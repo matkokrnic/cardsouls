@@ -41,9 +41,11 @@ _This file contains critical rules and patterns that AI agents must follow when 
 **Signals over polling**
 - Combat/economy state changes (HP, stamina, mana, orbs, card played, pitch staged) MUST emit **signals**; the HUD subscribes. Do not have the HUD poll hero state every frame.
 - Declare typed signals: `signal hp_changed(current: float, max: float)`.
+- **Direct subscription is the default:** consumers (HUD, etc.) subscribe directly to the **owning state object's** typed signals. `EventBus` is reserved for genuinely global, cross-system events with no clear owner (e.g. match started, round ended). Do NOT route per-entity state changes (hp, stamina, mana, orbs) through `EventBus`.
 
 **Autoloads (singletons)**
-- Global systems are Godot **autoloads** registered in `project.godot`. Anticipated: `MatchState`, `EventBus` (optional global signal hub), `CardDatabase`, `FeatureFlags`. Keep them minimal — no gameplay node logic inside autoloads.
+- Global systems are Godot **autoloads** registered in `project.godot`. Anticipated: `EventBus`, `CardDatabase`, `FeatureFlags`, and a thin `MatchState` autoload wrapper. Keep them minimal — no gameplay logic inside autoloads.
+- **MatchState split:** the match logic lives in `src/state/` as a plain, testable object with **no scene dependency**. The `src/systems/` autoload is only a thin wrapper that owns the instance and exposes it globally. Never put match logic in the autoload.
 
 **Data as Resources**
 - Cards, minion AI priority types, equipment passives, orb costs, and balance values are **`Resource` subclasses saved as `.tres`** — NOT hardcoded (the TDD states this repeatedly). Define e.g. `CardData extends Resource` with `@export` fields; author instances as `.tres` assets.
@@ -76,8 +78,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 ### Code Organization Rules
 
 **Folder layout** (greenfield — establish this structure; `res://` root):
-- `res://src/state/` — pure gameplay state layer (hero stats, mana/stamina/orb economy, card resolution, match state). No scene/visual deps.
-- `res://src/systems/` — autoloads & cross-cutting systems (`MatchState`, `EventBus`, `CardDatabase`, `FeatureFlags`, pooling).
+- `res://src/state/` — pure gameplay state layer (hero stats, mana/stamina/orb economy, card resolution, the `MatchState` object, shared gameplay enums). No scene/visual deps.
+- `res://src/systems/` — autoloads & cross-cutting systems (`EventBus`, `CardDatabase`, `FeatureFlags`, the thin `MatchState` autoload wrapper, pooling). Autoloads own instances and expose them; they hold no gameplay logic.
 - `res://src/actors/` — scene-bound nodes: hero, minions, totems, projectiles (each a `.tscn` + its script).
 - `res://src/ui/` — HUD and menus (read-only consumers of state signals).
 - `res://data/` — authored `.tres` content: `data/cards/`, `data/minions/`, `data/equipment/`, `data/balance/`.
@@ -95,7 +97,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Signals:** past-tense `snake_case` (`hp_changed`, `card_played`, `pitch_staged`, `orb_gained`).
 - **Booleans / flags:** `is_`/`has_`/`can_` prefix.
 - **Node names in scenes:** `PascalCase` matching their role (`Hitbox`, `Hurtbox`, `AnimationPlayer`).
-- **Card color is a first-class enum** (`RED`/`BLUE`/`GREEN`) used consistently across unblockable attacks, defenses, and orbs — never bare strings.
+- **Card color is a first-class enum** (`RED`/`BLUE`/`GREEN`) used consistently across unblockable attacks, defenses, and orbs — never bare strings. Shared gameplay enums live in `src/state/` (e.g. `src/state/enums.gd`), since state must never reference `src/actors/` or `src/ui/`.
 
 ### Testing Rules
 
