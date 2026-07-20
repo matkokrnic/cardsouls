@@ -1,0 +1,13 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Export artefakti
+/export/
+export_presets.cfg
+
+# Windows / editor smeće
+Thumbs.db
+desktop.ini
+.vscode/
+*.tmp
