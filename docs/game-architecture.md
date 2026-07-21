@@ -3,9 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.0'
+version: '1.1'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -30,7 +31,8 @@ indefinitely.
 **Load-bearing decisions**
 - **Deterministic single-tick state core** — one `MatchState.advance(delta)` call site with an
   enumerated sub-system order; the runner is the *only* `_physics_process` and drives movement
-  explicitly (replay-safe phase); all gameplay-critical timing via a pure `TimingWindow`.
+  explicitly (replay-safe phase); all gameplay-critical timing via a pure integer-tick
+  `TimingWindow` (counts ticks, not accumulated float — A1).
 - **Pure, headless-testable state layer** — `RefCounted` objects with no scene/`Input`/autoload deps;
   presentation subscribes to signals **queued during `advance()`, drained after**; state never reads a
   service (config injected).
@@ -269,21 +271,53 @@ actions, aim); the hero/state consumes it and never knows the source. Keyboard, 
 scripted AI all emit the **same** struct — dummy→PvP→bot is a config swap. Framed as AI-parity +
 testability, **not** netcode (#2).
 
-> **INVARIANT D3 (checkable):** No `Input.*` call — `Input.is_action_pressed`, `Input.get_vector`,
+> **INVARIANT D3 (checkable, two parts) — widened by A2 to full state-layer determinism.**
+>
+> **(a) Input confinement.** No `Input.*` call — `Input.is_action_pressed`, `Input.get_vector`,
 > `InputEvent` handling, etc. — appears anywhere outside a `Controller` implementation
 > (`src/**/controllers/`). State (`src/state/`) and actor (`src/actors/`) code never touch the input
 > singleton. **Check:** `grep -rn "Input\." src/ --include=*.gd` must return matches *only* under a
 > controllers path. A hit elsewhere is an architectural defect.
+>
+> **(b) State purity — no nondeterministic source in `src/state/`.** The Input ban is one instance of
+> a stronger rule: the state layer contains **no source of nondeterminism at all**. Forbidden in
+> `src/state/`: the *global* RNG functions (`randf`, `randi`, `randf_range`, `randi_range`, `randfn`,
+> `randomize`), and any `Time.*` (e.g. `Time.get_ticks_msec`), `OS.*`, or `Engine.*` frame/time query
+> (`get_physics_frames`, `get_process_frames`, …). **The single seeded gameplay RNG owned by
+> `MatchState` (F2) is the only permitted source of randomness** — sub-systems consume it as an
+> injected instance (`_rng.randf()`, a method call, is fine; a bare `randf()` is not), and all
+> gameplay-critical timing is integer ticks (A1), never a wall-clock read. **Check:** both greps below
+> must return **zero** matches (the leading `(^|[^.[:alnum:]_])` excludes instance-method calls like
+> `_rng.randf()`, matching only bare global calls):
+> ```
+> grep -rnE "(^|[^.[:alnum:]_])(randf|randi|randf_range|randi_range|randfn|randomize)[[:space:]]*\(" src/state/ --include=*.gd
+> grep -rnE "(^|[^.[:alnum:]_])(Time|OS|Engine)\." src/state/ --include=*.gd
+> ```
+> The one `RandomNumberGenerator` constructed for the seeded gameplay RNG lives in `match_state.gd`;
+> no other RNG is instantiated in `src/state/`. Any hit from either grep is an architectural defect.
 
 ---
 
 ### D4 — Timing-Window Primitive (Fairness Core)
 
-A single pure state-layer timer/window value type (`RefCounted`), advanced by explicit `tick(delta)`.
-No engine `Timer` / `SceneTreeTimer` nodes for gameplay-critical timing (chargeup, defense window,
-stun, and later fizzle) — engine timers are frame-coupled and untestable headless; inline float
-accumulators drift across systems. All timing windows are one primitive, advanced in D2 step 2, and
-driven by fixed `delta` in tests. This same primitive backs the fizzle deadline (D8).
+A single pure state-layer timer/window value type (`RefCounted`) that **counts integer physics ticks**,
+advanced one tick per call via `tick()`. No engine `Timer` / `SceneTreeTimer` nodes for
+gameplay-critical timing (chargeup, defense window, stun, and later fizzle) — engine timers are
+frame-coupled and untestable headless. All timing windows are one primitive, advanced in D2 step 2,
+one tick at a time in tests. This same primitive backs the fizzle deadline (D8).
+
+> **BINDING D4/A1 — count ticks, not accumulated float.** Replay determinism (F2/X5) rests on
+> **seed + intents**. A float accumulator (`_elapsed += delta`) would silently make it *also* rest on
+> `delta` being exactly `1/60` every tick, and float addition drifts across long windows regardless.
+> The window therefore holds an **integer tick count**; seconds→ticks conversion happens **once, when a
+> duration is loaded from balance `.tres`** (not per tick). Rules:
+> - **Conversion uses `round()`** (not `floor`/`ceil`) and **clamps to a minimum of 1 tick for any
+>   non-zero configured duration** — a window configured shorter than one tick must still *open*, never
+>   become a window that never fires.
+> - **X3 hot-reload re-converts on reload.** A window **already in flight** when a reload lands **keeps
+>   its original duration**; the new value takes effect **the next time that window opens**. Do **not**
+>   rescale remaining time proportionally — reload events are recorded in the intent stream (X3/X5), so
+>   replay must reproduce what actually happened, not an interpolation.
 
 ---
 
@@ -656,25 +690,43 @@ func sample() -> InputIntent:
 
 ```gdscript
 class_name TimingWindow extends RefCounted
-var _duration := 0.0
-var _elapsed := 0.0
+# A1: counts integer physics ticks, never accumulated float. Replay determinism (F2/X5) must not
+# depend on delta being exactly 1/60, nor drift via float addition over long windows.
+const TICK_HZ := 60.0
+
+var _duration_ticks := 0
+var _elapsed_ticks := 0
 var is_running := false
-func start(duration: float) -> void:
-    _duration = duration
-    _elapsed = 0.0
-    is_running = true
-func tick(delta: float) -> void:
+
+# Convert a configured seconds duration to a tick count. Done ONCE at balance load / X3 reload,
+# never per tick. round() (not floor/ceil); any non-zero duration clamps to >= 1 tick so a
+# sub-tick window still opens rather than never firing.
+static func seconds_to_ticks(seconds: float) -> int:
+    if seconds <= 0.0:
+        return 0
+    return maxi(1, int(round(seconds * TICK_HZ)))
+
+func start(duration_ticks: int) -> void:   # snapshots duration; an in-flight window keeps it across reload
+    _duration_ticks = duration_ticks
+    _elapsed_ticks = 0
+    is_running = duration_ticks > 0
+
+func tick() -> void:                        # one physics tick; magnitude-free by design
     if not is_running:
         return
-    _elapsed += delta
-    if _elapsed >= _duration:
+    _elapsed_ticks += 1
+    if _elapsed_ticks >= _duration_ticks:
         is_running = false
-func remaining() -> float:
-    return maxf(0.0, _duration - _elapsed)
+
+func remaining_ticks() -> int:
+    return maxi(0, _duration_ticks - _elapsed_ticks)
 ```
 
 Every chargeup / defense-window / stun / fizzle is *this one type*, advanced in `advance()` step 2,
-driven by fixed δ in tests. No engine `Timer` / `SceneTreeTimer` nodes for gameplay-critical timing.
+**one tick per call** in tests. `start()` takes a tick count (pre-converted from balance via
+`seconds_to_ticks`), so a window **already running keeps its original duration** when balance
+hot-reloads — the new value is picked up only at the next `start()` (D4/A1). No engine `Timer` /
+`SceneTreeTimer` nodes for gameplay-critical timing.
 
 ### Novel Pattern 5 — Data-Defined Economy Evaluator (D6)
 
@@ -828,6 +880,29 @@ Validated against `checklist.md`, the GDD systems, the E0–E8 epics, and the tw
 (integration-tested); strict replay requires captured seed + reload events, not the on-disk balance
 `.tres`.
 
+### Post-Completion Amendments
+
+Changes made after the 9-step workflow closed. Each is compatible with the validated decision set and
+strengthens an existing determinism guarantee rather than adding scope.
+
+- **A1 (v1.1, 2026-07-21) — `TimingWindow` counts integer ticks, not accumulated float.** Closes a
+  latent replay-determinism hole in D4: a float `_elapsed += delta` accumulator makes replay depend on
+  `delta` being exactly `1/60` and drifts via float addition. The primitive now holds an integer tick
+  count; seconds→ticks conversion happens once at balance load / X3 reload using `round()` with a
+  `>= 1`-tick clamp for any non-zero duration; an in-flight window keeps its original duration across a
+  hot-reload (no proportional rescale) so replay reproduces recorded reload events exactly. See D4 /
+  §Implementation Patterns → *Novel Pattern 4*.
+- **A2 (v1.1, 2026-07-21) — D3 invariant widened to full state-layer determinism.** The Input-`*`
+  confinement rule is generalized: `src/state/` may contain **no** nondeterministic source — no global
+  `randf`/`randi`/`randf_range`/`randi_range`/`randfn`/`randomize`, no `Time.*`/`OS.*`/`Engine.*`
+  frame-or-time query — the single seeded gameplay RNG owned by `MatchState` (F2) being the only
+  permitted randomness. Rewritten as two grep-checkable parts; see D3 INVARIANT (a)/(b).
+- **Checklist (First Steps item 4) — determinism regression test added.** E0 test harness gains a test
+  that runs N ticks from a fixed seed + fixed intent list and asserts a hash of the resulting state
+  against a golden value. The hash is taken over a **canonical serialization with sorted keys** —
+  iterating a `Dictionary` in insertion order yields a hash that is stable in practice but breaks
+  silently when insertion order changes. This test is the executable guard for A1, A2, and F2.
+
 ---
 
 ## Development Environment
@@ -852,7 +927,11 @@ Verify a repo is still maintained before adopting (the MCP ecosystem moves fast)
 3. Implement the state core: `SignalQueue`, `MatchState.advance(delta, intents)` + `drain_signals()`,
    `PlayerState` / `HeroState` / pools, `TimingWindow`, `InputIntent`, `KeyboardController`.
 4. Stand up the headless test harness (`godot --headless --script`) + first `HeroState`/pool tests and
-   the `.tres` smoke test.
+   the `.tres` smoke test. **Include a determinism regression test:** run N ticks from a fixed seed +
+   fixed intent list and assert a hash of the resulting state against a golden value. Hash over a
+   **canonical serialization with sorted keys** (never insertion-order `Dictionary` iteration, which is
+   stable in practice but breaks silently when insertion order changes). This is the executable guard
+   for A1, A2, and F2.
 5. Wire `match_runner` (`src/main/`): sample → gather facts → `advance` → drive movement → drain. Exit
    criteria: hero moves via the keyboard controller; headless state tests green; `FeatureFlagsService`
    loads a `.tres`.
