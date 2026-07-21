@@ -22,6 +22,14 @@ godot --headless --path . --script res://test/run_state_tests.gd
 When reading the result through a pipe, take the exit code from the **godot** stage — set
 `-o pipefail` or read `${PIPESTATUS[0]}`, or `grep`/`head` will mask a failing run.
 
+### Integration tests (need the engine runtime)
+Scene/actor tests that need a running main loop live in `test/integration/` and run standalone
+(not via the state harness). E.g. the E0 hero-movement exit criterion:
+
+```
+godot --headless --path . --script res://test/integration/test_hero_movement.gd
+```
+
 ### Fresh clone: build the class cache first
 `class_name` resolution needs `.godot/global_script_class_cache.cfg`, which is **git-ignored** and
 therefore absent on a fresh clone. If tests fail to load with *"Could not find type ..."*, build the
