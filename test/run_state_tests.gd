@@ -6,9 +6,8 @@ extends SceneTree
 ##
 ## Run:  godot --headless --path . --script res://test/run_state_tests.gd
 ## In a pipe, read ${PIPESTATUS[0]} (or set -o pipefail) — grep/head must not mask the code.
-##
-## Requires the global class cache to exist (class_name resolution). If a fresh clone reports
-## "Could not find type ...", build it once:  godot --headless --editor --quit --path .
+## Fresh-clone setup (class cache) is in README.md; the harness also prints the remedy if a
+## test fails to load.
 
 const TEST_DIR := "res://test/state/"
 
@@ -18,10 +17,15 @@ func _initialize() -> void:
 	var total := 0
 	var failed := 0
 	var asserts := 0
+	var load_error := false
 
 	print("=== state tests ===")
 	for path in files:
 		var script: GDScript = load(path)
+		if script == null:
+			load_error = true
+			print("  [XX] %s — FAILED TO LOAD (parse or class-resolution error)" % path.get_file())
+			continue
 		var inst: TestCase = script.new()
 		for method in _test_methods(inst):
 			var before := inst.failure_count()
@@ -36,9 +40,20 @@ func _initialize() -> void:
 				print("  [ok] %s::%s" % [path.get_file(), method])
 		asserts += inst.assert_count()
 
+	if load_error:
+		_print_cache_remedy()
 	print("=== %d tests, %d failed, %d assertions ===" % [total, failed, asserts])
-	print("RESULT: %s" % ("PASS" if failed == 0 else "FAIL"))
-	quit(0 if failed == 0 else 1)
+	var ok := failed == 0 and not load_error
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	quit(0 if ok else 1)
+
+
+func _print_cache_remedy() -> void:
+	print("")
+	print("!! A test failed to LOAD. If the log above says \"Could not find type ...\", the global")
+	print("!! class cache is missing (.godot/global_script_class_cache.cfg is git-ignored and absent")
+	print("!! on a fresh clone). Build it once, then re-run the tests:")
+	print("!!     godot --headless --editor --quit --path .")
 
 
 func _list_test_files() -> Array[String]:
