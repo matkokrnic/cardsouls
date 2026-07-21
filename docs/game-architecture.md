@@ -29,7 +29,7 @@ no networking**. This architecture is a **decision spine for a validation demo**
 indefinitely.
 
 **Load-bearing decisions**
-- **Deterministic single-tick state core** — one `MatchState.advance(delta)` call site with an
+- **Deterministic single-tick state core** — one `MatchState.advance(intents)` call site with an
   enumerated sub-system order; the runner is the *only* `_physics_process` and drives movement
   explicitly (replay-safe phase); all gameplay-critical timing via a pure integer-tick
   `TimingWindow` (counts ticks, not accumulated float — A1).
@@ -182,7 +182,7 @@ Netcode is excluded (#2) — no decision below is justified by "network-readines
 | # | Decision | Choice | Epic |
 |---|----------|--------|------|
 | D1 | State-layer object model | Composed plain `RefCounted` objects (MatchState → 2× PlayerState → pools/hand/hero) | E0 |
-| D2 | Time-step ownership | Single ordered `MatchState.advance(delta)`; enumerated sub-system order | E0 |
+| D2 | Time-step ownership | Single ordered `MatchState.advance(intents)`; enumerated sub-system order | E0 |
 | D3 | Controller abstraction | Per-tick `InputIntent` value object; `Input.*` confined to Controllers | E0 |
 | D4 | Timing-window primitive | Pure state-layer timer/window type advanced by `tick(delta)` | E1 |
 | D5 | Signal / event flow | State→presentation only; signals **queued during advance, drained after** | E0 |
@@ -222,9 +222,11 @@ touching others.
 
 ### D2 — Time-Step Ownership (Determinism Guarantee)
 
-**One call site advances gameplay time:** `MatchState.advance(delta)`, invoked exactly once per
-physics tick from a single `_physics_process`. Tests feed fixed `delta`; gameplay never reads
-wall-clock. This single ordered call *is* the framerate-independence + headless-testability guarantee.
+**One call site advances gameplay time:** `MatchState.advance(intents)`, invoked exactly once per
+physics tick from a single `_physics_process`. **One physics tick = one `advance()` call**; tests
+advance N fixed ticks and gameplay never reads wall-clock. This single ordered call *is* the
+framerate-independence + headless-testability guarantee. (`advance()` takes **no `delta`** — see the
+A1 follow-up note below.)
 
 **Frame sequence (the Match Runner's `_physics_process`, per binding — sampling is OUTSIDE advance):**
 
@@ -233,16 +235,16 @@ _physics_process(delta):   # the ONLY _physics_process in the project — actors
   1. Sample every Controller   → InputIntent per player   # D3: ONLY Controllers touch Input.*
   2. Gather spatial facts       query state-active sensors/hitboxes → queue overlap/contact events
                                 (reflect tick N-1's post-movement physics flush — F1)
-  3. MatchState.advance(delta, intents)                   # consumes facts + intents; enqueues signals
+  3. MatchState.advance(intents)                          # consumes facts + intents; enqueues signals
   4. Drive actor movement       each actor reads state velocity → move_and_slide() (F1)
   5. MatchState.drain_signals()                           # D5: flush queue AFTER advance returns
 ```
 
-**Enumerated sub-system order INSIDE `advance(delta, intents)`** (deterministic; player order P1→P2;
+**Enumerated sub-system order INSIDE `advance(intents)`** (deterministic; player order P1→P2;
 `[seam]` entries are reserved no-ops until their epic):
 
 ```
-advance(delta, intents):
+advance(intents):
   1. Ingest intents            apply each player's InputIntent → intended actions (P1 then P2)
   2. Advance timers            D4 windows: stamina/mana regen, chargeup, defense window, stun,
                                [fizzle deadline — E6 seam]
@@ -256,6 +258,19 @@ advance(delta, intents):
   8. Resolution check          HP ≤ 0 → death / round end
   # No signal emission here — steps 1–8 only ENQUEUE. Draining happens in the runner, step 3 above.
 ```
+
+> **A1 follow-up — `advance()` takes no `delta` (decided 2026-07-21).** After A1 (all
+> gameplay-critical timing is integer ticks) and F1 (position is actor-owned), the state layer has
+> **no remaining consumer of wall-clock `delta`**: `TimingWindow.tick()` counts ticks, and per-tick
+> resource generation (step 5) applies a **fixed per-tick amount** — a per-second balance value
+> converted **once at load**, never `rate × delta`. `delta` therefore lives **only in the runner**,
+> where `_drive_movement(delta)` feeds `move_and_slide()`. Threading `delta` into `advance()` "just in
+> case" is prohibited — it would reintroduce the exact float-`delta` dependence A1 removed.
+>
+> **A1 follow-up — tick-rate invariant (runner-checked).** `TimingWindow.TICK_HZ` (`60.0`) must equal
+> `project.godot` `physics/common/physics_ticks_per_second`, or every `seconds_to_ticks()` conversion
+> is silently wrong. `match_runner` asserts this **once at startup** via `check_invariant()` (X1) —
+> in the **runner, not state**, so INVARIANT D3(b) is not violated (state never reads `ProjectSettings`).
 
 Contacts (step 2→4): the runner gathers `Area3D` overlaps for state-flagged-active hitboxes by
 **direct query** (not async `area_entered` signals, whose firing order is not guaranteed) and pushes
@@ -488,7 +503,7 @@ res://
 ├── project.godot                     # autoloads + Input Map (intentional, reviewed edits)
 ├── src/
 │   ├── state/                        # PURE · headless · no scene/visual/Input deps — dependency SINK
-│   │   ├── match_state.gd            # D2: advance(delta,intents) ordered dispatch + drain_signals()
+│   │   ├── match_state.gd            # D2: advance(intents) ordered dispatch + drain_signals()
 │   │   ├── player_state.gd           # D1: composes hero + pools + hand
 │   │   ├── hero_state.gd
 │   │   ├── pools/  stamina_pool.gd · mana_pool.gd · orb_pool.gd   # OrbPool reserved flag-off (E5)
@@ -625,8 +640,8 @@ func _physics_process(delta: float) -> void:
     var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]  # D3, outside advance
     _gather_spatial_facts()                          # F1: query active sensors → queue overlap/contact facts
     _intent_recorder.capture(intents)                # X5 passive tap — never affects the tick
-    _match_state.advance(delta, intents)             # consumes facts + intents; enqueues signals only
-    _drive_movement(delta)                           # F1: actors move_and_slide here — no actor _physics_process
+    _match_state.advance(intents)                    # consumes facts + intents; enqueues signals only
+    _drive_movement(delta)                           # F1: actors move_and_slide here — delta lives ONLY here
     _match_state.drain_signals()                     # D5: emit AFTER advance returns
 ```
 
@@ -897,6 +912,14 @@ strengthens an existing determinism guarantee rather than adding scope.
   `randf`/`randi`/`randf_range`/`randi_range`/`randfn`/`randomize`, no `Time.*`/`OS.*`/`Engine.*`
   frame-or-time query — the single seeded gameplay RNG owned by `MatchState` (F2) being the only
   permitted randomness. Rewritten as two grep-checkable parts; see D3 INVARIANT (a)/(b).
+- **A1 follow-ups (v1.1, 2026-07-21), both resolved before E0 item 3.**
+  - **`advance()` signature drops `delta` → `advance(intents)`.** A1 (tick-based timing) + F1
+    (actor-owned position) leave no deterministic `delta` consumer in state; per-tick regen is a fixed
+    per-tick amount converted once at load. `delta` now lives only in the runner's `_drive_movement`.
+    Applied across D2, Novel Pattern 1, the structure tree, and First Steps item 3.
+  - **Tick-rate invariant is runner-checked.** `TimingWindow.TICK_HZ` must equal
+    `physics/common/physics_ticks_per_second`; `match_runner` asserts it once at startup via
+    `check_invariant()` (runner, not state — D3(b) intact). `project.godot` now sets the value explicitly.
 - **Checklist (First Steps item 4) — determinism regression test added.** E0 test harness gains a test
   that runs N ticks from a fixed seed + fixed intent list and asserts a hash of the resulting state
   against a golden value. The hash is taken over a **canonical serialization with sorted keys** —
@@ -924,7 +947,7 @@ Verify a repo is still maintained before adopting (the MCP ecosystem moves fast)
 2. Register autoloads in `project.godot`: `EventBus`, `FeatureFlagsService`, `BalanceConfigService`,
    `CardDatabase`; define named Input Map actions (P1/P2). **No `MatchState` autoload** — the runner
    owns it.
-3. Implement the state core: `SignalQueue`, `MatchState.advance(delta, intents)` + `drain_signals()`,
+3. Implement the state core: `SignalQueue`, `MatchState.advance(intents)` + `drain_signals()`,
    `PlayerState` / `HeroState` / pools, `TimingWindow`, `InputIntent`, `KeyboardController`.
 4. Stand up the headless test harness (`godot --headless --script`) + first `HeroState`/pool tests and
    the `.tres` smoke test. **Include a determinism regression test:** run N ticks from a fixed seed +
