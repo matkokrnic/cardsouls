@@ -580,10 +580,10 @@ exists to prevent. Autoloads are reserved for **config / content / global events
 > or a small params struct) **while there are only a couple of call sites** — do it as part of E3
 > balance authoring, not retrofitted after many callers exist.
 
-> ⚠️ **Refines `project-context.md`.** project-context currently prescribes a "thin `MatchState`
-> autoload wrapper … exposes it globally." That predates D5 and creates the bypass risk above.
-> project-context §Autoloads / §MatchState split should be updated to: *runner owns MatchState;
-> autoloads never expose live mutable state.*
+> **Synced with `project-context.md` (2026-07-21).** `project-context.md` §Autoloads now states
+> *runner owns MatchState; autoloads never expose live mutable state* — matching this decision. (An
+> earlier draft prescribed a thin `MatchState` autoload wrapper; that predated D5 and has been
+> removed.) The two documents agree; no divergence remains.
 
 ### Instrumentation wiring (X5 record/replay)
 - **Record:** the runner's sample step feeds each tick's `InputIntent` to `IntentRecorder`

@@ -4,8 +4,9 @@ user_name: 'Matko'
 date: '2026-07-20'
 sections_completed: ['technology_stack', 'engine_specific', 'performance', 'code_organization', 'testing', 'platform_build', 'critical_gotchas']
 status: 'complete'
-rule_count: 47
+rule_count: 53
 optimized_for_llm: true
+aligned_with: 'game-architecture.md v1.1 (F1, D3/A2, A1, D5, advance-no-delta); folders + testing updated to observed E0 code (2026-07-21)'
 ---
 
 # Project Context for AI Agents
@@ -35,17 +36,26 @@ _This file contains critical rules and patterns that AI agents must follow when 
 **Node lifecycle**
 - `_ready()` runs once when the node AND its children are in the tree — do child wiring here, not in `_init()`.
 - `_enter_tree()` fires before children are ready — do NOT touch `$Child` here.
-- Physics/combat logic (movement, hit detection) goes in `_physics_process(delta)`, not `_process(delta)`. UI/HUD updates go in `_process` or, better, are signal-driven.
+- **Single `_physics_process` (INVARIANT F1):** the **Match Runner** (`src/main/match_runner.gd`) is the **only** `_physics_process` in the project. It drives every tick in a fixed order: sample controllers → gather spatial facts → `MatchState.advance(intents)` → drive actor `move_and_slide()` → drain signals. **Actors do NOT define their own `_physics_process`** — the runner drives them, and they read state (e.g. `HeroState.velocity`), never input. UI/HUD updates go in `_process` or, better, are signal-driven. Check: `grep -rn "func _physics_process" src/` returns exactly one hit, in `match_runner.gd`.
 - Use `CharacterBody3D` + `move_and_slide()` for the hero (Godot 4 API). Jolt is the physics backend — do not assume Godot's default physics quirks.
 
 **Signals over polling**
 - Combat/economy state changes (HP, stamina, mana, orbs, card played, pitch staged) MUST emit **signals**; the HUD subscribes. Do not have the HUD poll hero state every frame.
 - Declare typed signals: `signal hp_changed(current: float, max: float)`.
 - **Direct subscription is the default:** consumers (HUD, etc.) subscribe directly to the **owning state object's** typed signals. `EventBus` is reserved for genuinely global, cross-system events with no clear owner (e.g. match started, round ended). Do NOT route per-entity state changes (hp, stamina, mana, orbs) through `EventBus`.
+- **Queued signals (D5):** signals raised during `MatchState.advance()` are **enqueued** (a bound emit pushed onto the shared `SignalQueue`), then **drained by the runner AFTER `advance()` returns** — never emitted mid-tick, so no consumer observes half-advanced state. **No state object subscribes to another state object's signal** — state-to-state coupling goes only through the ordered `advance()` dispatch.
 
 **Autoloads (singletons)**
 - Global systems are Godot **autoloads** registered in `project.godot`. Autoloads are for **config, content, and global events only**: `FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`. Keep them minimal — no gameplay logic inside autoloads, and **never expose live mutable game state through an autoload**.
 - **MatchState ownership:** the match logic lives in `src/state/` as a plain, testable object (`MatchState`) with **no scene dependency**. The **Match Runner** (`src/main/match_runner.gd`) creates and **owns** the single `MatchState` instance and wires references explicitly at match start — presentation/HUD receive read-only signal subscriptions or a read-only view, never a mutating handle. There is **no `MatchState` autoload**: a global mutable state singleton would let arbitrary code bypass the ordered state dispatch and the queued-signal discipline. Never put match logic in an autoload.
+
+**Controllers & state-layer determinism (D3 / A2 — INVARIANT)**
+- **`Input.*` is read ONLY in `src/controllers/`.** A `Controller` samples input and returns a pure-data `InputIntent` (a **fresh instance each tick**); state and actors consume the intent and never touch the `Input` singleton. Check: `grep -rn "Input\." src/` matches only under `src/controllers/`.
+- **`src/state/` contains NO nondeterministic source.** No global `randf()`/`randi()`/`randomize()`, no `Time.*`, no `OS.*`, no `Engine.*` frame/time query. The **single seeded gameplay RNG owned by `MatchState`** is the only randomness (consumed only inside `advance()`); cosmetic/VFX RNG is a separate stream. This is what makes the state layer deterministic and replay-safe.
+- **`MatchState.advance(intents)` takes NO `delta`.** After integer-tick timing (below) and actor-owned position, the state layer has no wall-clock consumer; `delta` lives only in the runner (for `move_and_slide`). Never thread `delta` into `advance()` "just in case".
+
+**Deterministic timing (A1 — INVARIANT)**
+- **Gameplay-critical timing counts integer ticks, not float.** Chargeup / defense-window / stun / fizzle use the `TimingWindow` primitive (`src/state/timing/`), advanced **one tick per `advance()` call** — never a float `_elapsed += delta` accumulator, and never an engine `Timer`/`SceneTreeTimer` node (frame-coupled, untestable headless, delta-dependent). Seconds→ticks is converted **once at balance load**: `round()`, clamped to a minimum of 1 tick for any non-zero duration. `TimingWindow.TICK_HZ` must equal `physics/common/physics_ticks_per_second` (the runner `check_invariant`s this at startup).
 
 **Data as Resources**
 - Cards, minion AI priority types, equipment passives, orb costs, and balance values are **`Resource` subclasses saved as `.tres`** — NOT hardcoded (the TDD states this repeatedly). Define e.g. `CardData extends Resource` with `@export` fields; author instances as `.tres` assets.
@@ -80,11 +90,13 @@ _This file contains critical rules and patterns that AI agents must follow when 
 **Folder layout** (greenfield — establish this structure; `res://` root):
 - `res://src/state/` — pure gameplay state layer (hero stats, mana/stamina/orb economy, card resolution, the `MatchState` object, shared gameplay enums). No scene/visual deps.
 - `res://src/systems/` — autoloads & cross-cutting systems (`EventBus`, `CardDatabase`, `FeatureFlagsService`, `BalanceConfigService`, pooling). Autoloads own their config/content instances and expose them; they hold **no gameplay logic and never expose live mutable match state** (the Match Runner owns `MatchState` — see §Autoloads).
-- `res://src/actors/` — scene-bound nodes: hero, minions, totems, projectiles (each a `.tscn` + its script).
+- `res://src/controllers/` — the Controller abstraction (`Controller`, `KeyboardController`). **The only place `Input.*` is read** (D3); produces `InputIntent` value objects.
+- `res://src/actors/` — scene-bound nodes: hero, minions, totems, projectiles (each a `.tscn` + its script). Driven by the runner; read state, never `Input`.
 - `res://src/ui/` — HUD and menus (read-only consumers of state signals).
+- `res://src/main/` — root scene + the **Match Runner** (`match_runner.gd`): the single `_physics_process` that owns `MatchState` and drives the tick (F1/D2).
 - `res://data/` — authored `.tres` content: `data/cards/`, `data/minions/`, `data/equipment/`, `data/balance/`.
 - `res://assets/` — art, audio, models, materials.
-- `res://test/` — GUT tests, mirroring `src/` structure.
+- `res://test/` — tests mirroring `src/`: `test/state/` (headless state tests, bootstrap harness) + `test/integration/` (runtime scene tests). GUT added later (X6).
 
 **Separation enforced by folders:** nothing in `src/state/` may `preload`/reference `src/ui/`, `src/actors/` scenes, or `AnimationPlayer`. Dependencies point visuals → state, never the reverse.
 
@@ -101,18 +113,18 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ### Testing Rules
 
-- **Framework:** **GUT** (Godot Unit Test) addon under `res://addons/gut/`. Tests live in `res://test/`, mirroring `src/`. Test files are `test_*.gd` extending `GutTest`.
+- **Framework:** **GUT is NOT yet installed** (X6 — not a prerequisite for E0). A bootstrap harness covers the state layer headless: `test/state/test_*.gd` extend `TestCase` (assert names mirror GUT for near-free later migration), run by `test/run_state_tests.gd` via `godot --headless --script`. Add GUT (`res://addons/gut/`) when convenient. Tests live in `res://test/`, mirroring `src/`.
 - **State layer is tested headless — no scene, no visuals.** Because the state layer (`src/state/`) has no scene/visual dependencies, all economy and resolution logic (damage, stamina, mana, orbs, card resolution, unblockable RPS outcomes) must be covered by pure unit tests that instantiate state objects directly and assert on signals/return values. If a rule can't be unit-tested without a running scene, the state/visual separation has been violated — fix the code, not the test.
-- **Assert on signals:** use GUT's `watch_signals()` / `assert_signal_emitted_with_parameters()` to verify state emits the right signal (e.g. `hp_changed`, `orb_gained`) rather than reaching into private fields.
+- **Assert on signals:** drain the `SignalQueue`, then verify state emitted the right signal (e.g. `hp_changed`, `orb_gained`) rather than reaching into private fields. (Once GUT lands: `watch_signals()` / `assert_signal_emitted_with_parameters()`.)
 - **Feature-flag matrix:** for any layer with a `FeatureFlags` toggle, test both ON and OFF paths, and assert graceful degradation (e.g. orbs OFF → pitch cost is mana-only, no orb requirement).
 - **Data-driven content is validated, not hand-mocked:** load real `.tres` card/minion/equipment resources in tests where practical, so authored content is exercised. Add a smoke test that loads every `.tres` in `data/` and asserts required fields are set.
-- **Determinism:** timing-sensitive tests drive logic by feeding fixed `delta` steps into the state layer, never by `await`-ing real wall-clock time.
-- **Integration/scene tests** (actors moving, hitbox→state contact wiring) are separate and minimal; keep the bulk of coverage in the headless state tests.
+- **Determinism:** timing-sensitive tests advance **fixed integer ticks** (call `advance()` / `TimingWindow.tick()` N times), never feed wall-clock `delta` or `await` real time (`advance()` takes no `delta` — A1). A **determinism regression** hashes a canonical **sorted-key** snapshot of `MatchState` against a golden value (never insertion-order `Dictionary` iteration).
+- **Integration/scene tests** (actors moving, hitbox→state contact wiring) live in `res://test/integration/`, need the engine runtime, and run standalone; keep the bulk of coverage in the headless state tests.
 
 ### Platform & Build Rules
 
 - **Primary platform: Windows desktop** (D3D12 / Forward+). No mobile/web targets in demo scope. Don't add platform `#if`-style branches or mobile renderer fallbacks.
-- **Input:** define named actions in the Input Map (Project Settings) and read via `Input.is_action_*` / `InputEvent` actions — never hardcode raw keycodes. Demo is local; plan for two local input profiles (P1/P2) so a second player / hot-seat is a config, not a rewrite.
+- **Input:** define named actions in the Input Map (Project Settings) and read via `Input.is_action_*` **only inside `src/controllers/`** (D3) — never hardcode raw keycodes, and never touch `Input` from state or actors. The two local profiles (P1/P2) are **one** `KeyboardController` taking a `"p1"`/`"p2"` prefix, so split-screen/hot-seat is a config, not a second class.
 - **Do not commit generated/local files:** `.godot/`, `/export/`, `export_presets.cfg`, `.claude/settings.local.json` are git-ignored — keep it that way.
 - **Keep `project.godot` edits intentional:** autoload registration and Input Map live here; review diffs before committing.
 
@@ -146,4 +158,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Update when the stack changes (Godot version, adding a test framework, first real code establishing a pattern).
 - Revisit once real `src/` code exists: convert "proposed conventions" here into "observed patterns," and delete any rule that has become obvious from the codebase.
 
-Last Updated: 2026-07-20
+Last Updated: 2026-07-21
