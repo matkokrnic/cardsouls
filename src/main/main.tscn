@@ -1,0 +1,38 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/main/match_runner.gd" id="1_ab7mr"]
+[ext_resource type="PackedScene" path="res://src/actors/hero/hero.tscn" id="2_djufw"]
+[ext_resource type="Script" path="res://src/actors/hero/hero.gd" id="3_jkpqq"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_jqarl"]
+size = Vector3(40, 1, 40)
+
+[sub_resource type="BoxMesh" id="BoxMesh_30cu5"]
+size = Vector3(40, 1, 40)
+
+[node name="Main" type="Node3D" unique_id=1592136353]
+script = ExtResource("1_ab7mr")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1389538338]
+transform = Transform3D(1, 0, 0, 0, 0.64278764, 0.76604444, 0, -0.76604444, 0.64278764, 0, 14, 12)
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=570038477]
+transform = Transform3D(0.8660254, 0.43301272, -0.24999999, 0, 0.49999997, 0.86602545, 0.5, -0.75, 0.43301266, 0, 0, 0)
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1639165771]
+
+[node name="GroundCollision" type="CollisionShape3D" parent="Ground" unique_id=323006534]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_jqarl")
+
+[node name="GroundMesh" type="MeshInstance3D" parent="Ground" unique_id=29039138]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+mesh = SubResource("BoxMesh_30cu5")
+
+[node name="P1Hero" type="CharacterBody3D" parent="." unique_id=1317219649 instance=ExtResource("2_djufw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 1, 0)
+script = ExtResource("3_jkpqq")
+
+[node name="P2Hero" type="CharacterBody3D" parent="." unique_id=1135604472 instance=ExtResource("2_djufw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1, 0)
+script = ExtResource("3_jkpqq")
