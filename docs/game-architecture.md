@@ -829,6 +829,13 @@ tick and under headless test.
   movement (move_and_slide) → drain signals`. Ordering is explicit code, matching D2's single-call-site
   philosophy; it never depends on scene-tree position, so a scene reorganization cannot shift the
   movement↔state phase by a tick.
+
+  > **INVARIANT F1 (checkable) — one `_physics_process`, in the runner.** No `func _physics_process`
+  > appears anywhere in `src/` except `src/main/match_runner.gd`. A hero/minion/totem actor with its
+  > own `_physics_process` reintroduces the scene-order nondeterminism this decision removes, and is an
+  > architectural defect. **Check:** `grep -rn "func _physics_process" src/ --include=*.gd` returns
+  > **exactly one** hit, in `match_runner.gd` (zero before E0 item 5 lands the runner). Carries the same
+  > weight as INVARIANT D3(a)/(b); enforced by the state-test harness (`test_architecture_invariants`).
 - **Position is actor-owned; the state layer is non-spatial.** Transforms live on actors (Jolt /
   `move_and_slide`, driven by the runner). `MatchState` holds no world coordinates.
 - **Fixed direction — actors REPORT, state DECIDES.** The runner queries each state-active
