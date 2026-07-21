@@ -1,2 +1,13 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# Explicit LF for Godot-authored text types — never let Windows CRLF conversion turn a
+# one-number change into a several-hundred-line .tscn/.tres diff. Do not rely on text=auto
+# heuristics for these.
+*.gd     text eol=lf
+*.tres   text eol=lf
+*.tscn   text eol=lf
+*.import text eol=lf
+*.uid    text eol=lf
+*.godot  text eol=lf
+*.cfg    text eol=lf
