@@ -858,6 +858,23 @@ Replay (X5) is sound only if *every* non-input source of variation is captured. 
   intent stream + recorded reload events** — the on-disk balance `.tres` is not trusted for strict
   replay. With reload events captured, the X3 path can no longer produce an unreplayable recording.
 
+**Snapshot contract (decided E0 item 3, for the item-4 determinism hash).** Every *persistent* state
+class exposes `to_snapshot() -> Dictionary` — keys → plain values (int / float / bool / String, enums
+as int, `Vector*`), nested state objects recurse via their own `to_snapshot()`. The determinism test
+hashes a **canonical serialization with sorted keys** over `MatchState.to_snapshot()` (never
+insertion-order `Dictionary` iteration). `MatchState`'s snapshot includes the **gameplay RNG state**
+(`RandomNumberGenerator.state`) so the hash catches RNG desync. **Excluded from the contract:**
+`InputIntent` (it is *input*, captured separately in the X5 stream) and `SignalQueue` (transient
+plumbing) — the exclusion is deliberate. A state class that is awkward to snapshot is usually holding
+something it shouldn't (a node ref, a service handle) — treat that as a design smell, not a
+serialization problem.
+
+**InputIntent lifetime (decided E0 item 3).** A `Controller` returns a **fresh `InputIntent` instance
+per `sample()`** — an immutable-per-tick value object. It is never a reused mutable instance, so the
+X5 recorder (which retains a reference each tick) can never end up holding N aliases of one
+ever-changing object (a bug invisible until the first replay). Correctness is structural, not
+dependent on the recorder copying on capture.
+
 ---
 
 ## Architecture Validation
