@@ -4,8 +4,10 @@ project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
 version: '1.0'
-stepsCompleted: [1, 2, 3, 4, 5, 6, 7]
-status: 'in-progress'
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+status: 'complete'
+engine: 'Godot 4.6.3'
+platform: 'Windows desktop (local split-screen, no networking)'
 
 # Source Documents
 gdd: 'docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/gdd.md'
@@ -16,11 +18,38 @@ project_context: 'docs/project-context.md'
 
 # Game Architecture — CardSouls
 
+## Executive Summary
+
+**CardSouls** is a 1v1 real-time hybrid — soulsborne melee **+** a Red/Blue/Green card economy —
+built in **Godot 4.6.3** (GDScript, Forward+/D3D12, Jolt) for **Windows desktop, local split-screen,
+no networking**. This architecture is a **decision spine for a validation demo**: full depth for
+**E0–E3** (foundations, melee, split-screen PvP, cards+mana) with **named seams** for **E4–E6**
+(minions/totems, unblockable RPS+orbs, pitch zone) — no speculative machinery, netcode deferred
+indefinitely.
+
+**Load-bearing decisions**
+- **Deterministic single-tick state core** — one `MatchState.advance(delta)` call site with an
+  enumerated sub-system order; the runner is the *only* `_physics_process` and drives movement
+  explicitly (replay-safe phase); all gameplay-critical timing via a pure `TimingWindow`.
+- **Pure, headless-testable state layer** — `RefCounted` objects with no scene/`Input`/autoload deps;
+  presentation subscribes to signals **queued during `advance()`, drained after**; state never reads a
+  service (config injected).
+- **Data-defined everything** — `.tres` schemas for cards, economy rules (`ResourceGenerationRule`,
+  `CardCastCondition`), telegraphs, balance, feature flags; new content = a new `.tres`, no code.
+- **Instrumentation is architecture** — feature-flag layer isolation, telegraph legibility
+  (shape+sound, <0.5s), and deterministic InputIntent **record/replay** (seeded gameplay RNG + recorded
+  balance-reload events).
+
+**Organization:** role-layered (`state / systems / controllers / actors / ui / main`).
+**Ready for:** E0 implementation, then epic/story breakdown.
+
+---
+
 ## Document Status
 
-This architecture document is being created through the GDS Architecture Workflow.
+**COMPLETE** — produced through the 9-step GDS Architecture Workflow.
 
-**Steps Completed:** 7 of 9 (Initialize · Project Context · Engine · Architectural Decisions · Cross-cutting · Structure · Implementation Patterns)
+**Steps Completed:** 9 of 9 (Initialize · Project Context · Engine · Architectural Decisions · Cross-cutting · Structure · Implementation Patterns · Validation · Completion)
 
 This is a **decision spine**, not an implementation spec. It formalizes the invariants already
 set in `docs/project-context.md` and resolves the technical choices the GDD raises but leaves open.
@@ -198,10 +227,13 @@ wall-clock. This single ordered call *is* the framerate-independence + headless-
 **Frame sequence (the Match Runner's `_physics_process`, per binding — sampling is OUTSIDE advance):**
 
 ```
-_physics_process(delta):
-  1. Sample every Controller  → InputIntent per player   # D3: ONLY Controllers touch Input.*
-  2. MatchState.advance(delta, intents)                  # enqueues signals, never emits
-  3. MatchState.drain_signals()                          # D5: flush queue AFTER advance returns
+_physics_process(delta):   # the ONLY _physics_process in the project — actors have none (F1)
+  1. Sample every Controller   → InputIntent per player   # D3: ONLY Controllers touch Input.*
+  2. Gather spatial facts       query state-active sensors/hitboxes → queue overlap/contact events
+                                (reflect tick N-1's post-movement physics flush — F1)
+  3. MatchState.advance(delta, intents)                   # consumes facts + intents; enqueues signals
+  4. Drive actor movement       each actor reads state velocity → move_and_slide() (F1)
+  5. MatchState.drain_signals()                           # D5: flush queue AFTER advance returns
 ```
 
 **Enumerated sub-system order INSIDE `advance(delta, intents)`** (deterministic; player order P1→P2;
@@ -212,7 +244,8 @@ advance(delta, intents):
   1. Ingest intents            apply each player's InputIntent → intended actions (P1 then P2)
   2. Advance timers            D4 windows: stamina/mana regen, chargeup, defense window, stun,
                                [fizzle deadline — E6 seam]
-  3. Resolve actions           movement, attack initiation, block/deflect, roll → hero transitions
+  3. Resolve actions           intended velocity + attack/block/roll transitions (physical
+                               move_and_slide runs in the actor — see Spatial Model, F1)
   4. Resolve contacts          drain queued hitbox→contact events → apply damage/chip to HP
   5. Resource generation       evaluate ResourceGenerationRule (melee-hit mana, passive tick),
                                [orb grants — E5 seam], [accelerator totems — E4 seam]
@@ -222,8 +255,10 @@ advance(delta, intents):
   # No signal emission here — steps 1–8 only ENQUEUE. Draining happens in the runner, step 3 above.
 ```
 
-Contacts (step 4): `Area3D` hitboxes report contact during the physics step by pushing a **queued
-contact event**; they never apply damage. The queue is drained deterministically inside advance.
+Contacts (step 2→4): the runner gathers `Area3D` overlaps for state-flagged-active hitboxes by
+**direct query** (not async `area_entered` signals, whose firing order is not guaranteed) and pushes
+**queued contact events**; hitboxes never apply damage. The queue is drained deterministically inside
+`advance()` step 4. See §Implementation Patterns → *Spatial Model* for the fixed intra-tick order.
 
 ---
 
@@ -376,18 +411,22 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
 2. **Per-player state inspector** — pools + active D4 timers + current telegraph; reads signals only.
 3. **Deterministic step/pause** — pause the runner and advance N fixed ticks (timing-window debugging).
 4. **Reveal-opponent-hand toggle** — debug counterpart to the E2 face-down-hand capability.
-5. **InputIntent record & replay** — record the per-tick `InputIntent` stream; replay makes any round
-   *exactly* reproducible from the recording + the balance `.tres` (D2 determinism + D3 pure-value
-   input make this near-free). **Scope: record + replay only — no rewind, no scrubbing UI.** Rationale:
-   the only actionable playtest report here is "I didn't see that happen," and diagnosing it requires
-   replaying what actually happened tick by tick; retrofitting capture later is expensive.
+5. **InputIntent record & replay** — record the per-tick `InputIntent` stream **plus the gameplay RNG
+   seed and any balance-reload events**; replay reproduces a round exactly from *seed + intents +
+   recorded reload events* — **not** from the on-disk balance `.tres`. See §Implementation Patterns →
+   *Determinism & Replay* for the rules (D2 + D3 make capture near-free). **Scope: record + replay only
+   — no rewind, no scrubbing UI.** Rationale: the only actionable playtest report here is "I didn't see
+   that happen," and diagnosing it requires replaying what actually happened tick by tick.
 
 ### Testing & Runtime Boundary (GUT not yet installed)
 
 | Testable WITHOUT engine runtime (pure GDScript instantiation) | Needs engine runtime (scene / GUT integration) |
 |---|---|
-| All of `src/state/`: pools, `HeroState`, `MatchState.advance(delta)` with fixed δ, the D4 timer primitive, the D6 evaluators (`ResourceGenerationRule` / `CardCastCondition`), RPS resolution, orb math | Actors (`CharacterBody3D` + `move_and_slide`), `Area3D` contact wiring, `SubViewport` split-screen, HUD `Control`, `CombatCues` bus, telegraph presentation |
+| All of `src/state/`: pools, `HeroState`, `MatchState.advance(delta)` with fixed δ, the D4 timer primitive, the D6 evaluators (`ResourceGenerationRule` / `CardCastCondition`), RPS **color-match** resolution & orb math, seeded gameplay RNG (draw/shuffle) | Actors (`CharacterBody3D` + `move_and_slide`), `Area3D` contact wiring, `SubViewport` split-screen, HUD `Control`, `CombatCues` bus, telegraph presentation, **spacing-dependent gameplay rules (Green thrust range, roll-to-close distance, dodge/leave-range) — F1** |
 
+- **F1 — spacing-dependent rules are runtime, not headless.** Green thrust range, roll-to-close
+  distance, and dodge/leave-range determination resolve from actor-reported spatial facts, so they sit
+  on the runtime side above — a real reduction in headless coverage vs. an all-in-state model.
 - **Dividing line = the D1/D5 state/visual seam.** State code needing a running tree to test is a
   *defect in the code, not the test* (project-context testing rule).
 - **Bootstrapping before GUT:** run state tests as `godot --headless --script` — pure `RefCounted`
@@ -493,10 +532,13 @@ exists to prevent. Autoloads are reserved for **config / content / global events
 
 ### Instrumentation wiring (X5 record/replay)
 - **Record:** the runner's sample step feeds each tick's `InputIntent` to `IntentRecorder`
-  (`src/systems/`). Recording is a passive tap — it never affects the tick.
+  (`src/systems/`), which also captures the gameplay RNG **seed** at start and any **balance-reload
+  events** (tick + values applied). Recording is a passive tap — it never affects the tick.
 - **Replay:** a `ReplayController` (`src/controllers/`) is swapped in for a hardware controller and
   emits the recorded `InputIntent` stream. The runner cannot tell the difference (D3). A round replays
-  exactly from recording + balance `.tres`. Scope: record + replay only — no rewind, no scrub UI.
+  exactly from **seed + intent stream + recorded balance-reload events** (see §Implementation Patterns →
+  *Determinism & Replay*) — not from the on-disk balance `.tres`. Scope: record + replay only — no
+  rewind, no scrub UI.
 - **UI:** only start/stop/load toggles live in `src/ui/debug/` (no state mutation there).
 
 ### Architectural Boundaries (enforceable dependency rules)
@@ -544,11 +586,13 @@ func drain() -> void:
 ```
 
 ```gdscript
-# src/main/match_runner.gd — the ONLY _physics_process in the project
+# src/main/match_runner.gd — the ONLY _physics_process in the project; actors have none (F1)
 func _physics_process(delta: float) -> void:
     var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]  # D3, outside advance
+    _gather_spatial_facts()                          # F1: query active sensors → queue overlap/contact facts
     _intent_recorder.capture(intents)                # X5 passive tap — never affects the tick
-    _match_state.advance(delta, intents)             # enqueues signals only
+    _match_state.advance(delta, intents)             # consumes facts + intents; enqueues signals only
+    _drive_movement(delta)                           # F1: actors move_and_slide here — no actor _physics_process
     _match_state.drain_signals()                     # D5: emit AFTER advance returns
 ```
 
@@ -704,6 +748,115 @@ tick and under headless test.
 | Timing | All gameplay-critical timing via `TimingWindow` advanced by fixed δ; never engine `Timer` nodes |
 | Signals | Owner emits via `SignalQueue.push`; subscribers are presentation-only; no state-to-state signals (D5) |
 
+### Spatial Model & the `_physics_process` boundary (validation F1)
+
+- **One `_physics_process`, explicit order (option a).** `match_runner` is the **only**
+  `_physics_process` in the project — **actors do not run their own.** The runner drives every tick in
+  a fixed intra-tick order: `sample controllers → gather spatial facts → advance() → drive actor
+  movement (move_and_slide) → drain signals`. Ordering is explicit code, matching D2's single-call-site
+  philosophy; it never depends on scene-tree position, so a scene reorganization cannot shift the
+  movement↔state phase by a tick.
+- **Position is actor-owned; the state layer is non-spatial.** Transforms live on actors (Jolt /
+  `move_and_slide`, driven by the runner). `MatchState` holds no world coordinates.
+- **Fixed direction — actors REPORT, state DECIDES.** The runner queries each state-active
+  sensor/hitbox and pushes spatial *facts* (overlaps, distances, contacts) into the queue consumed by
+  `advance()` step 4. An actor **never** evaluates a gameplay rule ("is this in thrust range?", "did
+  the dodge leave range?") and applies a result — it exposes the fact, and `advance()` decides.
+- **Documented phase (replay-safe).** Godot's physics server resolves collisions/overlaps *after*
+  `_physics_process` returns, so facts gathered at the top of tick N reflect the flush produced by tick
+  N−1's movement — a **constant one-tick relationship, identical on every run.** State logic treats
+  reported facts as "positions as of the last movement," never "live this instant." Because the
+  relationship is fixed (not scene-order-dependent), it is deterministic and replay-safe — closing the
+  same class of silent nondeterminism as the F2 RNG hole.
+- **Coverage consequence (honest):** spacing-dependent rules (Green thrust range, roll-to-close
+  distance, dodge/leave-range) resolve from runner-gathered facts and are therefore **integration-
+  tested, not headless** — recorded in the X6 boundary table. Non-spatial logic (economy, timing, RPS
+  color-match, orbs) stays fully headless.
+
+### Determinism & Replay (validation F2 + X3/X5 reconciliation)
+
+Replay (X5) is sound only if *every* non-input source of variation is captured. Three rules:
+
+- **Seeded RNG, owned by `MatchState`, advanced only in `advance()` (F2a).** The match runs a single
+  seeded **gameplay** RNG owned by `MatchState`, consumed **only** inside the ordered dispatch (e.g.
+  deck shuffle/draw in step 6). Any draw from outside `advance()` breaks replay. The **seed is
+  recorded** with the intent stream.
+- **Separate gameplay vs cosmetic RNG streams (F2b).** VFX variation, audio pitch jitter, and
+  animation selection use a **separate cosmetic RNG** and must **never** consume from the gameplay
+  stream — otherwise a presentation-only change would silently desync replays.
+- **Balance hot-reload is recorded, not ignored (X3/X5 reconciliation).** Because balance `.tres` is
+  hot-reloadable mid-match (X3), a recording no longer corresponds to a single balance state.
+  `IntentRecorder` therefore records each **balance-reload event in the stream** (tick index + values
+  applied); `ReplayController` re-applies them at the **same tick**. Replay reproduces from **seed +
+  intent stream + recorded reload events** — the on-disk balance `.tres` is not trusted for strict
+  replay. With reload events captured, the X3 path can no longer produce an unreplayable recording.
+
+---
+
+## Architecture Validation
+
+Validated against `checklist.md`, the GDD systems, the E0–E8 epics, and the two scope guards
+(no E4–E6 machinery; no network-ready abstraction). Date: 2026-07-21.
+
+| Check | Result | Notes |
+|---|---|---|
+| No E4–E6 machinery (scope) | PASS | Only named seams — OrbPool flag-off, PitchState reserved, TargetingService named, `resolve()` E5/E6 stubs |
+| No network-ready abstraction | PASS | Netcode excluded; state/visual seam framed as testability/legibility, not netcode |
+| Decision compatibility (D1–D9, X1–X6) | PASS | Cohere; no conflicting guidance |
+| GDD system coverage | PASS | Every GDD system maps to a decision, pattern, or named seam |
+| Epic mapping E0–E8 | PASS | Each epic has a home + patterns; seams sit at their epic |
+| Document completeness | PASS | No stray TBD/TODO; balance "TBD-in-playtest" is intentional data-driven content |
+| Generic web/DB/auth/API/scale checks | N/A | Local single-machine game demo |
+
+**Issues found and resolved this step:**
+- **F1 — spatial model + `_physics_process` ordering.** Chose **option (a)**: the runner is the
+  **only** `_physics_process` (actors have none) and drives movement explicitly at a fixed point
+  relative to `advance()`, so the movement↔state phase is deterministic (not scene-tree-order-
+  dependent). Position is actor-owned; actors report spatial facts and `advance()` decides; the fixed
+  one-tick fact→advance relationship is documented; spacing rules are integration-tested per the X6
+  boundary.
+- **F2 — replay RNG hole.** Single seeded gameplay RNG owned by `MatchState`, advanced only in
+  `advance()`, seed recorded; separate cosmetic RNG stream.
+- **X3/X5 conflict — hot-reload vs replay.** `IntentRecorder` records balance-reload events in the
+  stream; `ReplayController` re-applies them at the same tick.
+
+**Quality:** Completeness — Complete (E0–E3 depth + E4–E6 seams). Version specificity — engine pinned
+(Godot 4.6.3). Pattern clarity — Clear (concrete GDScript, enforceable invariants). AI-agent readiness
+— Ready for E0–E3.
+
+**Deliberately not overstated:** headless coverage excludes spacing-dependent gameplay
+(integration-tested); strict replay requires captured seed + reload events, not the on-disk balance
+`.tres`.
+
+---
+
+## Development Environment
+
+### Prerequisites
+- **Godot 4.6.3 stable** (Forward+ / D3D12; Jolt physics) — **GDScript only**, no C#/Mono.
+- **Windows desktop.** LF line endings + UTF-8 enforced (`.gitattributes` / `.editorconfig`).
+- **Git** — never commit `.godot/`, `/export/`, `export_presets.cfg`, `.claude/settings.local.json`.
+- **GUT** (Godot Unit Test) under `res://addons/gut/` — add when convenient (E0/E1); **not a
+  prerequisite for E0 state logic** (state tests bootstrap via `godot --headless --script`, per X6).
+
+### AI Tooling (MCP Servers)
+None selected during this workflow. Optional, addable later: **GoPeak** (`npx -y gopeak`) for
+scene/GDScript inspection and edit→run→inspect loops, and **Context7** for current Godot docs.
+Verify a repo is still maintained before adopting (the MCP ecosystem moves fast).
+
+### First Steps (E0 — Foundations)
+1. Create the role-layered `src/` tree + `data/`, `assets/`, `test/` per §Project Structure.
+2. Register autoloads in `project.godot`: `EventBus`, `FeatureFlagsService`, `BalanceConfigService`,
+   `CardDatabase`; define named Input Map actions (P1/P2). **No `MatchState` autoload** — the runner
+   owns it.
+3. Implement the state core: `SignalQueue`, `MatchState.advance(delta, intents)` + `drain_signals()`,
+   `PlayerState` / `HeroState` / pools, `TimingWindow`, `InputIntent`, `KeyboardController`.
+4. Stand up the headless test harness (`godot --headless --script`) + first `HeroState`/pool tests and
+   the `.tres` smoke test.
+5. Wire `match_runner` (`src/main/`): sample → gather facts → `advance` → drive movement → drain. Exit
+   criteria: hero moves via the keyboard controller; headless state tests green; `FeatureFlagsService`
+   loads a `.tres`.
+
 ---
 
 ## Resume Point
@@ -714,12 +867,10 @@ needed to continue the `gds-game-architecture` workflow is in THIS file.**
 ### Workflow state
 - Skill: `gds-game-architecture` (BMad/GDS micro-file workflow; steps in
   `.claude/skills/gds-game-architecture/steps/step-0N-*.md`).
-- **Completed: Steps 1–7** (Init · Project Context · Engine · Architectural Decisions · Cross-cutting ·
-  Structure · Implementation Patterns). See frontmatter `stepsCompleted: [1,2,3,4,5,6,7]`.
-- **Remaining: Step 8 (Validation)** — `step-08-validation.md`; then **Step 9 (Completion)** —
-  `step-09-*.md`. Resume by reading `step-08-validation.md` fully and following it. Each step ends with
-  an A/P/C menu; only advance on the user's **C**, and update frontmatter `stepsCompleted` before
-  loading the next step file.
+- **Completed: ALL 9 steps — workflow COMPLETE** (frontmatter `stepsCompleted: [1..9]`,
+  `status: complete`). This section is retained as an orientation map; no workflow step remains.
+- **Next workflow (not this one):** `gds-create-epics-and-stories` (`epics.md` already exists) → E0
+  implementation. See §Development Environment → First Steps.
 
 ### Facilitation contract (how the user, Matko, works — observed this run)
 - Wants each choice as **prose + a clear recommendation**; he replies "**Option N** + a binding
@@ -740,22 +891,18 @@ needed to continue the `gds-game-architecture` workflow is in THIS file.**
 - **Scope:** full depth E0–E3, **named seams only** for E4–E6; no speculative abstraction.
 - **Netcode deferred indefinitely** — drop any "network-ready" abstraction as a defect.
 - Decisions **D1–D9**, cross-cutting **X1–X6**, the project structure, and implementation patterns
-  above are settled.
+  above are settled. **Validation (Step 8) applied fixes F1 (spatial model / `_physics_process`
+  boundary), F2 (seeded gameplay RNG + separate cosmetic stream), and the X3/X5 replay reconciliation
+  (balance-reload events recorded in the stream)** — see §Architecture Validation.
 
-### Open items carried forward (NOT yet done)
-1. **`project-context.md` §Autoloads refinement — NOT YET APPLIED.** This architecture supersedes
-   project-context's "thin `MatchState` autoload wrapper … exposes it globally." Correct rule:
-   **the Match Runner (`src/main/match_runner.gd`) owns the single `MatchState` instance; autoloads
-   never expose live mutable state** (autoloads are for config/content/global-events only:
-   `FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`). Update
-   `project-context.md` §Autoloads and its "MatchState split" paragraph to match. Flagged inline in
-   §Project Structure → *MatchState Ownership*. **Action needed:** edit `project-context.md` (was left
-   for Matko to approve rather than edited silently).
-2. **Step 8 (Validation) and Step 9 (Completion) not started.** Validation should check the doc against
-   the GDD systems + the E0–E3/seam scope; watch for any accidental E4–E6 machinery or network-ready
-   abstraction (both would be defects here).
+### Open items carried forward
+1. **`project-context.md` §Autoloads refinement — DONE (applied 2026-07-21).** project-context
+   §Autoloads, its MatchState paragraph, the `src/systems/` line, and the FeatureFlags schema/loader
+   rename (line 65 → `FeatureFlagsService`; line 122 keeps the injected `FeatureFlags` resource per
+   Pattern 2) now match this architecture. No further action.
+2. **Workflow COMPLETE — no remaining steps.** Next is `gds-create-epics-and-stories`, then E0.
 
 ### Nothing else is being held only in context
-All bindings, decisions, code patterns, the GUT "testable-without-engine-runtime" boundary (X6), and
-the E2 face-down-hand capability are written above. The only un-applied action is open item #1
-(editing `project-context.md`).
+All bindings, decisions, code patterns, validation fixes (F1 / F2 / X3-X5 reconciliation), the GUT
+"testable-without-engine-runtime" boundary (X6), and the E2 face-down-hand capability are written
+above. No un-applied actions remain; the workflow is complete.

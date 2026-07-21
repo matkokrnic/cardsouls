@@ -44,8 +44,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Direct subscription is the default:** consumers (HUD, etc.) subscribe directly to the **owning state object's** typed signals. `EventBus` is reserved for genuinely global, cross-system events with no clear owner (e.g. match started, round ended). Do NOT route per-entity state changes (hp, stamina, mana, orbs) through `EventBus`.
 
 **Autoloads (singletons)**
-- Global systems are Godot **autoloads** registered in `project.godot`. Anticipated: `EventBus`, `CardDatabase`, `FeatureFlags`, and a thin `MatchState` autoload wrapper. Keep them minimal — no gameplay logic inside autoloads.
-- **MatchState split:** the match logic lives in `src/state/` as a plain, testable object with **no scene dependency**. The `src/systems/` autoload is only a thin wrapper that owns the instance and exposes it globally. Never put match logic in the autoload.
+- Global systems are Godot **autoloads** registered in `project.godot`. Autoloads are for **config, content, and global events only**: `FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`. Keep them minimal — no gameplay logic inside autoloads, and **never expose live mutable game state through an autoload**.
+- **MatchState ownership:** the match logic lives in `src/state/` as a plain, testable object (`MatchState`) with **no scene dependency**. The **Match Runner** (`src/main/match_runner.gd`) creates and **owns** the single `MatchState` instance and wires references explicitly at match start — presentation/HUD receive read-only signal subscriptions or a read-only view, never a mutating handle. There is **no `MatchState` autoload**: a global mutable state singleton would let arbitrary code bypass the ordered state dispatch and the queued-signal discipline. Never put match logic in an autoload.
 
 **Data as Resources**
 - Cards, minion AI priority types, equipment passives, orb costs, and balance values are **`Resource` subclasses saved as `.tres`** — NOT hardcoded (the TDD states this repeatedly). Define e.g. `CardData extends Resource` with `@export` fields; author instances as `.tres` assets.
@@ -62,7 +62,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 **HARD RULE — Feature flags**
 - Every gameplay layer must be **independently toggleable** through a single `FeatureFlags` Resource loaded **once at startup**: melee mana generation, unblockable system, orbs, pitch zone, minions, totems, equipment.
-- Systems read flags from that **one place** (the `FeatureFlags` autoload) and **degrade gracefully** when a layer is off (e.g. with orbs disabled, pitch costs require mana only).
+- Systems read flags from that **one place** (the `FeatureFlagsService` autoload) and **degrade gracefully** when a layer is off (e.g. with orbs disabled, pitch costs require mana only).
 - Rationale: playtests must isolate which layer causes cognitive overload; toggling must be a checkbox, not a code edit.
 
 ### Performance Rules
@@ -79,7 +79,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 **Folder layout** (greenfield — establish this structure; `res://` root):
 - `res://src/state/` — pure gameplay state layer (hero stats, mana/stamina/orb economy, card resolution, the `MatchState` object, shared gameplay enums). No scene/visual deps.
-- `res://src/systems/` — autoloads & cross-cutting systems (`EventBus`, `CardDatabase`, `FeatureFlags`, the thin `MatchState` autoload wrapper, pooling). Autoloads own instances and expose them; they hold no gameplay logic.
+- `res://src/systems/` — autoloads & cross-cutting systems (`EventBus`, `CardDatabase`, `FeatureFlagsService`, `BalanceConfigService`, pooling). Autoloads own their config/content instances and expose them; they hold **no gameplay logic and never expose live mutable match state** (the Match Runner owns `MatchState` — see §Autoloads).
 - `res://src/actors/` — scene-bound nodes: hero, minions, totems, projectiles (each a `.tscn` + its script).
 - `res://src/ui/` — HUD and menus (read-only consumers of state signals).
 - `res://data/` — authored `.tres` content: `data/cards/`, `data/minions/`, `data/equipment/`, `data/balance/`.
@@ -119,7 +119,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 ### Critical Don't-Miss Rules (anti-patterns & gotchas)
 
 - **NEVER let a visual drive state.** No applying damage from an `AnimationPlayer` call track, animation "hit frame" callback, VFX lifetime, or UI button handler. Visuals emit intent/contact → state decides. (See HARD RULE.)
-- **NEVER hardcode a gameplay layer on.** Any of {melee mana gen, unblockable, orbs, pitch zone, minions, totems, equipment} must check `FeatureFlags` and degrade gracefully when off. (See HARD RULE.)
+- **NEVER hardcode a gameplay layer on.** Any of {melee mana gen, unblockable, orbs, pitch zone, minions, totems, equipment} must check the **injected `FeatureFlags` resource** and degrade gracefully when off. **State-layer code receives `FeatureFlags` by injection and never reads `FeatureFlagsService`;** only `actors` / `ui` / `systems` may read the service. (See HARD RULE.)
 - **NEVER hardcode balance or content** (card costs, orb requirements, HP/stamina/mana values, unblockable damage, equipment passives, minion priority types). It lives in `.tres` / balance resources. The TDD flags most numbers as TBD-during-playtest — they must be tunable without recompiling.
 - **NEVER implement networking.** No RPCs, no authoritative-server logic. The TDD's Section 14 is obsolete for the demo. (The state/visual split is what keeps netcode addable *later*.)
 - **NEVER treat the legacy TDD's engine details as instructions** — it's UE5/C++. Mechanics = canon; implementation = Godot/GDScript per this file.
