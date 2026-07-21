@@ -574,6 +574,12 @@ write state directly, bypassing the D2 ordered dispatch and D5 — the exact fai
 exists to prevent. Autoloads are reserved for **config / content / global events only**
 (`FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`).
 
+> **Planned (E3) — `MatchState` config object.** The E0 constructor takes five positional floats
+> (`seed`, `max_hp`, `move_speed`, `max_stamina`, `max_mana`). Readable now, unreadable once balance
+> grows in E3. Fold them into a **single injected config/params object** (the injected `BalanceConfig`
+> or a small params struct) **while there are only a couple of call sites** — do it as part of E3
+> balance authoring, not retrofitted after many callers exist.
+
 > ⚠️ **Refines `project-context.md`.** project-context currently prescribes a "thin `MatchState`
 > autoload wrapper … exposes it globally." That predates D5 and creates the bypass risk above.
 > project-context §Autoloads / §MatchState split should be updated to: *runner owns MatchState;
@@ -829,6 +835,15 @@ tick and under headless test.
   sensor/hitbox and pushes spatial *facts* (overlaps, distances, contacts) into the queue consumed by
   `advance()` step 4. An actor **never** evaluates a gameplay rule ("is this in thrust range?", "did
   the dodge leave range?") and applies a result — it exposes the fact, and `advance()` decides.
+- **Camera-relative movement is a pushed fact, not a state read or a runner rotation (E1/E2).**
+  Soulslike movement is camera-relative, so `intent.move_dir` is a *camera-space* direction, not world
+  space. The **only** F1-consistent resolution: the runner gathers the **camera basis** as a spatial
+  fact in step 2 and pushes it into state; `advance()` then rotates `move_dir` by that basis to compute
+  world `HeroState.velocity`. The two tempting shortcuts are both defects — **state reading the camera**
+  breaks D3 (state touching presentation), and **the runner rotating velocity after reading it** makes
+  the field no longer the actual velocity and makes replay depend on presentation state. At E0
+  `move_dir` is treated as world-space directly (no camera yet); E1 introduces the pushed camera basis
+  rather than either shortcut.
 - **Documented phase (replay-safe).** Godot's physics server resolves collisions/overlaps *after*
   `_physics_process` returns, so facts gathered at the top of tick N reflect the flush produced by tick
   N−1's movement — a **constant one-tick relationship, identical on every run.** State logic treats
