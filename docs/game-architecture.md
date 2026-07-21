@@ -1,0 +1,761 @@
+---
+title: 'Game Architecture'
+project: 'CardSouls'
+date: '2026-07-21'
+author: 'Matko'
+version: '1.0'
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7]
+status: 'in-progress'
+
+# Source Documents
+gdd: 'docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/gdd.md'
+epics: 'docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/epics.md'
+brief: null
+project_context: 'docs/project-context.md'
+---
+
+# Game Architecture — CardSouls
+
+## Document Status
+
+This architecture document is being created through the GDS Architecture Workflow.
+
+**Steps Completed:** 7 of 9 (Initialize · Project Context · Engine · Architectural Decisions · Cross-cutting · Structure · Implementation Patterns)
+
+This is a **decision spine**, not an implementation spec. It formalizes the invariants already
+set in `docs/project-context.md` and resolves the technical choices the GDD raises but leaves open.
+
+---
+
+## Binding Constraints (set by Matko, Step 1)
+
+These are non-negotiable and scope every decision below.
+
+1. **Scope depth = E0–E3, seams for E4–E6.** Architect to sufficient depth for Foundations,
+   Melee, Split-screen PvP, and Cards+Mana. For Minions/Totems (E4), Unblockable RPS+Orbs (E5),
+   and Pitch Zone (E6): define **named extension points only** — no built machinery, no
+   speculative abstractions for un-playtested systems. Named seams, not machinery.
+2. **Netcode deferred indefinitely.** Drop any "network-ready" abstraction on sight — it is
+   pure cost now. The state/visual separation is retained for *testability and legibility*,
+   not as netcode scaffolding.
+3. **Data-defined economy is its own concern.** `ResourceGenerationRule` and `CardCastCondition`
+   are first-class `Resource` types covering mana generation and cast gating across the whole
+   economy — not scoped to minion AI targeting.
+4. **Fizzle timer = one shared deadline with one owner.** Distinct in kind from per-action
+   timing windows (chargeup/defense/stun). One authoritative owner in the state layer so the
+   logic cannot leak into three classes.
+5. **Legibility is architectural.** The telegraph shape system and the audio bus are *structure*
+   that must exist in E1/E2 (<0.5s recognition, shape+sound not hue, validated in a half-height
+   split-screen viewport) — not UI polish retrofitted later.
+6. **GUT not yet installed.** Flag which state-layer parts are testable *without* engine runtime,
+   so test-framework setup does not block E0. **Carry-forward:** the "testable without engine
+   runtime" boundary must be named concretely in the cross-cutting/testing step — not left as a
+   risk note here.
+
+---
+
+## Project Context
+
+### Game Overview
+**CardSouls** — a 1v1 real-time hybrid fusing third-person soulsborne melee combat with a
+real-time Red/Blue/Green card economy. Both layers are equally decisive (P1). Structured as
+buildup → bluff → payoff over an always-on combat heartbeat.
+
+### Technical Scope
+**Platform:** Windows desktop only (Godot 4.6.3, Forward+/D3D12, Jolt, GDScript only)
+**Genre:** Hybrid action-combat + real-time card economy
+**Mode:** Local single-machine split-screen (PvP / vs-AI). No networking.
+**Project Level:** High complexity, scoped to a validation demo (E0–E3 depth, E4–E6 seams).
+
+### Core Systems (architected to depth vs. seamed)
+| System | Epic | Depth |
+|---|---|---|
+| State layer / MatchState model | E0 | Full |
+| Controller abstraction (kbd/gamepad/AI) | E0 | Full |
+| Feature-flag system | E0 | Full |
+| Data-defined economy (ResourceGenerationRule, CardCastCondition) | E0/E3 | Full |
+| Deterministic timing core (_physics_process, fixed-delta) | E1 | Full |
+| Legibility structure (telegraph-shape + audio bus) | E1/E2 | Full |
+| Split-screen (2× SubViewport, shared state) | E2 | Full |
+| Card system + 4-mode CardData + mana flywheel | E3 | Full |
+| Fizzle shared-deadline owner | E6 | Seam in E0/E3 |
+| Minion/totem AI · Unblockable RPS+orbs · Pitch Zone | E4–E6 | Named seams only |
+
+### Technical Requirements
+- 60 FPS sustained with two viewports, many autonomous minions, totem targeting, VFX.
+- Combat determinism: timing-critical windows in `_physics_process`, fixed-delta, never `_process`.
+- Object pooling + throttled targeting for the minion/totem layer (seamed).
+- Signal-driven HUD; no per-frame economy recompute; state pushes via typed signals.
+- All content/balance authored as `.tres`; zero hardcoded gameplay numbers.
+- **Information-model integrity under split-screen (E2 HUD, required capability, not a later
+  feature):** hands are private; the only public information is the card staged in the Pitch Zone.
+  Because split-screen physically exposes both hands on one display — which would break the
+  information model and make bluffing unobservable under full information during playtests — the
+  E2 HUD layer **must be able to render the opponent's hand as face-down in each player's own
+  viewport.** This is an instrumentation-driven structural requirement of the HUD, addressed in E2,
+  not deferred.
+
+### Complexity Drivers
+- State/visual seam + controller abstraction (E0) — the invariants everything builds on.
+- Four-modes-per-card resolution model — novel, no off-the-shelf pattern.
+- Deterministic timing windows — the fairness core; solved structurally, verified headless.
+- Legibility as structure (not polish) — telegraph-shape system + audio bus exist by E1/E2.
+
+### Technical Risks
+- Getting the E0 seams wrong forces a refactor (highest-impact risk).
+- Telegraph legibility only truly judged in the E2 half-width viewport (validation gated on E2).
+- GUT not yet installed — state-layer testability must be provable without engine runtime
+  (boundary to be named concretely in the testing step).
+- Netcode explicitly excluded; any "network-ready" abstraction is treated as a defect.
+
+---
+
+## Engine & Framework
+
+### Selected Engine
+**Godot 4.6.3 stable** — Forward+/D3D12 renderer, Jolt physics (3D), GDScript only.
+(Confirmation only — pinned in project-context.md; not re-litigated in this workflow.)
+
+**Rationale:** Local single-machine demo; GDScript learning goal; no networking; strong
+`.tres`/Resource data-authoring fit; `SubViewport` split-screen; headless-testable via GUT.
+
+### Engine-Provided Architecture
+| Component | Solution | Notes |
+|---|---|---|
+| Rendering | Forward+ (D3D12) | Small flat arena; VFX/units dominate the budget |
+| Physics | Jolt 3D | CharacterBody3D + move_and_slide; Area3D hit/overlap queries |
+| Audio | AudioServer + bus layout | Legibility audio bus is architectural, defined in E1/E2 |
+| Input | Input Map named actions | Backs controller abstraction; P1/P2 profiles; no raw keycodes |
+| Scene mgmt | SceneTree / PackedScene / SubViewport | Two SubViewports = split-screen (E2) |
+| Build | Windows export templates | Single target; no platform branches or fallbacks |
+
+### Remaining Architectural Decisions (Steps 4–8)
+State-layer / MatchState model · controller-abstraction interface · feature-flag structure ·
+data-defined economy resources (ResourceGenerationRule, CardCastCondition) · deterministic
+timing core · signal-vs-EventBus flow · legibility structure (telegraph-shape + audio bus) ·
+split-screen state-sharing · pooling/targeting seams (E4) · fizzle shared-deadline owner (E6).
+
+### Tooling (optional, non-architectural)
+Godot MCP + Context7 recommended for AI-assisted development — add when convenient; not
+required by this architecture.
+
+---
+
+## Architectural Decisions
+
+Scope reminder: **full depth for E0–E3, named seams for E4–E6** (Binding Constraint #1).
+Netcode is excluded (#2) — no decision below is justified by "network-readiness."
+
+### Decision Summary
+
+| # | Decision | Choice | Epic |
+|---|----------|--------|------|
+| D1 | State-layer object model | Composed plain `RefCounted` objects (MatchState → 2× PlayerState → pools/hand/hero) | E0 |
+| D2 | Time-step ownership | Single ordered `MatchState.advance(delta)`; enumerated sub-system order | E0 |
+| D3 | Controller abstraction | Per-tick `InputIntent` value object; `Input.*` confined to Controllers | E0 |
+| D4 | Timing-window primitive | Pure state-layer timer/window type advanced by `tick(delta)` | E1 |
+| D5 | Signal / event flow | State→presentation only; signals **queued during advance, drained after** | E0 |
+| D6 | Data-defined economy | `ResourceGenerationRule` + `CardCastCondition` Resources + pure evaluator | E0/E3 |
+| D7 | Legibility structure | Standalone `TelegraphProfile` Resource (any action, melee incl.) + `CombatCues` bus | E1/E2 |
+| D8 | Fizzle shared-deadline owner | Sole owner `PitchState` in MatchState (seam in E0–E3, machinery E6) | E6 |
+| D9 | E4–E6 seams | `TargetingService` + pool (E4); reserved `OrbPool` (E5); `PitchState` (E6) | E4–E6 |
+
+**Quick confirmations:** Persistence = none (no meta-progression; only `FeatureFlags` + balance `.tres`).
+Networking = excluded. Asset loading = preload `.tres` at startup + scene-based + pooling (no streaming).
+UI = Godot `Control`, signal-driven, one HUD root per viewport. AI = a Controller implementation (E7),
+not a subsystem; bluffing AI deferred.
+
+---
+
+### D1 — State-Layer Object Model
+
+Composed plain objects, all `RefCounted` (no `Node`, no scene, fully headless):
+
+```
+MatchState
+├── PlayerState (P1)
+│   ├── HeroState          (HP, facing, action state)
+│   ├── StaminaPool
+│   ├── ManaPool
+│   ├── OrbPool            (reserved; flag-off until E5)
+│   └── Hand               (reserved; populated E3)
+├── PlayerState (P2)  … same shape
+└── PitchState             (reserved; sole fizzle-deadline owner, machinery E6 — see D8)
+```
+
+Each pool owns its value, its bounds, and its own typed signal surface. This gives every economy
+resource a single owner and a testable unit, and lets a feature-flag degrade one pool without
+touching others.
+
+---
+
+### D2 — Time-Step Ownership (Determinism Guarantee)
+
+**One call site advances gameplay time:** `MatchState.advance(delta)`, invoked exactly once per
+physics tick from a single `_physics_process`. Tests feed fixed `delta`; gameplay never reads
+wall-clock. This single ordered call *is* the framerate-independence + headless-testability guarantee.
+
+**Frame sequence (the Match Runner's `_physics_process`, per binding — sampling is OUTSIDE advance):**
+
+```
+_physics_process(delta):
+  1. Sample every Controller  → InputIntent per player   # D3: ONLY Controllers touch Input.*
+  2. MatchState.advance(delta, intents)                  # enqueues signals, never emits
+  3. MatchState.drain_signals()                          # D5: flush queue AFTER advance returns
+```
+
+**Enumerated sub-system order INSIDE `advance(delta, intents)`** (deterministic; player order P1→P2;
+`[seam]` entries are reserved no-ops until their epic):
+
+```
+advance(delta, intents):
+  1. Ingest intents            apply each player's InputIntent → intended actions (P1 then P2)
+  2. Advance timers            D4 windows: stamina/mana regen, chargeup, defense window, stun,
+                               [fizzle deadline — E6 seam]
+  3. Resolve actions           movement, attack initiation, block/deflect, roll → hero transitions
+  4. Resolve contacts          drain queued hitbox→contact events → apply damage/chip to HP
+  5. Resource generation       evaluate ResourceGenerationRule (melee-hit mana, passive tick),
+                               [orb grants — E5 seam], [accelerator totems — E4 seam]
+  6. Card / economy resolution card play + draw, [pitch resolution — E6 seam]
+  7. Board update              [minion throttled-tick + totems — E4 seam]
+  8. Resolution check          HP ≤ 0 → death / round end
+  # No signal emission here — steps 1–8 only ENQUEUE. Draining happens in the runner, step 3 above.
+```
+
+Contacts (step 4): `Area3D` hitboxes report contact during the physics step by pushing a **queued
+contact event**; they never apply damage. The queue is drained deterministically inside advance.
+
+---
+
+### D3 — Controller Abstraction (with enforceable invariant)
+
+A `Controller` produces a pure-data `InputIntent` each tick (`move_dir`, pressed/held/released
+actions, aim); the hero/state consumes it and never knows the source. Keyboard, gamepad, and
+scripted AI all emit the **same** struct — dummy→PvP→bot is a config swap. Framed as AI-parity +
+testability, **not** netcode (#2).
+
+> **INVARIANT D3 (checkable):** No `Input.*` call — `Input.is_action_pressed`, `Input.get_vector`,
+> `InputEvent` handling, etc. — appears anywhere outside a `Controller` implementation
+> (`src/**/controllers/`). State (`src/state/`) and actor (`src/actors/`) code never touch the input
+> singleton. **Check:** `grep -rn "Input\." src/ --include=*.gd` must return matches *only* under a
+> controllers path. A hit elsewhere is an architectural defect.
+
+---
+
+### D4 — Timing-Window Primitive (Fairness Core)
+
+A single pure state-layer timer/window value type (`RefCounted`), advanced by explicit `tick(delta)`.
+No engine `Timer` / `SceneTreeTimer` nodes for gameplay-critical timing (chargeup, defense window,
+stun, and later fizzle) — engine timers are frame-coupled and untestable headless; inline float
+accumulators drift across systems. All timing windows are one primitive, advanced in D2 step 2, and
+driven by fixed `delta` in tests. This same primitive backs the fizzle deadline (D8).
+
+---
+
+### D5 — Signal / Event Flow (with timing discipline)
+
+Direct typed signals on the owning state object; the HUD/presentation subscribes. `EventBus`
+autoload is reserved for genuinely global, ownerless events only (`match_started`, `round_ended`).
+
+> **BINDING D5 — signal timing & direction:**
+> 1. **Queued, not mid-tick.** Signals raised during `advance()` are **enqueued**, then **drained
+>    after `advance()` returns** (D2 runner step 3). A consumer can never observe half-advanced state.
+> 2. **Presentation-only subscribers.** Signal subscribers are presentation-layer only (HUD, VFX,
+>    audio, telegraph controller).
+> 3. **No state-to-state signals.** No state object subscribes to another state object's signal.
+>    State-to-state coupling goes exclusively through the **ordered dispatch in D2**, never through
+>    signals.
+
+---
+
+### D6 — Data-Defined Economy (Binding Constraint #3)
+
+Two first-class `Resource` base types, evaluated by a **pure evaluator in the state layer** (no
+hardcoded per-source rule methods):
+
+- **`ResourceGenerationRule`** (`source`, `resource`, `amount`, `trigger`) — drives *all* mana
+  generation as data: passive tick, on-melee-hit, and the Mana Accelerator totem (E4 seam).
+- **`CardCastCondition`** (`mana_cost`, per-color `orb_costs`, flags) — gates *every* cast and card
+  mode.
+
+E0 lands the **types + evaluator interface**; E3 authors the concrete `.tres`. Net: adding a mana
+source or a cast rule is a new `.tres`, not a code change — economy-wide, not scoped to minion AI.
+
+---
+
+### D7 — Legibility Structure (Binding Constraint #5)
+
+> **BINDING D7 — telegraph scope:** `TelegraphProfile` is a **standalone `Resource`**, referenced by
+> **any telegraphing action — melee actions included** — not owned by `CardData`. It **exists in E1**
+> so melee attacks carry telegraph structure from the start and the color-unblockable telegraphs in
+> E5 reuse it rather than forcing a retrofit.
+
+- **`TelegraphProfile`** fields: `shape_id`, `sting_id`, `color`, `pose_id`. **State owns *which*
+  telegraph is active** (color + chargeup window); a presentation-side `TelegraphController` reads
+  state and drives shape + sound. Hue is never the sole channel (colorblind-safe, <0.5s).
+- **Audio:** a fixed bus layout with a dedicated **`CombatCues`** bus (per-color stings + outcome
+  cues) separate from `Music` / `Ambience`, so functional cues are structurally un-maskable.
+- Telegraph legibility is validated in the **E2 half-width split viewport**.
+
+---
+
+### D8 — Fizzle Shared-Deadline Owner (Binding Constraint #4)
+
+A single `PitchState` object inside `MatchState` is the **sole owner** of the fizzle deadline (built
+on the D4 primitive). Every system *queries* `PitchState`; none holds its own copy of fizzle time.
+
+**In E0–E3 this is a named seam:** `MatchState` reserves the `PitchState` slot and the
+deadline-owner contract now (D2 step 2 / step 6 reserve its tick + resolution slots); the machinery
+lands in E6. This honors #4 (one owner, no leakage into three classes) without building E6 early (#1).
+
+---
+
+### D9 — E4–E6 Seams (named, no machinery)
+
+- **Minions/totems (E4):** a `TargetingService` interface (throttled shared-tick provider) + an
+  object-pool seam; `PlayerState` reserves a `units`/board collection. No AI built now.
+- **RPS/orbs (E5):** `OrbPool` exists as a reserved, flag-off pool in `PlayerState`; resolution
+  enters through the D2 command dispatch (steps 4–5). No RPS machinery now.
+- **Pitch (E6):** the `PitchState` owner from D8. Reserved, not built.
+
+---
+
+## Cross-cutting Concerns
+
+Patterns binding on ALL systems. (Event flow is specified in D5 and not restated here.)
+
+### Error Handling
+
+> **BINDING X1 — invariant checks must survive export.** Godot strips `assert()` in exported
+> release builds, so a bare `assert()` gives exported playtest builds *no* invariant check at all —
+> not a softer one. Invariants therefore route through an explicit `check_invariant(condition, msg)`
+> helper built on a **normal runtime branch** (`if not condition:`), which survives export.
+
+- `check_invariant(condition, msg)` behavior is mode-driven (mode from a config/build feature, not
+  from `assert`):
+  - **Dev mode** → fail fast (`push_error` + halt/breakpoint).
+  - **Playtest build** → `Log.error(msg)` + continue.
+- It guards the GDD's easy-to-break rules: all-color orb reset, hand ≤ 4, per-color orb cost never
+  read off `CardData`.
+- Recoverable/unexpected-but-handled → `push_warning`. **Feature-flag-OFF paths degrade, never
+  error** (a disabled layer is a valid state).
+- No player-facing error UI (dev-only demo). `assert()` may still be used for pure dev-time sanity,
+  but **never** as the sole guard of a gameplay invariant that must hold in a playtest build.
+
+### Logging
+
+- Thin `Log` util, levels ERROR/WARN/INFO/DEBUG, tagged per system.
+- HARD: no logging inside `advance()`'s steps or any per-frame hot path (allocation + determinism
+  risk). Logging never reads/mutates state — it is a pure observer. Destination: console + optional
+  file; plain tagged text.
+
+### Configuration
+
+- `FeatureFlags` `.tres` — loaded **once** at startup (the overload-isolation instrument).
+- **Balance `.tres`** — every TBD-in-playtest number (hero stats, per-color unblockable damage, all
+  timing windows, card/pitch costs, arena size). Zero hardcoded gameplay numbers.
+- Godot **Input Map** (named actions) + `project.godot` (autoloads). No meaningful player settings
+  in the demo.
+
+> **BINDING X3 — runtime reload is a config-layer requirement, not a debug nicety.** Balance `.tres`
+> must be **reloadable at runtime without restarting the match**. Tuning defense-window and chargeup
+> values in the tens of milliseconds is the dominant activity for the coming months; a restart per
+> iteration is a large hidden cost. The config layer exposes a reload that re-reads balance `.tres`
+> and re-applies values to live state mid-match. (`FeatureFlags` is load-once by design; **balance
+> values are hot-reloadable**.)
+
+### Event System
+
+- Per D5: owner-signals (state→presentation), drained after `advance()`. `EventBus` autoload carries
+  a small fixed typed set only: `match_started`, `round_started`, `round_ended` (past-tense
+  `snake_case`).
+
+### Debug Tools (gated behind a `debug` flag)
+
+1. **Runtime FeatureFlags toggle overlay** — live layer isolation (the GDD overload instrument).
+2. **Per-player state inspector** — pools + active D4 timers + current telegraph; reads signals only.
+3. **Deterministic step/pause** — pause the runner and advance N fixed ticks (timing-window debugging).
+4. **Reveal-opponent-hand toggle** — debug counterpart to the E2 face-down-hand capability.
+5. **InputIntent record & replay** — record the per-tick `InputIntent` stream; replay makes any round
+   *exactly* reproducible from the recording + the balance `.tres` (D2 determinism + D3 pure-value
+   input make this near-free). **Scope: record + replay only — no rewind, no scrubbing UI.** Rationale:
+   the only actionable playtest report here is "I didn't see that happen," and diagnosing it requires
+   replaying what actually happened tick by tick; retrofitting capture later is expensive.
+
+### Testing & Runtime Boundary (GUT not yet installed)
+
+| Testable WITHOUT engine runtime (pure GDScript instantiation) | Needs engine runtime (scene / GUT integration) |
+|---|---|
+| All of `src/state/`: pools, `HeroState`, `MatchState.advance(delta)` with fixed δ, the D4 timer primitive, the D6 evaluators (`ResourceGenerationRule` / `CardCastCondition`), RPS resolution, orb math | Actors (`CharacterBody3D` + `move_and_slide`), `Area3D` contact wiring, `SubViewport` split-screen, HUD `Control`, `CombatCues` bus, telegraph presentation |
+
+- **Dividing line = the D1/D5 state/visual seam.** State code needing a running tree to test is a
+  *defect in the code, not the test* (project-context testing rule).
+- **Bootstrapping before GUT:** run state tests as `godot --headless --script` — pure `RefCounted`
+  objects instantiated + asserted directly. GUT is added when convenient (E0/E1), **not** a
+  prerequisite for writing E0 state logic.
+
+---
+
+## Project Structure
+
+Top-level layout and all naming conventions are inherited **verbatim** from `project-context.md`
+(§Code Organization, §Naming Conventions). This section materializes the D-decisions and seams into
+a concrete tree and adds **two** folders to the project-context list (both ratified): `src/controllers/`
+and `src/main/`.
+
+### Organization Pattern
+Hybrid — layered by architectural role (state / systems / controllers / actors / ui), feature-grouped
+*inside* each layer. Required by the state/visual seam and the D3 invariant; not a free stylistic choice.
+
+### Directory Tree
+(⚠️ = extends the project-context folder list — ratified. `(En)` = reserved seam for that epic.)
+
+```
+res://
+├── project.godot                     # autoloads + Input Map (intentional, reviewed edits)
+├── src/
+│   ├── state/                        # PURE · headless · no scene/visual/Input deps — dependency SINK
+│   │   ├── match_state.gd            # D2: advance(delta,intents) ordered dispatch + drain_signals()
+│   │   ├── player_state.gd           # D1: composes hero + pools + hand
+│   │   ├── hero_state.gd
+│   │   ├── pools/  stamina_pool.gd · mana_pool.gd · orb_pool.gd   # OrbPool reserved flag-off (E5)
+│   │   ├── timing/ timing_window.gd  # D4 pure timer/window primitive (tick(delta))
+│   │   ├── economy/ economy_evaluator.gd   # D6 pure evaluator
+│   │   ├── input/  input_intent.gd   # D3 pure per-tick value object
+│   │   ├── pitch/  pitch_state.gd     # D8 sole fizzle-deadline owner — reserved seam until E6
+│   │   ├── enums.gd                  # CardColor {RED,BLUE,GREEN} + shared gameplay enums
+│   │   └── resources/                # Resource SCHEMA classes (.gd) — pure data vocabulary
+│   │       ├── card_data.gd · resource_generation_rule.gd · card_cast_condition.gd   # D6
+│   │       ├── telegraph_profile.gd  # D7 standalone; used from E1 (melee incl.)
+│   │       ├── balance_config.gd     # class_name BalanceConfig
+│   │       ├── feature_flags.gd      # class_name FeatureFlags
+│   │       └── minion_priority.gd (E4) · equipment_data.gd (E8)
+│   ├── systems/                      # autoloads & cross-cutting — own instances, NO gameplay logic
+│   │   ├── event_bus.gd              # D5 fixed set: match_started/round_started/round_ended
+│   │   ├── feature_flags_service.gd  # autoload: loads FeatureFlags .tres ONCE; exposes flags
+│   │   ├── balance_config_service.gd # autoload: loads BalanceConfig .tres; HOT-RELOAD (X3)
+│   │   ├── card_database.gd          # autoload: loads all card .tres at startup
+│   │   ├── intent_recorder.gd        # X5: captures InputIntent stream at the runner's sample step
+│   │   ├── log.gd (X2) · invariant.gd (X1 check_invariant)
+│   │   └── pool/ object_pool.gd      # pooling seam (E4)
+│   ├── controllers/  ⚠️              # D3: the ONLY path where Input.* may appear
+│   │   ├── controller.gd             # interface: sample() -> InputIntent
+│   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2)
+│   │   ├── scripted_controller.gd    # E7 bot (gets an injected READ-ONLY state view) — reserved
+│   │   └── replay_controller.gd      # X5: emits InputIntent from a recorded stream (indistinguishable
+│   │                                 #     from hardware to the runner)
+│   ├── actors/                       # scene-bound nodes (.tscn + .gd)
+│   │   ├── hero/                      # CharacterBody3D + move_and_slide; Hitbox REPORTS contact
+│   │   │   └── telegraph_controller.gd  # D7 presentation: reads state → shape+sound
+│   │   ├── dummy/ (E1)
+│   │   └── minions/ · totems/ · projectiles/   # reserved (E4/E5)
+│   ├── ui/                           # HUD + menus (Control) — read-only state-signal consumers
+│   │   ├── hud/                       # bars, 3 orb counters, hand (opponent face-down — E2 capability)
+│   │   └── debug/                     # X5 toggles + overlays ONLY (no state mutation): flags · inspector
+│   │                                 #     · step/pause · reveal-hand · record/replay start-stop-load
+│   └── main/  ⚠️                     # root scene + Match Runner (the single _physics_process, D2)
+│       └── match_runner.gd            # OWNS the MatchState instance; sample→advance→drain; wires refs
+├── data/                             # authored .tres INSTANCES
+│   ├── cards/ · minions/(E4) · equipment/(E8) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
+│   └── feature_flags.tres
+├── assets/                           # art · audio (feeds CombatCues bus) · models · materials
+├── test/                             # mirrors src/; test_*.gd + headless harness
+│   ├── state/                         # PURE headless tests — no engine runtime (X6)
+│   └── integration/                   # scene/actor tests — need runtime
+└── addons/gut/                       # when installed (X6: not a prerequisite for E0)
+```
+
+### Schema vs Loader (class_name uniqueness)
+Godot requires globally-unique `class_name`. Therefore:
+- **`src/state/resources/`** holds **schema** types (`extends Resource`, authored as `.tres`):
+  `FeatureFlags`, `BalanceConfig`, `CardData`, `ResourceGenerationRule`, `CardCastCondition`,
+  `TelegraphProfile`, `MinionPriority`, `EquipmentData`.
+- **`src/systems/`** holds **loaders/services** (`extends Node` autoloads), always `*Service`-suffixed:
+  `FeatureFlagsService`, `BalanceConfigService`. (`CardDatabase` and `EventBus` need no suffix — no
+  name-twin schema type.) A service loads its schema `.tres` and exposes it (`flags`, `config`).
+
+### MatchState Ownership (no autoload for live state)
+The **Match Runner** (`src/main/match_runner.gd`) creates and **owns** the single `MatchState`
+instance, advances it (D2), and drains its signal queue (D5). References are wired **explicitly** at
+match start:
+- HUD / presentation ← **signal subscriptions** (or an injected read-only view); never a mutating handle.
+- Scripted controller (E7) ← an injected **read-only state view**; it produces intents, never writes.
+
+**No `MatchState` autoload.** A globally-exposed mutable state singleton would let arbitrary code
+write state directly, bypassing the D2 ordered dispatch and D5 — the exact failure mode the seam
+exists to prevent. Autoloads are reserved for **config / content / global events only**
+(`FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`).
+
+> ⚠️ **Refines `project-context.md`.** project-context currently prescribes a "thin `MatchState`
+> autoload wrapper … exposes it globally." That predates D5 and creates the bypass risk above.
+> project-context §Autoloads / §MatchState split should be updated to: *runner owns MatchState;
+> autoloads never expose live mutable state.*
+
+### Instrumentation wiring (X5 record/replay)
+- **Record:** the runner's sample step feeds each tick's `InputIntent` to `IntentRecorder`
+  (`src/systems/`). Recording is a passive tap — it never affects the tick.
+- **Replay:** a `ReplayController` (`src/controllers/`) is swapped in for a hardware controller and
+  emits the recorded `InputIntent` stream. The runner cannot tell the difference (D3). A round replays
+  exactly from recording + balance `.tres`. Scope: record + replay only — no rewind, no scrub UI.
+- **UI:** only start/stop/load toggles live in `src/ui/debug/` (no state mutation there).
+
+### Architectural Boundaries (enforceable dependency rules)
+
+| Layer | May depend on | May NOT depend on | Enforces |
+|---|---|---|---|
+| `src/state/` | itself only | actors, ui, systems, controllers, `Input.*`, `Timer` nodes, `AnimationPlayer` | D1, D4, project-context HARD RULE |
+| `src/controllers/` | `state/` (InputIntent, enums) | actors, ui | D3 — and is the **only** `Input.*` site |
+| `src/actors/` | `state/`, `systems/` | ui | state/visual seam |
+| `src/ui/` + `actors/**/telegraph_controller` | `state/` (read signals / read-only view) | mutating state | D5 (presentation subscribes; never writes) |
+| `src/systems/` | `state/` | actors, ui | autoloads hold no gameplay logic |
+
+Direction is always **visuals → state, never reverse**. Contacts flow: `Area3D` reports → queued →
+drained in `advance()` step 4; hitboxes never apply damage.
+
+### Naming Conventions
+Per `project-context.md` §Naming Conventions verbatim. New types conform: `MatchState`, `PlayerState`,
+`HeroState`, `InputIntent`, `TimingWindow`, `ResourceGenerationRule`, `CardCastCondition`,
+`TelegraphProfile`, `PitchState`, `FeatureFlagsService`, `BalanceConfigService`, `ReplayController`,
+`IntentRecorder`.
+
+---
+
+## Implementation Patterns
+
+Concrete GDScript so agents implement the D-decisions identically. Full depth for E0–E3; E4–E6
+branches are reserved seams (guarded by `check_invariant`/feature flag until their epic). All code is
+Godot 4.6 GDScript, statically typed, per `project-context.md` conventions.
+
+### Novel Pattern 1 — Tick + Signal-Queue (D2 + D5, the core loop)
+
+A `SignalQueue` realizes D5's "enqueue during `advance()`, drain after." State objects push a bound
+emit; nothing emits mid-tick, so no consumer can observe half-advanced state.
+
+```gdscript
+class_name SignalQueue extends RefCounted
+var _pending: Array[Callable] = []
+func push(emitter: Callable) -> void:
+    _pending.append(emitter)
+func drain() -> void:
+    var batch := _pending
+    _pending = []            # swap-out first: re-entrant safe
+    for emit_call in batch:
+        emit_call.call()
+```
+
+```gdscript
+# src/main/match_runner.gd — the ONLY _physics_process in the project
+func _physics_process(delta: float) -> void:
+    var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]  # D3, outside advance
+    _intent_recorder.capture(intents)                # X5 passive tap — never affects the tick
+    _match_state.advance(delta, intents)             # enqueues signals only
+    _match_state.drain_signals()                     # D5: emit AFTER advance returns
+```
+
+`MatchState.advance()` runs the enumerated D2 sub-system order (ingest → timers → actions → contacts
+→ resource-gen → card/economy → board[E4 seam] → resolution-check); `drain_signals()` calls
+`_queue.drain()`.
+
+### Novel Pattern 2 — Pool + Queued Signal + Config Injection (D1, D5, boundary rule)
+
+Load-bearing consistency rule: **state never reads an autoload.** Balance flows *in* by injection.
+State may reference the `BalanceConfig` *schema* (it lives in `state/resources/`) but never
+`BalanceConfigService` (a `systems/` autoload).
+
+```gdscript
+class_name ManaPool extends RefCounted
+signal mana_changed(current: float, maximum: float)
+var _current: float = 0.0
+var _maximum: float
+var _queue: SignalQueue
+func _init(queue: SignalQueue, maximum: float) -> void:
+    _queue = queue
+    _maximum = maximum
+func add(amount: float) -> void:
+    var v := clampf(_current + amount, 0.0, _maximum)
+    if is_equal_approx(v, _current):
+        return
+    _current = v
+    _queue.push(mana_changed.emit.bind(_current, _maximum))   # queued, not emitted
+func get_current() -> float:
+    return _current
+func set_maximum(maximum: float) -> void:                     # X3 hot-reload re-injection
+    _maximum = maximum
+    add(0.0)   # re-clamp + re-signal if bounds shrank
+```
+
+Hot-reload (X3), no restart: `BalanceConfigService` reloads the `.tres` → calls
+`match_state.apply_balance(config)` → pools update bounds in place via `set_maximum` etc.
+
+### Novel Pattern 3 — Controller / InputIntent (D3)
+
+```gdscript
+class_name InputIntent extends RefCounted        # pure per-tick value object
+var move_dir := Vector2.ZERO
+var pressed: Dictionary = {}      # StringName action -> bool, this tick
+var held: Dictionary = {}
+var aim := Vector2.ZERO
+
+class_name Controller extends RefCounted          # interface
+func sample() -> InputIntent:
+    return InputIntent.new()                       # override per implementation
+```
+
+- `KeyboardController` / `GamepadController` are the **only** places `Input.*` may appear (D3 INVARIANT —
+  grep-checkable under `src/controllers/`).
+- `ReplayController` overrides `sample()` to return recorded intents; the runner cannot distinguish it
+  from hardware (X5).
+- `ScriptedController` (E7) receives an injected **read-only state view** at construction to make
+  decisions — it never mutates state.
+
+### Novel Pattern 4 — TimingWindow (D4, the fairness core)
+
+```gdscript
+class_name TimingWindow extends RefCounted
+var _duration := 0.0
+var _elapsed := 0.0
+var is_running := false
+func start(duration: float) -> void:
+    _duration = duration
+    _elapsed = 0.0
+    is_running = true
+func tick(delta: float) -> void:
+    if not is_running:
+        return
+    _elapsed += delta
+    if _elapsed >= _duration:
+        is_running = false
+func remaining() -> float:
+    return maxf(0.0, _duration - _elapsed)
+```
+
+Every chargeup / defense-window / stun / fizzle is *this one type*, advanced in `advance()` step 2,
+driven by fixed δ in tests. No engine `Timer` / `SceneTreeTimer` nodes for gameplay-critical timing.
+
+### Novel Pattern 5 — Data-Defined Economy Evaluator (D6)
+
+```gdscript
+class_name ResourceGenerationRule extends Resource
+@export var source: StringName        # &"melee_hit" | &"passive_tick" | &"mana_accelerator" (E4)
+@export var resource: StringName      # &"mana"
+@export var amount: float
+
+class_name EconomyEvaluator extends RefCounted    # PURE — the only place gen rules are applied
+static func apply(rules: Array[ResourceGenerationRule], src: StringName,
+                  player: PlayerState) -> void:
+    for r in rules:
+        if r.source == src and r.resource == &"mana":
+            player.mana.add(r.amount)
+```
+
+`CardCastCondition` gates every cast/mode the same data-driven way (mana cost + per-color orb costs +
+flags), evaluated against `PlayerState`. Adding a mana source or cast rule = a new `.tres`, no code.
+
+### Novel Pattern 6 — Four-Mode Card Resolution (the gameplay novelty)
+
+One `CardData` is summon **and** attack **and** defense **and** pitch. Modes ②/③ derive from `color`
+(no per-card data); ①/④ carry effects.
+
+```gdscript
+class_name CardData extends Resource
+@export var color: CardColor                 # drives Mode ②/③ unblockable identity
+@export var basic_effect: CardEffect         # Mode ① (E3)
+@export var pitch_effect: CardEffect         # Mode ④ (E6, reserved)
+@export var cast_condition: CardCastCondition
+```
+
+```gdscript
+enum ModeKind { BASIC, UNBLOCKABLE_INIT, UNBLOCKABLE_DEFENSE, PITCH }
+func resolve(player: PlayerState, card: CardData, mode: ModeKind) -> void:
+    match mode:
+        ModeKind.BASIC:               _resolve_basic(player, card)               # E3
+        ModeKind.UNBLOCKABLE_INIT:    _resolve_unblockable_init(player, card)    # E5 seam
+        ModeKind.UNBLOCKABLE_DEFENSE: _resolve_unblockable_defense(player, card)  # E5 seam
+        ModeKind.PITCH:               _resolve_pitch(player, card)               # E6 seam
+```
+
+E5/E6 branches are reserved stubs guarded by `check_invariant`/feature flag until their epic.
+(`CardEffect` is a reserved effect-schema `Resource` in `state/resources/` — `basic_effect` authored
+in E3, `pitch_effect` in E6.)
+
+### Hero Action-State Representation (DECIDED: pure enum + transition table)
+
+```gdscript
+# In HeroState (src/state/hero_state.gd)
+enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING }
+var action_state: ActionState = ActionState.IDLE
+# Transitions computed in advance() step 3 from InputIntent + TimingWindows. Fully headless-testable.
+```
+
+Chosen over the Node-based `StateMachine` from the Godot knowledge fragment, which is scene-coupled
+and `_process`-driven — it **cannot** be tested headless and would violate D1 and X6. Souls action
+states are few and timing-gated, so a pure enum in the state layer keeps them in the deterministic
+tick and under headless test.
+
+### Standard Patterns & Consistency Rules
+
+| Concern | Rule |
+|---|---|
+| Communication | State→presentation via **signals** (drained post-`advance()`); the runner **injects** refs at match start; **no** service locator for state |
+| Entity creation | `PackedScene.instantiate()` + `ObjectPool` for hot spawns (E4 seam); never instantiate/`queue_free` per shot in a hot path |
+| Entity state | Pure enum + transitions **in the state layer**; never a scene `StateMachine` for gameplay state |
+| Data access | Content/config via autoload **services**; **state receives schema `Resource`s by injection, never reads a `*Service`** |
+| Invariants | `check_invariant()` (X1), never bare `assert()` as the sole guard of a playtest-critical rule |
+| Timing | All gameplay-critical timing via `TimingWindow` advanced by fixed δ; never engine `Timer` nodes |
+| Signals | Owner emits via `SignalQueue.push`; subscribers are presentation-only; no state-to-state signals (D5) |
+
+---
+
+## Resume Point
+
+**For the next session — assume no memory of the conversation that produced this document. Everything
+needed to continue the `gds-game-architecture` workflow is in THIS file.**
+
+### Workflow state
+- Skill: `gds-game-architecture` (BMad/GDS micro-file workflow; steps in
+  `.claude/skills/gds-game-architecture/steps/step-0N-*.md`).
+- **Completed: Steps 1–7** (Init · Project Context · Engine · Architectural Decisions · Cross-cutting ·
+  Structure · Implementation Patterns). See frontmatter `stepsCompleted: [1,2,3,4,5,6,7]`.
+- **Remaining: Step 8 (Validation)** — `step-08-validation.md`; then **Step 9 (Completion)** —
+  `step-09-*.md`. Resume by reading `step-08-validation.md` fully and following it. Each step ends with
+  an A/P/C menu; only advance on the user's **C**, and update frontmatter `stepsCompleted` before
+  loading the next step file.
+
+### Facilitation contract (how the user, Matko, works — observed this run)
+- Wants each choice as **prose + a clear recommendation**; he replies "**Option N** + a binding
+  constraint," then expects the constraint recorded as a named rule. Do NOT dump option matrices via
+  the question tool; present recommendations and let him steer.
+- He catches divergences (naming collisions, engine-behavior gaps, boundary violations) — be precise;
+  verify engine claims; never promise behavior the engine won't deliver.
+- Config: `_bmad/gds/config.yaml` → user_name `Matko`, language English, output_folder `{project-root}/docs`.
+
+### Canonical inputs (sources of truth)
+- **GDD:** `docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/gdd.md` (+ `epics.md`, `decision-log.md`).
+- **Implementation source of truth:** `docs/project-context.md` (47 rules; two HARD RULES:
+  state/visual separation, feature-flag isolation).
+- **Mechanics canon (engine-obsolete):** `docs/tdd-legacy-ue5.md`.
+
+### Binding constraints & decisions already locked (do not re-litigate)
+- The six **Binding Constraints** (top of this doc) + bindings **D2/D3/D5/D7** and **X1/X3/X5**.
+- **Scope:** full depth E0–E3, **named seams only** for E4–E6; no speculative abstraction.
+- **Netcode deferred indefinitely** — drop any "network-ready" abstraction as a defect.
+- Decisions **D1–D9**, cross-cutting **X1–X6**, the project structure, and implementation patterns
+  above are settled.
+
+### Open items carried forward (NOT yet done)
+1. **`project-context.md` §Autoloads refinement — NOT YET APPLIED.** This architecture supersedes
+   project-context's "thin `MatchState` autoload wrapper … exposes it globally." Correct rule:
+   **the Match Runner (`src/main/match_runner.gd`) owns the single `MatchState` instance; autoloads
+   never expose live mutable state** (autoloads are for config/content/global-events only:
+   `FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`). Update
+   `project-context.md` §Autoloads and its "MatchState split" paragraph to match. Flagged inline in
+   §Project Structure → *MatchState Ownership*. **Action needed:** edit `project-context.md` (was left
+   for Matko to approve rather than edited silently).
+2. **Step 8 (Validation) and Step 9 (Completion) not started.** Validation should check the doc against
+   the GDD systems + the E0–E3/seam scope; watch for any accidental E4–E6 machinery or network-ready
+   abstraction (both would be defects here).
+
+### Nothing else is being held only in context
+All bindings, decisions, code patterns, the GUT "testable-without-engine-runtime" boundary (X6), and
+the E2 face-down-hand capability are written above. The only un-applied action is open item #1
+(editing `project-context.md`).
