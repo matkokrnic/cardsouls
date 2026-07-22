@@ -17,6 +17,12 @@ var p1: PlayerState
 var p2: PlayerState
 var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
 
+## Injected via apply_balance() (story 1-1). `balance` holds the non-duration authored
+## values; `balance_ticks` holds every `*_seconds` field pre-converted to integer ticks —
+## the ONLY form in which those durations may be read inside advance() (A1).
+var balance: BalanceConfig
+var balance_ticks: BalanceTicks
+
 var _queue: SignalQueue
 var _rng: RandomNumberGenerator  # the ONLY randomness source in the state layer (F2/A2)
 var _tick := 0
@@ -62,6 +68,18 @@ func advance(intents: Array[InputIntent]) -> void:
 	_check_resolution()
 
 
+## X3 hot-reload seam (story 1-1): the runner passes the (re)loaded BalanceConfig here.
+## Re-injects bounds set_maximum-style (re-clamp + re-signal, queued per D5) and
+## re-converts every `*_seconds` duration ONCE via BalanceTicks. A TimingWindow already
+## in flight keeps its original duration; the new tick counts take effect at its next
+## start() (D4/A1). Player order fixed P1 -> P2 for determinism.
+func apply_balance(config: BalanceConfig) -> void:
+	balance = config
+	balance_ticks = BalanceTicks.from_config(config)
+	_apply_balance_to_player(p1, config)
+	_apply_balance_to_player(p2, config)
+
+
 ## Emit all queued signals. Called by the runner AFTER advance() returns (D5).
 func drain_signals() -> void:
 	_queue.drain()
@@ -86,6 +104,12 @@ func _resolve_movement(player: PlayerState, intent: InputIntent) -> void:
 	player.hero.velocity = Vector3(dir.x, 0.0, dir.y) * player.hero.move_speed
 	if not dir.is_zero_approx():
 		player.hero.facing = dir
+
+
+func _apply_balance_to_player(player: PlayerState, config: BalanceConfig) -> void:
+	player.hero.set_max_hp(config.max_hp)
+	player.hero.move_speed = config.move_speed
+	player.stamina.set_maximum(config.max_stamina)
 
 
 func _check_resolution() -> void:

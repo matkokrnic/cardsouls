@@ -57,6 +57,13 @@ func get_max_hp() -> float:
 	return _max_hp
 
 
+## X3 hot-reload: re-inject the HP bound (set_maximum-style: re-clamp + re-signal if the
+## max shrank) — same pattern as the economy pools.
+func set_max_hp(maximum: float) -> void:
+	_max_hp = maximum
+	_set_hp(_hp)
+
+
 func set_action_state(new_state: ActionState) -> void:
 	if new_state == action_state:
 		return
