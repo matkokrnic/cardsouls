@@ -1,6 +1,6 @@
 # Story 1.1: Melee balance schema + hot-reloadable seconds→ticks conversion
 
-Status: backlog
+Status: ready-for-dev
 
 ## Story
 
