@@ -33,6 +33,14 @@ func test_balance_config_tres_has_every_e1_field_non_negative() -> void:
 		assert_true(float(config.get(field)) >= 0.0, "'%s' is non-negative" % field)
 
 
+func test_camera_config_tres_loads_with_framing_fields() -> void:
+	var config: Variant = load("res://data/camera_config.tres")
+	assert_not_null(config, "camera_config.tres loads")
+	assert_true(config is CameraConfig, "camera framing is its own resource (NOT BalanceConfig)")
+	for field in ["distance", "height", "pitch_degrees"]:
+		assert_true(field in config, "CameraConfig has '%s'" % field)
+
+
 func test_every_data_tres_loads() -> void:
 	var paths := _find_tres("res://data/")
 	assert_true(paths.size() >= 1, "at least one .tres exists in data/")
