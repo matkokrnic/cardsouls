@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="BalanceConfig" format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/balance_config.gd" id="1_balcfg"]
+
+[resource]
+script = ExtResource("1_balcfg")
+max_hp = 100.0
+move_speed = 5.0
+max_stamina = 50.0
+stamina_regen_per_second = 15.0
+stamina_regen_delay_seconds = 0.8
+roll_stamina_cost = 12.0
+deflect_stamina_cost = 8.0
+attack_windup_seconds = 0.25
+attack_active_seconds = 0.15
+attack_recovery_seconds = 0.35
+attack_chain_window_seconds = 0.5
+attack_chain_length = 3
+attack_damage_percent_of_max_hp = 10.0
+block_damage_multiplier = 0.3
+deflect_window_seconds = 0.15
+roll_iframe_seconds = 0.3
+roll_duration_seconds = 0.5
+roll_distance = 3.0
+stun_seconds = 0.6
