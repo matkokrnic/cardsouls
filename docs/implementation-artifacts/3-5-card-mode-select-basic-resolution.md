@@ -1,12 +1,10 @@
 # Story 3.5: Card-mode selection input and Basic (Mode ①) resolution
 
-Status: ready-for-dev
+Status: backlog
 
 > **⚠ E3 REVISIT GATE applies (see 3.1 for the full verbatim gate).** These E3 stories are provisional and must be reviewed against `docs/playtest-log.md` after the first E1/E2 playtest, before implementation — confirm, amend, or delete, and record the outcome in `decision-log.md`.
 >
 > **Revisit note (this story).** Provisional — confirm or amend against `docs/playtest-log.md` before implementing. This is the story most likely to be rewritten. Whether a real-time mode selection is viable at all depends on how much attention the melee layer leaves free, which the first playtest measures.
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
 

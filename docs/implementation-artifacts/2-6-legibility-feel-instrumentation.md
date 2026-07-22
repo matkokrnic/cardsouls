@@ -1,8 +1,6 @@
 # Story 2.6: Legibility and feel validation instrumentation
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

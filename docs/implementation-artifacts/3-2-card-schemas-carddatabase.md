@@ -1,12 +1,10 @@
 # Story 3.2: Card schemas, `CardDatabase`, and the first authored cards
 
-Status: ready-for-dev
+Status: backlog
 
 > **⚠ E3 REVISIT GATE applies (see 3.1 for the full verbatim gate).** These E3 stories are provisional and must be reviewed against `docs/playtest-log.md` after the first E1/E2 playtest, before implementation — confirm, amend, or delete, and record the outcome in `decision-log.md`.
 >
 > **Revisit note (this story).** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
 

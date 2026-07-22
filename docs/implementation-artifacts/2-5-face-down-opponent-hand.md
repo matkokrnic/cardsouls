@@ -1,8 +1,6 @@
 # Story 2.5: Information-model integrity — face-down opponent hand
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

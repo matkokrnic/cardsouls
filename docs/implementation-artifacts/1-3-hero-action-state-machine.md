@@ -1,8 +1,6 @@
 # Story 1.3: Hero action-state machine + action timing windows
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

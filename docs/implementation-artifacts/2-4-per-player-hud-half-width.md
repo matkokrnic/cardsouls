@@ -1,8 +1,6 @@
 # Story 2.4: Per-player HUD root in real half-width space
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

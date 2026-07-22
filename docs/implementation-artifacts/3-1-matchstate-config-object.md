@@ -1,14 +1,12 @@
 # Story 3.1: `MatchState` config object + card/economy balance schema
 
-Status: ready-for-dev
+Status: backlog
 
 > **⚠ E3 REVISIT GATE (verbatim from stories-manual-e3.md) — read before implementing any E3 story.**
 > These stories are provisional and must be reviewed after the first E1/E2 playtest, before implementation. They were written before anyone had played the melee layer against a human, and they rest on assumptions about how melee actually feels — attack cadence, how much downtime a player has between exchanges, whether there is any attention left over for a hand of cards at all. That is exactly the P4 question this project exists to answer, and it cannot be answered from a document.
 > The gate is a real step, not a formality: after the E2 playtest, re-read the E3 stories against `docs/playtest-log.md` and either confirm each story, amend it, or delete it. Record the outcome in `decision-log.md`.
 >
 > **Revisit note (this story).** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
 

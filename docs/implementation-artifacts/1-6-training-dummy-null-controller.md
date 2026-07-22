@@ -1,8 +1,6 @@
 # Story 1.6: Second player slot as the training dummy (controller config swap)
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

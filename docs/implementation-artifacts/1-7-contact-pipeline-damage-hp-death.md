@@ -1,8 +1,6 @@
 # Story 1.7: Contact pipeline — hitbox facts → damage → HP → death
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

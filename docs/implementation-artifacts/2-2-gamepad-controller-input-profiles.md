@@ -1,8 +1,6 @@
 # Story 2.2: Gamepad controller and P1/P2 input profiles
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

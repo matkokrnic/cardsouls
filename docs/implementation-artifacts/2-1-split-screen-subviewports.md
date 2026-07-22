@@ -1,8 +1,6 @@
 # Story 2.1: Two `SubViewport`s and the split-screen rig
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

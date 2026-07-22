@@ -1,8 +1,6 @@
 # Story 1.2: Camera rig + camera-relative movement as a pushed spatial fact
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

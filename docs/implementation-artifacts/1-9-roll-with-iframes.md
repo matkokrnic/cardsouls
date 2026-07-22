@@ -1,8 +1,6 @@
 # Story 1.9: Roll with i-frames
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

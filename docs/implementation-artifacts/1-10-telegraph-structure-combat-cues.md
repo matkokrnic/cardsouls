@@ -1,8 +1,6 @@
 # Story 1.10: Telegraph structure and combat cues (presentation layer)
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

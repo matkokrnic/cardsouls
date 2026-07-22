@@ -1,8 +1,6 @@
 # Story 2.3: Opponent slot becomes a second human
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: backlog
 
 ## Story
 

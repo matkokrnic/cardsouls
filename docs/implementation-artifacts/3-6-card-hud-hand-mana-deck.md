@@ -1,12 +1,10 @@
 # Story 3.6: Card HUD — hand, mana, deck and reshuffle indicators
 
-Status: ready-for-dev
+Status: backlog
 
 > **⚠ E3 REVISIT GATE applies (see 3.1 for the full verbatim gate).** These E3 stories are provisional and must be reviewed against `docs/playtest-log.md` after the first E1/E2 playtest, before implementation — confirm, amend, or delete, and record the outcome in `decision-log.md`.
 >
 > **Revisit note (this story).** Provisional — confirm or amend against `docs/playtest-log.md` before implementing. Whether the hand is readable at half width during an exchange is a P4 finding, not a styling preference.
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
 
