@@ -18,6 +18,8 @@ const _MAX_MANA := 80.0
 
 @onready var _p1_hero: HeroActor = $P1Hero
 @onready var _p2_hero: HeroActor = $P2Hero
+@onready var _p1_rig: CameraRig = $P1Hero/CameraRig
+@onready var _p2_rig: CameraRig = $P2Hero/CameraRig
 
 var _match_state: MatchState
 var _p1_controller: Controller
@@ -39,7 +41,14 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	# 1. Sample controllers -> InputIntent per player (the ONLY place Input is read — D3).
 	var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]
-	# 2. Gather spatial facts — none at E0 (no hitboxes/sensors yet).
+	# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
+	#    global basis). Reading the rig is the runner's ONLY interaction with it; the runner
+	#    never rotates velocity after state resolves it (AC 6, story 1-2).
+	#    LOCAL basis, deliberately not global (DECISION A): the rig is a child of the hero
+	#    root, and the global basis would fold a hero-root rotation into "camera forward".
+	#    Guarded by test/integration/test_root_rotation_isolation.gd.
+	_match_state.set_camera_basis(0, _p1_rig.basis)
+	_match_state.set_camera_basis(1, _p2_rig.basis)
 	# 3. Advance state (enqueues signals only).
 	_match_state.advance(intents)
 	# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
