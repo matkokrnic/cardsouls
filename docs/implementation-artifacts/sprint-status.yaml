@@ -38,7 +38,7 @@ development_status:
   # E1 — Melee Combat + Training Dummy
   epic-1: backlog
   1-1-melee-balance-schema: done
-  1-2-camera-relative-movement-basis: ready-for-dev
+  1-2-camera-relative-movement-basis: done
   1-3-hero-action-state-machine: backlog
   1-4-stamina-economy: backlog
   1-5-basic-attack-chain: backlog

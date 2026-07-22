@@ -4,7 +4,7 @@ baseline_commit: 6452e896bd478b9919fa66f8bfb43729164e696c
 
 # Story 1.2: Camera rig + camera-relative movement as a pushed spatial fact
 
-Status: review
+Status: done
 
 ## Story
 
