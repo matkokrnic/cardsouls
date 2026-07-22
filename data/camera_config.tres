@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CameraConfig" format=3]
+
+[ext_resource type="Script" path="res://src/actors/hero/camera_config.gd" id="1_camcfg"]
+
+[resource]
+script = ExtResource("1_camcfg")
+distance = 6.0
+height = 3.0
+pitch_degrees = -20.0
