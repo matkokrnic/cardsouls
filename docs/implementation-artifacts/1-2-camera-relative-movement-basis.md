@@ -1,6 +1,6 @@
 # Story 1.2: Camera rig + camera-relative movement as a pushed spatial fact
 
-Status: backlog
+Status: ready-for-dev
 
 ## Story
 
