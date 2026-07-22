@@ -1,0 +1,75 @@
+# generated: 2026-07-22
+# last_updated: 2026-07-22
+# project: cardsouls
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: docs/implementation-artifacts
+
+# STATUS DEFINITIONS (locked for this project):
+# =============================================
+# Lifecycle states are exactly: backlog -> ready-for-dev -> done. No other states.
+#
+#   - backlog: story inventoried; not yet promoted (promotion happens per-story
+#     via a separate readiness check)
+#   - ready-for-dev: story passed its readiness check and may be picked up
+#   - done: implemented and pushed
+#
+# BOARD NOTES:
+# ============
+# - Single rolling backlog. No sprint-N timeboxes (solo dev).
+# - Epic keys map 1:1 to the E-labels in the docs: E0 -> epic-0 ... E3 -> epic-3.
+# - epic-0 (E0 Foundations) is implemented and pushed; it carries no child
+#   story files by design.
+# - Story keys are the filename stems of the story files in
+#   docs/implementation-artifacts/ (promoted Set B).
+# - Per-story holds/notes live in story_notes below, never as extra statuses.
+
+generated: 2026-07-22
+last_updated: 2026-07-22
+project: cardsouls
+project_key: NOKEY
+tracking_system: file-system
+story_location: docs/implementation-artifacts
+
+development_status:
+  # E0 — Foundations (implemented and pushed; no child stories)
+  epic-0: done
+
+  # E1 — Melee Combat + Training Dummy
+  epic-1: backlog
+  1-1-melee-balance-schema: backlog
+  1-2-camera-relative-movement-basis: backlog
+  1-3-hero-action-state-machine: backlog
+  1-4-stamina-economy: backlog
+  1-5-basic-attack-chain: backlog
+  1-6-training-dummy-null-controller: backlog
+  1-7-contact-pipeline-damage-hp-death: backlog
+  1-8-block-and-deflect: backlog
+  1-9-roll-with-iframes: backlog
+  1-10-telegraph-structure-combat-cues: backlog
+
+  # E2 — Local Split-Screen PvP
+  epic-2: backlog
+  2-1-split-screen-subviewports: backlog
+  2-2-gamepad-controller-input-profiles: backlog
+  2-3-opponent-second-human: backlog
+  2-4-per-player-hud-half-width: backlog
+  2-5-face-down-opponent-hand: backlog
+  2-6-legibility-feel-instrumentation: backlog
+
+  # E3 — Card System + Mana Economy (gated — see story_notes)
+  epic-3: backlog
+  3-1-matchstate-config-object: backlog
+  3-2-card-schemas-carddatabase: backlog
+  3-3-deck-hand-draw-reshuffle: backlog
+  3-4-mana-economy-flywheel: backlog
+  3-5-card-mode-select-basic-resolution: backlog
+  3-6-card-hud-hand-mana-deck: backlog
+
+story_notes:
+  3-1-matchstate-config-object: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
+  3-2-card-schemas-carddatabase: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
+  3-3-deck-hand-draw-reshuffle: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
+  3-4-mana-economy-flywheel: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
+  3-5-card-mode-select-basic-resolution: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
+  3-6-card-hud-hand-mana-deck: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
