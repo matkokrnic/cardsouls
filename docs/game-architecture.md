@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.1'
+version: '1.2'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -535,7 +535,6 @@ res://
 │   ├── actors/                       # scene-bound nodes (.tscn + .gd)
 │   │   ├── hero/                      # CharacterBody3D + move_and_slide; Hitbox REPORTS contact
 │   │   │   └── telegraph_controller.gd  # D7 presentation: reads state → shape+sound
-│   │   ├── dummy/ (E1)
 │   │   └── minions/ · totems/ · projectiles/   # reserved (E4/E5)
 │   ├── ui/                           # HUD + menus (Control) — read-only state-signal consumers
 │   │   ├── hud/                       # bars, 3 orb counters, hand (opponent face-down — E2 capability)
@@ -964,6 +963,13 @@ strengthens an existing determinism guarantee rather than adding scope.
   against a golden value. The hash is taken over a **canonical serialization with sorted keys** —
   iterating a `Dictionary` in insertion order yields a hash that is stable in practice but breaks
   silently when insertion order changes. This test is the executable guard for A1, A2, and F2.
+- **A3 (v1.2, 2026-07-22) — dropped the vestigial `actors/dummy/` structure entry.** The Directory
+  Tree listed `src/actors/dummy/ (E1)`, implying the training dummy is a distinct actor type. That
+  contradicts the locked decision (D3 / decision-log 2026-07-20) that the dummy is **not** a type but a
+  **second full `PlayerState` + `HeroActor` driven by a `NullController`** — a controller/config swap,
+  nothing more (the E1 stories depend on this so that dummy → PvP → bot stays a one-line change). The
+  entry is removed; no dummy actor scene/type is to be created. The already-correct "dummy→PvP→bot is a
+  config swap" framing in D3 is unchanged.
 
 ---
 
