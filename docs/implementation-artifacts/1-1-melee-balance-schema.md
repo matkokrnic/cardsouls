@@ -4,7 +4,7 @@ baseline_commit: 427ef4fdbe26bdf973bc5d18c31e968192d0ec6c
 
 # Story 1.1: Melee balance schema + hot-reloadable seconds→ticks conversion
 
-Status: review
+Status: done
 
 ## Story
 
