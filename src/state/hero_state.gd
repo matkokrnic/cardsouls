@@ -9,7 +9,10 @@ extends RefCounted
 ## never read the intent's direction and move the actor directly (that would bypass D3).
 
 signal hp_changed(current: float, maximum: float)
-signal action_state_changed(state: ActionState)
+## Story 1-3 migration: was single-arg (state); now carries (previous, current) so the
+## presentation layer (1-10) and HUD (E2) can react to edges, not just arrivals. This is
+## the ONLY channel telling visuals what the hero is doing.
+signal action_state_changed(previous: ActionState, current: ActionState)
 
 ## Souls action states — few and timing-gated, kept as a pure enum in the state layer so
 ## transitions stay in the deterministic tick and under headless test (chosen over a
@@ -21,8 +24,19 @@ var velocity := Vector3.ZERO   # intended velocity; the runner reads this (D3), 
 var facing := Vector2.DOWN     # planar facing
 var move_speed: float          # injected (balance .tres in E3); tunable, not hardcoded-in-place
 
-var chargeup := TimingWindow.new()
-var defense := TimingWindow.new()
+## The eight per-action D4 windows (story 1-3). windup/active/recovery are the phases of
+## one attack swing; chain is the input window for ATTACKING -> ATTACKING; deflect opens at
+## BLOCKING entry (consumed in 1-8); roll_iframe/roll_duration at ROLLING entry (1-9).
+## stun is owned and advanced but NEVER start()ed by any E1 path — see TRANSITION TABLE.
+## Durations are always injected by MatchState from balance_ticks at start() time
+## (CONSTRAINT C) — HeroState never sees a BalanceTicks object.
+var windup := TimingWindow.new()
+var active := TimingWindow.new()
+var recovery := TimingWindow.new()
+var chain := TimingWindow.new()
+var deflect := TimingWindow.new()
+var roll_iframe := TimingWindow.new()
+var roll_duration := TimingWindow.new()
 var stun := TimingWindow.new()
 
 var _hp: float
@@ -67,14 +81,22 @@ func set_max_hp(maximum: float) -> void:
 func set_action_state(new_state: ActionState) -> void:
 	if new_state == action_state:
 		return
+	var previous := action_state
 	action_state = new_state
-	_queue.push(action_state_changed.emit.bind(new_state))
+	_queue.push(action_state_changed.emit.bind(previous, new_state))
 
 
-## Advance all D4 windows one tick (called from advance() step 2).
+## Advance all D4 windows one tick (called from advance() step 2). ORDER CONTRACT (AC 2):
+## timers advance FIRST (step 2), transitions read the advanced result (step 3) — never
+## flip this order.
 func tick_timers() -> void:
-	chargeup.tick()
-	defense.tick()
+	windup.tick()
+	active.tick()
+	recovery.tick()
+	chain.tick()
+	deflect.tick()
+	roll_iframe.tick()
+	roll_duration.tick()
 	stun.tick()
 
 
@@ -94,7 +116,12 @@ func to_snapshot() -> Dictionary:
 		"velocity": velocity,
 		"facing": facing,
 		"move_speed": move_speed,
-		"chargeup": chargeup.to_snapshot(),
-		"defense": defense.to_snapshot(),
+		"windup": windup.to_snapshot(),
+		"active": active.to_snapshot(),
+		"recovery": recovery.to_snapshot(),
+		"chain": chain.to_snapshot(),
+		"deflect": deflect.to_snapshot(),
+		"roll_iframe": roll_iframe.to_snapshot(),
+		"roll_duration": roll_duration.to_snapshot(),
 		"stun": stun.to_snapshot(),
 	}

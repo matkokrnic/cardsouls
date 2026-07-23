@@ -108,7 +108,7 @@ func test_mid_match_reload_keeps_in_flight_window_duration() -> void:
 	var ms := _make_match()
 	ms.apply_balance(_make_config({"attack_windup_seconds": 0.1}))  # 6 ticks
 	assert_eq(ms.balance_ticks.attack_windup_ticks, 6)
-	var w := ms.p1.hero.chargeup
+	var w := ms.p1.hero.windup
 	w.start(ms.balance_ticks.attack_windup_ticks)
 	w.tick()
 	w.tick()  # 2 of 6 elapsed

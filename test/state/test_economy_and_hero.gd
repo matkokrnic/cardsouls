@@ -45,11 +45,11 @@ func test_signals_queue_until_drain() -> void:
 
 func test_hero_timers_tick() -> void:
 	var p := _player()
-	p.hero.chargeup.start(2)
+	p.hero.windup.start(2)
 	p.hero.tick_timers()
-	assert_true(p.hero.chargeup.is_running, "running 1/2")
+	assert_true(p.hero.windup.is_running, "running 1/2")
 	p.hero.tick_timers()
-	assert_false(p.hero.chargeup.is_running, "done 2/2")
+	assert_false(p.hero.windup.is_running, "done 2/2")
 
 
 func test_orb_pool_all_color_reset() -> void:
