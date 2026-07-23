@@ -234,6 +234,38 @@ func test_pin_roll_cancel_resets_chain_sequence() -> void:
 	assert_eq(h.chain_index, 1, "fresh sequence can chain the full length again")
 
 
+## Same-tick tiebreak pin: INPUT_PRIORITY is (attack, roll, block) — three simultaneous
+## presses from IDLE fire exactly ONE transition (attack) and exactly one signal.
+func test_same_tick_presses_resolve_by_input_priority() -> void:
+	var ms := _make_match()
+	var h := ms.p1.hero
+	var log: Array = []
+	h.action_state_changed.connect(func(prev: HeroState.ActionState, cur: HeroState.ActionState) -> void:
+		log.append([int(prev), int(cur)]))
+	_advance(ms, _intent([&"attack", &"roll", &"block"]))
+	assert_eq(h.action_state, HeroState.ActionState.ATTACKING, "attack wins the same-tick tiebreak")
+	assert_eq(log, [[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.ATTACKING)]],
+		"exactly one transition, one signal")
+
+
+## Gated-reject fallthrough pin: at the chain cap, the attack edge REJECTS (returns
+## false) and a lower-priority same-tick roll press still fires on that same tick.
+func test_capped_chain_rejection_falls_through_to_roll_same_tick() -> void:
+	var ms := _make_match()
+	var h := ms.p1.hero
+	_advance(ms, _intent([&"attack"]))  # swing 0
+	_advance_to_recovery(ms)
+	_advance(ms, _intent([&"attack"]))  # chain -> swing 1
+	_advance_to_recovery(ms)
+	_advance(ms, _intent([&"attack"]))  # chain -> swing 2 (cap: 3 swings)
+	assert_eq(h.chain_index, 2, "at the cap")
+	_advance_to_recovery(ms)
+	_advance(ms, _intent([&"attack", &"roll"]))  # capped chain rejects; roll must fire NOW
+	assert_eq(h.action_state, HeroState.ActionState.ROLLING,
+		"rejected chain falls through to roll on the same tick")
+	assert_eq(h.chain_index, 0, "exit from ATTACKING resets the sequence")
+
+
 ## ---- Signal discipline ------------------------------------------------------------------
 
 func test_signal_sequence_queued_and_matches_expected_list() -> void:
