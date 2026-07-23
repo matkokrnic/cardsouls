@@ -5,7 +5,13 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
-const GOLDEN := "253ab157993a57520409e09378822f62814a2bb9c668bb79fe08fd327ec2c832"
+## Re-baselined in story 1-3 (cause: SNAPSHOT SHAPE ONLY — window renames + 5 new windows
+## + chain_index; the recorded sequence stays byte-identical and never calls apply_balance,
+## proven by re-mapping the new snapshot to the old shape reproducing the previous golden
+## 253ab157993a57520409e09378822f62814a2bb9c668bb79fe08fd327ec2c832 exactly).
+## Distinct from the future DEBT A re-baseline (which fires when apply_balance enters the
+## golden path — deliberately NOT this story).
+const GOLDEN := "d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7"
 
 const SEED := 1337
 const MAX_HP := 120.0
