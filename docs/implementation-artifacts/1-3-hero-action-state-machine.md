@@ -4,7 +4,7 @@ baseline_commit: 10137be0a47b1efc5fe038077c4b8a7e18b729c0
 
 # Story 1.3: Hero action-state machine + action timing windows
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
