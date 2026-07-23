@@ -1,3 +1,7 @@
+---
+baseline_commit: 10137be0a47b1efc5fe038077c4b8a7e18b729c0
+---
+
 # Story 1.3: Hero action-state machine + action timing windows
 
 Status: ready-for-dev
@@ -26,32 +30,32 @@ so that combat is deterministic, headless-testable, and the presentation layer l
 
 ## Tasks / Subtasks
 
-- [ ] Transition table (AC: 1, 3)
-  - [ ] Six-state enum unchanged; table one readable block; per-phase cancellability data on the ATTACKING row (windup and active non-cancellable, recovery roll-cancellable)
-  - [ ] Leave **both** CHARGING and STUNNED inbound transitions absent (not stubbed); STUNNED row is data, present but unreachable; nothing resolves OPEN decision (a)
-  - [ ] Chain logic: ATTACKING → ATTACKING inside the chain window; `chain_index: int` on `HeroState`, reset when the sequence ends; read `ms.balance.attack_chain_length` inline at transition time (no caching); no damage application
-- [ ] Window reconciliation + ownership (AC: 2)
-  - [ ] Rename `chargeup` → `windup`, `defense` → `deflect`; keep `stun`; add `active`, `recovery`, `chain`, `roll_iframe`, `roll_duration`; `tick_timers()` advances all eight
-  - [ ] Update the existing tests touching the old names (`test/state/test_balance_config.gd`, `test/state/test_economy_and_hero.gd`) as part of this story
-  - [ ] Comment the timers-first / transitions-read order in the file
-- [ ] CONSTRAINT C plumbing + DEBT A guard (AC: 2)
-  - [ ] Step-3 evaluation in `MatchState` reads `ms.balance_ticks.<field>` inline when a transition fires and passes the tick count into `start()`; no `BalanceTicks`-typed field anywhere in the state machine
-  - [ ] Single `balance_ticks == null` guard that skips transition evaluation entirely
-- [ ] Ordering inside `advance()` (AC: 1, 2, 5)
-  - [ ] Per slot in step 3: transitions evaluate **before** `_resolve_movement` — a press on tick N takes effect on tick N
-  - [ ] 1-3 transitions neither read nor write `velocity` — action/movement coupling lands in 1-5 (attack) / 1-9 (roll)
-  - [ ] Step 1 stays a no-op; update the step-1 reserved comment in `match_state.gd` ("parse attack/block/roll presses") to point at the step-3 evaluation so it does not rot
-- [ ] Signal migration (AC: 4)
-  - [ ] Change the existing `action_state_changed(state)` declaration and `set_action_state()` to `(previous, current)`; queued push via `SignalQueue` unchanged; confirm no existing subscribers
-- [ ] InputIntent key contract (AC: 1, 5)
-  - [ ] Intent `pressed`/`held` keys are **prefix-free** (`&"attack"`, `&"block"`, `&"roll"`); the `p1_`/`p2_` prefix is the controller's private Input Map mapping — adjust `keyboard_controller.gd` to write prefix-free keys into the intent
-  - [ ] Update the one existing consumer of prefixed intent keys — `test/state/test_controller.gd` asserts `is_held(&"p1_attack")` — and verify no other consumer exists
-  - [ ] Zero Input Map / `project.godot` changes (J/K/L for p1 and the p2 set are already mapped)
-- [ ] Headless tests (AC: 5)
-  - [ ] `apply_balance(<test config>)` in setup; exact-tick entry/exit per action; inputs during non-cancellable windows dropped, not buffered; chain window + cap; signal sequence after `drain_signals()` matches the expected list
-  - [ ] STUNNED inbound-edge guard test, bite-verified both ways
-- [ ] Snapshot + golden (AC: 6)
-  - [ ] `to_snapshot()` key changes exactly as listed in AC 6; regenerate the golden deliberately; record old → new hash in the Dev Agent Record (cause: snapshot shape only — NOT the DEBT A re-baseline)
+- [x] Transition table (AC: 1, 3)
+  - [x] Six-state enum unchanged; table one readable block; per-phase cancellability data on the ATTACKING row (windup and active non-cancellable, recovery roll-cancellable)
+  - [x] Leave **both** CHARGING and STUNNED inbound transitions absent (not stubbed); STUNNED row is data, present but unreachable; nothing resolves OPEN decision (a)
+  - [x] Chain logic: ATTACKING → ATTACKING inside the chain window; `chain_index: int` on `HeroState`, reset when the sequence ends; read `ms.balance.attack_chain_length` inline at transition time (no caching); no damage application
+- [x] Window reconciliation + ownership (AC: 2)
+  - [x] Rename `chargeup` → `windup`, `defense` → `deflect`; keep `stun`; add `active`, `recovery`, `chain`, `roll_iframe`, `roll_duration`; `tick_timers()` advances all eight
+  - [x] Update the existing tests touching the old names (`test/state/test_balance_config.gd`, `test/state/test_economy_and_hero.gd`) as part of this story
+  - [x] Comment the timers-first / transitions-read order in the file
+- [x] CONSTRAINT C plumbing + DEBT A guard (AC: 2)
+  - [x] Step-3 evaluation in `MatchState` reads `ms.balance_ticks.<field>` inline when a transition fires and passes the tick count into `start()`; no `BalanceTicks`-typed field anywhere in the state machine
+  - [x] Single `balance_ticks == null` guard that skips transition evaluation entirely
+- [x] Ordering inside `advance()` (AC: 1, 2, 5)
+  - [x] Per slot in step 3: transitions evaluate **before** `_resolve_movement` — a press on tick N takes effect on tick N
+  - [x] 1-3 transitions neither read nor write `velocity` — action/movement coupling lands in 1-5 (attack) / 1-9 (roll)
+  - [x] Step 1 stays a no-op; update the step-1 reserved comment in `match_state.gd` ("parse attack/block/roll presses") to point at the step-3 evaluation so it does not rot
+- [x] Signal migration (AC: 4)
+  - [x] Change the existing `action_state_changed(state)` declaration and `set_action_state()` to `(previous, current)`; queued push via `SignalQueue` unchanged; confirm no existing subscribers
+- [x] InputIntent key contract (AC: 1, 5)
+  - [x] Intent `pressed`/`held` keys are **prefix-free** (`&"attack"`, `&"block"`, `&"roll"`); the `p1_`/`p2_` prefix is the controller's private Input Map mapping — adjust `keyboard_controller.gd` to write prefix-free keys into the intent
+  - [x] Update the one existing consumer of prefixed intent keys — `test/state/test_controller.gd` asserts `is_held(&"p1_attack")` — and verify no other consumer exists
+  - [x] Zero Input Map / `project.godot` changes (J/K/L for p1 and the p2 set are already mapped)
+- [x] Headless tests (AC: 5)
+  - [x] `apply_balance(<test config>)` in setup; exact-tick entry/exit per action; inputs during non-cancellable windows dropped, not buffered; chain window + cap; signal sequence after `drain_signals()` matches the expected list
+  - [x] STUNNED inbound-edge guard test, bite-verified both ways
+- [x] Snapshot + golden (AC: 6)
+  - [x] `to_snapshot()` key changes exactly as listed in AC 6; regenerate the golden deliberately; record old → new hash in the Dev Agent Record (cause: snapshot shape only — NOT the DEBT A re-baseline)
 
 ## Dev Notes
 
@@ -89,10 +93,41 @@ so that combat is deterministic, headless-testable, and the presentation layer l
 
 ### Agent Model Used
 
+Claude Fable 5 (claude-fable-5), gds-dev-story workflow, 2026-07-23.
+
 ### Debug Log References
+
+- `bash test/run_all.sh` final: **55 state tests, 0 failed, 217 assertions; 3 integration suites PASS; ALL TESTS PASSED.**
+- Guard bite verified both ways: a temporary `&"bite_check": ActionState.STUNNED` edge in the `idle` row made exactly `test_table_has_no_inbound_stunned_or_charging_edges` fail (55 tests, 1 failed); reverted → all green.
+- Golden shape-only proof: scratchpad probe re-mapped the new snapshot to the pre-1-3 shape (windup→chargeup, deflect→defense, drop 5 new windows + chain_index) and reproduced the old golden exactly.
 
 ### Completion Notes List
 
+- All 6 ACs implemented across commits `38e559c` (windows + signal), `4f92088` (table + evaluation), `0005e0b` (prefix-free intent keys), `2ae294f` (golden re-baseline), `1db9eb0` (test suite + guard).
+- Table DATA lives in `hero_state.gd` next to the enum (user pin 1); `MatchState._resolve_actions` only evaluates it, before `_resolve_movement` per slot.
+- Attack phases derived from which window runs; phase-boundary disambiguation via `elapsed_ticks` (public `to_snapshot()`) with `start(0)`-cleared successor windows — `TimingWindow` unchanged. Assumes phase durations ≥ 1 tick (seconds_to_ticks clamps any non-zero authored value).
+- chain_index semantics per user pin 2: resets on ANY exit from ATTACKING (roll-cancel included), pinned by `test_pin_roll_cancel_resets_chain_sequence`.
+- Chain self-transition (ATTACKING → ATTACKING) emits `action_state_changed(ATTACKING, ATTACKING)` explicitly — `set_action_state()` no-ops on same-state, so `chain_attack()` enqueues the emit itself (AC 4: every table transition emits).
+- BLOCKING enters on press, persists on `held`, exits on release; deflect window opens at entry (consumed in 1-8). ROLLING exits on roll_duration expiry (i-frames consumed in 1-9).
+- Same-tick press tiebreak: fixed `INPUT_PRIORITY` (attack, roll, block); at most one transition per tick; gated chain rejection lets a lower-priority same-tick press still fire.
+- DEBT A option (b) live consequence confirmed: runner never calls `apply_balance`, so live-play actions are inert (pinned by `test_null_balance_ticks_guard_actions_inert`) until the follow-up story lands both DEBT A halves.
+- Commit order deviation (user-authorized adjustment): golden re-baseline moved to commit 4, test suite to commit 5 — the golden goes red at commit 1's rename and the suite can only run green after the re-baseline; both pinned commits stayed isolated.
+- Status left `ready-for-dev` and board untouched per instruction — close-out flips separately (board lifecycle is backlog → ready-for-dev → done).
+
 ### Golden Re-baseline (old → new hash, cause: snapshot shape — AC 6)
 
+- OLD: `253ab157993a57520409e09378822f62814a2bb9c668bb79fe08fd327ec2c832`
+- NEW: `d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7`
+- Cause: snapshot shape only (window key renames + 5 new windows + chain_index). `_run()` byte-identical; `apply_balance` still absent from the golden path. Proven by old-shape re-mapping reproducing the old golden. Distinct from the future DEBT A re-baseline.
+
 ### File List
+
+- `src/state/hero_state.gd` — 8 windows (renames + additions), chain_index, TRANSITION_TABLE + INPUT_PRIORITY, attack_phase()/transition_row(), entry actions, signal `(previous, current)`, snapshot changes.
+- `src/state/match_state.gd` — `_resolve_actions` + `_try_transition` (step 3, before `_resolve_movement`), DEBT A null guard, CONSTRAINT C inline reads, step-1 comment update.
+- `src/controllers/keyboard_controller.gd` — prefix-free intent keys (`INTENT_ACTIONS`, private `_action_map`).
+- `src/state/input/input_intent.gd` — key-contract doc comment only.
+- `test/state/test_action_state.gd` — NEW: 12-test suite incl. STUNNED/CHARGING guard (bite-verified).
+- `test/state/test_determinism.gd` — golden re-baseline (const + provenance comment).
+- `test/state/test_economy_and_hero.gd`, `test/state/test_balance_config.gd` — old window names updated.
+- `test/state/test_controller.gd` — prefix-free key asserts (+ negative assert).
+- `docs/implementation-artifacts/1-3-hero-action-state-machine.md` — this record, checkboxes, baseline_commit.
