@@ -12,6 +12,10 @@ extends RefCounted
 ## This is INPUT, not persistent state — it is captured separately in the X5 intent
 ## stream and is deliberately excluded from the to_snapshot() determinism contract.
 
+## KEY CONTRACT (story 1-3): pressed/held keys are PREFIX-FREE action names — &"attack",
+## &"block", &"roll". The p1_/p2_ Input Map prefix is the producing controller's private
+## business and must never leak into the intent; the state layer's transition table reads
+## these keys slot-agnostically.
 var move_dir := Vector2.ZERO                    # normalized-ish planar move, this tick
 var aim := Vector2.ZERO                         # facing/aim, this tick
 var pressed: Dictionary[StringName, bool] = {}  # action -> just-pressed this tick

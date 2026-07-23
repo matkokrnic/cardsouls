@@ -21,7 +21,9 @@ func test_keyboard_maps_input_and_isolates_prefix() -> void:
 	Input.action_release(&"p1_move_right")
 
 	Input.action_press(&"p1_attack")
-	assert_true(kc.sample().is_held(&"p1_attack"), "attack held")
+	var s := kc.sample()
+	assert_true(s.is_held(&"attack"), "attack held under the prefix-free intent key")
+	assert_false(s.held.has(&"p1_attack"), "prefixed keys never enter the intent")
 	Input.action_release(&"p1_attack")
 
 	# Prefix isolation: p1 controller must not read p2 input.
