@@ -139,3 +139,19 @@ The FIRST story that introduces a live mid-match reload trigger MUST land BOTH h
 ## Session 2026-07-23 — Story 1-2 close-out
 
 **DECISION A (locked) — hero ROOT must never be rotated while the camera is fixed (all of E1).** Body/facing rotation belongs on a child mesh node, never the root: the camera rig is a child of the hero root, so root rotation would fold into the pushed camera basis and break camera-relative "forward". The runner pushes the rig's **LOCAL** basis; guarded by `test/integration/test_root_rotation_isolation.gd`. A future story needing a rotating root must deliberately decouple the rig from hero rotation — **DECISION B, deferred**; nothing here resolves it. Detail: `docs/implementation-artifacts/1-2-camera-relative-movement-basis.md` (Dev Notes + Dev Agent Record).
+
+---
+
+## Session 2026-07-23 — Story 1-3 close-out
+
+**DECISION (locked) — chain_index resets on ANY exit from ATTACKING, roll-cancel included; a cancelled chain never resumes.** Enforced in one place (`HeroState.set_action_state`) and test-pinned (`test_pin_roll_cancel_resets_chain_sequence`). Revisiting this is a deliberate playtest decision, never an incidental change.
+
+**Implementation contract — attack phases are derived, not stored.** Windup/active/recovery are read off which window is currently running; phase-boundary ticks (all windows stopped) are disambiguated via `elapsed_ticks` with `start(0)`-cleared successor windows. The mechanism assumes every phase duration is >= 1 tick — a 0.0-authored phase duration is a config authoring error (audited in 1-3b).
+
+**Pinned tick contracts (all test-pinned in `test_action_state.gd`):** transitions evaluate before `_resolve_movement` (a press on tick N acts on tick N); `INPUT_PRIORITY` is attack > roll > block with at most one transition per tick; a gated-rejected edge (chain at the cap) falls through to the lower-priority press the same tick.
+
+**DEBT A status.** 1-3 took option (b): a single `balance_ticks == null` guard skips step-3 transition evaluation entirely, so live-play actions are inert while the runner still runs on E0 placeholders. Both DEBT A halves (runner `apply_balance` at match start + the coupled golden re-baseline) land together in the named follow-up story **`1-3b-live-balance-injection`**, scheduled before 1-4.
+
+**Golden record.** `253ab157...c832` -> `d3f42def...bcf7`, cause **snapshot shape only** (window renames + 5 new windows + `chain_index`), proven by re-mapping the new snapshot to the old shape and reproducing the old golden exactly. The DEBT A re-baseline remains pending and distinct.
+
+**1-5 scoping obligation.** Chain transition logic lives in 1-3; story 1-5 covers the remainder only — hitbox-active state data, damage application, per-swing contact dedupe, and the melee-hit mana hook. Do not re-implement the chain.
