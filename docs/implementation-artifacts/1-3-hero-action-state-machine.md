@@ -1,6 +1,6 @@
 # Story 1.3: Hero action-state machine + action timing windows
 
-Status: backlog
+Status: ready-for-dev
 
 ## Story
 
