@@ -166,6 +166,16 @@ The FIRST story that introduces a live mid-match reload trigger MUST land BOTH h
 
 **Authoring audit (permanent).** `test/state/test_balance_authoring.gd` (ca967b7) audits the REAL `data/balance/balance_config.tres`: every action `*_seconds` field (attack windup/active/recovery/chain window, deflect window, roll iframe/duration) must be > 0.0 — the 1-3 phase mechanism degenerates on 0-tick phases, so zero-authored values are defects, not tuning — and `attack_chain_length >= 1`. `stun_seconds` EXEMPT (data-only) until OPEN decision (a) resolves; the exemption is stated in the test.
 
-**NEW OBSERVATION SEAM (locked) — `match_runner.connect_hero_action_state_changed(slot, callback)`.** THE sanctioned channel for observing hero action transitions from outside the state layer: the runner wires the subscription to the owning state object's D5 queued signal; consumers never hold a MatchState handle. HUD/visual stories (E2, 1-10) must consume this seam, not invent their own. Obligation for its FIRST consumer: add an assert that `slot` is 0 or 1 — currently any slot != 0 silently maps to p2. Proven live by `test/integration/test_live_attack.gd`: simulated p1 attack press -> IDLE -> ATTACKING observed via the seam in the real scene.
+**NEW OBSERVATION SEAM (locked) — `match_runner.connect_hero_action_state_changed(slot, callback)`.** THE sanctioned channel for observing hero action transitions from outside the state layer: the runner wires the subscription to the owning state object's D5 queued signal; consumers never hold a MatchState handle. HUD/visual stories (E2, 1-10) must consume this seam, not invent their own. Obligation for its FIRST consumer **[RETIRED 2026-07-24 — story 1-3c, d7d600c, via `Invariant.check`; see Session 2026-07-24 — Story 1-3c close-out]**: add an assert that `slot` is 0 or 1 — currently any slot != 0 silently maps to p2. Proven live by `test/integration/test_live_attack.gd`: simulated p1 attack press -> IDLE -> ATTACKING observed via the seam in the real scene.
 
 **DEBT B status.** Still deferred, untouched by 1-3b: no mid-match reload trigger exists, so `reload()` keeps its cached-resource behavior. Both DEBT B halves (CACHE_MODE_IGNORE + reload event in the replay stream) still land together with the first story that introduces a live reload trigger.
+
+---
+
+## Session 2026-07-24 — Story 1-3c close-out
+
+**Seam first-consumer obligation RETIRED.** The slot guard landed in `connect_hero_action_state_changed` via `Invariant.check` (X1 — export-surviving, deliberately not a bare `assert`; d7d600c). The debug state overlay is the seam's first live consumer, proven end to end by `test/integration/test_debug_overlay.gd` observing ONLY the overlay's `Label.text` — never state, never runner privates.
+
+**FIRST HANDS-ON PLAYTEST of the project (2026-07-24, Matko).** All 1-3 transitions tracked correctly in live play: single attack (swing 0 -> IDLE), chain (swing 0 -> swing 1), recovery roll-cancel (ROLLING, counter reset), block on both slots independently with no cross-wiring. Timing at current authored values feels adequate — final judgment deferred until animations land.
+
+**E2 fence restated.** The real HUD (E2) consumes the seam; the overlay is a THROWAWAY debug tool, deletable or replaceable when the HUD lands — E2 stories must never copy its internals.
