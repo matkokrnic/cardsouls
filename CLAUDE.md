@@ -27,3 +27,24 @@ These fail the suite if violated — the guard is the test, not review.
 - **Docs and code never share a commit** — separate them.
 - **Validation that proves something worth proving gets committed as a test** (under `test/`), never written-then-deleted.
 - Keep `project.godot` edits intentional (autoloads / Input Map / main scene); review the diff.
+
+## Agent autonomy
+
+- Implementation decisions are yours: make them and proceed without asking.
+- DESIGN decisions are Matko's. STOP and ask before implementing whenever a
+  choice would change what the game IS (mechanics, player-facing behavior,
+  tuning semantics) or how the codebase is shaped for future stories (new
+  public APIs, new folders, architectural patterns) — unless the current
+  story, GDD, or decision-log already locks that choice. When unsure which
+  kind it is, ask.
+- Test: "am I choosing HOW to satisfy an already-locked requirement?" ->
+  implementation, proceed. "Am I choosing WHAT the requirement is?" ->
+  design, ask.
+
+## Git discipline (applies regardless of permission mode)
+
+- Show the full diff BEFORE staging. `git add` and `git commit` are separate
+  commands, explicit paths only.
+- NEVER push until Matko confirms the log in chat.
+- Anything sent to the browser chat for review must be pasted in full —
+  "the diff is above" is not review.
