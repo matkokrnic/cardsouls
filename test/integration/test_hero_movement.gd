@@ -9,7 +9,9 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://test/integration/test_hero_movement.gd
 ## (read ${PIPESTATUS[0]} / set -o pipefail so grep can't mask the exit code).
 
-const MOVE_SPEED := 5.0  # matches match_runner._MOVE_SPEED (E0 placeholder)
+# Live move_speed comes from data/balance/balance_config.tres, injected at match start via
+# apply_balance (story 1-3b) — it overwrites match_runner._MOVE_SPEED. Tune the .tres, update this.
+const MOVE_SPEED := 5.0
 
 var _p1: CharacterBody3D
 var _x0 := 0.0
