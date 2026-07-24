@@ -36,6 +36,24 @@ func _ready() -> void:
 	_p1_controller = KeyboardController.new(&"p1")
 	_p2_controller = KeyboardController.new(&"p2")
 	_match_state = MatchState.new(_SEED, _MAX_HP, _MOVE_SPEED, _MAX_STAMINA, _MAX_MANA)
+	# DEBT A retirement (story 1-3b): inject the authored balance ONCE at match start,
+	# before the first tick — advance() reads balance_ticks, so without this call live-play
+	# actions are inert (MatchState's balance_ticks == null guard, kept as a permanent
+	# invariant). apply_balance partially overwrites the constructor placeholders above
+	# (mana stays constructor-driven — BalanceConfig has no mana field); story 3-1 folds
+	# the constants into the config object. Mid-match reload stays DEBT B (deferred).
+	var balance_config: BalanceConfig = BalanceConfigService.get_config()
+	Invariant.check(balance_config != null, "authored balance config missing at match start")
+	_match_state.apply_balance(balance_config)
+
+
+## Read-only subscription seam (story 1-3b): consumers (HUD, integration tests) observe
+## hero action transitions through the owning state object's typed signal — the D5 queued
+## channel, drained by the runner after advance(). The runner wires the subscription so no
+## consumer ever holds a MatchState handle. slot: 0 = P1, 1 = P2.
+func connect_hero_action_state_changed(slot: int, callback: Callable) -> void:
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.hero.action_state_changed.connect(callback)
 
 
 func _physics_process(delta: float) -> void:
