@@ -1,6 +1,10 @@
+---
+baseline_commit: b8ba7143a89b301b406106f5ed2da43941b08a04
+---
+
 # Story 1.3b: Live balance injection (DEBT A retirement)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -17,15 +21,15 @@ so that live-play actions actually run and tuning data/balance/balance_config.tr
 
 ## Tasks / Subtasks
 
-- [ ] Runner wiring (AC: 1)
-  - [ ] `apply_balance(BalanceConfigService.get_config())` once at match start; guard untouched
-- [ ] Golden path (AC: 2)
-  - [ ] Fixed in-test config into the golden setup (never the authored .tres); extend the recorded intent sequence (attack, roll, block, one chain); single deliberate re-baseline, both causes recorded
-- [ ] Authoring audit (AC: 3)
-  - [ ] Permanent test over the real .tres: all action durations > 0.0, chain length >= 1, stun exempt
-- [ ] Live integration proof (AC: 4)
-  - [ ] Simulated p1 attack press in the real scene -> ATTACKING, asserted via the queued `action_state_changed` signal (never via the runner's private `_match_state`)
-  - [ ] Correct the provenance comment at `test/integration/test_hero_movement.gd:12`: `MOVE_SPEED := 5.0` is commented "matches match_runner._MOVE_SPEED (E0 placeholder)", but once `apply_balance` runs at match start the live `move_speed` comes from `data/balance/balance_config.tres`. The values coincide today so nothing breaks, but the comment's provenance becomes wrong and tuning `move_speed` in the `.tres` would fail this test with a misleading message — rewrite the comment to name the config as the real source
+- [x] Runner wiring (AC: 1)
+  - [x] `apply_balance(BalanceConfigService.get_config())` once at match start; guard untouched
+- [x] Golden path (AC: 2)
+  - [x] Fixed in-test config into the golden setup (never the authored .tres); extend the recorded intent sequence (attack, roll, block, one chain); single deliberate re-baseline, both causes recorded
+- [x] Authoring audit (AC: 3)
+  - [x] Permanent test over the real .tres: all action durations > 0.0, chain length >= 1, stun exempt
+- [x] Live integration proof (AC: 4)
+  - [x] Simulated p1 attack press in the real scene -> ATTACKING, asserted via the queued `action_state_changed` signal (never via the runner's private `_match_state`)
+  - [x] Correct the provenance comment at `test/integration/test_hero_movement.gd:12`: `MOVE_SPEED := 5.0` is commented "matches match_runner._MOVE_SPEED (E0 placeholder)", but once `apply_balance` runs at match start the live `move_speed` comes from `data/balance/balance_config.tres`. The values coincide today so nothing breaks, but the comment's provenance becomes wrong and tuning `move_speed` in the `.tres` would fail this test with a misleading message — rewrite the comment to name the config as the real source
 
 ## Dev Notes
 
@@ -58,8 +62,34 @@ so that live-play actions actually run and tuning data/balance/balance_config.tr
 
 ### Agent Model Used
 
+claude-fable-5 (Claude Code)
+
 ### Debug Log References
+
+- Red-phase run: state harness failed ONLY on `test_state_matches_golden` (old golden vs. new hash), all other 59 tests green — confirming the hash moved for the two declared causes and nothing else regressed.
+- One parse fix in `test_live_attack.gd` (`:=` cannot infer from a Variant comparison; typed `var ok: bool` explicitly).
+- Final run: `bash test/run_all.sh` → state harness 60 tests / 0 failed / 234 assertions, all 4 integration tests PASS, `ALL TESTS PASSED`.
 
 ### Completion Notes List
 
+- **AC 1 — runner wiring.** `match_runner._ready()` now calls `_match_state.apply_balance(BalanceConfigService.get_config())` exactly once at match start, before the first tick, with an `Invariant.check` that the config loaded (a silently-null config would reproduce the exact DEBT A symptom). The 1-3 `balance_ticks == null` guard in `MatchState._resolve_actions` is untouched — permanent invariant, never fires in a normally started match.
+- **AC 2 — GOLDEN RE-BASELINE (deliberate, once).** Old `d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7` → new `40b5a8041c327b416ca235af65fc7c05f494d8b1d7a2e2b2761190b86da1d613`. TWO causes, each named in the test header: (1) `apply_balance` now runs on the golden path, with a FIXED config constructed in the test (`_golden_config()`, modeled on `test_action_state.gd`'s `_config()`) — never `data/balance/*.tres`, so playtest tuning cannot move the golden; (2) the recorded intent sequence widened from 6 movement-only ticks to 24 ticks exercising attack (t1), one chain (t9, self-transition), roll as a recovery roll-cancel (t17), and block press/hold/release (p2, t1–t6). Added `test_recorded_sequence_exercises_all_transitions`, which pins the exact p1/p2 `action_state_changed` sequences so the golden can never silently degrade back to guarding movement only.
+- **AC 3 — authoring audit.** New permanent `test/state/test_balance_authoring.gd` loads the REAL `.tres` and asserts all seven action `*_seconds` fields > 0.0 and `attack_chain_length >= 1`. `stun_seconds` exemption stated in the test header (data-only until OPEN decision (a)). The audit passed against the current authored values — no `.tres` change was needed.
+- **AC 4 — live integration proof.** New `test/integration/test_live_attack.gd` (test_hero_movement.gd pattern: real `main.tscn`, simulated `p1_attack` press) asserts IDLE → ATTACKING via the queued `action_state_changed` signal. To keep the test off the runner's private `_match_state`, added a minimal read-only subscription seam to the runner — `connect_hero_action_state_changed(slot, callback)` — consistent with the architecture rule that the runner wires signal subscriptions and consumers never hold a MatchState handle. This is the one runner addition beyond the `apply_balance` call, made to satisfy the AC 4 observation-channel constraint (readiness-gate advisory 1).
+- **Provenance comment** at `test/integration/test_hero_movement.gd` MOVE_SPEED fixed: names `data/balance/balance_config.tres` (injected via `apply_balance`) as the live source, replacing the stale "matches match_runner._MOVE_SPEED (E0 placeholder)".
+- **Untouched, per hard constraints:** DEBT B (`reload()` caching / `CACHE_MODE_IGNORE`), CONSTRAINT C inline `balance_ticks` reads, the Input Map, InputIntent's prefix-free keys, and the constructor-placeholder overlap (runner constants still feed `MatchState.new()`, partially overwritten by `apply_balance`; mana stays constructor-driven — 3-1 territory).
+- **Board note:** `sprint-status.yaml` locks lifecycle states to exactly backlog → ready-for-dev → done, so no `in-progress`/`review` state was written there; the story Status above is the review marker. Board promotion to `done` happens at close-out per project convention.
+- `.uid` sidecars for the two new test files will be generated by the editor on next scan; none were produced by the headless runs.
+
 ### File List
+
+- `src/main/match_runner.gd` (modified — apply_balance at match start + read-only subscription seam)
+- `test/state/test_determinism.gd` (modified — fixed in-test golden config, widened 24-tick sequence, sequence-exercise pin test, re-baselined GOLDEN)
+- `test/state/test_balance_authoring.gd` (new — permanent authoring audit over the real .tres)
+- `test/integration/test_live_attack.gd` (new — live attack press → ATTACKING via queued signal)
+- `test/integration/test_hero_movement.gd` (modified — MOVE_SPEED provenance comment only)
+- `docs/implementation-artifacts/1-3b-live-balance-injection.md` (modified — this story file)
+
+## Change Log
+
+- 2026-07-24: Story 1-3b implemented — DEBT A retired (both halves together: runner `apply_balance` at match start + deliberate golden re-baseline `d3f42def…bcf7` → `40b5a804…d613`); permanent authoring audit and live integration proof added. Full suite green (60 state tests / 234 assertions + 4 integration tests).
