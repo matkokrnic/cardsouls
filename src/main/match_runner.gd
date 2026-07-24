@@ -45,6 +45,13 @@ func _ready() -> void:
 	var balance_config: BalanceConfig = BalanceConfigService.get_config()
 	Invariant.check(balance_config != null, "authored balance config missing at match start")
 	_match_state.apply_balance(balance_config)
+	# Story 1-3c: throwaway debug overlay (see its FENCE — E2 replaces it with the real
+	# HUD). Wired through the public seam below like any consumer; it receives per-slot
+	# callbacks only, never a state handle.
+	var overlay := DebugStateOverlay.new()
+	add_child(overlay)
+	connect_hero_action_state_changed(0, overlay.on_hero_transition.bind(0))
+	connect_hero_action_state_changed(1, overlay.on_hero_transition.bind(1))
 
 
 ## Read-only subscription seam (story 1-3b): consumers (HUD, integration tests) observe
@@ -52,6 +59,10 @@ func _ready() -> void:
 ## channel, drained by the runner after advance(). The runner wires the subscription so no
 ## consumer ever holds a MatchState handle. slot: 0 = P1, 1 = P2.
 func connect_hero_action_state_changed(slot: int, callback: Callable) -> void:
+	# Slot guard (story 1-3c — retires the decision-log first-consumer obligation).
+	# Invariant.check, NOT a bare assert: a bare assert strips in export builds (X1).
+	# Before this guard, any slot != 0 silently mapped to p2.
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	player.hero.action_state_changed.connect(callback)
 
