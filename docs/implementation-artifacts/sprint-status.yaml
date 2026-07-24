@@ -41,7 +41,7 @@ development_status:
   1-2-camera-relative-movement-basis: done
   1-3-hero-action-state-machine: done
   1-3b-live-balance-injection: done
-  1-3c-debug-state-overlay: ready-for-dev
+  1-3c-debug-state-overlay: done
   1-4-stamina-economy: backlog
   1-5-basic-attack-chain: backlog
   1-6-training-dummy-null-controller: backlog

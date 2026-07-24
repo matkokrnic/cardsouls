@@ -1,6 +1,10 @@
+---
+baseline_commit: be848258d4d89ed8cc4b662cbc327a339f149de2
+---
+
 # Story 1.3c: Debug state overlay
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -17,17 +21,17 @@ so I can hand-feel the 1-3 state machine (windup, chain window, roll-cancel timi
 
 ## Tasks / Subtasks
 
-- [ ] Overlay node (AC: 1)
-  - [ ] CanvasLayer + two Labels (one per player slot) showing the current action state NAME; state derived from the signal's `(previous, current)` arguments only
-  - [ ] Swing counter per label: increments on the ATTACKING -> ATTACKING self-transition, resets on any exit from ATTACKING — the chain must be visibly distinguishable
-- [ ] Seam guard — first-consumer obligation (AC: 2)
-  - [ ] `Invariant.check` in `connect_hero_action_state_changed` that `slot` is 0 or 1 (not a bare `assert` — X1, export-surviving); record the obligation as RETIRED and the mechanism choice in the Dev Agent Record
-- [ ] Runner wiring (AC: 1, 3)
-  - [ ] The runner instantiates the overlay and wires both slots via the seam ("the runner wires subscriptions"); overlay never touches MatchState or runner privates
-  - [ ] No edits under `src/state/`
-- [ ] Verification (AC: 4)
-  - [ ] `bash test/run_all.sh` green; golden hash unmoved (any movement is a defect, not a re-baseline)
-  - [ ] Manual smoke check: run the main scene; press attack (single + chained), roll (including a recovery roll-cancel), and block on p1 while p2 blocks — verify both labels track the transitions and the swing counter distinguishes the chain. Record the observed behavior in the Dev Agent Record.
+- [x] Overlay node (AC: 1)
+  - [x] CanvasLayer + two Labels (one per player slot) showing the current action state NAME; state derived from the signal's `(previous, current)` arguments only
+  - [x] Swing counter per label: increments on the ATTACKING -> ATTACKING self-transition, resets on any exit from ATTACKING — the chain must be visibly distinguishable
+- [x] Seam guard — first-consumer obligation (AC: 2)
+  - [x] `Invariant.check` in `connect_hero_action_state_changed` that `slot` is 0 or 1 (not a bare `assert` — X1, export-surviving); record the obligation as RETIRED and the mechanism choice in the Dev Agent Record
+- [x] Runner wiring (AC: 1, 3)
+  - [x] The runner instantiates the overlay and wires both slots via the seam ("the runner wires subscriptions"); overlay never touches MatchState or runner privates
+  - [x] No edits under `src/state/`
+- [x] Verification (AC: 4)
+  - [x] `bash test/run_all.sh` green; golden hash unmoved (any movement is a defect, not a re-baseline)
+  - [x] Manual smoke check: run the main scene; press attack (single + chained), roll (including a recovery roll-cancel), and block on p1 while p2 blocks — verify both labels track the transitions and the swing counter distinguishes the chain. Record the observed behavior in the Dev Agent Record.
 
 ## Dev Notes
 
@@ -58,10 +62,29 @@ so I can hand-feel the 1-3 state machine (windup, chain window, roll-cancel timi
 
 ### Agent Model Used
 
+claude-fable-5 (Claude Code)
+
 ### Debug Log References
+
+- First suite run raced the class-cache write for the new `class_name DebugStateOverlay` (three integration tests failed parse, two passed in the same run); after `godot --headless --editor --quit --path .` registered the class, the clean re-run was fully green. The new test was also hardened to fail fast (`get_node_or_null` + immediate FAIL/quit) instead of hanging the harness when the overlay labels are missing.
+- Final run: `bash test/run_all.sh` → state harness 60 tests / 0 failed / 234 assertions + all 5 integration tests PASS, `ALL TESTS PASSED`. `test/state/test_determinism.gd` untouched; the golden did not move.
 
 ### Completion Notes List
 
+- **AC 1 — overlay.** New `src/main/debug_state_overlay.gd` (`DebugStateOverlay extends CanvasLayer`, labels built in code — no scene file, no `main.tscn` edit). Displays "P1: <STATE>" / "P2: <STATE>", with " (swing N)" appended while ATTACKING. Fed exclusively by per-slot callbacks the runner wires through the seam (`on_hero_transition.bind(slot)`); no MatchState handle, no polling, no runner privates, no Input reads, no `_process`/`_physics_process`. Swing counter derived purely from `(previous, current)`: increment on ATTACKING -> ATTACKING, reset on any exit from ATTACKING (mirrors the 1-3 chain_index contract without reading it). State names decoded from `HeroState.ActionState.keys()` — no parallel string table. Labels initialize to IDLE in `_ready` before any signal.
+- **AC 2 — first-consumer obligation RETIRED.** `connect_hero_action_state_changed` now guards `slot == 0 or slot == 1` via **`Invariant.check`** — mechanism chosen over a bare `assert` per X1 (a bare assert strips in export builds; house pattern, same as the runner's TICK_HZ check). The decision-log first-consumer obligation (Session 2026-07-24) is retired; close-out marks it in the log.
+- **AC 3 — zero state-layer changes.** No file under `src/state/` touched; overlay lives under `src/main/` per the gate's location pin. The FENCE stands: E2 replaces this overlay and must consume the seam, not copy its internals.
+- **AC 4 — verification.** Suite green (60 state tests / 234 assertions + 5 integration tests), `test_determinism.gd` unmodified, golden unmoved. New `test/integration/test_debug_overlay.gd` proves the overlay end to end in the real scene by observing ONLY `Label.text`: labels init to IDLE pre-press, simulated p1 attack -> "P1: ATTACKING (swing 0)", a second press timed into the chain window -> "(swing 1)", reset to "P1: IDLE" after the sequence ends, p2 label IDLE throughout. Press timing derived from the authored `.tres` via `BalanceTicks`, so duration tuning reschedules the test instead of breaking it (assumes the chain window covers the first ~3 recovery ticks; currently 30).
+- **Manual smoke check: PASSED** — 2026-07-24, playtest by Matko (first hands-on playtest of the project): all transitions tracked correctly — single attack (swing 0 -> IDLE), chain (swing 0 -> swing 1), recovery roll-cancel (ROLLING, counter reset), block on both slots independently with no cross-wiring. Timing at current authored values feels adequate; final judgment deferred until animations land. Approved to proceed.
+- No Input Map changes, no DEBT B contact, no `project.godot` edits.
+
 ### File List
 
+- `src/main/debug_state_overlay.gd` (new — the overlay) + `src/main/debug_state_overlay.gd.uid` (generated)
+- `src/main/match_runner.gd` (modified — slot Invariant.check on the seam + overlay instantiation/wiring)
+- `test/integration/test_debug_overlay.gd` (new — live end-to-end proof via label text) + `test/integration/test_debug_overlay.gd.uid` (generated)
+- `docs/implementation-artifacts/1-3c-debug-state-overlay.md` (modified — this story file)
+
 ## Change Log
+
+- 2026-07-24: Story 1-3c implemented — debug state overlay fed exclusively by the seam; slot guard via Invariant.check (first-consumer obligation retired); suite green with the golden unmoved. Manual smoke check pending Matko's playtest; Status: review.
