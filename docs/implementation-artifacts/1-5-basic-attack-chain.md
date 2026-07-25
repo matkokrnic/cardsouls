@@ -1,6 +1,10 @@
+---
+baseline_commit: 12b220e1839598026792652beea63e95f278a386
+---
+
 # Story 1.5: Basic attack chain
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -26,17 +30,17 @@ so that the attack is deterministic, replay-safe, and the P2 flywheel starts in 
 
 ## Tasks / Subtasks
 
-- [ ] Flag injection seam: runner reads `FeatureFlagsService.get_flags()` once at match start and injects into `MatchState`; state never reads the service; flags EXCLUDED from `to_snapshot()` (AC: 4)
-- [ ] `BalanceConfig`: add `melee_hit_mana` + `attack_move_speed_multiplier`; author both in `data/balance/balance_config.tres` (multiplier `0.0`); extend the `.tres` smoke test and `test_balance_authoring.gd` (audit `melee_hit_mana > 0`; multiplier exempt-with-reason, non-negative) (AC: 9)
-- [ ] Contact intake API on `MatchState`: queued plain-data contact facts (attacker slot, target slot, attack index), drained deterministically in `advance()` step 4; shape recordable alongside intents (X5) (AC: 5)
-- [ ] Step-4 resolution: dedupe/liveness acceptance rule → damage = `attack_damage_percent_of_max_hp / 100.0` × target's max HP (inline read) → queue `hp_changed` → record confirmed hits for step 5 (AC: 5, 6, 7)
-- [ ] Step-5 single mana-generation path from recorded confirmed hits, gated on injected `melee_mana_generation`, amount read inline from `ms.balance.melee_hit_mana` (AC: 3)
-- [ ] `HeroState.is_hitbox_active` as a derived accessor (active window running); no stored field (AC: 2)
-- [ ] Per-swing dedupe tracking in state: keyed by attack index, lives exactly ONE tick past active-window close, snapshotted (AC: 7)
-- [ ] `attack_move_speed_multiplier` applied in `_resolve_movement` while `ATTACKING`, uniform across phases, velocity only, inline read (AC: 8)
-- [ ] Headless tests per AC 10, including the flag matrix (ON/OFF) and both sides of the stale-contact boundary (AC: 10)
-- [ ] Lower `attack_damage_percent_of_max_hp` toward the GDD ~5–8% band (suggest `6.0`) — data change in the authored `.tres` (AC: 6)
-- [ ] Golden re-baseline: ONE re-baseline, causes named separately ((a) snapshot shape, (b) authored damage/mana + synthetic hit in the sequence, (c) movement-root if it fires); scenario ends non-full HP + non-zero mana; pinning test with exact arithmetic at named ticks; in-test flags, never the authored `.tres` (AC: 11)
+- [x] Flag injection seam: runner reads `FeatureFlagsService.get_flags()` once at match start and injects into `MatchState`; state never reads the service; flags EXCLUDED from `to_snapshot()` (AC: 4)
+- [x] `BalanceConfig`: add `melee_hit_mana` + `attack_move_speed_multiplier`; author both in `data/balance/balance_config.tres` (multiplier `0.0`); extend the `.tres` smoke test and `test_balance_authoring.gd` (audit `melee_hit_mana > 0`; multiplier exempt-with-reason, non-negative) (AC: 9)
+- [x] Contact intake API on `MatchState`: queued plain-data contact facts (attacker slot, target slot, attack index), drained deterministically in `advance()` step 4; shape recordable alongside intents (X5) (AC: 5)
+- [x] Step-4 resolution: dedupe/liveness acceptance rule → damage = `attack_damage_percent_of_max_hp / 100.0` × target's max HP (inline read) → queue `hp_changed` → record confirmed hits for step 5 (AC: 5, 6, 7)
+- [x] Step-5 single mana-generation path from recorded confirmed hits, gated on injected `melee_mana_generation`, amount read inline from `ms.balance.melee_hit_mana` (AC: 3)
+- [x] `HeroState.is_hitbox_active` as a derived accessor (active window running); no stored field (AC: 2)
+- [x] Per-swing dedupe tracking in state: keyed by attack index, lives exactly ONE tick past active-window close, snapshotted (AC: 7)
+- [x] `attack_move_speed_multiplier` applied in `_resolve_movement` while `ATTACKING`, uniform across phases, velocity only, inline read (AC: 8)
+- [x] Headless tests per AC 10, including the flag matrix (ON/OFF) and both sides of the stale-contact boundary (AC: 10)
+- [x] Lower `attack_damage_percent_of_max_hp` toward the GDD ~5–8% band (suggest `6.0`) — data change in the authored `.tres` (AC: 6)
+- [x] Golden re-baseline: ONE re-baseline, causes named separately ((a) snapshot shape, (b) authored damage/mana + synthetic hit in the sequence, (c) movement-root if it fires); scenario ends non-full HP + non-zero mana; pinning test with exact arithmetic at named ticks; in-test flags, never the authored `.tres` (AC: 11)
 
 ## Dev Notes
 
@@ -77,8 +81,51 @@ so that the attack is deterministic, replay-safe, and the P2 flywheel starts in 
 
 ### Agent Model Used
 
+Claude Fable 5 (claude-fable-5) via gds-dev-story, 2026-07-25.
+
 ### Debug Log References
+
+- Preconditions (before any change): tree clean, HEAD = origin/main = 12b220e, board `1-5-basic-attack-chain: ready-for-dev`, `bash test/run_all.sh` — 85 state tests / 298 assertions + 5 integration, ALL TESTS PASSED, golden `871f8132…`.
+- Intermediate gate (golden discipline, implementation + all non-golden tests complete): 101 state tests / 355 assertions, the ONLY failure `test_determinism.gd::test_state_matches_golden` (hash drift — the expected snapshot-shape consequence). Confirmed before touching the golden.
+- Cause (c) empirical verification (scratch headless script over the exact golden sequence with the new code): nonzero P1 move input on ATTACKING ticks 1–4, 6–16; velocity nonzero on all of them with multiplier 1.0; final hash IDENTICAL for multiplier 0.0 vs 1.0. See Completion Notes.
+- Final: `bash test/run_all.sh` — 102 state tests / 361 assertions, 0 failed + 5 integration tests, ALL TESTS PASSED.
 
 ### Completion Notes List
 
+- **AC 2 (N3):** `HeroState.is_hitbox_active()` is a derived accessor — `active.is_running`, nothing stored; the active window only runs during ATTACKING. No actor consumption (1-7).
+- **AC 3 (DEBT D resolved) / AC 5 (N4):** step 4 (`MatchState._resolve_contacts()`) drains the queued facts in push order — dedupe/liveness acceptance → damage → queue `hp_changed` → return confirmed attacker slots; step 5 (`MatchState._generate_mana()`) is THE one mana-generation path (the `_regen_stamina` policy-seat analog, under the same single `balance_ticks != null` guard): gated on the injected `flags.melee_mana_generation` (null flags = faucet closed, inert like the balance null guards), amount read inline as `balance.melee_hit_mana` per confirmed hit (CONSTRAINT C). Mana is NOT added in step 4. No evaluator, no `src/state/economy/`.
+- **AC 4 (B3):** `MatchState.flags` injected once via `inject_feature_flags()`; runner reads `FeatureFlagsService.get_flags()` ONCE in `_ready()` (with an `Invariant.check`, mirroring balance) and injects. No reload path. Flags EXCLUDED from `to_snapshot()` — pinned by `test_flags_object_is_excluded_from_snapshot` (hash equality with and without injection).
+- **AC 5 (B7/X5):** contact intake = `MatchState.push_contact(attacker_slot, target_slot, attack_index)` appending a plain three-int Dictionary to `_contact_queue`, drained deterministically in step 4 and cleared every tick (facts are per-tick, never carried; pre-injection the queue drains inert). The queue is input-like pushed data (InputIntent/camera-basis category), excluded from the snapshot; recording alongside intents lands with the real runner feed in 1-7.
+- **AC 6 (N1):** damage = `attack_damage_percent_of_max_hp / 100.0 ×` the TARGET's `get_max_hp()`, both read inline at resolution. No `hit_landed` signal (1-7). Authored damage lowered `10.0 → 6.0` (GDD ~5–8% band).
+- **AC 7 (B7b/N2):** dedupe lives on the attacker's `HeroState._swing_dedupe`, keyed by a NEW monotonic `attack_index` counter (never resets, unlike `chain_index` — a stale fact can never collide with a later swing's record); every `_start_swing()` claims the next index and opens a record `{hit: [target slots], grace}`. Lifetime rides `tick_timers()` (step 2): expired graces clear first, then an active window that just closed puts the current record into its 1-tick grace — so a record set on tick N survives through tick N's step 4 and dies in tick N+1's step 2. Both boundary sides pinned (last-active-tick fact arriving one tick later ACCEPTED; one tick older DROPPED). Records are a Dictionary because a chain pressed on the first recovery tick legitimately overlaps the old record's grace tick. Snapshotted as `swing_dedupe` = {`attack_index`, `records` (deep copy)} — the ONE snapshot delta of the story (D8).
+- **AC 8 (B6):** `_resolve_movement` scales the resolved velocity by `balance.attack_move_speed_multiplier` (inline read) while `action_state == ATTACKING` — uniform across phases, velocity only, facing update untouched, ROLL half untouched (1-9). Authored `0.0` = full root. ATTACKING is unreachable pre-injection (step-3 guard), so the branch's `balance` read is safe.
+- **AC 9 (B4):** exactly TWO new `BalanceConfig` fields (`melee_hit_mana` under a new Mana export group; `attack_move_speed_multiplier` under Attack), neither on `BalanceTicks`, NO `max_mana` (runner comment updated to say "no max_mana field" — it previously said "no mana field", which `melee_hit_mana` would have falsified). Both authored in the `.tres`; smoke test fields added; audit: `melee_hit_mana > 0`, multiplier exempt-with-reason (header), non-negative only.
+- **AC 10 (B3b):** `test/state/test_contact_resolution.gd` (14 tests / 44 assertions): exact-tick hitbox accessor, confirmed hit → damage+mana with attacker/target isolation, same-swing dedupe, chained-swing-new-record, BOTH stale-boundary sides, unknown-index drop, flag matrix ON/OFF + the null-flags path, snapshot-exclusion pin, movement root scaled across all three phases and restored on exit + full-root facing pin, D8 dedupe snapshot shape, pre-injection inertness.
+- **AC 11 (B8) — ONE golden re-baseline, TWO causes, named separately:**
+  - **Cause (a) — snapshot shape:** `HeroState.to_snapshot()` gained `swing_dedupe` (monotonic counter + live records; D8).
+  - **Cause (b) — authored combat economy + synthetic hit:** `_golden_config()` authors `attack_damage_percent_of_max_hp` 10.0 and `melee_hit_mana` 12.0 (+ multiplier 0.0 explicit), `_make_match()` injects in-test flags (`_golden_flags()`, melee ON — never the authored `.tres`), and the sequence feeds ONE synthetic fact at t5 (`CONTACTS`, modeling a t4 swing-0 active contact with the F1 lag): P2 ends 108/120 HP (non-full), P1 ends 12 mana (non-zero). Pinned by `test_golden_sequence_exercises_hit_damage_and_mana` (exact 120→108 / 0→12 arithmetic at t4/t5/t24).
+  - **Cause (c) — movement root — VERIFIED NON-CAUSE:** the gate's premise half-holds — the sequence DOES hold nonzero movement input on ATTACKING ticks (1–4, 6–16) and the multiplier does root velocity on all of them — but the hash is EMPIRICALLY IDENTICAL with multiplier 0.0 vs 1.0, because the golden hashes only the FINAL (t24) snapshot: velocity is overwritten every tick, position is actor-owned (F1, never in state), and the run ends IDLE (roll ends t22). Movement-root can only move this hash if a sequence ends mid-ATTACKING. The re-baseline therefore has TWO causes, not three; finding recorded in the GOLDEN header comment.
+  - Golden `871f8132…` → `39564e83831819d4486d6216e9030535029de1298168ebeee720ab4812705353`; discipline followed: implementation + all non-golden tests proven green (101/355, only the golden red) BEFORE the golden was touched.
+- **Authored value note (first-guess placeholder, not story-specified):** `melee_hit_mana = 8.0` (10 confirmed hits fill the 80 constructor cap) — the story mandates the field and the >0 audit but names no number; TBD-in-playtest like every 1-1 placeholder.
+- **OUT OF SCOPE respected:** no `src/state/economy/`/evaluator, no `max_mana`, no `Area3D`/actor/runner gathering, no `hit_landed`, no per-phase multipliers, no roll×movement coupling, no flag reload path, no HUD, no chain re-specification (1-3 table and tests untouched).
+- Board note: sprint-status.yaml statuses are locked to backlog/ready-for-dev/done, so the board stays `ready-for-dev` during the review handoff; this story file's Status carries the review state (1-4 precedent).
+- **Review round R1:** `push_contact()` now ENFORCES its documented programming-error stance with `Invariant.check` (a plain static class, no autoload): slots must be 0 or 1, and attacker ≠ target (a self-contact fact is malformed in 1v1 — operator decision this round; 1-7's gate revisits if real gathering ever needs otherwise). Previously the ternary in `_resolve_contacts` silently mapped every slot != 0 to p2 while the docstring claimed set_camera_basis parity. No violation-path test, consistent with every existing `Invariant.check`.
+
 ### File List
+
+- `src/state/resources/balance_config.gd` (modified — `attack_move_speed_multiplier` + `melee_hit_mana` with header rationale)
+- `data/balance/balance_config.tres` (modified — both new fields authored; damage 10.0 → 6.0)
+- `src/state/hero_state.gd` (modified — `attack_index`, `_swing_dedupe` + lifetime in `tick_timers()`, `is_hitbox_active()`, `register_swing_hit()`, `swing_dedupe` snapshot delta)
+- `src/state/match_state.gd` (modified — `flags` + `inject_feature_flags()`, `push_contact()`/`_contact_queue`, step-4 `_resolve_contacts()`, step-5 `_generate_mana()`, movement multiplier in `_resolve_movement`)
+- `src/main/match_runner.gd` (modified — one-time flag read+inject with invariant; max-mana comment correction)
+- `test/state/test_contact_resolution.gd` (new — 14 tests / 44 assertions)
+- `test/state/test_contact_resolution.gd.uid` (new — editor-generated sidecar, review round)
+- `test/state/test_determinism.gd` (modified — golden re-baseline, combat-authored `_golden_config` + in-test `_golden_flags`, `CONTACTS` synthetic hit, AC 11 pin test, cause-(c) finding in the header)
+- `test/state/test_balance_authoring.gd` (modified — melee-hit economy pair audit + header exemption)
+- `test/state/test_data_resources.gd` (modified — two new fields in the smoke list)
+- `docs/implementation-artifacts/1-5-basic-attack-chain.md` (modified — this record)
+
+### Change Log
+
+- 2026-07-25: Story 1-5 implemented — flag injection seam (first flag consumer in state; flags config-not-state, snapshot-excluded), contact intake seam (`push_contact`, step-4 deterministic drain), per-swing dedupe keyed by a new monotonic `attack_index` with the exactly-one-tick-past-close lifetime (both boundary sides pinned), inline damage formula (authored value lowered to 6.0), THE one flag-gated step-5 mana path (DEBT D resolved direct), derived `is_hitbox_active`, B6 movement root (velocity only, uniform, authored 0.0), balance schema +2 fields with audit. ONE golden re-baseline with TWO separately-named causes — the gate-predicted cause (c) (movement root) was empirically verified a NON-CAUSE (final-snapshot hash; run ends IDLE) and is recorded as a finding instead. Suite: 85→102 state tests / 298→361 assertions + 5 integration, all green. Status: review.
+- 2026-07-25: Review round — R1 fixed: `push_contact` enforces slot validity (0/1) and attacker ≠ target via `Invariant.check`, making the documented programming-error stance real instead of a silent slot-collapse ternary. No violation-path test (existing Invariant.check convention). Suite unchanged: 102 state tests / 361 assertions + 5 integration, all green. Status: review.
