@@ -264,3 +264,19 @@ Readiness gate on `1-6-training-dummy-null-controller.md` (authored 2026-07-22 i
 **Docs debt (minor).** The architecture Directory Tree lists keyboard/gamepad/scripted/replay controllers but not `null_controller.gd`, though A3's amendment text names `NullController` explicitly. A tree omission, not a conflict — fold into the next architecture amendment; no edit now.
 
 **Default-swap note (N7).** 1-6 SWAPS a default rather than adding a slot: P2 has been a live `KeyboardController("p2")` slot since E0 (the 1-3c hands-on playtest exercised both slots), and after 1-6 the default scene is P1 human vs P2 dummy — two-human play returns only via the new config point until 2-3 realizes the swap-back. A deliberately chosen default, recorded so it reads as a swap, not an addition.
+
+---
+
+## Session 2026-07-25 — 1-6 close-out
+
+**What landed (873f349 code + 9bb5ac8 story record).** Implementation exactly as gated: `NullController` (`src/controllers/null_controller.gd`, a trivial `Controller` subclass — `sample()` inherits the base fresh-empty-`InputIntent` null behavior, adding nothing on purpose); **THE single per-slot controller-kind config point** in `match_runner.gd` (`ControllerKind` enum + `slot_controller_kinds` export + the `_make_controller()` factory — the ONE place a kind becomes a concrete `Controller`, with a size `Invariant.check`), the seam **2-3** (swap slot 1 `NULL → KEYBOARD_P2`) and **E7** (scripted kind) consume as one-line changes; **P2 default = `NULL`** (the training dummy). The vestigial `src/actors/dummy/.gitkeep` was removed in the code commit (A3's folder). No new `PlayerState`/actor/rig/scene, no `src/state/` change — the second slot has existed and been driven since E0, so 1-6 SWAPS P2's driver, it does not add a slot.
+
+**Golden — the gate's NONE prediction was CONFIRMED by measurement.** Hash unchanged `39564e83…5353`, `test_determinism.gd` untouched (no sequence re-record): the golden path feeds fixed intents straight to `advance()` and bypasses controllers, so the P2 default-swap cannot reach it. Contrast with the 1-5 cause-(c) lesson — predictions get MEASURED either way; this one held rather than dying. AC5b's new non-golden `test_null_controller.gd` proves the null-driven slot stays IDLE with zero velocity across 30 ticks (position is actor-owned, F1, never in state).
+
+**Invariants + suite.** F1 (one `_physics_process`), D3(a) (`Input.*` only in controllers — `NullController` reads none), D3(b)/A2 (state purity) all green with `NullController` live; the 5 integration tests instantiate the runner scene, so they exercise the real config-point factory and the P2-dummy default (`test_live_attack`/`test_debug_overlay` confirm the swap doesn't break the live scene). Suite 102 → 104 state tests / 361 → 487 assertions + 5 integration, all green; the operator independently ran the state harness (direct `godot` invocation) and confirmed 104/487 PASS.
+
+**R1 (story-record correction).** The record first cited a STATIC count ("12 assertions") for `test_null_controller.gd`, but its second test is loop-driven — 6 + 30×4 = **126 runtime assertions**, exactly the 487−361 suite delta. Corrected in both the File List line and the AC 5b note (commit 9bb5ac8). Lesson: report assertion counts from the harness output, not from reading the file.
+
+**PLAYTEST GAP — unchanged in kind.** The dummy slot is inert BY CONSTRUCTION (empty intents) and proven headless only; its live-play meaning arrives with **1-7** (the live `push_contact` damage feed — something to actually hit the dummy with) and **E2** (the HUD readout). The default scene is now P1 human vs P2 dummy; two-human play returns via the config point at 2-3.
+
+**Pointer.** Reset semantics + entry path remain a **1-7 gate** decision (relocated at the 1-6 gate); the `attack_index`-survives-reset CONSTRAINT stands (pinned in the 1-6 gate session above).
