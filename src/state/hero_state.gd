@@ -69,6 +69,11 @@ var action_state: ActionState = ActionState.IDLE
 ## chain (ATTACKING -> ATTACKING); resets to 0 on ANY exit from ATTACKING to a
 ## non-ATTACKING state (roll-cancel included — a cancelled chain never resumes).
 var chain_index: int = 0
+## Story 1-5 (B7b): MONOTONIC swing counter — the dedupe key. Unlike chain_index it never
+## resets: every swing (fresh or chained) gets a unique index for the life of the match,
+## so a stale contact fact can never collide with a later swing's record. -1 = no swing
+## yet. The runner (1-7) stamps gathered facts with this value.
+var attack_index: int = -1
 var velocity := Vector3.ZERO   # intended velocity; the runner reads this (D3), not the intent
 var facing := Vector2.DOWN     # planar facing
 var move_speed: float          # injected (balance .tres in E3); tunable, not hardcoded-in-place
@@ -91,6 +96,18 @@ var stun := TimingWindow.new()
 var _hp: float
 var _max_hp: float
 var _queue: SignalQueue
+
+## Story 1-5 (B7b/N2): per-swing dedupe records, keyed by attack_index. Each record is
+## {"hit": Array[int] of target slots already damaged this swing, "grace": int}. grace
+## semantics: -1 = the swing's active window has not closed yet (record alive); 1 = window
+## closed, record lives exactly ONE more tick (absorbs the F1 one-tick fact lag — a
+## contact gathered on the last active tick arrives the tick after close and is still
+## legitimate); decremented in tick_timers(), erased at 0. A fact is accepted iff its
+## attack_index has a record here AND its target is not already in that record's hit list.
+## SNAPSHOTTED (D8): mid-swing dedupe state excluded from the snapshot would be a
+## determinism/replay hole. Multiple records can be alive at once — a chain pressed on the
+## first recovery tick starts a new swing while the old record is still in its grace tick.
+var _swing_dedupe: Dictionary = {}
 
 
 func _init(queue: SignalQueue, max_hp: float, move_speed_value: float) -> void:
@@ -141,6 +158,29 @@ func set_action_state(new_state: ActionState) -> void:
 ## evaluation when a gated edge rejects a press; the reason vocabulary is the call site's.
 func reject_action(action: StringName, reason: StringName) -> void:
 	_queue.push(action_rejected.emit.bind(action, reason))
+
+
+## Story 1-5 (N3): DERIVED accessor, no stored flag — same "phases are derived, not
+## stored" family as attack_phase(). True iff the attack active window is running, which
+## only happens during ATTACKING. Actor-side consumption (the runner gathering overlaps
+## for state-flagged-active hitboxes) is 1-7 scope.
+func is_hitbox_active() -> bool:
+	return active.is_running
+
+
+## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
+## contact resolution for THIS hero as the attacker. Returns true iff the fact's
+## attack_index matches a live dedupe record AND this swing has not already damaged
+## target_slot — and then records the target, so a second same-swing contact returns
+## false. A false return means the fact is DROPPED (stale, unknown, or duplicate).
+func register_swing_hit(index: int, target_slot: int) -> bool:
+	if not _swing_dedupe.has(index):
+		return false
+	var hit: Array = _swing_dedupe[index]["hit"]
+	if target_slot in hit:
+		return false
+	hit.append(target_slot)
+	return true
 
 
 ## Derived attack phase. Phases are expressed by WHICH WINDOW IS RUNNING (AC 1) — no
@@ -218,8 +258,11 @@ func enter_block(deflect_window_ticks: int) -> void:
 
 
 ## One swing: windup starts; successor windows are start(0)-cleared so attack_phase() can
-## tell "not yet run this swing" (elapsed 0) from "finished" (elapsed > 0).
+## tell "not yet run this swing" (elapsed 0) from "finished" (elapsed > 0). Story 1-5:
+## every swing also claims the next attack_index and opens its dedupe record.
 func _start_swing(windup_ticks: int) -> void:
+	attack_index += 1
+	_swing_dedupe[attack_index] = {"hit": [], "grace": -1}
 	windup.start(windup_ticks)
 	active.start(0)
 	recovery.start(0)
@@ -235,8 +278,12 @@ static func _has_run(w: TimingWindow) -> bool:
 
 ## Advance all D4 windows one tick (called from advance() step 2). ORDER CONTRACT (AC 2):
 ## timers advance FIRST (step 2), transitions read the advanced result (step 3) — never
-## flip this order.
+## flip this order. Story 1-5: the dedupe lifetime rides the same step — expired graces
+## are cleared FIRST (a grace set on tick N survives through tick N's step 4 and dies in
+## tick N+1's step 2), then an active window that just closed puts the current swing's
+## record into its 1-tick grace.
 func tick_timers() -> void:
+	var was_active := active.is_running
 	windup.tick()
 	active.tick()
 	recovery.tick()
@@ -245,6 +292,16 @@ func tick_timers() -> void:
 	roll_iframe.tick()
 	roll_duration.tick()
 	stun.tick()
+	for index in _swing_dedupe.keys():
+		var grace := int(_swing_dedupe[index]["grace"])
+		if grace > 0:
+			grace -= 1
+			if grace == 0:
+				_swing_dedupe.erase(index)
+			else:
+				_swing_dedupe[index]["grace"] = grace
+	if was_active and not active.is_running:
+		_swing_dedupe[attack_index]["grace"] = 1
 
 
 func _set_hp(value: float) -> void:
@@ -261,6 +318,13 @@ func to_snapshot() -> Dictionary:
 		"max_hp": _max_hp,
 		"action_state": int(action_state),
 		"chain_index": chain_index,
+		# Story 1-5: the ONE snapshot delta of the story (D8) — the monotonic swing
+		# counter plus the live dedupe records (deep copy: the snapshot must be a value,
+		# not a live handle into state).
+		"swing_dedupe": {
+			"attack_index": attack_index,
+			"records": _swing_dedupe.duplicate(true),
+		},
 		"velocity": velocity,
 		"facing": facing,
 		"move_speed": move_speed,

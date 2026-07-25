@@ -18,6 +18,7 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"roll_stamina_cost", "deflect_stamina_cost",
 	"attack_windup_seconds", "attack_active_seconds", "attack_recovery_seconds",
 	"attack_chain_window_seconds", "attack_chain_length", "attack_damage_percent_of_max_hp",
+	"attack_move_speed_multiplier", "melee_hit_mana",
 	"block_damage_multiplier", "deflect_window_seconds",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

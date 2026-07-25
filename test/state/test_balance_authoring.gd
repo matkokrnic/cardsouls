@@ -13,6 +13,12 @@ extends TestCase
 ## Story 1-4 (D7) adds the NON-DURATION stamina-economy class below, with two exemptions:
 ## EXEMPT: deflect_stamina_cost — authored data with no consumer until 1-8 (stun_seconds precedent).
 ## EXEMPT: stamina_regen_delay_seconds — 0 is legitimate tuning (no delay), not a defect.
+##
+## Story 1-5 (B4) adds the melee-hit economy pair:
+## melee_hit_mana must be authored > 0 — a zero faucet is a dead flywheel; the
+## melee_mana_generation FLAG is the off-switch, never a zero amount.
+## EXEMPT from > 0: attack_move_speed_multiplier — 0.0 (full root) IS the authored design
+## value (B6 operator decision), so the audit asserts non-negative only.
 
 const CONFIG_PATH := "res://data/balance/balance_config.tres"
 
@@ -64,3 +70,23 @@ func test_authored_stamina_economy_values_are_positive() -> void:
 		"stamina_regen_per_second must be authored > 0 (spent stamina must come back)")
 	assert_true(config.roll_stamina_cost > 0.0,
 		"roll_stamina_cost must be authored > 0 (a free roll unguards the 1-4 economy)")
+
+
+## ---- Melee-hit economy pair (story 1-5, B4) — exemption reasoning in the file header. --
+
+func test_authored_melee_hit_mana_is_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.melee_hit_mana > 0.0,
+		"melee_hit_mana must be authored > 0 (a zero faucet is a dead flywheel — the flag is the off-switch)")
+
+
+func test_authored_attack_move_speed_multiplier_is_non_negative() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.attack_move_speed_multiplier >= 0.0,
+		"attack_move_speed_multiplier must be non-negative (0.0 = full root is the authored design)")

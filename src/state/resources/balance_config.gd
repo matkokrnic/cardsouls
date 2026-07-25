@@ -29,6 +29,19 @@ extends Resource
 @export var attack_chain_window_seconds: float = 0.0
 @export var attack_chain_length: int = 0
 @export var attack_damage_percent_of_max_hp: float = 0.0
+## Story 1-5 (B6): scales the hero's resolved velocity while ATTACKING, uniform across
+## windup/active/recovery (per-phase multipliers wait for animations). Scalar, NOT
+## tick-domain — never on BalanceTicks. Authored 0.0 = full root (a design value, not a
+## missing one — exempt from the >0 authoring audit with that reason).
+@export var attack_move_speed_multiplier: float = 0.0
+
+@export_group("Mana")
+## Story 1-5 (DEBT D resolved): mana per CONFIRMED melee hit, read inline at the moment
+## the hit is confirmed (CONSTRAINT C), gated on the injected
+## FeatureFlags.melee_mana_generation. Per-event amount, NOT tick-domain — never on
+## BalanceTicks. The flag is the off-switch; a zero amount is a dead flywheel (audited >0).
+## NO max_mana here — the mana cap stays the runner's constructor value until story 3-1.
+@export var melee_hit_mana: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

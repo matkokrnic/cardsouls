@@ -23,6 +23,15 @@ var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in
 var balance: BalanceConfig
 var balance_ticks: BalanceTicks
 
+## Story 1-5 (B3): the injected FeatureFlags — the first flag consumer in state. The
+## runner reads FeatureFlagsService ONCE at match start and injects here; state NEVER
+## reads the service (HARD RULE). Load-once, no reload path — deliberately unlike
+## balance. EXCLUDED from to_snapshot(): flags are CONFIG, not state (the 1-2
+## camera-basis analog), so the golden hash never depends on the flag object. Null
+## (pre-injection, most headless tests) closes every flag-gated path — inert, like the
+## balance null guards.
+var flags: FeatureFlags
+
 var _queue: SignalQueue
 var _rng: RandomNumberGenerator  # the ONLY randomness source in the state layer (F2/A2)
 var _tick := 0
@@ -35,6 +44,15 @@ var _round_over := false
 ## fixed (all of E1) the basis is deterministic, so X5 replay is unaffected. Defaults to
 ## identity: with no basis pushed (tick 0, headless tests) move_dir is world-space (AC 4).
 var _camera_bases: Array[Basis] = [Basis.IDENTITY, Basis.IDENTITY]
+
+## Story 1-5 (B7): queued contact facts, drained deterministically in advance() step 4.
+## Input-like PUSHED facts, same category as InputIntent and the camera basis: plain
+## recordable data (three ints per fact — X5 replay records them alongside intents; the
+## actual recording lands with the real runner feed in 1-7), EXCLUDED from to_snapshot()
+## like the intent stream. In live play the runner pushes facts in frame step 2, so they
+## reflect tick N-1's post-movement physics flush (F1 one-tick lag — absorbed by the
+## dedupe grace tick, see HeroState._swing_dedupe).
+var _contact_queue: Array[Dictionary] = []
 
 
 ## E0 constructs both players symmetrically (mirror match). When BalanceConfig lands (E3)
@@ -77,14 +95,20 @@ func advance(intents: Array[InputIntent]) -> void:
 	_resolve_movement(p1, p1_intent, 0)
 	_resolve_actions(p2, p2_intent)
 	_resolve_movement(p2, p2_intent, 1)
-	# 4. Resolve contacts      [E1 hitbox->contact seam — none at E0]
-	# 5. Resource generation   stamina regen (story 1-4), P1 -> P2. Implemented DIRECTLY —
-	#    the D6 evaluator/rule schema is DEBT D (deferred, not abandoned; the 1-5 mana hook
-	#    is the reconcile trigger). Same single null guard rationale as step 3: a
-	#    pre-injection MatchState stays inert, no scattered checks below.
+	# 4. Resolve contacts      (story 1-5) drain the queued facts in push order: dedupe/
+	#    liveness acceptance -> damage -> record confirmed hits for step 5. Damage and
+	#    dedupe ONLY here — mana is step 5's seat, keeping the documented D2 order
+	#    truthful (N4).
+	var confirmed_hits := _resolve_contacts()
+	# 5. Resource generation   stamina regen (story 1-4) then melee-hit mana (story 1-5),
+	#    P1 -> P2. Both implemented DIRECTLY — the D6 evaluator/rule schema is DEBT D
+	#    (RESOLVED at the 1-5 trigger: stays direct; evaluator extraction re-triggers at
+	#    E3). Same single null guard rationale as step 3: a pre-injection MatchState stays
+	#    inert, no scattered checks below.
 	if balance_ticks != null:
 		_regen_stamina(p1)
 		_regen_stamina(p2)
+		_generate_mana(confirmed_hits)
 	# 6. Card / economy        [E3 card play/draw; E6 pitch resolution]
 	# 7. Board update          [E4 minion/totem throttled-tick seam]
 	# 8. Resolution check
@@ -101,6 +125,35 @@ func apply_balance(config: BalanceConfig) -> void:
 	balance_ticks = BalanceTicks.from_config(config)
 	_apply_balance_to_player(p1, config)
 	_apply_balance_to_player(p2, config)
+
+
+## Story 1-5 (B3): one-time flag injection at match start. Runner-only, exactly once —
+## flags have NO reload path (deliberately unlike apply_balance); state never reads
+## FeatureFlagsService.
+func inject_feature_flags(value: FeatureFlags) -> void:
+	flags = value
+
+
+## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
+## through this same call, never a second path. Plain recordable data (X5): attacker
+## slot, target slot, and the attacker's HeroState.attack_index at gather time. Queued
+## here, drained in advance() step 4. Headless tests feed synthetic facts through this
+## API. A malformed fact is a programming error, ENFORCED at the seam (review R1 —
+## Invariant.check, a plain static class, no autoload): slots must be 0 or 1, and a
+## self-contact is malformed in 1v1 (operator decision; 1-7's gate revisits if real
+## gathering ever needs otherwise).
+func push_contact(attacker_slot: int, target_slot: int, attack_index: int) -> void:
+	Invariant.check(attacker_slot == 0 or attacker_slot == 1,
+		"contact attacker_slot must be 0 or 1, got %d" % attacker_slot)
+	Invariant.check(target_slot == 0 or target_slot == 1,
+		"contact target_slot must be 0 or 1, got %d" % target_slot)
+	Invariant.check(attacker_slot != target_slot,
+		"self-contact fact is malformed in 1v1 (attacker == target == %d)" % attacker_slot)
+	_contact_queue.append({
+		"attacker": attacker_slot,
+		"target": target_slot,
+		"attack_index": attack_index,
+	})
 
 
 ## Runner step-2 push (story 1-2). slot: 0 = P1, 1 = P2 — out-of-range is a programming
@@ -211,6 +264,47 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 	return true
 
 
+## Step-4 contact resolution (story 1-5). Drains the queue in push order; for each fact,
+## the attacker's dedupe decides acceptance (live record for the fact's attack_index +
+## target not already hit this swing — stale, unknown, and duplicate facts are DROPPED),
+## then damage = attack_damage_percent_of_max_hp / 100 x the TARGET's max HP, both read
+## inline at resolution (CONSTRAINT C). Applying damage queues the existing hp_changed —
+## NO hit_landed signal until 1-7. Returns the attacker slots of confirmed hits, in
+## confirmation order, for step 5's mana seat. Pre-injection guard mirrors
+## _resolve_actions: without balance the queue still drains (facts are per-tick, never
+## carried) but nothing resolves.
+func _resolve_contacts() -> Array[int]:
+	var confirmed: Array[int] = []
+	if _contact_queue.is_empty():
+		return confirmed
+	if balance == null:
+		_contact_queue.clear()
+		return confirmed
+	for fact in _contact_queue:
+		var attacker := p1 if int(fact["attacker"]) == 0 else p2
+		var target := p1 if int(fact["target"]) == 0 else p2
+		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"])):
+			continue
+		target.hero.take_damage(
+			balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp())
+		confirmed.append(int(fact["attacker"]))
+	_contact_queue.clear()
+	return confirmed
+
+
+## Step-5 melee-hit mana (story 1-5) — THE one mana-generation path (DEBT D resolved:
+## direct, no evaluator; the 1-4 single-deduction-path analog). Gated on the INJECTED
+## melee_mana_generation flag — flag OFF (or no flags injected) closes the faucet and
+## nothing else: the hit still landed and damaged in step 4 (graceful degradation). The
+## per-hit amount is read inline at the moment of use (CONSTRAINT C).
+func _generate_mana(confirmed_hits: Array[int]) -> void:
+	if flags == null or not flags.melee_mana_generation:
+		return
+	for slot in confirmed_hits:
+		var attacker := p1 if slot == 0 else p2
+		attacker.mana.add(balance.melee_hit_mana)
+
+
 ## Step-5 stamina regen (story 1-4). The per-tick amount is read inline from balance_ticks
 ## (CONSTRAINT C); the pool owns the mechanism (fixed add + post-spend delay window), THIS
 ## is the policy seat (D6): regen is suppressed while the hero is BLOCKING — block entry is
@@ -236,7 +330,16 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 		world_dir = Vector3(dir.x, 0.0, dir.y)
 	else:
 		world_dir = _camera_relative_dir(dir, _camera_bases[slot])
-	player.hero.velocity = world_dir * player.hero.move_speed
+	# Story 1-5 (B6, operator decision): attack commitment — while ATTACKING the resolved
+	# VELOCITY is scaled by attack_move_speed_multiplier (authored 0.0 = full root),
+	# uniform across windup/active/recovery, read inline at the moment of use
+	# (CONSTRAINT C). Velocity ONLY — the facing update below is untouched. ATTACKING is
+	# unreachable pre-injection (the step-3 balance_ticks guard), so `balance` is non-null
+	# on this branch. The ROLL half of the 1-3 coupling deferral is 1-9's.
+	var speed := player.hero.move_speed
+	if player.hero.action_state == HeroState.ActionState.ATTACKING:
+		speed *= balance.attack_move_speed_multiplier
+	player.hero.velocity = world_dir * speed
 	if not dir.is_zero_approx():
 		player.hero.facing = dir
 

@@ -40,11 +40,18 @@ func _ready() -> void:
 	# before the first tick — advance() reads balance_ticks, so without this call live-play
 	# actions are inert (MatchState's balance_ticks == null guard, kept as a permanent
 	# invariant). apply_balance partially overwrites the constructor placeholders above
-	# (mana stays constructor-driven — BalanceConfig has no mana field); story 3-1 folds
-	# the constants into the config object. Mid-match reload stays DEBT B (deferred).
+	# (the mana CAP stays constructor-driven — BalanceConfig has no max_mana field);
+	# story 3-1 folds the constants into the config object. Mid-match reload stays DEBT B
+	# (deferred).
 	var balance_config: BalanceConfig = BalanceConfigService.get_config()
 	Invariant.check(balance_config != null, "authored balance config missing at match start")
 	_match_state.apply_balance(balance_config)
+	# Story 1-5 (B3): read FeatureFlagsService ONCE at match start and inject — the ONLY
+	# place state receives flags (HARD RULE: state never reads the service). Flags are
+	# load-once by design: no reload path, deliberately unlike balance.
+	var feature_flags: FeatureFlags = FeatureFlagsService.get_flags()
+	Invariant.check(feature_flags != null, "authored feature flags missing at match start")
+	_match_state.inject_feature_flags(feature_flags)
 	# Story 1-3c: throwaway debug overlay (see its FENCE — E2 replaces it with the real
 	# HUD). Wired through the public seam below like any consumer; it receives per-slot
 	# callbacks only, never a state handle.
