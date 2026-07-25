@@ -4,7 +4,7 @@ baseline_commit: 47fba68b166044095d6e2615fecc1dbc4018f032
 
 # Story 1.6: Second player slot as the training dummy (controller config swap)
 
-Status: review
+Status: done
 
 ## Story
 
