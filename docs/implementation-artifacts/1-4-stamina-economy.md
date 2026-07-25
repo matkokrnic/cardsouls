@@ -1,6 +1,6 @@
 # Story 1.4: Stamina economy
 
-Status: backlog
+Status: ready-for-dev
 
 ## Story
 
