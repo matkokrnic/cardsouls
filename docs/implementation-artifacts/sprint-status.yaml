@@ -44,7 +44,7 @@ development_status:
   1-3c-debug-state-overlay: done
   1-4-stamina-economy: done
   1-5-basic-attack-chain: done
-  1-6-training-dummy-null-controller: backlog
+  1-6-training-dummy-null-controller: ready-for-dev
   1-7-contact-pipeline-damage-hp-death: backlog
   1-8-block-and-deflect: backlog
   1-9-roll-with-iframes: backlog

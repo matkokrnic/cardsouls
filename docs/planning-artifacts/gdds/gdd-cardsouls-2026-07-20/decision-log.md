@@ -244,3 +244,23 @@ Readiness gate on `1-5-basic-attack-chain.md` (authored 2026-07-22 in the origin
 **1-7 obligations born here.** Real runner-gathered facts MUST enter through `push_contact` — the single path, never a second one — stamped with the attacker's `attack_index` at gather time; the `hit_landed` signal (with its presentation consumer) is 1-7's; X5 recording of contact facts alongside intents lands with the real runner feed.
 
 **Process note.** The dev-pass commit was first authored as c51115d with code and the story record bundled; split into 513c70e (code+tests) + 9386f37 (story record) per CLAUDE.md "docs and code never share a commit" — operator path-list error, agent flag correct.
+
+---
+
+## Session 2026-07-25 — Story 1-6 readiness gate (operator decisions)
+
+Readiness gate on `1-6-training-dummy-null-controller.md` (authored 2026-07-22 in the original Set B batch, before any E1 code existed) returned **NOT READY** — six blocking findings (B1–B6) plus seven notes (N1–N7), all accepted and resolved by operator decision (Matko) and applied to the story file. Recorded here: the entries that bind beyond 1-6.
+
+**DECISION — debug reset RELOCATED from 1-6 to 1-7.** Rationale: until 1-7 lands the live `push_contact` feed, nothing in live play can damage the dummy — a 1-6 reset would be another headless-only artifact (the 1-4/1-5 playtest-gap pattern). Reset semantics AND its entry path (intent-carried event vs other — the questions the gate raised: a mutation outside `advance()` bypasses the D2 ordered dispatch; an unrecorded reset event is an X5 replay hole; `src/ui/debug/` is architecture-pinned to "no state mutation"; no `debug` flag carrier exists on FeatureFlags) are decided at the **1-7 gate** with the live damage loop in view — not invented at 1-6 dev time. The stories-manual E1.S7 item-4 wording ("the debug reset from E1.S6") is satisfied by 1-7 carrying its own reset; **the 1-7 gate must reconcile that wording** (the manual is not edited — 1-5 precedent).
+
+**CONSTRAINT (pinned) — `attack_index` survives any future reset.** It is monotonic for the life of the match per the 1-5 dedupe contract (`hero_state.gd:72-76`): resetting it would let stale contact facts collide with reused dedupe keys. Any future reset story (1-7's or later) must leave it untouched; "clear action state" never includes it.
+
+**AC5 split (B4).** The original "extend the determinism regression to two populated slots" was already satisfied — the golden has fed fixed intent lists to BOTH slots since E0/1-3b (`test_determinism.gd`: P1 attack/chain/roll-cancel, P2 block, movement pairs for both; key-order-independence guardrail present) — and as written invited a pointless sequence re-record. Split into: **(a)** the existing two-slot golden HOLDS, hash unchanged `39564e83…5353` — the golden path bypasses controllers, so 1-6 predicts NO movement; measured at dev time, never trusted (the 1-5 cause-(c) lesson); **(b)** a NEW non-golden headless test — N ticks of `NullController` intents leave the slot IDLE with velocity zero (position is actor-owned, F1). The golden sequence is NOT re-recorded.
+
+**Label cleanup (B5).** The story's two "DECISION (a)" references are replaced by citing **amendment A3** (game-architecture.md v1.2, commit d6ab666) as the settled authority for dummy identity (a NullController-driven slot, not a type). Reason: the label predates the 1-2 rename of seam choices to SEAM CHOICE and now collides with locked **DECISION A** (the unrelated 1-2 root-rotation decision) — same-looking name, different decision. No new label invented. 2-1 ("DECISION (b)") and 2-3 ("DECISION (a)") carry the same stale labels; their own gates' business.
+
+**Repo hygiene (B6).** `src/actors/dummy/.gitkeep` is still tracked in git — the vestigial folder A3 removed from the architecture Directory Tree persists in the repo. Deletion assigned to the **1-6 dev CODE commit** (docs and code never share a commit).
+
+**Docs debt (minor).** The architecture Directory Tree lists keyboard/gamepad/scripted/replay controllers but not `null_controller.gd`, though A3's amendment text names `NullController` explicitly. A tree omission, not a conflict — fold into the next architecture amendment; no edit now.
+
+**Default-swap note (N7).** 1-6 SWAPS a default rather than adding a slot: P2 has been a live `KeyboardController("p2")` slot since E0 (the 1-3c hands-on playtest exercised both slots), and after 1-6 the default scene is P1 human vs P2 dummy — two-human play returns only via the new config point until 2-3 realizes the swap-back. A deliberately chosen default, recorded so it reads as a swap, not an addition.
