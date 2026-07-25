@@ -43,7 +43,7 @@ development_status:
   1-3b-live-balance-injection: done
   1-3c-debug-state-overlay: done
   1-4-stamina-economy: done
-  1-5-basic-attack-chain: ready-for-dev
+  1-5-basic-attack-chain: done
   1-6-training-dummy-null-controller: backlog
   1-7-contact-pipeline-damage-hp-death: backlog
   1-8-block-and-deflect: backlog

@@ -4,7 +4,7 @@ baseline_commit: 12b220e1839598026792652beea63e95f278a386
 
 # Story 1.5: Basic attack chain
 
-Status: review
+Status: done
 
 ## Story
 
