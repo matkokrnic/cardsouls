@@ -179,3 +179,19 @@ The FIRST story that introduces a live mid-match reload trigger MUST land BOTH h
 **FIRST HANDS-ON PLAYTEST of the project (2026-07-24, Matko).** All 1-3 transitions tracked correctly in live play: single attack (swing 0 -> IDLE), chain (swing 0 -> swing 1), recovery roll-cancel (ROLLING, counter reset), block on both slots independently with no cross-wiring. Timing at current authored values feels adequate — final judgment deferred until animations land.
 
 **E2 fence restated.** The real HUD (E2) consumes the seam; the overlay is a THROWAWAY debug tool, deletable or replaceable when the HUD lands — E2 stories must never copy its internals.
+
+---
+
+## Session 2026-07-24/25 — Story 1-4 readiness gate (operator decisions)
+
+Readiness gate on `1-4-stamina-economy.md` (authored 2026-07-22 in the original batch, before 1-3 / 1-3b / 1-3c landed) returned **NOT READY** — eight blocking findings, all resolved by operator decision (Matko, D1–D9) and applied to the story file. Recorded here: the entries that bind beyond 1-4.
+
+**DEBT D — economy evaluator deferred.** Architecture D6 (data-driven `ResourceGenerationRule` + pure evaluator, game-architecture.md:360, :511, :754-760) is NOT implemented. 1-4 implements stamina spend/regen directly. Rationale: a rule schema shaped by a single continuous per-tick rule would be shaped by the least representative case; mana generation is event-driven (the `trigger` field exists for that reason) and orb generation is a third shape. TRIGGER: the first story introducing a SECOND resource rule — the mana hook in 1-5 — must decide whether to land the evaluator then or continue direct, and E3 (cards/mana) is the point where the full D6 form is expected. 1-5 and 3-4 currently reference the evaluator in their text; their gates must reconcile against this entry. D6 is deferred here, not abandoned.
+
+**BalanceTicks widened (D3).** `BalanceTicks` is the home for load-time derived tick-domain values, not only duration→tick conversions — first instance: `stamina_regen_per_tick` (derived once per load from `stamina_regen_per_second` and `TimingWindow.TICK_HZ`), read inline via `ms.balance_ticks.stamina_regen_per_tick` per CONSTRAINT C, which forbids caching a reference to the `BalanceTicks` object, not storing derived values inside it. The `balance_ticks.gd:10-11` header comment is amended in 1-4 to state the widened role.
+
+**`action_rejected` seam obligation (D5).** The signal is owned by `HeroState` (declared next to `action_state_changed`), emitted through the D5 queued mechanism; 1-4 builds NO runner seam — there is no consumer yet. The FIRST consumer (1-10) must receive a `connect_hero_action_rejected` seam mirroring `connect_hero_action_state_changed` (match_runner.gd:61-67), and must not reach through `_match_state`.
+
+**Basic attack stays FREE (GDD-affirming).** A proposal to route attack through the stamina deduction path was raised at this gate and rejected: gdd.md:139 and the resource table at :319 list Roll, Deflect, Unblockable Initiation and Unblockable Defense as the stamina consumers, and 1-5's mana hook makes the free basic attack the generator — gating it would lock the poorest player out of their only income and invert P2. The GDD was not changed. Recorded so the proposal is not re-raised.
+
+**Stamina playtest visibility deferred.** 1-4 ships with no stamina readout; the debug overlay is NOT extended to show it. Implementation is proven headless, and the player-facing readout is E2 HUD territory consuming the observation seam. Raised twice at this gate and deliberately deferred both times.
