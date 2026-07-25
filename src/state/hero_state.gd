@@ -13,6 +13,12 @@ signal hp_changed(current: float, maximum: float)
 ## presentation layer (1-10) and HUD (E2) can react to edges, not just arrivals. This is
 ## the ONLY channel telling visuals what the hero is doing.
 signal action_state_changed(previous: ActionState, current: ActionState)
+## Story 1-4 loss legibility (D5): a press REJECTED by a transition precondition — in E1
+## the stamina-gated roll ONLY. The 1-3 capped-chain reject stays silent; widening this
+## signal to cover it is a separate decision, not an implementation detail. Emitted queued,
+## even when a lower-priority action succeeds the same tick. NO runner seam until the first
+## consumer (1-10 — seam obligation recorded in the decision-log).
+signal action_rejected(action: StringName, reason: StringName)
 
 ## Souls action states — few and timing-gated, kept as a pure enum in the state layer so
 ## transitions stay in the deterministic tick and under headless test (chosen over a
@@ -129,6 +135,12 @@ func set_action_state(new_state: ActionState) -> void:
 		chain_index = 0  # any exit to a non-ATTACKING state ends the sequence for good
 	action_state = new_state
 	_queue.push(action_state_changed.emit.bind(previous, new_state))
+
+
+## Queued action_rejected emission (story 1-4, D5). Called by MatchState's step-3
+## evaluation when a gated edge rejects a press; the reason vocabulary is the call site's.
+func reject_action(action: StringName, reason: StringName) -> void:
+	_queue.push(action_rejected.emit.bind(action, reason))
 
 
 ## Derived attack phase. Phases are expressed by WHICH WINDOW IS RUNNING (AC 1) — no

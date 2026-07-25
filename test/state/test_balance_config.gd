@@ -66,6 +66,13 @@ func test_conversion_covers_every_seconds_field() -> void:
 	assert_eq(t.stun_ticks, 36, "stun converts like any duration (DATA ONLY in E1)")
 
 
+## Story 1-4 (AC 1): the load-time derived RATE field — per-second authoring value over
+## TICK_HZ, computed once in from_config() like every other tick-domain value.
+func test_conversion_derives_stamina_regen_per_tick() -> void:
+	var t := BalanceTicks.from_config(_make_config({"stamina_regen_per_second": 15.0}))
+	assert_eq(t.stamina_regen_per_tick, 0.25, "15/s at 60 Hz -> 0.25 per tick, derived at load")
+
+
 ## AC 3 end-to-end: service reload() -> apply_balance() -> pools and windows reflect the
 ## authored .tres values.
 func test_reload_to_apply_balance_reflects_tres_values() -> void:

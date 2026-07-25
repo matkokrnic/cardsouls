@@ -7,10 +7,17 @@ extends RefCounted
 ## non-zero duration) and only integer tick counts exist past this point. Never convert per
 ## tick, and never let a `*_seconds` float reach advance().
 ##
-## (stamina_regen_per_second is a RATE, not a `*_seconds` duration — it is not a window and
-## is not converted here.)
+## Story 1-4 widening (D3, decision-log Session 2026-07-24/25): BalanceTicks is the home
+## for LOAD-TIME DERIVED TICK-DOMAIN VALUES, not only duration->tick conversions. First
+## instance: stamina_regen_per_tick, a per-tick RATE derived from stamina_regen_per_second.
+## CONSTRAINT C forbids caching a reference to this object, not storing derived values
+## inside it — consumers still read ms.balance_ticks.<field> inline at the moment of use.
 
 var stamina_regen_delay_ticks: int
+## Fixed per-tick regen amount: stamina_regen_per_second / TICK_HZ, derived once per load.
+## advance() takes no delta (A1), so the per-second authoring value is never consumed
+## directly — this field is the only regen amount the state layer reads.
+var stamina_regen_per_tick: float
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -26,6 +33,7 @@ var stun_ticks: int
 static func from_config(config: BalanceConfig) -> BalanceTicks:
 	var t := BalanceTicks.new()
 	t.stamina_regen_delay_ticks = TimingWindow.seconds_to_ticks(config.stamina_regen_delay_seconds)
+	t.stamina_regen_per_tick = config.stamina_regen_per_second / TimingWindow.TICK_HZ
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)

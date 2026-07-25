@@ -5,17 +5,20 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
-## Re-baselined in story 1-3b (DEBT A retirement), TWO deliberate causes, each sufficient
-## on its own to move the hash:
-##   1. apply_balance() now runs on the golden path (a FIXED in-test config — see
-##      _golden_config below, NEVER the authored .tres), matching the live game where the
-##      runner injects balance at match start.
-##   2. The recorded intent sequence widened from movement-only to also exercise attack,
-##      roll (as a recovery roll-cancel), block, and one chain — the golden now guards
-##      transition determinism, not just movement.
+## Re-baselined in story 1-4 (stamina economy), ONE re-baseline with TWO deliberate
+## causes, named separately (65811b3 pattern), each sufficient on its own to move the hash:
+##   1. SNAPSHOT SHAPE change: StaminaPool.to_snapshot() gained the regen-delay window
+##      (a mid-count window excluded from the snapshot would be a determinism/replay
+##      hole — D8).
+##   2. _golden_config now AUTHORS real stamina values (regen, delay, roll cost), so the
+##      golden sequence exercises spend, the delay window, and regen — the t17 roll costs
+##      stamina and the pool is left MID-REGEN at t24 (guarded by
+##      test_golden_sequence_exercises_stamina_spend_and_regen below).
+## Previous golden 40b5a8041c327b416ca235af65fc7c05f494d8b1d7a2e2b2761190b86da1d613
+## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "40b5a8041c327b416ca235af65fc7c05f494d8b1d7a2e2b2761190b86da1d613"
+const GOLDEN := "871f8132f28f2192ec0edb0a0081b1e61ec87924c027a0ee2ddfdb1018f02a5c"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -48,11 +51,21 @@ const P2_BLOCK_HELD_THROUGH := 5
 ## the authored .tres must never move this hash. Tick counts (authored as ticks/60.0 so
 ## they are explicit): windup 3, active 4, recovery 6, chain window 5, deflect 4,
 ## roll iframe 2, roll duration 5, chain length 3 — test_action_state.gd's shape.
+##
+## Stamina values (story 1-4) are chosen for COVERAGE, not feel: the t17 roll spends 15
+## (40 -> 25), the 3-tick delay suppresses exactly t17-t19 (the window advances in step 2,
+## step 5 reads the result), regen (60/s = 1.0/tick) runs t20-t24 -> 30.0 at t24 — below
+## max and above the post-spend value, so the hashed final snapshot encodes BOTH the spend
+## and the regen (a rate fast enough to refill by t24 would hash identically to a run that
+## never spent).
 func _golden_config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = MAX_HP
 	c.move_speed = MOVE_SPEED
 	c.max_stamina = MAX_STAMINA
+	c.stamina_regen_per_second = 60.0          # 1.0 per tick
+	c.stamina_regen_delay_seconds = 3.0 / 60.0  # 3 ticks
+	c.roll_stamina_cost = 15.0
 	c.attack_windup_seconds = 3.0 / 60.0
 	c.attack_active_seconds = 4.0 / 60.0
 	c.attack_recovery_seconds = 6.0 / 60.0
@@ -95,6 +108,25 @@ func test_recorded_sequence_exercises_all_transitions() -> void:
 	assert_eq(p2_log, [[idle, blk], [blk, idle]], "p2: block press and release")
 
 
+## Story 1-4 (AC 6): the stamina analogue of the transition guard above — the golden only
+## guards the economy if the sequence actually exercises it. Pins: stamina dips below max
+## after the t17 roll spend, rises again before the final tick, and is left MID-REGEN at
+## t24 (below maximum, above the immediate post-spend value) so the hashed final snapshot
+## encodes both the spend and the regen.
+func test_golden_sequence_exercises_stamina_spend_and_regen() -> void:
+	var ms := _make_match()
+	var readings: Array[float] = []
+	_play_sequence(ms, func(_t: int) -> void: readings.append(ms.p1.stamina.get_current()))
+	var maximum := ms.p1.stamina.get_maximum()
+	var post_spend := readings[17 - 1]
+	var final := readings[TICKS - 1]
+	assert_eq(post_spend, 25.0, "t17 roll spend: 40 - 15 (delay suppresses regen that tick)")
+	assert_true(post_spend < maximum, "stamina dipped below maximum after the t17 roll")
+	assert_true(final > post_spend, "regen visibly ran before the run ended")
+	assert_true(final < maximum, "pool left MID-REGEN at t24 — below maximum")
+	assert_eq(final, 30.0, "25 + 5 regen ticks (delay covers t17-t19, 1.0/tick t20-t24)")
+
+
 func test_canonical_hash_ignores_key_insertion_order() -> void:
 	var d1 := {"a": 1, "b": {"x": 1, "y": 2}, "v": Vector3(1, 2, 3)}
 	var d2 := {"v": Vector3(1, 2, 3), "b": {"y": 2, "x": 1}, "a": 1}
@@ -108,7 +140,7 @@ func _make_match() -> MatchState:
 	return ms
 
 
-func _play_sequence(ms: MatchState) -> void:
+func _play_sequence(ms: MatchState, after_tick := Callable()) -> void:
 	for t in range(1, TICKS + 1):
 		var pair: Array = MOVES[(t - 1) % 6]
 		var i1 := _intent(pair[0], P1_PRESS.get(t, []), [])
@@ -117,6 +149,8 @@ func _play_sequence(ms: MatchState) -> void:
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()
+		if after_tick.is_valid():
+			after_tick.call(t)
 
 
 ## A just-pressed key is also held that tick (matches KeyboardController semantics).

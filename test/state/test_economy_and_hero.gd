@@ -9,9 +9,9 @@ func _player() -> PlayerState:
 func test_stamina_spend_and_overspend_guard() -> void:
 	var p := _player()
 	assert_eq(p.stamina.get_current(), 50.0, "starts full")
-	assert_true(p.stamina.spend(20.0))
+	assert_true(p.stamina.spend(20.0, 0))
 	assert_eq(p.stamina.get_current(), 30.0)
-	assert_false(p.stamina.spend(40.0), "overspend refused")
+	assert_false(p.stamina.spend(40.0, 0), "overspend refused")
 	assert_eq(p.stamina.get_current(), 30.0, "unchanged after refusal")
 
 

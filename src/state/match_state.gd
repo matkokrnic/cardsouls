@@ -63,9 +63,13 @@ func advance(intents: Array[InputIntent]) -> void:
 
 	# 1. Ingest intents        [no-op — attack/block/roll presses are read directly by the
 	#                           step-3 transition evaluation]
-	# 2. Advance D4 timers
+	# 2. Advance D4 timers   (hero windows + each pool's regen-delay window — every window
+	#    advances here, step 5 reads the result; unguarded like the hero timers, since a
+	#    pre-injection MatchState never started a delay window)
 	p1.hero.tick_timers()
 	p2.hero.tick_timers()
+	p1.stamina.tick_timers()
+	p2.stamina.tick_timers()
 	# 3. Resolve actions       per slot P1 -> P2: action transitions FIRST (a press on
 	#    tick N takes effect on tick N), then intended velocity from move_dir. Transitions
 	#    never read or write velocity — action/movement coupling lands in 1-5/1-9.
@@ -74,7 +78,13 @@ func advance(intents: Array[InputIntent]) -> void:
 	_resolve_actions(p2, p2_intent)
 	_resolve_movement(p2, p2_intent, 1)
 	# 4. Resolve contacts      [E1 hitbox->contact seam — none at E0]
-	# 5. Resource generation   [D6/E3 seam — melee-hit / passive mana]
+	# 5. Resource generation   stamina regen (story 1-4), P1 -> P2. Implemented DIRECTLY —
+	#    the D6 evaluator/rule schema is DEBT D (deferred, not abandoned; the 1-5 mana hook
+	#    is the reconcile trigger). Same single null guard rationale as step 3: a
+	#    pre-injection MatchState stays inert, no scattered checks below.
+	if balance_ticks != null:
+		_regen_stamina(p1)
+		_regen_stamina(p2)
 	# 6. Card / economy        [E3 card play/draw; E6 pitch resolution]
 	# 7. Board update          [E4 minion/totem throttled-tick seam]
 	# 8. Resolution check
@@ -163,13 +173,15 @@ func _resolve_actions(player: PlayerState, intent: InputIntent) -> void:
 		return
 	var edges: Dictionary = HeroState.TRANSITION_TABLE[row]
 	for action: StringName in HeroState.INPUT_PRIORITY:
-		if intent.is_pressed(action) and edges.has(action) and _try_transition(hero, edges[action]):
+		if intent.is_pressed(action) and edges.has(action) and _try_transition(player, edges[action]):
 			return
 
 
-## Fire one table edge. Returns false when a gated edge (chain) rejects, so a lower-
-## priority same-tick press may still be considered.
-func _try_transition(hero: HeroState, target: HeroState.ActionState) -> bool:
+## Fire one table edge. Returns false when a gated edge rejects — the chain cap (silent,
+## story 1-3) or the roll stamina precondition (emits action_rejected, story 1-4) — so a
+## lower-priority same-tick press may still be considered.
+func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool:
+	var hero := player.hero
 	match target:
 		HeroState.ActionState.ATTACKING:
 			if hero.action_state == HeroState.ActionState.ATTACKING:
@@ -182,10 +194,32 @@ func _try_transition(hero: HeroState, target: HeroState.ActionState) -> bool:
 			else:
 				hero.enter_attack(balance_ticks.attack_windup_ticks)
 		HeroState.ActionState.ROLLING:
+			# THE one stamina deduction path (D4, story 1-4) — roll only in E1: basic
+			# attack is FREE by GDD design (gdd.md:139/:319 — it is the 1-5 mana faucet),
+			# and BLOCKING entry is free (block costs TIME via the D6 regen suppression).
+			# Deflect joins this path in 1-8. Cost and delay are read inline at the moment
+			# of the transition (CONSTRAINT C). Insufficient stamina is a PRECONDITION
+			# (D5): the edge rejects and falls through per INPUT_PRIORITY, and the queued
+			# action_rejected keeps the loss legible even if a lower-priority press fires.
+			if not player.stamina.spend(
+					balance.roll_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
+				hero.reject_action(&"roll", &"insufficient_stamina")
+				return false
 			hero.enter_roll(balance_ticks.roll_duration_ticks, balance_ticks.roll_iframe_ticks)
 		HeroState.ActionState.BLOCKING:
 			hero.enter_block(balance_ticks.deflect_window_ticks)
 	return true
+
+
+## Step-5 stamina regen (story 1-4). The per-tick amount is read inline from balance_ticks
+## (CONSTRAINT C); the pool owns the mechanism (fixed add + post-spend delay window), THIS
+## is the policy seat (D6): regen is suppressed while the hero is BLOCKING — block entry is
+## free, so block must cost time or holding it would be free and P2 ("aggression is
+## economy") unenforced. Every other action state regenerates.
+func _regen_stamina(player: PlayerState) -> void:
+	player.stamina.advance_regen(
+		balance_ticks.stamina_regen_per_tick,
+		player.hero.action_state == HeroState.ActionState.BLOCKING)
 
 
 func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:
@@ -223,6 +257,9 @@ func _apply_balance_to_player(player: PlayerState, config: BalanceConfig) -> voi
 	player.hero.set_max_hp(config.max_hp)
 	player.hero.move_speed = config.move_speed
 	player.stamina.set_maximum(config.max_stamina)
+	# D9 (story 1-4): start FULL at the authored maximum. Scope limit: this does NOT touch
+	# the constructor/apply_balance double-injection quirk — that remains story 3-1.
+	player.stamina.refill()
 
 
 func _check_resolution() -> void:
