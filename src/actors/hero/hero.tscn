@@ -12,6 +12,9 @@ size = Vector3(1, 1, 1)
 [sub_resource type="BoxMesh" id="BoxMesh_6plks"]
 size = Vector3(1, 2, 1)
 
+[sub_resource type="PrismMesh" id="PrismMesh_fmark"]
+size = Vector3(0.4, 0.3, 0.25)
+
 [node name="HeroActor" type="CharacterBody3D" unique_id=1317219649]
 script = ExtResource("1_vde01")
 
@@ -20,6 +23,11 @@ shape = SubResource("BoxShape3D_qp0e8")
 
 [node name="Mesh" type="MeshInstance3D" parent="." unique_id=1501278172]
 mesh = SubResource("BoxMesh_6plks")
+
+[node name="FacingMarker" type="MeshInstance3D" parent="Mesh"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.5, 0.65)
+mesh = SubResource("PrismMesh_fmark")
+editor_description = "Directional marker (story 1-7b). Placeholder-aesthetic prism 'nose' making the mesh yaw VISIBLE: local +Y (prism apex) is rotated onto parent +Z — the same direction as the Hitbox reach (HitboxShape at local z 0.9) — so the wedge points where attacks land. Child of Mesh: it inherits the single shared yaw from HeroActor.drive() and can never diverge from it. Pure sub-resource authoring, no assets."
 
 [node name="Hitbox" type="Area3D" parent="."]
 collision_layer = 4
