@@ -22,8 +22,9 @@ signal action_rejected(action: StringName, reason: StringName)
 
 ## Souls action states — few and timing-gated, kept as a pure enum in the state layer so
 ## transitions stay in the deterministic tick and under headless test (chosen over a
-## scene-coupled StateMachine node).
-enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING }
+## scene-coupled StateMachine node). DEAD (story 1-7, D-3) is APPENDED so the existing
+## snapshot int values never shift.
+enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING, DEAD }
 
 ## ---------------------------------------------------------------------------------------
 ## TRANSITION TABLE (story 1-3) — the single readable block. Cancellability is DATA here,
@@ -41,6 +42,9 @@ enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING }
 ## Session 2026-07-22) by accident; stun stays data only. Guarded by the inbound-edge
 ## enumeration test in test_action_state.gd.
 ## CHARGING: reserved for E5 — no row, no inbound edge; deliberately absent, not stubbed.
+## DEAD (story 1-7, D-3): row present, accepts nothing, zero inbound TABLE edges — entry
+## is ONLY MatchState's step-8 resolution (a non-table path), exit is ONLY the D-1 debug
+## reset. Guarded by the same inbound-edge enumeration test.
 ##
 ## MatchState step 3 EVALUATES this table (reading balance_ticks inline, CONSTRAINT C);
 ## the table data itself lives here, next to the enum, per the architecture decision.
@@ -59,6 +63,7 @@ const TRANSITION_TABLE: Dictionary = {
 	&"blocking": {},            # exits on block release, not via an input edge
 	&"rolling": {},             # exits on roll_duration expiry
 	&"stunned": {},             # accepts no input — and nothing may transition IN (E1)
+	&"dead": {},                # accepts no input — enter via step-8 resolution, exit via reset ONLY
 }
 
 ## Fixed evaluation order for same-tick simultaneous presses (deterministic tiebreak).
@@ -75,7 +80,11 @@ var chain_index: int = 0
 ## yet. The runner (1-7) stamps gathered facts with this value.
 var attack_index: int = -1
 var velocity := Vector3.ZERO   # intended velocity; the runner reads this (D3), not the intent
-var facing := Vector2.DOWN     # planar facing
+## WORLD-SPACE planar facing (world x, z) — story 1-7 review R1: assigned from the same
+## camera-rotated world direction the velocity uses, so actor-side consumers (the hitbox
+## yaw in HeroActor.drive) need no basis knowledge. Under an identity basis it equals the
+## raw intent direction. Freezes while movement input is zero.
+var facing := Vector2.DOWN
 var move_speed: float          # injected (balance .tres in E3); tunable, not hardcoded-in-place
 
 ## The eight per-action D4 windows (story 1-3). windup/active/recovery are the phases of
@@ -221,6 +230,8 @@ func transition_row() -> StringName:
 			return &"rolling"
 		ActionState.STUNNED:
 			return &"stunned"
+		ActionState.DEAD:
+			return &"dead"
 		ActionState.CHARGING:
 			return &"charging"  # no table row -> accepts nothing (reserved E5)
 	return &"idle"

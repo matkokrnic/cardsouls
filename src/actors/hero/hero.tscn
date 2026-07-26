@@ -6,6 +6,9 @@
 [sub_resource type="BoxShape3D" id="BoxShape3D_qp0e8"]
 size = Vector3(1, 2, 1)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_hitbx"]
+size = Vector3(1, 1, 1)
+
 [sub_resource type="BoxMesh" id="BoxMesh_6plks"]
 size = Vector3(1, 2, 1)
 
@@ -17,6 +20,25 @@ shape = SubResource("BoxShape3D_qp0e8")
 
 [node name="Mesh" type="MeshInstance3D" parent="." unique_id=1501278172]
 mesh = SubResource("BoxMesh_6plks")
+
+[node name="Hitbox" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 2
+monitorable = false
+editor_description = "Melee hitbox (story 1-7). LAYER/MASK CONVENTION: layer 3 'hitbox' (bit value 4), mask = layer 2 'hurtbox' (bit value 2) - it DETECTS hurtboxes and is detected by nothing (monitorable off). NO gameplay logic here and it NEVER applies damage: the runner queries get_overlapping_areas() only while state flags the swing active, identity-filters self-overlaps, and pushes facts through MatchState.push_contact; advance() step 4 decides (actors REPORT, state DECIDES). Yawed from HeroState.facing by HeroActor.drive() as a CHILD node - the hero ROOT never rotates (DECISION A)."
+
+[node name="HitboxShape" type="CollisionShape3D" parent="Hitbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.9)
+shape = SubResource("BoxShape3D_hitbx")
+
+[node name="Hurtbox" type="Area3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+monitoring = false
+editor_description = "Hurtbox (story 1-7). LAYER/MASK CONVENTION: layer 2 'hurtbox' (bit value 2), mask 0 - it is DETECTED by hitboxes and detects nothing (monitoring off). NO gameplay logic and it NEVER applies damage; it exists purely to be reported as an overlap fact. Mirrors the body collision box."
+
+[node name="HurtboxShape" type="CollisionShape3D" parent="Hurtbox"]
+shape = SubResource("BoxShape3D_qp0e8")
 
 [node name="CameraRig" type="Node3D" parent="." unique_id=1274550193]
 script = ExtResource("2_camrg")

@@ -10,8 +10,16 @@ extends RefCounted
 ## ENQUEUES signals; the runner drains them after it returns (D5).
 
 ## Owned by MatchState, relayed to the EventBus autoload by the runner (state never touches
-## an autoload). loser_index: 0 = P1, 1 = P2.
+## an autoload). loser_index: 0 = P1, 1 = P2. Re-arms when the debug reset clears the
+## round latch (story 1-7, D-1): fires once per DEATH, not once per match.
 signal round_ended(loser_index: int)
+
+## Story 1-7 (N1): MatchState-owned two-player event (the round_ended analogy — a hit has
+## an attacker AND a target, so it is not per-hero). Queued in step 4 when a contact is
+## CONFIRMED, drained by the runner after advance() (D5). target_hp is the target's
+## REMAINING HP after the damage. Consumers subscribe through the runner seam
+## (match_runner.connect_hit_landed) and never hold a MatchState handle.
+signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float)
 
 var p1: PlayerState
 var p2: PlayerState
@@ -48,7 +56,8 @@ var _camera_bases: Array[Basis] = [Basis.IDENTITY, Basis.IDENTITY]
 ## Story 1-5 (B7): queued contact facts, drained deterministically in advance() step 4.
 ## Input-like PUSHED facts, same category as InputIntent and the camera basis: plain
 ## recordable data (three ints per fact — X5 replay records them alongside intents; the
-## actual recording lands with the real runner feed in 1-7), EXCLUDED from to_snapshot()
+## actual recording is RE-HOMED to the story that lands IntentRecorder, 1-7 gate D-4;
+## this seam's only obligation is staying recordable), EXCLUDED from to_snapshot()
 ## like the intent stream. In live play the runner pushes facts in frame step 2, so they
 ## reflect tick N-1's post-movement physics flush (F1 one-tick lag — absorbed by the
 ## dedupe grace tick, see HeroState._swing_dedupe).
@@ -79,8 +88,12 @@ func advance(intents: Array[InputIntent]) -> void:
 	var p2_intent := intents[1]
 	_tick += 1
 
-	# 1. Ingest intents        [no-op — attack/block/roll presses are read directly by the
-	#                           step-3 transition evaluation]
+	# 1. Ingest intents        debug reset only (story 1-7, D-2): intent-carried so the
+	#    mutation stays inside the ordered dispatch (D2) and rides the recorded intent
+	#    stream for free once the X5 recorder lands. Attack/block/roll presses are still
+	#    read directly by the step-3 transition evaluation.
+	if p1_intent.debug_reset or p2_intent.debug_reset:
+		_apply_debug_reset()
 	# 2. Advance D4 timers   (hero windows + each pool's regen-delay window — every window
 	#    advances here, step 5 reads the result; unguarded like the hero timers, since a
 	#    pre-injection MatchState never started a delay window)
@@ -265,14 +278,17 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 
 
 ## Step-4 contact resolution (story 1-5). Drains the queue in push order; for each fact,
-## the attacker's dedupe decides acceptance (live record for the fact's attack_index +
-## target not already hit this swing — stale, unknown, and duplicate facts are DROPPED),
-## then damage = attack_damage_percent_of_max_hp / 100 x the TARGET's max HP, both read
-## inline at resolution (CONSTRAINT C). Applying damage queues the existing hp_changed —
-## NO hit_landed signal until 1-7. Returns the attacker slots of confirmed hits, in
-## confirmation order, for step 5's mana seat. Pre-injection guard mirrors
-## _resolve_actions: without balance the queue still drains (facts are per-tick, never
-## carried) but nothing resolves.
+## a DEAD target drops the fact outright (story 1-7, D-3 — dropped BEFORE resolution: no
+## damage, no dedupe registration, no confirmed hit, so no step-5 mana; closes the
+## corpse-mana-farming defect found at the 1-7 gate), then the attacker's dedupe decides
+## acceptance (live record for the fact's attack_index + target not already hit this
+## swing — stale, unknown, and duplicate facts are DROPPED), then damage =
+## attack_damage_percent_of_max_hp / 100 x the TARGET's max HP, both read inline at
+## resolution (CONSTRAINT C). A confirmed hit queues the existing hp_changed plus
+## hit_landed (story 1-7 — the ONLY step-4 delta of that story). Returns the attacker
+## slots of confirmed hits, in confirmation order, for step 5's mana seat. Pre-injection
+## guard mirrors _resolve_actions: without balance the queue still drains (facts are
+## per-tick, never carried) but nothing resolves.
 func _resolve_contacts() -> Array[int]:
 	var confirmed: Array[int] = []
 	if _contact_queue.is_empty():
@@ -283,10 +299,14 @@ func _resolve_contacts() -> Array[int]:
 	for fact in _contact_queue:
 		var attacker := p1 if int(fact["attacker"]) == 0 else p2
 		var target := p1 if int(fact["target"]) == 0 else p2
+		if target.hero.action_state == HeroState.ActionState.DEAD:
+			continue
 		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"])):
 			continue
-		target.hero.take_damage(
-			balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp())
+		var damage := balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
+		target.hero.take_damage(damage)
+		_queue.push(hit_landed.emit.bind(
+			int(fact["attacker"]), int(fact["target"]), damage, target.hero.get_hp()))
 		confirmed.append(int(fact["attacker"]))
 	_contact_queue.clear()
 	return confirmed
@@ -333,15 +353,21 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	# Story 1-5 (B6, operator decision): attack commitment — while ATTACKING the resolved
 	# VELOCITY is scaled by attack_move_speed_multiplier (authored 0.0 = full root),
 	# uniform across windup/active/recovery, read inline at the moment of use
-	# (CONSTRAINT C). Velocity ONLY — the facing update below is untouched. ATTACKING is
-	# unreachable pre-injection (the step-3 balance_ticks guard), so `balance` is non-null
-	# on this branch. The ROLL half of the 1-3 coupling deferral is 1-9's.
+	# (CONSTRAINT C). Velocity ONLY — the facing update below is never scaled by the
+	# multiplier. ATTACKING is unreachable pre-injection (the step-3 balance_ticks
+	# guard), so `balance` is non-null on this branch. The ROLL half of the 1-3 coupling
+	# deferral is 1-9's.
 	var speed := player.hero.move_speed
 	if player.hero.action_state == HeroState.ActionState.ATTACKING:
 		speed *= balance.attack_move_speed_multiplier
 	player.hero.velocity = world_dir * speed
+	# Story 1-7 (review R1, operator decision): facing is WORLD-SPACE planar — the same
+	# rotated direction the velocity uses, so actor-side consumers (the hitbox yaw) need
+	# no basis knowledge. Under an identity basis world_dir == (dir.x, 0, dir.y), so
+	# facing equals the raw intent direction bit-for-bit (golden-neutral). The zero-guard
+	# is unchanged: facing freezes while there is no movement input.
 	if not dir.is_zero_approx():
-		player.hero.facing = dir
+		player.hero.facing = Vector2(world_dir.x, world_dir.z)
 
 
 ## Yaw-only camera-space -> world mapping (AC 3): the basis' right/back columns are
@@ -369,8 +395,36 @@ func _check_resolution() -> void:
 	if _round_over:
 		return
 	if not p1.hero.is_alive():
-		_round_over = true
-		_queue.push(round_ended.emit.bind(0))
+		_end_round(p1, 0)
 	elif not p2.hero.is_alive():
-		_round_over = true
-		_queue.push(round_ended.emit.bind(1))
+		_end_round(p2, 1)
+
+
+## Story 1-7 (D-3): the ONLY entry into ActionState.DEAD — a step-8 resolution outcome,
+## never a table edge (the table's dead row accepts nothing; exit is only the D-1 debug
+## reset). Presentation learns of death through the same queued action_state_changed
+## channel as every transition (the locked observation seam).
+func _end_round(loser: PlayerState, loser_index: int) -> void:
+	_round_over = true
+	loser.hero.set_action_state(HeroState.ActionState.DEAD)
+	_queue.push(round_ended.emit.bind(loser_index))
+
+
+## Story 1-7 (D-1, operator decision): ROUND-SCOPED debug reset — every slot's HP back to
+## max and the round latch cleared; NOTHING else (pools, dedupe records, in-flight
+## windows, and actor-owned positions untouched — a live hero mid-swing swings on). A
+## DEAD hero returns to IDLE (a "clear action state" entry), which NEVER touches
+## attack_index (monotonic dedupe contract, pinned at the 1-6 gate). Deliberately NOT
+## flag-gated: operator affordance, not a gameplay path (exception recorded in the
+## decision log). Fixed P1 -> P2 order for determinism.
+func _apply_debug_reset() -> void:
+	_round_over = false
+	_reset_player(p1)
+	_reset_player(p2)
+
+
+func _reset_player(player: PlayerState) -> void:
+	var hero := player.hero
+	if hero.action_state == HeroState.ActionState.DEAD:
+		hero.set_action_state(HeroState.ActionState.IDLE)
+	hero.heal(hero.get_max_hp())

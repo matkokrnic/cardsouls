@@ -16,6 +16,7 @@ var _up: StringName
 var _down: StringName
 var _left: StringName
 var _right: StringName
+var _debug_reset: StringName
 var _action_map: Dictionary[StringName, StringName] = {}  # intent key -> Input Map action
 
 
@@ -24,6 +25,7 @@ func _init(prefix: StringName) -> void:
 	_down = _action(prefix, "move_down")
 	_left = _action(prefix, "move_left")
 	_right = _action(prefix, "move_right")
+	_debug_reset = _action(prefix, "debug_reset")
 	for key in INTENT_ACTIONS:
 		_action_map[key] = _action(prefix, key)
 
@@ -35,6 +37,9 @@ func sample() -> InputIntent:
 		var mapped := _action_map[key]
 		intent.pressed[key] = Input.is_action_just_pressed(mapped)
 		intent.held[key] = Input.is_action_pressed(mapped)
+	# Story 1-7 (D-2): the debug reset is an edge (just-pressed), prefix-mapped like every
+	# action, carried on the intent rather than any out-of-band channel.
+	intent.debug_reset = Input.is_action_just_pressed(_debug_reset)
 	return intent
 
 

@@ -71,17 +71,21 @@ func _advance_until_idle(ms: MatchState) -> void:
 	assert_true(false, "IDLE not reached within 60 ticks")
 
 
-## ---- STUNNED / CHARGING guard (bite-verified both ways) --------------------------------
+## ---- STUNNED / CHARGING / DEAD guard (bite-verified both ways) --------------------------
 
 ## Enumerates the transition table: E1 must have ZERO inbound STUNNED edges (entering
 ## STUNNED would resolve OPEN decision (a) by accident) and zero inbound CHARGING edges
 ## (reserved E5). The STUNNED row itself must exist as data (accepts nothing); CHARGING
-## must have no row at all (absent, not stubbed).
-func test_table_has_no_inbound_stunned_or_charging_edges() -> void:
+## must have no row at all (absent, not stubbed). Story 1-7 (D-3) extends the guard to
+## DEAD: row present, accepts nothing, and ZERO inbound table edges — DEAD is entered
+## only by the step-8 resolution (a non-table path) and exited only by the debug reset.
+func test_table_has_no_inbound_stunned_charging_or_dead_edges() -> void:
 	var rows: Dictionary = HeroState.TRANSITION_TABLE
 	assert_true(rows.has(&"stunned"), "STUNNED row present (table data)")
 	assert_eq((rows[&"stunned"] as Dictionary).size(), 0, "STUNNED accepts no input")
 	assert_false(rows.has(&"charging"), "CHARGING row absent, not stubbed (E5)")
+	assert_true(rows.has(&"dead"), "DEAD row present (story 1-7, D-3)")
+	assert_eq((rows[&"dead"] as Dictionary).size(), 0, "DEAD accepts no input")
 	for row_key: StringName in rows:
 		var edges: Dictionary = rows[row_key]
 		for action: StringName in edges:
@@ -89,6 +93,8 @@ func test_table_has_no_inbound_stunned_or_charging_edges() -> void:
 				"inbound STUNNED edge forbidden in E1 (row %s, action %s)" % [row_key, action])
 			assert_ne(int(edges[action]), int(HeroState.ActionState.CHARGING),
 				"inbound CHARGING edge forbidden until E5 (row %s, action %s)" % [row_key, action])
+			assert_ne(int(edges[action]), int(HeroState.ActionState.DEAD),
+				"inbound DEAD edge forbidden — death is a step-8 resolution outcome (row %s, action %s)" % [row_key, action])
 
 
 ## ---- Exact-tick entry/exit --------------------------------------------------------------

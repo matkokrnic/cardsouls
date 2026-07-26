@@ -67,6 +67,20 @@ func test_straight_down_pitch_falls_back_to_world_space() -> void:
 		"degenerate basis falls back to world-space, no NaNs")
 
 
+## Story 1-7 (review R1): facing is WORLD-SPACE planar — it stores the camera-ROTATED
+## direction (what the hitbox yaw consumes), never the raw camera-space intent; under an
+## identity basis the two coincide and the raw value passes through unchanged.
+func test_facing_is_world_space_under_yaw_and_raw_under_identity() -> void:
+	var ms := _make_match()
+	ms.set_camera_basis(0, Basis(Vector3.UP, PI / 2.0))
+	_step(ms, Vector2(0, -1), Vector2(1, 0))  # p1 camera-forward intent; p2 identity basis
+	# camera yawed +90 deg: camera forward (-Z cam) = world -X -> facing (-1, 0), NOT (0, -1)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(-1, 0)),
+		"facing stores the ROTATED world direction under a yawed basis, not the raw intent")
+	assert_true(ms.p2.hero.facing.is_equal_approx(Vector2(1, 0)),
+		"identity basis: facing still equals the raw intent direction unchanged")
+
+
 func test_basis_is_excluded_from_snapshot() -> void:
 	var ms := _make_match()
 	var before := ms.to_snapshot()

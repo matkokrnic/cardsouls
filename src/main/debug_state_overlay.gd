@@ -13,6 +13,7 @@ extends CanvasLayer
 const _SLOT_COUNT := 2
 
 var _labels: Array[Label] = []
+var _hit_label: Label
 ## 0-based swing index per slot, derived purely from the transition stream: increments on
 ## the ATTACKING -> ATTACKING self-transition, resets on any exit from ATTACKING. Mirrors
 ## the chain_index contract (1-3) without ever reading it.
@@ -34,6 +35,12 @@ func _ready() -> void:
 		# Initialize to IDLE: the signal only fires on transitions, so the first frame must
 		# not wait for an emission to show something sane.
 		_refresh(slot)
+	# Story 1-7: last-hit readout, fed exclusively by the connect_hit_landed seam payload.
+	_hit_label = Label.new()
+	_hit_label.name = "HitLabel"
+	_hit_label.position = Vector2(16.0, 32.0)
+	_hit_label.text = "HIT: -"
+	add_child(_hit_label)
 
 
 ## Seam callback. The runner wires it per slot with
@@ -45,6 +52,14 @@ func on_hero_transition(previous: HeroState.ActionState, current: HeroState.Acti
 		_swings[slot] = 0   # any exit from ATTACKING ends the sequence
 	_states[slot] = current
 	_refresh(slot)
+
+
+## Seam callback (story 1-7): FIRST consumer of match_runner.connect_hit_landed. Renders
+## the payload alone — no state handle, no polling (same discipline as on_hero_transition).
+## Throwaway with the rest of this overlay (E2 fence).
+func on_hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float) -> void:
+	_hit_label.text = "HIT: P%d -> P%d  -%.1f  (P%d HP %.1f)" % [
+		attacker_slot + 1, target_slot + 1, damage, target_slot + 1, target_hp]
 
 
 func _refresh(slot: int) -> void:

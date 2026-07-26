@@ -70,13 +70,20 @@ func _ready() -> void:
 	var feature_flags: FeatureFlags = FeatureFlagsService.get_flags()
 	Invariant.check(feature_flags != null, "authored feature flags missing at match start")
 	_match_state.inject_feature_flags(feature_flags)
+	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
+	# one genuinely ownerless event. The relay lives in the RUNNER because state never
+	# touches an autoload; the source signal is queued (D5), so the bus emission happens
+	# at drain time, post-advance.
+	_match_state.round_ended.connect(_relay_round_ended)
 	# Story 1-3c: throwaway debug overlay (see its FENCE — E2 replaces it with the real
-	# HUD). Wired through the public seam below like any consumer; it receives per-slot
-	# callbacks only, never a state handle.
+	# HUD). Wired through the public seams below like any consumer; it receives signal
+	# payloads only, never a state handle.
 	var overlay := DebugStateOverlay.new()
 	add_child(overlay)
 	connect_hero_action_state_changed(0, overlay.on_hero_transition.bind(0))
 	connect_hero_action_state_changed(1, overlay.on_hero_transition.bind(1))
+	# Story 1-7 (AC 3): the overlay is hit_landed's FIRST consumer — still throwaway.
+	connect_hit_landed(overlay.on_hit_landed)
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a
@@ -107,6 +114,53 @@ func connect_hero_action_state_changed(slot: int, callback: Callable) -> void:
 	player.hero.action_state_changed.connect(callback)
 
 
+## Read-only subscription seam (story 1-7, N1) for the MatchState-owned hit_landed —
+## mirrors connect_hero_action_state_changed: the runner wires the subscription so no
+## consumer ever holds a MatchState handle. Match-level (attacker AND target ride the
+## payload), so there is no slot argument. Payload: (attacker_slot, target_slot, damage,
+## target_hp — the target's remaining HP after the damage).
+func connect_hit_landed(callback: Callable) -> void:
+	_match_state.hit_landed.connect(callback)
+
+
+## Story 1-7 (AC 4.3): MatchState.round_ended -> EventBus.round_ended. Runner-owned
+## because src/state/ never touches an autoload.
+func _relay_round_ended(loser_index: int) -> void:
+	EventBus.round_ended.emit(loser_index)
+
+
+## Story 1-7 (AC 2): step-2 contact-fact gathering for one attacker slot. Direct query
+## (get_overlapping_areas), NEVER area_entered — signal firing order is not guaranteed
+## and would make replay order-dependent. Queries ONLY while the state flags the hitbox
+## active, stamps the attacker's attack_index AT GATHER time (never at resolution), and
+## identity-filters self-overlaps (the overlapping area's owning actor != the attacker)
+## BEFORE pushing — fact SELECTION, not rule evaluation, which keeps push_contact's
+## strict attacker != target invariant intact (B5, operator decision; both heroes share
+## hero.tscn, so the attacker's own hurtbox IS in the hitbox's mask every swing). Facts
+## reflect tick N-1's physics flush (F1 one-tick lag — absorbed by the dedupe grace).
+func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroActor) -> void:
+	var hero := player.hero
+	if not hero.is_hitbox_active():
+		return
+	var attack_index := hero.attack_index
+	for area: Area3D in actor.hitbox.get_overlapping_areas():
+		var owner_actor := area.get_parent()
+		if owner_actor == actor:
+			continue  # self-overlap — filtered at gather, the invariant stays strict
+		var target_slot := _slot_of(owner_actor)
+		if target_slot == -1:
+			continue  # not a hero hurtbox; nothing else carries the hurtbox layer in E1
+		_match_state.push_contact(attacker_slot, target_slot, attack_index)
+
+
+func _slot_of(actor: Node) -> int:
+	if actor == _p1_hero:
+		return 0
+	if actor == _p2_hero:
+		return 1
+	return -1
+
+
 func _physics_process(delta: float) -> void:
 	# 1. Sample controllers -> InputIntent per player (the ONLY place Input is read — D3).
 	var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]
@@ -118,6 +172,10 @@ func _physics_process(delta: float) -> void:
 	#    Guarded by test/integration/test_root_rotation_isolation.gd.
 	_match_state.set_camera_basis(0, _p1_rig.basis)
 	_match_state.set_camera_basis(1, _p2_rig.basis)
+	#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
+	#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
+	_gather_contact_facts(0, _match_state.p1, _p1_hero)
+	_gather_contact_facts(1, _match_state.p2, _p2_hero)
 	# 3. Advance state (enqueues signals only).
 	_match_state.advance(intents)
 	# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.

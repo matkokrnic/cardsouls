@@ -51,3 +51,37 @@ func test_round_ended_is_queued_and_fires_once() -> void:
 	ms.advance(intents)
 	ms.drain_signals()
 	assert_eq(ev.n, 1, "not re-fired after round over")
+
+
+## Story 1-7 (D-1 consequence): extends the "exactly once" pin above — round_ended fires
+## once per DEATH, not once per match. The debug reset clears the latch (and revives the
+## DEAD hero), so a second death fires a second round_ended.
+func test_round_ended_rearms_after_debug_reset_and_fires_once_per_death() -> void:
+	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	var ev := {"n": 0, "loser": -1}
+	ms.round_ended.connect(func(loser: int) -> void:
+		ev.n += 1
+		ev.loser = loser)
+	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
+	ms.p2.hero.take_damage(999.0)
+	ms.advance(intents)
+	ms.drain_signals()
+	assert_eq(ev.n, 1, "first death fires")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.DEAD, "loser entered DEAD (step 8)")
+	ms.advance(intents)
+	ms.drain_signals()
+	assert_eq(ev.n, 1, "latched: no re-fire while the round stays over")
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	var reset_intents: Array[InputIntent] = [reset, InputIntent.new()]
+	ms.advance(reset_intents)
+	ms.drain_signals()
+	assert_false(bool(ms.to_snapshot()["round_over"]), "reset cleared the round latch")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE, "reset revived DEAD -> IDLE")
+	assert_eq(ms.p2.hero.get_hp(), 100.0, "reset restored HP to max")
+	assert_eq(ev.n, 1, "reset itself fires nothing")
+	ms.p2.hero.take_damage(999.0)
+	ms.advance(intents)
+	ms.drain_signals()
+	assert_eq(ev.n, 2, "second death fires again — once per DEATH, not per match")
+	assert_eq(ev.loser, 1, "same loser reported")

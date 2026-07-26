@@ -20,6 +20,12 @@ var move_dir := Vector2.ZERO                    # normalized-ish planar move, th
 var aim := Vector2.ZERO                         # facing/aim, this tick
 var pressed: Dictionary[StringName, bool] = {}  # action -> just-pressed this tick
 var held: Dictionary[StringName, bool] = {}     # action -> currently held
+## Story 1-7 (D-2, operator decision): intent-carried debug affordance — a round-scoped
+## reset request applied by advance() step 1. Deliberately NOT gated on a FeatureFlags
+## flag (operator affordance, not a gameplay path; exception recorded in the decision
+## log). Because it rides the intent, the X5 stream records it for free once the
+## recorder lands — no separate event class.
+var debug_reset: bool = false
 
 
 func is_pressed(action: StringName) -> bool:
