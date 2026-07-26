@@ -341,3 +341,19 @@ Readiness gate on `1-7-contact-pipeline-damage-hp-death.md` (authored 2026-07-22
 **Readiness gate (same session, report-only).** Verdict **READY** -- zero blocking findings, four advisories (N1 do not rotate Collision/Hurtbox; N2 integration test derives expected yaw from the pressed direction under the identity basis, mesh-yaw == hitbox-yaw is the primary pin; N3 .uid via editor scan for any new test file, verify the scan leaves `hero.tscn` alone; N4 below). All four story assumptions verified against `src/` by content; baseline measured live at gate time: 115 state tests / 543 assertions PASS, golden `39564e83...5353` confirmed. Promoted backlog -> ready-for-dev.
 
 **N4 -- comment-hygiene queue entry.** `test/state/test_contact_resolution.gd` carries a stale pre-R1 comment ("facing updates from raw intent") -- only true under an identity basis since the world-space facing contract (1-7 review R1). The assertion is valid (the test runs at identity); the wording is stale. Queued for a future comment-hygiene pass; deliberately NOT touched in 1-7b (its fence keeps the state harness untouched).
+
+---
+
+## Session 2026-07-26 -- Story 1-7b close-out
+
+**What landed (e125586 code+test / b2f4540 story record).** Implementation exactly as gated: `HeroActor.drive()` hoists the existing facing-to-yaw mapping into ONE local, assigned to BOTH `Hitbox` and `Mesh` -- one computation, two assignments, never a second atan2 (exactly one CODE occurrence of atan2 in `src/`, the hoisted `var yaw :=` line; the visible mesh is the truthful display of hitbox yaw and cannot diverge from it). `FacingMarker`: a `PrismMesh` sub-resource authored directly in `hero.tscn` as a child of `Mesh`, apex rotated onto local +Z (the hitbox reach direction) -- no new assets, no import pipeline. New integration pin `test/integration/test_visible_facing.gd` (+ editor-scan `.uid`): two real Input presses assert mesh yaw == hitbox yaw == the mapping of the pressed direction under the identity basis, root basis identity throughout, and yaw persistence after release. N1 respected (`Collision`/`Hurtbox` deliberately unrotated); DECISION A intact (`test_root_rotation_isolation.gd` green).
+
+**Golden -- the NONE prediction CONFIRMED by measurement, both directions (the 1-6 rule: predictions are measured both ways, never trusted).** Hash `39564e83...5353` measured BEFORE the first edit and again AFTER the implementation -- identical; no re-baseline, no sequence re-record. State harness 115 tests / 543 assertions green both runs; all 7 integration tests green, run individually.
+
+**Review: one finding, R1 (cosmetic, truth-in-record).** The story record's AC 1 grep claim overcounted -- corrected to exactly one CODE occurrence of atan2 in `src/`; the only other textual match is its own doc comment. No code change; the single-yaw-source contract holds.
+
+**Operator smoke check PASSED -- the 1-7 "FACING IS INVISIBLE" finding CLOSES.** The marker visibly leads the body through all eight keyboard directions; orientation persists on stop; the dummy never turns; the marker is legible from the fixed camera. Live aim now governs damage -- facing away from the dummy in range deals nothing, facing it lands hits: the exact capability the story existed to create.
+
+**360-degree facing is NOT a new obligation.** Eight-way facing is a KEYBOARD limitation, not a system one: facing is continuous (a world-space Vector2 through one atan2), and the state layer already accepts analog vectors (`test_analog_input_clamped_to_move_speed`). Full-360 facing arrives with analog input in story 2-2 (gamepad profiles). Nothing owed before then.
+
+**Pointer.** The N4 comment-hygiene queue entry (previous session) remains OPEN -- deliberately untouched in 1-7b per its fence; still queued for a future comment-hygiene pass.
