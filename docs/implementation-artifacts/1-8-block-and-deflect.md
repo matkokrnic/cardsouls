@@ -1,6 +1,10 @@
+---
+baseline_commit: cd5a75b5c559f63d326e06c0cc285ded77f39e7e
+---
+
 # Story 1.8: Block and Deflect
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -22,16 +26,16 @@ so that the defensive layer is legible, the most feel-sensitive number is hot-re
 
 ## Tasks / Subtasks
 
-- [ ] Balance schema: add `block_facing_arc_degrees` to the Defense group; author `180.0` in `balance_config.tres` (AC: 6)
-- [ ] Audit deltas in `test_balance_authoring.gd`: lift the `deflect_stamina_cost` exemption (`> 0`); `block_damage_multiplier` `0 < m < 1`; `block_facing_arc_degrees` `> 0`, `<= 360` (AC: 6)
-- [ ] Entry gate: no-window path in the BLOCKING transition + `action_rejected(&"deflect", &"insufficient_stamina")`; BLOCKING entry stays free (AC: 3)
-- [ ] Runner: widen the gathered fact to four fields — world-space target-to-attacker direction FROM POSITIONS ONLY; validate the new field at the `push_contact` seam (AC: 5)
-- [ ] Step-4 resolution: facing gate (state-side arc comparison), block multiplier, deflect with the +1 grace tick, spend at landing, `deflect_landed` (MatchState-owned, no runner seam), swing-hit registration for both outcomes, mana/`hit_landed` semantics (AC: 1, 2, 4)
-  - [ ] Amend the stale `match_state.gd` step-3 comment "Deflect joins this path in 1-8" to the R-D1 mechanism/policy-seat wording (AC: 3)
-- [ ] Headless tests per AC 9 (AC: 9)
-- [ ] Golden: measure BEFORE first edit and after; restructure the sequence DELIBERATELY (author real defense values in `_golden_config`, add an exercises-block-and-deflect pin test); at most ONE re-baseline with separately named causes; exact boundary ticks live in dedicated non-golden tests (see Golden prediction below)
-- [ ] Live smoke check: TEMPORARY flip of runner slot 1 to `KEYBOARD_P2` (exported array); the shipped default stays P2=NULL; the NAMED GAP "DEAD-slot residuals" is ACCEPTED for this supervised smoke check per R-D6 — record the acceptance in the Completion Notes (AC: 1, 2)
-- [ ] Close-out decision-log entry: D-4 four-field supersession (full), outcomes record, obligation status
+- [x] Balance schema: add `block_facing_arc_degrees` to the Defense group; author `180.0` in `balance_config.tres` (AC: 6)
+- [x] Audit deltas in `test_balance_authoring.gd`: lift the `deflect_stamina_cost` exemption (`> 0`); `block_damage_multiplier` `0 < m < 1`; `block_facing_arc_degrees` `> 0`, `<= 360` (AC: 6)
+- [x] Entry gate: no-window path in the BLOCKING transition + `action_rejected(&"deflect", &"insufficient_stamina")`; BLOCKING entry stays free (AC: 3)
+- [x] Runner: widen the gathered fact to four fields — world-space target-to-attacker direction FROM POSITIONS ONLY; validate the new field at the `push_contact` seam (AC: 5)
+- [x] Step-4 resolution: facing gate (state-side arc comparison), block multiplier, deflect with the +1 grace tick, spend at landing, `deflect_landed` (MatchState-owned, no runner seam), swing-hit registration for both outcomes, mana/`hit_landed` semantics (AC: 1, 2, 4)
+  - [x] Amend the stale `match_state.gd` step-3 comment "Deflect joins this path in 1-8" to the R-D1 mechanism/policy-seat wording (AC: 3)
+- [x] Headless tests per AC 9 (AC: 9)
+- [x] Golden: measure BEFORE first edit and after; restructure the sequence DELIBERATELY (author real defense values in `_golden_config`, add an exercises-block-and-deflect pin test); at most ONE re-baseline with separately named causes; exact boundary ticks live in dedicated non-golden tests (see Golden prediction below)
+- [x] Live smoke check: TEMPORARY flip of runner slot 1 to `KEYBOARD_P2` (exported array); the shipped default stays P2=NULL; the NAMED GAP "DEAD-slot residuals" is ACCEPTED for this supervised smoke check per R-D6 — record the acceptance in the Completion Notes (AC: 1, 2) — **performed by the operator 2026-07-26**
+- [ ] Close-out decision-log entry: D-4 four-field supersession (full), outcomes record, obligation status — **close-out commit, after review**
 
 ## Dev Notes
 
@@ -79,13 +83,46 @@ Report-only gate returned **NOT READY** — five blocking findings: B1 (AC contr
 
 ### Agent Model Used
 
+Claude Fable 5 (claude-fable-5)
+
 ### Debug Log References
+
+- Baseline (before first edit): state harness 115 tests / 543 assertions PASS; golden `39564e83831819d4486d6216e9030535029de1298168ebeee720ab4812705353` confirmed at cd5a75b.
+- Golden-protocol step-2 measurement (mechanics in, OLD sequence unchanged + four-field t5 fact with a front-facing direction): hash moved to `ca3dc15e27700d739d040b0a94ad5ad8b3fcff02a1a671cfb962e05fcca76ff5`; the t5 fact resolved as a DEFLECT — P2 HP 120.0 (was 108.0), P1 mana 0.0 (was 12.0). The gate's corrected grace arithmetic CONFIRMED empirically.
+- Non-golden proof run: 130 tests / 596 assertions, only the 2 golden-sequence tests failing (both expected), before the deliberate restructure.
+- Final: state harness 130 tests / 600 assertions PASS; all 7 integration tests PASS individually; editor scan produced ONLY `test_block_deflect.gd.uid` (verified via git status).
 
 ### Completion Notes List
 
+- **R-D1 landed as gated.** Entry: affordability precondition in the step-3 BLOCKING branch — no spend, no regen-delay restart (pinned by `test_entry_check_neither_spends_nor_restarts_regen_delay`); degrade queues `action_rejected(&"deflect", &"insufficient_stamina")` while block still enters. Spend at landing in step 4 via `StaminaPool.spend()` with the delay stated explicitly. `enter_block` gained the `open_deflect_window` parameter; the degraded path `start(0)`-clears any stale window from an earlier press (pinned by `test_degraded_entry_clears_a_stale_window_from_an_earlier_block`). The stale step-3 comment amended to the mechanism/policy-seat wording.
+- **R-N2 grace implemented WITHOUT a snapshot field.** `HeroState._deflect_closed_this_tick` is a per-tick TRANSIENT recomputed in `tick_timers()` (write-before-read inside every `advance()`: step 2 writes, step 4 reads, nothing reads it across ticks), so it is deliberately excluded from `to_snapshot()` — no determinism/replay hole, and the gate's snapshot-shape-NONE prediction held. `is_deflect_window_open()` = window running OR closed by this tick's step-2 advance.
+- **R-D4 landed as gated.** Dedupe registration precedes the outcome ladder, so blocked AND deflected contacts both register — a resolved swing's later facts cannot re-resolve (both directions pinned). Blocked = confirmed: reduced `hit_landed` + full flat mana. Deflected = fully negated: no damage, no `hit_landed`, no mana; `deflect_landed(attacker_slot, target_slot)` MatchState-owned, D5-queued, NO runner seam (1-10 inherits).
+- **R-B3 landed as gated.** `push_contact` widened to the four-field fact with a non-zero-direction `Invariant.check` at the seam; the runner computes the direction from `global_position`s ONLY (never reads `HeroState.facing`, no relative angle), normalizes it, and drops degenerate co-location at gather (fact selection, like the identity filter).
+- **Facing gate note (float honesty).** `_is_facing` uses exact float comparison with no epsilon; a direction at EXACTLY arc/2 lands on float rounding (`deg_to_rad(90)` vs `atan2`'s pi/2 differ by 1 ulp). The boundary tests therefore pin just-inside/just-outside the half-arc, not the measure-zero boundary ray — stated in the `_is_facing` doc comment.
+- **Golden (R-N3): ONE re-baseline** `39564e83...5353` -> `298c40f65d5f3191d2d7c2eacdccdd443c49fe24b0492d66e088318ed840f23f`, measured both directions, TWO causes named separately in the GOLDEN header: (1) exercised-path resolution change — the pre-existing t5 fact now DEFLECTS on the grace tick (step-2 empirical measurement above); (2) deliberate restructure — `_golden_config` authors the defense values (multiplier 0.25, deflect cost 20, arc 180), P2 gained a second block span (t7-14), and a new t13 fact resolves as an ordinary BLOCK, so the sequence exercises BOTH outcomes (new pin `test_golden_sequence_exercises_block_and_deflect`; the p2 transition pin widened to two spans). Snapshot shape verified NOT a cause. Exact boundary ticks live in `test_block_deflect.gd`, not in the golden.
+- **Suite:** 115 -> 130 state tests / 543 -> 600 assertions (14 new block/deflect tests + the defense audit); integration unchanged at 7, all green individually — the live pipeline runs the four-field gather (P2 dummy never blocks, so live outcomes are unchanged, confirmed by `test_contact_pipeline`: 19 hits, kill at 17, as before).
+- **Fences respected:** `roll_iframe` x contact untouched (the 1-9 half); STUNNED guard green, stun window never started; no DEBT B (no reload trigger / CACHE_MODE_IGNORE / recording changes), no DEBT D, no max_mana; DECISION A intact (no new atan2 — `_is_facing` uses `Vector2.angle_to`); `slot_controller_kinds` default untouched at [KEYBOARD_P1, NULL].
+- **Live smoke check NOT performed — awaits the operator after review** (per instruction): temporary flip of runner slot 1 to `KEYBOARD_P2`, shipped default stays P2=NULL. R-D6 acceptance restated: the DEAD-slot residuals (a dead hero can walk; a corpse mid-swing can be credited damage/mana) are ACCEPTED for supervised E1 smoke checks covering BOTH 1-8 and 1-9; the gap's fix trigger is story 2-3, the first story that SHIPS a human-driven-killable configuration.
+- **Close-out obligations for the docs commit:** decision-log close-out entry with the FULL D-4 "three-int" supersession (facts are four-field from 1-8 on), golden record, suite record, and obligation status.
+- **Live smoke check PASSED (2026-07-26, operator; temporary KEYBOARD_P2 flip on slot 1 in main.tscn — reverted, never committed).** Blocked chip lands at 1.8 (6.0 x 0.3) while facing the attacker; a timed block press produces NO number — the deflect, observable only as the absence of hit_landed; a back-facing block takes the full 6.0. All three outcomes match the headless pins live. FINDING (feeds 1-10): the parry is HARD to time with no visual/audio feedback — the deflect has no cue until 1-10 CombatCues, which is by design; the operator succeeded repeatedly despite it. R-D6 acceptance exercised without incident.
+
 ### File List
+
+- `src/state/resources/balance_config.gd` — `block_facing_arc_degrees` (Defense group, R-D2)
+- `data/balance/balance_config.tres` — authored `block_facing_arc_degrees = 180.0`
+- `src/state/hero_state.gd` — `enter_block(ticks, open_deflect_window)` no-window path (R-D1); `_deflect_closed_this_tick` transient + `is_deflect_window_open()` (R-N2); windows doc comment updated
+- `src/state/match_state.gd` — `deflect_landed` signal (R-D4); step-3 entry precondition + degrade (R-D1) and amended roll-branch comment; four-field `push_contact` with seam validation (R-B3); step-4 outcome ladder + `_is_facing` (R-D2/R-D3/R-D4)
+- `src/main/match_runner.gd` — four-field gather: direction from positions only, normalized, degenerate co-location dropped (R-B3)
+- `test/state/test_block_deflect.gd` (+ `.uid`) — NEW: 14 tests — window boundary both sides incl. grace, facing gate + half-arc both sides, R-D1 entry/degrade/stale-window, R-D4 registration both outcomes, R-N7 second-swing degrade, D5 queue discipline, R-B5 reload semantics
+- `test/state/test_balance_authoring.gd` — deflect_stamina_cost exemption LIFTED; defense-value audit added (R-N6)
+- `test/state/test_determinism.gd` — GOLDEN re-baselined with named causes; defense values authored; second P2 block span; four-field facts; `test_golden_sequence_exercises_block_and_deflect` replaces the 1-5 hit/mana pin; transition pin widened
+- `test/state/test_contact_resolution.gd` — call sites widened to the four-field seam
+- `test/state/test_contact_pipeline.gd` — call sites widened to the four-field seam
+- `docs/implementation-artifacts/1-8-block-and-deflect.md` — this record
 
 ## Change Log
 
 - 2026-07-22: Story authored (Set B batch, before any E1 code existed).
 - 2026-07-26: Readiness gate NOT READY (B1-B5); operator rulings R-D1..R-D7 + R-N2 + R-B3/R-B5 pins applied; story rewritten; Status backlog -> ready-for-dev.
+- 2026-07-26: Dev pass complete — mechanics, tests (130/600 + 7 integration), golden re-baselined `39564e83...` -> `298c40f6...` (one re-baseline, two named causes, step-2 prediction confirmed empirically); smoke check and close-out docs await operator review; Status ready-for-dev -> review.
+- 2026-07-26: Operator smoke check PASSED (temporary KEYBOARD_P2 flip, reverted); parry-visibility finding recorded for 1-10; review approved.
