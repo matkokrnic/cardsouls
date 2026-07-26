@@ -70,6 +70,14 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Hitboxes **report contact** (emit a signal / push a contact event) — they do **not** apply damage. The state layer decides what a contact means.
 - Rationale: keeps future netcode a layer to *add* rather than a rewrite, and keeps gameplay testable without a scene.
 
+**Collision layers (3D physics) — the hitbox/hurtbox convention (story 1-7)**
+- Three named `3d_physics` layers exist in `project.godot` `[layer_names]` (authored from zero in 1-7 — there was no section before): **layer 1 "bodies"** (bit value 1) — the default layer; `CharacterBody3D` heroes and the ground sit here by not setting a layer. **Layer 2 "hurtbox"** (bit value 2). **Layer 3 "hitbox"** (bit value 4). The next story that needs a layer starts at layer 4 and names it here.
+- **Hitbox** (`Area3D` in `hero.tscn`): `collision_layer = 4` (hitbox), `collision_mask = 2` (hurtbox), `monitorable = false` — it DETECTS hurtboxes and is detected by nothing. Hitboxes are not in each other's masks, so hitboxes never see hitboxes.
+- **Hurtbox** (`Area3D` in `hero.tscn`): `collision_layer = 2` (hurtbox), `collision_mask = 0`, `monitoring = false` — it is DETECTED and detects nothing.
+- **Neither node holds gameplay logic and neither applies damage** (the HARD RULE above, made concrete). The ONLY consumer is the runner's `_gather_contact_facts` (`match_runner.gd`): a direct `get_overlapping_areas()` query — never `area_entered` signals (their firing order is not guaranteed and would make replay order-dependent) — run only while the state flags the swing active (`HeroState.is_hitbox_active()`), stamping the attacker's `attack_index` at GATHER time, identity-filtering self-overlaps (the overlapping area's owning actor != the attacker — the attacker's own hurtbox is inside its hitbox's mask and reach on every swing), and pushing facts through `MatchState.push_contact`, the sole intake. `advance()` step 4 decides. Actors report, state decides.
+- The hitbox is aimed by yawing the **CHILD node** from `HeroState.facing` in `HeroActor.drive()`; the hero ROOT never rotates (DECISION A).
+- Current-scene fact, not part of the convention: only `hero.tscn` carries the pair today (the only actor). The layer/mask values are per-node scene properties, not project defaults — a new actor scene must set them per this table.
+
 **HARD RULE — Feature flags**
 - Every gameplay layer must be **independently toggleable** through a single `FeatureFlags` Resource loaded **once at startup**: melee mana generation, unblockable system, orbs, pitch zone, minions, totems, equipment.
 - Systems read flags from that **one place** (the `FeatureFlagsService` autoload) and **degrade gracefully** when a layer is off (e.g. with orbs disabled, pitch costs require mana only).
@@ -158,4 +166,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Update when the stack changes (Godot version, adding a test framework, first real code establishing a pattern).
 - Revisit once real `src/` code exists: convert "proposed conventions" here into "observed patterns," and delete any rule that has become obvious from the codebase.
 
-Last Updated: 2026-07-21
+Last Updated: 2026-07-26
