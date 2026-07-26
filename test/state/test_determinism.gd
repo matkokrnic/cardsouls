@@ -5,33 +5,38 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
-## Re-baselined in story 1-5 (basic attack chain), ONE re-baseline with TWO deliberate
-## causes, named separately (65811b3 / 1-4 pattern), each sufficient on its own to move
+## Re-baselined in story 1-8 (block and deflect), ONE re-baseline with TWO deliberate
+## causes, named separately (the 1-4/1-5 pattern), each sufficient on its own to move
 ## the hash:
-##   1. SNAPSHOT SHAPE change: HeroState.to_snapshot() gained "swing_dedupe" — the
-##      monotonic attack_index counter plus the live per-swing dedupe records (mid-swing
-##      dedupe state excluded from the snapshot would be a determinism/replay hole — D8).
-##   2. _golden_config now AUTHORS real combat-economy values (damage 10% of max HP,
-##      melee_hit_mana 12) with in-test flags (melee_mana_generation ON), and the
-##      recorded sequence feeds ONE synthetic confirmed hit at t5 (P1's swing-0 active
-##      window t4-7; the fact models a t4 contact arriving with the F1 one-tick lag) —
-##      P2 ends at 108/120 HP and P1 at 12 mana, so the hashed final state encodes the
-##      whole combat layer (guarded by test_golden_sequence_exercises_hit_damage_and_mana
-##      below).
-## VERIFIED NON-CAUSE — movement root (B6/AC 8): the sequence DOES hold nonzero movement
-## input on ATTACKING ticks (1-4, 6-16), and the multiplier roots velocity on all of
-## them, but the hash is EMPIRICALLY IDENTICAL with multiplier 0.0 vs 1.0: the golden
-## hashes only the FINAL (t24) snapshot, velocity is overwritten every tick, position is
-## actor-owned (F1, never in state), and the run ends IDLE. Movement-root cannot move
-## this hash unless a future sequence ends mid-ATTACKING; the readiness-gate expectation
-## that (c) would fire did not survive measurement (recorded in the 1-5 Dev Agent Record).
+##   1. EXERCISED-PATH RESOLUTION CHANGE: step 4 now implements the block/deflect
+##      outcome ladder, and the pre-existing t5 fact sits on the deflect window's +1
+##      grace tick (R-N2) against a front-facing blocker — it resolves as a DEFLECT
+##      (P2 keeps 120 HP, P1 keeps 0 mana, P2 pays the cost at landing) where it used
+##      to land as a full 12.0 hit. EMPIRICAL step-2 measurement (recorded in the Dev
+##      Agent Record): with mechanics implemented and the OLD sequence otherwise
+##      unchanged, the hash moved to ca3dc15e...76ff5 exactly this way — the gate's
+##      corrected grace arithmetic held.
+##   2. DELIBERATE SEQUENCE + AUTHORED-VALUE RESTRUCTURE: _golden_config now AUTHORS
+##      the defense values (block_damage_multiplier 0.25, deflect_stamina_cost 20,
+##      block_facing_arc_degrees 180), P2 gained a SECOND block span (t7-14), and a
+##      second fact at t13 resolves as an ordinary BLOCK — the sequence exercises BOTH
+##      outcomes by design (guarded by test_golden_sequence_exercises_block_and_deflect
+##      below), and the facts widened to the four-field R-B3 shape.
+## VERIFIED: SNAPSHOT SHAPE IS NOT A CAUSE — no to_snapshot() changed in 1-8; the R-N2
+## grace marker is a per-tick transient (write-before-read inside advance(), see
+## HeroState._deflect_closed_this_tick) and deflect-consumed state is DERIVED (dedupe
+## registration + window state), exactly as the gate predicted.
+## Previous golden 39564e83831819d4486d6216e9030535029de1298168ebeee720ab4812705353
+## (story 1-5, basic attack chain: dedupe snapshot shape + authored combat-economy
+## values + the t5 synthetic hit; held unchanged through 1-6, 1-7, and 1-7b — three
+## consecutive NONE predictions confirmed by measurement).
 ## Previous golden 871f8132f28f2192ec0edb0a0081b1e61ec87924c027a0ee2ddfdb1018f02a5c
 ## (story 1-4, stamina economy: snapshot shape + authored stamina values).
 ## Previous golden 40b5a8041c327b416ca235af65fc7c05f494d8b1d7a2e2b2761190b86da1d613
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "39564e83831819d4486d6216e9030535029de1298168ebeee720ab4812705353"
+const GOLDEN := "298c40f65d5f3191d2d7c2eacdccdd443c49fe24b0492d66e088318ed840f23f"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -50,19 +55,30 @@ const MOVES := [
 ]
 
 ## Recorded action overlay, keyed by tick (windows per _golden_config: windup 3, active 4,
-## recovery 6, chain 5). P1: attack t1 (swing 0: windup 1-3, active 4-7, recovery 8-13,
-## chain window 8-12), chain t9 (swing 1: windup 9-11, active 12-15, recovery from 16),
-## roll-cancel t17 (roll 17-21, IDLE t22). P2: block t1, held through t5, released t6.
+## recovery 6, chain 5, deflect 4). P1: attack t1 (swing 0: windup 1-3, active 4-7,
+## recovery 8-13, chain window 8-12), chain t9 (swing 1: windup 9-11, active 12-15,
+## recovery from 16), roll-cancel t17 (roll 17-21, IDLE t22). P2 (story 1-8): TWO block
+## spans — press t1 held through t5 (deflect window runs t1-4, grace t5), released t6;
+## press t7 held through t14 (window t7-10, grace t11), released t15.
 const TICKS := 24
 const P1_PRESS := {1: [&"attack"], 9: [&"attack"], 17: [&"roll"]}
-const P2_PRESS := {1: [&"block"]}
-const P2_BLOCK_HELD_THROUGH := 5
+const P2_PRESS := {1: [&"block"], 7: [&"block"]}
+const P2_BLOCK_HELD: Array = [[1, 5], [7, 14]]
 ## Story 1-5: synthetic contact facts fed through the push_contact seam, keyed by the
 ## tick they are pushed on (BEFORE that tick's advance — the runner's step-2 position).
-## Payload [attacker_slot, target_slot, attack_index] — plain recordable data (X5). The
-## t5 fact models a contact gathered on t4, P1's first active tick of swing 0 (windup
-## 1-3, active 4-7), arriving with the F1 one-tick lag.
-const CONTACTS := {5: [[0, 1, 0]]}
+## Payload [attacker_slot, target_slot, attack_index, target_to_attacker] — the
+## FOUR-field plain recordable fact (X5; story 1-8 R-B3 widened the original three-int
+## shape with the world-space direction the runner reports from positions). The t5 fact
+## models a contact gathered on t4, P1's first active tick of swing 0 (windup 1-3,
+## active 4-7), arriving with the F1 one-tick lag — it lands on the deflect window's +1
+## GRACE tick (R-N2) against a front-facing blocker (P2 faces (-1,-1)-ward at t5) and
+## DEFLECTS by design. The t13 fact (swing 1, active 12-15, gathered t12) arrives past
+## the second span's grace (t11) against a front-facing blocker (P2 faces (-1,0) at
+## t13) and resolves as an ordinary BLOCK by design.
+const CONTACTS := {
+	5: [[0, 1, 0, Vector2(-1, -1)]],
+	13: [[0, 1, 1, Vector2(-1, 0)]],
+}
 
 
 ## The golden's balance — constructed IN-TEST on purpose, never loaded from
@@ -100,6 +116,14 @@ func _golden_config() -> BalanceConfig:
 	c.attack_move_speed_multiplier = 0.0
 	c.melee_hit_mana = 12.0
 	c.deflect_window_seconds = 4.0 / 60.0
+	# Defense values (story 1-8), coverage-not-feel: multiplier 0.25 makes the t13
+	# blocked hit chip exactly 3.0 (117 non-full at t24); deflect cost 20 leaves P2
+	# MID-REGEN at t24 (40 - 20 at t5, regen only after the second span releases:
+	# t15-t24 -> 30.0 — below max, above post-spend, so the hashed final state encodes
+	# the deflect spend AND the regen); arc 180 = the authored front half-plane.
+	c.block_damage_multiplier = 0.25
+	c.deflect_stamina_cost = 20.0
+	c.block_facing_arc_degrees = 180.0
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0
 	return c
@@ -142,7 +166,8 @@ func test_recorded_sequence_exercises_all_transitions() -> void:
 	var blk := int(HeroState.ActionState.BLOCKING)
 	assert_eq(p1_log, [[idle, atk], [atk, atk], [atk, roll], [roll, idle]],
 		"p1: attack, chain (self-transition), recovery roll-cancel, roll end")
-	assert_eq(p2_log, [[idle, blk], [blk, idle]], "p2: block press and release")
+	assert_eq(p2_log, [[idle, blk], [blk, idle], [idle, blk], [blk, idle]],
+		"p2: two block spans (story 1-8) — press t1/release t6, press t7/release t15")
 
 
 ## Story 1-4 (AC 6): the stamina analogue of the transition guard above — the golden only
@@ -164,26 +189,37 @@ func test_golden_sequence_exercises_stamina_spend_and_regen() -> void:
 	assert_eq(final, 30.0, "25 + 5 regen ticks (delay covers t17-t19, 1.0/tick t20-t24)")
 
 
-## Story 1-5 (AC 11): the combat analogue of the stamina pin above — the golden only
-## guards the combat layer if the sequence actually lands a hit. Pins the exact damage
-## and mana arithmetic at named ticks so the sequence can never silently degrade back to
-## a hitless run: t4 (swing-0 active opens, fact not yet fed) both untouched; t5 (the
-## synthetic confirmed hit) P2 drops 120 -> 108 (10% of the TARGET's 120 max HP) and P1
-## mana 0 -> 12; t24 (final, hashed) still 108 HP / 12 mana — non-full HP and non-zero
-## mana on record (no HP regen, no E1 mana sink).
-func test_golden_sequence_exercises_hit_damage_and_mana() -> void:
+## Story 1-8 (supersedes the 1-5 hit/mana pin — the combat analogue of the stamina pin
+## above): the golden only guards the block/deflect layer if the sequence actually
+## exercises BOTH outcomes. Pins the exact arithmetic at named ticks so the sequence
+## can never silently degrade to a hitless (or deflectless) run: t4 both untouched;
+## t5 the GRACE-tick DEFLECT — P2 stays at 120 HP (fully negated), P1 mana stays 0
+## (denied), P2 stamina drops 40 -> 20 (cost paid AT LANDING, R-D1); t13 the ordinary
+## BLOCK — P2 drops 120 -> 117 (10% of 120 = 12.0, x 0.25), P1 mana 0 -> 12 (a blocked
+## hit is CONFIRMED and pays full flat mana, R-D4); t24 (final, hashed) 117 HP / 12
+## mana / P2 stamina 30.0 MID-REGEN (regen resumes only after the second block span
+## releases at t15) — non-full HP, non-zero mana, and a stamina value that encodes the
+## deflect spend AND the regen.
+func test_golden_sequence_exercises_block_and_deflect() -> void:
 	var ms := _make_match()
 	var hp_readings: Array[float] = []
 	var mana_readings: Array[float] = []
+	var p2_stamina_readings: Array[float] = []
 	_play_sequence(ms, func(_t: int) -> void:
 		hp_readings.append(ms.p2.hero.get_hp())
-		mana_readings.append(ms.p1.mana.get_current()))
-	assert_eq(hp_readings[4 - 1], 120.0, "t4: hit not yet fed — P2 at full HP")
+		mana_readings.append(ms.p1.mana.get_current())
+		p2_stamina_readings.append(ms.p2.stamina.get_current()))
+	assert_eq(hp_readings[4 - 1], 120.0, "t4: fact not yet fed — P2 at full HP")
 	assert_eq(mana_readings[4 - 1], 0.0, "t4: P1 mana still empty (flywheel starts empty)")
-	assert_eq(hp_readings[5 - 1], 108.0, "t5: confirmed hit — 10% of P2's 120 max HP = 12.0 chip")
-	assert_eq(mana_readings[5 - 1], 12.0, "t5: melee_hit_mana accrues on the SAME tick, step 5")
-	assert_eq(hp_readings[TICKS - 1], 108.0, "t24: NON-FULL HP on record (no HP regen exists)")
+	assert_eq(hp_readings[5 - 1], 120.0, "t5: DEFLECT on the grace tick — fully negated, no damage")
+	assert_eq(mana_readings[5 - 1], 0.0, "t5: a deflected contact generates NO mana (R-D4)")
+	assert_eq(p2_stamina_readings[5 - 1], 20.0, "t5: deflect cost 20 paid AT LANDING (40 -> 20)")
+	assert_eq(hp_readings[13 - 1], 117.0, "t13: ordinary BLOCK — 12.0 chip x 0.25 = 3.0")
+	assert_eq(mana_readings[13 - 1], 12.0, "t13: a blocked hit is CONFIRMED — full flat mana")
+	assert_eq(hp_readings[TICKS - 1], 117.0, "t24: NON-FULL HP on record (no HP regen exists)")
 	assert_eq(mana_readings[TICKS - 1], 12.0, "t24: NON-ZERO mana on record (no E1 mana sink)")
+	assert_eq(p2_stamina_readings[TICKS - 1], 30.0,
+		"t24: P2 MID-REGEN (20 + regen t15-t24) — the hash encodes the spend and the regen")
 
 
 func test_canonical_hash_ignores_key_insertion_order() -> void:
@@ -204,15 +240,22 @@ func _play_sequence(ms: MatchState, after_tick := Callable()) -> void:
 	for t in range(1, TICKS + 1):
 		var pair: Array = MOVES[(t - 1) % 6]
 		var i1 := _intent(pair[0], P1_PRESS.get(t, []), [])
-		var held2: Array = [&"block"] if t <= P2_BLOCK_HELD_THROUGH else []
+		var held2: Array = [&"block"] if _block_held(t) else []
 		var i2 := _intent(pair[1], P2_PRESS.get(t, []), held2)
 		for fact: Array in CONTACTS.get(t, []):
-			ms.push_contact(fact[0], fact[1], fact[2])
+			ms.push_contact(fact[0], fact[1], fact[2], fact[3])
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()
 		if after_tick.is_valid():
 			after_tick.call(t)
+
+
+static func _block_held(t: int) -> bool:
+	for r: Array in P2_BLOCK_HELD:
+		if t >= int(r[0]) and t <= int(r[1]):
+			return true
+	return false
 
 
 ## A just-pressed key is also held that tick (matches KeyboardController semantics).

@@ -10,9 +10,13 @@ extends TestCase
 ## consequence on deflect, decision-log Session 2026-07-22) is resolved — no E1 code path
 ## ever starts the stun window, so a zero there is inert, not degenerate.
 ##
-## Story 1-4 (D7) adds the NON-DURATION stamina-economy class below, with two exemptions:
-## EXEMPT: deflect_stamina_cost — authored data with no consumer until 1-8 (stun_seconds precedent).
+## Story 1-4 (D7) adds the NON-DURATION stamina-economy class below, with one exemption:
 ## EXEMPT: stamina_regen_delay_seconds — 0 is legitimate tuning (no delay), not a defect.
+## Story 1-8 (R-N6) LIFTS the deflect_stamina_cost exemption — the field gained its
+## consumer, and a free deflect unguards the economy (roll precedent). It also adds the
+## defense pair: block_damage_multiplier bounded 0 < m < 1 (0.0 = free total negation
+## that obsoletes deflect; >= 1.0 = a no-op or self-harm — defects by construction, not
+## tuning) and block_facing_arc_degrees bounded > 0 and <= 360.
 ##
 ## Story 1-5 (B4) adds the melee-hit economy pair:
 ## melee_hit_mana must be authored > 0 — a zero faucet is a dead flywheel; the
@@ -56,8 +60,8 @@ func test_authored_chain_length_is_at_least_one() -> void:
 
 
 ## ---- Non-duration assertion class (story 1-4, D7) — kept separate from the duration ----
-## ---- block above; exemptions (deflect_stamina_cost, stamina_regen_delay_seconds) in ----
-## ---- the file header. ------------------------------------------------------------------
+## ---- block above; the one remaining exemption (stamina_regen_delay_seconds) in the -----
+## ---- file header. ----------------------------------------------------------------------
 
 func test_authored_stamina_economy_values_are_positive() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
@@ -81,6 +85,21 @@ func test_authored_melee_hit_mana_is_positive() -> void:
 		return
 	assert_true(config.melee_hit_mana > 0.0,
 		"melee_hit_mana must be authored > 0 (a zero faucet is a dead flywheel — the flag is the off-switch)")
+
+
+## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
+
+func test_authored_defense_values_are_sane() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.deflect_stamina_cost > 0.0,
+		"deflect_stamina_cost must be authored > 0 (exemption LIFTED at 1-8 — a free deflect unguards the economy)")
+	assert_true(config.block_damage_multiplier > 0.0 and config.block_damage_multiplier < 1.0,
+		"block_damage_multiplier must be authored in (0, 1) — 0.0 obsoletes deflect, >= 1.0 makes block a no-op or self-harm")
+	assert_true(config.block_facing_arc_degrees > 0.0 and config.block_facing_arc_degrees <= 360.0,
+		"block_facing_arc_degrees must be authored in (0, 360] — the facing gate needs a real arc")
 
 
 func test_authored_attack_move_speed_multiplier_is_non_negative() -> void:

@@ -150,7 +150,17 @@ func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroA
 		var target_slot := _slot_of(owner_actor)
 		if target_slot == -1:
 			continue  # not a hero hurtbox; nothing else carries the hurtbox layer in E1
-		_match_state.push_contact(attacker_slot, target_slot, attack_index)
+		# Story 1-8 (R-B3): the fourth fact field — world-space planar direction from the
+		# TARGET to the ATTACKER, FROM POSITIONS ONLY. The runner reports the spatial
+		# fact; it never reads HeroState.facing and never computes a relative angle —
+		# the arc comparison is state policy (step 4). Degenerate co-location has no
+		# direction — dropped at gather (fact SELECTION, like the identity filter above).
+		var target_actor := owner_actor as Node3D
+		var to_attacker := actor.global_position - target_actor.global_position
+		var dir := Vector2(to_attacker.x, to_attacker.z)
+		if dir.is_zero_approx():
+			continue
+		_match_state.push_contact(attacker_slot, target_slot, attack_index, dir.normalized())
 
 
 func _slot_of(actor: Node) -> int:

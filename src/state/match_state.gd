@@ -21,6 +21,13 @@ signal round_ended(loser_index: int)
 ## (match_runner.connect_hit_landed) and never hold a MatchState handle.
 signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float)
 
+## Story 1-8 (R-D4): MatchState-owned two-player event (the hit_landed precedent — a
+## deflect has an attacker AND a target). Queued in step 4 when a contact resolves as a
+## DEFLECT (fully negated: no damage, no hit_landed, no mana), drained by the runner
+## after advance() (D5). NO runner connect seam in 1-8 — the FIRST consumer (1-10
+## CombatCues) inherits the seam obligation, the action_rejected precedent.
+signal deflect_landed(attacker_slot: int, target_slot: int)
+
 var p1: PlayerState
 var p2: PlayerState
 var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
@@ -149,23 +156,31 @@ func inject_feature_flags(value: FeatureFlags) -> void:
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
 ## through this same call, never a second path. Plain recordable data (X5): attacker
-## slot, target slot, and the attacker's HeroState.attack_index at gather time. Queued
-## here, drained in advance() step 4. Headless tests feed synthetic facts through this
-## API. A malformed fact is a programming error, ENFORCED at the seam (review R1 —
-## Invariant.check, a plain static class, no autoload): slots must be 0 or 1, and a
-## self-contact is malformed in 1v1 (operator decision; 1-7's gate revisits if real
-## gathering ever needs otherwise).
-func push_contact(attacker_slot: int, target_slot: int, attack_index: int) -> void:
+## slot, target slot, the attacker's HeroState.attack_index at gather time, and (story
+## 1-8, R-B3 — the FOUR-field fact, superseding the original three-int shape) the
+## world-space planar direction from the TARGET to the ATTACKER, computed by the runner
+## FROM POSITIONS ONLY. The runner reports the spatial fact; state alone compares it
+## against the target's facing (the arc gate is step-4 policy). Queued here, drained in
+## advance() step 4. Headless tests feed synthetic facts through this API. A malformed
+## fact is a programming error, ENFORCED at the seam (review R1 — Invariant.check, a
+## plain static class, no autoload): slots must be 0 or 1, a self-contact is malformed
+## in 1v1 (operator decision; 1-7's gate revisits if real gathering ever needs
+## otherwise), and a zero direction is directionless — no spatial fact.
+func push_contact(attacker_slot: int, target_slot: int, attack_index: int,
+		target_to_attacker: Vector2) -> void:
 	Invariant.check(attacker_slot == 0 or attacker_slot == 1,
 		"contact attacker_slot must be 0 or 1, got %d" % attacker_slot)
 	Invariant.check(target_slot == 0 or target_slot == 1,
 		"contact target_slot must be 0 or 1, got %d" % target_slot)
 	Invariant.check(attacker_slot != target_slot,
 		"self-contact fact is malformed in 1v1 (attacker == target == %d)" % attacker_slot)
+	Invariant.check(not target_to_attacker.is_zero_approx(),
+		"contact target_to_attacker direction must be non-zero (no spatial fact)")
 	_contact_queue.append({
 		"attacker": attacker_slot,
 		"target": target_slot,
 		"attack_index": attack_index,
+		"dir": target_to_attacker,
 	})
 
 
@@ -260,12 +275,14 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 			else:
 				hero.enter_attack(balance_ticks.attack_windup_ticks)
 		HeroState.ActionState.ROLLING:
-			# THE one stamina deduction path (D4, story 1-4) — roll only in E1: basic
+			# The step-3 policy seat of the single deduction MECHANISM (StaminaPool.spend,
+			# D4/story 1-4; R-D1 reconciliation) — roll is its only step-3 consumer: basic
 			# attack is FREE by GDD design (gdd.md:139/:319 — it is the 1-5 mana faucet),
 			# and BLOCKING entry is free (block costs TIME via the D6 regen suppression).
-			# Deflect joins this path in 1-8. Cost and delay are read inline at the moment
-			# of the transition (CONSTRAINT C). Insufficient stamina is a PRECONDITION
-			# (D5): the edge rejects and falls through per INPUT_PRIORITY, and the queued
+			# Deflect's policy seat is step 4 — spend at deflect LANDING, never at entry
+			# (story 1-8, R-D1). Cost and delay are read inline at the moment of the
+			# transition (CONSTRAINT C). Insufficient stamina is a PRECONDITION (D5): the
+			# edge rejects and falls through per INPUT_PRIORITY, and the queued
 			# action_rejected keeps the loss legible even if a lower-priority press fires.
 			if not player.stamina.spend(
 					balance.roll_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
@@ -273,7 +290,15 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 				return false
 			hero.enter_roll(balance_ticks.roll_duration_ticks, balance_ticks.roll_iframe_ticks)
 		HeroState.ActionState.BLOCKING:
-			hero.enter_block(balance_ticks.deflect_window_ticks)
+			# Story 1-8 (R-D1): affordability PRECONDITION only — no spend, no regen-delay
+			# restart at entry; the spend happens at deflect LANDING (step 4). Unaffordable
+			# = DEGRADE, not the 1-4 fallthrough: the block edge still fires as a plain
+			# block, only the window is denied, and the queued rejection names "deflect"
+			# because that is the thing denied. Cost read inline (CONSTRAINT C).
+			var can_deflect := player.stamina.get_current() >= balance.deflect_stamina_cost
+			hero.enter_block(balance_ticks.deflect_window_ticks, can_deflect)
+			if not can_deflect:
+				hero.reject_action(&"deflect", &"insufficient_stamina")
 	return true
 
 
@@ -282,12 +307,20 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 ## damage, no dedupe registration, no confirmed hit, so no step-5 mana; closes the
 ## corpse-mana-farming defect found at the 1-7 gate), then the attacker's dedupe decides
 ## acceptance (live record for the fact's attack_index + target not already hit this
-## swing — stale, unknown, and duplicate facts are DROPPED), then damage =
-## attack_damage_percent_of_max_hp / 100 x the TARGET's max HP, both read inline at
-## resolution (CONSTRAINT C). A confirmed hit queues the existing hp_changed plus
-## hit_landed (story 1-7 — the ONLY step-4 delta of that story). Returns the attacker
-## slots of confirmed hits, in confirmation order, for step 5's mana seat. Pre-injection
-## guard mirrors _resolve_actions: without balance the queue still drains (facts are
+## swing — stale, unknown, and duplicate facts are DROPPED). Story 1-8 (R-D4): dedupe
+## registration happens for EVERY outcome — one resolution per swing per target, whether
+## it lands full, blocked, or deflected; a resolved swing's later facts cannot
+## re-resolve. Outcome ladder for an accepted fact (all balance reads inline,
+## CONSTRAINT C): a BLOCKING target facing the attacker (the arc gate, R-D2/R-D3)
+## either DEFLECTS — window open per the +1 grace read (R-N2) AND the deflect cost
+## spends at LANDING (R-D1; a failed spend, the R-N7 multi-deflect edge, degrades this
+## contact to a block) — fully negated: no damage, no hit_landed, NO step-5 mana, only
+## the queued deflect_landed; or BLOCKS — damage x block_damage_multiplier, still a
+## CONFIRMED hit (reduced hit_landed + full step-5 mana — block deliberately does not
+## touch the attacker's economy in E1). Not facing (or not blocking) = full damage
+## regardless of the window — no parry from behind. Returns the attacker slots of
+## confirmed hits, in confirmation order, for step 5's mana seat. Pre-injection guard
+## mirrors _resolve_actions: without balance the queue still drains (facts are
 ## per-tick, never carried) but nothing resolves.
 func _resolve_contacts() -> Array[int]:
 	var confirmed: Array[int] = []
@@ -304,12 +337,31 @@ func _resolve_contacts() -> Array[int]:
 		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"])):
 			continue
 		var damage := balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
+		if target.hero.action_state == HeroState.ActionState.BLOCKING \
+				and _is_facing(target.hero, fact["dir"]):
+			if target.hero.is_deflect_window_open() and target.stamina.spend(
+					balance.deflect_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
+				_queue.push(deflect_landed.emit.bind(int(fact["attacker"]), int(fact["target"])))
+				continue
+			damage *= balance.block_damage_multiplier
 		target.hero.take_damage(damage)
 		_queue.push(hit_landed.emit.bind(
 			int(fact["attacker"]), int(fact["target"]), damage, target.hero.get_hp()))
 		confirmed.append(int(fact["attacker"]))
 	_contact_queue.clear()
 	return confirmed
+
+
+## Story 1-8 (R-D2/R-D3): the facing gate — pure state policy over the runner-reported
+## direction fact. True iff the target-to-attacker direction lies within +/- half the
+## authored arc of the target's world-space facing (angle_to is magnitude-independent,
+## so neither vector needs normalizing; the arc is read inline, CONSTRAINT C). Exact
+## float comparison, deliberately no epsilon: a direction at EXACTLY arc/2 lands on
+## float rounding, which is fine — real directions are continuous, and the guarded
+## behavior is both sides OF the arc, not the measure-zero boundary ray.
+func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
+	return absf(hero.facing.angle_to(target_to_attacker)) \
+			<= deg_to_rad(balance.block_facing_arc_degrees * 0.5)
 
 
 ## Step-5 melee-hit mana (story 1-5) — THE one mana-generation path (DEBT D resolved:

@@ -99,7 +99,7 @@ func test_is_hitbox_active_exactly_on_active_window_ticks() -> void:
 func test_confirmed_hit_damages_target_and_generates_attacker_mana() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)          # active t4-7
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 5 drains the fact in step 4
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "damage = 6% of the TARGET's 100 max HP")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "melee_hit_mana accrues to the ATTACKER (flag ON)")
@@ -110,9 +110,9 @@ func test_confirmed_hit_damages_target_and_generates_attacker_mana() -> void:
 func test_second_contact_same_swing_same_target_damages_once() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 5: confirmed
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 6: same swing, same target -> dropped
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "one swing damages a given target at most once")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "mana accrues once per CONFIRMED hit — dupe generates nothing")
@@ -121,14 +121,14 @@ func test_second_contact_same_swing_same_target_damages_once() -> void:
 func test_chained_swing_is_a_new_record_and_hits_again() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 5: swing 0 confirmed
 	for t in range(6, 9):
 		_advance(ms)                            # ticks 6-8: through active close, into recovery
 	_advance(ms, _intent([&"attack"]))          # tick 9: chain -> swing 1 (active t12-15)
 	for t in range(10, 13):
 		_advance(ms)                            # ticks 10-12: swing 1 windup, active starts t12
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 13: swing 1 confirmed
 	assert_eq(ms.p1.hero.attack_index, 1, "chain claimed a new monotonic attack index")
 	assert_eq(ms.p2.hero.get_hp(), 88.0, "a chained swing is a NEW record — same target hit again")
@@ -140,7 +140,7 @@ func test_chained_swing_is_a_new_record_and_hits_again() -> void:
 func test_fact_from_last_active_tick_accepted_one_tick_after_close() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 7)          # t7 = LAST active tick (window closes in t8 step 2)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 8: F1 lag — record in its grace tick
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "last-active-tick fact, arriving one tick later, is ACCEPTED")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "grace-tick confirmation still generates mana")
@@ -149,7 +149,7 @@ func test_fact_from_last_active_tick_accepted_one_tick_after_close() -> void:
 func test_fact_after_dedupe_record_expired_is_dropped() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 8)          # t8 consumed the grace tick
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 9: record erased in step 2 -> dropped in step 4
 	assert_eq(ms.p2.hero.get_hp(), 100.0, "fact older than the 1-tick grace is DROPPED — no damage")
 	assert_eq(ms.p1.mana.get_current(), 0.0, "dropped fact generates nothing")
@@ -157,7 +157,7 @@ func test_fact_after_dedupe_record_expired_is_dropped() -> void:
 
 func test_contact_with_no_swing_ever_started_is_dropped() -> void:
 	var ms := _make_match()
-	ms.push_contact(0, 1, 0)                    # no swing exists — no record for index 0
+	ms.push_contact(0, 1, 0, Vector2.DOWN)      # no swing exists — no record for index 0
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 100.0, "unknown attack index -> dropped, no crash")
 
@@ -167,7 +167,7 @@ func test_contact_with_no_swing_ever_started_is_dropped() -> void:
 func test_flag_off_hit_lands_and_damages_but_mana_stays_zero() -> void:
 	var ms := _make_match(true, false)          # melee_mana_generation OFF
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "flag OFF: the hit still lands and damages (graceful degradation)")
 	assert_eq(ms.p1.mana.get_current(), 0.0, "flag OFF closes ONLY the faucet")
@@ -176,7 +176,7 @@ func test_flag_off_hit_lands_and_damages_but_mana_stays_zero() -> void:
 func test_no_flags_injected_behaves_like_flag_off() -> void:
 	var ms := _make_match(false)                # flags never injected (null)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "no flags: damage still applies")
 	assert_eq(ms.p1.mana.get_current(), 0.0, "no flags: the flag-gated faucet stays closed (inert, like the balance null guards)")
@@ -230,7 +230,7 @@ func test_authored_zero_multiplier_is_full_root_but_facing_untouched() -> void:
 func test_swing_dedupe_tracking_is_snapshotted_mid_swing() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # tick 5: hit on the books, swing mid-flight
 	var snap: Dictionary = ms.p1.hero.to_snapshot()
 	assert_true(snap.has("swing_dedupe"), "mid-swing dedupe state is snapshotted (D8)")
@@ -244,7 +244,7 @@ func test_swing_dedupe_tracking_is_snapshotted_mid_swing() -> void:
 
 func test_contacts_inert_without_apply_balance() -> void:
 	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)  # deliberately NO apply_balance
-	ms.push_contact(0, 1, 0)
+	ms.push_contact(0, 1, 0, Vector2.DOWN)
 	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 	ms.advance(intents)
 	ms.drain_signals()

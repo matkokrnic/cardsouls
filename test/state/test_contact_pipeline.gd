@@ -84,7 +84,7 @@ func _advance_until_idle(ms: MatchState) -> void:
 ## fact pushed at t4, resolved t5). Leaves: P2 DEAD at 0 HP, P1 at 8 mana, tick at 5.
 func _kill_p2(ms: MatchState) -> void:
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)  # tick 5: 100% damage -> 0 HP -> step 8: DEAD + round_ended
 
 
@@ -96,7 +96,7 @@ func test_hit_landed_queued_with_payload() -> void:
 	ms.hit_landed.connect(func(attacker: int, target: int, damage: float, target_hp: float) -> void:
 		hits.append([attacker, target, damage, target_hp]))
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	# Advance WITHOUT draining to observe the D5 queue discipline directly.
 	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 	ms.advance(intents)
@@ -112,7 +112,7 @@ func test_hit_landed_drains_after_targets_hp_changed() -> void:
 	ms.p2.hero.hp_changed.connect(func(_c: float, _m: float) -> void: order.append("hp"))
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: order.append("hit"))
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)
 	assert_eq(order, ["hp", "hit"],
 		"FIFO drain: damage queues hp_changed first, then hit_landed — consumers see HP moved before the hit event")
@@ -123,9 +123,9 @@ func test_dropped_duplicate_fact_emits_no_hit_landed() -> void:
 	var hits := {"n": 0}
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)  # tick 5: confirmed
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)  # tick 6: same swing, same target -> dedupe drops it
 	assert_eq(hits.n, 1, "hit_landed fires per CONFIRMED hit only — dropped facts emit nothing")
 
@@ -173,7 +173,7 @@ func test_facts_on_dead_target_dropped_before_resolution_no_corpse_mana() -> voi
 	for i in range(3):
 		_advance(ms)                            # through windup: active window open now
 	assert_true(ms.p1.hero.is_hitbox_active(), "swing 1 active — a live gather would push facts")
-	ms.push_contact(0, 1, ms.p1.hero.attack_index)
+	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                # fact on a DEAD target
 	assert_eq(hits.n, 1, "no hit_landed on a corpse — fact dropped BEFORE resolution")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "corpse-mana-farming CLOSED: no mana from a dead target")

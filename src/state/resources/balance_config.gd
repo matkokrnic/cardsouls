@@ -46,6 +46,11 @@ extends Resource
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0
 @export var deflect_window_seconds: float = 0.0
+## Story 1-8 (R-D2): full width of the front arc within which a BLOCKING target counts as
+## facing the attacker — the gate for BOTH block mitigation and deflect (R-D3). State
+## compares the fact's target-to-attacker direction against HeroState.facing within
+## +/- half this arc. Scalar degrees, NOT tick-domain — never on BalanceTicks.
+@export var block_facing_arc_degrees: float = 0.0
 
 @export_group("Roll")
 @export var roll_iframe_seconds: float = 0.0

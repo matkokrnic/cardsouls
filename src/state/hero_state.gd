@@ -89,7 +89,9 @@ var move_speed: float          # injected (balance .tres in E3); tunable, not ha
 
 ## The eight per-action D4 windows (story 1-3). windup/active/recovery are the phases of
 ## one attack swing; chain is the input window for ATTACKING -> ATTACKING; deflect opens at
-## BLOCKING entry (consumed in 1-8); roll_iframe/roll_duration at ROLLING entry (1-9).
+## BLOCKING entry when the deflect cost is affordable (R-D1, story 1-8) and is read by the
+## step-4 resolution with a +1 grace tick (R-N2); roll_iframe/roll_duration at ROLLING
+## entry (1-9).
 ## stun is owned and advanced but NEVER start()ed by any E1 path — see TRANSITION TABLE.
 ## Durations are always injected by MatchState from balance_ticks at start() time
 ## (CONSTRAINT C) — HeroState never sees a BalanceTicks object.
@@ -105,6 +107,15 @@ var stun := TimingWindow.new()
 var _hp: float
 var _max_hp: float
 var _queue: SignalQueue
+
+## Story 1-8 (R-N2): TRANSIENT grace marker — true only on the single tick whose step-2
+## advance closed the deflect window, so a contact that physically happened on the
+## window's last running tick and arrives one tick late (the F1 fact lag) still deflects
+## (the dedupe-grace precedent). Write-before-read within every advance(): step 2
+## recomputes it, step 4 reads it, and nothing reads it across ticks — so it is
+## deliberately EXCLUDED from to_snapshot(): no determinism/replay hole, because replay
+## recomputes it identically inside each tick before any consumer runs.
+var _deflect_closed_this_tick := false
 
 ## Story 1-5 (B7b/N2): per-swing dedupe records, keyed by attack_index. Each record is
 ## {"hit": Array[int] of target slots already damaged this swing, "grace": int}. grace
@@ -175,6 +186,14 @@ func reject_action(action: StringName, reason: StringName) -> void:
 ## for state-flagged-active hitboxes) is 1-7 scope.
 func is_hitbox_active() -> bool:
 	return active.is_running
+
+
+## Story 1-8 (R-N2): the deflect window as step-4 resolution judges it — running, OR
+## closed by this very tick's step-2 advance (+1 grace tick). DERIVED from the window
+## plus the per-tick transient; no stored deflect-consumed state exists (each deflect
+## pays per landing, R-N7 — the window is never latched shut by a hit).
+func is_deflect_window_open() -> bool:
+	return deflect.is_running or _deflect_closed_this_tick
 
 
 ## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
@@ -263,9 +282,17 @@ func enter_roll(duration_ticks: int, iframe_ticks: int) -> void:
 	roll_iframe.start(iframe_ticks)
 
 
-func enter_block(deflect_window_ticks: int) -> void:
+## Story 1-8 (R-D1): open_deflect_window carries the entry-time affordability
+## PRECONDITION result — MatchState checks (policy), this only acts. The degraded path
+## start(0)-clears the window so a still-running window from an earlier block press can
+## never arm a block the hero could not afford. Entry itself never spends (BLOCKING
+## entry is FREE — the locked 1-4 ruling).
+func enter_block(deflect_window_ticks: int, open_deflect_window: bool) -> void:
 	set_action_state(ActionState.BLOCKING)
-	deflect.start(deflect_window_ticks)
+	if open_deflect_window:
+		deflect.start(deflect_window_ticks)
+	else:
+		deflect.start(0)
 
 
 ## One swing: windup starts; successor windows are start(0)-cleared so attack_phase() can
@@ -295,11 +322,15 @@ static func _has_run(w: TimingWindow) -> bool:
 ## record into its 1-tick grace.
 func tick_timers() -> void:
 	var was_active := active.is_running
+	var deflect_was_running := deflect.is_running
 	windup.tick()
 	active.tick()
 	recovery.tick()
 	chain.tick()
 	deflect.tick()
+	# Story 1-8 (R-N2): recomputed EVERY tick — true only when THIS step-2 advance
+	# closed the window (see the field's transient/no-snapshot contract).
+	_deflect_closed_this_tick = deflect_was_running and not deflect.is_running
 	roll_iframe.tick()
 	roll_duration.tick()
 	stun.tick()
