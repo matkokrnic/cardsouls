@@ -1,6 +1,10 @@
+---
+baseline_commit: 0abd4525ba3e398c5eb0d77f2fea2e73f9025287
+---
+
 # Story 1.7b: Visible facing — mesh yaw + directional marker
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -24,16 +28,16 @@ so that aiming a ~0.9-unit melee reach stops being blind, every subsequent comba
 
 ## Tasks / Subtasks
 
-- [ ] Mesh yaw in `drive()` (AC: 1)
-  - [ ] Hoist the existing hitbox yaw computation into ONE shared value per drive call; apply it to both `Hitbox` and `Mesh` — no second `atan2`
-  - [ ] `@onready` mesh reference alongside the existing `hitbox` reference
-- [ ] Directional marker (AC: 2)
-  - [ ] Small asymmetric primitive (e.g. prism) as a child of `Mesh`, offset toward local +Z, authored directly in `hero.tscn` sub-resources — no new assets
-- [ ] Verification (AC: 3, 4, 5)
-  - [ ] Integration test: two-direction drive → mesh yaw == hitbox yaw == expected mapping of the pressed direction; root rotation identity; yaw persists after release (extend `test/integration/` — prefer extending an existing file; a NEW .gd file needs a `.uid` via editor scan before it could ever be committed)
-  - [ ] `test/integration/test_root_rotation_isolation.gd` still green
-  - [ ] State harness before AND after: 115 tests / 543 assertions green, golden hash IDENTICAL (`39564e83…5353`) — measured, never trusted
-  - [ ] Manual smoke check: run the main scene, walk each direction, confirm the marker visibly leads the body and the dummy never turns; record the observed behavior in the Dev Agent Record
+- [x] Mesh yaw in `drive()` (AC: 1)
+  - [x] Hoist the existing hitbox yaw computation into ONE shared value per drive call; apply it to both `Hitbox` and `Mesh` — no second `atan2`
+  - [x] `@onready` mesh reference alongside the existing `hitbox` reference
+- [x] Directional marker (AC: 2)
+  - [x] Small asymmetric primitive (e.g. prism) as a child of `Mesh`, offset toward local +Z, authored directly in `hero.tscn` sub-resources — no new assets
+- [x] Verification (AC: 3, 4, 5)
+  - [x] Integration test: two-direction drive → mesh yaw == hitbox yaw == expected mapping of the pressed direction; root rotation identity; yaw persists after release (extend `test/integration/` — prefer extending an existing file; a NEW .gd file needs a `.uid` via editor scan before it could ever be committed)
+  - [x] `test/integration/test_root_rotation_isolation.gd` still green
+  - [x] State harness before AND after: 115 tests / 543 assertions green, golden hash IDENTICAL (`39564e83…5353`) — measured, never trusted
+  - [x] Manual smoke check: run the main scene, walk each direction, confirm the marker visibly leads the body and the dummy never turns; record the observed behavior in the Dev Agent Record — performed by the operator at review — PASSED, see Completion Notes
 
 ## Dev Notes
 
@@ -79,13 +83,35 @@ so that aiming a ~0.9-unit melee reach stops being blind, every subsequent comba
 
 ### Agent Model Used
 
+Claude Fable 5 (claude-fable-5)
+
 ### Debug Log References
+
+- Golden measured BOTH directions (AC 3, never trusted): state harness run BEFORE any edit — 115 tests / 543 assertions PASS; measured hash `39564e83831819d4486d6216e9030535029de1298168ebeee720ab4812705353` == GOLDEN. Re-run AFTER implementation — 115/543 PASS, measured hash IDENTICAL. Measurement via a scratchpad-only SceneTree script calling `test_determinism.gd`'s own `_run()` (no duplicated sequence, never committed).
+- Editor scan for the new test's `.uid` (N3): `godot --headless --editor --quit --path .` generated exactly `test/integration/test_visible_facing.gd.uid` (`uid://bxjcjx04u8cat`); verified by `git status --porcelain` + full diff that the scan rewrote NOTHING else — `hero.tscn` diff contains only the authored marker sub-resource + node (1-7 Debug Log precedent).
+- Integration tests run INDIVIDUALLY (WSL broken, `test/run_all.sh` unavailable): all 7 PASS — new `test_visible_facing` (right press yaw 1.570796, up press yaw 3.141593, persistence after release, root identity all three phases, mesh == hitbox exactly in all), plus `test_root_rotation_isolation` (AC 1 guard, still green), `test_hero_movement`, `test_camera_relative`, `test_live_attack`, `test_debug_overlay`, `test_contact_pipeline`.
 
 ### Completion Notes List
 
+- AC 1 — single yaw source: `HeroActor.drive()` hoists the existing `atan2(hero_state.facing.x, hero_state.facing.y)` into ONE local `yaw`, assigned to both `hitbox.rotation.y` and `mesh.rotation.y`. Exactly one CODE occurrence of `atan2` in `src/` — the hoisted `var yaw :=` line in `hero.gd`; the only other textual match is its own doc comment (review R1 correction of the original "exactly one line" grep claim). The single-yaw-source contract holds. `@onready var mesh` added alongside the existing `hitbox` ref. Root never rotates — N1 respected: `Collision` and `Hurtbox` untouched.
+- AC 2 — marker: `FacingMarker` (MeshInstance3D) authored as a child of `Mesh` in `hero.tscn`, a `PrismMesh` sub-resource (0.4 × 0.3 × 0.25) rotated so the prism apex points local +Z (the hitbox-reach direction), offset (0, 0.5, 0.65) — flush against the body box front face. Sub-resource primitives only, no new assets, no import pipeline.
+- AC 3 — presentation-only, golden NONE: nothing under `src/state/`, no `project.godot` edit, no new autoload, no snapshot change. Golden measured before AND after — identical (Debug Log above).
+- AC 4 — inherited semantics, zero new logic: no mesh-side facing memory written; persistence after release is pinned by the integration test's third phase (yaw holds 3.141593 across 15 zero-input frames). Per-slot generic via `drive()`; the NullController dummy stays at initial facing by the same code path.
+- AC 5 — test pin: NEW `test/integration/test_visible_facing.gd` (existing single-scenario scripts each pin a different contract; a multi-phase two-direction scenario did not fit any without rewriting its documented purpose — the story's new-file route taken, `.uid` duty done per N3). Two real Input presses (`p1_move_right` → π/2, `p1_move_up` → π); per phase asserts mesh yaw == hitbox yaw (primary truthful-display pin), == expected mapping derived from the pressed direction under the identity basis (N2 — no HeroState handle), root basis identity; after release, yaw persists. Yaw comparison approximate and angle-aware (`angle_difference`, eps 0.001), per N2.
+- Manual smoke check: NOT claimed at the dev pass — it cannot be performed headless. Left unticked then; performed by the operator (Matko) at review — see the following note.
+- Operator playtest (2026-07-26) PASSED — the marker visibly leads the body through all eight keyboard directions; orientation persists on stop; the dummy never turns; live aim now governs damage — facing away from the dummy in range deals nothing, facing it lands hits (the exact capability this story existed to create); the marker is legible from the fixed camera. Operator note for the record: eight-way facing is a KEYBOARD limitation, not a system one — facing is continuous (world-space Vector2 through one atan2); full-360 facing arrives with analog input in story 2-2 (gamepad profiles), and the state layer already accepts analog vectors (test_analog_input_clamped_to_move_speed). No new obligation.
+- N4 respected: `test/state/test_contact_resolution.gd` untouched (out of scope by design).
+
 ### File List
+
+- `src/actors/hero/hero.gd` (modified — hoisted single `yaw` local applied to both `Hitbox` and `Mesh`; `@onready` mesh ref)
+- `src/actors/hero/hero.tscn` (modified — `PrismMesh_fmark` sub-resource + `FacingMarker` node under `Mesh`)
+- `test/integration/test_visible_facing.gd` (new — AC 5 integration pin)
+- `test/integration/test_visible_facing.gd.uid` (new — editor-scan-generated sidecar for the new test)
 
 ## Change Log
 
 - 2026-07-26: Story authored from the 1-7 close-out playtest finding (facing invisible in live play) on the 1-3c make-state-visible model; presentation-only, single-yaw-source contract, golden prediction NONE. Status: backlog.
 - 2026-07-26: Readiness gate READY (zero blocking, four advisories N1–N4 recorded above); promoted backlog -> ready-for-dev.
+- 2026-07-26: Dev pass complete (Claude Fable 5). Mesh yaw joined to the hitbox yaw via ONE hoisted value in `drive()`; `FacingMarker` prism authored under `Mesh` in `hero.tscn`; new integration pin `test_visible_facing.gd` (+`.uid`). State harness 115/543 green before and after, golden `39564e83…5353` measured IDENTICAL both directions; all 7 integration tests green individually. Manual smoke check deferred to operator at review (headless session). Status: ready-for-dev -> review.
+- 2026-07-26: Review passed — operator smoke check PASSED (marker leads the body in all eight keyboard directions, yaw persists on stop, dummy never turns, live aim governs damage); R1 cosmetic fix to the AC 1 grep claim (exactly one CODE occurrence of `atan2` in `src/`; the other textual match is its own doc comment). Status stays review until close-out.
