@@ -4,7 +4,7 @@ baseline_commit: 16ad2145688e61202f94005f7709d3985bb24268
 
 # Story 1.7: Contact pipeline — hitbox facts → damage → HP → death
 
-Status: review
+Status: done
 
 ## Story
 
