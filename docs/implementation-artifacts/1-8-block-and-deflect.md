@@ -4,7 +4,7 @@ baseline_commit: cd5a75b5c559f63d326e06c0cc285ded77f39e7e
 
 # Story 1.8: Block and Deflect
 
-Status: review
+Status: done
 
 ## Story
 
@@ -126,3 +126,4 @@ Claude Fable 5 (claude-fable-5)
 - 2026-07-26: Readiness gate NOT READY (B1-B5); operator rulings R-D1..R-D7 + R-N2 + R-B3/R-B5 pins applied; story rewritten; Status backlog -> ready-for-dev.
 - 2026-07-26: Dev pass complete — mechanics, tests (130/600 + 7 integration), golden re-baselined `39564e83...` -> `298c40f6...` (one re-baseline, two named causes, step-2 prediction confirmed empirically); smoke check and close-out docs await operator review; Status ready-for-dev -> review.
 - 2026-07-26: Operator smoke check PASSED (temporary KEYBOARD_P2 flip, reverted); parry-visibility finding recorded for 1-10; review approved.
+- 2026-07-26: Status review -> done (board promoted; close-out follows in the decision log).
