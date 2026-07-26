@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-07-25
+# last_updated: 2026-07-26
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-07-25
+last_updated: 2026-07-26
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -46,6 +46,7 @@ development_status:
   1-5-basic-attack-chain: done
   1-6-training-dummy-null-controller: done
   1-7-contact-pipeline-damage-hp-death: done
+  1-7b-visible-facing: ready-for-dev
   1-8-block-and-deflect: backlog
   1-9-roll-with-iframes: backlog
   1-10-telegraph-structure-combat-cues: backlog

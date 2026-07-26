@@ -329,3 +329,15 @@ Readiness gate on `1-7-contact-pipeline-damage-hp-death.md` (authored 2026-07-22
 **Docs.** The collision layer/mask convention is now in `project-context.md` (93ec2a9). One sentence in it is a CONVENTION, not a description, and binds future stories: "The next story that needs a layer starts at layer 4 and names it here."
 
 **Pointer.** The X5 contact-fact recording obligation remains RE-HOMED (gate D-4) to the story that lands `IntentRecorder`, which takes it together with DEBT B's reload events as ONE stream contract.
+
+---
+
+## Session 2026-07-26 -- Story 1-7b authored + readiness gate
+
+**Mandate.** The 1-7 close-out playtest finding (previous session): facing is INVISIBLE in live play -- the hero is a symmetric box, the root never rotates (DECISION A), nothing rotates the `Mesh` child, and the only yawed node (the Hitbox) does not render. Every combat playtest is compromised until it lands, and 1-8 (block/deflect) is the most aim-sensitive story yet. Story `1-7b-visible-facing` authored on the 1-3c make-state-visible model; UNLIKE 1-3c it is NOT throwaway -- DECISION A already names the child mesh as the permanent home for body rotation; only the marker geometry is placeholder.
+
+**Operator pins (authored into the story as ACs, not re-derivable).** (1) SINGLE YAW SOURCE: the mesh uses the exact facing-to-yaw mapping the Hitbox already uses in `HeroActor.drive()` -- one computation, two assignments, never a second atan2; the visible mesh is the truthful display of hitbox yaw and cannot diverge from it. (2) A mandatory ASYMMETRIC MARKER as a child of the `Mesh` node (a rotated symmetric box is still invisible), authored directly in `hero.tscn`, no new assets. (3) PRESENTATION-ONLY with golden prediction NONE -- hash measured both directions, must be identical, never re-baselined; no `src/state/`, snapshot, Input Map, `project.godot`, or autoload changes. (4) DECISION A holds: the root never rotates; `test_root_rotation_isolation.gd` stays green; root rotation stays deferred DECISION B.
+
+**Readiness gate (same session, report-only).** Verdict **READY** -- zero blocking findings, four advisories (N1 do not rotate Collision/Hurtbox; N2 integration test derives expected yaw from the pressed direction under the identity basis, mesh-yaw == hitbox-yaw is the primary pin; N3 .uid via editor scan for any new test file, verify the scan leaves `hero.tscn` alone; N4 below). All four story assumptions verified against `src/` by content; baseline measured live at gate time: 115 state tests / 543 assertions PASS, golden `39564e83...5353` confirmed. Promoted backlog -> ready-for-dev.
+
+**N4 -- comment-hygiene queue entry.** `test/state/test_contact_resolution.gd` carries a stale pre-R1 comment ("facing updates from raw intent") -- only true under an identity basis since the world-space facing contract (1-7 review R1). The assertion is valid (the test runs at identity); the wording is stale. Queued for a future comment-hygiene pass; deliberately NOT touched in 1-7b (its fence keeps the state harness untouched).
