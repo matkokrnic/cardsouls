@@ -4,7 +4,7 @@ baseline_commit: 0abd4525ba3e398c5eb0d77f2fea2e73f9025287
 
 # Story 1.7b: Visible facing — mesh yaw + directional marker
 
-Status: review
+Status: done
 
 ## Story
 
@@ -115,3 +115,4 @@ Claude Fable 5 (claude-fable-5)
 - 2026-07-26: Readiness gate READY (zero blocking, four advisories N1–N4 recorded above); promoted backlog -> ready-for-dev.
 - 2026-07-26: Dev pass complete (Claude Fable 5). Mesh yaw joined to the hitbox yaw via ONE hoisted value in `drive()`; `FacingMarker` prism authored under `Mesh` in `hero.tscn`; new integration pin `test_visible_facing.gd` (+`.uid`). State harness 115/543 green before and after, golden `39564e83…5353` measured IDENTICAL both directions; all 7 integration tests green individually. Manual smoke check deferred to operator at review (headless session). Status: ready-for-dev -> review.
 - 2026-07-26: Review passed — operator smoke check PASSED (marker leads the body in all eight keyboard directions, yaw persists on stop, dummy never turns, live aim governs damage); R1 cosmetic fix to the AC 1 grep claim (exactly one CODE occurrence of `atan2` in `src/`; the other textual match is its own doc comment). Status stays review until close-out.
+- 2026-07-26: Close-out — promoted to done on the board (sprint-status.yaml) and in this header TOGETHER (1-7 shape). Status: review -> done.
