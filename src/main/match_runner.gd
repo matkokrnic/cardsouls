@@ -84,6 +84,20 @@ func _ready() -> void:
 	connect_hero_action_state_changed(1, overlay.on_hero_transition.bind(1))
 	# Story 1-7 (AC 3): the overlay is hit_landed's FIRST consumer — still throwaway.
 	connect_hit_landed(overlay.on_hit_landed)
+	# Story 1-10 (AC 3/4): each hero's telegraph controller — the FIRST consumer of the
+	# two seams landed below (connect_hero_action_rejected, connect_deflect_landed) and a
+	# parallel consumer of the existing two. Signal payloads only, never a state handle;
+	# match-level payloads (hit/deflect/round end) get this hero's slot BOUND at wiring,
+	# so the controller itself carries no identity. EventBus.round_ended is the one
+	# non-seam channel (global, ownerless — D5).
+	for slot: int in 2:
+		var actor: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		var cues: TelegraphController = actor.telegraph_controller
+		connect_hero_action_state_changed(slot, cues.on_action_state_changed)
+		connect_hero_action_rejected(slot, cues.on_action_rejected)
+		connect_hit_landed(cues.on_hit_landed.bind(slot))
+		connect_deflect_landed(cues.on_deflect_landed.bind(slot))
+		EventBus.round_ended.connect(cues.on_round_ended.bind(slot))
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a
@@ -121,6 +135,24 @@ func connect_hero_action_state_changed(slot: int, callback: Callable) -> void:
 ## target_hp — the target's remaining HP after the damage).
 func connect_hit_landed(callback: Callable) -> void:
 	_match_state.hit_landed.connect(callback)
+
+
+## Read-only subscription seam (story 1-10, AC 3 — retires the 1-4 gate seam
+## obligation): per-slot wrap of the HeroState-owned action_rejected, mirroring
+## connect_hero_action_state_changed including the slot guard. Payload:
+## (action, reason). slot: 0 = P1, 1 = P2.
+func connect_hero_action_rejected(slot: int, callback: Callable) -> void:
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.hero.action_rejected.connect(callback)
+
+
+## Read-only subscription seam (story 1-10, AC 3 — retires the 1-8 R-D4 seam
+## obligation): match-level wrap of the MatchState-owned deflect_landed, mirroring
+## connect_hit_landed (attacker AND target ride the payload, so no slot argument).
+## Payload: (attacker_slot, target_slot).
+func connect_deflect_landed(callback: Callable) -> void:
+	_match_state.deflect_landed.connect(callback)
 
 
 ## Story 1-7 (AC 4.3): MatchState.round_ended -> EventBus.round_ended. Runner-owned

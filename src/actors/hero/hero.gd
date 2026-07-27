@@ -17,6 +17,10 @@ extends CharacterBody3D
 ## display can never diverge from where the hitbox aims.
 @onready var mesh: MeshInstance3D = $Mesh
 
+## Story 1-10: the per-hero D7 cues layer. Exposed so the RUNNER can wire its
+## subscriptions through the connect seams at match start; nothing else touches it.
+@onready var telegraph_controller: TelegraphController = $TelegraphController
+
 
 func drive(hero_state: HeroState, _delta: float) -> void:
 	velocity = hero_state.velocity  # world velocity decided by advance(); never the raw intent

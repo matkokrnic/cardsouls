@@ -2,6 +2,17 @@
 
 [ext_resource type="Script" path="res://src/actors/hero/hero.gd" id="1_vde01"]
 [ext_resource type="Script" path="res://src/actors/hero/camera_rig.gd" id="2_camrg"]
+[ext_resource type="Script" path="res://src/actors/hero/telegraph_controller.gd" id="3_tgctl"]
+[ext_resource type="Resource" path="res://data/telegraphs/attack.tres" id="4_tpatk"]
+[ext_resource type="Resource" path="res://data/telegraphs/block.tres" id="5_tpblk"]
+[ext_resource type="Resource" path="res://data/telegraphs/roll.tres" id="6_tprol"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_attack.wav" id="7_watk"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_block.wav" id="8_wblk"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_roll.wav" id="9_wrol"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_deflect.wav" id="10_wdef"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_hit.wav" id="11_whit"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_reject.wav" id="12_wrej"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_round_end.wav" id="13_wend"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_qp0e8"]
 size = Vector3(1, 2, 1)
@@ -14,6 +25,26 @@ size = Vector3(1, 2, 1)
 
 [sub_resource type="PrismMesh" id="PrismMesh_fmark"]
 size = Vector3(0.4, 0.3, 0.25)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tgcone"]
+top_radius = 0.0
+bottom_radius = 0.25
+height = 0.4
+
+[sub_resource type="BoxMesh" id="BoxMesh_tgshld"]
+size = Vector3(0.5, 0.35, 0.08)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tgdisc"]
+top_radius = 0.8
+bottom_radius = 0.8
+height = 0.05
+
+[sub_resource type="SphereMesh" id="SphereMesh_tgsprk"]
+radius = 0.18
+height = 0.36
+
+[sub_resource type="BoxMesh" id="BoxMesh_tgflsh"]
+size = Vector3(1.15, 2.15, 1.15)
 
 [node name="HeroActor" type="CharacterBody3D" unique_id=1317219649]
 script = ExtResource("1_vde01")
@@ -52,3 +83,64 @@ shape = SubResource("BoxShape3D_qp0e8")
 script = ExtResource("2_camrg")
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=1834027465]
+
+[node name="TelegraphController" type="Node3D" parent="."]
+script = ExtResource("3_tgctl")
+attack_profile = ExtResource("4_tpatk")
+block_profile = ExtResource("5_tpblk")
+roll_profile = ExtResource("6_tprol")
+editor_description = "D7 cues layer (story 1-10). READ-ONLY consumer of the queued state signals, wired by the runner through the connect seams - signal payloads only, never a state handle, never a mutator call. AudioStreamPlayer children route to the CombatCues bus; telegraph shapes/spark/flash are in-scene primitives (FacingMarker precedent - no import pipeline for meshes). Shapes are root-relative overhead/underfoot markers ON PURPOSE: nothing here yaws, so the 1-7b single-yaw-source contract holds (no second atan2). NO _physics_process (F1)."
+
+[node name="StingAttack" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("7_watk")
+bus = &"CombatCues"
+
+[node name="StingBlock" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("8_wblk")
+bus = &"CombatCues"
+
+[node name="StingRoll" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("9_wrol")
+bus = &"CombatCues"
+
+[node name="CueDeflect" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("10_wdef")
+bus = &"CombatCues"
+
+[node name="CueHit" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("11_whit")
+bus = &"CombatCues"
+
+[node name="CueReject" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("12_wrej")
+bus = &"CombatCues"
+
+[node name="CueRoundEnd" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("13_wend")
+bus = &"CombatCues"
+
+[node name="Shapes" type="Node3D" parent="TelegraphController"]
+
+[node name="AttackCone" type="MeshInstance3D" parent="TelegraphController/Shapes"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+visible = false
+mesh = SubResource("CylinderMesh_tgcone")
+
+[node name="BlockShield" type="MeshInstance3D" parent="TelegraphController/Shapes"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+visible = false
+mesh = SubResource("BoxMesh_tgshld")
+
+[node name="RollDisc" type="MeshInstance3D" parent="TelegraphController/Shapes"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.95, 0)
+visible = false
+mesh = SubResource("CylinderMesh_tgdisc")
+
+[node name="DeflectSpark" type="MeshInstance3D" parent="TelegraphController"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 0)
+visible = false
+mesh = SubResource("SphereMesh_tgsprk")
+
+[node name="HitFlash" type="MeshInstance3D" parent="TelegraphController"]
+visible = false
+mesh = SubResource("BoxMesh_tgflsh")

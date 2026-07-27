@@ -47,6 +47,48 @@ func test_state_layer_has_no_nondeterministic_source() -> void:  # INVARIANT D3(
 		"nondeterministic source in src/state/ (global RNG / Time / OS / Engine): %s" % ", ".join(offenders))
 
 
+## Story 1-10 (AC 6): the cues/ui layer is READ-ONLY (D5 — presentation subscribes,
+## never writes). Banned tokens = the state layer's public MUTATOR surface (MatchState,
+## HeroState, pool mutators) plus the handle tokens that would make any of it reachable
+## (`_match_state`, `MatchState.new`). Read accessors (get_hp, is_deflect_window_open,
+## to_snapshot, ...) and the ActionState enum stay legal — the guard is on WRITES, not on
+## reads. Generic-looking tokens (spend(, add(, heal(, ...) are kept deliberately: a
+## false positive fails loudly at review time and costs a rename; a missed mutator costs
+## the D5 direction. Same contains-on-code-lines mechanism as the F1 scan above.
+const CUES_LAYER_BANNED_TOKENS: Array[String] = [
+	# MatchState mutators + the handles that reach them
+	"advance(", "drain_signals(", "push_contact(", "apply_balance(",
+	"inject_feature_flags(", "set_camera_basis(", "MatchState.new", "_match_state",
+	# HeroState mutators / entry actions
+	"take_damage(", "heal(", "set_max_hp(", "set_action_state(", "reject_action(",
+	"enter_attack(", "chain_attack(", "enter_roll(", "enter_block(",
+	"register_swing_hit(", "tick_timers(",
+	# Pool mutators (stamina/mana/orb)
+	"spend(", "add(", "refill(", "set_maximum(", "advance_regen(", "reset_all(",
+]
+
+
+func test_cues_layer_never_calls_state_mutators() -> void:  # Story 1-10 (AC 6) / D5
+	var targets := _gd_files("res://src/ui/")
+	var controller_found := false
+	for path in _gd_files("res://src/actors/"):
+		if path.ends_with("/telegraph_controller.gd"):
+			targets.append(path)
+			controller_found = true
+	# The named file must exist — a rename would otherwise silently un-guard the layer.
+	assert_true(controller_found, "telegraph_controller.gd not found under src/actors/")
+	var offenders: Array[String] = []
+	for path in targets:
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			for token in CUES_LAYER_BANNED_TOKENS:
+				if line.contains(token):
+					offenders.append("%s:%d [%s] %s" % [path, n, token, line.strip_edges()])
+	assert_eq(offenders.size(), 0,
+		"state mutator token in the read-only cues/ui layer: %s" % ", ".join(offenders))
+
+
 func _gd_files(root: String) -> Array[String]:
 	var out: Array[String] = []
 	var dir := DirAccess.open(root)
