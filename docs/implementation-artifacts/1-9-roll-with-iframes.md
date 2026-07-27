@@ -1,51 +1,88 @@
 # Story 1.9: Roll with i-frames
 
-Status: backlog
+Status: ready-for-dev
 
 ## Story
 
 As a player,
-I want a stamina-costing roll in the camera-relative input direction whose invulnerability is state (the hurtbox stays enabled),
+I want a stamina-costing roll that displaces me in the direction I held at the moment of input and ignores contacts for exactly the authored i-frame ticks (with the hurtbox left enabled),
 so that i-frames are deterministic and headless-testable and the exact i-frame boundary is asserted on ticks.
 
 ## Acceptance Criteria
 
-1. Roll is a transition to `ROLLING` costing stamina, direction taken from the camera-relative `move_dir` at the moment of input (falling back to the hero's facing when the stick is neutral). The roll's motion is written into `HeroState.velocity` in `advance()` step 3 — the actor never applies its own displacement.
-2. Invulnerability is **state**, not a disabled node: an i-frame `TimingWindow` sets `HeroState.is_invulnerable`, and `advance()` step 4 **discards contact facts targeting an invulnerable hero. The hurtbox `Area3D` is NOT disabled** — the fact still arrives and state decides, keeping the rule headless-testable.
-3. The roll's three phases come from balance: i-frames (a subset of the roll), roll duration, and recovery during which no new action is accepted. The i-frame window may open on a later tick than the roll itself; both windows are independent so the relationship is tunable.
-4. The 1.3 cancellability table is enforced: roll may cancel attack recovery, may not cancel active frames, is unavailable while `STUNNED` or below the stamina cost (with `action_rejected`).
-5. Headless tests: a contact during i-frames deals zero damage and one tick after i-frames deals full damage; roll direction resolves from `move_dir` and from facing when neutral; roll at insufficient stamina does not fire; roll during active frames is dropped. One integration test proves a roll actually displaces the actor in the intended world direction.
+1. **Fixed substrate — re-verify, never re-implement (B3 rescope).** The `ROLLING` transition, its stamina cost and rejection (`StaminaPool.spend()` at the step-3 policy seat; `action_rejected(&"roll", &"insufficient_stamina")`; cost read inline, CONSTRAINT C), and the full 1-3 cancellability table (roll cancels attack recovery; never windup/active; STUNNED and DEAD accept nothing) are FIXED SUBSTRATE from 1-3/1-4, test-pinned (`test_pin_roll_cancel_resets_chain_sequence`, `test_roll_at_cost_minus_one_rejected_with_signal`, `test_roll_at_exactly_cost_succeeds`, `test_roll_deducts_cost_at_the_transition`). This story re-verifies them and re-implements nothing. 1-9's deltas are exactly: (a) roll displacement (AC 2, 1-9/R6) and (b) the step-4 iframe drop (AC 3-4, 1-9/R1/R2/R3).
+2. **Roll displacement (1-9/R6) — the story core.** Direction is captured at ROLLING entry — the world-space, camera-rotated `move_dir`; `HeroState.facing` fallback when the stick is neutral — into a NEW snapshotted `HeroState` field. A new ROLLING branch in `_resolve_movement` overrides velocity at `roll_distance / roll_duration_seconds`: CONSTANT velocity, direction LOCKED for the whole roll, the FIRST consumer of `roll_distance`, both balance values read inline (CONSTRAINT C). No curve, no steering during the roll — future tuning stories, not this one. NAMED PLAYER-FACING BEHAVIOR CHANGE: today a rolling hero steers freely at full `move_speed` with live input; after 1-9 direction is locked and speed is roll-derived. State writes `velocity`; the actor never applies its own displacement (F1). No new balance field.
+3. **Iframe negation is a FACT DROP, pre-dedupe (1-9/R1).** An iframed contact is a fact DROP, not a resolution: step 4 drops it BEFORE dedupe registration, the same family as the existing DEAD-target drop. No damage, no `hit_landed`, no mana — and the swing keeps its chance: if the i-frames expire while the swing's active window is still open, the next gathered fact resolves normally. The ladder rule (one resolution per swing per target, R-D4) is untouched — a dropped fact never resolves. Ladder order: DEAD drop -> iframe drop (new) -> dedupe accept/register -> BLOCKING/facing (deflect -> block) -> full damage. No ladder crossing is possible: ROLLING and BLOCKING are mutually exclusive by the single `action_state` enum (1-9/R4, recorded as verified).
+4. **Derived invulnerability, judged on the window (+grace) alone (1-9/R2, 1-9/R3).** Invulnerability is DERIVED — a new `HeroState.is_iframe_open()` accessor over the EXISTING `roll_iframe` window plus a per-tick grace transient mirroring `_deflect_closed_this_tick` (recomputed in `tick_timers()`, write-before-read inside `advance()`, EXCLUDED from `to_snapshot()`). No stored `is_invulnerable`, no new snapshot field for it. The hurtbox `Area3D` is never disabled — the fact still arrives and state decides. Negation is judged on the window (+grace) ALONE, never on `state == ROLLING` (1-9/R3). Entry-edge semantics (1-9/R2, recorded): under the F1 one-tick fact lag the judged span is the physical span shifted one tick — at the ENTRY edge a contact whose physics predate the roll press by one tick is negated; intentional and player-favorable; net coverage equals the authored tick count. This EXTENDS the R-N2 precedent (which litigated only the close edge) to both edges.
+5. **Derived phases; no new data; the subset premise becomes an audit bound (1-9/R3).** The roll's phases are DERIVED from the two existing windows (the `attack_phase()` precedent): i-frames = `roll_iframe` running; recovery = `roll_duration` running AND `roll_iframe` not. No third window, no new balance field, no iframe start offset — both windows open at ROLLING entry (status quo, `enter_roll`). NEW authoring-audit bound in `test_balance_authoring.gd`: `roll_iframe` ticks <= `roll_duration` ticks (the R-N6 defect-by-construction family). Supporting invariant, now an obligation (1-9/R3): both roll windows start ONLY in `enter_roll` and no code path stops either before expiry; any future early-stop path must re-open this ruling.
+6. **No dodge cue/signal (1-9/R5).** 1-9 ships NO signal — under drop semantics there is no resolution to signal. If 1-10's combat-cues gate wants a dodge cue, it raises that itself and owns the cost of surfacing drops.
+7. **Headless tests.** The negation boundary pair under grace semantics, SAME swing (a contact resolving on the last iframe tick negates via the grace read; the first post-iframe tick's fact deals full damage); the drop-not-register pin (a post-iframe fact from the SAME swing lands — the swing kept its chance); no mana and no `hit_landed` on a negated contact; direction capture (from `move_dir`, under a non-identity camera basis, and the facing fallback on neutral); the ROLLING velocity override + direction-locked pin (mid-roll input changes neither direction nor speed); the iframe-drop-precedes-dedupe pin; mid-roll `apply_balance` (in-flight windows keep their duration — CONSTRAINT C); the AC 5 audit bound; a one-line roll-during-active-frames drop pin (completes the AC wording — the windup drop is already pinned). PLUS one integration test: real input, the actor displaces in the intended world direction.
 
 ## Tasks / Subtasks
 
-- [ ] Implement `ROLLING` transition + stamina cost; write roll motion into `HeroState.velocity` (AC: 1)
-  - [ ] Direction from camera-relative `move_dir`, facing fallback on neutral
-- [ ] Implement i-frames as `is_invulnerable` state; discard contact facts in step 4 (AC: 2)
-  - [ ] **Do NOT disable the hurtbox `Area3D`** — the fact arrives, state decides
-- [ ] Model the three independent balance-authored phases (i-frame / duration / recovery) (AC: 3)
-- [ ] Enforce the 1.3 cancellability preconditions (AC: 4)
-- [ ] Tests: exact i-frame boundary headless; direction; zero-stamina; drop during active; integration displacement (AC: 5)
+- [ ] `HeroState`: NEW snapshotted roll-direction field; `is_iframe_open()` accessor; `_roll_iframe_closed_this_tick` per-tick transient in `tick_timers()` (AC: 2, 4)
+- [ ] Step 3: capture the roll direction at ROLLING entry (camera-rotated `move_dir`; `facing` fallback on neutral); ROLLING branch in `_resolve_movement` overriding velocity at `roll_distance / roll_duration_seconds` (AC: 2)
+- [ ] Step 4: iframe drop BEFORE dedupe registration, slotted next to the DEAD-target drop (AC: 3, 4)
+- [ ] Audit bound: `roll_iframe` ticks <= `roll_duration` ticks in `test_balance_authoring.gd` (AC: 5)
+- [ ] Headless tests per AC 7 + the integration displacement test (AC: 7)
+- [ ] Golden: measure BEFORE first edit and after; author `roll_distance` in `_golden_config` (gate finding 1-9/N1); restructure deliberately (P2 attack overlapping P1's roll iframes); at most ONE re-baseline with the three named causes (see Golden prediction below)
+- [ ] Live smoke check: three-part protocol (see Live smoke check below) — **operator, after review**
+- [ ] Close-out decision-log entry: outcomes record, obligation status — **close-out commit, after review**
 
 ## Dev Notes
 
-- **DECISION (c) — roll i-frames are STATE; the hurtbox stays enabled.** Implement invulnerability as an `is_invulnerable` flag whose ticks are set by an i-frame `TimingWindow`; `advance()` step 4 discards contact facts against an invulnerable hero. Do **not** disable the hurtbox `Area3D` — the fact still arrives and state decides, which keeps the rule headless-testable and replay-safe. [Source: stories-manual-e1.md#E1.S9 item 2]
-- Roll motion is written to `HeroState.velocity`; the actor consumes it (F1 — actor moves, state decides). [Source: docs/game-architecture.md#Spatial Model, F1]
-- i-frame window is a subset of and independent from roll duration, so their relationship is tunable. [Source: stories-manual-e1.md#E1.S9 item 3]
+- **1-9/R1 mechanics.** The drop slots next to the DEAD-target drop in `_resolve_contacts()` — before `register_swing_hit`, so a dropped fact never consumes the swing. The runner re-gathers a fresh fact every tick the hitbox overlaps, so the same swing's later facts arrive on their own; the first post-iframe fact resolves normally.
+- **1-9/R2 grace.** Mirror `_deflect_closed_this_tick` exactly: a per-tick transient recomputed in every `tick_timers()`, write-before-read inside `advance()` (step 2 writes, step 4 reads, nothing reads it across ticks), excluded from `to_snapshot()` with the same replay-soundness argument (replay recomputes it identically inside each tick).
+- **1-9/R3 window-alone soundness.** The invariant that makes window-alone safe: ROLLING exits only on `roll_duration` expiry, the `rolling` table row accepts no input, and the debug reset touches neither action states (except DEAD -> IDLE) nor windows — so the audited bound `roll_iframe <= roll_duration` closes the only inversion path, and inversion becomes a config defect by construction. Window-alone (not state-AND-window) also keeps the grace tick alive when iframe close coincides with duration close — a state check would clip exactly the physically-last-tick contact the grace exists to protect.
+- **1-9/R6 numbers.** Authored: `roll_distance` 3.0 over `roll_duration_seconds` 0.5 = 6.0 u/s vs `move_speed` 5.0 — a roll outruns running; at 60 Hz, 30 ticks x 0.1 = exactly 3.0 units.
+- **Parked lunge compatibility (recorded).** The 1-7 attack-lunge finding stays parked ("when animations exist"); roll displacement is the same sanctioned family — state-layer authored displacement consumed through `velocity`, F1 intact — precedent-compatible, not a trigger.
+- **Gate finding 1-9/N1.** `_golden_config` does not author `roll_distance` (defaults 0.0): the golden restructure MUST author it, or the hash encodes a zero-speed roll and the golden guards nothing about displacement.
+- **Smoke (R-D6).** The dummy never swings; flip slot 1 to `KEYBOARD_P2` for the supervised check only; shipped default stays P2=NULL. The DEAD-slot residuals (a dead hero can walk; a corpse mid-swing can be credited damage/mana) stay ACCEPTED for supervised E1 smoke checks (1-8 AND 1-9); the fix trigger stays story 2-3.
+
+### Golden prediction (1-9/R7)
+
+Predicted to MOVE; at most ONE re-baseline; THREE separately named causes; measured in BOTH directions (hash recorded before the first edit and after); all non-golden tests proven green first.
+
+1. **Snapshot shape** — the new stored roll-direction field in `to_snapshot()` (it is read across ticks, so excluding it would be a replay hole; sufficient alone to move the hash).
+2. **Exercised path + authored value** — `_golden_config` gains `roll_distance` (currently unauthored there, defaulting 0.0 — gate finding 1-9/N1), and t17-21 velocity becomes the locked roll override instead of live-input steering (the recorded sequence has non-zero move input on roll ticks).
+3. **Deliberate restructure** — P2 gains an attack timed so its active window overlaps P1's roll iframes; one fact targeting P1 is negated during the iframes, a second fact one tick after close lands full damage, pinned by a new sequence-coverage test (the `test_golden_sequence_exercises_block_and_deflect` pattern).
+
+Dev discipline: the intermediate empirical measurement (mechanics in, OLD sequence unchanged) isolates causes 1+2 from 3; both predictions measured in both directions, never trusted. Exact boundary ticks live in dedicated non-golden tests, never in the golden.
+
+### Live smoke check (1-9/R8)
+
+The R-D6 acceptance is IN FORCE for 1-9 (recorded at the 1-8 close-out). Temporary flip of runner slot 1 to `KEYBOARD_P2` (exported array); the shipped default stays P2=NULL. Three-part protocol on the throwaway overlay's HitLabel:
+
+1. **Control** — P1 stands in P2's swing: a damage number appears (proves range and aim).
+2. **Dodge** — same position, timed roll through the swing: NO number (the negation; P1 is not blocking, so no deflect ambiguity).
+3. **Late roll** — the i-frames end inside the active window: a number appears. This part is a LIVE CHECK of the 1-9/R1 drop ruling — under register semantics a same-swing post-iframe number is impossible.
+
+Collateral hazard (known, restated): the editor save for the flip re-normalizes BOTH `src/main/main.tscn` and `project.godot`. Inspect `git diff project.godot` BEFORE reverting; revert both by full path: `git checkout -- src/main/main.tscn project.godot`.
 
 ### Project Structure Notes
 
-- `src/state/hero_state.gd` (roll transition, `is_invulnerable`, phase windows); fact discard in `src/state/match_state.gd` step 4; integration displacement test in `test/integration/`.
+- `src/state/hero_state.gd` (roll-direction field + snapshot delta, `is_iframe_open()`, grace transient), `src/state/match_state.gd` (entry-time direction capture, ROLLING branch in `_resolve_movement`, step-4 iframe drop), `test/state/` (new roll-iframe suite, audit bound, determinism restructure), `test/integration/` (displacement test). NO runner changes (gathering is untouched); NO balance schema changes.
+- NO architecture-doc edits: the amendment queue (world-space facing contract + `null_controller.gd` Directory Tree) stands untriggered; the global N4 comment-hygiene queue stays untouched.
 
 ### Project Context Rules
 
-- **State/visual separation:** invulnerability is a state fact; visuals never gate damage. [Source: docs/project-context.md#HARD RULE — State / visual separation]
-- **Integer-tick timing** for i-frames. [Source: docs/project-context.md#Deterministic timing]
+- **CONSTRAINT C:** `roll_distance`, `roll_duration_seconds` (as `roll_duration_ticks`), and the window tick counts are read inline at the moment of use; never cache the `BalanceTicks` object.
+- **State/visual separation:** invulnerability is a state fact; visuals never gate damage; the hurtbox stays enabled. [Source: docs/project-context.md#HARD RULE — State / visual separation]
+- **Integer-tick timing** for i-frames; the boundary is asserted on ticks. [Source: docs/project-context.md#Deterministic timing]
+- **D5 queued signals:** nothing new enqueues (1-9/R5 — no signal ships).
+- **Docs and code never share a commit.**
 
 ### References
 
 - [Source: stories-manual-e1.md#E1.S9]
 - [Source: gdd.md#Primary Mechanics — Roll]
 - [Source: docs/game-architecture.md#Spatial Model, F1]
+- [Source: decision-log.md#Session 2026-07-27 — Story 1-9 readiness gate (operator decisions)]
+- [Source: decision-log.md#Session 2026-07-26 — Story 1-8 readiness gate (R-D6, R-N2)]
+
+## Readiness Gate (2026-07-27)
+
+Report-only gate returned **NOT READY** — five blocking findings: B1 (AC2's stored `is_invulnerable` flag contradicted the derived-window idiom, and the negation semantics were unspecified against the R-D4 one-resolution ladder), B2 (AC3's three-balance-phase model and iframe start offset contradicted the shipped shape — no third field exists and `enter_roll` opens both windows at entry), B3 (the story presented the 1-3/1-4 substrate — ROLLING transition, stamina cost, cancellability — as new work), B4 (no golden prediction despite guaranteed snapshot-shape and exercised-path changes), B5 (no live-smoke section despite the R-D6 acceptance being in force for 1-9 by name). All resolved by operator decision (Matko): rulings 1-9/R1 (fact DROP pre-dedupe, DEAD-drop family), 1-9/R2 (+1 grace tick via per-tick transient; precedent extended to both edges), 1-9/R3 (window-alone judgment + audit bound + early-stop invariant obligation), 1-9/R4 (ladder position recorded as verified), 1-9/R5 (no signal), 1-9/R6 (displacement in scope: locked direction, constant velocity, first `roll_distance` consumer), 1-9/R7 (golden MOVES, three named causes), 1-9/R8 (three-part smoke protocol) — applied to this story 2026-07-27; promoted backlog -> ready-for-dev. Full record: decision-log.md, Session 2026-07-27 — Story 1-9 readiness gate.
 
 ## Dev Agent Record
 
@@ -56,3 +93,8 @@ so that i-frames are deterministic and headless-testable and the exact i-frame b
 ### Completion Notes List
 
 ### File List
+
+## Change Log
+
+- 2026-07-22: Story authored (Set B batch, before stories 1-3..1-8 were implemented).
+- 2026-07-27: Readiness gate NOT READY (B1-B5); operator rulings 1-9/R1..1-9/R8 applied; story rewritten; Status backlog -> ready-for-dev.
