@@ -1,6 +1,10 @@
+---
+baseline_commit: 9031f6c7a341f3b2d72d2fba2024568ad58e9d87
+---
+
 # Story 1.9: Roll with i-frames
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -20,13 +24,13 @@ so that i-frames are deterministic and headless-testable and the exact i-frame b
 
 ## Tasks / Subtasks
 
-- [ ] `HeroState`: NEW snapshotted roll-direction field; `is_iframe_open()` accessor; `_roll_iframe_closed_this_tick` per-tick transient in `tick_timers()` (AC: 2, 4)
-- [ ] Step 3: capture the roll direction at ROLLING entry (camera-rotated `move_dir`; `facing` fallback on neutral); ROLLING branch in `_resolve_movement` overriding velocity at `roll_distance / roll_duration_seconds` (AC: 2)
-- [ ] Step 4: iframe drop BEFORE dedupe registration, slotted next to the DEAD-target drop (AC: 3, 4)
-- [ ] Audit bound: `roll_iframe` ticks <= `roll_duration` ticks in `test_balance_authoring.gd` (AC: 5)
-- [ ] Headless tests per AC 7 + the integration displacement test (AC: 7)
-- [ ] Golden: measure BEFORE first edit and after; author `roll_distance` in `_golden_config` (gate finding 1-9/N1); restructure deliberately (P2 attack overlapping P1's roll iframes); at most ONE re-baseline with the three named causes (see Golden prediction below)
-- [ ] Live smoke check: three-part protocol (see Live smoke check below) — **operator, after review**
+- [x] `HeroState`: NEW snapshotted roll-direction field; `is_iframe_open()` accessor; `_roll_iframe_closed_this_tick` per-tick transient in `tick_timers()` (AC: 2, 4)
+- [x] Step 3: capture the roll direction at ROLLING entry (camera-rotated `move_dir`; `facing` fallback on neutral); ROLLING branch in `_resolve_movement` overriding velocity at `roll_distance / roll_duration_seconds` (AC: 2)
+- [x] Step 4: iframe drop BEFORE dedupe registration, slotted next to the DEAD-target drop (AC: 3, 4)
+- [x] Audit bound: `roll_iframe` ticks <= `roll_duration` ticks in `test_balance_authoring.gd` (AC: 5)
+- [x] Headless tests per AC 7 + the integration displacement test (AC: 7)
+- [x] Golden: measure BEFORE first edit and after; author `roll_distance` in `_golden_config` (gate finding 1-9/N1); restructure deliberately (P2 attack overlapping P1's roll iframes); at most ONE re-baseline with the three named causes (see Golden prediction below)
+- [x] Live smoke check: three-part protocol (see Live smoke check below) — **performed by the operator 2026-07-27**
 - [ ] Close-out decision-log entry: outcomes record, obligation status — **close-out commit, after review**
 
 ## Dev Notes
@@ -88,13 +92,40 @@ Report-only gate returned **NOT READY** — five blocking findings: B1 (AC2's st
 
 ### Agent Model Used
 
+Claude Fable 5 (claude-fable-5)
+
 ### Debug Log References
+
+- Baseline (before first edit): state harness 130 tests / 600 assertions PASS at 9031f6c; golden `298c40f65d5f3191d2d7c2eacdccdd443c49fe24b0492d66e088318ed840f23f` confirmed green.
+- Golden-protocol step-2 INTERMEDIATE measurement (mechanics A-E in + `roll_distance` authored in `_golden_config`, OLD sequence unchanged): hash moved to `3138e35bfb1af9b4d86e94b198dc86e5156c200589b15f38194d3713ff736874`, the golden the ONLY red test (140 tests / 633 assertions otherwise green).
+- Cause-2 ISOLATION run (same state, `roll_distance` authoring temporarily removed): hash IDENTICAL `3138e35b...6874` — cause 2 measured hash-neutral; the intermediate movement is cause 1 (snapshot shape) alone.
+- Post-restructure proof run: 141 tests, only `test_state_matches_golden` red with the FINAL hash `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` in its expected-vs-actual output; GOLDEN constant then updated EXACTLY ONCE.
+- Final: state harness 141 tests / 640 assertions PASS; all 8 integration tests PASS individually (7 existing + new `test_roll_displacement.gd`: dx=3.000000 dz=0.000000, mid-roll velocity (6,0,0), stopped after); editor scan produced ONLY the two new `.uid` sidecars — no `main.tscn`/`project.godot` collateral (verified via git status).
 
 ### Completion Notes List
 
+- **1-9/R6 landed as gated.** `enter_roll` gained a `direction` parameter (MatchState computes policy — the `_roll_world_direction` helper mirrors `_resolve_movement`'s clamp/identity/rotation mapping, NORMALIZED, with the world-space-facing fallback on a neutral stick; HeroState only stores). `_resolve_actions`/`_try_transition` now carry `intent`/`slot` so the ROLLING edge captures from the same press that fires it. `_resolve_movement` gained the ROLLING override branch: `roll_direction * (roll_distance / roll_duration_seconds)`, both read inline (CONSTRAINT C — pinned: a mid-roll reload changes the speed next tick while in-flight windows keep their duration). The facing update still runs during a roll (the ATTACKING-commitment precedent: velocity-only, facing tracks input). The stale "ROLL half is 1-9's" comments amended at both sites.
+- **1-9/R1/R3 landed as gated.** The iframe drop sits in `_resolve_contacts` directly after the DEAD-target drop, BEFORE `register_swing_hit`, judged via `is_iframe_open()` — window (+grace) alone, no state check. Pinned from both sides: the same swing's post-grace fact LANDS (drop-not-register / drop-precedes-dedupe), and the equality-edge config (iframe == duration) negates on the grace tick AFTER ROLLING already exited (window-alone).
+- **1-9/R2 landed WITHOUT a snapshot field.** `_roll_iframe_closed_this_tick` mirrors `_deflect_closed_this_tick` exactly: recomputed in `tick_timers()`, write-before-read inside every `advance()`, excluded from `to_snapshot()`. Boundary pinned in FACT-ARRIVAL ticks per the gate's precision requirement: close+1 arrival negates via the transient, close+2 lands full, SAME swing.
+- **Golden (1-9/R7): ONE re-baseline** `298c40f6...` -> `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2`, measured both directions, reconciled cause by cause: (1) SNAPSHOT SHAPE moved the hash as predicted (the one new `roll_direction` field; P1's t17 roll stores `(-1, 0, 0)` via the facing fallback — on the hashed record); (2) EXERCISED PATH + AUTHORED VALUE was predicted a mover but MEASURED NON-MOVER — roll velocities are per-tick transients overwritten before the hashed t24 snapshot (the 1-5 cause-(c) lesson holding again), proven by the isolation run (identical intermediate hash with and without the `roll_distance` authoring); `roll_distance` stays authored for path coverage per 1-9/N1; (3) DELIBERATE RESTRUCTURE moved the hash as predicted — P2 attacks t15 (block release and attack entry fire the same tick; active 18-21 over P1's roll iframes), the t19 arrival drops on the grace tick, the t20 arrival lands full damage (P1 120 -> 108, P2 mana 0 -> 12), pinned by `test_golden_sequence_exercises_iframe_negation`; the transitions pin widened to P2's fifth edge. Nothing moved that was not predicted.
+- **Suite:** 130 -> 141 state tests / 600 -> 640 assertions (9 new roll-iframe tests + the audit bound + the golden coverage pin); integration 7 -> 8, all green individually.
+- **Fences respected:** `match_runner.gd` untouched (gathering unchanged); no balance-schema fields; no new signals and nothing new enqueues (1-9/R5); no architecture-doc / board / decision-log edits in this pass; STUNNED guard green; DECISION A intact; `slot_controller_kinds` default untouched.
+- **Live smoke check NOT performed — awaits the operator after review** (three-part protocol in the Live smoke check section; part 3 live-checks the 1-9/R1 drop ruling). Close-out decision-log entry rides the later docs commit.
+- **Live smoke check PASSED (2026-07-27, operator; temporary KEYBOARD_P2 flip on slot 1 — reverted, never committed).** All three parts on the throwaway HitLabel: (1) CONTROL — standing in P2's swing, the damage number appeared; (2) DODGE — a timed roll through the swing produced NO number; (3) LATE ROLL — the i-frames expired inside the active window and the number appeared — the LIVE confirmation of the 1-9/R1 drop ruling (under register semantics a same-swing post-iframe number is impossible). Cleanup note: a second editor session left the flip baked into `main.tscn`; caught at the close-out chain's Step 0 baseline check and reverted by the operator by full path before anything was staged (`project.godot` was clean) — the 1-8 editor-save-collateral lesson repeated; procedural consequence recorded in the close-out decision-log entry.
+
 ### File List
+
+- `src/state/hero_state.gd` — `roll_direction` (snapshotted, the ONE 1-9 snapshot delta); `_roll_iframe_closed_this_tick` transient + `is_iframe_open()` (1-9/R2/R3); `enter_roll(duration, iframe, direction)`; `tick_timers()` recomputes the transient
+- `src/state/match_state.gd` — `intent`/`slot` threaded through `_resolve_actions`/`_try_transition`; `_roll_world_direction` capture helper (1-9/R6); ROLLING override in `_resolve_movement`; step-4 iframe drop pre-dedupe (1-9/R1/R3); comment amendments at the touched sites
+- `test/state/test_roll_iframes.gd` (+ `.uid`) — NEW: 9 tests — running-iframe drop, the fact-arrival boundary pair (grace close+1 / full close+2, same swing), window-alone equality edge, direction capture (normalized+locked / facing fallback / camera basis), mid-roll reload (CONSTRAINT C), roll-during-active drop, snapshot shape pin
+- `test/state/test_balance_authoring.gd` — `test_authored_roll_iframe_within_roll_duration` (1-9/R3 bound, compared in ticks)
+- `test/state/test_determinism.gd` — GOLDEN re-baselined with the three causes reconciled in the header; `_golden_config` authors `roll_distance` 3.0 (1-9/N1); P2 attack t15 + t19/t20 facts; `test_golden_sequence_exercises_iframe_negation`; transitions pin widened
+- `test/integration/test_roll_displacement.gd` (+ `.uid`) — NEW: full-chain displacement — neutral-stick roll via facing fallback, dx == roll_distance, straight, mid-roll velocity from state, stop after
+- `docs/implementation-artifacts/1-9-roll-with-iframes.md` — this record
 
 ## Change Log
 
 - 2026-07-22: Story authored (Set B batch, before stories 1-3..1-8 were implemented).
 - 2026-07-27: Readiness gate NOT READY (B1-B5); operator rulings 1-9/R1..1-9/R8 applied; story rewritten; Status backlog -> ready-for-dev.
+- 2026-07-27: Dev pass complete — mechanics, tests (141/640 + 8 integration), golden re-baselined `298c40f6...` -> `33817201...` (one re-baseline; three causes reconciled both directions — cause 2 measured NON-MOVER, the 1-5 cause-(c) precedent); smoke check and close-out docs await operator review; Status ready-for-dev -> review.
+- 2026-07-27: Operator smoke check PASSED (three-part protocol; part 3 confirms the 1-9/R1 drop ruling live); the flip collateral from a second editor session caught and reverted at the close-out Step 0; review approved.
