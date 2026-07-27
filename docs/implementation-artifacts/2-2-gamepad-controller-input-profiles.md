@@ -14,7 +14,7 @@ so that a gamepad drives either slot indistinguishably downstream — the equiva
 2. `gamepad_controller.gd` is the second `Controller` implementation. It reads DEVICE-FILTERED joypad state directly — `Input.get_joy_axis(device, axis)`, `Input.is_joy_button_pressed(device, button)` — inside `src/controllers/` only (D3(a) holds). Button/axis mapping and the deadzone are AUTHORED DATA in a single load-once, controller-owned profile resource (named in Dev Notes / File List) — no raw joypad constants scattered inline, no `BalanceConfig` entry. Above the deadzone, the stick vector is NORMALIZED to unit length before being assigned to `move_dir` (2-2/R5) — a partial stick deflection does not produce fractional-speed movement. It emits the identical `InputIntent` shape — the runner cannot tell it apart from keyboard.
 3. Device assignment and disconnect behaviour:
    - (a) The single dev-machine pad drives whichever slot it is assigned to. Proven live by running BOTH smoke flips (pad on slot 0, pad on slot 1 — see Live Smoke).
-   - (b) With no pad connected, the controller emits a neutral intent and the match does not crash and does not pause. This half IS headless-testable: `Input.get_connected_joypads()` is already empty in the harness.
+   - (b) With no pad connected, the controller emits a neutral intent and the match does not crash and does not pause. The NEVER-CONNECTED case (no pad present at construction) IS headless-testable: `Input.get_connected_joypads()` is already empty in the harness. The RUNTIME-DISCONNECT case (a pad vanishing mid-match after its device index was already assigned) is a different path and is NOT headless-testable — it is proven live (see Live Smoke).
    - (c) Simultaneous two-device isolation (two pads driving two slots at once) is DEFERRED VERIFICATION — unverifiable on the dev machine, which has exactly one physical pad. Recorded explicitly here, not silently dropped.
    This logic lives in the controller, never in the runner or state. Device index is derived from `Input.get_connected_joypads()` at construction.
 4. The D3 invariant holds after adding the implementation: `grep -rn "Input\." src/` matches only under `src/controllers/`, and the architecture invariant test still passes unmodified.
@@ -31,6 +31,7 @@ so that a gamepad drives either slot indistinguishably downstream — the equiva
 - [ ] Confirm the D3 grep + invariant test unchanged (AC: 4)
 - [ ] Integration test: analog-shaped intent vs. equivalent keyboard intent → byte-identical `HeroState` over N ticks (AC: 5)
 - [ ] Live smoke: pad on slot 0, then pad on slot 1 (AC: 3a) — pending operator live smoke
+- [ ] Live smoke: unplug the pad mid-match and confirm the slot goes neutral with no crash/pause, then replug and confirm control returns (AC: 3b) — pending operator live smoke
 - [ ] Record simultaneous two-device isolation as deferred verification in the Dev Agent Record (AC: 3c)
 
 ## Golden Prediction
@@ -41,10 +42,14 @@ so that a gamepad drives either slot indistinguishably downstream — the equiva
 
 `Input.*` joypad reads (`Input.get_joy_axis`, `Input.is_joy_button_pressed`) are headless-blind — `Input.get_connected_joypads()` is empty in the harness regardless of hardware — so the hardware-to-intent mapping and 360-degree stick-to-facing behavior can only be confirmed live, never by the state harness or an integration test.
 
-- **Flip 1 — pad on slot 0.** Temporary `GAMEPAD` on runner slot 0 (`slot_controller_kinds`), performed by TEXT-EDITING the line in `src/main/main.tscn` with the Godot editor CLOSED for the entire smoke (2-1/R2 procedure). Confirms the dev-machine pad drives P1: stick `move_dir` tracks the physical stick through 360 degrees, buttons map to attack/block/roll per the profile resource.
-- **Flip 2 — pad on slot 1.** Same procedure, pad reassigned to slot 1. Confirms the same pad drives P2 when assigned there — the live proof for AC3(a) that device assignment, not a hardcoded slot, decides which player the pad drives.
-- **No-pad check.** AC3(b) — neutral intent, no crash/pause with zero joypads connected — is proven by the state/integration harness (`Input.get_connected_joypads()` is already empty there); no live step needed for this half.
-- **Revert.** Text edit back per flip, or per-diff sorting; a blanket `git checkout -- src/main/main.tscn` is FORBIDDEN once the file carries this story's intentional changes (2-1/R2 rule, carried forward). `git status` + the collateral diff are re-verified immediately before any commit chain begins; no lingering Godot editor session (`Get-Process *godot*` check before Step 0).
+- **R-D6 NOT re-invoked.** Both smoke flips below run the gamepad against a NULL dummy — no killable human slot is involved. R-D6 remains SPENT (consumed at 2-1) and available to story 2-3, which genuinely needs it (permanent `KEYBOARD_P2` flip plus the DEAD-slot residuals fix).
+- **Flip 1 — pad on slot 0.** `slot_controller_kinds = Array[int]([3, 2])` — gamepad slot 0 vs. NULL dummy slot 1. Confirms the dev-machine pad drives P1: stick `move_dir` tracks the physical stick through 360 degrees, buttons map to attack/block/roll per the profile resource.
+- **Flip 2 — pad on slot 1.** `slot_controller_kinds = Array[int]([2, 3])` — NULL dummy slot 0, gamepad slot 1. Confirms the same pad drives P2 when assigned there — the live proof for AC3(a) that the device index comes from `Input.get_connected_joypads()`, NOT from the slot index.
+- **Forbidden flip.** `Array[int]([0, 3])` (keyboard P1 vs. gamepad P2) is FORBIDDEN in 2-2 — it would put a live killable human on both slots and thereby re-invoke R-D6, which the line above declines.
+- **Procedure, both flips.** TEXTUAL edit adding/editing the `slot_controller_kinds` line directly under the `Main` node's `script =` line in `src/main/main.tscn`, Godot editor CLOSED throughout; `git diff -- src/main/main.tscn` after every edit; never committed.
+- **No-pad check (never-connected).** AC3(b)'s never-connected half — neutral intent, no crash/pause with zero joypads connected at construction — is proven by the state/integration harness (`Input.get_connected_joypads()` is already empty there); no live step needed for this half.
+- **Live disconnect/reconnect.** AC3(b)'s runtime half is NOT covered by the headless case above — unplug the pad mid-match: the slot goes neutral, the match neither crashes nor pauses; replug and confirm control returns.
+- **Revert.** Text edit back per flip, or per-diff sorting; a blanket `git checkout -- src/main/main.tscn` is FORBIDDEN once the file carries this story's intentional changes. 2-2 makes no committed `main.tscn` change, so that clause does not apply here — the standing per-diff rule governs regardless. `git status` + the collateral diff are re-verified immediately before any commit chain begins; no lingering Godot editor session (`Get-Process *godot*` check before Step 0).
 - **Deferred (AC3c).** Simultaneous two-pad isolation is NOT verifiable on the dev machine (exactly one physical pad) — recorded here as an explicit gap, not silently dropped. Revisit if/when a second pad is available.
 
 ## Dev Notes
