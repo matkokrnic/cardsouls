@@ -18,12 +18,12 @@ so that combat feel and <0.5s telegraph legibility can be judged in the real hal
 
 ## Tasks / Subtasks
 
-- [ ] Restructure `main.tscn` into two `SubViewportContainer`+`SubViewport` pairs sharing one world; no gameplay node reparented (AC: 1)
-- [ ] Keep camera follow in runner step 4; no viewport/camera `_physics_process` (AC: 2)
-- [ ] Extend `test/integration/test_camera_relative.gd` to cover slot 1 independently, verifying the two-entry basis already at HEAD (AC: 3)
-- [ ] VERIFY integration-test node paths (`test/integration/test_camera_relative.gd`, `test_root_rotation_isolation.gd`, `test_hero_movement.gd`) still resolve after the scene work; under the ruled topology they should be unchanged — update only if a path actually moved, and list any touched test in the File List (AC: 2, 3)
-- [ ] Re-validate half-width framing; adjust `data/camera_config.tres` values or log a finding (AC: 4)
-- [ ] Measure frame time both viewports live; record baseline in `docs/playtest-log.md` (AC: 5)
+- [x] Restructure `main.tscn` into two `SubViewportContainer`+`SubViewport` pairs sharing one world; no gameplay node reparented (AC: 1)
+- [x] Keep camera follow in runner step 4; no viewport/camera `_physics_process` (AC: 2)
+- [x] Extend `test/integration/test_camera_relative.gd` to cover slot 1 independently, verifying the two-entry basis already at HEAD (AC: 3)
+- [x] VERIFY integration-test node paths (`test/integration/test_camera_relative.gd`, `test_root_rotation_isolation.gd`, `test_hero_movement.gd`) still resolve after the scene work; under the ruled topology they should be unchanged — update only if a path actually moved, and list any touched test in the File List (AC: 2, 3)
+- [x] Re-validate half-width framing; adjust `data/camera_config.tres` values or log a finding (AC: 4) — pending operator live smoke (visual judgment; headless cannot decide framing)
+- [x] Measure frame time both viewports live; record baseline in `docs/playtest-log.md` (AC: 5) — pending operator live smoke
 
 ## Golden Prediction
 
@@ -64,10 +64,33 @@ The spent R-D6 acceptance is RE-INVOKED for THIS story only, consumed on use —
 
 ### Agent Model Used
 
+claude-opus-4-8
+
 ### Debug Log References
+
+- Golden BEFORE first edit == golden AFTER last edit == `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` (state harness `test_determinism` green in both directions; `GOLDEN` constant in `test/state/test_determinism.gd` untouched). Prediction NONE held.
+- State harness both passes: `142 tests, 0 failed, 645 assertions` (includes F1/`test_architecture_invariants`).
+- All 8 integration tests PASS individually post-edit. Extended `test_camera_relative`: `P1 dx=-2.500002 dz=0.000000  P2 dx=2.500002 dz=0.000000 (smoke_ok=true, p1_followed=true, p2_followed=true)` — P1 follows its +90° rig yaw to world −X, P2 follows its −90° rig yaw to world +X (opposite axes → the two per-slot bases are distinct and independent).
 
 ### Completion Notes List
 
+- **Topology (ruling 2-1/R1).** No gameplay node reparented. `Sun`, `Ground`, `P1Hero`, `P2Hero` stay direct children of `Main`. Two `SubViewportContainer` (`P1View` anchored left half `0..0.5`, `P2View` right half `0.5..1.0`, both `stretch = true`) each hold a `SubViewport` hosting only a follower `Camera3D`. Each `CameraRig` stays a child of its hero (`hero.tscn` untouched) and remains the step-2 basis source. Node-path verification: `test_root_rotation_isolation.gd` and `test_hero_movement.gd` (`Main/P1Hero`, `Main/P1Hero/CameraRig`) resolve unchanged and were NOT modified.
+- **World-sharing mechanism (the declared KAKO freedom).** The two `SubViewport`s keep `own_world_3d = false` (the default), so they inherit the root window's `World3D` — the same world `Main`'s gameplay nodes register into. No world is duplicated and no `world_3d` is wired by script: the follower cameras render the shared world purely by living in `SubViewport`s that inherit it. Chosen over an explicit `world_3d` assignment because the gameplay lives in the root window's world (not inside a `SubViewport`), so inheritance is the natural, script-free fit for "render a world you do not own."
+- **Camera follow (step 4b).** The runner mirrors each rig's CHILD camera global transform (`_p1_rig_cam` / `_p2_rig_cam`, i.e. `CameraRig/Camera3D`) onto the follower — NOT the rig root's transform. The rig root sits at the hero origin; the authored `camera_config` framing (distance/height/pitch) is applied by `CameraRig.apply_config` to the child camera's LOCAL transform, so only the child camera's GLOBAL transform carries the pulled-back framing. Copying it keeps `data/camera_config.tres` the single framing source for both the rig camera and the follower — AC4 reframing stays a one-file `.tres` edit with no follower-specific values. (The literal ruling phrase "rig's global transform" is read this way so AC4 framing survives; a rig-root copy would drop it.) Follower default projection matches the rig camera's (both plain `Camera3D` defaults, fov 75).
+- **`current = true` disposition (dev-pass detail per Dev Notes).** Removed the old `current = true` override on P1's rig `Camera3D` and the now-orphaned `[editable path="P1Hero"]`. Set `current = true` on the two follower cameras instead. Rationale: the split-screen followers are now the intended render path and their containers fully occlude the root window; the rig cameras are pure basis sources, so privileging P1's rig camera as an explicit full-window root render was redundant work behind the opaque containers. Heroes are now symmetric (both plain `hero.tscn` instances). No integration test depends on the `current` flag (they read camera transforms only), and all 8 still pass.
+- **`render_target_update_mode = 4` (ALWAYS) on both `SubViewport`s.** Guarantees continuous rendering in the split (both viewports are always visible anyway, so the delta vs the WHEN_VISIBLE default is negligible) — avoids any risk of a stale/black half during the live smoke.
+- **F1 held.** No new `_physics_process` anywhere; the follow runs inside the runner's existing one. No script on any viewport/container/camera node. No new `.gd` file created.
+- **AC4 / AC5 pending operator live smoke.** `data/camera_config.tres` was NOT touched — half-width framing is a visual judgment headless cannot make. If the pulled-back framing fails at half width, that is a finding for the operator (recorded here, not in `decision-log.md`). Frame-time baseline (`docs/playtest-log.md`) is the operator's live measurement. `src/state/` and `project.godot` were NOT touched (pre-declared STOP tripwires — none tripped).
+- **Operator live smoke results (AC4/AC5 closed).** Both viewports render side by side; P1 camera-relative correct; half-width framing PASS — hero fully visible with terrain context, the pulled-back framing survives, NO `camera_config.tres` change needed; no camera jitter; sustained 60 fps through a full melee exchange with a live `KEYBOARD_P2` flip; flip applied and reverted by TEXT EDIT with the editor closed the whole time; post-revert diff verified to the intentional set. Live observation: a DEAD hero can still move — the known NAMED GAP "DEAD-slot residuals" (1-7), now confirmed live; fix trigger remains story 2-3.
+
 ### File List
 
-- `test/integration/test_camera_relative.gd` — to be EXTENDED for two-slot coverage (AC 3), currently P1-only
+- `src/main/main.tscn` — restructured: two `SubViewportContainer`+`SubViewport`+follower `Camera3D` pairs added; P1 rig-camera `current = true` override and `[editable path="P1Hero"]` removed (AC 1)
+- `src/main/match_runner.gd` — added follower + rig-camera `@onready` refs and step-4b camera follow; no new `_physics_process` (AC 2)
+- `test/integration/test_camera_relative.gd` — EXTENDED for independent slot-1 coverage via the per-slot config point, verifying the two-entry basis already at HEAD (AC 3)
+
+## Change Log
+
+| Date | Version | Description | Author |
+|------|---------|-------------|--------|
+| 2026-07-27 | 0.1 | Dev pass: split-screen `SubViewport` restructure, runner step-4b camera follow, two-slot `test_camera_relative` extension. Golden unmoved; suite 142/645 + 8 integration green. AC4/AC5 pending operator live smoke. NOT committed. | claude-opus-4-8 |
