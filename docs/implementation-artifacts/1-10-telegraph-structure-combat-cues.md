@@ -1,6 +1,6 @@
 # Story 1.10: Telegraph structure and combat cues (presentation layer)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
