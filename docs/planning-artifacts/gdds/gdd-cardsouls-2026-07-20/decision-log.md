@@ -514,3 +514,21 @@ Readiness gate on `2-1-split-screen-subviewports.md` (backlog since the Set B ba
 **New docs debt.** `stories-manual-e2.md` E2.S1 item 4 carries the same "balance-authored" camera wording error as `stories-manual-e1.md#E1.S2` — both sync on the next planning pass; manuals are not edited now.
 
 **Promotion.** All fixes applied to the story file the same day; story Status and board promoted backlog -> ready-for-dev.
+
+---
+
+## Session 2026-07-27 — 2-1 close-out
+
+**What landed (1c510c1 code+tests / ddaa908 docs+smoke / 55a5a5e board+status).** Implementation exactly as gated — rulings 2-1/R1 and 2-1/R2 implemented as ruled, nothing reopened (see the readiness-gate session above for the rulings themselves); full detail in the story Dev Agent Record. Dev pass browser review PASSED. Operator live smoke (2026-07-27) PASSED. Suite: 142 tests / 645 assertions + 8 integration tests, all green (integration run individually). Golden prediction NONE CONFIRMED in both directions — hash `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` unchanged, no re-baseline.
+
+**Micro-decision (accepted on review) — step-4b follow source.** The rig's CHILD camera (`CameraRig/Camera3D` global transform) is the follow source, not the rig root — a literal rig-root copy would drop the authored `camera_config` framing. `data/camera_config.tres` remains the single framing source for rig camera and follower alike.
+
+**KAKO record.** `SubViewport`s inherit the root `World3D` (`own_world_3d` default — no scripted world wiring); `render_target_update_mode` ALWAYS. `current = true` moved to the two followers; the P1 rig-camera `current` override and the orphaned `[editable path="P1Hero"]` are removed — rig cameras are now pure basis/framing sources.
+
+**Smoke.** Half-width framing PASS with no `camera_config.tres` change; no camera jitter; sustained 60 fps through a live melee exchange; the `KEYBOARD_P2` flip executed and reverted by text edit per 2-1/R2, editor closed throughout; the text-edit flip rule kept the smoke itself collateral-free, but a FOURTH editor collateral (`project.godot` only, same signature: line reorder + physics pin dropped) appeared in the pre-chain window from an editor touch outside the smoke procedure; it was caught by the binding Step-0 status+collateral check immediately before the chain and reverted solo after a full pasted diff. New standing rule adopted: before every commit chain's Step 0, verify no Godot editor process is running (`Get-Process *godot*`); a lingering editor session can re-save collateral at any moment.
+
+**R-D6 acceptance.** The 2-1 re-invocation is CONSUMED — spent again. Any future story wanting a live smoke against a killable human slot must re-invoke on its own gate (2-2 is the likely next claimant).
+
+**Live confirmation of NAMED GAP "DEAD-slot residuals" (1-7).** A DEAD hero still moves — first live sighting (E1 smokes ran a NULL dummy); fix trigger remains story 2-3, unchanged.
+
+**Board.** 2-1 done.
