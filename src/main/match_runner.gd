@@ -33,6 +33,15 @@ enum ControllerKind { KEYBOARD_P1, KEYBOARD_P2, NULL }
 @onready var _p2_hero: HeroActor = $P2Hero
 @onready var _p1_rig: CameraRig = $P1Hero/CameraRig
 @onready var _p2_rig: CameraRig = $P2Hero/CameraRig
+# Story 2-1: the rig's CHILD camera (framed by CameraRig.apply_config — distance/height/pitch)
+# is the follow SOURCE; its global transform is mirrored onto the per-slot SubViewport follower
+# camera each tick (step 4b). The rig cameras stay basis-only render-wise (no `current`).
+@onready var _p1_rig_cam: Camera3D = $P1Hero/CameraRig/Camera3D
+@onready var _p2_rig_cam: Camera3D = $P2Hero/CameraRig/Camera3D
+# Story 2-1: the two split-screen follower cameras, one per SubViewport (main.tscn). Presentation
+# only — driven by the runner in step 4b, never their own _physics_process (F1).
+@onready var _p1_view_cam: Camera3D = $P1View/P1Viewport/P1Camera
+@onready var _p2_view_cam: Camera3D = $P2View/P2Viewport/P2Camera
 
 var _match_state: MatchState
 var _p1_controller: Controller
@@ -223,5 +232,16 @@ func _physics_process(delta: float) -> void:
 	# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
 	_p1_hero.drive(_match_state.p1.hero, delta)
 	_p2_hero.drive(_match_state.p2.hero, delta)
+	# 4b. Split-screen camera follow (story 2-1, ruling 2-1/R1). Copy each hero rig CAMERA's
+	#     framed global transform onto its SubViewport follower camera — AFTER drive() so it
+	#     reflects this tick's move_and_slide. Presentation-only: a deterministic function of
+	#     the tick, snapshot-excluded, running INSIDE the one runner _physics_process (F1 holds —
+	#     no viewport/camera/container carries its own _physics_process). Mirroring the rig's
+	#     CHILD camera (not the rig root) carries the authored camera_config framing
+	#     (distance/height/pitch) through to the half-width viewport, so AC4 reframing stays a
+	#     single-source data/camera_config.tres edit — the follower needs no framing of its own,
+	#     and its default projection matches the rig camera's (both plain Camera3D defaults).
+	_p1_view_cam.global_transform = _p1_rig_cam.global_transform
+	_p2_view_cam.global_transform = _p2_rig_cam.global_transform
 	# 5. Drain queued signals AFTER advance returns (D5).
 	_match_state.drain_signals()

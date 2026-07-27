@@ -30,11 +30,29 @@ mesh = SubResource("BoxMesh_30cu5")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 1, 0)
 script = ExtResource("3_jkpqq")
 
-[node name="Camera3D" parent="P1Hero/CameraRig"]
-current = true
-
 [node name="P2Hero" type="CharacterBody3D" parent="." unique_id=1135604472 instance=ExtResource("2_djufw")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1, 0)
 script = ExtResource("3_jkpqq")
 
-[editable path="P1Hero"]
+[node name="P1View" type="SubViewportContainer" parent="."]
+anchor_right = 0.5
+anchor_bottom = 1.0
+stretch = true
+
+[node name="P1Viewport" type="SubViewport" parent="P1View"]
+render_target_update_mode = 4
+
+[node name="P1Camera" type="Camera3D" parent="P1View/P1Viewport"]
+current = true
+
+[node name="P2View" type="SubViewportContainer" parent="."]
+anchor_left = 0.5
+anchor_right = 1.0
+anchor_bottom = 1.0
+stretch = true
+
+[node name="P2Viewport" type="SubViewport" parent="P2View"]
+render_target_update_mode = 4
+
+[node name="P2Camera" type="Camera3D" parent="P2View/P2Viewport"]
+current = true
