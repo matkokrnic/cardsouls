@@ -53,7 +53,7 @@ development_status:
 
   # E2 — Local Split-Screen PvP
   epic-2: backlog
-  2-1-split-screen-subviewports: backlog
+  2-1-split-screen-subviewports: ready-for-dev
   2-2-gamepad-controller-input-profiles: backlog
   2-3-opponent-second-human: backlog
   2-4-per-player-hud-half-width: backlog
