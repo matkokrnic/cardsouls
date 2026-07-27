@@ -4,7 +4,7 @@ baseline_commit: 9031f6c7a341f3b2d72d2fba2024568ad58e9d87
 
 # Story 1.9: Roll with i-frames
 
-Status: review
+Status: done
 
 ## Story
 
@@ -129,3 +129,4 @@ Claude Fable 5 (claude-fable-5)
 - 2026-07-27: Readiness gate NOT READY (B1-B5); operator rulings 1-9/R1..1-9/R8 applied; story rewritten; Status backlog -> ready-for-dev.
 - 2026-07-27: Dev pass complete — mechanics, tests (141/640 + 8 integration), golden re-baselined `298c40f6...` -> `33817201...` (one re-baseline; three causes reconciled both directions — cause 2 measured NON-MOVER, the 1-5 cause-(c) precedent); smoke check and close-out docs await operator review; Status ready-for-dev -> review.
 - 2026-07-27: Operator smoke check PASSED (three-part protocol; part 3 confirms the 1-9/R1 drop ruling live); the flip collateral from a second editor session caught and reverted at the close-out Step 0; review approved.
+- 2026-07-27: Status review -> done (board promoted; close-out follows in the decision log).
