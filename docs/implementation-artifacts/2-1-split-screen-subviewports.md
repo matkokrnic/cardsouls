@@ -1,6 +1,6 @@
 # Story 2.1: Two `SubViewport`s and the split-screen rig
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
