@@ -102,6 +102,22 @@ func test_authored_defense_values_are_sane() -> void:
 		"block_facing_arc_degrees must be authored in (0, 360] — the facing gate needs a real arc")
 
 
+## ---- Roll window bound (story 1-9, 1-9/R3) ----------------------------------------------
+## The "iframe is a subset of the roll" premise as a defect-by-construction bound: step-4
+## negation is judged on the iframe window ALONE (never on state == ROLLING), so an iframe
+## outliving the roll would be invulnerability while walking. Compared in TICKS — the form
+## the windows actually run in.
+
+func test_authored_roll_iframe_within_roll_duration() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var ticks := BalanceTicks.from_config(config)
+	assert_true(ticks.roll_iframe_ticks <= ticks.roll_duration_ticks,
+		"roll_iframe must not outlive roll_duration in ticks (window-alone negation, 1-9/R3)")
+
+
 func test_authored_attack_move_speed_multiplier_is_non_negative() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")

@@ -110,10 +110,12 @@ func advance(intents: Array[InputIntent]) -> void:
 	p2.stamina.tick_timers()
 	# 3. Resolve actions       per slot P1 -> P2: action transitions FIRST (a press on
 	#    tick N takes effect on tick N), then intended velocity from move_dir. Transitions
-	#    never read or write velocity — action/movement coupling lands in 1-5/1-9.
-	_resolve_actions(p1, p1_intent)
+	#    never write velocity — both halves of the 1-3 coupling deferral now live in
+	#    _resolve_movement (1-5 attack commitment; 1-9 roll override reading the
+	#    entry-locked roll_direction, captured here in step 3 at the ROLLING transition).
+	_resolve_actions(p1, p1_intent, 0)
 	_resolve_movement(p1, p1_intent, 0)
-	_resolve_actions(p2, p2_intent)
+	_resolve_actions(p2, p2_intent, 1)
 	_resolve_movement(p2, p2_intent, 1)
 	# 4. Resolve contacts      (story 1-5) drain the queued facts in push order: dedupe/
 	#    liveness acceptance -> damage -> record confirmed hits for step 5. Damage and
@@ -221,7 +223,7 @@ func to_snapshot() -> Dictionary:
 ## into the window's start() (CONSTRAINT C: never cache the BalanceTicks object — a
 ## running window keeps its old duration across a reload; the next start() picks up the
 ## new one, guarded by test_balance_config.gd).
-func _resolve_actions(player: PlayerState, intent: InputIntent) -> void:
+func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> void:
 	# DEBT A deferral (story 1-3, deliberate): the runner never calls apply_balance() yet,
 	# so in live play balance_ticks is null and actions are INERT until the follow-up
 	# story wires apply_balance at match start + re-baselines the golden (both DEBT A
@@ -254,14 +256,18 @@ func _resolve_actions(player: PlayerState, intent: InputIntent) -> void:
 		return
 	var edges: Dictionary = HeroState.TRANSITION_TABLE[row]
 	for action: StringName in HeroState.INPUT_PRIORITY:
-		if intent.is_pressed(action) and edges.has(action) and _try_transition(player, edges[action]):
+		if intent.is_pressed(action) and edges.has(action) \
+				and _try_transition(player, edges[action], intent, slot):
 			return
 
 
 ## Fire one table edge. Returns false when a gated edge rejects — the chain cap (silent,
 ## story 1-3) or the roll stamina precondition (emits action_rejected, story 1-4) — so a
 ## lower-priority same-tick press may still be considered.
-func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool:
+## intent/slot ride along for the ROLLING edge only (story 1-9): the entry-time roll
+## direction is captured from the SAME press that fires the transition.
+func _try_transition(player: PlayerState, target: HeroState.ActionState, intent: InputIntent,
+		slot: int) -> bool:
 	var hero := player.hero
 	match target:
 		HeroState.ActionState.ATTACKING:
@@ -288,7 +294,8 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 					balance.roll_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
 				hero.reject_action(&"roll", &"insufficient_stamina")
 				return false
-			hero.enter_roll(balance_ticks.roll_duration_ticks, balance_ticks.roll_iframe_ticks)
+			hero.enter_roll(balance_ticks.roll_duration_ticks, balance_ticks.roll_iframe_ticks,
+					_roll_world_direction(hero, intent.move_dir, slot))
 		HeroState.ActionState.BLOCKING:
 			# Story 1-8 (R-D1): affordability PRECONDITION only — no spend, no regen-delay
 			# restart at entry; the spend happens at deflect LANDING (step 4). Unaffordable
@@ -302,10 +309,31 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState) -> bool
 	return true
 
 
+## Story 1-9 (1-9/R6): the entry-time roll direction — the same camera-rotated world
+## mapping _resolve_movement uses (clamp, identity short-circuit, yaw-only rotation),
+## NORMALIZED (constant roll speed needs a unit direction), with the hero's world-space
+## facing as the fallback when the stick is neutral. Computed ONCE at the transition;
+## the stored value is locked for the whole roll.
+func _roll_world_direction(hero: HeroState, move_dir: Vector2, slot: int) -> Vector3:
+	if move_dir.is_zero_approx():
+		return Vector3(hero.facing.x, 0.0, hero.facing.y).normalized()
+	var dir := move_dir
+	if dir.length() > 1.0:
+		dir = dir.normalized()
+	var world_dir: Vector3
+	if _camera_bases[slot] == Basis.IDENTITY:
+		world_dir = Vector3(dir.x, 0.0, dir.y)
+	else:
+		world_dir = _camera_relative_dir(dir, _camera_bases[slot])
+	return world_dir.normalized()
+
+
 ## Step-4 contact resolution (story 1-5). Drains the queue in push order; for each fact,
 ## a DEAD target drops the fact outright (story 1-7, D-3 — dropped BEFORE resolution: no
 ## damage, no dedupe registration, no confirmed hit, so no step-5 mana; closes the
-## corpse-mana-farming defect found at the 1-7 gate), then the attacker's dedupe decides
+## corpse-mana-farming defect found at the 1-7 gate), then an open target iframe drops
+## it the same way (story 1-9, 1-9/R1 — the second target-state drop; see the inline
+## comment for the ladder position), then the attacker's dedupe decides
 ## acceptance (live record for the fact's attack_index + target not already hit this
 ## swing — stale, unknown, and duplicate facts are DROPPED). Story 1-8 (R-D4): dedupe
 ## registration happens for EVERY outcome — one resolution per swing per target, whether
@@ -333,6 +361,13 @@ func _resolve_contacts() -> Array[int]:
 		var attacker := p1 if int(fact["attacker"]) == 0 else p2
 		var target := p1 if int(fact["target"]) == 0 else p2
 		if target.hero.action_state == HeroState.ActionState.DEAD:
+			continue
+		# Story 1-9 (1-9/R1): iframe FACT DROP — not a resolution. Judged on the window
+		# (+grace) ALONE, never on state == ROLLING (1-9/R3), and BEFORE dedupe
+		# registration (the DEAD-drop family): a dropped fact never consumes the swing,
+		# so if the i-frames expire inside the swing's active window the next gathered
+		# fact resolves normally. No damage, no hit_landed, no mana, no signal (1-9/R5).
+		if target.hero.is_iframe_open():
 			continue
 		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"])):
 			continue
@@ -407,12 +442,24 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	# uniform across windup/active/recovery, read inline at the moment of use
 	# (CONSTRAINT C). Velocity ONLY — the facing update below is never scaled by the
 	# multiplier. ATTACKING is unreachable pre-injection (the step-3 balance_ticks
-	# guard), so `balance` is non-null on this branch. The ROLL half of the 1-3 coupling
-	# deferral is 1-9's.
-	var speed := player.hero.move_speed
-	if player.hero.action_state == HeroState.ActionState.ATTACKING:
-		speed *= balance.attack_move_speed_multiplier
-	player.hero.velocity = world_dir * speed
+	# guard), so `balance` is non-null on this branch.
+	# Story 1-9 (1-9/R6): the ROLL half of the same coupling deferral — while ROLLING the
+	# velocity is the entry-locked roll_direction at roll_distance / roll_duration_seconds
+	# (the ruling's exact quotient; a SPEED derivation, not window timing — timing stays
+	# balance_ticks), both read inline at the moment of use (CONSTRAINT C: a mid-roll
+	# reload changes the speed next tick while in-flight windows keep their duration).
+	# Live input steers nothing until the roll ends; the facing update below still runs
+	# (the ATTACKING-commitment precedent: velocity-only, facing tracks input). ROLLING is
+	# unreachable pre-injection too, and the authoring audit guarantees
+	# roll_duration_seconds > 0.
+	if player.hero.action_state == HeroState.ActionState.ROLLING:
+		player.hero.velocity = player.hero.roll_direction \
+				* (balance.roll_distance / balance.roll_duration_seconds)
+	else:
+		var speed := player.hero.move_speed
+		if player.hero.action_state == HeroState.ActionState.ATTACKING:
+			speed *= balance.attack_move_speed_multiplier
+		player.hero.velocity = world_dir * speed
 	# Story 1-7 (review R1, operator decision): facing is WORLD-SPACE planar — the same
 	# rotated direction the velocity uses, so actor-side consumers (the hitbox yaw) need
 	# no basis knowledge. Under an identity basis world_dir == (dir.x, 0, dir.y), so

@@ -5,27 +5,32 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
-## Re-baselined in story 1-8 (block and deflect), ONE re-baseline with TWO deliberate
-## causes, named separately (the 1-4/1-5 pattern), each sufficient on its own to move
-## the hash:
-##   1. EXERCISED-PATH RESOLUTION CHANGE: step 4 now implements the block/deflect
-##      outcome ladder, and the pre-existing t5 fact sits on the deflect window's +1
-##      grace tick (R-N2) against a front-facing blocker — it resolves as a DEFLECT
-##      (P2 keeps 120 HP, P1 keeps 0 mana, P2 pays the cost at landing) where it used
-##      to land as a full 12.0 hit. EMPIRICAL step-2 measurement (recorded in the Dev
-##      Agent Record): with mechanics implemented and the OLD sequence otherwise
-##      unchanged, the hash moved to ca3dc15e...76ff5 exactly this way — the gate's
-##      corrected grace arithmetic held.
-##   2. DELIBERATE SEQUENCE + AUTHORED-VALUE RESTRUCTURE: _golden_config now AUTHORS
-##      the defense values (block_damage_multiplier 0.25, deflect_stamina_cost 20,
-##      block_facing_arc_degrees 180), P2 gained a SECOND block span (t7-14), and a
-##      second fact at t13 resolves as an ordinary BLOCK — the sequence exercises BOTH
-##      outcomes by design (guarded by test_golden_sequence_exercises_block_and_deflect
-##      below), and the facts widened to the four-field R-B3 shape.
-## VERIFIED: SNAPSHOT SHAPE IS NOT A CAUSE — no to_snapshot() changed in 1-8; the R-N2
-## grace marker is a per-tick transient (write-before-read inside advance(), see
-## HeroState._deflect_closed_this_tick) and deflect-consumed state is DERIVED (dedupe
-## registration + window state), exactly as the gate predicted.
+## Re-baselined in story 1-9 (roll with i-frames), ONE re-baseline; the gate predicted
+## THREE causes (1-9/R7) and measurement reconciled them in both directions:
+##   1. SNAPSHOT SHAPE (a mover, as predicted): HeroState.to_snapshot() gains
+##      "roll_direction" on both players; P1's t17 roll stores (-1, 0, 0) via the
+##      neutral-stick FACING FALLBACK. Sufficient alone to move the hash.
+##   2. EXERCISED PATH + AUTHORED VALUE — PREDICTED A MOVER, MEASURED NON-MOVER:
+##      _golden_config authors roll_distance 3.0 and t17-21 velocity is the locked roll
+##      override, but roll velocities are per-tick transients overwritten before the
+##      hashed final t24 snapshot (the 1-5 cause-(c) lesson holding again). EMPIRICAL:
+##      the step-2 intermediate hash was IDENTICAL with and without the roll_distance
+##      line — the authoring is path coverage, not a hash cause.
+##   3. DELIBERATE RESTRUCTURE (a mover, as predicted): P2 gains an attack at t15
+##      (active 18-21, over P1's roll iframes); the t19 arrival DROPS on the iframe
+##      grace tick and the t20 arrival from the SAME swing lands FULL damage — P1
+##      120 -> 108 HP, P2 mana 0 -> 12 on the hashed record (guarded by
+##      test_golden_sequence_exercises_iframe_negation below).
+## Step-2 INTERMEDIATE measurement (mechanics in, OLD sequence unchanged):
+## 3138e35bfb1af9b4d86e94b198dc86e5156c200589b15f38194d3713ff736874 — isolates causes
+## 1+2 from 3 (and the cause-2 toggle run above pins the movement to cause 1 alone).
+## The 1-9/R2 iframe grace marker is a per-tick transient excluded from the snapshot
+## (HeroState._roll_iframe_closed_this_tick, the _deflect_closed_this_tick mirror) — no
+## snapshot contribution, exactly as gated.
+## Previous golden 298c40f65d5f3191d2d7c2eacdccdd443c49fe24b0492d66e088318ed840f23f
+## (story 1-8, block and deflect: four-field facts + the outcome ladder; two named
+## causes — the t5 grace-tick deflect + the deliberate two-span/defense-values
+## restructure; snapshot shape verified not a cause).
 ## Previous golden 39564e83831819d4486d6216e9030535029de1298168ebeee720ab4812705353
 ## (story 1-5, basic attack chain: dedupe snapshot shape + authored combat-economy
 ## values + the t5 synthetic hit; held unchanged through 1-6, 1-7, and 1-7b — three
@@ -36,7 +41,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "298c40f65d5f3191d2d7c2eacdccdd443c49fe24b0492d66e088318ed840f23f"
+const GOLDEN := "338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -55,14 +60,19 @@ const MOVES := [
 ]
 
 ## Recorded action overlay, keyed by tick (windows per _golden_config: windup 3, active 4,
-## recovery 6, chain 5, deflect 4). P1: attack t1 (swing 0: windup 1-3, active 4-7,
-## recovery 8-13, chain window 8-12), chain t9 (swing 1: windup 9-11, active 12-15,
-## recovery from 16), roll-cancel t17 (roll 17-21, IDLE t22). P2 (story 1-8): TWO block
-## spans — press t1 held through t5 (deflect window runs t1-4, grace t5), released t6;
-## press t7 held through t14 (window t7-10, grace t11), released t15.
+## recovery 6, chain 5, deflect 4, roll iframe 2, roll duration 5). P1: attack t1 (swing
+## 0: windup 1-3, active 4-7, recovery 8-13, chain window 8-12), chain t9 (swing 1:
+## windup 9-11, active 12-15, recovery from 16), roll-cancel t17 (roll 17-21, iframe
+## covers arrivals 17-18 with grace t19, IDLE t22; t17's move pair is (0,0), so the roll
+## direction comes from the FACING FALLBACK — facing (-1,0) from t16). P2 (story 1-8):
+## TWO block spans — press t1 held through t5 (deflect window runs t1-4, grace t5),
+## released t6; press t7 held through t14 (window t7-10, grace t11), released t15.
+## P2 (story 1-9): attack t15 — the release tick; the block exit and the attack entry
+## fire the same tick (windup 15-17, active 18-21), putting P2's active window over P1's
+## roll iframes.
 const TICKS := 24
 const P1_PRESS := {1: [&"attack"], 9: [&"attack"], 17: [&"roll"]}
-const P2_PRESS := {1: [&"block"], 7: [&"block"]}
+const P2_PRESS := {1: [&"block"], 7: [&"block"], 15: [&"attack"]}
 const P2_BLOCK_HELD: Array = [[1, 5], [7, 14]]
 ## Story 1-5: synthetic contact facts fed through the push_contact seam, keyed by the
 ## tick they are pushed on (BEFORE that tick's advance — the runner's step-2 position).
@@ -74,10 +84,17 @@ const P2_BLOCK_HELD: Array = [[1, 5], [7, 14]]
 ## GRACE tick (R-N2) against a front-facing blocker (P2 faces (-1,-1)-ward at t5) and
 ## DEFLECTS by design. The t13 fact (swing 1, active 12-15, gathered t12) arrives past
 ## the second span's grace (t11) against a front-facing blocker (P2 faces (-1,0) at
-## t13) and resolves as an ordinary BLOCK by design.
+## t13) and resolves as an ordinary BLOCK by design. Story 1-9: the t19/t20 pair targets
+## the ROLLING P1 from P2's t15 swing (active 18-21) — the t19 arrival (gathered t18,
+## P2's first active tick) lands on P1's iframe GRACE tick (iframe covers 17-18, 1-9/R2)
+## and is DROPPED; the t20 arrival (gathered t19) is one past the grace and lands FULL
+## damage on the still-rolling P1 (iframes over, roll not) — the sequence exercises both
+## sides of the iframe boundary from the SAME swing by design.
 const CONTACTS := {
 	5: [[0, 1, 0, Vector2(-1, -1)]],
 	13: [[0, 1, 1, Vector2(-1, 0)]],
+	19: [[1, 0, 0, Vector2(1, 0)]],
+	20: [[1, 0, 0, Vector2(1, 0)]],
 }
 
 
@@ -126,6 +143,12 @@ func _golden_config() -> BalanceConfig:
 	c.block_facing_arc_degrees = 180.0
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0
+	# Story 1-9 (gate finding 1-9/N1): authored so the t17 roll exercises the REAL
+	# displacement override (2-tick iframe / 5-tick duration -> 36.0 u/s while rolling).
+	# Roll velocities are per-tick transients overwritten before t24, so this value
+	# cannot reach the hashed final snapshot — authored for path coverage, not the hash
+	# (the 1-5 cause-(c) lesson, re-confirmed empirically in the 1-9 record).
+	c.roll_distance = 3.0
 	return c
 
 
@@ -166,8 +189,8 @@ func test_recorded_sequence_exercises_all_transitions() -> void:
 	var blk := int(HeroState.ActionState.BLOCKING)
 	assert_eq(p1_log, [[idle, atk], [atk, atk], [atk, roll], [roll, idle]],
 		"p1: attack, chain (self-transition), recovery roll-cancel, roll end")
-	assert_eq(p2_log, [[idle, blk], [blk, idle], [idle, blk], [blk, idle]],
-		"p2: two block spans (story 1-8) — press t1/release t6, press t7/release t15")
+	assert_eq(p2_log, [[idle, blk], [blk, idle], [idle, blk], [blk, idle], [idle, atk]],
+		"p2: two block spans (story 1-8) then the t15 attack (story 1-9) — release and press fire the same tick")
 
 
 ## Story 1-4 (AC 6): the stamina analogue of the transition guard above — the golden only
@@ -220,6 +243,33 @@ func test_golden_sequence_exercises_block_and_deflect() -> void:
 	assert_eq(mana_readings[TICKS - 1], 12.0, "t24: NON-ZERO mana on record (no E1 mana sink)")
 	assert_eq(p2_stamina_readings[TICKS - 1], 30.0,
 		"t24: P2 MID-REGEN (20 + regen t15-t24) — the hash encodes the spend and the regen")
+
+
+## Story 1-9 (the block/deflect pin's iframe analogue): the golden only guards the iframe
+## layer if the sequence actually exercises BOTH sides of the boundary. Pins the exact
+## arithmetic at named ticks so the sequence can never silently degrade to a dropless (or
+## landless) run: t19 the GRACE-tick DROP — P1 stays at 120 HP (fact dropped pre-dedupe),
+## P2 mana stays 0 (a dropped fact is not a resolution); t20 the SAME swing's next fact
+## lands FULL damage on the still-rolling P1 — 120 -> 108 (iframes over, roll not; and
+## the drop never registered, or this fact would be a same-swing duplicate), P2 mana
+## 0 -> 12; t24 (final, hashed) P1 at 108 HP / P2 at 12 mana — the hash encodes the
+## landed hit, and P1's roll_direction is (-1, 0, 0), pinning the t17 neutral-stick
+## FACING FALLBACK on the record.
+func test_golden_sequence_exercises_iframe_negation() -> void:
+	var ms := _make_match()
+	var p1_hp: Array[float] = []
+	var p2_mana: Array[float] = []
+	_play_sequence(ms, func(_t: int) -> void:
+		p1_hp.append(ms.p1.hero.get_hp())
+		p2_mana.append(ms.p2.mana.get_current()))
+	assert_eq(p1_hp[19 - 1], 120.0, "t19: iframe grace-tick DROP — no damage")
+	assert_eq(p2_mana[19 - 1], 0.0, "t19: a dropped fact generates NO mana (1-9/R1)")
+	assert_eq(p1_hp[20 - 1], 108.0, "t20: the SAME swing lands FULL damage one past the grace")
+	assert_eq(p2_mana[20 - 1], 12.0, "t20: the landed hit pays full flat mana")
+	assert_eq(p1_hp[TICKS - 1], 108.0, "t24: P1 non-full HP on the hashed record")
+	assert_eq(p2_mana[TICKS - 1], 12.0, "t24: P2 non-zero mana on the hashed record")
+	assert_eq(ms.p1.hero.roll_direction, Vector3(-1, 0, 0),
+		"t17 roll captured via the facing fallback — on the hashed record")
 
 
 func test_canonical_hash_ignores_key_insertion_order() -> void:

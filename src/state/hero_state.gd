@@ -85,6 +85,12 @@ var velocity := Vector3.ZERO   # intended velocity; the runner reads this (D3), 
 ## yaw in HeroActor.drive) need no basis knowledge. Under an identity basis it equals the
 ## raw intent direction. Freezes while movement input is zero.
 var facing := Vector2.DOWN
+## Story 1-9 (1-9/R6): WORLD-SPACE unit roll direction, captured ONCE at ROLLING entry
+## (camera-rotated move_dir; facing fallback when the stick is neutral — MatchState
+## computes, enter_roll stores). Locked for the whole roll: _resolve_movement reads THIS
+## while ROLLING instead of live input. SNAPSHOTTED (the one 1-9 snapshot delta) — it is
+## read across ticks, so excluding it would be a determinism/replay hole.
+var roll_direction := Vector3.ZERO
 var move_speed: float          # injected (balance .tres in E3); tunable, not hardcoded-in-place
 
 ## The eight per-action D4 windows (story 1-3). windup/active/recovery are the phases of
@@ -116,6 +122,14 @@ var _queue: SignalQueue
 ## deliberately EXCLUDED from to_snapshot(): no determinism/replay hole, because replay
 ## recomputes it identically inside each tick before any consumer runs.
 var _deflect_closed_this_tick := false
+
+## Story 1-9 (1-9/R2): TRANSIENT grace marker — true only on the single tick whose step-2
+## advance closed the roll_iframe window (the _deflect_closed_this_tick mirror, absorbing
+## the same F1 one-tick fact lag). Write-before-read within every advance(): step 2
+## recomputes it, step 4 reads it, and nothing reads it across ticks — so it is
+## deliberately EXCLUDED from to_snapshot(): no determinism/replay hole, because replay
+## recomputes it identically inside each tick before any consumer runs.
+var _roll_iframe_closed_this_tick := false
 
 ## Story 1-5 (B7b/N2): per-swing dedupe records, keyed by attack_index. Each record is
 ## {"hit": Array[int] of target slots already damaged this swing, "grace": int}. grace
@@ -194,6 +208,16 @@ func is_hitbox_active() -> bool:
 ## pays per landing, R-N7 — the window is never latched shut by a hit).
 func is_deflect_window_open() -> bool:
 	return deflect.is_running or _deflect_closed_this_tick
+
+
+## Story 1-9 (1-9/R2/R3): the iframe window as step-4 resolution judges it — running, OR
+## closed by this very tick's step-2 advance (+1 grace tick). Judged on the window ALONE,
+## never on state == ROLLING (1-9/R3): the authoring audit bounds iframe <= duration and
+## both roll windows start only in enter_roll with no early-stop path, so the window
+## cannot legitimately outlive the roll — any future early-stop path must re-open that
+## ruling.
+func is_iframe_open() -> bool:
+	return roll_iframe.is_running or _roll_iframe_closed_this_tick
 
 
 ## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
@@ -276,8 +300,12 @@ func chain_attack(windup_ticks: int) -> void:
 	_queue.push(action_state_changed.emit.bind(ActionState.ATTACKING, ActionState.ATTACKING))
 
 
-func enter_roll(duration_ticks: int, iframe_ticks: int) -> void:
+## Story 1-9 (1-9/R6): `direction` is the entry-captured world-space unit roll direction
+## (MatchState computes the camera rotation and the facing fallback — policy stays in the
+## evaluator; this only stores). Both windows open here and ONLY here (1-9/R3 obligation).
+func enter_roll(duration_ticks: int, iframe_ticks: int, direction: Vector3) -> void:
 	set_action_state(ActionState.ROLLING)
+	roll_direction = direction
 	roll_duration.start(duration_ticks)
 	roll_iframe.start(iframe_ticks)
 
@@ -323,6 +351,7 @@ static func _has_run(w: TimingWindow) -> bool:
 func tick_timers() -> void:
 	var was_active := active.is_running
 	var deflect_was_running := deflect.is_running
+	var iframe_was_running := roll_iframe.is_running
 	windup.tick()
 	active.tick()
 	recovery.tick()
@@ -332,6 +361,9 @@ func tick_timers() -> void:
 	# closed the window (see the field's transient/no-snapshot contract).
 	_deflect_closed_this_tick = deflect_was_running and not deflect.is_running
 	roll_iframe.tick()
+	# Story 1-9 (1-9/R2): recomputed EVERY tick — true only when THIS step-2 advance
+	# closed the window (see the field's transient/no-snapshot contract).
+	_roll_iframe_closed_this_tick = iframe_was_running and not roll_iframe.is_running
 	roll_duration.tick()
 	stun.tick()
 	for index in _swing_dedupe.keys():
@@ -369,6 +401,8 @@ func to_snapshot() -> Dictionary:
 		},
 		"velocity": velocity,
 		"facing": facing,
+		# Story 1-9: the ONE snapshot delta of the story — the entry-locked roll direction.
+		"roll_direction": roll_direction,
 		"move_speed": move_speed,
 		"windup": windup.to_snapshot(),
 		"active": active.to_snapshot(),
