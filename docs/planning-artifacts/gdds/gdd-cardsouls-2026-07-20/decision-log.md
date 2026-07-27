@@ -474,3 +474,23 @@ Readiness gate on `1-10-telegraph-structure-combat-cues.md` (authored 2026-07-22
 **Golden prediction: NONE — conditional on 1-10/R1 (controller-owned mapping) and 1-10/R2 (no dodge cue); measured at dev time in both directions, never trusted** (1-6 / 1-7b precedents). Reasoning: no `advance()` path, snapshot field, signal, or authored gameplay number changes; `telegraph_profile.gd` is pure data vocabulary never referenced by state logic; the two new runner seams are subscription plumbing, and the golden path bypasses the runner. Baseline hash `33817201...21da2`; state harness green both runs; integration files run individually. The story also carries the F1-invariant hazard explicitly: the telegraph controller must not declare `_physics_process`.
 
 **Promotion.** All fixes applied to the story file the same day; story Status and board promoted backlog -> ready-for-dev.
+
+---
+
+## Session 2026-07-27 — 1-10 close-out
+
+**What landed (246e04e code+tests+assets / c4daf57 story record / 426f968 board+status).** Implementation exactly as gated — rulings 1-10/R1..1-10/R4 implemented as ruled, nothing reopened (see the readiness-gate session above for the rulings themselves); full detail in the story Dev Agent Record. Dev pass browser-reviewed: PASS. The two-phase live smoke per 1-10/R3 was executed and PASSED — **Phase 1** all cues confirmed, including the chain re-sting; **Phase 2** deflect spark with NO hit reaction, plus the block chip. ONE finding: **S1 — RollDisc occluded** (radius 0.45 < the hero box half-extent 0.5, entirely inside the body box); fixed (radius 0.8, y -0.95) and the disc re-smoked PASS. **1-10's smoke acceptance is now SPENT** (the R-D6 pattern: any future story wanting a live smoke against a killable human-driven slot re-invokes acceptance at its own gate rather than inherit it).
+
+**RETIRED obligations.** (1) The 1-4 gate `action_rejected` seam obligation — `connect_hero_action_rejected` landed, first consumer = the telegraph controller. (2) The 1-8 R-D4 `deflect_landed` consumer + seam obligation — `connect_deflect_landed` landed, same first consumer.
+
+**Delegated decision recorded — the cues-layer banned-token list (AC 6).** The list is the full public MUTATOR surface of `MatchState` + `HeroState` + the pools, plus the handle tokens `_match_state` / `MatchState.new`; reads stay legal (the guard is on writes — the D5 direction, not data access); the test carries an existence guard on `telegraph_controller.gd` so a rename cannot silently un-guard the layer. `TimingWindow.start(`/`tick(` deliberately excluded — unreachable without an already-banned handle token, and they would false-positive legitimate presentation timers.
+
+**Confirmed live.** A chain re-emits ATTACKING -> ATTACKING, so every chained swing re-stings (the code comment verified in the smoke).
+
+**Note.** The cue tween durations (0.12 hit flash / 0.18 spark) are hardcoded in the controller — presentation-side, acceptable for E1; candidate to fold into profile data when the DEBT E work lands. No new debt item.
+
+**pose_id.** Authored in the profiles but consumer-less until the animation rig lands (DEBT E member 4, already registered).
+
+**Golden record.** Prediction NONE measured and CONFIRMED in both directions — hash `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` unchanged, no re-baseline, no sequence re-record. New committed suite baseline: 142 state tests / 645 assertions + 8 integration tests (run individually).
+
+**Board.** 1-1..1-10 done — **epic E1 complete.**
