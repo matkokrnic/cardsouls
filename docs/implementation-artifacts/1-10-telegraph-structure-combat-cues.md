@@ -19,13 +19,13 @@ so that after every exchange I can say what happened, and the legibility structu
 
 ## Tasks / Subtasks
 
-- [ ] Create `src/state/resources/telegraph_profile.gd` (D7 schema home), THEN author `TelegraphProfile` `.tres` for each E1 melee action in `data/telegraphs/`; exported controller-owned `ActionState` -> profile map (AC: 1)
-- [ ] Define the audio bus layout (`CombatCues` + `Music` + `Ambience`) saved at `res://default_bus_layout.tres`; route combat cues through `CombatCues` (AC: 2)
-- [ ] Land the owed seams `connect_hero_action_rejected` + `connect_deflect_landed` in `match_runner.gd`; wire the telegraph controller as first consumer of both (AC: 3)
-- [ ] Implement read-only `telegraph_controller.gd` consuming only the sanctioned channels (AC: 4)
-- [ ] Land the deflect spark + sting FIRST, then hit reaction and remaining outcome cues (AC: 5)
-- [ ] Extend `test_architecture_invariants.gd` with the cues-layer banned-token scan (AC: 6)
-- [ ] Run the two-phase live smoke per the protocol below (AC: 5, 6)
+- [x] Create `src/state/resources/telegraph_profile.gd` (D7 schema home), THEN author `TelegraphProfile` `.tres` for each E1 melee action in `data/telegraphs/`; exported controller-owned `ActionState` -> profile map (AC: 1)
+- [x] Define the audio bus layout (`CombatCues` + `Music` + `Ambience`) saved at `res://default_bus_layout.tres`; route combat cues through `CombatCues` (AC: 2)
+- [x] Land the owed seams `connect_hero_action_rejected` + `connect_deflect_landed` in `match_runner.gd`; wire the telegraph controller as first consumer of both (AC: 3)
+- [x] Implement read-only `telegraph_controller.gd` consuming only the sanctioned channels (AC: 4)
+- [x] Land the deflect spark + sting FIRST, then hit reaction and remaining outcome cues (AC: 5)
+- [x] Extend `test_architecture_invariants.gd` with the cues-layer banned-token scan (AC: 6)
+- [x] Run the two-phase live smoke per the protocol below (AC: 5, 6) — operator-run, after review (1-10/R3)
 
 ## Golden Prediction
 
@@ -72,8 +72,52 @@ DEAD-slot residuals (a dead hero can walk; a corpse mid-swing can be credited da
 
 ### Agent Model Used
 
+Claude Fable 5 (claude-fable-5)
+
 ### Debug Log References
+
+- Baseline harness (BEFORE first edit): 141 tests / 640 assertions, PASS; `test_state_matches_golden` green against the pinned `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2`.
+- Bus layout headless check (scratchpad script, not committed): `bus_count=4 names=Master, CombatCues, Music, Ambience`, CombatCues sends to Master — the DEFAULT path loads with zero `project.godot` edit.
+- Editor scan (`godot --headless --editor --quit --path .`): exit 0, no errors; produced ONLY the two new `.gd.uid` files and the seven `.wav.import` files. `git diff -- src/main/main.tscn` and `git diff -- project.godot` both EMPTY — zero collateral this pass.
+- Bite proof (AC 6): planted `hero_state.take_damage(1.0)` in `telegraph_controller.gd`; harness failed exactly there — `assert_eq: got 1, expected 0 (state mutator token in the read-only cues/ui layer: res://src/actors/hero/telegraph_controller.gd:130 [take_damage(] hero_state.take_damage(1.0))`, `=== 142 tests, 1 failed ===`, exit 1. Plant removed; suite green again.
+- Final harness (AFTER last edit): 142 tests / 645 assertions, PASS; golden BYTE-IDENTICAL (prediction NONE confirmed in both directions). Assertion delta 640 -> 645 fully accounted: +2 from the new invariant test, +3 from `test_every_data_tres_loads` asserting per authored `.tres` (the three new telegraph profiles — which also proves they load headless).
+- All 8 integration tests run INDIVIDUALLY: PASS, exit 0 each (camera_relative, root_rotation_isolation, hero_movement, live_attack, debug_overlay, contact_pipeline, visible_facing, roll_displacement); logs clean of script errors.
+- Windows note: `godot.exe` detaches stdout in this shell; harness runs used `C:\Godot\godot_console.exe` (same binary family, console subsystem) to capture output.
+- Live smoke (2026-07-27, two-phase per 1-10/R3, operator-run): **Phase 1 (no flip)** — attack cone + sting PASS; chain re-sting CONFIRMED (static cone, one sting per chained swing); roll sting PASS; block shield + sting PASS; rejection buzz PASS; hit reaction PASS; round-end cue plays exactly once. **Phase 2 (KEYBOARD_P2 flip on slot 1, since reverted)** — deflect spark + ping with NO hit reaction PASS; block chip thud + flash PASS. Zero collateral after the revert (`main.tscn` and `project.godot` clean, verified by `git status` + diff). ONE finding: **S1 — RollDisc invisible** (CylinderMesh radius 0.45 < hero BoxMesh half-extent 0.5, at y -0.9 entirely inside the opaque body box — occluded from every angle).
+- S1 fix pass (2026-07-27, same day, text edit to `hero.tscn` only — no editor invocation, no new files): `CylinderMesh_tgdisc` top/bottom radius 0.45 -> 0.8, RollDisc origin y -0.9 -> -0.95. Post-fix re-verify: harness 142 tests / 645 assertions PASS, `test_state_matches_golden` and `test_cues_layer_never_calls_state_mutators` green, golden constant untouched; all 8 integration tests individually PASS exit 0. Disc re-smoke still pending (the live-smoke task stays unticked until then).
+- Disc re-smoke (2026-07-27, post-S1 fix, operator-run, no flip, no editor): PASS — colored ring visible around the hero base during the roll, clears on roll end.
 
 ### Completion Notes List
 
+- **Delegated decision — banned-token list (AC 6):** the list is the state layer's public MUTATOR surface plus the handle tokens that make it reachable: MatchState (`advance(`, `drain_signals(`, `push_contact(`, `apply_balance(`, `inject_feature_flags(`, `set_camera_basis(`, `MatchState.new`, `_match_state`), HeroState (`take_damage(`, `heal(`, `set_max_hp(`, `set_action_state(`, `reject_action(`, `enter_attack(`, `chain_attack(`, `enter_roll(`, `enter_block(`, `register_swing_hit(`, `tick_timers(`), pools (`spend(`, `add(`, `refill(`, `set_maximum(`, `advance_regen(`, `reset_all(`). Rationale: reads stay legal (the guard is on WRITES — D5 direction, not data access); generic-looking tokens are kept deliberately because a false positive fails loudly and costs a rename, while a missed mutator costs the invariant; `TimingWindow.start(`/`tick(` are omitted because they are unreachable without a handle token that is already banned, and `.start(`/`.tick(` would false-positive on legitimate presentation Timers/tweens. The test also asserts `telegraph_controller.gd` EXISTS under `src/actors/`, so a rename cannot silently un-guard the layer. Mechanism = the F1 scan's contains-on-comment-stripped-lines, per the gate.
+- **R1 map shape (implementation choice):** the controller-owned exported map is THREE named `TelegraphProfile` exports (`attack_profile` / `block_profile` / `roll_profile`) folded into a `Dictionary[HeroState.ActionState, TelegraphProfile]` in `_ready()`, rather than one exported typed Dictionary — hand-authored `.tscn` serialization of typed dictionaries is fragile, named slots are self-documenting, and the map still lives exclusively on the controller (1-10/R1 intact). Only the three REACHABLE E1 acting states are mapped (STUNNED is unreachable, CHARGING is E5, IDLE/DEAD deliberately cue-less).
+- **Profile indirection:** `shape_id`/`sting_id` name the controller's child nodes (`Shapes/<shape_id>`, `<sting_id>` AudioStreamPlayer), so swapping a cue is a data edit. `pose_id` is authored (`PoseAttack`/`PoseBlock`/`PoseRoll`) but consumed by nothing until the animation rig lands (DEBT E member 4).
+- **Telegraph shapes are non-yawing root-relative markers** (attack cone + block shield overhead, roll disc underfoot): nothing in the cues layer rotates, so the 1-7b single-yaw-source contract holds — no second `atan2` anywhere. Tint via per-instance `material_override` built in `_ready()` (unshaded; no shared sub-resource material, so the two heroes cannot cross-tint).
+- **Slot identity stays out of the controller:** match-level payloads (`hit_landed`, `deflect_landed`, `round_ended`) get the hero's slot BOUND as a trailing arg at wiring time (the overlay precedent); the controller compares payload slots against it and holds no state.
+- **Round-end cue** plays on the LOSING hero's controller only — one audible cue, no doubling across the two per-hero controllers (implementation choice; revisit if a match-level cue host ever exists).
+- **Deflect spark + sting landed first** (AC 5 priority), then hit reaction (thud + red flash on the TARGET), then the remaining cues (per-action stings, rejection buzz, round-end). All timing is tweens/audio players — NO `_physics_process` (F1 hazard closed), no code under `src/ui/` (E2 fence), no new signals (1-10/R2 — no dodge cue; the iframe drop stays signal-less).
+- **Placeholder audio:** seven tiny generated PCM wavs (distinct pitch/timbre per cue: 880 Hz attack, 523 Hz block, 349->494 Hz roll sweep, bright 1568+2093 Hz deflect ping, 160->90 Hz hit thud, 196 Hz square reject buzz, 784->392 Hz round-end fall). The generator script was scratchpad-only (validation-by-script, not worth a committed test — the committed artifact is the wavs plus the `.tres` load audit).
+- The two seam docstrings in `match_runner.gd` record the obligations they retire (1-4 gate `action_rejected` seam; 1-8 R-D4 `deflect_landed` consumer/seam).
+- State layer untouched except the data-only `telegraph_profile.gd` (its D7 schema home); no snapshot change, no `advance()` change — golden hash identical both directions.
+- **Smoke finding S1 (fixed):** the RollDisc telegraph was authored radius 0.45 at y -0.9 — smaller than the hero BoxMesh half-extent (0.5) and fully inside the opaque body box, so it was occluded from every angle. Fix: radius 0.8, y -0.95 — the disc must EXCEED the box half-extent to read as a colored ground ring around the hero's base; it now protrudes 0.3 beyond the body just above floor level. Scene-text-only change; verified by the full re-run (harness + 8 integration tests green, golden untouched).
+
 ### File List
+
+- `src/state/resources/telegraph_profile.gd` — NEW (D7 schema; AC 1)
+- `src/state/resources/telegraph_profile.gd.uid` — NEW (editor scan)
+- `data/telegraphs/attack.tres`, `data/telegraphs/block.tres`, `data/telegraphs/roll.tres` — NEW (AC 1)
+- `default_bus_layout.tres` — NEW (AC 2; default path, no `project.godot` edit)
+- `assets/audio/sting_attack.wav`, `sting_block.wav`, `sting_roll.wav`, `cue_deflect.wav`, `cue_hit.wav`, `cue_reject.wav`, `cue_round_end.wav` (+ their seven `.import` files) — NEW (AC 2 placeholder cues)
+- `src/actors/hero/telegraph_controller.gd` — NEW (AC 4/5)
+- `src/actors/hero/telegraph_controller.gd.uid` — NEW (editor scan)
+- `src/actors/hero/hero.tscn` — MODIFIED (TelegraphController node + AudioStreamPlayer children on CombatCues + in-scene primitive VFX; AC 4/5)
+- `src/actors/hero/hero.gd` — MODIFIED (`telegraph_controller` @onready exposure for runner wiring)
+- `src/main/match_runner.gd` — MODIFIED (two new seams + five-channel wiring of both controllers; AC 3)
+- `test/state/test_architecture_invariants.gd` — MODIFIED (fourth test: cues-layer banned-token scan; AC 6)
+- `docs/implementation-artifacts/1-10-telegraph-structure-combat-cues.md` — MODIFIED (this record)
+
+## Change Log
+
+- 2026-07-27 — Dev pass (no commits): ACs 1-6 implemented and verified headless (harness 142/645 green, golden identical both directions, 8/8 integration tests individually green, invariant-test bite proven). Live smoke (two-phase, 1-10/R3) deliberately NOT run — operator-owned, post-review. Status left at ready-for-dev pending review verdict.
+- 2026-07-27 — Smoke fix pass S1 (no commits): live smoke passed both phases except S1 (RollDisc occluded inside the body box); fixed by scene-text edit to `hero.tscn` (disc radius 0.45 -> 0.8, y -0.9 -> -0.95). Re-verified: harness 142/645 green with golden untouched, 8/8 integration tests individually green. Disc re-smoke pending; live-smoke task checkbox deliberately left unticked.
+- 2026-07-27 — Disc re-smoke PASS; live smoke fully complete. Story enters the commit chain.
