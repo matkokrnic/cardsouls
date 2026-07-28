@@ -623,3 +623,35 @@ above stands as written (append-only, 1-9 / 2-1 / A4 precedent).
   rule exists to detect.
 - The standing rule is unchanged and is what caught it: `git diff` after EVERY manual edit,
   no exception.
+
+---
+
+## Session 2026-07-28 — Story 2-3 readiness gate (operator decisions)
+
+Readiness gate on `2-3-opponent-second-human.md` (authored 2026-07-22 in the original Set B batch, before any E1/E2 code existed) returned **NOT READY** — seven blocking findings, five notes, four questions, report-only against `a299bda`, suite measured green at 151/690 state-harness assertions + 8 integration tests. The story described a different story than the one 2-3 must carry: it never mentioned the DEAD-slot residuals fix (the named gap from 1-7, live-confirmed at the 2-1 smoke, whose committed trigger is 2-3) — the story's actual primary deliverable — and it pulled in three out-of-scope items (a match-setup selection scene/resource, per-player HUD subscription owned by 2-4, and a `ReplayController`/X5 replay path absent from `src/`), carried no Golden Hash or Live Smoke section, and carried a stale "DECISION (a)" label. Old AC1 and the A3 one-liner (`slot_controller_kinds` default `[0,2]` -> `[0,1]`) were verified correct as written and kept in substance. All findings resolved by operator decision (Matko, rulings 2-3/R1..2-3/R12) and applied to the story file the same session. Labels are story-scoped per the 1-9 convention.
+
+**2-3/R1 (locked) — acceptance criteria rewritten; old AC2, AC3, AC4 excised.** The story is rebuilt around five ACs: the A3 config flip (old AC1, kept), the DEAD-slot state-gating fix, the DEAD-attacker step-4 ladder extension, guards + integration re-verification, and the live smoke. Old AC2 (match-setup selection scene/resource), old AC3 (per-player HUD subscription), and old AC4 (`ReplayController`/X5 replay) are removed from this story entirely — see 2-3/R2..R4.
+
+**2-3/R2 — X5 / `ReplayController` REROUTED, not deleted.** The requirement is not dropped: it moves to the story that lands `IntentRecorder`, which already inherits the four-field contact fact (1-8 D-4 supersession) and the second half of DEBT B (reload events in the intent stream) — one stream contract, taken together. 2-3 does not build a recorder or a replay controller. A Dev Notes pointer states this in the story file.
+
+**2-3/R3 — per-player HUD stays with 2-4.** Nothing in 2-3 enforces HUD subscription scope. "No HUD reads the opponent's `PlayerState`" is already covered by the locked observation seam (signals/payloads only, consumers never hold a state handle) — 2-3 has nothing further to enforce here.
+
+**2-3/R4 — no match-setup selection scene or resource.** `slot_controller_kinds` is the ONLY configuration point (constraint A3); a selection affordance would be a second authoring surface. Deferred to its own story when E7 (scripted bot) is in view.
+
+**2-3/R5 (locked) — DEAD-slot residual fix SEAT: state-gating inside `MatchState` step 3.** A dead slot gets zero velocity, FROZEN facing (frozen at the moment of death, not reset), and suppressed stamina regeneration. Intent-suppression in the controller is REJECTED — the state gates behaviour; controllers stay dumb (D3a).
+
+**2-3/R6 (locked) — DEAD ATTACKER: negation seats on the step-4 ladder as an extension of the existing DEAD-drop rung to the attacker side.** It must NOT be implemented by stopping or clearing in-flight windows: an early-stop path re-opens the 1-9/R3 obligation ("both roll windows start only in `enter_roll` and no path closes them before expiry"). Consequence, deliberately accepted: windows on a dead hero KEEP TICKING to expiry — this is deliberate behaviour, not a residual — they simply deliver nothing (no damage, no `hit_landed`, no mana, no signal).
+
+**2-3/R7 (locked) — LIVE SMOKE RUNS WITH NO FLIP LINE.** After the flip the script default IS `[0,1]`, so the smoke exercises the COMMITTED default with zero manual `.tscn` edits. This removes the blank-line-residue hazard (2-2 process note) and the baked-flip hazard (the recurring editor-collateral pattern, four prior incidents) entirely. Any additional run against a different configuration is OPTIONAL and only then requires the manual line, with the full ritual (editor closed, textual edit immediately below the `script =` line of the `Main` node with no blank line, `git diff` after the edit AND after the removal).
+
+**2-3/R8 — R-D6 smoke acceptance RE-INVOKED by 2-3.** SPENT since 2-1; NOT re-invoked by 2-2 (both 2-2 flips ran against the NULL dummy, per 2-2's A1). A permanent `KEYBOARD_P2` default means two live, killable human slots — this is the true candidate the acceptance's own text was scoped for.
+
+**2-3/R9 — label rename: "DECISION (a)" -> architecture amendment A3, matching the label the code comments already use** (`match_runner.gd` and `null_controller.gd`), per the 1-6 gate's B5 precedent (which already flagged 2-3's stale label for its own gate to resolve). **Disambiguation:** the story-local "(a)" was NOT the decision-log's OPEN decision (a) — "Attacker consequence on basic-attack deflect" (Session 2026-07-22, deflect consequence to the attacker / STUNNED) — which remains open, untouched by this story, with its forcing point at E5 (unblockable RPS+orbs, where an attacker-consequence mechanic would naturally land).
+
+**2-3/R10 — NEW NAMED GAP: "post-round-over live match".** `MatchState.advance()` has no early return on `_round_over` (confirmed by content: no such guard exists in `advance()`, `match_state.gd:93` on) — the surviving hero keeps moving after the round ends. This will be VISIBLE on the first two-human smoke (a NULL dummy never exhibited it, since it never moves). NOT 2-3 scope. Named and parked; owner decided at the E2 retrospective.
+
+**2-3/R11 — integration re-verification requirement.** The dev pass must RE-RUN all 8 integration tests INDIVIDUALLY AFTER the flip and report the results explicitly. Integration tests drive the real scene, so any that rely on the default slot config now get a live P2 keyboard slot instead of a NULL dummy. Headless probably yields a neutral intent for an unpressed keyboard slot, but that is an assumption to prove at dev time, not a fact to assume.
+
+**2-3/R12 — Golden prediction: NONE, both directions.** The recorded determinism sequence never kills a hero (P1 ends 108 HP, P2 ends 117 HP, MAX_HP 120), so the DEAD branch is never entered; and `slot_controller_kinds` is runner-side config absent from `MatchState.to_snapshot()`, so the flip cannot touch the hash by construction. If the hash moves at all, that is a FINDING (the gating leaked into a live branch) and is investigated, never baselined away.
+
+**Promotion.** All fixes applied to the story file the same session; story Status and board promoted backlog -> ready-for-dev.
