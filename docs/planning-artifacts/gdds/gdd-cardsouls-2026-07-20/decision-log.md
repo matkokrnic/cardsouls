@@ -655,3 +655,35 @@ Readiness gate on `2-3-opponent-second-human.md` (authored 2026-07-22 in the ori
 **2-3/R12 — Golden prediction: NONE, both directions.** The recorded determinism sequence never kills a hero (P1 ends 108 HP, P2 ends 117 HP, MAX_HP 120), so the DEAD branch is never entered; and `slot_controller_kinds` is runner-side config absent from `MatchState.to_snapshot()`, so the flip cannot touch the hash by construction. If the hash moves at all, that is a FINDING (the gating leaked into a live branch) and is investigated, never baselined away.
 
 **Promotion.** All fixes applied to the story file the same session; story Status and board promoted backlog -> ready-for-dev.
+
+---
+
+## Session 2026-07-28 — 2-3 close-out
+
+**What landed (843e33a code+tests / 96cd66f docs+smoke / fa2beb7 board+status).** Implementation exactly as gated — rulings 2-3/R1..2-3/R12 implemented as ruled, nothing reopened. Quoted by content from commit 843e33a, per acceptance criterion:
+
+- **AC1** — "Flip `slot_controller_kinds` default to `[0, 1]` at the sole A3 config point."
+- **AC2** — "Close the DEAD-slot residuals: zero a dead hero's velocity every tick and skip its facing write in `_resolve_movement`, suppress stamina regen for a dead hero in `_regen_stamina`" — "no new snapshot field."
+- **AC3** — "drop contact facts sourced from a dead attacker at the pre-dedupe rung of the step-4 ladder" — "No in-flight window is stopped early."
+- **AC4** — "Guards for each residual class plus the shipped default array." Five new tests total; all 8 integration tests re-run individually after the flip, all PASS.
+- **AC5** — live two-human smoke, PASS, no findings (`docs/playtest-log.md`, 2026-07-28 entry).
+
+**New rulings, continuing from 2-3/R12:**
+
+**2-3/R13 — MICRO-DECISION (operator-accepted): a hero still moves on its FINAL LIVING TICK.** Movement resolves in step 3, DEAD is set in step 8 — so the corpse carries its last live velocity for exactly one tick before the first dead tick zeroes it. Accepted deliberately: zeroing at DEAD entry would spread the dead-movement decision across a third function. Not visible at 60 Hz in the live smoke. Pinned by `test_dead_hero_velocity_zeroed_every_tick`, which asserts the one-tick carry explicitly.
+
+**2-3/R14 — the velocity/facing asymmetry and WHY.** `velocity` is written because `HeroActor.drive()` reads it into `move_and_slide()` every frame — a skipped write would leave the corpse sliding at its last live speed forever. `facing` is skipped because nothing re-derives it downstream (it is only ever read to compute a display yaw) — persistence of the last value IS the freeze, not a separately stored frozen copy. No new snapshot field: only `velocity`'s VALUE on the DEAD branch changes.
+
+**2-3/R15 — attacker-side drop joins the EXISTING DEAD-drop family, no new rung.** The attacker-liveness check seats at the SAME pre-dedupe rung as the target-side drop, ahead of the iframe drop and `register_swing_hit`. No early-stop path was introduced, so the 1-9/R3 obligation ("both roll windows start only in `enter_roll`, no path closes them before expiry") stands untouched — windows on a dead hero keep ticking to expiry by design.
+
+**2-3/R16 — Golden: NONE, both directions, prediction confirmed; guards proven load-bearing by the reverse run.** Hash `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` unmoved since 1-9, measured in both directions (the reverse measurement temporarily disabled the DEAD gates and the file was restored byte-for-byte, SHA256-verified). The reverse run also showed all four behavioural guards FAIL without the gates — the load-bearing proof 2-3/R12 asked for is now empirical, not merely structural. Suite 151/690 -> 156/714 state-harness assertions.
+
+**2-3/R17 — R-D6 RE-INVOKED and PASSED against two live killable human slots — SPENT again.** Any later story wanting a live smoke against a killable human-driven slot re-invokes it at its own gate.
+
+**2-3/R18 — PROCESS: first smoke in this repo run with ZERO manual `.tscn` edits.** Because the flip became the committed default (2-3/R7), blank-line residue and baked-flip hazards were structurally absent rather than merely avoided. Zero editor collateral; the collateral registry stays at FOUR incidents.
+
+**2-3/R19 — comment hygiene: three stale sites corrected in commit 843e33a.** The `_regen_stamina` docstring, the `match_runner.gd` export comment, and the `test_camera_relative.gd` header/inline comments. The explicit `[0, 1]` override in that test is RETAINED on purpose — a test must not depend on a default it does not itself set.
+
+**2-3/R10 status.** The named gap "post-round-over live match" remains OPEN and unowned; owner decided at the E2 retrospective.
+
+**Board.** 2-3 done; E2 now stands at 3/6.
