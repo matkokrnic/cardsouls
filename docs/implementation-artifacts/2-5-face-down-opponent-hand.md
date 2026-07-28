@@ -21,14 +21,14 @@ so that bluffing stays observable under the real information model and E3 cannot
 
 ## Tasks / Subtasks
 
-- [ ] Implement the single-seat face-up/face-down rule in `hud_root.gd`: one private construction function taking a parameter for whether a row belongs to the owning slot; own hand renders face-up, opponent hand renders face-down (AC: 1)
-- [ ] Implement the rendered card count as a presentation-local constant `4`; confirm no read of `PlayerState.hand`, no read of `hand_size`, no write to `hand` anywhere in `src/ui/` (AC: 2)
-- [ ] In `test/integration/test_hud_viewports.gd`, FIRST check whether an equivalent per-slot binding assertion already exists from 2-4 and extend it rather than duplicate it; the extended (or new) assertion must prove no HUD root instance is ever constructed with the opposing slot's index (AC: 3)
-- [ ] Lay out the opponent row top-centre, above the Pitch Zone placeholder, between the deck indicator and the orb counters, at its own real footprint; verify the bottom-centre `HandStrip` from 2-4 is neither moved nor resized and no other reserved 2-4 element moves (AC: 4)
-- [ ] Confirm zero new files under `src/ui/`; confirm `src/ui/debug/` still contains only its `.gitkeep`; confirm zero new observation seams and zero `.tscn` edits; build both rows once at setup with no `_process`, no `_physics_process`, no signal consumption (AC: 5)
-- [ ] Exclude the Pitch Zone placeholder from the face-down rule as the single documented public exception; confirm 2-5 renders no pitched card (AC: 6)
-- [ ] In `test/integration/test_hud_viewports.gd`, add assertions that each viewport contains both rows, the own row is front-styled, the opponent row is back-styled, and the two stylings are genuinely different; keep the integration suite globbing to 8 files; demonstrate the new assertion fails without the back-styling, then restore and verify byte-for-byte via SHA256 (AC: 7)
-- [ ] Confirm the operator has written the `docs/playtest-log.md` entry for 2-5 by hand before the commit chain begins (AC: 8)
+- [x] Implement the single-seat face-up/face-down rule in `hud_root.gd`: one private construction function taking a parameter for whether a row belongs to the owning slot; own hand renders face-up, opponent hand renders face-down (AC: 1)
+- [x] Implement the rendered card count as a presentation-local constant `4`; confirm no read of `PlayerState.hand`, no read of `hand_size`, no write to `hand` anywhere in `src/ui/` (AC: 2)
+- [x] In `test/integration/test_hud_viewports.gd`, FIRST check whether an equivalent per-slot binding assertion already exists from 2-4 and extend it rather than duplicate it; the extended (or new) assertion must prove no HUD root instance is ever constructed with the opposing slot's index (AC: 3)
+- [x] Lay out the opponent row top-centre, above the Pitch Zone placeholder, between the deck indicator and the orb counters, at its own real footprint; verify the bottom-centre `HandStrip` from 2-4 is neither moved nor resized and no other reserved 2-4 element moves (AC: 4)
+- [x] Confirm zero new files under `src/ui/`; confirm `src/ui/debug/` still contains only its `.gitkeep`; confirm zero new observation seams and zero `.tscn` edits; build both rows once at setup with no `_process`, no `_physics_process`, no signal consumption (AC: 5)
+- [x] Exclude the Pitch Zone placeholder from the face-down rule as the single documented public exception; confirm 2-5 renders no pitched card (AC: 6)
+- [x] In `test/integration/test_hud_viewports.gd`, add assertions that each viewport contains both rows, the own row is front-styled, the opponent row is back-styled, and the two stylings are genuinely different; keep the integration suite globbing to 8 files; demonstrate the new assertion fails without the back-styling, then restore and verify byte-for-byte via SHA256 (AC: 7)
+- [x] Confirm the operator has written the `docs/playtest-log.md` entry for 2-5 by hand before the commit chain begins (AC: 8)
 
 ## Dev Notes
 
@@ -116,14 +116,49 @@ The acceptance criterion naming the Pitch Zone is rephrased NEUTRALLY: the card 
 
 ### Agent Model Used
 
+Claude Opus 4.8
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- **Constructor micro-decision.** `HudRoot._init()` (`src/ui/hud/hud_root.gd`) takes no
+  arguments at all — it only sets `name = "HudRoot"`. AC3's requirement that "no HUD root
+  instance is ever constructed with the opposing slot's index" is therefore satisfied
+  STRUCTURALLY: the constructor makes passing any slot, own or opposing, impossible in the
+  first place. The asymmetry assertion in `test_hud_viewports.gd` (rolling P1 moves only P1's
+  HUD stamina bar) proves a different, and more useful, property — that the runner's per-slot
+  wiring (in `match_runner.gd`) is uncrossed. The test does not, and should not be read to,
+  prove the acceptance criterion itself; the criterion is closed by the constructor's shape.
+
+- **Layout slack, measured from source.** The opponent row's `OpponentHandStrip` container is
+  236 px wide (`offset_right - offset_left` = 118 - (-118)); its four 52x64 card panels plus
+  three 8 px separations occupy 4*52 + 3*8 = 232 px of content, leaving 4 px of slack. The own
+  row's `HandStrip` container is 344 px wide (172 - (-172)); its four 74x84 panels plus
+  separations occupy 4*74 + 3*8 = 320 px, leaving 24 px of slack. Recorded so a later sizing or
+  separation change has a documented margin before it collides with either container edge.
+
+- **Styling-direction fix.** Review found the first styling assertion in
+  `test_hud_viewports.gd` NON-DIRECTIONAL: it proved only that the two rows' stylings
+  differed, so swapping them — showing the player's own hand as a back and the opponent's as a
+  face — would still have passed, which is exactly the information leak this story exists to
+  prevent. The fix (`_check_hand_rows`) pins the direction structurally: the face-down
+  opponent back must carry the strictly heavier border than the face-up own card
+  (`back_is_heavier`), in addition to the pre-existing difference check. Non-vacuity for this
+  fix was proven by SWAPPING the two branches of `_make_card_face_style` (own vs. opponent
+  colors/border widths exchanged) — the run showed the difference check still true but the
+  direction check false, i.e. FAIL, demonstrating the old assertion would have passed the
+  inversion. The file was restored from a copy taken outside the repo, not via `git checkout`,
+  and verified byte-for-byte via SHA256 before re-running the suite.
+
 ### File List
+
+- src/ui/hud/hud_root.gd
+- test/integration/test_hud_viewports.gd
 
 ## Change Log
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
 | 2026-07-28 | 0.1 | Gate fixes: rulings 2-5/R1..R9 applied (presentation-local hand-count constant, opponent-read non-issue via public/symmetric hand size, two-row face-down/face-up layout, reveal toggle deferred to epic 3, Pitch Zone exception rephrased neutrally); promoted backlog -> ready-for-dev. | Claude Sonnet 5 |
+| 2026-07-28 | 0.2 | Dev pass: both hand rows built through the single-seat `_build_hand_row(is_own)` function; face styling pinned directional (opponent back strictly heavier-framed) after review found the original assertion non-directional; suite 156/715 + 8 integration files unmoved, golden hash unmoved. | Claude Opus 4.8 |
