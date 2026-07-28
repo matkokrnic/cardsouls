@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="GamepadProfile" format=3]
+
+[ext_resource type="Script" path="res://src/controllers/gamepad_profile.gd" id="1_gpprof"]
+
+[resource]
+script = ExtResource("1_gpprof")
+move_axis_x = 0
+move_axis_y = 1
+attack_button = 10
+block_button = 9
+roll_button = 1
+deadzone = 0.2

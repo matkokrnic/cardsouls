@@ -42,6 +42,28 @@ func test_camera_config_tres_loads_with_framing_fields() -> void:
 		assert_true(field in config, "CameraConfig has '%s'" % field)
 
 
+func test_gamepad_profile_tres_loads_with_mapping_fields() -> void:  # Story 2-2 (2-2/R2)
+	var profile: Variant = load("res://data/gamepad_profile.tres")
+	assert_not_null(profile, "gamepad_profile.tres loads")
+	assert_true(profile is GamepadProfile,
+		"input mapping is its own controller-owned resource (NOT BalanceConfig, 2-2/R2)")
+	for field in ["move_axis_x", "move_axis_y", "attack_button", "block_button", "roll_button", "deadzone"]:
+		assert_true(field in profile, "GamepadProfile has '%s'" % field)
+
+
+func test_gamepad_profile_buttons_distinct_and_not_system() -> void:  # Story 2-2 (review D1)
+	# The first draft authored block=5, which is JOY_BUTTON_GUIDE — a SYSTEM button, not a
+	# shoulder. Make that exact class of error bite: the three action buttons must be pairwise
+	# DISTINCT and none may be a system button (GUIDE / START / BACK).
+	var profile: GamepadProfile = load("res://data/gamepad_profile.tres")
+	assert_ne(profile.attack_button, profile.block_button, "attack != block")
+	assert_ne(profile.block_button, profile.roll_button, "block != roll")
+	assert_ne(profile.attack_button, profile.roll_button, "attack != roll")
+	var system := [JOY_BUTTON_GUIDE, JOY_BUTTON_START, JOY_BUTTON_BACK]
+	for b in [profile.attack_button, profile.block_button, profile.roll_button]:
+		assert_false(b in system, "action button %d must not be a system button (GUIDE/START/BACK)" % b)
+
+
 func test_every_data_tres_loads() -> void:
 	var paths := _find_tres("res://data/")
 	assert_true(paths.size() >= 1, "at least one .tres exists in data/")

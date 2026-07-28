@@ -47,6 +47,22 @@ func test_state_layer_has_no_nondeterministic_source() -> void:  # INVARIANT D3(
 		"nondeterministic source in src/state/ (global RNG / Time / OS / Engine): %s" % ", ".join(offenders))
 
 
+func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)
+	# int-literal callers depend on these ordinals: test_camera_relative.gd writes [0, 1] and
+	# every 2-2 smoke flip writes int literals like [3, 2] / [2, 3]. A future reorder would
+	# silently change the default that ships — the same "a dependency that exists must bite when
+	# broken" principle as the F1/D3 scans above. GAMEPAD is APPENDED so NULL stays ordinal 2.
+	# Read the enum off the runner script (it has no class_name to statically type against).
+	var runner: GDScript = load("res://src/main/match_runner.gd")
+	var consts := runner.get_script_constant_map()
+	assert_true(consts.has("ControllerKind"), "match_runner.gd defines the ControllerKind enum")
+	var k: Dictionary = consts.get("ControllerKind", {})
+	assert_eq(k.get("KEYBOARD_P1"), 0, "KEYBOARD_P1 == 0")
+	assert_eq(k.get("KEYBOARD_P2"), 1, "KEYBOARD_P2 == 1")
+	assert_eq(k.get("NULL"), 2, "NULL stays ordinal 2 (GAMEPAD appended, not inserted)")
+	assert_eq(k.get("GAMEPAD"), 3, "GAMEPAD appended == 3")
+
+
 ## Story 1-10 (AC 6): the cues/ui layer is READ-ONLY (D5 — presentation subscribes,
 ## never writes). Banned tokens = the state layer's public MUTATOR surface (MatchState,
 ## HeroState, pool mutators) plus the handle tokens that would make any of it reachable

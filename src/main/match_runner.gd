@@ -22,7 +22,7 @@ const _MAX_MANA := 80.0
 ## hero/actor/state edit (dummy identity is a controller choice, arch amendment A3). P2
 ## DEFAULTS to NULL (the training dummy, story 1-6); the second slot itself has existed and
 ## been driven since E0 — this story SWAPS its driver, it does not add a slot.
-enum ControllerKind { KEYBOARD_P1, KEYBOARD_P2, NULL }
+enum ControllerKind { KEYBOARD_P1, KEYBOARD_P2, NULL, GAMEPAD }
 
 @export var slot_controller_kinds: Array[ControllerKind] = [
 	ControllerKind.KEYBOARD_P1,  # slot 0 — P1 (local keyboard)
@@ -60,8 +60,8 @@ func _ready() -> void:
 	# is a programming error (Invariant.check, export-surviving — X1).
 	Invariant.check(slot_controller_kinds.size() == 2,
 		"slot_controller_kinds must have exactly 2 entries (P1, P2), got %d" % slot_controller_kinds.size())
-	_p1_controller = _make_controller(slot_controller_kinds[0])
-	_p2_controller = _make_controller(slot_controller_kinds[1])
+	_p1_controller = _make_controller(slot_controller_kinds[0], 0)
+	_p2_controller = _make_controller(slot_controller_kinds[1], 1)
 	_match_state = MatchState.new(_SEED, _MAX_HP, _MOVE_SPEED, _MAX_STAMINA, _MAX_MANA)
 	# DEBT A retirement (story 1-3b): inject the authored balance ONCE at match start,
 	# before the first tick — advance() reads balance_ticks, so without this call live-play
@@ -112,7 +112,7 @@ func _ready() -> void:
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a
 ## kind becomes an instance. Extended (never branched around) by 2-2/2-3 (gamepad / second
 ## keyboard) and E7 (scripted). NullController is the training-dummy driver.
-func _make_controller(kind: ControllerKind) -> Controller:
+func _make_controller(kind: ControllerKind, slot: int) -> Controller:
 	match kind:
 		ControllerKind.KEYBOARD_P1:
 			return KeyboardController.new(&"p1")
@@ -120,8 +120,29 @@ func _make_controller(kind: ControllerKind) -> Controller:
 			return KeyboardController.new(&"p2")
 		ControllerKind.NULL:
 			return NullController.new()
+		ControllerKind.GAMEPAD:
+			# Story 2-2 (2-2/R4): the i-th GAMEPAD slot binds the i-th connected joypad. The
+			# ordinal is a PURE function of the config — the count of GAMEPAD slots BEFORE this one
+			# (2-2 review D3), NOT the player slot and NOT a mutable counter — so re-wiring the
+			# slots (2-3, DEBT B reload) can never bind the wrong device and there is no counter to
+			# reset. The profile is the load-once authored mapping (data/gamepad_profile.tres),
+			# the camera_config pattern.
+			return GamepadController.new(
+				_gamepad_ordinal_for_slot(slot), load("res://data/gamepad_profile.tres") as GamepadProfile)
 	Invariant.check(false, "unknown controller kind: %d" % kind)
 	return NullController.new()
+
+
+## Story 2-2 (2-2/R4, review D3): the gamepad ordinal for a slot = how many GAMEPAD slots precede
+## it in slot_controller_kinds. A PURE function of the config, so _make_controller stays
+## idempotent and order-independent: the i-th GAMEPAD binds the i-th connected joypad exactly as
+## R4 states, with no state to reset between wirings.
+func _gamepad_ordinal_for_slot(slot: int) -> int:
+	var ordinal := 0
+	for i in slot:
+		if slot_controller_kinds[i] == ControllerKind.GAMEPAD:
+			ordinal += 1
+	return ordinal
 
 
 ## Read-only subscription seam (story 1-3b): consumers (HUD, integration tests) observe
