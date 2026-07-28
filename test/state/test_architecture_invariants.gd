@@ -102,6 +102,15 @@ const CUES_LAYER_BANNED_TOKENS: Array[String] = [
 
 func test_cues_layer_never_calls_state_mutators() -> void:  # Story 1-10 (AC 6) / D5
 	var targets := _gd_files("res://src/ui/")
+	# Story 2-4 (2-4/R8): the HUD root must exist under src/ui/hud/. The banned-token scan
+	# already covers new src/ui/ files recursively; this existence assertion guards against a
+	# MOVE OUT of src/ui/ specifically, which would silently narrow scan coverage — mirroring
+	# the telegraph_controller.gd controller_found guard below.
+	var hud_root_found := false
+	for path in targets:
+		if path.ends_with("/hud/hud_root.gd"):
+			hud_root_found = true
+	assert_true(hud_root_found, "hud_root.gd not found under src/ui/hud/ (2-4/R8)")
 	var controller_found := false
 	for path in _gd_files("res://src/actors/"):
 		if path.ends_with("/telegraph_controller.gd"):

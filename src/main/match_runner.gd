@@ -85,15 +85,25 @@ func _ready() -> void:
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
 	# at drain time, post-advance.
 	_match_state.round_ended.connect(_relay_round_ended)
-	# Story 1-3c: throwaway debug overlay (see its FENCE — E2 replaces it with the real
-	# HUD). Wired through the public seams below like any consumer; it receives signal
-	# payloads only, never a state handle.
-	var overlay := DebugStateOverlay.new()
-	add_child(overlay)
-	connect_hero_action_state_changed(0, overlay.on_hero_transition.bind(0))
-	connect_hero_action_state_changed(1, overlay.on_hero_transition.bind(1))
-	# Story 1-7 (AC 3): the overlay is hit_landed's FIRST consumer — still throwaway.
-	connect_hit_landed(overlay.on_hit_landed)
+	# Story 2-4 (2-4/R3): the throwaway 1-3c debug overlay is RETIRED here — E2 replaces it
+	# with the real HUD. One HudRoot per viewport, constructed in code and added under each
+	# SubViewport (the overlay's code-construction pattern, reparented per-viewport instead of
+	# to the runner root — the HUD must be per-viewport, not one global overlay). No main.tscn
+	# edit, no new .tscn, no camera, no reparented gameplay node (2-4/R6). Each root is wired
+	# ONLY to its own slot's three economy seams (2-4/R7 no-opponent-read: it is handed only
+	# this player's payloads and structurally cannot reach the opponent) plus the ownerless
+	# EventBus.round_ended (2-4/R4: the four combat seams stay owned by TelegraphController and
+	# are NOT re-consumed here). The three economy seams PRIME ON CONNECT, so the bars render
+	# full immediately — add_child fires the root's _ready (parent SubViewport is already in
+	# the tree) BEFORE these connects, so the bars exist when the priming call lands.
+	var hud_viewports: Array[SubViewport] = [$P1View/P1Viewport, $P2View/P2Viewport]
+	for slot: int in 2:
+		var hud := HudRoot.new()
+		hud_viewports[slot].add_child(hud)
+		connect_hero_hp_changed(slot, hud.on_hp_changed)
+		connect_stamina_changed(slot, hud.on_stamina_changed)
+		connect_mana_changed(slot, hud.on_mana_changed)
+		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
 	# Story 1-10 (AC 3/4): each hero's telegraph controller — the FIRST consumer of the
 	# two seams landed below (connect_hero_action_rejected, connect_deflect_landed) and a
 	# parallel consumer of the existing two. Signal payloads only, never a state handle;
@@ -190,6 +200,41 @@ func connect_deflect_landed(callback: Callable) -> void:
 ## because src/state/ never touches an autoload.
 func _relay_round_ended(loser_index: int) -> void:
 	EventBus.round_ended.emit(loser_index)
+
+
+## Read-only subscription seam (story 2-4, AC 1/2 — 2-4/R1 amendment to the locked seam
+## family, FOUR -> SEVEN): per-slot wrap of the HeroState-owned hp_changed, mirroring
+## connect_hero_action_state_changed including the slot guard. Payload: (current, maximum).
+## PRIMES ON CONNECT (2-4/R2): invokes the callback ONCE, immediately, with the current
+## (hp, max_hp) before returning — so a consumer connecting in _ready renders a full bar
+## without waiting for the first damage, and `maximum` is never withheld. slot: 0 = P1, 1 = P2.
+func connect_hero_hp_changed(slot: int, callback: Callable) -> void:
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.hero.hp_changed.connect(callback)
+	callback.call(player.hero.get_hp(), player.hero.get_max_hp())
+
+
+## Read-only subscription seam (story 2-4, AC 1/2 — 2-4/R1): per-slot wrap of the
+## StaminaPool-owned stamina_changed, same slot guard and (current, maximum) payload as
+## connect_hero_hp_changed. PRIMES ON CONNECT (2-4/R2). slot: 0 = P1, 1 = P2.
+func connect_stamina_changed(slot: int, callback: Callable) -> void:
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.stamina.stamina_changed.connect(callback)
+	callback.call(player.stamina.get_current(), player.stamina.get_maximum())
+
+
+## Read-only subscription seam (story 2-4, AC 1/2 — 2-4/R1): per-slot wrap of the
+## ManaPool-owned mana_changed, same slot guard and (current, maximum) payload. PRIMES ON
+## CONNECT (2-4/R2). The mana bar is LIVE from E1 (2-4/R13): mana starts at 0/max and moves
+## on every CONFIRMED melee hit (blocked hits included, 1-8 ruling) via the step-5 melee-hit
+## seat. slot: 0 = P1, 1 = P2.
+func connect_mana_changed(slot: int, callback: Callable) -> void:
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.mana.mana_changed.connect(callback)
+	callback.call(player.mana.get_current(), player.mana.get_maximum())
 
 
 ## Story 1-7 (AC 2): step-2 contact-fact gathering for one attacker slot. Direct query
