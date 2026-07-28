@@ -574,3 +574,34 @@ Readiness gate on `2-2-gamepad-controller-input-profiles.md` (backlog since the 
 **A6 — hardware precondition pinned.** The 2-2 live smoke runs on a Logitech F310 in X (XInput) mode; the mode is verified before the smoke and recorded in the result. The gamepad profile is authored against the SDL standard button/axis mapping, valid only in X mode — in D mode the same physical button reports a different index and the profile is silently wrong. This was ratified at gate time and dropped in the first fix pass; it is restored here because `gds-dev-story` may not edit the Live Smoke section.
 
 **A7 — profile script path RATIFIED, no longer provisional; supersedes A5's first bullet.** Re-verified by content: `camera_config.tres`'s script is at `src/actors/hero/camera_config.gd` (actor-owned) and `feature_flags.gd` is at `src/state/resources/feature_flags.gd` (state-owned). The precedent is "a resource script lives in its owner's domain folder", which makes `src/controllers/gamepad_profile.gd` consistent, not deviant, for a controller-owned resource. The story's Dev Notes and Project Structure Notes now state the path as ratified. The dev pass implements the path as written and does not re-open it.
+
+---
+
+## Session 2026-07-28 — 2-2 close-out
+
+**What landed (d4b489e code+tests / 52d945f docs+smoke / 7dfcbb1 board+status).** Implementation exactly as gated — rulings 2-2/R1..2-2/R7 and addenda A1-A7 implemented as ruled, nothing reopened (see the readiness-gate session above for the rulings themselves); full detail in the story Dev Agent Record.
+
+**Golden.** Prediction NONE HELD (2-2/R1) — measured in both directions at the dev pass and re-measured at this chain; hash `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` unchanged since 1-9. Suite 142/645 -> 151/690 state-harness assertions, plus 8 integration tests, all green (integration run individually).
+
+**Review findings D1-D5, resolved.**
+- D1: the first draft authored `block_button = 5`, which is `JOY_BUTTON_GUIDE` — a SYSTEM button, not RB. Fixed STRUCTURALLY, not by editing an integer: `gamepad_profile.gd`'s exports are typed with the engine `JoyButton`/`JoyAxis` enums and DEFAULT to named constants, plus a guard test that the three action buttons are pairwise distinct and none is GUIDE/START/BACK.
+- D2: no Y inversion is needed, and one would have INTRODUCED the bug it was meant to prevent — both the keyboard's `get_vector` up-arg and `JOY_AXIS_LEFT_Y` put "up" at negative Y; pinned by a test comparing against the keyboard's ACTUAL output, not a chosen literal.
+- D3: the first draft's mutable `_next_gamepad_ordinal` counter (order-dependent, non-idempotent) is REJECTED and replaced by a pure `_gamepad_ordinal_for_slot` derivation off `slot_controller_kinds` — the i-th GAMEPAD binds the i-th connected joypad regardless of wiring order — pinned by a two-slot test.
+- D4: the tick-based pressed-edge derivation (no engine-tracked "just pressed" for raw joypad buttons) is promoted from prose to MICRO-DECISION 5 as a genuine behavioural asymmetry against the keyboard's frame-based edge, plus an operator watch-note to verify clean attack-chain linking during the live smoke — the one path headless cannot exercise.
+- D5 RECONCILIATION: AC5's "integration test" wording is satisfied by a STATE-harness test, not the SceneTree integration harness. The property (analog-shaped intent vs. equivalent keyboard intent -> byte-identical `HeroState` snapshots) is frameless — pure `MatchState` + `InputIntent` — while all 8 SceneTree integration tests are scene-based (`main.tscn` + `_physics_process`); the repo's own placement rule (frameless -> state harness) puts it there. Recorded here as a reconciliation; the AC text is NOT rewritten — the log is canonical.
+
+**Control scheme ratified.** Attack RB, block/deflect LB, dodge B — the Sekiro line (2-2 review D1 operator ruling), accepted live at the smoke. The mapping and deadzone stay authored data in `data/gamepad_profile.tres`, re-authorable without a code change.
+
+**R-D6.** NOT re-invoked by 2-2 (both smoke flips ran the pad against a NULL dummy, per A1) — remains SPENT since 2-1 and available to story 2-3.
+
+**AC3c.** Simultaneous two-pad isolation is DEFERRED VERIFICATION — unverifiable on the dev machine, which has exactly one physical pad. Recorded explicitly, not silently dropped; revisit if/when a second pad is available.
+
+**OPEN DECISION (c) — carried, not resolved here.** Variable analog magnitude (walking at partial stick deflection) stays unauthored (2-2/R5: the controller normalizes to unit length above the deadzone instead). Forcing point remains story 2-6; whether it joins the DEBT E animation-gate registry is decided at the E2 retrospective.
+
+**Live smoke — operator PASS.** Hardware: Logitech F310, X (XInput) mode, connected before launch. Construction log `[gamepad] slot ordinal 0 -> device 0 (XInput Controller)` confirms X mode by device name (2-2/A6) and, logged during Flip 2 while the pad sat on player slot 1, is the live proof of the D3 pure ordinal derivation (ordinal from the connected-joypad list, not the slot index). Flip 1 `Array[int]([3, 2])`: attack/block/roll all drive from the pad, no dropouts, facing continuous rather than 8-directional, RB/LB/B scheme accepted as-is. Flip 2 `Array[int]([2, 3])`: the same pad drives P2; a 2-3 hit attack chain links exactly as on the keyboard (the live check for MICRO-DECISION 5's pressed edge); unplug mid-match sends the slot neutral with no crash/pause, replug restores control. The forbidden flip `Array[int]([0, 3])` was NOT run (A1). NOT verified: simultaneous two-pad isolation (AC3c), fps/perf measurement, deadzone-edge jitter. Verdict: PASS for what is covered.
+
+**Process notes.**
+1. The blank-line residue after a Notepad flip edit recurred during this story's dev-pass window — the SECOND occurrence of the 2-1 lesson (1-9/1-8 editor-collateral pattern's docs-file cousin). `git diff` after every manual edit stays mandatory, no exception.
+2. A suspected `unique_id` collateral on `main.tscn` was investigated and DISMISSED: `unique_id=` is normal, already-committed content on every node header in this repo's `.tscn` format (confirmed with `git show HEAD:src/main/main.tscn`), not an editor artifact. No fifth editor-collateral incident — `main.tscn` carries zero diff for this story (Step 0 verified).
+
+**Board.** 2-2 done; E2 at 2 of 6.
