@@ -1,6 +1,6 @@
 # Story 2.2: Gamepad controller and P1/P2 input profiles
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
