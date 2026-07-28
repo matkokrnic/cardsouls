@@ -61,7 +61,12 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # the HUD never eats gameplay input
 	_build_vitals()
 	_build_pitch_zone()
-	_build_hand_strip()
+	# Story 2-5: both hand rows go through the ONE construction function below. `true` = the
+	# owning player's face-up hand (the reserved 2-4 bottom-centre strip); `false` = the
+	# opponent's face-down hand (new top-centre row). The parameter is the single seat of the
+	# face-up / face-down decision (2-5/R4).
+	_build_hand_row(true)
+	_build_hand_row(false)
 	_build_orb_counters()
 	_build_deck_indicator()
 	_build_round_label()
@@ -190,30 +195,82 @@ func _build_pitch_zone() -> void:
 	panel.add_child(_pitch_timer)
 
 
-## 4-card hand strip placeholder (E3 / 2-5). Bottom-centre own-tempo action surface.
-## Reserved footprint only.
-func _build_hand_strip() -> void:
+## Story 2-5: the two per-viewport hand rows (E3 card widgets land later). BOTH rows are built
+## by this ONE function — `is_own` is the SINGLE SEAT of the face-up / face-down decision
+## (2-5/R1, R4): it alone selects front styling (own hand, face-up) versus back styling
+## (opponent hand, face-down) through the one call to _make_card_face_style below, and nothing
+## else anywhere re-decides styling. The epic-3 reveal toggle is a flip of this parameter, not a
+## second rule; `src/ui/debug/` stays empty until then.
+##
+## The own row (`is_own` true) is the bottom-centre own-tempo action surface reserved by 2-4 —
+## same node name, anchors, offsets and four Card0..Card3 panels at 74x84, NEITHER moved nor
+## resized — now gaining a front style. The opponent row (`is_own` false) is new: top-centre,
+## above the pitch-zone placeholder and between the deck indicator (top-left) and the orb
+## counters (top-right), back-styled, with smaller panels because a card back carries nothing to
+## read. Its placement and sizing are PROVISIONAL — the A/B tuning across HUD phases is story
+## 2-6's, which owns the instrumentation (2-5/R3). Nothing else in the reserved layout moves.
+##
+## The rendered count is the presentation-local constant 4 (2-5/R1): hand size is 4 at all times
+## per the GDD, and it is PUBLIC AND SYMMETRIC (2-5/R2), so rendering the opponent's count is not
+## an opponent read — no read of PlayerState.hand, no hand_size field, no write to hand. Epic 3
+## makes the count data-driven; that is a named follow-up here, not a passing remark. Both rows
+## are built ONCE at setup: no _process, no _physics_process, no signal consumption (2-5/R6).
+func _build_hand_row(is_own: bool) -> void:
 	var strip := HBoxContainer.new()
-	strip.name = "HandStrip"
 	strip.alignment = BoxContainer.ALIGNMENT_CENTER
 	strip.add_theme_constant_override("separation", 8)
 	strip.anchor_left = 0.5
 	strip.anchor_right = 0.5
-	strip.anchor_top = 1.0
-	strip.anchor_bottom = 1.0
-	strip.offset_left = -172.0
-	strip.offset_right = 172.0
-	strip.offset_top = -104.0
-	strip.offset_bottom = -20.0
+	var card_size: Vector2
+	if is_own:
+		# Own face-up hand: the 2-4 bottom-centre HandStrip footprint, unchanged.
+		strip.name = "HandStrip"
+		strip.anchor_top = 1.0
+		strip.anchor_bottom = 1.0
+		strip.offset_left = -172.0
+		strip.offset_right = 172.0
+		strip.offset_top = -104.0
+		strip.offset_bottom = -20.0
+		card_size = Vector2(74.0, 84.0)
+	else:
+		# Opponent face-down hand: new top-centre row between deck indicator and orb counters,
+		# above the pitch-zone placeholder. Smaller panels — a back carries nothing to read.
+		strip.name = "OpponentHandStrip"
+		strip.anchor_top = 0.0
+		strip.anchor_bottom = 0.0
+		strip.offset_left = -118.0
+		strip.offset_right = 118.0
+		strip.offset_top = 10.0
+		strip.offset_bottom = 74.0
+		card_size = Vector2(52.0, 64.0)
 	add_child(strip)
-	# 4 = the AUTHORED hand size, a balance LEVER (not a structural constant) — reserved here
-	# as footprint only. E3 owns making the hand data-driven; if the authored size changes,
-	# this count follows it there, not by a rule baked into presentation.
+	var card_style := _make_card_face_style(is_own)
 	for i in 4:
 		var card := Panel.new()
 		card.name = "Card%d" % i
-		card.custom_minimum_size = Vector2(74.0, 84.0)
+		card.custom_minimum_size = card_size
+		card.add_theme_stylebox_override("panel", card_style)
 		strip.add_child(card)
+
+
+## The SINGLE SEAT of the face-up / face-down decision (2-5/R1, R4). `is_own` picks a card FACE
+## (own hand, face-up: light parchment, thin dark frame) versus a card BACK (opponent hand,
+## face-down: deep indigo, heavy gold frame) — genuinely distinguishable at a glance in a
+## half-width viewport, not two identical blank panels. One StyleBoxFlat is shared across a
+## row's four panels (identical backs / blank faces this story). This one `if is_own` is the
+## only place styling branches on ownership; a later reveal toggle flips this parameter.
+func _make_card_face_style(is_own: bool) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.set_corner_radius_all(4)
+	if is_own:
+		box.bg_color = Color(0.90, 0.87, 0.78)      # parchment face
+		box.border_color = Color(0.24, 0.20, 0.16)  # thin dark frame
+		box.set_border_width_all(2)
+	else:
+		box.bg_color = Color(0.10, 0.13, 0.34)      # deep-indigo back
+		box.border_color = Color(0.78, 0.64, 0.24)  # heavy gold frame
+		box.set_border_width_all(4)
+	return box
 
 
 ## Three orb counters placeholder (E4 / E5). Top-right periphery own-tempo totals. Reserved
