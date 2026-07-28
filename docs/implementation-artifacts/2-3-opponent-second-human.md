@@ -1,6 +1,6 @@
 # Story 2.3: Opponent slot becomes a second human
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
