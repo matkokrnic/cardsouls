@@ -1,6 +1,6 @@
 # Story 2.4: Per-player HUD root in real half-width space
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
