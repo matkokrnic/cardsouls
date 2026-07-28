@@ -605,3 +605,21 @@ Readiness gate on `2-2-gamepad-controller-input-profiles.md` (backlog since the 
 2. A suspected `unique_id` collateral on `main.tscn` was investigated and DISMISSED: `unique_id=` is normal, already-committed content on every node header in this repo's `.tscn` format (confirmed with `git show HEAD:src/main/main.tscn`), not an editor artifact. No fifth editor-collateral incident — `main.tscn` carries zero diff for this story (Step 0 verified).
 
 **Board.** 2-2 done; E2 at 2 of 6.
+
+### Correction to process note 1 (same session)
+
+Process note 1 above places the blank-line residue "during this story's dev-pass window" and
+calls it a cousin of the editor-collateral pattern. Both are corrected here; the paragraph
+above stands as written (append-only, 1-9 / 2-1 / A4 precedent).
+- WHEN: the residue occurred during the OPERATOR'S LIVE SMOKE, after the dev pass had
+  finished, when the temporary `slot_controller_kinds` flip lines were removed from
+  `src/main/main.tscn` by hand. Two blank lines were left behind and were caught by
+  `git diff` before the chain, exactly as the rule intends.
+- WHAT IT IS NOT: this is an artifact of a MANUAL TEXT EDIT in a scene file, not of a Godot
+  editor session. It is NOT a member of the editor-collateral register, which stays at FOUR
+  incidents with its own distinct signature (node reordering, deletion of engine-default
+  pins such as `physics_ticks_per_second=60`, added `uid=` attributes, scene
+  renormalization). Conflating the two would dilute the signature that the closed-editor
+  rule exists to detect.
+- The standing rule is unchanged and is what caught it: `git diff` after EVERY manual edit,
+  no exception.
