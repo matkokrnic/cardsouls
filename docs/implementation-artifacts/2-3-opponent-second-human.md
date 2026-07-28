@@ -20,12 +20,12 @@ so that human-vs-human melee is achieved with no hero/actor/state edit beyond th
 
 ## Tasks / Subtasks
 
-- [ ] Flip `slot_controller_kinds` default `[0, 2]` -> `[0, 1]` at the sole config point; add a NEW guard pinning the shipped DEFAULT ARRAY to `[0, 1]` — distinct from 2-2's `test_controller_kind_ordinals_pinned` (`test/state/test_architecture_invariants.gd:50`), which already pins the four ordinal VALUES and needs no change here (AC: 1)
-- [ ] Guard `_resolve_movement` (step 3) for a DEAD hero: EXPLICITLY WRITE `velocity` to zero every tick (never skip — `HeroActor.drive()` reads it directly), SKIP the `facing` write (last value persists, the freeze); guard `_regen_stamina` (step 5) to skip a DEAD hero — no new snapshot field (AC: 2)
-- [ ] Add an attacker-liveness check in `_resolve_contacts` (step 4) at the same PRE-DEDUPE rung as the existing target-side DEAD drop, ahead of the iframe drop; verify no window is stopped or cleared early (AC: 3)
-- [ ] Add guards: dead-slot zero velocity, dead-slot frozen facing, dead-slot no stamina regen, dead attacker's in-flight window delivers nothing (no damage/hit_landed/mana/signal); add the new `slot_controller_kinds` default-array guard (AC: 4)
-- [ ] Re-run all 8 integration tests individually after the flip; report each result explicitly (AC: 4)
-- [ ] Run the live two-human smoke per the Live Smoke section below; write prose feel notes in `docs/playtest-log.md` (AC: 5)
+- [x] Flip `slot_controller_kinds` default `[0, 2]` -> `[0, 1]` at the sole config point; add a NEW guard pinning the shipped DEFAULT ARRAY to `[0, 1]` — distinct from 2-2's `test_controller_kind_ordinals_pinned` (`test/state/test_architecture_invariants.gd:50`), which already pins the four ordinal VALUES and needs no change here (AC: 1) — landed as `test_slot_controller_kinds_default_is_p1_p2`
+- [x] Guard `_resolve_movement` (step 3) for a DEAD hero: EXPLICITLY WRITE `velocity` to zero every tick (never skip — `HeroActor.drive()` reads it directly), SKIP the `facing` write (last value persists, the freeze); guard `_regen_stamina` (step 5) to skip a DEAD hero — no new snapshot field (AC: 2)
+- [x] Add an attacker-liveness check in `_resolve_contacts` (step 4) at the same PRE-DEDUPE rung as the existing target-side DEAD drop, ahead of the iframe drop; verify no window is stopped or cleared early (AC: 3) — 1-9/R3 obligation confirmed intact
+- [x] Add guards: dead-slot zero velocity, dead-slot frozen facing, dead-slot no stamina regen, dead attacker's in-flight window delivers nothing (no damage/hit_landed/mana/signal); add the new `slot_controller_kinds` default-array guard (AC: 4) — five new tests total
+- [x] Re-run all 8 integration tests individually after the flip; report each result explicitly (AC: 4) — all 8 PASS individually
+- [x] Run the live two-human smoke per the Live Smoke section below; write prose feel notes in `docs/playtest-log.md` (AC: 5) — operator smoke PASS, no findings
 
 ## Dev Notes
 
@@ -87,8 +87,28 @@ so that human-vs-human melee is achieved with no hero/actor/state edit beyond th
 
 ### Agent Model Used
 
+Dev pass: claude-opus-4-8. Commit chain: claude-sonnet-5.
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- Suite `151/690` -> `156/714`. All 8 integration tests re-run individually after the flip, all PASS, diagnostics bit-identical to baseline — 7 of the 8 rely on the default and now build a live `KEYBOARD_P2` on slot 1, proving empirically that an unpressed keyboard yields a neutral intent under the headless harness.
+- Golden UNMOVED, measured in BOTH directions: the reverse measurement temporarily disabled the DEAD gates and the file was restored byte-for-byte, SHA256-verified. The reverse run also showed all four behavioural guards FAIL without the gates — proving them load-bearing, not merely inert insurance.
+- Live smoke: PASS, no findings, zero editor collateral (see `docs/playtest-log.md`, 2026-07-28 entry).
+
 ### File List
+
+- `src/main/match_runner.gd` — EDITED. `slot_controller_kinds` default flipped `[0, 2]` -> `[0, 1]` at the sole A3 config point (AC 1)
+- `src/state/match_state.gd` — EDITED. DEAD-slot movement gate in `_resolve_movement` (velocity zeroed, facing write skipped), regen suppression in `_regen_stamina`, attacker-side DEAD drop in `_resolve_contacts` at the pre-dedupe rung (AC 2, 3)
+- `test/state/test_architecture_invariants.gd` — EDITED. Added `test_slot_controller_kinds_default_is_p1_p2` (AC 1, 4)
+- `test/state/test_match_state.gd` — EDITED. Added `test_dead_hero_velocity_zeroed_every_tick`, `test_dead_hero_facing_frozen` (AC 2, 4)
+- `test/state/test_stamina_economy.gd` — EDITED. Added `test_dead_hero_stamina_does_not_regen` (AC 2, 4)
+- `test/state/test_contact_resolution.gd` — EDITED. Added `test_dead_attacker_in_flight_window_delivers_nothing` (AC 3, 4)
+- `test/integration/test_camera_relative.gd` — EDITED. Comment/header updates only — the test's explicit `[0, 1]` override now matches the shipped default but is retained on purpose; no behavioural change (AC 1)
+
+## Change Log
+
+| Date | Version | Description | Author |
+|------|---------|-------------|--------|
+| 2026-07-28 | 0.1 | Dev pass: `slot_controller_kinds` default flipped to `[0, 1]`; DEAD-slot residuals closed (velocity zero, facing freeze, stamina suppression, attacker-side contact drop); five new guard tests. Golden unmoved, measured both directions; suite 151/690 -> 156/714 + 8 integration green. Live smoke PASS, no findings. NOT committed. | claude-opus-4-8 |

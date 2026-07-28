@@ -36,4 +36,8 @@ Nije provjereno:
 
 Zakljucak: PASS za pokriveno.
 
+28.7.
+
+split screen radi kako spada, kada igrac biva ubijen ne moze se micati za razliku od ranije
+
 
