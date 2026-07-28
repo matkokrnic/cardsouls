@@ -23,23 +23,23 @@ so that CardSouls discovers whether the full HUD fits the space at all, before t
 
 ## Tasks / Subtasks
 
-- [ ] Add `connect_hero_hp_changed(slot, cb)`, `connect_stamina_changed(slot, cb)`, `connect_mana_changed(slot, cb)` to `src/main/match_runner.gd`, each wrapping `player.hero.hp_changed` / `player.stamina.stamina_changed` / `player.mana.mana_changed` on the correct `PlayerState` (`_match_state.p1`/`_match_state.p2`), with the same slot guard as `connect_hero_action_state_changed` (AC: 1)
-- [ ] Prime each of the three seams on connect: call the connecting callback once with `player.hero.get_hp()`/`get_max_hp()`, `player.stamina.get_current()`/`get_maximum()`, `player.mana.get_current()`/`get_maximum()` respectively, immediately after `.connect(callback)` (AC: 2)
-- [ ] Add `src/ui/hud/hud_root.gd` -- a `Control`, constructed in code, no companion `.tscn` (AC: 3)
-- [ ] In `match_runner._ready`, instantiate one `HudRoot` per viewport and `add_child` it under `$P1View/P1Viewport` and `$P2View/P2Viewport` respectively; verify `main.tscn` carries zero diff, no camera is added, no gameplay node is reparented, `data/camera_config.tres` is untouched (AC: 3)
-- [ ] Implement HP/stamina/mana bars inside `hud_root.gd` as signal-driven consumers of AC1's three seams only; no `_process` override for economy state (AC: 4)
-- [ ] Wire each `HudRoot` instance's bar callbacks through `connect_hero_hp_changed(slot, ...)`/`connect_stamina_changed(slot, ...)`/`connect_mana_changed(slot, ...)` bound to that viewport's own slot only; add a test pinning that each HUD root is wired with only its own slot's economy callbacks (AC: 4)
-- [ ] Reserve + lay out the 4-card hand strip, 3 orb counters, Pitch Zone slot+timer, deck/reshuffle indicators as empty placeholder `Control`s at their real footprint, no signal wiring (AC: 5)
-- [ ] Apply the P4 centre/periphery layout inside `hud_root.gd`; comment the rationale in the script (AC: 6)
-- [ ] Delete `src/main/debug_state_overlay.gd` and `src/main/debug_state_overlay.gd.uid` (AC: 7)
-- [ ] Remove the overlay's instantiation (`DebugStateOverlay.new()`), its `connect_hero_action_state_changed` binds, and its `connect_hit_landed` bind from `match_runner._ready` (AC: 7)
-- [ ] Delete `test/integration/test_debug_overlay.gd` and its `.uid` companion (AC: 7)
-- [ ] Add `test/integration/test_hud_viewports.gd` proving per-viewport HUD nodes exist under BOTH `SubViewport`s in the live scene; confirm the integration suite still globs to 8 files (AC: 7)
-- [ ] After `src/ui/hud/hud_root.gd` and `test/integration/test_hud_viewports.gd` exist, generate their `.uid` companions via `godot --headless --editor --quit --path .` (the editor is never opened by hand); then run a per-diff collateral check -- `git status` plus `git diff` on every file the scan touched, classifying each diff individually. Blanket revert is RETIRED; collateral is always sorted per-diff. Known collateral signature to watch for: reorder + deletion of the `physics_ticks_per_second=60` pin + uid attributes + scene renormalization (AC: 7)
-- [ ] Wire a minimal per-viewport round-over label via `EventBus.round_ended.connect(root.on_round_ended.bind(slot))`, mirroring the `TelegraphController` precedent (`cues.on_round_ended.bind(slot)`); connect no other combat seam in HUD wiring (AC: 8)
-- [ ] Write the per-element -> channel table into Dev Notes (below) (AC: 8)
-- [ ] Extend `test_cues_layer_never_calls_state_mutators` in `test/state/test_architecture_invariants.gd` with an existence assertion for `src/ui/hud/hud_root.gd`, matching the `controller_found` pattern used for `telegraph_controller.gd` (AC: 9)
-- [ ] Screenshot at final half-width resolution; verify no clipping by the split boundary or the pulled-back camera's arena view (AC: 10)
+- [x] Add `connect_hero_hp_changed(slot, cb)`, `connect_stamina_changed(slot, cb)`, `connect_mana_changed(slot, cb)` to `src/main/match_runner.gd`, each wrapping `player.hero.hp_changed` / `player.stamina.stamina_changed` / `player.mana.mana_changed` on the correct `PlayerState` (`_match_state.p1`/`_match_state.p2`), with the same slot guard as `connect_hero_action_state_changed` (AC: 1)
+- [x] Prime each of the three seams on connect: call the connecting callback once with `player.hero.get_hp()`/`get_max_hp()`, `player.stamina.get_current()`/`get_maximum()`, `player.mana.get_current()`/`get_maximum()` respectively, immediately after `.connect(callback)` (AC: 2)
+- [x] Add `src/ui/hud/hud_root.gd` -- a `Control`, constructed in code, no companion `.tscn` (AC: 3)
+- [x] In `match_runner._ready`, instantiate one `HudRoot` per viewport and `add_child` it under `$P1View/P1Viewport` and `$P2View/P2Viewport` respectively; verify `main.tscn` carries zero diff, no camera is added, no gameplay node is reparented, `data/camera_config.tres` is untouched (AC: 3)
+- [x] Implement HP/stamina/mana bars inside `hud_root.gd` as signal-driven consumers of AC1's three seams only; no `_process` override for economy state (AC: 4)
+- [x] Wire each `HudRoot` instance's bar callbacks through `connect_hero_hp_changed(slot, ...)`/`connect_stamina_changed(slot, ...)`/`connect_mana_changed(slot, ...)` bound to that viewport's own slot only; add a test pinning that each HUD root is wired with only its own slot's economy callbacks (AC: 4)
+- [x] Reserve + lay out the 4-card hand strip, 3 orb counters, Pitch Zone slot+timer, deck/reshuffle indicators as empty placeholder `Control`s at their real footprint, no signal wiring (AC: 5)
+- [x] Apply the P4 centre/periphery layout inside `hud_root.gd`; comment the rationale in the script (AC: 6)
+- [x] Delete `src/main/debug_state_overlay.gd` and `src/main/debug_state_overlay.gd.uid` (AC: 7)
+- [x] Remove the overlay's instantiation (`DebugStateOverlay.new()`), its `connect_hero_action_state_changed` binds, and its `connect_hit_landed` bind from `match_runner._ready` (AC: 7)
+- [x] Delete `test/integration/test_debug_overlay.gd` and its `.uid` companion (AC: 7)
+- [x] Add `test/integration/test_hud_viewports.gd` proving per-viewport HUD nodes exist under BOTH `SubViewport`s in the live scene; confirm the integration suite still globs to 8 files (AC: 7)
+- [x] After `src/ui/hud/hud_root.gd` and `test/integration/test_hud_viewports.gd` exist, generate their `.uid` companions via `godot --headless --editor --quit --path .` (the editor is never opened by hand); then run a per-diff collateral check -- `git status` plus `git diff` on every file the scan touched, classifying each diff individually. Blanket revert is RETIRED; collateral is always sorted per-diff. Known collateral signature to watch for: reorder + deletion of the `physics_ticks_per_second=60` pin + uid attributes + scene renormalization (AC: 7)
+- [x] Wire a minimal per-viewport round-over label via `EventBus.round_ended.connect(root.on_round_ended.bind(slot))`, mirroring the `TelegraphController` precedent (`cues.on_round_ended.bind(slot)`); connect no other combat seam in HUD wiring (AC: 8)
+- [x] Write the per-element -> channel table into Dev Notes (below) (AC: 8)
+- [x] Extend `test_cues_layer_never_calls_state_mutators` in `test/state/test_architecture_invariants.gd` with an existence assertion for `src/ui/hud/hud_root.gd`, matching the `controller_found` pattern used for `telegraph_controller.gd` (AC: 9)
+- [x] Screenshot at final half-width resolution; verify no clipping by the split boundary or the pulled-back camera's arena view (AC: 10)
 
 ## Dev Notes
 
@@ -128,13 +128,29 @@ The round-over label makes the open 2-3/R10 gap visible: `MatchState.advance()` 
 
 ### Agent Model Used
 
+Claude Opus 4.8
+
 ### Debug Log References
 
 ### Completion Notes List
 
+- Golden measured in BOTH directions: `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` before this commit chain (baseline, unchanged since 1-9) and again after -- unmoved. Suite 156 tests / 715 assertions (156/714 -> 156/715, the new `hud_root.gd` existence guard in `test_architecture_invariants.gd` is the added assertion), all 8 integration tests run INDIVIDUALLY and PASS, including `test_hud_viewports.gd` replacing the retired `test_debug_overlay.gd` (baseline held at 8, did not drop to 7).
+- `.uid` scan: after `hud_root.gd` / `test_hud_viewports.gd` were added, the scan produced exactly 2 new `.uid` files (`src/ui/hud/hud_root.gd.uid`, `test/integration/test_hud_viewports.gd.uid`) plus the 2 expected deletions (`debug_state_overlay.gd.uid`, `test_debug_overlay.gd.uid`). Zero collateral elsewhere in the tree -- no `main.tscn` diff, no `physics_ticks_per_second` reorder, no `camera_config.tres` touch. Verified this session via `git diff --stat -- '*.uid'` against the full repo, not just the touched paths.
+- Review pass this session (D1): the `connect_hero_hp_changed` / `connect_stamina_changed` / `connect_mana_changed` prime-on-connect calls were temporarily stripped from `match_runner.gd` and `test_hud_viewports.gd` was re-run -- it FAILED (`primed_ok=false`), proving the AC2 priming guard actually bites rather than passing vacuously. `match_runner.gd` was then restored via `git checkout` and its SHA256 (`c22e79d2...`) verified byte-for-byte identical to the pre-mutation file. No further review findings surfaced -- `EventBus.round_ended` payload order was independently cross-checked against `signal round_ended(loser_index: int)` in `event_bus.gd` and the `.bind(slot)` pattern matches the existing `TelegraphController.on_round_ended` precedent exactly.
+- AC10 (legibility at real half-width size) was verified via the operator's own live smoke against the shipped two-human default, not an agent-taken screenshot -- this session ran headless only (no editor, no game launch), per chain instructions. See `docs/playtest-log.md` (2026-07-28 entry, operator's own hand) and the decision-log close-out for the recorded findings (pitch-zone centring, card-icon size).
+- Live smoke (operator, second two-human smoke): HUD confined to its own half in both viewports, priming live (HP/stamina full, mana empty at start), mana rises on confirmed hits, win/lose labels render and persist through a debug reset (see decision-log MICRO-DECISION 1), fps fine, zero manual `.tscn` edits, zero collateral. Two findings recorded, both deferred (see decision-log): pitch-zone centring (S1) and card-slot legibility pending real art (S2).
+
 ### File List
+
+- Modified: `src/main/match_runner.gd` -- three new per-slot economy seams; debug overlay wiring replaced with per-viewport `HudRoot` construction.
+- Modified: `test/state/test_architecture_invariants.gd` -- `hud_root.gd` existence guard added to `test_cues_layer_never_calls_state_mutators`.
+- Added: `src/ui/hud/hud_root.gd` (+ `.uid`) -- the per-viewport HUD root.
+- Added: `test/integration/test_hud_viewports.gd` (+ `.uid`) -- replaces `test_debug_overlay.gd`; proves per-viewport HUD existence, prime-on-connect, and per-slot binding asymmetry.
+- Deleted: `src/main/debug_state_overlay.gd` (+ `.uid`) -- retired (2-4/R3).
+- Deleted: `test/integration/test_debug_overlay.gd` (+ `.uid`) -- retired, superseded by `test_hud_viewports.gd`.
 
 ## Change Log
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
+| 2026-07-28 | 1.0 | Dev pass: three primed per-slot economy seams, code-constructed per-viewport HudRoot, debug overlay retired, live smoke passed with two findings deferred to E2 retro. | Claude Opus 4.8 |
