@@ -1,6 +1,6 @@
 # Story 2.5: Information-model integrity — face-down opponent hand
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
