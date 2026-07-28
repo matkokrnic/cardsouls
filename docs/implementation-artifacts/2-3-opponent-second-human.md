@@ -111,4 +111,4 @@ Dev pass: claude-opus-4-8. Commit chain: claude-sonnet-5.
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
-| 2026-07-28 | 0.1 | Dev pass: `slot_controller_kinds` default flipped to `[0, 1]`; DEAD-slot residuals closed (velocity zero, facing freeze, stamina suppression, attacker-side contact drop); five new guard tests. Golden unmoved, measured both directions; suite 151/690 -> 156/714 + 8 integration green. Live smoke PASS, no findings. NOT committed. | claude-opus-4-8 |
+| 2026-07-28 | 0.1 | Dev pass: `slot_controller_kinds` default flipped to `[0, 1]`; DEAD-slot residuals closed (velocity zero, facing freeze, stamina suppression, attacker-side contact drop); five new guard tests. Golden unmoved, measured both directions; suite 151/690 -> 156/714 + 8 integration green. Live smoke PASS, no findings. Committed in 843e33a (code+tests); docs record 96cd66f; board fa2beb7; close-out c6d0a3e. | claude-opus-4-8 |
