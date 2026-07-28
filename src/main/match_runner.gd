@@ -18,15 +18,16 @@ const _MAX_MANA := 80.0
 
 ## Story 1-6 (AC 2): THE single per-slot controller-kind config point. Slot 0 = P1, slot
 ## 1 = P2. Swapping a slot's kind here is the ONLY edit dummy -> PvP -> bot needs — E2 (2-3)
-## swaps slot 1 NULL -> KEYBOARD_P2, E7 -> a scripted kind — a one-line change, never a
-## hero/actor/state edit (dummy identity is a controller choice, arch amendment A3). P2
-## DEFAULTS to NULL (the training dummy, story 1-6); the second slot itself has existed and
-## been driven since E0 — this story SWAPS its driver, it does not add a slot.
+## swapped slot 1 NULL -> KEYBOARD_P2, E7 -> a scripted kind — a one-line change, never a
+## hero/actor/state edit (dummy identity is a controller choice, arch amendment A3). Slot 1
+## ships KEYBOARD_P2 as of 2-3; NULL remains an available kind (the 1-6 training dummy) but
+## is no longer the shipped default. The second slot itself has existed and been driven
+## since E0 — this story SWAPPED its driver, it does not add a slot.
 enum ControllerKind { KEYBOARD_P1, KEYBOARD_P2, NULL, GAMEPAD }
 
 @export var slot_controller_kinds: Array[ControllerKind] = [
 	ControllerKind.KEYBOARD_P1,  # slot 0 — P1 (local keyboard)
-	ControllerKind.NULL,         # slot 1 — P2 (training dummy; 2-3 -> KEYBOARD_P2)
+	ControllerKind.KEYBOARD_P2,  # slot 1 — P2 (local keyboard; 2-3 A3 flip NULL -> KEYBOARD_P2)
 ]
 
 @onready var _p1_hero: HeroActor = $P1Hero

@@ -11,9 +11,11 @@ extends SceneTree
 ## are yawed in OPPOSITE senses and both heroes are driven forward: each follows its OWN camera
 ## and is unaffected by the other's rotation (P1 -> world -X, P2 -> world +X). Opposite results
 ## from opposite rig yaws prove the two bases are distinct, not shared. Slot 1 is put on a
-## KEYBOARD_P2 controller FOR THIS TEST ONLY (shipped main.tscn keeps slot 1 = NULL, the training
-## dummy); the kind is set on the scene instance BEFORE it enters the tree, through the single
-## per-slot config point (match_runner.slot_controller_kinds), never a private reach-in.
+## KEYBOARD_P2 controller EXPLICITLY, via assign() below (shipped main.tscn also ships
+## KEYBOARD_P2 on slot 1 as of 2-3 — NULL, the training dummy, remains an available kind but is
+## no longer the default); the kind is set on the scene instance BEFORE it enters the tree,
+## through the single per-slot config point (match_runner.slot_controller_kinds), never a
+## private reach-in.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_camera_relative.gd
 ## (read ${PIPESTATUS[0]} / set -o pipefail so grep can't mask the exit code).
@@ -35,7 +37,9 @@ func _initialize() -> void:
 	var main: Variant = scene.instantiate()
 	# Single per-slot config point (story 1-6): drive slot 1 with a real keyboard controller so
 	# P2's camera-relative movement can be exercised. assign() coerces into the typed export in
-	# place, BEFORE add_child so the runner's _ready reads it. Shipped default keeps slot 1 = NULL.
+	# place, BEFORE add_child so the runner's _ready reads it. As of 2-3 this now matches the
+	# shipped default (slot 1 = KEYBOARD_P2), but the explicit override is kept on purpose: a
+	# test must not depend on a default it does not itself set.
 	main.slot_controller_kinds.assign([0, 1])  # 0 = KEYBOARD_P1, 1 = KEYBOARD_P2
 	root.add_child(main)
 	_p1 = root.get_node("Main/P1Hero")

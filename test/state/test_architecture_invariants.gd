@@ -63,6 +63,22 @@ func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)
 	assert_eq(k.get("GAMEPAD"), 3, "GAMEPAD appended == 3")
 
 
+func test_slot_controller_kinds_default_is_p1_p2() -> void:  # Story 2-3 (2-3/R7, AC1)
+	# DISTINCT from test_controller_kind_ordinals_pinned above: that pins the enum VALUES;
+	# this pins the SHIPPED default ARRAY. The 2-3 A3 flip moved slot 1 from the 1-6 NULL
+	# training dummy ([0, 2]) to a second live keyboard ([0, 1]). The live two-human smoke
+	# (2-3/R7) exercises THIS committed default with zero .tscn edits, so a regression that
+	# reverts the flip must bite here. Read the export default off a bare instance — @onready
+	# vars and _ready() do not run under .new() (no tree), so this is just the export default.
+	var runner: GDScript = load("res://src/main/match_runner.gd")
+	var inst: Node = runner.new()
+	var kinds: Array = inst.slot_controller_kinds
+	assert_eq(kinds.size(), 2, "exactly two slots ship (P1, P2)")
+	assert_eq(int(kinds[0]), 0, "slot 0 ships KEYBOARD_P1 (ordinal 0)")
+	assert_eq(int(kinds[1]), 1, "slot 1 ships KEYBOARD_P2 (ordinal 1) — the 2-3 flip from NULL")
+	inst.free()
+
+
 ## Story 1-10 (AC 6): the cues/ui layer is READ-ONLY (D5 — presentation subscribes,
 ## never writes). Banned tokens = the state layer's public MUTATOR surface (MatchState,
 ## HeroState, pool mutators) plus the handle tokens that would make any of it reachable

@@ -362,6 +362,15 @@ func _resolve_contacts() -> Array[int]:
 		var target := p1 if int(fact["target"]) == 0 else p2
 		if target.hero.action_state == HeroState.ActionState.DEAD:
 			continue
+		# Story 2-3 (AC3, 2-3/R6): attacker-side DEAD FACT DROP — the same rung and the same
+		# DEAD-drop family as the target drop above: PRE-DEDUPE, ahead of the iframe drop and
+		# register_swing_hit. A dead attacker's fact delivers NOTHING (no damage, no
+		# hit_landed, no mana, no deflect signal). Placed before register_swing_hit so the
+		# corpse's fact never consumes the swing's one resolution; attack_index stays
+		# untouched. The in-flight window is NOT stopped or shortened here — it keeps ticking
+		# to expiry by design (1-9/R3 intact); it simply resolves to nothing.
+		if attacker.hero.action_state == HeroState.ActionState.DEAD:
+			continue
 		# Story 1-9 (1-9/R1): iframe FACT DROP — not a resolution. Judged on the window
 		# (+grace) ALONE, never on state == ROLLING (1-9/R3), and BEFORE dedupe
 		# registration (the DEAD-drop family): a dropped fact never consumes the swing,
@@ -416,14 +425,30 @@ func _generate_mana(confirmed_hits: Array[int]) -> void:
 ## (CONSTRAINT C); the pool owns the mechanism (fixed add + post-spend delay window), THIS
 ## is the policy seat (D6): regen is suppressed while the hero is BLOCKING — block entry is
 ## free, so block must cost time or holding it would be free and P2 ("aggression is
-## economy") unenforced. Every other action state regenerates.
+## economy") unenforced; suppressed likewise while DEAD, since a corpse runs no economy
+## (story 2-3). Every other action state regenerates.
 func _regen_stamina(player: PlayerState) -> void:
-	player.stamina.advance_regen(
-		balance_ticks.stamina_regen_per_tick,
-		player.hero.action_state == HeroState.ActionState.BLOCKING)
+	# Story 2-3 (AC2, 2-3/R5): a DEAD hero is skipped the SAME way a BLOCKING one already is
+	# (the D6 suppression) — a corpse runs no economy. This extends the existing suppression
+	# flag; it is a DIFFERENT function and step from the P2 movement gate (do not merge them).
+	var state := player.hero.action_state
+	var suppressed := state == HeroState.ActionState.BLOCKING \
+			or state == HeroState.ActionState.DEAD
+	player.stamina.advance_regen(balance_ticks.stamina_regen_per_tick, suppressed)
 
 
 func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:
+	# Story 2-3 (AC2, 2-3/R5): a DEAD hero exhibits no live movement. ASYMMETRIC by
+	# downstream consumption (see story Dev Notes): velocity is EXPLICITLY written to zero
+	# EVERY tick — HeroActor.drive() reads hero_state.velocity straight into move_and_slide()
+	# (hero.gd:26), so a SKIPPED write would leave the last live velocity in place and the
+	# corpse would slide forever; facing is SKIPPED (this early return never reaches the
+	# facing write below), so its last value persists unchanged — that persistence IS the
+	# freeze, storing nothing new (hero.gd:34 only reads facing to derive a display yaw).
+	# No new snapshot field: only velocity's VALUE on the DEAD branch changes.
+	if player.hero.action_state == HeroState.ActionState.DEAD:
+		player.hero.velocity = Vector3.ZERO
+		return
 	var dir := intent.move_dir
 	if dir.length() > 1.0:
 		dir = dir.normalized()  # analog safety; never speed up past move_speed

@@ -240,6 +240,42 @@ func test_swing_dedupe_tracking_is_snapshotted_mid_swing() -> void:
 	assert_eq(records[0]["hit"], [1], "the confirmed target is on the record")
 
 
+## ---- Dead attacker (story 2-3, AC3/AC4, 2-3/R6) -----------------------------------------
+
+## A DEAD attacker delivers nothing: the step-4 attacker-liveness drop sits at the same
+## PRE-DEDUPE rung as the target DEAD drop, ahead of the iframe drop and register_swing_hit.
+## The in-flight window is NOT stopped or shortened (1-9/R3 intact) — killing during the
+## active window, its record stays live — but the corpse's fact resolves to nothing: no
+## damage, no hit_landed, no mana, no deflect signal, and attack_index / the swing's one
+## resolution are untouched (register_swing_hit is never reached).
+func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
+	var ms := _make_match()
+	_attack_and_advance_through(ms, 4)          # P1 ATTACKING, active window open (t4-7), swing 0
+	assert_true(ms.p1.hero.is_hitbox_active(), "attacker's active window is open before death")
+	var atk := ms.p1.hero.attack_index
+	var hits: Array = []
+	ms.hit_landed.connect(func(a: int, t: int, d: float, hp: float) -> void: hits.append([a, t, d, hp]))
+	var deflects: Array = []
+	ms.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	ms.p1.hero.take_damage(999.0)               # kill the attacker mid-swing
+	_advance(ms)                                # step 8 of this tick sets P1 DEAD (window keeps ticking)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "attacker is now DEAD")
+	assert_eq(ms.p1.hero.attack_index, atk, "swing index unchanged by death")
+	# A fact SOURCED from the dead attacker, its dedupe record still live.
+	var p2_hp_before := ms.p2.hero.get_hp()
+	var p1_mana_before := ms.p1.mana.get_current()
+	ms.push_contact(0, 1, atk, Vector2.DOWN)
+	_advance(ms)                                # step 4 resolves the fact against the DEAD attacker
+	assert_eq(ms.p2.hero.get_hp(), p2_hp_before, "no damage — a dead attacker's fact delivers nothing")
+	assert_eq(ms.p1.mana.get_current(), p1_mana_before, "no mana for a dead attacker (flag was ON)")
+	assert_eq(hits, [], "no hit_landed emitted for a dead attacker")
+	assert_eq(deflects, [], "no deflect_landed emitted for a dead attacker")
+	assert_eq(ms.p1.hero.attack_index, atk, "attack_index untouched (register_swing_hit never reached)")
+	var snap: Dictionary = ms.p1.hero.to_snapshot()
+	assert_true(bool(snap["swing_dedupe"]["records"].has(atk)),
+		"the swing's dedupe record is intact — the corpse's fact never consumed the swing's resolution")
+
+
 ## ---- Pre-injection guard ----------------------------------------------------------------
 
 func test_contacts_inert_without_apply_balance() -> void:

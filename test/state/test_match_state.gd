@@ -85,3 +85,44 @@ func test_round_ended_rearms_after_debug_reset_and_fires_once_per_death() -> voi
 	ms.drain_signals()
 	assert_eq(ev.n, 2, "second death fires again — once per DEATH, not per match")
 	assert_eq(ev.loser, 1, "same loser reported")
+
+
+## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's velocity is EXPLICITLY zeroed every tick.
+## HeroActor.drive() reads hero_state.velocity straight into move_and_slide(), so a skipped
+## write would leave the last live velocity in place and the corpse would slide forever —
+## the residual this story kills. The kill tick still moves while alive (movement resolves in
+## step 3, DEAD is set in step 8), so the corpse carries velocity until the FIRST dead tick
+## zeroes it, and it stays zero across further ticks even with live move intents.
+func test_dead_hero_velocity_zeroed_every_tick() -> void:
+	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	_step(ms, Vector2(1, 0), Vector2.ZERO)   # P1 moving: velocity (5, 0, 0)
+	ms.p1.hero.take_damage(999.0)
+	_step(ms, Vector2(1, 0), Vector2.ZERO)   # kill tick: alive at step 3 -> velocity kept, DEAD at step 8
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "P1 is DEAD")
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(5, 0, 0)),
+		"corpse still carries its last live velocity after the kill tick — the residual this closes")
+	_step(ms, Vector2(0, 1), Vector2.ZERO)   # first DEAD tick, LIVE perpendicular intent
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3.ZERO),
+		"DEAD: velocity EXPLICITLY zeroed despite a live move intent")
+	_step(ms, Vector2(-1, 0), Vector2.ZERO)  # a further DEAD tick, another live intent
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3.ZERO),
+		"stays zero across further ticks with live intents")
+
+
+## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's facing write is SKIPPED — the last value
+## persists unchanged, and that persistence IS the freeze (no stored frozen copy, no new
+## snapshot field). Asymmetric with velocity above: velocity is written, facing is not.
+func test_dead_hero_facing_frozen() -> void:
+	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	_step(ms, Vector2(1, 0), Vector2.ZERO)   # P1 facing -> (1, 0)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(1, 0)), "live facing set from input")
+	ms.p1.hero.take_damage(999.0)
+	_step(ms, Vector2(1, 0), Vector2.ZERO)   # kill tick: DEAD at step 8, facing still (1, 0)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "P1 is DEAD")
+	var frozen := ms.p1.hero.facing
+	_step(ms, Vector2(0, 1), Vector2.ZERO)   # DEAD tick, live perpendicular intent
+	assert_true(ms.p1.hero.facing.is_equal_approx(frozen),
+		"DEAD: facing write SKIPPED — last value persists, NOT updated to (0, 1)")
+	_step(ms, Vector2(0, -1), Vector2.ZERO)  # a further DEAD tick, another live intent
+	assert_true(ms.p1.hero.facing.is_equal_approx(frozen),
+		"facing stays frozen across further ticks with live intents")

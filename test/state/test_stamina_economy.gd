@@ -356,6 +356,26 @@ func test_reload_swaps_cost_rate_and_delay_at_next_use() -> void:
 		"reloaded delay (2 ticks) and regen rate (2.0/tick) both read inline")
 
 
+## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's stamina regen is suppressed the SAME way
+## BLOCKING already is (D6) — a corpse runs no economy. The kill tick still regenerates
+## while alive (regen is step 5, DEAD is set in step 8), so regen is captured at death and
+## must not advance across further DEAD ticks.
+func test_dead_hero_stamina_does_not_regen() -> void:
+	var ms := _make_match()
+	ms.p1.stamina.spend(20.0, 0)  # 30, no delay window — regen would otherwise be visible
+	ms.drain_signals()
+	assert_eq(ms.p1.stamina.get_current(), 30.0, "start below max")
+	ms.p1.hero.take_damage(999.0)
+	_advance(ms)  # kill tick: alive at step 5 -> regen 30 -> 31, DEAD at step 8
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "P1 is DEAD")
+	var stamina_at_death := ms.p1.stamina.get_current()
+	assert_eq(stamina_at_death, 31.0, "kill tick regenerated once while still alive")
+	for i in range(3):
+		_advance(ms)
+	assert_eq(ms.p1.stamina.get_current(), stamina_at_death,
+		"DEAD: no stamina regen across further ticks (suppressed like BLOCKING)")
+
+
 ## ---- Step-5 null guard ------------------------------------------------------------------
 
 func test_no_regen_without_apply_balance() -> void:
