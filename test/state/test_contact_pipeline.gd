@@ -146,6 +146,11 @@ func test_death_enters_dead_via_step8_and_signals_through_the_seam() -> void:
 		"death announced through the SAME queued action_state_changed channel (locked seam)")
 
 
+## STORY 2-6 SUPERSESSION: this now proves the step-1b round-over FREEZE, NOT the empty DEAD
+## transition-table row. Once P2 is DEAD the round is over, so the advance() calls carrying the
+## presses return at step 1b and step 3 (_resolve_actions) never runs — the presses are dropped
+## by the freeze, not the dead row. The dead-row rejection is now unreachable via advance() (2-6
+## arch-amendment queue: removal vs retention).
 func test_dead_hero_row_accepts_no_input() -> void:
 	var ms := _make_match()
 	ms.p2.hero.take_damage(999.0)
@@ -161,45 +166,64 @@ func test_dead_hero_row_accepts_no_input() -> void:
 	assert_eq(fired.n, 0, "no transitions, no signals — presses on a dead hero are dropped")
 
 
-func test_facts_on_dead_target_dropped_before_resolution_no_corpse_mana() -> void:
+## Story 1-7/2-3 anti-corpse-mana-farming guarantee, now provided by the story-2-6 round-over
+## FREEZE. Pre-2-6 this drove a post-death LIVE swing through the step-4 DEAD-target fact-drop;
+## story 2-6 Block 1 retires the post-round-over live match (2-6/R5+R6), so a DEAD hero always
+## implies _round_over and step 1b returns BEFORE step 4 — the DEAD-target drop is now
+## defensive-only (unreachable via advance()). The farming defect is therefore closed BY
+## CONSTRUCTION: the killing hit lands its mana on the kill tick (target dies at step 8, after
+## the step-5 mana seat), and NO further resolution can run while the round is frozen. Proven by:
+## mana is exactly one hit's worth after the kill, and facts pushed on later frozen ticks resolve
+## NOTHING (no hit_landed, no extra mana, no damage) even while the attacker keeps pressing.
+##
+## STORY 2-6 SUPERSESSION: this now proves the step-1b round-over FREEZE, NOT the step-4
+## DEAD-target fact drop. A DEAD hero always implies _round_over, so every post-kill advance()
+## returns at step 1b and step 4 never drains the pushed facts — the DEAD-target drop is now
+## unreachable via advance() (2-6 arch-amendment queue: removal vs retention).
+func test_no_corpse_mana_farming_under_round_over_freeze() -> void:
 	var ms := _make_match(100.0)
 	var hits := {"n": 0}
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)
 	_kill_p2(ms)
 	assert_eq(hits.n, 1, "the killing hit itself landed")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "killing hit generated its mana (target died in step 8, after step 5)")
-	_advance_until_idle(ms)                     # recover out of swing 0
-	_advance(ms, _intent([&"attack"]))          # fresh swing 1 (attack_index 1), active 4 ticks in
-	for i in range(3):
-		_advance(ms)                            # through windup: active window open now
-	assert_true(ms.p1.hero.is_hitbox_active(), "swing 1 active — a live gather would push facts")
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
-	_advance(ms)                                # fact on a DEAD target
-	assert_eq(hits.n, 1, "no hit_landed on a corpse — fact dropped BEFORE resolution")
-	assert_eq(ms.p1.mana.get_current(), 8.0, "corpse-mana-farming CLOSED: no mana from a dead target")
-	assert_eq(ms.p2.hero.get_hp(), 0.0, "no damage applied either")
-	var records: Dictionary = ms.p1.hero.to_snapshot()["swing_dedupe"]["records"]
-	assert_eq(records[1]["hit"], [], "dropped before dedupe registration — swing 1's record stays clean")
+	assert_true(bool(ms.to_snapshot()["round_over"]), "round is frozen after the kill")
+	# The match is frozen: attack presses never progress the swing, and a fact pushed on a frozen
+	# tick is never drained (step 4 is skipped by step 1b). Corpse-farming is closed by construction.
+	for i in range(6):
+		ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)  # a fact every frozen tick
+		_advance(ms, _intent([&"attack"]))                            # attacker keeps pressing attack
+	assert_eq(hits.n, 1, "no hit_landed while frozen — no post-death resolution at all")
+	assert_eq(ms.p1.mana.get_current(), 8.0, "corpse-mana-farming CLOSED: mana never grows past the kill")
+	assert_eq(ms.p2.hero.get_hp(), 0.0, "no further damage applied to the corpse")
 
 
 ## ---- Debug reset (AC 5, D-1/D-2) --------------------------------------------------------
 
 func test_debug_reset_is_round_scoped_and_nothing_else() -> void:
+	# Story 2-6: the reset now lands on a FROZEN tick (the round is over). The reset is step 1, so
+	# it clears the latch BEFORE step 1b consults it and steps 2-8 resolve again that same tick
+	# (2-6/R6). The pre-2-6 flow set up a mid-delay stamina reading via post-kill live rolls,
+	# impossible under the freeze; instead P1 rolls (spending stamina) BEFORE the kill, so the
+	# "pools untouched" (D-2) bite lands on STAMINA — the half that would move if the reset ever
+	# poked the D9 apply_balance refill. P2 is killed via take_damage (not P1's swing) so P1 stays
+	# cleanly mid-roll into the freeze.
 	var ms := _make_match(100.0)
-	_kill_p2(ms)                                # tick 5: P2 DEAD, P1 mana 8, attack_index 0
+	_advance(ms, _intent([&"roll"]))            # tick 1: P1 rolls -> stamina 50->40, ROLLING; delay suppresses ticks 1-3
+	assert_eq(ms.p1.stamina.get_current(), 40.0, "roll spent 10 stamina before death")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ROLLING, "P1 mid-roll")
+	var index_before := ms.p1.hero.attack_index  # P1 never attacked -> attack_index 0
+	ms.p2.hero.take_damage(999.0)               # arm P2's death
+	ms.p1.hero.take_damage(30.0)                # damage P1 too, so the HP-restore assertion bites
+	_advance(ms)                                # tick 2: P2 dies at step 8 -> round over; delay covers tick 2 so stamina stays 40
+	assert_true(bool(ms.to_snapshot()["round_over"]), "round over after P2's death")
+	assert_eq(ms.p1.stamina.get_current(), 40.0, "stamina still 40 (regen delay suppresses ticks 1-3)")
+	assert_eq(ms.p1.hero.get_hp(), 70.0, "P1 at 70 before the reset (the HP-restore assertion must bite)")
 	var p2_log: Array = []
 	ms.p2.hero.action_state_changed.connect(
 		func(prev: HeroState.ActionState, cur: HeroState.ActionState) -> void:
 			p2_log.append([int(prev), int(cur)]))
-	_advance_until_idle(ms)                     # P1 swings out (IDLE t14)
-	_advance(ms, _intent([&"roll"]))            # t15: stamina 50 -> 40, delay covers t15-t17
-	assert_eq(ms.p1.stamina.get_current(), 40.0)
-	var index_before := ms.p1.hero.attack_index
-	# Review R4: damage P1 too, so the "ALL slots to max" assertion below can actually
-	# fail — without this, P1 sat at 100.0 with or without the reset.
-	ms.p1.hero.take_damage(30.0)
-	assert_eq(ms.p1.hero.get_hp(), 70.0, "P1 damaged pre-reset (the assertion below must bite)")
-	_advance(ms, _intent([], [], true))         # t16: intent-carried ROUND-SCOPED reset
+	_advance(ms, _intent([], [], true))         # tick 3: ROUND-SCOPED reset on the frozen tick
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "all slots restored: P1 HP back to max")
 	assert_eq(ms.p2.hero.get_hp(), 100.0, "all slots restored: P2 HP back to max")
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE, "DEAD -> IDLE on reset")
@@ -207,12 +231,11 @@ func test_debug_reset_is_round_scoped_and_nothing_else() -> void:
 	assert_eq(p2_log, [[int(HeroState.ActionState.DEAD), int(HeroState.ActionState.IDLE)]],
 		"revival announced through the same queued seam")
 	assert_eq(ms.p1.hero.attack_index, index_before, "attack_index NEVER resets (pinned dedupe contract)")
-	assert_eq(ms.p1.mana.get_current(), 8.0, "pools untouched: mana neither refilled nor zeroed")
 	assert_eq(ms.p1.stamina.get_current(), 40.0,
-		"pools untouched: stamina exactly its normal mid-delay value — the reset refilled nothing")
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ROLLING, "a LIVE hero's action state untouched (mid-roll)")
-	_advance(ms, _intent([&"attack"]))          # P1 still rolling — dropped; proves normal play resumed
-	_advance_until_idle(ms)
+		"POOLS UNTOUCHED (D-2): stamina still EXACTLY 40 — the reset refilled nothing (bites the D9 apply_balance refill)")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ROLLING,
+		"a LIVE hero's action state untouched: still mid-roll through the reset (windows untouched)")
+	_advance_until_idle(ms)                     # roll finishes normally — proves play resumed
 	_advance(ms, _intent([&"attack"]))
 	assert_eq(ms.p1.hero.attack_index, index_before + 1, "next swing continues the monotonic count")
 

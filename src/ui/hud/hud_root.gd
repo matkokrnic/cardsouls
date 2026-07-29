@@ -47,6 +47,7 @@ var _stamina_bar: ProgressBar
 var _stamina_value: Label
 var _mana_bar: ProgressBar
 var _mana_value: Label
+var _pitch_panel: Panel
 var _pitch_timer: Label
 var _round_label: Label
 
@@ -98,6 +99,16 @@ func on_mana_changed(current: float, maximum: float) -> void:
 func on_round_ended(loser_index: int, my_slot: int) -> void:
 	_round_label.text = "YOU WIN" if loser_index != my_slot else "YOU LOSE"
 	_round_label.visible = true
+
+
+## EventBus.round_started (story 2-6, AC 1, 2-6/R5): the single CLEAR seat for the round-over
+## label — a debug reset hides it, closing the 2-4 close-out MICRO-DECISION 1 gap (the label
+## previously survived a reset because nothing signalled it). on_round_ended above stays the
+## single SET seat. No-argument and slot-independent: the reset is ownerless, so both viewports
+## clear on the one event. No prime-on-connect — the label is built hidden, so this only ever
+## HIDES in response to a real reset event.
+func on_round_started() -> void:
+	_round_label.visible = false
 
 
 func _apply_bar(bar: ProgressBar, value_label: Label, current: float, maximum: float) -> void:
@@ -173,15 +184,9 @@ func _make_bar_row(caption: String, fill: Color) -> Array:
 ## only — consumes no signal.
 func _build_pitch_zone() -> void:
 	var panel := _make_placeholder_panel("PitchZone", "PITCH ZONE")
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -70.0
-	panel.offset_right = 70.0
-	panel.offset_top = -110.0
-	panel.offset_bottom = -22.0
+	_pitch_panel = panel
 	add_child(panel)
+	set_pitch_zone_placement(false)  # start at anchor A (dead-centre, the shipped placement)
 	_pitch_timer = Label.new()
 	_pitch_timer.name = "PitchTimer"
 	_pitch_timer.text = "0.0"
@@ -193,6 +198,37 @@ func _build_pitch_zone() -> void:
 	_pitch_timer.offset_top = 2.0
 	_pitch_timer.offset_bottom = 22.0
 	panel.add_child(_pitch_timer)
+
+
+## Story 2-6 (AC 5, 2-6/R9): move THIS viewport's Pitch Zone placeholder between the two A/B
+## candidate anchors. `false` = anchor A, the shipped dead-centre focal position; `true` = anchor
+## B, just LEFT of the lower-centre vitals bars. The B anchor is derived from the vitals column's
+## own geometry (that column spans centre ± 180, see _build_vitals) — NOT from OpponentHandStrip
+## (2-5's provisional face-down row, which may be deleted in E3 and must never be anchored to).
+## The instrument panel drives BOTH viewports through this one method (shared switch). The
+## _pitch_timer child rides along automatically (its anchors are relative to this panel).
+func set_pitch_zone_placement(left_of_bars: bool) -> void:
+	_pitch_panel.anchor_left = 0.5
+	_pitch_panel.anchor_right = 0.5
+	if left_of_bars:
+		# Anchor B: a 100x88 panel in the gutter just LEFT of the vitals column. The column's left
+		# edge is at centre-180 (see _build_vitals); the panel's right edge sits 6px left of it
+		# (centre-186) and it is 100 wide, fitting the ~108px gutter to the viewport's left edge at
+		# the nominal half-width. Derived from the vitals geometry — NOT from OpponentHandStrip.
+		_pitch_panel.anchor_top = 1.0
+		_pitch_panel.anchor_bottom = 1.0
+		_pitch_panel.offset_left = -286.0
+		_pitch_panel.offset_right = -186.0
+		_pitch_panel.offset_top = -196.0
+		_pitch_panel.offset_bottom = -108.0
+	else:
+		# Anchor A: the shipped dead-centre focal placement.
+		_pitch_panel.anchor_top = 0.5
+		_pitch_panel.anchor_bottom = 0.5
+		_pitch_panel.offset_left = -70.0
+		_pitch_panel.offset_right = 70.0
+		_pitch_panel.offset_top = -110.0
+		_pitch_panel.offset_bottom = -22.0
 
 
 ## Story 2-5: the two per-viewport hand rows (E3 card widgets land later). BOTH rows are built

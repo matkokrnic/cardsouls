@@ -79,7 +79,7 @@ func sample() -> InputIntent:
 	var raw := Vector2(
 		Input.get_joy_axis(_device, _profile.move_axis_x),
 		Input.get_joy_axis(_device, _profile.move_axis_y))
-	intent.move_dir = resolve_move_dir(raw, _profile.deadzone)
+	intent.move_dir = resolve_move_dir(raw, _profile.deadzone, _profile.normalize_move_magnitude)
 	for key in INTENT_ACTIONS:
 		var held := Input.is_joy_button_pressed(_device, _button_map[key])
 		intent.held[key] = held
@@ -88,11 +88,19 @@ func sample() -> InputIntent:
 	return intent
 
 
-## Deadzone + unit normalization (2-2/R5), factored out as a PURE function so the
-## below-threshold-zero / above-threshold-unit-length contract is headless-testable without a
-## physical pad (joypad axes are not headless-samplable). Below the deadzone -> ZERO; at or above
-## -> the stick DIRECTION at unit length, so partial deflection is not fractional-speed movement.
-static func resolve_move_dir(raw: Vector2, deadzone: float) -> Vector2:
+## Deadzone + magnitude policy (2-2/R5, extended by 2-6/R8), factored out as a PURE function so
+## the contract is headless-testable without a physical pad (joypad axes are not
+## headless-samplable). Below the deadzone -> ZERO always. Above it, the magnitude policy is the
+## authored GamepadProfile.normalize_move_magnitude, passed in so this stays pure:
+##   normalize == true  (shipped default) -> the stick DIRECTION at unit length (2-2/R5 binary
+##                        speed, keyboard parity).
+##   normalize == false -> the stick's actual magnitude, clamped to length 1.0 — a partial
+##                        deflection yields a partial move_dir magnitude (variable analog speed).
+## The clamp reuses the analog-safety rule already in _resolve_movement (never exceed unit length,
+## so downstream never speeds past move_speed). The default keeps every 2-arg caller unchanged.
+static func resolve_move_dir(raw: Vector2, deadzone: float, normalize_magnitude := true) -> Vector2:
 	if raw.length() < deadzone:
 		return Vector2.ZERO
-	return raw.normalized()
+	if normalize_magnitude or raw.length() > 1.0:
+		return raw.normalized()
+	return raw

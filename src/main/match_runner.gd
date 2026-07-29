@@ -85,6 +85,10 @@ func _ready() -> void:
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
 	# at drain time, post-advance.
 	_match_state.round_ended.connect(_relay_round_ended)
+	# Story 2-6 (AC 1, 2-6/R5): relay the reset counterpart exactly the same way — directly in
+	# _ready(), no new per-slot connect_ seam. State never touches an autoload, so the runner is
+	# the one seat that bridges MatchState.round_started onto the ownerless EventBus.
+	_match_state.round_started.connect(_relay_round_started)
 	# Story 2-4 (2-4/R3): the throwaway 1-3c debug overlay is RETIRED here — E2 replaces it
 	# with the real HUD. One HudRoot per viewport, constructed in code and added under each
 	# SubViewport (the overlay's code-construction pattern, reparented per-viewport instead of
@@ -97,13 +101,39 @@ func _ready() -> void:
 	# full immediately — add_child fires the root's _ready (parent SubViewport is already in
 	# the tree) BEFORE these connects, so the bars exist when the priming call lands.
 	var hud_viewports: Array[SubViewport] = [$P1View/P1Viewport, $P2View/P2Viewport]
+	var huds: Array[HudRoot] = []
 	for slot: int in 2:
 		var hud := HudRoot.new()
 		hud_viewports[slot].add_child(hud)
+		huds.append(hud)
 		connect_hero_hp_changed(slot, hud.on_hp_changed)
 		connect_stamina_changed(slot, hud.on_stamina_changed)
 		connect_mana_changed(slot, hud.on_mana_changed)
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
+		# Story 2-6 (AC 1): the label's single CLEAR seat — a debug reset hides it on BOTH
+		# viewports. No-argument and slot-independent (the reset is ownerless), so no .bind(slot).
+		EventBus.round_started.connect(hud.on_round_started)
+	# Story 2-6 (AC 2): per-player debug StateInspector, one per SubViewport (the HudRoot
+	# per-viewport pattern). READ-ONLY: wired to FIVE of the existing observation seams (no eighth),
+	# each bound to its own slot; the three economy seams prime on connect so its bars render at once.
+	for slot: int in 2:
+		var inspector := StateInspector.new()
+		hud_viewports[slot].add_child(inspector)
+		connect_hero_action_state_changed(slot, inspector.on_action_state_changed)
+		connect_hero_action_rejected(slot, inspector.on_action_rejected)
+		connect_hero_hp_changed(slot, inspector.on_hp_changed)
+		connect_stamina_changed(slot, inspector.on_stamina_changed)
+		connect_mana_changed(slot, inspector.on_mana_changed)
+	# Story 2-6 (AC 4/5): the ONE global debug instrument panel. Added as a top-level Control child
+	# of the runner root so it renders over the whole window (both switches are window-global). It
+	# flips only presentation/controller-local switches (2-6/R4): the magnitude switch mutates the
+	# SHARED gamepad profile IN MEMORY (load() returns the resource-cache instance the gamepad
+	# controllers also read — never persisted), the Pitch Zone A/B switch moves both viewports'
+	# placeholder together via HudRoot.set_pitch_zone_placement.
+	var panel := DebugInstrumentPanel.new()
+	panel.gamepad_profile = load("res://data/gamepad_profile.tres") as GamepadProfile
+	panel.huds = huds
+	add_child(panel)
 	# Story 1-10 (AC 3/4): each hero's telegraph controller — the FIRST consumer of the
 	# two seams landed below (connect_hero_action_rejected, connect_deflect_landed) and a
 	# parallel consumer of the existing two. Signal payloads only, never a state handle;
@@ -200,6 +230,13 @@ func connect_deflect_landed(callback: Callable) -> void:
 ## because src/state/ never touches an autoload.
 func _relay_round_ended(loser_index: int) -> void:
 	EventBus.round_ended.emit(loser_index)
+
+
+## Story 2-6 (AC 1, 2-6/R5): MatchState.round_started -> EventBus.round_started. Runner-owned
+## for the same reason as _relay_round_ended: src/state/ never touches an autoload. No-argument
+## — the reset is a whole-match event, not per-player.
+func _relay_round_started() -> void:
+	EventBus.round_started.emit()
 
 
 ## Read-only subscription seam (story 2-4, AC 1/2 — 2-4/R1 amendment to the locked seam

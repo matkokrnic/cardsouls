@@ -14,6 +14,14 @@ extends RefCounted
 ## round latch (story 1-7, D-1): fires once per DEATH, not once per match.
 signal round_ended(loser_index: int)
 
+## Story 2-6 (AC 1, 2-6/R5/R6): the RESET counterpart to round_ended — a no-argument, ownerless
+## round-lifecycle event (a debug reset is a whole-match event, not per-player, the round_ended
+## analogy inverted). Pushed QUEUED and UNCONDITIONALLY by _apply_debug_reset() on EVERY debug
+## reset (D5), relayed by the runner to EventBus.round_started exactly the way round_ended is.
+## The single CLEAR trigger for the round-over label (HudRoot.on_round_started); round_ended
+## stays the single SET. No prime-on-connect: a HUD consumer must receive an actual reset event.
+signal round_started()
+
 ## Story 1-7 (N1): MatchState-owned two-player event (the round_ended analogy — a hit has
 ## an attacker AND a target, so it is not per-hero). Queued in step 4 when a contact is
 ## CONFIRMED, drained by the runner after advance() (D5). target_hp is the target's
@@ -101,6 +109,28 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    read directly by the step-3 transition evaluation.
 	if p1_intent.debug_reset or p2_intent.debug_reset:
 		_apply_debug_reset()
+	# 1b. Round-over freeze (story 2-6, AC 1, 2-6/R6 — the 2-3/R10 named gap's owner): once the
+	#    round is over, HALT both heroes and return, skipping steps 2 through 8 for this tick, so
+	#    the surviving hero stops moving instead of gliding on. Seated AFTER step 1 (reset
+	#    ingestion), NEVER hoisted ahead of it (the R6 ordering): a debug reset landing on the SAME
+	#    tick the round is frozen cleared _round_over just above, so movement resolution resumes
+	#    THAT tick, not one tick later. _tick already incremented at the top, so frozen ticks still
+	#    advance the counter — a reset landing on tick N stays deterministic.
+	#    Velocity is zeroed on EVERY frozen tick (2-6 operator ruling, close-out micro-decision):
+	#    the runner reads HeroState.velocity into move_and_slide() every physics frame regardless
+	#    of this early return, so a skipped write would leave the corpse (or any hero moving at the
+	#    kill instant) sliding at its last live speed forever — exactly the 2-3/R14 residual, now
+	#    honoured HERE instead of the step-3 DEAD branch. This is the standing 2-3 asymmetry rule
+	#    applied unchanged: a field read downstream must be WRITTEN, a display-only field may be
+	#    SKIPPED, so facing is left untouched and its last value persists (2-3/R14). The 2-3/R13
+	#    one-tick carry is intact: on the KILL tick movement resolves at step 3 and DEAD is set at
+	#    step 8, so the freeze only begins the NEXT tick — the corpse still carries its final
+	#    velocity for exactly that one tick before step 1b zeroes it. Golden CANNOT prove this: the
+	#    recorded sequence never reaches a round-over (story Dev Notes / test_determinism).
+	if _round_over:
+		p1.hero.velocity = Vector3.ZERO
+		p2.hero.velocity = Vector3.ZERO
+		return
 	# 2. Advance D4 timers   (hero windows + each pool's regen-delay window — every window
 	#    advances here, step 5 reads the result; unguarded like the hero timers, since a
 	#    pre-injection MatchState never started a delay window)
@@ -545,6 +575,11 @@ func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
 	_reset_player(p2)
+	# Story 2-6 (AC 1, 2-6/R5): announce the reset UNCONDITIONALLY on every debug reset — the
+	# round lifecycle previously emitted only on END (round_ended), never on reset, which is the
+	# 2-4 close-out MICRO-DECISION 1 gap (the round-over label survived a reset because nothing
+	# signalled it). Queued (D5) like every state signal; the runner relays it post-drain.
+	_queue.push(round_started.emit)
 
 
 func _reset_player(player: PlayerState) -> void:

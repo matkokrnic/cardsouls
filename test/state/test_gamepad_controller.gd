@@ -117,6 +117,50 @@ func test_above_deadzone_normalized_to_unit_length() -> void:  # 2-2/R5
 	assert_almost_eq(d.y, 0.0, 1e-5, "no spurious Y component")
 
 
+func test_variable_magnitude_passes_partial_deflection_through() -> void:  # Story 2-6 (AC 4, 2-6/R8)
+	# normalize_magnitude == false: above the deadzone the stick's ACTUAL magnitude passes through
+	# (clamped to length 1.0), so a partial deflection is a partial move_dir magnitude instead of
+	# binary speed. Below the deadzone still ZERO (the toggle changes only the above-deadzone rule).
+	var dz := 0.2
+	assert_eq(GamepadController.resolve_move_dir(Vector2(0.1, 0.0), dz, false), Vector2.ZERO,
+		"deadzone still applies with the toggle off")
+	var half := GamepadController.resolve_move_dir(Vector2(0.6, 0.0), dz, false)
+	assert_almost_eq(half.length(), 0.6, 1e-5,
+		"toggle OFF: 0.6 deflection passes through as magnitude 0.6, NOT normalized to 1.0")
+	assert_almost_eq(half.x, 0.6, 1e-5, "direction and magnitude both preserved on +X")
+	# Clamp: an over-unit raw vector (a diagonal past length 1) is still capped to 1.0 (analog safety).
+	var over := GamepadController.resolve_move_dir(Vector2(1.0, 1.0), dz, false)
+	assert_almost_eq(over.length(), 1.0, 1e-5, "toggle OFF: over-unit magnitude clamped to 1.0")
+	# Contrast the SAME input under the default (true): normalized to unit length. This is the bite —
+	# if the branch were ignored, `half` above would read 1.0 and match this.
+	assert_almost_eq(GamepadController.resolve_move_dir(Vector2(0.6, 0.0), dz, true).length(), 1.0,
+		1e-5, "toggle ON (default): the same 0.6 deflection normalizes to unit length")
+
+
+func test_panel_and_controller_share_the_same_profile_instance() -> void:  # Story 2-6 (N1, DEBT B adjacency)
+	# The instrument panel flips normalize_move_magnitude on the instance it holds via
+	# load("res://data/gamepad_profile.tres"); a GamepadController reads the field every tick on the
+	# instance the runner passed it (also via load() of the same path). This must not stay an
+	# ASSUMPTION: Godot's resource cache returns the SAME object for repeated load() of one path, so
+	# the panel and the controller share one instance and the flip is seen. Verified BY CONTENT here
+	# (== on Object is reference identity). If this ever fails, the AC-4 toggle silently no-ops.
+	const PATH := "res://data/gamepad_profile.tres"
+	var a: GamepadProfile = load(PATH)
+	var b: GamepadProfile = load(PATH)
+	assert_true(a == b, "load() of the same path returns the SAME cached resource instance (reference identity)")
+	# A controller built the way the runner builds it holds that exact instance — so the panel's
+	# load() and the controller's _profile are one object, and a panel flip reaches sample().
+	var controller := GamepadController.new(0, load(PATH))
+	assert_true(controller._profile == a,
+		"a GamepadController built via load() holds the shared instance the panel mutates")
+	# A flip on the panel's handle is visible on the controller's handle (same object).
+	var before := a.normalize_move_magnitude
+	a.normalize_move_magnitude = not before
+	assert_eq(controller._profile.normalize_move_magnitude, not before,
+		"flipping the field on one handle is seen on the other — they are the same instance")
+	a.normalize_move_magnitude = before  # leave the cached resource as authored (no persistence anyway)
+
+
 func test_gamepad_stick_up_matches_keyboard_up() -> void:  # Story 2-2 (review D2)
 	# Y-sign pin: a raw stick vector meaning "pushed up" must resolve to the SAME move_dir the
 	# keyboard produces for move_up — compared against the keyboard's ACTUAL output, not a chosen

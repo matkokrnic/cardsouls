@@ -222,7 +222,7 @@ func test_authored_zero_multiplier_is_full_root_but_facing_untouched() -> void:
 	assert_eq(h.velocity, Vector3.ZERO, "0.0 = full root: velocity zeroed while ATTACKING")
 	_advance(ms, _intent([], [], Vector2(0, 1)))
 	assert_eq(h.velocity, Vector3.ZERO, "still rooted mid-windup")
-	assert_eq(h.facing, Vector2(0, 1), "facing updates from raw intent — the multiplier scales VELOCITY only")
+	assert_eq(h.facing, Vector2(0, 1), "facing updates from the camera-rotated world_dir (1-7 R1) — identity basis here so it coincides with raw intent; the multiplier scales VELOCITY only")
 
 
 ## ---- Dedupe snapshot (AC 7, D8) ---------------------------------------------------------
@@ -248,6 +248,12 @@ func test_swing_dedupe_tracking_is_snapshotted_mid_swing() -> void:
 ## active window, its record stays live — but the corpse's fact resolves to nothing: no
 ## damage, no hit_landed, no mana, no deflect signal, and attack_index / the swing's one
 ## resolution are untouched (register_swing_hit is never reached).
+##
+## STORY 2-6 SUPERSESSION: this now passes because of the step-1b round-over FREEZE, NOT the
+## step-4 DEAD-attacker fact drop. Killing the attacker sets _round_over, so the advance() that
+## would resolve the pushed fact returns at step 1b and step 4 never runs — the fact is never
+## drained. The step-4 DEAD-attacker drop is now unreachable via advance() (2-6 arch-amendment
+## queue: removal vs retention).
 func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)          # P1 ATTACKING, active window open (t4-7), swing 0

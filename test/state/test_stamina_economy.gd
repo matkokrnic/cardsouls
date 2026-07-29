@@ -360,6 +360,11 @@ func test_reload_swaps_cost_rate_and_delay_at_next_use() -> void:
 ## BLOCKING already is (D6) — a corpse runs no economy. The kill tick still regenerates
 ## while alive (regen is step 5, DEAD is set in step 8), so regen is captured at death and
 ## must not advance across further DEAD ticks.
+##
+## STORY 2-6 SUPERSESSION: this now passes because of the step-1b round-over FREEZE, NOT the
+## _regen_stamina DEAD suppression. After the kill the round is over, so the further advance()
+## ticks return at step 1b and step 5 (regen) never runs at all. The _regen_stamina DEAD branch
+## is now unreachable via advance() (see the 2-6 arch-amendment queue entry: removal vs retention).
 func test_dead_hero_stamina_does_not_regen() -> void:
 	var ms := _make_match()
 	ms.p1.stamina.spend(20.0, 0)  # 30, no delay window — regen would otherwise be visible

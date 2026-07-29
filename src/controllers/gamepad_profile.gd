@@ -27,3 +27,13 @@ extends Resource
 @export var block_button: JoyButton = JOY_BUTTON_LEFT_SHOULDER    # L1 — block / deflect
 @export var roll_button: JoyButton = JOY_BUTTON_B                 # B  — dodge / roll
 @export var deadzone: float = 0.2   # stick magnitude below which move_dir resolves to ZERO
+
+## Story 2-6 (AC 4, 2-6/R8): variable-analog-magnitude toggle. TRUE (shipped default) = today's
+## behaviour — above the deadzone the stick vector is normalized to unit length, so a partial
+## deflection is binary-speed movement (keyboard parity, 2-2/R5). FALSE = the stick's actual
+## magnitude passes through (clamped to length 1.0), so a partial deflection yields a partial
+## move_dir magnitude. An AUTHORED field on this same load-once resource that already owns the
+## mapping and deadzone — NOT a FeatureFlags member (2-6/R4): replay stays safe because the
+## resulting magnitude is folded into the recorded InputIntent.move_dir, never a separate flag.
+## The debug instrument panel flips this IN MEMORY on the shared instance only — never persisted.
+@export var normalize_move_magnitude: bool = true
