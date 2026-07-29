@@ -55,3 +55,46 @@ nema nezeljenih preklapanja
 sve je na svom mejstu od ranije
 natpis idalje stoji nakon R
 fps stablian
+
+29.7.
+
+mislim da se ubijanje kretajucih igrace odvija propisno s tim da je tekso porcjeniti jer napaddac koji lovi stane svaki put kad azmahuje, ono sto svakako mogu reci 100% sigurno je to da nakon R nestaje win/lose poruka, nije mi jasno sto je ovo magnitude i ovo drugo, primjetio sam da kad toglam to drugo(a ne vidim procitati jer malo strsi van ekrana ljevo i poklapa se sa drugim elemetom, slika priakzuje to, sotale svati su unutar svojih gabarita sto se tice priakza), reci mi zasto priakzjemo statuse igraca dvaput u ui-u i kao state przore zasebne, aha to je instepctor, pa kad p1 nešto radi tipa napada p2, mejnja se inspector od p2 tj pada mu hp, jesi ti htio mozda prikazati tudi hp i statuse? instument zaklanje hud kao sto sam ranije rekao, pitch zona na novom mejstu je po meni mnogo bolje pozincinoirana nego na sred ekrana, kako da ac7 odradim, fps je uredan
+
+sad je dovedne  u red I razjasnjeno dosta toga
+1 leš ne nastavlja klizati kada ga ubijem u prketu, panel je sada na sredini, citljivo je ali ruzno izgleda, osim toga sad uiocama da se oba igraca prraliziraju kada jedan umre
+
+## 2-6-legibility-feel-instrumentation — live smoke (2026-07-29)
+
+Config: shipped default, two live humans, no .tscn edit. fps ~145.
+
+PASS. Block 1 confirmed live:
+- round ends -> BOTH heroes freeze (intended: step 1b skips resolution for both)
+- a hero killed while MOVING does not slide; the corpse halts
+- R clears the win/lose label and the match continues; repeatable
+- inspector present in both halves, primed from the start, per-slot correct
+- pitch zone A/B moves both halves together
+
+Findings (non-blocking):
+- S4: pitch zone at anchor B (left of the vitals bars) reads BETTER than dead
+  centre. FIRST A/B reading only -- the verdict stays open for E6.
+- S6: the instrument panel is readable and clear of the HUD after the fix, but
+  centred and visually ugly. Cosmetic, no owner.
+- S8: the attack sting and the block sting are more similar to each other than
+  either is to the roll sting. All three cues still read correctly and in time,
+  but SHAPE carried the read -- by ear alone attack vs block is weak, and the
+  protocol requires the set to be distinguishable by ear as well. Owner: the
+  DEBT E "legibility under 0.5s" member on the rig story, where the definitive
+  run with a naive observer also lives. NOT fixed in 2-6.
+
+AC 4 (variable analog magnitude): NOT verifiable in this smoke -- keyboard slots,
+no pad, .tscn flip forbidden. Switch present and toggles; effect unverified.
+
+### AC 7 -- telegraph legibility protocol, rehearsal run
+naive observer: NO -- DRY RUN of the procedure, not a verdict on the cues.
+Definitive legibility judgement stays animation-gated (rig story).
+
+| Action | Cue | Identified before resolve? | Correct? | Carried by | Note |
+|--------|-----|---------------------------|----------|------------|------|
+| Attack | AttackCone + StingAttack | Y | Y | both | sting close to block's |
+| Block  | BlockShield + StingBlock | Y | Y | both | sting close to attack's |
+| Roll   | RollDisc + StingRoll     | Y | Y | both | clearly distinct by ear |
