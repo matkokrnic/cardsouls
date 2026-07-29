@@ -1,6 +1,6 @@
 # Story 2.6: Legibility and feel validation instrumentation
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
