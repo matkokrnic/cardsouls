@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-07-29
+# last_updated: 2026-07-30
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-07-29
+last_updated: 2026-07-30
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -36,7 +36,7 @@ development_status:
   epic-0: done
 
   # E1 — Melee Combat + Training Dummy
-  epic-1: backlog
+  epic-1: done
   1-1-melee-balance-schema: done
   1-2-camera-relative-movement-basis: done
   1-3-hero-action-state-machine: done
@@ -52,7 +52,7 @@ development_status:
   1-10-telegraph-structure-combat-cues: done
 
   # E2 — Local Split-Screen PvP
-  epic-2: backlog
+  epic-2: done
   2-1-split-screen-subviewports: done
   2-2-gamepad-controller-input-profiles: done
   2-3-opponent-second-human: done
