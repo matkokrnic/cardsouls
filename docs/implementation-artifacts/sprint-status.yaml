@@ -62,7 +62,7 @@ development_status:
 
   # E3 — Card System + Mana Economy (gated — see story_notes)
   epic-3: backlog
-  3-0a-rig-adoption: backlog
+  3-0a-rig-adoption: ready-for-dev
   3-0b-feel-and-timing-tuning: backlog
   3-0c-intent-recorder: backlog
   3-1-matchstate-config-object: backlog
@@ -73,7 +73,7 @@ development_status:
   3-6-card-hud-hand-mana-deck: backlog
 
 story_notes:
-  3-0a-rig-adoption: "Board slot only, story file not yet authored (Matko writes it immediately after this commit — E3-P/R6). First models + AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation must survive); triggers DEBT E inheritance but ACs cover only the substrate + guards."
+  3-0a-rig-adoption: "Story authored, gated, and promoted to ready-for-dev 2026-07-30 (3-0a/R1-R8). First models + AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd must both stay green); triggers DEBT E inheritance but ACs cover only the substrate + guards."
   3-0b-feel-and-timing-tuning: "Board slot only, story file not yet authored just-in-time before its turn (Matko writes it — E3-P/R6). Carries the five DEBT E judgments (1-3c timing, 1-5 B6 multipliers, 1-7 lunge root motion, legibility <0.5s incl. pose_id and finding S8, OPEN decision (c)) plus deterministic step/pause (2-6/R3, the new Input Map actions land here and only here), window countdown (2-6/R7), and the real AC7 legibility run with a naive observer."
   3-0c-intent-recorder: "Board slot only, story file deliberately not authored yet (E3-P/R3, Set B staleness lesson). Carries the X5 four-field contact-fact contract and both halves of DEBT B."
   3-1-matchstate-config-object: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
