@@ -889,3 +889,29 @@ Readiness gate on `2-6-legibility-feel-instrumentation.md` (authored 2026-07-22 
 **E2-CO/R8 -- state at close.** E2 complete 6/6. Suite: 164 state tests / 759 assertions, plus 9 integration files. Golden unmoved and measured in both directions, six times running.
 
 **E2-CO/R9 -- process note.** Two browser-side claims were overturned by content this session (that the A3 amendment had not been applied -- it had, as an addendum to the existing A3 entry; and that the ladder carried a duplicated "Ingest intents" line -- it did not). Repo-content dispute score 10:0 for the CC side. Standing lesson: an Update/Write render is not a diff -- added-vs-replaced is judged only from `git diff`.
+
+---
+
+## Session 2026-07-30 -- E3 planning
+
+**E3-P/R1 -- Pass scope.** Five items land in one docs commit: epics stubs (Committed obligations added to E3/E4/E5/E6 in `epics.md`); stories-manual sync (E1.S2 / E2.S1 item 4 camera wording corrected); `IntentRecorder` board slot; rig story split + board slots (`3-0a-rig-adoption`, `3-0b-feel-and-timing-tuning`); supersession de-vacuization schedule. The E3 revisit gate stays closed until all five are closed; this commit closes them, with two scheduled follow-ups that precede the gates they feed: the corrective pass (E3-P/R4) and Matko-authored rig story files (E3-P/R6).
+
+**E3-P/R2 -- DEBT E split across two rig stories.** ADOPTION (`3-0a-rig-adoption`): first models + AnimationPlayer in `hero.tscn`; DECISION A intact (hero root never rotates; `test_root_rotation_isolation.gd` must survive); formally triggers DEBT E inheritance but its ACs cover only the substrate + guards. TUNING (`3-0b-feel-and-timing-tuning`): the five DEBT E judgments (1-3c final playtest timing judgment; 1-5 B6 per-phase movement multipliers; 1-7 attack-lunge root motion; legibility <0.5s shape+sound validation incl. pose/silhouette distinctness, `pose_id` consumption, and smoke finding S8 -- attack and block stings too similar by ear; OPEN decision (c) variable analog magnitude judgment) + deterministic step/pause (2-6/R3; the new `project.godot` Input Map actions land here and only here) + window countdown (2-6/R7) + the real AC7 legibility run with a naive observer. Amendment to the DEBT E trigger rule (1-10/R4): inheritance is split exactly this way so the adoption story does not re-inherit all seven items.
+
+**E3-P/R3 -- `IntentRecorder` story: board slot only** (`3-0c-intent-recorder`). The story FILE is deliberately not authored now (Set B staleness lesson -- story files written long before their dev pass go stale) and will be written just-in-time at its own creation pass. Its contract, by content: consumes the four-field contact fact `[attacker_slot, target_slot, attack_index, world-space direction target->attacker]` computed by the runner from positions (1-8 D-4 supersession); carries BOTH halves of DEBT B (`ResourceLoader` with `CACHE_MODE_IGNORE`; reload event in the intent stream; X5: replay = seed + intents + reload events, never re-read from disk); carries record/replay + mid-round reload per 2-6/R2.
+
+**E3-P/R4 -- Supersession de-vacuization schedule (executes E2-CO/R4).** A lightweight test-only corrective pass runs immediately after this commit, BEFORE the rig adoption story. The six SUPERSESSION-annotated tests --
+- `test/state/test_contact_pipeline.gd :: test_dead_hero_row_accepts_no_input`
+- `test/state/test_contact_pipeline.gd :: test_no_corpse_mana_farming_under_round_over_freeze`
+- `test/state/test_contact_resolution.gd :: test_dead_attacker_in_flight_window_delivers_nothing`
+- `test/state/test_match_state.gd :: test_dead_hero_velocity_zeroed_every_tick`
+- `test/state/test_match_state.gd :: test_dead_hero_facing_frozen`
+- `test/state/test_stamina_economy.gd :: test_dead_hero_stamina_does_not_regen`
+
+move from `advance()` to direct step-function calls on manually constructed state (DEAD hero, `_round_over` false); each test must be proven to FAIL under mutation of the branch it guards (restore from a copy outside the repo, SHA256-verified). Two commits: "test:" + a decision-log record. The full story ritual is waived: the ruling was already made at E2-CO/R4 and mutation proofs replace review. Fallback unchanged: delete tests AND code together, never code without tests.
+
+**E3-P/R5 -- stories-manual sync executed.** Corrected lines:
+- `stories-manual-e1.md` E1.S2 item 1: "Camera distance/height/pitch are authored in `data/camera_config.tres` -- presentation-side, load-once, outside `BalanceConfig` and outside the X3 hot-reload path (2-1 micro-decision, review-accepted) -- not literals in the scene script."
+- `stories-manual-e2.md` E2.S1 item 4: "Adjust the camera values authored in `data/camera_config.tres` -- presentation-side, load-once, outside `BalanceConfig` and outside the X3 hot-reload path (2-1 micro-decision, review-accepted); if the pulled-back framing does not survive half width, that is a finding worth logging in `decision-log.md`, not silently zooming in."
+
+**E3-P/R6 -- Rig story authorship.** Matko writes both story files himself -- adoption immediately after this commit as its own separate docs commit, tuning just-in-time before its turn. Both must include Golden Prediction and Live Smoke sections from the first draft (Set B files have lacked both sections six times running).

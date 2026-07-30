@@ -54,9 +54,10 @@ player slot already instantiated and driven by `NullController`.
    relative to *their own* camera and unaffected by the other camera's rotation.
 4. Re-check camera framing at half width against the GDD's requirement: fixed distance, no zoom,
    pulled back slightly further than Elden Ring's default, with the hero fully visible and enough
-   terrain context to read spacing. Adjust the balance-authored camera values; if the pulled-back
-   framing does not survive half width, that is a finding worth logging in `decision-log.md`, not
-   silently zooming in.
+   terrain context to read spacing. Adjust the camera values authored in `data/camera_config.tres`
+   — presentation-side, load-once, outside `BalanceConfig` and outside the X3 hot-reload path (2-1
+   micro-decision, review-accepted); if the pulled-back framing does not survive half width, that is
+   a finding worth logging in `decision-log.md`, not silently zooming in.
 5. Measure the frame budget with both viewports live: capture frame time over a full melee exchange
    and confirm the 60 FPS target (~16.6 ms) holds. Record the measured number in
    `docs/playtest-log.md` — it is the baseline every later epic's performance claim is compared to.

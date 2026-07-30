@@ -90,8 +90,10 @@ story implements the sanctioned approach; both shortcuts named there are defects
 
 1. Build the camera rig as an actor-side node attached to the hero scene: third-person, **fixed
    distance, no zoom**, pulled back slightly further than Elden Ring's default so the hero is fully
-   visible with terrain context. Camera distance/height/pitch are balance-authored, not literals in
-   the scene script. The rig has no `_physics_process`; the runner drives it.
+   visible with terrain context. Camera distance/height/pitch are authored in `data/camera_config.tres`
+   — presentation-side, load-once, outside `BalanceConfig` and outside the X3 hot-reload path (2-1
+   micro-decision, review-accepted) — not literals in the scene script. The rig has no
+   `_physics_process`; the runner drives it.
 2. Add a per-player camera-basis spatial fact to the runner's step 2: the runner reads each player's
    camera basis and pushes it into `MatchState` **indexed by player slot** (a small fixed-size array,
    not a single global basis). Sizing it per slot now is what keeps E2 a config change rather than a

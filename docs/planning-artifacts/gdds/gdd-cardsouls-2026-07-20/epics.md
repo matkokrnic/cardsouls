@@ -2,7 +2,7 @@
 title: CardSouls — Development Epics
 parent: gdd.md
 created: 2026-07-20
-updated: 2026-07-20
+updated: 2026-07-30
 status: draft
 ---
 
@@ -84,6 +84,32 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 
 **Risks.** Mode-select UX under real-time pressure must not become a parallel demand (P4).
 
+**Committed obligations.**
+- The rig-adoption story and the feel-and-timing-tuning story (the DEBT E split, decision-log
+  E3-P/R2) take board slots ahead of the stories below, both preceding the E3 revisit gate.
+- The `IntentRecorder` story (the X5 contact-fact contract + DEBT B's reload events, one stream
+  contract — decision-log 2-6/R2) takes a board slot; the story file is deliberately not authored
+  yet (decision-log E3-P/R3), written just-in-time at its own creation pass.
+- 3-1 (`MatchState` config object) folds the constructor/`apply_balance` double-injection quirk
+  (`match_state.gd:544`) into one injected config object; reconciles `ManaPool`'s `apply_balance`
+  refill behavior against `StaminaPool`'s (D9 full-refill ruling) once `max_mana` lands in
+  `BalanceConfig` (currently the runner's constructor value only); carries OPEN decision (d) —
+  does the basic attack cost stamina (decision-log:743) — as a seat if the E2 retro adopts it.
+- DEBT D (the D6 economy-evaluator full form) is committed to land at story 3-4's own gate, which
+  reconciles 3-4's existing evaluator-framing text (decision-log:224); not resolved here.
+- The deck story (3-3) is the forcing point for the open question of whether hand size ever varies
+  (decision-log:801) — first version: always 4, refill on play.
+- The reveal-opponent-hand toggle, deferred from 2-5 (2-5/R4), lands in E3 on the condition already
+  met there: the face-down/face-up rule lives in exactly ONE seat.
+- A real `FeatureFlags` overlay does not exist yet; today exactly one flag
+  (`melee_mana_generation`) is true by default (`src/state/resources/feature_flags.gd`) — every
+  other flag stays dormant until its own epic (E4 minions/totems, E5 unblockable/orbs, E6
+  pitch-zone, E8 equipment).
+- E3 art includes resolving 2-4's smoke finding S2 — "card slots look small for legibility"
+  (decision-log:739) — once real card art exists.
+- The opponent face-down top-centre row (2-5/R3) is PROVISIONAL — nothing built in E3 may anchor
+  to it; it may be deleted outright (2-6/R9).
+
 ---
 
 ## E4 — Minions & Totems
@@ -99,6 +125,10 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 **Exit criteria.** Cards summon functioning minions/totems; 60 FPS holds with many units; flags toggle cleanly.
 
 **Risks.** Targeting performance; minion AI feel in the small arena (arena size interacts — iterate).
+
+**Committed obligations.** Per the GDD epic table (`gdd.md:412`): "Autonomous minion AI (data-defined
+priorities), pooling, throttled targeting, 3 totem subtypes." Flags: `minions`, `totems`. The GDD
+defines no further E4 commitments beyond what is already in Goal/Key stories/Exit criteria above.
 
 ---
 
@@ -119,6 +149,15 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 
 **Risks.** Defense-window length is the fairness core; telegraph legibility must be judged in the E2 half-width viewport.
 
+**Committed obligations.**
+- State takes ownership of the active telegraph fact for RPS; the fact→profile mapping stays
+  presentation (1-10/R1, locked).
+- OPEN decision (a) — attacker consequence on basic-attack deflect / stun — has its forcing point
+  here (decision-log:649); the color-counter stun on the three-tier ladder must reconcile with the
+  melee-deflect consequence already shipped in E1 (1-8, R-D5: no attacker consequence).
+- `ActionState.CHARGING` is already reserved in the enum (`src/state/hero_state.gd:27`), unused
+  until E5 wires Mode ② chargeup.
+
 ---
 
 ## E6 — Pitch Zone (Vision Complete)
@@ -137,6 +176,15 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 **Exit criteria.** The full touchstone is playable in split-screen; buildup→bluff→payoff exists end-to-end.
 
 **Milestone.** **The vision is now testable.** The go/no-go validation playtests (and the playtester-composition instrumentation from Success Metrics) begin here.
+
+**Committed obligations.**
+- `PitchState` gains content; it carries none until E6 (2-6/R9).
+- Whether the Pitch Zone mechanic is shared between players or owned per-player remains OPEN,
+  reserved for E6 (2-6/R9) — the only lock: the pitched card is the sole public information, hands
+  stay private otherwise.
+- Pitch zone placement judgment stays open; the first A/B reading (2-6/R19, finding S4) found
+  anchor B (left of the vitals bars) reads better than dead-centre anchor A — a first reading only,
+  not a verdict.
 
 ---
 
