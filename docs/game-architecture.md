@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.2'
+version: '1.3'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -157,6 +157,7 @@ buildup → bluff → payoff over an always-on combat heartbeat.
 | Physics | Jolt 3D | CharacterBody3D + move_and_slide; Area3D hit/overlap queries |
 | Audio | AudioServer + bus layout | Legibility audio bus is architectural, defined in E1/E2 |
 | Input | Input Map named actions | Backs controller abstraction; P1/P2 profiles; no raw keycodes |
+| | **Exception:** `GamepadController` (E2) | Device-filtered reads — `Input.get_joy_axis(device, ...)`, `Input.is_joy_button_pressed(device, ...)` — never Input Map actions. Named actions cannot be bound per device, so per-slot gamepad binding is impossible through them. Mapping/deadzone are authored data in `data/gamepad_profile.tres`; the device is bound once at construction, so a pad must be connected before the game starts. |
 | Scene mgmt | SceneTree / PackedScene / SubViewport | Two SubViewports = split-screen (E2) |
 | Build | Windows export templates | Single target; no platform branches or fallbacks |
 
@@ -245,7 +246,15 @@ _physics_process(delta):   # the ONLY _physics_process in the project — actors
 
 ```
 advance(intents):
-  1. Ingest intents            apply each player's InputIntent → intended actions (P1 then P2)
+  1. Ingest intents            debug reset only — applied here because it is intent-carried
+                               (story 1-7, D-2), so the mutation stays inside the ordered
+                               dispatch and rides the recorded intent stream for free. The
+                               rest of each player's InputIntent (move_dir, attack/block/roll)
+                               is read directly by step 3's transition evaluation, not here.
+  1b. Round-over freeze (story 2-6, AC 1)   if _round_over: zero BOTH heroes' velocity this
+                                   tick, skip facing, and RETURN — steps 2-8 do not run.
+                                   Seated AFTER step 1, so a same-tick reset clears _round_over
+                                   first and movement resumes that tick, not one tick later.
   2. Advance timers            D4 windows: stamina/mana regen, chargeup, defense window, stun,
                                [fizzle deadline — E6 seam]
   3. Resolve actions           intended velocity + attack/block/roll transitions (physical
@@ -258,6 +267,13 @@ advance(intents):
   8. Resolution check          HP ≤ 0 → death / round end
   # No signal emission here — steps 1–8 only ENQUEUE. Draining happens in the runner, step 3 above.
 ```
+
+**Consequence of step 1b (story 2-6, 2-6/R15/R16).** DEAD always implies round-over under the freeze,
+so the 2-3 DEAD-residual branches — `_resolve_movement`'s DEAD velocity-zero/facing-skip,
+`_regen_stamina`'s DEAD suppression, and both DEAD-attacker/DEAD-target fact drops in
+`_resolve_contacts` — are currently **unreachable via `advance()`**, while remaining the contract of
+their own step functions (reachable by calling those functions directly). See decision-log.md, E2
+close-out, for the retention ruling.
 
 > **A1 follow-up — `advance()` takes no `delta` (decided 2026-07-21).** After A1 (all
 > gameplay-critical timing is integer ticks) and F1 (position is actor-owned), the state layer has
@@ -339,7 +355,22 @@ one tick at a time in tests. This same primitive backs the fizzle deadline (D8).
 ### D5 — Signal / Event Flow (with timing discipline)
 
 Direct typed signals on the owning state object; the HUD/presentation subscribes. `EventBus`
-autoload is reserved for genuinely global, ownerless events only (`match_started`, `round_ended`).
+autoload is reserved for genuinely global, ownerless events only (`match_started`, `round_started`,
+`round_ended`).
+
+**Observation seam registry (2-4/2-6 amendment).** Consumers reach state exclusively through runner
+connect seams (`match_runner.gd`), never a state handle. There are now **seven**, plus the EventBus
+round-lifecycle pair above:
+
+- **Four combat seams:** `connect_hero_action_state_changed`, `connect_hit_landed`,
+  `connect_hero_action_rejected`, `connect_deflect_landed`.
+- **Three economy seams (added in 2-4):** `connect_hero_hp_changed`, `connect_stamina_changed`,
+  `connect_mana_changed` — per-slot, payload `(current, maximum)`, and **all three PRIME ON CONNECT**:
+  they emit the current value immediately on connection. Without priming the HUD bars stay empty until
+  the first change, and the maximum never arrives at all.
+
+Invariants unchanged: signal payloads only, never a state handle; signals are queued during
+`advance()` and drained afterwards.
 
 > **BINDING D5 — signal timing & direction:**
 > 1. **Queued, not mid-tick.** Signals raised during `advance()` are **enqueued**, then **drained
@@ -452,7 +483,13 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
 
 - Per D5: owner-signals (state→presentation), drained after `advance()`. `EventBus` autoload carries
   a small fixed typed set only: `match_started`, `round_started`, `round_ended` (past-tense
-  `snake_case`).
+  `snake_case`). `match_runner` relays `round_started` from the queued signal drain, same as
+  `round_ended`. The single seat for clearing the round-over label is `HudRoot.on_round_started`.
+  Deliberately **no prime-on-connect** for `round_started`/`round_ended` — the consumer needs an
+  *event*, not a value, and the label starts hidden.
+- **No eighth seam.** The debug `StateInspector` displays only what the seven D5 connect seams already
+  carry; per-tick timing-window countdown streaming is deliberately deferred — it would firehose state
+  internals through the queued-drain path.
 
 ### Debug Tools (gated behind a `debug` flag)
 
@@ -528,7 +565,7 @@ res://
 │   │   └── pool/ object_pool.gd      # pooling seam (E4)
 │   ├── controllers/  ⚠️              # D3: the ONLY path where Input.* may appear
 │   │   ├── controller.gd             # interface: sample() -> InputIntent
-│   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2)
+│   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2) · null_controller.gd
 │   │   ├── scripted_controller.gd    # E7 bot (gets an injected READ-ONLY state view) — reserved
 │   │   └── replay_controller.gd      # X5: emits InputIntent from a recorded stream (indistinguishable
 │   │                                 #     from hardware to the runner)
@@ -850,6 +887,14 @@ tick and under headless test.
   the field no longer the actual velocity and makes replay depend on presentation state. At E0
   `move_dir` is treated as world-space directly (no camera yet); E1 introduces the pushed camera basis
   rather than either shortcut.
+- **World-space facing contract (1-7/1-8 amendment).** `HeroState.facing` is **world-space planar**
+  (world x, z), not camera- or actor-relative. The contact fact carries a world-space direction from
+  *target to attacker*, computed by the runner **from positions** (`match_runner.gd`,
+  `_gather_contact_facts`) — it never reads `HeroState.facing` and never expresses a relative angle;
+  arc comparison against that fact is state policy in `advance()` step 4. **Single yaw source:**
+  `HeroActor.drive()` computes exactly **one** yaw — `atan2(facing.x, facing.y)` — and feeds both the
+  Hitbox and the Mesh; a second `atan2` anywhere is a defect. The hero **root never rotates**;
+  facing/body rotation lives on child nodes, and the runner pushes the rig's local basis.
 - **Documented phase (replay-safe).** Godot's physics server resolves collisions/overlaps *after*
   `_physics_process` returns, so facts gathered at the top of tick N reflect the flush produced by tick
   N−1's movement — a **constant one-tick relationship, identical on every run.** State logic treats
@@ -969,7 +1014,27 @@ strengthens an existing determinism guarantee rather than adding scope.
   **second full `PlayerState` + `HeroActor` driven by a `NullController`** — a controller/config swap,
   nothing more (the E1 stories depend on this so that dummy → PvP → bot stays a one-line change). The
   entry is removed; no dummy actor scene/type is to be created. The already-correct "dummy→PvP→bot is a
-  config swap" framing in D3 is unchanged.
+  config swap" framing in D3 is unchanged. **Current truth (as of story 2-3):** `slot_controller_kinds`
+  on the runner is the **only** configuration point for slot wiring. The shipped script default is now
+  `[0, 1]` = `KEYBOARD_P1, KEYBOARD_P2` — two live killable human slots. `NULL` remains an available
+  kind but is no longer the default. Committed `main.tscn` carries no `slot_controller_kinds` override,
+  so the script default applies.
+- **A4 (v1.3, 2026-07-30) — E2 close-out amendment queue flush.** Seven amendments landed together,
+  closing the queue tracked at decision-log 2-6/R16:
+  1. **Observation seam registry (D5).** The connect-seam family is now enumerated: four combat seams
+     plus three economy seams (2-4) that prime on connect.
+  2. **World-space facing contract (Spatial Model).** `HeroState.facing` is world-space planar; the
+     contact fact direction is computed from positions, never from facing; single yaw source in
+     `HeroActor.drive()`.
+  3. **Directory Tree.** `null_controller.gd` added under `src/controllers/`.
+  4. **A3 label fix (above).** Current truth for `slot_controller_kinds`'s shipped default.
+  5. **Gamepad exception (Engine-Provided Architecture).** `GamepadController` reads raw per-device
+     joystick input, exempted from the Input Map named-actions rule.
+  6. **`EventBus.round_started` (D5 / Event System).** Documented alongside `round_ended`; a "no
+     eighth seam" note pins the connect-seam count.
+  7. **`advance()` ladder (D2).** Marked current with the story 2-6 step-1b round-over freeze; the
+     2-3 DEAD-residual branches are noted unreachable via `advance()` but retained as the contract of
+     their own step functions (ruling: decision-log.md, E2 close-out).
 
 ---
 
