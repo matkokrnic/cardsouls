@@ -12,6 +12,14 @@ func _step(ms: MatchState, d1: Vector2, d2: Vector2) -> void:
 	ms.drain_signals()
 
 
+## A single-slot InputIntent carrying only a move direction — for the direct _resolve_movement
+## calls in the DEAD-branch contract tests below (SUPERSESSION de-vacuization, E3-P/R4).
+func _move_intent(dir: Vector2) -> InputIntent:
+	var i := InputIntent.new()
+	i.move_dir = dir
+	return i
+
+
 func test_movement_seam_computes_world_velocity() -> void:
 	var ms := MatchState.new(42, 100.0, 5.0, 50.0, 80.0)
 	_step(ms, Vector2(1, 0), Vector2(0, 1))
@@ -87,55 +95,58 @@ func test_round_ended_rearms_after_debug_reset_and_fires_once_per_death() -> voi
 	assert_eq(ev.loser, 1, "same loser reported")
 
 
-## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's velocity is EXPLICITLY zeroed every tick.
-## HeroActor.drive() reads hero_state.velocity straight into move_and_slide(), so a skipped
-## write would leave the last live velocity in place and the corpse would slide forever —
-## the residual this story kills. The kill tick still moves while alive (movement resolves in
-## step 3, DEAD is set in step 8), so the corpse carries velocity until the FIRST dead tick
-## zeroes it, and it stays zero across further ticks even with live move intents.
+## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's velocity is EXPLICITLY written to zero on every
+## tick. HeroActor.drive() reads hero_state.velocity straight into move_and_slide(), so a SKIPPED
+## write would leave the last live velocity in place and the corpse would slide forever — the
+## residual this branch kills. DIRECTIONAL: the write must ZERO the field even under a live move
+## intent (a removed write leaves the prior value; a swapped branch would set world_dir * speed).
 ##
-## STORY 2-6 SUPERSESSION: this now passes because of the step-1b round-over FREEZE, NOT the
-## step-3 DEAD branch. A dead hero always implies _round_over, so on every tick after the kill
-## advance() returns at step 1b — and step 1b zeroes both heroes' velocity (2-6 halt ruling),
-## which is what keeps the corpse from sliding here. The step-3 DEAD velocity-zero is now
-## unreachable via advance() (see the 2-6 arch-amendment queue entry: removal vs retention).
+## SUPERSESSION de-vacuization (E2-CO/R4, executes E3-P/R4): the 2-6 step-1b freeze makes this
+## branch unreachable through advance() (a DEAD hero always implies _round_over, and step 1b zeroes
+## velocity and returns before step 3). So this pins the _resolve_movement CONTRACT directly, by
+## calling it on a hand-constructed DEAD hero with _round_over FALSE — a state advance() cannot
+## produce, which is exactly the point (E2-CO/R4: the branch is the step function's contract, not
+## advance()'s). MUTATION: delete the `player.hero.velocity = Vector3.ZERO` write on the DEAD branch
+## and this FAILS — the corpse keeps its last live velocity instead of halting.
 func test_dead_hero_velocity_zeroed_every_tick() -> void:
 	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
-	_step(ms, Vector2(1, 0), Vector2.ZERO)   # P1 moving: velocity (5, 0, 0)
-	ms.p1.hero.take_damage(999.0)
-	_step(ms, Vector2(1, 0), Vector2.ZERO)   # kill tick: alive at step 3 -> velocity kept, DEAD at step 8
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "P1 is DEAD")
-	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(5, 0, 0)),
-		"corpse still carries its last live velocity after the kill tick — the residual this closes")
-	_step(ms, Vector2(0, 1), Vector2.ZERO)   # first DEAD tick, LIVE perpendicular intent
+	ms.p1.hero.velocity = Vector3(5, 0, 0)                    # a live velocity that must be zeroed
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
+	assert_false(bool(ms.to_snapshot()["round_over"]),
+		"hand-constructed: DEAD with _round_over FALSE (advance() cannot produce this)")
+	ms._resolve_movement(ms.p1, _move_intent(Vector2(0, 1)), 0)  # DIRECT call, live perpendicular intent
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3.ZERO),
-		"DEAD: velocity EXPLICITLY zeroed despite a live move intent")
-	_step(ms, Vector2(-1, 0), Vector2.ZERO)  # a further DEAD tick, another live intent
+		"DEAD: velocity EXPLICITLY written to zero despite a live move intent")
+	ms.p1.hero.velocity = Vector3(-3, 0, 2)                   # dirty it again
+	ms._resolve_movement(ms.p1, _move_intent(Vector2(-1, 0)), 0)
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3.ZERO),
-		"stays zero across further ticks with live intents")
+		"stays zeroed on every direct call, even with a live intent")
 
 
-## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's facing write is SKIPPED — the last value
-## persists unchanged, and that persistence IS the freeze (no stored frozen copy, no new
-## snapshot field). Asymmetric with velocity above: velocity is written, facing is not.
+## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's facing write is SKIPPED — the last value persists
+## unchanged, and that persistence IS the freeze (no stored frozen copy, no new snapshot field).
+## The locked 2-3 asymmetry: a field read downstream (velocity) must be WRITTEN; a display-only
+## field (facing) may be SKIPPED. Asymmetric with velocity above — swapping or removing the skip
+## (letting the facing write run) would update facing to the live intent.
 ##
-## STORY 2-6 SUPERSESSION: after the kill the round is over, so advance() returns at step 1b,
-## which SKIPS the facing write (facing is display-only — the same asymmetry rule). So facing
-## persists here because of the freeze, not the step-3 DEAD branch (now unreachable via advance()).
+## SUPERSESSION de-vacuization (E2-CO/R4, executes E3-P/R4): the 2-6 step-1b freeze makes this
+## unreachable through advance() (step 1b skips the facing write and returns before step 3). So
+## this pins the _resolve_movement CONTRACT directly on a hand-constructed DEAD hero (_round_over
+## FALSE). MUTATION: delete the DEAD branch's early `return` (keeping the velocity write) and this
+## FAILS — execution falls through to the facing write and facing updates to the live intent.
 func test_dead_hero_facing_frozen() -> void:
 	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
-	_step(ms, Vector2(1, 0), Vector2.ZERO)   # P1 facing -> (1, 0)
-	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(1, 0)), "live facing set from input")
-	ms.p1.hero.take_damage(999.0)
-	_step(ms, Vector2(1, 0), Vector2.ZERO)   # kill tick: DEAD at step 8, facing still (1, 0)
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "P1 is DEAD")
+	ms.p1.hero.facing = Vector2(1, 0)                        # a known live facing
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
+	assert_false(bool(ms.to_snapshot()["round_over"]),
+		"hand-constructed: DEAD with _round_over FALSE")
 	var frozen := ms.p1.hero.facing
-	_step(ms, Vector2(0, 1), Vector2.ZERO)   # DEAD tick, live perpendicular intent
+	ms._resolve_movement(ms.p1, _move_intent(Vector2(0, 1)), 0)  # DIRECT call, a DIFFERENT live intent
 	assert_true(ms.p1.hero.facing.is_equal_approx(frozen),
-		"DEAD: facing write SKIPPED — last value persists, NOT updated to (0, 1)")
-	_step(ms, Vector2(0, -1), Vector2.ZERO)  # a further DEAD tick, another live intent
+		"DEAD: facing write SKIPPED — last value persists, NOT updated to the live (0, 1) intent")
+	ms._resolve_movement(ms.p1, _move_intent(Vector2(0, -1)), 0)
 	assert_true(ms.p1.hero.facing.is_equal_approx(frozen),
-		"facing stays frozen across further ticks with live intents")
+		"facing stays frozen across further direct calls with live intents")
 
 
 # --- Story 2-6 (AC 1): round-lifecycle freeze + reset visibility ---------------------------

@@ -146,56 +146,78 @@ func test_death_enters_dead_via_step8_and_signals_through_the_seam() -> void:
 		"death announced through the SAME queued action_state_changed channel (locked seam)")
 
 
-## STORY 2-6 SUPERSESSION: this now proves the step-1b round-over FREEZE, NOT the empty DEAD
-## transition-table row. Once P2 is DEAD the round is over, so the advance() calls carrying the
-## presses return at step 1b and step 3 (_resolve_actions) never runs — the presses are dropped
-## by the freeze, not the dead row. The dead-row rejection is now unreachable via advance() (2-6
-## arch-amendment queue: removal vs retention).
+## Story 1-7 (D-3): the DEAD transition-table row (`&"dead": {}`) accepts no input — entry is
+## ONLY MatchState's step-8 resolution, exit is ONLY the D-1 debug reset. A press on a dead hero
+## fires no table edge and emits no signal. DIRECTIONAL: attack, roll, AND block presses are all
+## dropped, and the state stays DEAD (an edge added to the dead row would transition it out).
+##
+## SUPERSESSION de-vacuization (E2-CO/R4, executes E3-P/R4): the 2-6 step-1b freeze makes this
+## unreachable through advance() (a DEAD hero implies _round_over, and step 1b returns before step
+## 3 runs _resolve_actions). So this pins the _resolve_actions CONTRACT directly, by calling it on
+## a hand-constructed DEAD hero with _round_over FALSE and live presses. MUTATION: add any edge to
+## the `&"dead"` row (e.g. `&"attack": ActionState.ATTACKING`) and this FAILS — the press
+## transitions the corpse out of DEAD.
 func test_dead_hero_row_accepts_no_input() -> void:
 	var ms := _make_match()
-	ms.p2.hero.take_damage(999.0)
-	_advance(ms)  # step 8: DEAD
-	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.DEAD)
+	ms.p2.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
+	ms.drain_signals()  # discard the forced-DEAD action_state_changed before we start counting
+	assert_false(bool(ms.to_snapshot()["round_over"]), "hand-constructed: DEAD with _round_over FALSE")
 	var fired := {"n": 0}
 	ms.p2.hero.action_state_changed.connect(
 		func(_p: HeroState.ActionState, _c: HeroState.ActionState) -> void: fired.n += 1)
-	_advance(ms, null, _intent([&"attack"]))
-	_advance(ms, null, _intent([&"roll"]))
-	_advance(ms, null, _intent([&"block"], [&"block"]))
+	ms._resolve_actions(ms.p2, _intent([&"attack"]), 1)          # DIRECT calls — no advance(), no step 1b
+	ms._resolve_actions(ms.p2, _intent([&"roll"]), 1)
+	ms._resolve_actions(ms.p2, _intent([&"block"], [&"block"]), 1)
+	ms.drain_signals()
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.DEAD, "dead row accepts no table edge")
 	assert_eq(fired.n, 0, "no transitions, no signals — presses on a dead hero are dropped")
 
 
-## Story 1-7/2-3 anti-corpse-mana-farming guarantee, now provided by the story-2-6 round-over
-## FREEZE. Pre-2-6 this drove a post-death LIVE swing through the step-4 DEAD-target fact-drop;
-## story 2-6 Block 1 retires the post-round-over live match (2-6/R5+R6), so a DEAD hero always
-## implies _round_over and step 1b returns BEFORE step 4 — the DEAD-target drop is now
-## defensive-only (unreachable via advance()). The farming defect is therefore closed BY
-## CONSTRUCTION: the killing hit lands its mana on the kill tick (target dies at step 8, after
-## the step-5 mana seat), and NO further resolution can run while the round is frozen. Proven by:
-## mana is exactly one hit's worth after the kill, and facts pushed on later frozen ticks resolve
-## NOTHING (no hit_landed, no extra mana, no damage) even while the attacker keeps pressing.
+## Story 1-7 (D-3) / 2-3: the step-4 DEAD-TARGET fact drop — a contact aimed at a DEAD target is
+## dropped PRE-DEDUPE (no damage, no hit_landed, no confirmed hit, so no step-5 mana), closing the
+## corpse-mana-farming defect found at the 1-7 gate. Sits on the SAME pre-dedupe rung as the
+## DEAD-attacker drop (test_dead_attacker_in_flight_window_delivers_nothing).
 ##
-## STORY 2-6 SUPERSESSION: this now proves the step-1b round-over FREEZE, NOT the step-4
-## DEAD-target fact drop. A DEAD hero always implies _round_over, so every post-kill advance()
-## returns at step 1b and step 4 never drains the pushed facts — the DEAD-target drop is now
-## unreachable via advance() (2-6 arch-amendment queue: removal vs retention).
-func test_no_corpse_mana_farming_under_round_over_freeze() -> void:
+## SUPERSESSION de-vacuization (E2-CO/R4, executes E3-P/R4): the 2-6 step-1b freeze makes this
+## unreachable through advance() (a DEAD target implies _round_over, and step 1b returns before
+## step 4 drains the queue). The live-match anti-farming guarantee is SEPARATELY pinned by
+## test_round_over_freezes_resolution_until_reset in test_match_state.gd; this test pins the
+## OTHER, otherwise-unguarded half — the _resolve_contacts DEAD-target drop CONTRACT — directly.
+## A live attacker (a live swing record) and a hand-constructed DEAD target with _round_over
+## FALSE, resolved by calling _resolve_contacts() directly and feeding its result to the step-5
+## mana seat. MUTATION: delete the `if target ... DEAD: continue` drop and this FAILS — the fact
+## resolves into damage, a hit_landed, and a confirmed hit.
+##
+## RENAMED from test_no_corpse_mana_farming_under_round_over_freeze: the old name described the
+## step-1b freeze, which this test no longer exercises (E2-CO/R4 ruled all six SUPERSESSION tests
+## repoint to their DEAD branch; see the SDV decision-log record).
+func test_dead_target_fact_dropped_no_corpse_mana() -> void:
 	var ms := _make_match(100.0)
+	ms.p1.hero.enter_attack(3)                               # P1 alive, ATTACKING, live swing record
+	var atk := ms.p1.hero.attack_index
+	ms.p2.hero.set_action_state(HeroState.ActionState.DEAD)  # DEAD target; _round_over stays FALSE
+	ms.drain_signals()
+	assert_false(bool(ms.to_snapshot()["round_over"]),
+		"hand-constructed: DEAD target with _round_over FALSE")
 	var hits := {"n": 0}
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)
-	_kill_p2(ms)
-	assert_eq(hits.n, 1, "the killing hit itself landed")
-	assert_eq(ms.p1.mana.get_current(), 8.0, "killing hit generated its mana (target died in step 8, after step 5)")
-	assert_true(bool(ms.to_snapshot()["round_over"]), "round is frozen after the kill")
-	# The match is frozen: attack presses never progress the swing, and a fact pushed on a frozen
-	# tick is never drained (step 4 is skipped by step 1b). Corpse-farming is closed by construction.
-	for i in range(6):
-		ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)  # a fact every frozen tick
-		_advance(ms, _intent([&"attack"]))                            # attacker keeps pressing attack
-	assert_eq(hits.n, 1, "no hit_landed while frozen — no post-death resolution at all")
-	assert_eq(ms.p1.mana.get_current(), 8.0, "corpse-mana-farming CLOSED: mana never grows past the kill")
-	assert_eq(ms.p2.hero.get_hp(), 0.0, "no further damage applied to the corpse")
+	var deflects := {"n": 0}
+	ms.deflect_landed.connect(func(_a: int, _t: int) -> void: deflects.n += 1)
+	var hp_before := ms.p2.hero.get_hp()
+	var mana_before := ms.p1.mana.get_current()
+	ms.push_contact(0, 1, atk, Vector2.DOWN)                 # a fact from the live attacker at the DEAD target
+	var confirmed := ms._resolve_contacts()                 # DIRECT step call — no advance(), no step 1b
+	ms._generate_mana(confirmed)                            # the step-5 seat, fed the step-4 result
+	ms.drain_signals()
+	assert_eq(confirmed.size(), 0, "DEAD-target fact is not a confirmed hit — nothing for step 5")
+	assert_eq(ms.p2.hero.get_hp(), hp_before, "no damage — a fact at a dead target delivers nothing")
+	assert_eq(ms.p1.mana.get_current(), mana_before, "no mana (flag ON, but no confirmed hit)")
+	assert_eq(hits.n, 0, "no hit_landed for a dead target")
+	assert_eq(deflects.n, 0, "no deflect_landed for a dead target")
+	assert_eq(ms.p1.hero.attack_index, atk,
+		"attack_index untouched — dropped PRE-dedupe (register_swing_hit never reached)")
+	assert_true(bool(ms.p1.hero.to_snapshot()["swing_dedupe"]["records"].has(atk)),
+		"the swing's dedupe record is intact — the corpse-aimed fact never consumed the swing's resolution")
 
 
 ## ---- Debug reset (AC 5, D-1/D-2) --------------------------------------------------------

@@ -244,38 +244,45 @@ func test_swing_dedupe_tracking_is_snapshotted_mid_swing() -> void:
 
 ## A DEAD attacker delivers nothing: the step-4 attacker-liveness drop sits at the same
 ## PRE-DEDUPE rung as the target DEAD drop, ahead of the iframe drop and register_swing_hit.
-## The in-flight window is NOT stopped or shortened (1-9/R3 intact) — killing during the
-## active window, its record stays live — but the corpse's fact resolves to nothing: no
-## damage, no hit_landed, no mana, no deflect signal, and attack_index / the swing's one
-## resolution are untouched (register_swing_hit is never reached).
+## The in-flight window is NOT stopped or shortened (1-9/R3 intact) — killed during the active
+## window, its record stays live — but the corpse's fact resolves to nothing: no damage, no
+## hit_landed, no mana, no deflect signal, and attack_index / the swing's one resolution are
+## untouched (register_swing_hit is never reached).
 ##
-## STORY 2-6 SUPERSESSION: this now passes because of the step-1b round-over FREEZE, NOT the
-## step-4 DEAD-attacker fact drop. Killing the attacker sets _round_over, so the advance() that
-## would resolve the pushed fact returns at step 1b and step 4 never runs — the fact is never
-## drained. The step-4 DEAD-attacker drop is now unreachable via advance() (2-6 arch-amendment
-## queue: removal vs retention).
+## SUPERSESSION de-vacuization (E2-CO/R4, executes E3-P/R4): the 2-6 step-1b freeze makes this
+## branch unreachable through advance() (a DEAD attacker implies _round_over, and step 1b returns
+## before step 4 drains the queue). So this pins the _resolve_contacts CONTRACT directly. Setup
+## drives a REAL in-flight active window via advance(); the attacker is then forced DEAD DIRECTLY
+## (not via a kill, so _round_over stays FALSE — a state advance() cannot produce), and the fact
+## is resolved by calling _resolve_contacts() directly, feeding its result to the step-5 mana
+## seat. MUTATION: delete the `if attacker ... DEAD: continue` drop and this FAILS — the corpse's
+## fact resolves into damage, a hit_landed, and a confirmed hit (step-5 mana).
 func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 	var ms := _make_match()
-	_attack_and_advance_through(ms, 4)          # P1 ATTACKING, active window open (t4-7), swing 0
+	_attack_and_advance_through(ms, 4)          # P1 ATTACKING, active window open (t4-7), live swing
 	assert_true(ms.p1.hero.is_hitbox_active(), "attacker's active window is open before death")
 	var atk := ms.p1.hero.attack_index
-	var hits: Array = []
-	ms.hit_landed.connect(func(a: int, t: int, d: float, hp: float) -> void: hits.append([a, t, d, hp]))
-	var deflects: Array = []
-	ms.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
-	ms.p1.hero.take_damage(999.0)               # kill the attacker mid-swing
-	_advance(ms)                                # step 8 of this tick sets P1 DEAD (window keeps ticking)
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "attacker is now DEAD")
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD directly; _round_over stays FALSE
+	assert_false(bool(ms.to_snapshot()["round_over"]),
+		"hand-constructed: DEAD attacker with _round_over FALSE")
+	assert_true(ms.p1.hero.is_hitbox_active(),
+		"the in-flight active window keeps ticking after death (1-9/R3 intact)")
 	assert_eq(ms.p1.hero.attack_index, atk, "swing index unchanged by death")
-	# A fact SOURCED from the dead attacker, its dedupe record still live.
+	var hits := {"n": 0}
+	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)
+	var deflects := {"n": 0}
+	ms.deflect_landed.connect(func(_a: int, _t: int) -> void: deflects.n += 1)
 	var p2_hp_before := ms.p2.hero.get_hp()
 	var p1_mana_before := ms.p1.mana.get_current()
-	ms.push_contact(0, 1, atk, Vector2.DOWN)
-	_advance(ms)                                # step 4 resolves the fact against the DEAD attacker
+	ms.push_contact(0, 1, atk, Vector2.DOWN)    # a fact SOURCED from the DEAD attacker
+	var confirmed := ms._resolve_contacts()     # DIRECT step call — no advance(), no step 1b
+	ms._generate_mana(confirmed)                # the step-5 seat, fed the step-4 result
+	ms.drain_signals()
+	assert_eq(confirmed.size(), 0, "DEAD-attacker fact is not a confirmed hit — nothing for step 5")
 	assert_eq(ms.p2.hero.get_hp(), p2_hp_before, "no damage — a dead attacker's fact delivers nothing")
 	assert_eq(ms.p1.mana.get_current(), p1_mana_before, "no mana for a dead attacker (flag was ON)")
-	assert_eq(hits, [], "no hit_landed emitted for a dead attacker")
-	assert_eq(deflects, [], "no deflect_landed emitted for a dead attacker")
+	assert_eq(hits.n, 0, "no hit_landed emitted for a dead attacker")
+	assert_eq(deflects.n, 0, "no deflect_landed emitted for a dead attacker")
 	assert_eq(ms.p1.hero.attack_index, atk, "attack_index untouched (register_swing_hit never reached)")
 	var snap: Dictionary = ms.p1.hero.to_snapshot()
 	assert_true(bool(snap["swing_dedupe"]["records"].has(atk)),

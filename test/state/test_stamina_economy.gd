@@ -356,29 +356,28 @@ func test_reload_swaps_cost_rate_and_delay_at_next_use() -> void:
 		"reloaded delay (2 ticks) and regen rate (2.0/tick) both read inline")
 
 
-## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's stamina regen is suppressed the SAME way
-## BLOCKING already is (D6) — a corpse runs no economy. The kill tick still regenerates
-## while alive (regen is step 5, DEAD is set in step 8), so regen is captured at death and
-## must not advance across further DEAD ticks.
+## Story 2-3 (AC2/AC4, 2-3/R5): a DEAD hero's stamina regen is SUPPRESSED the SAME way BLOCKING
+## already is (D6) — a corpse runs no economy. DIRECTIONAL: the suppression flag must include the
+## DEAD state, so a corpse with headroom below max and NO regen-delay window still does not
+## regenerate (a removed DEAD clause lets regen add stamina_regen_per_tick every call).
 ##
-## STORY 2-6 SUPERSESSION: this now passes because of the step-1b round-over FREEZE, NOT the
-## _regen_stamina DEAD suppression. After the kill the round is over, so the further advance()
-## ticks return at step 1b and step 5 (regen) never runs at all. The _regen_stamina DEAD branch
-## is now unreachable via advance() (see the 2-6 arch-amendment queue entry: removal vs retention).
+## SUPERSESSION de-vacuization (E2-CO/R4, executes E3-P/R4): the 2-6 step-1b freeze makes this
+## branch unreachable through advance() (a DEAD hero always implies _round_over, and step 1b
+## returns before step 5). So this pins the _regen_stamina CONTRACT directly, by calling it on a
+## hand-constructed DEAD hero with _round_over FALSE and NO delay window (spend delay 0), so only
+## the DEAD suppression — not a delay window — can hold regen back. MUTATION: delete `or state ==
+## HeroState.ActionState.DEAD` from the suppression and this FAILS — the corpse regenerates.
 func test_dead_hero_stamina_does_not_regen() -> void:
 	var ms := _make_match()
-	ms.p1.stamina.spend(20.0, 0)  # 30, no delay window — regen would otherwise be visible
+	ms.p1.stamina.spend(20.0, 0)  # 30, NO delay window — regen would otherwise be visible every call
 	ms.drain_signals()
-	assert_eq(ms.p1.stamina.get_current(), 30.0, "start below max")
-	ms.p1.hero.take_damage(999.0)
-	_advance(ms)  # kill tick: alive at step 5 -> regen 30 -> 31, DEAD at step 8
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "P1 is DEAD")
-	var stamina_at_death := ms.p1.stamina.get_current()
-	assert_eq(stamina_at_death, 31.0, "kill tick regenerated once while still alive")
-	for i in range(3):
-		_advance(ms)
-	assert_eq(ms.p1.stamina.get_current(), stamina_at_death,
-		"DEAD: no stamina regen across further ticks (suppressed like BLOCKING)")
+	assert_eq(ms.p1.stamina.get_current(), 30.0, "start below max, no delay window")
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
+	assert_false(bool(ms.to_snapshot()["round_over"]), "hand-constructed: DEAD with _round_over FALSE")
+	for i in range(4):
+		ms._regen_stamina(ms.p1)  # DIRECT call — advance()'s step 1b would skip step 5 entirely
+	assert_eq(ms.p1.stamina.get_current(), 30.0,
+		"DEAD: regen suppressed across every direct call (suppressed like BLOCKING)")
 
 
 ## ---- Step-5 null guard ------------------------------------------------------------------
