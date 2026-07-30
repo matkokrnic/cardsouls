@@ -915,3 +915,37 @@ move from `advance()` to direct step-function calls on manually constructed stat
 - `stories-manual-e2.md` E2.S1 item 4: "Adjust the camera values authored in `data/camera_config.tres` -- presentation-side, load-once, outside `BalanceConfig` and outside the X3 hot-reload path (2-1 micro-decision, review-accepted); if the pulled-back framing does not survive half width, that is a finding worth logging in `decision-log.md`, not silently zooming in."
 
 **E3-P/R6 -- Rig story authorship.** Matko writes both story files himself -- adoption immediately after this commit as its own separate docs commit, tuning just-in-time before its turn. Both must include Golden Prediction and Live Smoke sections from the first draft (Set B files have lacked both sections six times running).
+
+---
+
+## Session 2026-07-30 -- Supersession de-vacuization (executes E3-P/R4)
+
+**SDV/R1 -- Pass shape and sanction.** Test-only corrective pass, run outside the full story ritual per E2-CO/R4 and E3-P/R4 (ritual waived: the ruling was already made, mutation proofs replace review; unlike a dev pass, this pass DOES commit at the end). `src/` stayed byte-identical throughout -- both source files restored from an out-of-repo copy and SHA256-verified after every mutation, NEVER `git checkout --` (the standing 2-4/2-5 rule). Two commits: `3abb525` (test/, six tests repointed) and this decision-log record.
+
+**SDV/R2 -- Test -> branch mapping (each of the six SUPERSESSION tests now pins its DEAD step-function branch by a DIRECT call).**
+| Test | Step function | Guarded branch | Site |
+| --- | --- | --- | --- |
+| `test_dead_hero_velocity_zeroed_every_tick` | `_resolve_movement` | DEAD velocity-zero WRITE | `match_state.gd` 480 |
+| `test_dead_hero_facing_frozen` | `_resolve_movement` | DEAD facing SKIP (early return) | `match_state.gd` 481 |
+| `test_dead_hero_row_accepts_no_input` | `_resolve_actions` | empty `&"dead": {}` table row | `hero_state.gd` 66 |
+| `test_dead_target_fact_dropped_no_corpse_mana` | `_resolve_contacts` | DEAD-target drop | `match_state.gd` 393-394 |
+| `test_dead_attacker_in_flight_window_delivers_nothing` | `_resolve_contacts` | DEAD-attacker drop | `match_state.gd` 402-403 |
+| `test_dead_hero_stamina_does_not_regen` | `_regen_stamina` | DEAD suppression clause | `match_state.gd` 465-466 |
+
+Route in every case: force the hero DEAD via `set_action_state(DEAD)` (which never touches `_round_over`, so the state is DEAD-with-`_round_over`-false -- a combination `advance()` cannot produce, which is exactly the point), then call the step function directly. E2-CO/R5's single-write-site fact (`match_state.gd:563`, `_round_over = true` immediately above) underpins the "advance() cannot produce this" claim, re-verified this session.
+
+**SDV/R3 -- Mutation evidence (the acceptance criterion; each branch mutated in isolation from an out-of-repo copy, mapped test proven to FAIL, src restored + SHA256-verified between mutations).**
+- M1 (delete the velocity-zero write): `test_dead_hero_velocity_zeroed_every_tick` FAILS ("velocity EXPLICITLY written to zero..."); `test_dead_hero_facing_frozen` stays GREEN -- the write and the skip are independent halves of the 2-3 asymmetry.
+- M2 (delete the DEAD-branch early `return`): `test_dead_hero_facing_frozen` FAILS ("facing write SKIPPED..."); the velocity test also trips (fall-through overwrites velocity), as expected.
+- M3 (add `&"attack": ActionState.ATTACKING` to the `&"dead"` row): `test_dead_hero_row_accepts_no_input` FAILS (state got 1/ATTACKING, expected 6/DEAD; fired 1, expected 0); `test_action_state.gd`'s inbound-edge enumeration also caught it -- independent corroboration.
+- M4 (delete the DEAD-target drop): `test_dead_target_fact_dropped_no_corpse_mana` FAILS (confirmed hit 1, P2 HP 0.0, hit_landed fired); the DEAD-attacker test stays GREEN.
+- M5 (delete the DEAD-attacker drop): `test_dead_attacker_in_flight_window_delivers_nothing` FAILS (confirmed 1, HP 94.0, mana 8.0, hit_landed fired); the DEAD-target test stays GREEN -- the two contact drops isolate cleanly both ways.
+- M6 (drop `or state == HeroState.ActionState.DEAD` from the regen suppression): `test_dead_hero_stamina_does_not_regen` FAILS (stamina 34.0 = 30 + 4 x 1.0/tick, expected 30.0).
+
+**SDV/R4 -- Micro-decision: `test_no_corpse_mana_farming_under_round_over_freeze` was vacuous in a STRONGER sense than the other five, and is RENAMED, not merely repointed.** The E3-P/R4 caution flagged it as possibly a step-1b freeze test (round_over TRUE its point). Verified by content: post-kill it was DOUBLY BACKSTOPPED -- removing step 1b alone left the DEAD-target drop as backstop, and removing the DEAD-target drop alone left step 1b -- so NO single-branch mutation could make it fail. Separately, the step-1b freeze is ALREADY comprehensively guarded (both heroes' velocity zeroed, facing skip, press-ignored, tick-increment, with its own MUTATION PROOF A/B) by `test_round_over_freezes_resolution_until_reset`. Its honest, isolable, otherwise-unguarded branch is therefore the `_resolve_contacts` DEAD-target drop. Repointed there and RENAMED `test_dead_target_fact_dropped_no_corpse_mana` -- the `_under_round_over_freeze` name would lie about the mechanism. This is E2-CO/R4's directive applied thoughtfully, not blindly, and satisfies it for all six.
+
+**SDV/R5 -- Micro-decision: the contact tests feed the step-4 result to the step-5 mana seat.** `_resolve_contacts` returns confirmed-hit slots; mana is added in `advance()` step 5 by `_generate_mana(confirmed)`, NOT inside `_resolve_contacts`. So each contact test calls `_resolve_contacts()` then `_generate_mana(confirmed)`, and asserts BOTH `confirmed.size() == 0` and mana unchanged -- otherwise a fact resolved under mutation would still show no mana growth (step 5 unreached) and the "no mana" assertion would not bite. Confirmed by M5: mana reached 8.0 under the DEAD-attacker mutation.
+
+**SDV/R6 -- One test helper added (`test_match_state.gd::_move_intent`).** A one-line `InputIntent` builder carrying only `move_dir`, for the two direct `_resolve_movement` calls. Test-file-local; no `src/` or public-API change.
+
+**SDV/R7 -- Final state.** `src/` byte-identical (`match_state.gd` SHA `9B13F7CA..7296`, `hero_state.gd` SHA `357C8951..FB9E`, both verified equal to the pre-pass value at close; `git status -- src/` empty). Suite GREEN: 164 state tests / 760 assertions (was 759; +1 net from the rewrites -- test COUNT unchanged, the rename is a repoint, not an add/remove), all 9 integration files individually PASS. Golden `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` UNMOVED and asserted green by `test_state_matches_golden`; NO re-baseline (`test_determinism.gd` never touched). No collateral: `project.godot`, `main.tscn`, and every `.tres` untouched.
