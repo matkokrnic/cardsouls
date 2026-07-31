@@ -18,6 +18,10 @@ extends TestCase
 ## that obsoletes deflect; >= 1.0 = a no-op or self-harm — defects by construction, not
 ## tuning) and block_facing_arc_degrees bounded > 0 and <= 360.
 ##
+## The stamina-cost corrective pass (E3-RG/R2) adds attack_stamina_cost to that class, NOT
+## exempt: decision (d) is RESOLVED (DP/R2 — the basic attack costs stamina), so a zero there
+## is a silently disarmed anti-spam lever, exactly the roll/deflect reasoning.
+##
 ## Story 1-5 (B4) adds the melee-hit economy pair:
 ## melee_hit_mana must be authored > 0 — a zero faucet is a dead flywheel; the
 ## melee_mana_generation FLAG is the off-switch, never a zero amount.
@@ -74,6 +78,8 @@ func test_authored_stamina_economy_values_are_positive() -> void:
 		"stamina_regen_per_second must be authored > 0 (spent stamina must come back)")
 	assert_true(config.roll_stamina_cost > 0.0,
 		"roll_stamina_cost must be authored > 0 (a free roll unguards the 1-4 economy)")
+	assert_true(config.attack_stamina_cost > 0.0,
+		"attack_stamina_cost must be authored > 0 (a free attack is the mashing DP/R2 priced — roll precedent)")
 
 
 ## ---- Melee-hit economy pair (story 1-5, B4) — exemption reasoning in the file header. --

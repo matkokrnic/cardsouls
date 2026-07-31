@@ -301,20 +301,37 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState, intent:
 	var hero := player.hero
 	match target:
 		HeroState.ActionState.ATTACKING:
-			if hero.action_state == HeroState.ActionState.ATTACKING:
+			var chaining := hero.action_state == HeroState.ActionState.ATTACKING
+			if chaining:
 				# Chain edge: only inside the chain window and below the authored cap.
 				# attack_chain_length is a COUNT, not a duration — it lives on balance,
 				# not balance_ticks; read inline under the same no-caching rule.
+				# FIRST, before the stamina seat below: a capped press is not an attempt
+				# to attack, so it must not be charged (and stays SILENT, story 1-3).
 				if not hero.chain.is_running or hero.chain_index + 1 >= balance.attack_chain_length:
 					return false
+			# The THIRD step-3 policy seat of the deduction MECHANISM (stamina-cost
+			# corrective pass, E3-RG/R2; decision (d) RESOLVED at DP/R2 — the basic attack
+			# costs stamina as an ANTI-SPAM lever, the 1-5 mana faucet is untouched).
+			# Follows the ROLL precedent exactly, not deflect's: charged AT ENTRY per swing
+			# (chain included), and unaffordable = the 1-4 FALLTHROUGH, never deflect's
+			# degrade — there is no degraded attack to fall back to. Cost and delay read
+			# inline (CONSTRAINT C). Nothing above this line mutated hero state, so a
+			# rejected attack costs nothing, enters no state, and leaves chain_index alone.
+			if not player.stamina.spend(
+					balance.attack_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
+				hero.reject_action(&"attack", &"insufficient_stamina")
+				return false
+			if chaining:
 				hero.chain_attack(balance_ticks.attack_windup_ticks)
 			else:
 				hero.enter_attack(balance_ticks.attack_windup_ticks)
 		HeroState.ActionState.ROLLING:
-			# The step-3 policy seat of the single deduction MECHANISM (StaminaPool.spend,
-			# D4/story 1-4; R-D1 reconciliation) — roll is its only step-3 consumer: basic
-			# attack is FREE by GDD design (gdd.md:139/:319 — it is the 1-5 mana faucet),
-			# and BLOCKING entry is free (block costs TIME via the D6 regen suppression).
+			# A step-3 policy seat of the single deduction MECHANISM (StaminaPool.spend,
+			# D4/story 1-4; R-D1 reconciliation). No longer the ONLY one: the basic attack
+			# gained a cost in the E3-RG/R2 corrective pass and shares this seat's shape
+			# (see the ATTACKING case above). BLOCKING entry stays free (block costs TIME
+			# via the D6 regen suppression).
 			# Deflect's policy seat is step 4 — spend at deflect LANDING, never at entry
 			# (story 1-8, R-D1). Cost and delay are read inline at the moment of the
 			# transition (CONSTRAINT C). Insufficient stamina is a PRECONDITION (D5): the

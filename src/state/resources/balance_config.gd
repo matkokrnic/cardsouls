@@ -21,6 +21,13 @@ extends Resource
 @export var stamina_regen_delay_seconds: float = 0.0
 @export var roll_stamina_cost: float = 0.0
 @export var deflect_stamina_cost: float = 0.0
+## Stamina-cost corrective pass (E3-RG/R2; OPEN decision (d) RESOLVED at DP/R2): the basic
+## attack's per-swing cost — an ANTI-SPAM lever, not an economy constraint (melee stays the
+## 1-5 mana faucet). Charged per SWING, so a chain of N costs N x this. Spent at the step-3
+## transition on the roll precedent (entry-time spend, reject-and-fall-through), never at
+## landing like deflect. Zero default like every other field: an unauthored cost is a free
+## attack, which the authoring audit forbids for the shipped .tres.
+@export var attack_stamina_cost: float = 0.0
 
 @export_group("Attack")
 @export var attack_windup_seconds: float = 0.0

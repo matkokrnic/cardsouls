@@ -5,6 +5,28 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by the STAMINA-COST CORRECTIVE PASS (E3-RG/R2; decision (d) RESOLVED at
+## DP/R2 — the basic attack costs stamina), ONE re-baseline, ONE named cause: the basic
+## attack gained a stamina cost. Reconciled in both directions, two contributing halves
+## measured apart:
+##   1. THE SEAT ITSELF (a mover): the attack's spend follows the ROLL precedent verbatim
+##      (operator ruling), so attack ENTRY restarts the post-spend regen-delay window — and
+##      does so even at a 0.0 cost, since the window restarts on any SUCCESSFUL spend. On
+##      this sequence P2's t15 attack alone costs 3 regen ticks: P2 stamina 30.0 -> 27.0.
+##      Sufficient alone to move the hash.
+##   2. AUTHORED COVERAGE VALUE (a mover): _golden_config authors attack_stamina_cost 6.0,
+##      paid at P1's t1 attack and t9 chain and at P2's t15 attack. P1 40 -> 34 -> (regen)
+##      39 -> 33 -> (regen) 38, so the t17 roll now spends from 38 (23.0 post-spend, 28.0
+##      at t24 instead of 25.0/30.0); P2 20 -> 14 -> 21.0 at t24.
+## Step-2 INTERMEDIATE measurement (mechanics in, _golden_config's cost still 0.0):
+## d101980f315d43265325d68674dae79f67acc7210c0ecd8c092cc45df9581512 — isolates cause 1 from
+## cause 2, and reproduced by toggling the authored 6.0 back off after the fact.
+## NOT a cause: snapshot SHAPE is untouched — the attack seat adds no field, and the
+## regen-delay window it restarts was already snapshotted (StaminaPool.to_snapshot, D8).
+## Previous golden 338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2
+## (story 1-9, roll with i-frames — the three causes recorded below; held unchanged through
+## 3-0a and the melee-damage corrective, which moved no authored value the golden reads).
+##
 ## Re-baselined in story 1-9 (roll with i-frames), ONE re-baseline; the gate predicted
 ## THREE causes (1-9/R7) and measurement reconciled them in both directions:
 ##   1. SNAPSHOT SHAPE (a mover, as predicted): HeroState.to_snapshot() gains
@@ -41,7 +63,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2"
+const GOLDEN := "7fbb4b7f589251d25a13d6b49138b416266031e124cdae1c07e99e0f4fc119d1"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -105,11 +127,11 @@ const CONTACTS := {
 ## roll iframe 2, roll duration 5, chain length 3 — test_action_state.gd's shape.
 ##
 ## Stamina values (story 1-4) are chosen for COVERAGE, not feel: the t17 roll spends 15
-## (40 -> 25), the 3-tick delay suppresses exactly t17-t19 (the window advances in step 2,
-## step 5 reads the result), regen (60/s = 1.0/tick) runs t20-t24 -> 30.0 at t24 — below
-## max and above the post-spend value, so the hashed final snapshot encodes BOTH the spend
-## and the regen (a rate fast enough to refill by t24 would hash identically to a run that
-## never spent).
+## (38 -> 23 — the two attack spends precede it since E3-RG/R2), the 3-tick delay suppresses
+## exactly t17-t19 (the window advances in step 2, step 5 reads the result), regen (60/s =
+## 1.0/tick) runs t20-t24 -> 28.0 at t24 — below max and above the post-spend value, so the
+## hashed final snapshot encodes BOTH the spend and the regen (a rate fast enough to refill
+## by t24 would hash identically to a run that never spent).
 ##
 ## Combat-economy values (story 1-5), same coverage-not-feel principle: damage 10% of the
 ## TARGET's 120 max HP = 12.0 per hit (t5 hit -> P2 at 108, non-full at t24 — no HP
@@ -124,6 +146,13 @@ func _golden_config() -> BalanceConfig:
 	c.stamina_regen_per_second = 60.0          # 1.0 per tick
 	c.stamina_regen_delay_seconds = 3.0 / 60.0  # 3 ticks
 	c.roll_stamina_cost = 15.0
+	# Stamina-cost corrective pass (E3-RG/R2), coverage-not-feel like every value here — 6.0
+	# is NOT the authored 12.0. Chosen so BOTH attack spends stay legible on the record and
+	# neither is erased by a clamp at the 40.0 maximum: P1 t1 40 -> 34, regen t4-t8 -> 39
+	# (still below max); t9 chain 39 -> 33, regen t12-t16 -> 38 (still below max); t17 roll
+	# 38 -> 23, regen t20-t24 -> 28 at the hashed final tick. P2 pays it once at its t15
+	# attack (20 -> 14, regen t18-t24 -> 21).
+	c.attack_stamina_cost = 6.0
 	c.attack_windup_seconds = 3.0 / 60.0
 	c.attack_active_seconds = 4.0 / 60.0
 	c.attack_recovery_seconds = 6.0 / 60.0
@@ -205,11 +234,12 @@ func test_golden_sequence_exercises_stamina_spend_and_regen() -> void:
 	var maximum := ms.p1.stamina.get_maximum()
 	var post_spend := readings[17 - 1]
 	var final := readings[TICKS - 1]
-	assert_eq(post_spend, 25.0, "t17 roll spend: 40 - 15 (delay suppresses regen that tick)")
+	assert_eq(post_spend, 23.0,
+		"t17 roll spend: 38 - 15 (the two attack spends preceded it — E3-RG/R2)")
 	assert_true(post_spend < maximum, "stamina dipped below maximum after the t17 roll")
 	assert_true(final > post_spend, "regen visibly ran before the run ended")
 	assert_true(final < maximum, "pool left MID-REGEN at t24 — below maximum")
-	assert_eq(final, 30.0, "25 + 5 regen ticks (delay covers t17-t19, 1.0/tick t20-t24)")
+	assert_eq(final, 28.0, "23 + 5 regen ticks (delay covers t17-t19, 1.0/tick t20-t24)")
 
 
 ## Story 1-8 (supersedes the 1-5 hit/mana pin — the combat analogue of the stamina pin
@@ -241,8 +271,9 @@ func test_golden_sequence_exercises_block_and_deflect() -> void:
 	assert_eq(mana_readings[13 - 1], 12.0, "t13: a blocked hit is CONFIRMED — full flat mana")
 	assert_eq(hp_readings[TICKS - 1], 117.0, "t24: NON-FULL HP on record (no HP regen exists)")
 	assert_eq(mana_readings[TICKS - 1], 12.0, "t24: NON-ZERO mana on record (no E1 mana sink)")
-	assert_eq(p2_stamina_readings[TICKS - 1], 30.0,
-		"t24: P2 MID-REGEN (20 + regen t15-t24) — the hash encodes the spend and the regen")
+	assert_eq(p2_stamina_readings[TICKS - 1], 21.0,
+		"t24: P2 MID-REGEN — 20, then its t15 attack spends 6 (E3-RG/R2) and restarts the "
+		+ "delay (t15-t17), regen t18-t24 -> 21; the hash encodes both spends and the regen")
 
 
 ## Story 1-9 (the block/deflect pin's iframe analogue): the golden only guards the iframe

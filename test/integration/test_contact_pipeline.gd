@@ -42,6 +42,11 @@ var _swing_ticks := 0
 var _damage := 0.0
 var _max_hp := 0.0
 var _kill_hits := 0
+## Stamina-cost corrective pass (E3-RG/R2): worst-case ticks for a drained hero to afford
+## one more swing — the post-spend regen delay plus the ticks to regenerate one attack's
+## cost. DERIVED from the .tres like every other expectation here, so tuning the cost or the
+## regen rate reschedules this test instead of breaking it.
+var _attack_refill_ticks := 0
 
 var _frames := 0
 var _phase := "kill"
@@ -72,6 +77,9 @@ func _initialize() -> void:
 	_max_hp = config.max_hp
 	_damage = config.attack_damage_percent_of_max_hp / 100.0 * config.max_hp
 	_kill_hits = int(ceil(config.max_hp / _damage))
+	var regen_per_tick := config.stamina_regen_per_second / 60.0
+	var regen_ticks: float = 0.0 if regen_per_tick <= 0.0 else ceil(config.attack_stamina_cost / regen_per_tick)
+	_attack_refill_ticks = ticks.stamina_regen_delay_ticks + int(regen_ticks)
 
 
 func _check(cond: bool, label: String) -> void:
@@ -166,11 +174,21 @@ func _physics_process(_delta: float) -> bool:
 				_phase = "reset"
 				_reset_at = _frames + 5
 				_phase_pressed = false
-				_phase_deadline = _frames + 3 * _swing_ticks + 120
+				# + _attack_refill_ticks: the post-reset swing must now wait out the
+				# stamina the kill phase spent (E3-RG/R2).
+				_phase_deadline = _frames + 3 * _swing_ticks + 120 + _attack_refill_ticks
 		"reset":
 			# One more swing AFTER the live reset — pressed once P1 is back to IDLE so the
 			# press can never fall into a non-cancellable window and be dropped.
-			if not _phase_pressed and _reset_at == -1 and _p1_state == int(HeroState.ActionState.IDLE) and _press_at == -1 and _release_at == -1:
+			# Stamina-cost corrective pass (E3-RG/R2): RE-PRESSES until the swing actually
+			# fires, the same auto-swing shape the kill phase above already uses. A single
+			# press is no longer enough — the kill phase now ends with P1's stamina drained
+			# (every swing costs attack_stamina_cost, and the 1-7/D-1 debug reset is
+			# ROUND-scoped: HP and the round latch only, pools deliberately untouched), so
+			# the first press lands on an empty bar and is REJECTED. This cannot livelock:
+			# a refused spend never restarts the delay window, so regen keeps running and
+			# the bar reaches the cost within _attack_refill_ticks.
+			if _reset_at == -1 and _p1_state == int(HeroState.ActionState.IDLE) and _press_at == -1 and _release_at == -1:
 				_press_at = _frames + 2
 				_phase_pressed = true
 			if _hits.size() == _kill_hits + 1:

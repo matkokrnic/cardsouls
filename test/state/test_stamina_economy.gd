@@ -1,15 +1,17 @@
 extends TestCase
 
 ## Story 1-4 coverage: the stamina economy. Pool mechanism (fixed per-tick regen, the
-## post-spend delay window and its restart-on-spend, snapshot shape), the one deduction
-## path (roll only — attack and block are free), the D5 lockout precondition with the two
-## explicit AC 4 pins (fallthrough + rejected-emit), D6 regen conditions (BLOCKING and the
-## delay window are the ONLY suppressions), D9 start-full, CONSTRAINT C inline reads, and
-## the step-5 null guard.
+## post-spend delay window and its restart-on-spend, snapshot shape), the deduction paths
+## (roll since 1-4, the ATTACK since the E3-RG/R2 corrective pass; block entry stays free),
+## the D5 lockout precondition with the two explicit AC 4 pins (fallthrough +
+## rejected-emit), D6 regen conditions (BLOCKING and the delay window are the ONLY
+## suppressions), D9 start-full, CONSTRAINT C inline reads, and the step-5 null guard.
 ##
 ## Test balance: max 50, regen 60/s = 1.0/tick (arithmetic stays readable), delay 3 ticks,
 ## roll cost 10; action durations are test_action_state.gd's shape (windup 3, active 4,
 ## recovery 6, chain window 5, deflect 4, roll iframe 2, roll duration 5, chain length 3).
+## attack_stamina_cost is deliberately LEFT UNAUTHORED (0.0) in _config() — the attack-cost
+## tests author it per-case via _make_match_with_attack_cost().
 
 
 func _config() -> BalanceConfig:
@@ -168,7 +170,7 @@ func test_pool_snapshot_includes_regen_delay_window() -> void:
 	assert_true(bool(snap["regen_delay"]["is_running"]), "window state survives the snapshot")
 
 
-## ---- One deduction path (D4) ------------------------------------------------------------
+## ---- Deduction paths (D4) ---------------------------------------------------------------
 
 func test_roll_deducts_cost_at_the_transition() -> void:
 	var ms := _make_match()
@@ -177,15 +179,124 @@ func test_roll_deducts_cost_at_the_transition() -> void:
 	assert_eq(ms.p1.stamina.get_current(), 40.0, "cost 10 deducted through the one path")
 
 
-func test_attack_and_block_are_free() -> void:
+## Story 1-4's original pin, NARROWED by the stamina-cost corrective pass (E3-RG/R2): the
+## basic attack is no longer free by design — decision (d) RESOLVED at DP/R2 — so what this
+## still pins is the ZERO-DEFAULT convention, not GDD doctrine. _config() authors no
+## attack_stamina_cost, and an unauthored cost is a free attack (every BalanceConfig field
+## defaults to 0.0 on purpose). The authored .tres is guarded the other way, by the > 0
+## audit in test_balance_authoring.gd. Block entry stays genuinely free (D6: it costs TIME).
+func test_unauthored_attack_cost_deducts_nothing_and_block_entry_is_free() -> void:
 	var ms := _make_match()
 	_advance(ms, _intent([&"attack"]))
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ATTACKING)
-	assert_eq(ms.p1.stamina.get_current(), 50.0, "basic attack costs no stamina (GDD)")
+	assert_eq(ms.p1.stamina.get_current(), 50.0,
+		"UNAUTHORED attack cost (0.0 default) deducts nothing — not a claim that attacks are free")
 	var ms2 := _make_match()
 	_advance(ms2, _intent([&"block"], [&"block"]))
 	assert_eq(ms2.p1.hero.action_state, HeroState.ActionState.BLOCKING)
 	assert_eq(ms2.p1.stamina.get_current(), 50.0, "BLOCKING entry is free — no check, no cost")
+
+
+## ---- Attack cost (stamina-cost corrective pass, E3-RG/R2) -------------------------------
+## The THIRD deduction seat, on the ROLL precedent: charged AT ENTRY per swing (chain
+## included), unaffordable = the 1-4 fallthrough with action_rejected, never deflect's
+## degrade. The shared _config() above deliberately leaves attack_stamina_cost at 0.0, so
+## these author it explicitly — a test must not depend on a default it does not itself set.
+
+func _make_match_with_attack_cost(cost: float) -> MatchState:
+	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
+	var c := _config()
+	c.attack_stamina_cost = cost
+	ms.apply_balance(c)
+	ms.drain_signals()
+	return ms
+
+
+func test_attack_deducts_authored_cost_at_the_transition() -> void:
+	var ms := _make_match_with_attack_cost(8.0)
+	_advance(ms, _intent([&"attack"]))
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ATTACKING, "affordable attack fires")
+	assert_eq(ms.p1.stamina.get_current(), 42.0,
+		"EXACTLY the authored cost deducted at entry: 50 - 8 (delay suppresses regen that tick)")
+
+
+## The rejected attack costs NOTHING and changes NO state — not the action state, not the
+## pool, not chain_index, not the monotonic swing counter. The setup spend carries a 5-tick
+## delay so "stamina untouched" is isolated from regen; the roll analogue above already pins
+## that a refused spend never restarts that window.
+func test_attack_at_cost_minus_one_rejected_and_changes_nothing() -> void:
+	var ms := _make_match_with_attack_cost(8.0)
+	ms.p1.stamina.spend(43.0, 5)  # 7.0 == cost - 1 (test setup, not a gameplay path)
+	ms.drain_signals()
+	var rejections: Array = []
+	ms.p1.hero.action_rejected.connect(func(action: StringName, reason: StringName) -> void:
+		rejections.append([action, reason]))
+	_advance(ms, _intent([&"attack"]))
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"lockout is a PRECONDITION — the attack never enters ATTACKING")
+	assert_eq(ms.p1.stamina.get_current(), 7.0, "nothing deducted by the rejected attack")
+	assert_eq(ms.p1.hero.chain_index, 0, "chain index never advanced")
+	assert_eq(ms.p1.hero.attack_index, -1, "no swing started — the monotonic counter is untouched")
+	assert_eq(rejections, [[&"attack", &"insufficient_stamina"]],
+		"queued action_rejected names the attack, reusing the existing reason vocabulary")
+
+
+func test_attack_at_exactly_cost_succeeds() -> void:
+	var ms := _make_match_with_attack_cost(8.0)
+	ms.p1.stamina.spend(42.0, 5)  # 8.0 == cost exactly
+	ms.drain_signals()
+	_advance(ms, _intent([&"attack"]))
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ATTACKING, "exactly-affordable attack fires")
+	assert_eq(ms.p1.stamina.get_current(), 0.0, "spent to exactly empty")
+
+
+## EVERY swing is charged, chain included — and a chain the pool cannot afford leaves
+## chain_index alone (the sequence neither advances nor resets; the hero stays in recovery).
+func test_chain_swing_is_charged_and_unaffordable_chain_leaves_index_alone() -> void:
+	var ms := _make_match_with_attack_cost(30.0)
+	_advance(ms, _intent([&"attack"]))  # swing 0: 50 - 30 = 20
+	assert_eq(ms.p1.stamina.get_current(), 20.0, "first swing charged")
+	assert_eq(ms.p1.hero.chain_index, 0, "swing 0")
+	_advance_to_recovery(ms)
+	var rejections: Array = []
+	ms.p1.hero.action_rejected.connect(func(action: StringName, reason: StringName) -> void:
+		rejections.append([action, reason]))
+	var before := ms.p1.stamina.get_current()
+	assert_true(before < 30.0, "setup: the chain is genuinely unaffordable (%s < 30)" % before)
+	_advance(ms, _intent([&"attack"]))
+	assert_eq(ms.p1.hero.chain_index, 0, "rejected chain did NOT advance the index")
+	assert_eq(ms.p1.stamina.get_current(), before + 1.0,
+		"nothing deducted; only the ordinary 1.0/tick regen ran")
+	assert_eq(rejections, [[&"attack", &"insufficient_stamina"]], "the rejected chain is legible")
+
+
+## ORDERING pin: the 1-3 chain CAP is evaluated BEFORE the stamina seat, so a press that is
+## already capped is refused for free and stays SILENT (1-4 scope: action_rejected covers
+## stamina rejections only). A cap gate seated after the spend would charge for a swing that
+## never happens.
+func test_capped_chain_press_is_not_charged_and_stays_silent() -> void:
+	var ms := _make_match_with_attack_cost(4.0)
+	var rejections: Array = []
+	ms.p1.hero.action_rejected.connect(func(action: StringName, reason: StringName) -> void:
+		rejections.append([action, reason]))
+	_advance(ms, _intent([&"attack"]))  # swing 0
+	_advance_to_recovery(ms)
+	_advance(ms, _intent([&"attack"]))  # chain -> swing 1
+	_advance_to_recovery(ms)
+	_advance(ms, _intent([&"attack"]))  # chain -> swing 2 (cap: 3 swings)
+	assert_eq(ms.p1.hero.chain_index, 2, "at the cap")
+	_advance_to_recovery(ms)
+	# Drain clear of the maximum so "unchanged" is a real reading and not a clamp: at max,
+	# regen adds nothing and a wrongly-charged press could hide inside the ceiling.
+	ms.p1.stamina.spend(10.0, 0)  # test setup, not a gameplay path — 0 delay, regen stays live
+	ms.drain_signals()
+	var before := ms.p1.stamina.get_current()
+	assert_true(before < 50.0, "setup: below the maximum, so regen and a charge are both visible")
+	_advance(ms, _intent([&"attack"]))  # capped press — refused before the stamina seat
+	assert_eq(ms.p1.hero.chain_index, 2, "capped press dropped")
+	assert_eq(ms.p1.stamina.get_current(), before + 1.0,
+		"capped press charged NOTHING — the cap gate precedes the spend (only regen moved)")
+	assert_eq(rejections, [], "the capped-chain reject stays SILENT — stamina never refused it")
 
 
 ## ---- Lockout + rejection semantics (D5, AC 4) -------------------------------------------
@@ -286,13 +397,30 @@ func test_regen_runs_while_rolling_after_delay_expires() -> void:
 		"regen runs while ROLLING — only BLOCKING and the delay window suppress (D6)")
 
 
+## ADAPTED by the stamina-cost corrective pass (E3-RG/R2), operator-ruled: the attack seat
+## follows the ROLL precedent verbatim, so attack ENTRY restarts the post-spend delay window
+## exactly as roll and deflect do — even here, where _config() leaves attack_stamina_cost at
+## its 0.0 default and nothing is actually deducted (the window restarts on any SUCCESSFUL
+## spend, and a 0.0 spend succeeds). The D6 claim under test is unchanged and still the
+## point: the ATTACKING *state* does not suppress regen. Only the tick it becomes visible
+## moved, out from under the 3-tick delay. Arithmetic: 30.0 at entry (delay covers the entry
+## tick t1 and t2-t3), regen resumes t4 at 1.0/tick -> 31.0, with the hero still ATTACKING
+## (windup 3 + active 4 + recovery 6 = 13 ticks of ATTACKING, so t4 is comfortably inside).
 func test_regen_runs_while_attacking() -> void:
 	var ms := _make_match()
 	ms.p1.stamina.spend(20.0, 0)  # 30, no delay
 	ms.drain_signals()
 	_advance(ms, _intent([&"attack"]))
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ATTACKING)
-	assert_eq(ms.p1.stamina.get_current(), 31.0, "regen runs while ATTACKING")
+	assert_eq(ms.p1.stamina.get_current(), 30.0,
+		"attack entry restarts the delay window (roll precedent) — no regen on t1")
+	_advance(ms)  # t2: delay counts
+	_advance(ms)  # t3: delay counts (3 of 3)
+	assert_eq(ms.p1.stamina.get_current(), 30.0, "post-attack delay covers t1-t3 exactly")
+	_advance(ms)  # t4: window expired in step 2 -> regen, still mid-swing
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ATTACKING, "still ATTACKING at t4")
+	assert_eq(ms.p1.stamina.get_current(), 31.0,
+		"regen runs while ATTACKING — the STATE never suppressed it (D6), only the delay did")
 
 
 func test_regen_reaches_max_end_to_end_without_overshoot() -> void:
