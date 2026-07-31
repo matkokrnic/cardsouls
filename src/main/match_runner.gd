@@ -148,6 +148,11 @@ func _ready() -> void:
 		connect_hit_landed(cues.on_hit_landed.bind(slot))
 		connect_deflect_landed(cues.on_deflect_landed.bind(slot))
 		EventBus.round_ended.connect(cues.on_round_ended.bind(slot))
+		# Story 3-0a: the rig animation controller shares the action-state seam — the five
+		# ActionState-driven clips (idle/attack/block/roll/death). The sixth, `run`, is NOT
+		# wired here: HeroActor.drive() pushes it per-tick from velocity (3-0a/R2). Read-only,
+		# no state handle, mirroring the telegraph wiring.
+		connect_hero_action_state_changed(slot, actor.animation_controller.on_action_state_changed)
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a

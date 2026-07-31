@@ -11,3 +11,8 @@
 *.uid    text eol=lf
 *.godot  text eol=lf
 *.cfg    text eol=lf
+
+# Binary asset types (story 3-0a) — the rig assets are committed directly to git (no LFS).
+# Mark them binary so Git never attempts EOL normalization or line-diffing on them.
+*.fbx    binary
+*.png    binary

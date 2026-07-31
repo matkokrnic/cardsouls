@@ -21,6 +21,12 @@ extends CharacterBody3D
 ## subscriptions through the connect seams at match start; nothing else touches it.
 @onready var telegraph_controller: TelegraphController = $TelegraphController
 
+## Story 3-0a: the per-hero rig animation layer. Exposed so the RUNNER wires it to the
+## action-state seam at match start (the five ActionState-driven clips); drive() pushes the
+## per-tick velocity magnitude to it for the `run` clip (3-0a/R2), the ONE selection the
+## transition-fired seam cannot carry. Presentation-only — never handed a state object.
+@onready var animation_controller: AnimationController = $AnimationController
+
 
 func drive(hero_state: HeroState, _delta: float) -> void:
 	velocity = hero_state.velocity  # world velocity decided by advance(); never the raw intent
@@ -34,4 +40,9 @@ func drive(hero_state: HeroState, _delta: float) -> void:
 	var yaw := atan2(hero_state.facing.x, hero_state.facing.y)
 	hitbox.rotation.y = yaw
 	mesh.rotation.y = yaw
+	# Story 3-0a (3-0a/R2): PUSH the velocity magnitude to the rig's animation controller on
+	# this same per-tick call — the `run` clip is chosen from speed while IDLE (a running hero
+	# is IDLE with non-zero velocity, no state transition the seam could carry). Presentation
+	# read only: no new seam, no state handle, no second _physics_process (F1 intact).
+	animation_controller.on_locomotion(velocity.length())
 	move_and_slide()

@@ -13,15 +13,15 @@
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_hit.wav" id="11_whit"]
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_reject.wav" id="12_wrej"]
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_round_end.wav" id="13_wend"]
+[ext_resource type="PackedScene" path="res://assets/characters/paladin/paladin.fbx" id="14_paldn"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/paladin/paladin_anims.res" id="15_anims"]
+[ext_resource type="Script" path="res://src/actors/hero/animation_controller.gd" id="16_anctl"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_qp0e8"]
 size = Vector3(1, 2, 1)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_hitbx"]
 size = Vector3(1, 1, 1)
-
-[sub_resource type="BoxMesh" id="BoxMesh_6plks"]
-size = Vector3(1, 2, 1)
 
 [sub_resource type="PrismMesh" id="PrismMesh_fmark"]
 size = Vector3(0.4, 0.3, 0.25)
@@ -53,10 +53,18 @@ script = ExtResource("1_vde01")
 shape = SubResource("BoxShape3D_qp0e8")
 
 [node name="Mesh" type="MeshInstance3D" parent="." unique_id=1501278172]
-mesh = SubResource("BoxMesh_6plks")
+
+[node name="Paladin" parent="Mesh" instance=ExtResource("14_paldn")]
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Mesh/Paladin"]
+root_node = NodePath("..")
+libraries = {
+&"": ExtResource("15_anims")
+}
 
 [node name="FacingMarker" type="MeshInstance3D" parent="Mesh"]
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0.5, 0.65)
+visible = false
 mesh = SubResource("PrismMesh_fmark")
 editor_description = "Directional marker (story 1-7b). Placeholder-aesthetic prism 'nose' making the mesh yaw VISIBLE: local +Y (prism apex) is rotated onto parent +Z — the same direction as the Hitbox reach (HitboxShape at local z 0.9) — so the wedge points where attacks land. Child of Mesh: it inherits the single shared yaw from HeroActor.drive() and can never diverge from it. Pure sub-resource authoring, no assets."
 
@@ -144,3 +152,8 @@ mesh = SubResource("SphereMesh_tgsprk")
 [node name="HitFlash" type="MeshInstance3D" parent="TelegraphController"]
 visible = false
 mesh = SubResource("BoxMesh_tgflsh")
+
+[node name="AnimationController" type="Node3D" parent="."]
+script = ExtResource("16_anctl")
+animation_player_path = NodePath("../Mesh/Paladin/AnimationPlayer")
+editor_description = "Rig presentation layer (story 3-0a): READ-ONLY per-hero consumer of the action-state seam (connect_hero_action_state_changed), wired by the runner at match start like TelegraphController. Selects one of the paladin's six skinned clips: IDLE/ATTACKING/BLOCKING/ROLLING/DEAD from the seam, `run` PUSHED from HeroActor.drive()'s per-tick velocity magnitude while IDLE (gate ruling 3-0a/R2). Never a state handle, never a mutator. NO _physics_process (F1)."
