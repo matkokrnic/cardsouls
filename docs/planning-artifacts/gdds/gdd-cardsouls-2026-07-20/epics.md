@@ -93,18 +93,16 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 - 3-1 (`MatchState` config object) folds the constructor/`apply_balance` double-injection quirk
   (`match_state.gd:544`) into one injected config object; reconciles `ManaPool`'s `apply_balance`
   refill behavior against `StaminaPool`'s (D9 full-refill ruling) once `max_mana` lands in
-  `BalanceConfig` (currently the runner's constructor value only); carries OPEN decision (d) —
-  does the basic attack cost stamina (decision-log:743) — as a seat if the E2 retro adopts it.
+  `BalanceConfig` (currently the runner's constructor value only). OPEN decision (d) — does the
+  basic attack cost stamina — is RESOLVED (DP/R2, decision-log:1037: YES); the value and its
+  certain golden re-baseline are NOT a 3-1 seat — they land in a standalone corrective pass that
+  precedes 3-1 (decision-log E3-RG/R2), so the re-baseline carries exactly one named cause.
 - DEBT D (the D6 economy-evaluator full form) is committed to land at story 3-4's own gate, which
   reconciles 3-4's existing evaluator-framing text (decision-log:224); not resolved here.
 - The deck story (3-3) is the forcing point for the open question of whether hand size ever varies
   (decision-log:801) — first version: always 4, refill on play.
 - The reveal-opponent-hand toggle, deferred from 2-5 (2-5/R4), lands in E3 on the condition already
   met there: the face-down/face-up rule lives in exactly ONE seat.
-- A real `FeatureFlags` overlay does not exist yet; today exactly one flag
-  (`melee_mana_generation`) is true by default (`src/state/resources/feature_flags.gd`) — every
-  other flag stays dormant until its own epic (E4 minions/totems, E5 unblockable/orbs, E6
-  pitch-zone, E8 equipment).
 - E3 art includes resolving 2-4's smoke finding S2 — "card slots look small for legibility"
   (decision-log:739) — once real card art exists.
 - The opponent face-down top-centre row (2-5/R3) is PROVISIONAL — nothing built in E3 may anchor
