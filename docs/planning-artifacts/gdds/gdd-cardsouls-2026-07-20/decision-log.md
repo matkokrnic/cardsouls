@@ -971,3 +971,37 @@ The `3-0a-rig-adoption` story's readiness gate returned NOT READY with three blo
 **3-0a/R7 -- resolves N2: `FacingMarker` (a child of `Mesh`) survives the change, hidden.** The prism-nose directional marker from 1-7b is redundant once a real model is present. Ruling: keep the node, set `visible = false`, do not remove it. Recorded as a micro-decision in Dev Notes; confirmed by content search that no test references `FacingMarker`.
 
 **3-0a/R8 -- resolves N3: `.gitattributes` gains explicit binary rules before the assets are committed.** `*.fbx binary` and `*.png binary`, added as a task; the `.gitattributes` edit itself lands with the asset/code chain, not this docs commit. Verified by content: the current `.gitattributes` declares only text-normalization rules (`*.gd`, `*.tres`, `*.tscn`, `*.import`, `*.uid`, `*.godot`, `*.cfg`), nothing binary.
+
+---
+
+## Session 2026-07-31 -- 3-0a fix pass (R9-R12)
+
+Docs-only fix pass resolving the review's two blocking findings (B1: AC6's unsatisfiable zero-root-motion claim; B2: empty Dev Agent Record) via four rulings. No code, asset, or `.import` change; the dev pass working tree is untouched. Full detail lives in `docs/implementation-artifacts/3-0a-rig-adoption.md` (Change Log v0.3); this entry records the amendment-queue growth only.
+
+**3-0a/R10 -- architecture amendment queue grows by two, plus the pre-existing item carried forward.** The queue was last flushed at E2-CO/R1 (commit `f80f90e`) and has not been re-flushed since. Verified by content this session: `docs/game-architecture.md`'s Directory Tree (`### Directory Tree`, line ~535) DOES list `assets/` as a top-level entry (line 585, unlike the earlier working assumption that it was absent outright) -- but unlike every sibling (`src/`, `data/`, `test/`), it is a single unexpanded line ("art · audio (feeds CombatCues bus) · models · materials") with no itemized children. That gap -- `assets/` not expanded into its actual subdirectory structure -- is the queue's pre-existing item, carried forward, now sharpened by content rather than assumed. It gains TWO new members from the 3-0a fix pass:
+  1. **Import post-processing as a repo pattern** -- `assets/characters/paladin/strip_model_anim.gd`, an `EditorScenePostImport` `@tool` script substituted (3-0a/R10 in the story file) for the model import setting `animation/import=false`, which does not strip the embedded `mixamo_com` take in Godot 4.6.3 despite being set. First use of this import hook anywhere in the repo.
+  2. **A new artifact type under `assets/`** -- an import-time `.gd` script living alongside its source asset (item 1), plus the `AnimationLibrary` `.res` (`paladin_anims.res`) as a committed assembly artifact, neither of which the current Directory Tree vocabulary (source assets only) accounts for.
+  Queued; NOT edited into `docs/game-architecture.md` this session (docs-only fix pass, story-file scope). Forcing point: the next architecture amendment queue flush (pattern: E2-CO/R1).
+
+---
+
+## Session 2026-07-31 -- Story 3-0a close-out
+
+**What landed (f9093ec code+tests+assets / 8140e38 dev record+playtest log / 6e97ca3 board+status; this decision-log commit itself carries the R9-R12 fix-pass session above and this close-out session).** Implementation exactly as gated and reviewed -- rulings 3-0a/R1..3-0a/R12 stand as ruled, nothing reopened. Suite: **164 state tests / 760 assertions / 0 failed**; golden `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` **unmoved, measured in BOTH directions**. Integration files: **9 -> 10** (the new `test_rig_clips.gd`, AC3's mutation-proven six-clip contract), all run **INDIVIDUALLY and PASS**. `src/state/` byte-identical, confirmed by `git status`/`git diff`, not by assertion.
+
+**New rulings, continuing from 3-0a/R12:**
+
+**3-0a/R13 -- live-smoke findings, all NON-BLOCKING, all handed to 3-0b.** The operator ran the smoke with a second human on the shipped default (`slot_controller_kinds = [0, 1]`, two live killable humans), two keyboards, no `.tscn` flip. PASS on every checked point: all six clips fire on the correct `ActionState`s; the corpse stays down (`death` holds, loop off); deflect visually borrows the block pose with no jerk (verified live -- one player held block while the other attacked into it); frame rate held with two skinned characters on screen. Three findings, none blocking:
+  1. The roll telegraph ring reads as **beside** the hero, not under him. Diagnosis: the ring did NOT move -- it is drawn at the root where the hero actually is; the MESH moved. This is the measured `roll` Hips excursion (~1.09 units planar, Dev Notes table) become visible now that a body replaced the placeholder box. **Not a regression** introduced by adoption -- the excursion pre-existed and the box merely never showed it.
+  2. The `roll` clip is cut well before it finishes -- the authored `roll_duration` is far shorter than the clip. Expected under the R5 clip-end/mid-clip policy; reconciling clip length against authored timing is 3-0b's.
+  3. The `block` clip has no transition frames -- the hero pops into the guard pose and out of it, and deflect enters that same held pose instantly. Follows from choosing a held-pose clip; carries a real trade (the instant pop means zero visual lag between input and guard). Whether to soften it is a 3-0b judgment.
+
+**3-0a/R14 -- ruling 3-0a/R12 CORRECTED: an In Place re-download does NOT pin the root.** R12 (Live Smoke, story file) claimed that if `roll` reads as detached, the fix is an In Place re-download of that clip -- the same category `roll` and `run` already used for AC6. That is **wrong**: `roll` was **already** downloaded In Place (R9). In Place yields net-zero *travel* across the clip but does not pin the root; the Hips still swing ~1.09 units planar mid-clip (Dev Notes measured table), which is exactly what reads as the body sitting beside the hero (R13 finding 1). The correct routes, both 3-0b's, are: (a) a different roll or dodge clip with a smaller Hips excursion, or (b) zero the XZ component of the Hips position track in the animation library while keeping Y (so the crouch survives) -- the same principle the `run` clip already relies on, where the legs cycle in place and state carries the body. Corrected in the story's Live Smoke note so the artifact carries no false fix route into 3-0b. No code or asset changed -- this is a documentation correction; the fix itself is 3-0b's.
+
+**3-0a/R15 -- R-D6 live-smoke acceptance RE-INVOKED on 3-0a, PASSED (the FIFTH two-human smoke), SPENT again.** Available to the next story with a live smoke against killable human slots.
+
+**3-0a/R16 -- Golden unmoved, measured in both directions, the SEVENTH consecutive story.** Hash `338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` unchanged since 1-9. As predicted (NONE, both directions): the rig touches no `src/state/` and adds no `MatchState.to_snapshot()` field, so no snapshot could move.
+
+**E3 underway.** 3-0a is the first E3 story delivered; `epic-3` stays `backlog` (the card system proper is unbuilt). Next: 3-0b (feel-and-timing tuning, Matko-authored just-in-time), which inherits the DEBT E judgments plus the three R13 findings above.
+
+**Promotion.** Story Status and board promoted ready-for-dev -> done.
