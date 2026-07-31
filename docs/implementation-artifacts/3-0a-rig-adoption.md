@@ -1,6 +1,6 @@
 # Story 3.0a: Rig adoption
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-07-30
+# last_updated: 2026-07-31
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -62,7 +62,7 @@ development_status:
 
   # E3 — Card System + Mana Economy (gated — see story_notes)
   epic-3: backlog
-  3-0a-rig-adoption: ready-for-dev
+  3-0a-rig-adoption: done
   3-0b-feel-and-timing-tuning: backlog
   3-0c-intent-recorder: backlog
   3-1-matchstate-config-object: backlog
@@ -73,8 +73,8 @@ development_status:
   3-6-card-hud-hand-mana-deck: backlog
 
 story_notes:
-  3-0a-rig-adoption: "Story authored, gated, and promoted to ready-for-dev 2026-07-30 (3-0a/R1-R8). First models + AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd must both stay green); triggers DEBT E inheritance but ACs cover only the substrate + guards."
-  3-0b-feel-and-timing-tuning: "Board slot only, story file not yet authored just-in-time before its turn (Matko writes it — E3-P/R6). Carries the five DEBT E judgments (1-3c timing, 1-5 B6 multipliers, 1-7 lunge root motion, legibility <0.5s incl. pose_id and finding S8, OPEN decision (c)) plus deterministic step/pause (2-6/R3, the new Input Map actions land here and only here), window countdown (2-6/R7), and the real AC7 legibility run with a naive observer."
+  3-0a-rig-adoption: "DONE 2026-07-31 (3-0a/R1-R16). Skinned paladin + six-clip AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd both green); src/state/ byte-identical, golden 338172010a…21da2 unmoved both directions; suite 164/760/0, 10 integration files individually green (test_rig_clips.gd added, mutation-proven). Live smoke PASSED with two humans on the shipped default (R-D6 re-invoked, SPENT); three non-blocking findings handed to 3-0b (below)."
+  3-0b-feel-and-timing-tuning: "Board slot only, story file not yet authored just-in-time before its turn (Matko writes it — E3-P/R6). Carries the five DEBT E judgments (1-3c timing, 1-5 B6 multipliers, 1-7 lunge root motion, legibility <0.5s incl. pose_id and finding S8, OPEN decision (c)) plus deterministic step/pause (2-6/R3, the new Input Map actions land here and only here), window countdown (2-6/R7), and the real AC7 legibility run with a naive observer. NEW from the 3-0a live smoke (3-0a/R13): (1) roll telegraph ring reads beside the hero — the ~1.09-unit planar Hips mid-clip excursion made visible now that a body replaced the box (ring unmoved, mesh moved); fix routes = a smaller-excursion roll/dodge clip OR zero the Hips XZ track while keeping Y (3-0a/R12 CORRECTED — an In Place re-download does NOT pin the root, roll was already In Place); (2) roll clip cut before it finishes (authored roll_duration << clip length); (3) block has no transition frames — held-pose clip pops in/out, deflect enters the same held pose instantly (trade: zero input-to-guard visual lag)."
   3-0c-intent-recorder: "Board slot only, story file deliberately not authored yet (E3-P/R3, Set B staleness lesson). Carries the X5 four-field contact-fact contract and both halves of DEBT B."
   3-1-matchstate-config-object: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
   3-2-card-schemas-carddatabase: "HOLD — revisit after first E1/E2 playtest; do not promote to ready-for-dev until then."
