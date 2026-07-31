@@ -1273,3 +1273,133 @@ card fields on `InputIntent`) is final before the stream contract is written; th
 comes early because melee feel is not changed by cards, and its known roll defect (3-0a/R13 finding 1,
 decision-log:995: the Hips-excursion / roll-ring-beside-the-hero defect) would otherwise contaminate
 every remaining live smoke.
+
+---
+
+## Session 2026-08-01 -- Stamina-cost corrective pass: the basic attack costs 12
+
+**SC/R1 -- Pass shape and sanction, both verified by content before relying on them.** A corrective
+pass run OUTSIDE the full story ritual, in the shape BC/R1-R5 established: judgment already made, so
+proof-by-measurement replaces review; two commits, code and docs never sharing one. Two rulings sanction
+it. (1) DP/R2 (decision-log:1037) RESOLVED OPEN decision (d): the basic attack costs stamina, an
+ANTI-SPAM lever and not an economy constraint -- the 1-4-gate "Basic attack stays FREE" ruling and 1-5's
+melee-hit mana are about the ECONOMY and are untouched. (2) E3-RG/R2 (decision-log:1104) assigned the
+value and the implementation to a STANDALONE pass landing BEFORE 3-1, "so that the certain golden
+re-baseline has exactly one named cause in its own commit, not bundled into 3-1's own re-baseline-causing
+config-object refactor." Unlike the melee-damage corrective, this pass DOES move the golden --
+predicted by E3-RG/R2 and confirmed (SC/R8). COMMIT PREFIX, recorded because it deliberately DIFFERS
+from the corrective pass immediately preceding it and the two should not read as inconsistent: the pass
+SHAPE is shared with BC/R1, but the commit TYPE follows what the commit actually does.
+`chore(balance):` is for TUNING AN AUTHORED VALUE -- BC's one-number `.tres` edit, housekeeping.
+This pass adds a MECHANIC (a new balance field, a third spend seat in `match_state.gd`, five new tests,
+a golden re-baseline), so it lands as `feat(state):` -- the scoped form already used three times in this
+history for state-layer additions (`feat(state): E0 pools + HeroState + PlayerState` and siblings).
+Someone searching in a month for when attacks began costing stamina looks under `feat`, not `chore`.
+
+**SC/R2 -- THE VALUE: `attack_stamina_cost = 12.0`, authored against three criteria.** Authored against
+the real shipped costs, not a guess: `roll_stamina_cost = 12.0`, `deflect_stamina_cost = 8.0`,
+`max_stamina = 50.0`, `attack_chain_length = 3` (`data/balance/balance_config.tres:9,12,13,18`).
+  (a) A full chain is affordable from a full bar: 3 x 12 = 36 <= 50.
+  (b) A defensive action survives a full chain: 50 - 36 = 14, which affords the MORE EXPENSIVE of the
+      two defensive actions (roll 12), not merely the cheaper deflect (8). Both remain available.
+  (c) Two full chains back to back are impossible: 6 x 12 = 72 > 50.
+Measured live under the authored config (attack pressed every tick for 400 ticks, headless probe):
+swings fire at ticks 1, 25, 49 -- the full chain off a full bar -- then 94, 182, 278, 374, i.e. one swing
+per ~96 ticks thereafter, with 211 presses rejected. The lever throttles mashing exactly as intended.
+
+**SC/R3 -- RECORDED RULING: what "gated by regen" means, so it is unambiguous hereafter.** E3-RG/R2's
+own wording ("a full attack chain is affordable from a full bar while the next attack past the chain is
+gated by regen") was read during this pass as requiring a FOURTH attack to be UNAFFORDABLE. At 12 it is
+not: the probe shows the fourth swing at t94 firing off the 14 left over, gated by the chain cap rather
+than by stamina. Operator ruling, recorded here so a future reader does not re-derive a different value
+from that sentence: the strict reading OVER-CONSTRAINS the criteria. Combined with criterion (b) at the
+roll's 12.0 it admits only 12.5 < x <= 12.67 -- a window 0.17 wide, which breaks the first time the
+roll's cost is tuned. "A value that survives only by two tenths is not precision, it is fragility."
+The INTENDED reading: "gated by regen" means the regen MECHANISM throttles sustained attacking -- the
+delay restarts on every swing, so continued attacking never self-funds -- NOT that a fourth attack must
+be impossible. The lever makes spam EXPENSIVE, not forbidden: a player is free to swing into an empty
+bar, and the punishment is being empty with no regen running. So criterion (c) is satisfied by the REGEN
+GATE, not by unaffordability. At 12 the arithmetic is comfortable rather than knife-edge: a full chain
+costs 36 of 50, leaving 14, which still affords the 12.0 roll; attacking on past the chain drains toward
+empty with regen gated -- a self-punishing choice, not a wall. 12.6 was offered and explicitly REJECTED.
+This entry corrects E3-RG/R2 FORWARD; that entry's text is not rewritten (the standing rule, 2-2/A4).
+
+**SC/R4 -- THE SEAT: the third `StaminaPool.spend()` policy seat, on the ROLL precedent.** Seated in
+`MatchState._try_transition`'s ATTACKING case (step 3). Roll was the better-fitting of the two existing
+precedents and deflect was rejected by content: roll spends AT ENTRY and an unaffordable press REJECTS
+and falls through per INPUT_PRIORITY (`match_state.gd:313-328`), whereas deflect holds a read-only
+precondition at entry, spends at LANDING in step 4 (`:335`, `:416-417`), and treats unaffordable as a
+DEGRADE -- the block still fires, only the window is denied. There is no degraded attack to fall back
+to, so the degrade shape does not apply. Charged PER SWING, chain included. ORDERING, deliberate and
+pinned by its own test: the 1-3 chain CAP is evaluated BEFORE the stamina seat, so a capped press is
+refused for free and stays SILENT (a cap gate seated after the spend would charge for a swing that never
+happens). Rejection reuses the existing vocabulary rather than inventing a variant --
+`action_rejected(&"attack", &"insufficient_stamina")`, the reason StringName already used by roll and
+deflect. A rejected attack costs nothing, enters no state, and advances neither `chain_index` nor the
+monotonic `attack_index`.
+
+**SC/R5 -- DESIGN CONSEQUENCE RAISED MID-PASS AND RULED: attacking now gates stamina regen for 0.8s.**
+Following the roll precedent verbatim means passing `balance_ticks.stamina_regen_delay_ticks` to
+`spend()`, so attack ENTRY restarts the post-spend regen-delay window. Neither DP/R2 nor E3-RG/R2
+authorises that -- they decided a COST -- so the pass STOPPED and put the fork to the operator with both
+branches measured: (A) roll precedent verbatim, versus (B) `spend(cost, 0)`, a cost that never gates
+regen. Measured cost of each: (A) mash cadence ~96 ticks/swing, three state failures and one integration
+failure, two of them structural; (B) ~2x faster cadence, and the ENTIRE suite structurally intact with
+only the golden moving. Operator ruling: **(A)**. "Both existing consumers gate regen; an attack that did
+not would be the only one that doesn't, and that asymmetry has no justification." Recorded as a real
+mechanic, not an implementation detail: committing to offense now costs defensive readiness for 0.8s,
+and this -- not the cost alone -- is what makes the throttle bite (SC/R3).
+
+**SC/R6 -- BC/R3's standing fact SURVIVES, with one boundary now mapped.** BC/R3 established that
+authored balance is isolated from both the golden and the unit suite. Nothing here contradicts it, and
+the distinction is worth recording precisely: the `.tres` EDIT (`attack_stamina_cost = 12.0`) moved no
+unit test -- every combat unit test still builds its own in-test `BalanceConfig`, where the new field
+sits at its 0.0 default. What moved tests was the CODE (a new seat that fires in every config) and the
+golden's OWN in-test coverage value, neither of which BC/R3 ever claimed isolation for. The one genuine
+qualification: BC/R3 called `test_contact_pipeline.gd` (the only test reading the authored `.tres`)
+"fully PARAMETRIC and self-reschedules". It did self-reschedule its timings, but it ALSO needed a
+structural fix (SC/R7) -- parametric expectations do not survive a change that makes a pressed action
+REFUSABLE. Record for future passes: "derived from the .tres" protects VALUES, not the assumption that
+an input always produces an action.
+
+**SC/R7 -- TESTS: five new pins, two adaptations, one audit, each with its arithmetic.** New, in
+`test_stamina_economy.gd`: exact deduction at the transition (50 - 8 = 42); exactly-affordable spends to
+empty; the rejected attack changes NOTHING (state stays IDLE, stamina 7.0 untouched, `chain_index` 0,
+`attack_index` -1, and the queued rejection emitted); a chain swing is charged and an unaffordable chain
+leaves the index alone; a CAPPED press is not charged and stays silent (the SC/R4 ordering pin). Audit:
+`attack_stamina_cost > 0` added to `test_balance_authoring.gd`'s non-duration class, NOT exempt -- a zero
+is a silently disarmed lever, the roll/deflect reasoning. ADAPTED, both flowing from SC/R5 and both named
+rather than quietly rewritten: (1) `test_regen_runs_while_attacking` -- the D6 claim under test is
+UNCHANGED (the ATTACKING *state* never suppressed regen); only the tick it becomes visible moved out from
+under the 3-tick delay, so the test now reads 30.0 across t1-t3 and 31.0 at t4, still ATTACKING. (2)
+`test_contact_pipeline.gd`'s reset phase -- its kill phase is now regen-paced (3295 frames / 34 swings
+~= 96.9, matching the probe's 96), so it ends with P1 drained, and the 1-7/D-1 debug reset is ROUND-scoped
+by design ("every slot's HP back to max ... NOTHING else (pools ... untouched)"). Its single
+non-retrying press therefore landed on an empty bar and was refused; it now RE-PRESSES until the swing
+fires, the same auto-swing shape the kill phase already used, with a `_attack_refill_ticks` allowance
+derived from the `.tres`. This cannot livelock: a refused spend never restarts the delay window.
+
+**SC/R8 -- PROOF: mutation, then ONE re-baseline measured in both directions.** MUTATION (non-vacuity of
+the new guard): with the affordability precondition removed -- the spend left in place but its result
+ignored -- `test_attack_at_cost_minus_one_rejected_and_changes_nothing` FAILS on the state (got
+ATTACKING, expected IDLE) and on the swing counter (got 0, expected -1), and
+`test_chain_swing_is_charged_and_unaffordable_chain_leaves_index_alone` FAILS on the index (got 1,
+expected 0) and on the missing rejection. `src/state/match_state.gd` was backed up OUTSIDE the repo
+before mutating and restored by copying back, never `git checkout` (which would have wiped the whole
+uncommitted pass); SHA256 `a3d6cc44adb807db08f9aa770ec28ac25807e1aaaf36009ee157ba95d75d11e8` verified
+byte-for-byte identical before and after. GOLDEN: every non-golden test was proven green FIRST (169
+tests, 784 assertions, 1 failure -- the golden alone), then exactly ONE re-baseline,
+`338172010a5409ab32684986bfff73b156f53bb828358e28f304ece440b21da2` ->
+`7fbb4b7f589251d25a13d6b49138b416266031e124cdae1c07e99e0f4fc119d1`, cause named: the basic attack gained
+a stamina cost. Two contributing halves measured APART, the 1-9 discipline: the intermediate
+`d101980f315d43265325d68674dae79f67acc7210c0ecd8c092cc45df9581512` is the seat alone with
+`_golden_config`'s cost still 0.0 (P2's t15 attack costs 3 regen ticks, 30.0 -> 27.0 -- the delay restart
+of SC/R5 moves the hash even at zero cost), and toggling the authored 6.0 back off REPRODUCED it exactly.
+REVERSE direction: with the seat removed the hash returns to `33817201...` exactly, so nothing else
+contributed. Snapshot SHAPE is NOT a cause -- the seat adds no field, and the regen-delay window it
+restarts was already snapshotted (D8). `_golden_config` authors 6.0, NOT the shipped 12.0
+(coverage-not-feel, and chosen so neither attack spend is erased by a clamp at the 40.0 maximum).
+FIGURES: suite BEFORE 164 tests / 760 assertions / 0 failed + 10 integration PASS; AFTER 169 tests / 784
+assertions / 0 failed + 10 integration PASS. No collateral: `git diff -- project.godot
+src/main/main.tscn` empty, re-checked immediately before each commit. NOT PUSHED -- both commits are
+local pending the operator's confirmation of the log.
