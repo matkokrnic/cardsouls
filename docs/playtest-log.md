@@ -98,3 +98,14 @@ Definitive legibility judgement stays animation-gated (rig story).
 | Attack | AttackCone + StingAttack | Y | Y | both | sting close to block's |
 | Block  | BlockShield + StingBlock | Y | Y | both | sting close to attack's |
 | Roll   | RollDisc + StingRoll     | Y | Y | both | clearly distinct by ear |
+
+
+
+31.7. 
+konfiguracija (isporučeni default, dvije tipkovnice, bez flipa) i da ste bili dvojica
+što je prošlo: šest animacija na prave akcije, leš ostaje ležati, deflect bez trzaja, fps stabilan
+žuti roll krug pokraj lika — najvrednija stavka; zapiši da si vidio tijelo odvojeno od mjesta gdje hero stvarno jest
+roll klip se prekine puno prije kraja
+blok nema međukadrova, pop u pozu i iz nje
+da ništa od toga ne blokira adoption i da sve tri stavke idu 3-0b
+
