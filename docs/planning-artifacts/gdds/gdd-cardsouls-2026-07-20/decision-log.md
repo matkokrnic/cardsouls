@@ -896,7 +896,7 @@ Readiness gate on `2-6-legibility-feel-instrumentation.md` (authored 2026-07-22 
 
 **E3-P/R1 -- Pass scope.** Five items land in one docs commit: epics stubs (Committed obligations added to E3/E4/E5/E6 in `epics.md`); stories-manual sync (E1.S2 / E2.S1 item 4 camera wording corrected); `IntentRecorder` board slot; rig story split + board slots (`3-0a-rig-adoption`, `3-0b-feel-and-timing-tuning`); supersession de-vacuization schedule. The E3 revisit gate stays closed until all five are closed; this commit closes them, with two scheduled follow-ups that precede the gates they feed: the corrective pass (E3-P/R4) and Matko-authored rig story files (E3-P/R6).
 
-**E3-P/R2 -- DEBT E split across two rig stories.** ADOPTION (`3-0a-rig-adoption`): first models + AnimationPlayer in `hero.tscn`; DECISION A intact (hero root never rotates; `test_root_rotation_isolation.gd` must survive); formally triggers DEBT E inheritance but its ACs cover only the substrate + guards. TUNING (`3-0b-feel-and-timing-tuning`): the five DEBT E judgments (1-3c final playtest timing judgment; 1-5 B6 per-phase movement multipliers; 1-7 attack-lunge root motion; legibility <0.5s shape+sound validation incl. pose/silhouette distinctness, `pose_id` consumption, and smoke finding S8 -- attack and block stings too similar by ear; OPEN decision (c) variable analog magnitude judgment) + deterministic step/pause (2-6/R3; the new `project.godot` Input Map actions land here and only here) + window countdown (2-6/R7) + the real AC7 legibility run with a naive observer. Amendment to the DEBT E trigger rule (1-10/R4): inheritance is split exactly this way so the adoption story does not re-inherit all seven items.
+**E3-P/R2 -- DEBT E split across two rig stories -- SCOPE NOTE ADDED 2026-07-31 (see Session 2026-07-31 -- E3 revisit gate (outcome), below, decision-log E3-RG/R7): the "land here and only here" Input Map wording below binds only 3-0b's step/pause actions — it was never meant to freeze the Input Map for the whole epic, and 3-5 may add its own card actions under the same discipline. Original entry kept below for the record.** ADOPTION (`3-0a-rig-adoption`): first models + AnimationPlayer in `hero.tscn`; DECISION A intact (hero root never rotates; `test_root_rotation_isolation.gd` must survive); formally triggers DEBT E inheritance but its ACs cover only the substrate + guards. TUNING (`3-0b-feel-and-timing-tuning`): the five DEBT E judgments (1-3c final playtest timing judgment; 1-5 B6 per-phase movement multipliers; 1-7 attack-lunge root motion; legibility <0.5s shape+sound validation incl. pose/silhouette distinctness, `pose_id` consumption, and smoke finding S8 -- attack and block stings too similar by ear; OPEN decision (c) variable analog magnitude judgment) + deterministic step/pause (2-6/R3; the new `project.godot` Input Map actions land here and only here) + window countdown (2-6/R7) + the real AC7 legibility run with a naive observer. Amendment to the DEBT E trigger rule (1-10/R4): inheritance is split exactly this way so the adoption story does not re-inherit all seven items.
 
 **E3-P/R3 -- `IntentRecorder` story: board slot only** (`3-0c-intent-recorder`). The story FILE is deliberately not authored now (Set B staleness lesson -- story files written long before their dev pass go stale) and will be written just-in-time at its own creation pass. Its contract, by content: consumes the four-field contact fact `[attacker_slot, target_slot, attack_index, world-space direction target->attacker]` computed by the runner from positions (1-8 D-4 supersession); carries BOTH halves of DEBT B (`ResourceLoader` with `CACHE_MODE_IGNORE`; reload event in the intent stream; X5: replay = seed + intents + reload events, never re-read from disk); carries record/replay + mid-round reload per 2-6/R2.
 
@@ -1043,3 +1043,233 @@ Status: OPEN, no resolution recorded.
 Scope, precisely: this ruling makes the revisit gate RUNNABLE. It does NOT promote any story and does NOT pre-judge any E3 story's content — the gate still has to run, and it is the gate's own re-read against `docs/playtest-log.md` that decides what each E3 story confirms, amends, or drops. `docs/implementation-artifacts/sprint-status.yaml`'s `story_notes` for 3-1 through 3-6 are rewritten in this commit so they no longer point at an event (a separate external playtest) that will never occur, while all six stories remain HELD until the gate has actually been run against them.
 
 **DP/R4 -- Lettering unified into one chronological scheme; letters retrofitted onto three previously-unlettered OPEN entries.** The log carried two eras of OPEN-decision style: the earliest entries (2026-07-22) were written as bare `**OPEN — Title.**`, with no letter at all; letters first appear starting with `(c)` at the 2-2 close-out (2026-07-28) and continue with `(d)` at the 2-4 close-out. Three entries were unlettered — attacker consequence on deflect (2026-07-22), reshuffle vulnerable-window cost (2026-07-22), and whether hand size ever varies (2-5 close-out, 2026-07-28) — despite the first having been referred to as "decision (a)" in cross-references since the 1-8 gate. This pass makes it one scheme, by opening order: `(a)` attacker consequence on deflect, `(b)` reshuffle vulnerable-window cost, `(c)` variable analog magnitude, `(d)` basic attack costs stamina (RESOLVED today, DP/R2), `(e)` hand size ever varies, `(f)` camera always-lock-on (DP/R1 above — written as `(b)` in this session's first draft before the retrofit), `(g)` basic attack stamina cost value/owner (DP/R2 above — written as `(e)` in the same first draft). Only the three unlettered entries' headers were touched (letter added, nothing else in their text changed); DP/R1 and DP/R2's own letters were renumbered in place before this record was written, so no stale letter reaches the committed log. Anyone reading `(f)`/`(g)` as oddly high for a same-day pair: this is why — read it as a retrofit, not an error.
+
+---
+
+## Session 2026-07-31 -- E3 revisit gate (outcome)
+
+This entry satisfies the epic's own exit criterion, verbatim from `stories-manual-e3.md:241` (Epic exit
+criteria, item 6): **"The revisit gate has been executed and its outcome recorded in `decision-log.md`."**
+DP/R3 (above) made the gate RUNNABLE by content; this session RUNS it — a read of the six E3 story files
+(`docs/implementation-artifacts/3-1..3-6`) against `docs/playtest-log.md` and the shipped `src/` state, per
+`stories-manual-e3.md`'s own instruction ("re-read this file against `docs/playtest-log.md` and either
+confirm each story, amend it, or delete it").
+
+**VERDICT: E3 proceeds AMENDED.** Five of six stories (3-1, 3-3, 3-4, 3-5, 3-6) need text corrections
+before promotion to ready-for-dev; 3-2 is implementable as written apart from two cosmetic fixes. No
+story is deleted. The epic's shape, sequence, and exit criteria (`stories-manual-e3.md:234-241`) survive
+unchanged.
+
+**Context bounding this gate — recounted precisely.** Thirteen readiness-gate sessions are logged for
+stories explicitly described in-text as belonging to the Set B batch: seven in E1 (1-4, 1-5, 1-6, 1-7,
+1-8, 1-9, 1-10) and six in E2 (2-1, 2-2, 2-3, 2-4, 2-5, 2-6) — verified by content, each one's own gate
+session names it "the original Set B batch" or "backlog since the Set B batch." All thirteen return NOT
+READY at first read. Two qualifications, stated so the claim is checkable rather than asserted: (1) 1-1,
+1-2, and 1-3 never received a logged "readiness gate (operator decisions)" session at all — their
+close-outs run directly from implementation with no gate session preceding them in this log — so they
+belong in neither a seven-count nor a thirteen-count; a claim naming them would be unverifiable by
+content. (2) every one of the thirteen sessions resolves its findings and promotes the story to
+ready-for-dev within that SAME session ("Promotion. All fixes applied... promoted backlog ->
+ready-for-dev"), so NOT READY is only a FIRST-PASS verdict — none of the thirteen stories exited its gate
+session still NOT READY. A count of seven is defensible only if narrowed to the E1 gates alone; nothing
+in the log itself states that narrower scope — 2-1 through 2-6 are each described as "the Set B batch"
+with the same wording as the E1 stories — so thirteen is the number this log actually supports for "every
+Set B story that has reached a readiness gate," with the first-pass/promoted-same-session caveat above.
+The sole READY-on-first-pass gate anywhere in the log, 1-7b, was a freshly authored non-Set-B story, not a
+counterexample to either count. This gate does NOT substitute for the six E3 stories' own readiness
+gates — each still faces its own before its dev pass; `sprint-status.yaml`'s HOLD notes for 3-1 through
+3-6 are rewritten in the companion commit to say the gate has now run, without changing HOLD itself (see
+below).
+
+**E3-RG/R1 -- MANA SCALE: the GDD's scale is canonical.** Verified by content: the GDD's own baseline
+reference is "Clash-Royale-like ~10 max, ~1/sec — adjust to card costs in balance" (`gdd.md:220`), and its
+worked example costs 3 Mana (Imp Summoner, Basic, `gdd.md:203`) and 5 Mana + 2 Green orbs (Hellburst,
+Pitch, `gdd.md:206`) — both far smaller than the shipped numbers. The shipped mana cap is a runner
+constant, not balance data: `const _MAX_MANA := 80.0` (`match_runner.gd:17`), injected only via the
+constructor (`match_runner.gd:66`), because `BalanceConfig` has no `max_mana` field
+(`balance_config.gd:43`: "NO max_mana here — the mana cap stays the runner's constructor value until story
+3-1"). The shipped per-hit value, `melee_hit_mana = 8.0` (`data/balance/balance_config.tres:21`), was
+recorded as a first-guess "Authored placeholder" at 1-5 close-out (decision-log:240), never revisited.
+Ruling: all three mana numbers — the cap, the per-hit amount, and the passive regen — are authored
+TOGETHER in 3-1 as one coherent set, and card costs in 3-2 are authored against that set, never
+independently. The per-hit amount comes DOWN: at the GDD's ~10 cap, the shipped 8.0 fills the bar in two
+hits (8, then clamped at 10) and the flywheel disappears. The authoring criterion to record: a round of
+the GDD's stated length (~60-120s active play) funds the GDD's stated number of loop cycles (~2-4
+buildup->bluff->payoff cycles per round, both `gdd.md` Core Gameplay Loop). Record also: the recent
+melee-damage halving (BC/R2, decision-log:1015, `attack_damage_percent_of_max_hp` 6.0 -> 3.0) explicitly
+left `melee_hit_mana` untouched ("class default... `melee_hit_mana` (8.0)... all untouched") — so mana
+earned per point of damage dealt has doubled (8/6 ≈ 1.33 -> 8/3 ≈ 2.67 per hit-point). That is part of
+what 3-1 reconciles.
+
+**E3-RG/R2 -- THE BASIC ATTACK'S STAMINA COST: value and owning story.** The decision that the attack
+costs stamina is already resolved (OPEN decision (d), RESOLVED at DP/R2, decision-log:1037); NEW OPEN
+DECISION (g) (decision-log:1039) left the value and the owning story open, noting a "CERTAIN golden
+re-baseline... since stamina values are in the snapshot." Ruling: it lands as a STANDALONE corrective
+pass BEFORE 3-1, in the shape of the recent melee-damage corrective (BC/R1-R5, decision-log:1011-1022:
+judgment already made, proof-by-measurement replaces review, one authored value + one decision-log
+commit) — so that the certain golden re-baseline has exactly one named cause in its own commit, not
+bundled into 3-1's own re-baseline-causing config-object refactor. The value is not chosen by taste: it
+is authored so that a full attack chain is affordable from a full bar while the next attack past the
+chain is gated by regen. Verified by content: authored `attack_chain_length = 3`
+(`data/balance/balance_config.tres:18`), `max_stamina = 50.0` (:9), `stamina_regen_per_second = 15.0`
+and `stamina_regen_delay_seconds = 0.8` (:10-11) — the corrective pass authors the per-attack cost
+against these, not against a fresh guess.
+
+**E3-RG/R3 -- THE PUBLIC-INFORMATION CHANNEL.** Two stories need the reshuffle vulnerable window visible
+in BOTH viewports (`stories-manual-e3.md` E3.S3 item 4 and E3.S6 item 3: "flagged visually to both
+players"/"clearly flagged in both viewports"), while the shipped HUD is bound per-slot and structurally
+cannot receive anything about the opponent — verified by content: 2-4/R7 (decision-log:709) "NO-OPPONENT-
+READ IS STRUCTURAL... the HUD is handed only its own player's payloads and structurally cannot reach the
+opponent"; 2-5/R11 (decision-log:789) "`HudRoot._init()` takes no slot argument at all." Ruling: this
+rides an OWNERLESS event on the existing `EventBus`, following the round-lifecycle precedent already in
+use (`round_started`/`round_ended`, `game-architecture.md:484-489`: "`EventBus` autoload carries a small
+fixed typed set only... `match_runner` relays `round_started`... same as `round_ended`"), carrying which
+player is vulnerable as payload. This is NOT an eighth observation seam and does not amend the ruling
+that froze that family: 2-6/R7 (decision-log:825, locked) "NO EIGHTH SEAM... per-tick timing-window
+countdown streaming is deliberately deferred" froze the per-slot CONNECT-seam family (four combat seams
+plus three economy seams, `2-4/R1`, decision-log:697) at seven; the seam family is per-slot observation,
+and this is a match-wide public fact riding the SAME bus that already carries `round_started`/
+`round_ended` — a different mechanism, not a member of the frozen family.
+
+**E3-RG/R4 -- THE OPPONENT FACE-DOWN ROW IS DELETED.** Verified by content: three separate places forbid
+anchoring to it. (1) `epics.md:110-111`, E3 committed obligations: "The opponent face-down top-centre row
+(2-5/R3) is PROVISIONAL — nothing built in E3 may anchor to it; it may be deleted outright (2-6/R9)." (2)
+decision-log 2-6/R9 (line 829): "The A/B must NOT anchor to `OpponentHandStrip` (2-5's face-down row),
+which is provisional and may be deleted in E3." (3) the 2-6 story file itself, twice
+(`docs/implementation-artifacts/2-6-legibility-feel-instrumentation.md:29,168`): "independent of
+`OpponentHandStrip`," both the task line and the completion note. Story 3-6 AC1 nonetheless anchors to
+it: "populated with real cards inside the existing per-viewport privacy rule from 2.5... the slot whose
+privacy behaviour already works is used" — reusing the exact `HandStrip`/`OpponentHandStrip` nodes 2-5
+built in `hud_root.gd`. Ruling: the row goes. Reasons to record: it carries no information while the hand
+size is fixed (2-5/R1, decision-log:761: rendered count is a "presentation-local constant 4"); it
+consumes space in an already-crowded half-width viewport (2-5/R12 measured slack, decision-log:791); and
+decisively, it renders a count whose PUBLICITY was never decided — the GDD makes the pitched card the
+only public information (2-5/R9, decision-log:777; `epics.md:181-182`: "the only lock: the pitched card
+is the sole public information, hands stay private otherwise"). If a varying hand size ever lands (OPEN
+decision (e), decision-log:801), whether the count is public becomes a separate design question at that
+time.
+
+**E3-RG/R5 -- THE REVEAL-OPPONENT-HAND TOGGLE** is owned by the card HUD story (3-6) as a named
+acceptance criterion. Its trigger rides the presentation-local switch mechanism built by 2-6, the
+instrumentation story: `DebugInstrumentPanel` (`src/ui/debug/debug_instrument_panel.gd`, per the 2-6 File
+List, `2-6-legibility-feel-instrumentation.md:190`) — not a new Input Map action (no `Input.*` read
+belongs in `src/ui/`, the standing constraint restated at 2-5/R4, decision-log:767), and not a feature
+flag, which is load-once and runtime-immutable (2-6/R4, decision-log:817, locked: the panel "may flip
+ONLY presentation-local and controller-local switches — never a `FeatureFlags` member"). Verified by
+content: the single ownership seat is already `HudRoot._make_card_face_style(is_own)` — the face-down
+rule was required to live in exactly ONE seat as the condition of 2-5's deferral (2-5/R4, decision-log:
+767) and landed there (2-5 close-out, decision-log:785) — so the toggle is a flip of that one parameter,
+not a second rule.
+
+**E3-RG/R6 -- CARD SIZE.** The HUD story (3-6) owns the sizing and layout of the card strip and MAY grow
+its footprint; 2-4 reserved the space, 3-6 finalizes it. Verified measured slack (2-5/R12, decision-log:
+791): opponent row (`OpponentHandStrip`) 236px container, 232px content, 4px slack; own row (`HandStrip`)
+344px container, 320px content, 24px slack — both flagged as too small for legibility (smoke finding S2,
+2-4 close-out, decision-log:739, also cited at `epics.md:108-109`) and deliberately deferred until real
+card art exists (E3). Card ART itself is scheduled in no story and stays unowned — it is decided when
+there is something to draw.
+
+**E3-RG/R7 -- INPUT MAP OWNERSHIP.** E3-P/R2 (decision-log:899) ruled that "the new `project.godot` Input
+Map actions land here and only here" for 3-0b's deterministic step/pause actions. Per this log's
+established corrected-forward convention (the 2-2/A4 precedent, decision-log:568, and the DP/R2 exception
+noted there), this entry AMENDS E3-P/R2's wording in place, read as scoped: it binds only 3-0b's
+step/pause actions, and was never meant to freeze the Input Map for the whole epic. 3-5 (the mode-select
+story) may add its own card actions (play/stage/cancel, per-mode binds) under the same discipline already
+established for controller-facing actions elsewhere: named actions, textual edit with the editor closed,
+diff reviewed (the 2-1/R2 procedure, decision-log:506). This was never available to 2-2 because E3 sat
+under a HOLD gate at the time (2-2/R3, decision-log:546: the E3 action clause was "struck entirely... E3
+is under a HOLD gate pending the first E1/E2 playtest") — that HOLD is what DP/R3 (decision-log:1041)
+lifted by making the revisit gate runnable; 3-5 is the first story positioned to use the now-open door.
+
+**E3-RG/R8 -- THE ECONOMY EVALUATOR FULLY REPLACES the direct mana path rather than sitting behind it,
+with a proof obligation: the mana amounts for the melee case must be unchanged, shown before and after.**
+That makes it a provable refactor, not a rewrite — two paths for one rule is what rots. Verified by
+content: `ResourceGenerationRule`, `CardCastCondition`, and `economy_evaluator.gd`/`EconomyEvaluator` do
+not exist anywhere in `src/` (zero grep matches) — DEBT D (decision-log:189) stays LIVE (decision-log:
+210: "DEBT D — LIVE. The D6 economy evaluator stays deferred"), committed to land at 3-4's own gate
+(`epics.md:98-99`). The architecture document nonetheless describes them as already landed in several
+places, with no "Planned (E3)" qualifier: the Directory Tree lists `economy/ economy_evaluator.gd # D6
+pure evaluator` and `resources/... resource_generation_rule.gd . card_cast_condition.gd # D6`
+(`game-architecture.md:548,553`), unlike the `MatchState` config object, which IS explicitly marked
+"Planned (E3)" (`game-architecture.md:613`); the D6 capability table marks it "E0/E3 · Full"
+(`game-architecture.md:107,190`); the Testable-without-engine-runtime table lists "the D6 evaluators
+(`ResourceGenerationRule` / `CardCastCondition`)" as already testable (`game-architecture.md:511`); Novel
+Pattern 5 (`game-architecture.md:788-806`) is written as existing code. Both facts (non-existence in
+`src/`, and the doc's already-landed framing) go in 3-4's Dev Notes as first-class findings, not a
+background assumption — constructing the evaluator and its rule resource become first-class acceptance
+criteria. Separately verified: the melee-to-mana hook does NOT need wiring — it is already live and
+shipped. `MatchState._generate_mana` grants `balance.melee_hit_mana` on every confirmed hit, gated on the
+injected `FeatureFlags.melee_mana_generation` (2-4/R13, decision-log:727; traced end-to-end at BC/R3,
+decision-log:1017: the authored `.tres` reaches state on a SINGLE route, `.tres` -> `apply_balance()` ->
+state, never a constructor constant). 3-4 is therefore the REFACTOR (the evaluator replaces this direct
+path, under the proof obligation above) PLUS the NEW passive-tick income — not new wiring of an existing
+hook; its AC2 is reworded accordingly. The Dev Notes citation to `stories-manual-e1.md#E1.S5`
+(evaluator framing) is superseded text: the 1-5 gate entry (decision-log:224) states "the 1-5 story text
+is cleaned of every evaluator reference (`stories-manual-e1.md` E1.S5 item 3's evaluator framing is
+superseded by this entry; the manual is not edited)" — 3-4 cites decision-log:224 in its place. What the
+mana pool lacks that the stamina pool has: a `BalanceTicks`-derived per-tick regen value (stamina has
+`stamina_regen_per_tick`, `src/state/timing/balance_ticks.gd:20`, derived once at load from
+`stamina_regen_per_second`) and a seat in the `advance()` tick ladder (stamina ticks in step 2 via
+`StaminaPool.tick_timers()`; `ManaPool`, `src/state/pools/mana_pool.gd`, has only `add`/`spend`/
+`set_maximum` — no regen method and no ladder seat at all). A passive tick needs its own derived per-tick
+value (e.g. `mana_regen_per_tick` on `BalanceTicks`) and its own seat in the ladder.
+
+**E3-RG/R9 -- THE SEED LIVES OUTSIDE the hot-reloadable balance resource, in a separate match-scoped
+params object injected once.** A reload that re-seeds mid-match is a determinism hole. Verified by
+content: `const _SEED := 12345` (`match_runner.gd:13`) is currently a constructor-only positional float
+(`MatchState.new(_SEED, ...)`, `match_runner.gd:66`), never touched by `apply_balance()`
+(`match_state.gd:175-178`), which IS both the match-start injection path and the X3 live-reload seam (1-4
+gate, decision-log:199). `_rng` is seeded exactly once in `_init` (`match_state.gd:92-93`) and is "the
+ONLY randomness source in the state layer" (`match_state.gd:59`). The architecture doc's "Planned (E3)"
+note (`game-architecture.md:613-617`) says to fold all five constructor floats "into a single injected
+config/params object (the injected `BalanceConfig` or a small params struct)" — read literally, folding
+`seed` into the SAME hot-reloadable `BalanceConfig` object `apply_balance()` consumes would let a
+mid-match reload re-seed the RNG. 3-1 must say this explicitly rather than folding the seed in with the
+tunables — a plain reading of the "Planned (E3)" note would get this wrong.
+
+**E3-RG/R10 -- This gate's output lands as two docs commits: this one, and the story amendments** —
+matching the established test-only/docs-only corrective-pass shape (SDV/R1, decision-log:923: "Two
+commits: `test:`... and this decision-log record"; BC/R1, decision-log:1013: "two commits: the `.tres`
+edit and this decision-log record").
+
+**E3-RG/R11 -- EVERY amended story gains a Golden Prediction section and a Live Smoke section.** Not
+negotiable: verified by content, none of the six current story files
+(`docs/implementation-artifacts/3-1` through `3-6`) contains either section. E3-P/R6 (decision-log:917)
+already flagged the pattern once: "Both must include Golden Prediction and Live Smoke sections from the
+first draft (Set B files have lacked both sections six times running)" — required of 3-0a/3-0b as new
+files specifically because Set B files kept failing this. This gate finds the identical defect, unrevised,
+in the six E3 story stubs still carried over from the original Set B batch — the seventh occasion,
+cumulatively, that a Set B-authored file reaches a gate without them. Separately, and by content: the
+determinism golden hash `33817201...21da2` has been unmoved for SEVEN consecutive stories — stated
+explicitly at 3-0a's own close-out (3-0a/R16, decision-log:1003: "Golden unmoved, measured in both
+directions, the SEVENTH consecutive story"), continuing from 2-6 (2-6/R22, decision-log:865: "the SIXTH
+consecutive story") back through 2-5, 2-4, 2-3, 2-2, 2-1, 1-10. E3 breaks that streak: the deck story
+(3-3) draws from the seeded RNG inside `advance()` (`rng_state` is part of the hashed snapshot,
+`match_state.gd:242`) AND populates `PlayerState.hand`, which already emits `"hand_size": hand.size()` in
+`to_snapshot()` but is currently always zero (2-5/R1, decision-log:761: "`hand` is declared `[]` and never
+mutated anywhere in `src/`... a golden trap"). 3-3 therefore moves the golden TWICE OVER, from RNG
+consumption and from the hand-size field the snapshot already emits — two separately named causes in one
+story, continuing the "measured in both directions, separately named causes" discipline this project has
+followed since the 1-5 cause-(c) lesson.
+
+**E3-RG/R12 -- NO FEATURE-FLAGS OVERLAY IN E3.** Verified by content, the ruling that keeps feature flags
+load-once and runtime-immutable: 2-6/R4 (decision-log:817, locked) — "`FeatureFlags` stays load-once and
+runtime-immutable... Reason: flags appear in neither `MatchState.to_snapshot()` nor the recorded intent
+stream, so mutating one at runtime would be a silent replay hole." The overlay is therefore not merely
+unowned but currently PROHIBITED, not merely deferred. `epics.md:104-107` currently reads "A real
+`FeatureFlags` overlay does not exist yet... every other flag stays dormant until its own epic" as an item
+inside E3's Committed-obligations list — presented as an E3-relevant bullet while committing E3 to
+nothing and stating no prohibition. Ruling: remove it from `epics.md` as an E3 item; record instead that a
+live `FeatureFlags` overlay is PROHIBITED pending the reload machinery — only once DEBT B's reload-event-
+in-intent-stream half lands (re-homed to the `IntentRecorder`/3-0c story per 2-6/R2 and E3-P/R3,
+decision-log:813,901) does a runtime flag mutation stop being a silent replay hole.
+
+**ORDER, recorded as part of the outcome.** The stamina-cost corrective pass (E3-RG/R2) and the
+feel-and-timing story (3-0b, operator-authored) come first — order between the two not fixed by this
+gate — then 3-1, 3-4, 3-2, 3-3, 3-5, the `IntentRecorder` (3-0c), and the card HUD (3-6) last. Reasons to
+record: 3-4 precedes 3-2 so the card-cast condition (`CardCastCondition` gating mana cost) is designed
+against a working evaluator rather than a hypothetical one; 3-0c follows 3-5 so the intent shape (the new
+card fields on `InputIntent`) is final before the stream contract is written; the feel-and-timing story
+comes early because melee feel is not changed by cards, and its known roll defect (3-0a/R13 finding 1,
+decision-log:995: the Hips-excursion / roll-ring-beside-the-hero defect) would otherwise contaminate
+every remaining live smoke.
