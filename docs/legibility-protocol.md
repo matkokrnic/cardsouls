@@ -46,6 +46,21 @@ A cue that fails is a finding: note it, and the operator logs it in `docs/playte
 |--------|----------------|---------------------------|----------|-----------------------------------|------|
 |        |                |                           |          |                                   |      |
 
+## Audio discrimination pass
+
+A second, separately named pass, run AFTER the primary procedure above and never merged into it.
+The primary run (steps 1-5) is UNCHANGED by this addition — shape and sting are still judged
+**together** there, unmuted, nothing is muted for that test. This pass exists because a finding
+(S8) showed the attack and block stings were too similar to tell apart by ear alone.
+
+1. The observer faces away from the screen, so no visual information reaches them.
+2. A single sting is played, in isolation.
+3. The observer names the action they believe it is: attack or block.
+
+Passing requires correct identification without visual information. Record the result the same
+way as the primary run — `identified correctly? (Y/N)` — plus a one-line note on which stings, if
+any, were confused for one another.
+
 ## Rehearsal — E1 melee telegraphs (story 1-10)
 
 The protocol's first run, against the three melee cues already shipped. These are the
