@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-07-31
+# last_updated: 2026-08-01
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-07-31
+last_updated: 2026-08-01
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -63,7 +63,7 @@ development_status:
   # E3 — Card System + Mana Economy (gated — see story_notes)
   epic-3: backlog
   3-0a-rig-adoption: done
-  3-0b-feel-and-timing-tuning: backlog
+  3-0b-feel-and-timing-tuning: ready-for-dev
   3-0c-intent-recorder: backlog
   3-1-matchstate-config-object: backlog
   3-2-card-schemas-carddatabase: backlog
