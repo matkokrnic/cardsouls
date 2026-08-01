@@ -1403,3 +1403,111 @@ FIGURES: suite BEFORE 164 tests / 760 assertions / 0 failed + 10 integration PAS
 assertions / 0 failed + 10 integration PASS. No collateral: `git diff -- project.godot
 src/main/main.tscn` empty, re-checked immediately before each commit. NOT PUSHED -- both commits are
 local pending the operator's confirmation of the log.
+
+---
+
+## Session 2026-08-01 -- Story 3-0b readiness gate (operator decisions)
+
+Readiness gate on `3-0b-feel-and-timing-tuning.md` (authored earlier the same session, ACs 1-13
+verbatim from the operator's own readiness-gate scope) returned **NOT READY**, four blocking
+findings. (1) AC1's pause scope named only that pause "halts `advance()` ticking," leaving
+unstated what else must freeze and how the step/pause input could be read at all without either
+breaking D3(a) (`Input.*` confined to `src/controllers/`) or being wrongly modelled as an
+`InputIntent`, which would enter the recorded intent stream and threaten determinism during a
+pause. (2) AC2 left the standing objection that a per-tick countdown "hands the state layer's
+internals to presentation" unanswered, and did not name the geometry regression
+(`test/integration/test_debug_instruments.gd`) already guarding the panel's layout at roughly 4px
+of slack -- the exact margin the new countdown rows are likely to eat. (3) AC5 was ambiguous
+between "replaces" and "supplements" for the flat `attack_move_speed_multiplier` -- read
+literally it could pass with both the flat field and the three per-phase fields present, which
+the pinned `.tres` field-name registry in `test_data_resources.gd` would fail on a half-migration.
+(4) AC11 and AC13 both asked for something the current evidence contradicts: AC11 asked for shape
+and sound to be judged "separately," which is not how `docs/legibility-protocol.md`'s primary run
+works (judged together, unmuted), and it dropped the S8 audio-discrimination finding entirely;
+AC13 cited an unverified figure ("~1.725") with no measured record behind it, and did not account
+for `BoxShape3D_qp0e8` being the SAME sub-resource shared by both `Collision` and
+`HurtboxShape`, so a naive resize would silently change hurtbox volume too -- a gameplay change
+riding in as a cosmetic one. All four resolved by operator ruling below, applied to the story
+file the same session.
+
+**3-0b/R1 -- AC1 pause scope, ruled.** While paused, three things freeze: `_match_state.advance()`,
+both `HeroActor.drive()` calls, and `_gather_contact_facts`. Camera follow keeps running --
+harmless presentation-only motion, and the operator must be able to look around during a pause.
+A single step performs the normal per-tick order exactly once: gather -> advance -> drive.
+Rationale for freezing gather specifically: contact facts are per-tick observations of the current
+physical arrangement; accumulating a whole pause's worth and draining it into one step on resume
+would corrupt the very tick the debug tool is trying to show.
+
+**3-0b/R2 -- AC1: step/pause is a match-global DEBUG input, not an intent.** It never enters
+`InputIntent`, never enters the recorded intent stream, and never passes through `advance()`. This
+is a deliberate divergence from `debug_reset`, which IS intent-carried per its own ruling: pause
+must survive the absence of ticking (nothing is advancing to consume an intent), which an intent --
+by construction consumed only inside `advance()` -- cannot do.
+
+**3-0b/R3 -- AC1 implementation constraint, sanctioned.** The reader is a NON-`Controller` class
+under `src/controllers/` (suggested `src/controllers/debug_input_reader.gd`) -- it does not
+implement `sample()`, does not return an `InputIntent`, and returns plain booleans the runner
+polls. New shape for that folder: every existing member (`KeyboardController`,
+`GamepadController`, `NullController`) is a `Controller` implementing `sample()`. Sanctioned
+because it is the only routing that satisfies the machine-checked D3(a) invariant without
+misrepresenting step/pause as an intent (R2 above). Architecture amendment queued:
+`docs/game-architecture.md` gains a line documenting this new non-`Controller` `src/controllers/`
+shape; not edited into the doc this session.
+
+**3-0b/R4 -- AC2 gains the geometry regression to its must-stay-green list.**
+`test/integration/test_debug_instruments.gd`'s assertion that `InstrumentBox` stays inside the
+window and intersects no `HudRoot` child and no `StateInspector`, in both viewports, is now named
+in AC2. Measured at this gate: the box sits at y[359,448] inside an empty band of y[354,452] --
+roughly 4px of slack -- so adding per-slot countdown rows will very likely require re-fitting the
+panel layout. Recorded as expected work, not a surprise to be discovered mid-implementation.
+
+**3-0b/R5 -- AC2's ruled channel answers the standing objection.** A countdown does not "hand the
+state layer's internals to presentation": the accessor returns COMPUTED PLAIN INTEGERS derived
+from `TimingWindow.remaining_ticks()`, read-only, debug-only -- no state handle crosses the seam.
+Presentation receives values, not internals, matching every other observation seam's discipline.
+`to_snapshot()` is untouched, so the replay contract never learns the instrument exists.
+
+**3-0b/R6 -- AC5: the flat `attack_move_speed_multiplier` is REMOVED, not kept alongside the three
+new per-phase fields.** The `.tres` field-name registry in `test_data_resources.gd` is pinned; a
+half-migration (old field retained beside the new ones) fails immediately. Ten files fan out from
+the removal (grep-verified this session): `test_balance_authoring.gd` (header exemption + its
+named test), `test_data_resources.gd`, `test_match_state.gd`, `test_contact_resolution.gd`,
+`test_block_deflect.gd`, `test/state/test_contact_pipeline.gd` (distinct from the same-named
+integration file, which does not author this field), `test_gamepad_controller.gd`,
+`test_null_controller.gd`, `test_roll_iframes.gd`, `test_determinism.gd`. `test_match_state.gd`'s
+deliberate non-zero `0.5` -- authored so a wrongful ATTACKING yields a distinguishable velocity --
+must survive the migration, pinned on whichever phase that test drives.
+
+**3-0b/R7 -- AC11 rewritten: two runs, not one.** The legibility protocol's primary run judges
+shape and sting TOGETHER, unmuted -- that stays the primary run, and the story no longer asks for
+"shape and sound judged separately," which was never how the protocol worked. S8 requires a
+SECOND, separate pass: audio discrimination -- the naive observer, facing away from the screen,
+hears a single sting and calls attack or block. AC11 requires BOTH runs, per
+`docs/legibility-protocol.md` as amended this session (the audio-discrimination-pass commit, above
+this one). AC11 still gates on AC9 being resolved first.
+
+**3-0b/R8 -- AC13 rewritten: verdict on the BODY box; the shared sub-resource must split before any
+resize.** `BoxShape3D_qp0e8` in `hero.tscn` is shared by both `Collision` and `HurtboxShape`, so a
+naive resize would silently change the volume `_gather_contact_facts` detects -- a gameplay
+change, not a cosmetic one. If the verdict is "resize," the sub-resource must FIRST be split into
+separate shapes for `Collision` and `HurtboxShape`; hurtbox geometry stays at today's values unless
+a separately logged decision changes it -- out of scope for this story under all circumstances.
+The AC's stated figure "~1.725" is removed from the AC body -- unconfirmed, no measured record
+behind it; the only measured repo value on record is "approximately 1.8" (3-0a's import check). A
+remeasure is required before the verdict.
+
+**3-0b/R9 -- Golden Prediction corrected, three ways.** (a) Citations: the isolation-runs
+precedent is BC/R3 (melee-damage corrective pass) and the VALUES-only boundary it maps is SC/R6
+(stamina-cost pass) -- every "BC/R3-R7" style citation is replaced with "BC/R3 + SC/R6." (b) The
+"third re-baseline ever" ordinal is deleted entirely; the discipline is stated instead -- two named
+causes, isolation runs between them, one re-baseline naming both separately -- with the actual
+re-baseline count read off `test_determinism.gd`'s own record at the time of the change, not
+asserted here in advance. (c) The phase is named: at the hashed tick, P1 is IDLE and P2 is in
+attack RECOVERY, and the in-test golden config authors the multiplier `0.0` there -- so AC5's
+coverage value must sit in the RECOVERY phase to be visible in the hash at all. For AC6, if the
+lunge term is scoped to windup/active only, it is invisible at that same tick, and the prediction
+legitimately forks to "MOVES from AC5 alone" -- a recorded, expected outcome, not a missed
+prediction.
+
+**Promotion.** All fixes applied to the story file the same session; story Status and board
+promoted backlog -> ready-for-dev.
