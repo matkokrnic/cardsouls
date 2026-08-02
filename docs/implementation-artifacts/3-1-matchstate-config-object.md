@@ -53,7 +53,14 @@ re-applied on `apply_balance()` rather than a constructor constant.
    `test_stamina_economy.gd::test_no_regen_without_apply_balance`,
    `test_contact_resolution.gd::test_contacts_inert_without_apply_balance` — are re-anchored from
    fixed-value assertions (`100.0` / `30.0`, both constructor-supplied today) to "unchanged from
-   construction" assertions, and each is mutation-proven to fail without the guard it pins.
+   construction" assertions. Of the three guards this AC touches, only the NEW
+   `_check_resolution()` guard is mutation-provable by these tests: deleting it fails all three
+   re-anchored tests, because a stat-less 0-hp hero ends the round on tick 1. The two PRE-EXISTING
+   `balance_ticks == null` guards (step 3's action-resolution gate, step 5's regen gate) are
+   CRASH-guards, not value-guards — a measured GDScript semantic (a null dereference aborts only
+   the function it occurs in; the caller resumes on the next line with exit code 0 and
+   byte-identical state) makes their removal invisible to any value assertion the suite can make.
+   This was equally true before this story and is not a regression it introduces (3-1/R6).
 6. **Test surface.** `E1_BALANCE_FIELDS` in `test/state/test_data_resources.gd` is extended with
    `max_mana` and `mana_regen_per_second`; the authoring audit in `test/state/test_balance_authoring.gd`
    is extended likewise; `test/state/test_determinism.gd` receives a fixture SIGNATURE update ONLY —
@@ -199,11 +206,74 @@ controller, or presentation code and consumes no observation seam.
 - If the dev pass finds this untrue — e.g. a call site the story missed touches presentation — that is
   a scope finding for `decision-log.md`, not a reason to skip a smoke silently.
 
+## Dev Pass Record
+
+Dev pass model: **Claude Opus 4.8**. This section records that pass's substance; the commit chain
+that lands it (constructor/config commit, this doc commit, the board-promotion commit, and the
+decision-log close-out) is a separate session, **Claude Sonnet 5** — see Agent Model Used below.
+
+- **File List (surface honesty).** 22 modified files + 2 new (`src/state/match_params.gd` and its
+  generated `src/state/match_params.gd.uid`) — see File List below for the full paths. Two files
+  in that set are beyond the 13 named in the Tasks/Subtasks call-site count:
+  `test/integration/test_hero_movement.gd` (a comment-only fix citing the deleted
+  `match_runner._MOVE_SPEED`, which its header comment referenced by name) and
+  `test/state/test_economy_and_hero.gd` (because `PlayerState` is ALSO constructed stat-less —
+  the story's AC1/AC3 stat-less-construction principle has one production caller, `MatchState`,
+  but `PlayerState`'s own constructor carries the same shape of change one level down). The
+  leaf-object constructors (`HeroState`, `StaminaPool`, `ManaPool`) are untouched — this was
+  accepted at review as ruling D4: extending the stat-less pattern to every leaf was out of
+  scope, `PlayerState` moved because it is `MatchState`'s one direct dependent.
+- **`MatchParams`.** `src/state/match_params.gd`, `RefCounted` (not a `Resource`, and deliberately
+  not filed under `src/state/resources/` — it is match-scoped construction data, not
+  hot-reloadable balance). Single field `seed_value: int`, set once via `_init`. `MatchState`
+  consumes it into `_rng.seed` at construction and does not retain the object, so there is no
+  stored seed a later call could re-apply — "never re-seeded" is structural, not conventional
+  (E3-RG/R9).
+- **First-injection mechanism.** Detected as `balance == null` inside `apply_balance()` — a
+  DERIVED fact from an existing field, not a new one. Nothing else writes `balance`, so there is
+  no second flag to drift out of sync with it.
+- **Three mutation proofs, each verified by editing the file in place, running the suite, and
+  restoring from an out-of-repo backup copy (SHA256-compared before mutating and after
+  restoring; `git checkout --` was never used, so no working-tree state outside the mutation
+  itself was ever at risk):**
+  - **A — mana refill on reload.** Added `player.mana.refill()` (equivalently,
+    `player.mana.add(config.max_mana)`) beside the `set_maximum` call in
+    `_apply_balance_to_player`. FAILED `test_balance_config.gd::test_mid_match_reload_sets_mana_maximum_but_never_refills`
+    as expected (earned mana became a full bar on reload). Bonus finding: the determinism golden
+    ALSO moved under this mutation, independently confirming the Golden Prediction section's
+    named third candidate cause — a reload-refill — as a real, detectable golden mover, and
+    confirming 3-1/R5's ruling that eliminating it (AC4's never-refill contract) is the reason the
+    shipped golden is unmoved rather than the mutation being an untested blind spot.
+  - **B — first-injection hp fill.** Deleted the `if first_injection: player.hero.heal(config.max_hp)`
+    branch in `_apply_balance_to_player`. FAILED
+    `test_balance_config.gd::test_first_injection_yields_full_hp_full_stamina_empty_mana` as
+    expected (hp stayed `0.0`, hero not alive at match start).
+  - **C — the `_check_resolution` guard.** Deleted `if balance_ticks == null: return` from
+    `_check_resolution()`. FAILED all three re-anchored inertness tests
+    (`test_action_state.gd::test_null_balance_ticks_guard_actions_inert`,
+    `test_stamina_economy.gd::test_no_regen_without_apply_balance`,
+    `test_contact_resolution.gd::test_contacts_inert_without_apply_balance`) as expected — a
+    stat-less 0-hp hero ends the round on tick 1 against a hero that never had hp to lose. This is
+    the AC5 amendment's value-provable guard (see AC5 above).
+- **Class-cache hand-edit (sanctioned, ruling D3).** During the dev pass, `MatchParams` was
+  registered by hand in `.godot/global_script_class_cache.cfg` rather than by opening the editor
+  mid-pass — that file is git-ignored, the hand-edit is disclosed here, and the editor was never
+  opened during the pass itself. This chain's own Phase 1 editor scan later generated the
+  `.uid` file with `project.godot` SHA-identical before and after (see Phase 1 SHA outcome in the
+  final report), confirming the hand-edit didn't leave the project in a state the editor
+  disagreed with.
+- **Audit call kept.** `mana_regen_per_second` stays in the "audited `> 0`" class alongside
+  `stamina_regen_per_second`, not the exempt class (ruling D2) — see
+  `test_balance_authoring.gd::test_authored_mana_set_is_positive`.
+- **Suite outcome.** 192 tests / 917 assertions / 0 failed + 14 integration files, all PASS. Golden
+  hash unmoved (`96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b`).
+
 ## Dev Agent Record
 
 ### Agent Model Used
 
-Claude Sonnet 5
+Dev pass: Claude Opus 4.8. Commit chain (this doc, board promotion, decision-log close-out):
+Claude Sonnet 5.
 
 ### Debug Log References
 
@@ -211,8 +281,36 @@ Claude Sonnet 5
 
 - Readiness-gate fix pass (2026-08-02): the rulings applied in this revision were provided by the
   operator at this story's readiness gate; this pass rewrote the file around them.
+- Dev pass (2026-08-02, Claude Opus 4.8): implemented AC1-AC6 — see Dev Pass Record above for
+  file-list surface honesty, the `MatchParams` shape, the first-injection mechanism, the three
+  mutation proofs, the class-cache hand-edit, and the suite outcome.
 
 ### File List
+
+- data/balance/balance_config.tres
+- src/main/match_runner.gd
+- src/state/match_state.gd
+- src/state/player_state.gd
+- src/state/resources/balance_config.gd
+- src/state/match_params.gd (new)
+- src/state/match_params.gd.uid (new)
+- test/integration/test_hero_movement.gd
+- test/state/test_action_state.gd
+- test/state/test_balance_authoring.gd
+- test/state/test_balance_config.gd
+- test/state/test_block_deflect.gd
+- test/state/test_camera_basis.gd
+- test/state/test_contact_pipeline.gd
+- test/state/test_contact_resolution.gd
+- test/state/test_data_resources.gd
+- test/state/test_debug_window_countdown.gd
+- test/state/test_determinism.gd
+- test/state/test_economy_and_hero.gd
+- test/state/test_gamepad_controller.gd
+- test/state/test_match_state.gd
+- test/state/test_null_controller.gd
+- test/state/test_roll_iframes.gd
+- test/state/test_stamina_economy.gd
 
 ## Change Log
 
@@ -220,3 +318,4 @@ Claude Sonnet 5
 |------|---------|-------------|--------|
 | 2026-07-31 | 0.2 | E3 revisit-gate amendment (commit `10b96a1`): duplicate mana-per-hit AC field renamed to the shipped `melee_hit_mana`; constructor/`apply_balance` double injection named; seed ruled out of the hot-reloadable config; `ManaPool`/`StaminaPool` reload-refill asymmetry flagged; hot-reload AC corrected to the test-only path it is; stale stamina-cost seat dropped; Golden Prediction and Live Smoke sections added. Status stayed backlog pending this story's own readiness gate. | Claude Opus 4.8 |
 | 2026-08-02 | 0.3 | Readiness-gate fix pass (2.8, NOT READY on first read -> fixed -> promoted, same session). Scope REDUCED per the Q1 ruling: the five card/deck fields leave 3-1 for 3-2/3-3, so the story adds exactly two new `BalanceConfig` fields and no tick conversion. AC set replaced with six verifiable ACs (seed into `MatchParams`; the mana set 10.0/1.0/0.25 with `melee_hit_mana` re-authored not duplicated; single injection + runner constant deletion; per-pool reload contract; pre-injection stat-less contract incl. the `_check_resolution` guard; test-surface extension). Golden Prediction replaced wholesale — baseline corrected from the two-re-baselines-stale `33817201…` to `96ac5f64…`, prediction NONE conditional on `max_mana = 90.0` in `_golden_config()` and a measured no-op double-injection diff. Stale citations corrected to current anchors (`_apply_balance_to_player` `match_state.gd:670-676`; `melee_hit_mana` `balance_config.gd:69` / `.tres:25`). Dev Notes appended with the Q1 ruling, the verified `set_max_hp` clamp-only finding behind AC4, the E3-RG/R1 funding arithmetic, the BC/R2 reconciliation, N7 (no `BalanceTicks` seat here), N1 sizing (1 src + 25 test call sites across 13 files), and the N3 correction. Live Smoke kept NOT REQUIRED with the R-D6 and 8/80 == 1/10 notes added. Status backlog -> ready-for-dev; `sprint-status.yaml` flipped alongside. | Claude Opus 4.8 |
+| 2026-08-02 | 0.4 | Dev pass delivered AC1-AC6 (Claude Opus 4.8); commit-chain review ruling D1 reworded AC5's mutation clause to match the delivered software — only the NEW `_check_resolution()` guard is mutation-provable by the three re-anchored tests, the two pre-existing `balance_ticks` guards are CRASH-guards whose removal is invisible to value assertions (a measured GDScript null-deref semantic), recorded permanently at decision-log 3-1/R6. Dev Pass Record section added: file-list surface honesty (2 files beyond the named 13 — a comment fix and `PlayerState`'s own stat-less construction, ruling D4), the `MatchParams` shape, the first-injection mechanism, three mutation proofs A/B/C (mana refill on reload, with a bonus confirmation that it independently moves the golden per 3-1/R5; first-injection hp fill; the `_check_resolution` guard), the class-cache hand-edit (ruling D3), the kept `mana_regen_per_second` audit (ruling D2), and the suite outcome (192/917/0 failed + 14 integration, golden unmoved). File List and Agent Model Used filled in. | Claude Sonnet 5 |
