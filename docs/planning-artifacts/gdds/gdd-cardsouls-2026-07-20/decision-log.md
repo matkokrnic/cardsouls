@@ -1511,3 +1511,76 @@ prediction.
 
 **Promotion.** All fixes applied to the story file the same session; story Status and board
 promoted backlog -> ready-for-dev.
+
+---
+
+## Session 2026-08-02 -- Story 3-0b Pass 1 (rulings)
+
+Pass 1 of the four-pass split delivers AC1 (deterministic step/pause) and AC2 (per-slot window
+countdown). Full suite re-run before this commit chain: 182 state tests / 844 assertions / 0
+failed, 11 integration files individually green (`test_step_pause.gd` added); golden
+`7fbb4b7f589251d25a13d6b49138b416266031e124cdae1c07e99e0f4fc119d1` UNMOVED -- neither AC touches
+`src/state/`'s golden-reachable surface.
+
+**3-0b/R10 -- AC1 freeze list, as shipped: FOUR items, not three.** `_match_state.advance()`, both
+`HeroActor.drive()` calls, `_gather_contact_facts`, AND `_match_state.set_camera_basis()` (both
+per-slot pushes) all sit inside `match_runner.gd::_physics_process`'s single `ticking` gate. The
+camera-basis push is provably INERT while paused -- the stepped tick re-pushes the live rig basis
+before `advance()` next reads it, so freezing it changes no observable behaviour -- but 3-0b/R1
+(readiness gate) named only three items, and the AC describes DELIVERED software: the list is
+corrected to match what actually ships, not the minimal set that would have sufficed. Camera
+FOLLOW (step 4b, the split-screen viewport mirror) stays outside the gate, unchanged from R1.
+
+**3-0b/R11 -- input latching REFUSED.** Controller sampling (`_p1_controller.sample()` /
+`_p2_controller.sample()`) is NOT one of the frozen four -- it runs every tick, paused or not, per
+R1's original scope. Consequence: a just-pressed edge made during a pause decays (Godot's edges
+are frame-scoped) before the match resumes, so its intent is discarded -- you cannot arm an action
+while paused and have it fire on the next step. Raised and ruled at Pass 1: latching the discarded
+edge for replay on the next tick is REFUSED. Reason: a latch would be an input buffer living
+outside the recorded intent stream, which is exactly what step/pause must never become (the same
+principle R2 already applied to keep step/pause itself out of `InputIntent`). Workaround: hold the
+key across the step.
+
+**3-0b/R12 -- the "no contact facts accumulate while paused" claim is accepted as
+CONSTRUCTION-delivered, not independently asserted.** `_gather_contact_facts` sits inside the same
+`ticking` gate as `advance()` and `drive()` (R1's own rationale for including it in the freeze), so
+with `advance()` frozen the accumulated-and-drained case and the empty case are indistinguishable
+downstream -- there is nothing left for a dedicated test to tell apart. Ruled a deliberate choice
+over a vacuous test, recorded so a future gate does not misread the absence of a test here as a
+coverage hole.
+
+**3-0b/R13 -- the sanctioned non-`Controller` reader shape, as built.**
+`src/controllers/debug_input_reader.gd` (`DebugInputReader`, `extends RefCounted`) matches R3's
+sanction exactly: no `sample()`, no `InputIntent` return, two plain-boolean accessors
+(`pause_pressed()`, `step_pressed()`) reading `debug_pause` / `debug_step` as edges. D3(a) satisfied
+(the reader lives under `src/controllers/`, the only `Input.*` call site for these two actions).
+`test/state/test_debug_step_pause.gd` pins the shape by content -- `get_script().get_base_script()`
+is null (extends `RefCounted` directly, not `Controller`) and `has_method("sample")` is false --
+so a future "tidy-up" into a `Controller` fails loudly here.
+
+**3-0b/R14 -- the debug accessor channel, as built.** `MatchState.debug_window_ticks_remaining()`
+returns `Array[Dictionary]`, one entry per slot, each a `StringName -> int` map of only the
+currently-running windows (built fresh per call, per R5's "values not internals" answer). The
+runner polls it once per tick, immediately after `advance()`, and pushes the payload into
+`DebugInstrumentPanel.set_window_countdown()`. `to_snapshot()` is pinned untouched by
+`test_snapshot_shape_is_untouched_by_the_instrument` (`test/state/test_debug_window_countdown.gd`)
+-- it hashes the snapshot before and after a call to the accessor and asserts the hash and both the
+top-level and per-hero key sets are unchanged, so the replay contract provably never learns the
+instrument exists.
+
+**3-0b/R15 -- F1/F2 chosen as the match-global Input Map keys, collision-pinned.** `debug_pause` ->
+physical `F1`, `debug_step` -> physical `F2`, both actions carrying no `p1_`/`p2_` prefix (R2's
+match-global framing). `test_debug_keys_collide_with_no_other_project_binding`
+(`test/state/test_debug_step_pause.gd`) scans every other project action (excluding Godot's
+built-in `ui_*` set, which already shares keys with gameplay actions by design) for a physical-key
+collision with either debug key and asserts zero.
+
+**3-0b/R16 -- the AC2 geometry assertion (R4's must-stay-green regression) FAILED once during
+implementation, evidence it is load-bearing.** Adding the countdown as two more VBox rows inside
+the existing 98px-tall band (2-6's box already used 89 of it) pushed `InstrumentBox` outside the
+empty band and collided with the vitals bars in `test/integration/test_debug_instruments.gd`'s
+geometry check -- the regression R4 flagged as "very likely" was observed, not hypothetical. Fixed
+by re-fitting the box horizontally instead of vertically: 300 -> 600 wide, contents split into two
+columns (switches | countdown), keeping content height at the original ~89px inside the same band.
+Recorded because a guard that never fails invites the assumption it is decorative; this one caught
+a real regression during this story's own implementation.
