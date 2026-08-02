@@ -19,7 +19,10 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"attack_windup_seconds", "attack_active_seconds", "attack_recovery_seconds",
 	"attack_chain_window_seconds", "attack_chain_length", "attack_damage_percent_of_max_hp",
 	"attack_windup_move_speed_multiplier", "attack_active_move_speed_multiplier",
-	"attack_recovery_move_speed_multiplier", "attack_lunge_distance", "melee_hit_mana",
+	"attack_recovery_move_speed_multiplier", "attack_lunge_distance",
+	# Story 3-1 (AC 2/AC 6): the mana set — max_mana and mana_regen_per_second are NEW here,
+	# melee_hit_mana was already present and is only RE-AUTHORED (never a second field).
+	"max_mana", "melee_hit_mana", "mana_regen_per_second",
 	"block_damage_multiplier", "deflect_window_seconds",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

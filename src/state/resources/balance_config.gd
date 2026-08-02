@@ -61,12 +61,27 @@ extends Resource
 @export var attack_lunge_distance: float = 0.0
 
 @export_group("Mana")
+## Story 3-1 (AC 2, 3-1/R1): the mana cap — authored here as of this story, so BalanceConfig
+## is now the single source of truth for it exactly as it already was for max_hp,
+## move_speed and max_stamina (AC 3). Re-injected on every apply_balance() with
+## set_maximum ONLY: current mana is re-clamped, NEVER refilled (3-1/R2).
+@export var max_mana: float = 0.0
 ## Story 1-5 (DEBT D resolved): mana per CONFIRMED melee hit, read inline at the moment
 ## the hit is confirmed (CONSTRAINT C), gated on the injected
 ## FeatureFlags.melee_mana_generation. Per-event amount, NOT tick-domain — never on
 ## BalanceTicks. The flag is the off-switch; a zero amount is a dead flywheel (audited >0).
-## NO max_mana here — the mana cap stays the runner's constructor value until story 3-1.
+## RE-AUTHORED by story 3-1 as part of the coherent mana set (3-1/R1): the shipped 8.0 was a
+## placeholder against an 80 cap, and the BC/R2 damage halving (6 -> 3) had silently doubled
+## mana earned per point of damage. 1.0 per confirmed hit against the 10.0 cap re-bases both
+## together and keeps per-hit bar fill identical (8/80 == 1/10 == 10% of the bar).
 @export var melee_hit_mana: float = 0.0
+## Story 3-1 (AC 2, 3-1/R1): passive mana regeneration, the second faucet beside the melee
+## one. AUTHORING UNITS ONLY in this story — N7/E3-RG/R8 place the derived
+## `mana_regen_per_tick` seat on BalanceTicks and the matching rung in the advance() ladder
+## in story 3-4, so NOTHING consumes this field yet and no BalanceTicks field lands here.
+## Named `*_per_second` (a RATE, the stamina_regen_per_second precedent), not `*_seconds` —
+## it is not a duration and does not enter the A1 seconds->ticks conversion.
+@export var mana_regen_per_second: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

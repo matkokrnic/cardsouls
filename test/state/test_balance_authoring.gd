@@ -99,6 +99,28 @@ func test_authored_melee_hit_mana_is_positive() -> void:
 		"melee_hit_mana must be authored > 0 (a zero faucet is a dead flywheel — the flag is the off-switch)")
 
 
+## Story 3-1 (AC 2/AC 6, 3-1/R1): the two NEW mana fields, audited in the same
+## defect-by-construction class as the stamina economy rather than the exempt class.
+## max_mana: a zero cap makes mana unearnable (ManaPool clamps every add to the maximum) and
+## every card uncastable — the same shape as "a zero stamina pool locks out every consumer".
+## mana_regen_per_second: 3-1/R1 authored the trio as ONE coherent set against a recorded
+## funding criterion (~2-4 buildup->bluff->payoff cycles per round), and the arithmetic behind
+## that criterion counts the passive faucet explicitly (~22 mana over 90 s at 0.25/s). A
+## zeroed passive would silently break the criterion the values were chosen against, so it is
+## audited like stamina_regen_per_second, not exempted like stamina_regen_delay_seconds. A
+## future tuning pass that genuinely wants a melee-only economy LIFTS this the way 1-8 lifted
+## the deflect_stamina_cost exemption — deliberately, with its reason recorded here.
+func test_authored_mana_set_is_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.max_mana > 0.0,
+		"max_mana must be authored > 0 (a zero cap clamps every add to nothing — no card is ever castable)")
+	assert_true(config.mana_regen_per_second > 0.0,
+		"mana_regen_per_second must be authored > 0 (the 3-1/R1 funding criterion counts the passive faucet)")
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

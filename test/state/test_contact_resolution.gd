@@ -33,6 +33,9 @@ func _config(windup_mult := 0.0, active_mult := 0.0, recovery_mult := 0.0,
 	c.attack_active_move_speed_multiplier = active_mult
 	c.attack_recovery_move_speed_multiplier = recovery_mult
 	c.attack_lunge_distance = lunge_distance
+	# Story 3-1 (AC 1/AC 3): the mana CAP is authored data now that the constructor carries none.
+	# 80.0 is what this fixture's MatchState.new used to supply, so behaviour is unchanged.
+	c.max_mana = 80.0
 	c.melee_hit_mana = 8.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.roll_iframe_seconds = 2.0 / 60.0
@@ -49,7 +52,7 @@ func _flags(mana_on: bool) -> FeatureFlags:
 ## inject_flags=false leaves MatchState.flags null (the pre-injection headless default).
 func _make_match(inject_flags := true, mana_on := true, windup_mult := 0.0,
 		active_mult := 0.0, recovery_mult := 0.0, lunge_distance := 0.0) -> MatchState:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(7))
 	ms.apply_balance(_config(windup_mult, active_mult, recovery_mult, lunge_distance))
 	if inject_flags:
 		ms.inject_feature_flags(_flags(mana_on))
@@ -392,10 +395,23 @@ func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 
 ## ---- Pre-injection guard ----------------------------------------------------------------
 
+## Story 3-1 (AC 5, 3-1/R3) RE-ANCHORED: the old anchor was the constructor-supplied 100.0
+## hp, which no longer exists — a pre-injection hero is stat-less. The anchor is UNCHANGED
+## FROM CONSTRUCTION over the whole per-player snapshot, which additionally pins that the
+## dropped fact left no dedupe record and cost no stamina.
+##
+## MUTATION (the round-end half, AC 5's new guard): delete `if balance_ticks == null: return`
+## from _check_resolution and this FAILS — a 0-hp stat-less hero ends the round on this very
+## tick, flipping round_over and setting the loser DEAD in the snapshot.
 func test_contacts_inert_without_apply_balance() -> void:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)  # deliberately NO apply_balance
+	var ms := MatchState.new(MatchParams.new(7))  # deliberately NO apply_balance
+	var before: Dictionary = ms.to_snapshot()
 	ms.push_contact(0, 1, 0, Vector2.DOWN)
 	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 	ms.advance(intents)
 	ms.drain_signals()
-	assert_eq(ms.p2.hero.get_hp(), 100.0, "pre-injection MatchState: step-4 contacts inert, no crash")
+	var after: Dictionary = ms.to_snapshot()
+	assert_false(bool(after["round_over"]), "pre-injection: no round end (AC 5)")
+	assert_eq(after["p2"], before["p2"],
+		"pre-injection MatchState: step-4 contacts inert — p2 UNCHANGED FROM CONSTRUCTION, no crash")
+	assert_eq(after["p1"], before["p1"], "the attacker is likewise untouched (no dedupe record, no spend)")

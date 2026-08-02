@@ -30,6 +30,9 @@ func _config() -> BalanceConfig:
 	c.attack_windup_move_speed_multiplier = 0.0
 	c.attack_active_move_speed_multiplier = 0.0
 	c.attack_recovery_move_speed_multiplier = 0.0
+	# Story 3-1 (AC 1/AC 3): the mana CAP is authored data now that the constructor carries none.
+	# 80.0 is what this fixture's MatchState.new used to supply, so behaviour is unchanged.
+	c.max_mana = 80.0
 	c.melee_hit_mana = 8.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.roll_iframe_seconds = 2.0 / 60.0
@@ -38,7 +41,7 @@ func _config() -> BalanceConfig:
 
 
 func _make_match() -> MatchState:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(7))
 	ms.apply_balance(_config())
 	ms.drain_signals()
 	return ms

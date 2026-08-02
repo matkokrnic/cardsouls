@@ -21,7 +21,7 @@ func _make_config(overrides: Dictionary = {}) -> BalanceConfig:
 
 
 func _make_match() -> MatchState:
-	return MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	return MatchState.new(MatchParams.new(1))
 
 
 func test_conversion_zero_seconds_is_zero_ticks() -> void:
@@ -107,6 +107,82 @@ func test_apply_balance_reclamps_and_resignals_shrunk_bound() -> void:
 	assert_eq(ev.n, 1, "shrunk bound re-signals on drain")
 	assert_eq(ev.max, 30.0)
 	assert_eq(ms.p1.stamina.get_current(), 30.0, "re-clamped to the new max")
+
+
+## ---- Story 3-1 (AC 4, 3-1/R2): the PER-POOL reload contract -----------------------------
+## The three pools are deliberately NOT symmetric across apply_balance(), and each half of
+## the asymmetry has its own pin: stamina's refill-on-every-reload is
+## test_stamina_economy.gd::test_mid_match_reload_refills_stamina_to_max (untouched by this
+## story), and mana's NEVER-refill is the test below.
+
+## Mana gets set_maximum and NOTHING else — earned mana is re-clamped into the new bound and
+## never handed back full. ManaPool's own contract is that mana starts empty and is built by
+## the flywheel (mana_pool.gd:4-5); a reload-refill would gift a full bar mid-match.
+##
+## MUTATION PROOF: add `player.mana.refill()` (or `player.mana.add(config.max_mana)`) beside
+## the mana set_maximum in _apply_balance_to_player and this FAILS — the earned 4.0 becomes a
+## full bar on the reload. The shrink half fails on any implementation that skips
+## set_maximum entirely.
+func test_mid_match_reload_sets_mana_maximum_but_never_refills() -> void:
+	var ms := _make_match()
+	ms.apply_balance(_make_config({"max_mana": 10.0}))
+	ms.drain_signals()
+	assert_eq(ms.p1.mana.get_current(), 0.0, "match start: mana EMPTY (the flywheel builds it)")
+	assert_eq(ms.p1.mana.get_maximum(), 10.0, "match start: the authored cap is injected")
+	ms.p1.mana.add(4.0)  # earned mid-match, the state a reload must respect
+	ms.drain_signals()
+	# Reload with a LARGER cap: the bound moves, the earned value does not.
+	ms.apply_balance(_make_config({"max_mana": 20.0}))
+	ms.drain_signals()
+	assert_eq(ms.p1.mana.get_maximum(), 20.0, "reload re-injects the new mana bound")
+	assert_eq(ms.p1.mana.get_current(), 4.0,
+		"reload NEVER refills mana — the earned 4.0 survives untouched (3-1/R2)")
+	assert_eq(ms.p2.mana.get_current(), 0.0, "the other player's empty bar is not filled either")
+	# Reload with a SMALLER cap: set_maximum re-clamps, which is all a rescale may do.
+	ms.apply_balance(_make_config({"max_mana": 3.0}))
+	ms.drain_signals()
+	assert_eq(ms.p1.mana.get_maximum(), 3.0, "shrunk bound re-injected")
+	assert_eq(ms.p1.mana.get_current(), 3.0, "current CLAMPED into the smaller bound, not refilled")
+
+
+## Story 3-1 (AC 4, 3-1/R2/R4): the FIRST-INJECTION outcome, the half that cannot fall out of
+## one uniform rule. set_max_hp only re-clamps (it never raises hp), so with the constructor
+## no longer seeding hp a stat-less hero would sit at 0 and start the match DEAD — the 3-1/R4
+## finding. Match start must yield FULL hp, FULL stamina, EMPTY mana.
+##
+## MUTATION PROOF: delete the `if first_injection: player.hero.heal(config.max_hp)` branch in
+## _apply_balance_to_player and this FAILS — hp stays 0.0 and the hero is not alive.
+func test_first_injection_yields_full_hp_full_stamina_empty_mana() -> void:
+	var ms := MatchState.new(MatchParams.new(1))
+	assert_eq(ms.p1.hero.get_hp(), 0.0, "pre-injection: stat-less (AC 1) — hp is not seeded")
+	ms.apply_balance(_make_config({"max_mana": 10.0}))
+	ms.drain_signals()
+	for player: PlayerState in [ms.p1, ms.p2]:
+		assert_eq(player.hero.get_hp(), 100.0, "match start: FULL hp at the authored maximum")
+		assert_true(player.hero.is_alive(), "match start: alive — never a hero that starts dead")
+		assert_eq(player.stamina.get_current(), 50.0, "match start: FULL stamina (D9)")
+		assert_eq(player.mana.get_current(), 0.0, "match start: EMPTY mana (the flywheel contract)")
+		assert_eq(player.mana.get_maximum(), 10.0, "match start: the mana bound is injected")
+
+
+## Story 3-1 (AC 4): hp is PRESERVED and clamped across a reload — exactly what set_max_hp
+## ships today, and deliberately NOT the stamina refill. A reload must never heal.
+##
+## MUTATION PROOF: change the first-injection hp fill into an unconditional one (drop the
+## `if first_injection`) and this FAILS — the wounded 40.0 becomes a free full heal.
+func test_mid_match_reload_preserves_hp_and_clamps_it() -> void:
+	var ms := _make_match()
+	ms.apply_balance(_make_config())
+	ms.p1.hero.take_damage(60.0)
+	ms.drain_signals()
+	assert_eq(ms.p1.hero.get_hp(), 40.0, "wounded mid-match")
+	ms.apply_balance(_make_config())        # live reload, same bound
+	ms.drain_signals()
+	assert_eq(ms.p1.hero.get_hp(), 40.0, "reload PRESERVES current hp — never a free heal")
+	ms.apply_balance(_make_config({"max_hp": 25.0}))  # reload with a smaller bound
+	ms.drain_signals()
+	assert_eq(ms.p1.hero.get_max_hp(), 25.0, "shrunk hp bound re-injected")
+	assert_eq(ms.p1.hero.get_hp(), 25.0, "current hp CLAMPED into the smaller bound")
 
 
 ## AC 5: a mid-match reload must not disturb an in-flight window; the new duration takes

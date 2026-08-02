@@ -79,20 +79,18 @@ var _camera_bases: Array[Basis] = [Basis.IDENTITY, Basis.IDENTITY]
 var _contact_queue: Array[Dictionary] = []
 
 
-## E0 constructs both players symmetrically (mirror match). When BalanceConfig lands (E3)
-## these values arrive from the injected config; they are never hardcoded in-place here.
-func _init(
-	seed_value: int,
-	max_hp: float,
-	move_speed: float,
-	max_stamina: float,
-	max_mana: float,
-) -> void:
+## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
+## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
+## now arrive ONLY through apply_balance() (BalanceConfig is their single source of truth),
+## and the seed arrives here, once, never re-applied. Both players are therefore constructed
+## STAT-LESS (AC 5 / 3-1/R3): a MatchState that never received apply_balance() has zeroed
+## bounds and is inert — no regen, no contact resolution, no round end.
+func _init(params: MatchParams) -> void:
 	_queue = SignalQueue.new()
 	_rng = RandomNumberGenerator.new()
-	_rng.seed = seed_value
-	p1 = PlayerState.new(_queue, max_hp, move_speed, max_stamina, max_mana)
-	p2 = PlayerState.new(_queue, max_hp, move_speed, max_stamina, max_mana)
+	_rng.seed = params.seed_value
+	p1 = PlayerState.new(_queue)
+	p2 = PlayerState.new(_queue)
 	pitch = PitchState.new()
 
 
@@ -172,11 +170,18 @@ func advance(intents: Array[InputIntent]) -> void:
 ## re-converts every `*_seconds` duration ONCE via BalanceTicks. A TimingWindow already
 ## in flight keeps its original duration; the new tick counts take effect at its next
 ## start() (D4/A1). Player order fixed P1 -> P2 for determinism.
+##
+## Story 3-1 (AC 4, 3-1/R2): this is ALSO match start now that the constructor carries no
+## stats, and the two occasions differ in exactly one place — hp. FIRST injection is
+## detected from `balance == null` (a DERIVED fact, no new field to keep in sync, and
+## nothing else writes `balance`); it is passed down rather than re-derived per player so
+## both players are read from the same decision.
 func apply_balance(config: BalanceConfig) -> void:
+	var first_injection := balance == null
 	balance = config
 	balance_ticks = BalanceTicks.from_config(config)
-	_apply_balance_to_player(p1, config)
-	_apply_balance_to_player(p2, config)
+	_apply_balance_to_player(p1, config, first_injection)
+	_apply_balance_to_player(p2, config, first_injection)
 
 
 ## Story 1-5 (B3): one-time flag injection at match start. Runner-only, exactly once —
@@ -667,16 +672,47 @@ static func _camera_relative_dir(dir: Vector2, camera_basis: Basis) -> Vector3:
 	return right.normalized() * dir.x + back.normalized() * dir.y
 
 
-func _apply_balance_to_player(player: PlayerState, config: BalanceConfig) -> void:
+## Story 3-1 (AC 4, 3-1/R2): the PER-POOL reload contract. The three pools are deliberately
+## NOT symmetric, and the asymmetry is the contract, not an oversight:
+##   hp      — set_max_hp re-clamps the CURRENT value into the new bound and never raises it
+##             (hero_state.gd), so a reload preserves the hp a player has fought down to.
+##             That leaves match start with nothing to fill it, hence `first_injection`
+##             below: without it a stat-less hero would sit at 0 hp and start the match dead
+##             (3-1/R4, the finding that forced this seat to exist at all).
+##   stamina — set_maximum + refill on EVERY injection (D9, story 1-4, UNCHANGED): stamina
+##             is the moment-to-moment resource and a reload hands it back full.
+##   mana    — set_maximum ONLY, on every injection including the first. NEVER refilled:
+##             ManaPool's own contract is that mana starts empty and is built by the
+##             flywheel (mana_pool.gd:4-5), so a reload-refill would hand a free full bar
+##             mid-match and break the buildup P2 depends on. set_maximum re-clamps the
+##             current value into the new bound (ManaPool.set_maximum -> add(0.0)), which is
+##             all a rescale may do to a player's earned mana.
+## Match start therefore yields FULL hp, FULL stamina, EMPTY mana.
+func _apply_balance_to_player(player: PlayerState, config: BalanceConfig,
+		first_injection: bool) -> void:
 	player.hero.set_max_hp(config.max_hp)
+	if first_injection:
+		# The one match-start-only write. heal() clamps at the maximum set just above, so
+		# this is "fill to the authored max" and nothing else — the _reset_player idiom.
+		player.hero.heal(config.max_hp)
 	player.hero.move_speed = config.move_speed
 	player.stamina.set_maximum(config.max_stamina)
-	# D9 (story 1-4): start FULL at the authored maximum. Scope limit: this does NOT touch
-	# the constructor/apply_balance double-injection quirk — that remains story 3-1.
+	# D9 (story 1-4): start FULL at the authored maximum — every apply_balance, reload
+	# included (test_mid_match_reload_refills_stamina_to_max). Story 3-1 reconciled the
+	# constructor/apply_balance double injection this comment used to defer: there is no
+	# constructor seeding left to double-write.
 	player.stamina.refill()
+	player.mana.set_maximum(config.max_mana)
 
 
+## Story 3-1 (AC 5, 3-1/R3): joins the `balance_ticks == null` gated family (step 3's
+## _resolve_actions, step 5's regen/mana, step 4's `balance == null` twin). A pre-injection
+## MatchState is stat-less as well as inert, so its heroes sit at 0 hp — unguarded, the
+## FIRST tick of a never-injected match would resolve a round end against a hero that was
+## never given any hp to lose. Read inline like every other guard (CONSTRAINT C).
 func _check_resolution() -> void:
+	if balance_ticks == null:
+		return
 	if _round_over:
 		return
 	if not p1.hero.is_alive():

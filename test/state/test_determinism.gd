@@ -213,6 +213,11 @@ func _golden_config() -> BalanceConfig:
 	# is NOT the authored 0.5: like every value here it is chosen to be loud enough that a
 	# scope bug (a lunge leaking into recovery) would move the hash rather than round away.
 	c.attack_lunge_distance = 2.0
+	# Story 3-1 (AC 6, 3-1/R5): a fixture SIGNATURE move, NOT a value change. 90.0 is exactly
+	# what the MAX_MANA constant fed through MatchState's constructor before AC1 removed the
+	# positional floats; ManaPool.to_snapshot() emits {current, maximum}, so any other value
+	# here would move the golden. The GOLDEN PREDICTION IS NONE and this line is why.
+	c.max_mana = MAX_MANA
 	c.melee_hit_mana = 12.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	# Defense values (story 1-8), coverage-not-feel: multiplier 0.25 makes the t13
@@ -391,7 +396,7 @@ func test_canonical_hash_ignores_key_insertion_order() -> void:
 
 
 func _make_match() -> MatchState:
-	var ms := MatchState.new(SEED, MAX_HP, MOVE_SPEED, MAX_STAMINA, MAX_MANA)
+	var ms := MatchState.new(MatchParams.new(SEED))
 	ms.apply_balance(_golden_config())
 	ms.inject_feature_flags(_golden_flags())
 	ms.drain_signals()

@@ -2,8 +2,24 @@ extends TestCase
 
 ## Item 3(b) coverage: pools + HeroState + PlayerState.
 
+## Story 3-1 (AC 1/AC 3): PlayerState is constructed STAT-LESS — every bound now arrives by
+## injection (MatchState._apply_balance_to_player), so this helper injects the SAME values
+## the old positional constructor supplied, the same way the real seat does: bounds set, then
+## stamina refilled (D9) and mana left EMPTY (the flywheel contract, 3-1/R2). Every
+## assertion below is therefore unchanged.
 func _player() -> PlayerState:
-	return PlayerState.new(SignalQueue.new(), 100.0, 5.0, 50.0, 80.0)
+	return _stat_player(SignalQueue.new())
+
+
+func _stat_player(queue: SignalQueue) -> PlayerState:
+	var p := PlayerState.new(queue)
+	p.hero.set_max_hp(100.0)
+	p.hero.heal(100.0)
+	p.hero.move_speed = 5.0
+	p.stamina.set_maximum(50.0)
+	p.stamina.refill()
+	p.mana.set_maximum(80.0)
+	return p
 
 
 func test_stamina_spend_and_overspend_guard() -> void:
@@ -34,7 +50,11 @@ func test_hp_damage_floor_and_death() -> void:
 
 func test_signals_queue_until_drain() -> void:
 	var q := SignalQueue.new()
-	var p := PlayerState.new(q, 100.0, 5.0, 50.0, 80.0)
+	var p := _stat_player(q)
+	# Story 3-1: the stat injection above QUEUES its own re-injection signals (hp fill,
+	# stamina refill). Drain them here, before connecting, so this test still observes
+	# exactly one queued emission — its own.
+	q.drain()
 	var hits := {"n": 0}
 	p.hero.hp_changed.connect(func(_c: float, _m: float) -> void: hits.n += 1)
 	p.hero.take_damage(10.0)

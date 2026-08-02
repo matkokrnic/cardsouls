@@ -31,7 +31,7 @@ func _config() -> BalanceConfig:
 ## AC 5: apply_balance in setup — the machine is fully exercised headless even though
 ## live play defers balance injection (DEBT A option b).
 func _make_match() -> MatchState:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(7))
 	ms.apply_balance(_config())
 	ms.drain_signals()
 	return ms
@@ -303,16 +303,36 @@ func test_signal_sequence_queued_and_matches_expected_list() -> void:
 
 ## DEBT A option (b) pin: without apply_balance (live play today), transition evaluation
 ## is skipped entirely — actions inert, no signals, no crash.
+##
+## Story 3-1 (AC 5, 3-1/R3) RE-ANCHORED: a pre-injection MatchState is now stat-less as well
+## as inert, so the old fixed-value anchors (100.0 hp / 30.0 stamina) were constructor
+## artefacts that no longer exist. The anchor is UNCHANGED FROM CONSTRUCTION, taken over the
+## WHOLE per-player snapshot rather than one field — a stronger claim than the two constants
+## it replaces, and one that cannot rot the next time a field is added.
+##
+## MUTATION (the round-end half, AC 5's new guard): delete `if balance_ticks == null: return`
+## from _check_resolution and this FAILS on both the round_over assertion and the p1 snapshot
+## — a stat-less hero sits at 0 hp, so the very first tick resolves a round end and sets the
+## loser DEAD against a hero that was never given any hp to lose.
 func test_null_balance_ticks_guard_actions_inert() -> void:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)  # deliberately NO apply_balance
+	var ms := MatchState.new(MatchParams.new(7))  # deliberately NO apply_balance
 	var h := ms.p1.hero
 	var fired := {"n": 0}
 	h.action_state_changed.connect(func(_p: HeroState.ActionState, _c: HeroState.ActionState) -> void:
 		fired.n += 1)
+	var before: Dictionary = ms.to_snapshot()
+	assert_eq(ms.p1.hero.get_max_hp(), 0.0, "stat-less at construction: no hp bound (AC 1)")
+	assert_eq(ms.p1.stamina.get_maximum(), 0.0, "stat-less at construction: no stamina bound")
+	assert_eq(ms.p1.mana.get_maximum(), 0.0, "stat-less at construction: no mana bound")
 	for i in range(3):
 		_advance(ms, _intent([&"attack"], [&"block"]))
 	assert_eq(h.action_state, HeroState.ActionState.IDLE, "actions inert without injected balance")
 	assert_eq(fired.n, 0, "no transitions, no signals")
+	var after: Dictionary = ms.to_snapshot()
+	assert_false(bool(after["round_over"]),
+		"NO ROUND END: _check_resolution is gated too, or a 0-hp stat-less hero would lose on tick 1")
+	assert_eq(after["p1"], before["p1"], "p1 UNCHANGED FROM CONSTRUCTION across three pressed ticks")
+	assert_eq(after["p2"], before["p2"], "p2 UNCHANGED FROM CONSTRUCTION across three pressed ticks")
 
 
 ## CONSTRAINT C pin: an in-flight window keeps its duration across a mid-swing reload;

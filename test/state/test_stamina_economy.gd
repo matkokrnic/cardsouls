@@ -34,7 +34,7 @@ func _config() -> BalanceConfig:
 
 
 func _make_match() -> MatchState:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(7))
 	ms.apply_balance(_config())
 	ms.drain_signals()
 	return ms
@@ -204,7 +204,7 @@ func test_unauthored_attack_cost_deducts_nothing_and_block_entry_is_free() -> vo
 ## these author it explicitly — a test must not depend on a default it does not itself set.
 
 func _make_match_with_attack_cost(cost: float) -> MatchState:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(7))
 	var c := _config()
 	c.attack_stamina_cost = cost
 	ms.apply_balance(c)
@@ -438,9 +438,15 @@ func test_regen_reaches_max_end_to_end_without_overshoot() -> void:
 
 ## ---- Start full (D9, AC 5) --------------------------------------------------------------
 
+## Story 3-1 (AC 1/AC 4): the pre-injection SETUP changed, the pin did not. This test used to
+## spend 30 from a constructor-supplied 50 to prove the refill overwrote a non-full pool;
+## post-3-1 the constructor supplies nothing, so the pool is stat-less at 0/0 and the spend
+## is not even affordable. The stat-less state IS the stronger starting point — the pool goes
+## 0 -> 50 on the D9 refill, so the assertion cannot pass by accident of already being full.
 func test_apply_balance_starts_pool_full() -> void:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
-	ms.p1.stamina.spend(30.0, 0)  # 20 before injection
+	var ms := MatchState.new(MatchParams.new(7))
+	assert_eq(ms.p1.stamina.get_current(), 0.0, "pre-injection: stat-less, NOT full (AC 1)")
+	assert_eq(ms.p1.stamina.get_maximum(), 0.0, "pre-injection: no authored bound yet")
 	ms.apply_balance(_config())
 	ms.drain_signals()
 	assert_eq(ms.p1.stamina.get_current(), 50.0, "apply_balance() sets current to the authored max")
@@ -510,11 +516,24 @@ func test_dead_hero_stamina_does_not_regen() -> void:
 
 ## ---- Step-5 null guard ------------------------------------------------------------------
 
+## Story 3-1 (AC 5, 3-1/R3) RE-ANCHORED: the old setup spent 20 from a constructor-supplied
+## 50 and anchored on the resulting 30.0. Post-3-1 there is nothing to spend — a
+## pre-injection pool is stat-less at 0/0 — so the anchor is UNCHANGED FROM CONSTRUCTION over
+## the whole per-player snapshot, which also covers the regen-delay window the old single
+## float did not.
+##
+## MUTATION (the round-end half, AC 5's new guard): delete `if balance_ticks == null: return`
+## from _check_resolution and this FAILS — the 0-hp stat-less hero ends the round on tick 1,
+## flipping round_over and putting p1's hero into DEAD inside the snapshot.
 func test_no_regen_without_apply_balance() -> void:
-	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)  # deliberately NO apply_balance
-	ms.p1.stamina.spend(20.0, 0)
-	ms.drain_signals()
+	var ms := MatchState.new(MatchParams.new(7))  # deliberately NO apply_balance
+	var before: Dictionary = ms.to_snapshot()
+	assert_eq(ms.p1.stamina.get_current(), 0.0, "stat-less at construction: empty pool")
+	assert_eq(ms.p1.stamina.get_maximum(), 0.0, "stat-less at construction: no authored bound")
 	for i in range(3):
 		_advance(ms)
-	assert_eq(ms.p1.stamina.get_current(), 30.0,
-		"pre-injection MatchState: step-5 regen inert, no crash")
+	var after: Dictionary = ms.to_snapshot()
+	assert_false(bool(after["round_over"]), "pre-injection: no round end (AC 5)")
+	assert_eq(after["p1"], before["p1"],
+		"pre-injection MatchState: step-5 regen inert — p1 UNCHANGED FROM CONSTRUCTION, no crash")
+	assert_eq(after["p2"], before["p2"], "p2 likewise unchanged")

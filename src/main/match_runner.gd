@@ -7,14 +7,17 @@ extends Node3D
 ## Tick order (D2 / F1): sample controllers -> gather spatial facts -> advance(intents) ->
 ## drive actor movement (move_and_slide, inside the actor) -> drain signals.
 
-# E0 placeholders. These are the injection point: E3 folds them into an injected BalanceConfig
-# object (see game-architecture.md "Planned (E3) — MatchState config object"). Not authored as
-# .tres yet, so they live here as clearly-marked interim constants, tunable in one place.
+# Story 3-1 (AC 3): the four E0 tunable placeholders (_MAX_HP, _MOVE_SPEED, _MAX_STAMINA,
+# _MAX_MANA) are DELETED — data/balance/balance_config.tres is their single source of truth and
+# apply_balance() their single injection path, so a runner constant could only be a second value
+# to disagree with the authored one.
+#
+# _SEED survives as the RUNNER-SIDE SOURCE for MatchParams and nothing else (E3-RG/R9): the seed
+# is match-scoped, injected once at construction, and never re-applied by apply_balance() — it
+# does NOT belong in the hot-reloadable BalanceConfig, where a reload would re-seed the RNG
+# mid-match and blow a determinism hole. It stays a constant here until a story needs a per-match
+# seed source (a menu, a replay file).
 const _SEED := 12345
-const _MAX_HP := 100.0
-const _MOVE_SPEED := 5.0
-const _MAX_STAMINA := 50.0
-const _MAX_MANA := 80.0
 
 ## Story 1-6 (AC 2): THE single per-slot controller-kind config point. Slot 0 = P1, slot
 ## 1 = P2. Swapping a slot's kind here is the ONLY edit dummy -> PvP -> bot needs — E2 (2-3)
@@ -74,14 +77,14 @@ func _ready() -> void:
 		"slot_controller_kinds must have exactly 2 entries (P1, P2), got %d" % slot_controller_kinds.size())
 	_p1_controller = _make_controller(slot_controller_kinds[0], 0)
 	_p2_controller = _make_controller(slot_controller_kinds[1], 1)
-	_match_state = MatchState.new(_SEED, _MAX_HP, _MOVE_SPEED, _MAX_STAMINA, _MAX_MANA)
+	_match_state = MatchState.new(MatchParams.new(_SEED))
 	# DEBT A retirement (story 1-3b): inject the authored balance ONCE at match start,
 	# before the first tick — advance() reads balance_ticks, so without this call live-play
 	# actions are inert (MatchState's balance_ticks == null guard, kept as a permanent
-	# invariant). apply_balance partially overwrites the constructor placeholders above
-	# (the mana CAP stays constructor-driven — BalanceConfig has no max_mana field);
-	# story 3-1 folds the constants into the config object. Mid-match reload stays DEBT B
-	# (deferred).
+	# invariant). Story 3-1: this call is no longer a PARTIAL overwrite of constructor
+	# placeholders — it is now the ONLY thing that gives either hero hp, move speed, or pool
+	# bounds, so the match is stat-less until it runs (AC 3/AC 4). Mid-match reload stays
+	# DEBT B (deferred): nothing calls apply_balance() a second time in live play.
 	var balance_config: BalanceConfig = BalanceConfigService.get_config()
 	Invariant.check(balance_config != null, "authored balance config missing at match start")
 	_match_state.apply_balance(balance_config)

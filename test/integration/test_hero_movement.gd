@@ -10,7 +10,8 @@ extends SceneTree
 ## (read ${PIPESTATUS[0]} / set -o pipefail so grep can't mask the exit code).
 
 # Live move_speed comes from data/balance/balance_config.tres, injected at match start via
-# apply_balance (story 1-3b) — it overwrites match_runner._MOVE_SPEED. Tune the .tres, update this.
+# apply_balance (story 1-3b). Story 3-1 (AC 3) deleted match_runner._MOVE_SPEED, the placeholder
+# that injection used to overwrite — the .tres is now the ONLY source. Tune it, update this.
 const MOVE_SPEED := 5.0
 
 var _p1: CharacterBody3D

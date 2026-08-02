@@ -8,8 +8,18 @@ extends TestCase
 const SPEED := 5.0
 
 
+## Story 3-1 (AC 3): move_speed reaches the hero ONLY through apply_balance() now that the
+## constructor carries no tunables, so this fixture injects the SPEED every assertion below
+## reads. Nothing else about the file changes — the bases are still pushed directly.
 func _make_match() -> MatchState:
-	return MatchState.new(7, 100.0, SPEED, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(7))
+	var c := BalanceConfig.new()
+	c.max_hp = 100.0
+	c.move_speed = SPEED
+	c.max_stamina = 50.0
+	ms.apply_balance(c)
+	ms.drain_signals()
+	return ms
 
 
 func _step(ms: MatchState, d1: Vector2, d2: Vector2 = Vector2.ZERO) -> void:

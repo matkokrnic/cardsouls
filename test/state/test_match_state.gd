@@ -2,6 +2,26 @@ extends TestCase
 
 ## Item 3(c) coverage: MatchState.advance(intents) + drain_signals().
 
+## Story 3-1 (AC 3/AC 5): the hero/stamina baselines these tests read — move_speed for the
+## movement seam, max_hp for the death that ends a round — arrive ONLY by injection now that
+## MatchState's constructor carries no tunables, and a stat-less match is deliberately inert
+## (no round end, no resolved velocity). The values are exactly what MatchState.new used to
+## supply positionally, so every assertion below is unchanged.
+func _stats_config() -> BalanceConfig:
+	var c := BalanceConfig.new()
+	c.max_hp = 100.0
+	c.move_speed = 5.0
+	c.max_stamina = 50.0
+	return c
+
+
+func _stats_match(seed_value: int) -> MatchState:
+	var ms := MatchState.new(MatchParams.new(seed_value))
+	ms.apply_balance(_stats_config())
+	ms.drain_signals()
+	return ms
+
+
 func _step(ms: MatchState, d1: Vector2, d2: Vector2) -> void:
 	var i1 := InputIntent.new()
 	i1.move_dir = d1
@@ -21,7 +41,7 @@ func _move_intent(dir: Vector2) -> InputIntent:
 
 
 func test_movement_seam_computes_world_velocity() -> void:
-	var ms := MatchState.new(42, 100.0, 5.0, 50.0, 80.0)
+	var ms := _stats_match(42)
 	_step(ms, Vector2(1, 0), Vector2(0, 1))
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(5, 0, 0)), "p1 (1,0) -> world +X * speed")
 	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(1, 0)))
@@ -29,20 +49,20 @@ func test_movement_seam_computes_world_velocity() -> void:
 
 
 func test_analog_input_clamped_to_move_speed() -> void:
-	var ms := MatchState.new(42, 100.0, 5.0, 50.0, 80.0)
+	var ms := _stats_match(42)
 	_step(ms, Vector2(3, 4), Vector2.ZERO)  # length 5 input
 	assert_almost_eq(ms.p1.hero.velocity.length(), 5.0, 1e-4, "never exceeds move_speed")
 
 
 func test_tick_counter_advances() -> void:
-	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(1))
 	_step(ms, Vector2.ZERO, Vector2.ZERO)
 	_step(ms, Vector2.ZERO, Vector2.ZERO)
 	assert_eq(int(ms.to_snapshot()["tick"]), 2)
 
 
 func test_round_ended_is_queued_and_fires_once() -> void:
-	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	var ms := _stats_match(1)
 	var ev := {"n": 0, "loser": -1}
 	ms.round_ended.connect(func(loser: int) -> void:
 		ev.n += 1
@@ -65,7 +85,7 @@ func test_round_ended_is_queued_and_fires_once() -> void:
 ## once per DEATH, not once per match. The debug reset clears the latch (and revives the
 ## DEAD hero), so a second death fires a second round_ended.
 func test_round_ended_rearms_after_debug_reset_and_fires_once_per_death() -> void:
-	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	var ms := _stats_match(1)
 	var ev := {"n": 0, "loser": -1}
 	ms.round_ended.connect(func(loser: int) -> void:
 		ev.n += 1
@@ -109,7 +129,7 @@ func test_round_ended_rearms_after_debug_reset_and_fires_once_per_death() -> voi
 ## advance()'s). MUTATION: delete the `player.hero.velocity = Vector3.ZERO` write on the DEAD branch
 ## and this FAILS — the corpse keeps its last live velocity instead of halting.
 func test_dead_hero_velocity_zeroed_every_tick() -> void:
-	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(1))
 	ms.p1.hero.velocity = Vector3(5, 0, 0)                    # a live velocity that must be zeroed
 	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
 	assert_false(bool(ms.to_snapshot()["round_over"]),
@@ -135,7 +155,7 @@ func test_dead_hero_velocity_zeroed_every_tick() -> void:
 ## FALSE). MUTATION: delete the DEAD branch's early `return` (keeping the velocity write) and this
 ## FAILS — execution falls through to the facing write and facing updates to the live intent.
 func test_dead_hero_facing_frozen() -> void:
-	var ms := MatchState.new(1, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(1))
 	ms.p1.hero.facing = Vector2(1, 0)                        # a known live facing
 	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
 	assert_false(bool(ms.to_snapshot()["round_over"]),
@@ -176,6 +196,9 @@ func _b1_config() -> BalanceConfig:
 	c.attack_windup_move_speed_multiplier = 0.5
 	c.attack_active_move_speed_multiplier = 0.0
 	c.attack_recovery_move_speed_multiplier = 0.0
+	# Story 3-1 (AC 1/AC 3): the mana CAP is authored data now that the constructor carries none.
+	# 80.0 is what this fixture's MatchState.new used to supply, so behaviour is unchanged.
+	c.max_mana = 80.0
 	c.melee_hit_mana = 8.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.roll_iframe_seconds = 2.0 / 60.0
@@ -184,7 +207,7 @@ func _b1_config() -> BalanceConfig:
 
 
 func _b1_match() -> MatchState:
-	var ms := MatchState.new(9, 100.0, 5.0, 50.0, 80.0)
+	var ms := MatchState.new(MatchParams.new(9))
 	ms.apply_balance(_b1_config())
 	ms.drain_signals()
 	return ms

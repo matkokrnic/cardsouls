@@ -111,7 +111,7 @@ func test_snapshot_shape_is_untouched_by_the_instrument() -> void:
 
 
 func _make_match() -> MatchState:
-	var ms := MatchState.new(SEED, MAX_HP, MOVE_SPEED, MAX_STAMINA, MAX_MANA)
+	var ms := MatchState.new(MatchParams.new(SEED))
 	ms.apply_balance(_config())
 	ms.drain_signals()
 	return ms
@@ -138,6 +138,9 @@ func _config() -> BalanceConfig:
 	c.attack_windup_move_speed_multiplier = 0.0
 	c.attack_active_move_speed_multiplier = 0.0
 	c.attack_recovery_move_speed_multiplier = 0.0
+	# Story 3-1 (AC 1/AC 3): the mana CAP is authored data now that the constructor carries none.
+	# 80.0 is what this fixture's MatchState.new used to supply, so behaviour is unchanged.
+	c.max_mana = 80.0
 	c.melee_hit_mana = 5.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.block_damage_multiplier = 0.25
