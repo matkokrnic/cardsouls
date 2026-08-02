@@ -10,3 +10,4 @@ attack_button = 10
 block_button = 9
 roll_button = 1
 deadzone = 0.2
+normalize_move_magnitude = true
