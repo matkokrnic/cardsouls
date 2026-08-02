@@ -1755,3 +1755,95 @@ that S8 (2-6/R19) found indiscriminable. Both stings stay normalized to the orig
 DELIVERY only -- the verdict on whether it actually reads as distinct belongs to AC11's
 naive-observer audio-discrimination pass, reserved for Pass 4 (AC9 is a precondition of
 AC11 per 3-0b/R7).
+
+## Session 2026-08-02 -- Story 3-0b Pass 3b (rulings)
+
+Pass 3b delivers AC4's VERTICAL half (Pass 3 delivered only the lateral half) and a
+pre-existing chain-retrigger fix, both verified by the operator in live play. No
+`src/state/` change this pass -- golden untouched. Full suite re-run before this commit
+chain: 188 state tests / 874 assertions / 0 failed, 14 integration files individually
+green (`test_chain_retrigger.gd`, `test_vertical_alignment.gd` new).
+
+**3-0b/R29 -- the anchor convention, as measured, and that the suspected telegraph-height
+contradiction did not exist.** Every presentation anchor in `hero.tscn` is a child of the
+hero ROOT and keys off the collision box: root is the body CENTRE, `Collision`/
+`HurtboxShape` span root y [-1,+1], and `main.tscn`'s spawn at y 1.0 puts the box floor
+exactly on the ground's top surface. Measured at this gate: nine of ten anchors obeyed
+that convention; the paladin model was the SOLE non-conformer, because its FBX origin is
+at the feet and 3-0a instanced it with no transform, leaving the model floating exactly
+1.0 above the box floor. Going in, the two authored telegraph heights (`+1.5` for
+`AttackCone`/`BlockShield`, `-0.95` for `RollDisc`) looked like they might disagree with
+each other; measured, they do not: `+1.5` is 0.5 above the box top exactly as `-0.95` is
+0.05 above the box floor, both authored in story 1-10 against a box-only hero, before any
+model existed. The apparent contradiction was an artifact of reading box-relative
+authoring against a floating model, not a real inconsistency in the 1-10 authoring.
+
+**3-0b/R30 -- operator ruling: the telegraphs travel WITH the model, not re-anchored
+overhead.** `Mesh.position.y = -1.0` grounds the model on the box floor;
+`AttackCone`/`BlockShield`/`DeflectSpark` drop by the same 1.0 (`+1.5 -> +0.5`,
+`+1.5 -> +0.5`, `+1.3 -> +0.3`) rather than being re-anchored to read overhead against the
+now-lower model. Reason: the cone was ALREADY intersecting the model's head before this
+fix (world 2.5 against a measured head top of 2.7255), so dropping it by the same 1.0
+preserves BIT-IDENTICALLY the composition that already passed the 2-6 and 3-0a live
+smokes -- whereas re-anchoring overhead would have introduced an unreviewed composition
+immediately before AC11's naive-observer run, the highest-stakes review this story has.
+Accepted cost, named explicitly: the cone and shield now intersect the model's head and
+shoulders and are partly occluded by it. That cost is deferred, not absorbed here -- AC11
+judges with evidence whether it harms legibility, and the telegraphs move again only if
+that verdict says so.
+
+**3-0b/R31 -- the chain-retrigger cause, both suppressors, and why the seek is
+load-bearing.** `attack_chain_length = 3` with a 30-tick chain window deliberately lets a
+new swing begin before the previous one finishes, and the state layer was correct
+throughout: `chain_attack()` explicitly re-emits ATTACKING -> ATTACKING on the
+action-state seam precisely so presentation learns of a swing that changes no state
+(pinned state-side by `test_action_state.gd`'s `[atk, atk]` sequence). Measured: the
+consumer swallowed it via TWO INDEPENDENT suppressors, not one. First,
+`AnimationController._play()`'s selector guarded on `current_animation != clip` -- a
+chained swing's clip name is already `attack`, so the guard alone made it a no-op.
+Second, and independently of that guard: `AnimationPlayer.play(name)` is itself a no-op
+on playback POSITION when `name` is already the current, still-playing animation
+(measured directly on Godot 4.6.3 -- play, advance to 0.30, play the same name again,
+position is still 0.30). Because the second suppressor exists independently of the
+first, removing only the name guard would not have fixed the defect; the fix's
+`seek(0.0, true)` is therefore LOAD-BEARING, not belt-and-braces alongside the guard
+removal.
+
+**3-0b/R32 -- the rejected route: a swing index through `drive()`.** Pushing a chained-
+swing index through `HeroActor.drive()` (the 3-0a run-speed precedent shape) was
+considered and rejected. That precedent exists ONLY where the seam genuinely cannot
+carry the event -- `run` has no `ActionState` behind it, so `drive()` is the only channel
+locomotion has. A chained swing is different: it already has a dedicated, already-tested
+emission on an existing seam (the ATTACKING -> ATTACKING self-transition). Routing a
+parallel payload through `drive()` as well would have plumbed a second channel for an
+event already arriving on the first, and left the action-state seam silently broken for
+every future same-state transition a new state might introduce. NO EIGHTH SEAM was
+added; the fix (`_restart()`) consumes the existing seam correctly instead.
+
+**3-0b/R33 -- the defect predates Pass 3; Pass 3 made it legible, not present.** At the
+pre-Pass-3 90-tick attack clip length, all three swings of a chain were suppressed
+identically (one animation played for three swings), which reads as uniform enough to be
+mistaken for an intentional held-pose chaining policy. Pass 3's AC3 retime to 45 ticks
+changed the ratio: two of three swings now got a visible animation and one did not,
+turning a uniform (and easily misread) behavior into a conspicuous gap. The defect itself
+-- the two suppressors in `AnimationController` -- has been present since 3-0a shipped
+that script; nothing about Pass 3's retime introduced it.
+
+**3-0b/R34 -- SUITE BLIND SPOT, a standing lesson that outlives this story.** The suite
+asserts authored data AT REST and never runtime COMPOSITION. Before Pass 3b, no test
+anywhere referenced `AnimationController`, `current_animation`, or which clip is actually
+playing. A relative measure (the Hips excursion in `test_clip_timing.gd`) is
+mathematically blind to a constant offset; a clip inventory (`test_rig_clips.gd`) is
+blind to selection and retrigger. The blind class this names: absolute placement, clip
+selection, retrigger, layering, visibility, and every "the seam fires but the consumer
+ignores it" failure -- precisely what a naive observer catches instantly and a green
+suite never mentions. `test_vertical_alignment.gd` and `test_chain_retrigger.gd` attack
+this hole from opposite sides: one asserts an absolute spatial relationship across two
+packed scene files (hero-local and world-space, cross-checked against `main.tscn`'s spawn
+and ground), the other drives the real `AnimationController` callback through a
+three-swing chain and asserts the runtime selection/retrigger outcome. Recorded here as
+its own ruling, separate from the AC4/chain-retrigger rulings above, because the lesson is
+general: any future presentation seam with a runtime SELECTION or PLACEMENT decision
+needs its own test asking "what actually happened at runtime", not only tests of the data
+it was authored from -- a green suite is not evidence that a seam's consumer is doing
+anything with what it receives.
