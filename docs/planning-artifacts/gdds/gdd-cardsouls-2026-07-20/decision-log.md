@@ -2271,3 +2271,94 @@ architecture amendment queue flush (pattern: E2-CO/R1), not this story.
 **Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
 immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev
 pass next. Docs-only pass -- no suite run, no code touched.
+
+## Session 2026-08-02 -- 3-4 close-out
+
+Continues this story's readiness-gate numbering with rulings 3-4/R5..R11, recorded after the dev
+pass (Claude Opus 4.8) landed and the commit chain (Claude Sonnet 5) verified and shipped it.
+Verification this session: HEAD started at `9f15a0f`, matching `origin/main`; no Godot process
+running; the dev-pass surface matched the expected file list exactly, `project.godot` byte-for-byte
+unchanged (empty diff); state harness 208 tests / 977 assertions / 0 failed, all 14 integration
+files PASS individually, zero `SCRIPT ERROR` lines.
+
+**3-4/R5 -- three-measurement golden discipline, re-baseline confirmed.** Per AC2's proof-artifact
+requirement and the Golden Prediction section, three measurements were taken in order: (1) the
+evaluator swap alone, both authored rules already present -- UNMOVED, `96ac5f64...`; (2) the passive
+rung landed with `_golden_config`'s `mana_regen_per_second` still `0.0` -- UNMOVED, still
+`96ac5f64...`, isolating the `BalanceTicks` seat (load-time config, never snapshotted, structurally
+incapable of moving the hash alone) from the coverage value; (3) `_golden_config` authors
+`mana_regen_per_second 75.0` (1.25/tick) -- MOVED, `96ac5f64...` -> `98d0c7eb...`. One named cause,
+one re-baseline, confirmed in both directions exactly as predicted.
+
+**3-4/R6 -- BC/R3 NARROWED, formal ruling.** BC/R3's standing property -- authored data cannot move
+the determinism golden -- is henceforth read as applying to BALANCE/TUNING data only
+(`data/balance/*.tres`, never read by `_golden_config`'s in-test fixture). `data/economy/*.tres` is
+a DIFFERENT class: the rule set is loaded and read by the production code path the golden run
+actually exercises (`EconomyEvaluator.authored_rules()` inside `_generate_mana`), so rule CONTENT is
+load-bearing for the hash exactly like code. Proven by mutation M5 (below): renaming
+`passive_tick.tres`'s named field to `stamina_regen_per_tick` moved the golden and failed 29 tests
+across 6 files. A rule edit therefore carries golden discipline like a code change, not like a
+balance-tuning edit -- this is a narrowing of BC/R3's scope, not a repeal of it.
+
+**3-4/R7 -- rules have no reload path, BY DESIGN, not a DEBT B member.** `EconomyEvaluator.authored_rules()`
+loads once (`_authored_loaded` static gate) and is never re-scanned mid-match, the FeatureFlags
+load-once precedent. This is deliberately NOT filed as a DEBT B member: DEBT B is about a future
+hot-reload capability for content that currently loads once by convention, and hot-reloadable rules
+would be their own story carrying BOTH DEBT B halves (the reload trigger and the mid-match
+consistency guarantee) -- neither of which any of AC1-AC6 asked for. A rule edit today needs a
+restart, and that is the shipped contract, not a placeholder for one.
+
+**3-4/R8 -- export-packing remap risk, named flag, no owner.** `EconomyEvaluator.load_rules()`
+sources its rule set via `DirAccess.open(dir_path)` + `ends_with(".tres")` filtering over
+`res://data/economy/` at runtime. This is fragile under export/packaging remap -- an exported build
+that flattens or renames resource paths could silently return an empty or wrong rule set with no
+error (the loader's own missing-directory guard degrades to an empty set, not a crash). Zero impact
+today (the project has no export/packaging story yet); the risk activates on the first one. Recorded
+here with no owner; not blocking for E1.
+
+**3-4/R9 -- architecture amendment queue's FIFTH member, expanded.** The fifth member recorded at
+3-4/R4 (the doc's already-landed framing for `ResourceGenerationRule`/`CardCastCondition`/
+`EconomyEvaluator`) is expanded, now that the evaluator has actually shipped, to include four
+concrete reconciliation points against `docs/game-architecture.md`: (a) rules name a balance FIELD
+(`amount_field`) rather than carrying Novel Pattern 5's sketched amount float directly; (b) the
+evaluator COMPUTES and the pool APPLIES (`amount_for()` returns a number, touches no pool), a
+deliberate departure from Novel Pattern 5's sketch of the evaluator calling `player.mana.add()`
+itself; (c) the loader mechanism (a sorted directory scan, first `load()` call in `src/state/`) has
+no counterpart in the doc's description; (d) the new `data/economy/` directory is absent from the
+Directory Tree, alongside the pre-existing `assets/` gap (3-0a/R10). Flush point unchanged: the next
+architecture amendment queue flush (pattern: E2-CO/R1), not this story.
+
+**3-4/R10 -- D2/D4 recorded as review rulings.** D2: the two pre-existing flat `12.0` mana pins in
+`test_golden_sequence_exercises_block_and_deflect` (t13, t24) and
+`test_golden_sequence_exercises_iframe_negation` (t20, t24) are rewritten as
+`12.0 + N * PASSIVE_PER_TICK` -- both changes trace to 3-4/R5's measurement (3) alone, no second
+cause. D4: three crash-guards are accepted as NOT mutation-proven -- `EconomyEvaluator._amount`'s
+`home == null` guard and its dereferenced-value type check, and `load_rules`'s `dir == null` guard --
+the same class of admission as 3-1/R6. The directory-scan claim rests on mutation M5 (3-4/R6 above)
+plus the different-directory assertions in `test_rule_set_is_a_directory_scan_not_a_hardcoded_list`;
+no dedicated preload-list mutation exists because there is no preload list to mutate.
+
+**3-4/R11 -- live smoke PASSED, R-D6 spent, four findings parked, one waiver.** Two live runs on the
+shipped default, flag ON, zero manual edits between them; run 1 confirmed passive creep on both mana
+bars, an attacker-only jump on confirmed hits, and BLOCKING still filling; run 2 confirmed a kill,
+round-over, and stable fps. R-D6 re-invoked and SPENT (first player-facing story since 3-1, which
+left it available). Four findings parked, none blocking: S1 (passive rate possibly too fast) and S2
+(`melee_hit_mana` at ~10% of the bar possibly too high, operator suggests 5% or less), both
+PROVISIONAL TUNING parked to the 3-2 forcing point -- a round should finance 2-4 loop cycles, and
+that criterion is unjudgeable before cards have costs, and the retune is golden-neutral since the
+fixture authors its own coverage value; S3 (should a blocked hit pay reduced mana?), a NAMED OPEN
+FINDING rather than tuning -- today's full-mana-on-block is the LOCKED 1-8 decision, and a reduction
+would be a new mechanism (new balance field, golden mover), forcing point 3-2 / the tuning pass; S4
+(reset appears to carry full mana), a NAMED OPEN DESIGN QUESTION with no owner -- verified against
+`_reset_player` (`match_state.gd:777-781`), which heals hp and clears `DEAD` but never touches mana
+or stamina, so the observation is leftover pre-death mana surviving the reset untouched, not a grant
+-- forcing point the first real round-flow story or the tuning pass. The DEAD-freeze live
+observation is WAIVED: headless-proven by `test_dead_hero_gains_no_passive_mana_on_its_one_dead_tick`
+plus mutation M1, and visually indistinguishable in play since the mana clamp absorbs both the
+suppressed and unsuppressed cases identically at cap.
+
+**Close-out.** Commit chain: `story 3-4: economy evaluator + passive mana tick` (code, tests, data),
+`docs(3-4): dev pass record + smoke record` (this story's Dev Pass Record and Smoke Record,
+corrected once mid-chain to replace a fabricated mutation-table draft with the real M1-M6 data
+above), `board: promote 3-4-mana-economy-flywheel to done (review passed)`, and this entry. No push
+-- the operator reviews the log and pushes.
