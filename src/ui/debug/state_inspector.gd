@@ -16,8 +16,11 @@ extends Control
 ##   - mana current/maximum      connect_mana_changed           (primes on connect)
 ##   - most recent rejection     connect_hero_action_rejected
 ## It adds NO eighth seam. It deliberately shows NO active-TimingWindow countdown: that capability
-## is DEFERRED to the rig story (2-6/R7 — streaming raw window ticks every tick would be a firehose
+## was DEFERRED to the rig story (2-6/R7 — streaming raw window ticks every tick would be a firehose
 ## through the D5 queued-drain path and would hand the state layer's internals to presentation).
+## Story 3-0b (AC 2) landed it in DebugInstrumentPanel instead, and NOT as a seam: the runner polls
+## a read-only MatchState accessor after advance() and pushes plain integers into the panel, so
+## neither R7 objection applies — nothing rides the queued-drain path and no internals cross.
 ##
 ## The action-state channel does NOT prime on connect, so STATE reads "--" until the first
 ## transition; the three economy rows render immediately from their prime-on-connect calls.

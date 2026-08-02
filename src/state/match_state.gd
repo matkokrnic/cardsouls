@@ -247,6 +247,43 @@ func to_snapshot() -> Dictionary:
 	}
 
 
+## Story 3-0b (AC 2): READ-ONLY DEBUG accessor — per slot, the remaining ticks of the action
+## windows that are currently RUNNING, as COMPUTED PLAIN INTEGERS derived from
+## TimingWindow.remaining_ticks(). Slot order is fixed [P1, P2]; window order within a slot is
+## HeroState's declaration order. A window that is not running is ABSENT (the AC's "active
+## windows"), so the payload is small — at most two or three entries per slot in practice.
+##
+## This is DEBUG INSTRUMENTATION, NOT an eighth observation seam: the runner POLLS it after
+## advance() and pushes the plain payload into DebugInstrumentPanel. No signal, no state handle,
+## no mutator — presentation receives VALUES, never internals, the same discipline the seven
+## seams already follow (the standing "hands the state layer's internals to presentation"
+## objection is answered by the return type: ints keyed by name). to_snapshot() is deliberately
+## NOT extended, so the replay contract never learns this instrument exists.
+func debug_window_ticks_remaining() -> Array[Dictionary]:
+	return [_running_window_ticks(p1.hero), _running_window_ticks(p2.hero)]
+
+
+## The per-hero half of debug_window_ticks_remaining(). The TimingWindow objects are read and
+## discarded INSIDE this function — only ints leave it.
+static func _running_window_ticks(hero: HeroState) -> Dictionary:
+	var out: Dictionary = {}
+	var windows: Array = [
+		[&"windup", hero.windup],
+		[&"active", hero.active],
+		[&"recovery", hero.recovery],
+		[&"chain", hero.chain],
+		[&"deflect", hero.deflect],
+		[&"iframe", hero.roll_iframe],
+		[&"roll", hero.roll_duration],
+		[&"stun", hero.stun],
+	]
+	for entry: Array in windows:
+		var window: TimingWindow = entry[1]
+		if window.is_running:
+			out[entry[0]] = window.remaining_ticks()
+	return out
+
+
 ## Step-3 transition evaluation (story 1-3). EVALUATES HeroState.TRANSITION_TABLE — the
 ## table data lives on HeroState next to the enum; this is only the evaluator. Durations
 ## are read from balance_ticks.<field> inline at the moment a transition fires and passed

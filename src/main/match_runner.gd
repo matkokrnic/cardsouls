@@ -48,6 +48,17 @@ var _match_state: MatchState
 var _p1_controller: Controller
 var _p2_controller: Controller
 
+## Story 3-0b (AC 1): the match-global DEBUG step/pause reader — a NON-Controller member of
+## src/controllers/ (see its own header). It is NOT one of the two slot controllers: it produces
+## no InputIntent and its presses never reach advance(). Held here because D3(a) keeps Input.*
+## out of this file while F1 keeps the tick gate in it.
+var _debug_input := DebugInputReader.new()
+var _paused := false
+
+## Story 3-0b (AC 2): the ONE debug instrument panel, kept so the runner can push the polled
+## window-countdown payload into it after each advance(). A Control reference, never a seam.
+var _instrument_panel: DebugInstrumentPanel
+
 
 func _ready() -> void:
 	# TICK_HZ must equal the physics tick rate, or every seconds_to_ticks() is silently wrong.
@@ -134,6 +145,8 @@ func _ready() -> void:
 	panel.gamepad_profile = load("res://data/gamepad_profile.tres") as GamepadProfile
 	panel.huds = huds
 	add_child(panel)
+	# Story 3-0b (AC 2): kept for the per-tick countdown push in _physics_process step 3b.
+	_instrument_panel = panel
 	# Story 1-10 (AC 3/4): each hero's telegraph controller — the FIRST consumer of the
 	# two seams landed below (connect_hero_action_rejected, connect_deflect_landed) and a
 	# parallel consumer of the existing two. Signal payloads only, never a state handle;
@@ -322,25 +335,51 @@ func _slot_of(actor: Node) -> int:
 
 
 func _physics_process(delta: float) -> void:
+	# 0. Story 3-0b (AC 1): the DEBUG step/pause gate. Read through the controller-layer
+	#    DebugInputReader (D3(a) — Input.* may not appear in this file), never as an intent:
+	#    these presses do not enter InputIntent, the recorded intent stream, or advance(). Pause
+	#    must survive the ABSENCE of ticking, which an intent consumed inside advance() cannot —
+	#    the deliberate divergence from the intent-carried debug_reset. Both reads are EDGES, so
+	#    a held key neither re-toggles the pause nor auto-fires steps: one tick per press.
+	if _debug_input.pause_pressed():
+		_paused = not _paused
+	var ticking := not _paused or _debug_input.step_pressed()
 	# 1. Sample controllers -> InputIntent per player (the ONLY place Input is read — D3).
+	#    Sampled every frame, paused or not: sampling is not one of the three things AC 1
+	#    freezes, and Godot's just-pressed edges are frame-scoped either way.
 	var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]
-	# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
-	#    global basis). Reading the rig is the runner's ONLY interaction with it; the runner
-	#    never rotates velocity after state resolves it (AC 6, story 1-2).
-	#    LOCAL basis, deliberately not global (DECISION A): the rig is a child of the hero
-	#    root, and the global basis would fold a hero-root rotation into "camera forward".
-	#    Guarded by test/integration/test_root_rotation_isolation.gd.
-	_match_state.set_camera_basis(0, _p1_rig.basis)
-	_match_state.set_camera_basis(1, _p2_rig.basis)
-	#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
-	#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
-	_gather_contact_facts(0, _match_state.p1, _p1_hero)
-	_gather_contact_facts(1, _match_state.p2, _p2_hero)
-	# 3. Advance state (enqueues signals only).
-	_match_state.advance(intents)
-	# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
-	_p1_hero.drive(_match_state.p1.hero, delta)
-	_p2_hero.drive(_match_state.p2.hero, delta)
+	# Story 3-0b (AC 1): steps 2, 3 and 4 — gather, advance, drive — are THE freeze. While paused
+	# nothing gathers, nothing advances, nothing drives; a single step runs this block exactly
+	# once, in the unchanged per-tick order. Contact-fact gathering freezes WITH advance and drive
+	# (not outside them): facts are per-tick observations of the CURRENT arrangement, so
+	# accumulating a whole pause's worth and draining them into one step would corrupt the very
+	# tick being instrumented. The camera-basis push rides inside the gate too — it is a state
+	# write, and pushing it while paused is provably inert (the step tick re-pushes the live basis
+	# before advance() reads it). Camera FOLLOW (step 4b) stays outside: the operator must be able
+	# to look around while paused.
+	if ticking:
+		# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
+		#    global basis). Reading the rig is the runner's ONLY interaction with it; the runner
+		#    never rotates velocity after state resolves it (AC 6, story 1-2).
+		#    LOCAL basis, deliberately not global (DECISION A): the rig is a child of the hero
+		#    root, and the global basis would fold a hero-root rotation into "camera forward".
+		#    Guarded by test/integration/test_root_rotation_isolation.gd.
+		_match_state.set_camera_basis(0, _p1_rig.basis)
+		_match_state.set_camera_basis(1, _p2_rig.basis)
+		#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
+		#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
+		_gather_contact_facts(0, _match_state.p1, _p1_hero)
+		_gather_contact_facts(1, _match_state.p2, _p2_hero)
+		# 3. Advance state (enqueues signals only).
+		_match_state.advance(intents)
+		# 3b. Story 3-0b (AC 2): POLL the read-only debug accessor right after advance() and push
+		#     the plain-integer per-slot window countdown into the instrument panel. Debug
+		#     instrumentation, NOT an eighth observation seam: no signal, no state handle, and
+		#     to_snapshot() is untouched, so the replay contract never learns it exists.
+		_instrument_panel.set_window_countdown(_match_state.debug_window_ticks_remaining())
+		# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
+		_p1_hero.drive(_match_state.p1.hero, delta)
+		_p2_hero.drive(_match_state.p2.hero, delta)
 	# 4b. Split-screen camera follow (story 2-1, ruling 2-1/R1). Copy each hero rig CAMERA's
 	#     framed global transform onto its SubViewport follower camera — AFTER drive() so it
 	#     reflects this tick's move_and_slide. Presentation-only: a deterministic function of

@@ -8,6 +8,11 @@ extends Control
 ## (2-6/R4 — flags stay load-once and runtime-immutable so replay has no silent hole). No
 ## _process / _physics_process (F1); it is driven entirely by the two switches' toggled signals.
 ##
+## Story 3-0b (AC 2) adds a third instrument — the per-slot window countdown — and RE-FITS the
+## box to hold it (see _ready). It is a READ-ONLY display: the runner polls MatchState's
+## read-only debug accessor after each advance() and pushes PLAIN INTEGERS here. No state
+## handle, no signal, no eighth observation seam, no to_snapshot() extension.
+##
 ## Two switches:
 ##   1. Analog magnitude (AC 4, 2-6/R8) — flips GamepadProfile.normalize_move_magnitude on the
 ##      SHARED in-memory resource instance the gamepad controllers already read fresh every tick
@@ -27,6 +32,10 @@ extends Control
 var gamepad_profile: GamepadProfile
 var huds: Array[HudRoot] = []
 
+## Story 3-0b (AC 2): the two per-slot countdown value Labels, index 0 = P1, 1 = P2. Written
+## ONLY by set_window_countdown below, from the runner's polled plain-integer payload.
+var _countdown_values: Array[Label] = []
+
 
 func _init() -> void:
 	name = "DebugInstrumentPanel"
@@ -43,17 +52,23 @@ func _ready() -> void:
 	box.name = "InstrumentBox"
 	# Placement DERIVED from the measured HUD geometry at the shipped 1152x648 (dev record, S1/S2):
 	# the band y[354,452] — between the round-over label (bottom 354) and the vitals bars (top 452)
-	# — is EMPTY across the full window width in both viewports (nothing else spans it). Centre the
-	# 300x89 box there: x[426,726], y[359,448]. Collides with no HudRoot child and neither
-	# StateInspector, and lies fully inside the window. Machine-checked by test_debug_instruments.gd.
+	# — is EMPTY across the full window width in both viewports (nothing else spans it).
+	#
+	# Story 3-0b RE-FIT. The band is 98px tall and the 2-6 box already used 89 of it, so the AC 2
+	# countdown could not be added as two more ROWS (~50px more) without leaving the band and
+	# colliding with the vitals bars. The band is empty across the FULL WIDTH, though, so the
+	# spare room is horizontal: the box goes 300 -> 600 wide and the contents split into two
+	# COLUMNS (switches | countdown), which keeps the content height at the same ~89 and the box
+	# inside the band. New rect: x[276,876], y[356,450] — 2px clear of the band edges on both
+	# sides. Machine-checked (both viewports) by test_debug_instruments.gd.
 	box.anchor_left = 0.5
 	box.anchor_right = 0.5
 	box.anchor_top = 0.5
 	box.anchor_bottom = 0.5
-	box.offset_left = -150.0
-	box.offset_right = 150.0
-	box.offset_top = 35.0
-	box.offset_bottom = 124.0
+	box.offset_left = -300.0
+	box.offset_right = 300.0
+	box.offset_top = 32.0
+	box.offset_bottom = 126.0
 	add_child(box)
 	var column := VBoxContainer.new()
 	column.name = "Instruments"
@@ -63,6 +78,14 @@ func _ready() -> void:
 	title.text = "-- DEBUG INSTRUMENTS --"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
+	var row := HBoxContainer.new()
+	row.name = "InstrumentColumns"
+	row.add_theme_constant_override("separation", 12)
+	column.add_child(row)
+	var switches := VBoxContainer.new()
+	switches.name = "Switches"
+	switches.add_theme_constant_override("separation", 2)
+	row.add_child(switches)
 
 	# Switch 1: analog magnitude. Pressed == normalize (the authored default true), so the button
 	# starts pressed and toggling OFF selects variable magnitude.
@@ -71,7 +94,7 @@ func _ready() -> void:
 	magnitude.text = "Normalize analog magnitude"
 	magnitude.button_pressed = gamepad_profile == null or gamepad_profile.normalize_move_magnitude
 	magnitude.toggled.connect(_on_normalize_toggled)
-	column.add_child(magnitude)
+	switches.add_child(magnitude)
 
 	# Switch 2: Pitch Zone A/B. Pressed == the left-of-bars candidate (B); unpressed == dead-centre
 	# (A, the shipped placement). Starts unpressed so both viewports begin at the current anchor.
@@ -80,7 +103,59 @@ func _ready() -> void:
 	pitch.text = "Pitch Zone: left of bars"
 	pitch.button_pressed = false
 	pitch.toggled.connect(_on_pitch_placement_toggled)
-	column.add_child(pitch)
+	switches.add_child(pitch)
+
+	# Instrument 3 (story 3-0b, AC 2): the per-slot window countdown, one read-only row per slot.
+	_build_window_countdown(row)
+
+
+## AC 2: the countdown column — ONE row per slot, whose Label the runner's polled payload writes
+## into. Two rows and no column caption is a size decision, not a style one: the switch column is
+## two rows tall, so a third row here would make the countdown column the tallest thing in the box
+## and push it out of the empty band (measured: 98px content in a 98px band, zero slack). The
+## caption rides in each row's own prefix instead. Every Label CLIPS rather than wrapping or
+## growing (clip_text), so a long payload can never push the box's minimum size past the
+## re-fitted rect either — which is exactly what the geometry assertion guards.
+func _build_window_countdown(row: HBoxContainer) -> void:
+	var countdown := VBoxContainer.new()
+	countdown.name = "WindowCountdown"
+	countdown.add_theme_constant_override("separation", 2)
+	countdown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(countdown)
+	for slot: int in 2:
+		var line := Label.new()
+		line.name = "Slot%dCountdown" % slot
+		line.text = _countdown_text(slot, "--")
+		line.clip_text = true
+		countdown.add_child(line)
+		_countdown_values.append(line)
+
+
+## AC 2: the runner's per-tick push, called after each advance() with MatchState's read-only
+## debug payload — an Array of per-slot Dictionaries of window name -> remaining TICKS, plain
+## integers only. This panel holds no state handle and never asks state for anything; it is
+## handed values, exactly like every seam-fed consumer. While the match is PAUSED the runner
+## does not tick, so it does not poll, and the last stepped tick's values stay on screen — which
+## is the whole point of pairing this instrument with AC 1's single-step.
+func set_window_countdown(per_slot: Array) -> void:
+	for slot: int in _countdown_values.size():
+		var entry: Dictionary = per_slot[slot] if slot < per_slot.size() else {}
+		_countdown_values[slot].text = _countdown_text(slot, _format_windows(entry))
+
+
+## One row's text, built in ONE place so the built default and every polled update read the same.
+static func _countdown_text(slot: int, windows: String) -> String:
+	return "P%d windows  %s" % [slot + 1, windows]
+
+
+## "windup 7  chain 12" — or "--" when no window is running for that slot.
+static func _format_windows(windows: Dictionary) -> String:
+	if windows.is_empty():
+		return "--"
+	var parts: Array[String] = []
+	for key: StringName in windows:
+		parts.append("%s %d" % [key, int(windows[key])])
+	return "  ".join(parts)
 
 
 ## AC 4: flip the AUTHORED field on the shared in-memory GamepadProfile instance. IN MEMORY ONLY —
