@@ -2107,3 +2107,53 @@ proven at BC/R3 and re-confirmed by SC/R6 and the 3-0b gate.
 **Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
 immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev
 pass next. Docs-only pass -- no suite run, no code touched.
+
+## Session 2026-08-02 -- 3-1 close-out
+
+Continues this story's readiness-gate numbering with rulings 3-1/R6..R9, recorded after the dev
+pass (2.8, Claude Opus 4.8) landed and the commit chain (Claude Sonnet 5) verified and shipped it.
+
+**3-1/R6 -- AC5 PROVABILITY, and a PERMANENT addendum to the 3-0b/R34 blind-spot family.** AC5's
+mutation clause originally claimed all three re-anchored inertness tests were mutation-proven
+against each of the guards they touch. Measured this session: only the NEW `_check_resolution()`
+guard is value-provable by those tests -- deleting it fails all three, because a stat-less 0-hp
+hero ends the round on tick 1. The two PRE-EXISTING `balance_ticks == null` guards (step 3's
+action-resolution gate, step 5's regen gate) are CRASH-guards, not value-guards: GDScript's
+null-dereference semantic aborts only the function it occurs in, and the caller resumes on the
+next line with exit code 0 and byte-identical state, so removing either guard is invisible to any
+value assertion the suite can make. This was equally true before this story -- it is not a
+regression 3-1 introduces -- and AC5 is amended in the story file to match the delivered software
+rather than overclaim it (`docs(3-1)` commit, this chain). Recorded here as a PERMANENT addendum
+to 3-0b/R34: the suite is blind not only to runtime composition it never asserts, but also to
+guard-removals that degrade into an intra-function abort with an identical end state. Zero
+`SCRIPT ERROR` lines in the harness's own output is currently the ONLY detector for this class, and
+it is informal -- nothing fails the suite if a `SCRIPT ERROR` appears. OPEN, no owner: make the
+harness FAIL on `SCRIPT ERROR` lines in its own output; ownership decided at the E3 retrospective.
+
+**3-1/R7 -- `mana_regen_per_second` stays AUDITED > 0.** The 3-1/R1 funding criterion (~2-4
+buildup->bluff->payoff cycles per round) explicitly counts the passive faucet (~22 mana over 90 s
+at 0.25/s) as part of the arithmetic it was chosen against, so a silently zeroed passive would
+break the criterion the values were authored to satisfy without any test noticing. Confirmed: this
+field belongs in the audited-positive class alongside `stamina_regen_per_second`, not the exempt
+class. A future tuning pass that deliberately wants a melee-only economy LIFTS this exemption the
+way 1-8 lifted the `deflect_stamina_cost` exemption (R-N6) -- deliberately, with the reason recorded
+at the point it happens, not silently.
+
+**3-1/R8 -- class-cache hand-edit, sanctioned retroactively.** `MatchParams` was registered by hand
+in `.godot/global_script_class_cache.cfg` during the dev pass rather than by opening the editor
+mid-pass. That file is git-ignored, the hand-edit was disclosed in the dev pass record, and the
+editor was never opened during the pass itself. This chain's own Phase 1 editor scan (the one
+sanctioned editor invocation) generated `src/state/match_params.gd.uid` with `project.godot`
+SHA256-identical before and after the scan
+(`31033A50137C98DCB740B051B74EA0EBA99AA92DC993CA075BF8E466B71BCB1F`, measured both sides, this
+chain) and produced exactly one new file beyond the dev-pass surface -- no other collateral. The
+hand-edit is sanctioned on that basis.
+
+**3-1/R9 -- surface honesty, confirmed.** File List is the story's named 13 plus 2:
+`test/integration/test_hero_movement.gd` (a comment-only fix citing the deleted
+`match_runner._MOVE_SPEED`) and `test/state/test_economy_and_hero.gd` (because `PlayerState` is
+also constructed stat-less -- one production caller, `MatchState`, with the leaf-object
+constructors, `HeroState`/`StaminaPool`/`ManaPool`, left untouched -- accepted at review as ruling
+D4). `MatchState.new`'s fan-out was sized correctly at the readiness gate: 1 `src/` call site
+(`match_runner.gd:77`) plus 25 test call sites across 13 files, confirmed unchanged by this pass's
+own file list.
