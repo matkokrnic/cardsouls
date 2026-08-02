@@ -58,22 +58,47 @@ func _ready() -> void:
 ## Seam callback (connect_hero_action_state_changed): the entered state selects its clip.
 ## IDLE defers run/idle to the per-tick locomotion push; ATTACKING/BLOCKING/ROLLING/DEAD play
 ## at once (winning any in-flight clip); unmapped states (STUNNED/CHARGING) hold the pose.
+##
+## A TRANSITION ALWAYS RESTARTS ITS CLIP (3-0b Pass 3b). The seam fires once per transition,
+## and a chained swing is a SELF-transition: HeroState.chain_attack() explicitly re-emits
+## ATTACKING -> ATTACKING for exactly this reason (state-side, pinned by
+## test_action_state.gd's queued-signal sequence). Selecting by name alone therefore loses
+## every chained swing — the name is already `attack`, so the second and third swings of a
+## three-swing chain would inherit whatever is left of the first swing's clip instead of
+## playing their own. That is why this path calls _restart(), never _play(): restarting is
+## what the 3-0a clip policy already says a transition does ("a transition arriving mid-clip
+## wins immediately with NO blending"), and a same-state transition is still a transition.
 func on_action_state_changed(_previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
 	_state = current
 	var clip: StringName = _CLIP.get(current, &"")
 	if clip != &"":
-		_play(clip)
+		_restart(clip)
 
 
 ## Pushed every tick from HeroActor.drive() (gate ruling 3-0a/R2): while the hero is IDLE, the
 ## velocity magnitude picks run vs idle. Ignored in every other state — attack/block/roll/death
 ## own the body while they persist, so residual velocity never overrides them.
+##
+## This path is POLLED, not evented, so it uses the idempotent _play(): re-selecting the clip
+## already playing must be a no-op or `run` would restart from frame 0 on every single tick
+## and never visibly animate. The two paths are deliberately NOT the same call.
 func on_locomotion(speed: float) -> void:
 	if _state != HeroState.ActionState.IDLE:
 		return
 	_play(&"run" if speed > RUN_SPEED_EPS else &"idle")
 
 
+## Idempotent selection for the polled locomotion push: switch only on an actual change.
 func _play(clip: StringName) -> void:
 	if animation_player.current_animation != clip:
 		animation_player.play(clip)
+
+
+## Unconditional restart for the evented transition path. The seek() is LOAD-BEARING and not
+## belt-and-braces: AnimationPlayer.play(name) is a no-op on playback position when `name` is
+## already the current, still-playing animation (measured on Godot 4.6.3 — play, advance to
+## 0.30, play again, position is still 0.30). Dropping the seek would silently reinstate the
+## chained-swing defect for every chain pressed before the previous clip ends.
+func _restart(clip: StringName) -> void:
+	animation_player.play(clip)
+	animation_player.seek(0.0, true)
