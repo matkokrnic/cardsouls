@@ -1847,3 +1847,126 @@ general: any future presentation seam with a runtime SELECTION or PLACEMENT deci
 needs its own test asking "what actually happened at runtime", not only tests of the data
 it was authored from -- a green suite is not evidence that a seam's consumer is doing
 anything with what it receives.
+
+## Session 2026-08-02 -- Story 3-0b Pass 4 (close-out)
+
+Pass 4 delivers the four ACs left after Pass 3b (8, 11, 12, 13), closing every acceptance
+criterion in the story. Both remaining verdicts are "keep" and AC8 mandates no `.tres`
+edit, so no `src/state/` change lands this pass -- golden untouched. Full suite re-run
+before this commit chain and again after the AC12 data edit: 188 state tests / 874
+assertions / 0 failed, 14 integration files individually green, golden
+`96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b` unmoved.
+
+**3-0b/R35 -- AC8 VERDICT: NO CHANGE, closing DEBT E member 1.** No `.tres` edits, no
+retime, therefore no golden question. The operator's Pass-1-era tempo observation ("the
+attack is too fast but does not feel fast because the animation is too slow; the roll
+feels too slow") is resolved by Pass 3's AC3 retime on its own merits -- the attack clip no
+longer lags the authored window, so the attack now FEELS as fast as it already was. This
+also answers the second of the "TWO NAMED INPUTS to AC8" recorded at Pass 3: the operator
+judged hit registration to coincide with the sword's visual arrival, so the measured 55.5%
+impact-peak offset (one to two ticks after the active window closes) is not visible in
+play, and the piecewise per-phase retime that would close that gap is deliberately NOT
+built. A verdict on the input, not an omission -- the finer instrument (`tools/
+retime_clips.gd` does not do piecewise retiming today) stays on the shelf until a future
+pass's playtest evidence actually calls for it.
+
+**3-0b/R36 -- AC11 PASSED, both runs, every trial correct -- and the occlusion question it
+resolves rather than assumes.** The primary run (shape and sting judged TOGETHER, unmuted,
+half viewport, per `docs/legibility-protocol.md`) and the separate audio discrimination
+pass (S8, observer facing away from the screen, sting alone) both passed with a genuine
+naive observer, every trial correctly identified. This settles the question Pass 3b
+explicitly deferred (3-0b/R29-R30): grounding the paladin model left the `AttackCone` and
+`BlockShield` partly occluding the head/shoulders, an accepted cost at the time, ruled on
+by AC11 rather than assumed away. The occlusion does NOT harm legibility -- observed, not
+inferred -- so the telegraph anchors do not move. AC9/AC11 ordering (locked at the
+readiness gate) was respected: the sting-distinctness pass (Pass 3) landed before this run.
+
+**3-0b/R37 -- AC12 VERDICT: KEEP `normalize_move_magnitude = true`.** Deciding reason,
+code-checkable and requiring no pad session: there is exactly one locomotion clip (`run`),
+no walk clip and no blend space, and the minimum above-deadzone analog speed is 1.0 u/s
+against a clip-selection threshold of 0.1 -- so with normalization off, a lightly deflected
+stick would walk at speed 1.0 while the legs play the full-speed `run` clip authored for
+5.0, foot-sliding across the entire lower half of the analog range with no threshold value
+able to fix it. The verdict reopens if and when a walk clip or blend space exists. The
+pad A/B session named in the story's Dev Notes was deliberately skipped -- the deciding
+argument is code-checkable and confirming the shipped default costs no change. Landed as
+`chore(data)`: the field is now authored explicitly in `data/gamepad_profile.tres` rather
+than inheriting the script default silently.
+
+**3-0b/R38 -- AC13 VERDICT: leave the collision box at height 2.0.** A remeasurement DID
+run this pass -- Pass 4A CPU-skinned every vertex of every skinned surface (9835 vertices,
+4 surfaces, 69 bones) in hero-root space and cross-checked the result two independent ways
+(mesh-AABB against live node transforms, and the bone-origin Y span). Result: 1.7255 at
+rest. Per clip: idle 1.6319, run 1.6151, attack 1.7942, block 1.4269, roll 1.9887, death
+1.6563. The "~1.725" figure struck at the readiness gate (3-0b/R8) as unverified turns out
+to have been correct; 3-0a's "~1.8" import-check value was the loose one.
+
+The reason to keep 2.0 is not merely that the box is larger than the model. At Pass 4A the
+box was correct but the model was misplaced -- floating 1.0 above the box floor -- and
+resizing the box then would have tightened it around a model that was not where it
+belonged, making things worse. Pass 3b fixed the placement instead. With grounding
+delivered, the model now spans hero-root y [-1.0, +0.7255] inside a box spanning [-1, +1]:
+the box floor sits exactly at the feet, with 0.2745 of headroom above the model, and the
+attack clip's peak (1.7942 above the feet, i.e. +0.7942) still fits inside. 2.0 is the
+correct height for the alignment that now exists, not a slack value tolerated.
+
+A resize would still cost the same collateral as before: first splitting the shared
+`BoxShape3D_qp0e8` sub-resource into separate `Collision`/`HurtboxShape` shapes (AC13's own
+precondition, so a body-height change cannot silently move the hurtbox volume
+`_gather_contact_facts` reads). Not worth the collateral for a cosmetic-only gain. Hurtbox
+geometry is untouched, as it must be under all circumstances.
+
+**Flagged observation, unverified, NOT a ruling:** the roll clip's measured minimum is
+0.3404 below the rest feet plane, so after grounding the model may dip below the ground
+plane mid-roll. This was measured before grounding landed and has not been checked by eye
+since. Recorded for a future pass or live session to confirm or dismiss -- owned by nobody
+yet.
+
+**3-0b/R39 -- FOUR NAMED DEFERRALS, each given an owner so they are debts with an
+address.** (a) the attack may be a touch too fast; (b) the roll may want to be slightly
+slower; (c) the i-frames may want to run slightly longer; (d) the attack and the roll
+should not cost the same stamina. All four are owned by a later tuning pass, once the full
+gameplay loop exists to tune feel against -- the operator's stated priority is reaching
+that loop first, not micro-tuning combat feel in isolation from the system it will
+eventually sit inside (cards, mana, the rest of E3).
+
+**3-0b/R40 -- live-smoke status, recorded per the TRUTHFULNESS RULE, no softening either
+direction.** The Pass 4 `docs/playtest-log.md` entry (dated 2.8., six numbered
+observations plus a sound-telegraph note) reads as a SOLO feel-judgment session -- the
+operator judging attack speed, roll reaction timing, presence of all three animations,
+hit-registration timing against the sword's arrival, i-frame duration, and invulnerability
+feel, by eye, alone. Nothing in the entry places a second human on the other slot, and
+nothing in it evidences either side being killed. It therefore does NOT evidence a
+two-human match on the shipped default with both sides killable, and AC11's naive-observer
+session (an observer WATCHING) is explicitly not read as satisfying it either -- watching
+is not playing. **R-D6 is NOT re-invoked by 3-0b.** It remains AVAILABLE, last spent at
+3-0a/R15 (the fifth two-human smoke), carried forward to the next story that ships
+player-facing behaviour. This does not block the story's close-out -- only the record.
+
+## Session 2026-08-02 -- Story 3-0b close-out
+
+**What landed (f61ca54 chore(data) / 9959bd0 docs(playtest-log) / 4a6a6a4 docs(stories)
+board+status; this decision-log commit itself carries the Pass 4 rulings above and this
+close-out session).** All thirteen acceptance criteria delivered across four passes plus
+one corrective pass. Pass 1 (3-0b/R10 onward) shipped deterministic step/pause and the
+per-slot debug window countdown. Pass 2 (3-0b/R18 onward) replaced the flat attack-move
+multiplier with three per-phase fields and added a state-side additive attack lunge,
+re-baselining the golden once with both causes measured and named separately. Pass 3
+(3-0b/R23 onward) reconciled the attack and roll clips to their authored tick windows,
+fixed the roll's lateral Hips excursion, ruled to KEEP the block clip's instant pop, made
+the attack and block stings audibly distinct, and explicitly retired `pose_id`. Pass 3b
+(3-0b/R29 onward), an unplanned corrective pass, closed the vertical half of the roll fix
+that Pass 3 had only half-delivered (the model floating a full unit above the box floor)
+and fixed an unrelated chain-retrigger defect predating 3-0a, exposing and partly closing a
+standing suite blind spot (authored data at rest vs. runtime composition) along the way.
+Pass 4 (3-0b/R35 onward, this session) closed the remaining four judgment calls -- AC8 NO
+CHANGE, AC11 PASSED, AC12 KEEP, AC13 leave as-is -- named four deferrals with an owner, and
+recorded the live-smoke status truthfully rather than as hoped. Final state: golden
+re-baselined exactly once across the whole story (`7fbb4b7f...` -> `96ac5f64...`); suite 188
+state tests / 874 assertions / 0 failed, 14 integration files individually green
+(`test_step_pause.gd`, `test_clip_timing.gd`, `test_vertical_alignment.gd`,
+`test_chain_retrigger.gd` added across the five passes, several mutation-proven); R-D6
+live-smoke acceptance NOT re-invoked, remains available. What E3 inherits: a melee loop
+whose timing, movement, and legibility have been judged and tuned against the real rig,
+with every DEBT E member and every 3-0a live-smoke finding closed, and four named,
+owned tuning deferrals waiting on the full gameplay loop rather than blocking it.
