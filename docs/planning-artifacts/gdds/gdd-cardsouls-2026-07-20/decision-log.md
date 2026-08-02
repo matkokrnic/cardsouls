@@ -1584,3 +1584,19 @@ by re-fitting the box horizontally instead of vertically: 300 -> 600 wide, conte
 columns (switches | countdown), keeping content height at the original ~89px inside the same band.
 Recorded because a guard that never fails invites the assumption it is decorative; this one caught
 a real regression during this story's own implementation.
+
+**3-0b/R17 -- architecture amendment queue grows by one, the pre-existing items carried
+forward.** The queue was last flushed at E2-CO/R1 (commit `f80f90e`) and has not been re-flushed
+since; it grew by two at 3-0a/R10 (the `assets/` Directory Tree gap, carried forward again here,
+plus the import-post-processing pattern and the new `assets/`-artifact-type finding, both still
+unflushed). It gains a THIRD member from this Pass 1 session:
+  3. **A non-`Controller` class under `src/controllers/`** -- `src/controllers/debug_input_reader.gd`
+     (`DebugInputReader`), sanctioned at the 3-0b readiness gate (3-0b/R3) and now BUILT (3-0b/R13,
+     above): it does not implement `sample()` and does not return an `InputIntent`, unlike every
+     other member of that folder (`KeyboardController`, `GamepadController`, `NullController`, all
+     `Controller`s implementing `sample()`). `docs/game-architecture.md`'s `### Directory Tree` and
+     `### D3 -- Controller Abstraction` sections both describe that folder as `Controller`-only; that
+     description is now stale.
+  Queued; NOT edited into `docs/game-architecture.md` this session (this commit is queue bookkeeping
+  only, no architecture-doc-body edit). Forcing point: the next architecture amendment queue flush
+  (pattern: E2-CO/R1).
