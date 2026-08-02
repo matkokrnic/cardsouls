@@ -1,6 +1,6 @@
 # Story 3.1: `MatchState` config object + mana balance set
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** The E3 revisit gate has RUN (2026-07-31, decision-log Session 2026-07-31 — E3
 > revisit gate (outcome), rulings E3-RG/R1..R12); this story was amended per that outcome in commit
