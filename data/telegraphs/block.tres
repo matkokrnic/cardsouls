@@ -7,4 +7,3 @@ script = ExtResource("1_tgpro")
 shape_id = &"BlockShield"
 sting_id = &"StingBlock"
 color = Color(0.2, 0.45, 0.95, 1)
-pose_id = &"PoseBlock"
