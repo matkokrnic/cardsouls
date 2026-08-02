@@ -1970,3 +1970,140 @@ live-smoke acceptance NOT re-invoked, remains available. What E3 inherits: a mel
 whose timing, movement, and legibility have been judged and tuned against the real rig,
 with every DEBT E member and every 3-0a live-smoke finding closed, and four named,
 owned tuning deferrals waiting on the full gameplay loop rather than blocking it.
+
+---
+
+## Session 2026-08-02 -- Story 3-1 readiness gate (operator decisions)
+
+Readiness gate on `3-1-matchstate-config-object.md` (2.8, report-only, run against `8ba69b4`)
+returned **NOT READY** on first read: seven blocking findings (B1-B7), eight notes (N1-N8), four
+questions (Q1-Q4). This is the same first-pass verdict every Set B story's gate has returned --
+all thirteen logged Set B gates return NOT READY at first read and are fixed and promoted within
+the same session (recounted at the E3 revisit gate, above) -- and this gate is no exception in
+either direction: fixed and promoted the same session, story Status and board `backlog ->
+ready-for-dev`.
+
+**What the gate found, in substance.** (B1) The Golden Prediction named baseline `33817201...`,
+which predates TWO re-baselines -- the stamina-cost corrective pass and 3-0b Pass 2 -- so the
+section's own anchor was dead text; it also predicted NONE without naming what the prediction was
+conditional on, which is the one thing that makes a NONE prediction checkable. (B2) The ACs mixed
+rationale into the contract, so several were not verifiable claims about shipped software.
+(B3) AC2's field list was written before the consuming stories existed and committed 3-1 to
+authoring five card/deck numbers nothing could yet be tuned against. (B4) AC3's tick-conversion
+clause presupposed at least one new `*_seconds` field, which the scope strip removes entirely.
+(B5) The BC/R2 reconciliation -- the melee damage halving having doubled mana per point of damage
+-- was named in the E3 revisit gate but nowhere in the story, so the dev pass could have authored
+the new cap without re-basing the per-hit value against it. (B6) Citations were stale: the story
+pointed at `match_state.gd:539-545` for `_apply_balance_to_player` (now `:670-676`) and at
+`balance_config.gd:44` / `.tres:21` for `melee_hit_mana` (now `:69` / `:25`) -- remembered line
+numbers, not content. (B7) No pre-injection contract existed at all: with the constructor's stat
+floats removed, a `MatchState` built without `apply_balance` becomes stat-less as well as inert,
+and nothing in the story said what that state must be or which tests pin it.
+
+**Notes recorded (N1-N8), the load-bearing ones.** N1: the story described the call-site fan-out
+as "the small number of existing call sites"; grep-verified this session it is ONE `src/` call
+site (`match_runner.gd:77`) plus 25 test call sites across 13 files, and the honest number belongs
+in the story. N2/N3: the Dev Notes carried a stale complaint that `epics.md:96-97` still framed the
+attack stamina cost as a possible 3-1 seat -- that text was SWEPT in the E3 revisit-gate amendment
+commit `10b96a1`, and `epics.md:96-99` now reads correctly (decision (d) RESOLVED at DP/R2; the
+value and its golden re-baseline explicitly not a 3-1 seat), so the note's evidence was corrected
+rather than the disclaimer dropped. N4: the story still carried the verbatim E3 revisit-gate banner
+telling the reader the gate had not run -- replaced with a scope note stating that it ran (31.7,
+E3-RG/R1..R12), that DP/R3 waived the separate external playtest, and that this story then passed
+its own gate. N5: the test-surface work (`E1_BALANCE_FIELDS`, the authoring audit, the determinism
+fixture) was implied but never made an acceptance criterion. N7: `mana_regen_per_second` is an
+authoring-unit field only in this story -- the derived `mana_regen_per_tick` seat on `BalanceTicks`
+and the `advance()` ladder seat belong to 3-4 (E3-RG/R8), and no `BalanceTicks` field may land here.
+
+**Q1 -- SCOPE STRIP, ruled.** `hand_size`, `deck_size`, `draw_replacement_delay_seconds`,
+`reshuffle_vulnerable_window_seconds`, and `default_copies_per_card` are REMOVED from 3-1; each is
+added just-in-time by its consuming story (3-2/3-3), where its value can be authored against
+something real rather than guessed a story early. Two riders recorded:
+`reshuffle_vulnerable_window_seconds` additionally PRICES OPEN decision (b), which is undecided --
+it is authored nowhere until (b) is ruled, and (b) keeps its existing forcing point; and
+`default_copies_per_card` is likely per-card data rather than a `BalanceConfig` field, which 3-2
+judges. Consequence: 3-1 adds exactly TWO new `BalanceConfig` fields, neither a `*_seconds` field,
+so no new tick conversion lands in this story at all (which resolves B4).
+
+**Q2 -- resolved by Q1.** The question of how `reshuffle_vulnerable_window_seconds` should be
+authored while OPEN decision (b) is undecided disappears with the field: it is not authored
+anywhere in 3-1, and decision (b) stays open at its existing forcing point.
+
+**Q3 -- R-D6 does not attach.** 3-1 ships no player-facing code path, so the two-human live-smoke
+acceptance is not invoked by this story; it stays AVAILABLE (last spent at 3-0a/R15) for the next
+story that ships player-facing behaviour. Recorded with the observation that makes it checkable:
+the mana rescale keeps per-hit bar fill IDENTICAL -- `8/80 == 1/10 == 10%` of the bar -- and the
+passive regen value has no consumer until 3-4, so nothing visibly changes until 3-4, whose smoke IS
+required and is the first live observation of the new scale.
+
+**Q4 -- confirmed.** `BalanceConfig` wins as the single source of truth for all four tunables
+(`max_hp`, `move_speed`, `max_stamina`, `max_mana`); the constructor stops carrying them and the
+runner's four tunable constants are deleted. The seed goes to a match-scoped `MatchParams` object
+injected once at construction and never re-applied by `apply_balance()` (E3-RG/R9, locked) --
+`_SEED` survives in the runner only as that object's source.
+
+**3-1/R1 -- THE MANA SET, Matko's design call: `max_mana = 10.0`, `melee_hit_mana = 1.0`,
+`mana_regen_per_second = 0.25`.** Authored together as one coherent set per E3-RG/R1, against the
+GDD's canonical scale (~10 max, ~1/sec adjusted to card costs) and its worked card costs, 3 (Imp
+Summoner, Basic) and 5 (Hellburst, Pitch). The criterion is recorded with the numbers so a later
+tuning pass can check the same thing: one round of the GDD's stated length (~60-120 s of active
+play) funds ~2-4 buildup->bluff->payoff cycles. Arithmetic for this set: passive 0.25/s is ~22 mana
+over 90 s, melee income at 1.0 per confirmed hit adds the rest, which funds 3-5 cycles at 6-10 mana
+per cycle -- slightly hot, inside the criterion, and cheaply retunable as a `chore(balance)` edit
+that cannot move the golden. `melee_hit_mana` is RE-AUTHORED, not added: it is an existing shipped
+field (`balance_config.gd:69`, `.tres:25`), and a second field of the same meaning would author a
+duplicate. This also discharges BC/R2: the damage halving (6 -> 3) left `melee_hit_mana` at 8.0 and
+so doubled mana per point of damage (8/6 ~= 1.33 -> 8/3 ~= 2.67); the new set re-bases both
+together at 1.0 mana per hit against damage 3 (~0.33 per hit-point, 10% of the 10-mana bar). The
+shipped 80 cap and 8.0 per-hit value are PLACEHOLDERS REPLACED here, not values to carry across.
+
+**3-1/R2 -- THE PER-POOL RELOAD CONTRACT, Matko's design call.** On `apply_balance()` mid-match the
+three pools are deliberately NOT symmetric. Stamina: `set_maximum` + `refill`, D9 unchanged, and
+`test_mid_match_reload_refills_stamina_to_max` survives untouched. Mana: `set_maximum` ONLY --
+current clamped to the new maximum, NEVER refilled, because `ManaPool`'s own contract is that mana
+starts empty and is built by the flywheel (`mana_pool.gd:4-5`), and a reload-refill would hand a
+free full bar mid-match. That never-refill rule is pinned by a NEW test that must be
+mutation-proven to fail if a refill is added. HP: current preserved and clamped to the new maximum,
+never refilled -- exactly what ships today. Match start yields full hp, full stamina, empty mana.
+In-flight timing windows survive a reload (existing test untouched), and the hot-reload path stays
+TEST-ONLY: DEBT B is untouched and no live mid-match reload trigger is introduced.
+
+**3-1/R3 -- THE PRE-INJECTION CONTRACT (gate ruling, answering B7).** A `MatchState` constructed
+without `apply_balance()` is inert AND stat-less: no stamina regen, no contact resolution, no round
+end -- `_check_resolution()` joins the `balance_ticks == null` gated family it is currently outside
+of. The three inertness tests (`test_action_state.gd::test_null_balance_ticks_guard_actions_inert`,
+`test_stamina_economy.gd::test_no_regen_without_apply_balance`,
+`test_contact_resolution.gd::test_contacts_inert_without_apply_balance`) currently assert
+constructor-supplied fixed values (100.0 / 30.0) and are re-anchored to "unchanged from
+construction," each mutation-proven to fail without the guard it pins.
+
+**3-1/R4 -- THE `set_max_hp` FINDING, verified at this gate by code read, and what it forces.**
+`HeroState._init(queue, max_hp, move_speed_value)` sets BOTH `_max_hp` and `_hp = max_hp`, so "full
+hp at match start" comes from the CONSTRUCTOR today, not from `apply_balance()`.
+`set_max_hp(maximum)` (`hero_state.gd:176-178`) sets `_max_hp` and then calls `_set_hp(_hp)`, which
+CLAMPS the current value into `[0, new max]` and never raises it. One uniform `apply_balance` rule
+therefore cannot produce both required outcomes: once the constructor stops carrying `max_hp`, a
+stat-less hero sits at `_hp = 0.0` and `set_max_hp(100.0)` leaves it there -- a hero that starts the
+match dead. Ruling: the story flags an explicit FIRST-INJECTION initialization as a dev-pass task,
+with the outcomes of 3-1/R2 as its contract and the mechanism left to the dev pass. This is also the
+independent reason `_check_resolution()` must be guarded (3-1/R3): unguarded, a 0-hp pre-injection
+hero would end the round on the first tick.
+
+**3-1/R5 -- GOLDEN PREDICTION re-derived (gate ruling, answering B1).** Baseline corrected to the
+current `96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b`. Prediction: NONE,
+conditional on two NAMED things, both measured rather than assumed. (1) `_golden_config()` must
+author `max_mana = 90.0` exactly -- the value of the fixture's current in-test `MAX_MANA` constant;
+any other value moves the hash, because `ManaPool.to_snapshot()` emits `{current, maximum}`. (2) The
+double-injection reconciliation must change no value the golden run receives -- a field-by-field
+diff of the golden's constructor constants against `_golden_config()`'s authored values, done BEFORE
+implementing; expected a no-op, measured not assumed. A third candidate cause, a mana refill on
+`apply_balance()`, is ELIMINATED by 3-1/R2's never-refill ruling. The fixture edit at the golden
+test's `MatchState.new` call site is FORCED by AC1 regardless of the hash. Discipline unchanged:
+measure in both directions, and any movement is stop-isolate-report, never a silent re-baseline (the
+1-5 cause-(c) lesson). The authored `.tres` values (10.0 / 1.0 / 0.25) cannot move the golden --
+`_golden_config()` builds its fixture in-test and never loads `data/balance/balance_config.tres`,
+proven at BC/R3 and re-confirmed by SC/R6 and the 3-0b gate.
+
+**Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
+immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev
+pass next. Docs-only pass -- no suite run, no code touched.
