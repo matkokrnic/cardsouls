@@ -5,6 +5,37 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by STORY 3-4 (mana economy and the melee->mana flywheel), ONE re-baseline,
+## ONE named cause — predicted in the story's Golden Prediction and confirmed in BOTH
+## directions by THREE measurements taken in order:
+##   1. THE EVALUATOR SWAP ALONE (AC2's proof artifact) — PREDICTED UNMOVED, MEASURED
+##      UNMOVED. MatchState._generate_mana's direct `balance.melee_hit_mana` grant is DELETED
+##      and replaced by an EconomyEvaluator lookup over an authored `melee_hit` rule that
+##      names that same field, with the melee_mana_generation flag moved onto the rule as
+##      data (`required_flag`). Both authored `.tres` rules were present for this
+##      measurement, so the rule files' mere existence is measured hash-neutral too. Hash
+##      after this step: 96ac5f64... — bit-identical to the pre-story value, which is what
+##      makes the refactor provably behaviour-preserving on the melee case.
+##   2. THE PASSIVE RUNG ITSELF (BalanceTicks.mana_regen_per_tick + ManaPool.advance_regen +
+##      the step-5 seat) — MEASURED UNMOVED, still 96ac5f64... This isolates the SEAT from
+##      the AUTHORED COVERAGE VALUE, the same way the 3-0b and stamina-cost passes did: with
+##      _golden_config's mana_regen_per_second still defaulting to 0.0 the rung adds 0.0 per
+##      tick and ManaPool.add(0.0) is a no-op. Confirms a BalanceTicks seat is structurally
+##      incapable of moving the hash on its own (it is load-time config, never snapshotted).
+##   3. THE FIXTURE COVERAGE VALUE (a mover — the ONE named cause): _golden_config now
+##      authors mana_regen_per_second 75.0 = 1.25 per tick, which activates the passive rung
+##      inside the hashed run. Both heroes accumulate 24 x 1.25 = 30.0 on top of their one
+##      confirmed hit's 12.0, so both end t24 at 42.0 mana instead of 12.0 — visible in the
+##      final snapshot because mana has no sink in E1 and the value is left UNCLAMPED under
+##      the 90.0 cap. Guarded by test_golden_sequence_exercises_passive_mana_regen below.
+## NOT a cause: snapshot SHAPE is untouched — the passive faucet has NO delay window (sealed
+## decision, AC4), so unlike StaminaPool the mana pool gains no TimingWindow and
+## ManaPool.to_snapshot() still emits exactly {current, maximum}. Nor is the rule set: the
+## authored `.tres` carry no gameplay numbers (only which balance field each faucet reads),
+## so the BC/R3 property that authored tuning cannot move this hash survives intact.
+## Previous golden 96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b
+## (story 3-0b Pass 2, below; held unchanged through 3-1).
+##
 ## Re-baselined by STORY 3-0b PASS 2 (AC5 per-phase movement multipliers + AC6 attack
 ## lunge), ONE re-baseline, TWO predicted causes — one moved, one measured non-moving,
 ## exactly the fork the story's Golden Prediction section recorded in advance:
@@ -97,13 +128,16 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b"
+const GOLDEN := "98d0c7ebfdbe01a97622b185a7e3388428793cc87e323751c2ffb5b6f58f81ff"
 
 const SEED := 1337
 const MAX_HP := 120.0
 const MOVE_SPEED := 6.0
 const MAX_STAMINA := 40.0
 const MAX_MANA := 90.0
+## Story 3-4 (AC 7): the passive faucet's fixture COVERAGE rate, expressed per tick because
+## that is the form the ladder consumes. 75.0 per second / 60 Hz = 1.25 — see _golden_config.
+const PASSIVE_PER_TICK := 1.25
 
 ## Movement pairs [p1, p2], cycled over the run (tick t uses MOVES[(t - 1) % 6]).
 const MOVES := [
@@ -219,6 +253,19 @@ func _golden_config() -> BalanceConfig:
 	# here would move the golden. The GOLDEN PREDICTION IS NONE and this line is why.
 	c.max_mana = MAX_MANA
 	c.melee_hit_mana = 12.0
+	# Story 3-4 (AC 7) — THE named cause of this story's re-baseline, and the one line that
+	# makes the passive rung visible to the hash at all. Coverage-not-feel like every value
+	# here: 75.0/s = 1.25 per tick is NOT the authored 0.25/s, and it is deliberately
+	# DISTINCT from this fixture's stamina rate (60.0/s = 1.0 per tick) so a selector bug
+	# that read stamina_regen_per_tick for the passive rule would land on a different value
+	# and move the hash rather than silently coinciding. Chosen to stay clear of the 90.0
+	# cap over 24 ticks (30.0 accrued, plus one 12.0 hit = 42.0 at t24 — accumulating and
+	# UNCLAMPED on the record, so the hash encodes the accumulation itself), and exactly
+	# representable in binary so every expected value below is an exact equality.
+	# Without this line the rung is hash-NEUTRAL: _golden_config builds its fixture in-test
+	# and never loads data/balance/balance_config.tres, so the field would default to 0.0
+	# and the passive tick would add nothing (measured — see the re-baseline record above).
+	c.mana_regen_per_second = 75.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	# Defense values (story 1-8), coverage-not-feel: multiplier 0.25 makes the t13
 	# blocked hit chip exactly 3.0 (117 non-full at t24); deflect cost 20 leaves P2
@@ -321,14 +368,18 @@ func test_golden_sequence_exercises_block_and_deflect() -> void:
 		mana_readings.append(ms.p1.mana.get_current())
 		p2_stamina_readings.append(ms.p2.stamina.get_current()))
 	assert_eq(hp_readings[4 - 1], 120.0, "t4: fact not yet fed — P2 at full HP")
-	assert_eq(mana_readings[4 - 1], 0.0, "t4: P1 mana still empty (flywheel starts empty)")
+	assert_eq(mana_readings[4 - 1], 4 * PASSIVE_PER_TICK,
+		"t4: P1 has earned the PASSIVE faucet and nothing else — no hit has been confirmed")
 	assert_eq(hp_readings[5 - 1], 120.0, "t5: DEFLECT on the grace tick — fully negated, no damage")
-	assert_eq(mana_readings[5 - 1], 0.0, "t5: a deflected contact generates NO mana (R-D4)")
+	assert_eq(mana_readings[5 - 1], 5 * PASSIVE_PER_TICK,
+		"t5: a deflected contact generates NO MELEE mana (R-D4) — the passive faucet is untouched by it")
 	assert_eq(p2_stamina_readings[5 - 1], 20.0, "t5: deflect cost 20 paid AT LANDING (40 -> 20)")
 	assert_eq(hp_readings[13 - 1], 117.0, "t13: ordinary BLOCK — 12.0 chip x 0.25 = 3.0")
-	assert_eq(mana_readings[13 - 1], 12.0, "t13: a blocked hit is CONFIRMED — full flat mana")
+	assert_eq(mana_readings[13 - 1], 12.0 + 13 * PASSIVE_PER_TICK,
+		"t13: a blocked hit is CONFIRMED — full flat mana ON TOP of 13 passive ticks")
 	assert_eq(hp_readings[TICKS - 1], 117.0, "t24: NON-FULL HP on record (no HP regen exists)")
-	assert_eq(mana_readings[TICKS - 1], 12.0, "t24: NON-ZERO mana on record (no E1 mana sink)")
+	assert_eq(mana_readings[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK,
+		"t24: NON-ZERO mana on record (no E1 mana sink) — one hit plus the passive accumulation")
 	assert_eq(p2_stamina_readings[TICKS - 1], 21.0,
 		"t24: P2 MID-REGEN — 20, then its t15 attack spends 6 (E3-RG/R2) and restarts the "
 		+ "delay (t15-t17), regen t18-t24 -> 21; the hash encodes both spends and the regen")
@@ -352,11 +403,14 @@ func test_golden_sequence_exercises_iframe_negation() -> void:
 		p1_hp.append(ms.p1.hero.get_hp())
 		p2_mana.append(ms.p2.mana.get_current()))
 	assert_eq(p1_hp[19 - 1], 120.0, "t19: iframe grace-tick DROP — no damage")
-	assert_eq(p2_mana[19 - 1], 0.0, "t19: a dropped fact generates NO mana (1-9/R1)")
+	assert_eq(p2_mana[19 - 1], 19 * PASSIVE_PER_TICK,
+		"t19: a dropped fact generates NO MELEE mana (1-9/R1) — only the passive faucet has paid")
 	assert_eq(p1_hp[20 - 1], 108.0, "t20: the SAME swing lands FULL damage one past the grace")
-	assert_eq(p2_mana[20 - 1], 12.0, "t20: the landed hit pays full flat mana")
+	assert_eq(p2_mana[20 - 1], 12.0 + 20 * PASSIVE_PER_TICK,
+		"t20: the landed hit pays full flat mana on top of 20 passive ticks")
 	assert_eq(p1_hp[TICKS - 1], 108.0, "t24: P1 non-full HP on the hashed record")
-	assert_eq(p2_mana[TICKS - 1], 12.0, "t24: P2 non-zero mana on the hashed record")
+	assert_eq(p2_mana[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK,
+		"t24: P2 non-zero mana on the hashed record")
 	assert_eq(ms.p1.hero.roll_direction, Vector3(-1, 0, 0),
 		"t17 roll captured via the facing fallback — on the hashed record")
 
@@ -387,6 +441,29 @@ func test_golden_sequence_exercises_per_phase_movement_and_lunge() -> void:
 		"t5: P1's ACTIVE-phase velocity is the lunge ALONE (zero move intent) — AC6 genuinely ran")
 	assert_true(p2_vel[TICKS - 1].is_equal_approx(Vector3(4.5, 0.0, 0.0)),
 		"t24 (hashed): P2 in RECOVERY at 6.0 * 0.75, NO lunge term — the AC5-moves/AC6-non-mover split")
+
+
+## Story 3-4 (AC 4/AC 7), the passive-faucet analogue of the pins above: this re-baseline's
+## ONE named cause is _golden_config()'s nonzero mana_regen_per_second, and naming it is
+## vacuous unless the rung it activates actually ran across the recorded sequence. Pinned at
+## t1 (the first tick, before any contact — the reading is the passive faucet ALONE, which is
+## also the proof that there is no delay window) and at the hashed t24, on BOTH heroes: the
+## passive rule is ungated and per-player, unlike the attacker-only melee rule, so a
+## regression that seated it on the attacker path would show as an asymmetry here.
+func test_golden_sequence_exercises_passive_mana_regen() -> void:
+	var ms := _make_match()
+	var p1_mana: Array[float] = []
+	_play_sequence(ms, func(_t: int) -> void: p1_mana.append(ms.p1.mana.get_current()))
+	assert_eq(p1_mana[1 - 1], PASSIVE_PER_TICK,
+		"t1: the passive rung ran on the very FIRST tick — no delay window (sealed, AC 4)")
+	assert_eq(p1_mana[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK,
+		"t24 (hashed): P1's one confirmed hit (12.0) plus 24 passive ticks at 1.25 = 42.0")
+	assert_eq(ms.p2.mana.get_current(), 12.0 + TICKS * PASSIVE_PER_TICK,
+		"t24: P2 carries the SAME passive accumulation — the faucet is per-player, not attacker-only")
+	assert_true(ms.p1.mana.get_current() < ms.p1.mana.get_maximum(),
+		"left UNCLAMPED at t24, so the hash encodes the accumulated value and not the cap")
+	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.DEAD,
+		"sanity: nobody dies on this sequence, so DEAD suppression never fires inside the hash")
 
 
 func test_canonical_hash_ignores_key_insertion_order() -> void:

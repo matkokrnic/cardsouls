@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ResourceGenerationRule" format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/resource_generation_rule.gd" id="1_resgen"]
+
+[resource]
+script = ExtResource("1_resgen")
+source = &"passive_tick"
+resource = &"mana"
+amount_domain = 1
+amount_field = &"mana_regen_per_tick"
+required_flag = &""

@@ -73,6 +73,15 @@ func test_conversion_derives_stamina_regen_per_tick() -> void:
 	assert_eq(t.stamina_regen_per_tick, 0.25, "15/s at 60 Hz -> 0.25 per tick, derived at load")
 
 
+## Story 3-4 (AC 4): the MANA twin of the derived rate above — same derivation, same reason
+## (advance() takes no delta, A1, so the per-second authoring value is never consumed
+## directly), landing on BalanceTicks per E3-RG/R8. This is the field the authored
+## `passive_tick` rule names; the per-second value never reaches the tick ladder.
+func test_conversion_derives_mana_regen_per_tick() -> void:
+	var t := BalanceTicks.from_config(_make_config({"mana_regen_per_second": 30.0}))
+	assert_eq(t.mana_regen_per_tick, 0.5, "30/s at 60 Hz -> 0.5 per tick, derived at load")
+
+
 ## AC 3 end-to-end: service reload() -> apply_balance() -> pools and windows reflect the
 ## authored .tres values.
 func test_reload_to_apply_balance_reflects_tres_values() -> void:

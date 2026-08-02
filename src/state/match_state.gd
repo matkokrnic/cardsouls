@@ -150,11 +150,12 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    dedupe ONLY here — mana is step 5's seat, keeping the documented D2 order
 	#    truthful (N4).
 	var confirmed_hits := _resolve_contacts()
-	# 5. Resource generation   stamina regen (story 1-4) then melee-hit mana (story 1-5),
-	#    P1 -> P2. Both implemented DIRECTLY — the D6 evaluator/rule schema is DEBT D
-	#    (RESOLVED at the 1-5 trigger: stays direct; evaluator extraction re-triggers at
-	#    E3). Same single null guard rationale as step 3: a pre-injection MatchState stays
-	#    inert, no scattered checks below.
+	# 5. Resource generation   stamina regen (story 1-4) then mana — melee-hit AND the
+	#    passive tick (story 3-4), P1 -> P2. Stamina is still DIRECT; mana is now the D6
+	#    EVALUATOR path (DEBT D's extraction, re-triggered at E3 exactly as the 1-5
+	#    resolution said it would be): _generate_mana asks EconomyEvaluator for each
+	#    authored rule's amount and applies it to the pool. Same single null guard rationale
+	#    as step 3: a pre-injection MatchState stays inert, no scattered checks below.
 	if balance_ticks != null:
 		_regen_stamina(p1)
 		_regen_stamina(p2)
@@ -497,17 +498,41 @@ func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
 			<= deg_to_rad(balance.block_facing_arc_degrees * 0.5)
 
 
-## Step-5 melee-hit mana (story 1-5) — THE one mana-generation path (DEBT D resolved:
-## direct, no evaluator; the 1-4 single-deduction-path analog). Gated on the INJECTED
-## melee_mana_generation flag — flag OFF (or no flags injected) closes the faucet and
-## nothing else: the hit still landed and damaged in step 4 (graceful degradation). The
-## per-hit amount is read inline at the moment of use (CONSTRAINT C).
+## Step-5 mana generation (story 3-4, AC 1/AC 2) — the D6 EVALUATOR seat. The direct
+## `balance.melee_hit_mana` grant story 1-5 shipped here is GONE, not kept behind a flag:
+## the authored `melee_hit` rule now names that same field and the evaluator dereferences
+## it, so this is a refactor of the one existing path and NOT a second call site.
+## `melee_mana_generation` is still the off-switch, but it is DATA on the rule now
+## (`required_flag`), so both flag configurations run through the same evaluator call —
+## flag OFF simply resolves to 0.0 and ManaPool.add() no-ops. No flags injected reads the
+## same way (graceful degradation, unchanged from 1-5).
+## The live `balance` / `balance_ticks` / `flags` are passed IN on every call and never
+## retained by the evaluator (CONSTRAINT C — it is static and stateless).
 func _generate_mana(confirmed_hits: Array[int]) -> void:
-	if flags == null or not flags.melee_mana_generation:
-		return
+	var rules := EconomyEvaluator.authored_rules()
+	var per_hit := EconomyEvaluator.amount_for(rules, EconomyEvaluator.SOURCE_MELEE_HIT,
+			EconomyEvaluator.MANA, balance, balance_ticks, flags)
 	for slot in confirmed_hits:
 		var attacker := p1 if slot == 0 else p2
-		attacker.mana.add(balance.melee_hit_mana)
+		attacker.mana.add(per_hit)
+	# The PASSIVE rung (story 3-4, AC 4) — the second faucet, same step, same slot, fixed
+	# P1 -> P2 order. Sealed semantics: no delay window, suppressed for DEAD only, NOT
+	# suppressed for BLOCKING (mana building behind a block IS the flywheel's point, and
+	# block already pays through the stamina suppression — it is not double-charged).
+	# The round-over freeze needs NO guard here: step 1b returns before step 5 is reached,
+	# so a frozen tick never runs this at all.
+	var per_tick := EconomyEvaluator.amount_for(rules, EconomyEvaluator.SOURCE_PASSIVE_TICK,
+			EconomyEvaluator.MANA, balance, balance_ticks, flags)
+	_regen_mana(p1, per_tick)
+	_regen_mana(p2, per_tick)
+
+
+## Step-5 passive mana (story 3-4, AC 4) — the POLICY seat beside _regen_stamina's (D6).
+## Mana's suppression set is deliberately NARROWER than stamina's: DEAD only. A corpse runs
+## no economy (the standing 2-3/R5 doctrine), but a blocking hero keeps charging.
+func _regen_mana(player: PlayerState, amount_per_tick: float) -> void:
+	var suppressed := player.hero.action_state == HeroState.ActionState.DEAD
+	player.mana.advance_regen(amount_per_tick, suppressed)
 
 
 ## Step-5 stamina regen (story 1-4). The per-tick amount is read inline from balance_ticks

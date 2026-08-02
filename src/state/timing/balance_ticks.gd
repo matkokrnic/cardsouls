@@ -18,6 +18,12 @@ var stamina_regen_delay_ticks: int
 ## advance() takes no delta (A1), so the per-second authoring value is never consumed
 ## directly — this field is the only regen amount the state layer reads.
 var stamina_regen_per_tick: float
+## Story 3-4 (AC 4): the PASSIVE mana faucet's fixed per-tick amount —
+## mana_regen_per_second / TICK_HZ, derived once per load on the stamina_regen_per_tick
+## precedent above and for the same reason (advance() takes no delta, A1: never rate x delta).
+## The authored `passive_tick` rule names THIS field, not the per-second authoring value, so
+## nothing per-second ever reaches the tick ladder.
+var mana_regen_per_tick: float
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -34,6 +40,7 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	var t := BalanceTicks.new()
 	t.stamina_regen_delay_ticks = TimingWindow.seconds_to_ticks(config.stamina_regen_delay_seconds)
 	t.stamina_regen_per_tick = config.stamina_regen_per_second / TimingWindow.TICK_HZ
+	t.mana_regen_per_tick = config.mana_regen_per_second / TimingWindow.TICK_HZ
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)
