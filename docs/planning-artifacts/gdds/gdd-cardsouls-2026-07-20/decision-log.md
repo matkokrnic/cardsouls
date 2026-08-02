@@ -1600,3 +1600,75 @@ unflushed). It gains a THIRD member from this Pass 1 session:
   Queued; NOT edited into `docs/game-architecture.md` this session (this commit is queue bookkeeping
   only, no architecture-doc-body edit). Forcing point: the next architecture amendment queue flush
   (pattern: E2-CO/R1).
+
+## Session 2026-08-02 -- Story 3-0b Pass 2 (rulings)
+
+Pass 2 of the four-pass split delivers AC5 (per-phase attack movement multipliers) and AC6
+(attack lunge, state-side velocity). Full suite re-run before this commit chain: 188 state
+tests / 874 assertions / 0 failed, 11 integration files individually green; golden
+re-baselined once, `7fbb4b7f589251d25a13d6b49138b416266031e124cdae1c07e99e0f4fc119d1` ->
+`96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b`.
+
+**3-0b/R18 -- the neutral authored migration: the SEAT is Pass 2, the VALUES are AC8's.**
+The three per-phase fields that replace `attack_move_speed_multiplier` are all authored at
+the flat field's old value, `0.0`, in `data/balance/balance_config.tres`. This is deliberate:
+Pass 2's obligation is AC5's structural obligation (the flat field REMOVED, three per-phase
+fields in its place, `.tres` field-name registry pinned) -- it is not a tuning pass. Live feel
+is therefore unchanged by this commit chain by construction; judging what the three values
+should actually be is AC8's verdict, reserved for Pass 4 against live play.
+
+**3-0b/R19 -- the lunge phase scope, ruled: WINDUP and ACTIVE only.** `_attack_lunge_velocity()`
+returns a non-zero term only while `HeroState.attack_phase()` reports `windup`/`windup_done` or
+`active`/`active_done`; RECOVERY carries none. Rationale: the lunge is the commitment forward
+INTO the swing, matching the 1-7 close-out's sanctioned form ("applied by the STATE layer as a
+velocity curve during the swing"). Whether the hero should keep drifting forward through
+recovery is a separate feel question, not this AC's to answer -- if a future pass wants
+recovery drift, it is a new, separately-ruled term, not an extension of this one's phase scope.
+
+**3-0b/R20 -- four implementation choices accepted, as built.**
+1. The lunge is ADDITIVE to the steered velocity (`world_dir * speed + lunge`), never a
+   replacement. At the authored `0.0` multipliers the lunge is therefore the WHOLE of attack
+   velocity today -- the intended shape: input steers nothing mid-swing, the swing itself
+   carries the hero forward.
+2. Speed is `attack_lunge_distance / (attack_windup_seconds + attack_active_seconds)` -- the
+   roll's `roll_distance / roll_duration_seconds` precedent verbatim. This yields a flat
+   (constant-speed) curve; an eased curve is a Pass 4 feel decision, not decided here.
+3. Boundary-tick phases (`windup_done`, `active_done`) group with their un-suffixed sibling
+   exactly as `HeroState.transition_row()` already groups them, in BOTH
+   `_attack_phase_multiplier()` and `_attack_lunge_velocity()` -- so the two phase consumers
+   this story adds can never disagree about which phase a boundary tick belongs to.
+4. Lunge direction reads `HeroState.facing` LIVE, at the moment of use, rather than an
+   entry-locked direction captured at swing start. This keeps the lunge out of the snapshot
+   entirely -- no new state field, no snapshot-shape change -- which is the direct reason
+   AC6 was a measured golden non-mover rather than a second snapshot-shape re-baseline.
+
+**3-0b/R21 -- live facing accepted for Pass 2, WITH a named open question for AC8/Pass 4.**
+Because facing updates every tick an intent is live (the existing velocity-only-commitment
+rule), the lunge is steerable mid-swing: a hero turning while attacking lunges along the NEW
+facing, not the facing it had when the swing started. This is in tension with the word
+"commitment." Ruled acceptable for Pass 2 because the alternative -- entry-locking the lunge
+direction, the `roll_direction` shape -- requires a new stored snapshot field and therefore a
+SNAPSHOT SHAPE CHANGE with its own golden re-baseline, out of proportion for this pass's
+structural obligation. If the Pass 4 playtest verdict (AC8) judges that steerable lunge
+breaks commitment, the fix is entry-locking, and it gets its OWN pass with its own
+re-baseline -- it must not be squeezed into Pass 4's tuning work.
+
+**3-0b/R22 -- the re-baseline record: one re-baseline, two causes named separately, an
+isolation probe proving the seat is hash-neutral.** `_golden_config()` in `test_determinism.gd`
+authors the three per-phase fields as three DISTINCT non-neutral values (windup 0.25 / active
+0.5 / recovery 0.75) and `attack_lunge_distance` at 2.0, for path coverage. Measured in three
+points: baseline `7fbb4b7f...` (Pass 1 close) -> AC5 landed alone `96ac5f64...` (MOVED, as
+predicted) -> AC5+AC6 `96ac5f64...` (bit-identical to the AC5-alone measurement -- AC6 a
+measured NON-MOVER). AC6's prediction was a mover; the actual outcome is the fork the story's
+Golden Prediction section named in advance as a legitimate, non-missed outcome, reason: at the
+hashed tick P1 is IDLE and P2 is in RECOVERY, and the lunge (R19) carries no term in recovery.
+The isolation probe: with the three per-phase fields in place, toggling ONLY the recovery
+value back to `0.0` (windup 0.25 / active 0.5 left in place) reproduced the OLD golden
+`7fbb4b7f...` exactly. This proves two things in one probe -- the per-phase SEAT itself is
+hash-neutral when the visible phase still carries the old flat value, and the windup/active
+coverage values are themselves measured non-movers at this fixture (their attack-tick
+velocities are per-tick transients overwritten before the hashed tick, the same "1-9 cause 2"
+shape recurring a third time). Independent confirmation of AC6's hash invisibility:
+mutation-deleting the lunge term from `_resolve_movement` during implementation left
+`test_state_matches_golden` passing -- observed directly, not inferred from the isolation
+probe alone.
