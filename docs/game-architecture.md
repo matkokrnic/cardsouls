@@ -405,7 +405,7 @@ source or a cast rule is a new `.tres`, not a code change — economy-wide, not 
 > so melee attacks carry telegraph structure from the start and the color-unblockable telegraphs in
 > E5 reuse it rather than forcing a retrofit.
 
-- **`TelegraphProfile`** fields: `shape_id`, `sting_id`, `color`, `pose_id`. **State owns *which*
+- **`TelegraphProfile`** fields: `shape_id`, `sting_id`, `color`. **State owns *which*
   telegraph is active** (color + chargeup window); a presentation-side `TelegraphController` reads
   state and drives shape + sound. Hue is never the sole channel (colorblind-safe, <0.5s).
 - **Audio:** a fixed bus layout with a dedicated **`CombatCues`** bus (per-color stings + outcome
