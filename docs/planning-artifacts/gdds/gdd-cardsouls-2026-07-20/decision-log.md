@@ -1672,3 +1672,86 @@ shape recurring a third time). Independent confirmation of AC6's hash invisibili
 mutation-deleting the lunge term from `_resolve_movement` during implementation left
 `test_state_matches_golden` passing -- observed directly, not inferred from the isolation
 probe alone.
+
+---
+
+## Session 2026-08-02 -- Story 3-0b Pass 3 (rulings)
+
+Pass 3 of the four-pass split delivers AC3 (clip/window reconciliation), AC4 (roll Hips
+excursion fix), AC7 (block in-between-frames verdict), AC9 (sting distinctness), and AC10
+(`pose_id` retirement). No `src/state/` change this pass -- golden untouched. Full suite
+re-run before this commit chain: 188 state tests / 874 assertions / 0 failed, 12
+integration files individually green (`test_clip_timing.gd` new).
+
+**3-0b/R23 -- AC7 VERDICT: KEEP the instant block entry.** The deciding reason is NOT
+generic latency: `enter_block()` opens the 9-tick (0.15s) deflect window on the entry tick,
+so a 0.05s blend would cover a THIRD of that window (0.1s would cover TWO THIRDS) with a
+"shield still rising" pose on screen while the deflect window is already live. That is a
+legibility lie placed exactly where legibility is load-bearing, and it would corrupt
+AC11's naive-observer read of the parry. Trade-off recorded honestly the other way: the
+pop is a real visual artifact -- the least animated moment in the combat loop -- and the
+cost of keeping it is purely aesthetic, while the cost of softening it would have been
+mechanical (misrepresenting when the deflect window is actually open).
+
+**3-0b/R24 -- AC7 follow-on, ruled: a blend on block EXIT is a genuinely different,
+genuinely open case, NOT taken in this story.** Exit is instant to IDLE with nothing
+mechanical live afterward -- no recovery window, and stamina-regen suppression lifts the
+same tick -- so a blend on exit misrepresents nothing mechanical, unlike a blend on entry
+(R23). Recorded as a named future option WITH its conditions already established, so a
+future pass does not have to re-derive them: it must be scoped to block -> IDLE only
+(block -> attack and block -> roll start real mechanical content immediately and must stay
+instant), and it requires amending 3-0a's "a transition arriving mid-clip wins immediately
+with NO blending" policy plus a conditional in `_play()` -- a policy amendment, not a
+parameter tweak.
+
+**3-0b/R25 -- AC10 EXPLICIT LOGGED RETIREMENT (this entry is the AC deliverable).**
+`pose_id` is retired from `TelegraphProfile`, not wired to a consumer. Deciding asymmetry:
+`shape_id` and `sting_id` name presentation nodes that actually exist (`Shapes/<shape_id>`
+and the `<sting_id>` `AudioStreamPlayer`, both children of `TelegraphController`) --
+`pose_id` names nothing. Wiring it would have required a SECOND copy of the
+`ActionState -> TelegraphProfile` mapping (1-10/R1 rules that mapping is owned by
+`TelegraphController` alone) plus a pose -> clip indirection layered on top of the
+existing `AnimationController._CLIP` mapping, and would still have covered only the three
+telegraphing states -- IDLE and DEAD have no telegraph profile and never will, so `_CLIP`
+survives regardless of what `pose_id` does. That is two selection mechanisms replacing
+one, split on a line (telegraphing vs not) that has nothing to do with animation. The
+"authored now, consumed when the rig lands" bet (1-10, DEBT E member 4) already failed
+once: the rig landed in 3-0a and no honest consumer emerged. Removed rather than carried a
+second time; a future story that genuinely needs pose vocabulary can re-add one export
+more cheaply than this dead contract was carried.
+
+**3-0b/R26 -- AC3's direction lock made executable, and the tool that pays for it.**
+`test/integration/test_clip_timing.gd` reads the `attack`/`roll` windows through
+`BalanceTicks.from_config()` -- the same seconds->ticks boundary `advance()` uses -- rather
+than hardcoding tick counts, so retuning any of `attack_windup_seconds`,
+`attack_active_seconds`, `attack_recovery_seconds`, or `roll_duration_seconds` now
+requires re-running `tools/retime_clips.gd` in the SAME pass, or the test fails.
+`tools/retime_clips.gd` is promoted from this pass's throwaway retiming script to a
+committed, parametric tool: it derives its target windows the same way the test does,
+rather than encoding this pass's numbers, and is verified as a no-op against the
+already-reconciled library. Recorded as an ACCEPTED NARROWING of the standing "a balance
+tuning change is a one-line `.tres` edit with no test consequence" property (BC/R3), scoped
+to exactly these four fields -- every other authored field keeps the full isolation BC/R3
+established.
+
+**3-0b/R27 -- AC4's route and threshold.** Route taken (of the two 3-0a/R14 named): zero
+the roll clip's Hips X/Z position keys while preserving Y, not a clip swap. Measured:
+planar excursion 1.0895 -> 0.0000, vertical dip 0.7213 preserved so the dive still reads as
+a dive rather than an upright lateral glide. `test_clip_timing.gd` pins a regression
+ceiling, `ROLL_HIPS_PLANAR_MAX = 0.25`, derived from geometry rather than picked
+arbitrarily: the `RollDisc` telegraph (`CylinderMesh_tgdisc`, `hero.tscn`) has radius 0.8,
+and the hero's body box (1x2x1) has half-width 0.5; at 0.25 the hips stay under a third of
+the disc's radius and under half the body's own half-width, so the body cannot leave its
+own footprint, let alone the disc. The delivered value sits far inside that ceiling by
+design -- it is a regression ceiling with large headroom, not a value anyone tuned up to.
+
+**3-0b/R28 -- AC9's delivery, with AC11 named as its verdict.** `sting_attack.wav` and
+`sting_block.wav` are made audibly distinct on four orthogonal axes: duration (0.070s vs
+0.220s), onset (instant vs soft), register (~1000-1180 Hz vs ~160-240 Hz), and glide
+direction (rising vs falling) -- glide direction is the PRIMARY cue, since it needs no
+reference pitch to judge, unlike the prior single-frequency difference (875 Hz vs 520 Hz)
+that S8 (2-6/R19) found indiscriminable. Both stings stay normalized to the original peak
+(0.60), so discrimination is timbral, not a loudness difference. This ruling records the
+DELIVERY only -- the verdict on whether it actually reads as distinct belongs to AC11's
+naive-observer audio-discrimination pass, reserved for Pass 4 (AC9 is a precondition of
+AC11 per 3-0b/R7).
