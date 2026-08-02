@@ -2157,3 +2157,117 @@ constructors, `HeroState`/`StaminaPool`/`ManaPool`, left untouched -- accepted a
 D4). `MatchState.new`'s fan-out was sized correctly at the readiness gate: 1 `src/` call site
 (`match_runner.gd:77`) plus 25 test call sites across 13 files, confirmed unchanged by this pass's
 own file list.
+
+---
+
+## Session 2026-08-02 -- Story 3-4 readiness gate
+
+Readiness gate on `3-4-mana-economy-flywheel.md` (report-only, run against `71d4775`) returned
+**NOT READY** on first read: nine blocking findings. This is the same first-pass verdict every Set B
+story's gate has returned -- fourteen PRIOR Set B readiness-gate sessions (seven E1, six E2, plus 3-1
+on 2026-08-02), all NOT READY on first read; 3-4 makes it **15/15** -- and this gate is no exception
+in either direction: fixed and promoted the same session, story Status and board `backlog ->
+ready-for-dev`.
+
+**Two premise corrections, resolved before the blocking findings.** (1) The gate's own first-pass
+framing treated the architecture amendment queue as if it held a single member (the E0/E3 evaluator
+attribution this gate itself surfaces). Verified by content against the full decision-log history:
+the queue currently holds FOUR members, none of them this gate's finding -- (a) the `assets/`
+Directory Tree gap, a pre-existing item missed by the E2-CO/R1 flush and carried forward (3-0a/R10);
+(b) import post-processing as a repo pattern, `strip_model_anim.gd` (3-0a/R10); (c) a new artifact
+type under `assets/`, the import-time `.gd` script plus the committed `AnimationLibrary` `.res`
+(3-0a/R10); (d) a non-`Controller` class under `src/controllers/`, `debug_input_reader.gd`
+(3-0b/R17 Pass 1). This gate's own finding (the E0/E3 evaluator attribution + Novel Pattern 5) is a
+FIFTH member, not the queue's only one -- see 3-4/R4 below. (2) The gate's first pass flagged
+`sprint-status.yaml`'s board shape -- `epic-3: backlog` with every child story carrying a HOLD note
+in `story_notes` -- as an apparent inconsistency. Verified by content: this is the STANDARD shape
+this board has used since the E3 revisit gate, identically for 3-2, 3-3, 3-5, and 3-6 (each `backlog`
+in `development_status` with its own HOLD note in `story_notes`, per the gate outcome recorded
+2026-07-31); it is not a defect specific to 3-4.
+
+**The nine blocking findings, resolved.**
+- **B1 -- `CardCastCondition` had no business in this story's scope.** AC1 named
+  `CardCastCondition` as constructed by 3-4 alongside `ResourceGenerationRule`/`EconomyEvaluator`.
+  Ruling: STRIPPED to 3-2, designed there against the working evaluator this story delivers (ORDER
+  ruling -- the evaluator must exist before a cast condition can be evaluated against it). AC1
+  rewritten to exactly two rule instances, `melee_hit` and `passive_tick`; nothing in 3-4 gates card
+  casts.
+- **B2 -- the N7 obligation (3-1 gate, decision-log:2014-2016) was a Dev Note, not an AC.** The
+  derived `mana_regen_per_tick` seat on `BalanceTicks` and the `advance()` ladder rung were an
+  obligation recorded at 3-1's gate but never promoted to a verifiable claim in 3-4's own text.
+  Promoted to AC4 in full, including the seat's exact location (step 5) and its suppression
+  semantics (3-4/R2 below).
+- **B3 -- the Golden Prediction's baseline was unnamed.** The original text read "whatever
+  3-1/3-2/3-3 leave it at," unverifiable at the time it was written and now provably wrong in order
+  (3-4 precedes 3-2/3-3, per `epics.md`'s own committed-obligations list). Corrected to the concrete,
+  current baseline `96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b`, unmoved through
+  3-1.
+- **B4 -- fixture-blindness discovery.** The original prediction assumed the authored `.tres`
+  `mana_regen_per_second` (0.25, 3-1/R1) would itself move the golden once non-zero. Verified by
+  content: `_golden_config()` builds its fixture in-test and never loads
+  `data/balance/balance_config.tres` (BC/R3, re-confirmed SC/R6 and the 3-0b gate) -- the authored
+  value cannot reach the golden by any route. The actual, sole movement cause is a deliberate
+  `_golden_config()` fixture coverage edit (precedent: `attack_stamina_cost` 6.0, `roll_distance` 3.0),
+  named as such in the rewritten Golden Prediction section.
+- **B5 -- false `BalanceTicks` cause removed.** The original text speculated the passive tick "adds
+  a derived field" to `BalanceTicks` as a possible second golden-moving cause. `BalanceTicks` is
+  load-time config, rebuilt from `BalanceConfig` and never part of `to_snapshot()` -- structurally
+  incapable of moving the hash on its own, regardless of which fields it carries. Removed; the
+  fixture coverage edit (B4) is the ONE named cause.
+- **B6 -- the Live Smoke section contradicted itself.** The original text required smoke "at
+  flag-matrix granularity, not full two-human," while separately naming the flywheel-vs-bookkeeping
+  question as something only a real two-human exchange can answer. Resolved: REQUIRED, full
+  two-human, flag ON, on the shipped default. R-D6 ATTACHES to this story and is SPENT -- 3-4 is the
+  first player-facing story since 3-1, which shipped no player-facing code path (3-1/Q3) and left
+  R-D6 available (last spent 3-0a/R15).
+- **B7 -- the stale E3-revisit banner.** Lines 5-7 still told the reader the gate had not run.
+  Replaced with a Scope note in the 3-1 pattern: the E3 revisit gate ran 2026-07-31 (E3-RG/R1..R12),
+  this story's own gate ran 2026-08-02, and DP/R3 waived the separate external playtest.
+- **B8 -- AC3/AC4 carried rationale instead of verifiable claims.** Old AC3's "with no error and no
+  special-case path" and old AC4's HUD-wiring narrative mixed justification into the contract. Both
+  rewritten to pure claims about shipped software (AC3, AC4 below); the rationale moved to Dev Notes.
+- **B9 -- "with no error" is unassertable.** Old AC3 required flag-off degradation "with no error."
+  GDScript's null-dereference semantic aborts only the function it occurs in and the caller resumes
+  with exit code 0 and byte-identical state (the crash-guard-blind family, permanently recorded at
+  3-1/R6) -- no test can distinguish "no error" from "an error the suite cannot see." Dropped; no new
+  null guard in this story's scope is claimed mutation-proven on that basis.
+
+**3-4/R1 -- AC set replaced with six verifiable claims (resolves B1/B2/B8/B9).** AC1 scope (two rule
+instances, `CardCastCondition` excluded); AC2 replacement proof (the golden-unmoved measurement IS
+the proof artifact); AC3 flag scope (both configurations run through the evaluator, no second path);
+AC4 passive mechanism (regen method, `BalanceTicks` seat, step-5 rung, sealed suppression semantics);
+AC5 behavior (flag matrix, clamp, source filtering, plus a DEAD-suppression proof); AC6 CONSTRAINT C
+(new, below).
+
+**3-4/R2 -- sealed design decisions, with reasoning.** No delay window on passive regen: unlike
+stamina's `_regen_delay`, passive mana is dead machinery until the first mana spender lands (3-2/3-5),
+so it arrives just-in-time then rather than being built speculatively now. DEAD suppressed, BLOCKING
+NOT suppressed: DEAD follows the standing "a corpse runs no economy" doctrine already applied to
+stamina (2-3/R5); BLOCKING is deliberately excluded from mana's suppression set because mana buildup
+behind a block IS the flywheel's point, and block already pays its own cost through stamina
+suppression -- mana does not need to double-charge it. The step-5 seat is not a new decision but the
+documented ladder meaning: `advance()`'s own step-5 comment already reads "stamina regen (story 1-4)
+then melee-hit mana (story 1-5)" -- the `passive_tick` rung joins the slot `_generate_mana` already
+occupies. The round-over freeze needs no new guard: step 1b returns before step 2, so step 5 is
+never reached on a frozen tick -- recorded as a no-action Dev Note, not an AC.
+
+**3-4/R3 -- CONSTRAINT C promoted to AC6, with its proof.** The evaluator must read `ms.balance` /
+`ms.balance_ticks` inline at point of use and never cache a reference, since `apply_balance` swaps the
+whole `BalanceTicks` object on reload. Value-provable test: a mid-match `apply_balance` with a
+different `mana_regen_per_second` must change the very next tick's regen rate -- this also exercises
+the per-pool reload contract (mana `set_maximum` + clamp, no refill, pinned by
+`test_mid_match_reload_sets_mana_maximum_but_never_refills`).
+
+**3-4/R4 -- architecture amendment queue gains a FIFTH member.** The four pre-existing members stand
+as enumerated in the premise correction above, unflushed since E2-CO/R1. This gate's own finding (the
+evaluator non-existence + the doc's already-landed framing) is the fifth: `docs/game-architecture.md`
+describes `ResourceGenerationRule`/`CardCastCondition`/`EconomyEvaluator` as already landed in the
+Directory Tree (`:548,553`), the D6 capability table ("E0/E3 · Full", `:107,190`), the
+Testable-without-engine-runtime table (`:511`), and Novel Pattern 5 (`:788-806`) -- unlike the
+`MatchState` config object, explicitly marked "Planned (E3)" (`:613`). All four need reconciling
+against the evaluator this story actually constructs, once it ships. Flush point unchanged: the next
+architecture amendment queue flush (pattern: E2-CO/R1), not this story.
+
+**Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
+immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev
+pass next. Docs-only pass -- no suite run, no code touched.
