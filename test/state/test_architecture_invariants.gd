@@ -47,6 +47,27 @@ func test_state_layer_has_no_nondeterministic_source() -> void:  # INVARIANT D3(
 		"nondeterministic source in src/state/ (global RNG / Time / OS / Engine): %s" % ", ".join(offenders))
 
 
+## Story 3-0b (AC6) / DECISION A + the in-place rule. The attack lunge is a state-side
+## velocity term; the explicitly REJECTED alternative is root-motion extraction, which would
+## make replay depend on animation sampling and put presentation in charge of position. That
+## rejection is now machine-checked rather than trusted: src/state/ may never name a
+## root-motion API. Scanning src/state/ (not all of src/) is the load-bearing scope — it is
+## the layer whose determinism the ban protects. Comments are stripped by _code_lines, so the
+## prose above and the AC6 rationale in match_state.gd never false-positive.
+func test_state_layer_never_extracts_root_motion() -> void:
+	var re := RegEx.create_from_string("(root_motion|RootMotion|AnimationPlayer|AnimationMixer)")
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/state/"):
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_eq(offenders.size(), 0,
+		"root-motion extraction in src/state/ (AC6: the lunge is a state velocity term): %s"
+				% ", ".join(offenders))
+
+
 func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)
 	# int-literal callers depend on these ordinals: test_camera_relative.gd writes [0, 1] and
 	# every 2-2 smoke flip writes int literals like [3, 2] / [2, 3]. A future reorder would

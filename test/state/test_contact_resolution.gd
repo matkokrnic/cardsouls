@@ -14,7 +14,8 @@ extends TestCase
 ## constructed IN-TEST, never loaded from the authored .tres.
 
 
-func _config(move_multiplier := 0.0) -> BalanceConfig:
+func _config(windup_mult := 0.0, active_mult := 0.0, recovery_mult := 0.0,
+		lunge_distance := 0.0) -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = 5.0
@@ -28,7 +29,10 @@ func _config(move_multiplier := 0.0) -> BalanceConfig:
 	c.attack_chain_window_seconds = 5.0 / 60.0
 	c.attack_chain_length = 3
 	c.attack_damage_percent_of_max_hp = 6.0
-	c.attack_move_speed_multiplier = move_multiplier
+	c.attack_windup_move_speed_multiplier = windup_mult
+	c.attack_active_move_speed_multiplier = active_mult
+	c.attack_recovery_move_speed_multiplier = recovery_mult
+	c.attack_lunge_distance = lunge_distance
 	c.melee_hit_mana = 8.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.roll_iframe_seconds = 2.0 / 60.0
@@ -43,9 +47,10 @@ func _flags(mana_on: bool) -> FeatureFlags:
 
 
 ## inject_flags=false leaves MatchState.flags null (the pre-injection headless default).
-func _make_match(inject_flags := true, mana_on := true, move_multiplier := 0.0) -> MatchState:
+func _make_match(inject_flags := true, mana_on := true, windup_mult := 0.0,
+		active_mult := 0.0, recovery_mult := 0.0, lunge_distance := 0.0) -> MatchState:
 	var ms := MatchState.new(7, 100.0, 5.0, 50.0, 80.0)
-	ms.apply_balance(_config(move_multiplier))
+	ms.apply_balance(_config(windup_mult, active_mult, recovery_mult, lunge_distance))
 	if inject_flags:
 		ms.inject_feature_flags(_flags(mana_on))
 	ms.drain_signals()
@@ -195,34 +200,130 @@ func test_flags_object_is_excluded_from_snapshot() -> void:
 
 ## ---- Movement root (AC 8, 10) -----------------------------------------------------------
 
-func test_attack_velocity_scaled_uniformly_across_phases_and_restored_on_exit() -> void:
-	var ms := _make_match(true, true, 0.5)      # half speed while ATTACKING
+## Story 3-0b (AC5, DEBT E member 2): the successor to 1-5's
+## test_attack_velocity_scaled_uniformly_across_phases_and_restored_on_exit. That test
+## pinned the OPPOSITE property — one flat multiplier applied identically in all three
+## phases — so it is REPLACED, not kept: the uniformity it guarded is exactly what AC5
+## removes. THREE DISTINCT authored values produce THREE DISTINCT velocities, so a
+## selector that returned the wrong field (or the same field three times) cannot pass.
+## MUTATION PROOF: make _attack_phase_multiplier() return any single field for every
+## phase and this FAILS on whichever phases that field does not belong to.
+func test_attack_velocity_uses_per_phase_multipliers_and_restores_on_exit() -> void:
+	var ms := _make_match(true, true, 0.5, 0.25, 0.75)  # windup / active / recovery
 	var h := ms.p1.hero
 	var move := _intent([], [], Vector2(1, 0))
 	_advance(ms, _intent([&"attack"], [], Vector2(1, 0)))  # tick 1: windup
-	assert_eq(h.velocity, Vector3(2.5, 0.0, 0.0), "windup: velocity scaled by 0.5")
+	assert_eq(h.attack_phase(), &"windup")
+	assert_eq(h.velocity, Vector3(2.5, 0.0, 0.0), "windup: 5.0 * its OWN 0.5")
 	for t in range(2, 5):
 		_advance(ms, move)                      # ticks 2-4: into active
 	assert_eq(h.attack_phase(), &"active")
-	assert_eq(h.velocity, Vector3(2.5, 0.0, 0.0), "active: same multiplier — uniform across phases")
+	assert_eq(h.velocity, Vector3(1.25, 0.0, 0.0), "active: 5.0 * its OWN 0.25 — not windup's")
 	for t in range(5, 9):
 		_advance(ms, move)                      # ticks 5-8: into recovery
 	assert_eq(h.attack_phase(), &"recovery")
-	assert_eq(h.velocity, Vector3(2.5, 0.0, 0.0), "recovery: same multiplier — uniform across phases")
+	assert_eq(h.velocity, Vector3(3.75, 0.0, 0.0), "recovery: 5.0 * its OWN 0.75 — not active's")
 	for t in range(9, 15):
 		_advance(ms, move)                      # ticks 9-14: recovery done -> IDLE on t14
 	assert_eq(h.action_state, HeroState.ActionState.IDLE)
 	assert_eq(h.velocity, Vector3(5.0, 0.0, 0.0), "full speed restored on exit from ATTACKING")
 
 
+## Story 3-0b (AC5): the three phases are INDEPENDENTLY addressable — a non-zero windup
+## beside a rooted active/recovery moves the hero for the windup ticks ALONE. Complements
+## the three-distinct-values test above by pinning the ZERO direction too: a selector that
+## leaked windup's value into the later phases passes that test's shape but fails here.
+func test_per_phase_multipliers_are_independent() -> void:
+	var ms := _make_match(true, true, 1.0, 0.0, 0.0)    # windup free, active/recovery rooted
+	var h := ms.p1.hero
+	var move := _intent([], [], Vector2(1, 0))
+	_advance(ms, _intent([&"attack"], [], Vector2(1, 0)))
+	assert_eq(h.velocity, Vector3(5.0, 0.0, 0.0), "windup 1.0: full speed while ATTACKING")
+	for t in range(2, 5):
+		_advance(ms, move)
+	assert_eq(h.attack_phase(), &"active")
+	assert_eq(h.velocity, Vector3.ZERO, "active 0.0: rooted, though windup was free")
+	for t in range(5, 9):
+		_advance(ms, move)
+	assert_eq(h.attack_phase(), &"recovery")
+	assert_eq(h.velocity, Vector3.ZERO, "recovery 0.0: rooted, though windup was free")
+
+
 func test_authored_zero_multiplier_is_full_root_but_facing_untouched() -> void:
-	var ms := _make_match()                     # multiplier 0.0 — the authored design value
+	var ms := _make_match()                     # all three multipliers 0.0 — the authored design
 	var h := ms.p1.hero
 	_advance(ms, _intent([&"attack"], [], Vector2(1, 0)))
 	assert_eq(h.velocity, Vector3.ZERO, "0.0 = full root: velocity zeroed while ATTACKING")
 	_advance(ms, _intent([], [], Vector2(0, 1)))
 	assert_eq(h.velocity, Vector3.ZERO, "still rooted mid-windup")
 	assert_eq(h.facing, Vector2(0, 1), "facing updates from the camera-rotated world_dir (1-7 R1) — identity basis here so it coincides with raw intent; the multiplier scales VELOCITY only")
+
+
+## ---- Attack lunge (story 3-0b, AC6) -----------------------------------------------------
+## Authored 0.35 over a 7-tick swing span (windup 3 + active 4 = 7/60 s) = 3.0 u/s, chosen so
+## the expected speed is a round number. All three phase multipliers stay 0.0 and the move
+## intent stays ZERO throughout, so world_dir is zero and the observed velocity IS the lunge
+## term alone — nothing to disentangle. A zero move intent also freezes facing at its
+## Vector2.DOWN initial value, so the lunge direction is +Z for the whole swing.
+
+const LUNGE_SPEED := 3.0     # 0.35 units / (7/60 s)
+
+
+func test_attack_lunge_is_live_in_windup_and_active_only() -> void:
+	var ms := _make_match(true, true, 0.0, 0.0, 0.0, 0.35)
+	var h := ms.p1.hero
+	var lunge := Vector3(0.0, 0.0, LUNGE_SPEED)      # facing DOWN -> world +Z
+	_advance(ms, _intent([&"attack"], [], Vector2.ZERO))
+	assert_eq(h.attack_phase(), &"windup")
+	assert_true(h.velocity.is_equal_approx(lunge),
+		"windup: the swing carries the hero forward though the move intent is ZERO and the multiplier roots it")
+	for t in range(2, 5):
+		_advance(ms)                                 # ticks 2-4: into active
+	assert_eq(h.attack_phase(), &"active")
+	assert_true(h.velocity.is_equal_approx(lunge), "active: still committed forward")
+	for t in range(5, 9):
+		_advance(ms)                                 # ticks 5-8: into recovery
+	assert_eq(h.attack_phase(), &"recovery")
+	assert_true(h.velocity.is_equal_approx(Vector3.ZERO),
+		"recovery: NO lunge — the ruled phase scope (commitment into the swing, not drift out of it)")
+	for t in range(9, 15):
+		_advance(ms)                                 # ticks 9-14: recovery done -> IDLE on t14
+	assert_eq(h.action_state, HeroState.ActionState.IDLE)
+	assert_true(h.velocity.is_equal_approx(Vector3.ZERO), "IDLE: no residual lunge after the swing")
+
+
+## The lunge follows HeroState.facing (world-space planar since 1-7/R1), not a fixed axis —
+## a term hardcoded to +Z would pass the test above and fail here. Also pins that the lunge
+## ADDS to the steered velocity rather than replacing it: multiplier 1.0 with a live move
+## intent must show BOTH terms.
+func test_attack_lunge_follows_facing_and_adds_to_steered_velocity() -> void:
+	var ms := _make_match(true, true, 1.0, 0.0, 0.0, 0.35)
+	var h := ms.p1.hero
+	# Tick 1 turns the hero east: facing is written AFTER velocity, so this tick still
+	# lunges along the initial DOWN facing while the steered term already reads (1,0).
+	_advance(ms, _intent([&"attack"], [], Vector2(1, 0)))
+	assert_true(h.velocity.is_equal_approx(Vector3(5.0, 0.0, LUNGE_SPEED)),
+		"windup mult 1.0: steered 5.0 on +X PLUS the lunge on the pre-tick facing — additive, not a replacement")
+	assert_eq(h.facing, Vector2(1, 0), "facing turned east on that same tick")
+	# Tick 2 holds the same intent: the lunge has picked the new facing up.
+	_advance(ms, _intent([], [], Vector2(1, 0)))
+	assert_true(h.velocity.is_equal_approx(Vector3(5.0 + LUNGE_SPEED, 0.0, 0.0)),
+		"lunge now runs along the NEW facing (+X) — it tracks facing, never a fixed axis")
+
+
+## AC6's headline constraint: the lunge is a STATE-SIDE velocity term, never root motion.
+## This is the executable half of that claim — the state harness runs with NO scene, NO
+## AnimationPlayer and NO actor (test/run_state_tests.gd drives MatchState in _initialize(),
+## the E0 no-frame rule), so a lunge observed HERE cannot have come from an animation sample
+## by construction. The static half (src/state/ never names a root-motion API) is
+## test_architecture_invariants.gd::test_state_layer_never_extracts_root_motion.
+## MUTATION PROOF: delete the lunge term from _resolve_movement and this FAILS — velocity
+## stays ZERO, with no animation anywhere to supply displacement in its place.
+func test_attack_lunge_is_state_side_with_no_animation_present() -> void:
+	var ms := _make_match(true, true, 0.0, 0.0, 0.0, 0.35)
+	_advance(ms, _intent([&"attack"], [], Vector2.ZERO))
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(0.0, 0.0, LUNGE_SPEED)),
+		"displacement is computed by MatchState from authored balance data alone — no rig, no clip, no sampling")
 
 
 ## ---- Dedupe snapshot (AC 7, D8) ---------------------------------------------------------

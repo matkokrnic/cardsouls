@@ -168,7 +168,14 @@ func _b1_config() -> BalanceConfig:
 	c.attack_chain_window_seconds = 5.0 / 60.0
 	c.attack_chain_length = 3
 	c.attack_damage_percent_of_max_hp = 6.0
-	c.attack_move_speed_multiplier = 0.5  # non-zero, so a wrongful ATTACKING gives a distinct velocity
+	# Story 3-0b (AC5) migration: the deliberate NON-ZERO stays, pinned on WINDUP — the phase
+	# the mutation actually reaches. MUTATION PROOF A's frozen-tick attack press enters
+	# ATTACKING at step 3 and windup is the running window when _resolve_movement reads the
+	# phase that same tick, so windup carries the intent: non-zero, so a wrongful ATTACKING
+	# gives a distinct velocity. Active/recovery stay 0.0 — this test never reaches them.
+	c.attack_windup_move_speed_multiplier = 0.5
+	c.attack_active_move_speed_multiplier = 0.0
+	c.attack_recovery_move_speed_multiplier = 0.0
 	c.melee_hit_mana = 8.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.roll_iframe_seconds = 2.0 / 60.0

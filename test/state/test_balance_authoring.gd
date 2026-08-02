@@ -25,8 +25,14 @@ extends TestCase
 ## Story 1-5 (B4) adds the melee-hit economy pair:
 ## melee_hit_mana must be authored > 0 — a zero faucet is a dead flywheel; the
 ## melee_mana_generation FLAG is the off-switch, never a zero amount.
-## EXEMPT from > 0: attack_move_speed_multiplier — 0.0 (full root) IS the authored design
-## value (B6 operator decision), so the audit asserts non-negative only.
+## EXEMPT from > 0: the attack movement multipliers — 0.0 (full root) IS the authored design
+## value (B6 operator decision), so the audit asserts non-negative only. Story 3-0b (AC5)
+## splits that single flat field into three per-phase fields; the exemption and its reason
+## carry over UNCHANGED to all three, and the audit now covers three fields instead of one.
+## EXEMPT from > 0 likewise: attack_lunge_distance (story 3-0b AC6) — a zero lunge is
+## legitimate tuning (no lunge), not a degenerate config, so this is the
+## stamina_regen_delay_seconds class, not the roll/deflect-cost class. The authored value is
+## a non-zero starting magnitude; AC8 tunes it and may legitimately take it to zero.
 
 const CONFIG_PATH := "res://data/balance/balance_config.tres"
 
@@ -124,10 +130,16 @@ func test_authored_roll_iframe_within_roll_duration() -> void:
 		"roll_iframe must not outlive roll_duration in ticks (window-alone negation, 1-9/R3)")
 
 
-func test_authored_attack_move_speed_multiplier_is_non_negative() -> void:
+## Story 3-0b (AC5): the flat field's audit, carried onto all three per-phase successors —
+## the exemption's reason (0.0 = full root is a design value) is unchanged, so the bound
+## stays non-negative rather than > 0. A NEGATIVE multiplier is the defect this catches:
+## it would drive the hero BACKWARDS along its own input direction while attacking.
+func test_authored_attack_move_speed_multipliers_are_non_negative() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.attack_move_speed_multiplier >= 0.0,
-		"attack_move_speed_multiplier must be non-negative (0.0 = full root is the authored design)")
+	for field in [&"attack_windup_move_speed_multiplier", &"attack_active_move_speed_multiplier",
+			&"attack_recovery_move_speed_multiplier"]:
+		assert_true(float(config.get(field)) >= 0.0,
+			"%s must be non-negative (0.0 = full root is the authored design)" % field)

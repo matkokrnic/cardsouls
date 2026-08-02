@@ -547,11 +547,14 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	else:
 		world_dir = _camera_relative_dir(dir, _camera_bases[slot])
 	# Story 1-5 (B6, operator decision): attack commitment — while ATTACKING the resolved
-	# VELOCITY is scaled by attack_move_speed_multiplier (authored 0.0 = full root),
-	# uniform across windup/active/recovery, read inline at the moment of use
-	# (CONSTRAINT C). Velocity ONLY — the facing update below is never scaled by the
-	# multiplier. ATTACKING is unreachable pre-injection (the step-3 balance_ticks
-	# guard), so `balance` is non-null on this branch.
+	# VELOCITY is scaled by an attack-phase multiplier (authored 0.0 = full root), read
+	# inline at the moment of use (CONSTRAINT C). Velocity ONLY — the facing update below
+	# is never scaled by the multiplier. ATTACKING is unreachable pre-injection (the step-3
+	# balance_ticks guard), so `balance` is non-null on this branch.
+	# Story 3-0b (AC5, DEBT E member 2): the multiplier is now PER PHASE — the single flat
+	# field is gone and _attack_phase_multiplier() selects windup/active/recovery from
+	# HeroState.attack_phase(). No new state: the phase is already derived from which
+	# window is running.
 	# Story 1-9 (1-9/R6): the ROLL half of the same coupling deferral — while ROLLING the
 	# velocity is the entry-locked roll_direction at roll_distance / roll_duration_seconds
 	# (the ruling's exact quotient; a SPEED derivation, not window timing — timing stays
@@ -565,10 +568,18 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 		player.hero.velocity = player.hero.roll_direction \
 				* (balance.roll_distance / balance.roll_duration_seconds)
 	else:
+		# Story 3-0b (AC6): the attack LUNGE, ADDED to the input-driven velocity rather than
+		# replacing it — the phase multiplier keeps scaling what the player steers, and the
+		# lunge is the separate committed push the swing itself carries. At the authored
+		# multipliers (0.0 = full root) the lunge is therefore the whole of the attack's
+		# velocity, which is the intended shape: input steers nothing mid-swing, the swing
+		# still carries the hero forward.
 		var speed := player.hero.move_speed
+		var lunge := Vector3.ZERO
 		if player.hero.action_state == HeroState.ActionState.ATTACKING:
-			speed *= balance.attack_move_speed_multiplier
-		player.hero.velocity = world_dir * speed
+			speed *= _attack_phase_multiplier(player.hero.attack_phase())
+			lunge = _attack_lunge_velocity(player.hero)
+		player.hero.velocity = world_dir * speed + lunge
 	# Story 1-7 (review R1, operator decision): facing is WORLD-SPACE planar — the same
 	# rotated direction the velocity uses, so actor-side consumers (the hitbox yaw) need
 	# no basis knowledge. Under an identity basis world_dir == (dir.x, 0, dir.y), so
@@ -576,6 +587,72 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	# is unchanged: facing freezes while there is no movement input.
 	if not dir.is_zero_approx():
 		player.hero.facing = Vector2(world_dir.x, world_dir.z)
+
+
+## Story 3-0b (AC5): per-phase attack movement multiplier. Selects one of the three
+## BalanceConfig fields from HeroState.attack_phase(), read inline at the moment of use
+## (CONSTRAINT C).
+##
+## BOUNDARY VALUES: attack_phase() also returns windup_done/active_done/attack_done on a
+## phase-boundary tick (step 2 stopped a window, step 3 has not yet started the next). Step
+## 3(a) normally starts the successor BEFORE _resolve_movement runs, so an ATTACKING hero
+## is on a running window here — but a degenerate 0-tick authored phase can leave a *_done
+## value visible, so the mapping is TOTAL rather than relying on that. It groups the
+## boundary values exactly the way HeroState.transition_row() already does (windup +
+## windup_done together, active + active_done together), so the two phase consumers agree
+## on where a boundary tick belongs instead of inventing a second grouping; attack_done
+## falls to recovery as the last phase that ran.
+func _attack_phase_multiplier(phase: StringName) -> float:
+	match phase:
+		&"windup", &"windup_done":
+			return balance.attack_windup_move_speed_multiplier
+		&"active", &"active_done":
+			return balance.attack_active_move_speed_multiplier
+		_:
+			return balance.attack_recovery_move_speed_multiplier
+
+
+## Story 3-0b (AC6): the attack lunge as a STATE-SIDE velocity term — the sanctioned form
+## from the 1-7 close-out ("an authored lunge displacement in balance data, applied by the
+## STATE layer as a velocity curve during the swing"). NEVER root motion: no AnimationPlayer
+## sample reaches this function, so replay never depends on animation and DECISION A / the
+## in-place rule stand untouched.
+##
+## Speed derivation follows the ROLL precedent verbatim (roll_distance /
+## roll_duration_seconds, the neighbouring branch): the authored DISPLACEMENT divided by the
+## span it is spent over. A *_seconds float is read here for the same reason the roll reads
+## one — this is a SPEED derivation, not window timing; all timing stays on balance_ticks
+## (CONSTRAINT C: both operands are read inline at the moment of use, so a mid-swing reload
+## changes the speed next tick while in-flight windows keep their duration).
+##
+## PHASE SCOPE (ruled, story AC6): live during WINDUP and ACTIVE only. The lunge is the
+## commitment forward INTO the swing; drifting through recovery is a different feel decision
+## and is not this term's. Boundary values are grouped exactly as _attack_phase_multiplier()
+## groups them, so the two consumers never disagree about which phase a boundary tick is in.
+##
+## Direction is HeroState.facing — world-space planar since 1-7/R1, so no basis knowledge is
+## needed here and none of the camera mapping above applies to it. Facing is read LIVE
+## rather than entry-locked (the roll's stored roll_direction shape), which keeps the lunge
+## out of the snapshot entirely: no new state field, no snapshot-shape change. A hero that
+## turns mid-swing therefore lunges along its new facing — the "velocity-only commitment,
+## facing tracks input" rule this function already follows for the multiplier.
+##
+## Guards: a zero-or-negative span would divide to INF and poison the snapshot, and a
+## zero facing has no direction to lunge along. Both yield no lunge. The authoring audit
+## already keeps the shipped windup/active durations > 0; this guard covers in-test and
+## pre-authoring configs, which the roll branch can skip only because ROLLING is
+## unreachable before its own authored duration exists.
+func _attack_lunge_velocity(hero: HeroState) -> Vector3:
+	var phase := hero.attack_phase()
+	var committed := phase == &"windup" or phase == &"windup_done" \
+			or phase == &"active" or phase == &"active_done"
+	if not committed:
+		return Vector3.ZERO
+	var span := balance.attack_windup_seconds + balance.attack_active_seconds
+	if span <= 0.0 or hero.facing.is_zero_approx():
+		return Vector3.ZERO
+	var dir := hero.facing.normalized()
+	return Vector3(dir.x, 0.0, dir.y) * (balance.attack_lunge_distance / span)
 
 
 ## Yaw-only camera-space -> world mapping (AC 3): the basis' right/back columns are

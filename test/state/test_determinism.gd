@@ -5,6 +5,40 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by STORY 3-0b PASS 2 (AC5 per-phase movement multipliers + AC6 attack
+## lunge), ONE re-baseline, TWO predicted causes — one moved, one measured non-moving,
+## exactly the fork the story's Golden Prediction section recorded in advance:
+##   1. AC5 PER-PHASE MULTIPLIERS — PREDICTED A MOVER, MEASURED A MOVER, but the SEAT is
+##      not the cause: the AUTHORED COVERAGE VALUE is. The flat attack_move_speed_multiplier
+##      is replaced by three per-phase fields selected via HeroState.attack_phase(); at the
+##      hashed t24 P1 is IDLE and P2 is in its t15 swing's RECOVERY with move (1,0), so the
+##      RECOVERY field alone is visible in the hash. _golden_config authors 0.25/0.5/0.75
+##      (windup/active/recovery) where the flat field was 0.0, moving P2's final velocity
+##      from ZERO to 6.0 * 0.75 = 4.5 on +X.
+##      EMPIRICAL ISOLATION, both directions: toggling ONLY the recovery value back to 0.0
+##      (windup 0.25 / active 0.5 left in place) reproduced the OLD golden 7fbb4b7f exactly.
+##      That measures two things at once — the per-phase SEAT itself is hash-NEUTRAL when
+##      the visible phase carries the old flat value, and the windup/active coverage values
+##      are MEASURED NON-MOVERS (attack velocities on earlier ticks are per-tick transients
+##      overwritten before t24 — the 1-5 cause-(c) lesson holding a third time).
+##   2. AC6 ATTACK LUNGE — PREDICTED A MOVER, MEASURED A NON-MOVER (the 1-9 cause-2 shape).
+##      The hash after AC6 landed was BIT-IDENTICAL to the hash after AC5 alone. REASON: the
+##      lunge is ruled live during WINDUP and ACTIVE only, and at t24 P1 is IDLE while P2 is
+##      in RECOVERY — no lunge term exists at the hashed tick — while the lunge velocities on
+##      the swing ticks that DO carry it are the same per-tick transients as above. The
+##      fixture was deliberately NOT redesigned to make the prediction come true; the
+##      authored 2.0 is path coverage, and test_golden_sequence_exercises_per_phase_movement
+##      _and_lunge proves that coverage is real (P1's t5 velocity IS the lunge alone).
+## Step-2 INTERMEDIATE measurement (AC5 in, AC6 not yet written):
+## 96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b — identical to the final
+## value below, which IS the measurement that makes AC6 a non-mover.
+## NOT a cause: snapshot SHAPE is untouched — the per-phase lookup adds no state (the phase
+## was already derived from which window is running) and the lunge reads facing LIVE rather
+## than storing an entry-locked direction, so unlike the roll it adds no snapshot field.
+## Previous golden 7fbb4b7f589251d25a13d6b49138b416266031e124cdae1c07e99e0f4fc119d1
+## (the stamina-cost corrective pass below; held unchanged through 3-0b Pass 1, whose
+## step/pause and window-countdown work is runner/debug-only and reaches no state field).
+##
 ## Re-baselined by the STAMINA-COST CORRECTIVE PASS (E3-RG/R2; decision (d) RESOLVED at
 ## DP/R2 — the basic attack costs stamina), ONE re-baseline, ONE named cause: the basic
 ## attack gained a stamina cost. Reconciled in both directions, two contributing halves
@@ -63,7 +97,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "7fbb4b7f589251d25a13d6b49138b416266031e124cdae1c07e99e0f4fc119d1"
+const GOLDEN := "96ac5f6467ee8de5866391b1886c112794b89ee24f0ed56e6a5597bb6a5d966b"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -136,8 +170,18 @@ const CONTACTS := {
 ## Combat-economy values (story 1-5), same coverage-not-feel principle: damage 10% of the
 ## TARGET's 120 max HP = 12.0 per hit (t5 hit -> P2 at 108, non-full at t24 — no HP
 ## regen exists), melee_hit_mana 12.0 (t5 hit -> P1 at 12 of 90, non-zero at t24 — no
-## mana sink exists in E1). attack_move_speed_multiplier is authored 0.0 (the live full-
-## root shape) — empirically hash-neutral for THIS sequence, see the GOLDEN header.
+## mana sink exists in E1).
+##
+## Story 3-0b (AC5) replaced the flat attack_move_speed_multiplier — authored 0.0 here, the
+## live full-root shape, and empirically hash-neutral for THIS sequence — with three
+## per-phase fields, authored here as THREE DISTINCT COVERAGE VALUES (0.25/0.5/0.75), NOT
+## the live 0.0/0.0/0.0. Only RECOVERY is visible in the hash: at the hashed t24 P1 is IDLE
+## and P2 is in its t15 swing's recovery (windup 15-17, active 18-21, recovery from 22) with
+## move pair MOVES[23 % 6] = (1,0), so P2's final velocity is 6.0 * 0.75 = 4.5 on +X. The
+## windup/active values are path coverage only — attack velocities on earlier ticks are
+## per-tick transients overwritten before t24 (the 1-5 cause-(c) lesson). They are authored
+## DISTINCT anyway so a selector bug that read the wrong field for recovery would land on a
+## different value and move the hash rather than silently coinciding.
 func _golden_config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = MAX_HP
@@ -159,7 +203,16 @@ func _golden_config() -> BalanceConfig:
 	c.attack_chain_window_seconds = 5.0 / 60.0
 	c.attack_chain_length = 3
 	c.attack_damage_percent_of_max_hp = 10.0
-	c.attack_move_speed_multiplier = 0.0
+	c.attack_windup_move_speed_multiplier = 0.25
+	c.attack_active_move_speed_multiplier = 0.5
+	c.attack_recovery_move_speed_multiplier = 0.75
+	# Story 3-0b (AC6): authored for PATH COVERAGE, not the hash — the roll_distance
+	# precedent exactly (1-9 cause 2, predicted mover / measured non-mover). The lunge is
+	# scoped to windup/active, both players are past those phases at the hashed t24, and
+	# attack velocities on earlier ticks are per-tick transients overwritten before it. 2.0
+	# is NOT the authored 0.5: like every value here it is chosen to be loud enough that a
+	# scope bug (a lunge leaking into recovery) would move the hash rather than round away.
+	c.attack_lunge_distance = 2.0
 	c.melee_hit_mana = 12.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	# Defense values (story 1-8), coverage-not-feel: multiplier 0.25 makes the t13
@@ -301,6 +354,34 @@ func test_golden_sequence_exercises_iframe_negation() -> void:
 	assert_eq(p2_mana[TICKS - 1], 12.0, "t24: P2 non-zero mana on the hashed record")
 	assert_eq(ms.p1.hero.roll_direction, Vector3(-1, 0, 0),
 		"t17 roll captured via the facing fallback — on the hashed record")
+
+
+## Story 3-0b (AC5/AC6), the per-phase-movement analogue of the pins above: the golden only
+## guards the new movement seat if the sequence actually EXERCISES it, and AC6's "authored
+## for path coverage" claim is vacuous unless the lunge is shown to have run. Both are pinned
+## on ticks where the arithmetic is unambiguous because the move intent is ZERO, so the
+## steered term drops out and the velocity is the new term alone:
+##   t5 — P1 is in swing 0's ACTIVE window (windup 1-3, active 4-7) and MOVES[4] gives P1
+##        (0,0), so world_dir is zero and P1's velocity IS the lunge: facing (-1,0) carried
+##        from t4 (a zero intent does not update facing), 2.0 units / (7/60 s) on -X. This is
+##        the evidence that AC6 ran at all — and, paired with the t24 pin below, the evidence
+##        for WHY it is a measured non-mover.
+##   t24 — the hashed tick. P2 is in its t15 swing's RECOVERY with move (1,0): velocity is
+##        6.0 * the recovery multiplier 0.75 = 4.5 on +X, with NO lunge component, which is
+##        exactly the AC5-moves / AC6-does-not split the re-baseline record names.
+func test_golden_sequence_exercises_per_phase_movement_and_lunge() -> void:
+	var ms := _make_match()
+	var p1_vel: Array[Vector3] = []
+	var p2_vel: Array[Vector3] = []
+	_play_sequence(ms, func(_t: int) -> void:
+		p1_vel.append(ms.p1.hero.velocity)
+		p2_vel.append(ms.p2.hero.velocity))
+	var lunge_speed := 2.0 / (7.0 / 60.0)
+	assert_eq(ms.p1.hero.attack_phase(), &"attack_done", "sanity: P1's swings are long over by t24")
+	assert_true(p1_vel[5 - 1].is_equal_approx(Vector3(-lunge_speed, 0.0, 0.0)),
+		"t5: P1's ACTIVE-phase velocity is the lunge ALONE (zero move intent) — AC6 genuinely ran")
+	assert_true(p2_vel[TICKS - 1].is_equal_approx(Vector3(4.5, 0.0, 0.0)),
+		"t24 (hashed): P2 in RECOVERY at 6.0 * 0.75, NO lunge term — the AC5-moves/AC6-non-mover split")
 
 
 func test_canonical_hash_ignores_key_insertion_order() -> void:

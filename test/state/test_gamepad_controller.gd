@@ -43,7 +43,9 @@ func _config() -> BalanceConfig:
 	c.attack_chain_window_seconds = 5.0 / 60.0
 	c.attack_chain_length = 3
 	c.attack_damage_percent_of_max_hp = 6.0
-	c.attack_move_speed_multiplier = 0.0
+	c.attack_windup_move_speed_multiplier = 0.0
+	c.attack_active_move_speed_multiplier = 0.0
+	c.attack_recovery_move_speed_multiplier = 0.0
 	c.melee_hit_mana = 8.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.roll_iframe_seconds = 2.0 / 60.0

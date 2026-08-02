@@ -32,7 +32,9 @@ func _config(deflect_window_seconds := 4.0 / 60.0, deflect_cost := 8.0,
 	c.attack_chain_window_seconds = 5.0 / 60.0
 	c.attack_chain_length = 3
 	c.attack_damage_percent_of_max_hp = 6.0
-	c.attack_move_speed_multiplier = 0.0
+	c.attack_windup_move_speed_multiplier = 0.0
+	c.attack_active_move_speed_multiplier = 0.0
+	c.attack_recovery_move_speed_multiplier = 0.0
 	c.melee_hit_mana = 8.0
 	c.block_damage_multiplier = 0.25
 	c.deflect_stamina_cost = deflect_cost
