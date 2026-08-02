@@ -37,7 +37,7 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 
 **Key stories.**
 - `CharacterBody3D` hero movement (`move_and_slide`); pulled-back soulsborne camera.
-- Basic attack chain — state-driven; hitbox *reports contact*, state applies chip damage and exposes a mana-generation hook (wired in E3).
+- Basic attack chain — state-driven; hitbox *reports contact*, state applies chip damage and grants mana on confirmed hits directly (the direct path is replaced by the data-defined economy evaluator in 3-4, not newly wired there).
 - Block / Deflect — hold to block; precise-timing parry window; stamina cost.
 - Roll — i-frame dodge in movement direction; stamina cost.
 - Stamina economy — auto-regen; zero-stamina lockout of roll/deflect/unblockable.
