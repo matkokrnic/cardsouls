@@ -109,3 +109,8 @@ roll klip se prekine puno prije kraja
 blok nema međukadrova, pop u pozu i iz nje
 da ništa od toga ne blokira adoption i da sve tri stavke idu 3-0b
 
+
+
+2.8.
+1  taman ili mozda samo mrvicu pre brzo ali zasad vise nego dovoljno dobro 2 cini se taman za reagirati 3 sve 3 anicmacije su prisutne 4 od oka mi je tesko tvrditi sa isgurnoscu ali djeuje kao da registracija udasraca se poklapa sa stizanjem maca to mi se cini dobro 5 za sada vise nego dovoljno dobro mozda bi jos malo posporio nekad kasnije 6 osjecas ses neranjivost a li misli mda bi bila jos dodatna da mrvu dulje traje, al kazem zasasd to vise nebi dirao dovjno dobro je za sada
+zvuk tkoader telegrafira dovoljno dobro
