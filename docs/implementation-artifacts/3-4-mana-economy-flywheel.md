@@ -129,6 +129,126 @@ smoke carries one named question for the playtest-log: "flywheel or bookkeeping"
 (Matko) writes the playtest-log entry; the dev pass NEVER writes `docs/playtest-log.md`. The flag-OFF
 leg is headless-only (AC3/AC5) — no `feature_flags.tres` edit for any live run.
 
+## Dev Pass Record
+
+Dev pass model: **Claude Opus 4.8**. This section records that pass's substance; the commit chain
+that lands it (evaluator/tests/data commit, this doc commit, the board-promotion commit, and the
+decision-log close-out) is a separate session, **Claude Sonnet 5** — see Agent Model Used below.
+
+- **Suite outcome.** State harness 192 tests / 917 assertions / 0 failed -> **208 tests / 977
+  assertions / 0 failed**; all 14 integration tests PASS individually; zero `SCRIPT ERROR` lines
+  across the harness output.
+- **Golden — three measurements, in order (matches the Golden Prediction section exactly):**
+  1. **Evaluator swap alone** (AC2's proof artifact) — the direct `balance.melee_hit_mana` grant
+     replaced by the `EconomyEvaluator` call over the authored `melee_hit` rule, both authored
+     `.tres` already present. Measured **UNMOVED**: `96ac5f64...`. Proves the refactor is a true
+     no-op on the melee case.
+  2. **Passive rung landed, fixture untouched** (`BalanceTicks.mana_regen_per_tick` +
+     `ManaPool.advance_regen` + the step-5 seat, `_golden_config`'s `mana_regen_per_second` still
+     its default `0.0`) — measured **UNMOVED**, still `96ac5f64...`. Isolates the SEAT from the
+     COVERAGE VALUE: a `BalanceTicks` field is load-time config, never snapshotted, so it cannot
+     move the hash by existing.
+  3. **Fixture coverage value edited** — `_golden_config` authors `mana_regen_per_second 75.0`
+     (1.25/tick). Measured **MOVED**: `96ac5f64...` -> `98d0c7eb...`. This is the ONE named cause;
+     re-baselined once.
+  - **Coverage-value rationale (selector-bug guard).** 75.0/s was chosen deliberately DISTINCT from
+    this fixture's stamina rate (60.0/s = 1.0/tick): if the evaluator's field lookup ever picked up
+    `stamina_regen_per_tick` instead of `mana_regen_per_tick` for the passive rule, the two rates
+    coinciding would let that selector bug hide inside an unchanged hash. 75.0/s (1.25/tick) also
+    stays clear of the 90.0 mana cap over the 24-tick record (30.0 accrued + one 12.0 hit = 42.0 at
+    t24, left UNCLAMPED so the hash encodes the accumulation) and is exactly representable in
+    binary, so every expected value in the golden-sequence tests is an exact equality, no tolerance.
+- **Mutation table.** Each row: mutate in place, run the suite, restore from an out-of-repo backup
+  copy (SHA256-compared before mutating and after restoring; `git checkout --` never used).
+  | # | Mutation | Result |
+  |---|---|---|
+  | M1 | DEAD suppression removed from `_regen_mana` | 1 failure — `test_dead_hero_gains_no_passive_mana_on_its_one_dead_tick` |
+  | M2 | `EconomyEvaluator` caches `BalanceTicks` in a static var | 10 failures incl. `test_mid_match_reload_changes_the_very_next_tick_regen_rate` — the process-wide static poisoned 9 OTHER tests |
+  | M2b | Same defect scoped per-`MatchState` (narrower rerun) | 1 failure, crisp — `test_mid_match_reload_changes_the_very_next_tick_regen_rate` |
+  | M3 | BLOCKING suppressed too (mana mirrors stamina) | 1 failure — `test_blocking_hero_still_gains_passive_mana_while_stamina_is_suppressed` |
+  | M4 | Melee grant leaks to the target as well | 6 failures — 2 mana-economy, 1 contact-resolution, 3 determinism (incl. the golden) |
+  | M5 | `passive_tick.tres` renamed to name `stamina_regen_per_tick` | 29 failures across 6 files — the `.tres` CONTENT is load-bearing everywhere, including the golden |
+  | M6 | `_flag_open` always returns true | 5 failures — 3 mana-economy, 2 contact-resolution |
+- **Provability honesty.** Three crash-guards are NOT claimed mutation-proven: the `home == null`
+  guard in `EconomyEvaluator._amount` (a pre-injection `MatchState`), the type check on the
+  dereferenced value in that same method (`value is float or value is int`), and the `dir == null`
+  guard in `load_rules` (a missing directory). No test deletes any of these three and asserts a
+  crash in their absence — the same class of admission 3-1 made for its own crash-guards (3-1/R6).
+  Admitted partial: no dedicated preload-list mutation was run (there is no preload list — sourcing
+  is a live directory scan) — the directory-scan claim is accepted on M5 above plus the
+  different-directory assertions in `test_rule_set_is_a_directory_scan_not_a_hardcoded_list`.
+- **KAKO decisions (what/how, recorded for the record):**
+  - **Rule sourcing.** A directory scan of `data/economy/`, sorted before loading — the first
+    `load()` call to appear anywhere in `src/state/`. Forced by two constraints together: AC2
+    requires the evaluator swap to be a behaviour-preserving no-op (an injection seam would force
+    every existing fixture to inject rules before mana generation worked at all), and the autoload
+    fence rules out a new service (a new autoload is a `project.godot` edit this story does not
+    make).
+  - **Rules name a field, never carry an amount.** A rule is structure (which field, which faucet),
+    not a gameplay number.
+  - **Evaluator computes, pools apply.** `amount_for()` returns a float and touches no pool — a
+    deliberate departure from the architecture doc's Novel Pattern 5 sketch (which has the
+    evaluator call `player.mana.add()` itself), so the mutation stays inside
+    `MatchState.advance()`'s ordered dispatch (D2) where every other mutation already lives. Filed
+    as the architecture amendment queue's fifth member.
+- **Review outcome: PASS**, four items:
+  - **D1 — rule sourcing ACCEPTED**, with three named consequences: it NARROWS BC/R3 — the standing
+    "authored data cannot move the determinism golden" property now applies to balance/tuning data
+    ONLY (`data/balance/*.tres`, never read by the hashed run); `data/economy/*.tres` is a DIFFERENT
+    class — the rule set IS loaded and read by the production code path the golden run exercises, so
+    rule content is load-bearing for the hash exactly like code (proven by M5's 29 failures above);
+    it is no-reload-by-design (rules load once, like FeatureFlags — a rule edit needs a restart, not
+    a hot-reload path, since none of AC1-AC6 asked for one, and this is deliberately NOT a DEBT B
+    member — hot-reloadable rules would be their own story with both DEBT B halves); and it carries
+    the export-packing remap risk as a named flag with no owner (`DirAccess` scan + `ends_with(
+    ".tres")` is fragile under export remap — zero impact today, activates on the first
+    export/packaging story).
+  - **D2 — two golden pins rewritten as `12.0 + N * PASSIVE_PER_TICK`** within the same named cause:
+    the pre-existing flat `12.0` mana assertions in `test_golden_sequence_exercises_block_and_deflect`
+    (t13, t24) and `test_golden_sequence_exercises_iframe_negation` (t20, t24) now read as the melee
+    amount plus the accumulated passive ticks — both changes trace to measurement 3 above, no second
+    cause.
+  - **D3 — folded into the architecture amendment queue's fifth member**, now expanded to include:
+    rules-name-a-field vs Novel Pattern 5's amount-float sketch, compute-vs-apply, the loader, and
+    the new `data/economy/` directory absent from the Directory Tree.
+  - **D4 — partial accepted**: the provability-honesty admission above (three crash-guards not
+    mutation-proven, no dedicated preload-list mutation) was reviewed and accepted as sufficient
+    rather than extended.
+
+**Smoke Record.** Two live runs, shipped default configuration, flag ON, zero manual edits between
+runs.
+- **Run 1** confirmed: passive creep visible on both mana bars; an attacker-only jump on a
+  confirmed hit; BLOCKING keeps filling (the sealed non-suppression, AC4).
+- **Run 2** confirmed: a kill, round-over, and stable fps throughout.
+- **S1 (parked, PROVISIONAL TUNING).** Operator observation: the passive rate may read too fast.
+  Parked to the 3-2 forcing point per the E3 criterion — a round should finance 2-4 loop cycles, and
+  that's unjudgeable before cards have costs to spend mana against. A retune later is a
+  golden-neutral `chore(balance)`: the golden's own fixture authors its own coverage value,
+  independent of the shipped `.tres`.
+- **S2 (parked, PROVISIONAL TUNING).** Operator observation: `melee_hit_mana` at ~10% of the mana
+  bar per hit may be too high; operator suggests 5% or less. Same forcing point and same
+  golden-neutral retune path as S1.
+- **S3 (parked, named open finding).** Operator question: should a blocked hit pay reduced mana
+  (e.g. 2% vs the current 5%) rather than the same amount as an unblocked hit? Today's behavior —
+  a blocked hit pays FULL mana, identical to an unblocked one — is the LOCKED 1-8 decision (block
+  does not touch the attacker's economy at all, deliberate for E1). A reduction would be a NEW
+  mechanism (a new balance field, and a golden mover), not a tuning change, so it is recorded as an
+  open finding rather than folded into S1/S2. Forcing point: 3-2 / the tuning pass.
+- **S4 (parked, named open design question, no owner).** Live observation: a respawn appears to
+  carry full mana. Verified against the code, not assumed: `_reset_player`
+  (`match_state.gd:777-781`) only heals hp to max and clears a `DEAD` action state back to `IDLE` —
+  it never touches the mana (or stamina) pool at all. So "full mana at respawn" is leftover mana
+  the hero had already accumulated before dying, surviving the reset untouched, not the reset
+  granting anything (the `attack_index` precedent — reset is deliberately narrow). Forcing point:
+  the first real round-flow story, or the tuning pass, whichever comes first.
+- **DEAD-freeze live observation — WAIVED.** The DEAD-suppression behavior is headless-proven
+  (`test_dead_hero_gains_no_passive_mana_on_its_one_dead_tick` plus mutation M1) and visually
+  indistinguishable in live play at the moment it would matter, since the mana clamp absorbs both
+  the suppressed and unsuppressed cases identically at cap. No live-observation follow-up needed.
+- **R-D6 re-invoked and SPENT** on this story (see Live Smoke section above).
+- The playtest-log entries for these runs are the OPERATOR's own words — not reproduced or edited
+  here.
+
 ## Dev Agent Record
 
 ### Agent Model Used
@@ -139,4 +259,23 @@ Claude Sonnet 5
 
 ### Completion Notes List
 
+- Dev pass (2026-08-02, Claude Opus 4.8): implemented AC1-AC6 — see Dev Pass Record above for
+  the three golden measurements, the mutation table, the KAKO decisions, and the review outcome.
+- Live smoke (2026-08-02, two runs, operator Matko): see Smoke Record above for findings
+  S1-S4 and the DEAD-freeze waiver.
+
 ### File List
+
+- data/economy/melee_hit.tres (new)
+- data/economy/passive_tick.tres (new)
+- src/state/economy/economy_evaluator.gd (new)
+- src/state/economy/economy_evaluator.gd.uid (new)
+- src/state/resources/resource_generation_rule.gd (new)
+- src/state/resources/resource_generation_rule.gd.uid (new)
+- src/state/match_state.gd
+- src/state/pools/mana_pool.gd
+- src/state/timing/balance_ticks.gd
+- test/state/test_balance_config.gd
+- test/state/test_determinism.gd
+- test/state/test_mana_economy.gd (new)
+- test/state/test_mana_economy.gd.uid (new)
