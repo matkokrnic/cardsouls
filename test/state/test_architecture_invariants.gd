@@ -68,6 +68,41 @@ func test_state_layer_never_extracts_root_motion() -> void:
 				% ", ".join(offenders))
 
 
+## Story 3-2 (AC 5): CARD DATA NEVER REACHES THE STATE LAYER. Cards are a growing content
+## library loaded by the CardDatabase autoload from data/cards/; the hashed determinism run
+## must stay independent of them, or adding a card would re-baseline the golden and defeat the
+## "new card = a .tres, no code" promise this epic exists to deliver. (Deliberate ASYMMETRY
+## with data/economy/, whose rule content IS load-bearing for the hash — 3-4/R6.) If a later
+## story needs card data inside the tick loop it arrives by INJECTION, exactly as BalanceConfig
+## and FeatureFlags do. Scanning src/state/ (not all of src/) is the load-bearing scope, and
+## comments are stripped by _code_lines so the prose above never false-positives.
+func test_state_layer_never_names_card_data() -> void:
+	var re := RegEx.create_from_string("(CARDS_DIR|data/cards)")
+	# NON-VACUITY, two ways. (a) The banned tokens must be REAL: card_database.gd names both,
+	# so a rename there that silently empties this guard fails HERE instead of passing quietly
+	# — the same "a rename must not un-guard the layer" mechanism as the hud_root_found and
+	# controller_found assertions above. (b) The scan must actually visit files.
+	var db_hits := 0
+	for line in _code_lines("res://src/systems/card_database.gd"):
+		if re.search(line) != null:
+			db_hits += 1
+	assert_true(db_hits > 0,
+		"card_database.gd must still name CARDS_DIR / data/cards — otherwise this guard is vacuous")
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/state/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/state/ scan found no .gd files (guard would be vacuous)")
+	assert_eq(offenders.size(), 0,
+		"card data named in src/state/ (AC5: cards reach state by injection only, never by path): %s"
+				% ", ".join(offenders))
+
+
 func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)
 	# int-literal callers depend on these ordinals: test_camera_relative.gd writes [0, 1] and
 	# every 2-2 smoke flip writes int literals like [3, 2] / [2, 3]. A future reorder would

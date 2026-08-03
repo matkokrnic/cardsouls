@@ -54,6 +54,13 @@ static func authored_rules() -> Array[ResourceGenerationRule]:
 ## the set must not depend on filesystem enumeration order). Non-rule resources in the
 ## directory are skipped, so a stray `.tres` cannot poison the rule set. A missing directory
 ## yields an empty set rather than failing — graceful degradation, the FeatureFlags precedent.
+##
+## RECIPROCAL NOTE (story 3-2): `CardDatabase._load_all()` (src/systems/card_database.gd)
+## runs the same sorted, extension-filtered, single-directory scan over `data/cards/`. The
+## duplication is DELIBERATE — a shared helper is deferred to a third scan, because these two
+## sit on opposite sides of the state/systems layer boundary and the helper has no honest home
+## today. Change one and check the other. The export-packaging remap risk filed here at 3-4/R8
+## covers BOTH directories.
 static func load_rules(dir_path: String) -> Array[ResourceGenerationRule]:
 	var out: Array[ResourceGenerationRule] = []
 	var dir := DirAccess.open(dir_path)
