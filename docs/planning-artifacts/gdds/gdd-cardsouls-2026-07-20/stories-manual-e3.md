@@ -131,9 +131,10 @@ only inside `advance()`).
    exhaustion reshuffles the discard pile and opens the vulnerable window for the authored ticks;
    same-seed draw sequences match.
 
-**Exit criterion.** Each player draws a full hand at round start, draw-on-play respects a
-data-authored delay, exhaustion reshuffles with a signalled vulnerable window, and every draw comes
-from the seeded RNG inside `advance()`.
+**Exit criterion.** Each player's hand fills to `hand_size` at match start and on debug reset from a
+deck shuffled by the seeded RNG inside `advance()`. Draw-on-play, exhaustion-reshuffle, and the
+vulnerable window have no consumer until E3.S5 (the card-play story), which is where those clauses are
+discharged.
 
 ---
 
