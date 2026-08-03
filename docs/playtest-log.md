@@ -114,3 +114,8 @@ da ništa od toga ne blokira adoption i da sve tri stavke idu 3-0b
 2.8.
 1  taman ili mozda samo mrvicu pre brzo ali zasad vise nego dovoljno dobro 2 cini se taman za reagirati 3 sve 3 anicmacije su prisutne 4 od oka mi je tesko tvrditi sa isgurnoscu ali djeuje kao da registracija udasraca se poklapa sa stizanjem maca to mi se cini dobro 5 za sada vise nego dovoljno dobro mozda bi jos malo posporio nekad kasnije 6 osjecas ses neranjivost a li misli mda bi bila jos dodatna da mrvu dulje traje, al kazem zasasd to vise nebi dirao dovjno dobro je za sada
 zvuk tkoader telegrafira dovoljno dobro
+
+2.8
+1 oba mana bara se polako pasivno pune, iako nemogu sa sigurnoscu reci dok nebu visse mehanika implenetirano, cini se mozda malo prebrzo, kao sto mi se cini i da svaki udrac generira previse mane 10% je puno sigurno bi smanjo na 5% a mozda cak i manje te blokirani udarci nebi trebali davati jednako mane kao oni koji ne pordu mozda umjesto 5% onako 2%, ali to su stvarikoje cu bolje zanti reci ka da vise stvari bude implementirano 2 pogodat daje vildjiv skok ,mozdaprevise kako sam ranije komentirao, 3 blkirani pogodak daje manu to ne znam kako sam ranije naveo jeli dobro ili da barrem ne daje mane kao i nebolkirani, buduci da se mana brzo puni a napad je snizen kako smo htjli nisam uspio ubiti lika prije nego se napunio skorz pa nemogu reci, fps nez kako da vidim ako mislim na isto
+
+fps uredan, a sada kazem ti buduci da se mana prebtzo puni vec je skroz puna kad umre p2 pa ne vidm puni li se dok je mrtvac ali kad kllilknem r se respawna s punom manom
