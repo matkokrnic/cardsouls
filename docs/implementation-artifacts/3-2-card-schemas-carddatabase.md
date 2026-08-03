@@ -151,6 +151,22 @@ so that adding a card is a `.tres` with no code change, and per-colour unblockab
   the same superseded shape as working code (`amount: float`, `EconomyEvaluator.apply()` mutating a
   pool directly), which this project's shipped evaluator explicitly departed from
   (`amount_domain`/`amount_field`, compute-not-apply — 3-4/R9). Make NO edit to the architecture doc.
+- **THE NINE CARDS ARE A FIXTURE SET, NOT THE GAME'S CARDS.** They exist to prove the loader, the id
+  contract, and deck constructibility. The operator will design real cards in a later pass once
+  effects can actually do something; these ids are internal (`CardData` has no display-name field
+  anywhere) and a rename stays cheap. Recorded so placeholders do not become canon by inertia.
+- **The authored set and why.** Cost tier maps to card type — one Spell at 2, one Minion at 3, one
+  Totem at 5 per colour, and the three totems take one each of the GDD's three totem subtypes, so the
+  nine span all three card types across all three colours. `imp_summoner` at 3 red mana is the GDD's
+  own worked example reproduced, not invented. Copies: 3 on the cheap cards, 2 on the totems, 24
+  available for a 20-card deck.
+- **The open decisions the dev pass made that the story left open.** `CardEffect` ships with exactly
+  one field (`effect_id`) on the precedent of a reserved field that was authored ahead of its consumer
+  in an earlier story and later deleted; `orb_costs` is empty on every card because orbs are
+  pitch-only by the GDD, not by omission; `card_count()` was added as a read accessor beside
+  `get_card`/`has_card` so the integration test need not reach into a private dictionary, and no
+  ordered exposure was added; the loader has no empty-id skip because an empty id is an authoring
+  error caught at the data level.
 
 ### Readiness-gate findings and rulings (2026-08-03)
 
@@ -251,6 +267,76 @@ The live-smoke acceptance criterion (R-D6) is currently SPENT (3-4/R11, first pl
 3-1) and is re-invoked by the next story that ships player-facing behaviour — the card-play story (3-5),
 not this one.
 
+## Dev Pass Record
+
+Dev pass model: **Claude Opus 4.8**. This section records that pass's substance; the commit chain
+that lands it (schemas/data/tests commit, this doc commit, the board-promotion commit, and the
+decision-log close-out) is a separate session, **Claude Sonnet 5** — see Agent Model Used below.
+
+- **Suite outcome.** State harness 208 tests / 977 assertions / 0 failed -> **218 tests / 1103
+  assertions / 0 failed**; fifteen integration files PASS individually (a fifteenth,
+  `test/integration/test_card_database.gd`, added this story); zero `SCRIPT ERROR` / `Parse Error` /
+  `INVARIANT VIOLATED` lines across the harness output.
+- **Golden — measured in both directions, exactly as the Golden Prediction section states.** Measured
+  before the first edit and after the last: **UNMOVED**, `98d0c7eb...` throughout.
+- **Mutation table.** Every target copied to a scratchpad OUTSIDE the repo before mutating; restored
+  by copy-back, never `git checkout --`; every restore SHA256-verified.
+
+  - **M1** — Removed what AC5 protects: added `const CARDS_DIR := "res://data/cards/"` to
+    `src/state/player_state.gd`. FAIL as required. `test_architecture_invariants.gd` ::
+    `test_state_layer_never_names_card_data`. State harness 218 tests, 1 failed, 1103 assertions,
+    RESULT: FAIL, exit 1. Message: `assert_eq: got 1, expected 0 (card data named in src/state/ ...
+    res://src/state/player_state.gd:7 const CARDS_DIR := "res://data/cards/")`.
+  - **M2** — Duplicated an id: `data/cards/frost_dart.tres` id -> `&"ember_lash"`. FAIL as required.
+    `test_card_authoring.gd` :: `test_every_id_is_non_empty_and_unique`. 218 tests, 1 failed, 1103
+    assertions, exit 1. Two assertions: got 1, expected 0 (card ids are unique across the set:
+    ember_lash) and got 8, expected 9 (nine distinct ids). ALSO `test_card_database.gd` (integration):
+    count=8 (expected 9) missing=[frost_dart], RESULT: FAIL, exit 1.
+  - **M3** — Loader returns an empty set: `if true: return` at the top of `_load_all()` in
+    `src/systems/card_database.gd`. FAIL as required, but ONLY in integration. `test_card_database.gd`:
+    count=0 (expected 9), all nine ids missing, RESULT: FAIL, exit 1. STATE HARNESS: 218 tests, 0
+    failed, 1103 assertions, RESULT: PASS, exit 0.
+  - **M4** — `max_copies = 4` (outside the GDD's 2-3 band) in `data/cards/hellforge_totem.tres`. FAIL as
+    required. `test_card_authoring.gd` ::
+    `test_copies_cap_is_in_bounds_and_a_twenty_card_deck_is_constructible`. 218 tests, 1 failed, 1103
+    assertions, exit 1. assert_true failed (card 'hellforge_totem' max_copies 4 is in the GDD's 2-3
+    band).
+  - **M5** — Added `@export var unblockable_damage: float = 0.0` to `CardData`. FAIL as required, in
+    TWO tests. `test_card_authoring.gd` :: `test_card_data_carries_no_damage_or_unblockable_field` and
+    :: `test_card_data_exports_exactly_the_authored_field_set`. 218 tests, 2 failed, 1103 assertions,
+    exit 1.
+
+  Restore hashes, all matching pre-mutation:
+  - `player_state.gd` — `D2C61FB4F74F749D9DEC0B4B33BD815B56867C801B3DED1A442BD883EF519BBC`
+  - `frost_dart.tres` — `AFC1FE07774ABF9BB36707C105537BFDD522FF511061CF00857B0B55D6683088`
+  - `card_database.gd` — `6E09E39BDCF8B104D833EFB2D3FBEE6B936DB21A3613D5C8CEC198AF05D8FA04`
+  - `hellforge_totem.tres` — `62334139917D165ED8FA9E93F70067132441FA2ABDD24BB142AFAF118074CB3D`
+  - `card_data.gd` — `4278C70241592F8FC232767462D8CE7D13C7EAA29FF4DD87A520C3807957697E`
+
+- **M3 IS THE STORY'S OWN ARGUMENT, MEASURED.** With the loader body dead the entire state harness
+  stays green — it instantiates no autoloads, and the authoring test loads the `.tres` files itself —
+  and the integration test is the only thing in the repo that bites. That is exactly the claim that
+  justified requiring it ("a silently empty card dictionary would today be noticed by nothing"), now
+  demonstrated rather than asserted.
+- **CRASH GUARDS, NOT PROVEN, DELIBERATELY.** The loader's two null guards (a missing directory, a
+  resource that fails to cast) are crash guards. A GDScript null dereference aborts only the current
+  function and leaves the caller running, so removing either produces no observable failure. No proof
+  was manufactured.
+- **THE MUTATION TABLE WAS MEASURED BEFORE ONE COSMETIC FIX.** M5 exposed a field name matching both
+  banned tokens being listed twice in the failure message; a `break` was added afterwards. Message text
+  only, pass/fail unaffected, and the full suite was re-run green after it. Recorded so the table and
+  the final code are not claimed to be from the same moment.
+- **THE ECONOMY FILE'S COMMENT-ONLY CHANGE IS SANCTIONED, NOT A FENCE BREACH.** The dev pass prompt
+  said both "`src/state/economy/` is not touched" and "add the reciprocal comment there". The fence
+  meant no cast evaluator in that folder, not a byte-identical file, and AC4 explicitly requires the
+  reciprocal cross-reference. The diff there is docstring only, zero code lines.
+- **THE CLASS CACHE HAND-WRITE IS NOW A STANDING TECHNIQUE, NOT A DEVIATION.** New `class_name`
+  declarations cannot resolve without an editor scan, so nothing at all can run; the dev pass
+  hand-appended the three entries to the git-ignored generated class cache in the exact format the
+  editor writes, and this chain's editor scan regenerates it. This is the second occurrence (the first
+  was story 3-1) and it is recorded as the normal division of labour: the dev pass writes the cache by
+  hand, the chain runs the scan.
+
 ## Dev Agent Record
 
 ### Agent Model Used
@@ -263,8 +349,34 @@ Claude Sonnet 5
 
 - Readiness-gate fix pass (2026-08-03): the rulings applied in this revision were provided by the
   operator at this story's readiness gate; this pass rewrote the file around them.
+- Dev pass (2026-08-03, Claude Opus 4.8): implemented AC1-AC7 — see Dev Pass Record above for the
+  suite outcome, the golden measurement (NONE, both directions), the mutation table, and the recorded
+  rulings.
 
 ### File List
+
+- data/cards/bramble_snare.tres (new)
+- data/cards/ember_lash.tres (new)
+- data/cards/frost_dart.tres (new)
+- data/cards/hellforge_totem.tres (new)
+- data/cards/imp_summoner.tres (new)
+- data/cards/storm_kite.tres (new)
+- data/cards/tidal_wardstone.tres (new)
+- data/cards/thornback_guardian.tres (new)
+- data/cards/verdant_wardstone.tres (new)
+- src/state/resources/card_data.gd (new)
+- src/state/resources/card_data.gd.uid (new)
+- src/state/resources/card_effect.gd (new)
+- src/state/resources/card_effect.gd.uid (new)
+- src/state/resources/card_cast_condition.gd (new)
+- src/state/resources/card_cast_condition.gd.uid (new)
+- test/state/test_card_authoring.gd (new)
+- test/state/test_card_authoring.gd.uid (new)
+- test/integration/test_card_database.gd (new)
+- test/integration/test_card_database.gd.uid (new)
+- src/systems/card_database.gd
+- src/state/economy/economy_evaluator.gd
+- test/state/test_architecture_invariants.gd
 
 ## Change Log
 
@@ -272,3 +384,4 @@ Claude Sonnet 5
 |------|---------|-------------|--------|
 | 2026-07-31 | 0.2 | E3 revisit-gate outcome (commit `10b96a1`): CONFIRMED as written apart from two cosmetic fixes — named the existing `Enums.CardColor` instead of a second enum; cited the GDD as the source of the copies-per-card bound. Golden Prediction and Live Smoke sections added. Status stayed backlog pending this story's own readiness gate. | Claude Opus 4.8 |
 | 2026-08-03 | 0.3 | Readiness-gate fix pass (NOT READY on first read -> fixed and promoted, same session; sixteenth logged Set B readiness gate). AC set replaced with seven verifiable claims (card schema; cast-condition schema with no evaluator; nine-card starter set; loader; cards outside the hashed run; test surface incl. a new integration test; the unblockable negative guard). Stale E3-revisit banner and dangling 3-1 cross-reference replaced with a Scope note in the 3-1/3-4 pattern. The wrong `check_invariant` name in the old AC4 dropped entirely — the sibling 3-5 story had it corrected to `Invariant.check` at the revisit gate; this story carried the wrong name through untouched because it was confirmed, not amended, the clearest evidence the confirm proved shallow. Golden Prediction baseline corrected from `33817201...` — stale across three intervening re-baselines (the stamina-cost corrective pass, 3-0b Pass 2, and the 3-4 economy re-baseline) — to `98d0c7eb...`, prediction NONE in both directions. Live Smoke kept NOT REQUIRED with the corrected reason (the autoload's `_ready()` runs in the live boot path; the integration runner's headless script-error grep is the proof). Dev Notes appended with the evaluator contract inherited by 3-5, the literal-vs-field `mana_cost` ruling, card identity as a field not a filename, the copies-cap-is-per-card ruling, the pacing measuring-stick arithmetic, the parked-findings seats (S1/S2 here, S3 its own seat, S4 to the round-flow story), the deliberate scan-duplication note with the extended remap flag, the pre-declared crash guards, and the sixth architecture-amendment-queue member. Status backlog -> ready-for-dev; `sprint-status.yaml` and `stories-manual-e3.md` updated alongside. | Claude Opus 4.8 |
+| 2026-08-03 | 0.4 | Dev pass landed (implementation ran on Claude Opus 4.8; this commit chain — code commit, this doc commit, board promotion, decision-log close-out — runs on Claude Sonnet 5, per Agent Model Used below): three schemas, nine fixture cards, the `CardDatabase` loader, the AC5 state-layer guard, and the new state/integration test surfaces (AC1-AC7). Dev Pass Record section added with the suite outcome (208/977 -> 218/1103), the golden measurement (NONE, both directions), the full mutation table (M1-M5), and the five recorded rulings (M3 as the story's own argument, the crash-guard admission, the mutation-table-before-cosmetic-fix note, the economy comment-only sanction, the class-cache hand-write precedent). Dev Notes appended with the fixture-set framing for the nine cards, the authored-set rationale, and the dev pass's open KAKO decisions. File List filled. Status stays ready-for-dev; promotion to done is a separate commit. | Claude Sonnet 5 |
