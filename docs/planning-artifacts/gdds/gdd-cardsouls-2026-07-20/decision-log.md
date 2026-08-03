@@ -2576,3 +2576,139 @@ breach against the "`src/state/economy/` is not touched" scope line.
 data), `docs(3-2): dev pass record` (this story's Dev Pass Record, Dev Notes additions, Dev Agent
 Record, and Change Log), `board: promote 3-2-card-schemas-carddatabase to done`, and this entry. No
 push -- the operator reviews the log and pushes.
+
+## Session 2026-08-03 -- Story 3-3 readiness gate
+
+Readiness gate on `3-3-deck-hand-draw-reshuffle.md` (docs-only, report-only) returned **NOT READY**
+on first read. This is the same first-pass verdict every Set B story's gate has returned -- sixteen
+PRIOR Set B readiness-gate sessions (seven E1, six E2, plus 3-1, 3-4, and 3-2, the last two on
+2026-08-02 and 2026-08-03), all NOT READY on first read -- 3-3 makes it **17/17** -- and this gate is
+no exception in either direction: fixed and promoted the same session, story Status and board `backlog
+-> ready-for-dev`.
+
+**Baseline measured green before the first edit** (docs-only pass; no code touched): state harness 218
+tests / 1103 assertions / 0 failed; 15 integration files, each individually PASS; golden unmoved at
+`98d0c7ebfdbe01a97622b185a7e3388428793cc87e323751c2ffb5b6f58f81ff`; `project.godot` SHA256 hash
+unchanged (`31033a50137c98dc...`, matching the 3-2 close-out measurement -- this story adds no
+autoload and touches no engine config);
+engine 4.6.3.
+
+**Premise corrections, with content, resolved before the blocking findings.**
+(i) The pre-gate story text named exactly two Golden Prediction causes -- draw consuming the RNG (old
+AC2) and `hand_size` becoming non-zero -- and both are, under the fixture's DEFAULT authored values,
+NON-MOVERS: `_golden_config()` authors no `deck_size`/`hand_size` today, so a shuffle over an empty
+deck consumes the RNG zero times and an empty deck fills no hand. Neither claimed cause moves the hash
+unless the fixture is given a coverage value for `deck_size` (and, dependently, `hand_size`) -- a
+fixture-authoring step the pre-gate text never named. A THIRD, unnamed cause moves the hash
+unconditionally: `PlayerState.to_snapshot()` adding the `Deck`/`Hand` keys at all changes the snapshot
+SHAPE even at every-size-zero, before any RNG is consumed. This is the gate's most valuable finding --
+it turns a two-cause prediction into three, one of them unconditional, and makes explicit that the dev
+pass must AUTHOR a `deck_size` (and `hand_size`) fixture coverage value or the predicted movers do not
+move, silently invalidating the golden pin.
+(ii) `Array.shuffle()` was measured directly on this engine (4.6.3): it draws from the GLOBAL RNG and
+leaves a per-instance `RandomNumberGenerator` completely untouched. Verified against the shipped guard,
+`test_state_layer_has_no_nondeterministic_source` (`test/state/test_architecture_invariants.gd`,
+INVARIANT D3(b)/A2): its banned-token regex covers `randf`/`randi`/`randf_range`/`randi_range`/
+`randfn`/`randomize` and `Time`/`OS`/`Engine`. It does not mention `shuffle`, `pick_random`, or `seed`
+at all -- a `deck.shuffle()` written under `src/state/` today would pass the entire suite while
+silently destroying replay determinism. AC7 (the explicit Fisher-Yates requirement) and AC8 (the guard
+extension) exist because of this measurement, not as a precaution against a hypothetical.
+(iii) Deck composition -- WHICH cards, in what quantity, fill a fixture deck -- was unowned by any
+story: 3-2 authored the cards and `max_copies` but explicitly deferred real deck selection past E3;
+the pre-gate 3-3 text named `deck_size` as a size with no rule for what fills it. Ruled here (AC4):
+walk `CardDatabase`'s sorted ids, taking up to each card's `max_copies`, until `deck_size` is reached
+-- deterministic, content-agnostic, and explicitly a FIXTURE rule, not the deckbuilding seat.
+(iv) `CardDatabase` (`src/systems/card_database.gd`) could not be enumerated in any order before this
+gate: `get_card`/`has_card`/`card_count` give no way to walk the loaded set, and its own comments
+already anticipated this gap ("any later ordered read sorts explicitly"). AC3 adds exactly one sorted
+ordered accessor, discharging that anticipation.
+(v) Deck exhaustion is UNREACHABLE in this story as scoped: only one draw event exists here (the
+initial fill, at match start and on debug reset) and nothing else removes cards from the deck, so a
+20-card deck with a 4-card hand can never run out. Discard, reshuffle-on-exhaustion, and the vulnerable
+window all require a play-triggered draw that does not exist until 3-5. Ruling: all four (discard,
+reshuffle, vulnerable window, and the draw-on-play delay that would trigger them) move to 3-5 together
+with their trigger -- not split from it.
+
+**All twelve rulings, in the order they land in the story's AC list / Dev Notes.**
+1. **AC1 -- pure `Deck`/`Hand`.** `RefCounted`, not `Resource` or `Node`; owned by `PlayerState`; no
+   `CardDatabase`/`CARDS_DIR`/`data/cards` name, no global-RNG call. Reason: state-layer purity is the
+   load-bearing invariant this whole epic is built to protect (D3(b)/A2).
+2. **AC2 -- the injection seam.** Modelled directly on `MatchState.inject_feature_flags()`:
+   once at match start, content-only, explicitly no reload path. Reason: deck CONTENT is like flags,
+   not like balance -- it does not need live-tuning, and a reload path would invite a mid-match content
+   swap with no defined semantics.
+3. **AC3 -- one sorted `CardDatabase` accessor.** Discharges (iv) above. Reason: an ordered read must
+   be an explicit, sorted contract, never dictionary iteration order (the same rule 3-2's gate already
+   set for `get_card`/`has_card`).
+4. **AC4 -- deterministic sorted-id fixture composition.** Discharges (iii) above. Reason: recorded so
+   a later reader does not mistake this for the deckbuilding seat, which does not exist yet.
+5. **AC5 -- `StringName` ids, counts-only snapshot.** Reason: a `CardData` reference reaching the
+   snapshot would fail same-seed determinism outright -- the canonical hash has no object branch and
+   falls through to a per-allocation instance-id string, which differs between two independently
+   constructed matches even with identical content and seed.
+6. **AC6 -- `deck_size`/`hand_size` on `BalanceConfig`, `draw_replacement_delay_seconds` excluded.**
+   Reason: the delay field's only consumer (draw-on-play) is 3-5's; authoring it here would ship a
+   dead `BalanceConfig` field, a dead `BalanceTicks` field, an `E1_BALANCE_FIELDS` entry, and an audit
+   exemption for a consumer one story away -- the same reasoning 3-1's gate used to strip these very
+   fields out of 3-1 itself.
+7. **AC7 -- explicit Fisher-Yates, one seat.** Discharges (ii) above. Reason: `Array.shuffle()` is
+   banned by construction, not merely by a guard that would catch it (that guard is AC8); one seat
+   (called from both match start and debug reset) keeps "the RNG is consumed only inside `advance()`"
+   true by inspection.
+8. **AC8 -- the extended architecture-invariants guard.** Reason: closes the gap found at (ii); built
+   non-vacuous in both of the ways the existing card guard already is (`test_state_layer_never_names_
+   card_data`) -- the banned token must be real somewhere in the repo, and the file scan must be proven
+   to visit files -- and mutation-proven, not merely asserted to work.
+9. **AC9 -- hand fills to `hand_size` at match start and debug reset.** Reason: this is the only draw
+   event this story ships; stating it precisely (from the TOP of the shuffled deck, remaining count
+   `deck_size - hand_size`) makes the boundary with 3-5's draw-on-play unambiguous.
+10. **AC10 -- `Invariant.check` against an empty injected deck.** Reason: gives the previously-filed,
+    ownerless export-remap risk (an empty `data/cards/` under export packaging degrading silently) a
+    DETECTOR at the injection seam, without resolving the flag itself, which stays open.
+11. **AC11 -- the negative guard.** Reason: states precisely, as a checkable claim, everything (v)
+    above rules out of scope -- discard, reshuffle, exhaustion, vulnerable window, draw delay,
+    `EventBus`, card effect, cast evaluator, any `src/ui/` file, any Input Map entry, any observation
+    seam.
+12. **AC12 -- exactly one re-baseline, three causes.** Discharges (i) above. Reason: the permanent
+    golden-baseline rule (below) exists because this pattern -- a stale baseline sitting uncorrected in
+    story text -- was found at 3-2's gate earlier this same day and now again here; this AC forces the
+    dev pass to PROVE the causes by measurement rather than assert them.
+
+**New obligation recorded for the intent-recorder story (3-0c).** Deck order is not itself hash-visible
+(the snapshot carries counts only), but it IS replay-relevant -- the same seed reproduces the same
+shuffle only if the pre-shuffle composition is also known. The injected deck composition must enter the
+replay record alongside seed, intents, and reload events, or a replay silently depends on the live
+contents of `data/cards/`, which change without a trace whenever a card is added or edited. `3-0c`'s
+board slot (file deliberately not yet authored, per E3-P/R3) is the right owner; this is a new line item
+for when that story is written, not a claim that it is written now.
+
+**PERMANENT RULE, newly recorded.** A story's Golden Prediction baseline is re-derived from the
+`GOLDEN` constant in `test_determinism.gd` at gate time, and never copied forward from whatever the
+story text already says. The baseline `33817201...21da2` that this story's pre-gate text carried was
+NOT wrong when written -- it was the actual current golden on 2026-07-31, when the revisit-gate
+amendment (`10b96a1`) added this story's Golden Prediction section. It went stale afterward, across
+three re-baselines the story text was never revisited against (the stamina-cost corrective pass, 3-0b
+Pass 2, the 3-4 economy re-baseline), and nothing caught it until this gate. 3-2's gate, earlier this
+same day, found the identical pattern independently. Two consecutive stories reaching their own gate
+with a stale baseline is what makes this a RULE rather than a one-off correction: the baseline is
+re-derived at gate time, every time, regardless of what the story currently claims.
+
+**ONE MORE THING -- a correction, not a new ruling.** The architecture amendment queue's forcing point
+has been called "the E3 close-out" in working conversation, but no entry anywhere in this log actually
+commits to that framing -- every prior member (3-4/R4, R9; the sixth member at 3-2's gate; the seventh
+recorded in this story's own Dev Notes) says only "the next flush," citing the `E2-CO/R1` pattern
+without naming when that next flush occurs. Recorded HERE, explicitly: the forcing point IS the E3
+close-out (the same shape as `E2-CO/R1`, commit `f80f90e`, which flushed the E2-era queue at the E2
+close-out, not mid-epic) -- so that this claim exists in the log instead of being asserted in
+conversation and nowhere else.
+
+**Note for the remaining epic stories.** 3-5 and 3-6 still carry the same stale E3-revisit banner
+residue found at 3-2's gate and this one -- their own gates should not spend a finding rediscovering
+it; the fix is the same Scope-note replacement applied at 3-1, 3-2, 3-4, and here. 3-5 additionally
+inherits four scope items from this gate (discard, reshuffle-on-exhaustion, the vulnerable window, and
+the draw-on-play delay) that its own gate should expect to find undeclared in its current text, exactly
+as 3-2's gate found the copies-cap ruling undeclared after 3-1 assigned it there.
+
+**Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
+immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev pass
+next. Docs-only pass -- suite run once for the baseline measurement above, no code touched.
