@@ -2362,3 +2362,149 @@ suppressed and unsuppressed cases identically at cap.
 corrected once mid-chain to replace a fabricated mutation-table draft with the real M1-M6 data
 above), `board: promote 3-4-mana-economy-flywheel to done (review passed)`, and this entry. No push
 -- the operator reviews the log and pushes.
+
+## Session 2026-08-03 -- Story 3-2 readiness gate
+
+Readiness gate on `3-2-card-schemas-carddatabase.md` (report-only, run against `172fb09`) returned
+**NOT READY** on first read: nine blocking findings. This is the same first-pass verdict every Set B
+story's gate has returned -- fifteen PRIOR Set B readiness-gate sessions (seven E1, six E2, plus 3-1
+and 3-4 on 2026-08-02), all NOT READY on first read -- 3-2 makes it **16/16** -- and this gate is no
+exception in either direction: fixed and promoted the same session, story Status and board `backlog
+-> ready-for-dev`.
+
+**Why this gate matters beyond its own findings -- the CONFIRM proved shallow.** 3-2 is the one E3
+story the revisit gate CONFIRMED rather than amended (E3-RG/R outcome, decision-log Session
+2026-07-31: "3-2 is implementable as written apart from two cosmetic fixes"). The cleanest evidence
+that a confirm is not the same guarantee an amendment is: the sibling card-play story (3-5) had its
+invariant-helper name corrected at that same gate -- old text read `check_invariant`, corrected to
+`Invariant.check` (`src/systems/invariant.gd`, verified by content: `static func check(condition:
+bool, message: String) -> void`) -- while 3-2's own AC4 carried the identical wrong name,
+`check_invariant`, untouched through the same commit (`10b96a1`), because it sat inside the "CONFIRMED
+as written" two-cosmetic-fixes bucket rather than the amended one. Both spellings recorded here so the
+finding is checkable without opening the commit: wrong = `check_invariant` (names no real symbol);
+shipped = `Invariant.check`.
+
+**Premise corrections, with content, resolved before the blocking findings.**
+(i) The decision log records no per-story ruling enumerating VERIFIED CLAIMS for 3-2 -- the E3
+revisit-gate entry states only that the story was "implementable as written apart from two cosmetic
+fixes" (Session 2026-07-31, above). The per-claim framing this gate's own report used (treating each
+old AC as independently verified) came from the gate report itself, not from anything the log had
+actually recorded; the confirm was a summary verdict, not a claim-by-claim audit.
+(ii) The GDD's second referenced card price -- Mode ④ Pitch, "Mana (higher) + orbs (per card); all
+orbs reset to 0 on activation" (`gdd.md`, the four-mode table) -- is a MODE of the SAME card, not a
+second card: "Card anatomy. Every card carries... a Basic effect + mana cost, and a Pitch effect +
+cost" (`gdd.md`, Card System). That price is reserved for a later epic (E6) and is not authored live
+by this story.
+(iii) Four smoke findings from 3-4's live smoke are parked, not three (3-4/R11, above: S1, S2, S3,
+S4) -- an earlier draft of this gate's own report undercounted them at three, dropping S4 (the
+mana-survives-reset finding) silently.
+(iv) The claim that authoring a hand-size `BalanceConfig` field would move the determinism golden is
+FALSE. Verified by content: `PlayerState.to_snapshot()` emits `"hand_size": hand.size()` -- it reads
+the hand ARRAY's own size, not a balance field -- and `test_determinism.gd`'s `_golden_config()`
+builds its `BalanceConfig` in-test, never loading `data/balance/balance_config.tres` (BC/R3,
+re-confirmed SC/R6, the 3-0b gate, and 3-4/R6's narrowing). A balance field is therefore hash-neutral
+by construction; what actually moves the golden is POPULATING the hand array, which belongs to the
+deck story (3-3), not to authoring a number. This is recorded as the gate's most valuable finding --
+it heads off a wrong assumption before it reaches 3-3's own gate.
+
+**The nine blocking findings, resolved.**
+- **Banner residue plus a dangling cross-reference.** The story still opened with the verbatim
+  pre-gate E3-REVISIT banner and a line pointing at 3-1 "for the full verbatim gate" -- 3-1's own
+  banner was already replaced with a Scope note at its own fix pass, so the pointer dangled. Replaced
+  with a Scope note in the 3-1/3-4 pattern (story file, above).
+- **An unsatisfiable injection clause.** Old AC3 required `CardDatabase` to both preload cards AND for
+  "the state layer" to receive them "by injection" in the same story, with no consumer anywhere in
+  3-2's own scope to inject them INTO -- an AC that cannot be checked against shipped software until a
+  later story exists. Resolved by AC2's explicit economy-evaluator exclusion and AC4's loader-only
+  scope; `stories-manual-e3.md`'s E3.S2 exit criterion was corrected alongside (companion commit) to
+  scope the injection clause to E3.S5.
+- **An AC asserting a balance field that does not exist and belongs to a later epic.** Old AC4 named
+  "per-colour unblockable damage... a fixed value per colour in balance" as something this story's
+  guard protects -- but that balance field is not authored anywhere yet, and authoring it is not this
+  story's business (it is gated behind `FeatureFlags.unblockable`, a later epic). Replaced by AC7,
+  which carries ONLY the negative guard (a test fails if a per-card damage/unblockable field appears),
+  asserting nothing about a field that doesn't exist.
+- **The wrong invariant-helper name.** Discussed above -- dropped by rewording AC7 as a pure claim
+  about test behaviour, with no mechanism name to get wrong.
+- **A golden baseline stale across three intervening re-baselines.** The Golden Prediction section still
+  cited `33817201...21da2`, which predates the stamina-cost corrective pass, 3-0b Pass 2, and the 3-4
+  economy re-baseline. Corrected to the current baseline (the `GOLDEN` constant in
+  `test_determinism.gd`) `98d0c7ebfdbe01a97622b185a7e3388428793cc87e323751c2ffb5b6f58f81ff`, prediction
+  NONE measured in both directions, with the deliberate cards/rules asymmetry against 3-4/R6's BC/R3
+  narrowing recorded explicitly (rules are load-bearing for the hash; cards are not, by design).
+- **Undeclared inherited scope.** The copies-cap ruling assigned to this story by 3-1's own gate (Q1
+  rider: "`default_copies_per_card` is likely per-card data rather than a `BalanceConfig` field, which
+  3-2 judges") was nowhere named in 3-2's text -- a reader could not tell this story was discharging an
+  obligation another story's gate created. Named in Dev Notes and discharged as AC3's `max_copies`
+  export.
+- **Unspecified card identity and iteration order.** Nothing in the story said whether a card's
+  identity is its filename or a field, or whether the loaded set has any ordering contract -- both
+  become load-bearing the moment the deck-shuffle story (3-3) makes deck order hash-visible. Ruled and
+  recorded in Dev Notes: identity is a FIELD, filename mirroring it is convention only; any ordered
+  exposure is explicitly sorted, dictionary iteration order is never a contract.
+- **Two schema divergences from the architecture doc, undeclared.** Verified by content: the `CardData`
+  sketch under "Novel Pattern 6 -- Four-Mode Card Resolution" lists four exports where this story ships
+  six (`id`, `max_copies` added), and `CardEffect` appears in no schema list under "Schema vs Loader
+  (class_name uniqueness)" and no Directory Tree line. Neither divergence was named anywhere in the
+  story. Recorded as the SIXTH member of the architecture amendment queue (the queue held five per
+  3-4/R4 and R9), alongside the already-queued fifth member's own staleness (Novel Pattern 5 still
+  shows the pre-3-4 evaluator shape) -- no edit to the architecture doc itself, per the standing
+  flush-point convention (E2-CO/R1).
+- **Silence on the parked findings.** 3-4's four live-smoke findings (S1-S4) named this story as a
+  forcing point for S1/S2, but nothing in 3-2's text acknowledged owning them, or explained why S3 and
+  S4 do NOT land here. All four now have an explicit seat, recorded in Dev Notes and restated as
+  rulings below.
+
+**Rulings, restated from the story's Dev Notes.**
+- **Schema-only, evaluator deferred.** `CardCastCondition` is a pure schema; no cast evaluator ships
+  in `src/state/economy/` this story. Its first consumer is the card-play story (3-5), designed
+  against the working `EconomyEvaluator` 3-4 already shipped -- the reason `CardCastCondition` was
+  stripped out of 3-4's own scope back to this story ("STRIPPED to 3-2, designed there against the
+  working evaluator this story delivers," 3-4's gate finding B1, above).
+- **`mana_cost` is a literal float, never a balance-field name.** Deliberate break from the
+  `ResourceGenerationRule.amount_field` mirror: every gameplay NUMBER shared across the game lives in
+  balance, but a card's price is per-card CONTENT.
+- **`id` is a field, never the filename.** Survives a rename; becomes a replay-relevant identity once
+  3-3 makes deck order hash-visible.
+- **The copies cap is per-card data, not a `BalanceConfig` field** -- discharging the obligation 3-1's
+  gate assigned here.
+- **Cards stay outside the hashed run, with the asymmetry against rules reasoned explicitly.** Rule
+  content IS load-bearing for the golden (3-4/R6, narrowing BC/R3, proven by mutation M5's 29
+  failures) because the rule set is two files and a fixed mechanism; card content is NOT, because cards
+  are a growing content library and making them hash-bearing would mean every new card re-baselines
+  the golden -- defeating the "new card = a `.tres`, no code" promise this story exists to deliver.
+- **S1/S2 (tuning) get one seat here, discharged by pricing, not by retuning.** The retune itself is a
+  separate, golden-neutral `chore(balance)` commit whose forcing point moves to the first live smoke in
+  which a card can actually be cast -- the "2-4 cycles per round" criterion is unjudgeable before then.
+- **S3 (blocked-hit mana) gets its OWN, separate seat.** It is a new mechanism (a new balance field, a
+  certain golden mover) that would reverse the locked 1-8 decision that a block does not touch the
+  attacker's economy -- not a tuning value, and not this story's to rule on.
+- **S4 (mana survives a reset) is NOT inherited here.** It belongs to the first round-flow story;
+  verified against `MatchState._reset_player()` (`src/state/match_state.gd`), which never touches mana
+  or stamina, so the observation is leftover pre-death mana, not a grant.
+- **The scan-helper deferral, with the extended remap flag.** A shared directory-scan helper between
+  `CardDatabase._load_all()` and `EconomyEvaluator.load_rules()` is deferred to a third scan -- the two
+  existing scans sit on opposite sides of the state/systems boundary and a shared helper has no honest
+  home yet. The ownerless export-packaging remap risk named at 3-4/R8 is EXTENDED to cover
+  `data/cards/` alongside `data/economy/`, rather than filed a second time.
+- **The new integration test, and why the state harness cannot cover it.** The state harness
+  instantiates no autoloads, so nothing in it ever exercises `CardDatabase._ready()`; only a real
+  integration test proves the loader actually populates itself at boot, and a silently empty card
+  dictionary would today be noticed by nothing else.
+
+**Operator's sealed design decisions.**
+- **The buildup->bluff->payoff cycle cost is taken as roughly 11 mana** (one 5-cost pitch plus two
+  3-cost plays: 5 + 3 + 3), after a deck-throughput reading (a full pass through the 20-card deck) was
+  considered and explicitly rejected -- the GDD's cycle is buildup -> bluff -> payoff, not a pass
+  through the deck.
+- **A nine-card starter set ships at three per colour**, one each at 2/3/5 mana, with a preference on
+  record for four or five cards per colour LATER -- deferred because adding a card is a `.tres` with no
+  code change, so there is no cost to shipping the smaller set now and growing it later.
+
+**Note for the remaining epic stories.** The same stale E3-revisit banner residue found here is
+present in 3-3, 3-5, and 3-6 -- their own gates should not spend a finding rediscovering it; the fix
+is the same Scope-note replacement applied at 3-1, 3-4, and here.
+
+**Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
+immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev pass
+next. Docs-only pass -- no suite run, no code touched.
