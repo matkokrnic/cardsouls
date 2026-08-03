@@ -2508,3 +2508,71 @@ is the same Scope-note replacement applied at 3-1, 3-4, and here.
 **Promotion.** All fixes applied to the story file the same session (`docs(stories)` commit,
 immediately preceding this one); story Status and board promoted `backlog -> ready-for-dev`; dev pass
 next. Docs-only pass -- no suite run, no code touched.
+
+## Session 2026-08-03 -- 3-2 close-out
+
+Recorded after the dev pass (Claude Opus 4.8) landed and the commit chain (Claude Sonnet 5) verified
+and shipped it. Verification this session: HEAD started at `20e9af7`, matching `origin/main`; the
+dev-pass surface matched the expected file list exactly (14 files added, 3 modified); no Godot process
+running; `project.godot` byte-for-byte unchanged before and after the editor scan
+(`31033a50137c98dc...`); state harness 218 tests / 1103 assertions / 0 failed, all 15 integration
+files PASS individually (a fifteenth, `test_card_database.gd`, added this story), zero `SCRIPT ERROR`
+/ `Parse Error` / `INVARIANT VIOLATED` lines.
+
+**What shipped, and what deliberately did not.** Three schemas (`CardData`, `CardEffect`,
+`CardCastCondition`) land in `src/state/resources/`; nine fixture cards land in `data/cards/`;
+`CardDatabase._load_all()` replaces its no-op body with a sorted, extension-filtered, single-directory
+scan indexed by the `id` field, plus a `card_count()` read accessor; two new test surfaces
+(`test/state/test_card_authoring.gd`, `test/integration/test_card_database.gd`); the AC5 state-layer
+guard, mutation-proven. NO cast evaluator ships -- `src/state/economy/` carries only the comment-only
+reciprocal cross-reference AC4 requires. The evaluator's first consumer is the card-play story (3-5),
+under the contract this story records: pure, static, computes rather than applies -- `ManaPool.spend()`'s
+shape (returns a bool, changes nothing when unaffordable) is the one the cast evaluator must mirror on
+the spend side; pools apply the spend, the evaluator never does.
+
+**The golden prediction held: NONE, measured before the first edit and after the last, unmoved
+(`98d0c7eb...` throughout).** The standing consequence stays in force: card `.tres` content is NOT
+load-bearing for the hash and must not become so -- if a later story needs cards inside the tick loop
+they arrive by injection, and the golden fixture authors its own coverage value, exactly as
+`_golden_config()` already does for balance and economy fields. This is the deliberate ASYMMETRY with
+`data/economy/*.tres`, whose content IS load-bearing (3-4/R6, proven by mutation M5's 29 failures) --
+the rule set is two files and a fixed mechanism, while cards are a growing content library, and making
+card content hash-bearing would mean every new card re-baselines the golden, defeating the "new card =
+a `.tres`, no code" promise this story exists to deliver.
+
+**M3 is the session's most valuable measurement.** With the loader body dead (`if true: return` at the
+top of `_load_all()`), the entire state harness stays green -- it instantiates no autoloads, and the
+authoring test loads the `.tres` files itself -- and the integration test is the only thing in the repo
+that bites (count=0 expected 9, all nine ids missing, RESULT: FAIL). That is exactly the claim that
+justified requiring the integration test in the first place ("a silently empty card dictionary would
+today be noticed by nothing," AC6/the gate's own finding), now demonstrated by mutation rather than
+asserted.
+
+**A NAMED OPEN WITH NO OWNER: `orb_costs` has ZERO coverage.** No card authors it (correctly -- orbs
+are pitch-only by the GDD), and no test round-trips a populated typed dictionary through a `.tres`. So
+that field's serialisation has never been exercised with content. No action taken deliberately:
+authoring a fixture card just to test it would be authoring data with no consumer, the thing this
+story exists to avoid. Forcing point: the first story that authors an orb cost, which is the pitch
+epic (E6).
+
+**The architecture amendment queue's SIXTH member, now concrete rather than predicted.** The `CardData`
+schema ships six exports where the doc's "Novel Pattern 6 -- Four-Mode Card Resolution" sketch has
+four (`id`, `max_copies` added); `CardEffect` appears in no schema list under "Schema vs Loader
+(class_name uniqueness)" and no Directory Tree line. Flush at the epic close-out, per the standing
+flush-point convention (E2-CO/R1); no edit to the architecture doc made here.
+
+**The class-cache technique and the comment-only economy diff, recorded as rulings so neither is
+re-litigated.** New `class_name` declarations cannot resolve without an editor scan, so the dev pass
+hand-appended the three new entries (`CardData`, `CardEffect`, `CardCastCondition`) to the git-ignored
+generated class cache in the exact format the editor writes, and this chain's editor scan regenerated
+it correctly -- the second occurrence of this technique (the first was story 3-1), now the standing
+division of labour. The `src/state/economy/economy_evaluator.gd` diff is docstring-only, zero code
+lines -- sanctioned by AC4's explicit requirement for the reciprocal cross-reference, not a fence
+breach against the "`src/state/economy/` is not touched" scope line.
+
+**Board: done. Next story in the locked order: 3-3.**
+
+**Close-out.** Commit chain: `story 3-2: card schemas, CardDatabase loader, starter set` (code, tests,
+data), `docs(3-2): dev pass record` (this story's Dev Pass Record, Dev Notes additions, Dev Agent
+Record, and Change Log), `board: promote 3-2-card-schemas-carddatabase to done`, and this entry. No
+push -- the operator reviews the log and pushes.
