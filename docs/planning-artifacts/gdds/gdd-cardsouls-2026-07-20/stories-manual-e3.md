@@ -99,8 +99,9 @@ and tick-converted at load, hot-reload re-applies them, and the invariant and sm
 5. Extend the `.tres` smoke test to load every authored card and assert required fields, a valid
    colour enum, and a copy cap within bounds.
 
-**Exit criterion.** Cards are authored as `.tres`, loaded by `CardDatabase` at startup, injected into
-state, validated by the smoke test, and adding a new card requires no code change.
+**Exit criterion.** Cards are authored as `.tres`, loaded by `CardDatabase` at startup, validated by the
+smoke test, and adding a new card requires no code change. Injection into state has no consumer until
+E3.S5 (the card-play story), which is where that clause is discharged.
 
 ---
 
