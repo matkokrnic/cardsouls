@@ -83,6 +83,26 @@ extends Resource
 ## it is not a duration and does not enter the A1 seconds->ticks conversion.
 @export var mana_regen_per_second: float = 0.0
 
+@export_group("Cards")
+## Story 3-3 (AC 6): how many cards one deck holds. A COUNT, not a duration — it lives here
+## and never on BalanceTicks (the A1 conversion is for `*_seconds` fields only). Read INLINE at
+## its point of use (CONSTRAINT C), which is the RUNNER: it walks CardDatabase's sorted ids
+## taking up to each card's max_copies until this many are collected, and injects the plain
+## StringName ids into MatchState (AC 2/AC 4). The state layer never reads this field — it
+## receives the composition already sized.
+## PROVISIONAL FIXTURE composition, not the deckbuilding seat: real deck selection is E4/E5 or
+## later. Audited > 0 (test_balance_authoring.gd): a zero deck is a match with no cards.
+@export var deck_size: int = 0
+## Story 3-3 (AC 6): how many cards the hand is filled to. A COUNT, same reasoning as
+## deck_size, but THIS one is read by the state layer — inline at the single step-6 deal seat
+## (MatchState._deal_player), on both the match-start and the debug-reset occasion.
+## The hand does NOT vary in this story's first version. OPEN decision (e) — "does the number
+## of cards in a hand ever vary?" — is CARRIED, not resolved: no variable-size path is built
+## speculatively. Audited > 0 and <= deck_size (a hand bigger than the deck cannot be dealt).
+## NOT HERE: `draw_replacement_delay_seconds` lands at 3-5 WITH its consumer, so the field and
+## its seat arrive together instead of leaving a dead field and an audit exemption behind.
+@export var hand_size: int = 0
+
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0
 @export var deflect_window_seconds: float = 0.0

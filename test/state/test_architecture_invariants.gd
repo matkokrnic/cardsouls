@@ -103,6 +103,60 @@ func test_state_layer_never_names_card_data() -> void:
 				% ", ".join(offenders))
 
 
+## Story 3-3 (AC 8): TWO bans in one scan, both about reaches the pure state layer must never
+## make. Scanning src/state/ (not all of src/) is the load-bearing scope, as in the two guards
+## above, and comments are stripped by _code_lines so this prose never false-positives.
+##
+## (1) IMPLICIT-GLOBAL-RNG COLLECTION APIs. Array.shuffle() was MEASURED on this engine (4.6.3)
+## drawing from the GLOBAL RNG and leaving a per-instance RandomNumberGenerator untouched — and
+## test_state_layer_has_no_nondeterministic_source above does NOT catch it, because that guard
+## bans the bare randf/randi family BY NAME and these are method calls on a collection. So a
+## `deck.shuffle()` under src/state/ passes the entire suite today while silently destroying
+## replay. That measurement is why AC 7 specifies an explicit Fisher-Yates against the injected
+## generator instead of the one-liner, and why this guard exists at all. `pick_random(` is the
+## same hole with a different name; bare `seed(` is it from the other end — reseeding the
+## global generator from state. Instance calls (`rng.randi_range(...)`) are the SANCTIONED
+## form and are deliberately NOT matched.
+##
+## (2) THE CardDatabase TOKEN. Card content reaches src/state/ ONLY by injection (AC 2). The
+## sibling guard below bans the PATH (CARDS_DIR / data/cards); this bans the AUTOLOAD, which is
+## the other way the layer could reach the card library — and the way that became reachable the
+## moment this story gave the runner a real reason to read it.
+func test_state_layer_never_uses_implicit_global_rng_or_card_database() -> void:
+	var re := RegEx.create_from_string(
+		"(\\.shuffle\\s*\\(|\\.pick_random\\s*\\(|(^|[^.\\w])seed\\s*\\(|CardDatabase)")
+	# NON-VACUITY (a), first way — the banned token must be REAL somewhere: match_runner.gd is
+	# the ONLY production reader of the autoload (AC 2), so a rename there that silently empties
+	# half this guard fails HERE, the same mechanism as the CARDS_DIR assertion below.
+	var runner_hits := 0
+	for line in _code_lines("res://src/main/match_runner.gd"):
+		if line.contains("CardDatabase"):
+			runner_hits += 1
+	assert_true(runner_hits > 0,
+		"match_runner.gd must still name CardDatabase — otherwise half this guard is vacuous")
+	# The RNG half has no legitimate use anywhere in src/ to point at, so the PATTERN itself is
+	# proven against the exact strings it exists to catch — a regex typo that silently disarms
+	# the ban fails here instead of passing quietly — and against the form it must NOT catch.
+	for banned in ["\tdeck.shuffle()", "\tvar c = _cards.pick_random()", "\tseed(1337)"]:
+		assert_true(re.search(banned) != null, "the AC8 pattern must match `%s`" % banned.strip_edges())
+	assert_null(re.search("\tvar j := rng.randi_range(0, i)"),
+		"an INSTANCE-generator draw is the sanctioned form and must not trip this guard")
+	# NON-VACUITY (b), second way: the scan must actually visit files.
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/state/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/state/ scan found no .gd files (guard would be vacuous)")
+	assert_eq(offenders.size(), 0,
+		"implicit-global-RNG API or CardDatabase named in src/state/ (AC8: the seeded generator "
+		+ "is passed IN, card content arrives by injection): %s" % ", ".join(offenders))
+
+
 func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)
 	# int-literal callers depend on these ordinals: test_camera_relative.gd writes [0, 1] and
 	# every 2-2 smoke flip writes int literals like [3, 2] / [2, 3]. A future reorder would

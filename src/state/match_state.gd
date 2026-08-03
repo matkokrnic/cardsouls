@@ -78,6 +78,22 @@ var _camera_bases: Array[Basis] = [Basis.IDENTITY, Basis.IDENTITY]
 ## dedupe grace tick, see HeroState._swing_dedupe).
 var _contact_queue: Array[Dictionary] = []
 
+## Story 3-3 (AC 2): the injected deck COMPOSITION — plain StringName ids, retained so the
+## step-6 deal seat can lay a fresh pile down on BOTH of its occasions (match start and debug
+## reset) without a discard pile to recover cards from. EXCLUDED from to_snapshot() for the
+## same reason `flags` is: this is injected CONTENT, not state (the snapshot carries COUNTS
+## only, AC 5). NEW OBLIGATION for the intent-recorder story (3-0c): this composition must
+## enter the replay record alongside seed and intents, or a replay silently depends on the
+## contents of data/cards/, which change without a trace.
+var _deck_contents: Array[StringName] = []
+
+## Story 3-3 (AC 7/AC 9): the one-shot latch that arms the step-6 deal. Set by the injection
+## seam (match start) and re-set by _apply_debug_reset(); cleared when the seat actually runs.
+## EXCLUDED from to_snapshot(): it is consumed inside the same advance() that armed it whenever
+## balance is present, and it is derivable from the replay record (seed + injection + intents)
+## in the one case where it is not.
+var _deck_deal_pending := false
+
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
 ## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
@@ -160,7 +176,14 @@ func advance(intents: Array[InputIntent]) -> void:
 		_regen_stamina(p1)
 		_regen_stamina(p2)
 		_generate_mana(confirmed_hits)
-	# 6. Card / economy        [E3 card play/draw; E6 pitch resolution]
+	# 6. Card / economy        the DECK DEAL seat (story 3-3, AC 7/AC 9) — the ONE seat, serving
+	#    BOTH occasions: match start (armed by the injection seam) and the debug reset (armed at
+	#    step 1 THIS tick, so a reset's reshuffle lands on the reset tick, not one later). Seated
+	#    HERE rather than in inject_deck() so "the seeded RNG is consumed only inside advance()"
+	#    stays provable (F2) — and because the debug reset is an intent in the recorded stream,
+	#    the reset-time reshuffle is replay-safe for free.
+	#    [E3 card play/draw — 3-5; E6 pitch resolution]
+	_deal_pending_decks()
 	# 7. Board update          [E4 minion/totem throttled-tick seam]
 	# 8. Resolution check
 	_check_resolution()
@@ -190,6 +213,27 @@ func apply_balance(config: BalanceConfig) -> void:
 ## FeatureFlagsService.
 func inject_feature_flags(value: FeatureFlags) -> void:
 	flags = value
+
+
+## Story 3-3 (AC 2): the deck-content INJECTION SEAM — the inject_feature_flags precedent
+## above, followed exactly: runner-only, ONCE at match start, CONTENT ONLY, and NO reload path
+## (deliberately unlike apply_balance). This is the ONLY way deck content reaches src/state/;
+## no file under src/state/ may name CardDatabase, CARDS_DIR or data/cards (AC 1/AC 8), so the
+## runner reads the autoload, derives the composition (AC 4) and hands plain StringName ids in.
+##
+## CONTENT ONLY, NEVER THE DEAL: the ids are retained here and the shuffle + fill happen at the
+## step-6 seat inside advance(). Calling this does not consume one bit of the seeded RNG — the
+## property test_injection_alone_deals_nothing_and_consumes_no_rng pins.
+##
+## AC 10: an EMPTY injected deck is a programming error, ENFORCED AT THE SEAM (Invariant.check,
+## the push_contact precedent — a plain static class, export-surviving, no autoload). This is
+## the DETECTOR the ownerless export-packaging remap risk flag gained instead of an owner: a
+## data/cards/ that degrades to empty under export remap becomes a LOUD failure at match start
+## rather than a silently empty deck nobody notices.
+func inject_deck(contents: Array[StringName]) -> void:
+	Invariant.check(not contents.is_empty(), "injected deck content must be non-empty (empty card set or a failed export remap?)")
+	_deck_contents = contents.duplicate()
+	_deck_deal_pending = true
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -551,6 +595,51 @@ func _regen_stamina(player: PlayerState) -> void:
 	player.stamina.advance_regen(balance_ticks.stamina_regen_per_tick, suppressed)
 
 
+## Step-6 deck deal (story 3-3, AC 7/AC 9) — the ONE SEAT. Runs at most once per tick, and only
+## when something armed it: the match-start injection or a debug reset ingested at step 1 this
+## same tick. There is no round-start event in the game (round_started fires only FROM the debug
+## reset, whose own comment calls it an operator affordance and not a gameplay path), so "round
+## start" for the fill means exactly those two occasions and nothing else.
+##
+## Player order is fixed P1 -> P2 for determinism, and both piles are laid down from the SAME
+## injected composition and shuffled against the SAME generator in turn — which is how the two
+## players get different orders out of one seed without a second RNG ever existing.
+##
+## `balance == null` joins the pre-injection guard family (step 3's _resolve_actions, step 5's
+## regen, step 4's twin): hand_size has no value to read yet. The latch is deliberately NOT
+## cleared on that path, so a match that receives its deck before its balance still deals on the
+## first tick after apply_balance() instead of silently never dealing.
+func _deal_pending_decks() -> void:
+	if not _deck_deal_pending or balance == null:
+		return
+	_deck_deal_pending = false
+	_deal_player(p1)
+	_deal_player(p2)
+
+
+## The per-player half: full composition down, shuffle, hand emptied, then fill from the TOP.
+##
+## The debug-reset occasion RESTORES the full composition rather than returning cards from
+## anywhere — there is nowhere to return them TO (no discard pile ships, AC 11) — and AC 9 pins
+## the post-reset counts to the same hand_size / deck_size - hand_size pair as match start.
+##
+## hand_size is read INLINE at the moment of use (CONSTRAINT C): a snapshot-the-value read in
+## the TimingWindow.start() shape, never a cached BalanceConfig reference, so a hot reload takes
+## effect at the next deal instead of half-applying to one already in flight.
+##
+## The is_empty() stop is a FLOOR, not a feature: no reshuffle and no deck-exhaustion handling
+## ship here (AC 11 — with only this initial fill drawing, exhaustion is unreachable), and the
+## authoring audit keeps hand_size <= deck_size so the shipped config never reaches it.
+func _deal_player(player: PlayerState) -> void:
+	player.deck.set_contents(_deck_contents)
+	player.deck.shuffle_with_rng(_rng)
+	player.hand.clear()
+	for _slot in balance.hand_size:
+		if player.deck.is_empty():
+			break
+		player.hand.add(player.deck.draw_top())
+
+
 func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:
 	# Story 2-3 (AC2, 2-3/R5): a DEAD hero exhibits no live movement. ASYMMETRIC by
 	# downstream consumption (see story Dev Notes): velocity is EXPLICITLY written to zero
@@ -767,6 +856,14 @@ func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
 	_reset_player(p2)
+	# Story 3-3 (AC 9): RE-ARM the step-6 deal seat — the reshuffle and refill happen THERE,
+	# inside this same advance(), never here. A reset that lands before any injection has no
+	# composition to lay down, so the latch is left alone rather than armed against nothing.
+	# The parked finding that MANA survives a reset stays PARKED with the first round-flow
+	# story: this story only participates in this function beside the hp heal and introduces
+	# no round lifecycle of its own.
+	if not _deck_contents.is_empty():
+		_deck_deal_pending = true
 	# Story 2-6 (AC 1, 2-6/R5): announce the reset UNCONDITIONALLY on every debug reset — the
 	# round lifecycle previously emitted only on END (round_ended), never on reset, which is the
 	# 2-4 close-out MICRO-DECISION 1 gap (the round-over label survived a reset because nothing

@@ -5,6 +5,42 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by STORY 3-3 (deck, hand, draw), ONE re-baseline, THREE separately named causes
+## — predicted in the story's Golden Prediction and each ISOLATED BY ITS OWN MEASUREMENT and
+## REPRODUCED IN BOTH DIRECTIONS. Measured in order, one edit at a time:
+##   1. SNAPSHOT SHAPE (a mover, unconditional and predicted): PlayerState.to_snapshot() gains
+##      "deck_size" beside the "hand_size" key E0 already emitted. Taken with BOTH counts still
+##      at zero, so this measures the KEY and nothing else — 98d0c7eb -> b2e58eca. Sufficient
+##      alone to move the hash.
+##      Isolated FIRST from an even earlier step: Deck and Hand existing and being owned by
+##      PlayerState, with nothing snapshotted, MEASURED UNMOVED at 98d0c7eb.
+##   2. THE FIXTURE COVERAGE VALUE deck_size, VIA RNG CONSUMPTION (a mover, predicted):
+##      _golden_config authors deck_size 17, which is also what sizes the fixture's injected
+##      composition, so the step-6 Fisher-Yates finally has a pile to permute. rng_state IS
+##      hashed and NOTHING consumed the RNG before this story; the shuffle draws exactly
+##      size - 1 = 16 times per player, 32 draws in all. b2e58eca -> 8cb49431. The cause is the
+##      SIZE alone and is independent of card identity — see _golden_deck's opaque ids.
+##   3. THE FIXTURE COVERAGE VALUE hand_size (a mover, predicted, and dependent on cause 2 —
+##      an empty deck fills no hand): _golden_config authors hand_size 9, so each player's deal
+##      moves 9 cards off the top and both snapshotted counts change together, 17/0 -> 8/9.
+##      8cb49431 -> ad42841e, the value below.
+## INTERMEDIATE measurement, isolating the SEAT from the AUTHORED VALUES (the 3-4 and
+## stamina-cost precedent): with the whole mechanism in place — the injection seam, the step-6
+## deal, the Fisher-Yates, the BalanceConfig fields, the authored .tres values, the runner
+## wiring — but _golden_config authoring NEITHER count, the hash was b2e58eca, BIT-IDENTICAL to
+## cause 1 alone. The seat is structurally incapable of moving this hash on its own.
+## REVERSE, both directions reproduced EXACTLY: toggling hand_size back to 0 reproduced
+## 8cb49431 (cause 3 isolated); toggling deck_size back to 0 as well reproduced b2e58eca (cause
+## 2 isolated, and the injection gate makes that a genuine one-value toggle).
+## NOT a cause: CARD CONTENT. data/cards/ is unreachable from the state harness (no autoloads)
+## and _golden_deck authors its own opaque identities, so adding a card can never re-baseline
+## this hash — the promise the epic exists to deliver. Deck ORDER is not a cause either: the
+## snapshot carries COUNTS only (AC 5), so the order is invisible to the hash even though it is
+## what the shuffle produces. Nor is the authored balance_config.tres: _golden_config is built
+## in-test, so the BC/R3 property that authored TUNING cannot move this hash survives intact.
+## Previous golden 98d0c7ebfdbe01a97622b185a7e3388428793cc87e323751c2ffb5b6f58f81ff
+## (story 3-4, mana economy — the record below).
+##
 ## Re-baselined by STORY 3-4 (mana economy and the melee->mana flywheel), ONE re-baseline,
 ## ONE named cause — predicted in the story's Golden Prediction and confirmed in BOTH
 ## directions by THREE measurements taken in order:
@@ -128,7 +164,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "98d0c7ebfdbe01a97622b185a7e3388428793cc87e323751c2ffb5b6f58f81ff"
+const GOLDEN := "ad42841edcd549660de44a9cf1b6c916b2a090a9c973ec44ec8ecd1960434f08"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -138,6 +174,15 @@ const MAX_MANA := 90.0
 ## Story 3-4 (AC 7): the passive faucet's fixture COVERAGE rate, expressed per tick because
 ## that is the form the ladder consumes. 75.0 per second / 60 Hz = 1.25 — see _golden_config.
 const PASSIVE_PER_TICK := 1.25
+## Story 3-3 (AC 12): the deck/hand fixture COVERAGE values — coverage, NOT feel, like every
+## number in _golden_config. Deliberately NOT the authored 20 / 4, and deliberately DISTINCT
+## from every other count this fixture carries ({2, 3, 4, 5, 6, 10, 12, 15, 20, 24, 40, 60, 75,
+## 90, 120, 180}), so a selector bug that read the wrong field lands on a different number and
+## MOVES the hash rather than silently coinciding with one. The derived counts are distinct too:
+## 17 - 9 = 8 cards left in the pile and 16 Fisher-Yates draws per player, neither of which
+## appears anywhere else here either.
+const DECK_SIZE := 17
+const HAND_SIZE := 9
 
 ## Movement pairs [p1, p2], cycled over the run (tick t uses MOVES[(t - 1) % 6]).
 const MOVES := [
@@ -283,7 +328,32 @@ func _golden_config() -> BalanceConfig:
 	# cannot reach the hashed final snapshot — authored for path coverage, not the hash
 	# (the 1-5 cause-(c) lesson, re-confirmed empirically in the 1-9 record).
 	c.roll_distance = 3.0
+	# Story 3-3 (AC 12) — the TWO lines that make this story's causes visible to the hash at all,
+	# and the only two that changed between measurements M2, M3 and M4. Without deck_size the
+	# fixture injects nothing, the Fisher-Yates draws ZERO times and the RNG state never moves
+	# (a MEASURED non-mover); without hand_size the deal fills nothing and the snapshotted counts
+	# stay at deck_size / 0. Neither is loaded from data/balance/balance_config.tres — the
+	# standing property that authored TUNING cannot move this hash is untouched.
+	c.deck_size = DECK_SIZE
+	c.hand_size = HAND_SIZE
 	return c
+
+
+## Story 3-3 (AC 12): the golden's deck CONTENT, built in-test with OPAQUE identities — the
+## _golden_config principle applied to the other injected resource. data/cards/ is unreachable
+## from the state harness (no autoloads) and these ids are nothing the card library contains, so
+## ADDING A CARD MUST NEVER RE-BASELINE THIS HASH. That is not incidental: card identity cannot
+## reach the hash at all, because the snapshot carries COUNTS only (AC 5) and the Fisher-Yates
+## draw count depends on the pile's SIZE alone.
+##
+## The fixture plays the RUNNER's role here — deriving a composition of the authored deck_size
+## and injecting it — because the state layer never reads deck_size itself. Ids are DISTINCT so
+## the permutation and fill-from-the-top proofs in test_deck_and_hand.gd have something to see.
+func _golden_deck() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for i in DECK_SIZE:
+		out.append(StringName("golden_card_%02d" % i))
+	return out
 
 
 ## Golden-path flags — constructed IN-TEST with melee_mana_generation ON, never read
@@ -466,6 +536,60 @@ func test_golden_sequence_exercises_passive_mana_regen() -> void:
 		"sanity: nobody dies on this sequence, so DEAD suppression never fires inside the hash")
 
 
+## Story 3-3 (AC 12), the deck analogue of the pins above: this re-baseline's causes 2 and 3 are
+## named as "the shuffle consumed RNG" and "the fill moved cards", and naming them is VACUOUS
+## unless the recorded run genuinely did both. A fixture that injected a deck but never dealt it
+## would still move the hash (the snapshot key alone did that at M2) and would leave the golden
+## guarding nothing about either mechanism.
+##
+## Pinned on the hashed final state, all four claims separately:
+##   - the FILL ran: hand_size 9 on BOTH players, deck 17 - 9 = 8 left (AC 9's exact counts);
+##   - the SHUFFLE ran: P1's pile is NOT in injected order (the identity permutation is the
+##     failure mode a no-op shuffle produces, and it is what an `Array.shuffle()` regression
+##     would look like on a per-instance generator too);
+##   - the shuffle used the MATCH's generator: P1 and P2 got DIFFERENT orders from one seed,
+##     which only happens because the two deals draw from the same generator in turn;
+##   - nothing was invented or lost: deck + hand is a PERMUTATION of the injected multiset.
+func test_golden_sequence_exercises_deck_shuffle_and_hand_fill() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	assert_eq(ms.p1.hand.size(), HAND_SIZE, "the fill ran: P1 holds hand_size cards at t24")
+	assert_eq(ms.p2.hand.size(), HAND_SIZE, "...and so does P2 — the deal is per-player")
+	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE,
+		"deck remaining is deck_size - hand_size (AC 9) — no reshuffle, no second draw")
+	var injected := _golden_deck()
+	var p1_pile := ms.p1.deck.to_array()
+	var p2_pile := ms.p2.deck.to_array()
+	assert_ne(p1_pile, injected.slice(0, DECK_SIZE - HAND_SIZE),
+		"the SHUFFLE ran: the pile is not the injected order (a no-op shuffle is the failure mode)")
+	assert_ne(p1_pile, p2_pile,
+		"P1 and P2 drew DIFFERENT orders from the one seeded generator (the ONE-SEAT ordering)")
+	var p1_all := p1_pile.duplicate()
+	p1_all.append_array(ms.p1.hand.to_array())
+	p1_all.sort()
+	var expected := injected.duplicate()
+	expected.sort()
+	assert_eq(p1_all, expected,
+		"deck + hand is a PERMUTATION of the injected multiset — nothing invented, nothing lost")
+
+
+## Story 3-3 (AC 5): two INDEPENDENTLY CONSTRUCTED matches, same seed, POPULATED deck, must hash
+## identically. Distinct from test_same_seed_and_intents_hash_identically above only in what it
+## is FOR: that one predates the deck and would still pass with an empty one, so it cannot speak
+## to the thing this story most easily breaks. The failure this catches is a CardData reference
+## (or any object) reaching the snapshot — the canonical hash has no object branch and falls
+## through to a string conversion yielding a PER-ALLOCATION instance id, so two matches built
+## from identical data would hash differently and only a populated deck would show it.
+func test_two_matches_with_a_populated_deck_hash_identically() -> void:
+	var a := _make_match()
+	var b := _make_match()
+	_play_sequence(a)
+	_play_sequence(b)
+	assert_eq(a.p1.deck.size(), DECK_SIZE - HAND_SIZE, "sanity: the deck really is populated")
+	assert_eq(CanonicalHash.of(a.to_snapshot()), CanonicalHash.of(b.to_snapshot()),
+		"independently constructed matches with the same seed and a populated deck hash identically")
+
+
 func test_canonical_hash_ignores_key_insertion_order() -> void:
 	var d1 := {"a": 1, "b": {"x": 1, "y": 2}, "v": Vector3(1, 2, 3)}
 	var d2 := {"v": Vector3(1, 2, 3), "b": {"y": 2, "x": 1}, "a": 1}
@@ -474,8 +598,16 @@ func test_canonical_hash_ignores_key_insertion_order() -> void:
 
 func _make_match() -> MatchState:
 	var ms := MatchState.new(MatchParams.new(SEED))
-	ms.apply_balance(_golden_config())
+	var config := _golden_config()
+	ms.apply_balance(config)
 	ms.inject_feature_flags(_golden_flags())
+	# Story 3-3 (AC 12): the deck-content injection, in the runner's own match-start order. Gated
+	# on the authored size for a deliberate reason — AC 10 makes an EMPTY injected deck a loud
+	# failure, so a zero deck_size means "this fixture has no deck at all", which is exactly the
+	# M2 state. That gate is what makes both reverse measurements a genuine ONE-LINE toggle of a
+	# single authored value rather than a hand-edited call site.
+	if config.deck_size > 0:
+		ms.inject_deck(_golden_deck())
 	ms.drain_signals()
 	return ms
 

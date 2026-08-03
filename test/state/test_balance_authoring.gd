@@ -121,6 +121,25 @@ func test_authored_mana_set_is_positive() -> void:
 		"mana_regen_per_second must be authored > 0 (the 3-1/R1 funding criterion counts the passive faucet)")
 
 
+## Story 3-3 (AC 6): the deck/hand COUNTS, audited in the defect-by-construction class rather
+## than the exempt one. deck_size 0 is a match whose players hold no cards at all — the "zero
+## stamina pool locks out every consumer" shape. hand_size 0 is a deal that deals nothing, which
+## would leave the whole step-6 seat silently inert. The RELATIONAL bound is the third: the fill
+## stops at an exhausted pile (no reshuffle ships, AC 11), so a hand_size ABOVE deck_size would
+## quietly deal a short hand forever instead of failing — a defect by construction, not tuning.
+func test_authored_deck_and_hand_counts_are_sane() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.deck_size > 0,
+		"deck_size must be authored > 0 (a zero deck is a match with no cards in it)")
+	assert_true(config.hand_size > 0,
+		"hand_size must be authored > 0 (a zero hand makes the whole deal seat silently inert)")
+	assert_true(config.hand_size <= config.deck_size,
+		"hand_size must be <= deck_size (no reshuffle ships — an over-large hand deals short forever)")
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

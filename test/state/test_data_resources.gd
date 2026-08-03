@@ -23,6 +23,11 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# Story 3-1 (AC 2/AC 6): the mana set — max_mana and mana_regen_per_second are NEW here,
 	# melee_hit_mana was already present and is only RE-AUTHORED (never a second field).
 	"max_mana", "melee_hit_mana", "mana_regen_per_second",
+	# Story 3-3 (AC 6): the deck/hand COUNTS. deck_size is read by the RUNNER (it sizes the
+	# composition it injects), hand_size by the state layer at the step-6 deal seat.
+	# draw_replacement_delay_seconds is deliberately NOT here — it lands at 3-5 with its
+	# consumer, so no dead field and no audit exemption ships one story early.
+	"deck_size", "hand_size",
 	"block_damage_multiplier", "deflect_window_seconds",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

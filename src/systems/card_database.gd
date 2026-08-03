@@ -67,3 +67,32 @@ func has_card(id: StringName) -> bool:
 ## read sorts explicitly.
 func card_count() -> int:
 	return _cards.size()
+
+
+## Story 3-3 (AC 3): the ONE ordered read over the loaded ids — EXPLICITLY sorted, never
+## dictionary iteration order (which card_count's header above already says is not a contract).
+## This is the "any later ordered read sorts explicitly" that header anticipated.
+##
+## Returns a FRESH array, so no caller can reach the backing dictionary through it. get_card,
+## has_card and card_count are UNCHANGED — this is an addition, not a widening of them.
+##
+## Its one production consumer is match_runner's deck composition (AC 4), which walks this in
+## order taking up to each card's max_copies. Sorting HERE rather than at the consumer is what
+## makes "the deck composition never depends on filesystem enumeration order" a property of the
+## database instead of a habit of whoever reads it.
+## SORTED AS STRINGS, DELIBERATELY, and this is load-bearing rather than stylistic: Godot's
+## StringName comparison operators order by INTERNAL POINTER, not lexicographically, so
+## `Array[StringName].sort()` yields an allocation-dependent order that looks sorted, is
+## deterministic within one process, and is NOT stable across runs or builds. Measured here on
+## 4.6.3: it returned frost_dart, ember_lash, bramble_snare, ... — a deck composition built on
+## that would be exactly the filesystem-order dependency this accessor exists to prevent. The
+## round-trip through String is what makes "explicitly sorted" true.
+func sorted_ids() -> Array[StringName]:
+	var names: Array[String] = []
+	for id: StringName in _cards.keys():
+		names.append(String(id))
+	names.sort()
+	var ids: Array[StringName] = []
+	for name in names:
+		ids.append(StringName(name))
+	return ids

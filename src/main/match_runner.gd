@@ -94,6 +94,14 @@ func _ready() -> void:
 	var feature_flags: FeatureFlags = FeatureFlagsService.get_flags()
 	Invariant.check(feature_flags != null, "authored feature flags missing at match start")
 	_match_state.inject_feature_flags(feature_flags)
+	# Story 3-3 (AC 2/AC 4): deck CONTENT injection — the inject_feature_flags precedent
+	# directly above (once at match start, content only, no reload path). The runner is the ONLY
+	# reader of CardDatabase and the ONLY production caller of this seam: no file under
+	# src/state/ may name the autoload (AC 8, machine-checked in test_architecture_invariants),
+	# so the composition is derived HERE and plain StringName ids cross the boundary. deck_size
+	# is read inline off the already-loaded authored config (CONSTRAINT C). An empty result is
+	# rejected AT THE SEAM (AC 10), so there is deliberately no second check here.
+	_match_state.inject_deck(_derive_deck_contents(balance_config.deck_size))
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -169,6 +177,33 @@ func _ready() -> void:
 		# wired here: HeroActor.drive() pushes it per-tick from velocity (3-0a/R2). Read-only,
 		# no state handle, mirroring the telegraph wiring.
 		connect_hero_action_state_changed(slot, actor.animation_controller.on_action_state_changed)
+
+
+## Story 3-3 (AC 4): PROVISIONAL FIXTURE deck composition — walk CardDatabase's explicitly
+## SORTED ids, take up to each card's `max_copies`, stop when deck_size is reached. Sorted-id
+## order makes the result deterministic by construction: it can never depend on filesystem
+## enumeration order, and adding a card changes the composition only in the way the data says.
+## `max_copies` gains its FIRST consumer here.
+##
+## THIS IS NOT THE DECKBUILDING SEAT. Real deck selection is E4/E5 or later; this exists so the
+## card system has a deck to draw from at all, and it lives in the RUNNER because it is the one
+## place allowed to read CardDatabase (AC 2) — src/state/ may not so much as name it (AC 8).
+##
+## The library can be SMALLER than deck_size, in which case the walk simply stops when it runs
+## out of copies; the shipped nine cards carry 24 authorable copies against a deck_size of 20.
+## The genuinely broken case — an empty card set, e.g. a directory that degraded to empty under
+## export remap — is caught loudly at the injection seam (AC 10), not swallowed here.
+func _derive_deck_contents(deck_size: int) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null:
+			continue
+		for _copy in card.max_copies:
+			if out.size() >= deck_size:
+				return out
+			out.append(id)
+	return out
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a
