@@ -1,6 +1,6 @@
 # Story 3.5b: Draw-replacement delay, deck exhaustion, and the reshuffle vulnerable window
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** This file was authored at the 3-5 readiness gate (2026-08-04, decision-log
 > Session 2026-08-04 -- Story 3-5 readiness gate) and AMENDED at its own readiness gate the same day
