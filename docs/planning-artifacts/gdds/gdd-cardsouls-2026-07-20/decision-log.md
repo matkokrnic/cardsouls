@@ -3072,3 +3072,140 @@ too; the commit chain is not rebuilt to make the column uniform.
 immediately preceding this one); `3-5a`'s Status and board promoted `backlog -> ready-for-dev`. `3-5b`
 stays `backlog`, HOLD, pending its own readiness gate -- not promoted, not gated, this session. Docs-only
 pass -- suite run once for the baseline measurement above, no code touched.
+
+---
+
+## Session 2026-08-04 -- 3-5a close-out
+
+Continues this story's label series (3-5/R1 above) with rulings 3-5/R2..R9, recorded after the dev
+pass (Claude Opus 4.8) landed and the commit chain (Claude Sonnet 5) verified and shipped it.
+Verification this session: `HEAD` started at `77d7f06`, matching `origin/main`, 0/0 divergence; a live
+Godot process from the operator's own smoke build was found running at the start of the chain, flagged,
+and confirmed closed by the operator before the editor scan ran; the working-tree surface matched the
+expected 14-modified/6-untracked set exactly; the encoding repair on `test/state/test_determinism.gd`
+held (0 CR bytes, 0 C3/C2 mojibake lead bytes, no BOM, byte-verified); one headless editor scan
+generated SIX new `.uid` files, not the two originally anticipated -- two for the new `src/` scripts
+and four for the new `test/` files, matching this repo's universal 1:1 `.gd` -> `.uid` convention
+(verified: 41 tracked `test/**/*.gd` files, 41 tracked `test/**/*.uid` siblings) -- all six committed
+alongside their scripts (commit 1), on the operator's decision. State harness 287 tests / 1297
+assertions / 0 failed, all 17 integration files PASS individually (`test_card_selection_indicator.gd`
+added), zero `SCRIPT ERROR` / `Parse Error` / `INVARIANT VIOLATED` lines, matching the dev pass's own
+recorded numbers exactly -- nothing in the dev pass was re-derived or re-measured, only verified.
+
+**What shipped, against all twelve ACs.** The controller-only mode-select scheme (AC1); card actions
+read at step 6, never ingested at step 1 (AC2); `src/state/economy/cast_evaluator.gd` as a pure static
+sibling of `EconomyEvaluator` (AC3); the one-shot match-wide card-cost injection seam on `MatchState`
+(AC4); one-tick Basic-mode resolution with an instant refill, the resolved card's id emitted on
+`card_cast_resolved` (AC5); the discard pile as a third pure container on `PlayerState`, `Hand` gains
+`remove_at` (AC6); unaffordable-cast rejection through the shipped `action_rejected` signal and its
+existing per-slot seam (AC7); the DEAD/frozen-tick cast contract (AC8); the mode enum on `Enums`
+beside `CardColor`, dispatch as a private `MatchState` method at step 6 (AC9); a presentation-local
+selection indicator (AC10); Input Map hygiene, both guards (AC11); the reserved pitch/stage action
+confirmed a no-op deletion (AC12). Suite: 246 tests / 1186 assertions + 16 integration -> **287 tests
+/ 1297 assertions + 17 integration**.
+
+**3-5/R2 -- Golden re-baseline (the SIXTH), three causes plus two isolation results measured beyond
+what was required.** `ad42841e...` -> `c4b9f897...`: cause 1 (`discard_size` key, all-zero values,
+unconditional) moved the hash alone (M1); cause 2 (a landed cast's `deck_size`/`discard_size` change)
+and cause 3 (mana spent) were separated by pricing the fixture cast at 0.0 first (M3, cause 2 alone)
+then at 7.0 (M4, cause 3 added). Two results were measured beyond the minimum needed to ship: **M0**
+confirms the bare `DiscardPile` addition with nothing snapshotted is UNMOVED -- the container's mere
+existence cannot move the hash without a snapshot key reading it. **M2** confirms cast-cost content
+injected but no cast committed reproduces M1's hash BIT-IDENTICALLY (`a079c111` both times) -- the
+injection machinery itself cannot move the hash without a cast actually landing, isolating the SEAT
+from its CONTENT the same way 3-4/the mana-flywheel isolated a `BalanceTicks` seat from its coverage
+value. Both reverse toggles (R1, R2) reproduced their forward measurements exactly.
+
+**3-5/R3 -- `rng_state` predicted and measured a non-mover, kept as a permanent test.** The Golden
+Prediction named `rng_state` as a non-mover because `Deck.draw_top()` consumes no RNG (only the 3-3
+shuffle does); measured, it did not move. Kept as `test_the_recorded_cast_consumes_no_rng` rather than
+a comment, specifically because a PRIOR version of this same Golden Prediction (corrected at this
+story's own readiness gate, 3-5/R1) claimed the opposite -- a claim that stood uncontradicted until
+measured. A comment can rot silently the way that claim did; a test cannot.
+
+**3-5/R4 -- SUPERSESSION of three 3-3 `AC 11` fences, formal ruling.** Three test fences authored by
+the CLOSED story 3-3 named "story 3-5" as their owner and were NARROWED, not deleted, by this story's
+dev pass: `discard` released from the banned-token scan, `reshuffle|exhaust|vulnerab|draw_replacement`
+STAY banned -- the fence is now `3-5b`'s, since an instant refill still cannot exhaust a pile.
+`CardCastCondition` released, `CardEffect` STAYS banned -- 3-5a resolves a cast and emits an id, never
+an effect (AC5's accepted deviation, below), so the fence still has a real subject. Input Map `card`
+released, `pitch|stage|play|draw|discard|hand` STAY banned. A POSITIVE Input Map guard was added
+alongside the negative one, because the negative guard alone cannot distinguish "correctly added" from
+"never added." All four narrowed/added forms are mutation-proven (the story's own mutation table, rows
+9, 10, 13b, 14). The 3-3 story file itself is NOT edited -- this ruling is the formal record of the
+supersession, per the standing rule that a closed story's file is not reopened to reflect a later
+story narrowing its fences.
+
+**3-5/R5 -- the frozen-tick cast contract is SILENCE, ruled and pinned in both halves.** A cast
+committed on a round-over frozen tick is dropped silently: no state change, no signal, not even an
+`action_rejected`. Structural reason: step 1b returns before step 2, so on a frozen tick NO intent is
+ingested at all, and attack/block/roll/move are already dropped exactly this way; emitting for casts
+alone would require reading card intent inside step 1b, which AC2 forbids. `action_rejected` remains
+the rejection path for LIVE-tick refusals only (insufficient mana, empty slot). Pinned by
+`test_cast_on_a_frozen_tick_is_dropped_silently` in both directions (nothing changes AND nothing is
+emitted). **This closes the readiness-gate finding (blocking finding 6, Session 2026-08-04 -- Story
+3-5 readiness gate) that no contract existed for a cast on a frozen tick** -- a later gate should read
+this as a settled ruling, not rediscover it as a defect.
+
+**3-5/R6 -- DEAD <=> frozen is a total coupling, measured.** `_end_round` sets `_round_over = true`
+and the loser's `DEAD` together, and it is the ONLY entry into `DEAD`; the debug reset clears both. A
+DEAD player is therefore always also frozen, and the step-6 DEAD-cannot-cast guard is UNREACHABLE in
+natural play. It ships anyway as defense in depth, in the same family as the DEAD branches already
+guarding steps 3, 4, and 5, each unreachable for the identical reason and guarded anyway. Pinned by
+the repo's established forced-DEAD test idiom.
+
+**3-5/R7 -- `project.godot` is no longer pinned at its old SHA.** The constant carried forward by
+prior close-outs (`31033a50137c98dc...`) is superseded by `8879DE490EDDA78051595F189FB9BB6F2E75384FEBA
+FF142C8958EC107970004`, measured additions-only both before and after this chain's own editor scan (60
+insertions, 0 deletions, twelve new Input Map actions) -- no setting reorder, no deleted engine-default
+pin, no `config/features` move, no uid churn.
+
+**3-5/R8 -- OPEN DESIGN QUESTION, owner `3-5b`: does dying abort what a dying player started?**
+The operator's stated intent is that anything a player started before dying is aborted. Honouring it
+needs an EARLY-STOP path, and the standing invariant runs the other way (`match_state.gd`: an in-flight
+window "is NOT stopped or shortened here ... it simply resolves to nothing," 1-9/R3 intact). **Vacuous
+in 3-5a** -- nothing in this story spans ticks, so there is nothing in flight to abort. The first
+card-side mechanism that actually spans ticks is `3-5b`'s delayed replacement draw, which is where
+this question is forced and must be ruled EXPLICITLY. Recorded as an open question, not a decided
+behaviour, and not a defect in 3-5a.
+
+**3-5/R9 -- the architecture-amendment queue's EIGHTH member now has a concrete target.** Novel
+Pattern 6 (`docs/game-architecture.md`) is written as shipped code and is wrong three ways: its
+`CardData` sketch omits `id` and `max_copies` (already the sixth member); it shows `ModeKind` and a
+free `resolve()` function as existing with no owning class named; and it names a guard helper,
+`check_invariant`, that names no real symbol. `ModeKind` now DOES exist, on `Enums`, with `MatchState`
+owning the step-6 dispatch (AC9) -- the amendment has a concrete target to correct against. Forcing
+point stays the E3 close-out docs flush, unchanged.
+
+**Mutation table, all sixteen rows confirmed** (recorded verbatim in the story's own Dev Pass Record).
+Every target restored from an out-of-repo SHA256-verified copy, `git checkout --` never used. Two
+mutation attempts were themselves defective and were redone rather than banked: MUT-12's first form was
+invalid GDScript (hung Godot, inconclusive, killed and restored), MUT-13's first token was uppercase
+against a case-sensitive regex (a false pass, redone as 13b). NOT claimed mutation-proven: both
+`inject_card_costs` `Invariant.check` calls in the FIRING sense (`Invariant.check` routes through
+`assert()`, which aborts the harness before a failure can be observed), and `CastEvaluator`'s
+null-condition branch -- their PRESENCE is guarded by source scan, and that scan IS proven (row 15).
+
+**Smoke Record.** Live smoke PASS, R-D6 re-invoked and SPENT. Confirmed in play: the selection
+indicator behaves as tested; a confirm with no armed slot does nothing; while the opponent is dead a
+card can still be ARMED but not cast; fps steady throughout. One WAIVER: deck shrinkage is not
+smoke-visible (no HUD shows a deck count, that is `3-6`), resting instead on the headless proof
+(deck-size assertions plus golden cause 2) -- same class as the earlier DEAD-bar-freeze waiver. Two
+findings: **S5**, no feedback on a cast at all (no sound, nothing on screen, for either a successful
+cast or a rejection) -- not a defect, `card_cast_resolved` deliberately has no listener and
+`action_rejected` reaches only the debug inspector; named the leading candidate to inherit the seam
+obligation, forcing point `3-6` for the visual half, audio separate. **S6**, a cast succeeds during a
+roll and while blocking with no resistance -- no AC required an action-state gate and none was
+invented; named open, forcing point E5, where a charge-up mode that spans time makes "may you cast
+mid-roll" load-bearing. Recorded so a later reader does not file it as a bug: being able to ARM while
+the round is frozen is intended, the indicator is pushed outside the ticking gate, exactly as camera
+follow is during a debug pause.
+
+**Board: done.** Next story in the locked order: `3-5b`, currently `backlog`/HOLD pending its own
+readiness gate (this story's own gate: `3-5a -> 3-5b -> 3-0c -> 3-6`).
+
+**Close-out.** Commit chain: `story 3-5a: card mode select + basic card resolution` (`f4cc806`, code,
+tests, `project.godot`, six `.uid` siblings), `docs(3-5a): dev pass record + smoke record` (`d136e26`,
+this story's Dev Pass Record, the AC5/Golden-Prediction/Agent-Model-Used corrections, the supersession
+item, the Smoke Record, and the Change Log row), `board: promote 3-5a to done` (`3fc584c`), and this
+entry. No push -- the operator reviews the log and pushes.
