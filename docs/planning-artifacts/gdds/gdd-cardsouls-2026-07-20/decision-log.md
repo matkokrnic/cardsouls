@@ -2834,3 +2834,241 @@ the four scope items named above, undeclared in its current text).**
 data), `docs(3-3): dev pass record` (`b49d414`, this story's Dev Pass Record, Dev Notes additions, Dev
 Agent Record, and Change Log), `board: promote 3-3-deck-hand-draw-reshuffle to done` (`c2e2de7`), and
 this entry. No push -- the operator reviews the log and pushes.
+
+## Session 2026-08-04 -- Story 3-5 readiness gate
+
+Readiness gate on `3-5-card-mode-select-basic-resolution.md` (docs-only, report-only, run against
+`8a7f7e2`) returned **NOT READY** on first read. This is the same first-pass verdict every Set B
+story's gate has returned -- seventeen PRIOR Set B readiness-gate sessions (seven E1, six E2, plus
+3-1 and 3-4 on 2026-08-02, plus 3-2 and 3-3 on 2026-08-03), all NOT READY on first read -- 3-3
+itself recorded "makes it 17/17" at its own gate (verified by content against this log, matching
+exactly; no discrepancy to report), and this session, run against 3-3's now-shipped code, makes it
+**18/18** -- fixed and promoted the same session, no exception in either direction.
+
+**Baseline measured green before the first edit** (docs-only pass; no code touched): state harness 246
+tests / 1186 assertions / 0 failed; 16 integration files, each individually PASS; golden unmoved at
+`ad42841edcd549660de44a9cf1b6c916b2a090a9c973ec44ec8ecd1960434f08`; `project.godot` SHA256 unchanged
+(`31033a50137c98dc...`, matching the 3-3 gate's own measurement -- this pass adds no autoload and
+touches no engine config); engine 4.6.3.
+
+**The split, ruled first because everything below is scoped by it.** Story 3-5 as pre-gate-written
+carried sixteen workstreams: two new balance fields, a new enum, a new evaluator, a new injection
+seam, a new `EventBus` signal, and a multi-cause golden re-baseline. It splits at the seam between THE
+TRIGGER (mode-select input, cast gating, Mode ① resolution) and WHAT THE TRIGGER MAKES REACHABLE (the
+draw-replacement delay, deck exhaustion, the reshuffle, and the vulnerable window). The 3-3 gate ruled
+that those four inherited items "move to 3-5 together with their trigger -- not split from it"
+(Session 2026-08-03 -- Story 3-3 readiness gate, finding (v)). That ruling is HONOURED here, not
+reopened: its purpose was that no mechanism ships before its trigger exists. `3-5a` delivers the
+trigger; `3-5b` lands after it exists, as its own story rather than a `3-5a` task. Measured, not
+assumed: with the shipped fixture (`deck_size` 20, `hand_size` 4), deck exhaustion needs SIXTEEN
+successful casts inside one round before the pile runs dry -- reachable in principle (a fixed-`delta`
+headless test can drive sixteen casts trivially) and unreachable as a realistic live-smoke event, which
+is why `3-5b`'s Live Smoke is NOT REQUIRED with that measurement as the stated reason, distinct from
+`3-3`'s NOT-REQUIRED reason (no player-facing surface at all).
+
+**Ordering change.** The E3-RG `ORDER` ruling (Session 2026-07-31, E3 revisit gate (outcome)) fixed
+3-1, 3-4, 3-2, 3-3, 3-5, `3-0c` (`IntentRecorder`), 3-6 last. With the split, that becomes **3-5a ->
+3-5b -> 3-0c -> 3-6**. Reason: 3-6 renders the reshuffle vulnerable window in the HUD (E3.S6 item 3,
+"clearly flagged in both viewports"), so it needs 3-5b -- which is what actually ships the window and
+its `EventBus` event -- to exist first. `epics.md` and `stories-manual-e3.md` updated alongside (split
+commit, `257e4d3`).
+
+**Nine premise corrections, with content, resolved before the blocking findings.**
+
+(i) The pre-gate story text's Tasks/Subtasks list said card actions are ingested at `advance()` step 1
+    ("Ingest card actions step 1; dispatch via `resolve()` step 6"), four lines below an AC that
+    already said the opposite ("Card actions are read directly at step 6 ... NOT ingested at step
+    1"). The story instructed the dev pass to do what its own AC forbade. Corrected: the task line is
+    deleted outright, not reworded -- AC2 is already the authoritative statement.
+
+(ii) The stale pre-revisit-gate banner ("E3 REVISIT GATE applies ... provisional ... must be reviewed
+     before implementation") was still at the top of the file, false since 2026-07-31: the epic
+     revisit gate has RUN, and this story's own gate ran the same day as this entry. This is the fifth
+     consecutive story carrying this residue (3-1, 3-2, 3-4, 3-3, now 3-5a), corrected to the same
+     Scope-note shape used at all four. Note for `3-5b`: it is a brand-new file, authored after this
+     gate, so it never carried the stale banner to begin with -- its own Scope note states its HOLD
+     directly.
+
+(iii) **3-5/R1 -- THE DECK-DRAW PREMISE IS FALSE, and it falsifies two things at once.** The pre-gate
+     Golden Prediction claimed "a draw consumes the seeded gameplay RNG" as its second named cause.
+     Measured against the shipped code: `Deck.draw_top()` (`src/state/deck.gd:54`) takes the LAST
+     element of the backing array and removes it -- no `rng` argument, no call into `MatchState`'s
+     `_rng`, nothing consumed. The ONLY RNG consumer anywhere in `Deck` is the Fisher-Yates shuffle
+     (3-3, AC7), which runs once at match start / debug reset, not on a replacement draw. This
+     falsifies the story's own second golden cause outright. It ALSO falsifies the general shape of
+     claim the revisit gate's own R11 made about this project's determinism history (Session
+     2026-07-31, E3-RG/R11: "the deck story (3-3) draws from the seeded RNG inside `advance()` ... AND
+     populates `PlayerState.hand` ... 3-3 therefore moves the golden TWICE OVER, from RNG consumption
+     and from the hand-size field") -- R11's claim is about 3-3's OWN initial-fill shuffle, which DOES
+     consume RNG and was correctly measured as a golden mover at the 3-3 gate; but the pre-gate 3-5
+     text extrapolated that same "a draw consumes RNG" shape onto a DIFFERENT draw (the replacement
+     draw on cast) that shares no code path with the shuffle. No decision-log entry anywhere is found,
+     by content search, making this specific extrapolated claim about the replacement draw under a
+     citable label prior to this one -- the claim originates in the 3-5 story text itself, authored at
+     the revisit gate per E3-RG/R11's blanket "every amended story gains a Golden Prediction section"
+     mandate, and propagated unverified until measured here. Recorded as the general precedent this
+     establishes: **the E3 revisit gate read six stories against the code as it stood on 2026-07-31,
+     and per-story gates running after intervening stories can and now do overturn its findings -- a
+     revisit-gate finding is evidence, not a fact, once code has moved under it.** (3-3 landed between
+     the revisit gate and this one; this is the first time that movement has actually overturned
+     something.)
+
+(iv) The Golden Prediction's `rng_state` citation, `match_state.gd:242`, has rotted -- measured,
+     `rng_state` is captured at `match_state.gd:292` today (three re-baselines and one story's worth of
+     line churn since the revisit gate wrote that citation). Corrected to cite the symbol, not the
+     line, per this project's standing citation discipline.
+
+(v) `stories-manual-e3.md` and `docs/game-architecture.md`'s Novel Pattern 6 both still name the guard
+    helper `check_invariant`, which names no real symbol anywhere in this repo (`grep -rn
+    "check_invariant" src/` returns zero hits). The real static guard is `Invariant.check`
+    (`src/systems/invariant.gd`). The 3-5 story's OWN AC2 was already corrected to the right name at
+    the revisit gate (2026-07-31) -- the 3-2 gate (2026-08-03) found the identical wrong name in ITS
+    OWN old AC4 and dropped it, citing this story ("the sibling 3-5 story had it corrected ... this story
+    carried the wrong name through untouched because it was confirmed, not amended, the clearest
+    evidence the confirm proved shallow" -- Session 2026-08-03, Story 3-2 readiness gate). This gate
+    finds the SAME wrong name a third place: the architecture document itself, never corrected. Folded
+    into the ruling below on the eighth architecture-amendment-queue member rather than logged twice.
+
+(vi) Novel Pattern 6's `CardData` code sketch (`docs/game-architecture.md:812-818`) shows four
+     `@export` fields; the shipped `CardData` (`src/state/resources/card_data.gd`) has SIX -- `id` and
+     `max_copies` both load-bearing and both missing from the sketch. This is not a new finding: it was
+     already recorded as the architecture-amendment-queue's SIXTH member at the 3-2 gate. Restated here
+     only because it is one of three things wrong with the SAME doc section this gate is auditing, and
+     folding it into a single eighth-member ruling (below) is more honest than pretending it is unowned
+     by this gate.
+
+(vii) Novel Pattern 6 (`docs/game-architecture.md:820-828`) presents a `ModeKind` enum and a free
+      `resolve(player, card, mode)` function as though they already exist, with no owning class named.
+      Verified by content: `grep -rn "ModeKind\|func resolve(" src/` returns zero hits. Neither exists
+      anywhere in `src/` today. Ruled (AC9): the enum lands on `Enums` beside `CardColor`
+      (`src/state/enums.gd`); the dispatch is a PRIVATE `MatchState` method called at step 6, matching
+      the `_generate_mana`/`_resolve_actions`/`_deal_pending_decks` shape every other `advance()`
+      mutation already uses -- not a free function, and not a new class, because the mutation must stay
+      inside `advance()`'s ordered dispatch (D2).
+
+(viii) The premise that one story could deliver mode-select input, cast gating, a new evaluator, a new
+       injection seam, Basic-mode resolution, discard, the draw delay, deck exhaustion, reshuffle, AND
+       the vulnerable window together was never coherent once measured against the dependency shape:
+       WHAT THE TRIGGER MAKES REACHABLE cannot be built, let alone tested, before THE TRIGGER exists.
+       This is the premise the split (above) corrects structurally rather than by editing prose.
+
+(ix) The four items the 3-3 gate ruled move to "3-5" (discard, reshuffle-on-exhaustion, the vulnerable
+     window, and the draw-on-play delay) named an undivided "3-5" as their destination, written before
+     3-5 itself split. Corrected: their actual destination is `3-5b` specifically, not `3-5a` -- stated
+     explicitly in `3-5b`'s own Scope note so a later reader does not go looking for them in the wrong
+     file.
+
+**Nine blocking findings, each resolved by the AC that closes it (3-5a).**
+
+1. **No discard container existed anywhere**, and `Hand` (today: add/clear/size/is_empty/`to_array`,
+   `to_array` returning a duplicate) exposed no removal path at all -- a card could enter a hand but
+   never leave one through the type meant to hold it. Resolved by AC6: a discard pile ships as a third
+   pure container on `PlayerState` alongside `Deck` and `Hand`, with a `Hand` removal method added; the
+   snapshot gains exactly one new key, the discard COUNT, never ids.
+2. **No seam existed for card costs to reach the state layer at all** -- `CardCastCondition.mana_cost`
+   is per-card content (3-2), and nothing injects card content into `src/state/` today except the
+   `inject_deck`/`inject_feature_flags` precedents, neither of which carries cost data. Resolved by
+   AC4: a new one-shot injection seam on `MatchState`, on the deck-injection precedent -- once at match
+   start, content only, no reload path, ONE match-wide map (both players use the same injected
+   composition, per 3-3's locked ruling), validated at injection time with `Invariant.check` so an
+   unknown id is unreachable at cast time rather than a new crash guard, and excluded from
+   `to_snapshot()`.
+3. **No evaluator existed to gate a cast, and its home was ambiguous** -- folding cost-evaluation logic
+   into `EconomyEvaluator` would contradict that file's own header, which declares it "THE one place
+   `ResourceGenerationRule`s are read," a generation-side identity. Resolved by AC3: a new pure static
+   sibling, `src/state/economy/cast_evaluator.gd`, that COMPUTES (returns an empty-or-reason
+   `StringName`) and does not APPLY -- the pool applies the spend inside `advance()`'s ordered dispatch,
+   the same compute/apply split `EconomyEvaluator` already uses on the generation side.
+4. **`Hand` had no removal method**, discharged together with finding 1 above (AC6) -- listed
+   separately because it blocks even a card LEAVING a hand, independent of where it goes.
+5. **No rejection path was defined for an unaffordable cast.** Resolved by AC7: reuse the SHIPPED
+   `action_rejected` signal and the existing per-slot observation seam that already carries the
+   insufficient-stamina rejections (`connect_hero_action_rejected`), with a card action name and a
+   reason token -- no new signal, no new seam, seam count unchanged (still the seven frozen at 2-6/R7).
+6. **No contract existed for a cast attempted by a DEAD player or on a frozen round-over tick.**
+   Resolved by AC8: DEAD cannot cast; a cast on a frozen tick drops silently with no rejection signal,
+   consistent with every other intent during the freeze (step 1b returns before step 2). Both pinned by
+   tests. The second half carries a forward NOTE for `3-5b`: nothing in THIS story spans ticks, so
+   there is nothing in flight to abort here, but `3-5b`'s delayed replacement draw must tick out and
+   deliver nothing rather than being cancelled on a death -- an early-stop path would reopen the locked
+   1-9 invariant obligation that windows on a dead hero run to expiry and simply deliver nothing.
+7. **The mode enum had no defined home**, and Novel Pattern 6's sketch (finding (vii) above) is not a
+   real location. Resolved by AC9: `Enums` (`src/state/enums.gd`), beside `CardColor`; dispatch as a
+   private `MatchState` function at step 6.
+8. **A selection indicator was unscoped**, risking overlap with 3-6's HUD work (card contents, sizing,
+   layout). Resolved by AC10: a presentation-local indicator (armed slot, armed mode) added to the
+   EXISTING placeholder card row -- no new seam, no read of `PlayerState.hand`, no resize, no card
+   identity, no cost display, fenced explicitly against 3-6.
+9. **A reserved pitch/stage action had no ruling on whether it ships**, and Input Map hygiene for the
+   new card actions had no stated procedure. Resolved by AC11 (named actions, textual edit with the
+   editor closed, `project.godot` SHA256 before/after, diff reviewed -- the 2-1/R2 procedure, per
+   E3-RG/R7's scoping of the Input Map ownership ruling to allow this) and AC12 (the reserved
+   pitch/stage action is DELETED outright, on the retired-`pose_id` precedent (3-0b, DEBT E member 4)
+   -- a reserved action with no consumer does not ship, since the pitch zone is an E6 flag and is off).
+
+**The eighth architecture-amendment-queue member**, combining findings (v), (vi) and (vii) above into
+one entry rather than three: the Novel Pattern 6 section of `docs/game-architecture.md` is written as
+if it were shipped code and is wrong three ways -- its card-data sketch omits the `id` and
+`max_copies` fields, both load-bearing (already the sixth member, restated here because it lives in
+the same section); it presents a mode enum and a `resolve()` function as existing with no owning class
+named, neither of which exists anywhere in `src/`; and it names a guard helper, `check_invariant`,
+that names no real symbol -- a defect already corrected in the story text (at the revisit gate) but
+NOT in the architecture document. The seventh member's conditional clause (Session 2026-08-03, Story
+3-3 readiness gate close-out: "if a vulnerable-window signal lands with 3-5, the `EventBus` header and
+the seam registry both need reconciling") now attaches to `3-5b`, not `3-5a`, since the vulnerable
+window is `3-5b`'s scope. Flush point unchanged: the E3 close-out (Session 2026-08-03, Story 3-3
+readiness gate: "the forcing point IS the E3 close-out").
+
+**Two previously unlisted inherited obligations**, named here because nowhere else names them: (1) 3-3
+fixed the meaning of "top" as the back of the pile (`Deck.draw_top()` takes the LAST element) and
+handed that meaning to this story -- a replacement draw reads the same "top." (2) Both players receive
+the SAME injected composition through 3-3's one seam, which constrains the new cost-injection seam
+(AC4) to a single match-wide map, not a per-player one, for the same reason.
+
+**Operator's seals, recorded by decision.**
+1. The split (3-5a / 3-5b, trigger vs. reachable) is SEALED. Not reopened; see the split ruling above.
+2. The selection indicator (AC10) is SEALED to presentation-local, no hand read, no resize, fenced
+   against 3-6.
+3. The melee tuning retune is SEALED to land AFTER this story's live smoke, not before, as its own
+   golden-neutral balance commit -- the criterion (a round should finance 2-4 loop cycles) is
+   unjudgeable until cycles per round can actually be counted, which is exactly why its forcing point
+   moved here.
+4. That a DEAD player cannot cast (AC8, first half) is SEALED.
+
+**The smoke cannot answer the mode-select-under-pressure question in E3, and that is recorded so a
+PASS is never later misread.** Exactly one mode is reachable in E3; the rest are guarded stubs. The
+real forcing point for whether mode-select is viable under real-time pressure at all moves to E5, when
+the additional modes land -- this story's Live Smoke proves only that arming and committing a single
+card mid-exchange does not read as stopping to use a menu, not that mode-selection itself scales.
+
+**Epic-wide staleness, RECORDED not fixed -- out of scope for a 3-5 fix pass.** Two items, both
+deferred with an explicit forcing point rather than corrected here:
+1. `stories-manual-e3.md` still carries a file-level front-matter `status: provisional — revisit
+   after the first E1/E2 playtest` (line 6), and every section still standing (E3.S1, E3.S2, E3.S3,
+   E3.S4, E3.S6 -- five of the file's seven current sections) carries its own unamended `Revisit note`
+   reading "Provisional — confirm or amend against `docs/playtest-log.md` before implementing," even
+   though the revisit gate RAN on 2026-07-31 and four of the six original stories (3-1, 3-2, 3-3, 3-4)
+   have since passed their own readiness gates -- only E3.S5a (this gate) and the new E3.S5b carry
+   current Revisit notes.
+2. `stories-manual-e3.md` E3.S2 item 4 (not E3.S3 -- verified by content; the referring correction
+   text located it at E3.S3, which this entry does not repeat uncorrected) separately instructs
+   authoring a card-damage guard as "Add a `check_invariant` or a test that fails if a per-card damage
+   field ever appears" -- the same non-existent symbol corrected in E3.S5a above, standing unfixed in
+   a section this pass does not own.
+
+Both are epic-wide edits, not scoped to any single story's gate. Forcing point: the E3 close-out docs
+flush, the same flush point already fixed for the architecture-amendment queue (Session 2026-08-03,
+Story 3-3 readiness gate: "the forcing point IS the E3 close-out").
+
+**The Change Log author-column question stays parked, second file now exhibiting it.** `3-5a`'s
+Change Log reads `Claude Opus 4.8` for v0.2 (the revisit-gate amendment, authored before this fix
+pass existed) and `Claude Sonnet 5` for v0.3 and v0.4 (the split and this gate's fix pass, both this
+session). This is the SECOND story file carrying a mixed author column, after 3-2 (Session
+2026-08-03, Story 3-2 readiness gate close-out), where whether that column records a repo-wide
+constant or the literal authoring agent was parked for the E3 close-out flush. It stays parked here
+too; the commit chain is not rebuilt to make the column uniform.
+
+**Promotion.** All fixes applied to `3-5a` the same session (`docs(stories)` commit `b3a3481`,
+immediately preceding this one); `3-5a`'s Status and board promoted `backlog -> ready-for-dev`. `3-5b`
+stays `backlog`, HOLD, pending its own readiness gate -- not promoted, not gated, this session. Docs-only
+pass -- suite run once for the baseline measurement above, no code touched.
