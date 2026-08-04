@@ -1,6 +1,6 @@
 # Story 3.0c: Intent recorder — the X5 record/replay stream contract
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** This file was authored at the story's own CREATION pass (2026-08-04, commit
 > `290e4c9`) per `decision-log.md` `E3-P/R3`, and REWRITTEN the same day at its own READINESS GATE,
