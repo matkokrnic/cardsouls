@@ -447,19 +447,196 @@ to the **E4/E5 balance pass**. Any future conclusion about the reachability of d
 from a LIVE session carries it, because casts per round is a direct function of mana income and mana
 income is known miscalibrated in the direction that makes casts cheaper and more frequent.
 
+## Dev Pass Record
+
+Dev pass model: **Claude Opus 5**. This section records that pass's substance; the commit chain that
+lands it (the code/tests commit, this doc commit, the board promotion and the decision-log
+close-out) is a separate session. NOTHING IS COMMITTED OR STAGED BY THIS PASS.
+
+- **Suite outcome.** State harness 287 tests / 1297 assertions / 0 failed -> **310 tests / 1463
+  assertions / 0 failed**; **18/18** integration files PASS individually
+  (`test_deck_reshuffle.gd` added this story); zero `SCRIPT ERROR` / `Parse Error` /
+  `INVARIANT VIOLATED` lines. `project.godot` is BYTE-IDENTICAL start to finish
+  (`8879DE49...070004`) — 3-5b adds no Input Map action. Two new `.gd` files, so two `.uid`
+  siblings are owed from the editor scan at chain time.
+- **Golden re-baseline (the SEVENTH)**, `c4b9f897` -> `40eb5554`, ONE re-baseline, measured one edit
+  at a time. Every non-golden test was GREEN with the nonzero fixture delay in place BEFORE the
+  sequence was started — including the three assertions that delay breaks (see below).
+
+  | # | Step | Hash | Verdict |
+  |---|------|------|---------|
+  | M0 | both windows + the debt owned by `PlayerState`, mechanism present but INERT, fixture priced `0.0`, nothing snapshotted | `c4b9f897` | UNMOVED — the zero point |
+  | M1 | + `pending_draw` key alone, all-zero, mechanism still inert | `9bcfcd7a` | MOVED — cause C1 |
+  | M2 | + `pending_draw_owed` key, all-zero, mechanism still inert | `b5b4da8d` | MOVED — cause C2 |
+  | M3a | mechanism RE-ENABLED (step-2 tick, step-6 delivery, debt, reshuffle, signal), fixture still `0.0` | `b5b4da8d` | UNMOVED — seat isolated from content |
+  | M3b | + `DRAW_DELAY_TICKS` 11 | `40eb5554` | MOVED — cause C3(b) (FINAL) |
+  | R1 | remove ONLY C2's key | `9bcfcd7a` | reproduced M1 exactly |
+  | R2 | re-price the delay back to `0.0` | `b5b4da8d` | reproduced M2/M3a exactly |
+
+  **C4 (`rng_state`) — predicted NON-MOVER, measured a non-mover, BOTH directions.** Forward:
+  `test_the_recorded_cast_consumes_no_rng` stays green and stays kept — `draw_top()` consumes
+  nothing whether it fires on the cast tick or eleven ticks later. Reverse, and the story is right
+  that it is required: a reshuffle DOES move `rng_state`, measured in two separate non-golden
+  fixtures (`test_draw_delay_and_reshuffle.gd` and, on the AUTHORED config,
+  `test/integration/test_deck_reshuffle.gd`), each of which ALSO measures that a plain delivery
+  draw does not.
+- **The three assertions the nonzero delay breaks were rewritten and green before the re-baseline**,
+  exactly as the Dev Notes require: `test_golden_sequence_exercises_the_recorded_cast`'s "INSTANT
+  refill" hand assertion and its deck count, and the same two counts in
+  `test_golden_sequence_exercises_deck_shuffle_and_hand_fill`. A FOURTH was found and rewritten too,
+  not named in the story: `test_two_matches_with_a_populated_deck_hash_identically` carries the same
+  `DECK_SIZE - HAND_SIZE - 1` sanity count. All four now read the in-flight counts, and both
+  conservation sites gained AC 11's fourth term.
+- **DISCREPANCY REPORTED, NOT SILENTLY RESOLVED — the Golden Prediction's C2 caption.** C2 is
+  captioned "the vulnerable-window snapshot key", but that key does not exist in the delivered
+  software, and it cannot: **AC 4** rules the snapshot gains EXACTLY TWO keys and names them both
+  (`pending_draw`, `pending_draw_owed`) with a key-set pin so "a third key cannot ship quietly", and
+  **AC 2** rules that nothing under `src/` may READ the vulnerable window — `to_snapshot()` is a
+  read. The two ACs are followed as written. Everything else in C2's text describes the second
+  pending-draw key exactly ("add on top of C1, still all-zero, still no behaviour change", "remove
+  only C2's key — expect C1's measured hash BIT-IDENTICALLY", "adding ONE KEY AT A TIME is what
+  separates C1 from C2"), so the four causes are all present and all measured; only the caption is
+  wrong. Recorded in `test_determinism.gd`'s re-baseline record as well. **The consequence is
+  stated plainly:** the vulnerable window is cross-tick state that is NOT hashed. That is safe only
+  because nothing reads it — state no code consults cannot change an outcome or desync a replay —
+  and AC 2's guard is precisely what keeps that premise true. If a later story prices the window,
+  it must enter the snapshot at the same time.
+- **AC 16's shared shuffle helper did NOT contort the code, so the escape hatch was not taken.**
+  Both occasions were already "lay contents down, then shuffle", so the helper is one line
+  (`MatchState._shuffle_deck`) and both call sites read better than before. `shuffle_with_rng(`
+  stands at exactly TWO occurrences under `src/` post-landing — `deck.gd`'s definition and that one
+  helper — and the guard additionally pins WHICH two files, so two calls plus a moved definition
+  cannot pass on the count alone. Proven FALLING (row M-A).
+- **The `EventBus` two-signal pin was DELIBERATELY UPDATED to three**, per AC 6. It is not a broken
+  test; it is the mechanism working. Both it and the narrowed surface fence were RENAMED to stop
+  their names asserting counts and tokens that are no longer true, and each records its OLD NAME
+  verbatim in its docstring so the Fence Inventory stays greppable:
+  `test_event_bus_still_carries_exactly_the_two_declared_signals` ->
+  `..._the_three_declared_signals`, and
+  `test_no_reshuffle_exhaustion_or_draw_delay_surface_ships` -> `test_no_deck_exhaustion_surface_ships`.
+- **The runner stays at SEVEN `connect_*` seams.** The vulnerable-window signal is a match-wide fact
+  relayed onto `EventBus` after the drain on the `round_started` mechanism (one `connect` in
+  `_ready()`, one `_relay_*` method) — not an eighth observation seam.
+- **CONSTRAINT C honoured:** both new values are read inline from `ms.balance_ticks` at the point of
+  use (`_resolve_basic_cast`, `_deliver_pending_draw`, `_reshuffle_discard_into_deck`); no
+  `BalanceTicks` reference is cached anywhere. Pinned for BOTH windows by AC 15's two tests.
+- **AC 13's reflective guard found TWO REAL PRE-EXISTING DEFECTS on its first run**, which is the
+  strongest possible evidence it is not vacuous. `attack_stamina_cost` (shipped by the stamina-cost
+  corrective pass) and `block_facing_arc_degrees` (shipped by 1-8) were never added to
+  `E1_BALANCE_FIELDS`, so neither live tunable was covered by the non-negativity audit and nothing
+  failed. Both are now listed, with the finding recorded inline. This is reported rather than
+  quietly repaired because it is a four-story and eleven-story hole in a hand-maintained list.
+- **AC 10's reachability premise is STRICTER than the story states, and this is reported rather
+  than deviated from.** The AC says reachability "depends on authored balance numbers". Measured:
+  with `deck + hand + discard` conserved, a delivery finding both piles empty requires the hand to
+  hold the entire composition, which forces successful draws to exceed casts — impossible. The
+  both-empty case is therefore UNREACHABLE IN NATURAL PLAY at ANY authored numbers, in the same
+  family as the DEAD branches. The AC is delivered exactly as written (no-op degrade, no
+  `Invariant.check`, its own headless test); the test CONSTRUCTS the case directly, which the AC
+  already anticipates ("constructing the case directly"). The no-op is if anything better justified
+  than the story argues: a crash guard on an unreachable path fires only after some later story
+  makes it reachable.
+- **Mutation table.** Every target backed up OUTSIDE the repo and restored from that copy with a
+  SHA256 equality check; `git checkout --` never used. Every new guard proven FALLING.
+
+  | # | Mutation | File | Target guard | Fell |
+  |---|---|---|---|---|
+  | M-A | add a SECOND `shuffle_with_rng(` call site | `match_state.gd` | AC 16 / F2 count scan | `test_exactly_one_seeded_shuffle_call_site` (+2) |
+  | M-B | a damage path reads `target.vulnerable_window.is_running` | `match_state.gd` | AC 2 negative guard | `test_nothing_in_src_reads_the_reshuffle_vulnerable_window` (1) |
+  | M-C | `pending_draw.is_running = false` force-close | `match_state.gd` | AC 7 early-stop scan | `test_nothing_in_src_stops_or_clears_the_pending_draw_window` (1) |
+  | M-D | drop the new field from `E1_BALANCE_FIELDS` | `test_data_resources.gd` | AC 13 half (a) | `test_balance_config_field_lists_are_complete_by_reflection` (1) |
+  | M-E | delete the `from_config` derivation | `balance_ticks.gd` | AC 13 half (b) | same guard, + 15 behavioural (16) |
+  | M-F | `var _deck_exhausted := false` in `src/` | `match_state.gd` | narrowed `exhaust` fence | `test_no_deck_exhaustion_surface_ships` (1) |
+  | M-G | a FOURTH `EventBus` signal | `event_bus.gd` | updated bus pin | `test_event_bus_still_carries_exactly_the_three_declared_signals` (1) |
+  | M-H | author the delay `0.0` | `balance_config.tres` | AC 1 bespoke bound | `test_authored_card_timing_values_are_positive` (1) |
+  | M-I | author the vulnerable window `0.0` | `balance_config.tres` | AC 2 bespoke bound | same guard (1) |
+  | M-J | ship a THIRD snapshot key | `player_state.gd` | AC 4 key-set pin | key-set pin + AC 2 read guard + golden (3) |
+  | M-K | gate the cast on a pending draw | `match_state.gd` | AC 3 no-new-refusal | `test_a_cast_is_not_gated_on_a_pending_draw` (+3) |
+  | M-L | delete the delivery-time DEAD check | `match_state.gd` | AC 7 | `test_a_dead_player_ticks_the_window_out...` (1) |
+  | M-M | hoist the tick ABOVE the round-over freeze | `match_state.gd` | AC 8 | `test_the_pending_draw_window_does_not_tick_on_a_frozen...` (1) |
+  | M-N | reset no longer kills a pending draw | `match_state.gd` | AC 9 | `test_a_debug_reset_kills_a_pending_draw...` (1) |
+  | M-O | draw anyway when both piles are empty | `match_state.gd` | AC 10 | 2 tests + the exact `Out of bounds get index '-1'` crash |
+  | M-P | add `Deck.reshuffle()` | `deck.gd` | Deck/Hand method fence | `test_hand_and_deck_expose_no_play_or_discard_path` (1) |
+  | M-Q | seat the delivery BEFORE the cast dispatch | `match_state.gd` | AC 3 zero-delay degrade | `test_a_zero_derived_delay_degrades...` + 3-5a's instant-refill test (2) |
+
+  M-J's FIRST run exposed a REAL BLIND SPOT IN A GUARD THIS STORY WROTE, and the guard was
+  strengthened rather than the result banked: the AC 2 pattern was anchored on `.vulnerable_window`
+  (a leading dot), so it saw every read through a handle but NOT an unqualified self-read inside
+  `player_state.gd`, where the field is named bare — exactly the shape M-J used. A second pattern
+  banning `vulnerable_window.(is_running|remaining_ticks|to_snapshot)` outright now closes it, and
+  M-J was re-run: the AC 2 guard falls too.
+- **Provability honesty.** Every guard in the table above is proven in the falling direction. NOT
+  claimed mutation-proven in the FIRING sense: nothing new — this story adds no `Invariant.check`.
+  AC 10's degrade is deliberately guard-free, and its correctness is proven by M-O producing the
+  out-of-bounds access the degrade prevents.
+- **Fence Inventory, delivered as stated.** Ban dies for `reshuffle` / `vulnerab` /
+  `draw_replacement`; `exhaust` survives with its vacuity assertion (`scanned > 0`) and a regex
+  self-test in BOTH directions (the pattern must match `var _deck_exhausted := false` and must NOT
+  match `if player.deck.is_empty():`). `CardEffect`, the Input Map guards (positive and negative)
+  and F1/D3(a)/D3(b)/A2 all survive UNTOUCHED and green. The Deck/Hand method fence stays green via
+  the no-new-method route and is re-proven (M-P). The invariant file's header enumeration now reads
+  "F1, D3a, D3b, F2".
+- **Live Smoke: NOT REQUIRED**, and R-D6 is NOT re-invoked — it remains 3-6's. No smoke was run and
+  no smoke record is invented. `docs/playtest-log.md` is untouched.
+
 ## Dev Agent Record
 
 ### Agent Model Used
+
+Claude Opus 5
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- Dev pass (2026-08-04, Claude Opus 5): implemented AC 1-16. See the Dev Pass Record above for the
+  suite outcome, the seventh golden re-baseline and its four measured causes, the seventeen-row
+  mutation table, and the four items reported rather than silently resolved (the Golden Prediction's
+  C2 caption, the two pre-existing `E1_BALANCE_FIELDS` omissions, AC 10's stricter-than-stated
+  reachability, and the blind spot found in this story's own AC 2 guard).
+- No AC was deviated from or left blocked. AC 16's stop-and-ask escape hatch was NOT triggered: the
+  shared helper is one line and contorts nothing.
+- Nothing is committed, staged or pushed by this pass.
+
 ### File List
+
+**New — tests** (2 new `.gd` files; `.uid` siblings owed from the editor scan at chain time)
+- `test/state/test_draw_delay_and_reshuffle.gd`
+- `test/integration/test_deck_reshuffle.gd`
+
+**Modified — source**
+- `src/state/resources/balance_config.gd` (`draw_replacement_delay_seconds`,
+  `reshuffle_vulnerable_window_seconds`)
+- `src/state/timing/balance_ticks.gd` (both derived tick counts)
+- `src/state/player_state.gd` (`pending_draw`, `pending_draw_owed`, `vulnerable_window`; two new
+  snapshot keys)
+- `src/state/match_state.gd` (`reshuffle_vulnerable_window_opened`; step-2 window ticks; step-6
+  delivery, lazy reshuffle and the ONE `_shuffle_deck` helper; the cast now owes instead of draws;
+  the deal seat kills a pending draw)
+- `src/systems/event_bus.gd` (the third bus signal)
+- `src/main/match_runner.gd` (the relay — no new `connect_*` seam)
+
+**Modified — data**
+- `data/balance/balance_config.tres` (authored `1.0` and `1.5`)
+
+**Modified — tests**
+- `test/state/test_determinism.gd` (fixture delay, re-baseline record, four rewritten count
+  assertions, AC 11's fourth term)
+- `test/state/test_deck_and_hand.gd` (surface fence narrowed + renamed, bus pin updated + renamed,
+  AC 2 negative guard, AC 7 early-stop scan)
+- `test/state/test_architecture_invariants.gd` (AC 16's F2 scan; header enumeration)
+- `test/state/test_data_resources.gd` (two new fields, two PRE-EXISTING omissions repaired, AC 13's
+  reflective guard)
+- `test/state/test_balance_authoring.gd` (the bespoke `> 0.0` bounds)
+- `test/state/test_card_play.gd` (AC 11's fourth term; the instant-refill test re-justified as the
+  zero-delay degrade)
+
+**`project.godot`** — UNCHANGED, verified by SHA256 at the start and end of the pass.
 
 ## Change Log
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
 | 2026-08-04 | 0.1 | File authored at the 3-5 readiness gate, splitting `E3.S5` into `3-5a` (THE TRIGGER) and `3-5b` (WHAT THE TRIGGER MAKES REACHABLE), and carrying the four items 3-3's gate ruled move to 3-5 with their trigger. Status backlog, HOLD pending this slot's own readiness gate. | Claude Sonnet 5 |
+| 2026-08-04 | 0.3 | DEV PASS (implementation only — nothing committed, staged or pushed). All sixteen ACs implemented, none deviated from, none blocked. Two authored `BalanceConfig` durations with derived tick counterparts and bespoke `> 0.0` bounds; a pending-draw `TimingWindow` plus owed COUNTER on `PlayerState`, ticked at step 2 and delivered at the END of step 6 (after the cast dispatch, so a zero derived delay degrades exactly to 3-5a's instant refill); exactly two new snapshot keys with a key-set pin; a LAZY reshuffle inside the one existing step-6 RNG seat with no new `Deck`/`Hand` method; the vulnerable window and its owner-slot event relayed onto `EventBus` (two-signal pin DELIBERATELY updated to three, runner still at seven `connect_*` seams); death drops the DELIVERY and never the window; the frozen-tick, debug-reset, both-empty and four-term-conservation contracts; a required headless integration proof driven against the AUTHORED config; a REFLECTIVE `BalanceConfig` completeness guard; the fence inventory delivered as stated; both windows surviving a mid-match `apply_balance`; and F2 MACHINE-CHECKED — AC 16's shared helper did not contort the code, so the stop-and-ask escape hatch was not triggered and `shuffle_with_rng(` stands at exactly two occurrences post-landing. Suite 287/1297 -> **310 tests / 1463 assertions / 0 failed**, integration 17 -> **18/18**. SEVENTH golden re-baseline, `c4b9f897` -> **`40eb5554`**, four causes each measured in both directions with an M0 zero point proving the fields and the inert mechanism hash-neutral. Seventeen mutation proofs, every new guard shown FALLING. FOUR items reported rather than silently resolved: the Golden Prediction's C2 caption names a snapshot key that ACs 2 and 4 forbid (the ACs were followed; the cause itself is real and measured); AC 13's new guard found `attack_stamina_cost` and `block_facing_arc_degrees` missing from `E1_BALANCE_FIELDS` since their own stories, both repaired; AC 10's both-empty case is measurably unreachable at ANY authored numbers, not merely balance-dependent; and a blind spot in this story's own AC 2 guard, found by mutation and closed. `project.godot` byte-identical throughout. Live Smoke correctly not run; R-D6 not re-invoked. | Claude Opus 5 |
 | 2026-08-04 | 0.2 | Readiness-gate fix pass (NOT READY on first read -> fixed and promoted, same session; NINETEENTH logged readiness-gate session, all nineteen NOT READY on first reading and all nineteen resolved the same session). Eighteen rulings applied, `3-5b/R1`..`3-5b/R18`. The central premise was corrected: deck exhaustion is ALREADY REACHABLE in shipped 3-5a code, so this story REPLACES a silent floor rather than creating a mechanism (`3-5b/R1`); Story Statement and Scope note reframed. AC set replaced with sixteen verifiable claims about delivered software -- two AUTHORED balance fields with bespoke `> 0.0` bounds plus a negative guard that keeps open decision (b) open; a pending-draw timer plus owed counter ticked at step 2 and delivered at step 6; exactly two new snapshot keys; a LAZY reshuffle inside the one existing step-6 RNG seat with no new `Deck`/`Hand` method; the owner-only vulnerable window on the ownerless `EventBus` with its two-signal pin deliberately updated to three; death dropping the DELIVERY and never the window (1-9/R3 untouched); the frozen-tick, debug-reset, both-empty and four-term-conservation contracts; a required headless proof of exhaustion/reshuffle/both-empty; a REFLECTIVE `BalanceConfig` completeness guard; the fence inventory; in-flight survival across `apply_balance`; and a source scan pinning `shuffle_with_rng(` to exactly two sites, which makes F2 MACHINE-CHECKED for the first time (`3-5b/R17` -- the gate reported the second-RNG-seat gap and declined to invent an invariant to close it; the operator ruled the guard ships, and 3-5b is F2's forcing point because it is the first story that can introduce a second seat). `3-5b/R18` then CORRECTED R17's original form, which was self-contradictory: the two-occurrence count was measured pre-implementation, and AC 5's reshuffle is a second shuffle occasion, so a guard pinned at two would have failed on its own story. The fix keeps the count and removes the second CALL SITE -- both occasions route through ONE private `MatchState` shuffle helper -- with an explicit STOP-AND-ASK escape hatch if that helper contorts the code, since a second seeded seat is a design change. The two previously unfailable ACs (a pending draw's snapshot visibility, and the vulnerable window's price) were instructions to this file's author, not claims about software, and are now RULED and rewritten as claims. Fence inventory table added with a per-guard verdict. Golden Prediction replaced (was "TBD at this story's own readiness gate"): baseline re-derived `c4b9f897...`, MOVES, one re-baseline, four separately named causes each measured in both directions, and the golden sequence explicitly NOT widened to reach exhaustion. Live Smoke kept NOT REQUIRED with the reason CORRECTED to 3-3's (no player-facing surface, evidenced by content), R-D6 confirmed not re-invoked here, and the S1/S2 asterisk carried forward to 3-6 and the E4/E5 balance pass rather than dropped. Dev Notes APPENDED to (all six original bullets retained verbatim) with the reframe, the decision-(b) landing, the step-2/step-6 split rationale, AC 7's honest near-vacuity, the closure of `3-5/R8`, the three existing assertions the nonzero fixture delay breaks, the architecture-amendment queue's seventh member firing, and the extended 3-0c obligation, plus F2's review-enforced-until-now status and the FALLING direction of AC 16's mutation proof. Tasks/Subtasks added, mirroring the sixteen ACs. Project Structure Notes corrected to `src/systems/event_bus.gd` (`src/main/event_bus.gd` does not exist). Status backlog -> ready-for-dev; `sprint-status.yaml` updated alongside. | Claude Opus 5 |
