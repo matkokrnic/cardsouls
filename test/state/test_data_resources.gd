@@ -16,6 +16,13 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"max_hp", "move_speed",
 	"max_stamina", "stamina_regen_per_second", "stamina_regen_delay_seconds",
 	"roll_stamina_cost", "deflect_stamina_cost",
+	# FOUND BY STORY 3-5b's reflective guard below, on its first run, and repaired here:
+	# `attack_stamina_cost` (the stamina-cost corrective pass, E3-RG/R2) and
+	# `block_facing_arc_degrees` (story 1-8, R-D2) both shipped WITHOUT ever being added to this
+	# hand-maintained list, so neither was covered by the non-negativity loop. Nothing failed,
+	# which is precisely the hole AC 13 exists to close — two live tunables were unaudited for
+	# four and eleven stories respectively.
+	"attack_stamina_cost",
 	"attack_windup_seconds", "attack_active_seconds", "attack_recovery_seconds",
 	"attack_chain_window_seconds", "attack_chain_length", "attack_damage_percent_of_max_hp",
 	"attack_windup_move_speed_multiplier", "attack_active_move_speed_multiplier",
@@ -25,10 +32,15 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"max_mana", "melee_hit_mana", "mana_regen_per_second",
 	# Story 3-3 (AC 6): the deck/hand COUNTS. deck_size is read by the RUNNER (it sizes the
 	# composition it injects), hand_size by the state layer at the step-6 deal seat.
-	# draw_replacement_delay_seconds is deliberately NOT here — it lands at 3-5 with its
-	# consumer, so no dead field and no audit exemption ships one story early.
+	# Story 3-5b (AC 1/AC 2): the two card DURATIONS, arriving WITH their consumers exactly as
+	# 3-3's note here said they would — the delay between a played card and its replacement, and
+	# the window a reshuffle leaves its owner vulnerable for. Both carry a BESPOKE authored > 0.0
+	# bound in test_balance_authoring.gd on top of the `>= 0.0` loop below, because `field in
+	# config` and `>= 0.0` BOTH pass on the 0.0 script default — which would ship the story
+	# invisible in the build.
 	"deck_size", "hand_size",
-	"block_damage_multiplier", "deflect_window_seconds",
+	"draw_replacement_delay_seconds", "reshuffle_vulnerable_window_seconds",
+	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",
 ]
@@ -41,6 +53,64 @@ func test_balance_config_tres_has_every_e1_field_non_negative() -> void:
 	for field in E1_BALANCE_FIELDS:
 		assert_true(field in config, "BalanceConfig has '%s'" % field)
 		assert_true(float(config.get(field)) >= 0.0, "'%s' is non-negative" % field)
+
+
+## Story 3-5b (AC 13): the REFLECTIVE completeness guard, and the reason it has to exist is that
+## both lists it checks are HAND-MAINTAINED. `E1_BALANCE_FIELDS` above is a literal
+## `const Array[String]`, and `test_balance_config.gd::test_conversion_covers_every_seconds_field`
+## is a literal dictionary of nine fields — so before this test, a field added to `BalanceConfig`
+## and forgotten in either place failed NOTHING. It would simply never be audited and never be
+## converted, and the first symptom would be a duration silently reading 0 ticks in the tick
+## ladder. This story adds two fields and is the forcing point.
+##
+## (a) EVERY script-declared float/int property must appear in E1_BALANCE_FIELDS. Reflection is
+##     what makes the list impossible to under-fill: the loop above proves each LISTED field
+##     exists, this proves each EXISTING field is listed. Two directions, one contract.
+## (b) EVERY `*_seconds` property must have a value DERIVED by `BalanceTicks.from_config()` —
+##     checked by authoring one distinctive value across all of them and reading the tick-domain
+##     counterpart back, so a field with a `*_ticks` twin that `from_config` forgets to fill fails
+##     here (an unassigned int reads 0, not 30).
+##
+## MUTATION, both halves: drop `draw_replacement_delay_seconds` from E1_BALANCE_FIELDS and (a)
+## fails; delete its `from_config` line and (b) fails.
+func test_balance_config_field_lists_are_complete_by_reflection() -> void:
+	var declared: Array[String] = []
+	for p in BalanceConfig.new().get_property_list():
+		if int(p["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE == 0:
+			continue
+		var kind := int(p["type"])
+		if kind != TYPE_FLOAT and kind != TYPE_INT:
+			continue
+		declared.append(String(p["name"]))
+	assert_true(declared.size() > 0,
+		"reflection found no BalanceConfig fields (the guard would be vacuous)")
+	assert_true(declared.has("draw_replacement_delay_seconds"),
+		"sanity: reflection sees this story's own new field, so the scan is real")
+	# (a) every declared tunable is audited by the list above.
+	var unlisted: Array[String] = []
+	for name in declared:
+		if not E1_BALANCE_FIELDS.has(name):
+			unlisted.append(name)
+	assert_eq(unlisted.size(), 0,
+		"BalanceConfig field missing from E1_BALANCE_FIELDS — it ships unaudited: %s"
+				% ", ".join(unlisted))
+	# (b) every declared duration is converted by BalanceTicks.from_config().
+	var probe := BalanceConfig.new()
+	var durations: Array[String] = []
+	for name in declared:
+		if name.ends_with("_seconds"):
+			durations.append(name)
+			probe.set(name, 0.5)  # 0.5 s * 60 Hz = 30 ticks, distinct from every default
+	assert_true(durations.size() > 0, "no *_seconds fields found (half (b) would be vacuous)")
+	var ticks := BalanceTicks.from_config(probe)
+	var underived: Array[String] = []
+	for name in durations:
+		var twin := name.substr(0, name.length() - "_seconds".length()) + "_ticks"
+		if not (twin in ticks) or int(ticks.get(twin)) != 30:
+			underived.append(name)
+	assert_eq(underived.size(), 0,
+		"*_seconds field with no derived value out of BalanceTicks.from_config() — it would read "
+		+ "0 ticks in the tick ladder and never fire: %s" % ", ".join(underived))
 
 
 func test_camera_config_tres_loads_with_framing_fields() -> void:

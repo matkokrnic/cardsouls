@@ -288,11 +288,24 @@ func test_injection_seam_rejects_an_empty_injected_deck() -> void:
 ##   - `discard` is DROPPED from the ban — 3-5a ships the discard pile, because a card that leaves
 ##     the hand has to go somewhere the same tick it is played.
 ##   - `reshuffle`, `exhaust`, `vulnerab` and `draw_replacement` STAY BANNED, and this fence is
-##     now 3-5b's. Its reasoning is unchanged and still exact: 3-5a draws the replacement
-##     INSTANTLY, so a pile still cannot run out inside a round and exhaustion is still
-##     unreachable. The delayed draw is what makes it reachable, and it arrives with 3-5b.
-func test_no_reshuffle_exhaustion_or_draw_delay_surface_ships() -> void:
-	var re := RegEx.create_from_string("(reshuffle|exhaust|vulnerab|draw_replacement)")
+##     now 3-5b's.
+##
+## NARROWED AGAIN BY STORY 3-5b, the owner named directly above, which is the legitimate
+## introducer of three of the four tokens (Fence Inventory, 3-5b):
+##   - `reshuffle`, `vulnerab` and `draw_replacement` — THE BAN DIES. The lazy reshuffle, the
+##     vulnerable window and the authored draw-replacement delay all ship in this story.
+##   - `exhaust` — STAYS BANNED, and this half is the whole surviving fence. Exhaustion is
+##     expressible as `is_empty()`, which is already how 3-5a and 3-5b both express it: nothing in
+##     src/ needs an "exhausted" concept, a flag or a state, and a story that reaches for one is
+##     modelling the floor instead of just reading the pile. Both the vacuity assertion and the
+##     regex self-test are RETAINED, so a typo cannot silently disarm a fence that has just been
+##     narrowed (3-5b AC 14).
+##
+## RENAMED with the narrowing, from `test_no_reshuffle_exhaustion_or_draw_delay_surface_ships` —
+## the old name is recorded here verbatim so the 3-5b Fence Inventory stays greppable, and the new
+## one does not claim to ban three tokens that now ship legitimately.
+func test_no_deck_exhaustion_surface_ships() -> void:
+	var re := RegEx.create_from_string("(exhaust)")
 	var offenders: Array[String] = []
 	var scanned := 0
 	for path in _gd_files("res://src/"):
@@ -303,11 +316,13 @@ func test_no_reshuffle_exhaustion_or_draw_delay_surface_ships() -> void:
 			if re.search(line) != null:
 				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
 	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
-	assert_true(re.search("func _reshuffle_deck() -> void:") != null,
+	assert_true(re.search("var _deck_exhausted := false") != null,
 		"the pattern must match what it bans — a regex typo must not silently disarm this")
+	assert_null(re.search("if player.deck.is_empty():"),
+		"...and must NOT match the sanctioned form — exhaustion is expressible as is_empty()")
 	assert_eq(offenders.size(), 0,
-		"3-5b surface shipped early in src/ (no reshuffle, exhaustion handling, "
-		+ "vulnerable window or draw-replacement delay): %s" % ", ".join(offenders))
+		"a deck-exhaustion surface shipped in src/ (the pile is read with is_empty(), never "
+		+ "modelled as a flag or a state): %s" % ", ".join(offenders))
 
 
 ## NARROWED BY STORY 3-5a, the owner this fence names. 3-5a IS the cast-evaluator consumer, so
@@ -335,18 +350,23 @@ func test_no_card_effect_consumer_ships() -> void:
 		+ "effect): %s" % ", ".join(offenders))
 
 
-func test_event_bus_still_carries_exactly_the_two_declared_signals() -> void:
-	# AC 11: no EventBus signal ships here. The vulnerable-window event IS ruled to be an
-	# ownerless bus event on the round_started/round_ended precedent (E3-RG/R3) — that ruling
-	# stays binding on 3-5, which owns the trigger. Pinning the SET is what makes "no signal
-	# shipped" checkable; a later story that legitimately adds one updates this deliberately.
+## DELIBERATELY UPDATED BY STORY 3-5b, two signals -> three (AC 6, Fence Inventory), and RENAMED
+## with it from `test_event_bus_still_carries_exactly_the_two_declared_signals` — a name carrying
+## a count must not go on asserting a different one. The old name is recorded here verbatim so the
+## Fence Inventory stays greppable.
+##
+## 3-3's AC 11 pinned the set at two precisely SO THAT this could not happen quietly: the
+## vulnerable-window event was already ruled to be an ownerless bus event on the
+## round_started/round_ended precedent (E3-RG/R3), and 3-5b is the story that ruling named. The
+## story naming this test is the record that the change was intended rather than drifted into.
+func test_event_bus_still_carries_exactly_the_three_declared_signals() -> void:
 	var bus: GDScript = load("res://src/systems/event_bus.gd")
 	var names: Array[String] = []
 	for s in bus.get_script_signal_list():
 		names.append(String(s.name))
 	names.sort()
-	assert_eq(names, ["round_ended", "round_started"],
-		"EventBus signal set is unchanged by this story (AC 11)")
+	assert_eq(names, ["reshuffle_vulnerable_window_opened", "round_ended", "round_started"],
+		"EventBus carries exactly the three declared signals (3-5b AC 6 added the third)")
 
 
 ## NARROWED BY STORY 3-5a, the owner this fence names — and it is now story 3-5a's OWN AC 12
@@ -390,6 +410,161 @@ func test_card_scheme_input_actions_ship_for_both_players() -> void:
 				missing.append(action)
 	assert_eq(missing.size(), 0,
 		"card-scheme Input Map actions missing (AC 11): %s" % ", ".join(missing))
+
+
+## Story 3-5b (AC 2): THE GUARD THAT KEEPS OPEN DECISION (b) OPEN.
+##
+## A `TimingWindow` cannot exist without a duration, so `reshuffle_vulnerable_window_seconds` IS
+## authored — but what "vulnerable" COSTS is still undecided (decision-log Session 2026-07-22,
+## open decision (b), carried untouched by every story since). The mechanism that keeps it
+## genuinely open rather than closed by construction is this: if NOTHING READS the window, nothing
+## has priced it. A damage path, a mitigation path or an action-state path that consulted it would
+## silently decide the open question; this fence makes that impossible to do by accident.
+##
+## READS ARE BANNED; the two WRITES that make the window exist at all are allowed and enumerated.
+## `tick()` is a write, not a read — a window nobody advances is a window permanently open, which
+## is a different bug — and `start()` is the reshuffle itself. Everything else is an offender,
+## including `is_running`, `remaining_ticks()` and `to_snapshot()`: those three are exactly how a
+## consumer would price it, and the third is additionally why the window is NOT a snapshot key.
+##
+## The pattern is anchored on the FIELD ACCESS (`.vulnerable_window`), not the bare word, so the
+## authored balance field and the signal name — which share the vocabulary and are legitimately
+## everywhere — cannot false-positive. Both directions of that are self-tested below.
+## TWO patterns, and the second exists because the first has a measured blind spot. The ACCESS
+## pattern is anchored on a leading dot, so it sees every read through a handle
+## (`player.`, `p1.`, `target.`) — which is every consumer OUTSIDE PlayerState — but NOT an
+## UNQUALIFIED self-read inside player_state.gd itself, where the field is named bare. That hole
+## was found by mutation (adding `"vulnerable_window": vulnerable_window.to_snapshot()` to the
+## snapshot passed this guard while correctly failing the AC 4 key-set pin), so the READ pattern
+## below closes it: the three state-reading forms are banned outright, dot or no dot, anywhere
+## under src/.
+const VULNERABLE_WINDOW_WRITER := "res://src/state/match_state.gd"
+const VULNERABLE_WINDOW_ALLOWED_FORMS: Array[String] = [
+	".vulnerable_window.start(", ".vulnerable_window.tick()",
+]
+
+
+func test_nothing_in_src_reads_the_reshuffle_vulnerable_window() -> void:
+	var read := RegEx.create_from_string(
+		"vulnerable_window\\.(is_running|remaining_ticks|to_snapshot)")
+	assert_true(read.search("\tvar v := vulnerable_window.to_snapshot()") != null,
+		"the READ pattern must catch an UNQUALIFIED self-read — the access pattern below cannot")
+	assert_true(read.search("\tif p1.vulnerable_window.is_running:") != null,
+		"...and a qualified one")
+	assert_null(read.search("\tplayer.vulnerable_window.start(ticks)"),
+		"...while leaving the sanctioned WRITES alone")
+	var read_offenders: Array[String] = []
+	for path in _gd_files("res://src/"):
+		var rn := 0
+		for line in _code_lines(path):
+			rn += 1
+			if read.search(line) != null:
+				read_offenders.append("%s:%d %s" % [path, rn, line.strip_edges()])
+	assert_eq(read_offenders.size(), 0,
+		"the vulnerable window's STATE is read somewhere in src/ — is_running/remaining_ticks are "
+		+ "how a consumer prices it, and to_snapshot is why it is not a hash key: %s"
+				% ", ".join(read_offenders))
+	var re := RegEx.create_from_string("\\.vulnerable_window\\b")
+	# The pattern must match what it exists to catch...
+	assert_true(re.search("\tif target.vulnerable_window.is_running:") != null,
+		"the pattern must catch a READ of the window — a regex typo must not disarm this")
+	assert_true(re.search("\tplayer.vulnerable_window.start(ticks)") != null,
+		"...and the write it allows, or the allow-list would never be consulted")
+	# ...and must NOT match the two things that share its vocabulary, or the fence would be
+	# unimplementable and would get relaxed rather than kept.
+	assert_null(re.search("\tbalance.reshuffle_vulnerable_window_seconds"),
+		"the authored BALANCE FIELD is not the window and must not trip this")
+	assert_null(re.search("\t_queue.push(reshuffle_vulnerable_window_opened.emit.bind(slot))"),
+		"the SIGNAL is the window's public face and must not trip this")
+	var scanned := 0
+	var hits := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) == null:
+				continue
+			hits += 1
+			var allowed := false
+			if path == VULNERABLE_WINDOW_WRITER:
+				for form in VULNERABLE_WINDOW_ALLOWED_FORMS:
+					if line.contains(form):
+						allowed = true
+			if not allowed:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
+	assert_true(hits > 0,
+		"src/ must TOUCH the vulnerable window somewhere — otherwise this guard is vacuous")
+	assert_eq(offenders.size(), 0,
+		"something in src/ READS the reshuffle vulnerable window — open decision (b) would be "
+		+ "closed by construction rather than by a ruling: %s" % ", ".join(offenders))
+
+
+## Story 3-5b (AC 7): NO EARLY-STOP PATH SHIPS. 1-9/R3 stays locked — an in-flight window "is NOT
+## stopped or shortened ... it simply resolves to nothing" — and death drops the DELIVERY, not the
+## window. This scan is what keeps that a property of the code rather than of the current author's
+## intent: the pending-draw window may only be STARTED, TICKED and READ, never stopped, cleared or
+## force-closed by writing `is_running`.
+##
+## `pending_draw_owed` is deliberately NOT matched (the `\b` after `pending_draw` sees the
+## underscore and fails): the DEBT is a different thing from the WINDOW, and the debug reset
+## legitimately zeroes it (AC 9). Self-tested in both directions below.
+##
+## Note that `start(0)` is the sanctioned KILL — the debug reset uses it — and is allowed on
+## purpose: it goes through the one shipped API instead of a bespoke abort, which is precisely what
+## makes "no early-stop path" checkable at all.
+const PENDING_DRAW_WRITER := "res://src/state/match_state.gd"
+const PENDING_DRAW_ALLOWED_FORMS: Array[String] = [
+	".pending_draw.start(", ".pending_draw.tick()", ".pending_draw.is_running",
+]
+const PENDING_DRAW_BANNED_FORMS: Array[String] = [
+	".pending_draw.stop(", ".pending_draw.clear(",
+	".pending_draw.is_running =", ".pending_draw.is_running=",
+]
+
+
+func test_nothing_in_src_stops_or_clears_the_pending_draw_window() -> void:
+	var re := RegEx.create_from_string("\\.pending_draw\\b")
+	assert_true(re.search("\tplayer.pending_draw.stop()") != null,
+		"the pattern must catch an early stop — a regex typo must not disarm this")
+	assert_null(re.search("\tplayer.pending_draw_owed = 0"),
+		"the DEBT is not the window: the debug reset zeroes it legitimately (AC 9)")
+	for banned in ["\tplayer.pending_draw.stop()", "\tplayer.pending_draw.clear()",
+			"\tplayer.pending_draw.is_running = false"]:
+		var caught := false
+		for form in PENDING_DRAW_BANNED_FORMS:
+			if banned.contains(form):
+				caught = true
+		assert_true(caught, "the ban list must catch `%s`" % banned.strip_edges())
+	var scanned := 0
+	var hits := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) == null:
+				continue
+			hits += 1
+			var allowed := false
+			if path == PENDING_DRAW_WRITER:
+				for form in PENDING_DRAW_ALLOWED_FORMS:
+					if line.contains(form):
+						allowed = true
+			for form in PENDING_DRAW_BANNED_FORMS:
+				if line.contains(form):
+					allowed = false
+			if not allowed:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
+	assert_true(hits > 0,
+		"src/ must TOUCH the pending-draw window somewhere — otherwise this guard is vacuous")
+	assert_eq(offenders.size(), 0,
+		"an early-stop / abort path against the pending-draw window shipped in src/ (1-9/R3: an "
+		+ "in-flight window resolves to nothing, it is never cut short): %s" % ", ".join(offenders))
 
 
 func test_hand_and_deck_expose_no_play_or_discard_path() -> void:

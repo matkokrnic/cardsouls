@@ -20,8 +20,13 @@ const START_MANA := 10.0
 
 ## The whole of AC 5 in one tick, asserted as four separate facts because they are four separate
 ## mutations and a partial resolution must not read as a pass: the mana is spent, the card leaves
-## the hand, it lands in the discard, and a replacement is drawn IMMEDIATELY (no delay field, no
-## countdown — those are 3-5b's).
+## the hand, it lands in the discard, and a replacement is drawn IMMEDIATELY.
+##
+## STILL TRUE AFTER STORY 3-5b, and deliberately so. 3-5b replaces the instant refill with a timer
+## plus a debt — but this fixture's `_config()` authors no `draw_replacement_delay_seconds`, so
+## the delay derives to ZERO ticks and the delivery fires inside the cast tick. That is 3-5b's own
+## ruled degrade (AC 3, "unless the derived delay is zero ticks"), and keeping this test green at
+## a zero price is what proves the degrade is exact rather than approximately similar.
 func test_basic_cast_spends_discards_and_refills_in_one_tick() -> void:
 	var ms := _make_match()
 	var before_hand := ms.p1.hand.to_array()
@@ -57,6 +62,14 @@ func test_basic_cast_queues_the_resolution_signal() -> void:
 ## The conservation property the third container has to satisfy: nothing is invented and nothing
 ## is lost. deck + hand + discard must stay a permutation of the injected composition across a
 ## cast — the failure mode a remove-without-discard (or a discard-without-remove) produces.
+##
+## STORY 3-5b (AC 11) ADDS THE FOURTH TERM: **deck + hand + discard + in-flight**. The first three
+## stay a PERMUTATION — the replacement is drawn AT DELIVERY, so a pending draw holds no card in
+## limbo and invents none — and the fourth is a COUNT that closes the HAND: while a draw is owed
+## the hand is one short, and `hand + owed == hand_size` is what records that. On THIS fixture the
+## derived delay is zero (see _config), so the term is settled inside each cast tick; it is
+## exercised with a live debt in test_draw_delay_and_reshuffle.gd, across a reshuffle and across
+## the both-empty degrade.
 func test_cast_conserves_the_injected_multiset() -> void:
 	var ms := _make_match()
 	_advance(ms, _cast_intent(2), InputIntent.new())
@@ -71,6 +84,8 @@ func test_cast_conserves_the_injected_multiset() -> void:
 	assert_eq(all, expected,
 		"deck + hand + discard is a permutation of the injected composition after two casts")
 	assert_eq(ms.p1.discard.size(), 2, "both casts reached the discard")
+	assert_eq(ms.p1.hand.size() + ms.p1.pending_draw_owed, HAND_SIZE,
+		"the IN-FLIGHT term closes the hand: hand + owed == hand_size (3-5b AC 11)")
 
 
 ## The debug reset restores the FULL composition to the deck, so the discard must be emptied with

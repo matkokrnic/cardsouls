@@ -54,6 +54,19 @@ signal deflect_landed(attacker_slot: int, target_slot: int)
 ## `id -> CardEffect` on the presentation side, where CardDatabase is already readable.
 signal card_cast_resolved(slot: int, card_id: StringName)
 
+## Story 3-5b (AC 6): a player's discard has just been folded back into their deck and they are
+## VULNERABLE for the authored window. Queued in step 6 at the reshuffle, drained by the runner
+## after advance() (D5) and RELAYED onto the ownerless EventBus — the round_started /
+## round_ended mechanism exactly (E3-RG/R3), because "this player's deck ran out" is a match-wide
+## public fact rather than a per-entity state change.
+##
+## NOT AN EIGHTH OBSERVATION SEAM. The frozen family (2-6/R7) is per-slot CONNECT-seam
+## observation and stays at SEVEN connect_* methods on the runner; this rides the bus, where
+## round_started and round_ended already live, and the runner bridges it in _ready() with a plain
+## relay and no new seam. The payload is the vulnerable player's SLOT INDEX and nothing else —
+## no card, no count, no window handle.
+signal reshuffle_vulnerable_window_opened(slot: int)
+
 var p1: PlayerState
 var p2: PlayerState
 var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
@@ -190,6 +203,16 @@ func advance(intents: Array[InputIntent]) -> void:
 	p2.hero.tick_timers()
 	p1.stamina.tick_timers()
 	p2.stamina.tick_timers()
+	# Story 3-5b (AC 3/AC 8): the pending-draw window and its vulnerable-window sibling advance
+	# HERE, beside every other D4 timer, and step 6 reads the result — the StaminaPool
+	# _regen_delay idiom verbatim (ticked at step 2, consumed at step 5). Seating the tick here
+	# buys AC 8's frozen-tick contract for FREE: step 1b returns above, so a round-over tick
+	# never reaches this line and no window advances during the freeze. Unguarded like its
+	# neighbours — a pre-injection MatchState never started either window.
+	p1.pending_draw.tick()
+	p2.pending_draw.tick()
+	p1.vulnerable_window.tick()
+	p2.vulnerable_window.tick()
 	# 3. Resolve actions       per slot P1 -> P2: action transitions FIRST (a press on
 	#    tick N takes effect on tick N), then intended velocity from move_dir. Transitions
 	#    never write velocity — both halves of the 1-3 coupling deferral now live in
@@ -229,6 +252,18 @@ func advance(intents: Array[InputIntent]) -> void:
 	_deal_pending_decks()
 	_resolve_card_action(p1, p1_intent, 0)
 	_resolve_card_action(p2, p2_intent, 1)
+	#    Story 3-5b (AC 3/AC 5): the PENDING-DRAW DELIVERY, third and last in this one seat, and
+	#    the ordering is load-bearing in both directions. AFTER the cast dispatch, because a
+	#    derived delay of ZERO ticks must still refill on the cast tick (TimingWindow.start(0)
+	#    leaves is_running false, so the delivery below fires immediately) — that is what makes a
+	#    zero delay degrade EXACTLY to 3-5a's instant refill instead of arriving one tick late,
+	#    and it is what lets the golden isolate the delay's SEAT from its authored CONTENT.
+	#    INSIDE step 6, because a delivery may need to reshuffle, and the reshuffle must consume
+	#    the seeded RNG in the SAME seat _deal_pending_decks() already occupies — F2 ("the seeded
+	#    RNG is consumed only inside advance()") stays provable by inspection, and machine-checked
+	#    since AC 16. A naive "tick and draw together at step 2" would have opened a second seat.
+	_deliver_pending_draw(p1, 0)
+	_deliver_pending_draw(p2, 1)
 	# 7. Board update          [E4 minion/totem throttled-tick seam]
 	# 8. Resolution check
 	_check_resolution()
@@ -701,12 +736,12 @@ func _deal_pending_decks() -> void:
 ## the TimingWindow.start() shape, never a cached BalanceConfig reference, so a hot reload takes
 ## effect at the next deal instead of half-applying to one already in flight.
 ##
-## The is_empty() stop is a FLOOR, not a feature: no reshuffle and no deck-exhaustion handling
-## ship here (AC 11 — with only this initial fill drawing, exhaustion is unreachable), and the
-## authoring audit keeps hand_size <= deck_size so the shipped config never reaches it.
+## The is_empty() stop is a FLOOR here too, but it is no longer the LAST word: story 3-5b gives
+## the pile a way back (the lazy reshuffle at delivery time), and the authoring audit still keeps
+## hand_size <= deck_size so this initial fill never reaches the floor.
 func _deal_player(player: PlayerState) -> void:
 	player.deck.set_contents(_deck_contents)
-	player.deck.shuffle_with_rng(_rng)
+	_shuffle_deck(player.deck)
 	player.hand.clear()
 	# Story 3-5a: the discard is emptied HERE, beside the hand, because this is the seat that
 	# re-lays the whole composition. Without it a debug reset would restore every card to the
@@ -715,6 +750,14 @@ func _deal_player(player: PlayerState) -> void:
 	# first reset after a cast. This is the reset's discard answer; the RESHUFFLE (returning the
 	# discard to the deck mid-round) is 3-5b's and is deliberately not here.
 	player.discard.clear()
+	# Story 3-5b (AC 9): the debug reset KILLS a pending draw, and the owed card is NOT restored
+	# — it is already back in the pile, because this seat re-lays the FULL injected composition
+	# two lines above. Conservation is therefore restored by construction and 3-3's AC 9 post-reset
+	# count pin needs no special case. start(0) is the kill: TimingWindow.start() sets is_running
+	# from `duration_ticks > 0`, so a zero duration leaves the window stopped AND its snapshot at
+	# all-zeros — no bespoke stop() path, which is what keeps AC 7's early-abort scan honest.
+	player.pending_draw_owed = 0
+	player.pending_draw.start(0)
 	for _slot in balance.hand_size:
 		if player.deck.is_empty():
 			break
@@ -771,11 +814,13 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 						% int(intent.card_mode))
 
 
-## Story 3-5a (AC 5): Mode ① resolution, ENTIRELY WITHIN ONE TICK — mana spent, card out of the
-## hand, card into the discard, replacement drawn immediately, effect signal queued. No delay
-## field, no countdown, no in-flight window: the delayed replacement draw and everything it makes
-## reachable (deck exhaustion, reshuffle, the vulnerable window) are 3-5b's, and nothing here
-## spans ticks.
+## Story 3-5a (AC 5): Mode ① resolution — mana spent, card out of the hand, card into the
+## discard, effect signal queued.
+##
+## STORY 3-5b (AC 3) AMENDS THE LAST STEP: the replacement is no longer drawn here. 3-5a's
+## instant refill is REPLACED by a debt plus a timer, delivered at the end of step 6 (see
+## _deliver_pending_draw). Everything else about this function is unchanged, including the fact
+## that the mana spend, the hand removal and the discard all still happen within this one tick.
 ##
 ## REJECTIONS RIDE THE SHIPPED SEAM (AC 7): HeroState.reject_action — the same queued
 ## action_rejected signal and the same per-slot observation seam that already carries the
@@ -802,14 +847,108 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 		"an ALLOWED cast must be affordable — CastEvaluator and ManaPool disagree")
 	var played := player.hand.remove_at(hand_slot)
 	player.discard.add(played)
-	# INSTANT REFILL (AC 5). The is_empty() stop is the same FLOOR _deal_player carries: with no
-	# reshuffle in this story a pile can run down, and drawing from an empty one would be an
-	# index error rather than a design. draw_top() takes the LAST element and consumes NO RNG —
-	# the only RNG consumer in Deck is shuffle_with_rng — which is why rng_state is a predicted
-	# and MEASURED non-mover for this story's golden.
-	if not player.deck.is_empty():
-		player.hand.add(player.deck.draw_top())
+	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
+	# exactly here; it is REPLACED, not kept behind a flag. The debt is incremented and the window
+	# started, and the delivery happens at the end of this same step 6 — immediately if the
+	# derived delay is zero ticks, `delay` ticks later otherwise.
+	#
+	# A CAST IS NOT GATED ON A PENDING DRAW (AC 3): no check above this line consults the debt, no
+	# new rejection reason ships, and mana remains the only throttle. Casting again with a draw in
+	# flight simply owes a second card.
+	#
+	# balance_ticks is read INLINE (CONSTRAINT C) and is non-null here by construction, which is
+	# why this seat keeps its "NO balance == null guard" property: a hand can only be non-empty if
+	# the step-6 deal ran, and the deal returns early while balance is null.
+	player.pending_draw_owed += 1
+	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	_queue.push(card_cast_resolved.emit.bind(slot, played))
+
+
+## Step-6 delivery of ONE owed replacement (story 3-5b, AC 3/AC 5/AC 7/AC 10). Seated after the
+## cast dispatch; see the call site for why both halves of that ordering are load-bearing.
+##
+## The window is READ, never stopped: a delivery is due when the debt is non-zero and the window
+## is not running, which is true both for a window that expired at step 2 and for one that was
+## started with a zero duration this very tick. Exactly ONE card per expiry, then the window
+## RESTARTS while the debt is still above zero, so four casts in flight deliver four cards one at
+## a time rather than four at once.
+##
+## DEATH DROPS THE DELIVERY, NEVER THE WINDOW (AC 7). 1-9/R3 stays locked — no early-stop path
+## ships anywhere in this file; a dead player's window ticks out normally and the CARD is simply
+## discarded, the 1-9/R1 fact-drop idiom applied literally. The debt is still consumed, because a
+## corpse that came back would otherwise be handed a backlog. Like its step-3/4/5/6 siblings this
+## branch is UNREACHABLE in natural play (3-5/R6: DEAD and _round_over are set together and
+## cleared together, so a DEAD player is always also frozen and step 1b returns before step 2) —
+## it is defense in depth in exactly that family, and is proven non-vacuous the same way each of
+## them is, by the forced-DEAD idiom (`set_action_state(DEAD)` with _round_over left FALSE).
+func _deliver_pending_draw(player: PlayerState, slot: int) -> void:
+	if player.pending_draw_owed <= 0 or player.pending_draw.is_running:
+		return
+	player.pending_draw_owed -= 1
+	if player.hero.action_state != HeroState.ActionState.DEAD:
+		_draw_one_replacement(player, slot)
+	if player.pending_draw_owed > 0:
+		player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+
+
+## The draw itself, with the LAZY reshuffle in front of it (story 3-5b, AC 5/AC 10).
+##
+## LAZY, NOT EAGER: nothing happens at deck_size == 0: the pile is refilled at the moment a draw
+## would otherwise find it empty, which is the only moment the state layer can observe the need.
+##
+## BOTH EMPTY IS A NO-OP DEGRADE, NEVER A CRASH (AC 10). No Invariant.check ships on this path,
+## deliberately unlike the injection seams: reachability here depends on AUTHORED BALANCE NUMBERS
+## (a small deck against a long delay drains both piles), and a crash path reachable from authored
+## data is not acceptable. The owed card is consumed by the caller either way, the hand simply
+## stays short — hand_size is permitted to reach 0 — and NO vulnerable window opens, because
+## there was nothing to reshuffle.
+func _draw_one_replacement(player: PlayerState, slot: int) -> void:
+	if player.deck.is_empty():
+		if player.discard.is_empty():
+			return
+		_reshuffle_discard_into_deck(player, slot)
+	player.hand.add(player.deck.draw_top())
+
+
+## Story 3-5b (AC 5/AC 6): this player's discard folded back into this player's deck, inside the
+## one existing step-6 RNG seat.
+##
+## NO NEW `Deck` OR `Hand` METHOD, and that is a delivered constraint rather than a style note:
+## the whole operation is expressible with the containers' shipped surface (set_contents +
+## the shared shuffle helper + clear), which is what keeps the Deck/Hand method-name fence green.
+## A `Deck.reshuffle()` would kill that fence.
+##
+## THIS PLAYER'S OWN DISCARD ONLY. It never touches the opponent's piles and never re-derives a
+## fresh composition from the injected content — a reshuffled pile is exactly the cards this
+## player has played, which is what makes the four-term conservation property hold across it.
+## `draw_top()` takes the LAST element (the fixed "top is the back" convention, 3-3), so the
+## shuffle above decides what the reshuffled pile hands back first.
+func _reshuffle_discard_into_deck(player: PlayerState, slot: int) -> void:
+	player.deck.set_contents(player.discard.to_array())
+	_shuffle_deck(player.deck)
+	player.discard.clear()
+	# AC 6: the window and its announcement, together and nowhere else. The window's duration is
+	# read INLINE (CONSTRAINT C) so a mid-match reload takes effect at the next reshuffle while an
+	# already-running window keeps its own. The signal is QUEUED (D5) and relayed by the runner.
+	player.vulnerable_window.start(balance_ticks.reshuffle_vulnerable_window_ticks)
+	_queue.push(reshuffle_vulnerable_window_opened.emit.bind(slot))
+
+
+## INVARIANT F2, MACHINE-CHECKED (story 3-5b, AC 16 — `3-5b/R17` corrected by `3-5b/R18`).
+##
+## THE ONE SEEDED-SHUFFLE CALL SITE IN `src/`. Both shuffle OCCASIONS route through here — the
+## match-start/debug-reset deal (_deal_player) and the lazy reshuffle above — so
+## `shuffle_with_rng(` appears in exactly TWO places in the whole of `src/`: its definition in
+## deck.gd and this one line. test_architecture_invariants.gd pins that count.
+##
+## Why a helper rather than two call sites: F2 ("the seeded RNG is consumed only inside
+## advance()") has been cited as a contract by 3-3, 3-5a and 3-5b and was REVIEW-ENFORCED ONLY —
+## the D3(b)/A2 scan bans GLOBAL RNG in src/state/, not a SECOND SEEDED SEAT, so nothing in the
+## suite would have failed if `_rng` had grown a second consumer. This story is the first that
+## could introduce one. Collapsing both occasions onto one line makes "one seat" literally true
+## rather than approximately true, and makes it countable.
+func _shuffle_deck(deck: Deck) -> void:
+	deck.shuffle_with_rng(_rng)
 
 
 func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:

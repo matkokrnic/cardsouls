@@ -21,3 +21,15 @@ signal round_ended(loser_index: int)
 ## prime-on-connect — a consumer must observe an actual reset, never a value synthesized at
 ## connect time (2-6/R6).
 signal round_started()
+
+## Story 3-5b (AC 6) — the THIRD bus signal, and the first one that is not round lifecycle.
+## MatchState owns the SOURCE signal (state never touches an autoload); the RUNNER relays it here
+## after the queued drain (D5), exactly like the two above. `slot`: 0 = P1, 1 = P2 — the player
+## whose discard was just folded back into their deck and who is vulnerable for the authored
+## window. Fires once per reshuffle.
+##
+## OWNER-ONLY FACT ON AN OWNERLESS BUS, and that pairing is deliberate (E3-RG/R3): "P1's deck ran
+## out" is a match-wide public event both viewports react to, not a per-entity state change, so
+## it belongs here rather than on a per-slot connect_ seam. The runner's seven connect_* seams
+## are UNCHANGED by this story — this is not an eighth.
+signal reshuffle_vulnerable_window_opened(slot: int)

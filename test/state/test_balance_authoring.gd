@@ -140,6 +140,33 @@ func test_authored_deck_and_hand_counts_are_sane() -> void:
 		"hand_size must be <= deck_size (no reshuffle ships — an over-large hand deals short forever)")
 
 
+## Story 3-5b (AC 1/AC 2): the two card DURATIONS, audited in the defect-by-construction class —
+## the deck_size / hand_size precedent directly above, NOT the exempt stamina_regen_delay_seconds
+## class, and the distinction is the whole point of this test existing at all.
+##
+## `field in config` and the `>= 0.0` loop in test_data_resources.gd BOTH pass on BalanceConfig's
+## 0.0 script default. So existence alone is not sufficient, and an implementation that added the
+## fields, wired the seats and forgot the .tres would ship this entire story INVISIBLE in the
+## build: every replacement would arrive instantly (the 3-5a behaviour it replaces) and every
+## vulnerable window would close on the tick it opened. That is exactly the dead field
+## balance_config.gd's reservation comment existed to prevent, arriving by a different door.
+##
+## Zero is still a legal IN-TEST value — the golden isolates the delay's seat from its content by
+## pricing it 0.0, and the derived-zero path degrades to the instant refill deliberately. It is the
+## AUTHORED value that must be positive.
+func test_authored_card_timing_values_are_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.draw_replacement_delay_seconds > 0.0,
+		"draw_replacement_delay_seconds must be authored > 0 (a zero delay ships 3-5b invisible — "
+		+ "every replacement arrives instantly, which is the 3-5a behaviour it replaces)")
+	assert_true(config.reshuffle_vulnerable_window_seconds > 0.0,
+		"reshuffle_vulnerable_window_seconds must be authored > 0 (a zero window closes on the "
+		+ "tick it opens, leaving 3-6 nothing to render)")
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

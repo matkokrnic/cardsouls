@@ -99,9 +99,32 @@ extends Resource
 ## The hand does NOT vary in this story's first version. OPEN decision (e) — "does the number
 ## of cards in a hand ever vary?" — is CARRIED, not resolved: no variable-size path is built
 ## speculatively. Audited > 0 and <= deck_size (a hand bigger than the deck cannot be dealt).
-## NOT HERE: `draw_replacement_delay_seconds` lands at 3-5 WITH its consumer, so the field and
-## its seat arrive together instead of leaving a dead field and an audit exemption behind.
+## The `draw_replacement_delay_seconds` reservation this comment used to carry is DISCHARGED
+## directly below — story 3-5b is the "3-5 WITH its consumer" the note was waiting for.
 @export var hand_size: int = 0
+## Story 3-5b (AC 1): how long a played card's REPLACEMENT takes to arrive. The reservation the
+## `hand_size` comment above carried since 3-3, now discharged WITH its consumer: 3-5a shipped
+## the instant refill, and this field is what turns it into a debt that is paid `delay` later.
+## A DURATION, so it converts to ticks exactly once at load (A1) — `BalanceTicks
+## .draw_replacement_delay_ticks`, read INLINE at the cast seat (CONSTRAINT C).
+##
+## AUDITED > 0 (test_balance_authoring.gd), NOT merely non-negative, and the distinction is the
+## whole point: `field in config` and `>= 0.0` both pass on this script's 0.0 default, which
+## would ship the delay INVISIBLE in the build and recreate exactly the dead field the
+## reservation comment existed to prevent. Zero ticks is a legal in-test value (it degrades to
+## 3-5a's instant refill, which is how the golden isolates the seat from its content) — it is
+## the AUTHORED value that must be positive.
+@export var draw_replacement_delay_seconds: float = 0.0
+## Story 3-5b (AC 2): how long the reshuffling player stays "vulnerable" after their discard is
+## folded back into the deck. The GDD's "~1.5-2s TBD" range.
+##
+## AUTHORED AND AUDITED > 0 like its sibling above, for the identical reason. What is NOT
+## decided here is what vulnerable COSTS: OPEN decision (b) stays open, and the mechanism that
+## keeps it open is a NEGATIVE GUARD (test_deck_and_hand.gd) asserting that nothing under `src/`
+## READS the window this value sizes — no damage path, no mitigation path, no action-state path.
+## A TimingWindow cannot exist without a duration, so the field ships; if nothing consults it,
+## nothing has priced it. The renderer is 3-6's.
+@export var reshuffle_vulnerable_window_seconds: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

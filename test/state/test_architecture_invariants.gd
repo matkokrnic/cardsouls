@@ -1,6 +1,6 @@
 extends TestCase
 
-## Executable guards for the load-bearing architectural invariants (F1, D3a, D3b). These
+## Executable guards for the load-bearing architectural invariants (F1, D3a, D3b, F2). These
 ## carry the same weight as the decisions themselves — scanning src/ here regression-tests
 ## them in CI, not just by hand. Comments are stripped (cut at first '#') so explanatory
 ## prose mentioning a banned token never false-positives. (This file lives under test/, not
@@ -155,6 +155,64 @@ func test_state_layer_never_uses_implicit_global_rng_or_card_database() -> void:
 	assert_eq(offenders.size(), 0,
 		"implicit-global-RNG API or CardDatabase named in src/state/ (AC8: the seeded generator "
 		+ "is passed IN, card content arrives by injection): %s" % ", ".join(offenders))
+
+
+## Story 3-5b (AC 16, `3-5b/R17` corrected by `3-5b/R18`): INVARIANT F2, MACHINE-CHECKED FOR THE
+## FIRST TIME. F2 — "the seeded RNG is consumed only inside advance()" — has been cited as a
+## contract by 3-3, 3-5a and 3-5b and was REVIEW-ENFORCED ONLY: the D3(b)/A2 guard above bans the
+## bare randf/randi family inside src/state/, and the sibling below bans the implicit-global-RNG
+## collection APIs, but NEITHER covers a SECOND SEEDED SEAT. Nothing in the suite would have
+## failed if `_rng` had grown a second consumer, which is exactly the mistake a lazy reshuffle
+## makes easy to reach for. 3-5b is the first story that could introduce one, so it is F2's
+## forcing point.
+##
+## THE COUNT IS THE POST-LANDING COUNT, AND THAT IS THE AC. Measured at 3-5b's gate, src/ already
+## held exactly two `shuffle_with_rng(` occurrences — but for a DIFFERENT reason (one shuffle
+## occasion, one call site), so a green run before the work started proved nothing. What this pins
+## is that the count is STILL two once a SECOND shuffle occasion exists, which is only achievable
+## through the shared MatchState helper both occasions route through: the match-start/debug-reset
+## deal and the lazy reshuffle. Pinning two WITHOUT that helper would have failed on this story's
+## own landing — the self-contradiction `3-5b/R18` corrects.
+##
+## THE PROOF RUNS FALLING: a second call site anywhere under src/ must make this FAIL. A guard
+## that only confirms today's count is one refactor away from being vacuous.
+const SEEDED_SHUFFLE_DEFINITION := "res://src/state/deck.gd"
+const SEEDED_SHUFFLE_CALLER := "res://src/state/match_state.gd"
+
+
+func test_exactly_one_seeded_shuffle_call_site() -> void:  # INVARIANT F2
+	var re := RegEx.create_from_string("shuffle_with_rng\\s*\\(")
+	# The pattern must match both forms it counts — a regex typo must not silently disarm this.
+	assert_true(re.search("func shuffle_with_rng(rng: RandomNumberGenerator) -> void:") != null,
+		"the pattern must match the DEFINITION")
+	assert_true(re.search("\tdeck.shuffle_with_rng(_rng)") != null,
+		"the pattern must match a CALL")
+	var scanned := 0
+	var sites: Array[String] = []
+	for path in _gd_files("res://src/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				sites.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
+	assert_eq(sites.size(), 2,
+		"F2: `shuffle_with_rng(` must appear in EXACTLY TWO places in src/ — its definition in "
+		+ "deck.gd and the ONE private MatchState helper both shuffle occasions route through. "
+		+ "A third occurrence is a SECOND SEEDED SEAT, which is a design change and the "
+		+ "operator's call, not a refactor: %s" % ", ".join(sites))
+	# Naming the two files is what makes the COUNT mean "definition plus one caller" rather than
+	# "any two lines anywhere" — two calls and a moved definition would otherwise still pass.
+	var definitions := 0
+	var callers := 0
+	for site in sites:
+		if site.begins_with(SEEDED_SHUFFLE_DEFINITION):
+			definitions += 1
+		elif site.begins_with(SEEDED_SHUFFLE_CALLER):
+			callers += 1
+	assert_eq(definitions, 1, "one of the two is deck.gd's definition")
+	assert_eq(callers, 1, "...and the other is match_state.gd's single private helper")
 
 
 func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)

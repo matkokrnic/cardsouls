@@ -5,6 +5,63 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by STORY 3-5b (draw-replacement delay, deck exhaustion, reshuffle, vulnerable
+## window), ONE re-baseline, FOUR separately named causes — predicted in the story's Golden
+## Prediction and each ISOLATED BY ITS OWN MEASUREMENT and REPRODUCED IN BOTH DIRECTIONS.
+## Measured in order, one edit at a time:
+##   0. THE ZERO POINT, isolated FIRST from an even earlier step (the 3-3 / 3-5a cause-1 method):
+##      PlayerState OWNING both new TimingWindows and the debt counter, the whole pending-draw
+##      mechanism PRESENT in match_state.gd but inert, and the fixture priced 0.0 — with NOTHING
+##      snapshotted. MEASURED UNMOVED at c4b9f897, the pre-story value. The fields' mere existence
+##      is hash-neutral, which is what makes causes 1 and 2 measure the KEYS and nothing else.
+##   1. SNAPSHOT SHAPE, KEY ONE (a mover, unconditional and predicted): PlayerState.to_snapshot()
+##      gains "pending_draw", the TimingWindow.to_snapshot() dictionary, on the shipped StaminaPool
+##      `"regen_delay": _regen_delay.to_snapshot()` precedent. Taken at ALL-ZERO values with the
+##      mechanism still inert, so this measures the KEY alone — c4b9f897 -> 9bcfcd7a. Sufficient
+##      alone to move the hash.
+##   2. SNAPSHOT SHAPE, KEY TWO (a mover, predicted): "pending_draw_owed", the int debt, added ON
+##      TOP of cause 1 and still all-zero — 9bcfcd7a -> b5b4da8d. Adding ONE KEY AT A TIME is what
+##      separates causes 1 and 2; measuring them together would have left neither named.
+##      NOTE, and it corrects the story's own Golden Prediction: its C2 is CAPTIONED "the
+##      vulnerable-window snapshot key", but AC 4 rules the snapshot gains EXACTLY TWO keys and
+##      names them both, and AC 2 rules that nothing may READ the vulnerable window — a snapshot
+##      read is a read. The window is therefore NOT hashed (see player_state.gd for why that is
+##      safe: state nothing reads cannot change an outcome), and C2's real subject is this second
+##      pending-draw key. Everything else in C2's text — added on top of C1, all-zero, no
+##      behaviour change, reversible to C1 bit-identically — describes it exactly.
+##   3. THE AUTHORED DELAY, in TWO steps, isolating the SEAT from its CONTENT (the M2 precedent):
+##      (a) THE MECHANISM ITSELF — the step-2 tick, the step-6 delivery, the debt increment at the
+##          cast, the lazy reshuffle and the vulnerable-window signal all re-enabled, with the
+##          fixture still priced 0.0 — MEASURED UNMOVED, still b5b4da8d, BIT-IDENTICAL to cause 2.
+##          A zero derived delay degrades EXACTLY to 3-5a's instant refill (TimingWindow.start(0)
+##          leaves the window stopped, so the delivery fires inside the cast tick), which is why
+##          the delivery is seated AFTER the cast dispatch. The mechanism is structurally
+##          incapable of moving this hash on its own.
+##      (b) THE FIXTURE COVERAGE VALUE (a mover — the ONE behavioural cause): _golden_config now
+##          authors DRAW_DELAY_TICKS 11. The cast lands at t22 and the run hashes at t24, so the
+##          replacement is STILL IN FLIGHT on the record: P1's hand_size 9 -> 8, deck_size 8 -> 9,
+##          pending_draw running with 9 ticks left and pending_draw_owed 1. b5b4da8d -> 40eb5554,
+##          the value below. Guarded by test_golden_sequence_exercises_the_recorded_cast.
+##   4. rng_state — PREDICTED A NON-MOVER, MEASURED A NON-MOVER, in BOTH directions. Forward:
+##      test_the_recorded_cast_consumes_no_rng stays green — draw_top() consumes nothing whether
+##      it fires on the cast tick or eleven ticks later, and _golden_config leaves EIGHT cards in
+##      each pile against ONE recorded cast, so this fixture cannot reach a reshuffle at all.
+##      REVERSE, and it is what makes the forward half non-vacuous: a reshuffle DOES move
+##      rng_state, measured in a separate non-golden fixture driven to exhaustion
+##      (test_draw_delay_and_reshuffle.gd and test/integration/test_deck_reshuffle.gd, which
+##      additionally proves it on the AUTHORED config).
+## REVERSE, both directions reproduced EXACTLY: removing only cause 2's key reproduced 9bcfcd7a
+## (cause 2 isolated); re-pricing the fixture delay back to 0.0 reproduced b5b4da8d (cause 3(b)
+## isolated, and a genuine one-value toggle).
+## NOT a cause: the RESHUFFLE, the VULNERABLE WINDOW or its authored duration — none is reachable
+## on this sequence, and the window is not a snapshot key. Nor is CARD CONTENT, still: data/cards/
+## remains unreachable from the state harness and _golden_deck / _golden_costs author this
+## fixture's own opaque ids. Nor is data/balance/balance_config.tres: _golden_config is built
+## in-test, so the BC/R3 property that authored TUNING cannot move this hash survives intact —
+## which is exactly why the two new authored values needed their own bespoke audit.
+## Previous golden c4b9f897138a2b36dbce11f939b2892379919909c17df1696cde24a75c070e2e
+## (story 3-5a, card-mode select + Mode (1) resolution — the record below).
+##
 ## Re-baselined by STORY 3-5a (card-mode select + Mode (1) resolution), ONE re-baseline, THREE
 ## separately named causes plus ONE predicted-and-measured NON-MOVER — predicted in the story's
 ## Golden Prediction, each ISOLATED BY ITS OWN MEASUREMENT and REPRODUCED IN BOTH DIRECTIONS.
@@ -209,7 +266,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "c4b9f897138a2b36dbce11f939b2892379919909c17df1696cde24a75c070e2e"
+const GOLDEN := "40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -246,6 +303,20 @@ const HAND_SIZE := 9
 const CAST_TICK := 22
 const CAST_SLOT := 3
 const CAST_MANA_COST := 7.0
+
+## Story 3-5b (AC 1): the DRAW-REPLACEMENT DELAY's fixture coverage value — coverage, NOT feel,
+## like every number here, and 11 ticks is NOT the authored 1.0 s / 60 ticks. Chosen DISTINCT from
+## every other count this fixture carries ({2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 17, 20, 22, 24,
+## 40, 60, 75, 90, 120, 180}) so a selector bug that read the wrong tick field lands on a different
+## number and MOVES the hash rather than silently coinciding with one.
+##
+## LOAD-BEARING THAT IT IS NONZERO, per the standing lesson that a fixture which does not author
+## its own content measures a false non-move: the cast lands at t22 and the run hashes at t24, so
+## 11 ticks leaves the replacement STILL IN FLIGHT on the hashed record — hand one LOWER, deck one
+## HIGHER, and a running window plus a debt of 1 inside the hash. Priced at 0.0 the mechanism
+## degrades to 3-5a's instant refill and measures nothing, which is exactly what makes it the
+## separable second half of golden cause C3.
+const DRAW_DELAY_TICKS := 11
 
 ## Movement pairs [p1, p2], cycled over the run (tick t uses MOVES[(t - 1) % 6]).
 const MOVES := [
@@ -399,6 +470,17 @@ func _golden_config() -> BalanceConfig:
 	# standing property that authored TUNING cannot move this hash is untouched.
 	c.deck_size = DECK_SIZE
 	c.hand_size = HAND_SIZE
+	# Story 3-5b (AC 1) — the ONE line that makes this story's cause C3 visible to the hash, and
+	# the reason C3 splits into a seat half and a content half. Priced at 0.0 the pending-draw
+	# mechanism is structurally incapable of moving this hash (the replacement arrives inside the
+	# cast tick, exactly as 3-5a drew it); priced NONZERO the t22 cast is still owed a card at the
+	# hashed t24. Not loaded from data/balance/balance_config.tres — the standing property that
+	# authored TUNING cannot move this hash is untouched.
+	c.draw_replacement_delay_seconds = float(DRAW_DELAY_TICKS) / 60.0
+	# reshuffle_vulnerable_window_seconds is deliberately NOT authored here. _golden_config leaves
+	# EIGHT cards in each pile against a single recorded cast, so the fixture cannot reach a
+	# reshuffle and the window can never open — authoring a duration for a path this sequence does
+	# not take would be coverage of nothing. The reshuffle's proof is its own headless test.
 	return c
 
 
@@ -638,15 +720,18 @@ func test_golden_sequence_exercises_passive_mana_regen() -> void:
 func test_golden_sequence_exercises_deck_shuffle_and_hand_fill() -> void:
 	var ms := _make_match()
 	_play_sequence(ms)
-	assert_eq(ms.p1.hand.size(), HAND_SIZE, "the fill ran: P1 holds hand_size cards at t24")
-	assert_eq(ms.p2.hand.size(), HAND_SIZE, "...and so does P2 — the deal is per-player")
-	# Story 3-5a: P2 is now the untouched player and keeps the original AC 9 counts; P1 has drawn
-	# ONE replacement for its t22 cast. Asserting them separately is what keeps this pin about the
-	# DEAL — a regression in the deal shows on both players, a cast bug on only one.
+	# Story 3-5b: P2 is the untouched player and is the one that still pins the DEAL's exact
+	# counts; P1's hand is one short at t24 because its t22 cast is still owed a replacement
+	# (DRAW_DELAY_TICKS outlives the two ticks between the cast and the hash). Asserting the two
+	# players separately is what keeps this pin about the DEAL — a regression in the deal shows on
+	# BOTH players, a cast-or-delay bug on only one.
+	assert_eq(ms.p2.hand.size(), HAND_SIZE, "the fill ran: P2 holds hand_size cards at t24")
 	assert_eq(ms.p2.deck.size(), DECK_SIZE - HAND_SIZE,
 		"P2 cast nothing: deck remaining is deck_size - hand_size (AC 9) — no reshuffle")
-	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
-		"P1 drew ONE replacement for its t22 cast")
+	assert_eq(ms.p1.hand.size(), HAND_SIZE - 1,
+		"P1's t22 replacement is STILL IN FLIGHT at t24 — the hand is one short")
+	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE,
+		"...so P1's pile has not paid for it yet either")
 	var injected := _golden_deck()
 	var p1_pile := ms.p1.deck.to_array()
 	var p2_pile := ms.p2.deck.to_array()
@@ -687,10 +772,18 @@ func test_golden_sequence_exercises_the_recorded_cast() -> void:
 	_play_sequence(ms)
 	assert_eq(ms.p1.discard.size(), 1, "the cast LANDED — exactly one card in P1's discard")
 	assert_eq(ms.p2.discard.size(), 0, "P2 never casts on this sequence — its discard is empty")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE,
-		"INSTANT refill: the hand is back to full, which is why hand_size does not move the hash")
-	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
-		"the replacement came off the deck — one below the no-cast count (cause 2)")
+	# Story 3-5b (AC 1/AC 3) REWRITES the two count assertions that used to pin the INSTANT refill
+	# by name, and the rewrite is this story's expected work rather than a regression: the fixture
+	# now prices the delay at DRAW_DELAY_TICKS, the cast lands at t22 and the run hashes at t24, so
+	# the replacement is STILL IN FLIGHT on the hashed record. The hand is one LOWER and the deck
+	# one HIGHER than 3-5a recorded — which is the whole visible content of golden cause C3(b).
+	assert_eq(ms.p1.hand.size(), HAND_SIZE - 1,
+		"the replacement is STILL OWED at t24 — the hand is one short (C3(b)'s first half)")
+	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE,
+		"...and the deck has NOT yet paid for it — one higher than 3-5a's count (C3(b)'s second)")
+	assert_eq(ms.p1.pending_draw_owed, 1, "exactly one draw in flight on the hashed record")
+	assert_true(ms.p1.pending_draw.is_running,
+		"...with its window still running, so both new snapshot keys are non-idle in the hash")
 	assert_eq(ms.p1.mana.get_current(), 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
 		"the PRICE was paid out of the accumulation (cause 3)")
 	var all: Array[StringName] = []
@@ -702,6 +795,11 @@ func test_golden_sequence_exercises_the_recorded_cast() -> void:
 	expected.sort()
 	assert_eq(all, expected,
 		"deck + hand + discard is a PERMUTATION of the injected composition — nothing invented")
+	# Story 3-5b (AC 11): the FOURTH term. The three containers above are still a whole permutation
+	# — the card is drawn at delivery, so an owed draw holds nothing in limbo — and the in-flight
+	# COUNT is what accounts for the hand being one short.
+	assert_eq(ms.p1.hand.size() + ms.p1.pending_draw_owed, HAND_SIZE,
+		"the IN-FLIGHT term closes the hand: hand + owed == hand_size")
 
 
 ## Story 3-5a: rng_state is a PREDICTED and MEASURED NON-MOVER, and this is the measurement,
@@ -737,8 +835,8 @@ func test_two_matches_with_a_populated_deck_hash_identically() -> void:
 	var b := _make_match()
 	_play_sequence(a)
 	_play_sequence(b)
-	assert_eq(a.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
-		"sanity: the deck really is populated (less P1's one t22 cast replacement)")
+	assert_eq(a.p1.deck.size(), DECK_SIZE - HAND_SIZE,
+		"sanity: the deck really is populated (P1's t22 replacement is still owed, not yet drawn)")
 	assert_eq(CanonicalHash.of(a.to_snapshot()), CanonicalHash.of(b.to_snapshot()),
 		"independently constructed matches with the same seed and a populated deck hash identically")
 

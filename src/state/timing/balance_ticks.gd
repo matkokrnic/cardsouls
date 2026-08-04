@@ -24,6 +24,14 @@ var stamina_regen_per_tick: float
 ## The authored `passive_tick` rule names THIS field, not the per-second authoring value, so
 ## nothing per-second ever reaches the tick ladder.
 var mana_regen_per_tick: float
+## Story 3-5b (AC 1): the delay between a card being played and its replacement arriving,
+## derived ONCE at load like every other duration (the stamina_regen_delay_ticks precedent).
+## Read INLINE at the cast seat and at the delivery restart (CONSTRAINT C) — never cached.
+var draw_replacement_delay_ticks: int
+## Story 3-5b (AC 2): the vulnerable window a reshuffle opens. Derived here for the same reason
+## as every sibling; the ONLY thing that reads it is the reshuffle that starts the window
+## (AC 2's negative guard is what keeps that true, and OPEN decision (b) open with it).
+var reshuffle_vulnerable_window_ticks: int
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -41,6 +49,10 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.stamina_regen_delay_ticks = TimingWindow.seconds_to_ticks(config.stamina_regen_delay_seconds)
 	t.stamina_regen_per_tick = config.stamina_regen_per_second / TimingWindow.TICK_HZ
 	t.mana_regen_per_tick = config.mana_regen_per_second / TimingWindow.TICK_HZ
+	t.draw_replacement_delay_ticks = TimingWindow.seconds_to_ticks(
+			config.draw_replacement_delay_seconds)
+	t.reshuffle_vulnerable_window_ticks = TimingWindow.seconds_to_ticks(
+			config.reshuffle_vulnerable_window_seconds)
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)

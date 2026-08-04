@@ -120,6 +120,12 @@ func _ready() -> void:
 	# _ready(), no new per-slot connect_ seam. State never touches an autoload, so the runner is
 	# the one seat that bridges MatchState.round_started onto the ownerless EventBus.
 	_match_state.round_started.connect(_relay_round_started)
+	# Story 3-5b (AC 6): the vulnerable-window relay, wired here for the same reason and in the
+	# same shape as the two above — one line in _ready(), no new per-slot connect_ seam, so the
+	# frozen seven-seam family (2-6/R7) is untouched. State owns the signal; the bus is the
+	# runner's to reach.
+	_match_state.reshuffle_vulnerable_window_opened.connect(
+			_relay_reshuffle_vulnerable_window_opened)
 	# Story 2-4 (2-4/R3): the throwaway 1-3c debug overlay is RETIRED here — E2 replaces it
 	# with the real HUD. One HudRoot per viewport, constructed in code and added under each
 	# SubViewport (the overlay's code-construction pattern, reparented per-viewport instead of
@@ -325,6 +331,14 @@ func _relay_round_ended(loser_index: int) -> void:
 ## — the reset is a whole-match event, not per-player.
 func _relay_round_started() -> void:
 	EventBus.round_started.emit()
+
+
+## Story 3-5b (AC 6): MatchState.reshuffle_vulnerable_window_opened ->
+## EventBus.reshuffle_vulnerable_window_opened. The two relays above, third time — runner-owned
+## because src/state/ never touches an autoload, and a plain relay rather than a connect_ seam
+## because the payload is a match-wide public fact carrying its own slot.
+func _relay_reshuffle_vulnerable_window_opened(slot: int) -> void:
+	EventBus.reshuffle_vulnerable_window_opened.emit(slot)
 
 
 ## Read-only subscription seam (story 2-4, AC 1/2 — 2-4/R1 amendment to the locked seam
