@@ -119,3 +119,28 @@ zvuk tkoader telegrafira dovoljno dobro
 1 oba mana bara se polako pasivno pune, iako nemogu sa sigurnoscu reci dok nebu visse mehanika implenetirano, cini se mozda malo prebrzo, kao sto mi se cini i da svaki udrac generira previse mane 10% je puno sigurno bi smanjo na 5% a mozda cak i manje te blokirani udarci nebi trebali davati jednako mane kao oni koji ne pordu mozda umjesto 5% onako 2%, ali to su stvarikoje cu bolje zanti reci ka da vise stvari bude implementirano 2 pogodat daje vildjiv skok ,mozdaprevise kako sam ranije komentirao, 3 blkirani pogodak daje manu to ne znam kako sam ranije naveo jeli dobro ili da barrem ne daje mane kao i nebolkirani, buduci da se mana brzo puni a napad je snizen kako smo htjli nisam uspio ubiti lika prije nego se napunio skorz pa nemogu reci, fps nez kako da vidim ako mislim na isto
 
 fps uredan, a sada kazem ti buduci da se mana prebtzo puni vec je skroz puna kad umre p2 pa ne vidm puni li se dok je mrtvac ali kad kllilknem r se respawna s punom manom
+
+4.8.
+1 opisano ponasanje je istovjetno testiranom 2 ne znam kako bi ustanovio smanjuje li se špil a vidm da si to opisao kao inteded ponasanje 3 dok nije armiran slot e nista ne radi ali to znam jer se mana en skini i to mogu vjdeti kazes da je "tiho" ali ni kad castam se ne cuje nista bili trebalo? 5vidim da se moze castati tokom rolla i tokom blokiranja bez porblema 4 kad je poritnvik mortav vidim da mogu armirati ali ne i castati, fps stabilan cijelo vrijeme
+
+
+## 2026-08-04 — Story 3-5a live smoke (two-human)
+
+First run where a card can actually be played. Keyboard only:
+P1 holds Q, picks 1-4, confirms with E; P2 holds O, picks 6-9, confirms with P.
+
+Confirmed in play: the selection indicator lights the right slot and clears the
+instant the modifier is released; a confirm with nothing armed does nothing; a
+cast with too little mana does nothing; while the opponent is dead a card can
+still be armed but not cast; fps steady throughout.
+
+Not observable: whether the deck shrinks. Nothing on screen shows a deck count
+yet (that is 3-6), so I could only infer the cast landed from the mana dropping.
+
+S5 — there is no feedback on a cast at all. No sound, nothing on screen, for
+either a successful cast or a rejection. I noticed the silence before I noticed
+anything else; without the mana bar moving I would not know a cast had happened.
+
+S6 — I can cast in the middle of a roll and while holding block, with no
+resistance at all. Recording the observation; I am not yet sure whether it reads
+as a bug or as the card layer simply being parallel to melee.
