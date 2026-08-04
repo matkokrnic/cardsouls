@@ -1,0 +1,527 @@
+extends TestCase
+
+## Story 3-0c, PRIMARY ACCEPTANCE (AC 10, `3-0c/R6`): a driven run is recorded and replayed FROM
+## THE RECORD ALONE to a BIT-IDENTICAL CanonicalHash.
+##
+## ITS OWN FIXTURE, and that is load-bearing. The golden determinism sequence
+## (test_determinism.gd) gains NEITHER the mid-run apply_balance() nor the pushed contact facts
+## this fixture drives, so this story's Golden Prediction of NONE stays structural rather than
+## hopeful. Nothing here touches that file.
+##
+## WHY THIS ONE TEST MAKES ACs 1-9 FALSIFIABLE TOGETHER: dropping any single channel from the
+## record makes the replay diverge, which is proven per channel below. The two ACs it replaces
+## (run the golden sequence with and without a recorder; assert no captured channel moves the
+## hash) were unfalsifiable by construction — both pass with capture() bodied as `pass`.
+##
+## Also carries AC 4 (balance comes from the record, never from disk), AC 8 (the camera-basis
+## channel, driven NON-IDENTITY so the test is not the passive-tap tautology an identity basis
+## would be) and AC 11 (replay equality is hash-only, and the unhashed cross-tick set is pinned
+## to exactly three members).
+
+const SEED := 4242
+
+## The sequence. Every channel is driven: a mid-run reload (AC 4), a non-identity camera basis
+## (AC 8), pushed contact facts (AC 9), an intent-carried debug reset, a melee swing that lands,
+## and a card cast — so a dropped channel has somewhere to show.
+const TICKS := 24
+const RESET_TICK := 3        # intent-carried debug reset: re-lays and re-shuffles both piles
+const ATTACK_TICK := 5       # windup 5-7, active 8-11 at this fixture's authored windows
+const CONTACT_TICK := 9      # a fact inside that active window -> a CONFIRMED hit
+const RELOAD_TICK := 14      # mid-run apply_balance: reload event #1
+const CAST_TICK := 20
+const CAST_SLOT := 1
+
+## The composition, built IN-TEST with OPAQUE ids — data/cards/ is unreachable from the state
+## harness and these ids are nothing the card library contains, so card content can never reach
+## this fixture (the _golden_deck discipline).
+const DECK_IDS: Array[StringName] = [
+	&"replay_card_0", &"replay_card_1", &"replay_card_2",
+	&"replay_card_3", &"replay_card_4", &"replay_card_5",
+]
+const HAND_SIZE := 3
+const CAST_MANA_COST := 5.0
+const MELEE_HIT_MANA := 12.0
+## Coverage, not feel, and deliberately DISTINCT from the authored data/balance/*.tres value
+## (5.0) — AC 4's proof is that a replay lands on the RECORDED number rather than the on-disk one,
+## which is unprovable if the two coincide.
+const MOVE_SPEED := 7.0
+## The mid-run reload's ONE moved value. move_speed lands directly in HeroState.move_speed, which
+## IS a snapshot key, so the reload event is visible in the hash by itself.
+const RETUNED_MOVE_SPEED := 11.0
+
+## Movement pairs [p1, p2], cycled (tick t uses MOVES[(t - 1) % 4]). The final tick's P1 pair is
+## NON-ZERO on purpose: velocity is a per-tick transient, so the camera basis is only visible in
+## the hashed final snapshot if the last tick actually steers.
+const MOVES := [
+	[Vector2(1, 0), Vector2(-1, 0)],
+	[Vector2(0, 1), Vector2(1, 1)],
+	[Vector2(-1, 1), Vector2(0, -1)],
+	[Vector2(0.5, -0.5), Vector2(1, 0)],
+]
+
+## AC 8: a 90-degree yaw pushed on SLOT 0 every tick; slot 1 stays identity, so the same fixture
+## covers both the rotated and the short-circuit path. Under this basis _camera_relative_dir maps
+## intent (x, y) to world (y, 0, -x) instead of the identity (x, 0, y) — a different world
+## direction for every non-zero intent in MOVES, which is what makes the dropped-channel half of
+## AC 8 a real divergence rather than a tautology.
+const CAMERA_YAW_DEGREES := 90.0
+
+## AC 11: THE UNHASHED CROSS-TICK EXCLUSION SET — exactly three members, each with the argument
+## that makes hash-only replay equality an HONEST claim. A FOURTH appearing later fails
+## test_unhashed_cross_tick_state_is_exactly_three_members below.
+##
+##  (a) PlayerState.vulnerable_window — unhashed because NOTHING READS IT (`3-5b/R19`), with the
+##      read decision handed to 3-6 by `3-5b/R20`. The first story that gives the window a
+##      mechanical cost must bring it into the snapshot in the same pass.
+##  (b) the card containers' CONTENTS and ORDER — the snapshot carries SIZES only, sound because
+##      order "stays derivable from seed plus injected composition" (player_state.gd:84-87), which
+##      is a REPLAY argument and holds only because ACs 1, 3 and 5 make it true across a replay.
+##  (c) MatchState._camera_bases — captured by AC 8's channel rather than hashed.
+const UNHASHED_CROSS_TICK: Array[String] = [
+	"player_state.vulnerable_window",
+	"deck._cards", "hand._cards", "discard_pile._cards",
+	"match_state._camera_bases",
+]
+const UNHASHED_CROSS_TICK_MEMBERS := 3
+
+## Reaches CanonicalHash through the to_snapshot() chain (MatchState -> PlayerState/PitchState ->
+## HeroState/pools/TimingWindow). The card containers are here because their SIZES are hashed;
+## their contents are exclusion (b) above, one level down in the container classes themselves.
+const HASHED: Array[String] = [
+	"match_state.p1", "match_state.p2", "match_state.pitch", "match_state._rng",
+	"match_state._tick", "match_state._round_over",
+	"player_state.hero", "player_state.stamina", "player_state.mana", "player_state.orbs",
+	"player_state.deck", "player_state.hand", "player_state.discard",
+	"player_state.pending_draw", "player_state.pending_draw_owed",
+	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
+	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
+	"hero_state.move_speed", "hero_state.windup", "hero_state.active", "hero_state.recovery",
+	"hero_state.chain", "hero_state.deflect", "hero_state.roll_iframe",
+	"hero_state.roll_duration", "hero_state.stun", "hero_state._hp", "hero_state._max_hp",
+	"hero_state._swing_dedupe",
+	"pitch_state._fizzle",
+	"mana_pool._current", "mana_pool._maximum",
+	"orb_pool._red", "orb_pool._blue", "orb_pool._green",
+	"stamina_pool._current", "stamina_pool._maximum", "stamina_pool._regen_delay",
+	"timing_window._duration_ticks", "timing_window._elapsed_ticks", "timing_window.is_running",
+]
+
+## PER-TICK: emptied before the next tick can observe it, so it is never cross-tick state at all.
+## The D5 SIGNAL BUFFERS belong here and the classification is deliberate: `_queue` / `_pending`
+## hold already-decided emissions that no gameplay path reads, and the runner drains them after
+## every advance() exactly as advance() itself drains `_contact_queue` at step 4. Both are queues
+## emptied every tick; one inside advance, one immediately after.
+const PER_TICK: Array[String] = [
+	"match_state._queue", "match_state._contact_queue", "match_state._deck_deal_pending",
+	"hero_state._queue", "hero_state._deflect_closed_this_tick",
+	"hero_state._roll_iframe_closed_this_tick",
+	"mana_pool._queue", "orb_pool._queue", "stamina_pool._queue",
+	"signal_queue._pending",
+]
+
+## INJECTED config / content: never produced by the tick, never changes except through a seam
+## that IS a capture channel (AC 4 balance, AC 7 flags, AC 5/6 composition and costs).
+## balance_ticks is derived from balance by BalanceTicks.from_config, so restoring one restores it.
+const INJECTED: Array[String] = [
+	"match_state.balance", "match_state.balance_ticks", "match_state.flags",
+	"match_state._deck_contents", "match_state._card_costs",
+]
+
+## Files under src/state/ that carry no runtime match state, with the reason each is exempt from
+## the classification above. A NEW file under src/state/ that is in neither list fails the scan.
+const NOT_RUNTIME_STATE: Array[String] = [
+	"enums",              # enum declarations only
+	"match_params",       # construction params, consumed into the RNG and not retained
+	"balance_ticks",      # derived from the injected BalanceConfig (A1)
+	"input_intent",       # INPUT, snapshot-exempt by contract and captured by the X5 stream
+	"cast_evaluator", "economy_evaluator",   # stateless evaluators
+]
+
+
+# ---------------------------------------------------------------- AC 10, the primary
+
+## AC 10: the whole story in one assertion. A run driven through EVERY channel, recorded, then a
+## SECOND independent MatchState driven ONLY by the record — a ReplayController per slot for the
+## intents, and the recorded seed, content, reload events, camera bases and contact facts for
+## everything else — must reach a BIT-IDENTICAL CanonicalHash.
+func test_a_driven_run_replays_from_the_record_alone_to_a_bit_identical_hash() -> void:
+	var recorded := _record_a_driven_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	assert_eq(record.tick_count(), TICKS, "the record carries every tick that ran")
+	var replayed := _replay(record)
+	assert_eq(CanonicalHash.of(replayed.to_snapshot()), CanonicalHash.of(live.to_snapshot()),
+		"a replay driven from the record ALONE is bit-identical to the run that produced it")
+
+
+## AC 10, the half that makes it mean anything: the fixture must actually EXERCISE every channel,
+## or a bit-identical replay would be proving something about an empty stream. Each claim is
+## pinned on the recorded run's own final state.
+func test_the_recorded_run_exercises_every_channel() -> void:
+	var recorded := _record_a_driven_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	assert_eq(record.reload_event_count(), 2,
+		"reload event #0 (match start, AC 4) plus the ONE mid-run apply_balance")
+	assert_eq(record.reload_event_tick(0), 0, "event #0 lands at tick 0 — before the first tick")
+	assert_eq(record.reload_event_tick(1), RELOAD_TICK - 1,
+		"the mid-run event is keyed to the tick it was applied before")
+	assert_eq(live.p1.hero.move_speed, RETUNED_MOVE_SPEED,
+		"the mid-run reload REACHED state: move_speed is the retuned value, and it is hashed")
+	assert_eq(record.contacts_at(CONTACT_TICK).size(), 1, "the contact channel carries the fact")
+	assert_true(live.p2.hero.get_hp() < live.p2.hero.get_max_hp(),
+		"the fact was CONFIRMED: P2 took damage, so the contact channel is load-bearing here")
+	assert_true(live.p1.mana.get_current() > 0.0,
+		"the flags channel is load-bearing: melee mana was generated, which the flag gates")
+	assert_eq(live.p1.discard.size(), 1,
+		"the cast LANDED, so the cost-map channel is load-bearing (an unpriced card is refused)")
+	assert_eq(record.camera_pushes_at(TICKS).size(), 2,
+		"both slots' bases ride the record on every tick")
+	assert_eq(record.intents_at(CAST_TICK)[0].card_slot, CAST_SLOT,
+		"the intent stream carries the cast's card fields, not just movement")
+
+
+## AC 10: DROPPING ANY ONE CHANNEL MAKES THE REPLAY DIVERGE. This is what makes ACs 1-9
+## falsifiable together — a channel that could be removed without moving the hash would be a
+## channel the record does not need.
+func test_dropping_any_single_channel_diverges_the_replay() -> void:
+	var recorded := _record_a_driven_run()
+	var live_hash := CanonicalHash.of((recorded["state"] as MatchState).to_snapshot())
+	var record: IntentRecorder = recorded["record"]
+	assert_eq(CanonicalHash.of(_replay(record).to_snapshot()), live_hash,
+		"sanity: the undropped replay matches, so every divergence below is the DROP")
+	for channel in ["seed", "balance", "flags", "deck", "costs", "reload", "bases",
+			"contacts", "intents"]:
+		assert_ne(CanonicalHash.of(_replay(record, channel).to_snapshot()), live_hash,
+			"dropping the %s channel must DIVERGE the replay" % channel)
+
+
+# ---------------------------------------------------------------- AC 4
+
+## AC 4: on replay, balance values come from the RECORD and BalanceConfigService is never read.
+## Proven against the AUTHORED .tres, whose values are asserted to DIFFER from the recorded ones —
+## so a replay that silently fell back to disk would land on different numbers, and the third
+## measurement shows it would indeed diverge.
+func test_replay_takes_balance_from_the_record_not_from_the_authored_tres() -> void:
+	var authored: BalanceConfig = load("res://data/balance/balance_config.tres")
+	assert_not_null(authored, "sanity: the authored balance .tres is loadable from here")
+	assert_ne(authored.move_speed, MOVE_SPEED,
+		"the fixture's recorded move_speed DIFFERS from the on-disk value — without that this "
+		+ "test could not tell a record-driven replay from a disk-driven one")
+	var recorded := _record_a_driven_run()
+	var live_hash := CanonicalHash.of((recorded["state"] as MatchState).to_snapshot())
+	var record: IntentRecorder = recorded["record"]
+	assert_eq(record.replay_balance_config(0).move_speed, MOVE_SPEED,
+		"the record replays the value that was APPLIED, not the one on disk")
+	assert_eq(CanonicalHash.of(_replay(record).to_snapshot()), live_hash,
+		"...and the replay reproduces the recorded run on those values")
+	# The falsifying half: a replay that used the on-disk config instead would NOT reproduce it.
+	assert_ne(CanonicalHash.of(_replay(record, "balance_from_disk").to_snapshot()), live_hash,
+		"a replay that re-read the authored .tres instead of the record DIVERGES — which is "
+		+ "exactly the failure a tuning pass between record and replay would cause")
+	# By VALUE, not by handle: a post-capture edit to the resource cannot reach into the record.
+	var mutable := _config()
+	var solo := IntentRecorder.new()
+	solo.capture_apply_balance(mutable)
+	mutable.move_speed = 999.0
+	assert_eq(solo.replay_balance_config(0).move_speed, MOVE_SPEED,
+		"the reload channel captured VALUES — a later edit to the resource cannot re-tune the record")
+
+
+# ---------------------------------------------------------------- AC 8
+
+## AC 8: the camera basis is a per-tick, per-slot channel. Driven NON-IDENTITY on slot 0 — an
+## identity-only test would be the passive-tap tautology, since MatchState short-circuits on
+## identity and a dropped channel would leave the same identity behind.
+func test_the_camera_basis_channel_is_driven_non_identity_and_is_load_bearing() -> void:
+	var recorded := _record_a_driven_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	var pushes := record.camera_pushes_at(TICKS)
+	assert_eq(pushes.size(), 2, "both slots pushed on the hashed tick")
+	assert_ne(pushes[0][1] as Basis, Basis.IDENTITY,
+		"slot 0's recorded basis is NON-IDENTITY — without this the test proves nothing")
+	assert_eq(pushes[1][1] as Basis, Basis.IDENTITY, "slot 1 stays identity (both paths covered)")
+	var live_hash := CanonicalHash.of(live.to_snapshot())
+	assert_eq(CanonicalHash.of(_replay(record).to_snapshot()), live_hash,
+		"a replay that re-pushes the recorded bases reproduces the run")
+	assert_ne(CanonicalHash.of(_replay(record, "bases").to_snapshot()), live_hash,
+		"...and with the basis channel DROPPED the replay diverges")
+	# WHERE it diverges, named rather than left to the hash: the basis reaches world_dir, which
+	# reaches HeroState.velocity and facing — both snapshot keys.
+	var dropped := _replay(record, "bases")
+	assert_ne(dropped.p1.hero.velocity, live.p1.hero.velocity,
+		"the divergence is P1's hashed velocity: an identity basis maps the same intent elsewhere")
+	assert_eq(dropped.p2.hero.velocity, live.p2.hero.velocity,
+		"...and slot 1 is unaffected, because its recorded basis WAS identity")
+
+
+# ---------------------------------------------------------------- AC 11
+
+## AC 11: replay equality is CanonicalHash-only, so the cross-tick state the hash does NOT cover
+## has to be pinned or the equality claim is dishonest. Every declared member of every runtime
+## state class under src/state/ is classified into exactly one bucket, and the unhashed cross-tick
+## bucket must be exactly the three members named at the top of this file. A FOURTH fails here.
+func test_unhashed_cross_tick_state_is_exactly_three_members() -> void:
+	assert_eq(UNHASHED_CROSS_TICK_MEMBERS, 3,
+		"the pin is THREE members: the vulnerable window, the card containers' contents/order, "
+		+ "and the camera bases (`3-0c/R8`)")
+	var classified: Dictionary = {}
+	for bucket: Array in [HASHED, PER_TICK, INJECTED, UNHASHED_CROSS_TICK]:
+		for key: String in bucket:
+			assert_false(classified.has(key), "%s is classified twice" % key)
+			classified[key] = true
+	var declared: Array[String] = []
+	var unclassified: Array[String] = []
+	var unknown_files: Array[String] = []
+	for path in _gd_files("res://src/state/"):
+		var stem := path.get_file().trim_suffix(".gd")
+		if path.contains("/resources/"):
+			continue          # authored Resources: injected content/config, never runtime state
+		if NOT_RUNTIME_STATE.has(stem):
+			continue
+		if not _known_runtime_state_file(stem):
+			unknown_files.append(path)
+			continue
+		for member in _declared_members(path):
+			var key := "%s.%s" % [stem, member]
+			declared.append(key)
+			if not classified.has(key):
+				unclassified.append(key)
+	assert_eq(unknown_files.size(), 0,
+		"a new file under src/state/ is neither classified as runtime state nor exempt — its "
+		+ "members must be placed in one of the four buckets before replay equality can stay an "
+		+ "honest claim: %s" % ", ".join(unknown_files))
+	assert_true(declared.size() > 40, "the scan must actually visit the state layer's members")
+	assert_eq(unclassified.size(), 0,
+		"unclassified state member(s) — each is either hashed, per-tick, injected, or a FOURTH "
+		+ "unhashed cross-tick exclusion, and a fourth is what this pin exists to refuse: %s"
+				% ", ".join(unclassified))
+	# ...and every pinned key must be REAL, so a rename cannot silently empty a bucket.
+	var stale: Array[String] = []
+	for key: String in classified:
+		if not declared.has(key):
+			stale.append(key)
+	assert_eq(stale.size(), 0, "classified member(s) that no longer exist: %s" % ", ".join(stale))
+
+
+## AC 11 (b): the containers' order is unhashed, and the soundness argument is "derivable from
+## seed plus injected composition". That is a REPLAY argument, so it is measured here rather than
+## quoted: the replay's piles match the recorded run's card-for-card, in order, even though the
+## hash only ever saw their sizes.
+func test_container_order_is_reproduced_although_the_hash_never_saw_it() -> void:
+	var recorded := _record_a_driven_run()
+	var live: MatchState = recorded["state"]
+	var replayed := _replay(recorded["record"])
+	assert_true(live.p1.deck.size() > 1, "sanity: there is an ORDER to get wrong")
+	assert_eq(replayed.p1.deck.to_array(), live.p1.deck.to_array(),
+		"deck ORDER — invisible to the hash (sizes only) — is reproduced from seed + composition")
+	assert_eq(replayed.p1.hand.to_array(), live.p1.hand.to_array(), "hand order likewise")
+	assert_eq(replayed.p1.discard.to_array(), live.p1.discard.to_array(), "discard order likewise")
+	assert_eq(replayed.p2.deck.to_array(), live.p2.deck.to_array(),
+		"...and P2's, which the ONE-SEAT shuffle ordering makes a different permutation")
+	assert_ne(live.p1.deck.to_array(), live.p2.deck.to_array(),
+		"sanity: the two piles really are different permutations of one composition")
+
+
+# ---------------------------------------------------------------- the driven run
+
+## The fixture plays the RUNNER's role — capturing on every channel beside the call it taps,
+## exactly as match_runner.gd does. Returns the recorded run's final state AND its record.
+func _record_a_driven_run() -> Dictionary:
+	var record := IntentRecorder.new()
+	var params := MatchParams.new(SEED)
+	record.capture_seed(params.seed_value)
+	var ms := MatchState.new(params)
+	var config := _config()
+	record.capture_apply_balance(config)      # RELOAD EVENT #0 (AC 4)
+	ms.apply_balance(config)
+	var flags := _flags()
+	record.capture_inject_feature_flags(flags)
+	ms.inject_feature_flags(flags)
+	record.capture_inject_deck(DECK_IDS)      # the composition, then the costs — the ORDER (AC 5)
+	ms.inject_deck(DECK_IDS)
+	var costs := _costs()
+	record.capture_inject_card_costs(costs)
+	ms.inject_card_costs(costs)
+	for t in range(1, TICKS + 1):
+		if t == RELOAD_TICK:
+			var retuned := _retuned_config()
+			record.capture_apply_balance(retuned)
+			ms.apply_balance(retuned)
+		for push: Array in _camera_pushes():
+			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
+			ms.set_camera_basis(int(push[0]), push[1] as Basis)
+		if t == CONTACT_TICK:
+			record.capture_push_contact(0, 1, 0, Vector2(-1, 0))
+			ms.push_contact(0, 1, 0, Vector2(-1, 0))
+		var intents := _intents(t)
+		record.capture_advance(intents)
+		ms.advance(intents)
+		ms.drain_signals()
+	return {"state": ms, "record": record}
+
+
+## The SECOND, independent MatchState — driven ONLY by the record. `drop` names one channel to
+## withhold, which is how every capture AC is proven falling at once.
+func _replay(record: IntentRecorder, drop := "") -> MatchState:
+	var seed_value := 0 if drop == "seed" else record.replay_seed()
+	var ms := MatchState.new(MatchParams.new(seed_value))
+	if drop == "balance_from_disk":
+		ms.apply_balance(load("res://data/balance/balance_config.tres") as BalanceConfig)
+	elif drop != "balance":
+		ms.apply_balance(record.replay_balance_config(0))
+	if drop != "flags":
+		ms.inject_feature_flags(record.replay_feature_flags())
+	if drop == "costs":
+		ms.inject_deck(record.replay_deck_contents())   # composition without its prices
+	elif drop != "deck":
+		assert_true(record.replay_inject_content(ms),
+			"the recorded content order replays (deck then costs)")
+	var p1_controller := ReplayController.new(record, 0)
+	var p2_controller := ReplayController.new(record, 1)
+	for t in range(1, record.tick_count() + 1):
+		if drop != "reload":
+			record.replay_apply_reloads_before(ms, t)
+		if drop != "bases":
+			record.replay_push_camera_bases(ms, t)
+		if drop != "contacts":
+			record.replay_push_contacts(ms, t)
+		var intents: Array[InputIntent] = [p1_controller.sample(), p2_controller.sample()]
+		if drop == "intents":
+			intents = [InputIntent.new(), InputIntent.new()]
+		ms.advance(intents)
+		ms.drain_signals()
+	return ms
+
+
+func _camera_pushes() -> Array:
+	return [[0, Basis(Vector3.UP, deg_to_rad(CAMERA_YAW_DEGREES))], [1, Basis.IDENTITY]]
+
+
+func _intents(t: int) -> Array[InputIntent]:
+	var pair: Array = MOVES[(t - 1) % MOVES.size()]
+	var i1 := InputIntent.new()
+	i1.move_dir = pair[0]
+	var i2 := InputIntent.new()
+	i2.move_dir = pair[1]
+	if t == RESET_TICK:
+		i1.debug_reset = true
+	if t == ATTACK_TICK:
+		i1.pressed[&"attack"] = true
+		i1.held[&"attack"] = true
+	if t == CAST_TICK:
+		i1.card_slot = CAST_SLOT
+		i1.card_mode = Enums.ModeKind.BASIC
+		i1.card_commit = true
+	var out: Array[InputIntent] = [i1, i2]
+	return out
+
+
+# ---------------------------------------------------------------- fixture content
+
+## Built IN-TEST, never loaded from data/balance/*.tres — the _golden_config discipline, and here
+## it is doubly load-bearing: AC 4's proof rests on the recorded values DIFFERING from the
+## authored ones.
+func _config() -> BalanceConfig:
+	var c := BalanceConfig.new()
+	c.max_hp = 100.0
+	c.move_speed = MOVE_SPEED
+	c.max_stamina = 30.0
+	c.stamina_regen_per_second = 60.0
+	c.stamina_regen_delay_seconds = 2.0 / 60.0
+	c.roll_stamina_cost = 8.0
+	c.attack_stamina_cost = 4.0
+	c.attack_windup_seconds = 3.0 / 60.0
+	c.attack_active_seconds = 4.0 / 60.0
+	c.attack_recovery_seconds = 5.0 / 60.0
+	c.attack_chain_window_seconds = 4.0 / 60.0
+	c.attack_chain_length = 3
+	c.attack_damage_percent_of_max_hp = 20.0
+	c.attack_windup_move_speed_multiplier = 0.25
+	c.attack_active_move_speed_multiplier = 0.5
+	c.attack_recovery_move_speed_multiplier = 0.75
+	c.attack_lunge_distance = 1.5
+	c.max_mana = 60.0
+	c.melee_hit_mana = MELEE_HIT_MANA
+	c.deck_size = DECK_IDS.size()
+	c.hand_size = HAND_SIZE
+	c.block_damage_multiplier = 0.5
+	c.deflect_window_seconds = 3.0 / 60.0
+	c.deflect_stamina_cost = 10.0
+	c.block_facing_arc_degrees = 180.0
+	c.roll_iframe_seconds = 2.0 / 60.0
+	c.roll_duration_seconds = 5.0 / 60.0
+	c.roll_distance = 2.0
+	return c
+
+
+## The mid-run reload's config — identical except for move_speed, so reload event #1's effect on
+## the hash is ONE named value rather than a wall of them.
+func _retuned_config() -> BalanceConfig:
+	var c := _config()
+	c.move_speed = RETUNED_MOVE_SPEED
+	return c
+
+
+func _flags() -> FeatureFlags:
+	var f := FeatureFlags.new()
+	f.melee_mana_generation = true
+	return f
+
+
+func _costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in DECK_IDS:
+		var c := CardCastCondition.new()
+		c.mana_cost = CAST_MANA_COST
+		out[id] = c
+	return out
+
+
+# ---------------------------------------------------------------- source scanning (AC 11)
+
+## The runtime state carriers under src/state/, by file stem. Kept as an explicit list (rather
+## than "everything not exempt") so a NEW state file cannot slip through unclassified.
+func _known_runtime_state_file(stem: String) -> bool:
+	return ["match_state", "player_state", "hero_state", "deck", "hand", "discard_pile",
+		"pitch_state", "mana_pool", "orb_pool", "stamina_pool", "signal_queue",
+		"timing_window"].has(stem)
+
+
+func _declared_members(path: String) -> Array[String]:
+	var out: Array[String] = []
+	var re := RegEx.create_from_string("^var\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	for line in _code_lines(path):
+		var m := re.search(line)
+		if m != null:
+			out.append(m.get_string(1))
+	return out
+
+
+func _gd_files(root: String) -> Array[String]:
+	var out: Array[String] = []
+	var dir := DirAccess.open(root)
+	if dir == null:
+		return out
+	for f in dir.get_files():
+		if f.ends_with(".gd"):
+			out.append(root + f)
+	for d in dir.get_directories():
+		out.append_array(_gd_files(root + d + "/"))
+	return out
+
+
+# Code portion of each line (everything before the first '#'), so comments can't false-positive.
+func _code_lines(path: String) -> Array[String]:
+	var out: Array[String] = []
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return out
+	while not f.eof_reached():
+		var line := f.get_line()
+		var hash_idx := line.find("#")
+		if hash_idx >= 0:
+			line = line.substr(0, hash_idx)
+		out.append(line)
+	return out

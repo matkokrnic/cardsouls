@@ -215,6 +215,97 @@ func test_exactly_one_seeded_shuffle_call_site() -> void:  # INVARIANT F2
 	assert_eq(callers, 1, "...and the other is match_state.gd's single private helper")
 
 
+## Story 3-0c (AC 12, `3-0c/R9`): THE X5 RECORDER AND ITS REPLAY CONTROLLER LIVE OUTSIDE
+## src/state/, and the state layer may not so much as NAME them. This joins the whole-directory
+## src/state/ scans above as the fifth, and it is a scan rather than a citation of the
+## architecture doc's directory tree deliberately — `3-0c/R10` rules that tree PRE-CODE TEXT.
+##
+## THE ARGUMENT'S LIMIT, stated so it is not overclaimed: a deliberately clock-free,
+## content-blind, in-memory recorder placed under src/state/ would trip NONE of the four scans
+## above (it names no Time/OS/Engine, no CARDS_DIR, no CardDatabase, no bare seed()). That is
+## precisely why this scan ships instead of resting on those.
+const RECORDER_PATH := "res://src/systems/intent_recorder.gd"
+const REPLAY_CONTROLLER_PATH := "res://src/controllers/replay_controller.gd"
+
+
+func test_state_layer_never_names_the_recorder_or_the_replay_controller() -> void:
+	# NON-VACUITY (a): both files must be REAL and must live where AC 12 places them — a MOVE into
+	# src/state/ (or a rename) would otherwise silently empty this guard instead of failing it.
+	assert_true(FileAccess.file_exists(RECORDER_PATH),
+		"the recorder must live at %s (runner-owned, src/systems/)" % RECORDER_PATH)
+	assert_true(FileAccess.file_exists(REPLAY_CONTROLLER_PATH),
+		"the replay controller must live at %s (a Controller, src/controllers/)" % REPLAY_CONTROLLER_PATH)
+	for path in _gd_files("res://src/state/"):
+		assert_false(path.ends_with("/intent_recorder.gd"),
+			"the recorder must not live under src/state/: %s" % path)
+		assert_false(path.ends_with("/replay_controller.gd"),
+			"the replay controller must not live under src/state/: %s" % path)
+	# NON-VACUITY (b): the banned tokens must be real somewhere, so a class rename that empties
+	# this ban fails HERE — the CARDS_DIR / CardDatabase mechanism above.
+	var runner_hits := 0
+	for line in _code_lines("res://src/main/match_runner.gd"):
+		if line.contains("IntentRecorder") or line.contains("ReplayController"):
+			runner_hits += 1
+	assert_true(runner_hits > 0,
+		"match_runner.gd must still name both classes — otherwise this guard is vacuous")
+	var re := RegEx.create_from_string("(IntentRecorder|ReplayController)")
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/state/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/state/ scan found no .gd files (guard would be vacuous)")
+	assert_eq(offenders.size(), 0,
+		"the recorder / replay controller named in src/state/ (AC 12: the record is the RUNNER's; "
+		+ "the state layer is recorded, it does not record): %s" % ", ".join(offenders))
+
+
+## Story 3-0c (AC 13): THE SEVEN-SEAM FAMILY, MACHINE-CHECKED FOR THE FIRST TIME. `2-6/R7` froze
+## the runner's per-slot observation seams at SEVEN and eleven stories have honoured it BY REVIEW
+## ONLY — verified by content at this story's gate: `connect_` appears in test/ solely as USAGE
+## (test_contact_pipeline.gd, test_live_attack.gd, test_telegraph_profiles.gd), never as a count
+## assertion. Nothing in the suite would have failed if an eighth seam had shipped.
+##
+## THE PROOF RUNS FALLING: an eighth `connect_*` anywhere under src/main/ must make this FAIL.
+## This story adds none — its recorder is a plain runner-owned object called directly at the
+## capture points, and `recorded_stream()` is a read accessor, not a seam (no signal, no
+## callback, no state handle), which is why it is deliberately NOT named `connect_*`.
+const OBSERVATION_SEAMS: Array[String] = [
+	"connect_hero_action_state_changed", "connect_hero_action_rejected", "connect_hit_landed",
+	"connect_deflect_landed", "connect_hero_hp_changed", "connect_stamina_changed",
+	"connect_mana_changed",
+]
+
+
+func test_runner_observation_seams_are_exactly_seven() -> void:  # 2-6/R7
+	var re := RegEx.create_from_string("^func\\s+(connect_[A-Za-z0-9_]*)\\s*\\(")
+	# The pattern must match the form it counts — a regex typo must not silently disarm this.
+	assert_true(re.search("func connect_hit_landed(callback: Callable) -> void:") != null,
+		"the pattern must match a seam DECLARATION")
+	assert_null(re.search("\tconnect_mana_changed(slot, hud.on_mana_changed)"),
+		"a CALL is not a declaration and must not be counted")
+	var scanned := 0
+	var found: Array[String] = []
+	for path in _gd_files("res://src/main/"):
+		scanned += 1
+		for line in _code_lines(path):
+			var m := re.search(line)
+			if m != null:
+				found.append(m.get_string(1))
+	assert_true(scanned > 0, "src/main/ scan found no .gd files (guard would be vacuous)")
+	found.sort()
+	var expected := OBSERVATION_SEAMS.duplicate()
+	expected.sort()
+	assert_eq(found, expected,
+		"the runner's observation-seam family is FROZEN AT SEVEN (2-6/R7). An eighth seam is a "
+		+ "design change and the operator's call, not a refactor — and a removed one is as loud "
+		+ "as an added one: %s" % ", ".join(found))
+
+
 func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)
 	# int-literal callers depend on these ordinals: test_camera_relative.gd writes [0, 1] and
 	# every 2-2 smoke flip writes int literals like [3, 2] / [2, 3]. A future reorder would

@@ -412,6 +412,46 @@ func test_card_scheme_input_actions_ship_for_both_players() -> void:
 		"card-scheme Input Map actions missing (AC 11): %s" % ", ".join(missing))
 
 
+## Story 3-0c (AC 14, `3-0c/R11`): THE SHIPPED INPUT MAP ACTION SET, PINNED BY EXACT EQUALITY.
+##
+## This story adds NO action, and the way that is checked is not a "no record/replay-named
+## action" scan — the repo's own labelled precedent directly above says why that would be
+## vacuous: "The negative guard above cannot tell 'correctly added' from 'never added', so the
+## pair is what makes the Input Map edit checkable in both directions." A negative scan for names
+## nobody has proposed is a guard against nothing.
+##
+## So the whole project action set is pinned instead, and an ADDED action fails exactly as loudly
+## as a removed or renamed one. Godot's built-in `ui_*` navigation is excluded: it ships with the
+## engine, is not this project's to pin, and deliberately shares keys with gameplay actions
+## already (p2_move_* are the arrow keys — see test_debug_step_pause.gd's collision scan, which
+## excludes them for the same reason).
+const SHIPPED_INPUT_ACTIONS: Array[String] = [
+	"debug_pause", "debug_step",
+	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
+	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
+	"p1_move_down", "p1_move_left", "p1_move_right", "p1_move_up", "p1_roll",
+	"p2_attack", "p2_block", "p2_card_1", "p2_card_2", "p2_card_3", "p2_card_4",
+	"p2_cast_confirm", "p2_cast_mode", "p2_debug_reset",
+	"p2_move_down", "p2_move_left", "p2_move_right", "p2_move_up", "p2_roll",
+]
+
+
+func test_shipped_input_map_action_set_is_exactly_pinned() -> void:
+	var shipped: Array[String] = []
+	for action: StringName in InputMap.get_actions():
+		var name := String(action)
+		if name.begins_with("ui_"):
+			continue
+		shipped.append(name)
+	shipped.sort()
+	var expected := SHIPPED_INPUT_ACTIONS.duplicate()
+	expected.sort()
+	assert_eq(shipped, expected,
+		"the project's Input Map action set moved. An action is a project.godot edit and belongs "
+		+ "to the story that ships its consumer — 3-0c ships none (its replay mode is reachable "
+		+ "only from a test, never from a key)")
+
+
 ## Story 3-5b (AC 2): THE GUARD THAT KEEPS OPEN DECISION (b) OPEN.
 ##
 ## A `TimingWindow` cannot exist without a duration, so `reshuffle_vulnerable_window_seconds` IS

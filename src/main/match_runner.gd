@@ -51,6 +51,25 @@ var _match_state: MatchState
 var _p1_controller: Controller
 var _p2_controller: Controller
 
+## Story 3-0c (X5, AC 12): the ONE runner-owned recorder — a plain object called directly at the
+## capture points below, NOT an eighth observation seam (no signal, no connect_ method, no state
+## handle). It is a PASSIVE TAP: nothing it captures is ever read back into the tick.
+var _recorder := IntentRecorder.new()
+
+## Story 3-0c (AC 9): set to a captured record BEFORE this node enters the tree to run the match
+## FROM THAT RECORD instead of from live services and live hardware. Reachable only from a test
+## in this story — the operator surface (start/stop/load, user:// persistence, the live reload
+## trigger) is `3-0d`'s, per `3-0c/R5`.
+##
+## Replay guarantees STATE identity, not VISUAL identity: actor positions come from
+## move_and_slide() and may drift between a recording and its replay. That is tolerable precisely
+## because the ONLY physics-to-state channel is the contact fact, and the contact fact is
+## recorded — anything a divergent position could do to the tick has to travel through
+## push_contact, which replay supplies from the record rather than from the scene.
+var replay_record: IntentRecorder = null
+## Ticks replayed so far — the cursor the recorded facts, bases and reload events are keyed by.
+var _replay_tick := 0
+
 ## Story 3-0b (AC 1): the match-global DEBUG step/pause reader — a NON-Controller member of
 ## src/controllers/ (see its own header). It is NOT one of the two slot controllers: it produces
 ## no InputIntent and its presses never reach advance(). Held here because D3(a) keeps Input.*
@@ -80,9 +99,21 @@ func _ready() -> void:
 	# is a programming error (Invariant.check, export-surviving — X1).
 	Invariant.check(slot_controller_kinds.size() == 2,
 		"slot_controller_kinds must have exactly 2 entries (P1, P2), got %d" % slot_controller_kinds.size())
-	_p1_controller = _make_controller(slot_controller_kinds[0], 0)
-	_p2_controller = _make_controller(slot_controller_kinds[1], 1)
-	_match_state = MatchState.new(MatchParams.new(_SEED))
+	# Story 3-0c (AC 9): in replay mode BOTH slots are driven by the record. A ReplayController is
+	# a plain Controller, so this is the 1-6 per-slot config point being used, not bypassed —
+	# "dummy -> PvP -> bot -> replay is a config swap" is the D3 promise, honoured here.
+	var replaying := replay_record != null
+	_p1_controller = ReplayController.new(replay_record, 0) if replaying \
+			else _make_controller(slot_controller_kinds[0], 0)
+	_p2_controller = ReplayController.new(replay_record, 1) if replaying \
+			else _make_controller(slot_controller_kinds[1], 1)
+	# Story 3-0c (AC 3): ONE seed value, read once and used twice — the record's when replaying,
+	# the runner constant otherwise. Never a second, independently-read seed: what is captured is
+	# literally what reaches MatchParams.
+	var seed_value := replay_record.replay_seed() if replaying else _SEED
+	if not replaying:
+		_recorder.capture_seed(seed_value)
+	_match_state = MatchState.new(MatchParams.new(seed_value))
 	# DEBT A retirement (story 1-3b): inject the authored balance ONCE at match start,
 	# before the first tick — advance() reads balance_ticks, so without this call live-play
 	# actions are inert (MatchState's balance_ticks == null guard, kept as a permanent
@@ -90,14 +121,27 @@ func _ready() -> void:
 	# placeholders — it is now the ONLY thing that gives either hero hp, move speed, or pool
 	# bounds, so the match is stat-less until it runs (AC 3/AC 4). Mid-match reload stays
 	# DEBT B (deferred): nothing calls apply_balance() a second time in live play.
-	var balance_config: BalanceConfig = BalanceConfigService.get_config()
+	# Story 3-0c (AC 4, `3-0c/R4`): THIS call site is RELOAD EVENT #0 — the reload channel already
+	# has the right shape for it, so the match-start injection needs no sixth channel of its own.
+	# On replay the values come from the record and BalanceConfigService is never read, which is
+	# what makes a recording survive a tuning pass.
+	var balance_config: BalanceConfig = replay_record.replay_balance_config(0) if replaying \
+			else BalanceConfigService.get_config()
 	Invariant.check(balance_config != null, "authored balance config missing at match start")
+	if not replaying:
+		_recorder.capture_apply_balance(balance_config)
 	_match_state.apply_balance(balance_config)
 	# Story 1-5 (B3): read FeatureFlagsService ONCE at match start and inject — the ONLY
 	# place state receives flags (HARD RULE: state never reads the service). Flags are
 	# load-once by design: no reload path, deliberately unlike balance.
-	var feature_flags: FeatureFlags = FeatureFlagsService.get_flags()
+	# Story 3-0c (AC 7, `3-0c/R3`): flags are a CAPTURE CHANNEL, which is not runtime mutation —
+	# they stay load-once and runtime-immutable, FeatureFlagsService still has no reload path, and
+	# a replay injects the RECORDED flags rather than reading the service.
+	var feature_flags: FeatureFlags = replay_record.replay_feature_flags() if replaying \
+			else FeatureFlagsService.get_flags()
 	Invariant.check(feature_flags != null, "authored feature flags missing at match start")
+	if not replaying:
+		_recorder.capture_inject_feature_flags(feature_flags)
 	_match_state.inject_feature_flags(feature_flags)
 	# Story 3-3 (AC 2/AC 4): deck CONTENT injection — the inject_feature_flags precedent
 	# directly above (once at match start, content only, no reload path). The runner is the ONLY
@@ -106,11 +150,26 @@ func _ready() -> void:
 	# so the composition is derived HERE and plain StringName ids cross the boundary. deck_size
 	# is read inline off the already-loaded authored config (CONSTRAINT C). An empty result is
 	# rejected AT THE SEAM (AC 10), so there is deliberately no second check here.
-	_match_state.inject_deck(_derive_deck_contents(balance_config.deck_size))
-	# Story 3-5a (AC 4): cast-cost injection, the same shape and the same seat as the deck
-	# injection directly above. ORDER MATTERS and is not stylistic — the seam validates that the
-	# map is TOTAL over the injected composition, so the composition must already be in.
-	_match_state.inject_card_costs(_derive_card_costs())
+	#
+	# Story 3-0c (AC 5/AC 6): both content channels are captured here, in this order, and the
+	# ORDER ITSELF enters the record. On replay the recorder re-injects in the recorded order and
+	# refuses an unsound one — the cost seam's totality check reads _deck_contents, so
+	# costs-before-deck would validate against an empty composition and pass vacuously. Replay
+	# never reads CardDatabase: without this channel a recording would silently depend on the
+	# contents of data/cards/, which change without a trace.
+	if replaying:
+		Invariant.check(replay_record.replay_inject_content(_match_state),
+			"recorded content order is unsound — the cast-cost totality check would be vacuous")
+	else:
+		var deck_contents := _derive_deck_contents(balance_config.deck_size)
+		_recorder.capture_inject_deck(deck_contents)
+		_match_state.inject_deck(deck_contents)
+		# Story 3-5a (AC 4): cast-cost injection, the same shape and the same seat as the deck
+		# injection directly above. ORDER MATTERS and is not stylistic — the seam validates that
+		# the map is TOTAL over the injected composition, so the composition must already be in.
+		var card_costs := _derive_card_costs()
+		_recorder.capture_inject_card_costs(card_costs)
+		_match_state.inject_card_costs(card_costs)
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -242,6 +301,18 @@ func _derive_card_costs() -> Dictionary[StringName, CardCastCondition]:
 			continue
 		out[id] = card.cast_condition
 	return out
+
+
+## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
+## runner-owned plain object — NOT an eighth observation seam and deliberately not a `connect_`
+## method (AC 13 pins that family at seven): no signal, no callback, no state handle. A replay is
+## started by assigning `replay_record` before this node enters the tree; persisting a record to
+## `user://` and the operator control that starts and stops one are `3-0d`'s (`3-0c/R5`).
+##
+## In replay mode this stays EMPTY: a replay re-recording its own source would produce a copy of
+## the record it is already reading, so the tap has nothing to add.
+func recorded_stream() -> IntentRecorder:
+	return _recorder
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a
@@ -407,7 +478,13 @@ func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroA
 		var dir := Vector2(to_attacker.x, to_attacker.z)
 		if dir.is_zero_approx():
 			continue
-		_match_state.push_contact(attacker_slot, target_slot, attack_index, dir.normalized())
+		# Story 3-0c (AC 9): the fact is TAPPED here, at the one place it is produced, and pushed
+		# unchanged. This whole function is what replay mode suppresses — regenerating facts
+		# through physics on replay was REJECTED at 1-7's gate (D-4) because it would hang
+		# replay soundness on Jolt bit-determinism.
+		var fact_dir := dir.normalized()
+		_recorder.capture_push_contact(attacker_slot, target_slot, attack_index, fact_dir)
+		_match_state.push_contact(attacker_slot, target_slot, attack_index, fact_dir)
 
 
 func _slot_of(actor: Node) -> int:
@@ -451,18 +528,42 @@ func _physics_process(delta: float) -> void:
 	# before advance() reads it). Camera FOLLOW (step 4b) stays outside: the operator must be able
 	# to look around while paused.
 	if ticking:
-		# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
-		#    global basis). Reading the rig is the runner's ONLY interaction with it; the runner
-		#    never rotates velocity after state resolves it (AC 6, story 1-2).
-		#    LOCAL basis, deliberately not global (DECISION A): the rig is a child of the hero
-		#    root, and the global basis would fold a hero-root rotation into "camera forward".
-		#    Guarded by test/integration/test_root_rotation_isolation.gd.
-		_match_state.set_camera_basis(0, _p1_rig.basis)
-		_match_state.set_camera_basis(1, _p2_rig.basis)
-		#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
-		#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
-		_gather_contact_facts(0, _match_state.p1, _p1_hero)
-		_gather_contact_facts(1, _match_state.p2, _p2_hero)
+		# Story 3-0c (AC 9): the REPLAY FORK. In replay mode the runner performs NO Area3D overlap
+		# query and pushes NO live camera basis — it pushes the recorded bases and drains the
+		# recorded facts for this tick instead, in recorded push order. Everything downstream
+		# (advance, drive, follow, drain) is bit-for-bit the same code path, which is what makes
+		# replay a source swap rather than a second simulation.
+		if replay_record != null:
+			_replay_tick += 1
+			replay_record.replay_apply_reloads_before(_match_state, _replay_tick)
+			replay_record.replay_push_camera_bases(_match_state, _replay_tick)
+			replay_record.replay_push_contacts(_match_state, _replay_tick)
+		else:
+			# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
+			#    global basis). Reading the rig is the runner's ONLY interaction with it; the runner
+			#    never rotates velocity after state resolves it (AC 6, story 1-2).
+			#    LOCAL basis, deliberately not global (DECISION A): the rig is a child of the hero
+			#    root, and the global basis would fold a hero-root rotation into "camera forward".
+			#    Guarded by test/integration/test_root_rotation_isolation.gd.
+			#    Story 3-0c (AC 8): TAPPED per slot per tick. Today the pushed basis is always
+			#    identity in live play, but its value is read during movement resolution and
+			#    reaches the HASHED HeroState.velocity — a replay that did not restore it could
+			#    diverge the moment a look action ships (`3-0c/R2`).
+			_recorder.capture_set_camera_basis(0, _p1_rig.basis)
+			_match_state.set_camera_basis(0, _p1_rig.basis)
+			_recorder.capture_set_camera_basis(1, _p2_rig.basis)
+			_match_state.set_camera_basis(1, _p2_rig.basis)
+			#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
+			#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
+			_gather_contact_facts(0, _match_state.p1, _p1_hero)
+			_gather_contact_facts(1, _match_state.p2, _p2_hero)
+			# Story 3-0c (AC 2): the X5 intent tap. Seated HERE, immediately before advance(),
+			# and NOT at the sample step the architecture doc's pre-code sketch draws it at
+			# (`3-0c/R10` — that text is candidate design, not authority): 3-0b's pause gate
+			# samples every frame but advances only on ticking ones, so a tap at the sample step
+			# would record intents that no tick ever consumed and desync the stream from its own
+			# tick indices. One capture, one advance, always in that order.
+			_recorder.capture_advance(intents)
 		# 3. Advance state (enqueues signals only).
 		_match_state.advance(intents)
 		# 3b. Story 3-0b (AC 2): POLL the read-only debug accessor right after advance() and push
