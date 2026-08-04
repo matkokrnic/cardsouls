@@ -149,6 +149,12 @@ stream half, carried since `1-3b`.
   story directly: "the X5 recorder (which retains a reference each tick) can never hold N aliases of
   one ever-changing object" — a guarantee that rests on the E0 LIFETIME decision (a `Controller` returns
   a FRESH instance per `sample()`, never a mutated cached one).
+- **Clarification, `3-0c/R18`: AC 2's use of a non-default `card_mode` in its round-trip fixture is
+  FIELD-SHAPE ONLY.** The test drives `card_mode = Enums.ModeKind.PITCH` purely to prove the field
+  captures and replays a non-default value like every other field — it is not a sanction to resolve
+  that mode. The non-`BASIC` `ModeKind` values remain guarded stubs, unreachable in play, until E5;
+  `cast_evaluator.gd`'s dispatch and its own fence (`test_non_basic_modes_are_unreachable_in_e3`,
+  story 3-5a) are untouched by this story.
 - **`push_contact` signature** (`match_state.gd:360`): `(attacker_slot: int, target_slot: int,
   attack_index: int, target_to_attacker: Vector2)`. Four `Invariant.check` guards at the seam (slot
   range, no self-contact, non-zero direction). Computed by the runner's `_gather_contact_facts` FROM
@@ -176,9 +182,11 @@ stream half, carried since `1-3b`.
   `PlayerState`: `hero`, `stamina`, `mana`, `orbs`, `deck_size`, `hand_size`, `discard_size`,
   `pending_draw`, `pending_draw_owed`.
   `HeroState`: `hp`, `max_hp`, `action_state`, `chain_index`, `swing_dedupe` (`attack_index` +
-  `records`), `velocity`, `facing`, `roll_direction`, `move_speed`, plus seven `TimingWindow`
+  `records`), `velocity`, `facing`, `roll_direction`, `move_speed`, plus **eight** `TimingWindow`
   sub-dictionaries (`windup`/`active`/`recovery`/`chain`/`deflect`/`roll_iframe`/`roll_duration`/
-  `stun`). `StaminaPool`: `current`, `maximum`, `regen_delay`. `ManaPool`/`OrbPool`: counts only.
+  `stun`) — **correction, `3-0c/R14`**: an earlier draft of this bullet said "seven" while listing
+  all eight names; `hero_state.gd`'s `to_snapshot()` (lines 407-414) carries all eight, verified by
+  content. `StaminaPool`: `current`, `maximum`, `regen_delay`. `ManaPool`/`OrbPool`: counts only.
   `PitchState`: `fizzle`. `TimingWindow`: `duration_ticks`, `elapsed_ticks`, `is_running`.
 - **Correction to a premise in this story's own commissioning brief.** The brief assumed dedupe records
   and `attack_index` were unhashed per-tick transients. Verified by content: they are NOT — both ride
@@ -187,7 +195,16 @@ stream half, carried since `1-3b`.
   confirmed separately: `MatchState._contact_queue` (drained fully inside `advance()` step 4),
   `_deck_deal_pending` (consumed inside the same `advance()` that sets it), and
   `HeroState._roll_iframe_closed_this_tick` / `_deflect_closed_this_tick` (grace markers, named
-  unhashed in the 1-9 golden record). The CROSS-TICK unhashed set is corrected below by `3-0c/R8`.
+  unhashed in the 1-9 golden record). **Correction, `3-0c/R14`**: this list omitted the D5 SIGNAL
+  BUFFERS — `SignalQueue._pending` (`signal_queue.gd:11`) and the five `_queue: SignalQueue`
+  references that hold it (`match_state.gd`, `hero_state.gd`, `mana_pool.gd`, `orb_pool.gd`,
+  `stamina_pool.gd`). They belong in this same per-tick bucket, and the CONTRACT that keeps them
+  there — not merely the observation that they happen to be empty — is: the runner calls
+  `MatchState.drain_signals()` after every `advance()` (`match_runner.gd:589`), which drains
+  `_queue` unconditionally every tick on the D5 timing discipline (signals raised during
+  `advance()` are enqueued, never emitted mid-tick, then drained once the tick is fully resolved),
+  and no gameplay path reads `_pending` — `drain()` is its only reader. The CROSS-TICK unhashed set
+  is corrected below by `3-0c/R8`.
 - **RNG single-seat guard (F2), machine-checked.** `shuffle_with_rng(` appears exactly twice in `src/`
   — its definition in `deck.gd` and its one caller, `MatchState._shuffle_deck` — pinned by
   `test_architecture_invariants.gd` (landed as `3-5b` AC16). Nothing in this story's design should add
@@ -358,9 +375,13 @@ stream half, carried since `1-3b`.
   (AC 12).
 - `src/controllers/replay_controller.gd` (new) — a `Controller` subclass emitting recorded intents;
   structurally indistinguishable from hardware to the runner (D3).
-- `src/main/match_runner.gd` — the capture call at the sample step, plus a headless replay mode that
-  suppresses fact-gathering and the live camera-basis push and drives both from the record (AC 9). No
-  change to the seven `connect_*` seams and no change to the `_physics_process` structure (F1
+- `src/main/match_runner.gd` — the capture call seated immediately before `advance()`, inside the
+  ticking gate (**correction, `3-0c/R14`**: an earlier draft of this note placed the tap at the
+  "sample step"; that seat is wrong and was never shipped — 3-0b's pause gate samples every frame
+  but advances only on ticking ones, so a sample-step tap would record intents no tick ever
+  consumed and desync the stream from its own tick indices). Plus a headless replay mode that
+  suppresses fact-gathering and the live camera-basis push and drives both from the record (AC 9).
+  No change to the seven `connect_*` seams and no change to the `_physics_process` structure (F1
   untouched).
 - `src/ui/debug/` — **untouched by this story.** The start/stop/load control is `3-0d`'s.
 - `src/state/` — touched by NOTHING in this story (AC 12).
@@ -443,15 +464,154 @@ identity test does not already prove more strictly. The smoke belongs to `3-0d`,
 start/stop/load control, `user://` persistence and the live reload trigger — every part of this feature
 that a human can actually observe. `R-D6` is not re-invoked here and stays AVAILABLE.
 
+## Dev Pass Record
+
+Dev pass model: **Claude Opus 5**. This section records that pass's substance; the commit chain
+that lands it (code/tests commit, this doc commit, the board-promotion commit, and the
+decision-log close-out) is a separate session, **Claude Sonnet 5** — see Agent Model Used below.
+(`Opus 4.8` is this repo's commit-trailer constant, not a model name — see every `Co-Authored-By`
+line in this project's git history; it does not identify who ran the dev pass, and conflating the
+two produced the wrong model name in an earlier draft of this section.)
+
+- **Suite outcome.** State harness 310 tests / 1463 assertions / 0 failed -> **329 tests / 1715
+  assertions / 0 failed**; all 19 integration files PASS individually (`test_replay_contacts.gd`
+  added this story); zero `SCRIPT ERROR` / `Parse Error` / `INVARIANT VIOLATED` lines across the
+  harness output.
+- **Golden UNMOVED**, `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322` measured
+  identical before and after, both Golden Prediction premises holding: no snapshot key (nothing
+  under `src/systems/` or `src/controllers/` is reachable from `to_snapshot()`; `src/state/` gains
+  no file, guarded by AC 12's token scan plus the three pre-existing whole-directory scans) and no
+  seeded-RNG consumer (F2's `shuffle_with_rng(` guard still reads exactly two sites). `project.godot`
+  byte-identical throughout (SHA256 unchanged).
+- **A gap in this record, stated plainly rather than smoothed over.** The dev pass reported ten
+  mutation proofs verbally at hand-off. None of the ten left an artifact anywhere in the tree — no
+  mutation table, no restored-file log, nothing the commit chain could verify. A proof that exists
+  only in a chat report does not exist for this repo's purposes: this codebase's own discipline
+  (`docs/game-architecture.md`, the golden/mutation convention every prior story in E1-E3 follows)
+  is that a claim of "this guard falls correctly" is a MEASUREMENT, not a report. So the commit chain
+  re-ran its OWN ten mutations against the shipped code — independently chosen, overlapping the dev
+  pass's set in intent but not identical to it — and separately re-derived the three of the dev
+  pass's ten that covered ACs (9, 11, 14) the chain's own ten happened not to touch. **The table below
+  keeps the two sets visibly separate, by provenance, rather than merging them into one list that
+  would misrepresent what was actually measured where.**
+
+  **Set A — the dev pass's own ten, as reported at hand-off.** Provenance `REPORTED (dev pass; no
+  tree artifact)` unless noted otherwise. Three rows were re-run this session because they are the
+  only reported proofs covering AC 9, AC 11 and AC 14; those three carry the measured numbers and a
+  `RE-DERIVED (chain)` provenance instead.
+
+  | # | Mutation | File | Reported/measured target failure | Provenance |
+  |---|---|---|---|---|
+  | dpM1 | `match_state.gd` gains public `inject_widget(value)` with no channel | `match_state.gd` | intake-surface pin AND uncovered-channel assertion both fall | REPORTED (dev pass; no tree artifact) |
+  | dpM2 | dpM1 plus a matching `capture_inject_widget` on the recorder | `match_state.gd` / `intent_recorder.gd` | only the surface pin falls, isolating the channel check as independent | REPORTED (dev pass; no tree artifact) |
+  | dpM3 | completeness guard unwired from `capture_advance` | `intent_recorder.gd` | the wiring test falls | REPORTED (dev pass; no tree artifact) |
+  | dpM4 | `replay_inject_content` no longer refuses an unsound order | `intent_recorder.gd` | the inverted record replays and injects content it should not | REPORTED (dev pass; no tree artifact) |
+  | **dpM5** | `player_state.gd` gains `var _fourth_unhashed_thing` | `player_state.gd` | the three-member exclusion pin falls | **RE-DERIVED (chain), 2026-08-04: measured 1 failure — `test_unhashed_cross_tick_state_is_exactly_three_members` — matches the report exactly** |
+  | dpM6 | an eighth `connect_` on the runner | `match_runner.gd` | the seven-seam scan falls | REPORTED (dev pass; no tree artifact) |
+  | dpM7 | `match_state.gd` returns the string `"IntentRecorder"` | `match_state.gd` | the `src/state/` token scan falls | REPORTED (dev pass; no tree artifact) |
+  | **dpM8** | replay mode no longer suppresses `_gather_contact_facts` | `match_runner.gd` | `test_replay_contacts.gd` phase [C] reports `stripped_hits=1` where zero is required, phase [B] still passes | **RE-DERIVED (chain), 2026-08-04, integration run WITH `--script`: measured `recorded_ticks=110 recorded_facts=9 live_hits=1 far_hits=1 stripped_hits=1 swings=1/1`, `RESULT: FAIL` — phase [B]'s `_far_hits == _live_hits` check still holds (1 == 1, "still passes" as reported); phase [C]'s zero-hits check fails (`stripped_hits=1`), exactly as reported** |
+  | dpM9 | `capture_set_camera_basis` bodied as a no-op | `intent_recorder.gd` | five tests fall including the primary identity assertion; this is where the AC 8 divergence was measured | REPORTED (dev pass; no tree artifact) |
+  | **dpM10** | `InputMap.add_action(&"p1_replay_start")` at runtime via a throwaway probe, `project.godot` never touched | test-time runtime call, no file edit | the exact-equality action-set pin falls | **RE-DERIVED (chain), 2026-08-04: measured 1 failure — `test_shipped_input_map_action_set_is_exactly_pinned` — and confirmed `project.godot` diff stayed EMPTY, exactly as reported** |
+
+  **Set B — the chain's own ten, measured directly against the shipped code this session.**
+  Provenance `MEASURED (chain)` for every row. Every target restored from a scratch-directory copy,
+  SHA256-verified identical before the next mutation began; `git checkout --` never used.
+
+  | # | Mutation | File | Target failure | Actual | Provenance |
+  |---|---|---|---|---|---|
+  | c1 | contact-fact tick key off-by-one (`_tick` for `_tick + 1`) | `intent_recorder.gd` | `test_the_recorded_run_exercises_every_channel` | 1 | MEASURED (chain) |
+  | c2 | camera-basis tick key off-by-one (`_tick` for `_tick + 1`) | `intent_recorder.gd` | camera-basis + exercises-every-channel | 2 | MEASURED (chain) |
+  | c3 | `replay_inject_content`'s order-soundness check disarmed | `intent_recorder.gd` | content-order/injection test | 1 | MEASURED (chain) |
+  | c4 | drop `card_commit` from `copy_intent` | `intent_recorder.gd` | round-trip + identity-hash cascade | 6 | MEASURED (chain) |
+  | c5 | `ReplayController.sample()` cursor never advances | `replay_controller.gd` | round-trip + identity-hash cascade | 6 | MEASURED (chain) |
+  | c6 | add an eighth `connect_*` seam to the runner | `match_runner.gd` | `test_runner_observation_seams_are_exactly_seven` | 1 | MEASURED (chain) |
+  | c7 | remove the match-start completeness `Invariant.check` call | `intent_recorder.gd` | `test_the_match_start_completeness_guard_is_wired_at_the_capture_seam` | 1 | MEASURED (chain) |
+  | c8 | invert the `_resource_values` property-usage filter | `intent_recorder.gd` | flags round-trip + identity-hash cascade | 6 | MEASURED (chain) |
+  | c9 | name a banned live service (`FeatureFlagsService`) in the recorder | `intent_recorder.gd` | `test_no_recorder_behaviour_is_gated_behind_a_flag_or_a_live_service` | 1 | MEASURED (chain) |
+  | c10 | name `IntentRecorder` inside `src/state/match_state.gd` | `match_state.gd` | `test_state_layer_never_names_the_recorder_or_the_replay_controller` | 1 | MEASURED (chain) |
+
+  Rows c4, c5 and c8 fall wide (six tests each) because each mutation breaks a value the AC 10 identity
+  fixture depends on downstream of the point it corrupts — the round-trip test catches it directly and
+  the bit-identical-hash test and its dropped-channel/basis/order siblings catch the resulting
+  divergence a second time. That breadth is itself evidence the identity test is doing real work, not
+  a defect in the mutation. Sets A and B are NOT merged: dpM3/dpM6/dpM7 target the same guards as c7/c6/c10
+  respectively (a plausible sign the dev pass's report was genuine), but each set's numbering, wording
+  and provenance are kept exactly as produced, per row, rather than collapsed into one shared count.
+- **AC 9's proof form and its stated limit**, quoted from `test/integration/test_replay_contacts.gd`'s
+  own header: "zero Area3D overlap queries" is not directly countable on this engine (a GDScript
+  override of a native method is a parse error under this project's warnings-as-errors setting, and
+  Godot exposes no per-query performance monitor for an overlap list), so the query is proven absent
+  by its only observable consequence — a gathered fact reaching `push_contact` — in three phases
+  against the same physical arrangement: [A] live, in reach, a hit lands and the runner's own recorder
+  captures the stream; [B] the SAME record replayed with P1 teleported 15 units away — no overlap is
+  physically possible, yet the recorded hits still land identically and in order; [C] the same record
+  with its contact channel stripped, replayed in reach, swinging exactly as in [A] — zero hits. **The
+  named limit:** [C] does not cover a query whose result is discarded without reaching `push_contact`;
+  nothing in the codebase does that (`_gather_contact_facts` is the sole caller and pushes everything
+  it selects), so the uncovered case could only waste time, never desync a replay.
+- **AC 8's measured divergence.** `test_the_camera_basis_channel_is_driven_non_identity_and_is_load_bearing`
+  drives slot 0 with a 90-degree yaw and slot 1 at identity; with the basis channel dropped the replay's
+  divergence is named rather than left to the hash — P1's hashed `velocity` differs from the live run's
+  (an identity basis maps the same intent to a different world direction), while P2's hashed `velocity`
+  is unaffected, because its recorded basis was identity to begin with.
+- **The exclusion pin stands at THREE** (`3-0c/R8`, unchanged by this pass — see `3-0c/R12` below):
+  `PlayerState.vulnerable_window`, the card containers' contents/order, and `MatchState._camera_bases`.
+  `test_unhashed_cross_tick_state_is_exactly_three_members` classifies every declared member of every
+  runtime state class under `src/state/` into hashed / per-tick / injected / this pin, and a fourth
+  exclusion appearing later fails it.
+- **Four corrections to the pre-dev-pass story text**, all landed in this same commit (`3-0c/R14`,
+  `3-0c/R16`, `3-0c/R18` — see decision-log close-out for the full rulings): the Project Structure
+  Notes' intent-tap seat ("the sample step") was wrong and is corrected to the shipped seat
+  (immediately before `advance()`, inside the ticking gate — a sample-step tap would desync the stream
+  from its own tick indices against 3-0b's pause gate); the per-tick transient exclusion argument in Dev
+  Notes omitted the D5 signal buffers (`SignalQueue._pending` and the five `_queue` references) and now
+  names them with the drain contract; Dev Notes' `HeroState.to_snapshot()` TimingWindow count is
+  corrected from "seven" to the eight actually listed and verified by content; and AC 2's non-default
+  `card_mode` fixture value is noted as field-shape-only, not a sanction to resolve non-`BASIC` modes,
+  which stay guarded stubs until E5. All pre-existing Dev Notes bullets survive — verified by checking
+  each line the corrections touch was extended, not deleted.
+
 ## Dev Agent Record
 
 ### Agent Model Used
+
+Claude Sonnet 5
 
 ### Debug Log References
 
 ### Completion Notes List
 
+- Dev pass (2026-08-04, Claude Opus 5): implemented AC1-AC14 — see Dev Pass Record above for the
+  suite outcome, the two-set mutation table (the dev pass's own ten as reported, the chain's own ten
+  as measured, with three of the dev pass's rows re-derived at the chain because they left no tree
+  artifact), the AC 8/AC 9 proof detail, and the four story-text corrections.
+- Live smoke NOT REQUIRED, this story's own reason (nothing in it is live-observable) — see Live Smoke
+  above. `R-D6` not re-invoked, stays AVAILABLE.
+
 ### File List
+
+**New — source**
+- `src/systems/intent_recorder.gd`
+- `src/controllers/replay_controller.gd`
+
+**New — tests**
+- `test/state/test_intent_recorder.gd`
+- `test/state/test_replay_identity.gd`
+- `test/integration/test_replay_contacts.gd`
+
+**Modified — source**
+- `src/main/match_runner.gd` (recorder capture calls, replay fork, `recorded_stream()`)
+
+**Modified — tests**
+- `test/state/test_architecture_invariants.gd` (AC 12 placement scan, AC 13 seven-seam pin)
+- `test/state/test_deck_and_hand.gd` (AC 14 exact-equality Input Map action-set pin)
+
+**Untouched** — `project.godot` (AC 14: no action added; byte-identical throughout), `src/state/`
+(AC 12: gains no file), `src/ui/debug/` (the operator surface is `3-0d`'s).
+
+**Class cache** — the `.uid` siblings for all five new `.gd` files are generated by the editor scan on
+the commit chain, not in this pass — every tracked `.gd` file in this repo carries a 1:1 `.uid`
+sibling.
 
 ## Change Log
 
@@ -459,3 +619,4 @@ that a human can actually observe. `R-D6` is not re-invoked here and stays AVAIL
 |------|---------|-------------|--------|
 | 2026-08-04 | 0.1 | File authored at this story's own creation pass (`E3-P/R3`), not at a readiness gate. Twelve ACs recorded, each already locked by a decision-log ruling, an architecture-doc commitment, or a structural fact verified by content against shipped code (HEAD `ce30569`) — the one-stream-contract shape (seed + intents + reload events + injected deck composition + injected cast-cost map), the four-field contact fact's inheritance, `InputIntent`'s full eight-field capture, the passive-tap guarantee, the no-eighth-seam and no-new-Input-Map-action constraints, `FeatureFlags` staying load-once, and captured content staying outside `to_snapshot()`/`CanonicalHash`. Seven items deliberately NOT decided — scope (record vs record+replay), whether the initial `apply_balance()` belongs in the stream, DEBT B's live-trigger question, replay-equality strength against the one confirmed unhashed field (`PlayerState.vulnerable_window`), recording storage/format, the recording trigger/lifetime, and runner-vs-state placement — each recorded as an Open Question with a recommendation and its trade-off, to be ruled at this story's own readiness gate. Dev Notes correct a premise in this story's commissioning brief: swing-dedupe records and `attack_index` are hashed (not unhashed transients as assumed); the only confirmed unhashed cross-tick state is the vulnerable window, per `3-5b/R19`. Golden Prediction NONE (conditional on the runner/systems-placement recommendation); Live Smoke TBD (conditional on scope/trigger rulings). Status `backlog`; promotion to `ready-for-dev` deferred to the readiness-gate fix pass. Nothing under `src/` or `test/` is touched by this pass — docs only. | Claude Sonnet 5 |
 | 2026-08-04 | 0.2 | Readiness-gate fix pass (NOT READY on first read with ten blocking findings -> fixed and promoted, same session; TWENTIETH logged readiness-gate session, all twenty NOT READY on first reading and all twenty resolved the same session). Eleven rulings applied, `3-0c/R1`..`3-0c/R11`. **The story SPLIT** (`3-0c/R5`): `3-0c` keeps the contract and its proof and is entirely headless; a new sibling slot, `3-0d-replay-surface-and-live-reload`, takes the operator surface, `user://` persistence and format, `CACHE_MODE_IGNORE`, the live reload trigger and the live smoke — dividing DEBT B along its own stated seam. AC set replaced with FOURTEEN machine-checkable claims about shipped software. "Exactly five channels" is dead: the channel set is DERIVED from `MatchState`'s intake surface by a source scan (`3-0c/R2`), and the gate's intake list was corrected by content — `set_camera_basis` is an eighth intake whose value reaches hashed `velocity`, so it becomes a channel (AC 8). Replay is not a controller swap alone: contact facts originate in the runner from `Area3D` overlaps and raw positions and cannot ride `InputIntent`, so replay suppresses gathering and drains recorded facts into `push_contact` by tick index (`3-0c/R1`, AC 9), with replay's guarantee stated as STATE identity, not visual identity. Injected feature flags become a channel without reopening load-once immutability (`3-0c/R3`, AC 7); the match-start `apply_balance()` becomes reload event #0 (`3-0c/R4`, AC 4). The two unfalsifiable hash-comparison ACs — both pass with `capture()` bodied as `pass` — are REPLACED by one record-then-replay identity test in its own fixture, driving every channel including a mid-run `apply_balance` and pushed contact facts (`3-0c/R6`, AC 10). A FABRICATED QUOTATION attributed to `input_intent.gd`'s header is deleted and the AC re-sourced to the file's real text plus the E3 ordering ruling, both quoted exactly (`3-0c/R7`). The unhashed cross-tick set is corrected from one member to THREE — the vulnerable window, the card containers' contents/order, and `_camera_bases` — each with its soundness argument, pinned so a fourth fails (`3-0c/R8`, AC 11). Placement closed to `src/systems/`, runner-owned, cited to three live `src/state/` guards rather than to the architecture tree, with the argument's limit stated (`3-0c/R9`, AC 12). The architecture doc's X5 section is ruled PRE-CODE TEXT — candidate design, not authority; its scope line is ratified, its controller-swap mechanism becomes the architecture-amendment queue's NINTH member, flushing at the E3 close-out (`3-0c/R10`). Guard corrections (`3-0c/R11`): the seven-`connect_*` count gains its first test (AC 13); the vacuous negative Input-Map scan is replaced by an exact-equality action-set pin (AC 14); the fixture seed is parameterised; "at the same tick it is injected" corrected to "at match start, before the first tick"; the record carries the deck/cost injection ORDER. Dev Notes APPENDED to (all twelve original bullets retained) with the eleven rulings and three content corrections: `log.gd` does not exist in `src/systems/`, the architecture tree's autoload-labelled entries number three not four, and the paraphrased `3-5b/R19` quotation is now quoted exactly. Golden Prediction NONE, now ARGUING both premises (no snapshot key; no seeded-RNG consumer) and stating that the identity fixture is separate so the golden cannot move. Live Smoke NOT REQUIRED with this story's own reason: nothing in it is live-observable. Open Questions section REMOVED — all seven are ruled or re-homed to `3-0d`. Status `backlog` -> `ready-for-dev`; `sprint-status.yaml` updated alongside with the new `3-0d` board slot. Docs only — no `src/`, no `test/`, no `project.godot`; suite not run. | Claude Opus 5 |
+| 2026-08-04 | 0.3 | Dev pass (Claude Opus 5) delivered all fourteen ACs against the readiness-gate-fixed story — see Dev Pass Record above for the suite outcome, the AC 8/AC 9 proof detail, and the exclusion pin holding at three. Golden UNMOVED, `project.godot` byte-identical. **Rebuild note:** the dev pass reported ten mutation proofs verbally, none left an artifact in the tree, and an earlier pass at this record recorded ten DIFFERENT mutations run at the chain under the dev pass's own heading, as if the dev pass had produced them — three ACs (9, 11, 14) ended up with no recorded falling proof at all. Corrected: the table now carries two provenance-tagged sets, the dev pass's own ten as reported and the chain's own ten as measured, with the three covering AC 9/AC 11/AC 14 re-derived at the chain this session and their measured numbers recorded. Four corrections to the pre-dev-pass story text landed in this same commit (`3-0c/R14`, `3-0c/R16`, `3-0c/R18`): the intent-tap seat in Project Structure Notes ("the sample step") corrected to the shipped seat, immediately before `advance()` inside the ticking gate; the per-tick transient exclusion argument in Dev Notes extended with the D5 signal buffers (`SignalQueue._pending` and the five `_queue` references) and their drain contract; the `HeroState.to_snapshot()` TimingWindow count corrected from "seven" to the eight actually listed; and AC 2's non-default `card_mode` fixture value noted as field-shape-only, not a sanction to resolve non-`BASIC` modes. All pre-existing Dev Notes bullets retained. Suite 310/1463 + 18 integration -> 329/1715 + 19 integration (`test_replay_contacts.gd` added). Live Smoke correctly NOT REQUIRED (nothing in this story is live-observable), `R-D6` not re-invoked. Close-out recorded in decision-log. | Claude Sonnet 5 |
