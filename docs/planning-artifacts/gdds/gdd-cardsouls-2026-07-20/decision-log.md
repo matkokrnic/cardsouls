@@ -3209,3 +3209,297 @@ tests, `project.godot`, six `.uid` siblings), `docs(3-5a): dev pass record + smo
 this story's Dev Pass Record, the AC5/Golden-Prediction/Agent-Model-Used corrections, the supersession
 item, the Smoke Record, and the Change Log row), `board: promote 3-5a to done` (`3fc584c`), and this
 entry. No push -- the operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-04 -- Story 3-5b readiness gate
+
+Readiness gate on `3-5b-draw-delay-exhaustion-reshuffle.md` (docs-only, report-only, run against
+`2d944b6`) returned **NOT READY** on first read, with eight blocking findings. That makes
+**19 of 19**: nineteen logged readiness-gate sessions in this log (seven E1, six E2, then 3-1, 3-4,
+3-2, 3-3, 3-5a and now 3-5b), all nineteen NOT READY on first reading, all nineteen fixed and
+promoted in the same session -- no exception in either direction. Eighteen rulings, `3-5b/R1`..
+`3-5b/R18`, applied to the story file and the board the same session. `3-5b/R17` was ruled after the
+report was delivered, closing the one gap the report named and declined to close on its own
+authority; `3-5b/R18` was ruled after that, correcting R17. Both are folded into this entry rather
+than appended as later sessions, because both belong to this gate.
+
+**Baseline measured green before the first edit** (docs-only pass; no code touched): state harness
+287 tests / 1297 assertions / 0 failed; 17 integration files, each individually PASS; golden unmoved
+at `c4b9f897138a2b36dbce11f939b2892379919909c17df1696cde24a75c070e2e`; `project.godot` SHA256
+`8879DE490EDDA78051595F189FB9BB6F2E75384FEBAFF142C8958EC107970004`, matching `3-5/R7`'s constant and
+unchanged by this pass; `HEAD` `2d944b6`, clean tree, `0 0` divergence against `origin/main`, no
+Godot process running at start or finish.
+
+**Two premise corrections to the gate brief itself, recorded because the brief was wrong and the
+repo won.** (i) The brief expected this file to lack a Golden Prediction and a Live Smoke section,
+"reported on eight consecutive stories". It has BOTH; only the Golden Prediction's content was
+deferred ("TBD at this story's own readiness gate"), correctly, under the permanent 3-3 rule that a
+baseline is re-derived at gate time and never copied forward. (ii) The brief called this Set B
+lineage. It is not: the file was authored 2026-08-04 at the 3-5 gate. It does, however, exhibit the
+Set B failure mode one step removed -- it was written BEFORE 3-5a's dev pass landed later the same
+day, so every claim it made about 3-5a was a forward prediction, and finding `3-5b/R1` below is one
+of those predictions turning out false.
+
+**`3-5b/R1` -- REFRAME: deck exhaustion is ALREADY REACHABLE in shipped code, and the story's central
+premise was false.** Verified by content: `MatchState._resolve_basic_cast` draws a replacement on
+EVERY cast (`if not player.deck.is_empty(): player.hand.add(player.deck.draw_top())`), so the pile
+drains one card per cast regardless of any delay. With the authored config (`deck_size` 20,
+`hand_size` 4) the deal leaves sixteen in the pile, and the SEVENTEENTH cast in a round hits the
+`is_empty()` floor: no replacement is drawn, the hand shrinks below four permanently, and nothing
+signals it. 3-5b therefore REPLACES a shipped, silent floor behaviour; it does not make exhaustion
+reachable. The "sixteen casts" arithmetic the file carried is correct; the conclusion drawn from it
+was not. 3-5a's own delivered code says so in two places -- `_resolve_basic_cast`: "with no reshuffle
+in this story a pile CAN RUN DOWN", and `discard_pile.gd`: "the deck only ever shrinks within one
+round". **SUPERSESSION, formal:** the fence rationale in `test/state/test_deck_and_hand.gd`
+(`test_no_reshuffle_exhaustion_or_draw_delay_surface_ships`), which reads "3-5a draws the replacement
+INSTANTLY, so a pile still cannot run out inside a round and exhaustion is still unreachable. The
+delayed draw is what makes it reachable", is SUPERSEDED as of this entry. Per the standing rule
+(`3-5/R4`) the closed story's file is not reopened; this entry is the record. The fence's mechanical
+effect is unaffected and it stays green until 3-5b lands.
+
+**`3-5b/R2` -- Death: the window TICKS OUT, the DELIVERY is dropped. `3-5/R8` is CLOSED.** No
+early-stop path ships; 1-9/R3 stays locked ("the in-flight window is NOT stopped or shortened here --
+it keeps ticking to expiry by design ... it simply resolves to nothing", `match_state.gd`). The
+1-9/R1 fact-drop idiom is applied literally: the DEAD / round-over check happens at DELIVERY time and
+discards the replacement. This satisfies BOTH the 3-5 gate's blocking finding 6 (which stated the
+no-cancel outcome as a requirement) and the operator's sealed intent recorded in `3-5/R8` (which
+recorded the same question as OPEN, owner 3-5b) -- the intent was about the OUTCOME, that a corpse is
+not handed a card, not about the MECHANISM. The log's self-contradiction between those two entries is
+resolved BY THIS RULING, not by editing either of them (append-only convention). `3-5/R8` is closed.
+Honest note carried into the story: because DEAD and `_round_over` are a total coupling (`3-5/R6`)
+and step 1b returns before step 2, a dead player's window never ticks and the delivery never runs, so
+this guard is unreachable in natural play -- defense in depth in the same family as the DEAD branches
+at steps 3, 4, 5 and 6, proven non-vacuous by the repo's forced-DEAD idiom.
+
+**`3-5b/R3` -- the pending-draw timer ticks at STEP 2**, beside `hero.tick_timers()` /
+`stamina.tick_timers()`, and therefore inherits "does not tick on a frozen tick" for free, because
+step 1b (`if _round_over: ... return`) returns before step 2. This is made an EXPLICIT acceptance
+criterion rather than silently inherited.
+
+**`3-5b/R4` -- the debug reset KILLS a pending draw; the card is not restored.** `_apply_debug_reset`
+/ `_deal_player` already re-lay the full injected composition and clear the discard, so conservation
+is restored by construction and 3-3's AC 9 post-reset count pin stays green with no special case.
+
+**`3-5b/R5` -- reshuffle is LAZY, at draw time.** The seat is the draw. An eager reshuffle at
+`deck_size == 0` would open the vulnerable window on a cast that does not draw, and would introduce a
+second trigger point.
+
+**Interaction of `3-5b/R3` and `3-5b/R5`, resolved rather than left latent.** Ticking the window at
+step 2 and reshuffling lazily "at draw time" would put RNG consumption at step 2 on a naive reading,
+creating the second RNG seat `3-5b/R5` and F2 both forbid. Ruled: the window is ADVANCED at step 2;
+the DELIVERY -- the draw, and therefore any reshuffle -- happens at STEP 6, inside the seat
+`_deal_pending_decks()` already occupies. This is the shipped idiom, not a compromise:
+`StaminaPool._regen_delay` is already ticked at step 2 and READ at step 5.
+
+**`3-5b/R6` -- deck AND discard both empty is a NO-OP DEGRADE; NO `Invariant.check(false)` ships on
+that path.** Reachability depends on authored balance numbers, and a crash path reachable from
+authored data is not acceptable. The draw resolves to nothing, the owed count is consumed, the hand
+stays short, the window does not open. Gets its own headless test constructing the case directly.
+
+**`3-5b/R7` -- the vulnerable window SHIPS, with an authored duration and NO mechanical cost; open
+decision (b) stays OPEN.** The pre-gate AC 5 offered a false dilemma -- author the price, or author
+nothing. A `TimingWindow` cannot exist without a duration, and `stories-manual-e3.md` E3.S5b item 4
+requires the window open "for the authored ticks", so the field is authored either way. Decision (b)
+concerns the window's PRICE, not its existence. Authored value: `reshuffle_vulnerable_window_seconds
+= 1.5` (the GDD's "~1.5-2s TBD" range). The mechanism that keeps (b) genuinely open is a NEGATIVE
+GUARD required of the dev pass: nothing under `src/` may READ that window except the code that starts
+it and the code that emits its event. If nothing reads it, nothing has priced it.
+
+**`3-5b/R8` -- the snapshot gains EXACTLY TWO keys: `pending_draw` and `pending_draw_owed`.** One
+timer plus a debt counter: on expiry it draws ONE card and restarts itself while `owed > 0`.
+`hand_size` is permitted to reach 0. Both keys cross tick boundaries, which is why they are hashed --
+the `_deck_deal_pending` exclusion precedent is available only to state consumed inside the same
+`advance()` that armed it, and a pending draw that never crosses a tick is an instant draw; the live
+precedent is `StaminaPool.to_snapshot()`'s `"regen_delay": _regen_delay.to_snapshot()`. **NO new
+rejection reason:** a cast is not gated on a pending draw, mana stays the only throttle, and a second
+throttle is not invented here.
+
+**`3-5b/R9` -- the vulnerable window belongs to the RESHUFFLING PLAYER ONLY**, payload carries that
+player's slot index, and it is mechanically inert while (b) stands -- so the block / roll / iframe
+interaction question does not arise and must not be answered speculatively.
+
+**`3-5b/R10` -- `draw_replacement_delay_seconds = 1.0`, authored, with a bespoke `> 0.0` bound.** The
+value is an authored PLACEHOLDER; the feel judgement moves to E4/E5. The AC requires the AUTHORED
+VALUE, not merely the field's existence, because `field in config` and the generic `>= 0.0` loop both
+pass on the script default of `0.0` -- which would ship the story invisible in the build and recreate
+exactly the dead field `balance_config.gd`'s reservation comment was written to prevent. Mechanism:
+the field joins `E1_BALANCE_FIELDS` under the existing `>= 0.0` loop (no bespoke non-negativity audit
+added), and a BESPOKE `> 0.0` authoring bound lands in `test_balance_authoring.gd`, the
+`deck_size`/`hand_size` precedent. **Consequence stated openly:** that bound narrows the manual's
+"zero means instant" out of the SHIPPED config until the E4/E5 feel pass, at which point relaxing it
+is a one-line test edit. The MECHANISM must still handle a zero-tick delay correctly, proven against
+an in-test `BalanceConfig`, never against the authored `.tres` -- so BC/R3's isolation of authored
+balance from the unit suite is preserved. **The golden fixture must author a NONZERO value**, per the
+standing lesson that a fixture which does not author its own content measures a false non-move.
+
+**`3-5b/R11` -- Live Smoke NOT REQUIRED, reason CORRECTED; R-D6 not re-invoked; the S1/S2 asterisk
+CARRIED FORWARD.** The story's stated reason (reaching exhaustion needs an unrealistic grind) is not
+the binding one and rested on the premise `3-5b/R1` just corrected. The true reason is 3-3's: this
+story ships NO player-facing surface. Verified by content: `hud_root.gd` renders the card row from
+"the presentation-local constant 4 (2-5/R1) ... no read of `PlayerState.hand`", so a delayed
+replacement is invisible; the deck readout is the literal placeholder
+`_make_placeholder_panel("DeckIndicator", "DECK -- / RESH")`, wired to nothing; and the vulnerable
+window's renderer is 3-6, which is exactly why the locked order is `3-5a -> 3-5b -> 3-0c -> 3-6`.
+3-5a's smoke already recorded this as finding S5. **The R-D6 smoke acceptance is NOT re-invoked by
+3-5b** -- it was re-invoked and SPENT at 3-5a and remains 3-6's. **Therefore the S1/S2 asterisk is
+NOT spent on a smoke that will not happen:** the melee/mana retune was deliberately skipped (operator
+ruling, 4 Aug) because the loop -- buildup -> bluff -> payoff -- does not yet exist; only buildup
+does, there is no bluff (no hidden cards) and no payoff (effects do nothing, `card_cast_resolved` has
+no listener, no `CardEffect` consumer exists in `src/`). The mana rate is known too fast and the melee
+share known too large, both recorded in the operator's own playtest log. That asterisk is CARRIED
+FORWARD to 3-6 and to the E4/E5 balance pass, and any future conclusion about exhaustion reachability
+drawn from a LIVE session carries it -- casts per round is a direct function of mana income.
+
+**`3-5b/R12` -- the story carries a FENCE INVENTORY TABLE with a per-guard verdict.** Under `src/`,
+the `reshuffle` / `vulnerab` / `draw_replacement` bans DIE (3-5b is their legitimate owner) while
+**`exhaust` REMAINS BANNED** -- exhaustion is expressible as `is_empty()`, which is already how 3-5a
+expresses it. The `CardEffect` guard SURVIVES untouched, with a correction of record: `CardEffect` is
+NOT banned from `src/` at all -- the class ships (`class_name CardEffect`) and `card_data.gd` exports
+it twice; the fence bans a CONSUMER and explicitly excludes `card_effect.gd`,
+`card_cast_condition.gd` and `card_data.gd`. The Input Map action-name ban and its positive twin both
+SURVIVE (3-5b adds no actions and does not touch `project.godot`). **Two fences neither the story nor
+the gate brief had named** are inventoried here: the `Deck`/`Hand` METHOD-NAME fence
+(`test_hand_and_deck_expose_no_play_or_discard_path`, banning `discard`/`play`/`reshuffle`/`refill`/
+`exhaust` as method names) STAYS GREEN via the no-new-method route -- `set_contents(discard.to_array())`
++ `shuffle_with_rng(_rng)` + `discard.clear()`; and
+`test_event_bus_still_carries_exactly_the_two_declared_signals` is DELIBERATELY UPDATED from two
+signals to three, that test existing precisely so this cannot happen quietly. Any narrowed guard must
+RETAIN both its vacuity assertion (`scanned > 0`) and its regex self-test, so a typo cannot silently
+disarm a fence that has just been narrowed.
+
+**`3-5b/R13` -- new ACs for everything the gate found uncovered, plus a REFLECTIVE completeness
+guard.** Uncovered and now covered: debug reset versus a pending draw; frozen-tick behaviour; death;
+the reshuffle trigger point; the both-empty case; the conservation property gaining a FOURTH term
+(in-flight); and a HEADLESS integration proof of exhaustion, reshuffle and both-empty -- required,
+because live observation can reach none of it (`3-5b/R11`). Separately: today `E1_BALANCE_FIELDS` is
+a literal `const Array[String]` and `test_balance_config.gd::test_conversion_covers_every_seconds_field`
+is a literal dictionary of nine fields, so a `*_seconds` field added to `BalanceConfig` and forgotten
+in either place fails NOTHING. A reflective guard over `BalanceConfig.get_property_list()` must land,
+asserting every declared numeric property appears in `E1_BALANCE_FIELDS` and every `*_seconds`
+property has a derived counterpart from `BalanceTicks.from_config()`. 3-5b adds two fields and is the
+forcing point. Mutation-proven.
+
+**`3-5b/R14` -- the 3-0c obligation is EXTENDED to the injected COST MAP.** The log previously
+recorded only that the injected deck COMPOSITION must enter the replay record alongside seed, intents
+and reload events (Session 2026-08-03, Story 3-3 readiness gate; restated at the 3-5 gate). The cost
+map (`inject_card_costs`, 3-5a AC4) is in the identical position -- injected once at match start,
+excluded from `to_snapshot()`, and outcome-changing -- so a replay against a re-priced card set
+diverges silently, which is the exact failure the composition obligation exists to prevent. The
+obligation now covers BOTH. The `3-0c` story file is deliberately NOT edited (it does not exist yet,
+per E3-P/R3); this entry is the record its own gate picks up. Recorded alongside: 3-5b itself adds NO
+further replay-relevant injected state -- its two new values are `BalanceConfig` fields, already
+covered by DEBT B's reload-events-in-the-stream half.
+
+**`3-5b/R15` -- Project Structure Notes corrected to `src/systems/event_bus.gd`.** The pre-gate text
+named `src/main/event_bus.gd`, which does not exist; verified by content, `src/systems/event_bus.gd`
+is the only `event_bus.gd` in the tree and is the path the fence test loads
+(`load("res://src/systems/event_bus.gd")`). This mattered because Project Structure Notes is the one
+section that tells a dev pass where new code goes, and this was its only new-file claim.
+
+**`3-5b/R16` -- Golden Prediction: MOVES, ONE re-baseline, FOUR separately named causes**, replacing
+"TBD at this story's own readiness gate". Baseline re-derived at write time from the `GOLDEN` constant
+in `test/state/test_determinism.gd`: `c4b9f897138a2b36dbce11f939b2892379919909c17df1696cde24a75c070e2e`.
+**C1**, the `pending_draw` snapshot key: MOVER, measured by adding the key alone, all-zero,
+unconditional, no behaviour change, fixture delay 0.0 (the M1 shape from `3-5/R2`); reverse by
+removing that key only and expecting the exact baseline back. **C2**, the vulnerable-window snapshot
+key: MOVER, added on top of C1, still all-zero; reverse by removing only C2's key and expecting C1's
+hash bit-identically -- ONE KEY AT A TIME is what separates C1 from C2. **C3**, the authored delay, in
+two steps isolating the SEAT from its CONTENT (the M2 precedent): (a) fixture at 0.0 reproduces
+C1+C2's hash BIT-IDENTICALLY, (b) fixture at a nonzero value still running at the hashed tick moves it
+again, because that tick's `hand_size` is one LOWER and `deck_size` one HIGHER -- the fixture casts at
+t22 and hashes at t24. **C4**, `rng_state`: NON-MOVER -- `_golden_config` authors `deck_size` 17 /
+`hand_size` 9, leaving eight cards per pile against one recorded cast, so the fixture cannot reach
+exhaustion, `shuffle_with_rng` is never re-entered, and `draw_top()` consumes no RNG whenever it
+fires; forward half is keeping `test_the_recorded_cast_consumes_no_rng` green, and the REVERSE half is
+required -- prove a reshuffle DOES move `rng_state` in a SEPARATE, NON-GOLDEN fixture driven to
+exhaustion, without which C4 is a vacuous claim. **The golden sequence is NOT widened to reach
+exhaustion**; exhaustion, reshuffle and both-empty are proven in dedicated headless tests instead.
+Recorded for the dev pass because it is easy to miss: a nonzero fixture delay BREAKS three existing
+non-golden assertions that pin the instant refill by name (`test_golden_sequence_exercises_the_recorded
+_cast`'s "INSTANT refill: the hand is back to full" and its deck count, and the same two counts in
+`test_golden_sequence_exercises_deck_shuffle_and_hand_fill`); those must be rewritten and green BEFORE
+the re-baseline is taken.
+
+**`3-5b/R17` -- F2 BECOMES MACHINE-CHECKED; the second-RNG-seat gap this session's own report named
+is CLOSED.** The gate reported that AC 5's "no second RNG seat / F2 stays provable by inspection"
+clause had NO machine guard, and deliberately did not invent one, because adding an architecture
+invariant is a design decision. Operator ruling: **the guard SHIPS.** Shape -- a source scan over
+`src/` asserting that `shuffle_with_rng(` appears in EXACTLY TWO places: its definition in
+`src/state/deck.gd`, and exactly ONE call site, in `src/state/match_state.gd`. Measured at gate time,
+those are precisely the two occurrences that exist (`deck.gd`: `func shuffle_with_rng(rng:
+RandomNumberGenerator) -> void:`; `match_state.gd`, inside `_deal_player`:
+`player.deck.shuffle_with_rng(_rng)`). Mutation-proven in the FALLING direction -- adding a second
+call site anywhere under `src/` must make it FAIL -- because a guard that only confirms the current
+count is one refactor away from vacuous; and carrying the same `scanned > 0` vacuity assertion the
+other source scans carry. **Home:** `test/state/test_architecture_invariants.gd`. The repo makes that
+choice obvious rather than free: that file already declares itself "executable guards for the
+load-bearing architectural invariants (F1, D3a, D3b)" and already houses every later
+architecture-invariant source scan (root-motion, `CardData`, implicit-global-RNG / `CardDatabase`,
+the 3-5a mode-select scope). Its header enumeration is updated to name F2.
+
+**Why 3-5b is F2's forcing point, recorded so the timing is not read as arbitrary.** F2 -- "the
+seeded RNG is consumed only inside `advance()`" -- is cited as a binding contract by 3-3 (AC 7),
+3-5a, and this story (AC 5), and has been enforced by REVIEW ONLY for all three. The nearest existing
+guard, `test_state_layer_has_no_nondeterministic_source` (D3(b)/A2) plus its 3-3 extension, bans the
+bare `randf`/`randi` family and the implicit-global-RNG collection APIs inside `src/state/` -- it says
+nothing about a SECOND SEEDED SEAT, so nothing in the suite would fail today if `_rng` were consumed
+from a second call site. Until now that was theoretical: only the one-shot deal consumed the
+generator. 3-5b's lazy reshuffle (`3-5b/R5`) is the first mechanism that makes a second seat a
+natural thing to reach for -- and `3-5b/R5`'s own step-2/step-6 split exists precisely because the
+naive reading creates one. The story that makes an invariant breakable is the story that should
+machine-check it. This ruling SUPERSEDES the "uncovered gap" finding recorded in this same session's
+gate report; the report is not edited, this entry is the record.
+
+**`3-5b/R18` -- `3-5b/R17`'s two-occurrence form was SELF-CONTRADICTORY; CORRECTED, not relaxed.**
+R17 is left standing above exactly as ruled (append-only); this entry is its correction. **The
+defect:** R17 measured `shuffle_with_rng(` at two occurrences under `src/` and pinned that number,
+but the measurement was taken PRE-IMPLEMENTATION. `3-5b`'s own AC 5 specifies a reshuffle that
+shuffles -- `set_contents(discard.to_array())` + a shuffle + `discard.clear()` -- so once this story
+lands, `_deal_player`'s existing call plus the reshuffle's call make the count THREE. A guard pinned
+at two would have FAILED ON ITS OWN STORY. Neither the ruling nor the gate that produced it caught
+this; the count was measured against today's `src/` and pinned as-is, which is exactly the class of
+error this project's "measure in both directions" discipline exists to catch, applied here to a
+count instead of a hash.
+
+**The correction, and why it is not simply "pin it at three."** Relaxing the number to three would
+concede the SECOND SEAT the guard exists to prevent -- the guard would then permit precisely the
+thing F2 forbids, while still passing. Ruled instead: **remove the second CALL SITE while keeping
+both shuffle OCCASIONS.** `src/state/match_state.gd` gains ONE private shuffle helper; the
+match-start/debug-reset deal (`_deal_player`) and AC 5's reshuffle both route through it, and it is
+the only thing in `src/` that calls `Deck.shuffle_with_rng()`. The guard then stands as R17 wrote it
+-- definition plus exactly ONE caller -- and "the seeded RNG is consumed in one seat" becomes
+LITERALLY true rather than approximately true, which is a stronger property than the one R17 set out
+to protect. The AC's count claim is restated as the POST-LANDING count, since the same scan passes
+against today's `src/` for a different reason (one occasion, one call site) and so proves nothing if
+run before the work starts.
+
+**ESCAPE HATCH, ruled explicitly because a guard that forces bad code is worse than no guard.** If
+the shared helper genuinely contorts the implementation -- if the two paths turn out to differ by
+more than which array they shuffle -- the dev pass **STOPS AND ASKS** rather than quietly adding a
+second call site and relaxing the AC. A second seeded seat is a DESIGN change and is the operator's
+call, not an implementation detail. AC 5 and AC 16 both carry this in the story file, along with a
+Dev Notes bullet recording the defect so a later reader does not rediscover it as a fresh finding.
+
+**Architecture-amendment queue: the SEVENTH member's conditional clause FIRES on this story** -- "if a
+vulnerable-window signal lands with 3-5, the `EventBus` header and the seam registry both need
+reconciling against the bus's enumerated signal set" (Session 2026-08-03, Story 3-3 readiness gate
+close-out; re-attached to `3-5b` at the 3-5 gate). `3-5b`'s AC 6 lands that signal. RECORDED, not
+flushed: the flush point remains the E3 close-out, unchanged.
+
+**Process note, recorded because it cost real time and is repeatable.** During the gate's baseline
+measurement an integration invocation OMITTED `--script` (`godot --headless --path . <file>` instead
+of `godot --headless --path . --script res://test/integration/<file>.gd`). Godot treated the argument
+as a scene path and HUNG; the process ran about ten minutes before it was noticed, and the enclosing
+loop kept respawning replacements as each was killed. Fixed by stopping the loop first, then the
+processes, then rerunning with `--script` -- 17/17 PASS. `test/run_all.sh` has always used `--script`;
+the error was in an ad-hoc PowerShell transcription of it. Any future gate running integration tests
+individually must include `--script`.
+
+**Promotion.** All eighteen rulings applied to `3-5b` the same session; Status and board promoted
+`backlog` -> `ready-for-dev`, `sprint-status.yaml` updated alongside in the same commit. Docs-only
+pass -- suite run once for the baseline measurement above, no code touched, `project.godot` untouched.
+Next story in the locked order after 3-5b: `3-0c`, then `3-6`.
+
+**Close-out.** Commit chain: `docs(stories): 3-5b gate fixes + promote to ready-for-dev` (the story
+file and `sprint-status.yaml`) and this entry. No push -- the operator reviews the log and pushes.
