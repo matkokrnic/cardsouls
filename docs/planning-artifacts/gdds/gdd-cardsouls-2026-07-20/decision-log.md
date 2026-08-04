@@ -3503,3 +3503,111 @@ Next story in the locked order after 3-5b: `3-0c`, then `3-6`.
 
 **Close-out.** Commit chain: `docs(stories): 3-5b gate fixes + promote to ready-for-dev` (the story
 file and `sprint-status.yaml`) and this entry. No push -- the operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-04 -- 3-5b close-out
+
+Continues this story's label series (`3-5b/R1`..`R18` above) with rulings `3-5b/R19`..`R21`, recorded
+after the dev pass (Claude Opus 5) landed and the commit chain (Claude Sonnet 5) verified and shipped
+it. Verification this session: `HEAD` started at `f80cb05`, matching `origin/main`, 0/0 divergence; no
+Godot process was found running before the chain touched anything; the working tree matched the dev
+pass's expected 14-modified/2-untracked set exactly; `project.godot`'s diff was EMPTY and its SHA256
+matched the carried constant `8879DE490EDDA78051595F189FB9BB6F2E75384FEBAFF142C8958EC107970004`
+exactly, unchanged from the `3-5a` chain. State harness 310 tests / 1463 assertions / 0 failed, all
+18 integration files PASS individually (each invocation including `--script`, per the process note two
+sessions ago), zero `SCRIPT ERROR` / `Parse Error` / `INVARIANT VIOLATED` lines, matching the dev
+pass's own recorded numbers exactly -- nothing was re-derived, only verified. One headless editor scan
+generated exactly the two `.uid` files owed by the two new `.gd` files
+(`test/state/test_draw_delay_and_reshuffle.gd.uid`, `test/integration/test_deck_reshuffle.gd.uid`) and
+nothing else -- no `project.godot` reorder, no deleted engine-default setting, no stray uid attribute,
+no scene renormalization.
+
+**Suite: 287 tests / 1297 assertions + 17 integration -> 310 tests / 1463 assertions + 18 integration**
+(`test_deck_reshuffle.gd` added). **Golden re-baselined the SEVENTH time**, `c4b9f897138a2b36dbce11f939
+b2892379919909c17df1696cde24a75c070e2e` -> `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39
+fa322`, four causes measured one edit at a time, each reproduced in both directions: **C1** (the
+`pending_draw` snapshot key, added alone at all-zero, mechanism still inert) `c4b9f897` -> `9bcfcd7a`,
+reverse by removing the key reproduced `c4b9f897` exactly; **C2** (the `pending_draw_owed` key, added
+on top of C1, still all-zero) `9bcfcd7a` -> `b5b4da8d`, reverse by removing only C2's key reproduced
+`9bcfcd7a` exactly; **C3(a)** (the mechanism -- step-2 tick, step-6 delivery, debt increment, lazy
+reshuffle, vulnerable-window signal -- fully re-enabled with the fixture still priced `0.0`) MEASURED
+UNMOVED, still `b5b4da8d`, bit-identical to C2, proving the mechanism structurally incapable of moving
+the hash on its own; **C3(b)** (the fixture's `draw_replacement_delay_seconds` priced at a nonzero
+coverage value, `DRAW_DELAY_TICKS` 11, so the t22 cast's replacement is still in flight at the t24
+hash) `b5b4da8d` -> `40eb5554`, the ONE behavioural mover and the final value, reverse by re-pricing the
+fixture delay back to `0.0` reproduced `b5b4da8d` exactly. **C4**, `rng_state`: predicted a non-mover,
+measured a non-mover in BOTH directions -- forward, `test_the_recorded_cast_consumes_no_rng` stays
+green because `draw_top()` consumes nothing whether it fires on the cast tick or eleven ticks later,
+and `_golden_config` leaves eight cards per pile against one recorded cast so no reshuffle is reachable
+on this fixture; reverse, a reshuffle DOES move `rng_state`, measured in two separate non-golden
+fixtures driven to exhaustion (`test_draw_delay_and_reshuffle.gd`, and `test/integration
+/test_deck_reshuffle.gd` on the AUTHORED `data/balance/balance_config.tres` values).
+
+**`3-5b/R19` -- the Golden Prediction's C2 caption was WRONG and is corrected.** `3-5b/R16` captioned
+C2 "the vulnerable-window snapshot key", but `3-5b/R8` and AC 4 rule the snapshot gains EXACTLY TWO
+keys and name them both (`pending_draw`, `pending_draw_owed`), and AC 2 rules that nothing under `src/`
+may READ the vulnerable window -- `to_snapshot()` is a read. C2's real subject is `pending_draw_owed`;
+everything else in C2's text describes it exactly (added on top of C1, still all-zero, no behaviour
+change, reversible to C1 bit-identically, "ONE KEY AT A TIME is what separates C1 from C2"), so all
+four causes are real and measured; only the caption is wrong. The dev pass followed the ACs and
+reported the discrepancy rather than resolving it silently, which is correct. **CARRIED CONSEQUENCE,
+stated as a standing obligation rather than an observation:** the vulnerable window is CROSS-TICK STATE
+THAT IS NOT HASHED. That is safe only because nothing reads it -- state no code consults cannot change
+an outcome or desync a replay -- and AC 2's guard is what keeps that premise true. **The first story
+that gives the window a mechanical cost MUST bring it into the snapshot in the same pass.**
+
+**`3-5b/R20` -- named obligation for `3-6`.** The window is today WRITE-ONLY state: ticked, never read.
+`3-6` must decide EXPLICITLY whether it renders from the `EventBus` event with its own
+presentation-local timer (the window stays unread and AC 2's guard stays green) or starts reading state
+-- the second automatically pulls the window into the snapshot and creates a new golden cause. This is
+`3-6`'s to answer at its own gate, not to discover during implementation.
+
+**`3-5b/R21` -- AC 10 is stronger than `3-5b/R6` claimed.** R6 said reachability of the both-empty case
+depends on authored balance numbers. It does not: conservation makes it unreachable at ANY authored
+numbers, since both piles empty would require the hand to hold the whole composition, which needs
+successful draws to exceed casts. The no-op degrade therefore ships as DEFENSE IN DEPTH in the same
+family as AC 7's DEAD check, constructed directly by its test rather than driven to. No code change;
+the claim in the record is corrected.
+
+**Two PRE-EXISTING defects found by AC 13's reflective guard on its first run**, recorded as their own
+finding and NOT folded into `3-5b`'s scope: `attack_stamina_cost` (shipped by the stamina-cost
+corrective pass) and `block_facing_arc_degrees` (shipped by `1-8`) had never been added to the
+hand-maintained `E1_BALANCE_FIELDS`, so neither was covered by the non-negativity audit -- for four and
+eleven stories respectively. Both repaired in this story's commit. This is the guard doing on its first
+run exactly what it was ruled in for.
+
+**A blind spot in this story's OWN AC 2 guard**, found by mutation M-J: the pattern was anchored on
+`.vulnerable_window` (a leading dot), so it saw every read through a handle but NOT an unqualified
+self-read inside `player_state.gd`, where the field is named bare. A second pattern banning
+`vulnerable_window.(is_running|remaining_ticks|to_snapshot)` outright, dot or no dot, now closes it;
+M-J was re-run and the strengthened guard falls correctly.
+
+**A FOURTH assertion broken by the nonzero fixture delay**, beyond the three `3-5b/R16` named:
+`test_two_matches_with_a_populated_deck_hash_identically` carried the same `DECK_SIZE - HAND_SIZE - 1`
+sanity count as the other three and was rewritten alongside them, now reading `DECK_SIZE - HAND_SIZE`
+("P1's t22 replacement is still owed, not yet drawn").
+
+**Two test RENAMES**, old names recorded verbatim so the Fence Inventory stays greppable:
+`test_no_reshuffle_exhaustion_or_draw_delay_surface_ships` -> `test_no_deck_exhaustion_surface_ships`
+(the ban on `reshuffle`/`vulnerab`/`draw_replacement` dies, `exhaust` survives as the sole remaining
+token); `test_event_bus_still_carries_exactly_the_two_declared_signals` ->
+`test_event_bus_still_carries_exactly_the_three_declared_signals` (AC 6's third bus signal).
+
+**Process note.** A SECOND Godot hang in this story's cycle, this one from `$ErrorActionPreference =
+"Stop"` aborting on Godot's stderr inside the mutation harness (the first, two sessions ago, was an
+omitted `--script` at the gate). Both were noticed and cleaned up by the agent; recorded so the pattern
+is visible -- a future harness invocation should not set `-Stop` around a Godot subprocess call.
+
+**Live Smoke NOT REQUIRED and R-D6 NOT re-invoked** -- both remain `3-6`'s, per the story's own
+readiness-gate ruling (no player-facing surface). `docs/playtest-log.md` is untouched. The S1/S2
+melee/mana asterisk (`3-4` close-out) is carried forward to `3-6` and the E4/E5 balance pass rather
+than spent here.
+
+**Board: done.** Next story in the locked order: `3-0c`, then `3-6`.
+
+**Close-out.** Commit chain: `story 3-5b: draw-replacement delay, deck exhaustion, reshuffle,
+vulnerable window` (`b9692c4`, code, tests, `data/balance/balance_config.tres`, two `.uid` siblings),
+`docs(3-5b): dev pass record` (`434c9f2`, the story's own Dev Pass Record), `board: promote
+3-5b-draw-delay-exhaustion-reshuffle to done (review passed)` (`18c9e9d`), and this entry. No push --
+the operator reviews the log and pushes.
