@@ -168,23 +168,42 @@ flag toggles cleanly in both directions, and both paths are asserted headless.
 
 ---
 
-## E3.S5 — Card-mode selection input and Basic (Mode ①) resolution
+## E3.S5a — Card-mode selection input and Basic (Mode ①) resolution
 
 **Depends on:** E3.S3, E3.S4.
 **Read first:** GDD `[NOTE FOR DESIGNER]` *Card-mode selection UX — open, high P4 relevance*;
 architecture Novel Pattern 6.
 
-> **Revisit note.** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
-> This is the story most likely to be rewritten. Whether a real-time mode selection is viable at all
-> depends on how much attention the melee layer leaves free, which the first playtest measures.
+> **Revisit note.** The E3 revisit gate RAN 2026-07-31 (decision-log Session 2026-07-31 — E3 revisit
+> gate (outcome), E3-RG/R1-R12) and this section's own readiness gate RAN 2026-08-04 (decision-log
+> Session 2026-08-04 — Story 3-5 readiness gate). "Confirm or amend before implementing" no longer
+> applies to this section — both gates have already run and their outcomes are recorded in
+> `decision-log.md`. Whether a real-time mode selection is viable at all under the full mode set still
+> depends on how much attention the melee layer leaves free; that question is not settled by either
+> gate and its forcing point is E5, when the additional modes land (only Mode ① ships in E3).
+>
+> **Split note (2026-08-04).** This section was `E3.S5` until this story's own readiness gate split it
+> into E3.S5a (THE TRIGGER — this section) and E3.S5b (WHAT THE TRIGGER MAKES REACHABLE, below), on
+> the 3-3 gate's ruling that discard/exhaustion/reshuffle/vulnerable-window "move to 3-5 together with
+> their trigger — not split from it." That ruling is honoured, not overturned: E3.S5b lands after
+> E3.S5a's trigger exists. See `decision-log.md` Session 2026-08-04 — Story 3-5 readiness gate.
+>
+> **Amended 2026-08-04.** Items 1 and 2 below carried three defects forward from the pre-gate story
+> text into this manual section: item 1 named a staging verb that does not ship this story (the pitch
+> zone is an E6 flag and is off; 3-5a's AC12 deletes the reserved action as unconsumed, on the
+> retired-`pose_id` precedent); item 2 said card actions are ingested at `advance()` step 1, when they
+> are READ at step 6 (step 1 ingests only the debug reset); and item 2 named a guard helper,
+> `check_invariant`, that names no real symbol (the shipped helper is `Invariant.check`). Corrected
+> below so this manual does not reseed the same defects at the next gate.
 
-1. Extend `InputIntent` with the card fields (selected hand slot, selected mode, play/stage/cancel
+1. Extend `InputIntent` with the card fields (selected hand slot, selected mode, play/cancel
    actions) and produce them in the controllers only. Choose **one** provisional mode-select scheme
    (radial, hold-modifier + slot, or per-mode bind) and implement it as the controller's concern, so
    swapping schemes touches `src/controllers/` and nothing else.
-2. Ingest card actions in `advance()` step 1 and resolve them in step 6, through the `resolve()`
-   dispatch of Novel Pattern 6. `ModeKind.BASIC` resolves; `UNBLOCKABLE_INIT`,
-   `UNBLOCKABLE_DEFENSE`, and `PITCH` remain stubs guarded by `check_invariant` / feature flag.
+2. Card actions are READ at step 6 of `advance()` — not ingested at step 1, which ingests only the
+   debug reset — and resolved there through the `resolve()` dispatch of Novel Pattern 6.
+   `ModeKind.BASIC` resolves; `UNBLOCKABLE_INIT`, `UNBLOCKABLE_DEFENSE`, and `PITCH` remain stubs
+   guarded by `Invariant.check` / feature flag.
 3. Gate every cast through `CardCastCondition` evaluated against `PlayerState` — never an inline mana
    comparison at the call site. With orbs flagged off, a condition's orb costs degrade to
    mana-only, which is the documented graceful-degradation example.
@@ -198,6 +217,41 @@ architecture Novel Pattern 6.
 **Exit criterion.** A player selects a card and plays it in Mode ① under real-time pressure, mana is
 paid through `CardCastCondition`, the card is discarded and replaced, and the E5/E6 modes remain
 guarded stubs.
+
+---
+
+## E3.S5b — Draw-replacement delay, deck exhaustion, and the reshuffle vulnerable window
+
+**Depends on:** E3.S3, E3.S5a.
+**Read first:** GDD §Card System → Deck & hand; architecture §Determinism & Replay (RNG consumed
+only inside `advance()`).
+
+> **New section, authored 2026-08-04** at this story's own readiness gate, splitting `E3.S5` into THE
+> TRIGGER (E3.S5a, above) and WHAT THE TRIGGER MAKES REACHABLE (this section). Carries the four items
+> 3-3's own gate ruled move to 3-5 together with their trigger — not split from it (`decision-log.md`
+> Session 2026-08-03 — Story 3-3 readiness gate, finding (v)) — reachable only once E3.S5a's cast path
+> exists. Provisional — confirm or amend against `docs/playtest-log.md` before implementing; the
+> draw-replacement delay in particular is a feel decision the melee playtest informs.
+
+1. Implement draw-on-play with the delay as **data**: `draw_replacement_delay_seconds` converted to a
+   `TimingWindow`, where zero means instant. Instant vs delayed is an open feel question (GDD:
+   "affects strategic tension") — build it so a playtest answers it by editing a `.tres`.
+2. Implement deck exhaustion → reshuffle-from-discard, landing in the same single step-6 RNG seat that
+   the E3.S3 shuffle and deal already use — not a second seat.
+3. Implement the reshuffle vulnerable window as a `TimingWindow` on the player, flagged visually to
+   both players via the ownerless `EventBus` event ruled at the E3 revisit gate (E3-RG/R3), on the
+   `round_started`/`round_ended` precedent. What "vulnerable" costs mechanically is not specified in
+   the GDD; do not invent it unless this story's own gate rules open decision (b) — emit the state and
+   keep the question open otherwise.
+4. Headless tests: playing a card draws exactly one after the authored delay; exhaustion reshuffles
+   the discard pile and opens the vulnerable window for the authored ticks; the vulnerable-window
+   event fires with the correct player payload; same-seed draw sequences match across the delay and
+   the reshuffle.
+
+**Exit criterion.** A played card's replacement arrives after the authored (possibly zero) delay; a
+deck that runs out reshuffles from its own discard pile inside the same seeded-RNG seat as the initial
+shuffle; the reshuffle vulnerable window is visible in both viewports via the `EventBus`; and
+`bash test/run_all.sh` is green including the delay and reshuffle determinism tests.
 
 ---
 

@@ -1,4 +1,4 @@
-# Story 3.5: Card-mode selection input and Basic (Mode ①) resolution
+# Story 3.5a: Card-mode selection input and Basic (Mode ①) resolution
 
 Status: backlog
 

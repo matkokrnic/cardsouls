@@ -90,6 +90,10 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 - The `IntentRecorder` story (the X5 contact-fact contract + DEBT B's reload events, one stream
   contract — decision-log 2-6/R2) takes a board slot; the story file is deliberately not authored
   yet (decision-log E3-P/R3), written just-in-time at its own creation pass.
+- **Ordering (updated 2026-08-04, decision-log Session 2026-08-04 — Story 3-5 readiness gate):** 3-5
+  split into 3-5a (the mode-select/cast trigger) and 3-5b (draw delay, exhaustion, reshuffle, the
+  vulnerable window); the locked order is 3-5a → 3-5b → `3-0c` (`IntentRecorder`) → 3-6. Reason: 3-6
+  renders the reshuffle vulnerable window in the HUD, so it needs 3-5b to exist first.
 - 3-1 (`MatchState` config object) folds the constructor/`apply_balance` double-injection quirk
   (`match_state.gd:544`) into one injected config object; reconciles `ManaPool`'s `apply_balance`
   refill behavior against `StaminaPool`'s (D9 full-refill ruling) once `max_mana` lands in
