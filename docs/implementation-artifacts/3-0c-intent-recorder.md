@@ -1,120 +1,144 @@
 # Story 3.0c: Intent recorder — the X5 record/replay stream contract
 
-Status: backlog
+Status: ready-for-dev
 
-> **Scope note.** This file is authored at the story's own CREATION pass (2026-08-04), per
-> `decision-log.md` `E3-P/R3`: "the story file is deliberately not authored yet ... written
-> just-in-time at its own creation pass." `sprint-status.yaml`'s `story_notes` for this key, quoted
-> verbatim: "Board slot only, story file deliberately not authored yet (E3-P/R3, Set B staleness
-> lesson). Carries the X5 four-field contact-fact contract and both halves of DEBT B." This pass
-> writes the ACs that are ALREADY LOCKED by decision-log obligations and `docs/game-architecture.md`'s
-> existing X5 design; it deliberately does NOT size or fully specify the mechanism — that happens at
-> this story's own readiness gate, the same two-pass shape `3-5b` used (`docs/implementation-artifacts/
-> 3-5b-draw-delay-exhaustion-reshuffle.md`, Change Log 0.1 -> 0.2). Seven items that would otherwise be
-> ACs are instead recorded in **Open Questions for the Readiness Gate** below, per instruction: this
-> pass does not decide them. **Status stays `backlog`** — promotion to `ready-for-dev` happens at the
-> fix pass that resolves those questions, not here.
+> **Scope note.** This file was authored at the story's own CREATION pass (2026-08-04, commit
+> `290e4c9`) per `decision-log.md` `E3-P/R3`, and REWRITTEN the same day at its own READINESS GATE,
+> which returned **NOT READY** with ten blocking findings and was resolved the same session by eleven
+> operator rulings (`decision-log.md`, Session 2026-08-04 — Story 3-0c readiness gate). Status is now
+> `ready-for-dev`; `sprint-status.yaml` is updated alongside.
 >
-> **Locked order.** `epics.md` E3 "Committed obligations": "the locked order is 3-5a -> 3-5b -> `3-0c`
-> (`IntentRecorder`) -> 3-6." Both predecessors are `done` (verified: `sprint-status.yaml`
+> **The story SPLIT at that gate** (`3-0c/R5`). `3-0c` keeps the stream contract and its proof and is
+> **entirely headless**: every capture channel, the `ReplayController`, replay-side fact injection, and
+> the record-then-replay identity test. It ships **no file I/O, no operator UI, no Input Map action and
+> no live reload trigger**. Those move to a new sibling slot,
+> `3-0d-replay-surface-and-live-reload` (board slot only, story file authored just-in-time at its own
+> creation pass, following the `3-0a`/`3-0b`/`3-0c` precedent). This divides DEBT B along its own
+> stated seam: **its stream half closes here, its cache half (`CACHE_MODE_IGNORE`) closes in the
+> sibling.**
+>
+> **Locked order.** `epics.md` E3 "Committed obligations": "the locked order is 3-5a → 3-5b → `3-0c`
+> (`IntentRecorder`) → 3-6." Both predecessors are `done` (verified: `sprint-status.yaml`
 > `development_status`). This story is next in the E3 sequence.
 
 ## Story
 
 As a solo developer building CardSouls,
-I want the per-tick `InputIntent` stream, the four-field contact fact, the match-start injected
-content (deck composition and cast-cost map), and balance-reload events captured into ONE recordable
-stream contract,
-so that a played round can be reconstructed exactly later from **seed + intents + reload events +
-injected content** — never from anything that can change out from under a recording (the live
-`CardDatabase`, a re-tuned `.tres`, a re-priced card) — closing the X5 obligation this story has
-carried since `2-3/R2` and the DEBT B obligation carried since `1-3b`.
+I want every external input to `MatchState` — the seed, the per-tick `InputIntent` stream, the
+four-field contact facts, the pushed camera bases, the match-start injected content (deck composition,
+cast-cost map, feature flags) and balance-reload events — captured into ONE recordable stream
+contract, and a `ReplayController` that reconstructs a round **from that record alone**,
+so that a played round replays to a bit-identical `CanonicalHash` without consulting anything that can
+change out from under a recording (the live `CardDatabase`, a re-tuned `.tres`, a re-priced card, a
+different flags resource), closing the X5 obligation this story has carried since `2-3/R2` and DEBT B's
+stream half, carried since `1-3b`.
 
 ## Acceptance Criteria
 
-Every item below is already locked by a decision-log ruling, an architecture-doc commitment, or a
-structural fact verified against shipped code in this pass's own research — never invented here. Items
-that are NOT yet locked are listed in Open Questions, not here.
-
-1. **The recorder emits ONE stream contract with exactly five capture channels** — the gameplay RNG
-   seed, the per-tick `InputIntent` for both slots, balance-reload events, the injected deck
-   composition, and the injected cast-cost map — never a partial subset and never an ungoverned sixth
-   channel. [`2-3/R2`; `3-3` close-out; `3-5a` close-out extended by `3-5b/R14`; `docs/game-architecture.md`
-   §Instrumentation wiring] A structural test over the recorder's public capture surface enumerates
-   exactly these five channels.
+1. **The capture channel set is DERIVED from `MatchState`'s external intake surface by a source scan,
+   not enumerated by hand.** A structural test scans `src/state/match_state.gd` for every public way
+   data enters the object from outside and asserts each has a corresponding capture channel on
+   `IntentRecorder`; a new intake seam shipping without a channel FAILS the test. The intake surface,
+   verified by content this pass, is eight members: `advance(intents)`, `apply_balance(config)`,
+   `inject_feature_flags(value)`, `inject_deck(contents)`, `inject_card_costs(costs)`,
+   `push_contact(...)`, `set_camera_basis(slot, basis)`, and the seed reaching `_init` via
+   `MatchParams`. `drain_signals()` is exempt and the test names it exempt IN THE ASSERTION, with the
+   reason: it carries no data inward. `to_snapshot()` and `debug_window_ticks_remaining()` are egress,
+   not intake.
 2. **Every `InputIntent` field is captured verbatim, per tick, per slot.** All eight fields —
    `move_dir`, `aim`, `pressed`, `held`, `debug_reset`, `card_slot`, `card_mode`, `card_commit` — ride
-   the stream unmodified; none is dropped, summarized, or re-derived. This is safe to lock because the
-   shape is FINAL as of 3-5a (`input_intent.gd`'s own header: "3-5 -> 3-0c ordering existed precisely
-   so the contract is not written against a moving shape"). A test constructs a synthetic `InputIntent`
-   with a non-default value in every field and asserts the captured record round-trips all eight.
-3. **The seed is captured exactly once, at match start**, sourced from the SAME value the runner feeds
-   `MatchParams` — never a second, independently-read seed. [`docs/game-architecture.md` §Determinism &
-   Replay: "The seed is recorded with the intent stream."]
-4. **Balance-reload events are captured as (tick index, the `BalanceConfig` values applied)**, sourced
-   from the runner's EXISTING `apply_balance()` call site — no second injection path invented for this
-   story. [DEBT B's second half, `decision-log.md:130,133`; `docs/game-architecture.md` §Determinism &
-   Replay: "`IntentRecorder` therefore records each balance-reload event in the stream (tick index +
-   values applied)"] Whether a LIVE mid-match trigger exists this story is Open Question 3, not this AC
-   — this AC is about the event's shape and source, not about who fires it.
-5. **The injected deck composition (the `Array[StringName]` argument to `inject_deck`) is captured at
-   the same tick it is injected.** [`3-3` close-out: "the injected deck COMPOSITION must enter the
-   replay record alongside seed, intents, and reload events, or a replay silently depends on the live
-   `CardDatabase`."]
-6. **The injected cast-cost map (the `Dictionary[StringName, CardCastCondition]` argument to
-   `inject_card_costs`) is captured at the same tick it is injected, and is NON-OPTIONAL.** A recording
-   that captured a composition but no cost map is malformed, enforced at the capture seam on the
-   `inject_deck`/`push_contact` `Invariant.check` precedent. [`3-5b/R14`, extending the `3-0c`
-   obligation explicitly: "The injected COST MAP ... is in the identical position ... without it a
-   replay against re-priced cards diverges silently."]
-7. **The four-field contact fact is captured exactly as pushed to `push_contact`** —
-   `attacker_slot`, `target_slot`, `attack_index`, `target_to_attacker` — inherited into this same
-   stream contract per `1-8 R-B3` / `2-3/R2`, never a narrower or re-derived shape.
-8. **Capture is a PASSIVE TAP**: it never mutates `InputIntent`, `MatchState`, or the tick order, and
-   its absence changes no behavior. [`docs/game-architecture.md`: "Recording is a passive tap — it
-   never affects the tick."] Proven by running the golden determinism sequence with and without an
-   attached recorder and asserting the `to_snapshot()` hashes are bit-identical.
-9. **The recorder introduces no eighth observation seam.** It is not wired through any
-   `connect_hero_*` / `connect_hit_landed` / `connect_deflect_landed` seam; it is a plain object the
-   runner owns and calls directly at the sample step (`_intent_recorder.capture(intents)` per the
-   architecture doc's own pseudocode), the same shape as the 3-0b debug-window-countdown and 3-5a
-   card-selection-push precedents. `match_runner.gd` stays at exactly seven `connect_*` methods.
-10. **No new Input Map action ships.** Any operator-facing start/stop/load control is a `Control`-level
-    UI affordance under `src/ui/debug/` — the architecture doc's own placement ("X5 toggles ... :
-    record/replay start-stop-load") — never a new `project.godot` action. A negative guard scans
-    `project.godot` for a new record/replay-named action.
-11. **`FeatureFlags` stays load-once and runtime-immutable.** This story adds no reload path to
-    `FeatureFlagsService` and gates no recorder behavior behind a flag mutation. [`2-6/R4`: "flags
-    appear in neither `MatchState.to_snapshot()` nor the recorded intent stream, so mutating one at
-    runtime would be a silent replay hole" — the injection itself is captured once, per AC1's seed/
-    reload-event precedent, not treated as a reloadable channel.]
-12. **Recorded content stays OUTSIDE `MatchState.to_snapshot()`.** No captured channel (intents,
-    contact facts, deck composition, cost map, reload events) is ever written into any
-    `to_snapshot()`-reachable field, and no `StringName`-keyed structure this story introduces ever
-    reaches `CanonicalHash`. [The 3-5a close-out's named hazard: `Array[StringName].sort()` orders by
-    internal pointer, so such a key would hash green in-process while replay is already broken.] A
-    test runs a recording across a sequence that exercises every capture channel and asserts the golden
-    hash is unaffected by the recorder's mere presence (see Golden Prediction).
+   the stream unmodified; none is dropped, summarized, or re-derived. A test constructs a synthetic
+   `InputIntent` with a non-default value in every field and asserts the captured record round-trips
+   all eight.
+3. **The seed is captured exactly once, at match start**, sourced from the SAME value that reaches
+   `MatchParams` — never a second, independently-read seed. The test fixture is PARAMETERISED over at
+   least two distinct seeds and asserts the captured value equals the constructed one in each run, so
+   the assertion cannot pass against a hardcoded constant.
+4. **Balance-reload events are captured as `(tick index, the BalanceConfig values applied)`, and the
+   match-start `apply_balance()` call is RELOAD EVENT #0** — recorded at match start, before the first
+   tick, from the runner's single existing call site (`match_runner.gd:95`). No second injection path
+   ships. On replay, balance values come from the record and `BalanceConfigService` is never read; a
+   test asserts a replay reproduces its recorded run with the on-disk `.tres` values differing from the
+   recorded ones.
+5. **The injected deck composition is captured at match start, before the first tick, together with its
+   INJECTION ORDER relative to the cost map.** Replay re-injects in the recorded order. A test asserts
+   the recorded composition is the exact `Array[StringName]` passed to `inject_deck`, non-empty, and
+   that a record whose order is inverted fails to replay.
+6. **The injected cast-cost map is captured at match start, before the first tick, and is
+   NON-OPTIONAL.** A record carrying a composition but no cost map is malformed and is rejected at the
+   capture seam by `Invariant.check`, on the `inject_deck`/`push_contact` precedent. Because
+   `inject_card_costs`'s totality check reads `_deck_contents`, replay MUST apply the cost map second —
+   the ordering of AC 5 is what makes this check mean anything on replay, exactly as it does live.
+7. **Injected `FeatureFlags` are a capture channel**, recorded once at match start before the first
+   tick, with the same three properties that made the composition and the cost map mandatory:
+   match-start, content-only, absent from `to_snapshot()`. Replay injects the recorded flags and never
+   reads `FeatureFlagsService`. **This is capture, not runtime mutation:** `FeatureFlagsService` still
+   has no `reload()` method and no reload path, no recorder behaviour is gated behind a flag mutation,
+   and a source scan asserts both.
+8. **The pushed camera basis is a per-tick, per-slot capture channel.** The value reaching
+   `set_camera_basis` is recorded for both slots each tick and re-pushed by replay before `advance()`.
+   A test drives a run with a non-identity basis on at least one slot, replays it, and asserts the
+   hashes match; the same test with the basis channel dropped from the record diverges.
+9. **Replay suppresses the runner's own contact-fact gathering and drains RECORDED facts into
+   `push_contact`, keyed by tick index.** In replay mode the runner does not call
+   `_gather_contact_facts` and does not push live camera bases; it pushes the recorded facts and bases
+   for the current tick instead. `MatchState.push_contact`'s signature and its four `Invariant.check`
+   guards are UNCHANGED — the seam already accepts facts from whoever pushes them. A test asserts that
+   a replaying runner performs zero `Area3D` overlap queries and that the facts reaching `push_contact`
+   are exactly the recorded ones, in recorded tick order.
+10. **PRIMARY ACCEPTANCE — a driven run is recorded and replayed FROM THE RECORD ALONE to a
+    bit-identical `CanonicalHash`.** The test records a run driven through EVERY channel — including a
+    mid-run `apply_balance()` and pushed contact facts — then constructs a second, independent
+    `MatchState` driven only by the record (a `ReplayController` for intents, recorded facts, bases,
+    seed, content and reload events for everything else) and asserts the two canonical hashes are
+    bit-identical. It lives in its **OWN fixture** and is never added to the golden determinism
+    sequence, which gains neither a mid-run `apply_balance` nor pushed contact facts. Dropping any one
+    channel from the record makes this test diverge, which is what makes ACs 1–9 falsifiable together.
+11. **Replay equality is `CanonicalHash`-only, and the cross-tick state the hash does NOT cover is
+    pinned to exactly three members with its soundness argument attached.** A structural test asserts
+    the exclusion set is exactly: (a) `PlayerState.vulnerable_window` — unhashed because nothing reads
+    it, the read decision handed to `3-6` by `3-5b/R20`; (b) the card containers' CONTENTS and ORDER in
+    `Deck`/`Hand`/`DiscardPile` — sizes only in the snapshot, sound because order "stays derivable from
+    seed plus injected composition" (`player_state.gd:84-87`), which ACs 1, 3 and 5 are what make true
+    across a replay; (c) `MatchState._camera_bases` — captured by AC 8 rather than hashed. A fourth
+    exclusion appearing later fails this test.
+12. **The recorder is `src/systems/intent_recorder.gd`, runner-owned; the replay controller is
+    `src/controllers/replay_controller.gd`.** No file under `src/state/` names either class, and
+    `src/state/` gains no file — a token scan asserts it, joining the four whole-directory `src/state/`
+    scans already in `test_architecture_invariants.gd`.
+13. **`match_runner.gd` stays at exactly seven `connect_*` methods, and THIS STORY CREATES THAT
+    GUARD.** The seven-seam count (`2-6/R7`'s frozen family) has never been machine-checked; it has
+    been review-enforced for eleven stories. A source scan pinning the count ships here, and it must be
+    proven FALLING (an eighth `connect_*` under `src/main/` makes it fail). The recorder is wired as a
+    plain runner-owned object called directly at the sample step, not through a seam.
+14. **The shipped Input Map action set is UNCHANGED, pinned by exact equality.** The negative
+    "no record/replay-named action" scan does not ship as a standalone claim — the repo's own labelled
+    precedent says so (`test_deck_and_hand.gd:399-401`: "The negative guard above cannot tell
+    'correctly added' from 'never added', so the pair is what makes the Input Map edit checkable in
+    both directions"). Instead the project's action set (excluding Godot's `ui_*`) is pinned by exact
+    set equality in the existing Input-Map pin family, so an ADDED action fails as loudly as a removed
+    one, and this story adds none.
 
 ## Tasks / Subtasks
 
-Deliberately coarse — this story's own readiness gate turns these into concrete implementation tasks
-once the Open Questions below are ruled, the same two-pass shape `3-5b` used.
-
-- [ ] Land the five-channel capture surface and its structural enumeration test (AC: 1)
-- [ ] Land per-tick `InputIntent` capture with the eight-field round-trip test (AC: 2)
-- [ ] Capture the seed once at match start from the runner's existing `MatchParams` value (AC: 3)
-- [ ] Define the reload-event shape (tick, applied values) sourced from the existing `apply_balance()`
-      call site (AC: 4) — trigger existence is Open Question 3, not this task
-- [ ] Capture injected deck composition and cast-cost map at their injection ticks, cost map
-      non-optional and Invariant-enforced (AC: 5, 6)
-- [ ] Capture the four-field contact fact inherited from `push_contact` (AC: 7)
-- [ ] Prove capture is a passive tap via the with/without-recorder golden-hash comparison (AC: 8)
-- [ ] Wire capture as a runner-owned plain object call, not a `connect_*` seam; verify the seven-seam
-      count is unchanged (AC: 9)
-- [ ] Verify no new Input Map action; negative guard over `project.godot` (AC: 10)
-- [ ] Verify `FeatureFlags` gains no reload path (AC: 11)
-- [ ] Verify no captured channel reaches `to_snapshot()`/`CanonicalHash` (AC: 12)
+- [ ] Land `IntentRecorder` in `src/systems/`, runner-owned, and the intake-surface scan that derives
+      its channel set (AC: 1, 12)
+- [ ] Per-tick `InputIntent` capture with the eight-field round-trip test (AC: 2)
+- [ ] Seed capture at match start; parameterise the fixture over two seeds (AC: 3)
+- [ ] Reload-event channel with the match-start `apply_balance()` as event #0; replay applies from the
+      record and never reads `BalanceConfigService` (AC: 4)
+- [ ] Deck-composition and cost-map channels carrying their injection ORDER; cost map non-optional and
+      `Invariant.check`-enforced at the capture seam (AC: 5, 6)
+- [ ] Feature-flags channel; assert `FeatureFlagsService` still has no reload path (AC: 7)
+- [ ] Camera-basis channel, per tick per slot (AC: 8)
+- [ ] Contact-fact channel; runner replay mode suppresses gathering and drains recorded facts into
+      `push_contact` by tick index (AC: 9)
+- [ ] `ReplayController` in `src/controllers/` — a `sample()` override emitting recorded intents (AC: 9,
+      10)
+- [ ] The record-then-replay identity test, in its own fixture, driving every channel (AC: 10)
+- [ ] The unhashed-cross-tick exclusion pin, three members with reasons (AC: 11)
+- [ ] The seven-`connect_*` source scan, proven falling (AC: 13)
+- [ ] The exact-equality Input Map action-set pin (AC: 14)
 
 ## Dev Notes
 
@@ -143,7 +167,7 @@ once the Open Questions below are ruled, the same two-pass shape `3-5b` used.
   already-loaded resource, so a mid-session on-disk `.tres` edit is silently ignored (no
   `CACHE_MODE_IGNORE`). `reload()` has exactly ONE caller in the whole tree: its own `_ready()`. No
   runner code path calls it a second time — **no live mid-match reload trigger exists in shipped code
-  today.** This is Open Question 3's premise, verified rather than inherited from the log.
+  today.** That half of DEBT B is now `3-0d`'s, per `3-0c/R5`; this story closes the stream half only.
 - **`FeatureFlagsService`** (`src/systems/feature_flags_service.gd`) has no `reload()` method at all —
   load-once is structural (there is nothing to call), not merely a convention nobody has broken yet.
 - **Snapshot key inventory, traced fully** (`to_snapshot()` chain: `MatchState` ->
@@ -159,20 +183,11 @@ once the Open Questions below are ruled, the same two-pass shape `3-5b` used.
 - **Correction to a premise in this story's own commissioning brief.** The brief assumed dedupe records
   and `attack_index` were unhashed per-tick transients. Verified by content: they are NOT — both ride
   inside `HeroState.to_snapshot()`'s `swing_dedupe` key, hashed since story 1-5 (D8). `rng_state` is
-  also hashed (top-level `MatchState` key). The ONLY confirmed unhashed cross-tick state is
-  `PlayerState.vulnerable_window` — declared and constructed on `PlayerState` but never appears in
-  `to_snapshot()`. This is DELIBERATE, per `decision-log.md` `3-5b/R19`: "the vulnerable window is
-  cross-tick state that is NOT hashed. That is safe only because nothing reads it ... AC 2's guard is
-  precisely what keeps that premise true. If a later story prices the window, it must enter the
-  snapshot at the same time." That "later story" language is why Open Question 4 below is not
-  rhetorical — this story is arguably the first one for which "nothing reads it" stops being a
-  sufficient safety argument, because a replay's correctness claim is no longer just "the live match
-  never observed a difference" but "two independently-driven runs never observed a difference."
-  Genuinely per-tick, drop-before-snapshot transients confirmed separately: `MatchState._contact_queue`
-  (drained fully inside `advance()` step 4), `_camera_bases` (runner-pushed, presentation-only),
+  also hashed (top-level `MatchState` key). Genuinely per-tick, drop-before-snapshot transients
+  confirmed separately: `MatchState._contact_queue` (drained fully inside `advance()` step 4),
   `_deck_deal_pending` (consumed inside the same `advance()` that sets it), and
   `HeroState._roll_iframe_closed_this_tick` / `_deflect_closed_this_tick` (grace markers, named
-  unhashed in the 1-9 golden record).
+  unhashed in the 1-9 golden record). The CROSS-TICK unhashed set is corrected below by `3-0c/R8`.
 - **RNG single-seat guard (F2), machine-checked.** `shuffle_with_rng(` appears exactly twice in `src/`
   — its definition in `deck.gd` and its one caller, `MatchState._shuffle_deck` — pinned by
   `test_architecture_invariants.gd` (landed as `3-5b` AC16). Nothing in this story's design should add
@@ -184,127 +199,174 @@ once the Open Questions below are ruled, the same two-pass shape `3-5b` used.
   isn't a discipline that could be broken by accident; it's structural. This is the reason authored
   tuning/content can never move the golden (`BC/R3`), and it is the reason a recorder living in
   `src/state/` would be a structural break from every precedent in this codebase, not merely an
-  awkward choice — see AC12 and Open Question 7.
+  awkward choice — see AC 12 and the guard citation below.
 - **`docs/game-architecture.md` already contains a fully-specified X5 design**, not merely a
   decision-log pointer. Directory tree (§Project Structure): `src/systems/intent_recorder.gd` — "X5:
   captures InputIntent stream at the runner's sample step" — sits beside `log.gd`/`invariant.gd`
-  (plain classes, confirmed NOT autoloads elsewhere in this codebase) rather than beside the four
-  labeled `# autoload` entries in the same folder; `src/controllers/replay_controller.gd` — "X5: emits
-  InputIntent from a recorded stream (indistinguishable from hardware to the runner)"; `src/ui/debug/`
-  — "record/replay start-stop-load" toggles, "no state mutation there." Runner tick pseudocode
-  (§Match Runner sketch) inserts capture as ONE line between fact-gathering and `advance()`:
-  `_intent_recorder.capture(intents)  # X5 passive tap — never affects the tick`. Scope is stated
-  explicitly and already closed at the design-intent level: **"Scope: record + replay only — no
-  rewind, no scrubbing UI."** This pass treats that scope statement as strong evidence, not as a
-  ruling ON THIS STORY's sizing — see Open Question 1.
+  rather than beside the THREE entries in the same folder explicitly labeled `# autoload:`
+  (`feature_flags_service.gd`, `balance_config_service.gd`, `card_database.gd`, tree lines 560-562);
+  `src/controllers/replay_controller.gd` — "X5: emits InputIntent from a recorded stream
+  (indistinguishable from hardware to the runner)"; `src/ui/debug/` — "record/replay start-stop-load"
+  toggles, "no state mutation there." Runner tick pseudocode (§Match Runner sketch) inserts capture as
+  ONE line between fact-gathering and `advance()`: `_intent_recorder.capture(intents)  # X5 passive tap
+  — never affects the tick`. Scope is stated explicitly: **"Scope: record + replay only — no rewind, no
+  scrubbing UI."** **Two corrections to this bullet's earlier form, both verified by content:**
+  `log.gd` does NOT exist in `src/systems/` (its contents are `pool/`, `balance_config_service.gd`,
+  `card_database.gd`, `event_bus.gd`, `feature_flags_service.gd`, `invariant.gd`) — the tree lists a
+  file that was never built; and the folder's autoload-labelled entries number THREE, not four
+  (`event_bus.gd` at tree line 559 carries a D5 caption, not an `# autoload:` label). The doc's
+  standing as a source is ruled by `3-0c/R10` below.
 - **Observation seam count.** `match_runner.gd` has exactly seven `connect_*` methods
   (`connect_hero_action_state_changed`, `connect_hero_action_rejected`, `connect_hit_landed`,
   `connect_deflect_landed`, `connect_hero_hp_changed`, `connect_stamina_changed`,
   `connect_mana_changed`) — the frozen family per `2-6/R7`. `EventBus` carries exactly three signals as
   of `3-5b` AC6 (`round_ended`, `round_started`, `reshuffle_vulnerable_window_opened`) — deliberately
   updated from two, and the story that did it renamed its own pin test to record the change. Neither
-  count should move as a side effect of this story.
+  count should move as a side effect of this story. **The seven-count has NO test pinning it today** —
+  verified by content: `connect_` appears in `test/` only as usage (`test_contact_pipeline.gd`,
+  `test_live_attack.gd`, `test_telegraph_profiles.gd`), never as a count assertion. AC 13 creates that
+  guard.
 
-## Open Questions for the Readiness Gate
+### Rulings applied at this story's readiness gate
 
-Per instruction, these are NOT decided in this pass. Each carries a recommendation and its trade-off,
-one short paragraph.
+- **`3-0c/R1` — replay is NOT a controller swap alone, and the architecture doc's mechanism is
+  insufficient.** Contact facts do not originate in any controller: `_gather_contact_facts`
+  (`match_runner.gd:388-410`) reads `actor.hitbox.get_overlapping_areas()` and raw
+  `global_position` deltas, and `InputIntent` has no contact field. A swapped-in `ReplayController`
+  therefore CANNOT deliver them, and regenerating them through physics on replay was rejected at 1-7's
+  gate (D-4) because it "would hang replay soundness on Jolt bit-determinism." Hence AC 9: replay mode
+  also SUPPRESSES the runner's gathering and drains recorded facts into `push_contact` by tick index.
+  `MatchState`'s seam is unchanged — `push_contact` already accepts facts from whoever pushes them, and
+  headless tests have fed synthetic facts through it since 1-5.
+- **Replay guarantees STATE identity, not VISUAL identity.** Actor positions come from
+  `move_and_slide` in `HeroActor.drive()` and may drift between a recording and its replay; nothing in
+  this story promises otherwise. That is tolerable precisely because the ONLY physics-to-state channel
+  is the contact fact — and the contact fact is recorded. Anything a divergent position could do to the
+  tick has to travel through `push_contact`, which replay supplies from the record rather than from
+  the scene.
+- **`3-0c/R2` — "exactly five channels" is DEAD; the channel list is DERIVED (AC 1).** No ruling
+  anywhere enumerates five, and the earlier AC list contradicted the number by naming seven things.
+  The list is now produced by scanning `MatchState`'s public intake surface, which makes the guard fail
+  when a new seam appears without a channel. **The intake list supplied at the gate was incomplete and
+  is corrected here:** `set_camera_basis(slot, camera_basis)` (`match_state.gd:389`) is a public intake
+  the runner pushes every ticking frame (`match_runner.gd:460-461`), and its value is READ during
+  movement resolution (`match_state.gd:567,975`) — it reaches `HeroState.velocity`, which is hashed.
+  A replay that does not restore it can diverge. Today the pushed basis is always identity in live play
+  (`CameraRig` has no look input, and the rig's LOCAL basis is unaffected by a hero-root rotation that
+  DECISION A forbids anyway), and `_resolve_movement` short-circuits on identity — so the channel is
+  cheap now and load-bearing the moment a look action ships. Hence AC 8.
+- **`3-0c/R3` — injected feature flags ARE a channel (AC 7).** They have the identical three properties
+  that made deck composition and the cost map mandatory: injected at match start, content-only, absent
+  from `to_snapshot()`. A replay against a different flags resource diverges silently — the same
+  failure `2-6/R4` names from the other direction: "flags appear in neither `MatchState.to_snapshot()`
+  nor the recorded intent stream, so mutating one at runtime would be a silent replay hole." **Capture
+  is not runtime mutation.** The load-once, runtime-immutable ruling for `FeatureFlags` stands
+  untouched, and AC 7 carries both clauses in one breath so this cannot be read as reopening it.
+- **`3-0c/R4` — the initial `apply_balance()` is reload event #0 (AC 4).** The earlier AC pointed at a
+  call site it had itself declared out of scope; the single existing call site (`match_runner.gd:95`)
+  is exactly the right source. Capturing it as the first event on the reload channel avoids inventing a
+  sixth channel for a shape the reload channel already has. On replay, balance values come from the
+  record and are never re-read from disk — which is what makes a recording survive a tuning pass, the
+  failure mode the whole channel exists to prevent.
+- **`3-0c/R5` — the story splits; `3-0d-replay-surface-and-live-reload` takes the operator surface.**
+  See the Scope note. `3-0c` is headless: channels, `ReplayController`, replay-side fact injection,
+  identity test. `3-0d` takes `ResourceLoader` `CACHE_MODE_IGNORE`, a live mid-match reload trigger,
+  `user://` persistence and the serialisation format, the start/stop/load control folded into the
+  existing `DebugInstrumentPanel`, and the live smoke. The board slot is added now; the story file is
+  authored just-in-time at its own creation pass, per the `E3-P/R3` precedent. `E3-P/R3` — which
+  assigned BOTH DEBT B halves plus record/replay to a single story — is AMENDED BY APPEND in the
+  decision log: original text untouched, a scope note added above it, exactly as `E3-P/R2` was amended.
+- **`3-0c/R6` — the identity test is the primary acceptance (AC 10).** The two earlier
+  hash-comparison ACs (run the golden sequence with and without a recorder; assert no captured channel
+  moves the hash) are unfalsifiable by construction: both pass with `capture()` bodied as `pass`. They
+  are REPLACED by one test that records a driven run and replays it from the record alone to a
+  bit-identical hash. It lives in its own fixture and never in the golden sequence — which must not
+  gain a mid-run `apply_balance` or pushed contact facts — and dropping any channel makes it diverge,
+  which is what makes every capture AC falsifiable at once.
+- **`3-0c/R7` — a fabricated quotation is DELETED.** The earlier AC 2 attributed this sentence to
+  `input_intent.gd`'s header: "3-5 -> 3-0c ordering existed precisely so the contract is not written
+  against a moving shape." **That sentence does not exist anywhere in the repo.** The AC's substance is
+  kept and re-sourced to two things that do exist. `input_intent.gd`'s real header, quoted exactly:
+  "This is INPUT, not persistent state — it is captured separately in the X5 intent stream and is
+  deliberately excluded from the to_snapshot() determinism contract." And the E3 ordering ruling
+  (`decision-log.md`, Session 2026-07-31 — E3 revisit gate (outcome), "ORDER, recorded as part of the
+  outcome"), quoted exactly: "3-0c follows 3-5 so the intent shape (the new card fields on
+  `InputIntent`) is final before the stream contract is written." Together those are the real basis for
+  locking the eight-field shape; the invented quotation was not.
+- **`3-0c/R8` — replay equality is hash-only, and the unhashed cross-tick set is THREE members, not
+  one (AC 11).** The gate's set — `{PlayerState.vulnerable_window}` — was verified by content and found
+  incomplete. (a) The vulnerable window is unhashed, per `3-5b/R19` quoted exactly: "the vulnerable
+  window is CROSS-TICK STATE THAT IS NOT HASHED. That is safe only because nothing reads it -- state no
+  code consults cannot change an outcome or desync a replay -- and AC 2's guard is what keeps that
+  premise true. **The first story that gives the window a mechanical cost MUST bring it into the
+  snapshot in the same pass.**" The window's read decision is `3-6`'s, per `3-5b/R20`: "`3-6` must
+  decide EXPLICITLY whether it renders from the `EventBus` event with its own presentation-local timer
+  (the window stays unread and AC 2's guard stays green) or starts reading state." (b) The card
+  containers' CONTENTS and ORDER are also unhashed — `PlayerState.to_snapshot()` ships `deck_size`,
+  `hand_size` and `discard_size` only, and says why in its own comment: "Deck ORDER is deliberately not
+  hash-visible — it stays derivable from seed plus injected composition." That derivability is a REPLAY
+  argument, and it holds only if the seed (AC 3), the composition (AC 5), the injection order (AC 5/6)
+  and F2's single seeded seat all hold — which is precisely what this story delivers. (c)
+  `_camera_bases` is unhashed cross-tick state, addressed by AC 8's channel rather than by a key. Hash
+  equality plus this three-member pin is therefore an honest equality claim; a fourth exclusion
+  appearing later must fail the pin rather than quietly weakening it. **Why this story is where the
+  question is forced,** carried forward from this file's creation pass: `3-5b/R19`'s "safe because
+  nothing reads it" is scoped to a SINGLE live run, and this story is the first for which that stops
+  being a sufficient safety argument — a replay's correctness claim is no longer just "the live match
+  never observed a difference" but "two independently-driven runs never observed a difference." The
+  pin is what keeps that stronger claim honest without inventing machinery this codebase has no
+  pattern for.
+- **`3-0c/R9` — placement is CLOSED: `src/systems/`, runner-owned (AC 12).** Not because the
+  architecture tree says so — `3-0c/R10` strips the tree of that authority — but because three live
+  guards in `test_architecture_invariants.gd`, each scanning EVERY `.gd` file under `src/state/`,
+  independently forbid the natural implementation of a state-resident recorder:
+  `test_state_layer_has_no_nondeterministic_source` (D3(b)/A2) bans `Time.`/`OS.`/`Engine.`, so a
+  recording header, a timestamp, or any user-path lookup is illegal there;
+  `test_state_layer_never_names_card_data` bans `CARDS_DIR`/`data/cards`, so a recorder that resolves
+  or validates its captured composition against the card library by path is illegal there; and
+  `test_state_layer_never_uses_implicit_global_rng_or_card_database` bans the `CardDatabase` autoload
+  — the same reach through the other door — plus a bare `seed(`, which is how a replay-side reseed
+  would naturally be written. **Stated precisely so the argument is not overclaimed:** a deliberately
+  clock-free, content-blind, in-memory recorder placed under `src/state/` would trip none of the four
+  scans. What closes the question is those three guards plus AC 12's own token scan, which is why
+  AC 12 ships a scan rather than resting on the tree.
+- **`3-0c/R10` — the architecture doc's X5 section is PRE-CODE TEXT.** Verified by content: the X5
+  directory-tree entries and the record/replay wiring trace to `6ac94bc` (2026-07-21), revised once by
+  `11fdd23` the same day; both precede `57038dc`, the first commit that adds anything under `src/`
+  (rev-counts 8 and 9 against 11). The gate stated a single commit; it is two, both pre-code, so the
+  load-bearing property holds. It is therefore a source of CANDIDATE DESIGN, not authority — the same
+  class as the section that once claimed E0 had landed the economy evaluator. Two consequences: (1) its
+  scope line — "record + replay only — no rewind, no scrubbing UI" — is RATIFIED NOW as a decision, so
+  it stops being aspirational; (2) its controller-swap replay mechanism is DEMONSTRATED INSUFFICIENT by
+  `3-0c/R1` and becomes a new architecture-amendment queue member (the NINTH; the queue held eight per
+  `3-5/R9`). `docs/game-architecture.md` is NOT edited this pass — the queue flushes at the E3
+  close-out, forcing point unchanged.
+- **`3-0c/R11` — guard and wording corrections.** The seven-`connect_*` count had no test (AC 13
+  creates it). The negative Input-Map scan dies as a standalone AC and binds instead to an
+  exact-equality action-set pin (AC 14) — the repo's own labelled precedent for why a negative alone is
+  vacuous is quoted in that AC. The fixture seed is parameterised (AC 3); note the gate named `12345`,
+  which is `match_runner.gd:20`'s `_SEED` — the state fixture's constant is `test_determinism.gd:271`,
+  `SEED := 1337`, and either way a hardcoded assertion is what parameterisation removes. "At the same
+  tick it is injected" is corrected to "at match start, before the first tick" throughout: both
+  injections happen in `_ready()`, where the tick is 0. The record carries the deck/cost injection
+  ORDER and replay applies it (AC 5, 6), because the cost seam's totality check reads `_deck_contents`
+  and passes vacuously against an empty one.
 
-1. **Scope: record only, or record + replay verification in the same story?**
-   `docs/game-architecture.md` already closes this at the design-intent level ("record + replay only —
-   no rewind, no scrubbing UI"), and no decision-log entry has ever proposed splitting record from
-   replay the way `3-5` split into `3-5a`/`3-5b`. Recommendation: build both in one story, following
-   the architecture doc's already-locked scope — replay's only real cost beyond record is a
-   `ReplayController` (a `sample()` override, structurally trivial per D3) and an equality-check
-   mechanism (Open Question 4). Trade-off: if the equality-check question turns out to need new
-   machinery (not just a hash compare), the combined story could grow the way `3-5` did, and splitting
-   at the gate — record now, replay next — is the fallback, not a redesign.
-2. **Does the INITIAL balance configuration belong in the stream, not just reload events?**
-   Neither the decision-log's ratified channel list nor `docs/game-architecture.md`'s capture
-   description mentions the match-start `apply_balance()` call — only "reload events" are named. If
-   replay re-reads the on-disk `.tres` for the STARTING config and only reload EVENTS are captured, a
-   replay diverges the moment anyone tunes a value between recording and replaying, even with zero
-   in-match reloads. Recommendation: capture the initial `apply_balance()` call as reload-event #0 (tick
-   0, before the first real tick) rather than inventing a sixth channel — it is literally the same
-   shape AC4 already locks, just at the earliest possible tick. Trade-off: this reads as "no channel six"
-   only if the readiness gate agrees tick-0 counts as a reload event; if not, it is a genuine sixth
-   channel and AC1's "exactly five" would need to become "exactly six."
-3. **DEBT B has no live mid-match reload trigger today. Does 3-0c define the event slot without a
-   trigger, or does it carry both halves and become the first live-reload story?**
-   Verified this pass: `BalanceConfigService.reload()` has exactly one caller (its own `_ready()`); no
-   runtime path re-triggers it. Every prior story that touched DEBT B (`1-3b` through `3-5b`) deferred
-   BOTH halves (`CACHE_MODE_IGNORE` + the stream event) "together with the first story that introduces
-   a live reload trigger." Recommendation: 3-0c defines the event SLOT and its shape (AC4) without
-   building a trigger — a live reload UI is a separate, player/operator-facing feature with its own
-   design question (what triggers it? a debug hotkey? a file-watch?) that this story's scope shouldn't
-   silently absorb. Trade-off: this leaves DEBT B's reload-event half UNEXERCISED by any real trigger,
-   so it can only be proven by a synthetic test that calls `apply_balance()` mid-sequence directly —
-   acceptable, but worth stating plainly rather than claiming DEBT B is "closed."
-4. **Unhashed cross-tick state: does replay equality check the canonical hash only, or does it need
-   something stronger? Does `3-5b/R19`'s "safe because nothing reads it" still hold once a replay
-   exists?**
-   `3-5b/R19` grounds the vulnerable window's exclusion from `to_snapshot()` in "nothing reads it," a
-   claim scoped to a SINGLE live run. A replay's correctness claim is stronger: it says two
-   independently-driven runs (live, then replayed) never diverge in anything that matters. If the
-   vulnerable window's value can differ between the two runs (e.g. a bug that starts it with the wrong
-   duration) and the hash still matches because the field is excluded, replay would report success on
-   a genuinely wrong reconstruction — silently. Recommendation: replay equality checks the canonical
-   hash at minimum (cheap, already exists) and this story should decide explicitly whether to ALSO diff
-   any unhashed-but-live-relevant fields (currently just the vulnerable window) as a second, stricter
-   check — the `3-5b/R19` text ("must enter the snapshot at the same time") reads as anticipating this
-   exact question. Trade-off: hash-only is cheap and reuses existing machinery but inherits the gap
-   named above; a stronger check is more correct but has no established pattern in this codebase to
-   follow, so it would be new machinery, not a reuse.
-5. **Where recordings live and in what format (`user://` vs `res://`, text vs binary), and whether the
-   format is part of the AC set.**
-   Genuinely unaddressed by both the decision-log and `docs/game-architecture.md` — neither names a
-   path or a serialization. Recommendation: `user://` (recordings are session artifacts, not shipped
-   content) in a format the state harness can also construct in-test for headless replay tests (a plain
-   `Dictionary`/`Array` structure serialized with Godot's built-in `var_to_bytes`/`str_to_var`,
-   mirroring `CanonicalHash`'s own reliance on plain-value snapshots rather than typed Resources).
-   Trade-off: a custom binary format would be more compact but harder to hand-inspect while debugging a
-   replay divergence, which is this feature's entire purpose (per `docs/project-context.md`'s own
-   rationale: "the only actionable playtest report here is 'I didn't see that happen'").
-6. **Recording trigger and lifetime, given that no new Input Map actions are allowed.**
-   `docs/game-architecture.md` already answers "how it's triggered" at the design-intent level — a
-   `Control`-level "start-stop-load" toggle in `src/ui/debug/`, not a keybind — which is consistent with
-   AC10's constraint and the `DebugInstrumentPanel` precedent (a window-global `Control`, not tied to
-   either player's Input Map). Recommendation: add a small control to the existing
-   `DebugInstrumentPanel` rather than a new top-level UI, on the "no eighth observation seam / no new
-   window-global surface" discipline this codebase has kept since `E2-CO/R6`. Lifetime (per-round?
-   spans a debug reset? survives a round-over freeze?) is still genuinely open and worth a explicit
-   ruling — recommend per-round, ended by `round_started`, since that is the existing reset boundary
-   every other per-round debug affordance (the HUD's round-clear, the label reset) already uses.
-7. **Does the recorder sit in the runner or in state? State would put it in the hash.**
-   `docs/game-architecture.md`'s directory tree places `intent_recorder.gd` under `src/systems/`
-   (beside `log.gd`/`invariant.gd`, plain classes confirmed NOT autoloads elsewhere in this codebase,
-   not beside the four entries in that same folder explicitly labeled `# autoload`), and its own
-   pseudocode shows the runner calling `_intent_recorder.capture(intents)` directly — a runner-owned
-   instance, the same shape as `_debug_input := DebugInputReader.new()`. This effectively answers the
-   question at the design-intent level: `src/systems/`, runner-owned, never `src/state/`. Recommendation:
-   ratify this placement as locked rather than reopening it — a `src/state/`-resident recorder would be
-   the first thing in this codebase's history to deliberately put replay-support machinery inside the
-   hashed boundary, breaking the same discipline that keeps `InputIntent` itself out of
-   `to_snapshot()`. Trade-off: none identified — this is the one open question where the recommendation
-   carries no real cost, which is why it's listed as still-open rather than folded into the ACs: it
-   rests on reading the architecture doc's directory-tree comments as intent rather than on an explicit
-   decision-log ruling naming this story.
+## Project Structure Notes
 
-### Project Structure Notes
+- `src/systems/intent_recorder.gd` (new) — the capture surface, runner-owned, never `src/state/`
+  (AC 12).
+- `src/controllers/replay_controller.gd` (new) — a `Controller` subclass emitting recorded intents;
+  structurally indistinguishable from hardware to the runner (D3).
+- `src/main/match_runner.gd` — the capture call at the sample step, plus a headless replay mode that
+  suppresses fact-gathering and the live camera-basis push and drives both from the record (AC 9). No
+  change to the seven `connect_*` seams and no change to the `_physics_process` structure (F1
+  untouched).
+- `src/ui/debug/` — **untouched by this story.** The start/stop/load control is `3-0d`'s.
+- `src/state/` — touched by NOTHING in this story (AC 12).
+- `project.godot` — untouched (AC 14).
 
-Per `docs/game-architecture.md`'s existing (not newly proposed) placement, to be confirmed or amended
-at the readiness gate once Open Questions 1 and 7 are ruled:
-- `src/systems/intent_recorder.gd` (new) — the capture surface, runner-owned, never `src/state/`.
-- `src/controllers/replay_controller.gd` (new, only if Open Question 1 resolves to record+replay in
-  this story) — a `Controller` subclass emitting recorded intents; structurally indistinguishable from
-  hardware to the runner (D3).
-- `src/main/match_runner.gd` — one new line at the sample step (`_intent_recorder.capture(intents)`),
-  no change to the seven `connect_*` seams or the `_physics_process` structure (F1 untouched).
-- `src/ui/debug/` — a start-stop-load control, most likely folded into the existing
-  `DebugInstrumentPanel` (Open Question 6) rather than a new top-level `Control`.
-- `src/state/` — touched by NOTHING in this story (AC12; Open Question 7's recommendation).
-
-### Project Context Rules
+## Project Context Rules
 
 - **Seeded RNG consumed only inside `advance()`; no bare global RNG in `src/state/`.** [Source:
   docs/project-context.md#Critical Implementation Rules, line 54]
@@ -319,23 +381,30 @@ at the readiness gate once Open Questions 1 and 7 are ruled:
 - **`Input.*` may appear only under `src/controllers/`.** [Source: docs/project-context.md#Critical
   Implementation Rules; D3(a)]
 
-### References
+## References
 
 - [Source: decision-log.md — `2-3/R2` (X5 rerouted to this story, one stream contract)]
-- [Source: decision-log.md — `E3-P/R3` (file deliberately unauthored until this pass)]
-- [Source: decision-log.md — DEBT B, entries at lines 130, 133, 171, 214, 411, 458]
+- [Source: decision-log.md — `E3-P/R3` (file deliberately unauthored until this pass; AMENDED BY
+  APPEND at this gate, `3-0c/R5`, to scope across the `3-0c`/`3-0d` pair)]
+- [Source: decision-log.md — `D-4` and its 1-8 supersession (four-field contact fact; replay
+  regenerating facts through physics REJECTED)]
+- [Source: decision-log.md — DEBT B, entries at lines 130, 171, 214, 411, 458]
 - [Source: decision-log.md — `2-6/R4` (FeatureFlags load-once/runtime-immutable, replay-hole reasoning)]
+- [Source: decision-log.md — Session 2026-07-31, E3 revisit gate (outcome), "ORDER" (3-0c follows 3-5
+  so the intent shape is final)]
 - [Source: decision-log.md — Session 2026-08-03, Story 3-3 readiness gate close-out (deck composition
   obligation)]
 - [Source: decision-log.md — Session 2026-08-04, 3-5a close-out (cost-map obligation, `3-5b/R14`
   extension)]
-- [Source: decision-log.md — Session 2026-08-04, 3-5b close-out, `3-5b/R19` (vulnerable window unhashed,
-  future obligation)]
+- [Source: decision-log.md — Session 2026-08-04, 3-5b close-out, `3-5b/R19` and `3-5b/R20` (vulnerable
+  window unhashed; the read decision handed to 3-6)]
+- [Source: decision-log.md — Session 2026-08-04, Story 3-0c readiness gate (`3-0c/R1`..`3-0c/R11`)]
 - [Source: docs/game-architecture.md — §Project Structure (directory tree), §Match Runner sketch,
   §Determinism & Replay, §Snapshot contract, §InputIntent lifetime, §Instrumentation wiring (X5
-  record/replay)]
+  record/replay) — PRE-CODE TEXT per `3-0c/R10`, candidate design rather than authority]
 - [Source: docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/epics.md — E3 "Committed obligations"]
-- [Source: sprint-status.yaml — `story_notes.3-0c-intent-recorder`]
+- [Source: sprint-status.yaml — `story_notes.3-0c-intent-recorder`, `story_notes.3-0d-replay-surface-
+  and-live-reload`]
 - Note: `stories-manual-e3.md` contains no mention of the intent recorder, X5, or DEBT B by content
   search — this story is entirely decision-log/architecture-doc-born, not a line item in the original
   E3 manual.
@@ -343,29 +412,36 @@ at the readiness gate once Open Questions 1 and 7 are ruled:
 ## Golden Prediction
 
 **Baseline, re-derived at write time from the `GOLDEN` constant in `test/state/test_determinism.gd`
-(HEAD `ce30569`):** `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`.
+(HEAD `290e4c9`):** `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`.
 
-**Prediction: NONE, conditional on Open Question 7 resolving as recommended.** The recorder is
-runner/`src/systems/`-owned per the architecture doc's existing placement, never `src/state/`-resident,
-so it cannot write a field `to_snapshot()` reaches and cannot move `CanonicalHash` by construction — the
-same structural argument that makes `InputIntent` itself snapshot-exempt (AC12). If the readiness gate
-instead rules the recorder (or any replay-equality bookkeeping from Open Question 4) into `src/state/`,
-this prediction is INVALID and must be rewritten before the dev pass starts, not discovered by a
-surprised measurement. **AC8's with/without-recorder hash-identity test is what makes NONE a checked
-claim rather than an assumption**, and must be run in both directions (recorder present, recorder
-absent) exactly like every other NONE prediction in this project's history.
+**Prediction: NONE.** Both premises are argued, not assumed:
+
+1. **No snapshot key.** Nothing this story ships is reachable from `MatchState.to_snapshot()`. The
+   recorder lives in `src/systems/` and the replay controller in `src/controllers/` (AC 12, guarded by
+   a token scan plus the three `src/state/` scans cited in `3-0c/R9`); `src/state/` gains no file and
+   no field, so there is no path by which a captured channel could enter the hashed chain. This is the
+   same structural argument that makes `InputIntent` itself snapshot-exempt.
+2. **No seeded-RNG consumer.** The recorder and the replay controller draw no randomness. F2's
+   two-site guard (`shuffle_with_rng(` — its definition in `deck.gd` plus the one `MatchState` helper,
+   `test_architecture_invariants.gd`, landed as `3-5b` AC 16) must still read exactly two after this
+   story. A recorder that consumed the gameplay generator would both break replay and fail that guard.
+
+**The identity test's fixture is SEPARATE and the golden sequence is NOT widened.** AC 10's fixture
+drives a mid-run `apply_balance()` and pushes contact facts; the golden fixture gains neither. That
+separation is what makes the NONE prediction structural rather than hopeful — there is no edit to
+`test_determinism.gd`'s driven sequence in this story's scope. If the dev pass finds itself needing
+one, the prediction is INVALID and must be rewritten before the work continues, not discovered by a
+surprised measurement.
 
 ## Live Smoke
 
-**TBD at this story's own readiness gate — conditional on Open Questions 1 and 6.** If the story ships
-record-only with no operator-facing control (a headless capture proven entirely by tests), the
-`3-1`/`3-5b` precedent applies directly: NOT REQUIRED, no player-facing surface. If a start-stop-load
-`Control` ships in `DebugInstrumentPanel` (the Open Question 6 recommendation), it is new,
-operator-visible instrumentation in the same family the `2-2`/`2-6` debug-panel geometry smokes already
-cover — a brief smoke confirming the control is reachable and does not collide with the panel's existing
-countdown display becomes the minimum bar, short of a full `R-D6` two-human re-invocation (which this
-story's mechanism gives no independent reason to spend). This section must be rewritten with a concrete
-verdict once Open Questions 1 and 6 are ruled — it is not filled in on a guess here.
+**NOT REQUIRED — and the reason is this story's own, not a borrowed one.** `3-0c` ships nothing
+live-observable: no operator control, no Input Map action, no HUD or debug-panel surface, no visual or
+audible change, and no altered live-play behaviour (the recorder is a passive tap; replay mode is
+reachable only from a test). There is nothing a human at the keyboard could see that the headless
+identity test does not already prove more strictly. The smoke belongs to `3-0d`, which ships the
+start/stop/load control, `user://` persistence and the live reload trigger — every part of this feature
+that a human can actually observe. `R-D6` is not re-invoked here and stays AVAILABLE.
 
 ## Dev Agent Record
 
@@ -382,3 +458,4 @@ verdict once Open Questions 1 and 6 are ruled — it is not filled in on a guess
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
 | 2026-08-04 | 0.1 | File authored at this story's own creation pass (`E3-P/R3`), not at a readiness gate. Twelve ACs recorded, each already locked by a decision-log ruling, an architecture-doc commitment, or a structural fact verified by content against shipped code (HEAD `ce30569`) — the one-stream-contract shape (seed + intents + reload events + injected deck composition + injected cast-cost map), the four-field contact fact's inheritance, `InputIntent`'s full eight-field capture, the passive-tap guarantee, the no-eighth-seam and no-new-Input-Map-action constraints, `FeatureFlags` staying load-once, and captured content staying outside `to_snapshot()`/`CanonicalHash`. Seven items deliberately NOT decided — scope (record vs record+replay), whether the initial `apply_balance()` belongs in the stream, DEBT B's live-trigger question, replay-equality strength against the one confirmed unhashed field (`PlayerState.vulnerable_window`), recording storage/format, the recording trigger/lifetime, and runner-vs-state placement — each recorded as an Open Question with a recommendation and its trade-off, to be ruled at this story's own readiness gate. Dev Notes correct a premise in this story's commissioning brief: swing-dedupe records and `attack_index` are hashed (not unhashed transients as assumed); the only confirmed unhashed cross-tick state is the vulnerable window, per `3-5b/R19`. Golden Prediction NONE (conditional on the runner/systems-placement recommendation); Live Smoke TBD (conditional on scope/trigger rulings). Status `backlog`; promotion to `ready-for-dev` deferred to the readiness-gate fix pass. Nothing under `src/` or `test/` is touched by this pass — docs only. | Claude Sonnet 5 |
+| 2026-08-04 | 0.2 | Readiness-gate fix pass (NOT READY on first read with ten blocking findings -> fixed and promoted, same session; TWENTIETH logged readiness-gate session, all twenty NOT READY on first reading and all twenty resolved the same session). Eleven rulings applied, `3-0c/R1`..`3-0c/R11`. **The story SPLIT** (`3-0c/R5`): `3-0c` keeps the contract and its proof and is entirely headless; a new sibling slot, `3-0d-replay-surface-and-live-reload`, takes the operator surface, `user://` persistence and format, `CACHE_MODE_IGNORE`, the live reload trigger and the live smoke — dividing DEBT B along its own stated seam. AC set replaced with FOURTEEN machine-checkable claims about shipped software. "Exactly five channels" is dead: the channel set is DERIVED from `MatchState`'s intake surface by a source scan (`3-0c/R2`), and the gate's intake list was corrected by content — `set_camera_basis` is an eighth intake whose value reaches hashed `velocity`, so it becomes a channel (AC 8). Replay is not a controller swap alone: contact facts originate in the runner from `Area3D` overlaps and raw positions and cannot ride `InputIntent`, so replay suppresses gathering and drains recorded facts into `push_contact` by tick index (`3-0c/R1`, AC 9), with replay's guarantee stated as STATE identity, not visual identity. Injected feature flags become a channel without reopening load-once immutability (`3-0c/R3`, AC 7); the match-start `apply_balance()` becomes reload event #0 (`3-0c/R4`, AC 4). The two unfalsifiable hash-comparison ACs — both pass with `capture()` bodied as `pass` — are REPLACED by one record-then-replay identity test in its own fixture, driving every channel including a mid-run `apply_balance` and pushed contact facts (`3-0c/R6`, AC 10). A FABRICATED QUOTATION attributed to `input_intent.gd`'s header is deleted and the AC re-sourced to the file's real text plus the E3 ordering ruling, both quoted exactly (`3-0c/R7`). The unhashed cross-tick set is corrected from one member to THREE — the vulnerable window, the card containers' contents/order, and `_camera_bases` — each with its soundness argument, pinned so a fourth fails (`3-0c/R8`, AC 11). Placement closed to `src/systems/`, runner-owned, cited to three live `src/state/` guards rather than to the architecture tree, with the argument's limit stated (`3-0c/R9`, AC 12). The architecture doc's X5 section is ruled PRE-CODE TEXT — candidate design, not authority; its scope line is ratified, its controller-swap mechanism becomes the architecture-amendment queue's NINTH member, flushing at the E3 close-out (`3-0c/R10`). Guard corrections (`3-0c/R11`): the seven-`connect_*` count gains its first test (AC 13); the vacuous negative Input-Map scan is replaced by an exact-equality action-set pin (AC 14); the fixture seed is parameterised; "at the same tick it is injected" corrected to "at match start, before the first tick"; the record carries the deck/cost injection ORDER. Dev Notes APPENDED to (all twelve original bullets retained) with the eleven rulings and three content corrections: `log.gd` does not exist in `src/systems/`, the architecture tree's autoload-labelled entries number three not four, and the paraphrased `3-5b/R19` quotation is now quoted exactly. Golden Prediction NONE, now ARGUING both premises (no snapshot key; no seeded-RNG consumer) and stating that the identity fixture is separate so the golden cannot move. Live Smoke NOT REQUIRED with this story's own reason: nothing in it is live-observable. Open Questions section REMOVED — all seven are ruled or re-homed to `3-0d`. Status `backlog` -> `ready-for-dev`; `sprint-status.yaml` updated alongside with the new `3-0d` board slot. Docs only — no `src/`, no `test/`, no `project.godot`; suite not run. | Claude Opus 5 |
