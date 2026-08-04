@@ -5,6 +5,51 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by STORY 3-5a (card-mode select + Mode (1) resolution), ONE re-baseline, THREE
+## separately named causes plus ONE predicted-and-measured NON-MOVER — predicted in the story's
+## Golden Prediction, each ISOLATED BY ITS OWN MEASUREMENT and REPRODUCED IN BOTH DIRECTIONS.
+## Measured in order, one edit at a time:
+##   1. SNAPSHOT SHAPE (a mover, unconditional and predicted): PlayerState.to_snapshot() gains
+##      "discard_size" beside the deck/hand counts. Taken with the pile EMPTY and no cast in the
+##      sequence, so this measures the KEY and nothing else — ad42841e -> a079c111. Sufficient
+##      alone to move the hash.
+##      Isolated FIRST from an even earlier step, the 3-3 cause-1 method repeated: DiscardPile
+##      existing and being OWNED by PlayerState, with nothing snapshotted, MEASURED UNMOVED at
+##      ad42841e (the golden test PASSED at that step).
+##   2. THE RECORDED CAST's CONTAINER EFFECT (a mover, predicted): P1 commits a cast at
+##      CAST_TICK 22 with the price authored at 0.0, so the containers move and the pool does
+##      not. deck_size 8 -> 7 and discard_size 0 -> 1 on P1 alone. a079c111 -> 41e0f221.
+##      NOTE, and it refines the story's own wording: hand_size does NOT move. AC 5's refill is
+##      INSTANT, so the hand goes 9 -> 8 -> 9 inside one tick and the end-of-tick snapshot never
+##      sees the gap. The visible movers are the deck and the discard.
+##   3. THE FIXTURE COVERAGE VALUE CAST_MANA_COST (a mover, predicted, and separable from cause 2
+##      exactly because cause 2 was taken at a zero price): 7.0 is paid out of P1's accumulation,
+##      41.5 -> 34.5 at the hashed t24. 41e0f221 -> c4b9f897, the value below.
+##   4. rng_state — PREDICTED A NON-MOVER, MEASURED A NON-MOVER. Deck.draw_top() reads
+##      _cards[size - 1] and remove_at()s it; it takes no rng argument and consumes nothing, and
+##      the only RNG consumer in Deck is shuffle_with_rng (3-3). This story adds no reshuffle
+##      (that is 3-5b), so the replacement draw cannot advance the generator. Measured rather
+##      than reasoned, and the measurement is KEPT as a permanent test
+##      (test_the_recorded_cast_consumes_no_rng, which runs the sequence with and without the
+##      cast and compares rng_state directly) because a PRIOR version of this story's Golden
+##      Prediction claimed the opposite.
+## INTERMEDIATE measurement, isolating the SEAT from the AUTHORED VALUES (the 3-3/3-4 precedent):
+## with the whole mechanism in place — the cost-injection seam, the step-6 dispatch, the
+## evaluator, the discard container, the Input Map actions and the runner wiring — but the fixture
+## committing NO cast, the hash was a079c111, BIT-IDENTICAL to cause 1 alone. The cast machinery
+## is structurally incapable of moving this hash without a cast actually landing.
+## REVERSE, both directions reproduced EXACTLY: toggling CAST_MANA_COST back to 0.0 reproduced
+## 41e0f221 (cause 3 isolated); suppressing the cast as well (CAST_TICK 0, a genuine one-value
+## toggle) reproduced a079c111 (cause 2 isolated).
+## NOT a cause: CARD CONTENT, still. data/cards/ remains unreachable from the state harness and
+## _golden_costs prices this fixture's OWN opaque ids, so adding or repricing a real card can
+## never re-baseline this hash — the promise the epic exists to deliver, now extended to costs.
+## Nor is the injected cost MAP itself: it is excluded from to_snapshot(), which is also what
+## keeps its StringName KEYS out of the hash (Array[StringName].sort() orders by internal POINTER
+## on this engine, so such a key would hash green in-process while replay was already broken).
+## Previous golden ad42841edcd549660de44a9cf1b6c916b2a090a9c973ec44ec8ecd1960434f08
+## (story 3-3, deck/hand/draw — the record below).
+##
 ## Re-baselined by STORY 3-3 (deck, hand, draw), ONE re-baseline, THREE separately named causes
 ## — predicted in the story's Golden Prediction and each ISOLATED BY ITS OWN MEASUREMENT and
 ## REPRODUCED IN BOTH DIRECTIONS. Measured in order, one edit at a time:
@@ -164,7 +209,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "ad42841edcd549660de44a9cf1b6c916b2a090a9c973ec44ec8ecd1960434f08"
+const GOLDEN := "c4b9f897138a2b36dbce11f939b2892379919909c17df1696cde24a75c070e2e"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -183,6 +228,24 @@ const PASSIVE_PER_TICK := 1.25
 ## appears anywhere else here either.
 const DECK_SIZE := 17
 const HAND_SIZE := 9
+
+## Story 3-5a (AC 12): the CAST fixture values — coverage, NOT feel, like every number here.
+##
+## THE FIXTURE MUST AUTHOR ITS OWN CAST-COST CONTENT. data/cards/ is unreachable from the state
+## harness (no autoloads) and _golden_deck's ids are nothing the card library contains, so without
+## costs authored HERE every card-shaped cause would measure a FALSE NON-MOVER: the cast would
+## simply be refused and nothing would happen. That is why the injection below exists at all.
+##
+## CAST_TICK 22 puts the cast on a tick where P1 is IDLE (the t17 roll ends t21), so no action
+## state is in flight around it and the cast's effect on the record is unambiguous. P1 holds
+## 12.0 + 22 * 1.25 = 39.5 mana by then, comfortably above the price, so the cast LANDS rather
+## than measuring a refusal by accident.
+## CAST_SLOT 3 and CAST_MANA_COST 7.0 are both DISTINCT from every other number this fixture
+## carries, so a selector bug that read the wrong field lands on a different value and MOVES the
+## hash rather than silently coinciding with one.
+const CAST_TICK := 22
+const CAST_SLOT := 3
+const CAST_MANA_COST := 7.0
 
 ## Movement pairs [p1, p2], cycled over the run (tick t uses MOVES[(t - 1) % 6]).
 const MOVES := [
@@ -356,6 +419,22 @@ func _golden_deck() -> Array[StringName]:
 	return out
 
 
+## Story 3-5a (AC 12): the golden's CAST-COST content, built in-test over _golden_deck's opaque
+## ids — the _golden_config / _golden_deck principle applied to the third injected resource. Every
+## id is priced identically, so which card the shuffle happened to put in CAST_SLOT cannot change
+## the arithmetic and the measurement stays a function of the PRICE alone.
+##
+## The fixture plays the RUNNER's role here, deriving the map and injecting it, exactly as it
+## already does for the deck composition.
+func _golden_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in _golden_deck():
+		var c := CardCastCondition.new()
+		c.mana_cost = CAST_MANA_COST
+		out[id] = c
+	return out
+
+
 ## Golden-path flags — constructed IN-TEST with melee_mana_generation ON, never read
 ## from the authored .tres (the same tuning-cannot-move-the-hash principle as
 ## _golden_config).
@@ -448,8 +527,11 @@ func test_golden_sequence_exercises_block_and_deflect() -> void:
 	assert_eq(mana_readings[13 - 1], 12.0 + 13 * PASSIVE_PER_TICK,
 		"t13: a blocked hit is CONFIRMED — full flat mana ON TOP of 13 passive ticks")
 	assert_eq(hp_readings[TICKS - 1], 117.0, "t24: NON-FULL HP on record (no HP regen exists)")
-	assert_eq(mana_readings[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK,
-		"t24: NON-ZERO mana on record (no E1 mana sink) — one hit plus the passive accumulation")
+	# Story 3-5a: the t22 cast is the FIRST mana SINK this fixture has ever had, so the final
+	# reading is the accumulation MINUS the price. The t4/t5/t13 readings above are untouched —
+	# they all precede CAST_TICK, which is what keeps this pin's block/deflect subject intact.
+	assert_eq(mana_readings[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
+		"t24: one hit plus the passive accumulation, LESS the t22 cast's price")
 	assert_eq(p2_stamina_readings[TICKS - 1], 21.0,
 		"t24: P2 MID-REGEN — 20, then its t15 attack spends 6 (E3-RG/R2) and restarts the "
 		+ "delay (t15-t17), regen t18-t24 -> 21; the hash encodes both spends and the regen")
@@ -526,10 +608,13 @@ func test_golden_sequence_exercises_passive_mana_regen() -> void:
 	_play_sequence(ms, func(_t: int) -> void: p1_mana.append(ms.p1.mana.get_current()))
 	assert_eq(p1_mana[1 - 1], PASSIVE_PER_TICK,
 		"t1: the passive rung ran on the very FIRST tick — no delay window (sealed, AC 4)")
-	assert_eq(p1_mana[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK,
-		"t24 (hashed): P1's one confirmed hit (12.0) plus 24 passive ticks at 1.25 = 42.0")
+	assert_eq(p1_mana[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
+		"t24 (hashed): P1's hit (12.0) plus 24 passive ticks at 1.25, LESS the t22 cast price")
+	# Story 3-5a: P2 never casts, so its reading is the UNSPENT accumulation. The asymmetry is now
+	# doing double duty — it still catches a faucet wrongly seated on the attacker path, and it
+	# additionally catches a cast that debited the wrong player.
 	assert_eq(ms.p2.mana.get_current(), 12.0 + TICKS * PASSIVE_PER_TICK,
-		"t24: P2 carries the SAME passive accumulation — the faucet is per-player, not attacker-only")
+		"t24: P2 carries the FULL passive accumulation — per-player faucet, and P2 cast nothing")
 	assert_true(ms.p1.mana.get_current() < ms.p1.mana.get_maximum(),
 		"left UNCLAMPED at t24, so the hash encodes the accumulated value and not the cap")
 	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.DEAD,
@@ -555,8 +640,13 @@ func test_golden_sequence_exercises_deck_shuffle_and_hand_fill() -> void:
 	_play_sequence(ms)
 	assert_eq(ms.p1.hand.size(), HAND_SIZE, "the fill ran: P1 holds hand_size cards at t24")
 	assert_eq(ms.p2.hand.size(), HAND_SIZE, "...and so does P2 — the deal is per-player")
-	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE,
-		"deck remaining is deck_size - hand_size (AC 9) — no reshuffle, no second draw")
+	# Story 3-5a: P2 is now the untouched player and keeps the original AC 9 counts; P1 has drawn
+	# ONE replacement for its t22 cast. Asserting them separately is what keeps this pin about the
+	# DEAL — a regression in the deal shows on both players, a cast bug on only one.
+	assert_eq(ms.p2.deck.size(), DECK_SIZE - HAND_SIZE,
+		"P2 cast nothing: deck remaining is deck_size - hand_size (AC 9) — no reshuffle")
+	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
+		"P1 drew ONE replacement for its t22 cast")
 	var injected := _golden_deck()
 	var p1_pile := ms.p1.deck.to_array()
 	var p2_pile := ms.p2.deck.to_array()
@@ -566,11 +656,73 @@ func test_golden_sequence_exercises_deck_shuffle_and_hand_fill() -> void:
 		"P1 and P2 drew DIFFERENT orders from the one seeded generator (the ONE-SEAT ordering)")
 	var p1_all := p1_pile.duplicate()
 	p1_all.append_array(ms.p1.hand.to_array())
+	# Story 3-5a: the discard joins the conservation sum — the cast card left the hand and is
+	# neither in the pile nor the hand, so without this the multiset would be one short.
+	p1_all.append_array(ms.p1.discard.to_array())
 	p1_all.sort()
 	var expected := injected.duplicate()
 	expected.sort()
 	assert_eq(p1_all, expected,
 		"deck + hand is a PERMUTATION of the injected multiset — nothing invented, nothing lost")
+
+
+## Story 3-5a (AC 12), the cast analogue of the pins above: this re-baseline's causes 2 and 3 are
+## named as "the deck and discard counts moved" and "the price was paid", and naming them is
+## VACUOUS unless the recorded run genuinely cast a card. A fixture that injected cast costs but
+## never committed one would still move the hash (the snapshot key alone did that at M1) and would
+## leave the golden guarding nothing about the cast path at all.
+##
+## Pinned on the hashed final state, each claim separately:
+##   - the cast LANDED: one card in P1's discard, and P2 (who never casts) has none;
+##   - the REPLACEMENT was instant: P1's hand is still HAND_SIZE, which is why hand_size is a
+##     measured NON-mover even though the card left the hand — the refill restores it inside the
+##     same tick;
+##   - the DECK paid for the refill: one fewer than the no-cast count, which is cause 2's whole
+##     visible content alongside the discard;
+##   - the PRICE was paid: P1 ends CAST_MANA_COST below the accumulation it would otherwise
+##     carry, which is cause 3;
+##   - nothing was invented or lost: deck + hand + discard is a permutation of the composition.
+func test_golden_sequence_exercises_the_recorded_cast() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	assert_eq(ms.p1.discard.size(), 1, "the cast LANDED — exactly one card in P1's discard")
+	assert_eq(ms.p2.discard.size(), 0, "P2 never casts on this sequence — its discard is empty")
+	assert_eq(ms.p1.hand.size(), HAND_SIZE,
+		"INSTANT refill: the hand is back to full, which is why hand_size does not move the hash")
+	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
+		"the replacement came off the deck — one below the no-cast count (cause 2)")
+	assert_eq(ms.p1.mana.get_current(), 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
+		"the PRICE was paid out of the accumulation (cause 3)")
+	var all: Array[StringName] = []
+	all.append_array(ms.p1.deck.to_array())
+	all.append_array(ms.p1.hand.to_array())
+	all.append_array(ms.p1.discard.to_array())
+	all.sort()
+	var expected := _golden_deck()
+	expected.sort()
+	assert_eq(all, expected,
+		"deck + hand + discard is a PERMUTATION of the injected composition — nothing invented")
+
+
+## Story 3-5a: rng_state is a PREDICTED and MEASURED NON-MOVER, and this is the measurement,
+## kept permanently rather than taken once and written into a comment.
+##
+## REASON: Deck.draw_top() reads _cards[size - 1] and remove_at()s it. It takes no rng argument
+## and consumes nothing — the ONLY RNG consumer in Deck is shuffle_with_rng (3-3), and this story
+## adds no reshuffle (that is 3-5b). So the replacement draw cannot advance the generator.
+##
+## Measured by running the recorded sequence WITH and WITHOUT the cast and comparing rng_state
+## directly. The prior version of the story's Golden Prediction claimed the opposite — that a
+## refill draw consumes the seeded RNG — so this is pinned rather than asserted from reading.
+func test_the_recorded_cast_consumes_no_rng() -> void:
+	var with_cast := _make_match()
+	_play_sequence(with_cast)
+	var without_cast := _make_match()
+	_play_sequence(without_cast, Callable(), false)
+	assert_eq(with_cast.p1.discard.size(), 1, "sanity: the cast ran in the first match")
+	assert_eq(without_cast.p1.discard.size(), 0, "sanity: and did not in the second")
+	assert_eq(with_cast.to_snapshot()["rng_state"], without_cast.to_snapshot()["rng_state"],
+		"the cast and its replacement draw consumed NO rng — draw_top takes no generator")
 
 
 ## Story 3-3 (AC 5): two INDEPENDENTLY CONSTRUCTED matches, same seed, POPULATED deck, must hash
@@ -585,7 +737,8 @@ func test_two_matches_with_a_populated_deck_hash_identically() -> void:
 	var b := _make_match()
 	_play_sequence(a)
 	_play_sequence(b)
-	assert_eq(a.p1.deck.size(), DECK_SIZE - HAND_SIZE, "sanity: the deck really is populated")
+	assert_eq(a.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
+		"sanity: the deck really is populated (less P1's one t22 cast replacement)")
 	assert_eq(CanonicalHash.of(a.to_snapshot()), CanonicalHash.of(b.to_snapshot()),
 		"independently constructed matches with the same seed and a populated deck hash identically")
 
@@ -608,14 +761,27 @@ func _make_match() -> MatchState:
 	# single authored value rather than a hand-edited call site.
 	if config.deck_size > 0:
 		ms.inject_deck(_golden_deck())
+		# Story 3-5a (AC 12): cast costs, injected in the runner's own match-start order (after
+		# the composition — the seam validates that the map is TOTAL over it). Gated on the same
+		# authored size for the same reason: a zero deck_size means "this fixture has no cards at
+		# all", which keeps the reverse measurements a genuine one-value toggle.
+		ms.inject_card_costs(_golden_costs())
 	ms.drain_signals()
 	return ms
 
 
-func _play_sequence(ms: MatchState, after_tick := Callable()) -> void:
+## `cast` exists ONLY so test_the_recorded_cast_consumes_no_rng can run the identical sequence
+## with the cast suppressed. Every hashed path uses the default.
+func _play_sequence(ms: MatchState, after_tick := Callable(), cast := true) -> void:
 	for t in range(1, TICKS + 1):
 		var pair: Array = MOVES[(t - 1) % 6]
 		var i1 := _intent(pair[0], P1_PRESS.get(t, []), [])
+		# Story 3-5a (AC 12): P1's ONE recorded cast. Card fields are plain intent values, not
+		# named actions, so they ride alongside the press overlay rather than inside it.
+		if cast and t == CAST_TICK:
+			i1.card_slot = CAST_SLOT
+			i1.card_mode = Enums.ModeKind.BASIC
+			i1.card_commit = true
 		var held2: Array = [&"block"] if _block_held(t) else []
 		var i2 := _intent(pair[1], P2_PRESS.get(t, []), held2)
 		for fact: Array in CONTACTS.get(t, []):

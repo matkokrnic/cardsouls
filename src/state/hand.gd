@@ -43,3 +43,24 @@ func is_empty() -> bool:
 ## carries the COUNT alone (AC 5).
 func to_array() -> Array[StringName]:
 	return _cards.duplicate()
+
+
+## Story 3-5a (AC 6): the REMOVAL method this container did not have. Before this story the
+## hand exposed add/clear/size/is_empty/to_array only, and `to_array` returns a DUPLICATE — so
+## no caller could take a card out of a hand at all, which is precisely why playing a card
+## needed this seat rather than a mutation through the read accessor.
+##
+## Returns the removed id so the ONE caller (MatchState's step-6 cast dispatch) can hand it
+## straight to the discard pile without a second lookup that could disagree with this one.
+##
+## Bounds are a PROGRAMMING ERROR, not a runtime condition, and are enforced here rather than
+## trusted: the dispatch already rejects an out-of-range or empty slot through the
+## action_rejected path BEFORE reaching this call (CastEvaluator.REASON_EMPTY_SLOT), so an
+## index arriving here out of range means the guard above it was bypassed. Invariant.check is
+## the export-surviving form (X1), matching push_contact and the injection seams.
+func remove_at(index: int) -> StringName:
+	Invariant.check(index >= 0 and index < _cards.size(),
+		"hand slot %d out of range (hand holds %d) — the step-6 guard was bypassed" % [index, _cards.size()])
+	var id: StringName = _cards[index]
+	_cards.remove_at(index)
+	return id

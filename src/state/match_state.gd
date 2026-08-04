@@ -36,6 +36,24 @@ signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp
 ## CombatCues) inherits the seam obligation, the action_rejected precedent.
 signal deflect_landed(attacker_slot: int, target_slot: int)
 
+## Story 3-5a (AC 5): a Mode ① cast RESOLVED — queued in step 6 after the mana is spent, the
+## card has left the hand for the discard, and the replacement has been drawn. Payload is the
+## casting slot and the card that resolved.
+##
+## DELIBERATELY UNCONSUMED IN E3, and that is the correct state rather than a gap: the story's
+## Dev Notes rule that "a resolved cast queuing an unconsumed signal is the correct E3 state; a
+## fake placeholder actor is not". Nothing binds it — there is NO runner connect_ seam and no
+## presentation consumer — so the seven locked observation seams are still seven and this is
+## NOT an eighth. The FIRST consumer inherits the seam obligation, exactly as action_rejected
+## (1-4 -> 1-10) and deflect_landed (1-8 -> 1-10) each did.
+##
+## CARRIES THE CARD ID, NOT A CardEffect. The injected map is COSTS (AC 4), so the state layer
+## never receives a card's effect content and cannot emit it without a second injected map
+## built for a signal that has no listener — speculative machinery of exactly the kind the
+## pose_id retirement precedent exists to prevent. A consumer that needs the effect resolves
+## `id -> CardEffect` on the presentation side, where CardDatabase is already readable.
+signal card_cast_resolved(slot: int, card_id: StringName)
+
 var p1: PlayerState
 var p2: PlayerState
 var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
@@ -93,6 +111,26 @@ var _deck_contents: Array[StringName] = []
 ## balance is present, and it is derivable from the replay record (seed + injection + intents)
 ## in the one case where it is not.
 var _deck_deal_pending := false
+
+## Story 3-5a (AC 4): the injected per-card CAST COSTS, id -> CardCastCondition. ONE MATCH-WIDE
+## MAP, not a per-player pair: 3-3 locked that both players receive the same injected
+## composition through one seam, so a per-player cost map would be two copies of one fact.
+## Asymmetric decks (and with them asymmetric costs) arrive with real deckbuilding in E4/E5+;
+## until then this shape is an INHERITED CONSEQUENCE, not a defect.
+##
+## EXCLUDED FROM to_snapshot(), by the _deck_contents / _deck_deal_pending precedent: this is
+## injected CONTENT, not evolving state, and it never changes after match start. That exclusion
+## is also what makes its StringName KEYS safe. Keys of this kind must NEVER reach the snapshot:
+## CanonicalHash sorts dictionary keys, and Array[StringName].sort() was MEASURED on this engine
+## (4.6.3) to order by INTERNAL POINTER rather than lexicographically — deterministic within one
+## process, NOT across runs or builds. Both determinism tests run in a single process, so a
+## StringName key inside the hash would pass green while replay was already broken and no guard
+## in the suite would catch it.
+##
+## NEW OBLIGATION for the intent-recorder story (3-0c), the twin of the one _deck_contents
+## already carries: this map must enter the replay record alongside seed, intents and the
+## injected composition, or a replay silently depends on the contents of data/cards/.
+var _card_costs: Dictionary[StringName, CardCastCondition] = {}
 
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
@@ -183,7 +221,14 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    stays provable (F2) — and because the debug reset is an intent in the recorded stream,
 	#    the reset-time reshuffle is replay-safe for free.
 	#    [E3 card play/draw — 3-5; E6 pitch resolution]
+	#    Story 3-5a (AC 2/AC 9): the CAST dispatch shares this one seat, seated AFTER the deal so
+	#    a cast committed on the very first tick has a hand to cast FROM. Card actions are READ
+	#    HERE, never ingested at step 1 (step 1 ingests the debug reset and nothing else) —
+	#    matching the E2-CO/R3 precedent already applied to move_dir/attack/block/roll. Fixed
+	#    P1 -> P2 order, like every other per-player loop in this function.
 	_deal_pending_decks()
+	_resolve_card_action(p1, p1_intent, 0)
+	_resolve_card_action(p2, p2_intent, 1)
 	# 7. Board update          [E4 minion/totem throttled-tick seam]
 	# 8. Resolution check
 	_check_resolution()
@@ -234,6 +279,35 @@ func inject_deck(contents: Array[StringName]) -> void:
 	Invariant.check(not contents.is_empty(), "injected deck content must be non-empty (empty card set or a failed export remap?)")
 	_deck_contents = contents.duplicate()
 	_deck_deal_pending = true
+
+
+## Story 3-5a (AC 4): the CAST-COST injection seam — the inject_deck precedent directly above,
+## followed exactly: runner-only, ONCE at match start, CONTENT ONLY, and NO reload path
+## (deliberately unlike apply_balance). This is the ONLY way cast costs reach src/state/; no
+## file under src/state/ may name CardDatabase, CARDS_DIR or data/cards, so the runner reads the
+## autoload, derives the map and hands plain ids + CardCastCondition resources in.
+##
+## MUST BE CALLED AFTER inject_deck(). The second check below reads _deck_contents, so the
+## ordering is not a style preference — it is what makes the check mean anything. The runner
+## calls the two in that order and test_card_play.gd pins the guard.
+##
+## TWO checks, both Invariant.check at the seam (the inject_deck / push_contact precedent — a
+## plain static class, export-surviving, no autoload):
+##   1. NON-EMPTY, the inject_deck rationale verbatim: a data/cards/ that degrades to empty
+##      under an export remap becomes a LOUD failure at match start rather than a match in
+##      which every cast silently refuses with `unknown_card`.
+##   2. TOTAL OVER THE COMPOSITION: every id that can ever reach a hand has a cost entry. A
+##      hand is filled only from the deck, and the deck is laid down only from the injected
+##      composition, so this check makes an unknown id AT CAST TIME structurally unreachable —
+##      which is precisely why CastEvaluator carries no live crash guard for it (AC 4's
+##      "unreachable rather than a new crash guard").
+func inject_card_costs(costs: Dictionary[StringName, CardCastCondition]) -> void:
+	Invariant.check(not costs.is_empty(),
+		"injected cast costs must be non-empty (empty card set or a failed export remap?)")
+	for id in _deck_contents:
+		Invariant.check(costs.has(id),
+			"injected deck id %s has no cast cost entry — inject_card_costs must be total over the composition" % id)
+	_card_costs = costs.duplicate()
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -634,10 +708,108 @@ func _deal_player(player: PlayerState) -> void:
 	player.deck.set_contents(_deck_contents)
 	player.deck.shuffle_with_rng(_rng)
 	player.hand.clear()
+	# Story 3-5a: the discard is emptied HERE, beside the hand, because this is the seat that
+	# re-lays the whole composition. Without it a debug reset would restore every card to the
+	# deck AND leave the played ones in the discard, so "deck + hand + discard is a permutation
+	# of the injected composition" — the property test_card_play.gd pins — would break on the
+	# first reset after a cast. This is the reset's discard answer; the RESHUFFLE (returning the
+	# discard to the deck mid-round) is 3-5b's and is deliberately not here.
+	player.discard.clear()
 	for _slot in balance.hand_size:
 		if player.deck.is_empty():
 			break
 		player.hand.add(player.deck.draw_top())
+
+
+## Story 3-5a (AC 2/AC 9): the CARD-ACTION dispatch — a PRIVATE MatchState method called at
+## step 6, deliberately not a free function and not a new class, because the mutation must stay
+## inside advance()'s ordered dispatch (D2) where every other mutation lives. The architecture
+## doc's Novel Pattern 6 sketch shows a free-standing `resolve()` with no owning class named;
+## nothing of that shape existed in src/ and none is introduced here (the eighth
+## architecture-amendment-queue member).
+##
+## FROZEN TICKS NEVER REACH THIS FUNCTION, and that is the whole frozen-tick contract: step 1b
+## returns before step 2, so on a round-over tick no intent is ingested at all and a committed
+## cast is DROPPED SILENTLY — no state change, no signal, not even a rejection. That is
+## CONSISTENT with every other intent during the freeze (attack, block, roll and move are all
+## dropped the same way, for the same structural reason) and it is why card intent is NOT read
+## inside step 1b. Emitting a rejection for casts alone would require reading card intent there
+## and would make a cast the ONE action with freeze feedback — a privilege nothing else has.
+## This closes the readiness-gate finding that no contract existed for a cast on a frozen tick:
+## the contract is silence, ruled and pinned (test_card_play.gd::test_cast_on_a_frozen_tick_is
+## _dropped_silently), not an omission for a later gate to rediscover as a defect.
+##
+## The DEAD guard below is the LIVE-tick counterpart and is DEFENSE IN DEPTH, in the same family
+## as the DEAD branches at step 3 (_resolve_movement), step 4 (_resolve_contacts) and step 5
+## (_generate_mana): DEAD and _round_over are set TOGETHER by _end_round, and cleared together by
+## the debug reset, so a DEAD player is always also frozen and this branch is unreachable in
+## natural play. Its siblings are unreachable for the same reason and are guarded anyway; each is
+## pinned by the same forced-DEAD test idiom (`set_action_state(DEAD)` with _round_over left
+## FALSE), which is how this one is proven non-vacuous too. It returns SILENTLY, like every
+## sibling — a corpse gets no rejection feedback.
+##
+## NO `balance == null` GUARD, deliberately unlike its step-3/4/5 neighbours: that family exists
+## to stop reads of unset balance FIELDS, and this path reads none. Costs come from the injected
+## map and values from the pools. A pre-injection match has an empty hand, so a commit there
+## takes the empty-slot rejection, which is a true statement about that match rather than an
+## inert-guard violation.
+func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -> void:
+	if not intent.card_commit:
+		return
+	if player.hero.action_state == HeroState.ActionState.DEAD:
+		return
+	# AC 2's guarded stubs. ONE mode resolves in E3; the other three are declared so they CAN be
+	# guarded (see Enums.ModeKind) and are unreachable — the controller never produces them, and
+	# reaching one is a programming error, not a player-facing refusal. Invariant.check is the
+	# guard helper (`check_invariant` names no real symbol anywhere in this repo).
+	match intent.card_mode:
+		Enums.ModeKind.BASIC:
+			_resolve_basic_cast(player, intent.card_slot, slot)
+		_:
+			Invariant.check(false,
+				"card mode %d is a guarded stub and is unreachable in E3 (only BASIC resolves)"
+						% int(intent.card_mode))
+
+
+## Story 3-5a (AC 5): Mode ① resolution, ENTIRELY WITHIN ONE TICK — mana spent, card out of the
+## hand, card into the discard, replacement drawn immediately, effect signal queued. No delay
+## field, no countdown, no in-flight window: the delayed replacement draw and everything it makes
+## reachable (deck exhaustion, reshuffle, the vulnerable window) are 3-5b's, and nothing here
+## spans ticks.
+##
+## REJECTIONS RIDE THE SHIPPED SEAM (AC 7): HeroState.reject_action — the same queued
+## action_rejected signal and the same per-slot observation seam that already carries the
+## insufficient-stamina roll rejection to StateInspector. No new signal, no new seam, seam count
+## unchanged. The action name is the prefix-free &"card_cast", matching the &"roll"/&"attack"
+## vocabulary the existing rejections use.
+##
+## THE EVALUATOR COMPUTES, THE POOL APPLIES (AC 3): CastEvaluator returns a reason and touches
+## nothing; the spend below goes through ManaPool.spend(), inside this ordered dispatch. The
+## spend cannot fail after an ALLOWED verdict — the evaluator has just compared the same cost
+## against the same live reading — so a false return is a programming error and says so.
+func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void:
+	if hand_slot < 0 or hand_slot >= player.hand.size():
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
+		return
+	var id: StringName = player.hand.to_array()[hand_slot]
+	var condition: CardCastCondition = _card_costs.get(id)
+	var reason := CastEvaluator.refusal_reason(condition, player.mana.get_current(),
+			player.orbs, flags)
+	if reason != CastEvaluator.ALLOWED:
+		player.hero.reject_action(&"card_cast", reason)
+		return
+	Invariant.check(player.mana.spend(condition.mana_cost),
+		"an ALLOWED cast must be affordable — CastEvaluator and ManaPool disagree")
+	var played := player.hand.remove_at(hand_slot)
+	player.discard.add(played)
+	# INSTANT REFILL (AC 5). The is_empty() stop is the same FLOOR _deal_player carries: with no
+	# reshuffle in this story a pile can run down, and drawing from an empty one would be an
+	# index error rather than a design. draw_top() takes the LAST element and consumes NO RNG —
+	# the only RNG consumer in Deck is shuffle_with_rng — which is why rng_state is a predicted
+	# and MEASURED non-mover for this story's golden.
+	if not player.deck.is_empty():
+		player.hand.add(player.deck.draw_top())
+	_queue.push(card_cast_resolved.emit.bind(slot, played))
 
 
 func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:

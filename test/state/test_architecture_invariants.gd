@@ -240,6 +240,52 @@ func test_cues_layer_never_calls_state_mutators() -> void:  # Story 1-10 (AC 6) 
 		"state mutator token in the read-only cues/ui layer: %s" % ", ".join(offenders))
 
 
+## Story 3-5a (AC 1): THE MODE-SELECT SCHEME IS THE CONTROLLER'S, AND ONLY THE CONTROLLER'S.
+## The state layer receives three plain values — armed slot, mode, commit — and nothing about how
+## a player produced them. So the scheme's own vocabulary (the cast modifier, the per-slot card
+## binds, the confirm) may appear ONLY under src/controllers/, which is what makes "swapping the
+## scheme touches one folder" a checkable property rather than an intention.
+##
+## Scanning all of src/ MINUS src/controllers/ is the load-bearing scope here — the inverse of
+## the D3(a) Input scan directly above, and for the same reason: this is about what must stay
+## OUT of every other layer.
+##
+## `card_mode` is deliberately NOT banned: it is the INTENT FIELD the state layer legitimately
+## reads, and it is a different token from the `cast_mode` binding that arms it.
+const CARD_SCHEME_BANNED_TOKENS: Array[String] = [
+	"cast_mode", "cast_confirm", "card_1", "card_2", "card_3", "card_4",
+]
+
+
+func test_card_scheme_only_in_controllers() -> void:  # Story 3-5a (AC 1)
+	# NON-VACUITY: the tokens must be REAL somewhere. keyboard_controller.gd is the one producer
+	# of the scheme, so a rename there that silently empties this guard fails HERE instead of
+	# passing quietly — the same mechanism as the CARDS_DIR and CardDatabase assertions above.
+	var scheme_hits := 0
+	for line in _code_lines("res://src/controllers/keyboard_controller.gd"):
+		for token in CARD_SCHEME_BANNED_TOKENS:
+			if line.contains(token):
+				scheme_hits += 1
+	assert_true(scheme_hits > 0,
+		"keyboard_controller.gd must still name the card-scheme bindings — otherwise this guard is vacuous")
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/"):
+		if path.contains("/controllers/"):
+			continue
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			for token in CARD_SCHEME_BANNED_TOKENS:
+				if line.contains(token):
+					offenders.append("%s:%d [%s] %s" % [path, n, token, line.strip_edges()])
+	assert_true(scanned > 0, "the scan must actually visit files")
+	assert_eq(offenders.size(), 0,
+		"card-scheme symbol outside src/controllers/ (AC 1 — the scheme is the controller's): %s"
+				% ", ".join(offenders))
+
+
 func _gd_files(root: String) -> Array[String]:
 	var out: Array[String] = []
 	var dir := DirAccess.open(root)

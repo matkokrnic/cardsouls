@@ -282,8 +282,17 @@ func test_injection_seam_rejects_an_empty_injected_deck() -> void:
 ## move to 3-5 TOGETHER WITH THEIR TRIGGERS — with only an initial fill drawing from the pile,
 ## exhaustion is unreachable and a discard pile would be permanently empty. A speculative
 ## half-implementation here would be dead code guarding nothing.
-func test_no_discard_reshuffle_exhaustion_or_draw_delay_surface_ships() -> void:
-	var re := RegEx.create_from_string("(discard|reshuffle|exhaust|vulnerab|draw_replacement)")
+##
+## NARROWED BY STORY 3-5a, which is the owner this fence names. 3-5 split into 3-5a (the TRIGGER)
+## and 3-5b (what the trigger makes reachable), and the two halves land separately:
+##   - `discard` is DROPPED from the ban — 3-5a ships the discard pile, because a card that leaves
+##     the hand has to go somewhere the same tick it is played.
+##   - `reshuffle`, `exhaust`, `vulnerab` and `draw_replacement` STAY BANNED, and this fence is
+##     now 3-5b's. Its reasoning is unchanged and still exact: 3-5a draws the replacement
+##     INSTANTLY, so a pile still cannot run out inside a round and exhaustion is still
+##     unreachable. The delayed draw is what makes it reachable, and it arrives with 3-5b.
+func test_no_reshuffle_exhaustion_or_draw_delay_surface_ships() -> void:
+	var re := RegEx.create_from_string("(reshuffle|exhaust|vulnerab|draw_replacement)")
 	var offenders: Array[String] = []
 	var scanned := 0
 	for path in _gd_files("res://src/"):
@@ -297,15 +306,20 @@ func test_no_discard_reshuffle_exhaustion_or_draw_delay_surface_ships() -> void:
 	assert_true(re.search("func _reshuffle_deck() -> void:") != null,
 		"the pattern must match what it bans — a regex typo must not silently disarm this")
 	assert_eq(offenders.size(), 0,
-		"3-5 surface shipped early in src/ (AC 11 — no discard, reshuffle, exhaustion handling, "
+		"3-5b surface shipped early in src/ (no reshuffle, exhaustion handling, "
 		+ "vulnerable window or draw-replacement delay): %s" % ", ".join(offenders))
 
 
-func test_no_card_effect_or_cast_evaluator_consumer_ships() -> void:
-	# CardEffect and CardCastCondition exist as story 3-2 VOCABULARY under src/state/resources/.
-	# What must not exist yet is a CONSUMER: nothing may evaluate a cast or apply an effect (AC
-	# 11 — that is 3-5's). So the tokens are legal in their own declaring files and nowhere else.
-	var re := RegEx.create_from_string("(CardEffect|CardCastCondition)")
+## NARROWED BY STORY 3-5a, the owner this fence names. 3-5a IS the cast-evaluator consumer, so
+## `CardCastCondition` is dropped from the ban — it now legitimately appears in CastEvaluator, in
+## MatchState's injected cost map, and in the runner that derives it.
+##
+## `CardEffect` STAYS BANNED, and that is not an oversight of this pass: 3-5a resolves a cast and
+## emits the CARD ID, never a CardEffect. Nothing evaluates or applies an effect anywhere in
+## src/, so the fence still has a real subject — the first story to resolve effect CONTENT
+## retires it deliberately, exactly as this one retired the cast half.
+func test_no_card_effect_consumer_ships() -> void:
+	var re := RegEx.create_from_string("(CardEffect)")
 	var offenders: Array[String] = []
 	for path in _gd_files("res://src/"):
 		if path.ends_with("/card_effect.gd") or path.ends_with("/card_cast_condition.gd") \
@@ -317,8 +331,8 @@ func test_no_card_effect_or_cast_evaluator_consumer_ships() -> void:
 			if re.search(line) != null:
 				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
 	assert_eq(offenders.size(), 0,
-		"a card effect / cast evaluator consumer shipped (AC 11 — that is story 3-5): %s"
-				% ", ".join(offenders))
+		"a card EFFECT consumer shipped (3-5a resolves a cast and emits the card id, never an "
+		+ "effect): %s" % ", ".join(offenders))
 
 
 func test_event_bus_still_carries_exactly_the_two_declared_signals() -> void:
@@ -335,19 +349,47 @@ func test_event_bus_still_carries_exactly_the_two_declared_signals() -> void:
 		"EventBus signal set is unchanged by this story (AC 11)")
 
 
-func test_no_card_input_action_ships() -> void:
-	# AC 11: no project.godot Input Map entry. Scoped to the tokens THIS story could have added
-	# rather than pinning the whole action list, which would break on every unrelated input story.
+## NARROWED BY STORY 3-5a, the owner this fence names — and it is now story 3-5a's OWN AC 12
+## negative guard rather than a leftover.
+##
+## `card` is DROPPED from the ban: 3-5a ships p1_card_1..4 / p2_card_1..4 plus the cast modifier
+## and confirm, under the Input Map discipline AC 11 sets out (textual edit, editor closed,
+## SHA256 before and after, diff reviewed).
+##
+## `pitch` and `stage` STAY BANNED, and that is AC 12 exactly: the staging verb belongs to the
+## pitch zone, which is an E6 flag and is OFF, so a reserved action with no consumer must not
+## ship — the retired-pose-id precedent. (There was nothing to DELETE: no pitch or stage action
+## has ever existed in project.godot, so AC 12 is discharged as a pure negative guard, which is
+## this test.) `play`, `draw`, `discard` and `hand` stay banned too — 3-5a binds a cast modifier,
+## four card slots and a confirm, and nothing else.
+func test_no_pitch_stage_or_other_reserved_card_action_ships() -> void:
 	var offenders: Array[String] = []
 	for action: StringName in InputMap.get_actions():
 		var name := String(action)
 		if name.begins_with("ui_"):
 			continue
-		for token in ["card", "play", "draw", "pitch", "discard", "hand"]:
+		for token in ["play", "draw", "pitch", "discard", "hand", "stage"]:
 			if name.contains(token):
 				offenders.append(name)
 	assert_eq(offenders.size(), 0,
-		"a card-related Input Map action shipped (AC 11): %s" % ", ".join(offenders))
+		"a reserved pitch/stage (or other unshipped card) Input Map action exists (AC 12): %s"
+				% ", ".join(offenders))
+
+
+## Story 3-5a (AC 11): the actions this story DOES ship, pinned positively. The negative guard
+## above cannot tell "correctly added" from "never added", so the pair is what makes the Input
+## Map edit checkable in both directions — a lost or renamed bind fails here.
+func test_card_scheme_input_actions_ship_for_both_players() -> void:
+	var missing: Array[String] = []
+	for prefix in ["p1", "p2"]:
+		var expected: Array[String] = ["%s_cast_mode" % prefix, "%s_cast_confirm" % prefix]
+		for i in 4:
+			expected.append("%s_card_%d" % [prefix, i + 1])
+		for action in expected:
+			if not InputMap.has_action(action):
+				missing.append(action)
+	assert_eq(missing.size(), 0,
+		"card-scheme Input Map actions missing (AC 11): %s" % ", ".join(missing))
 
 
 func test_hand_and_deck_expose_no_play_or_discard_path() -> void:

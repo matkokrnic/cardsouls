@@ -51,6 +51,18 @@ var _pitch_panel: Panel
 var _pitch_timer: Label
 var _round_label: Label
 
+## Story 3-5a (AC 10): the OWN hand row's four panels, kept so the selection indicator can
+## restyle exactly one of them. Own row only — the opponent row is never indicated (a selection
+## is the owning player's, and 2-4/R7's no-opponent-read discipline is not weakened by a
+## highlight either).
+var _own_card_panels: Array[Panel] = []
+## The two styles the indicator swaps between. `_card_base_style` is the SHARED StyleBoxFlat the
+## row already used for all four panels (2-5/R4's single seat, unchanged); `_card_armed_style` is
+## the one new affordance this story ships. Held as references so the swap is an override write
+## and never a rebuild — no resize, no re-layout, no node churn.
+var _card_base_style: StyleBoxFlat
+var _card_armed_style: StyleBoxFlat
+
 
 func _init() -> void:
 	name = "HudRoot"
@@ -287,6 +299,14 @@ func _build_hand_row(is_own: bool) -> void:
 		card.custom_minimum_size = card_size
 		card.add_theme_stylebox_override("panel", card_style)
 		strip.add_child(card)
+		# Story 3-5a (AC 10): retain the OWN row's panels for the selection indicator. Size and
+		# layout above are untouched — they belong to 3-6, and the indicator is the only
+		# distinguishing affordance this story adds to the row.
+		if is_own:
+			_own_card_panels.append(card)
+	if is_own:
+		_card_base_style = card_style
+		_card_armed_style = _make_card_armed_style()
 
 
 ## The SINGLE SEAT of the face-up / face-down decision (2-5/R1, R4). `is_own` picks a card FACE
@@ -295,6 +315,45 @@ func _build_hand_row(is_own: bool) -> void:
 ## half-width viewport, not two identical blank panels. One StyleBoxFlat is shared across a
 ## row's four panels (identical backs / blank faces this story). This one `if is_own` is the
 ## only place styling branches on ownership; a later reveal toggle flips this parameter.
+## Story 3-5a (AC 10): the ARMED card style — the own face style with a loud gold border and a
+## warmer fill, so which slot is armed reads at a glance in a half-width viewport. Built from
+## scratch rather than by mutating the shared base: the base StyleBoxFlat is shared across all
+## four panels (2-5/R4), so mutating it in place would highlight the whole row.
+##
+## BORDER WIDTH ONLY GROWS INWARD in Godot's StyleBoxFlat, so a thicker armed border cannot
+## change the panel's layout footprint — the 74x84 size and the row's offsets are untouched,
+## which is what keeps sizing and layout with 3-6 as ruled.
+func _make_card_armed_style() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.set_corner_radius_all(4)
+	box.bg_color = Color(1.00, 0.96, 0.80)      # warmed parchment
+	box.border_color = Color(0.96, 0.78, 0.22)  # loud gold — the armed tell
+	box.set_border_width_all(5)
+	return box
+
+
+## Story 3-5a (AC 10): THE selection indicator. `slot` is the armed hand slot, -1 for none; the
+## mode rides along for the E5 modes and is currently always BASIC.
+##
+## PRESENTATION-LOCAL, and pushed rather than subscribed. The runner reads the armed slot off the
+## CONTROLLER after sample() and calls this — the same runner-polls-then-pushes-plain-values shape
+## already shipped for the debug window countdown (3-0b, AC 2). It is therefore NOT a new
+## observation seam and NOT an eighth: no signal, no state handle, no read of PlayerState.hand,
+## and to_snapshot() never learns the indicator exists. The row's count-of-four stays the
+## presentation-local constant it has been since 2-5/R1.
+##
+## Every panel is written on every call, not just the armed one, so the previously armed slot is
+## always cleared — a "highlight the new one" that forgot to clear the old one would leave two lit
+## and is exactly the failure the directional test below pins.
+func set_card_selection(slot: int, mode: Enums.ModeKind) -> void:
+	# The mode is accepted now so the call site is stable across E5, when the indicator gains a
+	# per-mode tell. One mode resolves in E3, so it currently selects nothing.
+	var _armed_mode := mode
+	for i in _own_card_panels.size():
+		var style: StyleBoxFlat = _card_armed_style if i == slot else _card_base_style
+		_own_card_panels[i].add_theme_stylebox_override("panel", style)
+
+
 func _make_card_face_style(is_own: bool) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.set_corner_radius_all(4)

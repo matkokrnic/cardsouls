@@ -62,6 +62,11 @@ var _paused := false
 ## window-countdown payload into it after each advance(). A Control reference, never a seam.
 var _instrument_panel: DebugInstrumentPanel
 
+## Story 3-5a (AC 10): the two per-viewport HUD roots, kept so the runner can push each slot's
+## armed-card selection into its own root after sampling. A Control reference, never a seam —
+## the DebugInstrumentPanel member directly above is the same pattern.
+var _huds: Array[HudRoot] = []
+
 
 func _ready() -> void:
 	# TICK_HZ must equal the physics tick rate, or every seconds_to_ticks() is silently wrong.
@@ -102,6 +107,10 @@ func _ready() -> void:
 	# is read inline off the already-loaded authored config (CONSTRAINT C). An empty result is
 	# rejected AT THE SEAM (AC 10), so there is deliberately no second check here.
 	_match_state.inject_deck(_derive_deck_contents(balance_config.deck_size))
+	# Story 3-5a (AC 4): cast-cost injection, the same shape and the same seat as the deck
+	# injection directly above. ORDER MATTERS and is not stylistic — the seam validates that the
+	# map is TOTAL over the injected composition, so the composition must already be in.
+	_match_state.inject_card_costs(_derive_card_costs())
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -156,6 +165,8 @@ func _ready() -> void:
 	panel.gamepad_profile = load("res://data/gamepad_profile.tres") as GamepadProfile
 	panel.huds = huds
 	add_child(panel)
+	# Story 3-5a (AC 10): kept for the per-tick selection-indicator push in _physics_process.
+	_huds = huds
 	# Story 3-0b (AC 2): kept for the per-tick countdown push in _physics_process step 3b.
 	_instrument_panel = panel
 	# Story 1-10 (AC 3/4): each hero's telegraph controller — the FIRST consumer of the
@@ -203,6 +214,27 @@ func _derive_deck_contents(deck_size: int) -> Array[StringName]:
 			if out.size() >= deck_size:
 				return out
 			out.append(id)
+	return out
+
+
+## Story 3-5a (AC 4): the injected CAST-COST map, derived here for the same reason the deck
+## composition is — the runner is the ONE place allowed to read CardDatabase (3-3 AC 2), and no
+## file under src/state/ may so much as name it (3-3 AC 8). The state layer receives plain ids
+## mapped to CardCastCondition resources and never learns where they came from.
+##
+## The WHOLE library is mapped, not just the ids the composition happens to use: the map is
+## content, deriving it costs one pass, and a narrower map would have to be re-derived the moment
+## deckbuilding (E4/E5+) lets a composition change. A card with no authored cast_condition is
+## SKIPPED rather than mapped to null, which is what gives the seam's totality check something
+## real to catch — a composition card missing its cost fails loudly at match start instead of
+## refusing every cast with `unknown_card` at play time.
+func _derive_card_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null or card.cast_condition == null:
+			continue
+		out[id] = card.cast_condition
 	return out
 
 
@@ -386,6 +418,15 @@ func _physics_process(delta: float) -> void:
 	#    Sampled every frame, paused or not: sampling is not one of the three things AC 1
 	#    freezes, and Godot's just-pressed edges are frame-scoped either way.
 	var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]
+	# 1b. Story 3-5a (AC 10): push each slot's ARMED CARD into its own HUD. Read off the
+	#     CONTROLLER, not off state — the indicator shows what the player has SELECTED, which is
+	#     a controller fact that never enters the tick or the snapshot. Same
+	#     runner-polls-then-pushes-plain-values shape as the 3-0b window countdown (step 3b), so
+	#     this is not an eighth observation seam: no signal, no state handle, plain ints only.
+	#     OUTSIDE the `ticking` gate deliberately — the selection must stay visible and
+	#     responsive while the debug pause is held, exactly as camera follow (4b) does.
+	_huds[0].set_card_selection(_p1_controller.armed_slot(), Enums.ModeKind.BASIC)
+	_huds[1].set_card_selection(_p2_controller.armed_slot(), Enums.ModeKind.BASIC)
 	# Story 3-0b (AC 1): steps 2, 3 and 4 — gather, advance, drive — are THE freeze. While paused
 	# nothing gathers, nothing advances, nothing drives; a single step runs this block exactly
 	# once, in the unchanged per-tick order. Contact-fact gathering freezes WITH advance and drive

@@ -18,6 +18,11 @@ var orbs: OrbPool          # reserved / flag-off until E5
 var deck: Deck
 var hand: Hand
 
+## Story 3-5a (AC 6): the THIRD card container, owned here on the Deck/Hand precedent directly
+## above and filled from ONE seat only — MatchState's step-6 cast dispatch. Like its two
+## siblings it takes no SignalQueue: the pile itself signals nothing.
+var discard: DiscardPile
+
 
 ## Story 3-1 (AC 1/AC 3): constructed STAT-LESS. Every bound below now arrives by injection
 ## (MatchState._apply_balance_to_player, from the single-source-of-truth BalanceConfig), so
@@ -32,6 +37,7 @@ func _init(queue: SignalQueue) -> void:
 	orbs = OrbPool.new(queue)
 	deck = Deck.new()
 	hand = Hand.new()
+	discard = DiscardPile.new()
 
 
 func to_snapshot() -> Dictionary:
@@ -46,4 +52,11 @@ func to_snapshot() -> Dictionary:
 		# and would fall through to a per-allocation instance id).
 		"deck_size": deck.size(),
 		"hand_size": hand.size(),
+		# Story 3-5a (AC 6): the ONE new snapshot key this story adds — the discard COUNT, on
+		# the deck_size/hand_size precedent exactly. No ids, no per-card structure, no pile
+		# ORDER: the same "counts only" rule, for the same reason (a StringName or a CardData
+		# reaching the hash is the failure mode both siblings exist to avoid). This key moves
+		# the golden BY ITSELF, at an all-zero value, before any cast behaviour runs — cause 1
+		# of this story's re-baseline.
+		"discard_size": discard.size(),
 	}
