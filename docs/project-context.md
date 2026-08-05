@@ -4,7 +4,7 @@ user_name: 'Matko'
 date: '2026-07-20'
 sections_completed: ['technology_stack', 'engine_specific', 'performance', 'code_organization', 'testing', 'platform_build', 'critical_gotchas']
 status: 'complete'
-rule_count: 53
+rule_count: 64
 optimized_for_llm: true
 aligned_with: 'game-architecture.md v1.1 (F1, D3/A2, A1, D5, advance-no-delta); folders + testing updated to observed E0 code (2026-07-21)'
 ---
@@ -48,6 +48,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 **Autoloads (singletons)**
 - Global systems are Godot **autoloads** registered in `project.godot`. Autoloads are for **config, content, and global events only**: `FeatureFlagsService`, `BalanceConfigService`, `CardDatabase`, `EventBus`. Keep them minimal — no gameplay logic inside autoloads, and **never expose live mutable game state through an autoload**.
 - **MatchState ownership:** the match logic lives in `src/state/` as a plain, testable object (`MatchState`) with **no scene dependency**. The **Match Runner** (`src/main/match_runner.gd`) creates and **owns** the single `MatchState` instance and wires references explicitly at match start — presentation/HUD receive read-only signal subscriptions or a read-only view, never a mutating handle. There is **no `MatchState` autoload**: a global mutable state singleton would let arbitrary code bypass the ordered state dispatch and the queued-signal discipline. Never put match logic in an autoload.
+- **CONSTRAINT C:** `apply_balance()` swaps the whole `BalanceTicks`/`BalanceConfig` object on every reload — never cache a reference to it; read `ms.balance_ticks`/`ms.balance` inline at the point of use (decision-log:135).
+- **Per-pool reload contract** (Matko's design call, `3-1/R2`): on `apply_balance()`, stamina gets `set_maximum` + full `refill`; mana gets `set_maximum` only, **never refilled**; hp is preserved and clamped, never re-healed mid-match.
 
 **Controllers & state-layer determinism (D3 / A2 — INVARIANT)**
 - **`Input.*` is read ONLY in `src/controllers/`.** A `Controller` samples input and returns a pure-data `InputIntent` (a **fresh instance each tick**); state and actors consume the intent and never touch the `Input` singleton. Check: `grep -rn "Input\." src/` matches only under `src/controllers/`.
@@ -127,7 +129,11 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Feature-flag matrix:** for any layer with a `FeatureFlags` toggle, test both ON and OFF paths, and assert graceful degradation (e.g. orbs OFF → pitch cost is mana-only, no orb requirement).
 - **Data-driven content is validated, not hand-mocked:** load real `.tres` card/minion/equipment resources in tests where practical, so authored content is exercised. Add a smoke test that loads every `.tres` in `data/` and asserts required fields are set.
 - **Determinism:** timing-sensitive tests advance **fixed integer ticks** (call `advance()` / `TimingWindow.tick()` N times), never feed wall-clock `delta` or `await` real time (`advance()` takes no `delta` — A1). A **determinism regression** hashes a canonical **sorted-key** snapshot of `MatchState` against a golden value (never insertion-order `Dictionary` iteration).
+- **Golden isolation:** authored `data/balance/*.tres` tuning is isolated from BOTH the golden and the unit suite (a value edit needs no test change) — but `data/economy/*.tres` rule CONTENT is load-bearing for the golden, since production code reads it on the golden's own path (`BC/R3`, narrowed `3-4/R6`).
 - **Integration/scene tests** (actors moving, hitbox→state contact wiring) live in `res://test/integration/`, need the engine runtime, and run standalone; keep the bulk of coverage in the headless state tests.
+- **Mutation-proof discipline:** a mutation made to prove a guard non-vacuous is restored from a copy taken OUTSIDE the repo, NEVER `git checkout --` (decision-log:799). The non-vacuity check must be proven against forms an adversary would use, not the author's own syntax (`3-0d/R14`).
+- **Guard mechanism over guard pattern:** prefer making a property IMPOSSIBLE BY CONSTRUCTION over DETECTABLE BY INSPECTION (e.g. a source-text scan); a guard evaded twice gets its mechanism replaced, not its pattern widened a third time (`3-0d/R20`).
+- **Adversarial review:** a pass must state what counts as FAILURE before it starts, not after (3-0d close-out, 2026-08-06).
 
 ### Platform & Build Rules
 
@@ -135,6 +141,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Input:** define named actions in the Input Map (Project Settings) and read via `Input.is_action_*` **only inside `src/controllers/`** (D3) — never hardcode raw keycodes, and never touch `Input` from state or actors. The two local profiles (P1/P2) are **one** `KeyboardController` taking a `"p1"`/`"p2"` prefix, so split-screen/hot-seat is a config, not a second class.
 - **Do not commit generated/local files:** `.godot/`, `/export/`, `export_presets.cfg`, `.claude/settings.local.json` are git-ignored — keep it that way.
 - **Keep `project.godot` edits intentional:** autoload registration and Input Map live here; review diffs before committing.
+- **Commit trailer:** `Co-Authored-By: Claude Opus 4.8` is a repo-wide constant on every commit, regardless of which model actually did the work — never the real model name.
 
 ### Critical Don't-Miss Rules (anti-patterns & gotchas)
 
@@ -148,6 +155,9 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Unblockable damage is per-color, not per-card:** a single fixed value per color in balance config (TDD 7.5) — don't read it off `CardData`.
 - **Free tree nodes with `queue_free()`**, not `free()`; validate with `is_instance_valid()` before touching pooled/possibly-freed nodes.
 - **No Godot 3.x API.** `export var`, `yield`, `KinematicBody`, `.instance()`, `OS.get_ticks_msec` polling loops → use 4.x equivalents.
+- **`Dictionary.has(key)` is TRUE for a key whose value is `null`** — presence is not type; check the value's type too before trusting it (`3-0d/R21`).
+- **`load()` returns a NON-NULL `GDScript` for a file that fails to parse** — a non-null check is vacuous; `can_instantiate()` is the working (if weaker) discriminator (`3-0d/R24`).
+- **`path.begins_with("user://")` is NOT a containment test** — the string can carry `..` and resolve outside it; normalise (`globalize_path().simplify_path()`) and compare against the resolved root plus separator (`3-0d/R22`).
 
 ---
 
@@ -166,4 +176,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Update when the stack changes (Godot version, adding a test framework, first real code establishing a pattern).
 - Revisit once real `src/` code exists: convert "proposed conventions" here into "observed patterns," and delete any rule that has become obvious from the codebase.
 
-Last Updated: 2026-07-26
+Last Updated: 2026-08-06
