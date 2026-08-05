@@ -1,6 +1,6 @@
 # Story 3.0d: Replay surface and live reload — the operator half of X5 + DEBT B's cache half
 
-Status: ready-for-dev
+Status: done
 
 > **Readiness gate, 2026-08-05 — outcome applied to this file.** The gate returned NOT READY with
 > five blocking findings (an unshippable mid-match "start recording" control; a "load" control with
@@ -182,7 +182,10 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    EXACTLY `{SaveRecord, ReloadBalance}` and nothing else. A third — a load control in particular —
    still fails it, proven by mutation at this pass.**
    SAVE writes the record so far to `user://`, and RECORDING CONTINUES AFTERWARDS — SAVE is a
-   snapshot of an always-on stream, not a stop. RELOAD calls the already-shipped
+   snapshot of an always-on stream, not a stop. **`3-0d/R30` (close-out): "writes to `user://`" now
+   means the first FREE path there, not `path_for(_save_index + 1)` named blind — the live smoke
+   this close-out records found the naive version live, destroying a prior session's record; see
+   the close-out's own section below.** RELOAD calls the already-shipped
    `match_runner.gd::trigger_live_balance_reload()` (AC 2) — the panel gains no new runner-side
    trigger logic, only its first operator-reachable seat. Both follow the panel's own in-code
    `CheckButton`/`Button` pattern (verified by content: two `CheckButton`s built directly in
@@ -941,6 +944,13 @@ assertion deleted from the mechanism test, the verifier's wrong-object hole clos
 fixture, two load-bearing line citations re-anchored, and AC 11's residue made concrete. Same
 invariant: the commit trailer reads `Claude Opus 4.8` on all three commits.
 
+**FIX + CLOSE-OUT PASS, `3-0d/R30` (2026-08-06): Claude Sonnet 5** — the defect the operator's live
+smoke found (SAVE overwriting a prior session's record) fixed, the live smoke's outcome recorded,
+two process rulings written down, and the story closed. Same invariant: the commit trailer reads
+`Claude Opus 4.8` on the code commit; this pass's own docs commits are authored `Claude Sonnet 5`
+in Agent Model Used only, per the standing rule that the trailer names the repo invariant, not the
+model that did the work.
+
 ### Debug Log References
 
 **Engine semantics MEASURED before any code was written** (throwaway script, deleted; Godot 4.6.3):
@@ -1123,8 +1133,88 @@ assertion. Restored from an out-of-repo copy, SHA-256
 `7541d1a2f2bfb84e8597a289253d2e060df53c24af091234c4f2b100a95eec2a` verified identical before and
 after.
 
+**FIX + CLOSE-OUT PASS — THE `3-0d/R30` MUTATION PROOF.** `RecordFile.first_free_index` reverted to
+`return start` (the pre-fix behaviour — a plain incrementing index with no disk check), backed up
+first to a copy taken OUTSIDE the repo, SHA-256
+`3e76590091e90f73d43f8756ddf126e48dd2b5203ba15f3b11a9aa82ece70f76`. **THREE tests went RED:**
+`test_first_free_index_skips_a_single_occupied_path`,
+`test_first_free_index_finds_the_gap_not_the_index_past_the_last_occupied_one`, and — the property
+itself — `test_save_at_the_computed_free_index_never_overwrites_an_existing_file`, whose failure shows the
+mechanism of the ORIGINAL defect directly: `assert_ne: both user://cardsouls_record_1.rec` (the
+computed save path collided with the occupied one) followed by the marker's ten bytes replaced by a
+full serialised record. Restored from the out-of-repo copy, SHA-256 verified identical; suite green
+again, 352/2270/22.
+
+**A NEAR-MISS DURING THIS PASS'S OWN TEST-WRITING, RECORDED RATHER THAN QUIETLY FIXED.** The first
+version of the gap test used a bare `RecordFile.first_free_index(1)` as its base index and touched
+`base + 3` on the assumption that a single free result meant its neighbours were free too. It did
+not: this machine's real `user://` directory carries the operator's own live-smoke records
+SPARSELY (index 1 and 2 already lost to the very defect `R30` fixes; index 3 and 4 survive), and
+`base + 3` landed on the live `cardsouls_record_4.rec` (8.4 MB). The touch overwrote it with a
+1-byte marker before the test's own assertion failed and its cleanup calls never ran — the same
+class of defect this ruling exists to close, reproduced by the close-out pass's OWN test code
+against real operator data. Recovered: an out-of-repo backup of all four records taken earlier in
+this pass (before the mutating test run) still held `cardsouls_record_4.rec`, SHA-256
+`2790d90f6045c6d0309f2ecacc94872a15b06082cc8832a277b83012ac00ea6e`; copied back and verified
+identical. `cardsouls_record_3.rec` was never touched, SHA-256
+`18374f9f638a9bdba49799a4e463011b96f667952c7dc41000ec1504409bc2f6` unchanged throughout. **Fixed by
+`_free_run`**, which scans for a whole CONTIGUOUS span of unoccupied indices — checking every index
+in the test's intended span against the filesystem — before any test touches a byte, so this class
+of mistake cannot recur; see the tests' own header comment in `test/state/test_record_file.gd`.
+
 ### Completion Notes List
 
+- **FIX + CLOSE-OUT PASS SUITE (`3-0d/R30`). Before, verified BY THIS PASS at `HEAD` `a68738d` with
+  a clean tree before any edit: 348 state tests / 2264 assertions / 22 integration files, ALL
+  PASSED. After: 352 / 2270 / 22 — +4 state tests, +6 assertions, 0 new integration files, ALL
+  PASSED both ends**, and green again after the mutation was restored. `project.godot`
+  BYTE-IDENTICAL, `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`. Golden
+  unmoved, `GOLDEN` still `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The
+  four inherited `3-0c` pins required ZERO edits.
+- **THE LIVE SMOKE (`3-0d`'s Live Smoke section) RAN, BY THE OPERATOR, AND PASSED — the first time
+  this story's own required observation was actually performed; every prior pass correctly deferred
+  it.** Measured facts, not prose: `ticks=2774`, `reload_events=16` (event #0 is match start, so
+  FIFTEEN live RELOAD presses from the panel), `contact_facts=488`, `camera_pushes=5548`,
+  `CanonicalHash bc1968d6d2e023ae36063cf2d70fb533eb7e2c3fb249250b8931a9e31f0a62ba`, `RESULT: PASS`,
+  exit 0 — and the SAME hash from a SECOND, separate verifier process on the same file. **That
+  second run matters beyond confirming determinism twice: the earlier determinism demonstration
+  (the dev-pass and post-review runs recorded above) ran on records with ZERO live reload events,
+  so `replay_apply_reloads_before` actually firing MID-REPLAY, on a real recorded reload, was not
+  covered by any measurement until this one.**
+- **`R-D6` IS SPENT ON THIS STORY'S SMOKE (`3-0d/R11`).** The operator confirms a KILL occurred.
+  Any later story wanting a live smoke against a killable human-driven slot must re-invoke it at
+  its own gate — R-D6 does not carry forward already spent.
+- **AC 9 / `3-0d/R10` OBSERVED BY EYE.** The operator confirms the stamina bar visibly refills to
+  max on RELOAD, and recorded it as EXPECTED — the per-pool `apply_balance` contract becoming
+  live-observable for the first time — rather than as a defect.
+- **CUMULATIVE SAVE PROVEN LIVE**, across the smoke session: four saves at 2151 / 5333 / 5659 /
+  9630 ticks, files growing 1.88 MB -> 8.4 MB monotonically — the operator-visible half of AC 6/AC
+  7, that SAVE snapshots an always-on stream rather than stopping or restarting it.
+- **THE VERIFIER'S REFUSAL PATH WAS EXERCISED LIVE, AND BY ACCIDENT.** A call against a
+  non-existent path printed `REFUSED: no record file at …` and `RESULT: FAIL` — AC 8's refusal
+  half, demonstrated outside any test harness.
+- **NOT PERFORMED, RECORDED AS NOT-OWED RATHER THAN OMITTED:** editing the authored `.tres`
+  mid-session and observing the change land after RELOAD. The Live Smoke section never required
+  it. Stated plainly: this leaves the story's headline claim — tune balance without restarting —
+  proven by AC 1 (cache bypass, by object identity) and AC 2 (the trigger reaches state), but never
+  once observed END TO END by a human. It is a one-line manual check available to any later pass;
+  not scheduled here.
+- **A RECORD IS ~52 KB/s** (`camera_pushes` runs two per tick and dominates the byte count): a
+  three-minute round is ~8 MB, consistent with the fourth live save above. Not a defect and not in
+  scope for this story — recorded as an observation for a later story that starts sharing records.
+- **THE `3-0d/R30` DEFECT THE SMOKE FOUND, AND ITS FIX.** `MatchRunner._save_index` started at 0 in
+  every session, so a NEW session's first SAVE wrote `cardsouls_record_1.rec` again and silently
+  destroyed the PREVIOUS session's record — this happened live, to the operator, mid-way through
+  the cumulative-save sequence above, and took the only recording in which the contact channel had
+  ever been exercised live. `RecordFile.first_free_index` now checks the filesystem before SAVE
+  picks a path, so the property holds across sessions and after a crash, not merely within one; see
+  the code commit and the Debug Log entry above for the mutation proof.
+- **THE COMMIT-HYGIENE EXCEPTION AND THE VERIFICATION-LOOP LESSON ARE RULED AT THIS CLOSE-OUT AND
+  RECORDED IN THE DECISION LOG, NOT HERE** — both are process rulings that outlive this story and
+  belong beside the other cross-story lessons already there (`3-0d/R14`, `3-0d/R20`).
+- **THE ARCHITECTURE-AMENDMENT QUEUE STAYS AT ELEVEN, CONFIRMED BY CONTENT AT THIS PASS.** No entry
+  after `3-0d/R12` (decision-log) adds a twelfth member; this close-out adds none either. The queue
+  flushes at E3 close-out, not here.
 - **CLOSING FIX PASS SUITE (`3-0d/R25`-`3-0d/R29`). Before, verified BY THIS PASS at `HEAD`
   `2fe3eca` with a clean tree before any edit: 348 state tests / 2264 assertions / 22 integration
   files, ALL PASSED — the stated baseline, confirmed rather than taken on trust. After: 348 / 2264 /
@@ -1436,6 +1526,29 @@ after.
   test's third assertion described correctly ("the live reload trigger still fires", not "no
   recorded fact reaches live state").
 
+**Modified — at the FIX + CLOSE-OUT PASS (`3-0d/R30`)**
+- `src/systems/record_file.gd` — **`3-0d/R30`**: gains `first_free_index(start)`, the first index
+  `>= start` whose `path_for` does not already exist on disk. `PATH_PREFIX`'s docstring corrected —
+  the "two files side by side" guarantee now holds ACROSS sessions, not merely within one.
+- `src/main/match_runner.gd` — **`3-0d/R30`**: `save_recorded_stream()` asks
+  `RecordFile.first_free_index(_save_index + 1)` before writing instead of naming
+  `path_for(_save_index + 1)` blind; `_save_index`'s own comment corrected to state the stronger,
+  cross-session guarantee and to record why it used to be wrong.
+- `test/state/test_record_file.gd` — **`3-0d/R30`**: four new tests
+  (`test_first_free_index_returns_the_starting_index_when_nothing_occupies_it`,
+  `test_first_free_index_skips_a_single_occupied_path`,
+  `test_first_free_index_finds_the_gap_not_the_index_past_the_last_occupied_one`,
+  `test_save_at_the_computed_free_index_never_overwrites_an_existing_file`) plus two fixture
+  helpers, `_touch` and `_free_run`. `_free_run` exists because this pass's own FIRST version of
+  the gap test, written without it, briefly overwrote a real operator record — see Debug Log
+  References. Nothing removed.
+
+**Deliberately untouched at the FIX + CLOSE-OUT PASS:** `src/ui/debug/debug_instrument_panel.gd`,
+`src/systems/intent_recorder.gd`, `test/tools/replay_file.gd`, `test/replay_drive.gd`,
+`project.godot`, the golden, the four inherited `3-0c` pins, everything under `src/state/`, and
+`docs/game-architecture.md` (the queue stands at ELEVEN, confirmed by content — see Completion
+Notes).
+
 **Deliberately untouched at the CLOSING FIX PASS:** `src/main/match_runner.gd` (mutation target
 twice, restored and SHA-256 verified both times — absent from `git status`), `project.godot`, the
 golden, the four inherited `3-0c` pins, everything under `src/state/`, and the board.
@@ -1458,6 +1571,7 @@ the four inherited `3-0c` pins.
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
+| 2026-08-06 | 0.8 | **FIX + CLOSE-OUT PASS (`3-0d/R30`) — STORY DONE.** The live smoke RAN, by the operator, and PASSED: `ticks=2774`, FIFTEEN live RELOAD presses (`reload_events=16`, event #0 is match start), `contact_facts=488`, `camera_pushes=5548`, `CanonicalHash bc1968d6…a62ba` reproduced by a SECOND, separate verifier process — the first measurement of `replay_apply_reloads_before` firing mid-replay against a REAL recorded reload, since every prior determinism run carried zero. R-D6 SPENT on this smoke's kill (`3-0d/R11`); AC 9's stamina refill observed by eye and recorded as EXPECTED (`3-0d/R10`); cumulative SAVE proven live across four saves (2151/5333/5659/9630 ticks, 1.88 MB -> 8.4 MB); the verifier's refusal path hit by accident (`REFUSED: no record file at …`); the authored-`.tres`-mid-session check NOT performed, recorded as not-owed rather than omitted; ~52 KB/s recorded as an observation for a future record-sharing story. **THE DEFECT THE SMOKE FOUND, MID-SESSION, AND FIXED HERE (`3-0d/R30`):** `MatchRunner._save_index` started at 0 in EVERY session, so a new session's first SAVE wrote `cardsouls_record_1.rec` again and silently destroyed the PREVIOUS session's record — costing the operator the only recording that had ever exercised the contact channel live. `RecordFile.first_free_index(start)` now returns the first index whose path is not already occupied ON DISK, and `save_recorded_stream()` asks it before writing, so SAVE cannot overwrite an existing record within a session, across sessions, or after a crash. Four new state tests plus two fixture helpers (`test/state/test_record_file.gd`); the marker-file byte-identity test is the property itself, not index arithmetic. **Suite 348/2264/22 -> 352/2270/22, ALL PASSED both ends.** Mutation proof: `first_free_index` reverted to `return start` turns three tests RED, including the byte-identity one, whose failure shows the ORIGINAL live defect's mechanism directly (`assert_ne: both user://cardsouls_record_1.rec`, then the marker's bytes replaced by a full record); restored from an out-of-repo copy, SHA-256 verified. **A NEAR-MISS IN THIS PASS'S OWN TEST-WRITING, RECORDED RATHER THAN QUIETLY FIXED:** the first version of the gap test assumed a single free index meant its neighbours were free too, and touched the REAL `cardsouls_record_4.rec` (8.4 MB) before its own assertion failed and cleanup never ran; recovered from an out-of-repo backup taken earlier this pass, SHA-256 verified identical, `cardsouls_record_3.rec` untouched throughout. Fixed by `_free_run`, which scans a whole contiguous span for occupancy before any test writes a byte. **TWO PROCESS RULINGS RECORDED IN THE DECISION LOG (not this file):** a named exception to "docs and code never share a commit" for a comment-only correction of prose inside a test file; and the verification-loop lesson that an adversarial pass must declare its failure criterion in advance, and a guard evaded twice gets its mechanism replaced, not its pattern widened. **Architecture-amendment queue confirmed at ELEVEN by content — unchanged, not flushed here.** `project.godot` byte-identical; golden unmoved; the four inherited `3-0c` pins zero edits. `Status: ready-for-dev` -> **`done`.** Four commits, none pushed. | Claude Sonnet 5 |
 | 2026-08-05 | 0.7 | **CLOSING FIX PASS (`3-0d/R25`-`3-0d/R29`) — THE `3-0d/R20` MECHANISM HELD; THREE SENTENCES ABOUT IT DID NOT.** A final verification pass attacked the structural mechanism against a criterion declared in advance: **eight attacks at six different moments, and no mid-session assignment to the public `replay_record` did anything.** Criterion (a) HOLDS. It failed only on criterion (b) — that the story and the log be TRUE of the shipped tree — where three sentences were FALSE, plus five non-blocking findings. All close here. **`R25` (the substantive one):** AC 5's amendment header asserted "REFUSED WITH A CLEAR REASON NOW HOLDS ON EVERY PATH". It does not — **FIVE inputs still return `{"record": null, "error": ""}`**, measured before the sentence was rewritten: `intents` as an Array of Dictionaries; `intents` shorter than `tick_count`; `camera_pushes` values that are ints; `contacts` values that are Arrays of ints; `tick_count` inflated past the intents array. `3-0d/R21` had corrected the Dev Notes and the class docstring and left the AC standing. **RULED: the claim is REDUCED to what the code carries — each required key's TOP-LEVEL type is validated before the rebuild — and the residue is STATED: nested and cross-key consistency is NOT validated and such a file still refuses with an empty reason. Nested validation is DELIBERATELY NOT BUILT**; the point of the ruling is that the boundary gets written down instead of pretended away, and the residue is closed for callers instead (test the record, never the reason — all three shipped callers already do). Corrected in AC 5 and in the identical sentence in `record_file.gd`. **`R26`:** the `3-0d/R20` decision-log entry and `test_replay_surface_pins.gd`'s header both said the mechanism test asserts "no recorded fact reaches live state". It asserts no such thing — its third assertion is that the LIVE RELOAD TRIGGER STILL FIRES. The pins header is corrected in place; the decision log is APPEND-ONLY for entries, so that correction is recorded in the new `R25`-`R29` entry, naming the sentence it corrects. **`R27`:** AC 3 said its test "counts `func capture_` occurrences" — the shipped test reads `script.get_script_method_list()` and its own docstring says so. The outcome claim (exactly eight) was always true; only the mechanism sentence was wrong, and wrong in the direction this story has spent three rounds learning to distrust. **`R28`:** the mechanism test's `_after_max_hp` assertion was VACUOUS — the un-fixed twin of the defect the previous pass found and fixed for the earlier reading, since `TRIGGER_FRAME` sits between the two readings and the trigger re-applies the authored balance. **MEASURED under the falsifying mutation: `after=100.000000` while the fork was genuinely flipped, and only the OTHER two assertions fired.** DELETED, with the docstring saying why it was removed rather than kept — a vacuous assertion in the file that IS the mechanism is worse than one anywhere else. Same ruling: the poisoned record's tripwire is **ONE CHANNEL WIDE** (only the reload event is observable; the contact fact is dropped at resolution because the attacker is idle, and the camera basis cannot move a zero `move_dir`), now stated instead of implied. **`R29`:** the verifier subprocess test did not catch a verifier that hashes the WRONG OBJECT — run-to-run equality is satisfied by any deterministic function of nothing in particular. Closed cheaply by a SECOND fixture differing ONLY in its recorded intents, asserted to hash DIFFERENTLY; the equality assertion is kept. **Proven by mutation, and it landed on exactly the new assertion:** with the tool hashing a fresh `MatchState`, both fixtures printed `ec631c0d…c137`, equality still PASSED, and only the new check failed. Also `R29`: the two deliberately load-bearing runner-fork citations (`ReplayDrive`'s docstring, `replay_file.gd`'s comment) RE-ANCHORED `match_runner.gd:601-608` -> **629-633** by locating the content; not swept, and one further stale citation in this file's own Dev Notes is REPORTED and left. **AC 11's residue made CONCRETE (`N2`), because a residue nobody can picture is not really stated:** a four-line per-tick consumer of the public member that swaps both live keyboard controllers for `ReplayController`s mid-match was built, installed and run — **the ENTIRE SUITE STAYED GREEN, 348/2264/22.** The deleted scan would have flagged it. The guarantee is "assigning it does nothing to the shipped runner", NOT "nothing can read it", and `3-0d/R20`'s trade is recorded honestly: not strict dominance, but a guard believed-and-false swapped for a guarantee narrower-and-true. **Suite: baseline 348/2264/22 CONFIRMED BY THIS PASS at `HEAD` `2fe3eca`, after 348/2264/22, ALL PASSED both ends.** Zero movement in all three, explained rather than left ambiguous: every assertion touched lives in an INTEGRATION file the state count cannot see — inert test 10 -> 9, verifier test 12 -> 16, **net +3 integration assertions**. `project.godot` byte-identical; golden unmoved; the four inherited `3-0c` pins zero edits; `match_runner.gd` unmodified (mutation target twice, restored and hash-verified both times). Live smoke NOT run. Three commits, none pushed. | Claude Sonnet 5 |
 | 2026-08-05 | 0.6 | **STRUCTURAL FIX PASS (`3-0d/R20`-`3-0d/R24`) — THE THIRD AND FINAL ROUND ON THE REPLAY-ENTRY GUARDS, and the ruling is that there will not be a fourth.** Both of this story's source scans had now been defeated THREE times. Round 3 found: `(replay_record) = null` classified BY THE WHITELIST as an "argument read" — a literal assignment certified as a read, by the very inversion `3-0d/R14` installed to prevent exactly that; six further panel declaration forms evading the Callable scan (`static var`, `@onready`, an inner-class member, a Callable in an untyped `Dictionary`, one in an untyped `Array`, an untyped member invoked through a local copy); a shared line reader truncating at the first `#` with NO string awareness, so a `#` inside a string literal deleted the rest of the line from BOTH scans; and both scans reading `.gd` only while `.tscn`-embedded GDScript under `src/` is shipped, compiled, executing code. A complete, wired LOAD control shipped past both with the entire suite green. **OPERATOR RULING `3-0d/R20`: A TEXT SCAN OVER SOURCE CANNOT CARRY A DESIGN INVARIANT, AND THIS PROJECT WILL STOP TRYING TO MAKE IT.** The property is made STRUCTURALLY IMPOSSIBLE instead of DETECTABLE: `MatchRunner` CONSUMES `replay_record` exactly once, in `_ready()`, into a private `_replay_record`, and the per-tick fork plus every other consumer read only the private field — so a mid-session assignment has no effect not because it is caught but because nothing reads what it changed (part 1). It is proven BEHAVIOURALLY by `test/integration/test_replay_entry_is_inert.gd`, which makes the forbidden assignment on a live runner and asserts the fork does not flip, recording continues, and the live reload trigger still fires (part 2). **BOTH SCANS DELETED** — the `replay_record` one outright (part 3), the panel one replaced by the SCENE-LEVEL control-set check alone, whose own `Button`-vs-`BaseButton` hole is closed in the same ruling since `LinkButton` extends `BaseButton` and was invisible to the old query (part 4). **AC 7 and AC 11 RE-WORDED to what the mechanisms actually carry, with the residue stated plainly in both** (part 5); every falsified passage corrected in place with the correction visible, including two that `3-0d/R19` had already corrected once. **`R21`:** `load_record` still returned `{"record": null, "error": ""}` for three inputs — required keys present with WRONG TYPES, `null` under `reload_events`, `null` under `intents` — because `has()` is true for `null` and says nothing about type; `REQUIRED_KEYS` is now a key -> TYPE map validated before the rebuild, refusing with a reason naming the key and what was found. **`R22`:** `save_record`'s bare `begins_with("user://")` was replaced by NORMALISATION — resolve the path, require it inside the `user://` directory — with the sibling-prefix trap (`user://../CardSoulsEvil/…`) measured and closed by comparing against the root plus its separator; traversal forms tested and nothing lands in the repo, verified by running it. **`R23`:** `ReplayDrive`'s two inert divergences from the runner (controllers constructed later, intents sampled after the pushes) are MATCHED to the runner statement for statement rather than documented away — the docstring's claim is the value. **`R24`:** the AC 8 verifier is now run BY THE SUITE as a subprocess, asserting `RESULT: PASS` and the same hash across two invocations; the obvious `load()`-non-null guard is vacuous (`load()` returns non-null on a parse error) and the subprocess form worked, so NO fallback to `can_instantiate()` was needed. **FIVE MUTATION PROOFS, behavioural where the guard is behavioural**, each restored from an out-of-repo copy with SHA-256 verified — including one that proves the OLD `Button` query PASSES with a fully wired `LinkButton` load control installed, and one that found a real defect in this pass's own new test (its only `max_hp` reading sat after the reload trigger, which scrubs the poisoned value; a reading was added before the trigger and both assertions then fired). **Suite: baseline 348/2244/20 CONFIRMED BY THIS PASS at `HEAD` `a6582e8`, after 348/2264/22, ALL PASSED both ends** and green again after every restore. The flat state-test count is two opposite movements — `test_replay_surface_pins.gd` 4 tests -> 2 (the deleted scans, the predicted DROP), `test_record_file.gd` 9 -> 11 — with the replacements living in the +2 integration files. `project.godot` byte-identical (`8879de49…07970004`); golden unmoved; the four inherited `3-0c` pins zero edits; `test/tools/replay_file.gd` unmodified. Live smoke NOT run. Three commits, none pushed. | Claude Opus 5 |
 | 2026-08-05 | 0.1 | File authored at this story's own creation pass, per the `3-0a`/`3-0b`/`3-0c` precedent and `3-0c/R5`'s split ruling. Nine ACs recorded, each mapping to one of the six inherited scope items (CACHE_MODE_IGNORE; the live reload trigger reusing the existing reload channel; `user://` persistence with the format deliberately unpinned; recording start/stop lifecycle; the panel controls with no new Input Map action; the live smoke) or explicitly declared discharged by a non-AC section with a reason (the live smoke itself, discharged by the required Live Smoke section rather than a numbered AC, matching this repo's own convention for every prior story). Every quoted string re-verified against shipped code or the decision log at write time; the commissioning brief's R-D6 claim ("spent on 3-4") is corrected — the more recent spend was `3-5a`. A structural gap not previously named anywhere is surfaced: `replay_record` is read once in `_ready()`, before the scene ticks, and no scene-reload mechanism exists in `src/`, so a mid-session "load" control has no runtime path into replay under the shipped architecture (Open Question (f)). Six Open Questions left open, none resolved. Golden Prediction NONE, argued on the same two premises `3-0c` used (no snapshot key; no seeded-RNG consumer). Live Smoke REQUIRED, described on the shipped two-keyboard default, no `.tscn` edit needed. Status `backlog`; promotion to `ready-for-dev` deferred to this story's own readiness gate. Nothing under `src/` or `test/` is touched by this pass — docs only. | Claude Sonnet 5 |
