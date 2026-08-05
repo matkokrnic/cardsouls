@@ -7,7 +7,12 @@ extends RefCounted
 ## seed, balance, flags, content, then per tick: recorded reload events, recorded camera bases,
 ## recorded contact facts, then advance() on the recorded intents. Get the order wrong and the
 ## replay diverges silently. Before this extraction that order was transcribed THREE times: the
-## runner's own live fork (`match_runner.gd:601-608`, the original), AC 4's in-suite round-trip
+## runner's own live fork (~~`match_runner.gd:601-608`~~ **RE-ANCHORED AT `3-0d/R25` BY LOCATING
+## THE CONTENT: `match_runner.gd:629-633`** — the file grew 115 lines and the old citation now
+## lands on the HUD card-selection push. This pointer is deliberately load-bearing, per `3-0d/R17`
+## and `3-0d/R23` — it is the "somewhere to point" a change in the runner's order has — so it is
+## re-anchored even though the standing carve-out does not require a wholesale sweep), AC 4's
+## in-suite round-trip
 ## test (`test/state/test_record_file.gd`), and AC 8's headless verifier
 ## (`test/tools/replay_file.gd`). The review found the third guarded by NOTHING: AC 4's test proved
 ## the SAVE/LOAD path, never the verifier's ordering, so the verifier could have drifted from the

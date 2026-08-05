@@ -23,7 +23,10 @@ extends RefCounted
 ## (AC 5) — which is what makes schema evolution safe without freezing a shape that has exactly
 ## one consumer today.
 ##
-## EVERY REFUSAL CARRIES A REASON, AND THAT IS NOW TRUE OF EVERY PATH (`3-0d/R15`). The review of
+## EVERY REFUSAL CARRIES A REASON ~~, AND THAT IS NOW TRUE OF EVERY PATH~~ (`3-0d/R15`). **THE
+## STRUCK CLAUSE IS FALSE AND IS RETIRED AT `3-0d/R25`** — five inputs still refuse with an EMPTY
+## reason; see THE RESIDUE at the end of this block, which is now where this class's actual
+## boundary is written down. The review of
 ## this story found the one path where it was not: a file carrying a matching version but a
 ## TRUNCATED body reached the rebuild, failed inside it, and came back as
 ## `{"record": null, "error": ""}` — a refusal with an EMPTY reason, which a caller testing
@@ -35,6 +38,28 @@ extends RefCounted
 ## present but carrying WRONG TYPES, `null` under `reload_events`, `null` under `intents`. Each
 ## required key's TYPE is now validated before the rebuild, and the refusal names the key and what
 ## was found in it. See REQUIRED_KEYS, which is a key -> type map for exactly this reason.
+##
+## THE RESIDUE, STATED RATHER THAN PRETENDED AWAY (`3-0d/R25`). Twice now this docstring has
+## claimed TOTALITY over refusal reasons and twice a narrower set of files has falsified it. It
+## stops claiming totality. **WHAT THE CODE CARRIES:** each required key's TOP-LEVEL TYPE is
+## validated before the rebuild (REQUIRED_KEYS, a key -> type map), and a file failing that is
+## refused with a reason naming the key and what was found in it. **WHAT IT DOES NOT CARRY:**
+## NESTED and CROSS-KEY consistency. Element types INSIDE the required containers, and array
+## lengths measured AGAINST `tick_count`, are not validated at all — such a file still reaches
+## `_from_dictionary()`, still dies inside it, and still comes back as
+## `{"record": null, "error": ""}`. FIVE MEASURED at `3-0d/R25`, every one returning an empty
+## reason: `intents` as an Array of DICTIONARIES; `intents` SHORTER than `tick_count`;
+## `camera_pushes` values that are INTS; `contacts` values that are ARRAYS OF INTS; `tick_count`
+## INFLATED past the intents array.
+##
+## NESTED VALIDATION IS DELIBERATELY NOT BUILT (`3-0d/R25`), and that is the ruling rather than an
+## omission: it is a third round of the same widening for marginal benefit on a format with
+## exactly one writer, and the lesson `3-0d/R20` already paid for is that the boundary gets WRITTEN
+## DOWN instead of chased. **CONSEQUENCE FOR CALLERS, stated once so it is not re-derived:** test
+## `result["record"] == null`, NEVER `error != ""` — the reason is a message for a human, not the
+## verdict. MEASURED at `3-0d/R25` — all three shipped callers already do: `replay_file.gd:43` and
+## `test_record_save_control.gd:191` branch on `result["record"] == null`, and
+## `test/state/test_record_file.gd` asserts the record before it reads any reason.
 ##
 ## RECORDS GO UNDER `user://`, AND THE API SAYS SO (`3-0d/R16`), BY NORMALISATION (`3-0d/R22`).
 ## That claim used to be true only of `path_for()`; `save_record` accepted any path and would

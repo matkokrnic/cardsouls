@@ -27,6 +27,14 @@ extends SceneTree
 ##     AC 8's actual claim, stated exactly (`3-0d/R18`: the hash is a function of the run that
 ##     PRODUCED the record, never a repo constant, so it is compared run-to-run and never to a
 ##     literal written down anywhere).
+##   [IT HASHES THE REPLAY, AND NOT SOMETHING ELSE] a SECOND, DIFFERENT record produces a DIFFERENT
+##     hash. Added at `3-0d/R25`, closing a hole in the assertion above: run-to-run equality is
+##     satisfied by ANY deterministic function of nothing in particular, so a verifier that hashed
+##     a FRESH `MatchState` instead of the replayed one passed every check in this file. The two
+##     fixtures share seed, balance, flags, deck and costs and differ ONLY in the recorded INTENTS
+##     — which is deliberate: it is exactly the difference a wrongly-hashed object cannot see, so
+##     "the hash depends on the replay" is what this measures rather than "the hash depends on the
+##     file". PROVEN BY MUTATION at `3-0d/R25` — see the story's Debug Log References.
 ##   [IT REFUSES] a corrupted file is refused with a reason and a NONZERO exit — so the PASS above
 ##     is a verdict the tool can actually withhold, not a line it always prints.
 ##
@@ -35,6 +43,9 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://test/integration/test_replay_verifier_tool.gd
 
 const FIXTURE_PATH := "user://test_3_0d_verifier_fixture.rec"
+## `3-0d/R25`: the SECOND fixture, identical to the first in every injected channel and different
+## only in its recorded intents — see [IT HASHES THE REPLAY] above for why that is the axis.
+const FIXTURE_B_PATH := "user://test_3_0d_verifier_fixture_b.rec"
 const CORRUPT_PATH := "user://test_3_0d_verifier_corrupt.rec"
 const TOOL := "res://test/tools/replay_file.gd"
 
@@ -44,14 +55,21 @@ const RELOAD_TICK := 5
 const CONTACT_TICK := 7
 const DECK_IDS: Array[StringName] = [&"verifier_card_0", &"verifier_card_1", &"verifier_card_2"]
 
+## `3-0d/R25`: the two fixtures' ONLY difference. Opposite signs rather than a scaled magnitude, so
+## P1 walks somewhere genuinely different and the divergence cannot be an accumulated rounding
+## whisker. Both are non-zero, so neither record is a "player stood still" degenerate.
+const MOVE_SCALE_A := 1.0
+const MOVE_SCALE_B := -1.0
+
 var _failures: Array[String] = []
 
 
 func _initialize() -> void:
 	_remove(FIXTURE_PATH)
+	_remove(FIXTURE_B_PATH)
 	_remove(CORRUPT_PATH)
 
-	var record := _fixture_record()
+	var record := _fixture_record(MOVE_SCALE_A)
 	var write_error := RecordFile.save_record(record, FIXTURE_PATH)
 	_check(write_error == "", "the fixture record was written through RecordFile: %s" % write_error)
 
@@ -76,6 +94,20 @@ func _initialize() -> void:
 		+ "measured run-to-run rather than against a literal (`3-0d/R18`): `%s` vs `%s`"
 				% [first_hash, second["hash"]])
 
+	# [IT HASHES THE REPLAY, AND NOT SOMETHING ELSE] — a DIFFERENT record, a DIFFERENT hash.
+	var record_b := _fixture_record(MOVE_SCALE_B)
+	var write_b_error := RecordFile.save_record(record_b, FIXTURE_B_PATH)
+	_check(write_b_error == "", "the second fixture record was written: %s" % write_b_error)
+	var other := _run_verifier(FIXTURE_B_PATH)
+	_check(other["exit"] == 0, "the second fixture verified too (exit %d)" % other["exit"])
+	var other_hash: String = other["hash"]
+	_check(other_hash != "", "...and printed a CanonicalHash: `%s`" % other_hash)
+	_check(other_hash != first_hash,
+		"TWO RECORDS THAT DIFFER ONLY IN THEIR RECORDED INTENTS PRINT DIFFERENT HASHES — which is "
+		+ "what makes the run-to-run equality above mean the hash came FROM THE REPLAY. A verifier "
+		+ "hashing a fresh MatchState, or anything else not derived from the intents, satisfies "
+		+ "equality and fails HERE (`3-0d/R25`). `%s` vs `%s`" % [first_hash, other_hash])
+
 	# [IT REFUSES] — the PASS above is a verdict, not a constant.
 	_write_corrupt_copy()
 	var refused := _run_verifier(CORRUPT_PATH)
@@ -87,8 +119,9 @@ func _initialize() -> void:
 		"...and NOT printing PASS, which is what makes the PASS above load-bearing")
 
 	_remove(FIXTURE_PATH)
+	_remove(FIXTURE_B_PATH)
 	_remove(CORRUPT_PATH)
-	_finish(first_hash)
+	_finish(first_hash, other_hash)
 
 
 func _check(cond: bool, label: String) -> void:
@@ -122,7 +155,12 @@ func _hash_from(text: String) -> String:
 ## discipline test/state/test_record_file.gd uses, so what the verifier reads is a record live play
 ## could have produced. Content and balance are IN-TEST LITERALS with opaque ids (golden isolation:
 ## a tuning pass moves neither this fixture nor the hash it produces).
-func _fixture_record() -> IntentRecorder:
+##
+## `3-0d/R25`: `move_scale` is the ONE axis the two fixtures differ on. Everything else — seed,
+## balance, flags, deck, costs, camera bases, the contact fact, the tick count — is IDENTICAL by
+## construction, so the hashes can only diverge through the REPLAYED INTENTS. That is the whole
+## point: it is the difference a verifier hashing the wrong object is blind to.
+func _fixture_record(move_scale: float) -> IntentRecorder:
 	var record := IntentRecorder.new()
 	record.capture_seed(SEED)
 	record.capture_apply_balance(_config(7.0))
@@ -136,13 +174,13 @@ func _fixture_record() -> IntentRecorder:
 		record.capture_set_camera_basis(1, Basis.IDENTITY)
 		if t == CONTACT_TICK:
 			record.capture_push_contact(0, 1, 0, Vector2(-1, 0))
-		record.capture_advance(_intents(t))
+		record.capture_advance(_intents(t, move_scale))
 	return record
 
 
-func _intents(t: int) -> Array[InputIntent]:
+func _intents(t: int, move_scale: float) -> Array[InputIntent]:
 	var i1 := InputIntent.new()
-	i1.move_dir = Vector2(t * 0.125, t * -0.0625)
+	i1.move_dir = Vector2(t * 0.125, t * -0.0625) * move_scale
 	i1.aim = Vector2(0.5, -0.25)
 	var i2 := InputIntent.new()
 	i2.move_dir = Vector2(-1, 0)
@@ -209,9 +247,11 @@ func _remove(path: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
-func _finish(measured_hash: String) -> void:
+func _finish(measured_hash: String, other_hash: String) -> void:
 	print("verifier tool: two subprocess runs agreed on CanonicalHash %s (this fixture's — never a "
 			% measured_hash + "repo constant, `3-0d/R18`)")
+	print("verifier tool: a second record differing ONLY in intents hashed %s — different, which is "
+			% other_hash + "what makes the agreement above a property of the REPLAY (`3-0d/R25`)")
 	for f in _failures:
 		print("FAILED: " + f)
 	print("RESULT: %s" % ("PASS" if _failures.is_empty() else "FAIL"))

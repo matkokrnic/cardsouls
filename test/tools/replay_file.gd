@@ -67,7 +67,10 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	# THE REPLAY, in the runner's own order (match_runner.gd:601-608): recorded reload events, then
+	# THE REPLAY, in the runner's own order (~~match_runner.gd:601-608~~ RE-ANCHORED AT `3-0d/R25`
+	# BY LOCATING THE CONTENT: match_runner.gd:629-633 — the runner grew 115 lines and the old
+	# citation now lands on the HUD card-selection push. Load-bearing per `3-0d/R17`/`3-0d/R23`):
+	# recorded reload events, then
 	# the recorded camera bases, then the recorded contact facts, then advance() on the recorded
 	# intents read through the shipped ReplayController — one instance per slot, exactly as the
 	# runner builds them. No live service, no CardDatabase, no hardware: everything comes from the

@@ -34,6 +34,35 @@ extends SceneTree
 ##   [THE LIVE RELOAD TRIGGER STILL WORKS] `trigger_live_balance_reload()` refuses outright in
 ##     replay mode. It still fires, so that consumer reads the private field too.
 ##
+## ~~A FOURTH READING, `_after_max_hp` AT THE FINAL FRAME, USED TO SIT BESIDE THE THIRD.~~ **IT IS
+## DELETED AT `3-0d/R25`, AND IT IS DELETED RATHER THAN KEPT BECAUSE IT WAS VACUOUS — IN THE ONE
+## FILE THAT IS THE MECHANISM, WHICH IS THE WORST PLACE FOR A VACUOUS ASSERTION.** It was the
+## UN-FIXED TWIN of the defect the previous pass caught for the earlier reading, and it survived
+## that pass for the same reason it was written: it LOOKS like reinforcement ("...and still is at
+## the end of the run"). It is not. MEASURED at `3-0d/R25` by re-running the falsifying mutation:
+## with the fork restored to the public member, this run prints
+## `max_hp authored=100.000000 before=100.000000 poisoned-check=1234.000000 after=100.000000` —
+## the poisoned value is genuinely in live state at POISON_CHECK_FRAME and GONE by MEASURE_FRAME,
+## because TRIGGER_FRAME sits between them and the trigger re-applies the AUTHORED balance. The
+## assertion therefore held while the fork was flipped and could not fail for the reason it named.
+## Keeping a vacuous assertion as "extra confidence" is what `3-0d/R20` calls a guard believed to
+## hold that does not; the two readings that DO fire (poisoned-check, and the frozen tick count)
+## are the whole tripwire, and they are enough.
+##
+## THE TRIPWIRE IS ONE CHANNEL WIDE, AND THAT IS STATED RATHER THAN IMPLIED (`3-0d/R25`). The
+## poisoned record drives all THREE replay channels, but only ONE of them is observable here:
+##   * THE RELOAD EVENT is observable — `max_hp` goes to POISON_MAX_HP. This is the tripwire.
+##   * THE CONTACT FACT produces NOTHING. `_resolve_contacts` calls
+##     `attacker.hero.register_swing_hit(...)`, which returns false when the attacker has no
+##     registered swing (`hero_state.gd:228-230`), and the poison record's attacker is IDLE — the
+##     fact is DROPPED at resolution, no damage, no `hit_landed`. Verified by content.
+##   * THE CAMERA BASIS is INERT. A basis only rotates a non-zero `move_dir`, and both live
+##     keyboards press nothing in a headless run, so the recorded basis changes no observable.
+## Making the other two observable was WEIGHED AND REJECTED at `3-0d/R25`: it would mean authoring
+## a swinging attacker and pressed intents into a test whose claim is about a FORK, for a second
+## and third witness to a thing one witness already proves loudly. The claim is verified, stated,
+## and left alone.
+##
 ## FALSIFYING CHANGE, obvious and real: restore ANY consumer to the public member — the per-tick
 ## `if replay_record != null:` fork above all — and this test goes red. That is what makes it the
 ## mechanism rather than a description of one. Proven by mutation at this pass.
@@ -224,8 +253,9 @@ func _evaluate() -> void:
 				% _authored_max_hp
 		+ "the recorded %f that a replayed tick 1 applies. Got %f"
 				% [POISON_MAX_HP, _poisoned_max_hp])
-	_check(_after_max_hp == _authored_max_hp,
-		"...and still is at the end of the run (%f)" % _after_max_hp)
+	# ~~_check(_after_max_hp == _authored_max_hp, "...and still is at the end of the run")~~ —
+	# DELETED AT `3-0d/R25` as VACUOUS; the docstring says why, and `_after_max_hp` is still MEASURED
+	# and PRINTED below so the value stays visible to a human without pretending to be a guard.
 	# [RECORDING CONTINUES]
 	_check(_after_ticks - _before_ticks == _after_frame - _before_frame,
 		"RECORDING CONTINUED at one tick per ticking frame across the assignment: %d ticks over %d "
