@@ -98,12 +98,29 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    the in-memory `IntentRecorder` and once from an `IntentRecorder` reconstructed by loading the saved
    file — and asserting the two replays hash identically. Breaking the save/load round-trip is what
    makes this AC falsifiable.
+   **POST-REVIEW AMENDMENT (`3-0d/R17`): THIS AC NOW ALSO COVERS AC 8's VERIFIER ORDERING, WHICH IT
+   DID NOT BEFORE.** Both replays here are driven through `ReplayDrive.drive()`
+   (`test/replay_drive.gd`), the single extracted copy of the replay drive order, SHARED with AC 8's
+   headless verifier. Before the extraction the verifier's ordering was a third independent
+   transcription that nothing guarded — see the AC 8 amendment and the corrected Dev Note.
 5. **The on-disk record carries a FORMAT VERSION int, and a record whose version does not match is
    REFUSED with a clear reason rather than replayed (`3-0d/R7`).** A test writes a record, rewrites
    only its version field to an unknown value, and asserts the load path refuses it and says why; the
    same test asserts a matching version loads. This is the ONE element of the on-disk shape this
    story pins — everything else about byte layout, key naming and file extension stays deliberately
    unpinned (rationale in Dev Notes).
+   **POST-REVIEW AMENDMENT (`3-0d/R15`, `3-0d/R16`): "REFUSED WITH A CLEAR REASON" NOW HOLDS ON
+   EVERY PATH, AND `save_record` CARRIES THE `user://` CLAIM ITSELF.** The review found ONE path
+   where the refusal had no reason: a file carrying a MATCHING version but a TRUNCATED body reached
+   `_from_dictionary()`, failed inside it, and came back as `{"record": null, "error": ""}` — which
+   a caller testing `error != ""` reads as SUCCESS, contradicting the class's own documented
+   contract. `RecordFile.REQUIRED_KEYS` is now validated BEFORE anything is rebuilt and the refusal
+   NAMES the missing keys; the previously untested no-version-key branch gains its own test; and a
+   derivation guard asserts `REQUIRED_KEYS` equals the key set an actual saved file carries, so the
+   two cannot drift. Separately (`3-0d/R16`), `save_record` accepted ANY path and was proven at the
+   review to write a record into the repo root — it now REFUSES a path that does not begin with
+   `user://`, with a reason, so this class's assertion about where records go is true of the API and
+   not only of `path_for()`.
 6. **Recording is ALWAYS-ON from tick 0: the record covers the match from its first tick and is never
    restarted mid-match (`3-0d/R1`).** Verified by content, `match_runner.gd:566` already calls
    `_recorder.capture_advance(intents)` on every ticking frame in the non-replay (`else`) branch, and
@@ -137,6 +154,14 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    runner-reaching Callables and their wired handlers sort to the EXACT expected two-member sets, so
    a third (a "load" in particular) fails here — and the test's own docstring says in its own text
    that AC 11, not this pin's control count, is what actually keeps a load control out.
+   **POST-REVIEW AMENDMENT (`3-0d/R14`): THAT STRUCTURAL TEST WAS EVADABLE AND IS NOW FIXED.** As
+   shipped it matched `^var\s+\w+\s*:\s*Callable` — the ANNOTATED form its author had written — so
+   the review declared a load control's Callable as `var load_record := Callable()`, the idiomatic
+   INFERRED form, and walked straight past this pin. The scan now matches a member declaration
+   CARRYING `Callable` IN ANY FORM (annotated, inferred, untyped-but-initialised) plus any member
+   the file INVOKES as a Callable, which also covers a member declared with no type at all. Its
+   self-check asserts all five of those forms are CAUGHT alongside the panel's own non-reaching
+   members being SPARED, and the pin was re-proven by mutation IN THE EVASION FORM.
    `test_shipped_input_map_action_set_is_exactly_pinned` (`test/state/test_deck_and_hand.gd:439`)
    stays green UNMOVED — the project's **30**-action set (MEASURED at this gate from
    `SHIPPED_INPUT_ACTIONS`, `test_deck_and_hand.gd:428-436`: 2 `debug_*` + 14 `p1_*` + 14 `p2_*`;
@@ -158,6 +183,16 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    `match_state.gd:137`). **CONSEQUENCE:** the Input Map pin's assertion message — "replay reachable
    only from a test, never from a key" (`test_deck_and_hand.gd:451-452`) — stays TRUE after this
    story, so it needs no edit.
+   **POST-REVIEW AMENDMENT (`3-0d/R17`): THE VERIFIER NO LONGER TRANSCRIBES THE REPLAY DRIVE ORDER.**
+   As shipped it carried its own copy of the ordering — a THIRD independent transcription after the
+   runner's live fork and AC 4's test — and NOTHING guarded it: AC 4 covered the save/load path only,
+   so a divergence here would have printed a stable but wrong hash indefinitely. The order is
+   extracted to `test/replay_drive.gd` (`ReplayDrive.drive()`), used by BOTH this verifier and AC 4's
+   in-suite round-trip test, which is what puts it under regression cover. The runner's own fork
+   stays where it is — it is `src/` code inside `_physics_process` and cannot call into `test/` —
+   and remains the ORIGINAL the helper is transcribed from, named in the helper's own docstring.
+   **This AC's own claim is unchanged and still holds:** run twice on the same file, the verifier
+   prints the same hash.
 9. **This story does not add pool-specific gating to a live reload — the shipped per-pool contract
    (`MatchState._apply_balance_to_player`, `match_state.gd:1116-1130`) is exercised UNCHANGED by the
    live trigger.** Verified by content: stamina receives `set_maximum` **and** `refill()` on every
@@ -197,6 +232,19 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
     touches the runner's seat (all hits drive a recorder directly: `test_intent_recorder.gd:117`,
     `test_replay_identity.gd:359`, `test_replay_contacts.gd:118`), which is exactly why moving the
     seat currently breaks nothing.
+    **POST-REVIEW AMENDMENT (`3-0d/R14`): HALF (b) WAS EVADABLE AND IS NOW A WHITELIST.** As shipped
+    it looked for the ONE shape an assignment takes — `\breplay_record\s*=[^=]` — and the review
+    reached the member three ways that pattern had not enumerated: `set("replay_record", rec)`,
+    `set_deferred("replay_record", rec)` and `runner[&"replay_record"] = rec`. ALL THREE PASSED, and
+    worse, all three were counted as harmless READS. The scan is INVERTED: every occurrence of the
+    token in `src/` must classify as one of four explicitly enumerated ALLOWED READ FORMS — the
+    declaration, a null comparison, a member read, or a read passed as an argument — and anything
+    else, INCLUDING A FORM NOBODY HAS THOUGHT OF YET, is an offender BY DEFAULT, reported with its
+    file, line and text. The allowed set is DERIVED from the shipped tree (each form is asserted to
+    occur in `src/`); no line count is hard-coded. The self-check asserts every evasion form above is
+    CAUGHT and every shipped form is SPARED **and classified as what it is**, and the pin was
+    re-proven by mutation in ALL THREE evasion forms. Half (a), the tap seat, was not evadable and is
+    UNCHANGED.
 
 ## Tasks / Subtasks
 
@@ -276,8 +324,16 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
   here that must reach back to the runner's recorder state, which needs either a runner-owned
   `Callable`/reference handed to the panel at construction (the `gamepad_profile`/`huds` precedent,
   generalized) or a signal the runner connects to — a HOW decision left to the dev pass, not fixed
-  here. That "exactly one runner-reaching control" is itself the shape AC 7's structural test counts,
-  which is what keeps a load control from being added back quietly.
+  here. ~~That "exactly one runner-reaching control" is itself the shape AC 7's structural test
+  counts, which is what keeps a load control from being added back quietly.~~ **CORRECTED AT THE
+  POST-REVIEW PASS (`3-0d/R19`): FALSE ON BOTH HALVES, AND THE SECOND HALF WAS ALREADY THE ERROR
+  `3-0d/R13` RULED ON.** (1) AC 7's structural test no longer COUNTS anything — it asserts an EXACT
+  SET, `{SaveRecord, ReloadBalance}` / `{_on_save_pressed, _on_reload_pressed}` (`3-0d/R13`), and the
+  panel carries TWO runner-reaching controls, not one. (2) A control count was never what keeps a
+  load control out. **AC 11's `replay_record` source scan is** — a load control's defining, catchable
+  property is that it ASSIGNS `replay_record`, which that scan forbids regardless of how many buttons
+  the panel carries. Both the ruling (`3-0d/R13`) and the test's own docstring say so; this bullet
+  contradicted them and now says what they say.
 - **The Input Map pin, verified by content** (`test/state/test_deck_and_hand.gd:428-452`):
   ~~28 actions (`debug_pause`, `debug_step`, 13 `p1_*`, 13 `p2_*`)~~ **CORRECTED — RE-MEASURED AT THE
   READINESS GATE from `SHIPPED_INPUT_ACTIONS` itself: 30 actions = 2 `debug_*` (`debug_pause`,
@@ -438,6 +494,48 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
   `3-0c/R14` (decision-log:3767-3769 and 3910-3913) — so this story's divergence is the **ELEVENTH**.
   `docs/game-architecture.md` is NOT edited by this pass; the queue flushes at the E3 close-out,
   forcing point unchanged.
+- **THE PERMANENT LESSON THIS STORY'S REVIEW PRODUCED (`3-0d/R14`), which outlives this story: A
+  PATTERN GUARD'S NON-VACUITY CHECK MUST BE PROVEN AGAINST THE FORMS AN ADVERSARY WOULD USE, NOT ONLY
+  THE FORM THE AUTHOR HAPPENED TO WRITE.** Both of this story's new source scans shipped with
+  self-checks and with mutation proofs, and BOTH were evaded at the review without either going red.
+  The reason is the same in both cases and it is not carelessness: **a mutation proof performed in
+  the author's own syntax proves only that syntax.** The `replay_record` scan was proven by breaking
+  it with `replay_record = ...`, the shape its author had in mind, so it never learned that
+  `set("replay_record", rec)`, `set_deferred("replay_record", rec)` and `runner[&"replay_record"] =
+  rec` reach the same member — and were being counted as READS. The panel scan was proven by
+  declaring an annotated `Callable`, so it never learned that `var load_record := Callable()`, the
+  form a developer is MOST likely to type, did not match it at all. The structural remedy, applied to
+  both: **enumerate what is ALLOWED and refuse everything else BY DEFAULT**, rather than enumerating
+  what is forbidden and being only as good as the author's imagination. The `replay_record` scan is
+  now a whitelist of four read forms; the panel scan matches `Callable` in any declaration form plus
+  invocation. Both self-checks now assert the EVASION FORMS ARE CAUGHT beside the legitimate forms
+  being SPARED, and both were re-proven by mutation IN THE EVASION FORMS. This lesson is recorded in
+  the decision log and binds every future pattern guard in this repo, not just these two.
+- **Two claims this story's own class made about itself that were not true of its API, both now
+  carried by code (`3-0d/R15`, `3-0d/R16`).** (1) `RecordFile`'s docstring says a refusal always
+  travels with its reason; on a versioned-but-truncated file it returned `{"record": null,
+  "error": ""}`, which a caller testing `error != ""` reads as SUCCESS. Required keys are validated
+  BEFORE the rebuild now. (2) The class and AC 7 both assert records go under `user://`; that was
+  true of `path_for()` and of nothing else, and `save_record` would write anywhere — proven at the
+  review by writing into the repo root. Both are the same shape of defect: **a property asserted in
+  prose and carried by a convention rather than by the API**, which holds exactly until the first
+  caller that does not follow the convention. Neither changes the on-disk format, so `FORMAT_VERSION`
+  stays at 1 (`3-0d/R7` — the format is unpinned; these are refusal paths, not shape changes).
+- **Why the AC 8 verifier's ordering needed extracting, and what the extraction cost (`3-0d/R17`).**
+  The replay drive order existed in THREE places — the runner's live fork (`match_runner.gd:601-608`,
+  the original), AC 4's test, and the verifier — and only the first two were guarded. AC 4 proved the
+  SAVE/LOAD path; it never touched the verifier's ordering, so the verifier could have drifted and
+  printed a stable, wrong hash forever. The two TEST-SIDE copies are now one (`ReplayDrive.drive()`).
+  **The runner's fork is deliberately NOT folded in and could not be:** it is `src/` code inside
+  `_physics_process` and `src/` cannot depend on `test/`. It stays the ORIGINAL, named in the
+  helper's docstring so a change there has somewhere to point. **Neither caller was weakened:** the
+  one thing that can legitimately go wrong (an unsound recorded content order, `3-0c/R11`) travels
+  back as a reason in a result Dictionary — the test asserts on it, the operator tool prints it and
+  exits nonzero. The verifier's `Invariant.check` crash became a printed `REFUSED:` line and exit 1,
+  which is strictly better for an operator tool and still loud. **Running the extracted verifier for
+  real immediately earned its keep:** it caught a parse error (a shadowed `result` local) that the
+  suite structurally cannot see, because `test/tools/replay_file.gd` is deliberately not globbed by
+  `run_all.sh`. A tool outside the suite must be RUN as part of any pass that edits it.
 
 ## Project Structure Notes
 
@@ -448,12 +546,23 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
   `IntentRecorder` itself or a sibling file under `src/systems/` is a HOW decision for the dev pass,
   constrained only by the existing `src/state/` exclusion (unaffected, this story touches no
   `src/state/` file) and by AC 4's round-trip requirement, not by a filename pinned here.
-- `src/ui/debug/debug_instrument_panel.gd` — gains EXACTLY ONE new control, SAVE, in-code, following
-  the existing two-`CheckButton` pattern (AC 7). No start control, no load control, no new `.tscn`, no
-  new top-level `Control`.
+- `src/ui/debug/debug_instrument_panel.gd` — ~~gains EXACTLY ONE new control, SAVE, in-code,
+  following the existing two-`CheckButton` pattern (AC 7).~~ **CORRECTED AT THE POST-REVIEW PASS
+  (`3-0d/R19`): FALSIFIED BY THE `3-0d/R13` AMENDMENT AND LEFT UNCORRECTED HERE.** AC 7 was
+  reformulated from a COUNT into an EXACT SET at `3-0d/R13` and the panel ships TWO new controls,
+  SAVE and RELOAD — this line still said "exactly one" afterwards, which is simply false about
+  shipped code. Correct text: **gains EXACTLY the SET of two new controls, `SaveRecord` and
+  `ReloadBalance`, in-code, following the existing two-`CheckButton` pattern (AC 7, amended
+  `3-0d/R13`).** No start control, no load control, no new `.tscn`, no new top-level `Control`.
 - `test/tools/replay_file.gd` — NEW: the standalone headless verifier (AC 8), `extends SceneTree` on
   the `test/integration/` pattern, taking a `user://` record path as a command-line argument. Under
   `test/` deliberately — that is what gives it `CanonicalHash`. Not globbed by `run_all.sh`.
+- `test/replay_drive.gd` — **NEW AT THE POST-REVIEW PASS (`3-0d/R17`)**: `class_name ReplayDrive`,
+  the ONE copy of the replay drive order, called by BOTH `test/state/test_record_file.gd` (AC 4) and
+  `test/tools/replay_file.gd` (AC 8). A library beside `test/canonical_hash.gd`, for the same
+  reason — its callers are a state test and a test-space operator tool, and nothing in the shipped
+  game replays a record from a file. Globbed by neither harness (`test/state/test_*.gd`,
+  `test/integration/test_*.gd`); reached by `class_name`.
 - `src/main/match_runner.gd` — gains the live-reload trigger's call site (AC 2) and whatever plumbing
   connects the panel's SAVE control to the recorder; does NOT touch the intent-tap seat, the `ticking`
   gate, the seven `connect_*` seams, or `replay_record` (AC 10, AC 11).
@@ -565,6 +674,11 @@ that did this work.
 AC 7 pins, and this decision-log entry. The `Claude Opus 4.8` commit trailer stays the repo-wide
 invariant, unaffected by which model actually did the work.
 
+**POST-REVIEW FIX PASS, `3-0d/R14`-`3-0d/R19` (2026-08-05): Claude Opus 5 (`claude-opus-5`)** — the
+hardened source scans, the `RecordFile` refusal paths, the `ReplayDrive` extraction, and the story
+and decision-log corrections. Same invariant: the commit trailer reads `Claude Opus 4.8` on all three
+commits regardless.
+
 ### Debug Log References
 
 **Engine semantics MEASURED before any code was written** (throwaway script, deleted; Godot 4.6.3):
@@ -609,8 +723,86 @@ refusal paths were exercised on that same real file: no argument -> usage, exit 
 `REFUSED: no record file at ...`; `format_version` rewritten to 99 -> `REFUSED: record format
 version 99 does not match this build's 1 ...`; version restored -> the SAME hash again.
 
+**CORRECTION OF RECORD ON THAT HASH (`3-0d/R18`), and it is an EXPLANATION, not a defect.** The
+review could not reproduce `5f465e7a…9d13`: it measured `d2f77f3e…92d0` from byte-identical record
+files across two sessions. **AC 8's actual claim — the same file replays to the same hash, twice —
+HOLDS, and was re-measured holding at this pass.** The hash above is **a function of the RUN that
+produced the record, not a constant of this repo**, and the two runs differed: the dev pass's
+throwaway producer PRESSED inputs (`p1_move_up`, `p1_attack`); the review's pressed none. Different
+intents, different final `MatchState`, different `CanonicalHash` — correctly. **Why the two runs
+looked identical and so the difference was invisible:** the verifier's summary line prints
+`ticks / reload_events / seed / deck / costs / order / camera_pushes / contact_facts` and **NOTHING
+ABOUT THE INTENTS THEMSELVES**, so two records that differ ONLY in what was pressed print the same
+summary and different hashes. Anyone comparing a hash to this record must reproduce the PRODUCING RUN
+first; quoting the number without its producer is what made it look like a broken claim.
+
+**POST-REVIEW FIX PASS — FOUR MUTATION PROOFS, EVERY ONE IN AN EVASION FORM (`3-0d/R14` part 4).**
+The prior pass's proofs were performed in the author's own syntax and are therefore superseded for
+these two pins: an annotated `Callable` and a bare `replay_record = ...` prove only those spellings.
+Each break below was applied, observed RED, then restored FROM A COPY TAKEN OUTSIDE THE REPO (the
+scratchpad, never `git checkout --`), with SHA-256 verified identical before and after —
+`match_runner.gd` `cdc452aaf802529587d6449d7a64cccfad917f55a2e5a8f7f09e88f77e61cc5d`,
+`debug_instrument_panel.gd` `0f92fb59fc24c97d3152665134e6b671196bfcaf0aecc1c3f180d5af7153b49a`.
+`git status` after all four confirms neither file is modified.
+
+| # | Evasion form applied | Observed |
+|---|----------------------|----------|
+| 1 | `set("replay_record", rec)` in `match_runner.gd` | `test_replay_surface_pins.gd::test_replay_record_is_assigned_nowhere_in_src` RED — `got 1, expected 0 ... res://src/main/match_runner.gd:661  set("replay_record", rec)` |
+| 2 | `set_deferred("replay_record", rec)` | same test RED — `... match_runner.gd:660  set_deferred("replay_record", rec)` |
+| 3 | `runner[&"replay_record"] = rec` (indexed property write) | same test RED — `... match_runner.gd:661  runner[&"replay_record"] = rec` |
+| 4 | `var load_record := Callable()` + a `LoadRecord` button + `_on_load_pressed()` — the rejected LOAD control declared in the INFERRED form | `test_replay_surface_pins.gd::test_the_panel_has_exactly_the_two_runner_reaching_controls` RED — `got ["load_record", "reload_balance", "save_record"], expected ["reload_balance", "save_record"]` AND `test_record_save_control.gd` RED — `got ["LoadRecord", "NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"]` |
+
+**ALL THREE OF 1-3 PASSED THE OLD SCAN, COUNTED AS READS; 4 PASSED THE OLD PANEL SCAN UNSEEN.** That
+is the whole content of `3-0d/R14`.
+
+**THE VERIFIER RUN FOR REAL AFTER THE `3-0d/R17` EXTRACTION** (throwaway producer under
+`test/tools/`, run headlessly then deleted; both `user://` files deleted afterwards). **The first
+attempt did not run at all** — `Parse Error: There is already a variable named "result" declared in
+this scope` at `replay_file.gd:80`, a shadowed local introduced by the extraction that the suite
+structurally cannot catch, because this file is deliberately not globbed by `run_all.sh`. Fixed, then
+two consecutive runs on the same file, identical output both times:
+`ticks=30  reload_events=2  seed=4242  deck=4 cards  costs=4  order=[&"deck", &"costs"]`,
+`camera_pushes=30  contact_facts=0`, `replayed 30 ticks to completion`, `CanonicalHash:
+74cbe99bb216886e81c35b0ab9522f7bd0d6a8f316ddb87dd1281df89589931f`, `RESULT: PASS`, exit 0. **That
+hash is this producer's, per `3-0d/R18` — it is not comparable to the dev pass's and is not a repo
+constant.** Refusal paths re-exercised on the same tool: no argument -> `usage: ...`; a TRUNCATED
+file (`intents` removed, version left intact) -> `REFUSED: user://post_review_probe_truncated.rec
+carries format version 1 but is missing intents — it is truncated or was not written by this class`,
+`RESULT: FAIL` — the `3-0d/R15` path, which before this pass returned an EMPTY error. `3-0d/R16`
+proven in the same run: `RecordFile.save_record(record, "post_review.rec")` returned `refusing to
+write post_review.rec — records go under user://, never into the project tree (`3-0d/R16`); use
+RecordFile.path_for()` and the repo root was confirmed to contain no such file afterwards.
+
 ### Completion Notes List
 
+- **POST-REVIEW FIX PASS SUITE (`3-0d/R14`-`3-0d/R19`). Before, verified at `HEAD` `d433b41` with a
+  clean tree before any edit: 344 state tests / 2198 assertions / 20 integration files, ALL PASSED.
+  After: 348 / 2244 / 20 — +4 state tests, +46 assertions, 0 new integration files. ALL PASSED both
+  ends**, and re-run green a third time after all four mutations were restored. The +4 are `3-0d/R15`
+  and `3-0d/R16`'s new refusal tests in `test_record_file.gd` (truncated file; no-version-key branch;
+  save outside `user://`; the `REQUIRED_KEYS` derivation guard); the +46 assertions are those plus
+  the two hardened scans' evasion-form self-checks. `project.godot` BYTE-IDENTICAL,
+  `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`, both ends. Golden unchanged,
+  `test_determinism.gd` absent from `git status`, `GOLDEN` still
+  `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The four inherited `3-0c` pins
+  required ZERO edits, confirmed by `git status`. `src/main/match_runner.gd` and
+  `src/ui/debug/debug_instrument_panel.gd` are UNMODIFIED by this pass — they were mutation targets
+  only, restored and hash-verified.
+- **POST-REVIEW: THE BLOCKING FINDING (B1) AND WHAT IT COST TO CLOSE.** Both of this story's new
+  source scans were evadable and their non-vacuity checks proved only the author's own syntax. Fixed
+  structurally, not by adding two more patterns: the `replay_record` scan is now a WHITELIST of four
+  allowed read forms with everything else an offender by default (`3-0d/R14` part 1), and the panel
+  scan matches `Callable` in ANY declaration form plus invocation (`3-0d/R14` part 2). The permanent
+  lesson is in the Dev Notes and in the decision log (`3-0d/R14` part 3). Re-proven by four mutations
+  in the evasion forms (`3-0d/R14` part 4) — see Debug Log References.
+- **POST-REVIEW, non-blocking, all five closed:** `3-0d/R15` (the empty-reason refusal on a truncated
+  record, plus the untested no-version-key branch, plus a `REQUIRED_KEYS` derivation guard);
+  `3-0d/R16` (`save_record` refuses a path outside `user://`); `3-0d/R17` (the verifier's ordering
+  extracted to `ReplayDrive` and thereby brought under AC 4's cover — and the Dev Notes claim that
+  AC 4 already covered it corrected, it covered the save/load path only); `3-0d/R18` (the AC 8 hash
+  is a function of its producing run, not a constant — corrected in Debug Log References with WHY two
+  runs can print identical summaries and different hashes); `3-0d/R19` (the two passages left
+  contradicting the amended AC 7, corrected in place with the correction visible).
 - **`3-0d/R13` FOLLOW-UP PASS SUITE. Before (re-verified by stashing this pass's edits and running
   clean at `HEAD` `dfebbb0`): 344 state tests / 2197 assertions / 20 integration files, ALL PASSED.
   After: 344 / 2198 / 20 — +1 assertion (the amended AC 7 pin's two-handler membership loop), 0 new
@@ -728,9 +920,30 @@ version 99 does not match this build's 1 ...`; version restored -> the SAME hash
   (`3-0d/R13`) amends the control-set assertion to the four-name set and adds the live RELOAD proof
   (reload event count + stamina refill through the StateInspector's own label).
 - `test/tools/replay_file.gd` (+ `.uid`) — AC 8, the headless verifier. NOT globbed by `run_all.sh`.
+  POST-REVIEW (`3-0d/R17`): its replay drive order is now `ReplayDrive.drive()`, not its own copy.
+- `test/replay_drive.gd` (+ `.uid`) — **NEW AT THE POST-REVIEW PASS (`3-0d/R17`)**: `class_name
+  ReplayDrive`, the ONE copy of the replay drive order, shared by AC 4's test and AC 8's verifier.
+  The one new `class_name` this pass ships; editor scan run and `.uid` committed.
 
 **Modified — tests**
 - `test/state/test_balance_config.gd` — gains AC 1's object-identity test; nothing removed.
+- `test/state/test_record_file.gd` — POST-REVIEW: gains `3-0d/R15`'s truncated-record and
+  no-version-key tests, `3-0d/R16`'s outside-`user://` refusal test, and the `REQUIRED_KEYS`
+  derivation guard; its `_replay()` now calls `ReplayDrive.drive()` (`3-0d/R17`). Nothing removed.
+- `test/state/test_replay_surface_pins.gd` — POST-REVIEW: BOTH scans hardened (`3-0d/R14`) — the
+  `replay_record` scan inverted into a whitelist, the panel Callable scan widened to any declaration
+  form plus invocation, and both self-checks extended with the evasion forms. AC 11 (a), the tap
+  seat, is UNTOUCHED.
+
+**Modified — source, post-review**
+- `src/systems/record_file.gd` — `REQUIRED_KEYS` validated before the rebuild (`3-0d/R15`) and
+  `REQUIRED_PATH_PREFIX` refusing a save outside `user://` (`3-0d/R16`). `FORMAT_VERSION` stays 1:
+  neither is a change to the on-disk shape.
+
+**Deliberately untouched at the post-review pass:** `src/main/match_runner.gd` and
+`src/ui/debug/debug_instrument_panel.gd` (mutation targets only, restored and SHA-256 verified),
+`test/state/test_live_reload.gd`, `test/integration/test_record_save_control.gd`,
+`test/state/test_balance_config.gd`, and everything below.
 
 **Deliberately untouched:** `project.godot` (hash identical), `docs/game-architecture.md` (the
 ELEVENTH amendment-queue member stands, `3-0d/R12`), `src/systems/intent_recorder.gd`,
@@ -744,4 +957,5 @@ the four inherited `3-0c` pins.
 | 2026-08-05 | 0.1 | File authored at this story's own creation pass, per the `3-0a`/`3-0b`/`3-0c` precedent and `3-0c/R5`'s split ruling. Nine ACs recorded, each mapping to one of the six inherited scope items (CACHE_MODE_IGNORE; the live reload trigger reusing the existing reload channel; `user://` persistence with the format deliberately unpinned; recording start/stop lifecycle; the panel controls with no new Input Map action; the live smoke) or explicitly declared discharged by a non-AC section with a reason (the live smoke itself, discharged by the required Live Smoke section rather than a numbered AC, matching this repo's own convention for every prior story). Every quoted string re-verified against shipped code or the decision log at write time; the commissioning brief's R-D6 claim ("spent on 3-4") is corrected — the more recent spend was `3-5a`. A structural gap not previously named anywhere is surfaced: `replay_record` is read once in `_ready()`, before the scene ticks, and no scene-reload mechanism exists in `src/`, so a mid-session "load" control has no runtime path into replay under the shipped architecture (Open Question (f)). Six Open Questions left open, none resolved. Golden Prediction NONE, argued on the same two premises `3-0c` used (no snapshot key; no seeded-RNG consumer). Live Smoke REQUIRED, described on the shipped two-keyboard default, no `.tscn` edit needed. Status `backlog`; promotion to `ready-for-dev` deferred to this story's own readiness gate. Nothing under `src/` or `test/` is touched by this pass — docs only. | Claude Sonnet 5 |
 | 2026-08-05 | 0.3 | **DEV PASS — all ELEVEN ACs implemented; suite 329/1715/19 -> 344/2197/20, all green both ends.** DEBT B is closed on both halves: `reload()` is `ResourceLoader.load(..., CACHE_MODE_IGNORE)` (AC 1, proven by OBJECT IDENTITY in the state harness with zero file mutation, engine semantics MEASURED first), and `match_runner.gd::trigger_live_balance_reload()` re-reads the service then captures BEFORE it applies on the existing reload channel (AC 2/AC 3, no ninth `capture_*`). `user://` persistence ships as `src/systems/record_file.gd` (`class_name RecordFile`, the ONE new class_name; editor scan run and `.uid` committed for all six new `.gd` files) — a sibling rather than a recorder method, so the recorder stays clock-free and content-blind and its own scan stays green. Round trip proven by bit-identical `CanonicalHash` across live run / in-memory replay / loaded-file replay AND channel-by-channel equality including all eight `InputIntent` fields (AC 4); `FORMAT_VERSION` refusal proven in both directions (AC 5); always-on cumulative recording proven in the harness and on the LIVE runner (AC 6). The panel gains EXACTLY ONE control, `SaveRecord`, in a third COLUMN (a third row would leave the empty band and trip `test_debug_instruments.gd`'s S1/S2 layout guard, which still passes), wired by a runner-owned `Callable` and pinned at one runner-reaching control by a scan that also forbids a second `Callable` and any `signal` (AC 7). `test/tools/replay_file.gd` ships and was RUN FOR REAL, twice, on a record produced headlessly by the live runner — same hash `5f465e7a...9d13` both times (AC 8). Per-pool contract exercised unchanged, stamina refill ratified (AC 9). The four inherited `3-0c` pins required ZERO edits and `project.godot` is byte-identical (`8879DE49...0004`); the golden did not move (`40eb5554...a322`). SIX mutation proofs, each broken then restored from an out-of-repo copy with SHA-256 verified. **ONE CONTRACT CONFLICT RAISED, NOT RESOLVED: AC 7 pins the panel at one control while the Live Smoke asks for a panel-triggered live reload — a second runner-reaching control. Built to the AC; the trigger has no operator surface and the smoke's reload step cannot be performed until the operator rules.** Live smoke NOT run (operator's, carries the required R-D6 kill). Code and docs in two separate commits; neither pushed. | Claude Opus 5 |
 | 2026-08-05 | 0.2 | **Readiness gate fix pass — NOT READY on first reading, five blocking findings, all ruled and applied (`3-0d/R1`-`R12`).** AC count 9 -> 11. **B1/`R1`:** ACs 5/6 contracted a mid-match START control that cannot ship — `capture_advance()` asserts `has_complete_match_start()` on its first captured tick and all five match-start channels are captured only inside `_ready()` behind `if not replaying`, so a mid-match start trips the invariant on the next tick; and even a working one would be meaningless, since a replay builds from `MatchState.new()` forward and no state-restore snapshot exists. Recording is ALWAYS-ON from tick 0 (already true in shipped code, `match_runner.gd:566`); new AC 6 pins it. **B2/`R2`:** the "load" control had no correct runtime path AND the story's stated reason was FALSE — `replay_record` is not read only in `_ready()`, it is also read every tick in `_physics_process` (lines 536-540), so a mid-session assignment injects tick-1 recorded reloads/bases/contacts into a live match while both controllers are still live keyboards and silently stops recording. LOAD IS NOT A LIVE CONTROL; a scene-reload mechanism was considered and REJECTED (new architecture; collides with the ratified "record + replay only" scope line). The panel gains EXACTLY ONE control, SAVE, with recording continuing afterwards (AC 7). **B3/`R3`/`R4`:** the smoke's payoff step was unperformable — `CanonicalHash` is `test/canonical_hash.gd` and nothing in `src/` computes or displays a hash (verified: the only two `src/` occurrences are comments). The payoff moves to a HEADLESS VERIFIER under `test/tools/` (AC 8), which is what legitimately gives it `CanonicalHash`; consequence recorded — the Input Map pin's "replay reachable only from a test, never from a key" message stays TRUE, so that non-blocking finding is DISSOLVED, not deferred. The smoke is reformulated to what it alone can prove: a REAL PLAYED ROUND's record exists, is structurally complete, and replays headlessly twice to the same hash. **B4/`R5`:** old AC 1 forced a permanent test to mutate the tracked authored `.tres` (`CONFIG_PATH` is a hardcoded const with no seam; `test_contact_pipeline.gd` and `test_balance_authoring.gd` read it too), colliding with the PERMANENT RULE at decision-log:799 and worse than the one-off case that rule was written for. AC 1 now proves the cache bypass BY OBJECT IDENTITY — two `reload()` calls yielding DIFFERENT references with EQUAL values, plain `load()` yielding the same one — **measured on Godot 4.6.3 before the AC was written**; zero file mutation, zero new autoload API, and it lands in the STATE harness (`test_balance_config.gd:88-89` already instantiates the service as a plain Node). **B5/`R6`:** old AC 9 was a process promise with no falsifying mechanism (all `capture_advance` hits in `test/` drive a recorder directly). AC 11 now ships a source scan over `match_runner.gd` pinning the tap seat AND that `replay_record` is assigned nowhere in `src/`. **`R7`:** on-disk format stays unpinned except for a mandatory format-version int with refusal on mismatch (new AC 5). **`R8`:** the old-record/changed-`CardDatabase` question is CLOSED BY CONSTRUCTION — replay drives injected deck + costs and never reads the autoload (verified). **`R9`:** debug reset is round-scoped and rides the record as an ordinary captured `InputIntent` field; a record spans it intact. **`R10`:** the visible stamina refill on a live reload is RATIFIED AS CORRECT (the per-pool `apply_balance` contract, live for the first time), observed by the smoke as EXPECTED. **`R11`:** R-D6 RE-INVOKED AND SPENT on this story's smoke; the kill is a REQUIRED observation. **`R12`:** the architecture's "record/replay start-stop-load" annotation (lines 578-579) genuinely diverges from SAVE-only and becomes the **ELEVENTH** amendment-queue member (queue counted by content: ten, per `3-0c/R10` and `3-0c/R14`); `game-architecture.md` NOT edited, queue flushes at E3 close-out. **Non-blocking corrections applied:** the Input Map action count re-measured 28 -> **30** (2 `debug_*` + 14 `p1_*` + 14 `p2_*`); "`reload()` has exactly ONE caller" corrected to TWO (its `_ready()` plus `test_balance_config.gd:89`), with the inheritance of that wrong claim from the CLOSED `3-0c` story file recorded here rather than by editing that file; three "not decided here" carve-outs moved out of ACs into Dev Notes; two drifted citations re-anchored by content (`3-0c/R5` 3685 -> **3682**-3699; the architecture X5 toggle line 579 -> **578**-579). Line numbers are NOT re-anchored wholesale — non-blocking on the repo's own precedent. **Open Questions section DELETED** (the `3-0c` precedent), all six ruled, each ruling's substance carried into the AC or Dev Note that now owns it. **Every pre-existing Dev Notes bullet survives**; the three falsified ones (the `reload()` caller count, the 28-action count, the `replay_record`-read-once structural gap) are CORRECTED IN PLACE with the correction visible, none deleted. Golden Prediction unchanged (NONE), premise 1 widened to name `test/tools/`. Status `backlog` -> **`ready-for-dev`**. Docs only; nothing under `src/` or `test/` touched. | Claude Sonnet 5 |
+| 2026-08-05 | 0.5 | **POST-REVIEW FIX PASS (`3-0d/R14`-`3-0d/R19`) — a code review returned CHANGES REQUIRED with ONE BLOCKING finding and five non-blocking; all six are closed here.** **B1/`R14`, blocking:** BOTH of this story's new source scans could be evaded, and the mutation proofs that "proved" them used the author's own syntax so they caught nothing. The `replay_record` scan matched `\breplay_record\s*=[^=]`, so `set("replay_record", rec)`, `set_deferred("replay_record", rec)` and `runner[&"replay_record"] = rec` ALL PASSED — counted as READS; the panel Callable scan matched `^var\s+\w+\s*:\s*Callable`, so the idiomatic `var load_record := Callable()` did not match at all. Fixed STRUCTURALLY, not by adding patterns: the `replay_record` scan is INVERTED INTO A WHITELIST of four enumerated allowed read forms (declaration, null comparison, member read, argument read) with everything else — including forms nobody has thought of yet — an offender BY DEFAULT, reported with file, line and text, the allowed set derived from the shipped tree and no line count hard-coded; the panel scan matches a declaration carrying `Callable` in ANY form plus any member the file invokes as a Callable. Both self-checks now assert the EVASION FORMS ARE CAUGHT beside the legitimate forms being SPARED. **REDONE MUTATION PROOFS, ALL FOUR IN EVASION FORMS** (`set()`, `set_deferred()`, indexed property write, inferred-form `Callable`), each observed RED, each restored from an out-of-repo copy with SHA-256 verified identical — a proof in the annotated/bare form no longer counts. **The PERMANENT LESSON (`R14` part 3), recorded in the decision log and in Dev Notes, binding every future pattern guard in this repo: a pattern guard's non-vacuity check must be proven against THE FORMS AN ADVERSARY WOULD USE, not only the form the author happened to write; enumerate what is ALLOWED and refuse the rest by default.** **`R15`:** `RecordFile.load_record` returned `{"record": null, "error": ""}` on a versioned-but-truncated file — a refusal with NO reason, which a caller testing `error != ""` reads as SUCCESS, contradicting the class's own contract. `REQUIRED_KEYS` are validated BEFORE the rebuild and the refusal names what is missing; tests added for the truncated file AND the previously untested no-version-key branch, plus a derivation guard asserting `REQUIRED_KEYS` is the key set the writer actually emits. **`R16`:** `save_record` accepted any path and was proven at the review to write into the repo root; a path not beginning with `user://` is now REFUSED with a reason, tested, so the class's assertion about where records go is true of the API and not only of `path_for()`. **`R17`:** the AC 8 verifier's replay ordering was a THIRD independent transcription that NOTHING guarded — AC 4 covered the save/load path only. Extracted to `test/replay_drive.gd` (`ReplayDrive.drive()`), used by BOTH `test/state/test_record_file.gd` and `test/tools/replay_file.gd`, so AC 4's round-trip hashes now genuinely cover the verifier's ordering; the falsified Dev Notes claim is corrected in place. The runner's own `src/` fork is deliberately NOT folded in (it cannot depend on `test/`) and stays the named original. Neither caller weakened: the unsound-content refusal travels as a reason in a result Dictionary. **Running the extracted verifier for real caught a parse error the suite structurally cannot see** — it is not globbed by `run_all.sh` — which is itself worth recording. **`R18`:** the Dev Agent Record's AC 8 hash `5f465e7a…9d13` was not reproducible at the review, which measured `d2f77f3e…92d0` from byte-identical files; **this is EXPLAINED, not a defect** — the dev pass's producer PRESSED inputs and the review's pressed none, so different intents gave a different final state and a different hash, while the verifier's summary line shows NO intents, which is why the two runs looked identical. AC 8's actual claim (same file -> same hash, twice) holds and was re-measured holding. The record now says the hash is a function of its producing run, not a constant. **`R19`:** the two passages left contradicting the `3-0d/R13` AC 7 amendment — Project Structure Notes still saying the panel "gains EXACTLY ONE new control, SAVE", and a Dev Note still saying the structural test COUNTS runner-reaching controls and that this is what keeps a load control out — are CORRECTED IN PLACE with the correction visible; the 0.3 Change Log row is HISTORICAL and untouched. **Suite 344/2198/20 -> 348/2244/20, ALL PASSED both ends** and green again after every mutation was restored; `project.godot` byte-identical (`8879DE49…07970004`); golden unmoved; the four inherited `3-0c` pins zero edits; `match_runner.gd` and `debug_instrument_panel.gd` unmodified. Three commits, none pushed. | Claude Opus 5 |
 | 2026-08-05 | 0.4 | **FOLLOW-UP DEV PASS (`3-0d/R13`) — the contract conflict the prior pass raised and deliberately did not resolve (AC 7 vs the Live Smoke's live-reload step) is RESOLVED, not deleted.** Operator ruling: AC 7's "exactly one new control" was never protecting a COUNT, it was protecting against a LOAD control (`3-0d/R2`) — a property AC 11's `replay_record` source scan already carries structurally, independent of button count. AC 7 is reformulated from a count into an EXACT SET, `{SaveRecord, ReloadBalance}`, the same shape this repo already uses for the Input Map pin. The `DebugInstrumentPanel` gains a second runner-owned `Callable`, `reload_balance`, and a second `Button`, `ReloadBalance`, stacked in the existing third column and wired to the already-shipped `trigger_live_balance_reload()` — no new runner-side trigger logic. **Layout MEASURED, not assumed:** a throwaway script confirmed the box's global rect is unchanged (x[276,876] y[356,450]) and both columns land on the same 64px minimum height, well inside the 94px band; `test_debug_instruments.gd`'s S1/S2 layout guard passed UNMOVED. `test/state/test_replay_surface_pins.gd`'s AC 7 pin is amended to assert the exact two-member Callable/handler sets (AC 11 untouched, zero edits); `test/integration/test_record_save_control.gd`'s control-set assertion is amended to the four-name set and extended to press RELOAD via the panel's own real-signal pattern, proving live: the runner's `reload_event_count()` goes 1 -> 2 and P1's stamina (spent to 38/50 by a real roll) refills to 50/50 through the StateInspector's own primed label. **MUTATION PROOF:** a third runner-reaching control (`load_record`, the rejected LOAD control) was added and BOTH the structural pin and the scene-level control-set check went RED; restored from an out-of-repo copy, SHA-256 verified identical. Suite 344/2197/20 -> 344/2198/20 (+1 assertion, 0 new tests/integration files), ALL PASSED both ends; `project.godot` re-verified byte-identical; golden unchanged; the four inherited `3-0c` pins required zero edits. Code and docs in separate commits; neither pushed. | Claude Sonnet 5 |
