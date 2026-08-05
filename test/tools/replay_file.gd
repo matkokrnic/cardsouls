@@ -20,7 +20,9 @@ extends SceneTree
 ## neither in that directory nor named `test_*`, deliberately: its INPUT is a file an operator
 ## produced by playing, which no unattended suite can conjure. Its regression cover is AC 4's
 ## in-suite round-trip test (test/state/test_record_file.gd), which proves the same save/load path
-## on a fixture the suite can build for itself.
+## on a fixture the suite can build for itself — and, since `3-0d/R17`, THE SAME REPLAY DRIVE
+## ORDER: the sequence below is `ReplayDrive.drive()`, shared with that test, not a third
+## transcription of its own. The review found the transcription unguarded, which is why it moved.
 ##
 ## THE FORM is the repo's own working pattern for a standalone script: `extends SceneTree` with an
 ## `_initialize()` entry point, the shape every file under test/integration/ uses and the shape
@@ -65,34 +67,27 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	var replayed := _replay(record)
+	# THE REPLAY, in the runner's own order (match_runner.gd:601-608): recorded reload events, then
+	# the recorded camera bases, then the recorded contact facts, then advance() on the recorded
+	# intents read through the shipped ReplayController — one instance per slot, exactly as the
+	# runner builds them. No live service, no CardDatabase, no hardware: everything comes from the
+	# record, which is the whole claim a replay makes.
+	#
+	# `3-0d/R17`: THAT ORDER IS NO LONGER TRANSCRIBED HERE. It lives in ReplayDrive, shared with
+	# AC 4's in-suite round-trip test — which is what finally puts this tool's ordering under
+	# regression cover. It used to be a THIRD independent transcription that nothing guarded: AC 4
+	# proved the save/load path only, so a divergence here would have printed a stable wrong hash.
+	var drive_result := ReplayDrive.drive(record)
+	if drive_result["error"] != "":
+		print("REFUSED: %s" % drive_result["error"])
+		print("RESULT: FAIL")
+		quit(1)
+		return
+	var replayed: MatchState = drive_result["state"]
 	print("replayed %d ticks to completion" % record.tick_count())
 	print("CanonicalHash: %s" % CanonicalHash.of(replayed.to_snapshot()))
 	print("RESULT: PASS")
 	quit(0)
-
-
-## THE REPLAY, in the runner's own order (match_runner.gd:536-568): recorded reload events, then
-## the recorded camera bases, then the recorded contact facts, then advance() on the recorded
-## intents read through the shipped ReplayController — one instance per slot, exactly as the
-## runner builds them. No live service, no CardDatabase, no hardware: everything comes from the
-## record, which is the whole claim a replay makes.
-func _replay(record: IntentRecorder) -> MatchState:
-	var ms := MatchState.new(MatchParams.new(record.replay_seed()))
-	ms.apply_balance(record.replay_balance_config(0))
-	ms.inject_feature_flags(record.replay_feature_flags())
-	Invariant.check(record.replay_inject_content(ms),
-		"recorded content order is unsound — the cast-cost totality check would be vacuous")
-	var p1_controller := ReplayController.new(record, 0)
-	var p2_controller := ReplayController.new(record, 1)
-	for tick in range(1, record.tick_count() + 1):
-		record.replay_apply_reloads_before(ms, tick)
-		record.replay_push_camera_bases(ms, tick)
-		record.replay_push_contacts(ms, tick)
-		var intents: Array[InputIntent] = [p1_controller.sample(), p2_controller.sample()]
-		ms.advance(intents)
-		ms.drain_signals()
-	return ms
 
 
 func _camera_pushes(record: IntentRecorder) -> int:

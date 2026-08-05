@@ -26,6 +26,33 @@ extends TestCase
 ## Both scans read the code portion of each line only, so a comment naming a banned form can
 ## neither trip nor satisfy them, and both carry their own non-vacuity checks: the patterns are
 ## proven against the exact strings they exist to catch.
+##
+## ---------------------------------------------------------------------------------------------
+## `3-0d/R14` — HOW THESE TWO SCANS WERE EVADED, AND THE RULE THAT CAME OUT OF IT.
+##
+## The review of this story broke BOTH pins without either going red. The `replay_record` scan
+## matched `\breplay_record\s*=[^=]`, so `set("replay_record", rec)`,
+## `set_deferred("replay_record", rec)` and `runner[&"replay_record"] = rec` all sailed through and
+## were counted as READS. The panel scan matched `^var\s+\w+\s*:\s*Callable`, so
+## `var load_record := Callable()` — the IDIOMATIC inferred form, the one a developer is most
+## likely to type — did not match at all. A load control written in those shapes passed both pins.
+##
+## THE PERMANENT LESSON (`3-0d/R14`, decision log): **a pattern guard's non-vacuity check must be
+## proven against THE FORMS AN ADVERSARY WOULD USE, not only the form the author happened to
+## write.** The original mutation proofs for these two scans were performed in the author's own
+## syntax — an annotated Callable, a bare `replay_record = ...` — so they proved that syntax and
+## nothing else. A guard that enumerates the ways it can be broken is only ever as good as the
+## imagination of whoever wrote the enumeration.
+##
+## WHAT CHANGED HERE, structurally, so this cannot recur by omission:
+##   * The `replay_record` scan is INVERTED INTO A WHITELIST. Every occurrence of the token in
+##     src/ must classify as one of an explicitly enumerated set of ALLOWED READ FORMS. Anything
+##     else — including a form nobody has thought of yet — is an offender BY DEFAULT rather than
+##     by enumeration.
+##   * The panel scan matches a member declaration CARRYING `Callable` IN ANY FORM, plus any
+##     member the file invokes as a Callable, rather than two hand-written patterns.
+##   * Both self-checks now assert the EVASION FORMS ARE CAUGHT alongside the legitimate forms
+##     being spared, and both were re-proven by mutation IN THE EVASION FORMS.
 
 const PANEL := "res://src/ui/debug/debug_instrument_panel.gd"
 const RUNNER := "res://src/main/match_runner.gd"
@@ -35,6 +62,16 @@ const RUNNER := "res://src/main/match_runner.gd"
 ## findings before comparing, so member/handler ORDER carries no meaning, only membership.
 const RUNNER_REACHING_MEMBERS: Array[String] = ["reload_balance", "save_record"]
 const RUNNER_REACHING_HANDLERS: Array[String] = ["_on_reload_pressed", "_on_save_pressed"]
+
+## AC 11 (b) / `3-0d/R14`: the token the whitelist scan below classifies, and the EXACT SET of
+## READ FORMS that scan allows. Anything else — an assignment, a `set()`/`set_deferred()` call, an
+## indexed property write, or a form nobody has thought of yet — is an offender BY DEFAULT. That
+## inversion is the point: the old scan enumerated what was FORBIDDEN and was walked around by
+## three shapes its author had not enumerated.
+const REPLAY_RECORD := "replay_record"
+const ALLOWED_FORMS: Array[String] = [
+	"declaration", "null comparison", "member read", "argument read",
+]
 
 
 # ---------------------------------------------------------------- AC 7
@@ -54,23 +91,50 @@ const RUNNER_REACHING_HANDLERS: Array[String] = ["_on_reload_pressed", "_on_save
 func test_the_panel_has_exactly_the_two_runner_reaching_controls() -> void:
 	var lines := _code_lines(PANEL)
 	assert_true(lines.size() > 50, "the panel source was actually read (got %d lines)" % lines.size())
-	var callables: Array[String] = []
-	var signals: Array[String] = []
-	var callable_re := RegEx.create_from_string("^var\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*Callable")
-	var signal_re := RegEx.create_from_string("^signal\\s+([A-Za-z_][A-Za-z0-9_]*)")
-	# NON-VACUITY: both patterns must match the exact forms they exist to catch.
-	assert_true(callable_re.search("var save_record: Callable = Callable()") != null,
-		"the Callable pattern matches a Callable member declaration")
-	assert_true(signal_re.search("signal save_requested") != null,
-		"the signal pattern matches a signal declaration")
-	for line in lines:
-		var c := callable_re.search(line)
-		if c != null:
-			callables.append(c.get_string(1))
-		var s := signal_re.search(line)
-		if s != null:
-			signals.append(s.get_string(1))
-	callables.sort()
+
+	# NON-VACUITY (`3-0d/R14`), PROVEN AGAINST THE FORMS AN ADVERSARY WOULD USE. The pattern this
+	# replaces was `^var\s+\w+\s*:\s*Callable` — it matched the annotated form its author had
+	# written and nothing else, so the review declared a load control's Callable as
+	# `var load_record := Callable()` and walked straight past the pin. Each declaration form below
+	# must now be CAUGHT.
+	for evasion: Array in [
+		["var load_record: Callable", "annotated, no initialiser"],
+		["var load_record: Callable = Callable()", "annotated with an initialiser"],
+		["var load_record := Callable()", "INFERRED — the form the review used to evade this pin"],
+		["var load_record = Callable()", "untyped, initialised with a Callable"],
+	]:
+		var source: Array[String] = ["var save_record: Callable = Callable()", evasion[0]]
+		var both: Array[String] = ["load_record", "save_record"]
+		assert_eq(_runner_reaching_members(source), both,
+			"a Callable member declared as `%s` is CAUGHT (%s)" % [evasion[0], evasion[1]])
+	# ...including one whose DECLARATION carries no type at all and whose only tell is that the
+	# file goes on to invoke it as a Callable — the form left over once the four above are closed.
+	var late: Array[String] = [
+		"var save_record: Callable = Callable()",
+		"var load_record",
+		"func _on_load_pressed() -> void:",
+		"\tif load_record.is_valid():",
+		"\t\tload_record.call()",
+	]
+	var late_want: Array[String] = ["load_record", "save_record"]
+	assert_eq(_runner_reaching_members(late), late_want,
+		"...and one declared untyped and INVOKED as a Callable later, which carries the word "
+		+ "`Callable` on no line at all")
+	# ...and the panel's own non-reaching members are SPARED: each is an object it was HANDED and
+	# acts on directly, not a way to ask the runner for anything.
+	var spared: Array[String] = [
+		"var gamepad_profile: GamepadProfile",
+		"var huds: Array[HudRoot] = []",
+		"var _countdown_values: Array[Label] = []",
+	]
+	var none: Array[String] = []
+	assert_eq(_runner_reaching_members(spared), none,
+		"a held resource or node reference is NOT a runner-reaching control and must be spared")
+	assert_eq(_declared_signals(["signal save_requested"]), ["save_requested"] as Array[String],
+		"the signal pattern matches a signal declaration — the OTHER shape a control could use")
+
+	var callables := _runner_reaching_members(lines)
+	var signals := _declared_signals(lines)
 	assert_eq(callables, RUNNER_REACHING_MEMBERS,
 		"the panel declares EXACTLY the two runner-reaching Callables — SAVE and RELOAD — and "
 		+ "nothing else; a third (a load control in particular) is what AC 7 refuses: %s"
@@ -151,27 +215,47 @@ func test_the_intent_tap_stays_seated_immediately_before_advance() -> void:
 ## external and pre-tree (test/integration/test_replay_contacts.gd:80), which is what makes replay
 ## a mode chosen BEFORE the node enters the tree rather than a switch flipped mid-match.
 ##
-## THE MEASUREMENT THIS PINS (taken at the readiness gate and re-taken here): the token appears in
-## src/ only as its declaration and as READS. A mid-session `replay_record = ...` — the naive
-## "load" control — fails here, which is the single structural trace of the control `3-0d/R2`
-## rejected.
+## A WHITELIST, NOT A BLACKLIST (`3-0d/R14`). This scan used to look for the ONE shape an
+## assignment takes — `replay_record` followed by a bare `=` — and the review reached the member
+## three ways it had not enumerated: `set("replay_record", rec)`,
+## `set_deferred("replay_record", rec)` and `runner[&"replay_record"] = rec`, ALL of which the old
+## pattern counted as harmless READS. The scan is therefore inverted: EVERY occurrence of the token
+## in src/ must classify as one of the four ALLOWED READ FORMS enumerated in `ALLOWED_FORMS`, and
+## anything else — including a form nobody has thought of yet — is an offender, reported with its
+## file, line and text. The allowed set is DERIVED from the shipped tree (every form in it is
+## asserted to occur below), never a transcription of today's line count.
 func test_replay_record_is_assigned_nowhere_in_src() -> void:
-	var declaration_re := RegEx.create_from_string("^\\s*(@export\\s+)?var\\s+replay_record\\b")
-	# An assignment is `replay_record` followed by a bare `=` — never `==`, `!=`, `>=`, `<=`.
-	var assignment_re := RegEx.create_from_string("\\breplay_record\\s*=[^=]")
-	# NON-VACUITY: the patterns must catch what they exist to catch and spare what they must spare.
-	assert_true(assignment_re.search("\tscene.replay_record = record") != null,
-		"the assignment pattern catches the form the rejected load control would use")
-	assert_true(assignment_re.search("\t\treplay_record = load_from_disk()") != null,
-		"...including a bare in-file assignment")
-	assert_null(assignment_re.search("\tvar replaying := replay_record != null"),
-		"a COMPARISON is not an assignment and must not be counted")
-	assert_null(assignment_re.search("\t\t\tif replay_record == null:"), "...nor an equality test")
-	assert_true(declaration_re.search("var replay_record: IntentRecorder = null") != null,
-		"the declaration pattern matches the shipped declaration")
+	# NON-VACUITY (`3-0d/R14`), PROVEN AGAINST THE FORMS AN ADVERSARY WOULD USE. The first is the
+	# shape the original proof used; the next three are the review's evasions, every one of which
+	# the OLD pattern let through as a read. All must be CAUGHT.
+	for caught: Array in [
+		["\t\treplay_record = RecordFile.load_record(path)[\"record\"]", "a bare in-file assignment"],
+		["\tscene.replay_record = record", "an assignment through a held reference"],
+		["\tself.replay_record = record", "...or through self"],
+		["\trunner.set(\"replay_record\", rec)", "EVASION 1: set() by property NAME"],
+		["\trunner.set_deferred(\"replay_record\", rec)", "EVASION 2: set_deferred()"],
+		["\trunner[&\"replay_record\"] = rec", "EVASION 3: an indexed property write"],
+		["\trunner[\"replay_record\"] = rec", "...and its plain-String twin"],
+	]:
+		assert_true(_occurrence_forms(caught[0]).has(""),
+			"`%s` is CAUGHT (%s)" % [caught[0].strip_edges(), caught[1]])
+	# ...and every form the SHIPPED runner actually uses is SPARED, and classified as what it is —
+	# a mislabelled read is a whitelist entry nobody checked.
+	var spared := {
+		"var replay_record: IntentRecorder = null": "declaration",
+		"\tvar replaying := replay_record != null": "null comparison",
+		"\t\t\tif replay_record == null:": "null comparison",
+		"\tvar seed_value := replay_record.replay_seed() if replaying else _SEED": "member read",
+		"\t_p1_controller = ReplayController.new(replay_record, 0) if replaying \\": "argument read",
+	}
+	for line: String in spared:
+		var want: Array[String] = [spared[line]]
+		assert_eq(_occurrence_forms(line), want,
+			"`%s` is SPARED, as a %s" % [line.strip_edges(), spared[line]])
 
 	var declarations: Array[String] = []
 	var offenders: Array[String] = []
+	var seen_forms: Dictionary = {}
 	var reads := 0
 	var scanned := 0
 	for path in _gd_files("res://src/"):
@@ -179,29 +263,126 @@ func test_replay_record_is_assigned_nowhere_in_src() -> void:
 		var n := 0
 		for line in _code_lines(path):
 			n += 1
-			if not line.contains("replay_record"):
-				continue
-			if declaration_re.search(line) != null:
-				declarations.append("%s:%d" % [path, n])
-				continue
-			if assignment_re.search(line) != null:
-				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
-			else:
-				reads += 1
+			for form in _occurrence_forms(line):
+				if form == "":
+					offenders.append("%s:%d  %s" % [path, n, line.strip_edges()])
+					continue
+				seen_forms[form] = true
+				if form == "declaration":
+					declarations.append("%s:%d" % [path, n])
+				else:
+					reads += 1
 	assert_true(scanned > 10, "the src/ scan visited the tree (got %d files)" % scanned)
 	assert_eq(offenders.size(), 0,
-		"replay_record is ASSIGNED in src/ — a mid-session assignment injects recorded reloads, "
-		+ "bases and contacts into a live match and silently stops recording, because "
-		+ "capture_advance sits in the branch the replay fork skips (`3-0d/R2`): %s"
-				% ", ".join(offenders))
+		"replay_record is REACHED in src/ by something that is not one of the allowed READ forms "
+		+ "%s — a mid-session assignment, however it is spelled, injects recorded reloads, bases "
+				% str(ALLOWED_FORMS)
+		+ "and contacts into a live match and silently stops recording, because capture_advance "
+		+ "sits in the branch the replay fork skips (`3-0d/R2`): %s" % "; ".join(offenders))
 	assert_eq(declarations.size(), 1,
 		"...and it is DECLARED exactly once, in the runner: %s" % ", ".join(declarations))
 	assert_true(reads > 0,
 		"the token must still be READ somewhere in src/, or this guard is scanning a name that no "
 		+ "longer exists")
+	# The whitelist is DERIVED from the tree it guards: every allowed form occurs in src/, so no
+	# entry in it is an untested guess about code that does not exist.
+	for form in ALLOWED_FORMS:
+		assert_true(seen_forms.has(form),
+			"the allowed form '%s' still occurs in src/ — an allowed form nothing uses is an "
+					% form + "unchecked hole in the whitelist, not a spare")
 
 
 # ---------------------------------------------------------------- scanning helpers
+
+## AC 7 / `3-0d/R14`: THE PANEL'S RUNNER-REACHING MEMBERS, matched on the DECLARATION CARRYING
+## `Callable` AT ALL rather than on a hand-written list of spellings. A member counts if either:
+##   * its top-level `var` declaration mentions `Callable` anywhere — which covers the annotated
+##     form (`: Callable`), the inferred form (`:= Callable(`), the untyped-but-initialised form
+##     (`= Callable()`), and any combination of them; or
+##   * the file INVOKES it as a Callable somewhere — which covers a member declared with no type
+##     and assigned later, the one shape carrying the word `Callable` on no line at all.
+## Local variables are excluded by construction: the declaration must sit at column 0.
+func _runner_reaching_members(lines: Array[String]) -> Array[String]:
+	var declaration_re := RegEx.create_from_string("^var\\s+([A-Za-z_][A-Za-z0-9_]*)\\b(.*)$")
+	var carries_re := RegEx.create_from_string("\\bCallable\\b")
+	var body := "\n".join(lines)
+	var out: Array[String] = []
+	for line in lines:
+		var m := declaration_re.search(line)
+		if m == null:
+			continue
+		var member := m.get_string(1)
+		var invoked_re := RegEx.create_from_string(
+			"\\b%s\\s*\\.\\s*(call|callv|bind|is_valid|call_deferred)\\s*\\(" % member)
+		if carries_re.search(m.get_string(2)) != null or invoked_re.search(body) != null:
+			out.append(member)
+	out.sort()
+	return out
+
+
+## The OTHER shape a control could use to ask the runner for something (`3-0d/R2`): a signal the
+## runner connects to. Banned outright, so the pin has one enumerable surface, not two.
+func _declared_signals(lines: Array[String]) -> Array[String]:
+	var re := RegEx.create_from_string("^signal\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	var out: Array[String] = []
+	for line in lines:
+		var m := re.search(line)
+		if m != null:
+			out.append(m.get_string(1))
+	return out
+
+
+## AC 11 (b) / `3-0d/R14`: classify EVERY occurrence of `replay_record` in one code line. Returns
+## one entry per occurrence — the name of the allowed READ form it matched, or "" for an
+## occurrence that matched none, i.e. an OFFENDER. Occurrence-level rather than line-level, so a
+## line that both reads and writes the member cannot hide the write behind the read.
+func _occurrence_forms(line: String) -> Array[String]:
+	var out: Array[String] = []
+	var from := 0
+	while true:
+		var index := line.find(REPLAY_RECORD, from)
+		if index == -1:
+			return out
+		out.append(_classify_occurrence(line, index))
+		from = index + REPLAY_RECORD.length()
+	return out
+
+
+## The whitelist itself. `index` is where `replay_record` starts in `line`; the classification is
+## made from the characters either side of it, so the FORMS are what is enumerated and everything
+## else falls through to the offender return at the bottom BY DEFAULT.
+func _classify_occurrence(line: String, index: int) -> String:
+	var before := line.substr(0, index)
+	var after := line.substr(index + REPLAY_RECORD.length())
+	# INSIDE A STRING LITERAL: `set("replay_record", rec)`, `runner[&"replay_record"] = rec`. Not a
+	# read of the member at all — it is the member's NAME handed to the property system, which is
+	# exactly how the review reached it three times without ever writing an assignment to it.
+	if before.ends_with("\"") or before.ends_with("'"):
+		return ""
+	# Part of a LONGER identifier. A different member, whose behaviour this pin knows nothing
+	# about — so it is not silently skipped either.
+	if before.length() > 0 and _is_word_char(before.substr(before.length() - 1)):
+		return ""
+	if after.length() > 0 and _is_word_char(after.substr(0, 1)):
+		return ""
+	if _matches("^\\s*(@export\\s+)?var\\s*$", before) and _matches("^\\s*[:=]", after):
+		return "declaration"
+	if _matches("^\\s*(==|!=)\\s*null\\b", after):
+		return "null comparison"
+	if _matches("^\\s*\\.\\s*[A-Za-z_]", after):
+		return "member read"
+	if _matches("^\\s*[,)]", after):
+		return "argument read"
+	return ""
+
+
+func _matches(pattern: String, text: String) -> bool:
+	return RegEx.create_from_string(pattern).search(text) != null
+
+
+func _is_word_char(c: String) -> bool:
+	return _matches("^[A-Za-z0-9_]$", c)
+
 
 ## Handler names wired to a control's signal in this file — `x.pressed.connect(_on_y)` /
 ## `x.toggled.connect(_on_y)`. Returns a name -> true set.

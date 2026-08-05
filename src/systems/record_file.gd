@@ -23,6 +23,16 @@ extends RefCounted
 ## (AC 5) — which is what makes schema evolution safe without freezing a shape that has exactly
 ## one consumer today.
 ##
+## EVERY REFUSAL CARRIES A REASON, AND THAT IS NOW TRUE OF EVERY PATH (`3-0d/R15`). The review of
+## this story found the one path where it was not: a file carrying a matching version but a
+## TRUNCATED body reached the rebuild, failed inside it, and came back as
+## `{"record": null, "error": ""}` — a refusal with an EMPTY reason, which a caller testing
+## `error != ""` reads as SUCCESS. The required keys are validated BEFORE anything is rebuilt.
+##
+## RECORDS GO UNDER `user://`, AND THE API SAYS SO (`3-0d/R16`). That claim used to be true only of
+## `path_for()`; `save_record` accepted any path and would happily write into the repo tree. It now
+## refuses a path that does not begin with `user://`, with a reason.
+##
 ## BINARY `store_var`, NOT JSON. The stream carries Basis, Vector2 and StringName values and the
 ## int/float distinction, none of which JSON round-trips. MEASURED on Godot 4.6.3 at this pass:
 ## store_var/get_var returns Basis and Vector2 equal, StringName keys still TYPE_STRING_NAME, and
@@ -40,6 +50,29 @@ const FORMAT_VERSION := 1
 const PATH_PREFIX := "user://cardsouls_record_"
 const PATH_SUFFIX := ".rec"
 
+## AC 5 / `3-0d/R15`: the keys `_to_dictionary` writes BESIDE the version, and therefore the keys
+## `_from_dictionary` may read. Validated BEFORE any rebuild so a truncated or foreign file is
+## REFUSED WITH A REASON NAMING WHAT IS MISSING, instead of dying inside the rebuild and returning
+## a null record with an EMPTY error — which a caller testing `error != ""` reads as SUCCESS, the
+## exact contradiction of this class's own documented contract that the review found.
+##
+## `format_version` is deliberately NOT a member: it is validated FIRST and on its own, because
+## the version is what decides which key set is even expected. A future version 2 is free to carry
+## a different set; it is refused by the version check long before it reaches here.
+##
+## DERIVED, NOT TRANSCRIBED: test_record_file.gd asserts this array equals the key set an actual
+## saved file carries minus `format_version`, so the two cannot drift apart.
+const REQUIRED_KEYS: Array[String] = [
+	"seed", "reload_events", "flags", "content_order", "deck", "costs", "tick_count", "intents",
+	"camera_pushes", "contacts",
+]
+
+## `3-0d/R16`: the ONE thing a save path must be. The class's own docstring and AC 7 both assert
+## records go to `user://`; before this guard that was true only of `path_for()`, and the API
+## accepted any path — proven at the review by writing a record into the repo root. Now the API
+## carries the claim.
+const REQUIRED_PATH_PREFIX := "user://"
+
 
 static func path_for(index: int) -> String:
 	return "%s%d%s" % [PATH_PREFIX, index, PATH_SUFFIX]
@@ -52,6 +85,9 @@ static func path_for(index: int) -> String:
 static func save_record(record: IntentRecorder, path: String) -> String:
 	if record == null:
 		return "there is no record to save"
+	if not path.begins_with(REQUIRED_PATH_PREFIX):
+		return ("refusing to write %s — records go under %s, never into the project tree "
+				+ "(`3-0d/R16`); use RecordFile.path_for()") % [path, REQUIRED_PATH_PREFIX]
 	if not record.has_complete_match_start():
 		return ("refusing to save a malformed record — missing %s"
 				% ", ".join(record.missing_match_start_channels()))
@@ -86,6 +122,17 @@ static func load_record(path: String) -> Dictionary:
 		return _refused(("record format version %d does not match this build's %d — refusing to "
 				+ "replay %s rather than guessing at a shape it may not carry")
 						% [version, FORMAT_VERSION, path])
+	# `3-0d/R15`: EVERY key the rebuild reads is checked BEFORE the rebuild runs. A file carrying a
+	# matching version but a truncated body used to reach _from_dictionary(), fail inside it, and
+	# come back as {"record": null, "error": ""} — a refusal with NO reason, which a caller testing
+	# `error != ""` reads as success. A refusal always carries its reason now, naming the keys.
+	var missing: Array[String] = []
+	for key in REQUIRED_KEYS:
+		if not data.has(key):
+			missing.append(key)
+	if not missing.is_empty():
+		return _refused(("%s carries format version %d but is missing %s — it is truncated or was "
+				+ "not written by this class") % [path, version, ", ".join(missing)])
 	return {"record": _from_dictionary(data), "error": ""}
 
 

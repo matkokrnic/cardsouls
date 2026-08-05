@@ -19,6 +19,16 @@ extends TestCase
 ## GOLDEN ISOLATION: the config, the composition and the costs are all built IN-TEST with opaque
 ## ids (the _golden_config / _golden_deck discipline), so this fixture cannot move the golden and
 ## a tuning pass cannot move this fixture.
+##
+## POST-REVIEW ADDITIONS (`3-0d/R15`, `3-0d/R16`, `3-0d/R17`):
+##   * R15 — the REFUSAL PATHS the shipped class got wrong or never exercised: a versioned but
+##     TRUNCATED file (which used to come back as a refusal with an EMPTY reason, read as success
+##     by any caller testing `error != ""`), the no-version-key branch, and a derivation guard
+##     asserting RecordFile.REQUIRED_KEYS is the key set the writer actually emits.
+##   * R16 — a save path outside `user://` is refused and writes nothing.
+##   * R17 — `_replay()` below no longer transcribes the replay drive order: it calls
+##     `ReplayDrive.drive()`, SHARED WITH AC 8's headless verifier, so AC 4's hash equalities now
+##     genuinely cover the verifier's ordering. They did not before.
 
 const ROUND_TRIP_PATH := "user://test_3_0d_round_trip.rec"
 const VERSION_PATH := "user://test_3_0d_version.rec"
@@ -193,6 +203,89 @@ func test_a_non_record_file_and_a_malformed_record_are_both_refused_with_reasons
 		"a null record is refused with a reason too, not a crash")
 
 
+## AC 5 / `3-0d/R15`: A VERSIONED BUT TRUNCATED RECORD IS REFUSED WITH A REASON NAMING WHAT IS
+## MISSING. The review found this path returning `{"record": null, "error": ""}` — a refusal with
+## NO reason, which contradicts this class's own documented contract and which a caller testing
+## `error != ""` reads as SUCCESS. The keys are validated BEFORE the rebuild now, so the failure
+## can never again be "whatever the rebuild happened to die on".
+func test_a_versioned_but_truncated_record_is_refused_with_a_reason_naming_the_missing_keys() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the intact record was written")
+	assert_not_null(RecordFile.load_record(VERSION_PATH)["record"], "...and loads intact")
+	# Drop two keys the rebuild reads, leaving the version — and everything else — untouched.
+	_rewrite_without(VERSION_PATH, ["intents", "camera_pushes"])
+	var refused := RecordFile.load_record(VERSION_PATH)
+	assert_null(refused["record"], "a truncated record is REFUSED, never half-rebuilt")
+	assert_ne(refused["error"], "",
+		"...WITH A REASON — the empty-error refusal the review found reads as SUCCESS to any "
+		+ "caller testing `error != \"\"`")
+	assert_true(refused["error"].contains("intents"),
+		"...and the reason NAMES the missing key: %s" % refused["error"])
+	assert_true(refused["error"].contains("camera_pushes"),
+		"...every missing key, not just the first: %s" % refused["error"])
+	assert_false(refused["error"].contains("seed"),
+		"...and names ONLY what is missing — `seed` is still there: %s" % refused["error"])
+	_remove(VERSION_PATH)
+
+
+## AC 5 / `3-0d/R15`: THE NO-VERSION-KEY BRANCH, previously shipped untested. A Dictionary that is
+## not a record at all — the shape a foreign `store_var` file or a pre-versioning record takes —
+## is refused for the reason it is refused for, not for the first key that happens to be missing.
+func test_a_dictionary_with_no_version_key_at_all_is_refused_with_a_reason() -> void:
+	var file := FileAccess.open(MALFORMED_PATH, FileAccess.WRITE)
+	file.store_var({"seed": SEED, "tick_count": 3})
+	file.close()
+	var refused := RecordFile.load_record(MALFORMED_PATH)
+	assert_null(refused["record"], "a Dictionary carrying no format version is refused")
+	assert_true(refused["error"].contains("format version"),
+		"...for THAT reason, named: %s" % refused["error"])
+	assert_true(refused["error"].contains(MALFORMED_PATH),
+		"...and the reason names the file: %s" % refused["error"])
+	_remove(MALFORMED_PATH)
+
+
+## `3-0d/R16`: A SAVE PATH OUTSIDE `user://` IS REFUSED. The class asserts in its own docstring
+## and in AC 7 that records go under `user://`; before this guard that was true of `path_for()`
+## and of nothing else, and the review proved it by writing a record into the repo root. The API
+## carries the claim now, so a future caller that builds its own path cannot quietly break it.
+func test_a_save_to_a_path_outside_user_is_refused_and_writes_nothing() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	for outside: String in ["res://test_3_0d_escape.rec", "test_3_0d_escape.rec",
+			"C:/test_3_0d_escape.rec", "user_data/test_3_0d_escape.rec"]:
+		var error := RecordFile.save_record(record, outside)
+		assert_ne(error, "", "saving to `%s` is REFUSED — records go under user://" % outside)
+		assert_true(error.contains("user://"), "...with a reason naming where they go: %s" % error)
+		assert_false(FileAccess.file_exists(outside), "...and nothing was written to `%s`" % outside)
+	# ...and the guard is about the PREFIX and nothing else: a user:// path still writes.
+	assert_eq(RecordFile.save_record(record, VERSION_PATH), "",
+		"a user:// path is unaffected — the refusal is the prefix, not a new blanket veto")
+	assert_true(FileAccess.file_exists(VERSION_PATH), "...and the file really is there")
+	assert_true(RecordFile.path_for(1).begins_with("user://"),
+		"path_for() satisfies the guard it was the only thing carrying before (`3-0d/R16`)")
+	_remove(VERSION_PATH)
+
+
+## `3-0d/R15`, the derivation guard: REQUIRED_KEYS IS THE KEY SET THE WRITER ACTUALLY WRITES, not
+## a transcription of it. A channel added to `_to_dictionary` without being added here would leave
+## the truncation check silently blind to that channel; this fails the moment the two diverge.
+func test_the_required_key_set_is_exactly_what_a_saved_record_carries() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the record was written")
+	var reader := FileAccess.open(VERSION_PATH, FileAccess.READ)
+	var written: Dictionary = reader.get_var()
+	reader.close()
+	var keys: Array = written.keys()
+	keys.erase("format_version")  # validated first and on its own — see RecordFile.REQUIRED_KEYS
+	keys.sort()
+	var required: Array = RecordFile.REQUIRED_KEYS.duplicate()
+	required.sort()
+	assert_eq(keys, required,
+		"every key the writer emits (besides the version) is a key the loader REQUIRES, and vice "
+		+ "versa — written %s, required %s" % [str(keys), str(required)])
+	assert_true(keys.size() > 5, "...and the comparison is against a real key set (%d)" % keys.size())
+	_remove(VERSION_PATH)
+
+
 # ---------------------------------------------------------------- AC 6
 
 ## AC 6: RECORDING IS ALWAYS-ON AND SAVE DOES NOT INTERRUPT IT. Drive N ticks, save, drive M more,
@@ -343,21 +436,17 @@ func _marked_move_dir(t: int) -> Vector2:
 ## The SECOND, independent MatchState — driven ONLY by the record, in the runner's replay order
 ## (reloads, bases, facts, then advance). Identical for the in-memory record and the loaded one,
 ## which is what makes the two hashes comparable.
+##
+## `3-0d/R17`: THE ORDER ITSELF NOW LIVES IN `ReplayDrive`, SHARED WITH AC 8's HEADLESS VERIFIER.
+## It used to be transcribed here and again in `test/tools/replay_file.gd`, and the review found
+## the verifier's copy guarded by nothing — this test proved the SAVE/LOAD path, never the
+## verifier's ordering. Sharing the drive is what makes AC 4 cover it: every hash equality below
+## is now measured through the same code the verifier runs.
 func _replay(record: IntentRecorder) -> MatchState:
-	var ms := MatchState.new(MatchParams.new(record.replay_seed()))
-	ms.apply_balance(record.replay_balance_config(0))
-	ms.inject_feature_flags(record.replay_feature_flags())
-	assert_true(record.replay_inject_content(ms), "the recorded content order replays")
-	var p1_controller := ReplayController.new(record, 0)
-	var p2_controller := ReplayController.new(record, 1)
-	for t in range(1, record.tick_count() + 1):
-		record.replay_apply_reloads_before(ms, t)
-		record.replay_push_camera_bases(ms, t)
-		record.replay_push_contacts(ms, t)
-		var intents: Array[InputIntent] = [p1_controller.sample(), p2_controller.sample()]
-		ms.advance(intents)
-		ms.drain_signals()
-	return ms
+	var result := ReplayDrive.drive(record)
+	assert_eq(result["error"], "",
+		"the recorded content order replays (`3-0c/R11`): %s" % result["error"])
+	return result["state"]
 
 
 # ---------------------------------------------------------------- fixture content
@@ -422,6 +511,20 @@ func _rewrite_format_version(path: String, version: int) -> void:
 	var data: Dictionary = reader.get_var()
 	reader.close()
 	data["format_version"] = version
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## `3-0d/R15`: remove keys from an existing record, leaving every other value — and the version —
+## exactly as written. The truncation a real partial write would produce, made deterministic.
+func _rewrite_without(path: String, keys: Array) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	for key in keys:
+		assert_true(data.has(key), "the record carried `%s` before it was removed" % key)
+		data.erase(key)
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()
