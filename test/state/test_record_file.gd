@@ -359,6 +359,85 @@ func test_a_save_path_that_escapes_the_user_directory_is_refused_and_writes_noth
 		_remove(allowed)
 
 
+# ---------------------------------------------------------------- `3-0d/R30`
+
+## `3-0d/R30`: SAVE MUST NEVER OVERWRITE AN EXISTING RECORD. `_save_index` used to start at 0 in
+## EVERY session, so a new session's first SAVE wrote `path_for(1)` again and silently destroyed
+## whatever a prior session had already written there — measured live, against the operator, who
+## lost the only recording that had ever exercised the contact channel to exactly this defect.
+##
+## THESE TESTS DRIVE `first_free_index` AGAINST REAL `path_for` PATHS, DELIBERATELY NOT INDEX 1.
+## `RecordFile`'s naming scheme has no seam for a test-only prefix, and this machine's real
+## `user://` directory carries genuine operator records RIGHT NOW (the live smoke this story's
+## close-out records) — SPARSELY, not just at the low indices, because the very defect this
+## ruling fixes already cost the operator index 1 and 2 before this pass restored index 4 from an
+## out-of-repo backup. A single free `first_free_index(1)` result is therefore NOT enough license
+## to touch its NEIGHBOURS too: `_free_run` scans for a whole CONTIGUOUS span of unoccupied
+## indices before any test writes a byte, so a test can never land on ground a real record already
+## occupies. **This safeguard exists because its absence bit this exact pass**: the first version
+## of the gap test below used a bare `first_free_index(1)` as `base` and touched `base + 3`
+## assuming it was free — it was not, `cardsouls_record_4.rec` (8.4 MB, a real operator file) was
+## there, and the touch overwrote it before the test's own assertion failed and its cleanup never
+## ran. Restored from the out-of-repo backup taken earlier this pass, SHA-256
+## `2790d90f6045c6d0309f2ecacc94872a15b06082cc8832a277b83012ac00ea6e` verified identical. `_free_run`
+## is what makes that class of mistake structurally unavailable to every test below.
+func test_first_free_index_returns_the_starting_index_when_nothing_occupies_it() -> void:
+	var base := _free_run(1)
+	assert_eq(RecordFile.first_free_index(base), base,
+		"an untouched directory (from `base` on) returns `base` itself")
+
+
+func test_first_free_index_skips_a_single_occupied_path() -> void:
+	var base := _free_run(2)
+	_touch(RecordFile.path_for(base))
+	assert_eq(RecordFile.first_free_index(base), base + 1,
+		"index %d is occupied, so the first free one is %d" % [base, base + 1])
+	_remove(RecordFile.path_for(base))
+
+
+func test_first_free_index_finds_the_gap_not_the_index_past_the_last_occupied_one() -> void:
+	var base := _free_run(4)
+	_touch(RecordFile.path_for(base))
+	_touch(RecordFile.path_for(base + 1))
+	_touch(RecordFile.path_for(base + 3))
+	# base+2 is the gap: occupied, occupied, FREE, occupied.
+	assert_eq(RecordFile.first_free_index(base), base + 2,
+		"the GAP at %d is returned, not %d (one past the LAST occupied index)"
+				% [base + 2, base + 4])
+	_remove(RecordFile.path_for(base))
+	_remove(RecordFile.path_for(base + 1))
+	_remove(RecordFile.path_for(base + 3))
+
+
+## THE PROPERTY ITSELF, PROVEN RATHER THAN INFERRED FROM THE INDEX ARITHMETIC ABOVE: write a
+## MARKER file — arbitrary bytes, not a real record, so any mutation to it is unambiguous — at the
+## first free index, then run exactly the sequence `save_recorded_stream()` runs
+## (`first_free_index` then `save_record`), and assert the marker survives BYTE-FOR-BYTE. Reverting
+## `first_free_index` to a bare `start` (the pre-`R30` behaviour) makes this go RED: the "save"
+## computes the OCCUPIED path and overwrites the marker.
+func test_save_at_the_computed_free_index_never_overwrites_an_existing_file() -> void:
+	var base := _free_run(2)
+	var marker_path := RecordFile.path_for(base)
+	var marker_bytes := PackedByteArray([1, 2, 3, 4, 5, 250, 251, 252, 0, 255])
+	_touch(marker_path, marker_bytes)
+
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	var index := RecordFile.first_free_index(base)
+	var save_path := RecordFile.path_for(index)
+	assert_ne(save_path, marker_path,
+		"the computed save path is NOT the occupied one — this is the property under test")
+	assert_eq(RecordFile.save_record(record, save_path), "", "the record was written to the free index")
+
+	var reader := FileAccess.open(marker_path, FileAccess.READ)
+	var marker_after := reader.get_buffer(reader.get_length())
+	reader.close()
+	assert_eq(marker_after, marker_bytes,
+		"the marker at %s is BYTE-UNCHANGED — SAVE found a free index instead of landing on it"
+				% marker_path)
+	_remove(marker_path)
+	_remove(save_path)
+
+
 # ---------------------------------------------------------------- AC 6
 
 ## AC 6: RECORDING IS ALWAYS-ON AND SAVE DOES NOT INTERRUPT IT. Drive N ticks, save, drive M more,
@@ -631,3 +710,31 @@ func _file_size(path: String) -> int:
 func _remove(path: String) -> void:
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## `3-0d/R30`: write arbitrary bytes at `path` — a MARKER, never a real record, so a test asserting
+## on its survival is not also depending on `RecordFile`'s own read/write pair being correct.
+func _touch(path: String, bytes: PackedByteArray = PackedByteArray([1])) -> void:
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_buffer(bytes)
+	writer.close()
+
+
+## `3-0d/R30`: the first index whose `count`-LONG run, `[index, index + count)`, is ENTIRELY free —
+## not merely `index` itself. Real operator records on this machine sit SPARSELY, so a single free
+## `first_free_index` result says nothing about its neighbours; a test that then touches several
+## consecutive indices on that assumption alone can land on one that is occupied. This scans past
+## any occupied index it finds, checking the WHOLE candidate span again from there, until a run
+## that long is genuinely empty.
+func _free_run(count: int) -> int:
+	var candidate := RecordFile.first_free_index(1)
+	var found := false
+	while not found:
+		var offset := 0
+		while offset < count and not FileAccess.file_exists(RecordFile.path_for(candidate + offset)):
+			offset += 1
+		if offset == count:
+			found = true
+		else:
+			candidate = RecordFile.first_free_index(candidate + offset + 1)
+	return candidate

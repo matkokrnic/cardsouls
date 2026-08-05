@@ -56,10 +56,18 @@ var _p2_controller: Controller
 ## handle). It is a PASSIVE TAP: nothing it captures is ever read back into the tick.
 var _recorder := IntentRecorder.new()
 
-## Story 3-0d (AC 7): how many times SAVE has been pressed this session. Each press writes its
-## OWN file (RecordFile.path_for), so two saves from one session sit side by side and the second
-## being longer than the first is directly observable. NOT recording state: the recorder is never
-## consulted about it, never reset by it, and a session that never saves behaves identically.
+## Story 3-0d (AC 7): the last index SAVE has written to, in THIS session. Each press writes its
+## OWN file (RecordFile.path_for), so two saves sit side by side and the second being longer than
+## the first is directly observable. NOT recording state: the recorder is never consulted about
+## it, never reset by it, and a session that never saves behaves identically.
+##
+## STARTS AT 0 EVERY SESSION, AND THAT USED TO BE THE DEFECT (`3-0d/R30`): a fresh session's first
+## SAVE wrote `path_for(1)` again, silently destroying whatever a PRIOR session had already
+## written there — measured live, against the operator, taking the only recording that had ever
+## exercised the contact channel with it. `save_recorded_stream()` no longer trusts this counter
+## alone: it asks `RecordFile.first_free_index(_save_index + 1)`, which checks the FILESYSTEM, so
+## SAVE never overwrites an existing record — not two presses in one session, and not the first
+## press of a session that follows one that already wrote there.
 var _save_index := 0
 
 ## Story 3-0c (AC 9): set to a captured record BEFORE this node enters the tree to run the match
@@ -354,13 +362,19 @@ func recorded_stream() -> IntentRecorder:
 ## RECORDING CONTINUES AFTERWARDS, and that is structural rather than promised: nothing here
 ## touches `_recorder`, which is never reassigned anywhere in this file. SAVE is a SNAPSHOT of an
 ## always-on stream (AC 6), and a second press writes a strictly longer record to its own path.
+##
+## `3-0d/R30`: THE PATH IS THE FIRST FREE ONE, NOT `_save_index + 1` NAMED BLIND. `_save_index`
+## alone used to pick the path directly and started at 0 every session, so a new session's first
+## SAVE collided with whatever a prior session had already written. `RecordFile.first_free_index`
+## checks the filesystem before a byte is written, so SAVE can never overwrite an existing record.
 func save_recorded_stream() -> String:
-	var path := RecordFile.path_for(_save_index + 1)
+	var index := RecordFile.first_free_index(_save_index + 1)
+	var path := RecordFile.path_for(index)
 	var error := RecordFile.save_record(_recorder, path)
 	if error != "":
 		push_warning("record NOT saved: %s" % error)
 		return ""
-	_save_index += 1
+	_save_index = index
 	print("record saved: %s (%d ticks)" % [path, _recorder.tick_count()])
 	return path
 

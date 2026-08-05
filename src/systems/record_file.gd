@@ -80,8 +80,13 @@ const FORMAT_VERSION := 1
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
-## (`path_for(1)`), and two presses in one session leave two files side by side, so "the second
-## save is longer than the first" is directly observable rather than a remembered file size.
+## (`path_for(1)`), and two presses leave two files side by side, so "the second save is longer
+## than the first" is directly observable rather than a remembered file size. **`3-0d/R30`: THAT
+## GUARANTEE USED TO HOLD ONLY WITHIN ONE SESSION**, because the caller's own index started at 0
+## every session and `path_for` alone names a path without checking whether it is occupied — a
+## fresh session's first SAVE silently overwrote whatever a PRIOR session had already written at
+## `path_for(1)`. See `first_free_index`, which is what makes the guarantee hold ACROSS sessions
+## too, by asking the filesystem rather than trusting a counter that has no memory of a prior run.
 const PATH_PREFIX := "user://cardsouls_record_"
 const PATH_SUFFIX := ".rec"
 
@@ -128,6 +133,22 @@ const REQUIRED_PATH_PREFIX := "user://"
 
 static func path_for(index: int) -> String:
 	return "%s%d%s" % [PATH_PREFIX, index, PATH_SUFFIX]
+
+
+## `3-0d/R30`: THE INDEX A CALLER SHOULD ACTUALLY WRITE TO, NOT MERELY NAME. `path_for(index)`
+## alone names a path; it says nothing about whether that path is already occupied, and a caller
+## that increments its own counter from 0 EVERY SESSION collides with whatever a PRIOR session
+## already wrote at `path_for(1)` — **this happened live, to the operator**: a new session's first
+## SAVE wrote `cardsouls_record_1.rec` again and silently destroyed the only recording in which
+## the contact channel had ever been exercised live. Returns the first index >= `start` whose
+## `path_for(index)` does not already exist on disk, so a caller that always asks before writing
+## can never clobber a file that is there — not within a session, not across sessions, not after a
+## crash, because the answer comes from the FILESYSTEM, never from in-memory counter state.
+static func first_free_index(start: int) -> int:
+	var index := start
+	while FileAccess.file_exists(path_for(index)):
+		index += 1
+	return index
 
 
 ## Writes `record` to `path`. Returns "" on success, or the REASON it was refused — never an
