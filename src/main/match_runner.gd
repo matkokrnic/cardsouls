@@ -56,6 +56,12 @@ var _p2_controller: Controller
 ## handle). It is a PASSIVE TAP: nothing it captures is ever read back into the tick.
 var _recorder := IntentRecorder.new()
 
+## Story 3-0d (AC 7): how many times SAVE has been pressed this session. Each press writes its
+## OWN file (RecordFile.path_for), so two saves from one session sit side by side and the second
+## being longer than the first is directly observable. NOT recording state: the recorder is never
+## consulted about it, never reset by it, and a session that never saves behaves identically.
+var _save_index := 0
+
 ## Story 3-0c (AC 9): set to a captured record BEFORE this node enters the tree to run the match
 ## FROM THAT RECORD instead of from live services and live hardware. Reachable only from a test
 ## in this story — the operator surface (start/stop/load, user:// persistence, the live reload
@@ -229,6 +235,12 @@ func _ready() -> void:
 	var panel := DebugInstrumentPanel.new()
 	panel.gamepad_profile = load("res://data/gamepad_profile.tres") as GamepadProfile
 	panel.huds = huds
+	# Story 3-0d (AC 7): the panel's ONE runner-reaching control — SAVE. Handed a Callable before
+	# add_child, the gamepad_profile / huds precedent generalised: the panel receives a way to
+	# ASK, never the recorder itself and never a state handle. No start control and no load
+	# control ship (`3-0d/R1`, `3-0d/R2`), and no Input Map action is added — SAVE is mouse-only,
+	# exactly like the two switches beside it.
+	panel.save_record = save_recorded_stream
 	add_child(panel)
 	# Story 3-5a (AC 10): kept for the per-tick selection-indicator push in _physics_process.
 	_huds = huds
@@ -313,6 +325,55 @@ func _derive_card_costs() -> Dictionary[StringName, CardCastCondition]:
 ## the record it is already reading, so the tap has nothing to add.
 func recorded_stream() -> IntentRecorder:
 	return _recorder
+
+
+## Story 3-0d (AC 7): WRITE THE RECORD SO FAR TO `user://`. Returns the path written, or "" with
+## a warning if the record was refused — a replay's tap is empty by construction, so "nothing to
+## save" is a legitimate session state to report rather than an Invariant.check.
+##
+## RECORDING CONTINUES AFTERWARDS, and that is structural rather than promised: nothing here
+## touches `_recorder`, which is never reassigned anywhere in this file. SAVE is a SNAPSHOT of an
+## always-on stream (AC 6), and a second press writes a strictly longer record to its own path.
+func save_recorded_stream() -> String:
+	var path := RecordFile.path_for(_save_index + 1)
+	var error := RecordFile.save_record(_recorder, path)
+	if error != "":
+		push_warning("record NOT saved: %s" % error)
+		return ""
+	_save_index += 1
+	print("record saved: %s (%d ticks)" % [path, _recorder.tick_count()])
+	return path
+
+
+## Story 3-0d (AC 2), DEBT B's BOTH-HALVES-TOGETHER RULE (decision-log:130-133): THE LIVE
+## MID-MATCH BALANCE RELOAD. Re-reads the authored .tres — which only re-reads anything because
+## of AC 1's CACHE_MODE_IGNORE, the cache half — and re-applies it to live state through the SAME
+## apply_balance() seam the match-start injection uses, CAPTURED FIRST on the SAME reload channel
+## `3-0c` shipped. No second injection path and no ninth capture channel (AC 3): this is reload
+## event N on the existing `{"tick": int, "values": Dictionary}` stream, which has always
+## supported N events (intent_recorder.gd:49-53).
+##
+## The capture is gated on `not replaying` exactly as the match-start call is, and on NOTHING
+## ELSE — recording is ALWAYS-ON from tick 0 (AC 6), so there is no "is a recording active" state
+## to branch on. In replay mode the whole trigger is refused: a replay applies the RECORDED
+## reload events, and re-reading the on-disk .tres mid-replay is precisely the divergence
+## `3-0c`'s AC 4 exists to prevent.
+##
+## OPERATOR SURFACE: NONE IN THIS STORY, and that is a CONTRACT CONFLICT flagged at this dev
+## pass, not an oversight. AC 7 pins the DebugInstrumentPanel at EXACTLY ONE new control (SAVE)
+## with a structural test counting runner-reaching controls at one, while the Live Smoke section
+## asks the operator to "trigger a live mid-match balance reload from the panel" — a second
+## runner-reaching control, which AC 7 forbids. The trigger therefore ships as this call site,
+## exercised by tests, with its UI seat left for the operator's ruling.
+func trigger_live_balance_reload() -> void:
+	if replay_record != null:
+		push_warning("live balance reload refused: a replay applies the RECORDED reload events")
+		return
+	BalanceConfigService.reload()
+	var config := BalanceConfigService.get_config()
+	Invariant.check(config != null, "authored balance config missing at live reload")
+	_recorder.capture_apply_balance(config)
+	_match_state.apply_balance(config)
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a

@@ -26,11 +26,25 @@ extends Control
 ##      about whether the eventual pitch MECHANIC is shared or per-player (that stays open for E6);
 ##      it is placeholder geometry only.
 
+## Story 3-0d (AC 7) adds the panel's THIRD control and its FIRST runner-reaching one — SAVE,
+## which writes the record so far to `user://`. RECORDING CONTINUES AFTERWARDS: SAVE is a
+## snapshot of an always-on stream (AC 6), never a stop, and this panel holds no recorder handle
+## and no state handle to stop it with — only the Callable below. There is deliberately NO start
+## control and NO load control (`3-0d/R1`, `3-0d/R2`), and the count of runner-reaching controls
+## here is pinned at ONE by test_replay_surface_pins.gd.
+
 ## Set by the runner BEFORE add_child (so _ready sees them). The shared gamepad profile instance
 ## (the runner loads it via the same res:// path, so the resource cache hands both the same object)
 ## and both per-viewport HudRoots (whose pitch placeholder the A/B switch repositions).
 var gamepad_profile: GamepadProfile
 var huds: Array[HudRoot] = []
+
+## Story 3-0d (AC 7): THE ONE RUNNER-REACHING SEAM OF THIS PANEL — a runner-owned Callable handed
+## over before add_child, exactly like the two references above (the `gamepad_profile` / `huds`
+## precedent generalised, the Dev Note's first option). A Callable rather than a signal the runner
+## connects to, because it is the shape this file already uses for "the runner hands the panel
+## what it may touch" and it keeps the reachable surface a single named member the pin can count.
+var save_record: Callable = Callable()
 
 ## Story 3-0b (AC 2): the two per-slot countdown value Labels, index 0 = P1, 1 = P2. Written
 ## ONLY by set_window_countdown below, from the runner's polled plain-integer payload.
@@ -108,6 +122,9 @@ func _ready() -> void:
 	# Instrument 3 (story 3-0b, AC 2): the per-slot window countdown, one read-only row per slot.
 	_build_window_countdown(row)
 
+	# Control 3 (story 3-0d, AC 7): SAVE — the ONE runner-reaching control. No start, no load.
+	_build_save_control(row)
+
 
 ## AC 2: the countdown column — ONE row per slot, whose Label the runner's polled payload writes
 ## into. Two rows and no column caption is a size decision, not a style one: the switch column is
@@ -129,6 +146,24 @@ func _build_window_countdown(row: HBoxContainer) -> void:
 		line.clip_text = true
 		countdown.add_child(line)
 		_countdown_values.append(line)
+
+
+## Story 3-0d (AC 7): the SAVE control, in a THIRD COLUMN rather than a third row in the switches
+## column — a geometry decision with the same measurement behind it 3-0b's re-fit used. The box
+## lives in the empty band y[356,450] (94px) and the two existing switch rows already fill ~89 of
+## it, so a third ROW would push the box out of the band and over the vitals bars: exactly the
+## S1/S2 regression test_debug_instruments.gd's layout assertion exists to catch. The band is
+## empty across the FULL window width, so the spare room is horizontal.
+func _build_save_control(row: HBoxContainer) -> void:
+	var column := VBoxContainer.new()
+	column.name = "RecordControls"
+	column.add_theme_constant_override("separation", 2)
+	row.add_child(column)
+	var save := Button.new()
+	save.name = "SaveRecord"
+	save.text = "Save record"
+	save.pressed.connect(_on_save_pressed)
+	column.add_child(save)
 
 
 ## AC 2: the runner's per-tick push, called after each advance() with MatchState's read-only
@@ -164,6 +199,15 @@ static func _format_windows(windows: Dictionary) -> String:
 func _on_normalize_toggled(pressed: bool) -> void:
 	if gamepad_profile != null:
 		gamepad_profile.normalize_move_magnitude = pressed
+
+
+## Story 3-0d (AC 7): hand the press to the runner and do nothing else. The panel does not know
+## where the record goes, holds nothing to write it with, and cannot stop the recording — the
+## same "act only on what you were handed" shape as the two switches above, with a Callable in
+## place of a resource. Null-guarded so a panel built outside the runner is inert, not a crash.
+func _on_save_pressed() -> void:
+	if save_record.is_valid():
+		save_record.call()
 
 
 ## AC 5: move BOTH viewports' pitch placeholder together (shared switch, A/B comparability). The

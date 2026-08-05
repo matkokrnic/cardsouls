@@ -104,6 +104,65 @@ func test_reload_to_apply_balance_reflects_tres_values() -> void:
 	service.free()
 
 
+## ---- Story 3-0d (AC 1, `3-0d/R5`): DEBT B's CACHE HALF ----------------------------------
+##
+## reload() must BYPASS the resource cache, or it re-reads nothing and X3 hot-reload is a lie
+## (decision-log:130 — "on-disk hot-reload is a no-op without CACHE_MODE_IGNORE"). The proof is
+## REFERENCE IDENTITY and it touches NO FILE: two reload() calls must hand back DIFFERENT
+## instances carrying EQUAL values, while a plain load() of the same path hands back ONE.
+##
+## MEASURED against this engine before the assertion was written (Godot 4.6.3, the shipped
+## data/balance/balance_config.tres): plain load() twice -> same instance; CACHE_MODE_IGNORE
+## twice -> different instances, equal values; CACHE_MODE_IGNORE vs the cached instance ->
+## different.
+##
+## MUTATION PROOF: revert reload()'s body to `_config = load(CONFIG_PATH) as BalanceConfig` and
+## the first assertion FAILS — both reloads return the one cached instance.
+##
+## ZERO FILE MUTATION, DELIBERATELY. The authored .tres is tracked and other tests read it
+## (test_balance_authoring.gd, test/integration/test_contact_pipeline.gd); a permanently
+## re-running test that edited it would have no restore step at all, which is strictly worse than
+## the one-off dev-pass case the PERMANENT RULE at decision-log:799 was written for.
+func test_reload_bypasses_the_resource_cache_and_hands_back_a_fresh_instance() -> void:
+	var script: GDScript = load(SERVICE_SCRIPT)
+	var config_path: String = script.get_script_constant_map()["CONFIG_PATH"]
+	assert_eq(config_path, "res://data/balance/balance_config.tres",
+		"the path under test is the service's own const, not a second literal to drift from it")
+	var service: Node = script.new()
+	service.reload()
+	var first: BalanceConfig = service.get_config()
+	service.reload()
+	var second: BalanceConfig = service.get_config()
+	assert_not_null(first, "the first reload produced a config")
+	assert_not_null(second, "...and so did the second")
+	assert_false(first == second,
+		"two reload() calls must hand back DIFFERENT instances — a plain load() returns the "
+		+ "CACHED resource forever, so a mid-session edit to the .tres would be silently ignored")
+	# EQUAL VALUES: the second reload re-read the same unmodified file, so a fresh instance is the
+	# only difference. Every script-declared property is compared, so this cannot pass on a
+	# half-populated re-read.
+	var compared := 0
+	for prop: Dictionary in first.get_property_list():
+		if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE == 0:
+			continue
+		compared += 1
+		assert_eq(second.get(prop["name"]), first.get(prop["name"]),
+			"reloaded value differs for %s — the re-read must be a fresh INSTANCE, not fresh DATA"
+					% prop["name"])
+	assert_true(compared > 10,
+		"the property walk must actually visit BalanceConfig's authored fields (got %d)" % compared)
+	# The other half, and what makes the first assertion about the CACHE MODE rather than about
+	# load() being unpredictable: a plain load() of the same path DOES hand back one instance.
+	var cached_a: BalanceConfig = load(config_path)
+	var cached_b: BalanceConfig = load(config_path)
+	assert_true(cached_a == cached_b,
+		"a plain load() of the same path returns the SAME cached instance twice — the behaviour "
+		+ "reload() must not have")
+	assert_false(first == cached_a,
+		"...and neither reload handed back that cached instance either")
+	service.free()
+
+
 func test_apply_balance_reclamps_and_resignals_shrunk_bound() -> void:
 	var ms := _make_match()  # stamina starts full at max 50
 	var ev := {"n": 0, "max": -1.0}
