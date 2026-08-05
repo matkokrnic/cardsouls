@@ -4825,3 +4825,173 @@ corrected (3-0d/R25-R29)` (the story file and the pins file header), and this en
 no existing entry edited, with `R26`'s correction of the earlier entry's own wrong sentence recorded
 HERE rather than by editing it. Docs and code never share a commit. The board is not touched. No
 push -- the operator reviews the log and pushes.
+
+
+## Session 2026-08-06 -- Story 3-0d close-out, `3-0d/R30`, and the story is DONE
+
+**Preconditions verified before anything was touched.** `HEAD` `a68738d` (the `3-0d/R25`-`R29`
+close-out commit); working tree clean; `git ls-remote origin main` `a68738d` -- HEAD and origin
+MATCH, this pass's predecessor's push having landed; no Godot process running. No fetch, no push
+performed by this pass. The stated suite baseline was not taken on trust: **348 state tests / 2264
+assertions / 22 integration files, ALL PASSED**, measured at that `HEAD` with a clean tree before
+the first edit.
+
+This session closes two things: a defect the operator's own live smoke found while performing the
+story's one remaining required observation, and the story itself.
+
+### `3-0d/R30` -- SAVE OVERWRITES A PRIOR SESSION'S RECORD, BECAUSE THE INDEX THAT NAMES THE PATH HAS NO MEMORY OF ONE
+
+**What happened, plainly.** `MatchRunner._save_index` starts at `0` in EVERY session -- it is
+in-memory counter state, and a fresh process has none. `save_recorded_stream()` used it to name the
+save path directly, `RecordFile.path_for(_save_index + 1)`, so a new session's FIRST press of SAVE
+always computed `path_for(1)` -- the same path the operator's LAST session's first SAVE had already
+written. `FileAccess.open(path, FileAccess.WRITE)` truncates and overwrites without asking. This was
+not theorised: it happened live, mid-smoke, to the operator, and took with it the only recording in
+which the contact channel had ever been exercised by a real human. Two of the four cumulative saves
+this same smoke produced (ticks 2151 and 5333) are gone; only the third and fourth (5659 and 9630
+ticks, 4.95 MB and 8.4 MB) survive on disk.
+
+**The documentation was NOT false.** `RecordFile`'s own docstring said "two presses in ONE SESSION
+leave two files side by side," and `_save_index`'s comment said "this session." Both claims were
+correctly scoped -- neither claimed anything about a SECOND session. The defect is not a false
+claim; it is that the class exists to produce an artefact and silently destroys the one it already
+produced, and the story's own text never asked the question "what happens on the FIRST save of the
+NEXT session."
+
+**The fix, ruled small on purpose.** `RecordFile.first_free_index(start)` (`src/systems/
+record_file.gd`) returns the first index `>= start` whose `path_for(index)` does not already exist
+ON DISK -- the answer comes from the filesystem, never from counter state, which is what makes it
+correct across sessions and after a crash, not merely within one. `save_recorded_stream()`
+(`src/main/match_runner.gd`) asks it before writing instead of naming a path blind.
+**Deliberately not built:** timestamps, rotation, a cap on record count, or any cleanup of old
+files -- each is a new story, and this ruling is scoped to the one property that failed: SAVE must
+never destroy an existing record.
+
+**Test surface** (`test/state/test_record_file.gd`): three tests on the index arithmetic (an
+untouched span returns its own start; a single occupied path is skipped; a GAP inside an occupied
+span is returned, not one-past-the-last-occupied index) and one on THE PROPERTY ITSELF -- a marker
+file (arbitrary bytes, not a real record) is written at the first free index, `save_recorded_stream`'s
+own sequence (`first_free_index` then `save_record`) is driven, and the marker is asserted
+BYTE-IDENTICAL afterwards. The marker test is the one that matters: the index tests could pass on a
+function that computes the right number and still overwrites, if a caller ignored it; the marker
+test proves the number is actually USED.
+
+**Mutation proof.** `first_free_index` reverted to `return start` (the exact pre-fix behaviour),
+backed up first to a copy taken OUTSIDE the repo, SHA-256
+`3e76590091e90f73d43f8756ddf126e48dd2b5203ba15f3b11a9aa82ece70f76`. **THREE tests went RED**,
+including the marker test, whose failure reproduces the ORIGINAL live defect's mechanism directly:
+`assert_ne: both user://cardsouls_record_1.rec` (the computed save path collided with the occupied
+one), then the marker's ten bytes found replaced by a full serialised record. Restored from the
+out-of-repo copy, SHA-256 verified identical; suite green again.
+
+**A near-miss inside this pass's OWN test-writing, recorded rather than quietly fixed, because it
+is the same lesson `3-0d/R14` already named for source scans applied to test authorship.** The
+first version of the gap test used a bare `first_free_index(1)` as its base index and touched
+`base + 3` on the assumption that a single free result said something about its NEIGHBOURS. It did
+not: this machine's real `user://` directory carries the operator's own live-smoke records
+SPARSELY -- index 1 and 2 already lost to the defect this ruling fixes, index 3 and 4 surviving --
+and `base + 3` landed on the live `cardsouls_record_4.rec` (8.4 MB). The touch overwrote it with a
+1-byte marker before the test's own assertion failed and its cleanup calls never ran. **Recovered**
+from an out-of-repo backup of all four records taken earlier in this same pass, SHA-256
+`2790d90f6045c6d0309f2ecacc94872a15b06082cc8832a277b83012ac00ea6e` verified identical after copying
+back; `cardsouls_record_3.rec` was never touched, SHA-256
+`18374f9f638a9bdba49799a4e463011b96f667952c7dc41000ec1504409bc2f6` unchanged throughout. **Fixed by
+`_free_run`**, which scans a whole CONTIGUOUS span for occupancy against the filesystem before any
+test writes a byte, so this class of mistake cannot recur in this file. Worth stating plainly: a
+pass whose entire purpose was fixing "SAVE destroys real data" nearly reproduced the same defect
+against the same real data, by the same root cause -- checking one index and assuming its neighbours
+follow. The guard that closes it (`_free_run`) is the same shape as the guard that closes `R30`
+itself: ask the filesystem, not an assumption.
+
+**Suite: baseline 348/2264/22 CONFIRMED BY THIS PASS at `HEAD` `a68738d`, after 352/2270/22, ALL
+PASSED both ends** and green a third time after the mutation was restored. `project.godot`
+BYTE-IDENTICAL, `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`. Golden unmoved,
+`GOLDEN` still `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The four
+inherited `3-0c` pins required ZERO edits.
+
+### The live smoke -- REQUIRED by the story, RUN for the first time at this close-out, and PASSED
+
+Every prior pass on this story correctly deferred the Live Smoke section to the operator; this is
+the first record of it actually happening. Measured facts:
+
+- `ticks=2774`, `reload_events=16` (event #0 is match start, so FIFTEEN live RELOAD presses from the
+  panel), `contact_facts=488`, `camera_pushes=5548`, `CanonicalHash
+  bc1968d6d2e023ae36063cf2d70fb533eb7e2c3fb249250b8931a9e31f0a62ba`, `RESULT: PASS`, exit 0 -- and
+  the SAME hash from a SECOND, separate verifier process on the same file. **The second run is not
+  redundant confirmation of determinism in general: every prior determinism measurement on this
+  story ran on a record with ZERO live reload events, so `replay_apply_reloads_before` actually
+  firing MID-REPLAY against a REAL recorded reload was not covered by any measurement until this
+  one.**
+- **`R-D6` IS SPENT ON THIS STORY'S SMOKE** (`3-0d/R11`): the operator confirms a KILL occurred.
+  R-D6 does not carry forward already spent; any later story wanting a live smoke against a killable
+  human-driven slot must re-invoke it at its own gate.
+- **AC 9 / `3-0d/R10` OBSERVED BY EYE:** the operator confirms the stamina bar visibly refills to
+  max on RELOAD and recorded it as EXPECTED, per the ratification already on record, rather than as
+  a defect.
+- Cumulative SAVE proven live: four saves at 2151 / 5333 / 5659 / 9630 ticks, files growing 1.88 MB
+  -> 8.4 MB -- the operator-visible half of AC 6/AC 7, monotonic growth confirming SAVE snapshots
+  rather than stops or restarts the stream. (Two of the four files no longer exist on disk, for the
+  reason this session's `R30` entry above records in full -- their EXISTENCE at those sizes, at the
+  time, is what is being reported here, not their present survival.)
+- The verifier's REFUSAL path was exercised live and by accident: a call against a non-existent path
+  printed `REFUSED: no record file at ...` and `RESULT: FAIL`.
+- **NOT PERFORMED, recorded as not-owed rather than omitted:** editing the authored `.tres`
+  mid-session and observing the change land after RELOAD. The Live Smoke section never required it.
+  Stated plainly: this leaves the story's headline claim -- tune balance without restarting -- proven
+  by AC 1 (cache bypass, by object identity) and AC 2 (the trigger reaches state), but never once
+  observed END TO END by a human. It is a one-line manual check available to any later pass; not
+  scheduled here.
+- **A record is ~52 KB/s** (`camera_pushes` runs two per tick and dominates the byte count): a
+  three-minute round is ~8 MB, consistent with the fourth live save above. Not a defect and not in
+  scope for this story -- recorded as an observation for a later story that starts sharing records.
+
+### Two process rulings, recorded because they outlive this story
+
+**The commit-hygiene exception.** The `3-0d/R25`-`R29` docs commit (`70288dc`) contains a
+comment-only edit to `test/state/test_replay_surface_pins.gd`, a `.gd` file, which the standing rule
+("docs and code never share a commit") forbids on its face. That pass flagged it honestly rather
+than hiding it. *Ruled: not rebuilt.* Rewriting three commits to move one comment costs a full pass
+for zero functional gain. Instead the rule gains ONE NAMED EXCEPTION, written down here rather than
+left implicit: **a comment-only correction of PROSE inside a test file, where that prose is the
+thing being corrected, may ride the docs commit.** The distinction that makes this safe: the edit
+changes no behaviour and needs no test run to verify, which is the property "docs and code never
+share a commit" actually protects (a docs-only commit that nobody needs to re-test). An unwritten
+exception is worse than a written one, because the next pass that hits the same shape has nothing to
+check itself against.
+
+**The verification-loop lesson, this story's most expensive one, recorded beside `3-0d/R20`.** This
+story took ELEVEN passes and THIRTY rulings end to end. The single largest cause was not any one
+mechanism being wrong -- it was that adversarial verification ran, more than once, against an
+UNDECLARED acceptance criterion. Without a criterion fixed in advance, every clever attack counted
+as a defeat regardless of whether it attacked the property the mechanism was built to guarantee, and
+each defeat spawned another pass to chase it. The one round that closed cleanly (`3-0d/R25`-`R29`)
+is also the one round whose criterion was stated BEFORE the attack ran: "does a mid-session
+assignment to `replay_record` do anything to the shipped runner" -- narrow, falsifiable, and
+answerable in one pass. *Ruled, and binding on future adversarial passes in this repo:* **an
+adversarial pass states what counts as FAILURE before it starts, not after; and a guard that has
+been evaded TWICE gets its MECHANISM replaced, not its pattern widened a third time** -- the
+`3-0d/R20` lesson, restated here because this story is the reason it had to be learned twice (once
+for the mechanism, once for the process around testing it).
+
+### Close-out
+
+**Architecture-amendment queue confirmed at ELEVEN by content, not taken on trust.** No entry after
+`3-0d/R12` in this log adds a twelfth member, and this close-out adds none either -- neither `R30`
+nor the two process rulings above touch `docs/game-architecture.md` or diverge from it. The queue
+is NOT flushed here; it flushes at the E3 close-out, per the standing forcing point.
+
+**Story `3-0d-replay-surface-and-live-reload` is DONE.** Status promoted `ready-for-dev` -> `done`
+in the story file and in `sprint-status.yaml`; `story_notes` reduced to what a future reader needs
+(what shipped, the smoke outcome, R-D6 spent) rather than the amendment history, which stays in the
+story file's own Change Log and in this log. Suite across the whole story, dev pass to this
+close-out: 329/1715/19 -> 352/2270/22 (the 329/1715/19 baseline is `3-0c`'s close-out figure, the
+tree this story's dev pass started from). `project.godot` byte-identical throughout; golden
+UNMOVED, `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`; the four inherited
+`3-0c` pins never edited by any pass of this story.
+
+**Four commits, none pushed:** `fix(x5): SAVE never overwrites an existing record (3-0d/R30)` (code
+and tests), `docs(3-0d): live smoke outcome + R30 (3-0d close-out)` (the story file), `board:
+promote 3-0d-replay-surface-and-live-reload to done` (`sprint-status.yaml` only), and this entry, a
+PURE APPEND -- no existing entry edited. Docs and code never share a commit, except where the named
+exception above applies, which this session's own commits do not invoke. The operator reviews the
+log and pushes.
