@@ -4191,3 +4191,101 @@ reading**, all 21 resolved in the session that found them.
 (the story file plus `sprint-status.yaml` -- status and `story_notes` both moved to the ruled scope), and
 this entry. Docs and code never share a commit; these are two separate docs commits. No push -- the
 operator reviews the log and pushes.
+
+## Session 2026-08-05 -- Story 3-0d, `3-0d/R13` panel reload control
+
+**Preconditions verified before anything was touched.** `HEAD` `dfebbb0` (the dev pass's docs record);
+working tree clean; `origin/main` `d45db42` -- two commits behind `HEAD`, expected (the dev pass at
+`f5da20c` and its own docs record at `dfebbb0` are both unpushed); no Godot process running.
+
+**The conflict this pass resolves, raised and deliberately NOT resolved by the dev pass at `f5da20c`.**
+AC 7 pinned `DebugInstrumentPanel` at EXACTLY ONE new runner-reaching control, SAVE, with a structural
+test (`test_replay_surface_pins.gd::test_the_panel_has_exactly_one_runner_reaching_control`) counting
+runner-reaching controls at one. The story's own Live Smoke section asks the operator to "trigger a live
+mid-match balance reload from the panel" -- which needs a SECOND such control. `match_runner.gd::
+trigger_live_balance_reload()` therefore shipped with tests and a source scan but NO operator surface,
+and the dev pass recorded this in the story's Dev Agent Record rather than build past it: "AC 7 pins the
+panel at EXACTLY ONE new control (SAVE)... while the Live Smoke asks the operator to trigger a live
+mid-match balance reload from the panel... This needs an operator ruling before the smoke runs."
+
+**`3-0d/R13` -- THE PANEL GAINS A SECOND CONTROL, RELOAD; AC 7 IS REFORMULATED FROM A COUNT INTO AN
+EXACT SET.** *Ruled:* the panel ships a second runner-reaching control, RELOAD, wired to the existing
+`trigger_live_balance_reload()` call site (no new runner-side trigger logic -- that call site shipped
+already, exercised by `test/state/test_live_reload.gd` and pinned by its own source scan). *The
+reasoning, which is the point of this ruling:* AC 7's original "exactly one" was never protecting a
+COUNT -- it was protecting against a LOAD control (`3-0d/R2`, the readiness gate). What must stay
+impossible is ENTERING REPLAY mid-session, and that is carried STRUCTURALLY by AC 11's second scan --
+`replay_record` is assigned NOWHERE in `src/` -- which is stronger than counting buttons: it holds
+regardless of how many buttons the panel carries, because a load control's defining, catchable property
+is the assignment itself, not its presence as a third control. Without an operator-reachable reload
+trigger the live path is unreachable code in the shipped game and the story's own premise -- tuning
+balance without a restart -- does not land. AC 7 is therefore reformulated from a COUNT into an EXACT
+SET, the same shape this repo already uses for the Input Map pin
+(`test_shipped_input_map_action_set_is_exactly_pinned`): the panel's runner-reaching controls are EXACTLY
+`{SaveRecord, ReloadBalance}` and nothing else. A third -- a load control in particular -- still fails
+it, proven by mutation below.
+
+**What was built.** `src/ui/debug/debug_instrument_panel.gd` gains a second runner-owned `Callable`,
+`reload_balance`, the same shape as `save_record` (`3-0d/R2`'s "the panel receives a way to ASK, never a
+state handle" precedent, generalised to two): a `Button` named `ReloadBalance`, stacked below
+`SaveRecord` in the existing third column (`RecordControls`), wired `pressed.connect(_on_reload_pressed)`
+which calls `reload_balance.call()` if valid. `src/main/match_runner.gd` hands the panel
+`panel.reload_balance = trigger_live_balance_reload` alongside the existing `panel.save_record =
+save_recorded_stream`, before `add_child`. No new Input Map action; both controls stay mouse-only.
+
+**Layout measured, not assumed.** A throwaway script (`test/tools/measure_panel_layout_throwaway.gd`,
+run once headlessly against `main.tscn` at the shipped 1152x648, then deleted) printed the box's actual
+global rect and both columns' combined minimum sizes: box `global_rect=[P: (276, 356), S: (600, 94)]`
+(unchanged from the 3-0b re-fit's x[276,876] y[356,450]), box `combined_minimum_size=(423, 89)` --
+LESS than the box's actual size, so nothing overflowed -- `RecordControls` (now two stacked buttons)
+`min_size=(126, 64)`, and `Switches` (the existing two-`CheckButton` column) `min_size=(272, 64)`: the
+two columns land on the SAME 64px minimum height, well inside the 94px band. `test_debug_instruments.gd`'s
+S1/S2 layout guard (the panel's global rect must lie inside the window and intersect no HUD/StateInspector
+rect) passed UNMOVED, verifying the re-fit rather than assuming it.
+
+**Tests amended.** `test/state/test_replay_surface_pins.gd`'s AC 7 pin
+(`test_the_panel_has_exactly_one_runner_reaching_control` -> renamed
+`test_the_panel_has_exactly_the_two_runner_reaching_controls`) now asserts the panel's Callable members
+sort to EXACTLY `["reload_balance", "save_record"]`, NO signal at all, and its wired control handlers that
+reach either Callable sort to EXACTLY `["_on_reload_pressed", "_on_save_pressed"]`. Its docstring states
+in its own text that AC 11's `replay_record` scan, not this pin's control count, is what actually keeps a
+load control out (`3-0d/R13`). AC 11 itself (`test_the_intent_tap_stays_seated_immediately_before_advance`,
+`test_replay_record_is_assigned_nowhere_in_src`) required ZERO edits.
+`test/integration/test_record_save_control.gd`'s scene-level control-set assertion is amended from the
+three-name set to `["NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"]`, and
+extended with a live proof that RELOAD reaches the trigger in the LIVE scene: a real roll
+(`p1_move_up` + `p1_roll`) spends P1's stamina from 50 to 38 (`roll_stamina_cost` 12 off the authored
+`max_stamina` 50), well inside `stamina_regen_delay_seconds` (0.8s / 48 ticks) so no natural regen can
+explain what follows; pressing `ReloadBalance` via the panel's own real-signal test pattern (`button.
+pressed.emit()`) is then observed, through the StateInspector's own primed `STAMValue` label (no runner-
+private access), refilling to 50/50, and the runner's `recorded_stream().reload_event_count()` is
+observed going 1 -> 2. Machine output: `reload control: stamina=38/50->50/50 reload_events=1->2`.
+
+**Mutation proof (`3-0d/R13`'s own, distinct from the dev pass's six).** A third runner-reaching control
+was added to `debug_instrument_panel.gd` -- a `load_record: Callable` member, a `LoadRecord` button, and
+an `_on_load_pressed()` handler calling it: the rejected LOAD control, in the exact shape `3-0d/R2`
+describes. Both guards went RED: `test_replay_surface_pins.gd::
+test_the_panel_has_exactly_the_two_runner_reaching_controls` (`callables` grew to
+`["load_record", "reload_balance", "save_record"]`, failing the exact-set equality) and
+`test_record_save_control.gd`'s control-set check (`got ["LoadRecord", "NormalizeMagnitude",
+"PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"]`). Restored from a copy taken OUTSIDE the repo
+(the scratchpad, never `git checkout --`), verified identical by SHA-256 before and after:
+`0f92fb59fc24c97d3152665134e6b671196bfcaf0aecc1c3f180d5af7153b49a`.
+
+**Suite, before and after.** Baseline verified before any edit (working tree stashed to `dfebbb0`, run,
+then restored): **344 state tests / 2197 assertions / 20 integration files, ALL PASSED.** After this
+pass: **344 / 2198 / 20, ALL PASSED** -- +1 assertion (the AC 7 pin's handler-membership check grew from
+one `assert_true` to a two-iteration loop), 0 new tests, 0 new integration files (an existing integration
+file was amended, not added). The four inherited `3-0c` pins (`test_architecture_invariants.gd`,
+`test_replay_identity.gd`, `test_intent_recorder.gd`, `test_deck_and_hand.gd`) required ZERO edits,
+confirmed by `git status`. `project.godot` is BYTE-IDENTICAL, SHA-256
+`8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004` both ends. The golden did not move:
+`test_determinism.gd` is absent from `git status` and its `GOLDEN` constant is unchanged,
+`40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`.
+
+**Close-out.** Three commits, none pushed: `feat(x5): panel reload control (3-0d/R13)` (the panel
+control, the runner wiring, the amended pins, the extended integration test -- code and tests only),
+`docs(3-0d): AC 7 amended to an exact control set (3-0d/R13)` (the story file: AC 7 rewritten, Dev Agent
+Record updated, a 0.4 Change Log row -- the raised conflict marked RESOLVED, not deleted), and this
+entry, a PURE APPEND. Docs and code never share a commit. No push -- the operator reviews the log and
+pushes.
