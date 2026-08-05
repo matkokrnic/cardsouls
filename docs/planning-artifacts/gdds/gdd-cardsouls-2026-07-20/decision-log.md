@@ -4452,3 +4452,187 @@ story file: the AC amendments, the two corrected passages, the extended Dev Agen
 corrected AC 8 hash note, a 0.5 Change Log row), and this entry, a PURE APPEND -- no existing entry
 edited. Docs and code never share a commit. The board is not touched. No push -- the operator reviews
 the log and pushes.
+
+
+## Session 2026-08-05 -- Story 3-0d structural fix pass, `3-0d/R20`-`3-0d/R24`
+
+**Preconditions verified before anything was touched.** `HEAD` `a6582e8` (the post-review pass's
+decision-log record); working tree clean; `origin/main` `d45db42` -- EIGHT commits behind `HEAD`,
+expected, none of the eight pushed; no Godot process running. No fetch, no push. The stated suite
+baseline was not taken on trust either: **348 state tests / 2244 assertions / 20 integration files,
+ALL PASSED**, measured at that `HEAD` with a clean tree before the first edit.
+
+**The verdict.** This is the THIRD round on the same two source scans, and it ends them.
+
+### `3-0d/R20` -- A TEXT SCAN OVER SOURCE CANNOT CARRY A DESIGN INVARIANT, AND THIS PROJECT WILL STOP TRYING TO MAKE IT
+
+Story 3-0d shipped two source scans meant to make a mid-session "load into replay" control
+impossible. They have now been defeated by fresh eyes three times:
+
+* **Round 1.** `set("replay_record", rec)`, `set_deferred(...)` and `runner[&"replay_record"] = rec`
+  all reached the member and were tallied as harmless READS; `var load_record := Callable()`, the
+  idiomatic inferred form, did not match the panel pattern at all.
+* **Round 2** (after `3-0d/R14` rewrote them as a per-occurrence WHITELIST and a
+  declaration-carrying-`Callable` match). **`(replay_record) = null` was classified BY THE WHITELIST
+  as an "argument read"** -- a literal assignment certified as a read, because the character after
+  the token is `)` and the whitelist's `^\s*[,)]` rule said that is a read. Six further panel
+  declaration forms evaded the Callable scan: `static var`, `@onready`, an inner-class member, a
+  `Callable` in an untyped `Dictionary`, one in an untyped `Array`, and an untyped member invoked
+  through a local copy. The shared line reader truncated at the first `#` with NO string awareness,
+  so a `#` inside a string literal deleted the rest of the line from BOTH scans. And both read `.gd`
+  only, while GDScript embedded in a `.tscn` under `src/` is shipped, compiled, executing code. A
+  complete, working, wired LOAD control shipped with the entire suite green.
+
+**The ruling.** Each round hardened the PATTERN and each round a form outside the pattern was found.
+The residue that is genuinely undecidable from source text is narrow -- a name built at runtime,
+reflection over the property list -- but the PRACTICAL residue kept being wide, because the
+classifier and its reader each keep having holes, and **a guard that is believed to hold and does
+not is worse than no guard**: the belief is what stops anyone looking. The property is therefore made
+STRUCTURALLY IMPOSSIBLE rather than DETECTABLE.
+
+**`3-0d/R20` part 1 -- `replay_record` IS CONSUMED ONCE AND NEVER READ AGAIN.** *Ruled and done.*
+`MatchRunner` reads the public `replay_record` exactly once, in `_ready()`, into a private
+`_replay_record`; the per-tick fork in `_physics_process`, the live-reload refusal and every other
+consumer read ONLY the private field. A mid-session assignment to the public member then has NO
+EFFECT -- not because it is caught, but because nothing reads what it changed. The external pre-tree
+assignment (`test/integration/test_replay_contacts.gd`) still works unchanged and was verified: that
+test passes unmodified in the suite, which is what makes this a CONSUMPTION POINT rather than a
+removal of the entry surface.
+
+**`3-0d/R20` part 2 -- PROVE IT BEHAVIOURALLY.** *Ruled and done*, as
+`test/integration/test_replay_entry_is_inert.gd`. It assigns `replay_record` mid-match on a
+live-shaped runner -- the plainest bare assignment, the exact line the deleted scan hunted -- and
+asserts the per-tick fork does NOT flip (live `max_hp` is still the authored value, not the poisoned
+one a replayed tick 1 applies), recording CONTINUES (one recorder tick per ticking frame across the
+assignment), and no recorded fact reaches live state. That test is the mechanism now. Its falsifying
+change is obvious and real and was performed: restoring the per-tick read of the public member makes
+it RED on both assertions.
+
+**`3-0d/R20` part 3 -- DELETE THE `replay_record` SOURCE SCAN.** *Ruled and done.* Not kept as a
+lint: keeping it would produce false confidence about a property now carried by construction, which
+is the failure mode this whole ruling is about. The AC says why (AC 11, re-worded).
+
+**`3-0d/R20` part 4 -- DELETE THE PANEL CALLABLE SOURCE SCAN.** *Ruled and done*, replaced by the
+SCENE-LEVEL control-set check alone, which enumerates ACTUAL INSTANTIATED CONTROLS at runtime and is
+therefore not evadable by declaration syntax. **Its known hole is fixed in the same ruling:** it
+queried `Button`, so a `LinkButton` -- which extends `BaseButton`, NOT `Button` -- slipped past. The
+query is `BaseButton`. **Verified by mutation BOTH WAYS, which is the part worth recording:** a
+wired `LinkButton` load control fails the new query (`got ["LoadRecord", "NormalizeMagnitude",
+"PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"]`), and **PASSES the old `Button` query, exit
+0** -- so the hole was real rather than theoretical.
+
+**`3-0d/R20` part 5 -- NO MECHANISM MAY BE DESCRIBED AS PROVING MORE THAN IT PROVES.** *Ruled and
+done.* AC 11's claim that a source scan asserts `replay_record` is assigned nowhere in `src/` is
+RETIRED; what replaces it is the structural consumption plus its behavioural test. AC 7 no longer
+claims a source scan makes a load control impossible; it claims the panel's instantiated control set
+is exactly the expected four names. **The residue is stated plainly in both**, and in the surviving
+test's own docstring: AC 11 half (a), the tap-seat scan, SURVIVES, and that is not an inconsistency
+-- a source scan is sound evidence for a question about CODE LAYOUT (where two statements sit
+relative to each other inside one known function of one known file) and unsound for a question about
+REACHABILITY (whether a behaviour can be provoked from anywhere in a tree). The two look alike and
+are not alike. The tap-seat test now also states its own reader limit (not string-aware) rather than
+leaving it implied.
+
+**THE PERMANENT LESSON (`3-0d/R20`), which outlives this story and supersedes `3-0d/R14`'s narrower
+one without contradicting it: PREFER MAKING A PROPERTY IMPOSSIBLE BY CONSTRUCTION OVER MAKING IT
+DETECTABLE BY INSPECTION; AND WHEN A GUARD HAS BEEN EVADED TWICE, REPLACE THE MECHANISM RATHER THAN
+THE PATTERN.** `3-0d/R14` drew the right narrower lesson -- enumerate what is ALLOWED, refuse the
+rest by default -- and the whitelist built on it was evaded BY ITS OWN CLASSIFIER. That is the
+moment the pattern-level remedy is exhausted: the guard's failures had stopped being about the
+pattern and started being about the fact that it was reading text at all. This binds every future
+guard in this repo. Concretely: (a) before writing a guard, ask whether the property can be made
+INERT instead -- a consumed value, a private field, a narrowed API -- and prefer that; (b) a guard
+that has been evaded twice is not to be widened a third time; (c) where a guard must be
+behavioural, its MUTATION PROOF must be behavioural too, and must check that the RIGHT assertion
+fires, not merely that the test goes red.
+
+### The four gap-closing rulings
+
+**`3-0d/R21` (closes the `3-0d/R15` gap) -- `has()` IS TRUE FOR `null`, SO PRESENCE IS NOT
+VALIDATION.** `RecordFile.load_record` still returned `{"record": null, "error": ""}` for three
+inputs: required keys present but carrying WRONG TYPES, `null` under `reload_events`, and `null`
+under `intents`. `3-0d/R15` had validated PRESENCE, which closed the truncated-file path and left
+these three reaching `_from_dictionary()`, dying inside it, and coming back with an EMPTY reason --
+the same defect R15 was raised to close, on a narrower set of files. *Ruled:* validate each required
+key's expected TYPE before rebuilding and refuse with a reason naming the key and what was found.
+Done, as `REQUIRED_KEYS` becoming a key -> TYPE map; all three tested. **Proven by mutation:** with
+the type check disabled the wrong-types file crashes inside the rebuild (`Invalid call. Nonexistent
+'int' constructor`, `record_file.gd:292`) and returns an empty error -- the exact defect reproduced.
+
+**`3-0d/R22` (closes the `3-0d/R16` gap) -- A PREFIX TEST ON A STRING THAT CAN CONTAIN `..` IS NOT A
+CONTAINMENT TEST.** `save_record`'s guard was a bare `begins_with("user://")` with no normalisation,
+and a `user://../../...` path was proven to write a record into the project root. *Ruled:* normalise
+instead -- resolve the path and refuse anything that does not land inside the `user://` directory.
+Done. **Engine semantics measured first:** `user://../../escape.rec` globalises to
+`.../Roaming/Godot/escape.rec`, two directories above the app's user data; `user://sub/../ok.rec`
+resolves back INSIDE, so the guard must be containment and not a ban on `..`; and
+**`user://../CardSoulsEvil/escape.rec` resolves to `.../app_userdata/CardSoulsEvil/escape.rec`,
+which has `.../app_userdata/CardSouls` as a STRING PREFIX and is a different directory** -- which is
+why the comparison is against the resolved root PLUS its separator. Traversal forms tested; **nothing
+lands in the repo, verified by running it** (a tree-wide search for `*.rec` outside `.godot/` returns
+nothing). **Proven by mutation:** reverted to the bare prefix test, the traversals genuinely WRITE
+files, which were removed by hand.
+
+**`3-0d/R23` (`3-0d/N4`) -- MATCH THE RUNNER, DO NOT DOWNGRADE THE CLAIM.** `ReplayDrive` reordered
+two statements relative to the runner's fork: the controllers were constructed later (the runner
+builds them first, before it has a MatchState), and the intents were sampled after the recorded
+pushes (the runner samples at the top of `_physics_process`, above the `ticking` gate). Both inert
+today, and inert only because `ReplayController.sample()` reads the record and never MatchState.
+*Ruled, and the choice is recorded because both options were live:* **MATCH the runner's order
+statement for statement**, rather than dropping the docstring's claim to be a transcription of it.
+The claim is the value -- the entire reason this helper exists (`3-0d/R17`) is that a silent drift
+prints a stable, WRONG hash forever, and a transcription whose docstring admits it is only "a" replay
+order guards nothing. Cost: two moved statements, no behaviour change, every hash in the suite
+unmoved -- which is itself the evidence that both divergences were inert.
+
+**`3-0d/R24` (`3-0d/N5`) -- THE PARSE BLIND SPOT, CLOSED BY BEHAVIOUR RATHER THAN BY SYNTAX.** A
+parse error in `test/tools/replay_file.gd` was invisible to the suite, which is how one shipped last
+pass. *Ruled:* the obvious guard is VACUOUS and must not be used -- **`load()` returns a NON-NULL
+`GDScript` for a file that does not compile**, so a non-null assertion passes on a broken tool;
+`can_instantiate()` is the working discriminator but proves only that the file COMPILES, which is
+strictly weaker than AC 8's claim. Build the real one. Done, as
+`test/integration/test_replay_verifier_tool.gd`: it writes a fixture record via `RecordFile`, runs
+the verifier as a SUBPROCESS in a fresh headless Godot (`OS.execute` on `OS.get_executable_path()`,
+so the same engine build), and asserts exit 0, `RESULT: PASS`, a completed replay, and **the same
+`CanonicalHash` across two invocations** -- AC 8's claim stated exactly, compared run-to-run and
+never against a literal (`3-0d/R18` stands). It also asserts a corrupted file is REFUSED with a
+nonzero exit, so the PASS is a verdict the tool can withhold. **The subprocess launch worked on this
+platform; NO fallback to `can_instantiate()` was needed.** **Proven by mutation:** the `3-0d/R17`
+parse error reintroduced verbatim makes it RED with the engine's own message. AC 8 is self-verifying
+now rather than operator-only, and this closes the process promise `3-0d/R17` left behind ("a tool
+outside the suite must be RUN as part of any pass that edits it") -- a process promise is not a
+mechanism, which is the same lesson as `3-0d/R6`.
+
+### A defect this pass found in its OWN new test, recorded because the finding is the method
+
+The first version of `test_replay_entry_is_inert.gd` took its only `max_hp` reading AFTER the live
+reload trigger step -- and the trigger re-applies the AUTHORED balance, which scrubs the poisoned
+value a flipped fork had already written. Under the mutation that restores the public-member read,
+that assertion stayed SILENT while the fork was genuinely flipped; only the recording-frozen
+assertion fired. A reading was added BEFORE the trigger, the mutation re-run, and both assertions
+then fired. **A mutation proof that only checks "does the test go red at all" would have passed
+this.** That is `3-0d/R14`'s lesson applied to a behavioural guard, and it is why `R20`'s part (c)
+above says the mutation proof must check that the RIGHT assertion fires.
+
+**Suite, before and after.** Baseline re-measured by this pass at `HEAD` `a6582e8` with a clean tree:
+**348 state tests / 2244 assertions / 20 integration files, ALL PASSED.** After: **348 / 2264 / 22,
+ALL PASSED** -- 0 net state tests, +20 assertions, +2 integration files -- and green a third time
+after all five mutations were restored. **The flat state-test count is two opposite movements and is
+stated rather than left to look like nothing changed:** `test_replay_surface_pins.gd` went 4 tests ->
+2 (the two DELETED source scans -- the drop this ruling predicted), `test_record_file.gd` went 9 ->
+11 (`R21`'s wrong-types refusal, `R22`'s traversal refusal). The assertion delta is the same story:
+the deleted scans carried large evasion-form self-check loops, and what replaced them lives in the
+two new INTEGRATION files, which the state count cannot see. `project.godot` is BYTE-IDENTICAL,
+SHA-256 `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`, both ends. The golden did
+not move: `test_determinism.gd` is absent from `git status` and `GOLDEN` still reads
+`40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The four inherited `3-0c` pins
+required ZERO edits. `test/tools/replay_file.gd` is UNMODIFIED -- a mutation target only, restored
+from an out-of-repo copy and SHA-256 verified, absent from `git status`. The live smoke was NOT run:
+it is the operator's, it carries the required R-D6 kill (`3-0d/R11`), and this pass was instructed
+not to run it.
+
+**Close-out.** Three commits, none pushed: `refactor(x5): make mid-session replay entry structurally
+inert (3-0d/R20-R24)` (code and tests), `docs(3-0d): AC 7 and AC 11 re-worded to what the mechanisms
+carry (3-0d/R20-R24)` (the story file), and this entry, a PURE APPEND -- no existing entry edited.
+Docs and code never share a commit. The board is not touched. No push -- the operator reviews the log
+and pushes.
