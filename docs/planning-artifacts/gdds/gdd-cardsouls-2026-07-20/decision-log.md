@@ -4289,3 +4289,166 @@ control, the runner wiring, the amended pins, the extended integration test -- c
 Record updated, a 0.4 Change Log row -- the raised conflict marked RESOLVED, not deleted), and this
 entry, a PURE APPEND. Docs and code never share a commit. No push -- the operator reviews the log and
 pushes.
+
+## Session 2026-08-05 -- Story 3-0d post-review fix pass, `3-0d/R14`-`3-0d/R19`
+
+**Preconditions verified before anything was touched.** `HEAD` `d433b41` (the `3-0d/R13` follow-up
+pass's decision-log record); working tree clean; `origin/main` `d45db42` -- FIVE commits behind
+`HEAD`, expected, none of the five pushed; no Godot process running. No fetch, no push.
+
+**The verdict.** A code review of story 3-0d returned **CHANGES REQUIRED**: one BLOCKING finding and
+five non-blocking. All six are ruled and closed here. The blocking one is the interesting one, and it
+is not really about this story.
+
+### B1, BLOCKING -- both of this story's new source scans could be evaded, and the mutation proofs that "proved" them caught nothing
+
+`test/state/test_replay_surface_pins.gd` shipped two source scans, each with a self-check and each
+with a mutation proof recorded in the story's Dev Agent Record. The review broke BOTH without either
+going red.
+
+The `replay_record` scan (AC 11 half (b)) matched `\breplay_record\s*=[^=]` -- an assignment is the
+token followed by a bare `=`. Verified by the review: `set("replay_record", rec)`,
+`set_deferred("replay_record", rec)` and `runner[&"replay_record"] = rec` ALL PASS, and worse, all
+three were tallied as harmless READS. The panel Callable scan (AC 7) matched
+`^var\s+\w+\s*:\s*Callable`, so `var load_record := Callable()` -- the idiomatic INFERRED form, the
+one a developer is most likely to type -- did not match at all. A load control written in those forms
+passed BOTH pins. The residue the review correctly noted: the scene-level Button-name set in
+`test/integration/test_record_save_control.gd` still catches a third BUTTON (CheckButton subclasses
+Button), so what actually got through is a load path that is not a button.
+
+**`3-0d/R14` part 1 -- INVERT THE `replay_record` SCAN INTO A WHITELIST.** *Ruled and done.* Every
+occurrence of the token in `src/` must now classify as one of an explicitly enumerated set of ALLOWED
+READ FORMS -- the declaration, a null comparison, a member read, or a read passed as an argument --
+and anything else is an offender, reported with its file, line and text. An assignment through
+`set()`, `set_deferred()`, an indexed property write, or any form nobody has thought of yet fails
+**by DEFAULT rather than by enumeration**. The classification is per-OCCURRENCE, not per-line, so a
+line that both reads and writes cannot hide the write behind the read; an occurrence sitting inside a
+string literal (which is what all three evasions are) is refused on that basis alone. The allowed set
+is DERIVED from the shipped tree -- the test asserts each of the four forms actually occurs in
+`src/`, so an allowed form nothing uses is caught as an unchecked hole -- and no line count is
+hard-coded.
+
+**`3-0d/R14` part 2 -- THE PANEL CALLABLE SCAN MATCHES ANY DECLARATION FORM.** *Ruled and done.* Not
+two enumerated patterns: a member counts if its top-level `var` declaration CARRIES `Callable` at all
+(annotated `: Callable`, inferred `:= Callable(`, untyped `= Callable()`, any combination) OR if the
+file goes on to INVOKE it as a Callable, which closes the one remaining shape -- a member declared
+with no type and assigned later, carrying the word `Callable` on no line at all.
+
+**`3-0d/R14` part 3 -- THE PERMANENT LESSON, and it is the reason this ruling is in the log at all.**
+**A pattern guard's non-vacuity check must be proven against THE FORMS AN ADVERSARY WOULD USE, not
+only the form the author happened to write, and a mutation proof performed in the author's own syntax
+proves ONLY that syntax.** Both scans here shipped with self-checks and with mutation proofs and both
+were still evadable, and the cause was identical in both cases: the author broke the guard the way
+the author was thinking about breaking it. A guard that enumerates what is FORBIDDEN is only ever as
+good as the imagination of whoever wrote the enumeration; a guard that enumerates what is ALLOWED and
+refuses the rest by default is bounded by the code it guards instead. **This binds every future
+pattern guard in this repo, not just these two.** Concretely, from now on: (a) prefer a whitelist to a
+blacklist wherever the allowed set is derivable from shipped code; (b) every pattern guard's
+non-vacuity check must assert the EVASION FORMS ARE CAUGHT alongside the legitimate forms being
+SPARED; (c) a mutation proof in the author's own syntax does not discharge a guard whose evasion
+forms have not been tried.
+
+**`3-0d/R14` part 4 -- REDO THE MUTATION PROOFS IN THE EVASION FORMS.** *Ruled and done.* Four
+proofs, each applied, observed RED, then restored FROM A COPY TAKEN OUTSIDE THE REPO (the scratchpad
+-- never `git checkout --`, the PERMANENT RULE at decision-log:799), SHA-256 verified identical
+before and after: `match_runner.gd`
+`cdc452aaf802529587d6449d7a64cccfad917f55a2e5a8f7f09e88f77e61cc5d`, `debug_instrument_panel.gd`
+`0f92fb59fc24c97d3152665134e6b671196bfcaf0aecc1c3f180d5af7153b49a`; `git status` afterwards confirms
+neither file is modified. (1) `set("replay_record", rec)` -> `test_replay_record_is_assigned_
+nowhere_in_src` RED, `got 1, expected 0 ... res://src/main/match_runner.gd:661
+set("replay_record", rec)`. (2) `set_deferred("replay_record", rec)` -> same test RED,
+`... match_runner.gd:660`. (3) `runner[&"replay_record"] = rec` -> same test RED,
+`... match_runner.gd:661`. (4) `var load_record := Callable()` plus a `LoadRecord` button and
+`_on_load_pressed()` -> BOTH `test_the_panel_has_exactly_the_two_runner_reaching_controls`
+(`got ["load_record", "reload_balance", "save_record"]`) AND `test_record_save_control.gd`'s
+control-set check (`got ["LoadRecord", "NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance",
+"SaveRecord"]`) RED. Every one of 1-3 passed the OLD scan as a read; 4 passed the OLD panel scan
+unseen. That contrast is the whole content of `R14`.
+
+### The five non-blocking findings
+
+**`3-0d/N2` / `3-0d/R15` -- A REFUSAL WITH NO REASON, CONTRADICTING THE CLASS'S OWN CONTRACT.**
+`RecordFile.load_record` returned `{"record": null, "error": ""}` on a versioned-but-truncated file:
+the version check passed, `_from_dictionary()` was reached, it failed inside on a missing key, and
+the result came back with an EMPTY error -- which a caller testing `error != ""` reads as SUCCESS,
+while the class's own docstring says the reason always travels with the failure. *Ruled:* validate
+the required keys BEFORE rebuilding and return a reason NAMING what is missing. Done, as
+`RecordFile.REQUIRED_KEYS`, checked after the version (the version is what decides which key set is
+even expected, so a future version 2 is refused earlier and never reaches this). Tests added for the
+truncated file AND for the previously untested no-version-key branch, plus a DERIVATION GUARD
+asserting `REQUIRED_KEYS` equals the key set an actual saved file carries minus `format_version`, so
+a channel added to the writer without being added here fails loudly instead of leaving the truncation
+check silently blind to it.
+
+**`3-0d/N3` / `3-0d/R16` -- THE `user://` CLAIM WAS TRUE OF `path_for()` AND OF NOTHING ELSE.**
+`save_record` accepted any path, and the review proved it by writing a record into the repo root.
+*Ruled:* a path that does not begin with `user://` is REFUSED with a reason. Done and tested,
+including that nothing is written; proven again on the live class during this pass ("refusing to
+write post_review.rec -- records go under user://, never into the project tree"), with the repo root
+confirmed clean afterwards. This and `N2` are the same shape of defect and worth naming as one: **a
+property asserted in prose and carried by a CONVENTION rather than by the API holds exactly until the
+first caller that does not follow the convention.** Neither changes the on-disk format, so
+`FORMAT_VERSION` stays at 1 -- these are refusal paths, not shape changes (`3-0d/R7` stands).
+
+**`3-0d/N4` / `3-0d/R17` -- THE VERIFIER'S REPLAY ORDERING WAS A THIRD UNGUARDED TRANSCRIPTION.** The
+replay drive order lived in three places -- the runner's live fork (`match_runner.gd:601-608`, the
+original), AC 4's in-suite round-trip test, and AC 8's headless verifier -- and nothing guarded the
+third: AC 4 proved the SAVE/LOAD path, never the verifier's ordering, so the verifier could have
+drifted from the runner and printed a stable but WRONG hash indefinitely. *Ruled:* extract the drive
+order into ONE helper under `test/`, used by both test-side callers, and correct the Dev Notes claim
+that AC 4 already covered it. Done, as `test/replay_drive.gd` (`class_name ReplayDrive`, the one new
+`class_name` this pass ships; editor scan run and `.uid` committed), a library beside
+`test/canonical_hash.gd` and globbed by neither harness. **The runner's own fork is deliberately NOT
+folded in and could not be** -- it is `src/` code inside `_physics_process` and `src/` cannot depend
+on `test/` -- so it stays the ORIGINAL, named in the helper's docstring so a change there has
+somewhere to point. **Neither caller was weakened:** the one thing that can legitimately go wrong (an
+unsound recorded content order, `3-0c/R11`) travels back as a reason in a result Dictionary, the same
+shape `RecordFile.load_record` uses; the test asserts on it, the operator tool prints `REFUSED:` and
+exits 1, which replaces an `Invariant.check` crash and is strictly better for an operator tool. **A
+finding this pass produced rather than received, worth its own line:** running the extracted verifier
+for real caught a parse error (a shadowed `result` local) that the suite structurally CANNOT see,
+because `test/tools/replay_file.gd` is deliberately not globbed by `run_all.sh`. **A tool that lives
+outside the suite must be RUN as part of any pass that edits it.**
+
+**`3-0d/N5` / `3-0d/R18` -- THE AC 8 HASH IS EXPLAINED, NOT A DEFECT.** The Dev Agent Record's
+`5f465e7a...9d13` was not reproducible at the review, which measured `d2f77f3e...92d0` from
+byte-identical record files across two sessions. *Ruled: this is an explanation, not a finding
+against the code.* The dev pass's producer script PRESSED inputs (`p1_move_up`, `p1_attack`); the
+review's pressed none. Different intents, different final `MatchState`, different `CanonicalHash` --
+correctly. **AC 8's actual claim -- the same file replays to the same hash, twice -- HOLDS**, and was
+re-measured holding at this pass (`74cbe99b...931f` twice from this pass's own producer, itself not
+comparable to either earlier number). **Why the discrepancy was invisible, which is the part worth
+recording:** the verifier's summary line prints ticks / reload_events / seed / deck / costs / order /
+camera_pushes / contact_facts and NOTHING ABOUT THE INTENTS, so two records differing ONLY in what
+was pressed print identical summaries and different hashes. The story record now says the hash is a
+function of the run that produced it, not a repo constant, and says why.
+
+**`3-0d/N1` / `3-0d/R19` -- TWO PASSAGES LEFT CONTRADICTING THE AMENDED AC 7.** The `3-0d/R13`
+amendment reformulated AC 7 from a COUNT into an EXACT SET, but Project Structure Notes still said
+the panel "gains EXACTLY ONE new control, SAVE", and a Dev Notes bullet still said the structural
+test COUNTS runner-reaching controls and that this is what keeps a load control out. Both are false
+about shipped code, and the second was already the exact error `3-0d/R13` ruled on -- a control count
+was never what keeps a load control out; AC 11's `replay_record` scan is. *Ruled:* correct both in
+place with the correction VISIBLE (struck through, not deleted -- the repo's standing discipline for
+a falsified claim). Done. The 0.3 Change Log row is HISTORICAL and stays untouched.
+
+**Suite, before and after.** Baseline verified at `HEAD` `d433b41` with a clean tree before any edit:
+**344 state tests / 2198 assertions / 20 integration files, ALL PASSED.** After this pass: **348 /
+2244 / 20, ALL PASSED** -- +4 state tests and +46 assertions, 0 new integration files. The +4 are
+`R15`/`R16`'s new refusal tests (truncated file; no-version-key branch; save outside `user://`; the
+`REQUIRED_KEYS` derivation guard); the assertions are those plus the two hardened scans' evasion-form
+self-checks. Re-run green a third time after all four mutations were restored. `project.godot` is
+BYTE-IDENTICAL, SHA-256 `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`, both
+ends. The golden did not move: `test_determinism.gd` is absent from `git status` and its `GOLDEN`
+constant still reads `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The four
+inherited `3-0c` pins required ZERO edits. `src/main/match_runner.gd` and
+`src/ui/debug/debug_instrument_panel.gd` are UNMODIFIED by this pass -- mutation targets only,
+restored and hash-verified. The live smoke was NOT run: it is the operator's and carries the required
+R-D6 kill (`3-0d/R11`).
+
+**Close-out.** Three commits, none pushed: `fix(x5): harden the 3-0d source scans and record refusal
+paths (3-0d/R14-R17)` (code and tests), `docs(3-0d): post-review corrections (3-0d/R14-R19)` (the
+story file: the AC amendments, the two corrected passages, the extended Dev Agent Record with the
+corrected AC 8 hash note, a 0.5 Change Log row), and this entry, a PURE APPEND -- no existing entry
+edited. Docs and code never share a commit. The board is not touched. No push -- the operator reviews
+the log and pushes.
