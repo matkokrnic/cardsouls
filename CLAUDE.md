@@ -27,6 +27,9 @@ These fail the suite if violated — the guard is the test, not review.
 - **Docs and code never share a commit** — separate them.
 - **Validation that proves something worth proving gets committed as a test** (under `test/`), never written-then-deleted.
 - Keep `project.godot` edits intentional (autoloads / Input Map / main scene); review the diff.
+- Commit messages are pure ASCII, written via `git commit -F <tempfile outside the repo>`.
+- The shell is PowerShell 5.1 — no `&&` chaining.
+- Trailer `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` on every commit.
 
 ## Agent autonomy
 
