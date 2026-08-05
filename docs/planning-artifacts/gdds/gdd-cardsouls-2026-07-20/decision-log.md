@@ -4636,3 +4636,192 @@ inert (3-0d/R20-R24)` (code and tests), `docs(3-0d): AC 7 and AC 11 re-worded to
 carry (3-0d/R20-R24)` (the story file), and this entry, a PURE APPEND -- no existing entry edited.
 Docs and code never share a commit. The board is not touched. No push -- the operator reviews the log
 and pushes.
+
+
+## Session 2026-08-05 -- Story 3-0d closing fix pass, `3-0d/R25`-`3-0d/R29`
+
+**Preconditions verified before anything was touched.** `HEAD` `2fe3eca` (the structural fix pass's
+decision-log record); working tree clean; `origin/main` `d45db42` -- ELEVEN commits behind `HEAD`,
+expected, none of the eleven pushed; no Godot process running. No fetch, no push. The stated suite
+baseline was not taken on trust either: **348 state tests / 2264 assertions / 22 integration files,
+ALL PASSED**, measured at that `HEAD` with a clean tree before the first edit.
+
+### The verdict: the mechanism HELD, and the prose around it did not
+
+A final verification pass attacked the `3-0d/R20` structural mechanism against a criterion declared
+in advance. **CRITERION (a) HOLDS.** Eight attacks at six different moments: no mid-session
+assignment to the public `replay_record` -- in any spelling, at any point in the match -- did
+anything to the shipped runner. The consumption point installed at `3-0d/R20` part 1 is doing the
+work it was ruled to do, and after three rounds of scans that were each walked around, that is the
+result worth recording plainly.
+
+**CRITERION (b) FAILED, on THREE sentences.** The story file and this log were required to be TRUE
+of the shipped tree. Three sentences were not, and all three were descriptions of MECHANISMS --
+which is precisely the failure `3-0d/R20` part 5 ruled against ("no mechanism may be described as
+proving more than it proves"), reappearing within one pass of the ruling that named it. That is the
+finding of this pass: **a correct mechanism does not keep its own description honest, and the
+description is what the next reader acts on.**
+
+### `3-0d/R25` -- AC 5's TOTALITY CLAIM IS FALSE; REDUCE IT TO WHAT THE CODE CARRIES AND STATE THE RESIDUE
+
+AC 5's amendment header asserted **"REFUSED WITH A CLEAR REASON NOW HOLDS ON EVERY PATH"**. It does
+not. **FIVE inputs still return `{"record": null, "error": ""}`** -- a refusal with an EMPTY reason,
+which a caller testing `error != ""` reads as SUCCESS. Measured at this pass BEFORE the sentence was
+rewritten (throwaway probe under `test/tools/`, deleted after the run; Godot 4.6.3), each one
+mutating a single axis of a valid record read back as a raw Dictionary:
+
+| Input | Engine error inside the rebuild | Returned |
+|-------|--------------------------------|----------|
+| `intents` as an Array of Dictionaries | `Invalid type in function '_intent_pair' ... Cannot convert argument 1 from Dictionary to Array` (`record_file.gd:311`) | `record=null error=''` |
+| `intents` shorter than `tick_count` | `Out of bounds get index '1' (on base: 'Array')` (`record_file.gd:311`) | `record=null error=''` |
+| `camera_pushes` values are ints | `Trying to assign value of type 'int' to a variable of type 'Array'` (`record_file.gd:307`) | `record=null error=''` |
+| `contacts` values are Arrays of ints | `Trying to assign value of type 'int' to a variable of type 'Array'` (`record_file.gd:309`) | `record=null error=''` |
+| `tick_count` inflated past intents | `Out of bounds get index '4' (on base: 'Array')` (`record_file.gd:311`) | `record=null error=''` |
+
+`3-0d/R21` had corrected the Dev Notes and the class docstring for the three inputs IT found, and
+**left the AC sentence standing** -- so the story's own acceptance criterion outlived the correction
+of the text that explained it. That is how a totality claim survives being falsified twice.
+
+*Ruled:* **the claim is REDUCED to what the code actually carries** -- each required key's TOP-LEVEL
+TYPE is validated before the rebuild (`REQUIRED_KEYS`, a key -> type map) and a file failing that is
+refused with a reason naming the key and what was found in it -- **and the RESIDUE is STATED:**
+nested and cross-key consistency (element types inside the required containers, array lengths
+measured against `tick_count`) is NOT validated, and a file failing those still refuses with an
+empty reason. Corrected in AC 5 and in the identical sentence in `src/systems/record_file.gd`.
+
+**NESTED VALIDATION IS DELIBERATELY NOT BUILT, and that is the ruling rather than an omission.** It
+is a third round of the same widening for marginal benefit on a format with exactly one writer, and
+the whole point of this ruling is that **the boundary gets WRITTEN DOWN instead of pretended away**.
+The residue is closed for CALLERS instead, which is cheap and total: test `result["record"] == null`,
+never `error != ""`. Measured -- all three shipped callers already do
+(`test/tools/replay_file.gd:43`, `test/integration/test_record_save_control.gd:191`, and
+`test/state/test_record_file.gd`, which asserts the record before it reads any reason).
+
+### `3-0d/R26` -- THE MECHANISM TEST IS DESCRIBED WRONGLY IN THIS LOG AND IN THE PINS FILE
+
+The `3-0d/R20` entry above (Session 2026-08-05, structural fix pass, part 2) says
+`test/integration/test_replay_entry_is_inert.gd` asserts **"no recorded fact reaches live state"**.
+**IT ASSERTS NO SUCH THING.** Its third assertion is that `reload_event_count()` goes 1 -> 2 after
+the mid-session assignment -- i.e. that **THE LIVE RELOAD TRIGGER STILL FIRES**, which is how the
+test reaches the OTHER consumer of the consumed record. Verified by reading the shipped assertions.
+The same wrong sentence was mirrored in `test/state/test_replay_surface_pins.gd`'s header.
+
+*Ruled:* correct both to what the test actually asserts. **The pins file is corrected in place with
+the correction visible. THIS LOG IS APPEND-ONLY FOR ENTRIES, so the earlier entry is NOT edited --
+this paragraph is the correction of record, and it names the sentence it corrects:** the clause "and
+no recorded fact reaches live state" in `3-0d/R20` part 2 is FALSE of the shipped test and should be
+read as "and the live reload trigger still fires". The rest of that part 2 paragraph is accurate.
+
+### `3-0d/R27` -- AC 3 DESCRIBES A TEXT SCAN; THE SHIPPED TEST DOES REFLECTION
+
+AC 3 said its test **"counts `func capture_` occurrences in `intent_recorder.gd`"**. The shipped
+test (`test/state/test_live_reload.gd::test_the_recorder_still_ships_exactly_eight_capture_channels`)
+reads `script.get_script_method_list()` and filters on the name prefix, and its OWN docstring says so
+explicitly: "Counted from the SCRIPT's own method list rather than by grepping `func capture_`, so a
+channel added by any means (including one inherited or defined out of the obvious form) is caught."
+**The outcome claim -- exactly eight, a ninth fails -- is TRUE and unchanged.** Only the sentence
+describing HOW was wrong.
+
+*Ruled:* correct the AC's mechanism sentence to the shipped one. Worth recording why this one
+matters despite changing no code: the false sentence described the WEAKER mechanism. It claimed a
+text scan where the code does reflection over the engine's own method list -- which is not evadable
+by declaration form. The story spent three rounds learning to distrust exactly the mechanism its own
+AC falsely advertised, while the shipped test had already applied the lesson.
+
+### `3-0d/R28` -- A VACUOUS ASSERTION IN THE FILE THAT *IS* THE MECHANISM
+
+Two corrections to `test/integration/test_replay_entry_is_inert.gd`, one of them a removal.
+
+**The `_after_max_hp` assertion at the final frame was VACUOUS.** With the fork flipped, `max_hp`
+reads the poisoned value at `POISON_CHECK_FRAME` and the AUTHORED one at `MEASURE_FRAME`, because
+`TRIGGER_FRAME` sits between them and the live reload trigger re-applies the authored balance,
+scrubbing the poison. It is the **UN-FIXED TWIN** of the defect the previous pass found and fixed
+for the earlier reading -- the same file, the same cause, caught once and missed once, because the
+survivor LOOKS like reinforcement ("...and still is at the end of the run"). *Ruled: DELETE it*, and
+say in the docstring why it was removed rather than kept. **A vacuous assertion in the file that IS
+the mechanism is worse than one anywhere else**, because that file is what everyone now points at.
+Measured before deleting, under the `3-0d/R20` falsifying mutation:
+`max_hp authored=100.000000 before=100.000000 poisoned-check=1234.000000 after=100.000000` --
+**TWO assertions fired, and `_after_max_hp` was not one of them.**
+
+**The poisoned record's tripwire is ONE CHANNEL WIDE, and the docstring implied three.** Only the
+reload event is observable. The recorded CONTACT FACT produces no hit -- `_resolve_contacts` calls
+`register_swing_hit`, which returns false when the attacker has no registered swing
+(`hero_state.gd:228-230`), and the poison record's attacker is idle, so the fact is DROPPED at
+resolution. The recorded CAMERA BASIS is inert: a basis only rotates a non-zero `move_dir` and both
+live keyboards press nothing in a headless run. *Ruled: correct the docstring to say that, and do
+NOT try to make the other two observable* -- that would mean authoring a swinging attacker and
+pressed intents into a test whose claim is about a FORK, for a second and third witness to something
+one witness already proves loudly. Verify the claim, state it, move on.
+
+### `3-0d/R29` -- TWO CLOSURES: THE WRONG-OBJECT HOLE, AND TWO LOAD-BEARING POINTERS
+
+**The verifier subprocess test did not catch a verifier that hashes the WRONG OBJECT.** Its
+determinism assertion compares the hash run-to-run and never against anything else, and run-to-run
+equality is satisfied by ANY deterministic function of nothing in particular -- so a verifier
+hashing a fresh `MatchState` instead of the replayed one passed every check in the file. *Ruled:
+close it cheaply* -- add a SECOND fixture record that differs from the first and assert the two
+produce DIFFERENT hashes; keep the existing equality assertion, this is an addition. Done. The two
+fixtures share seed, balance, flags, deck, costs, camera bases, contact fact and tick count and
+differ ONLY in their recorded intents, which is deliberate: that is exactly the difference a
+wrongly-hashed object cannot see. **Proven by mutation, and the mutation landed on exactly the new
+assertion** -- with the tool hashing a fresh `MatchState` built from the record's own injected
+channels but never advanced, both fixtures printed
+`ec631c0d9707ac9d1b6a3118f2654962302c23f44e8cbca3de59622d30eac137`, the run-to-run equality
+assertion still PASSED, and the ONLY failure was the new one. That is `3-0d/R20` part (c) satisfied:
+the RIGHT assertion fired, not merely some assertion.
+
+**`match_runner.gd` line citations have drifted** -- the file grew 115 lines and the old pointers
+land on the HUD card-selection push. *Ruled: wholesale re-anchoring is STILL not required* (the
+standing carve-out holds), **but two of the stale pointers are the ones `3-0d/R17` and `3-0d/R23`
+deliberately made LOAD-BEARING** -- `ReplayDrive`'s docstring and `test/tools/replay_file.gd`'s
+comment, both pointing at the runner's fork "so a change there has somewhere to point". A
+load-bearing pointer that points at the wrong thing is worse than none, since the whole reason those
+two exist is that a silent drift from the runner prints a stable, WRONG hash forever. Both
+re-anchored by LOCATING THE CONTENT: `match_runner.gd:601-608` -> **629-633**. One further stale
+citation was verified and deliberately LEFT: the story file's own `3-0d/R17` Dev Note carries the
+same pointer, is not one of the two made load-bearing, and stands under the carve-out.
+
+### The residue `3-0d/R20` leaves, recorded as a named residue rather than fixed (`3-0d/R25` N2)
+
+`3-0d/R20`'s guarantee is **"assigning `replay_record` does nothing to the shipped runner"**. It is
+NOT "nothing can read it", and the difference is not academic. **A NEW PER-TICK CONSUMER OF THE
+PUBLIC MEMBER STILL SLIPS THROUGH.** The concrete one was built and RUN at this pass: four lines at
+the top of `_physics_process`, above the sample step, swapping BOTH live keyboard controllers for
+`ReplayController`s the moment the public member is non-null -- handing the whole match over to a
+recorded intent stream mid-play. **MEASURED, not argued: with that installed the ENTIRE SUITE IS
+GREEN, 348 / 2264 / 22, ALL PASSED.** The behavioural test cannot see it and was never built to: it
+watches `max_hp`, the recorder's tick count and the reload trigger, and a controller swap moves none
+of the three. **THE DELETED SCAN WOULD HAVE FLAGGED IT.**
+
+*Ruled: record this as a named residue, do not build a fix.* The story already stated the residue in
+general terms; it is now CONCRETE in AC 11's residue paragraph, **because a residue nobody can
+picture is not really stated.** And it makes `3-0d/R20`'s trade honest rather than triumphant: the
+ruling did NOT strictly dominate the scan. It traded a guard that was *believed* to hold and did
+not, for a guarantee that is *narrower and true*. That is still the right trade -- a false belief is
+what stops anyone looking -- but it is a trade, and this log now says so.
+
+**Suite, before and after.** Baseline re-measured by this pass at `HEAD` `2fe3eca` with a clean
+tree: **348 state tests / 2264 assertions / 22 integration files, ALL PASSED.** After: **348 / 2264 /
+22, ALL PASSED** -- ZERO movement in all three, and that flatness is explained rather than left to
+look like nothing happened: **every assertion this pass touched lives in an INTEGRATION file, which
+the state harness's 2264 cannot see.** Counted directly: `test_replay_entry_is_inert.gd` 10
+assertions -> 9 (`R28`'s deletion), `test_replay_verifier_tool.gd` 12 -> 16 (`R29`'s second
+fixture). **Net +3 integration assertions.** No new file, no new `class_name`, no editor scan
+needed. `project.godot` is untouched and BYTE-IDENTICAL, SHA-256
+`8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`. The golden did not move:
+`test_determinism.gd` is absent from `git status` and `GOLDEN` still reads
+`40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The four inherited `3-0c` pins
+required ZERO edits. `src/main/match_runner.gd` is UNMODIFIED -- a mutation target TWICE this pass
+(the `R28` vacuity proof and the `N2` residue measurement), restored from an out-of-repo copy and
+SHA-256 verified `c2f58ccf...b478f66` identical both times, absent from `git status`.
+`test/tools/replay_file.gd` was the `R29` mutation target, restored the same way, SHA-256
+`7541d1a2...0a95eec2a`. The live smoke was NOT run: it is the operator's, it carries the required
+R-D6 kill (`3-0d/R11`), and this pass was instructed not to run it.
+
+**Close-out.** Three commits, none pushed: `fix(x5): record-file claim reduced to what it carries;
+verifier hash guard (3-0d/R25, R28, R29)` (code and tests), `docs(3-0d): three false claims
+corrected (3-0d/R25-R29)` (the story file and the pins file header), and this entry, a PURE APPEND --
+no existing entry edited, with `R26`'s correction of the earlier entry's own wrong sentence recorded
+HERE rather than by editing it. Docs and code never share a commit. The board is not touched. No
+push -- the operator reviews the log and pushes.
