@@ -235,12 +235,14 @@ func _ready() -> void:
 	var panel := DebugInstrumentPanel.new()
 	panel.gamepad_profile = load("res://data/gamepad_profile.tres") as GamepadProfile
 	panel.huds = huds
-	# Story 3-0d (AC 7): the panel's ONE runner-reaching control — SAVE. Handed a Callable before
-	# add_child, the gamepad_profile / huds precedent generalised: the panel receives a way to
-	# ASK, never the recorder itself and never a state handle. No start control and no load
-	# control ship (`3-0d/R1`, `3-0d/R2`), and no Input Map action is added — SAVE is mouse-only,
-	# exactly like the two switches beside it.
+	# Story 3-0d (AC 7, `3-0d/R13`): the panel's TWO runner-reaching controls — SAVE and RELOAD.
+	# Each handed its own Callable before add_child, the gamepad_profile / huds precedent
+	# generalised: the panel receives a way to ASK, never the recorder itself, never a state
+	# handle and never the BalanceConfigService reference. No start control and no load control
+	# ship (`3-0d/R1`, `3-0d/R2`), and no Input Map action is added — both are mouse-only, exactly
+	# like the two switches beside them.
 	panel.save_record = save_recorded_stream
+	panel.reload_balance = trigger_live_balance_reload
 	add_child(panel)
 	# Story 3-5a (AC 10): kept for the per-tick selection-indicator push in _physics_process.
 	_huds = huds
@@ -359,12 +361,14 @@ func save_recorded_stream() -> String:
 ## reload events, and re-reading the on-disk .tres mid-replay is precisely the divergence
 ## `3-0c`'s AC 4 exists to prevent.
 ##
-## OPERATOR SURFACE: NONE IN THIS STORY, and that is a CONTRACT CONFLICT flagged at this dev
-## pass, not an oversight. AC 7 pins the DebugInstrumentPanel at EXACTLY ONE new control (SAVE)
-## with a structural test counting runner-reaching controls at one, while the Live Smoke section
-## asks the operator to "trigger a live mid-match balance reload from the panel" — a second
-## runner-reaching control, which AC 7 forbids. The trigger therefore ships as this call site,
-## exercised by tests, with its UI seat left for the operator's ruling.
+## OPERATOR SURFACE (`3-0d/R13`): the DebugInstrumentPanel's RELOAD control, wired below. The dev
+## pass that first shipped this trigger flagged a contract conflict here — AC 7 pinned the panel
+## at EXACTLY ONE new control (SAVE), while the Live Smoke asked the operator to trigger a live
+## reload from the panel, which needs a second. The operator ruled (`3-0d/R13`): AC 7's "exactly
+## one" was never protecting a COUNT, it was protecting against a LOAD control (`3-0d/R2`), and
+## that protection is carried structurally by AC 11's `replay_record` source scan regardless of
+## button count. AC 7 was reformulated from a count into an exact SET, {SAVE, RELOAD}, and the
+## panel gained its second control.
 func trigger_live_balance_reload() -> void:
 	if replay_record != null:
 		push_warning("live balance reload refused: a replay applies the RECORDED reload events")

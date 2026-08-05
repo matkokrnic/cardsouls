@@ -6,13 +6,22 @@ extends TestCase
 ## this story leaves in the CODE rather than in prose gets a scan that goes RED when the property
 ## breaks:
 ##
-##   AC 7 — the DebugInstrumentPanel has EXACTLY ONE runner-reaching control (SAVE). A load
-##     control is what this refuses (`3-0d/R2`): assigning `replay_record` mid-session injects
-##     tick-1 recorded reloads, bases and facts into a live match and silently stops recording,
-##     because capture_advance lives in the `else` branch the replay fork then skips.
+##   AC 7 (AMENDED `3-0d/R13`) — the DebugInstrumentPanel has EXACTLY the SET of two
+##     runner-reaching controls {SAVE, RELOAD}, no more and no fewer. The readiness gate's original
+##     "exactly one" pin was never protecting a COUNT — it was protecting against a LOAD control
+##     (`3-0d/R2`): assigning `replay_record` mid-session injects tick-1 recorded reloads, bases and
+##     facts into a live match and silently stops recording, because capture_advance lives in the
+##     `else` branch the replay fork then skips. A live reload trigger needs an operator surface for
+##     the story to land at all (`3-0d/R13`), so the pin is reformulated from a COUNT into an EXACT
+##     SET — the same shape this repo already uses for the Input Map pin. A third control — a load
+##     control in particular — still fails here.
 ##   AC 11 — the passive-tap SEAT is not relocated (capture_advance sits immediately before
-##     advance(), inside the ticking gate), and `replay_record` is ASSIGNED NOWHERE in src/. That
-##     second half is the single structural trace the rejected load control leaves in the code.
+##     advance(), inside the ticking gate), and `replay_record` is ASSIGNED NOWHERE in src/. THIS,
+##     NOT AC 7's control count, IS WHAT ACTUALLY KEEPS A LOAD CONTROL OUT (`3-0d/R13`): AC 7 pins
+##     the panel's SHAPE, but a load control's defining property is that it assigns `replay_record`,
+##     and that is what AC 11's second scan forbids, structurally, regardless of how many buttons
+##     the panel carries. That is the single structural trace the rejected load control leaves in
+##     the code.
 ##
 ## Both scans read the code portion of each line only, so a comment naming a banned form can
 ## neither trip nor satisfy them, and both carry their own non-vacuity checks: the patterns are
@@ -21,25 +30,28 @@ extends TestCase
 const PANEL := "res://src/ui/debug/debug_instrument_panel.gd"
 const RUNNER := "res://src/main/match_runner.gd"
 
-## AC 7: the ONE runner-reaching member this panel may declare, and the ONE control handler that
-## may invoke it.
-const RUNNER_REACHING_MEMBER := "save_record"
-const RUNNER_REACHING_HANDLER := "_on_save_pressed"
+## AC 7 (amended `3-0d/R13`): the EXACT SET of runner-reaching members this panel may declare, and
+## the EXACT SET of control handlers that may invoke them. Sorted — the scan below sorts its own
+## findings before comparing, so member/handler ORDER carries no meaning, only membership.
+const RUNNER_REACHING_MEMBERS: Array[String] = ["reload_balance", "save_record"]
+const RUNNER_REACHING_HANDLERS: Array[String] = ["_on_reload_pressed", "_on_save_pressed"]
 
 
 # ---------------------------------------------------------------- AC 7
 
-## AC 7: EXACTLY ONE RUNNER-REACHING CONTROL. "Runner-reaching" is pinned by construction rather
-## than by intent: the Dev Notes name the only two shapes this file could use to ask the runner
-## for anything — a runner-owned Callable handed over at construction, or a signal the runner
-## connects to — so this asserts the panel declares exactly ONE Callable member, NO signal at all,
-## and that exactly one wired control handler invokes that Callable.
+## AC 7 (amended `3-0d/R13`): THE EXACT SET OF TWO RUNNER-REACHING CONTROLS. "Runner-reaching" is
+## pinned by construction rather than by intent: the Dev Notes name the only two shapes this file
+## could use to ask the runner for anything — a runner-owned Callable handed over at construction,
+## or a signal the runner connects to — so this asserts the panel declares EXACTLY the two expected
+## Callable members, NO signal at all, and that EXACTLY the two expected control handlers invoke
+## them.
 ##
-## A LOAD CONTROL FAILS HERE THREE WAYS: it needs its own Callable (a second member), or a signal
-## (banned outright), or it must reuse `save_record` — in which case it saves rather than loads.
-## The two existing switches stay uncounted because they self-contain their effect: they mutate
-## the resource / HudRoots they were handed and reach nothing.
-func test_the_panel_has_exactly_one_runner_reaching_control() -> void:
+## A LOAD CONTROL FAILS HERE just as it did under the old count: it needs its own Callable (a
+## THIRD member, breaking the exact-set equality), or a signal (banned outright), or it must reuse
+## `save_record`/`reload_balance` — in which case it saves or re-triggers a reload rather than
+## loading. The two existing switches stay uncounted because they self-contain their effect: they
+## mutate the resource / HudRoots they were handed and reach nothing.
+func test_the_panel_has_exactly_the_two_runner_reaching_controls() -> void:
 	var lines := _code_lines(PANEL)
 	assert_true(lines.size() > 50, "the panel source was actually read (got %d lines)" % lines.size())
 	var callables: Array[String] = []
@@ -58,29 +70,33 @@ func test_the_panel_has_exactly_one_runner_reaching_control() -> void:
 		var s := signal_re.search(line)
 		if s != null:
 			signals.append(s.get_string(1))
-	assert_eq(callables, [RUNNER_REACHING_MEMBER],
-		"the panel declares EXACTLY ONE runner-reaching Callable — a second is a second control "
-		+ "reaching back into the runner, which AC 7 refuses: %s" % ", ".join(callables))
+	callables.sort()
+	assert_eq(callables, RUNNER_REACHING_MEMBERS,
+		"the panel declares EXACTLY the two runner-reaching Callables — SAVE and RELOAD — and "
+		+ "nothing else; a third (a load control in particular) is what AC 7 refuses: %s"
+				% ", ".join(callables))
 	assert_eq(signals, [],
 		"...and no signal either: the other shape a control could use to ask the runner for "
 		+ "something (`3-0d/R2`): %s" % ", ".join(signals))
 
 	var handlers := _wired_control_handlers(lines)
-	assert_true(handlers.size() >= 3,
-		"the scan must find the panel's wired controls — two switches plus SAVE (got %d)"
-				% handlers.size())
+	assert_true(handlers.size() >= 4,
+		"the scan must find the panel's wired controls — two switches plus SAVE plus RELOAD "
+		+ "(got %d)" % handlers.size())
 	var reaching: Array[String] = []
 	for name: String in handlers:
-		if _function_body(lines, name).contains(RUNNER_REACHING_MEMBER):
+		var body := _function_body(lines, name)
+		if body.contains(RUNNER_REACHING_MEMBERS[0]) or body.contains(RUNNER_REACHING_MEMBERS[1]):
 			reaching.append(name)
 	reaching.sort()
-	assert_eq(reaching, [RUNNER_REACHING_HANDLER],
-		"EXACTLY ONE control handler reaches the runner, and it is SAVE. A start control or a "
-		+ "load control lands here as a second: %s" % ", ".join(reaching))
-	# ...and SAVE really is wired to a control, not merely declared.
-	assert_true(handlers.has(RUNNER_REACHING_HANDLER),
-		"the save handler is CONNECTED to a control's signal — a handler nothing invokes is not "
-		+ "a control")
+	assert_eq(reaching, RUNNER_REACHING_HANDLERS,
+		"EXACTLY the two control handlers reach the runner — SAVE and RELOAD. A start control or a "
+		+ "third runner-reaching control lands here as a third: %s" % ", ".join(reaching))
+	# ...and both handlers really are wired to a control, not merely declared.
+	for handler_name in RUNNER_REACHING_HANDLERS:
+		assert_true(handlers.has(handler_name),
+			"%s is CONNECTED to a control's signal — a handler nothing invokes is not a control"
+					% handler_name)
 
 
 ## AC 7: the SAVE control writes to a path the operator (and the AC 8 verifier) can NAME. The

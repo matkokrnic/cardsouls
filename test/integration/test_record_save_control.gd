@@ -15,10 +15,17 @@ extends SceneTree
 ##     overwrite), carries MORE ticks, and is LARGER on disk. SAVE is a snapshot of an always-on
 ##     stream (AC 6), not a stop — and here that is measured on the LIVE runner rather than on a
 ##     fixture's imitation of it.
-##   [ONE CONTROL] The panel's control set is asserted to be exactly the two shipped switches plus
-##     SAVE: no start control and no load control ships (`3-0d/R1`, `3-0d/R2`). The structural
-##     half of that pin (nothing else can REACH the runner) is
-##     test/state/test_replay_surface_pins.gd; this is the scene-level half.
+##   [TWO CONTROLS, EXACT SET] The panel's control set is asserted to be exactly the two shipped
+##     2-6 switches plus SAVE and RELOAD (`3-0d/R13`): no start control and no load control ships
+##     (`3-0d/R1`, `3-0d/R2`). The structural half of that pin (nothing ELSE can reach the runner)
+##     is test/state/test_replay_surface_pins.gd; this is the scene-level half.
+##   [RELOAD REACHES THE RUNNER] Pressing RELOAD (the panel's own test pattern, same as SAVE) is
+##     proven to reach `match_runner.gd::trigger_live_balance_reload()` in the LIVE scene: the
+##     runner's recorded stream gains a second reload event, and P1's stamina — spent below max by
+##     a real live roll input, the same live-input pattern test_debug_instruments.gd uses — is
+##     observed REFILLING to the maximum through the StateInspector's own primed STAM label. This
+##     is the operator-visible half AC 9 ratifies as correct (`3-0d/R10`), now proven wired rather
+##     than merely proven reachable in principle.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_record_save_control.gd
 
@@ -26,9 +33,22 @@ const FIRST_PRESS_FRAME := 20
 const SECOND_PRESS_FRAME := 60
 const DONE_FRAME := 64
 
+# Story 3-0d (AC 7, `3-0d/R13`): the RELOAD sequence, staged entirely inside the slack before
+# FIRST_PRESS_FRAME so the pre-existing SAVE timeline is untouched. A live roll (roll_stamina_cost
+# == 12.0 against the authored max_stamina == 50.0) spends P1's stamina below max; RELOAD is
+# pressed and checked well inside stamina_regen_delay_seconds (0.8s == 48 ticks), so nothing but
+# the reload itself can explain the refill observed at POST_RELOAD_CHECK_FRAME.
+const ROLL_PRESS_FRAME := 4
+const ROLL_RELEASE_FRAME := 5
+const MOVE_RELEASE_FRAME := 6
+const PRE_RELOAD_CHECK_FRAME := 9
+const RELOAD_PRESS_FRAME := 10
+const POST_RELOAD_CHECK_FRAME := 13
+
 var _frames := 0
 var _runner: Node
 var _panel: Control
+var _p1_stamina_label: Label
 var _failures: Array[String] = []
 
 var _first_path := ""
@@ -39,6 +59,11 @@ var _runner_ticks_at_first := 0
 var _runner_ticks_at_second := 0
 var _first_size := 0
 var _second_size := 0
+
+var _reload_events_before := -1
+var _reload_events_after := -1
+var _pre_reload_stamina := ""
+var _post_reload_stamina := ""
 
 
 func _initialize() -> void:
@@ -58,7 +83,24 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == 1:
 		_runner = root.get_node("Main")
 		_panel = root.get_node("Main/DebugInstrumentPanel")
+		_p1_stamina_label = root.get_node("Main/P1View/P1Viewport/StateInspector").find_child(
+			"STAMValue", true, false)
 		_check_control_set()
+	if _frames == ROLL_PRESS_FRAME:
+		Input.action_press(&"p1_move_up")
+		Input.action_press(&"p1_roll")
+	if _frames == ROLL_RELEASE_FRAME:
+		Input.action_release(&"p1_roll")
+	if _frames == MOVE_RELEASE_FRAME:
+		Input.action_release(&"p1_move_up")
+	if _frames == PRE_RELOAD_CHECK_FRAME:
+		_pre_reload_stamina = _p1_stamina_label.text
+		_reload_events_before = _runner.recorded_stream().reload_event_count()
+	if _frames == RELOAD_PRESS_FRAME:
+		_press_reload()
+	if _frames == POST_RELOAD_CHECK_FRAME:
+		_post_reload_stamina = _p1_stamina_label.text
+		_reload_events_after = _runner.recorded_stream().reload_event_count()
 	if _frames == FIRST_PRESS_FRAME:
 		_runner_ticks_at_first = _runner.recorded_stream().tick_count()
 		_press_save()
@@ -88,15 +130,26 @@ func _press_save() -> void:
 	button.pressed.emit()
 
 
-## AC 7: the panel ships EXACTLY the two 2-6 switches plus this story's ONE new control.
+## Story 3-0d (AC 7, `3-0d/R13`): the same real-signal pattern as SAVE, for RELOAD.
+func _press_reload() -> void:
+	var button: Button = _panel.find_child("ReloadBalance", true, false)
+	if button == null:
+		_failures.append("the panel has no ReloadBalance control")
+		return
+	button.pressed.emit()
+
+
+## AC 7 (amended `3-0d/R13`): the panel ships EXACTLY the two 2-6 switches plus this story's TWO
+## controls, SAVE and RELOAD — an exact set, not a count. A third (a load control in particular)
+## fails here.
 func _check_control_set() -> void:
 	var names: Array[String] = []
 	for node in _panel.find_children("*", "Button", true, false):
 		names.append(String(node.name))
 	names.sort()
-	_check(names == ["NormalizeMagnitude", "PitchZoneLeftOfBars", "SaveRecord"],
-		"the panel's controls are the two switches plus SAVE — no start control and no load "
-		+ "control (`3-0d/R1`, `3-0d/R2`): got %s" % str(names))
+	_check(names == ["NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"],
+		"the panel's controls are the two switches plus SAVE and RELOAD — no start control and no "
+		+ "load control (`3-0d/R1`, `3-0d/R2`): got %s" % str(names))
 
 
 func _loaded_tick_count(path: String) -> int:
@@ -121,6 +174,19 @@ func _file_size(path: String) -> int:
 
 
 func _evaluate() -> void:
+	_check(_pre_reload_stamina == "38/50",
+		"P1 spent stamina on a live roll before the reload (roll_stamina_cost 12 off max_stamina "
+		+ "50) — got %s" % _pre_reload_stamina)
+	_check(_reload_events_before == 1,
+		"before RELOAD is pressed, the stream carries only the match-start reload event (got %d)"
+				% _reload_events_before)
+	_check(_reload_events_after == _reload_events_before + 1,
+		"pressing RELOAD reached the runner's trigger and the stream gained a SECOND reload event "
+		+ "(%d -> %d)" % [_reload_events_before, _reload_events_after])
+	_check(_post_reload_stamina == "50/50",
+		"the RELOAD button's press reached LIVE STATE: P1's stamina refilled to the new maximum "
+		+ "through the SAME per-pool contract AC 9 ratifies as correct (`3-0d/R10`) — got %s"
+				% _post_reload_stamina)
 	_check(FileAccess.file_exists(_first_path),
 		"pressing SAVE wrote a file at the expected path %s" % _first_path)
 	_check(_first_ticks > 0, "the saved record carries the ticks played so far (got %d)" % _first_ticks)
@@ -156,6 +222,8 @@ func _finish() -> void:
 	print("save control: first=%d ticks (%d bytes) second=%d ticks (%d bytes) runner=%d/%d" % [
 		_first_ticks, _first_size, _second_ticks, _second_size,
 		_runner_ticks_at_first, _runner_ticks_at_second])
+	print("reload control: stamina=%s->%s reload_events=%d->%d" % [
+		_pre_reload_stamina, _post_reload_stamina, _reload_events_before, _reload_events_after])
 	for f in _failures:
 		print("FAILED: " + f)
 	print("RESULT: %s" % ("PASS" if _failures.is_empty() else "FAIL"))

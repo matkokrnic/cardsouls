@@ -26,12 +26,16 @@ extends Control
 ##      about whether the eventual pitch MECHANIC is shared or per-player (that stays open for E6);
 ##      it is placeholder geometry only.
 
-## Story 3-0d (AC 7) adds the panel's THIRD control and its FIRST runner-reaching one — SAVE,
-## which writes the record so far to `user://`. RECORDING CONTINUES AFTERWARDS: SAVE is a
-## snapshot of an always-on stream (AC 6), never a stop, and this panel holds no recorder handle
-## and no state handle to stop it with — only the Callable below. There is deliberately NO start
-## control and NO load control (`3-0d/R1`, `3-0d/R2`), and the count of runner-reaching controls
-## here is pinned at ONE by test_replay_surface_pins.gd.
+## Story 3-0d (AC 7) adds the panel's THIRD and FOURTH controls, its first two runner-reaching
+## ones — SAVE, which writes the record so far to `user://` (RECORDING CONTINUES AFTERWARDS: SAVE
+## is a snapshot of an always-on stream, AC 6, never a stop), and RELOAD (`3-0d/R13`), which
+## triggers a live mid-match balance reload on the SAME reload channel `3-0c` shipped. This panel
+## holds no recorder handle, no state handle and no BalanceConfigService reference to do either
+## with — only the two Callables below. There is deliberately NO start control and NO load control
+## (`3-0d/R1`, `3-0d/R2`): the panel's runner-reaching controls are pinned at the EXACT SET
+## {SAVE, RELOAD} by test_replay_surface_pins.gd, amended from a count to a set at `3-0d/R13`
+## because AC 11's `replay_record` source scan — not this pin's control count — is what actually
+## keeps a load control impossible.
 
 ## Set by the runner BEFORE add_child (so _ready sees them). The shared gamepad profile instance
 ## (the runner loads it via the same res:// path, so the resource cache hands both the same object)
@@ -39,12 +43,17 @@ extends Control
 var gamepad_profile: GamepadProfile
 var huds: Array[HudRoot] = []
 
-## Story 3-0d (AC 7): THE ONE RUNNER-REACHING SEAM OF THIS PANEL — a runner-owned Callable handed
-## over before add_child, exactly like the two references above (the `gamepad_profile` / `huds`
-## precedent generalised, the Dev Note's first option). A Callable rather than a signal the runner
-## connects to, because it is the shape this file already uses for "the runner hands the panel
-## what it may touch" and it keeps the reachable surface a single named member the pin can count.
+## Story 3-0d (AC 7): THE FIRST OF THE PANEL'S TWO RUNNER-REACHING SEAMS — a runner-owned Callable
+## handed over before add_child, exactly like the two references above (the `gamepad_profile` /
+## `huds` precedent generalised, the Dev Note's first option). A Callable rather than a signal the
+## runner connects to, because it is the shape this file already uses for "the runner hands the
+## panel what it may touch" and it keeps the reachable surface named members the pin can enumerate.
 var save_record: Callable = Callable()
+
+## Story 3-0d (AC 7, `3-0d/R13`): THE SECOND RUNNER-REACHING SEAM — the live balance reload
+## trigger. Same shape as save_record: the panel receives a way to ASK the runner, never a state
+## handle and never the BalanceConfigService reference itself.
+var reload_balance: Callable = Callable()
 
 ## Story 3-0b (AC 2): the two per-slot countdown value Labels, index 0 = P1, 1 = P2. Written
 ## ONLY by set_window_countdown below, from the runner's polled plain-integer payload.
@@ -122,8 +131,9 @@ func _ready() -> void:
 	# Instrument 3 (story 3-0b, AC 2): the per-slot window countdown, one read-only row per slot.
 	_build_window_countdown(row)
 
-	# Control 3 (story 3-0d, AC 7): SAVE — the ONE runner-reaching control. No start, no load.
-	_build_save_control(row)
+	# Controls 3-4 (story 3-0d, AC 7, `3-0d/R13`): SAVE and RELOAD — the panel's two
+	# runner-reaching controls. No start, no load.
+	_build_record_controls(row)
 
 
 ## AC 2: the countdown column — ONE row per slot, whose Label the runner's polled payload writes
@@ -148,13 +158,15 @@ func _build_window_countdown(row: HBoxContainer) -> void:
 		_countdown_values.append(line)
 
 
-## Story 3-0d (AC 7): the SAVE control, in a THIRD COLUMN rather than a third row in the switches
-## column — a geometry decision with the same measurement behind it 3-0b's re-fit used. The box
-## lives in the empty band y[356,450] (94px) and the two existing switch rows already fill ~89 of
-## it, so a third ROW would push the box out of the band and over the vitals bars: exactly the
-## S1/S2 regression test_debug_instruments.gd's layout assertion exists to catch. The band is
-## empty across the FULL window width, so the spare room is horizontal.
-func _build_save_control(row: HBoxContainer) -> void:
+## Story 3-0d (AC 7, `3-0d/R13`): SAVE and RELOAD, STACKED in a THIRD COLUMN rather than added as
+## rows in the switches column — a geometry decision with the same measurement behind it 3-0b's
+## re-fit used. The box lives in the empty band y[356,450] (94px); a ROW here would push the box
+## out of the band and over the vitals bars, exactly the S1/S2 regression
+## test_debug_instruments.gd's layout assertion exists to catch. The band is empty across the FULL
+## window width, so the spare room is horizontal — TWO buttons stacked in this one column measure
+## the same height as the two-row Switches column beside it (test_debug_instruments.gd's layout
+## assertion is the machine check, not this comment).
+func _build_record_controls(row: HBoxContainer) -> void:
 	var column := VBoxContainer.new()
 	column.name = "RecordControls"
 	column.add_theme_constant_override("separation", 2)
@@ -164,6 +176,11 @@ func _build_save_control(row: HBoxContainer) -> void:
 	save.text = "Save record"
 	save.pressed.connect(_on_save_pressed)
 	column.add_child(save)
+	var reload := Button.new()
+	reload.name = "ReloadBalance"
+	reload.text = "Reload balance"
+	reload.pressed.connect(_on_reload_pressed)
+	column.add_child(reload)
 
 
 ## AC 2: the runner's per-tick push, called after each advance() with MatchState's read-only
@@ -208,6 +225,15 @@ func _on_normalize_toggled(pressed: bool) -> void:
 func _on_save_pressed() -> void:
 	if save_record.is_valid():
 		save_record.call()
+
+
+## Story 3-0d (AC 7, `3-0d/R13`): hand the press to the runner and do nothing else — the same
+## "act only on what you were handed" shape as SAVE. The panel does not re-read
+## BalanceConfigService, does not touch MatchState, and cannot enter replay: AC 11's source scan
+## over `replay_record` is what keeps that impossible, not this control's absence.
+func _on_reload_pressed() -> void:
+	if reload_balance.is_valid():
+		reload_balance.call()
 
 
 ## AC 5: move BOTH viewports' pitch placeholder together (shared switch, A/B comparability). The
