@@ -17,8 +17,12 @@ extends SceneTree
 ##     fixture's imitation of it.
 ##   [TWO CONTROLS, EXACT SET] The panel's control set is asserted to be exactly the two shipped
 ##     2-6 switches plus SAVE and RELOAD (`3-0d/R13`): no start control and no load control ships
-##     (`3-0d/R1`, `3-0d/R2`). The structural half of that pin (nothing ELSE can reach the runner)
-##     is test/state/test_replay_surface_pins.gd; this is the scene-level half.
+##     (`3-0d/R1`, `3-0d/R2`). **As of `3-0d/R20` this is the WHOLE pin, not half of one.** The
+##     source-scan half in test/state/test_replay_surface_pins.gd is DELETED — it enumerated
+##     declaration TEXT and six declaration forms were found that evaded it — and this check
+##     replaces it because it enumerates INSTANTIATED CONTROLS at runtime and so cannot be evaded
+##     by how a member is spelled. Its own `Button`-vs-`BaseButton` hole is fixed in the same
+##     ruling; see _check_control_set.
 ##   [RELOAD REACHES THE RUNNER] Pressing RELOAD (the panel's own test pattern, same as SAVE) is
 ##     proven to reach `match_runner.gd::trigger_live_balance_reload()` in the LIVE scene: the
 ##     runner's recorded stream gains a second reload event, and P1's stamina — spent below max by
@@ -139,17 +143,47 @@ func _press_reload() -> void:
 	button.pressed.emit()
 
 
-## AC 7 (amended `3-0d/R13`): the panel ships EXACTLY the two 2-6 switches plus this story's TWO
-## controls, SAVE and RELOAD — an exact set, not a count. A third (a load control in particular)
-## fails here.
+## AC 7 (amended `3-0d/R13`, and THE ONLY PANEL PIN as of `3-0d/R20`): the panel ships EXACTLY the
+## two 2-6 switches plus this story's TWO controls, SAVE and RELOAD — an exact set, not a count.
+##
+## THIS IS NOW THE WHOLE MECHANISM. The source scan that used to sit beside it in
+## test/state/test_replay_surface_pins.gd — enumerating the panel's `Callable` MEMBERS by matching
+## declaration text — is DELETED (`3-0d/R20`): six declaration forms were found that evaded it
+## (`static var`, `@onready`, an inner-class member, a Callable inside an untyped Dictionary, one
+## inside an untyped Array, an untyped member invoked through a local copy), and hardening the
+## pattern a third time would only have moved the hole. THIS check is not evadable by declaration
+## syntax, because it does not read source at all: it enumerates the controls a BUILT panel
+## actually instantiated, in the live scene, after `_ready()` has run.
+##
+## `3-0d/R20` ALSO FIXES ITS OWN KNOWN HOLE. It used to query `"Button"`, so a `LinkButton` — which
+## extends `BaseButton`, NOT `Button` — was invisible to it, and a `LinkButton` is a perfectly good
+## thing to hang a load control on. The query is `"BaseButton"`, the common ancestor of every
+## clickable control this panel could use (`Button`, `CheckButton`, `CheckBox`, `LinkButton`,
+## `OptionButton`, `MenuButton`, `TextureButton`), so a third control fails here whatever class it
+## is built from. Proven by mutation at this pass with a `LinkButton`.
+##
+## THE RESIDUE, STATED (`3-0d/R20` part 5): this pins the panel's instantiated CONTROL SET. It is
+## not a claim that no control anywhere could enter replay — that property is carried by the
+## runner consuming `replay_record` once at `_ready()` (test_replay_entry_is_inert.gd), which holds
+## no matter what this panel grows.
 func _check_control_set() -> void:
 	var names: Array[String] = []
-	for node in _panel.find_children("*", "Button", true, false):
+	for node in _panel.find_children("*", "BaseButton", true, false):
 		names.append(String(node.name))
 	names.sort()
 	_check(names == ["NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"],
 		"the panel's controls are the two switches plus SAVE and RELOAD — no start control and no "
 		+ "load control (`3-0d/R1`, `3-0d/R2`): got %s" % str(names))
+	# NON-VACUITY, in the form the old `"Button"` query was blind to: the query must SEE a
+	# BaseButton subclass that is not a Button. Built, counted, freed — never added to the panel.
+	var probe := LinkButton.new()
+	var seen := _panel.find_children("*", "BaseButton", true, false).size()
+	_panel.add_child(probe)
+	_check(_panel.find_children("*", "BaseButton", true, false).size() == seen + 1,
+		"the control query SEES a LinkButton — it extends BaseButton, not Button, and the `Button` "
+		+ "query this replaced was blind to it (`3-0d/R20` part 4)")
+	_panel.remove_child(probe)
+	probe.free()
 
 
 func _loaded_tick_count(path: String) -> int:

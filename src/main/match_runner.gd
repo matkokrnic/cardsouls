@@ -72,7 +72,20 @@ var _save_index := 0
 ## because the ONLY physics-to-state channel is the contact fact, and the contact fact is
 ## recorded — anything a divergent position could do to the tick has to travel through
 ## push_contact, which replay supplies from the record rather than from the scene.
+##
+## Story 3-0d (`3-0d/R20`): THIS MEMBER IS AN ENTRY POINT, NOT A MODE SWITCH, AND THAT IS NOW
+## STRUCTURAL. It is READ EXACTLY ONCE — in `_ready()`, into `_replay_record` below — and never
+## again. Every later consumer (the per-tick fork, the live reload refusal) reads the PRIVATE
+## field, so assigning this member mid-session HAS NO EFFECT: not because something catches the
+## assignment, but because nothing reads what it changed. Three rounds of review defeated the
+## source scan that used to police this by inspection; the property is carried by construction
+## now (see test/integration/test_replay_entry_is_inert.gd, which is the mechanism).
 var replay_record: IntentRecorder = null
+
+## Story 3-0d (`3-0d/R20`): THE CONSUMED RECORD — the value `replay_record` held at `_ready()`,
+## which is the only moment a replay can be entered. Everything downstream reads this. Restoring
+## any consumer to the public member above is what makes the inertness test go red.
+var _replay_record: IntentRecorder = null
 ## Ticks replayed so far — the cursor the recorded facts, bases and reload events are keyed by.
 var _replay_tick := 0
 
@@ -108,15 +121,20 @@ func _ready() -> void:
 	# Story 3-0c (AC 9): in replay mode BOTH slots are driven by the record. A ReplayController is
 	# a plain Controller, so this is the 1-6 per-slot config point being used, not bypassed —
 	# "dummy -> PvP -> bot -> replay is a config swap" is the D3 promise, honoured here.
-	var replaying := replay_record != null
-	_p1_controller = ReplayController.new(replay_record, 0) if replaying \
+	# Story 3-0d (`3-0d/R20`): THE ONE READ OF THE PUBLIC `replay_record`, IN THE WHOLE FILE. Replay
+	# is a mode chosen BEFORE the node enters the tree, so this is the moment — and the only moment
+	# — at which the choice is meaningful. Consuming it into a private field here is what makes a
+	# mid-session assignment INERT BY CONSTRUCTION rather than merely forbidden by a scan.
+	_replay_record = replay_record
+	var replaying := _replay_record != null
+	_p1_controller = ReplayController.new(_replay_record, 0) if replaying \
 			else _make_controller(slot_controller_kinds[0], 0)
-	_p2_controller = ReplayController.new(replay_record, 1) if replaying \
+	_p2_controller = ReplayController.new(_replay_record, 1) if replaying \
 			else _make_controller(slot_controller_kinds[1], 1)
 	# Story 3-0c (AC 3): ONE seed value, read once and used twice — the record's when replaying,
 	# the runner constant otherwise. Never a second, independently-read seed: what is captured is
 	# literally what reaches MatchParams.
-	var seed_value := replay_record.replay_seed() if replaying else _SEED
+	var seed_value := _replay_record.replay_seed() if replaying else _SEED
 	if not replaying:
 		_recorder.capture_seed(seed_value)
 	_match_state = MatchState.new(MatchParams.new(seed_value))
@@ -131,7 +149,7 @@ func _ready() -> void:
 	# has the right shape for it, so the match-start injection needs no sixth channel of its own.
 	# On replay the values come from the record and BalanceConfigService is never read, which is
 	# what makes a recording survive a tuning pass.
-	var balance_config: BalanceConfig = replay_record.replay_balance_config(0) if replaying \
+	var balance_config: BalanceConfig = _replay_record.replay_balance_config(0) if replaying \
 			else BalanceConfigService.get_config()
 	Invariant.check(balance_config != null, "authored balance config missing at match start")
 	if not replaying:
@@ -143,7 +161,7 @@ func _ready() -> void:
 	# Story 3-0c (AC 7, `3-0c/R3`): flags are a CAPTURE CHANNEL, which is not runtime mutation —
 	# they stay load-once and runtime-immutable, FeatureFlagsService still has no reload path, and
 	# a replay injects the RECORDED flags rather than reading the service.
-	var feature_flags: FeatureFlags = replay_record.replay_feature_flags() if replaying \
+	var feature_flags: FeatureFlags = _replay_record.replay_feature_flags() if replaying \
 			else FeatureFlagsService.get_flags()
 	Invariant.check(feature_flags != null, "authored feature flags missing at match start")
 	if not replaying:
@@ -164,7 +182,7 @@ func _ready() -> void:
 	# never reads CardDatabase: without this channel a recording would silently depend on the
 	# contents of data/cards/, which change without a trace.
 	if replaying:
-		Invariant.check(replay_record.replay_inject_content(_match_state),
+		Invariant.check(_replay_record.replay_inject_content(_match_state),
 			"recorded content order is unsound — the cast-cost totality check would be vacuous")
 	else:
 		var deck_contents := _derive_deck_contents(balance_config.deck_size)
@@ -366,11 +384,16 @@ func save_recorded_stream() -> String:
 ## at EXACTLY ONE new control (SAVE), while the Live Smoke asked the operator to trigger a live
 ## reload from the panel, which needs a second. The operator ruled (`3-0d/R13`): AC 7's "exactly
 ## one" was never protecting a COUNT, it was protecting against a LOAD control (`3-0d/R2`), and
-## that protection is carried structurally by AC 11's `replay_record` source scan regardless of
-## button count. AC 7 was reformulated from a count into an exact SET, {SAVE, RELOAD}, and the
-## panel gained its second control.
+## that protection is carried independently of button count. AC 7 was reformulated from a count
+## into an exact SET, {SAVE, RELOAD}, and the panel gained its second control.
+##
+## CORRECTED (`3-0d/R20`): the sentence above used to say the protection is carried "by AC 11's
+## `replay_record` source scan". THAT SCAN IS DELETED — it was evaded three times, and a text scan
+## over source cannot carry a design invariant. What carries it now is that `replay_record` is
+## CONSUMED ONCE into `_replay_record` (see the member's own comment) and nothing reads the public
+## member again, so a load control would have nothing to flip.
 func trigger_live_balance_reload() -> void:
-	if replay_record != null:
+	if _replay_record != null:
 		push_warning("live balance reload refused: a replay applies the RECORDED reload events")
 		return
 	BalanceConfigService.reload()
@@ -598,11 +621,16 @@ func _physics_process(delta: float) -> void:
 		# recorded facts for this tick instead, in recorded push order. Everything downstream
 		# (advance, drive, follow, drain) is bit-for-bit the same code path, which is what makes
 		# replay a source swap rather than a second simulation.
-		if replay_record != null:
+		#
+		# Story 3-0d (`3-0d/R20`): the fork reads the PRIVATE `_replay_record`, consumed once in
+		# _ready(). Assigning the PUBLIC member mid-session cannot flip this branch, cannot inject a
+		# recorded reload/basis/fact into a live match, and cannot silently stop recording — the
+		# three consequences `3-0d/R2` names — because this line does not read what it changed.
+		if _replay_record != null:
 			_replay_tick += 1
-			replay_record.replay_apply_reloads_before(_match_state, _replay_tick)
-			replay_record.replay_push_camera_bases(_match_state, _replay_tick)
-			replay_record.replay_push_contacts(_match_state, _replay_tick)
+			_replay_record.replay_apply_reloads_before(_match_state, _replay_tick)
+			_replay_record.replay_push_camera_bases(_match_state, _replay_tick)
+			_replay_record.replay_push_contacts(_match_state, _replay_tick)
 		else:
 			# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
 			#    global basis). Reading the rig is the runner's ONLY interaction with it; the runner

@@ -32,10 +32,19 @@ extends Control
 ## triggers a live mid-match balance reload on the SAME reload channel `3-0c` shipped. This panel
 ## holds no recorder handle, no state handle and no BalanceConfigService reference to do either
 ## with — only the two Callables below. There is deliberately NO start control and NO load control
-## (`3-0d/R1`, `3-0d/R2`): the panel's runner-reaching controls are pinned at the EXACT SET
-## {SAVE, RELOAD} by test_replay_surface_pins.gd, amended from a count to a set at `3-0d/R13`
-## because AC 11's `replay_record` source scan — not this pin's control count — is what actually
-## keeps a load control impossible.
+## (`3-0d/R1`, `3-0d/R2`): the panel's INSTANTIATED control set is pinned at the exact four names
+## {NormalizeMagnitude, PitchZoneLeftOfBars, SaveRecord, ReloadBalance} by
+## test/integration/test_record_save_control.gd, which enumerates the real controls in a built
+## panel at runtime.
+##
+## CORRECTED (`3-0d/R20`): this header used to point at a SOURCE SCAN over this file
+## (`test_replay_surface_pins.gd`) and to say that AC 11's `replay_record` source scan is what
+## keeps a load control impossible. BOTH SCANS ARE DELETED. They were evaded three times over
+## three review rounds — a declaration form outside the pattern, a reader that truncated at a `#`
+## inside a string literal, GDScript embedded in a `.tscn` the scan never read — and a guard
+## believed to hold that does not is worse than no guard. What keeps a load control from doing
+## anything now is that `MatchRunner` CONSUMES `replay_record` once in `_ready()` and never reads
+## it again, so a mid-session assignment is inert by construction (`3-0d/R20`).
 
 ## Set by the runner BEFORE add_child (so _ready sees them). The shared gamepad profile instance
 ## (the runner loads it via the same res:// path, so the resource cache hands both the same object)
@@ -47,7 +56,7 @@ var huds: Array[HudRoot] = []
 ## handed over before add_child, exactly like the two references above (the `gamepad_profile` /
 ## `huds` precedent generalised, the Dev Note's first option). A Callable rather than a signal the
 ## runner connects to, because it is the shape this file already uses for "the runner hands the
-## panel what it may touch" and it keeps the reachable surface named members the pin can enumerate.
+## panel what it may touch".
 var save_record: Callable = Callable()
 
 ## Story 3-0d (AC 7, `3-0d/R13`): THE SECOND RUNNER-REACHING SEAM — the live balance reload
@@ -229,8 +238,9 @@ func _on_save_pressed() -> void:
 
 ## Story 3-0d (AC 7, `3-0d/R13`): hand the press to the runner and do nothing else — the same
 ## "act only on what you were handed" shape as SAVE. The panel does not re-read
-## BalanceConfigService, does not touch MatchState, and cannot enter replay: AC 11's source scan
-## over `replay_record` is what keeps that impossible, not this control's absence.
+## BalanceConfigService, does not touch MatchState, and cannot enter replay — and that last one is
+## true of ANY control this panel could grow (`3-0d/R20`): the runner consumes `replay_record` once
+## at `_ready()`, so there is nothing a mid-session assignment could flip.
 func _on_reload_pressed() -> void:
 	if reload_balance.is_valid():
 		reload_balance.call()

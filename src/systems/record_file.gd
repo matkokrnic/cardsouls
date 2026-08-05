@@ -29,9 +29,19 @@ extends RefCounted
 ## `{"record": null, "error": ""}` — a refusal with an EMPTY reason, which a caller testing
 ## `error != ""` reads as SUCCESS. The required keys are validated BEFORE anything is rebuilt.
 ##
-## RECORDS GO UNDER `user://`, AND THE API SAYS SO (`3-0d/R16`). That claim used to be true only of
-## `path_for()`; `save_record` accepted any path and would happily write into the repo tree. It now
-## refuses a path that does not begin with `user://`, with a reason.
+## ...AND THAT FIX WAS ITSELF INCOMPLETE, CLOSED AT `3-0d/R21`. Presence is not enough:
+## `Dictionary.has()` is TRUE for a key whose value is `null` and says nothing about type, so three
+## more inputs still reached the rebuild and still came back with an empty reason — required keys
+## present but carrying WRONG TYPES, `null` under `reload_events`, `null` under `intents`. Each
+## required key's TYPE is now validated before the rebuild, and the refusal names the key and what
+## was found in it. See REQUIRED_KEYS, which is a key -> type map for exactly this reason.
+##
+## RECORDS GO UNDER `user://`, AND THE API SAYS SO (`3-0d/R16`), BY NORMALISATION (`3-0d/R22`).
+## That claim used to be true only of `path_for()`; `save_record` accepted any path and would
+## happily write into the repo tree. The first fix was a bare `begins_with("user://")`, which
+## `user://../../…` satisfies while escaping the directory entirely — proven by writing a record
+## into the project root. The path is now RESOLVED and required to land inside the `user://`
+## directory; see `_outside_user_directory`.
 ##
 ## BINARY `store_var`, NOT JSON. The stream carries Basis, Vector2 and StringName values and the
 ## int/float distinction, none of which JSON round-trips. MEASURED on Godot 4.6.3 at this pass:
@@ -60,12 +70,29 @@ const PATH_SUFFIX := ".rec"
 ## the version is what decides which key set is even expected. A future version 2 is free to carry
 ## a different set; it is refused by the version check long before it reaches here.
 ##
-## DERIVED, NOT TRANSCRIBED: test_record_file.gd asserts this array equals the key set an actual
+## DERIVED, NOT TRANSCRIBED: test_record_file.gd asserts this key set equals the key set an actual
 ## saved file carries minus `format_version`, so the two cannot drift apart.
-const REQUIRED_KEYS: Array[String] = [
-	"seed", "reload_events", "flags", "content_order", "deck", "costs", "tick_count", "intents",
-	"camera_pushes", "contacts",
-]
+##
+## KEY -> EXPECTED TYPE, NOT A BARE KEY LIST (`3-0d/R21`). The presence check alone was not enough,
+## and the reason is a property of `Dictionary.has()` rather than an oversight: **`has(key)` is TRUE
+## for a key whose value is `null`, and says nothing whatever about type.** Three inputs therefore
+## reached `_from_dictionary()` and came back as `{"record": null, "error": ""}` — the exact
+## empty-reason refusal `3-0d/R15` was raised to close, still open on a narrower set of files:
+## required keys present but carrying the WRONG TYPES, `null` under `reload_events`, and `null`
+## under `intents`. Each key's type is checked here, before anything is rebuilt, and the refusal
+## names the key and what was found in it.
+const REQUIRED_KEYS: Dictionary[String, int] = {
+	"seed": TYPE_INT,
+	"reload_events": TYPE_ARRAY,
+	"flags": TYPE_DICTIONARY,
+	"content_order": TYPE_ARRAY,
+	"deck": TYPE_ARRAY,
+	"costs": TYPE_DICTIONARY,
+	"tick_count": TYPE_INT,
+	"intents": TYPE_ARRAY,
+	"camera_pushes": TYPE_DICTIONARY,
+	"contacts": TYPE_DICTIONARY,
+}
 
 ## `3-0d/R16`: the ONE thing a save path must be. The class's own docstring and AC 7 both assert
 ## records go to `user://`; before this guard that was true only of `path_for()`, and the API
@@ -85,9 +112,9 @@ static func path_for(index: int) -> String:
 static func save_record(record: IntentRecorder, path: String) -> String:
 	if record == null:
 		return "there is no record to save"
-	if not path.begins_with(REQUIRED_PATH_PREFIX):
-		return ("refusing to write %s — records go under %s, never into the project tree "
-				+ "(`3-0d/R16`); use RecordFile.path_for()") % [path, REQUIRED_PATH_PREFIX]
+	var outside := _outside_user_directory(path)
+	if outside != "":
+		return outside
 	if not record.has_complete_match_start():
 		return ("refusing to save a malformed record — missing %s"
 				% ", ".join(record.missing_match_start_channels()))
@@ -133,11 +160,51 @@ static func load_record(path: String) -> Dictionary:
 	if not missing.is_empty():
 		return _refused(("%s carries format version %d but is missing %s — it is truncated or was "
 				+ "not written by this class") % [path, version, ", ".join(missing)])
+	# `3-0d/R21`: PRESENCE IS NOT ENOUGH, and the gap is `has()`'s own semantics —
+	# it is TRUE for a key whose value is `null` and says nothing about type. A file with the right
+	# keys carrying the wrong values got past the loop above, died inside the rebuild, and came back
+	# as a refusal with an EMPTY error, which is the very thing `3-0d/R15` was raised to close.
+	var wrong: Array[String] = []
+	for key in REQUIRED_KEYS:
+		var found := typeof(data[key])
+		if found != REQUIRED_KEYS[key]:
+			wrong.append("%s (expected %s, found %s)"
+					% [key, type_string(REQUIRED_KEYS[key]), type_string(found)])
+	if not wrong.is_empty():
+		return _refused(("%s carries format version %d but %s — it was not written by this class, "
+				+ "or was written by a build whose shape this one cannot read")
+						% [path, version, ", ".join(wrong)])
 	return {"record": _from_dictionary(data), "error": ""}
 
 
 static func _refused(reason: String) -> Dictionary:
 	return {"record": null, "error": reason}
+
+
+## `3-0d/R22`: THE SAVE-PATH GUARD, BY NORMALISATION RATHER THAN BY PREFIX. Returns "" if `path`
+## lands inside the `user://` directory, or the REASON it does not.
+##
+## The prefix test this replaces was `path.begins_with("user://")` and nothing else, which a
+## `user://../../…` path satisfies while writing wherever it likes — MEASURED, not theorised:
+## `user://../../escape.rec` globalises to `…/Roaming/Godot/escape.rec`, two directories above the
+## app's user data, and the review had already used exactly that shape to drop a record in the
+## project root. A prefix test on a string that can contain `..` is not a containment test.
+##
+## So the path is RESOLVED — globalised to a native path, then `simplify_path()`d, which is what
+## collapses `..` — and required to sit under the equally-resolved user root. The trailing "/" on
+## the comparison is load-bearing and is its own measured trap: `user://../CardSoulsEvil/x.rec`
+## resolves to `…/app_userdata/CardSoulsEvil/x.rec`, which HAS `…/app_userdata/CardSouls` as a
+## string prefix and is a different directory. Comparing against the root plus its separator is
+## what refuses it.
+static func _outside_user_directory(path: String) -> String:
+	var user_root := ProjectSettings.globalize_path(REQUIRED_PATH_PREFIX).simplify_path()
+	var resolved := ProjectSettings.globalize_path(path).simplify_path()
+	if resolved.begins_with(user_root + "/"):
+		return ""
+	return ("refusing to write %s — it resolves to %s, which is not inside the %s directory (%s). "
+			+ "Records go under %s, never into the project tree (`3-0d/R16`, normalised at "
+			+ "`3-0d/R22`); use RecordFile.path_for()") % [
+					path, resolved, REQUIRED_PATH_PREFIX, user_root, REQUIRED_PATH_PREFIX]
 
 
 # ---------------------------------------------------------------- serialise

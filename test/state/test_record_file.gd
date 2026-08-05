@@ -268,6 +268,10 @@ func test_a_save_to_a_path_outside_user_is_refused_and_writes_nothing() -> void:
 ## `3-0d/R15`, the derivation guard: REQUIRED_KEYS IS THE KEY SET THE WRITER ACTUALLY WRITES, not
 ## a transcription of it. A channel added to `_to_dictionary` without being added here would leave
 ## the truncation check silently blind to that channel; this fails the moment the two diverge.
+##
+## `3-0d/R21`: REQUIRED_KEYS is now a key -> TYPE map, so the guard derives BOTH halves from the
+## same written file — the key set, and each key's actual type. A channel added to the writer with
+## a type the loader does not expect fails here rather than at some caller's expense.
 func test_the_required_key_set_is_exactly_what_a_saved_record_carries() -> void:
 	var record: IntentRecorder = _record_a_driven_run()["record"]
 	assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the record was written")
@@ -277,13 +281,82 @@ func test_the_required_key_set_is_exactly_what_a_saved_record_carries() -> void:
 	var keys: Array = written.keys()
 	keys.erase("format_version")  # validated first and on its own — see RecordFile.REQUIRED_KEYS
 	keys.sort()
-	var required: Array = RecordFile.REQUIRED_KEYS.duplicate()
+	var required: Array = RecordFile.REQUIRED_KEYS.keys()
 	required.sort()
 	assert_eq(keys, required,
 		"every key the writer emits (besides the version) is a key the loader REQUIRES, and vice "
 		+ "versa — written %s, required %s" % [str(keys), str(required)])
 	assert_true(keys.size() > 5, "...and the comparison is against a real key set (%d)" % keys.size())
+	# `3-0d/R21`: the DECLARED type of each key is the type the writer really emits, so the type
+	# check the loader runs is derived from shipped behaviour rather than guessed at.
+	for key: String in RecordFile.REQUIRED_KEYS:
+		assert_eq(typeof(written[key]), RecordFile.REQUIRED_KEYS[key],
+			"`%s` is written as %s, the type the loader requires" % [
+					key, type_string(RecordFile.REQUIRED_KEYS[key])])
 	_remove(VERSION_PATH)
+
+
+## `3-0d/R21`: PRESENCE IS NOT TYPE, AND `has()` IS TRUE FOR `null`. `3-0d/R15` validated that the
+## required keys EXIST before the rebuild, which closed the truncated-file path — and left three
+## inputs still reaching `_from_dictionary()`, still dying inside it, and still coming back as
+## `{"record": null, "error": ""}`: THE SAME EMPTY-REASON REFUSAL, read as SUCCESS by any caller
+## testing `error != ""`. All three are checked here, each against the key it corrupts.
+func test_a_record_whose_required_keys_carry_the_wrong_types_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	for corruption: Array in [
+		[{"tick_count": "eighteen", "seed": [], "costs": 7}, "tick_count",
+			"required keys present but carrying WRONG TYPES"],
+		[{"reload_events": null}, "reload_events", "`null` under reload_events"],
+		[{"intents": null}, "intents", "`null` under intents"],
+	]:
+		assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the intact record was written")
+		assert_not_null(RecordFile.load_record(VERSION_PATH)["record"], "...and loads intact")
+		_rewrite_values(VERSION_PATH, corruption[0])
+		var refused := RecordFile.load_record(VERSION_PATH)
+		assert_null(refused["record"], "%s: REFUSED, never half-rebuilt" % corruption[2])
+		assert_ne(refused["error"], "",
+			"%s: ...WITH A REASON — the empty-reason refusal `3-0d/R15` closed for MISSING keys was "
+					% corruption[2] + "still open for present-but-wrong ones")
+		assert_true(refused["error"].contains(corruption[1] as String),
+			"%s: ...and the reason NAMES the key: %s" % [corruption[2], refused["error"]])
+		_remove(VERSION_PATH)
+	# NON-VACUITY: `has()` really is true for a null value, which is WHY the presence check alone
+	# could not catch two of the three above. This is the engine semantics the ruling rests on.
+	var probe := {"intents": null}
+	assert_true(probe.has("intents"),
+		"`has()` is TRUE for a key whose value is null — the gap `3-0d/R21` closes")
+
+
+## `3-0d/R22`: A SAVE PATH IS CHECKED BY NORMALISATION, NOT BY PREFIX. `3-0d/R16` shipped
+## `begins_with("user://")`, which a `user://../../…` path satisfies while writing anywhere it
+## likes. Each traversal form below is resolved and refused, and NOTHING is written — checked at
+## the resolved native path, so "nothing was written" is a claim about the filesystem rather than
+## about the string that was refused.
+func test_a_save_path_that_escapes_the_user_directory_is_refused_and_writes_nothing() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	for traversal: String in [
+		"user://../../test_3_0d_traversal.rec",
+		"user://../test_3_0d_traversal.rec",
+		"user://../../../dev/cardsouls/test_3_0d_traversal.rec",
+		"user://sub/../../test_3_0d_traversal.rec",
+		# The sibling-directory trap: this RESOLVES to a path having the user root as a STRING
+		# prefix while being a different directory, so a naive begins_with(root) would allow it.
+		"user://../CardSoulsEvil/test_3_0d_traversal.rec",
+	]:
+		var error := RecordFile.save_record(record, traversal)
+		assert_ne(error, "", "`%s` ESCAPES user:// and is REFUSED" % traversal)
+		assert_true(error.contains("user://"),
+			"...with a reason naming where records go: %s" % error)
+		var resolved := ProjectSettings.globalize_path(traversal).simplify_path()
+		assert_false(FileAccess.file_exists(resolved),
+			"...and NOTHING was written at the path it resolves to (%s)" % resolved)
+	# ...and the guard still lets a legitimate path through, including one that only LOOKS like a
+	# traversal and resolves back inside: the check is containment, not a ban on the characters.
+	for allowed: String in [VERSION_PATH, "user://sub/../test_3_0d_traversal.rec"]:
+		assert_eq(RecordFile.save_record(record, allowed), "",
+			"`%s` resolves INSIDE user:// and is written" % allowed)
+		assert_true(FileAccess.file_exists(allowed), "...and the file really is there")
+		_remove(allowed)
 
 
 # ---------------------------------------------------------------- AC 6
@@ -525,6 +598,22 @@ func _rewrite_without(path: String, keys: Array) -> void:
 	for key in keys:
 		assert_true(data.has(key), "the record carried `%s` before it was removed" % key)
 		data.erase(key)
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## `3-0d/R21`: overwrite named values in an existing record, leaving the version and every other
+## key EXACTLY as written — so the refusal under test is about the corrupted values and nothing
+## else. The keys stay PRESENT, which is the whole point: `has()` still says yes.
+func _rewrite_values(path: String, values: Dictionary) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	for key: String in values:
+		assert_true(data.has(key), "the record carried `%s` before it was corrupted" % key)
+		data[key] = values[key]
+		assert_true(data.has(key), "...and STILL carries it afterwards — presence is not type")
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()
