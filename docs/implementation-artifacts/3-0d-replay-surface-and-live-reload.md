@@ -535,18 +535,148 @@ Neither subsumes the other, and only the second requires a human.
 
 ### Agent Model Used
 
-(not yet dev-passed — the readiness gate ran 2026-08-05 and promoted this story to `ready-for-dev`;
-the gate fix pass itself was run by Claude Sonnet 5, docs only)
+Claude Opus 5 (`claude-opus-5`) — the dev pass, 2026-08-05. The readiness gate's fix pass the day
+this file was promoted was Claude Sonnet 5, docs only. The commit trailer's
+`Claude Opus 4.8 <noreply@anthropic.com>` is a repo-wide INVARIANT (operator ruling), not the model
+that did this work.
 
 ### Debug Log References
 
+**Engine semantics MEASURED before any code was written** (throwaway script, deleted; Godot 4.6.3):
+plain `load()` twice -> `true` (same instance); `CACHE_MODE_IGNORE` twice -> `false` (different);
+`CACHE_MODE_IGNORE` vs the cached instance -> `false`; values equal -> `true`. Same script measured
+the persistence format's premises: `store_var`/`get_var` round-trips `Basis` and `Vector2` equal,
+keeps StringName keys `TYPE_STRING_NAME` (21) and keeps ints ints.
+
+**SIX MUTATION PROOFS — every new guard was broken and observed RED, then restored from a copy
+taken OUTSIDE the repo** (never `git checkout --`; SHA-256 verified identical after each restore):
+
+| # | Break | Test that went RED |
+|---|-------|--------------------|
+| 1 | tap moved to the sample step | `test_replay_surface_pins.gd::test_the_intent_tap_stays_seated_immediately_before_advance` — both halves (next statement, and inside the ticking gate) |
+| 2 | added `replay_record = RecordFile.load_record(path)["record"]` (the rejected LOAD control) | `test_replay_surface_pins.gd::test_replay_record_is_assigned_nowhere_in_src` |
+| 3 | added a second `Callable` + a `LoadRecord` button to the panel | `test_replay_surface_pins.gd::test_the_panel_has_exactly_one_runner_reaching_control` AND `test_record_save_control.gd` (scene-level half) |
+| 4 | `reload()` reverted to a plain `load()` | `test_balance_config.gd::test_reload_bypasses_the_resource_cache_and_hands_back_a_fresh_instance` |
+| 5 | camera-basis channel dropped on the way to disk | `test_record_file.gd::test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash` AND `::test_the_round_trip_carries_every_channel_verbatim` |
+| 6 | live trigger applies balance without capturing it | `test_live_reload.gd::test_the_runner_trigger_re_reads_the_service_and_captures_before_it_applies` |
+
+**AC 8's verifier, run for real** on a record produced HEADLESSLY BY THE LIVE RUNNER (throwaway
+script drove `main.tscn` for 90 frames and called the runner's own `save_recorded_stream()` — the
+same Callable the SAVE control invokes; script deleted, `user://` file deleted afterwards). Two
+consecutive runs on the same file, identical output both times:
+`ticks=89 reload_events=1 seed=12345 deck=20 cards costs=9 order=[&"deck", &"costs"]`,
+`camera_pushes=178 contact_facts=0`, `CanonicalHash:
+5f465e7a7ff0826c3a6977b64e16b784c58bb31a3d91b909585cbc0f6acf9d13`, `RESULT: PASS`, exit 0. Its
+refusal paths were exercised on that same real file: no argument -> usage, exit 2; missing path ->
+`REFUSED: no record file at ...`; `format_version` rewritten to 99 -> `REFUSED: record format
+version 99 does not match this build's 1 ...`; version restored -> the SAME hash again.
+
 ### Completion Notes List
 
+- **SUITE. Before: 329 state tests / 1715 assertions / 19 integration. After: 344 / 2197 / 20 —
+  +15 state tests, +482 assertions, +1 integration file. ALL PASSED both times.** No pre-existing
+  test was edited except `test_balance_config.gd`, which GAINED AC 1's test (the AC's own
+  instruction) and lost nothing.
+- **GOLDEN DID NOT MOVE.** `test_determinism.gd` is untouched (`git status` clean for it) and its
+  `GOLDEN` constant still reads `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`
+  — the Golden Prediction of NONE held, on both premises it was argued on. `test_determinism.gd::
+  test_state_hash_matches_golden` passes inside the 344.
+- **`project.godot` IS BYTE-IDENTICAL.** SHA-256 before and after:
+  `8879DE490EDDA78051595F189FB9BB6F2E75384FEBAFF142C8958EC107970004`. No Input Map action was
+  added; SAVE is mouse-only and `test_shipped_input_map_action_set_is_exactly_pinned` stays green
+  UNMOVED at 30 actions.
+- **THE FOUR INHERITED `3-0c` PINS REQUIRED ZERO EDITS (AC 10)**, verified by `git status`:
+  `test_architecture_invariants.gd`, `test_replay_identity.gd`, `test_intent_recorder.gd` and
+  `test_deck_and_hand.gd` are all unmodified, and all pass. This story touches no file under
+  `src/state/`, adds no `connect_*` seam and no unhashed cross-tick member.
+- **AC 1** — `reload()` is now `ResourceLoader.load(CONFIG_PATH, "", ResourceLoader.CACHE_MODE_IGNORE)`.
+  Proved BY OBJECT IDENTITY in the STATE harness, zero file mutation, zero new autoload API
+  (mutation proof 4).
+- **AC 2** — `match_runner.gd::trigger_live_balance_reload()`: `BalanceConfigService.reload()` ->
+  `_recorder.capture_apply_balance(config)` -> `_match_state.apply_balance(config)`, refused
+  outright in replay mode. Proven by a live-shaped pair reaching `reload_event_count() == 2` with
+  event 1's tick == the trigger point, by the replay side consuming that event with no new code,
+  and by a source scan over the runner's real call site (mutation proof 6).
+- **AC 3** — no ninth channel: the recorder's `capture_*` set is counted off the SCRIPT's own
+  method list and asserted to be exactly the eight `3-0c` shipped.
+- **AC 4** — `RecordFile.save_record` / `load_record`, a sibling under `src/systems/` (the
+  recorder gains no file I/O and keeps its clock-free, content-blind scan green). Round trip proven
+  twice over: bit-identical `CanonicalHash` across live run / in-memory replay / loaded-file replay,
+  AND channel-by-channel equality including all EIGHT `InputIntent` fields on every tick for both
+  slots (288 field comparisons). Mutation proof 5 shows a dropped channel fails it.
+- **AC 5** — `FORMAT_VERSION := 1` rides the file; a record whose version is rewritten is REFUSED
+  with a reason naming BOTH versions, and the SAME file loads again once the version is restored.
+  A non-record file and a record with no match start are refused the same way — reasons, never
+  crashes, and the malformed one is refused AT THE WRITE so it cannot exist to be loaded.
+- **AC 6** — always-on and cumulative, proven twice: in the state harness (save at 6 ticks, save
+  again at 13; second file carries 13 and still begins at TICK 1 with the value tick 1 drove) and on
+  the LIVE runner (`test_record_save_control.gd`: 19 ticks / 19,996 bytes then 59 ticks / 54,876
+  bytes, the runner's own tick count matching each file).
+- **AC 7** — ONE new control: `SaveRecord`, a `Button` in a THIRD COLUMN of the existing box (a
+  third ROW would have pushed the panel out of the empty y[356,450] band and over the vitals bars —
+  `test_debug_instruments.gd`'s S1/S2 layout assertion still passes, so the re-fit is verified, not
+  assumed). Wired by a runner-owned `Callable` set before `add_child`. Pinned at exactly one
+  runner-reaching control by a scan that also forbids a second `Callable` and any `signal` — the
+  only two shapes the Dev Notes name for reaching the runner (mutation proof 3, which fails BOTH the
+  structural pin and the scene-level control-set check).
+- **AC 8** — `test/tools/replay_file.gd`, `extends SceneTree` + `_initialize()`, deliberately not
+  globbed by `run_all.sh`. Run twice on a real runner-produced record for the same hash; see Debug
+  Log References for both outputs.
+- **AC 9** — the per-pool contract is exercised UNCHANGED by the live trigger: stamina refills to
+  the new maximum (ratified correct, `3-0d/R10`), mana keeps its earned value under the new bound,
+  hp is preserved and never re-healed, on both players.
+- **AC 11** — both halves shipped as one source scan each, with their patterns proven against the
+  exact strings they exist to catch (an assignment matches, a `!=`/`==` comparison does not), and
+  both proven RED by mutation (proofs 1 and 2).
+- **CONTRACT CONFLICT FOUND AND NOT RESOLVED BY THIS PASS — AC 7 vs the Live Smoke. AC 7 pins the
+  panel at EXACTLY ONE new control (SAVE) and ships a structural test counting runner-reaching
+  controls at one, so a RELOAD button is a second and is refused; the Live Smoke's third bullet asks
+  the operator to "trigger a live mid-match balance reload from the panel", which requires exactly
+  that second control.** Built to the AC, not to the smoke: `trigger_live_balance_reload()` ships as
+  a runner call site with tests and a source scan, and has NO operator surface. **As shipped, the
+  smoke's reload step cannot be performed and the smoke's stamina-refill observation with it.** This
+  needs an operator ruling before the smoke runs; the conflict is recorded in the trigger's own doc
+  comment so it cannot be lost.
+- **LIVE SMOKE NOT RUN** — it is the operator's, and it carries the required R-D6 kill observation
+  (`3-0d/R11`). This pass ends before it.
+- **Editor scan run in THIS pass** (`godot --headless --editor --quit --path .`): the one new
+  `class_name`, `RecordFile`, registers, and a `.uid` exists and is committed for every one of the
+  six new `.gd` files.
+
 ### File List
+
+**New — source**
+- `src/systems/record_file.gd` (+ `.uid`) — `class_name RecordFile`, the `user://` save/load pair
+  (AC 4/AC 5). The ONE new `class_name` this story ships.
+
+**Modified — source**
+- `src/systems/balance_config_service.gd` — `reload()` -> `CACHE_MODE_IGNORE` (AC 1).
+- `src/main/match_runner.gd` — `_save_index`; `panel.save_record = save_recorded_stream` wiring;
+  `save_recorded_stream()` (AC 7); `trigger_live_balance_reload()` (AC 2). The intent-tap seat, the
+  `ticking` gate, `_physics_process`'s structure, the seven `connect_*` seams and `replay_record`
+  are ALL untouched (AC 10/AC 11).
+- `src/ui/debug/debug_instrument_panel.gd` — the `save_record` Callable, `_build_save_control()`,
+  `_on_save_pressed()` (AC 7).
+
+**New — tests**
+- `test/state/test_live_reload.gd` (+ `.uid`) — AC 2, AC 3, AC 9, and the runner's call-site scan.
+- `test/state/test_record_file.gd` (+ `.uid`) — AC 4, AC 5, AC 6.
+- `test/state/test_replay_surface_pins.gd` (+ `.uid`) — AC 7 structural, AC 11 (both halves).
+- `test/integration/test_record_save_control.gd` (+ `.uid`) — AC 7 in the live scene.
+- `test/tools/replay_file.gd` (+ `.uid`) — AC 8, the headless verifier. NOT globbed by `run_all.sh`.
+
+**Modified — tests**
+- `test/state/test_balance_config.gd` — gains AC 1's object-identity test; nothing removed.
+
+**Deliberately untouched:** `project.godot` (hash identical), `docs/game-architecture.md` (the
+ELEVENTH amendment-queue member stands, `3-0d/R12`), `src/systems/intent_recorder.gd`,
+`src/controllers/replay_controller.gd`, everything under `src/state/`, `test_determinism.gd`, and
+the four inherited `3-0c` pins.
 
 ## Change Log
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
 | 2026-08-05 | 0.1 | File authored at this story's own creation pass, per the `3-0a`/`3-0b`/`3-0c` precedent and `3-0c/R5`'s split ruling. Nine ACs recorded, each mapping to one of the six inherited scope items (CACHE_MODE_IGNORE; the live reload trigger reusing the existing reload channel; `user://` persistence with the format deliberately unpinned; recording start/stop lifecycle; the panel controls with no new Input Map action; the live smoke) or explicitly declared discharged by a non-AC section with a reason (the live smoke itself, discharged by the required Live Smoke section rather than a numbered AC, matching this repo's own convention for every prior story). Every quoted string re-verified against shipped code or the decision log at write time; the commissioning brief's R-D6 claim ("spent on 3-4") is corrected — the more recent spend was `3-5a`. A structural gap not previously named anywhere is surfaced: `replay_record` is read once in `_ready()`, before the scene ticks, and no scene-reload mechanism exists in `src/`, so a mid-session "load" control has no runtime path into replay under the shipped architecture (Open Question (f)). Six Open Questions left open, none resolved. Golden Prediction NONE, argued on the same two premises `3-0c` used (no snapshot key; no seeded-RNG consumer). Live Smoke REQUIRED, described on the shipped two-keyboard default, no `.tscn` edit needed. Status `backlog`; promotion to `ready-for-dev` deferred to this story's own readiness gate. Nothing under `src/` or `test/` is touched by this pass — docs only. | Claude Sonnet 5 |
+| 2026-08-05 | 0.3 | **DEV PASS — all ELEVEN ACs implemented; suite 329/1715/19 -> 344/2197/20, all green both ends.** DEBT B is closed on both halves: `reload()` is `ResourceLoader.load(..., CACHE_MODE_IGNORE)` (AC 1, proven by OBJECT IDENTITY in the state harness with zero file mutation, engine semantics MEASURED first), and `match_runner.gd::trigger_live_balance_reload()` re-reads the service then captures BEFORE it applies on the existing reload channel (AC 2/AC 3, no ninth `capture_*`). `user://` persistence ships as `src/systems/record_file.gd` (`class_name RecordFile`, the ONE new class_name; editor scan run and `.uid` committed for all six new `.gd` files) — a sibling rather than a recorder method, so the recorder stays clock-free and content-blind and its own scan stays green. Round trip proven by bit-identical `CanonicalHash` across live run / in-memory replay / loaded-file replay AND channel-by-channel equality including all eight `InputIntent` fields (AC 4); `FORMAT_VERSION` refusal proven in both directions (AC 5); always-on cumulative recording proven in the harness and on the LIVE runner (AC 6). The panel gains EXACTLY ONE control, `SaveRecord`, in a third COLUMN (a third row would leave the empty band and trip `test_debug_instruments.gd`'s S1/S2 layout guard, which still passes), wired by a runner-owned `Callable` and pinned at one runner-reaching control by a scan that also forbids a second `Callable` and any `signal` (AC 7). `test/tools/replay_file.gd` ships and was RUN FOR REAL, twice, on a record produced headlessly by the live runner — same hash `5f465e7a...9d13` both times (AC 8). Per-pool contract exercised unchanged, stamina refill ratified (AC 9). The four inherited `3-0c` pins required ZERO edits and `project.godot` is byte-identical (`8879DE49...0004`); the golden did not move (`40eb5554...a322`). SIX mutation proofs, each broken then restored from an out-of-repo copy with SHA-256 verified. **ONE CONTRACT CONFLICT RAISED, NOT RESOLVED: AC 7 pins the panel at one control while the Live Smoke asks for a panel-triggered live reload — a second runner-reaching control. Built to the AC; the trigger has no operator surface and the smoke's reload step cannot be performed until the operator rules.** Live smoke NOT run (operator's, carries the required R-D6 kill). Code and docs in two separate commits; neither pushed. | Claude Opus 5 |
 | 2026-08-05 | 0.2 | **Readiness gate fix pass — NOT READY on first reading, five blocking findings, all ruled and applied (`3-0d/R1`-`R12`).** AC count 9 -> 11. **B1/`R1`:** ACs 5/6 contracted a mid-match START control that cannot ship — `capture_advance()` asserts `has_complete_match_start()` on its first captured tick and all five match-start channels are captured only inside `_ready()` behind `if not replaying`, so a mid-match start trips the invariant on the next tick; and even a working one would be meaningless, since a replay builds from `MatchState.new()` forward and no state-restore snapshot exists. Recording is ALWAYS-ON from tick 0 (already true in shipped code, `match_runner.gd:566`); new AC 6 pins it. **B2/`R2`:** the "load" control had no correct runtime path AND the story's stated reason was FALSE — `replay_record` is not read only in `_ready()`, it is also read every tick in `_physics_process` (lines 536-540), so a mid-session assignment injects tick-1 recorded reloads/bases/contacts into a live match while both controllers are still live keyboards and silently stops recording. LOAD IS NOT A LIVE CONTROL; a scene-reload mechanism was considered and REJECTED (new architecture; collides with the ratified "record + replay only" scope line). The panel gains EXACTLY ONE control, SAVE, with recording continuing afterwards (AC 7). **B3/`R3`/`R4`:** the smoke's payoff step was unperformable — `CanonicalHash` is `test/canonical_hash.gd` and nothing in `src/` computes or displays a hash (verified: the only two `src/` occurrences are comments). The payoff moves to a HEADLESS VERIFIER under `test/tools/` (AC 8), which is what legitimately gives it `CanonicalHash`; consequence recorded — the Input Map pin's "replay reachable only from a test, never from a key" message stays TRUE, so that non-blocking finding is DISSOLVED, not deferred. The smoke is reformulated to what it alone can prove: a REAL PLAYED ROUND's record exists, is structurally complete, and replays headlessly twice to the same hash. **B4/`R5`:** old AC 1 forced a permanent test to mutate the tracked authored `.tres` (`CONFIG_PATH` is a hardcoded const with no seam; `test_contact_pipeline.gd` and `test_balance_authoring.gd` read it too), colliding with the PERMANENT RULE at decision-log:799 and worse than the one-off case that rule was written for. AC 1 now proves the cache bypass BY OBJECT IDENTITY — two `reload()` calls yielding DIFFERENT references with EQUAL values, plain `load()` yielding the same one — **measured on Godot 4.6.3 before the AC was written**; zero file mutation, zero new autoload API, and it lands in the STATE harness (`test_balance_config.gd:88-89` already instantiates the service as a plain Node). **B5/`R6`:** old AC 9 was a process promise with no falsifying mechanism (all `capture_advance` hits in `test/` drive a recorder directly). AC 11 now ships a source scan over `match_runner.gd` pinning the tap seat AND that `replay_record` is assigned nowhere in `src/`. **`R7`:** on-disk format stays unpinned except for a mandatory format-version int with refusal on mismatch (new AC 5). **`R8`:** the old-record/changed-`CardDatabase` question is CLOSED BY CONSTRUCTION — replay drives injected deck + costs and never reads the autoload (verified). **`R9`:** debug reset is round-scoped and rides the record as an ordinary captured `InputIntent` field; a record spans it intact. **`R10`:** the visible stamina refill on a live reload is RATIFIED AS CORRECT (the per-pool `apply_balance` contract, live for the first time), observed by the smoke as EXPECTED. **`R11`:** R-D6 RE-INVOKED AND SPENT on this story's smoke; the kill is a REQUIRED observation. **`R12`:** the architecture's "record/replay start-stop-load" annotation (lines 578-579) genuinely diverges from SAVE-only and becomes the **ELEVENTH** amendment-queue member (queue counted by content: ten, per `3-0c/R10` and `3-0c/R14`); `game-architecture.md` NOT edited, queue flushes at E3 close-out. **Non-blocking corrections applied:** the Input Map action count re-measured 28 -> **30** (2 `debug_*` + 14 `p1_*` + 14 `p2_*`); "`reload()` has exactly ONE caller" corrected to TWO (its `_ready()` plus `test_balance_config.gd:89`), with the inheritance of that wrong claim from the CLOSED `3-0c` story file recorded here rather than by editing that file; three "not decided here" carve-outs moved out of ACs into Dev Notes; two drifted citations re-anchored by content (`3-0c/R5` 3685 -> **3682**-3699; the architecture X5 toggle line 579 -> **578**-579). Line numbers are NOT re-anchored wholesale — non-blocking on the repo's own precedent. **Open Questions section DELETED** (the `3-0c` precedent), all six ruled, each ruling's substance carried into the AC or Dev Note that now owns it. **Every pre-existing Dev Notes bullet survives**; the three falsified ones (the `reload()` caller count, the 28-action count, the `replay_record`-read-once structural gap) are CORRECTED IN PLACE with the correction visible, none deleted. Golden Prediction unchanged (NONE), premise 1 widened to name `test/tools/`. Status `backlog` -> **`ready-for-dev`**. Docs only; nothing under `src/` or `test/` touched. | Claude Sonnet 5 |
