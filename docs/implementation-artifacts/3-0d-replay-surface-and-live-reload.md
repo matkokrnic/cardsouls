@@ -90,9 +90,21 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    measured by content (`capture_seed`, `capture_apply_balance`, `capture_inject_feature_flags`,
    `capture_inject_deck`, `capture_inject_card_costs`, `capture_set_camera_basis`,
    `capture_push_contact`, `capture_advance`) — and this story adds none: the live reload trigger
-   (AC 2) is a second CALL to the existing `capture_apply_balance`, not a new method. A structural
+   (AC 2) is a second CALL to the existing `capture_apply_balance`, not a new method. ~~A structural
    test counts `func capture_` occurrences in `intent_recorder.gd` and asserts exactly eight,
-   proving a ninth would be a scope violation this test catches.
+   proving a ninth would be a scope violation this test catches.~~
+   **MECHANISM SENTENCE CORRECTED TO THE SHIPPED ONE (`3-0d/R27`), and the shipped mechanism is the
+   STRONGER of the two.** The test never grepped anything: `test_live_reload.gd::
+   test_the_recorder_still_ships_exactly_eight_capture_channels` loads the script and reads
+   `script.get_script_method_list()`, filtering names that begin with `capture_`, and asserts the
+   sorted result equals the named eight — its own docstring says so explicitly ("Counted from the
+   SCRIPT's own method list rather than by grepping `func capture_`, so a channel added by any
+   means (including one inherited or defined out of the obvious form) is caught"). **The OUTCOME
+   claim was always true and is unchanged — exactly eight, and a ninth fails here.** Only the
+   sentence describing HOW was wrong, and it was wrong in the direction this story has spent three
+   rounds learning to distrust: it described a TEXT SCAN where the code does REFLECTION over the
+   engine's own method list, which is not evadable by declaration form (`3-0d/R20`'s lesson,
+   already correctly applied here before the AC caught up with it).
 4. **A record saved to `user://` and loaded back replays to the same `CanonicalHash` as replaying the
    original in-memory record.** This is the AC 10 / `3-0c` identity shape, driven twice — once from
    the in-memory `IntentRecorder` and once from an `IntentRecorder` reconstructed by loading the saved
@@ -109,8 +121,8 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    same test asserts a matching version loads. This is the ONE element of the on-disk shape this
    story pins — everything else about byte layout, key naming and file extension stays deliberately
    unpinned (rationale in Dev Notes).
-   **POST-REVIEW AMENDMENT (`3-0d/R15`, `3-0d/R16`): "REFUSED WITH A CLEAR REASON" NOW HOLDS ON
-   EVERY PATH, AND `save_record` CARRIES THE `user://` CLAIM ITSELF.** The review found ONE path
+   **POST-REVIEW AMENDMENT (`3-0d/R15`, `3-0d/R16`): ~~"REFUSED WITH A CLEAR REASON" NOW HOLDS ON
+   EVERY PATH~~, AND `save_record` CARRIES THE `user://` CLAIM ITSELF.** The review found ONE path
    where the refusal had no reason: a file carrying a MATCHING version but a TRUNCATED body reached
    `_from_dictionary()`, failed inside it, and came back as `{"record": null, "error": ""}` — which
    a caller testing `error != ""` reads as SUCCESS, contradicting the class's own documented
@@ -121,6 +133,31 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
    review to write a record into the repo root — it now REFUSES a path that does not begin with
    `user://`, with a reason, so this class's assertion about where records go is true of the API and
    not only of `path_for()`.
+
+   **THE STRUCK CLAIM WAS FALSE AND IS REDUCED TO WHAT THE CODE CARRIES (`3-0d/R25`). THIS
+   PARAGRAPH IS THE OPERATIVE FORM OF AC 5's REFUSAL CLAIM.** Twice this AC has asserted TOTALITY
+   over refusal reasons — at `3-0d/R15` and again after `3-0d/R21` corrected the Dev Notes and the
+   class docstring but left this sentence standing — and both times a narrower set of files
+   falsified it. It stops asserting totality. What it claims, exactly:
+
+   > **Each required key's TOP-LEVEL TYPE is validated before the rebuild** (`RecordFile.
+   > REQUIRED_KEYS`, a key -> type map), and a file failing that is REFUSED with a reason naming
+   > the key and what was found in it — alongside the version mismatch, the missing version key,
+   > the non-Dictionary file, the absent file and the missing required key, each of which also
+   > refuses with a reason.
+
+   **THE RESIDUE, STATED PLAINLY (`3-0d/R25`).** NESTED and CROSS-KEY consistency is NOT validated:
+   element types INSIDE the required containers, and array lengths measured AGAINST `tick_count`,
+   reach `_from_dictionary()`, die inside it, and come back as `{"record": null, "error": ""}` — an
+   empty reason, which a caller testing `error != ""` reads as SUCCESS. **FIVE MEASURED at this
+   ruling before the sentence was rewritten**, every one returning an empty reason: `intents` as an
+   Array of DICTIONARIES; `intents` SHORTER than `tick_count`; `camera_pushes` values that are
+   INTS; `contacts` values that are ARRAYS OF INTS; `tick_count` INFLATED past the intents array.
+   **NESTED VALIDATION IS DELIBERATELY NOT BUILT** — that is the ruling, not an omission: it is a
+   third round of the same widening for marginal benefit on a format with exactly one writer, and
+   the point is that the boundary gets WRITTEN DOWN instead of chased. The residue is closed for
+   CALLERS instead: test `result["record"] == null`, never `error != ""`. Measured at this ruling,
+   all three shipped callers already do.
 6. **Recording is ALWAYS-ON from tick 0: the record covers the match from its first tick and is never
    restarted mid-match (`3-0d/R1`).** Verified by content, `match_runner.gd:566` already calls
    `_recorder.capture_advance(intents)` on every ticking frame in the non-replay (`else`) branch, and
@@ -291,7 +328,31 @@ headless verifier under `test/`, which is also what legitimately gives it `Canon
     assignment to `replay_record` does nothing on the shipped runner. They do not prove that no
     code anywhere could ever enter replay by some other route — nothing can prove that, which is
     the whole finding. They make the route that mattered STRUCTURALLY INERT instead of DETECTABLE,
-    which is a stronger position than a scan that has been walked around three times. Half (a), the
+    which is a stronger position than a scan that has been walked around three times.
+
+    **AND HERE IS WHAT THAT RESIDUE COSTS, CONCRETELY (`3-0d/R25`) — because a residue nobody can
+    picture is not really stated.** The guarantee is *"assigning `replay_record` does nothing to
+    the shipped runner"*. It is NOT *"nothing can read it"*. A NEW PER-TICK CONSUMER OF THE PUBLIC
+    MEMBER STILL SLIPS THROUGH, and the concrete one was built and run at this ruling: four lines
+    at the top of `_physics_process`, above the sample step, that swap BOTH live keyboard
+    controllers for `ReplayController`s the moment the public member is non-null —
+
+    ```gdscript
+    if replay_record != null and not (_p1_controller is ReplayController):
+        _p1_controller = ReplayController.new(replay_record, 0)
+        _p2_controller = ReplayController.new(replay_record, 1)
+    ```
+
+    — which hands the whole match over to a recorded intent stream mid-play. **MEASURED, not
+    argued: with that installed, the ENTIRE SUITE IS GREEN — 348 / 2264 / 22, ALL PASSED.** (b2)
+    does not see it, and cannot: it watches `max_hp`, the recorder's tick count and the reload
+    trigger, and a controller swap moves none of the three. **THE DELETED SCAN WOULD HAVE FLAGGED
+    IT** — a bare `replay_record` occurrence outside its four allowed read forms is exactly what it
+    hunted. That is the honest shape of the trade `3-0d/R20` made: it did not strictly dominate the
+    scan, it traded a guard that was *believed* to hold and did not, for a guarantee that is
+    *narrower and true*. The consumption point is the mechanism; this paragraph is its edge.
+
+    Half (a), the
     tap seat, is UNCHANGED and still a source scan — deliberately: it asserts where two statements
     sit relative to each other inside one known function of one known file, which is a question
     source text is genuinely evidence of, unlike "is this reachable from anywhere in the tree". Its
@@ -873,6 +934,13 @@ refusals; the `ReplayDrive` ordering matched to the runner; the AC 8 verifier br
 suite as a subprocess test. Same invariant: the commit trailer reads `Claude Opus 4.8` on all three
 commits regardless of which model did the work.
 
+**CLOSING FIX PASS, `3-0d/R25`-`3-0d/R29` (2026-08-05): Claude Sonnet 5** — the final verification
+pass's outcome applied. Three FALSE sentences corrected (AC 5's totality claim, the decision log's
+and the pins file's description of the mechanism test, AC 3's mechanism sentence), one VACUOUS
+assertion deleted from the mechanism test, the verifier's wrong-object hole closed with a second
+fixture, two load-bearing line citations re-anchored, and AC 11's residue made concrete. Same
+invariant: the commit trailer reads `Claude Opus 4.8` on all three commits.
+
 ### Debug Log References
 
 **Engine semantics MEASURED before any code was written** (throwaway script, deleted; Godot 4.6.3):
@@ -1008,8 +1076,107 @@ added BEFORE the trigger (`POISON_CHECK_FRAME`), the mutation re-run, and both a
 fired. **This is `3-0d/R14`'s lesson applied to a behavioural guard: the mutation proof is what
 found it, and a proof that had only checked "does the test go red at all" would have passed it.**
 
+**CLOSING FIX PASS (`3-0d/R25`-`3-0d/R29`) — THE FIVE `3-0d/R25` INPUTS, MEASURED BEFORE THE
+SENTENCE THEY FALSIFY WAS REWRITTEN** (throwaway probe under `test/tools/`, run headlessly then
+deleted; Godot 4.6.3). A valid 4-tick record was written through `RecordFile`, read back as a raw
+Dictionary, mutated one axis at a time and re-loaded. **All five returned `record=null error=''`:**
+
+| Input | Engine error inside the rebuild | `load_record` returned |
+|-------|--------------------------------|------------------------|
+| `intents` as an Array of Dictionaries | `Invalid type in function '_intent_pair' ... Cannot convert argument 1 from Dictionary to Array` (`record_file.gd:311`) | `record=null error=''` |
+| `intents` shorter than `tick_count` | `Out of bounds get index '1' (on base: 'Array')` (`record_file.gd:311`) | `record=null error=''` |
+| `camera_pushes` values are ints | `Trying to assign value of type 'int' to a variable of type 'Array'` (`record_file.gd:307`) | `record=null error=''` |
+| `contacts` values are Arrays of ints | `Trying to assign value of type 'int' to a variable of type 'Array'` (`record_file.gd:309`) | `record=null error=''` |
+| `tick_count` inflated past intents | `Out of bounds get index '4' (on base: 'Array')` (`record_file.gd:311`) | `record=null error=''` |
+
+Every one is the empty-reason refusal `3-0d/R15` was raised to close and `3-0d/R21` narrowed —
+still open on nested and cross-key shapes, which is what AC 5 now says instead of claiming totality.
+
+**CLOSING FIX PASS — THE `3-0d/R28` VACUITY, PROVEN RATHER THAN ASSERTED.** The deletion needed no
+mutation proof, but the claim that the assertion was VACUOUS is itself a claim, so it was measured:
+`match_runner.gd`'s per-tick fork was restored to the PUBLIC member (the `3-0d/R20` falsifying
+change) and `test_replay_entry_is_inert.gd` run. Output:
+`max_hp authored=100.000000 before=100.000000 poisoned-check=1234.000000 after=100.000000`,
+`recording: ticks 7->7 over frames 8->24`. **TWO assertions fired — the poisoned-check reading and
+the frozen tick count. `_after_max_hp` did NOT**, because `TRIGGER_FRAME` (12) sits between
+`POISON_CHECK_FRAME` (10) and `MEASURE_FRAME` (24) and the trigger re-applies the AUTHORED balance,
+scrubbing the poison. It could not fail for the reason it named. Restored from an out-of-repo copy,
+SHA-256 `c2f58ccf4d8df29fb0cfc42fe855c868fafa6957b95add3343fb755bbd478f66` verified identical.
+
+**CLOSING FIX PASS — THE `3-0d/R25` N2 RESIDUE, MEASURED RATHER THAN RECORDED ON TRUST.** The
+four-line per-tick consumer of the PUBLIC member quoted in AC 11's residue paragraph — swapping both
+live keyboard controllers for `ReplayController`s mid-match — was installed in `match_runner.gd` and
+the FULL SUITE run: **348 tests / 0 failed / 2264 assertions, ALL TESTS PASSED.** The residue is
+therefore stated as a fact of this tree, not as a worry. Restored from the same out-of-repo copy,
+SHA-256 identical, `git status` clean.
+
+**CLOSING FIX PASS — THE `3-0d/R29` MUTATION PROOF, AND IT LANDED EXACTLY ON THE NEW ASSERTION.**
+`test/tools/replay_file.gd` was made to hash the WRONG OBJECT: a fresh `MatchState` built from the
+record's own injected channels (seed, balance, flags, content) but NEVER ADVANCED — deterministic,
+so run-to-run equality still holds. Green beforehand, the test printed two different hashes
+(`60a9fe78…cb0e` and `cf037927…7de2`). Under the mutation **both fixtures printed the SAME hash,
+`ec631c0d9707ac9d1b6a3118f2654962302c23f44e8cbca3de59622d30eac137`**, the run-to-run equality
+assertion still PASSED, and the ONLY failure was the new one:
+`FAILED: TWO RECORDS THAT DIFFER ONLY IN THEIR RECORDED INTENTS PRINT DIFFERENT HASHES ... RESULT:
+FAIL`. That is `3-0d/R20`'s part (c) satisfied — the RIGHT assertion fired, not merely some
+assertion. Restored from an out-of-repo copy, SHA-256
+`7541d1a2f2bfb84e8597a289253d2e060df53c24af091234c4f2b100a95eec2a` verified identical before and
+after.
+
 ### Completion Notes List
 
+- **CLOSING FIX PASS SUITE (`3-0d/R25`-`3-0d/R29`). Before, verified BY THIS PASS at `HEAD`
+  `2fe3eca` with a clean tree before any edit: 348 state tests / 2264 assertions / 22 integration
+  files, ALL PASSED — the stated baseline, confirmed rather than taken on trust. After: 348 / 2264 /
+  22 — ZERO movement in all three, ALL PASSED.** That flatness is real and is explained rather than
+  left to look like nothing happened: **every assertion this pass touched lives in an INTEGRATION
+  file, and the state harness's 2264 cannot see them.** The integration delta, counted directly:
+  `test_replay_entry_is_inert.gd` 10 assertions -> 9 (`3-0d/R28`'s vacuous `_after_max_hp` reading,
+  DELETED — the value is still measured and printed, it is simply no longer pretending to guard),
+  and `test_replay_verifier_tool.gd` 12 -> 16 (`3-0d/R29`'s second fixture: written, verified, hash
+  non-empty, hash DIFFERENT). **Net +3 integration assertions, -1 state-visible anything.** No new
+  file, no new `class_name`, no editor scan needed. `project.godot` untouched and BYTE-IDENTICAL,
+  `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`. Golden unmoved,
+  `test_determinism.gd` absent from `git status`, `GOLDEN` still
+  `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`. The four inherited `3-0c` pins
+  required ZERO edits. `src/main/match_runner.gd` is UNMODIFIED — a mutation target twice this pass,
+  restored and SHA-256 verified both times, absent from `git status`.
+- **THE HEADLINE OF THIS PASS: THE `3-0d/R20` MECHANISM HELD; THE PROSE AROUND IT DID NOT.** The
+  final verification attacked the structural mechanism against a criterion declared in advance —
+  eight attacks at six different moments, no mid-session assignment to the public `replay_record`
+  did anything. It failed only on the second criterion, that the story and the log be TRUE of the
+  shipped tree: **three sentences were false.** AC 5 claimed refusals-with-reasons hold on EVERY
+  path (five inputs say otherwise, all five measured here); the `3-0d/R20` decision-log entry and
+  `test_replay_surface_pins.gd`'s header both said the mechanism test asserts "no recorded fact
+  reaches live state" (it asserts the LIVE RELOAD TRIGGER STILL FIRES); and AC 3 said its test
+  counts `func capture_` occurrences (it reads `get_script_method_list()`). Each is corrected IN
+  PLACE with the correction visible. **This is the story's own lesson turned on its own documents:**
+  `3-0d/R20` ruled that no mechanism may be described as proving more than it proves, and three
+  descriptions were doing exactly that within one pass of the ruling.
+- **`3-0d/R28`: A VACUOUS ASSERTION DELETED FROM THE FILE THAT IS THE MECHANISM**, which is the
+  worst place to keep one. `_after_max_hp` was the UN-FIXED TWIN of the defect the previous pass
+  found and fixed for the earlier reading — the trigger scrubs the poison before that frame, so it
+  held while the fork was genuinely flipped. Measured, then deleted, with the docstring saying WHY
+  it was removed rather than kept. Same ruling: the poisoned record's tripwire is **ONE CHANNEL
+  WIDE** — only the reload event is observable; the contact fact is dropped at resolution because
+  the attacker is idle and `register_swing_hit` refuses (`hero_state.gd:228-230`), and the camera
+  basis cannot move a `move_dir` that is zero. Stated in the docstring instead of implying three
+  live channels; making the other two observable was weighed and rejected.
+- **`3-0d/R29`: THE VERIFIER TEST NO LONGER PASSES A VERIFIER THAT HASHES THE WRONG OBJECT.** Run-to-
+  run equality is satisfied by any deterministic function of nothing in particular. A SECOND fixture
+  — identical in seed, balance, flags, deck, costs, bases, contact and tick count, differing ONLY in
+  the recorded intents — must now hash DIFFERENTLY. Proven by mutation, and the mutation landed on
+  exactly that assertion while the equality assertion stayed green. Same ruling: the two
+  deliberately load-bearing line citations (`ReplayDrive`'s docstring, `replay_file.gd`'s comment,
+  both pointing at the runner's fork "so a change there has somewhere to point") are RE-ANCHORED by
+  locating the content — `match_runner.gd:601-608` -> **629-633**; the file grew 115 lines and the
+  old citation lands on the HUD card-selection push. Not swept: the standing carve-out holds.
+- **ONE FURTHER STALE CITATION VERIFIED AND DELIBERATELY LEFT** (`3-0d/R29`, "report but do not
+  sweep"): this file's own `3-0d/R17` Dev Note carries the same `match_runner.gd:601-608` pointer
+  and it is equally stale. It is NOT one of the two the ruling made load-bearing, so it stands with
+  the rest of the un-anchored citations under the standing carve-out.
+- **LIVE SMOKE NOT RUN** — unchanged: it is the operator's and carries the required R-D6 kill
+  (`3-0d/R11`). This pass was explicitly instructed not to run it.
 - **STRUCTURAL FIX PASS SUITE (`3-0d/R20`-`3-0d/R24`). Before, verified BY THIS PASS at `HEAD`
   `a6582e8` with a clean tree before any edit: 348 state tests / 2244 assertions / 20 integration
   files, ALL PASSED — the stated baseline, confirmed rather than taken on trust. After: 348 / 2264 /
@@ -1252,6 +1419,27 @@ found it, and a proof that had only checked "does the test go red at all" would 
 - `test/replay_drive.gd` — **`3-0d/R23`**: controller construction and intent sampling moved to match
   the runner's order statement for statement. No behaviour change; every hash in the suite unmoved.
 
+**Modified — at the CLOSING FIX PASS (`3-0d/R25`-`3-0d/R29`)**
+- `src/systems/record_file.gd` — **`3-0d/R25`**, COMMENTS ONLY, no behaviour change: the header's
+  "true of EVERY path" clause struck, and a RESIDUE block added naming the five measured inputs that
+  still refuse with an empty reason, the deliberate decision not to build nested validation, and the
+  consequence for callers (test the record, never the reason).
+- `test/integration/test_replay_entry_is_inert.gd` — **`3-0d/R28`**: the vacuous `_after_max_hp`
+  assertion DELETED (struck in place, with the reason in the docstring), and the docstring corrected
+  to say the tripwire is ONE CHANNEL WIDE. `_after_max_hp` is still measured and printed.
+- `test/integration/test_replay_verifier_tool.gd` — **`3-0d/R29`**: a SECOND fixture record
+  differing only in its recorded intents, asserted to hash DIFFERENTLY. The existing run-to-run
+  equality assertion is kept; this is an addition. +4 assertions.
+- `test/replay_drive.gd`, `test/tools/replay_file.gd` — **`3-0d/R29`**, COMMENTS ONLY: the two
+  load-bearing runner-fork citations re-anchored `601-608` -> `629-633`.
+- `test/state/test_replay_surface_pins.gd` — **`3-0d/R26`**, HEADER COMMENT ONLY: the mechanism
+  test's third assertion described correctly ("the live reload trigger still fires", not "no
+  recorded fact reaches live state").
+
+**Deliberately untouched at the CLOSING FIX PASS:** `src/main/match_runner.gd` (mutation target
+twice, restored and SHA-256 verified both times — absent from `git status`), `project.godot`, the
+golden, the four inherited `3-0c` pins, everything under `src/state/`, and the board.
+
 **Deliberately untouched at the STRUCTURAL FIX PASS:** `test/tools/replay_file.gd` (mutation target
 only, restored and SHA-256 verified — absent from `git status`), `project.godot`, the golden, the
 four inherited `3-0c` pins, and everything under `src/state/`.
@@ -1270,6 +1458,7 @@ the four inherited `3-0c` pins.
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
+| 2026-08-05 | 0.7 | **CLOSING FIX PASS (`3-0d/R25`-`3-0d/R29`) — THE `3-0d/R20` MECHANISM HELD; THREE SENTENCES ABOUT IT DID NOT.** A final verification pass attacked the structural mechanism against a criterion declared in advance: **eight attacks at six different moments, and no mid-session assignment to the public `replay_record` did anything.** Criterion (a) HOLDS. It failed only on criterion (b) — that the story and the log be TRUE of the shipped tree — where three sentences were FALSE, plus five non-blocking findings. All close here. **`R25` (the substantive one):** AC 5's amendment header asserted "REFUSED WITH A CLEAR REASON NOW HOLDS ON EVERY PATH". It does not — **FIVE inputs still return `{"record": null, "error": ""}`**, measured before the sentence was rewritten: `intents` as an Array of Dictionaries; `intents` shorter than `tick_count`; `camera_pushes` values that are ints; `contacts` values that are Arrays of ints; `tick_count` inflated past the intents array. `3-0d/R21` had corrected the Dev Notes and the class docstring and left the AC standing. **RULED: the claim is REDUCED to what the code carries — each required key's TOP-LEVEL type is validated before the rebuild — and the residue is STATED: nested and cross-key consistency is NOT validated and such a file still refuses with an empty reason. Nested validation is DELIBERATELY NOT BUILT**; the point of the ruling is that the boundary gets written down instead of pretended away, and the residue is closed for callers instead (test the record, never the reason — all three shipped callers already do). Corrected in AC 5 and in the identical sentence in `record_file.gd`. **`R26`:** the `3-0d/R20` decision-log entry and `test_replay_surface_pins.gd`'s header both said the mechanism test asserts "no recorded fact reaches live state". It asserts no such thing — its third assertion is that the LIVE RELOAD TRIGGER STILL FIRES. The pins header is corrected in place; the decision log is APPEND-ONLY for entries, so that correction is recorded in the new `R25`-`R29` entry, naming the sentence it corrects. **`R27`:** AC 3 said its test "counts `func capture_` occurrences" — the shipped test reads `script.get_script_method_list()` and its own docstring says so. The outcome claim (exactly eight) was always true; only the mechanism sentence was wrong, and wrong in the direction this story has spent three rounds learning to distrust. **`R28`:** the mechanism test's `_after_max_hp` assertion was VACUOUS — the un-fixed twin of the defect the previous pass found and fixed for the earlier reading, since `TRIGGER_FRAME` sits between the two readings and the trigger re-applies the authored balance. **MEASURED under the falsifying mutation: `after=100.000000` while the fork was genuinely flipped, and only the OTHER two assertions fired.** DELETED, with the docstring saying why it was removed rather than kept — a vacuous assertion in the file that IS the mechanism is worse than one anywhere else. Same ruling: the poisoned record's tripwire is **ONE CHANNEL WIDE** (only the reload event is observable; the contact fact is dropped at resolution because the attacker is idle, and the camera basis cannot move a zero `move_dir`), now stated instead of implied. **`R29`:** the verifier subprocess test did not catch a verifier that hashes the WRONG OBJECT — run-to-run equality is satisfied by any deterministic function of nothing in particular. Closed cheaply by a SECOND fixture differing ONLY in its recorded intents, asserted to hash DIFFERENTLY; the equality assertion is kept. **Proven by mutation, and it landed on exactly the new assertion:** with the tool hashing a fresh `MatchState`, both fixtures printed `ec631c0d…c137`, equality still PASSED, and only the new check failed. Also `R29`: the two deliberately load-bearing runner-fork citations (`ReplayDrive`'s docstring, `replay_file.gd`'s comment) RE-ANCHORED `match_runner.gd:601-608` -> **629-633** by locating the content; not swept, and one further stale citation in this file's own Dev Notes is REPORTED and left. **AC 11's residue made CONCRETE (`N2`), because a residue nobody can picture is not really stated:** a four-line per-tick consumer of the public member that swaps both live keyboard controllers for `ReplayController`s mid-match was built, installed and run — **the ENTIRE SUITE STAYED GREEN, 348/2264/22.** The deleted scan would have flagged it. The guarantee is "assigning it does nothing to the shipped runner", NOT "nothing can read it", and `3-0d/R20`'s trade is recorded honestly: not strict dominance, but a guard believed-and-false swapped for a guarantee narrower-and-true. **Suite: baseline 348/2264/22 CONFIRMED BY THIS PASS at `HEAD` `2fe3eca`, after 348/2264/22, ALL PASSED both ends.** Zero movement in all three, explained rather than left ambiguous: every assertion touched lives in an INTEGRATION file the state count cannot see — inert test 10 -> 9, verifier test 12 -> 16, **net +3 integration assertions**. `project.godot` byte-identical; golden unmoved; the four inherited `3-0c` pins zero edits; `match_runner.gd` unmodified (mutation target twice, restored and hash-verified both times). Live smoke NOT run. Three commits, none pushed. | Claude Sonnet 5 |
 | 2026-08-05 | 0.6 | **STRUCTURAL FIX PASS (`3-0d/R20`-`3-0d/R24`) — THE THIRD AND FINAL ROUND ON THE REPLAY-ENTRY GUARDS, and the ruling is that there will not be a fourth.** Both of this story's source scans had now been defeated THREE times. Round 3 found: `(replay_record) = null` classified BY THE WHITELIST as an "argument read" — a literal assignment certified as a read, by the very inversion `3-0d/R14` installed to prevent exactly that; six further panel declaration forms evading the Callable scan (`static var`, `@onready`, an inner-class member, a Callable in an untyped `Dictionary`, one in an untyped `Array`, an untyped member invoked through a local copy); a shared line reader truncating at the first `#` with NO string awareness, so a `#` inside a string literal deleted the rest of the line from BOTH scans; and both scans reading `.gd` only while `.tscn`-embedded GDScript under `src/` is shipped, compiled, executing code. A complete, wired LOAD control shipped past both with the entire suite green. **OPERATOR RULING `3-0d/R20`: A TEXT SCAN OVER SOURCE CANNOT CARRY A DESIGN INVARIANT, AND THIS PROJECT WILL STOP TRYING TO MAKE IT.** The property is made STRUCTURALLY IMPOSSIBLE instead of DETECTABLE: `MatchRunner` CONSUMES `replay_record` exactly once, in `_ready()`, into a private `_replay_record`, and the per-tick fork plus every other consumer read only the private field — so a mid-session assignment has no effect not because it is caught but because nothing reads what it changed (part 1). It is proven BEHAVIOURALLY by `test/integration/test_replay_entry_is_inert.gd`, which makes the forbidden assignment on a live runner and asserts the fork does not flip, recording continues, and the live reload trigger still fires (part 2). **BOTH SCANS DELETED** — the `replay_record` one outright (part 3), the panel one replaced by the SCENE-LEVEL control-set check alone, whose own `Button`-vs-`BaseButton` hole is closed in the same ruling since `LinkButton` extends `BaseButton` and was invisible to the old query (part 4). **AC 7 and AC 11 RE-WORDED to what the mechanisms actually carry, with the residue stated plainly in both** (part 5); every falsified passage corrected in place with the correction visible, including two that `3-0d/R19` had already corrected once. **`R21`:** `load_record` still returned `{"record": null, "error": ""}` for three inputs — required keys present with WRONG TYPES, `null` under `reload_events`, `null` under `intents` — because `has()` is true for `null` and says nothing about type; `REQUIRED_KEYS` is now a key -> TYPE map validated before the rebuild, refusing with a reason naming the key and what was found. **`R22`:** `save_record`'s bare `begins_with("user://")` was replaced by NORMALISATION — resolve the path, require it inside the `user://` directory — with the sibling-prefix trap (`user://../CardSoulsEvil/…`) measured and closed by comparing against the root plus its separator; traversal forms tested and nothing lands in the repo, verified by running it. **`R23`:** `ReplayDrive`'s two inert divergences from the runner (controllers constructed later, intents sampled after the pushes) are MATCHED to the runner statement for statement rather than documented away — the docstring's claim is the value. **`R24`:** the AC 8 verifier is now run BY THE SUITE as a subprocess, asserting `RESULT: PASS` and the same hash across two invocations; the obvious `load()`-non-null guard is vacuous (`load()` returns non-null on a parse error) and the subprocess form worked, so NO fallback to `can_instantiate()` was needed. **FIVE MUTATION PROOFS, behavioural where the guard is behavioural**, each restored from an out-of-repo copy with SHA-256 verified — including one that proves the OLD `Button` query PASSES with a fully wired `LinkButton` load control installed, and one that found a real defect in this pass's own new test (its only `max_hp` reading sat after the reload trigger, which scrubs the poisoned value; a reading was added before the trigger and both assertions then fired). **Suite: baseline 348/2244/20 CONFIRMED BY THIS PASS at `HEAD` `a6582e8`, after 348/2264/22, ALL PASSED both ends** and green again after every restore. The flat state-test count is two opposite movements — `test_replay_surface_pins.gd` 4 tests -> 2 (the deleted scans, the predicted DROP), `test_record_file.gd` 9 -> 11 — with the replacements living in the +2 integration files. `project.godot` byte-identical (`8879de49…07970004`); golden unmoved; the four inherited `3-0c` pins zero edits; `test/tools/replay_file.gd` unmodified. Live smoke NOT run. Three commits, none pushed. | Claude Opus 5 |
 | 2026-08-05 | 0.1 | File authored at this story's own creation pass, per the `3-0a`/`3-0b`/`3-0c` precedent and `3-0c/R5`'s split ruling. Nine ACs recorded, each mapping to one of the six inherited scope items (CACHE_MODE_IGNORE; the live reload trigger reusing the existing reload channel; `user://` persistence with the format deliberately unpinned; recording start/stop lifecycle; the panel controls with no new Input Map action; the live smoke) or explicitly declared discharged by a non-AC section with a reason (the live smoke itself, discharged by the required Live Smoke section rather than a numbered AC, matching this repo's own convention for every prior story). Every quoted string re-verified against shipped code or the decision log at write time; the commissioning brief's R-D6 claim ("spent on 3-4") is corrected — the more recent spend was `3-5a`. A structural gap not previously named anywhere is surfaced: `replay_record` is read once in `_ready()`, before the scene ticks, and no scene-reload mechanism exists in `src/`, so a mid-session "load" control has no runtime path into replay under the shipped architecture (Open Question (f)). Six Open Questions left open, none resolved. Golden Prediction NONE, argued on the same two premises `3-0c` used (no snapshot key; no seeded-RNG consumer). Live Smoke REQUIRED, described on the shipped two-keyboard default, no `.tscn` edit needed. Status `backlog`; promotion to `ready-for-dev` deferred to this story's own readiness gate. Nothing under `src/` or `test/` is touched by this pass — docs only. | Claude Sonnet 5 |
 | 2026-08-05 | 0.3 | **DEV PASS — all ELEVEN ACs implemented; suite 329/1715/19 -> 344/2197/20, all green both ends.** DEBT B is closed on both halves: `reload()` is `ResourceLoader.load(..., CACHE_MODE_IGNORE)` (AC 1, proven by OBJECT IDENTITY in the state harness with zero file mutation, engine semantics MEASURED first), and `match_runner.gd::trigger_live_balance_reload()` re-reads the service then captures BEFORE it applies on the existing reload channel (AC 2/AC 3, no ninth `capture_*`). `user://` persistence ships as `src/systems/record_file.gd` (`class_name RecordFile`, the ONE new class_name; editor scan run and `.uid` committed for all six new `.gd` files) — a sibling rather than a recorder method, so the recorder stays clock-free and content-blind and its own scan stays green. Round trip proven by bit-identical `CanonicalHash` across live run / in-memory replay / loaded-file replay AND channel-by-channel equality including all eight `InputIntent` fields (AC 4); `FORMAT_VERSION` refusal proven in both directions (AC 5); always-on cumulative recording proven in the harness and on the LIVE runner (AC 6). The panel gains EXACTLY ONE control, `SaveRecord`, in a third COLUMN (a third row would leave the empty band and trip `test_debug_instruments.gd`'s S1/S2 layout guard, which still passes), wired by a runner-owned `Callable` and pinned at one runner-reaching control by a scan that also forbids a second `Callable` and any `signal` (AC 7). `test/tools/replay_file.gd` ships and was RUN FOR REAL, twice, on a record produced headlessly by the live runner — same hash `5f465e7a...9d13` both times (AC 8). Per-pool contract exercised unchanged, stamina refill ratified (AC 9). The four inherited `3-0c` pins required ZERO edits and `project.godot` is byte-identical (`8879DE49...0004`); the golden did not move (`40eb5554...a322`). SIX mutation proofs, each broken then restored from an out-of-repo copy with SHA-256 verified. **ONE CONTRACT CONFLICT RAISED, NOT RESOLVED: AC 7 pins the panel at one control while the Live Smoke asks for a panel-triggered live reload — a second runner-reaching control. Built to the AC; the trigger has no operator surface and the smoke's reload step cannot be performed until the operator rules.** Live smoke NOT run (operator's, carries the required R-D6 kill). Code and docs in two separate commits; neither pushed. | Claude Opus 5 |

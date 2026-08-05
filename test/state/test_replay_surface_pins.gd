@@ -34,9 +34,17 @@ extends TestCase
 ## which are the mechanisms now:
 ##
 ##   * `test/integration/test_replay_entry_is_inert.gd` — assigns `replay_record` mid-match on a
-##     LIVE runner and asserts the fork does not flip, recording continues, and no recorded fact
-##     reaches live state. Its falsifying change is obvious and real: restore the per-tick read of
-##     the public member and it goes red.
+##     LIVE runner and asserts the fork does not flip, recording continues, and ~~no recorded fact
+##     reaches live state~~ **THE LIVE RELOAD TRIGGER STILL FIRES**. Its falsifying change is
+##     obvious and real: restore the per-tick read of the public member and it goes red.
+##     **THE STRUCK CLAUSE WAS FALSE OF THE SHIPPED TEST AND IS CORRECTED AT `3-0d/R25`.** That
+##     test asserts nothing of the kind — its third assertion is that `reload_event_count()` goes
+##     1 -> 2 after the assignment, i.e. that `trigger_live_balance_reload()` still fires, which
+##     is how the OTHER consumer of the consumed record is reached. Verified by reading the
+##     shipped assertions. `3-0d/R20`'s decision-log entry carries the same wrong sentence; it is
+##     append-only, so the correction is recorded in the `3-0d/R25` entry rather than by editing
+##     it. Related, same ruling: that test's fourth reading was VACUOUS and is DELETED — the
+##     tripwire is ONE CHANNEL WIDE (the reload event), which its own docstring now states.
 ##   * `test/integration/test_record_save_control.gd` — the panel's control set, enumerated from
 ##     ACTUAL INSTANTIATED CONTROLS at runtime, so no declaration syntax can evade it.
 ##
