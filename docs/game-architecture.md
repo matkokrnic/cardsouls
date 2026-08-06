@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.3'
+version: '1.4'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -285,7 +285,7 @@ close-out, for the retention ruling.
 >
 > **A1 follow-up — tick-rate invariant (runner-checked).** `TimingWindow.TICK_HZ` (`60.0`) must equal
 > `project.godot` `physics/common/physics_ticks_per_second`, or every `seconds_to_ticks()` conversion
-> is silently wrong. `match_runner` asserts this **once at startup** via `check_invariant()` (X1) —
+> is silently wrong. `match_runner` asserts this **once at startup** via `Invariant.check()` (X1) —
 > in the **runner, not state**, so INVARIANT D3(b) is not violated (state never reads `ProjectSettings`).
 
 Contacts (step 2→4): the runner gathers `Area3D` overlaps for state-flagged-active hitboxes by
@@ -314,9 +314,14 @@ testability, **not** netcode (#2).
 > a stronger rule: the state layer contains **no source of nondeterminism at all**. Forbidden in
 > `src/state/`: the *global* RNG functions (`randf`, `randi`, `randf_range`, `randi_range`, `randfn`,
 > `randomize`), and any `Time.*` (e.g. `Time.get_ticks_msec`), `OS.*`, or `Engine.*` frame/time query
-> (`get_physics_frames`, `get_process_frames`, …). **The single seeded gameplay RNG owned by
-> `MatchState` (F2) is the only permitted source of randomness** — sub-systems consume it as an
-> injected instance (`_rng.randf()`, a method call, is fine; a bare `randf()` is not), and all
+> (`get_physics_frames`, `get_process_frames`, …). Also forbidden: the **implicit-global-RNG
+> collection APIs** `Array.shuffle()` and `Array.pick_random()` — measured (Godot 4.6.3) to draw
+> from the *global* RNG while leaving an injected `RandomNumberGenerator` untouched, so a
+> `deck.shuffle()` in `src/state/` would silently desync replay while passing every other guard
+> (story 3-3, AC 8); and a bare `seed(...)` call, which reseeds the global generator from state.
+> **The single seeded gameplay RNG owned by `MatchState` (F2) is the only permitted source of
+> randomness** — sub-systems consume it as an injected instance (`_rng.randf()`, `rng.randi_range(...)`,
+> a method call, is fine; the bare/global forms above are not), and all
 > gameplay-critical timing is integer ticks (A1), never a wall-clock read. **Check:** both greps below
 > must return **zero** matches (the leading `(^|[^.[:alnum:]_])` excludes instance-method calls like
 > `_rng.randf()`, matching only bare global calls):
@@ -355,12 +360,15 @@ one tick at a time in tests. This same primitive backs the fizzle deadline (D8).
 ### D5 — Signal / Event Flow (with timing discipline)
 
 Direct typed signals on the owning state object; the HUD/presentation subscribes. `EventBus`
-autoload is reserved for genuinely global, ownerless events only (`match_started`, `round_started`,
-`round_ended`).
+autoload is reserved for genuinely global, ownerless events only. It now carries **three** signals:
+`match_started`, `round_started`, `round_ended`, and `reshuffle_vulnerable_window_opened(slot)`
+(story 3-3/3-5b) — the one PUBLIC card fact, fired on OPEN only with no CLOSE counterpart, so a
+consumer that wants an indicator to turn itself off runs its own presentation-local countdown from
+the OPEN event rather than reading state (3-6/R3).
 
-**Observation seam registry (2-4/2-6 amendment).** Consumers reach state exclusively through runner
-connect seams (`match_runner.gd`), never a state handle. There are now **seven**, plus the EventBus
-round-lifecycle pair above:
+**Observation seam registry (2-4/2-6/3-6 amendment).** Consumers reach state exclusively through
+runner connect seams (`match_runner.gd`), never a state handle. There are now **eight**, plus the
+EventBus signals above:
 
 - **Four combat seams:** `connect_hero_action_state_changed`, `connect_hit_landed`,
   `connect_hero_action_rejected`, `connect_deflect_landed`.
@@ -368,6 +376,11 @@ round-lifecycle pair above:
   `connect_mana_changed` — per-slot, payload `(current, maximum)`, and **all three PRIME ON CONNECT**:
   they emit the current value immediately on connection. Without priming the HUD bars stay empty until
   the first change, and the maximum never arrives at all.
+- **One card seam (added in 3-6, story 3-6/R2):** `connect_cards_changed` — per-slot, payload
+  `(hand: Array[StringName], deck_size: int, discard_size: int)`, PRIMES ON CONNECT. **Own-slot-only**
+  (3-6/R7): the payload carries no slot index and a consumer is bound to one slot's channel, so a HUD
+  is structurally incapable of reading the opponent's counts — card identity/order still never reach
+  `to_snapshot()` (the 3-0c AC11 exclusion is untouched); this is a live push, never a state read.
 
 Invariants unchanged: signal payloads only, never a state handle; signals are queued during
 `advance()` and drained afterwards.
@@ -388,13 +401,22 @@ Invariants unchanged: signal payloads only, never a state handle; signals are qu
 Two first-class `Resource` base types, evaluated by a **pure evaluator in the state layer** (no
 hardcoded per-source rule methods):
 
-- **`ResourceGenerationRule`** (`source`, `resource`, `amount`, `trigger`) — drives *all* mana
-  generation as data: passive tick, on-melee-hit, and the Mana Accelerator totem (E4 seam).
+- **`ResourceGenerationRule`** (`source`, `resource`, `amount_domain`, `amount_field`, `required_flag`)
+  — drives *all* mana generation as data: passive tick, on-melee-hit, and the Mana Accelerator totem
+  (E4 seam). A rule names a **balance field** (`amount_field`) rather than carrying the gameplay
+  number itself, so the number stays authored once in `data/balance/*.tres` and the rule stays pure
+  structure (story 3-4).
 - **`CardCastCondition`** (`mana_cost`, per-color `orb_costs`, flags) — gates *every* cast and card
   mode.
 
-E0 lands the **types + evaluator interface**; E3 authors the concrete `.tres`. Net: adding a mana
-source or a cast rule is a new `.tres`, not a code change — economy-wide, not scoped to minion AI.
+E0 lands the **types**; E3 (story 3-4) authors the concrete `.tres` and ships `EconomyEvaluator`
+(`src/state/economy/`), the pure static evaluator: it **computes** (`amount_for()` returns a number)
+and **touches no pool** — the caller applies the amount inside `advance()`'s ordered dispatch (D2),
+the same compute/apply split `CastEvaluator` (story 3-5a) uses on the spend side. `authored_rules()`
+loads every `ResourceGenerationRule` `.tres` under `data/economy/` via a **sorted directory scan**
+(the `CardDatabase` precedent), once, with no reload path — rule content is structure, not
+per-match config. Net: adding a mana source or a cast rule is a new `.tres`, not a code change —
+economy-wide, not scoped to minion AI.
 
 ---
 
@@ -443,10 +465,11 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
 
 > **BINDING X1 — invariant checks must survive export.** Godot strips `assert()` in exported
 > release builds, so a bare `assert()` gives exported playtest builds *no* invariant check at all —
-> not a softer one. Invariants therefore route through an explicit `check_invariant(condition, msg)`
-> helper built on a **normal runtime branch** (`if not condition:`), which survives export.
+> not a softer one. Invariants therefore route through an explicit `Invariant.check(condition, msg)`
+> helper (`src/systems/invariant.gd`) built on a **normal runtime branch** (`if not condition:`),
+> which survives export.
 
-- `check_invariant(condition, msg)` behavior is mode-driven (mode from a config/build feature, not
+- `Invariant.check(condition, msg)` behavior is mode-driven (mode from a config/build feature, not
   from `assert`):
   - **Dev mode** → fail fast (`push_error` + halt/breakpoint).
   - **Playtest build** → `Log.error(msg)` + continue.
@@ -483,13 +506,13 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
 
 - Per D5: owner-signals (state→presentation), drained after `advance()`. `EventBus` autoload carries
   a small fixed typed set only: `match_started`, `round_started`, `round_ended` (past-tense
-  `snake_case`). `match_runner` relays `round_started` from the queued signal drain, same as
-  `round_ended`. The single seat for clearing the round-over label is `HudRoot.on_round_started`.
-  Deliberately **no prime-on-connect** for `round_started`/`round_ended` — the consumer needs an
-  *event*, not a value, and the label starts hidden.
-- **No eighth seam.** The debug `StateInspector` displays only what the seven D5 connect seams already
-  carry; per-tick timing-window countdown streaming is deliberately deferred — it would firehose state
-  internals through the queued-drain path.
+  `snake_case`), and `reshuffle_vulnerable_window_opened(slot)` (story 3-3/3-5b — see D5). `match_runner`
+  relays `round_started` from the queued signal drain, same as `round_ended`. The single seat for
+  clearing the round-over label is `HudRoot.on_round_started`. Deliberately **no prime-on-connect** for
+  `round_started`/`round_ended`/the reshuffle event — each is an *event*, not a value.
+- **Eight `connect_*` seams, frozen count (2-6/R7, raised by 3-6/R2).** The debug `StateInspector`
+  displays only what the eight D5 connect seams already carry; per-tick timing-window countdown
+  streaming is deliberately deferred — it would firehose state internals through the queued-drain path.
 
 ### Debug Tools (gated behind a `debug` flag)
 
@@ -497,12 +520,16 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
 2. **Per-player state inspector** — pools + active D4 timers + current telegraph; reads signals only.
 3. **Deterministic step/pause** — pause the runner and advance N fixed ticks (timing-window debugging).
 4. **Reveal-opponent-hand toggle** — debug counterpart to the E2 face-down-hand capability.
-5. **InputIntent record & replay** — record the per-tick `InputIntent` stream **plus the gameplay RNG
-   seed and any balance-reload events**; replay reproduces a round exactly from *seed + intents +
-   recorded reload events* — **not** from the on-disk balance `.tres`. See §Implementation Patterns →
-   *Determinism & Replay* for the rules (D2 + D3 make capture near-free). **Scope: record + replay only
-   — no rewind, no scrubbing UI.** Rationale: the only actionable playtest report here is "I didn't see
-   that happen," and diagnosing it requires replaying what actually happened tick by tick.
+5. **InputIntent record & replay** — record the per-tick `InputIntent` stream, per-slot camera bases,
+   and gathered contact facts, **plus the gameplay RNG seed, match-start injections (deck/card costs/
+   feature flags), and any balance-reload events**; replay reproduces a round exactly from that full
+   record — **not** from the on-disk balance `.tres` and not by re-deriving spatial facts live. See
+   §Implementation Patterns → *Determinism & Replay* and §Project Structure → *Instrumentation wiring*
+   for the rules (D2 + D3 make capture near-free). **Scope: record + replay only — no rewind, no
+   scrubbing UI** (ratified as a decision, `3-0c/R10`). **UI ships SAVE-only** (story 3-0d): no load
+   control and no start control exist in `src/ui/debug/`. Rationale: the only actionable playtest
+   report here is "I didn't see that happen," and diagnosing it requires replaying what actually
+   happened tick by tick.
 
 ### Testing & Runtime Boundary (GUT not yet installed)
 
@@ -545,12 +572,15 @@ res://
 │   │   ├── hero_state.gd
 │   │   ├── pools/  stamina_pool.gd · mana_pool.gd · orb_pool.gd   # OrbPool reserved flag-off (E5)
 │   │   ├── timing/ timing_window.gd  # D4 pure timer/window primitive (tick(delta))
-│   │   ├── economy/ economy_evaluator.gd   # D6 pure evaluator
+│   │   ├── economy/ economy_evaluator.gd · cast_evaluator.gd   # D6 pure evaluators (gen / spend)
 │   │   ├── input/  input_intent.gd   # D3 pure per-tick value object
 │   │   ├── pitch/  pitch_state.gd     # D8 sole fizzle-deadline owner — reserved seam until E6
-│   │   ├── enums.gd                  # CardColor {RED,BLUE,GREEN} + shared gameplay enums
+│   │   ├── enums.gd                  # CardColor {RED,BLUE,GREEN}, ModeKind, shared gameplay enums
+│   │   ├── deck.gd · hand.gd         # story 3-3: pure containers on PlayerState (+ discard pile)
 │   │   └── resources/                # Resource SCHEMA classes (.gd) — pure data vocabulary
-│   │       ├── card_data.gd · resource_generation_rule.gd · card_cast_condition.gd   # D6
+│   │       ├── card_data.gd          # D6/story 3-2/3-5a: id, color, basic_effect, pitch_effect,
+│   │       │                         #   cast_condition, max_copies (six exports)
+│   │       ├── card_effect.gd · resource_generation_rule.gd · card_cast_condition.gd   # D6
 │   │       ├── telegraph_profile.gd  # D7 standalone; used from E1 (melee incl.)
 │   │       ├── balance_config.gd     # class_name BalanceConfig
 │   │       ├── feature_flags.gd      # class_name FeatureFlags
@@ -560,15 +590,22 @@ res://
 │   │   ├── feature_flags_service.gd  # autoload: loads FeatureFlags .tres ONCE; exposes flags
 │   │   ├── balance_config_service.gd # autoload: loads BalanceConfig .tres; HOT-RELOAD (X3)
 │   │   ├── card_database.gd          # autoload: loads all card .tres at startup
-│   │   ├── intent_recorder.gd        # X5: captures InputIntent stream at the runner's sample step
-│   │   ├── log.gd (X2) · invariant.gd (X1 check_invariant)
+│   │   ├── intent_recorder.gd        # X5: captures the full replay record (intents, camera bases,
+│   │   │                             #     contacts, seed, injections, reloads), tapped immediately
+│   │   │                             #     before advance(), inside the runner's ticking gate
+│   │   ├── log.gd (X2) · invariant.gd (X1: class Invariant, static func check)
 │   │   └── pool/ object_pool.gd      # pooling seam (E4)
 │   ├── controllers/  ⚠️              # D3: the ONLY path where Input.* may appear
 │   │   ├── controller.gd             # interface: sample() -> InputIntent
 │   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2) · null_controller.gd
 │   │   ├── scripted_controller.gd    # E7 bot (gets an injected READ-ONLY state view) — reserved
-│   │   └── replay_controller.gd      # X5: emits InputIntent from a recorded stream (indistinguishable
-│   │                                 #     from hardware to the runner)
+│   │   ├── replay_controller.gd      # X5: emits InputIntent from a recorded stream (indistinguishable
+│   │   │                             #     from hardware to the runner)
+│   │   └── debug_input_reader.gd     # (3-0b) NOT a Controller: no sample(), no InputIntent. Reads
+│   │                                 #     the match-global DEBUG pause/step edges (AC 1) — presses
+│   │                                 #     that never enter InputIntent or the recorded stream. Lives
+│   │                                 #     here only because D3(a) confines ALL Input.* reads to this
+│   │                                 #     folder, not because it implements the Controller contract.
 │   ├── actors/                       # scene-bound nodes (.tscn + .gd)
 │   │   ├── hero/                      # CharacterBody3D + move_and_slide; Hitbox REPORTS contact
 │   │   │   └── telegraph_controller.gd  # D7 presentation: reads state → shape+sound
@@ -576,13 +613,27 @@ res://
 │   ├── ui/                           # HUD + menus (Control) — read-only state-signal consumers
 │   │   ├── hud/                       # bars, 3 orb counters, hand (opponent face-down — E2 capability)
 │   │   └── debug/                     # X5 toggles + overlays ONLY (no state mutation): flags · inspector
-│   │                                 #     · step/pause · reveal-hand · record/replay start-stop-load
+│   │                                 #     · step/pause · reveal-hand · record SAVE only (3-0d) —
+│   │                                 #     no load, no start control
 │   └── main/  ⚠️                     # root scene + Match Runner (the single _physics_process, D2)
 │       └── match_runner.gd            # OWNS the MatchState instance; sample→advance→drain; wires refs
 ├── data/                             # authored .tres INSTANCES
-│   ├── cards/ · minions/(E4) · equipment/(E8) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
+│   ├── cards/ · economy/ · minions/(E4) · equipment/(E8) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
+│   │                                 #   economy/: ResourceGenerationRule .tres, sorted-scan loaded (D6)
 │   └── feature_flags.tres
-├── assets/                           # art · audio (feeds CombatCues bus) · models · materials
+├── assets/                           # art (⚠️ see below) · audio (feeds CombatCues bus, .wav + .import)
+│   │                                 #   · models · materials
+│   ├── characters/<name>/            # 3-0a: source .fbx models + .png textures (binary, see
+│   │   │                             #   .gitattributes), one folder per rig
+│   │   ├── *.fbx · *.png             # source assets, RSCC-compressed on import
+│   │   ├── <name>_anims.res          # committed ASSEMBLY ARTIFACT: an AnimationLibrary built in the
+│   │   │                             #   editor from the imported clips (3-0a) — not a source asset
+│   │   └── strip_model_anim.gd       # an EditorScenePostImport @tool script (3-0a): the import-time
+│   │                                 #   post-processing hook, substituted for the `animation/import
+│   │                                 #   = false` import setting, which does not strip an embedded
+│   │                                 #   take on this engine version. First use of this import hook
+│   │                                 #   anywhere in the repo; lives beside the asset it processes.
+│   ├── audio/ · art/ · models/ · materials/   # source assets only, no import-hook scripts
 ├── test/                             # mirrors src/; test_*.gd + headless harness
 │   ├── state/                         # PURE headless tests — no engine runtime (X6)
 │   └── integration/                   # scene/actor tests — need runtime
@@ -592,8 +643,9 @@ res://
 ### Schema vs Loader (class_name uniqueness)
 Godot requires globally-unique `class_name`. Therefore:
 - **`src/state/resources/`** holds **schema** types (`extends Resource`, authored as `.tres`):
-  `FeatureFlags`, `BalanceConfig`, `CardData`, `ResourceGenerationRule`, `CardCastCondition`,
-  `TelegraphProfile`, `MinionPriority`, `EquipmentData`.
+  `FeatureFlags`, `BalanceConfig`, `CardData`, `CardEffect`, `ResourceGenerationRule`,
+  `CardCastCondition`, `TelegraphProfile`, `MinionPriority`, `EquipmentData`. `CardEffect` is a
+  reserved effect-schema `Resource` (story 3-2) — `basic_effect` authored in E3, `pitch_effect` in E6.
 - **`src/systems/`** holds **loaders/services** (`extends Node` autoloads), always `*Service`-suffixed:
   `FeatureFlagsService`, `BalanceConfigService`. (`CardDatabase` and `EventBus` need no suffix — no
   name-twin schema type.) A service loads its schema `.tres` and exposes it (`flags`, `config`).
@@ -621,16 +673,30 @@ exists to prevent. Autoloads are reserved for **config / content / global events
 > earlier draft prescribed a thin `MatchState` autoload wrapper; that predated D5 and has been
 > removed.) The two documents agree; no divergence remains.
 
-### Instrumentation wiring (X5 record/replay)
-- **Record:** the runner's sample step feeds each tick's `InputIntent` to `IntentRecorder`
-  (`src/systems/`), which also captures the gameplay RNG **seed** at start and any **balance-reload
-  events** (tick + values applied). Recording is a passive tap — it never affects the tick.
-- **Replay:** a `ReplayController` (`src/controllers/`) is swapped in for a hardware controller and
-  emits the recorded `InputIntent` stream. The runner cannot tell the difference (D3). A round replays
-  exactly from **seed + intent stream + recorded balance-reload events** (see §Implementation Patterns →
-  *Determinism & Replay*) — not from the on-disk balance `.tres`. Scope: record + replay only — no
-  rewind, no scrub UI.
-- **UI:** only start/stop/load toggles live in `src/ui/debug/` (no state mutation there).
+### Instrumentation wiring (X5 record/replay, shipped shape per stories 3-0c/3-0d)
+- **Record.** `IntentRecorder` (`src/systems/`) captures the gameplay RNG **seed**, `FeatureFlags`,
+  the injected deck composition and card-cost map (both match-start-only, story 3-3/3-5a), each
+  **balance-reload event** (tick + values applied), and per tick: each slot's camera basis, the
+  gathered contact facts, and the sampled `InputIntent`s. The tap is seated **immediately before
+  `advance()`, inside the runner's `ticking` gate** (story 3-0c, `3-0c/R14`) — **not** at the sample
+  step: 3-0b's debug pause gate samples controllers every frame but advances only on ticking ones, so
+  a tap at the sample step would record intents no tick ever consumed and desync the stream from its
+  own tick indices. One capture, one `advance()`, always in that order. Recording is a passive tap —
+  it never affects the tick.
+- **Replay is a runner-level FORK, not only a controller swap.** A `ReplayController`
+  (`src/controllers/`) is swapped in for both slots and emits the recorded `InputIntent` stream — the
+  runner cannot tell it from hardware for intents alone (D3) — but intents are not the only per-tick
+  input to `advance()`. Inside the `ticking` gate, replay mode skips the live `Area3D` overlap query
+  and the live camera-basis read entirely and instead: applies any balance-reload events recorded for
+  this tick, pushes the recorded camera bases, and pushes the recorded contact facts — all applied
+  directly against `MatchState` from the record, in recorded order, before `advance()` runs. A round
+  therefore replays exactly from **seed + intent stream + recorded camera bases + recorded contact
+  facts + recorded balance-reload events + the match-start injections** (see §Implementation Patterns
+  → *Determinism & Replay*) — never from the on-disk balance `.tres`, and never by re-deriving spatial
+  facts live. Scope: record + replay only — no rewind, no scrub UI (ratified as a decision, `3-0c/R10`).
+- **UI ships SAVE-only (story 3-0d).** `src/ui/debug/` carries a save control that persists the record
+  to `user://` — **no load control and no start control exist** (`3-0d/R2`); replay is driven by
+  passing a loaded record to the runner at construction (`_ready()`), not from a live UI toggle.
 
 ### Architectural Boundaries (enforceable dependency rules)
 
@@ -656,7 +722,7 @@ Per `project-context.md` §Naming Conventions verbatim. New types conform: `Matc
 ## Implementation Patterns
 
 Concrete GDScript so agents implement the D-decisions identically. Full depth for E0–E3; E4–E6
-branches are reserved seams (guarded by `check_invariant`/feature flag until their epic). All code is
+branches are reserved seams (guarded by `Invariant.check`/feature flag until their epic). All code is
 Godot 4.6 GDScript, statically typed, per `project-context.md` conventions.
 
 ### Novel Pattern 1 — Tick + Signal-Queue (D2 + D5, the core loop)
@@ -679,11 +745,17 @@ func drain() -> void:
 ```gdscript
 # src/main/match_runner.gd — the ONLY _physics_process in the project; actors have none (F1)
 func _physics_process(delta: float) -> void:
-    var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]  # D3, outside advance
-    _gather_spatial_facts()                          # F1: query active sensors → queue overlap/contact facts
-    _intent_recorder.capture(intents)                # X5 passive tap — never affects the tick
-    _match_state.advance(intents)                    # consumes facts + intents; enqueues signals only
-    _drive_movement(delta)                           # F1: actors move_and_slide here — delta lives ONLY here
+    var ticking := not _paused or _debug_input.step_pressed()   # 3-0b AC 1: the debug pause/step gate
+    var intents: Array[InputIntent] = [_p1_controller.sample(), _p2_controller.sample()]  # D3, sampled
+                                                      # every frame, paused or not — sampling is not
+                                                      # one of the three things the pause freezes
+    if ticking:                                      # gather, tap, advance, drive are THE freeze
+        _gather_spatial_facts()                      # F1: query active sensors → queue overlap/contact facts
+        _intent_recorder.capture_advance(intents)     # X5 tap, seated HERE (3-0c/R14) — NOT at the
+                                                      # sample step above, or a paused frame would
+                                                      # record an intent no tick ever consumes
+        _match_state.advance(intents)                # consumes facts + intents; enqueues signals only
+        _drive_movement(delta)                       # F1: actors move_and_slide here — delta lives ONLY here
     _match_state.drain_signals()                     # D5: emit AFTER advance returns
 ```
 
@@ -785,51 +857,73 @@ Every chargeup / defense-window / stun / fizzle is *this one type*, advanced in 
 hot-reloads — the new value is picked up only at the next `start()` (D4/A1). No engine `Timer` /
 `SceneTreeTimer` nodes for gameplay-critical timing.
 
-### Novel Pattern 5 — Data-Defined Economy Evaluator (D6)
+### Novel Pattern 5 — Data-Defined Economy Evaluator (D6, shipped shape per story 3-4)
 
 ```gdscript
 class_name ResourceGenerationRule extends Resource
-@export var source: StringName        # &"melee_hit" | &"passive_tick" | &"mana_accelerator" (E4)
-@export var resource: StringName      # &"mana"
-@export var amount: float
+@export var source: StringName          # &"melee_hit" | &"passive_tick" | &"mana_accelerator" (E4)
+@export var resource: StringName        # &"mana"
+@export var amount_domain: AmountDomain = AmountDomain.BALANCE   # where amount_field is read
+@export var amount_field: StringName    # names a BalanceConfig field — never a literal amount
+@export var required_flag: StringName   # optional FeatureFlags gate
 
-class_name EconomyEvaluator extends RefCounted    # PURE — the only place gen rules are applied
-static func apply(rules: Array[ResourceGenerationRule], src: StringName,
-                  player: PlayerState) -> void:
-    for r in rules:
-        if r.source == src and r.resource == &"mana":
-            player.mana.add(r.amount)
+class_name EconomyEvaluator extends RefCounted    # PURE, fully static — no instance, nothing to cache
+const RULES_DIR := "res://data/economy/"
+static var _authored: Array[ResourceGenerationRule] = []
+static var _authored_loaded := false
+
+static func authored_rules() -> Array[ResourceGenerationRule]:   # loaded once, sorted scan, no reload
+    if not _authored_loaded:
+        _authored = load_rules(RULES_DIR)
+        _authored_loaded = true
+    return _authored
+
+static func amount_for(rule: ResourceGenerationRule, balance: BalanceConfig) -> float:
+    return balance.get(rule.amount_field)    # COMPUTES only — the caller applies to a pool
 ```
 
-`CardCastCondition` gates every cast/mode the same data-driven way (mana cost + per-color orb costs +
-flags), evaluated against `PlayerState`. Adding a mana source or cast rule = a new `.tres`, no code.
+`EconomyEvaluator` computes; the caller (inside `advance()`'s ordered dispatch, D2 step 5) applies
+the returned amount to a pool — a deliberate departure from an earlier sketch where the evaluator
+called `player.mana.add()` itself. `CastEvaluator` (`src/state/economy/`, story 3-5a) mirrors the
+same compute/apply split on the spend side. `CardCastCondition` gates every cast/mode the same
+data-driven way (mana cost + per-color orb costs + flags), evaluated against `PlayerState`. Adding a
+mana source or cast rule = a new `.tres`, no code.
 
-### Novel Pattern 6 — Four-Mode Card Resolution (the gameplay novelty)
+### Novel Pattern 6 — Four-Mode Card Resolution (the gameplay novelty; shipped shape per stories 3-2/3-5a)
 
 One `CardData` is summon **and** attack **and** defense **and** pitch. Modes ②/③ derive from `color`
 (no per-card data); ①/④ carry effects.
 
 ```gdscript
 class_name CardData extends Resource
-@export var color: CardColor                 # drives Mode ②/③ unblockable identity
+@export var id: StringName                  # FIELD identity, never the filename (story 3-2)
+@export var color: Enums.CardColor           # drives Mode ②/③ unblockable identity
 @export var basic_effect: CardEffect         # Mode ① (E3)
 @export var pitch_effect: CardEffect         # Mode ④ (E6, reserved)
 @export var cast_condition: CardCastCondition
+@export var max_copies: int                  # per-card copies cap — card content, not BalanceConfig
 ```
+
+`ModeKind` lives on `Enums` (`src/state/enums.gd`), beside `CardColor` — not a free-standing enum
+declared here. Resolution is a **private `MatchState` method** dispatched at `advance()` step 6
+(story 3-5a, AC 9), matching the shape every other `advance()` mutation already uses
+(`_generate_mana` / `_resolve_actions` / `_deal_pending_decks`) — never a free `resolve()` function,
+so the mutation stays inside the ordered dispatch (D2):
 
 ```gdscript
-enum ModeKind { BASIC, UNBLOCKABLE_INIT, UNBLOCKABLE_DEFENSE, PITCH }
-func resolve(player: PlayerState, card: CardData, mode: ModeKind) -> void:
+# MatchState, private — not a free function
+func _resolve_card_mode(player: PlayerState, card: CardData, mode: Enums.ModeKind) -> void:
     match mode:
-        ModeKind.BASIC:               _resolve_basic(player, card)               # E3
-        ModeKind.UNBLOCKABLE_INIT:    _resolve_unblockable_init(player, card)    # E5 seam
-        ModeKind.UNBLOCKABLE_DEFENSE: _resolve_unblockable_defense(player, card)  # E5 seam
-        ModeKind.PITCH:               _resolve_pitch(player, card)               # E6 seam
+        Enums.ModeKind.BASIC:               _resolve_basic(player, card)               # E3
+        Enums.ModeKind.UNBLOCKABLE_INIT:    _resolve_unblockable_init(player, card)    # E5 seam
+        Enums.ModeKind.UNBLOCKABLE_DEFENSE: _resolve_unblockable_defense(player, card)  # E5 seam
+        Enums.ModeKind.PITCH:               _resolve_pitch(player, card)               # E6 seam
 ```
 
-E5/E6 branches are reserved stubs guarded by `check_invariant`/feature flag until their epic.
-(`CardEffect` is a reserved effect-schema `Resource` in `state/resources/` — `basic_effect` authored
-in E3, `pitch_effect` in E6.)
+E5/E6 branches are reserved stubs guarded by `Invariant.check`/feature flag until their epic (the
+guard helper is `Invariant.check`, `src/systems/invariant.gd` — never `check_invariant`, which names
+no real symbol in this repo). `CardEffect` is a reserved effect-schema `Resource` in
+`state/resources/` — `basic_effect` authored in E3, `pitch_effect` in E6.
 
 ### Hero Action-State Representation (DECIDED: pure enum + transition table)
 
@@ -853,7 +947,7 @@ tick and under headless test.
 | Entity creation | `PackedScene.instantiate()` + `ObjectPool` for hot spawns (E4 seam); never instantiate/`queue_free` per shot in a hot path |
 | Entity state | Pure enum + transitions **in the state layer**; never a scene `StateMachine` for gameplay state |
 | Data access | Content/config via autoload **services**; **state receives schema `Resource`s by injection, never reads a `*Service`** |
-| Invariants | `check_invariant()` (X1), never bare `assert()` as the sole guard of a playtest-critical rule |
+| Invariants | `Invariant.check()` (X1), never bare `assert()` as the sole guard of a playtest-critical rule |
 | Timing | All gameplay-critical timing via `TimingWindow` advanced by fixed δ; never engine `Timer` nodes |
 | Signals | Owner emits via `SignalQueue.push`; subscribers are presentation-only; no state-to-state signals (D5) |
 
@@ -1002,7 +1096,7 @@ strengthens an existing determinism guarantee rather than adding scope.
     Applied across D2, Novel Pattern 1, the structure tree, and First Steps item 3.
   - **Tick-rate invariant is runner-checked.** `TimingWindow.TICK_HZ` must equal
     `physics/common/physics_ticks_per_second`; `match_runner` asserts it once at startup via
-    `check_invariant()` (runner, not state — D3(b) intact). `project.godot` now sets the value explicitly.
+    `Invariant.check()` (runner, not state — D3(b) intact). `project.godot` now sets the value explicitly.
 - **Checklist (First Steps item 4) — determinism regression test added.** E0 test harness gains a test
   that runs N ticks from a fixed seed + fixed intent list and asserts a hash of the resulting state
   against a golden value. The hash is taken over a **canonical serialization with sorted keys** —
@@ -1035,6 +1129,58 @@ strengthens an existing determinism guarantee rather than adding scope.
   7. **`advance()` ladder (D2).** Marked current with the story 2-6 step-1b round-over freeze; the
      2-3 DEAD-residual branches are noted unreachable via `advance()` but retained as the contract of
      their own step functions (ruling: decision-log.md, E2 close-out).
+- **A5 (v1.4, 2026-08-06) — E3 close-out amendment queue flush.** Eleven amendments landed together,
+  confirmed by content against the decision log (queue confirmed at ELEVEN, decision-log Session
+  2026-08-04 -- Story 3-0d close-out) and closing the queue opened right after A4:
+  1. **`assets/` Directory Tree, expanded (`3-0a/R10`).** Was a single unexpanded line; now itemizes
+     `characters/<name>/` (source `.fbx`/`.png` + two new artifact kinds, next) alongside
+     `audio/`/`art/`/`models`/`materials`.
+  2. **Import post-processing as a repo pattern (`3-0a/R10`).** `EditorScenePostImport` `@tool`
+     scripts (e.g. `strip_model_anim.gd`) are a sanctioned artifact type living beside the asset they
+     process, substituted where an import *setting* does not achieve the same strip on this engine
+     version.
+  3. **A new artifact type under `assets/` (`3-0a/R10`).** Editor-assembled files committed alongside
+     source assets — an import-time `.gd` hook and an `AnimationLibrary` `.res` (e.g.
+     `paladin_anims.res`) — distinct from the source assets the prior Directory Tree vocabulary
+     assumed.
+  4. **`src/controllers/` is not `Controller`-only (`3-0b/R17`).** `debug_input_reader.gd`
+     (`DebugInputReader`) lives there because D3(a) confines all `Input.*` reads to the folder, not
+     because it implements `sample()`/`InputIntent` like every other member.
+  5. **Data-Defined Economy (D6) reconciled with the shipped evaluator (`3-4/R4`, `3-4/R9`).**
+     `ResourceGenerationRule` names a balance FIELD (`amount_field`) rather than carrying the amount
+     directly; `EconomyEvaluator` COMPUTES and the caller APPLIES inside `advance()`, never
+     `player.mana.add()` from the evaluator itself; the rule set loads via a sorted directory scan of
+     `data/economy/` (now itemized in the Directory Tree), not a preload list. See Novel Pattern 5.
+  6. **`CardData`/`CardEffect` schema reconciled (3-2 gate, `3-4/R9`(d)).** `CardData` ships six
+     exports (`id`, `max_copies` added to the four-export sketch); `CardEffect` is now listed under
+     Schema-vs-Loader and the Directory Tree.
+  7. **`Deck`/`Hand` Directory Tree lines + the nondeterminism ban named concretely (3-3 close-out).**
+     `deck.gd`/`hand.gd` now appear under `src/state/`; D3 INVARIANT (b) now names the actual banned
+     implicit-global-RNG collection APIs (`Array.shuffle()`, `Array.pick_random()`, bare `seed()`),
+     not just the concept. The conditional EventBus/seam-registry reconciliation this member also
+     carried fired with 3-5b/3-6 and is folded into members 6 (below, D5/Event System) directly.
+  8. **Novel Pattern 6 corrected three ways (`3-5/R9`, combining findings first raised at the 3-2 and
+     3-5a gates).** The `CardData` sketch (see member 6); `ModeKind` now lives on `Enums` with
+     resolution dispatched by a private `MatchState` method at `advance()` step 6, not a free
+     `resolve()` function; the guard helper is `Invariant.check` (`src/systems/invariant.gd`), never
+     `check_invariant`, which named no real symbol — corrected everywhere the doc used the wrong name.
+  9. **The X5 section was pre-code text, corrected to the shipped mechanism (`3-0c/R10`).** Its scope
+     line ("record + replay only — no rewind, no scrubbing UI") is ratified as a decision. Its
+     controller-swap replay sketch is replaced: replay is a runner-level fork that also replays
+     recorded camera bases, contact facts, and reload events directly against `MatchState`, not a
+     controller swap alone. See *Instrumentation wiring* and Debug Tools item 5.
+  10. **The tick pseudocode's intent-tap seat corrected (`3-0c/R14`).** The X5 tap is seated
+      immediately before `advance()`, inside the runner's ticking gate — not at the sample step, which
+      runs every frame regardless of the 3-0b pause gate and would desync the stream. See Novel
+      Pattern 1.
+  11. **`src/ui/debug/`'s record/replay annotation corrected to SAVE-only (`3-0d/R12`).** The Directory
+      Tree and Debug Tools item 5 claimed a start/stop/load surface; story 3-0d ships save only — no
+      load control and no start control exist.
+  Also recorded here, per the operator's ruling at this close-out: the card-slot refill-in-place
+  finding (decision-log, Session 2026-08-06 -- Story 3-6 close-out) is **not deferred** — it is a
+  preparatory story at the head of Epic 4, `4-0-hand-slot-stability`, on the `3-0a..3-0d` precedent of
+  a dedicated pre-epic substrate story. No story file is authored and the board is not touched by this
+  amendment pass; the ruling is recorded here only.
 
 ---
 
