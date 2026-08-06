@@ -36,6 +36,12 @@ so that whether the card layer is readable during live combat is assessed and wr
 - [x] Finalize card-strip sizing; render `CardData.id` as text (AC: 6)
 - [ ] Verify readability live; operator records `docs/playtest-log.md` by hand (AC: 7) — **operator's, R-D6 re-invoked**
 
+### Review Findings
+
+- [x] [Review][Patch] Reshuffle timer callback may fire against a freed `HudRoot` [src/ui/hud/hud_root.gd:on_reshuffle_vulnerable_window_opened] — fixed, `is_instance_valid` guard
+- [x] [Review][Patch] Deck/reshuffle labels lack overflow protection unlike card captions [src/ui/hud/hud_root.gd:_build_deck_indicator] — fixed, `clip_text` + ellipsis trim added
+- [x] [Review][Defer] Hand row hard-coded to 4 slots with silent truncation if `hand_ids` ever exceeds 4, no `Invariant.check` [src/ui/hud/hud_root.gd:on_cards_changed] — deferred, pre-existing (2-5/R1 constant-4 assumption predates this story); **CLOSED by `3-6/R8`** — `test_balance_authoring.gd::test_authored_deck_and_hand_counts_are_sane` gained `hand_size <= 4`, so an authored 5 now fails the suite loudly instead of the HUD truncating silently
+
 ## Dev Notes
 
 - The own row reuses the 2-5 privacy seat (`_make_card_face_style(true)`) and the 2-4 reserved footprint; the opponent row is deleted, not reused or hidden. [Source: decision-log.md E3-RG/R4, 3-6/R1]
