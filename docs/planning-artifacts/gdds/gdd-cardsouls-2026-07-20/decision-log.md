@@ -5200,3 +5200,120 @@ just-in-time authoring pass, per the Set-B-staleness lesson (`E3-P/R3`).
 **Two commits, neither pushed:** `docs(architecture): E3 amendment queue flush` (`docs/game-architecture.md`
 only, ledger entry A5), then this entry, a PURE APPEND -- no existing entry edited. The operator
 reviews the log and pushes.
+
+---
+
+## Session 2026-08-06 -- E3 retrospective ruled
+
+The first retrospective ever held in this project. The retrospective itself is
+`docs/implementation-artifacts/epic-3-retro-2026-08-06.md` (commit `docs(retro): epic 3
+retrospective`); this entry records only what it RULED, per the standing separation between an
+analysis artifact and the decisions it produces. `sprint-status.yaml` is deliberately NOT touched: it
+carries no `epic-N-retrospective` key for any epic and its header locks the lifecycle to exactly
+`backlog -> ready-for-dev -> done` ("No other states"), so recording a retrospective on the board
+would mean inventing a fourth status. The retrospective says so in its own text.
+
+**A correction the retrospective made to itself, recorded because the method is the finding.** Its
+first draft claimed "E3 ran 0-for-11 on skills," measured by counting skill NAMES in story prose --
+an artifact of what an author chose to write down, not a trace of what ran. The machine-checkable
+trace is the `baseline_commit` front-matter key, written by `gds-dev-story`. Measured by content:
+present in exactly THIRTEEN story files -- twelve in E1 (`1-1`, `1-2`, `1-3`, `1-3b`, `1-3c`, `1-4`,
+`1-5`, `1-6`, `1-7`, `1-7b`, `1-8`, `1-9`) and `3-6`, whose value
+`c6357be918bbd16ee7ed91879a15d74d2b40803b` resolves to `docs(decision-log): 3-6 readiness gate
+outcome`, the commit immediately preceding its dev pass. The prose measure missed three files.
+**Corrected: E3 ran 1 of 11 on the skills.** `3-6` ran end-to-end through `gds-create-story`,
+`gds-dev-story` and `gds-code-review`; it caught two real patch-level defects (freed-`HudRoot` timer
+callback; missing label overflow protection), both shipped in `fix(hud): 3-6 review patches`, and its
+`[Review][Defer]` became `3-6/R8`. It verified the dev pass's mutation claim with an INDEPENDENT
+mutation grep rather than trusting it. Its named failure mode: the Acceptance Auditor layer HUNG at
+600s and the acceptance audit was done by hand -- so the substitution is proven at patch level and
+UNPROVEN at exactly the layer where `3-0d` cost four review rounds. Permanent rule: **measure
+provenance from machine-written keys, never from prose.**
+
+**`E3-R/R1` -- OPEN DECISION (c), variable analog magnitude, is RESOLVED by shipped authoring, and is
+RECORDED, NOT REOPENED.** Decision (c) was raised at `2-2/R5` (the controller normalizes the stick
+vector to unit length above the deadzone rather than passing a fraction of `move_speed` through), with
+its forcing point set at 2-6 and then at "the E2 retrospective." **No E2 retrospective was ever held**
+-- verified by content, no `epic-*-retro-*.md` file existed in this repo before today -- so (c) waited
+two epics while the shipped code answered it. `3-0b` AC12 made the answer explicit and authored:
+VERDICT KEEP `normalize_move_magnitude = true`, now authored explicitly rather than surviving as an
+unstated default. Ruling: that IS the resolution. Variable-magnitude movement stays unauthored and
+unadopted; it does not join the DEBT E animation-gate registry (moot -- DEBT E is closed). Status:
+**RESOLVED**, no further owner, no forcing point. This is a bookkeeping closure of a decision the code
+settled, not a new design decision, and it is explicitly not an invitation to re-litigate walk speed.
+Recorded as the clearest evidence in the log for why retrospectives get held: a decision parked at a
+venue that never convenes stays parked.
+
+**`E3-R/R2` -- THE `SCRIPT ERROR` HARNESS GAP: OWNER IS THE OPERATOR, AND IT RUNS AS ITS OWN TOOLING
+PASS BEFORE `4-0-hand-slot-stability`.** This is the one item explicitly deferred to this
+retrospective (3-1 close-out: "OPEN, no owner: make the harness FAIL on `SCRIPT ERROR` lines in its
+own output; ownership decided at the E3 retrospective"). Re-verified by content this session:
+`test/run_all.sh:28` pipes each integration run through
+`grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"`, and the line below it sets `fail`
+from `PIPESTATUS[0]` -- the Godot exit code -- so **a `SCRIPT ERROR` line is printed and ignored. The
+grep is vacuous as a gate.** Every "zero SCRIPT ERROR lines" claim recorded across E3 was therefore a
+claim about output a human read, never about a test that would have failed. Ruling: **owner is the
+operator**, and it is scheduled as **its own tooling pass, BEFORE `4-0-hand-slot-stability`, not
+folded into it** -- on the standing precedent that a corrective with one named cause gets its own
+commit chain (BC/R1, SDV/R1, `E3-RG/R2`), and because folding a harness change into a story that also
+moves the golden would confuse two independent proofs. Note for whoever runs it: turning this on may
+surface pre-existing noise that has been printed and ignored for the whole project; that surfacing is
+the point, and any resulting failures are findings, not regressions introduced by the pass.
+
+**`E3-R/R3` -- THE MELEE RETUNE IS SCHEDULED, NOT RESOLVED, BECAUSE IT IS A FEEL CALL.** Owed since
+the 3-5 gate, where the operator sealed it to land AFTER `3-5a`'s live smoke as its own golden-neutral
+balance commit, against the criterion "a round should finance 2-4 loop cycles" (`E3-RG/R1`'s authoring
+criterion, restated at the 3-5 gate seal 3). Verified by content: **no such commit exists** in the E3
+range. The reason it was owed and not done is now the reason it still cannot be closed on paper --
+the criterion was unjudgeable until cycles per round could actually be counted, which the full loop
+only made possible at E3 close; and counting them is a LIVE PLAYTEST, not a headless measurement.
+Ruling: it stays a scheduled obligation with its criterion intact and its shape fixed (one authored
+`.tres` edit plus a decision-log record, golden-neutral by the BC/R3 isolation, no test edit), and it
+is NOT resolved by this retrospective. It requires a live playtest to judge; the retrospective cannot
+substitute for one. It re-invokes `R-D6` if run against killable human slots (`R-D6` is SPENT as of
+`3-6`).
+
+**`E3-R/R4` -- THE CHANGE LOG AUTHOR-COLUMN QUESTION, ANSWERED.** Parked twice (3-2 gate close-out,
+3-5a gate close-out), both naming the E3 close-out as the forcing point, and **not discharged there**
+-- the close-out flushed the eleven-member architecture queue and dropped this rider. Ruling: **the
+Change Log author column carries the ACTUAL MODEL THAT DROVE THAT PASS, the same value as `Agent Model
+Used` in the same file.** A mixed column is therefore CORRECT, not a defect to normalize: `3-5a` and
+`3-2` reading `Claude Opus 4.8` for one row and `Claude Sonnet 5` for the next is those files
+accurately recording that two different models did two different passes. No file is rewritten to make
+a column uniform. **The commit trailer is unaffected and stays the repo-wide constant
+`Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`** (operator ruling, restated at `3-0d`
+repeatedly, not reopened here). The two records answer different questions: the trailer names a repo
+invariant, the column and `Agent Model Used` name what did the work.
+
+**`E3-R/R5` -- WHAT E4 INHERITS, RECORDED AS A FACT ABOUT THE PLAN AND NOT AS A RULING ON IT.** Two
+findings the retrospective measured, carried here so the next planning pass reads them before
+authoring anything:
+1. **`CardEffect` has NO consumer anywhere in `src/`.** `3-5a` shipped `card_cast_resolved` carrying a
+   resolved card ID, not a `CardEffect` -- an accepted deviation, because the cost-injection seam
+   injects costs only. E4's stated goal in `epics.md` is "wire Basic-mode summons to real actors,"
+   which is precisely the missing consumer. E4 starts by building the thing the schema has been
+   waiting for since 3-2.
+2. **E4 enters with NO substrate stories and no architectural pre-work recorded.** `epics.md`'s E4
+   Committed obligations add nothing beyond the GDD epic table. E3 entered with four substrate stories
+   (`3-0a`..`3-0d`) plus a revisit gate. `4-0-hand-slot-stability` (ruled at the E3 close-out) is the
+   first correction to that and is unlikely to be the only one needed -- object pooling, throttled
+   targeting, and data-defined minion priority types are all named in `epics.md` with no decision
+   recorded anywhere about how they are shaped.
+No ruling is taken on E4's plan here. A retrospective records what the next planning pass must not
+discover late; it does not do that pass's job.
+
+**Also recorded, discharged by the companion commit rather than ruled.** `stories-manual-e3.md`'s
+provisional front matter, its stale revisit-gate banner, its six `Revisit note` blocks (E3.S1, E3.S2,
+E3.S3, E3.S4, E3.S5a, E3.S6) plus E3.S5b's unlabelled provisional sentence carrying the same stale
+instruction, and the last live instance of the non-existent symbol `check_invariant` (E3.S2 item 4,
+corrected to `Invariant.check`) -- all found by content, all deferred by the 3-5 gate to "the E3
+close-out docs flush," all missed by that flush, all landed now in `docs(stories): E3 stories manual
+hygiene`. `E3-RG/R11` had already flagged this class of failure as recurring "the seventh occasion
+cumulatively"; left alone the file would have reseeded corrected defects at the next gate that read it.
+Historical text is kept beneath each closure, unedited, per the standing rule that the log and its
+companion artifacts are corrected forward and never rewritten.
+
+**Three commits, none pushed:** `docs(retro): epic 3 retrospective` (the retrospective artifact only),
+`docs(stories): E3 stories manual hygiene` (`stories-manual-e3.md` only), then this entry, a PURE
+APPEND -- no existing entry edited. `sprint-status.yaml` untouched, deliberately (see above). No code
+changed; suite and golden untouched, nothing ran. The operator reviews the log and pushes.
