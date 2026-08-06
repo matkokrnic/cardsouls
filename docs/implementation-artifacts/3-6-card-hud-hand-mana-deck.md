@@ -4,7 +4,7 @@ baseline_commit: c6357be918bbd16ee7ed91879a15d74d2b40803b
 
 # Story 3.6: Card HUD — hand, mana, deck and reshuffle indicators
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -30,11 +30,11 @@ so that whether the card layer is readable during live combat is assessed and wr
 
 - [x] Delete `OpponentHandStrip` + construction path; populate `HandStrip` with real cards via AC2's seam (AC: 1)
 - [x] Add the eighth `connect_*` seam (hand ids + deck count + discard count, one payload); update the seven-seam guard to eight (AC: 2)
-- [ ] Judge the already-shipped mode-select affordance against P4; log the finding (AC: 3) — **operator's, pending the live smoke**
+- [x] Judge the already-shipped mode-select affordance against P4; log the finding (AC: 3) — **PASSED, operator's own hand, `docs/playtest-log.md` 6.8**
 - [x] Deck-count indicator from AC2's seam; reshuffle flag from `EventBus.reshuffle_vulnerable_window_opened` driving a presentation-local timer seeded by `reshuffle_vulnerable_window_seconds` (AC: 4)
 - [x] Keep the HUD signal-driven; no polling (AC: 5)
 - [x] Finalize card-strip sizing; render `CardData.id` as text (AC: 6)
-- [ ] Verify readability live; operator records `docs/playtest-log.md` by hand (AC: 7) — **operator's, R-D6 re-invoked**
+- [x] Verify readability live; operator records `docs/playtest-log.md` by hand (AC: 7) — **PASSED, `R-D6` spent (kill against a live killable slot; round-over label does not overlap the card row)**
 
 ### Review Findings
 
@@ -75,7 +75,9 @@ so that whether the card layer is readable during live combat is assessed and wr
 
 ## Live Smoke
 
-**REQUIRED, full two-human, half-width viewport — `R-D6` re-invoked (3-6/R6).** Available since 3-5a spent it; correctly not re-invoked by 3-5b/3-0c/3-0d, which shipped no player-facing surface. This is the first HUD-facing story since. Confirm: the deleted opponent row leaves no visual gap; own-hand contents (rendered as `id` text), mana level, and deck/reshuffle state are identifiable at a glance during a live exchange; the reshuffle flag turns off on its own via the presentation-local timer, never sticking on; final card-strip sizing does not collide with the bars, pitch placeholder, or deck indicator. Record the readability verdict in `docs/playtest-log.md`, operator's own hand, before the commit chain.
+**RAN, operator's own hand, PASSED — `R-D6` re-invoked AND spent.** Full two-human, half-width viewport, recorded in `docs/playtest-log.md` under `6.8`. Confirmed: hand contents readable during a live exchange; the deleted opponent row leaves no visual gap; no collision between the grown card strip, the bars, the pitch placeholder, or the deck indicator; mana and deck count both live; the mode-select affordance (AC 3) reads without a menu — P4 judgment PASSED. `R-D6` spent: a kill occurred against a live killable slot, and the round-over label does not overlap the card row. The reshuffle flag was NOT observed live (needs deck exhaustion) — stays proven headless by `test_card_hud.gd`, as does the debug-reset re-announce.
+
+Two findings recorded, neither blocking: peripheral legibility of mana/deck count "could be better," deferred by the operator until the full loop is implemented; and card slots shift left on cast (the replacement is appended at the end instead of refilling the vacated slot) — a state-semantics change, recorded as a named open decision for the E3 close-out (decision-log, this session), not built here and assigned no story number.
 
 ## Dev Agent Record
 
@@ -200,3 +202,7 @@ see and cannot cast, which is worse than an empty slot. `test_card_hud.gd` gaine
 
 - 2026-08-06 — Dev pass: ACs 1, 2, 4, 5, 6 implemented and mutation-proven; ACs 3 and 7 left to
   the operator's live smoke. Golden unmoved. Suite 352/2270 + 22 → 362/2304 + 23.
+- 2026-08-06 — Close-out: live smoke ran and PASSED (`docs/playtest-log.md` 6.8); ACs 3 and 7
+  both discharged; `R-D6` spent. Two non-blocking findings recorded, one a named open decision
+  (card-slot refill-in-place) for the E3 close-out, no story number assigned. `Status`
+  `in-progress` → `done`.
