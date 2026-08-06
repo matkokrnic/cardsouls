@@ -4995,3 +4995,82 @@ promote 3-0d-replay-surface-and-live-reload to done` (`sprint-status.yaml` only)
 PURE APPEND -- no existing entry edited. Docs and code never share a commit, except where the named
 exception above applies, which this session's own commits do not invoke. The operator reviews the
 log and pushes.
+
+---
+
+## Session 2026-08-06 -- Story 3-6 readiness gate
+
+Readiness gate on `docs/implementation-artifacts/3-6-card-hud-hand-mana-deck.md` (last touched by the
+E3 revisit gate, `E3-RG/R1-R12`, 2026-07-31 -- VERDICT AMENDED, HOLD pending this story's own gate)
+returned **NOT READY** with **SEVEN findings**, resolved by six operator rulings this session. This is
+the **TWENTY-SECOND logged readiness-gate session; all twenty-two have now returned NOT READY on first
+reading.** The gate report itself lives in the browser session; this entry is the record of the
+OUTCOME and the RULINGS, not a transcription of the findings.
+
+**Verification before anything was edited.** `HEAD` `3cf8efe`, working tree clean, `origin/main`
+`3cf8efe` -- no divergence, no fetch and no push needed to check it. The gate's findings were checked
+against the shipped tree, not assumed: no `connect_*` seam anywhere relays card identity or deck count
+(`src/main/match_runner.gd` scanned by content); `PlayerState.to_snapshot()` exposes
+`hand_size`/`discard_size` only, never ids or order; `CardData` has no display-name or art field;
+`_make_card_face_style` is private by the repo's own naming convention (`project-context.md:117`);
+`DebugInstrumentPanel`'s box is fixed-height with no stated slack for a fifth control, per its own
+3-0b/3-0d comments; `EventBus.reshuffle_vulnerable_window_opened` fires on OPEN only, with no CLOSE
+counterpart. All premises held.
+
+**The headline finding: `E3-RG/R4` and `E3-RG/R5`, ruled in the same 2026-07-31 session, contradict
+each other.** R4 deletes `OpponentHandStrip` outright ("the row goes"). R5 assumed the reveal toggle
+could "flip" the existing `_make_card_face_style(is_own)` seat -- which has a caller left only for
+`is_own == true` once R4's deletion lands. A toggle over a row that no longer exists renders nothing.
+Neither ruling was wrong about its own premise; R5 simply did not survive R4 being applied literally.
+
+**`3-6/R1` -- the reveal-opponent-hand toggle leaves this story.** `E3-RG/R4` stands. The toggle is
+removed as an AC and recorded as a named deferral, not a cancellation: it is cheap once `3-6/R2`'s
+seam ships (hand ids are already in hand at that point), owned by the first future story that touches
+`src/ui/hud/` card rendering -- no story number assigned, not an E3 exit criterion. This also disposes
+of three findings for free: the private-method call from `DebugInstrumentPanel`, the opponent row's
+panels never being stored anywhere, and the panel box having no layout budget for a fifth control --
+none of them matter once there is no toggle to build.
+
+**`3-6/R2` -- one new observation seam, not three.** Hand card ids (in hand order), deck count, and
+discard count ship together as ONE payload on the runner's eighth `connect_*` method, its own AC.
+`test_runner_observation_seams_are_exactly_seven` (`2-6/R7`'s freeze, machine-checked by a content
+scan of `src/main/`) becomes eight -- an explicit, reviewed exception, the same shape `3-5b` used to
+raise the `EventBus` pin from two signals to three. Card container contents/order still never reach
+`to_snapshot()` (the pinned 3-0c AC11 exclusion is untouched); this is a live push, never a state
+read.
+
+**`3-6/R3` -- the reshuffle window renders from the event, with a presentation-local timer, discharging
+`3-5b/R20` explicitly.** `3-5b/R20` required this story to choose, in the open, between a
+presentation-local timer (window stays unread, no golden move) and reading state directly (pulls the
+window into the snapshot, a new golden cause). Ruling: the timer. The gate's own finding is the reason
+the AC must say so in these terms: `reshuffle_vulnerable_window_opened` fires on OPEN only -- there is
+no CLOSE signal -- so an indicator built on the event alone cannot turn itself off. The AC now names
+the fix: the HUD receives `BalanceConfig.reshuffle_vulnerable_window_seconds` once at construction (the
+`gamepad_profile`/`huds` static-handoff precedent) and runs its own countdown from the OPEN event.
+
+**`3-6/R4` -- raw `CardData.id` as card text is accepted, recorded as a named deferral.** `CardData`
+has no display-name field and Card ART is unowned by every scheduled story; a formatted title was
+never authored anywhere in the pipeline. Rendering the raw snake_case id (e.g. `bramble_snare`) is a
+lower legibility bar than a real title, and AC7's whole point is measuring legibility -- so the
+deferral is recorded rather than silently assumed, and the live smoke's readability verdict is the
+check on whether it was good enough.
+
+**`3-6/R5` -- AC2 (mode-select) needed no new finding, only a task-list correction.**
+`set_card_selection` has been wired end-to-end since `3-5a` (`match_runner.gd:621-622`). The story's
+task list previously did not distinguish this from the genuinely unbuilt ACs; it now says so directly,
+so a dev pass does not spend effort re-discovering or re-building an affordance that already ships.
+
+**`3-6/R6` -- `R-D6` re-invoked.** Available since `3-5a` spent it; `3-5b`, `3-0c`, and `3-0d`
+correctly did not re-invoke it, having shipped no player-facing surface. This story is the first
+HUD-facing one since, so Live Smoke requires it again.
+
+### Close-out
+
+Story `3-6-card-hud-hand-mana-deck` promoted `backlog`/HOLD -> `ready-for-dev` in the story file and in
+`sprint-status.yaml`; `story_notes` reduced to five lines (what the gate found and ruled), not the full
+amendment history, which stays here and in the story file's own sections. No code changed this
+session -- docs only. Golden and suite untouched (no implementation ran).
+
+**Two commits, neither pushed:** `docs(stories): 3-6 gate fixes + promote to ready-for-dev` (the story
+file and `sprint-status.yaml`), and this entry, a PURE APPEND -- no existing entry edited. The operator
+reviews the log and pushes.
