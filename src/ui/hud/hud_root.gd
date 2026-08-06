@@ -180,8 +180,13 @@ func on_reshuffle_vulnerable_window_opened(slot: int, my_slot: int) -> void:
 	var token := _reshuffle_token
 	_reshuffle_label.text = "RESHUFFLE" if slot == my_slot else "OPP RESH"
 	_reshuffle_label.visible = true
-	get_tree().create_timer(reshuffle_vulnerable_window_seconds).timeout.connect(
-			func() -> void: _clear_reshuffle_flag(token))
+	# Review finding (3-6): the SceneTreeTimer outlives this HudRoot across a scene teardown
+	# mid-window — this root can be freed before the timer fires. is_instance_valid guards the
+	# freed case; calling a method on a freed Object would otherwise error.
+	var on_timeout := func() -> void:
+		if is_instance_valid(self):
+			_clear_reshuffle_flag(token)
+	get_tree().create_timer(reshuffle_vulnerable_window_seconds).timeout.connect(on_timeout)
 
 
 ## Hides the flag IF the expiring timer is the one that raised the flag currently showing. A
@@ -517,10 +522,16 @@ func _build_deck_indicator() -> void:
 	_deck_label.name = "DeckCount"
 	_deck_label.text = "DECK --"
 	_deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Review finding (3-6): overflow protection, matching the card captions' pattern — the
+	# 118px-wide column is narrower than "RESHUFFLE" can guarantee to fit at every font/DPI.
+	_deck_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_deck_label.clip_text = true
 	column.add_child(_deck_label)
 	_reshuffle_label = Label.new()
 	_reshuffle_label.name = "ReshuffleFlag"
 	_reshuffle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_reshuffle_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_reshuffle_label.clip_text = true
 	# Loud enough to catch the eye in the periphery — the flag is a state a player must NOTICE
 	# without being asked to watch the corner for it.
 	_reshuffle_label.add_theme_color_override("font_color", Color(0.98, 0.72, 0.20))

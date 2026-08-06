@@ -127,6 +127,13 @@ func test_authored_mana_set_is_positive() -> void:
 ## would leave the whole step-6 seat silently inert. The RELATIONAL bound is the third: the fill
 ## stops at an exhausted pile (no reshuffle ships, AC 11), so a hand_size ABOVE deck_size would
 ## quietly deal a short hand forever instead of failing — a defect by construction, not tuning.
+##
+## `3-6/R8` adds a FOURTH bound, closing the code-review finding deferred from 3-6: the HUD's
+## own hand row is built from exactly 4 slots (`hud_root.gd::_build_hand_row`, 2-5/R1's
+## presentation-local constant), and `HudRoot.on_cards_changed` silently drops any hand_ids
+## entry past index 3 rather than erroring. A hand_size of 5 is therefore a defect by
+## construction the moment playtest tuning authors one — exactly the class this file exists
+## for — so it fails HERE, loudly, instead of the HUD truncating silently at the next launch.
 func test_authored_deck_and_hand_counts_are_sane() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
@@ -138,6 +145,9 @@ func test_authored_deck_and_hand_counts_are_sane() -> void:
 		"hand_size must be authored > 0 (a zero hand makes the whole deal seat silently inert)")
 	assert_true(config.hand_size <= config.deck_size,
 		"hand_size must be <= deck_size (no reshuffle ships — an over-large hand deals short forever)")
+	assert_true(config.hand_size <= 4,
+		"hand_size must be <= 4 (3-6/R8): the HUD hand row is built from exactly 4 slots "
+		+ "(2-5/R1) and would silently truncate a larger hand instead of failing loud")
 
 
 ## Story 3-5b (AC 1/AC 2): the two card DURATIONS, audited in the defect-by-construction class —
