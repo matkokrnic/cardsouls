@@ -270,18 +270,25 @@ func test_state_layer_never_names_the_recorder_or_the_replay_controller() -> voi
 ## (test_contact_pipeline.gd, test_live_attack.gd, test_telegraph_profiles.gd), never as a count
 ## assertion. Nothing in the suite would have failed if an eighth seam had shipped.
 ##
-## THE PROOF RUNS FALLING: an eighth `connect_*` anywhere under src/main/ must make this FAIL.
-## This story adds none — its recorder is a plain runner-owned object called directly at the
-## capture points, and `recorded_stream()` is a read accessor, not a seam (no signal, no
-## callback, no state handle), which is why it is deliberately NOT named `connect_*`.
+## THE PROOF RUNS FALLING: a NINTH `connect_*` anywhere under src/main/ must make this FAIL.
+## 3-0c added none — its recorder is a plain runner-owned object called directly at the capture
+## points, and `recorded_stream()` is a read accessor, not a seam (no signal, no callback, no
+## state handle), which is why it is deliberately NOT named `connect_*`.
+##
+## STORY 3-6 (AC 2) MOVES THE COUNT TO EIGHT, AND THAT IS THE ONE SANCTIONED EXCEPTION. The HUD
+## cannot learn a hand by reading state — contents and pile order are excluded from to_snapshot()
+## by three separate rulings — so rendering the card layer at all requires a genuinely new
+## observation channel (PlayerState.cards_changed). This is the operator-approved amendment
+## `3-6/R2`, not a refactor: the count moved because a DESIGN decision moved it, the guard's name
+## and list moved WITH it in the same commit, and a ninth is the operator's call all over again.
 const OBSERVATION_SEAMS: Array[String] = [
 	"connect_hero_action_state_changed", "connect_hero_action_rejected", "connect_hit_landed",
 	"connect_deflect_landed", "connect_hero_hp_changed", "connect_stamina_changed",
-	"connect_mana_changed",
+	"connect_mana_changed", "connect_cards_changed",
 ]
 
 
-func test_runner_observation_seams_are_exactly_seven() -> void:  # 2-6/R7
+func test_runner_observation_seams_are_exactly_eight() -> void:  # 2-6/R7, amended 3-6/R2
 	var re := RegEx.create_from_string("^func\\s+(connect_[A-Za-z0-9_]*)\\s*\\(")
 	# The pattern must match the form it counts — a regex typo must not silently disarm this.
 	assert_true(re.search("func connect_hit_landed(callback: Callable) -> void:") != null,
@@ -301,9 +308,47 @@ func test_runner_observation_seams_are_exactly_seven() -> void:  # 2-6/R7
 	var expected := OBSERVATION_SEAMS.duplicate()
 	expected.sort()
 	assert_eq(found, expected,
-		"the runner's observation-seam family is FROZEN AT SEVEN (2-6/R7). An eighth seam is a "
-		+ "design change and the operator's call, not a refactor — and a removed one is as loud "
-		+ "as an added one: %s" % ", ".join(found))
+		"the runner's observation-seam family is FROZEN AT EIGHT (2-6/R7, amended once by 3-6/R2). "
+		+ "A ninth seam is a design change and the operator's call, not a refactor — and a removed "
+		+ "one is as loud as an added one: %s" % ", ".join(found))
+
+
+## Story 3-6 (AC 5): THE HUD IS SIGNAL-DRIVEN, MACHINE-CHECKED FOR THE FIRST TIME. `2-4/R9` chose
+## to keep "no _process in the HUD" REVIEW-CHECKED rather than enforced, and it survived five HUD
+## stories that way. This story is where that stops paying: it hands the HUD its first genuinely
+## time-varying element (the reshuffle flag, which must turn itself OFF), and the obvious way to
+## build one is a per-frame countdown in `_process`. So the discipline is enforced now, at the
+## moment it first has something to resist.
+##
+## `_physics_process` is already banned everywhere outside the runner by F1 above; this is the
+## `_process` half, scoped to `src/ui/` — the layer whose whole contract is "react to drained
+## signals". The shipped alternative is a one-shot SceneTreeTimer, which runs no per-frame code at
+## all (hud_root.gd's reshuffle flag).
+##
+## THE PROOF RUNS FALLING: a `func _process` anywhere under src/ui/ must make this FAIL.
+func test_ui_layer_never_polls_per_frame() -> void:  # Story 3-6 (AC 5), 2-4/R9 promoted
+	var re := RegEx.create_from_string("^func\\s+_process\\s*\\(")
+	# The pattern must match the form it bans, and must NOT match the names that merely contain it
+	# — a regex typo that silently disarms this fails here instead of passing quietly.
+	assert_true(re.search("func _process(delta: float) -> void:") != null,
+		"the pattern must match a _process DECLARATION")
+	assert_null(re.search("func _process_payload(x: int) -> void:"),
+		"a longer method name that merely starts with _process is not the banned override")
+	assert_null(re.search("\tset_process(false)"),
+		"a CALL is not a declaration and must not be counted")
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/ui/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				offenders.append("%s:%d" % [path, n])
+	assert_true(scanned > 0, "src/ui/ scan found no .gd files (guard would be vacuous)")
+	assert_eq(offenders.size(), 0,
+		"per-frame _process in src/ui/ (AC 5: the HUD updates from drained signals — a countdown "
+		+ "is a one-shot timer, never a frame loop): %s" % ", ".join(offenders))
 
 
 func test_controller_kind_ordinals_pinned() -> void:  # Story 2-2 (2-2/R4)

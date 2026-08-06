@@ -116,6 +116,12 @@ const PER_TICK: Array[String] = [
 	"hero_state._queue", "hero_state._deflect_closed_this_tick",
 	"hero_state._roll_iframe_closed_this_tick",
 	"mana_pool._queue", "orb_pool._queue", "stamina_pool._queue",
+	# Story 3-6 (AC 2): the FIFTH `_queue` reference, and it classifies exactly like its four
+	# siblings above — a shared reference to the ONE SignalQueue the runner drains after every
+	# advance(), holding already-decided emissions no gameplay path reads. PlayerState gained it
+	# because it gained a signal of its own (cards_changed); the classification argument is the
+	# unchanged one, not a new exemption.
+	"player_state._queue",
 	"signal_queue._pending",
 ]
 

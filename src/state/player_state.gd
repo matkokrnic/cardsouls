@@ -4,6 +4,32 @@ extends RefCounted
 ## D1 per-player composite: hero + economy pools + deck + hand. Pure RefCounted. All pools
 ## share the match SignalQueue so their signals drain together after advance() (D5).
 
+## Story 3-6 (AC 2): the CARD OBSERVATION CHANNEL — this composite's own typed signal, and the
+## first one PlayerState has ever owned (hp/stamina/mana each belong to the leaf that owns the
+## value; the three card containers own no queue, so the composite that owns all three is where
+## a payload spanning them belongs). Queued on the shared SignalQueue and drained by the runner
+## after advance(), exactly like every signal in this layer (D5); the runner's EIGHTH connect_*
+## seam is its only wiring, per slot.
+##
+## ONE PAYLOAD, THREE FACTS: the hand's CONTENTS in hand order, the deck COUNT, the discard
+## COUNT. It exists because the HUD cannot get the hand any other way — contents and pile ORDER
+## are excluded from to_snapshot() by 3-3 AC 5 / 3-5a AC 6 and pinned excluded by 3-0c AC 11
+## (a StringName in the canonical hash orders by INTERNAL POINTER on this engine, deterministic
+## within a process and not across runs). So this is a LIVE PUSH, not a state read, and adding
+## it moves no snapshot key and no golden.
+##
+## `hand_ids` is a COPY (Hand.to_array()), so a consumer cannot reach the container through it.
+## It is typed `Array[StringName]` on the wire; consumers may declare the parameter as a plain
+## `Array` (Callable binding does not narrow), which is why the copy matters rather than the
+## element type alone.
+##
+## OWN-SLOT FACTS ONLY (`3-6/R7`). Deck and discard COUNTS are private, exactly as the deleted
+## opponent hand row's count was: the runner binds each consumer to ONE slot's channel (2-4/R7)
+## and nothing here carries a slot index, so a consumer is structurally incapable of reading the
+## opponent's. The one PUBLIC card fact in the game is the reshuffle window, and it travels the
+## ownerless EventBus instead (3-5b AC 6) — not this channel.
+signal cards_changed(hand_ids: Array[StringName], deck_count: int, discard_count: int)
+
 var hero: HeroState
 var stamina: StaminaPool
 var mana: ManaPool
@@ -56,6 +82,11 @@ var pending_draw_owed := 0
 ## the coupling the counts-only snapshot discipline exists to avoid.
 var vulnerable_window: TimingWindow
 
+## Story 3-6 (AC 2): retained so notify_cards_changed() can enqueue. The three pools have each
+## held the queue since E0 for the same reason; this composite needed none until it owned a
+## signal of its own.
+var _queue: SignalQueue
+
 
 ## Story 3-1 (AC 1/AC 3): constructed STAT-LESS. Every bound below now arrives by injection
 ## (MatchState._apply_balance_to_player, from the single-source-of-truth BalanceConfig), so
@@ -64,6 +95,7 @@ var vulnerable_window: TimingWindow
 ## constructors — they are containers, and their unit tests build them with real bounds —
 ## but the one production caller hands them zeros and lets injection do the rest.
 func _init(queue: SignalQueue) -> void:
+	_queue = queue
 	hero = HeroState.new(queue, 0.0, 0.0)
 	stamina = StaminaPool.new(queue, 0.0, 0.0)  # filled by the D9 refill at first injection
 	mana = ManaPool.new(queue, 0.0, 0.0)        # stays empty — the flywheel builds it
@@ -73,6 +105,20 @@ func _init(queue: SignalQueue) -> void:
 	discard = DiscardPile.new()
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
+
+
+## Story 3-6 (AC 2): QUEUE one card-observation payload (D5). Called from MatchState at the seats
+## that move a card and NOWHERE ELSE — the deal, the cast, and the delayed replacement delivery —
+## so a tick that moves no card announces nothing and the channel can never degrade into a
+## per-tick push wearing a signal's clothes (AC 5's no-polling property, pinned by
+## test_card_observation.gd::test_a_tick_that_moves_no_card_announces_nothing).
+##
+## The values are read and BOUND HERE, at push time, so the payload describes the containers as
+## they were when the mutation completed. Two announcements in one tick (a cast whose replacement
+## delivers on the same tick, the zero-delay degrade) therefore drain in order and the LAST one is
+## the final state — never one stale payload overwriting a fresh one.
+func notify_cards_changed() -> void:
+	_queue.push(cards_changed.emit.bind(hand.to_array(), deck.size(), discard.size()))
 
 
 func to_snapshot() -> Dictionary:

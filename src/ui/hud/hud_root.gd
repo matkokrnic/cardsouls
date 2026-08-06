@@ -17,6 +17,11 @@ extends Control
 ## are NOT consumed here — they stay owned by TelegraphController (2-4/R4). The HUD reads
 ## exactly three economy channels plus the ownerless round-over event.
 ##
+## Story 3-6 adds the FOURTH channel — connect_cards_changed, the runner's eighth seam (AC 2) —
+## and a second ownerless bus event, EventBus.reshuffle_vulnerable_window_opened (AC 4). The card
+## channel is per-slot and PRIVATE like the three economy ones; the reshuffle event is public and
+## is the only card fact this root learns about the opponent (`3-6/R7`).
+##
 ## P4 / Reactor-Actor layout (2-4/R6, GDD #P4 / Reactor-Actor principle). The split viewport
 ## is HALF width, so every element gets its true half-width footprint NOW — this is the layer
 ## where CardSouls discovers whether the full HUD fits the space at all, before E3-E6 give the
@@ -34,8 +39,11 @@ extends Control
 ## (The centre "incoming telegraph" cue named in P4 is a WORLD-SPACE cue, not a HUD element —
 ## 2-4/R12 — so it is not built here; only the pitch timer placeholder occupies the centre.)
 ##
-## Every E3-E6 region below (hand strip, orb counters, pitch zone + timer, deck/reshuffle) is
-## a RESERVED empty placeholder occupying its real footprint and consuming NO signal (AC 5).
+## Story 3-6: the hand strip and the deck/reshuffle indicator are NO LONGER PLACEHOLDERS — they
+## are the first two reserved regions to gain real content, and this story owns their final
+## sizing (AC 6). The orb counters and the pitch zone stay reserved (E4/E5, E6). Card ART and a
+## display-name field are out of scope for every scheduled story, so a card renders as its
+## `CardData.id` text (`3-6/R4`).
 
 # The pixel offsets below are tuned against the nominal half-width footprint ~576x648 (the
 # default 1152x648 window split in two). Anchors keep every element attached to its viewport
@@ -50,6 +58,25 @@ var _mana_value: Label
 var _pitch_panel: Panel
 var _pitch_timer: Label
 var _round_label: Label
+## Story 3-6 (AC 4): the deck-count read-out and the reshuffle flag beside it. The count comes
+## from the eighth seam's payload; the flag comes from the ownerless bus event alone.
+var _deck_label: Label
+var _reshuffle_label: Label
+
+## Story 3-6 (AC 4): the authored vulnerable-window duration in SECONDS, handed over by the runner
+## at construction (the `gamepad_profile` / `huds` static-handoff precedent), before add_child.
+## PRESENTATION-LOCAL AND FOR THE FLAG ONLY: it seeds the one-shot timer that turns the flag back
+## off, so the HUD never reads PlayerState.vulnerable_window — which stays WRITE-ONLY unhashed
+## state that nothing consults (3-5b/R20), the property keeping the window's mechanical cost a
+## genuinely OPEN decision. If that window ever gains a cost, this number stops being the whole
+## story and the render is revisited THEN, deliberately (`3-6/R3`).
+var reshuffle_vulnerable_window_seconds := 0.0
+
+## Story 3-6 (AC 4): which reshuffle announcement the visible flag belongs to. Each event
+## increments it and its own one-shot timer captures the value; a timer whose token is stale does
+## nothing. Without this, a SECOND reshuffle landing while the flag is up would be switched off
+## early by the FIRST one's timer — the flag would lie about a window that is still open.
+var _reshuffle_token := 0
 
 ## Story 3-5a (AC 10): the OWN hand row's four panels, kept so the selection indicator can
 ## restyle exactly one of them. Own row only — the opponent row is never indicated (a selection
@@ -63,6 +90,13 @@ var _own_card_panels: Array[Panel] = []
 var _card_base_style: StyleBoxFlat
 var _card_armed_style: StyleBoxFlat
 
+## Story 3-6 (AC 1/AC 6): the four card CAPTIONS, one per own-row panel, index-aligned with
+## _own_card_panels. A card renders as its id text and nothing else — there is no art and no
+## display-name field on CardData, and neither is owned by any scheduled story (`3-6/R4`). A slot
+## with no card in it renders EMPTY rather than being hidden, so the row keeps its four-slot shape
+## while a replacement draw is in flight.
+var _own_card_labels: Array[Label] = []
+
 
 func _init() -> void:
 	name = "HudRoot"
@@ -74,12 +108,14 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # the HUD never eats gameplay input
 	_build_vitals()
 	_build_pitch_zone()
-	# Story 2-5: both hand rows go through the ONE construction function below. `true` = the
-	# owning player's face-up hand (the reserved 2-4 bottom-centre strip); `false` = the
-	# opponent's face-down hand (new top-centre row). The parameter is the single seat of the
-	# face-up / face-down decision (2-5/R4).
-	_build_hand_row(true)
-	_build_hand_row(false)
+	# Story 3-6 (AC 1): ONE hand row — the owning player's, face-up. The opponent's face-down
+	# row 2-5 built here is DELETED, not hidden and not repointed (E3-RG/R4): it rendered a
+	# four-card COUNT whose publicity was never decided, and the GDD makes the pitched card the
+	# only public card information. Deleting it is also why the reveal toggle E3-RG/R5 assumed
+	# would be a flip of `_make_card_face_style`'s parameter is DEFERRED rather than built here
+	# — with no opponent row left, a toggle would be a whole new debug-only rendering path
+	# (`3-6/R1`). The face-down branch of that function survives untouched for it.
+	_build_hand_row()
 	_build_orb_counters()
 	_build_deck_indicator()
 	_build_round_label()
@@ -103,6 +139,56 @@ func on_stamina_changed(current: float, maximum: float) -> void:
 ## every confirmed melee hit, blocked hits included.
 func on_mana_changed(current: float, maximum: float) -> void:
 	_apply_bar(_mana_bar, _mana_value, current, maximum)
+
+
+## Seam callback (connect_cards_changed, the runner's EIGHTH seam — story 3-6, AC 2). Primed on
+## connect with an empty hand: the deal lands at step 6 of the first advance(), one tick later.
+##
+## `hand_ids` is a COPY of this player's hand, in hand order; the two counts are this player's
+## OWN deck and discard (`3-6/R7` — card counts are private, only the reshuffle flag is public).
+## The parameter is typed as a plain `Array` because Callable binding does not narrow the
+## `Array[StringName]` on the wire; the elements are StringName ids either way.
+##
+## EVERY slot is written on every call, not just the occupied ones, so a hand that shrank (a cast
+## with its replacement still in flight) clears the vacated caption instead of leaving a ghost
+## card the player might try to cast. Discard count is accepted and deliberately NOT rendered:
+## no AC asks for it and the deck read-out is the own-tempo periphery element P4 places here —
+## it rides the payload so the channel does not need widening the first time a story wants it.
+func on_cards_changed(hand_ids: Array, deck_count: int, _discard_count: int) -> void:
+	for i in _own_card_labels.size():
+		_own_card_labels[i].text = str(hand_ids[i]) if i < hand_ids.size() else ""
+	_deck_label.text = "DECK %d" % deck_count
+
+
+## EventBus.reshuffle_vulnerable_window_opened (slot bound at wiring, the on_round_ended shape —
+## story 3-6, AC 4). BOTH viewports receive EVERY reshuffle: the event is ownerless and the fact
+## is public (E3-RG/R3), so each root renders it against its own slot — "RESHUFFLE" when the
+## window is this player's, "OPP RESH" when it is the other's. That is the whole of what crosses
+## the privacy line: the FLAG only, never the opponent's counts (`3-6/R7`).
+##
+## The flag turns itself off through a ONE-SHOT SceneTreeTimer seeded by the authored duration —
+## no _process, no per-frame countdown, no read of the state-side window (AC 5, machine-checked by
+## test_architecture_invariants.gd::test_ui_layer_never_polls_per_frame). The token guards the
+## overlapping case: a second reshuffle inside the first one's window must not be switched off by
+## the first one's timer. A non-positive authored duration would leave a flag that never clears,
+## so it is refused here rather than rendered — the authoring audit already keeps the value above
+## zero, and this is the presentation-side floor under that.
+func on_reshuffle_vulnerable_window_opened(slot: int, my_slot: int) -> void:
+	if reshuffle_vulnerable_window_seconds <= 0.0:
+		return
+	_reshuffle_token += 1
+	var token := _reshuffle_token
+	_reshuffle_label.text = "RESHUFFLE" if slot == my_slot else "OPP RESH"
+	_reshuffle_label.visible = true
+	get_tree().create_timer(reshuffle_vulnerable_window_seconds).timeout.connect(
+			func() -> void: _clear_reshuffle_flag(token))
+
+
+## Hides the flag IF the expiring timer is the one that raised the flag currently showing. A
+## stale token means a newer reshuffle owns the flag and this timer has nothing to say.
+func _clear_reshuffle_flag(token: int) -> void:
+	if token == _reshuffle_token:
+		_reshuffle_label.visible = false
 
 
 ## EventBus.round_ended (slot bound at wiring, mirroring TelegraphController). Minimal
@@ -243,78 +329,83 @@ func set_pitch_zone_placement(left_of_bars: bool) -> void:
 		_pitch_panel.offset_bottom = -22.0
 
 
-## Story 2-5: the two per-viewport hand rows (E3 card widgets land later). BOTH rows are built
-## by this ONE function — `is_own` is the SINGLE SEAT of the face-up / face-down decision
-## (2-5/R1, R4): it alone selects front styling (own hand, face-up) versus back styling
-## (opponent hand, face-down) through the one call to _make_card_face_style below, and nothing
-## else anywhere re-decides styling. The epic-3 reveal toggle is a flip of this parameter, not a
-## second rule; `src/ui/debug/` stays empty until then.
+## The OWN hand row — the bottom-centre own-tempo action surface reserved by 2-4, face-up since
+## 2-5, and given real content here (story 3-6, AC 1/AC 6). The opponent row 2-5 also built from
+## this function is DELETED (E3-RG/R4); the function therefore takes no parameter any more, and
+## `_make_card_face_style(true)` — the 2-5/R4 privacy seat — is still the ONE place the face-up /
+## face-down decision is made, called with the only ownership this HUD renders.
 ##
-## The own row (`is_own` true) is the bottom-centre own-tempo action surface reserved by 2-4 —
-## same node name, anchors, offsets and four Card0..Card3 panels at 74x84, NEITHER moved nor
-## resized — now gaining a front style. The opponent row (`is_own` false) is new: top-centre,
-## above the pitch-zone placeholder and between the deck indicator (top-left) and the orb
-## counters (top-right), back-styled, with smaller panels because a card back carries nothing to
-## read. Its placement and sizing are PROVISIONAL — the A/B tuning across HUD phases is story
-## 2-6's, which owns the instrumentation (2-5/R3). Nothing else in the reserved layout moves.
+## THIS STORY OWNS FINAL SIZING (AC 6), which is why the 2-4 reservation moves here and nowhere
+## else. The row grows from 74x84 panels in a 344-wide container to 84x92 in a 368-wide one:
+## 4 * 84 + 3 * 8 separation = 360 of content, inside 368. It grows UPWARD (top -112 instead of
+## -104) into the 4px gap above, never downward past the -20 bottom margin and never into the
+## vitals column, whose own bottom edge sits at -116. The extra width buys the card CAPTION room:
+## an id like `bramble_snare` has to be readable at half width, and it is the only thing a card
+## renders (`3-6/R4`).
 ##
-## The rendered count is the presentation-local constant 4 (2-5/R1): hand size is 4 at all times
-## per the GDD, and it is PUBLIC AND SYMMETRIC (2-5/R2), so rendering the opponent's count is not
-## an opponent read — no read of PlayerState.hand, no hand_size field, no write to hand. Epic 3
-## makes the count data-driven; that is a named follow-up here, not a passing remark. Both rows
-## are built ONCE at setup: no _process, no _physics_process, no signal consumption (2-5/R6).
-func _build_hand_row(is_own: bool) -> void:
+## The rendered count stays the presentation-local constant 4 (2-5/R1) — hand size is 4 at all
+## times per the GDD. What changed is that the four slots now carry CONTENT, pushed through the
+## eighth seam; the row itself is still built ONCE at setup and consumes no per-frame work
+## (2-5/R6, AC 5).
+func _build_hand_row() -> void:
 	var strip := HBoxContainer.new()
+	strip.name = "HandStrip"
 	strip.alignment = BoxContainer.ALIGNMENT_CENTER
 	strip.add_theme_constant_override("separation", 8)
 	strip.anchor_left = 0.5
 	strip.anchor_right = 0.5
-	var card_size: Vector2
-	if is_own:
-		# Own face-up hand: the 2-4 bottom-centre HandStrip footprint, unchanged.
-		strip.name = "HandStrip"
-		strip.anchor_top = 1.0
-		strip.anchor_bottom = 1.0
-		strip.offset_left = -172.0
-		strip.offset_right = 172.0
-		strip.offset_top = -104.0
-		strip.offset_bottom = -20.0
-		card_size = Vector2(74.0, 84.0)
-	else:
-		# Opponent face-down hand: new top-centre row between deck indicator and orb counters,
-		# above the pitch-zone placeholder. Smaller panels — a back carries nothing to read.
-		strip.name = "OpponentHandStrip"
-		strip.anchor_top = 0.0
-		strip.anchor_bottom = 0.0
-		strip.offset_left = -118.0
-		strip.offset_right = 118.0
-		strip.offset_top = 10.0
-		strip.offset_bottom = 74.0
-		card_size = Vector2(52.0, 64.0)
+	strip.anchor_top = 1.0
+	strip.anchor_bottom = 1.0
+	strip.offset_left = -184.0
+	strip.offset_right = 184.0
+	strip.offset_top = -112.0
+	strip.offset_bottom = -20.0
 	add_child(strip)
-	var card_style := _make_card_face_style(is_own)
+	var card_style := _make_card_face_style(true)
 	for i in 4:
 		var card := Panel.new()
 		card.name = "Card%d" % i
-		card.custom_minimum_size = card_size
+		card.custom_minimum_size = Vector2(84.0, 92.0)
 		card.add_theme_stylebox_override("panel", card_style)
 		strip.add_child(card)
-		# Story 3-5a (AC 10): retain the OWN row's panels for the selection indicator. Size and
-		# layout above are untouched — they belong to 3-6, and the indicator is the only
-		# distinguishing affordance this story adds to the row.
-		if is_own:
-			_own_card_panels.append(card)
-	if is_own:
-		_card_base_style = card_style
-		_card_armed_style = _make_card_armed_style()
+		# The caption. Inset by the frame width plus a hair so the text never touches the border,
+		# word-wrapped and shrunk to fit because ids are snake_case compounds of unbounded length;
+		# an id too long for the panel truncates visibly rather than overflowing into its
+		# neighbour. Dark on the parchment face — legibility at half width is the whole point.
+		var caption := Label.new()
+		caption.name = "CardName"
+		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		caption.clip_text = true
+		caption.add_theme_font_size_override("font_size", 12)
+		caption.add_theme_color_override("font_color", Color(0.16, 0.13, 0.10))
+		caption.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		caption.offset_left = 5.0
+		caption.offset_right = -5.0
+		caption.offset_top = 4.0
+		caption.offset_bottom = -4.0
+		card.add_child(caption)
+		# Story 3-5a (AC 10): the panels are retained for the selection indicator; story 3-6 adds
+		# the index-aligned captions for the hand contents.
+		_own_card_panels.append(card)
+		_own_card_labels.append(caption)
+	_card_base_style = card_style
+	_card_armed_style = _make_card_armed_style()
 
 
 ## The SINGLE SEAT of the face-up / face-down decision (2-5/R1, R4). `is_own` picks a card FACE
-## (own hand, face-up: light parchment, thin dark frame) versus a card BACK (opponent hand,
-## face-down: deep indigo, heavy gold frame) — genuinely distinguishable at a glance in a
-## half-width viewport, not two identical blank panels. One StyleBoxFlat is shared across a
-## row's four panels (identical backs / blank faces this story). This one `if is_own` is the
-## only place styling branches on ownership; a later reveal toggle flips this parameter.
+## (own hand, face-up: light parchment, thin dark frame) versus a card BACK (face-down: deep
+## indigo, heavy gold frame) — genuinely distinguishable at a glance in a half-width viewport,
+## not two identical blank panels. One StyleBoxFlat is shared across the row's four panels. This
+## one `if is_own` is the only place styling branches on ownership.
+##
+## Story 3-6: the `false` branch HAS NO CALLER any more, and is kept deliberately rather than
+## deleted with the opponent row it used to style. It is what makes the deferred reveal-opponent-
+## hand toggle (`3-6/R1`) cheap when its owning story arrives: the styling decision stays made,
+## in one place, and that story adds a rendering path rather than re-deciding privacy. Deleting
+## it would move the decision into whatever code re-invents it.
 ## Story 3-5a (AC 10): the ARMED card style — the own face style with a loud gold border and a
 ## warmer fill, so which slot is armed reads at a glance in a half-width viewport. Built from
 ## scratch rather than by mutating the shared base: the base StyleBoxFlat is shared across all
@@ -396,19 +487,45 @@ func _build_orb_counters() -> void:
 		orbs.add_child(orb)
 
 
-## Deck / reshuffle indicator placeholder (E3). Top-left periphery own-tempo count. Reserved
-## footprint only.
+## Deck count + reshuffle flag (story 3-6, AC 4) — the 2-4 top-left periphery placeholder, now
+## real. Own-tempo per P4: a deck count is read BETWEEN exchanges, never mid-reaction, so it stays
+## in the corner rather than moving toward the focal band.
+##
+## TWO stacked lines in the reserved footprint, grown just enough to hold them (40px -> 52px tall,
+## 106 -> 118 wide). The count line is written by the eighth seam's payload; the flag line is
+## written by the ownerless bus event and is hidden until one arrives — so an empty second line is
+## the normal state and a visible one means a window is open right now. The count text is a
+## placeholder dash until the first payload lands, which is one tick after construction.
 func _build_deck_indicator() -> void:
-	var deck := _make_placeholder_panel("DeckIndicator", "DECK -- / RESH")
+	var deck := Panel.new()
+	deck.name = "DeckIndicator"
 	deck.anchor_left = 0.0
 	deck.anchor_right = 0.0
 	deck.anchor_top = 0.0
 	deck.anchor_bottom = 0.0
 	deck.offset_left = 10.0
-	deck.offset_right = 116.0
+	deck.offset_right = 128.0
 	deck.offset_top = 10.0
-	deck.offset_bottom = 50.0
+	deck.offset_bottom = 62.0
 	add_child(deck)
+	var column := VBoxContainer.new()
+	column.name = "DeckColumn"
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.add_theme_constant_override("separation", 0)
+	deck.add_child(column)
+	_deck_label = Label.new()
+	_deck_label.name = "DeckCount"
+	_deck_label.text = "DECK --"
+	_deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_deck_label)
+	_reshuffle_label = Label.new()
+	_reshuffle_label.name = "ReshuffleFlag"
+	_reshuffle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Loud enough to catch the eye in the periphery — the flag is a state a player must NOTICE
+	# without being asked to watch the corner for it.
+	_reshuffle_label.add_theme_color_override("font_color", Color(0.98, 0.72, 0.20))
+	_reshuffle_label.visible = false
+	column.add_child(_reshuffle_label)
 
 
 ## Minimal per-viewport round-over label. Hidden until EventBus.round_ended arrives.

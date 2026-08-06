@@ -5,11 +5,14 @@ extends SceneTree
 ## a fixed-tick loop.
 ##
 ## WHY THIS IS THE WHOLE VERIFICATION STORY, and why it is required rather than optional: Live
-## Smoke is NOT REQUIRED for 3-5b because the story ships NO PLAYER-FACING SURFACE. The HUD card
-## row renders the presentation-local constant 4 and never reads the hand (hud_root.gd, 2-5/R1),
-## the deck readout is the literal placeholder "DECK -- / RESH" wired to nothing, and the
-## vulnerable window's renderer is 3-6's. A human at the keyboard therefore cannot observe one
-## claim below. Headless is not the cheap proof here — it is the only one.
+## Smoke is NOT REQUIRED for 3-5b because the story ships NO PLAYER-FACING SURFACE. AT THE TIME
+## 3-5b SHIPPED the HUD card row rendered the presentation-local constant 4 and never read the
+## hand (hud_root.gd, 2-5/R1), the deck readout was the literal placeholder "DECK -- / RESH" wired
+## to nothing, and the vulnerable window had no renderer at all. A human at the keyboard therefore
+## could not observe one claim below. Headless was not the cheap proof here — it was the only one.
+## (Story 3-6 has since given all three a renderer. That does not retroactively make these claims
+## observable: what this test proves is exhaustion ARITHMETIC against authored numbers, which no
+## HUD shows.)
 ##
 ## WHAT MAKES THIS AN INTEGRATION TEST rather than a second state test: it runs against
 ## `data/balance/balance_config.tres` — the WHOLE shipped config, authored values and all —

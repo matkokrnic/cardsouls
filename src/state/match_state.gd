@@ -762,6 +762,10 @@ func _deal_player(player: PlayerState) -> void:
 		if player.deck.is_empty():
 			break
 		player.hand.add(player.deck.draw_top())
+	# Story 3-6 (AC 2): the FIRST of the three announcement seats — one per seat that moves a
+	# card, placed after the whole occasion completes rather than per container touched, so the
+	# deal announces one settled payload instead of three intermediate ones.
+	player.notify_cards_changed()
 
 
 ## Story 3-5a (AC 2/AC 9): the CARD-ACTION dispatch — a PRIVATE MatchState method called at
@@ -861,6 +865,10 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# the step-6 deal ran, and the deal returns early while balance is null.
 	player.pending_draw_owed += 1
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+	# Story 3-6 (AC 2): the SECOND announcement seat. The hand is one short here and stays so
+	# until the delivery announces again — which is a true statement about the match and exactly
+	# what the HUD should render while a draw is in flight, not a gap to paper over.
+	player.notify_cards_changed()
 	_queue.push(card_cast_resolved.emit.bind(slot, played))
 
 
@@ -908,6 +916,11 @@ func _draw_one_replacement(player: PlayerState, slot: int) -> void:
 			return
 		_reshuffle_discard_into_deck(player, slot)
 	player.hand.add(player.deck.draw_top())
+	# Story 3-6 (AC 2): the THIRD and last announcement seat. Seated AFTER the lazy reshuffle
+	# above rather than inside it, so a delivery that had to refill the pile announces ONE
+	# settled payload — the reshuffled deck count and the refilled hand together. The both-empty
+	# degrade returns above without announcing, because it moved no card.
+	player.notify_cards_changed()
 
 
 ## Story 3-5b (AC 5/AC 6): this player's discard folded back into this player's deck, inside the

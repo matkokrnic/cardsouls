@@ -232,12 +232,27 @@ func _ready() -> void:
 	var huds: Array[HudRoot] = []
 	for slot: int in 2:
 		var hud := HudRoot.new()
+		# Story 3-6 (AC 4): the authored vulnerable-window duration, handed over BEFORE add_child
+		# on the `gamepad_profile` / `huds` static-handoff precedent. The HUD renders the reshuffle
+		# flag from the ownerless EventBus event plus this number and NOTHING else — it never reads
+		# the window's tick count, which stays write-only unhashed state (3-5b/R20, 3-6/R3). Read
+		# inline off the already-loaded authored config (CONSTRAINT C).
+		hud.reshuffle_vulnerable_window_seconds = balance_config.reshuffle_vulnerable_window_seconds
 		hud_viewports[slot].add_child(hud)
 		huds.append(hud)
 		connect_hero_hp_changed(slot, hud.on_hp_changed)
 		connect_stamina_changed(slot, hud.on_stamina_changed)
 		connect_mana_changed(slot, hud.on_mana_changed)
+		# Story 3-6 (AC 2): the eighth seam's ONE production consumer, bound to this root's own
+		# slot exactly like the three economy seams above (2-4/R7 no-opponent-read).
+		connect_cards_changed(slot, hud.on_cards_changed)
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
+		# Story 3-6 (AC 4): the reshuffle flag. BOTH viewports subscribe to the SAME ownerless bus
+		# event (E3-RG/R3 — "this player's deck ran out" is a match-wide public fact), each binding
+		# its OWN slot so it can render the event against itself: the round_ended wiring directly
+		# below, second time. A plain bus connect, not a seam — the family stays at eight.
+		EventBus.reshuffle_vulnerable_window_opened.connect(
+				hud.on_reshuffle_vulnerable_window_opened.bind(slot))
 		# Story 2-6 (AC 1): the label's single CLEAR seat — a debug reset hides it on BOTH
 		# viewports. No-argument and slot-independent (the reset is ownerless), so no .bind(slot).
 		EventBus.round_started.connect(hud.on_round_started)
@@ -547,6 +562,36 @@ func connect_mana_changed(slot: int, callback: Callable) -> void:
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	player.mana.mana_changed.connect(callback)
 	callback.call(player.mana.get_current(), player.mana.get_maximum())
+
+
+## Read-only subscription seam (story 3-6, AC 2) — THE EIGHTH, and the ONE amendment to the family
+## `2-6/R7` froze at seven (`3-6/R2`, operator-approved). Per-slot wrap of the PlayerState-owned
+## cards_changed, mirroring connect_hero_hp_changed exactly: same slot guard, same
+## no-state-handle discipline, same PRIME ON CONNECT (2-4/R2). Payload: (hand ids in hand order,
+## deck count, discard count).
+##
+## IT HAD TO BE A NEW SEAM RATHER THAN A REUSED ONE. The HUD cannot read the hand off the
+## snapshot — contents and pile order are excluded from it by 3-3 AC 5 / 3-5a AC 6 and pinned
+## excluded by 3-0c AC 11 — and none of the seven existing seams carries a card fact. The
+## alternative shapes were both worse: a runner-side POLL of the containers after advance() (the
+## 3-0b countdown shape) would make the HUD's card row a per-frame recompute, which AC 5 forbids;
+## and the ownerless EventBus is for match-wide PUBLIC facts, which a player's own hand is not.
+##
+## PRIMING IS EMPTY AND THAT IS CORRECT: the deal happens at step 6 of the FIRST advance(), so a
+## consumer connecting in _ready() primes with an empty hand and a zero deck, then receives the
+## real payload one tick later. An empty row until the first tick is a visible truth about the
+## match, not a bar that looks correct by construction (the 2-4/R2 rationale, unchanged).
+##
+## OWN SLOT ONLY (`3-6/R7`): deck and discard counts are PRIVATE. The consumer is bound to one
+## slot's channel and the payload carries no slot index, so a HUD is structurally incapable of
+## reading the opponent's counts — the same property that made deleting the opponent hand row the
+## right call rather than repointing it. The one public card fact, the reshuffle window, rides the
+## ownerless EventBus instead.
+func connect_cards_changed(slot: int, callback: Callable) -> void:
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.cards_changed.connect(callback)
+	callback.call(player.hand.to_array(), player.deck.size(), player.discard.size())
 
 
 ## Story 1-7 (AC 2): step-2 contact-fact gathering for one attacker slot. Direct query

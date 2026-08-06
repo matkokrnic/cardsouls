@@ -17,12 +17,14 @@ extends SceneTree
 ##     slot's index" — a HudRoot takes no slot argument at all, and the runner's per-slot
 ##     wiring being uncrossed is exactly what this proves. The 2-5 rows below are EXTENSIONS
 ##     of this existing per-slot binding assertion, not a duplicate binding test.
-##   [both hand rows + styling] Story 2-5 (AC 7): each viewport contains BOTH the own
-##     bottom-centre HandStrip and the opponent top-centre OpponentHandStrip, each with four
-##     card panels; the own row is front-styled and the opponent row is back-styled, and the
-##     two stylings are GENUINELY different (distinct StyleBoxFlat bg + border width), not two
-##     identical blank panels. Made non-vacuous: stripping the back styling collapses the two
-##     styles onto one and the "differ" assertion fails (proven by SHA256-verified removal).
+##   [the one hand row + its styling] Story 2-5 (AC 7) AS AMENDED BY 3-6 (AC 1): each viewport
+##     contains the own bottom-centre HandStrip with four card panels, and NO OpponentHandStrip —
+##     the opponent row is DELETED (E3-RG/R4), not hidden, which is why the assertion is on
+##     absence from the tree rather than on visibility. The own row is FRONT-styled, and the
+##     privacy DIRECTION is still pinned: the face-down style the surviving `_make_card_face_style`
+##     branch produces must be strictly heavier-framed than the face-up one the row carries, so
+##     swapping the two branches — handing a player their own hand as a card back — still fails
+##     here even though nothing renders a back today.
 ##
 ## Also checks prime-on-connect (AC 2): both stamina bars read full at frame 1, before any
 ## signal, so the bars are not empty until first change.
@@ -110,44 +112,54 @@ func _physics_process(_delta: float) -> bool:
 	return false
 
 
-## Story 2-5 (AC 7): one HUD contains BOTH hand rows — the own bottom-centre HandStrip and the
-## opponent top-centre OpponentHandStrip — each with four card panels; the own row is
-## front-styled, the opponent row is back-styled, and the two are GENUINELY different, not two
-## identical blank panels. Styling is read structurally off the panels' "panel" stylebox
-## override — no hardcoded colour values — so the guard survives a later palette change.
+## Story 2-5 (AC 7) as amended by story 3-6 (AC 1): one HUD contains exactly ONE hand row — the
+## own bottom-centre HandStrip with four card panels — and NO opponent row. Styling is read
+## structurally off the panels' "panel" stylebox override — no hardcoded colour values — so the
+## guard survives a later palette change.
 ##
-## Two properties, both required, both structural:
-##   [non-identity] the own and opponent styles differ (bg AND border width), so the rows are
-##     not two identical blanks. Made non-vacuous by collapse: strip the back styling and both
-##     rows share one style, so this fails (SHA256-verified removal in the dev record).
-##   [direction — the privacy invariant] the FACE-DOWN opponent back carries the strictly
-##     HEAVIER frame than the face-up own card. This pins WHICH row is the back: swapping the
-##     two stylings — handing the player their own hand as a back and showing the opponent's
-##     face — FAILS here. That inversion is exactly the information leak this story exists to
-##     prevent, so a difference-only check is not enough; direction must be pinned. Made
-##     non-vacuous by swap: exchanging the two branches inverts the border relation and this
-##     fails (SHA256-verified swap in the dev record).
+## Three properties, all required, all structural:
+##   [deletion] OpponentHandStrip is absent from the tree. Asserted on ABSENCE, not on
+##     visibility: E3-RG/R4 deletes the row, and a hidden row would still be a rendering path
+##     carrying a count whose publicity was never decided.
+##   [non-identity] the face-up style the row carries and the face-down style the surviving
+##     branch produces differ (bg AND border width), so the privacy decision is still a real
+##     distinction rather than two identical blanks. Collapsing the two branches onto one style
+##     fails here.
+##   [direction — the privacy invariant] the FACE-DOWN style carries the strictly HEAVIER frame
+##     than the face-up card the player is shown. This is what pins WHICH styling is the back:
+##     swapping the two branches — handing the player their own hand as a card back — FAILS here
+##     even though no back is rendered today, which is what keeps the deferred reveal toggle
+##     (3-6/R1) inheriting a decision rather than a coin flip. The comparison is made against a
+##     TREE-LESS HudRoot instance calling the same seat, because there is no second row left to
+##     read it off.
 func _check_hand_rows(hud: Node) -> bool:
 	var own := hud.get_node_or_null("HandStrip")
-	var opp := hud.get_node_or_null("OpponentHandStrip")
-	if own == null or opp == null:
-		print("hand rows missing: own=%s opp=%s" % [own, opp])
+	if own == null:
+		print("own hand row missing")
+		return false
+	if hud.get_node_or_null("OpponentHandStrip") != null:
+		print("OpponentHandStrip still present — 3-6 AC 1 deletes it, it is not hidden")
 		return false
 	var own_style := _row_card_style(own)
-	var opp_style := _row_card_style(opp)
-	if own_style == null or opp_style == null:
-		print("card styling missing: own_style=%s opp_style=%s" % [own_style, opp_style])
+	if own_style == null:
+		print("card styling missing on the own row")
+		return false
+	# The face-down style, from the ONE seat that decides it (2-5/R4). Built off a tree-less
+	# instance: _make_card_face_style is a pure function of its argument, so no _ready, no
+	# viewport and no state are involved.
+	var probe := HudRoot.new()
+	var back_style := probe._make_card_face_style(false) as StyleBoxFlat
+	probe.free()
+	if back_style == null:
+		print("the face-down styling branch is gone — the privacy decision has no seat")
 		return false
 	var own_border := own_style.get_border_width(SIDE_TOP)
-	var opp_border := opp_style.get_border_width(SIDE_TOP)
-	# Non-identity: the two rows are genuinely different, not two blank panels.
-	var differ: bool = own_style.bg_color != opp_style.bg_color and own_border != opp_border
-	# Direction (INVARIANT, not incidental): the opponent's face-down back has the strictly
-	# heavier frame than the own face-up card. Swapping the two stylings inverts this and fails.
-	var back_is_heavier: bool = opp_border > own_border
+	var back_border := back_style.get_border_width(SIDE_TOP)
+	var differ: bool = own_style.bg_color != back_style.bg_color and own_border != back_border
+	var back_is_heavier: bool = back_border > own_border
 	if not (differ and back_is_heavier):
-		print("hand-row styling wrong: differ=%s back_is_heavier=%s own_bg=%s opp_bg=%s own_border=%d opp_border=%d" % [
-			differ, back_is_heavier, own_style.bg_color, opp_style.bg_color, own_border, opp_border])
+		print("hand-row styling wrong: differ=%s back_is_heavier=%s own_bg=%s back_bg=%s own_border=%d back_border=%d" % [
+			differ, back_is_heavier, own_style.bg_color, back_style.bg_color, own_border, back_border])
 	return differ and back_is_heavier
 
 
