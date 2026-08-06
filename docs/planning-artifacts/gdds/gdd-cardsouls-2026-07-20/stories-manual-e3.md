@@ -3,7 +3,8 @@ title: CardSouls — E3 Stories (Card System + Mana Economy)
 parent: epics.md
 epic: E3
 created: 2026-07-21
-status: provisional — revisit after the first E1/E2 playtest
+updated: 2026-08-06
+status: ready
 depth: intentionally thinner than E1/E2
 ---
 
@@ -12,7 +13,22 @@ depth: intentionally thinner than E1/E2
 **Epic goal.** The card-economy foundation and the aggression flywheel (P2): melee hits fund mana,
 mana plays cards.
 
-> ## ⚠ Revisit gate — read before implementing any story in this file
+> ## ✅ Revisit gate — RAN 2026-07-31, and E3 is COMPLETE
+>
+> **The gate this block demanded has been executed and E3 has since shipped.** The gate ran
+> 2026-07-31 (`decision-log.md` Session 2026-07-31 — E3 revisit gate (outcome), `E3-RG/R1`-`E3-RG/R12`),
+> verdict **E3 proceeds AMENDED**: five of six stories amended, none deleted, the epic's shape and
+> exit criteria unchanged. Every story in this file has since passed its own readiness gate, been
+> implemented, and been closed `done` (`3-1`, `3-2`, `3-3`, `3-4`, `3-5a`, `3-5b`, `3-6`, alongside the
+> substrate stories `3-0a`-`3-0d`); E3 closed 2026-08-06.
+>
+> **Nothing in this file is provisional any longer, and no story below is awaiting a gate.** It is now
+> a historical record of the epic's authored intent. Read it as such — where it disagrees with
+> `decision-log.md` or the shipped `src/`, they win.
+>
+> The original gate text is kept below for the record, unedited.
+>
+> ---
 >
 > **These stories are provisional and must be reviewed after the first E1/E2 playtest, before
 > implementation.** They were written before anyone had played the melee layer against a human, and
@@ -53,7 +69,10 @@ mana plays cards.
 **Read first:** architecture §Project Structure → *Planned (E3) — `MatchState` config object* (this
 refactor is explicitly scheduled for E3, while call sites are still few).
 
-> **Revisit note.** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
+> **Revisit note — CLOSED 2026-08-06.** Shipped as `3-1-matchstate-config-object`, `done` 2026-08-02
+> (`decision-log.md` Session 2026-08-02 — Story 3-1 readiness gate, and 3-1 close-out). The seed was
+> deliberately kept OUT of the hot-reloadable config and put in a separate `MatchParams`
+> (`E3-RG/R9`) — a plain reading of item 1 below would have got that wrong.
 
 1. Fold `MatchState`'s five positional constructor floats (`seed`, `max_hp`, `move_speed`,
    `max_stamina`, `max_mana`) into a single injected config/params object, and update the small number
@@ -81,7 +100,11 @@ and tick-converted at load, hot-reload re-applies them, and the invariant and sm
 **Read first:** architecture Novel Pattern 6, §D6; GDD §Card System (card anatomy, worked example
 *Imp Summoner*).
 
-> **Revisit note.** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
+> **Revisit note — CLOSED 2026-08-06.** Shipped as `3-2-card-schemas-carddatabase`, `done` 2026-08-03
+> (`decision-log.md` Session 2026-08-03 — Story 3-2 readiness gate, and 3-2 close-out). Item 1's
+> `CardData` field list is superseded by the shipped six-export schema (`id` and `max_copies` added),
+> recorded as architecture-amendment queue member 6, flushed into `docs/game-architecture.md` at
+> ledger entry A5.
 
 1. Implement the schema resources in `src/state/resources/`: `CardData` (`color`, `basic_effect`,
    `pitch_effect`, `cast_condition`, `max_copies`), `CardEffect` as the reserved effect schema, and
@@ -94,8 +117,11 @@ and tick-converted at load, hot-reload re-applies them, and the invariant and sm
    exposes lookup by id. Content is loaded by a `systems/` service; the state layer receives card
    resources by injection and never reads the autoload.
 4. Keep the per-colour unblockable damage out of `CardData` entirely. It is a fixed value per colour
-   in balance (GDD §C, TDD §7.5) — a documented easy-to-get-wrong rule. Add a `check_invariant` or a
-   test that fails if a per-card damage field ever appears.
+   in balance (GDD §C, TDD §7.5) — a documented easy-to-get-wrong rule. Add an `Invariant.check` or a
+   test that fails if a per-card damage field ever appears. (Symbol corrected 2026-08-06: this item
+   read `check_invariant`, which names nothing in this repo; the shipped helper is `Invariant.check`,
+   `src/systems/invariant.gd`. Same defect as the one corrected in E3.S5a's amendment note below and
+   in `docs/game-architecture.md` at ledger entry A5 — this was its last live instance.)
 5. Extend the `.tres` smoke test to load every authored card and assert required fields, a valid
    colour enum, and a copy cap within bounds.
 
@@ -111,8 +137,12 @@ E3.S5 (the card-play story), which is where that clause is discharged.
 **Read first:** GDD §Card System → Deck & hand; architecture §Determinism & Replay (RNG consumed
 only inside `advance()`).
 
-> **Revisit note.** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
-> The draw-replacement delay in particular is a feel decision that the melee playtest informs.
+> **Revisit note — CLOSED 2026-08-06.** Shipped as `3-3-deck-hand-draw-reshuffle`, `done` 2026-08-03
+> (`decision-log.md` Session 2026-08-03 — Story 3-3 readiness gate, and 3-3 close-out). Items 3 and 4
+> (draw-replacement delay, exhaustion/reshuffle/vulnerable window) did NOT land here: the 3-3 gate
+> ruled they move to 3-5 together with their trigger, and they shipped in E3.S5b. `Deck`/`Hand` and the
+> seeded step-6 shuffle are 3-3's. Open decision (b) — what "vulnerable" costs mechanically — is still
+> OPEN and deliberately unpriced (`3-5b/R7`).
 
 1. Implement `Deck` and `Hand` in `src/state/` as pure objects owned by `PlayerState`: shuffle, draw,
    discard, and reshuffle-on-exhaustion, sized from balance (`deck_size`, `hand_size`).
@@ -144,9 +174,14 @@ discharged.
 **Read first:** GDD §B Mana Economy, pillar P2; architecture §D6 + Novel Pattern 5;
 `project-context.md` HARD RULE — feature flags.
 
-> **Revisit note.** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
-> Whether melee-funded mana feels like a flywheel or like bookkeeping is precisely what the first
-> playtest tells you.
+> **Revisit note — CLOSED 2026-08-06.** Shipped as `3-4-mana-economy-flywheel`, `done` 2026-08-02
+> (`decision-log.md` Session 2026-08-02 — Story 3-4 readiness gate, and 3-4 close-out). Item 2's "the
+> hook already exists" framing was correct and item 2's "no new call site" held: the evaluator FULLY
+> REPLACED the direct mana path under `E3-RG/R8`'s proof obligation rather than sitting behind it.
+> Whether the flywheel reads as a flywheel or as bookkeeping is still an open FEEL question — its
+> criterion (a round finances 2-4 loop cycles) became judgeable only once the full loop shipped, and
+> the melee retune it feeds is scheduled, not resolved (`decision-log.md` Session 2026-08-06 — E3
+> retrospective ruled).
 
 1. Author the mana sources as `ResourceGenerationRule` `.tres`: `passive_tick` (a fixed per-tick
    amount converted once at load, never `rate × delta`) and `melee_hit` (a burst on a confirmed
@@ -174,7 +209,13 @@ flag toggles cleanly in both directions, and both paths are asserted headless.
 **Read first:** GDD `[NOTE FOR DESIGNER]` *Card-mode selection UX — open, high P4 relevance*;
 architecture Novel Pattern 6.
 
-> **Revisit note.** The E3 revisit gate RAN 2026-07-31 (decision-log Session 2026-07-31 — E3 revisit
+> **Revisit note — CLOSED 2026-08-06.** Shipped as `3-5a-card-mode-select-basic-resolution`, `done`
+> 2026-08-04. Item 4's "emit the effect through the `CardEffect` seam" did NOT ship as written: AC5
+> emits the resolved card ID, not a `CardEffect`, an accepted deviation because the cost-injection
+> seam injects costs only. `CardEffect` therefore still has NO consumer in `src/` — E4's business.
+> The 2026-08-04 note below stands unedited as the record.
+>
+> **Revisit note (2026-08-04, historical).** The E3 revisit gate RAN 2026-07-31 (decision-log Session 2026-07-31 — E3 revisit
 > gate (outcome), E3-RG/R1-R12) and this section's own readiness gate RAN 2026-08-04 (decision-log
 > Session 2026-08-04 — Story 3-5 readiness gate). "Confirm or amend before implementing" no longer
 > applies to this section — both gates have already run and their outcomes are recorded in
@@ -230,8 +271,15 @@ only inside `advance()`).
 > TRIGGER (E3.S5a, above) and WHAT THE TRIGGER MAKES REACHABLE (this section). Carries the four items
 > 3-3's own gate ruled move to 3-5 together with their trigger — not split from it (`decision-log.md`
 > Session 2026-08-03 — Story 3-3 readiness gate, finding (v)) — reachable only once E3.S5a's cast path
-> exists. Provisional — confirm or amend against `docs/playtest-log.md` before implementing; the
-> draw-replacement delay in particular is a feel decision the melee playtest informs.
+> exists.
+>
+> **CLOSED 2026-08-06.** Shipped as `3-5b-draw-delay-exhaustion-reshuffle`, `done` 2026-08-04
+> (`decision-log.md` Session 2026-08-04 — Story 3-5b readiness gate, and 3-5b close-out). Both
+> durations are authored data (`draw_replacement_delay_seconds`,
+> `reshuffle_vulnerable_window_seconds = 1.5`), so the remaining feel question is answered by editing
+> a `.tres`, exactly as item 1 intended. Open decision (b) stays OPEN by construction: nothing in
+> `src/` reads the vulnerable window except the code that starts it and the code that emits its event
+> (`3-5b/R7`), so nothing has priced it.
 
 1. Implement draw-on-play with the delay as **data**: `draw_replacement_delay_seconds` converted to a
    `TimingWindow`, where zero means instant. Instant vs delayed is an open feel question (GDD:
@@ -260,9 +308,14 @@ shuffle; the reshuffle vulnerable window is visible in both viewports via the `E
 **Depends on:** E3.S5, E2.S4, E2.S5.
 **Read first:** GDD §Legibility Principle, pillar P4 and the Reactor/Actor principle; E2.S4/E2.S5.
 
-> **Revisit note.** Provisional — confirm or amend against `docs/playtest-log.md` before implementing.
-> Whether the hand is readable at half width during an exchange is a P4 finding, not a styling
-> preference.
+> **Revisit note — CLOSED 2026-08-06.** Shipped as `3-6-card-hud-hand-mana-deck`, `done` 2026-08-06
+> (`decision-log.md` Session 2026-08-06 — Story 3-6 readiness gate, and 3-6 close-out). The P4 finding
+> item 2 demanded was made and PASSED at the live smoke, written up by the operator's own hand in
+> `docs/playtest-log.md` 6.8. Item 1's "opponent's face-down" did NOT ship: `E3-RG/R4` deleted the
+> opponent hand row outright — it rendered a count whose publicity was never decided — so the
+> reveal-opponent-hand toggle is deferred with a home and no story number (`3-6/R1`). Item 3's
+> "public information" survives: the reshuffle flag renders in both viewports, while deck and discard
+> counts stay private (`3-6/R7`).
 
 1. Populate the hand strip reserved in E2.S4 with real cards, inside the existing per-viewport
    privacy rule from E2.S5 — own hand face-up, opponent's face-down. Do not add a new rendering path
@@ -287,7 +340,7 @@ live combat has been assessed and written down.
 
 ---
 
-## Epic exit criteria (E3 complete when all hold)
+## Epic exit criteria (E3 complete when all hold) — ALL HOLD, E3 CLOSED 2026-08-06
 
 1. Mode ① cards are playable at a mana cost, gated by `CardCastCondition`.
 2. Melee hits fund mana through an authored rule; the flywheel is observable in play.
