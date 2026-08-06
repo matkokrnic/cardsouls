@@ -5074,3 +5074,56 @@ session -- docs only. Golden and suite untouched (no implementation ran).
 **Two commits, neither pushed:** `docs(stories): 3-6 gate fixes + promote to ready-for-dev` (the story
 file and `sprint-status.yaml`), and this entry, a PURE APPEND -- no existing entry edited. The operator
 reviews the log and pushes.
+
+## Session 2026-08-06 -- Story 3-6 close-out
+
+The live smoke ran and PASSED, operator's own hands, and its `docs/playtest-log.md` entry (`6.8`) is
+already committed (`3cdf272`) -- untouched by this session. This closes the two ACs the dev pass left
+to the operator (AC 3, AC 7) and the story itself.
+
+**Smoke outcome.** Full two-human, half-width viewport. Hand contents readable during a live exchange;
+the deleted opponent row leaves no gap; no collision between the grown card strip, the bars, the pitch
+placeholder or the deck indicator; mana and deck count both live; the mode-select affordance (AC 3)
+reads without a menu -- **P4 judgment PASSED**. **`R-D6` RE-INVOKED AND SPENT** (`3-6/R6`'s re-invocation
+discharged): a kill occurred against a live killable slot, and the round-over label does not overlap
+the card row. The reshuffle flag was NOT observed live -- it needs deck exhaustion, which this exchange
+did not reach -- and stays proven headless by `test_card_hud.gd`; the debug-reset re-announce likewise.
+
+**`3-6/R7` and `3-6/R8` are unaffected by the smoke and stand as ruled.** `3-6/R7` (own-slot-only
+observation seam, reshuffle flag the sole public card fact) and `3-6/R8` (the hand_size<=4 audit bound
+closing the deferred truncation finding) were both dev-pass-time rulings, checked against the shipped
+tree at the readiness gate and unchanged by anything the smoke observed. Recorded here for the
+close-out's own completeness, not because either moved.
+
+**Two findings the operator recorded, neither blocking.**
+
+Peripheral legibility of mana and deck count "could be better" -- DEFERRED BY THE OPERATOR until the
+full loop is implemented. Not a defect to fix now; no ruling needed.
+
+**The card-slot-shift finding, recorded as a NAMED OPEN DECISION, not built here and assigned no story
+number.** Playing a card slides the remaining cards left and appends the replacement at the end, so
+`card_slot` 1 changes meaning under the player's fingers after every cast. The operator wants the
+replacement to refill the VACATED slot instead. This is a STATE-semantics change, not a HUD one: `Hand`
+has no concept of a hole today, a card slot is either occupied or the array is simply shorter -- adding
+one means (a) a "hole" representation in `Hand` distinct from "no card here because the hand is short",
+(b) a cast rejected against an empty slot the way an unaffordable cast is rejected today (3-5a's
+`action_rejected` seam, not a new one), and (c) `3-5b`'s delayed delivery filling a specific OWED index
+rather than appending -- `PlayerState.pending_draw_owed` would need to carry which slot it owes, not
+merely a count. It moves the golden: `hand` order becomes index-stable across a cast where it is not
+today, which is exactly the kind of behavioural change `3-5a`'s cast-and-refill sequencing was measured
+against. None of this is scoped by any shipped AC; it is new design surface, Matko's to decide, and
+sits beside the E3 architecture-amendment queue rather than in it -- the queue is untouched this
+session and flushes only at the E3 close-out.
+
+### Close-out
+
+Story `3-6-card-hud-hand-mana-deck` promoted `ready-for-dev` -> `done` in the story file and in
+`sprint-status.yaml`; `story_notes` rewritten to the closed outcome, five lines. No code changed this
+session -- docs only. Golden and suite untouched (no implementation ran); `R-D6` is spent and available
+again only once re-invoked by a future HUD-facing or otherwise player-surfaced story, per the standing
+rule (`3-0d/R11`, `3-6/R6`).
+
+**Two commits, neither pushed:** `docs(stories): 3-6 close-out` (the story file and
+`sprint-status.yaml`), then this entry, a PURE APPEND -- no existing entry edited. The
+architecture-amendment queue is deliberately untouched; it flushes at the E3 close-out, a separate
+pass. The operator reviews the log and pushes.
