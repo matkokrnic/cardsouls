@@ -1,6 +1,10 @@
+---
+baseline_commit: c6357be918bbd16ee7ed91879a15d74d2b40803b
+---
+
 # Story 3.6: Card HUD — hand, mana, deck and reshuffle indicators
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -24,13 +28,13 @@ so that whether the card layer is readable during live combat is assessed and wr
 
 ## Tasks / Subtasks
 
-- [ ] Delete `OpponentHandStrip` + construction path; populate `HandStrip` with real cards via AC2's seam (AC: 1)
-- [ ] Add the eighth `connect_*` seam (hand ids + deck count + discard count, one payload); update the seven-seam guard to eight (AC: 2)
-- [ ] Judge the already-shipped mode-select affordance against P4; log the finding (AC: 3)
-- [ ] Deck-count indicator from AC2's seam; reshuffle flag from `EventBus.reshuffle_vulnerable_window_opened` driving a presentation-local timer seeded by `reshuffle_vulnerable_window_seconds` (AC: 4)
-- [ ] Keep the HUD signal-driven; no polling (AC: 5)
-- [ ] Finalize card-strip sizing; render `CardData.id` as text (AC: 6)
-- [ ] Verify readability live; operator records `docs/playtest-log.md` by hand (AC: 7)
+- [x] Delete `OpponentHandStrip` + construction path; populate `HandStrip` with real cards via AC2's seam (AC: 1)
+- [x] Add the eighth `connect_*` seam (hand ids + deck count + discard count, one payload); update the seven-seam guard to eight (AC: 2)
+- [ ] Judge the already-shipped mode-select affordance against P4; log the finding (AC: 3) — **operator's, pending the live smoke**
+- [x] Deck-count indicator from AC2's seam; reshuffle flag from `EventBus.reshuffle_vulnerable_window_opened` driving a presentation-local timer seeded by `reshuffle_vulnerable_window_seconds` (AC: 4)
+- [x] Keep the HUD signal-driven; no polling (AC: 5)
+- [x] Finalize card-strip sizing; render `CardData.id` as text (AC: 6)
+- [ ] Verify readability live; operator records `docs/playtest-log.md` by hand (AC: 7) — **operator's, R-D6 re-invoked**
 
 ## Dev Notes
 
@@ -71,8 +75,122 @@ so that whether the card layer is readable during live combat is assessed and wr
 
 ### Agent Model Used
 
+Claude Opus 5 (dev pass, 2026-08-06).
+
+### Rulings this pass
+
+- **`3-6/R7` — the observation seam is OWN-SLOT ONLY; the reshuffle FLAG is the only public card
+  fact.** Operator ruling, taken mid-pass against AC 4's "each renders it against its own slot".
+  Both viewports subscribe to the ownerless event and each renders it in BOTH directions
+  (`RESHUFFLE` for its own slot, `OPP RESH` for the other's) — the `on_round_ended`
+  YOU WIN / YOU LOSE precedent, and the delivery of `E3-RG/R3`'s "vulnerability is public".
+  But deck and discard COUNTS stay private: the eighth seam carries no slot index and each HUD is
+  bound to one slot, so a root is structurally incapable of reading the opponent's counts. Reason
+  given: this is exactly why `E3-RG/R4` deleted the opponent hand row — it rendered a count whose
+  publicity was never decided, and the GDD makes the pitched card the only public card
+  information.
+
 ### Debug Log References
+
+Mutation table (every target backed up out-of-repo and SHA256-verified restored; `git checkout --`
+never used). All twelve confirmed FALLING:
+
+| # | Mutation | Guard that failed |
+|---|---|---|
+| M1 | drop the DEAL announcement seat | `test_card_observation.gd` deal / reset / queued-drain (3 tests) |
+| M2 | drop the CAST announcement seat | `test_a_cast_announces_the_shortened_hand_and_the_grown_discard` |
+| M3 | drop the DELIVERY announcement seat | `test_the_delayed_delivery_announces_the_refilled_hand` |
+| M4 | announce every tick (the polling regression) | `test_a_tick_that_moves_no_card_announces_nothing` (+4 payload-count tests) |
+| M5 | bind the LIVE hand array instead of a copy | `test_the_announced_hand_is_a_copy_...` |
+| M6 | rename `connect_cards_changed` off the family | `test_runner_observation_seams_are_exactly_eight` |
+| M7 | add `func _process` to `hud_root.gd` | `test_ui_layer_never_polls_per_frame` (new) |
+| M8 | cross-wire the seam so both roots read slot 0 | `test_card_hud.gd` `hands_differ` |
+| M9 | skip writing the VACATED caption ("ghost card") | *initially caught NOTHING* — see below |
+| M10 | flag never clears itself | `test_card_hud.gd` `flag_cleared` |
+| M11 | resurrect an `OpponentHandStrip` node | `test_card_hud.gd` `opp_row_deleted` + `test_hud_viewports.gd` |
+| M12 | collapse the face/back privacy branches | `test_hud_viewports.gd` direction pin |
+
+**M9 found a real coverage hole and the hole was closed, not excused.** Nothing in the suite
+failed when the vacated hand slot kept its old caption — the state of the HUD after a cast, while
+the replacement draw is in flight, was unproven. A caption left behind is a card the player can
+see and cannot cast, which is worse than an empty slot. `test_card_hud.gd` gained
+`vacated_cleared` / `refill_rewrote` and M9 was re-run against them: FAILS.
 
 ### Completion Notes List
 
+- **AC 1 — done.** `OpponentHandStrip` and its construction path are deleted; `_build_hand_row`
+  lost its `is_own` parameter and calls `_make_card_face_style(true)`, the unchanged 2-5/R4
+  privacy seat. The `false` branch of that seat is KEPT with no caller, deliberately: it is what
+  makes the deferred reveal toggle (`3-6/R1`) inherit a made decision instead of re-deciding
+  privacy. `test_hud_viewports.gd`'s 2-5 two-row assertion is rewritten as a DELETION assertion
+  (absence from the tree, not invisibility) plus the same direction pin, now taken against a
+  tree-less `HudRoot` probe since there is no second row to read it off.
+- **AC 2 — done, the eighth seam.** `PlayerState.cards_changed(hand_ids, deck_count,
+  discard_count)`, queued on the shared `SignalQueue` and drained after `advance()`;
+  `MatchRunner.connect_cards_changed(slot, callback)` wraps it per slot with the same slot guard
+  and the same PRIME-ON-CONNECT as the three economy seams. `PlayerState` gained its first signal
+  and therefore its first `_queue` reference — classified in `test_replay_identity.gd`'s PER_TICK
+  bucket beside the four sibling `_queue` references, not as a fourth unhashed-cross-tick
+  exclusion (that pin caught the new member and is what forced the classification to be stated).
+  Three announcement seats, one per seat that moves a card: the deal, the cast, the delayed
+  delivery. `test_runner_observation_seams_are_exactly_seven` → `..._eight`, list and message
+  moved with it.
+- **AC 3 — NOT DONE, and not doable by an agent.** The rendering already exists (3-5a); the work
+  is the P4 judgment during a live exchange and the `docs/playtest-log.md` entry, which is the
+  operator's own hand (2-6/R11, 2-4/R12, 2-5/R8).
+- **AC 4 — done.** Deck count from the seam's payload. The reshuffle flag renders from
+  `EventBus.reshuffle_vulnerable_window_opened` alone plus the authored
+  `reshuffle_vulnerable_window_seconds`, handed to each `HudRoot` before `add_child` on the
+  `gamepad_profile` / `huds` static-handoff precedent. The countdown is a ONE-SHOT
+  `SceneTreeTimer` — no `_process`, no per-frame work, and no read of `PlayerState`
+  `vulnerable_window`, which stays write-only unhashed state (3-5b/R20, 3-6/R3). A generation
+  TOKEN guards the overlap: a second reshuffle inside the first one's window is not switched off
+  early by the first one's timer.
+- **AC 5 — done, and promoted from review-checked to machine-checked.** `2-4/R9` left "no
+  `_process` in the HUD" to review; this story is the first to hand the HUD a time-varying
+  element, so `test_ui_layer_never_polls_per_frame` now bans `func _process` under `src/ui/`
+  (F1 already covers `_physics_process`). Proven falling by M7.
+- **AC 6 — done.** Card strip finalized at 84x92 panels in a 368-wide container (4 * 84 + 3 * 8 =
+  360 of content), grown UPWARD to `offset_top -112` — the vitals column's bottom edge is at
+  -116 and the -20 bottom margin is unchanged, so nothing else in the reserved layout moves.
+  A card renders `CardData.id` as word-wrapped, ellipsis-trimmed text (`3-6/R4`).
+- **AC 7 — NOT DONE.** Requires the two-human half-width live smoke; `R-D6` is re-invoked
+  (`3-6/R6`) and is the operator's to spend. Nothing in this pass writes the playtest log.
+- **Golden UNMOVED**, exactly as predicted and for the predicted reason: the channel adds no
+  snapshot key, consumes no RNG and reorders nothing inside `advance()`. Pinned executably by
+  `test_the_observation_channel_adds_no_snapshot_key`, which fails if a later change folds hand
+  contents into the snapshot.
+- **Suite 352 tests / 2270 assertions + 22 integration files → 362 / 2304 + 23**
+  (`test/integration/test_card_hud.gd` added). Zero SCRIPT ERROR / Parse Error / INVARIANT
+  VIOLATED. `project.godot` untouched — this story adds no Input Map action and no autoload.
+- **Board status not advanced.** `sprint-status.yaml` lifecycle is locked to
+  backlog → ready-for-dev → done, so 3-6 stays `ready-for-dev` on the board until the smoke and
+  the push; the story file carries the working status instead.
+
 ### File List
+
+- `src/state/player_state.gd` (modified) — `cards_changed` signal, retained `_queue`,
+  `notify_cards_changed()`.
+- `src/state/match_state.gd` (modified) — three announcement seats (`_deal_player`,
+  `_resolve_basic_cast`, `_draw_one_replacement`).
+- `src/main/match_runner.gd` (modified) — `connect_cards_changed` (the eighth seam), its HUD
+  wiring, the reshuffle-duration handoff, the per-viewport bus subscription.
+- `src/ui/hud/hud_root.gd` (modified) — opponent row deleted, own row rebuilt with captions and
+  final sizing, live deck indicator + reshuffle flag, `on_cards_changed`,
+  `on_reshuffle_vulnerable_window_opened`, `_clear_reshuffle_flag`.
+- `test/state/test_card_observation.gd` (new) — the channel's state-side contract, 9 tests.
+- `test/integration/test_card_hud.gd` (new) — the live chain, 10 properties.
+- `test/state/test_architecture_invariants.gd` (modified) — seam family 7 → 8 with the guard
+  renamed; new `test_ui_layer_never_polls_per_frame`.
+- `test/state/test_replay_identity.gd` (modified) — `player_state._queue` classified PER_TICK.
+- `test/integration/test_hud_viewports.gd` (modified) — two-row assertion → deletion assertion +
+  direction pin against a tree-less probe.
+- `test/integration/test_deck_reshuffle.gd` (modified) — comment-only: its header's claim that the
+  deck readout is a placeholder and the window has no renderer is now false.
+- `docs/implementation-artifacts/3-6-card-hud-hand-mana-deck.md` (modified) — this record,
+  `baseline_commit`, checkboxes, Status.
+
+### Change Log
+
+- 2026-08-06 — Dev pass: ACs 1, 2, 4, 5, 6 implemented and mutation-proven; ACs 3 and 7 left to
+  the operator's live smoke. Golden unmoved. Suite 352/2270 + 22 → 362/2304 + 23.
