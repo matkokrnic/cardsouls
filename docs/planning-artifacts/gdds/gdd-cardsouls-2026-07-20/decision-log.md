@@ -5127,3 +5127,76 @@ rule (`3-0d/R11`, `3-6/R6`).
 `sprint-status.yaml`), then this entry, a PURE APPEND -- no existing entry edited. The
 architecture-amendment queue is deliberately untouched; it flushes at the E3 close-out, a separate
 pass. The operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-06 -- E3 close-out
+
+E3 is complete: stories `3-0a` through `3-6` are all `done`, pushed, `HEAD == origin/main` at
+`ddd14ad`, suite 362/2305/23, golden `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`
+unmoved. This session flushes the architecture-amendment queue that accumulated across E3, per the
+standing forcing point set at `E2-CO/R1` and reaffirmed at every growth point since.
+
+**Queue confirmed at ELEVEN by content, not taken on trust.** Found by searching the log itself for
+every ruling that names the queue, cross-checked against the running counts each ruling states:
+`3-0a/R10` (items 1-3, item 1 the pre-existing `assets/` gap sharpened, items 2-3 new), `3-0b/R17`
+(item 4), `3-4/R4` (item 5), `3-4/R9` (item 5 expanded, not a new member), `3-2` readiness gate finding
+/ `3-2` close-out (item 6), `3-3` readiness-gate close-out (item 7), `3-5` readiness-gate findings
+(v)/(vi)/(vii) combined at the ruling below "the eighth architecture-amendment-queue member" (item 8),
+`3-5/R9` (item 8 given a concrete target, not a new member), `3-0c/R10` (item 9), `3-0c/R14` (item 10),
+`3-0d/R12` (item 11, explicitly counted against the prior ten by content). No entry after `3-0d/R12`
+adds a twelfth. **Eleven confirmed, matching the count reported by every ruling that recorded a running
+total.**
+
+**All eleven landed in `docs/game-architecture.md`, commit `docs(architecture): E3 amendment queue
+flush`, ledger entry A5 (v1.4).** Each amendment describes what SHIPPED and cites the ruling that made
+it so:
+1. `assets/` Directory Tree expanded from one unexpanded line into `characters/<name>/` (source
+   assets + two new artifact kinds) alongside `audio/`/`art/`/`models`/`materials` (`3-0a/R10`).
+2. Import post-processing (`EditorScenePostImport` `@tool` scripts, e.g. `strip_model_anim.gd`) named
+   as a sanctioned repo pattern (`3-0a/R10`).
+3. A new artifact type under `assets/` -- editor-assembled files (import-hook `.gd`, `AnimationLibrary`
+   `.res`) committed alongside source assets (`3-0a/R10`).
+4. `src/controllers/` documented as not exclusively `Controller`-typed: `DebugInputReader` lives there
+   under D3(a)'s Input-confinement rule without implementing `sample()`/`InputIntent` (`3-0b/R17`).
+5. D6 / Novel Pattern 5 rewritten to the shipped `EconomyEvaluator` shape: `amount_field` indirection,
+   compute/apply split (evaluator never touches a pool), sorted-directory-scan loading of
+   `data/economy/` (`3-4/R4`, `3-4/R9`).
+6. `CardData`/`CardEffect` schema corrected: six exports (`id`, `max_copies` added), `CardEffect` added
+   to Schema-vs-Loader and the Directory Tree (3-2 gate, `3-4/R9`).
+7. `Deck`/`Hand` added to the Directory Tree; D3 INVARIANT (b) now names the actual banned APIs
+   (`Array.shuffle()`, `Array.pick_random()`, bare `seed()`), not just the concept; the conditional
+   EventBus/seam-registry reconciliation folded into the D5/Event System rewrite below (3-3 close-out).
+8. Novel Pattern 6 corrected three ways: the `CardData` sketch (member 6); `ModeKind` moved onto
+   `Enums` with dispatch as a private `MatchState` method at `advance()` step 6, not a free `resolve()`
+   function; every `check_invariant` reference in the document renamed to the real symbol,
+   `Invariant.check` (`3-5/R9`, folding findings first raised at the 3-2 and 3-5a gates).
+9. The X5 section's scope line ratified as a decision; its controller-swap-only replay sketch replaced
+   with the shipped runner-level fork (recorded camera bases, contact facts, and reload events applied
+   directly against `MatchState`, not derived by a controller swap alone) (`3-0c/R10`).
+10. The tick pseudocode's intent-tap seat corrected: immediately before `advance()`, inside the
+    runner's ticking gate, not at the sample step (`3-0c/R14`).
+11. `src/ui/debug/`'s Directory Tree annotation and Debug Tools item 5 corrected from
+    "record/replay start-stop-load" to SAVE-only -- no load control, no start control (`3-0d/R12`).
+
+Also updated as part of the same pass, not separately queued members: the D5 observation-seam
+registry and Event System section now state the actual shipped counts (eight `connect_*` seams, three
+`EventBus` signals including `reshuffle_vulnerable_window_opened`) -- these were always going to move
+once member 7's conditional clause fired with `3-6/R2`, and fixing the count alongside the Deck/Hand
+tree entry (member 7) was more honest than landing a stale count and re-opening it next epic.
+
+**Ruling: the card-slot refill-in-place finding is a story now, not a deferral.** The finding recorded
+at the `3-6` close-out (card_slot identity is not stable across a cast; the operator wants the
+replacement to refill the VACATED slot) was left as a named open decision with no story number,
+sitting "beside" the amendment queue rather than in it. **The operator RULES it is done NOW, not
+deferred: it becomes `4-0-hand-slot-stability`, a preparatory story at the head of Epic 4, on the same
+precedent `3-0a`..`3-0d` set for E3** -- a dedicated substrate story ahead of the epic's feature work,
+rather than folding a state-semantics change (`Hand` needs a "hole" representation; a cast against an
+empty slot rejects like an unaffordable one; `PlayerState.pending_draw_owed` needs to carry which slot
+it owes) into the first E4 feature story. **No story file is authored and the board is not touched by
+this ruling** -- this entry is the record of the decision only; the story is created at its own
+just-in-time authoring pass, per the Set-B-staleness lesson (`E3-P/R3`).
+
+**Two commits, neither pushed:** `docs(architecture): E3 amendment queue flush` (`docs/game-architecture.md`
+only, ledger entry A5), then this entry, a PURE APPEND -- no existing entry edited. The operator
+reviews the log and pushes.
