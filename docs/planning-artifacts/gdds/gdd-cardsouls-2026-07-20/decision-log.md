@@ -5598,3 +5598,53 @@ them.**
 **Two commits, neither pushed:** `docs(stories): 4-0 gate fixes + promote to ready-for-dev` (the
 story file and `sprint-status.yaml`), then this entry, a PURE APPEND -- no existing entry edited. The
 operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-07 -- Story 4-0 close-out
+
+AC 9 (live smoke) is discharged. It ran and PASSED, and the operator wrote the entry in
+`docs/playtest-log.md` by his own hand (`7.8`), untouched by this session: casting from a
+non-rightmost slot now leaves that slot empty for the 1s delivery window and the replacement lands
+back in it, with no left-shift of the rest of the hand. That is the exact defect the 3-6 close-out
+named and this story was authored to fix. This closes the one AC the dev pass left to the operator
+and the story itself.
+
+**Review outcome, recorded from the code-review commits, not re-derived.** `gds-code-review` ran
+against `7510b5a..HEAD`. Blind Hunter and Acceptance Auditor both completed, zero AC violations. **0
+decision-item findings.** Two patches, both fixed same session (`0584c5b`): `PlayerState.to_snapshot()`'s
+`pending_draw_owed` key aliased the live `Array[int]` instead of returning a copy, unlike every
+sibling container in the codebase (`Hand.to_array()`, `Deck.to_array()`); and `_draw_one_replacement`'s
+two differently-scoped `slot` parameters, distinguished only by a prefix, renamed to `hand_slot` to
+match `_resolve_basic_cast`'s existing convention. Golden confirmed UNMOVED after both patches,
+`312522d8...fb3c`. One finding deferred, not fixed: AC 8's permanent post-exhaustion hole renders
+identically to a slot mid-flight awaiting delivery, both a blank caption -- deferred because AC 7's
+own forward constraint already scopes HUD affordability/greying rendering out of this pass, logged to
+`deferred-work.md`.
+
+**The Edge Case Hunter layer STALLED at 600s -- the SECOND stalled layer in two reviews running, and
+NOT the same layer both times, which changes the diagnosis.** 3-6's review stalled the Acceptance
+Auditor; 4-0's stalled the Edge Case Hunter. Two different layers, one stall each -- the suspect is
+not a single fragile layer but the parallel-layer review infrastructure itself. Both times covered by
+hand rather than left unrun: this session's three targeted checks were the mutation survivors X6/X8
+re-proven falling against a fresh mutation, the width-vs-occupancy binding audited at every
+re-pointed site across eight test files with none mismatched, and AC 7/AC 8's ordering and exhaustion
+pins confirmed non-vacuous by swap/removal. Two occurrences is not yet a fix, but it is no longer a
+coincidence either -- worth a look if a third review stalls a layer, any layer.
+
+**What 4-0 leaves open.** The hole-vs-in-flight HUD distinction deferred above sits in
+`deferred-work.md`, unscoped and unassigned -- no home story yet. The melee retune and the two-human
+playtest remain scheduled, not resolved, per `E3-R/R3`: both wait until casts carry consequences,
+which is E4 feature work this story only lays substrate for.
+
+### Close-out
+
+Story `4-0-hand-slot-stability` promoted `ready-for-dev` -> `done` in the story file and in
+`sprint-status.yaml`; the story file's own Status field carries `done`; `story_notes` rewritten to
+the closed outcome, one entry. No code changed this session -- docs only. Golden and suite untouched,
+`373/2397/23`, `312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c`.
+
+**Three commits, none pushed:** `docs(playtest-log): 4-0 slot stability smoke` (the operator's entry,
+committed verbatim as found in the working tree), `docs(stories): 4-0 close-out` (the story file and
+`sprint-status.yaml`), then this entry, a PURE APPEND -- no existing entry edited. The operator
+reviews the log and pushes.
