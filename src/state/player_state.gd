@@ -182,5 +182,5 @@ func to_snapshot() -> Dictionary:
 		# it is the delivery order, and two owed slots delivering in the wrong order is a real
 		# divergence the hash should see.
 		"pending_draw": pending_draw.to_snapshot(),
-		"pending_draw_owed": pending_draw_owed,
+		"pending_draw_owed": pending_draw_owed.duplicate(),
 	}

@@ -969,12 +969,12 @@ func _deliver_pending_draw(player: PlayerState, slot: int) -> void:
 ## as before this story — what changed is that the loss is addressed to a specific,
 ## permanently-refusing slot rather than to a shorter hand. "hand_size is permitted to reach 0"
 ## survives and now reads as occupied_count() reaching 0 against a still-full-width hand.
-func _draw_one_replacement(player: PlayerState, slot: int, owed_slot: int) -> void:
+func _draw_one_replacement(player: PlayerState, slot: int, hand_slot: int) -> void:
 	if player.deck.is_empty():
 		if player.discard.is_empty():
 			return
 		_reshuffle_discard_into_deck(player, slot)
-	player.hand.fill_at(owed_slot, player.deck.draw_top())
+	player.hand.fill_at(hand_slot, player.deck.draw_top())
 	# Story 3-6 (AC 2): the THIRD and last announcement seat. Seated AFTER the lazy reshuffle
 	# above rather than inside it, so a delivery that had to refill the pile announces ONE
 	# settled payload — the reshuffled deck count and the refilled hand together. The both-empty
