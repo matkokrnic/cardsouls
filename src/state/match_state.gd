@@ -742,7 +742,12 @@ func _deal_pending_decks() -> void:
 func _deal_player(player: PlayerState) -> void:
 	player.deck.set_contents(_deck_contents)
 	_shuffle_deck(player.deck)
-	player.hand.clear()
+	# Story 4-0 (AC 1, `4-0/R2`): the WIDTH is established HERE, at the deal seat, and nowhere
+	# else. `balance.hand_size` is read INLINE at the moment of use (CONSTRAINT C) and handed in;
+	# `Hand` never learns of BalanceConfig, never holds a config reference and never names
+	# hand_size. A Hand that has never been dealt to therefore has width 0, which is what keeps
+	# the pre-deal `hand_size` snapshot reading 0 without a special case.
+	player.hand.clear(balance.hand_size)
 	# Story 3-5a: the discard is emptied HERE, beside the hand, because this is the seat that
 	# re-lays the whole composition. Without it a debug reset would restore every card to the
 	# deck AND leave the played ones in the discard, so "deck + hand + discard is a permutation
@@ -756,12 +761,24 @@ func _deal_player(player: PlayerState) -> void:
 	# count pin needs no special case. start(0) is the kill: TimingWindow.start() sets is_running
 	# from `duration_ticks > 0`, so a zero duration leaves the window stopped AND its snapshot at
 	# all-zeros — no bespoke stop() path, which is what keeps AC 7's early-abort scan honest.
-	player.pending_draw_owed = 0
+	player.pending_draw_owed.clear()
 	player.pending_draw.start(0)
-	for _slot in balance.hand_size:
+	# Story 4-0 (AC 5, `4-0/R4`): the fill loop is REWRITTEN, not merely reviewed. `hand.clear()`
+	# now PRE-FILLS the authored width with markers (the width arriving from here, read inline per
+	# CONSTRAINT C — `Hand` never names hand_size), so the old `hand.add()` append would have
+	# written PAST that width and produced a 2 * hand_size array. An indexed in-place write is
+	# mandatory, and `Hand.add` no longer exists precisely so this could not be got wrong quietly.
+	#
+	# The post-fill state is UNCHANGED from before this story for every case the authored balance
+	# reaches: the authoring audit keeps hand_size <= deck_size, so the is_empty() floor below is
+	# never hit and every slot holds a card with no hole left behind. The floor is retained anyway
+	# — it is the same defensive stop the pre-4-0 loop carried, and a hand_size > deck_size
+	# authoring would leave trailing HOLES rather than a short hand, which AC 3 then refuses per
+	# slot instead of silently renumbering the rest.
+	for slot_index in balance.hand_size:
 		if player.deck.is_empty():
 			break
-		player.hand.add(player.deck.draw_top())
+		player.hand.fill_at(slot_index, player.deck.draw_top())
 	# Story 3-6 (AC 2): the FIRST of the three announcement seats — one per seat that moves a
 	# card, placed after the whole occasion completes rather than per container touched, so the
 	# deal announces one settled payload instead of three intermediate ones.
@@ -837,9 +854,31 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 ## spend cannot fail after an ALLOWED verdict — the evaluator has just compared the same cost
 ## against the same live reading — so a false return is a programming error and says so.
 func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void:
-	if hand_slot < 0 or hand_slot >= player.hand.size():
+	# Story 4-0 (AC 3): TWO paths to ONE reason. The bound check survives and is now a WIDTH bound;
+	# the HOLE test joins it as a SECOND path to the SAME refusal, not a new one and not a
+	# replacement for the first. `Hand.is_slot_empty` folds both together — it reports "holds no
+	# card" for an out-of-range index too — so the two cases cannot drift apart into two reasons.
+	#
+	# NO SIBLING TOKEN SHIPS (`3-5b/R8`'s surviving clause): CastEvaluator.REASON_EMPTY_SLOT is
+	# reused verbatim, riding the same shipped HeroState.reject_action / action_rejected seam and
+	# the same per-slot observation seam 3-5a already ships. A hole IS an empty slot — inventing
+	# REASON_HOLE would be naming the mechanism instead of the player-visible fact.
+	#
+	# `3-5b/R8`'s "a cast is not gated on a pending draw" SURVIVES NARROWED (`4-0/R5`): no cast is
+	# gated on the DEBT — nothing here consults pending_draw_owed, and casting a DIFFERENT slot
+	# with a draw in flight still resolves. What is refused is a cast against the slot whose OWN
+	# replacement is in flight, which is a statement about that slot being empty, not about the
+	# debt. "Mana stays the only throttle" is SUPERSEDED: mana remains the only ECONOMIC throttle,
+	# and slot occupancy is now a second, structural, player-observable precondition.
+	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
 		return
+	# Story 4-0 (AC 7, second part): the ORDERING BELOW IS PINNED, not incidental. The hole is
+	# refused at the guard directly above, BEFORE the cost map is ever consulted — so the empty
+	# marker can never reach `_card_costs.get(id)` and can never be evaluated for affordability.
+	# That is what makes "a hole is never rendered as an affordable card" true on the STATE side
+	# by construction rather than by a lookup that happens to miss. Do not move the cost lookup
+	# above the guard, and do not add a path that reaches it with an unvalidated slot.
 	var id: StringName = player.hand.to_array()[hand_slot]
 	var condition: CardCastCondition = _card_costs.get(id)
 	var reason := CastEvaluator.refusal_reason(condition, player.mana.get_current(),
@@ -863,7 +902,12 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# balance_ticks is read INLINE (CONSTRAINT C) and is non-null here by construction, which is
 	# why this seat keeps its "NO balance == null guard" property: a hand can only be non-empty if
 	# the step-6 deal ran, and the deal returns early while balance is null.
-	player.pending_draw_owed += 1
+	#
+	# STORY 4-0 (AC 4): the debt records WHICH SLOT. `hand_slot` is the slot just vacated one line
+	# above, appended to the FIFO so the replacement lands back in it rather than at the end of the
+	# hand. Two casts against two different slots each owe their own slot, and neither delivery can
+	# ever land in the other's.
+	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	# Story 3-6 (AC 2): the SECOND announcement seat. The hand is one short here and stays so
 	# until the delivery announces again — which is a true statement about the match and exactly
@@ -890,12 +934,17 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 ## it is defense in depth in exactly that family, and is proven non-vacuous the same way each of
 ## them is, by the forced-DEAD idiom (`set_action_state(DEAD)` with _round_over left FALSE).
 func _deliver_pending_draw(player: PlayerState, slot: int) -> void:
-	if player.pending_draw_owed <= 0 or player.pending_draw.is_running:
+	if player.pending_draw_owed.is_empty() or player.pending_draw.is_running:
 		return
-	player.pending_draw_owed -= 1
+	# Story 4-0 (AC 4): the debt is popped as a SLOT, not decremented as a count. FIFO — the
+	# oldest cast is served first, which is the tie-break the Deferred section leaves free and
+	# requires only that no delivery ever land in a slot it wasn't owed to. The pop happens
+	# BEFORE the DEAD branch, exactly as the decrement did: a corpse still consumes its debt, so
+	# one that came back is not handed a backlog (AC 7, 3-5b).
+	var owed_slot: int = player.pending_draw_owed.pop_front()
 	if player.hero.action_state != HeroState.ActionState.DEAD:
-		_draw_one_replacement(player, slot)
-	if player.pending_draw_owed > 0:
+		_draw_one_replacement(player, slot, owed_slot)
+	if not player.pending_draw_owed.is_empty():
 		player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 
 
@@ -910,12 +959,22 @@ func _deliver_pending_draw(player: PlayerState, slot: int) -> void:
 ## data is not acceptable. The owed card is consumed by the caller either way, the hand simply
 ## stays short — hand_size is permitted to reach 0 — and NO vulnerable window opens, because
 ## there was nothing to reshuffle.
-func _draw_one_replacement(player: PlayerState, slot: int) -> void:
+## STORY 4-0 (AC 4/AC 8): the drawn card is written INTO THE OWED SLOT, never appended. That one
+## substitution is what the whole story buys — the card in the slot the player cast is the exact
+## card its replacement refills, rather than a rename of whichever card slid into that position.
+##
+## AC 8 RULES WHAT THE BOTH-EMPTY DEGRADE NOW MEANS, and it is design, not an observation. The
+## debt is consumed by the caller either way; under this shape the consequence is that the HOLE
+## PERSISTS and that slot refuses through AC 3 for the rest of the round. The same cards are lost
+## as before this story — what changed is that the loss is addressed to a specific,
+## permanently-refusing slot rather than to a shorter hand. "hand_size is permitted to reach 0"
+## survives and now reads as occupied_count() reaching 0 against a still-full-width hand.
+func _draw_one_replacement(player: PlayerState, slot: int, owed_slot: int) -> void:
 	if player.deck.is_empty():
 		if player.discard.is_empty():
 			return
 		_reshuffle_discard_into_deck(player, slot)
-	player.hand.add(player.deck.draw_top())
+	player.hand.fill_at(owed_slot, player.deck.draw_top())
 	# Story 3-6 (AC 2): the THIRD and last announcement seat. Seated AFTER the lazy reshuffle
 	# above rather than inside it, so a delivery that had to refill the pile announces ONE
 	# settled payload — the reshuffled deck count and the refilled hand together. The both-empty

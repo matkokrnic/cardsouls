@@ -112,8 +112,15 @@ func _check_counts(state: MatchState, config: BalanceConfig) -> bool:
 	var ok := true
 	for slot: Array in [[0, state.p1], [1, state.p2]]:
 		var player: PlayerState = slot[1]
-		if player.hand.size() != config.hand_size:
+		# Story 4-0 (AC 5): occupancy AND width. Post-deal both equal hand_size — every slot holds
+		# a card and none holds a hole — and asserting them separately is what makes a deal that
+		# left a trailing hole fail here rather than pass on a coincidence of counts.
+		if player.hand.occupied_count() != config.hand_size:
 			_notes.append("p%d hand %d != authored hand_size %d" % [
+				int(slot[0]) + 1, player.hand.occupied_count(), config.hand_size])
+			ok = false
+		if player.hand.size() != config.hand_size:
+			_notes.append("p%d hand WIDTH %d != authored hand_size %d" % [
 				int(slot[0]) + 1, player.hand.size(), config.hand_size])
 			ok = false
 		if player.deck.size() != config.deck_size - config.hand_size:
@@ -126,7 +133,7 @@ func _check_counts(state: MatchState, config: BalanceConfig) -> bool:
 ## AC 4. Deck + hand is the injected composition; check the walk's rule on it directly.
 func _check_composition(state: MatchState, db: Node, config: BalanceConfig) -> bool:
 	var all: Array = state.p1.deck.to_array()
-	all.append_array(state.p1.hand.to_array())
+	all.append_array(state.p1.hand.occupied_ids())
 	var counts: Dictionary = {}
 	for id: StringName in all:
 		counts[id] = int(counts.get(id, 0)) + 1

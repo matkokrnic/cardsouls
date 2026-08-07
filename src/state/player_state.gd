@@ -60,9 +60,26 @@ var discard: DiscardPile
 ## AT DELIVERY off whatever the pile then holds, so nothing is held in limbo and no StringName
 ## has to survive across ticks (a StringName reaching the snapshot is the failure mode Deck, Hand
 ## and DiscardPile all exist to avoid — Array[StringName].sort() orders by internal POINTER on
-## this engine). The debt is a COUNT and nothing more.
+## this engine).
+##
+## STORY 4-0 (AC 4) CHANGES THE DEBT'S SHAPE, and `3-5b/R8`'s "a plain int COUNT and nothing more"
+## is SUPERSEDED for exactly this reason: a count cannot say WHICH slot a replacement is owed to,
+## and the whole story is that the replacement refills the slot its cast vacated. The debt is now
+## a FIFO of owed SLOT INDICES — `pop_front()` at delivery, `append()` at cast, so the tie-break
+## across simultaneously-owed slots is cast order (the Deferred section leaves that order free and
+## requires only that no delivery ever lands in a slot it wasn't owed to).
+##
+## ONE SHARED WINDOW, NOT ONE PER SLOT (`4-0/R6` — FORCED, not chosen). Two shipped constraints
+## close it: `3-5b/R8`'s one-timer, one-delivery-per-expiry cadence, which per-slot windows would
+## break by construction (they deliver simultaneously); and `3-5b/R8`'s two-key snapshot bound,
+## which this story relaxes only for this key's SHAPE — `hand_size` per-slot windows would put N
+## TimingWindow dictionaries into the hash and make the window COUNT a hash cause every time
+## `hand_size` is retuned.
+##
+## STILL NO IDENTITIES AND STILL NO NEW KEY (AC 6): these are slot INDICES, the counts-and-indices
+## rule intact, and the key COUNT does not grow — `3-5b/R8`'s two-key bound survives as a count.
 var pending_draw: TimingWindow
-var pending_draw_owed := 0
+var pending_draw_owed: Array[int] = []
 
 ## Story 3-5b (AC 6): the RESHUFFLE VULNERABLE WINDOW — `pending_draw`'s sibling, started when
 ## this player's discard is folded back into their deck.
@@ -132,7 +149,13 @@ func to_snapshot() -> Dictionary:
 		# reference here would poison the hash outright (the canonical hash has no object branch
 		# and would fall through to a per-allocation instance id).
 		"deck_size": deck.size(),
-		"hand_size": hand.size(),
+		# Story 4-0 (AC 2, `4-0/R1`): bound to occupied_count(), NOT to size(). Hand.size() now
+		# means WIDTH; occupied_count() is what size() meant when this key was written, so this
+		# binding is what keeps the key's MEANING unchanged across the shape change — and it is
+		# why cause 3 of this story's re-baseline is a non-mover (measured, not assumed: the
+		# golden hashes at t24 with a cast at t22 against an 11-tick delay, so a hole is LIVE at
+		# hash time and the width binding would read 9 where this reads 8).
+		"hand_size": hand.occupied_count(),
 		# Story 3-5a (AC 6): the ONE new snapshot key this story adds — the discard COUNT, on
 		# the deck_size/hand_size precedent exactly. No ids, no per-card structure, no pile
 		# ORDER: the same "counts only" rule, for the same reason (a StringName or a CardData
@@ -150,6 +173,14 @@ func to_snapshot() -> Dictionary:
 		# `"regen_delay": _regen_delay.to_snapshot()` shape exactly; the debt rides as a plain int
 		# COUNT, the deck_size/hand_size/discard_size shape exactly. Still no identities, still no
 		# order — the counts-only rule is unbroken.
+		#
+		# STORY 4-0 (AC 4/AC 6) RESHAPES THE SECOND OF THE TWO: the debt is no longer a plain int
+		# but the FIFO of owed SLOT INDICES (see the field's own comment for why a count cannot
+		# express this story). Indices are not identities, so the counts-and-indices rule stands;
+		# the key COUNT does not grow, so `3-5b/R8`'s two-key bound survives as a count. Unlike
+		# its siblings above, this array's ORDER IS MEANINGFUL and CanonicalHash preserves it —
+		# it is the delivery order, and two owed slots delivering in the wrong order is a real
+		# divergence the hash should see.
 		"pending_draw": pending_draw.to_snapshot(),
 		"pending_draw_owed": pending_draw_owed,
 	}

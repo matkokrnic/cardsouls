@@ -63,11 +63,26 @@ func test_card_data_carries_no_damage_or_unblockable_field() -> void:
 				% ", ".join(offenders))
 
 
+## LOAD-BEARING FOR STORY 4-0 (AC 7, `4-0/R3`) — re-pointed, not merely inherited. The empty
+## StringName is the HAND'S EMPTY-SLOT MARKER (`Hand.EMPTY`), so the `card.id != &""` assertion
+## below is what makes the marker/card-id collision IMPOSSIBLE BY CONSTRUCTION rather than
+## unlikely: an authored card with an empty id would be indistinguishable from a hole, and would
+## be silently unremovable, uncastable and invisible in the HUD at once.
+##
+## The guard already shipped before 4-0; this comment is the record that it now has a SECOND
+## owner, so a future pass cannot weaken or delete it without meeting that AC. Do not relax the
+## id assertion here without reading `Hand.EMPTY` first.
+##
+## (The gate's ratification named `test_balance_authoring.gd`; by content that file loads only the
+## BalanceConfig and cannot reach data/cards/, so the audit stays where the authored cards
+## actually are. Recorded as a correction, not a scope change.)
 func test_every_id_is_non_empty_and_unique() -> void:
 	var seen := {}
 	var dupes: Array[String] = []
 	for card in _load_cards():
-		assert_true(card.id != &"", "every card authors a non-empty id")
+		assert_true(card.id != Hand.EMPTY,
+			"every card authors a non-empty id — and `&\"\"` is the hand's HOLE MARKER, so an "
+			+ "empty id would be a card indistinguishable from an empty slot (4-0 AC 7)")
 		if seen.has(card.id):
 			dupes.append(String(card.id))
 		seen[card.id] = true

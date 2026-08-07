@@ -34,12 +34,23 @@ func test_basic_cast_spends_discards_and_refills_in_one_tick() -> void:
 	_advance(ms, _cast_intent(1), InputIntent.new())
 	assert_eq(ms.p1.mana.get_current(), START_MANA - CARD_COST,
 		"the price was spent through the pool (10.0 - 3.0)")
-	assert_false(ms.p1.hand.to_array().has(played_expected),
+	assert_false(ms.p1.hand.occupied_ids().has(played_expected),
 		"the cast card LEFT the hand — slot 1's id is gone")
 	assert_eq(ms.p1.discard.to_array(), [played_expected] as Array[StringName],
 		"...and landed in the discard, that card and only that card")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE,
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE,
 		"INSTANT refill: the hand is back to full on the SAME tick (AC 5, no delay)")
+	# Story 4-0 (AC 4): and the refill landed in SLOT 1 — the slot the cast vacated — not at the
+	# end. At a zero derived delay the vacate and the refill happen inside one tick, so this is
+	# the tightest possible statement of the story: the slot never observably held a hole, and
+	# every other slot is byte-for-byte what it was.
+	assert_false(ms.p1.hand.is_slot_empty(1), "slot 1 was refilled in place")
+	var after_hand := ms.p1.hand.to_array()
+	for i in HAND_SIZE:
+		if i == 1:
+			continue
+		assert_eq(after_hand[i], before_hand[i],
+			"slot %d is byte-for-byte unchanged by a cast of slot 1 (AC 1)" % i)
 	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE - 1,
 		"the replacement came off the deck (4 dealt, 1 drawn -> 3 left)")
 
@@ -76,7 +87,7 @@ func test_cast_conserves_the_injected_multiset() -> void:
 	_advance(ms, _cast_intent(0), InputIntent.new())
 	var all: Array[StringName] = []
 	all.append_array(ms.p1.deck.to_array())
-	all.append_array(ms.p1.hand.to_array())
+	all.append_array(ms.p1.hand.occupied_ids())
 	all.append_array(ms.p1.discard.to_array())
 	all.sort()
 	var expected := _deck_contents()
@@ -84,8 +95,9 @@ func test_cast_conserves_the_injected_multiset() -> void:
 	assert_eq(all, expected,
 		"deck + hand + discard is a permutation of the injected composition after two casts")
 	assert_eq(ms.p1.discard.size(), 2, "both casts reached the discard")
-	assert_eq(ms.p1.hand.size() + ms.p1.pending_draw_owed, HAND_SIZE,
-		"the IN-FLIGHT term closes the hand: hand + owed == hand_size (3-5b AC 11)")
+	assert_eq(ms.p1.hand.occupied_count() + ms.p1.pending_draw_owed.size(), HAND_SIZE,
+		"the IN-FLIGHT term closes the hand: occupied + owed == hand_size (3-5b AC 11, re-pointed "
+		+ "to occupancy by `4-0/R1` — bound to WIDTH this identity would invert)")
 
 
 ## The debug reset restores the FULL composition to the deck, so the discard must be emptied with
@@ -98,7 +110,7 @@ func test_debug_reset_empties_the_discard() -> void:
 	reset.debug_reset = true
 	_advance(ms, reset, InputIntent.new())
 	assert_eq(ms.p1.discard.size(), 0, "the reset emptied the discard")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE, "...and re-dealt a full hand")
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE, "...and re-dealt a full hand")
 	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE, "...from the full composition")
 
 
@@ -118,7 +130,7 @@ func test_unaffordable_cast_is_rejected_through_the_shipped_seam() -> void:
 	assert_eq(rejections, [[&"card_cast", CastEvaluator.REASON_INSUFFICIENT_MANA]],
 		"refused on the shipped action_rejected seam with a card action name and a reason")
 	assert_eq(ms.p1.mana.get_current(), 1.0, "nothing was spent")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE, "the card stayed in the hand")
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE, "the card stayed in the hand")
 	assert_eq(ms.p1.discard.size(), 0, "nothing reached the discard")
 
 
@@ -135,7 +147,7 @@ func test_commit_with_no_armed_slot_is_rejected() -> void:
 	_advance(ms, intent, InputIntent.new())
 	assert_eq(rejections, [[&"card_cast", CastEvaluator.REASON_EMPTY_SLOT]],
 		"a commit with nothing armed is refused, never a cast of slot 0")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE, "the hand is untouched")
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE, "the hand is untouched")
 
 
 ## A slot beyond the hand is the same refusal. Pinned separately from the -1 case because they
@@ -181,7 +193,7 @@ func test_dead_player_cannot_cast() -> void:
 	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
 	_advance(ms, _cast_intent(0), InputIntent.new())
 	assert_eq(ms.p1.mana.get_current(), START_MANA, "a corpse spends nothing")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE, "a corpse plays no card")
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE, "a corpse plays no card")
 	assert_eq(ms.p1.discard.size(), 0, "nothing reached the discard")
 	assert_eq(rejections, [], "and it is SILENT — the DEAD family signals nothing")
 
@@ -251,6 +263,36 @@ func test_non_basic_modes_are_unreachable_in_e3() -> void:
 	assert_eq(offenders.size(), 0,
 		"a non-BASIC mode is authored in src/ (E5/E6 modes are guarded stubs): %s"
 				% ", ".join(offenders))
+
+
+## STORY 4-0 (AC 7, second part): the ORDER of the two lines is PINNED, by content. The hole is
+## refused at the empty-slot guard BEFORE `_card_costs.get(id)` is ever reached, which is what
+## makes "a hole is never evaluated for affordability" true on the STATE side BY CONSTRUCTION
+## rather than by a map lookup that happens to miss. AC 7's HUD half is a forward constraint on
+## the first story to render cost or greying; this half ships now and is guarded now.
+##
+## Pinned as an ordering rather than as a behaviour because the behaviour (no mana spent on a
+## refused hole) is already asserted live in test_draw_delay_and_reshuffle.gd — this catches the
+## refactor that keeps the refusal but moves the lookup above it, where a future affordability
+## read would silently start consulting the marker.
+func test_the_empty_slot_guard_precedes_the_cost_lookup() -> void:
+	var guard_line := -1
+	var lookup_line := -1
+	var n := 0
+	for line in _code_lines("res://src/state/match_state.gd"):
+		n += 1
+		if guard_line < 0 and line.contains("player.hand.is_slot_empty(hand_slot)"):
+			guard_line = n
+		if lookup_line < 0 and line.contains("_card_costs.get(id)"):
+			lookup_line = n
+	assert_true(guard_line > 0,
+		"_resolve_basic_cast must refuse an empty slot via Hand.is_slot_empty — the single test "
+		+ "that folds the WIDTH bound and the hole into ONE reason (AC 3)")
+	assert_true(lookup_line > 0, "...and must still look the cost up (guard would be vacuous)")
+	assert_true(guard_line < lookup_line,
+		"the empty-slot guard must come BEFORE the cost lookup (%d vs %d): a hole must never "
+		% [guard_line, lookup_line]
+		+ "reach the cost map at all (AC 7)")
 
 
 ## The stub branch must actually EXIST — the other half of the guard above, which would pass

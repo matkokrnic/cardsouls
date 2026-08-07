@@ -99,14 +99,27 @@ func _physics_process(_delta: float) -> bool:
 		# payload DIRECTLY rather than by casting: a real cast needs mana the flywheel takes
 		# thousands of ticks to build, and what is under test here is the label rule, not the
 		# economy. The seam-to-callback path itself is proven by the deal assertions above.
+		#
+		# RE-POINTED BY STORY 4-0 (AC 7), and it had to be: this fixture hand-built a THREE-element
+		# array and asserted `after[3] == ""`, which exercised hud_root.gd:159's `else ""` branch.
+		# Under fixed width NO SHIPPED SEAT CAN EVER EMIT A SHORT ARRAY — that branch is DEAD — so
+		# left alone this would have gone on passing while testing nothing the code can produce.
+		# The payload is now FULL WIDTH with the EMPTY MARKER at the hole, which is what the seam
+		# really sends, and the caption comes from `str(marker)`: any marker but `&""` would render
+		# visible garbage here (`4-0/R3`), which is the defect AC 1 shipped to prevent.
+		#
+		# The vacated slot is slot 1, NOT the rightmost. That is the story's whole subject — a
+		# non-rightmost cast must not renumber its neighbours — and a marker parked at the end
+		# would pass even against the old shifting build.
 		var live := _captions(_p1_hud)
-		var short_hand: Array[StringName] = [
-			StringName(live[0]), StringName(live[1]), StringName(live[2])]
-		_p1_hud.on_cards_changed(short_hand, 7, 1)
+		var holed: Array[StringName] = [
+			StringName(live[0]), Hand.EMPTY, StringName(live[2]), StringName(live[3])]
+		_p1_hud.on_cards_changed(holed, 7, 1)
 		var after := _captions(_p1_hud)
-		_vacated_slot_cleared = after.size() == 4 and after[3] == "" and after[2] == live[2]
+		_vacated_slot_cleared = (after.size() == 4 and after[1] == ""
+			and after[0] == live[0] and after[2] == live[2] and after[3] == live[3])
 		if not _vacated_slot_cleared:
-			_detail += " after_short=%s;" % [after]
+			_detail += " after_holed=%s live=%s;" % [after, live]
 		# ...and refilling writes it back, so the clear is not a one-way trip.
 		_p1_hud.on_cards_changed(_to_ids(live), 6, 1)
 		_refill_rewrote_the_slot = _captions(_p1_hud) == live

@@ -124,8 +124,8 @@ func _drive_to_exhaustion_and_reshuffle(config: BalanceConfig) -> Dictionary:
 	if ms.p1.discard.size() != pile:
 		_notes.append("discard holds %d, expected %d" % [ms.p1.discard.size(), pile])
 		exhaustion_ok = false
-	if ms.p1.hand.size() != config.hand_size:
-		_notes.append("hand short at exhaustion: %d, expected %d" % [ms.p1.hand.size(), config.hand_size])
+	if ms.p1.hand.occupied_count() != config.hand_size:
+		_notes.append("hand short at exhaustion: %d, expected %d" % [ms.p1.hand.occupied_count(), config.hand_size])
 		exhaustion_ok = false
 	if not _vulnerable_events.is_empty():
 		_notes.append("the vulnerable event fired before any reshuffle: %s" % [_vulnerable_events])
@@ -141,20 +141,20 @@ func _drive_to_exhaustion_and_reshuffle(config: BalanceConfig) -> Dictionary:
 	if ms.p1.deck.size() != pile:
 		_notes.append("reshuffled pile holds %d, expected %d" % [ms.p1.deck.size(), pile])
 		reshuffle_ok = false
-	if ms.p1.hand.size() != config.hand_size:
-		_notes.append("hand not refilled after the reshuffle: %d" % ms.p1.hand.size())
+	if ms.p1.hand.occupied_count() != config.hand_size:
+		_notes.append("hand not refilled after the reshuffle: %d" % ms.p1.hand.occupied_count())
 		reshuffle_ok = false
-	if ms.p1.pending_draw_owed != 0:
-		_notes.append("a debt survived the reshuffling delivery: %d" % ms.p1.pending_draw_owed)
+	if not ms.p1.pending_draw_owed.is_empty():
+		_notes.append("a debt survived the reshuffling delivery: %s" % [ms.p1.pending_draw_owed])
 		reshuffle_ok = false
 	# Conservation across the reshuffle (AC 11), on the authored composition.
 	if not _is_conserved(ms, config):
 		reshuffle_ok = false
 	# P2 never cast: the reshuffle is this player's own discard and nothing else.
-	if ms.p2.deck.size() != pile or ms.p2.hand.size() != config.hand_size \
+	if ms.p2.deck.size() != pile or ms.p2.hand.occupied_count() != config.hand_size \
 			or ms.p2.discard.size() != 0:
 		_notes.append("P2's piles moved (%d/%d/%d) — the reshuffle is not owner-scoped" % [
-			ms.p2.deck.size(), ms.p2.hand.size(), ms.p2.discard.size()])
+			ms.p2.deck.size(), ms.p2.hand.occupied_count(), ms.p2.discard.size()])
 		reshuffle_ok = false
 
 	# rng_state MOVED across the reshuffle — the reverse half of the golden's cause C4, which is
@@ -196,16 +196,28 @@ func _check_both_empty_degrade(config: BalanceConfig) -> bool:
 	ms.reshuffle_vulnerable_window_opened.connect(func(slot: int) -> void: events.append(slot))
 	ms.p1.deck.set_contents([] as Array[StringName])
 	ms.p1.discard.clear()
-	ms.p1.pending_draw_owed = 1
+	# Story 4-0: the debt names a SLOT, so the constructed case opens a real hole for it to be
+	# owed to — an owed slot that is still occupied is a state the shipped code cannot produce.
+	ms.p1.hand.remove_at(0)
+	ms.p1.pending_draw_owed = [0] as Array[int]
 	ms.p1.pending_draw.start(0)
-	var hand_before := ms.p1.hand.size()
+	var hand_before := ms.p1.hand.occupied_count()
 	_tick(ms)
 	var ok := true
-	if ms.p1.pending_draw_owed != 0:
-		_notes.append("the owed draw was not consumed by the degrade: %d" % ms.p1.pending_draw_owed)
+	if not ms.p1.pending_draw_owed.is_empty():
+		_notes.append("the owed draw was not consumed by the degrade: %s" % [ms.p1.pending_draw_owed])
 		ok = false
-	if ms.p1.hand.size() != hand_before:
-		_notes.append("the degrade invented a card: hand %d -> %d" % [hand_before, ms.p1.hand.size()])
+	if ms.p1.hand.occupied_count() != hand_before:
+		_notes.append("the degrade invented a card: hand %d -> %d"
+				% [hand_before, ms.p1.hand.occupied_count()])
+		ok = false
+	# Story 4-0 (AC 8): the hole PERSISTS across the degrade, and that is the RULED outcome — the
+	# debt was consumed, nothing was drawn, and slot 0 refuses for the rest of the round.
+	if not ms.p1.hand.is_slot_empty(0) or ms.p1.hand.size() != config.hand_size \
+			or ms.p1.hand.occupied_count() != config.hand_size - 1:
+		_notes.append("the exhaustion hole did not persist at full width: "
+				+ "slot0_empty=%s width=%d occupied=%d" % [ms.p1.hand.is_slot_empty(0),
+				ms.p1.hand.size(), ms.p1.hand.occupied_count()])
 		ok = false
 	if ms.p1.vulnerable_window.is_running or not events.is_empty():
 		_notes.append("a vulnerable window opened with nothing to reshuffle")
@@ -217,7 +229,7 @@ func _check_both_empty_degrade(config: BalanceConfig) -> bool:
 ## terms), and the in-flight COUNT closes the hand (its fourth).
 func _is_conserved(ms: MatchState, config: BalanceConfig) -> bool:
 	var all := ms.p1.deck.to_array()
-	all.append_array(ms.p1.hand.to_array())
+	all.append_array(ms.p1.hand.occupied_ids())
 	all.append_array(ms.p1.discard.to_array())
 	all.sort()
 	var expected := _composition(config.deck_size)
@@ -227,9 +239,9 @@ func _is_conserved(ms: MatchState, config: BalanceConfig) -> bool:
 		_notes.append("conservation broken: %d cards accounted for, expected %d"
 				% [all.size(), expected.size()])
 		ok = false
-	if ms.p1.hand.size() + ms.p1.pending_draw_owed != config.hand_size:
+	if ms.p1.hand.occupied_count() + ms.p1.pending_draw_owed.size() != config.hand_size:
 		_notes.append("the in-flight term does not close the hand: %d + %d != %d"
-				% [ms.p1.hand.size(), ms.p1.pending_draw_owed, config.hand_size])
+				% [ms.p1.hand.occupied_count(), ms.p1.pending_draw_owed.size(), config.hand_size])
 		ok = false
 	return ok
 

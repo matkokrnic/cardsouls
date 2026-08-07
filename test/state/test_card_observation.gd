@@ -70,8 +70,15 @@ func test_a_cast_announces_the_shortened_hand_and_the_grown_discard() -> void:
 	assert_eq(seen.size(), 1, "the cast announced once")
 	var payload: Array = seen[0]
 	assert_false((payload[0] as Array).has(played), "the cast card is GONE from the announced hand")
-	assert_eq((payload[0] as Array).size(), HAND_SIZE - 1,
-		"the announced hand is one short while the replacement is in flight")
+	# Story 4-0 (AC 1/AC 7): the payload is FULL WIDTH and carries the EMPTY MARKER at the hole.
+	# It used to be one element shorter, which is what let the HUD renumber the remaining cards.
+	# The nine-consumer table binds this payload to WIDTH precisely so a renderer laying out a
+	# fixed row of slots sees the hole positionally rather than compacted away.
+	assert_eq((payload[0] as Array).size(), HAND_SIZE,
+		"the announced hand keeps its WIDTH while the replacement is in flight")
+	assert_eq((payload[0] as Array)[1], Hand.EMPTY,
+		"...with the empty marker standing in the vacated slot, so slot 2 is still announced at "
+		+ "index 2 (`4-0/R3`: any other marker renders visible garbage in hud_root.gd:159)")
 	assert_eq(payload[2], 1, "the announced discard grew by the card just played")
 	assert_eq(payload[1], DECK_SIZE - HAND_SIZE,
 		"the deck has NOT moved yet — the replacement is owed, not drawn (3-5b)")
@@ -128,7 +135,8 @@ func test_the_announced_hand_is_a_copy_the_consumer_cannot_mutate_state_through(
 	_advance(ms, InputIntent.new(), InputIntent.new())
 	var handed: Array = seen[0][0]
 	handed.clear()
-	assert_eq(ms.p1.hand.size(), HAND_SIZE, "clearing the received array must not empty the hand")
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE,
+		"clearing the received array must not empty the hand")
 
 
 ## IDS, never CardData. The containers carry StringName for a measured reason (an object in a

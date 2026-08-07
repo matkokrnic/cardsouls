@@ -5,6 +5,41 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## Re-baselined by STORY 4-0 (hand slot stability), ONE re-baseline, THREE causes predicted and
+## EXACTLY ONE of them a mover — each isolated by its own measurement and reproduced in both
+## directions. Measured in order, one edit at a time, against the inherited 40eb5554 value:
+##   1. SNAPSHOT SHAPE (the ONE mover, predicted): "pending_draw_owed" changes SHAPE from a plain
+##      int COUNT to the FIFO of owed SLOT INDICES (AC 4/AC 6). `3-5b/R8`'s "a plain int COUNT and
+##      nothing more" is SUPERSEDED; its two-key COUNT bound survives, since no third key ships.
+##      Measured LAST, on top of causes 2 and 3 already in place, so it measures the key shape
+##      alone: 40eb5554 -> 312522d8, the value below. REVERSE REPRODUCED EXACTLY — re-emitting the
+##      key as `pending_draw_owed.size()` with every behavioural change still live returned this
+##      fixture to 40eb5554 bit-identically, which is what makes "the shape is the whole cause"
+##      a measurement rather than an inference.
+##   2. BEHAVIOUR — PREDICTED A NON-MOVER at the readiness gate (`4-0/R7`), MEASURED A NON-MOVER
+##      here, and NOT re-derived from scratch per the story's instruction. The concern was a
+##      fixture issuing a second cast against the SAME numeric card_slot before the first
+##      replacement lands: under the old append model both resolved, under slot stability the
+##      second targets a hole and REJECTS (AC 3). The gate read all three hashing fixtures by
+##      content and found each issues EXACTLY ONE cast (this file at _play_sequence, CAST_SLOT 3
+##      of a 9-wide hand; test_record_file.gd and test_replay_identity.gd, slot 1 of 3). This
+##      story changed no hashing fixture's cast count, so the gate's finding stands and the
+##      measurement below is its confirmation.
+##   3. THE `hand_size` KEY VALUE — added by the gate (`4-0/R7`), and a NON-MOVER IF AND ONLY IF
+##      AC 2 is honoured. It is NOT free: this fixture casts at t22 and hashes at t24 against an
+##      11-tick delay, so a HOLE IS LIVE AT HASH TIME. `Hand.size()` now means WIDTH, and bound to
+##      it the key would read 9 where it reads 8 today. MEASURED, not asserted, and in both
+##      directions: bound to `hand.size()` this fixture hashes 2ce19380 — a genuine drift with
+##      nothing to do with this story — and bound to `hand.occupied_count()` per `4-0/R1` it holds
+##      at the inherited 40eb5554. That measurement is the whole justification for splitting
+##      `size()` from `occupied_count()` rather than letting one method carry both readings.
+## CAUSES 2 AND 3 WERE MEASURED TOGETHER AND THEN SEPARATED: with cause 1 staged out, the entire
+## behavioural change plus the occupancy binding held this fixture at 40eb5554 unmoved; cause 3
+## was then isolated by the width mutation above, which moved it. Cause 2 is therefore independently
+## confirmed — the only remaining variable in that unmoved run.
+## NOT a cause: the marker value itself. `Hand.EMPTY` never enters the snapshot — the hand
+## contributes a COUNT, and holes are absent from it by construction (AC 6).
+##
 ## Re-baselined by STORY 3-5b (draw-replacement delay, deck exhaustion, reshuffle, vulnerable
 ## window), ONE re-baseline, FOUR separately named causes — predicted in the story's Golden
 ## Prediction and each ISOLATED BY ITS OWN MEASUREMENT and REPRODUCED IN BOTH DIRECTIONS.
@@ -266,7 +301,7 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322"
+const GOLDEN := "312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -725,11 +760,20 @@ func test_golden_sequence_exercises_deck_shuffle_and_hand_fill() -> void:
 	# (DRAW_DELAY_TICKS outlives the two ticks between the cast and the hash). Asserting the two
 	# players separately is what keeps this pin about the DEAL — a regression in the deal shows on
 	# BOTH players, a cast-or-delay bug on only one.
-	assert_eq(ms.p2.hand.size(), HAND_SIZE, "the fill ran: P2 holds hand_size cards at t24")
+	assert_eq(ms.p2.hand.occupied_count(), HAND_SIZE,
+		"the fill ran: P2 holds hand_size cards at t24")
 	assert_eq(ms.p2.deck.size(), DECK_SIZE - HAND_SIZE,
 		"P2 cast nothing: deck remaining is deck_size - hand_size (AC 9) — no reshuffle")
-	assert_eq(ms.p1.hand.size(), HAND_SIZE - 1,
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE - 1,
 		"P1's t22 replacement is STILL IN FLIGHT at t24 — the hand is one short")
+	# Story 4-0, and this is CAUSE 3 of the re-baseline made visible (`4-0/R7`). A hole is LIVE at
+	# hash time on this very fixture, so the hashed `hand_size` key reads one of these two numbers
+	# and they differ. Bound to WIDTH it would read HAND_SIZE and the golden would move for a
+	# reason that has nothing to do with this story; bound to occupancy per AC 2 it reads
+	# HAND_SIZE - 1, unchanged, which is why cause 3 measures as a NON-MOVER.
+	assert_eq(ms.p1.hand.size(), HAND_SIZE,
+		"...as a HOLE against an unchanged WIDTH — the two readings differ here, which is exactly "
+		+ "why `4-0/R1` had to split them and why the snapshot binds to occupied_count()")
 	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE,
 		"...so P1's pile has not paid for it yet either")
 	var injected := _golden_deck()
@@ -740,7 +784,7 @@ func test_golden_sequence_exercises_deck_shuffle_and_hand_fill() -> void:
 	assert_ne(p1_pile, p2_pile,
 		"P1 and P2 drew DIFFERENT orders from the one seeded generator (the ONE-SEAT ordering)")
 	var p1_all := p1_pile.duplicate()
-	p1_all.append_array(ms.p1.hand.to_array())
+	p1_all.append_array(ms.p1.hand.occupied_ids())
 	# Story 3-5a: the discard joins the conservation sum — the cast card left the hand and is
 	# neither in the pile nor the hand, so without this the multiset would be one short.
 	p1_all.append_array(ms.p1.discard.to_array())
@@ -777,18 +821,22 @@ func test_golden_sequence_exercises_the_recorded_cast() -> void:
 	# now prices the delay at DRAW_DELAY_TICKS, the cast lands at t22 and the run hashes at t24, so
 	# the replacement is STILL IN FLIGHT on the hashed record. The hand is one LOWER and the deck
 	# one HIGHER than 3-5a recorded — which is the whole visible content of golden cause C3(b).
-	assert_eq(ms.p1.hand.size(), HAND_SIZE - 1,
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE - 1,
 		"the replacement is STILL OWED at t24 — the hand is one short (C3(b)'s first half)")
 	assert_eq(ms.p1.deck.size(), DECK_SIZE - HAND_SIZE,
 		"...and the deck has NOT yet paid for it — one higher than 3-5a's count (C3(b)'s second)")
-	assert_eq(ms.p1.pending_draw_owed, 1, "exactly one draw in flight on the hashed record")
+	assert_eq(ms.p1.pending_draw_owed, [CAST_SLOT] as Array[int],
+		"exactly one draw in flight on the hashed record, ADDRESSED to the slot that was cast — "
+		+ "this is cause 1 of the 4-0 re-baseline, in the key it moves")
+	assert_true(ms.p1.hand.is_slot_empty(CAST_SLOT),
+		"...and that slot is the hole, so the delivery has somewhere of its own to land (AC 4)")
 	assert_true(ms.p1.pending_draw.is_running,
 		"...with its window still running, so both new snapshot keys are non-idle in the hash")
 	assert_eq(ms.p1.mana.get_current(), 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
 		"the PRICE was paid out of the accumulation (cause 3)")
 	var all: Array[StringName] = []
 	all.append_array(ms.p1.deck.to_array())
-	all.append_array(ms.p1.hand.to_array())
+	all.append_array(ms.p1.hand.occupied_ids())
 	all.append_array(ms.p1.discard.to_array())
 	all.sort()
 	var expected := _golden_deck()
@@ -798,8 +846,8 @@ func test_golden_sequence_exercises_the_recorded_cast() -> void:
 	# Story 3-5b (AC 11): the FOURTH term. The three containers above are still a whole permutation
 	# — the card is drawn at delivery, so an owed draw holds nothing in limbo — and the in-flight
 	# COUNT is what accounts for the hand being one short.
-	assert_eq(ms.p1.hand.size() + ms.p1.pending_draw_owed, HAND_SIZE,
-		"the IN-FLIGHT term closes the hand: hand + owed == hand_size")
+	assert_eq(ms.p1.hand.occupied_count() + ms.p1.pending_draw_owed.size(), HAND_SIZE,
+		"the IN-FLIGHT term closes the hand: occupied + owed == hand_size")
 
 
 ## Story 3-5a: rng_state is a PREDICTED and MEASURED NON-MOVER, and this is the measurement,

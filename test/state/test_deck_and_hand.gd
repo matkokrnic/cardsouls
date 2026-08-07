@@ -32,9 +32,19 @@ func test_deck_and_hand_are_pure_refcounted_holding_string_name_ids() -> void:
 	assert_eq(deck.size(), CONTENTS.size())
 	var top: Variant = deck.draw_top()
 	assert_true(top is StringName, "deck elements are StringName IDS, never CardData or indices")
-	hand.add(top)
-	assert_eq(hand.size(), 1)
-	hand.clear()
+	# Story 4-0 (AC 1/AC 2): the hand is FIXED-WIDTH and the width comes FROM THE CALLER. A fresh
+	# Hand has width 0 — it has never been dealt to — and `clear(width)` is what establishes one.
+	# `Hand.add` is gone: appending against a pre-filled width would write PAST it.
+	assert_eq(hand.size(), 0, "a never-dealt hand has width 0 (`4-0/R2`)")
+	hand.clear(3)
+	assert_eq(hand.size(), 3, "clear(width) establishes the WIDTH...")
+	assert_eq(hand.occupied_count(), 0, "...holding nothing yet")
+	hand.fill_at(1, top)
+	assert_eq(hand.size(), 3, "a fill does not change the width")
+	assert_eq(hand.occupied_count(), 1)
+	assert_eq(hand.to_array(), [Hand.EMPTY, top, Hand.EMPTY] as Array[StringName],
+		"...and lands in the NAMED slot, holes either side")
+	hand.clear(0)
 	assert_eq(hand.size(), 0)
 
 
@@ -133,7 +143,12 @@ func test_injection_alone_deals_nothing_and_consumes_no_rng() -> void:
 func test_hand_fills_to_hand_size_from_the_top_of_the_shuffled_deck() -> void:
 	var ms := _match(SEED, HAND)
 	_tick(ms)
-	assert_eq(ms.p1.hand.size(), HAND, "hand filled to the authored hand_size")
+	assert_eq(ms.p1.hand.occupied_count(), HAND, "hand filled to the authored hand_size")
+	# Story 4-0 (AC 5): every slot occupied, none left a hole, immediately after a deal. The
+	# authoring audit keeps hand_size <= deck_size, so the fill never reaches the is_empty() floor.
+	assert_eq(ms.p1.hand.size(), HAND, "...across the full authored WIDTH")
+	for i in HAND:
+		assert_false(ms.p1.hand.is_slot_empty(i), "deal left no hole at slot %d" % i)
 	assert_eq(ms.p1.deck.size(), CONTENTS.size() - HAND, "deck holds deck_size - hand_size")
 	# Provenance: the dealt cards are the LAST HAND entries of the shuffled pile, in draw order
 	# (the top is the back — Deck.draw_top). Reconstruct the shuffle independently and compare.
@@ -150,7 +165,7 @@ func test_hand_fills_to_hand_size_from_the_top_of_the_shuffled_deck() -> void:
 func test_both_players_are_dealt_and_get_different_orders_from_one_seed() -> void:
 	var ms := _match(SEED, HAND)
 	_tick(ms)
-	assert_eq(ms.p2.hand.size(), HAND, "the deal is per-player, fixed P1 -> P2")
+	assert_eq(ms.p2.hand.occupied_count(), HAND, "the deal is per-player, fixed P1 -> P2")
 	assert_eq(ms.p2.deck.size(), CONTENTS.size() - HAND)
 	assert_ne(ms.p1.deck.to_array(), ms.p2.deck.to_array(),
 		"two deals off ONE generator in turn — different orders without a second RNG existing")
@@ -164,7 +179,7 @@ func test_deal_happens_once_and_is_not_repeated_on_later_ticks() -> void:
 	for _t in 5:
 		_tick(ms)
 	assert_eq(ms.p1.deck.to_array(), pile, "the latch is one-shot — no redeal on later ticks")
-	assert_eq(ms.p1.hand.size(), HAND)
+	assert_eq(ms.p1.hand.occupied_count(), HAND)
 	assert_eq(ms.to_snapshot()["rng_state"], rng_after_deal,
 		"and no further RNG is consumed — nothing else in advance() draws")
 
@@ -196,13 +211,13 @@ func test_debug_reset_restores_the_full_composition_and_refills_the_hand() -> vo
 	var first_pile := ms.p1.deck.to_array()
 	assert_eq(ms.p1.deck.size(), CONTENTS.size() - HAND)
 	_tick(ms, true)
-	assert_eq(ms.p1.hand.size(), HAND, "the reset refilled the hand (AC 9's second occasion)")
+	assert_eq(ms.p1.hand.occupied_count(), HAND, "the reset refilled the hand (AC 9's second occasion)")
 	assert_eq(ms.p1.deck.size(), CONTENTS.size() - HAND,
 		"and restored the FULL composition first — the cards in hand are not simply gone")
 	assert_ne(ms.p1.deck.to_array(), first_pile,
 		"the reset RESHUFFLED — it did not just hand back the same pile")
 	var all := ms.p1.deck.to_array()
-	all.append_array(ms.p1.hand.to_array())
+	all.append_array(ms.p1.hand.occupied_ids())
 	all.sort()
 	var expected := CONTENTS.duplicate()
 	expected.sort()
@@ -570,7 +585,7 @@ func test_nothing_in_src_stops_or_clears_the_pending_draw_window() -> void:
 	var re := RegEx.create_from_string("\\.pending_draw\\b")
 	assert_true(re.search("\tplayer.pending_draw.stop()") != null,
 		"the pattern must catch an early stop — a regex typo must not disarm this")
-	assert_null(re.search("\tplayer.pending_draw_owed = 0"),
+	assert_null(re.search("\tplayer.pending_draw_owed.clear()"),
 		"the DEBT is not the window: the debug reset zeroes it legitimately (AC 9)")
 	for banned in ["\tplayer.pending_draw.stop()", "\tplayer.pending_draw.clear()",
 			"\tplayer.pending_draw.is_running = false"]:
@@ -606,6 +621,40 @@ func test_nothing_in_src_stops_or_clears_the_pending_draw_window() -> void:
 	assert_eq(offenders.size(), 0,
 		"an early-stop / abort path against the pending-draw window shipped in src/ (1-9/R3: an "
 		+ "in-flight window resolves to nothing, it is never cut short): %s" % ", ".join(offenders))
+
+
+## Story 4-0 (AC 1, `4-0/R2`): the hand's WIDTH is established at the DEAL SEAT and nowhere else.
+## `Hand` never learns of BalanceConfig, never holds a config reference and never names
+## `hand_size` — the seat reads `balance.hand_size` INLINE at the moment of use (CONSTRAINT C)
+## and passes the width in. This is what keeps a never-dealt Hand at width 0 without a special
+## case, and it is what stops a hot balance reload from half-applying to a hand already in flight.
+##
+## Guarded structurally rather than trusted to review, because the tempting shortcut — caching a
+## BalanceConfig on the container so it can size itself — would violate CONSTRAINT C silently and
+## still pass every behavioural test in this suite.
+func test_hand_never_names_hand_size_or_the_balance_config() -> void:
+	var banned := ["hand_size", "BalanceConfig", "BalanceTicks", "BalanceConfigService"]
+	var offenders: Array[String] = []
+	var n := 0
+	var lines := 0
+	for line in _code_lines("res://src/state/hand.gd"):
+		n += 1
+		lines += 1
+		for token in banned:
+			if line.contains(token):
+				offenders.append("hand.gd:%d %s" % [n, line.strip_edges()])
+	assert_true(lines > 0, "hand.gd scan read no code lines (guard would be vacuous)")
+	assert_eq(offenders.size(), 0,
+		"Hand must not name hand_size or any balance type — the WIDTH arrives from the deal seat "
+		+ "(`4-0/R2`, CONSTRAINT C): %s" % ", ".join(offenders))
+	# ...and the seat really does pass one in, read inline. The other half of the same rule.
+	var seat := false
+	for line in _code_lines("res://src/state/match_state.gd"):
+		if line.contains("player.hand.clear(balance.hand_size)"):
+			seat = true
+	assert_true(seat,
+		"_deal_player must establish the width with `hand.clear(balance.hand_size)`, reading the "
+		+ "authored value INLINE rather than from a cached config (CONSTRAINT C)")
 
 
 func test_hand_and_deck_expose_no_play_or_discard_path() -> void:
