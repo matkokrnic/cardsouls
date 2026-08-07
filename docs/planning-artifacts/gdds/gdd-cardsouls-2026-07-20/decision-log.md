@@ -5377,3 +5377,224 @@ no assertion, test logic, or behaviour changed -- suite re-verified at 362/2305/
 APPEND -- no existing entry edited), then `docs(test): correct assert() harness-abort claim in
 comments` (`test/state/test_card_play.gd` and `test/state/test_deck_and_hand.gd`, comment-only). No
 `src/` changed, no golden re-baseline, no story file. The operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-07 -- Story 4-0 readiness gate outcome, `4-0/R1`-`4-0/R8`
+
+Readiness gate on `docs/implementation-artifacts/4-0-hand-slot-stability.md` (authored 2026-08-07 at
+its own just-in-time pass, commit `69726a5`, per `E3-P/R3`; HOLD carried in the file's own scope
+note) returned **NOT READY** with **EIGHT blocking findings and THREE notes**, resolved by eight
+operator rulings this session, two of them extended by the operator beyond the gate's proposal. This
+is the **TWENTY-THIRD logged readiness-gate session; all twenty-three have now returned NOT READY on
+first reading**, and all twenty-three were resolved in the session that found them. The gate report
+itself lives in the browser session; this entry records the OUTCOME and the RULINGS.
+
+**Preconditions verified before anything was read, and all held.** `HEAD` `69726a5`, `origin/main`
+`69726a5` -- no divergence. Working tree clean. Full suite re-run from this session: `362 tests, 0
+failed, 2305 assertions`, 23 integration files individually PASS, `run_all.sh` exit 0. `GOLDEN` at
+`test_determinism.gd:269` reads `40eb5554796bfff98f16994a1fa721be9ce7a0b01880be17b7fd84e6d39fa322`,
+matching. **The story's Dev Notes citation audit PASSED in full** -- every line number and symbol
+claim was checked by content (`hand.gd:19/22/61-66`, `match_state.gd:839/840-842/892/918/839-872`,
+`player_state.gd:65`, `hud_root.gd:157-159`) and not one failed. The story did not fail the gate on
+citation; it failed on the eight findings below.
+
+### The eight blocking findings
+
+**B1 -- `Hand` has no way to learn its own width, so AC 1 and Task 1 were unimplementable as
+written.** AC 1 said "fixed-width at `hand_size`"; Task 1 said `clear()` "fills every position." But
+`PlayerState._init` builds `Hand.new()` with no arguments (`player_state.gd:104`) and `hand_size` is
+read INLINE at the deal seat under CONSTRAINT C (`match_state.gd:735-737, 761`). `clear()` cannot
+fill "every position" because it does not know how many there are, and every way of telling it
+changes a public API.
+
+**B2 -- `Hand.size()` semantics undefined, and four shipped conservation assertions invert on the
+answer.** The story never said whether `size()` returns the container width (constant) or the
+occupied count. Under width semantics the four-term identity `hand.size() + pending_draw_owed ==
+hand_size` becomes `hand_size + owed == hand_size` -- FALSE whenever a draw is in flight. Four
+shipped sites assert it: `test_card_play.gd:87`, `test_draw_delay_and_reshuffle.gd:564`,
+`test_determinism.gd:801`, `test_deck_reshuffle.gd:230`. The same ambiguity decides B7 and whether
+`match_state.gd:840` is still a bound check. The gate's largest gap, and design-shaped.
+
+**B3 -- "HUD inherits this for free" is false unless the marker is `&""`, and no AC required that.**
+`hud_root.gd:159` is `_own_card_labels[i].text = str(hand_ids[i]) if i < hand_ids.size() else ""`.
+Against a fixed-width payload `hand_ids.size()` is always 4, the `else ""` branch is DEAD, and the
+caption becomes `str(marker)` -- so any marker but the empty `StringName` renders visible garbage in
+the vacated slot, the exact defect 3-6 AC 1 shipped to prevent. AC 1 constrained the marker's
+EXISTENCE, never its VALUE, and the story carried no HUD AC at all.
+
+**B4 -- 3-6's `vacated_cleared` proof goes vacuous.** `test_card_hud.gd:104-112` does not cast; it
+hand-builds a THREE-element payload and asserts `after[3] == ""`. Under fixed width no shipped seat
+can ever emit a short array, so that fixture stops testing anything the code can produce while still
+passing. The story called this "re-pointing"; it is a vacuity, and it cannot be fixed before the
+marker value is ruled.
+
+**B5 -- `_deal_player`'s fill loop MUST be rewritten; Project Structure Notes said it might not need
+to be.** `match_state.gd:761-764` fills via `player.hand.add(...)`. Against a `clear()` that
+pre-fills the width, `add()` appends PAST the width and produces a `2 * hand_size` array. "Reviewed
+against the new fixed-width container, not necessarily rewritten" was wrong by content.
+
+**B6 -- `3-5b/R8`'s "a cast is not gated on a pending draw" is contradicted BEHAVIOURALLY, not
+merely in scope.** The story's header said the no-new-rejection clause "survives in LETTER ... but
+not in SCOPE." It is worse: `test_draw_delay_and_reshuffle.gd:118`
+`test_a_cast_is_not_gated_on_a_pending_draw` casts **slot 0 twice** and asserts `rejections == []`.
+Under the story's AC 2 the second cast targets a hole and rejects -- the test named for R8's own rule
+FAILS. A scope note does not cover a failing test.
+
+**B7 -- the Golden Prediction was missing a cause.** Cause 1 named only `pending_draw_owed`'s shape,
+but `"hand_size": hand.size()` (`player_state.gd:135`) is also a hashed key whose value moves the
+moment `size()` means width. The golden hashes at t24 with a cast at t22 against an 11-tick delay, so
+a hole is LIVE at hash time: the key would read 9 where it reads 8 today. A second, independent
+snapshot mover the prediction did not name -- the precise failure mode the isolation discipline
+exists to catch. Also `test_determinism.gd:731` and `:780` assert `hand.size() == HAND_SIZE - 1`
+inside the hashing fixture's own pins.
+
+**B8 -- the exhaustion fixtures are mechanically destroyed, and the affected-file list was
+incomplete.** `_cast()` (`test_draw_delay_and_reshuffle.gd:536-541`) always casts slot 0, with a
+comment stating the exact premise this story deletes: "always slot 0, because the hand shrinks under
+it and slot 0 is the one index guaranteed to exist while the hand is non-empty." Two fixtures loop it
+`HAND_SIZE` times with no delivery between (`:96` `test_four_casts_in_flight_deliver_four_cards_one_per_expiry`;
+`:409` `test_conservation_holds_across_the_both_empty_degrade`) -- casts 2..N now reject
+and both collapse to a single cast. Separately, **`test_discard_pile.gd` was absent from Project
+Structure Notes** while pinning shrink semantics head-on (`:64` "the hand shrank by exactly one";
+`:73` `remove_at(hand.size() - 1)`), as were `test_card_observation.gd`, `test_card_hud.gd` and
+`test_deck_reshuffle.gd`. Also unmentioned anywhere: `hand.gd:62`'s
+`Invariant.check(index >= 0 and index < _cards.size())` exists to catch a bypassed step-6 guard, and
+under fixed width every index is in range, so it goes SILENTLY VACUOUS unless re-pointed to
+occupancy.
+
+### The three notes
+
+**N1 -- the Golden Prediction's cause 2, MEASURED rather than guessed, is a NON-MOVER.** The gate
+read all three hashing fixtures by content. Each issues EXACTLY ONE cast: `test_determinism.gd`
+(the golden) at `_play_sequence:879` `if cast and t == CAST_TICK`, `CAST_SLOT` 3 against `HAND_SIZE`
+9; `test_record_file.gd:567` `if t == CAST_TICK`, slot 1 against hand 3; `test_replay_identity.gd:419`
+`if t == CAST_TICK`, slot 1 against hand 3. **No golden fixture issues a second cast against any
+slot, let alone the same slot, let alone before the first replacement lands.** Cause 2 is therefore a
+measured non-mover, and `test_the_recorded_cast_consumes_no_rng:815` confirms the cast path is the
+only card-shaped hash cause and that it fires once. **Recorded here so the dev pass never re-derives
+it** (`4-0/R7`).
+
+**N2 -- `3-6/R8`'s `hand_size <= 4` bound is unaffected and becomes MORE load-bearing.**
+`test_balance_authoring.gd:148` bounds the AUTHORED `hand_size` against the HUD's four fixed slots.
+Fixed width makes a width-5 hand emit a 5-element payload into a 4-label row, so the bound already
+covers the new failure mode. No change needed.
+
+**N3 -- the Deferred section contradicted 3-5b's AC 10 degrade.** It said "every owed slot is
+eventually filled." Under the both-empty degrade (`match_state.gd:913-916`, proven at
+`test_draw_delay_and_reshuffle.gd:409`) the debt is consumed and no card arrives, so the slot stays a
+hole permanently and rejects forever. Only the no-misdelivery half of that clause is true.
+
+### The rulings
+
+**`4-0/R1` -- `Hand.size()` means WIDTH; a new `occupied_count()` carries what `size()` means
+today.** The gate enumerated nine consumers of the hand's length and they split irreconcilably across
+the two readings, so the split is made explicit rather than left implied. **The snapshot key
+`hand_size` binds to `occupied_count()`**, which preserves its meaning unchanged, keeps 3-5b's
+four-term conservation identity true, and keeps `3-5b/R8`'s "`hand_size` is permitted to reach 0"
+meaningful. `Hand.is_empty()` likewise means "no OCCUPIED slots" -- the backing array is never empty
+once dealt, so a bare `_cards.is_empty()` would be permanently false and silently wrong. Resolves B2;
+makes cause 1 the only snapshot-shape mover.
+
+**`4-0/R2` -- the width is established at the DEAL SEAT, never by `Hand` itself.** `clear()` takes
+the width (or an explicit resize), called with `balance.hand_size` read INLINE per CONSTRAINT C.
+`Hand` never learns of `BalanceConfig`, never holds a config reference and never names `hand_size`. A
+never-dealt `Hand` has width 0, which is what keeps `test_economy_and_hero.gd:89`'s pre-deal
+`snap["hand_size"] == 0` true with no special case. Resolves B1.
+
+**`4-0/R3` -- the empty marker is the empty `StringName` (`&""`), ruled explicitly, WITH the
+operator's extension.** Ruled so `hud_root.gd:159` renders a blank caption with no HUD change. A new
+AC pins it, and `test_card_hud.gd`'s `vacated_cleared` / `refill_rewrote` is re-pointed to a
+marker-bearing FULL-WIDTH payload rather than a hand-built short array. Resolves B3 and B4.
+
+**Operator extension, and three premise corrections the fix pass found by content and did not
+silently absorb:**
+- The extension requires the marker/card-id collision be impossible BY CONSTRUCTION via an
+  authoring-audit assertion that no authored `CardData.id` is the empty `StringName`. **That
+  assertion ALREADY SHIPS**: `test/state/test_card_authoring.gd:66`
+  `test_every_id_is_non_empty_and_unique` asserts `card.id != &""` over every authored card. It is
+  therefore RE-POINTED as load-bearing for this story with a comment saying so, rather than
+  duplicated. The collision was already impossible; the extension makes that fact load-bearing and
+  unweakenable.
+- The extension named `test_balance_authoring.gd` as the home for it. **By content that file loads
+  only the `BalanceConfig`** (`load(CONFIG_PATH) as BalanceConfig`, ten sites) and cannot reach
+  `data/cards/`. The audit stays in `test_card_authoring.gd`, where the authored cards actually are.
+  A placement correction, not a scope change.
+- The extension states the HUD's cost greying treats the marker as uncastable and never looks it up
+  in the cost map. **There is no cost, affordability or greying rendering in `src/ui/` today** --
+  verified by content; `_card_costs` is `MatchState`-private and no seam relays it. The AC therefore
+  ships in two halves: the SHIPPED state-side half (the hole rejects at `match_state.gd:840`,
+  returning at :842, BEFORE `_card_costs.get(id)` at :844, so a hole cannot reach the cost lookup at
+  all -- the dev pass keeps and pins that ordering), and a FORWARD constraint binding any future
+  affordability rendering. It requires no HUD code now, and the AC says so rather than implying a
+  mechanism that does not exist.
+
+**`4-0/R4` -- `_deal_player`'s fill loop is REWRITTEN to an indexed in-place write.** The Task line
+"reviewed ... not necessarily rewritten" is corrected. Resolves B5.
+
+**`4-0/R5` -- `3-5b/R8` is superseded CLAUSE BY CLAUSE, and the story carries the table.** Recorded
+here as the authority so no later pass re-derives it:
+
+| `3-5b/R8` clause | Verdict |
+| --- | --- |
+| The snapshot gains EXACTLY TWO new keys (`pending_draw`, `pending_draw_owed`) | SURVIVES as a key COUNT -- 4-0 adds no third key |
+| `pending_draw_owed` is "a plain int COUNT and nothing more" | SUPERSEDED -- it must carry slot addresses |
+| One timer plus a debt; ONE card per expiry; the window restarts while the debt is above zero | SURVIVES INTACT, and is load-bearing for `4-0/R6` |
+| Both keys cross tick boundaries, which is why they are hashed | SURVIVES -- a shape change does not touch the rationale |
+| "`hand_size` is permitted to reach 0" | SURVIVES, and only because `4-0/R1` binds the key to OCCUPANCY |
+| "NO new rejection reason" (the constant itself) | SURVIVES IN FULL -- `REASON_EMPTY_SLOT` reused, no sibling token |
+| "a cast is not gated on a pending draw" | SURVIVES NARROWED: no cast is gated on the DEBT; a cast against the slot whose OWN replacement is in flight is now refused |
+| "mana stays the only throttle" | SUPERSEDED -- mana is the only ECONOMIC throttle; slot occupancy is now a second, structural, player-observable precondition |
+
+`test_a_cast_is_not_gated_on_a_pending_draw` is re-pointed to two DIFFERENT slots, preserving the
+rule it was written for. Resolves B6.
+
+**`4-0/R6` -- the delivery shape is FORCED, not free; the story's Dev Notes are corrected.** The
+pre-gate draft called the shared-`TimingWindow`-plus-owed-queue versus per-slot-window choice an open
+implementation choice the dev pass would make. It was pre-decided at 3-5b, by two shipped
+constraints: (a) `3-5b/R8`'s one-timer, one-delivery-per-expiry cadence, which the story's own
+Deferred section preserves -- per-slot windows deliver simultaneously by construction; and (b)
+`3-5b/R8`'s two-key snapshot bound, which 4-0 relaxes only for `pending_draw_owed`'s SHAPE, where
+`hand_size` per-slot windows would put N `TimingWindow` dictionaries into the hash and make the
+window count a hash cause every time `hand_size` is retuned. **ONE shared `TimingWindow` plus an
+owed-slot queue ships.** Genuinely free: the queue's internal representation and the tie-break order,
+and the tie-break is already Deferred.
+
+**`4-0/R7` -- the Golden Prediction gains a THIRD cause and RECORDS cause 2 as measured.** Cause 3 is
+the `hand_size` KEY VALUE, a non-mover if and only if `4-0/R1` is honoured, and the dev pass MEASURES
+it rather than asserting it. Cause 2's measurement (N1 above) is recorded in the story and in this
+entry so the dev pass never re-derives it; it re-measures only if it changes a fixture's cast count,
+which nothing in this story requires. Resolves B7.
+
+**`4-0/R8` -- the affected-test inventory is carried in the story, the vacuous invariant is
+re-pointed, and the Deferred clause is corrected -- WITH the operator's extension.** Thirteen
+shrink-pinning sites are listed individually in the story's Dev Notes because the gate found them by
+content, not so the dev pass can re-derive them; `test_discard_pile.gd`, `test_card_observation.gd`,
+`test_card_hud.gd`, `test_card_authoring.gd`, `test_determinism.gd` and `test_deck_reshuffle.gd` join
+Project Structure Notes; `hand.gd:62`'s `Invariant.check` is re-pointed to OCCUPANCY with an explicit
+non-vacuity note; and the Deferred section's "every owed slot is eventually filled" is replaced by
+the no-misdelivery clause, which is the only part that is true. Resolves B8 and N3.
+
+**Operator extension: the permanent hole at exhaustion is the RULED DESIGN, not an observation.**
+When deck and discard are both empty, the owed slot's debt is consumed, **the hole PERSISTS, and that
+slot rejects for the rest of the round. Slot stability extends to exhaustion.** This ships as its own
+AC with its own test, not as a note on the degrade. The same cards are lost as today; what changes is
+that the loss is now addressed to a specific, permanently-refusing slot rather than to a shorter
+hand -- and the story states that as intent rather than leaving a reader to infer it from
+`match_state.gd:913-916`.
+
+### Close-out
+
+Story `4-0-hand-slot-stability` promoted `backlog` -> `ready-for-dev` in the story file and in
+`sprint-status.yaml`; the HOLD its scope note carried is DISCHARGED and the note rewritten to record
+that the gate ran. **Six ACs became NINE** (the length split, the marker/no-affordable-hole AC, and
+the exhaustion AC are new; the rest were amended in place). `story_notes` rewritten to the gate
+outcome, one entry. No code changed this session -- docs only. Suite and golden untouched, and
+re-verified unchanged at the start of the gate rather than assumed: 362/2305/23, `40eb5554...a322`.
+
+**Base rate: 23 gates, 23 NOT READY on first reading, all 23 resolved in the session that found
+them.**
+
+**Two commits, neither pushed:** `docs(stories): 4-0 gate fixes + promote to ready-for-dev` (the
+story file and `sprint-status.yaml`), then this entry, a PURE APPEND -- no existing entry edited. The
+operator reviews the log and pushes.
