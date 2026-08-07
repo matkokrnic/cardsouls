@@ -31,6 +31,15 @@ These fail the suite if violated — the guard is the test, not review.
 - The shell is PowerShell 5.1 — no `&&` chaining.
 - Trailer `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` on every commit.
 
+## Story tiers
+
+Every story is Tier A (touches `src/state/`, the golden, determinism, or replay — full gate + review
++ live smoke ritual) or Tier B (HUD/presentation/data/tooling/docs only, AND a measured before/after
+shows the golden and snapshot key set unmoved — lighter skill chain, no separate gate pass). The
+golden clause is decisive: a story that moves the golden is Tier A regardless of how it feels. Tier
+may be raised, never lowered, mid-story. Authority and full policy text: GDD decision-log, session
+2026-08-07, ruling `E4-P/R9` — read it there, not here.
+
 ## Agent autonomy
 
 - Implementation decisions are yours: make them and proceed without asking.
