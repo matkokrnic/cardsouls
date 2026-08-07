@@ -1,6 +1,10 @@
+---
+baseline_commit: 7510b5a05a3bfa870128065ec08fb5f0a790a1c2
+---
+
 # Story 4.0: Hand slot stability
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** Newly authored at the E3 close-out's own ruling (2026-08-06, decision-log Session
 > 2026-08-06 -- E3 close-out), on the just-in-time authoring precedent already used for
@@ -148,35 +152,35 @@ observable.
 
 ## Tasks / Subtasks
 
-- [ ] Give `Hand` a fixed-width, hole-aware representation. The width arrives FROM THE CALLER --
+- [x] Give `Hand` a fixed-width, hole-aware representation. The width arrives FROM THE CALLER --
       `clear(width)` or an explicit resize -- so `Hand` never names `hand_size` and never sees a
       `BalanceConfig`; a never-dealt `Hand` has width 0 (AC: 1)
-- [ ] Split the length surface: `size()` returns the WIDTH, a new `occupied_count()` returns what
+- [x] Split the length surface: `size()` returns the WIDTH, a new `occupied_count()` returns what
       `size()` means today, `is_empty()` means "no occupied slots" (AC: 2)
-- [ ] Replace `Hand.remove_at()`'s shift-left removal with an in-place hole write; add an in-place
+- [x] Replace `Hand.remove_at()`'s shift-left removal with an in-place hole write; add an in-place
       fill method that writes a card into a specific index (AC: 1, 4)
-- [ ] Re-point `hand.gd:62`'s `Invariant.check(index >= 0 and index < _cards.size())` to OCCUPANCY.
+- [x] Re-point `hand.gd:62`'s `Invariant.check(index >= 0 and index < _cards.size())` to OCCUPANCY.
       Under fixed width every index is in range, so left alone that invariant goes silently VACUOUS
       -- it exists to catch a bypassed step-6 guard and must keep catching one (AC: 1, 3)
-- [ ] Wire the hole case into `MatchState._resolve_basic_cast`'s existing bound check so a hole slot
+- [x] Wire the hole case into `MatchState._resolve_basic_cast`'s existing bound check so a hole slot
       takes `CastEvaluator.REASON_EMPTY_SLOT` the same way an out-of-range slot does; the bound check
       becomes a WIDTH bound and the hole test joins it (AC: 3)
-- [ ] Change `PlayerState.pending_draw_owed`'s shape to carry the owed slot(s) behind ONE shared
+- [x] Change `PlayerState.pending_draw_owed`'s shape to carry the owed slot(s) behind ONE shared
       `TimingWindow`; update `_deliver_pending_draw` / `_draw_one_replacement` to write into the owed
       index (AC: 4, and `4-0/R6` -- the shared-window shape is forced, not chosen)
-- [ ] REWRITE `_deal_player`'s fill loop (`match_state.gd:761-764`) from `hand.add()` to an indexed
+- [x] REWRITE `_deal_player`'s fill loop (`match_state.gd:761-764`) from `hand.add()` to an indexed
       in-place write, and prove every slot occupied post-deal against the authored
       `hand_size <= deck_size` bound (AC: 5)
-- [ ] Update `to_snapshot()`'s `pending_draw_owed` key to the new shape and bind `"hand_size"` to
+- [x] Update `to_snapshot()`'s `pending_draw_owed` key to the new shape and bind `"hand_size"` to
       `occupied_count()`; re-run the counts-only / no-card-identity guards (AC: 2, 6)
-- [ ] Add the comment re-pointing `test_card_authoring.gd:66`'s `card.id != &""` assertion as
+- [x] Add the comment re-pointing `test_card_authoring.gd:66`'s `card.id != &""` assertion as
       load-bearing for the marker choice; pin the cost-lookup ordering at
       `match_state.gd:840-844` (AC: 7)
-- [ ] Re-point `test_card_hud.gd`'s `vacated_cleared` / `refill_rewrote` to a marker-bearing
+- [x] Re-point `test_card_hud.gd`'s `vacated_cleared` / `refill_rewrote` to a marker-bearing
       FULL-WIDTH payload (AC: 7)
-- [ ] Pin the exhaustion outcome: both piles empty, debt consumed, hole persists, that slot rejects
+- [x] Pin the exhaustion outcome: both piles empty, debt consumed, hole persists, that slot rejects
       for the rest of the round (AC: 8)
-- [ ] Reconcile every test in the inventory below -- they are named individually because the gate
+- [x] Reconcile every test in the inventory below -- they are named individually because the gate
       found them by content, not so the dev pass can re-derive them (AC: 1, 2, 3, 4)
 - [ ] Live smoke: cast from a non-rightmost slot at least twice, from different starting slots;
       record the outcome in `docs/playtest-log.md` (AC: 9)
@@ -332,8 +336,142 @@ decision-log records then -- not restated here to avoid going stale.
 
 ### Agent Model Used
 
+Claude Opus 5 (dev pass, 2026-08-07).
+
 ### Debug Log References
+
+**Golden re-baseline, measured step by step, each cause isolated, both directions reproduced.**
+Inherited value re-derived from `test_determinism.gd`'s `GOLDEN` constant at pass start per the
+3-3 gate rule: `40eb5554...a322`. Preconditions: HEAD `7510b5a` (three docs commits past the
+gate's recorded `69726a5`; no code between), clean tree, 362 tests / 2305 assertions / 0 failed
++ 23 integration green.
+
+| # | Step | Prediction | Measurement | Result |
+| --- | --- | --- | --- | --- |
+| M1 | Causes 2 + 3 live, cause 1 STAGED OUT (`pending_draw_owed` still emitted as `.size()`) | non-movers | `40eb5554...a322` | **UNMOVED** — inherited value held |
+| M2 | Cause 3 isolated: `hand_size` bound to `hand.size()` (WIDTH) | would-be mover | `2ce19380...5883` | **MOVED** — cause 3 is real |
+| M3 | Cause 3 reverted to `occupied_count()` | non-mover | `40eb5554...a322` | **REVERSE REPRODUCED** |
+| M4 | Cause 1: `pending_draw_owed` flipped to the slot-index array | the ONE mover | `312522d8...fb3c` | **MOVED** |
+| M5 | Cause 1 reverted to `.size()`, all behaviour still live | returns to inherited | `40eb5554...a322` | **REVERSE REPRODUCED bit-identically** |
+
+`GOLDEN` re-baselined ONCE: `40eb5554...a322` ->
+`312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c`.
+
+**Cause 2 (behavioural) — CONFIRMED BY MEASUREMENT, not re-derived.** The gate's finding (all
+three hashing fixtures issue exactly one cast) was taken as given per this story's instruction.
+This pass changed no hashing fixture's cast count, so the finding stands; M1 is its confirmation
+— with cause 3 neutralised by AC 2 and cause 1 staged out, the entire behavioural change held the
+inherited hash, leaving cause 2 the only remaining variable in an unmoved run.
+
+**Cause 3 was NOT assumed.** `4-0/R7` required it measured, and it measured as a genuine would-be
+mover (M2) neutralised precisely by AC 2's binding (M3). Had `Hand.size()` been left carrying both
+readings, this story would have moved the golden for a reason unrelated to it.
+
+**Mutation table — ten mutations, every guard proven FALLING.** Every target backed up OUTSIDE the
+repo to the session scratchpad with SHA256 recorded before mutating, and restored by copying the
+backup back with the checksum re-verified. `git checkout --` was never used (decision-log:799).
+
+| # | Mutation | Falls |
+| --- | --- | --- |
+| X1 | `Hand.remove_at`'s occupancy Invariant reverted to a bound-only check (the vacuity AC 1 warns of) | `test_hand_guards_the_fill_and_the_removal...` |
+| X2 | `Array.remove_at` left-shift reinstated in `Hand.remove_at` (the original defect) | **28 tests** across 5 files |
+| X3 | `fill_at`'s occupied-slot Invariant deleted | `test_hand_guards_the_fill_and_the_removal...` |
+| X4 | AC 3's hole guard deleted from `_resolve_basic_cast`, width bound kept | 3 tests |
+| X5 | AC 7's cost lookup moved ABOVE the empty-slot guard | 6 tests |
+| X6 | Delivery writes the FIRST HOLE instead of the OWED slot | `test_two_owed_slots_each_receive_their_own_replacement` |
+| X7 | `_deal_player` fills back to front | `test_hand_fills_to_hand_size_from_the_top_of_the_shuffled_deck` |
+| X8 | `Hand.EMPTY` changed to `&"__empty__"` | `test_the_empty_marker_is_the_empty_string_name...` |
+| X9 | `is_empty()` reverted to the bare `_cards.is_empty()` | `test_hand_is_empty_means_no_occupied_slots...` |
+| X10 | `Hand` caches a `BalanceConfig` (CONSTRAINT C breach) | `test_hand_never_names_hand_size_or_the_balance_config` + an inherited 3-0c guard |
+
+**TWO MUTATIONS SURVIVED ON FIRST RUN AND FORCED NEW GUARDS — reported, not quietly patched:**
+
+- **X6 survived.** `test_two_owed_slots_each_receive_their_own_replacement` originally cast slots
+  0 then 3, where FIFO order and ascending-index order COINCIDE — so a delivery ignoring the owed
+  address entirely still passed. The fixture now casts DESCENDING (3 then 0), making owed order
+  `[3, 0]` disagree with first-hole order `[0, 3]` on the very first delivery. AC 4's central
+  claim was under-guarded until this was found.
+- **X8 survived.** Every site read `Hand.EMPTY` symbolically, so all of them followed the constant
+  wherever it went and none could catch the constant itself changing. Closed by
+  `test_the_empty_marker_is_the_empty_string_name_and_renders_as_a_blank_caption`, which pins the
+  value as a LITERAL and states why `hud_root.gd:159` forces it.
 
 ### Completion Notes List
 
+- **AC 1-8 delivered and pinned. AC 9 (live smoke) is NOT discharged — it is the operator's own
+  hand by the story's own text and no agent writes that entry.** The story is at `review` with
+  AC 9 outstanding, not at `done`.
+- **`Hand.add()` was DELETED, not merely left unused.** Against a `clear(width)` that pre-fills
+  the width, an appending method writes PAST it and produces a `2 * hand_size` array — the exact
+  failure `4-0/R4` names. Removing the method makes that impossible BY CONSTRUCTION rather than
+  detectable by inspection (project-context: guard mechanism over guard pattern, `3-0d/R20`).
+  Two read accessors were added alongside the ruled `occupied_count()`: `occupied_ids()` (the
+  occupancy view the four-term conservation proofs need, since the width view now carries markers
+  that are not cards) and `is_slot_empty()` (which folds the WIDTH bound and the hole into ONE
+  test, so AC 3's two paths cannot drift into two reasons).
+- **`pending_draw_owed` is a FIFO `Array[int]` of owed slot indices** — the representation left
+  free by `4-0/R6`. `CanonicalHash` preserves array ORDER, and that is correct here rather than
+  incidental: the order IS the delivery order, and two owed slots delivering in the wrong order is
+  a real divergence the hash should see. One shared `TimingWindow`, per `4-0/R6` — not re-opened.
+- **The nine-consumer binding table was followed site by site, not re-derived.** `cards_changed`
+  stays bound to WIDTH (a renderer laying out a fixed row needs holes positionally present);
+  `hand_size`, `is_empty()`, `hand.gd`'s Invariant and all four conservation sites bind to
+  OCCUPANCY. `match_state.gd`'s `for _slot in balance.hand_size` was left alone as the table says.
+- **`src/ui/hud/hud_root.gd` is UNCHANGED**, and AC 7 is what makes that safe rather than lucky.
+  Its `else ""` branch is now DEAD (no shipped seat can emit a short array) and the caption of a
+  hole is literally `str(Hand.EMPTY)` — blank only because the marker is the empty StringName.
+- **`project.godot` byte-identical throughout.** No new files, so no `.uid` scan was owed.
+- **AC 8's permanent hole is pinned as DESIGN**, headless and in integration: the debt is
+  consumed, the hole persists at full width, and that slot refuses through AC 3 repeatedly for the
+  rest of the round while its neighbours are untouched.
+- Suite: **362 tests / 2305 assertions / 23 integration -> 373 tests / 2397 assertions / 23
+  integration, 0 failed**, zero SCRIPT ERROR / Parse Error / INVARIANT VIOLATED.
+- One test RENAMED, old name recorded verbatim in its own docstring so the Fence Inventory stays
+  greppable: `test_the_pending_draw_keys_carry_a_window_and_an_int_debt_only` ->
+  `..._and_slot_indices_only`. One more effectively renamed by inversion:
+  `test_hand_remove_at_returns_and_removes_the_named_slot` ->
+  `test_hand_remove_at_leaves_a_hole_and_moves_no_other_slot` (its old assertion — "the remaining
+  cards close up in order" — WAS the bug).
+- **Correction recorded, not silently applied:** AC 7 ratified `test_balance_authoring.gd` as the
+  marker-collision guard's home; by content that file cannot reach `data/cards/`, so the
+  re-pointing landed on `test_card_authoring.gd:66` where the authored cards actually are. The
+  story text already anticipates this; noting it here as executed.
+
 ### File List
+
+- `src/state/hand.gd` — fixed-width hole-aware container; `clear(width)`, `size()` = WIDTH, new
+  `occupied_count()` / `occupied_ids()` / `is_slot_empty()` / `fill_at()`; `remove_at` is an
+  in-place hole write with its Invariant re-pointed to occupancy; `add()` deleted; `EMPTY` marker.
+- `src/state/player_state.gd` — `pending_draw_owed` is `Array[int]`; snapshot `hand_size` binds
+  `occupied_count()`; `pending_draw_owed` key carries the slot-index array.
+- `src/state/match_state.gd` — `_deal_player` establishes the width inline and fills by indexed
+  write; `_resolve_basic_cast` refuses holes through the shipped reason before the cost lookup;
+  `_deliver_pending_draw` pops an owed SLOT; `_draw_one_replacement` fills that slot.
+- `test/state/test_discard_pile.gd` — `remove_at` shrink pins inverted to hole pins; `fill_at`,
+  `is_empty()`, marker-value and guard-scan tests added.
+- `test/state/test_draw_delay_and_reshuffle.gd` — `_cast` helper takes a REQUIRED slot; multi-cast
+  fixtures cast one slot each; debt assertions re-shaped; five slot-stability tests added (AC 1,
+  AC 3 x2, AC 4, AC 8).
+- `test/state/test_deck_and_hand.gd` — container test rebuilt on the shipped surface; deal
+  fixtures assert occupancy AND width and no trailing hole; AC 1 structural fence added.
+- `test/state/test_card_play.gd` — byte-for-byte unchanged-neighbour assertion; conservation
+  re-pointed; AC 7 cost-ordering pin added.
+- `test/state/test_card_observation.gd` — announced payload is FULL WIDTH with the marker at the
+  hole.
+- `test/state/test_card_authoring.gd` — `card.id != Hand.EMPTY` re-pointed as load-bearing for the
+  marker choice, with the reason attached.
+- `test/state/test_determinism.gd` — `GOLDEN` re-baselined; three-cause header recorded; hashing
+  fixture asserts the live hole and the owed address.
+- `test/integration/test_card_hud.gd` — `vacated_cleared` / `refill_rewrote` re-pointed to a
+  marker-bearing FULL-WIDTH payload vacating a NON-rightmost slot.
+- `test/integration/test_deck_reshuffle.gd` — debt assertions re-shaped; AC 8 persistence checked
+  against the authored config.
+- `test/integration/test_deck_injection.gd` — deal counts assert occupancy and width separately.
+
+### Change Log
+
+- 2026-08-07 — Story 4-0 implemented (AC 1-8). Hand becomes fixed-width and hole-aware; the owed
+  replacement refills the vacated slot. Golden re-baselined once, `40eb5554...a322` ->
+  `312522d8...fb3c`, one predicted mover, two measured non-movers. Ten-row mutation table, two
+  survivors found and closed with new guards. Suite 362/2305 -> 373/2397, 23 integration green.
+  AC 9 (live smoke) outstanding — operator's own hand.
