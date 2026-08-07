@@ -5648,3 +5648,149 @@ the closed outcome, one entry. No code changed this session -- docs only. Golden
 committed verbatim as found in the working tree), `docs(stories): 4-0 close-out` (the story file and
 `sprint-status.yaml`), then this entry, a PURE APPEND -- no existing entry edited. The operator
 reviews the log and pushes.
+
+## Session 2026-08-07 -- E4 ratification, `E4-P/R1`-`E4-P/R11`
+
+Planning report delivered report-only; operator ratified it with amendments below. Rulings recorded
+here are the authority; CLAUDE.md's Story tiers section (E4-P/R9) points back to this entry rather
+than restating it.
+
+### Pre-write re-verification (claims checked against the repo, not taken on the prompt's word)
+
+- **D9 sentence.** `docs/game-architecture.md` D9 (pre-fix) stated `PlayerState` "reserves a
+  `units`/board collection." `player_state.gd` carries zero `units`/`board`/`Targeting`/`ObjectPool`
+  tokens -- the sentence described unbuilt work as already reserved in code. `src/systems/pool/`,
+  `src/actors/minions/`, `src/actors/totems/`, `src/actors/projectiles/`, and `data/minions/` all
+  contain only `.gitkeep`; `object_pool.gd` and `minion_priority.gd` do not exist anywhere in the
+  tree. Corrected in the same-session `docs(architecture)` commit (A6), naming the owning story per
+  seam instead of a bare epic label.
+- **Fixture spell/summon split.** Exactly 3 of 9 authored cards (`bramble_snare`, `ember_lash`,
+  `frost_dart`) carry `spell_*` effect ids; the other 6 (`hellforge_totem`, `imp_summoner`,
+  `storm_kite`, `thornback_guardian`, `tidal_wardstone`, `verdant_wardstone`) carry `summon_*`.
+  Matches the prompt's premise exactly.
+- **State-layer card-data guard.** `test_state_layer_never_names_card_data` bans exactly the regex
+  `(CARDS_DIR|data/cards)`, scoped to `src/state/`, with its own non-vacuity pair (the tokens must
+  appear in `card_database.gd`; the scan must visit files). R4/R10 rely on this guard staying green
+  unedited -- confirmed it does not need touching for E4.
+
+### R7 measurement -- where hero position lives (recorded per the obligation, not decided here)
+
+`hero_state.gd:5` states outright: "Pure RefCounted -- no scene, no Input, no position (position is
+actor-owned, F1)." State owns `velocity`, `facing`, `roll_direction` -- intent/derived quantities --
+never a position. `match_runner.gd:_gather_contact_facts` (line 606) reads `actor.global_position`
+directly off the scene node (`HeroActor`, line 624), computes the contact direction fact from it,
+and pushes ONLY that derived fact into state via `push_contact` (1-7's channel). This is exactly the
+1-8 contact-fact precedent R7 named in advance: position lives on the actor node, never in state;
+the runner computes a fact FROM node positions and injects the fact, not the position. The premise
+holds -- it does not contradict R7. Consequence for 4-1's gate: if minion position is put directly
+into state (rather than living on the minion's actor node with the runner deriving facts from it,
+same as the hero), that is a new architectural asymmetry against the hero precedent, not a forced
+choice, and 4-1's gate must ask this explicitly rather than default to whichever seems more
+convenient for `TargetingService`.
+
+### The rulings (as ratified, one clause of reasoning each -- narrative lives in the planning report, not restated here)
+
+`E4-P/R1` Story order: 4-0 (done) -> 4-0a (D9 reconciliation) -> 4-B1 (card-HUD debt discharge) ->
+4-1 (basic-summon resolution) -> 4-2 (minion AI + throttled targeting) -> 4-3 (minion combat) -> 4-4
+(totems, three subtypes) -> 4-5 (pooling + 60 FPS exit criterion). 4-B1 sits at position 2 because it
+is Tier B, discharges an escaped E3 obligation, and exercises the Tier B lane before feature work
+leans on it. Melee retune is not a story -- E3-R/R3 already fixed its shape; it runs once 4-3 gives
+casts consequences. Naming: 4-0 keeps its pushed, unsuffixed name; further substrate takes 4-0a,
+4-0b.
+
+`E4-P/R2` The `PlayerState` board collection ships INSIDE 4-1, with its first consumer, not as a
+standalone 4-0b -- `card_effect.gd`'s own precedent (reserved vocabulary authored ahead of its
+consumer, carried unconsumed since 3-2) is the shape to avoid repeating without cause. NAMED BREAK
+LINE: if 4-1's readiness gate returns more than 8 blocking findings, it splits into a state/board
+half and an actor/spawn half via `gds-correct-course` -- named now so a split is planned, not a
+rescue.
+
+`E4-P/R3` 4-0a is a docs commit riding this pass, not a board story -- one false sentence plus
+mislabeled empty seam directories carries no acceptance criteria (precedent: `6067d9e`). It lands
+before E4's first gate reads D9, not deferred to a close-out flush (E3 retro lesson 4). Discharged
+this session; see the pre-write re-verification above and the `docs(architecture)` commit.
+
+`E4-P/R4` Card effects reach the state layer by one-shot injection at match start, keyed by
+`effect_id` -- precedents `inject_deck` (3-3) and the one-shot cast-cost map (3-5a); the state layer
+never names `CARDS_DIR`/`data/cards`, and `test_state_layer_never_names_card_data` stays green
+UNEDITED. 4-1's gate does not relitigate this.
+
+`E4-P/R5` Data-defined minion priorities need no new shape decision -- a `MinionPriority` `.tres`
+naming a selection rule, resolved by a pure static evaluator in `src/state/`, is the D6 precedent
+(`ResourceGenerationRule`/`EconomyEvaluator`, 3-4; `CastEvaluator`, 3-5a) applied unchanged. 4-2's
+gate inherits this instead of rediscovering it.
+
+`E4-P/R6` Any `.tres` injected into the state layer joins golden discipline, treated as code -- the
+same narrowing of `BC/R3` that `3-4/R6` applied to `data/economy/`. Covers the card-effect map (R4)
+and `data/minions/*.tres` (R5). Named here so no gate discovers it as a finding.
+
+`E4-P/R7` Throttled targeting's shape is decided at 4-2's readiness gate, as rulings -- it is a
+determinism decision, not a performance one: a shared throttled tick inside `advance()` at fixed
+delta is hashable, `Area3D` overlap queries are physics-frame and live outside the state layer and
+are not hashable, and `epics.md`'s "and/or" hides that these place the targeting fact on opposite
+sides of the state/visual seam. OBLIGATION ON 4-1's GATE, discharged above: 4-1 must ask explicitly
+where a unit's position lives, with the 1-8 contact-fact precedent in hand. Measurement recorded
+above -- hero position is actor-owned, never state-owned; putting minion position directly in state
+would be a new asymmetry, not a forced choice, and 4-1 must not settle it incidentally.
+
+`E4-P/R8` Object pooling needs no shape decision now -- building a pool before one minion exists is
+speculative machinery (architecture Binding Constraint #1; `3-0d/R20`). What it needs is a failure
+criterion declared in advance: "many units" and "60 FPS holds" are numbers fixed at 4-5's gate before
+any measurement is taken. 4-5's tier is assigned at 4-1's close-out, once the unit-ownership ruling
+exists -- genuinely undecidable today.
+
+`E4-P/R9` Story tier policy. Every story is assigned a tier at authoring, before its first pass.
+Tier A -- touches `src/state/`, the golden, determinism, or replay: full ritual (readiness gate with
+numbered rulings -> dev pass -> code review -> live smoke where R-D6 attaches -> close-out),
+decision-log entry carries rulings and narrative. Tier B -- touches only HUD/presentation, data
+authoring, tooling, or docs, AND a measured before/after shows the golden and the snapshot key set
+unmoved: skill chain `gds-create-story` -> `gds-dev-story` -> `gds-code-review`, close-out folded
+into one commit, decision-log entry capped at rulings, no narrative. THE GOLDEN CLAUSE IS DECISIVE --
+a story that moves the golden is Tier A regardless of how much it feels like data authoring. Tier is
+assigned at authoring and may be RAISED, never lowered, mid-story; a Tier B story found to move the
+golden stops and is re-gated as Tier A.
+AMENDMENT 1 (operator): Tier B removes the separate gate PASS, not the gate -- the
+`gds-create-story` checklist plus operator review before promotion to ready-for-dev remains. Every
+gate in project history returned NOT READY on first reading (22/22); Tier B buys back the pass cost,
+not the correction point.
+AMENDMENT 2 (operator): if a THIRD code-review layer stalls, Tier B is SUSPENDED rather than
+hand-covered -- two consecutive reviews have stalled a different layer each time (3-6 Acceptance
+Auditor, 4-0 Edge Case Hunter), and Tier B leans on that infrastructure harder than Tier A does. Part
+of the policy text, not a footnote.
+TIER ASSIGNMENTS: 4-0a B (docs commit) | 4-B1 B | 4-1 A | 4-2 A | 4-3 A | 4-4 A (arguable -- the two
+accelerator totems are pure `.tres` authoring against a shipped evaluator seam, and it is Tier A only
+because it moves the golden, which is exactly why the golden clause must be decisive rather than
+intuition) | 4-5 UNDECIDED, assigned at 4-1 close-out (R8) | melee retune B by policy.
+HOME: this ruling is the authority. Second home: `CLAUDE.md`'s "Story tiers" section, a pointer only
+-- `project-context.md` is not touched, since CLAUDE.md describes it as derived from the GDD and
+architecture doc, and a process policy is derived from neither.
+
+`E4-P/R10` `spell_*` effect ids: 3 of 9 fixture cards carry them (confirmed above), and none of E4's
+GDD commitment (minions, pooling, targeting, totems) is spells. A `spell_*` id reaching the resolver
+is NOT a rejection case -- the cast already passed `CastEvaluator`, mana is spent, the discard is
+recorded. RULING: spell cards stay castable, the resource is spent, and the resolver takes a NAMED
+NO-OP with an explicit reason, never a silent swallow. Excluding spell cards from the E4 deal is
+refused -- it would move the golden for no feature reason and drop three of nine cards from every
+test. The no-op is proven in both directions (summon_* resolves; spell_* takes the named path) per
+the non-vacuity doctrine. Spell resolution acquires an owner at the E4 close-out at the latest.
+
+`E4-P/R11` Out of E4, named so scope cannot creep: all of E5 (modes 2/3, chargeup/color telegraph,
+the three-tier ladder, per-color damage, orbs and their HUD, color-as-defense,
+`ActionState.CHARGING`, open decision (a), S6); all of E6 (mode 4 pitch -- `pitch_effect` stays
+UNAUTHORED on every card, even while touching cards for summons); E7 bot, E8 equipment; spell
+resolution as a feature (R10); reshuffle vulnerable-window mechanical cost (`3-5b/R7`); whether hand
+size ever varies (open, bounded <= 4 by `3-6/R8`); camera always-lock-on/retarget (no owner -- NOTE:
+a board full of minions may hand this a forcing point during E4; if so, that is a
+`gds-correct-course`, not silent adoption); S5 audio feedback on a successful cast (4-1 partially
+discharges S5 by construction -- a successful cast puts a visible unit on the board -- the audio half
+stays unhomed); peripheral mana/deck legibility (operator-deferred until the full loop exists at E6;
+not folded into 4-B1); GDD-authority items (minion/spell healing, netcode, Best-of-3/sideboard,
+multiple arenas, real minion/totem art -- grey-box, legibility is the only hard visual bar);
+procedurally, no new board status for E4 and no E4 retrospective until E4 closes.
+
+### Close-out
+
+Docs-only pass, four commits, none pushed: `docs(architecture)` (D9 correction, A6), this entry
+(`docs(decision-log)`), `docs(sprint-status)` (epic-4 section opened, R1 order, R9 tiers, 4-0
+untouched), `docs(claude-md)` (Story tiers pointer section). No code changed, no golden or suite
+touched. Operator reviews the log and pushes.
