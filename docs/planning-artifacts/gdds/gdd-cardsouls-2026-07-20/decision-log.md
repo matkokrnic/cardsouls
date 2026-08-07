@@ -5317,3 +5317,63 @@ companion artifacts are corrected forward and never rewritten.
 `docs(stories): E3 stories manual hygiene` (`stories-manual-e3.md` only), then this entry, a PURE
 APPEND -- no existing entry edited. `sprint-status.yaml` untouched, deliberately (see above). No code
 changed; suite and golden untouched, nothing ran. The operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-07 -- harness gate fix recorded
+
+**`E3-R/R2` -- DISCHARGED BY `e2872e2`, SCOPE CORRECTED BY MEASUREMENT.** The retrospective ruling
+assumed all three grepped patterns (`SCRIPT ERROR`, `Parse Error`, `INVARIANT VIOLATED`) were equally
+ungated by `test/run_all.sh`'s `PIPESTATUS[0]` check. Measured, not assumed, this session: a `Parse
+Error` (script fails to load) makes Godot's own process exit nonzero, so that pattern was **already**
+caught by the pre-existing exit-code check -- verified by dropping a throwaway syntax-error `.gd` into
+`test/integration/` (deleted after) and observing `godot --headless --path . --script ...` exit 1 both
+standalone and inside the full suite, no hang, well under a 30s / 240s timeout respectively. The one
+real hole was a firing `Invariant.check`: it prints `ERROR: INVARIANT VIOLATED: ...` then `SCRIPT
+ERROR: Assertion failed: ...` and **continues**, so Godot exits 0 and the old gate registered a pass.
+`e2872e2` closes exactly that hole, no more: each test run's output is captured once (`out="$(godot
+... 2>&1)"`), Godot's exit status is captured explicitly right after (`exit=$?`, not `PIPESTATUS`, per
+the correction below), and the captured output is additionally grepped for all three patterns so a
+misreported pass still fails the suite. Console output shape is unchanged. Proved by injecting a probe
+integration test that fires `Invariant.check(false, ...)` and then prints `RESULT: PASS` -- the suite
+failed it (`>>> FAILED: ...`, exit 1); probe deleted, suite passed clean at **362 state tests / 2305
+assertions / 23 integration files**, matching the pre-existing baseline exactly (nothing else moved).
+
+**`3-0c/R15` -- CONFIRMED BY DIRECT MEASUREMENT, not re-derived from its own text.** Fired
+`Invariant.check(false, "probe firing")` from a throwaway script outside `test/` (deleted immediately
+after), invoked exactly as the harness invokes any script (`godot --headless --path . --script ...`).
+Observed: `push_error` prints the `ERROR: INVARIANT VIOLATED` line, `assert()` prints `SCRIPT ERROR:
+Assertion failed`, and the script's next line (`print("AFTER")`) still ran before `quit()` -- exit
+code 0. Print-and-continue, not abort, exactly as R15 already recorded. This does not violate R15's
+own precedent (never prove a guard's FIRING inside a test): the probe measured harness behaviour once,
+outside the suite, and was deleted, not committed as a test.
+
+**A NEW open finding, unowned, not fixed this pass: a `SceneTree` script that never reaches `quit()`
+never terminates.** Measured with a second throwaway probe (`test/integration/test_zzz_gate_probe.gd`,
+deleted after) containing a null dereference before `quit()`: `x.get_name()` on `var x: Node = null`,
+invoked identically to how `run_all.sh` invokes every integration test. Result: no output past the
+Godot startup banner for the full 300s the process was allowed to run, confirmed via the background
+task's own output file staying empty; the process was still alive and was killed by hand
+(`TaskStop`) -- it was not observed to exit on its own at any point. `run_all.sh` has no timeout
+anywhere in it, on any invocation. A test that hits this failure class -- an unhandled runtime error
+in a `SceneTree` script before it reaches `quit()` -- does not fail the suite; it stalls it
+indefinitely, and the grep gate is powerless against it because no output ever completes for the grep
+to see. The only defense is a per-test timeout. This is a wider hole than the one `e2872e2` closes.
+Recorded as open. **No owner assigned, no forcing point scheduled** -- per instruction, this session
+records it and does not act on it.
+
+**Companion correction, same session, different commit:** three test comments
+(`test_card_play.gd:226`, `test_card_play.gd:300`, `test_deck_and_hand.gd:254`) justified never
+calling `Invariant.check`'s stub directly by claiming assert() "ABORTS the harness." Measurement above
+proves that false -- it prints and continues. The conclusion those comments reach (don't call the
+guard directly; prove it by source scan / presence-at-seam instead) is unaffected and stands: a
+deliberately triggered guard still pollutes the suite's output with a false-looking failure, and as of
+`e2872e2` it now genuinely fails the suite, just for the wrong reason (a deliberate trigger, not a
+real defect) -- which is itself still a reason not to do it. Only the stated MECHANISM was wrong and
+is corrected; landed in `docs(test): correct assert() harness-abort claim in comments` (comment-only,
+no assertion, test logic, or behaviour changed -- suite re-verified at 362/2305/23 after).
+
+**Two commits, neither pushed:** `docs(decision-log): harness gate fix recorded` (this entry, a PURE
+APPEND -- no existing entry edited), then `docs(test): correct assert() harness-abort claim in
+comments` (`test/state/test_card_play.gd` and `test/state/test_deck_and_hand.gd`, comment-only). No
+`src/` changed, no golden re-baseline, no story file. The operator reviews the log and pushes.
