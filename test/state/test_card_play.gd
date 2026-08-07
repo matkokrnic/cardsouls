@@ -223,8 +223,10 @@ func test_cast_on_a_frozen_tick_is_dropped_silently() -> void:
 ## AC 2's negative-path test: the modes beyond Basic are UNREACHABLE in E3.
 ##
 ## Proven by SOURCE SCAN rather than by calling the stub, deliberately: the stub is an
-## `Invariant.check(false, ...)`, which routes through assert() and would ABORT the harness
-## rather than fail a test. The reachability question is "can anything in src/ ever put a
+## `Invariant.check(false, ...)`, which routes through assert() and PRINTS AND CONTINUES at exit 0
+## (3-0c/R15) rather than aborting — so run_all.sh's grep gate, not a process crash, is what would
+## turn calling the stub into a suite failure, and for the wrong reason (a deliberate trigger, not
+## a genuine defect). The reachability question is "can anything in src/ ever put a
 ## non-BASIC value on an intent" — and that is exactly what this scans for. Every
 ## `Enums.ModeKind.<X>` reference in the whole of src/ must name BASIC.
 ##
@@ -297,10 +299,11 @@ func test_snapshot_gains_exactly_the_discard_count() -> void:
 
 ## AC 4: both seam checks are still THERE, on the condition they exist for.
 ##
-## Their FIRING cannot be tested — Invariant.check routes through assert(), which ABORTS the
-## harness rather than failing a test, and run_all.sh greps for "INVARIANT VIOLATED" so even a
-## surviving one would fail the suite for the wrong reason. What IS provable is presence at the
-## seam: delete either and this fails. The mechanism and this reasoning are inherited verbatim
+## Their FIRING cannot be tested — Invariant.check routes through assert(), which PRINTS AND
+## CONTINUES at exit 0 rather than aborting (3-0c/R15), and run_all.sh greps for "INVARIANT
+## VIOLATED" so a deliberately triggered one would fail the suite for the wrong reason. What IS
+## provable is presence at the seam: delete either and this fails. The mechanism and this reasoning
+## are inherited verbatim
 ## from test_deck_and_hand.gd::test_injection_seam_rejects_an_empty_injected_deck.
 ##
 ## Declared honestly in the dev record as NOT mutation-proven in the firing sense.

@@ -251,10 +251,11 @@ func test_snapshot_carries_counts_only_never_identities_or_order() -> void:
 ## ---- AC 10: the empty-deck check at the injection seam ------------------------------------
 
 ## SOURCE-LEVEL by necessity, and the reason is worth stating rather than hiding: Invariant.check
-## routes through assert(), which cannot be caught in-process — a behavioural test would abort
-## the harness, and run_all.sh greps for "INVARIANT VIOLATED", so even a surviving one would fail
-## the suite for the wrong reason. What IS provable is that the check is still THERE, at the
-## seam, on the emptiness condition: delete it and this fails. Same mechanism as the source scans
+## routes through assert(), which cannot be caught in-process — it PRINTS AND CONTINUES at exit 0
+## rather than aborting (3-0c/R15), and run_all.sh greps for "INVARIANT VIOLATED", so a
+## deliberately triggered one would fail the suite for the wrong reason. What IS provable is that
+## the check is still THERE, at the seam, on the emptiness condition: delete it and this fails.
+## Same mechanism as the source scans
 ## in test_architecture_invariants.gd, and the comment-stripping reader is duplicated from it on
 ## purpose (two files, two scopes; a shared helper has no honest home until a third asks).
 func test_injection_seam_rejects_an_empty_injected_deck() -> void:
