@@ -1,6 +1,6 @@
 # Story 4.0: Hand slot stability
 
-Status: backlog
+Status: ready-for-dev
 
 > **Scope note.** Newly authored at the E3 close-out's own ruling (2026-08-06, decision-log Session
 > 2026-08-06 -- E3 close-out), on the just-in-time authoring precedent already used for
@@ -11,21 +11,38 @@ Status: backlog
 > the VACATED slot instead. That entry is the analysis; this story is the build. Where this file's
 > prose disagrees with either decision-log entry, the log wins.
 >
-> **Status is HOLD pending this story's OWN readiness gate** -- the same convention every other E3/E4
-> substrate story has used. The machine field stays `backlog` in `sprint-status.yaml`; this note
-> carries the HOLD. Do not promote to `ready-for-dev` until that gate runs -- this authoring pass
-> does not run it (operator instruction, this session).
->
-> **This story SUPERSEDES parts of `3-5b/R8`.** `3-5b/R8` ruled the snapshot gains exactly two keys,
-> `pending_draw` and `pending_draw_owed`, the second "a plain int COUNT and nothing more" -- and ruled
-> **no new rejection reason**, because a cast was not gated on a pending draw. Both stand only
-> partially once a hole is addressable: `pending_draw_owed` as a bare int cannot say WHICH slot a
-> draw is owed to, so its shape must change (AC 3); and "no new rejection reason" survives in LETTER
-> -- `CastEvaluator.REASON_EMPTY_SLOT` is reused, not joined by a sibling constant (AC 2) -- but not
-> in SCOPE, because a hole is now a persistently addressable, always-empty target rather than an
-> index that structurally could not be reached before. The same guard fires on a materially different
-> condition than it did in 3-5a/3-5b. **Naming this is the authoring pass's job; reconciling it
-> against the shipped code is the readiness gate's**, per the operator's instruction this session.
+> **The readiness gate RAN (2026-08-07, decision-log Session 2026-08-07 -- Story 4-0 readiness
+> gate).** Verdict NOT READY on first reading, eight blocking findings and three notes, resolved the
+> same session by `4-0/R1`-`4-0/R8` (two with operator extensions). This file is the post-gate text
+> and the HOLD is DISCHARGED: status is `ready-for-dev` here and in `sprint-status.yaml`. Where this
+> file disagrees with those rulings, the rulings win.
+
+## What this story supersedes of `3-5b/R8`
+
+The gate ruled `3-5b/R8` clause by clause (`4-0/R5`) rather than declaring the whole ruling
+partially superseded. The table is the authority; the dev pass does not re-derive it.
+
+| `3-5b/R8` clause | Verdict |
+| --- | --- |
+| The snapshot gains EXACTLY TWO new keys (`pending_draw`, `pending_draw_owed`) | **SURVIVES** as a key COUNT -- this story adds no third key |
+| `pending_draw_owed` is "a plain int COUNT and nothing more" | **SUPERSEDED** by AC 4: it must carry slot addresses |
+| One timer plus a debt; ONE card per expiry; the window restarts while the debt is above zero | **SURVIVES INTACT** -- and is load-bearing, see `4-0/R6` below |
+| Both keys cross tick boundaries, which is why they are hashed | **SURVIVES** -- a shape change does not touch the rationale |
+| "`hand_size` is permitted to reach 0" | **SURVIVES**, and only because `4-0/R1` binds the snapshot key to OCCUPANCY; it would be meaningless against a fixed width |
+| "NO new rejection reason" (the constant itself) | **SURVIVES IN FULL** -- `CastEvaluator.REASON_EMPTY_SLOT` is reused, no sibling token ships (AC 3) |
+| "a cast is not gated on a pending draw" | **SURVIVES NARROWED**: no cast is gated on the DEBT. A cast against the slot whose OWN replacement is in flight is now refused -- a behavioural supersession, not merely a re-scoping |
+| "mana stays the only throttle" | **SUPERSEDED**. Mana remains the only ECONOMIC throttle; slot occupancy is now a second, structural, player-observable precondition |
+
+**`4-0/R6` -- the delivery shape is FORCED, not free.** The Dev Notes of this file's pre-gate draft
+called the choice between one shared `TimingWindow` with an owed-slot queue and a per-slot window an
+open implementation choice. It is not: it was pre-decided at 3-5b. Two shipped constraints close it.
+(a) `3-5b/R8`'s one-timer, one-delivery-per-expiry cadence, which this file's own Deferred section
+preserves -- per-slot windows deliver simultaneously by construction. (b) `3-5b/R8`'s two-key
+snapshot bound, which this story relaxes only for `pending_draw_owed`'s SHAPE; `hand_size` per-slot
+windows would put N `TimingWindow` dictionaries into the hash and make the window count a hash cause
+every time `hand_size` is retuned. **The dev pass ships ONE shared `TimingWindow` plus an owed-slot
+queue.** What remains genuinely free: the queue's internal representation (a FIFO `Array[int]`
+versus a per-slot flag array) and the tie-break order, and the tie-break is already Deferred below.
 
 ## Story
 
@@ -37,29 +54,80 @@ survives a cast the way every other input binding on the controller does.
 ## Acceptance Criteria
 
 1. **`Hand` gains an explicit empty-slot representation, distinct from "the hand is shorter."** The
-   container is fixed-width at `hand_size`: every one of its `hand_size` positions holds either a
-   card id or an explicit empty marker, never fewer positions than that. Casting the card in slot N
-   changes only slot N -- every other slot's contents and index are byte-for-byte unchanged by the
-   cast, immediately and for as long as slot N stays a hole.
-2. **A cast against an empty slot rejects through the existing seam, not a new one.** Committing a
+   container is fixed-width: every one of its positions holds either a card id or an explicit empty
+   marker, never fewer positions than its width. Casting the card in slot N changes only slot N --
+   every other slot's contents and index are byte-for-byte unchanged by the cast, immediately and
+   for as long as slot N stays a hole. **The WIDTH is established at the DEAL SEAT, never by `Hand`
+   itself** (`4-0/R2`): `Hand` never learns of `BalanceConfig`, never holds a config reference and
+   never names `hand_size`; the seat passes the width in, reading `balance.hand_size` INLINE at the
+   moment of use per CONSTRAINT C, exactly as `_deal_player` reads it today (`match_state.gd:735-737,
+   761`). A `Hand` that has never been dealt to has width 0, which is what keeps
+   `test_economy_and_hero.gd:89`'s pre-deal `snap["hand_size"] == 0` true without a special case.
+2. **`Hand.size()` means WIDTH; a new `occupied_count()` carries what `size()` means today**
+   (`4-0/R1`). The two readings are irreconcilable under one method and the gate enumerated nine
+   consumers that split across them, so the split is explicit rather than implied. **The snapshot key
+   `hand_size` binds to `occupied_count()`**, which preserves its meaning unchanged, keeps 3-5b's
+   four-term conservation identity (`occupied + owed == hand_size`) true, and keeps
+   `3-5b/R8`'s "`hand_size` is permitted to reach 0" meaningful. `Hand.is_empty()` likewise means "no
+   OCCUPIED slots" -- the backing array is never empty once dealt, so a bare `_cards.is_empty()`
+   would be permanently false and silently wrong.
+3. **A cast against an empty slot rejects through the existing seam, not a new one.** Committing a
    cast whose `card_slot` currently names no card -- out of range OR a hole -- refuses through the
    shipped `HeroState.reject_action` / `action_rejected` seam with `CastEvaluator.REASON_EMPTY_SLOT`,
-   the same constant and the same per-slot observation seam 3-5a already ships. The out-of-range
-   bound check stays; a hole is a second path to the same reason, not a new one.
-3. **The owed replacement fills the vacated slot, not the end.** `PlayerState.pending_draw_owed`
-   carries WHICH slot (or slots) a draw is owed to, not only a count. `MatchState`'s delivery seat
-   (today `_deliver_pending_draw` / `_draw_one_replacement`) writes the drawn card into the owed
-   slot's own index rather than appending. Two casts against two different slots each owe their own
-   slot; neither can ever land in the other's.
-4. **Deal and debug-reset fill every slot front to back and leave no stray holes.** `_deal_player`
+   the same constant and the same per-slot observation seam 3-5a already ships. The bound check stays
+   and is a WIDTH bound; the hole test is a SECOND path to the same reason, not a new one and not a
+   replacement for the first.
+4. **The owed replacement fills the vacated slot, not the end.** `PlayerState.pending_draw_owed`
+   carries WHICH slot (or slots) a draw is owed to, not only a count, behind ONE shared
+   `TimingWindow` per `4-0/R6`. `MatchState`'s delivery seat (today `_deliver_pending_draw` /
+   `_draw_one_replacement`) writes the drawn card into the owed slot's own index rather than
+   appending. Two casts against two different slots each owe their own slot; neither can ever land in
+   the other's.
+5. **Deal and debug-reset fill every slot front to back and leave no stray holes.** `_deal_player`
    still empties and refills the whole hand each occasion; its post-fill state for every case the
    authored balance reaches (`hand_size <= deck_size`) is unchanged from today -- every slot holds a
-   card, none holds a hole, immediately after a deal.
-5. **The snapshot stays counts/indices-only.** No card identity crosses into `to_snapshot()` that
+   card, none holds a hole, immediately after a deal. **Its fill loop IS REWRITTEN, not merely
+   reviewed** (`4-0/R4`): `match_state.gd:761-764` fills via `player.hand.add(...)`, and against a
+   `clear()` that pre-fills the width that would append PAST the width and produce a
+   `2 * hand_size` array. An indexed in-place write is mandatory.
+6. **The snapshot stays counts/indices-only.** No card identity crosses into `to_snapshot()` that
    was not already crossing (3-3 AC 5, 3-5a AC 6, 3-0c AC 11 all stand). `pending_draw_owed`'s new
    shape may grow or reshape the key it occupies, but carries slot indices or counts, never a
-   `StringName` card id.
-6. **Verified live: cast from a non-rightmost slot; the replacement lands in that same slot when it
+   `StringName` card id. The key COUNT does not grow (`3-5b/R8`, surviving clause).
+7. **The empty marker is the empty `StringName` (`&""`), and a hole is never rendered as a card nor
+   as an affordable one** (`4-0/R3`). Ruled explicitly so `hud_root.gd:159` renders a blank caption
+   with no HUD change: that line is
+   `_own_card_labels[i].text = str(hand_ids[i]) if i < hand_ids.size() else ""`, and against a
+   fixed-width payload its `else ""` branch is DEAD -- the caption becomes `str(marker)`, so any
+   marker but the empty `StringName` renders visible garbage in the vacated slot, which is exactly
+   the defect 3-6 AC 1 shipped to prevent ("a caption left behind is a card the player can see and
+   cannot cast"). Three parts, each with its shipped status named honestly:
+   - **The marker/card-id collision is impossible BY CONSTRUCTION, and the guard ALREADY SHIPS.**
+     `test/state/test_card_authoring.gd:66` `test_every_id_is_non_empty_and_unique` already asserts
+     `card.id != &""` over every authored card. That assertion is hereby RE-POINTED as load-bearing
+     for this story and gains a comment saying so, so a future pass cannot weaken it without meeting
+     this AC. (The gate's ratification named `test_balance_authoring.gd`; by content that file loads
+     only the `BalanceConfig` and cannot reach `data/cards/`, so the audit stays where the authored
+     cards actually are. Recorded as a correction, not a scope change.)
+   - **State side, shipped and required:** the hole rejects at the guard BEFORE the cost map is ever
+     consulted -- `match_state.gd:840` returns at :842, and `_card_costs.get(id)` is :844. A hole
+     therefore cannot reach the cost lookup at all. The dev pass keeps that ordering and pins it.
+   - **HUD side, a FORWARD constraint:** there is no cost, affordability or greying rendering in
+     `src/ui/` today (verified by content at the gate; `_card_costs` is `MatchState`-private and no
+     seam relays it). When such rendering ships, the marker is uncastable by construction and is
+     never looked up in the cost map. This AC binds that future work; it requires no HUD code now.
+   - `test/integration/test_card_hud.gd:104-112`'s `vacated_cleared` / `refill_rewrote` proof is
+     RE-POINTED to a marker-bearing FULL-WIDTH payload. Today it hand-builds a THREE-element array
+     and asserts `after[3] == ""`; under fixed width no shipped seat can ever emit a short array, so
+     left alone that fixture would keep passing while testing nothing the code can produce.
+8. **Slot stability extends to EXHAUSTION: the permanent hole is the RULED design, not an
+   observation** (`4-0/R8`). When a player's deck and discard are both empty, 3-5b AC 10's degrade
+   consumes the owed slot's debt and draws nothing (`match_state.gd:913-916`). Under this story the
+   consequence is stated as intent: **the debt is consumed, the hole PERSISTS, and that slot rejects
+   through AC 3 for the rest of the round.** The same cards are lost as today; what changes is that
+   the loss is now addressed to a specific, permanently-refusing slot rather than to a shorter hand.
+   The dev pass pins this with its own test.
+9. **Verified live: cast from a non-rightmost slot; the replacement lands in that same slot when it
    arrives; nothing else shifts.** Run it from at least two different starting slots (not only the
    leftmost) to rule out an off-by-one. Recorded in `docs/playtest-log.md` by the operator's own
    hand -- no agent writes that entry.
@@ -68,27 +136,50 @@ survives a cast the way every other input binding on the controller does.
 
 **Delivery ORDER across more than one simultaneously-owed slot -- not specified beyond preserving
 3-5b's existing one-delivery-per-expiry cadence.** If two slots are owed at once and both come due on
-the same tick, which fills first is an implementation choice (e.g. cast order) as long as every owed
-slot is eventually filled and no delivery ever lands in a slot it wasn't owed to. Not P4-relevant at
-the shipped delay values -- no home story, revisit only if a future balance pass makes simultaneous
-holes common enough to be observable.
+the same tick, which fills first is an implementation choice (e.g. cast order) as long as **no
+delivery ever lands in a slot it wasn't owed to.** Not P4-relevant at the shipped delay values -- no
+home story, revisit only if a future balance pass makes simultaneous holes common enough to be
+observable.
+
+> Corrected at the gate (note N3): the pre-gate text said "every owed slot is eventually filled."
+> That is FALSE against 3-5b AC 10's both-empty degrade, which consumes the debt and draws nothing
+> (proven at `test_draw_delay_and_reshuffle.gd:409`). AC 8 now rules that outcome; the only clause
+> that survives unconditionally is the no-misdelivery half above.
 
 ## Tasks / Subtasks
 
-- [ ] Give `Hand` a fixed-width, hole-aware representation; `clear()` fills every position with the
-      empty marker rather than leaving the array empty (AC: 1)
+- [ ] Give `Hand` a fixed-width, hole-aware representation. The width arrives FROM THE CALLER --
+      `clear(width)` or an explicit resize -- so `Hand` never names `hand_size` and never sees a
+      `BalanceConfig`; a never-dealt `Hand` has width 0 (AC: 1)
+- [ ] Split the length surface: `size()` returns the WIDTH, a new `occupied_count()` returns what
+      `size()` means today, `is_empty()` means "no occupied slots" (AC: 2)
 - [ ] Replace `Hand.remove_at()`'s shift-left removal with an in-place hole write; add an in-place
-      fill method that writes a card into a specific index (AC: 1, 3)
+      fill method that writes a card into a specific index (AC: 1, 4)
+- [ ] Re-point `hand.gd:62`'s `Invariant.check(index >= 0 and index < _cards.size())` to OCCUPANCY.
+      Under fixed width every index is in range, so left alone that invariant goes silently VACUOUS
+      -- it exists to catch a bypassed step-6 guard and must keep catching one (AC: 1, 3)
 - [ ] Wire the hole case into `MatchState._resolve_basic_cast`'s existing bound check so a hole slot
-      takes `CastEvaluator.REASON_EMPTY_SLOT` the same way an out-of-range slot does (AC: 2)
-- [ ] Change `PlayerState.pending_draw_owed`'s shape to carry the owed slot(s); update
-      `_deliver_pending_draw` / `_draw_one_replacement` to write into the owed index (AC: 3)
-- [ ] Confirm `_deal_player`'s fill-from-top loop still leaves every slot occupied post-deal against
-      the authored `hand_size <= deck_size` bound (AC: 4)
-- [ ] Update `to_snapshot()`'s `pending_draw_owed` key to the new shape; re-run the counts-only /
-      no-card-identity guards (AC: 5)
+      takes `CastEvaluator.REASON_EMPTY_SLOT` the same way an out-of-range slot does; the bound check
+      becomes a WIDTH bound and the hole test joins it (AC: 3)
+- [ ] Change `PlayerState.pending_draw_owed`'s shape to carry the owed slot(s) behind ONE shared
+      `TimingWindow`; update `_deliver_pending_draw` / `_draw_one_replacement` to write into the owed
+      index (AC: 4, and `4-0/R6` -- the shared-window shape is forced, not chosen)
+- [ ] REWRITE `_deal_player`'s fill loop (`match_state.gd:761-764`) from `hand.add()` to an indexed
+      in-place write, and prove every slot occupied post-deal against the authored
+      `hand_size <= deck_size` bound (AC: 5)
+- [ ] Update `to_snapshot()`'s `pending_draw_owed` key to the new shape and bind `"hand_size"` to
+      `occupied_count()`; re-run the counts-only / no-card-identity guards (AC: 2, 6)
+- [ ] Add the comment re-pointing `test_card_authoring.gd:66`'s `card.id != &""` assertion as
+      load-bearing for the marker choice; pin the cost-lookup ordering at
+      `match_state.gd:840-844` (AC: 7)
+- [ ] Re-point `test_card_hud.gd`'s `vacated_cleared` / `refill_rewrote` to a marker-bearing
+      FULL-WIDTH payload (AC: 7)
+- [ ] Pin the exhaustion outcome: both piles empty, debt consumed, hole persists, that slot rejects
+      for the rest of the round (AC: 8)
+- [ ] Reconcile every test in the inventory below -- they are named individually because the gate
+      found them by content, not so the dev pass can re-derive them (AC: 1, 2, 3, 4)
 - [ ] Live smoke: cast from a non-rightmost slot at least twice, from different starting slots;
-      record the outcome in `docs/playtest-log.md` (AC: 6)
+      record the outcome in `docs/playtest-log.md` (AC: 9)
 
 ## Dev Notes
 
@@ -101,36 +192,77 @@ holes common enough to be observable.
   reasons must reach the same branch. `PlayerState.pending_draw_owed` (`src/state/player_state.gd:65`)
   is a bare `int`; delivery (`_deliver_pending_draw`, `match_state.gd:892`) decrements it and calls
   `_draw_one_replacement`, which only ever appends (`player.hand.add(...)`, `match_state.gd:918`).
-- **The open reconciliation this story does not pre-answer.** Today's single `TimingWindow` plus a
-  scalar counter lets several casts stack (`3-5b/R8`'s "a cast is not gated on a pending draw") and
-  delivers them one at a time in an order that was never tied to slot identity, because it didn't
-  need to be -- the replacement always went to the end. Once a delivery must land in a SPECIFIC slot,
-  a bare counter cannot carry more than one outstanding hole's address. Whether the shipped fix keeps
-  one shared `TimingWindow` with an owed-slot queue, or moves to a per-slot window, is an
-  implementation choice AC 3 requires be MADE, not a design call this story is pre-deciding here --
-  the readiness gate is where it gets reconciled against 3-5b/R8's letter, per this file's header.
+  All six citations were verified by content at the readiness gate and hold.
+- **The delivery-shape reconciliation is CLOSED, not open.** The pre-gate draft left the shared
+  window versus per-slot window choice to the dev pass. `4-0/R6` (above) rules it forced by
+  `3-5b/R8`'s surviving one-timer cadence and two-key snapshot bound. Do not re-open it; the free
+  part is the queue's representation and the tie-break order only.
+- **The nine consumers of the hand's length, enumerated by content at the gate.** AC 2's split is
+  what each one binds to. This table is the reconciliation list, not background reading.
+
+  | Consumer | Binds to |
+  | --- | --- |
+  | `player_state.gd:135` `"hand_size": hand.size()` (hashed) | `occupied_count()` |
+  | `player_state.gd:121` `cards_changed` payload `hand.to_array()` | WIDTH -- fixed-length, marker at the hole |
+  | `hud_root.gd:159` `i < hand_ids.size()` | branch goes DEAD; the marker value decides the caption (AC 7) |
+  | `match_state.gd:840` `hand_slot >= player.hand.size()` | WIDTH bound, plus a separate hole test (AC 3) |
+  | `match_state.gd:761` `for _slot in balance.hand_size` | unchanged -- reads `balance`, not `hand` |
+  | `hand.gd:62` `Invariant.check(index < _cards.size())` | occupancy, else vacuous |
+  | `hand.gd:37` `is_empty()` | "no occupied slots" |
+  | 3-5b's four-term conservation identity (four sites) | `occupied_count()`, else all four invert |
+  | `test_balance_authoring.gd:148` `hand_size <= 4` (`3-6/R8`) | unchanged, and MORE load-bearing: a width-5 hand emits a 5-element payload into a 4-label row |
+
+- **Every test that pins the OLD shrink semantics, found by content at the gate.** The `_cast()`
+  helper at `test_draw_delay_and_reshuffle.gd:536-541` always casts slot 0 and its own comment states
+  the premise this story deletes: "always slot 0, because the hand shrinks under it and slot 0 is the
+  one index guaranteed to exist while the hand is non-empty." Two fixtures loop it `HAND_SIZE` times
+  with no delivery between, so under AC 3 every cast after the first REJECTS and they collapse to a
+  single cast. **The multi-cast helper must cast a DIFFERENT slot per cast.**
+
+  | Site | What breaks |
+  | --- | --- |
+  | `test_draw_delay_and_reshuffle.gd:96` `test_four_casts_in_flight_deliver_four_cards_one_per_expiry` | slot-0 repeat; four assertions fail |
+  | `test_draw_delay_and_reshuffle.gd:409` `test_conservation_holds_across_the_both_empty_degrade` | same slot-0 repeat; also the AC 8 subject |
+  | `test_draw_delay_and_reshuffle.gd:118` `test_a_cast_is_not_gated_on_a_pending_draw` | asserts ZERO rejections on a slot-0 double cast; RE-POINT to two DIFFERENT slots, preserving the rule it was written for (the DEBT gates nothing) |
+  | `test_draw_delay_and_reshuffle.gd:100, 422` | "hand_size is PERMITTED to reach 0" -- `hand.size() == 0` becomes `occupied_count() == 0` |
+  | `test_draw_delay_and_reshuffle.gd:59, 67, 70, 288, 311, 375-378` | `HAND_SIZE - 1` shrink assertions |
+  | `test_draw_delay_and_reshuffle.gd:564` `_assert_conserved` | the four-term identity |
+  | `test_card_play.gd:87` | the four-term identity |
+  | `test_determinism.gd:731, 780, 801` | shrink pins and the identity, INSIDE the hashing fixture |
+  | `test_deck_reshuffle.gd:201-208, 230` | integration degrade + conservation |
+  | `test_card_observation.gd:74` | announced payload length `HAND_SIZE - 1` |
+  | `test_discard_pile.gd:55-73` | `remove_at` shrink pins: "the hand shrank by exactly one", `remove_at(hand.size() - 1)` |
+  | `test_deck_and_hand.gd:36-38` | `hand.size() == 0` after `clear()` |
+  | `test_card_hud.gd:104-112` | goes VACUOUS (AC 7) |
+
 - **`CardCastCondition`, `CastDatabase`, mana spend, and discard are unaffected.** The cast's
   economic half (`refusal_reason`, `ManaPool.spend`, `discard.add`) is untouched by this story; only
   WHICH index the removed/added card lives at changes. [Source: src/state/economy/cast_evaluator.gd;
   src/state/match_state.gd:839-872]
-- **HUD inherits this for free.** `hud_root.gd`'s card rendering (3-6) draws purely from
-  `cards_changed`'s `hand_ids` payload in array order -- it has no slot-shift logic of its own to fix.
-  3-6's `vacated_cleared` / `refill_rewrote` tests were proven against the OLD append model; they may
-  need re-pointing at the new hole marker rather than "index past the shrunk length," but no new HUD
-  code is expected. [Source: src/ui/hud/hud_root.gd; test/integration/test_card_hud.gd]
+- **HUD: no new HUD CODE, but the claim needed AC 7 to become true.** `hud_root.gd`'s card rendering
+  (3-6) draws purely from `cards_changed`'s `hand_ids` payload in array order and has no slot-shift
+  logic of its own to fix. The pre-gate draft's "inherits this for free" was true only by accident:
+  it holds if and only if the marker is `&""` (AC 7), and the 3-6 fixtures do not merely "need
+  re-pointing" -- one of them goes vacuous. [Source: src/ui/hud/hud_root.gd;
+  test/integration/test_card_hud.gd]
 
 ### Project Structure Notes
 
-- `src/state/hand.gd`: fixed-width hole-aware container; `remove_at` becomes an in-place write, a new
-  in-place fill method is added.
-- `src/state/player_state.gd`: `pending_draw_owed`'s declared shape changes from `int`.
+- `src/state/hand.gd`: fixed-width hole-aware container, width supplied by the caller; `remove_at`
+  becomes an in-place write, an in-place fill method is added, `size()`/`occupied_count()` split,
+  the `Invariant.check` at :62 re-pointed to occupancy.
+- `src/state/player_state.gd`: `pending_draw_owed`'s declared shape changes from `int`;
+  `to_snapshot()`'s `"hand_size"` binds to `occupied_count()`.
 - `src/state/match_state.gd`: `_resolve_basic_cast`'s bound check gains the hole path;
   `_deliver_pending_draw` / `_draw_one_replacement` write into the owed slot instead of appending;
-  `_deal_player`'s fill loop is reviewed against the new fixed-width container, not necessarily
-  rewritten.
-- `test/state/test_deck_and_hand.gd`, `test/state/test_card_play.gd`,
-  `test/state/test_draw_delay_and_reshuffle.gd`: all touch `Hand`/`pending_draw_owed` directly and
-  are the primary suites this story's dev pass will extend or reconcile.
+  `_deal_player`'s fill loop is REWRITTEN to an indexed write (AC 5).
+- `src/ui/hud/hud_root.gd`: expected UNCHANGED. AC 7 is what makes that expectation safe.
+- Test files this story touches, complete list (the pre-gate draft named three and missed four):
+  `test/state/test_deck_and_hand.gd`, `test/state/test_card_play.gd`,
+  `test/state/test_draw_delay_and_reshuffle.gd`, `test/state/test_discard_pile.gd`,
+  `test/state/test_card_observation.gd`, `test/state/test_card_authoring.gd`,
+  `test/state/test_determinism.gd`, `test/integration/test_card_hud.gd`,
+  `test/integration/test_deck_reshuffle.gd`.
 
 ### Project Context Rules
 
@@ -138,30 +270,50 @@ holes common enough to be observable.
   [Source: decision-log.md 3-5a AC 7, restated at 3-5b/R8]
 - **Counts/indices only ever cross into `to_snapshot()` -- never a card id.**
   [Source: decision-log.md 3-3 AC 5, 3-5a AC 6, 3-0c AC 11]
+- **CONSTRAINT C: authored balance is read INLINE at the moment of use**, never cached -- which is
+  why the hand's width arrives from the deal seat rather than from a config reference on `Hand`.
+  [Source: match_state.gd:735-737; AC 1]
 
 ### References
 
 - [Source: decision-log.md Session 2026-08-06 -- Story 3-6 close-out (the finding)]
 - [Source: decision-log.md Session 2026-08-06 -- E3 close-out (the ruling: "the operator RULES it is
   done NOW, not deferred... 4-0-hand-slot-stability")]
+- [Source: decision-log.md Session 2026-08-07 -- Story 4-0 readiness gate (`4-0/R1`-`4-0/R8`)]
 - [Source: decision-log.md 3-5b/R8]
 - [Source: src/state/hand.gd; src/state/player_state.gd; src/state/match_state.gd]
 
 ## Golden Prediction
 
-**MOVES.** Two separately measured causes, each to be isolated the way every prior multi-cause
-re-baseline in this project has been (1-5, 1-8, 1-9, 3-3, 3-4, 3-5a, 3-5b):
+**MOVES.** Causes to be isolated the way every prior multi-cause re-baseline in this project has
+been (1-5, 1-8, 1-9, 3-3, 3-4, 3-5a, 3-5b). The gate added cause 3 and MEASURED cause 2.
 
-1. **Snapshot-shape cause.** `pending_draw_owed` changes shape (AC 3, AC 5) -- this alone moves the
+1. **Snapshot-shape cause.** `pending_draw_owed` changes shape (AC 4, AC 6) -- this alone moves the
    golden at an early tick, before any cast-order-dependent behaviour runs, the same way 3-5b's own
    two new keys each moved it by themselves.
-2. **Behavioural cause.** Any fixture that issues a second cast against the SAME numeric `card_slot`
-   before the first cast's replacement has landed used to resolve BOTH casts under the append model
-   (the shift meant the same index named a different, still-live card by the second commit). Under
-   slot stability that second commit now targets a hole and REJECTS (AC 2) instead of resolving --
-   changing how much mana is spent, what enters the discard, and what is drawn from the deck in any
-   fixture that exercises it. If no golden fixture currently drives that exact sequence, this cause
-   is a non-mover in practice and the dev pass reports that measured result rather than assuming it.
+2. **Behavioural cause -- MEASURED AT THE GATE, a NON-MOVER, and the dev pass does not re-derive
+   it.** The concern was any fixture issuing a second cast against the SAME numeric `card_slot`
+   before the first replacement lands: under the append model both casts resolved, under slot
+   stability the second targets a hole and REJECTS (AC 3). The gate read all three hashing fixtures
+   by content. **Each issues EXACTLY ONE cast:**
+
+   | Fixture | Cast site | Casts | Slot / hand |
+   | --- | --- | --- | --- |
+   | `test_determinism.gd` (the golden) | `_play_sequence:879`, `if cast and t == CAST_TICK` | 1 | `CAST_SLOT` 3, `HAND_SIZE` 9 |
+   | `test_record_file.gd` | `:567`, `if t == CAST_TICK` | 1 | slot 1, hand 3 |
+   | `test_replay_identity.gd` | `:419`, `if t == CAST_TICK` | 1 | slot 1, hand 3 |
+
+   No golden fixture issues a second cast against any slot, let alone the same slot, let alone before
+   the first replacement lands. **Cause 2 is a measured non-mover.** The dev pass RECORDS this
+   finding; it re-measures only if it changes a fixture's cast count, which nothing in this story
+   requires.
+3. **The `hand_size` KEY VALUE cause, added by the gate (`4-0/R7`), and a NON-MOVER if and only if
+   AC 2 is honoured.** `"hand_size": hand.size()` (`player_state.gd:135`) is a hashed key. The golden
+   hashes at t24 with a cast at t22 against an 11-tick delay, so a hole is LIVE at hash time: bound
+   to the width the key would read 9 where it reads 8 today. Bound to `occupied_count()` per AC 2 it
+   reads 8 and does not move. **The dev pass MEASURES this rather than asserting it** -- a
+   Golden Prediction that misses a mover is precisely the failure mode the isolation discipline
+   exists to catch, and this cause was missed by the pre-gate draft.
 
 No baseline hash is recorded here, per the standing rule (3-3 gate) that a Golden Prediction baseline
 is re-derived from `test_determinism.gd`'s `GOLDEN` constant at gate time, never copied forward.
