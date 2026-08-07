@@ -147,3 +147,7 @@ as a bug or as the card layer simply being parallel to melee.
 
 6.8.
 1 ruka se čita 2 nema gorenje reda protivnice ruke  izgleda uredno 3 elemti se ne sudaraju 4 mana i deck count rade, sada jeli odma vidljivo iz perfiernog vida ha moglo bi biti bolje ali u sadasnjem razvoju nebi to dodatno razraadivao dok nemamo sve implementirano 5 naoruzanje se vidi i bez citanja izbornika NAPOMENA: volio bi da karte ne padaju u slotove ljevo kako im se karte s ljeva konzummiraju vec da povlacenj nove akrte zamjeni slot one igrane
+
+7.8. sada karte nakon sto su igrane ostavljaju prazan slot od 1s te se u njega povlaci nova karta, ne pomicu se sve ulijevo da se popuni praznina
+
+
