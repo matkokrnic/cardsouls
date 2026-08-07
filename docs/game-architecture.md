@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.4'
+version: '1.5'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -449,8 +449,11 @@ lands in E6. This honors #4 (one owner, no leakage into three classes) without b
 
 ### D9 — E4–E6 Seams (named, no machinery)
 
-- **Minions/totems (E4):** a `TargetingService` interface (throttled shared-tick provider) + an
-  object-pool seam; `PlayerState` reserves a `units`/board collection. No AI built now.
+- **Minions/totems (E4):** a `TargetingService` interface (throttled shared-tick provider, story
+  4-2) + an object-pool seam (story 4-5). `PlayerState` will gain a `units`/board collection with
+  its first consumer, story 4-1 (E4-P/R2) — it carries no such reference today. Nothing is built
+  yet: `src/systems/pool/`, `src/actors/minions|totems|projectiles/`, and `data/minions/` are
+  empty PLANNED directories (`.gitkeep` only).
 - **RPS/orbs (E5):** `OrbPool` exists as a reserved, flag-off pool in `PlayerState`; resolution
   enters through the D2 command dispatch (steps 4–5). No RPS machinery now.
 - **Pitch (E6):** the `PitchState` owner from D8. Reserved, not built.
@@ -594,7 +597,7 @@ res://
 │   │   │                             #     contacts, seed, injections, reloads), tapped immediately
 │   │   │                             #     before advance(), inside the runner's ticking gate
 │   │   ├── log.gd (X2) · invariant.gd (X1: class Invariant, static func check)
-│   │   └── pool/ object_pool.gd      # pooling seam (E4)
+│   │   └── pool/                     # PLANNED (story 4-5) — empty seam dir, object_pool.gd not authored
 │   ├── controllers/  ⚠️              # D3: the ONLY path where Input.* may appear
 │   │   ├── controller.gd             # interface: sample() -> InputIntent
 │   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2) · null_controller.gd
@@ -609,7 +612,7 @@ res://
 │   ├── actors/                       # scene-bound nodes (.tscn + .gd)
 │   │   ├── hero/                      # CharacterBody3D + move_and_slide; Hitbox REPORTS contact
 │   │   │   └── telegraph_controller.gd  # D7 presentation: reads state → shape+sound
-│   │   └── minions/ · totems/ · projectiles/   # reserved (E4/E5)
+│   │   └── minions/ (4-1) · totems/ (4-4) · projectiles/ (4-4)   # PLANNED, empty seam dirs
 │   ├── ui/                           # HUD + menus (Control) — read-only state-signal consumers
 │   │   ├── hud/                       # bars, 3 orb counters, hand (opponent face-down — E2 capability)
 │   │   └── debug/                     # X5 toggles + overlays ONLY (no state mutation): flags · inspector
@@ -618,7 +621,7 @@ res://
 │   └── main/  ⚠️                     # root scene + Match Runner (the single _physics_process, D2)
 │       └── match_runner.gd            # OWNS the MatchState instance; sample→advance→drain; wires refs
 ├── data/                             # authored .tres INSTANCES
-│   ├── cards/ · economy/ · minions/(E4) · equipment/(E8) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
+│   ├── cards/ · economy/ · minions/(4-1, PLANNED) · equipment/(E8) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
 │   │                                 #   economy/: ResourceGenerationRule .tres, sorted-scan loaded (D6)
 │   └── feature_flags.tres
 ├── assets/                           # art (⚠️ see below) · audio (feeds CombatCues bus, .wav + .import)
