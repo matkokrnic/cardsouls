@@ -13,9 +13,12 @@ GODOT="${GODOT:-/c/Godot/godot}"
 fail=0
 
 echo "### state harness ###"
-"$GODOT" --headless --path . --script res://test/run_state_tests.gd 2>&1 \
-  | grep -E "^  \[XX\]|^=== [0-9]|RESULT:|FAILED TO LOAD|^!!"
-if [ "${PIPESTATUS[0]}" -ne 0 ]; then echo ">>> STATE HARNESS FAILED"; fail=1; fi
+state_out="$("$GODOT" --headless --path . --script res://test/run_state_tests.gd 2>&1)"
+state_exit=$?
+echo "$state_out" | grep -E "^  \[XX\]|^=== [0-9]|RESULT:|FAILED TO LOAD|^!!|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"
+if [ "$state_exit" -ne 0 ] || echo "$state_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"; then
+  echo ">>> STATE HARNESS FAILED"; fail=1
+fi
 
 echo ""
 echo "### integration tests ###"
@@ -24,9 +27,12 @@ found=0
 for t in test/integration/test_*.gd; do
   found=1
   echo "--- $t ---"
-  "$GODOT" --headless --path . --script "res://$t" 2>&1 \
-    | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"
-  if [ "${PIPESTATUS[0]}" -ne 0 ]; then echo ">>> FAILED: $t"; fail=1; fi
+  t_out="$("$GODOT" --headless --path . --script "res://$t" 2>&1)"
+  t_exit=$?
+  echo "$t_out" | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"
+  if [ "$t_exit" -ne 0 ] || echo "$t_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"; then
+    echo ">>> FAILED: $t"; fail=1
+  fi
 done
 [ "$found" -eq 0 ] && echo "(no integration tests found)"
 
