@@ -1,5 +1,16 @@
 # Deferred Work
 
+## Deferred from: code review of 4-0-hand-slot-stability (2026-08-07)
+
+- **AC 8's permanent hole is visually indistinguishable from a slot mid-flight awaiting
+  delivery.** Both render the same blank caption (`Hand.EMPTY` -> empty string), and nothing in
+  the 4-0 diff or its tests distinguishes "temporarily empty, refilling soon" from "dead for the
+  round" to the player [src/ui/hud/hud_root.gd]. Deferred because the story's own AC 7 forward
+  constraint already scopes HUD affordability/greying rendering out of this pass ("no cost,
+  affordability or greying rendering in src/ui/ today... this AC binds that future work; it
+  requires no HUD code now"), and AC 9's outstanding live smoke is where this would first become
+  player-visible in practice.
+
 ## Deferred from: code review of 3-6-card-hud-hand-mana-deck (2026-08-06)
 
 - **CLOSED by `3-6/R8`.** Hand row hard-coded to 4 slots with silent truncation.

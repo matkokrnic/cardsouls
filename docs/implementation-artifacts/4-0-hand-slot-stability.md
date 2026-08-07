@@ -185,6 +185,55 @@ observable.
 - [ ] Live smoke: cast from a non-rightmost slot at least twice, from different starting slots;
       record the outcome in `docs/playtest-log.md` (AC: 9)
 
+### Review Findings
+
+**Review layers: Blind Hunter (complete), Acceptance Auditor (complete, no AC violations found),
+Edge Case Hunter (STALLED at 600s, same failure mode as 3-6 -- treated as failed, not run by
+hand as a full walkthrough beyond what the three targeted checks below cover).**
+
+**Targeted checks (run in the main session against the tree, not delegated):**
+- Mutation survivors X6 (delivery-to-first-hole) and X8 (`Hand.EMPTY` value change) RE-PROVEN
+  FALLING against a fresh mutation, backed up outside the repo to session scratchpad with SHA256
+  before mutating and restored by copying the backup back with the checksum re-verified
+  (`git checkout --` never used). Both guards hold.
+- Width-vs-occupancy binding audited at every re-pointed site against the story's nine-consumer
+  table, plus every additional `hand.size()`/`occupied_count()` call site the diff touches
+  (`test_deck_and_hand.gd`, `test_deck_injection.gd`, `test_deck_reshuffle.gd`, `test_determinism.gd`,
+  `test_discard_pile.gd`, `test_draw_delay_and_reshuffle.gd`, `test_card_play.gd`,
+  `test_card_observation.gd`). No mismatched binding found.
+- AC 7's cost-ordering pin (`test_the_empty_slot_guard_precedes_the_cost_lookup`, a source-scan
+  test) and its behavioural twin (`test_a_cast_against_the_hole_its_own_replacement_is_owed_to_refuses`,
+  asserting no mana spent) are non-vacuous: swapping the guard/lookup order in
+  `match_state.gd::_resolve_basic_cast` fails the scan test; removing the guard fails the mana
+  assertion. AC 8's exhaustion pins (headless
+  `test_at_exhaustion_the_hole_persists_and_that_slot_refuses_for_the_rest_of_the_round`;
+  integration `_check_both_empty_degrade`) are non-vacuous: either an invented card on the
+  both-empty path, or a bypassed hole guard letting a later cast succeed against slot 2, breaks
+  each.
+
+- [x] [Review][Patch] `PlayerState.to_snapshot()`'s `pending_draw_owed` key aliases the live
+      `Array[int]` instead of returning a copy [src/state/player_state.gd:185] -- every sibling
+      container (`Hand.to_array()`, `Deck.to_array()`) in this same codebase returns a duplicate
+      specifically so a held snapshot cannot silently mutate later; this key does not, and a caller
+      holding an earlier `to_snapshot()` dict will see `pending_draw_owed` change under it as later
+      `append()`/`pop_front()` calls run. No shipped test currently captures a `before` snapshot and
+      re-reads it after further advance() calls, so nothing fails today, but the fix
+      (`pending_draw_owed.duplicate()`) is a one-line, unambiguous change consistent with the
+      project's own established discipline. FIXED -- `.duplicate()` added; golden confirmed
+      UNMOVED at `312522d8...fb3c` (a copy of the same values is byte-identical for hashing).
+- [x] [Review][Patch] `_draw_one_replacement(player: PlayerState, slot: int, owed_slot: int)`
+      carries two differently-scoped concepts both named "slot" [src/state/match_state.gd:972],
+      distinguished only by a prefix with no type-level distinction -- low risk, but a future edit
+      could pass the wrong one. FIXED -- `owed_slot` renamed to `hand_slot`, matching
+      `_resolve_basic_cast`'s existing convention for a hand index; `slot` (the board slot) is
+      untouched and matches every sibling function in the file.
+- [x] [Review][Defer] AC 8's permanent hole is visually indistinguishable from a slot mid-flight
+      awaiting delivery -- both render the same blank caption, and nothing in this diff or its
+      tests distinguishes "temporarily empty" from "dead for the round" to the player
+      [src/ui/hud/hud_root.gd] -- deferred, the story's own AC 7 forward constraint already scopes
+      HUD affordability/greying rendering out of this pass, and AC 9's outstanding live smoke is
+      where this would first become player-visible.
+
 ## Dev Notes
 
 - **Current shape, read before touching it.** `Hand` (`src/state/hand.gd`) is a plain
