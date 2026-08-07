@@ -4,7 +4,7 @@ baseline_commit: 7510b5a05a3bfa870128065ec08fb5f0a790a1c2
 
 # Story 4.0: Hand slot stability
 
-Status: review
+Status: done
 
 > **Scope note.** Newly authored at the E3 close-out's own ruling (2026-08-06, decision-log Session
 > 2026-08-06 -- E3 close-out), on the just-in-time authoring precedent already used for
@@ -182,7 +182,7 @@ observable.
       for the rest of the round (AC: 8)
 - [x] Reconcile every test in the inventory below -- they are named individually because the gate
       found them by content, not so the dev pass can re-derive them (AC: 1, 2, 3, 4)
-- [ ] Live smoke: cast from a non-rightmost slot at least twice, from different starting slots;
+- [x] Live smoke: cast from a non-rightmost slot at least twice, from different starting slots;
       record the outcome in `docs/playtest-log.md` (AC: 9)
 
 ### Review Findings
