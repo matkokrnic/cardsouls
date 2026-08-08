@@ -5818,6 +5818,9 @@ file's own `Status:` field and echoed in `story_notes`. — _decided by Matko._
 `CFG/R4` Promotion of a story to `ready-for-dev` is a human act, never a skill's. No workflow may
 set that board value unconditionally on completion. — _decided by Matko._
 
+`CFG/R5` `review` is the second story-file-only status ("implemented, awaiting review"), per the
+CFG/R3 `authored` precedent; the board never carries it. — _decided by Matko._
+
 ---
 
 ## Session 2026-08-08 — 4-B1 review rulings

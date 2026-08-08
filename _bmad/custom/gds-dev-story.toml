@@ -1,0 +1,46 @@
+# Team override for gds-dev-story.
+# Merges over {skill-root}/customize.toml per _bmad structural rules: scalars
+# override, tables deep-merge, keyed arrays-of-tables replace/append, all
+# other arrays append. This file only sets a scalar (on_complete).
+#
+# Project rule (decision-log Session 2026-08-08 -- gds-dev-story override,
+# CFG/R5): this project's sprint-status.yaml board lifecycle stays locked to
+# exactly backlog -> ready-for-dev -> done (CFG/R2); finer-grained states are
+# story-file-only (CFG/R3 precedent -- `authored` for gds-create-story,
+# `review` here); promotion of the board entry is a human act via the
+# operator's chain commit, never a skill's (CFG/R4). gds-dev-story's Step 9
+# sets the story file's Status to "review" and writes
+# development_status[{{story_key}}] = "review" into sprint-status.yaml --
+# that second write is a board-lifecycle value the locked set does not
+# contain, so it is corrected here rather than in the shared skill.
+#
+# on_complete runs at the very end of the workflow, after Step 9's writes
+# already happened -- so it corrects the sprint-status.yaml write rather than
+# preventing it, and leaves the story file's Status: review untouched.
+
+[workflow]
+
+on_complete = """
+Undo the board-lifecycle write this skill run just made to {sprint_status},
+and leave the story file's own Status untouched:
+
+1. In {sprint_status}, restore development_status[{{story_key}}] from
+   "review" back to `ready-for-dev`. Preserve the `# Tier B` (or `# Tier A`)
+   trailing comment on that line exactly as it was before this run.
+
+2. Set story_notes[{{story_key}}] to one short line: dev pass complete on
+   <today's date>, story-file Status is `review` (story-file-only), awaiting
+   code review and the operator's commit chain.
+
+3. Update `last_updated` to today's date.
+
+4. Preserve every comment and section, including the STATUS DEFINITIONS and
+   BOARD NOTES blocks, verbatim.
+
+5. Leave the story file's `Status:` line exactly as Step 9 wrote it
+   ("review") -- do not revert it. `review` is a story-file-only value (see
+   CFG/R3 precedent, CFG/R5); the board never carries it.
+
+6. Print, as the final line of the run: "Board remains ready-for-dev per
+   CFG/R2 -- promotion to done is the operator's chain commit."
+"""
