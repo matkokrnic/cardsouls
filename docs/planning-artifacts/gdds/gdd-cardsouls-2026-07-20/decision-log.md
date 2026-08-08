@@ -5860,3 +5860,107 @@ retrospective. — _decided by Matko._
 `4-B1/R7` The reveal output's medium is the console; the on-screen label is removed (a band-locked
 label cannot legibly carry two hands, both HUDs already render the hands on screen, and the console
 gives the operator a copy-pasteable record). — _decided by Matko._
+
+---
+
+## Session 2026-08-08 -- process retrospective (Tier B pilot, workflow cost)
+
+Ratifies the REPORT-ONLY process retrospective on story `4-B1`. Evidence, measurements and the
+reasoning behind each ruling live in `docs/implementation-artifacts/process-retro-2026-08-08.md`;
+this entry carries the rulings only. Not an epic-4 retrospective (`E4-P/R11` stands).
+
+`PROC/R1` Suite cadence. The full suite runs EXACTLY TWICE per pass -- once at open, once at close.
+Mutation proofs run ONLY the affected test file, never the full suite. Evidence: `4-B1`'s dev pass
+ran the suite about six times where two would do, and the review's provenance audit found the Dev
+Agent Record's "Full suite re-run green after every restore" unevidenced -- the mutation table's
+four rows each name a single test run. The measured full-suite cost is 1m35s, so the surplus was
+~6-7 min; the rule is adopted because it is nearly free and it removes an unevidenced claim class,
+not because it is the main cost saving. Applies to both tiers. — _decided by Matko._
+
+`PROC/R2` Review shape. `gds-code-review` runs TWO parallel adversarial layers. The Acceptance
+Auditor's checks move INLINE into the main review session as a MANDATORY checklist -- the checks are
+preserved, only the flaky parallel infrastructure is removed. The checklist explicitly includes the
+DEV AGENT RECORD EVIDENCE AUDIT, the only check that audits the record rather than the code. When
+that audit falsifies a claim in the record, the fix pass ANNOTATES THE CLAIM IN PLACE
+("[corrected -- see Review Findings]") rather than leaving the correction only in a later section,
+so a reader hitting the record first cannot read the wrong thing. Every review records a
+LAYER-COMPLETION LINE naming each declared layer with its terminal state, on the shape `4-B1`'s
+review already emits; a review missing that line COUNTS AS A STALL. Applies to both tiers.
+— _decided by Matko._
+
+`PROC/R3` Edit fallback. On the FIRST failed Edit-tool match against a file carrying em-dashes or
+tabs, switch immediately to a python byte-replace. No repeated Edit attempts. The hazard is
+structural rather than incidental: the decision-log, every story artifact and `deferred-work.md` are
+dense with em-dashes and mix them with `--`, while every `.gd` source is tab-indented, so any
+docs+code story meets both. Applies to both tiers. — _decided by Matko._
+
+`PROC/R4` Tier B bookends. Browser touchpoints for a Tier B story are exactly three: STORY OPEN,
+CROSS-STORY RULINGS, and CLOSE-OUT. Checkpoint questions arising mid-pass are put to the operator
+DIRECTLY IN-SESSION -- precedent, the `4-B1` review, which put D1's tier question to the operator
+inline and received `4-B1/R3` back without a browser round trip. THE CHANNEL CHANGES, THE AUTHORITY
+DOES NOT: CLAUDE.md's agent-autonomy test still splits design from implementation, and a design
+question is still the operator's regardless of which surface it is asked on. Tier B only.
+— _decided by Matko._
+
+`PROC/R5` Home split for standing rules. Tier POLICY stays where `E4-P/R9` put it -- the
+decision-log as authority, `CLAUDE.md`'s "Story tiers" section as a pointer. Per-tier OPERATIONAL
+rules (suite cadence, review shape, edit fallback, budget, text fit) live in `project-context.md`'s
+Testing Rules, each ending in its ruling id. `E4-P/R9`'s clause "`project-context.md` is not
+touched, since ... a process policy is derived from neither [GDD nor architecture]" is hereby
+NARROWED to tier policy: it does not describe what that file already contains, since its Testing
+Rules already carry three pure process rulings (`3-0d/R14` mutation-proof discipline, `3-0d/R20`
+guard mechanism over guard pattern, and the adversarial-review failure criterion from the 3-0d
+close-out). The operational precedent was already present; this ruling names it. — _decided by
+Matko._
+
+`PROC/R6` Tier B is UN-SUSPENDED, and the stall counter RESETS TO 0 at this ratification rather than
+resuming at 3. `4-B1/R6` suspended Tier B under `E4-P/R9` AMENDMENT 2, whose stated predicate is the
+PARALLEL-LAYER INFRASTRUCTURE ("Tier B leans on that infrastructure harder than Tier A does"), not
+review quality and not Tier B's economics. `PROC/R2` deletes the stalling layer from the chain, so
+the counted mechanism no longer exists and the count has no subject -- guard mechanism over guard
+pattern, `3-0d/R20`, applied to a process counter. Under the new two-layer shape, THREE CONSECUTIVE
+STALLS RE-SUSPEND, and a review missing its layer-completion line counts as a stall, so silence
+cannot be mistaken for success. — _decided by Matko._
+
+`PROC/R7` Tier B machine-time budget. A Tier B story of `4-B1`'s size (two ACs, one presentation
+surface, no `src/state/`) costs AT MOST ~1 h, counted as dev pass plus code review agent-side wall
+clock. EXCLUDED from the count: the operator's own live smoke, browser ruling turns, and close-out
+doc and commit work -- none of which the session controls. A larger Tier B story STATES ITS OWN
+BUDGET AT AUTHORING rather than inheriting this one. Sessions note their start time and compare
+against the budget at full-suite boundaries (the two `PROC/R1` runs), which is where a natural
+checkpoint already exists. TRIPWIRE: on crossing the budget, STOP AND REPORT the remaining work to
+the operator -- never push through. Scaling the work down is the operator's call. Recorded honestly:
+`PROC/R1`-`R4` together would have saved `4-B1` an estimated 25-35 of its ~113 min, landing it at
+~80-90 min, still over this budget; the tripwire, not the four rulings, is what enforces it.
+Tier B only. — _decided by Matko._
+
+`PROC/R8` Text fit is not machine-checkable by the agent. Machine checks assert GEOMETRY ONLY -- a
+rect's position and clearance, as `test_debug_instruments.gd`'s layout guard does. The agent NEVER
+asserts on-screen text fit from character counts, font sizes or estimated metrics. Any AC hinging on
+ON-SCREEN LEGIBILITY goes to OPERATOR SMOKE AT FIRST RENDER, before any further machine pass on that
+surface. Evidence: `4-B1`'s two reveal-label passes each verified the rect (`panel_layout=true`, both
+viewports) and never the text fit, and both were rejected on sight for the same reason; only the
+third pass changed the medium (`4-B1/R7`, the console) instead of the font. A guard that cannot fail
+for the reason the operator will reject the work is a vacuous guard, which this repo treats as worse
+than none (`3-0d/R20`). This is the largest single cost sink `PROC/R1`-`R4` do not address. Applies
+to both tiers. — _decided by Matko._
+
+`PROC/R9` Board writes. `sprint-status.yaml` lifecycle writes made by skill `on_complete` hooks are
+EXPECTED WORKING-TREE EFFECTS of running the skill, not authoring choices -- `gds-dev-story` Step 9
+writes the board and `_bmad/custom/gds-dev-story.toml` reverts it (`CFG/R2`, commit `fceed8b`).
+Commit separation is owned by the CLOSE-OUT CHAIN, which sorts such a write into the docs commit. A
+dev pass whose working tree therefore shows `sprint-status.yaml` modified DOES NOT BREACH "docs and
+code never share a commit" -- the convention binds what lands in a commit, not what a skill leaves
+in the tree. `4-B1` raised the question by having the file in its diff and absent from its File
+List; the File List omission was the real defect, and `PROC/R2`'s evidence audit is what catches it.
+— _decided by Matko._
+
+### Close-out
+
+Docs-only pass, four commits, none pushed: `docs(retro)` (the retrospective record),
+`docs(decision-log)` (this entry), `docs(config)` (five operational bullets appended to
+`project-context.md`'s Testing Rules per `PROC/R5`, `rule_count` bumped), and `board` (the stale
+`sprint-status.yaml` header comment corrected -- STATUS DEFINITIONS untouched, no status value
+changed). `CLAUDE.md` is NOT touched: its Story tiers section is a pointer to `E4-P/R9`, and no tier
+policy changed here. No code changed, no golden or suite touched. Operator reviews the log and
+pushes.
