@@ -1,0 +1,48 @@
+# Team override for gds-create-story.
+# Merges over {skill-root}/customize.toml per _bmad structural rules: scalars
+# override, tables deep-merge, keyed arrays-of-tables replace/append, all
+# other arrays append. This file only sets a scalar (on_complete).
+#
+# Project rule (decision-log Session 2026-08-08 -- gds-create-story override):
+# this project never promotes a story from create straight to development --
+# a readiness gate (Tier A) or an operator review (Tier B) always sits between
+# authoring and dev. gds-create-story's Step 5/6 sets the story's Status to
+# ready-for-dev and flips the sprint-status.yaml entry from backlog to
+# ready-for-dev unconditionally. That is a project-wide policy mismatch, not
+# a per-story exception, so it is corrected here rather than in the shared
+# skill or in per-pass prompts.
+#
+# on_complete runs at the very end of Step 6, after both of those writes
+# already happened -- so it corrects them rather than preventing them.
+
+[workflow]
+
+on_complete = """
+Undo the unconditional ready-for-dev promotion this skill run just made:
+
+1. In {default_output_file}, change the story's `Status:` line from
+   `ready-for-dev` to `authored`. `authored` is a story-file-only value --
+   it is deliberately NOT added to sprint-status.yaml's STATUS DEFINITIONS
+   block, which stays locked to exactly backlog -> ready-for-dev -> done.
+   `authored` means: the story file is written, but not yet cleared for a
+   dev pass.
+
+2. In {sprint_status}:
+   - Set development_status[{{story_key}}] back to `backlog`, undoing this
+     run's write of `ready-for-dev` for that key.
+   - Set story_notes[{{story_key}}] to a short note recording that the story
+     was authored today and awaits operator review before promotion.
+   - Update `last_updated` to today's date.
+   - Preserve every comment and section, including the STATUS DEFINITIONS
+     and BOARD NOTES blocks, verbatim.
+
+3. Add (or update) a YAML frontmatter block at the very top of
+   {default_output_file}:
+     ---
+     baseline_commit: <full 40-character HEAD sha, from `git rev-parse HEAD`>
+     ---
+   gds-dev-story expects this key; gds-create-story does not otherwise write it.
+
+4. Print, as the final line of the run: "Story {{story_key}} is authored and
+   awaiting operator review -- it is NOT cleared for a dev pass."
+"""

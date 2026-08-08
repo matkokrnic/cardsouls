@@ -5794,3 +5794,26 @@ Docs-only pass, four commits, none pushed: `docs(architecture)` (D9 correction, 
 (`docs(decision-log)`), `docs(sprint-status)` (epic-4 section opened, R1 order, R9 tiers, 4-0
 untouched), `docs(claude-md)` (Story tiers pointer section). No code changed, no golden or suite
 touched. Operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-08 — gds-create-story override
+
+`CFG/R1` `gds-create-story` Step 5/6 sets a story's `Status` to `ready-for-dev` and flips its
+sprint-status.yaml entry from `backlog` to `ready-for-dev` unconditionally. This project never
+promotes a story straight from authoring to dev-ready -- a readiness gate (Tier A) or an operator
+review (Tier B) always sits between. RULING: the mismatch is corrected via
+`_bmad/custom/gds-create-story.toml`'s `on_complete`, which runs after Step 6's writes and reverts
+them, rather than by editing the shared skill. — _decided by Matko._
+
+`CFG/R2` The sprint-status.yaml board lifecycle stays locked at exactly `backlog` ->
+`ready-for-dev` -> `done`, per its own STATUS DEFINITIONS. Not amended, not extended. — _decided by
+Matko._
+
+`CFG/R3` `authored` is introduced as a story-file-only `Status:` value, meaning "authored, awaiting
+operator review" -- it is deliberately NOT added to sprint-status.yaml's STATUS DEFINITIONS; the
+board entry for such a story reads `backlog`, with the finer-grained state carried in the story
+file's own `Status:` field and echoed in `story_notes`. — _decided by Matko._
+
+`CFG/R4` Promotion of a story to `ready-for-dev` is a human act, never a skill's. No workflow may
+set that board value unconditionally on completion. — _decided by Matko._
