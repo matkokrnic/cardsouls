@@ -4,15 +4,16 @@ baseline_commit: dd61f9c69e052b2012668d6ef3a08ded46c8d7c4
 
 # Story 4.1: Basic summon resolution
 
-Status: authored
+Status: ready-for-dev
 
 > **Scope note.** Position 3 of the E4 order (`E4-P/R1`, decision-log Session 2026-08-07 -- E4
 > ratification). Tier A (`E4-P/R9`: touches `src/state/`, the golden, and determinism) -- full
 > ritual applies: readiness gate with numbered rulings -> dev pass -> code review -> live smoke
-> where `R-D6` attaches -> close-out. This authoring pass does NOT run that gate. `Status:` and
-> the sprint-status entry come out of this run as `authored`, not `ready-for-dev`, per
-> `_bmad/custom/gds-create-story.toml`'s `on_complete` -- awaiting operator review before
-> promotion.
+> where `R-D6` attaches -> close-out. **The readiness gate ran 2026-08-08 and returned NOT READY,
+> 7 blocking findings (`R1`/`R2`/`R3` counted as one work package, below the `E4-P/R2` break line
+> of 8, no split) -- the rulings below (`4-1/R1`-`4-1/R12` + the totem clause, decision-log Session
+> 2026-08-08 -- 4-1 readiness gate) are applied in place through this story. `Status:` and the
+> sprint-status entry now read `ready-for-dev`, operator-promoted (`CFG/R4`) after this pass.**
 >
 > **`E4-P/R2` -- the board collection ships INSIDE this story, not a separate one.**
 > `docs/game-architecture.md` D9 already reserves it: "`PlayerState` will gain a `units`/board
@@ -23,10 +24,11 @@ Status: authored
 > into a state/board half and an actor/spawn half via `gds-correct-course` -- named now so a
 > split is planned, not a rescue.
 >
-> **This story does not decide where a unit's position lives.** `E4-P/R7` places an explicit
-> obligation on this story's gate: ask the question, with the 1-8/1-9 hero-position precedent in
-> hand, rather than default to whichever seems convenient. See the Open Question below and Dev
-> Notes -- the readiness gate rules on it, this authoring pass does not.
+> **Where a unit's position lives is now RULED (`4-1/R12`).** `E4-P/R7` placed the obligation on
+> this story's gate to ask the question, with the 1-8/1-9 hero-position precedent in hand, rather
+> than default to whichever seems convenient; the gate ruled position stays actor-owned, hero
+> precedent unchanged, this story ships positionless. See the Open Question section and Dev Notes
+> below for the ruling text and the two named futures it hands to 4-2's gate.
 
 ## Story
 
@@ -51,16 +53,23 @@ discard pile the way every card does today.
    (`match_state.gd:339-344`). `src/state/` never names `CARDS_DIR` or `data/cards`;
    `test_state_layer_never_names_card_data` stays green UNEDITED (`E4-P/R4` -- this story's gate
    does not relitigate the seam shape).
-3. **The injected effect map joins golden discipline, treated as code (`E4-P/R6`).** The same
-   narrowing of `BC/R3` that `3-4/R6` applied to `data/economy/` and this story's own AC 2 applies
-   to `data/cards/`'s cost half: a change to any card's `effect_id` is now a determinism-relevant
-   edit, same as a change to its `mana_cost` already is.
+3. **`effect_id` joins golden discipline BY RULING, not by a measurable move (`4-1/R4`,
+   `E4-P/R6`).** The gate measured the golden deck as synthetic with in-test costs, so AC 3 does
+   NOT claim a golden move from a `.tres` edit -- standing `BC/R3` isolation holds. The narrowing
+   is a ruling only: an `effect_id` edit is a determinism-relevant class of change carrying review
+   burden, same as a change to a card's `mana_cost` already carries. The machine half: an
+   authoring test asserts every authored `basic_effect.effect_id` on every fixture card carries a
+   recognized prefix (`summon_` or `spell_`).
 4. **A `summon_*` effect id creates ONE unit record on the casting player's board/units
    collection.** `PlayerState` gains the collection D9 reserves (name: `units`, the architecture
    doc's own term) -- a pure, `RefCounted`-only structure on the `Deck`/`Hand`/`DiscardPile`
    precedent, holding no scene reference, no position, and no per-unit behaviour (AI/targeting/
    combat are 4-2/4-3, explicitly out of scope below). One record per resolved `summon_*` cast,
-   appended in cast order.
+   appended in cast order. **Ruled positionless this story (`4-1/R12`)**: position stays
+   actor-owned, the hero precedent unchanged; the real position-ownership decision is deferred to
+   `4-2`'s gate where a consumer (`TargetingService`) exists. **The record carries no type/kind
+   field (totem clause, ratified)** -- every `summon_*` id is treated identically, so this story's
+   uniform treatment does not pre-commit `4-4`'s totem/minion differentiation.
 5. **A `spell_*` effect id is a NAMED no-op, never a rejection, per `E4-P/R10`.** The cast has
    already passed `CastEvaluator`; mana is spent and the card discarded exactly as it is today.
    The resolver's spell branch performs no board mutation and reports an explicit, stated reason
@@ -69,13 +78,25 @@ discard pile the way every card does today.
    `spell_*` fixture cards) exercise this path; none of E4's committed obligations (minions,
    pooling, targeting, totems) is spells, and excluding spell cards from the deal is refused by
    the same ruling -- it would move the golden for no feature reason and drop three of nine cards
-   from every test.
-6. **Any effect id that is neither `summon_*` nor `spell_*` is explicitly refused, never silently
-   swallowed.** No fixture card produces this case today (the nine authored ids are exactly six
-   `summon_*` and three `spell_*` -- confirmed by reading every `data/cards/*.tres`), so this
-   branch needs its own synthetic non-vacuity proof, the `CastEvaluator.refusal_reason`'s
-   null-condition branch precedent (`cast_evaluator.gd:49-52`, "kept as a total function's honest
-   default... declared NOT mutation-proven for that reason").
+   from every test. **Ruled (`4-1/R10`): the stated reason is a RETURNED VALUE only, asserted in
+   unit tests, explicitly OFF the `reject_action` seam** -- a spell no-op is a SUCCESSFUL cast and
+   must not render a refusal to the player.
+6. **Refusal is by RETURNED NAMED VALUES, never an `Invariant.check` crash and never
+   `reject_action` (`4-1/R3`, ruled option (a)).** Two distinct named reasons, both proven:
+   - **(i) missing-entry honest default** -- no injected effect entry for the cast id, the
+     `cast_evaluator.gd` null-branch precedent, reachable via an effects-less fixture, proven with
+     a DIRECTED test.
+   - **(ii) unknown-prefix refusal** -- an entry exists but `effect_id` is neither `summon_*` nor
+     `spell_*`. No fixture card produces this case today (the nine authored ids are exactly six
+     `summon_*` and three `spell_*` -- confirmed by reading every `data/cards/*.tres`), so this
+     branch is proven with a synthetic map entry in a unit test, never a claim of natural
+     reachability.
+
+   Injection is state-side OPTIONAL: the existing `MatchState`-building fixtures stay untouched
+   and their casts land on reason (i). Record-side it is MANDATORY for v2 records --
+   `missing_match_start_channels()` treats a missing effects channel as malformed. The LIVE
+   runner path always injects: a guard proves the derive+inject pair is present in the
+   non-replay branch.
 7. **A visible grey-box unit actor appears for each resolved `summon_*` cast, owned by the
    runner.** `src/actors/minions/` (named `(4-1)` in the architecture Directory Tree,
    `game-architecture.md:615`) gains a grey-box scene -- a placeholder mesh sufficient for
@@ -83,16 +104,29 @@ discard pile the way every card does today.
    project; grey-box is the standing bar). The runner spawns one actor per unit record it learns
    about, on the `HeroActor`/telegraph-controller precedent: `src/state/` never holds the scene
    reference, `src/actors/` never holds gameplay logic beyond what the state layer feeds it.
-8. **Units clear at round end.** Both the real round-end path (`MatchState._end_round`,
-   `match_state.gd:1244`) and the debug reset path (`_apply_debug_reset`, `match_state.gd:1257`)
-   leave a player's `units` collection empty afterward, and the runner frees the matching actors
-   in response -- no board carries stale units into a fresh round, on the existing per-round
-   lifecycle (`round_ended`/`round_started`) rather than a new one.
+8. **Units clear ONLY on the reset path, ruled (`4-1/R5`).** `_apply_debug_reset`
+   (`match_state.gd:1257`) leaves a player's `units` collection empty afterward, and the runner
+   frees the matching actors in response. `_end_round` (`match_state.gd:1244`) stays UNTOUCHED --
+   the board persists through the round-over freeze and does not blink out at the instant of
+   death. `_apply_debug_reset`'s "NOTHING else" contract comment gains a NAMED exception for
+   units; the parked mana-survives-reset finding stays parked. "No stale units into a fresh round"
+   is delivered by the reset path alone, on the existing `round_started` relay for the runner's
+   actor cleanup, no new `EventBus` event.
 9. **Snapshot integration stays counts-only, the `deck_size`/`hand_size`/`discard_size` precedent
    verbatim.** Whatever key(s) `to_snapshot()` gains for the board (e.g. a `unit_count`) carries
    no unit identity, no effect id, and no position -- consistent with the existing rule that a
    `StringName` or object reference reaching the hash is the failure mode every card-container key
-   in this codebase exists to avoid (3-3 AC 5, 3-5a AC 6, 3-0c AC 11).
+   in this codebase exists to avoid (3-3 AC 5, 3-5a AC 6, 3-0c AC 11). **Attribution corrected
+   (`4-1/R7`):** the per-player snapshot and its pinned key set live in `player_state.gd` /
+   `test_card_observation.gd`, not `match_state.gd`'s match-level dict. **Scope note (`4-1/R12`):**
+   this AC's wording is SCOPED to this story's own snapshot key -- "the key(s) added by this story
+   carry no unit identity, no effect id, no position" -- and is explicitly NOT a standing bound; it
+   must not foreclose the state-owned-position option at `4-2`'s gate.
+
+10. **Replay parity (`4-1/R2`, new).** In replay mode, card effects arrive via
+    `_replay_record.replay_inject_content()` from the record, never re-derived from
+    `CardDatabase`; the replay identity coverage (`test_replay_identity.gd`) extends to the
+    effects channel; unit spawn behaviour is identical live vs. replay.
 
 ## Deferred / Out of scope
 
@@ -104,7 +138,11 @@ discard pile the way every card does today.
   (`summon_combat_totem`, `summon_mana_accelerator`, `summon_stamina_accelerator`, all on the
   wardstone cards). This story treats every `summon_*` id identically -- one generic grey-box unit
   record, no totem-specific behaviour, no totem/minion type distinction. 4-4 differentiates
-  totems from minions; this story does not pre-decide that shape.
+  totems from minions; this story does not pre-decide that shape. **Totem clause (ratified,
+  measured pass):** the unit record carries NO type/kind field, stated explicitly -- uniform
+  `summon_*` treatment therefore does not pre-commit `4-4`'s totem/minion differentiation. `4-4`'s
+  second golden move is already ratified as its own Tier A reason (`E4-P/R9`), independent of this
+  story.
 - **Object pooling / performance** (4-5) -- units are plain instantiated/freed nodes this story;
   no pool. `4-5`'s tier is assigned at this story's close-out (`E4-P/R8`), genuinely undecided
   until the unit-ownership ruling below exists.
@@ -112,9 +150,17 @@ discard pile the way every card does today.
   This story's spell branch is a named no-op, not a partial implementation of any spell's actual
   effect.
 
-## Open Question for the readiness gate (NOT decided here)
+## Open Question -- RULED at the readiness gate (`4-1/R12`)
 
-**Where does a unit's position live?** The measured hero precedent: `hero_state.gd:5` states
+**Where does a unit's position live?** RULED: the units record ships POSITIONLESS this story --
+position stays actor-owned, hero precedent unchanged. The real position-ownership decision is
+deferred to `4-2`'s gate, where a consumer (`TargetingService`) actually exists. AC 9's wording is
+explicitly SCOPED to this story's own snapshot key and is NOT a standing bound -- it must not
+foreclose the state-owned-position option at `4-2`. Both named futures (an inward position channel
+derived by the runner, on the hero precedent, vs. state-owned floats reaching the hash directly)
+are recorded in Dev Notes below as `4-2` gate input. The reasoning that led here, preserved:
+
+The measured hero precedent: `hero_state.gd:5` states
 "Pure RefCounted -- no scene, no Input, no position (position is actor-owned, F1)." `HeroState`
 owns `velocity`, `facing`, `roll_direction` -- intent/derived quantities -- never a position.
 `match_runner.gd:_gather_contact_facts` (line 643) reads `actor.global_position` directly off the
@@ -127,37 +173,55 @@ architectural asymmetry against that precedent -- not a forced choice. `E4-P/R7`
 obligation explicitly on this story's gate rather than on `4-2`'s (where `TargetingService` will
 actually need to query position), because AC 4's board collection ships here and the gate must not
 let the collection's shape default to whatever is momentarily convenient for a consumer that does
-not exist until 4-2. **This authoring pass presents the question with the precedent in hand and
-does not answer it.**
+not exist until 4-2. **This authoring pass presented the question with the precedent in hand; the
+gate has now answered it, above.**
 
 ## Tasks / Subtasks
 
 - [ ] Add `MatchState.inject_card_effects()`, the `inject_card_costs` seam shape verbatim,
-      `Invariant.check`-guarded for totality over the injected deck composition (AC: 2, 3)
+      `Invariant.check`-guarded for totality over the injected deck composition (AC: 2, 3). State
+      the injection order explicitly (`4-1/R8`): deck -> costs -> effects.
 - [ ] `_derive_card_effects()` in the runner, the `_derive_card_costs()` precedent verbatim
       (`match_runner.gd:362-378`) -- walk `CardDatabase.sorted_ids()`, map id -> `basic_effect`,
-      skip a card with no authored effect (AC: 2)
-- [ ] Add `capture_inject_card_effects()` to `IntentRecorder`; update
-      `EXPECTED_INTAKE_SURFACE` (`test/state/test_intent_recorder.gd:33`) and
-      `SHIPPED_CAPTURE_CHANNELS` (`test/state/test_live_reload.gd:36`) as a NAMED, deliberate
-      pin update -- both guards are machine-checked source scans and are meant to fail loudly
-      here (AC: 2)
+      skip a card with no authored effect (AC: 2). The LIVE runner path always calls the
+      derive+inject pair together, in the non-replay branch (`4-1/R3`).
+- [ ] **`4-1/R1` -- the full IntentRecorder content-channel package** (replaces the "one capture
+      method + two pins" task; scope was incomplete as originally authored):
+  - `intent_recorder.gd`: `CHANNEL_EFFECTS` constant; `SOUND_CONTENT_ORDER` becomes a 3-element
+    ordered contract (`4-1/R8`: `CHANNEL_EFFECTS` sits at the END); `_effect_values` storage; a
+    branch in `missing_match_start_channels()` (`4-1/R3`: a missing effects channel is malformed
+    for a v2 record); `replay_card_effects()`; a branch in `replay_inject_content()` (AC: 10).
+  - `record_file.gd`: `REQUIRED_KEYS`, `_to_dictionary`, `_from_dictionary`'s content-order match,
+    `FORMAT_VERSION` 1 -> 2. Ruled: v1 records are REFUSED with a reason per that file's own
+    contract -- NO migration shim, records are debug artifacts and a shim would be speculative
+    machinery.
+  - Tests that MOVE, named as deliberate pin updates (`4-1/R9` folded in here): `test_record_file.gd`
+    round-trip-carries-every-channel + its derived key-set test; `test_intent_recorder.gd`
+    `EXPECTED_INTAKE_SURFACE` + content-order tests; `test_live_reload.gd` THREE edits
+    (`SHIPPED_CAPTURE_CHANNELS` 8 -> 9, the literal eight-name array inside the exactly-eight test,
+    and that test's name); `test_replay_identity.gd`; `test_record_save_control.gd`;
+    `test/replay_drive.gd`; `test/tools/replay_file.gd`. (AC: 2, 10)
 - [ ] Write the resolver: `summon_*` -> append a unit record; `spell_*` -> named no-op with a
-      stated reason; anything else -> explicit refusal, proven by a synthetic fixture id (AC: 1,
-      4, 5, 6)
+      RETURNED-VALUE-only reason, off the `reject_action` seam (`4-1/R10`); anything else ->
+      explicit refusal by RETURNED NAMED VALUE, TWO distinct reasons -- missing-entry honest
+      default (directed test) and unknown-prefix refusal (synthetic-fixture test) -- never an
+      `Invariant.check` crash, never `reject_action` (`4-1/R3`) (AC: 1, 5, 6)
 - [ ] Add `PlayerState.units`, the pure-`RefCounted`-collection precedent (`Deck`/`Hand`/
-      `DiscardPile`); resolve the Open Question's shape as part of this task, per the gate's
-      ruling (AC: 4)
+      `DiscardPile`); positionless and type/kind-less per the gate's ruling (`4-1/R12`, totem
+      clause) (AC: 4)
 - [ ] `src/actors/minions/`: author the grey-box unit scene; wire the runner to spawn one actor
       per new unit record and free actors whose unit record is gone (AC: 7, 8)
-- [ ] Clear `units` in both `_end_round` and `_apply_debug_reset`; confirm the runner's actor
-      cleanup fires from the existing `round_ended`/`round_started` relay, no new EventBus event
-      (AC: 8)
-- [ ] Extend `to_snapshot()` with a counts-only board key; extend the snapshot key-set pin in
+- [ ] Clear `units` in `_apply_debug_reset` ONLY -- `_end_round` stays untouched (`4-1/R5`); add
+      the named exception for units to `_apply_debug_reset`'s "NOTHING else" contract comment;
+      confirm the runner's actor cleanup fires from the existing `round_started` relay, no new
+      EventBus event (AC: 8)
+- [ ] Extend `player_state.gd`'s `to_snapshot()` with a counts-only board key (attribution
+      corrected, `4-1/R7`: NOT `match_state.gd`'s dict); extend the snapshot key-set pin in
       `test_card_observation.gd` (AC: 9)
 - [ ] Golden re-baseline: measure and separate every cause exactly as every prior multi-cause
-      re-baseline in this project has (snapshot-shape cause vs. behavioural cause), per the
-      Golden Prediction below
+      re-baseline in this project has (snapshot-shape cause vs. behavioural cause -- the
+      behavioural cause is the golden fixture's `t22` `summon_*` cast, `4-1/R6`), per the Golden
+      Prediction below
 
 ## Dev Notes
 
@@ -192,7 +256,37 @@ does not answer it.**
   fail until `capture_inject_card_effects` exists and both pins (`test_intent_recorder.gd:33`,
   `test_live_reload.gd:36`) are updated DELIBERATELY. This is the guard-mechanism-over-pattern
   discipline (project-context.md) -- update the pin with intent, do not widen a regex to route
-  around it.
+  around it. **`4-1/R1` (BLOCKING, accepted at the gate): this capture-method view was incomplete.**
+  The full content-channel package is required, not one method plus two pins -- see Tasks/Subtasks
+  for the itemized `intent_recorder.gd`/`record_file.gd` surface and the full list of tests that
+  MOVE as deliberate pin updates. `record_file.gd` bumps `FORMAT_VERSION` 1 -> 2 and REFUSES v1
+  records with a reason; no migration shim is built (records are debug artifacts).
+- **`4-1/R3` (BLOCKING, ruled option (a)): the refusal mechanism is returned named values, not a
+  crash.** Two distinct reasons, never folded into one: missing-entry (no injected effect for the
+  cast id -- honest default, natural fixtures land here) and unknown-prefix (an entry exists but
+  its `effect_id` matches neither `summon_` nor `spell_` -- synthetic-only, no natural fixture
+  produces it). Injection itself is state-side OPTIONAL (existing `MatchState` fixtures are
+  untouched) but record-side MANDATORY for v2 (`missing_match_start_channels()` flags a missing
+  effects channel as malformed) -- these are two different obligations on the same channel, do not
+  conflate them.
+- **`4-1/R5` (BLOCKING, ruled): units clear on reset only, not round-end.** The board persisting
+  through the round-over freeze (rather than blinking out the instant a match ends) is the design
+  intent, matching how the board already behaves for every other piece of round-crossing state.
+  `_apply_debug_reset`'s doc comment needs the named exception added, not silently violated.
+- **`4-1/R6` (BLOCKING, ruled): the Golden Prediction's behavioural cause is real, not
+  hypothetical.** The gate confirmed the golden fixture injects effects and the card cast at tick
+  22 carries a `summon_*` effect id -- `unit_count` measurably moves `0 -> 1` in the hashed
+  snapshot from that tick forward, and the resolver therefore sits inside determinism coverage by
+  construction, not by luck.
+- **`4-1/R11` (non-blocking): Live Smoke's `R-D6` is RE-INVOKED on this gate** -- measured SPENT
+  since 3-6, so this is the next player-facing story carrying a live smoke and `R-D6` reattaches.
+  The smoke script (below) includes a kill and the `R-D6` acceptance ride-along.
+- **`4-1/R12` (BLOCKING, ruled): two named futures for `4-2`'s gate**, recorded here as that gate's
+  input rather than decided now -- (a) an INWARD position channel, the runner deriving a fact from
+  the unit actor's `global_position` and pushing it into state, on the hero
+  `push_contact`/`_gather_contact_facts` precedent; vs. (b) STATE-OWNED floats reaching the hash
+  directly on the unit record, a new asymmetry against that precedent. `4-2`'s gate rules between
+  them once `TargetingService` exists as a real consumer.
 - **The runner's observation-seam count is currently pinned at eight**
   (`test_architecture_invariants.gd`, `test_runner_observation_seams_are_exactly_eight`,
   amended 3-6/R2). If AC 7/8's actor spawn/despawn needs a NEW `connect_*` seam (as opposed to
@@ -217,9 +311,11 @@ does not answer it.**
 
 - `src/state/match_state.gd`: `inject_card_effects()` seat added (the `inject_deck`/
   `inject_card_costs` precedent); `_resolve_basic_cast` (or a new private helper it calls) gains
-  the resolver dispatch; `_end_round` and `_apply_debug_reset` gain the units-clear step;
-  `to_snapshot()` gains a counts-only board key.
-- `src/state/player_state.gd`: new `units` collection field, constructed empty in `_init`.
+  the resolver dispatch; `_apply_debug_reset` gains the units-clear step (`4-1/R5`: `_end_round`
+  stays untouched).
+- `src/state/player_state.gd`: new `units` collection field, constructed empty in `_init`;
+  `to_snapshot()` gains the counts-only board key -- attribution corrected (`4-1/R7`): this lives
+  on `player_state.gd`'s snapshot, not `match_state.gd`'s match-level dict.
 - `src/state/resources/`: no new schema file expected -- `CardEffect` (3-2) already carries the
   one field this story consumes (`effect_id`); a per-unit RECORD type, if the gate decides one is
   needed beyond "an entry exists," is new content here (state-layer, `RefCounted`, no scene ref).
@@ -229,11 +325,20 @@ does not answer it.**
 - `src/actors/minions/`: first real content -- the grey-box unit scene (`.tscn` + `.gd`), on the
   `src/actors/hero/` precedent (scene-bound node, no gameplay logic beyond what state feeds it).
 - `src/systems/intent_recorder.gd`: `capture_inject_card_effects()`, the `capture_inject_card_costs`
-  precedent (`intent_recorder.gd:124`) verbatim.
+  precedent (`intent_recorder.gd:124`) verbatim, PLUS the full content-channel package ruled at the
+  gate (`4-1/R1`): `CHANNEL_EFFECTS` constant, the 3-element `SOUND_CONTENT_ORDER` (effects at the
+  END, `4-1/R8`), `_effect_values` storage, a `missing_match_start_channels()` branch,
+  `replay_card_effects()`, a `replay_inject_content()` branch (AC 10).
+- `src/systems/record_file.gd`: `REQUIRED_KEYS`, `_to_dictionary`, `_from_dictionary`'s
+  content-order match, `FORMAT_VERSION` 1 -> 2 with v1 records refused (a reason, not a shim)
+  (`4-1/R1`).
 - `test/state/test_intent_recorder.gd`, `test/state/test_live_reload.gd`,
   `test/state/test_architecture_invariants.gd`, `test/state/test_card_observation.gd`,
-  `test/state/test_determinism.gd`: all touched by this story's guards; the primary suites the
-  dev pass extends.
+  `test/state/test_determinism.gd`, `test/state/test_record_file.gd`,
+  `test/state/test_replay_identity.gd`, `test/state/test_record_save_control.gd`,
+  `test/replay_drive.gd`, `test/tools/replay_file.gd`: all touched by this story's guards (the
+  `4-1/R1` package widens this list from the pre-gate two-pin view); the primary suites the dev
+  pass extends.
 
 ### Project Context Rules
 
@@ -257,6 +362,8 @@ does not answer it.**
 
 ### References
 
+- [Source: decision-log.md Session 2026-08-08 -- 4-1 readiness gate, `4-1/R1`-`4-1/R12` + the
+  totem clause]
 - [Source: decision-log.md Session 2026-08-07 -- E4 ratification, `E4-P/R1`, `E4-P/R2`,
   `E4-P/R4`, `E4-P/R6`, `E4-P/R7`, `E4-P/R9`, `E4-P/R10`, `E4-P/R11`]
 - [Source: docs/game-architecture.md D9 ("E4-E6 Seams"); Directory Tree
@@ -281,11 +388,11 @@ multi-cause re-baseline in this project has been (1-5, 1-8, 1-9, 3-3, 3-4, 3-5a,
    alone moves the golden at an early tick, before any summon is cast, the same way 3-5a's
    `discard_size` and 4-0's `pending_draw_owed` reshape each moved it by themselves at an
    all-zero/no-op value.
-2. **Behavioural cause.** Any golden fixture that casts a `summon_*` card now appends a unit
-   record where none was appended before, changing the board key's value from that tick forward.
-   If no golden fixture currently drives a summon cast, this cause is a non-mover in practice and
-   the dev pass reports that measured result rather than assuming it -- exactly the discipline
-   4-0's Golden Prediction applied to its own behavioural cause.
+2. **Behavioural cause -- CONFIRMED at the gate (`4-1/R6`), not merely predicted.** The golden
+   fixture DOES inject effects, and the card cast at tick 22 carries a `summon_*` effect id: the
+   board key's value measurably moves `unit_count` `0 -> 1` in the hashed snapshot from that tick
+   forward. This is a real, measured cause, and the resolver sits inside determinism coverage by
+   construction as a result.
 
 A third possible cause -- `rng_state`, if the resolver's unit-record creation consumes no RNG (it
 should not; nothing about which unit appears is random in this story) -- is a predicted non-mover,
@@ -305,8 +412,10 @@ judges live rather than headless (the `3-0a`/`3-6`/`4-0` precedent). At minimum:
 card and confirm a grey-box unit appears and remains after the cast resolves; cast a `spell_*`
 card and confirm nothing appears on the board and the card still resolves (mana spent, discarded,
 replacement owed) exactly as it does today; end a round (or trigger the debug reset) and confirm
-the board clears. `R-D6`'s re-invocation status at the time this story reaches a dev pass is
-whatever the decision-log records then -- not restated here to avoid going stale.
+the board clears. **`R-D6` is RE-INVOKED on this gate (`4-1/R11`)** -- measured SPENT since 3-6, so
+this is the next player-facing story carrying a live smoke and the two-human kill-acceptance
+ritual reattaches here. The smoke script includes a kill and the `R-D6` acceptance ride-along
+alongside the summon/spell/clear checks above.
 
 ## Dev Agent Record
 
@@ -329,3 +438,10 @@ compare against AFTER:**
 ### Completion Notes List
 
 ### File List
+
+## Change Log
+
+| Date | Version | Description | Author |
+|------|---------|-------------|--------|
+| 2026-08-08 | 0.1 | Story authored against the E4 ratification (`E4-P/R1`-`E4-P/R11`). Nine ACs covering the resolver, the injected-effects seam, golden discipline, `PlayerState.units`, the `summon_*`/`spell_*`/unknown-id branches, the grey-box actor, round-lifecycle clearing, and counts-only snapshotting. Position ownership left as an Open Question for the gate (`E4-P/R7`). Status `authored`, awaiting operator review. | Claude Sonnet 5 |
+| 2026-08-08 | 0.2 | Readiness-gate ruling pass (NOT READY on first read, 7 blocking findings with `R1`/`R2`/`R3` counted as one work package, below the `E4-P/R2` break line of 8, no split). AC 3 restated to claim golden discipline BY RULING only, not a measurable move, plus an authoring prefix-recognition test (`4-1/R4`). AC 4 amended positionless + type/kind-less (`4-1/R12` + totem clause). AC 5 amended: the spell no-op's reason is a returned value only, off `reject_action` (`4-1/R10`). AC 6 replaced: refusal by two named returned values, never a crash, never `reject_action` (`4-1/R3`). AC 8 replaced: units clear on `_apply_debug_reset` only, `_end_round` untouched (`4-1/R5`). AC 9 amended: snapshot attribution corrected to `player_state.gd` (`4-1/R7`), wording scoped to this story's own key, not a standing bound (`4-1/R12`). New AC 10 added: replay parity via `replay_inject_content()` (`4-1/R2`). Open Question section resolved with the `4-1/R12` ruling and its two named futures for `4-2`. Tasks/Subtasks rewritten: the IntentRecorder task replaced with the full content-channel package (`4-1/R1`, folding in `4-1/R9`'s `test_live_reload.gd` naming discipline); the resolver task carries the two-reason refusal shape; the units-clear task narrowed to the reset path; the snapshot task's file attribution corrected; the golden-re-baseline task names the `t22` behavioural cause. Dev Notes appended with `4-1/R1`, `R3`, `R5`, `R6`, `R11`, `R12` detail. Project Structure Notes corrected (`to_snapshot()` on `player_state.gd`, not `match_state.gd`; `record_file.gd` added). Golden Prediction's behavioural cause upgraded from predicted to CONFIRMED, naming the `t22` fixture cast (`4-1/R6`). Live Smoke amended: `R-D6` RE-INVOKED, measured SPENT since 3-6 (`4-1/R11`). Decision-log gains Session 2026-08-08 -- 4-1 readiness gate, recording `4-1/R1`-`4-1/R12` and the totem clause. Status flipped `authored` -> `ready-for-dev`; `sprint-status.yaml` promoted alongside (`CFG/R4`). | Claude Sonnet 5 |

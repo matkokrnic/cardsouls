@@ -5964,3 +5964,99 @@ Docs-only pass, four commits, none pushed: `docs(retro)` (the retrospective reco
 changed). `CLAUDE.md` is NOT touched: its Story tiers section is a pointer to `E4-P/R9`, and no tier
 policy changed here. No code changed, no golden or suite touched. Operator reviews the log and
 pushes.
+
+---
+
+## Session 2026-08-08 -- 4-1 readiness gate
+
+Verdict: **NOT READY** on first read, 7 blocking findings -- `R1`/`R2`/`R3` counted as ONE work
+package, below the `E4-P/R2` break line of 8, so NO SPLIT. Rulings applied in place to the story
+file this same session; promotion to `ready-for-dev` follows.
+
+`4-1/R1` (BLOCKING, accepted) The `IntentRecorder` scope was incomplete. The "one capture method +
+two pins" task is replaced with the full content-channel package: `intent_recorder.gd` gains
+`CHANNEL_EFFECTS`, a 3-element `SOUND_CONTENT_ORDER`, `_effect_values` storage, a
+`missing_match_start_channels()` branch, `replay_card_effects()`, and a `replay_inject_content()`
+branch. `record_file.gd` gains `REQUIRED_KEYS`, `_to_dictionary`/`_from_dictionary`'s content-order
+match, and `FORMAT_VERSION` 1 -> 2; v1 records are REFUSED with a reason, no migration shim (records
+are debug artifacts). Tests that MOVE, named as deliberate pin updates: `test_record_file.gd`
+round-trip-carries-every-channel + its derived key-set test; `test_intent_recorder.gd`
+`EXPECTED_INTAKE_SURFACE` + content-order tests; `test_live_reload.gd` THREE edits
+(`SHIPPED_CAPTURE_CHANNELS` 8 -> 9, the literal eight-name array, and that test's name);
+`test_replay_identity.gd`; `test_record_save_control.gd`; `test/replay_drive.gd`;
+`test/tools/replay_file.gd`. -- _decided by Matko._
+
+`4-1/R2` (BLOCKING, accepted) New AC -- replay parity. In replay mode, card effects arrive via
+`_replay_record.replay_inject_content()` from the record, never re-derived from `CardDatabase`; the
+replay identity coverage extends to it; unit spawn behaviour is identical live vs. replay.
+-- _decided by Matko._
+
+`4-1/R3` (BLOCKING, ruled -- option (a)) The refusal mechanism is RETURNED NAMED VALUES, with TWO
+distinct named reasons: (i) missing-entry honest default (no injected entry for the cast id, the
+`cast_evaluator.gd` null-branch precedent, reachable via an effects-less fixture, a DIRECTED test)
+and (ii) unknown-prefix refusal (entry exists, `effect_id` is neither `summon_*` nor `spell_*`,
+proven with a synthetic map entry in a unit test). NEVER an `Invariant.check` crash (`3-0c/R15`:
+unprovable), NEVER `reject_action`. Injection is state-side OPTIONAL -- existing `MatchState`
+fixtures stay untouched and their casts land on reason (i); record-side it is MANDATORY for v2
+records (`missing_match_start_channels()` treats a missing effects channel as malformed). A guard
+proves the LIVE runner path always injects (derive+inject pair present in the non-replay branch).
+-- _decided by Matko._
+
+`4-1/R4` (BLOCKING, accepted restatement) AC 3 must not claim a measurable golden move from a
+`.tres` edit -- the gate measured the golden deck as synthetic with in-test costs, so no such
+binding exists (standing `BC/R3` isolation). AC 3 restated: `effect_id` joins golden discipline BY
+RULING (`E4-P/R6`) -- a determinism-relevant class of change carrying review burden -- plus the
+machine half: an authoring test asserting every authored `basic_effect.effect_id` carries a
+recognized prefix (`summon_` or `spell_`). -- _decided by Matko._
+
+`4-1/R5` (BLOCKING, ruled) Units are cleared ONLY on the reset path (`_apply_debug_reset`);
+`_end_round` stays untouched -- the board persists through the round-over freeze and does not blink
+out at the instant of death. `_apply_debug_reset`'s "NOTHING else" contract comment gains a NAMED
+exception for units; the parked mana-survives-reset finding stays parked. AC 8 amended accordingly.
+-- _decided by Matko._
+
+`4-1/R6` (BLOCKING, ruled) Golden Prediction cause 2 names the fixture decision: the golden fixture
+INJECTS effects and the card cast at tick 22 carries a `summon_*` effect id -- the behavioural cause
+is real and measurable (`unit_count` `0 -> 1` in the hashed snapshot) and the resolver sits inside
+determinism coverage. -- _decided by Matko._
+
+`4-1/R7` (non-blocking, accepted) Snapshot attribution corrected: the per-player snapshot and its
+pinned key set live in `player_state.gd` / `test_card_observation.gd`, not `match_state.gd`'s
+match-level dict. -- _decided by Matko._
+
+`4-1/R8` (non-blocking, accepted) Injection order stated explicitly: deck -> costs -> effects (the
+totality check reads `_deck_contents`; the `3-0c/R11` vacuous-pass trap applies verbatim to
+effects), and `CHANNEL_EFFECTS` sits at the END of `SOUND_CONTENT_ORDER`. -- _decided by Matko._
+
+`4-1/R9` (non-blocking, accepted) Folded into `R1`'s `test_live_reload.gd` package, recorded here
+as its own ruling: the three named edits (channel count, literal array, test name) are a deliberate
+pin update, not a widened regex. -- _decided by Matko._
+
+`4-1/R10` (non-blocking, accepted) AC 5's stated reason is a RETURNED VALUE only, asserted in unit
+tests, explicitly OFF the `reject_action` seam -- a spell no-op is a successful cast and must not
+render a refusal to the player. -- _decided by Matko._
+
+`4-1/R11` (non-blocking, accepted) Live Smoke amended -- `R-D6` is RE-INVOKED on this gate (measured
+SPENT since 3-6; this is the next player-facing story with a live smoke). The smoke script includes
+a kill and the `R-D6` acceptance ride-along. -- _decided by Matko._
+
+`4-1/R12` (BLOCKING, ruled) The units record ships POSITIONLESS this story -- position stays
+actor-owned, hero precedent unchanged; the real position-ownership decision is deferred to `4-2`'s
+gate where a consumer exists. AC 9's wording is SCOPED to this story's snapshot key ("the key(s)
+added by this story carry no unit identity, no effect id, no position"), explicitly NOT a standing
+bound -- it must not foreclose the state-owned option at `4-2`. Both named futures (inward position
+channel vs. state-owned floats in the hash) recorded in Dev Notes as `4-2` gate input.
+-- _decided by Matko._
+
+**Totem clause** (measured pass, ratified): the unit record carries NO type/kind field, stated
+explicitly -- uniform `summon_*` treatment therefore does not pre-commit `4-4`'s totem/minion
+differentiation. `4-4`'s second golden move is already ratified as its own Tier A reason
+(`E4-P/R9`), independent of this story. -- _decided by Matko._
+
+### Close-out
+
+Docs-only pass, one commit, not pushed: the story file amended in place per `4-1/R1`-`4-1/R12` +
+the totem clause (Change Log entry 0.2), this decision-log entry, and the board promotion
+(`sprint-status.yaml` `4-1-basic-summon-resolution` `backlog` -> `ready-for-dev`, story Status
+header `authored` -> `ready-for-dev`, `CFG/R4`). No code changed, no golden or suite touched.
+Operator reviews the log and pushes.
