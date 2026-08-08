@@ -5817,3 +5817,20 @@ file's own `Status:` field and echoed in `story_notes`. — _decided by Matko._
 
 `CFG/R4` Promotion of a story to `ready-for-dev` is a human act, never a skill's. No workflow may
 set that board value unconditionally on completion. — _decided by Matko._
+
+---
+
+## Session 2026-08-08 — 4-B1 review rulings
+
+`4-B1/R1` The reveal-opponent-hand toggle lives on the DebugInstrumentPanel surface, NOT in
+HudRoot. Data path: the runner hands the panel a read accessor for opponent hand contents through
+the existing Callable-handoff pattern (the gamepad_profile/huds precedent, 3-0d AC 7) -- no new
+observation seam; `test_runner_observation_seams_are_exactly_eight` is not amended. The
+four-control pin in `test_record_save_control.gd` IS amended, as a reviewed, named exception per
+the `3-6/R2` precedent. Panel geometry (fifth control: new column vs band resize) is an
+implementation choice for the dev pass. — _decided by Matko._
+
+`4-B1/R2` The toggle is debug-only. The GDD lock ("hands are private; the pitched card is the only
+public information", 2-5/R9) stands untouched; the toggle must never be reachable in the shipped
+default configuration. An authored gameplay reveal option remains a separate future design ruling
+nobody has requested. — _decided by Matko._

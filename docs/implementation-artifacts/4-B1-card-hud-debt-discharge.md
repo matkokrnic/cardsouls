@@ -4,7 +4,7 @@ baseline_commit: b73eea9eb04bb2063e84997424ef28b2a6832ca5
 
 # Story 4.B1: Card HUD debt discharge
 
-Status: authored
+Status: ready-for-dev
 
 > **Scope note.** Position 2 of the E4 order (`E4-P/R1`, decision-log Session 2026-08-07 -- E4
 > ratification), placed here deliberately: Tier B, discharges an escaped E3 obligation, exercises
@@ -12,8 +12,8 @@ Status: authored
 > section points here rather than restating it): no separate readiness-gate pass, but the
 > `gds-create-story` checklist plus operator review before `ready-for-dev` promotion still applies
 > (Amendment 1) -- discharged by `_bmad/custom/gds-create-story.toml`'s `on_complete`, which is why
-> this file's `Status:` line and the sprint-status entry come out of this run as `authored`, not
-> `ready-for-dev`, pending that review.
+> this file's `Status:` line comes out of this run as `authored`, not `ready-for-dev`, pending that
+> review (the board entry stays `backlog` throughout, per `CFG/R3`).
 
 ## Scope, verbatim from the source that discharges it
 
@@ -212,12 +212,14 @@ either player's own gameplay view).
    to for opponent data, plus the geometry cost at M4 -- but requires NO amendment to the
    `connect_*` seam guard, since the panel's Callable-handoff pattern doesn't need a new signal if
    the runner can hand it a read accessor instead of a push seam).
+   RULED 2026-08-08: option A, DebugInstrumentPanel -- see `4-B1/R1`.
 2. **Is it debug-only or an authored gameplay option?** M3 found "hands are private, the pitched
    card is the only public information" locked at the GDD level (2-5/R9, epics.md). An authored
    gameplay reveal option would need to either respect that lock (reveal something other than
    contents) or explicitly re-open it -- a design decision, not an implementation one, per
    CLAUDE.md's Agent autonomy test. Default assumption pending the ruling: debug-only, gated behind
    whatever surface (1) selects, never reachable in the shipped default configuration.
+   RULED 2026-08-08: debug-only -- see `4-B1/R2`.
 
 ## Tasks / Subtasks
 
