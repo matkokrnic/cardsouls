@@ -23,3 +23,50 @@
   Closed by adding a fourth bound to `test_balance_authoring.gd::test_authored_deck_and_hand_counts_are_sane`
   (`hand_size <= 4`), so an authored 5 fails the suite loudly instead of the HUD truncating
   silently. History kept here per instruction rather than deleted.
+
+## Deferred from: code review of 4-B1-card-hud-debt-discharge (2026-08-08)
+
+- **The DebugInstrumentPanel box leaves the window at any width below 800px.**
+  `debug_instrument_panel.gd:130-131` centres a fixed 800-wide box (`offset_left -400`,
+  `offset_right 400`, widened from 600 by 4-B1 for its fourth column). `project.godot` carries no
+  `[display]` block, so the window is the resizable 1152x648 default with no stretch mode, and the
+  layout guard in `test_debug_instruments.gd` only ever runs at that default size. Deferred as a
+  pre-existing class rather than a 4-B1 defect: the 600-wide box had the same unguarded shape and
+  the same "only ever validated at one resolution" blind spot; 4-B1 widened the exposed range
+  (600-800px window widths) without introducing the mechanism. At the tested 1152x648 the widening
+  is genuinely clear -- x[176,976], y[356,450] against RoundOverLabel bottom y354 and Vitals top
+  y452, machine-checked in BOTH viewports and green.
+
+- **`hand_ids` is bound at push time while `pending_draw_owed` is read at drain time.**
+  `player_state.gd:137-138` binds the hand copy into the queued emit; the 4-B1 wrapper at
+  `match_runner.gd:255` reads `player_for_slot.pending_draw_owed` when the SignalQueue drains,
+  after the whole tick has resolved -- so every payload is rendered against the END-OF-TICK owed
+  set rather than the set that was true when it was pushed. Deferred because the mismatching
+  intermediate renders are all overwritten within the same drain and never reach the screen, and
+  because the shape belongs to the D5 queued-signal channel rather than to this story. The one
+  case where it IS visible is tracked separately as this review's HIGH decision item (the
+  both-empty exhaustion degrade popping the debt with no announcement, leaving the permanent hole
+  painted with `IN_FLIGHT_CAPTION`).
+
+- **A build gate for the reveal-opponent-hand toggle (code review D2, RULED deferred
+  2026-08-08).** `DebugInstrumentPanel` is added unconditionally by the runner
+  (`match_runner.gd:283, 298`) with no `OS.is_debug_build()` / export-build branch, so the
+  `RevealOpponentHand` CheckButton -- which shows both players' hand contents, the information the
+  GDD privacy lock protects -- is mouse-reachable in any build that ships the panel. The operator
+  RULED that default-off is sufficient today: this is a same-screen local prototype, no export
+  build exists, and a gate that no test could exercise would be a vacuous guard, which this repo
+  treats as worse than none (`3-0d/R20`, guard mechanism over guard pattern). OWNER: the first
+  story that produces a distributable / export build. That story must gate the whole panel, not
+  just this control -- SaveRecord and ReloadBalance ship the same way.
+
+- **DebugInstrumentPanel ergonomics -- size, placement, collapsibility (operator finding
+  2026-08-08).** Live-smoke observation during 4-B1: the mid-screen panel has grown bulky. It sits
+  dead-centre in the band between the round-over label and the vitals bars, and every story that
+  adds a control has widened it (2-6: 300 -> 3-0b: 600 -> 4-B1: 800 -> 1000, then back to 680 once
+  `4-B1/R7` deleted the reveal's output label). Width is the only axis available, because the band
+  has zero vertical slack -- which means the panel can only ever get wider across the middle of the
+  screen, and the next control repeats the argument. Worth revisiting as a whole: a smaller or
+  repositioned box, a collapsible panel, or moving the instruments out of the gameplay band
+  entirely. OWNER: the next story that touches `src/ui/debug/debug_instrument_panel.gd`. Not urgent
+  -- the machine check in `test_debug_instruments.gd` keeps the box provably clear of both HUDs and
+  both StateInspectors at 1152x648, so this is ergonomics, not occlusion.

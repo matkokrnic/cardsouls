@@ -5837,3 +5837,26 @@ implementation choice for the dev pass. — _decided by Matko._
 public information", 2-5/R9) stands untouched; the toggle must never be reachable in the shipped
 default configuration. An authored gameplay reveal option remains a separate future design ruling
 nobody has requested. — _decided by Matko._
+
+---
+
+## Session 2026-08-08 -- 4-B1 close-out
+
+`4-B1/R3` The code review's D1 finding is fixed state-side, inside this story: `player.notify_cards_changed()`
+added on both silent-pop paths (`_deliver_pending_draw`'s DEAD branch, `_draw_one_replacement`'s
+both-empty degrade), a named, measured exception to "no `src/state/` change" -- golden and snapshot
+keys measured UNMOVED. — _decided by Matko._
+
+`4-B1/R4` Default-off is sufficient today; a build gate is a named deferral owned by the first story
+with a distributable build, and must gate the whole panel. — _decided by Matko._
+
+`4-B1/R5` Smoke scope: the in-flight half live; the both-empty half discharged by the
+state-crossing integration test (unreachable in natural play, measured). — _decided by Matko._
+
+`4-B1/R6` The 4-B1 review was the THIRD consecutive run with one stalled parallel layer; per the
+ratified E4-P tier policy this SUSPENDS Tier B; un-suspension is owned by the upcoming
+retrospective. — _decided by Matko._
+
+`4-B1/R7` The reveal output's medium is the console; the on-screen label is removed (a band-locked
+label cannot legibly carry two hands, both HUDs already render the hands on screen, and the console
+gives the operator a copy-pasteable record). — _decided by Matko._

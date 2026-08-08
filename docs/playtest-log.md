@@ -150,4 +150,6 @@ as a bug or as the card layer simply being parallel to melee.
 
 7.8. sada karte nakon sto su igrane ostavljaju prazan slot od 1s te se u njega povlaci nova karta, ne pomicu se sve ulijevo da se popuni praznina
 
+8.8. revela hand toggle premejten u terminal ispisom, neka tkao to ostane, idalje ne vidmi svrhu te funkcionalnosti, idmeo dalje
+
 
