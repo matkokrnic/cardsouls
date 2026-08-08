@@ -245,7 +245,24 @@ func _ready() -> void:
 		connect_mana_changed(slot, hud.on_mana_changed)
 		# Story 3-6 (AC 2): the eighth seam's ONE production consumer, bound to this root's own
 		# slot exactly like the three economy seams above (2-4/R7 no-opponent-read).
-		connect_cards_changed(slot, hud.on_cards_changed)
+		# Story 4-B1 (AC 1): wrapped rather than passed bare, so this player's OWN
+		# `pending_draw_owed` rides alongside the seam's three existing values without a new
+		# signal, a new seam, or a src/state/ change. Read INLINE at the moment the seam fires
+		# (CONSTRAINT C, never cached) -- the wrapper's own 3-arg signature matches what
+		# connect_cards_changed primes with, so priming is unaffected.
+		#
+		# THE LAMBDA CAPTURES NO PlayerState (4-B1 code review). It used to capture one, and that
+		# was a reference CYCLE, not a style point: PlayerState is RefCounted, the lambda is stored
+		# in that same PlayerState's own `cards_changed` connection list, and the capture closed the
+		# loop -- leaked at exit. Resolving p1/p2 INSIDE the body captures only `self` (a Node, not
+		# ref-counted) and `slot`, and it makes CONSTRAINT C literally true of the OBJECT as well as
+		# the field rather than merely asserted. `.duplicate()` for the same reason the 4-0 review
+		# patched the snapshot key: a UI layer is handed a copy, never a live handle into state.
+		var slot_index := slot
+		connect_cards_changed(slot, func(hand_ids: Array, deck_count: int, discard_count: int) -> void:
+			var player: PlayerState = _match_state.p1 if slot_index == 0 else _match_state.p2
+			hud.on_cards_changed(hand_ids, deck_count, discard_count,
+					player.pending_draw_owed.duplicate()))
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
 		# Story 3-6 (AC 4): the reshuffle flag. BOTH viewports subscribe to the SAME ownerless bus
 		# event (E3-RG/R3 — "this player's deck ran out" is a match-wide public fact), each binding
@@ -284,6 +301,10 @@ func _ready() -> void:
 	# like the two switches beside them.
 	panel.save_record = save_recorded_stream
 	panel.reload_balance = trigger_live_balance_reload
+	# Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the panel's FIFTH control and its THIRD runner-reaching
+	# seam, same Callable-handoff shape as the two directly above -- a read accessor, not a
+	# push, so the panel calls it only from its own toggle handler.
+	panel.reveal_opponent_hand = debug_hand_contents
 	add_child(panel)
 	# Story 3-5a (AC 10): kept for the per-tick selection-indicator push in _physics_process.
 	_huds = huds
@@ -430,6 +451,22 @@ func trigger_live_balance_reload() -> void:
 	Invariant.check(config != null, "authored balance config missing at live reload")
 	_recorder.capture_apply_balance(config)
 	_match_state.apply_balance(config)
+
+
+## Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the DebugInstrumentPanel's READ ACCESSOR for both players'
+## hand contents — a Callable the panel CALLS on demand (its own toggle handler), not a push seam
+## and not a poll: no new `connect_*`, no per-tick call from `_physics_process`, and
+## `test_runner_observation_seams_are_exactly_eight` is untouched (the seam family stays at eight).
+## The same "hand the panel a way to ASK" shape as `save_recorded_stream` /
+## `trigger_live_balance_reload` above, generalised from an action to a read.
+##
+## Read INLINE at call time (CONSTRAINT C) — both hands come straight off the live containers via
+## their own `to_array()` copies, nothing is cached here or on the panel, and nothing here mutates
+## state. Debug-only (`4-B1/R2`): this method's only caller is the panel's CheckButton handler,
+## reachable by a manual mouse press alone — no Input Map action, no FeatureFlags read, and it
+## never fires in the shipped default configuration unless the operator toggles it.
+func debug_hand_contents() -> Array:
+	return [_match_state.p1.hand.to_array(), _match_state.p2.hand.to_array()]
 
 
 ## Story 1-6 (AC 2): map a configured slot kind to a concrete Controller — the ONE place a

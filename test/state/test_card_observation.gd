@@ -124,6 +124,70 @@ func test_the_debug_reset_re_announces_the_restored_hand() -> void:
 	assert_eq(last[2], 0, "and the discard emptied by the re-lay")
 
 
+# --- The two SILENT POPS (story 4-B1 code review, D1) -----------------------------------------
+
+## THE CONTRACT THIS CHANNEL GAINED AT 4-B1, and the bug that proved it was missing. Until 4-B1 the
+## rule was "announce when a CARD moved", and both paths below consume a debt without moving one,
+## so both returned silently and that was correct. 4-B1 put `pending_draw_owed` into what the
+## channel's consumer RENDERS (`HudRoot.on_cards_changed` paints IN_FLIGHT_CAPTION on any blank
+## slot the owed list names), which makes a debt that SHRANK an observable change in its own right.
+## A silent pop leaves the vacated slot painted "..." with nothing left that will ever repaint it —
+## the permanent hole rendered exactly like an in-flight slot, which is the deferred-work.md finding
+## the whole story exists to discharge, reintroduced through the back door.
+##
+## Both paths are UNREACHABLE IN NATURAL PLAY and are tested anyway, exactly like the DEAD branches
+## in test_card_play.gd / test_contact_pipeline.gd: card count is conserved and a debt always has
+## its own cast card sitting in the discard for the lazy reshuffle to hand back, so the piles cannot
+## both be empty while a debt is outstanding (measured: a probe driving the real machine 400 ticks
+## across seven deck sizes and three delays reached the precondition zero times). Defense in depth
+## for a RENDERING contract is still worth its two tests — the rendering is what broke.
+
+## Path 1: both piles empty at the delivery. The debt is consumed, no card can be drawn, the hole
+## becomes permanent — and the observer must be told, or it keeps showing a delivery in flight.
+func test_the_both_empty_degrade_announces_the_consumed_debt() -> void:
+	var ms := _dealt_match()
+	_advance(ms, _cast_intent(1), InputIntent.new())
+	_empty_both_piles(ms.p1)
+	assert_false(ms.p1.pending_draw_owed.is_empty(), "fixture: a debt is outstanding before the delivery")
+	var seen := _watch(ms.p1)
+	for _i in DRAW_DELAY_TICKS + 1:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p1.pending_draw_owed.is_empty(), "the delivery consumed the debt")
+	assert_eq(seen.size(), 1,
+		"the consumed debt announced exactly once — the slot is now the PERMANENT hole and the "
+		+ "consumer has to hear it, or it renders an in-flight delivery that will never arrive")
+	assert_eq((seen[0][0] as Array)[1], Hand.EMPTY, "...announcing the hole still standing at slot 1")
+	assert_eq(seen[0][1], 0, "...an empty deck")
+	assert_eq(seen[0][2], 0, "...and an empty discard: nothing was drawn and nothing reshuffled")
+
+
+## Path 2: the DEAD pop. Death drops the DELIVERY but still consumes the debt (AC 7, 3-5b /
+## 1-9/R3), so the same silence, from the other branch. Forced-DEAD idiom, `_round_over` left FALSE.
+func test_the_dead_pop_announces_the_consumed_debt() -> void:
+	var ms := _dealt_match()
+	_advance(ms, _cast_intent(1), InputIntent.new())
+	assert_false(ms.p1.pending_draw_owed.is_empty(), "fixture: a debt is outstanding before the delivery")
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
+	ms.drain_signals()  # discard the forced-DEAD action_state_changed before we start counting
+	var seen := _watch(ms.p1)
+	var deck_before := ms.p1.deck.size()
+	for _i in DRAW_DELAY_TICKS + 1:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p1.pending_draw_owed.is_empty(), "a corpse still consumes its debt (AC 7)")
+	assert_eq(ms.p1.deck.size(), deck_before, "...and drops the DELIVERY: no card came off the deck")
+	assert_eq(seen.size(), 1, "the consumed debt announced exactly once on the DEAD path too")
+	assert_eq((seen[0][0] as Array)[1], Hand.EMPTY, "...with the hole still standing at slot 1")
+
+
+## Both piles emptied between the cast and the delivery — the forced step that makes path 1
+## reachable at all. Kept beside its one caller rather than in the fixture block: it is a forcing
+## device for an unreachable branch, not part of any natural fixture.
+func _empty_both_piles(player: PlayerState) -> void:
+	var nothing: Array[StringName] = []
+	player.deck.set_contents(nothing)
+	player.discard.clear()
+
+
 # --- Shape of the payload ---------------------------------------------------------------------
 
 ## The payload is a COPY. A consumer that mutated it must not be able to reach into the hand —

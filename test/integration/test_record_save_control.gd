@@ -143,8 +143,10 @@ func _press_reload() -> void:
 	button.pressed.emit()
 
 
-## AC 7 (amended `3-0d/R13`, and THE ONLY PANEL PIN as of `3-0d/R20`): the panel ships EXACTLY the
-## two 2-6 switches plus this story's TWO controls, SAVE and RELOAD — an exact set, not a count.
+## AC 7 (amended `3-0d/R13`, and THE ONLY PANEL PIN as of `3-0d/R20`; amended AGAIN `4-B1/R1`): the
+## panel ships EXACTLY the two 2-6 switches, this story's TWO controls SAVE and RELOAD, plus 4-B1's
+## REVEAL toggle — an exact set, not a count. `4-B1/R1` names this a reviewed, named exception on
+## exactly the `3-6/R2` precedent (a pinned set amended by an operator ruling, not a widened regex).
 ##
 ## THIS IS NOW THE WHOLE MECHANISM. The source scan that used to sit beside it in
 ## test/state/test_replay_surface_pins.gd — enumerating the panel's `Callable` MEMBERS by matching
@@ -171,9 +173,11 @@ func _check_control_set() -> void:
 	for node in _panel.find_children("*", "BaseButton", true, false):
 		names.append(String(node.name))
 	names.sort()
-	_check(names == ["NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance", "SaveRecord"],
-		"the panel's controls are the two switches plus SAVE and RELOAD — no start control and no "
-		+ "load control (`3-0d/R1`, `3-0d/R2`): got %s" % str(names))
+	_check(names == ["NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance",
+			"RevealOpponentHand", "SaveRecord"],
+		"the panel's controls are the two switches plus SAVE, RELOAD and REVEAL — no start control "
+		+ "and no load control (`3-0d/R1`, `3-0d/R2`), REVEAL amended in by `4-B1/R1`: got %s"
+				% str(names))
 	# NON-VACUITY, in the form the old `"Button"` query was blind to: the query must SEE a
 	# BaseButton subclass that is not a Button. Built, counted, freed — never added to the panel.
 	var probe := LinkButton.new()

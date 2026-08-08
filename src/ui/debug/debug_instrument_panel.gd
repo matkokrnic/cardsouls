@@ -46,6 +46,18 @@ extends Control
 ## anything now is that `MatchRunner` CONSUMES `replay_record` once in `_ready()` and never reads
 ## it again, so a mid-session assignment is inert by construction (`3-0d/R20`).
 
+## Story 4-B1 (AC 2/AC 3, `4-B1/R1`/`4-B1/R2`) adds the panel's FIFTH control and its THIRD
+## runner-reaching seam — REVEAL, a debug-only toggle that reads BOTH players' hand contents
+## through a Callable read accessor (`reveal_opponent_hand`, the save_record/reload_balance
+## Callable-handoff shape generalised from an action to a read) and prints them to the panel's own
+## output Label. ON-DEMAND ONLY: the accessor is called from the toggle's own `toggled` handler,
+## never per-frame and never a new observation seam — HudRoot never learns of it, and
+## `test_runner_observation_seams_are_exactly_eight` stays untouched. The pinned control set in
+## `test/integration/test_record_save_control.gd` IS amended to five names, a reviewed named
+## exception on the `3-6/R2` precedent (`4-B1/R1`). Unpressed by default and reachable only by a
+## manual mouse click (`4-B1/R2`): it never reveals anything in the shipped default configuration,
+## and it changes no FeatureFlags member and no state-layer value.
+
 ## Set by the runner BEFORE add_child (so _ready sees them). The shared gamepad profile instance
 ## (the runner loads it via the same res:// path, so the resource cache hands both the same object)
 ## and both per-viewport HudRoots (whose pitch placeholder the A/B switch repositions).
@@ -64,9 +76,29 @@ var save_record: Callable = Callable()
 ## handle and never the BalanceConfigService reference itself.
 var reload_balance: Callable = Callable()
 
+## Story 4-B1 (AC 2/AC 3, `4-B1/R1`): THE THIRD RUNNER-REACHING SEAM — a READ accessor, not an
+## action, for both players' hand contents. Same Callable-handoff shape as the two above: the
+## panel receives a way to ASK, never a MatchState handle and never a HudRoot reference (it never
+## reaches opponent data through either). Called ONLY from the reveal toggle's own handler below —
+## never per-frame (F1) and never a new observation seam (`test_runner_observation_seams_are_
+## exactly_eight` stays untouched, `4-B1/R1`).
+var reveal_opponent_hand: Callable = Callable()
+
 ## Story 3-0b (AC 2): the two per-slot countdown value Labels, index 0 = P1, 1 = P2. Written
 ## ONLY by set_window_countdown below, from the runner's polled plain-integer payload.
 var _countdown_values: Array[Label] = []
+
+## Story 4-B1 (`4-B1/R7`, second live smoke): THE REVEAL HAS NO ON-SCREEN OUTPUT. Two label passes
+## (one line, then two lines at 11px) both clipped at the box edge — a label locked inside the
+## 94px band cannot legibly carry two hands, and the width it demanded made the mid-screen panel
+## bulky. The CONSOLE is the reveal output now: each press prints the two SNAP lines, which is also
+## copy-pasteable, is a log rather than a live view (so it cannot go stale), and does not duplicate
+## what both HudRoots already render for their own halves.
+##
+## This member exists so the assertion can drive the REAL CheckButton and read what the press
+## actually produced, rather than re-deriving it. Written only by _on_reveal_toggled: the two lines
+## on press, emptied on release.
+var _last_reveal_lines: PackedStringArray = []
 
 
 func _init() -> void:
@@ -91,14 +123,32 @@ func _ready() -> void:
 	# colliding with the vitals bars. The band is empty across the FULL WIDTH, though, so the
 	# spare room is horizontal: the box goes 300 -> 600 wide and the contents split into two
 	# COLUMNS (switches | countdown), which keeps the content height at the same ~89 and the box
-	# inside the band. New rect: x[276,876], y[356,450] — 2px clear of the band edges on both
+	# inside the band. 3-0b's rect was x[276,876], y[356,450] — 2px clear of the band edges on both
 	# sides. Machine-checked (both viewports) by test_debug_instruments.gd.
+	#
+	# Story 4-B1 (AC 2): the FOURTH column (reveal toggle + output) is the SAME horizontal-only
+	# move again -- the band still has zero VERTICAL slack (this box's height is untouched, 32 to
+	# 126), so a fifth control can only grow the box WIDER, never taller. 600 -> 800.
+	#
+	# The 4-B1 code review's rect was x[176,976], y[356,450]: the x half of 3-0b's figure above is
+	# HISTORY, not a description of this code -- the 2px band clearance is the half that survives,
+	# because only the width ever moves.
+	#
+	# The first live smoke drove it 800 -> 1000 (x[76,1076]) chasing a label that would not fit.
+	# That is history too: `4-B1/R7` deleted the label instead, so the reveal column is now a bare
+	# CheckButton and the box SHRINKS below even its pre-smoke width.
+	#
+	# THE SHIPPED RECT IS x[236,916], y[356,450]. The width is MEASURED, not estimated: the four
+	# columns report a combined minimum of 658px at runtime, so 680 is that plus a small margin
+	# against font-metric drift. HEIGHT UNTOUCHED for the fourth time and the same reason -- zero
+	# vertical slack in the band. 236px clear of the window on both sides at 1152 wide, and the
+	# narrowest this panel has been since 3-0b. Machine-checked the same way, in both viewports.
 	box.anchor_left = 0.5
 	box.anchor_right = 0.5
 	box.anchor_top = 0.5
 	box.anchor_bottom = 0.5
-	box.offset_left = -300.0
-	box.offset_right = 300.0
+	box.offset_left = -340.0
+	box.offset_right = 340.0
 	box.offset_top = 32.0
 	box.offset_bottom = 126.0
 	add_child(box)
@@ -143,6 +193,11 @@ func _ready() -> void:
 	# Controls 3-4 (story 3-0d, AC 7, `3-0d/R13`): SAVE and RELOAD — the panel's two
 	# runner-reaching controls. No start, no load.
 	_build_record_controls(row)
+
+	# Control 5 (story 4-B1, AC 2/AC 3, `4-B1/R1`/`4-B1/R2`): the reveal-opponent-hand toggle.
+	# Debug-only, mouse-only, unpressed by default (never reachable in the shipped default
+	# configuration unless the operator clicks it).
+	_build_reveal_control(row)
 
 
 ## AC 2: the countdown column — ONE row per slot, whose Label the runner's polled payload writes
@@ -190,6 +245,32 @@ func _build_record_controls(row: HBoxContainer) -> void:
 	reload.text = "Reload balance"
 	reload.pressed.connect(_on_reload_pressed)
 	column.add_child(reload)
+
+
+## Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the FIFTH control, in its OWN fourth column — the same
+## horizontal-only geometry move as `_build_record_controls` above, for the same reason (zero
+## vertical slack in the band). A CheckButton (the toggle) plus a read-only output Label, the
+## same two-row shape as the columns beside it. Unpressed by default (`4-B1/R2`): the toggle
+## never reveals anything unless the operator clicks it.
+##
+## SMOKE FINDINGS, TWICE (operator, live runs, 2026-08-08). First: one line could not carry two
+## hands — the label clipped on "SNAP P1 storm_kite, imp_sun..." and the P2 half never appeared.
+## Second: two lines at 11px clipped the SAME way ("...storm_kite, imp_summoner, stor"), and the
+## width the label kept demanding had made the mid-screen panel bulky. `4-B1/R7` changed the
+## MEDIUM rather than the font a third time: the label is GONE and the console carries the reveal.
+## What is left here is the toggle alone — so this column is now the narrowest of the four, which
+## is what let the box shrink back below its pre-smoke width.
+func _build_reveal_control(row: HBoxContainer) -> void:
+	var column := VBoxContainer.new()
+	column.name = "RevealColumn"
+	column.add_theme_constant_override("separation", 2)
+	row.add_child(column)
+	var toggle := CheckButton.new()
+	toggle.name = "RevealOpponentHand"
+	toggle.text = "Reveal opponent hand"
+	toggle.button_pressed = false
+	toggle.toggled.connect(_on_reveal_toggled)
+	column.add_child(toggle)
 
 
 ## AC 2: the runner's per-tick push, called after each advance() with MatchState's read-only
@@ -252,3 +333,62 @@ func _on_reload_pressed() -> void:
 func _on_pitch_placement_toggled(left_of_bars: bool) -> void:
 	for hud in huds:
 		hud.set_pitch_zone_placement(left_of_bars)
+
+
+## Story 4-B1 (AC 2/AC 3, `4-B1/R1`/`4-B1/R2`): pressed == read both hands ONCE, right now, and
+## show them; unpressed == blank the output. This is a single ON-DEMAND read through the accessor,
+## never a per-frame poll (F1) and never a subscription — toggling again re-reads the live
+## containers fresh (CONSTRAINT C applies through the accessor, `debug_hand_contents` on the
+## runner). Null-guarded exactly like SAVE/RELOAD: a panel built outside the runner is inert.
+##
+## Debug-only, DEFAULT-OFF (`4-B1/R2`, reaffirmed by the 4-B1 code review's D2 ruling): the only
+## path into this method is a manual mouse click on this CheckButton — no Input Map action, no
+## FeatureFlags read, no state-layer write, and the GDD privacy lock is untouched for every OTHER
+## surface (HudRoot never learns of this method). Deliberately NOT gated behind a debug-build check:
+## no export build exists for this same-screen local prototype, so such a gate could not be tested
+## and a vacuous guard is worse than none here (the build gate is a named deferral in
+## deferred-work.md, owned by the first story that produces a distributable build).
+##
+## IT IS A SNAPSHOT, AND IT SAYS SO: the read happens once, at the press, and the SNAP prefix says
+## which moment it describes. `4-B1/R7` retired the round_started clear that used to sit beside
+## this: it existed only because an on-screen label could rot into a silent lie across a reset, and
+## console lines are a LOG — they are timestamped by their position in it and cannot go stale.
+##
+## THE CONSOLE IS THE OUTPUT (`4-B1/R7`). ON PRESS ONLY — this is inside the toggle handler, never
+## a per-frame print, which would drown the log the operator is actually reading.
+func _on_reveal_toggled(pressed: bool) -> void:
+	if not pressed:
+		_last_reveal_lines = []
+		return
+	if not reveal_opponent_hand.is_valid():
+		return
+	var hands: Array = reveal_opponent_hand.call()
+	var p1_hand: Array = hands[0] if hands.size() > 0 else []
+	var p2_hand: Array = hands[1] if hands.size() > 1 else []
+	var line_1 := "SNAP P1: %s" % _render_hand(p1_hand)
+	var line_2 := "P2: %s" % _render_hand(p2_hand)
+	_last_reveal_lines = PackedStringArray([line_1, line_2])
+	print(line_1)
+	print(line_2)
+
+
+## Story 4-B1 (code review): `Hand.to_array()` is the WIDTH view — `Hand.EMPTY` sits at every hole
+## — and `str(&"")` is the empty string, so joining raw ids renders a holed hand as `a, , c, d`
+## and a fully holed one as `, , , `: the one surface whose whole purpose is showing hand CONTENTS
+## could not show which slot was empty. HOLE_MARKER makes the hole legible, which is the same
+## complaint AC 1 fixes on the HUD side, fixed here too rather than reproduced.
+const HOLE_MARKER := "-"
+
+
+func _render_hand(ids: Array) -> String:
+	var out := PackedStringArray()
+	for id in ids:
+		out.append(HOLE_MARKER if StringName(id) == Hand.EMPTY else str(id))
+	return ", ".join(out)
+
+
+## The reveal's read-back for the assertion — the two lines the LAST press produced, empty while
+## the toggle is off. Not an output surface: nothing renders it, and the test uses it only so it
+## can drive the real CheckButton rather than re-deriving what the press should have said.
+func last_reveal_lines() -> PackedStringArray:
+	return _last_reveal_lines

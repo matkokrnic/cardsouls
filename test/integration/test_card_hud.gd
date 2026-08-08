@@ -4,6 +4,10 @@ extends SceneTree
 ## observation seam -> HudRoot.on_cards_changed -> real card captions and a real deck count, plus
 ## the reshuffle flag's raise-and-self-clear.
 ##
+## Story 4-B1 (AC 1) adds the hole-vs-in-flight distinction: the SAME holed payload, driven once
+## with no owed slot and once with the vacated slot OWED, must render two DIFFERENT captions —
+## proving deferred-work.md's finding (both used to render the same blank) is discharged.
+##
 ## WHY AN INTEGRATION TEST. The suite's standing blind spot is that it proves state contracts and
 ## authored data AT REST but is blind to "the seam fires and the consumer swallows it". The state
 ## half of this channel is fully proven headless (test_card_observation.gd); a unit test on
@@ -41,6 +45,7 @@ var _captions_populated := false
 var _hands_differ := false
 var _deck_count_live := false
 var _vacated_slot_cleared := false
+var _in_flight_slot_distinct := false
 var _refill_rewrote_the_slot := false
 var _flag_hidden_initially := false
 var _flag_raised_both_ways := false
@@ -120,7 +125,18 @@ func _physics_process(_delta: float) -> bool:
 			and after[0] == live[0] and after[2] == live[2] and after[3] == live[3])
 		if not _vacated_slot_cleared:
 			_detail += " after_holed=%s live=%s;" % [after, live]
-		# ...and refilling writes it back, so the clear is not a one-way trip.
+		# Story 4-B1 (AC 1): the SAME holed payload, driven again with slot 1 marked OWED --
+		# the in-flight branch. deferred-work.md's exact complaint was that a permanent hole and
+		# an in-flight slot render the SAME blank caption; this is the assertion that they no
+		# longer do.
+		_p1_hud.on_cards_changed(holed, 7, 1, [1])
+		var in_flight := _captions(_p1_hud)
+		_in_flight_slot_distinct = (in_flight.size() == 4 and in_flight[1] == HudRoot.IN_FLIGHT_CAPTION
+			and in_flight[1] != "" and in_flight[0] == live[0] and in_flight[2] == live[2]
+			and in_flight[3] == live[3])
+		if not _in_flight_slot_distinct:
+			_detail += " in_flight=%s live=%s;" % [in_flight, live]
+		# ...and refilling writes it back, so neither branch is a one-way trip.
 		_p1_hud.on_cards_changed(_to_ids(live), 6, 1)
 		_refill_rewrote_the_slot = _captions(_p1_hud) == live
 	if _frames == FLAG_FRAME:
@@ -147,11 +163,11 @@ func _physics_process(_delta: float) -> bool:
 		_flag_cleared_itself = (not _flag_label(_p1_hud).visible) and (not _flag_label(_p2_hud).visible)
 		var ok: bool = (_huds_exist and _opponent_row_deleted and _captions_populated
 			and _hands_differ and _deck_count_live and _vacated_slot_cleared
-			and _refill_rewrote_the_slot and _flag_hidden_initially
+			and _in_flight_slot_distinct and _refill_rewrote_the_slot and _flag_hidden_initially
 			and _flag_raised_both_ways and _flag_cleared_itself)
-		print("card_hud: huds=%s opp_row_deleted=%s captions=%s hands_differ=%s deck_live=%s vacated_cleared=%s refill_rewrote=%s flag_hidden_initially=%s flag_raised=%s flag_cleared=%s%s" % [
+		print("card_hud: huds=%s opp_row_deleted=%s captions=%s hands_differ=%s deck_live=%s vacated_cleared=%s in_flight_distinct=%s refill_rewrote=%s flag_hidden_initially=%s flag_raised=%s flag_cleared=%s%s" % [
 			_huds_exist, _opponent_row_deleted, _captions_populated, _hands_differ,
-			_deck_count_live, _vacated_slot_cleared, _refill_rewrote_the_slot,
+			_deck_count_live, _vacated_slot_cleared, _in_flight_slot_distinct, _refill_rewrote_the_slot,
 			_flag_hidden_initially, _flag_raised_both_ways, _flag_cleared_itself, _detail])
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)

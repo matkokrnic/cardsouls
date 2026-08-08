@@ -97,6 +97,12 @@ var _card_armed_style: StyleBoxFlat
 ## while a replacement draw is in flight.
 var _own_card_labels: Array[Label] = []
 
+## Story 4-B1 (AC 1): the in-flight placeholder — visually distinct from both a real card id
+## (always a snake_case CardData.id, never punctuation-only) and from the permanent-hole blank
+## (""). Cheapest legible treatment at half-width: a caption swap on the existing
+## `_own_card_labels` machinery, no new StyleBox and no border/style change.
+const IN_FLIGHT_CAPTION := "..."
+
 
 func _init() -> void:
 	name = "HudRoot"
@@ -154,9 +160,23 @@ func on_mana_changed(current: float, maximum: float) -> void:
 ## card the player might try to cast. Discard count is accepted and deliberately NOT rendered:
 ## no AC asks for it and the deck read-out is the own-tempo periphery element P4 places here —
 ## it rides the payload so the channel does not need widening the first time a story wants it.
-func on_cards_changed(hand_ids: Array, deck_count: int, _discard_count: int) -> void:
+##
+## Story 4-B1 (AC 1): `pending_draw_owed` — this player's OWN owed-slot indices, read fresh at the
+## runner's wiring seat (match_runner.gd) off `PlayerState.pending_draw_owed` and handed in here
+## alongside the seam's own three values, never through a new signal or a cached reference
+## (CONSTRAINT C). A blank slot whose index appears here has a delivery in flight and renders the
+## IN_FLIGHT_CAPTION; a blank slot that does NOT appear here is 4-0 AC 8's permanent hole and stays
+## truly blank — the deferred-work.md finding this discharges. Defaulted to an empty Array so the
+## two pre-existing test call sites (3-arg) keep exercising the permanent-hole branch unchanged.
+func on_cards_changed(
+		hand_ids: Array, deck_count: int, _discard_count: int, pending_draw_owed: Array = []) -> void:
 	for i in _own_card_labels.size():
-		_own_card_labels[i].text = str(hand_ids[i]) if i < hand_ids.size() else ""
+		if i < hand_ids.size() and hand_ids[i] != Hand.EMPTY:
+			_own_card_labels[i].text = str(hand_ids[i])
+		elif pending_draw_owed.has(i):
+			_own_card_labels[i].text = IN_FLIGHT_CAPTION
+		else:
+			_own_card_labels[i].text = ""
 	_deck_label.text = "DECK %d" % deck_count
 
 

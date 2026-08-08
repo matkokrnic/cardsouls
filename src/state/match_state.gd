@@ -944,6 +944,16 @@ func _deliver_pending_draw(player: PlayerState, slot: int) -> void:
 	var owed_slot: int = player.pending_draw_owed.pop_front()
 	if player.hero.action_state != HeroState.ActionState.DEAD:
 		_draw_one_replacement(player, slot, owed_slot)
+	else:
+		# STORY 4-B1 (code review D1): THE DEBT SHRANK, SO THE OBSERVER MUST HEAR ABOUT IT, even
+		# though no card moved. "It moved no card, so it does not announce" was correct until 4-B1
+		# put `pending_draw_owed` INTO what the cards_changed channel renders: the HUD draws the
+		# in-flight caption from the owed list, so a silent pop leaves the vacated slot painted
+		# IN_FLIGHT_CAPTION forever with nothing left that will ever repaint it — the permanent
+		# hole made indistinguishable from an in-flight slot all over again, which is the exact
+		# deferred-work.md finding this story exists to discharge. The announcement carries no new
+		# key and no new value; the payload is the same three fields it always was.
+		player.notify_cards_changed()
 	if not player.pending_draw_owed.is_empty():
 		player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 
@@ -972,13 +982,22 @@ func _deliver_pending_draw(player: PlayerState, slot: int) -> void:
 func _draw_one_replacement(player: PlayerState, slot: int, hand_slot: int) -> void:
 	if player.deck.is_empty():
 		if player.discard.is_empty():
+			# STORY 4-B1 (code review D1): the both-empty degrade ANNOUNCES before returning. Same
+			# reason as the DEAD pop in the caller: the debt has already been consumed there, and
+			# since 4-B1 the owed list is part of what the channel's consumer RENDERS, so a silent
+			# return leaves this slot painted IN_FLIGHT_CAPTION with no repaint ever coming. The
+			# hand did not move — the DEBT did, and that is now an observable change. The comment
+			# below ("the both-empty degrade returns above without announcing") described the
+			# pre-4-B1 contract and is superseded here.
+			player.notify_cards_changed()
 			return
 		_reshuffle_discard_into_deck(player, slot)
 	player.hand.fill_at(hand_slot, player.deck.draw_top())
 	# Story 3-6 (AC 2): the THIRD and last announcement seat. Seated AFTER the lazy reshuffle
 	# above rather than inside it, so a delivery that had to refill the pile announces ONE
 	# settled payload — the reshuffled deck count and the refilled hand together. The both-empty
-	# degrade returns above without announcing, because it moved no card.
+	# degrade used to return above WITHOUT announcing, because it moved no card; since 4-B1's code
+	# review it announces too, because the DEBT moving is itself observable (see there).
 	player.notify_cards_changed()
 
 
