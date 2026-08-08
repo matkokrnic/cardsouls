@@ -4,7 +4,7 @@ user_name: 'Matko'
 date: '2026-07-20'
 sections_completed: ['technology_stack', 'engine_specific', 'performance', 'code_organization', 'testing', 'platform_build', 'critical_gotchas']
 status: 'complete'
-rule_count: 64
+rule_count: 69
 optimized_for_llm: true
 aligned_with: 'game-architecture.md v1.1 (F1, D3/A2, A1, D5, advance-no-delta); folders + testing updated to observed E0 code (2026-07-21)'
 ---
@@ -134,6 +134,11 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Mutation-proof discipline:** a mutation made to prove a guard non-vacuous is restored from a copy taken OUTSIDE the repo, NEVER `git checkout --` (decision-log:799). The non-vacuity check must be proven against forms an adversary would use, not the author's own syntax (`3-0d/R14`).
 - **Guard mechanism over guard pattern:** prefer making a property IMPOSSIBLE BY CONSTRUCTION over DETECTABLE BY INSPECTION (e.g. a source-text scan); a guard evaded twice gets its mechanism replaced, not its pattern widened a third time (`3-0d/R20`).
 - **Adversarial review:** a pass must state what counts as FAILURE before it starts, not after (3-0d close-out, 2026-08-06).
+- **Suite cadence:** the full suite runs EXACTLY TWICE per pass — once at open, once at close; mutation proofs run ONLY the affected test file, never the full suite (`PROC/R1`).
+- **Review shape:** two parallel adversarial layers; the Acceptance Auditor's checks run INLINE in the main session as a mandatory checklist, including the Dev Agent Record evidence audit — a falsified record claim is annotated in place. Every review records a layer-completion line per declared layer; a missing line counts as a stall (`PROC/R2`).
+- **Edit fallback:** on the FIRST failed Edit match against a file carrying em-dashes or tabs, switch to a python byte-replace — no Edit retries (`PROC/R3`).
+- **Machine-time budget (Tier B only):** ~1 h for a story of `4-B1`'s size (dev pass + code review); larger ones state their own at authoring. On crossing, STOP and report the remaining work — never push through (`PROC/R7`).
+- **Text fit is not machine-checkable:** machine checks assert GEOMETRY only; never assert on-screen text fit from character counts — any AC hinging on on-screen legibility goes to operator smoke at first render (`PROC/R8`).
 
 ### Platform & Build Rules
 
@@ -176,4 +181,4 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - Update when the stack changes (Godot version, adding a test framework, first real code establishing a pattern).
 - Revisit once real `src/` code exists: convert "proposed conventions" here into "observed patterns," and delete any rule that has become obvious from the codebase.
 
-Last Updated: 2026-08-06
+Last Updated: 2026-08-08
