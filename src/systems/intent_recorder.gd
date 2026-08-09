@@ -32,13 +32,21 @@ extends RefCounted
 ## CardDatabase, no BalanceConfigService, no FeatureFlagsService. Serialisation, `user://`
 ## persistence and the operator surface are `3-0d`'s (`3-0c/R5`), deliberately not here.
 
-## The two CONTENT channels, and the ONE order in which they may be applied. ORDER IS
+## The THREE CONTENT channels (story 4-1 adds the third), and the ONE order in which they may be
+## applied. ORDER IS
 ## LOAD-BEARING, not stylistic: MatchState.inject_card_costs()'s totality check reads
 ## _deck_contents, so costs-before-deck validates against an EMPTY composition and passes
 ## vacuously — the check would still be there and would still mean nothing (`3-0c/R11`).
 const CHANNEL_DECK := &"deck"
 const CHANNEL_COSTS := &"costs"
-const SOUND_CONTENT_ORDER: Array[StringName] = [CHANNEL_DECK, CHANNEL_COSTS]
+## Story 4-1 (`4-1/R1`, `4-1/R8`): the THIRD content channel, and it sits at the END of the
+## ordered contract for the same structural reason CHANNEL_COSTS sits after CHANNEL_DECK --
+## MatchState.inject_card_effects()'s totality check reads _deck_contents too, so any order that
+## puts effects before the composition validates against an EMPTY one and passes vacuously.
+## SOUND_CONTENT_ORDER is what a LIVE match produces; replay_inject_content() refuses anything
+## else rather than injecting in an order whose checks would mean nothing.
+const CHANNEL_EFFECTS := &"effects"
+const SOUND_CONTENT_ORDER: Array[StringName] = [CHANNEL_DECK, CHANNEL_COSTS, CHANNEL_EFFECTS]
 
 ## The seed channel (AC 3) — captured ONCE, at match start, from the SAME value that reaches
 ## MatchParams. There is deliberately no second, independently-read seed anywhere: MatchState
@@ -59,9 +67,15 @@ var _reload_events: Array[Dictionary] = []
 var _flags_values: Dictionary = {}
 var _flags_captured := false
 
-## The two content channels (AC 5 / AC 6) plus the ORDER they were injected in.
+## The three content channels (AC 5 / AC 6; story 4-1 adds the third) plus the ORDER they were
+## injected in.
 var _deck_contents: Array[StringName] = []
 var _cost_values: Dictionary = {}   # card id -> CardCastCondition property values
+## Story 4-1 (`4-1/R1`): card id -> CardEffect property values. BY VALUE like its two siblings and
+## for the identical reason (this file's header): a CardEffect is a Resource, so a retained handle
+## would let a later data/cards/ edit -- or the resource cache handing back the same instance --
+## silently re-write what a recording summons.
+var _effect_values: Dictionary = {}
 var _content_order: Array[StringName] = []
 
 ## The per-tick, per-slot camera-basis channel (AC 8, `3-0c/R2`). Keyed by the tick the pushed
@@ -131,6 +145,28 @@ func capture_inject_card_costs(costs: Dictionary[StringName, CardCastCondition])
 	_content_order.append(CHANNEL_COSTS)
 
 
+## The CARD-EFFECT channel (story 4-1, AC 2 / AC 10) -- MatchState.inject_card_effects(). Match
+## start, before the first tick, the capture_inject_card_costs precedent directly above followed
+## verbatim, including its NON-OPTIONAL record-side status: a record carrying a composition but no
+## effect map is malformed and is rejected at the capture seam, by has_complete_match_start()'s
+## Invariant.check in capture_advance().
+##
+## RECORD-SIDE MANDATORY, STATE-SIDE OPTIONAL (`4-1/R3`) -- two different obligations on one
+## channel, deliberately not conflated. MatchState.inject_card_effects() may simply not be called
+## (every fixture predating this story does exactly that, and its casts land on the resolver's
+## honest missing-entry default); a RECORD that reaches its first tick without this channel is a
+## recording defect, because a replay missing it would summon nothing where the live match summoned
+## a unit -- a silent divergence, which is the whole reason the channel set is required at all.
+func capture_inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
+	Invariant.check(not effects.is_empty(),
+		"a captured card-effect map must be non-empty (the inject_card_effects precedent)")
+	var values: Dictionary = {}
+	for id: StringName in effects:
+		values[id] = _resource_values(effects[id])
+	_effect_values = values
+	_content_order.append(CHANNEL_EFFECTS)
+
+
 ## The CAMERA-BASIS channel — MatchState.set_camera_basis(). Per tick, per slot. Today the
 ## pushed basis is always identity in live play, but its value is READ during movement
 ## resolution and reaches HeroState.velocity, which IS hashed — so a replay that does not
@@ -194,6 +230,10 @@ func missing_match_start_channels() -> Array[String]:
 		missing.append("deck composition")
 	if _cost_values.is_empty():
 		missing.append("cast costs")
+	# Story 4-1 (`4-1/R1`, `4-1/R3`): a v2 record missing the effects channel is MALFORMED -- the
+	# cast-cost clause directly above, applied to the third content channel.
+	if _effect_values.is_empty():
+		missing.append("card effects")
 	return missing
 
 
@@ -272,6 +312,18 @@ func replay_card_costs() -> Dictionary[StringName, CardCastCondition]:
 	return out
 
 
+## The recorded card effects, each CardEffect rebuilt from values (story 4-1, AC 10) -- so a card
+## RE-AUTHORED in data/cards/ after the recording cannot change what the replay summons, exactly
+## as replay_card_costs() keeps a re-priced card from changing what the replay pays.
+func replay_card_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id: StringName in _effect_values:
+		var effect := CardEffect.new()
+		_apply_values(effect, _effect_values[id])
+		out[id] = effect
+	return out
+
+
 ## Replay-side content injection, IN THE RECORDED ORDER (AC 5 / AC 6). Returns false — injecting
 ## nothing — for a record whose order is not the sound one, because costs-before-deck would run
 ## the cost seam's totality check against an empty composition and pass vacuously. Returning
@@ -286,6 +338,8 @@ func replay_inject_content(ms: MatchState) -> bool:
 				ms.inject_deck(replay_deck_contents())
 			CHANNEL_COSTS:
 				ms.inject_card_costs(replay_card_costs())
+			CHANNEL_EFFECTS:
+				ms.inject_card_effects(replay_card_effects())
 	return true
 
 

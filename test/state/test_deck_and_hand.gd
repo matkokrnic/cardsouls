@@ -349,21 +349,50 @@ func test_no_deck_exhaustion_surface_ships() -> void:
 ## emits the CARD ID, never a CardEffect. Nothing evaluates or applies an effect anywhere in
 ## src/, so the fence still has a real subject — the first story to resolve effect CONTENT
 ## retires it deliberately, exactly as this one retired the cast half.
-func test_no_card_effect_consumer_ships() -> void:
-	var re := RegEx.create_from_string("(CardEffect)")
+##
+## NARROWED AGAIN BY STORY 4-1, WHICH IS THE STORY THE CLAUSE DIRECTLY ABOVE NAMES. 4-1 resolves
+## effect CONTENT: CardEffectResolver reads `effect_id`, MatchState holds the injected map,
+## IntentRecorder and RecordFile carry it on the third content channel, and the runner derives
+## it. `CardEffect` is therefore DROPPED from the ban, exactly as 3-5a dropped
+## `CardCastCondition` when it became that token's legitimate consumer -- the fence is NARROWED
+## to what is still unconsumed, never deleted, so the Fence Inventory keeps a real subject.
+##
+## The RENAME follows the same discipline as the EventBus fence below: a name asserting "no
+## consumer ships" must not go on asserting it about a token that now has one. The old name is
+## recorded here verbatim so the Fence Inventory stays greppable:
+## `test_no_card_effect_consumer_ships`.
+##
+## `pitch_effect` IS WHAT REMAINS BANNED, and it has a real subject for exactly the reason
+## `CardEffect` did until this story: CardData.pitch_effect is Mode (4), reserved for E6,
+## authored null on every one of the nine cards, and read by NOTHING. 4-1 consumes `basic_effect`
+## alone -- the resolver never so much as names the pitch field -- so a pitch consumer appearing
+## in src/ before E6 designs the pitch mode is still exactly the drift this fence exists to
+## catch. The E6 story that builds the pitch mode retires it deliberately, as this one did the
+## basic half.
+func test_no_pitch_effect_consumer_ships() -> void:
+	var re := RegEx.create_from_string("(pitch_effect)")
 	var offenders: Array[String] = []
+	var scanned := 0
 	for path in _gd_files("res://src/"):
-		if path.ends_with("/card_effect.gd") or path.ends_with("/card_cast_condition.gd") \
-				or path.ends_with("/card_data.gd"):
-			continue
+		if path.ends_with("/card_data.gd"):
+			continue          # the schema DECLARES the field; declaring is not consuming
+		scanned += 1
 		var n := 0
 		for line in _code_lines(path):
 			n += 1
 			if re.search(line) != null:
 				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
+	# NON-VACUITY, two ways. The pattern must MATCH the form it bans, and must NOT match the
+	# Mode (1) read story 4-1 legitimately ships -- a regex that caught both would be failing
+	# green against this story's own resolver rather than against a real pitch consumer.
+	assert_true(re.search("var effect: CardEffect = card.pitch_effect") != null,
+		"the pattern must match what it bans -- a regex typo must not silently disarm this")
+	assert_null(re.search("out[id] = card.basic_effect"),
+		"...and must NOT match the sanctioned Mode (1) read that story 4-1 ships")
 	assert_eq(offenders.size(), 0,
-		"a card EFFECT consumer shipped (3-5a resolves a cast and emits the card id, never an "
-		+ "effect): %s" % ", ".join(offenders))
+		"a PITCH-effect consumer shipped in src/ (Mode (4) is E6's; 4-1 consumes basic_effect "
+		+ "alone): %s" % ", ".join(offenders))
 
 
 ## DELIBERATELY UPDATED BY STORY 3-5b, two signals -> three (AC 6, Fence Inventory), and RENAMED

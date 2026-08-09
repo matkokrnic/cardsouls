@@ -145,6 +145,18 @@ var _deck_deal_pending := false
 ## injected composition, or a replay silently depends on the contents of data/cards/.
 var _card_costs: Dictionary[StringName, CardCastCondition] = {}
 
+## Story 4-1 (AC 2): the injected per-card EFFECT map — `_card_costs`'s twin, carrying the same
+## obligations for the same reasons. Runner-derived, injected once at match start, keyed by the
+## same plain StringName ids; no file under src/state/ may name CardDatabase, CARDS_DIR or
+## data/cards, so this is the only way a CardEffect reaches this layer. It rides the replay
+## record on its own capture channel (`4-1/R1`, `4-1/R2`) for the reason stated directly above:
+## without it a replay would silently depend on the contents of data/cards/.
+##
+## NEVER HASHED, exactly like `_card_costs` and `_deck_contents`. This is injected CONTENT — it
+## is never produced by the tick and never changes except through a seam that IS a capture
+## channel — which is the classification test_replay_identity.gd's member pin records it under.
+var _card_effects: Dictionary[StringName, CardEffect] = {}
+
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
 ## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
@@ -343,6 +355,39 @@ func inject_card_costs(costs: Dictionary[StringName, CardCastCondition]) -> void
 		Invariant.check(costs.has(id),
 			"injected deck id %s has no cast cost entry — inject_card_costs must be total over the composition" % id)
 	_card_costs = costs.duplicate()
+
+
+## Story 4-1 (AC 2): the CARD-EFFECT injection seam — the inject_card_costs precedent directly
+## above, followed VERBATIM (`E4-P/R4`, which explicitly does not relitigate the seam shape):
+## runner-only, ONCE at match start, CONTENT ONLY, and NO reload path. This is the ONLY way
+## CardEffects reach src/state/; the runner reads the CardDatabase autoload, derives the map and
+## hands plain ids + CardEffect resources in.
+##
+## THE INJECTION ORDER IS DECK -> COSTS -> EFFECTS (`4-1/R8`), and the last leg is load-bearing
+## for the same reason the first two are: the totality check below reads `_deck_contents`, so
+## effects-before-deck would validate against an EMPTY composition and pass vacuously. The runner
+## calls all three in that order, IntentRecorder.SOUND_CONTENT_ORDER pins it in the record, and
+## replay_inject_content() refuses any other order.
+##
+## TWO checks, both Invariant.check at the seam, the inject_card_costs pair exactly:
+##   1. NON-EMPTY: a data/cards/ that degraded to empty under an export remap becomes a LOUD
+##      failure at match start rather than a match in which every summon silently lands on
+##      CardEffectResolver's missing-entry default.
+##   2. TOTAL OVER THE COMPOSITION: every id that can ever reach a hand has an effect entry.
+##
+## INJECTION IS OPTIONAL STATE-SIDE, AND THE TWO OBLIGATIONS MUST NOT BE CONFLATED (`4-1/R3`).
+## Not calling this at all is legal here — every MatchState-building fixture that predates this
+## story does exactly that, and its casts land on CardEffectResolver.REASON_NO_EFFECT_ENTRY, the
+## honest default. What is MANDATORY is RECORD-side: IntentRecorder.missing_match_start_channels()
+## treats a missing effects channel as malformed for a v2 record, and the live runner always
+## injects. Optional-at-the-seam, required-in-the-record: two different obligations on one channel.
+func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
+	Invariant.check(not effects.is_empty(),
+		"injected card effects must be non-empty (empty card set or a failed export remap?)")
+	for id in _deck_contents:
+		Invariant.check(effects.has(id),
+			"injected deck id %s has no card effect entry — inject_card_effects must be total over the composition" % id)
+	_card_effects = effects.duplicate()
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -890,6 +935,29 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 		"an ALLOWED cast must be affordable — CastEvaluator and ManaPool disagree")
 	var played := player.hand.remove_at(hand_slot)
 	player.discard.add(played)
+	# Story 4-1 (AC 1/AC 4/AC 5/AC 6): CardEffect's FIRST CONSUMER, seated here because `played`
+	# is the id the effect map is keyed by and this is the moment the cast has actually happened.
+	# The evaluator COMPUTES and this line APPLIES (D6): CardEffectResolver returns one of four
+	# named outcomes and touches nothing, and the ONE outcome that mutates appends the record here,
+	# inside advance()'s ordered dispatch, exactly as the mana spend goes through ManaPool.spend()
+	# five lines above.
+	#
+	# NOTHING BELOW THIS LINE IS CONDITIONAL ON THE VERDICT, and that is AC 5's whole content: the
+	# cast has already passed CastEvaluator, so mana stays spent, the card stays discarded and the
+	# replacement stays owed for EVERY outcome — a `spell_*` no-op, a missing entry and an unknown
+	# prefix are all SUCCESSFUL casts that happen to put nothing on the board.
+	#
+	# NO reject_action, ON ANY PATH (`4-1/R3`, `4-1/R10`). The refusal seam directly above this
+	# function's two guards is for casts that did NOT happen; rendering a resolved cast as a
+	# player-facing refusal would be a lie about the match. The reason is a RETURNED VALUE, and
+	# asserting it in the unit suite is the whole of its contract — which is why it is not stored,
+	# not signalled and not snapshotted.
+	#
+	# `flags` is read INLINE (CONSTRAINT C), never cached, exactly as the CastEvaluator call above
+	# reads it.
+	if CardEffectResolver.outcome(_card_effects.get(played), flags) \
+			== CardEffectResolver.OUTCOME_SUMMON:
+		player.units.add()
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
 	# exactly here; it is REPLACED, not kept behind a flag. The debt is incremented and the window
 	# started, and the delivery happens at the end of this same step 6 — immediately if the
@@ -1254,6 +1322,18 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ## attack_index (monotonic dedupe contract, pinned at the 1-6 gate). Deliberately NOT
 ## flag-gated: operator affordance, not a gameplay path (exception recorded in the
 ## decision log). Fixed P1 -> P2 order for determinism.
+##
+## STORY 4-1 (AC 8, `4-1/R5`): "NOTHING else" NOW CARRIES ONE NAMED EXCEPTION -- the per-player
+## UNIT BOARD, cleared in _reset_player below. It is NAMED here rather than silently violated,
+## and it is the RESET path ALONE: _end_round is deliberately UNTOUCHED, so the board persists
+## through the round-over freeze instead of blinking out at the instant of death, which is how
+## every other piece of round-crossing state already behaves. "No stale units into a fresh
+## round" is delivered by this path and nothing else. The runner frees the matching grey-box
+## actors off the round_started relay this function already queues below -- no new EventBus
+## event ships (AC 8).
+##
+## The parked mana-survives-reset finding stays PARKED. This story adds ONE named exception; it
+## does not open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -1278,3 +1358,7 @@ func _reset_player(player: PlayerState) -> void:
 	if hero.action_state == HeroState.ActionState.DEAD:
 		hero.set_action_state(HeroState.ActionState.IDLE)
 	hero.heal(hero.get_max_hp())
+	# Story 4-1 (AC 8, `4-1/R5`): the ONE named exception to the reset's "NOTHING else" contract
+	# -- see _apply_debug_reset's header. Seated in the PER-PLAYER helper because the board is
+	# per-player, and reached only from the reset: no round-end path clears it.
+	player.units.clear()

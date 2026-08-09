@@ -49,6 +49,21 @@ var hand: Hand
 ## siblings it takes no SignalQueue: the pile itself signals nothing.
 var discard: DiscardPile
 
+## Story 4-1 (AC 4): the BOARD — the FOURTH pure container, the collection
+## docs/game-architecture.md D9 reserved for this story ("PlayerState will gain a `units`/board
+## collection with its first consumer, story 4-1"; it carried no such reference before this
+## line). Built to the Deck / Hand / DiscardPile shape exactly: RefCounted, no SignalQueue, no
+## scene reference, filled from ONE seat only — MatchState's step-6 cast dispatch, through
+## CardEffectResolver's verdict.
+##
+## NO `units_changed` SIGNAL SHIPS, and its absence is deliberate rather than pending. None of
+## the three sibling containers carries a queue; PlayerState owns `cards_changed` only because
+## that payload SPANS all three. Nothing in this story's scope needs the HUD or presentation to
+## observe unit COUNT — the runner spawns and frees the grey-box actors off the snapshot count it
+## already reads post-advance, so a signal would be authored ahead of its consumer, which is the
+## `card_effect.gd` anti-precedent `E4-P/R2` names.
+var units: UnitBoard
+
 ## Story 3-5b (AC 3): the PENDING REPLACEMENT DRAW — a TimingWindow plus an owed COUNTER, the
 ## pair 3-5a's instant refill becomes once the replacement is a debt instead of an event. The
 ## window is advanced at MatchState.advance() step 2 beside the hero/pool timers; DELIVERY is
@@ -120,6 +135,7 @@ func _init(queue: SignalQueue) -> void:
 	deck = Deck.new()
 	hand = Hand.new()
 	discard = DiscardPile.new()
+	units = UnitBoard.new()
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
 
@@ -183,4 +199,26 @@ func to_snapshot() -> Dictionary:
 		# divergence the hash should see.
 		"pending_draw": pending_draw.to_snapshot(),
 		"pending_draw_owed": pending_draw_owed.duplicate(),
+		# Story 4-1 (AC 9): the ONE new key this story adds — the board COUNT, on the
+		# deck_size / hand_size / discard_size precedent verbatim. NO unit identity, NO effect
+		# id, NO position: the same counts-only rule, for the same measured reason (a StringName
+		# or an object reaching the hash is the failure mode every card-container key in this
+		# file exists to avoid — CanonicalHash has no object branch and Array[StringName].sort()
+		# orders by internal POINTER on this engine).
+		#
+		# There is nothing else it COULD carry: `4-1/R12` ships the unit record positionless and
+		# the ratified totem clause ships it type/kind-less, so UnitBoard holds a count and this
+		# key is that count. See unit_board.gd's header.
+		#
+		# SCOPED, NOT A STANDING BOUND (`4-1/R12`). This wording binds THIS story's key only. It
+		# must NOT be read as foreclosing state-owned unit position at `4-2`'s gate, which rules
+		# between an inward position channel (the hero push_contact precedent) and state-owned
+		# floats reaching the hash directly, once TargetingService exists as a real consumer.
+		#
+		# TWO SEPARATELY MEASURED GOLDEN CAUSES RIDE ON THIS ONE KEY: its mere PRESENCE at an
+		# all-zero value (the snapshot-shape cause, the 3-5a `discard_size` / 4-0
+		# `pending_draw_owed` pattern), and its VALUE moving 0 -> 1 from the golden fixture's t22
+		# `summon_*` cast onward (the behavioural cause, confirmed at the gate as `4-1/R6`). Both
+		# are measured and named separately in the Dev Agent Record.
+		"unit_count": units.size(),
 	}

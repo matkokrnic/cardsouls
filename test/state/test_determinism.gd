@@ -7,7 +7,37 @@ extends TestCase
 
 ## Re-baselined by STORY 4-0 (hand slot stability), ONE re-baseline, THREE causes predicted and
 ## EXACTLY ONE of them a mover — each isolated by its own measurement and reproduced in both
-## directions. Measured in order, one edit at a time, against the inherited 40eb5554 value:
+## RE-BASELINED BY STORY 4-1 (basic summon resolution), 312522d8 -> 78bd2b97, TWO CAUSES,
+## MEASURED SEPARATELY AND IN ORDER against the inherited 312522d8 value:
+##   1. SNAPSHOT SHAPE (a mover, predicted). PlayerState.to_snapshot() gains `unit_count`, the
+##      per-player board COUNT (AC 9), on the deck_size / hand_size / discard_size precedent. This
+##      cause was ISOLATED BY CONSTRUCTION rather than by a staged mutation: the key ships before
+##      the fixture injects any effects, so at this measurement the golden fixture's board was
+##      structurally incapable of moving off zero and the key entered the hash at an all-zero,
+##      no-op value — exactly how 3-5a's `discard_size` and 4-0's `pending_draw_owed` reshape each
+##      moved it alone. MEASURED: 312522d8 -> 542a05c042501e5ba45dfd94415f7fe38fabe7779e2db0bfeb0c70af427dcbda.
+##   2. BEHAVIOUR — the t22 SUMMON (a mover, CONFIRMED at the readiness gate as `4-1/R6` rather
+##      than merely predicted). _golden_effects() and _golden_flags()'s `minions = true` land
+##      together: they are ONE cause, not two, because either alone leaves the resolver answering
+##      a non-summoning outcome and `unit_count` pinned at 0 for the whole run. The fixture's ONE
+##      recorded cast is at CAST_TICK 22 and the hash is taken at t24, so the moved value is LIVE
+##      at hash time — which is what puts the resolver inside determinism coverage BY
+##      CONSTRUCTION. MEASURED on top of cause 1: 542a05c0 -> 78bd2b97, the value below.
+##   3. `rng_state` — PREDICTED A NON-MOVER, and CONFIRMED rather than assumed, on the 3-5b / 4-0
+##      precedent of explicitly testing a predicted non-mover. Nothing about which unit appears is
+##      random, so appending a record must consume no RNG. Measured against the tightest available
+##      pair (same fixture, same cast, effects injected vs. not) in
+##      test_the_summon_consumes_no_rng below, which asserts `unit_count` DIFFERS across the pair
+##      so the rng_state comparison cannot be vacuous.
+## NOT a cause: the authored data/cards/ effect ids, and not data/feature_flags.tres either.
+## _golden_effects() builds its map in-test over _golden_deck's opaque ids and _golden_flags()
+## constructs its own FeatureFlags — so re-authoring a real card's effect_id, or flipping the
+## authored minions flag, cannot re-baseline this hash. Standing `BC/R3` isolation is intact, and
+## AC 3's golden-discipline narrowing is a RULING about review burden, not a measured coupling
+## (`4-1/R4`).
+##
+## RE-BASELINED BY STORY 4-0 (hand slot stability), 40eb5554 -> 312522d8, three causes measured in
+## both directions. Measured in order, one edit at a time, against the inherited 40eb5554 value:
 ##   1. SNAPSHOT SHAPE (the ONE mover, predicted): "pending_draw_owed" changes SHAPE from a plain
 ##      int COUNT to the FIFO of owed SLOT INDICES (AC 4/AC 6). `3-5b/R8`'s "a plain int COUNT and
 ##      nothing more" is SUPERSEDED; its two-key COUNT bound survives, since no third key ships.
@@ -301,7 +331,9 @@ extends TestCase
 ## (story 1-3b, DEBT A retirement: apply_balance on the golden path + widened sequence).
 ## Previous golden d3f42defd2f442056d22eb43d480ef665f5e1083d3458b1db4ffdf48b932bcf7
 ## (story 1-3, snapshot-shape re-baseline).
-const GOLDEN := "312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c"
+## Previous golden 312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c
+## (story 4-0, hand slot stability: pending_draw_owed shape).
+const GOLDEN := "78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -555,9 +587,39 @@ func _golden_costs() -> Dictionary[StringName, CardCastCondition]:
 ## Golden-path flags — constructed IN-TEST with melee_mana_generation ON, never read
 ## from the authored .tres (the same tuning-cannot-move-the-hash principle as
 ## _golden_config).
+## Story 4-1 (AC 2, `4-1/R6`): the golden's CARD-EFFECT content — the _golden_config /
+## _golden_deck / _golden_costs principle applied to the FOURTH injected resource, built in-test
+## over the same opaque ids. data/cards/ is unreachable from the state harness and these ids are
+## nothing the card library contains, so RE-AUTHORING A REAL CARD'S effect_id MUST NEVER
+## RE-BASELINE THIS HASH.
+##
+## EVERY id is a `summon_`, deliberately: the fixture plays the RUNNER's role here as it already
+## does for the composition and the costs, and a uniform map keeps the measurement a function of
+## the RESOLVER rather than of which card the shuffle happened to put in CAST_SLOT — the identical
+## argument _golden_costs makes for pricing every id the same.
+##
+## THIS IS CAUSE 2 OF THIS STORY'S RE-BASELINE, and it is a BEHAVIOURAL cause rather than a shape
+## one: the t22 cast resolves to OUTCOME_SUMMON, `unit_count` moves 0 -> 1, and the hash is taken
+## at t24 — so the moved value is live at hash time and the resolver sits inside determinism
+## coverage BY CONSTRUCTION rather than by luck (`4-1/R6`, confirmed at the gate).
+func _golden_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in _golden_deck():
+		var e := CardEffect.new()
+		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
+
+
 func _golden_flags() -> FeatureFlags:
 	var f := FeatureFlags.new()
 	f.melee_mana_generation = true
+	# Story 4-1: the MINION LAYER ON, chosen for COVERAGE and not for feel — the _golden_config
+	# principle applied to a flag. With it off, CardEffectResolver would answer
+	# REASON_MINIONS_FLAG_CLOSED for the t22 cast, `unit_count` would stay 0 for the whole run,
+	# and the resolver would sit OUTSIDE determinism coverage while the golden still looked
+	# healthy. This line is what makes cause 2 of this story's re-baseline real.
+	f.minions = true
 	return f
 
 
@@ -871,6 +933,28 @@ func test_the_recorded_cast_consumes_no_rng() -> void:
 		"the cast and its replacement draw consumed NO rng — draw_top takes no generator")
 
 
+## Story 4-1: THE PREDICTED NON-MOVER, CONFIRMED RATHER THAN ASSUMED (the 3-5b / 4-0 precedent of
+## explicitly testing a predicted non-mover). The Golden Prediction names `rng_state` as a third
+## possible cause and predicts it does NOT move: nothing about WHICH unit appears is random in
+## this story, so appending a unit record must consume no RNG.
+##
+## Measured against the tightest possible pair — the SAME fixture, the SAME cast, differing only
+## in whether effects were injected, so the only difference between the two runs is whether the
+## resolver appended a record. `unit_count` must differ (or the comparison is vacuous) while
+## `rng_state` must not.
+func test_the_summon_consumes_no_rng() -> void:
+	var summoning := _make_match()
+	_play_sequence(summoning)
+	var not_summoning := _make_match_without_effects()
+	_play_sequence(not_summoning)
+	assert_eq(summoning.p1.to_snapshot()["unit_count"], 1,
+		"sanity: the t22 cast really did summon (`4-1/R6`)")
+	assert_eq(not_summoning.p1.to_snapshot()["unit_count"], 0,
+		"...and the effects-less run really did not — so this comparison is not vacuous")
+	assert_eq(summoning.to_snapshot()["rng_state"], not_summoning.to_snapshot()["rng_state"],
+		"appending a unit record consumed NO rng — the predicted non-mover, confirmed")
+
+
 ## Story 3-3 (AC 5): two INDEPENDENTLY CONSTRUCTED matches, same seed, POPULATED deck, must hash
 ## identically. Distinct from test_same_seed_and_intents_hash_identically above only in what it
 ## is FOR: that one predates the deck and would still pass with an empty one, so it cannot speak
@@ -912,12 +996,32 @@ func _make_match() -> MatchState:
 		# authored size for the same reason: a zero deck_size means "this fixture has no cards at
 		# all", which keeps the reverse measurements a genuine one-value toggle.
 		ms.inject_card_costs(_golden_costs())
+		# Story 4-1 (AC 2, `4-1/R8`): card effects, injected LAST in the runner's own match-start
+		# order (deck -> costs -> effects — the seam validates that the map is TOTAL over the
+		# composition, so the composition must already be in). Gated on the same authored size for
+		# the same reason as its two siblings: a zero deck_size means "this fixture has no cards at
+		# all", which keeps the reverse measurements a genuine one-value toggle.
+		ms.inject_card_effects(_golden_effects())
 	ms.drain_signals()
 	return ms
 
 
 ## `cast` exists ONLY so test_the_recorded_cast_consumes_no_rng can run the identical sequence
 ## with the cast suppressed. Every hashed path uses the default.
+## The SAME golden match with the effects seam never called — the fixture behind the predicted
+## non-mover measurement above, and the state of every MatchState fixture predating story 4-1.
+func _make_match_without_effects() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(SEED))
+	var config := _golden_config()
+	ms.apply_balance(config)
+	ms.inject_feature_flags(_golden_flags())
+	if config.deck_size > 0:
+		ms.inject_deck(_golden_deck())
+		ms.inject_card_costs(_golden_costs())
+	ms.drain_signals()
+	return ms
+
+
 func _play_sequence(ms: MatchState, after_tick := Callable(), cast := true) -> void:
 	for t in range(1, TICKS + 1):
 		var pair: Array = MOVES[(t - 1) % 6]

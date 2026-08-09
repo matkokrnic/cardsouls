@@ -113,6 +113,25 @@ var _instrument_panel: DebugInstrumentPanel
 ## the DebugInstrumentPanel member directly above is the same pattern.
 var _huds: Array[HudRoot] = []
 
+## Story 4-1 (AC 7): the grey-box unit scene and the actors spawned from it, per slot. The SCENE
+## REFERENCE LIVES HERE AND ONLY HERE -- src/state/ never holds one (UnitBoard is a pure
+## RefCounted count), which is the HeroActor precedent: state decides that a unit EXISTS, the
+## runner decides what that looks like and where it stands.
+const UNIT_SCENE := preload("res://src/actors/minions/unit_actor.tscn")
+
+## Spawned actors per slot, index-aligned with nothing in state -- the board is a COUNT, so the
+## runner's own array length is the whole of the correspondence. Freed together off the
+## round_started relay (AC 8).
+var _unit_actors: Array[Array] = [[], []]
+
+## Where a slot's grey-box units stand. Actor-owned position (`4-1/R12`), chosen by the runner:
+## a row BEHIND each hero's spawn (P1 at x -3, P2 at x +3 in main.tscn) so a summoned unit is
+## visible in that player's own viewport without standing in the fighting space between them.
+## Legibility placement only -- no gameplay reads it, and 4-2 replaces it with real placement.
+const UNIT_ROW_X: Array[float] = [-5.5, 5.5]
+const UNIT_ROW_SPACING := 1.4
+const UNIT_ROW_Z_START := -2.1
+
 
 func _ready() -> void:
 	# TICK_HZ must equal the physics tick rate, or every seconds_to_ticks() is silently wrong.
@@ -202,6 +221,18 @@ func _ready() -> void:
 		var card_costs := _derive_card_costs()
 		_recorder.capture_inject_card_costs(card_costs)
 		_match_state.inject_card_costs(card_costs)
+		# Story 4-1 (AC 2, `4-1/R8`): card EFFECTS, the THIRD content channel, injected LAST. The
+		# order deck -> costs -> effects is RULED, not stylistic, and it is load-bearing at both
+		# ends: inject_card_effects()'s totality check reads the injected composition, so
+		# effects-before-deck would validate against an empty one and pass vacuously, and
+		# IntentRecorder.SOUND_CONTENT_ORDER pins this same order into the record.
+		#
+		# The derive+inject PAIR travels together in this NON-REPLAY branch and nowhere else
+		# (`4-1/R3`): live play always injects, a replay never re-derives -- it takes the effects
+		# the record carries, through replay_inject_content() in the branch above.
+		var card_effects := _derive_card_effects()
+		_recorder.capture_inject_card_effects(card_effects)
+		_match_state.inject_card_effects(card_effects)
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -376,6 +407,31 @@ func _derive_card_costs() -> Dictionary[StringName, CardCastCondition]:
 		if card == null or card.cast_condition == null:
 			continue
 		out[id] = card.cast_condition
+	return out
+
+
+## Story 4-1 (AC 2): the injected CARD-EFFECT map -- `_derive_card_costs()` directly above,
+## followed VERBATIM, for the same reason it exists: the runner is the ONE place allowed to read
+## CardDatabase (3-3 AC 2), and no file under src/state/ may so much as name it (3-3 AC 8). The
+## state layer receives plain ids mapped to CardEffect resources and never learns where they came
+## from.
+##
+## The WHOLE library is mapped, not just the ids the composition happens to use -- the sibling's
+## own rationale, quoted because it is the reason and not a preference: "a narrower map would have
+## to be re-derived the moment deckbuilding lets a composition change".
+##
+## A card with no authored `basic_effect` is SKIPPED rather than mapped to null, which is what
+## gives inject_card_effects()'s totality check something real to catch: a composition card
+## missing its effect fails LOUDLY at match start instead of silently landing every one of its
+## casts on CardEffectResolver.REASON_NO_EFFECT_ENTRY at play time. All nine authored cards carry
+## one today.
+func _derive_card_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null or card.basic_effect == null:
+			continue
+		out[id] = card.basic_effect
 	return out
 
 
@@ -556,6 +612,36 @@ func _relay_round_ended(loser_index: int) -> void:
 ## — the reset is a whole-match event, not per-player.
 func _relay_round_started() -> void:
 	EventBus.round_started.emit()
+	# Story 4-1 (AC 8): the DEBUG RESET clears each player's UnitBoard (MatchState._reset_player,
+	# the one named exception to that function's "NOTHING else" contract), and the grey-box actors
+	# go with it. Wired onto THIS EXISTING RELAY deliberately -- no new EventBus event and no new
+	# observation seam ship for it, which is what AC 8 asks for. `_end_round` is untouched, so the
+	# board survives the round-over freeze and only a reset clears it.
+	_free_unit_actors()
+
+
+## Story 4-1 (AC 7): bring slot `slot`'s spawned actors up to `count`. See the call site for why
+## this only ever grows.
+func _spawn_missing_unit_actors(slot: int, count: int) -> void:
+	var actors: Array = _unit_actors[slot]
+	while actors.size() < count:
+		var unit := UNIT_SCENE.instantiate() as UnitActor
+		add_child(unit)
+		unit.global_position = Vector3(UNIT_ROW_X[slot],
+				0.0, UNIT_ROW_Z_START + UNIT_ROW_SPACING * actors.size())
+		actors.append(unit)
+
+
+## Story 4-1 (AC 8): free every spawned unit actor, both slots. `queue_free()` (never `free()`) on
+## nodes in the tree, per project-context; the arrays are cleared in the same pass so a second
+## reset cannot reach a freed instance.
+func _free_unit_actors() -> void:
+	for slot: int in 2:
+		var actors: Array = _unit_actors[slot]
+		for unit: Node in actors:
+			if is_instance_valid(unit):
+				unit.queue_free()
+		actors.clear()
 
 
 ## Story 3-5b (AC 6): MatchState.reshuffle_vulnerable_window_opened ->
@@ -760,6 +846,22 @@ func _physics_process(delta: float) -> void:
 		#     instrumentation, NOT an eighth observation seam: no signal, no state handle, and
 		#     to_snapshot() is untouched, so the replay contract never learns it exists.
 		_instrument_panel.set_window_countdown(_match_state.debug_window_ticks_remaining())
+		# 3c. Story 4-1 (AC 7): SPAWN one grey-box actor per unit record the board has gained. Read
+		#     off the state-owned COUNT right after advance(), the step-3b poll directly above in
+		#     shape and seat: no signal, no state handle held, no new `connect_*` -- so the
+		#     observation-seam family stays at EIGHT and needs no 3-6/R2-style amendment.
+		#
+		#     IDENTICAL LIVE AND REPLAY BY CONSTRUCTION (AC 10). This reads the board, not the
+		#     effect map and not the cast: whatever put the record there -- a live cast resolving
+		#     through CardEffectResolver, or the same cast re-resolving from a replayed intent
+		#     against the record's own injected effects -- reaches this line the same way. There is
+		#     no second spawn path to keep in agreement with the first.
+		#
+		#     GROWS ONLY. The board shrinks on exactly one path (the debug reset), and the actors
+		#     are freed there by the round_started relay, so a shrink never has to be inferred from
+		#     a count going down.
+		_spawn_missing_unit_actors(0, _match_state.p1.units.size())
+		_spawn_missing_unit_actors(1, _match_state.p2.units.size())
 		# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
 		_p1_hero.drive(_match_state.p1.hero, delta)
 		_p2_hero.drive(_match_state.p2.hero, delta)

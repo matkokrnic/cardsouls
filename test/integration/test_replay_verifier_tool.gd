@@ -167,6 +167,7 @@ func _fixture_record(move_scale: float) -> IntentRecorder:
 	record.capture_inject_feature_flags(_flags())
 	record.capture_inject_deck(DECK_IDS)
 	record.capture_inject_card_costs(_costs())
+	record.capture_inject_card_effects(_effects())   # story 4-1: the third content channel
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			record.capture_apply_balance(_config(11.0))
@@ -231,6 +232,16 @@ func _flags() -> FeatureFlags:
 	var f := FeatureFlags.new()
 	f.melee_mana_generation = true
 	return f
+
+
+## Story 4-1 (`4-1/R1`): the effect map for this fixture's composition, `_costs()`'s twin.
+func _effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
 
 
 func _costs() -> Dictionary[StringName, CardCastCondition]:

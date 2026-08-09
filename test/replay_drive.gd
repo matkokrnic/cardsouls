@@ -67,7 +67,7 @@ static func drive(record: IntentRecorder) -> Dictionary:
 	ms.inject_feature_flags(record.replay_feature_flags())
 	if not record.replay_inject_content(ms):
 		return {"state": null, "error": ("the recorded content order is unsound — the cast-cost "
-				+ "totality check would be vacuous (`3-0c/R11`)")}
+				+ "and card-effect totality checks would be vacuous (`3-0c/R11`, `4-1/R8`)")}
 	# The runner's `_physics_process` order: SAMPLE (step 1, above the `ticking` gate), then — in
 	# the replay fork — recorded reloads, recorded bases, recorded facts, then advance, then drain.
 	for tick in range(1, record.tick_count() + 1):

@@ -4,3 +4,4 @@
 
 [resource]
 script = ExtResource("1_d6d8t")
+minions = true

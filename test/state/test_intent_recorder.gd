@@ -30,9 +30,13 @@ const EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"
 ## equality so a REMOVED intake is as loud as an added one — but the falling guard for the AC's
 ## actual claim is the channel check below, which fails for a new intake whether or not this
 ## list was updated.
+## DELIBERATELY UPDATED BY STORY 4-1 (`4-1/R1`): `inject_card_effects` is MatchState's ninth
+## intake, and it ships WITH its `capture_inject_card_effects` channel. This pin is updated with
+## intent, which is what the guard-mechanism-over-guard-pattern discipline asks for -- the channel
+## check below is the falling guard, and it was RED until the channel existed.
 const EXPECTED_INTAKE_SURFACE: Array[String] = [
-	"_init", "advance", "apply_balance", "inject_card_costs", "inject_deck",
-	"inject_feature_flags", "push_contact", "set_camera_basis",
+	"_init", "advance", "apply_balance", "inject_card_costs", "inject_card_effects",
+	"inject_deck", "inject_feature_flags", "push_contact", "set_camera_basis",
 ]
 
 const DECK_IDS: Array[StringName] = [&"rec_card_a", &"rec_card_b", &"rec_card_c"]
@@ -164,13 +168,24 @@ func test_the_seed_channel_captures_the_value_that_reaches_match_params() -> voi
 ## and a record whose order is INVERTED fails to replay — because inject_card_costs()'s totality
 ## check reads _deck_contents, so costs-before-deck validates against an empty composition and
 ## passes vacuously, leaving the check present and meaningless.
-func test_content_channels_carry_the_composition_the_costs_and_their_injection_order() -> void:
+## RENAMED BY STORY 4-1 from
+## `test_content_channels_carry_the_composition_the_costs_and_their_injection_order` -- the name
+## ENUMERATES the channels, so it must not go on naming two once a third ships (the same
+## discipline the EventBus fence in test_deck_and_hand.gd follows). Old name recorded verbatim
+## here so the pin stays greppable.
+func test_content_channels_carry_the_composition_the_costs_the_effects_and_their_order() -> void:
 	var rec := _match_start_record()
 	assert_eq(rec.replay_deck_contents(), DECK_IDS,
 		"the recorded composition is the exact array handed to inject_deck")
 	assert_false(rec.replay_deck_contents().is_empty(), "and it is non-empty")
 	assert_eq(rec.replay_card_costs().keys(), DECK_IDS,
 		"the cost map is total over that composition on the record too")
+	# Story 4-1 (AC 2 / AC 10): the third content channel, on the cost map's own footing.
+	assert_eq(rec.replay_card_effects().keys(), DECK_IDS,
+		"the effect map is total over that composition on the record too")
+	assert_eq(String(rec.replay_card_effects()[DECK_IDS[0]].effect_id),
+		"summon_%s" % DECK_IDS[0],
+		"...and each effect comes back BY VALUE, rebuilt rather than handed back as a live handle")
 	assert_eq(rec.content_order(), IntentRecorder.SOUND_CONTENT_ORDER,
 		"the record carries the ORDER, captured from the calls rather than assumed")
 
@@ -189,9 +204,10 @@ func test_content_channels_carry_the_composition_the_costs_and_their_injection_o
 	inverted.capture_inject_feature_flags(FeatureFlags.new())
 	inverted.capture_inject_card_costs(_costs())
 	inverted.capture_inject_deck(DECK_IDS)
+	inverted.capture_inject_card_effects(_effects())
 	assert_eq(inverted.content_order(),
-		[IntentRecorder.CHANNEL_COSTS, IntentRecorder.CHANNEL_DECK],
-		"sanity: the inverted record really did capture the two channels the other way round")
+		[IntentRecorder.CHANNEL_COSTS, IntentRecorder.CHANNEL_DECK, IntentRecorder.CHANNEL_EFFECTS],
+		"sanity: the inverted record really did capture the channels in an unsound order")
 	var broken := _bare_match()
 	assert_false(inverted.replay_inject_content(broken),
 		"a record whose injection order is inverted FAILS to replay")
@@ -211,13 +227,16 @@ func test_a_record_missing_any_match_start_channel_is_malformed() -> void:
 		"a fully captured match start is complete")
 	assert_eq(_match_start_record().missing_match_start_channels(), [],
 		"...and names nothing missing")
-	# Each of the five match-start channels, omitted one at a time.
+	# Each of the SIX match-start channels, omitted one at a time. Story 4-1 (`4-1/R1`, `4-1/R3`)
+	# added the sixth: a v2 record missing the effects channel is malformed on exactly the same
+	# footing as one missing its cost map.
 	var expected := {
 		"seed": "seed",
 		"balance": "reload event #0",
 		"flags": "feature flags",
 		"deck": "deck composition",
 		"costs": "cast costs",
+		"effects": "card effects",
 	}
 	for omitted: String in expected:
 		var rec := _match_start_record(omitted)
@@ -346,6 +365,18 @@ func _costs() -> Dictionary[StringName, CardCastCondition]:
 	return out
 
 
+## Story 4-1 (`4-1/R1`): the effect map for the fixture composition, `_costs()`'s twin. Every id
+## carries a `summon_` prefix so the replayed content is exercised by a resolver that DOES
+## something with it, rather than by one that lands on the missing-entry default.
+func _effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
+
+
 func _bare_match() -> MatchState:
 	var ms := MatchState.new(MatchParams.new(1337))
 	ms.apply_balance(_config())
@@ -372,6 +403,10 @@ func _match_start_record(omit := "") -> IntentRecorder:
 		rec.capture_inject_deck(DECK_IDS)
 	if omit != "costs":
 		rec.capture_inject_card_costs(_costs())
+	# Story 4-1 (`4-1/R1`): the THIRD content channel, captured LAST (`4-1/R8`) and omittable on
+	# the same footing as the five that predate it -- a v2 record missing it is malformed.
+	if omit != "effects":
+		rec.capture_inject_card_effects(_effects())
 	return rec
 
 

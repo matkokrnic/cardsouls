@@ -38,9 +38,12 @@ const VULNERABLE_TICKS := 7
 ## AC 4: the exact key set PlayerState.to_snapshot() emits after this story, sorted. Two keys are
 ## NEW here; the other seven are its predecessors'. Pinned as a literal so a third key cannot
 ## ship quietly — that is the whole job of this constant.
+## DELIBERATELY EXTENDED BY STORY 4-1 (AC 9), the tenth key: `unit_count`, the per-player board
+## COUNT, on the deck_size / hand_size / discard_size precedent. The constant exists so a key
+## cannot ship QUIETLY, and this one did not -- it ships with the story that adds the board.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-	"pending_draw", "pending_draw_owed", "stamina",
+	"pending_draw", "pending_draw_owed", "stamina", "unit_count",
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the
@@ -318,7 +321,7 @@ func test_the_player_snapshot_key_set_is_exactly_the_expected_set() -> void:
 	var keys: Array = ms.p1.to_snapshot().keys()
 	keys.sort()
 	assert_eq(keys, EXPECTED_PLAYER_SNAPSHOT_KEYS,
-		"PlayerState.to_snapshot() gained exactly pending_draw and pending_draw_owed")
+		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count)")
 	assert_false(keys.has("vulnerable_window"),
 		"the vulnerable window is NOT a snapshot key — nothing reads it, so nothing can desync on it")
 

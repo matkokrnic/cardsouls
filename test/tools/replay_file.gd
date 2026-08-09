@@ -56,10 +56,13 @@ func _initialize() -> void:
 		quit(1)
 		return
 	print("format version %d accepted" % RecordFile.FORMAT_VERSION)
-	print("ticks=%d  reload_events=%d  seed=%d  deck=%d cards  costs=%d  order=%s" % [
+	# Story 4-1 (`4-1/R1`): `effects=` joins the summary — the operator surface names every content
+	# channel the record carries, so a channel added to the format is visible here rather than
+	# silently absent from the one report a human reads.
+	print("ticks=%d  reload_events=%d  seed=%d  deck=%d cards  costs=%d  effects=%d  order=%s" % [
 		record.tick_count(), record.reload_event_count(), record.replay_seed(),
 		record.replay_deck_contents().size(), record.replay_card_costs().size(),
-		str(record.content_order())])
+		record.replay_card_effects().size(), str(record.content_order())])
 	print("camera_pushes=%d  contact_facts=%d" % [_camera_pushes(record), _contact_facts(record)])
 	if record.tick_count() == 0:
 		print("MALFORMED: the record carries no ticks — there is nothing to replay")

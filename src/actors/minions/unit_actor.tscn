@@ -1,0 +1,17 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/actors/minions/unit_actor.gd" id="1_unitactor"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_unitbox"]
+size = Vector3(0.6, 1.2, 0.6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_unitgrey"]
+albedo_color = Color(0.55, 0.55, 0.58, 1)
+
+[node name="UnitActor" type="Node3D"]
+script = ExtResource("1_unitactor")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+mesh = SubResource("BoxMesh_unitbox")
+surface_material_override/0 = SubResource("StandardMaterial3D_unitgrey")

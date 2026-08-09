@@ -222,9 +222,13 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	var ms := _dealt_match()
 	var keys: Array = ms.p1.to_snapshot().keys()
 	keys.sort()
+	# DELIBERATELY EXTENDED BY STORY 4-1 (AC 9): `unit_count`, the board COUNT, on the
+	# deck_size / hand_size / discard_size precedent. The pin moves because the STORY moved it --
+	# this is the guard doing its job, naming the cause, exactly as its own docstring promises.
+	# The claim it guards is unchanged: counts only, never contents, no identity and no position.
 	var expected: Array = [
 		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-		"pending_draw", "pending_draw_owed", "stamina",
+		"pending_draw", "pending_draw_owed", "stamina", "unit_count",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "

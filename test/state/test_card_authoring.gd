@@ -133,6 +133,50 @@ func test_copies_cap_is_in_bounds_and_a_twenty_card_deck_is_constructible() -> v
 ## Mode ① is what this story authors. Mode ④ (Pitch) is reserved for E6 and stays UNAUTHORED,
 ## and orbs are spent "exclusively to pay a Pitch Effect (Mode ④) cost. No other use" (GDD §D)
 ## — so a Mode ① orb price would be a design change, not an authoring detail.
+## STORY 4-1 (AC 3, `4-1/R4`): THE MACHINE HALF OF THE GOLDEN-DISCIPLINE RULING. `effect_id` is
+## now a determinism-relevant class of change carrying review burden, exactly as a card's
+## `mana_cost` already does -- but the gate measured the golden deck as SYNTHETIC with in-test
+## costs, so AC 3 claims no measurable golden move from a .tres edit and standing `BC/R3`
+## isolation holds. What IS machine-checkable is the AUTHORING: every authored `effect_id` must
+## carry a prefix the resolver recognises.
+##
+## THE PREFIXES ARE READ OFF CardEffectResolver, NEVER RE-TYPED HERE. A literal copy would let the
+## resolver rename a prefix and leave this test asserting the old spelling -- green while every
+## authored card had silently become an unknown-prefix refusal. This is the same
+## derived-not-transcribed discipline RecordFile.REQUIRED_KEYS carries.
+##
+## THE STANDING BOUND THIS SETS: a TENTH card authored with a third prefix fails HERE, at
+## authoring time, instead of failing silently at play time as a card that costs mana, discards,
+## and does nothing.
+func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() -> void:
+	var cards := _load_cards()
+	assert_eq(cards.size(), EXPECTED_COUNT, "sanity: the scan visited all nine cards")
+	var prefixes := [CardEffectResolver.PREFIX_SUMMON, CardEffectResolver.PREFIX_SPELL]
+	var offenders: Array[String] = []
+	var summons := 0
+	var spells := 0
+	for card in cards:
+		assert_not_null(card.basic_effect,
+			"every card authors a Mode (1) effect -- inject_card_effects is TOTAL over the deck")
+		var id := String(card.basic_effect.effect_id)
+		assert_false(id.is_empty(), "%s authors a non-empty effect_id" % card.id)
+		if id.begins_with(CardEffectResolver.PREFIX_SUMMON):
+			summons += 1
+		elif id.begins_with(CardEffectResolver.PREFIX_SPELL):
+			spells += 1
+		else:
+			offenders.append("%s -> %s" % [card.id, id])
+	assert_eq(offenders.size(), 0,
+		"every authored effect_id must begin with one of %s (an unrecognised prefix resolves to "
+		+ "CardEffectResolver.REASON_UNKNOWN_EFFECT_PREFIX -- a card that costs mana and does "
+		+ "nothing): %s" % [prefixes, ", ".join(offenders)])
+	# The MEASURED split the story records (six summons, three spells) and the resolver's own
+	# reachability claim rests on: AC 6(ii) is declared NOT naturally reachable precisely because
+	# these two numbers add up to nine.
+	assert_eq(summons, 6, "six authored cards summon")
+	assert_eq(spells, 3, "...and three are spells (`4-1/R3`: no authored card is a third kind)")
+
+
 func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 	for card in _load_cards():
 		assert_not_null(card.basic_effect, "card '%s' authors a basic effect" % card.id)

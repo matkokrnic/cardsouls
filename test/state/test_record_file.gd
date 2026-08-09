@@ -109,6 +109,13 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 		"the cost map's ids survived")
 	assert_eq(loaded.replay_card_costs()[DECK_IDS[0]].mana_cost, CAST_MANA_COST,
 		"...and their VALUES, rebuilt as fresh CardCastConditions")
+	# Story 4-1 (`4-1/R1`): the THIRD content channel, on the cost map's own footing -- "carries
+	# EVERY channel" is this test's name, so a channel added to the writer is added here.
+	assert_eq(loaded.replay_card_effects().keys(), record.replay_card_effects().keys(),
+		"the effect map's ids survived")
+	assert_eq(String(loaded.replay_card_effects()[DECK_IDS[0]].effect_id),
+		"summon_%s" % DECK_IDS[0],
+		"...and their VALUES, rebuilt as fresh CardEffects")
 	assert_eq(loaded.replay_feature_flags().melee_mana_generation,
 		record.replay_feature_flags().melee_mana_generation, "the flags channel survived")
 	assert_eq(loaded.reload_event_count(), record.reload_event_count(), "both reload events survived")
@@ -515,6 +522,11 @@ func _match_start() -> Dictionary:
 	var costs := _costs()
 	record.capture_inject_card_costs(costs)
 	ms.inject_card_costs(costs)
+	# Story 4-1 (`4-1/R1`, `4-1/R8`): the THIRD content channel, captured and injected LAST -- the
+	# order deck -> costs -> effects the live runner produces and SOUND_CONTENT_ORDER pins.
+	var effects := _effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 
@@ -641,7 +653,23 @@ func _retuned_config() -> BalanceConfig:
 func _flags() -> FeatureFlags:
 	var f := FeatureFlags.new()
 	f.melee_mana_generation = true
+	# Story 4-1: the minion layer ON, so this fixture's recorded `summon_` cast actually appends a
+	# unit record. Without it the effects channel would ride the record while changing nothing in
+	# the hash, and every proof that rests on it would be VACUOUS.
+	f.minions = true
 	return f
+
+
+## Story 4-1 (`4-1/R1`): the effect map for this fixture's composition -- `_costs()`'s twin,
+## built in-test over the same opaque ids. Every id carries a `summon_` prefix so the channel is
+## exercised by a resolver that actually appends a unit record.
+func _effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
 
 
 func _costs() -> Dictionary[StringName, CardCastCondition]:

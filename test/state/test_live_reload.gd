@@ -31,9 +31,15 @@ const RETUNED_MAX_STAMINA := 55.0
 const MAX_MANA := 60.0
 const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reload_card_c"]
 
-## AC 3: the channel set as SHIPPED — measured by content at this story's pass. This story adds
-## NONE: its live trigger is a second CALL to capture_apply_balance, not a ninth method.
-const SHIPPED_CAPTURE_CHANNELS := 8
+## AC 3: the channel set as SHIPPED — measured by content at this story's pass. 3-0d's live
+## trigger added NONE: it is a second CALL to capture_apply_balance, not a ninth method.
+##
+## DELIBERATELY MOVED 8 -> 9 BY STORY 4-1 (`4-1/R1`, `4-1/R9`). `capture_inject_card_effects` is
+## the ninth channel, and it ships because MatchState gained a ninth INTAKE
+## (`inject_card_effects`) -- which is the only sanctioned reason a channel may appear, since the
+## set is DERIVED from that surface and not enumerated by choice (`3-0c/R2`). The pin moves with
+## the story that moves the surface; it is not widened to stop noticing.
+const SHIPPED_CAPTURE_CHANNELS := 9
 
 
 # ---------------------------------------------------------------- AC 2
@@ -92,7 +98,11 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ##
 ## Counted from the SCRIPT's own method list rather than by grepping `func capture_`, so a channel
 ## added by any means (including one inherited or defined out of the obvious form) is caught.
-func test_the_recorder_still_ships_exactly_eight_capture_channels() -> void:
+## RENAMED BY STORY 4-1 (`4-1/R9`) from `test_the_recorder_still_ships_exactly_eight_capture_
+## channels` — a test name carrying a COUNT must not go on asserting a different one, the
+## `test_event_bus_still_carries_exactly_the_two_declared_signals` precedent from 3-5b. The old
+## name is recorded here verbatim so the pin stays greppable.
+func test_the_recorder_still_ships_exactly_nine_capture_channels() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -102,11 +112,11 @@ func test_the_recorder_still_ships_exactly_eight_capture_channels() -> void:
 	channels.sort()
 	assert_eq(channels, [
 		"capture_advance", "capture_apply_balance", "capture_inject_card_costs",
-		"capture_inject_deck", "capture_inject_feature_flags", "capture_push_contact",
-		"capture_seed", "capture_set_camera_basis",
-	], "the channel set is the EIGHT `3-0c` shipped — this story adds none (AC 3)")
+		"capture_inject_card_effects", "capture_inject_deck", "capture_inject_feature_flags",
+		"capture_push_contact", "capture_seed", "capture_set_camera_basis",
+	], "the channel set is the EIGHT `3-0c` shipped plus story 4-1's card-effect channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"a ninth capture channel is a scope violation, and this is where it fails")
+		"a TENTH capture channel is a scope violation, and this is where it fails")
 
 
 # ---------------------------------------------------------------- AC 9
@@ -199,6 +209,9 @@ func _match_start() -> Dictionary:
 	record.capture_apply_balance(config)
 	ms.apply_balance(config)
 	var flags := FeatureFlags.new()
+	# Story 4-1: the minion layer ON, so the recorded effects channel is exercised by a resolver
+	# that actually appends rather than one gated shut.
+	flags.minions = true
 	record.capture_inject_feature_flags(flags)
 	ms.inject_feature_flags(flags)
 	record.capture_inject_deck(DECK_IDS)
@@ -206,6 +219,11 @@ func _match_start() -> Dictionary:
 	var costs := _costs()
 	record.capture_inject_card_costs(costs)
 	ms.inject_card_costs(costs)
+	# Story 4-1 (`4-1/R1`, `4-1/R8`): the THIRD content channel, captured and injected LAST -- the
+	# order deck -> costs -> effects the live runner produces and SOUND_CONTENT_ORDER pins.
+	var effects := _effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 
@@ -276,6 +294,18 @@ func _retuned_config() -> BalanceConfig:
 	c.move_speed = RETUNED_MOVE_SPEED
 	c.max_stamina = RETUNED_MAX_STAMINA
 	return c
+
+
+## Story 4-1 (`4-1/R1`): the effect map for this fixture's composition -- `_costs()`'s twin,
+## built in-test over the same opaque ids. Every id carries a `summon_` prefix so the channel is
+## exercised by a resolver that actually appends a unit record.
+func _effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
 
 
 func _costs() -> Dictionary[StringName, CardCastCondition]:

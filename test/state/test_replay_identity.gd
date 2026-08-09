@@ -93,6 +93,12 @@ const HASHED: Array[String] = [
 	"player_state.hero", "player_state.stamina", "player_state.mana", "player_state.orbs",
 	"player_state.deck", "player_state.hand", "player_state.discard",
 	"player_state.pending_draw", "player_state.pending_draw_owed",
+	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
+	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
+	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the
+	# snapshot key (`unit_count`), so all of it reaches the hash and none of it needs an
+	# exemption. UNHASHED_CROSS_TICK_MEMBERS stays at THREE.
+	"player_state.units", "unit_board._count",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
 	"hero_state.move_speed", "hero_state.windup", "hero_state.active", "hero_state.recovery",
@@ -130,7 +136,10 @@ const PER_TICK: Array[String] = [
 ## balance_ticks is derived from balance by BalanceTicks.from_config, so restoring one restores it.
 const INJECTED: Array[String] = [
 	"match_state.balance", "match_state.balance_ticks", "match_state.flags",
-	"match_state._deck_contents", "match_state._card_costs",
+	# Story 4-1 (AC 2 / AC 10): the injected EFFECT map, classified INJECTED for exactly the
+	# reasons its two neighbours are -- never produced by the tick, never changed except through
+	# `inject_card_effects`, which IS a capture channel (`capture_inject_card_effects`).
+	"match_state._deck_contents", "match_state._card_costs", "match_state._card_effects",
 ]
 
 ## Files under src/state/ that carry no runtime match state, with the reason each is exempt from
@@ -141,6 +150,7 @@ const NOT_RUNTIME_STATE: Array[String] = [
 	"balance_ticks",      # derived from the injected BalanceConfig (A1)
 	"input_intent",       # INPUT, snapshot-exempt by contract and captured by the X5 stream
 	"cast_evaluator", "economy_evaluator",   # stateless evaluators
+	"card_effect_resolver",                  # ditto (story 4-1) — fully static, retains nothing
 ]
 
 
@@ -196,7 +206,11 @@ func test_dropping_any_single_channel_diverges_the_replay() -> void:
 	var record: IntentRecorder = recorded["record"]
 	assert_eq(CanonicalHash.of(_replay(record).to_snapshot()), live_hash,
 		"sanity: the undropped replay matches, so every divergence below is the DROP")
-	for channel in ["seed", "balance", "flags", "deck", "costs", "reload", "bases",
+	# Story 4-1 (AC 10) adds "effects" -- the third content channel joins the falling proof on the
+	# same footing as "costs". It diverges because the fixture's t20 cast carries a `summon_`
+	# effect id and the minion flag is on, so a replay without the channel resolves that cast to
+	# the missing-entry default and ends the run with unit_count 0 against the live run's 1.
+	for channel in ["seed", "balance", "flags", "deck", "costs", "effects", "reload", "bases",
 			"contacts", "intents"]:
 		assert_ne(CanonicalHash.of(_replay(record, channel).to_snapshot()), live_hash,
 			"dropping the %s channel must DIVERGE the replay" % channel)
@@ -350,6 +364,11 @@ func _record_a_driven_run() -> Dictionary:
 	var costs := _costs()
 	record.capture_inject_card_costs(costs)
 	ms.inject_card_costs(costs)
+	# Story 4-1 (`4-1/R1`, `4-1/R8`): the THIRD content channel, captured and injected LAST -- the
+	# order deck -> costs -> effects the live runner produces and SOUND_CONTENT_ORDER pins.
+	var effects := _effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			var retuned := _retuned_config()
@@ -381,9 +400,14 @@ func _replay(record: IntentRecorder, drop := "") -> MatchState:
 		ms.inject_feature_flags(record.replay_feature_flags())
 	if drop == "costs":
 		ms.inject_deck(record.replay_deck_contents())   # composition without its prices
+	elif drop == "effects":
+		# Story 4-1: composition and prices, but no effects -- the one channel withheld, so the
+		# divergence below can only be the effects channel.
+		ms.inject_deck(record.replay_deck_contents())
+		ms.inject_card_costs(record.replay_card_costs())
 	elif drop != "deck":
 		assert_true(record.replay_inject_content(ms),
-			"the recorded content order replays (deck then costs)")
+			"the recorded content order replays (deck, then costs, then effects)")
 	var p1_controller := ReplayController.new(record, 0)
 	var p2_controller := ReplayController.new(record, 1)
 	for t in range(1, record.tick_count() + 1):
@@ -473,7 +497,23 @@ func _retuned_config() -> BalanceConfig:
 func _flags() -> FeatureFlags:
 	var f := FeatureFlags.new()
 	f.melee_mana_generation = true
+	# Story 4-1: the minion layer ON, so this fixture's recorded `summon_` cast actually appends a
+	# unit record. Without it the effects channel would ride the record while changing nothing in
+	# the hash, and every proof that rests on it would be VACUOUS.
+	f.minions = true
 	return f
+
+
+## Story 4-1 (`4-1/R1`): the effect map for this fixture's composition -- `_costs()`'s twin,
+## built in-test over the same opaque ids. Every id carries a `summon_` prefix so the channel is
+## exercised by a resolver that actually appends a unit record.
+func _effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
 
 
 func _costs() -> Dictionary[StringName, CardCastCondition]:
@@ -491,7 +531,7 @@ func _costs() -> Dictionary[StringName, CardCastCondition]:
 ## than "everything not exempt") so a NEW state file cannot slip through unclassified.
 func _known_runtime_state_file(stem: String) -> bool:
 	return ["match_state", "player_state", "hero_state", "deck", "hand", "discard_pile",
-		"pitch_state", "mana_pool", "orb_pool", "stamina_pool", "signal_queue",
+		"unit_board", "pitch_state", "mana_pool", "orb_pool", "stamina_pool", "signal_queue",
 		"timing_window"].has(stem)
 
 

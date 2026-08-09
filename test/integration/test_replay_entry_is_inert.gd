@@ -172,6 +172,14 @@ func _poison_record() -> IntentRecorder:
 	var costs: Dictionary[StringName, CardCastCondition] = {}
 	costs[&"poison_card"] = CardCastCondition.new()
 	record.capture_inject_card_costs(costs)
+	# Story 4-1 (`4-1/R1`): the third content channel — a v2 record without it is malformed at the
+	# capture seam, and this fixture's whole point is that it is a WELL-FORMED record that must
+	# nonetheless never be replayed.
+	var effects: Dictionary[StringName, CardEffect] = {}
+	var poison_effect := CardEffect.new()
+	poison_effect.effect_id = &"summon_poison"
+	effects[&"poison_card"] = poison_effect
+	record.capture_inject_card_effects(effects)
 	record.capture_set_camera_basis(0, Basis(Vector3.UP, deg_to_rad(90.0)))
 	record.capture_push_contact(0, 1, 0, Vector2(-1, 0))
 	for _tick in 4:

@@ -112,6 +112,10 @@ func _without_contacts(src: IntentRecorder) -> IntentRecorder:
 	out.capture_inject_feature_flags(src.replay_feature_flags())
 	out.capture_inject_deck(src.replay_deck_contents())
 	out.capture_inject_card_costs(src.replay_card_costs())
+	# Story 4-1 (`4-1/R1`): the third content channel is copied too — this helper strips the
+	# CONTACT channel "and nothing else", so a channel silently dropped here would make the
+	# resulting record malformed rather than merely contact-less.
+	out.capture_inject_card_effects(src.replay_card_effects())
 	for t in range(1, src.tick_count() + 1):
 		for push: Array in src.camera_pushes_at(t):
 			out.capture_set_camera_basis(int(push[0]), push[1] as Basis)

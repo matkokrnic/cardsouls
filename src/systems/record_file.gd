@@ -76,7 +76,17 @@ extends RefCounted
 
 ## AC 5: bump this the moment the shape below changes in a way an older file cannot satisfy. A
 ## file carrying any other value is REFUSED with a reason, never replayed on a guess.
-const FORMAT_VERSION := 1
+## STORY 4-1 (`4-1/R1`): BUMPED 1 -> 2. The shape below gained a required `effects` key (the third
+## content channel), and a v1 file cannot satisfy it -- it carries no effects at all, so replaying
+## one would summon nothing where the recorded match summoned units. That is exactly the "an older
+## file cannot satisfy it" condition this constant exists for.
+##
+## NO MIGRATION SHIM IS BUILT, AND THAT IS THE RULING RATHER THAN AN OMISSION (`4-1/R1`). A v1
+## record is REFUSED WITH A REASON by the version check in load_record(), which is this class's
+## own documented contract for every non-matching version. Records are DEBUG ARTEFACTS with exactly
+## one writer; a shim that back-filled an empty effects map would be speculative machinery whose
+## only output is a replay that silently diverges from the match it claims to reproduce.
+const FORMAT_VERSION := 2
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -122,6 +132,10 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	"intents": TYPE_ARRAY,
 	"camera_pushes": TYPE_DICTIONARY,
 	"contacts": TYPE_DICTIONARY,
+	# Story 4-1 (`4-1/R1`): the third content channel, required from FORMAT_VERSION 2 onward. Its
+	# arrival IS the version bump -- a v1 file lacks this key, and is refused by the version check
+	# long before this map is consulted.
+	"effects": TYPE_DICTIONARY,
 }
 
 ## `3-0d/R16`: the ONE thing a save path must be. The class's own docstring and AC 7 both assert
@@ -266,6 +280,13 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var recorded_costs := record.replay_card_costs()
 	for id: StringName in recorded_costs:
 		costs[id] = _resource_values(recorded_costs[id])
+	# Story 4-1 (`4-1/R1`): the third content channel, serialised through the recorder's PUBLIC
+	# replay-side read exactly as the costs directly above are -- this class touches only that API,
+	# which is what makes a loaded record a genuine one.
+	var effects: Dictionary = {}
+	var recorded_effects := record.replay_card_effects()
+	for id: StringName in recorded_effects:
+		effects[id] = _resource_values(recorded_effects[id])
 	var intents: Array = []
 	var camera_pushes: Dictionary = {}
 	var contacts: Dictionary = {}
@@ -288,6 +309,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"content_order": record.content_order(),
 		"deck": record.replay_deck_contents(),
 		"costs": costs,
+		"effects": effects,
 		"tick_count": record.tick_count(),
 		"intents": intents,
 		"camera_pushes": camera_pushes,
@@ -346,6 +368,8 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 				record.capture_inject_deck(_deck_ids(data["deck"]))
 			IntentRecorder.CHANNEL_COSTS:
 				record.capture_inject_card_costs(_card_costs(data["costs"]))
+			IntentRecorder.CHANNEL_EFFECTS:
+				record.capture_inject_card_effects(_card_effects(data["effects"]))
 	var intents: Array = data["intents"]
 	var camera_pushes: Dictionary = data["camera_pushes"]
 	var contacts: Dictionary = data["contacts"]
@@ -398,6 +422,14 @@ static func _card_costs(raw: Dictionary) -> Dictionary[StringName, CardCastCondi
 	var out: Dictionary[StringName, CardCastCondition] = {}
 	for id: StringName in raw:
 		out[id] = _rebuilt(CardCastCondition.new(), raw[id]) as CardCastCondition
+	return out
+
+
+## Story 4-1 (`4-1/R1`): the effects half of _card_costs directly above, same shape, same reason.
+static func _card_effects(raw: Dictionary) -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id: StringName in raw:
+		out[id] = _rebuilt(CardEffect.new(), raw[id]) as CardEffect
 	return out
 
 
