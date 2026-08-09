@@ -4,7 +4,7 @@ baseline_commit: dd61f9c69e052b2012668d6ef3a08ded46c8d7c4
 
 # Story 4.1: Basic summon resolution
 
-Status: review
+Status: done
 
 > **Scope note.** Position 3 of the E4 order (`E4-P/R1`, decision-log Session 2026-08-07 -- E4
 > ratification). Tier A (`E4-P/R9`: touches `src/state/`, the golden, and determinism) -- full

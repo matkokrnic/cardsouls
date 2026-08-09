@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-08-08 (4-1 gated and promoted to ready-for-dev)
+# last_updated: 2026-08-10 (4-1 review passed, live smoke passed, promoted to done)
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-08-08
+last_updated: 2026-08-10
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -78,11 +78,11 @@ development_status:
   epic-4: backlog
   4-0-hand-slot-stability: done
   4-B1-card-hud-debt-discharge: done  # Tier B
-  4-1-basic-summon-resolution: ready-for-dev  # Tier A
+  4-1-basic-summon-resolution: done  # Tier A
   4-2-minion-ai-throttled-targeting: backlog  # Tier A
   4-3-minion-combat: backlog             # Tier A
   4-4-totems: backlog                    # Tier A (golden clause, not build weight — E4-P/R9)
-  4-5-pooling-60fps-exit: backlog        # Tier UNDECIDED, assigned at 4-1 close-out (E4-P/R8)
+  4-5-pooling-60fps-exit: backlog        # Tier B (assigned at 4-1 close-out, E4-P/R8)
 
 story_notes:
   3-0a-rig-adoption: "DONE 2026-07-31 (3-0a/R1-R16). Skinned paladin + six-clip AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd both green); src/state/ byte-identical, golden 338172010a…21da2 unmoved both directions; suite 164/760/0, 10 integration files individually green (test_rig_clips.gd added, mutation-proven). Live smoke PASSED with two humans on the shipped default (R-D6 re-invoked, SPENT); three non-blocking findings handed to 3-0b (below)."
@@ -98,7 +98,7 @@ story_notes:
   3-6-card-hud-hand-mana-deck: "DONE 2026-08-06 -- dev pass (Claude Opus 5) delivered ACs 1/2/4/5/6, mutation-proven, 362/2304 + 23 integration. Code review found two patches (freed-timer guard, label overflow) and closed a deferred hand_size<=4 audit bound (3-6/R8). Live smoke ran and PASSED, operator's own hand: ACs 3 and 7 both discharged, R-D6 spent, docs/playtest-log.md 6.8. Two non-blocking findings: peripheral mana/deck legibility deferred by the operator; card-slot refill-in-place recorded as a named open decision for the E3 close-out, no story number assigned. Golden unmoved throughout. Close-out recorded in decision-log."
   4-0-hand-slot-stability: "DONE 2026-08-07 -- dev pass (Claude Opus 5) delivered AC 1-8, mutation-proven, 373/2397 + 23 integration, golden re-baselined once (40eb5554...a322 -> 312522d8...fb3c). Code review: 0 decision items, 2 patches (snapshot pending_draw_owed key aliased the live array instead of copying; _draw_one_replacement's two same-named slot params disambiguated to hand_slot), both fixed in 0584c5b; 1 finding deferred (a permanent post-exhaustion hole is visually indistinguishable from a slot mid-flight awaiting delivery, deferred-work.md). Edge Case Hunter STALLED at 600s -- the second review running with a stalled layer (3-6's Acceptance Auditor stalled; 4-0's Edge Case Hunter did), a different layer each time -- covered by hand via three targeted non-vacuous checks instead of the full layer. AC 9 (live smoke) discharged by the operator's own hand, docs/playtest-log.md 7.8: cast from a non-rightmost slot, the replacement refills that same slot, nothing else shifts. Leaves open: the hole-vs-in-flight HUD distinction (deferred-work.md); the melee retune and playtest still scheduled per E3-R/R3, deferred until casts gain consequences in E4. Close-out recorded in decision-log."
   4-B1-card-hud-debt-discharge: "DONE 2026-08-08 -- AC 1 hole-vs-in-flight distinction and AC 2/3 debug-only reveal toggle shipped, code review's D1 fixed state-side (4-B1/R3), golden and snapshot keys unmoved. Live smoke: in-flight half and reveal toggle smoked live; both-empty half unreachable by play, discharged by test_hole_vs_in_flight_live.gd (4-B1/R5)."
-  4-1-basic-summon-resolution: "READY-FOR-DEV 2026-08-08, Tier A -- readiness gate ruled 4-1/R1-R12 + the totem clause (NOT READY on first read, 7 blocking findings, R1/R2/R3 one work package, below the E4-P/R2 break line of 8, no split): full IntentRecorder content-channel package (R1); new replay-parity AC (R2); refusal by two named returned values, never a crash (R3); AC 3 restated as golden-discipline-by-ruling only (R4); units clear on reset only, not round-end (R5); golden behavioural cause confirmed at fixture tick 22 (R6); snapshot attribution corrected to player_state.gd (R7); units ship positionless and type/kind-less this story, position deferred to 4-2's gate (R12, totem clause). Promoted backlog -> ready-for-dev (CFG/R4)."
+  4-1-basic-summon-resolution: "DONE 2026-08-10 -- code review PASS (zero patches, 1 non-blocking LOW review note), live smoke PASS with R-D6 consumed on a live kill; close-out recorded in decision-log."
   4-2-minion-ai-throttled-targeting: "BACKLOG, Tier A -- TargetingService + data-defined minion priorities (MinionPriority .tres, E4-P/R5); gate rules throttled-tick vs Area3D shape as a determinism decision (E4-P/R7)."
   4-3-minion-combat: "BACKLOG, Tier A -- minion combat consequences; the melee retune (E3-R/R3) runs once this story lands, not as its own story."
   4-4-totems: "BACKLOG, Tier A by the golden clause (E4-P/R9) -- three totem subtypes (Combat, Mana Accelerator, Stamina Accelerator)."
