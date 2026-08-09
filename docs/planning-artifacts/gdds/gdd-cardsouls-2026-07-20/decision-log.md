@@ -6060,3 +6060,75 @@ the totem clause (Change Log entry 0.2), this decision-log entry, and the board 
 (`sprint-status.yaml` `4-1-basic-summon-resolution` `backlog` -> `ready-for-dev`, story Status
 header `authored` -> `ready-for-dev`, `CFG/R4`). No code changed, no golden or suite touched.
 Operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-10 -- 4-1 close-out
+
+Dev pass (Claude Opus 5, 2026-08-09) delivered all ten ACs; code review (`gds-code-review`) and
+live smoke both discharged. Story promoted `review` -> `done`; board promoted `ready-for-dev` ->
+`done`.
+
+**Review outcome (OPERATOR-REPORTED).** Verdict PASS, zero patches. Blind Hunter: 12 findings
+raised, 11 refuted on verification, 1 surviving LOW non-blocking -- the v1-refusal test rewrites
+the record version to `FORMAT_VERSION + 41` rather than literally `1`, same code path
+(`version != FORMAT_VERSION`), deliberately NOT patched since verification is not recursive. Edge
+Case Hunter STALLED (600s watchdog, no layer-completion line); operator ruled accepted without
+retry. `PROC/R6` stall counter now 1 -- the FOURTH consecutive review run carrying one failed
+layer, flagged as input to the next process retrospective, not actioned here. Inline
+acceptance-auditor checklist 10/10 PASS, including the Dev Agent Record evidence audit.
+-- _decided by Matko._
+
+**Live smoke outcome (OPERATOR-REPORTED), 2026-08-09.** PASS on the shipped default config, zero
+`.tscn` edits: summon casts put a persistent grey-box unit on the board; spell casts resolve
+normally (mana spent, discarded, replacement owed) with nothing appearing; units SURVIVE the kill
+and the round-over freeze (`4-1/R5` confirmed live); a reset clears both boards; fps stable.
+`R-D6` was re-invoked at this gate (`4-1/R11`) and is now CONSUMED again on a live kill against a
+killable human slot. -- _decided by Matko._
+
+`4-1/R13` (accepted) The dev pass's implementation decision -- summon resolution gated on
+`FeatureFlags.minions`, with `data/feature_flags.tres` turning the flag ON -- is ACCEPTED. The
+review's targeted check 1 verified the gate live; no alternative was proposed. -- _decided by
+Matko._
+
+**Golden chain, three hashes, two separately named causes (both isolated in the dev pass, ratified
+here):** `312522d8...fb3c` (pre-story) -> `542a05c0...dcbda` (SNAPSHOT-SHAPE cause -- the
+`unit_count` key entering the hash at an all-zero, no-op value before any summon is cast) ->
+`78bd2b97...b0b5e5` (BEHAVIOUR cause -- the t22 `summon_*` cast measurably moving `unit_count`
+`0 -> 1`, `4-1/R6`). `rng_state` confirmed a non-mover. `78bd2b97...b0b5e5` is the new `GOLDEN`.
+-- _decided by Matko._
+
+`E4-P/R8` (discharged) `4-5-pooling-60fps-exit` is assigned TIER B. `4-1` shipped units
+actor-owned with counts-only state, so pooling is runner/presentation machinery, not a
+state-layer concern; the ratified golden clause is the proof obligation (before/after golden AND
+the snapshot key set unmoved). The "many units" / "60 FPS holds" numbers must be fixed in the
+story before any measurement is taken. Tier may be raised later, never lowered mid-story.
+`sprint-status.yaml`'s `4-5` comment updated from "Tier UNDECIDED" accordingly. -- _decided by
+Matko._
+
+**Deviations, reported not silently absorbed:**
+1. The dev pass ran the full suite FOUR times, not the two `PROC/R1` allows (already recorded in
+   the story's own Dev Agent Record). Run 2 (close) went RED because three integration tests
+   (`test_replay_contacts.gd`, `test_replay_entry_is_inert.gd`, `test_replay_verifier_tool.gd`)
+   hand-build `IntentRecorder` records and sit OUTSIDE the readiness gate's `4-1/R1`
+   moving-tests enumeration; all three tripped the new malformed-record guard. This is a
+   GATE-LIST GAP, not a dev error -- the gate's enumeration missed three existing consumers of
+   the content-channel package it was itself expanding. Run 4 was avoidable waste (a recount, not
+   a fix).
+2. This close-out pass ran the full suite TWICE, exceeding its own "at most one" budget: run 1
+   confirmed green pre-staging; the pre-commit collateral scan then found two new test files
+   (`test_summon_actor_live.gd`, `test_card_effect_resolution.gd`) had shipped without their
+   `.uid` siblings -- the dev pass's editor scan checked only the three new `class_name`s, not
+   plain test scripts. The editor scan was re-run to generate them (`project.godot` SHA
+   unchanged), and a second full-suite run confirmed nothing regressed. Another gate-list gap: no
+   close-out precondition names a `.uid`-completeness scan for test files specifically.
+
+### Close-out
+
+Four commits, none pushed: `story 4-1: basic summon resolution` (all code/tests/scenes/data,
+incl. the two `.uid` files this pass generated); `docs(4-1): dev pass record` (Review Findings
+section, Live Smoke result, two Change Log rows, supplementing the dev pass's own record without
+replacing it); `board: promote 4-1-basic-summon-resolution to done` (`sprint-status.yaml`
+`ready-for-dev` -> `done`, story Status header `review` -> `done`, `4-5`'s comment `Tier
+UNDECIDED` -> `Tier B`, `CFG/R4`); this decision-log entry. Suite green throughout (399 state /
+2517 assertions + 24 integration). Operator reviews the log and pushes.
