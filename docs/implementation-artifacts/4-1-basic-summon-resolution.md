@@ -4,7 +4,7 @@ baseline_commit: dd61f9c69e052b2012668d6ef3a08ded46c8d7c4
 
 # Story 4.1: Basic summon resolution
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** Position 3 of the E4 order (`E4-P/R1`, decision-log Session 2026-08-07 -- E4
 > ratification). Tier A (`E4-P/R9`: touches `src/state/`, the golden, and determinism) -- full
@@ -178,14 +178,14 @@ gate has now answered it, above.**
 
 ## Tasks / Subtasks
 
-- [ ] Add `MatchState.inject_card_effects()`, the `inject_card_costs` seam shape verbatim,
+- [x] Add `MatchState.inject_card_effects()`, the `inject_card_costs` seam shape verbatim,
       `Invariant.check`-guarded for totality over the injected deck composition (AC: 2, 3). State
       the injection order explicitly (`4-1/R8`): deck -> costs -> effects.
-- [ ] `_derive_card_effects()` in the runner, the `_derive_card_costs()` precedent verbatim
+- [x] `_derive_card_effects()` in the runner, the `_derive_card_costs()` precedent verbatim
       (`match_runner.gd:362-378`) -- walk `CardDatabase.sorted_ids()`, map id -> `basic_effect`,
       skip a card with no authored effect (AC: 2). The LIVE runner path always calls the
       derive+inject pair together, in the non-replay branch (`4-1/R3`).
-- [ ] **`4-1/R1` -- the full IntentRecorder content-channel package** (replaces the "one capture
+- [x] **`4-1/R1` -- the full IntentRecorder content-channel package** (replaces the "one capture
       method + two pins" task; scope was incomplete as originally authored):
   - `intent_recorder.gd`: `CHANNEL_EFFECTS` constant; `SOUND_CONTENT_ORDER` becomes a 3-element
     ordered contract (`4-1/R8`: `CHANNEL_EFFECTS` sits at the END); `_effect_values` storage; a
@@ -201,24 +201,24 @@ gate has now answered it, above.**
     (`SHIPPED_CAPTURE_CHANNELS` 8 -> 9, the literal eight-name array inside the exactly-eight test,
     and that test's name); `test_replay_identity.gd`; `test_record_save_control.gd`;
     `test/replay_drive.gd`; `test/tools/replay_file.gd`. (AC: 2, 10)
-- [ ] Write the resolver: `summon_*` -> append a unit record; `spell_*` -> named no-op with a
+- [x] Write the resolver: `summon_*` -> append a unit record; `spell_*` -> named no-op with a
       RETURNED-VALUE-only reason, off the `reject_action` seam (`4-1/R10`); anything else ->
       explicit refusal by RETURNED NAMED VALUE, TWO distinct reasons -- missing-entry honest
       default (directed test) and unknown-prefix refusal (synthetic-fixture test) -- never an
       `Invariant.check` crash, never `reject_action` (`4-1/R3`) (AC: 1, 5, 6)
-- [ ] Add `PlayerState.units`, the pure-`RefCounted`-collection precedent (`Deck`/`Hand`/
+- [x] Add `PlayerState.units`, the pure-`RefCounted`-collection precedent (`Deck`/`Hand`/
       `DiscardPile`); positionless and type/kind-less per the gate's ruling (`4-1/R12`, totem
       clause) (AC: 4)
-- [ ] `src/actors/minions/`: author the grey-box unit scene; wire the runner to spawn one actor
+- [x] `src/actors/minions/`: author the grey-box unit scene; wire the runner to spawn one actor
       per new unit record and free actors whose unit record is gone (AC: 7, 8)
-- [ ] Clear `units` in `_apply_debug_reset` ONLY -- `_end_round` stays untouched (`4-1/R5`); add
+- [x] Clear `units` in `_apply_debug_reset` ONLY -- `_end_round` stays untouched (`4-1/R5`); add
       the named exception for units to `_apply_debug_reset`'s "NOTHING else" contract comment;
       confirm the runner's actor cleanup fires from the existing `round_started` relay, no new
       EventBus event (AC: 8)
-- [ ] Extend `player_state.gd`'s `to_snapshot()` with a counts-only board key (attribution
+- [x] Extend `player_state.gd`'s `to_snapshot()` with a counts-only board key (attribution
       corrected, `4-1/R7`: NOT `match_state.gd`'s dict); extend the snapshot key-set pin in
       `test_card_observation.gd` (AC: 9)
-- [ ] Golden re-baseline: measure and separate every cause exactly as every prior multi-cause
+- [x] Golden re-baseline: measure and separate every cause exactly as every prior multi-cause
       re-baseline in this project has (snapshot-shape cause vs. behavioural cause -- the
       behavioural cause is the golden fixture's `t22` `summon_*` cast, `4-1/R6`), per the Golden
       Prediction below
@@ -417,11 +417,34 @@ this is the next player-facing story carrying a live smoke and the two-human kil
 ritual reattaches here. The smoke script includes a kill and the `R-D6` acceptance ride-along
 alongside the summon/spell/clear checks above.
 
+**Result (OPERATOR-REPORTED): PASS, 2026-08-09**, shipped default config, zero `.tscn` edits.
+Summons appear on `summon_*` casts and persist; nothing appears on non-summon casts and the card
+still resolves normally; units SURVIVE the kill and the round-over freeze (`4-1/R5` confirmed
+live); a reset clears both boards; fps stable. `R-D6` was re-invoked at this gate (`4-1/R11`) and is
+now CONSUMED again -- the kill was confirmed live against a killable human slot.
+
+## Review Findings
+
+**(OPERATOR-REPORTED)** `gds-code-review`, closed. Verdict **PASS**, zero patches.
+
+- **Blind Hunter**: completed. 12 findings raised, 11 refuted on verification, 1 surviving LOW
+  non-blocking finding -- the v1-refusal test rewrites the record version to `FORMAT_VERSION + 41`
+  rather than literally `1`; it exercises the same code path (`version != FORMAT_VERSION`) and was
+  deliberately NOT patched, since verification is not recursive. Recorded as a review note, not a
+  defect.
+- **Edge Case Hunter**: STALLED (600s watchdog, no layer-completion line). Operator ruled: accepted
+  without retry. This is `PROC/R6`'s stall counter's FOURTH consecutive review run carrying one
+  failed layer -- counter now at 1, flagged as input to the next process retrospective.
+- **Inline acceptance-auditor checklist**: 10/10 PASS, including the evidence audit of the Dev
+  Agent Record.
+- **Targeted check 1 (feature-flag gating)**: the review verified `data/feature_flags.tres`
+  shipping `minions = true` and the resolver gating on it live; operator ruling: ACCEPTED.
+
 ## Dev Agent Record
 
 ### Agent Model Used
 
-(filled by the dev pass)
+Claude Opus 5 (1M context) -- dev pass, 2026-08-09.
 
 ### Debug Log References
 
@@ -437,7 +460,176 @@ compare against AFTER:**
 
 ### Completion Notes List
 
+#### Golden re-baseline -- ONE re-baseline, TWO causes, MEASURED and named separately
+
+| Step | What was in place | Hash | Cause |
+|------|-------------------|------|-------|
+| BEFORE | pre-story (the authoring-time record above) | `312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c` | -- |
+| Cause 1 | `unit_count` key present, fixture injects NO effects | `542a05c042501e5ba45dfd94415f7fe38fabe7779e2db0bfeb0c70af427dcbda` | **SNAPSHOT SHAPE** (AC 9). Isolated BY CONSTRUCTION, not by a staged mutation: the key shipped before `_golden_effects()` existed, so the board was structurally pinned at 0 and the key entered the hash at an all-zero, no-op value -- the 3-5a `discard_size` / 4-0 `pending_draw_owed` pattern. |
+| Cause 2 | `+ _golden_effects()` and `_golden_flags().minions = true` | `78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5` | **BEHAVIOUR -- the t22 summon** (`4-1/R6`, CONFIRMED at the gate). ONE cause, not two: either half alone leaves the resolver on a non-summoning outcome and `unit_count` at 0 for the whole run. Cast at `CAST_TICK` 22, hash taken at t24, so the moved value is LIVE at hash time. **This is the new `GOLDEN`.** |
+| Cause 3 | -- | non-mover | **`rng_state`** -- predicted a non-mover, CONFIRMED rather than assumed (`test_the_summon_consumes_no_rng`), measured against the tightest available pair: same fixture, same cast, effects injected vs. not, with `unit_count` asserted to DIFFER across the pair so the rng comparison cannot be vacuous. |
+
+**Not a cause, and provably so:** `_golden_effects()` builds its map in-test over `_golden_deck`'s
+opaque ids and `_golden_flags()` constructs its own `FeatureFlags`, so re-authoring a real card's
+`effect_id` -- or flipping the authored `minions` flag -- cannot re-baseline this hash. Standing
+`BC/R3` isolation is intact. AC 3's narrowing is a RULING about review burden, not a measured
+coupling (`4-1/R4`), and this pass claims no measurable golden move from a `.tres` edit.
+
+#### Mutation table -- provenance MEASURED (11 mutations, each run against the affected file only)
+
+Every mutation was applied by python byte-replace, run, then RESTORED from an out-of-repo scratchpad
+copy taken BEFORE any mutation (never `git checkout --`). Post-restore `sha256sum -c` verified all
+seven mutated sources bit-identical to their pre-mutation state.
+
+| # | File | Mutation | Result | Caught by (first-named) |
+|---|------|----------|--------|--------------------------|
+| M1 | `card_effect_resolver.gd` | summon branch always returns `REASON_MINIONS_FLAG_CLOSED` | **11 failed** | `test_a_summon_cast_appends_exactly_one_unit_record_to_the_caster`, `test_state_matches_golden`, `test_dropping_any_single_channel_diverges_the_replay` |
+| M2 | `card_effect_resolver.gd` | spell branch folded into unknown-prefix | **1 failed** | `test_a_spell_effect_id_returns_the_named_no_op_reason` |
+| M3 | `card_effect_resolver.gd` | missing-entry folded into unknown-prefix (the two `4-1/R3` reasons collapsed) | **1 failed** | `test_a_cast_with_no_injected_effect_entry_returns_the_missing_entry_reason` |
+| M4 | `card_effect_resolver.gd` | flag gate removed (`minions` hardcoded ON) | **2 failed** | `test_the_minion_layer_off_degrades_to_a_cast_with_no_board_effect`, `test_no_injected_flags_reads_as_closed` |
+| M5 | `match_state.gd` | reset no longer clears the board | **1 failed** | `test_the_debug_reset_clears_the_board` |
+| M6 | `match_state.gd` | board clear migrated INTO `_end_round` (`4-1/R5` violated) | **1 failed** | `test_end_round_never_touches_the_board` |
+| M7 | `player_state.gd` | snapshot key hardcoded to 0 | **4 failed** | `test_the_board_snapshot_key_is_a_plain_count`, `test_state_matches_golden`, `test_the_summon_consumes_no_rng` |
+| M8 | `intent_recorder.gd` | `replay_card_effects()` returns an empty map (channel silently dropped) | **6 failed** | `test_content_channels_carry_..._and_their_order`, `test_a_driven_run_replays_from_the_record_alone_to_a_bit_identical_hash` |
+| M9 | `record_file.gd` | v2 writer omits the `effects` key | **7 failed** | `test_the_required_key_set_is_exactly_what_a_saved_record_carries`, `test_the_round_trip_carries_every_channel_verbatim` |
+| M10 | `match_runner.gd` | runner never spawns an actor | **integration FAIL** | `test_summon_actor_live` (`board=1 actors=0`) |
+| M11 | `match_runner.gd` | runner never frees actors on reset | **integration FAIL** | `test_summon_actor_live` (`cleared_board=0/0 cleared_actors=1`) |
+
+**Declared NOT mutation-proven, honestly:** the two `inject_card_effects` seam guards in the FIRING
+sense. `Invariant.check` routes through `assert()`, which PRINTS AND CONTINUES at exit 0
+(`3-0c/R15`), and `run_all.sh` greps for `INVARIANT VIOLATED` -- so a deliberately triggered one
+would fail the suite for the wrong reason. Their PRESENCE at the seam is proven instead
+(`test_effect_injection_seam_keeps_both_guards`), the `test_cost_injection_seam_keeps_both_guards`
+mechanism and rationale verbatim.
+
+**Declared NOT naturally reachable, honestly:** AC 6(ii)'s unknown-prefix branch. The nine authored
+ids are exactly six `summon_*` and three `spell_*` -- re-confirmed BY MACHINE this pass
+(`test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises` asserts the 6/3 split) --
+so this branch is proven with SYNTHETIC map entries only and is never claimed to be live-reachable.
+
+#### Implementation decisions the story left to the dev pass
+
+1. **Summon resolution IS gated on `FeatureFlags.minions`, and the authored
+   `data/feature_flags.tres` turns that flag ON.** Dev Notes left this "an implementation choice
+   against the project-context HARD RULE, not decided here" -- and the HARD RULE decides it:
+   "NEVER hardcode a gameplay layer on. Any of {..., minions, totems, ...} must check the injected
+   FeatureFlags resource and degrade gracefully when off." `minions` is one of the seven named
+   layers. Degrading gracefully means the cast resolves exactly as it does today (mana spent, card
+   discarded, replacement owed) with no unit on the board, under its OWN named reason
+   (`REASON_MINIONS_FLAG_CLOSED`) rather than reusing the spell one -- "the layer is switched off"
+   and "this effect has no owner yet" are different facts about the match. Both matrix directions
+   are tested. Flipping the authored flag is the checkbox the rule exists to provide, and it is a
+   `.tres` edit, not a code edit. **This is the one dev-pass decision with player-facing
+   consequence and is flagged here for operator review.**
+2. **`UnitBoard` holds a COUNT.** Three ruled clauses empty the record -- positionless
+   (`4-1/R12`), type/kind-less (the ratified totem clause), and no AI/HP/targeting (Deferred) --
+   so what remains of "a unit record" is EXISTENCE, in cast order, and the honest representation of
+   N contentless records appended in order is N. An array of per-unit ids or structs would be
+   reserved vocabulary authored ahead of its consumer, which is precisely the `card_effect.gd`
+   anti-precedent `E4-P/R2` names as the one "to avoid repeating without cause". `4-2`'s gate adds
+   content against `TargetingService`, a consumer that will actually read it.
+3. **No new observation seam; the family stays at EIGHT.** The runner reads the board COUNT off
+   state right after `advance()` (the step-3b `debug_window_ticks_remaining()` poll's seat and
+   shape -- no signal, no state handle, no `connect_*`), so
+   `test_runner_observation_seams_are_exactly_eight` needed no `3-6/R2`-style amendment. Despawn
+   rides the EXISTING `round_started` relay with no new EventBus event, which is AC 8's own
+   instruction. Reading the BOARD rather than the cast is also what makes spawn identical live vs.
+   replay BY CONSTRUCTION (AC 10) -- there is no second spawn path to keep in agreement with the
+   first.
+4. **Actor placement is runner-chosen** (`UNIT_ROW_X` / `UNIT_ROW_SPACING` / `UNIT_ROW_Z_START`): a
+   row behind each hero's spawn, legibility only, and nothing reads it. Position stays actor-owned
+   per `4-1/R12`; 4-2 replaces this with real placement.
+
+#### Guards that MOVED, each as a deliberate, named pin update
+
+- `test_intent_recorder.gd`: `EXPECTED_INTAKE_SURFACE` gains `inject_card_effects` (MatchState's
+  ninth intake); the malformed-channel map goes five -> six; the content-order test RENAMED to
+  `test_content_channels_carry_the_composition_the_costs_the_effects_and_their_order`, old name
+  recorded in place.
+- `test_live_reload.gd` (`4-1/R9`, all three edits): `SHIPPED_CAPTURE_CHANNELS` 8 -> 9, the literal
+  eight-name channel array, and the test RENAMED to
+  `test_the_recorder_still_ships_exactly_nine_capture_channels`, old name recorded in place.
+- `test_card_observation.gd`, `test_draw_delay_and_reshuffle.gd`: the per-player snapshot key set
+  gains `unit_count` (nine keys -> ten).
+- `test_replay_identity.gd`: `_card_effects` classified INJECTED; `player_state.units` and
+  `unit_board._count` classified HASHED -- **not** a fourth unhashed cross-tick exclusion, because
+  unlike its three container siblings a `UnitBoard` has no contents to exclude, so
+  `UNHASHED_CROSS_TICK_MEMBERS` stays at THREE; `"effects"` joins the drop-channel falling proof.
+- `test_deck_and_hand.gd`: the `CardEffect` fence NARROWED to `pitch_effect` and renamed
+  `test_no_pitch_effect_consumer_ships`. This story is the "first story to resolve effect CONTENT"
+  that the fence's own docstring named as its retirer. Narrowed rather than deleted, on the 3-5a
+  precedent in that same file: `pitch_effect` is still Mode (4), E6's, authored null on all nine
+  cards and read by nothing, so the fence keeps a real subject.
+
+#### Deviations from the skill's procedure and standing rules -- reported, not silently adapted
+
+1. **The full suite ran FOUR times, not the two `PROC/R1` allows.** Run 1 (open) PASS. Run 2
+   (close) **RED**: three integration tests build `IntentRecorder` records by hand and were NOT in
+   the story's enumerated `4-1/R1` moving-tests list (`test_replay_contacts.gd`,
+   `test_replay_entry_is_inert.gd`, `test_replay_verifier_tool.gd`); all three tripped the new
+   malformed-record guard. Run 3, after fixing them, PASS -- a green close cannot be claimed
+   without re-running. Run 4 was **avoidable waste**: I re-ran `run_all.sh` to recover the
+   state-harness count line, which the state harness alone would have given me.
+2. **Run 1's assertion count was lost** to a `tail -40` that clipped the state-harness summary
+   line, so this record carries no open/close assertion-count delta -- only the close figures and
+   a mid-pass pre-story baseline.
+3. **Mutation proofs ran the whole state harness, not a single file.** `run_state_tests.gd` has no
+   single-file mode and none was added (new tooling was not in scope); the affected file's result
+   lines were read out of a harness run. No mutation consumed a `run_all.sh` full-suite run.
+4. **One Edit-tool miss** (`match_state.gd`, a wrapped-comment anchor). Switched to python
+   byte-replace immediately and used it for every subsequent source edit, per `PROC/R3`.
+
+#### Suite, before and after
+
+- **Open (run 1):** ALL TESTS PASSED, exit 0.
+- **Close (run 3):** ALL TESTS PASSED -- **399 state tests / 0 failed / 2517 assertions**, plus
+  **24 integration tests**, all PASS. (Pre-story baseline, measured mid-pass: 375 state tests /
+  2028 assertions. This story adds 24 state tests and 1 integration test.)
+
+#### New `class_name` editor scan (`3-0c/R15` family, ruled `3-0c/R13`)
+
+Three new `class_name`s ship: `UnitBoard`, `CardEffectResolver`, `UnitActor`. Editor scan RUN THIS
+PASS (`godot --headless --editor --quit --path .`); all three registered.
+**Collateral check clean:** `project.godot` SHA256
+`8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`, **before == after**, and the
+per-diff shows the only collateral is the three expected `.uid` files.
+
+#### Not done in this pass, by instruction
+
+- **NO COMMITS.** The close-out chain owns commits; the working tree is left dirty by design.
+- **The `on_complete` board write is uncommitted working-tree state** (`CFG/R5`).
+- **The Live Smoke is NOT discharged** -- it is the operator's, and `R-D6` is RE-INVOKED on this
+  story (`4-1/R11`). The smoke script in the story stands as written: cast a `summon_*` and confirm
+  a grey box appears and REMAINS; cast a `spell_*` and confirm nothing appears while the card still
+  resolves (mana spent, discarded, replacement owed); reset and confirm the board clears; plus the
+  kill and the `R-D6` two-human acceptance ride-along.
+
 ### File List
+
+**New**
+- `src/state/unit_board.gd` (+ `.uid`) -- `UnitBoard`, the per-player board container
+- `src/state/economy/card_effect_resolver.gd` (+ `.uid`) -- `CardEffectResolver`, the D6 sibling evaluator
+- `src/actors/minions/unit_actor.gd` (+ `.uid`) -- `UnitActor`, the grey-box unit
+- `src/actors/minions/unit_actor.tscn` -- the grey-box scene
+- `test/state/test_card_effect_resolution.gd` -- AC 1/2/4/5/6/8/9 + the feature-flag matrix
+- `test/integration/test_summon_actor_live.gd` -- AC 7/8 driven through the real runner
+
+**Modified**
+- `src/state/match_state.gd` -- `_card_effects`, `inject_card_effects()`, the resolver dispatch in `_resolve_basic_cast`, the reset clear in `_reset_player`, the named exception on `_apply_debug_reset`'s contract comment
+- `src/state/player_state.gd` -- the `units` collection, constructed empty; the `unit_count` snapshot key
+- `src/main/match_runner.gd` -- `_derive_card_effects()`, the capture+inject call site, the spawn step (3c), `_spawn_missing_unit_actors()`, `_free_unit_actors()` off `_relay_round_started`
+- `src/systems/intent_recorder.gd` -- `CHANNEL_EFFECTS`, the 3-element `SOUND_CONTENT_ORDER`, `_effect_values`, `capture_inject_card_effects()`, the `missing_match_start_channels()` branch, `replay_card_effects()`, the `replay_inject_content()` branch
+- `src/systems/record_file.gd` -- `FORMAT_VERSION` 1 -> 2 (v1 refused with a reason, no shim), the `effects` required key, `_to_dictionary`/`_from_dictionary`, `_card_effects()`
+- `data/feature_flags.tres` -- `minions = true`
+- `test/state/test_determinism.gd` -- `_golden_effects()`, `_golden_flags().minions`, `_make_match_without_effects()`, `test_the_summon_consumes_no_rng`, the re-baseline record, the new `GOLDEN`
+- `test/state/test_card_authoring.gd` -- the AC 3 authored-prefix test
+- `test/state/test_card_observation.gd`, `test/state/test_draw_delay_and_reshuffle.gd` -- the snapshot key-set pins
+- `test/state/test_intent_recorder.gd`, `test/state/test_live_reload.gd` -- the channel/intake pins and renames
+- `test/state/test_record_file.gd`, `test/state/test_replay_identity.gd` -- fixtures, round-trip channel assertions, member classification, the effects drop-channel proof
+- `test/state/test_deck_and_hand.gd` -- the `CardEffect` fence narrowed to `pitch_effect` and renamed
+- `test/integration/test_replay_contacts.gd`, `test/integration/test_replay_entry_is_inert.gd`, `test/integration/test_replay_verifier_tool.gd` -- hand-built records capture the third content channel
+- `test/replay_drive.gd` -- the unsound-order message names both totality checks
+- `test/tools/replay_file.gd` -- `effects=` joins the operator summary line
 
 ## Change Log
 
@@ -445,3 +637,6 @@ compare against AFTER:**
 |------|---------|-------------|--------|
 | 2026-08-08 | 0.1 | Story authored against the E4 ratification (`E4-P/R1`-`E4-P/R11`). Nine ACs covering the resolver, the injected-effects seam, golden discipline, `PlayerState.units`, the `summon_*`/`spell_*`/unknown-id branches, the grey-box actor, round-lifecycle clearing, and counts-only snapshotting. Position ownership left as an Open Question for the gate (`E4-P/R7`). Status `authored`, awaiting operator review. | Claude Sonnet 5 |
 | 2026-08-08 | 0.2 | Readiness-gate ruling pass (NOT READY on first read, 7 blocking findings with `R1`/`R2`/`R3` counted as one work package, below the `E4-P/R2` break line of 8, no split). AC 3 restated to claim golden discipline BY RULING only, not a measurable move, plus an authoring prefix-recognition test (`4-1/R4`). AC 4 amended positionless + type/kind-less (`4-1/R12` + totem clause). AC 5 amended: the spell no-op's reason is a returned value only, off `reject_action` (`4-1/R10`). AC 6 replaced: refusal by two named returned values, never a crash, never `reject_action` (`4-1/R3`). AC 8 replaced: units clear on `_apply_debug_reset` only, `_end_round` untouched (`4-1/R5`). AC 9 amended: snapshot attribution corrected to `player_state.gd` (`4-1/R7`), wording scoped to this story's own key, not a standing bound (`4-1/R12`). New AC 10 added: replay parity via `replay_inject_content()` (`4-1/R2`). Open Question section resolved with the `4-1/R12` ruling and its two named futures for `4-2`. Tasks/Subtasks rewritten: the IntentRecorder task replaced with the full content-channel package (`4-1/R1`, folding in `4-1/R9`'s `test_live_reload.gd` naming discipline); the resolver task carries the two-reason refusal shape; the units-clear task narrowed to the reset path; the snapshot task's file attribution corrected; the golden-re-baseline task names the `t22` behavioural cause. Dev Notes appended with `4-1/R1`, `R3`, `R5`, `R6`, `R11`, `R12` detail. Project Structure Notes corrected (`to_snapshot()` on `player_state.gd`, not `match_state.gd`; `record_file.gd` added). Golden Prediction's behavioural cause upgraded from predicted to CONFIRMED, naming the `t22` fixture cast (`4-1/R6`). Live Smoke amended: `R-D6` RE-INVOKED, measured SPENT since 3-6 (`4-1/R11`). Decision-log gains Session 2026-08-08 -- 4-1 readiness gate, recording `4-1/R1`-`4-1/R12` and the totem clause. Status flipped `authored` -> `ready-for-dev`; `sprint-status.yaml` promoted alongside (`CFG/R4`). | Claude Sonnet 5 |
+| 2026-08-09 | 1.0 | Dev pass (Claude Opus 5, 1M context). All nine tasks delivered; AC 1-10 implemented and covered. NEW: `UnitBoard` (a COUNT -- positionless, type/kind-less, no content to hold), `CardEffectResolver` (D6 sibling, four named outcomes), `UnitActor` grey-box scene, plus `test_card_effect_resolution.gd` and `test_summon_actor_live.gd`. `inject_card_effects()` seat on the `inject_card_costs` shape; runner `_derive_card_effects()`; the full `4-1/R1` content-channel package (`CHANNEL_EFFECTS`, 3-element `SOUND_CONTENT_ORDER`, `_effect_values`, `capture_inject_card_effects`, malformed-channel branch, `replay_card_effects`, `replay_inject_content` branch) with `FORMAT_VERSION` 1 -> 2 and v1 REFUSED, no shim. Golden re-baselined ONCE, `312522d8` -> `78bd2b97`, with both causes measured separately (snapshot-shape `542a05c0`; the t22 summon) and `rng_state` confirmed a non-mover. 11 mutation proofs, all restored from an out-of-repo copy and SHA-verified. IMPLEMENTATION DECISION flagged for review: summon resolution is gated on `FeatureFlags.minions` per the project-context HARD RULE, and `data/feature_flags.tres` turns the flag ON. Suite green: 399 state / 2517 assertions + 24 integration. Editor scan run for the three new `class_name`s, `project.godot` unchanged. NO COMMITS (close-out chain owns them); live smoke + `R-D6` remain the operator's. Status `ready-for-dev` -> `review`. | Claude Opus 5 |
+| 2026-08-09 | 1.1 | Code review (`gds-code-review`, OPERATOR-REPORTED). Verdict PASS, zero patches. Blind Hunter: 12 findings raised, 11 refuted, 1 surviving LOW non-blocking (v1-refusal test uses `FORMAT_VERSION + 41` rather than literal `1`, same code path, not patched). Edge Case Hunter STALLED (600s watchdog); operator accepted without retry (`PROC/R6` stall counter now 1, fourth consecutive run with a failed layer). Inline acceptance-auditor checklist 10/10 PASS. Feature-flag gating on `FeatureFlags.minions` with the flag ON reviewed and ACCEPTED. | Claude Opus 4.8 |
+| 2026-08-09 | 1.2 | Live smoke (operator, OPERATOR-REPORTED). PASS on the shipped default config, zero `.tscn` edits: summons appear and persist on `summon_*` casts; nothing appears on `spell_*` casts and the card still resolves normally; units survive the kill and the round-over freeze (`4-1/R5` confirmed live); reset clears both boards; fps stable. `R-D6` re-invoked (`4-1/R11`) and CONSUMED again on a live kill against a killable human slot. | Claude Opus 4.8 |
