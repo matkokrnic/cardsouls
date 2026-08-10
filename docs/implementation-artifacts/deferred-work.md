@@ -15,7 +15,8 @@
 
 ## Deferred from: code review of 4-3-minion-approach-and-collision (2026-08-10)
 
-- **Unit-vs-unit body collision is unmeasured (`4-3/R21`, finding 1).** The shipped comments
+- **CLOSED by `4-3a-minion-damage-and-death`, `test_two_units_converge_live.gd` (AC 10).**
+  Unit-vs-unit body collision is unmeasured (`4-3/R21`, finding 1). The shipped comments
   claimed the shared default layer makes a unit block "a hero (and another unit)", but
   `test_unit_approach_live.gd` only drives a hero into a parked unit -- two units driven at the
   same acquired target simultaneously is not exercised anywhere: the wedge/jitter risk of two

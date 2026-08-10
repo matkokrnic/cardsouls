@@ -6688,3 +6688,35 @@ Code and docs shipped across four commits (code+tests; dev pass docs; board prom
 this decision-log entry). Golden moved once, `73a86005` -> `35c38c0e`, ONE measured cause. Suite
 445/3464 + 27 -> 465/3621 + 29. Code review PASS, no blocking findings, review-stall counter stays
 zero. Live smoke PASS. Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3b story authoring rulings
+
+`4-3b/R1` (ruled) A minion's attack resolves through a real hitbox in the existing contact pipeline,
+not abstractly against its acquired target. Reason: abstract resolution is an unavoidable hit, the
+mob-feel finding from `4-3` repeating one layer up.
+`4-3b/R2` (ruled) A minion swing cleaves, sliding through every target its hitbox touches, as a hero
+swing does today. Consequence: cleave append order is hash-significant and rests on unpinned physics
+query order, so the new attacker surface must sort canonically on insertion, following `4-3a`'s hero
+dedupe-key precedent.
+`4-3b/R3` (ruled) No friendly fire on the attacker side: a unit never damages the hero or units of its
+own slot. Filtering happens on the resolution ladder by owner slot, never by collision layer.
+`4-3b/R4` (ruled) A confirmed hit sourced from a unit generates ZERO mana for its owner. Reason:
+otherwise summoning becomes a mana engine, and a blocked hit still confirms.
+`4-3b/R5` (ruled) `hit_landed` IS emitted when a unit damages a hero -- the hero is really hurt, so
+the telegraph flash is correct. Deliberate asymmetry against `4-3a`'s suppression of `hit_landed` for
+unit TARGETS; recorded so a later gate does not re-litigate it.
+`4-3b/R6` (ruled) The hero's existing defensive ladder applies to minion attacks unchanged: roll
+iframes drop the fact, deflect fully negates, block applies its damage multiplier.
+`4-3b/R7` (ruled) Deflecting a minion does NOT stun it, FOR NOW, with explicit intent to revisit if it
+proves worthwhile. The stun field keeps zero inbound edges; the open decision on stun stays open.
+`4-3b/R8` (ruled) Units pay no stamina and no resource to attack. Their only limiter is the attack
+rhythm itself.
+`4-3b/R9` (ruled) A unit's attack direction LOCKS when its windup begins; it does not keep tracking
+the target until the strike. Reason: minions are summon-tier, not boss-tier, at this stage -- a swing
+that misses when the target steps aside is the intended feel. Late-locking tracking belongs to
+per-kind movesets later.
+`4-3b/R10` (ruled) The attack trigger is pure distance to the acquired target, never an "arrived"
+flag. This removes the reached-vs-obstructed distinction from the attack path entirely.
+`4-3b/R11` (ruled) Units continue to collide with their own side; the measured case of a minion
+getting stuck on its own summoner is accepted as-is for now and stays deferred with a new owner -- a
+later story on richer minion behaviour. NOT discharged here.
