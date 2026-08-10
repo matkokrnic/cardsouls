@@ -152,4 +152,8 @@ as a bug or as the card layer simply being parallel to melee.
 
 8.8. revela hand toggle premejten u terminal ispisom, neka tkao to ostane, idalje ne vidmi svrhu te funkcionalnosti, idmeo dalje
 
+10.8.
+summoni se pojavljuju kad se odigrava karta koja ima summon i ne pojavlju kad se odigra karte bez summona, ostaju na ploci kad ubijem drugog igraca, nestaju kad resetriam n R, fps je stabilan
 
+10.8.
+1 cast summona sivi box koji je okrenut prema neprijatljeu 2 porate ga boxevi ako se krece neprijaelj 3 ubijanje radi porpiseno, r mice sumone 4 vidjlivo je solidno 5 DODATAK vidim da heroij mogu poralziti kroz te rpavokutnike ne znam jel to namjerno tako zasad
