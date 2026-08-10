@@ -49,6 +49,16 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# `BalanceTicks` counterpart by design) — but half (a) fails until they are listed here, which
 	# is the guard working exactly as 3-5b built it to.
 	"unit_move_speed", "unit_stop_distance",
+	# Story 4-3a (AC 1/AC 2, `4-3a/R8`): the unit's authored MAXIMUM HP and the DEDICATED FLAT
+	# damage one hero swing takes off it. Neither carries the `_seconds` suffix, so half (b) of the
+	# reflection guard below leaves them alone; half (a) fails until they are listed here.
+	#
+	# THE FLAT FIELD IS THE WHOLE POINT OF `4-3a/R8` AND NOT A DUPLICATE OF
+	# `attack_damage_percent_of_max_hp`: that field is a percentage of the TARGET's own maximum, so
+	# reusing it against a unit's own authored maximum would make hits-to-kill a CONSTANT (34, at
+	# the authored 3.0%) for every possible authored unit maximum, and `unit_max_hp` would be
+	# cosmetic. A flat value is what makes the authored maximum decide anything.
+	"unit_max_hp", "unit_damage_per_hit",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

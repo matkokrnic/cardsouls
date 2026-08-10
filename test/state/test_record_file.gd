@@ -35,6 +35,9 @@ const VERSION_PATH := "user://test_3_0d_version.rec"
 const FIRST_SAVE_PATH := "user://test_3_0d_cumulative_1.rec"
 const SECOND_SAVE_PATH := "user://test_3_0d_cumulative_2.rec"
 const MALFORMED_PATH := "user://test_3_0d_malformed.rec"
+## Story 4-3a: the FORMAT_VERSION / contact-row-shape pin writes its own file, so it cannot race
+## the round-trip fixture's path.
+const FORMAT_PIN_PATH := "user://test_4_3a_format_pin.rec"
 
 const SEED := 5150
 
@@ -88,6 +91,59 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## SOURCE CHANNEL BY CHANNEL, including all EIGHT InputIntent fields per tick per slot. A hash
 ## comparison alone could pass on a record that lost a channel the hashed final tick happens not
 ## to read; this cannot.
+## Story 4-3a (AC 3 / `4-3a/R10`): THE VERSION BUMP AND THE SHAPE IT EXISTS FOR, PINNED TOGETHER.
+##
+## Before this test nothing whatever pinned `FORMAT_VERSION`. The constant could be edited back to 2
+## and every test in this file would still pass -- so the bump was an unguarded claim. The two halves
+## here are deliberately in ONE test, because either alone is the failure mode:
+##
+##   * the VERSION reads 3. Alone this is a tautology a dev pass could satisfy by editing a number.
+##   * a UNIT-ADDRESSED fact survives the round trip AS a unit-addressed fact. This is what the bump
+##     is FOR: a v2 contact row carried four elements and no target index, and rebuilding one by
+##     assuming -1 would replay a hit on a UNIT as a hit on that slot's HERO -- a replay that
+##     silently diverges from the match it claims to reproduce, at the exact seam `record_file`'s
+##     refusal-with-a-reason exists to protect.
+##
+## THE PAIR that makes the second half non-vacuous is the hero-addressed fact recorded beside it: if
+## the index half were being dropped or defaulted, BOTH rows would come back reading -1 and the unit
+## row's assertion would fail while the hero row's still passed. Two addresses, one channel.
+func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
+	assert_eq(RecordFile.FORMAT_VERSION, 3,
+		"FORMAT_VERSION is 3 as of story 4-3a (`4-3a/R10`) -- the contact fact's target widened from "
+		+ "a bare slot to a `[slot, index]` address, so the recorded row's SHAPE changed")
+	var driven := _match_start()
+	var record: IntentRecorder = driven["record"]
+	var ms: MatchState = driven["state"]
+	# TWO addresses on the SAME tick and the SAME swing: a board unit at index 2, and the hero.
+	# Both go through the tap AND the seam, in the paired order the runner uses.
+	record.capture_push_contact(0, [1, 2], 0, Vector2(-1, 0))
+	ms.push_contact(0, [1, 2], 0, Vector2(-1, 0))
+	record.capture_push_contact(0, [1, -1], 0, Vector2(-1, 0))
+	ms.push_contact(0, [1, -1], 0, Vector2(-1, 0))
+	_tick(driven, _intents(1))
+	var error := RecordFile.save_record(record, FORMAT_PIN_PATH)
+	assert_eq(error, "", "the record saved: %s" % error)
+	var loaded := RecordFile.load_record(FORMAT_PIN_PATH)
+	var rebuilt: IntentRecorder = loaded["record"]
+	assert_not_null(rebuilt, "the record loaded back (error: %s)" % loaded["error"])
+	if rebuilt == null:
+		_remove(FORMAT_PIN_PATH)
+		return
+	var facts := rebuilt.contacts_at(1)
+	assert_eq(facts.size(), 2, "both contact rows survived the round trip")
+	if facts.size() == 2:
+		assert_eq((facts[0] as Array).size(), 5,
+			"a contact row is FIVE positional elements now: attacker, target slot, target INDEX, "
+			+ "attack index, direction (it was four through FORMAT_VERSION 2)")
+		assert_eq(int(facts[0][2]), 2,
+			"the UNIT-addressed fact came back addressed to board index 2 -- NOT defaulted to -1, "
+			+ "which would replay a hit on a unit as a hit on that slot's hero")
+		assert_eq(int(facts[1][2]), -1,
+			"...and the HERO-addressed fact beside it still reads -1, so the index half is being "
+			+ "carried rather than blanket-written")
+	_remove(FORMAT_PIN_PATH)
+
+
 func test_the_round_trip_carries_every_channel_verbatim() -> void:
 	var driven := _record_a_driven_run()
 	var live: MatchState = driven["state"]
@@ -544,8 +600,8 @@ func _record_a_driven_run() -> Dictionary:
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
 			ms.set_camera_basis(int(push[0]), push[1] as Basis)
 		if t == CONTACT_TICK:
-			record.capture_push_contact(0, 1, 0, Vector2(-1, 0))
-			ms.push_contact(0, 1, 0, Vector2(-1, 0))
+			record.capture_push_contact(0, [1, -1], 0, Vector2(-1, 0))
+			ms.push_contact(0, [1, -1], 0, Vector2(-1, 0))
 		_tick(driven, _intents(t))
 	return driven
 

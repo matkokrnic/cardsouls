@@ -1,5 +1,11 @@
 extends TestCase
 
+## Story 4-3a (AC 1): `UnitBoard.add()` takes the authored maximum HP now. An IN-TEST value, never
+## read from `data/balance/*.tres` (the BC/R3 isolation) — these tests are about targeting, and any
+## positive value makes the record LIVING, which is all they need.
+const LIVING_HP := 10.0
+
+
 ## Story 4-2: TargetingService (AC 2, 3, 6, 8), the UnitBoard identity extension (AC 9), the
 ## step-7 throttled tick (AC 7, 11) and the feature-flag matrix (AC 5).
 ##
@@ -89,7 +95,7 @@ func test_an_absent_priority_name_resolves_to_null_never_to_another_rule() -> vo
 	# rule is missing, and it turns into a NAMED no-target outcome rather than a crash or a
 	# substituted rule (AC 6's second reason).
 	assert_eq(TargetingService.reason_for(TargetingService.priority_named(rules, &"tank"),
-			true, 3, _open_flags()), TargetingService.REASON_NO_PRIORITY_DATA,
+			true, _living(3), _open_flags()), TargetingService.REASON_NO_PRIORITY_DATA,
 		"an absent name reaches the evaluator as missing DATA, against a live candidate set")
 
 
@@ -98,23 +104,23 @@ func test_an_absent_priority_name_resolves_to_null_never_to_another_rule() -> vo
 ## AC 6, THE POSITIVE HALF, and it comes first deliberately: a file that only ever asserted "no
 ## target" would pass vacuously. A recognized priority against a live opposing hero ACQUIRES.
 func test_a_recognized_priority_against_a_live_candidate_acquires() -> void:
-	assert_eq(TargetingService.reason_for(_standard(), true, 0, _open_flags()),
+	assert_eq(TargetingService.reason_for(_standard(), true, _living(0), _open_flags()),
 		TargetingService.REASON_ACQUIRED, "a live opposing hero IS a candidate")
-	assert_eq(TargetingService.reason_for(_standard(), false, 3, _open_flags()),
+	assert_eq(TargetingService.reason_for(_standard(), false, _living(3), _open_flags()),
 		TargetingService.REASON_ACQUIRED, "so are three opposing units with the hero dead")
 	assert_false(TargetingService.is_no_target(
-		TargetingService.target_for(_standard(), 1, true, 0, _open_flags())),
+		TargetingService.target_for(_standard(), 1, true, _living(0), _open_flags())),
 		"...and the pair that comes back is a REAL target, not the no-target sentinel")
 
 
 ## AC 6, reason ONE: no living candidate. Hero dead AND board empty — the only way the ordered
 ## candidate set is empty. Paired against both single-candidate cases above.
 func test_no_living_candidate_is_a_named_reason_not_a_crash() -> void:
-	assert_eq(TargetingService.reason_for(_standard(), false, 0, _open_flags()),
+	assert_eq(TargetingService.reason_for(_standard(), false, _living(0), _open_flags()),
 		TargetingService.REASON_NO_LIVING_CANDIDATE,
 		"a dead opposing hero and an empty opposing board is an honest NAMED no-target outcome")
 	assert_true(TargetingService.is_no_target(
-		TargetingService.target_for(_standard(), 1, false, 0, _open_flags())),
+		TargetingService.target_for(_standard(), 1, false, _living(0), _open_flags())),
 		"...and the verdict is the no-target pair, distinguishable from an acquired target")
 
 
@@ -125,23 +131,23 @@ func test_no_living_candidate_is_a_named_reason_not_a_crash() -> void:
 ## The out-of-range enum values model exactly what a hand-edited or stale `.tres` carries: the editor
 ## offers members only, a text edit does not.
 func test_missing_or_unrecognized_priority_data_is_a_named_reason() -> void:
-	assert_eq(TargetingService.reason_for(null, true, 5, _open_flags()),
+	assert_eq(TargetingService.reason_for(null, true, _living(5), _open_flags()),
 		TargetingService.REASON_NO_PRIORITY_DATA,
 		"NO RULE CARRIED THE SELECTED NAME (an empty data/minions/, or a failed export remap): the "
 		+ "verdict is named missing-data, and NEVER a silent substitution of another rule (`4-2/R17`)")
 	var bad_side := _standard()
 	bad_side.target_side = 99
-	assert_eq(TargetingService.reason_for(bad_side, true, 5, _open_flags()),
+	assert_eq(TargetingService.reason_for(bad_side, true, _living(5), _open_flags()),
 		TargetingService.REASON_NO_PRIORITY_DATA,
 		"an unrecognized authored `target_side` falls to the named reason (AC 1's last clause)")
 	var bad_order := _standard()
 	bad_order.ordering_mode = 99
-	assert_eq(TargetingService.reason_for(bad_order, true, 5, _open_flags()),
+	assert_eq(TargetingService.reason_for(bad_order, true, _living(5), _open_flags()),
 		TargetingService.REASON_NO_PRIORITY_DATA,
 		"an unrecognized authored `ordering_mode` falls to the same named reason")
 	# The PAIR that makes all three non-vacuous: the SAME candidate facts with a RECOGNIZED rule
 	# acquire. So each refusal above is attributable to the parameter alone.
-	assert_eq(TargetingService.reason_for(_standard(), true, 5, _open_flags()),
+	assert_eq(TargetingService.reason_for(_standard(), true, _living(5), _open_flags()),
 		TargetingService.REASON_ACQUIRED,
 		"identical candidate facts with recognized parameters ACQUIRE — so the three refusals above "
 		+ "are caused by the parameter and by nothing else")
@@ -167,7 +173,7 @@ func test_the_evaluator_names_no_invariant_check() -> void:
 ## is handed — so this asserts the property at the seam that enforces it.
 func test_the_verdict_only_ever_names_the_opposing_slot() -> void:
 	for opposing_slot in [0, 1]:
-		var pair := TargetingService.target_for(_standard(), opposing_slot, true, 4, _open_flags())
+		var pair := TargetingService.target_for(_standard(), opposing_slot, true, _living(4), _open_flags())
 		assert_eq(pair[0], opposing_slot,
 			"the acquired slot is the OPPOSING slot handed in — own-side units are not filtered out, "
 			+ "they are unreachable (`4-2/R3`)")
@@ -185,7 +191,7 @@ func test_the_verdict_only_ever_names_the_opposing_slot() -> void:
 ## (player_state.gd:77, 206-207; test_determinism.gd:170). The order here is over plain ints.
 func test_the_tie_break_is_board_index_ascending() -> void:
 	for count in [1, 2, 5, 17]:
-		var pair := TargetingService.target_for(_standard(), 1, false, count, _open_flags())
+		var pair := TargetingService.target_for(_standard(), 1, false, _living(count), _open_flags())
 		assert_eq(pair, [1, 0] as Array[int],
 			"index ASCENDING: the unit at board index 0 is the target on a board of %d" % count)
 
@@ -197,8 +203,8 @@ func test_the_tie_break_is_board_index_ascending() -> void:
 ## `hero_seeker` is TEST-ONLY: nothing under `src/` selects it (scanned in
 ## test_minion_authoring.gd). This is where it earns its authoring.
 func test_prefer_hero_changes_the_verdict_against_identical_candidates() -> void:
-	var standard := TargetingService.target_for(_standard(), 1, true, 3, _open_flags())
-	var seeker := TargetingService.target_for(_hero_seeker(), 1, true, 3, _open_flags())
+	var standard := TargetingService.target_for(_standard(), 1, true, _living(3), _open_flags())
+	var seeker := TargetingService.target_for(_hero_seeker(), 1, true, _living(3), _open_flags())
 	assert_eq(standard, [1, 0] as Array[int],
 		"`standard` takes the units first — board index 0 (AC 8's ascending order)")
 	assert_eq(seeker, [1, TargetingService.HERO_INDEX] as Array[int],
@@ -211,11 +217,11 @@ func test_prefer_hero_changes_the_verdict_against_identical_candidates() -> void
 ## `prefer_hero` is a PREFERENCE, not a restriction, in BOTH directions — the fall-through the golden
 ## fixture actually exercises (P2's board is empty there, so `standard` targets the hero).
 func test_each_preference_falls_through_when_its_first_choice_is_absent() -> void:
-	assert_eq(TargetingService.target_for(_standard(), 1, true, 0, _open_flags()),
+	assert_eq(TargetingService.target_for(_standard(), 1, true, _living(0), _open_flags()),
 		[1, TargetingService.HERO_INDEX] as Array[int],
 		"`standard` with an EMPTY opposing board falls through to the hero, rather than reporting no "
 		+ "target — this is the case the golden fixture hashes")
-	assert_eq(TargetingService.target_for(_hero_seeker(), 1, false, 2, _open_flags()),
+	assert_eq(TargetingService.target_for(_hero_seeker(), 1, false, _living(2), _open_flags()),
 		[1, 0] as Array[int],
 		"`hero_seeker` with a DEAD opposing hero falls through to the units, in ascending order")
 
@@ -223,9 +229,9 @@ func test_each_preference_falls_through_when_its_first_choice_is_absent() -> voi
 ## AC 8: determinism under a FIXED candidate set — the same facts yield the same verdict, every time.
 ## Cheap to assert and it is the property the whole story rests on.
 func test_the_verdict_is_deterministic_under_a_fixed_candidate_set() -> void:
-	var first := TargetingService.target_for(_standard(), 1, true, 4, _open_flags())
+	var first := TargetingService.target_for(_standard(), 1, true, _living(4), _open_flags())
 	for _i in 25:
-		assert_eq(TargetingService.target_for(_standard(), 1, true, 4, _open_flags()), first,
+		assert_eq(TargetingService.target_for(_standard(), 1, true, _living(4), _open_flags()), first,
 			"a fixed candidate set and a fixed tie-break yield one fixed verdict")
 
 
@@ -235,17 +241,17 @@ func test_the_verdict_is_deterministic_under_a_fixed_candidate_set() -> void:
 ## ALL both read as CLOSED (a layer that cannot be verified open stays shut — CastEvaluator's own
 ## direction); flag ON acquires.
 func test_the_minions_flag_gates_targeting_in_both_directions() -> void:
-	assert_eq(TargetingService.reason_for(_standard(), true, 3, _open_flags()),
+	assert_eq(TargetingService.reason_for(_standard(), true, _living(3), _open_flags()),
 		TargetingService.REASON_ACQUIRED, "flag ON: a target is acquired")
-	assert_eq(TargetingService.reason_for(_standard(), true, 3, _closed_flags()),
+	assert_eq(TargetingService.reason_for(_standard(), true, _living(3), _closed_flags()),
 		TargetingService.REASON_MINIONS_FLAG_CLOSED,
 		"flag OFF: a named reason, and NOT one of the two data reasons — 'the layer is switched off' "
 		+ "is a different fact about the match")
-	assert_eq(TargetingService.reason_for(_standard(), true, 3, null),
+	assert_eq(TargetingService.reason_for(_standard(), true, _living(3), null),
 		TargetingService.REASON_MINIONS_FLAG_CLOSED,
 		"NO FLAGS INJECTED reads as CLOSED — a layer that cannot be verified open stays shut")
 	assert_true(TargetingService.is_no_target(
-		TargetingService.target_for(_standard(), 1, true, 3, _closed_flags())),
+		TargetingService.target_for(_standard(), 1, true, _living(3), _closed_flags())),
 		"...and a flag-off unit acquires NOTHING (AC 5's own wording)")
 
 
@@ -253,7 +259,7 @@ func test_the_minions_flag_gates_targeting_in_both_directions() -> void:
 ## nothing about targeting runs, so reporting an authoring error the switched-off layer would never
 ## have reached would be a false statement about the match.
 func test_a_closed_flag_reports_the_flag_even_with_unrecognized_data() -> void:
-	assert_eq(TargetingService.reason_for(null, true, 3, _closed_flags()),
+	assert_eq(TargetingService.reason_for(null, true, _living(3), _closed_flags()),
 		TargetingService.REASON_MINIONS_FLAG_CLOSED,
 		"flag first: a closed layer reports the FLAG, not the missing data it never consulted")
 
@@ -264,10 +270,10 @@ func test_a_closed_flag_reports_the_flag_even_with_unrecognized_data() -> void:
 ## and "stable" means an existing record's index is not disturbed by a later append.
 func test_a_unit_identity_is_stable_and_addressable_across_appends() -> void:
 	var board := UnitBoard.new()
-	board.add()
+	board.add(LIVING_HP)
 	board.set_target_at(0, 1, TargetingService.HERO_INDEX)
-	board.add()
-	board.add()
+	board.add(LIVING_HP)
+	board.add(LIVING_HP)
 	assert_eq(board.size(), 3, "three records")
 	assert_eq(board.target_at(0), [1, TargetingService.HERO_INDEX] as Array[int],
 		"record 0 still holds ITS target after two later appends — the index is stable identity")
@@ -283,7 +289,7 @@ func test_the_board_length_is_unchanged_by_the_identity_extension() -> void:
 	assert_eq(board.size(), 0, "an empty board is length 0, as the count was")
 	assert_true(board.is_empty(), "...and reports empty")
 	for i in 4:
-		board.add()
+		board.add(LIVING_HP)
 		assert_eq(board.size(), i + 1, "each append adds exactly one to the length")
 	board.clear()
 	assert_eq(board.size(), 0, "the debug reset empties it WHOLE (`4-1/R5`) — both arrays together")
@@ -293,7 +299,7 @@ func test_the_board_length_is_unchanged_by_the_identity_extension() -> void:
 ## read as "the unit at index 0 of player 1" — an acquired target nobody acquired.
 func test_a_new_record_holds_the_no_target_pair_not_a_plausible_zero() -> void:
 	var board := UnitBoard.new()
-	board.add()
+	board.add(LIVING_HP)
 	assert_eq(board.target_at(0),
 		[TargetingService.NO_TARGET_SLOT, TargetingService.NO_TARGET_SLOT] as Array[int],
 		"a fresh record's pair is the no-target sentinel")
@@ -305,8 +311,8 @@ func test_a_new_record_holds_the_no_target_pair_not_a_plausible_zero() -> void:
 ## handle into the container. The mutation-after-read check is what makes "no handle" a measurement.
 func test_the_snapshot_payload_is_plain_int_pairs_in_board_order() -> void:
 	var board := UnitBoard.new()
-	board.add()
-	board.add()
+	board.add(LIVING_HP)
+	board.add(LIVING_HP)
 	board.set_target_at(0, 1, TargetingService.HERO_INDEX)
 	board.set_target_at(1, 1, 2)
 	var snap := board.targets_snapshot()
@@ -328,8 +334,8 @@ func test_the_board_bound_predicate_answers_both_ways() -> void:
 	var board := UnitBoard.new()
 	assert_false(board.has_index(0), "an empty board holds no index 0")
 	assert_false(board.has_index(-1), "...nor a negative index")
-	board.add()
-	board.add()
+	board.add(LIVING_HP)
+	board.add(LIVING_HP)
 	assert_true(board.has_index(0), "a two-record board holds index 0")
 	assert_true(board.has_index(1), "...and index 1")
 	assert_false(board.has_index(2), "...and not index 2 (the off-by-one direction)")
@@ -351,8 +357,9 @@ func test_every_board_bound_guard_is_wired_to_that_predicate() -> void:
 		assert_true(line.contains("has_index("),
 			"every bound guard consults the public predicate rather than re-deriving the bound: %s"
 					% line.strip_edges())
-	assert_eq(checks, 4,
-		"FOUR bound guards ship (target_at, target_slot_at, target_index_at, set_target_at) — a new "
+	assert_eq(checks, 6,
+		"SIX bound guards ship as of story 4-3a (target_at, target_slot_at, target_index_at, "
+		+ "set_target_at, and the two new hp seats hp_at + apply_damage_at) — a new "
 		+ "accessor without one, or one whose guard was dropped, moves this count")
 
 
@@ -555,12 +562,12 @@ func _match_with_interval(interval_ticks: int, minions_open := true) -> MatchSta
 	return ms
 
 
-## Units are put on the board through `UnitBoard.add()` directly rather than by casting a summon. The
+## Units are put on the board through `UnitBoard.add(LIVING_HP)` directly rather than by casting a summon. The
 ## cast path is 4-1's and is covered by test_card_effect_resolution.gd / test_determinism.gd; using it
 ## here would drag a deck, a cost map, an effect map and a mana budget into every case above without
 ## making a single assertion stronger.
 func _summon(player: PlayerState) -> void:
-	player.units.add()
+	player.units.add(LIVING_HP)
 
 
 func _advance(ms: MatchState) -> void:
@@ -669,4 +676,19 @@ func _code_lines(path: String) -> Array[String]:
 		if hash_idx >= 0:
 			line = line.substr(0, hash_idx)
 		out.append(line)
+	return out
+
+
+## Story 4-3a (AC 8, `4-3a/R15`): the candidate set the evaluator now takes — an ARRAY OF LIVING
+## BOARD INDICES, where 4-2 passed a bare COUNT. `_living(n)` is the ALL-ALIVE board of size `n`,
+## which is what every pre-4-3a assertion in this file meant by its count, so those assertions keep
+## asserting exactly what they asserted before the signature moved.
+##
+## A board with a HOLE is deliberately NOT expressible through this helper — a hole is the NEW
+## behaviour, and the tests that exercise it build their arrays literally so the hole is visible at
+## the assertion rather than hidden in a helper.
+static func _living(count: int) -> Array[int]:
+	var out: Array[int] = []
+	for i in count:
+		out.append(i)
 	return out

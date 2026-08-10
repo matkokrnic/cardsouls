@@ -248,4 +248,32 @@ func to_snapshot() -> Dictionary:
 		# (the behavioural cause). AC 9's identity extension is NEITHER of them -- measured a
 		# non-mover on its own (`4-2/R8`).
 		"unit_targets": units.targets_snapshot(),
+		# Story 4-3a (AC 9, `4-3a/R17`): the ONE new key this story adds -- each unit's HP, in
+		# board-index order, on the `unit_targets` precedent verbatim.
+		#
+		# IT IS A KEY AT ALL FOR THE `pending_draw` REASON, NOT THE `_deck_deal_pending` ONE: hp
+		# CROSSES TICKS and DECIDES AN OUTCOME (whether the next swing kills), so it cannot be
+		# recomputed for free inside the tick that reads it. A value that crosses ticks and decides
+		# an outcome does not sit outside the hash -- the same argument the swing-dedupe record's
+		# own docstring makes for snapshotting mid-swing dedupe state.
+		#
+		# STILL COUNTS AND VALUES, NEVER IDENTITIES. A float per record is the same class of thing
+		# as `hero.hp` two levels up; no unit identity, no StringName, no object and no position
+		# joins the hash. CanonicalHash has no object branch, and `Array[StringName].sort()` orders
+		# by internal POINTER on this engine -- the failure mode every container key in this file
+		# exists to avoid.
+		#
+		# THE ORDER IS MEANINGFUL and CanonicalHash preserves it, exactly as for `unit_targets`: hp
+		# held by the wrong unit is a real divergence. THIS KEY IS ALSO HOW A HOLE REACHES THE HASH
+		# (AC 7) -- a dead unit is a 0.0 at a STABLE index, so the snapshot carries WHERE the hole
+		# is, not merely that one exists. No separate hole key is authored, and that is deliberate:
+		# liveness is derived from hp and stored nowhere, so a second key would be a second
+		# expression of one fact.
+		#
+		# ONE GOLDEN CAUSE RIDES ON THIS KEY, not two: its mere PRESENCE at the authored maximum
+		# from the golden fixture's t22 `summon_*` cast onward. The golden fixture is deliberately
+		# NOT extended to INJURE a unit (that would be a third cause and is out of this story's
+		# re-baseline scope) -- so there is no behavioural cause to measure separately here. The
+		# story's SECOND named cause is elsewhere entirely: the widened swing-dedupe key shape.
+		"unit_hp": units.hp_snapshot(),
 	}

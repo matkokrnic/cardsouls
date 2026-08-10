@@ -20,10 +20,17 @@ extends RefCounted
 ## Storing the verdict happens in MatchState.advance()'s step-7 ordered dispatch, so the mutation
 ## stays where every other mutation lives (D2).
 ##
-## IT TAKES PLAIN FACTS, NOT A PlayerState. The candidate set reaches this file as three ints and a
-## bool (the opposing slot, whether that hero is alive, how many units that board holds), which is
-## what makes "touches no board" literally true rather than a promise, and what lets every branch
-## below be unit-tested without building a match.
+## IT TAKES PLAIN FACTS, NOT A PlayerState. The candidate set reaches this file as an int, a bool
+## and an ARRAY OF INTS (the opposing slot, whether that hero is alive, and which of that board's
+## indices are LIVING), which is what makes "touches no board" literally true rather than a promise,
+## and what lets every branch below be unit-tested without building a match.
+##
+## STORY 4-3a (AC 8, `4-3a/R15`) REPLACED THE THIRD FACT: it was `opposing_unit_count: int` through
+## 4-2, and a COUNT structurally cannot skip a hole. With a dead unit at index 0 the old
+## `return [opposing_slot, 0]` would hand back the CORPSE, and REASON_NO_LIVING_CANDIDATE tested a
+## count that a hole keeps non-zero. An array of plain ints is still a plain fact, so the contract
+## this paragraph states is preserved rather than weakened -- what changed is that the fact is now
+## rich enough to answer the question being asked of it.
 ##
 ## RULE SOURCING — the EconomyEvaluator precedent verbatim (AC 3). Rules are loaded HERE from
 ## `data/minions/` by DIRECTORY SCAN in SORTED filename order, rather than injected the way
@@ -71,9 +78,14 @@ const REASON_ACQUIRED := &"acquired"
 ## is empty, so the ordered candidate set is empty. Distinguishable from "acquired and it happens
 ## to be null" by construction, because success has its own name above.
 ##
-## A UNIT IS ALWAYS A LIVING CANDIDATE THIS STORY, and that is a consequence of the Deferred
-## section rather than an oversight: units have no HP until 4-3, so a unit on the board cannot be
-## dead. Only the hero's liveness varies.
+## STORY 4-3a (AC 8) FALSIFIED THIS CONSTANT'S ORIGINAL NOTE, which read: "A UNIT IS ALWAYS A LIVING
+## CANDIDATE THIS STORY ... units have no HP until 4-3, so a unit on the board cannot be dead. Only
+## the hero's liveness varies." That is no longer true in either half. Units carry `hp` as of this
+## story, a unit CAN be dead, and its death is exactly what this reason now has to be able to see —
+## which is why the parameter below is a list of LIVING indices and not a count. Both liveness
+## sources vary now, and this reason fires only when BOTH are exhausted: the opposing hero is dead
+## AND the opposing board holds no living unit (an EMPTY board and a board that is ALL HOLES reach
+## it identically, which is the point).
 const REASON_NO_LIVING_CANDIDATE := &"no_living_candidate"
 
 ## AC 6, reason TWO: the priority data is missing or unrecognized. Three ways in, all authored-data
@@ -159,13 +171,16 @@ static func priority_named(rules: Array[MinionPriority], rule_name: StringName) 
 ## make a closed flag report REASON_NO_PRIORITY_DATA whenever `data/minions/` happened to be empty.
 ##
 ## `flags` is the caller's LIVE object, passed in and dereferenced within this call (CONSTRAINT C).
+##
+## `opposing_living_units` (story 4-3a, AC 8) is the opposing board's LIVING indices. Only its
+## EMPTINESS is consulted here — which index is taken is `target_for`'s decision, not this one's.
 static func reason_for(priority: MinionPriority, opposing_hero_alive: bool,
-		opposing_unit_count: int, flags: FeatureFlags) -> StringName:
+		opposing_living_units: Array[int], flags: FeatureFlags) -> StringName:
 	if not _minions_open(flags):
 		return REASON_MINIONS_FLAG_CLOSED
 	if not _is_recognized(priority):
 		return REASON_NO_PRIORITY_DATA
-	if not opposing_hero_alive and opposing_unit_count <= 0:
+	if not opposing_hero_alive and opposing_living_units.is_empty():
 		return REASON_NO_LIVING_CANDIDATE
 	return REASON_ACQUIRED
 
@@ -183,7 +198,9 @@ static func reason_for(priority: MinionPriority, opposing_hero_alive: bool,
 ## THE TOTAL ORDER (`4-2/R3`): slot ascending, then board index ascending. The SLOT half is
 ## satisfied by construction — the opposing side of a 1v1 is exactly one slot, and a one-element
 ## slot set is trivially sorted — so the only half with anything to decide is the INDEX half, and
-## `0` is the ascending-first unit. `prefer_hero` chooses WHICH partition is taken; the total order
+## the ascending-first LIVING index is the answer (story 4-3a, AC 8 -- it was the constant `0`
+## through 4-2, when nothing could be dead). `prefer_hero` chooses WHICH partition is taken; the
+## total order
 ## picks inside it. Ties never resolve by Dictionary iteration order or by
 ## `Array[StringName].sort()`: no Dictionary and no StringName participates in this decision at all.
 ##
@@ -191,14 +208,21 @@ static func reason_for(priority: MinionPriority, opposing_hero_alive: bool,
 ## `_is_recognized` has already established by the time this line runs. A second mode arrives with
 ## the facts it orders by (position/HP, 4-3) and gets its branch then — writing a switch over one
 ## value now would be a branch nothing can take.
+##
+## STORY 4-3a (AC 8, `4-3a/R15`): THE INDEX HALF IS NO LONGER THE CONSTANT 0. It is the ASCENDING-
+## FIRST LIVING index, which is the same answer 4-2 gave whenever nothing was dead and a DIFFERENT
+## one the moment a hole exists at index 0 — where the old code handed back the corpse. `min()`
+## rather than `[0]` expresses the total order itself rather than trusting the caller to have built
+## the array in order: `living_indices()` does build it ascending, but the ORDER IS THE CONTRACT
+## here (`4-2/R3`), and a contract a caller could break silently is not one.
 static func target_for(priority: MinionPriority, opposing_slot: int, opposing_hero_alive: bool,
-		opposing_unit_count: int, flags: FeatureFlags) -> Array[int]:
-	if reason_for(priority, opposing_hero_alive, opposing_unit_count, flags) != REASON_ACQUIRED:
+		opposing_living_units: Array[int], flags: FeatureFlags) -> Array[int]:
+	if reason_for(priority, opposing_hero_alive, opposing_living_units, flags) != REASON_ACQUIRED:
 		return no_target()
 	if priority.prefer_hero and opposing_hero_alive:
 		return [opposing_slot, HERO_INDEX]
-	if opposing_unit_count > 0:
-		return [opposing_slot, 0]
+	if not opposing_living_units.is_empty():
+		return [opposing_slot, opposing_living_units.min()]
 	# Units-first exhausted: a Standard unit falls through to the hero rather than reporting no
 	# target, which is what makes `prefer_hero` a PREFERENCE and not a restriction. Reachable only
 	# with a live hero, because reason_for() has already refused the both-empty case above.

@@ -47,7 +47,7 @@ func test_every_authored_priority_carries_recognized_parameters() -> void:
 		# The evaluator's own predicate, reached through its public surface: a rule that is
 		# recognized cannot be refused for missing data, and vice versa. Flags are handed in OPEN so
 		# this measures the PARAMETERS and not the flag gate.
-		assert_eq(TargetingService.reason_for(rule, true, 0, _open_flags()),
+		assert_eq(TargetingService.reason_for(rule, true, _living(0), _open_flags()),
 			TargetingService.REASON_ACQUIRED,
 			("authored priority `%s` carries recognized parameters — TargetingService accepts it "
 			+ "against a live candidate rather than reporting missing/unrecognized data (AC 6)")
@@ -150,4 +150,19 @@ func _code_lines(path: String) -> Array[String]:
 		if hash_idx >= 0:
 			line = line.substr(0, hash_idx)
 		out.append(line)
+	return out
+
+
+## Story 4-3a (AC 8, `4-3a/R15`): the candidate set the evaluator now takes — an ARRAY OF LIVING
+## BOARD INDICES, where 4-2 passed a bare COUNT. `_living(n)` is the ALL-ALIVE board of size `n`,
+## which is what every pre-4-3a assertion in this file meant by its count, so those assertions keep
+## asserting exactly what they asserted before the signature moved.
+##
+## A board with a HOLE is deliberately NOT expressible through this helper — a hole is the NEW
+## behaviour, and the tests that exercise it build their arrays literally so the hole is visible at
+## the assertion rather than hidden in a helper.
+static func _living(count: int) -> Array[int]:
+	var out: Array[int] = []
+	for i in count:
+		out.append(i)
 	return out

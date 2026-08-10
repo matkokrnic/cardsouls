@@ -178,6 +178,41 @@ extends Resource
 ## its target until the two bodies wedge, which reads as a physics glitch rather than as an
 ## approach. Read inline at point of use, from the same runner-applied handle.
 @export var unit_stop_distance: float = 0.0
+## Story 4-3a (AC 1, `4-3a/R6`/`4-3a/R8`): a unit's MAXIMUM HP, and there is exactly one of it —
+## the field is authored HERE and SHARED by every minion rather than stored per record, because no
+## unit differs from another yet (the totem clause keeps the record type/kind-less, and the
+## `4-2/R17(c)` permission is spent on the per-record `hp` alone). A freshly summoned unit enters at
+## this value, on the `HeroState._init(... max_hp ...)` precedent.
+##
+## A SCALAR, NEVER TICK-DOMAIN — not a duration, so no `BalanceTicks` counterpart, exactly like
+## `unit_move_speed` and `unit_stop_distance` above.
+##
+## READ INLINE AT POINT OF USE (CONSTRAINT C), at MatchState's step-6 cast dispatch — the one seat
+## that calls `UnitBoard.add()`. The board itself never reads balance; it receives the maximum as an
+## argument, which is what keeps `UnitBoard` a pure container with no config dependency.
+##
+## AUDITED > 0 (test_balance_authoring.gd) for a failure that would otherwise be silent: a zero
+## maximum summons a unit that is ALREADY DEAD, so the first contact fact drops at the liveness rung
+## and the whole story ships invisible in the build.
+@export var unit_max_hp: float = 0.0
+## Story 4-3a (AC 2, `4-3a/R8`, decided by Matko): the DEDICATED FLAT damage one confirmed hero
+## swing takes off a unit. Deliberately NOT `attack_damage_percent_of_max_hp` recomputed against
+## `unit_max_hp`: that field is a percentage of the TARGET's OWN maximum, so reusing it here would
+## make hits-to-kill a CONSTANT (34, at the authored 3.0%) for EVERY possible authored unit maximum,
+## and `unit_max_hp` would be a cosmetic number that decides nothing. A flat value is what makes the
+## authored maximum load-bearing.
+##
+## FLAT, NOT A PERCENTAGE, and not scaled by anything: no block multiplier, no deflect, no facing
+## arc — those are all properties of a HERO target (`4-3a/R20`), and a unit structurally lacks every
+## one of them. Scalar, never tick-domain; read inline at the step-4 resolution seat (CONSTRAINT C).
+##
+## PROVISIONAL, AND ITS RETUNE HAS A NAMED OWNER: 3.0 against a 9.0 maximum is three swings to kill.
+## Both values are tuned by the melee retune in `4-3b` (`E3-R/R3`, re-anchored by `4-3a/R5`), which
+## is why test_balance_authoring.gd audits the hits-to-kill RATIO as a band rather than pinning 3.
+##
+## AUDITED > 0 for the opposite silent failure to its sibling above: a zero flat damage ships a unit
+## that can be hit forever and never dies — the invulnerable box this story exists to replace.
+@export var unit_damage_per_hit: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

@@ -175,14 +175,14 @@ func test_evaluator_flag_gate_opens_and_closes_the_melee_rule() -> void:
 func test_flag_on_each_confirmed_hit_generates_the_authored_amount() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)              # active t4-7
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                    # t5: swing 0 confirmed
 	for t in range(6, 9):
 		_advance(ms)                                # t6-t8
 	_advance(ms, _intent([&"attack"]))              # t9: chain -> swing 1 (active t12-15)
 	for t in range(10, 13):
 		_advance(ms)                                # t10-t12
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                    # t13: swing 1 confirmed
 	var passive := 13 * PASSIVE_PER_TICK
 	assert_eq(ms.p2.mana.get_current(), passive,
@@ -200,7 +200,7 @@ func test_flag_on_each_confirmed_hit_generates_the_authored_amount() -> void:
 func test_flag_off_leaves_only_the_passive_rule() -> void:
 	var ms := _make_match(false)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                    # t5: hit confirmed, melee faucet closed
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "flag OFF closes ONLY the faucet — the hit still damages")
 	assert_eq(ms.p1.mana.get_current(), 5 * PASSIVE_PER_TICK,
@@ -214,7 +214,7 @@ func test_flag_off_leaves_only_the_passive_rule() -> void:
 func test_no_flags_injected_still_runs_the_ungated_passive_rule() -> void:
 	var ms := _make_match(true, false)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                    # t5
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "no flags: damage still applies")
 	assert_eq(ms.p1.mana.get_current(), 5 * PASSIVE_PER_TICK,
@@ -326,7 +326,7 @@ func test_mid_match_reload_changes_the_very_next_tick_regen_rate() -> void:
 func test_mid_match_reload_changes_the_next_hit_mana() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                    # t5: paid at the original 8.0
 	var after_first := ms.p1.mana.get_current()
 	assert_eq(after_first - ms.p2.mana.get_current(), MELEE_HIT_MANA, "first hit paid 8.0")
@@ -339,7 +339,7 @@ func test_mid_match_reload_changes_the_next_hit_mana() -> void:
 	_advance(ms, _intent([&"attack"]))              # t9: chain
 	for t in range(10, 13):
 		_advance(ms)
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_advance(ms)                                    # t13: swing 1 confirmed at the NEW amount
 	assert_eq(ms.p1.mana.get_current() - ms.p2.mana.get_current(), MELEE_HIT_MANA + 20.0,
 		"the second hit paid the RELOADED amount — the rule dereferences balance inline")

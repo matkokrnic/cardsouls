@@ -178,14 +178,25 @@ func capture_set_camera_basis(slot: int, camera_basis: Basis) -> void:
 	_camera_pushes[tick].append([slot, camera_basis])
 
 
-## The CONTACT-FACT channel — MatchState.push_contact(). The four-field fact verbatim; the seam's
-## own signature and its four Invariant.check guards are UNCHANGED by this story (`3-0c/R1`).
-func capture_push_contact(attacker_slot: int, target_slot: int, attack_index: int,
+## The CONTACT-FACT channel — MatchState.push_contact(). The seam's fact verbatim, mirroring its
+## signature exactly so the tap can never record a differently-shaped fact from the one pushed.
+##
+## STORY 4-3a (AC 3, `4-3a/R10`): THE TARGET IS NOW AN ADDRESS PAIR, so the recorded row grows from
+## FOUR positional elements to FIVE -- the pair is FLATTENED into the row rather than nested,
+## keeping every element a scalar exactly as the four-element row was. THIS SHAPE CHANGE IS WHY
+## `RecordFile.FORMAT_VERSION` BUMPS TO 3: a v2 row has no target-index element, and rebuilding one
+## by assuming -1 would silently replay a unit hit as a hero hit. `record_file` refuses a mismatched
+## version outright with a reason and carries no migration path, and that refusal IS the design.
+##
+## THE CHANNEL SET IS UNCHANGED. No new capture channel joins the recorder, `push_contact` remains
+## the sole intake per 1-8, and the reflective `_resource_values()` helper is untouched -- it
+## serialises RESOURCES (balance, flags, costs, effects), and a contact fact is not one.
+func capture_push_contact(attacker_slot: int, target: Array[int], attack_index: int,
 		target_to_attacker: Vector2) -> void:
 	var tick := _tick + 1
 	if not _contacts.has(tick):
 		_contacts[tick] = []
-	_contacts[tick].append([attacker_slot, target_slot, attack_index, target_to_attacker])
+	_contacts[tick].append([attacker_slot, target[0], target[1], attack_index, target_to_attacker])
 
 
 ## The INTENT channel — MatchState.advance(). Retains the two per-tick value objects by
@@ -362,7 +373,11 @@ func replay_push_camera_bases(ms: MatchState, tick: int) -> void:
 ## The seam is unchanged — it has accepted facts from whoever pushes them since 1-5.
 func replay_push_contacts(ms: MatchState, tick: int) -> void:
 	for fact: Array in contacts_at(tick):
-		ms.push_contact(int(fact[0]), int(fact[1]), int(fact[2]), fact[3] as Vector2)
+		# Story 4-3a: the five-element row rebuilt into the seam's `[slot, index]` target pair. The
+		# recorded row is FLAT and the pair is reassembled here, at the one place that re-enters the
+		# seam -- so the record stays scalars-only and the seam stays pair-shaped.
+		ms.push_contact(int(fact[0]), [int(fact[1]), int(fact[2])], int(fact[3]),
+				fact[4] as Vector2)
 
 
 ## One slot's recorded intent for `tick`, as a FRESH InputIntent — never the retained instance.

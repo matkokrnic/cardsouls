@@ -223,15 +223,53 @@ func is_iframe_open() -> bool:
 ## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
 ## contact resolution for THIS hero as the attacker. Returns true iff the fact's
 ## attack_index matches a live dedupe record AND this swing has not already damaged
-## target_slot — and then records the target, so a second same-swing contact returns
-## false. A false return means the fact is DROPPED (stale, unknown, or duplicate).
-func register_swing_hit(index: int, target_slot: int) -> bool:
+## that TARGET ADDRESS — and then records the address, so a second same-swing contact
+## returns false. A false return means the fact is DROPPED (stale, unknown, or duplicate).
+##
+## STORY 4-3a (AC 3, `4-3a/R16`): THE KEY WIDENS FROM `[attack_index, slot]` TO
+## `[attack_index, slot, index]` — the full target address. Today's slot-only key is an
+## ARTEFACT OF A WORLD WHERE ONLY HEROES EXISTED: one slot held exactly one hittable thing,
+## so the slot WAS the address. With units on the board a slot holds a hero and N units, and
+## under the old key ONE SWING OVERLAPPING A UNIT AND THE ENEMY HERO WOULD RESOLVE ONLY THE
+## FIRST — the second contact would read as a duplicate of a target it never touched.
+##
+## SO A SWING CLEAVES. Overlapping three targets in one active window now produces three
+## separate confirmations rather than one, and the dedupe still does its actual job: the same
+## address cannot be hit twice by the same swing.
+##
+## `index == -1` addresses that slot's HERO and `>= 0` a board unit at that index — the
+## `4-2/R2` convention the contact fact's target and a unit's acquired target now SHARE, so
+## the two addressing schemes are one fact rather than two that could drift.
+##
+## THE HIT LIST THEREFORE HOLDS PAIRS, NOT INTS, and the snapshot follows it — the record is
+## deep-copied into to_snapshot(). The story PREDICTED that shape change as a second golden cause;
+## MEASURED, IT IS A NON-MOVER, and the mechanism is worth recording here rather than rediscovering:
+## every dedupe record in the golden's fixture has EXPIRED AND BEEN ERASED by the hash tick (both
+## heroes' `records` dictionaries are empty at t24), so the widened key has nothing to hash. It
+## would become a real cause the moment a fixture hashes mid-swing — which is exactly what
+## test_contact_resolution.gd's mid-swing snapshot pin measures instead.
+## `Array.has()` compares by VALUE and Godot 4 Array equality is element-wise, so a pair
+## already present is found by `in` exactly as a bare int was.
+##
+## CANONICAL ORDER (`4-3a/R22`): the hit list is kept sorted by target address, `[slot, index]`
+## ascending, rather than left in APPEND order. A cleave (AC 3) lets one swing register several
+## addresses in a single tick, and their arrival order here is whatever order
+## `_gather_contact_facts` happened to receive from the runner's overlap query — a physics query
+## that pins no ordering. This list is snapshotted and hashed (see the type comment above), so an
+## unpinned arrival order would make the hash depend on physics-query ordering: a determinism hole
+## the shipped golden cannot see, because its fixture never cleaves. Sorting on insertion (rather
+## than at snapshot time) keeps the stored state itself canonical, which is the simpler invariant
+## to hold. `Array.sort()` on an `Array[Array[int]]` compares element-wise, so it sorts lexically by
+## `[slot, index]` for free.
+func register_swing_hit(index: int, target_slot: int, target_index: int) -> bool:
 	if not _swing_dedupe.has(index):
 		return false
 	var hit: Array = _swing_dedupe[index]["hit"]
-	if target_slot in hit:
+	var address: Array[int] = [target_slot, target_index]
+	if address in hit:
 		return false
-	hit.append(target_slot)
+	hit.append(address)
+	hit.sort()
 	return true
 
 

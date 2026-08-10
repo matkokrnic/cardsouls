@@ -104,7 +104,15 @@ const HASHED: Array[String] = [
 	# it reaches the hash and none of it needs an exemption. UNHASHED_CROSS_TICK_MEMBERS stays at
 	# THREE, which is what makes AC 10's replay-parity claim honest for the new cross-tick state:
 	# there is no fourth unhashed member to argue about.
+	# Story 4-3a (AC 1 / AC 9, `4-3a/R17`): `_hp` classifies HASHED with its two index-aligned
+	# siblings, and for a STRONGER version of their reason rather than a weaker one. A value that
+	# CROSSES TICKS and DECIDES AN OUTCOME (whether the next swing kills) cannot sit outside the
+	# hash: a replay whose units carried different hp would diverge the moment one of them died.
+	# It reaches the hash through `PlayerState.to_snapshot()`'s `unit_hp` key, so no exemption is
+	# needed and UNHASHED_CROSS_TICK_MEMBERS stays at THREE. This is also the HOLE representation
+	# (AC 7) — a dead unit is a 0.0 at a stable index — so the hole is hashed too, by construction.
 	"player_state.units", "unit_board._target_slots", "unit_board._target_indices",
+	"unit_board._hp",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
 	"hero_state.move_speed", "hero_state.windup", "hero_state.active", "hero_state.recovery",
@@ -398,8 +406,8 @@ func _record_a_driven_run() -> Dictionary:
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
 			ms.set_camera_basis(int(push[0]), push[1] as Basis)
 		if t == CONTACT_TICK:
-			record.capture_push_contact(0, 1, 0, Vector2(-1, 0))
-			ms.push_contact(0, 1, 0, Vector2(-1, 0))
+			record.capture_push_contact(0, [1, -1], 0, Vector2(-1, 0))
+			ms.push_contact(0, [1, -1], 0, Vector2(-1, 0))
 		var intents := _intents(t)
 		record.capture_advance(intents)
 		ms.advance(intents)

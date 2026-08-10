@@ -89,7 +89,7 @@ func _play(ms: MatchState, through_tick: int, p1_press := {}, p2_block_ranges :=
 		var held2: Array = [&"block"] if held else []
 		var i2 := _intent(pressed2, held2)
 		for fact: Array in contacts.get(t, []):
-			ms.push_contact(fact[0], fact[1], fact[2], fact[3])
+			ms.push_contact(fact[0], [fact[1], -1], fact[2], fact[3])
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()
@@ -294,7 +294,7 @@ func test_deflect_landed_is_queued_never_emitted_mid_advance() -> void:
 	var deflects: Array = []
 	_collect_deflects(ms, deflects)
 	_play(ms, 3, {1: [&"attack"]}, [[1, 10]])
-	ms.push_contact(0, 1, 0, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], 0, Vector2.DOWN)
 	var intents: Array[InputIntent] = [InputIntent.new(), _intent([], [&"block"])]
 	ms.advance(intents)  # t4: deflect resolves — signal must stay queued
 	assert_eq(deflects.size(), 0, "deflect_landed is QUEUED during advance (D5)")
@@ -315,7 +315,7 @@ func test_reload_keeps_inflight_window_and_next_block_picks_up_new_ticks() -> vo
 	ms.apply_balance(_config(8.0 / 60.0))  # X3 seam, mid-match (D9 refill included)
 	ms.drain_signals()
 	_play_range(ms, 3, 5, {}, [[1, 6]])
-	ms.push_contact(0, 1, 0, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], 0, Vector2.DOWN)
 	_play_range(ms, 6, 6, {}, [[1, 6]])
 	assert_eq(deflects.size(), 0, "in-flight window kept its 4 ticks across the reload")
 	assert_eq(ms.p2.hero.get_hp(), 98.5, "t6 contact blocked (1-1 reload principle)")
@@ -324,7 +324,7 @@ func test_reload_keeps_inflight_window_and_next_block_picks_up_new_ticks() -> vo
 	# Fresh P1 swing at t14: windup t14-16, active t17-20; contact at t20.
 	_play_range(ms, 7, 13, {}, [])
 	_play_range(ms, 14, 19, {14: [&"attack"]}, [[14, 21]])
-	ms.push_contact(0, 1, ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
 	_play_range(ms, 20, 20, {}, [[14, 21]])
 	assert_eq(deflects, [[0, 1]], "next enter_block picked up the reloaded 8-tick window (t20 deflects)")
 

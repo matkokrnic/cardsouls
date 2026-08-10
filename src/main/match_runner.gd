@@ -632,6 +632,40 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 		actors.append(unit)
 
 
+## Story 4-3a (AC 11, `4-3a/R13`): FREE the actor of every unit whose record has died, and leave a
+## HOLE in its place so the array index stays aligned with the board index.
+##
+## WITHOUT THIS THE KILLED MINION STAYS A VISIBLE, SOLID GREY BOX FOREVER, contradicting this
+## story's own "removed from the board": the spawn loop only ever GROWS, and the only existing free
+## path is the debug reset. Measured before it was written.
+##
+## A HOLE, NOT A REMOVAL, for the same reason the RECORD keeps its index (AC 7 / `4-3a/R2`):
+## `erase()` here would shift every later actor down one and silently re-point
+## `_target_world_position` and `_address_of` at the WRONG unit. `null` at a stable index is what
+## keeps `actors[i]` and board index `i` the same number. Every consumer already tolerates it --
+## `_aim_unit_actors`, `_approach_unit_actors` and `_target_world_position` all guard with
+## `is_instance_valid()`, which is false for `null`, and `_address_of`'s `find()` never matches it.
+##
+## `queue_free()`, never `free()`, per project-context -- and this is NOT the pooling question
+## (`4-5` owns that, gated on the 60fps-at-16-units criterion).
+##
+## POLLED, NOT SIGNALLED. This reads the board right after `advance()`, the same shape and seat as
+## the spawn poll above and the aim/approach polls below: no signal, no state handle held, no new
+## `connect_*` -- so the observation-seam family stays where it is and needs no amendment. That is
+## also why `hit_landed` is not emitted for a unit (`4-3a/R12`): DEATH is the observable event, and
+## this is where presentation observes it.
+func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
+	var actors: Array = _unit_actors[slot]
+	for index: int in actors.size():
+		if player.units.is_alive_at(index):
+			continue
+		var unit: Node = actors[index]
+		if not is_instance_valid(unit):
+			continue
+		unit.queue_free()
+		actors[index] = null
+
+
 ## Story 4-2 (`4-2/R13`): point slot `slot`'s spawned boxes at whatever their records say they
 ## acquired. Presentation only — see the call site.
 ##
@@ -687,6 +721,14 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 	var actors: Array = _unit_actors[slot]
 	for index: int in actors.size():
 		if not player.units.has_index(index):
+			continue
+		# Story 4-3a (AC 7, `4-3a/R14`): THE APPROACH LIVENESS SEAT — the second of the two this
+		# story names. This loop drove EVERY index unconditionally through 4-3; a dead unit's record
+		# becomes "no longer walking" only because this line is here. It is NOT made redundant by the
+		# corpse's actor being freed just after `advance()`: the seats are separate by ruling, the
+		# predicate is the board's own (`is_alive_at`, never a re-derived `hp > 0` — the guard would
+		# otherwise consult a copy), and a hole that outlived its free would otherwise be walked.
+		if not player.units.is_alive_at(index):
 			continue
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
@@ -822,9 +864,29 @@ func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroA
 		var owner_actor := area.get_parent()
 		if owner_actor == actor:
 			continue  # self-overlap — filtered at gather, the invariant stays strict
-		var target_slot := _slot_of(owner_actor)
+		# Story 4-3a (AC 4): THE DROP THAT USED TO SIT HERE IS DELIBERATELY OPENED. Through 4-3 this
+		# read `_slot_of(owner_actor)` and discarded every overlap whose slot was -1 -- which is
+		# precisely what made a unit INVISIBLE to the contact pipeline. Identity resolution is now
+		# EXTENDED (never replaced: `_slot_of` is untouched below, so heroes resolve exactly as they
+		# did) to hand back a full `[slot, index]` TARGET ADDRESS, so a unit hurtbox resolves to a real
+		# board index instead of being dropped.
+		#
+		# NO LAYER WAS AUTHORED FOR THIS (`4-3a/R11`, decided by Matko). The unit hurtbox sits on the
+		# EXISTING layer 2 "hurtbox", which the hero Hitbox's mask already includes -- so it is visible
+		# to this very query with NO edit to `hero.tscn` and NO edit to `project.godot`; both stay
+		# byte-identical, and nothing other than the hero hitbox masks layer 2.
+		var address := _address_of(owner_actor)
+		var target_slot := address[0]
 		if target_slot == -1:
-			continue  # not a hero hurtbox; nothing else carries the hurtbox layer in E1
+			continue  # a hurtbox this runner cannot address -- neither hero nor a spawned unit
+		# Story 4-3a (AC 6, `4-3a/R21b`): NO FRIENDLY FIRE. A hero's hitbox does not damage a unit
+		# owned by that hero's OWN slot. This is the identity filter directly above extended from
+		# "not myself" to "not my side", and it sits at GATHER time rather than as a state-side check
+		# for a structural reason: `push_contact` asserts that attacker and target slots DIFFER, so a
+		# same-slot fact reaching that seam would trip the invariant rather than resolve to nothing.
+		# Fact SELECTION, not rule evaluation -- the same category as the self-overlap filter above.
+		if target_slot == attacker_slot:
+			continue
 		# Story 1-8 (R-B3): the fourth fact field — world-space planar direction from the
 		# TARGET to the ATTACKER, FROM POSITIONS ONLY. The runner reports the spatial
 		# fact; it never reads HeroState.facing and never computes a relative angle —
@@ -840,8 +902,35 @@ func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroA
 		# through physics on replay was REJECTED at 1-7's gate (D-4) because it would hang
 		# replay soundness on Jolt bit-determinism.
 		var fact_dir := dir.normalized()
-		_recorder.capture_push_contact(attacker_slot, target_slot, attack_index, fact_dir)
-		_match_state.push_contact(attacker_slot, target_slot, attack_index, fact_dir)
+		_recorder.capture_push_contact(attacker_slot, address, attack_index, fact_dir)
+		_match_state.push_contact(attacker_slot, address, attack_index, fact_dir)
+
+
+## Story 4-3a (AC 4): the overlapping area's owning actor resolved to a `[slot, index]` TARGET
+## ADDRESS -- `4-2/R2`'s convention, the same one `unit_board.gd` uses for what a unit has ACQUIRED,
+## so the contact fact's target and a unit's acquired target are ONE addressing scheme.
+##
+## `[-1, -1]` means UNADDRESSABLE and the caller drops the overlap, which is the old `_slot_of == -1`
+## drop preserved for everything that is genuinely neither a hero nor a spawned unit.
+##
+## HEROES ARE RESOLVED BY `_slot_of` AND NOTHING ELSE, deliberately: that function is EXTENDED by
+## this one rather than replaced, so hero-vs-hero identity resolution is bit-for-bit the code it was
+## before this story -- the regression pin AC 3 names rests on that.
+##
+## A UNIT IS FOUND BY IDENTITY IN THE PER-SLOT ACTOR ARRAY, and its position in that array IS its
+## board index (AC 4 / `4-3a/R13`) -- the same number the state layer uses, which is what keeps the
+## runner's array index and the state's identity one fact rather than two that could drift. `find()`
+## compares by reference and skips the `null` HOLES a freed corpse leaves behind (a freed actor is
+## never the argument here: it is gone from the tree, so its hurtbox cannot be in an overlap result).
+func _address_of(owner_actor: Node) -> Array[int]:
+	var hero_slot := _slot_of(owner_actor)
+	if hero_slot != -1:
+		return [hero_slot, TargetingService.HERO_INDEX]
+	for slot: int in 2:
+		var index: int = (_unit_actors[slot] as Array).find(owner_actor)
+		if index != -1:
+			return [slot, index]
+	return [-1, -1]
 
 
 func _slot_of(actor: Node) -> int:
@@ -949,6 +1038,13 @@ func _physics_process(delta: float) -> void:
 		#     a count going down.
 		_spawn_missing_unit_actors(0, _match_state.p1.units.size())
 		_spawn_missing_unit_actors(1, _match_state.p2.units.size())
+		# 3c-bis. Story 4-3a (AC 11, `4-3a/R13`): FREE the actor of any unit that died in the
+		#     advance() directly above, leaving a HOLE at its index. Seated immediately after the
+		#     spawn poll and before aim/approach, so a unit killed this tick is gone this tick and no
+		#     later loop in this same frame drives a corpse. Same poll shape as 3b/3c/3d: plain board
+		#     reads, no signal, no state handle, no new `connect_*`.
+		_free_dead_unit_actors(0, _match_state.p1)
+		_free_dead_unit_actors(1, _match_state.p2)
 		# 3d. Story 4-2 (`4-2/R13`): AIM each grey box at the target state acquired for it. PURELY
 		#     PRESENTATIONAL, and it is the live smoke's whole visible signal — with movement out of
 		#     scope (`4-2/R4`) a unit that never moves gives a human nothing to watch, so the box

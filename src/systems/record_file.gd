@@ -86,7 +86,17 @@ extends RefCounted
 ## own documented contract for every non-matching version. Records are DEBUG ARTEFACTS with exactly
 ## one writer; a shim that back-filled an empty effects map would be speculative machinery whose
 ## only output is a replay that silently diverges from the match it claims to reproduce.
-const FORMAT_VERSION := 2
+## STORY 4-3a (`4-3a/R10`) BUMPS THIS TO 3, and the reason is a payload SHAPE change rather than a
+## new channel. The contact fact's target widened from a bare slot to a `[slot, index]` ADDRESS
+## (AC 3), so the recorded contact row grew from four positional elements to five. A v2 file carries
+## no target-index element; rebuilding one by assuming -1 would silently replay a UNIT hit as a HERO
+## hit -- a replay that diverges from the match it claims to reproduce, which is exactly what the
+## version check exists to refuse. No migration shim, for the `4-1/R1` reason directly above: a v2
+## record is REFUSED WITH A REASON, and that refusal is this class's documented contract.
+##
+## The channel SET is unchanged -- no new capture channel, `push_contact` still the sole intake --
+## so REQUIRED_KEYS below does not move and `_resource_values` is untouched.
+const FORMAT_VERSION := 3
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -377,7 +387,11 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 		for push: Array in camera_pushes.get(tick, []):
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
 		for fact: Array in contacts.get(tick, []):
-			record.capture_push_contact(int(fact[0]), int(fact[1]), int(fact[2]), fact[3] as Vector2)
+			# Story 4-3a: the FIVE-element row (attacker, target slot, target index, attack index,
+			# dir) rebuilt into the recorder's pair-shaped seam. Guaranteed five here by the
+			# format_version check above -- a four-element v2 row never reaches this line.
+			record.capture_push_contact(int(fact[0]), [int(fact[1]), int(fact[2])], int(fact[3]),
+					fact[4] as Vector2)
 		record.capture_advance(_intent_pair(intents[tick - 1]))
 		_capture_reloads_at(record, reload_events, tick)
 	return record

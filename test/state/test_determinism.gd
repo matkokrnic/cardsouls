@@ -376,7 +376,36 @@ extends TestCase
 ## (story 4-0, hand slot stability: pending_draw_owed shape).
 ## Previous golden 78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5
 ## (story 4-1, basic summon resolution: unit_count key + the t22 summon).
-const GOLDEN := "73a86005f1f2c069306ed6504be9c99d109e7b96014f05b502224f658209d1b5"
+## Previous golden 73a86005f1f2c069306ed6504be9c99d109e7b96014f05b502224f658209d1b5
+## (story 4-2, throttled targeting: unit_targets key + the acquired pair; held unmoved by 4-3).
+##
+## ---------------------------------------------------------------------------------------------
+## STORY 4-3a RE-BASELINE (AC 9, `4-3a/R17`) -- ONE re-baseline, TWO causes PREDICTED, ONE MEASURED
+## AS A REAL MOVER. Both were measured INDEPENDENTLY and in BOTH DIRECTIONS before this line moved:
+##
+##   CAUSE 1, the `unit_hp` snapshot key -- A REAL MOVER, and the only one.
+##     73a86005 -> 35c38c0e, measured with cause 2 held OFF. The golden fixture summons one unit at
+##     t22 (`f.minions = true` in _golden_flags, `unit_count` 1 at the hash tick), so the new key
+##     enters carrying that unit's authored maximum. THE FIXTURE IS DELIBERATELY NOT EXTENDED TO
+##     INJURE A UNIT -- that would be a third cause and is out of this story's re-baseline scope --
+##     so this is the snapshot-SHAPE cause only, the 4-1 `unit_count` / 3-5a `discard_size` pattern.
+##
+##   CAUSE 2, the widened `[attack_index, slot, index]` swing-dedupe key -- PREDICTED A MOVER,
+##     MEASURED A NON-MOVER. With cause 1 held OFF and the widened key ON, this file hashed
+##     73a86005 EXACTLY -- the unmoved golden. The MECHANISM was measured rather than guessed: at
+##     the hash tick (t24) BOTH heroes' `swing_dedupe.records` dictionaries are EMPTY, because every
+##     record opened by the t5/t13/t19/t20 facts has passed its grace tick and been erased. A
+##     widened key over an empty record set has nothing to hash. It would move a fixture that
+##     hashed MID-SWING, which is what test_contact_resolution.gd's dedupe snapshot pin does -- and
+##     that pin DID move, which is where the shape change is proven instead.
+##
+##   THE REVERSE DIRECTION, which is what makes the single cause attributable: with BOTH causes
+##     held off, this file hashed 73a86005 -- so every other change this story ships (the widened
+##     `push_contact` target address, the `TargetingService` array-of-living-indices signature, the
+##     two liveness seats, unit damage, death, actor freeing, FORMAT_VERSION 3) is a MEASURED golden
+##     NON-MOVER. The mover is the key, and nothing else.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "35c38c0ef8008258a5c7ee614487ff92ca825866681f53636f865b83659321b9"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -1200,7 +1229,7 @@ func _play_sequence(ms: MatchState, after_tick := Callable(), cast := true) -> v
 		var held2: Array = [&"block"] if _block_held(t) else []
 		var i2 := _intent(pair[1], P2_PRESS.get(t, []), held2)
 		for fact: Array in CONTACTS.get(t, []):
-			ms.push_contact(fact[0], fact[1], fact[2], fact[3])
+			ms.push_contact(fact[0], [fact[1], -1], fact[2], fact[3])
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()

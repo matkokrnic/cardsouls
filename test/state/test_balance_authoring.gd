@@ -244,6 +244,48 @@ func test_authored_minion_approach_values_are_positive() -> void:
 		+ "until the two bodies wedge, which reads as a physics glitch, not as an approach)")
 
 
+## ---- Minion combat values (story 4-3a, AC 1/AC 2, `4-3a/R8`) ---------------------------
+##
+## BOTH AUDITED > 0, and each for its own failure. A zero `unit_max_hp` ships a unit that is
+## already dead the instant it is summoned — the first contact fact would find `hp <= 0` and drop
+## at the liveness rung, so summoning would resolve to a corpse and the whole story would be
+## invisible in the build. A zero `unit_damage_per_hit` ships the opposite and equally silent
+## failure: a unit that can be hit forever and never dies, which is precisely the invulnerable box
+## this story exists to replace.
+##
+## `field in config` and the `>= 0.0` loop in test_data_resources.gd BOTH pass on this script's 0.0
+## defaults, which is why these bespoke bounds exist at all — the `draw_replacement_delay_seconds`
+## reason verbatim.
+##
+## THE RATIO IS AUDITED TOO, and it is the only place the story's "three swings to kill" claim is
+## machine-checked. It is stated as a BAND rather than an equality so the `4-3b` melee retune can
+## re-tune both values without editing a test: hits-to-kill must be at least 2 (a one-shot minion
+## makes the hp field cosmetic — exactly the failure `4-3a/R8` rejected the percentage formula for)
+## and at most 10 (beyond that a kill stops being a legible, decisive event, which is this story's
+## own stated goal).
+##
+## Zero stays a legal IN-TEST value for both — no golden fixture authors either field — it is the
+## AUTHORED value that must be positive.
+func test_authored_minion_combat_values_are_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.unit_max_hp > 0.0,
+		"unit_max_hp must be authored > 0 (a zero maximum summons a unit that is already dead — "
+		+ "the first fact drops at the liveness rung and the story ships invisible)")
+	assert_true(config.unit_damage_per_hit > 0.0,
+		"unit_damage_per_hit must be authored > 0 (a zero flat damage ships the invulnerable box "
+		+ "this story exists to replace)")
+	var hits_to_kill := ceili(config.unit_max_hp / config.unit_damage_per_hit)
+	assert_true(hits_to_kill >= 2,
+		"authored hits-to-kill must be >= 2 — a one-shot minion makes unit_max_hp cosmetic, the "
+		+ "exact failure `4-3a/R8` rejected the percent-of-max formula for (got %d)" % hits_to_kill)
+	assert_true(hits_to_kill <= 10,
+		"authored hits-to-kill must be <= 10 — beyond that a kill stops being the legible, "
+		+ "decisive event this story ships (got %d)" % hits_to_kill)
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

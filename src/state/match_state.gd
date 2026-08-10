@@ -426,12 +426,31 @@ func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 ## plain static class, no autoload): slots must be 0 or 1, a self-contact is malformed
 ## in 1v1 (operator decision; 1-7's gate revisits if real gathering ever needs
 ## otherwise), and a zero direction is directionless — no spatial fact.
-func push_contact(attacker_slot: int, target_slot: int, attack_index: int,
+##
+## STORY 4-3a (AC 3): THE TARGET WIDENS FROM A BARE SLOT TO A TARGET ADDRESS, `[slot, index]`,
+## on the `4-2/R2` pair convention ALREADY SET — `index >= 0` addresses a board unit at that
+## index, `index == -1` addresses that slot's hero. That is the exact convention
+## `unit_board.gd`'s own target pair uses for what a unit has ACQUIRED, so the contact fact's
+## target and a unit's acquired target are now ONE addressing scheme rather than two that
+## could drift. Every hero-vs-hero call site passes `[target_slot, -1]` and resolves
+## identically to the bare-slot behaviour it replaces.
+##
+## THE SELF-CONTACT INVARIANT STAYS STRICT, AND AC 6 RIDES ON IT (`4-3a/R21b`): attacker and
+## target SLOTS must still differ, so a hero's hitbox overlapping its OWN slot's unit is a
+## malformed fact here. That is why the friendly-fire filter sits at GATHER time in the runner
+## rather than as a state-side check — a same-slot fact must never reach this seam at all.
+func push_contact(attacker_slot: int, target: Array[int], attack_index: int,
 		target_to_attacker: Vector2) -> void:
 	Invariant.check(attacker_slot == 0 or attacker_slot == 1,
 		"contact attacker_slot must be 0 or 1, got %d" % attacker_slot)
+	Invariant.check(target.size() == 2,
+		"contact target must be a [slot, index] pair, got %d element(s)" % target.size())
+	var target_slot := target[0] if target.size() == 2 else -1
+	var target_index := target[1] if target.size() == 2 else -1
 	Invariant.check(target_slot == 0 or target_slot == 1,
-		"contact target_slot must be 0 or 1, got %d" % target_slot)
+		"contact target slot must be 0 or 1, got %d" % target_slot)
+	Invariant.check(target_index >= TargetingService.HERO_INDEX,
+		"contact target index must be >= -1 (-1 is the hero), got %d" % target_index)
 	Invariant.check(attacker_slot != target_slot,
 		"self-contact fact is malformed in 1v1 (attacker == target == %d)" % attacker_slot)
 	Invariant.check(not target_to_attacker.is_zero_approx(),
@@ -439,6 +458,7 @@ func push_contact(attacker_slot: int, target_slot: int, attack_index: int,
 	_contact_queue.append({
 		"attacker": attacker_slot,
 		"target": target_slot,
+		"target_index": target_index,
 		"attack_index": attack_index,
 		"dir": target_to_attacker,
 	})
@@ -672,6 +692,17 @@ func _resolve_contacts() -> Array[int]:
 	for fact in _contact_queue:
 		var attacker := p1 if int(fact["attacker"]) == 0 else p2
 		var target := p1 if int(fact["target"]) == 0 else p2
+		# Story 4-3a (AC 3/AC 2, `4-3a/R20`): THE UNIT-TARGET BRANCH. A target address whose index
+		# is >= 0 addresses a BOARD UNIT, and a unit shares only the rungs it actually HAS.
+		# Expressed as a branch inside this ladder rather than a helper beside it (`4-3a/R20`
+		# permits either), so the SHARED rungs are visibly the same lines in the same ORDER:
+		# dead-target drop, dead-attacker drop, dedupe. What it SKIPS is skipped because a unit
+		# structurally lacks it, not because this story chose not to implement it — iframes,
+		# deflect and block are all properties of a HERO target: a unit has no roll, no defense
+		# window, no action state and no facing.
+		if int(fact["target_index"]) != TargetingService.HERO_INDEX:
+			_resolve_unit_contact(fact, attacker, target)
+			continue
 		if target.hero.action_state == HeroState.ActionState.DEAD:
 			continue
 		# Story 2-3 (AC3, 2-3/R6): attacker-side DEAD FACT DROP — the same rung and the same
@@ -681,6 +712,15 @@ func _resolve_contacts() -> Array[int]:
 		# corpse's fact never consumes the swing's one resolution; attack_index stays
 		# untouched. The in-flight window is NOT stopped or shortened here — it keeps ticking
 		# to expiry by design (1-9/R3 intact); it simply resolves to nothing.
+		#
+		# THIS TWO-LINE CHECK IS DUPLICATED in _resolve_unit_contact below, and that duplication is
+		# ACCEPTED, not refactored (4-3a/R24, review finding). The unit branch is a deliberately
+		# SHORT, separate path -- it shares only the rungs a unit actually has (4-3a/R20) -- and
+		# extracting a shared helper for one two-line condition adds indirection to the most
+		# sensitive shipped code in the project for no readability gain. If a THIRD copy of this
+		# check appears in a future story, that is the signal to replace the mechanism (e.g. a
+		# shared dead-attacker guard both ladders call into) rather than to keep tightening this
+		# two-copy pattern.
 		if attacker.hero.action_state == HeroState.ActionState.DEAD:
 			continue
 		# Story 1-9 (1-9/R1): iframe FACT DROP — not a resolution. Judged on the window
@@ -690,7 +730,8 @@ func _resolve_contacts() -> Array[int]:
 		# fact resolves normally. No damage, no hit_landed, no mana, no signal (1-9/R5).
 		if target.hero.is_iframe_open():
 			continue
-		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"])):
+		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"]),
+				TargetingService.HERO_INDEX):
 			continue
 		var damage := balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
 		if target.hero.action_state == HeroState.ActionState.BLOCKING \
@@ -706,6 +747,69 @@ func _resolve_contacts() -> Array[int]:
 		confirmed.append(int(fact["attacker"]))
 	_contact_queue.clear()
 	return confirmed
+
+
+## Story 4-3a (AC 2/AC 3/AC 5/AC 7, `4-3a/R20`): one contact fact whose target address names a
+## BOARD UNIT. The step-4 ladder's unit half, and it is deliberately SHORT — the rungs a hero
+## target carries that a unit structurally lacks are absent, not stubbed.
+##
+## THE SHARED RUNGS ARE IN THE SAME ORDER AS THE HERO LADDER, which is the whole of `4-3a/R20`'s
+## requirement:
+##   1. DEAD-TARGET DROP. The hero ladder's first rung, and a unit has one now — that is this
+##      story. A dead unit's record stays at its index carrying hp 0 (the hole, AC 7), and a fact
+##      addressing it is DROPPED, which is what AC 8 means by "stops being addressable as an attack
+##      target by a later swing". `is_alive_at` also reads false for an out-of-range index, so a
+##      fact naming a record that does not exist drops on the same rung rather than crashing.
+##   2. DEAD-ATTACKER DROP. Identical to the hero ladder's, same rung, same reason (2-3/R6): a
+##      corpse's fact delivers NOTHING, and it is placed BEFORE dedupe so the corpse never consumes
+##      the swing's one resolution against this address.
+##   3. DEDUPE, through the widened `[attack_index, slot, index]` key (`4-3a/R16`). This is what
+##      lets one swing cleave through several units while still refusing to hit any ONE of them
+##      twice.
+##
+## WHAT IS SKIPPED AND WHY: the IFRAME drop (a unit does not roll), the DEFLECT branch (a unit has
+## no defense window and no stamina to pay a deflect with) and the BLOCK multiplier plus its facing
+## gate (a unit has no action state and no facing to judge an arc against). All three are properties
+## of a HERO target. `4-3b` ships the unit as an ATTACKER; none of these becomes a unit property
+## then either.
+##
+## DAMAGE IS THE DEDICATED FLAT FIELD, read INLINE at this point of use (CONSTRAINT C) and NOT
+## `attack_damage_percent_of_max_hp` (`4-3a/R8`, decided by Matko) — see the field's own comment on
+## BalanceConfig for why a percentage of the target's own maximum would make hits-to-kill a constant
+## and `unit_max_hp` cosmetic.
+##
+## TWO THINGS DELIBERATELY DO NOT HAPPEN HERE, and each is its own AC:
+##   * NO `hit_landed` (AC 5-adjacent, `4-3a/R12`): the signal carries a SLOT only and its shipped
+##     consumer flashes and stings the HERO of that slot, so emitting it on a unit hit would flash
+##     an untouched hero whose hp did not change. The legible event this story ships is DEATH.
+##   * NO `confirmed.append` — and THAT IS AC 5's entire mechanism. Step 5's `_generate_mana` awards
+##     `melee_hit_mana` per entry in the list this function returns, so a unit-target confirmation
+##     staying OUT of that list is what makes killing minions generate no mana. There is no second
+##     gate inside `_generate_mana` to keep in agreement with this one.
+func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: PlayerState) -> void:
+	var index := int(fact["target_index"])
+	if not target.units.is_alive_at(index):
+		return
+	# THIS TWO-LINE CHECK DUPLICATES the hero ladder's dead-attacker drop above (see its comment for
+	# the full reasoning). ACCEPTED, not refactored (4-3a/R24, review finding) -- this branch is
+	# deliberately a short, separate path (4-3a/R20), and one two-line condition does not earn a
+	# shared helper. A THIRD copy appearing in the next story is the signal to replace the mechanism
+	# instead of tightening this pattern further.
+	if attacker.hero.action_state == HeroState.ActionState.DEAD:
+		return
+	if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"]), index):
+		return
+	# Story 4-3a (AC 7, `4-3a/R21a`): DEATH IS RESOLVED HERE, immediately after damage is applied,
+	# and it needs no line of its own — a record is dead exactly when its hp reaches 0, so the clamp
+	# inside `apply_damage_at` IS the death. Nothing is removed, nothing is compacted and no other
+	# record's index moves: the corpse stays at this index as a hole (AC 7), and the two named
+	# liveness seats (`4-3a/R14`) stop driving it because they consult `is_alive_at`.
+	#
+	# THE STEP-1b ROUND-OVER FREEZE NEEDS NO SPECIAL CASE, and this is the MEASURED claim
+	# `4-3a/R21a` narrowed the Open Question to rather than an assertion: step 1b returns from
+	# advance() before step 4 is ever reached, so a frozen tick never resolves a contact and
+	# therefore never kills a unit. Pinned in test_unit_damage_and_death.gd.
+	target.units.apply_damage_at(index, balance.unit_damage_per_hit)
 
 
 ## Story 1-8 (R-D2/R-D3): the facing gate — pure state policy over the runner-reported
@@ -730,6 +834,15 @@ func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
 ## same way (graceful degradation, unchanged from 1-5).
 ## The live `balance` / `balance_ticks` / `flags` are passed IN on every call and never
 ## retained by the evaluator (CONSTRAINT C — it is static and stateless).
+##
+## STORY 4-3a (AC 5, decided by Matko — `4-3a/R3`): A CONFIRMED HIT AGAINST A UNIT GENERATES NO
+## MANA, and this function is deliberately UNCHANGED by that. The gate is upstream, at the one place
+## the list is built: `_resolve_unit_contact` never appends to `confirmed_hits`, so a unit-target
+## confirmation cannot reach the melee rung below. A second check HERE would be a second gate to
+## keep in agreement with the first, and the first is the one that owns the list.
+##
+## Note the rung this runs to (`4-3a/R21c`, a citation correction): the PASSIVE rung at the bottom
+## is part of this seat, not a separate one — a pre-gate citation of "733-739" clipped it.
 func _generate_mana(confirmed_hits: Array[int]) -> void:
 	var rules := EconomyEvaluator.authored_rules()
 	var per_hit := EconomyEvaluator.amount_for(rules, EconomyEvaluator.SOURCE_MELEE_HIT,
@@ -981,7 +1094,11 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# reads it.
 	if CardEffectResolver.outcome(_card_effects.get(played), flags) \
 			== CardEffectResolver.OUTCOME_SUMMON:
-		player.units.add()
+		# Story 4-3a (AC 1): the authored maximum is read INLINE here (CONSTRAINT C) and handed
+		# DOWN to the board, which is what keeps `UnitBoard` a pure container with no config
+		# dependency. `balance` is non-null on this path by construction — the cast reached here
+		# through CastEvaluator, which a pre-injection MatchState never does.
+		player.units.add(balance.unit_max_hp)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
 	# exactly here; it is REPLACED, not kept behind a flag. The debt is incremented and the window
 	# started, and the delivery happens at the end of this same step 6 — immediately if the
@@ -1197,14 +1314,19 @@ func _retarget_units(owner: PlayerState, opponent: PlayerState, opposing_slot: i
 	if owner.units.is_empty():
 		return
 	var hero_alive := opponent.hero.is_alive()
-	var opposing_unit_count := opponent.units.size()
+	# Story 4-3a (AC 8, `4-3a/R14`): THE TARGETING LIVENESS SEAT — the first of the two this story
+	# names. The candidate scan now hands the evaluator the opposing board's LIVING indices instead
+	# of its SIZE, so a dead unit's index is not a candidate. Hoisted out of the loop with
+	# `hero_alive` for the reason this function's header already gives: these are per-BOARD facts,
+	# identical for every unit on this board, and hoisting them is what keeps this a SHARED scan.
+	var opposing_living := opponent.units.living_indices()
 	for index in owner.units.size():
 		# The evaluator COMPUTES, this line APPLIES (D6) — TargetingService touches no board, and
 		# UnitBoard.set_target_at is reached only from here. `flags` is read INLINE (CONSTRAINT C),
 		# exactly as the step-6 CardEffectResolver call reads it; a closed `minions` flag returns a
 		# no-target pair, so a flag-off unit never acquires a target (AC 5).
 		var pair := TargetingService.target_for(
-			priority, opposing_slot, hero_alive, opposing_unit_count, flags)
+			priority, opposing_slot, hero_alive, opposing_living, flags)
 		owner.units.set_target_at(index, pair[0], pair[1])
 
 

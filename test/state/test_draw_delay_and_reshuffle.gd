@@ -46,9 +46,11 @@ const VULNERABLE_TICKS := 7
 ## .gd carries the other — and BOTH were failing before this edit, which is the mechanism working as
 ## designed: the pin exists precisely so a key cannot ship quietly, and the story that adds the key
 ## is the story that moves the pin, deliberately and in both places.
+## DELIBERATELY EXTENDED AGAIN BY STORY 4-3a (AC 9, `4-3a/R17`), the TWELFTH key: `unit_hp`, one
+## float per unit record in board-index order. Same mechanism, third time, both pins moved together.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-	"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_targets",
+	"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_hp", "unit_targets",
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the
@@ -327,7 +329,7 @@ func test_the_player_snapshot_key_set_is_exactly_the_expected_set() -> void:
 	keys.sort()
 	assert_eq(keys, EXPECTED_PLAYER_SNAPSHOT_KEYS,
 		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count; "
-		+ "4-2 added unit_targets)")
+		+ "4-2 added unit_targets; 4-3a added unit_hp)")
 	assert_false(keys.has("vulnerable_window"),
 		"the vulnerable window is NOT a snapshot key — nothing reads it, so nothing can desync on it")
 

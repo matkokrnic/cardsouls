@@ -232,6 +232,15 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# with its own assertion below rather than a number quietly edited in place — a pin that drifts
 	# silently is the failure this project pins against.
 	#
+	# DELIBERATELY EXTENDED AGAIN BY STORY 4-3a (AC 9, `4-3a/R17`): `unit_hp`, one float per unit
+	# record in board-index order. ELEVEN -> TWELVE, with its own assertion below for the same
+	# reason 4-2 gave — a pin that drifts silently is the failure this project pins against.
+	#
+	# A FLOAT PER RECORD IS THE SAME CLASS AS `hero.hp` TWO LEVELS UP, so "counts only, never
+	# contents" is not weakened: no identity, no StringName, no object and no position joins the
+	# hash. This key is also HOW A HOLE REACHES THE HASH (AC 7) — a dead unit is a 0.0 at a stable
+	# index, so the snapshot carries WHERE the hole is, not merely that one exists.
+	#
 	# THE CLAIM THE PIN GUARDS IS STILL UNCHANGED, and that is why the extension is legitimate rather
 	# than an erosion: a `[slot, index]` pair is COUNTS AND INDICES, the same class as
 	# `pending_draw_owed`'s owed slots (`4-2/R2` cites that precedent by name). No identity, no
@@ -239,7 +248,7 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# no key at all — measured, `4-2/R8`.
 	var expected: Array = [
 		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-		"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_targets",
+		"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_hp", "unit_targets",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "
@@ -247,9 +256,9 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 11,
-		"the per-player snapshot key set is ELEVEN keys as of story 4-2 (ten before it — the one "
-		+ "new key is `unit_targets`, AC 11)")
+	assert_eq(keys.size(), 12,
+		"the per-player snapshot key set is TWELVE keys as of story 4-3a (eleven before it — the "
+		+ "one new key is `unit_hp`, AC 9 / `4-3a/R17`)")
 
 
 # --- Fixture ----------------------------------------------------------------------------------

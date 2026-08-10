@@ -91,7 +91,7 @@ func test_contact_during_running_iframe_is_dropped() -> void:
 	_collect_hits(ms, hits)
 	# t1: P1 rolls (iframe covers t1-t2), P2 starts a swing (record 0 opens at the press).
 	_step(ms, _intent([&"roll"]), _intent([&"attack"]))
-	ms.push_contact(1, 0, 0, Vector2.DOWN)
+	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
 	_step(ms)  # t2: iframe still running -> FACT DROP
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "contact during running iframe is dropped — no damage")
 	assert_eq(hits.size(), 0, "no hit_landed on a dropped fact")
@@ -111,12 +111,12 @@ func test_negation_boundary_grace_then_full_same_swing() -> void:
 	_collect_hits(ms, hits)
 	_step(ms, _intent([&"roll"]), _intent([&"attack"]))  # t1
 	_step(ms)                                            # t2
-	ms.push_contact(1, 0, 0, Vector2.DOWN)
+	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
 	_step(ms)  # t3: window closed in THIS tick's step 2 -> +1 grace -> negated
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "close+1 arrival negates via the grace transient")
 	assert_eq(ms.p2.mana.get_current(), 0.0, "negated: no mana")
 	assert_eq(hits.size(), 0, "negated: no hit_landed")
-	ms.push_contact(1, 0, 0, Vector2.DOWN)
+	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
 	_step(ms)  # t4: past the grace -> the SAME swing lands at full damage
 	assert_eq(ms.p1.hero.get_hp(), 94.0,
 		"close+2 arrival from the SAME swing lands FULL damage — the drop never registered")
@@ -138,11 +138,11 @@ func test_grace_negates_after_rolling_ended_window_alone() -> void:
 	_step(ms, null, _intent([&"attack"]))         # t2: P2 swing (windup t2-4, active t5-8)
 	for t in range(3, 6):
 		_step(ms)                                 # t3-t5
-	ms.push_contact(1, 0, 0, Vector2.DOWN)
+	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
 	_step(ms)  # t6: duration closed -> IDLE; iframe grace transient still negates
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "ROLLING already exited on t6")
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "grace-tick negation while IDLE — window-alone judgment")
-	ms.push_contact(1, 0, 0, Vector2.DOWN)
+	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
 	_step(ms)  # t7: past the grace -> lands
 	assert_eq(ms.p1.hero.get_hp(), 94.0, "first post-grace arrival lands full damage")
 
@@ -209,7 +209,7 @@ func test_mid_roll_reload_windows_keep_duration_speed_reads_inline() -> void:
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(3.0 / (5.0 / 60.0), 0, 0)),
 		"mid-roll velocity reads the NEW roll_distance inline (CONSTRAINT C)")
 	_step(ms)  # t3 (old iframe's grace tick — not tested here; boundary is t4)
-	ms.push_contact(1, 0, 0, Vector2.DOWN)
+	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
 	_step(ms)  # t4: under the reloaded 4-tick iframe this would be covered — it must LAND
 	assert_eq(ms.p1.hero.get_hp(), 94.0,
 		"in-flight iframe kept its 2 ticks across the reload — the t4 arrival lands")

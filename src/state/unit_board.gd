@@ -59,16 +59,49 @@ extends RefCounted
 var _target_slots: Array[int] = []
 var _target_indices: Array[int] = []
 
+## ------------------------------------------------------------------------------------------
+## STORY 4-3a (AC 1): THE THIRD PARALLEL ARRAY — hp.
+## ------------------------------------------------------------------------------------------
+## The `4-2/R17(c)` permission spent, on EXACTLY this one field (`4-3a/R6`). Still a PLAIN FLOAT per
+## record and still index-aligned with the two above, so the "no nested typed array, no Dictionary,
+## no StringName" reasoning in this file's header covers it unchanged.
+##
+## NO PER-UNIT MAXIMUM, deliberately. Maximum HP is authored ONCE on `BalanceConfig.unit_max_hp` and
+## shared by every minion, because no unit differs from another yet — the ratified totem clause
+## keeps the record type/kind-less, so a per-record maximum would be N copies of one authored
+## number. A unit enters at that maximum, passed IN to `add()` by the caller (below).
+##
+## LIVENESS IS DERIVED FROM THIS FIELD AND STORED NOWHERE (`is_alive_at`, `hp > 0.0`) — the
+## `HeroState.is_alive()` shape verbatim. There is deliberately no separate `_alive: Array[bool]`:
+## two fields expressing one fact is exactly how a corpse ends up simultaneously dead and alive.
+## THIS IS ALSO THE HOLE REPRESENTATION AC 7 asks for. A dead unit's record is not removed and not
+## blanked — it stays at its index carrying `hp <= 0`, which is what makes the hole a value rather
+## than a second structure to keep in sync.
+var _hp: Array[float] = []
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
-## resolved `summon_*` cast. Still takes NO ARGUMENT: everything a record carries beyond its index
-## is acquired later, by the step-7 tick, and a freshly summoned unit has acquired nothing yet — so
-## it enters holding the honest NO-TARGET pair rather than a placeholder that could be mistaken for
-## an acquired target of slot 0.
-func add() -> void:
+## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
+## that could be mistaken for an acquired target of slot 0 — everything else a record carries is
+## acquired later, by the step-7 tick, and a freshly summoned unit has acquired nothing yet.
+##
+## STORY 4-3a (AC 1): it now TAKES ONE ARGUMENT, the authored maximum HP, and that is the whole
+## reason the argument exists rather than a `BalanceConfig` reference on this class: reading balance
+## HERE would make a pure container depend on config and would cache nothing legitimately
+## (CONSTRAINT C). The caller reads `balance.unit_max_hp` INLINE at the cast seat and hands the
+## value down. A unit enters at that maximum, on the `HeroState._init(... max_hp ...)` precedent.
+##
+## STORY 4-3a (AC 7, `4-3a/R9`): STILL AN UNCONDITIONAL APPEND, AND THAT IS A RULING, NOT AN
+## OVERSIGHT. A summon following a death lands at a NEW index — it NEVER fills a dead unit's hole.
+## Reuse would silently re-point a stale throttled `unit_targets` reference at a DIFFERENT live
+## unit, which is the exact aliasing the hole discipline exists to prevent, and a future pooling
+## story (`4-5`) is precisely the change that would introduce a free list "for free". If this
+## function ever grows a "find a free slot" branch, that ruling is being reversed and needs its own.
+func add(max_hp: float) -> void:
 	var pair := TargetingService.no_target()
 	_target_slots.append(pair[0])
 	_target_indices.append(pair[1])
+	_hp.append(max_hp)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -78,9 +111,13 @@ func add() -> void:
 ##
 ## Both arrays are cleared TOGETHER — they are one collection expressed as two, and an index that
 ## existed in one but not the other would be a record with half a target.
+## Story 4-3a: `_hp` is cleared with its two siblings, for the header's own stated reason applied to
+## a third array — they are ONE collection expressed as three, and an index that existed in one but
+## not the others would be a record with half a target or no liveness at all.
 func clear() -> void:
 	_target_slots.clear()
 	_target_indices.clear()
+	_hp.clear()
 
 
 func size() -> int:
@@ -134,6 +171,93 @@ func set_target_at(index: int, slot: int, unit_index: int) -> void:
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
 	_target_slots[index] = slot
 	_target_indices[index] = unit_index
+
+
+## Story 4-3a (AC 1): the record's hp. Same bound enforcement as `target_at` and for the same
+## reason — every caller iterates `size()`, so an out-of-range index means the caller's own loop is
+## wrong and returning a plausible 0.0 would read as "dead" and hide it.
+func hp_at(index: int) -> float:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _hp[index]
+
+
+## Story 4-3a (AC 7/AC 8): THE LIVENESS PREDICATE, derived from hp and stored nowhere — the
+## `HeroState.is_alive()` shape verbatim (`_hp > 0.0`), for its reason verbatim.
+##
+## THE PUBLIC PREDICATE BOTH NAMED LIVENESS SEATS ARE WIRED TO (`4-3a/R14`): the targeting seat
+## (through `living_indices()` below) and the runner's DRIVE-phase approach loop. Nothing may
+## re-derive `hp > 0` inline at either seat, on the `has_index` precedent directly above — a guard
+## consulting a copy is guarding the copy.
+##
+## AN OUT-OF-RANGE INDEX READS AS NOT ALIVE rather than tripping the bound, and that is the one
+## deliberate divergence from `hp_at` above. CORRECTED (`4-3a/R23`, review finding): the runner's
+## actor array is NOT actually a source of out-of-range reads at either named liveness seat — spawn
+## resyncs the actor array's size against the board in the same tick, so the two never desync at
+## `living_indices()` or the DRIVE-phase approach loop. The real caller this leniency exists for is
+## `MatchState._resolve_unit_contact`'s dead-target rung: a contact FACT can name a stale or
+## malformed target index (see `test_a_fact_naming_a_nonexistent_index_is_dropped_not_a_crash`), and
+## for that caller "there is no such record" and "that record is dead" lead to the same correct
+## action, DROP the fact — an Invariant.check would be printing at a caller that is behaving
+## correctly against untrusted input.
+func is_alive_at(index: int) -> bool:
+	return has_index(index) and _hp[index] > 0.0
+
+
+## Story 4-3a (AC 2): apply one confirmed hit's damage. The ONE mutator of hp, reached only from
+## MatchState's step-4 contact resolution — the `set_target_at` discipline (one writer, inside the
+## ordered dispatch) applied to the second piece of record content.
+##
+## CLAMPED AT ZERO, never negative, mirroring `HeroState._set_hp`. A corpse at exactly 0.0 makes
+## `is_alive_at` false and keeps the snapshot value stable no matter how much overkill the last hit
+## carried — two units killed by differently-sized hits hash the same, which is the honest reading
+## (both are dead) and keeps the golden from moving on overkill arithmetic.
+##
+## NO SIGNAL. Units have no per-record signal channel and this story does not open one: `hit_landed`
+## is deliberately NOT emitted for a unit target (`4-3a/R12` — its payload carries a slot only, and
+## its shipped consumer would flash an untouched HERO whose hp did not change). The legible event
+## this story ships is DEATH, and presentation observes it by POLLING `is_alive_at` (the runner's
+## existing spawn/aim/approach poll shape), so the locked count of seven `connect_*` seams is
+## untouched.
+func apply_damage_at(index: int, amount: float) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_hp[index] = maxf(0.0, _hp[index] - amount)
+
+
+## Story 4-3a (AC 8, `4-3a/R15`): the LIVING board indices, ascending, freshly built each call.
+##
+## THIS IS THE CANDIDATE SET `TargetingService` NOW TAKES, in place of the bare
+## `opposing_unit_count: int` it took through 4-2. A COUNT structurally cannot skip a hole: with a
+## dead unit at index 0 the evaluator's `return [opposing_slot, 0]` would hand back the CORPSE, and
+## its `REASON_NO_LIVING_CANDIDATE` branch tests a count that a hole keeps non-zero. An array of
+## plain ints is still a PLAIN FACT, so the evaluator's stated contract ("plain facts, never a
+## `PlayerState`") is preserved rather than weakened.
+##
+## ASCENDING BY CONSTRUCTION — it is built by walking the board in index order — which is the INDEX
+## half of `4-2/R3`'s total order (slot ascending, then board index ascending) satisfied at the
+## source rather than by a sort the evaluator would have to trust.
+func living_indices() -> Array[int]:
+	var out: Array[int] = []
+	for i in _hp.size():
+		if _hp[i] > 0.0:
+			out.append(i)
+	return out
+
+
+## Story 4-3a (AC 9, `4-3a/R17`): the hp snapshot payload — one float per record, in board-index
+## order. `hp` CROSSES TICKS AND DECIDES AN OUTCOME, so it does not sit outside the hash; that is
+## the same argument the swing-dedupe record's own docstring makes for why mid-swing dedupe state is
+## snapshotted, and the one `pending_draw` won on.
+##
+## THE ORDER IS MEANINGFUL and CanonicalHash preserves it, exactly as it does for `unit_targets`
+## directly below: hp held by the wrong unit is a real divergence the hash should see. THIS IS ALSO
+## HOW A HOLE REACHES THE HASH — a dead unit is a 0.0 at a stable index, so the snapshot carries the
+## hole's position, not merely the fact that a hole exists.
+##
+## Freshly built each call, so no caller receives a handle into this container.
+func hp_snapshot() -> Array:
+	return _hp.duplicate()
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS

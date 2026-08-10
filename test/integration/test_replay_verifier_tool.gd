@@ -174,7 +174,7 @@ func _fixture_record(move_scale: float) -> IntentRecorder:
 		record.capture_set_camera_basis(0, Basis(Vector3.UP, deg_to_rad(90.0)))
 		record.capture_set_camera_basis(1, Basis.IDENTITY)
 		if t == CONTACT_TICK:
-			record.capture_push_contact(0, 1, 0, Vector2(-1, 0))
+			record.capture_push_contact(0, [1, -1], 0, Vector2(-1, 0))
 		record.capture_advance(_intents(t, move_scale))
 	return record
 
