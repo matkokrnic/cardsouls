@@ -6560,3 +6560,81 @@ per `2-3`), so no temporary flip is required. Same reasoning as `4-3/R14`.
 Docs-only, no code. One commit, not pushed: `docs(4-3a): split minion combat into damage and
 rhythm halves` (`sprint-status.yaml`, `deferred-work.md`, this decision-log entry). Operator
 reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3a readiness gate (rulings R8-R21)
+
+`4-3a/R8` (BLOCKING, ruled) AC 2 named one damage implementation, not two: a dedicated FLAT
+damage-to-unit balance field, never `attack_damage_percent_of_max_hp` recomputed against a unit's
+own authored maximum. Measured: that computation is a percentage of the TARGET's own maximum, so
+reuse would make hits-to-kill a constant (34, at the authored 3.0%) for EVERY possible authored
+unit maximum, and the authored unit HP field would be cosmetic. Authored provisionally: unit
+maximum HP = 9.0, flat damage to a unit = 3.0, three swings to kill; both provisional, tuned by the
+melee retune in `4-3b`. -- _decided by Matko._
+`4-3a/R9` (ruled) A hole is NEVER reused. `UnitBoard.add()` stays an unconditional append; a summon
+following a death lands at a NEW index, never the dead unit's hole. Reuse would silently re-point a
+stale throttled `unit_targets` reference at a DIFFERENT live unit -- the exact aliasing the hole
+discipline exists to prevent -- and pooling is precisely the change that would introduce a free
+list "for free." AC 7 states this; a task pins it with a test.
+`4-3a/R10` (ruled) `FORMAT_VERSION` goes to 3. The contact fact rides the replay tap
+(`capture_push_contact`, the positional four-element array, `record_file`'s fixed-position
+rebuild), so widening the target field changes the recorded payload's SHAPE. `record_file` refuses
+a mismatched version with a reason and no migration path, by design (`4-1` precedent). The Golden
+Prediction's stay-at-2 claim is REVERSED. No committed recording fixture exists to re-record.
+`4-3a/R11` (BLOCKING, ruled) The unit hurtbox goes on the EXISTING layer 2 "hurtbox". Measured: the
+hero Hitbox already declares `collision_layer = 4` / `collision_mask = 2`, and the repo holds
+exactly four layer/mask declarations, all in `hero.tscn`. `project.godot` and `hero.tscn` both stay
+BYTE-IDENTICAL. AC 4's "extend the hero Hitbox pairing" requirement is removed; `hero.tscn` leaves
+Project Structure Notes; the layer Open Question closes with this answer. -- _decided by Matko._
+`4-3a/R12` (BLOCKING, ruled) `hit_landed` is NOT emitted for a unit target -- the signal carries a
+slot only and its shipped consumer would flash and sting the hero of that slot, an untouched hero
+whose hp did not change. The legible event this story ships is DEATH. Live Smoke corrected: no
+claim that a hero's attack "visibly reduces" a unit's HP; three swings kill and remove it, nothing
+flashes or stings on the first two. Deferred item added, per-hit feedback on a damaged unit, OWNER
+`4-3b`; rejected alternatives: a widened signal payload (more plumbing, same screen) and a new
+observation seam (architecture amendment against the locked count of seven). -- _decided by Matko._
+`4-3a/R13` (ruled) A dead unit's actor is freed. Measured: the actor spawn loop only grows and the
+free path is reached from the debug reset alone, so without this a killed minion stays a visible
+grey box forever. New AC 11: `queue_free()` on death (until `4-5`'s 60fps-at-16-units criterion
+fails; not the pooling question), runner's per-slot actor array left holed to keep indices aligned.
+`4-3a/R14` (ruled) Liveness gates at two NAMED seats: the retarget loop (`TargetingService`'s
+candidate scan) and the approach loop (`match_runner.gd`'s DRIVE phase). Measured: both drive every
+index unconditionally today, untouched by any task. AC 7 now names both seats rather than asserting
+an outcome the code cannot yet give.
+`4-3a/R15` (ruled) `TargetingService.target_for`/`reason_for` take an `Array[int]` of living
+indices in place of `opposing_unit_count: int`. Measured: today's candidate set is three ints and a
+bool, `target_for` always returns index 0, so it structurally CANNOT skip a dead unit's index -- a
+hole at 0 hands back the corpse, and `REASON_NO_LIVING_CANDIDATE` tests a count a hole keeps
+non-zero. An int array is still a plain fact, preserving "never a `PlayerState`". Its docstring
+claiming a unit is always living is FALSIFIED by this story, corrected in the same pass.
+`4-3a/R16` (ruled) The dedupe key widens to the full target address, `[attack_index, slot, index]`
+-- today's `attack_index`-only key is an artefact of a hero-only world; under it one swing
+overlapping a unit and the enemy hero would resolve only the first. A swing now cleaves through
+multiple targets. That record is SNAPSHOTTED, so widening it is a SECOND golden cause (`R17`).
+`4-3a/R17` (ruled) `hp` joins the snapshot -- a value that crosses ticks and decides an outcome does
+not sit outside the hash, the dedupe record's own reasoning. Golden Prediction becomes a MOVER with
+TWO named causes (the hp key; the widened dedupe key), measured both directions, one re-baseline.
+The fixture is NOT extended to injure a unit -- a third cause, out of scope. BEFORE unchanged:
+golden `73a86005`, snapshot key set eleven.
+`4-3a/R18` (ruled) AC 10 gets a positive half: as written, three negative claims that would pass
+against two units that never moved. Requires both units MOVED and CONVERGED within a bounded
+distance of the SAME acquired pair, tolerances DERIVED AT RUNTIME from authored balance. The
+existing live test's single-actor helper cannot be reused for two units.
+`4-3a/R19` (ruled) AC 3's regression pin named: same damage value, dedupe outcome, confirmed-hit
+membership, `hit_landed` payload for a hero target. Covers the shipped contact tests under
+`test/state/` and `test/integration/` plus the determinism fixture's contact payloads, listed by
+real path in AC 3.
+`4-3a/R20` (ruled) The unit-target path SHARES the rungs a unit has (dead-attacker drop, dedupe)
+and SKIPS what it lacks (iframe, deflect, block). Branch-or-helper is an implementation choice; rung
+ORDER must match today's exactly.
+`4-3a/R21` (ruled) (a) Death resolves in the contact step right after damage; the round-over freeze
+precedes it and needs no special case AS A CLAIM TO BE MEASURED, not asserted. (b) AC 6 gains why
+the friendly-fire filter sits at GATHER time: the contact seam asserts attacker/target slots
+differ, so a same-slot fact reaching it would trip that invariant. (c) Citations fixed:
+`unit_board.gd` is 147 lines not 143; `_generate_mana` runs to the passive rung
+(`match_state.gd:733-750`), not line 739.
+
+### Close-out
+
+Docs-only, no code. Story promoted to `ready-for-dev`. One commit, not pushed: `docs(4-3a): apply
+readiness gate rulings R8-R21` (story file, `sprint-status.yaml`, `deferred-work.md`, this
+decision-log entry). Operator reviews the log and pushes.

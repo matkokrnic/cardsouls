@@ -1,5 +1,18 @@
 # Deferred Work
 
+## Deferred from: readiness gate of 4-3a-minion-damage-and-death (2026-08-10)
+
+- **Per-hit feedback on a damaged (not yet dead) unit (`4-3a/R12`, decided by Matko).**
+  `hit_landed` is NOT emitted for a unit target in `4-3a`: the signal carries a slot only, and its
+  shipped consumer flashes and stings the hero of that slot -- emitting it on a unit hit would
+  flash and sting an untouched hero whose HP did not change. The legible event `4-3a` ships is
+  DEATH: the unit disappears. A hero landing two non-lethal swings on a unit produces no visible
+  or audible feedback at all today. Two alternatives were considered and rejected at the gate:
+  widening the signal payload to carry a unit target (same screen, more plumbing, no new seam) and
+  a real unit feedback channel (a new observation seam, which the locked count of seven
+  `connect_*` seams on `match_runner.gd` makes an architecture amendment, not a story-scoped
+  change). OWNER: `4-3b-minion-attack-rhythm`.
+
 ## Deferred from: code review of 4-3-minion-approach-and-collision (2026-08-10)
 
 - **Unit-vs-unit body collision is unmeasured (`4-3/R21`, finding 1).** The shipped comments
