@@ -6638,3 +6638,53 @@ differ, so a same-slot fact reaching it would trip that invariant. (c) Citations
 Docs-only, no code. Story promoted to `ready-for-dev`. One commit, not pushed: `docs(4-3a): apply
 readiness gate rulings R8-R21` (story file, `sprint-status.yaml`, `deferred-work.md`, this
 decision-log entry). Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3a close-out
+
+`4-3a/R22` (ruled, fixed) `HeroState.register_swing_hit`'s hit list hashed an UNPINNED physics
+ordering: this story is the first to let one swing append several entries (the cleave, `R16`), and
+`_gather_contact_facts` receives overlaps from a query that pins no order. Fixed by sorting `hit` on
+every insertion (canonical `[slot, index]` order). Golden measured UNMOVED both directions -- the
+fixture's dedupe records are empty at its hash tick, nothing to hash there; not re-baselined.
+`4-3a/R23` (ruled, fixed) `UnitBoard.is_alive_at`'s lenient out-of-range read cited an UNREACHABLE
+runner/board desync (both named liveness seats already bound their loop first). Corrected to cite the
+real caller: `_resolve_unit_contact`'s dead-target rung, which can receive a stale/malformed index.
+`4-3a/R24` (ruled, recorded) The two-line dead-attacker check duplicated between the hero ladder and
+`_resolve_unit_contact` is ACCEPTED, not refactored -- the unit branch's separateness is `R20`'s own
+ruling, and one two-line condition does not earn a shared helper. Forward rule recorded at both
+sites: a THIRD copy is the signal to replace the mechanism, not tighten the pattern further.
+`4-3a/R25` (ruled, recorded) Minion-blocked-by-own-summoner ANNOTATES the existing deferred-work item
+(`approach()` cannot distinguish "arrived" from "physically obstructed", owner `4-3b`) rather than
+opening a new one -- the measured instance is `test_two_units_converge_live.gd`'s trailing unit
+wedging against P1's own hero. Item stays OPEN.
+`4-3a/R26` (rejected, false positive) The claimed "silent malformed-target fallback" in
+`push_contact`'s ternary is dead code: `Invariant.check(target.size() == 2, ...)` on the line above
+already halts loudly first, in every build this pipeline is ever exercised under. No code change.
+`4-3a/R27` The Golden Prediction's SECOND named cause (the widened `[attack_index, slot, index]`
+dedupe key, independently of the `hp` key) is FALSIFIED. Measured: at the golden fixture's hash tick
+(t24) both heroes' `swing_dedupe.records` are EMPTY -- every record opened by t5/t13/t19/t20 has
+expired -- so a widened key over an empty record set hashes nothing. The shape change IS proven,
+just not there: `test_contact_resolution.gd`'s mid-swing dedupe pin moved `[1]` -> `[[1, -1]]`. Only
+the `hp` key moved the golden (`73a86005` -> `35c38c0e`). Recorded so a future story does not recycle
+the dead second-cause claim.
+`4-3a/R28` Live smoke PASSED on every point, shipped defaults, operator's own hand: a summoned unit
+dies in three swings with no flash or sting on the first two; hitting an enemy unit pays no mana
+while hitting a hero does; no invisible wall where a dead unit stood; a hero's own units take
+nothing; two units share a target without interfering and both take damage from one swing; three
+swings to kill reads as a good standard.
+`4-3a/R29` (decided by Matko) A minion body-blocked by its OWN summoner is ACCEPTED as shipped, not
+fixed here. Operative reason: a fully implemented minion will move intelligently rather than like a
+homing missile, so "wedged into the first thing in its path" may stop being its only outcome --
+nothing may be left to fix. Secondary reason, cost: the alternative (a unit passing through its owner
+while still blocking the enemy) needs per-slot hero collision layers and a `project.godot` edit,
+which this epic has twice avoided paying. The cheaper fix has an owner: `4-3b` teaches `approach()`
+to distinguish "arrived" from "physically obstructed", letting a blocked unit steer around the
+obstacle. Forcing point: `4-3b`. The measured instance stays annotated on the existing deferred-work
+item (`R25`) and stays OPEN.
+
+### Close-out
+
+Code and docs shipped across four commits (code+tests; dev pass docs; board promotion to `done`;
+this decision-log entry). Golden moved once, `73a86005` -> `35c38c0e`, ONE measured cause. Suite
+445/3464 + 27 -> 465/3621 + 29. Code review PASS, no blocking findings, review-stall counter stays
+zero. Live smoke PASS. Operator reviews the log and pushes.
