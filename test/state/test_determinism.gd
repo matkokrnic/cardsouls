@@ -48,8 +48,6 @@ extends TestCase
 ## measured verdict above; re-tuning the authored retarget interval cannot re-baseline this hash.
 ## Standing `BC/R3` isolation is intact.
 ##
-## Re-baselined by STORY 4-0 (hand slot stability), ONE re-baseline, THREE causes predicted and
-## EXACTLY ONE of them a mover — each isolated by its own measurement and reproduced in both
 ## RE-BASELINED BY STORY 4-1 (basic summon resolution), 312522d8 -> 78bd2b97, TWO CAUSES,
 ## MEASURED SEPARATELY AND IN ORDER against the inherited 312522d8 value:
 ##   1. SNAPSHOT SHAPE (a mover, predicted). PlayerState.to_snapshot() gains `unit_count`, the
