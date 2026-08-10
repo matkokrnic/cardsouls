@@ -4,7 +4,7 @@ baseline_commit: b7b9c9c259dfdd4e475c2ea2adb53cd73cbfc468
 
 # Story 4.3: Minion approach and collision
 
-Status: ready-for-dev
+Status: review
 
 ## What this story supersedes
 
@@ -151,28 +151,28 @@ type.
 
 ## Tasks / Subtasks
 
-- [ ] Author `unit_move_speed` and `unit_stop_distance` on `BalanceConfig`
+- [x] Author `unit_move_speed` and `unit_stop_distance` on `BalanceConfig`
       (`@export_group("Minions")`), audited `> 0` — test: `test_balance_authoring.gd` (AC: 2)
-- [ ] Extend `E1_BALANCE_FIELDS` (`test_data_resources.gd:15`) with the two new fields — the
+- [x] Extend `E1_BALANCE_FIELDS` (`test_data_resources.gd:15`) with the two new fields — the
       reflection-completeness check at line 80 fails until this lands (`4-3/R9`) — test:
       `test_data_resources.gd` (AC: 2, 6)
-- [ ] Add a runner-driven approach step for unit actors — `UnitActor.approach(target_position:
+- [x] Add a runner-driven approach step for unit actors — `UnitActor.approach(target_position:
       Vector3, speed: float, stop_distance: float, delta: float)` called from the runner's DRIVE
       phase, alongside the hero drive call (`match_runner.gd` ~930-931, `4-3/R10`) — NOT alongside
       `_aim_unit_actors` (3d stays put; loop-merge is `deferred-work.md`'s) — target via
       `target_slot_at`/`target_index_at` resolved by `_target_world_position` — test:
       headless-unreachable by construction (F1); live integration test only (AC: 1, 3, 7)
-- [ ] Extend `test_architecture_invariants.gd` with the "`src/state/` reads no physics" scan, exact
+- [x] Extend `test_architecture_invariants.gd` with the "`src/state/` reads no physics" scan, exact
       token set, regex self-test pair, vacuity assert (AC 5, `4-3/R13`) — test: a mutation in a
       scratch copy proves the guard falls, restored from an out-of-repo SHA256-verified copy (AC: 5)
-- [ ] Write `test/integration/test_unit_approach_live.gd`, the `test_unit_aim_live.gd` shape —
+- [x] Write `test/integration/test_unit_approach_live.gd`, the `test_unit_aim_live.gd` shape —
       moved-then-stopped non-vacuity pair, facing held throughout (AC: 6, 7)
-- [ ] Implement Open Question 4's ruling (`4-3/R17`): `CharacterBody3D` + `move_and_slide()`,
+- [x] Implement Open Question 4's ruling (`4-3/R17`): `CharacterBody3D` + `move_and_slide()`,
       default layer/mask, one `CollisionShape3D` — test: a live check that a hero cannot walk
       through a unit standing in its path (AC: 4)
-- [ ] Golden measured UNMOVED in both directions (add-then-revert), snapshot key set confirmed
+- [x] Golden measured UNMOVED in both directions (add-then-revert), snapshot key set confirmed
       still eleven — test: `test_determinism.gd`, `test_card_observation.gd` (AC: 6)
-- [ ] Comment-only: correct `unit_actor.gd`'s TWO stale header sites (lines 16-17 and 32) per
+- [x] Comment-only: correct `unit_actor.gd`'s TWO stale header sites (lines 16-17 and 32) per
       `4-3/R1`/`R19` — test: none (prose-only, like the 4-2 comment re-point) (AC: 8)
 
 ## Dev Notes
@@ -285,16 +285,130 @@ Pending — this section fills in at code review, after the dev pass. Not yet ru
 ### Agent Model Used
 
 Claude Sonnet 5 — authoring pass, 2026-08-10.
+Claude Opus 4.8 — readiness-gate fix pass, 2026-08-10 (commit `8b29ce6`; see the Change Log note).
+Claude Opus 5 — dev pass, 2026-08-10.
 
 ### Debug Log References
 
+- Suite BEFORE (clean tree at `8b29ce6`, `bash test/run_all.sh`): **443 state tests / 3450
+  assertions / 0 failed**, 26 integration files, ALL PASS.
+- Suite AFTER: **445 state tests / 3464 assertions / 0 failed**, 27 integration files, ALL PASS.
+  Delta: +2 state tests (`test_state_layer_never_reads_physics`,
+  `test_authored_minion_approach_values_are_positive`), +14 assertions, +1 integration file
+  (`test_unit_approach_live.gd`).
+- GOLDEN measured in BOTH directions, **UNMOVED at
+  `73a86005f1f2c069306ed6504be9c99d109e7b96014f05b502224f658209d1b5`**: green on the clean tree
+  before the change (revert direction) and green with the whole change in (add direction).
+  `test_determinism.gd` is byte-identical — no re-baseline, and `_golden_config()` does NOT author
+  either new field (`4-3/R19/N3`). Snapshot key set still **eleven** (`test_card_observation.gd`,
+  untouched and green).
+- MUTATION TABLE, every target restored by COPY from an out-of-repo SHA256-verified backup, never
+  `git checkout --` (each restore's hash re-verified against the pre-mutation hash):
+  - **M1** — `func _physics_probe() -> PhysicsDirectSpaceState3D` appended to
+    `src/state/unit_board.gd` -> `test_state_layer_never_reads_physics` FAILS. The guard bites on a
+    real physics token in the real layer.
+  - **M2** — the scan regex mistyped (`move_and_slide` -> `move_annd_slide`) -> the SELF-TEST PAIR
+    FAILS ("the pattern must match the body-move call the runner's drive phase owns"). A regex typo
+    cannot silently disarm the guard.
+  - **M3** — the scan pointed at a non-existent directory -> the VACUITY ASSERT FAILS ("src/state/
+    scan found no .gd files"). Load-bearing here precisely because the guard is green today against
+    a `src/state/` containing no physics token at all.
+  - **M4** — the two new names dropped from `E1_BALANCE_FIELDS` ->
+    `test_balance_config_field_lists_are_complete_by_reflection` FAILS with both names listed as
+    shipping unaudited.
+  - **M5a** — authored `unit_move_speed = 0.0` -> `test_authored_minion_approach_values_are_positive`
+    FAILS, and `test_unit_approach_live.gd` FAILS.
+  - **M5b** — authored `unit_move_speed = 0.0` WITH the live test's up-front authored-values guard
+    disabled, so the measurement itself has to carry the failure -> FAILS on the delta half:
+    `never_started(delta=0.0000)`. The live test proves the field is read from AUTHORING, not from
+    `BalanceConfig`'s 0.0 script default, by two independent paths.
+  - **M6** — authored `unit_stop_distance = 0.0` (guard still disabled) -> FAILS on the stop half:
+    `wrong_distance(distance=0.801 authored=0.000)` — the unit walked into its target until the two
+    bodies wedged at the body-contact distance, exactly the failure mode the audit's message
+    predicts. The authoring audit FAILS too.
+  - **M7** — the `CollisionShape3D` stripped from `unit_actor.tscn` -> the live test FAILS on the
+    blocking half: `hero_walked_through(min_gap=0.349 contact=0.800)`, i.e. the hero passed clean
+    through the unit's volume. AC 4 is non-vacuous.
+- Live-test PASS line, shipped values: `speed=3.00 stop=1.50 spawned=true moved=true
+  far_while_moving=true stopped=true at_authored_distance=true facing=true/true reached=true
+  never_inside=true min_gap=0.927`.
+- `project.godot` and `src/main/main.tscn` are BYTE-IDENTICAL across the pass (`git diff` on both
+  is empty) — no new collision layer, no `slot_controller_kinds` flip, `R-D6` NOT spent
+  (`4-3/R14`, `4-3/R17`).
+
 ### Completion Notes List
 
+- **AC 1** — `_approach_unit_actors(slot, player, delta)` seats at the DRIVE phase as step 4a,
+  alongside the two hero `drive()` calls (`4-3/R10`); `_aim_unit_actors` stays at step 3d, unmerged
+  (the merge remains `deferred-work.md`'s). The per-frame path reads `target_slot_at` /
+  `target_index_at` and resolves through the existing `_target_world_position` — `target_at()` is
+  never called, and the loop allocates nothing on the heap. `UnitActor` gains NO `_physics_process`
+  (F1 still exactly one hit), no state handle and no signal into state; no field joins the unit
+  record, `FORMAT_VERSION` stays 2, no snapshot key ships, and position never enters state.
+- **AC 2** — `unit_move_speed` and `unit_stop_distance` added to `BalanceConfig`'s
+  `@export_group("Minions")`, authored `3.0` and `1.5`, both audited `> 0`. Neither carries a
+  `_seconds` suffix, so neither gains a `BalanceTicks` counterpart (half (b) of the reflection
+  guard correctly ignores them) — the scalar-vs-tick distinction the story fixed. Balance is read
+  at POINT OF USE from `_match_state.balance`, the config the runner APPLIED: that is the
+  replay-aware handle from the `match_runner.gd:177-180` selection (record's config during replay,
+  authored otherwise) and it also tracks a live RELOAD, which a copy taken at `_ready()` would not.
+  No `BalanceConfigService` read in the approach path, no copy in a `UnitActor` field (`4-3/R11`).
+- **AC 3** — planar (XZ) move toward the target at `unit_move_speed`; within `unit_stop_distance`
+  (or coincident) the velocity is zeroed and the node holds still, keeping its `aim_at()` yaw,
+  which is unchanged. A unit with no acquired target never reaches `approach()` — the loop skips it
+  on the `_aim_unit_actors` precedent, the same "stays where it is" answer one level up.
+- **AC 4** — `unit_actor.tscn`'s root is now a `CharacterBody3D` with ONE `CollisionShape3D` child,
+  a `BoxShape3D` of exactly the existing `0.6 x 1.2 x 0.6` mesh box, offset `+0.6` in y because the
+  unit root is at the box's FEET (the runner spawns units at y 0) unlike the hero root, which is
+  its body centre. NO layer/mask lines, matching `hero.tscn:49` — both bodies sit on default layer 1
+  "bodies". No new layer, `project.godot` untouched. NO hurtbox and NO `Area3D` (`4-3a`'s).
+- **AC 5** — `test_state_layer_never_reads_physics` scans `src/state/` for the exact four-token set
+  with no "or equivalent", and carries BOTH required parts: a three-way regex self-test (two must
+  match, one named near-miss — `get_overlapping_bodies` — must NOT, since widening the set is a
+  ruling and not a dev-pass edit) and the `scanned > 0` vacuity assert. M1/M2/M3 prove all three
+  parts fall.
+- **AC 6** — golden and key set measured UNMOVED in both directions (see Debug Log). As `4-3/R12`
+  predicted, this is a regression check and not the positive control; all four parts of the actual
+  positive control are discharged (live delta + stop, authored-value dependence, guard mutation,
+  `E1_BALANCE_FIELDS`).
+- **AC 7** — `test/integration/test_unit_approach_live.gd` drives the real main scene: real Input
+  Map presses -> summon -> throttled targeting -> the runner's drive phase -> a real `UnitActor`
+  found by WALKING THE TREE. It measures a tick-over-tick `global_position` delta while beyond the
+  stop distance, a tick-over-tick stop INSIDE `unit_stop_distance` measured against the AUTHORED
+  value (so a unit stopped by an obstacle rather than by the rule fails), facing held at both
+  samples, and — for AC 4 — P1's own hero walking into P1's own parked unit on shipped defaults,
+  asserted by the minimum planar centre gap over 130 frames against the two bodies' summed inradii.
+- **AC 8** — both stale `unit_actor.gd` header sites corrected: the "HP, damage and death are
+  4-3's" clause now points at `4-3a` (`4-3/R1`), and 4-2's "Movement is still 4-3's" now points at
+  the section directly below it.
+- **Implementation decisions taken (not design):** the authored values `3.0` / `1.5` (below the
+  hero's `move_speed` 5.0 so a unit is escapable, and clear of the `0.5 + 0.3` body-contact
+  distance so the stop reads as a halt rather than as a wedge) — both are one-line `.tres` tuning
+  edits with no test or golden consequence (`BC/R3`); reading balance off `_match_state.balance`
+  rather than adding a runner field; and `approach()`'s unused `_delta` parameter, which is
+  `HeroActor.drive()`'s precedent verbatim (`move_and_slide()` reads the physics delta itself).
+
 ### File List
+
+- `src/state/resources/balance_config.gd` — two new `Minions`-group scalars (AC 2).
+- `data/balance/balance_config.tres` — both fields authored (`3.0`, `1.5`) (AC 2).
+- `src/actors/minions/unit_actor.gd` — `extends CharacterBody3D`; new `approach()`; both header
+  corrections (AC 1, 3, 8).
+- `src/actors/minions/unit_actor.tscn` — root retyped to `CharacterBody3D`; one `CollisionShape3D`
+  child on default layer/mask (AC 4).
+- `src/main/match_runner.gd` — drive-phase step 4a call site and `_approach_unit_actors` (AC 1, 3).
+- `test/state/test_architecture_invariants.gd` — `test_state_layer_never_reads_physics` (AC 5).
+- `test/state/test_balance_authoring.gd` — `test_authored_minion_approach_values_are_positive`
+  (AC 2).
+- `test/state/test_data_resources.gd` — `E1_BALANCE_FIELDS` extended by two (AC 2, 6).
+- `test/integration/test_unit_approach_live.gd` — NEW (AC 4, 6, 7).
+- `docs/implementation-artifacts/4-3-minion-approach-and-collision.md` — this record.
+- `docs/implementation-artifacts/sprint-status.yaml` — story note; `4-5` tier comment reconciled.
 
 ## Change Log
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-10 | Claude Sonnet 5 | Story authored via `gds-create-story`, split from the boarded `4-3-minion-combat` per `4-3/R1`. |
-| 2026-08-10 | Claude Sonnet 5 | Readiness gate rulings `4-3/R7`-`4-3/R20` applied (operator-ratified). AC 1 corrected off the snapshot literal to the runner-reads/actor-owns-the-move contract (`R8`); AC 2 names the replay-aware config source and fixes its precedent citations (`R11`, `R19/N2`); AC 4 bounded to `4-2/R15`'s claim with the contact-pipeline indirection stated explicitly (`R7`); AC 5 fixes the exact physics-token set plus the regex self-test and vacuity-assert pair (`R13`); AC 6 demoted to a regression check, the four-part positive control named (`R12`); AC 8 covers both stale header sites (`R19/N1`). Both remaining Open Questions ruled (unit-vs-unit collision, recompute-every-frame). Open Question 4 ruled: `CharacterBody3D` + `move_and_slide()`, default layer/mask, no `project.godot` change (`R17`). Tasks gain `test_data_resources.gd` and pin the approach call to the drive phase, not `_aim_unit_actors` (`R9`, `R10`). Golden Prediction gains the authoring-ban and measured replay-safety notes (`R19/N3`, `R19/N4`). Live Smoke rewritten: `R-D6` NOT spent, no kill required (`R14`). Status `authored` -> `ready-for-dev`. |
+| 2026-08-10 | Claude Opus 4.8 | Readiness gate rulings `4-3/R7`-`4-3/R20` applied (operator-ratified). AC 1 corrected off the snapshot literal to the runner-reads/actor-owns-the-move contract (`R8`); AC 2 names the replay-aware config source and fixes its precedent citations (`R11`, `R19/N2`); AC 4 bounded to `4-2/R15`'s claim with the contact-pipeline indirection stated explicitly (`R7`); AC 5 fixes the exact physics-token set plus the regex self-test and vacuity-assert pair (`R13`); AC 6 demoted to a regression check, the four-part positive control named (`R12`); AC 8 covers both stale header sites (`R19/N1`). Both remaining Open Questions ruled (unit-vs-unit collision, recompute-every-frame). Open Question 4 ruled: `CharacterBody3D` + `move_and_slide()`, default layer/mask, no `project.godot` change (`R17`). Tasks gain `test_data_resources.gd` and pin the approach call to the drive phase, not `_aim_unit_actors` (`R9`, `R10`). Golden Prediction gains the authoring-ban and measured replay-safety notes (`R19/N3`, `R19/N4`). Live Smoke rewritten: `R-D6` NOT spent, no kill required (`R14`). Status `authored` -> `ready-for-dev`. (Author cell corrected at the dev pass from "Claude Sonnet 5" against the git record: commit `8b29ce6`, the commit that applied these rulings, carries `Co-Authored-By: Claude Opus 4.8`. Caveat recorded rather than hidden — `project-context.md:149` makes that trailer a repo-wide CONSTANT regardless of which model did the work, so it is weak evidence of authorship in general; what the git record does show unambiguously is that the two earlier `4-3` commits (`b7b9c9c`, `654d436`) shipped a NON-constant `Claude Sonnet 5` trailer in violation of that rule, while `8b29ce6` is the compliant one. This cell now agrees with its commit.) |
+| 2026-08-10 | Claude Opus 5 | Dev pass, all eight ACs. Two `BalanceConfig` `Minions` scalars authored `3.0` / `1.5` and audited `> 0`; `E1_BALANCE_FIELDS` extended by two; `UnitActor` retyped to `CharacterBody3D` with one `CollisionShape3D` on the default layer/mask (no new layer, `project.godot` untouched) and given `approach()`; a drive-phase step 4a `_approach_unit_actors` call site reading the replay-aware `_match_state.balance` at point of use; `test_state_layer_never_reads_physics` added with its regex self-test and vacuity assert; `test/integration/test_unit_approach_live.gd` added (moved / stopped-at-the-authored-distance / facing / hero-blocked, on shipped defaults, `R-D6` not spent); both stale `unit_actor.gd` header sites corrected. Golden measured UNMOVED both directions at `73a86005`, key set eleven. Suite 443/3450 + 26 integration -> 445/3464 + 27 integration, zero failures. Seven-row mutation table, all confirmed falling, every target restored from an out-of-repo SHA256-verified copy. Status `ready-for-dev` -> `review`. |
