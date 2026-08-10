@@ -4,7 +4,7 @@ baseline_commit: dab229178985f9532b181224421ba086328fac9b
 
 # Story 4.3a: Minion damage and death
 
-Status: review
+Status: done
 
 ## What this story supersedes
 
