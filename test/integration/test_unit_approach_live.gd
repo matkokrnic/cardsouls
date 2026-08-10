@@ -31,25 +31,29 @@ const ARM_FRAME := 4
 const CONFIRM_FRAME := 10
 const CONFIRM_RELEASE_FRAME := 14
 const SPAWN_CHECK_FRAME := 18
-## Comfortably past the authored 12-tick retarget cadence, so a boundary has certainly passed and
-## the unit has a target to walk toward -- and early enough that it is still far outside
-## `unit_stop_distance` (it spawns ~8.7 units from P2's hero and closes 0.05 per tick).
-const MOVE_SAMPLE_FRAME := 45
-## Arrival needs ~145 ticks at the authored speed; this leaves a wide margin, and the stop is
-## asserted against the authored distance rather than against having stopped.
-const STOP_SAMPLE_FRAME := 260
-## The hero walks into the parked unit from here. 130 ticks at the authored move_speed carries it
-## ~10.8 units from x -3, which is well past the unit's parked x if nothing stopped it.
-const WALK_START_FRAME := 268
-const WALK_END_FRAME := 398
 
-## Planar distance moved in ONE tick at the authored speed is 0.05. "Moving" is asserted well above
-## float noise and well below one tick's travel; "stopped" well below it.
+## `4-3/R22`: the sample frames and the STOP_BAND used to be hand-derived literals pinned to the
+## authored `unit_move_speed = 3.0` / `unit_stop_distance = 1.5` -- brittle against the melee
+## retune boarded for `4-3a`. Every one of them is now COMPUTED at runtime from the authored values
+## this test already reads (`_speed`, `_stop_distance`), `Engine.physics_ticks_per_second`, and the
+## live spawn-to-target distance (scene-determined, not authored, so it is measured rather than
+## assumed too). WHAT is measured is unchanged -- a tick-over-tick delta beyond the stop distance,
+## a tick-over-tick halt at the authored distance, and a hero walking into the parked unit -- only
+## WHEN the samples are taken and HOW WIDE the tolerance bands are now scale with the shipped speed.
+const RETARGET_SETTLE_TICKS := 15
+const MOVE_FRACTION_OF_CLOSE := 0.2
+const STOP_MARGIN_FRACTION := 0.5
+const STOP_MARGIN_FLOOR_TICKS := 40
+const WALK_START_BUFFER_TICKS := 8
+const WALK_MARGIN_FACTOR := 1.3
+const WALK_FLOOR_TICKS := 40
+
+## Planar distance moved in ONE tick at the authored speed is 0.05 (at the shipped 3.0 / 60 Hz).
+## "Moving" is asserted well above float noise and well below that; "stopped" well below it. These
+## thresholds stay literal (4-3/R22 only re-derives frames and STOP_BAND) -- the MOVED sample gap
+## is widened instead, at runtime, so a retuned speed still clears MOVED_EPSILON with margin.
 const MOVED_EPSILON := 0.02
 const STOPPED_EPSILON := 0.005
-## The unit may overshoot its stop test by at most one tick of travel (0.05), and must not stop
-## short of the band by more than that -- a unit halted early by something other than the rule fails.
-const STOP_BAND := 0.08
 const YAW_EPSILON := 0.01
 ## Body half-extents, planar: the hero's `Collision` box is 1 x 2 x 1 (`hero.tscn:20-21`) and the
 ## unit's is 0.6 x 1.2 x 0.6. Two convex boxes that are not overlapping can never have their centres
@@ -72,6 +76,21 @@ var _slot_chosen := false
 var _spawned := false
 var _speed := 0.0
 var _stop_distance := 0.0
+var _hero_speed := 0.0
+var _ticks_per_second := 60.0
+
+var _hero_start_pos := Vector3.ZERO
+var _initial_unit_distance := 0.0
+
+## Derived once the spawn is confirmed and the live spawn-to-target distance is known.
+var _move_sample_frame := 0
+var _move_confirm_frame := 0
+var _stop_sample_frame := 0
+var _stop_band := 0.0
+## Derived once the unit has actually parked, since where it parks (and so how far the hero must
+## walk) depends on the authored `unit_stop_distance`.
+var _walk_start_frame := 0
+var _walk_end_frame := 0
 
 var _move_from := Vector3.ZERO
 var _moved := false
@@ -110,12 +129,19 @@ func _physics_process(_delta: float) -> bool:
 		# assertions below meaningless, and `test_balance_authoring.gd` is the permanent guard.
 		_speed = _state.balance.unit_move_speed
 		_stop_distance = _state.balance.unit_stop_distance
+		# The hero's OWN authored move speed, needed only to size the WALK window (`4-3/R22`) --
+		# distinct from `_speed` (`unit_move_speed`), which the unit's approach uses.
+		_hero_speed = maxf(_state.balance.move_speed, 0.0001)
+		_ticks_per_second = maxf(Engine.physics_ticks_per_second, 1.0)
 		if _speed <= 0.0 or _stop_distance <= 0.0:
 			print("authored balance ships the mechanic invisible: unit_move_speed=%f "
 					% _speed + "unit_stop_distance=%f" % _stop_distance)
 			print("RESULT: FAIL")
 			quit(1)
 			return false
+		var hero: Node3D = _runner._p1_hero
+		if hero != null:
+			_hero_start_pos = hero.global_position
 	if _frames == 2:
 		# Mana, so the cast is affordable -- the economy is not what this test is about.
 		_state.p1.mana.add(_state.p1.mana.get_maximum())
@@ -150,13 +176,17 @@ func _physics_process(_delta: float) -> bool:
 		_spawned = _state.p1.units.size() == 1 and unit != null
 		if not _spawned:
 			_detail += " board=%d actor=%s;" % [_state.p1.units.size(), unit]
+		else:
+			_derive_sample_frames(unit)
 
-	# ---- MOVED: a tick-over-tick delta on a real node, while beyond the stop distance. ----
-	if _frames == MOVE_SAMPLE_FRAME:
+	# ---- MOVED: a delta on a real node, while beyond the stop distance. The gap between the two
+	#      samples is derived (`_move_confirm_frame`), not always one tick, so the expected travel
+	#      clears MOVED_EPSILON regardless of the authored speed. ----
+	if _frames == _move_sample_frame:
 		var unit := _first_unit_actor()
 		if unit != null:
 			_move_from = unit.global_position
-	if _frames == MOVE_SAMPLE_FRAME + 1:
+	if _frames == _move_confirm_frame:
 		var unit := _first_unit_actor()
 		var target: Variant = _target_position()
 		if unit == null or target == null:
@@ -177,11 +207,11 @@ func _physics_process(_delta: float) -> bool:
 				_detail += " lost_facing_while_moving;"
 
 	# ---- STOPPED: no longer moving, AND parked at the AUTHORED distance, still facing. ----
-	if _frames == STOP_SAMPLE_FRAME:
+	if _frames == _stop_sample_frame:
 		var unit := _first_unit_actor()
 		if unit != null:
 			_stop_from = unit.global_position
-	if _frames == STOP_SAMPLE_FRAME + 1:
+	if _stop_sample_frame > 0 and _frames == _stop_sample_frame + 1:
 		var unit := _first_unit_actor()
 		var target: Variant = _target_position()
 		if unit == null or target == null:
@@ -192,27 +222,30 @@ func _physics_process(_delta: float) -> bool:
 			if not _stopped:
 				_detail += " still_moving(delta=%.4f);" % delta
 			var distance := _planar_distance(unit.global_position, target)
-			_stopped_at_the_authored_distance = absf(distance - _stop_distance) <= STOP_BAND
+			_stopped_at_the_authored_distance = absf(distance - _stop_distance) <= _stop_band
 			if not _stopped_at_the_authored_distance:
 				_detail += " wrong_distance(distance=%.3f authored=%.3f);" % [
 					distance, _stop_distance]
 			_aimed_while_stopped = _is_facing(unit, target)
 			if not _aimed_while_stopped:
 				_detail += " lost_facing_while_stopped;"
+			# The WALK window depends on where the unit actually parked (which moves with a
+			# retuned `unit_stop_distance`), so it is only derivable now, not up front (`4-3/R22`).
+			_derive_walk_frames(unit.global_position)
 
 	# ---- BLOCKED (AC 4): P1's hero walks into P1's own parked unit. Shipped defaults, no kill,
 	#      no slot_controller_kinds flip -- `R-D6` is NOT spent by this story (`4-3/R14`).
 	#      `p1_move_right` is world +x (pinned by test_hero_movement.gd), and the unit parks
 	#      between P1's hero and P2's, so the hero walks straight at it. ----
-	if _frames == WALK_START_FRAME:
+	if _frames == _walk_start_frame:
 		Input.action_press(&"p1_move_right")
-	if _frames > WALK_START_FRAME and _frames <= WALK_END_FRAME:
+	if _frames > _walk_start_frame and _frames <= _walk_end_frame:
 		var unit := _first_unit_actor()
 		var hero: Node3D = _runner._p1_hero
 		if unit != null and hero != null:
 			_min_hero_gap = minf(_min_hero_gap,
 					_planar_distance(hero.global_position, unit.global_position))
-	if _frames == WALK_END_FRAME:
+	if _frames == _walk_end_frame:
 		Input.action_release(&"p1_move_right")
 		# The pair, and neither half means anything alone: the hero must have ARRIVED at the unit
 		# (or "never inside" is true of a hero that walked elsewhere), and must never have been
@@ -237,6 +270,50 @@ func _physics_process(_delta: float) -> bool:
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
 	return false
+
+
+## `4-3/R22`: computes `_move_sample_frame`, `_move_confirm_frame`, `_stop_sample_frame` and
+## `_stop_band` from the authored `_speed` / `_stop_distance`, `Engine.physics_ticks_per_second`,
+## and the live spawn-to-target distance -- instead of the hand-derived literals this replaced.
+func _derive_sample_frames(unit: UnitActor) -> void:
+	var target: Variant = _target_position()
+	if target == null:
+		return
+	_initial_unit_distance = _planar_distance(unit.global_position, target)
+	var unit_per_tick := _speed / _ticks_per_second
+	var distance_to_close := maxf(_initial_unit_distance - _stop_distance, unit_per_tick)
+	var ticks_to_close := int(ceil(distance_to_close / unit_per_tick))
+
+	# MOVE_SAMPLE: comfortably past initial settle, still well outside the stop distance --
+	# a fixed floor of ticks past spawn, or a fraction of the full close, whichever is later.
+	var move_offset := maxi(RETARGET_SETTLE_TICKS, int(ticks_to_close * MOVE_FRACTION_OF_CLOSE))
+	_move_sample_frame = SPAWN_CHECK_FRAME + move_offset
+	# The confirm sample sits far enough past the first that the EXPECTED travel clears
+	# MOVED_EPSILON with margin, whatever the authored speed -- one tick at 3.0/60, more ticks at
+	# a retuned-slower speed, still one at a retuned-faster speed.
+	var move_gap_ticks := maxi(1, int(ceil((MOVED_EPSILON * 2.0) / unit_per_tick)))
+	_move_confirm_frame = _move_sample_frame + move_gap_ticks
+
+	# STOP_SAMPLE: past full arrival, with a generous margin so the unit has settled.
+	var stop_margin := maxi(STOP_MARGIN_FLOOR_TICKS, int(ticks_to_close * STOP_MARGIN_FRACTION))
+	_stop_sample_frame = SPAWN_CHECK_FRAME + ticks_to_close + stop_margin
+
+	# STOP_BAND: the unit may overshoot or undershoot the authored stop distance by at most a
+	# little more than one tick of travel -- a unit halted early by something other than the rule
+	# fails. At the shipped 3.0 / 60 Hz this is exactly the original 0.08.
+	_stop_band = maxf(unit_per_tick * 1.6, 0.02)
+
+
+## `4-3/R22`: computes `_walk_start_frame` / `_walk_end_frame` from where the unit ACTUALLY parked
+## (`stop_position`, which shifts with a retuned `unit_stop_distance`) and the hero's own authored
+## move speed -- instead of the hand-derived literals this replaced.
+func _derive_walk_frames(stop_position: Vector3) -> void:
+	var hero_per_tick := _hero_speed / _ticks_per_second
+	var walk_distance := _planar_distance(_hero_start_pos, stop_position)
+	var walk_ticks := maxi(WALK_FLOOR_TICKS,
+			int(ceil((walk_distance / hero_per_tick) * WALK_MARGIN_FACTOR)))
+	_walk_start_frame = _stop_sample_frame + 1 + WALK_START_BUFFER_TICKS
+	_walk_end_frame = _walk_start_frame + walk_ticks
 
 
 ## The world position of the target the unit ACQUIRED, resolved the way the runner resolves it --
