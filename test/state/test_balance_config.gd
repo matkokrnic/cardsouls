@@ -82,6 +82,46 @@ func test_conversion_derives_mana_regen_per_tick() -> void:
 	assert_eq(t.mana_regen_per_tick, 0.5, "30/s at 60 Hz -> 0.5 per tick, derived at load")
 
 
+## Story 4-2 (AC 7, `4-2/R5`(a)): the retarget cadence derives like every other duration, on the
+## `draw_replacement_delay_seconds` precedent. Ordinary conversion first, so the clamp test below is
+## testing the CLAMP and not the conversion.
+func test_conversion_derives_minion_retarget_interval_ticks() -> void:
+	var t := BalanceTicks.from_config(_make_config({"minion_retarget_interval_seconds": 0.2}))
+	assert_eq(t.minion_retarget_interval_ticks, 12, "0.2 s at 60 Hz -> 12 ticks, derived at load")
+	var quarter := BalanceTicks.from_config(
+		_make_config({"minion_retarget_interval_seconds": 0.25}))
+	assert_eq(quarter.minion_retarget_interval_ticks, 15,
+		"0.25 s -> 15 ticks — the top of the project-context Performance Rule's ~0.1-0.25 s range")
+
+
+## Story 4-2 (AC 7, `4-2/R5`(d)): THE ONE FIELD IN BalanceTicks THAT IS NOT A BARE
+## seconds_to_ticks() CALL, and the reason it is special is that it is a MODULO DIVISOR. Every other
+## derived duration may legitimately be 0 ticks (`TimingWindow.start(0)` simply leaves the window
+## stopped); a 0 here would divide by zero on the tick ladder at MatchState's step-7 seat.
+##
+## The ruling gives the degenerate value a DEFINED meaning rather than a guard at the consumer: the
+## interval clamps to at least 1 tick ALWAYS, so an authored 0 means "retarget EVERY tick". Asserted
+## for zero AND for negative, because a hand-edited `.tres` can carry either and both would otherwise
+## reach the modulo — the clamp is `maxi(1, ...)`, not a zero special-case.
+##
+## THE CLAMP LIVES AT THE CONVERSION BOUNDARY, not at the consumer, which is what makes it
+## impossible to bypass: no consumer can read an unclamped value because none exists.
+func test_conversion_clamps_the_retarget_interval_to_at_least_one_tick() -> void:
+	var zero := BalanceTicks.from_config(_make_config({"minion_retarget_interval_seconds": 0.0}))
+	assert_eq(zero.minion_retarget_interval_ticks, 1,
+		"an authored 0 clamps to 1 tick — 'retarget every tick', never a modulo by zero (`4-2/R5`(d))")
+	var negative := BalanceTicks.from_config(
+		_make_config({"minion_retarget_interval_seconds": -3.0}))
+	assert_eq(negative.minion_retarget_interval_ticks, 1,
+		"a negative authored value clamps the same way — seconds_to_ticks returns 0 for it, and the "
+		+ "clamp is maxi(1, ...) rather than a zero special-case")
+	# The clamp must NOT be a floor applied to every field: a sub-tick duration elsewhere still
+	# converts by the shared rule, and a genuinely zero duration elsewhere still derives 0 ticks.
+	assert_eq(zero.reshuffle_vulnerable_window_ticks, 0,
+		"the clamp is scoped to the divisor field alone — a sibling duration authored 0 still "
+		+ "derives 0 ticks, so this is not a blanket floor over from_config()")
+
+
 ## AC 3 end-to-end: service reload() -> apply_balance() -> pools and windows reflect the
 ## authored .tres values.
 func test_reload_to_apply_balance_reflects_tres_values() -> void:

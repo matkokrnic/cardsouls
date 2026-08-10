@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MinionPriority" format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/minion_priority.gd" id="1_minionpriority"]
+
+[resource]
+script = ExtResource("1_minionpriority")
+priority_name = &"standard"
+target_side = 0
+prefer_hero = false
+ordering_mode = 0

@@ -221,4 +221,31 @@ func to_snapshot() -> Dictionary:
 		# `summon_*` cast onward (the behavioural cause, confirmed at the gate as `4-1/R6`). Both
 		# are measured and named separately in the Dev Agent Record.
 		"unit_count": units.size(),
+		# Story 4-2 (AC 11, `4-2/R2`): the ONE new key this story adds -- each unit's ACQUIRED
+		# TARGET as a `[slot, index]` pair, in board-index order.
+		#
+		# IT IS A KEY AT ALL BECAUSE THE THROTTLE MAKES IT CROSS-TICK STATE, which is the same
+		# argument `pending_draw` won on and the one `_deck_deal_pending` lost on: a target
+		# re-evaluated only every N ticks CANNOT be recomputed for free every tick the way a
+		# stateless per-frame scan could, so it persists between ticks and must be hashed or a
+		# replay could silently diverge on it.
+		#
+		# STILL COUNTS AND INDICES, NEVER IDENTITIES (`4-2/R2`): both halves of every pair are
+		# plain ints on the `pending_draw_owed` precedent ("these are slot INDICES, the
+		# counts-and-indices rule intact", the field comment above). `index >= 0` addresses a unit
+		# on the `slot`-identified player's board; `index == -1` addresses that player's hero; a
+		# `slot` of -1 is TargetingService's no-target discriminator. No unit identity, no
+		# StringName, no object and no position reaches the hash -- CanonicalHash has no object
+		# branch and `Array[StringName].sort()` orders by internal POINTER on this engine.
+		#
+		# THE ORDER IS MEANINGFUL and CanonicalHash preserves it, exactly as it does for
+		# `pending_draw_owed`: a target held by the wrong unit is a real divergence.
+		#
+		# TWO SEPARATELY MEASURED GOLDEN CAUSES RIDE ON THIS ONE KEY, and both are recorded in
+		# the Dev Agent Record with their own intermediate hash: its mere PRESENCE at an
+		# all-no-target value (the snapshot-shape cause, the 4-1 `unit_count` / 3-5a
+		# `discard_size` pattern), and a unit ACTUALLY ACQUIRING a target at a throttle boundary
+		# (the behavioural cause). AC 9's identity extension is NEITHER of them -- measured a
+		# non-mover on its own (`4-2/R8`).
+		"unit_targets": units.targets_snapshot(),
 	}

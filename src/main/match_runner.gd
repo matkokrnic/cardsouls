@@ -632,6 +632,53 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 		actors.append(unit)
 
 
+## Story 4-2 (`4-2/R13`): point slot `slot`'s spawned boxes at whatever their records say they
+## acquired. Presentation only — see the call site.
+##
+## READ THROUGH THE SINGLE-INT ACCESSORS, never `target_at()`: this runs every physics frame for every
+## spawned unit, and `target_at()` allocates a pair per call (the project-context Performance Rule on
+## per-frame allocations in hot paths). A no-target slot means the unit has acquired nothing yet, and
+## it is LEFT ALONE rather than reset to a default heading — "pointing where it last looked" is the
+## honest reading, and on a fresh unit that is simply its spawn heading.
+##
+## An actor array can be SHORTER than the board for one frame (the board grows inside advance(), the
+## spawn happens just above), so the loop is bounded by the ACTORS and the board index is checked
+## against the board — neither side is assumed to have caught up with the other.
+func _aim_unit_actors(slot: int, player: PlayerState) -> void:
+	var actors: Array = _unit_actors[slot]
+	for index: int in actors.size():
+		if not player.units.has_index(index):
+			continue
+		var unit: Node = actors[index]
+		if not is_instance_valid(unit):
+			continue
+		var target_slot := player.units.target_slot_at(index)
+		if target_slot == TargetingService.NO_TARGET_SLOT:
+			continue
+		var target_index := player.units.target_index_at(index)
+		var target_position: Variant = _target_world_position(target_slot, target_index)
+		if target_position is Vector3:
+			(unit as UnitActor).aim_at(target_position)
+
+
+## The `[slot, index]` pair resolved to a world position, and this is the ONLY place that translation
+## happens. `index == -1` is that slot's HERO (AC 11's encoding); `>= 0` is that slot's unit actor at
+## the same board index the state layer used, which is what makes the runner's array index and the
+## state's identity the same number rather than two that could drift.
+##
+## Returns null when the addressed actor does not exist — a target acquired on a tick whose actor the
+## runner has not spawned yet. The caller skips, so the box keeps its heading for that frame.
+func _target_world_position(target_slot: int, target_index: int) -> Variant:
+	if target_index == TargetingService.HERO_INDEX:
+		var hero: HeroActor = _p1_hero if target_slot == 0 else _p2_hero
+		return hero.global_position if is_instance_valid(hero) else null
+	var actors: Array = _unit_actors[target_slot]
+	if target_index < 0 or target_index >= actors.size():
+		return null
+	var unit: Node = actors[target_index]
+	return (unit as Node3D).global_position if is_instance_valid(unit) else null
+
+
 ## Story 4-1 (AC 8): free every spawned unit actor, both slots. `queue_free()` (never `free()`) on
 ## nodes in the tree, per project-context; the arrays are cleared in the same pass so a second
 ## reset cannot reach a freed instance.
@@ -862,6 +909,23 @@ func _physics_process(delta: float) -> void:
 		#     a count going down.
 		_spawn_missing_unit_actors(0, _match_state.p1.units.size())
 		_spawn_missing_unit_actors(1, _match_state.p2.units.size())
+		# 3d. Story 4-2 (`4-2/R13`): AIM each grey box at the target state acquired for it. PURELY
+		#     PRESENTATIONAL, and it is the live smoke's whole visible signal — with movement out of
+		#     scope (`4-2/R4`) a unit that never moves gives a human nothing to watch, so the box
+		#     rotates instead.
+		#
+		#     THE SAME SEAT AND SHAPE AS 3b AND 3c DIRECTLY ABOVE: a POLL right after advance(), plain
+		#     values only, no signal, no state handle held, no new `connect_*` — so the observation-seam
+		#     family stays at EIGHT and needs no `3-6/R2`-style amendment (`4-2/R15`'s own stated
+		#     consequence). Nothing here decides a target; the decision was made inside advance() by
+		#     TargetingService, and this reads the answer.
+		#
+		#     STATE DECIDES, PRESENTATION REACTS (the HARD RULE): the `[slot, index]` pair is a pair of
+		#     plain ints, and turning it into a world position is done HERE, from node positions the
+		#     runner already owns — no position ever travels inward (`4-2/R14` keeps position
+		#     actor-owned).
+		_aim_unit_actors(0, _match_state.p1)
+		_aim_unit_actors(1, _match_state.p2)
 		# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
 		_p1_hero.drive(_match_state.p1.hero, delta)
 		_p2_hero.drive(_match_state.p2.hero, delta)

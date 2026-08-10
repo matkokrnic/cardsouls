@@ -41,9 +41,14 @@ const VULNERABLE_TICKS := 7
 ## DELIBERATELY EXTENDED BY STORY 4-1 (AC 9), the tenth key: `unit_count`, the per-player board
 ## COUNT, on the deck_size / hand_size / discard_size precedent. The constant exists so a key
 ## cannot ship QUIETLY, and this one did not -- it ships with the story that adds the board.
+## DELIBERATELY EXTENDED AGAIN BY STORY 4-2 (AC 11, `4-2/R2`), the ELEVENTH key: `unit_targets`, each
+## unit's acquired `[slot, index]` pair. This is the SECOND pin on this key set — test_card_observation
+## .gd carries the other — and BOTH were failing before this edit, which is the mechanism working as
+## designed: the pin exists precisely so a key cannot ship quietly, and the story that adds the key
+## is the story that moves the pin, deliberately and in both places.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-	"pending_draw", "pending_draw_owed", "stamina", "unit_count",
+	"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_targets",
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the
@@ -321,7 +326,8 @@ func test_the_player_snapshot_key_set_is_exactly_the_expected_set() -> void:
 	var keys: Array = ms.p1.to_snapshot().keys()
 	keys.sort()
 	assert_eq(keys, EXPECTED_PLAYER_SNAPSHOT_KEYS,
-		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count)")
+		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count; "
+		+ "4-2 added unit_targets)")
 	assert_false(keys.has("vulnerable_window"),
 		"the vulnerable window is NOT a snapshot key — nothing reads it, so nothing can desync on it")
 

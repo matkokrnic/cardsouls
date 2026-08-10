@@ -40,6 +40,10 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# invisible in the build.
 	"deck_size", "hand_size",
 	"draw_replacement_delay_seconds", "reshuffle_vulnerable_window_seconds",
+	# Story 4-2 (AC 7, `4-2/R5`): the retarget cadence joins the audited set. Listed here because
+	# half (a) of the reflection guard below fails otherwise — which is the guard working: a new
+	# BalanceConfig tunable that nothing audits ships unaudited, and this file is what forbids that.
+	"minion_retarget_interval_seconds",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

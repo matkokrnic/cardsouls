@@ -24,3 +24,32 @@ extends Node3D
 ##
 ## POOLED BY NOBODY THIS STORY (4-5). Units are plain instantiated and `queue_free()`d nodes here;
 ## 4-5's tier is assigned at this story's close-out.
+##
+## STORY 4-2 ADDS ONE PURELY PRESENTATIONAL METHOD AND NO GAMEPLAY (`4-2/R13`). `aim_at()` yaws the
+## box toward whatever the runner tells it to look at. Everything above still holds: no
+## `_physics_process`, no `Input`, no state handle, no signal into state, no damage, and no targeting
+## DECISION -- the decision is TargetingService's, inside `advance()`, and this node is told the
+## answer. Movement is still 4-3's; a rotation is not a move.
+##
+## IT EXISTS BECAUSE THE SMOKE NEEDED A VISIBLE SIGNAL. With movement out of scope (`4-2/R4`), "the
+## unit does not sit permanently inert" is unfalsifiable by observation -- a unit that never moves
+## gives a human nothing to watch for. `4-2/R13` rewrote the live smoke around this rotation instead.
+##
+## ROTATING THIS ROOT IS SAFE, unlike the hero's (DECISION A). The hero root must never rotate
+## because the camera rig is its child, so a rotated root would fold hero rotation into the pushed
+## camera basis; this scene's only child is a mesh, it carries no camera and nothing reads its basis.
+## test_root_rotation_isolation.gd guards the HERO root and is untouched by this.
+
+
+## Yaw this box toward `target_position`, PLANAR (XZ) only -- the runner's own facing derivation for
+## the hero mesh, applied to a whole node instead of a child. A target directly overhead or exactly
+## coincident has no planar direction, so the current rotation is KEPT rather than snapped to an
+## arbitrary one: a unit whose target vanished stays pointing where it last looked, which reads as
+## "still aiming at where it was" rather than as a glitch.
+func aim_at(target_position: Vector3) -> void:
+	var planar := Vector2(target_position.x - global_position.x,
+			target_position.z - global_position.z)
+	if planar.is_zero_approx():
+		return
+	# atan2(x, z) is Godot's -Z-forward yaw convention: a Node3D looks down its own -Z.
+	global_rotation.y = atan2(planar.x, planar.y) + PI

@@ -276,7 +276,31 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    since AC 16. A naive "tick and draw together at step 2" would have opened a second seat.
 	_deliver_pending_draw(p1, 0)
 	_deliver_pending_draw(p2, 1)
-	# 7. Board update          [E4 minion/totem throttled-tick seam]
+	# 7. Board update          the SHARED THROTTLED TARGETING TICK (story 4-2, AC 7, `4-2/R15`).
+	#    This line replaces the literal `[E4 minion/totem throttled-tick seam]` comment that
+	#    reserved the seat from E4 planning onward — the seat is now filled by the thing it was
+	#    reserved for, not by something that merely fits.
+	#
+	#    A SHARED TICK INSIDE advance(), NOT `Area3D` OVERLAP QUERIES, and that is a DETERMINISM
+	#    ruling rather than a performance one (`4-2/R15`). Overlap queries were rejected BY NAME:
+	#    they are physics-frame, live outside src/state/, and Jolt's results are not guaranteed
+	#    bit-stable across a recording and its replay — the same reasoning that rejected
+	#    physics-timing contact detection at 1-7 (`D-4`). Evaluated here, the outcome is hashable by
+	#    construction and replay-safe for free, exactly like every other step-1-through-8
+	#    computation.
+	#
+	#    SEATED BETWEEN CARD RESOLUTION (step 6) AND THE RESOLUTION CHECK (step 8) because a unit's
+	#    target must be knowable before step 8 asks "is anything dead" — even though this story adds
+	#    no death consequence of its own (movement, combat, HP and death are all 4-3's, `4-2/R4`).
+	#    A unit summoned by THIS tick's step-6 cast is therefore already on the board when this runs:
+	#    if this tick IS a throttle boundary, the unit acquires its first target immediately, in this
+	#    same advance() call; otherwise it acquires at the next boundary tick.
+	#
+	#    Dev Note (`4-2/R18`): `test_targeting_service.gd`'s `_summon()` helper appends straight to
+	#    `player.units` and never runs step 6, so it cannot exercise either half of this — a future
+	#    story testing step-6-adjacent behaviour needs a real cast fixture (see `_match_for_cast`
+	#    there), not that helper.
+	_update_unit_targets()
 	# 8. Resolution check
 	_check_resolution()
 
@@ -1108,6 +1132,80 @@ func _reshuffle_discard_into_deck(player: PlayerState, slot: int) -> void:
 ## rather than approximately true, and makes it countable.
 func _shuffle_deck(deck: Deck) -> void:
 	deck.shuffle_with_rng(_rng)
+
+
+## Step-7 throttled targeting (story 4-2, AC 5/AC 7/AC 8/AC 11) — the shared tick `4-2/R15` ruled.
+##
+## THROTTLED, NOT PER-FRAME PER-UNIT, and the mechanism is `_tick % interval` (`4-2/R5`(c)): NO NEW
+## STATE and NO NEW HASH KEY for the counter itself. `_tick` is already hashed and already
+## monotonic, so the cadence rides state that exists rather than adding a per-unit or per-match
+## timer — which is also why a replay reproduces the cadence for free.
+##
+## `balance_ticks == null` JOINS THE PRE-INJECTION GUARD FAMILY (step 3's _resolve_actions, step 5's
+## regen, step 6's deal, step 4's `balance == null` twin): the interval has no value to read yet, and
+## a modulo against a zeroed BalanceTicks field would divide by zero. THE one guard — no scattered
+## checks below it.
+##
+## THE INTERVAL IS READ INLINE (CONSTRAINT C), never cached: a mid-match X3 reload changes the
+## cadence from the next tick, and nothing holds a reference to the BalanceTicks object. It cannot be
+## zero here — BalanceTicks clamps it to >= 1 at the single conversion boundary (`4-2/R5`(d)), so an
+## authored 0 means "every tick" instead of a crash.
+##
+## `apply_balance` IS DELIBERATELY UNTOUCHED BY THIS STORY (`4-2/R5`(b)). The per-pool reload
+## contract (`3-1/R2`) governs POOL BOUNDS; a shared cadence is not one, so there is no per-player
+## injection seat for it and none may be invented.
+##
+## THE RULE SET IS RESOLVED BY NAME, ONCE PER BOUNDARY TICK (`4-2/R17`): the sorted, directory-scanned
+## set is asked for `PRIORITY_STANDARD` specifically, never for "whatever sorts first". A missing
+## name yields a null priority, which TargetingService reports as REASON_NO_PRIORITY_DATA and turns
+## into a NO-TARGET pair — a named outcome, never a crash and never a silent substitution of the
+## other authored rule (AC 6).
+func _update_unit_targets() -> void:
+	if balance_ticks == null:
+		return
+	if _tick % balance_ticks.minion_retarget_interval_ticks != 0:
+		return
+	var priority := TargetingService.priority_named(
+		TargetingService.authored_priorities(), TargetingService.PRIORITY_STANDARD)
+	# Fixed P1 -> P2 order, like every other per-player loop in this function's file. The OPPOSING
+	# slot is passed explicitly rather than derived inside the evaluator, which is what keeps
+	# `4-2/R3`'s "own-side units are never candidates" structural: the evaluator can only ever name
+	# the slot it is handed.
+	_retarget_units(p1, p2, 1, priority)
+	_retarget_units(p2, p1, 0, priority)
+
+
+## One player's board, retargeted against the OPPOSING side only (`4-2/R3`).
+##
+## THE CANDIDATE FACTS ARE READ ONCE PER BOARD, NOT ONCE PER UNIT: the opposing hero's liveness and
+## the opposing board's size are the same for every unit on this board, so hoisting them out of the
+## loop is what keeps this a SHARED scan rather than N independent ones — the Performance Rule's
+## actual content, not just its cadence.
+##
+## EVERY UNIT ON A BOARD RESOLVES TO THE SAME TARGET THIS STORY, and that is a consequence of the
+## Deferred section rather than a bug: units carry no position (`4-2/R14` defers it to 4-3) and no
+## HP (4-3), so there is no per-unit fact for a priority to discriminate on. The loop is per-unit
+## anyway because the STORAGE is per-unit — 4-3's movement and 4-4's totems differentiate the
+## verdict without moving this seat.
+##
+## LIVENESS IS `is_alive()`, NOT `action_state == DEAD`, and the distinction is load-bearing on the
+## kill tick: step 8 sets DEAD after this step runs, so on the tick a hero's hp reaches zero the
+## action state has not caught up yet while `is_alive()` already reports the truth. Judging on the
+## state would let a unit acquire a corpse for one tick.
+func _retarget_units(owner: PlayerState, opponent: PlayerState, opposing_slot: int,
+		priority: MinionPriority) -> void:
+	if owner.units.is_empty():
+		return
+	var hero_alive := opponent.hero.is_alive()
+	var opposing_unit_count := opponent.units.size()
+	for index in owner.units.size():
+		# The evaluator COMPUTES, this line APPLIES (D6) — TargetingService touches no board, and
+		# UnitBoard.set_target_at is reached only from here. `flags` is read INLINE (CONSTRAINT C),
+		# exactly as the step-6 CardEffectResolver call reads it; a closed `minions` flag returns a
+		# no-target pair, so a flag-off unit never acquires a target (AC 5).
+		var pair := TargetingService.target_for(
+			priority, opposing_slot, hero_alive, opposing_unit_count, flags)
+		owner.units.set_target_at(index, pair[0], pair[1])
 
 
 func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:

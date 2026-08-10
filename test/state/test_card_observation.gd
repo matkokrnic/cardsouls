@@ -226,13 +226,30 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# deck_size / hand_size / discard_size precedent. The pin moves because the STORY moved it --
 	# this is the guard doing its job, naming the cause, exactly as its own docstring promises.
 	# The claim it guards is unchanged: counts only, never contents, no identity and no position.
+	#
+	# DELIBERATELY EXTENDED AGAIN BY STORY 4-2 (AC 11, `4-2/R2`): `unit_targets`, each unit's
+	# acquired `[slot, index]` pair. TEN -> ELEVEN, and the extension is its own deliberate change
+	# with its own assertion below rather than a number quietly edited in place — a pin that drifts
+	# silently is the failure this project pins against.
+	#
+	# THE CLAIM THE PIN GUARDS IS STILL UNCHANGED, and that is why the extension is legitimate rather
+	# than an erosion: a `[slot, index]` pair is COUNTS AND INDICES, the same class as
+	# `pending_draw_owed`'s owed slots (`4-2/R2` cites that precedent by name). No identity, no
+	# StringName, no object and no position joins the hash. AC 9's per-unit IDENTITY extension added
+	# no key at all — measured, `4-2/R8`.
 	var expected: Array = [
 		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-		"pending_draw", "pending_draw_owed", "stamina", "unit_count",
+		"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_targets",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "
 		+ "never contents (3-3 AC 5 / 3-5a AC 6 / 3-5b AC 4)")
+	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
+	# named quantity in its own right. A future story that swaps one key for another would keep this
+	# green and fail the set assertion above; one that adds a key silently fails BOTH.
+	assert_eq(keys.size(), 11,
+		"the per-player snapshot key set is ELEVEN keys as of story 4-2 (ten before it — the one "
+		+ "new key is `unit_targets`, AC 11)")
 
 
 # --- Fixture ----------------------------------------------------------------------------------

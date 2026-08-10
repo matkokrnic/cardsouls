@@ -32,6 +32,17 @@ var draw_replacement_delay_ticks: int
 ## as every sibling; the ONLY thing that reads it is the reshuffle that starts the window
 ## (AC 2's negative guard is what keeps that true, and OPEN decision (b) open with it).
 var reshuffle_vulnerable_window_ticks: int
+## Story 4-2 (AC 7, `4-2/R5`(a)/(d)): the throttled retarget cadence in TICKS, derived once at load
+## like every sibling. Read INLINE at the step-7 seat (CONSTRAINT C).
+##
+## THE ONE FIELD IN THIS FILE THAT IS NOT A BARE `seconds_to_ticks()` CALL, and the difference is
+## `4-2/R5`(d)'s ruling rather than a local choice. `seconds_to_ticks()` returns 0 for a
+## zero-or-negative duration; this field is a MODULO DIVISOR, so a 0 would be a divide-by-zero on
+## the tick ladder. It is clamped to a minimum of 1, which gives the degenerate authored value a
+## DEFINED meaning — an authored 0 retargets EVERY tick — instead of a crash or a silently disabled
+## tick. Zero is therefore a legal in-test value; the AUTHORED value is audited > 0 for the reason
+## balance_config.gd states at the field.
+var minion_retarget_interval_ticks: int
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -53,6 +64,9 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 			config.draw_replacement_delay_seconds)
 	t.reshuffle_vulnerable_window_ticks = TimingWindow.seconds_to_ticks(
 			config.reshuffle_vulnerable_window_seconds)
+	# The clamp is HERE, at the single conversion boundary, so no consumer can read an unclamped 0.
+	t.minion_retarget_interval_ticks = maxi(1,
+			TimingWindow.seconds_to_ticks(config.minion_retarget_interval_seconds))
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)

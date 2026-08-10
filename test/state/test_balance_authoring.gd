@@ -177,6 +177,43 @@ func test_authored_card_timing_values_are_positive() -> void:
 		+ "tick it opens, leaving 3-6 nothing to render)")
 
 
+## Story 4-2 (AC 7, `4-2/R5`): the retarget cadence, audited in the defect-by-construction class —
+## the `draw_replacement_delay_seconds` precedent directly above, NOT the exempt
+## `stamina_regen_delay_seconds` class, and the distinction carries the same weight here.
+##
+## `field in config`, the `>= 0.0` loop in test_data_resources.gd, and BalanceTicks' own clamp ALL
+## pass on the 0.0 script default — and the clamp is precisely what makes the omission dangerous
+## rather than loud: an unauthored cadence derives to 1 tick and every unit re-evaluates its target
+## EVERY TICK, which is exactly the per-frame-per-unit scan the project-context Performance Rule
+## forbids ("target-acquisition scans must NOT run every frame for every unit"). The throttle would
+## be shipped INVISIBLE in the build, with nothing failing — the dead-field failure mode
+## balance_config.gd's reservation comments exist to prevent, arriving through the door a clamp
+## opened.
+##
+## THE UPPER BOUND IS AUDITED TOO, unlike this field's siblings, and it is not a style preference:
+## the Performance Rule names ~0.1-0.25 s as the intended band, and a cadence far above it would
+## make a unit visibly unresponsive to a candidate set that has already changed (a target held for a
+## second after its owner died). 0.5 s is a deliberately generous ceiling — twice the named band's
+## top — so ordinary playtest tuning inside and a little past the band is free, while an authoring
+## slip of an order of magnitude fails here instead of at a playtest.
+##
+## Zero stays a legal IN-TEST value: test_determinism.gd relies on the clamp's defined meaning, and
+## test_balance_config.gd asserts it in both directions. It is the AUTHORED value that is bounded.
+func test_authored_minion_retarget_interval_is_within_the_throttle_band() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.minion_retarget_interval_seconds > 0.0,
+		"minion_retarget_interval_seconds must be authored > 0 (a zero clamps to 1 tick and ships "
+		+ "the whole THROTTLE invisible — every unit rescanning every tick, which is what the "
+		+ "Performance Rule forbids)")
+	assert_true(config.minion_retarget_interval_seconds <= 0.5,
+		"minion_retarget_interval_seconds must be authored <= 0.5 s — the Performance Rule's band is "
+		+ "~0.1-0.25 s, and this generous ceiling catches an order-of-magnitude authoring slip "
+		+ "without constraining ordinary tuning")
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

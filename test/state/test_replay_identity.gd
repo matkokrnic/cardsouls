@@ -98,7 +98,13 @@ const HASHED: Array[String] = [
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the
 	# snapshot key (`unit_count`), so all of it reaches the hash and none of it needs an
 	# exemption. UNHASHED_CROSS_TICK_MEMBERS stays at THREE.
-	"player_state.units", "unit_board._count",
+	# Story 4-2 (AC 9 / AC 11): the bare `_count` is GONE — UnitBoard is now an ordered collection,
+	# and its two index-aligned arrays classify HASHED for the identical reason the count did. The
+	# board's LENGTH is `unit_count` and its CONTENT is `unit_targets` (both snapshot keys), so all of
+	# it reaches the hash and none of it needs an exemption. UNHASHED_CROSS_TICK_MEMBERS stays at
+	# THREE, which is what makes AC 10's replay-parity claim honest for the new cross-tick state:
+	# there is no fourth unhashed member to argue about.
+	"player_state.units", "unit_board._target_slots", "unit_board._target_indices",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
 	"hero_state.move_speed", "hero_state.windup", "hero_state.active", "hero_state.recovery",
@@ -151,6 +157,12 @@ const NOT_RUNTIME_STATE: Array[String] = [
 	"input_intent",       # INPUT, snapshot-exempt by contract and captured by the X5 stream
 	"cast_evaluator", "economy_evaluator",   # stateless evaluators
 	"card_effect_resolver",                  # ditto (story 4-1) — fully static, retains nothing
+	# Story 4-2 (AC 2): ditto again — fully static, retains nothing between calls. Its ONE static
+	# member is the directory-scanned rule set, which is CONTENT loaded once with no reload path (the
+	# EconomyEvaluator._authored classification verbatim), not runtime match state. It also would not
+	# be seen by the member scan either way: `_declared_members` matches `^var`, and a `static var`
+	# does not start there.
+	"targeting_service",
 ]
 
 
@@ -195,6 +207,14 @@ func test_the_recorded_run_exercises_every_channel() -> void:
 		"both slots' bases ride the record on every tick")
 	assert_eq(record.intents_at(CAST_TICK)[0].card_slot, CAST_SLOT,
 		"the intent stream carries the cast's card fields, not just movement")
+	# Story 4-2 (AC 10): the new CROSS-TICK STATE is exercised by this fixture, asserted rather than
+	# assumed. The t20 cast summons a unit, and `_config()` authors no retarget cadence, so the
+	# derived interval clamps to 1 (`4-2/R5`(d)) and every tick is a boundary — the unit therefore
+	# acquires the opposing hero on t20 itself and holds it to the hashed t24. Without this line the
+	# story's replay-parity claim would rest on the new state happening to be covered.
+	assert_eq(live.p1.to_snapshot()["unit_targets"], [[1, TargetingService.HERO_INDEX]],
+		"the recorded run's summoned unit ACQUIRED a target, so the throttled-tick state this story "
+		+ "adds is inside the replayed hash rather than sitting at an all-no-target no-op")
 
 
 ## AC 10: DROPPING ANY ONE CHANNEL MAKES THE REPLAY DIVERGE. This is what makes ACs 1-9

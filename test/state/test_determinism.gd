@@ -5,6 +5,49 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## RE-BASELINED BY STORY 4-2 (minion AI and throttled targeting), 78bd2b97 -> 73a86005, ONE
+## re-baseline, TWO MOVERS and TWO NON-MOVERS, each measured SEPARATELY and IN ORDER against the
+## inherited 78bd2b97 value — the 4-1 three-step method (312522d8 -> 542a05c0 -> 78bd2b97) repeated.
+##   0. AC 9's IDENTITY EXTENSION, ALONE — PREDICTED A NON-MOVER (`4-2/R8`), MEASURED A NON-MOVER.
+##      UnitBoard stops being a bare `int` and becomes an ordered collection with per-unit target
+##      storage, and PlayerState.to_snapshot() is NOT yet touched. MEASURED UNMOVED at 78bd2b97,
+##      bit-identical to the inherited value: `unit_count` stays bound to `size()`, and `size()`
+##      returns the same collection length the count returned. The extension is NOT VACUOUS at this
+##      step — the fixture's t22 cast appends a record and the record carries its (no-target) pair —
+##      it simply is not hashed yet, which is exactly the property `4-2/R8` predicted.
+##   1. SNAPSHOT SHAPE (a mover, predicted, `4-2/R2`). PlayerState.to_snapshot() gains
+##      `unit_targets`, the per-unit `[slot, index]` pair list (AC 11), on the `unit_count` (4-1) /
+##      `discard_size` (3-5a) / `pending_draw_owed` (4-0) precedent. ISOLATED BY CONSTRUCTION rather
+##      than by a staged mutation, the 4-1 cause-1 method verbatim: the key ships before the step-7
+##      tick is wired, so at this measurement no unit could acquire anything and the key entered the
+##      hash at an all-NO-TARGET value. MEASURED: 78bd2b97 ->
+##      23518ba4b39c5cd5b70be9b304d8254f4d16a2506c84fd2e9165933f8a3ca922.
+##      The key set moves TEN -> ELEVEN here, pinned by test_card_observation.gd.
+##   2. BEHAVIOUR — a target ACTUALLY ACQUIRED at a throttle boundary (a mover, predicted). The
+##      step-7 seat is wired and _golden_config authors RETARGET_INTERVAL_TICKS 23, so the unit
+##      summoned by the t22 cast acquires `[1, -1]` (the opposing HERO — P2's board is empty, so
+##      Standard's units-first ordering falls through) at t23 and still holds it at the hashed t24.
+##      MEASURED on top of cause 1: 23518ba4 -> 73a86005, the value below.
+##   3. `rng_state` — PREDICTED A NON-MOVER, CONFIRMED rather than assumed, on the 3-5b / 4-0 / 4-1
+##      precedent. Nothing about tie-break selection consumes RNG (`4-2/R3`: a fixed authored total
+##      order, not a random one). Measured against the tightest available pair — same fixture, same
+##      cast, targeting reaching a boundary vs. never reaching one — in
+##      test_the_throttled_targeting_consumes_no_rng below, which asserts the acquired target
+##      DIFFERS across the pair so the rng_state comparison cannot be vacuous (the
+##      test_the_summon_consumes_no_rng shape verbatim).
+## THE CADENCE VALUE IS NOT A CAUSE, MEASURED AND NAMED rather than assumed either way. An
+## unauthored cadence derives to 1 tick (`4-2/R5`(d)'s clamp) and hashes IDENTICALLY to the authored
+## 23 — 73a86005 both ways — because the hash sees only the final snapshot and the acquired pair is
+## the same whichever boundary produced it. This CORRECTS the Golden Prediction's expectation that an
+## unauthored cadence would measure a false NON-MOVE; see RETARGET_INTERVAL_TICKS for the full
+## reasoning and for why the throttle's TIMING is proven in test_targeting_service.gd instead.
+## NOT a cause either: the authored data/minions/*.tres, and not data/balance/balance_config.tres.
+## `_golden_config` is built in-test and the golden path resolves its priority from the SCANNED
+## authored set — so `data/minions/` content IS on the golden's own path (AC 4(a)'s ruling is about
+## review burden, `4-1/R4`), but its two authored files carry only the parameters that produce the
+## measured verdict above; re-tuning the authored retarget interval cannot re-baseline this hash.
+## Standing `BC/R3` isolation is intact.
+##
 ## Re-baselined by STORY 4-0 (hand slot stability), ONE re-baseline, THREE causes predicted and
 ## EXACTLY ONE of them a mover — each isolated by its own measurement and reproduced in both
 ## RE-BASELINED BY STORY 4-1 (basic summon resolution), 312522d8 -> 78bd2b97, TWO CAUSES,
@@ -333,7 +376,9 @@ extends TestCase
 ## (story 1-3, snapshot-shape re-baseline).
 ## Previous golden 312522d8c597be8ba99f2beea56a8c7bdbfef48dd1f2eff1b8f6f49164c0fb3c
 ## (story 4-0, hand slot stability: pending_draw_owed shape).
-const GOLDEN := "78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5"
+## Previous golden 78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5
+## (story 4-1, basic summon resolution: unit_count key + the t22 summon).
+const GOLDEN := "73a86005f1f2c069306ed6504be9c99d109e7b96014f05b502224f658209d1b5"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -384,6 +429,43 @@ const CAST_MANA_COST := 7.0
 ## degrades to 3-5a's instant refill and measures nothing, which is exactly what makes it the
 ## separable second half of golden cause C3.
 const DRAW_DELAY_TICKS := 11
+
+## Story 4-2 (AC 7, `4-2/R5`): the RETARGET CADENCE's fixture coverage value — coverage, NOT feel,
+## like every number here, and 23 ticks is NOT the authored 0.2 s / 12 ticks. Chosen DISTINCT from
+## every other count this fixture carries ({2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 15, 16, 17, 20, 22, 24,
+## 40, 60, 75, 90, 120, 180}) so a selector bug that read the wrong tick field lands on a different
+## number and MOVES the hash rather than silently coinciding with one.
+##
+## 23 IS CHOSEN SO EXACTLY ONE BOUNDARY FALLS INSIDE THE UNIT'S LIFETIME. The recorded cast lands at
+## t22 and the run hashes at t24, so with 23 the only boundary in range is t23 (`23 % 23 == 0`;
+## the next is t46, past the run) — the spawned unit acquires its target on t23 and STILL HOLDS IT
+## at the hashed t24. That is what makes this story's behavioural cause real rather than nominal:
+## the acquired `[slot, index]` pair is live in the hashed record, and it is also the ONE tick of
+## PERSISTENCE the golden can see (t24 is not a boundary, and the target survives it).
+##
+## AUTHORING IT IS A TASK, NOT A HOPE (`4-2/R5`) — BUT THE MEASURED REASON IS NOT THE PREDICTED ONE,
+## AND THE DIFFERENCE IS RECORDED HERE RATHER THAN SMOOTHED OVER. The Golden Prediction expected an
+## unauthored cadence to measure a FALSE NON-MOVE. It does not, for a reason the prediction did not
+## account for: BalanceTicks clamps the derived interval to >= 1 (`4-2/R5`(d)), so an unauthored 0.0
+## means EVERY TICK and the target is acquired anyway. Measured, both ways: unauthored and authored
+## at 23 hash IDENTICALLY (73a86005 either way).
+##
+## SO THE CADENCE VALUE IS HASH-NEUTRAL FOR THIS FIXTURE, and it cannot be otherwise: the hash sees
+## only the FINAL snapshot, the acquired pair is `[1, -1]` whichever boundary produced it, and this
+## fixture's candidate set never changes, so no two boundaries can disagree. An interval with NO
+## boundary between the t22 cast and the hashed t24 (7, say) WOULD move the hash — by leaving the
+## unit with no target at all, which would forfeit this story's behavioural golden cause. The two
+## properties are not simultaneously reachable without a second summon or a hero death inside the
+## recorded sequence, neither of which this story adds.
+##
+## WHAT THIS LINE THEREFORE BUYS is that the golden sits on the THROTTLED path rather than the
+## every-tick one — per-frame-per-unit retargeting is exactly what the project-context Performance
+## Rule forbids, and without this line the golden would cover that path while looking healthy. The
+## throttle's TIMING is proven where it can be: AC 7's behavioural-negative pair in
+## test_targeting_service.gd, which changes the candidate set mid-interval and asserts the target is
+## unchanged until the boundary tick and changed AT it. Named here so no later reader mistakes this
+## fixture for coverage of the cadence itself.
+const RETARGET_INTERVAL_TICKS := 23
 
 ## Movement pairs [p1, p2], cycled over the run (tick t uses MOVES[(t - 1) % 6]).
 const MOVES := [
@@ -544,6 +626,12 @@ func _golden_config() -> BalanceConfig:
 	# hashed t24. Not loaded from data/balance/balance_config.tres — the standing property that
 	# authored TUNING cannot move this hash is untouched.
 	c.draw_replacement_delay_seconds = float(DRAW_DELAY_TICKS) / 60.0
+	# Story 4-2 (AC 7, `4-2/R5`) — the ONE line that puts the THROTTLE, and not merely the target,
+	# inside determinism coverage. Unauthored it derives to 1 tick (the clamp) and every tick
+	# retargets; authored at 23 exactly one boundary (t23) falls between the t22 cast and the hashed
+	# t24. Not loaded from data/balance/balance_config.tres — the standing property that authored
+	# TUNING cannot move this hash is untouched. See RETARGET_INTERVAL_TICKS for both measurements.
+	c.minion_retarget_interval_seconds = float(RETARGET_INTERVAL_TICKS) / 60.0
 	# reshuffle_vulnerable_window_seconds is deliberately NOT authored here. _golden_config leaves
 	# EIGHT cards in each pile against a single recorded cast, so the fixture cannot reach a
 	# reshuffle and the window can never open — authoring a duration for a path this sequence does
@@ -953,6 +1041,85 @@ func test_the_summon_consumes_no_rng() -> void:
 		"...and the effects-less run really did not — so this comparison is not vacuous")
 	assert_eq(summoning.to_snapshot()["rng_state"], not_summoning.to_snapshot()["rng_state"],
 		"appending a unit record consumed NO rng — the predicted non-mover, confirmed")
+
+
+## Story 4-2 (AC 7/AC 8/AC 11): the BEHAVIOURAL golden cause, pinned on the hashed record itself
+## rather than described in the re-baseline comment — the
+## test_golden_sequence_exercises_the_recorded_cast precedent. Without this, cause 2 of the
+## re-baseline would be a claim about a hash nobody can read.
+##
+## Every assertion here is a fact the hash actually carries at t24:
+##   - the unit EXISTS (cause 2 of the 4-1 re-baseline, unchanged) and holds exactly ONE target;
+##   - the target is the OPPOSING HERO — slot 1, index -1. P2's board is empty, so `standard`'s
+##     units-first ordering falls through to the hero (AC 8's fall-through, not `prefer_hero`);
+##   - it was acquired at the t23 BOUNDARY and PERSISTS through the non-boundary t24, which is the
+##     only slice of throttle BEHAVIOUR this fixture can see (the timing itself is proven in
+##     test_targeting_service.gd — see RETARGET_INTERVAL_TICKS);
+##   - P2 has no units at all, so its `unit_targets` is empty — a target list that grew on the side
+##     with no board would be a real defect this catches.
+func test_golden_sequence_exercises_throttled_targeting() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	assert_eq(ms.p1.units.size(), 1, "sanity: the t22 cast summoned exactly one unit (`4-1/R6`)")
+	var targets: Array = ms.p1.to_snapshot()["unit_targets"]
+	assert_eq(targets.size(), 1, "one record, one target pair — the list is index-aligned with the board")
+	assert_eq(targets[0], [1, TargetingService.HERO_INDEX],
+		"the acquired target is the OPPOSING HERO: slot 1, index -1 (AC 11's pair, AC 8's "
+		+ "units-first fall-through against an empty opposing board)")
+	assert_eq(ms.p2.to_snapshot()["unit_targets"], [],
+		"P2 owns no units, so nothing was written on its side")
+	assert_true(TICKS % RETARGET_INTERVAL_TICKS != 0,
+		"the hashed tick is NOT a boundary — so the pair above is a PERSISTED target, not one "
+		+ "recomputed on the hashed tick itself")
+
+
+## Story 4-2: THE PREDICTED NON-MOVER, CONFIRMED RATHER THAN ASSUMED (the 3-5b / 4-0 / 4-1
+## precedent). The Golden Prediction names `rng_state` as a predicted non-mover: nothing about
+## tie-break selection consumes RNG, because `4-2/R3` fixes a total order rather than drawing one.
+##
+## Measured against the tightest available pair — the SAME fixture, the SAME cast, the SAME summon,
+## differing ONLY in whether the retarget cadence ever reaches a boundary while the unit exists. The
+## acquired target must DIFFER across the pair (or the comparison is vacuous, the
+## test_the_summon_consumes_no_rng shape verbatim) while `rng_state` must not.
+##
+## 7 is the never-reaching interval: its boundaries are t7, t14, t21 and t28, and the unit exists
+## only from t22 to the run's end at t24.
+const NO_BOUNDARY_INTERVAL_TICKS := 7
+
+
+func test_the_throttled_targeting_consumes_no_rng() -> void:
+	var retargeting := _make_match()
+	_play_sequence(retargeting)
+	var never_retargeting := _make_match_with_retarget_interval(NO_BOUNDARY_INTERVAL_TICKS)
+	_play_sequence(never_retargeting)
+	assert_eq(retargeting.p1.units.size(), never_retargeting.p1.units.size(),
+		"sanity: both runs summoned the same unit — the ONLY difference is the cadence")
+	assert_eq(retargeting.p1.to_snapshot()["unit_targets"], [[1, TargetingService.HERO_INDEX]],
+		"sanity: the first run's unit ACQUIRED a target at the t23 boundary")
+	assert_eq(never_retargeting.p1.to_snapshot()["unit_targets"],
+		[[TargetingService.NO_TARGET_SLOT, TargetingService.NO_TARGET_SLOT]],
+		"...and the second run's never did (boundaries t7/t14/t21 all precede the t22 summon) — "
+		+ "so this comparison is not vacuous")
+	assert_eq(retargeting.to_snapshot()["rng_state"],
+		never_retargeting.to_snapshot()["rng_state"],
+		"acquiring a target consumed NO rng — the predicted non-mover, confirmed")
+
+
+## The golden match with ONE authored value changed, the `_make_match_without_effects` idiom applied
+## to a value instead of a seam. Exists only for the non-mover measurement directly above; every
+## hashed path uses `_make_match`.
+func _make_match_with_retarget_interval(interval_ticks: int) -> MatchState:
+	var ms := MatchState.new(MatchParams.new(SEED))
+	var config := _golden_config()
+	config.minion_retarget_interval_seconds = float(interval_ticks) / 60.0
+	ms.apply_balance(config)
+	ms.inject_feature_flags(_golden_flags())
+	if config.deck_size > 0:
+		ms.inject_deck(_golden_deck())
+		ms.inject_card_costs(_golden_costs())
+		ms.inject_card_effects(_golden_effects())
+	ms.drain_signals()
+	return ms
 
 
 ## Story 3-3 (AC 5): two INDEPENDENTLY CONSTRUCTED matches, same seed, POPULATED deck, must hash

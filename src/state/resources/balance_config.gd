@@ -126,6 +126,30 @@ extends Resource
 ## nothing has priced it. The renderer is 3-6's.
 @export var reshuffle_vulnerable_window_seconds: float = 0.0
 
+@export_group("Minions")
+## Story 4-2 (AC 7, `4-2/R5`(a)): how often a unit RE-EVALUATES its target. The project-context
+## Performance Rule made authorable — "target-acquisition scans must NOT run every frame for every
+## unit. Use a shared, throttled tick (e.g. re-target every ~0.1-0.25 s)" — so the cadence is a
+## tuning value, not a magic number in `advance()`.
+##
+## A DURATION, so it converts to ticks exactly once at load (A1), on the
+## `draw_replacement_delay_seconds` -> `_ticks` precedent directly above: `BalanceTicks
+## .minion_retarget_interval_ticks`, read INLINE at the step-7 seat (CONSTRAINT C).
+##
+## ONE MATCH-WIDE CADENCE, NOT A PER-POOL OR PER-PLAYER VALUE. `MatchState.apply_balance` is
+## deliberately NOT touched by this story (`4-2/R5`(b)): the per-pool reload contract (`3-1/R2`)
+## governs POOL BOUNDS, and a shared tick cadence is not one — a dev pass must not invent a
+## per-player injection seat for it.
+##
+## THE DEGENERATE VALUE IS DEFINED RATHER THAN LEFT TO ROUNDING (`4-2/R5`(d)): the derived interval
+## clamps to at least 1 tick ALWAYS, so an authored 0 means "every tick" instead of a modulo by zero.
+## That makes 0 a legal in-test value, exactly as a 0 draw delay is. It is the AUTHORED value that
+## is audited > 0 (test_balance_authoring.gd), for the `draw_replacement_delay_seconds` reason
+## verbatim: a zero authored cadence would ship the whole THROTTLE invisible in the build — every
+## unit re-scanning every frame is precisely the behaviour the Performance Rule forbids, and it
+## would pass a `>= 0.0` existence check silently.
+@export var minion_retarget_interval_seconds: float = 0.0
+
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0
 @export var deflect_window_seconds: float = 0.0
