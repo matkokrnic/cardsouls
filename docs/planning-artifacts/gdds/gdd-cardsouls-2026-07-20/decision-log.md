@@ -6720,3 +6720,125 @@ flag. This removes the reached-vs-obstructed distinction from the attack path en
 `4-3b/R11` (ruled) Units continue to collide with their own side; the measured case of a minion
 getting stuck on its own summoner is accepted as-is for now and stays deferred with a new owner -- a
 later story on richer minion behaviour. NOT discharged here.
+
+## Session 2026-08-11 -- 4-3b readiness gate (rulings R12-R22, R17 split a/b)
+
+`4-3b/R12` (BLOCKING, ruled) The unit's dedupe does NOT move off hero state, and the story does NOT
+split a third time. Measured: a unit cannot share the hero's monotonic `attack_index` (it is
+incremented only when a HERO starts a swing and it is snapshotted, so driving it from unit swings
+would change hero-observed values -- an unnamed golden cause), and cannot share the hero's
+`_swing_dedupe` records (their grace lifetime is driven by the HERO's own active window,
+`hero_state.gd:134-144`, which has nothing to do with a unit's). Therefore the unit gets its own
+counter and its own records, and the hero side is untouched. The split criterion named in advance
+was "only if the hero dedupe must relocate"; measurement says it must not.
+`4-3b/R13` (ruled) The gate's own proposed cut -- unit-attacks-hero in one story, unit-versus-unit
+in another -- is REJECTED. Both reasons it gave (cross-attacker ordering, attacker killed mid-swing)
+arise as soon as TWO minions attack one hero and as soon as a hero kills a minion mid-swing, so both
+live in the first half regardless of where the cut falls. They become first-class acceptance
+criteria instead.
+`4-3b/R14` (BLOCKING, ruled; AMENDED at this same gate for `R17b`'s in-reach flag -- the grant is
+FIVE fields, not four) FIELD PERMISSION GRANT for `4-3b` on the unit record, obtained at this story's
+own scope ruling per `4-3a/R6`. FIVE SCALAR fields land as parallel arrays on the `hp` precedent:
+phase state, tick countdown, locked attack direction, monotonic attack counter, and the IN-REACH FLAG
+(`R17b`). The DEDUPE HIT LIST does NOT join them -- it goes in a separate unit-owned state class
+beside the board. Reason: the board's own rule (`unit_board.gd:43-48`) forbids non-scalar per-record
+fields, that rule exists to keep objects out of the hash, and per-kind state is coming in `4-4`
+anyway. Cost accepted: one small new state class, and a snapshot key set that MOVES -- how far is a
+dev-pass measurement, not a number this gate asserts, because the board's own precedent runs both
+ways (one array -> one key for `unit_hp`; TWO arrays -> ONE key for `unit_targets`, which fuses
+`_target_slots` and `_target_indices` into pairs). The amendment is recorded here rather than left to
+disagree with the story, because the SIZE of the grant is the whole reason `4-3a/R6` made this story
+ask for its own.
+`4-3b/R15` (ruled) SIGNALS DO NOT WIDEN; the fact dictionary does. Measured from both consumers:
+`hit_landed` and `deflect_landed` carry a typed bare int attacker (`match_state.gd:30, 37`) and both
+shipped callbacks UNDERSCORE it and gate solely on the target slot
+(`telegraph_controller.gd:93-95, 108-110`), so a minion damaging a hero already flashes the correct
+hero with no change. Widening the payload would break two typed callbacks for no behavioural gain.
+`4-3b/R16` (ruled) Friendly-fire filtering sits at GATHER time, by owner slot. `4-3b/R3`'s substance
+stands unchanged; its LOCATION WORD ("on the resolution ladder") is corrected, because `push_contact`
+asserts attacker and target slots differ and HALTS on violation (`match_state.gd:454-455`) -- so a
+same-slot fact must never reach that seam, and a ladder-side check would be dead code behind a build
+halt.
+`4-3b/R17a` (BLOCKING, ruled) BEHAVIOUR: a minion begins its windup ONLY when its acquired target is
+within REACH -- never on a free-running cycle, and never off an "arrived" flag. This supersedes
+`4-3b/R10`'s "pure distance" wording at the level of what the game DOES. -- _decided by Matko._
+`4-3b/R17b` (BLOCKING, ruled at this gate -- NOT an operator decision) MECHANISM for `R17a`, arrived
+at by this gate's own measurement and recorded as its own ruling so the provenance is not confused
+with the behavioural call above. The reach relation is carried on the EXISTING `push_contact` intake,
+with a kind marker separating a REACH PROBE from a STRIKE, dropped at the TOP of `_resolve_contacts`
+ahead of every rung, and gathered on the SAME THROTTLED CADENCE the minion retargeting already uses
+(`minion_retarget_interval_ticks`, 12 at the authored 0.2 s) rather than every tick.
+BASIS (the Part 0 measurement): `4-3/R2` rejected an inward direction-fact channel feeding a
+state-owned per-unit VELOCITY, and rejected state-owned position floats, while AFFIRMING
+`push_contact` as the only inward intake -- and that intake ALREADY carries position-DERIVED spatial
+data (`match_runner.gd:895-904`, "FROM POSITIONS ONLY"); no other runner-to-state channel carries
+anything spatial (the throttled targeting consumes a priority, a slot int, a bool, an `Array[int]` of
+living indices and flags). So the probe adds no channel and delivers neither a position nor a
+velocity: state learns a relation, not a location.
+THE THROTTLE IS PART OF THE RULED MECHANISM, because the unthrottled cost is the largest this
+mechanism introduces and it need not be paid: measured, an unthrottled probe is one row per tick per
+in-range unit (up to 16 rows/tick, ~960 rows/second at `4-5`'s 16-unit criterion) against today's
+sparse per-swing bursts; on the existing 12-tick interval that falls to ~1.33 rows/tick, ~80
+rows/second. The existing interval FIELD is reused, so no new balance field and no new guard entry.
+THE PROBE IS GATHERED REGARDLESS OF THE UNIT'S PHASE, NOT ONLY WHILE IT IS IDLE, and state keeps a
+per-unit IN-REACH FLAG (the fifth granted field, `R14` amended): the flag is SET by a fact, a windup
+START CONSUMES it, and a unit begins its windup when it is idle AND the flag is set. Reason -- the
+idle-only variant this gate first wrote has a GAMEPLAY-VISIBLE artefact: a unit finishing recovery
+would wait up to a full interval for the next probe, making the effective cycle
+windup+active+recovery+up-to-one-interval, jittering with where the swing landed relative to the
+cadence, so the authored durations would not describe the observed attack rate. A performance
+decision must not silently retune combat. The stream volume is UNCHANGED by this: the throttle, not
+the idle narrowing, is what buys the reduction.
+THE FLAG IS SET BY ANY CONTACT FACT THIS UNIT SOURCES AGAINST ITS ACQUIRED TARGET, OF EITHER KIND --
+PROBE OR STRIKE (operator amendment, closing a REFRESH HOLE this gate left open). The hole: gathering
+through the swing is not sufficient on its own, because the fact's KIND is decided by PHASE -- while
+the active window is open the same overlap produces a STRIKE, not a probe -- so a throttle tick
+landing inside a unit's active window would refresh nothing, and after recovery the unit would wait
+for the next probe. That is the very jitter the flag exists to remove, merely less often. A landed
+strike is PROOF of reach, and stronger proof than a probe, since it is the same overlap test; so
+counting it closes the hole with no new mechanism and no extra stream volume.
+SCOPED TO THE ACQUIRED TARGET: only a fact whose TARGET ADDRESS is this unit's own acquired target
+sets the flag. Reason -- cleave (`4-3b/R2`) makes a swing through a BYSTANDER reachable, and letting
+that refresh "in reach" would keep a unit swinging at a target it has actually lost. Stated
+explicitly because it does not follow from either ruling read alone: cleave deliberately lets a swing
+touch what the unit never aimed at.
+CONSEQUENCE FOR `4-3b/R9`'s DIRECTION LOCK, ruled here rather than left open (an AC permitting two
+implementations of a player-visible behaviour is the defect that produced `4-3a`'s first blocking
+finding): the locked direction has EXACTLY ONE legal source -- the `dir` of the fact that most
+recently set the flag, NEGATED (the fact's field is target-to-attacker, `match_state.gd:463`).
+Measured: no alternative exists, because the direction is needed by the windup-start decision inside
+`advance()`, the runner learns a windup began only by polling AFTER `advance()` returns and this story
+adds no earlier signal, and state cannot derive a direction itself with position actor-owned
+(`4-3/R2`). So the locked direction is up to one throttle interval stale BY CONSTRUCTION -- the same
+staleness (i) above names, not a second one.
+TWO CONSEQUENCES NAMED HONESTLY. (i) The flag can be up to one interval stale, so a minion may begin
+a windup against a target that has just left reach; that whiff is consistent with `4-3b/R9` and
+`R18`, which already rule a summon-tier swing missing to be the intended feel. (ii) ABSENCE of
+overlap is NOT a fact and CANNOT clear the flag -- consumption at windup start is the ONLY clearing
+path. Stated explicitly so a dev pass does not go looking for a negative probe that does not exist.
+If this mechanism is ever found to cost more than the gate measured, it is amendable without
+reopening `R17a`.
+`4-3b/R18` (ruled) A swing whose target dies or is retargeted mid-windup COMPLETES INTO EMPTY AIR.
+Reason: summon-tier minions are placeholder behaviour, and a cancel path would add a second way a
+swing can end, against the no-interruption non-goal. -- _decided by Matko._
+`4-3b/R19` (ruled, recorded) The stamina drain from deflecting several minions in one window is an
+ACCEPTED, NAMED consequence of `4-3b/R6` (the hero's defensive ladder applies unchanged): deflect
+spends its cost PER FACT (`match_state.gd:739-742`), so later facts degrade to blocked damage once
+the spend fails. Nobody CHOSE this number; it is recorded here rather than left to surface at live
+smoke. Owner of the number: the melee retune block (`E3-R/R3`).
+`4-3b/R20` (measured observation, no owner assigned) The runner has NO round-over gate at all: its
+`_physics_process` gates only on the DEBUG pause (`match_runner.gd:951-953`), so `_aim_unit_actors`
+and `_approach_unit_actors` keep running after a round ends and units keep walking. INHERITED from
+`4-3`, not introduced by `4-3b` -- but this story makes it visibly odd (a frozen swing on a walking
+body). Recorded without an owner rather than silently absorbed.
+`4-3b/R21` (ruled) `RecordFile.FORMAT_VERSION` goes 3 -> 4, shape-only, with hard rejection of older
+records and no shim (the `4-1` refusal-with-reason precedent). CONDITIONAL on the `R17b` measurement:
+if the reach fact turns out to change the CHANNEL SET rather than the row shape, the required-key set
+moves too and this ruling is amended at the dev pass rather than applied. Measured expectation: the
+kind marker rides the existing row, so the channel set is unchanged.
+`4-3b/R22` (ruled) The golden fixture is NOT extended. Measured: it runs `MatchState` alone with no
+runner and no physics, its contact facts are hand-authored hero-attacker literals, and its single
+unit is summoned two ticks before the hash -- so a unit attack is STRUCTURALLY unreachable there.
+Extending it would mean giving the determinism fixture physics, which is what `D3(b)`/`A2` keep out
+of `src/state/`. Reachability limits and the causes proven by unit/integration tests instead are
+recorded in the story's Golden Prediction.

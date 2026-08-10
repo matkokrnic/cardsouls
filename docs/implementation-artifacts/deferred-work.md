@@ -32,8 +32,29 @@
 - **`approach()` does not distinguish "reached `unit_stop_distance`" from "physically obstructed
   short of it" (`4-3/R21`, finding 1).** A unit blocked by another body before it reaches its stop
   distance has no distinct code path, so its behaviour there is whatever `move_and_slide()`
-  happens to do, not a designed outcome. OWNER: `4-3b-minion-attack-rhythm` (its only consumer is
-  attack range, which lands in 4-3b).
+  happens to do, not a designed outcome. ~~OWNER: `4-3b-minion-attack-rhythm` (its only consumer is
+  attack range, which lands in 4-3b).~~
+
+  **REWRITTEN at the 4-3b readiness gate (2026-08-11). The stated rationale is FALSIFIED, and the
+  item is not closed.** "Its only consumer is attack range" no longer holds: `4-3b/R10` and
+  `4-3b/R17a` gave the attack trigger a REACH TEST instead (mechanised by `4-3b/R17b` as a throttled
+  probe on the existing `push_contact` intake),
+  which REMOVED that consumer rather than building the distinction. So the reason this item was
+  parked on `4-3b` has evaporated while the item itself has not.
+
+  **The residual gap is real and REMAINS: an obstructed unit still has no designed behaviour.**
+  Nothing in `4-3b` gives it one — `approach()` is explicitly not edited there — and the measured
+  own-side instance below is still reproducible.
+
+  **NEW OWNER: the later story on richer minion behaviour** (per `4-3b/R11`, which keeps own-side
+  collision deferred with a new owner; the same story that replaces "wedged into the first thing in
+  its path" with real steering, as `4-3a/R29`'s own operative reason anticipated). Named rather
+  than left unassigned, because an unowned item is one nobody re-reads.
+
+  **Supersession recorded:** `4-3a/R29` named `4-3b` as this item's FORCING POINT ("`4-3b` teaches
+  `approach()` to distinguish 'arrived' from 'physically obstructed'"). That assignment is
+  SUPERSEDED by the operator's two newer rulings, `4-3b/R10`/`R17a` (the reach trigger removes the
+  consumer) and `4-3b/R11` (own-side collision stays deferred under a new owner).
 
   **Annotated from 4-3a review (2026-08-10, `4-3a/R25`): a measured instance, not a new item --
   a summoned minion can be blocked by its OWN summoner.** Writing
@@ -42,8 +63,9 @@
   hero, which stands at (-3, 0), directly in the unit spawn lane -- the same "arrived" vs.
   "physically obstructed" gap this item already names, just triggered by a hero body instead of
   another unit. The test now relocates the hero off the lane as a setup step precisely so it scopes
-  itself to unit-vs-unit collision instead. This item stays OPEN and its owner unchanged; this is a
-  measurement of an existing gap, not a discharge of it.
+  itself to unit-vs-unit collision instead. This item stays OPEN; this is a measurement of an
+  existing gap, not a discharge of it. (Its owner was `4-3b` when this annotation was written — see
+  the 2026-08-11 rewrite above for the reassignment.)
 
 ## Deferred from: readiness gate of 4-3-minion-approach-and-collision (2026-08-10)
 
