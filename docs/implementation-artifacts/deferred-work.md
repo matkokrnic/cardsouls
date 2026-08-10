@@ -5,12 +5,8 @@
 - **Unit-vs-unit body collision is unmeasured (`4-3/R21`, finding 1).** The shipped comments
   claimed the shared default layer makes a unit block "a hero (and another unit)", but
   `test_unit_approach_live.gd` only drives a hero into a parked unit -- two units driven at the
-  same acquired target simultaneously is not exercised anywhere. Two things are open together:
-  the wedge/jitter risk of two `CharacterBody3D`s converging on the same point, and the fact that
-  `approach()` does not distinguish "reached `unit_stop_distance`" from "physically obstructed
-  short of it" -- a unit blocked by another body before it reaches its stop distance has no
-  distinct code path, so its behaviour there is whatever `move_and_slide()` happens to do, not a
-  designed outcome. OWNER: `4-3a-minion-combat`.
+  same acquired target simultaneously is not exercised anywhere: the wedge/jitter risk of two
+  `CharacterBody3D`s converging on the same point. OWNER: `4-3a-minion-damage-and-death`.
 
   **Update from 4-3 close-out live smoke (2026-08-10):** OBSERVED CLEAN by hand -- several units
   driven at the same target showed no jitter, no mutual pushing, normal movement, no passing
@@ -18,6 +14,12 @@
   the item. It does NOT close it: the item is about machine coverage (`4-3a`'s test still owes a
   live check with two-plus units converging on one target), and a single by-hand observation is not
   a substitute for that.
+
+- **`approach()` does not distinguish "reached `unit_stop_distance`" from "physically obstructed
+  short of it" (`4-3/R21`, finding 1).** A unit blocked by another body before it reaches its stop
+  distance has no distinct code path, so its behaviour there is whatever `move_and_slide()`
+  happens to do, not a designed outcome. OWNER: `4-3b-minion-attack-rhythm` (its only consumer is
+  attack range, which lands in 4-3b).
 
 ## Deferred from: readiness gate of 4-3-minion-approach-and-collision (2026-08-10)
 
@@ -31,7 +33,7 @@
 
 ## Deferred from: close-out of 4-2-minion-ai-throttled-targeting (2026-08-10)
 
-- **Units have no collision shape -- heroes pass through them.** `UnitActor`
+- **CLOSED by `4-3/R17`.** Units have no collision shape -- heroes pass through them. `UnitActor`
   (`src/actors/minions/unit_actor.gd`) is a `Node3D` with a `MeshInstance3D` and nothing else; no
   `CollisionShape3D`, no `Area3D`, no physics body. Noticed live during this story's smoke
   (`docs/playtest-log.md`, 10.8: "vidjim da heroji mogu proralziti kroz te pravokutnike ne znam

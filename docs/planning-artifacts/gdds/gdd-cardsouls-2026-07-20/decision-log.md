@@ -6520,3 +6520,43 @@ Story `4-3-minion-approach-and-collision` -> `done`. One commit, not pushed:
 decision-log entry, `sprint-status.yaml`, `deferred-work.md`'s unit-vs-unit item annotated, not
 closed). `docs/playtest-log.md` is the operator's own entry, not part of this commit. No code
 touched, no test suite run (docs-only pass). Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3a scope split (rulings R1-R7)
+
+`4-3a/R1` SCOPE SPLIT. `4-3a-minion-combat` is cut in two along the direction of damage.
+`4-3a-minion-damage-and-death`: the unit as TARGET only (hp, damage, death, board removal,
+contact-fact target addressing, unit hurtbox). `4-3b-minion-attack-rhythm`: the unit as ATTACKER
+(windup/active/recovery, unit hitbox, unit-vs-unit damage). Rationale: the attacker half needs
+per-unit action state and phase timers inside `advance()`, plus units entering
+`_gather_contact_facts` which today enumerates heroes only -- on its own larger than all of
+`4-3a`, landing in the step-4 ladder, the most sensitive shipped code. Ordering is
+dependency-correct: both halves need the same widened contact fact, and the attacker half gets a
+live victim to test against. Admitted cost: two golden re-baselines instead of one.
+`4-3a/R2` Death removes a unit from the board by leaving a HOLE at a stable index, never by
+compacting the array. Reason: `unit_targets` is `[slot, index]` under throttled retargeting, so
+compaction would silently re-point a stale reference at a DIFFERENT live unit. Precedent:
+`4-0-hand-slot-stability`. Converts `4-3/R15` (OQ2 ruled a presentational null-check because death
+was future work) into a state-layer concern owned by `4-3a`.
+`4-3a/R3` A confirmed hit against a unit generates NO mana. Reason: step 5 `_generate_mana` awards
+`melee_hit_mana` on every confirmed hit, so without an explicit gate, killing minions becomes a
+mana source. -- _decided by Matko._
+`4-3a/R4` No friendly fire: a hero's hitbox does not damage units owned by that hero's own slot.
+-- _decided by Matko._
+`4-3a/R5` The melee retune (`E3-R/R3`) re-anchors from `4-3a` to `4-3b`. Reason: the melee-feel
+half of the playtest checklist stays unanswerable until minions attack -- the same reason the
+block was deferred on 2026-08-10. The economic half becomes measurable for the first time once
+units can die. -- _decided by Matko._
+`4-3a/R6` The permission granted by `4-2/R17(c)` to add a field to the unit record is SPENT in
+`4-3a` on exactly one field: hp. Maximum HP is read from balance (all minions share the authored
+maximum), so no per-unit max field. `4-3b` receives NO advance permission; it must obtain its own
+at its own scope ruling. Reason: `R17(c)` exists so that record growth is a deliberate act, one
+story at a time.
+`4-3a/R7` `R-D6` is NOT spent in `4-3a`. The live smoke is "P1 summons, P2's hero kills it", and
+the shipped default `slot_controller_kinds` is already `[0,1]` (two live killable human slots,
+per `2-3`), so no temporary flip is required. Same reasoning as `4-3/R14`.
+
+### Close-out
+
+Docs-only, no code. One commit, not pushed: `docs(4-3a): split minion combat into damage and
+rhythm halves` (`sprint-status.yaml`, `deferred-work.md`, this decision-log entry). Operator
+reviews the log and pushes.
