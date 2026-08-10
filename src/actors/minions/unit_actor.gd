@@ -35,9 +35,11 @@ extends CharacterBody3D
 ## STORY 4-3 MAKES THIS A BODY AND GIVES IT THE MOVE (`4-3/R17`, `4-3/R8`). The root becomes a
 ## `CharacterBody3D` with ONE `CollisionShape3D` child on the DEFAULT layer/mask -- the same layer 1
 ## "bodies" the hero root sits on (`hero.tscn:49`, no layer/mask lines) -- so a unit blocks a hero,
-## and another unit, without a new collision layer and without touching `project.godot`. NO
-## HURTBOX AND NO `Area3D` SHIPS HERE: the hero Hitbox is layer 4 / mask 2 (hurtboxes only) and
-## `_gather_contact_facts` drops any actor whose `_slot_of` is -1, so a unit body cannot enter the
+## without a new collision layer and without touching `project.godot`. Unit-vs-unit blocking falls
+## out of the same default layer but is NOT measured by this story (`4-3/R21`; filed
+## `deferred-work.md`, owner `4-3a`). NO HURTBOX AND NO `Area3D` SHIPS HERE: the hero Hitbox is
+## layer 4 / mask 2 (hurtboxes only) and `_gather_contact_facts` drops any actor whose `_slot_of`
+## is -1, so a unit body cannot enter the
 ## contact pipeline. Damage intake is `4-3a`'s.
 ##
 ## EVERYTHING ABOVE STILL HOLDS ACROSS THAT CHANGE. `approach()` is the `aim_at()` shape with a
