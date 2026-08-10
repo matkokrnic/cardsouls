@@ -6480,3 +6480,43 @@ pushed: `docs(4-3): narrow the unit collision comments to what is measured` (R21
 code review and rulings R21-R25` (this entry, `deferred-work.md`, the story's Review/Change Log,
 `sprint-status.yaml`). Suite unmoved: 445 state tests / 3464 assertions / 0 failed, 27 integration,
 GOLDEN `73a86005` unmoved, snapshot key set still eleven. Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3 close-out (ruling R26)
+
+Live Smoke PASSED, operator's own hand, shipped defaults (`docs/playtest-log.md`, 10.8): a
+summoned unit approaches on summon; the hero cannot walk through or shove it; several units on one
+target show no jitter or mutual pushing, track normally, and do not pass through each other; the
+authored `3.0` / `1.5` feel right. `R-D6` NOT spent (`4-3/R14`).
+
+`4-3/R26` (ruled) FEEL FINDING, not a defect: minions currently read as homing projectiles rather
+than as Elden Ring-style mobs, because approach is the only thing they do -- no attack windup, no
+pause, no recovery. Correct for this story, which ships approach and nothing else. It is an
+acceptance concern for `4-3a`, whose attack rhythm is what makes a unit read as a mob, and it
+reinforces why the melee retune (`E3-R/R3`) is anchored to `4-3a` rather than here. Named as an
+input to `4-3a`'s create pass. -- _decided by Matko._
+
+What this story leaves live for `4-3a`:
+- The unit-vs-unit machine coverage gap (`deferred-work.md`) -- observed clean by hand at this
+  story's smoke, which lowers the risk read but does not close the item.
+- `approach()` not distinguishing "reached `stop_distance`" from "physically obstructed short of
+  it" (same deferred-work.md item).
+- The aim/approach loop-merge item (`deferred-work.md`, unassigned owner).
+- `R-D6`, unspent, available.
+- The `4-3/R26` feel finding above.
+- `4-3/R3`'s widening of the contact fact to `[slot, index]`, owned by `4-3a`.
+
+Carried forward for the E4 retrospective, no work now:
+- Two "close-out claimed a docs change that never shipped" instances (`4-3/R24`).
+- Two consecutive review runs with all three layers completing and no stall (PROC/R6 counter
+  stays 0).
+- The twice-seen pattern of a session completing its commits, losing the transcript to
+  compaction, and reporting a HEAD mismatch on the next prompt -- where the correct answer was
+  review, never reset.
+
+### Close-out
+
+Story `4-3-minion-approach-and-collision` -> `done`. One commit, not pushed:
+`docs(4-3): close out minion approach and collision` (story Status and Live Smoke, this
+decision-log entry, `sprint-status.yaml`, `deferred-work.md`'s unit-vs-unit item annotated, not
+closed). `docs/playtest-log.md` is the operator's own entry, not part of this commit. No code
+touched, no test suite run (docs-only pass). Operator reviews the log and pushes.

@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-08-10 (4-3 dev pass complete; board stays ready-for-dev per CFG/R2)
+# last_updated: 2026-08-10 (4-3 close-out; live smoke PASS, story done)
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -80,7 +80,7 @@ development_status:
   4-B1-card-hud-debt-discharge: done  # Tier B
   4-1-basic-summon-resolution: done  # Tier A
   4-2-minion-ai-throttled-targeting: done  # Tier A
-  4-3-minion-approach-and-collision: ready-for-dev  # Tier A
+  4-3-minion-approach-and-collision: done  # Tier A
   4-3a-minion-combat: backlog             # Tier A
   4-4-totems: backlog                    # Tier A (golden clause, not build weight — E4-P/R9)
   4-5-pooling-60fps-exit: backlog        # Tier B (assigned at 4-1 close-out, E4-P/R8)
@@ -101,7 +101,7 @@ story_notes:
   4-B1-card-hud-debt-discharge: "DONE 2026-08-08 -- AC 1 hole-vs-in-flight distinction and AC 2/3 debug-only reveal toggle shipped, code review's D1 fixed state-side (4-B1/R3), golden and snapshot keys unmoved. Live smoke: in-flight half and reveal toggle smoked live; both-empty half unreachable by play, discharged by test_hole_vs_in_flight_live.gd (4-B1/R5)."
   4-1-basic-summon-resolution: "DONE 2026-08-10 -- code review PASS (zero patches, 1 non-blocking LOW review note), live smoke PASS with R-D6 consumed on a live kill; close-out recorded in decision-log."
   4-2-minion-ai-throttled-targeting: "DONE 2026-08-10 -- code review PASS (1 decision item, resolved by 4-2/R18 -- the step-7 spawn-tick comment corrected rather than the behaviour changed; 0 patches), live smoke PASS on the shipped default (grey box rotates to face its acquired target, kill lands cleanly, R clears the units; R-D6 consumed). Golden re-baselined once, 78bd2b97 -> 73a86005; close-out recorded in decision-log."
-  4-3-minion-approach-and-collision: "DEV PASS COMPLETE 2026-08-10, all eight ACs; code review PASS 2026-08-10 (2 MEDIUM / 3 LOW, all five findings ruled 4-3/R21-R25, no blocking defects). Golden UNMOVED both directions at 73a86005, key set eleven; suite 445/3464 + 27 integration, unmoved by the fix pass; seven-row mutation table all confirmed. project.godot and main.tscn byte-identical (no new layer, R-D6 NOT spent, 4-3/R14/R17). All three layers (dev pass, code review, fix pass) completed with no stall (PROC/R6 counter stays 0). Live smoke still owed."
+  4-3-minion-approach-and-collision: "DONE 2026-08-10 -- all eight ACs shipped. Golden UNMOVED both directions at 73a86005, key set eleven; suite 445/3464 + 27 integration. Code review PASS (2 MEDIUM / 3 LOW, all five findings ruled 4-3/R21-R25, no blocking defects). project.godot and main.tscn byte-identical (no new layer, R-D6 NOT spent, 4-3/R14/R17). Live smoke PASS, operator's own hand, shipped defaults: a summoned unit approaches on summon; the hero cannot walk through or shove it; several units on one target show no jitter/wedging and track normally; authored 3.0/1.5 feel right. R-D6 unspent, stays available for 4-3a. All three layers (dev pass, code review, fix pass) completed with no stall (PROC/R6 counter stays 0). Close-out recorded in decision-log."
   4-3a-minion-combat: "BACKLOG, Tier A -- minion combat consequences (unit HP, damage, death, board removal), anchored on 4-3's approach and collision. The melee retune (E3-R/R3) runs once this story lands, not as its own story."
   4-4-totems: "BACKLOG, Tier A by the golden clause (E4-P/R9) -- three totem subtypes (Combat, Mana Accelerator, Stamina Accelerator)."
   4-5-pooling-60fps-exit: "BACKLOG, Tier B (assigned at 4-1 close-out, E4-P/R8 discharged) -- object pooling gated on a failure criterion fixed in advance, not built speculatively. Criterion fixed by 4-3/R18: required if the measured frame rate drops below 60 fps at 16 concurrent units on the reference machine; above that, instantiate/queue_free() stays shipped."

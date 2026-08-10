@@ -4,7 +4,7 @@ baseline_commit: b7b9c9c259dfdd4e475c2ea2adb53cd73cbfc468
 
 # Story 4.3: Minion approach and collision
 
-Status: review
+Status: done
 
 ## What this story supersedes
 
@@ -275,6 +275,19 @@ something to prove with it.
 Script, at minimum: a cast summons a unit; the box walks toward its acquired target and stops at
 `unit_stop_distance`, still visibly facing it (the 4-2 rotation smoke, now with actual approach);
 the hero cannot walk through it.
+
+**PASSED**, by the operator's own hand, on shipped defaults (`docs/playtest-log.md`, 10.8). All
+four observations:
+
+1. A summoned unit moves toward the enemy as soon as it is summoned.
+2. The hero cannot walk through it and cannot shove it.
+3. With several units on the same target: no jitter, no mutual pushing, they move normally, they
+   do not pass through each other, and they track the enemy.
+4. The authored `3.0` / `1.5` feel right.
+
+`R-D6` was NOT spent (`4-3/R14`) — collision is layer-based and slot-agnostic, falsifiable with
+P1's own hero and P1's own unit; no kill required. It stays AVAILABLE for `4-3a`, which ships death
+and has something to prove with it.
 
 ## Review Findings
 

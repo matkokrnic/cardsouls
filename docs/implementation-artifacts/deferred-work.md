@@ -12,6 +12,13 @@
   distinct code path, so its behaviour there is whatever `move_and_slide()` happens to do, not a
   designed outcome. OWNER: `4-3a-minion-combat`.
 
+  **Update from 4-3 close-out live smoke (2026-08-10):** OBSERVED CLEAN by hand -- several units
+  driven at the same target showed no jitter, no mutual pushing, normal movement, no passing
+  through each other, normal tracking (`docs/playtest-log.md`, 10.8). This lowers the risk read on
+  the item. It does NOT close it: the item is about machine coverage (`4-3a`'s test still owes a
+  live check with two-plus units converging on one target), and a single by-hand observation is not
+  a substitute for that.
+
 ## Deferred from: readiness gate of 4-3-minion-approach-and-collision (2026-08-10)
 
 - **Merge the aim and approach loops into one per-unit pass.** `_aim_unit_actors`
