@@ -4,7 +4,7 @@ baseline_commit: b95613b64e2502653d82d2e556b7c12d0f279453
 
 # Story 4.2: Minion AI and throttled targeting
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** Position 5 of the E4 order (`E4-P/R1`, decision-log Session 2026-08-07 -- E4
 > ratification): 4-0 -> 4-0a -> 4-B1 -> 4-1 (done) -> **4-2** -> 4-3 -> 4-4 -> 4-5. Tier A
@@ -202,29 +202,34 @@ Consequences of this ruling, stated explicitly:
 **`4-2/R6` (BLOCKING, ruled): every AC below gets a named falsifiable test on its own task line --
 a guard that cannot fall is this project's repeat failure (`2-4/D1`, `2-6/D1`).**
 
-- [ ] Author `MinionPriority` (`src/state/resources/minion_priority.gd`), the D6 schema precedent,
+- [x] Author `MinionPriority` (`src/state/resources/minion_priority.gd`), the D6 schema precedent,
       PARAMETRIC per `4-2/R16` (target side, prefer-hero, ordering mode fields) -- test:
       `test_minion_priority.gd` asserts the schema loads and exposes those parameters (AC: 1)
-- [ ] Author exactly TWO `data/minions/*.tres` files -- `Standard` and `Hero-Seeker` (`4-2/R16`;
+- [x] Author exactly TWO `data/minions/*.tres` files -- `Standard` and `Hero-Seeker` (`4-2/R16`;
       `Tank` and `Bomber`/AoE are named-deferred, not authored) -- test: an authoring test in the
       `test_balance_authoring.gd` family asserting every `.tres` in `data/minions/` loads as a
-      `MinionPriority` and carries recognized parameters (AC: 1, 4)
-- [ ] Write `TargetingService` (`src/state/targeting/targeting_service.gd` -- `4-2/R12`, NOT under
+      `MinionPriority` and carries recognized parameters (AC: 1, 4).
+      **`Standard` governs every unit; `Hero-Seeker` is AUTHORED BUT TEST-ONLY (`4-2/R17`,
+      condition 2)** -- nothing in the shipped path selects it, and `src/` may not name it (scanned
+      by `test_minion_authoring.gd`). It is not speculative machinery: without a differing pair
+      there is no way to prove the evaluator is generic rather than a hardcoded branch, which is the
+      same non-vacuity argument the golden's measured pairs rest on.
+- [x] Write `TargetingService` (`src/state/targeting/targeting_service.gd` -- `4-2/R12`, NOT under
       `economy/`), the directory-scan loader, and the deterministic tie-break (opposing side only,
       slot-then-index order, `4-2/R3`) -- test: `test_targeting_service.gd` covering the loader,
       the candidate-set restriction, and the tie-break order (AC: 2, 3, 8)
-- [ ] Extend `UnitBoard`/`PlayerState.units` with per-unit identity (position stays OUT, `4-2/R14`
+- [x] Extend `UnitBoard`/`PlayerState.units` with per-unit identity (position stays OUT, `4-2/R14`
       defers it to 4-3) -- test: `test_targeting_service.gd` or `test_unit_board.gd` asserting the
       identity is stable and addressable, and a golden/key-set measurement confirming the
       NON-MOVER prediction (`4-2/R8`) (AC: 9)
-- [ ] Author `minion_retarget_interval_seconds` (`BalanceConfig`) and derived
+- [x] Author `minion_retarget_interval_seconds` (`BalanceConfig`) and derived
       `minion_retarget_interval_ticks` (`BalanceTicks`), on the `draw_replacement_delay_seconds`
       precedent, clamped to >= 1 tick (`4-2/R5`) -- test: `test_balance_config.gd`/
       `test_balance_ticks.gd` covering the derivation and the clamp at an authored 0 (AC: 7)
-- [ ] `_golden_config()` authors a real, non-degenerate retarget cadence, on the
+- [x] `_golden_config()` authors a real, non-degenerate retarget cadence, on the
       `DRAW_DELAY_TICKS` precedent (`4-2/R5`) -- otherwise the throttle measures a false non-move;
       this is a task, not a hope (AC: 7, Golden Prediction)
-- [ ] Wire the throttled evaluation into `MatchState.advance()` step 7's reserved seat
+- [x] Wire the throttled evaluation into `MatchState.advance()` step 7's reserved seat
       (`match_state.gd:279`), the ruled shared in-`advance()` tick (`4-2/R15`), storing the
       `[slot, index]` verdict (`4-2/R2`) -- test, as a NAMED PAIR (`4-2/R6`): (a) the POSITIVE
       direction -- a target IS acquired against a populated opposing candidate set (a test that
@@ -232,18 +237,18 @@ a guard that cannot fall is this project's repeat failure (`2-4/D1`, `2-6/D1`).*
       NEGATIVE -- change the candidate set mid-interval and confirm the applied target does NOT
       change until the throttle's boundary tick, and DOES change at it (not instrumentation
       counting calls) (AC: 7, 8, 11)
-- [ ] Gate targeting on `FeatureFlags.minions`; matrix-test ON/OFF -- test: a flag-off unit never
+- [x] Gate targeting on `FeatureFlags.minions`; matrix-test ON/OFF -- test: a flag-off unit never
       acquires a target, on the 4-1 gating precedent (AC: 5)
-- [ ] Assert the authored `data/minions/` priority set loads NON-EMPTY under the headless harness
+- [x] Assert the authored `data/minions/` priority set loads NON-EMPTY under the headless harness
       (`4-2/R11`) -- AC 3's graceful-degradation-on-missing-directory clause means a silent load
       failure would otherwise look like a passing test (AC: 3)
-- [ ] Update or assert the snapshot key-set pin (`test_card_observation.gd`, find by content) --
+- [x] Update or assert the snapshot key-set pin (`test_card_observation.gd`, find by content) --
       it moves when `4-2/R2`'s target key ships (`4-2/R6`) (AC: 9, 11)
-- [ ] Golden re-baseline: measure and separate the TWO separately-named causes this story predicts
+- [x] Golden re-baseline: measure and separate the TWO separately-named causes this story predicts
       (snapshot-shape, from `4-2/R2`'s key; behavioural, from a throttled target actually being
       acquired), each in both directions, exactly as every prior multi-cause re-baseline in this
       project has, per the Golden Prediction below (AC: 4, 11)
-- [ ] Replay parity coverage for the shared in-`advance()` throttled tick (`4-2/R15`) -- extend
+- [x] Replay parity coverage for the shared in-`advance()` throttled tick (`4-2/R15`) -- extend
       `test_replay_identity.gd` to the new hashed state; `FORMAT_VERSION` stays 2 (`4-2/R7`,
       `4-2/R14`) (AC: 10)
 - [x] Comment-only: re-point the two shipped comments naming 4-2 as minion-movement owner to 4-3
@@ -302,6 +307,21 @@ a guard that cannot fall is this project's repeat failure (`2-4/D1`, `2-6/D1`).*
   assumption is not lost. `AC 9`'s identity extension itself still follows the counts-only
   precedent (`4-2/R8`: no unit identity, no `StringName`, no object reference reaches the hash) --
   it is `R2`'s target-verdict key, not AC 9's identity, that grows the set.
+- **RULED AT THE DEV PASS, `4-2/R17` (operator, this session): `Standard` governs every unit, and
+  `Hero-Seeker` is AUTHORED BUT TEST-ONLY.** The gap this closes was not covered by `R1`-`R16`: AC 1
+  ships exactly two `.tres` files, but 4-1's totem clause ships unit records type/kind-less and
+  `4-2/R14` adds no field to them, so nothing in the shipped path could select between the two.
+  Three conditions, all binding: (1) the selection is an EXPLICIT NAMED CONSTANT resolved BY NAME
+  from the sorted rule set (`TargetingService.PRIORITY_STANDARD`), never "whatever sorts first" --
+  and if the named rule is absent that falls to AC 6's missing/unrecognized-data reason and returns a
+  named no-target outcome, never a silent substitution of the other rule; (2) `Hero-Seeker` stays
+  authored but **TEST-ONLY**, in those words -- nothing in the shipped path selects it, `src/` may not
+  name it, and it is not speculative machinery because without a differing pair there is no way to
+  prove the evaluator is generic rather than a hardcoded branch; (3) per-unit priority CHOICE gets a
+  named forcing point rather than staying open -- the first story where units actually differ (4-3
+  combat / 4-4 totems), and that story, not this one, may add a field to the unit record. In live 1v1
+  play today the two rules coincide anyway: with the opposing board empty, `Standard`'s units-first
+  ordering falls through to the opposing hero, which is also what `Hero-Seeker` picks.
 - **RULED, `4-2/R9`: DEBT B is fully discharged and a new `data/minions/` `load()` inherits
   nothing from it.** `CACHE_MODE_IGNORE` exists only on `BalanceConfigService.reload()`, and only
   because balance has a LIVE reload trigger. `MinionPriority` content is directory-scanned,
@@ -442,19 +462,303 @@ reattaches here and is consumed normally.
 
 ## Review Findings
 
-Not yet run -- populated at the code-review pass.
+`gds-code-review`, run against the working tree (HEAD == origin/main == `63631bc`, uncommitted dev
+pass) per `PROC/R2`'s two-layer shape -- Blind Hunter and Edge Case Hunter run in parallel; the
+Acceptance Auditor's checklist ran INLINE in the main session rather than as a third layer.
+
+**Verdict: 1 DECISION ITEM, 0 PATCHES, 0 findings dismissed.** No HIGH findings. Suite measured
+once: 441 state tests / 3439 assertions / 0 failed, 26 integration files all PASS -- matches the Dev
+Agent Record's AFTER figures exactly.
+
+- **Blind Hunter**: completed, no stall. 1 finding.
+- **Edge Case Hunter**: completed, no stall. 1 finding -- the same defect, found independently.
+- **Inline acceptance-auditor checklist**: PASS on every targeted check (`4-2/R17` named-resolution
+  and no-substitution; no position/type/kind/priority field on the unit record; `UnitBoard`'s two
+  parallel arrays cannot desync -- `add()`/`clear()` always move both together and every writer is
+  bound-checked; CONSTRAINT C -- balance read inline, no cached `balance_ticks` reference anywhere
+  in the new code; presentation side clean -- no state handle, no signal into state, no new
+  `connect_*`, no per-frame allocation (`target_slot_at`/`target_index_at` used, never `target_at`
+  in the hot path), no targeting decision on the presentation side; new test files and the new
+  integration test are non-vacuous, including `test_minion_authoring.gd`'s deliberate
+  sorted-first-disagrees-with-selected proof; snapshot key set is eleven in both pins
+  (`test_card_observation.gd`, `test_draw_delay_and_reshuffle.gd`) and `test_data_resources.gd`'s
+  `E1_BALANCE_FIELDS` includes `minion_retarget_interval_seconds`). Evidence audit of the Dev Agent
+  Record's checkable claims: the 17-row mutation table's M6/M7/M13 rows are backed by real,
+  non-tautological guards (read directly, not re-run); `FORMAT_VERSION` untouched at 2;
+  `apply_balance` untouched; the observation-seam family adds no `connect_*`/signal (still a poll,
+  per the 3b/3c pattern); no reload path or cache mode on the new `data/minions/` loader. The
+  golden-chain intermediate hash (`23518ba4`) and AC 9's non-mover claim are internally consistent
+  with the shipped `GOLDEN` value and the M1/M2/M3 measurements recorded in
+  `test_determinism.gd`'s header, though only the final `73a86005` value and the recorded
+  intermediate strings were checked -- the intermediate hashes were not independently re-derived
+  (out of scope per PROC/R1's one-suite-run budget).
+
+### [Review][Decision] Step-7 comment overstates a guarantee: a unit CAN acquire a target on its own spawn tick
+
+Both layers converged on this independently. `src/state/match_state.gd:295-296`, the comment
+directly above the step-7 seat, states as an unqualified rule: "A unit summoned by THIS tick's
+step-6 cast is therefore already on the board when this runs, and acquires its first target at the
+next throttle boundary rather than on the spawn tick."
+
+This is false whenever the spawn tick and a throttle boundary coincide. `_retarget_units()`
+(`match_state.gd:225-238`) iterates `owner.units.size()` -- which already includes a unit appended
+moments earlier in the same tick's step 6 -- with no exclusion for units added this tick. Whenever
+`_tick % minion_retarget_interval_ticks == 0` on the summon tick itself, the new unit acquires a
+target immediately, same-tick. This isn't hypothetical: `test_replay_identity.gd`'s own new comment
+documents exactly this happening at its recorded cast tick (interval clamped to 1, "the unit
+therefore acquires the opposing hero on t20 itself"), and the golden fixture's
+`RETARGET_INTERVAL_TICKS := 23` was deliberately chosen so the t22 cast tick is NOT a multiple of
+23 -- i.e., the golden fixture was tuned specifically to avoid exercising the coincidence the
+step-7 comment says can't happen. With the shipped authored cadence (12 ticks, from the 0.2s
+`data/balance/balance_config.tres` value), any real-play summon landing on a tick divisible by 12
+hits the same coincidence.
+
+Not a crash, not a determinism/replay hazard (both paths are still hashable and replay-safe), and
+not a violation of any stated AC or ruling -- nothing in `4-2/R1`-`R17` requires "never on the spawn
+tick." It's a documentation/invariant-accuracy defect: the comment asserts a guarantee the code
+does not provide, and `4-3` (which builds movement/HP consequences on top of this same target
+state) could reasonably rely on that stated guarantee being true. Also untested either way: every
+throttle test in `test_targeting_service.gd` summons via the `_summon()` test helper (which appends
+directly to `player.units`, bypassing `advance()`'s step 6) before any `_advance()` call, so no test
+exercises a real step-6 cast landing on a boundary tick within the same `advance()` invocation.
+
+**This needs Matko's ruling, not a mechanical patch**, because the fix is a choice between two
+different intended behaviors: (a) the comment is simply wrong and should be corrected to describe
+the actual (harmless) behavior, or (b) the comment states the intended contract and the code should
+skip newly-added units for this tick's evaluation, deferring their first acquisition to the next
+boundary as documented. Both are legitimate designs; nothing already ruled picks one.
+
+**RESOLVED, `4-2/R18` (operator ruling, this session): option (a). The comment is wrong; the
+behaviour stays.** A unit acquiring a target on its spawn tick when that tick is a throttle
+boundary is the better behaviour -- more responsive, and 4-3 builds movement and combat on this
+same target. Deferring it would need per-tick "added this tick" tracking with no gameplay reason
+behind it -- machinery without a consumer, which this project refuses. Shipped:
+1. `src/state/match_state.gd:295-299` (the step-7 seat comment) rewritten to state the actual
+   behaviour POSITIVELY: a unit summoned by this tick's step-6 cast is already on the board when
+   step 7 runs, so if this tick IS a throttle boundary it acquires immediately, in the same
+   `advance()` call; otherwise it acquires at the next boundary. A Dev Note was added alongside it
+   recording that `test_targeting_service.gd`'s `_summon()` helper bypasses step 6 and cannot
+   exercise either half of this.
+2. A named pair added to `test/state/test_targeting_service.gd`, both driven through a REAL step-6
+   cast (`_match_for_cast`, the `test_card_effect_resolution.gd` deck/costs/effects shape, not
+   `_summon()`): `test_a_same_tick_summon_acquires_a_target_when_its_cast_tick_is_a_boundary` (cast
+   tick 2, interval 2 -- the unit holds an acquired target at the END of that same `advance()`
+   call) and `test_a_same_tick_summon_waits_for_the_next_boundary_when_its_cast_tick_is_not_one`
+   (cast tick 2, interval 5 -- the unit holds no-target until it is later advanced to tick 5, where
+   it acquires).
+
+No behaviour change. Suite run once after: 443 state tests / 3450 assertions / 0 failed, 26
+integration files all PASS (delta from the review's 441/3439: +2 state tests, +11 assertions). The
+golden was asserted, not re-baselined -- `73a86005` unmoved.
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
 Claude Sonnet 5 -- authoring pass, 2026-08-10.
+Claude Opus 5 (1M context) -- dev pass, 2026-08-10, via `gds-dev-story`.
 
 ### Debug Log References
 
+Suite BEFORE (measured at open): **399 state tests / 2517 assertions / 0 failed**, plus **25
+integration files, all PASS** (`bash test/run_all.sh`, exit 0). `GOLDEN` read from
+`test_determinism.gd:336` as `78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5`;
+per-player snapshot key set read by content as **ten** keys.
+
+> **Correction to the pass's stated BEFORE values.** The brief gave "24 integration"; the measured
+> count is **25** integration files (`ls test/integration/test_*.gd`). AFTER is 26 -- one file added
+> by this story, not two.
+
+Suite AFTER (measured at close): **441 state tests / 3439 assertions / 0 failed**, plus **26
+integration files, all PASS** (`bash test/run_all.sh`, exit 0). Delta +42 state tests,
++922 assertions, +1 integration file.
+
+**Editor scan (`3-0c/R13`, run IN this pass, not deferred to the chain).** Two runs of
+`godot --headless --editor --quit --path .`: the first after the `class_name` files existed
+(registered `MinionPriority` and `TargetingService`, printed in the `update_scripts_classes` step),
+the second after the new test files existed. `project.godot` SHA256 was
+`8879DE490EDDA78051595F189FB9BB6F2E75384FEBAFF142C8958EC107970004` before the first scan and
+**unchanged after both** -- no autoload, Input Map or main-scene collateral. Per-diff collateral check:
+the only files either scan produced are `.uid` siblings, listed in the File List below.
+
+**`.uid` finding, and it CORRECTS the known gap carried from the 4-1 chain.** The gap was recorded as
+"the scan generates `.uid` siblings only for `class_name` files, NOT for plain `.gd` test scripts".
+Measured here, that is not the mechanism: it is an ORDERING artefact. After the first scan the two
+`class_name` files had `.uid` siblings and the four new test scripts had none -- because the test
+scripts did not yet exist when that scan ran. A second scan, with every file present, generated all
+four (`test_minion_priority.gd.uid`, `test_minion_authoring.gd.uid`, `test_targeting_service.gd.uid`,
+`test_unit_aim_live.gd.uid`), matching the repo's existing convention that every `test_*.gd` carries
+one. The practical rule is therefore "scan LAST, after every new `.gd` exists", not "test scripts
+never get a `.uid`".
+
 ### Completion Notes List
 
+**AC-by-AC.** AC 1 -- `MinionPriority` authored as a pure parametric schema
+(`src/state/resources/minion_priority.gd`), `target_side` / `prefer_hero` / `ordering_mode` /
+`priority_name`; two `.tres` authored (`standard`, `hero_seeker`); `Tank`/`Bomber` deferred, and the
+deferral is stated at the enum members that would carry them. AC 2 -- `TargetingService` is a fully
+static, stateless sibling under `src/state/targeting/` (`4-2/R12`), taking plain facts rather than a
+`PlayerState`, so "touches no board" is structural. AC 3 -- directory scan, sorted, non-rule entries
+skipped, missing directory degrades to empty; loaded once, no reload path and no cache mode
+(`4-2/R9`). AC 4 -- (a) is a ruling about review burden and is not asserted as a measurement; (b)
+ships as `test_minion_authoring.gd`. AC 5 -- gated on injected `FeatureFlags.minions`, ON/OFF/absent
+all covered, at the evaluator AND through the real step-7 seat. AC 6 -- four named returned reasons,
+no `Invariant.check` anywhere in the evaluator (scanned); the missing/unrecognized reason is reachable
+three ways from authored data. AC 7 -- shared `_tick % interval` throttle at step 7, both halves of
+the named pair shipped (positive acquisition; behavioural negative changing the candidate set
+mid-interval). AC 8 -- opposing side only, slot-then-index ascending, determinism asserted. AC 9 --
+`UnitBoard` is an ordered collection whose identity is the board index; measured a golden and key-set
+NON-MOVER on its own. AC 10 -- replay parity green, `FORMAT_VERSION` untouched at 2, and
+`test_replay_identity.gd` now asserts its recorded run actually acquires a target so the coverage is
+named rather than incidental. AC 11 -- `unit_targets` ships as `[slot, index]` int pairs.
+
+**Live Smoke: PENDING OPERATOR.** Not closed by this pass. The machine half is shipped and green
+(`test/integration/test_unit_aim_live.gd`: the grey box's yaw matches a yaw recomputed from the two
+node positions, with both non-vacuity halves asserted), and the presentational rotation itself is in
+`UnitActor.aim_at()` plus the runner's step 3d. The human half -- legibility, the candidate-set change
+at a boundary, flag-off degradation, and the `R-D6` two-human kill acceptance -- is the operator's.
+
+**`4-2/R17` (operator ruling, this session).** Recorded in Dev Notes above with its full reasoning,
+for the close-out chain to carry into the decision-log. Summary: `Standard` governs every unit,
+resolved by an explicit named constant from the sorted set; `Hero-Seeker` is authored but TEST-ONLY;
+per-unit priority choice is forced at 4-3/4-4, which is also the only story allowed to add a field to
+the unit record. No type or priority field was added to the record in this pass.
+
+**Two corrections to the story's own predictions, both measured rather than argued.**
+1. The Golden Prediction expected an unauthored `_golden_config()` cadence to measure a FALSE
+   NON-MOVE. It does not. `4-2/R5`(d)'s clamp makes an unauthored 0.0 derive to 1 tick, i.e. "every
+   tick", so the target is acquired anyway -- unauthored and authored-at-23 hash IDENTICALLY
+   (`73a86005` both ways). The cadence VALUE is hash-neutral for this fixture and cannot be
+   otherwise: the hash sees only the final snapshot, the acquired pair is the same whichever boundary
+   produced it, and this fixture's candidate set never changes. What authoring the cadence actually
+   buys is that the golden sits on the THROTTLED path rather than the every-tick one. The throttle's
+   TIMING is proven where it can be, in `test_targeting_service.gd`'s behavioural negative. Full
+   reasoning is at `RETARGET_INTERVAL_TICKS` in `test_determinism.gd`.
+2. AC 1's "new priority types addable with zero code changes" was already corrected by `4-2/R16`;
+   this pass adds the concrete consequence that an `ordering_mode` vocabulary of one member is the
+   honest shape today, because the deferred modes (nearest, lowest-HP) need facts 4-3 ships. Named at
+   the enum rather than left implicit.
+
+**Golden chain -- ONE re-baseline, `78bd2b97` -> `73a86005`, four measurements.** Each cause isolated
+on its own, in the order below; the full record is in `test_determinism.gd`'s header.
+
+| # | What was in place | Hash | Verdict |
+|---|---|---|---|
+| M0 | inherited baseline | `78bd2b97a68d1d56def6f851ce867219f383b811715f7aa5a9bcd639c6b0b5e5` | -- |
+| M1 | **AC 9 identity extension ALONE** -- `UnitBoard` reshaped to an ordered collection with per-unit target storage; `to_snapshot()` untouched | `78bd2b97...b0b5e5` | **NON-MOVER, measured** (`4-2/R8` confirmed). Not vacuous: the fixture's t22 cast appends a record and the record carries its no-target pair -- it is simply not hashed yet |
+| M2 | **+ cause (a), snapshot shape** -- `unit_targets` key ships; step-7 tick NOT yet wired, so no unit could acquire anything and the key entered at an all-no-target value | `23518ba4b39c5cd5b70be9b304d8254f4d16a2506c84fd2e9165933f8a3ca922` | **MOVER** (isolated by construction, the 4-1 cause-1 method) |
+| M3a | **+ step-7 tick wired, cadence UNAUTHORED** in `_golden_config()` (derives to 1 tick) | `73a86005f1f2c069306ed6504be9c99d109e7b96014f05b502224f658209d1b5` | measured to isolate the cadence VALUE |
+| M3 | **+ cause (b), behavioural** -- `RETARGET_INTERVAL_TICKS = 23` authored, so the unit summoned at t22 acquires `[1, -1]` at the t23 boundary and still holds it at the hashed t24 | `73a86005f1f2c069306ed6504be9c99d109e7b96014f05b502224f658209d1b5` | **MOVER vs M2** (`23518ba4` -> `73a86005`); **identical to M3a**, which is finding 1 above |
+
+Both directions: M1 vs M0 is the non-mover in both (adding the extension leaves `78bd2b97`); M2's key
+removed returns to M1 (mutation M13 below); M3's behaviour suppressed returns to the no-target value
+(the `NO_BOUNDARY_INTERVAL_TICKS = 7` pair inside
+`test_the_throttled_targeting_consumes_no_rng`).
+
+**The two predicted NON-MOVERS, each confirmed with a non-vacuous pair rather than assumed.**
+(i) AC 9's identity extension -- M1 above, and the key set held at ten at that step. (ii) `rng_state`
+-- `test_the_throttled_targeting_consumes_no_rng`, built on the
+`test_the_summon_consumes_no_rng` shape: same fixture, same cast, same summon, differing ONLY in
+whether the cadence ever reaches a boundary while the unit exists (23 vs 7). The acquired target is
+asserted to DIFFER across the pair (`[[1,-1]]` vs `[[-1,-1]]`) so the `rng_state` equality cannot be
+vacuous.
+
+**Snapshot key-set pin: TEN -> ELEVEN, moved deliberately in BOTH places that carry it.** There are
+two independent pins, and the second was found by the closing suite run rather than by reading:
+`test_card_observation.gd` (`test_the_observation_channel_adds_no_snapshot_key`, which also gained a
+separate `keys.size() == 11` assertion so the COUNT is a named quantity in its own right) and
+`test_draw_delay_and_reshuffle.gd` (`EXPECTED_PLAYER_SNAPSHOT_KEYS`). A third guard,
+`test_data_resources.gd`'s reflection-based `E1_BALANCE_FIELDS` completeness check, also failed on the
+new `BalanceConfig` field and was extended. All three failing BEFORE they were updated is their own
+non-vacuity proof, recorded as rows M15-M17 below.
+
+**Mutation table.** Every row: the file backed up OUTSIDE the repo (scratchpad) and SHA256'd, ONE
+byte-level mutation applied, ONLY the affected test file run (`PROC/R1`), restored by COPYING THE
+BACKUP BACK (never `git checkout --`), and the SHA re-verified against the pre-mutation value.
+Provenance per row is the claim the mutation attacks. Every row FELL.
+
+| # | File mutated | Mutation (the claim it attacks) | Test file run | Verdict | Restore |
+|---|---|---|---|---|---|
+| M1 | `src/state/targeting/targeting_service.gd` | AC 8 / AC 1 -- `prefer_hero` branch INVERTED | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M2 | `src/state/targeting/targeting_service.gd` | AC 8 -- tie-break takes the LAST unit index instead of ascending-first | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M3 | `src/state/targeting/targeting_service.gd` | AC 5 -- flag/data ORDER reversed (data consulted before the flag) | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M4 | `src/state/targeting/targeting_service.gd` | AC 6 -- `ordering_mode` vocabulary check removed (any authored int accepted) | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M5 | `src/state/targeting/targeting_service.gd` | AC 5 -- no flags injected treated as OPEN instead of closed | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M6 | `src/state/targeting/targeting_service.gd` | `4-2/R17`(1) -- `priority_named` FALLS BACK to the sorted-first rule instead of returning null | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M7 | `src/state/match_state.gd` | AC 7 -- THROTTLE REMOVED (step 7 runs every tick) | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M8 | `src/state/match_state.gd` | `4-2/R3` -- OWN slot passed as the candidate side instead of the opposing one | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M9 | `src/state/timing/balance_ticks.gd` | `4-2/R5`(d) -- the `>= 1` tick CLAMP removed from the conversion boundary | `test_balance_config.gd` | **FAIL** | restored, SHA verified |
+| M10 | `src/state/unit_board.gd` | `3-0c/R15` -- the public bound predicate WIDENED (upper bound dropped) | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M11 | `src/state/unit_board.gd` | `3-0c/R15` -- one guard RE-DERIVES the bound inline instead of consulting the predicate | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M12 | `src/state/unit_board.gd` | AC 7 -- `set_target_at` also APPENDS, so targeting changes the board length | `test_targeting_service.gd` | **FAIL** | restored, SHA verified |
+| M13 | `src/state/player_state.gd` | AC 11 -- the `unit_targets` snapshot key removed | `test_card_observation.gd` | **FAIL** | restored, SHA verified |
+| M14 | `src/main/match_runner.gd` | `4-2/R13` -- the runner's AIM step removed (state targets, nothing renders it) | `test_unit_aim_live.gd` (integration) | **FAIL** | restored, SHA verified |
+| M15 | -- | AC 11 -- the real key addition, against `test_draw_delay_and_reshuffle.gd`'s SECOND key-set pin | `test_draw_delay_and_reshuffle.gd` | **FAIL** (observed live, before the pin was moved) | n/a -- the change is the shipped one |
+| M16 | -- | AC 11 -- the real key addition, against `test_card_observation.gd`'s pin | `test_card_observation.gd` | **FAIL** (observed live, before the pin was moved) | n/a -- the change is the shipped one |
+| M17 | -- | AC 7 -- the real `BalanceConfig` field, against `test_data_resources.gd`'s reflection completeness check | `test_data_resources.gd` | **FAIL** (observed live, before the list was extended) | n/a -- the change is the shipped one |
+
+**M6 is worth reading as a finding, not just a row.** On its FIRST run it PASSED -- a `priority_named`
+that silently substituted the sorted-first rule survived every test in the pass, because every test
+asked for a name that exists. That made `4-2/R17`'s "never silently substitute another rule" an
+unguarded claim, and a violation of it would have changed which priority governs the entire game with
+nothing failing. `test_an_absent_priority_name_resolves_to_null_never_to_another_rule` was added in
+response and M6 then fell. The mutation harness found this; reading did not.
+
+**Not touched, deliberately.** `apply_balance` (`4-2/R5`(b) -- no per-player injection seat for the
+cadence); `FORMAT_VERSION`, still 2 (`4-2/R7`); `IntentRecorder` and its channels; the eight-seam
+observation family (`4-2/R15`'s own stated consequence -- the aim step is a POLL in the step-3b/3c
+family, no `connect_*`); `data/cards/`; `test_architecture_invariants.gd`.
+
+**Pre-existing defect noticed, NOT fixed (out of scope).** `test_determinism.gd`'s header carries a
+truncated, duplicated fragment of the 4-0 re-baseline record (two lines beginning "Re-baselined by
+STORY 4-0 ... reproduced in both" that run straight into the 4-1 heading, with the complete 4-0 record
+appearing again further down). It is comment-only and predates this pass; the 4-2 record was inserted
+above it rather than reflowing it. Flagged for the close-out chain.
+
 ### File List
+
+**New -- source (2 files + 2 `.uid`)**
+- `src/state/resources/minion_priority.gd` (+ `.uid`)
+- `src/state/targeting/targeting_service.gd` (+ `.uid`)
+
+**New -- authored content (2)**
+- `data/minions/standard.tres`
+- `data/minions/hero_seeker.tres`
+
+**New -- tests (4 files + 4 `.uid`)**
+- `test/state/test_minion_priority.gd` (+ `.uid`)
+- `test/state/test_minion_authoring.gd` (+ `.uid`)
+- `test/state/test_targeting_service.gd` (+ `.uid`)
+- `test/integration/test_unit_aim_live.gd` (+ `.uid`)
+
+**Modified -- source (6)**
+- `src/state/match_state.gd` -- step 7's seat filled: `_update_unit_targets()` / `_retarget_units()`
+- `src/state/player_state.gd` -- the `unit_targets` snapshot key
+- `src/state/unit_board.gd` -- identity extension, target storage, `has_index()` predicate
+- `src/state/resources/balance_config.gd` -- `minion_retarget_interval_seconds`
+- `src/state/timing/balance_ticks.gd` -- `minion_retarget_interval_ticks` + the `>= 1` clamp
+- `src/actors/minions/unit_actor.gd` -- `aim_at()`, presentational only
+- `src/main/match_runner.gd` -- step 3d aim poll, `_aim_unit_actors()`, `_target_world_position()`
+
+**Modified -- authored content (1)**
+- `data/balance/balance_config.tres` -- `minion_retarget_interval_seconds = 0.2`
+
+**Modified -- tests (7)**
+- `test/state/test_determinism.gd` -- golden re-baseline + record, `RETARGET_INTERVAL_TICKS`, cadence
+  authored in `_golden_config()`, two new tests, `_make_match_with_retarget_interval()`
+- `test/state/test_card_observation.gd` -- key-set pin ten -> eleven + a separate count assertion
+- `test/state/test_draw_delay_and_reshuffle.gd` -- the second key-set pin
+- `test/state/test_data_resources.gd` -- `E1_BALANCE_FIELDS` completeness
+- `test/state/test_balance_config.gd` -- derivation + clamp (both directions)
+- `test/state/test_balance_authoring.gd` -- authored cadence band audit
+- `test/state/test_replay_identity.gd` -- member classification for the reshaped board,
+  `targeting_service` exempt, plus the AC 10 coverage assertion
+
+**Story file** -- `docs/implementation-artifacts/4-2-minion-ai-throttled-targeting.md` (permitted
+sections, plus two operator-directed edits: the `4-2/R17` Dev Notes entry and the TEST-ONLY wording on
+the `.tres` task line).
+
+NO COMMITS were made; the tree is left dirty by design for the close-out chain.
 
 ## Change Log
 
@@ -462,3 +766,5 @@ Claude Sonnet 5 -- authoring pass, 2026-08-10.
 |------|---------|-------------|--------|
 | 2026-08-10 | 0.1 | Story authored against the E4 ratification (`E4-P/R1`, `E4-P/R2`, `E4-P/R5`, `E4-P/R6`, `E4-P/R7`, `E4-P/R9`) and 4-1's discharged obligations (`4-1/R12`, `unit_board.gd`'s reserved header). Ten ACs covering `MinionPriority` (D6 schema), `TargetingService` (D6 sibling evaluator), directory-scan loading, golden discipline, feature-flag gating, named no-target outcomes, the throttled `advance()` step-7 seat, deterministic tie-break, `UnitBoard` identity extension, and replay parity. Two Open Questions (unit position ownership; throttled-tick vs `Area3D`) presented with full evidence and deliberately NOT decided, reserved for this story's own readiness gate. Golden Prediction states expected causes in both directions, none asserted as measured. Status `authored`, awaiting operator review. | Claude Sonnet 5 |
 | 2026-08-10 | 0.2 | Readiness gate rulings `4-2/R1`-`4-2/R16` applied (operator-ratified). AC 1 restated PARAMETRIC (two authored `.tres`, Tank/Bomber deferred); AC 4 restated on the `4-1/R4` by-ruling template; AC 7 fixes all four parts of the balance-authored cadence; AC 8 fixes the candidate set (opposing side only) and THE tie-break (slot then index); AC 9 gains the measured non-mover finding; AC 10 discharged by `4-2/R14`'s deferral (`FORMAT_VERSION` stays 2) plus the named residual replay hazard; new AC 11 states the hashed `[slot, index]` target representation. Deferred section corrected: minion MOVEMENT is out, owned by 4-3, with the two shipped ownership comments re-pointed (separate commit). Both Open Questions rewritten as RULED: Open Question 1 deferred again to 4-3 with movement as the forcing point (not a second can-kick); Open Question 2 ruled a shared throttled tick inside `advance()`, `Area3D` rejected by name. Tasks rewritten with a named falsifiable test per AC, the `4-2/R6` positive/negative pair, the snapshot-pin task, and the `src/state/targeting/` path (`4-2/R12`, corrected off `economy/`). Dev Notes amended (not replaced): `4-2/R9` DEBT B note, `4-2/R10` citation correction plus the live `3-0d/R21` gotcha, the observation-seam paragraph marked MOOT per `4-2/R15` with its reasoning kept. Golden Prediction rewritten: two named MOVERS (snapshot-shape from the target key, behavioural from an acquired throttled target), AC 9's identity extension confirmed a separate non-mover, `rng_state` still predicted non-mover. Live Smoke rewritten per `4-2/R13`: the grey box rotates to face its acquired target, purely presentational, no new observation seam; `R-D6` re-invoked. Status `authored` -> `ready-for-dev`. | Claude Sonnet 5 |
+| 2026-08-10 | 0.4 | **Review resolution** (`4-2/R18`, operator ruling). Resolved the review's single decision item: the step-7 seat comment overstated a guarantee (falsely claiming a same-tick-summoned unit never acquires before the next boundary). Ruled the comment wrong and the behaviour right -- a same-tick acquisition when the spawn tick is itself a boundary is more responsive and is what 4-3 builds on; deferring it would add per-tick tracking machinery with no consumer. `match_state.gd`'s step-7 comment rewritten positively, with a Dev Note on `_summon()`'s step-6 bypass; a named pair of tests added to `test_targeting_service.gd`, driven through a real step-6 cast (`_match_for_cast`), covering both the same-tick-boundary acquisition and the wait-for-next-boundary case. No behaviour change. Suite 441/3439 -> **443 state tests / 3450 assertions / 0 failed**, 26 integration files all PASS; golden asserted unmoved at `73a86005`. No commits; tree left dirty for the close-out chain. Status unchanged (`review`). | Claude Sonnet 5 |
+| 2026-08-10 | 0.3 | **Dev pass** (`gds-dev-story`). Implemented `MinionPriority` (parametric D6 schema), `TargetingService` (static D6 sibling under `src/state/targeting/`, directory-scan loader, opposing-side-only candidate set, slot-then-index tie-break, four named returned outcomes), the `UnitBoard` identity extension (ordered collection, board index as identity, per-unit `[slot, index]` target storage, `has_index()` predicate), the `minion_retarget_interval_seconds` / `_ticks` pair with the `>= 1` clamp at the conversion boundary, two authored `data/minions/*.tres`, the step-7 shared throttled tick in `MatchState.advance()`, the `unit_targets` snapshot key, and the presentational `UnitActor.aim_at()` + runner aim poll the live smoke needs. Operator ruling **`4-2/R17`** recorded in Dev Notes (Standard governs all units, resolved by named constant; Hero-Seeker authored but TEST-ONLY; per-unit priority choice forced at 4-3/4-4). Golden re-baselined ONCE, `78bd2b97` -> `73a86005`, with four measurements isolating each cause: AC 9's identity extension measured a NON-MOVER alone, the snapshot-shape cause `78bd2b97` -> `23518ba4`, the behavioural cause `23518ba4` -> `73a86005`; `rng_state` confirmed a non-mover against a non-vacuous pair. TWO of the story's own predictions CORRECTED by measurement: the unauthored cadence does NOT measure a false non-move (the clamp makes it 'every tick', hashing identically to the authored value), and the cadence VALUE is hash-neutral for this fixture. Snapshot key set ten -> eleven, moved deliberately in BOTH pins that carry it plus the reflection field-list guard. 17-row mutation table with per-row provenance, every row falling; M6 exposed an unguarded `4-2/R17` claim and a test was added in response. Suite 399/2517 -> **441 state tests / 3439 assertions / 0 failed**, 25 -> 26 integration files, all PASS. Live Smoke is PENDING OPERATOR (machine half shipped and green in `test_unit_aim_live.gd`). No commits; tree left dirty for the close-out chain. Status `ready-for-dev` -> `review`. | Claude Opus 5 (1M context) |
