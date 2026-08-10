@@ -6132,3 +6132,114 @@ replacing it); `board: promote 4-1-basic-summon-resolution to done` (`sprint-sta
 `ready-for-dev` -> `done`, story Status header `review` -> `done`, `4-5`'s comment `Tier
 UNDECIDED` -> `Tier B`, `CFG/R4`); this decision-log entry. Suite green throughout (399 state /
 2517 assertions + 24 integration). Operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-10 -- 4-2 readiness gate
+
+Docs-only ruling pass on the authored `4-2-minion-ai-throttled-targeting.md` (Status `authored`).
+Sixteen rulings, all applied to the story in place. No code changed except two comment-only
+ownership corrections, landed in their own separate commit per `4-2/R4`.
+
+`4-2/R1` (BLOCKING, ruled) AC 4 restated on the `4-1/R4` template: it previously asserted a
+measured golden dependency the Golden Prediction itself called conditional. `.tres` content under
+`data/minions/` joins golden discipline BY RULING (`E4-P/R6`), plus a machine half -- an authoring
+test asserting every `.tres` there loads as a `MinionPriority` with recognized parameters. The
+"load-bearing for the hash" claim moves to the Golden Prediction, unconditional there because of
+`R2`.
+
+`4-2/R2` (BLOCKING, ruled) The applied target is a HASHED INDEX PAIR, `[slot, index]`, on the
+`pending_draw_owed` precedent (`player_state.gd:94-95`) -- both plain ints, `index >= 0` a board
+unit, `index == -1` that player's hero. No identity, no object, no `StringName` reaches the hash.
+New AC 11 states this. -- _decided by Matko._
+
+`4-2/R3` (BLOCKING, ruled) Candidates are the OPPOSING side only -- opposing hero plus opposing
+board units; own-side units are never candidates. THE tie-break is slot ascending (fixed P1 -> P2,
+`match_state.gd:177`) then board index ascending -- the "or an equivalent stable, authored
+ordering" alternative is deleted. -- _decided by Matko._
+
+`4-2/R4` (BLOCKING, ruled) Minion MOVEMENT is out of this story, owned by 4-3 -- without movement
+a distance-based mechanic over the runner's decorative placement row would be fake. Deferred
+section states this in those words; the two shipped comments naming 4-2 as movement owner
+(`src/actors/minions/unit_actor.gd:16`, `src/main/match_runner.gd:130`) are re-pointed to 4-3 in
+their own comment-only commit, separate from the docs commit. -- _decided by Matko._
+
+`4-2/R5` (BLOCKING, ruled) AC 7's cadence, all four parts: (a) `minion_retarget_interval_seconds`
+(`BalanceConfig`) plus derived `minion_retarget_interval_ticks` (`BalanceTicks`), on the
+`draw_replacement_delay_seconds` precedent; (b) `apply_balance` untouched, a cadence is not a
+per-pool bound (`3-1/R2`); (c) the counter is `_tick % interval`, no new state, no new hash key;
+(d) the interval clamps to at least 1 tick, so an authored 0 means every tick. `_golden_config()`
+must author a real cadence or the throttle measures a false non-move -- a task, not a hope.
+
+`4-2/R6` (BLOCKING, ruled) Every AC gets a named falsifiable test on its task line. AC 6 needs the
+positive direction (a target IS acquired against a populated candidate set); AC 7's throttle needs
+a behavioural negative (the candidate set changes mid-interval, the target does not change until
+the boundary tick, and does change at it) -- not instrumentation counting. A task also updates or
+asserts the snapshot key-set pin (`test_card_observation.gd`).
+
+`4-2/R7` (non-blocking, accepted) Discharged by `R14`, not by argument: no new recorded fact
+channel, `FORMAT_VERSION` stays 2. A unit's board record and the directory-scanned
+`MinionPriority` are DERIVED STATE and CONTENT, not record channels. Residual hazard named: a
+replay reproduces a run only if `data/minions/` is unchanged, as `data/economy/` already requires.
+
+`4-2/R8` (non-blocking, measured) AC 9's identity extension moves neither the key set nor the
+golden on its own -- `UnitBoard` is a bare int, `unit_count` unchanged either way. Added to the
+Golden Prediction as a predicted non-mover, confirmed by the key set holding at ten if no key
+ships; the golden's two real movers this story are `R2`'s key and its behaviour.
+
+`4-2/R9` (non-blocking, accepted) DEBT B is fully discharged; a new `data/minions/` `load()`
+inherits nothing from it. `CACHE_MODE_IGNORE` exists only on `BalanceConfigService.reload()`,
+only because balance has a live reload trigger -- the dev pass adds no reload path or cache mode
+by analogy.
+
+`4-2/R10` (non-blocking, accepted) Citation fix: the `Array[StringName].sort()` internal-pointer
+hazard lives in code (`player_state.gd:77,206-207`; `test_determinism.gd:170`), not
+`project-context.md`. The Dictionary sorted-key rule IS in `project-context.md` (Testing Rules).
+The `3-0d/R21` gotcha (`Dictionary.has()` true for `null`) is live for any priority-parameter
+lookup table.
+
+`4-2/R11` (non-blocking, accepted) `game-architecture.md`'s own characterisation of the seam
+("throttled shared-tick provider, story 4-2", `game-architecture.md:452`) added to References as
+support for `R15`. Added measurement: the authored priority set must load NON-EMPTY under the
+headless harness, since AC 3's graceful-degradation clause would otherwise let a silent load
+failure pass as green.
+
+`4-2/R12` (BLOCKING, ruled) `TargetingService` lives at `src/state/targeting/targeting_service.gd`,
+NOT under `src/state/economy/` -- `economy/` holds three economy evaluators and targeting would
+hand that name to every E4 story after this one. `MinionPriority` stays in
+`src/state/resources/`. Tasks and Project Structure Notes corrected, including an earlier pass of
+this same checklist that had firmed the path to `economy/`. -- _decided by Matko._
+
+`4-2/R13` (non-blocking, accepted) Live Smoke rewritten: with movement out, "does not sit
+permanently inert" is unfalsifiable, so the smoke gets a visible signal -- the grey box rotates to
+face its target, purely presentational (runner reads node positions and the applied target off
+the snapshot, no new observation seam). The script includes a kill; `R-D6` is re-invoked and
+consumed normally (last spent 4-1's smoke, 2026-08-09).
+
+`4-2/R14` (BLOCKING, ruled) Open Question 1 (unit position) is DEFERRED AGAIN, to 4-3, with
+movement as the forcing point -- not a second can-kick: `4-1/R12` deferred because no consumer
+existed; a `TargetingService` without movement is still not that consumer. `FORMAT_VERSION` stays
+2, F1 untouched, and 4-2 targets over `R3`'s authored order, never over distance. -- _decided by
+Matko._
+
+`4-2/R15` (BLOCKING, ruled) Open Question 2: a shared throttled tick evaluated inside `advance()`.
+`Area3D` overlap queries REJECTED by name -- physics-frame, outside `src/state/`, not hashable,
+the `D-4` reasoning from 1-7. No fourth collision layer, no new observation seam;
+`test_runner_observation_seams_are_exactly_eight`'s Dev Notes paragraph is MOOT, reasoning kept
+rather than deleted. -- _decided by Matko._
+
+`4-2/R16` (BLOCKING, ruled) AC 1's "zero code changes" claim is false -- selection policy IS code.
+`MinionPriority` is PARAMETRIC, not type-name-keyed, on the `ResourceGenerationRule` `amount_field`
+precedent. Exactly TWO `.tres` authored this story: `Standard` and `Hero-Seeker`. `Tank` (needs
+HP, 4-3) and `Bomber`/AoE (needs position, 4-3/4-4) are named deferred, not authored. An
+unrecognized or unauthored parameter falls to a named returned reason (AC 6's second reason).
+-- _decided by Matko._
+
+### Close-out
+
+Two commits, neither pushed: `docs(4-2): record operator rulings and promote to ready-for-dev`
+(story amendments per every ruling above, this decision-log entry, `sprint-status.yaml` promotion,
+story Status `authored` -> `ready-for-dev`); `chore(4-3): re-point minion movement ownership
+comments` (the two `R4` comment corrections, code only, no behaviour change). `baseline_commit`
+untouched -- the dev pass owns it. No golden or suite touched, this is a docs-plus-comments pass.
+Operator reviews the log and pushes.
