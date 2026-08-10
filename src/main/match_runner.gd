@@ -127,7 +127,7 @@ var _unit_actors: Array[Array] = [[], []]
 ## Where a slot's grey-box units stand. Actor-owned position (`4-1/R12`), chosen by the runner:
 ## a row BEHIND each hero's spawn (P1 at x -3, P2 at x +3 in main.tscn) so a summoned unit is
 ## visible in that player's own viewport without standing in the fighting space between them.
-## Legibility placement only -- no gameplay reads it, and 4-2 replaces it with real placement.
+## Legibility placement only -- no gameplay reads it, and 4-3 replaces it with real placement.
 const UNIT_ROW_X: Array[float] = [-5.5, 5.5]
 const UNIT_ROW_SPACING := 1.4
 const UNIT_ROW_Z_START := -2.1

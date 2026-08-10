@@ -13,7 +13,7 @@ extends Node3D
 ## NO GAMEPLAY LOGIC LIVES HERE, on the HeroActor / TelegraphController precedent and the
 ## project-context HARD RULE that puts it there: no `_physics_process` (INVARIANT F1 -- the runner
 ## owns the only one), no `Input`, no state handle, no signal into state, no damage, no targeting,
-## no AI. It is placed by the runner and it stands there. Movement and AI are 4-2's; HP, damage and
+## no AI. It is placed by the runner and it stands there. Movement and AI are 4-3's; HP, damage and
 ## death are 4-3's; totem-vs-minion differentiation is 4-4's.
 ##
 ## POSITION IS ACTOR-OWNED, WHICH IS THE RULING (`4-1/R12`), NOT A CONVENIENCE. UnitBoard holds no
