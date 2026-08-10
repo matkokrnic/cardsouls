@@ -6365,3 +6365,78 @@ NOT spent by `4-3`; the `hp` field lands in `4-3a`. -- _decided by Matko._
 One commit, not pushed: `docs(4-3): split minion combat into approach and combat halves`
 (`sprint-status.yaml` board split, this decision-log entry, `deferred-work.md` collision item
 annotated with its new owner). No code touched. Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3 readiness gate (rulings R7-R20)
+
+`4-3/R7` (ruled) AC 4's collision claim is `4-2/R15`'s and no stronger: no code under `src/state/`
+reads a physics API and no state decision branches on a collision result. NOT claimed: collision
+has no effect on state -- blocking changes hero node positions, hero positions are the sole
+geometric input to `_gather_contact_facts` (`match_runner.gd:776-804`), and the derived facts enter
+state through `push_contact` (1-8). Hero-vs-hero collision already exercises this indirection on
+layer 1; a unit on layer 1 joins it, it does not create it.
+`4-3/R8` (BLOCKING, ruled) AC 1's literal wording ("`UnitActor` reads its acquired target from the
+snapshot") contradicted `unit_actor.gd:15`, the project-context HARD RULE, the story's own Task
+line, and `_target_world_position`'s docstring. Corrected: the RUNNER reads the throttled
+`[slot, index]` pair through `unit_board.gd`'s non-allocating accessors, resolves it through
+`_target_world_position` (`match_runner.gd:671`), and hands `UnitActor` a `Vector3` via
+`approach(target_position, speed, stop_distance, delta)`. "Snapshot" leaves this AC.
+`4-3/R9` (ruled) Two test files are load-bearing, not one: `test/state/test_data_resources.gd`
+(`E1_BALANCE_FIELDS`, reflection-checked, fails until extended) and
+`test/integration/test_unit_approach_live.gd`. Both added to Tasks and Project Structure Notes.
+`4-3/R10` (ruled) The approach call seats at ONE line: the DRIVE phase, alongside the hero drive
+call (`match_runner.gd` ~930-931), per `game-architecture.md:965-971`'s "drive actor movement
+(move_and_slide)" phase. `_aim_unit_actors` STAYS at 3d. The loop-merge idea goes to
+`deferred-work.md`, costed at one extra `_target_world_position` call/unit/frame, zero heap alloc.
+`4-3/R11` (BLOCKING, ruled) The approach step reads the runner's own replay-aware config handle at
+point of use -- the selection already made at `match_runner.gd:177-180`. Never
+`BalanceConfigService.get_config()` directly (would move units at the authored speed instead of the
+recorded one during replay, `3-0c`'s AC 4 divergence); never a copy cached in a `UnitActor` field.
+CONSTRAINT C bars caching in a private field, not reading the runner-held config. -- _decided by
+Matko._
+`4-3/R12` (ruled) AC 6 demoted to a REGRESSION statement -- zero-information, since the golden
+fixture instantiates no actor and no state code reads either field. `4-2/M1` does not transfer. The
+positive control is a conjunction, all four required: live moved-then-stopped delta on a real
+`UnitActor`; the fields read from the authored `.tres` at the live seat; the physics-token guard
+under mutation; `E1_BALANCE_FIELDS` extended.
+`4-3/R13` (ruled) AC 5's physics-token set is fixed exactly (`get_overlapping_areas`,
+`move_and_slide`, `CollisionShape3D`, `PhysicsDirectSpaceState3D`), "or equivalent" removed. Add the
+regex self-test pair (precedent `:333-338`) and the vacuity assert (precedent `:306`, `:348`) --
+the guard is green today against a `src/state/` with no physics token at all.
+`4-3/R14` (ruled) `R-D6` is NOT spent by this story. Collision is layer-based and slot-agnostic, so
+AC 4 is falsifiable with P1's own hero walking into P1's own unit, shipped defaults -- no
+`slot_controller_kinds` flip, no kill, no `project.godot`/`main.tscn` collateral. `R-D6` stays
+AVAILABLE for `4-3a`, which ships death and has something to prove with it. -- _decided by Matko._
+`4-3/R15` (ruled) Open Question 2 restated RULED AND DEFERRED: a presentation null-check, no state
+consequence. `_target_world_position` already returns null for an out-of-range index or freed
+instance and the caller already skips; approach does the same. This story cannot produce the
+interesting case -- the only board-shrink path is the debug reset. Re-acquisition is `4-3a`'s.
+`4-3/R16` (ruled) Open Question 3 ruled: recompute every frame through the non-allocating
+accessors. `project-context.md:93` throttles ACQUISITION scans, not a fixed-pair node lookup.
+Caching to the throttle boundary would lag up to `minion_retarget_interval_ticks` (12 at 0.2s).
+`4-3/R17` (ruled) Open Question 4: `CharacterBody3D` + `move_and_slide()`, `collision_layer 1` /
+`collision_mask 1` by default (matching `hero.tscn:49`), one `CollisionShape3D` sized to the
+existing 0.6 x 1.2 x 0.6 box. No new layer, `project.godot` untouched. No hurtbox this story
+(`4-3a`'s). Open Question 1: units DO collide with each other, free from the body type.
+-- _decided by Matko._
+`4-3/R18` (ruled) The `4-5` pooling criterion fixed in advance: required if the measured frame rate
+drops below 60 fps at 16 concurrent units on the reference machine; above that,
+instantiate/`queue_free()` stays shipped. Mirrored into the `4-5` board note. -- _decided by
+Matko._
+`4-3/R19` (ruled) Four corrections: (N1) `unit_actor.gd`'s header has TWO stale sites -- lines
+16-17 AND line 32; (N2) AC 2's precedent corrected to `move_speed`/`stamina_regen_per_second`
+(rate) and `attack_lunge_distance` (distance), `block_facing_arc_degrees` dropped; (N3)
+`_golden_config()` must NOT author the two new fields -- no state code reads them, authoring them
+is noise; (N4) replay-safety MEASURED: `intent_recorder.gd:401`'s `_resource_values()` is
+reflective over `PROPERTY_USAGE_SCRIPT_VARIABLE`, both fields ride `apply_balance` automatically,
+no `FORMAT_VERSION` change, no test pins that key set.
+`4-3/R20` (ruled) The gate corrected its own carried premise: `4-2/R5(d)` did NOT produce a false
+non-move from an unauthored cadence. `test_determinism.gd:38-43` records an unauthored cadence
+deriving to 1 tick, hashing identically to the authored 23 (`73a86005` both ways) -- this CORRECTED
+the story's prediction, it did not fail it. Recorded so the wrong lesson is not recycled.
+
+### Close-out
+
+One commit, not pushed: `docs(4-3): apply readiness gate rulings R7-R20` (story amended per each
+ruling above, `sprint-status.yaml` promoted to ready-for-dev, this decision-log entry,
+`deferred-work.md`'s aim/approach loop-merge item). No code touched, no test suite run (docs-only
+pass). Operator reviews the log and pushes.

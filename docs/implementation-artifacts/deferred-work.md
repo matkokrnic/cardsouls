@@ -1,5 +1,15 @@
 # Deferred Work
 
+## Deferred from: readiness gate of 4-3-minion-approach-and-collision (2026-08-10)
+
+- **Merge the aim and approach loops into one per-unit pass.** `_aim_unit_actors`
+  (`match_runner.gd:647`, seated at tick-phase 3d) and the new approach step (seated at the DRIVE
+  phase, `4-3/R10`) both resolve the same `[slot, index]` target to a `global_position` for the
+  same unit, once each, at two different points in the tick. Not merged by this story because
+  re-seating shipped code across a tick-phase boundary is not a refactor (`4-3/R10`). Measured
+  cost of leaving them split: one extra `_target_world_position` call per unit per frame, a
+  value-type return, zero heap allocation -- cheap, not urgent. OWNER: unassigned.
+
 ## Deferred from: close-out of 4-2-minion-ai-throttled-targeting (2026-08-10)
 
 - **Units have no collision shape -- heroes pass through them.** `UnitActor`
