@@ -6440,3 +6440,43 @@ One commit, not pushed: `docs(4-3): apply readiness gate rulings R7-R20` (story 
 ruling above, `sprint-status.yaml` promoted to ready-for-dev, this decision-log entry,
 `deferred-work.md`'s aim/approach loop-merge item). No code touched, no test suite run (docs-only
 pass). Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3 code review (rulings R21-R25)
+
+`4-3/R21` (ruled) Finding 1 (MEDIUM): `unit_actor.gd`'s header and `unit_actor.tscn`'s
+`editor_description` overclaimed "a unit blocks a hero (and another unit)" -- only hero-blocking
+is measured (`test_unit_approach_live.gd`). Both narrowed to the measured claim; unit-vs-unit
+blocking filed to `deferred-work.md`, owner `4-3a`, covering both the wedge/jitter risk and
+`approach()`'s conflation of "reached `unit_stop_distance`" with "physically obstructed short of
+it". Comment-only, no behaviour change.
+`4-3/R22` (ruled) Finding 2 (MEDIUM): `test_unit_approach_live.gd`'s `MOVE_SAMPLE_FRAME`,
+`STOP_SAMPLE_FRAME`, `WALK_START_FRAME`, `WALK_END_FRAME`, `STOP_BAND` were hand-derived literals,
+brittle against the melee retune boarded for `4-3a`. Re-derived at runtime from `_speed`,
+`_stop_distance`, `Engine.physics_ticks_per_second`, and the live spawn-to-target distance. WHAT is
+measured is unchanged. Proven: mutation (speed/stop_distance = 0) still FAILS; retune (1.0 and 8.0
+against authored 3.0) both PASS; `.tres` restored byte-identical.
+`4-3/R23` (ruled) Finding 3 (LOW): the `4-3` story's Change Log author cell for the readiness-gate
+pass reverts to "Claude Sonnet 5", the model the operator selected. The trailer-as-evidence
+argument added at the dev pass is deleted rather than reworded: a value emitted regardless of who
+did the work is not evidence of who did it. What stays true and useful: the `Co-Authored-By`
+trailer is not reliable authorship evidence in general, and commits `b7b9c9c`/`654d436` shipped a
+non-constant trailer against `project-context.md:149`.
+`4-3/R24` (ruled) Finding 4 (LOW): the `4-5` tier note stands (correctly applies `E4-P/R8`, NOT
+reverted). Recorded for the retrospective: `E4-P/R8`'s close-out claimed a sprint-status update
+that never landed, leaving a stale "Tier UNDECIDED" on the board for two stories -- the second
+instance of a close-out claiming a docs change that did not ship (first: the truncated `4-0`
+re-baseline record, repaired at `46ace6e`). Not work to do now.
+`4-3/R25` (ruled) Finding 5 (LOW): `test_architecture_invariants.gd`'s physics-token guard comment
+called the token set "exact and closed" -- it is a substring match with no word-boundary
+anchoring. Comment corrected to say so and to note the guard FAILS CLOSED (matches a superset of
+the four forms, never a subset) and is therefore safe. Guard itself untouched -- the pattern
+family is pre-existing and not this pass's to change.
+
+### Close-out
+
+Review PASS, 2 MEDIUM / 3 LOW, all five findings ruled, no blocking defects. Three commits, not
+pushed: `docs(4-3): narrow the unit collision comments to what is measured` (R21, comment-only);
+`test(4-3): derive approach live-test sampling from authored balance` (R22); `docs(4-3): record the
+code review and rulings R21-R25` (this entry, `deferred-work.md`, the story's Review/Change Log,
+`sprint-status.yaml`). Suite unmoved: 445 state tests / 3464 assertions / 0 failed, 27 integration,
+GOLDEN `73a86005` unmoved, snapshot key set still eleven. Operator reviews the log and pushes.

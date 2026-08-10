@@ -278,7 +278,35 @@ the hero cannot walk through it.
 
 ## Review Findings
 
-Pending — this section fills in at code review, after the dev pass. Not yet run.
+**PASS**, 2 MEDIUM / 3 LOW, all five findings ruled by the operator (`4-3/R21`-`4-3/R25`,
+decision-log.md Session 2026-08-10 "4-3 code review"), no blocking defects.
+
+1. **MEDIUM (`4-3/R21`)** — `unit_actor.gd`'s header and `unit_actor.tscn`'s `editor_description`
+   overclaimed "a unit blocks a hero (and another unit)"; only hero-blocking is measured
+   (`test_unit_approach_live.gd`). RULED: narrow both comments to the measured claim; unit-vs-unit
+   blocking filed to `deferred-work.md`, owner `4-3a`. Applied, comment-only.
+2. **MEDIUM (`4-3/R22`)** — `test_unit_approach_live.gd`'s sample frames and `STOP_BAND` were
+   hand-derived literals pinned to `unit_move_speed = 3.0` / `unit_stop_distance = 1.5`, brittle
+   against the melee retune boarded for `4-3a`. RULED: derive them at runtime from the authored
+   values, `Engine.physics_ticks_per_second`, and the live spawn-to-target distance. Applied;
+   mutation-proven falling at `unit_move_speed = 0` / `unit_stop_distance = 0`, retune-proven
+   passing at 1.0 and 8.0 against the authored 3.0.
+3. **LOW (`4-3/R23`)** — the Change Log author cell for the readiness-gate pass argued the
+   `Co-Authored-By` trailer as evidence for keeping "Claude Opus 4.8". RULED: revert the cell to
+   "Claude Sonnet 5", the model the operator selected, and delete the trailer-as-evidence argument
+   rather than reword it — a value emitted regardless of who did the work is not evidence of
+   authorship. Applied below.
+4. **LOW (`4-3/R24`)** — the `4-5` tier note is correct (applies `E4-P/R8`) and was NOT reverted.
+   RULED: record in the decision-log, as a retrospective finding and not work to do now, that
+   `E4-P/R8`'s close-out claimed a sprint-status update that never landed (second instance of this
+   class, after the truncated `4-0` re-baseline record, repaired at `46ace6e`). Applied.
+5. **LOW (`4-3/R25`)** — `test_architecture_invariants.gd`'s physics-token guard comment called the
+   token set "exact and closed"; it is a substring match with no word-boundary anchoring. RULED:
+   correct the comment to say so and note the guard fails CLOSED (matches a superset, never a
+   subset) and is therefore safe; the guard itself is untouched. Applied.
+
+All three layers (dev pass, code review, this fix pass) completed with no stall — PROC/R6 counter
+stays 0.
 
 ## Dev Agent Record
 
@@ -410,5 +438,6 @@ Claude Opus 5 — dev pass, 2026-08-10.
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-10 | Claude Sonnet 5 | Story authored via `gds-create-story`, split from the boarded `4-3-minion-combat` per `4-3/R1`. |
-| 2026-08-10 | Claude Opus 4.8 | Readiness gate rulings `4-3/R7`-`4-3/R20` applied (operator-ratified). AC 1 corrected off the snapshot literal to the runner-reads/actor-owns-the-move contract (`R8`); AC 2 names the replay-aware config source and fixes its precedent citations (`R11`, `R19/N2`); AC 4 bounded to `4-2/R15`'s claim with the contact-pipeline indirection stated explicitly (`R7`); AC 5 fixes the exact physics-token set plus the regex self-test and vacuity-assert pair (`R13`); AC 6 demoted to a regression check, the four-part positive control named (`R12`); AC 8 covers both stale header sites (`R19/N1`). Both remaining Open Questions ruled (unit-vs-unit collision, recompute-every-frame). Open Question 4 ruled: `CharacterBody3D` + `move_and_slide()`, default layer/mask, no `project.godot` change (`R17`). Tasks gain `test_data_resources.gd` and pin the approach call to the drive phase, not `_aim_unit_actors` (`R9`, `R10`). Golden Prediction gains the authoring-ban and measured replay-safety notes (`R19/N3`, `R19/N4`). Live Smoke rewritten: `R-D6` NOT spent, no kill required (`R14`). Status `authored` -> `ready-for-dev`. (Author cell corrected at the dev pass from "Claude Sonnet 5" against the git record: commit `8b29ce6`, the commit that applied these rulings, carries `Co-Authored-By: Claude Opus 4.8`. Caveat recorded rather than hidden — `project-context.md:149` makes that trailer a repo-wide CONSTANT regardless of which model did the work, so it is weak evidence of authorship in general; what the git record does show unambiguously is that the two earlier `4-3` commits (`b7b9c9c`, `654d436`) shipped a NON-constant `Claude Sonnet 5` trailer in violation of that rule, while `8b29ce6` is the compliant one. This cell now agrees with its commit.) |
+| 2026-08-10 | Claude Sonnet 5 | Readiness gate rulings `4-3/R7`-`4-3/R20` applied (operator-ratified). AC 1 corrected off the snapshot literal to the runner-reads/actor-owns-the-move contract (`R8`); AC 2 names the replay-aware config source and fixes its precedent citations (`R11`, `R19/N2`); AC 4 bounded to `4-2/R15`'s claim with the contact-pipeline indirection stated explicitly (`R7`); AC 5 fixes the exact physics-token set plus the regex self-test and vacuity-assert pair (`R13`); AC 6 demoted to a regression check, the four-part positive control named (`R12`); AC 8 covers both stale header sites (`R19/N1`). Both remaining Open Questions ruled (unit-vs-unit collision, recompute-every-frame). Open Question 4 ruled: `CharacterBody3D` + `move_and_slide()`, default layer/mask, no `project.godot` change (`R17`). Tasks gain `test_data_resources.gd` and pin the approach call to the drive phase, not `_aim_unit_actors` (`R9`, `R10`). Golden Prediction gains the authoring-ban and measured replay-safety notes (`R19/N3`, `R19/N4`). Live Smoke rewritten: `R-D6` NOT spent, no kill required (`R14`). Status `authored` -> `ready-for-dev`. (Author cell reverted to "Claude Sonnet 5", the model the operator selected, `4-3/R23`: a trailer emitted regardless of who did the work is not evidence of who did it. The `Co-Authored-By` trailer is not reliable authorship evidence in general; commits `b7b9c9c` and `654d436` shipped a non-constant `Claude Sonnet 5` trailer, in violation of `project-context.md:149`.) |
 | 2026-08-10 | Claude Opus 5 | Dev pass, all eight ACs. Two `BalanceConfig` `Minions` scalars authored `3.0` / `1.5` and audited `> 0`; `E1_BALANCE_FIELDS` extended by two; `UnitActor` retyped to `CharacterBody3D` with one `CollisionShape3D` on the default layer/mask (no new layer, `project.godot` untouched) and given `approach()`; a drive-phase step 4a `_approach_unit_actors` call site reading the replay-aware `_match_state.balance` at point of use; `test_state_layer_never_reads_physics` added with its regex self-test and vacuity assert; `test/integration/test_unit_approach_live.gd` added (moved / stopped-at-the-authored-distance / facing / hero-blocked, on shipped defaults, `R-D6` not spent); both stale `unit_actor.gd` header sites corrected. Golden measured UNMOVED both directions at `73a86005`, key set eleven. Suite 443/3450 + 26 integration -> 445/3464 + 27 integration, zero failures. Seven-row mutation table, all confirmed falling, every target restored from an out-of-repo SHA256-verified copy. Status `ready-for-dev` -> `review`. |
+| 2026-08-10 | Claude Sonnet 5 | Code review fix pass: PASS, 2 MEDIUM / 3 LOW, all five findings ruled (`4-3/R21`-`4-3/R25`). `unit_actor.gd`/`unit_actor.tscn` comments narrowed to the measured hero-blocking claim, unit-vs-unit gap filed to `deferred-work.md` (owner `4-3a`, `R21`). `test_unit_approach_live.gd`'s sample frames and `STOP_BAND` re-derived at runtime from authored balance instead of hand-derived literals (`R22`), mutation- and retune-proven. This Change Log's readiness-gate author cell reverted to "Claude Sonnet 5" (`R23`). `E4-P/R8`'s undelivered sprint-status update recorded for the retrospective (`R24`). The physics-token guard's comment corrected to describe an unanchored substring match that fails CLOSED (`R25`). Suite unmoved: 445/3464 + 27 integration, GOLDEN `73a86005` unmoved, key set eleven. No blocking defects; Status stays `review`. |

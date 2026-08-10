@@ -1,5 +1,17 @@
 # Deferred Work
 
+## Deferred from: code review of 4-3-minion-approach-and-collision (2026-08-10)
+
+- **Unit-vs-unit body collision is unmeasured (`4-3/R21`, finding 1).** The shipped comments
+  claimed the shared default layer makes a unit block "a hero (and another unit)", but
+  `test_unit_approach_live.gd` only drives a hero into a parked unit -- two units driven at the
+  same acquired target simultaneously is not exercised anywhere. Two things are open together:
+  the wedge/jitter risk of two `CharacterBody3D`s converging on the same point, and the fact that
+  `approach()` does not distinguish "reached `unit_stop_distance`" from "physically obstructed
+  short of it" -- a unit blocked by another body before it reaches its stop distance has no
+  distinct code path, so its behaviour there is whatever `move_and_slide()` happens to do, not a
+  designed outcome. OWNER: `4-3a-minion-combat`.
+
 ## Deferred from: readiness gate of 4-3-minion-approach-and-collision (2026-08-10)
 
 - **Merge the aim and approach loops into one per-unit pass.** `_aim_unit_actors`

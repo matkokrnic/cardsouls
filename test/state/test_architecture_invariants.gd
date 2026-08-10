@@ -322,9 +322,13 @@ func test_runner_observation_seams_are_exactly_eight() -> void:  # 2-6/R7, amend
 ## DERIVED facts enter through `push_contact`, the one intake (1-8). This guard measures the half
 ## that is claimable.
 ##
-## THE TOKEN SET IS EXACT AND CLOSED (`4-3/R13`): `get_overlapping_areas`, `move_and_slide`,
-## `CollisionShape3D`, `PhysicsDirectSpaceState3D`. No "or equivalent" — a guard whose membership is
-## a judgement call is not machine-checkable, and widening it is a ruling, not a dev-pass edit.
+## THE TOKEN SET IS CLOSED, BUT THE MATCH IS A SUBSTRING SEARCH WITH NO WORD-BOUNDARY ANCHORING
+## (`4-3/R25`): `get_overlapping_areas`, `move_and_slide`, `CollisionShape3D`,
+## `PhysicsDirectSpaceState3D`. No "or equivalent" — a guard whose membership is a judgement call is
+## not machine-checkable, and widening it is a ruling, not a dev-pass edit. The lack of anchoring
+## means it also matches any of the four strings embedded in a longer identifier (a hypothetical
+## `my_move_and_slide_helper` would still trip it) — that is a safety property, not a gap: the guard
+## FAILS CLOSED, catching a superset of the exact four forms rather than a subset.
 ##
 ## THIS GUARD IS GREEN TODAY AGAINST A `src/state/` THAT CONTAINS NO PHYSICS TOKEN AT ALL, which is
 ## exactly why both halves below are load-bearing rather than ceremonial: it would stay just as
