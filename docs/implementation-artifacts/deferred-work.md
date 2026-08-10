@@ -1,5 +1,16 @@
 # Deferred Work
 
+## Deferred from: close-out of 4-2-minion-ai-throttled-targeting (2026-08-10)
+
+- **Units have no collision shape -- heroes pass through them.** `UnitActor`
+  (`src/actors/minions/unit_actor.gd`) is a `Node3D` with a `MeshInstance3D` and nothing else; no
+  `CollisionShape3D`, no `Area3D`, no physics body. Noticed live during this story's smoke
+  (`docs/playtest-log.md`, 10.8: "vidjim da heroji mogu proralziti kroz te pravokutnike ne znam
+  jel to namjerno tako zasad"). Deferred because 4-2 adds no movement or combat consequence to
+  units at all (`4-2/R4`) -- a unit a hero can already walk through is not yet a unit anything
+  can collide WITH in a way that matters. OWNER: `4-3-minion-combat`'s readiness gate, which is
+  where movement and combat consequences first make collision a real question.
+
 ## Deferred from: code review of 4-0-hand-slot-stability (2026-08-07)
 
 - **AC 8's permanent hole is visually indistinguishable from a slot mid-flight awaiting

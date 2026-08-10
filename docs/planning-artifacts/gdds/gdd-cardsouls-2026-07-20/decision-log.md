@@ -6243,3 +6243,84 @@ story Status `authored` -> `ready-for-dev`); `chore(4-3): re-point minion moveme
 comments` (the two `R4` comment corrections, code only, no behaviour change). `baseline_commit`
 untouched -- the dev pass owns it. No golden or suite touched, this is a docs-plus-comments pass.
 Operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-10 -- 4-2 close-out
+
+Dev pass (Claude Opus 5) delivered all eleven ACs; code review (`gds-code-review`) and live smoke
+both discharged. Story promoted `review` -> `done`; board promoted `ready-for-dev` -> `done`.
+
+`4-2/R17` (operator, dev pass) `Standard` governs every unit, resolved by an EXPLICIT NAMED
+CONSTANT from the sorted rule set, never "whatever sorts first"; a missing name falls to AC 6's
+named no-target reason rather than a silent substitution. `Hero-Seeker` is authored but
+TEST-ONLY -- `src/` may not name it -- because without a differing authored pair there is no way
+to prove the evaluator is generic rather than a hardcoded branch. Per-unit priority CHOICE is a
+named forcing point rather than staying open: the first story where units actually differ (4-3 or
+4-4) is the only story allowed to add a priority field to the unit record. -- _decided by Matko._
+
+`4-2/R18` (operator, review resolution) The step-7 seat comment overstated a guarantee: it claimed
+a unit summoned by this tick's step-6 cast never acquires before the next throttle boundary, which
+is false whenever the spawn tick IS a boundary (`_retarget_units()` has no this-tick exclusion).
+RESOLVED as option (a): the comment was wrong, the behaviour is right. A same-tick acquisition when
+the spawn tick is itself a boundary is MORE RESPONSIVE, and 4-3 builds movement/combat on this same
+target; deferring it would add per-tick "added this tick" tracking with no gameplay reason behind
+it -- machinery without a consumer. The comment was rewritten positively and a named pair of tests
+was added driven through a REAL step-6 cast (`_match_for_cast`), covering both the same-tick-
+boundary acquisition and the wait-for-next-boundary case. No behaviour change; golden asserted
+unmoved at `73a86005`. -- _decided by Matko._
+
+**Golden chain, ONE re-baseline, TWO MOVERS and TWO NON-MOVERS, all isolated separately (both
+already recorded in `test_determinism.gd`'s header, ratified here):** `78bd2b97...b0b5e5`
+(inherited) -> AC 9's identity extension ALONE, PREDICTED a non-mover (`4-2/R8`) and MEASURED one,
+UNMOVED at `78bd2b97` -> the `unit_targets` snapshot-shape key ships before the step-7 tick is
+wired, a MOVER isolated by construction: `78bd2b97` -> `23518ba4...ca922` -> the step-7 tick wired
+with `RETARGET_INTERVAL_TICKS := 23` authored, so the t22-summoned unit acquires the opposing hero
+at the t23 boundary and still holds it at the hashed t24, a MOVER: `23518ba4` ->
+`73a86005...09d1b5`, the new `GOLDEN`. `rng_state` confirmed a non-mover against a non-vacuous
+pair (`test_the_throttled_targeting_consumes_no_rng`, interval 23 vs. 7, acquired target differs
+across the pair so the comparison cannot be vacuous). Snapshot key set TEN -> ELEVEN, moved
+deliberately in both pins that carry it (`test_card_observation.gd`,
+`test_draw_delay_and_reshuffle.gd`). -- _decided by Matko._
+
+**Live smoke outcome (OPERATOR-REPORTED).** PASS on the shipped default: a summoned box faces the
+opposing hero, follows by rotation when the enemy moves, the kill lands cleanly and `R` clears the
+units, and the rotation is legible on the untextured box (`docs/playtest-log.md`, 10.8 entries).
+`R-D6` was RE-INVOKED at this gate (`4-2/R13`) and is now CONSUMED again, on a live kill against a
+killable human slot. The flag-off half of the smoke script was deliberately NOT smoked live -- it
+is machine-covered at three levels (`test_targeting_service.gd`'s seat-level flag matrix, the
+evaluator-level matrix, `test_unit_aim_live.gd`'s non-vacuity) and editing authored flags before a
+commit chain is avoidable risk. -- _decided by Matko._
+
+**`PROC/R6` stall counter RESETS TO 0.** Both review layers (Blind Hunter, Edge Case Hunter)
+completed with layer-completion lines, no stall -- the first clean run after four consecutive runs
+carrying one stalled layer (3-6, 4-B1, 4-0, 4-1, each recorded at its own close-out). This is what
+un-suspends the reasoning `PROC/R6`'s three-consecutive-stall re-suspension trigger depends on; the
+count had never actually reached three, but was climbing toward it, and this run breaks the streak
+rather than extending it.
+
+**Three things this story leaves live, each with a named owner.**
+(a) Unit collision -- units are `Node3D` + `MeshInstance3D` with NO collision shape, so heroes pass
+through them today (`docs/playtest-log.md`, 10.8: "vidjim da heroji mogu proralziti kroz te
+pravokutnike"). OWNER: 4-3's gate. Filed to `deferred-work.md`.
+(b) Per-unit priority choice -- forced at 4-3/4-4, the only story allowed to add a priority field
+to the unit record (`4-2/R17` condition 3).
+(c) Unit position ownership -- deferred AGAIN to 4-3, with movement named as the forcing point
+(`4-2/R14`); not a second can-kick, since a `TargetingService` without movement was still not the
+consumer `4-1/R12` waited for.
+
+**The `.uid` rule, corrected.** The gap recorded at the 4-1 close-out ("the scan generates `.uid`
+siblings only for `class_name` files, not for plain `.gd` test scripts") was an ORDERING artefact,
+not a mechanism: measured this pass, a second scan run after every new `.gd` already existed
+generated `.uid` siblings for all four new plain test scripts. The editor scan does NOT skip plain
+test scripts. Practical rule: SCAN LAST, after every new `.gd` exists in the tree.
+
+### Close-out
+
+Five commits, none pushed: `story 4-2: minion AI and throttled targeting` (code, tests and data
+only); `docs(4-2): dev pass record, review findings and resolution` (the story file, task
+checklist, Review Findings, Dev Agent Record, Status `review` -> `done`); `board: promote
+4-2-minion-ai-throttled-targeting to done` (`sprint-status.yaml`); this decision-log entry plus one
+`deferred-work.md` entry; `chore(test): repair the truncated 4-0 re-baseline record in
+test_determinism.gd` (comment-only, pre-existing, unrelated to this story's own work). Suite green
+throughout (443 state / 3450 assertions + 26 integration). Operator reviews the log and pushes.
