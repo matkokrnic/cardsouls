@@ -34,6 +34,16 @@
   happens to do, not a designed outcome. OWNER: `4-3b-minion-attack-rhythm` (its only consumer is
   attack range, which lands in 4-3b).
 
+  **Annotated from 4-3a review (2026-08-10, `4-3a/R25`): a measured instance, not a new item --
+  a summoned minion can be blocked by its OWN summoner.** Writing
+  `test_two_units_converge_live.gd` (the AC 10 live test), the trailing unit's first run parked
+  6.82 units from its acquired target: it was wedged not against its sibling but against P1's own
+  hero, which stands at (-3, 0), directly in the unit spawn lane -- the same "arrived" vs.
+  "physically obstructed" gap this item already names, just triggered by a hero body instead of
+  another unit. The test now relocates the hero off the lane as a setup step precisely so it scopes
+  itself to unit-vs-unit collision instead. This item stays OPEN and its owner unchanged; this is a
+  measurement of an existing gap, not a discharge of it.
+
 ## Deferred from: readiness gate of 4-3-minion-approach-and-collision (2026-08-10)
 
 - **Merge the aim and approach loops into one per-unit pass.** `_aim_unit_actors`
