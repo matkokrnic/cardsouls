@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-08-10
+last_updated: 2026-08-10 (4-2 authored, awaiting operator review)
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -99,7 +99,7 @@ story_notes:
   4-0-hand-slot-stability: "DONE 2026-08-07 -- dev pass (Claude Opus 5) delivered AC 1-8, mutation-proven, 373/2397 + 23 integration, golden re-baselined once (40eb5554...a322 -> 312522d8...fb3c). Code review: 0 decision items, 2 patches (snapshot pending_draw_owed key aliased the live array instead of copying; _draw_one_replacement's two same-named slot params disambiguated to hand_slot), both fixed in 0584c5b; 1 finding deferred (a permanent post-exhaustion hole is visually indistinguishable from a slot mid-flight awaiting delivery, deferred-work.md). Edge Case Hunter STALLED at 600s -- the second review running with a stalled layer (3-6's Acceptance Auditor stalled; 4-0's Edge Case Hunter did), a different layer each time -- covered by hand via three targeted non-vacuous checks instead of the full layer. AC 9 (live smoke) discharged by the operator's own hand, docs/playtest-log.md 7.8: cast from a non-rightmost slot, the replacement refills that same slot, nothing else shifts. Leaves open: the hole-vs-in-flight HUD distinction (deferred-work.md); the melee retune and playtest still scheduled per E3-R/R3, deferred until casts gain consequences in E4. Close-out recorded in decision-log."
   4-B1-card-hud-debt-discharge: "DONE 2026-08-08 -- AC 1 hole-vs-in-flight distinction and AC 2/3 debug-only reveal toggle shipped, code review's D1 fixed state-side (4-B1/R3), golden and snapshot keys unmoved. Live smoke: in-flight half and reveal toggle smoked live; both-empty half unreachable by play, discharged by test_hole_vs_in_flight_live.gd (4-B1/R5)."
   4-1-basic-summon-resolution: "DONE 2026-08-10 -- code review PASS (zero patches, 1 non-blocking LOW review note), live smoke PASS with R-D6 consumed on a live kill; close-out recorded in decision-log."
-  4-2-minion-ai-throttled-targeting: "BACKLOG, Tier A -- TargetingService + data-defined minion priorities (MinionPriority .tres, E4-P/R5); gate rules throttled-tick vs Area3D shape as a determinism decision (E4-P/R7)."
+  4-2-minion-ai-throttled-targeting: "AUTHORED 2026-08-10, awaiting operator review before promotion (CFG/R3) -- story file written (10 ACs: MinionPriority D6 schema, TargetingService D6 sibling evaluator, golden discipline, flag gating, throttled advance() step-7 seat, deterministic tie-break, UnitBoard identity extension, replay parity). Two Open Questions deliberately left for this story's own readiness gate: unit position ownership (E4-P/R7, deferred from 4-1/R12) and throttled-tick vs Area3D (E4-P/R7). Board still reads backlog per CFG/R2/R3 until the gate promotes it."
   4-3-minion-combat: "BACKLOG, Tier A -- minion combat consequences; the melee retune (E3-R/R3) runs once this story lands, not as its own story."
   4-4-totems: "BACKLOG, Tier A by the golden clause (E4-P/R9) -- three totem subtypes (Combat, Mana Accelerator, Stamina Accelerator)."
   4-5-pooling-60fps-exit: "BACKLOG, Tier UNDECIDED (assigned at 4-1 close-out, E4-P/R8) -- object pooling gated on a failure criterion fixed in advance, not built speculatively."
