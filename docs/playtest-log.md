@@ -157,3 +157,6 @@ summoni se pojavljuju kad se odigrava karta koja ima summon i ne pojavlju kad se
 
 10.8.
 1 cast summona sivi box koji je okrenut prema neprijatljeu 2 porate ga boxevi ako se krece neprijaelj 3 ubijanje radi porpiseno, r mice sumone 4 vidjlivo je solidno 5 DODATAK vidim da heroij mogu poralziti kroz te rpavokutnike ne znam jel to namjerno tako zasad
+
+10.8.
+1 summon se krece prema neprijatleju kad je sumonan 2 ne mogu porci kroz njega niti odgurnuti 3kad je vise summona ne trzaju se i ne guraju, rkecu se noralno i medusobno ne mogu porci jedni kroz druge i prate narepatjea 4 pa brizna prilaska i razmak na koje mostaju djeluju okej, iako finalno sama zamiljao minone vise kao eldenr ing mobove nego homing porjektile ovov je za sad a vsie kao homing fireball haha, al sve sto si rekao da provjerim je na mjestu
