@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-08-10 (4-2 review passed, live smoke passed, promoted to done)
+# last_updated: 2026-08-10 (4-3 split into 4-3-minion-approach-and-collision and 4-3a-minion-combat)
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -80,7 +80,8 @@ development_status:
   4-B1-card-hud-debt-discharge: done  # Tier B
   4-1-basic-summon-resolution: done  # Tier A
   4-2-minion-ai-throttled-targeting: done  # Tier A
-  4-3-minion-combat: backlog             # Tier A
+  4-3-minion-approach-and-collision: backlog  # Tier A
+  4-3a-minion-combat: backlog             # Tier A
   4-4-totems: backlog                    # Tier A (golden clause, not build weight — E4-P/R9)
   4-5-pooling-60fps-exit: backlog        # Tier B (assigned at 4-1 close-out, E4-P/R8)
 
@@ -100,6 +101,7 @@ story_notes:
   4-B1-card-hud-debt-discharge: "DONE 2026-08-08 -- AC 1 hole-vs-in-flight distinction and AC 2/3 debug-only reveal toggle shipped, code review's D1 fixed state-side (4-B1/R3), golden and snapshot keys unmoved. Live smoke: in-flight half and reveal toggle smoked live; both-empty half unreachable by play, discharged by test_hole_vs_in_flight_live.gd (4-B1/R5)."
   4-1-basic-summon-resolution: "DONE 2026-08-10 -- code review PASS (zero patches, 1 non-blocking LOW review note), live smoke PASS with R-D6 consumed on a live kill; close-out recorded in decision-log."
   4-2-minion-ai-throttled-targeting: "DONE 2026-08-10 -- code review PASS (1 decision item, resolved by 4-2/R18 -- the step-7 spawn-tick comment corrected rather than the behaviour changed; 0 patches), live smoke PASS on the shipped default (grey box rotates to face its acquired target, kill lands cleanly, R clears the units; R-D6 consumed). Golden re-baselined once, 78bd2b97 -> 73a86005; close-out recorded in decision-log."
-  4-3-minion-combat: "BACKLOG, Tier A -- minion combat consequences; the melee retune (E3-R/R3) runs once this story lands, not as its own story. Inherited open question from 4-2's close-out: units are Node3D + MeshInstance3D with NO collision shape, so heroes pass through them today -- this gate rules on it."
+  4-3-minion-approach-and-collision: "BACKLOG, Tier A -- unit approach movement and physical collision only, no combat. Inherited open question from 4-2's close-out: units are Node3D + MeshInstance3D with NO collision shape, so heroes pass through them today -- this gate rules on it."
+  4-3a-minion-combat: "BACKLOG, Tier A -- minion combat consequences (unit HP, damage, death, board removal), anchored on 4-3's approach and collision. The melee retune (E3-R/R3) runs once this story lands, not as its own story."
   4-4-totems: "BACKLOG, Tier A by the golden clause (E4-P/R9) -- three totem subtypes (Combat, Mana Accelerator, Stamina Accelerator)."
   4-5-pooling-60fps-exit: "BACKLOG, Tier UNDECIDED (assigned at 4-1 close-out, E4-P/R8) -- object pooling gated on a failure criterion fixed in advance, not built speculatively."

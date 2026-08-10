@@ -6324,3 +6324,44 @@ checklist, Review Findings, Dev Agent Record, Status `review` -> `done`); `board
 `deferred-work.md` entry; `chore(test): repair the truncated 4-0 re-baseline record in
 test_determinism.gd` (comment-only, pre-existing, unrelated to this story's own work). Suite green
 throughout (443 state / 3450 assertions + 26 integration). Operator reviews the log and pushes.
+
+## Session 2026-08-10 -- 4-3 scope split
+
+`4-3/R1` (BLOCKING, ruled) The boarded `4-3-minion-combat` carried six things at once. CUT into
+`4-3-minion-approach-and-collision` (geometry, ships first) and a new `4-3a-minion-combat` (unit
+HP, damage, death, board removal). The melee retune (`E3-R/R3`) anchors to `4-3a`, not to `4-3`.
+-- _decided by Matko._
+
+`4-3/R2` (BLOCKING, ruled) Unit position ownership, deferred by `4-1/R12` and `4-2/R14`, is now
+CLOSED, not deferred again. The actor drives its own approach: `UnitActor` reads its acquired
+target from the snapshot (`unit_targets`, key set 11, `[slot, index]`, index -1 = hero), looks up
+that target's node, and moves toward it. State never owns unit position. `F1` holds literally
+(position is actor-owned, as `hero_state.gd:5` already is for heroes); `push_contact` remains the
+only inward intake (1-8); `FORMAT_VERSION` stays 2; no field is added to the unit record. Two
+alternatives REJECTED by name: an inward direction-fact channel feeding a state-owned per-unit
+velocity (pays a new intake, the stream contract, and `FORMAT_VERSION` 3), and state-owned
+position floats (breaks `F1`, rejected a third time). -- _decided by Matko._
+
+`4-3/R3` (ruled) Damage requires proximity, same as between two heroes, so combat runs through the
+shipped 1-8 contact pipeline; the contact fact's addressing widens to `[slot, index]` per the
+`4-2/R2` precedent. That is `4-3a`'s work -- `4-3` delivers no damage, no HP, no death.
+-- _decided by Matko._
+
+`4-3/R4` (ruled) Minions physically block heroes. Collision is presentation-only, so `4-2/R15`
+(`Area3D` rejected for targeting -- physics frames are not hashable) is untouched, but "no state
+decision reads physics" is a claim the story must make measurable, not assert. -- _decided by
+Matko._
+
+`4-3/R5` (ruled) `4-3` is Tier A even though it is predicted golden-neutral and would be Tier B
+eligible under the ratified policy. Tier may be raised, never lowered, mid-story. -- _decided by
+Matko._
+
+`4-3/R6` (ruled) The per-unit priority field moves to `4-4` (three totem subtypes are the first
+place units genuinely differ). The `4-2/R17(c)` permission to add a field to the unit record is
+NOT spent by `4-3`; the `hp` field lands in `4-3a`. -- _decided by Matko._
+
+### Close-out
+
+One commit, not pushed: `docs(4-3): split minion combat into approach and combat halves`
+(`sprint-status.yaml` board split, this decision-log entry, `deferred-work.md` collision item
+annotated with its new owner). No code touched. Operator reviews the log and pushes.

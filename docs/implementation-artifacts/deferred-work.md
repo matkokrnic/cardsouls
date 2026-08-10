@@ -8,8 +8,9 @@
   (`docs/playtest-log.md`, 10.8: "vidjim da heroji mogu proralziti kroz te pravokutnike ne znam
   jel to namjerno tako zasad"). Deferred because 4-2 adds no movement or combat consequence to
   units at all (`4-2/R4`) -- a unit a hero can already walk through is not yet a unit anything
-  can collide WITH in a way that matters. OWNER: `4-3-minion-combat`'s readiness gate, which is
-  where movement and combat consequences first make collision a real question.
+  can collide WITH in a way that matters. OWNER: `4-3-minion-approach-and-collision`'s readiness
+  gate, which is where movement first makes collision a real question (`4-3/R1`, the split of the
+  boarded `4-3-minion-combat` into approach/collision and a separate `4-3a-minion-combat`).
 
 ## Deferred from: code review of 4-0-hand-slot-stability (2026-08-07)
 
