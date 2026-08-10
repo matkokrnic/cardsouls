@@ -214,6 +214,36 @@ func test_authored_minion_retarget_interval_is_within_the_throttle_band() -> voi
 		+ "without constraining ordinary tuning")
 
 
+## Story 4-3 (AC 2): the approach RATE and the stop DISTANCE, both in the defect-by-construction
+## class — the `draw_replacement_delay_seconds` reason verbatim, and it is load-bearing here in a
+## way it is not for a duration. This story's ENTIRE positive control depends on these two values
+## being real: `field in config` passes on the 0.0 script default, the `>= 0.0` loop in
+## test_data_resources.gd passes on it, and half (b) of that file's reflection guard never looks at
+## either name (neither carries the `_seconds` suffix that keys the `BalanceTicks` obligation). So
+## an implementation that shipped both fields, wired the drive-phase seat and forgot the `.tres`
+## would fail NOTHING here — and would ship the mechanic INVISIBLE in the build: a zero speed
+## leaves the unit standing where it spawned, rotating to face its target and never closing, which
+## is precisely 4-2's shipped behaviour that this story exists to replace.
+##
+## THIS IS ALSO WHAT MAKES test/integration/test_unit_approach_live.gd NON-VACUOUS from authoring
+## rather than from a default: that test measures a live delta against the AUTHORED values, so with
+## either field at 0 it fails (a zero speed never moves; a zero stop distance never stops short).
+##
+## Zero stays a legal IN-TEST value — no golden fixture authors either field (`4-3/R19/N3`) — it is
+## the AUTHORED value that must be positive.
+func test_authored_minion_approach_values_are_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.unit_move_speed > 0.0,
+		"unit_move_speed must be authored > 0 (a zero speed ships 4-3 invisible — the unit rotates "
+		+ "to face its target and never closes, which is the 4-2 behaviour it replaces)")
+	assert_true(config.unit_stop_distance > 0.0,
+		"unit_stop_distance must be authored > 0 (a zero distance walks the unit into its target "
+		+ "until the two bodies wedge, which reads as a physics glitch, not as an approach)")
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

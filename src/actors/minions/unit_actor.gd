@@ -1,5 +1,5 @@
 class_name UnitActor
-extends Node3D
+extends CharacterBody3D
 
 ## Story 4-1 (AC 7): the GREY-BOX UNIT -- the first real content in `src/actors/minions/`, the
 ## directory `docs/game-architecture.md`'s Directory Tree tags `(4-1)` and which held nothing but
@@ -13,8 +13,9 @@ extends Node3D
 ## NO GAMEPLAY LOGIC LIVES HERE, on the HeroActor / TelegraphController precedent and the
 ## project-context HARD RULE that puts it there: no `_physics_process` (INVARIANT F1 -- the runner
 ## owns the only one), no `Input`, no state handle, no signal into state, no damage, no targeting,
-## no AI. It is placed by the runner and it stands there. Movement and AI are 4-3's; HP, damage and
-## death are 4-3's; totem-vs-minion differentiation is 4-4's.
+## no AI. It is placed by the runner and it stands there. Movement lands in 4-3 (below); HP, damage
+## and death are `4-3a`'s under `4-3/R1`, which split the boarded `4-3-minion-combat` in two;
+## totem-vs-minion differentiation is 4-4's.
 ##
 ## POSITION IS ACTOR-OWNED, WHICH IS THE RULING (`4-1/R12`), NOT A CONVENIENCE. UnitBoard holds no
 ## position and the hero precedent is unchanged (hero_state.gd:5 -- "no position (position is
@@ -29,7 +30,24 @@ extends Node3D
 ## box toward whatever the runner tells it to look at. Everything above still holds: no
 ## `_physics_process`, no `Input`, no state handle, no signal into state, no damage, and no targeting
 ## DECISION -- the decision is TargetingService's, inside `advance()`, and this node is told the
-## answer. Movement is still 4-3's; a rotation is not a move.
+## answer. A rotation is not a move; the move itself arrives in 4-3, directly below.
+##
+## STORY 4-3 MAKES THIS A BODY AND GIVES IT THE MOVE (`4-3/R17`, `4-3/R8`). The root becomes a
+## `CharacterBody3D` with ONE `CollisionShape3D` child on the DEFAULT layer/mask -- the same layer 1
+## "bodies" the hero root sits on (`hero.tscn:49`, no layer/mask lines) -- so a unit blocks a hero,
+## and another unit, without a new collision layer and without touching `project.godot`. NO
+## HURTBOX AND NO `Area3D` SHIPS HERE: the hero Hitbox is layer 4 / mask 2 (hurtboxes only) and
+## `_gather_contact_facts` drops any actor whose `_slot_of` is -1, so a unit body cannot enter the
+## contact pipeline. Damage intake is `4-3a`'s.
+##
+## EVERYTHING ABOVE STILL HOLDS ACROSS THAT CHANGE. `approach()` is the `aim_at()` shape with a
+## translation instead of a yaw: no `_physics_process` (the RUNNER calls it from its drive phase,
+## the hero `drive()` seat -- F1 stays exactly one hit), no `Input`, no state handle, no signal into
+## state, no damage, and NO DECISION -- the runner resolves the acquired `[slot, index]` pair to a
+## `Vector3` and hands it over, and the speed and stop distance are authored balance passed in by
+## the caller. This node holds NO copy of either value (CONSTRAINT C / `4-3/R11`) and never reads
+## `BalanceConfigService`: during replay that would walk the unit at the AUTHORED speed instead of
+## the RECORDED one.
 ##
 ## IT EXISTS BECAUSE THE SMOKE NEEDED A VISIBLE SIGNAL. With movement out of scope (`4-2/R4`), "the
 ## unit does not sit permanently inert" is unfalsifiable by observation -- a unit that never moves
@@ -53,3 +71,34 @@ func aim_at(target_position: Vector3) -> void:
 		return
 	# atan2(x, z) is Godot's -Z-forward yaw convention: a Node3D looks down its own -Z.
 	global_rotation.y = atan2(planar.x, planar.y) + PI
+
+
+## Story 4-3 (AC 1/AC 3, `4-3/R8`): WALK toward `target_position` at `speed`, stopping once within
+## `stop_distance` of it. PLANAR (XZ) exactly like `aim_at()` above -- the arena is flat, units
+## spawn on the ground, and nothing here climbs -- so the y component of the velocity stays zero
+## and a target at a different height never drags the box off the floor.
+##
+## THE ACTOR OWNS THE MOVE, THE RUNNER OWNS THE LOOKUP. Everything decided is decided elsewhere:
+## WHICH target is TargetingService's answer inside `advance()`, WHERE that target is is
+## `_target_world_position`'s translation of the `[slot, index]` pair, and HOW FAST and HOW CLOSE
+## are authored balance the caller reads inline at point of use. What is left here is arithmetic
+## and `move_and_slide()`.
+##
+## HOLDS STILL RATHER THAN DRIFTING, on `aim_at()`'s no-planar-direction precedent: a target
+## already inside `stop_distance` -- or coincident, which has no direction to move along -- zeroes
+## the velocity and returns. A unit with no acquired target never reaches this method at all (the
+## caller skips it), which is the same "stays where it is" answer arrived at one level up.
+##
+## `_delta` IS UNUSED AND THAT IS THE HERO PRECEDENT, not an oversight: `HeroActor.drive()` takes
+## the same parameter and ignores it for the same reason -- `move_and_slide()` reads the physics
+## delta from the engine itself. It is in the signature because the caller is the drive phase and
+## both drive calls look alike.
+func approach(target_position: Vector3, speed: float, stop_distance: float, _delta: float) -> void:
+	var to_x := target_position.x - global_position.x
+	var to_z := target_position.z - global_position.z
+	var distance := sqrt(to_x * to_x + to_z * to_z)
+	if distance <= stop_distance or distance <= 0.0:
+		velocity = Vector3.ZERO
+		return
+	velocity = Vector3(to_x / distance * speed, 0.0, to_z / distance * speed)
+	move_and_slide()

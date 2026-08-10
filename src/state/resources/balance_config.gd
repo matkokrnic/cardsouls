@@ -149,6 +149,35 @@ extends Resource
 ## unit re-scanning every frame is precisely the behaviour the Performance Rule forbids, and it
 ## would pass a `>= 0.0` existence check silently.
 @export var minion_retarget_interval_seconds: float = 0.0
+## Story 4-3 (AC 2): how fast a unit walks toward the target it acquired, in world units per
+## second — the `move_speed` / `stamina_regen_per_second` precedent for a RATE.
+##
+## A SCALAR, NEVER TICK-DOMAIN, and the name carries the reason: `BalanceTicks.from_config()`
+## converts `*_seconds` durations (A1), and a rate is not a duration. There is deliberately no
+## `unit_move_speed_ticks` counterpart, exactly as there is no `move_speed_ticks` — the value is
+## consumed per physics frame by `move_and_slide()`, whose delta the engine owns.
+##
+## READ INLINE AT POINT OF USE (CONSTRAINT C), from the config the RUNNER already applied
+## (`MatchState.balance`, the replay-aware handle selected at `match_runner.gd:177-180`) — never
+## `BalanceConfigService.get_config()` from the approach step, which during replay would walk
+## units at the AUTHORED speed instead of the RECORDED one (the divergence `3-0c`'s AC 4 exists
+## to prevent), and never a copy cached in a `UnitActor` field (`4-3/R11`).
+##
+## AUDITED > 0 (test_balance_authoring.gd), the `draw_replacement_delay_seconds` reason verbatim:
+## `field in config` and the `>= 0.0` loop in test_data_resources.gd BOTH pass on this script's
+## 0.0 default, and a zero speed ships the whole mechanic INVISIBLE in the build — a unit that
+## rotates to face its target and never closes the distance is exactly 4-2's behaviour, which
+## this story exists to replace. Zero stays a legal in-test value; it is the AUTHORED value that
+## must be positive.
+@export var unit_move_speed: float = 0.0
+## Story 4-3 (AC 2/AC 3): how close a unit gets to its target before it halts and holds its
+## facing — planar (XZ) centre-to-centre distance, the `attack_lunge_distance` precedent for a
+## DISTANCE. Scalar, never tick-domain, for its sibling's reason directly above.
+##
+## AUDITED > 0 for the same class of failure: a zero stop distance would have a unit walk into
+## its target until the two bodies wedge, which reads as a physics glitch rather than as an
+## approach. Read inline at point of use, from the same runner-applied handle.
+@export var unit_stop_distance: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

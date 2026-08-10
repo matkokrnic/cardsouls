@@ -313,6 +313,51 @@ func test_runner_observation_seams_are_exactly_eight() -> void:  # 2-6/R7, amend
 		+ "one is as loud as an added one: %s" % ", ".join(found))
 
 
+## Story 4-3 (AC 5, `4-3/R13`): "NO STATE DECISION READS PHYSICS" IS MEASURED, NOT ASSERTED. AC 4
+## claims a unit physically blocks a hero while the state layer stays ignorant of collision, and
+## `4-2/R15`/`4-3/R7` bound that claim precisely: no code under `src/state/` reads a physics API and
+## no state decision branches on a collision result. What is NOT claimed is that collision has no
+## effect on state — it does, through the shipped indirection: blocking changes hero NODE positions,
+## those positions are the sole geometric input to the runner's `_gather_contact_facts`, and the
+## DERIVED facts enter through `push_contact`, the one intake (1-8). This guard measures the half
+## that is claimable.
+##
+## THE TOKEN SET IS EXACT AND CLOSED (`4-3/R13`): `get_overlapping_areas`, `move_and_slide`,
+## `CollisionShape3D`, `PhysicsDirectSpaceState3D`. No "or equivalent" — a guard whose membership is
+## a judgement call is not machine-checkable, and widening it is a ruling, not a dev-pass edit.
+##
+## THIS GUARD IS GREEN TODAY AGAINST A `src/state/` THAT CONTAINS NO PHYSICS TOKEN AT ALL, which is
+## exactly why both halves below are load-bearing rather than ceremonial: it would stay just as
+## green at ZERO files scanned (hence the vacuity assert, precedent `:306`/`:348`) and just as green
+## with a regex that matches nothing (hence the self-test pair, precedent `:333-338`). Comments are
+## stripped by `_code_lines`, so this prose never false-positives.
+func test_state_layer_never_reads_physics() -> void:  # Story 4-3 (AC 5), 4-2/R15 promoted
+	var re := RegEx.create_from_string(
+		"(get_overlapping_areas|move_and_slide|CollisionShape3D|PhysicsDirectSpaceState3D)")
+	# The pattern must match every banned form it counts, and must NOT match a named near-miss —
+	# a regex typo that silently disarms this fails HERE instead of passing quietly.
+	assert_true(re.search("\tmove_and_slide()") != null,
+		"the pattern must match the body-move call the runner's drive phase owns")
+	assert_true(re.search("var shape := CollisionShape3D.new()") != null,
+		"the pattern must match a physics NODE TYPE named in code")
+	assert_null(re.search("\tvar areas := hitbox.get_overlapping_bodies()"),
+		"a different physics query is NOT in this story's exact token set (4-3/R13: no 'or "
+		+ "equivalent' — widening the set is a ruling, not a dev-pass edit)")
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files("res://src/state/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			if re.search(line) != null:
+				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
+	assert_true(scanned > 0, "src/state/ scan found no .gd files (guard would be vacuous)")
+	assert_eq(offenders.size(), 0,
+		"physics query in src/state/ (AC 5: actors report, state decides — collision reaches state "
+		+ "only as a DERIVED fact through push_contact): %s" % ", ".join(offenders))
+
+
 ## Story 3-6 (AC 5): THE HUD IS SIGNAL-DRIVEN, MACHINE-CHECKED FOR THE FIRST TIME. `2-4/R9` chose
 ## to keep "no _process in the HUD" REVIEW-CHECKED rather than enforced, and it survived five HUD
 ## stories that way. This story is where that stops paying: it hands the HUD its first genuinely

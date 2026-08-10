@@ -44,6 +44,11 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# half (a) of the reflection guard below fails otherwise — which is the guard working: a new
 	# BalanceConfig tunable that nothing audits ships unaudited, and this file is what forbids that.
 	"minion_retarget_interval_seconds",
+	# Story 4-3 (AC 2, `4-3/R9`): the approach RATE and the stop DISTANCE. Neither carries the
+	# `_seconds` suffix, so half (b) of the reflection guard below leaves them alone (they have no
+	# `BalanceTicks` counterpart by design) — but half (a) fails until they are listed here, which
+	# is the guard working exactly as 3-5b built it to.
+	"unit_move_speed", "unit_stop_distance",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

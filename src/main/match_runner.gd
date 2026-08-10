@@ -661,6 +661,46 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 			(unit as UnitActor).aim_at(target_position)
 
 
+## Story 4-3 (AC 1/AC 3, `4-3/R8`): walk slot `slot`'s spawned boxes toward whatever their records
+## say they acquired. THE RUNNER READS, THE ACTOR MOVES — see the call site in the drive phase for
+## why it sits there and not in `_aim_unit_actors`.
+##
+## THE SAME LOOP SHAPE AS `_aim_unit_actors`, INCLUDING EVERY REASON IT HAS: read through the
+## single-int accessors and never `target_at()` (which allocates a pair per call, per the
+## project-context Performance Rule on per-frame allocations in hot paths); a no-target slot is LEFT
+## ALONE rather than sent to a default heading; the actor array can be one frame SHORTER than the
+## board, so the loop is bounded by the ACTORS and the index checked against the BOARD; and a null
+## world position (an out-of-range index or a freed instance) means the box holds its position for
+## that frame (`4-3/R15`).
+##
+## RECOMPUTED EVERY FRAME, NOT CACHED TO THE THROTTLE BOUNDARY (`4-3/R16`). The Performance Rule
+## throttles target ACQUISITION scans, and this is not one — the pair is already decided, and this
+## is a node lookup from a fixed pair. Caching it to the retarget boundary would lag by up to
+## `minion_retarget_interval_ticks` (12 at the authored 0.2 s) and walk the unit toward where the
+## hero used to be.
+func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void:
+	# CONSTRAINT C: read at point of use, off the config the runner already applied — never a field
+	# on this node, never a copy on the actor, never BalanceConfigService (`4-3/R11`).
+	var balance := _match_state.balance
+	if balance == null:
+		return
+	var actors: Array = _unit_actors[slot]
+	for index: int in actors.size():
+		if not player.units.has_index(index):
+			continue
+		var unit: Node = actors[index]
+		if not is_instance_valid(unit):
+			continue
+		var target_slot := player.units.target_slot_at(index)
+		if target_slot == TargetingService.NO_TARGET_SLOT:
+			continue
+		var target_index := player.units.target_index_at(index)
+		var target_position: Variant = _target_world_position(target_slot, target_index)
+		if target_position is Vector3:
+			(unit as UnitActor).approach(target_position, balance.unit_move_speed,
+					balance.unit_stop_distance, delta)
+
+
 ## The `[slot, index]` pair resolved to a world position, and this is the ONLY place that translation
 ## happens. `index == -1` is that slot's HERO (AC 11's encoding); `>= 0` is that slot's unit actor at
 ## the same board index the state layer used, which is what makes the runner's array index and the
@@ -929,6 +969,23 @@ func _physics_process(delta: float) -> void:
 		# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
 		_p1_hero.drive(_match_state.p1.hero, delta)
 		_p2_hero.drive(_match_state.p2.hero, delta)
+		# 4a. Story 4-3 (AC 1/AC 3, `4-3/R10`): WALK each grey box toward the target it acquired.
+		#     THE DRIVE PHASE IS THE SEAT, deliberately not step 3d's `_aim_unit_actors` loop —
+		#     `game-architecture.md:965-971` names this phase "drive actor movement
+		#     (move_and_slide)", and this is a move. Merging the two loops would save one
+		#     `_target_world_position` call per unit per frame and is filed in `deferred-work.md`;
+		#     it is not taken here, because the phase a call sits in is the documented contract and
+		#     an allocation-free lookup is the cheap half.
+		#
+		#     THE CONFIG IS READ INLINE, AT POINT OF USE, AND IT IS THE REPLAY-AWARE ONE
+		#     (CONSTRAINT C, `4-3/R11`): `_match_state.balance` is whatever `apply_balance()` last
+		#     received — the record's config during replay, the authored one live, and the freshly
+		#     reloaded one after a live RELOAD press. `BalanceConfigService.get_config()` here would
+		#     walk units at the AUTHORED speed during a replay of a recording made before a tuning
+		#     pass, which is exactly the divergence `3-0c`'s AC 4 exists to prevent. Nothing caches
+		#     it: not this file, and not a `UnitActor` field.
+		_approach_unit_actors(0, _match_state.p1, delta)
+		_approach_unit_actors(1, _match_state.p2, delta)
 	# 4b. Split-screen camera follow (story 2-1, ruling 2-1/R1). Copy each hero rig CAMERA's
 	#     framed global transform onto its SubViewport follower camera — AFTER drive() so it
 	#     reflects this tick's move_and_slide. Presentation-only: a deterministic function of

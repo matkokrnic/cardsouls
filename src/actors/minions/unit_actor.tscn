@@ -8,8 +8,16 @@ size = Vector3(0.6, 1.2, 0.6)
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_unitgrey"]
 albedo_color = Color(0.55, 0.55, 0.58, 1)
 
-[node name="UnitActor" type="Node3D"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_unitbody"]
+size = Vector3(0.6, 1.2, 0.6)
+
+[node name="UnitActor" type="CharacterBody3D"]
 script = ExtResource("1_unitactor")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+shape = SubResource("BoxShape3D_unitbody")
+editor_description = "Story 4-3 (AC 4, ruling 4-3/R17). The unit's BODY shape, sized to the existing grey box (0.6 x 1.2 x 0.6) and offset +0.6 in y for the same reason the Mesh is: the unit ROOT is at the box's FEET (the runner spawns units at y 0), unlike the hero root which is its body CENTRE. NO layer/mask lines, exactly like hero.tscn's HeroActor root - both bodies sit on default layer 1 'bodies', which is what makes a unit block a hero (and another unit) without a new layer and without touching project.godot. This is the WHOLE collision mechanism: there is deliberately NO hurtbox and NO Area3D on this scene - a unit takes no damage until 4-3a ships one."
 
 [node name="Mesh" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
