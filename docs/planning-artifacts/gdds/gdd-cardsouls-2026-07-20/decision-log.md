@@ -6842,3 +6842,59 @@ unit is summoned two ticks before the hash -- so a unit attack is STRUCTURALLY u
 Extending it would mean giving the determinism fixture physics, which is what `D3(b)`/`A2` keep out
 of `src/state/`. Reachability limits and the causes proven by unit/integration tests instead are
 recorded in the story's Golden Prediction.
+
+## Session 2026-08-12 -- 4-3b close-out
+
+`4-3b/R23` (ruled) The locked attack direction FREEZES across WINDUP and ACTIVE but REFRESHES
+during RECOVERY -- AC 12's literal "until the swing ends" wording, read strictly, would freeze it
+forever and contradict AC 12's own bounded-staleness clause; the hitbox is shut during recovery so
+refreshing changes no outcome. -- _decided by Matko._
+`4-3b/R24` (ruled) LIVE SMOKE PASSED, `R-D6` SPENT. Operator killed by a minion -- the first hero
+death not caused by a hero. Six points passed as written: minion closes and stops at reach; roll
+takes no damage; block reduces; deflect fully negates without stun; telegraph flash fires on
+minion-damages-hero; own-side minions cannot hurt each other or their summoner; a minion dies to a
+minion in three hits, same as from a hero.
+`4-3b/R25` (ruled, recorded) TWO SMOKE POINTS UNMEASURABLE, not failed: the attack has no visual
+telegraph, so the operator could not see a swing begin or test evading it. Proven by test, invisible
+to a human; not an AC of this story. Named as the reason the melee retune's feel half stays
+unanswerable.
+`4-3b/R26` (decided by Matko) The melee retune (`E3-R/R3`) is CUT, not opened in full: one balance
+`.tres` edit lengthening the minion attack windup (enemy hits too fast the moment it closes),
+optionally the reach too; rest of the feel checklist deferred until real models and animations
+exist. An interim grey-box telegraph was declined.
+`4-3b/R27` (ruled, recorded) The rig/model/animation work (DEBT E) and the attack selector that
+would give minions movesets have NO OWNER AND NO SLOT -- the binding constraint on reaching
+intended enemy behaviour. The rig story gets an owner and a slot at the E4 close-out, ahead of the
+attack selector. -- _decided by Matko._
+`4-3b/R28` (ruled, recorded) The review layer reads `git diff HEAD`, excluding new files -- this
+story's new state class and both new test files were never seen by it. No
+`_bmad/custom/gds-code-review.toml` override exists. Recorded as a STANDING LIMITATION future
+review prompts must compensate for by hand, rather than building an override unprompted.
+`4-3b/R29` (ruled, recorded) The general case of the harness leak (two live SceneTree tests fixed by
+delaying `quit()` past their assertions) is unexamined elsewhere. OWNER: the next story/pass that
+touches a live SceneTree test (`deferred-work.md`). The four inherited `.uid` sidecars are now
+generated and committed, closing that gap.
+`4-3b/R30` (ruled, recorded) Six of seventeen ACs were not independently derived at review, relying
+on the green suite and mutation table; AC 14 rests entirely on two mutations from the same pass
+that wrote the code. Accepted risk, not re-derived here.
+`4-3b/R31` (ruled, recorded) The dev pass left an orphaned headless `godot` process running ~2
+hours undetected, caught only because a precondition existed for this close-out. Any harness with a
+subprocess timeout must kill the child and check for orphans at the end -- mandatory for every
+future dev/review pass.
+`4-3b/R32` (ruled, recorded) The deferred `hit_landed` per-hit-feedback item (`4-3a/R12`), owned by
+`4-3b`, is confirmed NOT addressed -- the unit-damages-unit/unit-damages-hero asymmetry ships
+unchanged. Item stays OPEN, reassigned to no owner (`deferred-work.md`).
+
+**Leaves LIVE for successors:** the widened kind-agnostic attacker address (totems, hero-cast
+projectiles named future users); the throttled reach probe and its shared cross-slot counter; the
+five granted unit-record scalars plus `UnitSwingDedupe`; `FORMAT_VERSION` 4; minion attack
+durations remain GLOBAL -- per-kind conversion is `4-4`'s opening act ("kind has a LIST of
+attacks", not "kind has an attack").
+
+### Close-out
+
+Four commits (code+tests; story record; this entry; board `done`). Golden unmoved at
+re-measurement, `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`. Snapshot key
+set: eighteen. Suite 497/3878 + 30/30 integration, all PASS -- matches the story file's own
+last-recorded figures. `FORMAT_VERSION` 4. `project.godot`/`hero.tscn` BYTE-IDENTICAL against
+`3ea5bbb`. Code review PASS. Live smoke PASS, `R-D6` spent. Operator reviews the log and pushes.
