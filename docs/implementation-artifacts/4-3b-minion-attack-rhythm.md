@@ -4,7 +4,7 @@ baseline_commit: 8c511e5995514f046fcb74384c71783576dda9c6
 
 # Story 4.3b: Minion attack rhythm
 
-Status: review
+Status: done
 
 ## What this story inherits
 

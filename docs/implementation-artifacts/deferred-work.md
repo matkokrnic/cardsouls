@@ -11,7 +11,22 @@
   widening the signal payload to carry a unit target (same screen, more plumbing, no new seam) and
   a real unit feedback channel (a new observation seam, which the locked count of seven
   `connect_*` seams on `match_runner.gd` makes an architecture amendment, not a story-scoped
-  change). OWNER: `4-3b-minion-attack-rhythm`.
+  change). ~~OWNER: `4-3b-minion-attack-rhythm`.~~
+
+  **Update from 4-3b close-out (2026-08-12, `4-3b/R32`): NOT addressed.** `4-3b` confirms the
+  asymmetry stays as designed (`hit_landed` fires on unit-damages-hero, not on unit-damages-unit)
+  and does not touch this item's substance -- see `4-3b-minion-attack-rhythm.md`, Non-Goals. The
+  item stays OPEN. OWNER: unassigned -- the next story that gives unit-vs-unit combat a real
+  feedback channel.
+
+## Deferred from: 4-3b-minion-attack-rhythm close-out (2026-08-12)
+
+- **The general case of the harness leak (`4-3b/R29`).** Two live SceneTree tests
+  (`test_live_attack.gd`, `test_unit_attack_live.gd`) leaked Jolt/engine resources from `quit()`
+  firing the same physics frame as the last measurement read; both fixed by deferring `quit()`
+  30 frames past assertions. Whether other live tests share this shape is unexamined and was not
+  this story's work. OWNER: the next story or pass that touches a live SceneTree test -- check the
+  file for the same "quit immediately after the last read" shape before adding to it.
 
 ## Deferred from: code review of 4-3-minion-approach-and-collision (2026-08-10)
 
