@@ -160,3 +160,9 @@ summoni se pojavljuju kad se odigrava karta koja ima summon i ne pojavlju kad se
 
 10.8.
 1 summon se krece prema neprijatleju kad je sumonan 2 ne mogu porci kroz njega niti odgurnuti 3kad je vise summona ne trzaju se i ne guraju, rkecu se noralno i medusobno ne mogu porci jedni kroz druge i prate narepatjea 4 pa brizna prilaska i razmak na koje mostaju djeluju okej, iako finalno sama zamiljao minone vise kao eldenr ing mobove nego homing porjektile ovov je za sad a vsie kao homing fireball haha, al sve sto si rekao da provjerim je na mjestu
+
+10.8.
+1 ubijanje radi tocno kako si opisao 2  heroij ne dobivaju manu od lupanja neprijatlejivh minoina 3 nema nevidljivg zida 4 udaranje vlastitog minoina ne snizava njegov hp 5 dva unita se ponasaju zeljeno, ne uovde jedan drugom smetnje a oba mogu zeljeno pirmiti dmg iz istog swinga 6 ako se heroja nade izmedu svog minoina i nepreijtlejskog heroja blokira ga, ne znam je li to zeljeno, 7 vec smo ranije rekli da jedanzamah ostti sve neprijatljske minone koje takne ne samo jednoga. 8 3 zamha do smirti se cini kao dobar standard
+
+12.8.
+1 summonani minoin krene prem meni i stane kadme krene mlatit samo ne vidim telegraph pa nemogu tocno reci kad krene zamah 2 zamah nema citljivu najavu ili je ja nevdim3 ne znam kako bi izmjegao izmicanjem kada ne vidim tu najavu 4 roll kroz udarac ne prima stetu, block negira dio, a deflect sktoz kako je i zmalsijeno 5 kada me pogodi crveni telegraf oko mene se pojavi 6 minoni se ne ozljeduju medusobno ako su od istog igraca 7 umiru od 3 udarca8 pustiosam da me ubije isve radi okej, e sad to sto nema telgraph ne znam treba li ispravljati jer preppotvlajam da mozemo skoro dodati neke placehodler modle i anmiacije pa ce one same po sebi davati vizualni telegraf sto se desava zar ne
