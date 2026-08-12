@@ -89,7 +89,7 @@ func _play(ms: MatchState, through_tick: int, p1_press := {}, p2_block_ranges :=
 		var held2: Array = [&"block"] if held else []
 		var i2 := _intent(pressed2, held2)
 		for fact: Array in contacts.get(t, []):
-			ms.push_contact(fact[0], [fact[1], -1], fact[2], fact[3])
+			ms.push_contact([fact[0], -1], [fact[1], -1], fact[2], fact[3], MatchState.CONTACT_STRIKE)
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()
@@ -294,7 +294,7 @@ func test_deflect_landed_is_queued_never_emitted_mid_advance() -> void:
 	var deflects: Array = []
 	_collect_deflects(ms, deflects)
 	_play(ms, 3, {1: [&"attack"]}, [[1, 10]])
-	ms.push_contact(0, [1, -1], 0, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	var intents: Array[InputIntent] = [InputIntent.new(), _intent([], [&"block"])]
 	ms.advance(intents)  # t4: deflect resolves — signal must stay queued
 	assert_eq(deflects.size(), 0, "deflect_landed is QUEUED during advance (D5)")
@@ -315,7 +315,7 @@ func test_reload_keeps_inflight_window_and_next_block_picks_up_new_ticks() -> vo
 	ms.apply_balance(_config(8.0 / 60.0))  # X3 seam, mid-match (D9 refill included)
 	ms.drain_signals()
 	_play_range(ms, 3, 5, {}, [[1, 6]])
-	ms.push_contact(0, [1, -1], 0, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_play_range(ms, 6, 6, {}, [[1, 6]])
 	assert_eq(deflects.size(), 0, "in-flight window kept its 4 ticks across the reload")
 	assert_eq(ms.p2.hero.get_hp(), 98.5, "t6 contact blocked (1-1 reload principle)")
@@ -324,7 +324,7 @@ func test_reload_keeps_inflight_window_and_next_block_picks_up_new_ticks() -> vo
 	# Fresh P1 swing at t14: windup t14-16, active t17-20; contact at t20.
 	_play_range(ms, 7, 13, {}, [])
 	_play_range(ms, 14, 19, {14: [&"attack"]}, [[14, 21]])
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_play_range(ms, 20, 20, {}, [[14, 21]])
 	assert_eq(deflects, [[0, 1]], "next enter_block picked up the reloaded 8-tick window (t20 deflects)")
 
@@ -341,3 +341,140 @@ func _play_range(ms: MatchState, from_tick: int, to_tick: int, p1_press := {},
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()
+
+
+## ================================================================================================
+## STORY 4-3b (AC 9 / AC 10): the hero's defensive ladder against a MINION's attack.
+## ================================================================================================
+
+func _config_4_3b() -> BalanceConfig:
+	var c := _config()
+	c.unit_max_hp = 9.0
+	c.unit_damage_per_hit = 3.0
+	c.minion_attack_windup_seconds = 2.0 / 60.0
+	c.minion_attack_active_seconds = 3.0 / 60.0
+	c.minion_attack_recovery_seconds = 4.0 / 60.0
+	c.minion_attack_reach_distance = 2.0
+	c.minion_retarget_interval_seconds = 1000.0
+	return c
+
+
+## P1 gets one unit in its ACTIVE window, through the real reach trigger and phase ladder.
+func _p1_unit_into_active_4_3b(ms: MatchState) -> void:
+	ms.p1.units.add(9.0)
+	ms.p1.units.set_target_at(0, 1, -1)
+	ms.push_contact([0, 0], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
+	_step(ms, {})
+	_step(ms, {})
+	for _t in 2:
+		_step(ms, {})
+
+
+func _match_4_3b() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(7))
+	ms.apply_balance(_config_4_3b())
+	var f := FeatureFlags.new()
+	f.minions = true
+	ms.inject_feature_flags(f)
+	ms.drain_signals()
+	return ms
+
+
+## One tick with the given per-slot pressed actions.
+func _step(ms: MatchState, presses: Dictionary) -> void:
+	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
+	for slot: int in presses:
+		for action: StringName in presses[slot]:
+			intents[slot].pressed[action] = true
+			intents[slot].held[action] = true
+	ms.advance(intents)
+	ms.drain_signals()
+
+
+## AC 9: the hero's defensive ladder applies to a minion's attack UNCHANGED. Three rungs, three
+## measurements, all against the SAME unit-sourced fact, plus an undefended control so each
+## reduction is measured against what the attack would otherwise have done.
+func test_the_hero_defensive_ladder_applies_unchanged_to_a_unit_attack() -> void:
+	# (i) UNDEFENDED control -- the full damage a unit attack does.
+	var undefended := _match_4_3b()
+	_p1_unit_into_active_4_3b(undefended)
+	var full_before := undefended.p2.hero.get_hp()
+	undefended.push_contact([0, 0], [1, -1], undefended.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_step(undefended, {})
+	var full_damage := full_before - undefended.p2.hero.get_hp()
+	assert_true(full_damage > 0.0, "sanity: an undefended unit attack lands full damage")
+
+	# (ii) DEFLECT: fully negated, deflect_landed queued, the cost spent.
+	var deflecting := _match_4_3b()
+	_p1_unit_into_active_4_3b(deflecting)
+	var deflects: Array = []
+	deflecting.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	var stamina_before := deflecting.p2.stamina.get_current()
+	var hp_before := deflecting.p2.hero.get_hp()
+	deflecting.push_contact([0, 0], [1, -1], deflecting.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_step(deflecting, {1: [&"block"]})
+	assert_eq(deflecting.p2.hero.get_hp(), hp_before,
+		"DEFLECT fully negates a minion's attack, exactly as it does a hero's (AC 9)")
+	assert_eq(deflects.size(), 1, "...and queues deflect_landed")
+	assert_eq(deflects[0][0], 0,
+		"...whose attacker payload is the BARE SLOT, unwidened (`4-3b/R15`)")
+	assert_true(deflecting.p2.stamina.get_current() < stamina_before,
+		"...and spends the deflect cost at LANDING, the shipped per-fact policy")
+
+	# (iii) BLOCK without the stamina to deflect: the multiplier applies.
+	var blocking := _match_4_3b()
+	_p1_unit_into_active_4_3b(blocking)
+	blocking.p2.stamina.spend(blocking.p2.stamina.get_current(), 0)
+	var block_before := blocking.p2.hero.get_hp()
+	blocking.push_contact([0, 0], [1, -1], blocking.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_step(blocking, {1: [&"block"]})
+	var blocked_damage := block_before - blocking.p2.hero.get_hp()
+	assert_true(blocked_damage > 0.0, "BLOCK reduces rather than negates...")
+	assert_true(blocked_damage < full_damage,
+		"...and the reduction is real, measured against the undefended control (AC 9)")
+
+
+## AC 10 (`4-3b/R7`), a NEGATIVE GUARD: deflecting a minion does NOT stun it, for now. The `stun`
+## field keeps ZERO inbound edges and this story does not open one; the open decision on stun stays
+## open.
+##
+## MEASURED AS A COMPARISON RATHER THAN AS AN ABSOLUTE: the deflected unit's phase state and
+## countdown must sit EXACTLY where the undeflected case leaves them. An absolute assertion
+## ("the unit is in RECOVERY") would pass against an implementation that stunned BOTH.
+func test_deflecting_a_minion_leaves_its_rhythm_exactly_where_an_undeflected_swing_does() -> void:
+	var deflected := _rhythm_after_swing(true)
+	var undeflected := _rhythm_after_swing(false)
+	assert_eq(deflected["deflects"], 1, "sanity: the deflected run really did deflect...")
+	assert_eq(undeflected["deflects"], 0, "...and the control run really did not")
+	assert_eq(deflected["phase"], undeflected["phase"],
+		"a deflected minion's PHASE is exactly where an undeflected swing leaves it — no stun edge "
+		+ "opens (AC 10, `4-3b/R7`)")
+	assert_eq(deflected["ticks"], undeflected["ticks"],
+		"...and so is its COUNTDOWN, to the tick: nothing was frozen, extended or cut short")
+	assert_eq(deflected["count"], undeflected["count"],
+		"...and its swing counter, so the rhythm was not restarted either")
+
+
+## One unit swing against P2, deflected or not, reported as the unit's rhythm state a few ticks on.
+func _rhythm_after_swing(deflect: bool) -> Dictionary:
+	var ms := _match_4_3b()
+	_p1_unit_into_active_4_3b(ms)
+	var deflects: Array = []
+	ms.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	if not deflect:
+		# The control run must differ ONLY in whether the fact was deflected, so P2 still BLOCKS --
+		# it simply cannot afford the deflect and the hit degrades to a block.
+		ms.p2.stamina.spend(ms.p2.stamina.get_current(), 0)
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_step(ms, {1: [&"block"]})
+	_step(ms, {})
+	return {
+		"phase": ms.p1.units.attack_phase_at(0),
+		"ticks": ms.p1.units.attack_ticks_at(0),
+		"count": ms.p1.units.attack_count_at(0),
+		"deflects": deflects.size(),
+	}

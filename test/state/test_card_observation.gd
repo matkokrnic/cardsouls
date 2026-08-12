@@ -246,9 +246,32 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# `pending_draw_owed`'s owed slots (`4-2/R2` cites that precedent by name). No identity, no
 	# StringName, no object and no position joins the hash. AC 9's per-unit IDENTITY extension added
 	# no key at all — measured, `4-2/R8`.
+	#
+	# DELIBERATELY EXTENDED AGAIN BY STORY 4-3b (AC 16, `4-3b/R14` as amended): the unit ATTACK
+	# RHYTHM. TWELVE -> EIGHTEEN, six new keys, each with its own line below and its own assertion
+	# of the COUNT — never a number quietly edited in place, which is this file's own standing
+	# discipline and the reason the count is asserted separately from the set.
+	#
+	# THE SIX ARE A DEV-PASS MEASUREMENT AND THE STORY SAID SO. `4-3b` NAMED six contributing
+	# fields — phase state, tick countdown, locked attack direction, monotonic attack counter,
+	# in-reach flag, and the unit dedupe records — and deliberately declined to assert a count,
+	# because the board's precedent runs BOTH ways: one array -> one key for `unit_hp`, but TWO
+	# arrays fused into ONE key of pairs for `unit_targets`. The floor it claimed was thirteen with
+	# no ceiling. MEASURED HERE: all six surfaced as keys, one apiece, so the count is EIGHTEEN and
+	# NO named field needed a stated reason for failing to surface.
+	#
+	# THE CLAIM THIS PIN GUARDS IS STILL UNCHANGED, which is what makes the extension legitimate
+	# rather than an erosion: ints, bools, `Vector2` headings and arrays of ints — counts, values
+	# and indices. No identity, no StringName, no object and no position joins the hash. The locked
+	# DIRECTION is the one that could look like an exception and is not: it is a normalised heading
+	# the runner DERIVED from two positions, the same class of position-derived datum the contact
+	# fact's `dir` has carried legally since 1-8, and `4-3/R2` bans state OWNING a position rather
+	# than learning a direction.
 	var expected: Array = [
 		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-		"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_hp", "unit_targets",
+		"pending_draw", "pending_draw_owed", "stamina",
+		"unit_attack_count", "unit_attack_dir", "unit_attack_phase", "unit_attack_ticks",
+		"unit_count", "unit_hp", "unit_in_reach", "unit_swing_dedupe", "unit_targets",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "
@@ -256,9 +279,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 12,
-		"the per-player snapshot key set is TWELVE keys as of story 4-3a (eleven before it — the "
-		+ "one new key is `unit_hp`, AC 9 / `4-3a/R17`)")
+	assert_eq(keys.size(), 18,
+		"the per-player snapshot key set is EIGHTEEN keys as of story 4-3b (twelve before it — the "
+		+ "six new keys are the unit attack rhythm: unit_attack_phase, unit_attack_ticks, "
+		+ "unit_attack_dir, unit_attack_count, unit_in_reach, unit_swing_dedupe; AC 16 / "
+		+ "`4-3b/R14` as amended)")
 
 
 # --- Fixture ----------------------------------------------------------------------------------

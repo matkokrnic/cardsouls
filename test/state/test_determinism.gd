@@ -404,8 +404,58 @@ extends TestCase
 ##     `push_contact` target address, the `TargetingService` array-of-living-indices signature, the
 ##     two liveness seats, unit damage, death, actor freeing, FORMAT_VERSION 3) is a MEASURED golden
 ##     NON-MOVER. The mover is the key, and nothing else.
+##
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "35c38c0ef8008258a5c7ee614487ff92ca825866681f53636f865b83659321b9"
+## STORY 4-3b: THE NINTH RE-BASELINE, 35c38c0e -> 4a089063. ONE CAUSE, MEASURED IN BOTH DIRECTIONS,
+## and TWO PREDICTED NON-MOVERS MEASURED RATHER THAN CITED.
+## ---------------------------------------------------------------------------------------------
+##   THE FIXTURE STRUCTURALLY CANNOT REACH A UNIT ATTACK, which is what makes the accounting short.
+##     This file runs `MatchState` ALONE -- no runner, no physics, no `Area3D`, no overlap query;
+##     its contact facts are HAND-AUTHORED literals pushed straight through the seam, every authored
+##     attacker is a HERO and every authored target is a hero; and its single unit is summoned by
+##     the t22 cast, two ticks before the hash at t24. That unit has no hitbox to overlap, nothing
+##     to overlap with, and no reach fact -- so it cannot windup, cannot swing, and cannot register
+##     a hit. THE FIXTURE IS NOT EXTENDED (`4-3b/R22`), for the reason `4-3a` declined: giving it
+##     physics or a synthetic hitbox would make the determinism golden depend on the very machinery
+##     `D3(b)`/`A2` keep out of `src/state/`.
+##
+##   THE ONE CAUSE: the SNAPSHOT KEY SET, twelve -> eighteen. The fixture's summoned unit
+##     contributes its IDLE-but-present attack state from t22 -- phase IDLE, countdown 0, a zero
+##     locked direction, counter 0, flag false -- plus an empty `unit_swing_dedupe`. A value that
+##     crosses ticks and decides an outcome does not sit outside the hash (`4-3a/R17`), so all six
+##     keys are hashed and their mere PRESENCE is the mover.
+##
+##   THE REVERSE DIRECTION, which is what makes the single cause attributable: with the six new keys
+##     held off `PlayerState.to_snapshot()` and EVERYTHING ELSE this story ships left in place, this
+##     file hashed 35c38c0e EXACTLY -- the pre-story golden, unchanged. Measured at the dev pass by
+##     deleting those six lines, running this file, and restoring from a SHA256-verified out-of-repo
+##     copy.
+##
+##   NON-MOVER 1, THE WIDENED ATTACKER ADDRESS AND THE KIND MARKER (AC 3 / AC 13), MEASURED not
+##     asserted: it falls out of the reverse-direction run above. Every hand-authored fact in this
+##     fixture is a hero attacker, and `[slot, -1]` with `CONTACT_STRIKE` resolves through the
+##     widened seam to the identical `PlayerState` and the identical hashed outcomes the bare int
+##     produced -- if it had not, the keys-removed run would have diverged from 35c38c0e and it did
+##     not. The marker is likewise a non-mover for a structural reason: facts are per-tick and never
+##     snapshotted.
+##
+##   NON-MOVER 2, THE UNIT DEDUPE CAUSE, PREDICTED FALSIFIED AND MEASURED FALSIFIED -- recorded
+##     because `4-3a`'s own gate had a prediction reversed by not measuring one. `4-3a/R27`
+##     falsified the hero-side dedupe cause because every record had EXPIRED by t24; here the reason
+##     is STRONGER: the unit's records CANNOT EXIST AT ALL by the hash tick, because the fixture's
+##     unit never swings. Pinned permanently by
+##     `test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record` below, so the claim
+##     is a live assertion rather than a comment.
+##
+##   CAUSES UNREACHABLE HERE, named so nobody reads a green golden as coverage of them: the phase
+##     progression through real tick counts, the cleave and its canonical order (AC 4), the
+##     cross-attacker ordering (AC 5), the friendly-fire gather filter (AC 6), the attacker-kind
+##     dispatch (AC 14), the killed-mid-swing drop (AC 15), and the reach trigger INCLUDING its
+##     throttled cadence (AC 13 -- there is no runner here, so the probe pass never runs at all).
+##     They are proven in test_unit_attack_rhythm.gd, test_contact_resolution.gd,
+##     test_unit_damage_and_death.gd and test/integration/test_unit_attack_live.gd.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf"
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -1229,7 +1279,7 @@ func _play_sequence(ms: MatchState, after_tick := Callable(), cast := true) -> v
 		var held2: Array = [&"block"] if _block_held(t) else []
 		var i2 := _intent(pair[1], P2_PRESS.get(t, []), held2)
 		for fact: Array in CONTACTS.get(t, []):
-			ms.push_contact(fact[0], [fact[1], -1], fact[2], fact[3])
+			ms.push_contact([fact[0], -1], [fact[1], -1], fact[2], fact[3], MatchState.CONTACT_STRIKE)
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()
@@ -1260,3 +1310,33 @@ func _run() -> String:
 	var ms := _make_match()
 	_play_sequence(ms)
 	return CanonicalHash.of(ms.to_snapshot())
+
+
+## Story 4-3b: THE FALSIFIED CAUSE, PINNED AS AN ASSERTION rather than left as a claim in the block
+## above -- the discipline `4-3a`'s gate paid for when a recorded-but-unmeasured prediction was
+## reversed.
+##
+## The golden's accounting says the unit dedupe records CANNOT contribute, because the fixture's one
+## unit never swings. That is only true while the unit stays IDLE to the hash tick. If a future
+## story gives this fixture a reach fact, a hitbox, or a runner, the unit WILL swing, the dedupe key
+## WILL carry a record, and the golden will move for a reason the block above says is impossible --
+## and this fails first, naming it.
+func test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	var summoner := ms.p1 if ms.p1.units.size() > 0 else ms.p2
+	assert_eq(summoner.units.size(), 1,
+		"sanity: the fixture really does summon exactly one unit (the t22 cast) — with none, every "
+		+ "assertion below would be vacuously true")
+	assert_eq(summoner.units.attack_phase_at(0), UnitBoard.AttackPhase.IDLE,
+		"the fixture's unit is IDLE at the hash tick — it has no hitbox to overlap, nothing to "
+		+ "overlap with and no reach fact, so it cannot wind up")
+	assert_eq(summoner.units.attack_count_at(0), 0, "...has never swung...")
+	assert_false(summoner.units.is_in_reach_at(0),
+		"...and was never reported in reach: this fixture pushes no probe, and a probe is the only "
+		+ "thing that sets the flag")
+	assert_eq(summoner.unit_dedupe.snapshot(), [],
+		"...so its dedupe records CANNOT EXIST at the hash tick. This is the golden block's "
+		+ "'falsified cause' made executable: the `unit_swing_dedupe` key is present but EMPTY, so "
+		+ "the widened dedupe shape contributes nothing here (a stronger reason than `4-3a/R27`'s, "
+		+ "which relied on records having merely EXPIRED)")

@@ -91,7 +91,7 @@ func test_contact_during_running_iframe_is_dropped() -> void:
 	_collect_hits(ms, hits)
 	# t1: P1 rolls (iframe covers t1-t2), P2 starts a swing (record 0 opens at the press).
 	_step(ms, _intent([&"roll"]), _intent([&"attack"]))
-	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_step(ms)  # t2: iframe still running -> FACT DROP
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "contact during running iframe is dropped — no damage")
 	assert_eq(hits.size(), 0, "no hit_landed on a dropped fact")
@@ -111,12 +111,12 @@ func test_negation_boundary_grace_then_full_same_swing() -> void:
 	_collect_hits(ms, hits)
 	_step(ms, _intent([&"roll"]), _intent([&"attack"]))  # t1
 	_step(ms)                                            # t2
-	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_step(ms)  # t3: window closed in THIS tick's step 2 -> +1 grace -> negated
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "close+1 arrival negates via the grace transient")
 	assert_eq(ms.p2.mana.get_current(), 0.0, "negated: no mana")
 	assert_eq(hits.size(), 0, "negated: no hit_landed")
-	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_step(ms)  # t4: past the grace -> the SAME swing lands at full damage
 	assert_eq(ms.p1.hero.get_hp(), 94.0,
 		"close+2 arrival from the SAME swing lands FULL damage — the drop never registered")
@@ -138,11 +138,11 @@ func test_grace_negates_after_rolling_ended_window_alone() -> void:
 	_step(ms, null, _intent([&"attack"]))         # t2: P2 swing (windup t2-4, active t5-8)
 	for t in range(3, 6):
 		_step(ms)                                 # t3-t5
-	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_step(ms)  # t6: duration closed -> IDLE; iframe grace transient still negates
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "ROLLING already exited on t6")
 	assert_eq(ms.p1.hero.get_hp(), 100.0, "grace-tick negation while IDLE — window-alone judgment")
-	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_step(ms)  # t7: past the grace -> lands
 	assert_eq(ms.p1.hero.get_hp(), 94.0, "first post-grace arrival lands full damage")
 
@@ -209,7 +209,7 @@ func test_mid_roll_reload_windows_keep_duration_speed_reads_inline() -> void:
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(3.0 / (5.0 / 60.0), 0, 0)),
 		"mid-roll velocity reads the NEW roll_distance inline (CONSTRAINT C)")
 	_step(ms)  # t3 (old iframe's grace tick — not tested here; boundary is t4)
-	ms.push_contact(1, [0, -1], 0, Vector2.DOWN)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_step(ms)  # t4: under the reloaded 4-tick iframe this would be covered — it must LAND
 	assert_eq(ms.p1.hero.get_hp(), 94.0,
 		"in-flight iframe kept its 2 ticks across the reload — the t4 arrival lands")
@@ -240,3 +240,80 @@ func test_snapshot_gains_roll_direction_and_excludes_the_transient() -> void:
 	assert_eq(snap["roll_direction"], Vector3(1, 0, 0), "snapshot carries the locked value")
 	assert_false(snap.has("_roll_iframe_closed_this_tick"),
 		"the grace transient stays OUT of the snapshot (per-tick, write-before-read)")
+
+
+## ================================================================================================
+## STORY 4-3b (AC 9): ROLL IFRAMES DROP A MINION'S ATTACK, exactly as they drop a hero's.
+## ================================================================================================
+##
+## The iframe rung is reached when the ATTACKER address names a UNIT instead of a hero, and it
+## judges the TARGET's window alone -- so nothing about it should change. This pins that it does not.
+
+func _config_4_3b_iframes() -> BalanceConfig:
+	var c := _config()
+	c.unit_max_hp = 9.0
+	c.unit_damage_per_hit = 3.0
+	c.minion_attack_windup_seconds = 2.0 / 60.0
+	c.minion_attack_active_seconds = 6.0 / 60.0
+	c.minion_attack_recovery_seconds = 4.0 / 60.0
+	c.minion_attack_reach_distance = 2.0
+	c.minion_retarget_interval_seconds = 1000.0
+	return c
+
+
+func _match_4_3b_iframes() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(7))
+	ms.apply_balance(_config_4_3b_iframes())
+	var f := FeatureFlags.new()
+	f.minions = true
+	ms.inject_feature_flags(f)
+	ms.drain_signals()
+	return ms
+
+
+func _tick_4_3b(ms: MatchState, p2_presses: Array = []) -> void:
+	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
+	for action: StringName in p2_presses:
+		intents[1].pressed[action] = true
+		intents[1].held[action] = true
+	ms.advance(intents)
+	ms.drain_signals()
+
+
+## P2 is the TARGET here, so P1 owns the attacking unit.
+func _unit_into_active_4_3b(ms: MatchState) -> void:
+	ms.p1.units.add(9.0)
+	ms.p1.units.set_target_at(0, 1, -1)
+	ms.push_contact([0, 0], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
+	_tick_4_3b(ms)
+	_tick_4_3b(ms)
+	for _t in 2:
+		_tick_4_3b(ms)
+
+
+## AC 9's iframe rung, BOTH directions in one test: the same unit-sourced fact is DROPPED while the
+## target's iframe window is open and LANDS once it has closed. A one-directional test would pass
+## against a build where unit facts never landed at all -- which is precisely the AC 14 defect.
+func test_roll_iframes_drop_a_unit_sourced_fact_and_stop_dropping_it_when_they_close() -> void:
+	var ms := _match_4_3b_iframes()
+	_unit_into_active_4_3b(ms)
+	# P2 rolls: the iframe window opens at the ROLLING transition, on the tick of the press.
+	var hp_before := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_tick_4_3b(ms, [&"roll"])
+	assert_eq(ms.p2.hero.get_hp(), hp_before,
+		"an open iframe window DROPS a unit-sourced fact outright — no damage, no signal, and the "
+		+ "swing's one resolution is NOT consumed (AC 9, the 1-9/R1 rung reached from a unit)")
+	# Let the iframes expire (including the +1 grace tick), then feed the same fact again. The
+	# active window is authored long enough to still be open.
+	for _t in 4:
+		_tick_4_3b(ms)
+	assert_false(ms.p2.hero.is_iframe_open(), "sanity: the window (and its grace tick) has closed")
+	assert_true(ms.p1.units.is_hitbox_active_at(0), "sanity: the unit's window is still open")
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_tick_4_3b(ms)
+	assert_true(ms.p2.hero.get_hp() < hp_before,
+		"...and the SAME fact lands once the window has closed, which is what makes the drop above "
+		+ "a statement about the IFRAMES rather than about unit facts never landing")

@@ -11,13 +11,16 @@ albedo_color = Color(0.55, 0.55, 0.58, 1)
 [sub_resource type="BoxShape3D" id="BoxShape3D_unitbody"]
 size = Vector3(0.6, 1.2, 0.6)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_unithitbx"]
+size = Vector3(1, 1.2, 1.4)
+
 [node name="UnitActor" type="CharacterBody3D"]
 script = ExtResource("1_unitactor")
 
 [node name="Collision" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
 shape = SubResource("BoxShape3D_unitbody")
-editor_description = "Story 4-3 (AC 4, ruling 4-3/R17). The unit's BODY shape, sized to the existing grey box (0.6 x 1.2 x 0.6) and offset +0.6 in y for the same reason the Mesh is: the unit ROOT is at the box's FEET (the runner spawns units at y 0), unlike the hero root which is its body CENTRE. NO layer/mask lines, exactly like hero.tscn's HeroActor root - both bodies sit on default layer 1 'bodies', which is what makes a unit block a hero without a new layer and without touching project.godot (measured: test_unit_approach_live.gd). Unit-vs-unit blocking falls out of the same default layer but is NOT measured by this story (4-3/R21; filed deferred-work.md, owner 4-3a). This is the WHOLE collision mechanism: there is deliberately NO hurtbox and NO Area3D on this scene - a unit takes no damage until 4-3a ships one."
+editor_description = "Story 4-3 (AC 4, ruling 4-3/R17). The unit's BODY shape, sized to the existing grey box (0.6 x 1.2 x 0.6) and offset +0.6 in y for the same reason the Mesh is: the unit ROOT is at the box's FEET (the runner spawns units at y 0), unlike the hero root which is its body CENTRE. NO layer/mask lines, exactly like hero.tscn's HeroActor root - both bodies sit on default layer 1 'bodies', which is what makes a unit block a hero without a new layer and without touching project.godot (measured: test_unit_approach_live.gd). Unit-vs-unit blocking falls out of the same default layer but is NOT measured by this story (4-3/R21; filed deferred-work.md, owner 4-3a). This is the WHOLE BODY-collision mechanism, and nothing more. DEV PASS CORRECTION (story 4-3b): this description used to end 'there is deliberately NO hurtbox and NO Area3D on this scene - a unit takes no damage until 4-3a ships one', which stopped being true the moment 4-3a shipped the Hurtbox node directly below (whose own description already records that it discharged that promise), and is doubly false since 4-3b added the Hitbox. This scene now carries TWO Area3Ds - a Hurtbox it is DETECTED by and a Hitbox it DETECTS with - and neither of them is this node's business."
 
 [node name="Hurtbox" type="Area3D" parent="."]
 collision_layer = 2
@@ -29,6 +32,17 @@ editor_description = "Unit hurtbox (story 4-3a, AC 4, ruling 4-3a/R11). LAYER/MA
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
 shape = SubResource("BoxShape3D_unitbody")
 editor_description = "Mirrors the BODY collision box exactly - same shape sub-resource, same +0.6 y offset for the same reason (the unit ROOT is at the box's FEET, unlike the hero root which is its body CENTRE). Sharing the sub-resource rather than duplicating its size literal is deliberate: 'the hurtbox mirrors the body collision box' is then true by construction instead of by two numbers agreeing."
+
+[node name="Hitbox" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 2
+monitorable = false
+editor_description = "Unit hitbox (story 4-3b, AC 2). LAYER/MASK CONVENTION, the hero.tscn Hitbox verbatim: layer 3 'hitbox' (bit value 4), mask = layer 2 'hurtbox' (bit value 2), monitorable off - it DETECTS hurtboxes and is detected by nothing, so hitboxes never see hitboxes. THE EXISTING layer 3 is reused rather than a new layer authored, which is what keeps project.godot and hero.tscn BYTE-IDENTICAL through this story, exactly as 4-3a's Hurtbox reused the existing layer 2 (4-3a/R11): the hero Hurtbox and this scene's own Hurtbox already declare collision_layer = 2, so both are visible to this box with no edit on either side. NO gameplay logic here and it NEVER applies damage: the runner's _gather_unit_contact_facts queries get_overlapping_areas() ONLY while state flags this unit's ACTIVE window open (UnitBoard.is_hitbox_active_at), identity-filters self-overlaps, filters same-slot overlaps at GATHER time (no friendly fire, AC 6), and pushes facts through MatchState.push_contact; advance() step 4 decides (actors REPORT, state DECIDES). Aimed by yawing the whole ROOT from the state-owned LOCKED attack direction (AC 12) - safe on this scene, unlike the hero's, because this root carries no camera rig (DECISION A applies to hero.tscn only)."
+
+[node name="HitboxShape" type="CollisionShape3D" parent="Hitbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -0.9)
+shape = SubResource("BoxShape3D_unithitbx")
+editor_description = "Offset FORWARD along local -Z, which is this scene's forward: UnitActor.aim_at/aim_along yaw with atan2(x, z) + PI, Godot's -Z-forward convention (a Node3D looks down its own -Z). The hero's HitboxShape sits at +z 0.9 because the hero MESH carries the opposite yaw convention - same reach, mirrored axis, and getting this sign wrong ships a minion that swings backwards. Also offset +0.6 in y like every other shape on this scene, because the unit ROOT is at the box's FEET. Sized to reach a target standing at the authored unit_stop_distance: the box spans 0.2 to 1.6 forward of the unit centre, and a hero halted at 1.5 presents its hurtbox face at 1.0."
 
 [node name="Mesh" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)

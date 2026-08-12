@@ -213,6 +213,39 @@ extends Resource
 ## AUDITED > 0 for the opposite silent failure to its sibling above: a zero flat damage ships a unit
 ## that can be hit forever and never dies — the invulnerable box this story exists to replace.
 @export var unit_damage_per_hit: float = 0.0
+## Story 4-3b (AC 1): the THREE GLOBAL attack-rhythm durations every minion shares — the hero's
+## own `attack_windup_seconds` / `attack_active_seconds` / `attack_recovery_seconds` triplet
+## (33-35) applied to a unit, and authored ONCE here rather than per record for the reason
+## `unit_max_hp` states directly above: no unit differs from another yet. `4-2/R17`(c) names the
+## first story where units actually DIFFER as the only one allowed to add a differentiating field
+## to the record, and this is not that story.
+##
+## NAMING IS LOAD-BEARING, which is why AC 1 spells these three identifiers out: the balance field
+## guard is REFLECTION-BASED (test_data_resources.gd) and matches on the field NAME. Each needs all
+## four of: the `<stem>_seconds` suffix; an exactly stem-matched `<stem>_ticks` twin on
+## `BalanceTicks` FILLED by `from_config()`; an entry in `E1_BALANCE_FIELDS`; and a non-negative
+## authored value. Miss any one and the guard fails — which IS the guard working.
+##
+## PROVISIONAL, NOT TUNED. This story ships a working rhythm; the melee retune block (`E3-R/R3`,
+## re-anchored here by `4-3a/R5`) runs once this story closes and owns the real numbers. The
+## authored 0.5 / 0.2 / 0.8 is deliberately SLOWER than the hero's 0.25 / 0.15 / 0.35 — a
+## summon-tier swing a human can read and step out of (`4-3b/R9`).
+@export var minion_attack_windup_seconds: float = 0.0
+@export var minion_attack_active_seconds: float = 0.0
+@export var minion_attack_recovery_seconds: float = 0.0
+## Story 4-3b (AC 13, `4-3b/R17a`): how close a unit's ACQUIRED TARGET must be before the unit may
+## begin a windup — planar (XZ) centre-to-centre, the `unit_stop_distance` precedent for a
+## DISTANCE. Scalar, never tick-domain, for its siblings' reason above.
+##
+## MEASURED IN THE RUNNER, NEVER IN STATE (D3(b)/A2). The runner turns the acquired `[slot, index]`
+## pair into two world positions it already owns and pushes the RELATION inward as a kind-marked
+## REACH PROBE on the existing `push_contact` intake — state learns "in reach", never a position.
+##
+## AUDITED > 0 AND AUDITED >= `unit_stop_distance` (test_balance_authoring.gd), and the second bound
+## is the one that matters: a unit HALTS at `unit_stop_distance` from its target, so a reach shorter
+## than the stop distance leaves every minion parked just outside its own reach, never in reach,
+## never winding up — the whole story shipped invisible in the build with nothing failing.
+@export var minion_attack_reach_distance: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

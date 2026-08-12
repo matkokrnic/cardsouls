@@ -175,14 +175,14 @@ func test_evaluator_flag_gate_opens_and_closes_the_melee_rule() -> void:
 func test_flag_on_each_confirmed_hit_generates_the_authored_amount() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)              # active t4-7
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                    # t5: swing 0 confirmed
 	for t in range(6, 9):
 		_advance(ms)                                # t6-t8
 	_advance(ms, _intent([&"attack"]))              # t9: chain -> swing 1 (active t12-15)
 	for t in range(10, 13):
 		_advance(ms)                                # t10-t12
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                    # t13: swing 1 confirmed
 	var passive := 13 * PASSIVE_PER_TICK
 	assert_eq(ms.p2.mana.get_current(), passive,
@@ -200,7 +200,7 @@ func test_flag_on_each_confirmed_hit_generates_the_authored_amount() -> void:
 func test_flag_off_leaves_only_the_passive_rule() -> void:
 	var ms := _make_match(false)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                    # t5: hit confirmed, melee faucet closed
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "flag OFF closes ONLY the faucet — the hit still damages")
 	assert_eq(ms.p1.mana.get_current(), 5 * PASSIVE_PER_TICK,
@@ -214,7 +214,7 @@ func test_flag_off_leaves_only_the_passive_rule() -> void:
 func test_no_flags_injected_still_runs_the_ungated_passive_rule() -> void:
 	var ms := _make_match(true, false)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                    # t5
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "no flags: damage still applies")
 	assert_eq(ms.p1.mana.get_current(), 5 * PASSIVE_PER_TICK,
@@ -326,7 +326,7 @@ func test_mid_match_reload_changes_the_very_next_tick_regen_rate() -> void:
 func test_mid_match_reload_changes_the_next_hit_mana() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                    # t5: paid at the original 8.0
 	var after_first := ms.p1.mana.get_current()
 	assert_eq(after_first - ms.p2.mana.get_current(), MELEE_HIT_MANA, "first hit paid 8.0")
@@ -339,7 +339,121 @@ func test_mid_match_reload_changes_the_next_hit_mana() -> void:
 	_advance(ms, _intent([&"attack"]))              # t9: chain
 	for t in range(10, 13):
 		_advance(ms)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                    # t13: swing 1 confirmed at the NEW amount
 	assert_eq(ms.p1.mana.get_current() - ms.p2.mana.get_current(), MELEE_HIT_MANA + 20.0,
 		"the second hit paid the RELOADED amount — the rule dereferences balance inline")
+
+
+## ================================================================================================
+## STORY 4-3b (AC 7, `4-3b/R4`): A CONFIRMED HIT SOURCED FROM A UNIT GENERATES NO MANA.
+## ================================================================================================
+##
+## The `4-3a/R3` unit-TARGET precedent applied to the unit-ATTACKER side, and the mechanism is the
+## same one: a unit-sourced confirmation stays OUT of the `confirmed_hits` list `_resolve_contacts`
+## returns, which is the list `_generate_mana` awards per entry. There is deliberately no second
+## gate inside `_generate_mana` to keep in agreement with this one.
+##
+## Reason it matters: otherwise SUMMONING BECOMES A MANA ENGINE -- a player who summons and walks
+## away farms the flywheel with no risk -- and a BLOCKED hit still confirms, so blocking would not
+## even slow it down.
+
+func _config_4_3b() -> BalanceConfig:
+	# PASSIVE regen OFF (the argument), so every mana equality below measures the MELEE faucet
+	# alone -- with the file's default 30.0/s passive rate a pool drifts every tick and "no mana
+	# was generated" would be unassertable.
+	var c := _config(0.0)
+	# A NONZERO deflect cost, which this file's own `_config` never authored (it has no deflect
+	# test). Left at the 0.0 default, `can_deflect` reads `0.0 >= 0.0` -> TRUE for a hero with an
+	# EMPTY stamina pool, so the blocked-hit fixture below would silently deflect instead and
+	# measure nothing.
+	c.deflect_stamina_cost = 8.0
+	c.unit_max_hp = 9.0
+	c.unit_damage_per_hit = 3.0
+	c.minion_attack_windup_seconds = 2.0 / 60.0
+	c.minion_attack_active_seconds = 3.0 / 60.0
+	c.minion_attack_recovery_seconds = 4.0 / 60.0
+	c.minion_attack_reach_distance = 2.0
+	c.minion_retarget_interval_seconds = 1000.0
+	return c
+
+
+func _match_4_3b() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(7))
+	ms.apply_balance(_config_4_3b())
+	var f := FeatureFlags.new()
+	f.melee_mana_generation = true
+	f.minions = true
+	ms.inject_feature_flags(f)
+	ms.drain_signals()
+	return ms
+
+
+## P1 gets one unit driven into its ACTIVE window through the real reach trigger and phase ladder.
+func _p1_unit_into_active_4_3b(ms: MatchState) -> void:
+	ms.p1.units.add(9.0)
+	ms.p1.units.set_target_at(0, 1, -1)
+	ms.push_contact([0, 0], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
+	_advance(ms)
+	_advance(ms)
+	for _t in 2:
+		_advance(ms)
+
+
+## AC 7, BOTH ATTACKER KINDS IN ONE TEST, which is the only form that discriminates: the identical
+## hit from a HERO attacker still pays, and from a UNIT attacker pays nothing. A test that only
+## measured the unit case would also pass against a build where mana generation was broken outright.
+func test_a_unit_sourced_hit_pays_no_mana_while_the_same_hero_hit_still_does() -> void:
+	# (i) the HERO control: mana moves.
+	var hero_run := _make_match()
+	var hero_mana_before := hero_run.p1.mana.get_current()
+	_attack_and_advance_through(hero_run, 4)
+	hero_run.push_contact([0, -1], [1, -1], hero_run.p1.hero.attack_index, Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(hero_run)
+	var hero_gain := hero_run.p1.mana.get_current() - hero_mana_before
+	assert_true(hero_gain > 0.0,
+		"sanity: a HERO-sourced confirmed hit still pays its owner (the melee faucet is intact)")
+
+	# (ii) the UNIT case: the same landed damage, no mana on either side.
+	var ms := _match_4_3b()
+	_p1_unit_into_active_4_3b(ms)
+	var p1_mana := ms.p1.mana.get_current()
+	var p2_mana := ms.p2.mana.get_current()
+	var hp_before := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_true(ms.p2.hero.get_hp() < hp_before,
+		"sanity: the unit-sourced hit really did LAND, so the two equalities below are about a "
+		+ "CONFIRMED hit and not about a fact that was dropped")
+	assert_eq(ms.p1.mana.get_current(), p1_mana,
+		"a unit-sourced confirmation generates NO mana for its owner (AC 7) — otherwise summoning "
+		+ "becomes a mana engine")
+	assert_eq(ms.p2.mana.get_current(), p2_mana, "...and none for the target either")
+
+
+## AC 7 against a BLOCKED hit, named because it is the case the gate reasoning calls out: a blocked
+## hit STILL CONFIRMS (it is reduced, not negated), so a unit-sourced blocked hit is the one that
+## would leak mana if the gate lived anywhere other than the confirmed-hits list.
+func test_a_blocked_unit_sourced_hit_pays_no_mana_either() -> void:
+	var ms := _match_4_3b()
+	_p1_unit_into_active_4_3b(ms)
+	var p1_mana := ms.p1.mana.get_current()
+	var hp_before := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	# P2 blocks WITHOUT the stamina to deflect, so the fact degrades to a blocked (still CONFIRMED)
+	# hit rather than being fully negated.
+	ms.p2.stamina.spend(ms.p2.stamina.get_current(), 0)
+	var blocking := InputIntent.new()
+	blocking.pressed[&"block"] = true
+	blocking.held[&"block"] = true
+	var intents: Array[InputIntent] = [InputIntent.new(), blocking]
+	ms.advance(intents)
+	ms.drain_signals()
+	var damage := hp_before - ms.p2.hero.get_hp()
+	assert_true(damage > 0.0, "sanity: a BLOCKED hit still lands reduced damage, so it CONFIRMED")
+	assert_eq(ms.p1.mana.get_current(), p1_mana,
+		"a BLOCKED unit-sourced hit pays no mana either — the gate is the confirmed-hits list, not "
+		+ "a damage test, so 'blocked but confirmed' cannot slip through it")

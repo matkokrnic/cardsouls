@@ -15,8 +15,8 @@ fail=0
 echo "### state harness ###"
 state_out="$("$GODOT" --headless --path . --script res://test/run_state_tests.gd 2>&1)"
 state_exit=$?
-echo "$state_out" | grep -E "^  \[XX\]|^=== [0-9]|RESULT:|FAILED TO LOAD|^!!|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"
-if [ "$state_exit" -ne 0 ] || echo "$state_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"; then
+echo "$state_out" | grep -E "^  \[XX\]|^=== [0-9]|RESULT:|FAILED TO LOAD|^!!|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"
+if [ "$state_exit" -ne 0 ] || echo "$state_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"; then
   echo ">>> STATE HARNESS FAILED"; fail=1
 fi
 
@@ -29,8 +29,8 @@ for t in test/integration/test_*.gd; do
   echo "--- $t ---"
   t_out="$("$GODOT" --headless --path . --script "res://$t" 2>&1)"
   t_exit=$?
-  echo "$t_out" | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"
-  if [ "$t_exit" -ne 0 ] || echo "$t_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED"; then
+  echo "$t_out" | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"
+  if [ "$t_exit" -ne 0 ] || echo "$t_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"; then
     echo ">>> FAILED: $t"; fail=1
   fi
 done

@@ -61,4 +61,11 @@ func _initialize() -> void:
 		print("  FAILED: " + f)
 	print("clips found: %s" % [names])
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	# Review fix pass (4-3b, F4): `instantiate()` above is never added to the tree, so it was
+	# never freed either -- a leaked Node whose physics shapes (hero.tscn's hurtbox/hitbox
+	# Area3Ds) leaked their Jolt RIDs with it. Measured cause of the "N RID allocations ... were
+	# leaked at exit" errors the tightened harness now catches (a loose harness let a PASSing run
+	# hide them). Freed explicitly rather than added to the tree and freed there: this file reads
+	# scene structure only and never runs a frame, so there is no teardown seat to ride on.
+	hero.free()
 	quit(0 if ok else 1)

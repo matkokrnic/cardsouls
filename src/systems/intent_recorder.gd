@@ -188,15 +188,31 @@ func capture_set_camera_basis(slot: int, camera_basis: Basis) -> void:
 ## by assuming -1 would silently replay a unit hit as a hero hit. `record_file` refuses a mismatched
 ## version outright with a reason and carries no migration path, and that refusal IS the design.
 ##
-## THE CHANNEL SET IS UNCHANGED. No new capture channel joins the recorder, `push_contact` remains
-## the sole intake per 1-8, and the reflective `_resource_values()` helper is untouched -- it
+## STORY 4-3b (AC 3 + AC 13, `4-3b/R21`): THE ROW GROWS AGAIN, FIVE -> SEVEN, and for the same class
+## of reason -- two more scalars on the same row, no new channel.
+##   * AC 3 widens the ATTACKER from a bare slot to a `[slot, index]` ADDRESS, kind-agnostic exactly
+##     as the target already is (`index == -1` is that slot's hero). FLATTENED into the row like the
+##     target pair before it, so every element stays a scalar.
+##   * AC 13 adds the KIND MARKER distinguishing a REACH PROBE from a STRIKE. Without it a probe
+##     would replay as a landed hit and deal damage.
+## `RecordFile.FORMAT_VERSION` BUMPS TO 4 for this: a v3 row has neither element, and rebuilding
+## them by assuming `-1` and `CONTACT_STRIKE` would silently replay a MINION's swing as its owner
+## HERO's, and a harmless probe as a real hit. `record_file` refuses a mismatched version outright
+## with a reason and carries no migration path, and that refusal IS the design.
+##
+## THE CHANNEL SET IS UNCHANGED, and this story MEASURED that rather than inheriting it (its own
+## Open Question 2 made the bump conditional on the answer). No new capture channel joins the
+## recorder; `push_contact` remains the sole intake per 1-8, taking one more PARAMETER rather than
+## gaining a sibling method -- which is what keeps `RecordFile.REQUIRED_KEYS` unmoved, since the
+## marker rides the existing row. The reflective `_resource_values()` helper is untouched: it
 ## serialises RESOURCES (balance, flags, costs, effects), and a contact fact is not one.
-func capture_push_contact(attacker_slot: int, target: Array[int], attack_index: int,
-		target_to_attacker: Vector2) -> void:
+func capture_push_contact(attacker: Array[int], target: Array[int], attack_index: int,
+		target_to_attacker: Vector2, kind: int) -> void:
 	var tick := _tick + 1
 	if not _contacts.has(tick):
 		_contacts[tick] = []
-	_contacts[tick].append([attacker_slot, target[0], target[1], attack_index, target_to_attacker])
+	_contacts[tick].append([attacker[0], attacker[1], target[0], target[1], attack_index,
+			target_to_attacker, kind])
 
 
 ## The INTENT channel — MatchState.advance(). Retains the two per-tick value objects by
@@ -373,11 +389,13 @@ func replay_push_camera_bases(ms: MatchState, tick: int) -> void:
 ## The seam is unchanged — it has accepted facts from whoever pushes them since 1-5.
 func replay_push_contacts(ms: MatchState, tick: int) -> void:
 	for fact: Array in contacts_at(tick):
-		# Story 4-3a: the five-element row rebuilt into the seam's `[slot, index]` target pair. The
-		# recorded row is FLAT and the pair is reassembled here, at the one place that re-enters the
-		# seam -- so the record stays scalars-only and the seam stays pair-shaped.
-		ms.push_contact(int(fact[0]), [int(fact[1]), int(fact[2])], int(fact[3]),
-				fact[4] as Vector2)
+		# Story 4-3a / 4-3b: the SEVEN-element row rebuilt into the seam's two `[slot, index]` pairs
+		# plus its kind marker. The recorded row is FLAT and BOTH pairs are reassembled here, at the
+		# one place that re-enters the seam -- so the record stays scalars-only and the seam stays
+		# pair-shaped. Guaranteed seven by RecordFile's format_version check; a shorter v3 row never
+		# reaches a replay.
+		ms.push_contact([int(fact[0]), int(fact[1])], [int(fact[2]), int(fact[3])], int(fact[4]),
+				fact[5] as Vector2, int(fact[6]))
 
 
 ## One slot's recorded intent for `tick`, as a FRESH InputIntent — never the retained instance.

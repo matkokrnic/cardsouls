@@ -43,6 +43,14 @@ var reshuffle_vulnerable_window_ticks: int
 ## tick. Zero is therefore a legal in-test value; the AUTHORED value is audited > 0 for the reason
 ## balance_config.gd states at the field.
 var minion_retarget_interval_ticks: int
+## Story 4-3b (AC 1): the unit attack rhythm in TICKS — the `attack_*_ticks` triplet below verbatim,
+## for a unit instead of a hero. PLAIN `seconds_to_ticks()` calls with NO clamp of their own: unlike
+## `minion_retarget_interval_ticks` above these are DURATIONS, not a modulo divisor, and
+## `seconds_to_ticks()` already clamps any non-zero authored duration to >= 1 tick. A 0.0-authored
+## phase would derive 0 ticks, which the authoring audit forbids for the shipped .tres.
+var minion_attack_windup_ticks: int
+var minion_attack_active_ticks: int
+var minion_attack_recovery_ticks: int
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -67,6 +75,12 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# The clamp is HERE, at the single conversion boundary, so no consumer can read an unclamped 0.
 	t.minion_retarget_interval_ticks = maxi(1,
 			TimingWindow.seconds_to_ticks(config.minion_retarget_interval_seconds))
+	t.minion_attack_windup_ticks = TimingWindow.seconds_to_ticks(
+			config.minion_attack_windup_seconds)
+	t.minion_attack_active_ticks = TimingWindow.seconds_to_ticks(
+			config.minion_attack_active_seconds)
+	t.minion_attack_recovery_ticks = TimingWindow.seconds_to_ticks(
+			config.minion_attack_recovery_seconds)
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)

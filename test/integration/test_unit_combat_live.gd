@@ -235,10 +235,40 @@ func _report() -> bool:
 			and is_equal_approx(_state.p2.units.hp_at(0), 0.0)
 	if not _enemy_died:
 		_detail += " enemy_alive(hp=%.2f swings=%d);" % [_state.p2.units.hp_at(0), _swings]
-	# AC 6: the hero's OWN unit, in the same volume, took nothing at all.
-	_friendly_untouched = is_equal_approx(_state.p1.units.hp_at(0), _unit_max_hp)
-	if not _friendly_untouched:
-		_detail += " friendly_damaged(hp=%.2f of %.2f);" % [_state.p1.units.hp_at(0), _unit_max_hp]
+	# AC 6: the hero's OWN unit, in the same volume, was never the TARGET OF A FACT this hero
+	# sourced -- measured at the FACT level rather than by hp.
+	#
+	# CORRECTED BY STORY 4-3b, AND THE OLD INSTRUMENT WAS INVALIDATED RATHER THAN WEAKENED. This
+	# read `p1.units.hp_at(0) == unit_max_hp` -- correct when it was written, because in `4-3a` a
+	# unit was a TARGET and nothing else, so the only thing that could move that hp was the
+	# friendly-fire filter leaking. `4-3b` makes a unit an ATTACKER: P2's enemy unit, parked in
+	# this same cluster, now legitimately attacks P1's hero and cleaves P1's unit standing beside
+	# it. That is the system WORKING, and it moves the hp for a reason that has nothing to do with
+	# this file's claim. MEASURED at 4-3b's dev pass: the friendly unit ends at 6.00 of 9.00,
+	# every other assertion in this file still passing.
+	#
+	# THE FACT IS THE THING THE FILTER ACTUALLY CONTROLS, and the new form is STRICTER, not looser:
+	# the recorder tap runs immediately BEFORE `push_contact`, so a same-slot fact that slipped the
+	# gather filter would be RECORDED here and only then trip the seam's Invariant -- which
+	# headless PRINTS and continues. So this count falls exactly where an `Invariant.check` cannot
+	# be proven by firing it. It is PAIRED against opposing-slot facts from this same hero, so it
+	# cannot pass by nothing ever being gathered.
+	var same_slot := 0
+	var opposing := 0
+	var recorder: IntentRecorder = _runner._recorder
+	for tick in range(PLACE_FRAME, recorder.tick_count() + 1):
+		for row: Array in recorder.contacts_at(tick):
+			if int(row[0]) == int(row[2]):
+				same_slot += 1
+			elif int(row[0]) == 0 and int(row[1]) == TargetingService.HERO_INDEX:
+				opposing += 1
+	_friendly_untouched = same_slot == 0 and opposing > 0
+	if same_slot > 0:
+		_detail += " same_slot_facts=%d(the friendly-fire filter leaked);" % same_slot
+	if opposing == 0:
+		_detail += " hero_sourced_no_facts_at_all(AC 6 would be vacuous);"
+	var note := " [4-3b: friendly unit hp %.2f of %.2f -- moved by P2's OWN minion attacking it," 			% [_state.p1.units.hp_at(0), _unit_max_hp]
+	_detail += note + " never by friendly fire]"
 	# AC 11: the corpse's actor is out of the tree, and its array slot is a HOLE at the SAME index.
 	_enemy_actor_freed = _unit_actor(1, 0) == null
 	if not _enemy_actor_freed:

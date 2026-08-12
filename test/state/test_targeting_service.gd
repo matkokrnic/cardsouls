@@ -357,10 +357,16 @@ func test_every_board_bound_guard_is_wired_to_that_predicate() -> void:
 		assert_true(line.contains("has_index("),
 			"every bound guard consults the public predicate rather than re-deriving the bound: %s"
 					% line.strip_edges())
-	assert_eq(checks, 6,
-		"SIX bound guards ship as of story 4-3a (target_at, target_slot_at, target_index_at, "
-		+ "set_target_at, and the two new hp seats hp_at + apply_damage_at) — a new "
-		+ "accessor without one, or one whose guard was dropped, moves this count")
+	assert_eq(checks, 15,
+		"FIFTEEN bound guards ship as of story 4-3b — the six of 4-3a (target_at, target_slot_at, "
+		+ "target_index_at, set_target_at, hp_at, apply_damage_at) plus NINE attack-rhythm seats "
+		+ "(attack_phase_at, attack_ticks_at, attack_dir_at, attack_count_at, is_in_reach_at, "
+		+ "mark_in_reach_at, set_attack_dir_at, begin_windup_at, set_phase_at). A new accessor "
+		+ "without one, or one whose guard was dropped, moves this count. `is_hitbox_active_at` "
+		+ "and `tick_attack_timers` carry NO Invariant.check and are deliberately absent: the "
+		+ "first is a lenient predicate on the `is_alive_at` precedent (a runner poll may ask "
+		+ "about an index the board has not caught up to), the second iterates the array itself "
+		+ "and has no index to bound")
 
 
 # ---------------------------------------------------------------- AC 7 / AC 11, the throttled tick

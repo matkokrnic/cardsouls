@@ -555,3 +555,52 @@ func _code_lines(path: String) -> Array[String]:
 			line = line.substr(0, hash_idx)
 		out.append(line)
 	return out
+
+
+## ================================================================================================
+## STORY 4-3b (AC 3, `4-3b/R15`): THE SIGNALS DO NOT WIDEN WITH THE FACT.
+## ================================================================================================
+##
+## AC 3 widens the contact FACT's attacker from a bare slot to a `[slot, index]` address, and scopes
+## that widening to the fact DICTIONARY alone. `hit_landed` and `deflect_landed` keep a typed BARE
+## INT attacker, because both shipped consumers UNDERSCORE it and gate solely on the TARGET slot --
+## so a minion damaging a hero already flashes and stings the correct hero with NO change at all,
+## and widening the payload would break two typed callbacks for zero behavioural gain.
+##
+## SCANNED RATHER THAN CALLED, because the failure this guards is a SIGNATURE change, and a
+## signature is not observable from an emission: a `hit_landed(attacker: Array, ...)` would still
+## emit, still reach a consumer, and still pass every behavioural test in the suite while breaking
+## `telegraph_controller.gd`'s typed callback at runtime in the live build only.
+##
+## THE PROOF RUNS FALLING, on this file's own standing discipline: the patterns are asserted against
+## the exact strings they exist to catch AND against the widened forms they exist to reject, so a
+## regex that matched everything (or nothing) fails here rather than passing silently.
+func test_the_contact_signals_keep_a_bare_int_attacker() -> void:
+	var lines := _code_lines("res://src/state/match_state.gd")
+	assert_true(lines.size() > 0, "the source was read (a guard over nothing is vacuous)")
+	var expected := {
+		"hit_landed":
+			"signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float)",
+		"deflect_landed": "signal deflect_landed(attacker_slot: int, target_slot: int)",
+	}
+	var found: Dictionary = {}
+	for line in lines:
+		var stripped := line.strip_edges()
+		for name: String in expected:
+			if stripped.begins_with("signal %s(" % name):
+				found[name] = stripped
+	for name: String in expected:
+		assert_true(found.has(name), "the `%s` declaration was found at all" % name)
+		if found.has(name):
+			assert_eq(found[name], expected[name],
+				("`%s` still takes a typed BARE INT attacker (`4-3b/R15`) — AC 3's widening is "
+				+ "scoped to the FACT DICTIONARY. Its two shipped consumers underscore the "
+				+ "attacker and gate on the target, so a minion damaging a hero already flashes "
+				+ "the right hero; widening this payload breaks two typed callbacks for zero "
+				+ "behavioural gain, and a dev pass reading AC 3 literally must not do it") % name)
+	# ...and the guard FALLS: the widened forms it exists to reject do not match the pins above.
+	assert_ne(expected["hit_landed"],
+		"signal hit_landed(attacker: Array[int], target_slot: int, damage: float, target_hp: float)",
+		"sanity: the widened attacker form is a DIFFERENT string, so the equality above discriminates")
+	assert_ne(expected["deflect_landed"], "signal deflect_landed(attacker: Array[int], target_slot: int)",
+		"sanity: and so is the deflect one")

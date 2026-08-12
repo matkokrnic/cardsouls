@@ -181,7 +181,7 @@ func _poison_record() -> IntentRecorder:
 	effects[&"poison_card"] = poison_effect
 	record.capture_inject_card_effects(effects)
 	record.capture_set_camera_basis(0, Basis(Vector3.UP, deg_to_rad(90.0)))
-	record.capture_push_contact(0, [1, -1], 0, Vector2(-1, 0))
+	record.capture_push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
 	for _tick in 4:
 		var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 		record.capture_advance(intents)

@@ -111,8 +111,27 @@ const HASHED: Array[String] = [
 	# It reaches the hash through `PlayerState.to_snapshot()`'s `unit_hp` key, so no exemption is
 	# needed and UNHASHED_CROSS_TICK_MEMBERS stays at THREE. This is also the HOLE representation
 	# (AC 7) — a dead unit is a 0.0 at a stable index — so the hole is hashed too, by construction.
+	# Story 4-3b (AC 16, `4-3b/R14` as amended): the five attack-rhythm arrays and the unit dedupe
+	# records classify HASHED, for the SAME reason `_hp` did and not a weaker one. Every one of them
+	# CROSSES TICKS AND DECIDES AN OUTCOME — the phase and countdown decide when the hitbox opens,
+	# the locked direction decides where the swing points, the counter keys the dedupe records, the
+	# in-reach flag is the cross-tick carrier between a probe and the windup it permits, and the
+	# records decide whether a second fact lands. A replay whose units carried a different phase or
+	# a different hit list would diverge the moment one of them swung.
+	#
+	# ALL SIX REACH THE HASH through `PlayerState.to_snapshot()`'s six new keys, so no exemption is
+	# needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE — which is what keeps AC 10's
+	# replay-parity claim honest for this story's new cross-tick state: there is no fourth unhashed
+	# member to argue about.
+	#
+	# `unit_swing_dedupe` IS THE UNIT TWIN OF `hero_state._swing_dedupe` BELOW, which has classified
+	# HASHED since 1-5 for the identical reason ("mid-swing dedupe state excluded from the snapshot
+	# would be a determinism/replay hole"). Two attacker kinds, one classification.
 	"player_state.units", "unit_board._target_slots", "unit_board._target_indices",
 	"unit_board._hp",
+	"unit_board._attack_phase", "unit_board._attack_ticks", "unit_board._attack_dir",
+	"unit_board._attack_count", "unit_board._in_reach",
+	"player_state.unit_dedupe", "unit_swing_dedupe._records",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
 	"hero_state.move_speed", "hero_state.windup", "hero_state.active", "hero_state.recovery",
@@ -406,8 +425,8 @@ func _record_a_driven_run() -> Dictionary:
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
 			ms.set_camera_basis(int(push[0]), push[1] as Basis)
 		if t == CONTACT_TICK:
-			record.capture_push_contact(0, [1, -1], 0, Vector2(-1, 0))
-			ms.push_contact(0, [1, -1], 0, Vector2(-1, 0))
+			record.capture_push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
+			ms.push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
 		var intents := _intents(t)
 		record.capture_advance(intents)
 		ms.advance(intents)
@@ -558,9 +577,13 @@ func _costs() -> Dictionary[StringName, CardCastCondition]:
 ## The runtime state carriers under src/state/, by file stem. Kept as an explicit list (rather
 ## than "everything not exempt") so a NEW state file cannot slip through unclassified.
 func _known_runtime_state_file(stem: String) -> bool:
+	# Story 4-3b: `unit_swing_dedupe` joins the list as a RUNTIME STATE file -- the unit-attacker
+	# twin of `hero_state._swing_dedupe`, holding per-swing hit lists that cross ticks. It is NOT
+	# exempt: its one member is classified HASHED above, reaching the snapshot through the
+	# `unit_swing_dedupe` key.
 	return ["match_state", "player_state", "hero_state", "deck", "hand", "discard_pile",
-		"unit_board", "pitch_state", "mana_pool", "orb_pool", "stamina_pool", "signal_queue",
-		"timing_window"].has(stem)
+		"unit_board", "unit_swing_dedupe", "pitch_state", "mana_pool", "orb_pool", "stamina_pool",
+		"signal_queue", "timing_window"].has(stem)
 
 
 func _declared_members(path: String) -> Array[String]:

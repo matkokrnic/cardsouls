@@ -64,6 +64,17 @@ var discard: DiscardPile
 ## `card_effect.gd` anti-precedent `E4-P/R2` names.
 var units: UnitBoard
 
+## Story 4-3b (AC 16, `4-3b/R14`): the unit-attacker SWING DEDUPE RECORDS, held BESIDE the board
+## rather than on it. `unit_board.gd`'s own header rule forbids a non-scalar per-record field and a
+## dedupe record is a list of target addresses, so this is the one piece of unit attack state the
+## board structurally cannot carry — the cost `4-3b/R14` accepted by name.
+##
+## OWNED BY PlayerState LIKE THE BOARD, cleared in the same debug-reset seat, and reached from the
+## same single writer family: `MatchState`'s step-4 contact resolution registers into it, and its
+## step-3 unit seat opens and closes records. Nothing outside `advance()` mutates it, and nothing
+## anywhere is handed a live record.
+var unit_dedupe: UnitSwingDedupe
+
 ## Story 3-5b (AC 3): the PENDING REPLACEMENT DRAW — a TimingWindow plus an owed COUNTER, the
 ## pair 3-5a's instant refill becomes once the replacement is a debt instead of an event. The
 ## window is advanced at MatchState.advance() step 2 beside the hero/pool timers; DELIVERY is
@@ -136,6 +147,7 @@ func _init(queue: SignalQueue) -> void:
 	hand = Hand.new()
 	discard = DiscardPile.new()
 	units = UnitBoard.new()
+	unit_dedupe = UnitSwingDedupe.new()
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
 
@@ -276,4 +288,35 @@ func to_snapshot() -> Dictionary:
 		# re-baseline scope) -- so there is no behavioural cause to measure separately here. The
 		# story's SECOND named cause is elsewhere entirely: the widened swing-dedupe key shape.
 		"unit_hp": units.hp_snapshot(),
+		# Story 4-3b (AC 16): the unit ATTACK RHYTHM joins the hash — SIX new keys, and the count is a
+		# DEV-PASS MEASUREMENT the story deliberately declined to assert, because the board's own
+		# precedent runs both ways (one array -> one key for `unit_hp`, two arrays -> one FUSED key
+		# for `unit_targets`). MEASURED HERE AS SIX: TWELVE -> EIGHTEEN.
+		#
+		# FIVE OF THE SIX ARE ONE-ARRAY-ONE-KEY, on the `unit_hp` side of that precedent, because
+		# they are five INDEPENDENT facts rather than one fact expressed severally. `unit_targets`
+		# fuses a slot and an index because a target IS one fact in two ints and splitting it would
+		# let the halves drift into different keys; a phase and a countdown are not two halves of one
+		# int pair, and fusing them would hide WHICH of them moved when the golden moves. The sixth is
+		# the dedupe records, which are not on the board at all (see `unit_dedupe` above).
+		#
+		# EVERY ONE OF THEM CROSSES TICKS AND DECIDES AN OUTCOME, which is the `4-3a/R17` test for
+		# whether a value may sit outside the hash: the phase and countdown decide when the hitbox
+		# opens, the locked direction decides where the swing points, the counter keys the dedupe
+		# records, the in-reach flag is the cross-tick carrier between a probe and the windup it
+		# permits, and the dedupe records decide whether a second fact lands. None can be recomputed
+		# for free inside the tick that reads it.
+		#
+		# STILL COUNTS AND VALUES, NEVER IDENTITIES. Ints, bools, `Vector2`s and arrays of ints —
+		# every one of them a type `CanonicalHash` has an explicit branch for. No StringName (whose
+		# `sort()` orders by internal POINTER on this engine), no object, and no position: the locked
+		# DIRECTION is a normalised heading derived by the runner from two positions, the same class
+		# of position-DERIVED datum the contact fact's `dir` has carried legally since 1-8, and
+		# `4-3/R2` bans state OWNING a position, not learning a direction.
+		"unit_attack_phase": units.attack_phase_snapshot(),
+		"unit_attack_ticks": units.attack_ticks_snapshot(),
+		"unit_attack_dir": units.attack_dir_snapshot(),
+		"unit_attack_count": units.attack_count_snapshot(),
+		"unit_in_reach": units.in_reach_snapshot(),
+		"unit_swing_dedupe": unit_dedupe.snapshot(),
 	}

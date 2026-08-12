@@ -286,6 +286,47 @@ func test_authored_minion_combat_values_are_positive() -> void:
 		+ "decisive event this story ships (got %d)" % hits_to_kill)
 
 
+## ---- Minion attack rhythm (story 4-3b, AC 1/AC 13) -------------------------------------
+##
+## THREE DURATIONS AUDITED > 0, for the failure the `>= 0.0` reflection loop cannot see: a
+## 0.0-authored phase derives 0 TICKS out of `seconds_to_ticks()`, and a phase of zero ticks
+## completes on the tick it starts — a minion whose whole rhythm collapses to nothing, swinging
+## every tick with no readable windup. Zero stays a legal IN-TEST value (no golden fixture authors
+## any of the three); it is the AUTHORED value that must be positive.
+##
+## THE REACH IS AUDITED AGAINST `unit_stop_distance`, AND THAT BOUND IS THE LOAD-BEARING ONE. A unit
+## HALTS at `unit_stop_distance` from its acquired target (`4-3` AC 2), so an authored reach SHORTER
+## than the stop distance parks every minion permanently just outside its own reach: no probe fact
+## ever reports in-reach, no windup ever begins, and the entire story ships invisible in the build
+## with every test still green. This is the `4-3b` twin of the `unit_move_speed > 0` audit and it
+## exists for the identical class of silent failure.
+##
+## NO CEILING ON THE THREE DURATIONS. They are PROVISIONAL by AC 1 and the melee retune (`E3-R/R3`)
+## owns the real numbers; a band authored here would be this pass guessing at that block's output.
+func test_authored_minion_attack_rhythm_is_playable() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.minion_attack_windup_seconds > 0.0,
+		"minion_attack_windup_seconds must be authored > 0 (a zero derives 0 ticks and the phase "
+		+ "completes on the tick it starts — no readable windup at all)")
+	assert_true(config.minion_attack_active_seconds > 0.0,
+		"minion_attack_active_seconds must be authored > 0 (a zero-tick active window never flags "
+		+ "the hitbox, so the swing can never land a fact)")
+	assert_true(config.minion_attack_recovery_seconds > 0.0,
+		"minion_attack_recovery_seconds must be authored > 0 (a zero recovery makes the rhythm the "
+		+ "unit's only limiter meaningless — AC 11 has no other gate)")
+	assert_true(config.minion_attack_reach_distance > 0.0,
+		"minion_attack_reach_distance must be authored > 0 (a zero reach is never satisfied, so no "
+		+ "unit ever leaves idle)")
+	assert_true(config.minion_attack_reach_distance >= config.unit_stop_distance,
+		("minion_attack_reach_distance (%.2f) must be >= unit_stop_distance (%.2f) — a unit halts "
+		+ "at the stop distance, so a shorter reach parks it permanently outside its own reach and "
+		+ "the story ships invisible with every test green")
+				% [config.minion_attack_reach_distance, config.unit_stop_distance])
+
+
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
 
 func test_authored_defense_values_are_sane() -> void:

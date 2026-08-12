@@ -48,9 +48,22 @@ const VULNERABLE_TICKS := 7
 ## is the story that moves the pin, deliberately and in both places.
 ## DELIBERATELY EXTENDED AGAIN BY STORY 4-3a (AC 9, `4-3a/R17`), the TWELFTH key: `unit_hp`, one
 ## float per unit record in board-index order. Same mechanism, third time, both pins moved together.
+## DELIBERATELY EXTENDED AGAIN BY STORY 4-3b (AC 16, `4-3b/R14` as amended), TWELVE -> EIGHTEEN:
+## the unit ATTACK RHYTHM contributes SIX keys — `unit_attack_phase`, `unit_attack_ticks`,
+## `unit_attack_dir`, `unit_attack_count`, `unit_in_reach` and `unit_swing_dedupe`. Same mechanism,
+## fourth time, both pins moved together and deliberately.
+##
+## SIX IS A MEASUREMENT, NOT A NUMBER THE STORY ASSERTED. `4-3b` named six CONTRIBUTING FIELDS and
+## refused to predict the count, because the board's own precedent runs both ways (one array -> one
+## key for `unit_hp`, two arrays -> one FUSED key for `unit_targets`), so the answer depended on how
+## the dev pass grouped fields into logical facts. Measured: every one of the six named fields
+## surfaced as its own key, and NONE required a stated reason for not surfacing. See
+## `player_state.gd` at these keys for why five of them are one-array-one-key rather than fused.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-	"pending_draw", "pending_draw_owed", "stamina", "unit_count", "unit_hp", "unit_targets",
+	"pending_draw", "pending_draw_owed", "stamina",
+	"unit_attack_count", "unit_attack_dir", "unit_attack_phase", "unit_attack_ticks",
+	"unit_count", "unit_hp", "unit_in_reach", "unit_swing_dedupe", "unit_targets",
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the
@@ -329,7 +342,7 @@ func test_the_player_snapshot_key_set_is_exactly_the_expected_set() -> void:
 	keys.sort()
 	assert_eq(keys, EXPECTED_PLAYER_SNAPSHOT_KEYS,
 		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count; "
-		+ "4-2 added unit_targets; 4-3a added unit_hp)")
+		+ "4-2 added unit_targets; 4-3a added unit_hp; 4-3b added the six unit attack-rhythm keys)")
 	assert_false(keys.has("vulnerable_window"),
 		"the vulnerable window is NOT a snapshot key — nothing reads it, so nothing can desync on it")
 

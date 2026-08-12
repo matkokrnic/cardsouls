@@ -132,7 +132,16 @@ var _deflect_closed_this_tick := false
 var _roll_iframe_closed_this_tick := false
 
 ## Story 1-5 (B7b/N2): per-swing dedupe records, keyed by attack_index. Each record is
-## {"hit": Array[int] of target slots already damaged this swing, "grace": int}. grace
+## {"hit": Array of [slot, index] TARGET ADDRESSES already resolved this swing, "grace": int}.
+##
+## DEV PASS CORRECTION (story 4-3b): this line documented the hit list as "Array[int] of target
+## slots" until now, which stopped being true when `4-3a` widened the key to full `[slot, index]`
+## addresses (`4-3a/R16`) — and the neighbouring `register_swing_hit` docstring has stated the
+## correct shape since that story ("THE HIT LIST THEREFORE HOLDS PAIRS, NOT INTS"). The two
+## descriptions of one field disagreed for a whole story. Corrected here rather than left, because
+## `4-3b` rewrites this mechanism for a SECOND attacker kind (`UnitSwingDedupe`), which makes this
+## the right place: a reader building the unit twin from the wrong description would key it by slot
+## and silently lose every cleave. grace
 ## semantics: -1 = the swing's active window has not closed yet (record alive); 1 = window
 ## closed, record lives exactly ONE more tick (absorbs the F1 one-tick fact lag — a
 ## contact gathered on the last active tick arrives the tick after close and is still

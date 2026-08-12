@@ -95,6 +95,21 @@ var replay_record: IntentRecorder = null
 ## any consumer to the public member above is what makes the inertness test go red.
 var _replay_record: IntentRecorder = null
 ## Ticks replayed so far — the cursor the recorded facts, bases and reload events are keyed by.
+## Story 4-3b (AC 13, `4-3b/R17b`): the REACH-PROBE cadence counter. RUNNER-LOCAL and PRIVATE,
+## reading the SAME authored `minion_retarget_interval_ticks` the state layer's own throttled
+## targeting reads -- rather than a new public tick accessor on MatchState, whose `_tick` is private
+## and surfaced only inside `to_snapshot()`. Incremented once per TICKING frame in the live gather
+## branch only: a replay drains recorded facts and never gathers, so this counter is never consulted
+## there and cannot desync a replay from its recording. Reset to 0 by `_relay_round_started` on a
+## debug reset (review fix pass F3a).
+##
+## ONE COUNTER, SHARED ACROSS BOTH SLOTS (review fix pass F3b, documented rather than changed):
+## `_gather_unit_facts` reads this same field for slot 0 and slot 1 both, so both players' minions
+## probe on the same tick rather than each slot carrying its own phase. Deterministic and harmless
+## today -- nothing depends on the two slots probing on staggered ticks -- so this is a NAMED
+## coupling, not an oversight, for the next person who touches it.
+var _probe_counter := 0
+
 var _replay_tick := 0
 
 ## Story 3-0b (AC 1): the match-global DEBUG step/pause reader — a NON-Controller member of
@@ -618,6 +633,16 @@ func _relay_round_started() -> void:
 	# observation seam ship for it, which is what AC 8 asks for. `_end_round` is untouched, so the
 	# board survives the round-over freeze and only a reset clears it.
 	_free_unit_actors()
+	# Review fix pass (4-3b, F3a): the REACH-PROBE cadence counter is RUNNER-LOCAL (state has no
+	# seat for it), so the debug reset -- a src/state/ event -- cannot clear it directly; this is
+	# the one relay `round_started` fires only FROM a debug reset (`match_state.gd:1215`), so it is
+	# the reset seat for runner-local state generally and the counter belongs with the actors above.
+	# Without this, a reset leaves the cadence carrying an ARBITRARY PHASE from the previous run
+	# rather than restarting it at tick zero. REPLAY IS UNAFFECTED: this counter only gates which
+	# tick GATHERS a probe fact (`_gather_unit_facts`'s `probing` read); replay drains previously
+	# TAPPED facts and never gathers, so the drifted phase is never consulted there and cannot
+	# desync a replay from its recording.
+	_probe_counter = 0
 
 
 ## Story 4-1 (AC 7): bring slot `slot`'s spawned actors up to `count`. See the call site for why
@@ -685,6 +710,20 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 			continue
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
+			continue
+		# Story 4-3b (AC 12): A UNIT THAT IS SWINGING IS AIMED FROM ITS LOCKED DIRECTION, not at its
+		# live target. The direction locks at windup start and must NOT be recomputed -- that is the
+		# whole point of the lock -- and the unit's Hitbox is a CHILD of the root this yaw turns, so
+		# continuing to aim at the target through a windup would swing the hitbox after a target that
+		# stepped aside. That is precisely the late-locking tracking `4-3b/R9` defers to per-kind
+		# movesets; a swing that misses because the target moved is the intended summon-tier feel.
+		#
+		# THE STATE LAYER DECIDED IT, THIS READS THE ANSWER -- the same told-the-answer relationship
+		# the acquired target pair below already has. A unit that has never had a fact against its
+		# target carries a zero heading, and `aim_along` KEEPS the current rotation for it rather
+		# than snapping to an arbitrary one (its own no-direction precedent).
+		if player.units.attack_phase_at(index) != UnitBoard.AttackPhase.IDLE:
+			(unit as UnitActor).aim_along(player.units.attack_dir_at(index))
 			continue
 		var target_slot := player.units.target_slot_at(index)
 		if target_slot == TargetingService.NO_TARGET_SLOT:
@@ -902,8 +941,178 @@ func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroA
 		# through physics on replay was REJECTED at 1-7's gate (D-4) because it would hang
 		# replay soundness on Jolt bit-determinism.
 		var fact_dir := dir.normalized()
-		_recorder.capture_push_contact(attacker_slot, address, attack_index, fact_dir)
-		_match_state.push_contact(attacker_slot, address, attack_index, fact_dir)
+		# Story 4-3b (AC 3): the ATTACKER is an ADDRESS now, and a hero's is `[slot, -1]` -- the
+		# same `4-2/R2` convention the target has used since 4-3a, so this call resolves to the
+		# identical PlayerState and the identical hashed outcomes the bare int produced. Stated
+		# literally rather than derived through `_address_of`: a hero attacker is never anything
+		# else here, and deriving it would be indirection with one possible answer. Kind is
+		# CONTACT_STRIKE -- a hero's hitbox produces landed swings and nothing else; the REACH
+		# PROBE is a unit-only fact (AC 13).
+		var attacker_address: Array[int] = [attacker_slot, TargetingService.HERO_INDEX]
+		_recorder.capture_push_contact(attacker_address, address, attack_index, fact_dir,
+			MatchState.CONTACT_STRIKE)
+		_match_state.push_contact(attacker_address, address, attack_index, fact_dir,
+			MatchState.CONTACT_STRIKE)
+
+
+## Story 4-3b (AC 2/AC 3/AC 5/AC 6): step-2 contact-fact gathering for one slot's UNITS -- the
+## `_gather_contact_facts` sibling directly above, and deliberately its SHAPE rather than a branch
+## inside it: the attacker loop, the active-window gate and the attack-index source all differ, and
+## the two would share only the per-overlap body.
+##
+## THE SAME PIPELINE A HERO'S SWING USES, WHICH IS AC 2's WHOLE POINT. A unit's hitbox is a real
+## `Area3D` queried with `get_overlapping_areas()` while state flags ITS OWN active window open, and
+## the result enters through `push_contact`, the sole intake. There is deliberately NO abstract
+## cadence that damages the acquired target without an overlap: an abstract resolution is an
+## UNAVOIDABLE hit, which is the mob-feel finding `4-3` already made one layer up, repeating at the
+## minion's own attack if this story took the shortcut. A unit whose window is open but whose hitbox
+## touches nothing therefore deals nothing.
+##
+## THE ACTIVE-WINDOW GATE IS THE BOARD'S OWN PREDICATE, `is_hitbox_active_at` -- never a re-derived
+## `phase == ACTIVE` inline, on the `is_alive_at` precedent (`4-3a/R14`): a guard consulting a copy
+## is guarding the copy.
+##
+## THE LOOP SHAPE IS `_aim_unit_actors`' VERBATIM, including every reason it has: bounded by the
+## ACTORS (the array can be one frame shorter than the board), the index checked against the BOARD,
+## `is_instance_valid()` guarded, and the liveness seat consulted -- a corpse's actor is freed after
+## `advance()`, but a unit killed between gathers must not still be swinging.
+##
+## NO FRIENDLY FIRE, FILTERED AT GATHER TIME BY OWNER SLOT (AC 6, `4-3b/R3`/`R16`) -- never by
+## collision layer, and never on the resolution ladder. The structural reason is `push_contact`'s
+## own invariant: it asserts `attacker_slot != target_slot`, and under the headless runner
+## `Invariant.check` does NOT halt the process on violation -- it push_errors, then `assert()`
+## aborts only the current call (push_contact returns without effect) and the engine keeps
+## running (measured: test/run_all.sh's own PASS/FAIL grep is what turns an INVARIANT VIOLATED
+## line into a failed run, not an engine halt). So a same-slot fact must never reach that seam at
+## all and a ladder-side check would be dead code behind a firing invariant, not a build halt.
+## This is the identity filter of the hero pass extended from "not myself" to "not my side", and
+## it covers BOTH the unit's own summoner and its own siblings.
+##
+## THE ATTACK INDEX IS THE UNIT'S OWN monotonic counter, stamped AT GATHER TIME exactly as the hero's
+## is -- never the owner hero's, which is the `4-3b/R12` measurement made concrete.
+##
+## STRIKES AND PROBES ARE GATHERED IN ONE WALK OVER THE BOARD, and that is AC 5's canonical
+## order rather than a tidiness choice. Two separate passes -- every unit's strikes, then every
+## unit's probes -- produce a within-slot sequence like `strike(unit 1), probe(unit 0)`, which is
+## a board-index INVERSION inside one tick. Measured at this dev pass: two such inversions
+## appeared across a 489-tick live run and test_unit_attack_live.gd's gather-order pin caught
+## them. One loop, one unit at a time, both fact kinds together, is what makes the order
+## ascending by construction.
+func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
+	var balance := _match_state.balance
+	var ticks := _match_state.balance_ticks
+	if balance == null or ticks == null:
+		return
+	# The probe's THROTTLE, evaluated once per slot rather than per unit: it is a cadence over
+	# ticks, not a per-unit budget, and re-deriving it inside the loop would read the same
+	# answer N times.
+	var probing := _probe_counter % ticks.minion_retarget_interval_ticks == 0
+	var reach := balance.minion_attack_reach_distance
+	var actors: Array = _unit_actors[attacker_slot]
+	for index: int in actors.size():
+		if not player.units.has_index(index):
+			continue
+		if not player.units.is_alive_at(index):
+			continue
+		var unit: Node = actors[index]
+		if not is_instance_valid(unit):
+			continue
+		var attacker_address: Array[int] = [attacker_slot, index]
+		var attack_index := player.units.attack_count_at(index)
+		var unit_actor := unit as UnitActor
+		if probing:
+			_push_reach_probe(attacker_slot, player, index, unit_actor, attacker_address,
+					attack_index, reach)
+		if not player.units.is_hitbox_active_at(index):
+			continue
+		for area: Area3D in unit_actor.hitbox.get_overlapping_areas():
+			var owner_actor := area.get_parent()
+			if owner_actor == unit_actor:
+				continue  # self-overlap -- this unit's own hurtbox is inside its own hitbox's mask
+			var address := _address_of(owner_actor)
+			var target_slot := address[0]
+			if target_slot == -1:
+				continue  # a hurtbox this runner cannot address -- neither hero nor a spawned unit
+			if target_slot == attacker_slot:
+				continue  # AC 6: never the summoner, never a sibling
+			var to_attacker := unit_actor.global_position - (owner_actor as Node3D).global_position
+			var dir := Vector2(to_attacker.x, to_attacker.z)
+			if dir.is_zero_approx():
+				continue  # degenerate co-location has no direction -- dropped at gather
+			var fact_dir := dir.normalized()
+			_recorder.capture_push_contact(attacker_address, address, attack_index, fact_dir,
+					MatchState.CONTACT_STRIKE)
+			_match_state.push_contact(attacker_address, address, attack_index, fact_dir,
+					MatchState.CONTACT_STRIKE)
+
+
+## Story 4-3b (AC 13, `4-3b/R17a`/`R17b`): THE THROTTLED REACH PROBE. One kind-marked fact per unit
+## whose ACQUIRED TARGET is within the authored reach, on the SAME cadence the minion retargeting
+## already uses, off the SAME authored field -- `minion_retarget_interval_ticks`, 12 ticks at the
+## authored 0.2 s. No new balance field is authored for it, so the audited field list and its guard
+## are untouched.
+##
+## WHY A FACT AT ALL, AND WHY IT IS LEGAL UNDER `4-3/R2` (measured at the readiness gate, not
+## assumed): a unit begins its windup ONLY when its target is in reach, that decision happens inside
+## `advance()`, and state cannot derive a distance because POSITION IS ACTOR-OWNED. `4-3/R2` closed
+## unit position ownership and affirmed that "`push_contact` remains the only inward intake" -- and
+## the contact fact's `dir` field has carried position-DERIVED spatial data through that very intake
+## since 1-8. A narrow "this unit's reach volume overlaps its acquired target" relation on the
+## EXISTING intake therefore falls INSIDE the ruling: it pays no new intake, and it delivers neither
+## a position nor a velocity. State learns a RELATION, not a location.
+##
+## THROTTLED, AND THE THROTTLE IS THE POINT. A strike fact exists only during an active window; an
+## UNTHROTTLED probe would exist on every tick a unit stands in range -- up to 16 rows/tick,
+## ~960 rows/second at `4-5`'s 16-unit criterion, against today's sparse per-swing bursts. On the
+## existing 12-tick interval that falls to ~1.33 rows/tick, ~80 rows/second: a 12x reduction.
+##
+## GATHERED REGARDLESS OF THE UNIT'S PHASE, AND AN IDLE-ONLY NARROWING IS REJECTED (`4-3b/R17b`).
+## An idle-only probe would leave a unit finishing recovery waiting up to a full interval for the
+## next probe, so the effective cycle would be windup+active+recovery+up-to-one-interval, JITTERING
+## with where the swing happened to land relative to the cadence -- meaning AC 1's authored durations
+## would not describe the observed attack rate. A performance decision must not silently retune
+## combat. Nothing is lost by dropping the narrowing: the THROTTLE, not the idle test, is what buys
+## the reduction.
+##
+## THE CADENCE IS A RUNNER-LOCAL COUNTER, and that is deliberate rather than lazy: `MatchState._tick`
+## is PRIVATE, surfaced only inside `to_snapshot()`, and a new public tick accessor is NOT taken for
+## this. It is replay-safe for exactly the reason today's overlap facts are -- the fact is TAPPED
+## here and REPLAYED FROM THE RECORD, never regenerated through physics on replay (the `3-0c` AC 9
+## fork), so a replay never runs this function at all and never consults this counter.
+##
+## THE INTERVAL AND THE REACH ARE READ INLINE (CONSTRAINT C) off the config the runner already
+## applied -- never `BalanceConfigService`, never cached on this node or on an actor, which during a
+## replay would measure reach at the AUTHORED value instead of the RECORDED one.
+func _push_reach_probe(attacker_slot: int, player: PlayerState, index: int, unit: UnitActor,
+		attacker_address: Array[int], attack_index: int, reach: float) -> void:
+	var target_slot := player.units.target_slot_at(index)
+	if target_slot == TargetingService.NO_TARGET_SLOT:
+		return
+	if target_slot == attacker_slot:
+		return  # own-side targets are impossible today (`4-2/R3`); never push a self-contact
+	var target_index := player.units.target_index_at(index)
+	var target_position: Variant = _target_world_position(target_slot, target_index)
+	if not (target_position is Vector3):
+		return  # an actor the runner has not spawned (or has freed) -- no measurable relation
+	var to_attacker := unit.global_position - (target_position as Vector3)
+	var dir := Vector2(to_attacker.x, to_attacker.z)
+	# PLANAR (XZ) centre-to-centre, the SAME geometry `unit_stop_distance` is measured in, so
+	# "has it arrived" and "is it in reach" are one geometry compared against two authored
+	# numbers rather than two geometries that could disagree. The authoring audit requires
+	# reach >= stop distance for exactly that reason.
+	if dir.length() > reach:
+		return
+	if dir.is_zero_approx():
+		return  # degenerate co-location has no direction -- the seam rejects a zero fact
+	# The probe carries the unit's CURRENT attack counter. It keys nothing (a probe never
+	# registers a dedupe hit), but the fact's shape is the seam's and every field is filled
+	# honestly rather than with a placeholder a later reader could mistake for a real swing.
+	var target_address: Array[int] = [target_slot, target_index]
+	var fact_dir := dir.normalized()
+	_recorder.capture_push_contact(attacker_address, target_address, attack_index, fact_dir,
+			MatchState.CONTACT_REACH_PROBE)
+	_match_state.push_contact(attacker_address, target_address, attack_index, fact_dir,
+			MatchState.CONTACT_REACH_PROBE)
 
 
 ## Story 4-3a (AC 4): the overlapping area's owning actor resolved to a `[slot, index]` TARGET
@@ -1006,8 +1215,40 @@ func _physics_process(delta: float) -> void:
 			_match_state.set_camera_basis(1, _p2_rig.basis)
 			#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
 			#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
+			# Story 4-3b (AC 5): THE CANONICAL CROSS-ATTACKER GATHER ORDER, and the unit pass's
+			# FIXED SEAT relative to the two hero gathers, stated here at that seat as AC 5
+			# requires. The order is SLOT ASCENDING, THEN BOARD INDEX ASCENDING -- the `4-2/R3`
+			# tie-break this project already established for minion targeting -- and a hero's
+			# address is `[slot, -1]`, so a slot's HERO precedes every unit on that slot's board
+			# by the same comparison rather than by a convention stated twice.
+			#
+			# IT MATTERS BECAUSE DEFLECT SPENDS STAMINA PER FACT: with two minions landing on one
+			# hero in one tick the first fact resolved is deflected and the second falls through to
+			# blocked damage once the stamina runs out (the accepted `4-3b/R19` drain). Which minion
+			# is which must not be decided by unpinned physics-query order.
+			#
+			# THE PROPERTY IS ALSO ENFORCED STATE-SIDE, and this seat is not what AC 5 rests on:
+			# `MatchState._canonical_contact_order()` sorts the queue by the same total order before
+			# resolving, so facts fed in ANY order resolve identically. Gathering canonically here
+			# keeps the RECORD's own row order canonical too, and means a reader of this file sees
+			# the intended order at the place it is produced.
+			#
+			# THE PROBE PASS RIDES ITS OWN THROTTLE, not this frame count -- see
+			# `_gather_unit_reach_probes`. The counter advances once per TICKING frame, here, so the
+			# cadence is measured in ticks rather than in frames the 3-0b pause gate skipped.
+			#
+			# ADVANCED BEFORE THE FIRST GATHER BELOW (review fix pass F3c, documented rather than
+			# changed): `_gather_unit_facts` reads `_probe_counter % minion_retarget_interval_ticks
+			# == 0` to decide whether THIS tick probes, and the increment above always runs first --
+			# so the very first ticking frame reads 1, not 0, and never probes. A one-tick phase
+			# shift with no functional consequence (the cadence still fires once every
+			# `minion_retarget_interval_ticks`, merely starting one tick later than a reader counting
+			# from zero would expect), named here so it does not read as an off-by-one.
+			_probe_counter += 1
 			_gather_contact_facts(0, _match_state.p1, _p1_hero)
+			_gather_unit_facts(0, _match_state.p1)
 			_gather_contact_facts(1, _match_state.p2, _p2_hero)
+			_gather_unit_facts(1, _match_state.p2)
 			# Story 3-0c (AC 2): the X5 intent tap. Seated HERE, immediately before advance(),
 			# and NOT at the sample step the architecture doc's pre-code sketch draws it at
 			# (`3-0c/R10` — that text is candidate design, not authority): 3-0b's pause gate

@@ -54,6 +54,12 @@ func test_conversion_covers_every_seconds_field() -> void:
 		"roll_iframe_seconds": 0.3,
 		"roll_duration_seconds": 0.5,
 		"stun_seconds": 0.6,
+		# Story 4-3b (AC 1): the unit attack rhythm converts like every sibling above, and the
+		# three are listed HERE as well as in the reflective guard because this file is the one
+		# that pins the ARITHMETIC (0.5 s * 60 Hz = 30) rather than merely "something was derived".
+		"minion_attack_windup_seconds": 0.5,
+		"minion_attack_active_seconds": 0.2,
+		"minion_attack_recovery_seconds": 0.8,
 	}))
 	assert_eq(t.stamina_regen_delay_ticks, 48)
 	assert_eq(t.attack_windup_ticks, 15)
@@ -64,6 +70,9 @@ func test_conversion_covers_every_seconds_field() -> void:
 	assert_eq(t.roll_iframe_ticks, 18)
 	assert_eq(t.roll_duration_ticks, 30)
 	assert_eq(t.stun_ticks, 36, "stun converts like any duration (DATA ONLY in E1)")
+	assert_eq(t.minion_attack_windup_ticks, 30)
+	assert_eq(t.minion_attack_active_ticks, 12)
+	assert_eq(t.minion_attack_recovery_ticks, 48)
 
 
 ## Story 1-4 (AC 1): the load-time derived RATE field — per-second authoring value over

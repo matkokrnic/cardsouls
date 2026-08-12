@@ -59,6 +59,13 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# the authored 3.0%) for every possible authored unit maximum, and `unit_max_hp` would be
 	# cosmetic. A flat value is what makes the authored maximum decide anything.
 	"unit_max_hp", "unit_damage_per_hit",
+	# Story 4-3b (AC 1): the unit ATTACK RHYTHM. The three durations DO carry the `_seconds` suffix,
+	# so half (b) below demands a stem-matched `_ticks` twin filled by `BalanceTicks.from_config()`
+	# for each — that is the whole reason AC 1 spells the three identifiers out rather than leaving
+	# the naming to the dev pass. `minion_attack_reach_distance` carries no suffix and is left alone
+	# by half (b), exactly like `unit_stop_distance` above; half (a) fails until it is listed here.
+	"minion_attack_windup_seconds", "minion_attack_active_seconds",
+	"minion_attack_recovery_seconds", "minion_attack_reach_distance",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

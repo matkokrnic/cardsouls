@@ -96,7 +96,21 @@ extends RefCounted
 ##
 ## The channel SET is unchanged -- no new capture channel, `push_contact` still the sole intake --
 ## so REQUIRED_KEYS below does not move and `_resource_values` is untouched.
-const FORMAT_VERSION := 3
+## STORY 4-3b (`4-3b/R21`) BUMPS THIS TO 4, and it is again a payload SHAPE change rather than a new
+## channel -- the third bump in the same family, for the third time on the contact row. The fact's
+## ATTACKER widened from a bare slot to a `[slot, index]` ADDRESS (AC 3) and the fact gained a KIND
+## marker separating a REACH PROBE from a STRIKE (AC 13), so the recorded row grew from five
+## positional elements to seven. A v3 file carries neither: rebuilding the attacker index by assuming
+## -1 would silently replay a MINION's swing as its owner HERO's, and rebuilding the marker by
+## assuming STRIKE would replay a harmless reach probe as a landed hit that deals damage. Both are
+## replays that diverge from the match they claim to reproduce, which is exactly what the version
+## check exists to refuse. HARD REJECTION, NO SHIM, for the `4-1/R1` reason above.
+##
+## The channel SET is unchanged and this story MEASURED it rather than assuming (its own Open
+## Question 2 left the bump conditional on the answer): the marker RIDES THE EXISTING ROW and
+## `push_contact` gained a parameter rather than a sibling method, so REQUIRED_KEYS below does not
+## move and `_resource_values` is untouched.
+const FORMAT_VERSION := 4
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -387,11 +401,12 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 		for push: Array in camera_pushes.get(tick, []):
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
 		for fact: Array in contacts.get(tick, []):
-			# Story 4-3a: the FIVE-element row (attacker, target slot, target index, attack index,
-			# dir) rebuilt into the recorder's pair-shaped seam. Guaranteed five here by the
-			# format_version check above -- a four-element v2 row never reaches this line.
-			record.capture_push_contact(int(fact[0]), [int(fact[1]), int(fact[2])], int(fact[3]),
-					fact[4] as Vector2)
+			# Story 4-3a / 4-3b: the SEVEN-element row (attacker slot, attacker index, target slot,
+			# target index, attack index, dir, kind) rebuilt into the recorder's pair-shaped seam.
+			# Guaranteed seven here by the format_version check above -- a five-element v3 row
+			# never reaches this line.
+			record.capture_push_contact([int(fact[0]), int(fact[1])],
+					[int(fact[2]), int(fact[3])], int(fact[4]), fact[5] as Vector2, int(fact[6]))
 		record.capture_advance(_intent_pair(intents[tick - 1]))
 		_capture_reloads_at(record, reload_events, tick)
 	return record

@@ -156,7 +156,7 @@ func test_a_hero_swing_takes_the_dedicated_flat_damage_off_a_unit() -> void:
 	_summon_p2(ms, 1)
 	assert_eq(ms.p2.units.hp_at(0), UNIT_MAX_HP, "sanity: full health before the swing")
 	_swing_to_active(ms)
-	ms.push_contact(0, [1, 0], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), 6.0,
 		"one confirmed swing takes the FLAT authored 3.0 — not 4.5 (50%% of the unit's own 9.0 "
@@ -172,7 +172,7 @@ func test_three_swings_kill_a_unit_and_the_third_is_the_one_that_does_it() -> vo
 	var expected: Array[float] = [6.0, 3.0, 0.0]
 	for swing in 3:
 		_swing_to_active(ms)
-		ms.push_contact(0, [1, 0], ms.p1.hero.attack_index, Vector2.DOWN)
+		ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 		_advance(ms)
 		assert_eq(ms.p2.units.hp_at(0), expected[swing],
 			"after swing %d the unit is at %.1f" % [swing + 1, expected[swing]])
@@ -190,7 +190,7 @@ func test_damage_is_clamped_at_zero_so_overkill_does_not_go_negative() -> void:
 	var ms := _make_match()
 	ms.p2.units.add(1.0)  # less health than one hit's damage
 	_swing_to_active(ms)
-	ms.push_contact(0, [1, 0], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), 0.0,
 		"hp floors at 0.0 rather than -2.0 — overkill leaves no trace in the hash")
@@ -211,7 +211,7 @@ func test_hitting_and_killing_a_unit_generates_no_mana_but_hitting_a_hero_does()
 	_summon_p2(ms, 1)
 	for _swing in 3:
 		_swing_to_active(ms)
-		ms.push_contact(0, [1, 0], ms.p1.hero.attack_index, Vector2.DOWN)
+		ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 		_advance(ms)
 		for _t in 12:
 			_advance(ms)
@@ -221,7 +221,7 @@ func test_hitting_and_killing_a_unit_generates_no_mana_but_hitting_a_hero_does()
 		+ "confirmed-hits list that step 5's melee rung reads")
 	# The PAIR: an identical swing against the HERO in the same match DOES pay.
 	_swing_to_active(ms)
-	ms.push_contact(0, [1, TargetingService.HERO_INDEX], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, TargetingService.HERO_INDEX], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p1.mana.get_current(), 8.0,
 		"...and the melee faucet is NOT simply broken: the same swing against the HERO pays the "
@@ -239,9 +239,9 @@ func test_one_swing_cleaves_through_two_units_and_the_hero() -> void:
 	_summon_p2(ms, 2)
 	_swing_to_active(ms)
 	var swing := ms.p1.hero.attack_index
-	ms.push_contact(0, [1, 0], swing, Vector2.DOWN)
-	ms.push_contact(0, [1, 1], swing, Vector2.DOWN)
-	ms.push_contact(0, [1, TargetingService.HERO_INDEX], swing, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, 0], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	ms.push_contact([0, -1], [1, 1], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	ms.push_contact([0, -1], [1, TargetingService.HERO_INDEX], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), 6.0, "unit 0 took the swing")
 	assert_eq(ms.p2.units.hp_at(1), 6.0,
@@ -261,18 +261,18 @@ func test_the_hit_list_is_canonically_ordered_regardless_of_fact_arrival_order()
 	_summon_p2(forward, 2)
 	_swing_to_active(forward)
 	var forward_swing := forward.p1.hero.attack_index
-	forward.push_contact(0, [1, 0], forward_swing, Vector2.DOWN)
-	forward.push_contact(0, [1, 1], forward_swing, Vector2.DOWN)
-	forward.push_contact(0, [1, TargetingService.HERO_INDEX], forward_swing, Vector2.DOWN)
+	forward.push_contact([0, -1], [1, 0], forward_swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	forward.push_contact([0, -1], [1, 1], forward_swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	forward.push_contact([0, -1], [1, TargetingService.HERO_INDEX], forward_swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(forward)
 
 	var reverse := _make_match()
 	_summon_p2(reverse, 2)
 	_swing_to_active(reverse)
 	var reverse_swing := reverse.p1.hero.attack_index
-	reverse.push_contact(0, [1, TargetingService.HERO_INDEX], reverse_swing, Vector2.DOWN)
-	reverse.push_contact(0, [1, 1], reverse_swing, Vector2.DOWN)
-	reverse.push_contact(0, [1, 0], reverse_swing, Vector2.DOWN)
+	reverse.push_contact([0, -1], [1, TargetingService.HERO_INDEX], reverse_swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	reverse.push_contact([0, -1], [1, 1], reverse_swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	reverse.push_contact([0, -1], [1, 0], reverse_swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(reverse)
 
 	assert_eq(forward_swing, reverse_swing, "sanity: same seed, same fixture, same attack_index")
@@ -296,8 +296,8 @@ func test_the_same_address_twice_in_one_swing_still_resolves_only_once() -> void
 	_summon_p2(ms, 1)
 	_swing_to_active(ms)
 	var swing := ms.p1.hero.attack_index
-	ms.push_contact(0, [1, 0], swing, Vector2.DOWN)
-	ms.push_contact(0, [1, 0], swing, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, 0], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	ms.push_contact([0, -1], [1, 0], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), 6.0,
 		"ONE hit's worth of damage, not two — the widened key still refuses the same address twice "
@@ -318,7 +318,7 @@ func test_a_hero_target_resolves_identically_under_the_widened_address() -> void
 		landed.append([attacker, target, damage, hp]))
 	_swing_to_active(ms)
 	var swing := ms.p1.hero.attack_index
-	ms.push_contact(0, [1, TargetingService.HERO_INDEX], swing, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, TargetingService.HERO_INDEX], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	# (1) SAME DAMAGE VALUE — the percent-of-max hero formula, untouched by this story.
 	assert_eq(ms.p2.hero.get_hp(), 50.0, "same damage: 50% of the target hero's 100.0 maximum")
@@ -331,7 +331,7 @@ func test_a_hero_target_resolves_identically_under_the_widened_address() -> void
 	assert_eq(ms.p1.mana.get_current(), 8.0,
 		"same confirmed-list membership: the hero hit still pays melee_hit_mana")
 	# (4) SAME DEDUPE OUTCOME — a second fact from the same swing at the same address is refused.
-	ms.push_contact(0, [1, TargetingService.HERO_INDEX], swing, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, TargetingService.HERO_INDEX], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 50.0, "same dedupe outcome: the repeat is still refused")
 	assert_eq(landed.size(), 1, "...and emits no second signal")
@@ -351,7 +351,7 @@ func test_death_leaves_a_hole_at_a_stable_index_and_shifts_nothing() -> void:
 	ms.p2.units.apply_damage_at(2, 2.0)   # 7.0
 	for _swing in 3:
 		_swing_to_active(ms)
-		ms.push_contact(0, [1, 0], ms.p1.hero.attack_index, Vector2.DOWN)
+		ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 		_advance(ms)
 		for _t in 12:
 			_advance(ms)
@@ -453,7 +453,7 @@ func test_a_dead_unit_is_not_addressable_by_a_later_swing() -> void:
 	assert_eq(ms.p2.units.hp_at(0), 0.0, "sanity: dead")
 	_swing_to_active(ms)
 	var swing := ms.p1.hero.attack_index
-	ms.push_contact(0, [1, 0], swing, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, 0], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), 0.0,
 		"a fact against a corpse resolves to NOTHING — dropped at the dead-target rung, exactly as "
@@ -480,7 +480,7 @@ func test_a_fact_naming_a_nonexistent_index_is_dropped_not_a_crash() -> void:
 	var ms := _make_match()
 	_summon_p2(ms, 1)
 	_swing_to_active(ms)
-	ms.push_contact(0, [1, 7], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, 7], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), UNIT_MAX_HP,
 		"the real unit at index 0 is untouched by a fact addressed to index 7")
@@ -511,7 +511,7 @@ func test_the_round_over_freeze_precedes_the_contact_step_so_no_unit_dies_during
 	frozen.p2.hero.take_damage(frozen.p2.hero.get_max_hp())
 	_advance(frozen)
 	assert_true(frozen.to_snapshot()["round_over"], "sanity: the round is over and the freeze is on")
-	frozen.push_contact(0, [1, 0], swing, Vector2.DOWN)
+	frozen.push_contact([0, -1], [1, 0], swing, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	for _t in 5:
 		_advance(frozen)
 	assert_eq(frozen.p2.units.hp_at(0), UNIT_DAMAGE,
@@ -523,7 +523,7 @@ func test_the_round_over_freeze_precedes_the_contact_step_so_no_unit_dies_during
 	_summon_p2(live, 1)
 	live.p2.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE)
 	_swing_to_active(live)
-	live.push_contact(0, [1, 0], live.p1.hero.attack_index, Vector2.DOWN)
+	live.push_contact([0, -1], [1, 0], live.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(live)
 	assert_eq(live.p2.units.hp_at(0), 0.0,
 		"the IDENTICAL fact on an unfrozen match DOES land and DOES kill — so the survival above is "
@@ -592,3 +592,137 @@ func _cast_summon_effects() -> Dictionary[StringName, CardEffect]:
 		effect.effect_id = &"summon_test_unit"
 		out[id] = effect
 	return out
+
+
+## ================================================================================================
+## STORY 4-3b (AC 15 / AC 17): the killed-mid-swing drop, and unit-versus-unit damage.
+## ================================================================================================
+
+const UNIT_WINDUP_4_3B := 2
+const UNIT_ACTIVE_4_3B := 5
+const UNIT_RECOVERY_4_3B := 4
+
+
+func _config_4_3b() -> BalanceConfig:
+	var c := _config()
+	c.minion_attack_windup_seconds = float(UNIT_WINDUP_4_3B) / 60.0
+	c.minion_attack_active_seconds = float(UNIT_ACTIVE_4_3B) / 60.0
+	c.minion_attack_recovery_seconds = float(UNIT_RECOVERY_4_3B) / 60.0
+	c.minion_attack_reach_distance = 2.0
+	c.minion_retarget_interval_seconds = 1000.0
+	return c
+
+
+func _match_4_3b() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(7))
+	ms.apply_balance(_config_4_3b())
+	ms.inject_feature_flags(_flags())
+	ms.drain_signals()
+	return ms
+
+
+## One unit on P1 acquired on `target`, driven into its ACTIVE window through the real reach trigger
+## and the real phase ladder -- never by writing the phase directly.
+func _p1_unit_into_active(ms: MatchState, target: Array[int]) -> void:
+	ms.p1.units.add(UNIT_MAX_HP)
+	ms.p1.units.set_target_at(0, target[0], target[1])
+	ms.push_contact([0, 0], target, 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
+	_advance(ms)
+	_advance(ms)
+	for _t in UNIT_WINDUP_4_3B:
+		_advance(ms)
+
+
+## AC 15: A UNIT KILLED MID-SWING LANDS NOTHING. Contact facts carry the F1 one-tick lag, so a fact
+## gathered while the attacker was alive can ARRIVE after it died; AC 14(a)'s liveness rung is what
+## drops it, and this is what proves the rung does its job.
+##
+## A POSITIVE PIN, NOT A NEGATIVE CLAIM, which is AC 15's own requirement: the PAIRED run shows the
+## fact WOULD have landed. Without it, "lands nothing" would also pass against a unit that never
+## attacked at all -- exactly the vacuity the AC names.
+func test_a_unit_killed_between_gather_and_resolution_lands_nothing() -> void:
+	# (i) THE SURVIVING RUN: the identical fact applies damage.
+	var survives := _match_4_3b()
+	survives.p2.units.add(UNIT_MAX_HP)
+	_p1_unit_into_active(survives, [1, 0])
+	var control_before := survives.p2.units.hp_at(0)
+	survives.push_contact([0, 0], [1, 0], survives.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(survives)
+	assert_eq(survives.p2.units.hp_at(0), control_before - UNIT_DAMAGE,
+		"the control run LANDS: this exact fact, from this exact attacker, applies damage")
+
+	# (ii) THE KILLED RUN: the same fact, gathered, then the attacker dies before resolution.
+	var ms := _match_4_3b()
+	ms.p2.units.add(UNIT_MAX_HP)
+	_p1_unit_into_active(ms, [1, 0])
+	var before := ms.p2.units.hp_at(0)
+	ms.push_contact([0, 0], [1, 0], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	# The kill lands BETWEEN gather and resolution -- the F1 window the drop exists for.
+	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: the ATTACKER is dead before step 4 runs")
+	_advance(ms)
+	assert_eq(ms.p2.units.hp_at(0), before,
+		"a unit killed between gather and resolution lands NOTHING — its in-flight fact is dropped "
+		+ "at the attacker-liveness rung (AC 15), the 2-3/R6 drop reached from a unit attacker")
+
+
+## AC 17: UNIT-VERSUS-UNIT DAMAGE FALLS OUT OF THE SAME OPENING, with no separate resolution path.
+## Measured as HITS-TO-KILL EQUALITY between the two attacker kinds against the identical target, at
+## the identical authored values -- which is the form that would catch a second ladder with its own
+## damage number, and which a "a unit can damage a unit" test would not.
+func test_a_minion_dies_to_a_minion_in_the_same_number_of_hits_it_takes_from_a_hero() -> void:
+	var by_hero := _hits_to_kill_from_hero()
+	var by_unit := _hits_to_kill_from_unit()
+	assert_true(by_hero > 1,
+		"sanity: the authored values need more than one hit, or the equality below is trivial")
+	assert_eq(by_unit, by_hero,
+		("a minion dies to another minion in the SAME number of hits it takes from a hero (%d) — "
+		+ "both attacker kinds read the same `unit_damage_per_hit` against the same `unit_max_hp` "
+		+ "through the same ladder, with no separate resolution path (AC 17)") % by_hero)
+	assert_eq(by_hero, ceili(UNIT_MAX_HP / UNIT_DAMAGE),
+		"...and that number is the one the AUTHORED values imply, so the equality is not two "
+		+ "implementations agreeing on a wrong answer")
+
+
+## Hits a HERO attacker needs to kill one unit. A fresh swing per hit: the dedupe refuses a second
+## fact against the same address within one swing, which is the mechanism, not an obstacle.
+func _hits_to_kill_from_hero() -> int:
+	var ms := _match_4_3b()
+	_summon_p2(ms, 1)
+	var hits := 0
+	while ms.p2.units.is_alive_at(0) and hits < 20:
+		_swing_to_active(ms)
+		ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN,
+				MatchState.CONTACT_STRIKE)
+		_advance(ms)
+		hits += 1
+		# Let the hero's swing finish so the next press starts a fresh one.
+		for _t in 12:
+			_advance(ms)
+	return hits
+
+
+## Hits a UNIT attacker needs to kill one unit, driven through the real rhythm: the unit is kept in
+## reach so it cycles, and each landed strike is counted.
+func _hits_to_kill_from_unit() -> int:
+	var ms := _match_4_3b()
+	ms.p2.units.add(UNIT_MAX_HP)
+	_p1_unit_into_active(ms, [1, 0])
+	var hits := 0
+	var cycles := 0
+	while ms.p2.units.is_alive_at(0) and cycles < 20:
+		if ms.p1.units.is_hitbox_active_at(0):
+			var before := ms.p2.units.hp_at(0)
+			ms.push_contact([0, 0], [1, 0], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+					MatchState.CONTACT_STRIKE)
+			_advance(ms)
+			if ms.p2.units.hp_at(0) < before:
+				hits += 1
+			continue
+		# Not in its window: keep it in reach so the rhythm cycles, and advance.
+		ms.p1.units.mark_in_reach_at(0)
+		_advance(ms)
+		cycles += 1
+	return hits

@@ -67,6 +67,17 @@ signal card_cast_resolved(slot: int, card_id: StringName)
 ## no card, no count, no window handle.
 signal reshuffle_vulnerable_window_opened(slot: int)
 
+## Story 4-3b (AC 13, `4-3b/R17b`): the contact fact's KIND marker. A STRIKE is a landed hitbox
+## overlap — everything `push_contact` has ever carried, which is why it is the zero value. A REACH
+## PROBE is the throttled "this unit's acquired target is within reach" relation, dropped at the top
+## of the step-4 ladder; it delivers no damage and its only effect is permitting a windup to start.
+##
+## PLAIN INT CONSTANTS RATHER THAN AN `enum`, matching how the fact's other fields are typed: the
+## marker rides the recorded contact ROW as a scalar (`intent_recorder.gd`), and a row element is an
+## int either way — an enum here would only be a type the record cannot carry.
+const CONTACT_STRIKE := 0
+const CONTACT_REACH_PROBE := 1
+
 var p1: PlayerState
 var p2: PlayerState
 var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
@@ -225,6 +236,16 @@ func advance(intents: Array[InputIntent]) -> void:
 	p2.pending_draw.tick()
 	p1.vulnerable_window.tick()
 	p2.vulnerable_window.tick()
+	# Story 4-3b (AC 1): the UNIT attack rhythm counts down HERE, beside every other D4 timer, and
+	# the step-3 seat below reads the result — the hero's own `tick_timers()` shape, for a container
+	# instead of an object (A1: integer ticks, one per advance(), never a float accumulator). The
+	# unit dedupe records advance their grace tick in the same breath, exactly as the hero's records
+	# do inside `HeroState.tick_timers()`. Unguarded like its neighbours: a pre-injection MatchState
+	# has an empty board and no records, so both calls are no-ops.
+	p1.units.tick_attack_timers()
+	p2.units.tick_attack_timers()
+	p1.unit_dedupe.tick()
+	p2.unit_dedupe.tick()
 	# 3. Resolve actions       per slot P1 -> P2: action transitions FIRST (a press on
 	#    tick N takes effect on tick N), then intended velocity from move_dir. Transitions
 	#    never write velocity — both halves of the 1-3 coupling deferral now live in
@@ -234,6 +255,14 @@ func advance(intents: Array[InputIntent]) -> void:
 	_resolve_movement(p1, p1_intent, 0)
 	_resolve_actions(p2, p2_intent, 1)
 	_resolve_movement(p2, p2_intent, 1)
+	# 3b. Story 4-3b (AC 1/AC 13): the UNIT attack rhythm's phase progression — the step-3 FAMILY's
+	#    third member, seated after both heroes for the same fixed P1 -> P2 determinism every other
+	#    per-player loop in this function follows. It is AI-driven, not input-driven: no
+	#    `InputIntent`, no `TRANSITION_TABLE` row, no stamina spend and no chain (AC 11). What it
+	#    borrows from `_resolve_actions` is only the WINDOW-ADVANCE SHAPE — read the timer step 2
+	#    just advanced, and move the phase when it reaches its boundary.
+	_advance_unit_attacks(p1)
+	_advance_unit_attacks(p2)
 	# 4. Resolve contacts      (story 1-5) drain the queued facts in push order: dedupe/
 	#    liveness acceptance -> damage -> record confirmed hits for step 5. Damage and
 	#    dedupe ONLY here — mana is step 5's seat, keeping the documented D2 order
@@ -439,10 +468,51 @@ func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 ## target SLOTS must still differ, so a hero's hitbox overlapping its OWN slot's unit is a
 ## malformed fact here. That is why the friendly-fire filter sits at GATHER time in the runner
 ## rather than as a state-side check — a same-slot fact must never reach this seam at all.
-func push_contact(attacker_slot: int, target: Array[int], attack_index: int,
-		target_to_attacker: Vector2) -> void:
+##
+## STORY 4-3b (AC 3): THE ATTACKER WIDENS TOO, from a bare `attacker_slot: int` to a `[slot, index]`
+## pair — the SAME `4-2/R2` convention `4-3a` already spent on the TARGET half, so the fact's two
+## addresses are now ONE addressing scheme applied twice rather than two that could drift.
+##
+## KIND-AGNOSTIC, NOT A HERO/MINION TWO-CASE ENUM. `index == -1` addresses that slot's HERO — every
+## existing hero-attacker call site resolves identically under `[slot, -1]` — and `index >= 0`
+## addresses a board unit at that index. Totems and hero-cast projectiles are already NAMED future
+## users of this exact opening (the Non-Goals), and a two-case shape would need re-widening the
+## moment either lands.
+##
+## THE WIDENING IS SCOPED TO THIS FACT DICTIONARY. THE SIGNALS DO NOT WIDEN (`4-3b/R15`, measured):
+## `hit_landed` and `deflect_landed` both carry a typed BARE INT attacker, and both shipped consumers
+## UNDERSCORE it and gate solely on the TARGET slot (telegraph_controller.gd) — so a minion damaging
+## a hero already flashes and stings the correct hero with no change at all. Widening the payload
+## would break two typed callbacks for zero behavioural gain. Pinned in
+## test_architecture_invariants.gd.
+##
+## STORY 4-3b (AC 13, `4-3b/R17b`): THE SIXTH FIELD, `kind`. `_resolve_contacts` treats every queue
+## entry as a landed STRIKE, so the REACH PROBE — the fact that tells state a unit's acquired target
+## is within reach and may be wound up at — needs a marker or it would deal damage. A probe is
+## dropped at the very TOP of the ladder: no damage, no dedupe registration, no `confirmed_hits`
+## entry, no mana and no signal. Its ONLY effect is permitting a windup to start.
+##
+## THE PARAMETER IS REQUIRED, NEVER DEFAULTED, and that is deliberate: a defaulted `kind` would let
+## a future probe producer silently omit it and deal damage — precisely the class of silent failure
+## AC 14 exists to close on the two attacker-side rungs.
+##
+## THIS IS STILL ONE INTAKE, WHICH IS WHY IT IS LEGAL UNDER `4-3/R2`. No second public intake method
+## ships: the recorder derives its capture channel set from `MatchState`'s public intake surface by a
+## source scan (`3-0c` AC 1), so a `push_reach_probe()` sibling would BE a new channel. A parameter
+## is not. And no position and no velocity travels inward — state learns a RELATION, exactly as it
+## has learned the position-DERIVED `dir` since 1-8.
+func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
+		target_to_attacker: Vector2, kind: int) -> void:
+	Invariant.check(attacker.size() == 2,
+		"contact attacker must be a [slot, index] pair, got %d element(s)" % attacker.size())
+	var attacker_slot := attacker[0] if attacker.size() == 2 else -1
+	var attacker_index := attacker[1] if attacker.size() == 2 else -1
 	Invariant.check(attacker_slot == 0 or attacker_slot == 1,
 		"contact attacker_slot must be 0 or 1, got %d" % attacker_slot)
+	Invariant.check(attacker_index >= TargetingService.HERO_INDEX,
+		"contact attacker index must be >= -1 (-1 is the hero), got %d" % attacker_index)
+	Invariant.check(kind == CONTACT_STRIKE or kind == CONTACT_REACH_PROBE,
+		"contact kind must be CONTACT_STRIKE or CONTACT_REACH_PROBE, got %d" % kind)
 	Invariant.check(target.size() == 2,
 		"contact target must be a [slot, index] pair, got %d element(s)" % target.size())
 	var target_slot := target[0] if target.size() == 2 else -1
@@ -457,10 +527,12 @@ func push_contact(attacker_slot: int, target: Array[int], attack_index: int,
 		"contact target_to_attacker direction must be non-zero (no spatial fact)")
 	_contact_queue.append({
 		"attacker": attacker_slot,
+		"attacker_index": attacker_index,
 		"target": target_slot,
 		"target_index": target_index,
 		"attack_index": attack_index,
 		"dir": target_to_attacker,
+		"kind": kind,
 	})
 
 
@@ -641,6 +713,75 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState, intent:
 	return true
 
 
+## Story 4-3b (AC 1/AC 12/AC 13): ONE PLAYER'S BOARD, advanced one tick through the unit attack
+## rhythm. The step-3 unit seat.
+##
+## THE PHASE LADDER IS windup -> active -> recovery -> idle, WITH NO OTHER EDGES. There is no chain
+## (a unit has one attack, Non-Goals), no input edge (nothing presses anything), no stamina or
+## resource gate (AC 11 — the rhythm itself is the only limiter), no stun edge (AC 10 — the `stun`
+## field keeps ZERO inbound edges and this story does not open one), and NO CANCEL: a swing whose
+## target dies or is retargeted mid-windup COMPLETES INTO EMPTY AIR (`4-3b/R18`), because a cancel
+## would be a second way a swing can end, against the no-interruption Non-Goal. Damage taken
+## mid-swing does not interrupt it either; only DEATH ends the attacker, and that is AC 15's rung in
+## the contact ladder rather than an edge here.
+##
+## THE BOUNDARY IS "THE COUNTDOWN STEP 2 JUST ADVANCED REACHED ZERO", which is the hero's
+## `attack_phase()` -> `&"windup_done"` shape expressed against a stored int instead of three
+## `TimingWindow` objects (per-record objects are what `unit_board.gd`'s header rule forbids).
+##
+## WHY RECOVERY -> IDLE AND THE NEXT WINDUP HAPPEN IN THE SAME PASS. AC 13 pins the back-to-back
+## cycle at EXACTLY windup + active + recovery ticks with NO throttle remainder added. A unit whose
+## in-reach flag is set must therefore begin its next windup on the very tick recovery ends, not on
+## the next tick and certainly not at the next probe — so the idle test below runs after the ladder,
+## against the phase this same pass may have just written. That is the whole reason the flag is a
+## STORED cross-tick carrier rather than a per-tick observation.
+##
+## WHAT MAY BEGIN A WINDUP, exactly (AC 13, `4-3b/R17a`): the unit is ALIVE, it is IDLE, and its
+## IN-REACH FLAG IS SET. Never a free-running cycle, never an "arrived" flag, and never a distance
+## this layer computes — position is actor-owned (`4-3/R2`) and this layer has none. The flag is set
+## only by the step-4 seat below, from a fact the runner pushed.
+##
+## A DEAD UNIT IS SKIPPED ENTIRELY, phases frozen where they stood. Nothing gathers a corpse's
+## hitbox (the runner frees its actor the same tick) and nothing may start a corpse swinging, so
+## advancing its ladder would be state kept for no reader — and `is_alive_at` is the board's own
+## liveness predicate, never a re-derived `hp > 0` (`4-3a/R14`).
+func _advance_unit_attacks(player: PlayerState) -> void:
+	if balance_ticks == null:
+		return
+	var board := player.units
+	for index in board.size():
+		if not board.is_alive_at(index):
+			continue
+		if board.attack_phase_at(index) != UnitBoard.AttackPhase.IDLE \
+				and board.attack_ticks_at(index) == 0:
+			match board.attack_phase_at(index):
+				UnitBoard.AttackPhase.WINDUP:
+					# The ACTIVE window opens, and the dedupe record for THIS swing opens with it —
+					# the `HeroState` pairing of "a live record exists exactly while the swing can
+					# still land" expressed for a unit. Keyed by the counter `begin_windup_at`
+					# returned, re-read here from the board so the two can never disagree.
+					board.set_phase_at(index, UnitBoard.AttackPhase.ACTIVE,
+							balance_ticks.minion_attack_active_ticks)
+					player.unit_dedupe.open(index, board.attack_count_at(index))
+				UnitBoard.AttackPhase.ACTIVE:
+					# The window closes and the record enters its single GRACE tick, absorbing the F1
+					# one-tick fact lag exactly as the hero's does: a contact gathered on the last
+					# active tick arrives the tick after close and is still legitimate.
+					board.set_phase_at(index, UnitBoard.AttackPhase.RECOVERY,
+							balance_ticks.minion_attack_recovery_ticks)
+					player.unit_dedupe.close(index)
+				UnitBoard.AttackPhase.RECOVERY:
+					board.set_phase_at(index, UnitBoard.AttackPhase.IDLE, 0)
+		if board.attack_phase_at(index) == UnitBoard.AttackPhase.IDLE \
+				and board.is_in_reach_at(index):
+			# CONSUMES the flag (inside `begin_windup_at`), which is its ONLY clearing path — there
+			# is no negative probe and absence of overlap is not a fact (AC 13's consequence (ii)).
+			# The locked direction needs no write here: it already holds the latest known heading to
+			# the acquired target, refreshed by the step-4 seat only while IDLE, and from this
+			# moment nothing writes it again until the swing ends. THAT FREEZE IS THE LOCK (AC 12).
+			board.begin_windup_at(index, balance_ticks.minion_attack_windup_ticks)
+
+
 ## Story 1-9 (1-9/R6): the entry-time roll direction — the same camera-rotated world
 ## mapping _resolve_movement uses (clamp, identity short-circuit, yaw-only rotation),
 ## NORMALIZED (constant roll speed needs a unit direction), with the hero's world-space
@@ -689,9 +830,25 @@ func _resolve_contacts() -> Array[int]:
 	if balance == null:
 		_contact_queue.clear()
 		return confirmed
-	for fact in _contact_queue:
+	for position in _canonical_contact_order():
+		var fact: Dictionary = _contact_queue[position]
+		var attacker_index := int(fact["attacker_index"])
 		var attacker := p1 if int(fact["attacker"]) == 0 else p2
 		var target := p1 if int(fact["target"]) == 0 else p2
+		# Story 4-3b (AC 13): THE IN-REACH SET, deliberately ABOVE every drop below it — including
+		# the probe drop, the dead-target drop and dedupe. A landed strike is PROOF of reach and
+		# stronger proof than a probe (it is the same overlap test), and a fact that drops for some
+		# OTHER reason still observed the overlap that produced it. Scoped to the unit's own ACQUIRED
+		# TARGET inside the helper.
+		_mark_reach_from_fact(attacker, attacker_index, fact)
+		# Story 4-3b (AC 13, `4-3b/R17b`): THE REACH-PROBE DROP, at the very TOP of the ladder, ahead
+		# of the dead-target drop and every rung after it. A probe yields no damage, no dedupe
+		# registration, no `confirmed_hits` entry, no mana and no signal, and it never reaches
+		# `_resolve_unit_contact`. Its ONLY effect is the flag set directly above, which permits a
+		# windup to start. The F1 one-tick lag applies to a probe exactly as to a strike, so a windup
+		# begins the tick AFTER reach is observed.
+		if int(fact["kind"]) == CONTACT_REACH_PROBE:
+			continue
 		# Story 4-3a (AC 3/AC 2, `4-3a/R20`): THE UNIT-TARGET BRANCH. A target address whose index
 		# is >= 0 addresses a BOARD UNIT, and a unit shares only the rungs it actually HAS.
 		# Expressed as a branch inside this ladder rather than a helper beside it (`4-3a/R20`
@@ -713,15 +870,14 @@ func _resolve_contacts() -> Array[int]:
 		# untouched. The in-flight window is NOT stopped or shortened here — it keeps ticking
 		# to expiry by design (1-9/R3 intact); it simply resolves to nothing.
 		#
-		# THIS TWO-LINE CHECK IS DUPLICATED in _resolve_unit_contact below, and that duplication is
-		# ACCEPTED, not refactored (4-3a/R24, review finding). The unit branch is a deliberately
-		# SHORT, separate path -- it shares only the rungs a unit actually has (4-3a/R20) -- and
-		# extracting a shared helper for one two-line condition adds indirection to the most
-		# sensitive shipped code in the project for no readability gain. If a THIRD copy of this
-		# check appears in a future story, that is the signal to replace the mechanism (e.g. a
-		# shared dead-attacker guard both ladders call into) rather than to keep tightening this
-		# two-copy pattern.
-		if attacker.hero.action_state == HeroState.ActionState.DEAD:
+		# STORY 4-3b (AC 14): THE MECHANISM WAS REPLACED HERE, exactly as `4-3a/R24` instructed. That
+		# ruling accepted the two-copy duplication of this check and named its own trigger: "If a
+		# THIRD copy of this check appears in a future story, that is the signal to replace the
+		# mechanism (e.g. a shared dead-attacker guard both ladders call into) rather than to keep
+		# tightening this two-copy pattern." This story is that story -- it needed the check to
+		# dispatch on ATTACKER KIND in BOTH ladders -- so both now call `_attacker_is_dead` and there
+		# is no duplicated condition left to keep in agreement.
+		if _attacker_is_dead(attacker, attacker_index):
 			continue
 		# Story 1-9 (1-9/R1): iframe FACT DROP — not a resolution. Judged on the window
 		# (+grace) ALONE, never on state == ROLLING (1-9/R3), and BEFORE dedupe
@@ -730,8 +886,8 @@ func _resolve_contacts() -> Array[int]:
 		# fact resolves normally. No damage, no hit_landed, no mana, no signal (1-9/R5).
 		if target.hero.is_iframe_open():
 			continue
-		if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"]),
-				TargetingService.HERO_INDEX):
+		if not _register_attacker_hit(attacker, attacker_index, int(fact["attack_index"]),
+				int(fact["target"]), TargetingService.HERO_INDEX):
 			continue
 		var damage := balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
 		if target.hero.action_state == HeroState.ActionState.BLOCKING \
@@ -742,11 +898,165 @@ func _resolve_contacts() -> Array[int]:
 				continue
 			damage *= balance.block_damage_multiplier
 		target.hero.take_damage(damage)
+		# Story 4-3b (AC 8, `4-3b/R5`): `hit_landed` IS emitted when a UNIT damages a HERO — the hero
+		# is really hurt, so the telegraph flash and sting on that hero are correct. A DELIBERATE
+		# ASYMMETRY against `4-3a/R12`'s suppression for unit TARGETS, recorded here so a later gate
+		# does not re-litigate it as an inconsistency: the two are not the same rule. Payload
+		# UNCHANGED per AC 3 — the bare-int attacker slot is enough, because the consumer gates on the
+		# TARGET (telegraph_controller.gd underscores the attacker).
 		_queue.push(hit_landed.emit.bind(
 			int(fact["attacker"]), int(fact["target"]), damage, target.hero.get_hp()))
-		confirmed.append(int(fact["attacker"]))
+		# Story 4-3b (AC 7, `4-3b/R4`): A UNIT-SOURCED CONFIRMATION GENERATES NO MANA, and THIS LINE
+		# is the whole mechanism — the `4-3a/R3` unit-TARGET precedent applied to the unit-ATTACKER
+		# side. `_generate_mana` awards per entry in the list this function returns, so keeping a
+		# unit-sourced confirmation OUT of the list is the gate. There is deliberately NO second check
+		# inside `_generate_mana` to keep in agreement with this one. Otherwise summoning becomes a
+		# mana engine — and a blocked hit still confirms.
+		if attacker_index == TargetingService.HERO_INDEX:
+			confirmed.append(int(fact["attacker"]))
 	_contact_queue.clear()
 	return confirmed
+
+
+## Story 4-3b (AC 5): THE CANONICAL RESOLUTION ORDER ACROSS ATTACKERS — SLOT ASCENDING, THEN BOARD
+## INDEX ASCENDING, the `4-2/R3` tie-break this project already established for minion targeting,
+## with the queue POSITION as a final tie-break so the sort is stable.
+##
+## WHY ORDER ACROSS ATTACKERS IS PLAYER-VISIBLE AND MUST NOT BE INCIDENTAL: deflect spends stamina
+## PER FACT (the ladder above), so with two minions landing on one hero in one tick the FIRST fact
+## resolved is deflected and the SECOND falls through to blocked damage once the stamina runs out.
+## Which minion is which must not be decided by unpinned physics-query or gather order.
+##
+## PINNED HERE RATHER THAN ONLY IN THE RUNNER, and that is the difference between a convention and a
+## mechanism (the standing `3-0d/R20` preference for impossible-by-construction over
+## detectable-by-inspection). The runner ALSO gathers in this order — hero then units, slot 0 then
+## slot 1 — but a canonical order that lives only in the gather seat would be re-established by
+## every future fact producer that remembers to. Sorting HERE makes the property hold for facts fed
+## in ANY order, which is exactly what AC 5's non-vacuous pin feeds in.
+##
+## HERO-VS-HERO IS BIT-FOR-BIT UNMOVED, provably: a hero attacker's address is `[slot, -1]`, the
+## runner has always gathered slot 0 before slot 1, and this sort is STABLE — so a queue containing
+## only hero facts comes out of it in exactly the order it went in.
+##
+## THE INDICES ARE SORTED, NOT THE QUEUE. Sorting the fact dictionaries themselves would need a
+## comparator over dictionaries and would lose the arrival position that makes the sort stable; an
+## `Array[int]` of positions costs one small allocation on ticks that have facts at all, which are
+## already the ticks allocating `confirmed`.
+func _canonical_contact_order() -> Array[int]:
+	var order: Array[int] = []
+	for i in _contact_queue.size():
+		order.append(i)
+	order.sort_custom(_contact_precedes)
+	return order
+
+
+func _contact_precedes(a: int, b: int) -> bool:
+	var fa: Dictionary = _contact_queue[a]
+	var fb: Dictionary = _contact_queue[b]
+	var slot_a := int(fa["attacker"])
+	var slot_b := int(fb["attacker"])
+	if slot_a != slot_b:
+		return slot_a < slot_b
+	var index_a := int(fa["attacker_index"])
+	var index_b := int(fb["attacker_index"])
+	if index_a != index_b:
+		return index_a < index_b
+	return a < b
+
+
+## Story 4-3b (AC 13): SET the sourcing unit's IN-REACH FLAG from a fact it produced — of EITHER
+## KIND, probe or strike.
+##
+## COUNTING STRIKES CLOSES A REFRESH HOLE, and it is the trap this AC exists to name: the fact's KIND
+## is decided by PHASE, so while a unit's active window is open the SAME overlap produces a STRIKE
+## rather than a probe. A throttle tick landing inside an active window would therefore refresh
+## nothing, and after recovery the unit would wait for the next probe — the same jitter the flag
+## exists to remove, merely less often. A landed strike is PROOF of reach, and stronger proof than a
+## probe since it is the identical overlap test, so counting it closes the hole with no new mechanism
+## and no extra stream volume.
+##
+## SCOPED TO THE ACQUIRED TARGET, AND THAT DOES NOT FOLLOW FROM AC 4 READ ALONE. AC 4's cleave
+## deliberately lets one swing damage BYSTANDERS the unit never aimed at; letting a bystander refresh
+## "in reach" would keep a unit swinging at a target it has actually lost. Only the FLAG is scoped
+## here — never which targets a cleave may damage.
+##
+## A HERO-SOURCED FACT RETURNS IMMEDIATELY: heroes have no reach flag, and a hero's swing is
+## input-driven.
+##
+## THE LOCKED DIRECTION IS REFRESHED IN THE SAME BREATH, AND ONLY WHILE THE SWING CAN STILL LAND
+## (AC 12). The fact's field is TARGET-to-ATTACKER, so the unit's attack direction is its NEGATION —
+## storing it un-negated would lock a backwards swing. Once a WINDUP has begun this branch cannot
+## fire again until the ACTIVE window has closed, so the value FREEZES across windup and active:
+## that freeze IS the lock, and it needs no sixth "is locked" field.
+##
+## THE FREEZE COVERS WINDUP AND ACTIVE, NOT RECOVERY, AND THE STORY DID NOT SETTLE WHICH — REPORTED
+## AS A DEV-PASS FINDING RATHER THAN CHOSEN QUIETLY. AC 12 states the freeze runs "from windup start
+## until the swing ends", which read literally includes recovery; but with AC 13's back-to-back cycle
+## a continuously in-reach unit is IDLE only inside the single step-3 pass that ends recovery and
+## begins the next windup, so NO fact can ever arrive while it is idle and the direction would freeze
+## at its FIRST value FOREVER — contradicting AC 12's own stated consequence that the lock is "up to
+## one throttle interval stale", which bounds the staleness at one interval. The two clauses cannot
+## both hold across a back-to-back cycle. The reading taken satisfies BOTH: AC 12's stated feel is
+## "a swing that misses when the target steps aside DURING WINDUP/ACTIVE is the intended feel" — it
+## names those two phases and not recovery — and during RECOVERY the hitbox is shut, so nothing can
+## land and refreshing harms nothing while keeping staleness bounded as promised. If the operator
+## wants the literal reading instead, this condition is the one line that changes.
+func _mark_reach_from_fact(attacker: PlayerState, attacker_index: int, fact: Dictionary) -> void:
+	if attacker_index == TargetingService.HERO_INDEX:
+		return
+	if not attacker.units.has_index(attacker_index):
+		return
+	if attacker.units.target_slot_at(attacker_index) != int(fact["target"]):
+		return
+	if attacker.units.target_index_at(attacker_index) != int(fact["target_index"]):
+		return
+	attacker.units.mark_in_reach_at(attacker_index)
+	var phase := attacker.units.attack_phase_at(attacker_index)
+	if phase != UnitBoard.AttackPhase.WINDUP and phase != UnitBoard.AttackPhase.ACTIVE:
+		attacker.units.set_attack_dir_at(attacker_index, -(fact["dir"] as Vector2))
+
+
+## Story 4-3b (AC 14, rung (a)): THE DEAD-ATTACKER DROP, DISPATCHED ON ATTACKER KIND.
+##
+## THE DEFECT THIS REPLACES WAS SILENT. Both ladders read `attacker.hero.action_state == DEAD`, which
+## for a UNIT attacker asks whether its OWNER HERO is dead — so a LIVE minion owned by a DEAD hero had
+## every one of its facts dropped, with no damage, no signal and no error. A unit attacker's liveness
+## is its OWN board record's, resolved from the widened address of AC 3.
+##
+## AC 15 IS WHAT PROVES THIS RUNG DOES ITS JOB from the other direction: contact facts carry the F1
+## one-tick lag, so a fact gathered while the unit was alive can arrive after it died, and this is the
+## rung that drops it. Placed BEFORE dedupe registration for the `2-3/R6` reason unchanged — a
+## corpse's fact must never consume the swing's one resolution against that address.
+##
+## THE THIRD COPY THAT `4-3a/R24` NAMED IN ADVANCE. That ruling accepted the two-copy duplication and
+## said explicitly: "If a THIRD copy of this check appears in a future story, that is the signal to
+## replace the mechanism (e.g. a shared dead-attacker guard both ladders call into) rather than to
+## keep tightening this two-copy pattern." This story is that future story, so the mechanism is
+## replaced as instructed rather than a third copy added.
+func _attacker_is_dead(attacker: PlayerState, attacker_index: int) -> bool:
+	if attacker_index == TargetingService.HERO_INDEX:
+		return attacker.hero.action_state == HeroState.ActionState.DEAD
+	return not attacker.units.is_alive_at(attacker_index)
+
+
+## Story 4-3b (AC 14, rung (b)): DEDUPE REGISTRATION, DISPATCHED ON ATTACKER KIND — the second
+## silently-failing attacker-side rung, and the more damaging of the two.
+##
+## THE DEFECT THIS REPLACES WAS SILENT AND TOTAL. Both ladders called `attacker.hero.register_swing_hit(...)`,
+## the OWNER HERO's registrar, which returns false for a unit's `attack_index` because a unit never
+## starts a hero swing and so never opens a record under that key — so EVERY UNIT HIT VANISHED with no
+## damage, no signal and no error. A unit's dedupe is its OWN (AC 16): its own monotonic counter on the
+## board, its own records in `UnitSwingDedupe`.
+##
+## WHY THE UNIT CANNOT SHARE THE HERO'S, measured (`4-3b/R12`): the hero's `attack_index` is
+## incremented only by hero swings and IS snapshotted, so driving it from unit swings would move
+## hero-observed values — an unnamed golden cause; and the hero's records expire off the HERO's own
+## active window, which has nothing to do with a unit's.
+func _register_attacker_hit(attacker: PlayerState, attacker_index: int, attack_index: int,
+		target_slot: int, target_index: int) -> bool:
+	if attacker_index == TargetingService.HERO_INDEX:
+		return attacker.hero.register_swing_hit(attack_index, target_slot, target_index)
+	return attacker.unit_dedupe.register(attacker_index, attack_index, target_slot, target_index)
 
 
 ## Story 4-3a (AC 2/AC 3/AC 5/AC 7, `4-3a/R20`): one contact fact whose target address names a
@@ -790,14 +1100,20 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	var index := int(fact["target_index"])
 	if not target.units.is_alive_at(index):
 		return
-	# THIS TWO-LINE CHECK DUPLICATES the hero ladder's dead-attacker drop above (see its comment for
-	# the full reasoning). ACCEPTED, not refactored (4-3a/R24, review finding) -- this branch is
-	# deliberately a short, separate path (4-3a/R20), and one two-line condition does not earn a
-	# shared helper. A THIRD copy appearing in the next story is the signal to replace the mechanism
-	# instead of tightening this pattern further.
-	if attacker.hero.action_state == HeroState.ActionState.DEAD:
+	# Story 4-3b (AC 14/AC 17): BOTH attacker-side rungs now DISPATCH ON ATTACKER KIND, through the
+	# same two helpers the hero ladder calls -- which is `4-3a/R24`'s own instruction discharged (it
+	# named a THIRD copy of the dead-attacker check as the signal to replace the mechanism rather
+	# than tighten the two-copy pattern, and this story would have been that third copy).
+	#
+	# AC 17 FALLS OUT OF EXACTLY THIS AND NEEDS NO SEPARATE PATH: unit-versus-unit damage is this
+	# same ladder with the ATTACKER address naming a unit instead of a hero. Both attacker kinds read
+	# the same `unit_damage_per_hit` against the same `unit_max_hp`, so a minion dies to another
+	# minion in the same number of hits it takes from a hero, by construction.
+	var attacker_index := int(fact["attacker_index"])
+	if _attacker_is_dead(attacker, attacker_index):
 		return
-	if not attacker.hero.register_swing_hit(int(fact["attack_index"]), int(fact["target"]), index):
+	if not _register_attacker_hit(attacker, attacker_index, int(fact["attack_index"]),
+			int(fact["target"]), index):
 		return
 	# Story 4-3a (AC 7, `4-3a/R21a`): DEATH IS RESOLVED HERE, immediately after damage is applied,
 	# and it needs no line of its own — a record is dead exactly when its hp reaches 0, so the clamp
@@ -810,6 +1126,14 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# advance() before step 4 is ever reached, so a frozen tick never resolves a contact and
 	# therefore never kills a unit. Pinned in test_unit_damage_and_death.gd.
 	target.units.apply_damage_at(index, balance.unit_damage_per_hit)
+	# Review fix pass (4-3b, F2): a unit that DIES here can never close its own swing-dedupe
+	# record through the normal per-tick path again -- `_advance_unit_attacks` skips dead units
+	# entirely, so a corpse killed mid-ACTIVE-window would otherwise leave that record open
+	# forever. This is the one place death is already known, so the record is discarded right
+	# here rather than adding a second liveness seat elsewhere. A no-op if this unit never opened
+	# a record, or one already closed and erased normally. See `UnitSwingDedupe.discard`.
+	if not target.units.is_alive_at(index):
+		target.unit_dedupe.discard(index)
 
 
 ## Story 1-8 (R-D2/R-D3): the facing gate — pure state policy over the runner-reported
@@ -1582,3 +1906,8 @@ func _reset_player(player: PlayerState) -> void:
 	# -- see _apply_debug_reset's header. Seated in the PER-PLAYER helper because the board is
 	# per-player, and reached only from the reset: no round-end path clears it.
 	player.units.clear()
+	# Story 4-3b (AC 16): the unit dedupe records are cleared WITH the board, in the same seat and
+	# under the same named exception -- they key BOARD INDICES, so a record surviving a board clear
+	# would key an index that no longer names the unit it was opened for. The two are one collection
+	# expressed as two, exactly as UnitBoard's own eight arrays are one expressed as eight.
+	player.unit_dedupe.clear()

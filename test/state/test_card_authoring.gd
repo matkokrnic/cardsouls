@@ -167,9 +167,9 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 		else:
 			offenders.append("%s -> %s" % [card.id, id])
 	assert_eq(offenders.size(), 0,
-		"every authored effect_id must begin with one of %s (an unrecognised prefix resolves to "
+		("every authored effect_id must begin with one of %s (an unrecognised prefix resolves to "
 		+ "CardEffectResolver.REASON_UNKNOWN_EFFECT_PREFIX -- a card that costs mana and does "
-		+ "nothing): %s" % [prefixes, ", ".join(offenders)])
+		+ "nothing): %s") % [prefixes, ", ".join(offenders)])
 	# The MEASURED split the story records (six summons, three spells) and the resolver's own
 	# reachability claim rests on: AC 6(ii) is declared NOT naturally reachable precisely because
 	# these two numbers add up to nine.

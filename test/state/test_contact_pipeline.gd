@@ -89,7 +89,7 @@ func _advance_until_idle(ms: MatchState) -> void:
 ## fact pushed at t4, resolved t5). Leaves: P2 DEAD at 0 HP, P1 at 8 mana, tick at 5.
 func _kill_p2(ms: MatchState) -> void:
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)  # tick 5: 100% damage -> 0 HP -> step 8: DEAD + round_ended
 
 
@@ -101,7 +101,7 @@ func test_hit_landed_queued_with_payload() -> void:
 	ms.hit_landed.connect(func(attacker: int, target: int, damage: float, target_hp: float) -> void:
 		hits.append([attacker, target, damage, target_hp]))
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	# Advance WITHOUT draining to observe the D5 queue discipline directly.
 	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 	ms.advance(intents)
@@ -117,7 +117,7 @@ func test_hit_landed_drains_after_targets_hp_changed() -> void:
 	ms.p2.hero.hp_changed.connect(func(_c: float, _m: float) -> void: order.append("hp"))
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: order.append("hit"))
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(order, ["hp", "hit"],
 		"FIFO drain: damage queues hp_changed first, then hit_landed — consumers see HP moved before the hit event")
@@ -128,9 +128,9 @@ func test_dropped_duplicate_fact_emits_no_hit_landed() -> void:
 	var hits := {"n": 0}
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)  # tick 5: confirmed
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)  # tick 6: same swing, same target -> dedupe drops it
 	assert_eq(hits.n, 1, "hit_landed fires per CONFIRMED hit only — dropped facts emit nothing")
 
@@ -210,7 +210,7 @@ func test_dead_target_fact_dropped_no_corpse_mana() -> void:
 	ms.deflect_landed.connect(func(_a: int, _t: int) -> void: deflects.n += 1)
 	var hp_before := ms.p2.hero.get_hp()
 	var mana_before := ms.p1.mana.get_current()
-	ms.push_contact(0, [1, -1], atk, Vector2.DOWN)                 # a fact from the live attacker at the DEAD target
+	ms.push_contact([0, -1], [1, -1], atk, Vector2.DOWN, MatchState.CONTACT_STRIKE)                 # a fact from the live attacker at the DEAD target
 	var confirmed := ms._resolve_contacts()                 # DIRECT step call — no advance(), no step 1b
 	ms._generate_mana(confirmed)                            # the step-5 seat, fed the step-4 result
 	ms.drain_signals()

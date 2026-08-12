@@ -79,6 +79,69 @@ var _target_indices: Array[int] = []
 ## than a second structure to keep in sync.
 var _hp: Array[float] = []
 
+## ------------------------------------------------------------------------------------------
+## STORY 4-3b (AC 16, `4-3b/R14` AS AMENDED AT THE GATE): FIVE MORE PARALLEL ARRAYS — the unit
+## ATTACK RHYTHM. `4-3a` spent the `4-2/R17`(c) permission on `hp` alone and gave `4-3b` NO advance
+## permission (`4-3a/R6`); this story obtained its own grant, and the grant is FIVE scalar fields.
+## ------------------------------------------------------------------------------------------
+## STILL PLAIN SCALARS, STILL INDEX-ALIGNED, so the header's "no nested typed array, no Dictionary,
+## no StringName" reasoning covers all five unchanged. The DEDUPE HIT LIST — the sixth thing a unit
+## swing needs — is precisely the field that CANNOT live here, because it is a list of addresses;
+## it lives in `UnitSwingDedupe` beside the board, which is that class's whole reason for existing.
+##
+## THE DURATIONS ARE NOT HERE. Windup/active/recovery lengths are GLOBAL, authored once on
+## `BalanceConfig` and shared by every minion (AC 1), because no unit differs from another yet — the
+## same reasoning that keeps `unit_max_hp` off the record. What is per-record is only WHERE IN THE
+## RHYTHM this particular unit is.
+
+## Which phase of its swing the unit at each index is in. A STORED enum rather than a derived one,
+## and that is the one place this diverges from `HeroState`, deliberately: a hero derives its phase
+## from WHICH `TimingWindow` OBJECT is running (`attack_phase()`), and per-record OBJECTS are exactly
+## what this file's header rule forbids. An int per record is the scalar form of the same fact.
+enum AttackPhase { IDLE, WINDUP, ACTIVE, RECOVERY }
+
+var _attack_phase: Array[int] = []
+
+## Ticks remaining in the CURRENT phase, counted down one per `advance()` (A1 — integer ticks, never
+## a float accumulator). Zero while IDLE. It crosses ticks and decides an outcome, so it is
+## snapshotted (`4-3a/R17`'s standing reasoning).
+var _attack_ticks: Array[int] = []
+
+## The ATTACKER-TO-TARGET planar direction captured at windup start (AC 12) — a `Vector2`, which
+## `CanonicalHash` has an explicit branch for (`test/canonical_hash.gd`, TYPE_VECTOR2), which is the
+## condition AC 12 attaches to the dev pass's free choice of encoding. It is a VALUE type carrying no
+## element type to lose and no iteration order to depend on, so the header rule holds.
+##
+## IT IS THE NEGATION OF THE FACT'S OWN FIELD. The contact fact carries TARGET-to-ATTACKER
+## (`push_contact`'s `target_to_attacker`, computed by the runner as `attacker - target`), so a unit's
+## attack direction is that vector NEGATED — storing it un-negated would lock a backwards swing.
+##
+## THE FREEZE IS THE LOCK, AND IT NEEDS NO SIXTH FIELD (AC 12's own implementation note): while the
+## swing cannot land this field is refreshed to the latest known direction to the acquired target,
+## and across WINDUP and ACTIVE nothing writes it. `set_attack_dir_at` is therefore called only under
+## a phase test at its one call site — see `MatchState._mark_reach_from_fact`, whose docstring
+## records why the freeze covers windup and active rather than running through recovery, and that
+## the story did not settle it.
+var _attack_dir: Array[Vector2] = []
+
+## The unit's OWN monotonic swing counter — the `HeroState.attack_index` equivalent, keying its
+## entries in `UnitSwingDedupe`. Its own rather than the hero's, and `4-3b/R12` measured why: the
+## hero's counter is incremented only by hero swings and is snapshotted, so driving it from unit
+## swings would move hero-observed values.
+var _attack_count: Array[int] = []
+
+## AC 13's IN-REACH FLAG — the fifth granted field, added by the gate's amendment to `4-3b/R14`.
+## SET by any contact fact this unit sources against its ACQUIRED TARGET, of either kind (probe or
+## strike); CONSUMED when a windup starts; cleared by nothing else. There is NO negative probe:
+## absence of overlap is not a fact and cannot clear this (AC 13's consequence (ii)).
+##
+## STORED because the probe and the windup happen on DIFFERENT TICKS — this flag is precisely the
+## cross-tick carrier between them — and because it is what lets the next swing begin the instant
+## recovery ends instead of waiting up to a full throttle interval for the next probe. Without it the
+## observed attack rate would be windup+active+recovery PLUS a jittering remainder, and AC 1's
+## authored durations would stop describing the rate a player actually sees.
+var _in_reach: Array[bool] = []
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
 ## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
@@ -102,6 +165,17 @@ func add(max_hp: float) -> void:
 	_target_slots.append(pair[0])
 	_target_indices.append(pair[1])
 	_hp.append(max_hp)
+	# Story 4-3b (AC 16): a unit enters IDLE, with nothing counting down, no locked direction, no
+	# swing behind it and NOT in reach. The honest empty value for all five, on the same reasoning
+	# `add()` already applies to the no-target pair: a freshly summoned unit has acquired nothing,
+	# observed nothing and swung at nothing. In particular it must NOT enter in-reach — a unit that
+	# began winding up before any probe ever reported reach is exactly the free-running cycle AC 13
+	# forbids.
+	_attack_phase.append(AttackPhase.IDLE)
+	_attack_ticks.append(0)
+	_attack_dir.append(Vector2.ZERO)
+	_attack_count.append(0)
+	_in_reach.append(false)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -118,6 +192,15 @@ func clear() -> void:
 	_target_slots.clear()
 	_target_indices.clear()
 	_hp.clear()
+	# Story 4-3b: the five attack-rhythm arrays are cleared with their siblings, for the header's own
+	# reason applied to eight arrays instead of three — they are ONE collection expressed as eight,
+	# and an index that existed in one but not the others would be a record with a phase but no
+	# liveness, or a countdown belonging to a unit that no longer exists.
+	_attack_phase.clear()
+	_attack_ticks.clear()
+	_attack_dir.clear()
+	_attack_count.clear()
+	_in_reach.clear()
 
 
 func size() -> int:
@@ -258,6 +341,150 @@ func living_indices() -> Array[int]:
 ## Freshly built each call, so no caller receives a handle into this container.
 func hp_snapshot() -> Array:
 	return _hp.duplicate()
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 4-3b (AC 16): the attack-rhythm accessors.
+## ------------------------------------------------------------------------------------------
+## THEY MATCH THE SHAPE OF THE EXISTING PER-RECORD ACCESSORS and that is AC 16's own requirement:
+## NON-ALLOCATING SINGLE-VALUE reads (`target_slot_at` / `target_index_at` / `hp_at`), never a
+## pair-allocating getter — the runner reads several of these every physics frame for every spawned
+## unit, which is exactly the hot path the project-context Performance Rule names.
+##
+## BOUND ENFORCEMENT FOLLOWS `hp_at`, NOT `is_alive_at`: an out-of-range index here is a programming
+## error, because every caller iterates `size()` or has already passed `has_index`. `is_alive_at`'s
+## deliberate leniency exists for ONE caller — the contact ladder's dead-target rung, which judges
+## untrusted fact data — and none of these is that caller.
+
+func attack_phase_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _attack_phase[index]
+
+
+## The runner's hitbox-gather predicate, and the unit twin of `HeroState.is_hitbox_active()`
+## (`active.is_running`) including its reason: the runner queries overlaps ONLY while state flags the
+## swing active. DERIVED from the stored phase, never a second stored flag — two fields expressing
+## one fact is how a swing ends up simultaneously active and not.
+func is_hitbox_active_at(index: int) -> bool:
+	return has_index(index) and _attack_phase[index] == AttackPhase.ACTIVE
+
+
+func attack_ticks_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _attack_ticks[index]
+
+
+func attack_dir_at(index: int) -> Vector2:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _attack_dir[index]
+
+
+func attack_count_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _attack_count[index]
+
+
+func is_in_reach_at(index: int) -> bool:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _in_reach[index]
+
+
+## SET-ONLY, never cleared here, and the asymmetry is AC 13's consequence (ii) made structural:
+## absence of overlap is NOT a fact, so there is no negative probe and nothing outside a windup start
+## may clear this. A `set_in_reach_at(i, false)` would be exactly the clearing path the AC forbids —
+## the flag is cleared by `begin_windup_at` CONSUMING it and by nothing else.
+func mark_in_reach_at(index: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_in_reach[index] = true
+
+
+## The LATEST KNOWN direction to the acquired target, refreshed while the unit is IDLE (AC 12). The
+## IDLE test lives at the call site rather than in here, because this class is a container and the
+## phase it would have to consult is policy: `MatchState` decides when a direction may still move,
+## the same way it decides when a target may be written (`set_target_at`'s one-writer discipline).
+func set_attack_dir_at(index: int, dir: Vector2) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_attack_dir[index] = dir
+
+
+## Begin a swing: CONSUME the in-reach flag, enter WINDUP for `windup_ticks`, and advance this unit's
+## own monotonic swing counter. Returns the new counter value, which is the `attack_index` the
+## swing's contact facts will be stamped with and the key its `UnitSwingDedupe` record is opened
+## under — returned rather than re-read so the caller cannot key a record off a different number
+## than the one the counter now holds.
+##
+## THE FLAG IS CONSUMED HERE AND NOWHERE ELSE (AC 13). That is the ONLY clearing path.
+func begin_windup_at(index: int, windup_ticks: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_in_reach[index] = false
+	_attack_phase[index] = AttackPhase.WINDUP
+	_attack_ticks[index] = windup_ticks
+	_attack_count[index] += 1
+	return _attack_count[index]
+
+
+## Enter `phase` for `ticks` ticks. The phase-progression mutator `MatchState`'s step-3 unit seat
+## drives; entering IDLE zeroes the countdown, because a countdown that outlived its phase would be
+## a second source of truth for "is this unit swinging".
+func set_phase_at(index: int, phase: AttackPhase, ticks: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_attack_phase[index] = phase
+	_attack_ticks[index] = 0 if phase == AttackPhase.IDLE else ticks
+
+
+## Count down every non-IDLE record by one tick, called from `advance()` step 2 beside every other
+## D4 timer — the `HeroState.tick_timers()` seat and shape, for a container instead of an object.
+## Clamped at zero: the step-3 seat reads "countdown reached zero" as the phase boundary, so a
+## countdown running negative would make the boundary a moment rather than a state.
+##
+## A DEAD UNIT'S RECORD IS TICKED LIKE ANY OTHER and that is deliberate — a corpse's countdown is
+## inert either way (nothing gathers a dead unit's hitbox, and `_advance_unit_attacks` skips it), and
+## a liveness test here would put a second liveness seat in a container that has no business holding
+## policy.
+func tick_attack_timers() -> void:
+	for i in _attack_phase.size():
+		if _attack_phase[i] == AttackPhase.IDLE:
+			continue
+		if _attack_ticks[i] > 0:
+			_attack_ticks[i] -= 1
+
+
+## AC 16's snapshot payloads — FIVE separate keys, one per array, on the `unit_hp` precedent
+## (one array -> one key) rather than the `unit_targets` one (two arrays -> one fused key of pairs).
+## MEASURED CHOICE, not a default: `unit_targets` fuses because a target IS one logical fact
+## expressed as two ints, and splitting it would let a slot and an index drift into different keys.
+## These five are five INDEPENDENT facts about a unit — a phase, a countdown, a direction, a counter
+## and a flag — and fusing any of them would hide which one moved when the golden moves.
+##
+## Each is freshly built, so no caller receives a handle into this container, and the ORDER IS
+## MEANINGFUL exactly as it is for `unit_hp`: a phase held by the wrong unit is a real divergence.
+func attack_phase_snapshot() -> Array:
+	return _attack_phase.duplicate()
+
+
+func attack_ticks_snapshot() -> Array:
+	return _attack_ticks.duplicate()
+
+
+func attack_dir_snapshot() -> Array:
+	return _attack_dir.duplicate()
+
+
+func attack_count_snapshot() -> Array:
+	return _attack_count.duplicate()
+
+
+func in_reach_snapshot() -> Array:
+	return _in_reach.duplicate()
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS

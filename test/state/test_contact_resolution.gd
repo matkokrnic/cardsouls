@@ -107,7 +107,7 @@ func test_is_hitbox_active_exactly_on_active_window_ticks() -> void:
 func test_confirmed_hit_damages_target_and_generates_attacker_mana() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)          # active t4-7
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 5 drains the fact in step 4
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "damage = 6% of the TARGET's 100 max HP")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "melee_hit_mana accrues to the ATTACKER (flag ON)")
@@ -118,9 +118,9 @@ func test_confirmed_hit_damages_target_and_generates_attacker_mana() -> void:
 func test_second_contact_same_swing_same_target_damages_once() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 5: confirmed
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 6: same swing, same target -> dropped
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "one swing damages a given target at most once")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "mana accrues once per CONFIRMED hit — dupe generates nothing")
@@ -129,14 +129,14 @@ func test_second_contact_same_swing_same_target_damages_once() -> void:
 func test_chained_swing_is_a_new_record_and_hits_again() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 5: swing 0 confirmed
 	for t in range(6, 9):
 		_advance(ms)                            # ticks 6-8: through active close, into recovery
 	_advance(ms, _intent([&"attack"]))          # tick 9: chain -> swing 1 (active t12-15)
 	for t in range(10, 13):
 		_advance(ms)                            # ticks 10-12: swing 1 windup, active starts t12
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 13: swing 1 confirmed
 	assert_eq(ms.p1.hero.attack_index, 1, "chain claimed a new monotonic attack index")
 	assert_eq(ms.p2.hero.get_hp(), 88.0, "a chained swing is a NEW record — same target hit again")
@@ -148,7 +148,7 @@ func test_chained_swing_is_a_new_record_and_hits_again() -> void:
 func test_fact_from_last_active_tick_accepted_one_tick_after_close() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 7)          # t7 = LAST active tick (window closes in t8 step 2)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 8: F1 lag — record in its grace tick
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "last-active-tick fact, arriving one tick later, is ACCEPTED")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "grace-tick confirmation still generates mana")
@@ -157,7 +157,7 @@ func test_fact_from_last_active_tick_accepted_one_tick_after_close() -> void:
 func test_fact_after_dedupe_record_expired_is_dropped() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 8)          # t8 consumed the grace tick
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 9: record erased in step 2 -> dropped in step 4
 	assert_eq(ms.p2.hero.get_hp(), 100.0, "fact older than the 1-tick grace is DROPPED — no damage")
 	assert_eq(ms.p1.mana.get_current(), 0.0, "dropped fact generates nothing")
@@ -165,7 +165,7 @@ func test_fact_after_dedupe_record_expired_is_dropped() -> void:
 
 func test_contact_with_no_swing_ever_started_is_dropped() -> void:
 	var ms := _make_match()
-	ms.push_contact(0, [1, -1], 0, Vector2.DOWN)      # no swing exists — no record for index 0
+	ms.push_contact([0, -1], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)      # no swing exists — no record for index 0
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 100.0, "unknown attack index -> dropped, no crash")
 
@@ -175,7 +175,7 @@ func test_contact_with_no_swing_ever_started_is_dropped() -> void:
 func test_flag_off_hit_lands_and_damages_but_mana_stays_zero() -> void:
 	var ms := _make_match(true, false)          # melee_mana_generation OFF
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "flag OFF: the hit still lands and damages (graceful degradation)")
 	assert_eq(ms.p1.mana.get_current(), 0.0, "flag OFF closes ONLY the faucet")
@@ -184,7 +184,7 @@ func test_flag_off_hit_lands_and_damages_but_mana_stays_zero() -> void:
 func test_no_flags_injected_behaves_like_flag_off() -> void:
 	var ms := _make_match(false)                # flags never injected (null)
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_eq(ms.p2.hero.get_hp(), 94.0, "no flags: damage still applies")
 	assert_eq(ms.p1.mana.get_current(), 0.0, "no flags: the flag-gated faucet stays closed (inert, like the balance null guards)")
@@ -334,7 +334,7 @@ func test_attack_lunge_is_state_side_with_no_animation_present() -> void:
 func test_swing_dedupe_tracking_is_snapshotted_mid_swing() -> void:
 	var ms := _make_match()
 	_attack_and_advance_through(ms, 4)
-	ms.push_contact(0, [1, -1], ms.p1.hero.attack_index, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)                                # tick 5: hit on the books, swing mid-flight
 	var snap: Dictionary = ms.p1.hero.to_snapshot()
 	assert_true(snap.has("swing_dedupe"), "mid-swing dedupe state is snapshotted (D8)")
@@ -386,7 +386,7 @@ func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 	ms.deflect_landed.connect(func(_a: int, _t: int) -> void: deflects.n += 1)
 	var p2_hp_before := ms.p2.hero.get_hp()
 	var p1_mana_before := ms.p1.mana.get_current()
-	ms.push_contact(0, [1, -1], atk, Vector2.DOWN)    # a fact SOURCED from the DEAD attacker
+	ms.push_contact([0, -1], [1, -1], atk, Vector2.DOWN, MatchState.CONTACT_STRIKE)    # a fact SOURCED from the DEAD attacker
 	var confirmed := ms._resolve_contacts()     # DIRECT step call — no advance(), no step 1b
 	ms._generate_mana(confirmed)                # the step-5 seat, fed the step-4 result
 	ms.drain_signals()
@@ -414,7 +414,7 @@ func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 func test_contacts_inert_without_apply_balance() -> void:
 	var ms := MatchState.new(MatchParams.new(7))  # deliberately NO apply_balance
 	var before: Dictionary = ms.to_snapshot()
-	ms.push_contact(0, [1, -1], 0, Vector2.DOWN)
+	ms.push_contact([0, -1], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 	ms.advance(intents)
 	ms.drain_signals()
@@ -423,3 +423,211 @@ func test_contacts_inert_without_apply_balance() -> void:
 	assert_eq(after["p2"], before["p2"],
 		"pre-injection MatchState: step-4 contacts inert — p2 UNCHANGED FROM CONSTRUCTION, no crash")
 	assert_eq(after["p1"], before["p1"], "the attacker is likewise untouched (no dedupe record, no spend)")
+
+
+## ================================================================================================
+## STORY 4-3b: the ATTACKER side of the fact — the widened address, the kind dispatch, the signal.
+## ================================================================================================
+
+## Board balance for the 4-3b block below. The unit fields the existing `_config()` never authored,
+## plus a minion rhythm of 2 / 3 / 4 ticks, all different from the hero's 3 / 4 / 6 in the same
+## fixture so a phase read off the wrong field cannot coincide.
+func _config_4_3b() -> BalanceConfig:
+	var c := _config()
+	c.unit_max_hp = 9.0
+	c.unit_damage_per_hit = 3.0
+	c.minion_attack_windup_seconds = 2.0 / 60.0
+	c.minion_attack_active_seconds = 3.0 / 60.0
+	c.minion_attack_recovery_seconds = 4.0 / 60.0
+	c.minion_attack_reach_distance = 2.0
+	c.minion_retarget_interval_seconds = 1000.0
+	return c
+
+
+func _match_4_3b() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(7))
+	ms.apply_balance(_config_4_3b())
+	var f := FeatureFlags.new()
+	f.melee_mana_generation = true
+	f.minions = true
+	ms.inject_feature_flags(f)
+	ms.drain_signals()
+	return ms
+
+
+## P1 gets one unit, acquired on `target`, driven into its ACTIVE window through the real reach
+## trigger and the real phase ladder — never by writing the phase directly, so what these tests
+## exercise is the shipped mechanism.
+func _p1_unit_into_active(ms: MatchState, target: Array[int]) -> void:
+	ms.p1.units.add(9.0)
+	ms.p1.units.set_target_at(0, target[0], target[1])
+	ms.push_contact([0, 0], target, 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
+	_advance(ms)
+	_advance(ms)                       # the windup begins
+	for _t in 2:                       # minion windup is 2 ticks
+		_advance(ms)
+
+
+## ---- AC 3: the hero-attacker REGRESSION PIN, and it is the non-vacuous one -----------------
+
+## AC 3's core claim is that the widened attacker address is KIND-AGNOSTIC and that every existing
+## hero-attacker call site "keeps resolving identically under `[slot, -1]`". The rest of this file
+## is already that pin — every one of its hero facts now goes through the widened form — but a
+## re-expression that is merely GREEN proves only that it compiles.
+##
+## THIS TEST MAKES IT NON-VACUOUS by measuring the ONE thing a broken widening would move and a
+## compile could not catch: the resolved ATTACKER. A `[0, -1]` fact must reach P1's hero — its
+## dedupe, its liveness, and P1's mana — and NOT be treated as a unit at board index -1 or as a
+## unit at index 0. Both wrong readings are silent: the first drops every hero hit (no record under
+## that index), the second would credit a unit's dedupe.
+func test_a_hero_attacker_address_still_resolves_to_that_slots_hero() -> void:
+	var ms := _match_4_3b()
+	# A unit ALSO exists on P1's board, so "resolved to the hero" is a real discrimination rather
+	# than the only possibility. It is never given a swing, so its dedupe stays empty.
+	ms.p1.units.add(9.0)
+	_attack_and_advance_through(ms, 4)
+	var mana_before := ms.p1.mana.get_current()
+	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_eq(ms.p2.hero.get_hp(), 94.0,
+		"a `[slot, -1]` attacker resolves to that slot's HERO and lands the hero's own damage")
+	assert_true(ms.p1.mana.get_current() > mana_before,
+		"...and generates the hero's mana, so it went down the hero path and not the unit one")
+	assert_eq(ms.p1.unit_dedupe.size(), 0,
+		"...and registered in the HERO's dedupe, never the unit board's — `index == -1` is the hero, "
+		+ "not board index -1 and not board index 0")
+	assert_eq(ms.p1.hero.to_snapshot()["swing_dedupe"]["records"].size(), 1,
+		"...which is where the record actually is")
+
+
+## ---- AC 14: BOTH attacker-side rungs, PINNED TO FAIL LOUDLY --------------------------------
+
+## AC 14 rung (a). THE DEFECT THIS PINS IS SILENT: the dead-attacker drop read
+## `attacker.hero.action_state == DEAD`, which for a UNIT attacker asks whether its OWNER HERO is
+## dead — so a LIVE minion owned by a DEAD hero had every one of its facts dropped, with no damage,
+## no signal and no error.
+##
+## PINNED BY ASSERTING THE POSITIVE OUTCOME IN EXACTLY THE CONFIGURATION THAT SWALLOWS IT, which is
+## AC 14's own instruction: the owner hero is DEAD and its minion is ALIVE, and the minion's hit
+## MUST land. Against the shipped-before-this-story code this test fails.
+func test_a_live_minion_under_a_dead_owner_hero_still_lands_its_hit() -> void:
+	var ms := _match_4_3b()
+	_p1_unit_into_active(ms, [1, -1])
+	# Kill the OWNER hero, not the unit. `_check_resolution` ends the round on a dead hero and the
+	# step-1b freeze would then skip step 4 entirely, so the round latch is cleared for this
+	# measurement -- what is under test is the ATTACKER-KIND dispatch, not the round lifecycle.
+	ms.p1.hero.take_damage(ms.p1.hero.get_max_hp())
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)
+	ms.drain_signals()
+	assert_true(ms.p1.units.is_alive_at(0), "sanity: the MINION is alive...")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "...and its OWNER is dead")
+	var hp_before := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_true(ms.p2.hero.get_hp() < hp_before,
+		"a LIVE minion's hit lands even though its OWNER HERO is dead — the liveness rung resolves "
+		+ "the ATTACKER'S OWN identity from the widened address (AC 14a). Reading the owner's "
+		+ "action_state drops this fact with no damage, no signal and no error")
+
+
+## AC 14 rung (a), THE OTHER DIRECTION, so the rung above is not simply "never drops anything":
+## a DEAD MINION's fact IS dropped, even under a perfectly healthy owner hero.
+func test_a_dead_minions_fact_is_dropped_even_under_a_living_owner() -> void:
+	var ms := _match_4_3b()
+	_p1_unit_into_active(ms, [1, -1])
+	ms.p1.units.apply_damage_at(0, 9.0)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: the minion is dead")
+	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "...and its owner is not")
+	var hp_before := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_eq(ms.p2.hero.get_hp(), hp_before,
+		"a DEAD minion's fact delivers nothing — its liveness is its OWN board record's, so the "
+		+ "rung falls in both directions rather than being permanently open")
+
+
+## AC 14 rung (b), and the more damaging of the two silent failures: dedupe registration called the
+## OWNER HERO's registrar, which returns false for a unit's `attack_index` because a unit never
+## starts a hero swing and so never opens a record under that key — so EVERY UNIT HIT VANISHED, with
+## no damage, no signal and no error.
+##
+## PINNED BY THE POSITIVE OUTCOME in exactly that configuration: a unit's FIRST registered hit lands.
+func test_a_units_first_registered_hit_lands_rather_than_vanishing() -> void:
+	var ms := _match_4_3b()
+	_p1_unit_into_active(ms, [1, -1])
+	assert_eq(ms.p1.unit_dedupe.size(), 1,
+		"sanity: the unit opened its OWN record when its window opened")
+	var hp_before := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_true(ms.p2.hero.get_hp() < hp_before,
+		"a unit's first hit LANDS — dedupe registration dispatches on ATTACKER KIND and consults "
+		+ "the unit's OWN records (AC 14b). Against the owner hero's registrar it returns false and "
+		+ "the hit vanishes with no damage, no signal and no error")
+	# ...and the dedupe still does its job: the SAME address cannot be hit twice by the same swing.
+	var hp_after := ms.p2.hero.get_hp()
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_eq(ms.p2.hero.get_hp(), hp_after,
+		"...and a SECOND fact from the same swing against the same address is refused, so the "
+		+ "registrar is really deduping rather than always returning true")
+
+
+## AC 14 rung (b), the isolation half: a unit's registration must not touch the OWNER HERO's dedupe,
+## and a hero's must not touch the unit's. Two registrars, no shared state (`4-3b/R12`).
+func test_the_two_registrars_are_separate_state() -> void:
+	var ms := _match_4_3b()
+	var hero_counter_before := ms.p1.hero.attack_index
+	_p1_unit_into_active(ms, [1, -1])
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_eq(ms.p1.unit_dedupe.size(), 1, "the unit's record exists")
+	assert_eq(ms.p1.hero.to_snapshot()["swing_dedupe"]["records"].size(), 0,
+		"...and the OWNER HERO opened none — a unit swing does not create hero dedupe state")
+	assert_eq(ms.p1.hero.attack_index, hero_counter_before,
+		"...and did not advance the hero's monotonic counter either, which is snapshotted and would "
+		+ "be an unnamed golden cause (`4-3b/R12`)")
+
+
+## ---- AC 8: the signal asymmetry ---------------------------------------------------------------
+
+## AC 8 (`4-3b/R5`): `hit_landed` IS emitted when a unit damages a HERO — the hero is really hurt, so
+## the telegraph flash and sting on that hero are correct — and is still SUPPRESSED for a unit
+## TARGET (`4-3a/R12`). A DELIBERATE ASYMMETRY, pinned in both directions in one test so a later
+## pass cannot "fix" it into consistency without this failing.
+func test_hit_landed_fires_for_a_unit_attacker_on_a_hero_and_not_on_a_unit() -> void:
+	var ms := _match_4_3b()
+	ms.p2.units.add(9.0)
+	var seen: Array = []
+	ms.hit_landed.connect(func(a: int, t: int, d: float, h: float) -> void:
+		seen.append([a, t, d, h]))
+	# (i) unit attacker -> HERO target: EMITTED.
+	_p1_unit_into_active(ms, [1, -1])
+	ms.push_contact([0, 0], [1, -1], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_eq(seen.size(), 1,
+		"`hit_landed` IS emitted when a unit damages a HERO (AC 8) — the hero is really hurt")
+	assert_eq(seen[0][0], 0,
+		"...and its attacker payload is the BARE SLOT, unwidened (`4-3b/R15`): the shipped consumers "
+		+ "underscore it and gate on the TARGET, so widening it would break two typed callbacks for "
+		+ "zero behavioural gain")
+	assert_eq(seen[0][1], 1, "...and the target slot is the hero that was hit")
+	# (ii) the SAME unit attacker -> UNIT target: SUPPRESSED.
+	var before := seen.size()
+	var unit_hp_before := ms.p2.units.hp_at(0)
+	ms.push_contact([0, 0], [1, 0], ms.p1.units.attack_count_at(0), Vector2.DOWN,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)
+	assert_true(ms.p2.units.hp_at(0) < unit_hp_before,
+		"sanity: the unit-target hit really did land, so the suppression below is about the SIGNAL")
+	assert_eq(seen.size(), before,
+		"...and NO `hit_landed` was emitted for it (`4-3a/R12`) — its payload carries a slot only, "
+		+ "and the shipped consumer would flash an untouched HERO whose hp did not change. The two "
+		+ "rules are not the same rule; this asymmetry is deliberate (AC 8)")

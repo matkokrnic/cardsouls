@@ -19,6 +19,7 @@ const MAX_FRAMES := 120  # 2 s at 60 Hz — generous vs. any sane authored windu
 var _runner: Node3D
 var _transitions: Array = []
 var _frames := 0
+var _quit_at := -1
 
 
 func _initialize() -> void:
@@ -40,7 +41,15 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_attack")
 	if _frames == 5:
 		Input.action_release(&"p1_attack")
-	if not _transitions.is_empty() or _frames >= MAX_FRAMES:
+	# Review fix pass (4-3b, F4): this used to `quit()` the instant the transition arrived -- 2
+	# physics frames after the press. Measured cause of a resource leak the tightened harness now
+	# catches (an "ERROR: 1 resources still in use at exit" a loose harness let a PASSing run
+	# hide): quitting that fast does not give whatever setup this transition triggers time to
+	# settle before engine teardown, so a resource never reaches a clean free. A short delay after
+	# the assertion already has what it needs removes the leak with no change to what is proven.
+	if not _transitions.is_empty() and _quit_at == -1:
+		_quit_at = _frames + 30
+	if (_quit_at != -1 and _frames >= _quit_at) or _frames >= MAX_FRAMES:
 		var expected := [int(HeroState.ActionState.IDLE), int(HeroState.ActionState.ATTACKING)]
 		var ok: bool = not _transitions.is_empty() and _transitions[0] == expected
 		print("live attack press: transitions=%s after %d frames" % [_transitions, _frames])

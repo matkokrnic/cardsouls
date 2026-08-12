@@ -61,6 +61,39 @@ extends CharacterBody3D
 ## test_root_rotation_isolation.gd guards the HERO root and is untouched by this.
 
 
+## Story 4-3b (AC 2): the unit HITBOX, exposed exactly as `HeroActor` exposes its own
+## (`hero.gd`) and for the same one consumer -- the runner's gather pass, which queries
+## `get_overlapping_areas()` directly and never `area_entered` (signal firing order is not
+## guaranteed and would make replay order-dependent). NOTHING ELSE READS IT, this node never touches
+## it, and it holds no gameplay logic: it reports contact and `advance()` step 4 decides.
+@onready var hitbox: Area3D = $Hitbox
+
+
+## Story 4-3b (AC 12): yaw this box along an ALREADY-DECIDED planar heading, rather than at a
+## position it must derive one from. The `aim_at()` twin below, and the ONE difference is who owns
+## the direction: `aim_at()` is told WHERE the target is and looks at it, this is told WHICH WAY to
+## face and obeys.
+##
+## IT EXISTS BECAUSE THE ATTACK DIRECTION LOCKS AT WINDUP START AND THE HITBOX IS A CHILD OF THIS
+## ROOT. While a unit is swinging, its heading is the LOCKED one the state layer captured (a value
+## that must NOT be recomputed -- that is the whole point of the lock), so the runner stops aiming
+## the box at the live target and drives it from that stored direction instead. Aiming at the live
+## target through a windup would swing the hitbox with a target that stepped aside, which is exactly
+## the late-locking tracking `4-3b/R9` defers to per-kind movesets.
+##
+## STILL NO DECISION HERE. The direction was decided inside `advance()`; this is the same
+## told-the-answer relationship `aim_at()` already has with `TargetingService`.
+##
+## A ZERO HEADING HAS NO DIRECTION and KEEPS the current rotation, on `aim_at()`'s own precedent: a
+## unit that has never had a fact against its target has no locked direction yet, and snapping it to
+## an arbitrary one would read as a glitch.
+func aim_along(planar_dir: Vector2) -> void:
+	if planar_dir.is_zero_approx():
+		return
+	# The same -Z-forward convention `aim_at()` uses; see its note.
+	global_rotation.y = atan2(planar_dir.x, planar_dir.y) + PI
+
+
 ## Yaw this box toward `target_position`, PLANAR (XZ) only -- the runner's own facing derivation for
 ## the hero mesh, applied to a whole node instead of a child. A target directly overhead or exactly
 ## coincident has no planar direction, so the current rotation is KEPT rather than snapped to an
