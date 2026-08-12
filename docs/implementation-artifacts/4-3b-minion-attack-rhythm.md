@@ -4,7 +4,7 @@ baseline_commit: 8c511e5995514f046fcb74384c71783576dda9c6
 
 # Story 4.3b: Minion attack rhythm
 
-Status: ready-for-dev
+Status: review
 
 ## What this story inherits
 
@@ -134,10 +134,13 @@ against my opponent's other minions — rather than a passive body a hero can fa
    its own slot (`4-3b/R3`, substance unchanged; `4-3b/R16` corrects its location word).
    **Filtering happens at GATHER time, by OWNER SLOT, never by collision layer.** Measured reason
    it cannot sit on the resolution ladder: `push_contact` asserts `attacker_slot != target_slot`
-   and HALTS on violation (`match_state.gd:454-455`, `Invariant.check`), so a same-slot fact must
-   never reach that seam at all — a ladder-side check would be dead code behind a build halt. The
-   shape to follow is the hero-attacker filter `4-3a/R21b` already shipped at gather time
-   (`match_runner.gd:882-889`).
+   via `Invariant.check` (`match_state.gd:454-455`), which under the headless runner PRINTS and
+   CONTINUES rather than halting (measured directly, review fix pass F1) — so a leaked
+   same-slot fact would NOT be stopped by the seam, and a ladder-side check relying on a halt
+   to make it unreachable would itself run, unguarded, on bad data. The filter must therefore
+   sit at gather time, before the seam, where a same-slot fact never gets produced in the first
+   place. The shape to follow is the hero-attacker filter `4-3a/R21b` already shipped at gather
+   time (`match_runner.gd:882-889`).
 
    PROVEN BY: `test_unit_combat_live.gd` — a unit's active hitbox overlapping its own summoner and
    its own sibling produces no fact, no damage, and no halt.
@@ -414,63 +417,63 @@ What genuinely remains:
 
 ## Tasks / Subtasks
 
-- [ ] Author three provisional `BalanceConfig` fields (`minion_attack_windup_seconds`,
+- [x] Author three provisional `BalanceConfig` fields (`minion_attack_windup_seconds`,
       `minion_attack_active_seconds`, `minion_attack_recovery_seconds`) plus the reach distance, and
       their `BalanceTicks` counterparts; extend `E1_BALANCE_FIELDS` (AC 1)
-- [ ] Add the five parallel scalar arrays to `UnitBoard` and the new unit-owned dedupe state class
+- [x] Add the five parallel scalar arrays to `UnitBoard` and the new unit-owned dedupe state class
       beside it, with non-allocating accessors; MEASURE the resulting snapshot key count rather than
       assuming it, and record it as a named extension in `test_card_observation.gd` (AC 16)
-- [ ] Widen `push_contact` / `capture_push_contact` / `replay_push_contacts` / `_rebuild_contacts`
+- [x] Widen `push_contact` / `capture_push_contact` / `replay_push_contacts` / `_rebuild_contacts`
       so the ATTACKER parameter is a kind-agnostic `[slot, index]` pair; preserve every existing
       hero-attacker call site under `[slot, -1]` with a non-vacuous regression pin (AC 3)
-- [ ] Add the kind marker to the fact row and the top-of-ladder probe drop, and gather the probe on
+- [x] Add the kind marker to the fact row and the top-of-ladder probe drop, and gather the probe on
       the EXISTING `minion_retarget_interval_ticks` cadence (12 ticks authored) via a runner-local
       counter — no new balance field, no new public tick accessor (AC 13, `4-3b/R17b`)
-- [ ] Wire the in-reach flag: SET by ANY fact this unit sources against its ACQUIRED TARGET, probe
+- [x] Wire the in-reach flag: SET by ANY fact this unit sources against its ACQUIRED TARGET, probe
       or strike (a bystander cleave must not set it), CONSUMED at windup start, cleared by nothing
       else; windup begins on idle AND flag set. Pin the back-to-back cycle at exactly
       windup+active+recovery with no throttle remainder, with the throttle tick inside the active
       window (AC 13)
-- [ ] Add a per-unit attack state machine (windup -> active -> recovery, no chain, no input —
+- [x] Add a per-unit attack state machine (windup -> active -> recovery, no chain, no input —
       AI-driven) seated in `advance()`'s existing step-3 family, triggered by the reach fact
       (AC 1, AC 13)
-- [ ] Add a unit Hitbox `Area3D` to `unit_actor.tscn` on the EXISTING layer 3 "hitbox" / mask 2
+- [x] Add a unit Hitbox `Area3D` to `unit_actor.tscn` on the EXISTING layer 3 "hitbox" / mask 2
       "hurtbox" convention (`hero.tscn:73-77`); no `project.godot` or `hero.tscn` edit (AC 2)
-- [ ] DEV PASS CORRECTION, same file: the `Collision` node's `editor_description`
+- [x] DEV PASS CORRECTION, same file: the `Collision` node's `editor_description`
       (`unit_actor.tscn:20`) still asserts "there is deliberately NO hurtbox and NO Area3D on this
       scene" — false since `4-3a` shipped the `Hurtbox` node directly below it (lines 22-31), whose
       own description already records that it discharged that promise. Correct the stale sentence
-- [ ] Extend `_gather_contact_facts` (or add a unit-attacker sibling) so a unit's active hitbox and
+- [x] Extend `_gather_contact_facts` (or add a unit-attacker sibling) so a unit's active hitbox and
       its reach probe enter through the SAME `push_contact` intake, stamped with the widened
       attacker address, in the canonical cross-attacker order (AC 2, AC 3, AC 5, AC 13)
-- [ ] Implement cleave + canonical-order dedupe registration for a unit attacker, on the
+- [x] Implement cleave + canonical-order dedupe registration for a unit attacker, on the
       `4-3a/R22` sort-on-insertion precedent (AC 4)
-- [ ] Dispatch the dead-attacker drop and dedupe registration on ATTACKER KIND, both ladders
+- [x] Dispatch the dead-attacker drop and dedupe registration on ATTACKER KIND, both ladders
       (AC 14), and pin the killed-mid-swing drop positively (AC 15)
-- [ ] Add the gather-time friendly-fire filter for the unit-attacker side (owner-slot based,
+- [x] Add the gather-time friendly-fire filter for the unit-attacker side (owner-slot based,
       never collision-layer based) (AC 6)
-- [ ] Keep unit-sourced confirmations out of `confirmed_hits` so step 5 pays no mana (AC 7)
-- [ ] Confirm `hit_landed` fires when a unit damages a hero and not when a unit damages a unit —
+- [x] Keep unit-sourced confirmations out of `confirmed_hits` so step 5 pays no mana (AC 7)
+- [x] Confirm `hit_landed` fires when a unit damages a hero and not when a unit damages a unit —
       the `4-3a/R12` asymmetry — WITHOUT widening either signal payload (AC 3, AC 8)
-- [ ] Route a unit-attacker fact against a hero target through the hero's full defensive ladder
+- [x] Route a unit-attacker fact against a hero target through the hero's full defensive ladder
       (iframe, deflect, block) unchanged (AC 9)
-- [ ] Confirm no stun edge opens on a deflected minion attack (AC 10, negative guard)
-- [ ] Confirm/guard that no `StaminaPool.spend` or resource cost gates a unit's attack (AC 11,
+- [x] Confirm no stun edge opens on a deflected minion attack (AC 10, negative guard)
+- [x] Confirm/guard that no `StaminaPool.spend` or resource cost gates a unit's attack (AC 11,
       negative guard)
-- [ ] Implement direction-lock-at-windup, and the complete-into-empty-air path for a target that
+- [x] Implement direction-lock-at-windup, and the complete-into-empty-air path for a target that
       dies or is retargeted mid-windup (AC 12)
-- [ ] Bump `FORMAT_VERSION` 3 -> 4 per `4-3b/R21`, hard rejection of older records, no shim
-- [ ] DEV PASS CORRECTION: `hero_state.gd:134-144`, the `_swing_dedupe` docstring still documents
+- [x] Bump `FORMAT_VERSION` 3 -> 4 per `4-3b/R21`, hard rejection of older records, no shim
+- [x] DEV PASS CORRECTION: `hero_state.gd:134-144`, the `_swing_dedupe` docstring still documents
       each record as `{"hit": Array[int] of target slots}` — false since `4-3a` widened the key to
       full `[slot, index]` addresses, and the neighbouring `register_swing_hit` docstring already
       states the correct shape ("THE HIT LIST THEREFORE HOLDS PAIRS, NOT INTS", line 244). This
       story rewrites that mechanism for a second attacker kind, so it is the right place to fix it
-- [ ] Extend `to_snapshot()` for the new unit attack state; measure the golden and the snapshot key
+- [x] Extend `to_snapshot()` for the new unit attack state; measure the golden and the snapshot key
       set in both directions per Golden Prediction
-- [ ] Measure `project.godot` / `hero.tscn` byte-identity (Golden Prediction)
-- [ ] Write unit-vs-unit damage tests: same hits-to-kill from a unit attacker as from a hero
+- [x] Measure `project.godot` / `hero.tscn` byte-identity (Golden Prediction)
+- [x] Write unit-vs-unit damage tests: same hits-to-kill from a unit attacker as from a hero
       attacker, at the authored values (AC 17)
-- [ ] Write live integration coverage for a minion's live attack against a hero and against
+- [x] Write live integration coverage for a minion's live attack against a hero and against
       another minion, discharging the R-D6 re-invocation (Live Smoke)
 
 ## Dev Notes
@@ -839,12 +842,335 @@ this story does not own it (`4-3b/R20`): what units do after the round ends.
 
 Claude Sonnet 5 — authoring pass, 2026-08-11.
 Claude Opus 5 — readiness gate pass, 2026-08-11.
+Claude Opus 5 — dev pass, 2026-08-11.
 
 ### Debug Log References
 
+**Suite, before and after.** Every proof between the bookend runs ran ONLY the affected test file,
+through a scratchpad single-file runner kept OUT of the repo.
+
+**DEVIATION FROM `PROC/R1`, REPORTED NOT BURIED: the full suite ran THREE times, not two.** The
+CLOSING run came back with the state half green (496 / 3871 / 0) but ONE integration file failing --
+`test_unit_combat_live.gd`, `4-3a`'s own, for the reason recorded under its corrected assertion: it
+measured the friendly-fire claim by HP, and this story makes P2's minion an attacker that
+legitimately damages P1's unit standing beside it. That instrument was corrected to the fact-level
+claim and the suite re-run, because ending a pass on a red closing run is worse than the extra run.
+A further measurement deviation, also reported: the OPENING run's state totals were lost to a
+`tail -60` on my own invocation, and were recovered by running the state harness alone against the
+untouched tree rather than by re-running the whole suite.
+
+| | state tests | assertions | failed | integration files |
+|---|---|---|---|---|
+| BEFORE | 465 | 3621 | 0 | 29, all PASS |
+
+The closing figure is the measured output of the final green run, not a projection.
+| AFTER | 496 | 3871 | 0 | 30, all PASS |
+
+**Golden: `35c38c0e…` → `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`.**
+Re-baselined ONCE. Causes named and measured separately, in both directions — the full accounting
+is written into `test_determinism.gd` at the constant, not only here:
+
+- **CAUSE 1 (the only mover): the snapshot KEY SET, twelve → eighteen.** The fixture's one summoned
+  unit contributes its idle-but-present attack state from t22.
+- **REVERSE DIRECTION:** with the six new keys held off `PlayerState.to_snapshot()` and everything
+  else this story ships left in place, the fixture hashed **`35c38c0e…` exactly** — the pre-story
+  golden. Measured by deleting those six lines, running the file, and restoring from a
+  SHA256-verified out-of-repo copy (`81e61fb4…`, verified equal after restore).
+- **NON-MOVER 1 — the widened attacker address and the kind marker: MEASURED, not cited.** It falls
+  out of the reverse-direction run: had `[slot, -1]` + `CONTACT_STRIKE` resolved differently from
+  the bare int, the keys-removed run could not have reproduced `35c38c0e…`.
+- **NON-MOVER 2 — the unit dedupe cause: PREDICTED FALSIFIED, MEASURED FALSIFIED.** Measured rather
+  than cited, per the story's own instruction. The fixture's unit reaches the hash tick IDLE, with
+  counter 0, flag false and an EMPTY `unit_swing_dedupe` — a stronger reason than `4-3a/R27`'s
+  (whose records had merely expired). Now a permanent assertion,
+  `test_determinism.gd::test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record`,
+  so the claim cannot rot into a comment.
+
+**Snapshot key set: TWELVE → EIGHTEEN.** All six contributing fields AC 16 named surfaced as keys,
+one apiece — `unit_attack_phase`, `unit_attack_ticks`, `unit_attack_dir`, `unit_attack_count`,
+`unit_in_reach`, `unit_swing_dedupe`. **No named field failed to surface, so no field needs a stated
+reason for not becoming a key.** Five are one-array-one-key on the `unit_hp` side of the board's
+two-way precedent rather than fused like `unit_targets`, because they are five independent facts
+rather than one fact in several ints; fusing any of them would hide which one moved when the golden
+moves. Recorded as a deliberately named extension in `test_card_observation.gd` (set AND count
+asserted separately) and in `test_draw_delay_and_reshuffle.gd`, never a number edited in place.
+
+**`FORMAT_VERSION` 3 → 4**, shape-only, hard rejection of older records, no shim. **What pins it to
+the row shape:** `test_record_file.gd::test_the_format_version_and_the_widened_contact_row_move_together`
+now drives THREE rows chosen so every widened column is paired against a row carrying the other
+value — hero→unit STRIKE, hero→hero STRIKE, unit→hero REACH PROBE — and asserts the version, the
+seven-element row, the target index (4-3a's half), the ATTACKER index and the KIND marker. A
+blanket-written column passes a single-row assertion and fails a paired one. **The channel set did
+NOT move** (the story's one conditional, Open Question 2, measured and resolved as predicted): the
+marker rides the existing row and `push_contact` gained a PARAMETER rather than a sibling method, so
+`RecordFile.REQUIRED_KEYS` is untouched and `_resource_values` is untouched. A sibling intake method
+would have been a new capture channel, because `3-0c` AC 1 derives the channel set from
+`MatchState`'s public intake surface by source scan — which is why `kind` is a parameter.
+
+**`project.godot` and `hero.tscn`: BYTE-IDENTICAL, measured in both directions.**
+
+| file | before | after |
+|---|---|---|
+| `project.godot` | `8879DE49…0004` | `8879DE49…0004` (identical) |
+| `src/actors/hero/hero.tscn` | `D470C3C3…FBB7` | `D470C3C3…FBB7` (identical) |
+| `src/actors/minions/unit_actor.tscn` | `3602EE0E…353B` | `4F21AEDD…8391` (the file that changes) |
+
+**Editor scan and its collateral check.** The new `class_name UnitSwingDedupe` required registering
+the global class cache in THIS pass, so `godot --headless --editor --quit --path .` ran here.
+`project.godot` hashed `8879DE49…0004` BEFORE and `8879DE49…0004` AFTER — no reordering, no deleted
+engine defaults, none of the five recorded incidents. Per-diff collateral check: the scan generated
+`.uid` sidecars for `unit_swing_dedupe.gd` (expected) and for FOUR PRE-EXISTING `4-3a` files whose
+sidecars were never generated or committed — `test_unit_damage_and_death.gd`,
+`test_two_units_converge_live.gd`, `test_unit_approach_live.gd`, `test_unit_combat_live.gd`. Those
+four are an inherited gap surfaced by this scan, not caused by this story's edits; every other `.gd`
+in the repo has its sidecar tracked. Flagged for the chain pass rather than silently dropped.
+
+### Mutation Table
+
+Every mutation: target copied OUTSIDE the repo and SHA256'd BEFORE the edit, restored FROM THAT COPY
+and re-hashed after. `git checkout --` was never used. Each proof ran ONLY the affected test file.
+
+| # | mutated | which test caught it | restored |
+|---|---|---|---|
+| M1 | `match_state.gd`: windup starts on IDLE alone, ignoring the in-reach flag (a FREE-RUNNING cycle) | `test_unit_attack_rhythm.gd` | yes |
+| M2 | `match_state.gd`: the acquired-target scope check dropped, so any fact refreshes in-reach | `test_unit_attack_rhythm.gd` | yes |
+| M3 | `unit_swing_dedupe.gd`: `hit.sort()` removed — append order instead of canonical | `test_unit_attack_rhythm.gd` | yes |
+| M4 | `match_state.gd`: `_canonical_contact_order` sort removed — insertion order resolution | `test_unit_attack_rhythm.gd` | yes |
+| M5 | `match_state.gd`: `_attacker_is_dead` reverted to reading the OWNER HERO (AC 14a's silent defect) | `test_contact_resolution.gd` | yes |
+| M6 | `match_state.gd`: `_register_attacker_hit` reverted to the OWNER HERO's registrar (AC 14b's silent defect) | `test_contact_resolution.gd` | yes |
+| M7 | `match_state.gd`: unit-sourced confirmations appended to `confirmed_hits` (summoning as a mana engine) | `test_mana_economy.gd` | yes |
+| M8 | `match_state.gd`: the locked direction stored UN-NEGATED (a backwards swing) | `test_unit_attack_rhythm.gd` | yes |
+| M9 | `match_state.gd`: the top-of-ladder REACH-PROBE drop removed | `test_unit_attack_rhythm.gd` | yes |
+| M10 | `match_state.gd`: `hit_landed` emission removed (AC 8's asymmetry, positive half) | `test_contact_resolution.gd` | yes |
+| M11 | `test_data_resources.gd`: `minion_attack_windup_seconds` dropped from `E1_BALANCE_FIELDS` (guard half (a)) | `test_data_resources.gd` | yes |
+| M12 | `balance_ticks.gd`: the `minion_attack_windup_ticks` conversion line deleted (guard half (b)) | `test_data_resources.gd` | yes |
+| M13 | `record_file.gd`: `FORMAT_VERSION` reverted 4 → 3 | `test_record_file.gd` | yes |
+| M14 | `balance_config.tres`: reach authored BELOW `unit_stop_distance` (the parked-outside-its-own-reach silent failure) | `test_balance_authoring.gd` | yes |
+| M15 | `match_state.gd`: a `StaminaPool.spend` added at windup start (AC 11's negative guard) | `test_unit_attack_rhythm.gd` | yes |
+| M16 | `match_runner.gd`: the GATHER-time friendly-fire filter removed (AC 6) | `test/integration/test_unit_attack_live.gd` | yes |
+| M17 | `match_runner.gd`: the hitbox overlap query replaced by an ABSTRACT resolution against the acquired target (AC 2's named failure) | `test/integration/test_unit_attack_live.gd` | yes |
+| M18 | `match_state.gd`: the `unit_dedupe.discard(index)` call on a unit's own death removed (F2's dead-attacker dedupe leak reintroduced) | `test_unit_attack_rhythm.gd` | yes |
+| M19 | `match_runner.gd`: the `_probe_counter = 0` reset in `_relay_round_started` removed (F3a's cadence-phase leak reintroduced) | `test/integration/test_probe_counter_reset_live.gd` | yes |
+| M20 | `test_card_authoring.gd`: the F4 format-string parenthesisation fix reverted (the `%s`/arg-count mismatch reintroduced) | `test/run_all.sh` (harness-level: state exits 0 and the test's own assertions still pass, but the tightened `^ERROR:` grep now flags the run) | yes |
+
+C1 fix pass note: `test_unit_attack_live.gd`'s quit-timing delay (the fourth offender left by the review
+fix pass) has no row here. It is a settle delay before `quit()`, not a guard a mutation can falsify —
+there is no branch or condition to invert; the fix either gives teardown time or it does not, and that
+was proven by repeated measurement (0/16 leaked after vs. 5/8 before), not by a mutation.
+
+**F4, THE HARNESS TIGHTENING, AND ITS STOP CONDITION -- TRIGGERED, NOT CLEANLY DISCHARGED.**
+`test/run_all.sh` now fails on any line matching `^ERROR:`, not only `SCRIPT ERROR|Parse
+Error|INVARIANT VIOLATED` -- closing the gap the review reproduced (a runtime error the old grep
+did not recognise left the run reporting PASS). A full raw-output scan (state harness + all 29
+inherited integration files, run individually, BEFORE fixing anything) surfaced exactly three
+offenders at that point, all fixed and each re-verified clean:
+  1. `test_card_authoring.gd:169` -- a format-string bug (`%s`/arg-count mismatch split across a
+     `+`-concatenated string, so `%` only ever bound the last segment). DETERMINISTIC. Fixed by
+     parenthesising the full concatenation before the `%`.
+  2. `test_rig_clips.gd` -- `ps.instantiate()`'s `hero` node was never added to the tree and never
+     freed, leaking the Jolt physics RIDs its hurtbox/hitbox `Area3D`s registered.
+     DETERMINISTIC (reproduced 4/4 re-runs pre-fix). Fixed with an explicit `hero.free()` before
+     `quit()`.
+  3. `test_live_attack.gd` -- `quit()` fired 2 physics frames after the observed transition, too
+     soon for some resource this transition triggers to finish settling before engine teardown.
+     Fixed by delaying `quit()` 30 frames past the assertion; re-verified clean across 4 repeated
+     runs post-fix.
+
+**A FOURTH surfaced AFTER those three were fixed and verified, during the mandated end-of-pass full
+suite run, and it is FLAKY rather than deterministic: `test_unit_attack_live.gd` (one of THIS
+story's own dev-pass files) leaked the same "N resources still in use at exit" class in roughly
+half of repeated runs (observed 4 leaked / 8 total across two batches) and PASSED CLEAN in the
+others, including the verification run taken right after the first three fixes landed. This is the
+STOP CONDITION: more than three offending files. Per the instruction, it is NOT fixed here.**
+`test/run_all.sh`'s tightened grep is left in the tree as instructed. The end-of-pass full suite run
+is reported HONESTLY below as it actually came back (`SOME TESTS FAILED`, this one flaky file), not
+re-run until it happened to come back green -- a harness that is strict but leaves the suite
+occasionally red is the state this pass is leaving for the operator to rule on, not a state hidden
+by re-rolling until lucky. The flakiness itself is informative: it suggests the true scope may not
+be a fixed list of files at all, but any live SceneTree test whose `quit()` follows its assertion
+closely — exactly the "unbounded tail" the stop condition exists to keep out of this pass's scope.
+
+**TWO MUTATIONS INITIALLY DID NOT FALL, AND BOTH EXPOSED A VACUOUS TEST OF MY OWN. Recorded rather
+than quietly fixed, because a guard that cannot fall is what this project has shipped twice:**
+
+- **M4 passed on its first run.** AC 5's order-permutation test originally fed TWO UNITS. That is
+  vacuous by construction: deflect opens no stun edge (AC 10), registration happens before the
+  deflect branch for both, and neither unit's confirmation pays mana — so "unit 0 deflected" and
+  "unit 1 deflected" are the SAME hashed state. Rebuilt around MIXED attacker kinds (P1's hero and
+  P1's unit landing in one tick, P2 holding exactly one deflect's stamina), where the order decides
+  whether the surviving fact is a mana-paying HERO confirmation. M4 then fell.
+- **M9 passed on its first run.** The probe test pushed its probe while the unit was IDLE, so a
+  probe that fell through the deleted drop was refused one rung later by the REGISTRAR (no record is
+  open when idle) and still applied nothing — the test passed for the wrong reason. Strengthened
+  with a second phase: a probe MID-ACTIVE-WINDOW against an address the swing has not registered, so
+  every rung below the drop would accept it, paired against the identical fact marked
+  `CONTACT_STRIKE` which DOES land. M9 then fell.
+
+**M18-M20 are the review fix pass's own (four of the review's non-blocking findings, applied on
+operator instruction rather than deferred). All three fell on their first run — no vacuity to
+record.** M18 pins the dead-attacker `UnitSwingDedupe` leak (a unit killed during its own ACTIVE
+window now has its record discarded the instant death is known, driven several ticks past the kill
+to rule out a mutation that merely delays the erasure). M19 pins the debug reset clearing the
+runner-local reach-probe cadence counter. M20 is harness-level, not a state/runner guard: reverting
+the F4 format-string fix does not fail the test's own assertions (the bug fires as a runtime error
+mid-assertion, not a wrong answer) — what catches it is the TIGHTENED `test/run_all.sh`, proven both
+ways: the same mutation against the PRE-tightening grep pattern (`SCRIPT ERROR|Parse Error|INVARIANT
+VIOLATED`, no `^ERROR:`) passes clean, which is the harness gap F4 closes.
+
 ### Completion Notes List
 
+**RED-GREEN HONESTY, reported as the prompt requires rather than blurred.** This pass was NOT
+test-first in the classical sense and does not claim to be. The suite was driven from the EXISTING
+pins outward: the six inherited pins that had to move (the two snapshot key sets, the record-file
+row shape, the replay-identity member classification, the `UnitBoard` bound-guard count, the golden)
+went RED on the first compile-and-run after the implementation landed, and were then moved
+deliberately with their reasons written in — genuinely red before green, and their redness was
+discovered rather than arranged. **Every NEW test in this story was written after the code it
+covers and passed on the first or second run; their only red is the mutation table above.** They are
+the second kind, and are not described as the first. Six of the new tests did fail on their first
+run, but on MY OWN test arithmetic (tick off-by-ones, a GDScript lambda capturing an int by value so
+a deflect counter never incremented, a fixture whose `deflect_stamina_cost` defaulted to 0.0 making
+an empty stamina pool "afford" a deflect) — those are authoring errors corrected, not red-green
+evidence, and are not counted as such.
+
+**AC 14's two rungs, and whether their tests ever went red.** Reported plainly: they did not go red
+against the shipped code, because the code and the tests landed in the same pass. What discharges
+them is M5 and M6, which restore the exact defective reads the AC describes — the owner hero's
+`action_state` and the owner hero's registrar — and both tests fail against them. That is the
+falling evidence; the green run alone would have proved nothing over a silent failure, which is
+precisely what the AC warned about.
+
+**One AC-level finding, reported rather than resolved quietly (AC 12).** The story did not settle a
+player-visible detail and the two halves of AC 12 cannot both hold. AC 12 says the direction freeze
+runs "from windup start **until the swing ends**", which read literally includes RECOVERY. But AC 13
+pins a back-to-back cycle in which a continuously in-reach unit is IDLE only inside the single
+step-3 pass that ends recovery and begins the next windup — so NO fact can ever arrive while it is
+idle, and the direction would freeze at its first value FOREVER, contradicting AC 12's own stated
+consequence that the lock is "up to one throttle interval stale", which BOUNDS the staleness at one
+interval. **The reading taken satisfies both stated properties: the freeze covers WINDUP and ACTIVE,
+not recovery.** AC 12's own description of the intended feel names those two phases and not
+recovery ("a swing that misses when the target steps aside during windup/active"), and during
+recovery the hitbox is shut so refreshing can change no outcome. The consequence is that a minion
+attacking back-to-back re-aims each swing at where its target was up to one throttle interval ago,
+rather than swinging in its first direction forever. **This is a design detail the operator may want
+the other way**; it is one condition in `MatchState._mark_reach_from_fact`, whose docstring records
+the whole measurement, and `test_unit_attack_rhythm.gd` pins the shipped reading explicitly.
+
+**One defect this pass's own guard caught (AC 5).** The live gather-order pin found TWO board-index
+inversions across a 489-tick run: the probe pass ran AFTER the whole strike pass, so within one slot
+a probe from unit 0 could follow a strike from unit 1. `_gather_unit_contact_facts` and
+`_gather_unit_reach_probes` were merged into a single `_gather_unit_facts` that walks the board once
+and emits both fact kinds per unit before moving on, making ascending order true by construction.
+Re-measured: zero inversions, 80 ticks carrying two or more distinct attackers.
+
+**AC 5 is enforced in BOTH places, deliberately.** The runner gathers in canonical order (hero, then
+units ascending, slot 0 then slot 1) AND `MatchState._canonical_contact_order()` sorts the queue by
+the same total order before resolving. AC 5's own pin feeds the same facts in different orders
+through `push_contact`, which only a state-side sort can satisfy; gathering canonically as well
+keeps the RECORD's row order canonical and the intent legible at the seat. Hero-vs-hero is
+bit-for-bit unmoved because the sort is STABLE and hero facts were already gathered slot-ascending.
+
+**`4-3a/R24`'s own instruction discharged.** That ruling accepted the duplicated dead-attacker check
+and named its trigger: "If a THIRD copy of this check appears in a future story, that is the signal
+to replace the mechanism … rather than to keep tightening this two-copy pattern." This story needed
+the check to dispatch on ATTACKER KIND in BOTH ladders, so both now call `_attacker_is_dead` and
+`_register_attacker_hit`, and no duplicated condition is left to keep in agreement. The stale
+comments asserting the duplication was accepted were rewritten in place.
+
+**Both assigned source-file corrections made.** (i) `unit_actor.tscn`'s `Collision` node
+`editor_description` no longer claims "there is deliberately NO hurtbox and NO Area3D on this
+scene" — false since `4-3a`, and doubly false now that this story adds the Hitbox; it names both
+`Area3D`s. (ii) `hero_state.gd`'s `_swing_dedupe` docstring no longer documents the record as
+`Array[int] of target slots` — false since `4-3a` widened the key to full `[slot, index]` addresses,
+and disagreeing with the `register_swing_hit` docstring three lines below it for a whole story.
+
+**Two pre-existing findings surfaced, neither fixed (both out of scope, reported not silently
+resolved).** (i) `test/state/test_card_authoring.gd` emits `ERROR: String formatting error: not all
+arguments converted during string formatting` on every suite run. The test still PASSES and
+`run_all.sh`'s grep does not match a bare `ERROR:`, so it has been invisible. Pre-existing — that
+file is untouched by this story. (ii) the four missing `.uid` sidecars described above.
+
+**Live smoke is NOT discharged by this pass.** `test/integration/test_unit_attack_live.gd` covers
+what a machine can see; the story's Live Smoke script is the operator's, R-D6 is re-invoked and
+UNSPENT, and the two-human items (a minion killing a hero; the deliberate two-minion deflect drain,
+`4-3b/R19`; what units do after the round ends, `4-3b/R20`) remain for Matko's own hand.
+
+**NO COMMITS MADE.** Everything is left in the working tree for a separate chain pass. Nothing was
+staged, committed or pushed, and `docs/playtest-log.md` — modified before this pass began — was
+never touched, staged or reverted.
+
 ### File List
+
+**New**
+- `src/state/unit_swing_dedupe.gd` (+ `.uid`) — the unit-owned dedupe records class
+- `test/state/test_unit_attack_rhythm.gd`
+- `test/integration/test_unit_attack_live.gd`
+
+**Modified — source**
+- `src/state/resources/balance_config.gd` — three minion rhythm durations + the reach distance
+- `src/state/timing/balance_ticks.gd` — the three derived tick counterparts
+- `src/state/unit_board.gd` — five parallel scalar arrays, the `AttackPhase` enum, nine bound-guarded
+  accessors, the phase mutators, `tick_attack_timers`, five snapshot payloads
+- `src/state/player_state.gd` — `unit_dedupe`, six new snapshot keys
+- `src/state/match_state.gd` — the kind constants; `push_contact`'s widened attacker + kind;
+  step-2 unit timers; the step-3b `_advance_unit_attacks` seat; the canonical contact order; the
+  probe drop; `_mark_reach_from_fact`; `_attacker_is_dead` / `_register_attacker_hit`; the AC 7 gate;
+  the debug-reset dedupe clear
+- `src/state/hero_state.gd` — the `_swing_dedupe` docstring correction ONLY, no mechanism change
+- `src/main/match_runner.gd` — the widened hero gather call; `_gather_unit_facts` and
+  `_push_reach_probe`; the `_probe_counter`; the canonical gather seat; the AC 12 aim freeze
+- `src/actors/minions/unit_actor.gd` — the `hitbox` accessor and `aim_along`
+- `src/actors/minions/unit_actor.tscn` — the Hitbox `Area3D` + shape; the stale-description correction
+- `src/systems/intent_recorder.gd` — the seven-element contact row
+- `src/systems/record_file.gd` — `FORMAT_VERSION` 3 → 4, the seven-element rebuild
+- `data/balance/balance_config.tres` — the four provisional authored values
+
+**Modified — tests**
+- `test/state/test_determinism.gd` — golden re-baseline + the falsified-cause pin
+- `test/state/test_card_observation.gd`, `test/state/test_draw_delay_and_reshuffle.gd` — key set 12 → 18
+- `test/state/test_record_file.gd` — the version / row-shape pin, three paired rows
+- `test/state/test_replay_identity.gd` — the six new members classified HASHED; the new state file registered
+- `test/state/test_targeting_service.gd` — bound-guard count 6 → 15
+- `test/state/test_data_resources.gd` — `E1_BALANCE_FIELDS` + 4
+- `test/state/test_balance_config.gd` — the three conversions and their arithmetic
+- `test/state/test_balance_authoring.gd` — the rhythm/reach authoring audit
+- `test/state/test_contact_resolution.gd` — AC 3 regression pin, AC 14 both rungs, AC 8 asymmetry
+- `test/state/test_mana_economy.gd` — AC 7, full and blocked
+- `test/state/test_block_deflect.gd` — AC 9 ladder, AC 10 no-stun
+- `test/state/test_roll_iframes.gd` — AC 9 iframe rung, both directions
+- `test/state/test_unit_damage_and_death.gd` — AC 15 paired survive/killed, AC 17 hits-to-kill
+- `test/state/test_architecture_invariants.gd` — AC 3 signal-arity pin
+- `test/state/test_contact_pipeline.gd`, `test/integration/test_replay_entry_is_inert.gd`,
+  `test/integration/test_replay_verifier_tool.gd` — call sites re-expressed under the widened seam
+- `test/integration/test_unit_combat_live.gd` — `4-3a`'s AC 6 assertion re-instrumented from hp
+  to the fact level, because this story invalidated the hp instrument (P2's minion now attacks)
+
+**Untracked, generated by this pass's editor scan, NOT authored here** (inherited `4-3a` gap):
+`test/state/test_unit_damage_and_death.gd.uid`, `test/integration/test_unit_approach_live.gd.uid`,
+`test/integration/test_unit_combat_live.gd.uid`, `test/integration/test_two_units_converge_live.gd.uid`
+
+**Review fix pass (F1-F4), applied on top of the dev pass above:**
+
+New:
+- `test/integration/test_probe_counter_reset_live.gd` — F3a's pin (no `.uid` sidecar generated;
+  the same inherited-gap pattern the dev pass's own File List already flagged, not new here)
+
+Modified — source:
+- `src/main/match_runner.gd` — F1's corrected comment (the contact-seam invariant does not halt
+  headless); F3a's `_probe_counter` reset in `_relay_round_started`; F3b/F3c documentation only
+- `src/state/match_state.gd` — F2's `unit_dedupe.discard()` call at the point a unit's death is
+  already known
+- `src/state/unit_swing_dedupe.gd` — F2's new `discard(board_index)` method
+
+Modified — tests:
+- `test/state/test_unit_attack_rhythm.gd` — F2's pin (M18)
+- `test/state/test_card_authoring.gd` — F4's format-string fix (the pre-existing, previously
+  reported-not-fixed ERROR the dev pass's own Change Log entry named)
+- `test/integration/test_live_attack.gd` — F4's fix for the resource leak the tightened harness
+  surfaced (quit deferred a short delay past the assertion)
+- `test/integration/test_rig_clips.gd` — F4's fix for the RID leak the tightened harness surfaced
+  (the instantiated-but-never-freed `hero` node is now freed)
+- `test/run_all.sh` — F4's tightened failure grep (`^ERROR:` added to both suites' pass/fail check)
 
 ## Change Log
 
@@ -852,3 +1178,6 @@ Claude Opus 5 — readiness gate pass, 2026-08-11.
 |---|---|---|
 | 2026-08-11 | Claude Sonnet 5 | Story authored via `gds-create-story`, inheriting the `4-3b` scope split from `4-3a-minion-combat` (`4-3a/R1`) and the eleven pre-ratified authoring rulings (`4-3b/R1`-`R11`, decision-log Session 2026-08-10). Five Open Questions left explicitly unruled for the readiness gate, most expensive named as the unit-record field shape / dedupe location. Golden Prediction states a preliminary mover claim, TBD pending the gate. Status left at `authored`, NOT promoted to `ready-for-dev` — a readiness gate runs next. |
 | 2026-08-11 | Claude Opus 5 | Readiness gate applied (`4-3b/R12`-`R22`). Four non-criteria deleted from the AC list (the undecided field-permission ask, the golden/key-set measurement obligation, the byte-identity obligation, the live-smoke re-invocation) and their content relocated to a real field-shape AC, Golden Prediction and Live Smoke. Three new ACs added: attacker-kind dispatch on the two silently-failing attacker-side rungs, canonical ordering across attackers, and the killed-mid-swing drop. Attack trigger changed from pure distance to a reach test (`R17a`, operator) mechanised as a THROTTLED kind-marked probe on the existing `push_contact` intake (`R17b`, this gate's own ruling by measurement, not the operator's), measured legal under `4-3/R2` and riding `minion_retarget_interval_ticks` so its stream cost is ~1.33 rows/tick instead of ~16. Signal-widening scoped OUT of AC 3. Friendly-fire filter corrected to gather time. Four Dev Notes citation errors corrected against this tree (the `fact["attacker"]` read list, `_generate_mana`, `register_swing_hit`, and the `4-3a/R29` label) and `4-3a/R29`'s forcing-point assignment recorded as REVERSED. Open Questions reduced to the provisional tuning values. Field grant amended to FIVE scalars: the throttle needs a per-unit in-reach flag, set by a probe and consumed at windup start, so a unit finishing recovery does not wait a further interval and the authored durations still describe the observed attack rate. Snapshot key count deliberately NOT asserted — measured that the board emits three separate top-level keys with precedent running both ways (one array -> one key for `unit_hp`, two arrays -> one fused key for `unit_targets`), so the six contributing fields are named and the count is left to the dev pass. Status promoted to `ready-for-dev`. |
+| 2026-08-11 | Claude Opus 5 | DEV PASS. All seventeen ACs implemented and covered; every task checked. Golden re-baselined ONCE, `35c38c0e` -> `4a089063`, one cause (the snapshot key set, twelve -> EIGHTEEN) measured in both directions -- with the six new keys held off, the fixture reproduced `35c38c0e` exactly -- and BOTH predicted non-movers measured rather than cited (the widened attacker address and kind marker; the unit dedupe cause, falsified again for a stronger reason than `4-3a/R27`'s and now a permanent assertion). Snapshot key count measured at EIGHTEEN: all six fields AC 16 named surfaced as keys, so none needed a stated reason for not surfacing. `FORMAT_VERSION` 3 -> 4, and Open Question 2 RESOLVED AS PREDICTED -- the kind marker rides the existing row, so the channel set and `RecordFile.REQUIRED_KEYS` did not move. `project.godot` and `hero.tscn` measured BYTE-IDENTICAL; `unit_actor.tscn` is the file that changed. The new `class_name` was registered by an editor scan in THIS pass with `project.godot` hashed before and after (identical) and collateral checked per-diff. Seventeen-row mutation table, every target restored from a SHA256-verified out-of-repo copy, `git checkout --` never used; TWO mutations initially failed to fall and both exposed a vacuous test of this pass's own making, recorded in the table rather than quietly fixed. This pass's own AC 5 gather-order pin found a real defect (two board-index inversions, the probe pass running after the whole strike pass) and it was fixed by merging the two passes into one board walk. ONE FINDING REPORTED, NOT DECIDED QUIETLY: AC 12's freeze clause and AC 13's back-to-back cycle cannot both hold as written -- the shipped reading freezes the direction across WINDUP and ACTIVE but not RECOVERY, which is the only reading that keeps AC 12's own 'up to one throttle interval stale' consequence true; the operator may want it the other way and it is one condition. Suite 465/3621 + 29 integration -> 496/3871 + 30 integration, zero failures; the full suite ran THREE times rather than two and both measurement deviations are reported in the Debug Log rather than buried. Two pre-existing findings surfaced and deliberately not fixed (a silent format-string ERROR in `test_card_authoring.gd`; four missing `.uid` sidecars inherited from `4-3a`). NO COMMITS -- the working tree is left for a separate chain pass, and `docs/playtest-log.md` was never touched. Live smoke NOT discharged: R-D6 stays re-invoked and UNSPENT for the operator's own hand. |
+| 2026-08-11 | Claude Sonnet 5 | REVIEW FIX PASS. Applied four of the code review's non-blocking findings (review outcome PASS, zero blocking findings) on operator instruction. **F1**: `match_runner.gd`'s comment claiming the contact-seam `Invariant.check` "HALTS on violation" was FALSE, measured directly against `test_unit_attack_live.gd`'s own (correct) comment that headless PRINTS and continues -- confirmed with a throwaway scratch script (`assert()` unwinds only the current call under the headless runner, no debugger attached; the process itself keeps running). Corrected the wrong comment and its "dead code behind a build halt" phrase; the identical claim in this story's own Dev Notes (AC 6, item 6) was left untouched per this pass's explicit instruction not to touch Dev Notes reasoning -- flagged here rather than silently left inconsistent. **F2**: a unit killed during its own ACTIVE window left its `UnitSwingDedupe` record open forever (`_advance_unit_attacks` skips dead units, so the `close()` that would start its grace tick never runs). Fixed at the one place death is already known (`_resolve_unit_contact`, right after `apply_damage_at`) with a new `UnitSwingDedupe.discard()`, erased outright rather than routed through the one-tick grace (a dead attacker's own future facts are already dropped one rung earlier). Pinned by a new mutation-proven test (M18) that checks the record is GONE, not merely that no damage misapplied, and stays gone many ticks later. Golden predicted UNMOVED (the determinism fixture's unit never swings) and measured unmoved. **F3**: (a) the runner-local reach-probe cadence counter was not cleared by the debug reset, carrying an arbitrary phase into the next run -- fixed in `_relay_round_started`, the one relay `round_started` fires only FROM a debug reset, pinned by a new live test (M19, direct field read, the same no-real-privacy convention `test_contact_pipeline.gd` already relies on) and REPLAY unaffected by construction (recorded facts are tapped and replayed, never regenerated); (b) the counter being shared across both slots, and (c) it advancing before the first gather so the first ticking frame never probes, are both DOCUMENTED, not changed, as instructed. **F4**: `test/run_all.sh` tightened (`^ERROR:` added to both suites' failure grep) to close a reproduced structural gap -- a runtime error lacking the old substrings left a run reporting PASS. Found and fixed exactly three offenders before the count exceeded the stop condition: a deterministic format-string bug (`test_card_authoring.gd`, argument-count mismatch from `%` binding only the last `+`-concatenated segment), and two engine-teardown resource leaks (`test_rig_clips.gd`: an `instantiate()`d node never added to the tree and never freed, leaking Jolt RIDs, deterministic; `test_live_attack.gd`: `quit()` firing too soon after its assertion for a resource to settle, fixed by a short delay). A FOURTH offender then surfaced during the mandated end-of-pass full run -- `test_unit_attack_live.gd`, leaking the same class FLAKILY (~half of repeated runs) rather than deterministically -- which is the STOP CONDITION (more than three files); per instruction it is left UNFIXED and the tightened harness is left in the tree for the operator to rule on. Full suite ran the required TWO times: before (496/3871 state + 29 integration, ALL PASS, old harness); after (497/3878 state + PASS, but integration reports SOME TESTS FAILED under the tightened grep -- the one disclosed flaky file above, reported honestly rather than re-rolled for a lucky green). Twenty-row mutation table (M18-M20 added to the dev pass's seventeen), every target copied outside the repo and SHA256-verified before mutating and after restoring, `git checkout --` never used. NO COMMITS, nothing staged; `docs/playtest-log.md` never read, touched, or reverted. No orphaned `godot` processes at start or end. Status stays `review`, board stays `ready-for-dev`. |
+| 2026-08-12 | Claude Sonnet 5 | REVIEW FIX PASS, continued (two corrections left over from the prior pass). **C1**: the operator ruled the prior pass's stop condition does not shield `test_unit_attack_live.gd` -- that file is this story's own dev-pass work, not a pre-existing tail. Measured the leak's baseline rate directly (5/8 runs leaked "resources still in use at exit") and applied the same remedy already proven on `test_live_attack.gd` (F4 above): `quit()` was firing the same physics frame as the last measurement read, before whatever that frame's contact/signal activity settles; deferred it 30 frames past `_done`, changing no measured value. Re-measured 0/16 leaked after (two runs of eight). No mutation-table row added -- a settle delay has no branch to invert, so it cannot be mutation-tested; noted in the table instead of inventing one. **C2**: corrected the identical false "HALTS on violation" claim the prior pass found but was barred from touching in this story's own Dev Notes (AC 6, item 6) -- now authorised. The sentence now states what F1 measured (headless PRINTS and continues) and the argument built on it is corrected to match: the friendly-fire filter must sit at gather time because the seam does NOT stop a leaked same-slot fact, not because a ladder-side check would be unreachable dead code behind a halt that does not happen. AC text, Non-Goals and Open Questions untouched. Full suite ran ONCE at the end under the (unchanged) tightened harness: 497/3878 state assertions + 30/30 integration, ALL PASS, zero `^ERROR:` lines. No orphaned `godot` processes at start or end. NO COMMITS, nothing staged; `docs/playtest-log.md` never read, touched, or reverted. Status stays `review`, board stays `ready-for-dev`. |
