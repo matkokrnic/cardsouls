@@ -6898,3 +6898,56 @@ re-measurement, `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bd
 set: eighteen. Suite 497/3878 + 30/30 integration, all PASS -- matches the story file's own
 last-recorded figures. `FORMAT_VERSION` 4. `project.godot`/`hero.tscn` BYTE-IDENTICAL against
 `3ea5bbb`. Code review PASS. Live smoke PASS, `R-D6` spent. Operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-13 -- melee retune executed, CUT form (E3-R/R3)
+
+**`E3-R/R3` -- DISCHARGED IN CUT FORM, PER THE SHAPE `4-3b/R26` FIXED.** `4-3b/R26` (decision-log
+line 6861) ruled the retune CUT to one balance `.tres` edit rather than opened in full, because the
+attack has no visual telegraph and the operator cannot judge tempo, evasion, or read against it, and
+because he declined an interim grey-box telegraph, wanting real models and animations first
+(`4-3b/R27`, DEBT E, still has no owner or slot). This entry executes that shape; it does not reopen
+it.
+
+**The one feel finding, from the operator's own 4-3b live smoke:** the minion hits too fast --
+essentially the moment it closes to reach, giving the opponent no time to react.
+
+**The one field changed:** `minion_attack_windup_seconds` in `data/balance/balance_config.tres`,
+`0.5 -> 0.9`. Measured, not assumed: `TimingWindow.TICK_HZ = 60.0` and
+`seconds_to_ticks() = round(seconds * TICK_HZ)` (`src/state/timing/timing_window.gd:10,23`), so this
+is `30 -> 54` ticks. No other field, no code, no test, no story file touched.
+
+**`minion_attack_active_seconds` / `minion_attack_recovery_seconds` -- operator's call, not taken
+here.** Recovery is what leaves a mob open after a miss, so lengthening windup alone changes the
+ratio of "time to react" against "time the mob stays vulnerable on a whiff" without touching the
+latter. Whether that ratio still reads as a coherent rhythm is a feel judgment this pass does not
+have standing to make -- flagged for the operator to rule on, not adjusted unilaterally.
+
+**`minion_attack_reach_distance` -- untouched, no measured reason to move it.** The authoring audit
+requires `reach >= unit_stop_distance`; authored values are `1.8 >= 1.5`, and lengthening the windup
+alone does not change either bound, so this stays exactly where `4-3b/R26` left it optional and this
+pass left it alone.
+
+**Golden measured unmoved, both directions**, confirming the standing `BC/R3` isolation (the
+determinism fixture builds its own in-test `BalanceConfig` and never loads the authored resource):
+full suite before the edit, `497 tests, 0 failed, 3878 assertions`, 30/30 integration PASS, golden
+`4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf` held (test_determinism.gd:458/796
+passed); full suite after, byte-identical `497 tests, 0 failed, 3878 assertions`, 30/30 integration
+PASS, same golden held. Both runs under the 4-3b-tightened harness gate (fails on any `^ERROR:`
+line); neither produced one.
+
+**No coupling to `tools/retime_clips.gd` -- confirmed by content.** That tool retimes HERO animation
+clips; there are no minion animation clips to retime, and a content search of the tool for `minion`
+returns no matches.
+
+**The rest of the feel checklist stays DEFERRED, not resolved.** Per `4-3b/R25`, the attack has no
+visual telegraph, so the operator cannot see a swing begin or judge evading it -- tempo, evasion, and
+read all stay unmeasurable until the rig/model/animation work (`4-3b/R27`, still unowned) lands. An
+interim grey-box telegraph was again not built; the operator wants real models and animations, not a
+placeholder.
+
+**Two commits, both shown as a diff and confirmed before staging, neither pushed:** the balance
+`.tres` alone; then this entry plus the board note. `docs/playtest-log.md` untouched (operator's own
+record). Suite and golden re-measured, not re-baselined -- no golden edit, no test edit. Operator
+reviews the log and pushes.
