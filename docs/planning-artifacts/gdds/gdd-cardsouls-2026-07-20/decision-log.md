@@ -6951,3 +6951,125 @@ placeholder.
 `.tres` alone; then this entry plus the board note. `docs/playtest-log.md` untouched (operator's own
 record). Suite and golden re-measured, not re-baselined -- no golden edit, no test edit. Operator
 reviews the log and pushes.
+
+## Session 2026-08-14 -- 4-3c readiness gate, fix pass
+
+`4-3c/R1` (decided by Matko) THE RIG STORY RUNS NOW, AHEAD OF TOTEMS -- a new decision, not a
+citation. `4-3b/R27` only DEFERRED this assignment to the E4 close-out and never made it (the log
+still recorded it unowned as of yesterday's `E3-R/R3` entry); superseded by this ruling. Reason: he
+cannot judge minion feel against a grey box, and the melee retune stays cut (`4-3b/R26`) until the
+rig lands.
+`4-3c/R2` (ruled, gate's finding, ratified) `4-3c` SPLITS: AC1-4 stay; AC5 (strike alignment) and
+AC6 (corpse lifecycle) are CUT to new story `4-3d-minion-strike-alignment-and-corpse-lifecycle`,
+`backlog`, ordered directly after `4-3c`, depending on its AC4 liveness gate (`R4` below). Reason:
+AC5 is `3-0a`-deferred-to-`3-0b`-class feel/timing work; AC6 changes actor LIFETIME (four runner
+loops, two invalidated comments, the intent-recorder tap, debug pause/reset), not presentation.
+`4-3c/R3` (ruled) MODEL PARENTS UNDER THE ROOT, NOT `Mesh`. Measured: `Mesh` carries a `+0.6`
+upward transform (root sits at the body's FEET); a feet-origin model under it would double-offset
+and hover, mirroring the hero's pre-`3-0b` float. `3-0a`/R1's discipline does not transfer -- AC2's
+discretionary framing pointed the wrong way. AC2 gains a mutation-proven minion counterpart of
+`test_vertical_alignment.gd` (`3-0b`).
+`4-3c/R4` (ruled) `_aim_unit_actors` GAINS A LIVENESS GATE, invisible today only because
+`_free_dead_unit_actors` frees a corpse's actor the same tick. Belongs in `4-3c` regardless of
+`4-3d`'s linger -- the seat is wrong on its own, and `4-3d` depends on it rather than adding it.
+`4-3c/R5` (ruled) IDLE/WALK VELOCITY SIGNAL CORRECTED. Several `_approach_unit_actors` paths
+`continue` without calling `approach()`; `CharacterBody3D.velocity` persists across ticks, so a
+unit losing its target keeps playing `walk` forever. Fix: zero velocity on every such skip path
+reaching a live node.
+`4-3c/R6` (ruled) AC4's clip selection gets a MUTATION-PROVEN TEST: liveness-below-phase is the
+named falling mutation (killed-mid-swing must go red), on the standing every-guard-falls discipline.
+`4-3c/R7` (ruled, corrected figures) Integration baseline 30 -> 31 files (`4-3b` added two, recorded
+one). Asset total ~34 -> ~35 MB (measured, 36,707,750 bytes). Dev Notes line citation corrected,
+`match_state.gd:753` not `755`.
+`4-3c/R8` (ruled, recorded) `.gitattributes` DISCHARGED, not opened at dev -- `git check-attr -a`
+confirms the existing bare extension wildcards (`*.fbx`/`*.png`) already cover the new directory.
+`4-3c/R9` (ruled, recorded) Change Log section added to `4-3c` (authoring pass row one, this fix
+pass row two) -- every story reaching `done` has one.
+
+**Rulings travelling with AC5/AC6 into `4-3d`:**
+`4-3d/R1` (ruled) Collision-disable covers ALL nodes (`Collision`/`Hurtbox`/`Hitbox`) -- a live
+`Hurtbox` would pollute the intent RECORDING. Deferred to a seat outside any physics callback
+(in-callback flag changes raise an engine error the `4-3b`-tightened harness fails on).
+`4-3d/R2` (ruled) Linger is TICK-COUNTED, timer ON THE ACTOR, never a parallel runner array --
+wall-clock breaks `3-0b`'s paused step-through; a parallel array survives the debug reset.
+`4-3d/R3` (ruled) `death`'s net displacement is accepted, NOT on `3-0a`/R9's hero-specific
+reasoning (round-over freeze). Correct reason: `_approach_unit_actors` already gates on
+`is_alive_at`, so nothing ever drives a dead unit again -- `4-3c`'s citation is corrected.
+`4-3d/R4` (ruled, recorded) Two shipped comments assert the broken invariant --
+`match_state.gd:744-747` (inside `src/state/`) and `match_runner.gd:975-978` -- both named
+collateral to correct; scope statement corrected to "no BEHAVIOURAL change under `src/state/`; one
+comment corrected."
+`4-3d/R5` (ruled, recorded) `attack.fbx`'s real length was never measured; `4-3d` measures it
+first -- available alignment mechanisms depend on that figure.
+`4-3d/R6` (recorded, NOT decided) Three alignment-mechanism options (playback rate; partial range;
+custom-speed offset) recorded as an OPEN QUESTION for `4-3d`'s own gate -- operator has not ruled.
+
+### Close-out (fix pass)
+
+Docs only, no code touched. `4-3c` split into `4-3c` (AC1-4, `authored`) and `4-3d` (AC5-6, new,
+`authored`, `backlog`, after `4-3c`). `sprint-status.yaml` corrected to cite `4-3c/R1` rather than
+`4-3b/R27`'s undischarged deferral. No golden/suite/`project.godot` measurement this pass. Operator
+reviews the log.
+
+## Session 2026-08-14 -- 4-3c/4-3d second readiness gate, fix pass
+
+`4-3c/R15` (decided by Matko) CONTROLLER PUSHED BEFORE THE LIVENESS SKIP, NOT AFTER -- AC4's push
+and liveness gate are ordered: push unconditionally first, aim-liveness check second. An early skip
+ahead of the push would freeze `4-3d`'s lingering corpse mid-swing instead of playing `death`;
+harmless in `4-3c` only because the actor is freed same-tick. `4-3d` states this dependency.
+`4-3c/R10` (ruled) AC1's death-topple ACCEPTANCE struck -- measures and records only; acceptance is
+`4-3d`'s (`4-3d/R3`). Dangling `AC 6 (below)` pointer and both stale citations removed.
+`4-3c/R12` (ruled) Velocity-zeroing path list REWRITTEN against measured code -- only
+`match_runner.gd:776-777` and `:780` qualify; `balance == null` and the pre-node `has_index`/
+`is_alive_at` continues have no live node yet.
+`4-3c/R13` (ruled) AC2 cross-check re-specified against the spawn constant (`match_runner.gd:650-657`,
+ground Y = 0.0) -- minions spawn from code, no spawn scene node.
+`4-3c/R11` (recorded) Vertical-alignment test gets a NAMED mutation: re-parent under `Mesh`, or
+restore `Mesh`'s offset onto the parent, must go red.
+`4-3c/R14` (ruled) Unmeasurable corpse item removed from Live Smoke, not replaced -- `4-3d`'s to
+smoke.
+`4-3c/R16`/`R17` (non-blocking) Stale `AC 6` pointer corrected; Dev Note added -- push seat reads the
+PREVIOUS tick's velocity, harmless for idle/walk.
+`4-3d/R7` (recorded) Hold-final-pose cited ONCE, as `3-0a/R5`, matching the log.
+`4-3d/R8` (recorded) The ~2.7s estimate restated as `4-3d`'s own UNVERIFIED figure, not quoted from a
+line `4-3c`'s cut deleted.
+`4-3d/R9` (recorded) Harness `^ERROR:` citation corrected to `test/run_all.sh` -- `4-3b/R31` is the
+orphaned-process ruling, not this one.
+`4-3d/R10` (recorded) `4-3d`'s corpse behaviour depends on `4-3c/R15`'s push ordering, stated in its
+inherits section.
+
+### Close-out (second fix pass)
+
+Docs only, no code touched. Both stories stay `authored`/`backlog`. `sprint-status.yaml` story_notes
+updated to reflect `4-3c/R10`-`R17` and `4-3d/R7`-`R10`. No golden/suite/`project.godot` measurement
+this pass. Operator reviews the log.
+
+## Session 2026-08-15 -- 4-3c live smoke, yaw convention and rooting-during-swing scope
+
+`4-3c/R18` (ruled, recorded) Canonical yaw convention for models on a unit-family root: `hero.gd:40`
+(`atan2(facing.x, facing.y)`, no `+PI`) is CANONICAL, matching a raw Mixamo import's native +Z front
+-- `hero.tscn`'s Mesh/Paladin carry no compensating rotation. `unit_actor.gd:106`/`:120` (`aim_along`/
+`aim_at`, `+PI`-shifted) is a non-canonical convention local to the UnitActor root. Any future model
+mounted on a `+PI`-form root MUST carry its own compensating yaw on the MODEL INSTANCE node only
+(yaw only, zero translation, never root/hitbox/hurtbox) and MUST ship a facing-vs-aim test in
+`test_unit_model_facing.gd`'s shape (world-space forward vs aim direction, never a yaw-field
+compare). Recorded because a backwards-mounted minion passed three readiness gates and a dev pass
+undetected.
+
+`4-3c/R19` (recorded, NO slot granted) Units are ROOTED during their own swing, mirroring the hero (operator's
+decision; mechanism measured here, NOT implemented). Measured: neither `_approach_unit_actors`
+(`match_runner.gd:795-856`) nor `unit_actor.gd:143-150`'s `approach()` reads `attack_phase_at`; max
+speed on a non-IDLE tick measures the full authored `unit_move_speed` (3.0). The hero is already
+rooted -- `match_state.gd:1712` scales speed by `_attack_phase_multiplier`, `balance_config.tres:
+21-23` authors windup/active/recovery at 0.0, only `attack_lunge_distance` (:24) moves him. Minions
+get the same full root; accepted cost: minions become KITEABLE. Also: a swing that leaves reach
+mid-flight still COMPLETES (begins only in-reach at `match_state.gd:775-782`; the phase machine,
+`:755-774`, advances on tick counters with no reach re-check) -- under a root rule this is the
+correct commitment punishment, DELIBERATELY KEPT. This ruling TOUCHES `src/state/match_state.gd` and
+MOVES THE GOLDEN -- it is NOT `4-3c` and NOT `4-3d`; it needs its own story and slot, NONE granted
+here.
+
+### Close-out
+
+Docs only, no code touched. `4-3c` stays `review`. No golden/suite/`project.godot` measurement this
+pass. Operator reviews the log.
