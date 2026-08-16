@@ -69,6 +69,18 @@ extends CharacterBody3D
 @onready var hitbox: Area3D = $Hitbox
 
 
+## Story 4-3c (AC 4): this unit's RIG PRESENTATION controller, exposed exactly as `hitbox`
+## above is exposed and for the same shape of reason -- one consumer, the runner, which pushes
+## it the liveness/phase/velocity payload from `_aim_unit_actors`'s existing per-tick call.
+##
+## THE ACTOR RESOLVES ITS OWN CHILD; THE RUNNER DRIVES IT. There is no separate spawn-seat
+## wiring call because there is nothing to wire: the controller is scene-authored in
+## unit_actor.tscn with its AnimationPlayer path exported (the hero's own AnimationController
+## precedent), so `$AnimationController` is already correct the moment the scene instantiates.
+## This node NEVER calls into it -- no gameplay logic gained a seat here (see the header).
+@onready var animation: UnitAnimationController = $AnimationController
+
+
 ## Story 4-3b (AC 12): yaw this box along an ALREADY-DECIDED planar heading, rather than at a
 ## position it must derive one from. The `aim_at()` twin below, and the ONE difference is who owns
 ## the direction: `aim_at()` is told WHERE the target is and looks at it, this is told WHICH WAY to

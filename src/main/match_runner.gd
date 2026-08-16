@@ -711,6 +711,47 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
 			continue
+		# Story 4-3c (AC 4): THE RIG PUSH, AND IT COMES FIRST -- the operator's ordering ruling
+		# (`4-3c/R15`), and the one line order in this file that is a machine contract rather than
+		# a style choice. It is UNCONDITIONAL for every actor index this loop reaches: it sits
+		# above the liveness gate below, never inside it and never behind it.
+		#
+		# IT CANNOT BE HOISTED HIGHER, and that is not a weakening of the ruling. The two guards
+		# above are structural -- `has_index` bounds the board read, `is_instance_valid` is what
+		# makes `unit` a node at all -- and there is no controller to push to until the second one
+		# has passed. AC 4's own wording is the exact one: "for every actor index the loop
+		# REACHES". The TASK line's "unconditionally first in the loop body" read literally would
+		# put this above the line that defines `unit`, which is unimplementable.
+		#
+		# WHY THE ORDER MATTERS, and why nothing in THIS story can see it break. A liveness check
+		# placed ahead of this push would also skip the push for a dead unit, and the presentation
+		# controller would never be told the unit died. In 4-3c that is invisible: a dead unit's
+		# actor is freed by `_free_dead_unit_actors` earlier in the same frame, so this loop never
+		# reaches a dead index. In 4-3d, where the corpse LINGERS, a controller that never received
+		# the push would freeze on whatever clip it last held -- a corpse stuck in a half-raised
+		# claw instead of playing `death`. The clip-selection test proves liveness-before-phase
+		# INSIDE the controller and is structurally blind to this ordering; the source-order
+		# assertion in test/integration/test_unit_clip_selection.gd is the only guard that sees it.
+		#
+		# The velocity read is the PREVIOUS tick's, not this one's: `_approach_unit_actors` (the
+		# only writer of a unit actor's velocity) runs later in the same `_physics_process`. One
+		# frame of staleness at 60 Hz cannot change which side of the walk/idle epsilon a unit
+		# falls on for any meaningful span, and it is recorded rather than left to be rediscovered.
+		(unit as UnitActor).animation.on_unit_tick(player.units.is_alive_at(index),
+				player.units.attack_phase_at(index), (unit as UnitActor).velocity.length())
+		# Story 4-3c (AC 4, `4-3c/R4`): THE AIM LIVENESS GATE, which this seat had none of. Today
+		# it is invisible for the reason above (the corpse's actor is already freed), but the seat
+		# is wrong on its own: `attack_phase_at` below is FROZEN for a dead unit -- nothing resets
+		# it to IDLE on death -- so without this a lingering corpse would be aimed from a stale
+		# locked swing direction as though it were still mid-attack. It ships HERE rather than in
+		# 4-3d because a seat 4-3d did not change should not become 4-3d's obligation to fix.
+		#
+		# IT GATES THE AIM DECISION ONLY, NEVER THE PUSH ABOVE. A dead unit is LEFT AT ITS
+		# LAST-AIMED HEADING, which is `aim_along`/`aim_at`'s own established answer for a unit
+		# with no usable direction -- "still pointing where it last looked" reads honestly, and a
+		# corpse has no target to acquire.
+		if not player.units.is_alive_at(index):
+			continue
 		# Story 4-3b (AC 12): A UNIT THAT IS SWINGING IS AIMED FROM ITS LOCKED DIRECTION, not at its
 		# live target. The direction locks at windup start and must NOT be recomputed -- that is the
 		# whole point of the lock -- and the unit's Hitbox is a CHILD of the root this yaw turns, so
@@ -774,12 +815,44 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 			continue
 		var target_slot := player.units.target_slot_at(index)
 		if target_slot == TargetingService.NO_TARGET_SLOT:
+			# Story 4-3c (AC 4, `4-3c/R5`, path list corrected `4-3c/R12`): THE FIRST OF EXACTLY TWO
+			# SKIP PATHS THAT MUST STOP THE ACTOR RATHER THAN JUST NOT MOVING IT.
+			#
+			# `CharacterBody3D.velocity` is a PERSISTENT physics property -- it holds whatever it
+			# was last set to across ticks, and Godot does not implicitly zero it between frames.
+			# `approach()` is the only writer, so a unit that moved and then STOPPED acquiring a
+			# resolvable target keeps its last nonzero velocity forever. Before 4-3c that was
+			# merely untidy (nothing read it); now the rig controller reads exactly this value to
+			# split `walk` from `idle`, so a stale value would play the walk clip on a
+			# standing-still minion indefinitely.
+			#
+			# This is the same "holds still rather than drifting" contract `UnitActor.approach()`
+			# already applies for its own within-`stop_distance` case, extended to the paths that
+			# never reach `approach()` at all. It writes the ACTOR's own built-in physics property
+			# -- no `src/state/` write, no snapshot field, and `move_and_slide()` is deliberately
+			# NOT called: the unit is being stopped, not driven.
+			#
+			# THE OTHER THREE SKIPS IN THIS LOOP ARE NOT ON THIS LIST AND MUST NOT BE ADDED TO IT:
+			# `balance == null` is an early RETURN for the whole slot before the per-actor loop
+			# starts (there is no single actor to zero), and the `has_index`/`is_alive_at`
+			# continues both run BEFORE `unit` is assigned (no node reference exists yet).
+			(unit as UnitActor).velocity = Vector3.ZERO
 			continue
 		var target_index := player.units.target_index_at(index)
 		var target_position: Variant = _target_world_position(target_slot, target_index)
 		if target_position is Vector3:
 			(unit as UnitActor).approach(target_position, balance.unit_move_speed,
 					balance.unit_stop_distance, delta)
+		else:
+			# The SECOND of the two paths (`4-3c/R12`), and the reason the list is a list rather
+			# than "every `continue`": this one is not a `continue` at all. It is the implicit
+			# fall-through when `_target_world_position` returns null -- an out-of-range index or a
+			# freed instance -- where the `if` above simply does not match and the iteration ends.
+			# It reaches `approach()` no more than the `NO_TARGET_SLOT` path above does and leaves
+			# exactly the same stale velocity behind, so it takes the same fix. The unit holding
+			# its position for that frame (`4-3/R15`) is unchanged; what changes is that it now
+			# also holds its STILLNESS.
+			(unit as UnitActor).velocity = Vector3.ZERO
 
 
 ## The `[slot, index]` pair resolved to a world position, and this is the ONLY place that translation

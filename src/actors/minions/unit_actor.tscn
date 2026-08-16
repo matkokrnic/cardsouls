@@ -1,12 +1,9 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/actors/minions/unit_actor.gd" id="1_unitactor"]
-
-[sub_resource type="BoxMesh" id="BoxMesh_unitbox"]
-size = Vector3(0.6, 1.2, 0.6)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_unitgrey"]
-albedo_color = Color(0.55, 0.55, 0.58, 1)
+[ext_resource type="PackedScene" path="res://assets/characters/skeletonzombie/skeletonzombie.fbx" id="2_szmodel"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/skeletonzombie/skeletonzombie_anims.res" id="3_szanims"]
+[ext_resource type="Script" path="res://src/actors/minions/unit_animation_controller.gd" id="4_szanctl"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_unitbody"]
 size = Vector3(0.6, 1.2, 0.6)
@@ -44,7 +41,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -0.9)
 shape = SubResource("BoxShape3D_unithitbx")
 editor_description = "Offset FORWARD along local -Z, which is this scene's forward: UnitActor.aim_at/aim_along yaw with atan2(x, z) + PI, Godot's -Z-forward convention (a Node3D looks down its own -Z). The hero's HitboxShape sits at +z 0.9 because the hero MESH carries the opposite yaw convention - same reach, mirrored axis, and getting this sign wrong ships a minion that swings backwards. Also offset +0.6 in y like every other shape on this scene, because the unit ROOT is at the box's FEET. Sized to reach a target standing at the authored unit_stop_distance: the box spans 0.2 to 1.6 forward of the unit centre, and a hero halted at 1.5 presents its hurtbox face at 1.0."
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
-mesh = SubResource("BoxMesh_unitbox")
-surface_material_override/0 = SubResource("StandardMaterial3D_unitgrey")
+[node name="SkeletonZombie" parent="." instance=ExtResource("2_szmodel")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+editor_description = "Story 4-3c (AC 2, ruling 4-3c/R3). The skinned Mixamo skeleton-zombie, REPLACING the grey placeholder box, and parented DIRECTLY UNDER THE ROOT with no TRANSLATION of its own - yaw only - not under the old `Mesh` node, which is DELETED along with its BoxMesh geometry. THE OFFSET IS THE WHOLE POINT: `Mesh` carried +0.6 in y, exactly like Collision/HurtboxShape/HitboxShape, because the unit ROOT sits at the body box's FEET (the runner spawns units at world y 0). This model's own origin ALSO sits at its feet, so parenting it under a +0.6 node would add that offset a second time and hover the minion 0.6 above the ground - the mirror image of the hero's own pre-3-0b floating defect (hero.tscn's root is the body CENTRE, so ITS Mesh node needed a COMPENSATING -1.0). Deleting `Mesh` outright rather than keeping it as an emptied pass-through parent is the recordable micro-decision AC 2 leaves to the dev pass: nothing in src/ or test/ references this scene's `Mesh` node (measured, zero hits), and an emptied MeshInstance3D whose transform must be zeroed anyway would be a misleadingly-typed node kept for nothing. Imported at native Mixamo scale (root_scale = 1.0, no manual correction); the minion's final on-screen SIZE is explicitly not decided by this story (Non-Goals - one decision about three numbers, owner Matko, taken at the Live Smoke). Pinned by test/integration/test_unit_vertical_alignment.gd. POST-SMOKE CORRECTION (4-3c fix pass): the model carries a compensating PI yaw (exact (-1,0,0,0,1,0,0,0,-1) basis, zero origin) because it mounts backwards otherwise - see the Dev Agent Record for the full hero/unit yaw-convention analysis."
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="SkeletonZombie"]
+root_node = NodePath("..")
+libraries = {
+&"": ExtResource("3_szanims")
+}
+editor_description = "Story 4-3c (AC 3). The minion's FOUR clips - idle, walk, attack, death - as one AnimationLibrary, the paladin's six-clip AnimationPlayer in miniature. `root_node = NodePath(\"..\")` points at the model instance above so the library's imported track paths (`Skeleton3D:mixamorig_Hips`, ...) resolve against THIS skeleton, exactly as hero.tscn's own AnimationPlayer resolves the paladin's. The model's bundled Mixamo take (`mixamo_com`) is NOT here and cannot be: it is stripped at import time by assets/characters/skeletonzombie/strip_model_anim.gd, on 3-0a/R10's sanctioned EditorScenePostImport route - the importer's own `animation/import=false` does NOT strip it on this engine build (4.6.3), a finding 3-0a already measured and this story carries forward rather than re-discovering. The library itself is built headlessly and reproducibly by tools/build_zombie_anims.gd. Pinned by test/integration/test_unit_rig_clips.gd."
+
+[node name="AnimationController" type="Node" parent="."]
+script = ExtResource("4_szanctl")
+animation_player_path = NodePath("../SkeletonZombie/AnimationPlayer")
+editor_description = "Rig presentation layer (story 4-3c, AC 4): READ-ONLY per-unit clip selector, the hero's AnimationController counterpart. PUSHED, never evented and never polled on its own clock: the minion has no action-state signal (4-3b's attack rhythm is a plain scalar per board index and units carry no per-record signal), so MatchRunner._aim_unit_actors - which already touches every spawned live unit actor once per physics frame and already reads attack_phase_at there - carries the payload on its existing call. No new seam, no new loop, NO _physics_process (F1), no state handle, no mutator. Selection is liveness-BEFORE-phase (a unit killed mid-swing keeps its frozen attack_phase forever, so only liveness tells the controller the swing is over), and the runner PUSHES BEFORE it checks liveness (operator ruling 4-3c/R15) so a corpse is always told it died - the ordering 4-3d's lingering corpse depends on."
