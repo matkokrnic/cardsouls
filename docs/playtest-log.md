@@ -166,3 +166,6 @@ summoni se pojavljuju kad se odigrava karta koja ima summon i ne pojavlju kad se
 
 12.8.
 1 summonani minoin krene prem meni i stane kadme krene mlatit samo ne vidim telegraph pa nemogu tocno reci kad krene zamah 2 zamah nema citljivu najavu ili je ja nevdim3 ne znam kako bi izmjegao izmicanjem kada ne vidim tu najavu 4 roll kroz udarac ne prima stetu, block negira dio, a deflect sktoz kako je i zmalsijeno 5 kada me pogodi crveni telegraf oko mene se pojavi 6 minoni se ne ozljeduju medusobno ako su od istog igraca 7 umiru od 3 udarca8 pustiosam da me ubije isve radi okej, e sad to sto nema telgraph ne znam treba li ispravljati jer preppotvlajam da mozemo skoro dodati neke placehodler modle i anmiacije pa ce one same po sebi davati vizualni telegraf sto se desava zar ne
+
+17.8.
+zamah ukorijenjuje, kretanje je normalno, porblem otkloinjen ali sada uoceavam da su trenutak lupanja i animaicja nepotavanti pa je onda parry na jako losem mjestu, osim toga super provbitni problem zatvoren adekvatno

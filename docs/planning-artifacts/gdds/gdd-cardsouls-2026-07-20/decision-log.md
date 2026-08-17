@@ -7128,3 +7128,28 @@ ruled list that stops matching the code is the defect this project keeps correct
 
 Docs only, no code touched. `4-3c1` stays `authored`, board stays `backlog`. No golden/suite/
 `project.godot` measurement this pass. Operator reviews the log.
+
+## Session 2026-08-17 -- 4-3c1 dev-pass findings, recorded (rulings R4-R6)
+
+`4-3c1/R4` (recorded) the approach-test EXPECTED-FAILURE prediction was wrong, and the mechanism is
+GEOMETRY-DEPENDENT, not a design property. `_push_reach_probe` fires only every
+`minion_retarget_interval_ticks` (`match_runner.gd:1115`, 12 ticks / 0.6 units at the authored
+speed) -- twice the 0.3-unit band between `unit_stop_distance` and `minion_attack_reach_distance`.
+No probe lands in-band at the shipped geometry, so `test_unit_approach_live.gd:225` passes
+untouched. A retune of speed, either distance, probe cadence, or spawn position can flip it red.
+Not hardened; hardening is an untaken scope decision.
+`4-3c1/R5` (recorded) `test_intent_recorder.gd`'s intake-derivation rule is WIDENED by a second
+named exemption, `EXEMPT_PURE_QUERY`, for `unit_attack_phase_multiplier` -- a parameterised method
+that is still not an intake because it is a pure function of its argument. Matched by NAME, not by
+verified purity: a future method reusing the name, or a later edit making this one impure, passes
+unchallenged. Deliberately not generalised to "any parameterised query" -- each exemption stays an
+argued ruling.
+`4-3c1/R6` (recorded) `4-3c/R12`'s cited coordinates (`match_runner.gd:776-777`/`:780`) are STALE,
+measured at `:839`/`:855` before this story's edit and `:855`/`:884` after. Rulings must name the
+construct first and the coordinates second -- line numbers decay, constructs don't.
+
+### Close-out
+
+Docs only. `4-3c1` stays `review`, board stays `ready-for-dev`. No golden/suite/`project.godot`
+measurement this pass beyond item 1's own state-test verification (see story artifact). Operator
+reviews the log.

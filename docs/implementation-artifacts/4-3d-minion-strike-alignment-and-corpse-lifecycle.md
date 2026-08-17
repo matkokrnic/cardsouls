@@ -102,6 +102,11 @@ so that the fight reads as real combat rather than boxes disappearing on a count
    ~0.767s end-of-clip truncation has NOT yet been rated by eye** — measured against the 1.9s cycle
    vs the 2.6667s clip, carried here as an open observation, not yet a finding either way.
 
+   **Additional AC 5 input, from `4-3c1`'s Live Smoke check (2026-08-17): the strike/impact mismatch
+   is now a felt symptom with a named consequence** — the moment damage lands and the visible strike
+   do not coincide, which puts the parry window in a misleading place; this is the evidence AC 5's
+   three-way mechanism choice was waiting on, not a new defect.
+
 2. **The corpse stays 10 seconds and the player can walk through it.** Today
    `MatchRunner._free_dead_unit_actors` (`match_runner.gd:682-691`) frees a dead unit's actor the
    SAME tick death is detected — before this story, that is invisible, because there is nothing to see
