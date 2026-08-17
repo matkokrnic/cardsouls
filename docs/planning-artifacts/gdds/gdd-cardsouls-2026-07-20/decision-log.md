@@ -6972,6 +6972,7 @@ discretionary framing pointed the wrong way. AC2 gains a mutation-proven minion 
 `4-3c/R4` (ruled) `_aim_unit_actors` GAINS A LIVENESS GATE, invisible today only because
 `_free_dead_unit_actors` frees a corpse's actor the same tick. Belongs in `4-3c` regardless of
 `4-3d`'s linger -- the seat is wrong on its own, and `4-3d` depends on it rather than adding it.
+**Pointer -- `4-3c/R5` AMENDED BY APPEND 2026-08-16 (see Session 2026-08-16 -- 4-3c1 third readiness gate, fix pass, below, decision-log `4-3c1/R3`).**
 `4-3c/R5` (ruled) IDLE/WALK VELOCITY SIGNAL CORRECTED. Several `_approach_unit_actors` paths
 `continue` without calling `approach()`; `CharacterBody3D.velocity` persists across ticks, so a
 unit losing its target keeps playing `walk` forever. Fix: zero velocity on every such skip path
@@ -7019,6 +7020,7 @@ ahead of the push would freeze `4-3d`'s lingering corpse mid-swing instead of pl
 harmless in `4-3c` only because the actor is freed same-tick. `4-3d` states this dependency.
 `4-3c/R10` (ruled) AC1's death-topple ACCEPTANCE struck -- measures and records only; acceptance is
 `4-3d`'s (`4-3d/R3`). Dangling `AC 6 (below)` pointer and both stale citations removed.
+**Pointer -- `4-3c/R12` AMENDED BY APPEND 2026-08-16 (see Session 2026-08-16 -- 4-3c1 third readiness gate, fix pass, below, decision-log `4-3c1/R3`).**
 `4-3c/R12` (ruled) Velocity-zeroing path list REWRITTEN against measured code -- only
 `match_runner.gd:776-777` and `:780` qualify; `balance == null` and the pre-node `has_index`/
 `is_alive_at` continues have no live node yet.
@@ -7073,3 +7075,56 @@ here.
 
 Docs only, no code touched. `4-3c` stays `review`. No golden/suite/`project.godot` measurement this
 pass. Operator reviews the log.
+
+## Session 2026-08-16 -- E4 forcing-point recording: projectiles (camera lock-on checked, already recorded)
+
+Docs-only recording pass. Camera/lock-on was checked against this log first: `DP/R1` (Session
+2026-07-31, above) and `E4-P/R11`'s "camera always-lock-on/retarget (no owner...)" line already carry
+the LIGHT/FULL variant split, the `block_facing_arc_degrees`/orientation-as-defense conflict, the
+off-screen-enemy-hero/Legibility Principle conflict, and the no-owner/no-slot/E4-forcing-point status
+verbatim. Nothing added or duplicated for camera/lock-on.
+
+`E4-P/R12` (recorded, NO owner, NO slot) PROJECTILES: operator ruling, 2026-08-10, previously
+unrecorded. A projectile FLIES -- a real entity with a position that can be dodged, never an
+abstract resolution over an acquired target. It is SHARED infrastructure, not a totem speciality:
+its source may be a totem, a minion, or a hero spell card. Open addressing problem, recorded so it
+is not rediscovered at implementation: a projectile OUTLIVES its source, so `[slot, index]` into the
+unit board (the address form `4-3a/R16` widened the dedupe key to) cannot address it -- it needs its
+own attacker identity and its own dedupe. This meets the `spell_*` forcing point already owed at E4
+close-out (`E4-P/R10`, "spell resolution acquires an owner at the E4 close-out at the latest"), since
+the projectile is those cards' delivery path -- the two open items converge on one owner, not two.
+A cut is PROPOSED, not decided: accelerators in `4-4`, Combat Totem plus projectiles in a new
+`4-4a`. This entry does not rule the cut; that stays the operator's. Forcing point: E4. No board
+entry made -- placement is undecided.
+
+### Close-out
+
+Docs only, no code touched. No board entry added for either item (neither has an owner or a slot).
+`sprint-status.yaml` untouched this pass. Operator reviews the log.
+
+## Session 2026-08-16 -- 4-3c1 third readiness gate, fix pass (rulings R1-R3)
+
+`4-3c1/R1` (ruled) THE SEAT. `unit_attack_phase_multiplier(phase)` is a pure function in
+`src/state/match_state.gd`, read inline by the runner at `match_runner.gd:844-845` (CONSTRAINT C, no
+caching). The hero precedent does NOT transfer directly: the hero's `velocity` IS hashed state
+(`hero_state.gd:5-9`), so `match_state` both computes and applies it; a unit's velocity is
+actor-owned (`unit_actor.gd:143-151`, no `Vector3` on `UnitBoard`), so `match_state` may only EXPOSE
+the rule, never apply it -- the same shape as the contact fact, where a derived fact crosses the seam
+and ownership does not.
+`4-3c1/R2` (ruled) IDLE RETURNS 1.0. `attack_phase_at` is a FOUR-value enum (`match_state.gd:755-774`);
+the hero's `_attack_phase_multiplier` (`:1738-1745`) matches a three-value StringName with an `_:`
+catch-all. A literal mirror maps IDLE onto the recovery field (authored 0.0) and roots every unit
+permanently, including units that have never attacked. No catch-all may fall through to a phase
+field; IDLE and any other non-attacking phase return 1.0 explicitly.
+`4-3c1/R3` (ruled) AMENDS `4-3c/R5` AND `4-3c/R12`. Their "exactly two velocity-zeroing paths" list is
+a RULED list, not a comment convention. A third path now exists: decided at the
+`_approach_unit_actors` call site (`match_runner.gd:844-845`) and written inside
+`UnitActor.approach()` (`unit_actor.gd:143-151`), and unlike the two listed paths it DOES call
+`move_and_slide()` (`:151`) even at zero velocity. The source comment block at
+`match_runner.gd:817-838`/`:847-854` must be updated in the same pass that adds the third path -- a
+ruled list that stops matching the code is the defect this project keeps correcting.
+
+### Close-out
+
+Docs only, no code touched. `4-3c1` stays `authored`, board stays `backlog`. No golden/suite/
+`project.godot` measurement this pass. Operator reviews the log.
