@@ -371,3 +371,23 @@ func test_authored_attack_move_speed_multipliers_are_non_negative() -> void:
 			&"attack_recovery_move_speed_multiplier"]:
 		assert_true(float(config.get(field)) >= 0.0,
 			"%s must be non-negative (0.0 = full root is the authored design)" % field)
+
+
+## Story 4-3c1 (AC 3, `4-3c/R19`): the MINION-SIDE TWIN of the audit directly above — a separate
+## test rather than three more entries in that loop, because the two triplets are deliberately
+## separate fields (AC 1) and a shared audit would quietly re-couple them in the one place that is
+## supposed to keep them apart.
+##
+## Same exemption, same reason: 0.0 = full root is the authored design value, so the bound is
+## non-negative rather than > 0. A NEGATIVE multiplier is the defect this catches — it would drive
+## a minion BACKWARDS, away from the target it is swinging at, for the whole swing.
+func test_authored_minion_attack_move_speed_multipliers_are_non_negative() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	for field in [&"minion_attack_windup_move_speed_multiplier",
+			&"minion_attack_active_move_speed_multiplier",
+			&"minion_attack_recovery_move_speed_multiplier"]:
+		assert_true(float(config.get(field)) >= 0.0,
+			"%s must be non-negative (0.0 = full root is the authored design)" % field)

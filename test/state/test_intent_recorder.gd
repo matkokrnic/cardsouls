@@ -26,6 +26,26 @@ const SEED_CHANNEL := "capture_seed"
 ## empties every tick, not an intake.
 const EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"
 
+## Story 4-3c1 (AC 2, seat ruled by `4-3c1/R1`): THE SECOND EXEMPTION, and it is a genuinely new
+## CATEGORY rather than another instance of the first — recorded here with its reason because the
+## derivation rule stated below did not anticipate it.
+##
+## `unit_attack_phase_multiplier(phase)` TAKES A PARAMETER AND STILL CARRIES NO DATA INWARD. It is
+## a PURE QUERY: a function of its argument alone, returning a float, writing nothing and storing
+## nothing. The rule below reads "takes at least one parameter => intake" because until now every
+## parameterised public method on MatchState was a write seam; this one is parameterised EGRESS,
+## which the rule has no word for.
+##
+## IT IS PUBLIC BY RULING, NOT BY CONVENIENCE (`4-3c1/R1`): a unit's velocity is actor-owned, so
+## MatchState may only EXPOSE the phase rule and the runner must read it at the point of use. A
+## private helper could not satisfy that, so the shape is locked and this exemption is its
+## consequence.
+##
+## IT NEEDS NO CAPTURE CHANNEL for the same reason `drain_signals` does not: a replay that
+## reproduces the inputs reproduces the phase, and the phase reproduces this return value. Nothing
+## reaches MatchState through it, so there is nothing for a stream to carry.
+const EXEMPT_PURE_QUERY := "unit_attack_phase_multiplier"
+
 ## AC 1: the intake surface VERIFIED BY CONTENT at this story's pass. Pinned by exact set
 ## equality so a REMOVED intake is as loud as an added one — but the falling guard for the AC's
 ## actual claim is the channel check below, which fails for a new intake whether or not this
@@ -51,8 +71,16 @@ const DECK_IDS: Array[StringName] = [&"rec_card_a", &"rec_card_b", &"rec_card_c"
 ##
 ## THE DERIVATION RULE, stated so it can be checked rather than trusted: a public method that
 ## takes at least one PARAMETER carries data inward and is an intake; a public method that takes
-## none either returns state (to_snapshot / debug_window_ticks_remaining — EGRESS) or is the
+## none either returns state (to_snapshot / debug_window_ticks_remaining — EGRESS) or is a
 ## named exemption above. _init is an intake because MatchParams carries the seed in.
+##
+## STORY 4-3c1 WIDENED THAT RULE'S EXEMPTION SIDE, deliberately: `unit_attack_phase_multiplier`
+## takes a parameter and is STILL not an intake, because it is a pure function of its argument
+## rather than a write seam. The rule's parameter test is a PROXY for "carries data inward", and
+## this is the first place the proxy and the thing it stands for came apart. It is handled as a
+## named exemption with its reason (see `EXEMPT_PURE_QUERY`) rather than by loosening the proxy
+## into "returns void", so every future parameterised method still lands in `intakes` by default
+## and has to be argued out one at a time.
 func test_every_match_state_intake_has_a_capture_channel() -> void:
 	var surface := _match_state_public_surface()
 	assert_true(surface.size() > 0, "the scan must actually find MatchState's public surface")
@@ -60,20 +88,29 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 	var egress: Array[String] = []
 	var exempt: Array[String] = []
 	for name: String in surface:
-		if bool(surface[name]["has_params"]):
-			intakes.append(name)
-		elif name == EXEMPT_CARRIES_NO_DATA_INWARD:
+		# The exemptions are checked FIRST, and they have to be: `EXEMPT_PURE_QUERY` takes a
+		# parameter, so the `has_params` branch below would otherwise claim it as an intake before
+		# the exemption was ever consulted.
+		if name == EXEMPT_CARRIES_NO_DATA_INWARD or name == EXEMPT_PURE_QUERY:
 			exempt.append(name)
+		elif bool(surface[name]["has_params"]):
+			intakes.append(name)
 		else:
 			egress.append(name)
 	intakes.sort()
 	egress.sort()
+	exempt.sort()
 	assert_eq(intakes, EXPECTED_INTAKE_SURFACE,
 		"MatchState's intake surface changed — a new intake needs a capture channel (and this "
 		+ "pin updated deliberately); a removed one needs its channel retired")
-	assert_eq(exempt, [EXEMPT_CARRIES_NO_DATA_INWARD],
-		"drain_signals() is EXEMPT and this is where that is recorded: it carries no data INWARD "
-		+ "— it is the D5 emit half of a queue the runner empties every tick, not an intake")
+	var expected_exempt := [EXEMPT_CARRIES_NO_DATA_INWARD, EXEMPT_PURE_QUERY]
+	expected_exempt.sort()
+	assert_eq(exempt, expected_exempt,
+		"the TWO exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
+		+ "no data INWARD (it is the D5 emit half of a queue the runner empties every tick), and "
+		+ "unit_attack_phase_multiplier() is a PURE QUERY that takes a parameter and still carries "
+		+ "none (a function of its argument, returning a float, writing nothing) — neither is an "
+		+ "intake, and a THIRD name appearing here is a real intake escaping its capture channel")
 	assert_eq(egress, ["debug_window_ticks_remaining", "to_snapshot"],
 		"to_snapshot() and debug_window_ticks_remaining() are EGRESS, not intake — they return "
 		+ "state and receive none")

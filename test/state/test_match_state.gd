@@ -313,3 +313,29 @@ func test_round_started_pushed_once_per_debug_reset() -> void:
 	ms.advance(reset_intents)
 	ms.drain_signals()
 	assert_eq(seen.count, 2, "unconditional: every debug reset pushes round_started")
+
+
+## Story 4-3c1 (Completion Note 6, operator's ruling): the dev pass flagged this as NOT DONE and
+## recommended it — `4-3c1/R2`'s IDLE rule was guarded only by `test_unit_swing_root_live.gd`, the
+## slowest and most fragile layer capable of seeing it. This is the cheap, direct state-side proof.
+##
+## Three DISTINCT non-zero values, not three equal ones: `unit_attack_phase_multiplier` selects
+## one of three authored fields by phase, and if all three were left at their shared authored 0.0
+## (or any shared value), a wrong-field bug — WINDUP reading the RECOVERY field, say — would return
+## the same number and this test could not tell. Distinct values make the return value name which
+## field was actually read.
+func test_unit_attack_phase_multiplier_selects_the_right_field() -> void:
+	var config := BalanceConfig.new()
+	config.minion_attack_windup_move_speed_multiplier = 0.25
+	config.minion_attack_active_move_speed_multiplier = 0.5
+	config.minion_attack_recovery_move_speed_multiplier = 0.75
+	var ms := MatchState.new(MatchParams.new(1))
+	ms.apply_balance(config)
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.IDLE), 1.0,
+		"IDLE returns the identity, EXPLICITLY -- not a field lookup (4-3c1/R2)")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP), 0.25,
+		"WINDUP reads minion_attack_windup_move_speed_multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE), 0.5,
+		"ACTIVE reads minion_attack_active_move_speed_multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.RECOVERY), 0.75,
+		"RECOVERY reads minion_attack_recovery_move_speed_multiplier")

@@ -246,6 +246,29 @@ extends Resource
 ## than the stop distance leaves every minion parked just outside its own reach, never in reach,
 ## never winding up — the whole story shipped invisible in the build with nothing failing.
 @export var minion_attack_reach_distance: float = 0.0
+## Story 4-3c1 (AC 1, `4-3c/R19`): the minion's OWN three attack-phase move-speed multipliers —
+## the unit-side parallel of the hero's `attack_<phase>_move_speed_multiplier` triplet (50-52),
+## scaling a unit's approach speed while it is WINDUP / ACTIVE / RECOVERY. Authored 0.0 = full
+## root, the same design value (not a missing one) the hero's three carry, so the audit bound is
+## non-negative rather than > 0.
+##
+## THREE NEW FIELDS RATHER THAN REUSING THE HERO'S THREE, which is AC 1's whole content: sharing
+## the hero's keys would permanently couple minion feel to hero feel — a later hero retune would
+## silently retune every minion, with no way to diverge the two without a migration.
+##
+## NO LUNGE TWIN, and that is an explicit non-goal, not a forgotten field: the hero's
+## `attack_lunge_distance` (61) is a SEPARATE additive velocity term, and mirroring it would
+## reintroduce committed movement during the swing through a different door than the one this
+## story closes.
+##
+## Scalars, NOT tick-domain — never on `BalanceTicks`. Carrying no `_seconds` suffix, half (b) of
+## the reflective guard leaves them alone; the obligations that DO apply are the two AC 3 names:
+## an entry apiece in `E1_BALANCE_FIELDS` (`test_data_resources.gd`, hand-maintained — half (a)
+## fails until they are listed) and the minion-side non-negative audit in
+## `test_balance_authoring.gd`.
+@export var minion_attack_windup_move_speed_multiplier: float = 0.0
+@export var minion_attack_active_move_speed_multiplier: float = 0.0
+@export var minion_attack_recovery_move_speed_multiplier: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

@@ -815,8 +815,25 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 			continue
 		var target_slot := player.units.target_slot_at(index)
 		if target_slot == TargetingService.NO_TARGET_SLOT:
-			# Story 4-3c (AC 4, `4-3c/R5`, path list corrected `4-3c/R12`): THE FIRST OF EXACTLY TWO
-			# SKIP PATHS THAT MUST STOP THE ACTOR RATHER THAN JUST NOT MOVING IT.
+			# Story 4-3c (AC 4, `4-3c/R5`, path list corrected `4-3c/R12`, AMENDED `4-3c1/R3`):
+			# THE FIRST OF EXACTLY TWO SKIP PATHS THAT MUST STOP THE ACTOR RATHER THAN JUST NOT
+			# MOVING IT.
+			#
+			# THE LIST IS NO LONGER THE WHOLE STORY: there are now THREE places a unit's velocity
+			# ends up zero, and only the two named here are SKIP paths. The third (`4-3c1/R3`) is
+			# swing commitment -- decided at the `approach()` call site below, where the authored
+			# phase multiplier (0.0 while WINDUP/ACTIVE/RECOVERY) is folded into the speed, and
+			# WRITTEN inside `approach()` itself. It is a different shape from these two and must
+			# NOT be folded into this list: it does not skip anything, it drives the unit normally
+			# at a speed that happens to be zero, and unlike both paths here it DOES call
+			# `move_and_slide()` (`unit_actor.gd:151`). A unit rooted mid-swing is being DRIVEN;
+			# these two are being STOPPED.
+			#
+			# `4-3c/R12`'s OWN CITED COORDINATES NO LONGER RESOLVE: it cites `match_runner.gd:776-777`
+			# and `:780` for the two writes, which are lines in a version of this file that has since
+			# moved. The two writes it names are the two below in this function -- identified by what
+			# they are, not by the ruling's line numbers, which are stale and recorded as such rather
+			# than silently re-derived.
 			#
 			# `CharacterBody3D.velocity` is a PERSISTENT physics property -- it holds whatever it
 			# was last set to across ticks, and Godot does not implicitly zero it between frames.
@@ -841,10 +858,26 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 		var target_index := player.units.target_index_at(index)
 		var target_position: Variant = _target_world_position(target_slot, target_index)
 		if target_position is Vector3:
-			(unit as UnitActor).approach(target_position, balance.unit_move_speed,
+			# Story 4-3c1 (AC 2, `4-3c/R19`, seat `4-3c1/R1`): SWING COMMITMENT — the unit's own
+			# attack phase scales the speed it is driven at, so a unit that has committed to a swing
+			# plants its feet for the whole of it (authored 0.0 = full root, mirroring the hero) and
+			# runs at the ordinary `unit_move_speed` only while IDLE.
+			#
+			# THE THIRD VELOCITY-ZEROING PATH IS DECIDED ON THIS LINE (`4-3c1/R3`) and written inside
+			# `approach()` — see the amended path list below. The multiplier is read INLINE here, off
+			# the same config handle the rest of this loop reads (CONSTRAINT C): never cached to a
+			# field on this node, never copied onto the actor. `match_state` only EXPOSES the rule --
+			# a unit's velocity is actor-owned, so the scaling has to happen where the speed is
+			# passed in, not inside the state layer that computed the factor.
+			var phase_multiplier := _match_state.unit_attack_phase_multiplier(
+					player.units.attack_phase_at(index))
+			(unit as UnitActor).approach(target_position,
+					balance.unit_move_speed * phase_multiplier,
 					balance.unit_stop_distance, delta)
 		else:
-			# The SECOND of the two paths (`4-3c/R12`), and the reason the list is a list rather
+			# The SECOND of the two SKIP paths (`4-3c/R12`, amended `4-3c1/R3` -- the swing-commitment
+			# zeroing above is a third zeroing but not a third member of THIS list, for the reason
+			# recorded there), and the reason the list is a list rather
 			# than "every `continue`": this one is not a `continue` at all. It is the implicit
 			# fall-through when `_target_world_position` returns null -- an out-of-range index or a
 			# freed instance -- where the `if` above simply does not match and the iteration ends.

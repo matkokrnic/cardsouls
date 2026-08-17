@@ -1745,6 +1745,47 @@ func _attack_phase_multiplier(phase: StringName) -> float:
 			return balance.attack_recovery_move_speed_multiplier
 
 
+## Story 4-3c1 (AC 2, `4-3c/R19`, seat ruled by `4-3c1/R1`): the MINION's per-phase attack
+## movement multiplier — the unit-side parallel of `_attack_phase_multiplier()` above, selecting
+## one of the three `minion_attack_<phase>_move_speed_multiplier` fields from a unit's own
+## `UnitBoard.AttackPhase`.
+##
+## PURE, PUBLIC, AND IT ONLY EXPOSES THE RULE — it never applies it, and that asymmetry with the
+## hero is the point of `4-3c1/R1`. The hero's `velocity` IS hashed state (`hero_state.gd:5-9`),
+## so `_resolve_movement` both computes the hero's multiplier and writes the scaled velocity. A
+## unit's velocity is ACTOR-owned (`unit_actor.gd:143-151`; there is no `Vector3` on `UnitBoard`),
+## so this layer can only ever hand the rule out: the runner reads it inline at the
+## `UnitActor.approach()` call site (CONSTRAINT C — no caching to a field, here or there) and
+## passes a scaled speed in. Same shape as the contact fact — a derived fact crosses the
+## state/actor seam, ownership of the write does not.
+##
+## IDLE RETURNS 1.0 EXPLICITLY, AND THERE IS NO CATCH-ALL FALL-THROUGH TO A PHASE FIELD
+## (`4-3c1/R2`). This is where the hero's shape must NOT be mirrored literally. `attack_phase()`
+## returns one of a three-value StringName set, so the hero's `_:` arm safely means "recovery";
+## `AttackPhase` is a FOUR-value enum whose fourth value, IDLE, is the phase a unit spends nearly
+## all of its life in. A literal mirror would map IDLE onto `minion_attack_recovery_move_speed_
+## multiplier` (authored 0.0) and permanently root EVERY unit, including ones that have never
+## swung — a shipped-immobile minion layer with nothing failing. The default arm therefore returns
+## the identity, and only the three ATTACKING phases select a field.
+##
+## TAKES `int`, NOT `UnitBoard.AttackPhase`, on the project's own existing convention for carrying
+## this enum across a call boundary: `UnitBoard.attack_phase_at()` is declared `-> int`
+## (`unit_board.gd:359`) and `UnitAnimationController.on_unit_tick()` takes `phase: int`
+## (`unit_animation_controller.gd:108`). The arms below compare against the named enum values, so
+## the domain is still stated where it matters.
+func unit_attack_phase_multiplier(phase: int) -> float:
+	match phase:
+		UnitBoard.AttackPhase.WINDUP:
+			return balance.minion_attack_windup_move_speed_multiplier
+		UnitBoard.AttackPhase.ACTIVE:
+			return balance.minion_attack_active_move_speed_multiplier
+		UnitBoard.AttackPhase.RECOVERY:
+			return balance.minion_attack_recovery_move_speed_multiplier
+		_:
+			# IDLE and any phase added later: full, unmodified speed. NOT a field lookup.
+			return 1.0
+
+
 ## Story 3-0b (AC6): the attack lunge as a STATE-SIDE velocity term — the sanctioned form
 ## from the 1-7 close-out ("an authored lunge displacement in balance data, applied by the
 ## STATE layer as a velocity curve during the swing"). NEVER root motion: no AnimationPlayer

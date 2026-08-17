@@ -66,6 +66,13 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# by half (b), exactly like `unit_stop_distance` above; half (a) fails until it is listed here.
 	"minion_attack_windup_seconds", "minion_attack_active_seconds",
 	"minion_attack_recovery_seconds", "minion_attack_reach_distance",
+	# Story 4-3c1 (AC 1/AC 3, `4-3c/R19`): the minion's own three attack-phase move-speed
+	# multipliers. None carries the `_seconds` suffix, so half (b) below leaves them alone exactly
+	# as it leaves `minion_attack_reach_distance` alone; half (a) fails until all three are listed
+	# HERE, BY HAND — this literal is not derived from anything, which is the reason the story
+	# spells the task out rather than assuming the reflective guard would supply them.
+	"minion_attack_windup_move_speed_multiplier", "minion_attack_active_move_speed_multiplier",
+	"minion_attack_recovery_move_speed_multiplier",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",
