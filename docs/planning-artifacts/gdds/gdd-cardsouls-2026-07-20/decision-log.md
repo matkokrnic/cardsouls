@@ -7002,8 +7002,10 @@ collateral to correct; scope statement corrected to "no BEHAVIOURAL change under
 comment corrected."
 `4-3d/R5` (ruled, recorded) `attack.fbx`'s real length was never measured; `4-3d` measures it
 first -- available alignment mechanisms depend on that figure.
+**Pointer -- `4-3d/R5` SUPERSEDED 2026-08-26 (see Session 2026-08-26 -- 4-3d third readiness gate, fix pass, below, decision-log `4-3d/R18`).** The entry above is untouched and stands as the record; the length has since been measured (2.6667 s, 80 keys, `4-3c`'s own Dev Agent Record) and this ruling's premise no longer holds.
 `4-3d/R6` (recorded, NOT decided) Three alignment-mechanism options (playback rate; partial range;
 custom-speed offset) recorded as an OPEN QUESTION for `4-3d`'s own gate -- operator has not ruled.
+**Pointer -- `4-3d/R6` SUPERSEDED 2026-08-26 (see Session 2026-08-26 -- 4-3d third readiness gate, fix pass, below, decision-log `4-3d/R11`).** The entry above is untouched and stands as the record; the operator has since ruled custom playback rate as THE mechanism.
 
 ### Close-out (fix pass)
 
@@ -7035,6 +7037,7 @@ PREVIOUS tick's velocity, harmless for idle/walk.
 `4-3d/R7` (recorded) Hold-final-pose cited ONCE, as `3-0a/R5`, matching the log.
 `4-3d/R8` (recorded) The ~2.7s estimate restated as `4-3d`'s own UNVERIFIED figure, not quoted from a
 line `4-3c`'s cut deleted.
+**Pointer -- `4-3d/R8` SUPERSEDED 2026-08-26 (see Session 2026-08-26 -- 4-3d third readiness gate, fix pass, below, decision-log `4-3d/R18`).** The entry above is untouched and stands as the record; the length is now measured, not estimated.
 `4-3d/R9` (recorded) Harness `^ERROR:` citation corrected to `test/run_all.sh` -- `4-3b/R31` is the
 orphaned-process ruling, not this one.
 `4-3d/R10` (recorded) `4-3d`'s corpse behaviour depends on `4-3c/R15`'s push ordering, stated in its
@@ -7153,3 +7156,159 @@ construct first and the coordinates second -- line numbers decay, constructs don
 Docs only. `4-3c1` stays `review`, board stays `ready-for-dev`. No golden/suite/`project.godot`
 measurement this pass beyond item 1's own state-test verification (see story artifact). Operator
 reviews the log.
+
+## Session 2026-08-26 -- 4-3d third readiness gate, fix pass (rulings R11-R18)
+
+`4-3d/R11` (ruled by Matko) MECHANISM DECIDED: custom `AnimationPlayer` playback rate is THE AC 1
+alignment mechanism, superseding `4-3d/R6`'s open question. (b) a partial clip range and (c) a
+`custom_speed`/start-offset play call are REJECTED -- both require playback to begin partway into
+the clip to land the strike in the active window, which removes the front of the windup, the
+anticipation the player reads to time a parry. Accepted consequence, in the operator's words: the
+whole swing plays visibly faster than authored, complete and uncut, and that is accepted.
+`4-3d/R12` (ruled) WITHDRAWN: a rate band (1.4035-1.5926) and a peak-time figure (1.4333 s) circulated
+in conversation, derived from an input `4-3d/R13` shows unverifiable in this repo. Neither number is
+stated anywhere in the story. Also withdrawn: the claim that one rate value fixes both the AC 1
+strike alignment and the `4-3c`-observed ~0.767 s chained-swing truncation.
+**Pointer -- `4-3d/R12` AMENDED BY APPEND 2026-08-26 (see Session 2026-08-26 -- 4-3d fifth readiness gate, fix pass, below, decision-log `4-3d/R21`).** The entry above is untouched and stands as the record; its clause "Neither number is stated anywhere in the story" is inaccurate as written -- both figures appear in the story, inside its own withdrawal paragraph -- and the accurate claim is that neither is stated as LOAD-BEARING.
+`4-3d/R13` (ruled) The hips-displacement excursion peak is NOT accepted as a proxy for the strike
+frame. The dev pass measures the STRIKE FRAME -- the frame at which the claw arrives, the thing the
+player reads -- and the rate is derived FROM that measurement, not assumed ahead of it. The figure
+"hips peak at t = 1.4333 s" is unverifiable: `1.4333 s` is `walk`'s clip length in `4-3c`'s own table
+(`4-3c-minion-rig-adoption.md:608`), not a time-of-peak for `attack`.
+`4-3d/R14` (ruled) REOPEN CONDITION added to AC 1: the rejection of (b)/(c) assumes the measured
+strike frame sits in the back portion of the clip. If the measured strike frame is early enough that
+a rate aligning it would leave the clip shorter than the 1.9 s cycle unachievable -- the arithmetic no
+longer favours (a) -- the dev pass STOPS and returns the choice to the operator rather than
+improvising. A stop condition, not a caveat.
+**Pointer -- `4-3d/R14` AMENDED BY APPEND 2026-08-26 (see Session 2026-08-26 -- 4-3d fourth readiness gate, fix pass, below, decision-log `4-3d/R19`).** The entry above is untouched and stands as the record; its stated arithmetic was inverted and its trigger is corrected by the entry referenced below. The STOP mechanism itself -- return the mechanism choice to the operator rather than improvise -- is unchanged.
+`4-3d/R15` (ruled) PRIORITY: alignment of the visible strike beats elimination of the truncation. If
+the ruled rate still truncates chained swings, that is a Live Smoke watch item, not a blocker -- the
+parry symptom is an observed live defect (`4-3c1`'s smoke); the truncation has never been judged by
+eye.
+`4-3d/R16` (ruled) AC 2 SPLITS into independently falsifiable criteria: AC 2 (retention +
+walk-through), AC 3 (timer seat, tick-counting, debug pause and reset), AC 4 (collision disable
+outside any physics callback), AC 5 (`death` clip holds final pose). The death-displacement
+acceptance reasoning and the two shipped-comment corrections move out of AC numbering into Dev
+Notes/collateral -- they are not independently falsifiable behaviour.
+`4-3d/R17` (ruled) Every guard this story proposes asserts a VISIBLE EFFECT, not an identifier. For
+AC 1 that is the clip's playback position at the moment the ACTIVE window opens -- not the rate
+value, not the clip name, not source line order. `test_unit_clip_selection.gd` Part B's inherited
+line-order/indentation guard is REPLACED, not extended, by a behavioural assertion in Part A's shape.
+`4-3d/R18` (recorded) `attack.fbx`'s real length is measured: 2.6667 s, 80 keys (`4-3c`'s own Dev
+Agent Record, Hips-track table, `4-3c-minion-rig-adoption.md:605-609`). Supersedes `4-3d/R5` (never
+measured) and `4-3d/R8` (restated as an unverified ~2.7 s estimate) -- both premises no longer hold.
+
+Also corrected this pass, not separate rulings: `match_runner.gd` coordinates re-cited from the
+stale `975-978`/`770` (rotted ~80-100 lines since `4-3c`'s dev pass landed) to the current
+`1083-1084` (`_gather_unit_facts`'s header, not the aim pass) and `795`/`811`
+(`_approach_unit_actors`/its `is_alive_at` gate), each with its anchor text quoted so the next rot is
+self-healing. AC 4's Hurtbox rationale corrected from "facts no tick consumes" to a
+recording/replay-stream cleanliness argument, citing `match_state.gd:1101`'s dead-target drop as the
+reason gameplay is not at risk; the per-node collision property corrected (`Hurtbox` needs
+`monitorable`, `Hitbox` needs `monitoring`, `Collision` needs `disabled` -- not one property named for
+all three). The debug-reset relay's Dev Note corrected from "must free a lingering corpse too" to a
+confirmed no-op (`_free_unit_actors`, `match_runner.gd:912-918`, frees every entry unconditionally).
+The `^ERROR:`-on-physics-callback claim split into its measured half (the harness,
+`test/run_all.sh:18-19,32-33`) and its assumed half (the engine behaviour, to be confirmed live by
+the dev pass). `baseline_commit` re-baselined `1ddff87` -> `f009dd5`. Golden hash named explicitly
+(`4a089063...`) rather than left as an unanchored "both directions" prediction.
+
+### Close-out
+
+Docs only, no code touched, no `src/`/`test/`/`project.godot` edit, editor never opened. `4-3d`
+stays `authored`, board stays `backlog` -- promotion is the operator's act. No golden/suite/
+`project.godot` measurement this pass. Operator reviews the log.
+
+## Session 2026-08-26 -- 4-3d fourth readiness gate, fix pass (second docs-only correction pass)
+
+`4-3d/R19` (ruled) REOPEN CONDITION arithmetic corrected -- amends `4-3d/R14`'s stated trigger, not
+its stop-condition mechanism. Let `T` = the measured strike frame's timestamp within the 2.6667 s
+clip. Aligning the strike to the START of the ACTIVE window gives rate `r = T / 0.9`; effective clip
+duration is then `L/r = 2.4 / T`. Break-even at `T = 1.263 s` (`r = 1.40`, duration exactly 1.90 s).
+`T > 1.263 s`: duration falls BELOW the cycle -- the clip ends early and holds its final pose, no
+truncation. `T < 1.263 s`: duration rises ABOVE the cycle -- chained swings still truncate, which
+`4-3d/R15` already rules a Live Smoke watch item, NOT a stop condition -- it survives with the
+alignment still achieved. `T < 0.9 s`: `r < 1.0`, the swing plays SLOWER than authored, contradicting
+`4-3d/R11`'s accepted consequence. NEW STOP CONDITION, superseding `4-3d/R14`'s stated trigger: the
+dev pass STOPS and returns the mechanism choice to the operator if the required rate `r` falls
+OUTSIDE `[1.0, 2.0]` -- below 1.0 contradicts the accepted consequence, above 2.0 exceeds anything
+the operator accepted. Within that band the dev pass proceeds and the operator's eye rules at Live
+Smoke.
+
+**Pointer -- `4-3d/R19` AMENDED BY APPEND 2026-08-26 (see Session 2026-08-26 -- 4-3d fifth readiness gate, fix pass, below, decision-log `4-3d/R20`).** The entry above is untouched and stands as the record; its upper stop bound (`r <= 2.0`) was supplied without derivation and is removed -- the stop condition is now `r < 1.0` only. The STOP mechanism itself -- return the mechanism choice to the operator rather than improvise -- is unchanged for the surviving trigger.
+
+Also corrected this pass, not separate rulings: the `4-3b/R27` and `4-3b/R26` citations in AC 1
+removed where they did not support their claim (`4-4` ordering is not authorised by `4-3b/R27`; the
+windup `0.5 -> 0.9` figures now cited to the measured `.tres` only, the ruling attribution dropped).
+AC 5 gains a named EFFECT guard (playback position pinned at the clip's end) where it previously had
+none. `test_unit_clip_selection.gd` Part B's guard is now explicitly REPLACED, not extended, per
+`4-3d/R17`'s literal text, with a task deleting the `push_line < gate_line` assertion; its
+behavioural-replacement task's AC tag corrected from 1 to 5. `sprint-status.yaml`'s "Former AC6"
+corrected to "Former AC 2", matching `4-3d/R16`. The runner-loop enumeration corrected from four to
+five, adding `_gather_unit_facts` (`match_runner.gd:1083-1084`) as the loop whose shipped header
+comment this story invalidates and whose corpse-bearing behaviour AC 4's collision-disable exists to
+keep clean. Nine guards now each carry a named mutation that must turn them red, on this project's
+standing mutation-table practice. `4-3c-minion-rig-adoption.md`'s stale inbound `4-3d` AC references
+(`:622`, `:852`, `:890`) and `sprint-status.yaml:112` corrected to the current AC numbering.
+
+### Close-out
+
+Docs only, no code touched, no `src/`/`test/`/`project.godot` edit, editor never opened. `4-3d`
+stays `authored`, board stays `backlog` -- promotion is the operator's act. No golden/suite/
+`project.godot` measurement this pass. Operator reviews the log.
+
+## Session 2026-08-26 -- 4-3d fifth readiness gate, fix pass (third docs-only correction pass)
+
+`4-3d/R20` (ruled by Matko) STOP CONDITION upper bound REMOVED -- amends `4-3d/R19`'s stated trigger,
+the same way `4-3d/R19` amended `4-3d/R14`'s; `4-3d/R19` is untouched and stands as the record.
+`4-3d/R19`'s upper bound (`r <= 2.0`) was supplied without derivation and is struck. The dev pass
+STOPS and returns the mechanism choice to the operator ONLY if the required rate `r < 1.0`
+(equivalently `T < 0.9 s`, the variable actually measured) -- below 1.0 the swing plays SLOWER than
+authored, contradicting `4-3d/R11`'s accepted consequence. No upper stop is derivable or needed: the
+mechanism is self-bounding -- the latest possible strike frame is the clip's own end, `T = 2.6667 s`,
+giving `r = 2.963` and an effective clip duration of `2.4 / 2.6667 = 0.9 s`. Admissible strike-frame
+timestamps are simply `T >= 0.9 s`, no upper limit. Above `r = 1.0` the dev pass proceeds and records
+the measured `T`, the derived `r`, the effective clip duration, and which artefact results
+(truncation or held final pose, with its duration per cycle) in Dev Notes; the operator's eye rules at
+Live Smoke.
+
+`4-3d/R21` (recorded) **Correction (append) to `4-3d/R12` (above).** Authored by the fourth fix pass
+as an unnumbered correction; NUMBERED by this fifth pass so `4-3d/R12` can carry a pointer to it, its
+text and its location otherwise unchanged. The
+clause in `4-3d/R12`, "Neither number is stated anywhere in the story," is inaccurate as written: both
+figures appear in the story, inside the withdrawal paragraph itself. `4-3d/R12` is untouched; the
+accurate claim is that neither figure is stated as LOAD-BEARING -- no surviving claim anywhere uses
+either number to derive the ruled rate. (Relocated from the third-pass session block, where it was
+originally misplaced; authored by the fourth fix pass, not this one.)
+
+Also corrected this pass, not separate rulings: Live Smoke gains one bullet covering both branches of
+the corrected arithmetic (truncation if `T < 1.263 s`, held final pose if `T > 1.263 s`), since which
+occurs depends on a dev-pass measurement, citing `4-3c-minion-rig-adoption.md:853-857` (anchor
+"CONSEQUENCE, stated plainly and NOT fixed here") and `:894` (the `2026-08-15` DEFECT B1 FIX PASS
+Change Log row, anchor "the `_select` dedup held the finished clip's final pose for ~9.7s"); AC 1
+`:98-99` no longer frames the held-pose branch as costless. The mutation table (Dev Notes) is now
+labelled PROVISIONAL with an explicit obligation on the dev pass to re-derive every mutation against
+the seat it actually picks. AC 5 gains an implementing task for its playback-pinned guard, with `N`
+bound to AC 2/3's already-bound retention count (N+599). The walk-through observable moves from AC 2
+to AC 4 (the mechanism that produces it, per `4-3d/R16`'s own independent-falsifiability standard);
+AC 2 retains retention as its own independently falsifiable content; mutation 3 updated to serve AC 4.
+Mutation 1 (AC 1) now states the tolerance that must fail it; mutation 6 (AC 4) marked dependent on
+AC 4's own deferred per-node measurement. `4-3d/R14`'s pointer corrected ("referenced above" ->
+"referenced below" -- it points to `4-3d/R19`, which sits below). `4-3d/R8`'s pointer now says "The
+entry above", matching the canonical form, now that it sits immediately below its own entry. AC 1
+`:129`'s withdrawal paragraph corrected: it no longer claims no rate figure is stated anywhere -- the
+derived break-even `r = 1.40` is legitimately stated and is distinct from the WITHDRAWN circulated
+band. `4-3c-minion-rig-adoption.md`'s `:628-629` and its `:894` Change Log row (the `2026-08-15`
+DEFECT B1 FIX PASS row; cited as `:890` when written, before this pass's own annotation shifted the
+file by +4) -- both edited beyond a
+stale AC number by the fourth pass -- are REVERTED to original wording, with an appended annotation at
+`:628-629` and a new Change Log row recording the revert; the closed story's record is not rewritten
+backwards. `4-3c1-swing-commitment.md:347` and `:530` (stale `4-3d AC 5` references) corrected to
+`AC 1`, completing the sweep `sprint-status.yaml:112` already had; a third stale `AC 5` instance found
+in `sprint-status.yaml:112` itself, missed by that same sweep, is also corrected.
+
+### Close-out
+
+Docs only, no code touched, no `src/`/`test/`/`project.godot` edit, editor never opened. `4-3d` stays
+`authored`, board stays `backlog` -- promotion is the operator's act. No golden/suite/
+`project.godot` measurement this pass. Operator reviews the log.

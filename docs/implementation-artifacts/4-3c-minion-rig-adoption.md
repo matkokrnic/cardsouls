@@ -619,7 +619,7 @@ the one that turned out to matter at the hero's smoke).
   finding feeds `4-3d`, and it is a pre-existing measurement made visible, not a regression this story
   introduced.**
 - **`death`'s topple is MEASURED AND RECORDED ONLY. This story accepts nothing** (`4-3c/R10`) —
-  acceptance and its reasoning belong to `4-3d` AC 2 (`4-3d/R3`), which has its own, differently-argued
+  acceptance and its reasoning belong to `4-3d` AC 5 (`4-3d/R3`), which has its own, differently-argued
   basis (liveness-gated driving, not the hero's round-over freeze). Recorded for it: the topple is
   -1.0988 on Z, -0.0562 on X, -0.7959 on Y, and it HOLDS to the last key.
 - **Clip lengths are recorded as measured collateral, deliberately WITHOUT drawing `4-3d`'s
@@ -628,6 +628,10 @@ the one that turned out to matter at the hero's smoke).
   ~2.7 s figure that had circulated (`4-3d/R8`); it is now measured rather than estimated, and which
   alignment mechanism follows from it remains `4-3d`'s open question for the operator. **No alignment
   work was done here.**
+  **Annotation (append), 2026-08-26, fifth `4-3d` fix pass.** The clause above is untouched and stands
+  as the record of what this pass knew on 2026-08-15. It has since been superseded: the operator
+  DECIDED the alignment mechanism (custom `AnimationPlayer` playback rate), `4-3d/R11`,
+  decision-log Session 2026-08-26 — see `4-3d-minion-strike-alignment-and-corpse-lifecycle.md` AC 1.
 
 #### Measured asset inventory (AC 1)
 
@@ -849,7 +853,7 @@ existing `test_unit_clip_selection.gd` is GREEN through the whole defect). Mutat
 **CONSEQUENCE, stated plainly and NOT fixed here.** The swing cycle is 1.9s and the attack clip is
 2.6667s, so each chained swing now **truncates the final ~0.767s (28.7%) of the clip**. That is
 **expected**, it is strictly better than the held-pose defect it replaces, and aligning the visible
-strike to the authored ACTIVE window is owned by **`4-3d` AC 5** (`4-3c/R2`) — deliberately not
+strike to the authored ACTIVE window is owned by **`4-3d` AC 1** (`4-3c/R2`) — deliberately not
 addressed in this pass.
 
 ### File List
@@ -889,6 +893,7 @@ addressed in this pass.
 | 2026-08-14 | Claude Opus 5 (1M context) | DEV PASS. Story promoted `authored` -> `ready-for-dev` (third readiness gate READY, zero blocking findings), then implemented. All four ACs satisfied; no AC amended and none found unimplementable. Assets committed (36,707,750 bytes measured, confirming the `4-3c/R7` ~35 MB correction to the byte); all four clips' Hips displacement MEASURED and tabulated, every one matching its stated expectation (`idle`/`walk` net-zero, `attack` net-zero with a 1.1722 mid-clip planar excursion recorded as a Live Smoke watch item on the `3-0a` roll-ring precedent, `death`'s topple measured and recorded ONLY -- acceptance left to `4-3d` per `4-3c/R10`). Model parented DIRECTLY UNDER THE ROOT with `Mesh` deleted outright (micro-decision recorded); four clips assembled into one `AnimationLibrary`; the model's bundled `mixamo_com` stripped via the `3-0a`/R10 `EditorScenePostImport` route, the broken `animation/import=false` route not re-attempted. `_aim_unit_actors` now pushes phase/liveness/velocity to the new controller FIRST and gates the AIM decision on liveness AFTER (`4-3c/R15`), with the final line order recorded explicitly in Completion Notes; `_approach_unit_actors` zeroes actor velocity at exactly the two `4-3c/R12` paths. Three new guards, all four named mutations proven to fall (backup-outside-repo + SHA256, restore by copy-back, never `git checkout`). The runner-side ordering -- which NO behavioural test in this story can see, and which would surface only in `4-3d` -- is pinned by a SOURCE-ORDER assertion on the `test_architecture_invariants.gd` precedent, itself mutation-proven. Suite 497/3878/0 UNMOVED, integration 31 -> 34 all PASS; golden `4a089063...` UNMOVED measured both directions; `project.godot` byte-identical across six hashes spanning two editor sessions, tick pin intact, NO collateral; `src/state/` and `hero.tscn` byte-identical. Deviations recorded in Completion Notes (headless library assembly instead of the editor; no no-op spawn-seat wiring call; red-green order). No commits, nothing staged. |
 | 2026-08-15 | Claude Opus 5 (1M context) | DEFECT B1 FIX PASS. Root cause MEASURED: chained swings never pass through IDLE (WINDUP 54 -> ACTIVE 12 -> RECOVERY 48 -> WINDUP, seven swings = one 743-tick non-IDLE stretch), so the controller's level selection `phase != IDLE` fired once for all seven and the `_select` dedup held the finished clip's final pose for ~9.7s. Fixed by remembering the previous tick's phase and re-triggering on the EDGE into WINDUP; `on_unit_tick`'s signature, `src/state/`, `match_runner.gd`, the death-before-phase ordering and `4-3c/R15`'s push-before-liveness ordering all untouched. New guard `test/integration/test_unit_attack_retrigger.gd` asserts playback RESTART across a RECOVERY->WINDUP transition (the clip name never changes, which is why `test_unit_clip_selection.gd` is green through the whole defect -- measured); mutation table row 6, provenance MEASURED. CONSEQUENCE recorded, not fixed here: 1.9s cycle vs 2.6667s clip truncates the last ~0.767s (28.7%) of each chained swing -- expected, better than the held pose it replaces, owned by `4-3d` AC 5. Suite 497/3878/0 UNMOVED, integration 35 -> 36 all PASS, golden `4a089063...` UNMOVED, `project.godot` byte-identical with the 60-tick pin intact. Status stays `review`; no commits, nothing staged. |
 | 2026-08-15 | Claude Sonnet 5 | LIVE SMOKE (docs-only). Defect A confirmed fixed and defect B1 confirmed improved, both by eye; remaining swing slide attributed to the unimplemented rooted-during-swing scope (decision-log, this session), not a `4-3c` defect. Open observation (truncation readability) carried to `4-3d`. No code touched. |
+| 2026-08-26 | Claude Sonnet 5 | DOCS-ONLY CORRECTION PASS (`4-3d`'s fifth readiness-gate fix pass, scope-overrun correction). Two 2026-08-26 edits this DONE/PUSHED story's record had received from `4-3d`'s fourth fix pass (`:628-629`'s rewrite of the alignment-mechanism sentence, and this Change Log's own `:894` row's `AC 1` wording) exceeded stale-AC-number correction and rewrote what a closed pass said it knew at the time; both REVERTED to original wording. `:628-629` gains an inline appended annotation pointing to `4-3d/R11` (operator decided the alignment mechanism 2026-08-26, eleven days after this story closed) instead of being rewritten. This row is the record of that revert. `:622` ("acceptance and its reasoning belong to `4-3d` AC 5") and `:856` ("aligning the visible strike to the authored ACTIVE window is owned by `4-3d` AC 1" — cited as `:852` when this row was written, before the `:631-634` annotation above shifted this file by +4; re-resolved by content) (bare AC-number corrections only, made the same fourth pass) and `sprint-status.yaml:112` stand as corrected. No behavioural change; status/board unchanged. |
 
 **H1 FIX PASS (2026-08-15):** `death` is UNREACHABLE end-to-end live — `_free_dead_unit_actors` frees
 a unit's actor the same tick death is observed (`match_runner.gd:690-691`), before `_aim_unit_actors`
