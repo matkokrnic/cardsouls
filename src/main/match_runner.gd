@@ -679,6 +679,18 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 ## `connect_*` -- so the observation-seam family stays where it is and needs no amendment. That is
 ## also why `hit_landed` is not emitted for a unit (`4-3a/R12`): DEATH is the observable event, and
 ## this is where presentation observes it.
+## STORY 4-3d (AC 2/3/4) CHANGES THE TIMING, NOT THE OUTCOME: the actor is no longer freed on the
+## tick death is observed -- it LINGERS as a corpse for 10 s (600 ticks at the 60 Hz pin) and is
+## freed at the end of that. Everything above still holds; the hole still appears at the same
+## index, it just appears 600 ticks later.
+##
+## THE TIMER IS NOT HERE. It lives on the ACTOR (`UnitActor._linger_ticks`), which is the ruling
+## (AC 3) and not a convenience: a runner-local parallel array keyed by index would survive the
+## debug reset that clears `_unit_actors`, and would need its own reset-relay wiring that a field
+## living on the freed node does not.
+##
+## THIS SEAT IS INSIDE THE RUNNER'S `ticking` GATE, which is the whole reason the linger honours
+## `3-0b`'s deterministic step/pause: a corpse held under the debug pause does not age.
 func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
 	var actors: Array = _unit_actors[slot]
 	for index: int in actors.size():
@@ -687,8 +699,17 @@ func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
 			continue
-		unit.queue_free()
-		actors[index] = null
+		var corpse := unit as UnitActor
+		# THE FIRST OBSERVATION OF DEATH, tick N: start the count and disable collision (the
+		# disable defers itself out of this physics callback -- see `begin_corpse_linger`). The
+		# corpse is NOT aged on this tick, so `_linger_ticks` reads exactly "ticks since death".
+		if not corpse.is_lingering():
+			corpse.begin_corpse_linger()
+			continue
+		# Every tick after: age it. Freed on tick N+600, still in the tree at N+599.
+		if corpse.advance_corpse_linger():
+			corpse.queue_free()
+			actors[index] = null
 
 
 ## Story 4-2 (`4-2/R13`): point slot `slot`'s spawned boxes at whatever their records say they
@@ -1080,8 +1101,11 @@ func _gather_contact_facts(attacker_slot: int, player: PlayerState, actor: HeroA
 ##
 ## THE LOOP SHAPE IS `_aim_unit_actors`' VERBATIM, including every reason it has: bounded by the
 ## ACTORS (the array can be one frame shorter than the board), the index checked against the BOARD,
-## `is_instance_valid()` guarded, and the liveness seat consulted -- a corpse's actor is freed after
-## `advance()`, but a unit killed between gathers must not still be swinging.
+## `is_instance_valid()` guarded, and the liveness seat consulted -- a corpse's actor now LINGERS
+## for 10 s after `advance()` rather than being freed there (story 4-3d, AC 2/3), so this loop
+## reaches corpses for up to 600 ticks; but a unit killed between gathers must not still be
+## swinging. The lingering corpse is additionally collision-disabled (4-3d AC 4), so even the
+## overlap query below has nothing to return for it.
 ##
 ## NO FRIENDLY FIRE, FILTERED AT GATHER TIME BY OWNER SLOT (AC 6, `4-3b/R3`/`R16`) -- never by
 ## collision layer, and never on the resolution ladder. The structural reason is `push_contact`'s

@@ -49,6 +49,13 @@ extends Node
 ## expected, and it is strictly better than the held-pose defect it replaces. Aligning the visible
 ## strike to the authored ACTIVE window is 4-3d AC 5's, not this pass's (4-3c/R2).
 ##
+## STORY 4-3d (AC 1) DISCHARGES THAT: the `attack` clip now plays at a CUSTOM PLAYBACK RATE so the
+## visible claw-strike pose lands at the instant the authored ACTIVE window opens. See
+## `ATTACK_PLAYBACK_RATE` below for the measurement and the derivation. The 4-3c consequence
+## recorded above is superseded by it: at the shipped rate the clip's effective duration is
+## 1.8462s against a 1.9s cycle, so a chained swing no longer truncates -- it finishes and HOLDS
+## its final pose for the remaining ~0.054s, which is the artefact 4-3d's Live Smoke rates.
+##
 ## CLIP-END / MID-CLIP (adoption level, the 3-0a policy applied verbatim). A non-looping clip
 ## (`attack`/`death`) that ends while its selection persists HOLDS its final pose; a change of
 ## selection mid-clip wins immediately, with NO blending. Alignment of the visible strike to
@@ -67,6 +74,49 @@ var animation_player: AnimationPlayer
 ## between "still" and "moving"). The authored `unit_move_speed` is 3.0, an order and a half
 ## above this, so the split is unambiguous in both directions.
 const WALK_SPEED_EPS := 0.1
+
+## Story 4-3d (AC 1): the MEASURED STRIKE FRAME of the `attack` clip -- the timestamp within the
+## clip's own 2.6667 s at which the visible claw-strike pose lands.
+##
+## MEASURED, NOT ASSUMED (`4-3d/R13`), by `tools/measure_strike_frame.gd`, which samples all 81
+## frame boundaries of the clip and reports each hand bone's position RELATIVE TO THE HIPS -- the
+## arm's own extension, with the body's lunge divided out. The LEFT hand is the striking limb
+## (it reaches 0.8337 forward of the hips against the right hand's 0.7303, and 1.58 forward in
+## actor space against the right's 0.80) and its forward extension peaks at FRAME 39 of 80,
+## t = 1.3000 s, where its speed also collapses from 20.5 to 14.1 to 10.3 -- an arrival, not a
+## pass-through.
+##
+## THE HIPS-DISPLACEMENT PEAK IS NOT THIS NUMBER and is explicitly not a proxy for it
+## (`4-3d/R13`): the same tool measures that peak at t = 1.4333 s, 0.1333 s LATER, because the
+## root keeps translating after the claw has arrived.
+const ATTACK_STRIKE_FRAME_SECONDS := 1.3
+
+## The authored `minion_attack_windup_seconds` this rate aligns the strike to
+## (`data/balance/balance_config.tres`). NOT read from `BalanceConfigService` -- this is a
+## presentation node on `WALK_SPEED_EPS`'s own precedent, and CONSTRAINT C keeps authored balance
+## out of actors entirely. It is named rather than folded into the literal below so the coupling
+## is visible: re-tuning the authored windup without re-deriving this constant would put the
+## visible strike back out of alignment. `test/integration/test_unit_strike_alignment_live.gd`
+## reads the AUTHORED value at run time and fails if the two ever disagree, so the coupling is
+## guarded rather than merely commented.
+const ATTACK_ALIGNED_WINDUP_SECONDS := 0.9
+
+## Story 4-3d (AC 1), THE MECHANISM, ruled by the operator (`4-3d/R11`): a CUSTOM PLAYBACK RATE.
+## Playing the clip at `r` puts its strike frame at `ATTACK_STRIKE_FRAME_SECONDS / r` of real
+## time, so aligning it to the START of the ACTIVE window -- one authored windup after the swing
+## begins -- is `r = T / windup = 1.3000 / 0.9 = 1.4444`.
+##
+## THE WHOLE CLIP PLAYS, COMPLETE AND UNCUT, FROM FRAME 0, merely faster. That is the accepted
+## consequence in the operator's own words, and it is why the two rejected alternatives are not
+## used: a partial clip range (b) and a start-offset play call (c) both remove the front of the
+## windup -- the anticipation a player reads to time a parry (`4-3d/R11`).
+##
+## DERIVED ARTEFACT, recorded because the Live Smoke rates it (`4-3d/R15`): the clip's effective
+## duration becomes 2.6667 / 1.4444 = 1.8462 s against the 1.9 s authored cycle. `T > 1.263 s`,
+## so this is the HELD-FINAL-POSE branch -- 0.0538 s (3.2 ticks) of held final pose per chained
+## swing, and NO truncation. The ~0.767 s truncation `4-3c` shipped is closed as a side effect;
+## `4-3d/R15` ruled that closure subordinate to the alignment, not a goal of its own.
+const ATTACK_PLAYBACK_RATE := ATTACK_STRIKE_FRAME_SECONDS / ATTACK_ALIGNED_WINDUP_SECONDS
 
 ## The last clip THIS CONTROLLER SELECTED, which is deliberately not the same question as
 ## "what is the AnimationPlayer playing right now".
@@ -136,8 +186,20 @@ func _select(clip: StringName, force: bool = false) -> void:
 	if _selected == clip and not force:
 		return
 	_selected = clip
-	animation_player.play(clip)
+	# Story 4-3d (AC 1): the custom playback rate rides on the SAME `play()` call that already
+	# selects the clip -- `AnimationPlayer.play(name, custom_blend, custom_speed)`. Deliberately
+	# NOT `speed_scale`, which is a property of the whole player: that would speed up `idle`,
+	# `walk` and `death` too, and a corpse toppling at 1.44x is not what AC 1 asks for. The rate
+	# is per-clip and every clip but `attack` gets 1.0.
+	animation_player.play(clip, -1.0, _playback_rate(clip))
 	if force:
 		# Explicit, engine-version-independent restart: `play()` on the currently-playing clip is
 		# not contractually a rewind, and a re-trigger that did not rewind would be a silent no-op.
 		animation_player.seek(0.0, true)
+
+
+## Story 4-3d (AC 1): the playback rate for `clip`. ONE clip is aligned and the rest run at
+## authored speed -- there is exactly one authored rhythm to align against (the attack windup),
+## and `idle`/`walk`/`death` have no window to land on.
+func _playback_rate(clip: StringName) -> float:
+	return ATTACK_PLAYBACK_RATE if clip == &"attack" else 1.0

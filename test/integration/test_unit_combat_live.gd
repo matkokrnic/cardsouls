@@ -3,7 +3,7 @@ extends SceneTree
 ## Story 4-3a (AC 4 / AC 6 / AC 11): A HERO'S REAL SWING KILLS A REAL MINION THROUGH THE REAL
 ## CONTACT PIPELINE -- the unit's `Area3D` hurtbox, the runner's `get_overlapping_areas()` query, the
 ## widened `[slot, index]` target address, `push_contact`, and step 4 -- and the corpse's ACTOR
-## LEAVES THE SCENE.
+## ENTERS THE CORPSE LIFECYCLE (story 4-3d inverted this line: it used to read "LEAVES THE SCENE").
 ##
 ## WHY THIS EXISTS AS A MACHINE TEST AT ALL: the headless state suite structurally cannot see any of
 ## it (`3-0b/R34`'s blind spot). test_unit_damage_and_death.gd proves the STATE contract -- a fact
@@ -19,9 +19,12 @@ extends SceneTree
 ##         Pair: the enemy unit beside it dies, so the zero is attributable to the FRIENDLY-FIRE
 ##         FILTER and not to a swing that missed everything. Both units are asserted to be inside
 ##         the hitbox reach when the swing lands, so neither half can pass by being out of range.
-##   AC 11 the dead unit's ACTOR is gone from the tree, and its slot in the runner's per-slot array
-##         is a HOLE (null) at the SAME index the dead record occupies. Pair: the friendly unit's
-##         actor is still in the tree, so "gone" is not "the whole scene was torn down".
+##   AC 11 the dead unit's ACTOR reaches the corpse lifecycle -- CORRECTED BY STORY 4-3d, which
+##         inverted the timing: the actor is no longer freed on the death tick, it LINGERS, so
+##         what this file asserts is that the corpse is still at its own index and has been TOLD
+##         it died. The 600-tick expiry and the hole that follows belong to
+##         test_unit_corpse_linger_live.gd. Pair: the friendly unit's actor is still in the tree
+##         and NOT lingering, so neither half is "the whole scene was torn down".
 ##
 ## POSITIONS ARE SET DIRECTLY rather than walked into place, and that is deliberate. Position is
 ## actor-owned (`4-1/R12`), the APPROACH is already owned end-to-end by test_unit_approach_live.gd,
@@ -75,8 +78,8 @@ var _enemy_started_alive := false
 var _enemy_ever_in_reach := false
 var _friendly_ever_in_reach := false
 var _enemy_died := false
-var _enemy_actor_freed := false
-var _enemy_hole_at_same_index := false
+var _enemy_corpse_lingering := false
+var _enemy_still_at_same_index := false
 var _friendly_untouched := false
 var _friendly_actor_alive := false
 var _mana_after_kill := -1.0
@@ -269,14 +272,31 @@ func _report() -> bool:
 		_detail += " hero_sourced_no_facts_at_all(AC 6 would be vacuous);"
 	var note := " [4-3b: friendly unit hp %.2f of %.2f -- moved by P2's OWN minion attacking it," 			% [_state.p1.units.hp_at(0), _unit_max_hp]
 	_detail += note + " never by friendly fire]"
-	# AC 11: the corpse's actor is out of the tree, and its array slot is a HOLE at the SAME index.
-	_enemy_actor_freed = _unit_actor(1, 0) == null
-	if not _enemy_actor_freed:
-		_detail += " enemy_actor_still_present;"
+	# AC 11: the corpse's actor lifecycle.
+	#
+	# INVERTED BY STORY 4-3d (AC 2/3), AND THE OLD INSTRUMENT WAS INVALIDATED RATHER THAN
+	# WEAKENED -- the same correction 4-3b made to AC 6's instrument directly above, for the same
+	# kind of reason. This read "the actor is gone and its array slot is a HOLE" three frames
+	# after the kill, which was correct when it was written because `_free_dead_unit_actors` freed
+	# a dead unit's actor on the tick death was observed. 4-3d changed that seat: the corpse now
+	# LINGERS for 600 ticks and is freed at the end of it. Asserting it is gone at +3 frames now
+	# asserts the DEFECT.
+	#
+	# WHAT THIS FILE STILL OWNS is that the kill reached the actor layer at all: the corpse must
+	# be a LINGERING corpse -- still in the tree, still at its own index, and TOLD IT DIED (its
+	# linger has begun) -- rather than an untouched live actor. The 600-tick expiry and the hole
+	# that follows it belong to test_unit_corpse_linger_live.gd, which counts them; duplicating
+	# that here would make this file wait 10 seconds for a claim it is not about.
+	var corpse := _unit_actor(1, 0)
+	_enemy_corpse_lingering = corpse != null and corpse.is_lingering()
+	if corpse == null:
+		_detail += " enemy_actor_already_freed(4-3d's linger is not in effect);"
+	elif not corpse.is_lingering():
+		_detail += " enemy_actor_present_but_linger_never_started;"
 	var enemy_actors: Array = _runner._unit_actors[1]
-	_enemy_hole_at_same_index = enemy_actors.size() == 1 and enemy_actors[0] == null
-	if not _enemy_hole_at_same_index:
-		_detail += " no_hole_at_index_0(actors=%d);" % enemy_actors.size()
+	_enemy_still_at_same_index = enemy_actors.size() == 1 and enemy_actors[0] == corpse
+	if not _enemy_still_at_same_index:
+		_detail += " corpse_not_at_index_0(actors=%d);" % enemy_actors.size()
 	_friendly_actor_alive = _unit_actor(0, 0) != null
 	if not _friendly_actor_alive:
 		_detail += " friendly_actor_also_gone(scene_torn_down?);"
@@ -297,13 +317,13 @@ func _report() -> bool:
 	var ok := _p1_slot_chosen and _p2_slot_chosen and _spawned and _enemy_started_alive \
 			and _enemy_ever_in_reach and _friendly_ever_in_reach \
 			and _enemy_died and _friendly_untouched \
-			and _enemy_actor_freed and _enemy_hole_at_same_index and _friendly_actor_alive \
+			and _enemy_corpse_lingering and _enemy_still_at_same_index and _friendly_actor_alive \
 			and no_melee_mana
 	print("unit_combat_live: swings=%d enemy_started_alive=%s enemy_in_reach=%s friendly_in_reach=%s "
 			% [_swings, _enemy_started_alive, _enemy_ever_in_reach, _friendly_ever_in_reach]
-			+ "enemy_died=%s friendly_untouched=%s(hp=%.2f) actor_freed=%s hole=%s friendly_actor=%s "
-			% [_enemy_died, _friendly_untouched, _state.p1.units.hp_at(0), _enemy_actor_freed,
-				_enemy_hole_at_same_index, _friendly_actor_alive]
+			+ "enemy_died=%s friendly_untouched=%s(hp=%.2f) corpse_lingering=%s at_index=%s friendly_actor=%s "
+			% [_enemy_died, _friendly_untouched, _state.p1.units.hp_at(0), _enemy_corpse_lingering,
+				_enemy_still_at_same_index, _friendly_actor_alive]
 			+ "mana=%.3f max_jump=%.4f%s" % [_mana_after_kill, _max_mana_jump, _detail])
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	quit(0 if ok else 1)

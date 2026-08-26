@@ -742,7 +742,10 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState, intent:
 ## only by the step-4 seat below, from a fact the runner pushed.
 ##
 ## A DEAD UNIT IS SKIPPED ENTIRELY, phases frozen where they stood. Nothing gathers a corpse's
-## hitbox (the runner frees its actor the same tick) and nothing may start a corpse swinging, so
+## hitbox — CORRECTED BY STORY 4-3d, which changed the reason without changing the fact: the
+## runner no longer frees a corpse's actor the same tick, it LINGERS for 10 s, so the hitbox is
+## inert because 4-3d's AC 4 disables the actor's collision nodes, not because the actor is gone.
+## Nothing may start a corpse swinging either, so
 ## advancing its ladder would be state kept for no reader — and `is_alive_at` is the board's own
 ## liveness predicate, never a re-derived `hp > 0` (`4-3a/R14`).
 func _advance_unit_attacks(player: PlayerState) -> void:

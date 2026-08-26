@@ -81,6 +81,97 @@ extends CharacterBody3D
 @onready var animation: UnitAnimationController = $AnimationController
 
 
+## Story 4-3d (AC 3): the CORPSE LINGER, in TICKS. 10 s at the 60 Hz `project.godot` pin
+## (`common/physics_ticks_per_second=60`), which is the only clock this project counts in.
+##
+## NOT AUTHORED AND NOT A `BalanceConfig` FIELD, by the story's own Non-Goals: this is a
+## lifecycle mechanism, not a tuning pass -- the same posture `4-3c` took for the idle/walk
+## epsilon directly above.
+const LINGER_TICKS := 600
+
+## Ticks elapsed since this actor was first observed dead. `-1` means "not a corpse", which is
+## also what makes `begin_corpse_linger()` idempotent -- the runner observes death on EVERY tick
+## after it happens, not once.
+##
+## THE TIMER LIVES HERE, ON THE ACTOR, AND THAT IS THE RULING (AC 3), not a convenience. Two
+## measured reasons. A runner-local parallel array would survive the debug reset that clears
+## `_unit_actors` -- leaking stale entries, or needing its own reset-relay wiring that a
+## per-actor field does not, because the field is freed WITH the node it lives on. And counting
+## TICKS rather than wall-clock seconds is what makes the linger honour `3-0b`'s deterministic
+## step/pause: the runner only calls `advance_corpse_linger()` from inside its `ticking` gate, so
+## a corpse held under the debug pause does not age out mid-inspection.
+var _linger_ticks := -1
+
+
+## True once this actor has been told it is a corpse. Read by the runner to tell the FIRST
+## observation of death from every later one.
+func is_lingering() -> bool:
+	return _linger_ticks >= 0
+
+
+## Story 4-3d (AC 2/3/4): begin the linger. Called by `MatchRunner._free_dead_unit_actors` on the
+## tick a live actor is first observed dead, and a no-op on every tick after that.
+##
+## The collision disable is DEFERRED, and that half is AC 4's -- see `disable_all_collision()`.
+func begin_corpse_linger() -> void:
+	if _linger_ticks >= 0:
+		return
+	_linger_ticks = 0
+	# Story 4-3d (AC 4): OUT OF THE PHYSICS CALLBACK. The only caller reaches this from inside
+	# `MatchRunner._physics_process`, so the write is deferred to the end of the frame.
+	#
+	# THE AC'S STATED RATIONALE WAS MEASURED FALSE AND IS CORRECTED HERE, not carried. AC 4
+	# assumed -- and explicitly flagged as an assumption for this dev pass to confirm live -- that
+	# setting `CollisionShape3D.disabled` / `Area3D.monitorable` / `Area3D.monitoring` from inside
+	# a physics callback makes the engine emit an `^ERROR:` line, which `test/run_all.sh`
+	# (`:18-19`, `:32-33`) greps for and fails the suite on. MEASURED on this build (4.6.3) by
+	# running exactly this call INLINE and driving a real kill through test_unit_combat_live.gd:
+	# stderr carried NO `ERROR:` line and no `SCRIPT ERROR`, and all three writes took effect.
+	# Godot's "function blocked" guard fires while the physics server is FLUSHING SIGNALS, and
+	# `_physics_process` is not inside that flush.
+	#
+	# THE DEFERRAL STAYS ANYWAY, because AC 4 requires the SEAT, not the rationale -- and the seat
+	# is independently the right one: it is the only version that stays correct if this disable is
+	# ever reached from an `area_entered`/`body_entered` handler, which IS inside the flush. It
+	# costs one frame of live collision on the death tick, and the runner's next gather has not
+	# run within that frame.
+	disable_all_collision.call_deferred()
+
+
+## Story 4-3d (AC 3): advance the linger by one tick and report whether it has expired. Called by
+## the runner from a seat inside its `ticking` gate, so paused ticks do not age a corpse.
+##
+## NO `_physics_process` HERE (INVARIANT F1 -- the runner owns the only one). A timer that ticked
+## itself would be a second one, and would also age through the debug pause.
+func advance_corpse_linger() -> bool:
+	_linger_ticks += 1
+	return _linger_ticks >= LINGER_TICKS
+
+
+## Story 4-3d (AC 4): make the corpse INERT to physics -- ALL THREE collision nodes, not a subset,
+## and each by the property that actually carries its live capability (measured against
+## `unit_actor.tscn`, where the three ship with different flags already set):
+##
+##   `Collision`  CollisionShape3D -- `disabled`. This is the BODY shape; disabling it is what
+##                lets a hero walk THROUGH the corpse instead of being stopped by it (AC 4's
+##                walk-through observable).
+##   `Hurtbox`    Area3D on layer 2, `monitoring` already false -- so what makes it DETECTABLE is
+##                `monitorable` (default true), not `monitoring`. Left live, a corpse would keep
+##                answering the hero hitbox's `get_overlapping_areas()` query and write facts into
+##                the intent recorder's contact channel. Gameplay is not at risk
+##                (`match_state.gd`'s dead-target drop discards a fact landing on a dead record
+##                before dedupe and `register_swing_hit`) -- this is a recording/replay-stream
+##                CLEANLINESS requirement, which is exactly why it needs its own guard.
+##   `Hitbox`     Area3D, `monitorable` already false -- so its live property is `monitoring`,
+##                the thing that makes its own `get_overlapping_areas()` return anything.
+##
+## NEVER CALLED DIRECTLY FROM A PHYSICS CALLBACK -- see `begin_corpse_linger()`.
+func disable_all_collision() -> void:
+	($Collision as CollisionShape3D).disabled = true
+	($Hurtbox as Area3D).monitorable = false
+	($Hitbox as Area3D).monitoring = false
+
+
 ## Story 4-3b (AC 12): yaw this box along an ALREADY-DECIDED planar heading, rather than at a
 ## position it must derive one from. The `aim_at()` twin below, and the ONE difference is who owns
 ## the direction: `aim_at()` is told WHERE the target is and looks at it, this is told WHICH WAY to

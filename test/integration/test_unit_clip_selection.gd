@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Story 4-3c (AC 4) machine contract, in TWO parts that guard two different things:
+## Story 4-3c (AC 4) machine contract. It had TWO parts; story 4-3d deleted the second (below):
 ##
 ## PART A -- SELECTION, inside the controller. UnitAnimationController.on_unit_tick() picks
 ## the right one of the four clips, and picks it in the right ORDER: liveness is checked
@@ -11,38 +11,25 @@ extends SceneTree
 ##   FOREVER -- nothing ever resets it to IDLE on death. A phase-first controller would show a
 ##   corpse still swinging.
 ##
-## PART B -- ORDERING, inside the runner, and it is a SOURCE-ORDER assertion rather than a
-## behavioural one. This is the story's structural blind spot made visible, not hidden.
+## PART B IS DELETED BY STORY 4-3d (`4-3d/R17`) AND REPLACED, NOT EXTENDED.
 ##
-## H2 FIX PASS: line order alone (push_line < gate_line) pins the TEXT, not the
-## UNCONDITIONALITY the ruling actually requires. A gate rewritten to WRAP the push --
-## `if player.units.is_alive_at(index): <push>` -- still satisfies push_line < gate_line
-## while making the push conditional again, the exact 4-3c/R15 defect. Part B therefore also
-## asserts the push line's INDENTATION equals the loop body's base indentation (read off the
-## `has_index` guard, known to sit unconditionally in the loop body): a push nested inside any
-## conditional is indented one level deeper and fails that check even when line order still
-## reads correctly.
+## It asserted SOURCE ORDER -- that the controller push in `MatchRunner._aim_unit_actors` sits
+## above that loop's liveness gate (`4-3c/R15`), by reading line numbers and indentation out of
+## the runner's own text. It said so itself, in its own header: "the ordering is pinned the only
+## way it can be pinned TODAY", and "when 4-3d ships the corpse linger, a behavioural test becomes
+## possible".
 ##
-##   Part A proves liveness-before-phase INSIDE the controller. NOTHING BEHAVIOURAL IN THIS
-##   STORY CAN PROVE THE RUNNER-SIDE ORDERING -- that the controller push in
-##   MatchRunner._aim_unit_actors happens BEFORE that loop's own liveness gate (the operator's
-##   ruling, 4-3c/R15). The reason is exact: in 4-3c a dead unit's actor is freed by
-##   _free_dead_unit_actors EARLIER IN THE SAME FRAME, so _aim_unit_actors never reaches a dead
-##   index at all, and a push wrongly seated BEHIND an early liveness skip would pass every
-##   behavioural test this story can write. It would surface only in 4-3d -- where the corpse
-##   LINGERS -- as a corpse frozen in a half-raised claw instead of playing `death`, which is
-##   the precise defect the ruling exists to prevent.
-##
-##   So the ordering is pinned the only way it can be pinned today: by reading the source. That
-##   is not a novel liberty in this repo -- test/state/test_architecture_invariants.gd already
-##   enforces F1 and D3(a)/D3(b) by scanning src/ text, for the same reason (the property is
-##   structural, and no runtime state exhibits it). When 4-3d ships the corpse linger, a
-##   behavioural test becomes possible and this assertion becomes belt-and-braces rather than
-##   the sole guard; until then it is the sole guard.
+## 4-3d SHIPPED THE CORPSE LINGER. The behavioural test is now possible, and it lives in
+## test/integration/test_unit_corpse_linger_live.gd (`_reference_pose`): a lingering corpse must
+## HOLD THE POSE THE `death` CLIP ENDS ON, and must not hold the pose the `attack` clip ends on --
+## the half-raised claw a push seated behind the liveness gate produces. That is the effect this
+## file's line-order assertion was standing in for, and an effect assertion sees things the source
+## read never could (a rename, a refactor into a helper, a push that runs but is handed the wrong
+## liveness value). This project has now shipped three defects where a guard asserted an
+## identifier -- or source order -- and could not see the effect; this is the third one being
+## retired rather than kept alongside its replacement.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_unit_clip_selection.gd
-
-const RUNNER_PATH := "res://src/main/match_runner.gd"
 
 var _failures: Array[String] = []
 var _unit: Node
@@ -165,74 +152,6 @@ func _part_a() -> void:
 		"a finished `death` clip was RE-TRIGGERED by the polled push - a corpse would loop its death forever")
 
 
-## PART B: the runner-side ordering, read from the source. See the header for why this cannot
-## be a behavioural test in 4-3c.
-func _part_b() -> void:
-	var src := FileAccess.get_file_as_string(RUNNER_PATH)
-	if src.is_empty():
-		_failures.append("could not read %s" % RUNNER_PATH)
-		return
-	var lines := src.split("\n")
-
-	# Isolate _aim_unit_actors' own body, so a match from any other loop in this large file
-	# cannot satisfy (or break) the assertion.
-	var start := -1
-	var end := lines.size()
-	for i: int in lines.size():
-		if lines[i].begins_with("func _aim_unit_actors("):
-			start = i
-		elif start >= 0 and lines[i].begins_with("func "):
-			end = i
-			break
-	if start < 0:
-		_failures.append("_aim_unit_actors not found in %s" % RUNNER_PATH)
-		return
-
-	# The loop body's base indentation (H2 FIX PASS), read off the `has_index` guard -- known to
-	# sit directly in the loop body, never inside a conditional of its own. Everything that must
-	# run UNCONDITIONALLY for every actor index the loop reaches has to sit at this same depth.
-	var base_indent := -1
-	for i: int in range(start, end):
-		if lines[i].strip_edges().begins_with("if not player.units.has_index(index):"):
-			base_indent = lines[i].length() - lines[i].strip_edges(true, false).length()
-			break
-	if base_indent < 0:
-		_failures.append("could not locate the loop body's base indentation (has_index guard) in %s" % RUNNER_PATH)
-		return
-
-	var push_line := -1
-	var push_indent := -1
-	var gate_line := -1
-	for i: int in range(start, end):
-		var text := lines[i].strip_edges()
-		if text.begins_with("#"):
-			continue
-		if push_line < 0 and text.contains("on_unit_tick("):
-			push_line = i
-			push_indent = lines[i].length() - lines[i].strip_edges(true, false).length()
-		if gate_line < 0 and text.contains("is_alive_at(index)") and text.begins_with("if not "):
-			gate_line = i
-
-	if push_line < 0:
-		_failures.append("_aim_unit_actors makes no `on_unit_tick(` push - AC 4's controller push is missing")
-	if gate_line < 0:
-		_failures.append("_aim_unit_actors has no `if not ...is_alive_at(index)` gate - AC 4/4-3c/R4's liveness gate is missing")
-	if push_line >= 0 and gate_line >= 0:
-		_check(push_line < gate_line,
-			("ORDERING VIOLATION (4-3c/R15): the controller push is at line %d, BEHIND the liveness "
-			+ "gate at line %d. A dead unit would never be told it died, and 4-3d's lingering corpse "
-			+ "would freeze mid-swing instead of playing `death`.") % [push_line + 1, gate_line + 1])
-	if push_line >= 0:
-		_check(push_indent == base_indent,
-			("ORDERING VIOLATION (4-3c/R15): the controller push at line %d is indented past the loop "
-			+ "body's base indentation (push at %d, base %d) - it has been WRAPPED inside a "
-			+ "conditional and is no longer unconditional for every actor index the loop reaches.")
-			% [push_line + 1, push_indent, base_indent])
-	if push_line >= 0 and gate_line >= 0:
-		print("aim-loop order: push at line %d (indent %d, base %d), liveness gate at line %d"
-				% [push_line + 1, push_indent, base_indent, gate_line + 1])
-
-
 ## PART A NEEDS EXACTLY ONE FRAME, and the reason is worth recording rather than rediscovering:
 ## a node added to the tree from inside `_initialize()` does NOT get its `_ready()` called there
 ## (measured: `is_node_ready()` is still false immediately after `add_child`) -- the SceneTree
@@ -241,11 +160,11 @@ func _part_b() -> void:
 ## assertion would read a null player if it ran in `_initialize`. Deferring to `_process` is the
 ## same shape the `*_live.gd` integration tests already use for their own frame-dependent work.
 ##
-## Part B reads source text and needs no tree at all, so it stays in `_initialize`.
+## Part B is gone (see the header): its replacement is a behavioural assertion in
+## test_unit_corpse_linger_live.gd, so nothing in this file reads source text any more.
 func _initialize() -> void:
 	_unit = load("res://src/actors/minions/unit_actor.tscn").instantiate()
 	root.add_child(_unit)
-	_part_b()
 
 
 func _process(_delta: float) -> bool:
