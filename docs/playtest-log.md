@@ -169,3 +169,6 @@ summoni se pojavljuju kad se odigrava karta koja ima summon i ne pojavlju kad se
 
 17.8.
 zamah ukorijenjuje, kretanje je normalno, porblem otkloinjen ali sada uoceavam da su trenutak lupanja i animaicja nepotavanti pa je onda parry na jako losem mjestu, osim toga super provbitni problem zatvoren adekvatno
+
+26.8.
+1 parry je sada mnogo bolji, obrana taman di treba biti 2 najava iako je zamah brzi da se sasvim solidno regirati pravovremneo na njega  4 lesina sotji 10 sekundi pa nestane ne znamo sto ti znaci debug pauza i resrt, primjetio sam jos neka cudna ponasanja u edgecaseovima minoiona ali to bi svako ostavio za nakon implemtnacije e4 e5 i e6

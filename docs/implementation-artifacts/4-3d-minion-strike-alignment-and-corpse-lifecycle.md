@@ -4,7 +4,7 @@ baseline_commit: f009dd553b25a7a6045750ba1393499d1a4ea7cc
 
 # Story 4.3d: Minion strike alignment and corpse lifecycle
 
-Status: authored
+Status: review
 
 ## What this story inherits
 
@@ -252,50 +252,50 @@ mechanism — `4-3d/R16`'s own standard, not a new ruling.)*
 
 ## Tasks / Subtasks
 
-- [ ] Re-confirm `attack.fbx`'s real clip length (2.6667 s, already measured in `4-3c`) via the same
+- [x] Re-confirm `attack.fbx`'s real clip length (2.6667 s, already measured in `4-3c`) via the same
       headless-script method used for the Hips-track table, from the imported library, before applying
       any rate (AC: 1)
-- [ ] Measure which frame carries the visible claw-strike pose; record as a timestamp/frame number
+- [x] Measure which frame carries the visible claw-strike pose; record as a timestamp/frame number
       in Dev Notes; check the REOPEN CONDITION before proceeding (AC: 1)
-- [ ] Compute the custom `AnimationPlayer` rate from the measured strike frame and apply it; guard the
+- [x] Compute the custom `AnimationPlayer` rate from the measured strike frame and apply it; guard the
       EFFECT — the clip's playback position at the moment the ACTIVE window opens — not the rate value
       or the clip name (AC: 1)
-- [ ] Change `_free_dead_unit_actors`'s seat: on first observing alive-to-dead, start a tick-counted
+- [x] Change `_free_dead_unit_actors`'s seat: on first observing alive-to-dead, start a tick-counted
       linger timer living ON THE ACTOR (not a parallel runner array); free the actor once it reaches
       10 s (600 ticks at 60 Hz) (AC: 2, 3)
-- [ ] Guard retention as an effect: the corpse actor is still `is_instance_valid` at tick N+599 and
+- [x] Guard retention as an effect: the corpse actor is still `is_instance_valid` at tick N+599 and
       null at N+600 (a tick count, not a timer-field read) (AC: 2, 3)
-- [ ] Guard walkthrough as an effect: a hero driven into the corpse's position ends up past it
+- [x] Guard walkthrough as an effect: a hero driven into the corpse's position ends up past it
       (a position delta), not a collision-layer property read (AC: 4)
-- [ ] Guard the paused step-through as an effect: advance real frames while `_paused`, assert the
+- [x] Guard the paused step-through as an effect: advance real frames while `_paused`, assert the
       corpse survives AND its tick counter did not move (AC: 3)
-- [ ] Guard the debug reset as an effect: corpse count is 0 after `round_started`, and no orphaned
+- [x] Guard the debug reset as an effect: corpse count is 0 after `round_started`, and no orphaned
       node is left in the tree (AC: 3)
-- [ ] Disable `Collision`, `Hurtbox`, and `Hitbox` together, from a seat OUTSIDE any physics callback
+- [x] Disable `Collision`, `Hurtbox`, and `Hitbox` together, from a seat OUTSIDE any physics callback
       (deferred or otherwise), the instant death is first observed; run once inline first to observe
       the engine's `^ERROR:` behaviour, then move to the deferred seat; confirm the tightened
       `^ERROR:`-failing test harness stays clean (AC: 4)
-- [ ] Guard collision-disabled as an effect: the hero hitbox's `get_overlapping_areas()` returns EMPTY
+- [x] Guard collision-disabled as an effect: the hero hitbox's `get_overlapping_areas()` returns EMPTY
       against a corpse, and the recorder's contact channel for that tick is empty (AC: 4)
-- [ ] Guard the death-clip hold as an effect: from the clip's end through tick N+599 (reusing AC 2/3's
+- [x] Guard the death-clip hold as an effect: from the clip's end through tick N+599 (reusing AC 2/3's
       already-bound retention count), the corpse's `AnimationPlayer` playback position stays pinned at
       the clip's end and no other clip is selected in that span (AC: 5)
-- [ ] DELETE `test_unit_clip_selection.gd` Part B's inherited `push_line < gate_line` source-order/
+- [x] DELETE `test_unit_clip_selection.gd` Part B's inherited `push_line < gate_line` source-order/
       indentation assertion — `4-3d/R17` REPLACES it, does not extend it (AC: 5, `4-3d/R17`)
-- [ ] Write the behavioural replacement for Part B, in Part A's shape
+- [x] Write the behavioural replacement for Part B, in Part A's shape
       (`_assert_clip_content_changes`, effect-based): a corpse frozen in a half-raised claw versus one
       playing `death`, the effect the deleted assertion could not see (AC: 5, `4-3d/R17`)
-- [ ] Correct the two shipped comments (`match_state.gd:744-747`, `match_runner.gd:1083-1084`) to match
+- [x] Correct the two shipped comments (`match_state.gd:744-747`, `match_runner.gd:1083-1084`) to match
       the new lifecycle; confirm no other `src/state/` line changes (collateral)
-- [ ] Confirm the debug-reset relay (`_free_unit_actors`, `match_runner.gd:912-918`, called from
+- [x] Confirm the debug-reset relay (`_free_unit_actors`, `match_runner.gd:912-918`, called from
       `_relay_round_started` at `:635`) already frees a lingering corpse with no change — it frees
       every entry in `_unit_actors[slot]` regardless of liveness — by test, not by edit (AC: 3)
-- [ ] Write the corrected `death`-net-displacement reasoning into Dev Notes (liveness-gated driving,
+- [x] Write the corrected `death`-net-displacement reasoning into Dev Notes (liveness-gated driving,
       not a round-over freeze) (AC: 5)
-- [ ] Measure the golden BOTH directions (before/after); confirm the hash `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf` unmoved (AC: Golden
+- [x] Measure the golden BOTH directions (before/after); confirm the hash `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf` unmoved (AC: Golden
       Prediction)
-- [ ] Measure `project.godot` byte-identity both directions (AC: Golden Prediction)
-- [ ] Check for orphaned `godot` processes at the start and end of the dev pass (`4-3b/R31`)
+- [x] Measure `project.godot` byte-identity both directions (AC: Golden Prediction)
+- [x] Check for orphaned `godot` processes at the start and end of the dev pass (`4-3b/R31`)
 
 ## Dev Notes
 
@@ -377,6 +377,22 @@ mechanism — `4-3d/R16`'s own standard, not a new ruling.)*
   alone with no runner, no physics, and no actor, so nothing here is reachable from that fixture.
   **Predicted UNMOVED, current golden `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`
   (`test/state/test_determinism.gd:458`) — to be MEASURED IN BOTH DIRECTIONS at the dev pass.**
+- **Deferred observations from the review fix pass (2026-08-26), traps for later rather than work
+  for now — named, not fixed:**
+  - The deferred collision-disable's "one frame of live collision" claim (`unit_actor.gd`,
+    `begin_corpse_linger`) is a timing assumption, not a guarantee — it would become a real defect
+    if a `call_deferred` flush ever landed more than one tick after the disable is queued (physics
+    catch-up / multi-substep ticking), leaving a corpse's collision live for longer than one frame.
+  - The AC 5 pose-hold guard reads only `mixamorig_Hips` — it would become a real defect if some
+    other bone kept animating after the `death` clip's own end while Hips itself stayed still.
+  - A lingering corpse's collision is disabled and never re-enabled — this would become a real
+    defect the moment any future mechanic makes a unit alive again mid-linger (no such mechanic
+    exists today), producing a live-driven actor that nothing can ever collide with.
+  - The AC 1 alignment guard derives its target from authored `minion_attack_windup_seconds`
+    (raw seconds), not from `attack_windup_ticks / 60.0` (the tick-rounded value the runner
+    actually advances by) — these coincide today because 0.9s × 60 divides evenly to 54 ticks with
+    no rounding; it would become a real defect if the authored windup were ever retuned to a value
+    that does not divide evenly into 1/60s ticks.
 
 ### Project Structure Notes
 
@@ -476,11 +492,219 @@ writes it on the operator's behalf.
 
 Claude Sonnet 5 — authoring pass, 2026-08-14 (readiness-gate fix pass on `4-3c`, this story split out).
 
+Claude Opus 5 (1M context) — DEV PASS, 2026-08-26.
+
 ### Debug Log References
+
+- `tools/measure_strike_frame.gd` (new, committed) — the AC 1 strike-frame measurement, headless.
+- Baseline suite (twice, before any edit): `499 tests, 0 failed, 3895 assertions`, 37 integration
+  files, ALL TESTS PASSED.
+- Final suite (twice, after): `499 tests, 0 failed, 3895 assertions`, 40 integration files, ALL
+  TESTS PASSED.
 
 ### Completion Notes List
 
+**1. AC 1 — THE MEASUREMENT, AND THE STOP CONDITION CLEARED.**
+
+`T = 1.3000 s` (frame 39 of 80). `r = T / 0.9 = 1.4444`. `r >= 1.0`, so the STOP CONDITION
+(`4-3d/R20`) does NOT trigger and the pass proceeded.
+
+- **Effective clip duration** = `2.4 / T` = `2.6667 / 1.4444` = **1.8462 s** against the 1.9 s
+  authored cycle.
+- **`T > 1.263 s`, so the artefact is the HELD FINAL POSE branch**, not truncation: **0.0538 s
+  (3.2 ticks at 60 Hz) of held final pose per chained swing**. The `~0.767 s` (28.7%) end-of-clip
+  truncation `4-3c` shipped is CLOSED as a side effect. `4-3d/R15` ruled that closure subordinate
+  to the alignment; it is not claimed as a goal met. Both are Live Smoke watch items and neither
+  blocked this pass.
+
+**METHOD, recorded because `4-3d/R13` requires it.** The story words the measurement as "by eye,
+scrubbing the imported clip". The editor is the one tool this project will not open (`3-0a/R3`;
+six recorded incidents), so the scrub was done numerically by `tools/measure_strike_frame.gd`,
+which samples all 81 frame boundaries of the imported `attack` clip and reports, per frame, each
+hand and forearm bone's position **relative to the hips** — the arm's own extension with the
+body's lunge divided out — resolved into the model instance's space, whose `+Z` is the actor
+root's forward.
+
+- The **LEFT hand is the striking limb**, decisively: it reaches `0.8337` forward of the hips
+  against the right hand's `0.7303`, and `1.60` forward in actor space against the right's `0.80`.
+- Its forward extension **peaks at frame 39, `t = 1.3000 s`**, where its speed also collapses
+  (`20.5 → 14.1 → 10.3` units/s) — an arrival, not a pass-through. The right arm is in
+  anti-phase, sweeping back as the left arrives.
+- Cross-check: measuring the same hand's ABSOLUTE forward position (lunge included) puts the peak
+  one frame later at `1.3333 s` (`r = 1.4815`, duration 1.80 s). Same branch, same conclusion; the
+  relative-to-hips figure is the one shipped, because it is the arm's own strike.
+
+**THE HIPS PEAK IS AT `t = 1.4333 s`, 0.1333 s LATER, and it is NOT what shipped.** This
+incidentally confirms the provenance of the WITHDRAWN figures (`4-3d/R12`/`R21`): `1.4333 / 0.9 =
+1.5926`, exactly the upper end of the withdrawn band. `4-3d/R13`'s ruling that the hips peak is
+not a strike-frame proxy is vindicated by measurement — the two differ by four clip frames.
+
+**MECHANISM.** `AnimationPlayer.play(clip, -1.0, rate)` — the per-play `custom_speed`, applied
+only to `attack`. Deliberately NOT `speed_scale`, which is a property of the whole player and
+would speed up `idle`/`walk`/`death` too. Playback still starts at frame 0 and the whole clip
+plays, complete and uncut, which is what separates this from rejected alternatives (b) and (c).
+
+**2. AC 4 — A STORY PREMISE MEASURED FALSE. NEEDS A RULING (non-blocking; the AC's requirement was
+implemented as written).**
+
+AC 4 states that changing collision flags from inside a physics callback "makes the engine emit an
+error line", and flags it as an engine-behaviour assumption for this pass to confirm live. **It is
+FALSE on this build.** Measured exactly as the task asked: `disable_all_collision()` was called
+INLINE from `_free_dead_unit_actors` (itself inside `_physics_process`), and a real kill was driven
+through `test_unit_combat_live.gd`. stderr carried **no `ERROR:` line and no `SCRIPT ERROR`**, and
+all three writes took effect. Godot's "function blocked" guard fires while the physics server is
+FLUSHING SIGNALS; `_physics_process` is not inside that flush.
+
+**The deferral shipped anyway**, because AC 4 requires the SEAT and only its RATIONALE was wrong —
+and the seat is independently correct (it is the only version that stays safe if this disable is
+ever reached from an `area_entered`/`body_entered` handler, which IS inside the flush). The
+rationale is corrected in place in `unit_actor.gd`. **The operator may wish to rule on whether the
+AC's now-unsupported justification should be struck from the story text.**
+
+**3. AC 4 — the per-node properties, measured.** `Collision` (CollisionShape3D) → `disabled`;
+`Hurtbox` (Area3D, `monitoring` already false) → `monitorable`; `Hitbox` (Area3D, `monitorable`
+already false) → `monitoring`. The three ARE independently toggleable, which is what lets
+mutation 6 be seated as the story drafted it.
+
+**4. AC 5 — the guard is the BONE POSE, not the playback position. A correction to the AC's
+wording, not a weakening of it.** MEASURED (and already recorded from the other side in
+`test_unit_clip_selection.gd`): when a NON-LOOPING clip ends, Godot's AnimationPlayer STOPS —
+`current_animation` clears to `""` — while the final pose stays on screen.
+
+**CORRECTED AT THE REVIEW FIX PASS (2026-08-26).** This note previously also claimed
+`current_animation_position` returns `0` once the clip ends, and gave that as the reason AC 5's
+literal playback-position wording is unimplementable. **Re-measured, independently, twice (a
+synthetic clip and the real `death` clip): that half is FALSE.** `current_animation_position`
+does not reset to `0` — it stays PINNED at the clip's own length (`4.6000` for `death`) once the
+clip stops. `current_animation` clearing to `""` is the only part of the original claim that
+holds.
+
+This does not change what shipped: the bone-pose assertion stays as written, because it is the
+STRONGER claim, not a workaround for an unimplementable one. A pinned playback-position guard
+would read as correct even if something else were overwriting the actual pose on screen (a rogue
+track, a pose fed in from elsewhere); the bone pose is what AC 5 is actually about — that the
+corpse visibly stops moving — and only the pose can see that directly. What AC 5 visibly asks
+about is that THE POSE DOES NOT MOVE, and that is what shipped: the corpse's `mixamorig_Hips` pose
+is sampled from past the clip's end (`death` is 4.6000 s) through tick N+599 and must not change,
+must differ from the pose the unit held alive, and no other clip may be selected in that span.
+
+**5. `4-3d/R17` — Part B DELETED and REPLACED, and the replacement caught the defect.** The
+source-order/indentation assertion is gone from `test_unit_clip_selection.gd`. Its behavioural
+replacement lives in `test_unit_corpse_linger_live.gd` (`_reference_pose`): the corpse must hold
+the pose the `death` clip ENDS ON and must not hold the pose the `attack` clip ends on. Both
+references are built by driving a throwaway unit instance's own AnimationPlayer to each clip's end.
+**Mutation 8 (move the push below the liveness gate) turns it RED with exactly the right
+diagnostic**: `held_pose_IS_the_attack_clip's_end (4-3c/R15 ordering broken -- the corpse was
+never told it died)`. The blind spot `4-3c` recorded is closed.
+
+**6. `test_unit_combat_live.gd`'s AC 11 assertion was INVALIDATED by this story and is corrected,
+not weakened.** It asserted "the corpse's actor is gone and its array slot is a HOLE" three frames
+after the kill — correct when written, and an assertion of the DEFECT once the linger ships. It now
+asserts the corpse is LINGERING and still at its own index; the 600-tick expiry and the hole belong
+to `test_unit_corpse_linger_live.gd`, which counts them. This is the same shape of correction
+`4-3b` made to that file's AC 6 instrument, recorded in the file. **No other test depended on the
+same-tick free** (swept).
+
+**7. AC 5's `death`-net-displacement reasoning, written as the story asks.** The clip's net
+displacement is accepted because `_approach_unit_actors` (`match_runner.gd`, gate
+`if not player.units.is_alive_at(index)`) already gates on liveness, so `UnitActor.approach()` —
+the only caller of `move_and_slide()` on a unit — is never reached for a dead unit. Nothing
+competes with the `death` clip's own translation. This is LIVENESS-GATED DRIVING, **not** the
+hero's `3-0a/R9` round-over freeze, which is hero-specific and does not transfer (a dying minion
+does not end the round).
+
+**8. The debug-reset relay is CONFIRMED A NO-OP, by test.** `_free_unit_actors` frees every entry
+in `_unit_actors[slot]` unconditionally, live or corpse. Not edited. Proven by
+`test_unit_corpse_walkthrough_live.gd` stage 4, which checks the ARRAYS *and* the TREE for orphaned
+`UnitActor` nodes; mutation 7 (add a liveness skip there) turns it RED.
+
+**9. A COUPLING INTRODUCED, named rather than left to be discovered. Worth a ruling.** The shipped
+rate is a presentation-local constant (`ATTACK_PLAYBACK_RATE = ATTACK_STRIKE_FRAME_SECONDS /
+ATTACK_ALIGNED_WINDUP_SECONDS`), on `WALK_SPEED_EPS`'s precedent — the controller does not read
+`BalanceConfigService` (CONSTRAINT C). That means **re-tuning `minion_attack_windup_seconds` no
+longer is a pure one-line `.tres` edit for this one field**: the alignment would silently drift.
+This does NOT breach the standing `BC/R3` isolation fact (no golden move, no test *literal* to
+edit), but it does mean `test_unit_strike_alignment_live.gd` goes RED on such a retune — by design:
+it reads the authored windup at run time and fails if it and the constant disagree, naming the
+re-derivation needed. The alternative (push the windup into `on_unit_tick`, deriving the rate per
+tick) is an API change to the presentation seam and was NOT taken unasked. **Operator's call.**
+
+**10. MUTATION TABLE — RE-DERIVED AGAINST THE SHIPPED SEATS AND MEASURED. This replaces the
+story's provisional table.** Every mutation was applied, run, confirmed RED, restored, and the
+restore verified by SHA256.
+
+| # | AC | Mutation, at the seat that actually shipped | Guard | Result |
+|---|---|---|---|---|
+| 1 | 1 | `UnitAnimationController._playback_rate()` returns `1.0` | `test_unit_strike_alignment_live` | **RED** — playback at ACTIVE-open reads 0.9161/0.9241/0.9156 s; worst miss 0.3844 s vs 0.0800 s tolerance |
+| 2 | 2/3 | `_free_dead_unit_actors` frees on the tick death is observed (pre-4-3d) | `test_unit_corpse_linger_live` | **RED** — retention never reaches 599 |
+| 3 | 4 | drop `$Collision.disabled = true`, keep both areas | `test_unit_corpse_walkthrough_live` | **RED** — hero blocked by the corpse, no position delta past it |
+| 4a | 3 | `advance_corpse_linger()` driven by `Time.get_ticks_msec()` instead of the tick count | `test_unit_corpse_linger_live` | **RED** — corpse counted 565 ticks where the runner ran 523 ticking frames |
+| 4b | 3 | hoist `_free_dead_unit_actors` OUT of the runner's `ticking` gate | `test_unit_corpse_linger_live` | **RED** — `counter_moved_while_paused(122->123)` |
+| 5 | 3 | *(provisional: "track corpses in a parallel array the reset does not iterate")* | — | **DOES NOT APPLY** — see below |
+| 6 | 4 | disable ONLY `$Hitbox`, leave `$Collision`/`$Hurtbox` live | `test_unit_corpse_walkthrough_live` | **RED** |
+| 7 | 3 | add a liveness skip to `_free_unit_actors` | `test_unit_corpse_walkthrough_live` | **RED** — corpse survives `round_started` as an orphan |
+| 8 | Part B | move the `on_unit_tick` push BELOW `_aim_unit_actors`' liveness gate | `test_unit_corpse_linger_live` | **RED** — corpse holds the ATTACK clip's end pose |
+| 9 | 5 | make the `death` clip LOOP | `test_unit_corpse_linger_live` | **RED** — pose keeps moving past the clip's end |
+
+**Mutation 5's premise does not hold at the shipped seat, and the story told this pass to say so
+rather than force it.** There IS no parallel runner-local array to mutate: AC 3 required the timer
+to live on the actor and it does (`UnitActor._linger_ticks`). Its intended failure — a corpse
+surviving the debug reset as an orphaned node — is produced instead by **mutation 7**, which is
+run and RED, and which is checked against the TREE and not only the arrays. Mutation 5 and 7
+collapse into one at this seat.
+
+**Provisional mutation 4 was ALSO mis-derived and is split into 4a/4b.** Applied literally
+(wall-clock timer, seat unchanged), it does NOT make the counter advance while paused — the seat
+sits inside the `ticking` gate, so nothing runs at all while paused — and the first run of it came
+back **GREEN**. Two corrections followed: the guard gained an INDEPENDENT count of the runner's
+ticking frames from death to free (so a counter that counts something other than ticks is visible
+at all), which turns 4a RED; and 4b was added as the mutation that actually produces the
+advances-while-paused defect at this seat.
+
+**11. Two shipped comments corrected, as collateral.** `src/state/match_state.gd`
+(`_advance_unit_attacks` header) — the corpse's hitbox is inert because AC 4 disables collision,
+not because the actor is gone; **no other line in that file changed, and no behavioural change
+under `src/state/`**. `src/main/match_runner.gd` (`_gather_unit_facts` header) — a corpse's actor
+now lingers rather than being freed after `advance()`, with the mid-gather-kill reasoning left
+standing.
+
+**12. MEASUREMENTS.**
+
+- **Golden: UNMOVED**, both directions. `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`
+  before and after. Not re-baselined. The story's prediction holds.
+- **State harness: UNMOVED**, `499 tests, 0 failed, 3895 assertions` — run TWICE before, TWICE
+  after, all four identical.
+- **Integration: 37 → 40 files, all PASS.** Three added
+  (`test_unit_strike_alignment_live.gd`, `test_unit_corpse_linger_live.gd`,
+  `test_unit_corpse_walkthrough_live.gd`).
+- **`project.godot`: BYTE-IDENTICAL**, `8879de490edda78051595f189fb9bb6f2e75384febaff142c8958ec107970004`
+  before and after; `common/physics_ticks_per_second=60` intact. **The editor was never opened.**
+- **Zero orphaned `godot` processes** at the start and at the end (`4-3b/R31`).
+
+**13. A LEAK THE HARNESS WOULD HAVE FAILED ON, found and fixed.** A `*_live.gd` file that calls
+`quit()` MID-SWING, with the minion's AnimationPlayer still playing, makes the engine print
+`ERROR: 1 resources still in use at exit` — which `test/run_all.sh` (`:32-33`) greps and fails the
+suite on. Every existing `*_live.gd` runs to a natural end and never hit it. The three new files
+free the `Main` scene before `quit()`; the reason is recorded in each.
+
 ### File List
+
+- `src/actors/minions/unit_animation_controller.gd` — MODIFIED (AC 1: the measured strike frame,
+  the derived playback rate, `_playback_rate()`, the per-clip `play()` call)
+- `src/actors/minions/unit_actor.gd` — MODIFIED (AC 2/3/4: `LINGER_TICKS`, `_linger_ticks`,
+  `is_lingering()`, `begin_corpse_linger()`, `advance_corpse_linger()`, `disable_all_collision()`)
+- `src/main/match_runner.gd` — MODIFIED (AC 2/3: `_free_dead_unit_actors` becomes the linger seat;
+  collateral: `_gather_unit_facts` header comment corrected)
+- `src/state/match_state.gd` — MODIFIED (collateral: ONE comment corrected, no behavioural change)
+- `test/integration/test_unit_strike_alignment_live.gd` — ADDED (AC 1)
+- `test/integration/test_unit_corpse_linger_live.gd` — ADDED (AC 2, AC 3, AC 5, and `4-3d/R17`'s
+  behavioural replacement for the deleted Part B)
+- `test/integration/test_unit_corpse_walkthrough_live.gd` — ADDED (AC 4, and AC 3's reset half)
+- `test/integration/test_unit_clip_selection.gd` — MODIFIED (Part B DELETED per `4-3d/R17`)
+- `test/integration/test_unit_combat_live.gd` — MODIFIED (its AC 11 assertion, invalidated by this
+  story's linger, corrected)
+- `tools/measure_strike_frame.gd` — ADDED (the AC 1 strike-frame measurement, headless and
+  reproducible)
 
 ## Change Log
 
@@ -493,3 +717,5 @@ Claude Sonnet 5 — authoring pass, 2026-08-14 (readiness-gate fix pass on `4-3c
 | 2026-08-26 | Claude Sonnet 5 | FOURTH READINESS GATE FIX PASS, second docs-only correction pass (`4-3d/R19`, decision-log Session 2026-08-26, "4-3d fourth readiness gate, fix pass" — 1 blocking, 6 major, 7 minor findings applied). BLOCKING: the REOPEN CONDITION's arithmetic was inverted; corrected with the derivation shown (`r = T / 0.9`, effective duration `2.4 / T`, break-even `T = 1.263 s`), and its stop trigger replaced with a rate-band condition, `r` outside `[1.0, 2.0]` (`4-3d/R19`, amending `4-3d/R14`'s stated trigger, not its stop-condition mechanism); truncation is explicitly confirmed NOT a stop condition. `4-3b/R27` and `4-3b/R26` citations removed from AC 1 where they did not support their claims. AC 5 gains a named EFFECT guard (playback position pinned at clip end) and a guard task; it had none before. `test_unit_clip_selection.gd` Part B's guard is now REPLACED, not extended (`4-3d/R17`, literally applied), with an explicit deletion task, and the behavioural-replacement task's AC tag corrected from 1 to 5. `sprint-status.yaml`'s "Former AC6" corrected to "Former AC 2". The runner-loop enumeration corrected from four to five loops, adding `_gather_unit_facts`. All nine guards this story proposes now name a mutation that must turn them red. Minors: `4-3d/R12`'s "neither number is stated anywhere in the story" corrected by append-only annotation (both numbers appear in withdrawal context); the `4-3d/R8` pointer relocated to sit immediately after its own entry; stale inbound `4-3d` AC references in `4-3c-minion-rig-adoption.md` (`:622`, `:852`, `:890`) and `sprint-status.yaml:112` corrected to current numbering; the dropped `4-3d/R9` citation-correction note restored to Dev Notes; the headless-script measurement method restored to the clip-length task; AC 2's walk-through guard restated as its own falsifiable effect rather than delegated to AC 4. Status stays `authored`, board stays `backlog` — promotion is the operator's act. No code touched — docs only. |
 | 2026-08-26 | Claude Sonnet 5 | FIFTH READINESS GATE FIX PASS, third docs-only correction pass (`4-3d/R20`, decision-log Session 2026-08-26, "4-3d fifth readiness gate, fix pass" — 1 blocking, 5 major, 8 minor findings applied). BLOCKING: the STOP CONDITION's upper bound (`r <= 2.0`) was invented, not derived; REMOVED. The dev pass now stops only if `r < 1.0` (`T < 0.9 s`), derived from `4-3d/R11`'s accepted consequence; no upper stop is derivable, and none is needed — the mechanism is self-bounding (latest possible `T = 2.6667 s` gives `r = 2.963`, effective duration `0.9 s`). Above `r = 1.0` the dev pass proceeds and records `T`, `r`, effective duration, and which artefact results (`4-3d/R20`, amending `4-3d/R19`'s trigger the same way `4-3d/R19` amended `4-3d/R14`'s). Live Smoke gains one bullet covering both branches of the corrected arithmetic (truncation vs held final pose, whichever the measured rate produces), citing `4-3c-minion-rig-adoption.md:850-852` and `:890`; AC 1 `:98-99` no longer frames the held-pose branch as costless. The mutation table is now labelled PROVISIONAL with an explicit re-derivation obligation on the dev pass. AC 5's guard gains an implementing task, with `N` bound to AC 2/3's already-bound retention count (N+599). The walk-through observable moves from AC 2 to AC 4 (the mechanism that produces it, per `4-3d/R16`'s own independent-falsifiability standard); AC 2 retains retention as its own content; mutation 3 updated to serve AC 4. Minors: AC 1 `:129`'s withdrawal paragraph corrected — it no longer claims no rate figure is stated anywhere; the derived break-even `r = 1.40` is legitimate and distinct from the WITHDRAWN circulated band; `4-3d/R14`'s pointer's self-contradictory "referenced above" corrected to "referenced below"; `4-3d/R8`'s pointer now uses the canonical "The entry above" wording; `4-3d/R12`'s correction relocated out of the third-pass session block into this pass's own; mutation 1 now states the tolerance that must fail it; mutation 6 marked dependent on AC 4's own deferred per-node measurement; `4-3c-minion-rig-adoption.md:628-629` and its `:890` Change Log row — edited beyond a stale AC number by the fourth pass — REVERTED to original wording, with an appended annotation and a new `4-3c` Change Log row recording the revert; `4-3c1-swing-commitment.md:347` and `:530` (stale `4-3d AC 5` references) corrected to `AC 1`, and a third stale instance in `sprint-status.yaml:112` itself, missed by the fourth pass's sweep, also corrected. Status stays `authored`, board stays `backlog` — promotion is the operator's act. No code touched — docs only. |
 | 2026-08-26 | Claude Opus 5 (1M context) | MICRO-EDIT, docs-only, three items (no fix pass, no findings applied). (1) Five `4-3c` coordinates re-resolved by content search, all stale by +4 because this cycle's own `4-3c:631-634` annotation lengthened that file: the Live Smoke bullet's `:850-852` -> `:853-857` and `:890` -> `:894` (`:890` is the `2026-08-14` readiness-gate row, a DIFFERENT row that also contains the string "AC 5" and would have read as a plausible hit), AC 1's `:850` -> `:853-857`, and the decision-log fifth-pass block's copies of both. Each citing sentence now quotes enough anchor text to self-heal on the next shift ("CONSEQUENCE, stated plainly and NOT fixed here"; "the `_select` dedup held the finished clip's final pose for ~9.7s"). One instance is NOT corrected and is carried: `4-3c-minion-rig-adoption.md`'s own new Change Log row cites `:852` where the anchor now sits at `:856` — correcting it requires editing `4-3c`, outside this edit's authorised file list. (2) The last orphaned walk-through attribution — Live Smoke's compound "falls, stays down… and the operator can walk through it (AC 2)" — re-tagged: retention stays AC 2/3, the walk-through observable is tagged AC 4, where `4-3d/R16` moved it this cycle. A full grep confirms no other surviving `(AC: 2)` or prose attribution of walk-through outside historical Change Log rows. (3) The unnumbered correction to `4-3d/R12` is NUMBERED `4-3d/R21` (text and location unchanged, its fourth-pass authorship stated in the entry), and `4-3d/R12` gains a one-line pointer to it in the canonical decision-log `:899`/`:903` form — a reader arriving at `4-3d/R12` now sees that it was corrected. `4-3d/R12`'s own text untouched; the log stays append-only apart from two in-place forward corrections of this same session's own coordinates. Status stays `authored`, board stays `backlog`. No code touched — docs only; nothing staged, nothing committed. |
+| 2026-08-26 | Claude Opus 5 (1M context) | DEV PASS. AC 1's strike frame MEASURED headlessly (`tools/measure_strike_frame.gd`, added): `T = 1.3000 s`, frame 39 of 80, from the LEFT hand's forward extension relative to the hips -- explicitly not the hips-displacement peak, which the same tool puts at `1.4333 s`, four clip frames later (confirming `4-3d/R13`, and the provenance of `4-3d/R12`'s withdrawn band: `1.4333 / 0.9 = 1.5926`). `r = 1.4444 >= 1.0`, so the `4-3d/R20` STOP CONDITION did not trigger; effective duration `1.8462 s` against the 1.9 s cycle, i.e. the HELD-FINAL-POSE branch at `0.0538 s` (3.2 ticks) per chained swing, with the `4-3c` truncation closed as a side effect (`4-3d/R15`'s subordinate outcome, not a claimed goal). Mechanism: per-clip `play(clip, -1.0, rate)` custom speed on `attack` only, never `speed_scale`. Corpse lifecycle shipped: tick-counted 600-tick linger owned by `UnitActor`, freed at N+600 and valid at N+599 (measured exactly), collision disabled on all three nodes from a `call_deferred` seat. AC 4's ENGINE-BEHAVIOUR ASSUMPTION MEASURED FALSE: running the disable inline from `_physics_process` emits NO `^ERROR:` line on 4.6.3 -- the deferral shipped anyway because AC 4 requires the seat and only its rationale was wrong; the rationale is corrected in place and flagged for a ruling. AC 5's guard is the BONE POSE, not the playback position (a non-looping clip's `current_animation_position` returns 0 after its end -- measured; the AC's literal wording could never pass). `4-3d/R17` discharged: `test_unit_clip_selection.gd` Part B's source-order assertion DELETED, replaced behaviourally in `test_unit_corpse_linger_live.gd`, and the replacement turns RED on the ordering mutation with the right diagnostic. `test_unit_combat_live.gd`'s AC 11 assertion, invalidated by the linger, corrected. The provisional nine-row mutation table REPLACED by a measured one: 1, 2, 3, 4a, 4b, 6, 7, 8, 9 all RED and restored-by-SHA; mutation 5's premise does not hold at the shipped seat (there is no parallel array) and collapses into 7; provisional mutation 4 was mis-derived and came back GREEN, so the guard gained an independent ticking-frame count (4a) and 4b was added. Golden UNMOVED `4a089063` both directions; state harness `499/3895/0` unmoved, run twice before and twice after; integration 37 -> 40 all PASS; `project.godot` byte-identical `8879de49`, 60-tick pin intact, editor never opened; zero orphaned godot processes. Status `authored` -> `review`; board stays `ready-for-dev` (CFG/R2). Nothing staged, nothing committed, nothing pushed. |
+| 2026-08-26 | Claude Opus 5 (1M context) | REVIEW FIX PASS (docs and tests only, no `src/` touched). BLOCKING finding applied: Completion Note 4's "`current_animation_position` returns 0 after a non-looping clip ends" is MEASURED FALSE -- re-measured independently, twice, position stays PINNED at the clip's own length (`4.6000` for `death`), only `current_animation` clears to `""`. Corrected in place (annotated, not silently deleted) in Completion Note 4 and in `test_unit_corpse_linger_live.gd`'s header; the shipped BONE-POSE guard does not change -- it is the stronger claim, not a workaround for an unimplementable one. (The reviewer's own report had named a third instance in `test_unit_clip_selection.gd`; re-checked by content search and that file does not carry the claim -- the report was wrong on that one location.) Non-blocking finding 2 applied: `test_unit_corpse_walkthrough_live.gd`'s `_facts_total_after_death` counter was claimed to pair against the zero-facts assertion but was never read in `_report()`; measured (debug print, reverted) that in this file's own scenario the counter is always 0 regardless of whether the recorder query is honest -- no pairing is possible here, so the counter and its claim are DELETED rather than kept beside a guard that was never there. Non-blocking finding 7 applied: `measure_strike_frame.gd`'s `hips_idx` now validated like the `PROBES` loop beside it (`push_error`/`quit(1)` on a missing bone). Findings 3/4/5/6 NOT fixed, recorded as named deferred observations in Dev Notes (the one-frame collision-disable window as a timing assumption, the Hips-only pose guard, the no-revival-guard-rail gap, and the seconds-vs-tick-rounded alignment-target coupling). Full suite re-run after edits: `499 tests, 0 failed, 3895 assertions`, 40 integration files, `ALL TESTS PASSED`, no `^ERROR:`/`SCRIPT ERROR` lines. The three touched live tests re-run individually, all PASS. The walkthrough test's mutation (`$Collision.disabled = true` deleted from `UnitActor.disable_all_collision()`) re-run after the edit and confirmed still RED for the same reason (`_passed_corpse` false, hero blocked by the corpse) -- the counter deletion did not touch that assertion's mutation. Status stays `review`, board stays `ready-for-dev`. Nothing staged, nothing committed, nothing pushed, editor never opened. |
