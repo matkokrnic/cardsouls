@@ -1,5 +1,26 @@
 # Deferred Work
 
+## Deferred from: code review of 4-3e-summon-spawn-placement (2026-08-27)
+
+- **`test_unit_spawn_placement_live.gd`'s `_actor_at(index)` indexes `_unit_actors[0]` by raw
+  position without a hole guard** — would null-deref if a hole ever preceded the first live unit at
+  the sampling frame. Not reachable in this file's current no-death scenario.
+- **The sidestep/clear direction helpers added to `test_unit_approach_live.gd`,
+  `test_unit_strike_alignment_live.gd`, `test_unit_swing_root_live.gd` normalize a `Vector2` with no
+  degenerate-length guard**, unlike production `_rear_direction`'s explicit epsilon fallback. Not
+  reachable given the authored scene's hero/unit positions.
+- **`test_unit_swing_root_live.gd`'s 6.0 m sidestep vs `test_unit_strike_alignment_live.gd`'s 4.0 m
+  is undocumented.** Plausibly explained by swing-root's additional zero-neighbour-contact
+  assertion, but neither the file's comment nor the Dev Agent Record states or measures the reason.
+- **4-3e's Dev Agent Record overstates the necessity of its one recorded deviation** (replacing
+  Task 4's `while actors.size() < count` with a batch-size-plus-`for` shape). A `while` loop
+  consuming a pre-computed `Array[Vector3]` from one `_compute_spawn_positions(..., batch_size)`
+  call would have satisfied both the literal `while` shape and AC9's one-call-per-batch requirement
+  — they were not actually in conflict. The underlying growth/no-reuse property is independently
+  verified intact; this is a self-report rigor gap in future dev-pass write-ups, not a code defect.
+- **AC6(b)'s "one-word correction" claim (`unit_board.gd:303`) understates its own diff** — three
+  lines of `3-6/R2` citation commentary were also appended. Still comment-only, still satisfies AC7.
+
 ## Deferred from: readiness gate of 4-3a-minion-damage-and-death (2026-08-10)
 
 - **Per-hit feedback on a damaged (not yet dead) unit (`4-3a/R12`, decided by Matko).**

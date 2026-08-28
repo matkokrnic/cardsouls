@@ -4,7 +4,7 @@ baseline_commit: d3854ff12656b9f4c1a378519bc83ca282c0c090
 
 # Story 4.3e: Summon spawn placement
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -266,8 +266,8 @@ summon just because a spot is occupied.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Replace the frozen row constants with a hero-relative spawn scheme (AC 1, 6)
-  - [ ] **EXTRACT A DIRECTLY-CALLABLE PLACEMENT HELPER — REQUIRED, NOT OPTIONAL (AC 4, AC 9).** The
+- [x] Task 1 — Replace the frozen row constants with a hero-relative spawn scheme (AC 1, 6)
+  - [x] **EXTRACT A DIRECTLY-CALLABLE PLACEMENT HELPER — REQUIRED, NOT OPTIONAL (AC 4, AC 9).** The
         base-spot computation, the outward search (Task 2) and the in-batch cluster offset
         (Task 3) live in ONE private helper method on `MatchRunner` taking
         `(the occupied positions, this hero's position, the opposing hero's position, slot,
@@ -278,7 +278,7 @@ summon just because a spot is occupied.
         a required seam, not a style choice: AC 9's two purity
         assertions and Task 1's preferred measured-Y assertion CALL it, and neither can be
         written against three inline lines (`match_runner.gd:652-657` today).
-  - [ ] **THE CALLER BUILDS THE OCCUPANCY LIST (AC 3, AC 9 — third gate).** Inside
+  - [x] **THE CALLER BUILDS THE OCCUPANCY LIST (AC 3, AC 9 — third gate).** Inside
         `_spawn_missing_unit_actors`, walk `_unit_actors` for BOTH slots with the same
         `is_instance_valid()` guard every other loop uses, take each live actor's
         `global_position`, and add BOTH heroes' positions (`_p1_hero`/`_p2_hero`, the
@@ -286,22 +286,22 @@ summon just because a spot is occupied.
         helper receives. Two consequences the earlier draft could not state: `null` holes never
         reach the helper at all, and the helper stays a pure function of its arguments with no
         scene-tree read of its own — which is what makes AC 9's two assertions writable.
-  - [ ] Remove `UNIT_ROW_X`, `UNIT_ROW_SPACING`, `UNIT_ROW_Z_START` from `match_runner.gd:146-148`
+  - [x] Remove `UNIT_ROW_X`, `UNIT_ROW_SPACING`, `UNIT_ROW_Z_START` from `match_runner.gd:146-148`
         (or repurpose the surviving ones — e.g. an offset-behind-hero distance and a cluster
         separation distance — but they must no longer encode an absolute per-slot X coordinate).
-  - [ ] At the point `_spawn_missing_unit_actors` currently runs (`match_runner.gd:1410-1411`,
+  - [x] At the point `_spawn_missing_unit_actors` currently runs (`match_runner.gd:1410-1411`,
         right after `advance()`), compute each slot's "behind hero, away from opponent" base spot
         from `_p1_hero`/`_p2_hero`'s *live* `global_position` (the same accessor pattern already
         used by `_target_world_position`, `match_runner.gd:919-927` — no new seam needed) and the
         opposing hero's position for that slot.
-  - [ ] The spawn Y is GROUND-DERIVED and stays at ground level (AC 8) — the hero's `.y` is read
+  - [x] The spawn Y is GROUND-DERIVED and stays at ground level (AC 8) — the hero's `.y` is read
         for NOTHING. Only the hero's X/Z participate in "behind". **"Ground-derived" is the
         ground-level CONSTANT the runner already uses (`match_runner.gd:656`'s literal `0.0`), not
         a raycast and not any physics query** — a ground query inside the helper would break AC 9's
         purity and no `src/main/` guard would catch it.
-  - [ ] Rewrite the `match_runner.gd:142-145` comment block to describe the new scheme and why
+  - [x] Rewrite the `match_runner.gd:142-145` comment block to describe the new scheme and why
         gameplay (contact facts, the reach probe) reads the result of this placement.
-  - [ ] **RE-AUTHOR `test/integration/test_unit_vertical_alignment.gd` (AC 8 / impacted test).**
+  - [x] **RE-AUTHOR `test/integration/test_unit_vertical_alignment.gd` (AC 8 / impacted test).**
         Its `_parse_spawn_ground_y()` scans `match_runner.gd` for the literal source string
         `"unit.global_position = Vector3(UNIT_ROW_X[slot],"` (line 63) and fails LOUDLY via
         `quit(1)` when the source no longer matches (lines 56-77, 140-147). Removing the constants
@@ -311,16 +311,16 @@ summon just because a spot is occupied.
         new magic string. A source-string parse is itself failure mode (a): it asserts the SHAPE OF
         A LINE, not the height a unit actually stands at, and it sits in shipped code today.
         Checks (1), (3) and (4) in that file are unrelated to placement and stay as they are.
-  - [ ] Fix the one-word stale seam count at `src/state/unit_board.gd:303` (AC 6(b)): `seven` ->
+  - [x] Fix the one-word stale seam count at `src/state/unit_board.gd:303` (AC 6(b)): `seven` ->
         `eight`. Comment only — no behaviour, no signature, no field.
-- [ ] Task 2 — Deterministic outward search for a free spot: UNBOUNDED IN CANDIDATES, TERMINATING
+- [x] Task 2 — Deterministic outward search for a free spot: UNBOUNDED IN CANDIDATES, TERMINATING
       BY FINITENESS (AC 2, 9)
-  - [ ] Given a candidate base spot, walk a deterministically-ordered outward sequence of RINGS
+  - [x] Given a candidate base spot, walk a deterministically-ordered outward sequence of RINGS
         with NO fixed candidate budget, until a candidate is far enough from EVERY OCCUPIED
         POSITION IN THE LIST THE CALLER HANDED IN — the live unit actors of BOTH slots AND BOTH
         HEROES (AC 3) — and from every batch member already placed in this call (AC 4) — to not
         overlap on spawn. The FIRST free candidate wins and the walk stops.
-  - [ ] **THE RADIUS PROPERTY IS A REQUIREMENT, AND IT IS WHAT MAKES THE WALK TERMINATE — AND IT IS
+  - [x] **THE RADIUS PROPERTY IS A REQUIREMENT, AND IT IS WHAT MAKES THE WALK TERMINATE — AND IT IS
         PER RING, NOT PER CANDIDATE (AC 2, fourth gate).** The sequence is organised into RINGS:
         each ring holds FINITELY MANY candidates at the SAME radius from the base spot, visited in
         a FIXED DETERMINISTIC ORDER; the radius is NON-DECREASING WITHIN a ring and STRICTLY
@@ -331,57 +331,57 @@ summon just because a spot is occupied.
         is an infinite loop inside `_physics_process`. Termination argument: radius grows without
         bound between rings + finitely many occupants, each with a bounded neighbourhood => some
         ring is entirely free => the walk halts in finitely many steps, each ring being finite.
-  - [ ] **EVERY CANDIDATE LIES IN THE REAR HALF-SPACE (AC 1, owner ruling, fourth gate).** A ring is
+  - [x] **EVERY CANDIDATE LIES IN THE REAR HALF-SPACE (AC 1, owner ruling, fourth gate).** A ring is
         a rear ARC, not a full circle: candidates on the opponent's side of the summoning hero,
         measured against the hero-to-opponent direction at cast time, are never offered and never
         accepted. A crowded rear pushes the unit FURTHER BEHIND, never in front. Termination is
         unaffected — a rear arc at a large enough radius is still eventually free.
-  - [ ] **The offset-behind distance MUST EXCEED the occupancy clearance radius**, so the base spot
+  - [x] **The offset-behind distance MUST EXCEED the occupancy clearance radius**, so the base spot
         is never inside the summoning hero's own clearance and the first candidate is not
         systematically rejected. Both numbers are the dev pass's to choose (Implementation
         Latitude); this relation between them is not.
-  - [ ] **No arena test, no `[-20, 20]` check, no out-of-arena skip, no "everything is occupied"
+  - [x] **No arena test, no `[-20, 20]` check, no out-of-arena skip, no "everything is occupied"
         fallback branch.** Termination comes from the bullet above, not from a bound. Writing an
         unreachable fallback branch here is writing dead code — do not add one, and do not add a
         candidate-count cap "just in case".
-  - [ ] The whole computation obeys AC 9's purity list: no RNG, no `Time`/`OS`/`Engine`, no frame
+  - [x] The whole computation obeys AC 9's purity list: no RNG, no `Time`/`OS`/`Engine`, no frame
         counter, no scene-tree iteration order, and no dependence on the ORDER of the occupancy
         list (holes never reach the helper — the caller filters them, Task 1).
-- [ ] Task 3 — Cluster same-batch units, separate them from each other (AC 4)
-  - [ ] `_spawn_missing_unit_actors` is called once per tick with the slot's new total count
+- [x] Task 3 — Cluster same-batch units, separate them from each other (AC 4)
+  - [x] `_spawn_missing_unit_actors` is called once per tick with the slot's new total count
         (`match_runner.gd:650-657`); treat the growth batch it adds in one call (`actors.size()` at
         entry up to `count`) as ONE cluster sharing one searched base spot, placing members near it
         with a small per-member separation so they don't spawn stacked.
-  - [ ] **EVERY MEMBER IS CLEARED, NOT JUST THE FIRST (AC 4, owner ruling, fourth gate).** Members
+  - [x] **EVERY MEMBER IS CLEARED, NOT JUST THE FIRST (AC 4, owner ruling, fourth gate).** Members
         are placed ONE AT A TIME, and each member's position must clear EVERY occupant in the
         caller's list AND every member of the same batch already placed in this call — run the same
         rear-arc ring search (Task 2) for each. Offsetting
         members from one searched spot blind would drop members 2..N inside a hero or a live unit.
         For N=1 this is exactly the behaviour Task 2 already specifies.
-  - [ ] **The batch is exactly one unit in every reachable case at `d3854ff`** (AC 4's measurement:
+  - [x] **The batch is exactly one unit in every reachable case at `d3854ff`** (AC 4's measurement:
         `match_state.gd:1428`, `match_state.gd:1329-1344`, `match_runner.gd:1410-1411`). Write the
         loop for N anyway — that is this task's whole content — and do NOT write a comment claiming
         several casts can share a batch today.
-  - [ ] A later cast (a later tick, hero having possibly moved) must NOT read this batch's base
+  - [x] A later cast (a later tick, hero having possibly moved) must NOT read this batch's base
         spot — recompute the base spot fresh from the hero's current position every call.
-- [ ] Task 4 — Preserve existing invariants (AC 7)
-  - [ ] No position field added to `UnitBoard` or any `src/state/` type — position stays
+- [x] Task 4 — Preserve existing invariants (AC 7)
+  - [x] No position field added to `UnitBoard` or any `src/state/` type — position stays
         actor/runner-owned exactly as today.
-  - [ ] No new `connect_*` method on `MatchRunner` — `test_runner_observation_seams_are_exactly_eight`
+  - [x] No new `connect_*` method on `MatchRunner` — `test_runner_observation_seams_are_exactly_eight`
         (`test/state/test_architecture_invariants.gd:291`) must still pass unmodified.
-  - [ ] The dead-unit hole convention (`4-3a/R13`, `match_runner.gd:660-693`) is untouched: a
+  - [x] The dead-unit hole convention (`4-3a/R13`, `match_runner.gd:660-693`) is untouched: a
         `null` at a freed index is never treated as "occupied" by the new search, and the search
         never assigns a freed index to a new unit (spawning is still purely additive — the
         `while actors.size() < count` shape at `match_runner.gd:652` stays the growth mechanism).
-- [ ] Task 5 — Tests
-  - [ ] A live integration test (pattern: `test/integration/test_unit_*_live.gd`) proving: a unit
+- [x] Task 5 — Tests
+  - [x] A live integration test (pattern: `test/integration/test_unit_*_live.gd`) proving: a unit
         summoned from a hero standing at a non-origin, non-default-facing position spawns behind
         that hero on the side away from the opponent, not at the old fixed row coordinate.
-  - [ ] A test proving the outward search: pre-occupy the computed base spot (and its immediate
+  - [x] A test proving the outward search: pre-occupy the computed base spot (and its immediate
         ring) with existing actors, summon again, and assert the new unit lands at a free
         candidate rather than overlapping — and that a cast is never silently dropped for want of
         space.
-  - [ ] **THE AC 9 PURITY GUARD (two assertions, both effects).** (i) Call the placement helper
+  - [x] **THE AC 9 PURITY GUARD (two assertions, both effects).** (i) Call the placement helper
         TWICE with identical arguments and assert the returned positions are byte-identical. (ii)
         Call it with the SAME OCCUPANCY SET IN A DIFFERENT ORDER and assert the same result. **(ii)
         IS A CHEAP REGRESSION PIN, NOT A STRONG TEST, and its docstring must say so:** the natural
@@ -394,11 +394,11 @@ summon just because a spot is occupied.
         two DO NOT cover (the D3(b)/A2 scan never reaches `src/main/`, so the rest of the purity
         list is review-held, and assertion (i) catches a `Time`/frame-counter read barely if at
         all); do not write a comment or docstring claiming this pair proves purity outright.
-  - [ ] **NO TEST FOR N>1 (AC 4, fifth gate).** The batch loop is written for N, and there is no
+  - [x] **NO TEST FOR N>1 (AC 4, fifth gate).** The batch loop is written for N, and there is no
         test for N>1 because no gameplay path reaches it (`match_state.gd:1428`,
         `match_state.gd:1329-1344`, `match_runner.gd:1410-1411`) — correctness for N>1 is carried
         by REVIEW, and this story says so rather than pretending otherwise.
-  - [ ] **RE-MEASURE `test/integration/test_two_units_converge_live.gd` (impacted test).** Lines
+  - [x] **RE-MEASURE `test/integration/test_two_units_converge_live.gd` (impacted test).** Lines
         113-127 teleport P1's hero to `z = 8.0` specifically to get it OUT of the spawn lane
         ("units spawn in a row at z -2.1 / -0.7 and walk +x toward P2's hero; P1's hero stands at
         (-3, 0) — directly in that lane"), and its comment carries a MEASURED number (the trailing
@@ -409,7 +409,7 @@ summon just because a spot is occupied.
         (Checked at the gate: it is the only integration test that repositions a HERO before
         summoning. `test_unit_corpse_walkthrough_live.gd:209,228` repositions UNIT actors
         explicitly after spawn and is unaffected.)
-  - [ ] Re-run `test_runner_observation_seams_are_exactly_eight`
+  - [x] Re-run `test_runner_observation_seams_are_exactly_eight`
         (`test/state/test_architecture_invariants.gd:291`) — unmodified — and the SNAPSHOT KEY-SET
         assertion in `test/state/test_card_observation.gd`, which is what actually guards AC 7's
         positionless clause (`test_determinism.gd:25`: "The key set moves TEN -> ELEVEN here,
@@ -418,8 +418,67 @@ summon just because a spot is occupied.
         first clause is partly held by review. There is no `Vector3`-in-`src/state/` scan and no
         `test_unit_board.gd` — the earlier phrase "the `UnitBoard` positionless-count guards"
         named nothing that exists.
-  - [ ] Full suite before/after per project convention (`test/run_all.sh`). See ## Golden
+  - [x] Full suite before/after per project convention (`test/run_all.sh`). See ## Golden
         Prediction below for what the golden can and cannot tell you here.
+
+### Review Findings
+
+Reviewed via `gds-code-review` (Blind Hunter, Edge Case Hunter, Acceptance Auditor — three
+independent layers), baseline `d3854ff`, HEAD `0890415` plus uncommitted tree. **Verdict: no
+blocking defects.** All nine ACs verified against the actual working-tree code, not just the dev
+pass's self-report. The three operator questions resolved clean:
+
+1. **Setup repairs in the three unnamed impacted tests preserve what they measure.**
+   `test_unit_approach_live.gd`, `test_unit_strike_alignment_live.gd`,
+   `test_unit_swing_root_live.gd` all reposition the summoner's hero AFTER the unit has already
+   spawned, and the direction is derived live from unit/opponent positions, not hardcoded — none of
+   them touch or weaken the stress condition each file exists to measure. AC1/AC3's placement
+   properties are independently and directly covered by the new `test_unit_spawn_placement_live.gd`,
+   which none of the three repairs go anywhere near.
+2. **AC7's growth invariant is intact.** `_spawn_missing_unit_actors`
+   (`match_runner.gd:707-724`) computes `batch_size := count - actors.size()`, early-returns when
+   not positive, and only ever `actors.append(...)`s — never indexes by position, never overwrites a
+   `null` hole. The `4-3a/R13` dead-unit hole convention is untouched.
+3. **AC9's purity claim holds, read line by line.** `_compute_spawn_positions` and its helpers
+   (`match_runner.gd:770-837`) touch only their parameters and file-level `const`s — no scene-tree
+   read, no node reference, no RNG, no `Time`/`OS`/`Engine`, no frame counter, and `_spot_is_clear`'s
+   conjunction-over-both-lists shape is order-independent by construction. `test_unit_spawn_purity.gd`
+   genuinely exercises both purity assertions (verified non-vacuous).
+
+- [x] [Review][Patch] `_ring_candidate`'s `arc_steps := int(SPAWN_ARC_HALF_WIDTH_RADIANS /
+      SPAWN_ARC_STEP_RADIANS)` truncates a float division that only happens to land on an exact
+      integer (`3.0`) for today's constants (`PI/2`/`PI/6`). A future retune to a ratio that rounds
+      down in IEEE-754 (e.g. landing on `2.999999999999998`) would silently narrow the documented
+      ±90° rear arc to ±60° with nothing anywhere to catch it. Use `roundi(...)` (or add an assertion
+      that the division is integral) instead of `int(...)` truncation. [src/main/match_runner.gd]
+      **APPLIED**: swapped `int(...)` for `roundi(...)` at `match_runner.gd:778`, with a comment
+      naming why. Suite AFTER: state harness 499/0/3895 (unchanged from BEFORE), 42 integration
+      files including the new spawn tests all PASS, golden UNMOVED at `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`
+      (`test_determinism.gd` untouched).
+- [x] [Review][Defer] `test_unit_spawn_placement_live.gd`'s `_actor_at(index)` indexes
+      `_unit_actors[0]` by raw position and would null-deref if a hole ever preceded the first live
+      unit at the sampling frame; not reachable in this file's current no-death scenario. — deferred,
+      test-only latent robustness gap
+- [x] [Review][Defer] The three sidestep/clear helpers added to
+      `test_unit_approach_live.gd`/`test_unit_strike_alignment_live.gd`/`test_unit_swing_root_live.gd`
+      compute a direction via `Vector2(...).normalized()` with no degenerate-length guard (unlike
+      production `_rear_direction`'s explicit epsilon fallback); not reachable given the authored
+      scene's hero/unit positions. — deferred, test-only latent robustness gap
+- [x] [Review][Defer] `test_unit_swing_root_live.gd`'s 6.0 m sidestep vs `test_unit_strike_alignment_live.gd`'s
+      4.0 m is plausibly explained (swing-root additionally asserts zero neighbour-contact, a
+      strictly stronger requirement) but neither the file's comment nor the Dev Agent Record states
+      the reason or measures why 4.0 was insufficient there. — deferred, documentation gap only, no
+      behavioral risk found
+- [x] [Review][Defer] Dev Agent Record's "Deviation from the story text" overstates necessity: a
+      `while actors.size() < count:` loop consuming a pre-computed `Array[Vector3]` from one
+      `_compute_spawn_positions(..., batch_size)` call would have satisfied both the literal `while`
+      shape AND AC9's one-call-per-batch requirement — they were not actually in conflict. The
+      substantive property (purely additive, no freed-index reuse) is independently verified intact
+      in the actual code, so this is a self-report rigor gap, not a functional defect. — deferred,
+      no code change needed
+- [x] [Review][Defer] AC6(b)'s "one-word correction" claim (`unit_board.gd:303`) understates the
+      edit: the diff also appends three lines of `3-6/R2` citation commentary. Still comment-only,
+      still satisfies AC7's three literal clauses. — deferred, self-report imprecision only
 
 ## Dev Notes
 
@@ -719,16 +778,179 @@ writes it on the operator's behalf.
 
 ### Agent Model Used
 
+Claude Opus 5 (1M context), 2026-08-27. Baseline `d3854ff`, HEAD at start `0890415`, tree clean.
+
 ### Debug Log References
+
+Measurements taken during the pass, in order:
+
+1. **Suite BEFORE**, on a clean tree (the runner edit was `git stash`ed to take it): state harness
+   **499 tests / 0 failed / 3895 assertions**, `test_state_matches_golden` PASS at
+   `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`; **40 integration files,
+   all PASS**.
+2. **AC 8 non-vacuity (named mutation, run and reverted).** `src/main/match_runner.gd` backed up to
+   the scratchpad and SHA256'd (`026fefb6...`) before mutating; the accepted candidate's y changed
+   from `SPAWN_GROUND_Y` to `hero_position.y`; `test_unit_vertical_alignment.gd` went **RED on
+   three assertions** — spawn y 1.0000 vs ground top 0.0000, model feet 0.9838 vs 0.0000, and the
+   new (2b) hero-y-independence check reporting `hero at y 1.00 spawns units at 1.0000, hero at
+   y 7.50 spawns them at 7.5000`. File restored by copying the backup back; SHA256 re-verified
+   identical. The old source-string parse was structurally blind to this mutation.
+3. **`test_two_units_converge_live.gd`, three states measured.** (a) UNCHANGED against the new
+   placement: FAIL, both units wedge on their own hero at 10.98 / 11.58 against a convergence bound
+   of 3.30 — the pre-cast teleport had inverted into carrying the spawn lane along with the hero.
+   (b) With the teleport MOVED after both spawns: PASS, 1.50 / 2.10, `min_sep` 0.600, jitter 0.0000.
+   (c) With the teleport DELETED entirely (backed up and restored the same way): FAIL, leading unit
+   parks 6.80 from the target at a ~0.80 planar gap on its own hero, trailing unit 7.40. The
+   pre-4-3e comment's measured `6.82` was a figure of the deleted row scheme and is replaced by
+   these; both new numbers are recorded in the file's own comment.
+4. **Suite AFTER, first run**: state harness unchanged at **499/3895/0**, golden PASS. Integration
+   **42 files, 39 PASS / 3 FAIL** — `test_unit_approach_live.gd`,
+   `test_unit_strike_alignment_live.gd`, `test_unit_swing_root_live.gd`. Diagnosed to ONE shared
+   cause (Completion Note 8), setups repaired, each re-run green individually:
+   approach `at_authored_distance=true ... min_gap=0.800`; strike alignment
+   `samples=[1.3256, 1.3256, 1.3156] worst=0.0256s` against target 1.3000s; swing root
+   `idle_worst_dev=0.000000 windup=53 active=11 recovery=5 contacts=0`.
+5. **Suite AFTER, second run** (the reported figure): state harness **499 tests / 0 failed / 3895
+   assertions**, `ALL TESTS PASSED`, exit 0. **42 integration files, all PASS.**
+6. **Golden, BOTH DIRECTIONS: UNMOVED at
+   `4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf`.** Measured green on the
+   clean tree before the pass (step 1) and green again after it (step 5), with
+   `test/state/test_determinism.gd` never edited — `git status` shows it unmodified, so the
+   constant at `:458` is the same string in both measurements. **No re-baseline.** The state
+   harness assertion count is also unmoved at 3895, which is the snapshot key set holding still:
+   no new key, so AC 7's positionless clause is intact as far as that guard reaches (its named
+   residual gap — a private unhashed field would slip past it — is unchanged and untested, as the
+   story records). As the Golden Prediction says, this check is near-vacuous here and the
+   information was in `test/integration/`, where three unnamed files did move (Completion Note 8).
 
 ### Completion Notes List
 
+1. **AC 1 — placement is hero-relative and rear-arc-constrained.** `_compute_spawn_positions`
+   computes an away-from-opponent unit vector in the planar x/z frame, puts the base spot
+   `SPAWN_BEHIND_DISTANCE` along it from the summoning hero's LIVE position, and searches outward
+   from there. The rear half-space is enforced STRUCTURALLY rather than by a post-filter: every
+   candidate sits at `|angle| <= 90 degrees` off the away axis, so its displacement from the hero
+   along hero->opponent is `-(SPAWN_BEHIND_DISTANCE + r*cos(angle))`, which is at most
+   `-SPAWN_BEHIND_DISTANCE` and can never be positive. There is no candidate anywhere in the
+   sequence that a rear-half-space test could reject, so no such test exists. The degenerate
+   direction is `_rear_direction`'s one branch: below `SPAWN_DEGENERATE_DIRECTION_EPSILON` the axis
+   becomes the slot's fixed away-from-centre axis (P1 -x, P2 +x), and because that axis feeds the
+   whole arc rather than only the base spot, the fallback governs the search as AC 1 requires.
+2. **AC 2 — unbounded, ring-organised, terminating by finiteness.** No candidate cap, no `[-20, 20]`
+   test, no out-of-arena skip, no "everything occupied" fallback branch — none of them are in the
+   code, and no dead branch was written "just in case". Ring 0 is the base spot alone; ring k holds
+   seven candidates at radius `k * SPAWN_RING_STEP`. Radius is constant within a ring and increases
+   between rings by a fixed compile-time constant, without bound. The first free candidate wins and
+   the walk stops.
+3. **AC 3 — both heroes are occupants, and no proximity rule was added.** The caller seeds the
+   occupancy list with `_p1_hero.global_position` and `_p2_hero.global_position` before walking the
+   unit actors of both slots. Nothing anywhere rejects a cast, and nothing measures distance to the
+   opponent for any purpose other than deriving the away axis.
+4. **AC 4 — members placed one at a time, each cleared against everything already placed.** The
+   batch loop runs the full ring search per member with `placed` as a second occupancy list, so
+   member 2..N cannot land inside a hero, a live unit, or a sibling. They still cluster rather than
+   scatter, and that falls out of the design rather than needing a rule: every member's search
+   starts from the SAME base spot and takes the first free candidate, so the later ones sit a ring
+   or two further out. Measured in `test_unit_spawn_purity.gd` at N=3 with the base spot and its
+   first ring pre-occupied: `(-7.300, 0, 0)`, `(-7.059, 0, -0.900)`, `(-7.059, 0, +0.900)` — three
+   spots inside a 1.8 m span. **No test asserts N>1 behaviour**, per the fifth gate; the purity
+   file uses N=3 only because it needs more than one position to compare, and says so.
+5. **AC 5 — facing untouched.** No edit to `_aim_unit_actors` or any heading computation; the
+   helper returns positions only. `test_unit_spawn_placement_live.gd` turns the summoning hero to
+   1.1 rad before casting, precisely to make it visible that heading is not an input to placement.
+6. **AC 6 — both stale comments corrected.** (a) The `match_runner.gd:142-145` block is replaced,
+   and the replacement names both false claims explicitly rather than silently dropping them.
+   (b) `src/state/unit_board.gd`'s "seven `connect_*` seams" is now "eight", with the `3-6/R2`
+   amendment cited in place. Comment only; the golden and the snapshot key set cannot see it, and
+   `test_architecture_invariants.gd`'s `src/state/` scanners strip comments before scanning.
+7. **AC 7 — invariants preserved.** No position field on `UnitBoard` or any `src/state/` type; no
+   new `connect_*` (`test_runner_observation_seams_are_exactly_eight` re-ran unmodified and green);
+   the dead-unit hole convention untouched — spawning is still purely additive, a `null` at a freed
+   index is filtered out of the occupancy list rather than treated as an occupant, and no freed
+   index is ever reassigned.
+8. **THREE INTEGRATION TESTS THE STORY DID NOT NAME ALSO NEEDED REPAIR — ONE SHARED CAUSE, AND IT
+   IS A REAL CONSEQUENCE OF AC 1 RATHER THAN A DEFECT.** The story named two impacted files; the
+   measured count is five. `test_unit_approach_live.gd`, `test_unit_strike_alignment_live.gd` and
+   `test_unit_swing_root_live.gd` all summon ONE P1 unit from a STATIONARY hero standing on its
+   authored spawn and then wait for it to reach P2. Hero-relative placement puts the summoner
+   BETWEEN its own fresh unit and the enemy **by construction, for every summon in the game** — and
+   the shipped 4-3 approach still does not distinguish "arrived" from "physically blocked" (4-3's
+   own Non-Goal, untouched here). So a hero that never moves parks its own minion against its back:
+   the approach test measured the unit stopping at 6.800 instead of the authored 1.500, and the
+   other two never saw a single swing phase because the minion never reached attack range. Each
+   file now moves P1's hero out of its own unit's lane on the frame the unit appears — BEHIND the
+   unit in the approach test, which needs the original hero-walks-into-parked-unit topology, and
+   LATERALLY in the other two. Every direction is derived from the live unit->opponent axis rather
+   than assumed to be -x. **This is worth the operator's attention as a design observation, not as
+   a bug:** in play the summoner keeps moving and the minion streams past, but a player who summons
+   and then stands still is now permanently in their own minion's way. Nothing in the story rules
+   on that, and this pass did not invent a rule for it.
+9. **AC 8 — ground-derived Y, and the guard that replaced a source parse.**
+   `test_unit_vertical_alignment.gd` no longer scans `match_runner.gd`'s SOURCE for a magic string.
+   It CALLS `_compute_spawn_positions` and measures the y it returns — which is only possible
+   because AC 9 made the helper pure — and it now takes that measurement TWICE, with the hero at
+   its authored y 1.0 and again at an absurd 7.5, asserting the two agree. Mutation-proven RED
+   (Debug Log 2). Checks (1), (3) and (4) in that file are unrelated to placement and are unchanged.
+10. **AC 9 — purity, and an honest account of its guard.** `test_unit_spawn_purity.gd` carries the
+    two required assertions, both effects, plus three non-vacuity checks before them (the batch is
+    the size asked for; the members are distinct; and the walk actually LEFT the occupied base spot,
+    without which the repeatability claim would only cover the first branch). Its docstring states
+    that assertion (ii) is a cheap regression pin rather than a strong property test, and states
+    what the pair does not cover: D3(b)/A2 never scans `src/main/`, so a `randf()` here trips no
+    guard and the rest of the purity list is review-held. Nothing in the file or in the runner's
+    comments claims otherwise.
+
+### Implementation Latitude — what was chosen, and why
+
+| Choice | Value | Reason |
+|---|---|---|
+| Search pattern | **Rings of a rear arc.** Ring 0 = base spot alone; ring k = 7 candidates at radius `k * step`, angles `0, +-30, +-60, +-90` degrees off the away axis, visited `0, +30, -30, +60, -60, +90, -90`. | Ring (not spiral) because a ring makes the per-ring radius rule literal in the code; the fixed sweep order makes determinism inspectable rather than argued. |
+| `SPAWN_BEHIND_DISTANCE` | **2.5** | The story's own suggested starting value — the X component of the deleted row. Players actually saw 2.60-3.27 planar under the old scheme, so 2.5 lands just inside familiar. |
+| `SPAWN_CLEARANCE_RADIUS` | **0.9** | Derived, not tuned: unit inradius 0.3 + hero inradius 0.5 = 0.8 is the touching distance of the worst pair; 0.9 carries a small margin. Satisfies the required relation `< SPAWN_BEHIND_DISTANCE` with room to spare. |
+| `SPAWN_RING_STEP` | **0.6** | One unit body width. Small enough that a displaced member still reads as part of the cluster; a compile-time constant, never adaptive. |
+| Arc granularity | `SPAWN_ARC_STEP_RADIANS = PI/6`, `SPAWN_ARC_HALF_WIDTH_RADIANS = PI/2` | The half-width IS the rear half-space constraint, so AC 1 is enforced by the candidate generator rather than by a filter that could be removed. |
+| Degenerate threshold | `SPAWN_DEGENERATE_DIRECTION_EPSILON = 0.05` | Well below any distance two separately-controlled heroes hold, well above float noise on a normalise. |
+| Where the constants live | `const` in `match_runner.gd` | Explicitly permitted: this is placement geometry, not balance data, so no `.tres` and no hot reload. |
+
+### Deviation from the story text
+
+**One, and it is a wording conflict inside the story rather than a judgement call.** Task 4 says
+"the `while actors.size() < count` shape at `match_runner.gd:652` stays the growth mechanism",
+while Task 1 and AC 9 require ONE helper call per batch returning N positions. A per-member `while`
+cannot make one call per batch. The `while` is therefore replaced by
+`batch_size = count - actors.size()`, an early return when it is not positive, and a `for` over the
+returned positions. **The mechanism Task 4 was protecting is intact and unchanged**: growth only,
+purely additive, no freed index ever reused, no shrink path — which is what that bullet's own
+sentence goes on to say it is about.
+
 ### File List
+
+Production code:
+- `src/main/match_runner.gd` (modified) — constants replaced; `_spawn_missing_unit_actors` builds
+  the occupancy list and consumes the batch; `_compute_spawn_positions`, `_rear_direction`,
+  `_ring_candidate`, `_spot_is_clear` added; the `142-145` comment block rewritten.
+- `src/state/unit_board.gd` (modified) — comment only, `seven` -> `eight` (AC 6(b)).
+
+Tests:
+- `test/integration/test_unit_spawn_placement_live.gd` (new) — AC 1 / AC 2 / AC 3 / AC 8, live.
+- `test/integration/test_unit_spawn_purity.gd` (new) — AC 9's two assertions, no scene graph.
+- `test/integration/test_unit_vertical_alignment.gd` (modified) — source parse replaced by a
+  measured-Y call plus the hero-y-independence assertion (2b).
+- `test/integration/test_two_units_converge_live.gd` (modified) — the hero teleport moved to after
+  both spawns; comment re-derived and every measured figure re-measured.
+- `test/integration/test_unit_approach_live.gd` (modified) — summoner moved behind its own unit at
+  spawn (Completion Note 8).
+- `test/integration/test_unit_strike_alignment_live.gd` (modified) — summoner sidestepped at spawn.
+- `test/integration/test_unit_swing_root_live.gd` (modified) — summoner sidestepped at spawn.
+
+Unchanged and verified byte-identical: `project.godot`, `src/main/main.tscn`, everything under
+`src/actors/`. The editor was never opened.
 
 ## Change Log
 
 | Date | Author | Change |
 |---|---|---|
+| 2026-08-27 | Claude Opus 5 (1M context) | DEV PASS. All nine ACs implemented; all 33 task checkboxes closed. Placement is hero-relative, computed by a new pure `MatchRunner._compute_spawn_positions(occupied, hero, opponent, slot, batch_size) -> Array[Vector3]`, one call per batch; the caller builds the occupancy list (both heroes + every live unit actor of both slots, `null` holes filtered at the source). The outward search is rings of a REAR ARC: ring 0 the base spot, ring k seven candidates at `k * 0.6` swept `0, +-30, +-60, +-90` degrees off the away axis — so the rear half-space is a property of the CANDIDATE GENERATOR and there is no filter that could be deleted. No candidate cap, no arena test, no fallback branch, no dead code. Latitude chosen: behind-distance **2.5**, clearance **0.9** (derived from the 0.5 + 0.3 inradius sum, and `< 2.5` as required), ring step **0.6**, arc step **PI/6**, half-width **PI/2**, degenerate threshold **0.05**; all `const` in `match_runner.gd`. `UNIT_ROW_X`/`UNIT_ROW_SPACING`/`UNIT_ROW_Z_START` deleted; both stale comments corrected, including the one-word `seven` -> `eight` in `src/state/unit_board.gd` (the story's only `src/state/` edit). **Suite 499/3895/0 BEFORE and AFTER, unmoved. Golden UNMOVED IN BOTH DIRECTIONS at `4a089063...`, no re-baseline, `test_determinism.gd` never edited. Integration 40 -> 42, all PASS.** `project.godot`, `main.tscn` and `src/actors/` byte-identical; editor never opened. **FIVE integration files were impacted, not the two the story named.** The two named ones were handled as specified: `test_unit_vertical_alignment.gd`'s source-string parse is REPLACED by a measured-Y call into the helper plus a new hero-y-independence assertion (mutation-proven RED), and `test_two_units_converge_live.gd`'s hero teleport MOVED to after both spawns with every measured figure re-measured (10.98/11.58 unchanged-setup, 1.50/2.10 fixed, 6.80/7.40 no-teleport; the stale 6.82 is gone). **THREE MORE — `test_unit_approach_live.gd`, `test_unit_strike_alignment_live.gd`, `test_unit_swing_root_live.gd` — failed on ONE shared cause the story did not anticipate**: hero-relative placement puts the summoner between its own fresh unit and the enemy BY CONSTRUCTION, and a STATIONARY summoner therefore blocks its own minion (measured: approach parks at 6.800 vs the authored 1.500; the other two observed zero swing phases). That is shipped AC 1 behaviour interacting with 4-3's untouched "approach does not distinguish arrived from physically blocked" Non-Goal, so the three setups move the summoner out of its own unit's lane at spawn — behind it in the approach test, laterally in the other two, each direction DERIVED from the live unit->opponent axis. Flagged for the operator as a design observation, not fixed here: a player who summons and then stands still is now permanently in their own minion's way; nothing in the story rules on it. ONE DEVIATION FROM THE STORY TEXT, recorded in Dev Agent Record: Task 4's "the `while actors.size() < count` shape stays" cannot coexist with Task 1/AC 9's one-call-per-batch helper, so the `while` became a batch-size computation plus a `for` — the growth mechanism that bullet protects (additive only, no freed index reused) is unchanged. Status `ready-for-dev` -> `review`. Nothing staged, nothing committed; LIVE SMOKE NOT RUN (operator's, and the operator writes `docs/playtest-log.md` by hand before the commit chain). |
 | 2026-08-27 | Claude Sonnet 5 | Story authored against `d3854ff`. Status `authored`. |
 | 2026-08-27 | Claude Opus 5 (1M context) | FIFTH READINESS GATE FIX PASS — **THIS PASS REMOVED SPECIFICATION RATHER THAN ADDING IT**, docs-only, this file only. Three of the fifth gate's four blocking findings (B1, B2, B4) existed only because AC 4 had been inflated into a full specification of cluster mechanics for N>1 — mechanics the story itself measures as UNREACHABLE THROUGH PLAY at `d3854ff`. The owner's ruling: do not specify, guard or gate behaviour nothing can execute; delete the thing that needed the constraint rather than authoring the constraint. **AC 4 COLLAPSED TO ITS TWO SURVIVING CLAIMS**: members of a growth batch land NEAR ONE ANOTHER rather than scattered around the hero, and each member's position clears EVERY occupant and every member already placed in the same call. The unreachability measurement and its three citations (`match_state.gd:1428`, `match_state.gd:1329-1344`, `match_runner.gd:1410-1411`) are KEPT. **DELETED**: the named MINIMUM and MAXIMUM in-batch separation bounds and the "minimum must be at least the occupancy clearance radius" relation (AC 4 and Task 3) — with them go B1 (AC 2's first-free-candidate accept rule imposed no maximum, so a conforming search could fail the maximum the test asserted), B2 (four dev-chosen numbers with only two stated relations, so the feasible region could be empty) and NB1 (at equality the minimum re-asserted the clearance rule and falsified nothing); the per-member seeding rule "seeded near the cluster" in Task 3 (B4 — undefined, unlisted in latitude, and load-bearing only for the bounds now deleted); the MANDATORY SYNTHETIC N=3 TEST in AC 4 and Task 5, replaced by one line — the batch loop is written for N, there is no test for N>1 because no gameplay path reaches it, correctness for N>1 is carried by REVIEW and the story says so rather than pretending otherwise; the Implementation Latitude bullet naming the two separation distances; Task 1's reference to "AC 4's synthetic N=3 test" as a caller of the helper (AC 9's two purity assertions and the measured-Y assertion still require the extraction, so the seam stays MANDATORY); and Project Structure Notes' "the AC 4 clustering guard is the exception", now naming AC 9's purity assertions as the tests that need no live scene graph. **THE ONE PROMOTION (B3, owner ruling)**: the degenerate-direction fallback moved OUT of Implementation Latitude and INTO AC 1 as a requirement — when the hero-to-opponent direction is too short to be reliable, the rear arc's axis is the slot's fixed away-from-centre axis (P1 toward -x, P2 toward +x), for the ARC and not merely the base spot. It previously lived only in latitude and predated the rear-arc clause, leaving an AC with no defined meaning in the case AC 3 explicitly blesses. Live Smoke point 4 amended to exempt that case: with the heroes effectively on top of each other the operator judges "behind" against the SLOT AXIS, not the live direction. What stays latitude is only the threshold at which the direction counts as unreliable. **NB2**: the fourth-gate row's parenthetical claiming `test_architecture_invariants.gd:284` is the trailing `3-6/R2` comment is corrected in place — 284 is the `const OBSERVATION_SEAMS` declaration, 283 is the comment, 288 the closing `]`. NO NEW REQUIREMENT, RELATION OR NUMBER was added in this pass. Everything verified green at the fifth gate is UNTOUCHED: the nine ACs and their numbering, AC 2's ring/rear-arc termination argument (re-checked sound for any arc width, degenerate widths included), the citations `test_architecture_invariants.gd:285-288` and `:318-324`, the `sqrt` arithmetic and the 3.27/2.60 figures, the golden `4a089063...` at `test_determinism.gd:458`, and Live Smoke points 1, 2, 3, 5, 6. Status stays `authored`. No code, no test, no `sprint-status.yaml`; nothing staged, nothing committed. |
 | 2026-08-27 | Claude Opus 5 (1M context) | FOURTH READINESS GATE FIX PASS — four blocking and four non-blocking findings applied on owner rulings, docs-only, this file only. **THE RADIUS RULE IS PER RING, NOT PER CANDIDATE (B1).** The third pass required the radius to STRICTLY INCREASE per candidate, which forbade the ring that Implementation Latitude simultaneously mandated — a ring holds several candidates at one radius by definition. AC 2, Task 2 and the latitude bullet now say: the sequence is organised into RINGS, each holding FINITELY MANY candidates at the SAME radius visited in a FIXED DETERMINISTIC ORDER; the radius is NON-DECREASING WITHIN a ring and STRICTLY INCREASES BETWEEN rings by a FIXED POSITIVE STEP, without bound. Termination argument unchanged in substance, with "each ring being finite" added so the per-ring candidate count cannot be read as unbounded. **THE HELPER TAKES BATCH SIZE AND RETURNS N POSITIONS (B2)** — one call per batch, not one per member. AC 9's headline and the "Design already locked" bullet both still said "batch INDEX", contradicting Task 1's signature and AC 4's N=3 guard; all three now read `(the occupied positions, this hero's position, the opposing hero's position, slot, BATCH SIZE)` returning an ORDERED LIST OF N POSITIONS, and Task 1's bullet states the one-call-per-batch shape explicitly. **"BEHIND" WINS OVER PROXIMITY (B3, owner ruling)** — the fourth gate found nothing constraining the ACCEPTED candidate's direction, so a crowded rear (or an opponent standing on the summoner, which AC 3 blesses) could put the unit in front. A new AC 1 paragraph makes the rear half-space a requirement OF THE ACCEPTED CANDIDATE: every candidate lies on the far side of the summoning hero from the opponent, measured against the hero-to-opponent direction at cast time; a ring is a rear ARC, not a full circle; a crowded rear pushes the unit FURTHER BEHIND, never in front. Restated in Task 2 as its own bullet, in the latitude bullet, in AC 3's consequence sentence ("further out" -> "FURTHER BEHIND … never around into the fighting space") and in Live Smoke point 4, which now names a unit in the fighting space as a smoke FAILURE. Termination is unaffected and says so. **EVERY CLUSTER MEMBER IS CLEARED (B4).** Task 3's "one searched base spot, offset the rest blind" would have dropped members 2..N inside a hero or a live unit — the exact interpenetration AC 3 exists to prevent. AC 4 and Task 3 now place members ONE AT A TIME, each clearing EVERY occupant in the caller's list AND every member of the same batch already placed in this call, running the same rear-arc ring search seeded near the cluster; the cluster's tightness is a preference for where to look FIRST, never a licence to skip the occupancy test. For N=1 the behaviour is unchanged. Task 2's first bullet gains the already-placed-members clause. **NON-BLOCKING**: AC 4's separation is now bounded on BOTH sides — a named MINIMUM (at least the occupancy clearance radius) and a named MAXIMUM, both authored by the dev pass — and Task 5's synthetic N=3 assertion tests both bounds, because "three distinct spots" is satisfied by 1e-6 m and falsifies nothing (NB5); AC 9's guard (ii) is KEPT but no longer described as "STRONGER" or "the real property" — it is restated as a CHEAP REGRESSION PIN against a later positionally-indexed occupancy read, with the reason stated plainly (a conjunction over the whole list is order-independent by construction, so the pin normally passes on the first try), and Task 5 carries the same wording into the test's docstring requirement (NB6); a new Task 2 bullet requires the offset-behind distance to EXCEED the occupancy clearance radius, so the base spot is never inside the summoning hero's own clearance, with the relation named in the latitude bullet as not-latitude (NB7); the two drifted line ranges corrected in AC 6(b), AC 9, the ruled-open-question paragraph and References — the eight seam names are at `test_architecture_invariants.gd:285-288` (corrected at the fifth gate: 284 is the `const OBSERVATION_SEAMS` DECLARATION, not a comment — 283 is the trailing `3-6/R2` comment line, and 288 is the closing `]`) and the hero-NODE-positions passage at `:318-324` (NB8). DELETED: only the superseded wordings named above — the per-candidate radius sentence, "batch index" in two places, "each within a named pairwise separation" as the sole cluster assertion, and guard (ii)'s "STRONGER … the real property" claim. Historical Change Log rows are left verbatim as the record of what each pass wrote, including their now-superseded line ranges. Everything verified green at the fourth gate is UNTOUCHED: the nine ACs and their numbering, the `sqrt` arithmetic and the 3.27/2.60 figures, the golden `4a089063...` at `test_determinism.gd:458` with its superseded-hash warnings, and every other citation re-verified at this gate (`match_runner.gd:656`'s literal `0.0`; the `142-145` comment block with both stale claims on line 145; `unit_board.gd:303`'s "seven"; `unit_actor.tscn`'s `Collision` editor_description and its default-layer-1 claim; `main.tscn:30,34`/`:19`/`:21`/58 lines; `match_state.gd:1428`/`:1329-1344`; `match_runner.gd:1410-1411`/`:919-927`; `test_architecture_invariants.gd:291`). Status stays `authored`. No code, no test, no `sprint-status.yaml`; nothing staged, nothing committed. |

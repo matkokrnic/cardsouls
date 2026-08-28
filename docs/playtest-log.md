@@ -172,3 +172,6 @@ zamah ukorijenjuje, kretanje je normalno, porblem otkloinjen ali sada uoceavam d
 
 26.8.
 1 parry je sada mnogo bolji, obrana taman di treba biti 2 najava iako je zamah brzi da se sasvim solidno regirati pravovremneo na njega  4 lesina sotji 10 sekundi pa nestane ne znamo sto ti znaci debug pauza i resrt, primjetio sam jos neka cudna ponasanja u edgecaseovima minoiona ali to bi svako ostavio za nakon implemtnacije e4 e5 i e6
+
+28.8.
+1 vidim da rub map zaprao ne postoji jer da i ja i inion letimo iznad kad prestane ploca na kojoj svi stojimo, osim toga minion se spawna kako kazes iza heroija u ondosnu na neprijatleju, i uvje se posjavi isti porblem ako se ni heroj ni neprijatlje ne pomaknu minoinu ce semtati vlastiti heroij i nece ga znati zoabici 2 minoni se dobro sapwna u trku 3 da minon se uvjek spawna iza heroja u odnosu na neprijtleja odnosno da je heroj tocno izmedu vlastitog minona i neprijatelja4 kad dotrcim u lice nepritaljeu minon s eopet klasicno spawna iza mene 5 imam dojam da stoje na tlu ali to nemogu provjeriti jer nemogu micati kaeru slobodno  6 lesine se ne mici i ne spawna se preko nje
