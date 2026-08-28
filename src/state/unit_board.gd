@@ -300,8 +300,10 @@ func is_alive_at(index: int) -> bool:
 ## is deliberately NOT emitted for a unit target (`4-3a/R12` — its payload carries a slot only, and
 ## its shipped consumer would flash an untouched HERO whose hp did not change). The legible event
 ## this story ships is DEATH, and presentation observes it by POLLING `is_alive_at` (the runner's
-## existing spawn/aim/approach poll shape), so the locked count of seven `connect_*` seams is
-## untouched.
+## existing spawn/aim/approach poll shape), so the locked count of eight `connect_*` seams is
+## untouched. (`seven` here until 4-3e AC 6(b): the family moved to EIGHT at `3-6/R2`, and
+## `test_architecture_invariants.gd:291` has read
+## `test_runner_observation_seams_are_exactly_eight` ever since. Stale citation, one word.)
 func apply_damage_at(index: int, amount: float) -> void:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])

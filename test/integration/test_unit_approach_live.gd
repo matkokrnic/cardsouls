@@ -65,6 +65,10 @@ const OVERLAP_EPSILON := 0.05
 ## to come within a box-width of contact at some point, or the check is vacuously true of a hero
 ## that walked nowhere near the unit.
 const REACHED_DISTANCE := 1.3
+## Story 4-3e: how far BEHIND its own fresh unit the summoning hero is parked, so the unit has a
+## clear run at its target and the hero still has one at the unit. Comfortably outside
+## `BODY_CONTACT_DISTANCE` (0.8), so the two do not start the run already touching.
+const HERO_CLEAR_DISTANCE := 2.0
 
 var _frames := 0
 var _runner: Node
@@ -177,6 +181,7 @@ func _physics_process(_delta: float) -> bool:
 		if not _spawned:
 			_detail += " board=%d actor=%s;" % [_state.p1.units.size(), unit]
 		else:
+			_clear_the_summoners_hero(unit)
 			_derive_sample_frames(unit)
 
 	# ---- MOVED: a delta on a real node, while beyond the stop distance. The gap between the two
@@ -270,6 +275,41 @@ func _physics_process(_delta: float) -> bool:
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
 	return false
+
+
+## STORY 4-3e SETUP STEP: put P1's hero on the FAR SIDE of its own freshly-summoned unit.
+##
+## WHY THIS IS NOW NEEDED, and why it is a setup repair rather than a defect being papered over.
+## 4-3e made placement HERO-RELATIVE: a summoned unit appears BEHIND its summoner, on the side away
+## from the opponent (that story's AC 1, an owner ruling). So the summoner is ALWAYS between its own
+## fresh unit and the enemy -- by construction, for every summon in the game. A stationary hero
+## therefore stands in its own minion's path, and the shipped 4-3 approach still does not
+## distinguish "arrived" from "physically blocked" (4-3's own Non-Goal, unchanged). MEASURED at the
+## 4-3e dev pass with this call absent: the unit wedges on its own hero and parks 6.800 from the
+## target instead of the authored 1.500, failing `at_authored_distance`.
+##
+## THAT IS THE SHIPPED BEHAVIOUR, NOT A BUG THIS FILE MAY ASSERT AWAY. In play the summoner walks
+## on and the minion streams past; this file measures the approach RULE, so it takes the summoner
+## out of the way once, deterministically, the frame the unit appears.
+##
+## THE HERO GOES BEHIND THE UNIT, not merely aside, because the BLOCKED half of this test still
+## needs the original topology: the unit parked between P1's hero and P2's, with `p1_move_right`
+## walking the hero straight at it. The direction is DERIVED from the live unit->opponent axis
+## rather than assumed to be -x, so the setup survives a scene whose heroes move.
+func _clear_the_summoners_hero(unit: UnitActor) -> void:
+	var hero: Node3D = _runner._p1_hero
+	var opponent: Node3D = _runner._p2_hero
+	if hero == null or opponent == null:
+		return
+	var unit_position := unit.global_position
+	var away := Vector2(unit_position.x - opponent.global_position.x,
+			unit_position.z - opponent.global_position.z).normalized()
+	hero.global_position = Vector3(
+			unit_position.x + away.x * HERO_CLEAR_DISTANCE,
+			hero.global_position.y,
+			unit_position.z + away.y * HERO_CLEAR_DISTANCE)
+	# The walk window is derived from where the hero STARTS, so the start must be the moved one.
+	_hero_start_pos = hero.global_position
 
 
 ## `4-3/R22`: computes `_move_sample_frame`, `_move_confirm_frame`, `_stop_sample_frame` and

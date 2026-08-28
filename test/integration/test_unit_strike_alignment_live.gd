@@ -46,6 +46,23 @@ const TOLERANCE_SECONDS := 0.08
 ## only held for swing #1 would be the same defect wearing a new hat.
 const REQUIRED_SWINGS := 3
 
+## Story 4-3e: how far ASIDE the summoning hero is moved once its unit exists, and why.
+##
+## 4-3e made placement HERO-RELATIVE -- a summoned unit appears BEHIND its summoner, on the side
+## away from the opponent (that story's AC 1, an owner ruling) -- so the summoner is ALWAYS between
+## its own fresh unit and the enemy, by construction, for every summon in the game. The shipped 4-3
+## approach still does not distinguish "arrived" from "physically blocked" (4-3's own Non-Goal), so
+## a stationary hero parks its own minion against its back and the minion never reaches attack
+## range. MEASURED at the 4-3e dev pass without this step: 0 of 3 swings observed in 1400 frames --
+## this file's whole subject never happens.
+##
+## THAT IS SHIPPED BEHAVIOUR, NOT A DEFECT THIS FILE MAY ASSERT AWAY: in play the summoner walks on
+## and the minion streams past. This file is about the STRIKE FRAME, so the summoner steps out of
+## its own minion's way once, deterministically, on the frame the unit appears. LATERALLY, not
+## backwards: perpendicular to the unit->opponent axis, so the unit's run and its target are both
+## untouched.
+const HERO_CLEAR_SIDESTEP := 4.0
+
 var _frames := 0
 var _runner: Node
 var _state: MatchState
@@ -103,6 +120,7 @@ func _physics_process(_delta: float) -> bool:
 		if not _spawned:
 			return _finish(false, "summon did not land: board=%d actor=%s"
 					% [_state.p1.units.size(), _unit_actor()])
+		_sidestep_the_summoners_hero(_unit_actor())
 		# THE TARGET. Aligning the strike to the START of the ACTIVE window means the clip has
 		# reached its strike frame after exactly one authored windup of real time; played at rate
 		# `r` that position is `windup * r`. Both inputs are read from what SHIPPED -- the authored
@@ -126,6 +144,24 @@ func _physics_process(_delta: float) -> bool:
 	if _samples.size() >= REQUIRED_SWINGS or _frames >= MAX_FRAMES:
 		return _report()
 	return false
+
+
+## Story 4-3e setup step: move P1's hero SIDEWAYS out of its own unit's lane. See
+## `HERO_CLEAR_SIDESTEP` for why this became necessary and why it is a setup repair, not a
+## weakening. The sidestep direction is DERIVED from the live unit->opponent axis rather than
+## assumed, so it survives a scene whose heroes are somewhere else.
+func _sidestep_the_summoners_hero(unit: UnitActor) -> void:
+	var hero: Node3D = _runner._p1_hero
+	var opponent: Node3D = _runner._p2_hero
+	if hero == null or opponent == null or unit == null:
+		return
+	var forward := Vector2(opponent.global_position.x - unit.global_position.x,
+			opponent.global_position.z - unit.global_position.z).normalized()
+	var lateral := Vector2(-forward.y, forward.x)
+	hero.global_position = Vector3(
+			hero.global_position.x + lateral.x * HERO_CLEAR_SIDESTEP,
+			hero.global_position.y,
+			hero.global_position.z + lateral.y * HERO_CLEAR_SIDESTEP)
 
 
 ## One tick of evidence, taken on the EDGE into ACTIVE and nowhere else -- the instant the authored

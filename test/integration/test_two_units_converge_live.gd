@@ -37,6 +37,12 @@ const CONFIRM2_FRAME := 26
 const RELEASE2_FRAME := 30
 const SPAWN_CHECK_FRAME := 36
 
+## Story 4-3e: P1's hero leaves the units' lane on the frame BEFORE the spawn check -- after both
+## casts have resolved, never before. See the block at that frame for why the ordering is now
+## load-bearing rather than incidental.
+const HERO_CLEAR_FRAME := SPAWN_CHECK_FRAME - 1
+const HERO_CLEAR_Z := 8.0
+
 ## Settling allowance before the approach is judged, and the window over which jitter is sampled.
 const RETARGET_SETTLE_TICKS := 30
 const ARRIVAL_MARGIN_FRACTION := 0.6
@@ -111,23 +117,39 @@ func _physics_process(_delta: float) -> bool:
 		_jitter_epsilon = per_tick * 0.25
 		_converge_bound = _stop_distance + UNIT_INRADIUS * 2.0 * CONVERGE_BODY_ALLOWANCE
 	if _frames == 2:
-		# P1'S OWN HERO IS MOVED OFF THE SPAWN LANE, and this is a SCOPE decision rather than a
-		# convenience. The units spawn in a row at z -2.1 / -0.7 and walk +x toward P2's hero; P1's
-		# hero stands at (-3, 0) -- directly in that lane -- so the trailing unit runs into ITS OWN
-		# HERO'S BODY and stops there. Measured: without this line the trailing unit parks 6.82 from
-		# the target, pinned against the hero at a planar gap of ~0.97 (hero inradius 0.5 + unit 0.3).
-		#
-		# THAT IS NOT A DEFECT AND IT IS NOT THIS AC. It is the shipped 4-3 approach behaviour, and
-		# this story's own Non-Goals keep it: "`approach()` is NOT taught to distinguish 'arrived'
-		# from 'physically blocked'" -- that distinction's only consumer is attack range, which lands
-		# in `4-3b`. AC 10 is UNIT-VS-UNIT body collision, so the hero is taken out of the lane to
-		# leave the two units as the only bodies that can interact. Position is actor-owned
-		# (`4-1/R12`), so moving it here is a presentation-side setup step and touches no state.
-		var p1_hero: Node3D = _runner._p1_hero
-		p1_hero.global_position = Vector3(p1_hero.global_position.x, p1_hero.global_position.y, 8.0)
 		_state.p1.mana.add(_state.p1.mana.get_maximum())
 		if not _state.flags.minions:
 			return _fail("the authored FeatureFlags has minions OFF -- this test cannot summon")
+	if _frames == HERO_CLEAR_FRAME:
+		# P1'S OWN HERO IS MOVED OFF THE UNITS' LANE, and this is a SCOPE decision rather than a
+		# convenience. The two units walk +x toward P2's hero; P1's hero stands at (-3, 0), squarely
+		# in that lane, so the trailing unit runs into ITS OWN HERO'S BODY and stops there.
+		#
+		# THAT IS NOT A DEFECT AND IT IS NOT THIS AC. It is the shipped 4-3 approach behaviour, and
+		# 4-3a's own Non-Goals keep it: "`approach()` is NOT taught to distinguish 'arrived' from
+		# 'physically blocked'". AC 10 is UNIT-VS-UNIT body collision, so the hero is taken out of
+		# the lane to leave the two units as the only bodies that can interact. Position is
+		# actor-owned (`4-1/R12`), so moving it here is a presentation-side setup step, no state.
+		#
+		# STORY 4-3e MOVED THIS BLOCK, AND THE ORDERING IS NOW LOAD-BEARING. Placement became
+		# HERO-RELATIVE: a unit is summoned BEHIND its own hero, on the side away from the opponent.
+		# So the old shape -- teleport at frame 2, summon afterwards -- INVERTED ITSELF. It used to
+		# carry the hero out of a fixed row's lane; it would now carry THE LANE ALONG WITH THE HERO,
+		# spawning both units behind the hero at z ~ 10 and putting the hero back between them and
+		# their target. RE-MEASURED at the 4-3e dev pass: with the teleport left at frame 2 both
+		# units wedge on their own hero and park 10.98 and 11.58 from the target, against a
+		# convergence bound of 3.30.
+		#
+		# The hero therefore leaves AFTER both casts have resolved. There is no placement geometry
+		# that puts a summoned unit somewhere its own hero is not behind it -- that is the whole
+		# content of 4-3e AC 1 -- so clearing the lane is only possible once the units exist.
+		# RE-MEASURED with this block deleted entirely: the LEADING unit parks 6.80 from the target,
+		# pinned against its own hero at a planar gap of ~0.80 (hero inradius 0.5 + unit 0.3), and
+		# the trailing one 7.40, stacked a body-width behind it. (The pre-4-3e figure recorded here
+		# was 6.82 against the frozen row; the row is gone, so that number is gone with it.)
+		var p1_hero: Node3D = _runner._p1_hero
+		p1_hero.global_position = Vector3(
+				p1_hero.global_position.x, p1_hero.global_position.y, HERO_CLEAR_Z)
 	if _frames == 3:
 		_slot_chosen = _choose_a_summoning_slot()
 		if not _slot_chosen:

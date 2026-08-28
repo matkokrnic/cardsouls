@@ -42,46 +42,56 @@ const EXACT_EPS := 0.001
 ## posture the hero test's own DISC_FEET_AGREEMENT takes.
 const MODEL_FEET_AGREEMENT := 0.05
 
-## The runner file the spawn-Y constant is PARSED from, not transcribed (M3 FIX PASS). A
-## transcribed literal here would defeat its own stated purpose -- it claims to notice a
-## runner change, but a hand-copied number never actually re-reads the runner and would stay
-## `0.0` even if `_spawn_missing_unit_actors` moved. So this reads the value straight off
-## `MatchRunner._spawn_missing_unit_actors`'s own literal (`unit.global_position =
-## Vector3(UNIT_ROW_X[slot], 0.0, ...)`) every run.
 const RUNNER_PATH := "res://src/main/match_runner.gd"
 
-## Parse the spawn-Y literal out of `_spawn_missing_unit_actors`. Returns NAN, and the caller
-## fails LOUDLY, if the source no longer matches -- a silent fallback to a hardcoded number
-## would restore the exact transcription defect this fix pass exists to remove.
-func _parse_spawn_ground_y() -> float:
-	var src := FileAccess.get_file_as_string(RUNNER_PATH)
-	if src.is_empty():
-		_failures.append("could not read %s to parse the spawn-Y literal" % RUNNER_PATH)
+## The two authored hero y-coordinates (main.tscn:30,34 -- P1Hero and P2Hero both at y 1), and a
+## deliberately absurd third one. The hero root is the body CENTRE; the unit root is the body's
+## FEET. Any placement that took its y from the hero would return these instead of the ground.
+const HERO_AUTHORED_Y := 1.0
+const HERO_ABSURD_Y := 7.5
+
+## MEASURED, NOT PARSED (story 4-3e, Task 1). This used to scan `match_runner.gd`'s SOURCE for the
+## literal string `"unit.global_position = Vector3(UNIT_ROW_X[slot],"` and read the spawn-Y off the
+## following line. 4-3e deletes those constants, so the parse had to go -- but PORTING IT TO A NEW
+## MAGIC STRING WAS DELIBERATELY NOT DONE, because a source parse is the very failure mode this
+## suite keeps catching: it asserts THE SHAPE OF A LINE, not the height a unit actually stands at,
+## and a reformat of a correct line turns it red while a genuinely floating unit could sail past.
+##
+## So this CALLS the placement routine and measures the y it returns. `MatchRunner` needs no tree
+## and no frame for this -- `_compute_spawn_positions` is a pure function of its arguments (4-3e
+## AC 9), which is exactly what makes it callable from a structural test like this one.
+##
+## Returns NAN, and the caller fails LOUDLY, if the routine is gone or returns nothing: a silent
+## fallback to a hardcoded number would lie the same way the old transcribed constant did.
+func _measure_spawn_ground_y(hero_y: float) -> float:
+	var runner: Node3D = load(RUNNER_PATH).new() as Node3D
+	if runner == null:
+		_failures.append("could not instantiate %s to measure the spawn Y" % RUNNER_PATH)
 		return NAN
-	var lines := src.split("\n")
-	for i: int in lines.size() - 1:
-		if not lines[i].contains("unit.global_position = Vector3(UNIT_ROW_X[slot],"):
-			continue
-		var next_line := lines[i + 1].strip_edges()
-		var comma := next_line.find(",")
-		if comma < 0:
-			break
-		var token := next_line.substr(0, comma).strip_edges()
-		if token.is_valid_float():
-			return token.to_float()
-		break
-	_failures.append(("could not parse the spawn-Y literal out of %s's "
-			+ "_spawn_missing_unit_actors - the source no longer matches the expected shape, "
-			+ "and a silent fallback would lie the same way the old hardcoded constant did")
-			% RUNNER_PATH)
-	return NAN
+	var occupied: Array[Vector3] = []
+	# P1 (slot 0) summoning against an opponent on the far side -- main.tscn's authored pair, with
+	# the hero y swept by the caller.
+	var spots: Array = runner._compute_spawn_positions(
+			occupied, Vector3(-3.0, hero_y, 0.0), Vector3(3.0, hero_y, 0.0), 0, 1)
+	runner.free()
+	if spots.size() != 1:
+		_failures.append(("MatchRunner._compute_spawn_positions returned %d positions for a batch "
+				+ "of 1 - the spawn-Y measurement has nothing to read") % spots.size())
+		return NAN
+	return (spots[0] as Vector3).y
 
 ## The world-space Y the runner spawns every unit actor onto -- CROSS-CHECKED, NOT TRUSTED:
 ## minions have no spawn scene node the way main.tscn gives the heroes one (4-3c/R13), so the
-## ground assertion below checks the parsed value against main.tscn's actual ground surface
+## ground assertion below checks the measured value against main.tscn's actual ground surface
 ## rather than assuming the two agree. If the runner ever spawns units at a different height,
 ## that check is what notices.
 var SPAWN_GROUND_Y: float = NAN
+## The same measurement taken with the hero lifted to an absurd height. 4-3e AC 8's whole content
+## is that these two are the SAME NUMBER: "behind the hero" is a PLANAR relationship and the hero's
+## y participates in nothing. A dev pass that implemented AC 1 by offsetting the hero's whole
+## `global_position` backwards and assigning it would spawn every minion 1.0 m in the air -- and
+## the old source parse, which never called anything, was structurally blind to that.
+var SPAWN_GROUND_Y_LIFTED: float = NAN
 
 var _unit: Node3D
 var _failures: Array[String] = []
@@ -138,8 +148,9 @@ func _check(ok: bool, message: String) -> void:
 
 
 func _initialize() -> void:
-	SPAWN_GROUND_Y = _parse_spawn_ground_y()
-	if is_nan(SPAWN_GROUND_Y):
+	SPAWN_GROUND_Y = _measure_spawn_ground_y(HERO_AUTHORED_Y)
+	SPAWN_GROUND_Y_LIFTED = _measure_spawn_ground_y(HERO_ABSURD_Y)
+	if is_nan(SPAWN_GROUND_Y) or is_nan(SPAWN_GROUND_Y_LIFTED):
 		for f in _failures:
 			print("  FAILED: " + f)
 		print("RESULT: FAIL")
@@ -171,6 +182,16 @@ func _initialize() -> void:
 	_check(absf(feet - ground_top) <= MODEL_FEET_AGREEMENT,
 		"a spawned unit's model feet land at world y %.4f, ground top is %.4f - delta %.4f"
 			% [feet, ground_top, feet - ground_top])
+
+	# --- (2b) 4-3e AC 8: THE SPAWN Y IS GROUND-DERIVED, NEVER THE HERO'S. ---
+	# Lifting the summoning hero 6.5 m must not lift the summoned unit one millimetre. This is the
+	# assertion the deleted source parse could not make: it never called placement at all, so an
+	# implementation that offset the hero's whole global_position backwards -- floating every
+	# minion by the hero root's own 1.0 m centre offset -- would have left its magic string intact.
+	_check(absf(SPAWN_GROUND_Y_LIFTED - SPAWN_GROUND_Y) <= EXACT_EPS,
+		("the spawn Y follows the HERO's y: hero at y %.2f spawns units at %.4f, hero at y %.2f "
+			+ "spawns them at %.4f - 'behind the hero' is planar and must read no hero y at all")
+			% [HERO_AUTHORED_Y, SPAWN_GROUND_Y, HERO_ABSURD_Y, SPAWN_GROUND_Y_LIFTED])
 
 	# --- (3) The body box itself is where the scene says it is. ---
 	# The pin in (1) is a RELATIONSHIP, so it would also be satisfiable by moving the BOX down

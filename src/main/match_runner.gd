@@ -139,13 +139,52 @@ const UNIT_SCENE := preload("res://src/actors/minions/unit_actor.tscn")
 ## round_started relay (AC 8).
 var _unit_actors: Array[Array] = [[], []]
 
-## Where a slot's grey-box units stand. Actor-owned position (`4-1/R12`), chosen by the runner:
-## a row BEHIND each hero's spawn (P1 at x -3, P2 at x +3 in main.tscn) so a summoned unit is
-## visible in that player's own viewport without standing in the fighting space between them.
-## Legibility placement only -- no gameplay reads it, and 4-3 replaces it with real placement.
-const UNIT_ROW_X: Array[float] = [-5.5, 5.5]
-const UNIT_ROW_SPACING := 1.4
-const UNIT_ROW_Z_START := -2.1
+## Story 4-3e: WHERE A SUMMONED UNIT STANDS. Actor-owned position (`4-1/R12`), chosen by the
+## runner and computed FRESH AT CAST TIME from the summoning hero's LIVE position: a spot BEHIND
+## that hero, on the side away from the opponent (AC 1). This REPLACES the frozen per-slot row
+## (`UNIT_ROW_X`/`UNIT_ROW_SPACING`/`UNIT_ROW_Z_START`), which was never hero-relative -- it only
+## looked that way while both heroes stood on their authored spawns, and drifted apart from the
+## hero the moment either one moved (heroes move freely since 1-2).
+##
+## THE COMMENT THAT STOOD HERE MADE TWO CLAIMS, BOTH FALSE, and 4-3e's AC 6(a) exists to correct
+## them rather than let a stale citation keep shipping:
+##   * "no gameplay reads it" -- false since 4-3. Contact facts and the reach probe are computed
+##     from ACTOR POSITIONS, so the distance from the spawn spot to the hero (and to the opponent)
+##     decides how long a minion runs before its first strike. Placement is a gameplay input.
+##   * "4-3 replaces it with real placement" -- false. 4-3 never touched spawn placement; these
+##     constants were the ONLY placement mechanism from 4-1 until this story.
+##
+## GEOMETRY, NOT BALANCE, so these stay `const` here rather than moving into balance_config.tres.
+##
+## `SPAWN_BEHIND_DISTANCE` MUST EXCEED `SPAWN_CLEARANCE_RADIUS` (4-3e Task 2): otherwise the base
+## spot sits inside the summoning hero's own clearance and ring 0 is rejected on every single cast.
+const SPAWN_BEHIND_DISTANCE := 2.5
+## How close a candidate may come to an occupant (either hero, any live unit actor of either slot,
+## or an earlier member of the same batch) before it counts as OCCUPIED. Derived, not tuned: a
+## unit body box is 0.6 wide (inradius 0.3) and a hero's is 1.0 (inradius 0.5), so 0.8 is the
+## touching distance of the worst pair and 0.9 carries a small margin over it.
+const SPAWN_CLEARANCE_RADIUS := 0.9
+## The FIXED POSITIVE STEP between rings of the outward search. Constant, never adaptive and never
+## shrinking -- that is what makes the radius grow WITHOUT BOUND, which together with the finiteness
+## of the occupants is the whole termination argument (4-3e AC 2). One unit body width.
+const SPAWN_RING_STEP := 0.6
+## Angular spacing of the candidates within one ring, and the ring's half-width. HALF-WIDTH PI/2
+## IS THE REAR HALF-SPACE (AC 1): every candidate sits at |angle| <= 90 degrees off the away-from-
+## opponent axis, so a candidate's displacement from the hero always has a NON-POSITIVE component
+## along hero->opponent. A ring is therefore a rear ARC, never a full circle, and a crowded rear
+## pushes the unit FURTHER BEHIND rather than around into the fighting space.
+const SPAWN_ARC_STEP_RADIANS := PI / 6.0
+const SPAWN_ARC_HALF_WIDTH_RADIANS := PI / 2.0
+## Below this, hero->opponent is too short to give a reliable direction (the AC 3 case: a hero
+## summoning while standing on the opponent). AC 1's ruling then governs: the arc's axis is the
+## slot's FIXED away-from-centre axis, P1 toward -x and P2 toward +x.
+const SPAWN_DEGENERATE_DIRECTION_EPSILON := 0.05
+## The ground-level constant the runner has spawned units onto since 4-1 (the literal `0.0` that
+## used to sit inline in `_spawn_missing_unit_actors`). NOT a raycast and NOT any physics query --
+## a ground query inside the placement helper would break its purity (AC 9) and no `src/main/`
+## guard would catch it. "Behind the hero" is PLANAR: the hero's `.y` is read for NOTHING, because
+## the two roots disagree about what y means (hero root = body CENTRE at y 1, unit root = FEET).
+const SPAWN_GROUND_Y := 0.0
 
 
 func _ready() -> void:
@@ -647,14 +686,158 @@ func _relay_round_started() -> void:
 
 ## Story 4-1 (AC 7): bring slot `slot`'s spawned actors up to `count`. See the call site for why
 ## this only ever grows.
+##
+## STORY 4-3e CHANGES WHERE, NOT WHETHER. The growth mechanism is untouched -- purely additive,
+## never reusing a freed index, so `4-3a/R13`'s dead-unit HOLE convention is undisturbed. What
+## changes is that the three inline row constants are gone and the batch's positions come from
+## `_compute_spawn_positions` below.
+##
+## THIS FUNCTION BUILDS THE OCCUPANCY LIST; the helper never reads the scene tree (AC 9). Both
+## heroes go in it (AC 3 -- summoning while standing ON the opponent is blessed, and that is exactly
+## when "behind me" lands inside a body; heroes are `CharacterBody3D` on the same default layer 1
+## as units, so an uncleared candidate is a real interpenetration), and so does every LIVE unit
+## actor of BOTH slots. `null` holes are filtered out HERE, with the same `is_instance_valid()`
+## guard every other loop in this file uses -- which is why the helper never has to remember to
+## ignore one, and why the ORDER of the list is the only thing left that could vary between runs.
+##
+## Heroes are dereferenced unguarded, the same way step 5's `_p1_hero.drive(...)` does at the bottom
+## of the same tick: they are `@onready` scene children of main.tscn, not optional. A guarded
+## early-return here would be worse than the crash it dodges -- it would silently skip a spawn the
+## board has already recorded, desynchronising `_unit_actors` from the board index-for-index.
 func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 	var actors: Array = _unit_actors[slot]
-	while actors.size() < count:
+	var batch_size := count - actors.size()
+	if batch_size <= 0:
+		return
+	var occupied: Array[Vector3] = [_p1_hero.global_position, _p2_hero.global_position]
+	for other_slot: int in 2:
+		for unit: Node in _unit_actors[other_slot]:
+			if is_instance_valid(unit):
+				occupied.append((unit as Node3D).global_position)
+	var hero_position: Vector3 = _p1_hero.global_position if slot == 0 else _p2_hero.global_position
+	var opponent_position: Vector3 = _p2_hero.global_position if slot == 0 else _p1_hero.global_position
+	for spot: Vector3 in _compute_spawn_positions(
+			occupied, hero_position, opponent_position, slot, batch_size):
 		var unit := UNIT_SCENE.instantiate() as UnitActor
 		add_child(unit)
-		unit.global_position = Vector3(UNIT_ROW_X[slot],
-				0.0, UNIT_ROW_Z_START + UNIT_ROW_SPACING * actors.size())
+		unit.global_position = spot
 		actors.append(unit)
+
+
+## Story 4-3e (AC 1, 2, 4, 8, 9): the ORDERED LIST OF `batch_size` WORLD POSITIONS one growth batch
+## of slot `slot`'s units lands on. ONE CALL PER BATCH, not one per member.
+##
+## A PURE FUNCTION OF ITS ARGUMENTS, and that is a REQUIREMENT rather than a happy accident (AC 9).
+## It reads no scene tree, holds no node reference, spawns nothing and mutates no runner field. No
+## RNG, no `Time`/`OS`/`Engine`, no frame counter, no scene-tree iteration order, and no dependence
+## on the ORDER of `occupied` -- the clearance test below is a CONJUNCTION over the whole list, so
+## order-independence holds by construction rather than by care.
+##
+##   WHAT NO GUARD HERE COVERS, said plainly: D3(b)/A2's machine scan for `randf`/`randi`/`Time`/
+##   `OS`/`Engine` reads `src/state/` ONLY. This file is `src/main/` and is NOT scanned by it. A
+##   `randf()` added below would trip NOTHING; `test_unit_spawn_purity.gd`'s repeat-call assertion
+##   would catch it only probabilistically and would very likely miss a frame-counter read
+##   entirely. The rest of AC 9's purity list is held by CODE REVIEW, not by a test.
+##
+## THE SEARCH. The base spot is `SPAWN_BEHIND_DISTANCE` behind the hero along the away-from-opponent
+## axis. From there the walk visits RINGS: ring 0 is the base spot alone; ring k (k >= 1) holds
+## `2 * arc_steps + 1` candidates at radius `k * SPAWN_RING_STEP`, swept outward from the axis in a
+## fixed deterministic order (0, +1 step, -1 step, +2 steps, -2 steps, ...) out to +/- 90 degrees.
+## The FIRST candidate clear of every occupant AND of every batch member already placed in this call
+## wins, and the walk stops there.
+##
+## IT TERMINATES, and the argument is the reason there is NO candidate cap and NO fallback branch
+## (writing either would be dead code): the radius strictly increases BETWEEN rings by a fixed
+## positive step, without bound, while each ring holds finitely many candidates; the occupants are
+## finitely many and each blocks only a bounded neighbourhood; so some ring at a finite radius is
+## entirely free and the walk halts at or before it, having visited finitely many candidates. The
+## rear-arc restriction does not affect this -- a rear arc far enough out is still eventually free.
+## There is NO arena test and NO [-20, 20] check: nothing about the floor bounds placement.
+##
+## EVERY ACCEPTED CANDIDATE IS IN THE REAR HALF-SPACE (AC 1), which is what makes "behind" win over
+## proximity: a candidate's displacement from the HERO is `-(SPAWN_BEHIND_DISTANCE + r*cos(angle))`
+## along hero->opponent, and `cos(angle) >= 0` for every `|angle| <= 90` degrees, so that component
+## is at most `-SPAWN_BEHIND_DISTANCE` and never positive. A crowded rear pushes the unit FURTHER
+## BEHIND; a unit never appears between the summoning hero and its opponent.
+##
+## MEMBERS ARE PLACED ONE AT A TIME and each clears the ones already placed, so members 2..N cannot
+## land inside a hero or a live unit. They still read as ONE CLUSTER rather than a scatter, because
+## every member's search starts from the SAME base spot and takes the first free candidate -- the
+## later members simply sit a ring or two further out. AT `d3854ff` `batch_size` IS ALWAYS 1 through
+## play (one `units.add()` per resolved cast, one `card_commit` per player per tick, and two
+## same-tick casts are different slots spawned through separate calls); the loop is written for N
+## because multi-summon cards are planned, and correctness for N > 1 is carried by review.
+func _compute_spawn_positions(occupied: Array[Vector3], hero_position: Vector3,
+		opponent_position: Vector3, slot: int, batch_size: int) -> Array[Vector3]:
+	var placed: Array[Vector3] = []
+	if batch_size <= 0:
+		return placed
+	var away := _rear_direction(hero_position, opponent_position, slot)
+	var lateral := Vector2(-away.y, away.x)
+	var base := Vector2(hero_position.x, hero_position.z) + away * SPAWN_BEHIND_DISTANCE
+	# roundi, not int/truncation: the ratio is integral for today's constants, but truncating a
+	# float division would silently narrow the rear arc if a future retune landed just under an
+	# integer (e.g. 2.999999999999998 truncating to 2 instead of rounding to 3).
+	var arc_steps := roundi(SPAWN_ARC_HALF_WIDTH_RADIANS / SPAWN_ARC_STEP_RADIANS)
+	for _member: int in batch_size:
+		var ring := 0
+		while true:
+			var radius := SPAWN_RING_STEP * float(ring)
+			var candidates := 1 if ring == 0 else 2 * arc_steps + 1
+			var accepted := Vector2.ZERO
+			var found := false
+			for index: int in candidates:
+				var candidate := _ring_candidate(base, away, lateral, radius, index)
+				if _spot_is_clear(candidate, occupied, placed):
+					accepted = candidate
+					found = true
+					break
+			if found:
+				# AC 8: the y is the GROUND CONSTANT, never the hero's. Only x/z are computed.
+				placed.append(Vector3(accepted.x, SPAWN_GROUND_Y, accepted.y))
+				break
+			ring += 1
+	return placed
+
+
+## The unit vector pointing AWAY from the opponent, in the planar x/z frame. The hero's `.y` and the
+## opponent's `.y` are read for nothing.
+##
+## THE DEGENERATE CASE HAS A DEFINED ANSWER (AC 1, and it is a requirement rather than latitude):
+## when the two heroes are effectively on top of one another -- the case AC 3 explicitly blesses --
+## hero->opponent carries no reliable direction, so the axis becomes the SLOT'S FIXED
+## AWAY-FROM-CENTRE axis: P1 places toward -x, P2 toward +x. This governs the whole rear ARC, not
+## merely the base spot.
+func _rear_direction(hero_position: Vector3, opponent_position: Vector3, slot: int) -> Vector2:
+	var toward := Vector2(opponent_position.x - hero_position.x,
+			opponent_position.z - hero_position.z)
+	if toward.length() < SPAWN_DEGENERATE_DIRECTION_EPSILON:
+		return Vector2(-1.0, 0.0) if slot == 0 else Vector2(1.0, 0.0)
+	return -toward.normalized()
+
+
+## Candidate `index` of the ring at `radius` around `base`, in the fixed order 0, +1, -1, +2, -2,
+## ... steps off the away axis. Every index maps to `|angle| <= SPAWN_ARC_HALF_WIDTH_RADIANS`, which
+## is what keeps the ring a REAR ARC (AC 1).
+func _ring_candidate(base: Vector2, away: Vector2, lateral: Vector2,
+		radius: float, index: int) -> Vector2:
+	var angle := SPAWN_ARC_STEP_RADIANS * float((index + 1) / 2)
+	if index % 2 == 0:
+		angle = -angle
+	return base + (away * cos(angle) + lateral * sin(angle)) * radius
+
+
+## Is `spot` far enough from EVERY occupant and EVERY batch member already placed to not spawn
+## overlapping one? A conjunction over both whole lists -- which is precisely why the answer cannot
+## depend on the order of either (AC 9).
+func _spot_is_clear(spot: Vector2, occupied: Array[Vector3], placed: Array[Vector3]) -> bool:
+	for other: Vector3 in occupied:
+		if Vector2(other.x, other.z).distance_to(spot) < SPAWN_CLEARANCE_RADIUS:
+			return false
+	for other: Vector3 in placed:
+		if Vector2(other.x, other.z).distance_to(spot) < SPAWN_CLEARANCE_RADIUS:
+			return false
+	return true
 
 
 ## Story 4-3a (AC 11, `4-3a/R13`): FREE the actor of every unit whose record has died, and leave a
