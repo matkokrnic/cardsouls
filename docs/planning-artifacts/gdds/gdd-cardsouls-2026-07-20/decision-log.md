@@ -7312,3 +7312,56 @@ in `sprint-status.yaml:112` itself, missed by that same sweep, is also corrected
 Docs only, no code touched, no `src/`/`test/`/`project.godot` edit, editor never opened. `4-3d` stays
 `authored`, board stays `backlog` -- promotion is the operator's act. No golden/suite/
 `project.godot` measurement this pass. Operator reviews the log.
+
+## Session 2026-08-29 -- 4-4 readiness gate fix pass, rulings `4-4/R1`-`4-4/R12`
+
+`4-4/R1` (ruled) 8 M FIRING RANGE. Working, playtest-tunable value; derived against the 40x40 m
+arena (`main.tscn`) so the totem's threat radius stays well inside the arena rather than covering it.
+`4-4/R2` (ruled) 60 M PROJECTILE TRAVEL BUDGET. Derived against the same arena: the 40x40 m Ground's
+diagonal is ~56.57 m; 60 m rounds up so a corner-to-corner shot can complete before the budget
+expires. Distinct from `4-4/R1` -- travel budget vs. firing permission govern different things.
+`4-4/R3` (ruled) HOMING AND ACCELERATION ARE AUTHORED DATA. A live projectile's heading updates per
+an authored homing profile and it accelerates per an authored acceleration profile; no code branch
+selects between behaviors by kind.
+`4-4/R4` (ruled) I-FRAME DROP ENDS HOMING. The existing i-frame drop rung (`1-9/R1`) also ends that
+projectile's homing on the same tick: the projectile holds its last heading and flies straight for
+the remainder of its flight budget.
+`4-4/R5` (ruled) SPATIAL DODGING DOES NOT END HOMING. A target leaving the flight path with no
+i-frame window open does not end homing. Only `4-4/R4` ends homing.
+`4-4/R6` (ruled) BLOCK/DEFLECT CONSUME THE PROJECTILE. A contact fact resolving as a block or a
+deflect consumes the projectile on that contact.
+`4-4/R7` (ruled) EVERY KIND'S ATTACK CAPABILITY IS A LIST. Per the 4-3b close-out wording, a kind has
+a LIST of attack records (length one acceptable this story), never a single flat attack.
+`4-4/R8` (ruled) PER-KIND AUTHORED TARGETING PRIORITY, BY NAME. Each kind authors its targeting
+priority as a reference to an existing `MinionPriority.priority_name`. Spends `4-2/R17`(c) and
+`4-3/R6`. `_update_unit_targets`'s hardcoded `PRIORITY_STANDARD` lookup becomes a per-kind read; the
+`REASON_NO_PRIORITY_DATA` missing-name contract and `hero_seeker`'s test-only status carry forward.
+`4-4/R9` (ruled) SHIPPED COMBAT TOTEM AUTHORS A HERO-PREFERRING PRIORITY. A NEW shipped `.tres`
+profile, a third alongside `standard` and the test-only `hero_seeker`. Minions keep `&"standard"`
+unchanged. Rationale: projectile avoidance is designed for a target that can roll; a unit cannot.
+`4-4/R10` (ruled) HOLD-FIRE OUT OF RANGE IS A POST-SELECTION GATE. The Combat totem acquires by its
+authored priority (`4-4/R8`/`4-4/R9`) and holds fire while the acquired target is beyond `4-4/R1`'s
+range; no re-selection by distance, no NEAREST `OrderingMode` -- that stays deferred work.
+`4-4/R11` (ruled) STAMINA ACCELERATOR IS OWNER-ONLY. Only the summoning player's hero's stamina
+regen is raised, by an authored factor, while the totem is alive; the opponent's regen is untouched.
+Mechanism (per-player derived rate vs. multiplier at the regen seat vs. something else) stays a
+dev-pass call within the `3-1/R2` per-pool reload contract.
+`4-4/R12` (ruled) SPEED 0 FOR ALL THREE KINDS. Combat, Mana Accelerator, and Stamina Accelerator
+totems are all authored with movement speed 0 and never leave spawn while alive -- not only the two
+accelerators. Cites `gdd.md`'s "small, unimposing static structure."
+
+Also fixed this pass, not separate rulings: AC 3's collision pattern corrected to name the `Hurtbox`
+member the damage path actually needs, and that no totem kind authors a `Hitbox`; AC 9's per-kind
+conversion inventory widened from four `BalanceConfig` globals to twelve, naming the eight further
+attack-timing/multiplier globals; AC 11 (test list) gains `test_balance_config.gd`; "shape" is
+dropped from the attack record with no ruling to replace it; AC 18/19 (Mana/Stamina Accelerator, now
+AC 20/21) corrected for the third `_generate_mana` call site and the owner-only wording; two Open
+Questions closed by citation (`E4-P/R12` for projectile addressing's principle; `epics.md`'s
+`FeatureFlags: minions, totems` commitment for the totems-flag gate); Dev Notes citations converted
+from line numbers to symbol names per the standing citation discipline.
+
+### Close-out
+
+Docs only, no code touched, no `src/`/`test/`/`project.godot` edit. `4-4-totems` stays `authored`,
+board stays `backlog` -- promotion is the operator's act. No golden/suite/`project.godot`
+measurement this pass. Operator reviews the log.
