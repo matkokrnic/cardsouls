@@ -131,6 +131,12 @@ Detailed breakdown of the epic sequence summarized in `gdd.md`. High-level-story
 **Committed obligations.** Per the GDD epic table (`gdd.md:412`): "Autonomous minion AI (data-defined
 priorities), pooling, throttled targeting, 3 totem subtypes." Flags: `minions`, `totems`. The GDD
 defines no further E4 commitments beyond what is already in Goal/Key stories/Exit criteria above.
+- Camera/lock-on (`DP/R1`, `E4-P/R11`) is ADOPTED into E4 via `gds-correct-course`, 2026-08-30 --
+  the board-full-of-minions forcing point `E4-P/R11` named has been met (4-4-totems done). Story
+  `4-6-camera-lock-on` enters the backlog, board-ordered BEFORE `4-5-pooling-60fps-exit` per
+  operator instruction; the numeral is historical/creation-order, not board order (existing
+  precedent: `4-3a`..`4-3e` interleaving). Hard Tier A by the golden clause (`HeroState.facing`
+  ownership migrates from input- to target-derived).
 
 ---
 

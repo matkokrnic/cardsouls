@@ -7432,3 +7432,63 @@ exit 0 after every commit. Golden `d94337cd` -> `a96b123e`, one cause, re-baseli
 explicit go rather than on the dev pass's judgement. `project.godot` untouched. Review findings
 M1-M9 and L1-L5 deliberately NOT actioned -- they are recorded in `_44-review.md` and are the
 operator's to schedule. The Tier A live smoke remains unspent. Nothing pushed.
+
+---
+
+## Session 2026-08-30 -- gds-correct-course: camera/lock-on adopted into E4, DP/R1 resolved
+
+Docs-only pass. `E4-P/R11`'s own forcing-point note ("a board full of minions may hand this a
+forcing point during E4; if so, that is a `gds-correct-course`, not silent adoption") is now met --
+`4-4-totems` is done, so the board carries minions and totems, i.e. more than one lock-on target
+exists. Operator ruled (browser, 2026-08-30) to adopt camera/lock-on into epic 4 now, via this
+`gds-correct-course` run, ordered before `4-5-pooling-60fps-exit`. Full Sprint Change Proposal:
+`docs/planning-artifacts/sprint-change-proposal-2026-08-30.md`.
+
+**CC/R1 -- `DP/R1` open decision (f) content is RESOLVED.** `DP/R1` (Session 2026-07-31, above)
+opened two sub-questions and left the whole decision OPEN. Both are now answered, per operator
+ruling:
+
+(i) Facing follows the locked target -- FULL variant, not camera-only. The hero always faces the
+locked target regardless of movement direction. `HeroState.facing` ownership moves from
+input-derived to target-derived. Golden WILL move; snapshot is touched -- hard Tier A, accepted
+with eyes open. Consequence, ruled deliberately: against the locked target, the 180-degree block
+arc never misses, so block becomes pure timing (Sekiro-style); orientation-as-defense migrates into
+target selection, since minions/totems can attack from outside the locked frame.
+
+(ii) Off-frame targets are handled by the retarget model below (right-stick flick), not by keeping
+the enemy hero pinned on-screen. The Legibility Principle's <0.5s telegraph-read requirement was
+written assuming an on-screen target; an off-screen opposing-hero attack is read by sound only for
+now. This is recorded as a NAMED PLAYTEST QUESTION -- does sound alone give adequate warning? --
+not settled here and not story scope for `4-6-camera-lock-on`.
+
+**CC/R2 -- Always lock-on confirmed; `InputIntent.aim` free-rotation route SUPERSEDED (not
+supplemented), per `DP/R1`'s own original wording.** Never a free camera. Default and fallback
+target: the opposing hero.
+
+**CC/R3 -- Controls (DS/ER/Sekiro model).** Right-stick CLICK instantly re-locks onto the opposing
+hero. Right-stick FLICK switches lock to the best on-screen candidate in that screen-space
+direction (minions, totems, hero). No unlock state. Off-screen opposing hero is resolved by the
+click.
+
+**CC/R4 -- Live smokes run primarily on controller from now on.** The game targets controller feel;
+the `2-2` pad-plugged-in-before-launch constraint stands.
+
+**CC/R5 -- Delegated implementation direction, named not decided.** Retarget resolution follows the
+contact-fact precedent (`1-8`/`4-1` R7 lineage): positions/screen space live outside `src/state/`;
+the presentation side resolves a flick into a chosen target and pushes the RESULT (`[slot, index]`
+or hero) as an input fact into the intent stream; replay records the outcome, not the stick.
+Keyboard mapping is proposed in the story; controller is primary. Whether target-derived facing can
+be computed without a live camera/scene query inside `src/state/` (D3(b)/A2) is confirmed, not
+assumed, at the story's own readiness gate.
+
+**CC/R6 -- Board mechanics, unchanged.** Story `4-6-camera-lock-on` enters the backlog only.
+Lifecycle stays `backlog -> ready-for-dev -> done`; no promotion by this or any workflow
+(`CFG/R2`/`R4`). Board-ordered BEFORE `4-5-pooling-60fps-exit` per operator instruction; the numeral
+is historical/creation-order, not board order (precedent: `4-3a`..`4-3e` interleaving). Story spec
+authoring is a separate `gds-create-story` run, not done by this pass.
+
+### Close-out
+
+Docs-only pass, one commit: this entry plus `epics.md` (E4 committed-obligations bullet),
+`sprint-status.yaml` (one new backlog entry), and the Sprint Change Proposal artifact. No code
+changed, no golden or suite touched, nothing pushed. Operator reviews the log and pushes.
