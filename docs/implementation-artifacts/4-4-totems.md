@@ -4,7 +4,7 @@ baseline_commit: d5a83721e4a0a9762c63714df778beb0d6ca34ca
 
 # Story 4.4: Totems
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -267,6 +267,49 @@ card name.
 - [Source: docs/implementation-artifacts/sprint-status.yaml — `4-4-totems`, 4-3e close-out] — Tier
   A annotation; arena-edge and standing-summoner non-goals.
 
+### Dev-pass decisions on the Open Questions (recorded as taken)
+
+- **OQ-1, per-kind storage shape — DECIDED: two `Resource` schemas reached from `BalanceConfig`
+  through one exported `Array[UnitKindProfile] unit_kinds`.** `UnitAttackProfile` carries AC 9's
+  record (windup / active / recovery / range / damage / cadence, plus an optional
+  `ProjectileProfile`); `UnitKindProfile` carries the kind (name, move speed, stop distance, max hp,
+  priority name, the three phase multipliers, the attack LIST). *Why not a scanned directory like
+  `data/minions/` or `data/economy/`:* those hold STRUCTURE — `EconomyEvaluator`'s header says in as
+  many words that a rule carries no gameplay number, which is what lets them sit outside
+  `apply_balance()`. Per-kind data is nothing but tuning, so it belongs to the object that travels
+  through the X3 hot-reload seam; a scanned directory would put eleven live tunables beyond
+  `apply_balance()` and beyond `BC/R3`'s isolation. *Why not flat suffixed globals:* four fields x
+  four kinds plus the seven B5 additions is 44 flat fields, each audited individually with nothing
+  enforcing that a kind carries a complete set — a resource per kind makes AC 6's "no field is left
+  undefined for a kind" true by construction. *AC 11 holds* because `BalanceTicks.from_config()`
+  walks `unit_kinds` and builds an index-aligned `UnitKindTicks`/`UnitAttackTicks` structure, so no
+  second seconds-to-ticks boundary is authored.
+- **OQ-2, Stamina Accelerator mechanism — DECIDED: a FACTOR applied at the existing
+  `MatchState._regen_stamina` seat, not a per-player derived rate and not a pool change.** `3-1/R2`'s
+  per-pool reload contract governs POOL BOUNDS at `apply_balance()`; a regen multiplier is not a
+  bound. Deriving a per-player rate at reload time would make the accelerator's effect depend on
+  WHEN a reload happened rather than on whether the totem is alive right now — a totem summoned
+  mid-round would do nothing until the next reload, and a dead one would keep paying out. At the
+  regen seat the factor tracks liveness exactly and returns to the non-accelerated value on the tick
+  the totem dies, with nothing to tear down. Owner-only is structural rather than checked: the seat
+  is already per-player and consults that player's OWN board. `StaminaPool` is untouched —
+  `advance_regen(amount, suppressed)` already takes the amount per call, so the pool keeps the
+  mechanism and this stays the D6 policy seat.
+- **OQ-3, projectile representation — DECIDED: a per-player `ProjectileBoard` pure container
+  (`PlayerState.projectiles`), built to the `UnitBoard` shape, holding no position and no heading.**
+  It has to be state-owned because AC 16 makes a STATE decision (the i-frame drop) change an ACTOR
+  behaviour (homing), and that flag must be snapshotted or a replay could diverge on it. Position
+  stays actor-owned (`4-3/R2`, `4-1/R12` unchanged). The 60 m budget is tracked as an INTEGRATED PATH
+  LENGTH the state layer computes from the same authored curve the actor moves by — a scalar of the
+  same class as a timer, so no position travels inward and `push_contact` stays the only intake.
+  `E4-P/R12`'s "its own attacker identity" is a THIRD PARTITION of the existing `[slot, index]` int
+  space (`index <= -2`, `PROJECTILE_INDEX_BASE - i`) rather than a third element on the pair: the
+  recorded contact ROW shape, every hero and unit call site, and every replay made before this story
+  are all untouched. Its "own dedupe" is its LIVENESS — resolving consumes the shot, so it can never
+  resolve twice and no hit list ships. A shot outlives its source by storing the FIRING KIND'S
+  INDEX (config, not an instance) and reading every authored number through it live, so nothing goes
+  stale on an X3 reload.
+
 ## Open Questions
 
 - **Stamina Accelerator's economy wiring mechanism.** `4-4/R11` rules WHO (owner-only) and WHAT (an
@@ -283,10 +326,165 @@ card name.
 
 ### Agent Model Used
 
-Claude Sonnet 5 (claude-sonnet-5)
+Claude Opus 5 (claude-opus-5[1m]). The story file was authored naming Sonnet 5; the dev pass was run
+by Opus 5, corrected here rather than left stale. (The commit trailer stays the repo-wide constant
+`Claude Opus 4.8` per the standing operator ruling — a different obligation from this field.)
 
 ### Debug Log References
 
+Full build notes, every measurement and the three open findings: `C:\dev\_44-dev.md`.
+Per-commit diffs: `C:\dev\_44-commitA.diff`, `_44-commitB.diff`, `_44-commitC.diff`.
+Close-out suite log: `C:\dev\_44-close-suite.log`.
+
 ### Completion Notes List
 
+**Four commits, code only; this docs commit is separate.**
+
+1. `feat(state): 4-4 per-kind unit data, totem/minion split, kind index on the record` — AC 1, 2, 5,
+   6, 7, 8, 9, 10, 11, AC 12 cause 1.
+2. `feat(state): 4-4 the projectile - board, flight, homing and the totem actor` — AC 3, 4, 13, 14,
+   15, 16, 17, 18, 19, AC 12 cause 2.
+3. `feat(state): 4-4 the mana and stamina accelerator totems` — AC 20, 21, AC 12 cause 3.
+4. `fix(test): bind % to the whole concatenated assertion message, not its tail` — a defect this
+   pass introduced, found by the close-out suite run.
+
+**Measurements.** State suite `499 / 3895 / 0` -> **`542 / 4211 / 0`**. Integration **42 -> 43
+files**, all PASS. `bash test/run_all.sh` exits 0, `ALL TESTS PASSED`. Per-player snapshot key set
+18 -> 27. `UnitBoard` bound guards 15 -> 17. Authored priorities 2 -> 3, authored economy rules
+2 -> 3. `project.godot` byte-identical, no new collision layer (AC 3's "no second pattern" is why).
+
+**AC 12, the three causes measured separately and in order.** The story requires the per-kind
+conversion named as its own cause, separate from the projectile and from the accelerators, so the
+golden was re-baselined once per build commit rather than once at the end with three causes
+entangled:
+
+| pass | cause | golden |
+| --- | --- | --- |
+| — | inherited from 4-3b | `4a089063` |
+| 1a | SNAPSHOT SHAPE alone — `unit_kind` + `unit_attack_cooldown` at their zero payloads. Isolated by staging `GOLDEN_UNIT_MAX_HP` at 0.0, which reproduces the fixture's pre-4-4 behaviour exactly (`unit_max_hp` was never authored in `_golden_config`, so the t22 summon's record has entered dead-on-arrival since 4-3a) | `93ecf7e9` |
+| 1b | THE CONVERSION'S CONTENT — the staged value restored to 7.0, record enters ALIVE, `unit_hp` `[0.0]` -> `[7.0]` | `836afc01` |
+| 2 | THE PROJECTILE, snapshot shape — seven keys at empty arrays, isolated BY CONSTRUCTION (the fixture's kind is a minion that cannot launch) | `d94337cd` |
+| 3 | THE ACCELERATOR FAUCETS — **measured a NON-MOVER**, all three candidate causes named | `d94337cd` |
+
+Measured non-movers, named rather than assumed: AC 7's per-kind priority read (structural — the
+fixture's kind authors `standard`, the same name the removed `PRIORITY_STANDARD` constant carried);
+AC 10's cadence gate; the attacker-derived damage unification (`attack_damage_percent_of_max_hp`
+3.0% x 100.0 == the minion record's authored 3.0, so it is bit-for-bit identical at the shipped
+authoring); and `rng_state` at every step.
+
+**One field split into two, and it is the notable ripple.** `unit_damage_per_hit` always had two
+readers that were never one fact — the hero-versus-unit case `4-3a/R8` authored it for, and the
+unit-versus-unit case `4-3b` AC 17 reused it for. AC 6 moves damage-per-hit per kind and AC 9 puts it
+on the attack RECORD, which is the ATTACKER's property, so the two separate: a unit attacker deals
+its own kind's record damage, a hero attacker deals the new flat `hero_damage_to_unit`. Damage
+against a HERO became attacker-derived on the same reasoning, which is what makes a totem's shot
+deal ITS authored damage rather than the hero's own swing percentage.
+
+**Two live-behaviour consequences surfaced by integration tests, both real and both fixed.**
+`test_unit_combat_live.gd` compared "enemy at full health" against the minion's maximum, but with
+the split shipped the cast can now summon a TOTEM (12.0, not 9.0) — fixed by reading the summoned
+unit's OWN kind off its record. More broadly, ten integration tests choose a summon card from the
+dealt hand, and three cards now summon totems: a test measuring MINION behaviour must not have its
+subject decided by the shuffle, so the shared chooser now excludes totem ids by reading the
+resolver's own table. `test_unit_corpse_linger_live.gd` was already failing on exactly that
+(`unit.animation` is null on a totem, which authors no rig).
+
+**AC-by-AC.** 1 whole-id table + `SUMMON_KINDS` + per-record kind index; 2 `UnitBoard.add(max_hp,
+kind_index)` — one mechanism, no second hp/damage/death path; 3 `totem_actor.tscn` (same script,
+same layers, Hitbox deleted) + the runner picking the scene from authored data + the melee gather
+skipped for a projectile kind; 4 spawn rule untouched (4-3e already scoped to "minion or totem");
+5 all three totem kinds authored speed 0, machine-checked in `test_balance_authoring.gd` and
+measured live; 6/9 eleven globals -> per-kind schemas; 7/8 per-kind priority + the new shipped
+`hero_preferring.tres`; 10 `cadence_seconds` on the record + `_attack_cooldown` on the board; 11 all
+three named test files updated, plus a NEW per-kind arm of the reflective guard (the eleven fields
+left `BalanceConfig`'s reflection sight, so deleting them from the list would have been a silent
+loss of audit); 12 above; 13 hold-fire falls out of the in-reach condition — a post-selection gate
+with no timeout path and no distance re-selection anywhere; 14-19 the projectile; 20/21 the
+accelerators.
+
+**Known coverage boundary, reported rather than hidden.** The projectile's BEHAVIOUR is not inside
+determinism coverage. Every previous board story got its behaviour into the golden by construction,
+but the fixture summons at t22 and hashes at t24, and the earliest a shot can launch on that
+timeline is t25 (summon t22 -> target acquired at the t23 throttle boundary -> earliest
+scope-matching probe t23 -> windup t24 -> windup-to-active t25). Getting one in needs the recorded
+sequence extended past t24, which is a fixture redesign that would re-baseline every unrelated key
+at once. Guarded by `test/state/test_projectile_flight.gd` and
+`test/integration/test_projectile_flight_live.gd` instead. Recorded in the determinism header too.
+
+**An intermittent this pass introduced, unresolved.** `test/integration/test_debug_instruments.gd`
+sometimes prints `ERROR: 1 resources still in use at exit`, and `run_all.sh` fails the suite on
+`^ERROR:`. Measured against a worktree at the pre-pass baseline `500adef`: **0/18 runs at baseline,
+3/18 (~17%) on this tree** — so it is attributable to this pass, not pre-existing. Twelve
+`--verbose` runs never reproduced it, so there is a rate but no mechanism; the plausible candidates
+are the two new `preload`s on `match_runner.gd` and the nested sub-resources
+`balance_config.tres` now carries. No test asserts wrongly because of it. **Flagged for the review
+gate.** The close-out `run_all.sh` run was clean (exit 0).
+
+**Not done, and it is the operator's:** the Tier A LIVE SMOKE. `test_projectile_flight_live.gd`
+proves the mechanism by machine (fires only in range, actor appears, travels 17.04 m, steers
+1.55 rad toward a laterally-moving target over 89 samples), but AC 5's "stand where you place them",
+the totem's on-screen legibility and whether a homing shot is actually dodgeable by a human are
+`PROC/R8` matters for the operator's eye.
+
 ### File List
+
+**New — `src/`**
+- `src/state/resources/unit_kind_profile.gd`
+- `src/state/resources/unit_attack_profile.gd`
+- `src/state/resources/projectile_profile.gd`
+- `src/state/timing/unit_kind_ticks.gd`
+- `src/state/timing/unit_attack_ticks.gd`
+- `src/state/projectile_board.gd`
+- `src/actors/projectiles/projectile_actor.gd`
+- `src/actors/projectiles/projectile_actor.tscn`
+- `src/actors/minions/totem_actor.tscn`
+
+**New — `data/`**
+- `data/minions/hero_preferring.tres`
+- `data/economy/mana_accelerator.tres`
+
+**New — `test/`**
+- `test/unit_kind_fixture.gd`
+- `test/state/test_projectile_flight.gd`
+- `test/state/test_totem_accelerators.gd`
+- `test/integration/test_projectile_flight_live.gd`
+
+**Modified — `src/`**
+- `src/state/resources/balance_config.gd`
+- `src/state/timing/balance_ticks.gd`
+- `src/state/unit_board.gd`
+- `src/state/player_state.gd`
+- `src/state/match_state.gd`
+- `src/state/economy/card_effect_resolver.gd`
+- `src/state/economy/economy_evaluator.gd`
+- `src/actors/minions/unit_actor.gd`
+- `src/main/match_runner.gd`
+
+**Modified — `data/`**
+- `data/balance/balance_config.tres`
+- `data/feature_flags.tres`
+
+**Modified — `test/state/`**
+- `test_data_resources.gd`, `test_balance_authoring.gd`, `test_balance_config.gd`,
+  `test_determinism.gd`, `test_replay_identity.gd`, `test_intent_recorder.gd`,
+  `test_card_observation.gd`, `test_draw_delay_and_reshuffle.gd`, `test_card_effect_resolution.gd`,
+  `test_targeting_service.gd`, `test_minion_authoring.gd`, `test_mana_economy.gd`,
+  `test_match_state.gd`, `test_unit_attack_rhythm.gd`, `test_unit_damage_and_death.gd`,
+  `test_contact_resolution.gd`, `test_block_deflect.gd`, `test_roll_iframes.gd`
+
+**Modified — `test/integration/`**
+- `test_summon_actor_live.gd`, `test_two_units_converge_live.gd`, `test_unit_aim_live.gd`,
+  `test_unit_approach_live.gd`, `test_unit_attack_live.gd`, `test_unit_combat_live.gd`,
+  `test_unit_corpse_linger_live.gd`, `test_unit_corpse_walkthrough_live.gd`,
+  `test_unit_spawn_placement_live.gd`, `test_unit_strike_alignment_live.gd`,
+  `test_unit_swing_root_live.gd`
+
+**Untouched, deliberately:** `project.godot` (no new collision layer, no new autoload, no Input Map
+change), `src/actors/hero/*`, `src/ui/*`, and every `connect_*` observation seam — the family stays
+at EIGHT.
+
+### Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-08-30 | Dev pass executed via `gds-dev-story`. Four code commits (three build + one fix), golden re-baselined `4a089063` -> `d94337cd` across three separately measured causes, suite `499/3895` -> `542/4211`, integration 42 -> 43 files. Status -> `review`. Three open findings recorded for the review gate. |
