@@ -38,6 +38,19 @@ const MALFORMED_PATH := "user://test_3_0d_malformed.rec"
 ## Story 4-3a: the FORMAT_VERSION / contact-row-shape pin writes its own file, so it cannot race
 ## the round-trip fixture's path.
 const FORMAT_PIN_PATH := "user://test_4_3a_format_pin.rec"
+## Story 4-4 (`4-4/R15`): the byte-identity re-save and the retired-version refusal each write
+## their own file, for the same no-racing reason.
+const RESAVE_PATH := "user://test_4_4_resave.rec"
+const RETIRED_VERSION_PATH := "user://test_4_4_retired_version.rec"
+
+## Story 4-4: the in-test `unit_kinds` list the recorded config carries, and the nested values the
+## round trip is measured on. Deliberately THREE LEVELS DEEP (kind -> attack -> projectile),
+## because that is the depth `store_var` could not carry and the depth the fix has to reach.
+const KIND_NAME := &"file_kind"
+const KIND_MAX_HP := 17.0
+const KIND_DAMAGE := 2.5
+const KIND_RANGE := 6.5
+const PROJECTILE_BUDGET := 44.0
 
 const SEED := 5150
 
@@ -123,10 +136,12 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 4,
-		"FORMAT_VERSION is 4 as of story 4-3b (`4-3b/R21`) -- the contact fact's ATTACKER widened to "
-		+ "a `[slot, index]` address and the fact gained a KIND marker, so the recorded row's SHAPE "
-		+ "changed again (it was 3 through 4-3a, 2 through 4-1)")
+	assert_eq(RecordFile.FORMAT_VERSION, 5,
+		"FORMAT_VERSION is 5 as of story 4-4 (`4-4/R15`) -- the recorded BalanceConfig gained a "
+		+ "nested `unit_kinds` list a v4 file carries nothing for (it was 4 through 4-3b, 3 through "
+		+ "4-3a, 2 through 4-1). The contact row's SHAPE is unchanged at seven elements, and the "
+		+ "assertions below still pin it: the row and the version stopped moving together at this "
+		+ "bump, so the row needs its own guard")
 	var driven := _match_start()
 	var record: IntentRecorder = driven["record"]
 	var ms: MatchState = driven["state"]
@@ -220,6 +235,36 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 					% index + "stream, which is the only way capture_apply_balance can stamp it")
 		assert_eq(loaded.replay_balance_config(index).move_speed,
 			record.replay_balance_config(index).move_speed, "...and its values")
+		# Story 4-4 (`4-4/R15`): ...INCLUDING THE NESTED HALF, which is the whole reason the bump
+		# exists. `move_speed` above is a float, and a float survived every shape this class ever
+		# had; `unit_kinds` is an `Array[UnitKindProfile]` whose contents were being handed to
+		# `store_var` as live references and coming back as an EMPTY ARRAY with nothing printed.
+		# Asserted at all THREE levels, because each is a separate recursion the fix has to make.
+		var config := loaded.replay_balance_config(index)
+		assert_eq(config.unit_kinds.size(), 1,
+			"reload event %d's config came back WITH its kind list — a size of 0 here is the "
+					% index + "silent total loss `4-4/R15` bumped the format for")
+		if config.unit_kinds.size() == 1:
+			var kind := config.kind_at(0)
+			assert_eq(String(kind.kind_name), String(KIND_NAME),
+				"...level 1: the kind's own StringName, which `kind_index_of` addresses it by")
+			assert_eq(kind.max_hp, KIND_MAX_HP, "...level 1: and its hp")
+			assert_eq(kind.attacks.size(), 1, "...level 2: its attack list is a nested array")
+			if kind.attacks.size() == 1:
+				assert_eq(kind.attacks[0].damage, KIND_DAMAGE, "...level 2: and the attack's damage")
+				assert_eq(kind.attacks[0].range, KIND_RANGE, "...level 2: and its range")
+				assert_not_null(kind.attacks[0].projectile,
+					"...level 3: the attack's projectile is a nested resource, not a lost null")
+				if kind.attacks[0].projectile != null:
+					assert_eq(kind.attacks[0].projectile.travel_budget, PROJECTILE_BUDGET,
+						"...level 3: and the projectile's own authored budget")
+			assert_eq(config.kind_index_of(KIND_NAME), 0,
+				"...and the rebuilt list ANSWERS the lookup every summon goes through — "
+				+ "NO_KIND_INDEX here is a replay in which nothing has a kind")
+		assert_ne(config.kind_at(0), record.replay_balance_config(index).kind_at(0),
+			"...and the rebuilt kind is a FRESH object, not the live authored one handed back: a "
+			+ "record on disk carries numbers, never a path to a resource that can be re-tuned "
+			+ "under it (the by-value discipline, now recursive)")
 	var fields := 0
 	for tick in range(1, record.tick_count() + 1):
 		assert_eq(loaded.camera_pushes_at(tick), record.camera_pushes_at(tick),
@@ -248,6 +293,76 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 	assert_true(loaded.replay_intent(RESET_TICK, 0).debug_reset, "debug_reset came back set")
 	assert_ne(loaded.replay_intent(1, 0).aim, Vector2.ZERO, "aim came back non-zero")
 	_remove(ROUND_TRIP_PATH)
+
+
+## Story 4-4 (`4-4/R15`): THE ROUND TRIP AS BYTE IDENTITY, which is the assertion the field-by-field
+## test above could not make and the one the `unit_kinds` loss walked straight through.
+##
+## The test above names the channels it compares, and that naming is exactly its weakness: a field
+## nobody thought to add is a field nobody compares. `unit_kinds` was the largest thing ever added
+## to the recorded config and the test's own comment ("a channel added to the writer is added here")
+## was not honoured — one float, `move_speed`, stood in for the whole config.
+##
+## SAVE -> LOAD -> SAVE AGAIN, AND COMPARE THE TWO FILES BYTE FOR BYTE. Nothing is named, so nothing
+## can be forgotten: any value the writer emits and the rebuild drops changes the second file. The
+## comparison is sound in both directions because `store_var` is deterministic over the same
+## Dictionary and both files are written by the same function on the same build.
+##
+## NON-VACUITY IS ASSERTED, not assumed: the reloaded record is checked to CARRY the three-level
+## kind list, because two files that both lost it would be byte-identical too.
+func test_a_saved_record_reloads_and_re_saves_to_the_identical_BYTES() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, ROUND_TRIP_PATH), "", "the first file was written")
+	var reloaded := _loaded(ROUND_TRIP_PATH)
+	assert_eq(RecordFile.save_record(reloaded, RESAVE_PATH), "",
+		"the RELOADED record saved again — a record rebuilt from disk is a record")
+	var first := _bytes(ROUND_TRIP_PATH)
+	var second := _bytes(RESAVE_PATH)
+	assert_eq(second.size(), first.size(),
+		"the re-saved file is the same LENGTH (%d vs %d) — a dropped channel is shorter"
+				% [second.size(), first.size()])
+	assert_true(first == second,
+		"...and the same BYTES: everything the writer emits survived load and came back out "
+		+ "identical, named or not")
+	# NON-VACUITY: the bytes being compared actually carry the nested list.
+	assert_true(first.size() > 0, "sanity: the file is not empty")
+	assert_eq(reloaded.replay_balance_config(0).unit_kinds.size(), 1,
+		"...and the record whose bytes those are really does carry a kind list, so the identity "
+		+ "above is a statement about the nested half and not about two empty configs")
+	assert_not_null(reloaded.replay_balance_config(0).kind_at(0).attacks[0].projectile,
+		"...three levels deep, so the identity covers the whole recursion")
+	_remove(ROUND_TRIP_PATH)
+	_remove(RESAVE_PATH)
+
+
+## Story 4-4 (`4-4/R15`): the OTHER half of the bump, and the half a bump exists for. A v4 record
+## predates `unit_kinds` entirely — it carries the retired flat keys and nothing this build can
+## build a kind list from — so replaying one would put every summoned unit on the board with no
+## speed, no hp, no damage, no attack and no priority. It is REFUSED with a reason naming both
+## versions, never accepted and quietly diverged from.
+##
+## Written as a real v4-shaped file rather than a version-field edit alone: the config values it
+## carries are stripped back to the pre-4-4 key set, so the refusal is measured against a body a
+## v4 build would actually have written and not just against a relabelled v5 body.
+func test_a_record_from_the_version_before_unit_kinds_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, RETIRED_VERSION_PATH), "", "the record was written")
+	_rewrite_as_pre_4_4(RETIRED_VERSION_PATH)
+	var refused := RecordFile.load_record(RETIRED_VERSION_PATH)
+	assert_null(refused["record"],
+		"a v4 record is REFUSED — it carries no `unit_kinds`, and replaying it would put every "
+		+ "summoned unit on the board kindless: no hp, no speed, no damage, no attack")
+	assert_ne(refused["error"], "",
+		"...with a REASON, never the empty-error refusal a caller reads as success")
+	assert_true(refused["error"].contains("4"),
+		"...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains("5"),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION, not about the stripping: a v5 file of the same shape loads.
+	assert_eq(RecordFile.save_record(record, RETIRED_VERSION_PATH), "", "rewritten as v5")
+	assert_not_null(RecordFile.load_record(RETIRED_VERSION_PATH)["record"],
+		"the same record at the CURRENT version loads, so the refusal above was the version")
+	_remove(RETIRED_VERSION_PATH)
 
 
 # ---------------------------------------------------------------- AC 5
@@ -734,7 +849,36 @@ func _config() -> BalanceConfig:
 	c.block_facing_arc_degrees = 180.0
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0
+	# Story 4-4 (`4-4/R15`): the recorded config's NESTED half. `_config()` is the object the
+	# reload-event channel serialises, so putting the kind list here is what makes the round-trip
+	# assertions measure the three-level nesting rather than a flat wall of floats.
+	c.unit_kinds = [_ranged_kind()]
 	return c
+
+
+## A kind carrying an attack carrying a projectile — the deepest shape `BalanceConfig` can hold,
+## built in-test over opaque values (the `BC/R3` golden-isolation discipline) so a tuning pass
+## cannot move it and it cannot move the golden.
+func _ranged_kind() -> UnitKindProfile:
+	var projectile := ProjectileProfile.new()
+	projectile.launch_speed = 9.0
+	projectile.travel_budget = PROJECTILE_BUDGET
+	projectile.max_speed = 20.0
+	var attack := UnitAttackProfile.new()
+	attack.windup_seconds = 3.0 / 60.0
+	attack.active_seconds = 2.0 / 60.0
+	attack.recovery_seconds = 4.0 / 60.0
+	attack.range = KIND_RANGE
+	attack.damage = KIND_DAMAGE
+	attack.projectile = projectile
+	var kind := UnitKindProfile.new()
+	kind.kind_name = KIND_NAME
+	kind.max_hp = KIND_MAX_HP
+	kind.move_speed = 3.0
+	kind.stop_distance = 1.5
+	kind.priority_name = &"standard"
+	kind.attacks = [attack]
+	return kind
 
 
 ## The mid-run reload's config — one moved value, so the event's effect on the replay is a single
@@ -816,6 +960,36 @@ func _rewrite_values(path: String, values: Dictionary) -> void:
 		assert_true(data.has(key), "the record carried `%s` before it was corrupted" % key)
 		data[key] = values[key]
 		assert_true(data.has(key), "...and STILL carries it afterwards — presence is not type")
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## Story 4-4: the whole file as bytes, for the identity comparison. Read as a buffer rather than
+## through `get_var`, so the assertion is about the FILE and not about the reader agreeing with
+## itself.
+func _bytes(path: String) -> PackedByteArray:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return PackedByteArray()
+	var out := f.get_buffer(f.get_length())
+	f.close()
+	return out
+
+
+## Story 4-4 (`4-4/R15`): rewrite a saved record into the shape a PRE-4-4 build would have written
+## — version 4, and every recorded config stripped of `unit_kinds` and given back the flat keys the
+## kind list replaced. That is the file the version check has to refuse.
+func _rewrite_as_pre_4_4(path: String) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	data["format_version"] = 4
+	for event: Dictionary in (data["reload_events"] as Array):
+		var values: Dictionary = event["values"]
+		values.erase("unit_kinds")
+		values["unit_max_hp"] = KIND_MAX_HP
+		values["unit_damage_per_hit"] = KIND_DAMAGE
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()

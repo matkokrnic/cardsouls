@@ -110,7 +110,25 @@ extends RefCounted
 ## Question 2 left the bump conditional on the answer): the marker RIDES THE EXISTING ROW and
 ## `push_contact` gained a parameter rather than a sibling method, so REQUIRED_KEYS below does not
 ## move and `_resource_values` is untouched.
-const FORMAT_VERSION := 4
+##
+## STORY 4-4 (`4-4/R15`) BUMPS THIS TO 5, and this one is neither a new channel nor a contact-row
+## shape change -- it is the RECORDED BALANCE CONFIG's own shape. `4-4` gave `BalanceConfig` an
+## `Array[UnitKindProfile] unit_kinds`, and `_resource_values` below was a ONE-LEVEL capture: it
+## read the property by value and handed the live `Resource` references straight to `store_var`,
+## which encodes each of them as an `EncodedObjectAsID` because `full_objects` defaults to false.
+## On load, assigning that untyped array of ids into the typed `Array[UnitKindProfile]` property
+## is REJECTED BY THE ENGINE WITH NOTHING PRINTED, so the field stayed at its `[]` default --
+## MEASURED, not theorised: `rebuilt unit_kinds size = 0` against the shipped `.tres`.
+##
+## The consequence is the exact condition every bump above exists to refuse, in its worst form: a
+## record loaded from disk replays with NO UNIT KINDS AT ALL -- `kind_at()` null everywhere,
+## `kind_index_of()` -> `NO_KIND_INDEX`, so every summon puts a unit on the board with no speed, no
+## hp, no damage, no attack and no priority. `_resource_values` / `_rebuilt` now RECURSE (see
+## NESTED_CLASS_KEY), which fixes the post-4-4 half; the bump fixes the PRE-4-4 half. A v4 record
+## carries the retired flat keys (`unit_max_hp`, `unit_damage_per_hit`) and no `unit_kinds` at all,
+## so rebuilding one would set dead keys onto nothing and replay every unit as kindless. HARD
+## REJECTION, NO SHIM, for the `4-1/R1` reason above.
+const FORMAT_VERSION := 5
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -360,16 +378,82 @@ static func _intent_values(intent: InputIntent) -> Dictionary:
 ## Every SCRIPT-DECLARED property of a Resource, by value — the recorder's own by-value discipline
 ## (intent_recorder.gd:345-356) applied on the way to disk, so a record on disk carries numbers
 ## and never a path back to an authored resource that can be re-tuned under it.
+##
+## STORY 4-4 (`4-4/R15`): BY VALUE IS NOW RECURSIVE, and the reason is that "by value" was never
+## true of a Resource-valued property. It used to read the property and hand whatever came back to
+## `store_var`, which is exactly right for a float and silently wrong for a `Resource`: with
+## `full_objects` false, a live reference is encoded as an `EncodedObjectAsID` — an int in a
+## trenchcoat — and rebuilding from it produces nothing. `BalanceConfig.unit_kinds` was the first
+## property to have that shape, and it lost its entire contents on every save. See `_captured`.
 static func _resource_values(res: Resource) -> Dictionary:
 	var out: Dictionary = {}
 	for prop: Dictionary in res.get_property_list():
 		if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE == 0:
 			continue
-		var value: Variant = res.get(prop["name"])
-		if value is Dictionary or value is Array:
-			value = value.duplicate(true)
-		out[prop["name"]] = value
+		out[prop["name"]] = _captured(res.get(prop["name"]))
 	return out
+
+
+## The two keys a NESTED resource rides under, and the reason they are two rather than one: the
+## rebuild has to know WHICH class to construct before it can set anything, and a plain values dict
+## carries no class. Prefixed so they cannot collide with a script property name — GDScript
+## identifiers cannot begin with a digit, but they CAN begin with `_`, so the names below are
+## deliberately shapes no `@export` would ever take.
+const NESTED_CLASS_KEY := "__resource_class"
+const NESTED_VALUES_KEY := "__resource_values"
+
+## Every script class a saved record can carry NESTED inside another resource, tag -> constructor.
+## WRITTEN OUT RATHER THAN DERIVED, for `_intent_values`'s reason one function up: a fourth nesting
+## level added to `BalanceConfig` leaves this VISIBLY incomplete (the value comes back null and the
+## round-trip test fails loudly) instead of silently narrowing what survives a save.
+##
+## RESIDUE, on `3-0d/R25`'s footing: an unknown tag rebuilds as `null` rather than as a named
+## refusal. A v5 file can only carry these three, because this build's writer is the only thing
+## that writes v5 and it emits exactly what it can read; a file carrying a foreign tag is corrupt
+## input of the same family as the five cases `3-0d/R25` writes down.
+static func _fresh_nested(tag: String) -> Resource:
+	match tag:
+		"UnitKindProfile":
+			return UnitKindProfile.new()
+		"UnitAttackProfile":
+			return UnitAttackProfile.new()
+		"ProjectileProfile":
+			return ProjectileProfile.new()
+	return null
+
+
+## One property value, captured by value all the way down: a Resource becomes a tagged dict, a
+## container is rebuilt element by element (which is also what makes the old `duplicate(true)`
+## unnecessary — nothing here shares a reference with the live object), everything else is already
+## a value and rides as itself.
+static func _captured(value: Variant) -> Variant:
+	if value is Resource:
+		return {
+			NESTED_CLASS_KEY: _class_tag(value as Resource),
+			NESTED_VALUES_KEY: _resource_values(value as Resource),
+		}
+	if value is Array:
+		var elements: Array = []
+		for element: Variant in (value as Array):
+			elements.append(_captured(element))
+		return elements
+	if value is Dictionary:
+		var entries: Dictionary = {}
+		var source: Dictionary = value
+		for key: Variant in source:
+			entries[key] = _captured(source[key])
+		return entries
+	return value
+
+
+## The script class name a nested resource is tagged with. `get_global_name()` is the `class_name`
+## line itself, which is the same string `_fresh_nested` matches on; a Resource with no script (none
+## reachable from a record today) falls back to its engine class so the tag is never empty.
+static func _class_tag(res: Resource) -> String:
+	var script := res.get_script() as Script
+	if script != null and String(script.get_global_name()) != "":
+		return String(script.get_global_name())
+	return res.get_class()
 
 
 # ---------------------------------------------------------------- rebuild
@@ -462,7 +546,48 @@ static func _card_effects(raw: Dictionary) -> Dictionary[StringName, CardEffect]
 	return out
 
 
+## `_resource_values`'s inverse. TYPED ARRAYS ARE ASSIGNED, NOT SET, and that is the half of
+## `4-4/R15` that is easy to get wrong twice: `res.set("unit_kinds", <untyped Array>)` is REJECTED
+## WITH NOTHING PRINTED even when every element is the right class, so a rebuild that recursed
+## correctly and then `set()` the result would still have landed an empty array. MEASURED both ways
+## on Godot 4.6.3 — `set()` leaves size 0, `Array.assign()` onto the property's own typed array
+## converts in place and reads back size 1. The array `get()` returns IS the property's array
+## (arrays are reference values), so assigning into it is assigning into the resource.
 static func _rebuilt(res: Resource, values: Dictionary) -> Resource:
 	for name: String in values:
-		res.set(name, values[name])
+		var value: Variant = _restored(values[name])
+		var existing: Variant = res.get(name)
+		if value is Array and existing is Array:
+			(existing as Array).assign(value as Array)
+			continue
+		# The same trap on the other container: `orb_costs` is a `Dictionary[CardColor, int]`, and
+		# an untyped Dictionary `set()` onto it is refused as quietly as the array case.
+		if value is Dictionary and existing is Dictionary:
+			(existing as Dictionary).assign(value as Dictionary)
+			continue
+		res.set(name, value)
 	return res
+
+
+## `_captured`'s inverse, one value at a time: a tagged dict becomes a fresh resource rebuilt
+## through this same function, a container is restored element by element, everything else is
+## already the value it was written as.
+static func _restored(value: Variant) -> Variant:
+	if value is Dictionary and (value as Dictionary).has(NESTED_CLASS_KEY):
+		var entry: Dictionary = value
+		var fresh := _fresh_nested(String(entry[NESTED_CLASS_KEY]))
+		if fresh == null:
+			return null
+		return _rebuilt(fresh, entry[NESTED_VALUES_KEY])
+	if value is Array:
+		var elements: Array = []
+		for element: Variant in (value as Array):
+			elements.append(_restored(element))
+		return elements
+	if value is Dictionary:
+		var entries: Dictionary = {}
+		var source: Dictionary = value
+		for key: Variant in source:
+			entries[key] = _restored(source[key])
+		return entries
+	return value
