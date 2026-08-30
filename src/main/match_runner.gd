@@ -1455,7 +1455,19 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 		# `Hitbox` (AC 3), so a totem's actor has none to query. Two expressions of one fact, and
 		# they cannot disagree because the scene is CHOSEN from the same authored data this tests
 		# (`_unit_scene_for`).
-		if attack.projectile != null or unit_actor.hitbox == null:
+		#
+		# REVIEW FIX (4-4, H1): `attack` ITSELF may be null here, and this line used to
+		# dereference it. `_unit_attack_profile` answers null for the two authored misses its
+		# own docstring names -- an X3 reload that shortened `unit_kinds` under a live record,
+		# and a kind authoring an empty attack list -- and the probe read above is guarded for
+		# exactly that, while this one was not. It is REACHABLE rather than theoretical:
+		# `MatchState._advance_unit_attacks` `continue`s on the same miss, which FREEZES the
+		# unit in whatever phase it holds, so a unit caught mid-ACTIVE keeps
+		# `is_hitbox_active_at` true forever and this line then threw on Nil every physics
+		# frame from then on. Ordered FIRST so the miss is answered before either of the two
+		# facts below is asked for; a null attack skips the melee pass for the same reason a
+		# projectile attack does -- there is no authored swing to gather for.
+		if attack == null or attack.projectile != null or unit_actor.hitbox == null:
 			continue
 		for area: Area3D in unit_actor.hitbox.get_overlapping_areas():
 			var owner_actor := area.get_parent()
