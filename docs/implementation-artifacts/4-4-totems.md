@@ -4,7 +4,7 @@ baseline_commit: d5a83721e4a0a9762c63714df778beb0d6ca34ca
 
 # Story 4.4: Totems
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
