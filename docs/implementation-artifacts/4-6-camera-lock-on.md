@@ -102,14 +102,14 @@ carry more than one thing worth aiming at.
     action).
 13. A keyboard binding is PROPOSED (documentation deliverable, not a testable behavior claim) for
     click/flick equivalents, consistent with keyboard parity elsewhere (`2-2/R5`); controller is
-    primary and carries the live smokes (`CC/R4`). Same item as Open Question 6; not filed twice as
+    primary and carries the live smokes (`CC/R4`). Same item as Open Question 5; not filed twice as
     a behavior claim.
 14. `RecordFile.FORMAT_VERSION` (currently 5, `record_file.gd:131`, pinned by
     `test_record_file.gd:139`) bump is DECIDED at dev time by a single measured fact: does the
     retarget result fit inside the existing `InputIntent`/recorded-fact channels? If yes, no bump
     (per the `4-3a/R10`/`4-3b/R21`/`4-4/R15` no-shim precedent, a fitting shape never bumps); if a new
     element is needed, bump to 6, hard-rejecting older records, no migration shim. Same item as Open
-    Question 4; the measurement, not the outcome, is decided here.
+    Question 3; the measurement, not the outcome, is decided here.
 
 ## Non-Goals
 
@@ -133,7 +133,7 @@ carry more than one thing worth aiming at.
 - **Baseline measured for this story (repo, before any change):** HEAD
   `6cd6dd187824c211ae2ed804f8cd2276585cde55` == `origin/main`, clean tree. Determinism golden
   currently `a96b123e67ef8330b5bb07c1bafefaf5204e9bf9982eded936f8d69b29afa522`
-  (`test/state/test_determinism.gd:608`) — the value AC 2 expects to change. Full-suite counts:
+  (`test/state/test_determinism.gd:608`) — the value AC 4 expects to change. Full-suite counts:
   run `bash test/run_all.sh` fresh at dev-pass start and record the actual numbers there; this
   story's own authoring pass did not need to re-run it (docs-only) but the dev pass MUST, per the
   golden-clause discipline every prior Tier A story in this epic has followed.
