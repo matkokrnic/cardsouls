@@ -7572,3 +7572,45 @@ Docs only, one commit: this entry plus the story file's ACs, Non-Goals, Dev Note
 Questions. No code touched, no `src/`/`test/`/`project.godot` edit, no golden/suite measurement this
 pass. `4-6-camera-lock-on` stays `authored`, board stays `backlog` -- promotion and any further gate
 pass are the operator's act. Operator reviews the log.
+
+---
+
+## Session 2026-08-30 -- 4-6 dev pass, operator ruling `4-6/R7`
+
+The dev pass on `docs/implementation-artifacts/4-6-camera-lock-on.md` (`gds-dev-story`). One
+operator ruling, given in chat before the pass began and recorded here as its first durable record;
+everything else the pass decided is a dev-pass call and lives in the story's Dev Agent Record, not
+here.
+
+`4-6/R7` (ruled, chat, 2026-08-30) THE NEUTRAL-STICK ROLL BACKSTEPS AWAY FROM THE LOCKED TARGET.
+Story 4-6 Open Question 4 -- reserved for the operator by `4-6`'s own gate note N9, because rolling
+toward or away from the lock is a change to what the game IS and not an implementation detail.
+
+WHEN THE LEFT STICK IS NEUTRAL AT ROLL ENTRY, the roll goes AWAY from the locked target -- the
+INVERSE of the facing fallback, not toward it. This is the DS/ER locked-on neutral-dodge convention
+(the backstep direction). It is delivered as the ORDINARY roll: same animation, same i-frames, same
+distance and duration. No new move, no new mechanic, no second branch -- only the fallback
+direction in `_roll_world_direction` (`match_state.gd:1063-1065`) inverts.
+
+DIRECTED STICK INPUT IS UNCHANGED. A roll entered with the stick pushed follows the stick exactly
+as it always has; the ruling touches the fallback and nothing else.
+
+RATIONALE. Once facing became target-derived (`4-6` AC 2), the old fallback stopped meaning "the way
+I was last heading" and started meaning "straight at the thing I am locked to" -- which is the one
+direction a dodge must not default to. EXPLICITLY REVERSIBLE: one operator, revisited at playtest
+if it feels wrong.
+
+GOLDEN DISCIPLINE, discharged. The ruling required the inversion to be measured either way: a third
+separately measured cause if any golden-fixture tick rolls with a neutral stick, a recorded
+non-move if none does. ONE DOES -- `test_determinism.gd`'s t17 roll-cancel, whose move pair is
+`MOVES[16 % 6] = (0, 0)`. So it is a real third cause, measured in isolation at the dev pass:
+`9a71e68a` -> `aa3566d7`, with `roll_direction` moving `(-1, 0, 0)` -> `(-0.6, 0, -0.8)` on the
+hashed record. The full four-cause ladder is in the story's Dev Agent Record.
+
+### Close-out
+
+Two commits, code and docs never sharing one: the implementation plus its tests, then this entry
+with the story file's Dev Agent Record, File List, Change Log and `Status: review`. The story-file
+`review` value is story-file-only (`CFG/R3` precedent, `CFG/R5`); the board stays `ready-for-dev`
+-- promotion to `done` is the operator's chain commit after the live smoke (`CC/R4`: controller is
+primary, and this pass has no pad). Nothing pushed. Operator reviews the log.

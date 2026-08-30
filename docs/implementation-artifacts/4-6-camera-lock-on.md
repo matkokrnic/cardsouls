@@ -4,7 +4,7 @@ baseline_commit: 6cd6dd187824c211ae2ed804f8cd2276585cde55
 
 # Story 4.6: Camera Lock-On
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -275,9 +275,245 @@ carry more than one thing worth aiming at.
 ### Agent Model Used
 
 Claude Sonnet 5 (claude-sonnet-5), story authored via `gds-create-story`.
+Claude Opus 5 (claude-opus-5), dev pass via `gds-dev-story` (2026-08-30).
 
 ### Debug Log References
 
+Full dev-pass log: `C:\dev\_46-dev.md` (preconditions, both full-suite runs, the golden
+measurement ladder with every intermediate hash, the AC 7 re-examination, and the mutation table
+reproduced below).
+
+### Open Question decisions (dev-pass calls)
+
+**OQ 1 - where the lock lives, and the injected fact's SHAPE.** Three shapes, each copied from an
+already-shipped sibling rather than invented:
+
+1. The lock TARGET is `PlayerState.lock_target_slot` / `lock_target_index`, two plain ints,
+   surfacing as ONE snapshot key `lock_target` holding a `[slot, index]` pair - the `unit_targets`
+   shape verbatim, and `4-2/R2`'s counts-and-indices rule intact. HASHED, not excluded: it crosses
+   ticks and decides where the hero faces, which decides the `_is_facing` arc (`4-3a/R17`).
+   Two ints rather than a pair for `UnitBoard`'s own reason (the read is per-tick and a pair
+   allocates); the opposing-slot default is seeded by `MatchState`, which is the only place that
+   knows a `PlayerState`'s index.
+2. The injected DIRECTION fact is a world-space planar `Vector2` per slot, pushed through
+   `MatchState.set_lock_direction(slot, dir)` - the `set_camera_basis` shape verbatim, which is
+   what `4-6/R6` mandates. `Vector2.ZERO` means NO FACT and leaves facing at its last value: the
+   direct analogue of the identity-basis short-circuit. UNHASHED and captured by its own record
+   channel, exactly as `_camera_bases` is.
+3. The retarget REQUEST rides `InputIntent` as `retarget_slot` / `retarget_index`, with
+   `retarget_slot == NO_RETARGET` (-1) meaning no request - the `card_slot == -1` shape verbatim.
+
+**OQ 2 - `InputIntent.aim`.** DELETED, not repurposed and not left present-but-unused. `DP/R1`'s
+"repurposed, still flowing through `aim`" lean was read against and rejected on a measured fact
+(see OQ 3), not on taste. A field kept alive for a purpose that no longer exists is rot; a
+repurposed one is a lie about its own name.
+
+**OQ 3 / AC 14 - `RecordFile.FORMAT_VERSION`.** MEASURED: the retarget result does NOT fit the
+existing channels. **BUMPED 5 -> 6**, hard rejection of older records, no migration shim
+(`4-3a/R10` / `4-3b/R21` / `4-4/R15`). The measurement, in three findings:
+
+1. The occupied intent channels are `move_dir`, `pressed`/`held`, `debug_reset` and the three card
+   fields. The only free one was `aim`.
+2. `aim` is a `Vector2` and a `[slot, index]` address is two small ints, so it fits DIMENSIONALLY -
+   and fails on the SENTINEL: `Vector2.ZERO`, `aim`'s resting value, is the legal address `[0, 0]`
+   (slot 0's unit 0). There is no "no retarget" value inside the field's current value space.
+3. So the resting value would have to move, and then every v5 record on disk decodes its resting
+   `aim` as a live retarget - a replay that silently diverges from the match it claims to
+   reproduce, which is the exact failure `record_file.gd`'s header says the version check exists to
+   refuse.
+
+The one bump carries three shape changes at once, which is free: `aim` deleted, the retarget pair
+added, and the new per-tick `lock_pushes` channel beside `camera_pushes`.
+
+**OQ 4 - the roll's neutral-stick fallback.** NOT a dev-pass call: **operator ruling `4-6/R7`**,
+applied verbatim (see the decision log). One operator, one line.
+
+**OQ 5 / AC 13 - the keyboard binding PROPOSAL** (a documentation deliverable by AC 13's own
+wording, deliberately NOT implemented):
+
+| action | P1 | P2 |
+|--------|----|----|
+| re-lock onto the opposing hero (the R3 click) | `Q` | `Numpad 0` |
+| retarget flick LEFT / RIGHT | `Z` / `C` | `Numpad 1` / `Numpad 3` |
+
+Not built, for two reasons that pull the same way: AC 13 files it as a proposal rather than a
+behaviour claim, and new Input Map actions are `project.godot` edits - a board surface, not
+dev-pass terrain. Controller stays primary and carries the live smokes (`CC/R4`). A keyboard slot
+is never left without a target: `CC/R2`'s always-on default lock holds, so what a keyboard player
+lacks is RETARGETING, not lock-on.
+
+### Golden re-baseline - FOUR causes, measured separately and in order
+
+`a96b123e` -> **`aa3566d7`**. Method: the 4-3b REVERSE-DIRECTION staging - one thing held off the
+fully-shipped tree at a time, both staged files backed up out of repo and SHA256-verified
+byte-identical after restoration.
+
+| # | cause | staged how | hash |
+|---|-------|-----------|------|
+| 0 | inherited (4-4 review fix pass) | - | `a96b123e...` |
+| 1 | AC 4(a) FACING OWNERSHIP, behaviour half | `lock_target` held off the snapshot AND the `4-6/R7` sign held off `_roll_world_direction` | `cd21eac5a93f6772275d1ebc18603807fc0a83db385ffbf691270900bd4a3a76` |
+| 2 | AC 4(a) FACING OWNERSHIP, shape half (`lock_target`; key set 27 -> 28) | key restored | `9a71e68abc4d8697b6c6ce0c8d44c9410628f6e6b0e8f7ee25a0f342af66d122` |
+| 3 | `4-6/R7` NEUTRAL-STICK BACKSTEP | sign restored | **`aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f`** |
+| 4 | AC 4(b) LIVE CAMERA BASIS | - | **NON-MOVER, measured and structural** |
+
+AC 4 names causes (a) and (b); `4-6/R7` adds the third. Cause (a) is SPLIT into behaviour and shape
+because this project's standing discipline separates a snapshot-shape mover from a behavioural one
+(4-1, 4-2 and 4-4 all did), and fusing them would have made the pair unattributable.
+
+Cause 4's non-move is structural rather than lucky: the state harness instantiates no scene, so
+there is no rig to yaw, and `test_determinism.gd` calls `set_camera_basis` ZERO times (grepped) -
+every tick resolves through the identity short-circuit exactly as it always has. Cause (b) is real
+and it LANDED, but on the INTEGRATION suite (see AC 7 below), not on this hash. Causes 1-3 fully
+explain the final value, and NO UNEXPECTED MOVE occurred at any rung.
+
+`4-6/R7`'s measure-it-either-way clause is discharged in the affirmative: a golden-fixture tick
+DOES roll with a neutral stick - t17, whose move pair is `MOVES[16 % 6] = (0, 0)` - so the
+inversion is a real third cause. `roll_direction` moves `(-1, 0, 0)` -> `(-0.6, 0, -0.8)` on the
+hashed record.
+
+**Snapshot key set: 27 -> 28**, one key (`lock_target`). `UNHASHED_CROSS_TICK_MEMBERS` STAYS AT
+THREE: `_lock_directions` joins argument (c) beside `_camera_bases` - the same argument now
+covering two pushed spatial arrays, the 4-4 "both hashed, count stays at three" discipline - and it
+ships with its own falsifying drop test.
+
+### AC 7: the two named files were RE-EXAMINED, and both needed rewriting
+
+Both were falsified by the live yaw. This is AC 4 cause (b) landing.
+
+- **`test_camera_relative.gd`** staged rig rotations in `_initialize()`. That is no longer
+  possible: the runner overwrites the rig yaw every tick, so a staged value is gone before the
+  first measurement. THE DRIVER REPLACED THE FIXTURE - each rig now looks at its own locked target,
+  and with P1 at x -3 and P2 at x +3 the expected signs are the exact INVERSE of the pre-4-6 ones
+  (P1 -> +X, P2 -> -X). What the file proves is unchanged, and is now proved against the shipping
+  path rather than a test-only one. Measured: P1 dx +2.500, P2 dx -2.500, both dz 0.000.
+- **`test_root_rotation_isolation.gd`** - DECISION A comes through STRONGER. The runner writes the
+  lock yaw into the rig's LOCAL rotation, which is precisely what keeps the pushed LOCAL basis
+  correct under a (forbidden) rotated root. The expected displacement moves from "world -Z" to
+  "world +X, the direction of P1's locked target"; the property - a 60-degree ROOT yaw must not
+  rotate that - is untouched, and the test is sharper, because a global-basis read now produces a
+  bigger wrong answer against the same tight band. Measured: dx +2.500, dz 0.000.
+
+Six further live fixtures moved for the same cause, each a fixture update and not a defect:
+`test_visible_facing.gd` (expected yaw now derived live from the locked target; a `LOCK_YAW_EPS` of
+0.05 covers the F1 one-tick lag, measured at 0.014 rad, while the mesh==hitbox pin stays at 0.001),
+`test_hero_movement.gd` (velocity AXIS -> velocity MAGNITUDE, which is what was always being
+claimed), `test_roll_displacement.gd` (magnitudes plus a new `away_from_lock` assertion - it is now
+the live proof of `4-6/R7`), and `test_step_pause.gd` / `test_unit_approach_live.gd` /
+`test_unit_corpse_walkthrough_live.gd` (`p1_move_right` -> `p1_move_up`, because camera-forward is
+world +X now; in `test_step_pause.gd` that also keeps the path a straight LINE, which matters
+because the file compares four steps against four times a one-axis per-tick displacement and
+camera-right ORBITS the target).
+
+### Mutation-proof table
+
+Provenance: every row **MEASURED** in this dev pass. Each mutation was applied to the shipped tree,
+the affected suites run, and the file restored and SHA256-verified byte-identical.
+
+| id | mutation | RED |
+|----|----------|-----|
+| M-A | facing write reverts to `world_dir` (input-derived) | `test_camera_basis` x2, `test_match_state`, `test_determinism` x3, `test_replay_identity` lock channel; integration `test_visible_facing` |
+| M-B | re-add the movement zero-guard to the facing write | `test_camera_basis::test_facing_tracks_the_lock_with_no_movement_and_freezes_with_no_lock_fact` |
+| M-C | drop the `-` in `_roll_world_direction` (`4-6/R7`) | `test_roll_iframes` backstep, `test_determinism` golden + iframe_negation; integration `test_roll_displacement` |
+| M-D | delete the step-4b `_validate_lock` pair | `test_lock_on::test_a_locked_units_death_snaps_the_lock_to_the_opposing_hero_on_the_kill_tick` |
+| M-F | rig yaw `atan2(-x,-y)` -> `atan2(x,y)` | integration `test_lock_on_live`, `test_camera_relative` (no state test goes red, and that is correct: the rig is presentation and the headless harness has no scene) |
+| M-G | remove the resolver's proximity tie-break | `test_lock_on::test_the_flick_breaks_an_alignment_tie_on_screen_proximity` |
+| M-H | remove the flick EDGE (fire while held) | `test_lock_on::test_the_flick_edge_fires_once_per_crossing` |
+| M-I | remove the `lock_target` snapshot key | golden ladder cause 2 (`9a71e68a` -> `cd21eac5`) plus both key-set pins |
+| M-J | remove the click's flick suppression | `test_lock_on::test_a_lock_click_suppresses_the_flick_it_would_have_produced` |
+
 ### Completion Notes List
 
+- **All 14 ACs satisfied.** AC 13 is a documentation deliverable and is delivered as the OQ 5
+  proposal above, by its own wording ("not a testable behavior claim").
+- **Suite, both full runs.** Start: 548 state tests / 4270 assertions, 43 integration files. End:
+  **565 state tests / 4370 assertions, 0 failed; 44 integration files, every one PASS.** Delta
+  +17 tests, +100 assertions, +1 integration file.
+- **PRE-EXISTING OPEN FINDING, not this story's.** `test/integration/test_unit_attack_live.gd`
+  prints `RESULT: PASS` but intermittently also emits `ERROR: 1 resources still in use at exit`,
+  which `run_all.sh` greps for - so the harness verdict line reads `SOME TESTS FAILED` while every
+  assertion passes. MEASURED AT THE UNTOUCHED BASELINE before a byte was written: three consecutive
+  isolated runs, PASS/PASS/PASS, exit 0 every time, with the ERROR line present on run 2 only. A
+  non-deterministic engine-shutdown resource-release warning. Reproduced identically at the end of
+  the pass. Filed for the operator; not a regression and not a state or golden fact.
+- **F1 / D3(a) / D3(b)/A2 all intact**, machine-checked by
+  `test_architecture_invariants.gd`: no second `_physics_process` (the rig yaw is a value PUSHED
+  into `CameraRig.face_lock_direction` from the runner's existing seat), `Input.*` stays inside
+  `src/controllers/` (the right stick and R3 are device-filtered reads in `GamepadController`, no
+  Input Map action - the `2-2` precedent), and `src/state/` performs no live scene or camera query:
+  the lock direction arrives as a pushed per-tick fact through the `set_camera_basis` /
+  `push_contact` seam family, exactly as `4-6/R6` confirmed.
+- **AC 1's separate-write claim is machine-checked**, not merely asserted: `test_lock_on_live.gd`
+  pins that the CHILD camera still carries the authored distance/height/pitch and stays pitch-only
+  while the ROOT yaws every tick.
+- **AC 11's replay claim rests on one line's SEAT**: `_resolve_retarget` runs IMMEDIATELY BEFORE
+  `_recorder.capture_advance(intents)`, in the LIVE branch only, so the record carries the OUTCOME
+  of a gesture and never the stick deflection - and a replay cannot re-resolve it, because
+  `ReplayController` inherits the neutral accessors and the resolution is structurally inside the
+  `else` of the replay fork.
+- **AC 3's "same tick" cost a second seat**, and it is named as such rather than hidden:
+  `_validate_lock` runs at step 1c AND at step 4b. Step 4 is the only seat that can kill a unit, so
+  validating only at 1c would leave the hashed end-of-tick snapshot pointing at a corpse for
+  exactly one tick - a one-tick corpse-hold window under another name. The function is idempotent
+  by construction, which is what makes two call sites honest.
+- **NAMED CONSEQUENCE, shipped with eyes open (AC 5, `DP/R1`(i))**: against the locked target the
+  block arc can no longer be dodged by turning away, so block is pure timing. `_is_facing` and
+  `block_facing_arc_degrees` are mechanically untouched; what changed is what feeds `facing`.
+- **INHERITED TENSION, not resolved (AC 2's own wording)**: the DEAD early return and the
+  round-over freeze still SKIP the facing write under the standing "a display-only field may be
+  skipped" rule, which is now in tension with facing feeding `_is_facing`. Both branches also
+  freeze everything that could act on it, so nothing observable rides on it today. Carried, named
+  in `match_state.gd` at the write itself, and left for the story that owns the round lifecycle.
+- **One new `class_name`**: `LockOnResolver` (`src/main/lock_on_resolver.gd`), a pure static helper
+  beside the runner, sanctioned by this story's Project Structure Notes. Editor scan run in-pass;
+  `project.godot` SHA256 unchanged before and after (no collateral). It is NOT `TargetingService`
+  and reuses none of its evaluator - only the runner borrows that file's `HERO_INDEX` address
+  convention, which the Non-Goals explicitly permit.
+- **Not done, by scope**: the keyboard bindings (AC 13, proposal only), off-screen telegraph
+  legibility (Non-Goal, a named playtest question), and the LIVE SMOKE ritual, which is the
+  operator's - `CC/R4` puts it on the controller, and this pass has no pad.
+
 ### File List
+
+**Source (11 modified, 1 added)**
+- `src/state/input/input_intent.gd`
+- `src/state/player_state.gd`
+- `src/state/match_state.gd`
+- `src/main/match_runner.gd`
+- `src/main/lock_on_resolver.gd` *(added)*
+- `src/actors/hero/camera_rig.gd`
+- `src/controllers/controller.gd`
+- `src/controllers/gamepad_controller.gd`
+- `src/controllers/gamepad_profile.gd`
+- `src/systems/intent_recorder.gd`
+- `src/systems/record_file.gd`
+- `data/gamepad_profile.tres`
+
+**Tests (15 modified, 2 added)**
+- `test/state/test_lock_on.gd` *(added)*
+- `test/integration/test_lock_on_live.gd` *(added)*
+- `test/state/test_camera_basis.gd`
+- `test/state/test_card_observation.gd`
+- `test/state/test_contact_resolution.gd`
+- `test/state/test_determinism.gd`
+- `test/state/test_draw_delay_and_reshuffle.gd`
+- `test/state/test_intent_recorder.gd`
+- `test/state/test_live_reload.gd`
+- `test/state/test_match_state.gd`
+- `test/state/test_record_file.gd`
+- `test/state/test_replay_identity.gd`
+- `test/state/test_roll_iframes.gd`
+- `test/integration/test_camera_relative.gd`
+- `test/integration/test_hero_movement.gd`
+- `test/integration/test_replay_verifier_tool.gd`
+- `test/integration/test_roll_displacement.gd`
+- `test/integration/test_root_rotation_isolation.gd`
+- `test/integration/test_step_pause.gd`
+- `test/integration/test_unit_approach_live.gd`
+- `test/integration/test_unit_corpse_walkthrough_live.gd`
+- `test/integration/test_visible_facing.gd`
+
+## Change Log
+
+| date | change |
+|------|--------|
+| 2026-08-30 | Dev pass via `gds-dev-story`. All 14 ACs implemented; operator ruling `4-6/R7` applied; Open Questions 1, 2, 3 and 5 decided and recorded above. Golden re-baselined `a96b123e` -> `aa3566d7` across FOUR separately measured causes (three movers, one measured non-mover). `RecordFile.FORMAT_VERSION` 5 -> 6. Snapshot key set 27 -> 28. Suite 548 -> 565 state tests, 43 -> 44 integration files, all green. Status -> `review`. |
