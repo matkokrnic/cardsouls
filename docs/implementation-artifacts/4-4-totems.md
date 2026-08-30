@@ -160,7 +160,7 @@ card name.
   shared by every unit today — `unit_board.gd`'s header ("NO PER-UNIT MAXIMUM, deliberately...
   because no unit differs from another yet") names 4-3/4-4 as the stories allowed to change it.
 - **The per-kind conversion is wider than those four (B5 correction).** AC 9's attack record also
-  moves eight further `BalanceConfig` globals (same file, same `.tres`) off their shared-global
+  moves seven further `BalanceConfig` globals (same file, same `.tres`) off their shared-global
   shape: `minion_attack_windup_seconds` / `_active_seconds` / `_recovery_seconds` (read in
   `match_state.gd`'s unit-phase advance and `begin_windup_at`, via their `BalanceTicks`
   counterparts), `minion_attack_reach_distance` (`match_runner.gd`'s `_gather_unit_facts`), and
@@ -168,6 +168,7 @@ card name.
   multiplier). Decision-log: "minion attack durations remain GLOBAL -- per-kind conversion is
   `4-4`'s opening act." Per-kind durations still cross seconds-to-ticks through the single named
   conversion point, `BalanceTicks.from_config()` — no second boundary is authored (AC 11).
+  `minion_retarget_interval_seconds` STAYS shared, by operator ruling: no kind needs its own cadence yet; converts later when one does.
 - **Tests measured as pinning these globals today** (constructing a `BalanceConfig` fixture, per
   the standing `BC/R3` isolation): only `test_data_resources.gd` (`E1_BALANCE_FIELDS` reflection
   guard), `test_balance_authoring.gd` (bespoke bounds), and `test_balance_config.gd`
@@ -194,6 +195,7 @@ card name.
   or defense window. Since the shipped Combat totem's priority is hero-preferring (AC 8, `4-4/R9`),
   its ordinary target is the opposing hero, so AC 16's homing-end event is reachable today; the
   unit-target case is AC 16's second sentence only, no synthetic test.
+- **"Shape" was dropped from the attack record (AC 9)** — no reader exists in `src/state/` and no ruling defines one; it returns with a future moveset story.
 - **CardEffectResolver's summon dispatch is uniform today** (`OUTCOME_SUMMON` for every `summon_*`
   prefix); this story is where its own header comment says the split has to land.
 - **FeatureFlags gating (B11(b) closes this).** Both `minions` and `totems` bools exist, but only
@@ -206,7 +208,7 @@ card name.
   totem's threat radius well inside the 40 m span; 60 m rounds up the ~56.57 m diagonal so a
   corner-to-corner shot can complete before the budget expires. Both remain working,
   playtest-tunable values.
-- **Mana/Stamina accelerator numbers are derived relative to `passive_tick`, per ruling.**
+- **Mana/Stamina accelerator numbers are derived relative to `passive_tick`, per `4-4/R13`.**
   `data/economy/passive_tick.tres` is the only precedent for "a totem produces a resource on some
   cadence" in this repo; the Mana Accelerator's cadence/amount are set relative to its values (same
   order of magnitude, stronger since totem-gated), and the Stamina Accelerator's regen factor is
@@ -254,7 +256,7 @@ card name.
   and dedupe; discharges `spell_*` forcing point `E4-P/R10`; PROPOSED but never decided a `4-4a`
   epic cut, not taken up here.
 - [Source: docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/decision-log.md — 4-4 rulings,
-  `4-4/R1`-`4-4/R12`] — this story's own working values and mechanism rulings.
+  `4-4/R1`-`4-4/R13`] — this story's own working values and mechanism rulings.
 - [Source: src/state/economy/card_effect_resolver.gd, header + `OUTCOME_SUMMON` dispatch] — uniform
   `summon_*` dispatch, naming 4-4 as where the split lands.
 - [Source: src/state/resources/resource_generation_rule.gd, `source` field docstring] —
@@ -271,7 +273,7 @@ card name.
   authored factor); HOW stays open within the `3-1/R2` per-pool reload contract — a per-player
   derived rate, a multiplier at the regen seat, or something else. AC 21 does not settle this.
 - **Per-kind data's storage shape** (one `.tres` per kind vs. a single indexed resource vs.
-  something else) is a dev-pass call; only that the twelve globals (AC 6 + B5 inventory) become
+  something else) is a dev-pass call; only that the eleven globals (AC 6 + B5 inventory) become
   per-kind, and the three named test files (AC 11) update to match, is fixed here.
 - **Projectile representation in `src/state/`.** `E4-P/R12` rules the addressing PRINCIPLE (its own
   attacker identity and dedupe, not a `[slot, index]` unit-board address), not the representation —

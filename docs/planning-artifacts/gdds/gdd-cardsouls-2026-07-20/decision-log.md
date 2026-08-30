@@ -7349,10 +7349,15 @@ dev-pass call within the `3-1/R2` per-pool reload contract.
 `4-4/R12` (ruled) SPEED 0 FOR ALL THREE KINDS. Combat, Mana Accelerator, and Stamina Accelerator
 totems are all authored with movement speed 0 and never leave spawn while alive -- not only the two
 accelerators. Cites `gdd.md`'s "small, unimposing static structure."
+`4-4/R13` (ruled) ACCELERATOR WORKING VALUES ARE DERIVED, NOT PRINCIPLED. The Mana Accelerator's
+cadence/amount and the Stamina Accelerator's regen factor are derived relative to the existing
+`passive_tick` rule and the non-accelerated `stamina_regen_per_second` baseline, respectively --
+playtest-tunable working values, not a new mechanism. Exact figures are a dev-pass measurement
+against the live `.tres`, recorded at dev time.
 
 Also fixed this pass, not separate rulings: AC 3's collision pattern corrected to name the `Hurtbox`
 member the damage path actually needs, and that no totem kind authors a `Hitbox`; AC 9's per-kind
-conversion inventory widened from four `BalanceConfig` globals to twelve, naming the eight further
+conversion inventory widened from four `BalanceConfig` globals to eleven, naming the seven further
 attack-timing/multiplier globals; AC 11 (test list) gains `test_balance_config.gd`; "shape" is
 dropped from the attack record with no ruling to replace it; AC 18/19 (Mana/Stamina Accelerator, now
 AC 20/21) corrected for the third `_generate_mana` call site and the owner-only wording; two Open
