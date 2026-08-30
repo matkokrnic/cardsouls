@@ -537,8 +537,10 @@ func is_attack_ready_at(index: int) -> bool:
 ## omission: every `Invariant.check` in this class is a BOUND guard wired to `has_index()` (pinned by
 ## `test_targeting_service.gd::test_every_board_bound_guard_is_wired_to_that_predicate`), and a
 ## container holds no policy about the values it is handed. The window's positivity is guaranteed
-## where it is DERIVED — `MatchState._reach_freshness_ticks()` returns `maxi(1, ...) + 1` or its
-## strictest fallback of 1, so it cannot be zero without that helper changing.
+## where it is DERIVED — `MatchState._reach_freshness_ticks()` adds 1 to `BalanceTicks`'s own
+## `minion_retarget_interval_ticks`, which carries the `maxi(1, ...)` clamp (`balance_ticks.gd`,
+## the single conversion boundary), or falls back to its own strictest 1 with no `BalanceTicks` at
+## all — so it cannot be zero without one of those two changing.
 func mark_in_reach_at(index: int, fresh_ticks: int) -> void:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
