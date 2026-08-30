@@ -74,6 +74,13 @@ const MOVE_SPEED := 7.0
 const RETUNED_MOVE_SPEED := 11.0
 const CAMERA_YAW_DEGREES := 90.0
 
+## Story 4-6 (AC 11/AC 14): the ONE tick that carries a retarget address, and the address it
+## carries. Slot 1's board index 4 -- a UNIT address, deliberately NOT the `[1, -1]` hero one, so a
+## rebuild that blanket-wrote the index half to the hero sentinel fails rather than coinciding.
+const RETARGET_TICK := 2
+const RETARGET_SLOT := 1
+const RETARGET_INDEX := 4
+
 ## AC 6: ticks driven before the first SAVE, and after it before the second.
 const TICKS_BEFORE_FIRST_SAVE := 6
 const TICKS_BETWEEN_SAVES := 7
@@ -136,12 +143,13 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 5,
-		"FORMAT_VERSION is 5 as of story 4-4 (`4-4/R15`) -- the recorded BalanceConfig gained a "
-		+ "nested `unit_kinds` list a v4 file carries nothing for (it was 4 through 4-3b, 3 through "
-		+ "4-3a, 2 through 4-1). The contact row's SHAPE is unchanged at seven elements, and the "
-		+ "assertions below still pin it: the row and the version stopped moving together at this "
-		+ "bump, so the row needs its own guard")
+	assert_eq(RecordFile.FORMAT_VERSION, 6,
+		"FORMAT_VERSION is 6 as of story 4-6 (AC 14) -- the intent shape changed (`aim` deleted, "
+		+ "`retarget_slot`/`retarget_index` added) and a new per-tick `lock_pushes` channel joined "
+		+ "the file, none of which a v5 record carries (it was 5 through 4-4, 4 through 4-3b, 3 "
+		+ "through 4-3a, 2 through 4-1). The contact row's SHAPE is unchanged at seven elements, "
+		+ "and the assertions below still pin it: the row and the version stopped moving together "
+		+ "at 4-4's bump, so the row needs its own guard")
 	var driven := _match_start()
 	var record: IntentRecorder = driven["record"]
 	var ms: MatchState = driven["state"]
@@ -275,23 +283,29 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 			var got := loaded.replay_intent(tick, slot)
 			var want := record.replay_intent(tick, slot)
 			assert_eq(got.move_dir, want.move_dir, "t%d s%d move_dir" % [tick, slot])
-			assert_eq(got.aim, want.aim, "t%d s%d aim" % [tick, slot])
 			assert_eq(got.pressed, want.pressed, "t%d s%d pressed" % [tick, slot])
 			assert_eq(got.held, want.held, "t%d s%d held" % [tick, slot])
 			assert_eq(got.debug_reset, want.debug_reset, "t%d s%d debug_reset" % [tick, slot])
 			assert_eq(got.card_slot, want.card_slot, "t%d s%d card_slot" % [tick, slot])
 			assert_eq(int(got.card_mode), int(want.card_mode), "t%d s%d card_mode" % [tick, slot])
 			assert_eq(got.card_commit, want.card_commit, "t%d s%d card_commit" % [tick, slot])
-			fields += 8
-	assert_eq(fields, TICKS * 2 * 8,
-		"all eight intent fields were compared for both slots on every tick (got %d)" % fields)
+			# Story 4-6 (AC 8/AC 11): `aim` is GONE from the intent and the two retarget-address
+			# fields replace it -- so the per-field count moves EIGHT -> NINE with the format
+			# bump, and this loop is where a field that silently stopped surviving a save fails.
+			assert_eq(got.retarget_slot, want.retarget_slot, "t%d s%d retarget_slot" % [tick, slot])
+			assert_eq(got.retarget_index, want.retarget_index, "t%d s%d retarget_index" % [tick, slot])
+			fields += 9
+	assert_eq(fields, TICKS * 2 * 9,
+		"all nine intent fields were compared for both slots on every tick (got %d)" % fields)
 	# ...and the driven values really were non-default, or the comparison above proves nothing.
 	var loud := loaded.replay_intent(CAST_TICK, 0)
 	assert_eq(loud.card_slot, CAST_SLOT, "the cast tick's card fields came back non-default")
 	assert_true(loud.card_commit, "...including the commit edge")
 	assert_true(loaded.replay_intent(ATTACK_TICK, 0).is_held(&"attack"), "held came back non-empty")
 	assert_true(loaded.replay_intent(RESET_TICK, 0).debug_reset, "debug_reset came back set")
-	assert_ne(loaded.replay_intent(1, 0).aim, Vector2.ZERO, "aim came back non-zero")
+	var retargeted := loaded.replay_intent(RETARGET_TICK, 0)
+	assert_eq(retargeted.retarget_slot, RETARGET_SLOT, "the retarget address came back non-default")
+	assert_eq(retargeted.retarget_index, RETARGET_INDEX, "...both halves of it")
 	_remove(ROUND_TRIP_PATH)
 
 
@@ -356,10 +370,13 @@ func test_a_record_from_the_version_before_unit_kinds_is_refused_with_a_reason()
 		"...with a REASON, never the empty-error refusal a caller reads as success")
 	assert_true(refused["error"].contains("4"),
 		"...naming the version found: %s" % refused["error"])
-	assert_true(refused["error"].contains("5"),
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
 		"...and the version this build speaks: %s" % refused["error"])
-	# The refusal is about the VERSION, not about the stripping: a v5 file of the same shape loads.
-	assert_eq(RecordFile.save_record(record, RETIRED_VERSION_PATH), "", "rewritten as v5")
+	# The refusal is about the VERSION, not about the stripping: a CURRENT-version file of the same
+	# shape loads. Story 4-6 reads the constant here rather than a literal, because the literal was
+	# the version this build spoke at the time and that is what makes it drift silently.
+	assert_eq(RecordFile.save_record(record, RETIRED_VERSION_PATH), "",
+		"rewritten at the current version")
 	assert_not_null(RecordFile.load_record(RETIRED_VERSION_PATH)["record"],
 		"the same record at the CURRENT version loads, so the refusal above was the version")
 	_remove(RETIRED_VERSION_PATH)
@@ -773,12 +790,17 @@ func _camera_pushes() -> Array:
 	return [[0, Basis(Vector3.UP, deg_to_rad(CAMERA_YAW_DEGREES))], [1, Basis.IDENTITY]]
 
 
-## Every one of InputIntent's eight fields is driven non-default somewhere in the run, so the
-## round trip is compared against a stream that actually carries them.
+## Every one of InputIntent's NINE fields is driven non-default somewhere in the run, so the
+## round trip is compared against a stream that actually carries them. Story 4-6 replaces `aim`
+## (driven every tick) with the retarget address, driven on ONE tick -- because that is what the
+## field's resting value MEANS: `retarget_slot == NO_RETARGET` is a tick with no click and no
+## flick, and driving it on every tick would model a gesture no player makes.
 func _intents(t: int) -> Array[InputIntent]:
 	var i1 := InputIntent.new()
 	i1.move_dir = _marked_move_dir(t)
-	i1.aim = Vector2(0.5, -0.25)
+	if t == RETARGET_TICK:
+		i1.retarget_slot = RETARGET_SLOT
+		i1.retarget_index = RETARGET_INDEX
 	var i2 := InputIntent.new()
 	i2.move_dir = Vector2(-1, 0)
 	if t == RESET_TICK:

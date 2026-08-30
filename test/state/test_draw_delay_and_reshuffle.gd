@@ -60,7 +60,10 @@ const VULNERABLE_TICKS := 7
 ## surfaced as its own key, and NONE required a stated reason for not surfacing. See
 ## `player_state.gd` at these keys for why five of them are one-array-one-key rather than fused.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
-	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
+	"deck_size", "discard_size", "hand_size", "hero",
+	# Story 4-6 (AC 2/AC 4): the lock-on target as a `[slot, index]` pair, in sorted position.
+	"lock_target",
+	"mana", "orbs",
 	"pending_draw", "pending_draw_owed",
 	# Story 4-4 (AC 14-19): the projectile board contributes SEVEN keys, in sorted position.
 	"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
@@ -349,7 +352,8 @@ func test_the_player_snapshot_key_set_is_exactly_the_expected_set() -> void:
 	keys.sort()
 	assert_eq(keys, EXPECTED_PLAYER_SNAPSHOT_KEYS,
 		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count; "
-		+ "4-2 added unit_targets; 4-3a added unit_hp; 4-3b added the six unit attack-rhythm keys)")
+		+ "4-2 added unit_targets; 4-3a added unit_hp; 4-3b added the six unit attack-rhythm keys; "
+		+ "4-6 added lock_target)")
 	assert_false(keys.has("vulnerable_window"),
 		"the vulnerable window is NOT a snapshot key — nothing reads it, so nothing can desync on it")
 

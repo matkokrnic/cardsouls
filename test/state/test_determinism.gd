@@ -5,6 +5,76 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## RE-BASELINED BY STORY 4-6 (camera lock-on), a96b123e -> aa3566d7, THREE CAUSES MEASURED
+## SEPARATELY AND IN ORDER, plus a FOURTH candidate predicted and confirmed a NON-MOVER.
+##
+## AC 4 requires this story's causes to be "each confirmed and re-baselined in isolation per the
+## `4-3a/R17`/`4-4` AC 12 multi-cause precedent (`4-6/R2`)", and operator ruling `4-6/R7` adds a
+## third that AC 4 did not know about when it was written. Each was measured by STAGING ONE THING
+## OFF the fully-shipped tree and re-running this file -- the 4-3b reverse-direction method -- with
+## both staged files backed up out of repo and SHA256-verified byte-identical after restoration.
+##
+##   0. THE INHERITED VALUE, for reference: a96b123e (story 4-4's review fix pass).
+##
+##   1. FACING OWNERSHIP, THE BEHAVIOUR HALF (AC 2, AC 4 cause (a)). `HeroState.facing` stops being
+##      written from the camera-rotated movement input and starts being written from the pushed
+##      LOCK DIRECTION, unconditionally, with the movement zero-guard gone. Staged by holding the
+##      `lock_target` snapshot key OFF `PlayerState.to_snapshot()` and the `4-6/R7` sign OFF
+##      `_roll_world_direction`, so this measurement is the facing write and nothing else.
+##      MEASURED: a96b123e ->
+##      cd21eac5a93f6772275d1ebc18603807fc0a83db385ffbf691270900bd4a3a76.
+##
+##      IT IS A REAL BEHAVIOURAL CAUSE IN THIS FIXTURE, not a nominal one, and `LOCK_DIRS` is what
+##      makes it so -- see that constant for the three-sided constraint its values satisfy. Facing
+##      reaches the hash directly (`hero.facing`) and indirectly through the attack LUNGE, which
+##      runs along it: at t5 P1's whole velocity IS the lunge.
+##
+##   2. FACING OWNERSHIP, THE SHAPE HALF (AC 2, AC 4 cause (a)). `PlayerState.to_snapshot()` gains
+##      ONE key, `lock_target`, the `[slot, index]` address this player's hero is locked onto.
+##      Restored on top of cause 1. MEASURED: cd21eac5 ->
+##      9a71e68abc4d8697b6c6ce0c8d44c9410628f6e6b0e8f7ee25a0f342af66d122.
+##      The key set moves TWENTY-SEVEN -> TWENTY-EIGHT here, pinned by test_card_observation.gd
+##      and test_draw_delay_and_reshuffle.gd.
+##
+##      SPLIT FROM CAUSE 1 RATHER THAN FUSED WITH IT even though AC 4 names them as one cause,
+##      because this file's standing discipline separates a snapshot SHAPE mover from a BEHAVIOUR
+##      mover (4-1, 4-2 and 4-4 all did) and fusing them would have made the pair unattributable.
+##      Its value is NOT static across the run: both players start locked on the opposing hero and
+##      the fixture never retargets, so `[1, -1]` / `[0, -1]` is what reaches the hash -- the
+##      resting value, which is exactly what AC 10's "there is no unlocked state" means.
+##
+##   3. THE `4-6/R7` NEUTRAL-STICK BACKSTEP (operator ruling, this dev pass). With the stick
+##      neutral at roll entry the roll now goes AWAY from the locked target instead of along
+##      facing. Restored on top of causes 1 and 2. MEASURED: 9a71e68a ->
+##      aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f, the value below.
+##
+##      THE RULING REQUIRED THIS TO BE MEASURED EITHER WAY -- "if any golden-fixture tick rolls
+##      with a neutral stick, this inversion is a THIRD separately measured golden cause; if none
+##      does, measure and record the non-move." ONE DOES: t17's move pair is MOVES[16 % 6] =
+##      (0, 0), so P1's roll-cancel takes the fallback, and `roll_direction` is SNAPSHOTTED and
+##      still holds its entry-locked value at the hashed t24. It moves
+##      Vector3(-0.6, 0, -0.8) from what causes 1-2 alone would have left at (0.6, 0, 0.8) --
+##      pinned by name in test_golden_sequence_exercises_iframe_negation.
+##
+##   4. THE LIVE CAMERA BASIS (AC 4 cause (b)) -- PREDICTED A NON-MOVER FOR THIS HASH, CONFIRMED,
+##      AND STRUCTURALLY SO. AC 4 names the rig's new per-tick yaw making the pushed basis
+##      non-identity in live play, which changes `world_dir` and therefore the hashed
+##      `HeroState.velocity` -- the `3-0c/R2` divergence. IT CANNOT REACH THIS FILE: the state
+##      harness instantiates no scene, so there is no rig to yaw, and this fixture calls
+##      `set_camera_basis` ZERO times (grepped), so every tick resolves through the identity
+##      short-circuit exactly as it always has. Confirmed by causes 1-3 fully explaining the final
+##      value.
+##
+##      SO CAUSE (b) IS GUARDED ELSEWHERE, and naming where is the point of recording it here
+##      rather than omitting it: test/integration/test_camera_relative.gd drives the live yaw
+##      end-to-end through the real runner, and test_replay_identity.gd drives a NON-IDENTITY
+##      basis through the record. A green golden is not coverage of it.
+##
+## NOT a cause: `data/gamepad_profile.tres`'s new right-stick fields (this fixture builds its
+## intents in-test and loads no controller resource), and the `RecordFile.FORMAT_VERSION` bump
+## (this file never touches a record).
+## ---------------------------------------------------------------------------------------------
+##
 ## RE-BASELINED BY STORY 4-4'S REVIEW FIX PASS (`4-4/R14`), d94337cd -> a96b123e, ONE CAUSE.
 ##   1. SNAPSHOT VALUE SHAPE, not the key SET. `unit_in_reach` was a bool per unit and is now an INT
 ##      per unit — the number of ticks a reach confirmation stays CURRENT. The key set does NOT move
@@ -605,7 +675,7 @@ extends TestCase
 ##     They are proven in test_unit_attack_rhythm.gd, test_contact_resolution.gd,
 ##     test_unit_damage_and_death.gd and test/integration/test_unit_attack_live.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "a96b123e67ef8330b5bb07c1bafefaf5204e9bf9982eded936f8d69b29afa522"
+const GOLDEN := "aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -725,6 +795,34 @@ const MOVES := [
 ## P2 (story 1-9): attack t15 — the release tick; the block exit and the attack entry
 ## fire the same tick (windup 15-17, active 18-21), putting P2's active window over P1's
 ## roll iframes.
+## Story 4-6 (AC 2/AC 4): the PER-SLOT LOCK DIRECTION this fixture pushes, every tick, through
+## `set_lock_direction` -- the seat the runner uses, modelled here the way `CONTACTS` models the
+## contact channel. WITHOUT THIS LINE THE FIXTURE MEASURES A FALSE NON-MOVE ON HALF THE STORY,
+## which is the standing lesson every value in this file is chosen against: with nothing pushed,
+## facing simply freezes at its `Vector2.DOWN` construction default for all 24 ticks, P2 stops
+## facing the incoming swings, and the t5 DEFLECT and t13 BLOCK -- coverage this fixture has
+## carried since 1-8 -- would silently vanish rather than being preserved.
+##
+## CONSTANT, NOT CYCLED, and that is what a lock IS: the direction to a target changes only as the
+## two move, and modelling it as a per-tick cycle would model a target teleporting around the
+## board. Constant also keeps this fixture's ONE facing-derived transient -- the t17 roll's
+## neutral-stick fallback -- attributable to the ruling that inverted it rather than to which
+## entry of a cycle t17 happened to land on.
+##
+## THE VALUES ARE COVERAGE, NOT FEEL, like every number in this file, and are constrained on three
+## sides simultaneously:
+##   * OFF THE AXES and off every `MOVES` entry, so a facing write that regressed to the movement
+##     source lands on a different value and MOVES the hash rather than coinciding with this one.
+##   * UNIT LENGTH, because the runner pushes a normalised direction and a fixture that pushed an
+##     unnormalised one would hash a state the production path cannot produce.
+##   * P2's DIRECTION KEEPS THE 1-8 DEFENCE COVERAGE ALIVE, measured against the authored 180 deg
+##     arc: the t5 fact arrives from (-1, -1), 8.1 deg off P2's (-0.8, -0.6) facing, and the t13
+##     fact from (-1, 0), 36.9 deg off it -- both inside the front half-plane, so the DEFLECT and
+##     the BLOCK both still resolve exactly as they have since 1-8.
+## P1's (0.6, 0.8) additionally makes the `4-6/R7` backstep VISIBLE: the t17 neutral roll now locks
+## (-0.6, 0, -0.8), which is neither the old (-1, 0, 0) nor its own inverse.
+const LOCK_DIRS := [Vector2(0.6, 0.8), Vector2(-0.8, -0.6)]
+
 const TICKS := 24
 const P1_PRESS := {1: [&"attack"], 9: [&"attack"], 17: [&"roll"]}
 const P2_PRESS := {1: [&"block"], 7: [&"block"], 15: [&"attack"]}
@@ -1089,8 +1187,15 @@ func test_golden_sequence_exercises_iframe_negation() -> void:
 	assert_eq(p1_hp[TICKS - 1], 108.0, "t24: P1 non-full HP on the hashed record")
 	assert_eq(p2_mana[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK,
 		"t24: P2 non-zero mana on the hashed record")
-	assert_eq(ms.p1.hero.roll_direction, Vector3(-1, 0, 0),
-		"t17 roll captured via the facing fallback — on the hashed record")
+	# STORY 4-6, OPERATOR RULING `4-6/R7`: the neutral-stick fallback INVERTS, and this is the one
+	# assertion in this file that sees it -- t17's move pair is (0, 0), so the roll takes the
+	# fallback. Facing at t17 is the pushed `LOCK_DIRS[0]` = (0.6, 0.8), and the backstep is its
+	# INVERSE. It was Vector3(-1, 0, 0) through 4-4, when facing was the input-derived (-1, 0)
+	# carried from t16 and the fallback ran ALONG it. Both halves of the change are visible in
+	# this one value, which is why it is the cause-attribution anchor in the re-baseline record
+	# above rather than a line quietly edited to match.
+	assert_eq(ms.p1.hero.roll_direction, Vector3(-0.6, 0, -0.8),
+		"t17 roll captured via the INVERTED facing fallback (`4-6/R7`) — on the hashed record")
 
 
 ## Story 3-0b (AC5/AC6), the per-phase-movement analogue of the pins above: the golden only
@@ -1099,10 +1204,14 @@ func test_golden_sequence_exercises_iframe_negation() -> void:
 ## on ticks where the arithmetic is unambiguous because the move intent is ZERO, so the
 ## steered term drops out and the velocity is the new term alone:
 ##   t5 — P1 is in swing 0's ACTIVE window (windup 1-3, active 4-7) and MOVES[4] gives P1
-##        (0,0), so world_dir is zero and P1's velocity IS the lunge: facing (-1,0) carried
-##        from t4 (a zero intent does not update facing), 2.0 units / (7/60 s) on -X. This is
-##        the evidence that AC6 ran at all — and, paired with the t24 pin below, the evidence
-##        for WHY it is a measured non-mover.
+##        (0,0), so world_dir is zero and P1's velocity IS the lunge, along facing, at 2.0 units
+##        / (7/60 s). This is the evidence that AC6 ran at all — and, paired with the t24 pin
+##        below, the evidence for WHY it is a measured non-mover.
+##        STORY 4-6 (AC 2): facing at t5 is the pushed `LOCK_DIRS[0]` = (0.6, 0.8), so the lunge
+##        runs along THAT. It used to read (-1, 0) — the input-derived heading carried from t4,
+##        because a zero intent did not update facing. The claim is unchanged and is if anything
+##        sharper: the lunge tracks facing, and facing now has one owner instead of a
+##        carried-over transient.
 ##   t24 — the hashed tick. P2 is in its t15 swing's RECOVERY with move (1,0): velocity is
 ##        6.0 * the recovery multiplier 0.75 = 4.5 on +X, with NO lunge component, which is
 ##        exactly the AC5-moves / AC6-does-not split the re-baseline record names.
@@ -1115,8 +1224,10 @@ func test_golden_sequence_exercises_per_phase_movement_and_lunge() -> void:
 		p2_vel.append(ms.p2.hero.velocity))
 	var lunge_speed := 2.0 / (7.0 / 60.0)
 	assert_eq(ms.p1.hero.attack_phase(), &"attack_done", "sanity: P1's swings are long over by t24")
-	assert_true(p1_vel[5 - 1].is_equal_approx(Vector3(-lunge_speed, 0.0, 0.0)),
-		"t5: P1's ACTIVE-phase velocity is the lunge ALONE (zero move intent) — AC6 genuinely ran")
+	var lunge_dir := Vector3(LOCK_DIRS[0].x, 0.0, LOCK_DIRS[0].y)
+	assert_true(p1_vel[5 - 1].is_equal_approx(lunge_dir * lunge_speed),
+		"t5: P1's ACTIVE-phase velocity is the lunge ALONE (zero move intent), along the LOCKED "
+		+ "facing — AC6 genuinely ran")
 	assert_true(p2_vel[TICKS - 1].is_equal_approx(Vector3(4.5, 0.0, 0.0)),
 		"t24 (hashed): P2 in RECOVERY at 6.0 * 0.75, NO lunge term — the AC5-moves/AC6-non-mover split")
 
@@ -1462,6 +1573,13 @@ func _play_sequence(ms: MatchState, after_tick := Callable(), cast := true) -> v
 		var i2 := _intent(pair[1], P2_PRESS.get(t, []), held2)
 		for fact: Array in CONTACTS.get(t, []):
 			ms.push_contact([fact[0], -1], [fact[1], -1], fact[2], fact[3], MatchState.CONTACT_STRIKE)
+		# Story 4-6 (AC 2): the LOCK-DIRECTION channel, pushed BEFORE that tick's advance() -- the
+		# runner's step-2 position, the same seat the contact facts directly above are pushed at.
+		# Pushed EVERY tick rather than once at construction even though the value is constant and
+		# the array persists: the fixture models the runner's behaviour, not the shortest way to
+		# reach the same state.
+		for slot: int in 2:
+			ms.set_lock_direction(slot, LOCK_DIRS[slot])
 		var intents: Array[InputIntent] = [i1, i2]
 		ms.advance(intents)
 		ms.drain_signals()

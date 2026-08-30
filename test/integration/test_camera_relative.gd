@@ -1,19 +1,29 @@
 extends SceneTree
 
-## Story 1-2 integration (AC 5) + Story 2-1 (AC 3): [smoke] the authored camera config .tres
-## reaches the rig's camera, and [movement] rotating a rig PROGRAMMATICALLY (camera look input
-## is out of E1 scope — no Input Map action exists or may be added) makes a fixed forward intent
-## move that hero along ITS OWN camera forward, proving rig basis -> runner push -> state rotation
-## -> actor displacement end-to-end.
+## Story 1-2 integration (AC 5) + Story 2-1 (AC 3) + Story 4-6 (AC 1, AC 7): [smoke] the authored
+## camera config .tres reaches the rig's camera, and [movement] a fixed forward intent moves each
+## hero along ITS OWN camera forward, proving rig basis -> runner push -> state rotation -> actor
+## displacement end-to-end.
 ##
-## Story 2-1 extends this to BOTH slots, exercising the per-slot camera basis (_camera_bases —
-## two live entries already at HEAD) independently for P1 (slot 0) and P2 (slot 1). The two rigs
-## are yawed in OPPOSITE senses and both heroes are driven forward: each follows its OWN camera
-## and is unaffected by the other's rotation (P1 -> world -X, P2 -> world +X). Opposite results
-## from opposite rig yaws prove the two bases are distinct, not shared. Slot 1 is put on a
-## KEYBOARD_P2 controller EXPLICITLY, via assign() below (shipped main.tscn also ships
-## KEYBOARD_P2 on slot 1 as of 2-3 — NULL, the training dummy, remains an available kind but is
-## no longer the default); the kind is set on the scene instance BEFORE it enters the tree,
+## STORY 4-6 RE-EXAMINED THIS FILE RATHER THAN RE-RUNNING IT (AC 7 requires exactly that), and it
+## needed the fixture rewritten. Through 4-4 the test rotated each rig PROGRAMMATICALLY, because
+## camera rotation was out of scope and nothing else could move a rig. That is no longer possible:
+## the runner now yaws both rigs EVERY TICK to frame the locked target, so a rotation written in
+## _initialize() is overwritten before the first measurement. THE DRIVER REPLACES THE FIXTURE.
+##
+## WHAT THE TEST PROVES IS UNCHANGED, and if anything is now proven against the shipping path
+## instead of a test-only one. Each rig looks at its own locked target, which by default is the
+## opposing hero (`CC/R2`); main.tscn parks P1 at x -3 and P2 at x +3; so P1's camera forward is
+## world +X and P2's is world -X. A forward intent must therefore walk each hero TOWARD the other
+## -- in OPPOSITE world directions, which is still the per-slot proof: two heroes following one
+## shared basis would move the same way, and the bases here are live rather than staged.
+##
+## THE EXPECTED SIGNS ARE THE EXACT INVERSE of the pre-4-6 ones (P1 was -X, P2 was +X), because
+## the old fixture yawed P1 +90 and P2 -90 while the live lock yaws them to face each other.
+##
+## Slot 1 is put on a KEYBOARD_P2 controller EXPLICITLY, via assign() below (shipped main.tscn also
+## ships KEYBOARD_P2 on slot 1 as of 2-3 — NULL, the training dummy, remains an available kind but
+## is no longer the default); the kind is set on the scene instance BEFORE it enters the tree,
 ## through the single per-slot config point (match_runner.slot_controller_kinds), never a
 ## private reach-in.
 ##
@@ -46,11 +56,9 @@ func _initialize() -> void:
 	_p2 = root.get_node("Main/P2Hero")
 	_p1_rig = root.get_node("Main/P1Hero/CameraRig")
 	_p2_rig = root.get_node("Main/P2Hero/CameraRig")
-	# Rotate each rig PROGRAMMATICALLY (no look input), in OPPOSITE senses: P1 +90 deg yaw
-	# (camera forward -> world -X), P2 -90 deg yaw (camera forward -> world +X). Opposite
-	# directions prove each hero uses ITS OWN per-slot basis, not a shared one.
-	_p1_rig.rotation_degrees = Vector3(0.0, 90.0, 0.0)
-	_p2_rig.rotation_degrees = Vector3(0.0, -90.0, 0.0)
+	# Story 4-6: NOTHING IS STAGED HERE ANY MORE. The rigs are yawed by the runner's own per-tick
+	# lock-on driver, from the default lock (`CC/R2`: the opposing hero), so the bases this test
+	# measures against are the ones the game actually ships.
 
 
 func _physics_process(_delta: float) -> bool:
@@ -76,12 +84,13 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_release(&"p2_move_up")
 		var p1_moved := _p1.global_position - _p1_start
 		var p2_moved := _p2.global_position - _p2_start
-		# P1 rig yawed +90 deg: camera forward = world -X. Forward intent must displace P1
-		# along -X, with no drift onto the unrotated -Z axis.
-		var p1_followed := p1_moved.x < -0.1 and absf(p1_moved.z) < 0.05
-		# P2 rig yawed -90 deg: camera forward = world +X. Forward intent must displace P2
-		# along +X — the OPPOSITE axis, proving slot 1's basis is live AND independent of P1's.
-		var p2_followed := p2_moved.x > 0.1 and absf(p2_moved.z) < 0.05
+		# P1 is locked on P2, which sits at +X: camera forward = world +X. A forward intent must
+		# displace P1 along +X, with no drift onto the unrotated -Z axis the identity basis gave.
+		var p1_followed := p1_moved.x > 0.1 and absf(p1_moved.z) < 0.05
+		# P2 is locked on P1, which sits at -X: camera forward = world -X. The OPPOSITE axis,
+		# proving slot 1's basis is live AND independent of P1's -- and that the yaw driver is
+		# per-slot rather than one shared camera.
+		var p2_followed := p2_moved.x < -0.1 and absf(p2_moved.z) < 0.05
 		var ok := _smoke_ok and p1_followed and p2_followed
 		print("camera-relative P1 dx=%f dz=%f  P2 dx=%f dz=%f (smoke_ok=%s, p1_followed=%s, p2_followed=%s)" % [
 			p1_moved.x, p1_moved.z, p2_moved.x, p2_moved.z, _smoke_ok, p1_followed, p2_followed])

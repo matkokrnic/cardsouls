@@ -218,12 +218,19 @@ func _run_stage() -> void:
 				return
 			if elapsed == 1:
 				_obstacle_x = hero.global_position.x + OBSTACLE_GAP
-				Input.action_press(&"p1_move_right")
+		# STORY 4-6 (AC 1): `p1_move_up` -- CAMERA-FORWARD -- is what world +X is now, and the
+		# swap is this story's cause (b) landing on an existing fixture rather than a fix. The rig
+		# yaws every tick to frame the locked target, the default lock is the opposing hero, and
+		# main.tscn parks P1 at x -3 and P2 at x +3 -- so camera-forward IS +X, and `p1_move_right`
+		# is camera-RIGHT, which is now perpendicular to it. Measured, not assumed: with the rig
+		# fixed this pressed `p1_move_right`; test_camera_relative.gd is the file that pins the new
+		# mapping end-to-end.
+				Input.action_press(&"p1_move_up")
 			# Re-parked every frame: the friendly unit is walking toward its own target, and an
 			# obstacle that wandered off would make "blocked" unfalsifiable.
 			live.global_position = Vector3(_obstacle_x, 0.0, hero.global_position.z)
 			if elapsed >= DRIVE_FRAMES:
-				Input.action_release(&"p1_move_right")
+				Input.action_release(&"p1_move_up")
 				_live_probe_dx = hero.global_position.x - _obstacle_x
 				_blocked_by_live = _live_probe_dx < -BLOCKED_MARGIN
 				if not _blocked_by_live:
@@ -241,9 +248,9 @@ func _run_stage() -> void:
 					live2.global_position = PARKING_LOT
 				_obstacle_x = hero.global_position.x + OBSTACLE_GAP
 				corpse.global_position = Vector3(_obstacle_x, 0.0, hero.global_position.z)
-				Input.action_press(&"p1_move_right")
+				Input.action_press(&"p1_move_up")
 			if elapsed >= DRIVE_FRAMES:
-				Input.action_release(&"p1_move_right")
+				Input.action_release(&"p1_move_up")
 				_corpse_probe_dx = hero.global_position.x - _obstacle_x
 				_passed_corpse = _corpse_probe_dx > PAST_MARGIN
 				if not _passed_corpse:

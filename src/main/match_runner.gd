@@ -1795,6 +1795,124 @@ func _slot_of(actor: Node) -> int:
 	return -1
 
 
+## Story 4-6 (AC 1/AC 2, `4-6/R6`): the world-space PLANAR direction from this slot's hero to
+## whatever that slot has locked, as a unit `Vector2` in the (x, z) convention `HeroState.facing`
+## and the contact fact's `dir` already use.
+##
+## FROM POSITIONS ONLY, exactly as `_gather_contact_facts` computes `target_to_attacker`: the
+## runner reports the spatial fact and state decides what it means. The ADDRESS comes from state
+## (`PlayerState.lock_target_*`); turning it into a world position is done HERE, through the same
+## `_target_world_position` the unit aim/approach loops use, so there is one address-to-position
+## mapping in this file rather than two.
+##
+## Vector2.ZERO IS "NO FACT", and it has three causes, all of them handled the same way by both
+## consumers (facing keeps its last value, the rig keeps its heading): an unspawned or freed target
+## actor (`_target_world_position` returns null), a degenerate co-located target (the
+## `push_contact` zero-direction drop verbatim), and a hero actor that is no longer valid.
+func _lock_direction(slot: int) -> Vector2:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	if not is_instance_valid(hero):
+		return Vector2.ZERO
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var target_position: Variant = _target_world_position(
+		player.lock_target_slot, player.lock_target_index)
+	if target_position == null:
+		return Vector2.ZERO
+	var to_target: Vector3 = (target_position as Vector3) - hero.global_position
+	var planar := Vector2(to_target.x, to_target.z)
+	if planar.is_zero_approx():
+		return Vector2.ZERO
+	return planar.normalized()
+
+
+## Story 4-6 (AC 9/AC 10/AC 11): turn one slot's right-stick gesture into a retarget ADDRESS on
+## that slot's intent. Writes nothing when there is no gesture, and nothing when a flick finds no
+## candidate -- AC 10's no-op is delivered by sending no request at all, which leaves the standing
+## lock untouched state-side (there is no unlock value to send).
+##
+## CLICK BEATS FLICK, checked first (AC 9: "regardless of current target"). The controller already
+## suppresses a flick on a click tick; stating the precedence at both layers costs one branch and
+## means neither can silently disagree with the other.
+func _resolve_retarget(slot: int, intent: InputIntent, controller: Controller,
+		view_cam: Camera3D) -> void:
+	var opposing := 1 - slot
+	if controller.relock_pressed():
+		intent.retarget_slot = opposing
+		intent.retarget_index = TargetingService.HERO_INDEX
+		return
+	var flick := controller.retarget_flick()
+	if flick.is_zero_approx():
+		return
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	if not is_instance_valid(hero) or not is_instance_valid(view_cam):
+		return
+	var hero_screen: Variant = _screen_position(view_cam, hero.global_position)
+	if hero_screen == null:
+		return  # this slot cannot see its own hero; there is no screen frame to flick within
+	var addresses: Array[Array] = []
+	var screens: Array[Vector2] = []
+	_gather_flick_candidates(slot, opposing, view_cam, addresses, screens)
+	var pick := LockOnResolver.best_candidate(hero_screen as Vector2, flick, screens)
+	if pick == -1:
+		return
+	intent.retarget_slot = addresses[pick][0]
+	intent.retarget_index = addresses[pick][1]
+
+
+## Story 4-6 (AC 10): the ON-SCREEN candidate set for a flick -- the OPPOSING HERO plus every
+## LIVING unit on the opposing board (minions and totems alike, which are one board), gathered
+## hero-then-units in board-index order so an exact geometric tie in the resolver breaks on the
+## same total order the contact pipeline uses (`4-3b/R5`).
+##
+## OPPOSING SLOT ONLY. A player locks onto things that can be fought; a lock onto one's own minion
+## has no meaning under `CC/R2`'s always-locked camera and would point the hero away from every
+## threat.
+##
+## THE CURRENT TARGET IS EXCLUDED, which is what makes a flick a SWITCH: leaving it in would let a
+## flick "retarget" to what is already locked and read as a dead control.
+##
+## OFF-SCREEN CANDIDATES ARE EXCLUDED BY `_screen_position` RETURNING NULL -- AC 10 says on-screen
+## candidates, and it is also what makes the click the only route back to an off-screen opposing
+## hero (AC 9).
+func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
+		addresses: Array[Array], screens: Array[Vector2]) -> void:
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var opponent: PlayerState = _match_state.p1 if opposing == 0 else _match_state.p2
+	var current: Array[int] = [player.lock_target_slot, player.lock_target_index]
+	var candidates: Array[Array] = [[opposing, TargetingService.HERO_INDEX]]
+	var actors: Array = _unit_actors[opposing]
+	for index: int in actors.size():
+		if opponent.units.has_index(index) and opponent.units.is_alive_at(index):
+			candidates.append([opposing, index])
+	for address: Array in candidates:
+		if address[0] == current[0] and address[1] == current[1]:
+			continue
+		var world: Variant = _target_world_position(address[0], address[1])
+		if world == null:
+			continue
+		var screen: Variant = _screen_position(view_cam, world as Vector3)
+		if screen == null:
+			continue
+		addresses.append(address)
+		screens.append(screen as Vector2)
+
+
+## Story 4-6 (AC 10): unproject a world point into this slot's own viewport, or null when it is
+## not visible there -- behind the camera, or outside the viewport rectangle. PRESENTATION ONLY;
+## nothing it returns reaches `src/state/` except through the resolved ADDRESS the caller stamps
+## on the intent.
+func _screen_position(view_cam: Camera3D, world: Vector3) -> Variant:
+	if view_cam.is_position_behind(world):
+		return null
+	var point := view_cam.unproject_position(world)
+	var viewport := view_cam.get_viewport()
+	if viewport == null:
+		return null
+	if not viewport.get_visible_rect().has_point(point):
+		return null
+	return point
+
+
 func _physics_process(delta: float) -> void:
 	# 0. Story 3-0b (AC 1): the DEBUG step/pause gate. Read through the controller-layer
 	#    DebugInputReader (D3(a) — Input.* may not appear in this file), never as an intent:
@@ -1828,6 +1946,26 @@ func _physics_process(delta: float) -> void:
 	# before advance() reads it). Camera FOLLOW (step 4b) stays outside: the operator must be able
 	# to look around while paused.
 	if ticking:
+		# 1c. Story 4-6 (AC 1/AC 2): THE LOCK-ON GATHER, and it comes BEFORE the fork and before
+		#     the basis push for a reason that is a machine contract, not a style choice. The rig
+		#     yaw is what MAKES the basis non-identity, so a push seated above this line would ship
+		#     last tick's orientation into this tick's movement resolution -- one frame of camera
+		#     lag folded into a HASHED value.
+		#
+		#     ONE COMPUTATION, TWO CONSUMERS. The same per-slot direction yaws the rig
+		#     (presentation, AC 1) and is pushed into state as the facing fact (AC 2, `4-6/R6`);
+		#     deriving it twice would be two answers to one question. It is computed from the two
+		#     ACTOR POSITIONS this runner already owns -- state decides WHAT is locked, the runner
+		#     turns that address into a direction, and no position ever travels inward
+		#     (`4-2/R14`, the `_aim_unit_actors` rule verbatim).
+		#
+		#     THE YAW RUNS IN REPLAY TOO, on purpose: it is presentation, and replay guarantees
+		#     STATE identity rather than VISUAL identity (see `replay_record` above). What replay
+		#     does NOT do is push this live direction into state -- it drains the RECORDED one in
+		#     the fork below, exactly as it does for the camera basis.
+		var lock_dirs: Array[Vector2] = [_lock_direction(0), _lock_direction(1)]
+		_p1_rig.face_lock_direction(lock_dirs[0])
+		_p2_rig.face_lock_direction(lock_dirs[1])
 		# Story 3-0c (AC 9): the REPLAY FORK. In replay mode the runner performs NO Area3D overlap
 		# query and pushes NO live camera basis — it pushes the recorded bases and drains the
 		# recorded facts for this tick instead, in recorded push order. Everything downstream
@@ -1842,6 +1980,12 @@ func _physics_process(delta: float) -> void:
 			_replay_tick += 1
 			_replay_record.replay_apply_reloads_before(_match_state, _replay_tick)
 			_replay_record.replay_push_camera_bases(_match_state, _replay_tick)
+			# Story 4-6 (AC 2): the LOCK-DIRECTION channel drains here, beside the bases and for
+			# the identical reason -- it is derived from actor POSITIONS, and positions come from
+			# move_and_slide() and may drift between a recording and its replay. A replay that
+			# re-derived it from the live scene would diverge on the hashed `HeroState.facing` the
+			# first time a hero stood a hair off where it stood before.
+			_replay_record.replay_push_lock_directions(_match_state, _replay_tick)
 			_replay_record.replay_push_contacts(_match_state, _replay_tick)
 		else:
 			# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
@@ -1858,6 +2002,15 @@ func _physics_process(delta: float) -> void:
 			_match_state.set_camera_basis(0, _p1_rig.basis)
 			_recorder.capture_set_camera_basis(1, _p2_rig.basis)
 			_match_state.set_camera_basis(1, _p2_rig.basis)
+			# Story 4-6 (AC 2, `4-6/R6`): the LOCK DIRECTION, pushed and tapped in the SAME seat
+			# and the same order as the basis directly above -- the confirmed mechanism, a pushed
+			# per-tick fact through the `set_camera_basis` / `push_contact` seam family, never a
+			# live scene query from inside `src/state/`. Gathered at 1c above, where the rig yaw
+			# that this basis now carries was written from the very same value.
+			_recorder.capture_set_lock_direction(0, lock_dirs[0])
+			_match_state.set_lock_direction(0, lock_dirs[0])
+			_recorder.capture_set_lock_direction(1, lock_dirs[1])
+			_match_state.set_lock_direction(1, lock_dirs[1])
 			#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
 			#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
 			# Story 4-3b (AC 5): THE CANONICAL CROSS-ATTACKER GATHER ORDER, and the unit pass's
@@ -1910,6 +2063,19 @@ func _physics_process(delta: float) -> void:
 			# samples every frame but advances only on ticking ones, so a tap at the sample step
 			# would record intents that no tick ever consumed and desync the stream from its own
 			# tick indices. One capture, one advance, always in that order.
+			# Story 4-6 (AC 11, `CC/R5`): RESOLVE each slot's click/flick into a `[slot, index]`
+			# ADDRESS and stamp it onto that slot's intent -- IMMEDIATELY BEFORE the X5 tap, so
+			# what the record carries is the OUTCOME of the gesture and never the raw stick
+			# deflection. That ordering is the whole of AC 11's replay claim: a recorded flick
+			# re-applies as the target it actually chose, not as a direction re-resolved against a
+			# camera and a board arrangement that no longer exist.
+			#
+			# LIVE BRANCH ONLY. In replay the recorded intent ALREADY carries the resolved
+			# address, and ReplayController's inherited neutral accessors would overwrite it with
+			# "no request" if this ran there -- so the guard is structural (this is inside the
+			# `else`), not a flag.
+			_resolve_retarget(0, intents[0], _p1_controller, _p1_view_cam)
+			_resolve_retarget(1, intents[1], _p2_controller, _p2_view_cam)
 			_recorder.capture_advance(intents)
 		# 3. Advance state (enqueues signals only).
 		_match_state.advance(intents)

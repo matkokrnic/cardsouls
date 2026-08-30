@@ -171,14 +171,47 @@ func test_roll_direction_from_move_dir_normalized_and_locked() -> void:
 		"after the roll, velocity is input-driven again at move_speed")
 
 
-func test_roll_direction_facing_fallback_when_neutral() -> void:
+## OPERATOR RULING `4-6/R7` INVERTS THIS FALLBACK, and the test moves with it. Through 4-4 a
+## neutral-stick roll went ALONG `facing`; from 4-6 it goes AWAY from it -- the DS/ER locked-on
+## neutral-dodge (backstep) convention, now that `facing` means "straight at the locked target"
+## rather than "the way I was last heading". Delivered as the ORDINARY roll: same i-frames, same
+## speed, same duration, only the sign of the fallback direction.
+##
+## RENAMED FROM `test_roll_direction_facing_fallback_when_neutral`, recorded verbatim so the Fence
+## Inventory stays greppable.
+##
+## MUTATION PROOF: drop the minus sign in `_roll_world_direction` and this fails on the first
+## assertion at exactly the inverse vector -- the two directions are distinguishable, which is why
+## the lock direction below is pushed non-symmetric.
+func test_roll_direction_neutral_stick_backsteps_away_from_the_lock() -> void:
 	var ms := _make_match()
-	_step(ms, _intent([], Vector2(1, 0)))   # t1: establish facing (1, 0)
+	ms.set_lock_direction(0, Vector2(1, 0))
+	_step(ms, _intent([], Vector2(1, 0)))   # t1: facing becomes the locked direction (1, 0)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(1, 0)),
+		"sanity: the hero really is facing the locked target before the roll")
 	_step(ms, _intent([&"roll"]))           # t2: neutral-stick roll
-	assert_true(ms.p1.hero.roll_direction.is_equal_approx(Vector3(1, 0, 0)),
-		"neutral stick falls back to the hero's world-space facing")
-	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(ROLL_SPEED, 0, 0)),
-		"fallback direction drives the roll velocity")
+	assert_true(ms.p1.hero.roll_direction.is_equal_approx(Vector3(-1, 0, 0)),
+		"neutral stick rolls AWAY from the locked target (`4-6/R7`), the inverse of facing")
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(-ROLL_SPEED, 0, 0)),
+		"the inverted fallback direction drives the roll velocity, at the unchanged roll speed")
+
+
+## `4-6/R7`'s other half, and the one that keeps the ruling narrow: DIRECTED stick input is
+## UNCHANGED. A roll entered with the stick pushed follows the stick exactly as it always has --
+## the inversion is the FALLBACK only, which is what makes the ruling one operator rather than a
+## branch. Driven with a stick direction OPPOSITE the lock so a leaked inversion would land on
+## the lock direction instead and fail here.
+func test_roll_direction_with_a_directed_stick_is_unchanged_by_the_backstep_rule() -> void:
+	var ms := _make_match()
+	ms.set_lock_direction(0, Vector2(1, 0))
+	_step(ms, _intent([&"roll"], Vector2(-1, 0)))
+	assert_true(ms.p1.hero.roll_direction.is_equal_approx(Vector3(-1, 0, 0)),
+		"a directed roll follows the STICK, not the lock and not its inverse")
+	var ms2 := _make_match()
+	ms2.set_lock_direction(0, Vector2(1, 0))
+	_step(ms2, _intent([&"roll"], Vector2(1, 0)))
+	assert_true(ms2.p1.hero.roll_direction.is_equal_approx(Vector3(1, 0, 0)),
+		"...including a roll pushed straight AT the locked target, which the fallback never produces")
 
 
 func test_roll_direction_uses_camera_basis() -> void:

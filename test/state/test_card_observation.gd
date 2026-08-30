@@ -267,8 +267,18 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# the runner DERIVED from two positions, the same class of position-derived datum the contact
 	# fact's `dir` has carried legally since 1-8, and `4-3/R2` bans state OWNING a position rather
 	# than learning a direction.
+	#
+	# DELIBERATELY EXTENDED AGAIN BY STORY 4-6 (AC 2/AC 4): `lock_target`, this player's lock-on
+	# target as a `[slot, index]` pair. TWENTY-SEVEN -> TWENTY-EIGHT, with its own count assertion
+	# below for the reason every extension since 4-2 has had one: a pin that drifts silently is the
+	# failure this project pins against.
+	#
+	# THE CLAIM THE PIN GUARDS IS STILL UNCHANGED. A `[slot, index]` pair is COUNTS AND INDICES --
+	# the `unit_targets` class exactly, and `4-2/R2`'s reasoning transfers verbatim. No identity, no
+	# StringName, no object and NO POSITION joins the hash: the lock's world-space DIRECTION is a
+	# pushed runner fact excluded from the snapshot (`4-6/R6`), and only the ADDRESS is here.
 	var expected: Array = [
-		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
+		"deck_size", "discard_size", "hand_size", "hero", "lock_target", "mana", "orbs",
 		"pending_draw", "pending_draw_owed",
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
 		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
@@ -285,8 +295,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 27,
-		"the per-player snapshot key set is TWENTY-SEVEN keys as of story 4-4 (eighteen before it). "
+	assert_eq(keys.size(), 28,
+		"the per-player snapshot key set is TWENTY-EIGHT keys as of story 4-6, which adds ONE: "
+		+ "`lock_target`, the `[slot, index]` address this player's hero is locked onto (AC 2), "
+		+ "hashed because it crosses ticks and decides where the hero faces, which decides the "
+		+ "`_is_facing` block arc. It was TWENTY-SEVEN as of 4-4 (eighteen before it). "
 		+ "TWO come from the unit board: `unit_kind`, the per-record kind INDEX that makes a totem "
 		+ "a distinct on-board thing (AC 1), and `unit_attack_cooldown`, the firing-cadence "
 		+ "countdown (AC 10). SEVEN come from the new projectile board (AC 14-19): its target pair, "

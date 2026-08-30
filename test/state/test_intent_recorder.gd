@@ -95,6 +95,10 @@ const EXEMPT_PURE_QUERIES: Array[String] = [
 const EXPECTED_INTAKE_SURFACE: Array[String] = [
 	"_init", "advance", "apply_balance", "inject_card_costs", "inject_card_effects",
 	"inject_deck", "inject_feature_flags", "push_contact", "set_camera_basis",
+	# Story 4-6 (AC 2, `4-6/R6`): the SIXTH pushed-fact intake -- the per-tick lock direction, in
+	# sorted position beside the basis it is a sibling of. It arrives WITH its
+	# `capture_set_lock_direction` channel, which is exactly what this scan exists to force.
+	"set_lock_direction",
 ]
 
 const DECK_IDS: Array[StringName] = [&"rec_card_a", &"rec_card_b", &"rec_card_c"]
@@ -174,7 +178,8 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 func test_all_eight_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	var loud := InputIntent.new()
 	loud.move_dir = Vector2(0.25, -0.75)
-	loud.aim = Vector2(-0.5, 0.125)
+	loud.retarget_slot = 1
+	loud.retarget_index = 4
 	loud.pressed[&"attack"] = true
 	loud.held[&"block"] = true
 	loud.debug_reset = true
@@ -183,7 +188,7 @@ func test_all_eight_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	loud.card_commit = true
 	var resting := InputIntent.new()
 	assert_ne(loud.move_dir, resting.move_dir, "move_dir is non-default")
-	assert_ne(loud.aim, resting.aim, "aim is non-default")
+	assert_ne(loud.retarget_slot, resting.retarget_slot, "retarget_slot is non-default")
 	assert_ne(loud.pressed, resting.pressed, "pressed is non-default")
 	assert_ne(loud.held, resting.held, "held is non-default")
 	assert_ne(loud.debug_reset, resting.debug_reset, "debug_reset is non-default")
@@ -200,7 +205,8 @@ func test_all_eight_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	# PER SLOT: read back through the shipped controller, one instance per slot.
 	var got: InputIntent = ReplayController.new(rec, 0).sample()
 	assert_eq(got.move_dir, loud.move_dir, "move_dir")
-	assert_eq(got.aim, loud.aim, "aim")
+	assert_eq(got.retarget_slot, loud.retarget_slot, "retarget_slot")
+	assert_eq(got.retarget_index, loud.retarget_index, "retarget_index")
 	assert_eq(got.pressed, loud.pressed, "pressed")
 	assert_eq(got.held, loud.held, "held")
 	assert_eq(got.debug_reset, loud.debug_reset, "debug_reset")

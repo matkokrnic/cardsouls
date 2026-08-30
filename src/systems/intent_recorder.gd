@@ -83,6 +83,23 @@ var _content_order: Array[StringName] = []
 ## the per-tick entry keeps PUSH ORDER: [[slot, Basis], ...].
 var _camera_pushes: Dictionary[int, Array] = {}
 
+## Story 4-6 (AC 2, `4-6/R6`): the per-tick, per-slot LOCK-DIRECTION channel -- the SIXTH capture
+## channel, and a sibling of `_camera_pushes` above in every respect: same keying (the tick the
+## pushed value will be READ on), same push-order entry shape [[slot, Vector2], ...], same
+## classification (a pushed spatial fact, not state).
+##
+## IT IS ITS OWN CHANNEL RATHER THAN A ROW ON AN EXISTING ONE because it is its own SEAM:
+## `set_lock_direction` is a distinct call with a distinct payload, and the recorder's standing
+## discipline is that a channel mirrors a seam one-for-one so the tap cannot record a
+## differently-shaped fact from the one pushed.
+##
+## IT MUST BE RECORDED, and the argument is stronger than the basis's own. The direction is derived
+## from ACTOR POSITIONS, which come from move_and_slide() and may drift between a recording and its
+## replay -- and it lands directly in the HASHED `HeroState.facing`. Re-deriving it live during a
+## replay is exactly the divergence the basis channel was built to prevent (`3-0c/R2`), except that
+## here it is not a future risk: facing is target-derived from this story onward.
+var _lock_pushes: Dictionary[int, Array] = {}
+
 ## The contact-fact channel (AC 9), keyed by tick index exactly like the bases above, with the
 ## four-field fact stored in push order: [[attacker, target, attack_index, dir], ...].
 var _contacts: Dictionary[int, Array] = {}
@@ -176,6 +193,23 @@ func capture_set_camera_basis(slot: int, camera_basis: Basis) -> void:
 	if not _camera_pushes.has(tick):
 		_camera_pushes[tick] = []
 	_camera_pushes[tick].append([slot, camera_basis])
+
+
+## The LOCK-DIRECTION channel (story 4-6, AC 2) — MatchState.set_lock_direction(). Per tick, per
+## slot, mirroring `capture_set_camera_basis` directly above line for line: the two are the same
+## kind of fact and are captured the same way.
+##
+## `RecordFile.FORMAT_VERSION` BUMPS TO 6 for this channel and the intent-shape change that ships
+## with it (AC 14). A v5 record has no lock channel at all, and replaying one against
+## target-derived facing would leave every hero facing its construction default while the
+## recording's heroes tracked their targets -- a replay that silently diverges from the match it
+## claims to reproduce. `record_file` refuses a mismatched version outright with a reason and
+## carries no migration path, and that refusal IS the design (`4-3a/R10`, `4-3b/R21`, `4-4/R15`).
+func capture_set_lock_direction(slot: int, direction: Vector2) -> void:
+	var tick := _tick + 1
+	if not _lock_pushes.has(tick):
+		_lock_pushes[tick] = []
+	_lock_pushes[tick].append([slot, direction])
 
 
 ## The CONTACT-FACT channel — MatchState.push_contact(). The seam's fact verbatim, mirroring its
@@ -300,6 +334,10 @@ func contacts_at(tick: int) -> Array:
 	return (_contacts[tick] as Array).duplicate() if _contacts.has(tick) else []
 
 
+func lock_pushes_at(tick: int) -> Array:
+	return (_lock_pushes[tick] as Array).duplicate() if _lock_pushes.has(tick) else []
+
+
 # ---------------------------------------------------------------- replay side
 
 func replay_seed() -> int:
@@ -385,6 +423,13 @@ func replay_push_camera_bases(ms: MatchState, tick: int) -> void:
 		ms.set_camera_basis(int(push[0]), push[1] as Basis)
 
 
+## Re-push the recorded per-slot lock directions for `tick`, in recorded push order (story 4-6,
+## AC 2). The `replay_push_camera_bases` sibling directly above, for the sibling channel.
+func replay_push_lock_directions(ms: MatchState, tick: int) -> void:
+	for push: Array in lock_pushes_at(tick):
+		ms.set_lock_direction(int(push[0]), push[1] as Vector2)
+
+
 ## Drain the recorded contact facts for `tick` into push_contact, in recorded push order (AC 9).
 ## The seam is unchanged — it has accepted facts from whoever pushes them since 1-5.
 func replay_push_contacts(ms: MatchState, tick: int) -> void:
@@ -409,13 +454,16 @@ func replay_intent(tick: int, slot: int) -> InputIntent:
 	return copy_intent(pair[slot])
 
 
-## All EIGHT InputIntent fields, verbatim (AC 2). Written as explicit field assignments rather
-## than a property-list walk so that adding a ninth field to InputIntent leaves this function
+## All NINE InputIntent fields, verbatim (AC 2). Written as explicit field assignments rather
+## than a property-list walk so that adding a tenth field to InputIntent leaves this function
 ## visibly incomplete instead of silently widening the contract.
+##
+## Story 4-6 (AC 8/AC 11): EIGHT -> NINE. `aim` is GONE (its free-rotation route is superseded,
+## not supplemented) and the two retarget-address fields take its place -- so this is a shape
+## change in both directions at once, which is half of why `RecordFile.FORMAT_VERSION` bumps to 6.
 static func copy_intent(src: InputIntent) -> InputIntent:
 	var out := InputIntent.new()
 	out.move_dir = src.move_dir
-	out.aim = src.aim
 	for key: StringName in src.pressed:
 		out.pressed[key] = src.pressed[key]
 	for key: StringName in src.held:
@@ -424,6 +472,8 @@ static func copy_intent(src: InputIntent) -> InputIntent:
 	out.card_slot = src.card_slot
 	out.card_mode = src.card_mode
 	out.card_commit = src.card_commit
+	out.retarget_slot = src.retarget_slot
+	out.retarget_index = src.retarget_index
 	return out
 
 

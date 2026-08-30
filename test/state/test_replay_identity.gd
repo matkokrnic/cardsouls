@@ -66,6 +66,14 @@ const MOVES := [
 ## AC 8 a real divergence rather than a tautology.
 const CAMERA_YAW_DEGREES := 90.0
 
+## Story 4-6 (AC 2): the LOCK DIRECTIONS this fixture pushes, one per slot, every tick. Driven
+## NON-ZERO on BOTH slots and on DIFFERENT headings -- an all-zero push would be the passive-tap
+## tautology the camera basis avoids by driving non-identity, since a zero direction leaves facing
+## untouched and a dropped channel would leave the same untouched facing behind. Chosen off the
+## axes and distinct from every MOVES entry, so a facing write that regressed to the movement
+## source lands on a different value rather than coinciding with these.
+const LOCK_DIRS: Array[Vector2] = [Vector2(0.6, 0.8), Vector2(-0.8, 0.6)]
+
 ## AC 11: THE UNHASHED CROSS-TICK EXCLUSION SET — exactly three members, each with the argument
 ## that makes hash-only replay equality an HONEST claim. A FOURTH appearing later fails
 ## test_unhashed_cross_tick_state_is_exactly_three_members below.
@@ -76,11 +84,21 @@ const CAMERA_YAW_DEGREES := 90.0
 ##  (b) the card containers' CONTENTS and ORDER — the snapshot carries SIZES only, sound because
 ##      order "stays derivable from seed plus injected composition" (player_state.gd:84-87), which
 ##      is a REPLAY argument and holds only because ACs 1, 3 and 5 make it true across a replay.
-##  (c) MatchState._camera_bases — captured by AC 8's channel rather than hashed.
+##  (c) MatchState's PUSHED PER-TICK SPATIAL FACTS — `_camera_bases`, and from story 4-6
+##      `_lock_directions` — captured by their own channels rather than hashed.
+##
+##      STORY 4-6 ADDS AN ARRAY TO ARGUMENT (c), NOT A FOURTH ARGUMENT, and the distinction is the
+##      one this pin has always counted by: MEMBERS here means ARGUMENTS, which is why (b)'s three
+##      containers have always counted as one. `_lock_directions` is `_camera_bases`' twin in every
+##      respect the argument turns on -- pushed by the runner every tick through the same seam
+##      family (`4-6/R6`), never produced by the tick, and captured by `capture_set_lock_direction`
+##      exactly as the basis is by `capture_set_camera_basis`. Its own drop test below is what
+##      makes that claim falsifiable rather than asserted (the 4-4 discipline: two new board
+##      members, both HASHED, count stays at THREE).
 const UNHASHED_CROSS_TICK: Array[String] = [
 	"player_state.vulnerable_window",
 	"deck._cards", "hand._cards", "discard_pile._cards",
-	"match_state._camera_bases",
+	"match_state._camera_bases", "match_state._lock_directions",
 ]
 const UNHASHED_CROSS_TICK_MEMBERS := 3
 
@@ -93,6 +111,16 @@ const HASHED: Array[String] = [
 	"player_state.hero", "player_state.stamina", "player_state.mana", "player_state.orbs",
 	"player_state.deck", "player_state.hand", "player_state.discard",
 	"player_state.pending_draw", "player_state.pending_draw_owed",
+	# Story 4-6 (AC 2/AC 3): the LOCK-ON TARGET's two halves classify HASHED, for `4-3a/R17`'s test
+	# rather than a weaker one -- they CROSS TICKS (the lock changes only on a click, a flick or the
+	# target's death) and DECIDE AN OUTCOME (where the hero faces, hence the `_is_facing` block
+	# arc). They reach the hash through `PlayerState.to_snapshot()`'s ONE `lock_target` key, so no
+	# exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
+	#
+	# THE DIRECTION IS THE OTHER HALF AND IS CLASSIFIED ELSEWHERE, deliberately: the ADDRESS is
+	# state and is hashed here; the world-space DIRECTION to it is a pushed runner fact and sits in
+	# exclusion (c) with the camera bases.
+	"player_state.lock_target_slot", "player_state.lock_target_index",
 	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
 	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the
@@ -359,6 +387,40 @@ func test_the_camera_basis_channel_is_driven_non_identity_and_is_load_bearing() 
 		"...and slot 1 is unaffected, because its recorded basis WAS identity")
 
 
+# ---------------------------------------------------------------- story 4-6, AC 2
+
+## Story 4-6 (AC 2, `4-6/R6`): the LOCK-DIRECTION channel is the `camera_bases` test directly
+## above, for the sibling channel, and it exists for the same reason: the direction is derived from
+## ACTOR POSITIONS, which come from move_and_slide() and may drift between a recording and its
+## replay, and it lands in the HASHED `HeroState.facing`. A replay that re-derived it live would
+## diverge the first time a hero stood a hair off where it stood before.
+##
+## DRIVEN NON-ZERO ON BOTH SLOTS, which is what stops this being the passive-tap tautology: a zero
+## direction is "no fact" and leaves facing untouched, so an all-zero fixture would pass with the
+## channel dropped.
+func test_the_lock_direction_channel_is_driven_non_zero_and_is_load_bearing() -> void:
+	var recorded := _record_a_driven_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	var pushes := record.lock_pushes_at(TICKS)
+	assert_eq(pushes.size(), 2, "both slots pushed a lock direction on the hashed tick")
+	assert_ne(pushes[0][1] as Vector2, Vector2.ZERO,
+		"slot 0's recorded direction is NON-ZERO -- without this the test proves nothing")
+	assert_ne(pushes[1][1] as Vector2, Vector2.ZERO, "...and so is slot 1's")
+	assert_true(live.p1.hero.facing.is_equal_approx(LOCK_DIRS[0]),
+		"the channel REACHED state: P1's hashed facing is the pushed direction")
+	var live_hash := CanonicalHash.of(live.to_snapshot())
+	assert_eq(CanonicalHash.of(_replay(record).to_snapshot()), live_hash,
+		"a replay that re-pushes the recorded lock directions reproduces the run")
+	assert_ne(CanonicalHash.of(_replay(record, "lock").to_snapshot()), live_hash,
+		"...and with the lock channel DROPPED the replay diverges")
+	# WHERE it diverges, named rather than left to the hash.
+	var dropped := _replay(record, "lock")
+	assert_ne(dropped.p1.hero.facing, live.p1.hero.facing,
+		"the divergence is P1's hashed facing: with no fact pushed it never leaves its default")
+	assert_ne(dropped.p2.hero.facing, live.p2.hero.facing, "...and P2's, for the same reason")
+
+
 # ---------------------------------------------------------------- AC 11
 
 ## AC 11: replay equality is CanonicalHash-only, so the cross-tick state the hash does NOT cover
@@ -368,7 +430,9 @@ func test_the_camera_basis_channel_is_driven_non_identity_and_is_load_bearing() 
 func test_unhashed_cross_tick_state_is_exactly_three_members() -> void:
 	assert_eq(UNHASHED_CROSS_TICK_MEMBERS, 3,
 		"the pin is THREE members: the vulnerable window, the card containers' contents/order, "
-		+ "and the camera bases (`3-0c/R8`)")
+		+ "and MatchState's pushed per-tick spatial facts -- the camera bases (`3-0c/R8`) and, "
+		+ "since story 4-6, the lock directions beside them. The second array joined argument (c), "
+		+ "it did not open a fourth argument (`4-6/R6`)")
 	var classified: Dictionary = {}
 	for bucket: Array in [HASHED, PER_TICK, INJECTED, UNHASHED_CROSS_TICK]:
 		for key: String in bucket:
@@ -460,6 +524,11 @@ func _record_a_driven_run() -> Dictionary:
 		for push: Array in _camera_pushes():
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
 			ms.set_camera_basis(int(push[0]), push[1] as Basis)
+		# Story 4-6 (AC 2): the lock channel is driven in the SAME per-tick seat the bases are, on
+		# both slots, so a dropped channel has somewhere to show.
+		for slot: int in 2:
+			record.capture_set_lock_direction(slot, LOCK_DIRS[slot])
+			ms.set_lock_direction(slot, LOCK_DIRS[slot])
 		if t == CONTACT_TICK:
 			record.capture_push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
 			ms.push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
@@ -498,6 +567,8 @@ func _replay(record: IntentRecorder, drop := "") -> MatchState:
 			record.replay_apply_reloads_before(ms, t)
 		if drop != "bases":
 			record.replay_push_camera_bases(ms, t)
+		if drop != "lock":
+			record.replay_push_lock_directions(ms, t)
 		if drop != "contacts":
 			record.replay_push_contacts(ms, t)
 		var intents: Array[InputIntent] = [p1_controller.sample(), p2_controller.sample()]

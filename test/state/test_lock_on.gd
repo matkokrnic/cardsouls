@@ -1,0 +1,290 @@
+extends TestCase
+
+## Story 4-6 (camera lock-on) — the STATE half, headless. Everything the lock does inside
+## `advance()`: where it rests, how a retarget enters, when it snaps off a dead target, and how it
+## survives a debug reset. Plus the two PURE presentation policies this story ships —
+## `LockOnResolver.best_candidate` (the flick's screen-space pick) and
+## `GamepadController.resolve_flick` (the flick EDGE) — both of which are static functions over
+## plain values precisely so they can be proven here rather than only at a live smoke.
+##
+## WHAT IS NOT HERE, and where it is instead: the FACING WRITE that the lock feeds is pinned in
+## test_camera_basis.gd (it is a movement-seam property, and that file owns the seam); the roll
+## BACKSTEP (`4-6/R7`) is in test_roll_iframes.gd beside the roll it modifies; the RIG YAW and the
+## live camera basis are integration-only and live in test/integration/test_camera_relative.gd and
+## test_lock_on_live.gd; the RECORD CHANNEL is in test_replay_identity.gd and test_record_file.gd.
+
+const UNIT_MAX_HP := 6.0
+const UNIT_DAMAGE := 6.0   # exactly lethal in ONE hero hit, so the snap lands on a known tick
+const HERO_INDEX := TargetingService.HERO_INDEX
+
+
+func _config() -> BalanceConfig:
+	var c := BalanceConfig.new()
+	c.max_hp = 100.0
+	c.move_speed = 5.0
+	c.max_stamina = 100.0
+	c.attack_windup_seconds = 3.0 / 60.0
+	c.attack_active_seconds = 4.0 / 60.0
+	c.attack_recovery_seconds = 6.0 / 60.0
+	c.attack_chain_window_seconds = 5.0 / 60.0
+	c.attack_chain_length = 3
+	c.attack_damage_percent_of_max_hp = 10.0
+	c.block_facing_arc_degrees = 180.0
+	c.roll_duration_seconds = 5.0 / 60.0
+	c.roll_distance = 3.0
+	c.unit_kinds = UnitKindFixture.minion_only(UNIT_MAX_HP, UNIT_DAMAGE, 0, 0, 0, 2.0)
+	c.hero_damage_to_unit = UNIT_DAMAGE
+	return c
+
+
+func _flags() -> FeatureFlags:
+	var f := FeatureFlags.new()
+	f.minions = true
+	return f
+
+
+func _make_match() -> MatchState:
+	var ms := MatchState.new(MatchParams.new(7))
+	ms.apply_balance(_config())
+	ms.inject_feature_flags(_flags())
+	ms.drain_signals()
+	return ms
+
+
+func _intent(pressed_keys: Array = []) -> InputIntent:
+	var i := InputIntent.new()
+	for k in pressed_keys:
+		i.pressed[k] = true
+		i.held[k] = true
+	return i
+
+
+func _retarget_intent(slot: int, index: int) -> InputIntent:
+	var i := InputIntent.new()
+	i.retarget_slot = slot
+	i.retarget_index = index
+	return i
+
+
+func _advance(ms: MatchState, p1_intent: InputIntent = null,
+		p2_intent: InputIntent = null) -> void:
+	var intents: Array[InputIntent] = [
+		p1_intent if p1_intent != null else InputIntent.new(),
+		p2_intent if p2_intent != null else InputIntent.new(),
+	]
+	ms.advance(intents)
+	ms.drain_signals()
+
+
+func _lock(player: PlayerState) -> Array:
+	return [player.lock_target_slot, player.lock_target_index]
+
+
+# ---------------------------------------------------------------- CC/R2: there is no unlocked state
+
+## `CC/R2` / AC 2: the default and fallback target is ALWAYS the opposing hero, and it is set at
+## CONSTRUCTION rather than on the first tick — so a MatchState that has never advanced, and one
+## that never receives a lock direction at all, still holds a real address rather than a sentinel.
+func test_a_fresh_match_is_already_locked_on_the_opposing_hero() -> void:
+	var ms := _make_match()
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX], "P1 starts locked on P2's hero")
+	assert_eq(_lock(ms.p2), [0, HERO_INDEX], "P2 starts locked on P1's hero — per slot, not global")
+	_advance(ms)
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX], "...and a tick with no retarget changes nothing")
+	assert_eq(_lock(ms.p2), [0, HERO_INDEX])
+
+
+## AC 2/AC 4: the lock is a SNAPSHOT KEY, in the `unit_targets` shape — one key holding a
+## `[slot, index]` pair of plain ints. It is hashed because it crosses ticks and decides where the
+## hero faces; the DIRECTION to the target is deliberately NOT here (it is a pushed runner fact).
+func test_the_lock_reaches_the_snapshot_as_a_slot_index_pair() -> void:
+	var ms := _make_match()
+	var snap: Dictionary = ms.p1.to_snapshot()
+	assert_true(snap.has("lock_target"), "the lock is a snapshot key")
+	assert_eq(snap["lock_target"], [1, HERO_INDEX], "...carrying the resting opposing-hero address")
+	for half in (snap["lock_target"] as Array):
+		assert_true(half is int, "both halves are plain ints — counts and indices, never identities")
+	ms.set_lock_direction(0, Vector2(0.6, 0.8))
+	_advance(ms)
+	var text := str(ms.p1.to_snapshot()["lock_target"])
+	assert_false(text.contains("0.6"),
+		"the pushed DIRECTION does not reach the snapshot through this key — only the address does")
+
+
+# ---------------------------------------------------------------- AC 9/AC 10/AC 11: retargeting
+
+## AC 11: the retarget enters as a RESOLVED ADDRESS on the intent and takes effect on the tick it
+## was pressed — the same tick-N rule attack/block/roll presses get, which is what AC 9's
+## "instantly" means at this layer.
+func test_a_retarget_on_the_intent_takes_effect_the_same_tick() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	_advance(ms, _retarget_intent(1, 0))
+	assert_eq(_lock(ms.p1), [1, 0], "P1 is locked onto P2's unit 0 at the end of the very tick it asked")
+	assert_eq(_lock(ms.p2), [0, HERO_INDEX], "...and the OTHER slot's lock is untouched: per player")
+
+
+## AC 9: a re-lock is just a retarget whose address is the opposing hero, so the click needs no
+## second mechanism — and it works FROM a unit lock, which is the case it exists for (the opposing
+## hero has gone off screen and a flick cannot reach it).
+func test_a_relock_returns_to_the_opposing_hero_from_a_unit_lock() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	_advance(ms, _retarget_intent(1, 0))
+	assert_eq(_lock(ms.p1), [1, 0], "sanity: locked onto the unit first")
+	_advance(ms, _retarget_intent(1, HERO_INDEX))
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX], "the click's address puts the hero back in lock")
+
+
+## AC 10: there is no UNLOCK value, so a flick that found no candidate is expressed by sending NO
+## REQUEST — `retarget_slot` at its resting NO_RETARGET. The standing lock must survive that
+## untouched, which is what makes the no-op a no-op rather than a silent reset.
+func test_a_tick_with_no_request_leaves_the_standing_lock_alone() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	_advance(ms, _retarget_intent(1, 0))
+	var resting := InputIntent.new()
+	assert_eq(resting.retarget_slot, InputIntent.NO_RETARGET,
+		"sanity: a fresh intent really does request nothing")
+	for _t in 5:
+		_advance(ms, resting)
+	assert_eq(_lock(ms.p1), [1, 0], "five quiet ticks later the unit lock is still held")
+
+
+# ---------------------------------------------------------------- AC 3: the corpse-free snap
+
+## AC 3 (`4-6/R4`, `4-6/R5`): a locked UNIT that dies releases the lock IMMEDIATELY, the SAME TICK,
+## back to the opposing hero — no corpse-hold window, even though the corpse itself lingers on the
+## board for several ticks (`4-3d`).
+##
+## SAME TICK IS THE WHOLE CLAIM, and it is why the assertion is taken on the kill tick rather than
+## the one after: validating only at step 1c would leave the end-of-tick snapshot — the hashed one
+## — pointing at a corpse for exactly one tick, which is a one-tick corpse-hold window under
+## another name.
+##
+## MUTATION PROOF: delete the step-4b `_validate_lock` pair and this fails on the first assertion,
+## reading `[1, 0]`; the tick-after assertion below would still pass, which is precisely why both
+## are here.
+func test_a_locked_units_death_snaps_the_lock_to_the_opposing_hero_on_the_kill_tick() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	_advance(ms, _retarget_intent(1, 0))
+	assert_eq(_lock(ms.p1), [1, 0], "sanity: locked onto the living unit")
+	# P1 swings and a fact lands on the unit for exactly lethal damage.
+	_advance(ms, _intent([&"attack"]))
+	for _t in 3:
+		_advance(ms)                       # windup t2-t4, active from t5
+	ms.push_contact([0, HERO_INDEX], [1, 0], ms.p1.hero.attack_index, Vector2(-1, 0),
+			MatchState.CONTACT_STRIKE)
+	_advance(ms)                           # the KILL tick: step 4 kills, step 4b re-validates
+	assert_false(ms.p2.units.is_alive_at(0), "sanity: the fact really did kill the unit")
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX],
+		"the lock is back on the opposing hero at the END of the kill tick — no corpse hold")
+	assert_eq(ms.p2.units.size(), 1,
+		"...while the CORPSE is still on the board: the snap is about the lock, not the board")
+	_advance(ms)
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX], "and it stays there")
+
+
+## AC 3's other half, stated as its own test because it is a different mechanism: a lock whose
+## board INDEX no longer exists at all — the debug reset clears the board — is invalid for the same
+## reason a dead one is, and `has_index` is what catches it before `is_alive_at` can read past the
+## cleared arrays.
+func test_a_lock_onto_a_board_index_the_reset_deleted_returns_to_the_opposing_hero() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	_advance(ms, _retarget_intent(1, 0))
+	assert_eq(_lock(ms.p1), [1, 0], "sanity: locked onto a unit that exists")
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	_advance(ms, reset)
+	assert_eq(ms.p2.units.size(), 0, "sanity: the reset cleared the board")
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX], "the lock did not survive the board it addressed")
+	assert_eq(_lock(ms.p2), [0, HERO_INDEX], "both slots are back at the `CC/R2` default")
+
+
+## AC 3: with the opposing HERO locked and dead, the round is over and step 1b's freeze makes lock
+## resolution inert — the tick returns before the lock seat is reached, so nothing turns and
+## nothing re-targets. Asserted rather than assumed, because "inert" is a claim about a seat's
+## POSITION and a later re-seat would silently break it.
+func test_lock_resolution_is_inert_once_the_round_is_over() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	ms.p2.hero.take_damage(ms.p2.hero.get_max_hp())
+	_advance(ms)                            # step 8 ends the round on this tick
+	var frozen := _lock(ms.p1)
+	_advance(ms, _retarget_intent(1, 0))    # a click the frozen tick must not act on
+	assert_eq(_lock(ms.p1), frozen,
+		"a round-over tick never reaches the lock seat, so even an explicit retarget is inert")
+
+
+# ---------------------------------------------------------------- AC 10: the flick's pick
+
+## `LockOnResolver` picks by ALIGNMENT first: every candidate inside the 120-degree cone is a
+## legitimate answer to "that way", and the most aligned one is the best answer.
+func test_the_flick_picks_the_best_aligned_candidate() -> void:
+	var hero := Vector2(100.0, 100.0)
+	var screens: Array[Vector2] = [
+		Vector2(100.0, 60.0),    # 0: straight UP from the hero
+		Vector2(130.0, 70.0),    # 1: up and to the right, 36.9 deg off
+	]
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, -1.0), screens), 0,
+		"an UP flick takes the candidate straight up")
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(1.0, -1.0), screens), 1,
+		"...and an up-RIGHT flick takes the up-right one, from the same candidate set")
+
+
+## Ties inside the cone break on SCREEN PROXIMITY — the candidate the player most plausibly meant.
+func test_the_flick_breaks_an_alignment_tie_on_screen_proximity() -> void:
+	var hero := Vector2.ZERO
+	var screens: Array[Vector2] = [Vector2(200.0, 0.0), Vector2(50.0, 0.0)]
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(1.0, 0.0), screens), 1,
+		"both are exactly on the flick axis, so the NEARER one wins")
+
+
+## AC 10: a flick with no candidate in that direction is a NO-OP, and -1 is how this layer says so
+## — the runner turns it into "send no request", which leaves the standing lock alone.
+func test_the_flick_finds_nothing_outside_its_cone() -> void:
+	var hero := Vector2.ZERO
+	var screens: Array[Vector2] = [Vector2(0.0, 100.0)]   # straight DOWN
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, -1.0), screens), -1,
+		"a candidate 180 degrees from the flick is not 'that way' by any reading")
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(1.0, 0.0), screens), -1,
+		"...nor is one at exactly 90 degrees, which is outside the 60-either-side cone")
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2.ZERO, screens), -1,
+		"and a zero flick names no direction at all")
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, 1.0), [] as Array[Vector2]), -1,
+		"an empty candidate set is the ordinary off-screen case, not an error")
+
+
+## A candidate sitting exactly on the hero names no direction and is skipped rather than
+## normalising a zero vector into a NaN.
+func test_a_candidate_on_top_of_the_hero_is_skipped() -> void:
+	var hero := Vector2(10.0, 10.0)
+	var screens: Array[Vector2] = [hero, Vector2(10.0, -90.0)]
+	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, -1.0), screens), 1,
+		"the co-located candidate is skipped and the real one is found")
+
+
+# ---------------------------------------------------------------- AC 10: the flick EDGE
+
+## The flick is an EDGE: the stick must CROSS the authored threshold. A held deflection retargets
+## ONCE, which is the same one-press-one-action rule attack and roll get from `_prev_held`.
+func test_the_flick_edge_fires_once_per_crossing() -> void:
+	var threshold := 0.7
+	var pushed := Vector2(0.0, -1.0)
+	assert_eq(GamepadController.resolve_flick(pushed, 0.0, threshold, false), Vector2(0.0, -1.0),
+		"crossing the threshold from rest fires, as a unit SCREEN-space direction")
+	assert_eq(GamepadController.resolve_flick(pushed, 1.0, threshold, false), Vector2.ZERO,
+		"...and holding it there does NOT fire again")
+	assert_eq(GamepadController.resolve_flick(Vector2(0.0, -0.5), 0.0, threshold, false),
+		Vector2.ZERO, "a deflection below the threshold is not a flick")
+	assert_eq(GamepadController.resolve_flick(pushed, 0.69, threshold, false), Vector2(0.0, -1.0),
+		"...and one that was just below last tick fires the moment it crosses")
+
+
+## AC 9 beats AC 10: pressing R3 deflects the stick with the same thumb, so a click suppresses the
+## flick it would otherwise have produced.
+func test_a_lock_click_suppresses_the_flick_it_would_have_produced() -> void:
+	assert_eq(GamepadController.resolve_flick(Vector2(1.0, 0.0), 0.0, 0.7, true), Vector2.ZERO,
+		"the click wins, so a re-lock never also fires a spurious retarget")

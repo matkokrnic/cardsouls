@@ -4,7 +4,17 @@ extends SceneTree
 ## the actual main scene and asserts the hero moves from simulated input through the FULL chain:
 ## KeyboardController -> InputIntent -> MatchState.advance -> HeroState.velocity -> HeroActor. This
 ## is the E0 "hero moves via the keyboard controller" exit criterion, and it also proves the actor's
-## velocity comes from STATE (not the intent) — HeroActor.velocity must equal move_speed on the axis.
+## velocity comes from STATE (not the intent) — HeroActor.velocity must have move_speed's MAGNITUDE,
+## which a raw intent (a unit vector) cannot produce on its own.
+##
+## STORY 4-6 (AC 1/AC 4 cause (b)) GENERALISED THE SECOND CLAIM FROM AN AXIS TO A MAGNITUDE, and
+## the change is this story's live consequence landing on an existing fixture rather than a
+## weakening. The rig now yaws every tick to frame the locked target, so the pushed camera basis is
+## non-identity in live play for the first time and a pressed direction no longer maps to a world
+## AXIS -- it maps to that axis ROTATED by the lock yaw. `velocity.x == move_speed` was never the
+## claim; it was the identity-basis shorthand for it. The magnitude is basis-invariant and is the
+## thing that was always being asserted: state multiplies a unit intent by move_speed, and nothing
+## else in the chain can.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_hero_movement.gd
 ## (read ${PIPESTATUS[0]} / set -o pipefail so grep can't mask the exit code).
@@ -16,6 +26,7 @@ const MOVE_SPEED := 5.0
 
 var _p1: CharacterBody3D
 var _x0 := 0.0
+var _z0 := 0.0
 var _frames := 0
 
 
@@ -31,15 +42,20 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == 5:
 		Input.action_press(&"p1_move_right")
 		_x0 = _p1.global_position.x
+		_z0 = _p1.global_position.z
 	if _frames >= 35:
 		Input.action_release(&"p1_move_right")
 		var dx := _p1.global_position.x - _x0
 		var actor_velocity := _p1.velocity  # set by HeroActor.drive from HeroState.velocity
-		var moved_right := dx > 0.1
-		var velocity_from_state := is_equal_approx(actor_velocity.x, MOVE_SPEED)
-		var ok := moved_right and velocity_from_state
-		print("hero dx=%f  actor.velocity=%v  (moved_right=%s, velocity_from_state=%s)" % [
-			dx, actor_velocity, moved_right, velocity_from_state])
+		var travelled := Vector2(dx, _p1.global_position.z - _z0).length()
+		var moved := travelled > 0.1
+		var velocity_from_state := is_equal_approx(actor_velocity.length(), MOVE_SPEED)
+		# The velocity is PLANAR: the yaw-only basis flattening can never tilt movement, which is
+		# the 1-2 AC 3 property and is worth keeping asserted now that the basis is live.
+		var planar := is_zero_approx(actor_velocity.y)
+		var ok := moved and velocity_from_state and planar
+		print("hero travelled=%f  actor.velocity=%v  (moved=%s, velocity_from_state=%s, planar=%s)" % [
+			travelled, actor_velocity, moved, velocity_from_state, planar])
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
 	return false

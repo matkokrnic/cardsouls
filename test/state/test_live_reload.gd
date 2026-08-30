@@ -39,7 +39,7 @@ const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reloa
 ## (`inject_card_effects`) -- which is the only sanctioned reason a channel may appear, since the
 ## set is DERIVED from that surface and not enumerated by choice (`3-0c/R2`). The pin moves with
 ## the story that moves the surface; it is not widened to stop noticing.
-const SHIPPED_CAPTURE_CHANNELS := 9
+const SHIPPED_CAPTURE_CHANNELS := 10
 
 
 # ---------------------------------------------------------------- AC 2
@@ -102,7 +102,7 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ## channels` — a test name carrying a COUNT must not go on asserting a different one, the
 ## `test_event_bus_still_carries_exactly_the_two_declared_signals` precedent from 3-5b. The old
 ## name is recorded here verbatim so the pin stays greppable.
-func test_the_recorder_still_ships_exactly_nine_capture_channels() -> void:
+func test_the_recorder_still_ships_exactly_ten_capture_channels() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -114,9 +114,14 @@ func test_the_recorder_still_ships_exactly_nine_capture_channels() -> void:
 		"capture_advance", "capture_apply_balance", "capture_inject_card_costs",
 		"capture_inject_card_effects", "capture_inject_deck", "capture_inject_feature_flags",
 		"capture_push_contact", "capture_seed", "capture_set_camera_basis",
-	], "the channel set is the EIGHT `3-0c` shipped plus story 4-1's card-effect channel")
+		# Story 4-6 (AC 2, `4-6/R6`): the TENTH channel -- the per-tick lock direction, the
+		# `capture_set_camera_basis` sibling. The pin moves because the STORY moved it, which is
+		# this guard doing its job and naming the cause.
+		"capture_set_lock_direction",
+	], "the channel set is the EIGHT `3-0c` shipped, plus story 4-1's card-effect channel and "
+		+ "story 4-6's lock-direction channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"a TENTH capture channel is a scope violation, and this is where it fails")
+		"an ELEVENTH capture channel is a scope violation, and this is where it fails")
 
 
 # ---------------------------------------------------------------- AC 9

@@ -11,3 +11,7 @@ block_button = 9
 roll_button = 1
 deadzone = 0.2
 normalize_move_magnitude = true
+look_axis_x = 2
+look_axis_y = 3
+lock_button = 8
+flick_threshold = 0.7

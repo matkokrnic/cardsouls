@@ -182,7 +182,8 @@ func _fixture_record(move_scale: float) -> IntentRecorder:
 func _intents(t: int, move_scale: float) -> Array[InputIntent]:
 	var i1 := InputIntent.new()
 	i1.move_dir = Vector2(t * 0.125, t * -0.0625) * move_scale
-	i1.aim = Vector2(0.5, -0.25)
+	i1.retarget_slot = 1
+	i1.retarget_index = -1
 	var i2 := InputIntent.new()
 	i2.move_dir = Vector2(-1, 0)
 	var out: Array[InputIntent] = [i1, i2]

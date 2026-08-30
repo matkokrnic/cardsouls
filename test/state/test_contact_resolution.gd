@@ -302,12 +302,16 @@ func test_attack_lunge_is_live_in_windup_and_active_only() -> void:
 func test_attack_lunge_follows_facing_and_adds_to_steered_velocity() -> void:
 	var ms := _make_match(true, true, 1.0, 0.0, 0.0, 0.35)
 	var h := ms.p1.hero
-	# Tick 1 turns the hero east: facing is written AFTER velocity, so this tick still
-	# lunges along the initial DOWN facing while the steered term already reads (1,0).
+	# Story 4-6 (AC 2): what TURNS the hero east is now the pushed lock direction, not the move
+	# input. The claim under test is unchanged -- the lunge tracks `facing`, whatever writes it --
+	# and the tick-order property it rests on is unchanged too: facing is still written AFTER
+	# velocity inside the same `_resolve_movement`, so tick 1 still lunges along the pre-tick
+	# DOWN facing while the steered term already reads (1, 0).
+	ms.set_lock_direction(0, Vector2(1, 0))
 	_advance(ms, _intent([&"attack"], [], Vector2(1, 0)))
 	assert_true(h.velocity.is_equal_approx(Vector3(5.0, 0.0, LUNGE_SPEED)),
 		"windup mult 1.0: steered 5.0 on +X PLUS the lunge on the pre-tick facing — additive, not a replacement")
-	assert_eq(h.facing, Vector2(1, 0), "facing turned east on that same tick")
+	assert_eq(h.facing, Vector2(1, 0), "facing turned east on that same tick -- from the LOCK")
 	# Tick 2 holds the same intent: the lunge has picked the new facing up.
 	_advance(ms, _intent([], [], Vector2(1, 0)))
 	assert_true(h.velocity.is_equal_approx(Vector3(5.0 + LUNGE_SPEED, 0.0, 0.0)),
@@ -324,6 +328,9 @@ func test_attack_lunge_follows_facing_and_adds_to_steered_velocity() -> void:
 ## stays ZERO, with no animation anywhere to supply displacement in its place.
 func test_attack_lunge_is_state_side_with_no_animation_present() -> void:
 	var ms := _make_match(true, true, 0.0, 0.0, 0.0, 0.35)
+	# No lock direction is pushed, so facing stays at its DOWN default -- which is what the
+	# expected +Z lunge below reads. Stated rather than left implicit now that facing has a
+	# second possible source (story 4-6, AC 2).
 	_advance(ms, _intent([&"attack"], [], Vector2.ZERO))
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(0.0, 0.0, LUNGE_SPEED)),
 		"displacement is computed by MatchState from authored balance data alone — no rig, no clip, no sampling")

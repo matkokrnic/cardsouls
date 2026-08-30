@@ -6,7 +6,8 @@ extends SceneTree
 ## a MatchState handle; every observation is a scene-tree read (the hero's world position, the
 ## panel's Label text), the same discipline as every other integration file.
 ##
-##   [AC 1 FREEZE] With p1_move_right held, P1 advances a constant distance per tick. Pressing
+##   [AC 1 FREEZE] With p1_move_up (camera-forward, story 4-6) held, P1 advances a constant
+##     distance per tick. Pressing
 ##     debug_pause stops it DEAD: the position is bit-identical across ten further frames. That is
 ##     the whole freeze — advance(), both drive() calls and the contact gather sit in one gated
 ##     block, so a hero that does not move is a tick that did not run.
@@ -66,7 +67,19 @@ func _physics_process(_delta: float) -> bool:
 			_slot1 = panel.find_child("Slot1Countdown", true, false) if panel != null else null
 			_nodes_ok = _p1 != null and _slot0 != null and _slot1 != null
 		5:
-			Input.action_press(&"p1_move_right")  # held until the countdown phase below
+		# STORY 4-6 (AC 1): `p1_move_up` -- CAMERA-FORWARD -- is what world +X is now, and the
+		# swap is this story's cause (b) landing on an existing fixture rather than a fix. The rig
+		# yaws every tick to frame the locked target, the default lock is the opposing hero, and
+		# main.tscn parks P1 at x -3 and P2 at x +3 -- so camera-forward IS +X, and `p1_move_right`
+		# is camera-RIGHT, which is now perpendicular to it. Measured, not assumed: with the rig
+		# fixed this pressed `p1_move_right`; test_camera_relative.gd is the file that pins the new
+		# mapping end-to-end.
+			# IT MATTERS HERE THAT THE PATH IS STRAIGHT, which is why this is camera-FORWARD and
+			# not camera-right: this file measures a per-tick displacement along ONE AXIS and then
+			# compares four steps against four times it. Walking straight AT the locked target
+			# keeps the lock direction constant, so the path is a line; walking camera-right
+			# ORBITS the target and the same measurement would be comparing a chord to an arc.
+			Input.action_press(&"p1_move_up")  # held until the countdown phase below
 		10:
 			_x_a = _p1.global_position.x
 		20:
@@ -105,7 +118,7 @@ func _physics_process(_delta: float) -> bool:
 			_x_resume = _p1.global_position.x
 		68:
 			_resumed_after_unpause = (_p1.global_position.x - _x_resume) > 5.0 * _per_tick
-			Input.action_release(&"p1_move_right")
+			Input.action_release(&"p1_move_up")
 			Input.action_press(&"p1_attack")     # AC 2: give the countdown a real window to show
 		69:
 			Input.action_release(&"p1_attack")

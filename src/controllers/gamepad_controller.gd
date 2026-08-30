@@ -28,6 +28,14 @@ const INTENT_ACTIONS: Array[StringName] = [&"attack", &"block", &"roll"]
 ## re-checked each tick so a replug at the same index restores control for free.
 const NO_DEVICE := -1
 
+## Story 4-6: the `_prev_held` key the R3 edge is remembered under. A PRIVATE key that never
+## reaches an InputIntent -- the lock click is not an intent action (AC 11 sends the RESOLVED
+## ADDRESS inward instead), so it is deliberately NOT a member of INTENT_ACTIONS and the
+## prefix-free intent-key contract is untouched. It rides the same dictionary because that
+## dictionary is exactly "what was held last tick" and a second one would be a second answer to
+## the same question.
+const _LOCK_KEY := &"__lock"
+
 var _device: int = NO_DEVICE
 var _profile: GamepadProfile
 var _button_map: Dictionary[StringName, int] = {}
@@ -36,6 +44,23 @@ var _button_map: Dictionary[StringName, int] = {}
 ## roll are edge-triggered downstream. Controller-private, never state; the emitted InputIntent
 ## stays a fresh per-tick value.
 var _prev_held: Dictionary[StringName, bool] = {}
+
+## Story 4-6 (AC 9/AC 10): the two RIGHT-STICK edges, sampled in sample() and read back by the
+## runner in the same frame. Controller-private, never state, and never on the InputIntent -- what
+## reaches the intent is the RESOLVED ADDRESS the runner computes from these (AC 11), which is why
+## these are polled the way `armed_slot()` is rather than carried.
+##
+## SAMPLED IN sample() AND NOT IN THE ACCESSORS, deliberately: an accessor that read the device
+## would report a different answer depending on how many times the runner called it, and edges
+## must fire exactly once per sample. This is the `_prev_held` discipline directly above, applied
+## to a button and a magnitude instead of three buttons.
+var _lock_pressed := false
+var _flick := Vector2.ZERO
+## Previous-tick right-stick magnitude. Raw axes have no engine-tracked edge, so the FLICK edge is
+## "crossed the authored threshold this tick, having been below it last tick" -- a held stick
+## therefore flicks ONCE, not once per tick, which is the same one-press-one-action rule attack
+## and roll get from `_prev_held`.
+var _prev_flick_magnitude := 0.0
 
 
 ## slot_gamepad_ordinal: WHICH gamepad this is among the configured GAMEPAD slots (the i-th
@@ -68,6 +93,13 @@ func sample() -> InputIntent:
 	# currently connected (disconnected mid-match). No crash, no pause — just a neutral intent.
 	if _device == NO_DEVICE or not Input.get_connected_joypads().has(_device):
 		_prev_held.clear()  # so a button held across a reconnect does not fire a stale edge
+		# Story 4-6: the right-stick edges are cleared on the SAME neutral path and for the same
+		# reason -- a pad unplugged mid-flick must not deliver that flick on reconnect. The
+		# magnitude memory resets to 0.0 so a stick still deflected at reconnect re-arms the edge
+		# rather than being read as "already past the threshold, no crossing".
+		_lock_pressed = false
+		_flick = Vector2.ZERO
+		_prev_flick_magnitude = 0.0
 		return intent
 	# Y SIGN (2-2 review D2), verified by content + test, NOT an accident: raw Y is read
 	# DIRECTLY, no inversion. JOY_AXIS_LEFT_Y is positive-DOWN, so a stick pushed UP reads a
@@ -85,7 +117,62 @@ func sample() -> InputIntent:
 		intent.held[key] = held
 		intent.pressed[key] = held and not _prev_held.get(key, false)
 		_prev_held[key] = held
+	_sample_lock_controls()
 	return intent
+
+
+## Story 4-6 (AC 9/AC 10, `CC/R3`): the two right-stick edges, derived here and read back by the
+## runner through `relock_pressed()` / `retarget_flick()` below. Split out of sample() rather than
+## inlined so the intent-building above stays the 2-2 shape a reader already knows.
+##
+## THE CLICK IS EXCLUSIVE. A press of R3 is a re-lock onto the opposing hero (AC 9) and suppresses
+## any flick the same thumb produced pushing the stick in -- pressing R3 deflects the stick, which
+## would otherwise fire a spurious retarget in whatever direction the thumb rolled. The runner
+## honours the same precedence (click checked first), so the rule is stated once at each layer and
+## the two cannot disagree about which wins.
+func _sample_lock_controls() -> void:
+	var lock_held := Input.is_joy_button_pressed(_device, _profile.lock_button)
+	_lock_pressed = lock_held and not _prev_held.get(_LOCK_KEY, false)
+	_prev_held[_LOCK_KEY] = lock_held
+	var raw := Vector2(
+		Input.get_joy_axis(_device, _profile.look_axis_x),
+		Input.get_joy_axis(_device, _profile.look_axis_y))
+	_flick = resolve_flick(raw, _prev_flick_magnitude, _profile.flick_threshold, _lock_pressed)
+	_prev_flick_magnitude = raw.length()
+
+
+## Story 4-6 (AC 10): the FLICK EDGE policy, factored out as a PURE function for the reason
+## `resolve_move_dir` below is -- joypad axes are not headless-samplable, so a policy left inline
+## is a policy no test can reach. Same shape, same file, same discipline as 2-2's own extraction.
+##
+## THE EDGE: the stick must have CROSSED the authored threshold this tick, having been below it
+## last, so a held deflection flicks ONCE rather than once per tick. Y is read DIRECTLY, no
+## inversion -- the 2-2 review-D2 argument verbatim, and here it is load-bearing twice over,
+## because SCREEN space is +Y-down too and the raw stick vector therefore already IS the screen
+## direction the resolver wants (see `Controller.retarget_flick`).
+##
+## `lock_pressed` SUPPRESSES the flick: pressing R3 deflects the stick with the same thumb, and
+## without this a re-lock would also fire a spurious retarget in whatever direction the thumb
+## rolled. AC 9 beating AC 10 is therefore structural rather than a matter of call order.
+static func resolve_flick(raw: Vector2, prev_magnitude: float, threshold: float,
+		lock_pressed: bool) -> Vector2:
+	if lock_pressed:
+		return Vector2.ZERO
+	if raw.length() < threshold or prev_magnitude >= threshold:
+		return Vector2.ZERO
+	return raw.normalized()
+
+
+## Story 4-6 (AC 9): the click edge sampled by `_sample_lock_controls`. See Controller's base
+## declaration for why this is polled rather than carried on the intent.
+func relock_pressed() -> bool:
+	return _lock_pressed
+
+
+## Story 4-6 (AC 10): the flick edge sampled by `_sample_lock_controls`, as a unit SCREEN-SPACE
+## direction, or ZERO for no flick this tick.
+func retarget_flick() -> Vector2:
+	return _flick
 
 
 ## Deadzone + magnitude policy (2-2/R5, extended by 2-6/R8), factored out as a PURE function so

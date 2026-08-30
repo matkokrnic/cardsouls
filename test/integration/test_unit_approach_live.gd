@@ -252,7 +252,14 @@ func _physics_process(_delta: float) -> bool:
 	#      `p1_move_right` is world +x (pinned by test_hero_movement.gd), and the unit parks
 	#      between P1's hero and P2's, so the hero walks straight at it. ----
 	if _frames == _walk_start_frame:
-		Input.action_press(&"p1_move_right")
+		# STORY 4-6 (AC 1): `p1_move_up` -- CAMERA-FORWARD -- is what world +X is now, and the
+		# swap is this story's cause (b) landing on an existing fixture rather than a fix. The rig
+		# yaws every tick to frame the locked target, the default lock is the opposing hero, and
+		# main.tscn parks P1 at x -3 and P2 at x +3 -- so camera-forward IS +X, and `p1_move_right`
+		# is camera-RIGHT, which is now perpendicular to it. Measured, not assumed: with the rig
+		# fixed this pressed `p1_move_right`; test_camera_relative.gd is the file that pins the new
+		# mapping end-to-end.
+		Input.action_press(&"p1_move_up")
 	if _frames > _walk_start_frame and _frames <= _walk_end_frame:
 		var unit := _first_unit_actor()
 		var hero: Node3D = _runner._p1_hero
@@ -260,7 +267,7 @@ func _physics_process(_delta: float) -> bool:
 			_min_hero_gap = minf(_min_hero_gap,
 					_planar_distance(hero.global_position, unit.global_position))
 	if _frames == _walk_end_frame:
-		Input.action_release(&"p1_move_right")
+		Input.action_release(&"p1_move_up")
 		# The pair, and neither half means anything alone: the hero must have ARRIVED at the unit
 		# (or "never inside" is true of a hero that walked elsewhere), and must never have been
 		# INSIDE it (which is what walking through a body looks like frame by frame).

@@ -128,7 +128,18 @@ extends RefCounted
 ## carries the retired flat keys (`unit_max_hp`, `unit_damage_per_hit`) and no `unit_kinds` at all,
 ## so rebuilding one would set dead keys onto nothing and replay every unit as kindless. HARD
 ## REJECTION, NO SHIM, for the `4-1/R1` reason above.
-const FORMAT_VERSION := 5
+## STORY 4-6 BUMPS 5 -> 6 (AC 14), and the bump is a MEASUREMENT rather than a habit: AC 14 asks
+## whether the retarget result fits inside the existing `InputIntent` / recorded-fact channels, and
+## it does not. The only unoccupied intent field was `aim`, whose resting `Vector2.ZERO` is a VALID
+## `[slot, index]` address (slot 0's unit 0) -- so repurposing it has no "no retarget" sentinel
+## without moving its resting value, and moving that makes every v5 record decode a resting `aim`
+## as a live retarget onto `[0, 0]`. A new element is needed, so the format bumps, and it carries
+## THREE shape changes at once: `aim` DELETED, `retarget_slot`/`retarget_index` ADDED, and the new
+## per-tick `lock_pushes` channel required beside `camera_pushes`. A v5 record has none of them,
+## and replaying one against target-derived facing would leave every hero facing its construction
+## default while the recording's heroes tracked their targets. HARD REJECTION, NO SHIM, the
+## `4-3a/R10` / `4-3b/R21` / `4-4/R15` discipline unbroken.
+const FORMAT_VERSION := 6
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -174,6 +185,10 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	"intents": TYPE_ARRAY,
 	"camera_pushes": TYPE_DICTIONARY,
 	"contacts": TYPE_DICTIONARY,
+	# Story 4-6 (AC 2/AC 14): the per-tick LOCK-DIRECTION channel, required from FORMAT_VERSION 6
+	# onward. Its arrival IS half the version bump -- a v5 file lacks this key, and is refused by
+	# the version check long before this map is consulted, exactly as `effects` was at v2.
+	"lock_pushes": TYPE_DICTIONARY,
 	# Story 4-1 (`4-1/R1`): the third content channel, required from FORMAT_VERSION 2 onward. Its
 	# arrival IS the version bump -- a v1 file lacks this key, and is refused by the version check
 	# long before this map is consulted.
@@ -332,6 +347,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var intents: Array = []
 	var camera_pushes: Dictionary = {}
 	var contacts: Dictionary = {}
+	var lock_pushes: Dictionary = {}
 	for tick in range(1, record.tick_count() + 1):
 		var pair: Array = []
 		for intent: InputIntent in record.intents_at(tick):
@@ -343,6 +359,11 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		var facts := record.contacts_at(tick)
 		if not facts.is_empty():
 			contacts[tick] = facts
+		# Story 4-6 (AC 2): the lock channel rides the same loop, the same sparse
+		# only-if-non-empty rule and the same tick keying as its `camera_pushes` sibling.
+		var locks := record.lock_pushes_at(tick)
+		if not locks.is_empty():
+			lock_pushes[tick] = locks
 	return {
 		"format_version": FORMAT_VERSION,
 		"seed": record.replay_seed(),
@@ -356,22 +377,27 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"intents": intents,
 		"camera_pushes": camera_pushes,
 		"contacts": contacts,
+		"lock_pushes": lock_pushes,
 	}
 
 
-## All EIGHT InputIntent fields, verbatim — written as explicit field reads for the same reason
-## IntentRecorder.copy_intent is (intent_recorder.gd:325-327): a ninth field leaves this visibly
-## incomplete instead of silently narrowing what survives a save.
+## All NINE InputIntent fields, verbatim — written as explicit field reads for the same reason
+## IntentRecorder.copy_intent is: a tenth field leaves this visibly incomplete instead of silently
+## narrowing what survives a save.
+##
+## Story 4-6 (AC 8/AC 11/AC 14): `aim` is GONE and the two retarget-address fields replace it —
+## half of the FORMAT_VERSION 5 -> 6 bump (see the constant's own block).
 static func _intent_values(intent: InputIntent) -> Dictionary:
 	return {
 		"move_dir": intent.move_dir,
-		"aim": intent.aim,
 		"pressed": intent.pressed.duplicate(),
 		"held": intent.held.duplicate(),
 		"debug_reset": intent.debug_reset,
 		"card_slot": intent.card_slot,
 		"card_mode": int(intent.card_mode),
 		"card_commit": intent.card_commit,
+		"retarget_slot": intent.retarget_slot,
+		"retarget_index": intent.retarget_index,
 	}
 
 
@@ -481,9 +507,15 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 	var intents: Array = data["intents"]
 	var camera_pushes: Dictionary = data["camera_pushes"]
 	var contacts: Dictionary = data["contacts"]
+	var lock_pushes: Dictionary = data["lock_pushes"]
 	for tick in range(1, int(data["tick_count"]) + 1):
 		for push: Array in camera_pushes.get(tick, []):
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
+		# Story 4-6 (AC 2): the lock channel is re-captured in the SAME per-tick seat and the same
+		# order relative to `capture_advance` as the bases above -- both are pushed before a tick
+		# advances, live and on rebuild alike.
+		for push: Array in lock_pushes.get(tick, []):
+			record.capture_set_lock_direction(int(push[0]), push[1] as Vector2)
 		for fact: Array in contacts.get(tick, []):
 			# Story 4-3a / 4-3b: the SEVEN-element row (attacker slot, attacker index, target slot,
 			# target index, attack index, dir, kind) rebuilt into the recorder's pair-shaped seam.
@@ -512,7 +544,6 @@ static func _intent_pair(raw: Array) -> Array[InputIntent]:
 static func _intent_from_values(values: Dictionary) -> InputIntent:
 	var intent := InputIntent.new()
 	intent.move_dir = values["move_dir"]
-	intent.aim = values["aim"]
 	for key: StringName in values["pressed"]:
 		intent.pressed[key] = bool(values["pressed"][key])
 	for key: StringName in values["held"]:
@@ -521,6 +552,8 @@ static func _intent_from_values(values: Dictionary) -> InputIntent:
 	intent.card_slot = int(values["card_slot"])
 	intent.card_mode = int(values["card_mode"]) as Enums.ModeKind
 	intent.card_commit = bool(values["card_commit"])
+	intent.retarget_slot = int(values["retarget_slot"])
+	intent.retarget_index = int(values["retarget_index"])
 	return intent
 
 

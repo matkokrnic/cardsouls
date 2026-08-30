@@ -42,9 +42,14 @@ func _move_intent(dir: Vector2) -> InputIntent:
 
 func test_movement_seam_computes_world_velocity() -> void:
 	var ms := _stats_match(42)
+	# Story 4-6 (AC 2): facing is no longer a function of `move_dir`, so the facing half of this
+	# test drives the seam that now owns it. The VELOCITY half is untouched -- that coupling is
+	# exactly what AC 2 left in place.
+	ms.set_lock_direction(0, Vector2(0, -1))
 	_step(ms, Vector2(1, 0), Vector2(0, 1))
 	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(5, 0, 0)), "p1 (1,0) -> world +X * speed")
-	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(1, 0)))
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(0, -1)),
+		"facing is the pushed lock direction, NOT the (1,0) the same tick moved along")
 	assert_true(ms.p2.hero.velocity.is_equal_approx(Vector3(0, 0, 5)), "p2 (0,1) -> world +Z * speed")
 
 

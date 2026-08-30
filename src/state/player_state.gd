@@ -141,6 +141,25 @@ var pending_draw_owed: Array[int] = []
 ## the coupling the counts-only snapshot discipline exists to avoid.
 var vulnerable_window: TimingWindow
 
+## Story 4-6 (AC 2/AC 3, `CC/R2`): THE LOCK-ON TARGET -- what this player's hero is currently
+## locked onto, as the `4-3a/R16` `[slot, index]` address whose home is
+## `TargetingService.HERO_INDEX` (`index == -1` is that slot's hero).
+##
+## TWO PLAIN INTS RATHER THAN A PAIR, for the reason `UnitBoard` splits `_target_slots` /
+## `_target_indices`: the read is per-tick and per-player and a pair allocates. They surface as
+## ONE snapshot key (`lock_target`), the `unit_targets` fusion verbatim.
+##
+## THERE IS NO UNLOCKED STATE (`CC/R2`, AC 10). The resting value is the OPPOSING HERO, set by
+## `MatchState._init` and restored by `_reset_player` -- both places know the slot, which this
+## object deliberately does not (a PlayerState has never known its own index, and giving it one
+## for this would be a new coupling for one field).
+##
+## HASHED, not excluded: it CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`) -- it decides where
+## the hero faces, which decides the `_is_facing` block arc, so a replay whose heroes carried a
+## different lock would diverge the moment one of them blocked.
+var lock_target_slot: int = TargetingService.NO_TARGET_SLOT
+var lock_target_index: int = TargetingService.HERO_INDEX
+
 ## Story 3-6 (AC 2): retained so notify_cards_changed() can enqueue. The three pools have each
 ## held the queue since E0 for the same reason; this composite needed none until it owned a
 ## signal of its own.
@@ -228,6 +247,24 @@ func to_snapshot() -> Dictionary:
 		# divergence the hash should see.
 		"pending_draw": pending_draw.to_snapshot(),
 		"pending_draw_owed": pending_draw_owed.duplicate(),
+		# Story 4-6 (AC 2/AC 4): the ONE new key this story adds -- this player's LOCK-ON TARGET
+		# as a `[slot, index]` pair, the `unit_targets` shape verbatim and the same
+		# counts-and-indices rule (`4-2/R2`): two plain ints, no identity, no StringName, no
+		# object and no position.
+		#
+		# IT IS A KEY AT ALL FOR THE `unit_targets` REASON EXACTLY. The lock persists between
+		# ticks -- it changes only on a click, a flick, or the locked target's death -- so it
+		# cannot be recomputed for free inside the tick that reads it, and a value that crosses
+		# ticks and decides an outcome does not sit outside the hash (`4-3a/R17`). What it
+		# decides is where the hero FACES, and facing decides the `_is_facing` block arc, so a
+		# replay whose heroes carried a different lock would diverge the moment one blocked.
+		#
+		# THE DIRECTION IS NOT HERE, and deliberately so. The lock's TARGET is state; the
+		# world-space DIRECTION to it is a runner-gathered spatial fact pushed through
+		# `MatchState.set_lock_direction` (`4-6/R6`) and captured by its own record channel --
+		# the `_camera_bases` classification, not this one. State learns a direction; it never
+		# owns a position (`4-3/R2`).
+		"lock_target": [lock_target_slot, lock_target_index],
 		# Story 4-1 (AC 9): the ONE new key this story adds — the board COUNT, on the
 		# deck_size / hand_size / discard_size precedent verbatim. NO unit identity, NO effect
 		# id, NO position: the same counts-only rule, for the same measured reason (a StringName

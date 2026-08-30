@@ -147,6 +147,25 @@ var _round_over := false
 ## identity: with no basis pushed (tick 0, headless tests) move_dir is world-space (AC 4).
 var _camera_bases: Array[Basis] = [Basis.IDENTITY, Basis.IDENTITY]
 
+## Story 4-6 (AC 2, `4-6/R6`): PER-SLOT LOCK DIRECTION -- the world-space planar unit direction
+## from this slot's hero to its locked target, gathered by the runner and pushed here every tick.
+## THE `_camera_bases` CATEGORY EXACTLY, and that is the ruling rather than a resemblance: the
+## target's POSITION is actor-owned (F1) and `src/state/` holds no world coordinates, so the
+## direction cannot be computed here and cannot be queried from here (D3(b)/A2). It arrives as a
+## pushed fact through `set_lock_direction`, the `set_camera_basis` / `push_contact` seam family,
+## and `_is_facing` has consumed a runner-gathered `Vector2` direction this exact way since 1-8.
+##
+## EXCLUDED from to_snapshot() and CAPTURED BY ITS OWN RECORD CHANNEL, the `_camera_bases`
+## classification verbatim (test_replay_identity.gd exclusion (c)) -- NOT a fourth unhashed
+## cross-tick argument, the same one argument now covering two pushed spatial arrays.
+##
+## Vector2.ZERO IS "NO FACT THIS TICK" and is the resting value: with nothing pushed (tick 0, and
+## every headless state test that does not drive one) facing is LEFT UNCHANGED, exactly as an
+## identity basis short-circuits movement to the E0 world-space mapping. A degenerate co-located
+## target produces no direction and is dropped at the gather, the `push_contact` zero-direction
+## rule verbatim.
+var _lock_directions: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
+
 ## Story 1-5 (B7): queued contact facts, drained deterministically in advance() step 4.
 ## Input-like PUSHED facts, same category as InputIntent and the camera basis: plain
 ## recordable data (three ints per fact — X5 replay records them alongside intents; the
@@ -219,6 +238,13 @@ func _init(params: MatchParams) -> void:
 	p1 = PlayerState.new(_queue)
 	p2 = PlayerState.new(_queue)
 	pitch = PitchState.new()
+	# Story 4-6 (`CC/R2`, AC 2): THE RESTING LOCK IS THE OPPOSING HERO, and it is seeded HERE
+	# because this is the only place that knows which slot each PlayerState is. There is no
+	# unlocked state at any point in a match's life -- not at construction, not after a debug
+	# reset (`_reset_lock` below is called from both), and not after the locked target dies
+	# (AC 3 snaps back to this same address).
+	_reset_lock(p1, 1)
+	_reset_lock(p2, 0)
 
 
 ## The single ordered dispatch (D2). intents = [p1_intent, p2_intent]. Enqueues signals
@@ -256,6 +282,18 @@ func advance(intents: Array[InputIntent]) -> void:
 		p1.hero.velocity = Vector3.ZERO
 		p2.hero.velocity = Vector3.ZERO
 		return
+	# 1c. Story 4-6 (AC 3/AC 9/AC 10): THE LOCK SEAT -- ingest each slot's retarget RESULT off its
+	#    intent, then re-validate the standing lock. Seated HERE, after the step-1b freeze and
+	#    BEFORE step 3, for two reasons that pull the same way: a click or flick must take effect
+	#    on the tick it was pressed (AC 9's "instantly", the same tick-N rule step 3 applies to
+	#    attack/block/roll presses), and step 3's facing write reads the result. A round-over tick
+	#    returns above and never reaches this line, which is exactly what AC 3 means by the freeze
+	#    making target resolution inert when the opposing hero is the thing that died.
+	#
+	#    THE VALIDATION HALF RUNS TWICE, and the second seat (4b) is not redundancy -- see there.
+	#    This one catches a lock whose target the step-1 DEBUG RESET just cleared off the board.
+	_resolve_lock(p1, p1_intent, 1)
+	_resolve_lock(p2, p2_intent, 0)
 	# 2. Advance D4 timers   (hero windows + each pool's regen-delay window — every window
 	#    advances here, step 5 reads the result; unguarded like the hero timers, since a
 	#    pre-injection MatchState never started a delay window)
@@ -318,6 +356,19 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    dedupe ONLY here — mana is step 5's seat, keeping the documented D2 order
 	#    truthful (N4).
 	var confirmed_hits := _resolve_contacts()
+	# 4b. Story 4-6 (AC 3, `4-6/R4`/`4-6/R5`): THE CORPSE-FREE SNAP. When the locked target is a
+	#    minion or totem and it dies, the lock moves to the opposing hero IMMEDIATELY, the SAME
+	#    TICK -- no corpse-hold window, even though the corpse itself lingers on the board for
+	#    several ticks (`4-3d`, test_unit_corpse_linger_live.gd). Step 4 is the ONLY seat that can
+	#    kill a unit, so "same tick" means exactly "seated right after it": validating only at
+	#    step 1c would leave the hashed end-of-tick snapshot pointing at a corpse for one tick,
+	#    which is a corpse-hold window one tick long wearing a different name.
+	#
+	#    IDEMPOTENT, which is what makes running it twice honest rather than a smell: it either
+	#    finds a live addressed unit and returns, or resets to the opposing hero. Nothing it does
+	#    depends on how many times it has run this tick.
+	_validate_lock(p1, 1)
+	_validate_lock(p2, 0)
 	# 5. Resource generation   stamina regen (story 1-4) then mana — melee-hit AND the
 	#    passive tick (story 3-4), P1 -> P2. Stamina is still DIRECT; mana is now the D6
 	#    EVALUATOR path (DEBT D's extraction, re-triggered at E3 exactly as the 1-5
@@ -606,6 +657,22 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 ## rig from hero rotation deliberately (deferred DECISION B).
 func set_camera_basis(slot: int, camera_basis: Basis) -> void:
 	_camera_bases[slot] = camera_basis
+
+
+## Runner step-2 push (story 4-6, AC 2, `4-6/R6`). The WORLD-SPACE PLANAR direction from this
+## slot's hero to its locked target, gathered by the runner from the two actor positions it
+## already owns -- the `_gather_contact_facts` `target_to_attacker` computation verbatim, one
+## level up. slot: 0 = P1, 1 = P2; the array index asserts on anything else.
+##
+## STATE NEVER QUERIES THE SCENE (D3(b)/A2). This is the confirmed mechanism `4-6/R6` names: a
+## pushed per-tick fact through the `set_camera_basis` / `push_contact` seam family, never a live
+## camera or node read from inside `src/state/`. `_is_facing` has consumed a runner-gathered
+## direction this exact way since 1-8, so this adds no new KIND of channel.
+##
+## Vector2.ZERO means NO FACT (a co-located target, or an address whose actor the runner has not
+## spawned): facing is left at its last value rather than snapped to a garbage heading.
+func set_lock_direction(slot: int, direction: Vector2) -> void:
+	_lock_directions[slot] = direction
 
 
 ## Emit all queued signals. Called by the runner AFTER advance() returns (D5).
@@ -1060,9 +1127,21 @@ func _projectile_acceleration_delay_ticks_at(board: ProjectileBoard, index: int)
 ## NORMALIZED (constant roll speed needs a unit direction), with the hero's world-space
 ## facing as the fallback when the stick is neutral. Computed ONCE at the transition;
 ## the stored value is locked for the whole roll.
+##
+## STORY 4-6, OPERATOR RULING `4-6/R7`: THE NEUTRAL-STICK FALLBACK IS NOW INVERTED -- with the
+## stick at rest the roll goes AWAY from the locked target, not toward it. This is the DS/ER
+## locked-on neutral-dodge convention (the backstep direction), delivered as the ORDINARY roll:
+## same animation, same i-frames, same distance and duration, no new move and no new mechanic.
+## Once facing became target-derived (AC 2) the old fallback stopped meaning "the way I was last
+## heading" and started meaning "straight at the thing I am locked to", which is the one
+## direction a dodge must not default to.
+##
+## DIRECTED STICK INPUT IS UNCHANGED: below the neutral branch the roll follows the stick
+## exactly as it always has. The ruling is explicitly REVERSIBLE -- one sign, revisited at
+## playtest -- which is why it is one operator, not a branch.
 func _roll_world_direction(hero: HeroState, move_dir: Vector2, slot: int) -> Vector3:
 	if move_dir.is_zero_approx():
-		return Vector3(hero.facing.x, 0.0, hero.facing.y).normalized()
+		return -Vector3(hero.facing.x, 0.0, hero.facing.y).normalized()
 	var dir := move_dir
 	if dir.length() > 1.0:
 		dir = dir.normalized()
@@ -1618,6 +1697,54 @@ func _attacker_attack_damage(attacker: PlayerState, attacker_index: int) -> floa
 		return 0.0
 	var attack := kind.attack_at(0)
 	return attack.damage if attack != null else 0.0
+
+
+## Story 4-6 (AC 9/AC 10/AC 11): the step-1c LOCK seat for one player. INGEST then VALIDATE.
+##
+## A retarget is a plain `[slot, index]` ADDRESS the runner already resolved against the live
+## scene -- this layer performs no candidate search, no screen-space work and no distance test.
+## `retarget_slot == InputIntent.NO_RETARGET` is a tick with no click and no flick, which leaves
+## the standing lock alone: there is no unlock value, because `CC/R2` gives lock-on no unlocked
+## state (AC 10, and a flick with no candidate is a no-op the RUNNER produces by sending no
+## request at all).
+func _resolve_lock(player: PlayerState, intent: InputIntent, opposing_slot: int) -> void:
+	if intent.retarget_slot != InputIntent.NO_RETARGET:
+		Invariant.check(intent.retarget_slot == 0 or intent.retarget_slot == 1,
+			"retarget slot must be 0 or 1, got %d" % intent.retarget_slot)
+		Invariant.check(intent.retarget_index >= TargetingService.HERO_INDEX,
+			"retarget index must be >= -1 (-1 is the hero), got %d" % intent.retarget_index)
+		player.lock_target_slot = intent.retarget_slot
+		player.lock_target_index = intent.retarget_index
+	_validate_lock(player, opposing_slot)
+
+
+## Story 4-6 (AC 3, `4-6/R4`/`4-6/R5`): the lock's liveness rule, and the whole of it. A HERO
+## address is always valid -- a slot always has a hero, and a DEAD one means the round is over
+## and step 1b has already frozen the tick. A UNIT address is valid only while that board index
+## exists AND is alive; the instant it is not, the lock snaps to the opposing hero with no
+## corpse-hold window, despite the corpse lingering on the board (`4-3d`).
+##
+## `has_index` BEFORE `is_alive_at`, in that order and not the reverse: a debug reset clears the
+## board outright, so the index can be GONE rather than merely dead, and `is_alive_at` on a
+## cleared board would read past its arrays.
+##
+## IDEMPOTENT BY CONSTRUCTION, which is what lets step 1c and step 4b both call it.
+func _validate_lock(player: PlayerState, opposing_slot: int) -> void:
+	if player.lock_target_index == TargetingService.HERO_INDEX:
+		return
+	var owner: PlayerState = p1 if player.lock_target_slot == 0 else p2
+	if owner.units.has_index(player.lock_target_index) \
+			and owner.units.is_alive_at(player.lock_target_index):
+		return
+	_reset_lock(player, opposing_slot)
+
+
+## Story 4-6 (`CC/R2`): THE ONE DEFAULT, in one place. The opposing hero, always -- at
+## construction, after a debug reset, and after the locked target dies. Callers pass the
+## opposing slot because a PlayerState does not know its own index.
+func _reset_lock(player: PlayerState, opposing_slot: int) -> void:
+	player.lock_target_slot = opposing_slot
+	player.lock_target_index = TargetingService.HERO_INDEX
 
 
 ## Story 1-8 (R-D2/R-D3): the facing gate — pure state policy over the runner-reported
@@ -2327,13 +2454,30 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 			speed *= _attack_phase_multiplier(player.hero.attack_phase())
 			lunge = _attack_lunge_velocity(player.hero)
 		player.hero.velocity = world_dir * speed + lunge
-	# Story 1-7 (review R1, operator decision): facing is WORLD-SPACE planar — the same
-	# rotated direction the velocity uses, so actor-side consumers (the hitbox yaw) need
-	# no basis knowledge. Under an identity basis world_dir == (dir.x, 0, dir.y), so
-	# facing equals the raw intent direction bit-for-bit (golden-neutral). The zero-guard
-	# is unchanged: facing freezes while there is no movement input.
-	if not dir.is_zero_approx():
-		player.hero.facing = Vector2(world_dir.x, world_dir.z)
+	# Story 4-6 (AC 2, `CC/R1`(i)): FACING IS TARGET-DERIVED, NOT INPUT-DERIVED. Still
+	# WORLD-SPACE planar (story 1-7 review R1, unchanged) and still reaching the actor through
+	# this one field, so the 1-7b single-yaw-source contract at hero.gd:31-42 is untouched
+	# (AC 6) -- what changed is WHAT feeds it, not the route or the space.
+	#
+	# THE ZERO-GUARD ON MOVEMENT IS GONE, which is the whole point: a locked hero faces its
+	# target while strafing, backing off, or standing perfectly still. The guard that replaces
+	# it is on the FACT, not the input -- an absent lock direction (nothing pushed, a co-located
+	# target, an actor the runner has not spawned) leaves facing at its last value, which is the
+	# same "no new information, keep the last heading" rule the old guard expressed about input.
+	#
+	# THE TWO CARVE-OUTS ARE ELSEWHERE AND UNCHANGED: the DEAD early return at the top of this
+	# function (2-3/R14) never reaches this line, and the round-over freeze (step 1b, 2-6/R6)
+	# returns before movement resolves at all. On both, facing is left at its last value under
+	# the standing "a display-only field may be SKIPPED" rule. THAT CLASSIFICATION IS NOW IN
+	# TENSION with facing feeding `_is_facing` -- a pre-existing tension this story INHERITS and
+	# deliberately does not resolve (AC 2 says so in as many words); both branches also freeze
+	# everything else that could act on it, so nothing observable rides on it today.
+	#
+	# `world_dir` STILL FEEDS VELOCITY ABOVE and is untouched by this: camera-relative movement
+	# and target-relative facing are two seams now, split exactly here.
+	var lock_dir := _lock_directions[slot]
+	if not lock_dir.is_zero_approx():
+		player.hero.facing = lock_dir
 
 
 ## Story 3-0b (AC5): per-phase attack movement multiplier. Selects one of the three
@@ -2553,6 +2697,14 @@ func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
 	_reset_player(p2)
+	# Story 4-6 (`CC/R2`): the lock returns to the opposing hero with the board it addressed.
+	# Seated HERE rather than in `_reset_player` for the reason `_init` seats it here: the
+	# OPPOSING SLOT is knowledge this function has and the per-player helper does not. It pairs
+	# with `player.units.clear()` inside that helper exactly as the dedupe and projectile clears
+	# do -- a lock addressing a board index the clear just deleted would name a unit that no
+	# longer exists, the same class of dangling address those two clears exist to prevent.
+	_reset_lock(p1, 1)
+	_reset_lock(p2, 0)
 	# Story 3-3 (AC 9): RE-ARM the step-6 deal seat — the reshuffle and refill happen THERE,
 	# inside this same advance(), never here. A reset that lands before any injection has no
 	# composition to lay down, so the latch is left alone rather than armed against nothing.
