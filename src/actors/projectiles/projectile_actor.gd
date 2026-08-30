@@ -14,8 +14,9 @@ extends Node3D
 ## IT OWNS EXACTLY ONE THING: ITS HEADING. That is the same split every actor in this project has —
 ## `4-3/R2` keeps position actor-owned, and a heading is the derivative of a position. What the STATE
 ## layer owns is whether the heading may still be UPDATED (`ProjectileBoard._homing`, AC 16), how
-## fast the shot is going (`MatchState.projectile_speed_at`, derived from the authored profile) and
-## when the flight ends (the 60 m odometer, AC 19). The runner reads all three and drives this node.
+## far the shot moves this tick (`MatchState.projectile_step_distance_at`, derived from the authored
+## profile) and when the flight ends (the 60 m odometer, AC 19). The runner reads all three and
+## drives this node.
 ##
 ## WHY THE HEADING IS HERE AND NOT IN STATE. Steering toward "the target's current position" (AC 15)
 ## needs a position, and no position may travel inward (`4-3/R2`: `push_contact` is the only inward
@@ -39,7 +40,7 @@ extends Node3D
 ##
 ## IT PERSISTS ACROSS TICKS AND THAT IS THE WHOLE MECHANISM OF AC 16. When the state layer ends
 ## homing, the runner simply STOPS CALLING `steer_toward()`; this value is the last one steering
-## produced, and `advance_flight()` keeps using it. "The projectile keeps its last heading and
+## produced, and `advance_flight_by()` keeps using it. "The projectile keeps its last heading and
 ## travels in a straight line" is therefore the ABSENCE of an update rather than a special mode, and
 ## there is no straight-line branch anywhere to fall out of step with the homing one.
 var heading := Vector3.FORWARD
@@ -91,20 +92,22 @@ func steer_toward(target_position: Vector3, turn_rate_degrees: float) -> void:
 	_face_heading()
 
 
-## Move one tick's worth along the current heading at `speed` world units per second.
+## Move along the current heading by `distance` world units — one tick's worth.
 ##
-## THE DISTANCE IS THE ONE THE STATE LAYER ALREADY SPENT FROM THE BUDGET. The runner passes the
-## speed it read from `MatchState.projectile_speed_at()` — the same derived value
-## `MatchState._advance_projectiles` integrated the odometer with — so the distance flown here and
-## the distance charged against the 60 m budget (AC 19) are ONE arithmetic rather than two that
-## could drift apart over a long flight.
+## THE DISTANCE IS THE ONE THE STATE LAYER ALREADY SPENT FROM THE BUDGET, and it is now that number
+## rather than a speed this function re-integrates. The runner passes
+## `MatchState.projectile_step_distance_at()`, which returns what `_advance_projectiles` charged the
+## odometer on the tick that just completed — so the distance flown here and the distance charged
+## against the 60 m budget (AC 19) are ONE arithmetic rather than two that could drift apart over a
+## long flight. It took a speed until review finding H2, and re-deriving the speed here read the
+## flight clock one tick after the odometer had been charged.
 ##
 ## A PLAIN TRANSLATION, NOT `move_and_slide()`: this is a `Node3D`, not a body. A projectile is not
 ## blocked by terrain or by other bodies — it is stopped by a CONTACT, which the state layer decides
 ## from the hitbox overlap this node reports, and by its travel budget. Sliding along a wall would be
 ## a physics behaviour nothing in this story asks for.
-func advance_flight(speed: float) -> void:
-	global_position += heading * (speed / TimingWindow.TICK_HZ)
+func advance_flight_by(distance: float) -> void:
+	global_position += heading * distance
 
 
 ## Yaw the node to match its heading. PRESENTATIONAL ONLY — nothing reads this rotation, including

@@ -926,10 +926,21 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 ## stale copies of authored data, and what makes an X3 retune take effect on shots already in the
 ## air rather than only on the next one.
 ##
-## THE RUNNER MOVES THE ACTOR BY THE SAME DERIVED SPEED, from `projectile_speed_at()` below, so the
-## odometer this integrates and the distance the actor actually covers are ONE arithmetic rather
-## than two that could drift. That is also why the budget is spendable without a position ever
-## entering this layer.
+## THE RUNNER MOVES THE ACTOR BY THE DISTANCE THIS SEAT CHARGED, through
+## `projectile_step_distance_at()` below — and that claim USED TO BE FALSE, which is review finding
+## H2. The runner called `projectile_speed_at(board, index)` AFTER `advance()` returned, and
+## `advance_at` had already incremented the flight clock by then; since the speed is a pure function
+## of that clock, the actor was permanently ONE TICK AHEAD on the acceleration curve relative to the
+## budget it was being charged against. Not a determinism defect (position is actor-owned and never
+## hashed), but AC 19's "travels at most 60 m" was measured on the odometer while the visible shot
+## travelled slightly farther, and the overshoot scales linearly with
+## `acceleration_per_second_squared` — so a retune would have widened it silently.
+##
+## THE ODOMETER IS THE REFERENCE, not the actor, and that is the direction the fix takes: launch
+## speed must apply on a shot's FIRST tick, which is `flight_ticks == 0` — the pre-increment value
+## this seat reads. The runner now asks for the distance charged on the tick that just completed
+## rather than re-deriving a speed from a clock that has moved. That is also why the budget is
+## spendable without a position ever entering this layer.
 ##
 ## A SHOT WHOSE KIND NO LONGER RESOLVES IS CONSUMED rather than frozen — an X3 reload that shortened
 ## `unit_kinds` leaves it with no authored speed and no authored budget, and a projectile that can
@@ -945,21 +956,28 @@ func _advance_projectiles(player: PlayerState) -> void:
 		if profile == null:
 			board.consume_at(index)
 			continue
-		# One tick's distance at this tick's derived speed. `TimingWindow.TICK_HZ` is the project's
-		# single clock (the runner `check_invariant`s it against `physics_ticks_per_second` at
-		# startup), so this is the integer-tick integration A1 requires — never a wall-clock delta.
-		var distance := projectile_speed_at(board, index) / TimingWindow.TICK_HZ
+		# One tick's distance at this tick's derived speed, read at the flight clock's PRE-INCREMENT
+		# value — `advance_at` below is what moves the clock on. `TimingWindow.TICK_HZ` is the
+		# project's single clock (the runner `check_invariant`s it against `physics_ticks_per_second`
+		# at startup), so this is the integer-tick integration A1 requires — never a wall-clock delta.
+		var distance := _step_distance_at_flight_ticks(board, index, board.flight_ticks_at(index))
 		board.advance_at(index, distance, profile.travel_budget)
 
 
 ## The CURRENT SPEED of one live projectile, in world units per second — the acceleration profile
 ## (AC 15) evaluated at this shot's flight clock.
 ##
-## PUBLIC because the RUNNER reads it too, to move the actor by exactly the distance
-## `_advance_projectiles` just spent from the budget. One arithmetic, two readers, rather than a
-## duplicated curve that a retune could desynchronise. It is a PURE QUERY — it touches no board and
+## PUBLIC as the state layer's ONE expression of the authored curve, so nothing outside it may keep a
+## duplicated copy that a retune could desynchronise. It is a PURE QUERY — it touches no board and
 ## mutates nothing — which is the same classification `unit_attack_phase_multiplier` already carries
 ## for the same reason (`4-3c1/R5`'s `EXEMPT_PURE_QUERY`).
+##
+## THE RUNNER DOES NOT USE THIS ONE, and that changed at review finding H2. It used to, to move the
+## actor — and reading it AFTER `advance()` returned meant reading the flight clock one tick after
+## the odometer had been charged. The runner asks `projectile_step_distance_at` below instead, which
+## names its tick explicitly. What still reads this is the curve's own tests and anything that wants
+## "how fast is this shot going right now", which is a question about the CURRENT clock and is
+## answered correctly by exactly this.
 ##
 ## THE CURVE IS AUTHORED DATA AND THERE IS EXACTLY ONE OF IT (`4-4/R3`): launch speed until the
 ## authored delay has elapsed, then linear acceleration, clamped at the authored ceiling. No branch
@@ -970,10 +988,42 @@ func _advance_projectiles(player: PlayerState) -> void:
 ## bound over a long flight, and a step longer than a hurtbox is wide would tunnel straight through
 ## it — the projectile would pass through its target instead of hitting it.
 func projectile_speed_at(board: ProjectileBoard, index: int) -> float:
+	return _speed_at_flight_ticks(board, index, board.flight_ticks_at(index))
+
+
+## Story 4-4 (review finding H2): THE DISTANCE THIS SHOT FLEW ON THE TICK THAT JUST COMPLETED, in
+## world units — the value the runner moves the actor by, and the SAME number
+## `_advance_projectiles` charged against the 60 m budget on that tick.
+##
+## PUBLIC for `projectile_speed_at`'s reason verbatim (a projectile's POSITION is actor-owned, so the
+## state layer may only EXPOSE the arithmetic), and a PURE QUERY on the same footing — it touches no
+## board and mutates nothing. It joins the `EXEMPT_PURE_QUERIES` set in test_intent_recorder.gd, and
+## it needs no capture channel for its two siblings' reason: a replay that reproduces the board
+## reproduces this answer, and nothing reaches MatchState through it.
+##
+## THE `- 1` IS THE F1 ONE-TICK LAG, NOT AN OFF-BY-ONE. The runner's drive phase runs AFTER
+## `advance()` has returned, and `ProjectileBoard.advance_at` increments the flight clock as part of
+## charging the odometer — so by the time this is called the clock reads the NEXT tick's value. The
+## tick whose distance was actually spent is the one before it. Asking for the SPENT DISTANCE rather
+## than for a speed is what makes "one arithmetic, two readers" true by construction: both readers
+## now name the same tick explicitly instead of one of them inferring it from a clock that has moved.
+func projectile_step_distance_at(board: ProjectileBoard, index: int) -> float:
+	return _step_distance_at_flight_ticks(board, index, board.flight_ticks_at(index) - 1)
+
+
+## One tick's distance at the speed this shot carries at flight tick `ticks`. The single conversion
+## from the authored curve to a per-tick displacement, so neither reader divides by `TICK_HZ` itself.
+func _step_distance_at_flight_ticks(board: ProjectileBoard, index: int, ticks: int) -> float:
+	return _speed_at_flight_ticks(board, index, ticks) / TimingWindow.TICK_HZ
+
+
+## The authored curve, evaluated at an EXPLICIT flight tick rather than at whatever the board's clock
+## happens to read. Both public seams above name their tick through this one function, which is what
+## H2's fix rests on: there is no path left that infers the tick instead of stating it.
+func _speed_at_flight_ticks(board: ProjectileBoard, index: int, ticks: int) -> float:
 	var profile := _projectile_profile_at(board, index)
 	if profile == null:
 		return 0.0
-	var ticks := board.flight_ticks_at(index)
 	var delay := _projectile_acceleration_delay_ticks_at(board, index)
 	if ticks <= delay:
 		return profile.launch_speed

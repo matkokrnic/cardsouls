@@ -67,9 +67,20 @@ const EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"
 ## one expression of "this totem is currently doing its job" — a private helper would force a second
 ## copy into any test that wanted to assert on it. A replay that reproduces the board reproduces
 ## this answer, so there is nothing for a stream to carry.
+##
+## `projectile_step_distance_at(board, index)` IS THE FOURTH, added by 4-4's review fix pass for
+## finding H2, and it is `projectile_speed_at`'s own argument one step further along. The runner
+## used to move the actor by re-deriving a SPEED from the board after `advance()` had already
+## incremented the flight clock — so the actor flew at one tick's speed while the odometer had been
+## charged another's. This seam returns the DISTANCE the state layer actually spent on the tick that
+## just completed, which is what makes "one arithmetic, two readers" true by construction. Same
+## category as its three neighbours exactly: a pure function of its arguments returning a float,
+## writing nothing and storing nothing, needing no capture channel because a replay that reproduces
+## the board reproduces its answer.
 const EXEMPT_PURE_QUERIES: Array[String] = [
 	"unit_attack_phase_multiplier",
 	"projectile_speed_at",
+	"projectile_step_distance_at",
 	"has_live_kind",
 ]
 
@@ -135,7 +146,8 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 	assert_eq(exempt, expected_exempt,
 		"the FOUR exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
 		+ "no data INWARD (it is the D5 emit half of a queue the runner empties every tick), and "
-		+ "unit_attack_phase_multiplier(), projectile_speed_at() and has_live_kind() are PURE QUERIES that "
+		+ "unit_attack_phase_multiplier(), projectile_speed_at(), projectile_step_distance_at() and "
+		+ "has_live_kind() are PURE QUERIES that "
 		+ "take parameters and still carry none (functions of their arguments, returning a value, "
 		+ "writing nothing) — none is an intake, and a FIFTH name appearing here is a real intake "
 		+ "escaping its capture channel")

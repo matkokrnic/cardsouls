@@ -1547,9 +1547,17 @@ func _projectile_launch_position(slot: int, source_index: int) -> Vector3:
 ## second movement mode, and there is no straight-line branch to fall out of step with the homing one
 ## (`4-4/R5`: nothing here ends homing, and a target leaving the flight path is not an event).
 ##
-## THE SPEED IS THE STATE LAYER'S OWN DERIVED VALUE, read through `MatchState.projectile_speed_at`
-## — the SAME arithmetic `_advance_projectiles` charged the 60 m odometer with, so the distance flown
-## and the distance spent are one number rather than two curves that drift apart over a long flight.
+## THE DISTANCE IS THE STATE LAYER'S OWN, read through `MatchState.projectile_step_distance_at` —
+## literally the number `_advance_projectiles` charged the 60 m odometer with on the tick that just
+## completed, so the distance flown and the distance spent are one number rather than two curves that
+## drift apart over a long flight.
+##
+## IT USED TO READ A SPEED INSTEAD, AND THAT WAS REVIEW FINDING H2. This seat called
+## `projectile_speed_at(board, index)` after `advance()` had returned, and the flight clock had
+## already been incremented by then — so the actor flew at speed(t+1) while the odometer had been
+## charged speed(t), permanently one tick ahead on the acceleration curve. Three comments (this one,
+## and two in `match_state.gd`) asserted the opposite in as many words. Asking for the SPENT DISTANCE
+## makes the claim true by construction rather than by comment.
 ##
 ## A DEAD SHOT IS NOT DRIVEN. Its actor is freed later in the same frame; driving it first would move
 ## a corpse one last tick and could produce a contact fact the state layer would then drop at the
@@ -1572,7 +1580,7 @@ func _drive_projectiles(slot: int, player: PlayerState) -> void:
 				if profile != null:
 					shot.steer_toward(target_position as Vector3,
 							profile.homing_turn_rate_degrees_per_second)
-		shot.advance_flight(_match_state.projectile_speed_at(board, index))
+		shot.advance_flight_by(_match_state.projectile_step_distance_at(board, index))
 
 
 ## Story 4-4 (AC 14): the CONTACT GATHER for slot `slot`'s live projectiles — the

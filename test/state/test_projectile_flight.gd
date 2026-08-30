@@ -419,6 +419,47 @@ func test_acceleration_is_clamped_at_the_authored_ceiling() -> void:
 		"the derived speed never exceeds the authored max_speed, however long the flight runs")
 
 
+## REVIEW FINDING H2, made executable: the distance the RUNNER moves the actor by must be the
+## distance the ODOMETER was charged, on the same tick, and not one tick's worth further along the
+## acceleration curve.
+##
+## The runner's drive phase runs AFTER `advance()` has returned, and `advance_at` increments the
+## flight clock as part of charging the odometer -- so a runner that re-derived a SPEED from the
+## board was reading speed(t+1) against a budget charged speed(t), permanently one tick ahead. Three
+## comments asserted the opposite in as many words. `projectile_step_distance_at` is the seam that
+## makes the claim true by construction, and this is its guard.
+##
+## MEASURED ON AN ACCELERATING SHOT ON PURPOSE. At a constant speed the two readings coincide and
+## the test would pass with the defect in place; the whole error is that the curve has moved between
+## them, so it is only visible while the curve is moving.
+func test_the_distance_the_actor_flies_is_the_distance_the_odometer_was_charged() -> void:
+	var profile := _projectile(180.0, 3600.0, 0, 10000.0)
+	profile.travel_budget = 1000.0   # far past what five accelerating ticks can spend
+	var ms := _make_match(profile)
+	_fire(ms)
+	var board := ms.p1.projectiles
+	var previous := board.travelled_at(0)
+	var compared := 0
+	for _t in 5:
+		_advance(ms)
+		if not board.is_alive_at(0):
+			break
+		var charged := board.travelled_at(0) - previous
+		assert_eq(ms.projectile_step_distance_at(board, 0), charged,
+			"flight tick %d: the runner is handed exactly what the odometer just spent (%f)"
+					% [board.flight_ticks_at(0), charged])
+		previous = board.travelled_at(0)
+		compared += 1
+	assert_true(compared >= 3,
+		"...on at least three consecutive ticks, or the equality is a coincidence at one point "
+		+ "(compared %d)" % compared)
+	# NON-VACUITY: the curve really is moving across those ticks, so speed(t) and speed(t+1) are
+	# DIFFERENT numbers and the defect would have shown.
+	assert_ne(ms.projectile_speed_at(board, 0), LAUNCH_SPEED,
+		"...and the shot is accelerating, so reading the clock one tick late would have been a "
+		+ "different distance rather than the same one")
+
+
 func test_a_zero_turn_rate_and_zero_acceleration_are_legal_authored_values() -> void:
 	# Both fields are audited NON-NEGATIVE rather than > 0 for the shipped `.tres`, because zero has
 	# an honest meaning for each: fly straight, and fly at a constant speed. This pins that the
