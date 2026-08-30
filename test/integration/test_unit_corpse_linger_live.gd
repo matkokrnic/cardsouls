@@ -70,6 +70,17 @@ const PAUSE_FRAMES := 40
 ## being an EDGE read one frame behind this callback.
 const TICK_COUNT_TOLERANCE := 5
 
+## Pinned-to-composition was the defect, found when deck_size 20 -> 24 at the 4-4 live smoke: a
+## fixed seed no longer guarantees a summoning card lands in the frame-3 hand. Reshuffle through
+## the same debug-reset input path a player uses instead of pinning the deal; the RNG advances
+## deterministically each reshuffle, so the retry sequence is identical on every run.
+const RESHUFFLE_MAX_ATTEMPTS := 12
+const RESHUFFLE_SETTLE_TICKS := 10
+
+var _reshuffling := false
+var _reshuffle_tick := 0
+var _reshuffle_attempts := 0
+
 var _frames := 0
 var _runner: Node
 var _state: MatchState
@@ -117,6 +128,8 @@ func _initialize() -> void:
 
 
 func _physics_process(_delta: float) -> bool:
+	if _reshuffling:
+		return _drive_reshuffle()
 	_frames += 1
 	if _frames == 1:
 		_runner = root.get_node_or_null("Main")
@@ -134,7 +147,9 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == 3:
 		_slots_chosen = _choose_summon_slot(_state.p2, "p2")
 		if not _slots_chosen:
-			return _finish(false, "no summoning card dealt to p2")
+			_reshuffling = true
+			_reshuffle_tick = 0
+			return false
 	# P2 summons the unit P1's hero will kill.
 	if _frames == P2_ARM_FRAME:
 		Input.action_press(&"p2_cast_mode")
@@ -357,6 +372,27 @@ func _finish(ok: bool, message: String) -> bool:
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	_teardown()
 	quit(0 if ok else 1)
+	return false
+
+
+## Drives one press/release/settle cycle of the debug reset, then re-checks the dealt hand.
+## Bounded so a build that never deals a summoning card still fails, rather than hanging.
+func _drive_reshuffle() -> bool:
+	_reshuffle_tick += 1
+	if _reshuffle_tick == 1:
+		Input.action_press(&"p1_debug_reset")
+	if _reshuffle_tick == 3:
+		Input.action_release(&"p1_debug_reset")
+	if _reshuffle_tick == RESHUFFLE_SETTLE_TICKS:
+		_slots_chosen = _choose_summon_slot(_state.p2, "p2")
+		if _slots_chosen:
+			_reshuffling = false
+			return false
+		_reshuffle_attempts += 1
+		if _reshuffle_attempts >= RESHUFFLE_MAX_ATTEMPTS:
+			return _finish(false, "no summoning card dealt to p2 (after %d reshuffle attempts)"
+					% _reshuffle_attempts)
+		_reshuffle_tick = 0
 	return false
 
 

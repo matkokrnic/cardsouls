@@ -59,6 +59,17 @@ const SIDE_OFFSET := 0.35
 const IN_REACH_MAX := 1.4
 const IN_REACH_MIN := 0.4
 
+## Pinned-to-composition was the defect, found when deck_size 20 -> 24 at the 4-4 live smoke: a
+## fixed seed no longer guarantees a summoning card lands in the frame-3 hand. Reshuffle through
+## the same debug-reset input path a player uses instead of pinning the deal; the RNG advances
+## deterministically each reshuffle, so the retry sequence is identical on every run.
+const RESHUFFLE_MAX_ATTEMPTS := 12
+const RESHUFFLE_SETTLE_TICKS := 10
+
+var _reshuffling := false
+var _reshuffle_tick := 0
+var _reshuffle_attempts := 0
+
 var _frames := 0
 var _runner: Node
 var _state: MatchState
@@ -95,6 +106,8 @@ func _initialize() -> void:
 
 
 func _physics_process(_delta: float) -> bool:
+	if _reshuffling:
+		return _drive_reshuffle()
 	_frames += 1
 	if _frames == 1:
 		_runner = root.get_node_or_null("Main")
@@ -130,8 +143,9 @@ func _physics_process(_delta: float) -> bool:
 		_p1_slot_chosen = _choose_summon_slot(_state.p1, "p1")
 		_p2_slot_chosen = _choose_summon_slot(_state.p2, "p2")
 		if not _p1_slot_chosen or not _p2_slot_chosen:
-			return _fail("no summoning card dealt: p1=%s p2=%s"
-					% [_p1_slot_chosen, _p2_slot_chosen])
+			_reshuffling = true
+			_reshuffle_tick = 0
+			return false
 	# --- P1 summons its OWN unit (the friendly-fire subject, AC 6) ---
 	if _frames == ARM_FRAME:
 		Input.action_press(&"p1_cast_mode")
@@ -351,6 +365,28 @@ func _fail(message: String) -> bool:
 	print(message)
 	print("RESULT: FAIL")
 	quit(1)
+	return false
+
+
+## Drives one press/release/settle cycle of the debug reset, then re-checks the dealt hand.
+## Bounded so a build that never deals a summoning card still fails, rather than hanging.
+func _drive_reshuffle() -> bool:
+	_reshuffle_tick += 1
+	if _reshuffle_tick == 1:
+		Input.action_press(&"p1_debug_reset")
+	if _reshuffle_tick == 3:
+		Input.action_release(&"p1_debug_reset")
+	if _reshuffle_tick == RESHUFFLE_SETTLE_TICKS:
+		_p1_slot_chosen = _choose_summon_slot(_state.p1, "p1")
+		_p2_slot_chosen = _choose_summon_slot(_state.p2, "p2")
+		if _p1_slot_chosen and _p2_slot_chosen:
+			_reshuffling = false
+			return false
+		_reshuffle_attempts += 1
+		if _reshuffle_attempts >= RESHUFFLE_MAX_ATTEMPTS:
+			return _fail("no summoning card dealt: p1=%s p2=%s (after %d reshuffle attempts)"
+					% [_p1_slot_chosen, _p2_slot_chosen, _reshuffle_attempts])
+		_reshuffle_tick = 0
 	return false
 
 

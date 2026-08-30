@@ -88,6 +88,17 @@ const MIN_IDLE_SAMPLES := 10
 ## nothing touching it, and a hero merely nudged aside would still be a body in the sample.
 const HERO_CLEAR_SIDESTEP := 6.0
 
+## Pinned-to-composition was the defect, found when deck_size 20 -> 24 at the 4-4 live smoke: a
+## fixed seed no longer guarantees a summoning card lands in the frame-3 hand. Reshuffle through
+## the same debug-reset input path a player uses instead of pinning the deal; the RNG advances
+## deterministically each reshuffle, so the retry sequence is identical on every run.
+const RESHUFFLE_MAX_ATTEMPTS := 12
+const RESHUFFLE_SETTLE_TICKS := 10
+
+var _reshuffling := false
+var _reshuffle_tick := 0
+var _reshuffle_attempts := 0
+
 var _frames := 0
 var _runner: Node
 var _state: MatchState
@@ -127,6 +138,8 @@ func _initialize() -> void:
 
 
 func _physics_process(_delta: float) -> bool:
+	if _reshuffling:
+		return _drive_reshuffle()
 	_frames += 1
 	if _frames == 1:
 		_runner = root.get_node_or_null("Main")
@@ -167,8 +180,9 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == 3:
 		_choose_a_summoning_slot()
 		if not _slot_chosen:
-			return _finish(false, "no summoning card in the dealt hand: %s"
-					% str(_state.p1.hand.to_array()))
+			_reshuffling = true
+			_reshuffle_tick = 0
+			return false
 	if _frames == ARM_FRAME:
 		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
@@ -325,6 +339,27 @@ func _finish(ok: bool, message: String) -> bool:
 	return false
 
 
+## Drives one press/release/settle cycle of the debug reset, then re-checks the dealt hand.
+## Bounded so a build that never deals a summoning card still fails, rather than hanging.
+func _drive_reshuffle() -> bool:
+	_reshuffle_tick += 1
+	if _reshuffle_tick == 1:
+		Input.action_press(&"p1_debug_reset")
+	if _reshuffle_tick == 3:
+		Input.action_release(&"p1_debug_reset")
+	if _reshuffle_tick == RESHUFFLE_SETTLE_TICKS:
+		_choose_a_summoning_slot()
+		if _slot_chosen:
+			_reshuffling = false
+			return false
+		_reshuffle_attempts += 1
+		if _reshuffle_attempts >= RESHUFFLE_MAX_ATTEMPTS:
+			return _finish(false, "no summoning card in the dealt hand: %s (after %d reshuffle attempts)"
+					% [str(_state.p1.hand.to_array()), _reshuffle_attempts])
+		_reshuffle_tick = 0
+	return false
+
+
 func _phase_name(phase: int) -> String:
 	match phase:
 		UnitBoard.AttackPhase.IDLE:
@@ -370,7 +405,15 @@ func _choose_a_summoning_slot() -> void:
 		var card := db.get_card(hand[index]) as CardData
 		if card == null or card.basic_effect == null:
 			continue
-		if String(card.basic_effect.effect_id).begins_with(CardEffectResolver.PREFIX_SUMMON):
+		# Story 4-4 (AC 1), the same exclusion the sibling live files already carry: this file
+		# measures a walking MINION's root, and a TOTEM stands still by design (`4-4/R12`) -- so a
+		# totem-summoning card must not be the one this chooser arms. Read off the resolver's own
+		# table rather than a second list of totem ids, so the two can never disagree. Reachable
+		# now that the reshuffle helper (below) can draw further into a deck_size-24 hand.
+		var effect_id: StringName = card.basic_effect.effect_id
+		var is_summon := String(effect_id).begins_with(CardEffectResolver.PREFIX_SUMMON)
+		var is_totem := CardEffectResolver.SUMMON_KINDS.has(effect_id)
+		if is_summon and not is_totem:
 			_armed_slot = index
 			_armed_action = StringName("p1_card_%d" % (index + 1))
 			_slot_chosen = InputMap.has_action(_armed_action)

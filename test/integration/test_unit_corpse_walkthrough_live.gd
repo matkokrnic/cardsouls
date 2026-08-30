@@ -74,6 +74,17 @@ const BLOCKED_MARGIN := 0.4
 ## be mistaken for the corpse doing it.
 const PARKING_LOT := Vector3(40.0, 0.0, 40.0)
 
+## Pinned-to-composition was the defect, found when deck_size 20 -> 24 at the 4-4 live smoke: a
+## fixed seed no longer guarantees a summoning card lands in the frame-3 hand. Reshuffle through
+## the same debug-reset input path a player uses instead of pinning the deal; the RNG advances
+## deterministically each reshuffle, so the retry sequence is identical on every run.
+const RESHUFFLE_MAX_ATTEMPTS := 12
+const RESHUFFLE_SETTLE_TICKS := 10
+
+var _reshuffling := false
+var _reshuffle_tick := 0
+var _reshuffle_attempts := 0
+
 var _frames := 0
 var _runner: Node
 var _state: MatchState
@@ -111,6 +122,8 @@ func _initialize() -> void:
 
 
 func _physics_process(_delta: float) -> bool:
+	if _reshuffling:
+		return _drive_reshuffle()
 	_frames += 1
 	if _frames == 1:
 		_runner = root.get_node_or_null("Main")
@@ -127,7 +140,9 @@ func _physics_process(_delta: float) -> bool:
 			return _finish(false, "the authored FeatureFlags has minions OFF -- cannot summon")
 	if _frames == 3:
 		if not _choose_summon_slot(_state.p1, "p1") or not _choose_summon_slot(_state.p2, "p2"):
-			return _finish(false, "no summoning card dealt to both players")
+			_reshuffling = true
+			_reshuffle_tick = 0
+			return false
 	if _frames == P1_ARM_FRAME:
 		Input.action_press(&"p1_cast_mode")
 	if _frames == P1_ARM_FRAME + 1:
@@ -368,6 +383,26 @@ func _finish(ok: bool, message: String) -> bool:
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	_teardown()
 	quit(0 if ok else 1)
+	return false
+
+
+## Drives one press/release/settle cycle of the debug reset, then re-checks the dealt hand.
+## Bounded so a build that never deals a summoning card still fails, rather than hanging.
+func _drive_reshuffle() -> bool:
+	_reshuffle_tick += 1
+	if _reshuffle_tick == 1:
+		Input.action_press(&"p1_debug_reset")
+	if _reshuffle_tick == 3:
+		Input.action_release(&"p1_debug_reset")
+	if _reshuffle_tick == RESHUFFLE_SETTLE_TICKS:
+		if _choose_summon_slot(_state.p1, "p1") and _choose_summon_slot(_state.p2, "p2"):
+			_reshuffling = false
+			return false
+		_reshuffle_attempts += 1
+		if _reshuffle_attempts >= RESHUFFLE_MAX_ATTEMPTS:
+			return _finish(false, "no summoning card dealt to both players (after %d reshuffle attempts)"
+					% _reshuffle_attempts)
+		_reshuffle_tick = 0
 	return false
 
 
