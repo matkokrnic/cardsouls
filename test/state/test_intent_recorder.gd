@@ -171,11 +171,11 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 
 # ---------------------------------------------------------------- AC 2
 
-## AC 2: EVERY InputIntent FIELD RIDES THE STREAM VERBATIM, per tick, per slot. All eight fields
+## AC 2: EVERY InputIntent FIELD RIDES THE STREAM VERBATIM, per tick, per slot. All nine fields
 ## are given a NON-DEFAULT value (asserted non-default, or the round-trip would pass against a
 ## recorder that dropped them and returned a fresh object), captured, and read back through the
 ## real ReplayController — the same path the runner uses, not a private accessor.
-func test_all_eight_input_intent_fields_round_trip_per_tick_per_slot() -> void:
+func test_all_nine_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	var loud := InputIntent.new()
 	loud.move_dir = Vector2(0.25, -0.75)
 	loud.retarget_slot = 1

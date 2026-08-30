@@ -150,7 +150,7 @@ var vulnerable_window: TimingWindow
 ## ONE snapshot key (`lock_target`), the `unit_targets` fusion verbatim.
 ##
 ## THERE IS NO UNLOCKED STATE (`CC/R2`, AC 10). The resting value is the OPPOSING HERO, set by
-## `MatchState._init` and restored by `_reset_player` -- both places know the slot, which this
+## `MatchState._init` and restored by `MatchState._apply_debug_reset` -- both know the slot, which this
 ## object deliberately does not (a PlayerState has never known its own index, and giving it one
 ## for this would be a new coupling for one field).
 ##

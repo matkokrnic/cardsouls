@@ -249,8 +249,10 @@ func _physics_process(_delta: float) -> bool:
 
 	# ---- BLOCKED (AC 4): P1's hero walks into P1's own parked unit. Shipped defaults, no kill,
 	#      no slot_controller_kinds flip -- `R-D6` is NOT spent by this story (`4-3/R14`).
-	#      `p1_move_right` is world +x (pinned by test_hero_movement.gd), and the unit parks
-	#      between P1's hero and P2's, so the hero walks straight at it. ----
+	#      Camera-forward is world +x while the default lock holds (pinned end-to-end by
+	#      test_camera_relative.gd -- test_hero_movement.gd pins the velocity MAGNITUDE, not an
+	#      axis, since story 4-6 made the basis live), and the unit parks between P1's hero and
+	#      P2's, so the hero walks straight at it. See the press below. ----
 	if _frames == _walk_start_frame:
 		# STORY 4-6 (AC 1): `p1_move_up` -- CAMERA-FORWARD -- is what world +X is now, and the
 		# swap is this story's cause (b) landing on an existing fixture rather than a fix. The rig
