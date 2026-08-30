@@ -5,6 +5,26 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## RE-BASELINED BY STORY 4-4'S REVIEW FIX PASS (`4-4/R14`), d94337cd -> a96b123e, ONE CAUSE.
+##   1. SNAPSHOT VALUE SHAPE, not the key SET. `unit_in_reach` was a bool per unit and is now an INT
+##      per unit — the number of ticks a reach confirmation stays CURRENT. The key set does NOT move
+##      (still TWENTY-SEVEN), and no behaviour in this fixture moved either: the fixture's every
+##      contact fact is HERO-sourced, so `_mark_reach_from_fact` returns before marking and the
+##      countdown sits at its empty value for the whole run. What changed is how CanonicalHash
+##      RENDERS that value — `false` -> `0` — which is the entire delta. MEASURED both ways: with
+##      `in_reach_snapshot()` projecting the count back down to a bool the fixture reproduces
+##      d94337cd exactly, and with the count itself it reads a96b123e.
+##   2. `rng_state` — a non-mover, and structurally so: nothing about a reach confirmation's shelf
+##      life consumes RNG. Confirmed by the measurement above being fully explained by the one
+##      key's rendering.
+##
+## WHY THE COUNT IS HASHED RATHER THAN ITS PREDICATE, since the cheaper option was available and was
+## measured: `4-3a/R17` says a value that CROSSES TICKS and DECIDES AN OUTCOME cannot sit outside the
+## hash, and how much freshness is left decides whether the next windup may begin. Hashing only the
+## bool would have kept this golden unmoved at the price of two genuinely different states hashing
+## the same, and `UNHASHED_CROSS_TICK_MEMBERS` going 3 -> 4 in test_replay_identity.gd. The operator
+## refused that trade by name and spent the re-baseline instead; the exclusion set STAYS AT THREE.
+
 ## NOT RE-BASELINED BY STORY 4-4, PASS 3 OF 3 (the accelerator faucets) — d94337cd UNMOVED, and the
 ## non-move is MEASURED AND NAMED rather than a step that was skipped. AC 12 requires the
 ## accelerators to be considered as their own cause "separate from any cause introduced by the
@@ -16,8 +36,12 @@ extends TestCase
 ##      narrowed that isolation explicitly: `data/economy/*.tres` rule CONTENT is load-bearing for
 ##      the golden, since production code scans that directory on the golden's own path. MEASURED
 ##      UNMOVED, and the reason is structural: `EconomyEvaluator.amount_for` filters by SOURCE, the
-##      new rule's source is `mana_accelerator`, and the two rungs the fixture reaches ask for
-##      `melee_hit` and `passive_tick`. A rule that matches no queried source contributes nothing.
+##      new rule's source is `mana_accelerator`, and the two rungs whose results this fixture SPENDS
+##      ask for `melee_hit` and `passive_tick`. A rule that matches no queried source contributes
+##      nothing. (D3, corrected at the review: the third `amount_for` call IS reached on every tick
+##      — the cadence divisor clamps to >= 1 — it simply discards its result behind the liveness
+##      gate. The sentence used to read as though the call never happened; cause 2 below always
+##      said otherwise.)
 ##   2. THE THIRD `_generate_mana` CALL SITE. Reached on every cadence boundary, but gated on a LIVE
 ##      accelerator on that player's own board — and the fixture's authored kind is a MINION, so
 ##      `has_live_kind` is false for both players on every tick of the recorded sequence. The rung
@@ -48,13 +72,30 @@ extends TestCase
 ##      RESULT. Every previous board story (4-1's summon, 4-2's acquired target, 4-3a's hp) got its
 ##      behaviour inside determinism coverage BY CONSTRUCTION, because the fixture's ONE recorded
 ##      cast at t22 was enough to move the value before the hash is taken at t24. A projectile
-##      cannot reach the hash on that timeline, and the arithmetic is exact rather than approximate:
-##      the unit is summoned at t22, acquires its target at the t23 throttle boundary
-##      (RETARGET_INTERVAL_TICKS 23), the earliest probe that can scope-match its acquired target is
-##      therefore t23, the windup it permits begins at t24 — the hashed tick — and the
-##      windup-to-active transition that LAUNCHES is t25 at the earliest. Getting a live shot into
-##      this hash requires extending the recorded sequence past t24, which is a fixture redesign
-##      this story was not scoped to do and which would re-baseline every unrelated key at once.
+##      cannot reach the hash on that timeline.
+##
+##      THE TICK ARITHMETIC, CORRECTED AT THE REVIEW (D2 — the dev pass wrote t25). Measured against
+##      `advance()`'s actual step order: step 3b `_advance_unit_attacks` runs BEFORE step 4
+##      `_resolve_contacts`, and step 7 `_update_unit_targets` runs LAST. The unit is summoned at
+##      t22; at t23 step 4 it still holds the no-target pair, and the retarget that gives it a target
+##      happens at t23 step 7, AFTER — so the earliest scope-matching mark is t24, the windup it
+##      permits begins at t25, and the windup-to-active transition that LAUNCHES is t26. The error
+##      ran against the pass's own margin (t26 > t24 > the hashed tick), so the conclusion held a
+##      fortiori; the number was still wrong and is fixed here.
+##
+##      AND THE REMEDY SENTENCE THIS BLOCK USED TO CARRY WAS FALSE (D1 — corrected at the review).
+##      It said getting a projectile into the golden "requires extending the recorded sequence past
+##      t24". IT DOES NOT, and a follow-up story starting from that sentence would extend the
+##      fixture and still measure nothing. TWO INDEPENDENT STRUCTURAL REASONS, either alone
+##      sufficient: (i) `mark_in_reach_at` is reached only from `_mark_reach_from_fact`, which
+##      returns immediately for a HERO attacker, and every fact this fixture pushes is hero-sourced
+##      — so `unit_in_reach` is empty forever at EVERY tick count and the unit can never wind up;
+##      (ii) the fixture's kind comes from `UnitKindFixture.melee()`, which never sets
+##      `attack.projectile`, so the launch branch is dead regardless. Reason (ii) is the same
+##      "isolated by construction" argument this entry's cause 1 rests on, which is why it is
+##      load-bearing here and not a coincidence. Bringing a shot into this hash needs a fixture that
+##      pushes a UNIT-sourced probe against a kind authoring a projectile — a redesign, not a longer
+##      sequence, and one that would re-baseline every unrelated key at once.
 ##      SO THE PROJECTILE'S BEHAVIOUR IS GUARDED BY ITS OWN HEADLESS TESTS
 ##      (test_projectile_flight.gd) AND BY test/integration/test_projectile_flight_live.gd, NOT by
 ##      this hash. Recorded here, and in the Dev Agent Record, as a known coverage boundary for the
@@ -564,7 +605,7 @@ extends TestCase
 ##     They are proven in test_unit_attack_rhythm.gd, test_contact_resolution.gd,
 ##     test_unit_damage_and_death.gd and test/integration/test_unit_attack_live.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "d94337cd655b3765f97c45aa55db698e234b8212f7741a07cfebccf8cf5a0cad"
+const GOLDEN := "a96b123e67ef8330b5bb07c1bafefaf5204e9bf9982eded936f8d69b29afa522"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

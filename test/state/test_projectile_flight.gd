@@ -37,6 +37,19 @@ const RECOVERY := 1
 ## `push_contact` documents its fourth argument to be. Deliberately not symmetric under negation.
 const FACT_DIR := Vector2(0.6, 0.8)
 
+## Story 4-4 (`4-4/R14`): the cadence fixture's three numbers, chosen so the defect they express is
+## reachable and the arithmetic stays countable.
+##   * RETARGET_TICKS 12 is the shipped 0.2 s probe cadence at 60 Hz, so FRESHNESS_TICKS below is
+##     the shipped window rather than a convenient one.
+##   * STALE_CADENCE_TICKS 40 is LONGER than that window — the gap is the defect's reachability
+##     condition (the shipped Combat totem's 120 is longer still; 40 keeps the tests short).
+##   * FRESHNESS_MARGIN_TICKS is slack past the cooldown, so "it did not fire" is a claim about a
+##     totem that has been idle and ready for a while rather than about one caught mid-cooldown.
+const RETARGET_TICKS := 12
+const FRESHNESS_TICKS := RETARGET_TICKS + 1
+const STALE_CADENCE_TICKS := 40
+const FRESHNESS_MARGIN_TICKS := 10
+
 
 func _projectile(turn_rate := 180.0, accel := 0.0, accel_delay_ticks := 0,
 		max_speed := LAUNCH_SPEED) -> ProjectileProfile:
@@ -143,11 +156,145 @@ func _fire(ms: MatchState) -> void:
 		_advance(ms)                 # windup begins, then runs out -> ACTIVE -> LAUNCH
 
 
+## Story 4-4 (`4-4/R14`): the CADENCE fixture — a totem that re-arms slowly and a runner that probes
+## on the shipped cadence. Everything else is `_make_match()`'s config; only the two intervals move,
+## so anything these tests measure is attributable to them.
+func _cadence_match() -> MatchState:
+	var config := _config()
+	config.minion_retarget_interval_seconds = float(RETARGET_TICKS) / 60.0
+	config.unit_kinds[0].attack_at(0).cadence_seconds = float(STALE_CADENCE_TICKS) / 60.0
+	var ms := MatchState.new(MatchParams.new(13))
+	ms.apply_balance(config)
+	ms.inject_feature_flags(_flags())
+	ms.drain_signals()
+	return ms
+
+
+## `_fire()`'s sibling for the cadence fixture: one probe, one swing, one shot — and then nothing
+## else is pushed, so what happens next is decided entirely by the freshness rule.
+func _fire_once(ms: MatchState) -> void:
+	_summon_totem(ms)
+	ms.push_contact([0, 0], [1, TargetingService.HERO_INDEX], 0, FACT_DIR,
+			MatchState.CONTACT_REACH_PROBE)
+	_advance(ms)
+	for _t in WINDUP + 1:
+		_advance(ms)
+
+
+## Run the totem's swing out to IDLE, however many ticks its phases take — the tests below care that
+## it is idle and barred by its cadence, never how many ticks the walk took.
+func _idle(ms: MatchState) -> void:
+	var guard := 0
+	while ms.p1.units.attack_phase_at(0) != UnitBoard.AttackPhase.IDLE and guard < 20:
+		_advance(ms)
+		guard += 1
+
+
 ## The projectile attacker ADDRESS for P1's shot 0 — spelled through the public helper at every call
 ## site rather than as a literal -2, which is the encoding discipline `MatchState` states at
 ## `PROJECTILE_INDEX_BASE`.
 func _shot_address(index := 0) -> Array[int]:
 	return [0, MatchState.projectile_attacker_index(index)]
+
+
+## ---- AC 13 / `4-4/R14`: A CONFIRMATION HAS A SHELF LIFE -----------------------------------------
+
+## The REVIEW's measured scenario, made executable. Story 4-4 added the firing cadence as a third AND
+## on the windup gate, and that turned the in-reach flag from something consumed on the very next
+## IDLE tick into something BANKED FOR A WHOLE COOLDOWN. A hero inside the Combat totem's 8 m range
+## sets the flag; the totem is mid-cadence so nothing consumes it; the hero walks away; no probe can
+## clear it (`4-3b` AC 13(ii) — absence of overlap is not a fact); and when the cooldown expires the
+## totem winds up and fires at a target the shipped authoring puts ~18 m away. AC 13 says a target
+## held beyond range is fired upon NEVER, and one shot per departure is not never.
+##
+## `4-4/R14` closes it WITHOUT a negative probe: a confirmation stays CURRENT for one probe cadence
+## plus the F1 one-tick lag, and a unit may begin an attack only on a current one.
+##
+## THE CADENCE HERE IS LONGER THAN THE FRESHNESS WINDOW ON PURPOSE (40 ticks against 13) — that gap
+## IS the defect's reachability condition, and a fixture whose cadence fitted inside the window could
+## not express it.
+func test_a_confirmation_that_goes_unrenewed_through_a_cooldown_fires_nothing() -> void:
+	var ms := _cadence_match()
+	_fire_once(ms)
+	assert_eq(ms.p1.projectiles.size(), 1, "the first shot fired off a CURRENT confirmation")
+	_idle(ms)
+	assert_false(ms.p1.units.is_attack_ready_at(0), "...and the long cadence has it barred")
+	# THE BANK. One probe lands EARLY in the cooldown -- the target is genuinely in range at this
+	# moment -- and nothing consumes it, because the cadence rung refuses. This is the confirmation
+	# the defect banked for the whole cooldown.
+	ms.push_contact([0, 0], [1, TargetingService.HERO_INDEX], ms.p1.units.attack_count_at(0),
+			FACT_DIR, MatchState.CONTACT_REACH_PROBE)
+	_advance(ms)
+	assert_true(ms.p1.units.is_in_reach_at(0), "the confirmation is banked and current")
+	# ...and NOW the target leaves. No further probe arrives -- which is the only thing the runner
+	# does differently for a target out of range, since there is no negative probe to push.
+	for _t in STALE_CADENCE_TICKS + FRESHNESS_MARGIN_TICKS:
+		_advance(ms)
+	assert_eq(ms.p1.projectiles.size(), 1,
+		"AC 13: NO SECOND SHOT. The cooldown expired long ago and the totem is idle and willing, but "
+		+ "the confirmation it was holding went stale %d ticks after it was made -- so there is "
+				% FRESHNESS_TICKS + "nothing current to begin an attack on")
+	assert_eq(ms.p1.units.attack_phase_at(0), UnitBoard.AttackPhase.IDLE,
+		"...and it never even wound up: the gate refused at the in-reach rung, not at the cadence "
+		+ "rung, which is what makes this hold-fire rather than a slower cadence")
+	assert_false(ms.p1.units.is_in_reach_at(0),
+		"...because the confirmation is no longer current")
+	assert_true(ms.p1.units.is_attack_ready_at(0),
+		"...while the CADENCE is ready and willing -- the pair is what proves the refusal came from "
+		+ "the freshness half and not from a cooldown that happened not to have expired")
+
+
+## The PAIR that makes the test above non-vacuous, and the regression guard on the fix itself: the
+## identical fixture, identical cadence, identical tick count -- with the runner still confirming on
+## its cadence, exactly as it does for a target that never left. A fix that simply stopped totems
+## firing a second time would pass the test above and fail here.
+func test_a_confirmation_renewed_on_the_probe_cadence_fires_again_on_schedule() -> void:
+	var ms := _cadence_match()
+	_fire_once(ms)
+	assert_eq(ms.p1.projectiles.size(), 1, "the first shot fired")
+	_idle(ms)
+	for t in STALE_CADENCE_TICKS + FRESHNESS_MARGIN_TICKS:
+		# The runner re-probes every `RETARGET_TICKS`; the target is still in range, so every one of
+		# those probes lands. Nothing else about this run differs from the test above.
+		if t % RETARGET_TICKS == 0:
+			ms.push_contact([0, 0], [1, TargetingService.HERO_INDEX],
+					ms.p1.units.attack_count_at(0), FACT_DIR, MatchState.CONTACT_REACH_PROBE)
+		_advance(ms)
+	assert_true(ms.p1.projectiles.size() > 1,
+		"a target that is STILL THERE is still fired upon: the renewed confirmation is current when "
+		+ "the cooldown expires, so the cadence keeps its schedule (got %d shots)"
+				% ms.p1.projectiles.size())
+	assert_true(ms.p1.units.is_in_reach_at(0),
+		"...and the confirmation is current at the end, re-seeded rather than accumulated")
+
+
+## The window's own arithmetic, asserted directly rather than inferred from a firing outcome: a
+## confirmation is current for exactly `minion_retarget_interval_ticks + 1` ticks -- one probe
+## cadence, plus the F1 lag that separates the tick a probe is gathered on from the tick it is
+## consumed on. A window one tick SHORTER would expire a confirmation on the very tick its successor
+## arrives and punch a hole in every cadence.
+func test_a_confirmation_stays_current_for_exactly_one_probe_cadence_plus_the_lag() -> void:
+	var ms := _cadence_match()
+	# A unit that CANNOT act on the flag, so the countdown is observed ageing rather than being
+	# consumed: it is put straight into a long cooldown by its first swing.
+	_fire_once(ms)
+	_idle(ms)
+	assert_eq(ms.p1.units.attack_phase_at(0), UnitBoard.AttackPhase.IDLE, "the swing is over")
+	assert_false(ms.p1.units.is_attack_ready_at(0),
+		"...and the long cadence still has it barred, so the confirmation below can only AGE")
+	ms.push_contact([0, 0], [1, TargetingService.HERO_INDEX], ms.p1.units.attack_count_at(0),
+			FACT_DIR, MatchState.CONTACT_REACH_PROBE)
+	_advance(ms)
+	assert_true(ms.p1.units.is_in_reach_at(0), "the fresh confirmation is current")
+	for _t in FRESHNESS_TICKS - 1:
+		_advance(ms)
+	assert_true(ms.p1.units.is_in_reach_at(0),
+		"...still current on the LAST tick of its window (%d ticks after it was made)"
+				% (FRESHNESS_TICKS - 1))
+	_advance(ms)
+	assert_false(ms.p1.units.is_in_reach_at(0),
+		"...and stale on the next -- the window is exactly %d ticks (RETARGET_TICKS %d + the F1 "
+				% [FRESHNESS_TICKS, RETARGET_TICKS] + "one-tick lag), neither authored nor guessed")
 
 
 # ---- AC 14: the launch ------------------------------------------------------------------------

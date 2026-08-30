@@ -726,7 +726,10 @@ func _hits_to_kill_from_unit() -> int:
 				hits += 1
 			continue
 		# Not in its window: keep it in reach so the rhythm cycles, and advance.
-		ms.p1.units.mark_in_reach_at(0)
+		# Story 4-4 (`4-4/R14`): TWO ticks of freshness, not one — the mark happens outside
+		# `advance()`, and `tick_attack_timers` ages it once at step 2 before the step-3b gate reads
+		# it, so a one-tick window would be stale by the time the gate looks.
+		ms.p1.units.mark_in_reach_at(0, 2)
 		_advance(ms)
 		cycles += 1
 	return hits

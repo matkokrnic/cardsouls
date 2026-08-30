@@ -140,7 +140,42 @@ var _attack_count: Array[int] = []
 ## recovery ends instead of waiting up to a full throttle interval for the next probe. Without it the
 ## observed attack rate would be windup+active+recovery PLUS a jittering remainder, and AC 1's
 ## authored durations would stop describing the rate a player actually sees.
-var _in_reach: Array[bool] = []
+##
+## ------------------------------------------------------------------------------------------
+## STORY 4-4 (`4-4/R14`): A CONFIRMATION NOW HAS A SHELF LIFE, so this is a COUNTDOWN OF FRESH
+## TICKS rather than a bare bool. `is_in_reach_at` still answers the yes/no question every caller
+## asks (`> 0`); the number itself is read only here and by `in_reach_snapshot`.
+## ------------------------------------------------------------------------------------------
+## THE DEFECT IT CLOSES, measured at this story's review: set-only was safe while the windup
+## condition was `IDLE and is_in_reach_at`, because a flag a probe set was consumed on the very next
+## IDLE tick. `4-4` added the CADENCE as a third AND, and that turned a flag consumed within a tick
+## into a flag BANKED FOR A WHOLE COOLDOWN. A hero inside the Combat totem's 8 m range at tick N sets
+## it; the totem is 120 ticks into its 2.0 s cadence so nothing consumes it; the hero walks away at
+## 5.0 m/s; no probe clears it (by ruling); and at N+120 the totem winds up and fires a homing shot
+## at a target ~18 m away — more than twice its authored range. AC 13 says a target beyond range is
+## fired upon NEVER, and one shot per departure is not never.
+##
+## THE FIX IS NOT A NEGATIVE PROBE, and `4-3b` AC 13(ii) stands untouched: nothing observes an
+## ABSENCE of overlap and nothing clears this from outside. What changed is that a POSITIVE
+## confirmation stops being CURRENT once it is old enough that the runner would have re-confirmed it
+## by now if the target were still in range. `4-4/R14` DERIVES that window rather than authoring it:
+## one probe cadence (`minion_retarget_interval_ticks`) PLUS the F1 one-tick fact lag. The seeding
+## caller reads it inline off `BalanceTicks` (CONSTRAINT C) — see `MatchState._mark_reach_from_fact`.
+##
+## THE SHIPPED MINION IS UNMOVED, and that is the property that makes this a defect fix rather than a
+## rhythm change: a probe re-seeds the window every `minion_retarget_interval_ticks` ticks and the
+## window is one tick LONGER than that, so a continuously-in-range target never lets the countdown
+## reach zero. Only a unit whose confirmation has genuinely gone unrenewed loses it.
+##
+## IT IS HASHED IN FULL, as the COUNT and not as its boolean projection, by `4-3a/R17` directly: a
+## value that CROSSES TICKS and DECIDES AN OUTCOME (whether the next windup may begin) cannot sit
+## outside the hash, and how much freshness is LEFT decides exactly that. Snapshotting only the
+## predicate would have kept `4-4`'s golden unmoved at the price of two states that differ hashing
+## the same, and the operator refused that trade by name: the golden is re-baselined instead,
+## `d94337cd` -> `a96b123e`, one cause, key set unchanged at 27 and only this key's rendering moved
+## (`false` -> `0`). `UNHASHED_CROSS_TICK_MEMBERS` therefore STAYS AT THREE — see
+## `test_replay_identity.gd`, where this member is classified HASHED beside its nine siblings.
+var _in_reach_ticks: Array[int] = []
 
 ## ------------------------------------------------------------------------------------------
 ## STORY 4-4 (AC 1/AC 2): THE KIND INDEX — the field the ratified TOTEM CLAUSE reserved for THIS
@@ -230,7 +265,7 @@ func add(max_hp: float, kind_index: int) -> void:
 	_attack_ticks.append(0)
 	_attack_dir.append(Vector2.ZERO)
 	_attack_count.append(0)
-	_in_reach.append(false)
+	_in_reach_ticks.append(0)
 	# Story 4-4: the kind is the one thing a fresh record is NOT empty about — it is decided at cast
 	# time (AC 1: "each resolve to a distinct on-board kind AT CAST TIME") and never changes again.
 	# The cooldown enters expired, on the same honest-empty-value reasoning every field above uses: a
@@ -261,7 +296,7 @@ func clear() -> void:
 	_attack_ticks.clear()
 	_attack_dir.clear()
 	_attack_count.clear()
-	_in_reach.clear()
+	_in_reach_ticks.clear()
 	# Story 4-4: cleared with their nine siblings, for the header's own reason applied to ten arrays
 	# instead of eight — one collection expressed as ten, and an index present in one but not the
 	# others would be a record with a kind but no liveness.
@@ -459,7 +494,7 @@ func attack_count_at(index: int) -> int:
 func is_in_reach_at(index: int) -> bool:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
-	return _in_reach[index]
+	return _in_reach_ticks[index] > 0
 
 
 ## Story 4-4 (AC 1): the record's KIND INDEX. Bound enforcement follows `hp_at`, not `is_alive_at`,
@@ -491,11 +526,23 @@ func is_attack_ready_at(index: int) -> bool:
 ## SET-ONLY, never cleared here, and the asymmetry is AC 13's consequence (ii) made structural:
 ## absence of overlap is NOT a fact, so there is no negative probe and nothing outside a windup start
 ## may clear this. A `set_in_reach_at(i, false)` would be exactly the clearing path the AC forbids —
-## the flag is cleared by `begin_windup_at` CONSUMING it and by nothing else.
-func mark_in_reach_at(index: int) -> void:
+## the flag is cleared by `begin_windup_at` CONSUMING it, and by its own AGE running out.
+##
+## STORY 4-4 (`4-4/R14`): `fresh_ticks` is how long this confirmation stays CURRENT, DERIVED by the
+## caller off the probe cadence (see `_in_reach_ticks`). It is a RE-SEED, not an increment: a second
+## confirmation inside the window restarts the shelf life rather than extending it, so the flag
+## always means "confirmed within the last `fresh_ticks` ticks" and never "confirmed a lot".
+##
+## `fresh_ticks` IS NOT RE-CHECKED HERE, and that is this file's own discipline rather than an
+## omission: every `Invariant.check` in this class is a BOUND guard wired to `has_index()` (pinned by
+## `test_targeting_service.gd::test_every_board_bound_guard_is_wired_to_that_predicate`), and a
+## container holds no policy about the values it is handed. The window's positivity is guaranteed
+## where it is DERIVED — `MatchState._reach_freshness_ticks()` returns `maxi(1, ...) + 1` or its
+## strictest fallback of 1, so it cannot be zero without that helper changing.
+func mark_in_reach_at(index: int, fresh_ticks: int) -> void:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
-	_in_reach[index] = true
+	_in_reach_ticks[index] = fresh_ticks
 
 
 ## The LATEST KNOWN direction to the acquired target, refreshed while the unit is IDLE (AC 12). The
@@ -524,7 +571,7 @@ func set_attack_dir_at(index: int, dir: Vector2) -> void:
 func begin_windup_at(index: int, windup_ticks: int, cadence_ticks: int) -> int:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
-	_in_reach[index] = false
+	_in_reach_ticks[index] = 0
 	_attack_phase[index] = AttackPhase.WINDUP
 	_attack_ticks[index] = windup_ticks
 	_attack_count[index] += 1
@@ -560,6 +607,13 @@ func tick_attack_timers() -> void:
 	for i in _attack_cooldown.size():
 		if _attack_cooldown[i] > 0:
 			_attack_cooldown[i] -= 1
+	# Story 4-4 (`4-4/R14`): the REACH CONFIRMATION ages here too, and unconditionally for the
+	# cadence cooldown's reason directly above — a confirmation goes stale while the unit sits IDLE
+	# waiting for its cooldown, which is exactly the state the `IDLE: continue` below skips. Clamped
+	# at zero so "stale" is a state and not a moment.
+	for i in _in_reach_ticks.size():
+		if _in_reach_ticks[i] > 0:
+			_in_reach_ticks[i] -= 1
 	for i in _attack_phase.size():
 		if _attack_phase[i] == AttackPhase.IDLE:
 			continue
@@ -592,8 +646,12 @@ func attack_count_snapshot() -> Array:
 	return _attack_count.duplicate()
 
 
+## Story 4-4 (`4-4/R14`): THE COUNT, not its boolean projection — the key `unit_in_reach` now renders
+## an int per unit rather than a bool. That is what keeps `_in_reach_ticks` HASHED state under
+## `4-3a/R17` with no exclusion to argue about, and it is the ONE cause of this story's third golden
+## re-baseline (`d94337cd` -> `a96b123e`); the key SET did not move.
 func in_reach_snapshot() -> Array:
-	return _in_reach.duplicate()
+	return _in_reach_ticks.duplicate()
 
 
 ## Story 4-4 (AC 1/AC 10/AC 12): the two new snapshot payloads, on the `unit_hp` side of this

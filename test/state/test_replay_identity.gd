@@ -130,7 +130,15 @@ const HASHED: Array[String] = [
 	"player_state.units", "unit_board._target_slots", "unit_board._target_indices",
 	"unit_board._hp",
 	"unit_board._attack_phase", "unit_board._attack_ticks", "unit_board._attack_dir",
-	"unit_board._attack_count", "unit_board._in_reach",
+	# Story 4-4 (`4-4/R14`): `_in_reach` became `_in_reach_ticks`, a COUNTDOWN of how long a reach
+	# confirmation stays current, and it classifies HASHED for a STRONGER version of the bool's own
+	# reason. `4-3a/R17`: a value that crosses ticks and decides an outcome cannot sit outside the
+	# hash -- and how much freshness is LEFT is exactly what decides whether the next windup may
+	# begin. Snapshotting only its predicate was measured and REFUSED by the operator: it would have
+	# spared the golden and made this a FOURTH exclusion, so the golden was re-baselined instead
+	# (`d94337cd` -> `a96b123e`, one cause) and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE. It
+	# reaches the hash through the same `unit_in_reach` key, now an int per unit.
+	"unit_board._attack_count", "unit_board._in_reach_ticks",
 	# Story 4-4 (AC 1/AC 10): the two new board members, BOTH HASHED, so
 	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE and there is still no fourth exclusion to argue
 	# about. `_kind_index` decides every authored number that governs a unit for its whole life and

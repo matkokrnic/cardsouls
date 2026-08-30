@@ -895,6 +895,15 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 		# totem never winds up, "regardless of how long it remains in that state" — there is no
 		# timeout path and no re-selection by distance anywhere in this file.
 		#
+		# ...AND THAT ARGUMENT WAS HALF TRUE, WHICH IS WHY `4-4/R14` EXISTS. "A target held beyond
+		# range never sets it" covers a target that was NEVER in range; it did not cover a target
+		# that was in range once and then LEFT. The cadence AND directly above is what made the
+		# difference matter: before this story the gate was consumed on the next IDLE tick, and now
+		# a confirmation can sit unconsumed for a whole cooldown while the target walks away. The
+		# fix is in `UnitBoard._in_reach_ticks` — `is_in_reach_at` now means "confirmed RECENTLY"
+		# rather than "confirmed ever", on a window derived from the probe cadence. This condition
+		# is unchanged; what it reads has a shelf life.
+		#
 		# THE SHIPPED MINION IS UNMOVED BY THE NEW CONDITION: it authors a 0.0 cadence, so its
 		# cooldown is 0 on the tick recovery ends and the third AND is already true.
 		if board.attack_phase_at(index) == UnitBoard.AttackPhase.IDLE \
@@ -1306,10 +1315,35 @@ func _mark_reach_from_fact(attacker: PlayerState, attacker_index: int, fact: Dic
 		return
 	if attacker.units.target_index_at(attacker_index) != int(fact["target_index"]):
 		return
-	attacker.units.mark_in_reach_at(attacker_index)
+	attacker.units.mark_in_reach_at(attacker_index, _reach_freshness_ticks())
 	var phase := attacker.units.attack_phase_at(attacker_index)
 	if phase != UnitBoard.AttackPhase.WINDUP and phase != UnitBoard.AttackPhase.ACTIVE:
 		attacker.units.set_attack_dir_at(attacker_index, -(fact["dir"] as Vector2))
+
+
+## Story 4-4 (`4-4/R14`): HOW LONG A REACH CONFIRMATION STAYS CURRENT, in ticks. DERIVED, never
+## authored, and that derivation is the whole ruling: a confirmation older than ONE PROBE CADENCE
+## can no longer be current, because the runner re-probes on that cadence and would have
+## re-confirmed by now if the target were still in range. The `+ 1` is the F1 ONE-TICK FACT LAG —
+## a probe gathered on tick N is consumed by `advance()` on N+1, so a window of exactly
+## `minion_retarget_interval_ticks` would expire the confirmation on the very tick its successor
+## arrives and leave a one-tick hole in every cadence for no reason.
+##
+## READ INLINE OFF `BalanceTicks` ON EVERY CALL (CONSTRAINT C), never copied onto a record: an X3
+## reload that retunes `minion_retarget_interval_seconds` changes the window for confirmations made
+## after it, and no unit carries a stale copy of the old cadence.
+##
+## THE NULL FALLBACK IS THE STRICTEST WINDOW, not the most permissive. With no `BalanceTicks` there
+## is no cadence to derive from, so the window is ONE TICK — the smallest value that is not "stale on
+## arrival". A unit in that state cannot swing anyway (its phase durations come from the same
+## object), so the fallback can only ever be conservative. This helper is also the sole guarantee
+## that `UnitBoard.mark_in_reach_at` is never handed a non-positive window; the container does not
+## re-check it, because every `Invariant.check` in that class is a BOUND guard by its own pinned
+## discipline.
+func _reach_freshness_ticks() -> int:
+	if balance_ticks == null:
+		return 1
+	return balance_ticks.minion_retarget_interval_ticks + 1
 
 
 ## Story 4-3b (AC 14, rung (a)): THE DEAD-ATTACKER DROP, DISPATCHED ON ATTACKER KIND.

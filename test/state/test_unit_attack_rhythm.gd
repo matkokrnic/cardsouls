@@ -652,6 +652,13 @@ func test_every_new_unit_attack_field_round_trips_through_the_snapshot() -> void
 	_summon_p1(ms)
 	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_probe(ms, 0)
+	# Story 4-4 (`4-4/R14`): the in-reach key is a COUNTDOWN OF FRESH TICKS now, so it is sampled
+	# HERE as well -- non-zero, on the tick the probe landed and before the next advance's windup
+	# consumes it. Without this rung the assertion below would be the only one, and 0 is that key's
+	# empty default: a key emitted but never filled would pass it. The pair is what keeps AC 16's
+	# round trip non-vacuous for this key.
+	assert_ne(ms.p1.to_snapshot()["unit_in_reach"], [0],
+		"the confirmation reaches the snapshot as a LIVE tick count before it is consumed")
 	_advance(ms)
 	for _t in UNIT_WINDUP:
 		_advance(ms)
@@ -666,9 +673,10 @@ func test_every_new_unit_attack_field_round_trips_through_the_snapshot() -> void
 	assert_eq(snap["unit_attack_dir"], [LOCKED_DIR],
 		"...and the locked direction, as a Vector2 CanonicalHash has a branch for")
 	assert_eq(snap["unit_attack_count"], [1], "...and the unit's own monotonic swing counter")
-	assert_eq(snap["unit_in_reach"], [false],
-		"...and the in-reach flag, here CONSUMED by the windup, which is a real value and not a "
-		+ "default: the probe set it true one tick before this swing began")
+	assert_eq(snap["unit_in_reach"], [0],
+		"...and the in-reach countdown, here CONSUMED by the windup (`4-4/R14` made this key an INT "
+		+ "count of fresh ticks rather than a bool; it is the one cause of the golden's third "
+		+ "re-baseline). Its live non-zero value is asserted above, before the windup ate it")
 	assert_eq(snap["unit_swing_dedupe"], [[0, 1, -1, [[1, 0]]]],
 		"...and the dedupe record: board index, swing counter, grace -1 (window open) and the one "
 		+ "address this swing has registered")
