@@ -62,12 +62,14 @@ func _config() -> BalanceConfig:
 	c.block_facing_arc_degrees = 180.0
 	c.deflect_window_seconds = 4.0 / 60.0
 	c.minion_retarget_interval_seconds = 1000.0  # never a boundary tick: no test here retargets
-	c.unit_max_hp = UNIT_MAX_HP
-	c.unit_damage_per_hit = UNIT_DAMAGE
-	c.minion_attack_windup_seconds = float(UNIT_WINDUP) / 60.0
-	c.minion_attack_active_seconds = float(UNIT_ACTIVE) / 60.0
-	c.minion_attack_recovery_seconds = float(UNIT_RECOVERY) / 60.0
-	c.minion_attack_reach_distance = 2.0   # read by the RUNNER only; inert in a headless fixture
+	# Story 4-4 (AC 6/AC 9): the six flat fields this block used to set are PER KIND now. Every value
+	# is still an in-test literal (the `BC/R3` isolation, unchanged) — what moved is the SHAPE, and
+	# `UnitKindFixture` owns the shape so twelve fixtures do not each hand-roll two resources.
+	# `hero_damage_to_unit` is the hero-attacker half of the old `unit_damage_per_hit`; the unit
+	# half rides the kind's attack record.
+	c.unit_kinds = UnitKindFixture.minion_only(UNIT_MAX_HP, UNIT_DAMAGE, UNIT_WINDUP, UNIT_ACTIVE,
+			UNIT_RECOVERY, 2.0)  # reach read by the RUNNER only; inert in a headless fixture
+	c.hero_damage_to_unit = UNIT_DAMAGE
 	return c
 
 
@@ -111,7 +113,7 @@ func _advance(ms: MatchState, p1_intent: InputIntent = null,
 ## DOES once it exists, and the step-6 cast seat has its own coverage elsewhere.
 func _summon_p1(ms: MatchState, target: Array[int] = [1, -1]) -> int:
 	var index := ms.p1.units.size()
-	ms.p1.units.add(UNIT_MAX_HP)
+	ms.p1.units.add(UNIT_MAX_HP, 0)
 	ms.p1.units.set_target_at(index, target[0], target[1])
 	return index
 
@@ -224,7 +226,7 @@ func test_a_unit_with_no_reach_fact_never_leaves_idle() -> void:
 func test_a_reach_probe_applies_no_damage_no_mana_and_no_signal() -> void:
 	var ms := _make_match()
 	_summon_p1(ms, [1, 0])
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	var hp_before := ms.p2.units.hp_at(0)
 	var mana_before := ms.p1.mana.get_current()
 	var hits: Array = []
@@ -249,7 +251,7 @@ func test_a_reach_probe_applies_no_damage_no_mana_and_no_signal() -> void:
 	# registered. Now every rung below the drop would ACCEPT it, and only the drop itself stands
 	# between the probe and real damage. M9 falls here.
 	# ------------------------------------------------------------------------------------------
-	ms.p2.units.add(UNIT_MAX_HP)                     # a second, un-hit address at [1, 1]
+	ms.p2.units.add(UNIT_MAX_HP, 0)                     # a second, un-hit address at [1, 1]
 	_advance(ms)                                     # the windup begins
 	for _t in UNIT_WINDUP:
 		_advance(ms)
@@ -320,7 +322,7 @@ func test_two_consecutive_swings_are_exactly_one_cycle_apart_with_no_throttle_re
 func test_only_a_fact_against_the_acquired_target_refreshes_the_flag() -> void:
 	var ms := _make_match()
 	_summon_p1(ms, [1, -1])          # the unit has acquired P2's HERO
-	ms.p2.units.add(UNIT_MAX_HP)     # ...and a bystander unit stands beside it
+	ms.p2.units.add(UNIT_MAX_HP, 0)     # ...and a bystander unit stands beside it
 	ms.push_contact([0, 0], [1, 0], 0, PROBE_DIR, MatchState.CONTACT_STRIKE)
 	_advance(ms)
 	assert_false(ms.p1.units.is_in_reach_at(0),
@@ -402,7 +404,7 @@ func test_a_swing_whose_target_dies_mid_windup_runs_to_completion_and_lands_noth
 	# --- the run where the target survives.
 	var alive := _make_match()
 	_summon_p1(alive, [1, 0])
-	alive.p2.units.add(UNIT_MAX_HP)
+	alive.p2.units.add(UNIT_MAX_HP, 0)
 	_probe(alive, 0, [1, 0])
 	_advance(alive)
 	for _t in UNIT_WINDUP:
@@ -417,7 +419,7 @@ func test_a_swing_whose_target_dies_mid_windup_runs_to_completion_and_lands_noth
 	# --- the run where the target dies during the windup.
 	var ms := _make_match()
 	_summon_p1(ms, [1, 0])
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_probe(ms, 0, [1, 0])
 	_advance(ms)
 	assert_eq(_phase(ms), UnitBoard.AttackPhase.WINDUP, "the swing is committed")
@@ -453,8 +455,8 @@ func test_a_swing_whose_target_dies_mid_windup_runs_to_completion_and_lands_noth
 func test_one_unit_swing_cleaves_three_targets_and_registers_none_of_them_twice() -> void:
 	var ms := _make_match()
 	_summon_p1(ms)
-	ms.p2.units.add(UNIT_MAX_HP)
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_probe(ms, 0)
 	_advance(ms)
 	for _t in UNIT_WINDUP:
@@ -502,8 +504,8 @@ func test_the_same_overlaps_in_reversed_order_store_an_identical_hit_list() -> v
 func _dedupe_after_cleave(addresses: Array) -> Array:
 	var ms := _make_match()
 	_summon_p1(ms)
-	ms.p2.units.add(UNIT_MAX_HP)
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_probe(ms, 0)
 	_advance(ms)
 	for _t in UNIT_WINDUP:
@@ -648,7 +650,7 @@ func test_a_full_unit_attack_cycle_spends_no_stamina_and_generates_no_mana() -> 
 func test_every_new_unit_attack_field_round_trips_through_the_snapshot() -> void:
 	var ms := _make_match()
 	_summon_p1(ms)
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_probe(ms, 0)
 	_advance(ms)
 	for _t in UNIT_WINDUP:
@@ -691,7 +693,7 @@ func test_every_new_unit_attack_field_round_trips_through_the_snapshot() -> void
 func test_a_unit_killed_during_its_own_active_window_has_its_dedupe_record_discarded() -> void:
 	var ms := _make_match()
 	_summon_p1(ms, [1, 0])              # P1 unit 0 targets P2 unit 0
-	ms.p2.units.add(UNIT_MAX_HP)        # P2 unit 0, the eventual killer
+	ms.p2.units.add(UNIT_MAX_HP, 0)        # P2 unit 0, the eventual killer
 	ms.p2.units.set_target_at(0, 0, 0)  # P2 unit 0 targets P1 unit 0
 	ms.push_contact([0, 0], [1, 0], ms.p1.units.attack_count_at(0), PROBE_DIR,
 			MatchState.CONTACT_REACH_PROBE)

@@ -30,8 +30,12 @@ func test_the_loader_returns_the_authored_set_in_sorted_filename_order() -> void
 	var names: Array[StringName] = []
 	for rule in rules:
 		names.append(rule.priority_name)
-	assert_eq(names, [&"hero_seeker", &"standard"] as Array[StringName],
-		"the scan is SORTED by filename (hero_seeker.tres, standard.tres) — never filesystem order")
+	# Story 4-4 (AC 8, `4-4/R9`): `hero_preferring.tres` is the THIRD authored profile, and its
+	# position in this list is the whole point of the assertion — sorted by FILENAME, so it lands
+	# between `hero_seeker` and `standard` rather than at the end where an append would put it.
+	assert_eq(names, [&"hero_preferring", &"hero_seeker", &"standard"] as Array[StringName],
+		"the scan is SORTED by filename (hero_preferring.tres, hero_seeker.tres, standard.tres) — "
+		+ "never filesystem order")
 
 
 ## AC 3: a MISSING directory degrades to an EMPTY set rather than failing — the FeatureFlags
@@ -270,10 +274,10 @@ func test_a_closed_flag_reports_the_flag_even_with_unrecognized_data() -> void:
 ## and "stable" means an existing record's index is not disturbed by a later append.
 func test_a_unit_identity_is_stable_and_addressable_across_appends() -> void:
 	var board := UnitBoard.new()
-	board.add(LIVING_HP)
+	board.add(LIVING_HP, 0)
 	board.set_target_at(0, 1, TargetingService.HERO_INDEX)
-	board.add(LIVING_HP)
-	board.add(LIVING_HP)
+	board.add(LIVING_HP, 0)
+	board.add(LIVING_HP, 0)
 	assert_eq(board.size(), 3, "three records")
 	assert_eq(board.target_at(0), [1, TargetingService.HERO_INDEX] as Array[int],
 		"record 0 still holds ITS target after two later appends — the index is stable identity")
@@ -289,7 +293,7 @@ func test_the_board_length_is_unchanged_by_the_identity_extension() -> void:
 	assert_eq(board.size(), 0, "an empty board is length 0, as the count was")
 	assert_true(board.is_empty(), "...and reports empty")
 	for i in 4:
-		board.add(LIVING_HP)
+		board.add(LIVING_HP, 0)
 		assert_eq(board.size(), i + 1, "each append adds exactly one to the length")
 	board.clear()
 	assert_eq(board.size(), 0, "the debug reset empties it WHOLE (`4-1/R5`) — both arrays together")
@@ -299,7 +303,7 @@ func test_the_board_length_is_unchanged_by_the_identity_extension() -> void:
 ## read as "the unit at index 0 of player 1" — an acquired target nobody acquired.
 func test_a_new_record_holds_the_no_target_pair_not_a_plausible_zero() -> void:
 	var board := UnitBoard.new()
-	board.add(LIVING_HP)
+	board.add(LIVING_HP, 0)
 	assert_eq(board.target_at(0),
 		[TargetingService.NO_TARGET_SLOT, TargetingService.NO_TARGET_SLOT] as Array[int],
 		"a fresh record's pair is the no-target sentinel")
@@ -311,8 +315,8 @@ func test_a_new_record_holds_the_no_target_pair_not_a_plausible_zero() -> void:
 ## handle into the container. The mutation-after-read check is what makes "no handle" a measurement.
 func test_the_snapshot_payload_is_plain_int_pairs_in_board_order() -> void:
 	var board := UnitBoard.new()
-	board.add(LIVING_HP)
-	board.add(LIVING_HP)
+	board.add(LIVING_HP, 0)
+	board.add(LIVING_HP, 0)
 	board.set_target_at(0, 1, TargetingService.HERO_INDEX)
 	board.set_target_at(1, 1, 2)
 	var snap := board.targets_snapshot()
@@ -334,8 +338,8 @@ func test_the_board_bound_predicate_answers_both_ways() -> void:
 	var board := UnitBoard.new()
 	assert_false(board.has_index(0), "an empty board holds no index 0")
 	assert_false(board.has_index(-1), "...nor a negative index")
-	board.add(LIVING_HP)
-	board.add(LIVING_HP)
+	board.add(LIVING_HP, 0)
+	board.add(LIVING_HP, 0)
 	assert_true(board.has_index(0), "a two-record board holds index 0")
 	assert_true(board.has_index(1), "...and index 1")
 	assert_false(board.has_index(2), "...and not index 2 (the off-by-one direction)")
@@ -357,8 +361,13 @@ func test_every_board_bound_guard_is_wired_to_that_predicate() -> void:
 		assert_true(line.contains("has_index("),
 			"every bound guard consults the public predicate rather than re-deriving the bound: %s"
 					% line.strip_edges())
-	assert_eq(checks, 15,
-		"FIFTEEN bound guards ship as of story 4-3b — the six of 4-3a (target_at, target_slot_at, "
+	assert_eq(checks, 17,
+		"SEVENTEEN bound guards ship as of story 4-4 — fifteen through 4-3b plus this story's two "
+		+ "per-record accessors (kind_index_at, attack_cooldown_at). `is_attack_ready_at` carries "
+		+ "NO Invariant.check and is deliberately absent for `is_hitbox_active_at`'s reason "
+		+ "verbatim: it is a lenient PREDICATE, so an index the board has not caught up to reads "
+		+ "'not ready' rather than tripping a guard at a caller behaving correctly. Original 4-3b "
+		+ "text follows: FIFTEEN bound guards ship as of story 4-3b — the six of 4-3a (target_at, target_slot_at, "
 		+ "target_index_at, set_target_at, hp_at, apply_damage_at) plus NINE attack-rhythm seats "
 		+ "(attack_phase_at, attack_ticks_at, attack_dir_at, attack_count_at, is_in_reach_at, "
 		+ "mark_in_reach_at, set_attack_dir_at, begin_windup_at, set_phase_at). A new accessor "
@@ -562,6 +571,12 @@ func _match_with_interval(interval_ticks: int, minions_open := true) -> MatchSta
 	c.attack_active_seconds = 3.0 / 60.0
 	c.attack_recovery_seconds = 3.0 / 60.0
 	c.minion_retarget_interval_seconds = float(interval_ticks) / 60.0
+	# Story 4-4 (AC 7, `4-4/R8`): a unit resolves its priority through its OWN KIND now, so a
+	# fixture authoring no kind would leave every unit with no priority name, no priority and
+	# therefore no target — which would make every case in this file pass or fail for the wrong
+	# reason. One minion kind at index 0, naming the same `standard` priority the removed hardcoded
+	# `PRIORITY_STANDARD` lookup used to select, so these tests assert exactly what they did before.
+	c.unit_kinds = UnitKindFixture.minion_only(LIVING_HP, 3.0, 0, 0, 0, 2.0)
 	ms.apply_balance(c)
 	ms.inject_feature_flags(_open_flags() if minions_open else _closed_flags())
 	ms.drain_signals()
@@ -573,7 +588,7 @@ func _match_with_interval(interval_ticks: int, minions_open := true) -> MatchSta
 ## here would drag a deck, a cost map, an effect map and a mana budget into every case above without
 ## making a single assertion stronger.
 func _summon(player: PlayerState) -> void:
-	player.units.add(LIVING_HP)
+	player.units.add(LIVING_HP, 0)
 
 
 func _advance(ms: MatchState) -> void:
@@ -602,6 +617,12 @@ func _match_for_cast(interval_ticks: int) -> MatchState:
 	c.deck_size = CAST_DECK_SIZE
 	c.hand_size = CAST_HAND_SIZE
 	c.minion_retarget_interval_seconds = float(interval_ticks) / 60.0
+	# Story 4-4 (AC 7, `4-4/R8`): a unit resolves its priority through its OWN KIND now, so a
+	# fixture authoring no kind would leave every unit with no priority name, no priority and
+	# therefore no target — which would make every case in this file pass or fail for the wrong
+	# reason. One minion kind at index 0, naming the same `standard` priority the removed hardcoded
+	# `PRIORITY_STANDARD` lookup used to select, so these tests assert exactly what they did before.
+	c.unit_kinds = UnitKindFixture.minion_only(LIVING_HP, 3.0, 0, 0, 0, 2.0)
 	ms.apply_balance(c)
 	ms.inject_feature_flags(_open_flags())
 	ms.inject_deck(_cast_deck_contents())

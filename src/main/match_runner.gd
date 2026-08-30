@@ -1073,11 +1073,27 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 			# field on this node, never copied onto the actor. `match_state` only EXPOSES the rule --
 			# a unit's velocity is actor-owned, so the scaling has to happen where the speed is
 			# passed in, not inside the state layer that computed the factor.
+			# Story 4-4 (AC 5/AC 6, `4-4/R12`): THE SPEED AND STOP DISTANCE ARE PER KIND NOW, read
+			# through this unit's own kind index off the same replay-aware config handle
+			# (CONSTRAINT C / `4-3/R11` unchanged). AC 5's "all three totem kinds are authored with
+			# a movement speed of 0 and never leave their spawn position" is delivered HERE and by
+			# authoring alone: a kind authoring `move_speed = 0.0` reaches `approach()` with a zero
+			# speed, which zeroes the velocity and moves nothing. There is no is-a-totem branch
+			# anywhere in this loop, which is what makes AC 5 a data fact rather than a code fact.
+			var kind_index := player.units.kind_index_at(index)
+			var kind := balance.kind_at(kind_index)
+			if kind == null:
+				# An X3 reload shortened `unit_kinds` under a live record. Stop rather than walk at
+				# an invented speed — the same "holds still" answer both skip paths above give, and
+				# for the same reason: `CharacterBody3D.velocity` is persistent, so a skipped write
+				# would leave the unit gliding on its last speed forever.
+				(unit as UnitActor).velocity = Vector3.ZERO
+				continue
 			var phase_multiplier := _match_state.unit_attack_phase_multiplier(
-					player.units.attack_phase_at(index))
+					player.units.attack_phase_at(index), kind_index)
 			(unit as UnitActor).approach(target_position,
-					balance.unit_move_speed * phase_multiplier,
-					balance.unit_stop_distance, delta)
+					kind.move_speed * phase_multiplier,
+					kind.stop_distance, delta)
 		else:
 			# The SECOND of the two SKIP paths (`4-3c/R12`, amended `4-3c1/R3` -- the swing-commitment
 			# zeroing above is a third zeroing but not a third member of THIS list, for the reason
@@ -1320,7 +1336,6 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 	# ticks, not a per-unit budget, and re-deriving it inside the loop would read the same
 	# answer N times.
 	var probing := _probe_counter % ticks.minion_retarget_interval_ticks == 0
-	var reach := balance.minion_attack_reach_distance
 	var actors: Array = _unit_actors[attacker_slot]
 	for index: int in actors.size():
 		if not player.units.has_index(index):
@@ -1333,9 +1348,23 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 		var attacker_address: Array[int] = [attacker_slot, index]
 		var attack_index := player.units.attack_count_at(index)
 		var unit_actor := unit as UnitActor
-		if probing:
+		# Story 4-4 (AC 6/AC 9/AC 10/AC 13): THE REACH IS PER KIND AND PER ATTACK RECORD — the
+		# successor to the single flat `balance.minion_attack_reach_distance`. It is read here,
+		# inside the per-unit loop, because it now VARIES per unit; the probe THROTTLE stays hoisted
+		# above the loop because it does not (`minion_retarget_interval_seconds` stays shared, by
+		# the operator ruling the story's Dev Notes record).
+		#
+		# THE SAME AUTHORED NUMBER SERVES A MELEE REACH AND A FIRING RANGE (AC 13's 8 m on the
+		# shipped Combat totem), because both answer the same question of the ALREADY-ACQUIRED
+		# target: may this attack begin? That is `4-4/R10`'s post-selection gate — nothing here
+		# re-selects by distance and no NEAREST ordering mode is consulted.
+		#
+		# A KIND WITH NO ATTACK NEVER PROBES, so the two accelerator totems produce no facts at all
+		# (AC 3: they never attack). That is an authoring fact, not a kind-name branch.
+		var attack := _unit_attack_profile(balance, player, index)
+		if probing and attack != null:
 			_push_reach_probe(attacker_slot, player, index, unit_actor, attacker_address,
-					attack_index, reach)
+					attack_index, attack.range)
 		if not player.units.is_hitbox_active_at(index):
 			continue
 		for area: Area3D in unit_actor.hitbox.get_overlapping_areas():
@@ -1357,6 +1386,28 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 					MatchState.CONTACT_STRIKE)
 			_match_state.push_contact(attacker_address, address, attack_index, fact_dir,
 					MatchState.CONTACT_STRIKE)
+
+
+## Story 4-4 (AC 6/AC 9): the attack record governing the unit at `index` on `player`'s board, or
+## NULL when it has none. The runner-side twin of the resolution
+## `MatchState._advance_unit_attacks` does with the tick-domain records, and it is a helper rather
+## than three inline lines because two seats in this file need the same answer.
+##
+## READ INLINE OFF THE CONFIG HANDLE THE CALLER ALREADY RESOLVED (CONSTRAINT C / `4-3/R11`): the
+## `balance` argument is `_match_state.balance`, the replay-aware handle — never
+## `BalanceConfigService`, which during a replay would measure reach at the AUTHORED value instead
+## of the RECORDED one.
+##
+## NULL ON EVERY MISS, and each miss is a real authored state rather than an error: a kind index no
+## longer in the authored list (an X3 reload that shortened it), and a kind that authors an empty
+## attack list (the two accelerator totems, AC 3). Both mean the same thing to every caller — this
+## unit has no attack — so they get the same answer rather than two.
+func _unit_attack_profile(balance: BalanceConfig, player: PlayerState,
+		index: int) -> UnitAttackProfile:
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	if kind == null:
+		return null
+	return kind.attack_at(0)
 
 
 ## Story 4-3b (AC 13, `4-3b/R17a`/`R17b`): THE THROTTLED REACH PROBE. One kind-marked fact per unit

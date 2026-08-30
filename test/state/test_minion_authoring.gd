@@ -27,10 +27,16 @@ func test_the_authored_priority_set_loads_non_empty() -> void:
 		"data/minions/ must load at least one MinionPriority under the headless harness — an empty "
 		+ "set is what a failed export remap or a broken script reference looks like, and AC 3's "
 		+ "graceful degradation would otherwise hide it (`4-2/R11`)")
-	assert_eq(rules.size(), 2,
-		"EXACTLY TWO priorities are authored this story (AC 1): `standard` and `hero_seeker`. Tank "
-		+ "(needs HP) and Bomber/AoE (needs position) are named DEFERRED to 4-3/4-4, not authored — "
-		+ "a third file arriving here must come with the story that consumes it")
+	# Story 4-4 (AC 8, `4-4/R9`): THE THIRD FILE ARRIVED WITH THE STORY THAT CONSUMES IT, which is
+	# exactly the condition 4-2's wording here set. `hero_preferring.tres` is the shipped Combat
+	# totem's authored priority — a NEW profile, not a reuse of `standard` and not a promotion of the
+	# test-only `hero_seeker` — and `test_balance_authoring.gd` asserts the Combat totem actually
+	# names it and that it actually prefers the hero, so this count cannot grow on an unconsumed file.
+	assert_eq(rules.size(), 3,
+		"EXACTLY THREE priorities are authored: `standard` (minions), the test-only `hero_seeker`, "
+		+ "and `hero_preferring` (the shipped Combat totem, `4-4/R9`). Tank (needs a per-unit HP "
+		+ "ordering mode) and Bomber/AoE (needs a position ordering mode) are still DEFERRED, not "
+		+ "authored — a fourth file arriving here must come with the story that consumes it")
 
 
 ## AC 1/AC 4(b): every authored file loads as a MinionPriority and carries RECOGNIZED parameters.

@@ -131,8 +131,17 @@ func _physics_process(_delta: float) -> bool:
 		# approach step reads at point of use, so this test measures what shipped rather than a
 		# constant copied into it. A zero in either is not tolerated here: it would make the
 		# assertions below meaningless, and `test_balance_authoring.gd` is the permanent guard.
-		_speed = _state.balance.unit_move_speed
-		_stop_distance = _state.balance.unit_stop_distance
+		# Story 4-4 (AC 6): PER KIND now, resolved BY NAME rather than by index 0 — a reordered
+		# authored list must fail loudly here, not quietly measure a static totem's zero speed.
+		var kind: UnitKindProfile = _state.balance.kind_at(
+			_state.balance.kind_index_of(&"minion"))
+		if kind == null:
+			print("authored balance carries no `minion` kind -- nothing to approach")
+			print("RESULT: FAIL")
+			quit(1)
+			return false
+		_speed = kind.move_speed
+		_stop_distance = kind.stop_distance
 		# The hero's OWN authored move speed, needed only to size the WALK window (`4-3/R22`) --
 		# distinct from `_speed` (`unit_move_speed`), which the unit's approach uses.
 		_hero_speed = maxf(_state.balance.move_speed, 0.0001)

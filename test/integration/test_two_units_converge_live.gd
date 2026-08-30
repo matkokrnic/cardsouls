@@ -103,8 +103,15 @@ func _physics_process(_delta: float) -> bool:
 		_state = _runner._match_state if _runner != null else null
 		if _runner == null or _state == null:
 			return _fail("missing: runner=%s state=%s" % [_runner, _state])
-		_speed = _state.balance.unit_move_speed
-		_stop_distance = _state.balance.unit_stop_distance
+		# Story 4-4 (AC 6): the approach values are PER KIND now. Read off the MINION kind by name,
+		# not by index 0, so a reordered authored list fails here loudly instead of silently
+		# measuring a totem's zero speed and reporting "the approach ships invisible".
+		var kind: UnitKindProfile = _state.balance.kind_at(
+			_state.balance.kind_index_of(&"minion"))
+		if kind == null:
+			return _fail("authored balance carries no `minion` kind -- nothing to converge")
+		_speed = kind.move_speed
+		_stop_distance = kind.stop_distance
 		_ticks_per_second = maxf(Engine.physics_ticks_per_second, 1.0)
 		if _speed <= 0.0 or _stop_distance <= 0.0:
 			return _fail("authored balance ships the approach invisible: speed=%f stop=%f"

@@ -434,12 +434,9 @@ func test_contacts_inert_without_apply_balance() -> void:
 ## fixture so a phase read off the wrong field cannot coincide.
 func _config_4_3b() -> BalanceConfig:
 	var c := _config()
-	c.unit_max_hp = 9.0
-	c.unit_damage_per_hit = 3.0
-	c.minion_attack_windup_seconds = 2.0 / 60.0
-	c.minion_attack_active_seconds = 3.0 / 60.0
-	c.minion_attack_recovery_seconds = 4.0 / 60.0
-	c.minion_attack_reach_distance = 2.0
+	# Story 4-4 (AC 6/AC 9): per-kind now. Same in-test literals, new shape (see UnitKindFixture).
+	c.unit_kinds = UnitKindFixture.minion_only(9.0, 3.0, 2, 3, 4, 2.0)
+	c.hero_damage_to_unit = 3.0
 	c.minion_retarget_interval_seconds = 1000.0
 	return c
 
@@ -459,7 +456,7 @@ func _match_4_3b() -> MatchState:
 ## trigger and the real phase ladder — never by writing the phase directly, so what these tests
 ## exercise is the shipped mechanism.
 func _p1_unit_into_active(ms: MatchState, target: Array[int]) -> void:
-	ms.p1.units.add(9.0)
+	ms.p1.units.add(9.0, 0)
 	ms.p1.units.set_target_at(0, target[0], target[1])
 	ms.push_contact([0, 0], target, 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
 	_advance(ms)
@@ -484,7 +481,7 @@ func test_a_hero_attacker_address_still_resolves_to_that_slots_hero() -> void:
 	var ms := _match_4_3b()
 	# A unit ALSO exists on P1's board, so "resolved to the hero" is a real discrimination rather
 	# than the only possibility. It is never given a swing, so its dedupe stays empty.
-	ms.p1.units.add(9.0)
+	ms.p1.units.add(9.0, 0)
 	_attack_and_advance_through(ms, 4)
 	var mana_before := ms.p1.mana.get_current()
 	ms.push_contact([0, -1], [1, -1], ms.p1.hero.attack_index, Vector2.DOWN,
@@ -603,7 +600,7 @@ func test_the_two_registrars_are_separate_state() -> void:
 ## pass cannot "fix" it into consistency without this failing.
 func test_hit_landed_fires_for_a_unit_attacker_on_a_hero_and_not_on_a_unit() -> void:
 	var ms := _match_4_3b()
-	ms.p2.units.add(9.0)
+	ms.p2.units.add(9.0, 0)
 	var seen: Array = []
 	ms.hit_landed.connect(func(a: int, t: int, d: float, h: float) -> void:
 		seen.append([a, t, d, h]))

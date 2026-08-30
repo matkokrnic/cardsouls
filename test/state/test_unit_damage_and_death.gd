@@ -59,8 +59,11 @@ func _config(unit_max_hp := UNIT_MAX_HP) -> BalanceConfig:
 	c.block_damage_multiplier = 0.5
 	c.block_facing_arc_degrees = 180.0
 	c.deflect_window_seconds = 4.0 / 60.0
-	c.unit_max_hp = unit_max_hp
-	c.unit_damage_per_hit = UNIT_DAMAGE
+	# Story 4-4 (AC 6/AC 9): per-kind now, same in-test literals. The phase durations are 0 here —
+	# this base fixture never advances a unit swing (the 4-3b fixture below sets real ones) — and a
+	# zero-length phase is legal in-test exactly as a zero draw delay is.
+	c.unit_kinds = UnitKindFixture.minion_only(unit_max_hp, UNIT_DAMAGE, 0, 0, 0, 2.0)
+	c.hero_damage_to_unit = UNIT_DAMAGE
 	return c
 
 
@@ -109,7 +112,7 @@ func _swing_to_active(ms: MatchState) -> void:
 ## a unit AFTER it exists. The real step-6 cast seat has its own test below.
 func _summon_p2(ms: MatchState, count: int) -> void:
 	for _i in count:
-		ms.p2.units.add(UNIT_MAX_HP)
+		ms.p2.units.add(UNIT_MAX_HP, 0)
 
 
 ## ---- AC 1: hp joins the record, at the AUTHORED maximum ----------------------------------
@@ -137,7 +140,7 @@ func test_a_summoned_unit_enters_at_the_authored_maximum() -> void:
 ## exists — and proof that liveness really is derived from hp rather than from "a record exists".
 func test_a_zero_maximum_summons_a_record_that_is_already_dead() -> void:
 	var ms := _make_match()
-	ms.p2.units.add(0.0)
+	ms.p2.units.add(0.0, 0)
 	assert_eq(ms.p2.units.size(), 1, "the record exists")
 	assert_false(ms.p2.units.is_alive_at(0),
 		"...and is NOT alive: liveness is hp > 0, derived, never 'a record is present'")
@@ -188,7 +191,7 @@ func test_three_swings_kill_a_unit_and_the_third_is_the_one_that_does_it() -> vo
 ## differently-sized hits must hash identically: both are simply dead.
 func test_damage_is_clamped_at_zero_so_overkill_does_not_go_negative() -> void:
 	var ms := _make_match()
-	ms.p2.units.add(1.0)  # less health than one hit's damage
+	ms.p2.units.add(1.0, 0)  # less health than one hit's damage
 	_swing_to_active(ms)
 	ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(ms)
@@ -430,7 +433,7 @@ func test_a_board_of_nothing_but_holes_reaches_no_living_candidate() -> void:
 ## pass every evaluator test in this file and fail here.
 func test_the_step_7_seat_never_acquires_a_dead_unit() -> void:
 	var ms := _make_match()
-	ms.p1.units.add(UNIT_MAX_HP)          # the acquirer
+	ms.p1.units.add(UNIT_MAX_HP, 0)          # the acquirer
 	_summon_p2(ms, 2)                     # the candidates
 	ms.p2.hero.take_damage(ms.p2.hero.get_max_hp())   # hero dead, so units are the only candidates
 	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP)       # ...and candidate 0 is a hole
@@ -605,10 +608,11 @@ const UNIT_RECOVERY_4_3B := 4
 
 func _config_4_3b() -> BalanceConfig:
 	var c := _config()
-	c.minion_attack_windup_seconds = float(UNIT_WINDUP_4_3B) / 60.0
-	c.minion_attack_active_seconds = float(UNIT_ACTIVE_4_3B) / 60.0
-	c.minion_attack_recovery_seconds = float(UNIT_RECOVERY_4_3B) / 60.0
-	c.minion_attack_reach_distance = 2.0
+	# Story 4-4 (AC 6/AC 9): the 4-3b rhythm re-authored on the kind rather than as four flat
+	# globals. `_config()` above already built a minion kind with zero-length phases; this replaces
+	# it wholesale rather than mutating the record in place, so the two fixtures cannot half-merge.
+	c.unit_kinds = UnitKindFixture.minion_only(UNIT_MAX_HP, UNIT_DAMAGE, UNIT_WINDUP_4_3B,
+			UNIT_ACTIVE_4_3B, UNIT_RECOVERY_4_3B, 2.0)
 	c.minion_retarget_interval_seconds = 1000.0
 	return c
 
@@ -624,7 +628,7 @@ func _match_4_3b() -> MatchState:
 ## One unit on P1 acquired on `target`, driven into its ACTIVE window through the real reach trigger
 ## and the real phase ladder -- never by writing the phase directly.
 func _p1_unit_into_active(ms: MatchState, target: Array[int]) -> void:
-	ms.p1.units.add(UNIT_MAX_HP)
+	ms.p1.units.add(UNIT_MAX_HP, 0)
 	ms.p1.units.set_target_at(0, target[0], target[1])
 	ms.push_contact([0, 0], target, 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
 	_advance(ms)
@@ -643,7 +647,7 @@ func _p1_unit_into_active(ms: MatchState, target: Array[int]) -> void:
 func test_a_unit_killed_between_gather_and_resolution_lands_nothing() -> void:
 	# (i) THE SURVIVING RUN: the identical fact applies damage.
 	var survives := _match_4_3b()
-	survives.p2.units.add(UNIT_MAX_HP)
+	survives.p2.units.add(UNIT_MAX_HP, 0)
 	_p1_unit_into_active(survives, [1, 0])
 	var control_before := survives.p2.units.hp_at(0)
 	survives.push_contact([0, 0], [1, 0], survives.p1.units.attack_count_at(0), Vector2.DOWN,
@@ -654,7 +658,7 @@ func test_a_unit_killed_between_gather_and_resolution_lands_nothing() -> void:
 
 	# (ii) THE KILLED RUN: the same fact, gathered, then the attacker dies before resolution.
 	var ms := _match_4_3b()
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_p1_unit_into_active(ms, [1, 0])
 	var before := ms.p2.units.hp_at(0)
 	ms.push_contact([0, 0], [1, 0], ms.p1.units.attack_count_at(0), Vector2.DOWN,
@@ -708,7 +712,7 @@ func _hits_to_kill_from_hero() -> int:
 ## reach so it cycles, and each landed strike is counted.
 func _hits_to_kill_from_unit() -> int:
 	var ms := _match_4_3b()
-	ms.p2.units.add(UNIT_MAX_HP)
+	ms.p2.units.add(UNIT_MAX_HP, 0)
 	_p1_unit_into_active(ms, [1, 0])
 	var hits := 0
 	var cycles := 0

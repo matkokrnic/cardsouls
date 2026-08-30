@@ -131,6 +131,14 @@ const HASHED: Array[String] = [
 	"unit_board._hp",
 	"unit_board._attack_phase", "unit_board._attack_ticks", "unit_board._attack_dir",
 	"unit_board._attack_count", "unit_board._in_reach",
+	# Story 4-4 (AC 1/AC 10): the two new board members, BOTH HASHED, so
+	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE and there is still no fourth exclusion to argue
+	# about. `_kind_index` decides every authored number that governs a unit for its whole life and
+	# cannot be recomputed from anything else on the record — the cast that chose it is gone.
+	# `_attack_cooldown` is the cross-tick carrier between one shot and the next, the
+	# `_in_reach` classification applied to a second countdown. They reach the hash through
+	# `PlayerState.to_snapshot()`'s `unit_kind` and `unit_attack_cooldown` keys.
+	"unit_board._kind_index", "unit_board._attack_cooldown",
 	"player_state.unit_dedupe", "unit_swing_dedupe._records",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
@@ -181,6 +189,13 @@ const NOT_RUNTIME_STATE: Array[String] = [
 	"enums",              # enum declarations only
 	"match_params",       # construction params, consumed into the RNG and not retained
 	"balance_ticks",      # derived from the injected BalanceConfig (A1)
+	# Story 4-4 (AC 11): the two PER-KIND halves of `balance_ticks`, exempt for its reason verbatim
+	# — both are built inside `BalanceTicks.from_config()` and hold nothing but tick counts derived
+	# from the injected `BalanceConfig`. They are rebuilt WHOLE on every `apply_balance()`, so
+	# restoring the config restores them exactly as it already restores `balance_ticks`, and no
+	# member of either crosses a tick as match state. What crosses a tick is the COUNTDOWN a window
+	# was started with, which lives on `UnitBoard` and is classified HASHED above.
+	"unit_attack_ticks", "unit_kind_ticks",
 	"input_intent",       # INPUT, snapshot-exempt by contract and captured by the X5 stream
 	"cast_evaluator", "economy_evaluator",   # stateless evaluators
 	"card_effect_resolver",                  # ditto (story 4-1) — fully static, retains nothing
@@ -530,6 +545,13 @@ func _config() -> BalanceConfig:
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0
 	c.roll_distance = 2.0
+	# Story 4-4 (AC 1): the cast seat resolves a summon's KIND before appending a record, so without
+	# an authored kind this fixture's recorded summon would put nothing on the board — and the
+	# effects channel's divergence proof, which rests on that unit ACQUIRING a target, would go
+	# vacuous. One minion kind at index 0, naming `standard` so the acquired verdict this file
+	# asserts (`[1, -1]`) is exactly what the removed hardcoded lookup produced.
+	c.unit_kinds = UnitKindFixture.minion_only(9.0, 3.0, 0, 0, 0, 2.0)
+	c.hero_damage_to_unit = 3.0
 	return c
 
 

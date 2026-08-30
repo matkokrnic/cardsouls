@@ -5,6 +5,53 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## RE-BASELINED BY STORY 4-4, PASS 1 OF 3 (the per-kind data conversion), 4a089063 -> 836afc01, TWO
+## CAUSES MEASURED SEPARATELY AND IN ORDER against the inherited 4a089063 value.
+##
+## AC 12 REQUIRES THE THREE STORY-LEVEL CAUSES TO BE MEASURED SEPARATELY — "the per-kind data
+## conversion named as its own measured cause, separate from any cause introduced by the projectile
+## or the accelerator faucets" — so 4-4 re-baselines THREE TIMES, once per build commit, rather than
+## once at the end with three entangled causes. This entry is the FIRST; the projectile's and the
+## accelerators' entries are added above it by their own commits.
+##   1. SNAPSHOT SHAPE (a mover, predicted). `PlayerState.to_snapshot()` gains TWO keys: `unit_kind`
+##      (the per-record kind INDEX, AC 1) and `unit_attack_cooldown` (the firing-cadence countdown,
+##      AC 10). ISOLATED BY A STAGED VALUE rather than by construction, because unlike 4-1/4-2 the
+##      conversion cannot ship without SOME authored kind — with none, the cast seat puts no record
+##      on the board at all and `unit_count`/`unit_hp` coverage would silently vanish instead of
+##      moving. So `GOLDEN_UNIT_MAX_HP` was staged at 0.0 for this measurement, which reproduces the
+##      fixture's pre-4-4 behaviour EXACTLY: `unit_max_hp` was never authored in `_golden_config`,
+##      defaulted to 0.0, and the t22 summon's record has entered DEAD-on-arrival in this hash since
+##      4-3a. At that staging the ONLY delta from the inherited value is the two new keys, both at
+##      their zero payloads (`[0]` and `[0]`). MEASURED: 4a089063 ->
+##      93ecf7e99d9996dbda0fe66979f243b580d7e8f9e7e8a9a23277d45bb3394306.
+##      The key set moves EIGHTEEN -> TWENTY here, pinned by test_card_observation.gd.
+##   2. THE CONVERSION'S CONTENT (a mover). `GOLDEN_UNIT_MAX_HP` restored to its real coverage value
+##      7.0, so the summoned record now enters ALIVE and `unit_hp` moves `[0.0]` -> `[7.0]`.
+##      MEASURED on top of cause 1: 93ecf7e9 -> 836afc01, the value below.
+##   3. AC 7's PER-KIND PRIORITY READ — PREDICTED A NON-MOVER, and the prediction is STRUCTURAL
+##      rather than merely measured: `_update_unit_targets`'s removed hardcoded
+##      `TargetingService.PRIORITY_STANDARD` lookup is replaced by a read of the asking kind's
+##      authored `priority_name`, and `_golden_config`'s kind authors `&"standard"` — the same name
+##      the constant carried. The evaluator therefore receives the identical `MinionPriority` object
+##      it received before, and the acquired `[1, -1]` verdict this hash has encoded since 4-2 is
+##      unmoved. Confirmed by the two measurements above being fully explained by their own causes.
+##   4. AC 10's CADENCE GATE — PREDICTED A NON-MOVER on the fixture, CONFIRMED. The new third
+##      condition on the windup gate reads `is_attack_ready_at`, and the fixture's kind authors a 0.0
+##      cadence (the shipped minion authoring), so the cooldown is 0 whenever the gate is consulted.
+##      The fixture's unit never reaches the gate at all — it is dead at cause 1's staging and, at
+##      cause 2's, alive but never in reach — so the gate is hash-neutral here by two independent
+##      routes. Its real proof is test_unit_attack_rhythm.gd, not this hash.
+##   5. `rng_state` — PREDICTED A NON-MOVER, on the 4-1 / 4-2 precedent of explicitly testing a
+##      predicted non-mover. Nothing about which KIND a cast summons is random: the id -> kind name
+##      lookup is a Dictionary `get()` by a known key and the name -> index lookup is a linear walk
+##      of an authored list. CONFIRMED by test_the_summon_consumes_no_rng, which is unchanged and
+##      still asserts `unit_count` differs across its pair so the comparison cannot be vacuous.
+## NOT a cause: the authored `data/balance/balance_config.tres`, whose eleven converted globals moved
+## into `unit_kinds` — `_golden_config` is built in-test and never loads it, so the standing `BC/R3`
+## isolation survives the conversion intact. Nor is `data/minions/hero_preferring.tres`, the new
+## third authored priority (AC 8): the fixture's kind names `standard`, and a file the golden path
+## never resolves cannot move the hash.
+##
 ## RE-BASELINED BY STORY 4-2 (minion AI and throttled targeting), 78bd2b97 -> 73a86005, ONE
 ## re-baseline, TWO MOVERS and TWO NON-MOVERS, each measured SEPARATELY and IN ORDER against the
 ## inherited 78bd2b97 value — the 4-1 three-step method (312522d8 -> 542a05c0 -> 78bd2b97) repeated.
@@ -455,7 +502,17 @@ extends TestCase
 ##     They are proven in test_unit_attack_rhythm.gd, test_contact_resolution.gd,
 ##     test_unit_damage_and_death.gd and test/integration/test_unit_attack_live.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "4a089063a8b3eff2274c0ca300dafe80e4eb4d3970ada352ca432a7e39844bdf"
+const GOLDEN := "836afc013bd310fd47420f656b06fb0f14b87f206827805448334b6e712a536b"
+
+## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
+## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
+##
+## `GOLDEN_UNIT_MAX_HP` IS THIS STORY'S CAUSE-2 STAGING KNOB. At 0.0 the t22 summon's record enters
+## DEAD, exactly as it did through 4-3a/4-3b when `unit_max_hp` was an unauthored 0.0 default — which
+## is what let cause 1 (the two new snapshot keys) be measured in isolation. At 7.0 the record enters
+## ALIVE and `unit_hp` moves off 0.0, which is cause 2. Both measurements are recorded above.
+const GOLDEN_UNIT_MAX_HP := 7.0
+const GOLDEN_UNIT_DAMAGE := 2.0
 
 const SEED := 1337
 const MAX_HP := 120.0
@@ -709,6 +766,28 @@ func _golden_config() -> BalanceConfig:
 	# t24. Not loaded from data/balance/balance_config.tres — the standing property that authored
 	# TUNING cannot move this hash is untouched. See RETARGET_INTERVAL_TICKS for both measurements.
 	c.minion_retarget_interval_seconds = float(RETARGET_INTERVAL_TICKS) / 60.0
+	# Story 4-4 (AC 6/AC 12) — THE PER-KIND CONVERSION, and the line that carries this story's
+	# SECOND named re-baseline cause. Before this story the fixture authored NO unit fields at all,
+	# so `unit_max_hp` defaulted to 0.0 and the t22 summon put a record on the board that was DEAD on
+	# arrival (hp 0.0, the value `unit_hp` has carried in this hash since 4-3a). The four globals are
+	# gone; a kind must be authored or the cast resolves successfully and puts NOTHING on the board,
+	# which would silently delete `unit_count`/`unit_hp` coverage rather than re-baseline it.
+	#
+	# THE TWO CAUSES ARE MEASURED SEPARATELY BY STAGING THIS ONE VALUE (see the re-baseline record
+	# at the top of this file): authored at 0.0 the record still enters DEAD and the ONLY delta from
+	# the inherited hash is the two new snapshot keys (cause 1, the shape); authored at
+	# GOLDEN_UNIT_MAX_HP the record enters ALIVE and `unit_hp` moves (cause 2, the conversion's
+	# content). Coverage-not-feel like every value here — 7.0 is NOT the authored 9.0.
+	#
+	# `standard` is named deliberately: it is the priority the REMOVED hardcoded
+	# `TargetingService.PRIORITY_STANDARD` lookup used to select, so the acquired-target verdict this
+	# hash has encoded since 4-2 is unmoved by AC 7's per-kind priority read. The durations are 0 —
+	# the fixture's unit never swings, and authoring a rhythm for a path this sequence does not take
+	# would be coverage of nothing (the `reshuffle_vulnerable_window_seconds` reasoning verbatim).
+	c.unit_kinds = UnitKindFixture.minion_only(GOLDEN_UNIT_MAX_HP, GOLDEN_UNIT_DAMAGE, 0, 0, 0, 2.0)
+	# The HERO-attacker half of the old `unit_damage_per_hit`. Authored for completeness; the
+	# fixture's hero never swings at a unit, so it is hash-neutral by construction.
+	c.hero_damage_to_unit = GOLDEN_UNIT_DAMAGE
 	# reshuffle_vulnerable_window_seconds is deliberately NOT authored here. _golden_config leaves
 	# EIGHT cards in each pile against a single recorded cast, so the fixture cannot reach a
 	# reshuffle and the window can never open — authoring a duration for a path this sequence does

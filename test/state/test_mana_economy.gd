@@ -368,12 +368,9 @@ func _config_4_3b() -> BalanceConfig:
 	# EMPTY stamina pool, so the blocked-hit fixture below would silently deflect instead and
 	# measure nothing.
 	c.deflect_stamina_cost = 8.0
-	c.unit_max_hp = 9.0
-	c.unit_damage_per_hit = 3.0
-	c.minion_attack_windup_seconds = 2.0 / 60.0
-	c.minion_attack_active_seconds = 3.0 / 60.0
-	c.minion_attack_recovery_seconds = 4.0 / 60.0
-	c.minion_attack_reach_distance = 2.0
+	# Story 4-4 (AC 6/AC 9): per-kind now. Same in-test literals, new shape (see UnitKindFixture).
+	c.unit_kinds = UnitKindFixture.minion_only(9.0, 3.0, 2, 3, 4, 2.0)
+	c.hero_damage_to_unit = 3.0
 	c.minion_retarget_interval_seconds = 1000.0
 	return c
 
@@ -391,7 +388,7 @@ func _match_4_3b() -> MatchState:
 
 ## P1 gets one unit driven into its ACTIVE window through the real reach trigger and phase ladder.
 func _p1_unit_into_active_4_3b(ms: MatchState) -> void:
-	ms.p1.units.add(9.0)
+	ms.p1.units.add(9.0, 0)
 	ms.p1.units.set_target_at(0, 1, -1)
 	ms.push_contact([0, 0], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
 	_advance(ms)

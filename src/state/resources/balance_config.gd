@@ -141,6 +141,13 @@ extends Resource
 ## governs POOL BOUNDS, and a shared tick cadence is not one — a dev pass must not invent a
 ## per-player injection seat for it.
 ##
+## STORY 4-4 DELIBERATELY LEAVES THIS SHARED while converting eleven of its neighbours to per-kind
+## data, and that is an OPERATOR RULING recorded in the story's Dev Notes rather than a dev-pass
+## omission: "`minion_retarget_interval_seconds` STAYS shared, by operator ruling: no kind needs its
+## own cadence yet; converts later when one does." A per-kind retarget cadence would also break the
+## step-7 seat's single `_tick % interval` throttle into N throttles, which is the shared-scan
+## property the Performance Rule actually asks for.
+##
 ## THE DEGENERATE VALUE IS DEFINED RATHER THAN LEFT TO ROUNDING (`4-2/R5`(d)): the derived interval
 ## clamps to at least 1 tick ALWAYS, so an authored 0 means "every tick" instead of a modulo by zero.
 ## That makes 0 a legal in-test value, exactly as a 0 draw delay is. It is the AUTHORED value that
@@ -149,126 +156,100 @@ extends Resource
 ## unit re-scanning every frame is precisely the behaviour the Performance Rule forbids, and it
 ## would pass a `>= 0.0` existence check silently.
 @export var minion_retarget_interval_seconds: float = 0.0
-## Story 4-3 (AC 2): how fast a unit walks toward the target it acquired, in world units per
-## second — the `move_speed` / `stamina_regen_per_second` precedent for a RATE.
+
+## ------------------------------------------------------------------------------------------
+## STORY 4-4 (AC 6/AC 7/AC 9): THE PER-KIND CONVERSION. Eleven shared globals become this list.
+## ------------------------------------------------------------------------------------------
+## GONE FROM THIS FILE, and each was named in the story's Dev Notes inventory before the pass
+## began. AC 6's four: `unit_move_speed`, `unit_stop_distance`, `unit_max_hp`,
+## `unit_damage_per_hit`. The B5 correction's seven: `minion_attack_windup_seconds`,
+## `minion_attack_active_seconds`, `minion_attack_recovery_seconds`,
+## `minion_attack_reach_distance`, and `minion_attack_windup/active/recovery_move_speed_multiplier`.
 ##
-## A SCALAR, NEVER TICK-DOMAIN, and the name carries the reason: `BalanceTicks.from_config()`
-## converts `*_seconds` durations (A1), and a rate is not a duration. There is deliberately no
-## `unit_move_speed_ticks` counterpart, exactly as there is no `move_speed_ticks` — the value is
-## consumed per physics frame by `move_and_slide()`, whose delta the engine owns.
+## THEY ARE REMOVED, NOT KEPT ALONGSIDE, on the `attack_move_speed_multiplier` precedent this file
+## already set at story 3-0b: "The flat field is REMOVED, not kept alongside — a half-migration
+## would leave two sources of truth for the same scalar." Eleven half-migrations would be eleven.
 ##
-## READ INLINE AT POINT OF USE (CONSTRAINT C), from the config the RUNNER already applied
-## (`MatchState.balance`, the replay-aware handle selected at `match_runner.gd:177-180`) — never
-## `BalanceConfigService.get_config()` from the approach step, which during replay would walk
-## units at the AUTHORED speed instead of the RECORDED one (the divergence `3-0c`'s AC 4 exists
-## to prevent), and never a copy cached in a `UnitActor` field (`4-3/R11`).
+## `unit_board.gd`'s HEADER AND `4-2/R17`(c) BOTH NAMED THIS STORY AS THE OWNER. The board's own
+## comment says the shared maximum exists "because no unit differs from another yet" and names
+## 4-3/4-4 as the stories allowed to change it; `4-3/R6` assigned the permission here and `4-4/R8`
+## spends it. Units differ now.
 ##
-## AUDITED > 0 (test_balance_authoring.gd), the `draw_replacement_delay_seconds` reason verbatim:
-## `field in config` and the `>= 0.0` loop in test_data_resources.gd BOTH pass on this script's
-## 0.0 default, and a zero speed ships the whole mechanic INVISIBLE in the build — a unit that
-## rotates to face its target and never closes the distance is exactly 4-2's behaviour, which
-## this story exists to replace. Zero stays a legal in-test value; it is the AUTHORED value that
-## must be positive.
-@export var unit_move_speed: float = 0.0
-## Story 4-3 (AC 2/AC 3): how close a unit gets to its target before it halts and holds its
-## facing — planar (XZ) centre-to-centre distance, the `attack_lunge_distance` precedent for a
-## DISTANCE. Scalar, never tick-domain, for its sibling's reason directly above.
+## ORDER IS AUTHORED AND LOAD-BEARING. A unit record stores the plain INT INDEX of its kind in this
+## array (never the StringName — `Array[StringName].sort()` orders by internal POINTER on this
+## engine), so reordering the authored list renames every existing record's kind. The authoring
+## audit pins the shipped order by name.
 ##
-## AUDITED > 0 for the same class of failure: a zero stop distance would have a unit walk into
-## its target until the two bodies wedge, which reads as a physics glitch rather than as an
-## approach. Read inline at point of use, from the same runner-applied handle.
-@export var unit_stop_distance: float = 0.0
-## Story 4-3a (AC 1, `4-3a/R6`/`4-3a/R8`): a unit's MAXIMUM HP, and there is exactly one of it —
-## the field is authored HERE and SHARED by every minion rather than stored per record, because no
-## unit differs from another yet (the totem clause keeps the record type/kind-less, and the
-## `4-2/R17(c)` permission is spent on the per-record `hp` alone). A freshly summoned unit enters at
-## this value, on the `HeroState._init(... max_hp ...)` precedent.
+## READ INLINE AT POINT OF USE (CONSTRAINT C), through `kind_at()` below, off the live
+## `MatchState.balance` handle the runner applied — never cached on a record, never on an actor,
+## and never `BalanceConfigService` (which during a replay would read the AUTHORED values instead
+## of the RECORDED ones, the divergence `3-0c`'s AC 4 exists to prevent).
+@export var unit_kinds: Array[UnitKindProfile] = []
+## Story 4-4 (AC 6/AC 9): the HERO half of the old `unit_damage_per_hit`, under a name that says
+## whose damage it is — what one confirmed HERO swing takes off a unit.
 ##
-## A SCALAR, NEVER TICK-DOMAIN — not a duration, so no `BalanceTicks` counterpart, exactly like
-## `unit_move_speed` and `unit_stop_distance` above.
+## IT IS NOT A SURVIVING GLOBAL; IT IS THE OTHER HALF OF A FIELD THAT HAD TWO DIFFERENT READERS.
+## `4-3a/R8` authored `unit_damage_per_hit` for the hero-versus-unit case; `4-3b`'s AC 17 then reused
+## the same field for unit-versus-unit. AC 6 moves damage-per-hit PER KIND and AC 9 puts it on the
+## attack RECORD — which is the ATTACKER's property — so the unit-attacker reader follows the kind
+## and this one stays a hero property, where it always belonged. See
+## `MatchState._damage_against_unit`.
 ##
-## READ INLINE AT POINT OF USE (CONSTRAINT C), at MatchState's step-6 cast dispatch — the one seat
-## that calls `UnitBoard.add()`. The board itself never reads balance; it receives the maximum as an
-## argument, which is what keeps `UnitBoard` a pure container with no config dependency.
+## STILL FLAT, NOT A PERCENTAGE, and `4-3a/R8`'s reasoning is STRENGTHENED by the per-kind move
+## rather than weakened: with `max_hp` now authored per kind, `attack_damage_percent_of_max_hp`
+## against a unit would make hits-to-kill a CONSTANT for every authored kind, and every kind's
+## authored maximum would decide nothing.
 ##
-## AUDITED > 0 (test_balance_authoring.gd) for a failure that would otherwise be silent: a zero
-## maximum summons a unit that is ALREADY DEAD, so the first contact fact drops at the liveness rung
-## and the whole story ships invisible in the build.
-@export var unit_max_hp: float = 0.0
-## Story 4-3a (AC 2, `4-3a/R8`, decided by Matko): the DEDICATED FLAT damage one confirmed hero
-## swing takes off a unit. Deliberately NOT `attack_damage_percent_of_max_hp` recomputed against
-## `unit_max_hp`: that field is a percentage of the TARGET's OWN maximum, so reusing it here would
-## make hits-to-kill a CONSTANT (34, at the authored 3.0%) for EVERY possible authored unit maximum,
-## and `unit_max_hp` would be a cosmetic number that decides nothing. A flat value is what makes the
-## authored maximum load-bearing.
+## AUDITED > 0 for the failure `unit_damage_per_hit` was audited against verbatim: a zero ships a
+## unit that can be hit forever and never dies — the invulnerable box `4-3a` existed to replace.
+@export var hero_damage_to_unit: float = 0.0
+
+@export_group("Totems")
+## Story 4-4 (AC 20, `4-4/R13`): the Mana Accelerator totem's per-firing MANA AMOUNT — the field
+## `data/economy/mana_accelerator.tres` names as its amount's home.
 ##
-## FLAT, NOT A PERCENTAGE, and not scaled by anything: no block multiplier, no deflect, no facing
-## arc — those are all properties of a HERO target (`4-3a/R20`), and a unit structurally lacks every
-## one of them. Scalar, never tick-domain; read inline at the step-4 resolution seat (CONSTRAINT C).
+## THE RULE CANNOT CARRY THE NUMBER, and that is `ResourceGenerationRule`'s own header rule rather
+## than a choice made here: "a rule `.tres` carries no gameplay number ... every gameplay number
+## lives in BalanceConfig, hot-reloadable through the X3 seam". AC 20 restates it. So the faucet is
+## authored as a rule naming this field, and the evaluator dereferences it against the live balance
+## object on every call.
 ##
-## PROVISIONAL, AND ITS RETUNE HAS A NAMED OWNER: 3.0 against a 9.0 maximum is three swings to kill.
-## Both values are tuned by the melee retune in `4-3b` (`E3-R/R3`, re-anchored by `4-3a/R5`), which
-## is why test_balance_authoring.gd audits the hits-to-kill RATIO as a band rather than pinning 3.
+## A PER-EVENT AMOUNT, NOT A PER-TICK RATE — `melee_hit_mana`'s domain, not
+## `mana_regen_per_tick`'s — because the accelerator fires on a CADENCE (below) rather than every
+## tick. `amount_domain` on the authored rule is therefore `BALANCE`, not `BALANCE_TICKS`.
 ##
-## AUDITED > 0 for the opposite silent failure to its sibling above: a zero flat damage ships a unit
-## that can be hit forever and never dies — the invulnerable box this story exists to replace.
-@export var unit_damage_per_hit: float = 0.0
-## Story 4-3b (AC 1): the THREE GLOBAL attack-rhythm durations every minion shares — the hero's
-## own `attack_windup_seconds` / `attack_active_seconds` / `attack_recovery_seconds` triplet
-## (33-35) applied to a unit, and authored ONCE here rather than per record for the reason
-## `unit_max_hp` states directly above: no unit differs from another yet. `4-2/R17`(c) names the
-## first story where units actually DIFFER as the only one allowed to add a differentiating field
-## to the record, and this is not that story.
+## DERIVED RELATIVE TO `passive_tick`, NOT PRINCIPLED (`4-4/R13`). See the authored `.tres` and the
+## dev-pass measurement recorded in the Dev Agent Record for the arithmetic; the value is a working,
+## playtest-tunable number.
 ##
-## NAMING IS LOAD-BEARING, which is why AC 1 spells these three identifiers out: the balance field
-## guard is REFLECTION-BASED (test_data_resources.gd) and matches on the field NAME. Each needs all
-## four of: the `<stem>_seconds` suffix; an exactly stem-matched `<stem>_ticks` twin on
-## `BalanceTicks` FILLED by `from_config()`; an entry in `E1_BALANCE_FIELDS`; and a non-negative
-## authored value. Miss any one and the guard fails — which IS the guard working.
+## AUDITED > 0: a zero amount is a dead faucet, and the totem would ship visible but inert.
+@export var mana_accelerator_mana: float = 0.0
+## Story 4-4 (AC 20): how often a live Mana Accelerator totem produces that amount.
 ##
-## PROVISIONAL, NOT TUNED. This story ships a working rhythm; the melee retune block (`E3-R/R3`,
-## re-anchored here by `4-3a/R5`) runs once this story closes and owns the real numbers. The
-## authored 0.5 / 0.2 / 0.8 is deliberately SLOWER than the hero's 0.25 / 0.15 / 0.35 — a
-## summon-tier swing a human can read and step out of (`4-3b/R9`).
-@export var minion_attack_windup_seconds: float = 0.0
-@export var minion_attack_active_seconds: float = 0.0
-@export var minion_attack_recovery_seconds: float = 0.0
-## Story 4-3b (AC 13, `4-3b/R17a`): how close a unit's ACQUIRED TARGET must be before the unit may
-## begin a windup — planar (XZ) centre-to-centre, the `unit_stop_distance` precedent for a
-## DISTANCE. Scalar, never tick-domain, for its siblings' reason above.
+## A DURATION, so it converts once at load (A1) to `BalanceTicks.mana_accelerator_interval_ticks`,
+## read INLINE at the third `_generate_mana` call site (CONSTRAINT C).
 ##
-## MEASURED IN THE RUNNER, NEVER IN STATE (D3(b)/A2). The runner turns the acquired `[slot, index]`
-## pair into two world positions it already owns and pushes the RELATION inward as a kind-marked
-## REACH PROBE on the existing `push_contact` intake — state learns "in reach", never a position.
+## A MODULO DIVISOR, so it takes `minion_retarget_interval_ticks`'s clamp rather than the plain
+## `seconds_to_ticks()` every duration above uses: the derived value is clamped to at least 1 tick,
+## which gives an authored 0 the DEFINED meaning "every tick" instead of a divide-by-zero on the
+## tick ladder. Zero is therefore a legal in-test value; the AUTHORED value is audited > 0.
+@export var mana_accelerator_interval_seconds: float = 0.0
+## Story 4-4 (AC 21, `4-4/R11`/`4-4/R13`): the factor a live Stamina Accelerator totem MULTIPLIES
+## its OWNER's hero stamina regeneration by. Owner-only: the opposing hero's regen is untouched,
+## which the seat makes structural rather than checked (the regen seat is already per-player and
+## consults that player's OWN board).
 ##
-## AUDITED > 0 AND AUDITED >= `unit_stop_distance` (test_balance_authoring.gd), and the second bound
-## is the one that matters: a unit HALTS at `unit_stop_distance` from its target, so a reach shorter
-## than the stop distance leaves every minion parked just outside its own reach, never in reach,
-## never winding up — the whole story shipped invisible in the build with nothing failing.
-@export var minion_attack_reach_distance: float = 0.0
-## Story 4-3c1 (AC 1, `4-3c/R19`): the minion's OWN three attack-phase move-speed multipliers —
-## the unit-side parallel of the hero's `attack_<phase>_move_speed_multiplier` triplet (50-52),
-## scaling a unit's approach speed while it is WINDUP / ACTIVE / RECOVERY. Authored 0.0 = full
-## root, the same design value (not a missing one) the hero's three carry, so the audit bound is
-## non-negative rather than > 0.
+## A MULTIPLIER ON THE DERIVED PER-TICK RATE, applied at the regen seat — NOT a second authored
+## rate and NOT a per-pool bound. The `3-1/R2` per-pool reload contract governs POOL BOUNDS
+## (stamina: `set_maximum` + `refill`), and a regen multiplier is not a bound; deriving a per-player
+## rate at `apply_balance()` instead would make the accelerator's effect depend on when a reload
+## happened rather than on whether the totem is alive right now.
 ##
-## THREE NEW FIELDS RATHER THAN REUSING THE HERO'S THREE, which is AC 1's whole content: sharing
-## the hero's keys would permanently couple minion feel to hero feel — a later hero retune would
-## silently retune every minion, with no way to diverge the two without a migration.
-##
-## NO LUNGE TWIN, and that is an explicit non-goal, not a forgotten field: the hero's
-## `attack_lunge_distance` (61) is a SEPARATE additive velocity term, and mirroring it would
-## reintroduce committed movement during the swing through a different door than the one this
-## story closes.
-##
-## Scalars, NOT tick-domain — never on `BalanceTicks`. Carrying no `_seconds` suffix, half (b) of
-## the reflective guard leaves them alone; the obligations that DO apply are the two AC 3 names:
-## an entry apiece in `E1_BALANCE_FIELDS` (`test_data_resources.gd`, hand-maintained — half (a)
-## fails until they are listed) and the minion-side non-negative audit in
-## `test_balance_authoring.gd`.
-@export var minion_attack_windup_move_speed_multiplier: float = 0.0
-@export var minion_attack_active_move_speed_multiplier: float = 0.0
-@export var minion_attack_recovery_move_speed_multiplier: float = 0.0
+## AUDITED > 1.0, not merely > 0: AC 21 requires the rate to be RAISED ABOVE its non-accelerated
+## value, so an authored 1.0 (or less) ships a totem that does nothing, or actively harms its owner,
+## while every test stays green. A value of exactly 1.0 is the identity and is what a hero WITHOUT
+## the totem effectively runs at — that is the comparison the AC names.
+@export var stamina_accelerator_regen_multiplier: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0
@@ -288,3 +269,43 @@ extends Resource
 ## DATA FIELD ONLY. No E1 code path enters STUNNED — attacker-stun-on-deflect is OPEN
 ## decision (a) in the GDD decision log, and authoring this duration does NOT resolve it.
 @export var stun_seconds: float = 0.0
+
+
+## Story 4-4 (AC 1/AC 2): the sentinel a failed kind lookup returns. NOT -1 by coincidence — it is
+## the same "no such thing" answer `TargetingService.NO_TARGET_SLOT` and `HERO_INDEX` use in the
+## addressing space next door, and every reader tests against the NAME rather than against a bare
+## -1 so the two spaces never get confused at a call site.
+const NO_KIND_INDEX := -1
+
+
+## The plain INT INDEX of the kind carrying `name`, or `NO_KIND_INDEX` when the authored list holds
+## none. This is the ONE place a kind NAME becomes a kind INDEX, and the index is what crosses into
+## the unit record and therefore into the determinism snapshot.
+##
+## NEVER A FALLBACK TO ANOTHER KIND, the `TargetingService.priority_named` contract verbatim:
+## substituting a different kind for a missing one would change what the card summons without
+## anything saying so. The miss reaches the cast seat as `NO_KIND_INDEX`, which resolves the cast
+## successfully (mana spent, card discarded — `4-1/R3`'s "nothing below the verdict is conditional")
+## while putting NO record on the board.
+##
+## FIRST MATCH IN AUTHORED ORDER, so a duplicated name resolves deterministically. Names are
+## COMPARED as StringNames and never SORTED — `Array[StringName].sort()` orders by INTERNAL POINTER
+## on this engine (player_state.gd:77, 206-207), so a name may be compared but must never decide an
+## order.
+func kind_index_of(name: StringName) -> int:
+	for i in unit_kinds.size():
+		var kind := unit_kinds[i]
+		if kind != null and kind.kind_name == name:
+			return i
+	return NO_KIND_INDEX
+
+
+## The kind profile at `index`, or NULL for a `NO_KIND_INDEX` / out-of-range index. The total-
+## function shape `UnitKindProfile.attack_at` and `TargetingService.priority_named` both use: an
+## out-of-range read here means a record was written under a different authored list than the one
+## being read now (a mid-match X3 reload that shortened `unit_kinds`), and every seat handles a
+## null kind as "this unit does nothing" rather than crashing the tick.
+func kind_at(index: int) -> UnitKindProfile:
+	if index < 0 or index >= unit_kinds.size():
+		return null
+	return unit_kinds[index]

@@ -54,12 +54,10 @@ func test_conversion_covers_every_seconds_field() -> void:
 		"roll_iframe_seconds": 0.3,
 		"roll_duration_seconds": 0.5,
 		"stun_seconds": 0.6,
-		# Story 4-3b (AC 1): the unit attack rhythm converts like every sibling above, and the
-		# three are listed HERE as well as in the reflective guard because this file is the one
-		# that pins the ARITHMETIC (0.5 s * 60 Hz = 30) rather than merely "something was derived".
-		"minion_attack_windup_seconds": 0.5,
-		"minion_attack_active_seconds": 0.2,
-		"minion_attack_recovery_seconds": 0.8,
+		# Story 4-4 (AC 20): the Mana Accelerator cadence converts like every sibling above, but
+		# CLAMPED to at least one tick — it is a modulo divisor on the tick ladder, the
+		# `minion_retarget_interval_seconds` shape rather than the plain-duration shape.
+		"mana_accelerator_interval_seconds": 0.25,
 	}))
 	assert_eq(t.stamina_regen_delay_ticks, 48)
 	assert_eq(t.attack_windup_ticks, 15)
@@ -70,9 +68,80 @@ func test_conversion_covers_every_seconds_field() -> void:
 	assert_eq(t.roll_iframe_ticks, 18)
 	assert_eq(t.roll_duration_ticks, 30)
 	assert_eq(t.stun_ticks, 36, "stun converts like any duration (DATA ONLY in E1)")
-	assert_eq(t.minion_attack_windup_ticks, 30)
-	assert_eq(t.minion_attack_active_ticks, 12)
-	assert_eq(t.minion_attack_recovery_ticks, 48)
+	assert_eq(t.mana_accelerator_interval_ticks, 15)
+
+
+## Story 4-4 (AC 11): the PER-KIND half of the conversion, pinned HERE as ARITHMETIC — the same job
+## the three `minion_attack_*_ticks` assertions above used to do, for the fields that replaced them.
+## `test_data_resources.gd`'s reflective arm proves every per-kind duration IS derived; this proves
+## the derived numbers are the RIGHT numbers, which reflection cannot.
+##
+## TWO KINDS WITH DIFFERENT DURATIONS, deliberately, and neither sharing a value with the other:
+## a conversion that derived kind 0's record for every kind — or that flattened the list back to one
+## shared triplet — would return the same numbers for both and pass a single-kind test.
+func test_conversion_covers_every_per_kind_seconds_field() -> void:
+	var minion := UnitAttackProfile.new()
+	minion.windup_seconds = 0.5      # 30 ticks
+	minion.active_seconds = 0.2      # 12
+	minion.recovery_seconds = 0.8    # 48
+	minion.cadence_seconds = 0.0     # 0 — the back-to-back authoring, NOT clamped to 1
+	var projectile := ProjectileProfile.new()
+	projectile.acceleration_delay_seconds = 0.4   # 24
+	var totem := UnitAttackProfile.new()
+	totem.windup_seconds = 0.9       # 54
+	totem.active_seconds = 0.25      # 15
+	totem.recovery_seconds = 0.1     # 6
+	totem.cadence_seconds = 2.0      # 120
+	totem.projectile = projectile
+	var kind_a := UnitKindProfile.new()
+	kind_a.kind_name = &"minion"
+	kind_a.attacks = [minion]
+	var kind_b := UnitKindProfile.new()
+	kind_b.kind_name = &"combat_totem"
+	kind_b.attacks = [totem]
+	var config := BalanceConfig.new()
+	config.unit_kinds = [kind_a, kind_b]
+	var t := BalanceTicks.from_config(config)
+	var a := t.kind_ticks_at(0).attack_at(0)
+	assert_eq(a.windup_ticks, 30)
+	assert_eq(a.active_ticks, 12)
+	assert_eq(a.recovery_ticks, 48)
+	assert_eq(a.cadence_ticks, 0,
+		"a zero authored cadence derives ZERO ticks, NOT a clamped 1 — it is a duration, not a "
+		+ "modulo divisor, and zero is the back-to-back authoring every minion ships with")
+	var b := t.kind_ticks_at(1).attack_at(0)
+	assert_eq(b.windup_ticks, 54, "the SECOND kind derives its OWN windup, not the first kind's")
+	assert_eq(b.active_ticks, 15)
+	assert_eq(b.recovery_ticks, 6)
+	assert_eq(b.cadence_ticks, 120)
+	assert_eq(b.projectile_acceleration_delay_ticks, 24,
+		"a projectile's acceleration delay crosses the SAME single boundary (A1) — no second "
+		+ "conversion point is authored for it")
+	assert_eq(a.projectile_acceleration_delay_ticks, 0,
+		"a melee record authors no projectile, so its delay derives 0 and nothing reads it")
+
+
+## Story 4-4 (AC 11): the derived per-kind structure is INDEX-ALIGNED with `BalanceConfig.unit_kinds`
+## and stays aligned across a NULL entry, which is what stops a shortened or holed authored list
+## from silently repointing every board record's kind index at a different kind.
+func test_per_kind_conversion_stays_index_aligned_across_a_null_kind() -> void:
+	var real := UnitAttackProfile.new()
+	real.windup_seconds = 0.5
+	var kind := UnitKindProfile.new()
+	kind.kind_name = &"real"
+	kind.attacks = [real]
+	var config := BalanceConfig.new()
+	config.unit_kinds = [null, kind]
+	var t := BalanceTicks.from_config(config)
+	assert_eq(t.unit_kind_ticks.size(), 2,
+		"a null authored kind derives an EMPTY record set, never a skipped entry — skipping would "
+		+ "shift every later kind's index by one")
+	assert_null(t.kind_ticks_at(0).attack_at(0), "the null kind derives no attack record")
+	assert_eq(t.kind_ticks_at(1).attack_at(0).windup_ticks, 30,
+		"the kind at index 1 is still read at index 1")
+	assert_null(t.kind_ticks_at(2), "an out-of-range kind index reads null, never a wrapped entry")
+	assert_null(t.kind_ticks_at(BalanceConfig.NO_KIND_INDEX),
+		"NO_KIND_INDEX reads null on the tick side exactly as it does on the config side")
 
 
 ## Story 1-4 (AC 1): the load-time derived RATE field — per-second authoring value over
@@ -195,11 +264,48 @@ func test_reload_bypasses_the_resource_cache_and_hands_back_a_fresh_instance() -
 		if int(prop["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE == 0:
 			continue
 		compared += 1
+		# Story 4-4: `unit_kinds` holds RESOURCE instances, so a scalar `assert_eq` on it compares
+		# OBJECT IDENTITY and fails on a genuinely fresh deep re-read — which is the very property
+		# this test exists to prove. It is compared FIELD BY FIELD below instead, and the identity
+		# difference is asserted rather than tolerated.
+		if String(prop["name"]) == "unit_kinds":
+			continue
 		assert_eq(second.get(prop["name"]), first.get(prop["name"]),
 			"reloaded value differs for %s — the re-read must be a fresh INSTANCE, not fresh DATA"
 					% prop["name"])
 	assert_true(compared > 10,
 		"the property walk must actually visit BalanceConfig's authored fields (got %d)" % compared)
+	# Story 4-4: the NESTED half of the same contract, and it is STRONGER than the scalar walk above
+	# rather than an exemption from it. A deep reload must produce (i) the same authored VALUES and
+	# (ii) genuinely different sub-resource INSTANCES — a cached sub-resource would make a live edit
+	# to a kind's numbers silently ignored while the top-level object looked fresh, which is exactly
+	# the X3 failure this whole test exists to catch, one level down.
+	assert_eq(second.unit_kinds.size(), first.unit_kinds.size(),
+		"the reloaded config authors the same number of unit kinds")
+	assert_true(first.unit_kinds.size() > 0,
+		"the authored config must carry unit kinds, or the nested half of this test is vacuous")
+	for i in first.unit_kinds.size():
+		var a: UnitKindProfile = first.unit_kinds[i]
+		var b: UnitKindProfile = second.unit_kinds[i]
+		assert_false(a == b,
+			"kind %d must be a FRESH sub-resource instance — a cached one would ignore a live edit "
+			+ "to that kind's numbers" % i)
+		assert_eq(b.kind_name, a.kind_name, "kind %d reloaded under the same name" % i)
+		assert_eq(b.max_hp, a.max_hp, "kind %d reloaded the same max_hp" % i)
+		assert_eq(b.move_speed, a.move_speed, "kind %d reloaded the same move_speed" % i)
+		assert_eq(b.priority_name, a.priority_name, "kind %d reloaded the same priority" % i)
+		assert_eq(b.attacks.size(), a.attacks.size(), "kind %d reloaded the same attack count" % i)
+		for j in a.attacks.size():
+			var attack_a: UnitAttackProfile = a.attacks[j]
+			var attack_b: UnitAttackProfile = b.attacks[j]
+			assert_false(attack_a == attack_b,
+				"kind %d attack %d must be a FRESH sub-resource instance too" % [i, j])
+			assert_eq(attack_b.windup_seconds, attack_a.windup_seconds)
+			assert_eq(attack_b.active_seconds, attack_a.active_seconds)
+			assert_eq(attack_b.recovery_seconds, attack_a.recovery_seconds)
+			assert_eq(attack_b.cadence_seconds, attack_a.cadence_seconds)
+			assert_eq(attack_b.range, attack_a.range)
+			assert_eq(attack_b.damage, attack_a.damage)
 	# The other half, and what makes the first assertion about the CACHE MODE rather than about
 	# load() being unpredictable: a plain load() of the same path DOES hand back one instance.
 	var cached_a: BalanceConfig = load(config_path)

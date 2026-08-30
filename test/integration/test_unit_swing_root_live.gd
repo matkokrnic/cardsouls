@@ -136,21 +136,27 @@ func _physics_process(_delta: float) -> bool:
 		# THE AUTHORED VALUES, read off the config the runner APPLIED -- the same handle the
 		# approach seat reads at point of use, so this measures what shipped rather than a constant
 		# copied into the test.
-		_speed = _state.balance.unit_move_speed
-		_stop_distance = _state.balance.unit_stop_distance
+		# Story 4-4 (AC 6): PER KIND now, resolved BY NAME. This file measures a walking MINION, so a
+		# reordered `unit_kinds` that put a static totem at index 0 must fail loudly here.
+		var kind: UnitKindProfile = _state.balance.kind_at(
+			_state.balance.kind_index_of(&"minion"))
+		if kind == null:
+			return _finish(false, "authored balance carries no `minion` kind -- nothing to root")
+		_speed = kind.move_speed
+		_stop_distance = kind.stop_distance
 		_ticks_per_second = maxf(Engine.physics_ticks_per_second, 1.0)
 		if _speed <= 0.0 or _stop_distance <= 0.0:
 			return _finish(false, "authored balance ships the mechanic invisible: "
-					+ "unit_move_speed=%f unit_stop_distance=%f" % [_speed, _stop_distance])
+					+ "minion move_speed=%f stop_distance=%f" % [_speed, _stop_distance])
 		# THE POSITIVE CONTROL FOR THE ROOT: all three authored multipliers must be 0.0, or
 		# "displacement is exactly 0.0" is not what the authored data actually asks for and this
-		# file would be asserting a number nobody authored.
-		for field in [&"minion_attack_windup_move_speed_multiplier",
-				&"minion_attack_active_move_speed_multiplier",
-				&"minion_attack_recovery_move_speed_multiplier"]:
-			if float(_state.balance.get(field)) != 0.0:
-				return _finish(false, ("authored %s is %f, not the 0.0 full root this file "
-						+ "measures") % [field, float(_state.balance.get(field))])
+		# file would be asserting a number nobody authored. Story 4-4: read off the KIND.
+		for field in [&"attack_windup_move_speed_multiplier",
+				&"attack_active_move_speed_multiplier",
+				&"attack_recovery_move_speed_multiplier"]:
+			if float(kind.get(field)) != 0.0:
+				return _finish(false, ("authored minion %s is %f, not the 0.0 full root this file "
+						+ "measures") % [field, float(kind.get(field))])
 		_expected_idle_travel = _speed / _ticks_per_second
 	if _frames == 2:
 		_state.p1.mana.add(_state.p1.mana.get_maximum())

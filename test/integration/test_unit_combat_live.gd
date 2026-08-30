@@ -101,10 +101,18 @@ func _physics_process(_delta: float) -> bool:
 		_state = _runner._match_state if _runner != null else null
 		if _runner == null or _state == null:
 			return _fail("missing: runner=%s state=%s" % [_runner, _state])
-		_unit_max_hp = _state.balance.unit_max_hp
-		if _unit_max_hp <= 0.0 or _state.balance.unit_damage_per_hit <= 0.0:
-			return _fail("authored balance ships the mechanic invisible: unit_max_hp=%f damage=%f"
-					% [_unit_max_hp, _state.balance.unit_damage_per_hit])
+		# Story 4-4 (AC 6/AC 9): the unit maximum is PER KIND, and the damage a HERO swing takes off
+		# a unit is `hero_damage_to_unit` — the hero-attacker half of the old `unit_damage_per_hit`
+		# (see `MatchState._damage_against_unit`). This file drives a HERO killing a minion, so it is
+		# the hero-side field that must be non-zero here.
+		var kind: UnitKindProfile = _state.balance.kind_at(
+			_state.balance.kind_index_of(&"minion"))
+		if kind == null:
+			return _fail("authored balance carries no `minion` kind -- nothing to kill")
+		_unit_max_hp = kind.max_hp
+		if _unit_max_hp <= 0.0 or _state.balance.hero_damage_to_unit <= 0.0:
+			return _fail("authored balance ships the mechanic invisible: minion max_hp=%f damage=%f"
+					% [_unit_max_hp, _state.balance.hero_damage_to_unit])
 		# The swing cadence, derived from the AUTHORED action durations (`4-3/R22` discipline).
 		var ticks := _state.balance_ticks
 		_swing_period = ticks.attack_windup_ticks + ticks.attack_active_ticks \
@@ -157,8 +165,17 @@ func _physics_process(_delta: float) -> bool:
 			return _fail("spawn failed: p1_board=%d p2_board=%d p1_actor=%s p2_actor=%s"
 					% [_state.p1.units.size(), _state.p2.units.size(),
 						_unit_actor(0, 0), _unit_actor(1, 0)])
+		# Story 4-4 (AC 1/AC 6): "full health" is THE SUMMONED UNIT'S OWN KIND's maximum now, not one
+		# shared global. This file casts whichever card the shuffle put in the chosen hand slot, and
+		# with the totem/minion split shipped that card may summon a TOTEM (max_hp 12.0) rather than
+		# a minion (9.0) — so comparing against the minion's maximum would fail on a correct build.
+		# The unit's own kind is read off its record, which is exactly the indirection the story
+		# introduced.
+		var summoned_kind: UnitKindProfile = _state.balance.kind_at(
+			_state.p2.units.kind_index_at(0))
+		var summoned_max_hp := summoned_kind.max_hp if summoned_kind != null else 0.0
 		_enemy_started_alive = _state.p2.units.is_alive_at(0) \
-				and is_equal_approx(_state.p2.units.hp_at(0), _unit_max_hp)
+				and is_equal_approx(_state.p2.units.hp_at(0), summoned_max_hp)
 		if not _enemy_started_alive:
 			_detail += " enemy_not_at_full(hp=%.2f);" % _state.p2.units.hp_at(0)
 		_next_swing_frame = PLACE_FRAME + 1

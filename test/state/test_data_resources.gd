@@ -48,31 +48,27 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# `_seconds` suffix, so half (b) of the reflection guard below leaves them alone (they have no
 	# `BalanceTicks` counterpart by design) — but half (a) fails until they are listed here, which
 	# is the guard working exactly as 3-5b built it to.
-	"unit_move_speed", "unit_stop_distance",
-	# Story 4-3a (AC 1/AC 2, `4-3a/R8`): the unit's authored MAXIMUM HP and the DEDICATED FLAT
-	# damage one hero swing takes off it. Neither carries the `_seconds` suffix, so half (b) of the
-	# reflection guard below leaves them alone; half (a) fails until they are listed here.
+	# Story 4-4 (AC 6/AC 11): ELEVEN ENTRIES LEFT THIS LIST — `unit_move_speed`,
+	# `unit_stop_distance`, `unit_max_hp`, `unit_damage_per_hit`, `minion_attack_windup_seconds`,
+	# `minion_attack_active_seconds`, `minion_attack_recovery_seconds`,
+	# `minion_attack_reach_distance` and the three `minion_attack_*_move_speed_multiplier`s. They are
+	# per-KIND now, and reflection half (a) below would fail on any that stayed listed here (the list
+	# is audited in BOTH directions). Their successors are audited by the PER-KIND guard at the
+	# bottom of this file, which is AC 11's actual requirement rather than a like-for-like swap.
 	#
-	# THE FLAT FIELD IS THE WHOLE POINT OF `4-3a/R8` AND NOT A DUPLICATE OF
-	# `attack_damage_percent_of_max_hp`: that field is a percentage of the TARGET's own maximum, so
-	# reusing it against a unit's own authored maximum would make hits-to-kill a CONSTANT (34, at
-	# the authored 3.0%) for every possible authored unit maximum, and `unit_max_hp` would be
-	# cosmetic. A flat value is what makes the authored maximum decide anything.
-	"unit_max_hp", "unit_damage_per_hit",
-	# Story 4-3b (AC 1): the unit ATTACK RHYTHM. The three durations DO carry the `_seconds` suffix,
-	# so half (b) below demands a stem-matched `_ticks` twin filled by `BalanceTicks.from_config()`
-	# for each — that is the whole reason AC 1 spells the three identifiers out rather than leaving
-	# the naming to the dev pass. `minion_attack_reach_distance` carries no suffix and is left alone
-	# by half (b), exactly like `unit_stop_distance` above; half (a) fails until it is listed here.
-	"minion_attack_windup_seconds", "minion_attack_active_seconds",
-	"minion_attack_recovery_seconds", "minion_attack_reach_distance",
-	# Story 4-3c1 (AC 1/AC 3, `4-3c/R19`): the minion's own three attack-phase move-speed
-	# multipliers. None carries the `_seconds` suffix, so half (b) below leaves them alone exactly
-	# as it leaves `minion_attack_reach_distance` alone; half (a) fails until all three are listed
-	# HERE, BY HAND — this literal is not derived from anything, which is the reason the story
-	# spells the task out rather than assuming the reflective guard would supply them.
-	"minion_attack_windup_move_speed_multiplier", "minion_attack_active_move_speed_multiplier",
-	"minion_attack_recovery_move_speed_multiplier",
+	# `hero_damage_to_unit` is NOT one of the eleven and is NOT a survivor of `unit_damage_per_hit`:
+	# it is the HERO-attacker half of a field that always had two different readers (see its comment
+	# on BalanceConfig and `MatchState._damage_against_unit`), so it stays a flat global and is
+	# audited here.
+	"hero_damage_to_unit",
+	# Story 4-4 (AC 20/AC 21): the two accelerator faucets' numbers. `ResourceGenerationRule` forbids
+	# a rule carrying its own amount, so the Mana Accelerator's amount and cadence live here and the
+	# authored `.tres` names the first of them. The Stamina Accelerator's factor is applied at the
+	# regen seat and has no rule at all (no `STAMINA` resource exists through that seam — the story's
+	# B8 correction), so it is a plain global too. The cadence carries the `_seconds` suffix, so half
+	# (b) below demands a stem-matched `mana_accelerator_interval_ticks` on `BalanceTicks`.
+	"mana_accelerator_mana", "mana_accelerator_interval_seconds",
+	"stamina_accelerator_regen_multiplier",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",
@@ -144,6 +140,146 @@ func test_balance_config_field_lists_are_complete_by_reflection() -> void:
 	assert_eq(underived.size(), 0,
 		"*_seconds field with no derived value out of BalanceTicks.from_config() — it would read "
 		+ "0 ticks in the tick ladder and never fire: %s" % ", ".join(underived))
+
+
+## Story 4-4 (AC 11): the PER-KIND ARM of the guard above, and the reason it exists rather than the
+## eleven removed entries simply being deleted from `E1_BALANCE_FIELDS`.
+##
+## AC 11 does not ask for the audit to shrink. It asks that the three named files "are all updated
+## to match the per-kind field set", because "per-kind durations must still cross the
+## seconds-to-ticks boundary through the single named `BalanceTicks.from_config()` point". The guard
+## above reflects over `BalanceConfig` ONLY, so the moment a duration moved onto `UnitAttackProfile`
+## it left that guard's sight — and a `windup_seconds` that `from_config()` forgot to convert would
+## read 0 ticks in the tick ladder with nothing failing, which is exactly the hole story 3-5b built
+## the reflective guard to close in the first place.
+##
+## THE THREE PER-KIND SCHEMAS ARE AUDITED THE SAME TWO WAYS:
+##   (a) every script-declared float/int on each is LISTED below, hand-maintained and checked in
+##       both directions, exactly as `E1_BALANCE_FIELDS` is.
+##   (b) every `*_seconds` property on them is DERIVED by `BalanceTicks.from_config()` — probed by
+##       authoring one distinctive value across all of them and reading the tick-domain counterpart
+##       back out of the per-kind structure, so a field the conversion forgets reads 0, not 30.
+##
+## MUTATION, both halves: drop `cadence_seconds` from `UNIT_ATTACK_FIELDS` and (a) fails; delete its
+## line in `BalanceTicks._kind_ticks` and (b) fails.
+const UNIT_KIND_FIELDS: Array[String] = [
+	"move_speed", "stop_distance", "max_hp",
+	"attack_windup_move_speed_multiplier", "attack_active_move_speed_multiplier",
+	"attack_recovery_move_speed_multiplier",
+]
+
+const UNIT_ATTACK_FIELDS: Array[String] = [
+	"windup_seconds", "active_seconds", "recovery_seconds", "cadence_seconds",
+	"range", "damage",
+]
+
+const PROJECTILE_FIELDS: Array[String] = [
+	"launch_speed", "homing_turn_rate_degrees_per_second", "acceleration_delay_seconds",
+	"acceleration_per_second_squared", "max_speed", "travel_budget",
+]
+
+## Half (a) for the three per-kind schemas: reflection finds every declared tunable, and each must
+## be listed above. StringName and Resource properties (`kind_name`, `priority_name`, `attacks`,
+## `projectile`) are NOT tunables and are skipped by the same float/int filter the `BalanceConfig`
+## guard uses.
+func test_per_kind_schema_field_lists_are_complete_by_reflection() -> void:
+	_assert_declared_fields_listed(UnitKindProfile.new(), UNIT_KIND_FIELDS, "UnitKindProfile")
+	_assert_declared_fields_listed(UnitAttackProfile.new(), UNIT_ATTACK_FIELDS, "UnitAttackProfile")
+	_assert_declared_fields_listed(ProjectileProfile.new(), PROJECTILE_FIELDS, "ProjectileProfile")
+
+
+## Half (b): every per-kind `*_seconds` field crosses the seconds-to-ticks boundary at the single
+## named point. 0.5 s x 60 Hz = 30 ticks, distinct from every default, so an unconverted field
+## (which reads 0) is unmistakable.
+func test_per_kind_durations_are_converted_by_from_config() -> void:
+	var projectile := ProjectileProfile.new()
+	var attack := UnitAttackProfile.new()
+	attack.projectile = projectile
+	var kind := UnitKindProfile.new()
+	kind.kind_name = &"probe"
+	kind.attacks = [attack]
+	var config := BalanceConfig.new()
+	config.unit_kinds = [kind]
+	# Author 0.5 across every `*_seconds` the two nested schemas declare, found by reflection rather
+	# than by hand, so a NEW duration added to either schema is covered the day it is added.
+	var attack_durations := _declared_seconds(attack)
+	var projectile_durations := _declared_seconds(projectile)
+	assert_true(attack_durations.size() > 0,
+		"no *_seconds on UnitAttackProfile (half (b) would be vacuous)")
+	assert_true(projectile_durations.size() > 0,
+		"no *_seconds on ProjectileProfile (half (b) would be vacuous)")
+	for name in attack_durations:
+		attack.set(name, 0.5)
+	for name in projectile_durations:
+		projectile.set(name, 0.5)
+	var ticks := BalanceTicks.from_config(config)
+	var derived := ticks.kind_ticks_at(0)
+	assert_not_null(derived,
+		"from_config() derived no tick record set for an authored kind — the per-kind conversion "
+		+ "is not index-aligned with BalanceConfig.unit_kinds")
+	var record := derived.attack_at(0)
+	assert_not_null(record, "from_config() derived no tick record for an authored attack")
+	# The four attack durations, named explicitly: the derived twin does not carry the `_seconds`
+	# stem verbatim (`windup_seconds` -> `windup_ticks`), so the stem rewrite the BalanceConfig guard
+	# uses applies here too, and every one of them must read 30.
+	var underived: Array[String] = []
+	for pair in [["windup_seconds", record.windup_ticks], ["active_seconds", record.active_ticks],
+			["recovery_seconds", record.recovery_ticks],
+			["cadence_seconds", record.cadence_ticks],
+			["acceleration_delay_seconds", record.projectile_acceleration_delay_ticks]]:
+		if int(pair[1]) != 30:
+			underived.append(String(pair[0]))
+	assert_eq(underived.size(), 0,
+		"per-kind *_seconds field with no derived value out of BalanceTicks.from_config() — it "
+		+ "would read 0 ticks in the tick ladder and never fire: %s" % ", ".join(underived))
+	# COMPLETENESS: every reflected duration above is one of the five asserted, so a NEW `*_seconds`
+	# field added to either schema fails HERE rather than silently escaping the arithmetic pin.
+	var asserted := ["windup_seconds", "active_seconds", "recovery_seconds", "cadence_seconds",
+			"acceleration_delay_seconds"]
+	var unasserted: Array[String] = []
+	for name in attack_durations + projectile_durations:
+		if not asserted.has(name):
+			unasserted.append(name)
+	assert_eq(unasserted.size(), 0,
+		"per-kind *_seconds field with no arithmetic assertion above — add its derived twin to the "
+		+ "pairs list or it converts unaudited: %s" % ", ".join(unasserted))
+
+
+func _assert_declared_fields_listed(probe: Resource, listed: Array[String], label: String) -> void:
+	var declared := _declared_tunables(probe)
+	assert_true(declared.size() > 0, "reflection found no %s fields (the guard would be vacuous)" % label)
+	var unlisted: Array[String] = []
+	for name in declared:
+		if not listed.has(name):
+			unlisted.append(name)
+	assert_eq(unlisted.size(), 0,
+		"%s field missing from its audit list — it ships unaudited: %s" % [label, ", ".join(unlisted)])
+	var stale: Array[String] = []
+	for name in listed:
+		if not declared.has(name):
+			stale.append(name)
+	assert_eq(stale.size(), 0,
+		"%s audit list names a field the schema no longer declares: %s" % [label, ", ".join(stale)])
+
+
+func _declared_tunables(probe: Resource) -> Array[String]:
+	var out: Array[String] = []
+	for p in probe.get_property_list():
+		if int(p["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE == 0:
+			continue
+		var kind := int(p["type"])
+		if kind != TYPE_FLOAT and kind != TYPE_INT:
+			continue
+		out.append(String(p["name"]))
+	return out
+
+
+func _declared_seconds(probe: Resource) -> Array[String]:
+	var out: Array[String] = []
+	for name in _declared_tunables(probe):
+		if name.ends_with("_seconds"):
+			out.append(name)
+	return out
 
 
 func test_camera_config_tres_loads_with_framing_fields() -> void:

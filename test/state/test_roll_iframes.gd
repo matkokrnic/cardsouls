@@ -251,12 +251,11 @@ func test_snapshot_gains_roll_direction_and_excludes_the_transient() -> void:
 
 func _config_4_3b_iframes() -> BalanceConfig:
 	var c := _config()
-	c.unit_max_hp = 9.0
-	c.unit_damage_per_hit = 3.0
-	c.minion_attack_windup_seconds = 2.0 / 60.0
-	c.minion_attack_active_seconds = 6.0 / 60.0
-	c.minion_attack_recovery_seconds = 4.0 / 60.0
-	c.minion_attack_reach_distance = 2.0
+	# Story 4-4 (AC 6/AC 9): per-kind now. Same in-test literals, new shape (see UnitKindFixture) —
+	# including this file's deliberately LONGER active window (6 ticks), which several i-frame tests
+	# depend on to keep a unit's hitbox open across a whole roll.
+	c.unit_kinds = UnitKindFixture.minion_only(9.0, 3.0, 2, 6, 4, 2.0)
+	c.hero_damage_to_unit = 3.0
 	c.minion_retarget_interval_seconds = 1000.0
 	return c
 
@@ -282,7 +281,7 @@ func _tick_4_3b(ms: MatchState, p2_presses: Array = []) -> void:
 
 ## P2 is the TARGET here, so P1 owns the attacking unit.
 func _unit_into_active_4_3b(ms: MatchState) -> void:
-	ms.p1.units.add(9.0)
+	ms.p1.units.add(9.0, 0)
 	ms.p1.units.set_target_at(0, 1, -1)
 	ms.push_contact([0, 0], [1, -1], 0, Vector2.DOWN, MatchState.CONTACT_REACH_PROBE)
 	_tick_4_3b(ms)

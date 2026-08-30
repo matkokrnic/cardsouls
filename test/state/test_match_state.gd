@@ -324,18 +324,44 @@ func test_round_started_pushed_once_per_debug_reset() -> void:
 ## (or any shared value), a wrong-field bug — WINDUP reading the RECOVERY field, say — would return
 ## the same number and this test could not tell. Distinct values make the return value name which
 ## field was actually read.
+##
+## STORY 4-4 (AC 6): THE THREE FIELDS ARE PER KIND NOW and the seat takes the asking unit's KIND
+## INDEX, so this test authors TWO kinds with DIFFERENT multipliers and asserts each index reads its
+## own. That is a strictly stronger version of the same argument the paragraph above makes: three
+## distinct values per kind name which FIELD was read, and two distinct kinds name which KIND was
+## read. A per-kind lookup that ignored the index would return kind 0's numbers for kind 1 and fail
+## here.
 func test_unit_attack_phase_multiplier_selects_the_right_field() -> void:
 	var config := BalanceConfig.new()
-	config.minion_attack_windup_move_speed_multiplier = 0.25
-	config.minion_attack_active_move_speed_multiplier = 0.5
-	config.minion_attack_recovery_move_speed_multiplier = 0.75
+	var slow := UnitKindFixture.melee(&"minion", 9.0, 3.0, 0, 0, 0, 2.0)
+	slow.attack_windup_move_speed_multiplier = 0.25
+	slow.attack_active_move_speed_multiplier = 0.5
+	slow.attack_recovery_move_speed_multiplier = 0.75
+	var fast := UnitKindFixture.melee(&"combat_totem", 9.0, 3.0, 0, 0, 0, 8.0)
+	fast.attack_windup_move_speed_multiplier = 0.1
+	fast.attack_active_move_speed_multiplier = 0.2
+	fast.attack_recovery_move_speed_multiplier = 0.3
+	config.unit_kinds = [slow, fast]
 	var ms := MatchState.new(MatchParams.new(1))
 	ms.apply_balance(config)
-	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.IDLE), 1.0,
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.IDLE, 0), 1.0,
 		"IDLE returns the identity, EXPLICITLY -- not a field lookup (4-3c1/R2)")
-	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP), 0.25,
-		"WINDUP reads minion_attack_windup_move_speed_multiplier")
-	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE), 0.5,
-		"ACTIVE reads minion_attack_active_move_speed_multiplier")
-	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.RECOVERY), 0.75,
-		"RECOVERY reads minion_attack_recovery_move_speed_multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP, 0), 0.25,
+		"WINDUP reads the asking kind's attack_windup_move_speed_multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE, 0), 0.5,
+		"ACTIVE reads the asking kind's attack_active_move_speed_multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.RECOVERY, 0), 0.75,
+		"RECOVERY reads the asking kind's attack_recovery_move_speed_multiplier")
+	# Story 4-4 (AC 6): the SECOND kind reads its OWN three, which is what makes the conversion from
+	# three shared globals to three per-kind fields non-vacuous.
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP, 1), 0.1,
+		"a second kind reads ITS OWN windup multiplier, not the first kind's")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE, 1), 0.2,
+		"a second kind reads ITS OWN active multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.RECOVERY, 1), 0.3,
+		"a second kind reads ITS OWN recovery multiplier")
+	# An unresolvable kind index yields FULL speed rather than a root — the graceful-degradation
+	# direction the seat documents (a shortened `unit_kinds` under a live record must not freeze it).
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP,
+			BalanceConfig.NO_KIND_INDEX), 1.0,
+		"an unresolvable kind runs at full speed, never rooted")

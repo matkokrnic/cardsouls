@@ -270,8 +270,10 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	var expected: Array = [
 		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
 		"pending_draw", "pending_draw_owed", "stamina",
-		"unit_attack_count", "unit_attack_dir", "unit_attack_phase", "unit_attack_ticks",
-		"unit_count", "unit_hp", "unit_in_reach", "unit_swing_dedupe", "unit_targets",
+		# Story 4-4 (AC 1/AC 10): two more — `unit_attack_cooldown` and `unit_kind`.
+		"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
+		"unit_attack_ticks",
+		"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_swing_dedupe", "unit_targets",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "
@@ -279,11 +281,12 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 18,
-		"the per-player snapshot key set is EIGHTEEN keys as of story 4-3b (twelve before it — the "
-		+ "six new keys are the unit attack rhythm: unit_attack_phase, unit_attack_ticks, "
-		+ "unit_attack_dir, unit_attack_count, unit_in_reach, unit_swing_dedupe; AC 16 / "
-		+ "`4-3b/R14` as amended)")
+	assert_eq(keys.size(), 20,
+		"the per-player snapshot key set is TWENTY keys as of story 4-4 (eighteen before it — the "
+		+ "two new keys are `unit_kind`, the per-record kind INDEX that makes a totem a distinct "
+		+ "on-board thing (AC 1), and `unit_attack_cooldown`, the firing-cadence countdown "
+		+ "(AC 10)). Both are plain ints: the kind's StringName NAME deliberately never reaches the "
+		+ "hash, because `Array[StringName].sort()` orders by internal POINTER on this engine")
 
 
 # --- Fixture ----------------------------------------------------------------------------------

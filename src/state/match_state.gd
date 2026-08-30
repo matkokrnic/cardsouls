@@ -748,12 +748,33 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState, intent:
 ## Nothing may start a corpse swinging either, so
 ## advancing its ladder would be state kept for no reader — and `is_alive_at` is the board's own
 ## liveness predicate, never a re-derived `hp > 0` (`4-3a/R14`).
+##
+## STORY 4-4 (AC 6/AC 9/AC 10): THE DURATIONS ARE PER-KIND NOW. The three flat
+## `balance_ticks.minion_attack_*_ticks` fields this seat used to read are gone; each unit's phase
+## lengths come from ITS OWN kind's attack record, resolved through the record's kind index and read
+## INLINE at the moment of use (CONSTRAINT C).
+##
+## A KIND THAT AUTHORS NO ATTACK NEVER ENTERS THE LADDER AT ALL (AC 3: "the accelerators never
+## attack"), and that is an AUTHORING fact rather than a code branch over kind names: the two
+## accelerator totems author an empty `attacks` list, `attack_ticks` resolves to null, and the unit
+## is skipped. It cannot wind up, cannot open a hitbox and cannot fire.
+##
+## A UNIT MID-SWING WHEN ITS KIND STOPS RESOLVING (an X3 reload that shortened `unit_kinds`) is
+## skipped too, which FREEZES it in its current phase rather than advancing it with invented
+## durations. That is the honest degradation: the phase countdown has already been ticked by step 2,
+## so the unit simply stops progressing rather than snapping to a phase no authored record describes.
 func _advance_unit_attacks(player: PlayerState) -> void:
 	if balance_ticks == null:
 		return
 	var board := player.units
 	for index in board.size():
 		if not board.is_alive_at(index):
+			continue
+		var kind_ticks := balance_ticks.kind_ticks_at(board.kind_index_at(index))
+		if kind_ticks == null:
+			continue
+		var attack_ticks := kind_ticks.attack_at(0)
+		if attack_ticks == null:
 			continue
 		if board.attack_phase_at(index) != UnitBoard.AttackPhase.IDLE \
 				and board.attack_ticks_at(index) == 0:
@@ -764,25 +785,42 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 					# still land" expressed for a unit. Keyed by the counter `begin_windup_at`
 					# returned, re-read here from the board so the two can never disagree.
 					board.set_phase_at(index, UnitBoard.AttackPhase.ACTIVE,
-							balance_ticks.minion_attack_active_ticks)
+							attack_ticks.active_ticks)
 					player.unit_dedupe.open(index, board.attack_count_at(index))
 				UnitBoard.AttackPhase.ACTIVE:
 					# The window closes and the record enters its single GRACE tick, absorbing the F1
 					# one-tick fact lag exactly as the hero's does: a contact gathered on the last
 					# active tick arrives the tick after close and is still legitimate.
 					board.set_phase_at(index, UnitBoard.AttackPhase.RECOVERY,
-							balance_ticks.minion_attack_recovery_ticks)
+							attack_ticks.recovery_ticks)
 					player.unit_dedupe.close(index)
 				UnitBoard.AttackPhase.RECOVERY:
 					board.set_phase_at(index, UnitBoard.AttackPhase.IDLE, 0)
+		# Story 4-4 (AC 10/AC 13): THE CADENCE GATE joins the two conditions that were already here,
+		# as a third AND rather than as a branch — a unit may begin its next attack only once its
+		# firing cooldown has expired. `is_attack_ready_at` is the board's own public predicate and
+		# nothing here re-derives `attack_cooldown_at(i) == 0` inline (the `has_index` /
+		# `is_alive_at` discipline: a guard consulting a copy is guarding the copy).
+		#
+		# AC 13's HOLD-FIRE FALLS OUT OF THE IN-REACH CONDITION ALREADY PRESENT, and needs no rung
+		# of its own — which is exactly `4-4/R10`'s "post-selection gate" rather than a distance
+		# based re-selection. The unit has ALREADY acquired its target by its authored priority
+		# (step 7); the reach probe measures that acquired target against this kind's authored
+		# `range` and only then sets the flag. A target held beyond range never sets it, so the
+		# totem never winds up, "regardless of how long it remains in that state" — there is no
+		# timeout path and no re-selection by distance anywhere in this file.
+		#
+		# THE SHIPPED MINION IS UNMOVED BY THE NEW CONDITION: it authors a 0.0 cadence, so its
+		# cooldown is 0 on the tick recovery ends and the third AND is already true.
 		if board.attack_phase_at(index) == UnitBoard.AttackPhase.IDLE \
-				and board.is_in_reach_at(index):
+				and board.is_in_reach_at(index) \
+				and board.is_attack_ready_at(index):
 			# CONSUMES the flag (inside `begin_windup_at`), which is its ONLY clearing path — there
 			# is no negative probe and absence of overlap is not a fact (AC 13's consequence (ii)).
 			# The locked direction needs no write here: it already holds the latest known heading to
 			# the acquired target, refreshed by the step-4 seat only while IDLE, and from this
 			# moment nothing writes it again until the swing ends. THAT FREEZE IS THE LOCK (AC 12).
-			board.begin_windup_at(index, balance_ticks.minion_attack_windup_ticks)
+			board.begin_windup_at(index, attack_ticks.windup_ticks, attack_ticks.cadence_ticks)
 
 
 ## Story 1-9 (1-9/R6): the entry-time roll direction — the same camera-rotated world
@@ -892,7 +930,22 @@ func _resolve_contacts() -> Array[int]:
 		if not _register_attacker_hit(attacker, attacker_index, int(fact["attack_index"]),
 				int(fact["target"]), TargetingService.HERO_INDEX):
 			continue
-		var damage := balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
+		# Story 4-4 (AC 9): DAMAGE AGAINST A HERO IS NOW ATTACKER-DERIVED TOO, and the unification is
+		# BIT-FOR-BIT BEHAVIOUR-PRESERVING at the shipped authoring rather than a retune. A HERO
+		# attacker still reads `attack_damage_percent_of_max_hp` against the target's own maximum —
+		# unchanged, so hero-versus-hero is the code it was. A UNIT attacker now reads ITS OWN KIND's
+		# attack-record damage, which is what AC 9 means by the record carrying damage: the record
+		# describes what THIS attack does, not what happens to be done to it.
+		#
+		# WHY IT MOVES NOTHING TODAY, MEASURED: the shipped minion's record authors 3.0 damage, and
+		# the value it replaces for a unit attacker was `attack_damage_percent_of_max_hp` (3.0) /
+		# 100 * hero `max_hp` (100.0) = 3.0. Identical. The golden therefore does not move on this
+		# line, which is why it is not one of this story's named re-baseline causes.
+		#
+		# IT IS ALSO WHAT MAKES THE PROJECTILE'S DAMAGE AUTHORED (AC 14/AC 15). Without it a Combat
+		# totem's shot would deal the HERO's own swing percentage — a number belonging to a different
+		# attacker entirely — and the totem's authored damage would decide nothing.
+		var damage := _damage_against_hero(attacker, attacker_index, target)
 		if target.hero.action_state == HeroState.ActionState.BLOCKING \
 				and _is_facing(target.hero, fact["dir"]):
 			if target.hero.is_deflect_window_open() and target.stamina.spend(
@@ -1128,7 +1181,7 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# `4-3a/R21a` narrowed the Open Question to rather than an assertion: step 1b returns from
 	# advance() before step 4 is ever reached, so a frozen tick never resolves a contact and
 	# therefore never kills a unit. Pinned in test_unit_damage_and_death.gd.
-	target.units.apply_damage_at(index, balance.unit_damage_per_hit)
+	target.units.apply_damage_at(index, _damage_against_unit(attacker, attacker_index))
 	# Review fix pass (4-3b, F2): a unit that DIES here can never close its own swing-dedupe
 	# record through the normal per-tick path again -- `_advance_unit_attacks` skips dead units
 	# entirely, so a corpse killed mid-ACTIVE-window would otherwise leave that record open
@@ -1137,6 +1190,64 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# a record, or one already closed and erased normally. See `UnitSwingDedupe.discard`.
 	if not target.units.is_alive_at(index):
 		target.unit_dedupe.discard(index)
+
+
+## Story 4-4 (AC 6/AC 9): what ONE confirmed hit against a unit takes off it, DISPATCHED ON ATTACKER
+## KIND — the successor to the single flat `balance.unit_damage_per_hit` this seat used to read.
+##
+## THE OLD FIELD HAD TWO READERS THAT WERE NEVER THE SAME FACT, and AC 6 splitting it is what makes
+## that visible. `4-3a/R8` created it for the HERO-versus-unit case ("the DEDICATED FLAT damage one
+## confirmed hero swing takes off a unit"); `4-3b`'s AC 17 then reused it for UNIT-versus-unit,
+## noting approvingly that "both attacker kinds read the same `unit_damage_per_hit`". AC 6 moves
+## damage-per-hit per kind and AC 9 puts it on the attack RECORD — which is the ATTACKER's property.
+## So the two readers separate:
+##
+##   * A UNIT ATTACKER deals ITS OWN KIND's authored attack damage. That is the per-kind conversion,
+##     and it is what makes a Combat totem's shot and a minion's swing differ without a branch.
+##   * A HERO ATTACKER deals `balance.hero_damage_to_unit` — the same flat number under a name that
+##     says whose damage it is. `4-3a/R8`'s reasoning for why it must be FLAT rather than
+##     `attack_damage_percent_of_max_hp` is UNCHANGED and now stronger: with `max_hp` itself per
+##     kind, a percentage would make hits-to-kill a constant across every authored kind and make
+##     every kind's authored maximum cosmetic.
+##
+## AN UNRESOLVABLE ATTACKER KIND DEALS NOTHING (0.0), the graceful-degradation direction every
+## authored-data miss in this project takes: a record written under an authored list that a live X3
+## reload has since shortened stops hurting anything rather than dealing an invented number. Same
+## answer for a kind that authors no attack — an accelerator totem cannot produce a strike fact in
+## the first place (it never winds up), so this branch is defence in depth.
+## Story 4-4 (AC 9): what one confirmed hit against a HERO takes off it, dispatched on attacker kind
+## — the twin of `_damage_against_unit` directly below, and the two are deliberately separate
+## functions rather than one with a target-kind parameter, because the HERO-attacker branches differ
+## in a way no shared expression captures: against a hero the attacker's own swing is a PERCENTAGE
+## of the target's maximum (`4-3a/R8`'s reasoning applies only to unit targets), while against a
+## unit it is the flat `hero_damage_to_unit`.
+##
+## THE HERO BRANCH IS UNTOUCHED CODE. `attack_damage_percent_of_max_hp / 100.0 * max_hp` is the
+## expression story 1-5 shipped and nothing about it changes, which is what keeps hero-versus-hero
+## combat — and therefore the bulk of the golden fixture — bit-for-bit unmoved.
+##
+## A UNIT ATTACKER READS ITS OWN KIND'S ATTACK RECORD, with the same two graceful-degradation misses
+## `_damage_against_unit` documents (an unresolvable kind, a kind with no attack) answering 0.0 for
+## the same reason.
+func _damage_against_hero(attacker: PlayerState, attacker_index: int,
+		target: PlayerState) -> float:
+	if attacker_index == TargetingService.HERO_INDEX:
+		return balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
+	var kind := balance.kind_at(attacker.units.kind_index_at(attacker_index))
+	if kind == null:
+		return 0.0
+	var attack := kind.attack_at(0)
+	return attack.damage if attack != null else 0.0
+
+
+func _damage_against_unit(attacker: PlayerState, attacker_index: int) -> float:
+	if attacker_index == TargetingService.HERO_INDEX:
+		return balance.hero_damage_to_unit
+	var kind := balance.kind_at(attacker.units.kind_index_at(attacker_index))
+	if kind == null:
+		return 0.0
+	var attack := kind.attack_at(0)
+	return attack.damage if attack != null else 0.0
 
 
 ## Story 1-8 (R-D2/R-D3): the facing gate — pure state policy over the runner-reported
@@ -1419,13 +1530,31 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	#
 	# `flags` is read INLINE (CONSTRAINT C), never cached, exactly as the CastEvaluator call above
 	# reads it.
-	if CardEffectResolver.outcome(_card_effects.get(played), flags) \
-			== CardEffectResolver.OUTCOME_SUMMON:
-		# Story 4-3a (AC 1): the authored maximum is read INLINE here (CONSTRAINT C) and handed
-		# DOWN to the board, which is what keeps `UnitBoard` a pure container with no config
-		# dependency. `balance` is non-null on this path by construction — the cast reached here
-		# through CastEvaluator, which a pre-injection MatchState never does.
-		player.units.add(balance.unit_max_hp)
+	# Story 4-4 (AC 1): THE TOTEM/MINION SPLIT LANDS HERE, at cast time, which is what AC 1 means by
+	# "each resolve to a distinct on-board kind AT CAST TIME". The resolver answers two questions in
+	# sequence — is this a summon at all (unchanged), and if so WHICH kind — and this seat APPLIES
+	# the second answer by turning the kind NAME into the plain int index the record stores.
+	var effect: CardEffect = _card_effects.get(played)
+	if CardEffectResolver.outcome(effect, flags) == CardEffectResolver.OUTCOME_SUMMON:
+		# Story 4-4 (AC 1/AC 6): the kind index and THAT KIND'S authored maximum are both read
+		# INLINE here (CONSTRAINT C) and handed DOWN to the board, which is what keeps `UnitBoard` a
+		# pure container with no config dependency — the `4-3a/R6` shape, widened by exactly one
+		# argument. `balance` is non-null on this path by construction: the cast reached here through
+		# CastEvaluator, which a pre-injection MatchState never does.
+		var kind_index := balance.kind_index_of(CardEffectResolver.kind_for(effect))
+		var kind := balance.kind_at(kind_index)
+		# AN UNAUTHORED KIND PUTS NOTHING ON THE BOARD, LOUDLY-BY-ABSENCE RATHER THAN SILENTLY AS A
+		# MINION (`BalanceConfig.kind_index_of`'s own "never a fallback to another kind" contract,
+		# the `TargetingService.priority_named` posture applied to a second lookup). Substituting a
+		# default kind would summon a minion from a totem card with nothing saying so.
+		#
+		# NOTHING BELOW THIS BRANCH IS CONDITIONAL ON IT, which is `4-1/R3`/`4-1/R10` unchanged: the
+		# cast has already passed CastEvaluator, so mana stays spent, the card stays discarded and
+		# the replacement stays owed. A cast that resolves to an unauthored kind is a SUCCESSFUL
+		# cast that happens to put nothing on the board, exactly as a `spell_*` no-op is — and it
+		# takes no `reject_action`, on the same ruling.
+		if kind != null:
+			player.units.add(kind.max_hp, kind_index)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
 	# exactly here; it is REPLACED, not kept behind a flag. The debt is incremented and the window
 	# started, and the delivery happens at the end of this same step 6 — immediately if the
@@ -1604,19 +1733,31 @@ func _shuffle_deck(deck: Deck) -> void:
 ## name yields a null priority, which TargetingService reports as REASON_NO_PRIORITY_DATA and turns
 ## into a NO-TARGET pair — a named outcome, never a crash and never a silent substitution of the
 ## other authored rule (AC 6).
+##
+## STORY 4-4 (AC 7, `4-4/R8`): THE HARDCODED `PRIORITY_STANDARD` LOOKUP IS GONE — each unit's
+## priority is resolved from ITS OWN KIND's authored `priority_name`. That is the whole of
+## `4-2/R17`(c) as assigned here by `4-3/R6`, and the paragraph above it describes what SURVIVES the
+## change rather than what it replaces: the rule set is still the sorted directory scan, still
+## resolved BY NAME and never by "whatever sorts first", a missing name still yields a null priority
+## which `TargetingService` reports as `REASON_NO_PRIORITY_DATA` and turns into a NO-TARGET pair,
+## and another rule is still NEVER silently substituted.
+##
+## THE RULE SET IS FETCHED ONCE PER BOUNDARY TICK, NOT ONCE PER UNIT, which is what keeps this the
+## SHARED scan the Performance Rule asks for. What moved inside the per-unit loop is only the NAME
+## LOOKUP against that already-loaded set — a linear walk of the two or three authored rules, not a
+## directory scan.
 func _update_unit_targets() -> void:
 	if balance_ticks == null:
 		return
 	if _tick % balance_ticks.minion_retarget_interval_ticks != 0:
 		return
-	var priority := TargetingService.priority_named(
-		TargetingService.authored_priorities(), TargetingService.PRIORITY_STANDARD)
+	var priorities := TargetingService.authored_priorities()
 	# Fixed P1 -> P2 order, like every other per-player loop in this function's file. The OPPOSING
 	# slot is passed explicitly rather than derived inside the evaluator, which is what keeps
 	# `4-2/R3`'s "own-side units are never candidates" structural: the evaluator can only ever name
 	# the slot it is handed.
-	_retarget_units(p1, p2, 1, priority)
-	_retarget_units(p2, p1, 0, priority)
+	_retarget_units(p1, p2, 1, priorities)
+	_retarget_units(p2, p1, 0, priorities)
 
 
 ## One player's board, retargeted against the OPPOSING side only (`4-2/R3`).
@@ -1626,18 +1767,24 @@ func _update_unit_targets() -> void:
 ## loop is what keeps this a SHARED scan rather than N independent ones — the Performance Rule's
 ## actual content, not just its cadence.
 ##
-## EVERY UNIT ON A BOARD RESOLVES TO THE SAME TARGET THIS STORY, and that is a consequence of the
-## Deferred section rather than a bug: units carry no position (`4-2/R14` defers it to 4-3) and no
-## HP (4-3), so there is no per-unit fact for a priority to discriminate on. The loop is per-unit
-## anyway because the STORAGE is per-unit — 4-3's movement and 4-4's totems differentiate the
-## verdict without moving this seat.
+## EVERY UNIT ON A BOARD NO LONGER RESOLVES TO THE SAME TARGET, and story 4-4 is the story this
+## paragraph named in advance. It used to read: "EVERY UNIT ON A BOARD RESOLVES TO THE SAME TARGET
+## THIS STORY ... 4-3's movement and 4-4's totems differentiate the verdict without moving this
+## seat." The verdict is differentiated now and the SEAT DID NOT MOVE — what changed is one lookup
+## inside the loop: each unit's priority comes from its own kind (AC 7, `4-4/R8`), so a Combat totem
+## and a minion standing on the same board can and do acquire different targets.
+##
+## THE HOISTED FACTS ARE STILL HOISTED. The opposing hero's liveness and the opposing board's living
+## indices are per-BOARD facts, identical for every unit here, and hoisting them is what keeps this a
+## SHARED scan rather than N independent ones — the Performance Rule's actual content. Only the
+## per-unit half (which priority governs THIS unit) sits inside the loop, because only it varies.
 ##
 ## LIVENESS IS `is_alive()`, NOT `action_state == DEAD`, and the distinction is load-bearing on the
 ## kill tick: step 8 sets DEAD after this step runs, so on the tick a hero's hp reaches zero the
 ## action state has not caught up yet while `is_alive()` already reports the truth. Judging on the
 ## state would let a unit acquire a corpse for one tick.
 func _retarget_units(owner: PlayerState, opponent: PlayerState, opposing_slot: int,
-		priority: MinionPriority) -> void:
+		priorities: Array[MinionPriority]) -> void:
 	if owner.units.is_empty():
 		return
 	var hero_alive := opponent.hero.is_alive()
@@ -1648,6 +1795,20 @@ func _retarget_units(owner: PlayerState, opponent: PlayerState, opposing_slot: i
 	# identical for every unit on this board, and hoisting them is what keeps this a SHARED scan.
 	var opposing_living := opponent.units.living_indices()
 	for index in owner.units.size():
+		# Story 4-4 (AC 7, `4-4/R8`): THE PER-KIND PRIORITY READ. The kind's authored
+		# `priority_name` is resolved against the already-loaded rule set BY NAME, and a kind that
+		# names a priority `data/minions/` does not author resolves to null — which
+		# `TargetingService.reason_for` reports as `REASON_NO_PRIORITY_DATA` and turns into a
+		# NO-TARGET pair. NEVER a silent substitution of another rule (AC 7's carried-forward
+		# contract), and never a fallback to `PRIORITY_STANDARD`: falling back would make a typo in
+		# an authored kind indistinguishable from correct authoring.
+		#
+		# AN UNRESOLVABLE KIND takes the same path for the same reason — a null kind names no
+		# priority, so `priority_named` is asked for the empty name, finds nothing, and the unit
+		# holds no target.
+		var kind := balance.kind_at(owner.units.kind_index_at(index)) if balance != null else null
+		var priority_name: StringName = kind.priority_name if kind != null else &""
+		var priority := TargetingService.priority_named(priorities, priority_name)
 		# The evaluator COMPUTES, this line APPLIES (D6) — TargetingService touches no board, and
 		# UnitBoard.set_target_at is reached only from here. `flags` is read INLINE (CONSTRAINT C),
 		# exactly as the step-6 CardEffectResolver call reads it; a closed `minions` flag returns a
@@ -1776,14 +1937,30 @@ func _attack_phase_multiplier(phase: StringName) -> float:
 ## (`unit_board.gd:359`) and `UnitAnimationController.on_unit_tick()` takes `phase: int`
 ## (`unit_animation_controller.gd:108`). The arms below compare against the named enum values, so
 ## the domain is still stated where it matters.
-func unit_attack_phase_multiplier(phase: int) -> float:
+##
+## STORY 4-4 (AC 6, the B5 inventory): IT TAKES THE UNIT'S KIND INDEX. The three globals it used to
+## read are gone from `BalanceConfig`; the three multipliers are now per kind, so the seat has to be
+## told WHICH kind is asking. The runner passes `player.units.kind_index_at(index)` at the one call
+## site, beside the phase it already passes — no new coupling, the same "state exposes the rule, the
+## actor owns the velocity" split `4-3c1/R1` established.
+##
+## AN UNRESOLVABLE KIND YIELDS FULL SPEED (1.0), not zero, and the direction is deliberate: a null
+## kind means the authored list changed under a live record (an X3 reload that shortened
+## `unit_kinds`), and rooting every affected unit in place would read as a freeze, while running
+## them at full speed reads as "the multipliers stopped applying" — the smaller and more legible
+## degradation. It joins the IDLE branch below rather than getting its own, because both answers are
+## the same number for the same reason: no authored multiplier governs this tick.
+func unit_attack_phase_multiplier(phase: int, kind_index: int) -> float:
+	var kind := balance.kind_at(kind_index)
+	if kind == null:
+		return 1.0
 	match phase:
 		UnitBoard.AttackPhase.WINDUP:
-			return balance.minion_attack_windup_move_speed_multiplier
+			return kind.attack_windup_move_speed_multiplier
 		UnitBoard.AttackPhase.ACTIVE:
-			return balance.minion_attack_active_move_speed_multiplier
+			return kind.attack_active_move_speed_multiplier
 		UnitBoard.AttackPhase.RECOVERY:
-			return balance.minion_attack_recovery_move_speed_multiplier
+			return kind.attack_recovery_move_speed_multiplier
 		_:
 			# IDLE and any phase added later: full, unmodified speed. NOT a field lookup.
 			return 1.0

@@ -38,12 +38,48 @@ extends RefCounted
 ## asserts that every authored id carries one of these two prefixes, which is the machine half
 ## of AC 3's golden-discipline ruling (`4-1/R4`).
 ##
-## Matched as a PREFIX, never as a whole-id table: the six summon ids differ (`summon_imp`,
-## `summon_combat_totem`, ...) and this story treats every one of them IDENTICALLY (the ratified
-## totem clause). A whole-id table would be the place `4-4`'s totem/minion split has to land, and
-## writing it now would pre-commit that shape.
+## STORY 4-4 (AC 1): THE WHOLE-ID TABLE THIS COMMENT NAMED IN ADVANCE NOW EXISTS, directly below.
+## The paragraph this replaces read: "Matched as a PREFIX, never as a whole-id table ... A whole-id
+## table would be the place `4-4`'s totem/minion split has to land, and writing it now would
+## pre-commit that shape." This is 4-4; the shape is chosen here, by the story that has to live with
+## it, exactly as that note intended.
+##
+## THE PREFIXES SURVIVE AND STILL DO THEIR OWN JOB. They classify an id as a summon or a spell — the
+## question `outcome()` asks — and `test_card_authoring.gd` still asserts every authored id carries
+## one of the two, which is the machine half of `4-1/R4`'s golden-discipline ruling. What the table
+## adds is a SECOND, finer question the prefix cannot answer: WHICH kind a summon puts on the board.
+## Two questions, two mechanisms, neither replacing the other.
 const PREFIX_SUMMON := "summon_"
 const PREFIX_SPELL := "spell_"
+
+## AC 1: the `summon_*` id -> UNIT KIND NAME table — the differentiation the ratified TOTEM CLAUSE
+## withheld until this story. The three totem fixture cards named in AC 1 (`hellforge_totem` /
+## `summon_combat_totem`, `tidal_wardstone` / `summon_mana_accelerator`, `verdant_wardstone` /
+## `summon_stamina_accelerator`) each resolve to a DISTINCT kind here, which is what makes them "no
+## longer uniform `summon_*` handling indistinguishable from a minion or from one another".
+##
+## A `Dictionary`, AND ITS ITERATION ORDER DECIDES NOTHING. It is only ever `get()`-ed by a single
+## known key — never iterated, never sorted, never hashed — so the standing prohibition on
+## Dictionary iteration order and on StringNames reaching a hash is untouched. The VALUE that leaves
+## this file is a kind NAME, and `BalanceConfig.kind_index_of()` turns it into the plain int that
+## actually crosses into the record and the snapshot.
+##
+## AN UNMAPPED `summon_*` ID FALLS TO THE MINION KIND, and that is a DELIBERATE default rather than
+## an oversight: `summon_imp` and the two other minion fixture ids are not listed, so the shipped
+## minion verdict is untouched by this table's arrival and a future minion card needs no edit here.
+## Only a kind that DIFFERS earns a row. The failure this cannot hide is the one that matters — a
+## row naming a kind `BalanceConfig` does not author reaches `NO_KIND_INDEX` at the cast seat and
+## puts NOTHING on the board, loudly, rather than silently summoning a minion.
+const KIND_MINION := &"minion"
+const SUMMON_KINDS: Dictionary[StringName, StringName] = {
+	&"summon_combat_totem": &"combat_totem",
+	&"summon_mana_accelerator": &"mana_accelerator",
+	&"summon_stamina_accelerator": &"stamina_accelerator",
+}
+
+## AC 1: the three ids above are TOTEMS and gate on `FeatureFlags.totems`; every other `summon_*` id
+## is a minion and gates on `FeatureFlags.minions`. Derived from the table rather than listed a
+## second time, so the two can never disagree — see `_is_totem()` below.
 
 ## FOUR NAMED OUTCOMES, EXACTLY ONE OF WHICH MUTATES THE BOARD. Named as constants rather than
 ## repeated StringName literals so a typo at a call site fails to compile-match instead of
@@ -94,6 +130,19 @@ const REASON_UNKNOWN_EFFECT_PREFIX := &"unknown_effect_prefix"
 ## which is the rule working as intended — toggling the layer is a checkbox, not a code edit.
 const REASON_MINIONS_FLAG_CLOSED := &"minions_flag_closed"
 
+## Story 4-4 (story Dev Notes, the B11(b) correction): the TOTEM twin of the reason directly above.
+## Both `minions` and `totems` bools have existed on `FeatureFlags` since 1-5, but only
+## `flags.minions` was ever read in `src/` — `flags.totems` was UNREAD, while `epics.md`'s E4 goal
+## commits `FeatureFlags: minions, totems`. This story discharges that commitment by giving the
+## totem layer its own gate, read the same way `minions` already is.
+##
+## ITS OWN NAME RATHER THAN A REUSE OF `REASON_MINIONS_FLAG_CLOSED`, on that constant's own stated
+## reasoning: "the layer is switched off" is a different fact about the match per LAYER, and a
+## playtester isolating cognitive overload needs to know WHICH switch closed the cast. Degrading
+## gracefully means the identical thing it means for minions — the cast still resolves (mana spent,
+## card discarded, replacement owed) and no totem reaches the board.
+const REASON_TOTEMS_FLAG_CLOSED := &"totems_flag_closed"
+
 
 ## What this cast's effect does, as one of the four named outcomes above. `effect` is the injected
 ## per-card CardEffect for the id just cast — null when no entry was injected for it; `flags` is
@@ -103,15 +152,53 @@ const REASON_MINIONS_FLAG_CLOSED := &"minions_flag_closed"
 ## has been recognised as a summon, so an UNKNOWN prefix reports itself as unknown whether the
 ## minion layer is on or off. Reading the flag first would make an authoring error invisible
 ## behind a switch.
+##
+## STORY 4-4 (AC 1): THE FLAG CONSULTED IS NOW THE ONE THAT OWNS THIS ID'S LAYER. The ordering
+## argument this docstring already makes is UNCHANGED and now does more work: the id is recognised
+## as a summon first, then classified as totem or minion, and only THEN is the owning flag read — so
+## an unknown prefix still reports itself as unknown whether either layer is on or off, and a totem
+## id whose kind `BalanceConfig` does not author still resolves as a summon here (the missing kind is
+## the CAST SEAT's problem, not the resolver's — this file computes, it does not apply).
 static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	if effect == null:
 		return REASON_NO_EFFECT_ENTRY
 	var id := String(effect.effect_id)
 	if id.begins_with(PREFIX_SUMMON):
+		if _is_totem(effect.effect_id):
+			return OUTCOME_SUMMON if _totems_open(flags) else REASON_TOTEMS_FLAG_CLOSED
 		return OUTCOME_SUMMON if _minions_open(flags) else REASON_MINIONS_FLAG_CLOSED
 	if id.begins_with(PREFIX_SPELL):
 		return REASON_SPELL_NOT_YET_RESOLVED
 	return REASON_UNKNOWN_EFFECT_PREFIX
+
+
+## Story 4-4 (AC 1): the UNIT KIND NAME this cast puts on the board — the second, finer question the
+## prefix cannot answer (see `SUMMON_KINDS`).
+##
+## TOTAL OVER EVERY `summon_*` ID, by construction: a mapped id returns its own kind, an unmapped one
+## returns `KIND_MINION`. That default is what keeps the three minion fixture cards' behaviour
+## bit-for-bit unmoved by this story and what stops a future minion card from needing an edit here.
+##
+## IT COMPUTES, IT DOES NOT APPLY (D6). The returned NAME is turned into the plain int index the
+## record actually stores by `BalanceConfig.kind_index_of()`, at the cast seat inside `advance()`'s
+## ordered dispatch — this file never touches a board, a pool or a `BalanceConfig`.
+##
+## A NON-SUMMON EFFECT IS A PROGRAMMING ERROR AT THE CALL SITE, not a case handled here: the one
+## caller reaches this only after `outcome()` returned `OUTCOME_SUMMON`. It still answers total
+## rather than crashing — `KIND_MINION` — because a total function's honest default is this file's
+## standing posture (the `REASON_NO_EFFECT_ENTRY` null branch, `CastEvaluator.refusal_reason`).
+static func kind_for(effect: CardEffect) -> StringName:
+	if effect == null:
+		return KIND_MINION
+	return SUMMON_KINDS.get(effect.effect_id, KIND_MINION)
+
+
+## Whether this `summon_*` id belongs to the TOTEM layer. DERIVED FROM `SUMMON_KINDS` rather than
+## listed a second time, which is the whole reason it is a function: a second literal list of totem
+## ids would be a second thing to keep in agreement with the first, and the failure mode is silent
+## (an id in one list and not the other gates on the wrong flag).
+static func _is_totem(effect_id: StringName) -> bool:
+	return SUMMON_KINDS.has(effect_id)
 
 
 ## NO FLAGS INJECTED READS AS CLOSED — CastEvaluator._flag_open's own reading, in the same
@@ -120,3 +207,8 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 ## exercising a state that live play cannot reach, and it gets the safe answer.
 static func _minions_open(flags: FeatureFlags) -> bool:
 	return flags != null and flags.minions
+
+
+## Story 4-4: the TOTEM twin, in the same direction and for the same reason.
+static func _totems_open(flags: FeatureFlags) -> bool:
+	return flags != null and flags.totems

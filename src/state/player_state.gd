@@ -319,4 +319,21 @@ func to_snapshot() -> Dictionary:
 		"unit_attack_count": units.attack_count_snapshot(),
 		"unit_in_reach": units.in_reach_snapshot(),
 		"unit_swing_dedupe": unit_dedupe.snapshot(),
+		# Story 4-4 (AC 1/AC 10): TWO new board keys — the per-record KIND INDEX and the per-record
+		# firing-cadence COOLDOWN. One array -> one key apiece, on the `unit_hp` side of the
+		# precedent this block's 4-3b note spells out, because a kind and a cooldown are two
+		# independent facts and fusing them would hide which moved.
+		#
+		# STILL COUNTS AND INDICES, NEVER IDENTITIES. Both are plain ints: the kind is an INDEX into
+		# the authored `BalanceConfig.unit_kinds` list, deliberately NOT the kind's StringName —
+		# `Array[StringName].sort()` orders by internal POINTER on this engine, which is the failure
+		# mode every container key in this file exists to avoid.
+		#
+		# ONE GOLDEN CAUSE RIDES ON THE PAIR, not two: their mere PRESENCE. The golden fixture's t22
+		# cast summons a MINION, whose kind index is 0 and whose authored cadence is 0.0 — so both
+		# keys hash at their zero values throughout the recorded sequence and neither has a
+		# behavioural cause to measure separately. The named causes are recorded in the Dev Agent
+		# Record.
+		"unit_kind": units.kind_index_snapshot(),
+		"unit_attack_cooldown": units.attack_cooldown_snapshot(),
 	}

@@ -117,15 +117,22 @@ func _physics_process(_delta: float) -> bool:
 		_state = _runner._match_state if _runner != null else null
 		if _runner == null or _state == null:
 			return _fail("missing: runner=%s state=%s" % [_runner, _state])
+		# Story 4-4 (AC 6/AC 9): the reach and the damage are on the MINION kind's attack RECORD now.
+		# Resolved BY NAME so a reordered `unit_kinds` fails loudly rather than measuring a totem.
 		var b := _state.balance
-		if b.minion_attack_reach_distance <= 0.0 or b.unit_damage_per_hit <= 0.0:
+		var kind_index := b.kind_index_of(&"minion")
+		var kind: UnitKindProfile = b.kind_at(kind_index)
+		var attack: UnitAttackProfile = kind.attack_at(0) if kind != null else null
+		if attack == null:
+			return _fail("authored balance carries no `minion` kind with an attack record")
+		if attack.range <= 0.0 or attack.damage <= 0.0:
 			return _fail("authored balance ships the mechanic invisible: reach=%f damage=%f"
-					% [b.minion_attack_reach_distance, b.unit_damage_per_hit])
+					% [attack.range, attack.damage])
 		# The cycle length is DERIVED from the AUTHORED durations, never pinned to literals, so the
 		# `4-3b` melee retune cannot silently desynchronise this file (the `4-3/R22` discipline).
-		var t := _state.balance_ticks
-		_cycle_ticks = t.minion_attack_windup_ticks + t.minion_attack_active_ticks \
-				+ t.minion_attack_recovery_ticks
+		# Story 4-4: derived from the same kind's tick record rather than the removed flat triplet.
+		var t: UnitAttackTicks = _state.balance_ticks.kind_ticks_at(kind_index).attack_at(0)
+		_cycle_ticks = t.windup_ticks + t.active_ticks + t.recovery_ticks
 		_state.hit_landed.connect(func(a: int, target: int, d: float, hp: float) -> void:
 			_hits.append([a, target, d, hp]))
 	if _frames == 2:

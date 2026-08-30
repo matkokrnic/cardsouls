@@ -62,8 +62,11 @@ const VULNERABLE_TICKS := 7
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
 	"pending_draw", "pending_draw_owed", "stamina",
-	"unit_attack_count", "unit_attack_dir", "unit_attack_phase", "unit_attack_ticks",
-	"unit_count", "unit_hp", "unit_in_reach", "unit_swing_dedupe", "unit_targets",
+	# Story 4-4 (AC 1/AC 10): `unit_attack_cooldown` (the firing-cadence countdown) and `unit_kind`
+	# (the per-record kind INDEX — never the StringName) join the set. Sorted position, not appended.
+	"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
+	"unit_attack_ticks",
+	"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_swing_dedupe", "unit_targets",
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the

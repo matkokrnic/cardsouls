@@ -90,9 +90,15 @@ func _physics_process(_delta: float) -> bool:
 		_state = _runner._match_state if _runner != null else null
 		if _runner == null or _state == null:
 			return _finish(false, "missing: runner=%s state=%s" % [_runner, _state])
-		_windup_seconds = _state.balance.minion_attack_windup_seconds
+		# Story 4-4 (AC 9): the windup is on the MINION kind's attack RECORD now, not a flat global.
+		var kind: UnitKindProfile = _state.balance.kind_at(
+			_state.balance.kind_index_of(&"minion"))
+		var attack: UnitAttackProfile = kind.attack_at(0) if kind != null else null
+		if attack == null:
+			return _finish(false, "authored balance carries no `minion` kind with an attack record")
+		_windup_seconds = attack.windup_seconds
 		if _windup_seconds <= 0.0:
-			return _finish(false, "authored minion_attack_windup_seconds is %f -- there is no "
+			return _finish(false, "the authored minion attack windup is %f -- there is no "
 					% _windup_seconds + "window for the strike to land at")
 	if _frames == 2:
 		_state.p1.mana.add(_state.p1.mana.get_maximum())

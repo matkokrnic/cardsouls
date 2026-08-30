@@ -142,6 +142,54 @@ var _attack_count: Array[int] = []
 ## authored durations would stop describing the rate a player actually sees.
 var _in_reach: Array[bool] = []
 
+## ------------------------------------------------------------------------------------------
+## STORY 4-4 (AC 1/AC 2): THE KIND INDEX — the field the ratified TOTEM CLAUSE reserved for THIS
+## story, and the header clause directly above that says the record is "STILL ... TYPE/KIND-LESS" is
+## hereby DISCHARGED rather than quietly relaxed.
+## ------------------------------------------------------------------------------------------
+## The clause's own stated purpose was that "uniform `summon_*` treatment does not pre-commit
+## `4-4`'s differentiation" — i.e. it withheld the shape until the story that had to choose it. This
+## is that story: three totem kinds must resolve to distinct on-board kinds at cast time (AC 1) and
+## then differ in speed, hp, priority and attack capability. A record with no kind cannot.
+##
+## A PLAIN INT INDEX INTO `BalanceConfig.unit_kinds`, NEVER THE `StringName` KIND NAME, and that is
+## the same rule the header states for every other field here: no StringName goes anywhere near this
+## container, because `Array[StringName].sort()` orders by INTERNAL POINTER on this engine
+## (player_state.gd:77, 206-207) — deterministic within one process, NOT across runs or builds. The
+## index hashes cleanly, and it is STABLE because the authored list's ORDER is authored.
+##
+## IT IS THE ONLY DIFFERENTIATING FIELD ADDED, and deliberately so. The eleven converted globals do
+## NOT get eleven parallel arrays: every one of them is read THROUGH this index, inline at the point
+## of use (CONSTRAINT C), off the live `MatchState.balance`. Copying them per record would be N
+## copies of one authored number and each copy would go stale on the next X3 reload — which is the
+## exact failure CONSTRAINT C exists to prevent.
+##
+## `BalanceConfig.NO_KIND_INDEX` NEVER REACHES THIS ARRAY: the cast seat refuses to add a record for
+## an unresolved kind (see `MatchState._resolve_basic_cast`), so a record on the board always names
+## an index that was valid when it was written. `kind_at()` may still return null for it after an X3
+## reload shortened the authored list, and every reading seat treats a null kind as "this unit does
+## nothing" rather than crashing the tick.
+var _kind_index: Array[int] = []
+
+## STORY 4-4 (AC 10): the FIRING-CADENCE COOLDOWN, in ticks — the ninth parallel array, and the one
+## field AC 10's "its own firing cadence as a number on that record" needs on the record side.
+##
+## SEEDED AT WINDUP START (inside `begin_windup_at`, from the kind's authored `cadence_ticks`) and
+## counted down one per `advance()` beside every other D4 timer. A new windup may begin only when it
+## has reached zero — so the cadence is measured from WINDUP START, not from the swing's end, which
+## is what makes an authored cadence SHORTER than windup+active+recovery degrade to back-to-back
+## rather than to overlapping swings.
+##
+## IT IS A SEPARATE COUNTDOWN FROM `_attack_ticks` AND MUST NOT BE FOLDED INTO IT. `_attack_ticks`
+## counts the CURRENT PHASE and is zeroed on entering IDLE; the cadence must keep counting THROUGH
+## idle, because its whole job is to hold a totem idle between shots. Two facts, two fields — the
+## header's own "two fields expressing one fact" warning cuts the other way here.
+##
+## THE SHIPPED MINION AUTHORS 0.0 CADENCE, so its cooldown is already expired the moment recovery
+## ends and its rhythm is bit-for-bit what 4-3b shipped. This array's ARRIVAL still moves the golden
+## (a new all-zero snapshot key), which is a named shape cause in the Dev Agent Record.
+var _attack_cooldown: Array[int] = []
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
 ## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
@@ -160,7 +208,14 @@ var _in_reach: Array[bool] = []
 ## unit, which is the exact aliasing the hole discipline exists to prevent, and a future pooling
 ## story (`4-5`) is precisely the change that would introduce a free list "for free". If this
 ## function ever grows a "find a free slot" branch, that ruling is being reversed and needs its own.
-func add(max_hp: float) -> void:
+##
+## STORY 4-4 (AC 1/AC 2): it TAKES A SECOND ARGUMENT, the record's KIND INDEX, and that argument
+## exists for the identical reason `max_hp` does — reading `BalanceConfig` here would make a pure
+## container depend on config. The caller resolves the cast id to a kind index and hands the plain
+## int down. AC 2's "no second hp/damage/death mechanism is authored" is satisfied by this signature
+## and nothing else: a totem enters through THIS function, at ITS kind's authored maximum, and dies
+## through `apply_damage_at`'s clamp exactly as a minion does.
+func add(max_hp: float, kind_index: int) -> void:
 	var pair := TargetingService.no_target()
 	_target_slots.append(pair[0])
 	_target_indices.append(pair[1])
@@ -176,6 +231,12 @@ func add(max_hp: float) -> void:
 	_attack_dir.append(Vector2.ZERO)
 	_attack_count.append(0)
 	_in_reach.append(false)
+	# Story 4-4: the kind is the one thing a fresh record is NOT empty about — it is decided at cast
+	# time (AC 1: "each resolve to a distinct on-board kind AT CAST TIME") and never changes again.
+	# The cooldown enters expired, on the same honest-empty-value reasoning every field above uses: a
+	# freshly summoned totem has fired nothing, so nothing is holding it back from its first shot.
+	_kind_index.append(kind_index)
+	_attack_cooldown.append(0)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -201,6 +262,11 @@ func clear() -> void:
 	_attack_dir.clear()
 	_attack_count.clear()
 	_in_reach.clear()
+	# Story 4-4: cleared with their nine siblings, for the header's own reason applied to ten arrays
+	# instead of eight — one collection expressed as ten, and an index present in one but not the
+	# others would be a record with a kind but no liveness.
+	_kind_index.clear()
+	_attack_cooldown.clear()
 
 
 func size() -> int:
@@ -396,6 +462,32 @@ func is_in_reach_at(index: int) -> bool:
 	return _in_reach[index]
 
 
+## Story 4-4 (AC 1): the record's KIND INDEX. Bound enforcement follows `hp_at`, not `is_alive_at`,
+## on the reason stated above the attack-rhythm accessors: every caller iterates `size()` or has
+## already passed `has_index`, so an out-of-range read here is the caller's own loop being wrong,
+## and returning a plausible 0 would silently make that unit a MINION.
+func kind_index_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _kind_index[index]
+
+
+## Story 4-4 (AC 10): ticks remaining before this unit's next attack may begin. Same bound
+## enforcement and same reason as `kind_index_at` directly above.
+func attack_cooldown_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _attack_cooldown[index]
+
+
+## THE PUBLIC PREDICATE THE WINDUP GATE IS WIRED TO (the `has_index` / `is_alive_at` discipline: a
+## guard that consults a copy is guarding the copy). `MatchState._advance_unit_attacks` must not
+## re-derive `attack_cooldown_at(i) == 0` inline — this is the one expression of "may this unit
+## begin its next attack yet", and a second copy is a second thing to keep in agreement.
+func is_attack_ready_at(index: int) -> bool:
+	return has_index(index) and _attack_cooldown[index] == 0
+
+
 ## SET-ONLY, never cleared here, and the asymmetry is AC 13's consequence (ii) made structural:
 ## absence of overlap is NOT a fact, so there is no negative probe and nothing outside a windup start
 ## may clear this. A `set_in_reach_at(i, false)` would be exactly the clearing path the AC forbids —
@@ -423,13 +515,20 @@ func set_attack_dir_at(index: int, dir: Vector2) -> void:
 ## than the one the counter now holds.
 ##
 ## THE FLAG IS CONSUMED HERE AND NOWHERE ELSE (AC 13). That is the ONLY clearing path.
-func begin_windup_at(index: int, windup_ticks: int) -> int:
+##
+## STORY 4-4 (AC 10): it also SEEDS THE FIRING-CADENCE COOLDOWN, from the authored `cadence_ticks`
+## the caller reads inline off this unit's kind. Seeding HERE — at windup start, in the same call
+## that consumes the reach flag and advances the counter — is what makes the cadence measured from
+## windup start rather than from the swing's end (see `_attack_cooldown`'s own comment). The shipped
+## minion authors a zero cadence and is therefore unaffected.
+func begin_windup_at(index: int, windup_ticks: int, cadence_ticks: int) -> int:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
 	_in_reach[index] = false
 	_attack_phase[index] = AttackPhase.WINDUP
 	_attack_ticks[index] = windup_ticks
 	_attack_count[index] += 1
+	_attack_cooldown[index] = cadence_ticks
 	return _attack_count[index]
 
 
@@ -453,6 +552,14 @@ func set_phase_at(index: int, phase: AttackPhase, ticks: int) -> void:
 ## a liveness test here would put a second liveness seat in a container that has no business holding
 ## policy.
 func tick_attack_timers() -> void:
+	# Story 4-4 (AC 10): the CADENCE COOLDOWN counts down here too, and UNCONDITIONALLY — not under
+	# the IDLE `continue` below. That is the whole difference between the two countdowns: the phase
+	# countdown is meaningless while IDLE, whereas the cadence exists PRECISELY to run while the unit
+	# is idle and waiting for its next shot. Clamped at zero for its sibling's reason — the windup
+	# gate reads "reached zero" as a state, not as a moment.
+	for i in _attack_cooldown.size():
+		if _attack_cooldown[i] > 0:
+			_attack_cooldown[i] -= 1
 	for i in _attack_phase.size():
 		if _attack_phase[i] == AttackPhase.IDLE:
 			continue
@@ -487,6 +594,27 @@ func attack_count_snapshot() -> Array:
 
 func in_reach_snapshot() -> Array:
 	return _in_reach.duplicate()
+
+
+## Story 4-4 (AC 1/AC 10/AC 12): the two new snapshot payloads, on the `unit_hp` side of this
+## file's own precedent (one array -> one key), because a kind and a cooldown are two INDEPENDENT
+## facts about a unit and fusing them would hide which one moved when the golden moves.
+##
+## BOTH CROSS TICKS AND DECIDE AN OUTCOME, which is `4-3a/R17`'s test for whether a value may sit
+## outside the hash. The kind decides every authored number the unit is governed by, for its whole
+## life, and cannot be recomputed from anything else on the record — the cast that chose it is long
+## gone. The cooldown decides when the next shot may begin and is exactly the cross-tick carrier
+## between one shot and the next.
+##
+## PLAIN INTS, so no StringName and no object reaches the hash — see `_kind_index`'s own comment for
+## why the NAME is deliberately not what is stored. The ORDER IS MEANINGFUL and CanonicalHash
+## preserves it: a kind held by the wrong unit is a real divergence.
+func kind_index_snapshot() -> Array:
+	return _kind_index.duplicate()
+
+
+func attack_cooldown_snapshot() -> Array:
+	return _attack_cooldown.duplicate()
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS

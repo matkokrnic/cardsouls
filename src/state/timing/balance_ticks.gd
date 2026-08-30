@@ -43,14 +43,27 @@ var reshuffle_vulnerable_window_ticks: int
 ## tick. Zero is therefore a legal in-test value; the AUTHORED value is audited > 0 for the reason
 ## balance_config.gd states at the field.
 var minion_retarget_interval_ticks: int
-## Story 4-3b (AC 1): the unit attack rhythm in TICKS — the `attack_*_ticks` triplet below verbatim,
-## for a unit instead of a hero. PLAIN `seconds_to_ticks()` calls with NO clamp of their own: unlike
-## `minion_retarget_interval_ticks` above these are DURATIONS, not a modulo divisor, and
-## `seconds_to_ticks()` already clamps any non-zero authored duration to >= 1 tick. A 0.0-authored
-## phase would derive 0 ticks, which the authoring audit forbids for the shipped .tres.
-var minion_attack_windup_ticks: int
-var minion_attack_active_ticks: int
-var minion_attack_recovery_ticks: int
+## Story 4-4 (AC 11): the PER-KIND tick domain — one `UnitKindTicks` per entry of
+## `BalanceConfig.unit_kinds`, INDEX-ALIGNED with it, each holding the derived tick counts of that
+## kind's attack records.
+##
+## THIS REPLACES THE FLAT `minion_attack_windup/active/recovery_ticks` TRIPLET story 4-3b shipped
+## here. Those three are REMOVED rather than kept alongside, the `attack_move_speed_multiplier`
+## precedent `balance_config.gd` set at 3-0b: a half-migration leaves two sources of truth for one
+## scalar, and here it would leave every minion's rhythm readable from two places that a retune
+## could silently diverge.
+##
+## IT IS WHY AC 11's BOUNDARY CLAUSE HOLDS. The per-kind durations are `*_seconds` floats on
+## `UnitAttackProfile`, and they cross into the tick domain HERE — inside the one
+## `BalanceTicks.from_config()` call — exactly as every flat duration in this file does. No second
+## boundary is authored, and no `*_seconds` float reaches `advance()`.
+##
+## Read through `kind_ticks_at()` INLINE at the point of use (CONSTRAINT C), never cached.
+var unit_kind_ticks: Array[UnitKindTicks] = []
+## Story 4-4 (AC 20): the Mana Accelerator faucet's cadence in ticks. A MODULO DIVISOR, so it takes
+## `minion_retarget_interval_ticks`'s clamp above rather than the plain conversion — an authored 0
+## means "every tick" instead of a divide-by-zero on the tick ladder.
+var mana_accelerator_interval_ticks: int
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -75,12 +88,19 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# The clamp is HERE, at the single conversion boundary, so no consumer can read an unclamped 0.
 	t.minion_retarget_interval_ticks = maxi(1,
 			TimingWindow.seconds_to_ticks(config.minion_retarget_interval_seconds))
-	t.minion_attack_windup_ticks = TimingWindow.seconds_to_ticks(
-			config.minion_attack_windup_seconds)
-	t.minion_attack_active_ticks = TimingWindow.seconds_to_ticks(
-			config.minion_attack_active_seconds)
-	t.minion_attack_recovery_ticks = TimingWindow.seconds_to_ticks(
-			config.minion_attack_recovery_seconds)
+	# Story 4-4 (AC 20): the accelerator cadence takes the modulo-divisor clamp, for
+	# `minion_retarget_interval_ticks`'s reason directly above and not by analogy — it is read as
+	# `_tick % interval` at the third `_generate_mana` call site.
+	t.mana_accelerator_interval_ticks = maxi(1,
+			TimingWindow.seconds_to_ticks(config.mana_accelerator_interval_seconds))
+	# Story 4-4 (AC 11): THE PER-KIND CONVERSION, seated INSIDE this one function so the
+	# seconds-to-ticks boundary stays single. A null entry in the authored list derives an empty
+	# `UnitKindTicks` rather than being skipped, because the derived array must stay INDEX-ALIGNED
+	# with `config.unit_kinds` — skipping would shift every later kind's index by one and silently
+	# repoint every board record written under the old alignment.
+	t.unit_kind_ticks = []
+	for kind in config.unit_kinds:
+		t.unit_kind_ticks.append(_kind_ticks(kind))
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)
@@ -90,3 +110,40 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.roll_duration_ticks = TimingWindow.seconds_to_ticks(config.roll_duration_seconds)
 	t.stun_ticks = TimingWindow.seconds_to_ticks(config.stun_seconds)
 	return t
+
+
+## Story 4-4 (AC 11): one authored kind's attack durations, converted. Static and private — the
+## conversion lives inside this file because this file IS the boundary; putting it on
+## `UnitKindProfile` would make a pure schema resource depend on `TimingWindow`, and putting it on
+## `UnitKindTicks` would make the derived object know how to derive itself. `from_config()` above is
+## the only caller.
+##
+## A NULL KIND DERIVES AN EMPTY RECORD SET rather than a null entry, so `kind_ticks_at()` below can
+## return a real object for every authored index and no seat has to guard twice (once for the index
+## and once for the entry). A null ATTACK inside a non-null kind is skipped the same way — it
+## derives a zeroed record, keeping the per-record alignment `UnitKindTicks` documents.
+static func _kind_ticks(kind: UnitKindProfile) -> UnitKindTicks:
+	var out := UnitKindTicks.new()
+	if kind == null:
+		return out
+	for attack in kind.attacks:
+		var a := UnitAttackTicks.new()
+		if attack != null:
+			a.windup_ticks = TimingWindow.seconds_to_ticks(attack.windup_seconds)
+			a.active_ticks = TimingWindow.seconds_to_ticks(attack.active_seconds)
+			a.recovery_ticks = TimingWindow.seconds_to_ticks(attack.recovery_seconds)
+			a.cadence_ticks = TimingWindow.seconds_to_ticks(attack.cadence_seconds)
+			if attack.projectile != null:
+				a.projectile_acceleration_delay_ticks = TimingWindow.seconds_to_ticks(
+						attack.projectile.acceleration_delay_seconds)
+		out.attacks.append(a)
+	return out
+
+
+## The derived tick record set for the kind at `index`, or NULL for an out-of-range index —
+## `BalanceConfig.kind_at()`'s twin, index-aligned with it and answering out-of-range the same way,
+## so a seat that holds a kind index reads both objects through one guard shape.
+func kind_ticks_at(index: int) -> UnitKindTicks:
+	if index < 0 or index >= unit_kind_ticks.size():
+		return null
+	return unit_kind_ticks[index]

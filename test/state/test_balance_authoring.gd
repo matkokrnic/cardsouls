@@ -236,12 +236,26 @@ func test_authored_minion_approach_values_are_positive() -> void:
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.unit_move_speed > 0.0,
-		"unit_move_speed must be authored > 0 (a zero speed ships 4-3 invisible — the unit rotates "
-		+ "to face its target and never closes, which is the 4-2 behaviour it replaces)")
-	assert_true(config.unit_stop_distance > 0.0,
-		"unit_stop_distance must be authored > 0 (a zero distance walks the unit into its target "
-		+ "until the two bodies wedge, which reads as a physics glitch, not as an approach)")
+	# Story 4-4 (AC 5/AC 6, `4-4/R12`): THE SPEED BOUND IS PER KIND AND IS NO LONGER `> 0` FOR EVERY
+	# KIND. `4-4/R12` rules all three TOTEM kinds to speed 0 — the GDD's "small, unimposing static
+	# structure" — so a blanket `> 0` audit would forbid the very authoring the ruling mandates. The
+	# bound splits: the MINION kind keeps `> 0` for 4-3's reason verbatim, every kind is
+	# non-negative, and every TOTEM kind is audited `== 0` so AC 5 is machine-checked rather than
+	# merely intended.
+	var minion := _kind(config, &"minion")
+	assert_not_null(minion, "the authored config must carry a `minion` kind")
+	if minion == null:
+		return
+	assert_true(minion.move_speed > 0.0,
+		"the minion kind's move_speed must be authored > 0 (a zero speed ships 4-3 invisible — the "
+		+ "unit rotates to face its target and never closes, which is the 4-2 behaviour it replaces)")
+	for kind: UnitKindProfile in config.unit_kinds:
+		assert_true(kind.move_speed >= 0.0, "%s move_speed is non-negative" % kind.kind_name)
+		assert_true(kind.stop_distance > 0.0,
+			("%s stop_distance must be authored > 0 (a zero distance walks the unit into its target "
+			+ "until the two bodies wedge, which reads as a physics glitch, not as an approach) — "
+			+ "authored for every kind including ones that never move, per AC 6's 'no field is left "
+			+ "undefined for a kind'") % kind.kind_name)
 
 
 ## ---- Minion combat values (story 4-3a, AC 1/AC 2, `4-3a/R8`) ---------------------------
@@ -271,19 +285,35 @@ func test_authored_minion_combat_values_are_positive() -> void:
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.unit_max_hp > 0.0,
-		"unit_max_hp must be authored > 0 (a zero maximum summons a unit that is already dead — "
-		+ "the first fact drops at the liveness rung and the story ships invisible)")
-	assert_true(config.unit_damage_per_hit > 0.0,
-		"unit_damage_per_hit must be authored > 0 (a zero flat damage ships the invulnerable box "
-		+ "this story exists to replace)")
-	var hits_to_kill := ceili(config.unit_max_hp / config.unit_damage_per_hit)
-	assert_true(hits_to_kill >= 2,
-		"authored hits-to-kill must be >= 2 — a one-shot minion makes unit_max_hp cosmetic, the "
-		+ "exact failure `4-3a/R8` rejected the percent-of-max formula for (got %d)" % hits_to_kill)
-	assert_true(hits_to_kill <= 10,
-		"authored hits-to-kill must be <= 10 — beyond that a kill stops being the legible, "
-		+ "decisive event this story ships (got %d)" % hits_to_kill)
+	# Story 4-4 (AC 6/AC 9): PER KIND. `max_hp` keeps its `> 0` bound for EVERY kind — a zero
+	# maximum summons something already dead whatever kind it is — and the hits-to-kill BAND is now
+	# audited per kind against `hero_damage_to_unit`, which is the hero-attacker successor of the
+	# flat `unit_damage_per_hit` this test used to read.
+	assert_true(config.hero_damage_to_unit > 0.0,
+		"hero_damage_to_unit must be authored > 0 (a zero flat damage ships the invulnerable box "
+		+ "`4-3a` exists to replace — a unit that can be hit forever and never dies)")
+	assert_true(config.unit_kinds.size() > 0,
+		"the authored config must carry unit kinds, or every per-kind audit here is vacuous")
+	for kind: UnitKindProfile in config.unit_kinds:
+		assert_true(kind.max_hp > 0.0,
+			("%s max_hp must be authored > 0 (a zero maximum summons a unit that is already dead — "
+			+ "the first fact drops at the liveness rung and the kind ships invisible)")
+					% kind.kind_name)
+		var hits_to_kill := ceili(kind.max_hp / config.hero_damage_to_unit)
+		assert_true(hits_to_kill >= 2,
+			("%s takes %d hero swing(s) to kill — must be >= 2; a one-shot unit makes its authored "
+			+ "max_hp cosmetic, the exact failure `4-3a/R8` rejected the percent-of-max formula for")
+					% [kind.kind_name, hits_to_kill])
+		assert_true(hits_to_kill <= 10,
+			("%s takes %d hero swings to kill — must be <= 10; beyond that a kill stops being the "
+			+ "legible, decisive event `4-3a` ships") % [kind.kind_name, hits_to_kill])
+		# AC 6's completeness clause, machine-checked: "every kind's value for a field it does not
+		# use for anything ... is still authored and NON-NEGATIVE — no field is left undefined for a
+		# kind". A kind that never attacks still authors a damage; it is audited non-negative, not
+		# positive, because 0.0 is the honest authoring for a totem that makes no contact.
+		var attack := kind.attack_at(0)
+		if attack != null:
+			assert_true(attack.damage >= 0.0, "%s attack damage is non-negative" % kind.kind_name)
 
 
 ## ---- Minion attack rhythm (story 4-3b, AC 1/AC 13) -------------------------------------
@@ -308,23 +338,41 @@ func test_authored_minion_attack_rhythm_is_playable() -> void:
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.minion_attack_windup_seconds > 0.0,
-		"minion_attack_windup_seconds must be authored > 0 (a zero derives 0 ticks and the phase "
-		+ "completes on the tick it starts — no readable windup at all)")
-	assert_true(config.minion_attack_active_seconds > 0.0,
-		"minion_attack_active_seconds must be authored > 0 (a zero-tick active window never flags "
-		+ "the hitbox, so the swing can never land a fact)")
-	assert_true(config.minion_attack_recovery_seconds > 0.0,
-		"minion_attack_recovery_seconds must be authored > 0 (a zero recovery makes the rhythm the "
-		+ "unit's only limiter meaningless — AC 11 has no other gate)")
-	assert_true(config.minion_attack_reach_distance > 0.0,
-		"minion_attack_reach_distance must be authored > 0 (a zero reach is never satisfied, so no "
-		+ "unit ever leaves idle)")
-	assert_true(config.minion_attack_reach_distance >= config.unit_stop_distance,
-		("minion_attack_reach_distance (%.2f) must be >= unit_stop_distance (%.2f) — a unit halts "
-		+ "at the stop distance, so a shorter reach parks it permanently outside its own reach and "
-		+ "the story ships invisible with every test green")
-				% [config.minion_attack_reach_distance, config.unit_stop_distance])
+	# Story 4-4 (AC 6/AC 9/AC 10): PER KIND, AND ONLY FOR KINDS THAT ACTUALLY ATTACK. A kind
+	# authoring an EMPTY attack list is the honest shape for the two accelerator totems (AC 3: "the
+	# accelerators never attack"), so it is skipped rather than failed — but a kind that DOES author
+	# an attack must author a playable one, for the three reasons stated in this test's header.
+	for kind: UnitKindProfile in config.unit_kinds:
+		var attack := kind.attack_at(0)
+		if attack == null:
+			continue
+		assert_true(attack.windup_seconds > 0.0,
+			("%s windup_seconds must be authored > 0 (a zero derives 0 ticks and the phase "
+			+ "completes on the tick it starts — no readable windup at all)") % kind.kind_name)
+		assert_true(attack.active_seconds > 0.0,
+			("%s active_seconds must be authored > 0 (a zero-tick active window never flags the "
+			+ "hitbox, so the swing can never land a fact)") % kind.kind_name)
+		assert_true(attack.recovery_seconds > 0.0,
+			("%s recovery_seconds must be authored > 0 (a zero recovery makes the rhythm the "
+			+ "unit's only limiter meaningless)") % kind.kind_name)
+		assert_true(attack.range > 0.0,
+			("%s attack range must be authored > 0 (a zero range is never satisfied, so the unit "
+			+ "never leaves idle)") % kind.kind_name)
+		assert_true(attack.cadence_seconds >= 0.0,
+			("%s cadence_seconds is non-negative (0 is the legitimate back-to-back authoring every "
+			+ "minion ships with, so this bound is NOT > 0)") % kind.kind_name)
+		# THE REACH-VERSUS-STOP-DISTANCE BOUND APPLIES TO MELEE RECORDS ONLY, and the narrowing is
+		# `4-4/R1`'s consequence rather than a weakening. The bound exists because a unit WALKS to
+		# `stop_distance` and must then be in reach; a PROJECTILE record's range is a FIRING range
+		# on a kind that never walks at all (`4-4/R12`, speed 0), and it is deliberately far longer
+		# than the stop distance. Applying the melee bound there would assert something true by
+		# accident and hide the real one.
+		if attack.projectile == null:
+			assert_true(attack.range >= kind.stop_distance,
+				("%s melee range (%.2f) must be >= its stop_distance (%.2f) — a unit halts at the "
+				+ "stop distance, so a shorter reach parks it permanently outside its own reach and "
+				+ "the kind ships invisible with every test green")
+						% [kind.kind_name, attack.range, kind.stop_distance])
 
 
 ## ---- Defense values (story 1-8, R-N6) — bounds reasoning in the file header. -----------
@@ -381,13 +429,219 @@ func test_authored_attack_move_speed_multipliers_are_non_negative() -> void:
 ## Same exemption, same reason: 0.0 = full root is the authored design value, so the bound is
 ## non-negative rather than > 0. A NEGATIVE multiplier is the defect this catches — it would drive
 ## a minion BACKWARDS, away from the target it is swinging at, for the whole swing.
+##
+## STORY 4-4 (AC 6): PER KIND NOW, and audited for EVERY kind rather than once — which is strictly
+## more coverage than the three flat globals had, and is the point of the conversion.
 func test_authored_minion_attack_move_speed_multipliers_are_non_negative() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	for field in [&"minion_attack_windup_move_speed_multiplier",
-			&"minion_attack_active_move_speed_multiplier",
-			&"minion_attack_recovery_move_speed_multiplier"]:
-		assert_true(float(config.get(field)) >= 0.0,
-			"%s must be non-negative (0.0 = full root is the authored design)" % field)
+	for kind: UnitKindProfile in config.unit_kinds:
+		for field in [&"attack_windup_move_speed_multiplier",
+				&"attack_active_move_speed_multiplier",
+				&"attack_recovery_move_speed_multiplier"]:
+			assert_true(float(kind.get(field)) >= 0.0,
+				"%s.%s must be non-negative (0.0 = full root is the authored design)"
+						% [kind.kind_name, field])
+
+
+## ---- The shipped KIND SET (story 4-4, AC 1) ---------------------------------------------
+##
+## THE FOUR KINDS AC 6 NAMES ARE AUDITED BY NAME, AND SO IS THEIR ORDER. A unit record stores its
+## kind as a plain INT INDEX into `BalanceConfig.unit_kinds` (never the StringName — see
+## `UnitBoard._kind_index`), so reordering the authored list silently renames every existing
+## record's kind and would repoint a saved replay's units at the wrong profiles. The order is
+## therefore part of the authored contract, and this is where that is said out loud.
+##
+## THE NAMES MUST MATCH `CardEffectResolver.SUMMON_KINDS`'s VALUES, or a totem card would resolve to
+## a kind name `BalanceConfig` does not author and put NOTHING on the board — loudly by absence
+## (which is the designed failure), but with the card silently dead. That cross-file agreement is the
+## one this test exists to hold, so it reads the resolver's own table rather than a second literal.
+func test_authored_unit_kinds_cover_every_summon_kind_in_a_pinned_order() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var names: Array[StringName] = []
+	for kind: UnitKindProfile in config.unit_kinds:
+		assert_not_null(kind, "no authored kind slot may be null — indices must stay stable")
+		names.append(kind.kind_name)
+	assert_eq(names, [&"minion", &"combat_totem", &"mana_accelerator", &"stamina_accelerator"],
+		"the authored kind list and ITS ORDER are the contract a record's stored kind INDEX means; "
+		+ "reordering renames every existing record's kind")
+	# Every kind the resolver can name must exist, plus the unmapped default it falls back to.
+	for kind_name: StringName in CardEffectResolver.SUMMON_KINDS.values():
+		assert_true(config.kind_index_of(kind_name) != BalanceConfig.NO_KIND_INDEX,
+			("CardEffectResolver maps a summon id to kind `%s`, which the authored config does not "
+			+ "carry — that card would resolve successfully and put nothing on the board")
+					% kind_name)
+	assert_true(config.kind_index_of(CardEffectResolver.KIND_MINION) != BalanceConfig.NO_KIND_INDEX,
+		"the unmapped-summon default kind must be authored, or every minion card is inert")
+
+
+## ---- The three TOTEM kinds (story 4-4, AC 5/AC 8/AC 10, `4-4/R1`/`4-4/R9`/`4-4/R12`) ------
+##
+## AC 5 / `4-4/R12` MACHINE-CHECKED: all three totem kinds author movement speed 0, "not only the
+## two accelerators". This is the one place that ruling is enforced rather than merely honoured — a
+## retune that gave the Combat totem a walking speed would otherwise pass every other test.
+##
+## AC 8 / `4-4/R9` MACHINE-CHECKED: the Combat totem names a HERO-PREFERRING priority that is
+## NEITHER `standard` NOR the test-only `hero_seeker`, and the named profile must actually exist in
+## `data/minions/` AND actually prefer the hero. Naming a profile that does not exist would leave
+## the totem permanently targetless; naming one that does not prefer the hero would silently undo
+## `4-4/R9`'s rationale (projectile avoidance is designed for a target that can roll).
+##
+## AC 3 MACHINE-CHECKED: the two accelerators author NO attack at all, and the Combat totem attacks
+## only via a projectile.
+func test_authored_totem_kinds_are_static_and_correctly_prioritised() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	for kind_name in [&"combat_totem", &"mana_accelerator", &"stamina_accelerator"]:
+		var kind := _kind(config, kind_name)
+		assert_not_null(kind, "the authored config must carry a `%s` kind" % kind_name)
+		if kind == null:
+			continue
+		assert_eq(kind.move_speed, 0.0,
+			("%s must author move_speed 0 (`4-4/R12`: ALL THREE totem kinds are static, not only "
+			+ "the two accelerators — the GDD's 'small, unimposing static structure')") % kind_name)
+	var combat := _kind(config, &"combat_totem")
+	if combat == null:
+		return
+	assert_ne(combat.priority_name, TargetingService.PRIORITY_STANDARD,
+		"AC 8: the Combat totem authors a NEW priority, not a reuse of `standard`")
+	assert_ne(combat.priority_name, &"hero_seeker",
+		"AC 8: the Combat totem authors a NEW priority, not a reuse of the TEST-ONLY `hero_seeker`")
+	var priority := TargetingService.priority_named(
+		TargetingService.authored_priorities(), combat.priority_name)
+	assert_not_null(priority,
+		("the Combat totem names priority `%s`, which `data/minions/` does not author — the totem "
+		+ "would be permanently targetless and never fire") % combat.priority_name)
+	if priority == null:
+		return
+	assert_true(priority.prefer_hero,
+		("`%s` must PREFER THE HERO (`4-4/R9`: projectile avoidance is designed for a target that "
+		+ "can roll, and a unit cannot)") % combat.priority_name)
+	for kind_name in [&"mana_accelerator", &"stamina_accelerator"]:
+		var accelerator := _kind(config, kind_name)
+		if accelerator != null:
+			assert_false(accelerator.has_attack(),
+				"AC 3: %s must author NO attack — the accelerators never attack" % kind_name)
+	assert_true(combat.has_attack(), "AC 10: the Combat totem authors exactly one attack record")
+	assert_eq(combat.attacks.size(), 1,
+		"AC 9 Non-Goal: every kind ships exactly ONE attack record this story")
+	assert_not_null(combat.attack_at(0).projectile,
+		"AC 3/AC 14: the Combat totem attacks ONLY via its projectile")
+
+
+## ---- The Combat totem's projectile (story 4-4, AC 10/AC 15/AC 19, `4-4/R1`/`4-4/R2`) ------
+##
+## THE 8 M FIRING RANGE AND THE 60 M TRAVEL BUDGET ARE AUDITED SEPARATELY AND AGAINST EACH OTHER,
+## which is AC 19's own requirement: they are "a distinct authored number" governing "a different
+## thing (total travel budget vs. whether the totem may fire at all)". A build that collapsed them
+## into one number would make a shot expire at the edge of the firing range and never reach a target
+## that stepped back, and nothing else in the suite would notice.
+##
+## THE ARENA BOUNDS ARE WHERE BOTH VALUES COME FROM (`4-4/R1`, `4-4/R2`), so they are audited against
+## the arena rather than against themselves: the range must stay WELL INSIDE the 40 m span (a totem
+## whose threat radius covered the arena would not be a placed structure at all), and the budget must
+## clear the ~56.57 m diagonal so a corner-to-corner shot can complete.
+const ARENA_SPAN := 40.0
+const ARENA_DIAGONAL := 56.5685424949238
+
+func test_authored_projectile_profile_is_playable() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var combat := _kind(config, &"combat_totem")
+	if combat == null or combat.attack_at(0) == null:
+		assert_true(false, "the Combat totem must author an attack record to audit")
+		return
+	var attack := combat.attack_at(0)
+	var projectile := attack.projectile
+	assert_not_null(projectile, "the Combat totem's attack must author a projectile")
+	if projectile == null:
+		return
+	assert_true(attack.range > 0.0 and attack.range < ARENA_SPAN * 0.5,
+		("the firing range (%.2f) must be > 0 and well inside the %.0f m arena span (`4-4/R1`) — a "
+		+ "range covering the arena makes the totem's placement decide nothing")
+				% [attack.range, ARENA_SPAN])
+	assert_true(attack.cadence_seconds > 0.0,
+		"AC 10: the Combat totem authors its OWN firing cadence > 0 (a zero cadence degrades it to "
+		+ "the minion's back-to-back cycle and AC 10's number would decide nothing)")
+	assert_true(projectile.travel_budget >= ARENA_DIAGONAL,
+		("the travel budget (%.2f) must clear the arena's ~%.2f m diagonal (`4-4/R2`) so a "
+		+ "corner-to-corner shot can complete") % [projectile.travel_budget, ARENA_DIAGONAL])
+	assert_true(projectile.travel_budget > attack.range,
+		("AC 19: the travel budget (%.2f) and the firing range (%.2f) are DISTINCT numbers "
+		+ "governing different things — a budget at or below the range expires every shot that "
+		+ "chases a target which stepped back") % [projectile.travel_budget, attack.range])
+	assert_true(projectile.launch_speed > 0.0,
+		"launch_speed must be authored > 0 (a zero launch with zero acceleration never leaves the "
+		+ "totem, and AC 14's 'distinct entity that travels' ships invisible)")
+	assert_true(projectile.homing_turn_rate_degrees_per_second >= 0.0,
+		"the homing turn rate is non-negative (0 is the honest 'flies straight' authoring)")
+	assert_true(projectile.homing_turn_rate_degrees_per_second > 0.0,
+		"AC 15: the SHIPPED profile must actually home (> 0), or AC 16/AC 17's homing-end rules "
+		+ "guard behaviour the build never exhibits")
+	assert_true(projectile.acceleration_per_second_squared >= 0.0,
+		"acceleration is non-negative (0 is the honest 'constant speed' authoring)")
+	assert_true(projectile.acceleration_per_second_squared > 0.0,
+		"AC 15: the SHIPPED profile must actually accelerate (> 0)")
+	assert_true(projectile.acceleration_delay_seconds >= 0.0,
+		"the acceleration delay is non-negative (0 means accelerating from launch)")
+	assert_true(projectile.max_speed >= projectile.launch_speed,
+		("max_speed (%.2f) must be >= launch_speed (%.2f) — a lower ceiling would DECELERATE a "
+		+ "projectile the profile says accelerates")
+				% [projectile.max_speed, projectile.launch_speed])
+
+
+## ---- Accelerator working values (story 4-4, AC 20/AC 21, `4-4/R13`) -----------------------
+##
+## `4-4/R13` MAKES THESE DERIVED, NOT PRINCIPLED: the Mana Accelerator's cadence/amount are set
+## relative to the existing `passive_tick` rule and the Stamina Accelerator's factor relative to the
+## non-accelerated `stamina_regen_per_second` baseline. So the bounds audited here are RELATIONS to
+## those baselines rather than absolute numbers — which is what keeps them playtest-tunable while
+## still catching the two silent failures.
+##
+## THE STAMINA MULTIPLIER IS AUDITED > 1.0, NOT > 0. AC 21 requires the rate to be RAISED ABOVE its
+## non-accelerated value; an authored 1.0 ships a totem that does exactly nothing and below 1.0 ships
+## one that HARMS its owner, and both pass a `> 0` bound silently.
+func test_authored_accelerator_values_are_derived_and_effective() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.mana_accelerator_mana > 0.0,
+		"mana_accelerator_mana must be authored > 0 (a zero amount is a dead faucet — the totem "
+		+ "ships visible but inert)")
+	assert_true(config.mana_accelerator_interval_seconds > 0.0,
+		"mana_accelerator_interval_seconds must be authored > 0 (a zero authored cadence derives a "
+		+ "clamped 1 tick and pays out EVERY tick, which is not a cadence at all)")
+	# `4-4/R13`'s derivation, machine-checked as a BAND against the `passive_tick` baseline it is
+	# derived from: stronger than passive (the totem must be worth casting) but the same order of
+	# magnitude (it is a faucet, not a win condition).
+	var accelerator_per_second := config.mana_accelerator_mana / config.mana_accelerator_interval_seconds
+	assert_true(accelerator_per_second > config.mana_regen_per_second,
+		("the Mana Accelerator (%.3f mana/s) must out-produce the passive faucet (%.3f mana/s) — "
+		+ "`4-4/R13`: 'stronger since totem-gated'")
+				% [accelerator_per_second, config.mana_regen_per_second])
+	assert_true(accelerator_per_second <= config.mana_regen_per_second * 10.0,
+		("the Mana Accelerator (%.3f mana/s) must stay within an order of magnitude of the passive "
+		+ "faucet (%.3f mana/s) — `4-4/R13`: 'same order of magnitude'")
+				% [accelerator_per_second, config.mana_regen_per_second])
+	assert_true(config.stamina_accelerator_regen_multiplier > 1.0,
+		("stamina_accelerator_regen_multiplier must be authored > 1.0 (got %.2f) — AC 21 requires "
+		+ "the owner's regen to be RAISED; 1.0 ships a totem that does nothing and < 1.0 ships one "
+		+ "that harms its owner, and both pass a `> 0` bound")
+				% config.stamina_accelerator_regen_multiplier)
+
+
+## The authored kind carrying `kind_name`, or null. A test-local read of the same lookup
+## `BalanceConfig.kind_index_of` performs, expressed as the profile rather than the index because
+## every assertion above is about the profile's fields.
+func _kind(config: BalanceConfig, kind_name: StringName) -> UnitKindProfile:
+	return config.kind_at(config.kind_index_of(kind_name))

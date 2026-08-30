@@ -447,6 +447,12 @@ func _config() -> BalanceConfig:
 	c.max_stamina = 40.0
 	c.deck_size = DECK_SIZE
 	c.hand_size = HAND_SIZE
+	# Story 4-4 (AC 1): the cast seat resolves a summon's KIND before it appends a record, so a
+	# fixture authoring no kinds would have every summon here resolve SUCCESSFULLY and put nothing on
+	# the board — the honest behaviour for an unauthored kind (see the seat), but not what these
+	# tests are measuring. One minion kind at index 0, which is what an unmapped `summon_*` id
+	# resolves to (`CardEffectResolver.KIND_MINION`).
+	c.unit_kinds = UnitKindFixture.minion_only(9.0, 3.0, 0, 0, 0, 2.0)
 	return c
 
 
