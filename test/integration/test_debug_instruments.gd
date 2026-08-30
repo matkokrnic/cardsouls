@@ -71,6 +71,37 @@ var _reveal_clears_on_untoggle := false
 
 func _initialize() -> void:
 	root.add_child(load("res://src/main/main.tscn").instantiate())
+	_silence_audio_cues(root)
+
+
+## THE FIX FOR THE INTERMITTENT `ERROR: 1 resources still in use at exit`, which run_all.sh's
+## `^ERROR:` grep turned into a random red suite (measured 2/30 here, and 19/40 on a stripped-down
+## probe of this same file).
+##
+## THE MECHANISM, measured rather than guessed. This test drives the round-over label through the
+## 1-7 round_ended path (`_bus.round_ended.emit(1)` in _run_static_checks below). That reaches
+## TelegraphController.on_round_ended, which calls `_cue_round_end.play()` — and
+## `assets/audio/cue_round_end.wav` is 0.4 s long. The test then quits ~0.42 s later (frame 34;
+## measured elapsed-after-emit 415-429 ms). Whether the AudioServer has retired that playback by the
+## time the engine tears down is a coin flip, and when it has not, the still-live
+## AudioStreamPlaybackWAV holds the AudioStreamWAV and the engine reports it as a leaked resource.
+## `--verbose` names it outright: "Resource still in use: res://assets/audio/cue_round_end.wav".
+##
+## IT IS A TEST-SIDE ARTEFACT, NOT A LEAK IN src/. Measured proof: quitting EARLIER makes it worse
+## (frame 24 -> 15/20, frame 28 -> 19/20) and quitting LATER makes it vanish (frame 45 -> 0/20,
+## frame 60 -> 0/20) — a pure "did the 0.4 s cue finish before exit" race, with no reference cycle
+## and nothing retained by shipped code. Nulling the streams removes the race at its source (0/60),
+## rather than the "quit later" workaround, which only widens a window that machine load can close
+## again.
+##
+## NOTHING HERE IS UNDER TEST BY THIS FILE — it asserts on Labels, Controls and rects. A headless
+## run has no audio device anyway; what it has is an AudioServer that faithfully keeps mixing a
+## sample this test has no reason to start.
+func _silence_audio_cues(node: Node) -> void:
+	if node is AudioStreamPlayer or node is AudioStreamPlayer2D or node is AudioStreamPlayer3D:
+		node.stream = null
+	for child in node.get_children():
+		_silence_audio_cues(child)
 
 
 func _physics_process(_delta: float) -> bool:
