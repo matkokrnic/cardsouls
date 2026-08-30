@@ -78,6 +78,43 @@ signal reshuffle_vulnerable_window_opened(slot: int)
 const CONTACT_STRIKE := 0
 const CONTACT_REACH_PROBE := 1
 
+## Story 4-4 (`E4-P/R12`): THE PROJECTILE PARTITION of the contact address space. `E4-P/R12` rules
+## that a projectile "needs its own attacker identity and dedupe, not a `[slot, index]` unit-board
+## address"; this is that identity, expressed as a THIRD PARTITION of the existing index half rather
+## than as a third element on the pair.
+##
+## THE WHOLE SCHEME, in one place: `index >= 0` addresses a unit at that board index, `index == -1`
+## (`TargetingService.HERO_INDEX`) addresses that slot's hero, and `index <= -2` addresses that
+## slot's projectile at `PROJECTILE_INDEX_BASE - index`. Three partitions, one int, one convention.
+##
+## WHY NOT A WIDER TUPLE. The fact rides the recorded contact ROW as plain scalars
+## (`intent_recorder.gd`) and every existing hero and unit call site passes a two-element pair; a
+## third element would change the recorded row shape, break every replay made before this story, and
+## force every call site to learn a field that two of the three partitions would leave at a constant.
+##
+## THE ENCODING IS ALWAYS DONE THROUGH THE TWO HELPERS BELOW, never by writing `-2 - i` at a call
+## site — the `UnitBoard.has_index` discipline: a convention re-derived inline is a convention that
+## can be got wrong in one place and right everywhere else.
+const PROJECTILE_INDEX_BASE := -2
+
+
+## The contact-address index half naming projectile `index` on its owner's board.
+static func projectile_attacker_index(index: int) -> int:
+	return PROJECTILE_INDEX_BASE - index
+
+
+## Whether a contact address's index half names a PROJECTILE. The public predicate every rung of the
+## step-4 ladder dispatches on; nothing re-derives `<= PROJECTILE_INDEX_BASE` inline.
+static func is_projectile_index(attacker_index: int) -> bool:
+	return attacker_index <= PROJECTILE_INDEX_BASE
+
+
+## The projectile board index a contact address names. The inverse of
+## `projectile_attacker_index`, and an involution on this partition — which is what makes the pair
+## impossible to get half-right.
+static func projectile_index_of(attacker_index: int) -> int:
+	return PROJECTILE_INDEX_BASE - attacker_index
+
 var p1: PlayerState
 var p2: PlayerState
 var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
@@ -263,6 +300,19 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    just advanced, and move the phase when it reaches its boundary.
 	_advance_unit_attacks(p1)
 	_advance_unit_attacks(p2)
+	# 3c. Story 4-4 (AC 15/AC 19): the PROJECTILE FLIGHT ADVANCE — the step-3 family's fourth
+	#    member, seated after both unit seats for the same fixed P1 -> P2 determinism, and BEFORE
+	#    step 4 for a load-bearing reason: a shot whose budget expires on this tick must be dead by
+	#    the time the ladder judges the facts it produced, so a fact gathered under the F1 one-tick
+	#    lag from an already-expired shot drops at the dead-attacker rung — which is what AC 19's
+	#    "removed from the world" has to mean for a fact still in flight — rather than landing a hit
+	#    the shot had no budget left for.
+	#
+	#    IT ADVANCES A CLOCK AND AN ODOMETER, NOTHING ELSE. The heading is actor-owned and never
+	#    enters this layer; what advances here is the acceleration clock (which decides the current
+	#    speed) and the path length (which decides the end).
+	_advance_projectiles(p1)
+	_advance_projectiles(p2)
 	# 4. Resolve contacts      (story 1-5) drain the queued facts in push order: dedupe/
 	#    liveness acceptance -> damage -> record confirmed hits for step 5. Damage and
 	#    dedupe ONLY here — mana is step 5's seat, keeping the documented D2 order
@@ -509,8 +559,15 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 	var attacker_index := attacker[1] if attacker.size() == 2 else -1
 	Invariant.check(attacker_slot == 0 or attacker_slot == 1,
 		"contact attacker_slot must be 0 or 1, got %d" % attacker_slot)
-	Invariant.check(attacker_index >= TargetingService.HERO_INDEX,
-		"contact attacker index must be >= -1 (-1 is the hero), got %d" % attacker_index)
+	# Story 4-4 (`E4-P/R12`): the attacker index half now has THREE partitions, so the old
+	# `>= HERO_INDEX` bound is replaced rather than widened by exception: any index at or above the
+	# hero is a hero-or-unit address, and any index at or below `PROJECTILE_INDEX_BASE` is a
+	# projectile. Nothing is left in between, so the check still refuses nothing valid and admits
+	# nothing meaningless — which is what an address-space bound is for.
+	Invariant.check(attacker_index >= TargetingService.HERO_INDEX
+			or is_projectile_index(attacker_index),
+		("contact attacker index must be >= -1 (a unit or the hero) or <= %d (a projectile), got %d")
+				% [PROJECTILE_INDEX_BASE, attacker_index])
 	Invariant.check(kind == CONTACT_STRIKE or kind == CONTACT_REACH_PROBE,
 		"contact kind must be CONTACT_STRIKE or CONTACT_REACH_PROBE, got %d" % kind)
 	Invariant.check(target.size() == 2,
@@ -770,11 +827,20 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 	for index in board.size():
 		if not board.is_alive_at(index):
 			continue
-		var kind_ticks := balance_ticks.kind_ticks_at(board.kind_index_at(index))
+		var kind_index := board.kind_index_at(index)
+		var kind_ticks := balance_ticks.kind_ticks_at(kind_index)
 		if kind_ticks == null:
 			continue
 		var attack_ticks := kind_ticks.attack_at(0)
 		if attack_ticks == null:
+			continue
+		# Story 4-4 (AC 14): the AUTHORED record beside its derived tick record. Both are read
+		# INLINE at the point of use (CONSTRAINT C) and through the SAME index, which is what keeps
+		# `UnitKindTicks`'s index-alignment contract a single fact rather than two lookups that could
+		# disagree. Null here means the same thing null means above — this kind does not attack.
+		var kind := balance.kind_at(kind_index) if balance != null else null
+		var attack := kind.attack_at(0) if kind != null else null
+		if attack == null:
 			continue
 		if board.attack_phase_at(index) != UnitBoard.AttackPhase.IDLE \
 				and board.attack_ticks_at(index) == 0:
@@ -787,6 +853,25 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 					board.set_phase_at(index, UnitBoard.AttackPhase.ACTIVE,
 							attack_ticks.active_ticks)
 					player.unit_dedupe.open(index, board.attack_count_at(index))
+					# Story 4-4 (AC 14): THE LAUNCH SEAT. An attack whose record authors a projectile
+					# fires ONE at the windup-to-active transition — the same moment a melee attack's
+					# hitbox opens, so "the swing lands here" is one moment for both kinds of attack
+					# rather than two that could drift.
+					#
+					# THE DEDUPE RECORD IS STILL OPENED ABOVE, and deliberately so even though a
+					# projectile attack's hitbox never gathers (`_gather_unit_facts` skips it). The
+					# record is opened by the PHASE, not by the weapon; making it conditional would
+					# put a second is-this-a-projectile test in the one place the phase ladder is
+					# supposed to be uniform, to save a record nothing ever registers into.
+					#
+					# A PROJECTILE IS LAUNCHED EVEN WITH NO ACQUIRED TARGET. It carries the
+					# no-target pair, finds no position to home on and flies straight until its
+					# budget expires — which is the honest behaviour, and it is unreachable in
+					# shipped play anyway: the windup that led here could only begin because a reach
+					# probe reported the ACQUIRED target in range.
+					if attack.projectile != null:
+						player.projectiles.add(board.target_slot_at(index),
+								board.target_index_at(index), board.kind_index_at(index), index)
 				UnitBoard.AttackPhase.ACTIVE:
 					# The window closes and the record enters its single GRACE tick, absorbing the F1
 					# one-tick fact lag exactly as the hero's does: a contact gathered on the last
@@ -821,6 +906,94 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 			# the acquired target, refreshed by the step-4 seat only while IDLE, and from this
 			# moment nothing writes it again until the swing ends. THAT FREEZE IS THE LOCK (AC 12).
 			board.begin_windup_at(index, attack_ticks.windup_ticks, attack_ticks.cadence_ticks)
+
+
+## Story 4-4 (AC 15/AC 19): advance every LIVE projectile on one player's board by one tick — the
+## acceleration clock and the travel odometer, and nothing else.
+##
+## THE SPEED IS DERIVED, NEVER STORED (see `projectile_board.gd`'s header): the record holds the
+## firing kind's INDEX, and every authored number is read through it INLINE on every tick
+## (CONSTRAINT C). That is what lets a shot outlive the totem that fired it without carrying five
+## stale copies of authored data, and what makes an X3 retune take effect on shots already in the
+## air rather than only on the next one.
+##
+## THE RUNNER MOVES THE ACTOR BY THE SAME DERIVED SPEED, from `projectile_speed_at()` below, so the
+## odometer this integrates and the distance the actor actually covers are ONE arithmetic rather
+## than two that could drift. That is also why the budget is spendable without a position ever
+## entering this layer.
+##
+## A SHOT WHOSE KIND NO LONGER RESOLVES IS CONSUMED rather than frozen — an X3 reload that shortened
+## `unit_kinds` leaves it with no authored speed and no authored budget, and a projectile that can
+## neither move nor expire would hang in the air forever. Ending it is the honest degradation.
+func _advance_projectiles(player: PlayerState) -> void:
+	if balance == null or balance_ticks == null:
+		return
+	var board := player.projectiles
+	for index in board.size():
+		if not board.is_alive_at(index):
+			continue
+		var profile := _projectile_profile_at(board, index)
+		if profile == null:
+			board.consume_at(index)
+			continue
+		# One tick's distance at this tick's derived speed. `TimingWindow.TICK_HZ` is the project's
+		# single clock (the runner `check_invariant`s it against `physics_ticks_per_second` at
+		# startup), so this is the integer-tick integration A1 requires — never a wall-clock delta.
+		var distance := projectile_speed_at(board, index) / TimingWindow.TICK_HZ
+		board.advance_at(index, distance, profile.travel_budget)
+
+
+## The CURRENT SPEED of one live projectile, in world units per second — the acceleration profile
+## (AC 15) evaluated at this shot's flight clock.
+##
+## PUBLIC because the RUNNER reads it too, to move the actor by exactly the distance
+## `_advance_projectiles` just spent from the budget. One arithmetic, two readers, rather than a
+## duplicated curve that a retune could desynchronise. It is a PURE QUERY — it touches no board and
+## mutates nothing — which is the same classification `unit_attack_phase_multiplier` already carries
+## for the same reason (`4-3c1/R5`'s `EXEMPT_PURE_QUERY`).
+##
+## THE CURVE IS AUTHORED DATA AND THERE IS EXACTLY ONE OF IT (`4-4/R3`): launch speed until the
+## authored delay has elapsed, then linear acceleration, clamped at the authored ceiling. No branch
+## anywhere selects a different curve by kind — a kind that wants to behave differently authors
+## different numbers.
+##
+## THE CEILING IS NOT COSMETIC. Without it an authored acceleration would grow the speed without
+## bound over a long flight, and a step longer than a hurtbox is wide would tunnel straight through
+## it — the projectile would pass through its target instead of hitting it.
+func projectile_speed_at(board: ProjectileBoard, index: int) -> float:
+	var profile := _projectile_profile_at(board, index)
+	if profile == null:
+		return 0.0
+	var ticks := board.flight_ticks_at(index)
+	var delay := _projectile_acceleration_delay_ticks_at(board, index)
+	if ticks <= delay:
+		return profile.launch_speed
+	var accelerating_seconds := float(ticks - delay) / TimingWindow.TICK_HZ
+	return minf(profile.max_speed,
+			profile.launch_speed + profile.acceleration_per_second_squared * accelerating_seconds)
+
+
+## This shot's authored projectile profile, resolved through the KIND INDEX its record stores. Null
+## for a kind an X3 reload has removed, or one whose attack record authors no projectile — the
+## second is unreachable in shipped play (only a projectile attack launches one) and is answered
+## honestly rather than asserted, on this file's standing total-function posture.
+func _projectile_profile_at(board: ProjectileBoard, index: int) -> ProjectileProfile:
+	var kind := balance.kind_at(board.kind_index_at(index))
+	if kind == null:
+		return null
+	var attack := kind.attack_at(0)
+	return attack.projectile if attack != null else null
+
+
+## The acceleration delay in TICKS, read off the derived tick record rather than re-converted here —
+## A1's single seconds-to-ticks boundary is `BalanceTicks.from_config()` and nothing else may
+## convert. Zero for an unresolvable kind, which only ever pairs with a null profile above.
+func _projectile_acceleration_delay_ticks_at(board: ProjectileBoard, index: int) -> int:
+	var kind_ticks := balance_ticks.kind_ticks_at(board.kind_index_at(index))
+	if kind_ticks == null:
+		return 0
+	var record := kind_ticks.attack_at(0)
+	return record.projectile_acceleration_delay_ticks if record != null else 0
 
 
 ## Story 1-9 (1-9/R6): the entry-time roll direction — the same camera-rotated world
@@ -926,6 +1099,23 @@ func _resolve_contacts() -> Array[int]:
 		# so if the i-frames expire inside the swing's active window the next gathered
 		# fact resolves normally. No damage, no hit_landed, no mana, no signal (1-9/R5).
 		if target.hero.is_iframe_open():
+			# Story 4-4 (AC 16, `4-4/R4`): THE I-FRAME DROP IS ALSO WHAT ENDS A PROJECTILE'S HOMING,
+			# on the same tick and at the same rung. The rung itself is UNCHANGED — the fact is
+			# dropped exactly as it has been since `1-9/R1`, before dedupe, with no damage, no
+			# signal and no mana — and this line adds a SECOND CONSEQUENCE for one attacker kind
+			# rather than a second rung that could fall out of step with the first.
+			#
+			# THE PROJECTILE IS NOT CONSUMED HERE, and the asymmetry against AC 18 is the whole
+			# point: a blocked or deflected shot is STOPPED (AC 18), while a shot that passes
+			# through i-frames keeps flying — it just stops steering. From this tick on it holds its
+			# last heading, which is the actor's own state and needs no value pushed to it: the
+			# runner simply stops asking where the target is.
+			#
+			# `4-4/R5` IS THE OTHER HALF, and it is enforced by ABSENCE: nothing anywhere ends
+			# homing when a target merely leaves the flight path, because a miss is not an event and
+			# produces no fact to hang such a rung on.
+			if is_projectile_index(attacker_index):
+				attacker.projectiles.end_homing_at(projectile_index_of(attacker_index))
 			continue
 		if not _register_attacker_hit(attacker, attacker_index, int(fact["attack_index"]),
 				int(fact["target"]), TargetingService.HERO_INDEX):
@@ -950,6 +1140,12 @@ func _resolve_contacts() -> Array[int]:
 				and _is_facing(target.hero, fact["dir"]):
 			if target.hero.is_deflect_window_open() and target.stamina.spend(
 					balance.deflect_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
+				# Story 4-4 (AC 18, `4-4/R6`): A DEFLECTED PROJECTILE IS CONSUMED — it "does not
+				# continue flying past a blocked or deflected hit". Seated on the deflect path
+				# itself rather than once below, because this path `continue`s: the deflect is
+				# FULLY NEGATED (no damage, no `hit_landed`, no mana, `1-8`'s R-D4 unchanged) and
+				# never reaches the common consumption line further down.
+				_consume_projectile_attacker(attacker, attacker_index)
 				_queue.push(deflect_landed.emit.bind(int(fact["attacker"]), int(fact["target"])))
 				continue
 			damage *= balance.block_damage_multiplier
@@ -970,8 +1166,32 @@ func _resolve_contacts() -> Array[int]:
 		# mana engine — and a blocked hit still confirms.
 		if attacker_index == TargetingService.HERO_INDEX:
 			confirmed.append(int(fact["attacker"]))
+		# Story 4-4 (AC 18, `4-4/R6`): THE COMMON CONSUMPTION LINE — a BLOCKED hit and a FULL hit
+		# both end the shot here. Together with the deflect path above, every outcome that RESOLVES
+		# consumes the projectile; the only outcomes that do not are the ones that DROP the fact
+		# (dead target, dead attacker, i-frames), which is exactly right — a dropped fact is not a
+		# hit, and AC 16 is explicit that the i-frame case keeps flying.
+		#
+		# SEATED AFTER `take_damage` AND THE SIGNAL, so a consumed shot has still delivered
+		# everything the hit owed. Order matters only for readability here — nothing between reads
+		# the projectile's liveness — but the sequence "resolve, then end" is the honest one.
+		_consume_projectile_attacker(attacker, attacker_index)
 	_contact_queue.clear()
 	return confirmed
+
+
+## Story 4-4 (AC 18, `4-4/R6`): end this fact's attacker if it is a PROJECTILE, and do nothing for
+## any other attacker kind. A one-line helper rather than the test written out at each of the three
+## resolving outcomes (deflect, block, full), because the three must never disagree about what
+## "resolved" means — and because a fourth outcome added later gets it by calling this rather than by
+## remembering the encoding.
+##
+## `consume_at` IS IDEMPOTENT and lenient on the index, so this is safe to call on every resolution
+## without first asking whether the attacker is a projectile at all.
+func _consume_projectile_attacker(attacker: PlayerState, attacker_index: int) -> void:
+	if not is_projectile_index(attacker_index):
+		return
+	attacker.projectiles.consume_at(projectile_index_of(attacker_index))
 
 
 ## Story 4-3b (AC 5): THE CANONICAL RESOLUTION ORDER ACROSS ATTACKERS — SLOT ASCENDING, THEN BOARD
@@ -1006,6 +1226,21 @@ func _canonical_contact_order() -> Array[int]:
 	return order
 
 
+## STORY 4-4: WHERE PROJECTILES LAND IN THIS ORDER, stated rather than left to be discovered. The
+## comparison is unchanged — slot ascending, then attacker INDEX ascending, then queue position — and
+## a projectile's index is `PROJECTILE_INDEX_BASE - i`, i.e. -2, -3, -4, ... So within one slot the
+## order is: projectiles NEWEST-FIRST (the most negative index sorts first), then the hero at -1,
+## then units ascending from 0.
+##
+## THAT IS DETERMINISTIC AND STABLE, WHICH IS ALL `4-3b/R5` REQUIRES — its content is that the order
+## must not be decided by unpinned physics-query order, not that any particular attacker kind goes
+## first. It is also unobservable in shipped play today: the multi-attacker consequence `4-3b/R5`
+## names is the per-fact deflect stamina drain, and a deflected projectile is CONSUMED (AC 18) rather
+## than falling through to a second resolution, so two shots landing in one tick spend at most what
+## two facts would have spent in any order.
+##
+## HERO-VERSUS-HERO IS STILL BIT-FOR-BIT UNMOVED: no projectile fact exists in a hero-only queue, and
+## the sort remains stable.
 func _contact_precedes(a: int, b: int) -> bool:
 	var fa: Dictionary = _contact_queue[a]
 	var fb: Dictionary = _contact_queue[b]
@@ -1060,6 +1295,11 @@ func _contact_precedes(a: int, b: int) -> bool:
 func _mark_reach_from_fact(attacker: PlayerState, attacker_index: int, fact: Dictionary) -> void:
 	if attacker_index == TargetingService.HERO_INDEX:
 		return
+	# Story 4-4: a PROJECTILE-sourced fact returns immediately, for the hero's own reason one line
+	# above — projectiles have no reach flag and no windup for one to permit. The reach flag is a
+	# property of a unit deciding when to swing, and a shot has already been fired.
+	if is_projectile_index(attacker_index):
+		return
 	if not attacker.units.has_index(attacker_index):
 		return
 	if attacker.units.target_slot_at(attacker_index) != int(fact["target"]):
@@ -1089,9 +1329,17 @@ func _mark_reach_from_fact(attacker: PlayerState, attacker_index: int, fact: Dic
 ## replace the mechanism (e.g. a shared dead-attacker guard both ladders call into) rather than to
 ## keep tightening this two-copy pattern." This story is that future story, so the mechanism is
 ## replaced as instructed rather than a third copy added.
+##
+## STORY 4-4: THE THIRD ATTACKER KIND joins the dispatch, which is exactly what this function was
+## extracted to make cheap. A projectile's liveness is its own board record's — false once it has
+## been consumed (AC 18) or its budget has expired (AC 19) — and AC 19's "removed from the world"
+## depends on this rung: the F1 one-tick lag means a shot that expired at step 3c can still have a
+## fact arriving at step 4, and this is where that fact drops.
 func _attacker_is_dead(attacker: PlayerState, attacker_index: int) -> bool:
 	if attacker_index == TargetingService.HERO_INDEX:
 		return attacker.hero.action_state == HeroState.ActionState.DEAD
+	if is_projectile_index(attacker_index):
+		return not attacker.projectiles.is_alive_at(projectile_index_of(attacker_index))
 	return not attacker.units.is_alive_at(attacker_index)
 
 
@@ -1108,10 +1356,23 @@ func _attacker_is_dead(attacker: PlayerState, attacker_index: int) -> bool:
 ## incremented only by hero swings and IS snapshotted, so driving it from unit swings would move
 ## hero-observed values — an unnamed golden cause; and the hero's records expire off the HERO's own
 ## active window, which has nothing to do with a unit's.
+##
+## STORY 4-4: A PROJECTILE'S DEDUPE IS ITS LIVENESS, AND THAT IS WHY THIS BRANCH REGISTERS NOTHING.
+## The two existing branches keep a HIT LIST because one swing may cleave several targets while
+## refusing to hit any ONE of them twice. A projectile cannot cleave: resolving CONSUMES it (AC 18
+## and the full-damage path alike), so "has this shot already resolved" and "is this shot still
+## alive" are the same question — and answering it from one field is what stops the two drifting.
+##
+## THE LIVENESS TEST IS NOT REDUNDANT WITH THE RUNG ABOVE. `_attacker_is_dead` runs BEFORE this on
+## both ladders, so this branch is reached only for a live shot — but two facts from ONE tick can
+## both name the same shot (two hurtboxes overlapped at once), and the first to resolve consumes it.
+## This is the rung that drops the second.
 func _register_attacker_hit(attacker: PlayerState, attacker_index: int, attack_index: int,
 		target_slot: int, target_index: int) -> bool:
 	if attacker_index == TargetingService.HERO_INDEX:
 		return attacker.hero.register_swing_hit(attack_index, target_slot, target_index)
+	if is_projectile_index(attacker_index):
+		return attacker.projectiles.is_alive_at(projectile_index_of(attacker_index))
 	return attacker.unit_dedupe.register(attacker_index, attack_index, target_slot, target_index)
 
 
@@ -1182,6 +1443,16 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# advance() before step 4 is ever reached, so a frozen tick never resolves a contact and
 	# therefore never kills a unit. Pinned in test_unit_damage_and_death.gd.
 	target.units.apply_damage_at(index, _damage_against_unit(attacker, attacker_index))
+	# Story 4-4 (AC 16 second sentence / AC 18): a projectile that lands on a UNIT is consumed here,
+	# the hero ladder's common consumption line applied to the short ladder. AC 16's second sentence
+	# is satisfied BY ABSENCE rather than by code: this ladder has no i-frame, block or deflect rung
+	# — a unit structurally lacks all three — so there is nowhere a unit-targeted shot's homing could
+	# end early, and it ends only at contact or at the 60 m budget, exactly as the AC states.
+	#
+	# REACHABLE ONLY ONCE A FUTURE KIND AUTHORS A UNIT-PREFERRING PRIORITY (the AC says so in as many
+	# words): the shipped Combat totem is hero-preferring by `4-4/R9`, so its shots address heroes.
+	# This line is therefore the correct behaviour written once, not a path the shipped build takes.
+	_consume_projectile_attacker(attacker, attacker_index)
 	# Review fix pass (4-3b, F2): a unit that DIES here can never close its own swing-dedupe
 	# record through the normal per-tick path again -- `_advance_unit_attacks` skips dead units
 	# entirely, so a corpse killed mid-ACTIVE-window would otherwise leave that record open
@@ -1233,17 +1504,32 @@ func _damage_against_hero(attacker: PlayerState, attacker_index: int,
 		target: PlayerState) -> float:
 	if attacker_index == TargetingService.HERO_INDEX:
 		return balance.attack_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
-	var kind := balance.kind_at(attacker.units.kind_index_at(attacker_index))
-	if kind == null:
-		return 0.0
-	var attack := kind.attack_at(0)
-	return attack.damage if attack != null else 0.0
+	return _attacker_attack_damage(attacker, attacker_index)
 
 
 func _damage_against_unit(attacker: PlayerState, attacker_index: int) -> float:
 	if attacker_index == TargetingService.HERO_INDEX:
 		return balance.hero_damage_to_unit
-	var kind := balance.kind_at(attacker.units.kind_index_at(attacker_index))
+	return _attacker_attack_damage(attacker, attacker_index)
+
+
+## The authored attack damage of a NON-HERO attacker — a unit's own kind, or, for a projectile, the
+## kind that FIRED it. Shared by both target ladders above because the answer does not depend on what
+## is being hit: an attack record says what THAT attack does (AC 9).
+##
+## THE PROJECTILE READS THE FIRING KIND'S RECORD, NOT A COPY TAKEN AT LAUNCH, which is how a shot
+## outlives its source without carrying stale authored data (`projectile_board.gd`'s header). The
+## totem may already be dead; its KIND is config and is not.
+##
+## BOTH MISSES ANSWER 0.0 — an unresolvable kind (an X3 reload shortened `unit_kinds` under a live
+## record) and a kind that authors no attack. The graceful-degradation direction every authored-data
+## miss in this project takes: a record written under an authored list that no longer describes it
+## stops hurting anything rather than dealing an invented number.
+func _attacker_attack_damage(attacker: PlayerState, attacker_index: int) -> float:
+	var kind_index := attacker.projectiles.kind_index_at(projectile_index_of(attacker_index)) \
+			if is_projectile_index(attacker_index) \
+			else attacker.units.kind_index_at(attacker_index)
+	var kind := balance.kind_at(kind_index)
 	if kind == null:
 		return 0.0
 	var attack := kind.attack_at(0)
@@ -2132,3 +2418,9 @@ func _reset_player(player: PlayerState) -> void:
 	# would key an index that no longer names the unit it was opened for. The two are one collection
 	# expressed as two, exactly as UnitBoard's own eight arrays are one expressed as eight.
 	player.unit_dedupe.clear()
+	# Story 4-4 (AC 14): the PROJECTILE board is cleared in the same seat, under the same named
+	# exception, and the pairing is load-bearing rather than tidy. A projectile record stores the
+	# board index of the unit that fired it and the `[slot, index]` address of what it was fired at;
+	# surviving a board clear, both would name records that no longer exist. Clearing the two
+	# together is what keeps "units gone but their shots still flying" unrepresentable.
+	player.projectiles.clear()

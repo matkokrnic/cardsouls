@@ -458,6 +458,15 @@ func _summon_slots(player: PlayerState) -> Array[int]:
 		var card := db.get_card(hand[index]) as CardData
 		if card == null or card.basic_effect == null:
 			continue
-		if String(card.basic_effect.effect_id).begins_with(CardEffectResolver.PREFIX_SUMMON):
+		# Story 4-4 (AC 1): MINION-summoning cards ONLY. Before this story every `summon_*` id
+		# resolved to one uniform unit, so any of them served. Three of them now summon TOTEMS --
+		# which stand still (`4-4/R12`), carry no animation rig, and in the Combat totem's case fire
+		# a projectile instead of swinging -- so a test that measures MINION behaviour must not have
+		# its subject chosen by the shuffle. The exclusion reads the resolver's OWN table rather than
+		# a second list of totem ids, so the two can never disagree.
+		var effect_id: StringName = card.basic_effect.effect_id
+		var is_summon := String(effect_id).begins_with(CardEffectResolver.PREFIX_SUMMON)
+		var is_totem := CardEffectResolver.SUMMON_KINDS.has(effect_id)
+		if is_summon and not is_totem:
 			out.append(index)
 	return out

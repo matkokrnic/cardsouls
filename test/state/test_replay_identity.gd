@@ -139,6 +139,19 @@ const HASHED: Array[String] = [
 	# `_in_reach` classification applied to a second countdown. They reach the hash through
 	# `PlayerState.to_snapshot()`'s `unit_kind` and `unit_attack_cooldown` keys.
 	"unit_board._kind_index", "unit_board._attack_cooldown",
+	# Story 4-4 (AC 14-19): the PROJECTILE BOARD and all eight of its members, ALL HASHED — so
+	# UNHASHED_CROSS_TICK_MEMBERS still stays at THREE and this story adds no fourth exclusion to
+	# argue about either. Each passes `4-3a/R17`'s test on its own: the target decides where homing
+	# steers, the kind decides every authored number governing the shot for its whole life (and is
+	# what lets it outlive the totem that fired it), the source index is the launch position's only
+	# route out of state, liveness IS the projectile's dedupe, the homing flag records whether
+	# AC 16's i-frame drop has already fired, the clock decides the current speed, and the odometer
+	# decides the 60 m end.
+	"player_state.projectiles",
+	"projectile_board._target_slots", "projectile_board._target_indices",
+	"projectile_board._kind_index", "projectile_board._source_index",
+	"projectile_board._alive", "projectile_board._homing",
+	"projectile_board._flight_ticks", "projectile_board._travelled",
 	"player_state.unit_dedupe", "unit_swing_dedupe._records",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
@@ -603,8 +616,13 @@ func _known_runtime_state_file(stem: String) -> bool:
 	# twin of `hero_state._swing_dedupe`, holding per-swing hit lists that cross ticks. It is NOT
 	# exempt: its one member is classified HASHED above, reaching the snapshot through the
 	# `unit_swing_dedupe` key.
+	# Story 4-4: `projectile_board` joins the list as a RUNTIME STATE file — the fifth pure
+	# container, holding per-shot flight state that crosses ticks. It is NOT exempt: all eight of
+	# its members are classified HASHED above, reaching the snapshot through the seven
+	# `projectile_*` keys.
 	return ["match_state", "player_state", "hero_state", "deck", "hand", "discard_pile",
-		"unit_board", "unit_swing_dedupe", "pitch_state", "mana_pool", "orb_pool", "stamina_pool",
+		"unit_board", "unit_swing_dedupe", "projectile_board",
+		"pitch_state", "mana_pool", "orb_pool", "stamina_pool",
 		"signal_queue", "timing_window"].has(stem)
 
 

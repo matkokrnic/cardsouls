@@ -269,7 +269,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# than learning a direction.
 	var expected: Array = [
 		"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-		"pending_draw", "pending_draw_owed", "stamina",
+		"pending_draw", "pending_draw_owed",
+		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
+		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
+		"projectile_source", "projectile_targets", "projectile_travelled",
+		"stamina",
 		# Story 4-4 (AC 1/AC 10): two more — `unit_attack_cooldown` and `unit_kind`.
 		"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 		"unit_attack_ticks",
@@ -281,12 +285,16 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 20,
-		"the per-player snapshot key set is TWENTY keys as of story 4-4 (eighteen before it — the "
-		+ "two new keys are `unit_kind`, the per-record kind INDEX that makes a totem a distinct "
-		+ "on-board thing (AC 1), and `unit_attack_cooldown`, the firing-cadence countdown "
-		+ "(AC 10)). Both are plain ints: the kind's StringName NAME deliberately never reaches the "
-		+ "hash, because `Array[StringName].sort()` orders by internal POINTER on this engine")
+	assert_eq(keys.size(), 27,
+		"the per-player snapshot key set is TWENTY-SEVEN keys as of story 4-4 (eighteen before it). "
+		+ "TWO come from the unit board: `unit_kind`, the per-record kind INDEX that makes a totem "
+		+ "a distinct on-board thing (AC 1), and `unit_attack_cooldown`, the firing-cadence "
+		+ "countdown (AC 10). SEVEN come from the new projectile board (AC 14-19): its target pair, "
+		+ "the firing kind, the source index, liveness (which IS its dedupe), the homing flag "
+		+ "AC 16's i-frame drop clears, the acceleration clock and the 60 m odometer. Every one is "
+		+ "a plain int, bool or float — no StringName reaches the hash, because "
+		+ "`Array[StringName].sort()` orders by internal POINTER on this engine, and no POSITION "
+		+ "does either: `projectile_travelled` is a path LENGTH the state layer integrates itself")
 
 
 # --- Fixture ----------------------------------------------------------------------------------

@@ -44,7 +44,26 @@ const EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"
 ## IT NEEDS NO CAPTURE CHANNEL for the same reason `drain_signals` does not: a replay that
 ## reproduces the inputs reproduces the phase, and the phase reproduces this return value. Nothing
 ## reaches MatchState through it, so there is nothing for a stream to carry.
-const EXEMPT_PURE_QUERY := "unit_attack_phase_multiplier"
+##
+## STORY 4-4 (AC 15): THE EXEMPTION BECOMES A SET, because a SECOND parameterised-egress seam ships.
+## `projectile_speed_at(board, index)` is the same category exactly — a pure function of its
+## arguments returning a float, writing nothing and storing nothing — and it is public for the same
+## SHAPE OF REASON `4-3c1/R1` gave the first: a projectile's POSITION is actor-owned, so the state
+## layer may only EXPOSE the derived speed and the runner must read it at the point of use. It has to
+## be the state layer's own arithmetic and no other, because the same value is what
+## `MatchState._advance_projectiles` charges against the 60 m travel budget (AC 19) — a private
+## helper plus a duplicated curve in the runner is precisely the drift this seam exists to prevent.
+##
+## IT NEEDS NO CAPTURE CHANNEL for its predecessor's reason verbatim: a replay that reproduces the
+## inputs reproduces the projectile board, and the board reproduces this return value. Nothing
+## reaches MatchState through it.
+##
+## MATCHED BY NAME, NOT BY PURITY — the guard is a source scan and cannot verify a function is pure.
+## A future seam added here must earn its place with a written reason, exactly as both of these did.
+const EXEMPT_PURE_QUERIES: Array[String] = [
+	"unit_attack_phase_multiplier",
+	"projectile_speed_at",
+]
 
 ## AC 1: the intake surface VERIFIED BY CONTENT at this story's pass. Pinned by exact set
 ## equality so a REMOVED intake is as loud as an added one — but the falling guard for the AC's
@@ -88,10 +107,10 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 	var egress: Array[String] = []
 	var exempt: Array[String] = []
 	for name: String in surface:
-		# The exemptions are checked FIRST, and they have to be: `EXEMPT_PURE_QUERY` takes a
-		# parameter, so the `has_params` branch below would otherwise claim it as an intake before
-		# the exemption was ever consulted.
-		if name == EXEMPT_CARRIES_NO_DATA_INWARD or name == EXEMPT_PURE_QUERY:
+		# The exemptions are checked FIRST, and they have to be: every `EXEMPT_PURE_QUERIES` member
+		# takes a parameter, so the `has_params` branch below would otherwise claim it as an intake
+		# before the exemption was ever consulted.
+		if name == EXEMPT_CARRIES_NO_DATA_INWARD or EXEMPT_PURE_QUERIES.has(name):
 			exempt.append(name)
 		elif bool(surface[name]["has_params"]):
 			intakes.append(name)
@@ -103,14 +122,15 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 	assert_eq(intakes, EXPECTED_INTAKE_SURFACE,
 		"MatchState's intake surface changed — a new intake needs a capture channel (and this "
 		+ "pin updated deliberately); a removed one needs its channel retired")
-	var expected_exempt := [EXEMPT_CARRIES_NO_DATA_INWARD, EXEMPT_PURE_QUERY]
+	var expected_exempt := [EXEMPT_CARRIES_NO_DATA_INWARD] + EXEMPT_PURE_QUERIES
 	expected_exempt.sort()
 	assert_eq(exempt, expected_exempt,
-		"the TWO exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
+		"the THREE exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
 		+ "no data INWARD (it is the D5 emit half of a queue the runner empties every tick), and "
-		+ "unit_attack_phase_multiplier() is a PURE QUERY that takes a parameter and still carries "
-		+ "none (a function of its argument, returning a float, writing nothing) — neither is an "
-		+ "intake, and a THIRD name appearing here is a real intake escaping its capture channel")
+		+ "unit_attack_phase_multiplier() and projectile_speed_at() are PURE QUERIES that take "
+		+ "parameters and still carry none (functions of their arguments, returning a float, "
+		+ "writing nothing) — none is an intake, and a FOURTH name appearing here is a real intake "
+		+ "escaping its capture channel")
 	assert_eq(egress, ["debug_window_ticks_remaining", "to_snapshot"],
 		"to_snapshot() and debug_window_ticks_remaining() are EGRESS, not intake — they return "
 		+ "state and receive none")

@@ -66,7 +66,14 @@ extends CharacterBody3D
 ## `get_overlapping_areas()` directly and never `area_entered` (signal firing order is not
 ## guaranteed and would make replay order-dependent). NOTHING ELSE READS IT, this node never touches
 ## it, and it holds no gameplay logic: it reports contact and `advance()` step 4 decides.
-@onready var hitbox: Area3D = $Hitbox
+##
+## STORY 4-4 (AC 3): IT IS `get_node_or_null` NOW, because a TOTEM SCENE AUTHORS NO HITBOX. AC 3 is
+## explicit — "No totem kind authors a `Hitbox`: the Combat totem attacks only via its projectile
+## (AC 14); the accelerators never attack" — and `totem_actor.tscn` is this same script mounted on a
+## scene that carries Collision and Hurtbox and nothing else. `$Hitbox` would push a runtime error
+## on every totem instantiation; a null here is the honest answer, and the runner's gather pass
+## already has to skip a kind with no melee attack for its own reasons.
+@onready var hitbox: Area3D = get_node_or_null("Hitbox")
 
 
 ## Story 4-3c (AC 4): this unit's RIG PRESENTATION controller, exposed exactly as `hitbox`
@@ -78,7 +85,12 @@ extends CharacterBody3D
 ## unit_actor.tscn with its AnimationPlayer path exported (the hero's own AnimationController
 ## precedent), so `$AnimationController` is already correct the moment the scene instantiates.
 ## This node NEVER calls into it -- no gameplay logic gained a seat here (see the header).
-@onready var animation: UnitAnimationController = $AnimationController
+##
+## STORY 4-4 (AC 3/AC 5): `get_node_or_null` for `hitbox`'s reason applied to the rig. A totem is a
+## static structure (`4-4/R12`) with no walk, no swing and no death animation to select between, so
+## `totem_actor.tscn` carries no `AnimationController` and this reads null there. The runner's push
+## site guards it rather than every kind carrying a controller with nothing to control.
+@onready var animation: UnitAnimationController = get_node_or_null("AnimationController")
 
 
 ## Story 4-3d (AC 3): the CORPSE LINGER, in TICKS. 10 s at the 60 Hz `project.godot` pin
@@ -166,10 +178,20 @@ func advance_corpse_linger() -> bool:
 ##                the thing that makes its own `get_overlapping_areas()` return anything.
 ##
 ## NEVER CALLED DIRECTLY FROM A PHYSICS CALLBACK -- see `begin_corpse_linger()`.
+##
+## STORY 4-4 (AC 3): EACH NODE IS RESOLVED DEFENSIVELY, because `totem_actor.tscn` carries no
+## `Hitbox`. The three reasons above are unchanged for the nodes that exist; a node a scene does not
+## author cannot be live, so skipping it disables exactly as much as there is to disable.
 func disable_all_collision() -> void:
-	($Collision as CollisionShape3D).disabled = true
-	($Hurtbox as Area3D).monitorable = false
-	($Hitbox as Area3D).monitoring = false
+	var collision := get_node_or_null("Collision") as CollisionShape3D
+	if collision != null:
+		collision.disabled = true
+	var hurtbox := get_node_or_null("Hurtbox") as Area3D
+	if hurtbox != null:
+		hurtbox.monitorable = false
+	var hit := get_node_or_null("Hitbox") as Area3D
+	if hit != null:
+		hit.monitoring = false
 
 
 ## Story 4-3b (AC 12): yaw this box along an ALREADY-DECIDED planar heading, rather than at a

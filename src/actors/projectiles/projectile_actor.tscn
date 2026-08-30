@@ -1,0 +1,30 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/actors/projectiles/projectile_actor.gd" id="1_projectile"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_projectile"]
+radius = 0.35
+
+[sub_resource type="SphereMesh" id="SphereMesh_projectile"]
+radius = 0.25
+height = 0.5
+
+[node name="ProjectileActor" type="Node3D"]
+script = ExtResource("1_projectile")
+editor_description = "Story 4-4 (AC 14). The live projectile - 'a distinct entity in the world (not an instant hit) that travels from the totem toward its target rather than resolving contact immediately'. A plain Node3D, NOT a CharacterBody3D: a projectile is not blocked by anything and cannot be walked into, so it carries no body collision, and its movement is a plain translation rather than move_and_slide() (see projectile_actor.gd). It is spawned, steered and freed by the runner; it owns its HEADING and nothing else."
+
+[node name="Hitbox" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 2
+monitorable = false
+editor_description = "The projectile's hitbox. LAYER/MASK CONVENTION, the hero.tscn and unit_actor.tscn Hitbox verbatim: layer 3 'hitbox' (bit value 4), mask = layer 2 'hurtbox' (bit value 2), monitorable off - it DETECTS hurtboxes and is detected by nothing, so hitboxes never see hitboxes and a shot can never hit another shot. THE EXISTING layer 3 IS REUSED rather than a fourth layer authored, which is what keeps project.godot BYTE-IDENTICAL through this story, exactly as 4-3a's Hurtbox reused layer 2 (4-3a/R11) and 4-3b's Hitbox reused layer 3: every hero and unit Hurtbox already declares collision_layer = 2, so all of them are visible to this box with no edit on any scene. NO gameplay logic here and it NEVER applies damage: the runner's gather pass queries get_overlapping_areas() ONLY while the state layer flags this shot alive, resolves the overlapping area's owning actor to a [slot, index] target address, filters same-slot overlaps at GATHER time (a shot never hits its own side), and pushes the fact through MatchState.push_contact with the shot's own PROJECTILE attacker address (E4-P/R12, MatchState.PROJECTILE_INDEX_BASE); advance() step 4 decides. Actors REPORT, state DECIDES."
+
+[node name="HitboxShape" type="CollisionShape3D" parent="Hitbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("SphereShape3D_projectile")
+editor_description = "A SPHERE, not a box, and the choice is load-bearing rather than cosmetic: a projectile arrives from any bearing and its hitbox must present the same profile whichever way it is flying. A box would make the effective hit width depend on the approach angle, so a shot curving in diagonally would be measurably easier to slip past than one arriving square - a difference no authored number expresses and no test would catch. Being rotation-independent also means the node's presentational yaw cannot affect gameplay. Radius 0.35 is a little larger than the visible mesh (0.25) so a shot that LOOKS like it grazed a target counts as a hit - the standing preference for generous contact over frame-perfect geometry. Offset +0.7 in y to fly at roughly chest height on both a hero and a totem, so it meets a hurtbox rather than passing under one."
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+mesh = SubResource("SphereMesh_projectile")
+editor_description = "GREY BALL - the standing grey-box bar applied to a sphere. Visual fidelity is out of scope everywhere in this project; what this has to do is be VISIBLE in the live smoke so an operator can watch a shot leave a totem, curve toward a hero, and either land or expire. Offset +0.7 in y to match the hitbox it represents, so what a human sees and what the physics query sees are the same object in the same place."

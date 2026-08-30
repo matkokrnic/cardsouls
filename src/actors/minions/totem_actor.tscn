@@ -1,0 +1,34 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/actors/minions/unit_actor.gd" id="1_unitactor"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_totembody"]
+size = Vector3(0.8, 1.4, 0.8)
+
+[sub_resource type="BoxMesh" id="BoxMesh_totem"]
+size = Vector3(0.8, 1.4, 0.8)
+
+[node name="TotemActor" type="CharacterBody3D"]
+script = ExtResource("1_unitactor")
+editor_description = "Story 4-4 (AC 3). The TOTEM actor - the same CharacterBody3D + Collision + Hurtbox pattern unit_actor.tscn already uses, with the Hitbox DELETED and nothing else changed. AC 3 asks for exactly that and says why in as many words: a totem 'blocks movement using the same CharacterBody3D + Collision (CollisionShape3D) pattern the existing unit actors use, plus the Hurtbox (Area3D + HurtboxShape) member needed to take damage through the shipped hitbox.get_overlapping_areas() path - no second collision or damage-detection pattern is authored. No totem kind authors a Hitbox: the Combat totem attacks only via its projectile (AC 14); the accelerators never attack.'  IT MOUNTS THE SAME SCRIPT, unit_actor.gd, which is what makes 'no second pattern' literally true rather than a promise: there is one actor script for board units, and it resolves its Hitbox and AnimationController with get_node_or_null precisely so this scene can omit both. THE RUNNER PICKS THE SCENE FROM AUTHORED DATA, never from a kind name - a kind whose attack record authors a projectile, or which authors no attack at all, gets this scene; a kind with a melee attack gets unit_actor.tscn. So 'totems have no hitbox' is an authoring consequence, not a hardcoded list. NO ANIMATION RIG, and that is AC 5 / 4-4/R12 rather than a shortcut: a totem is a 'small, unimposing static structure (wardstone, not tower)' authored at movement speed 0, so it has no walk clip to select, no swing to play and no death animation the corpse linger would outlive. NO _physics_process, no Input, no state handle, no signal into state, no damage and no targeting - the whole of unit_actor.gd's header holds here unchanged."
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("BoxShape3D_totembody")
+editor_description = "The totem's BODY shape - the unit_actor.tscn Collision node verbatim in every respect that matters: NO layer/mask lines, so it sits on default layer 1 'bodies' exactly as the hero root and the minion root do, which is what makes a totem BLOCK MOVEMENT (AC 3) without a new collision layer and without touching project.godot. Offset +0.7 in y for the reason the minion's is offset +0.6: the actor ROOT is at the box's FEET (the runner spawns board units at world y 0), unlike the hero root which is its body CENTRE. The offset differs from the minion's only because the box is taller (1.4 vs 1.2); it is half the height in both cases, which is the rule rather than the number."
+
+[node name="Hurtbox" type="Area3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+monitoring = false
+editor_description = "Totem hurtbox - the unit_actor.tscn Hurtbox verbatim, layer 2 'hurtbox', mask 0, monitoring off: it is DETECTED by hitboxes and detects nothing. THIS IS THE WHOLE OF AC 2's 'takes damage through the same mechanism a minion already uses' on the scene side. The hero Hitbox declares collision_mask = 2 and the minion Hitbox declares collision_mask = 2, so this box is visible to both with no edit on either side and no new layer - the same reuse 4-3a/R11 made when it added the minion's. NO gameplay logic here and it NEVER applies damage: the runner's gather pass resolves this area's owning actor to a [slot, index] target address and pushes a fact through MatchState.push_contact; advance() step 4 decides."
+
+[node name="HurtboxShape" type="CollisionShape3D" parent="Hurtbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+shape = SubResource("BoxShape3D_totembody")
+editor_description = "Mirrors the BODY collision box exactly - same shape sub-resource, same +0.7 y offset - so 'the hurtbox mirrors the body collision box' is true by construction rather than by two literals agreeing. The unit_actor.tscn HurtboxShape makes the identical choice for the identical reason."
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+mesh = SubResource("BoxMesh_totem")
+editor_description = "GREY BOX, and that is the standing bar rather than a placeholder awaiting art: visual fidelity is explicitly out of scope everywhere in this project, and unit_actor.tscn only carries a skinned model because story 4-3c had a rig-adoption AC of its own. A totem needs to be VISIBLE and DISTINGUISHABLE from a minion in the live smoke - taller and squarer than the 0.6 x 1.2 x 0.6 minion body - and this is the least machinery that achieves it. Offset +0.7 in y like every other node here, because the root is at the box's FEET. No material is authored: the default is what every grey box in this project has used."

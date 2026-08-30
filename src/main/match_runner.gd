@@ -134,10 +134,32 @@ var _huds: Array[HudRoot] = []
 ## runner decides what that looks like and where it stands.
 const UNIT_SCENE := preload("res://src/actors/minions/unit_actor.tscn")
 
+## Story 4-4 (AC 3): the TOTEM scene — the same `CharacterBody3D` + `Collision` + `Hurtbox` pattern
+## with the `Hitbox` deleted, mounting the SAME `unit_actor.gd` script. See `totem_actor.tscn`'s own
+## description for why that is what "no second collision or damage-detection pattern is authored"
+## means in practice.
+const TOTEM_SCENE := preload("res://src/actors/minions/totem_actor.tscn")
+
+## Story 4-4 (AC 14): the PROJECTILE scene — a plain `Node3D` carrying one `Hitbox` on the existing
+## layer 3 / mask 2 convention, and no body collision.
+const PROJECTILE_SCENE := preload("res://src/actors/projectiles/projectile_actor.tscn")
+
 ## Spawned actors per slot, index-aligned with nothing in state -- the board is a COUNT, so the
 ## runner's own array length is the whole of the correspondence. Freed together off the
 ## round_started relay (AC 8).
 var _unit_actors: Array[Array] = [[], []]
+
+## Story 4-4 (AC 14): spawned PROJECTILE actors per slot, index-aligned with `PlayerState.projectiles`
+## the same way `_unit_actors` is with the unit board — position in the array IS the board index, so
+## the runner's array index and the state layer's projectile identity are ONE number rather than two
+## that could drift.
+##
+## GROWS ONLY, exactly like `_unit_actors`, and for the ruling that governs it: `ProjectileBoard.add`
+## is an unconditional append that never fills a hole (`4-3a/R9`'s reasoning applied to a second
+## container), so a freed shot leaves a `null` at a stable index and nothing is compacted. The
+## arrays are emptied WHOLE by the debug reset, off the same `round_started` relay that empties
+## `_unit_actors`.
+var _projectile_actors: Array[Array] = [[], []]
 
 ## Story 4-3e: WHERE A SUMMONED UNIT STANDS. Actor-owned position (`4-1/R12`), chosen by the
 ## runner and computed FRESH AT CAST TIME from the summoning hero's LIVE position: a spot BEHIND
@@ -716,12 +738,49 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 				occupied.append((unit as Node3D).global_position)
 	var hero_position: Vector3 = _p1_hero.global_position if slot == 0 else _p2_hero.global_position
 	var opponent_position: Vector3 = _p2_hero.global_position if slot == 0 else _p1_hero.global_position
-	for spot: Vector3 in _compute_spawn_positions(
-			occupied, hero_position, opponent_position, slot, batch_size):
-		var unit := UNIT_SCENE.instantiate() as UnitActor
+	# Story 4-4 (AC 3/AC 4): the SPAWN RULE IS UNCHANGED — AC 4 asks for exactly that, and 4-3e's own
+	# AC 1 already scoped it to "minion or totem". What this story adds is WHICH SCENE the batch
+	# instantiates, chosen from AUTHORED DATA rather than from a kind name: a kind whose attack
+	# record authors a projectile, or which authors no attack at all, has no melee hitbox to author
+	# and gets `TOTEM_SCENE`; a kind with a melee attack gets `UNIT_SCENE`. So AC 3's "no totem kind
+	# authors a Hitbox" is an authoring consequence rather than a hardcoded list, and a future melee
+	# totem or ranged minion needs no edit here.
+	#
+	# THE BATCH INDEX IS THE BOARD INDEX. `actors.size()` before each append is the record this
+	# actor belongs to, which is what lets the scene be chosen per-record; the array stays
+	# index-aligned with the board exactly as it has since 4-1.
+	var spots := _compute_spawn_positions(occupied, hero_position, opponent_position, slot,
+			batch_size)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	for spot: Vector3 in spots:
+		var unit := _unit_scene_for(player, actors.size()).instantiate() as UnitActor
 		add_child(unit)
 		unit.global_position = spot
 		actors.append(unit)
+
+
+## Story 4-4 (AC 3): which actor scene the board record at `index` should be instantiated from,
+## decided from AUTHORED DATA and never from a kind NAME.
+##
+## THE TEST IS "DOES THIS KIND SWING A MELEE ATTACK". A melee attack needs the `Hitbox` the runner's
+## gather pass queries; a projectile attack does not (it fires an entity that carries its own), and
+## a kind with no attack at all needs one even less. Both of the latter therefore get the scene with
+## no `Hitbox`, which is AC 3's requirement stated as the property that actually decides it.
+##
+## AN UNRESOLVABLE KIND FALLS TO `UNIT_SCENE`, the fuller of the two: a record whose kind an X3
+## reload has removed still exists on the board and still has to be visible and blockable, and the
+## scene with more nodes degrades more gracefully than the one with fewer.
+func _unit_scene_for(player: PlayerState, index: int) -> PackedScene:
+	var balance := _match_state.balance
+	if balance == null or not player.units.has_index(index):
+		return UNIT_SCENE
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	if kind == null:
+		return UNIT_SCENE
+	var attack := kind.attack_at(0)
+	if attack == null or attack.projectile != null:
+		return TOTEM_SCENE
+	return UNIT_SCENE
 
 
 ## Story 4-3e (AC 1, 2, 4, 8, 9): the ORDERED LIST OF `batch_size` WORLD POSITIONS one growth batch
@@ -941,8 +1000,17 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		# only writer of a unit actor's velocity) runs later in the same `_physics_process`. One
 		# frame of staleness at 60 Hz cannot change which side of the walk/idle epsilon a unit
 		# falls on for any meaningful span, and it is recorded rather than left to be rediscovered.
-		(unit as UnitActor).animation.on_unit_tick(player.units.is_alive_at(index),
-				player.units.attack_phase_at(index), (unit as UnitActor).velocity.length())
+		#
+		# STORY 4-4 (AC 3/AC 5): GUARDED, because a TOTEM SCENE CARRIES NO ANIMATION CONTROLLER. A
+		# totem is a static structure authored at speed 0 (`4-4/R12`) with no walk clip to select,
+		# no swing to play and no death animation, so `totem_actor.tscn` authors no rig and
+		# `UnitActor.animation` reads null there. The ORDERING RULING (`4-3c/R15`) is untouched by
+		# this guard: the push is still unconditionally first for every actor that HAS a controller,
+		# and an actor with none has nothing that could be left frozen on a stale clip.
+		var rig: UnitAnimationController = (unit as UnitActor).animation
+		if rig != null:
+			rig.on_unit_tick(player.units.is_alive_at(index),
+					player.units.attack_phase_at(index), (unit as UnitActor).velocity.length())
 		# Story 4-3c (AC 4, `4-3c/R4`): THE AIM LIVENESS GATE, which this seat had none of. Today
 		# it is invisible for the reason above (the corpse's actor is already freed), but the seat
 		# is wrong on its own: `attack_phase_at` below is FROZEN for a dead unit -- nothing resets
@@ -1136,6 +1204,15 @@ func _free_unit_actors() -> void:
 			if is_instance_valid(unit):
 				unit.queue_free()
 		actors.clear()
+		# Story 4-4 (AC 14): the PROJECTILE actors are freed in the SAME seat, and the pairing
+		# mirrors the state side exactly — `MatchState._reset_player` clears `units` and
+		# `projectiles` together, so the two arrays must be emptied together or the reset would
+		# leave shots in the air belonging to records that no longer exist. One reset, one teardown.
+		var shots: Array = _projectile_actors[slot]
+		for shot: Node in shots:
+			if is_instance_valid(shot):
+				shot.queue_free()
+		shots.clear()
 
 
 ## Story 3-5b (AC 6): MatchState.reshuffle_vulnerable_window_opened ->
@@ -1367,6 +1444,19 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 					attack_index, attack.range)
 		if not player.units.is_hitbox_active_at(index):
 			continue
+		# Story 4-4 (AC 3/AC 14): THE MELEE PASS IS SKIPPED FOR A KIND THAT FIRES A PROJECTILE, and
+		# this line is what "the Combat totem attacks only via its projectile" means at the gather
+		# seat. Without it a Combat totem standing beside a hero would deal melee damage during its
+		# active window — at its 8 m FIRING range the hitbox overlaps nothing, so the defect would be
+		# invisible until someone walked up to a totem, which is exactly the kind of hole a live
+		# smoke finds and a unit test does not.
+		#
+		# THE NULL GUARD IS THE SAME RULE FROM THE OTHER SIDE: `totem_actor.tscn` authors no
+		# `Hitbox` (AC 3), so a totem's actor has none to query. Two expressions of one fact, and
+		# they cannot disagree because the scene is CHOSEN from the same authored data this tests
+		# (`_unit_scene_for`).
+		if attack.projectile != null or unit_actor.hitbox == null:
+			continue
 		for area: Area3D in unit_actor.hitbox.get_overlapping_areas():
 			var owner_actor := area.get_parent()
 			if owner_actor == unit_actor:
@@ -1386,6 +1476,177 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 					MatchState.CONTACT_STRIKE)
 			_match_state.push_contact(attacker_address, address, attack_index, fact_dir,
 					MatchState.CONTACT_STRIKE)
+
+
+## Story 4-4 (AC 14): bring slot `slot`'s spawned projectile actors up to its board's record count —
+## `_spawn_missing_unit_actors`'s shape, and the same poll-right-after-`advance()` seat.
+##
+## THE LAUNCH POSITION IS THE FIRING UNIT'S, which is the one thing a fresh shot needs that its own
+## record cannot carry: position is actor-owned (`4-3/R2`), so the record stores the SOURCE BOARD
+## INDEX and this is where that is spent. A source whose actor is already gone — killed and freed in
+## the same frame it fired — falls back to the OWNER HERO's position rather than the world origin:
+## the shot is a real thing that must appear somewhere plausible, and origin would fling it across
+## the arena from a corner.
+##
+## THE LAUNCH HEADING IS AIMED AT THE TARGET, at no turn-rate limit (see
+## `ProjectileActor.launch_toward`): a turn rate describes how a shot changes course, and a shot that
+## has not yet flown has no course to change. A shot with no resolvable target keeps the scene's
+## default heading and flies straight until its budget expires — the honest behaviour, and
+## unreachable in shipped play, where the windup that produced it could only begin because a reach
+## probe reported the acquired target in range.
+##
+## IDENTICAL LIVE AND REPLAY BY CONSTRUCTION, the `_spawn_missing_unit_actors` property verbatim:
+## this reads the BOARD, not the cast and not the attack — whatever put the record there reaches this
+## line the same way, so there is no second spawn path to keep in agreement with the first.
+func _spawn_missing_projectile_actors(slot: int, player: PlayerState) -> void:
+	var actors: Array = _projectile_actors[slot]
+	var board := player.projectiles
+	while actors.size() < board.size():
+		var index := actors.size()
+		var shot := PROJECTILE_SCENE.instantiate() as ProjectileActor
+		add_child(shot)
+		shot.global_position = _projectile_launch_position(slot, board.source_index_at(index))
+		var target_position: Variant = _target_world_position(
+			board.target_slot_at(index), board.target_index_at(index))
+		if target_position is Vector3:
+			shot.launch_toward((target_position as Vector3) - shot.global_position)
+		actors.append(shot)
+
+
+## Where a shot fired by the unit at `source_index` on slot `slot` first appears. See
+## `_spawn_missing_projectile_actors` for why the owner hero is the fallback.
+func _projectile_launch_position(slot: int, source_index: int) -> Vector3:
+	var actors: Array = _unit_actors[slot]
+	if source_index >= 0 and source_index < actors.size():
+		var source: Node = actors[source_index]
+		if is_instance_valid(source):
+			return (source as Node3D).global_position
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	return hero.global_position
+
+
+## Story 4-4 (AC 15/AC 16/AC 19): steer and move slot `slot`'s live projectiles — the DRIVE-phase
+## seat, beside `_approach_unit_actors` and for its reason (`game-architecture.md` names this phase
+## "drive actor movement", and this is a move).
+##
+## THE STATE LAYER DECIDES WHETHER TO STEER; THIS ASKS AND OBEYS. `is_homing_at` is the flag AC 16's
+## i-frame drop clears, and when it reads false this simply stops calling `steer_toward` — so
+## "keeps its last heading and travels in a straight line" is the ABSENCE of an update rather than a
+## second movement mode, and there is no straight-line branch to fall out of step with the homing one
+## (`4-4/R5`: nothing here ends homing, and a target leaving the flight path is not an event).
+##
+## THE SPEED IS THE STATE LAYER'S OWN DERIVED VALUE, read through `MatchState.projectile_speed_at`
+## — the SAME arithmetic `_advance_projectiles` charged the 60 m odometer with, so the distance flown
+## and the distance spent are one number rather than two curves that drift apart over a long flight.
+##
+## A DEAD SHOT IS NOT DRIVEN. Its actor is freed later in the same frame; driving it first would move
+## a corpse one last tick and could produce a contact fact the state layer would then drop at the
+## dead-attacker rung — work done to be discarded.
+func _drive_projectiles(slot: int, player: PlayerState) -> void:
+	var actors: Array = _projectile_actors[slot]
+	var board := player.projectiles
+	for index: int in actors.size():
+		if not board.is_alive_at(index):
+			continue
+		var node: Node = actors[index]
+		if not is_instance_valid(node):
+			continue
+		var shot := node as ProjectileActor
+		if board.is_homing_at(index):
+			var target_position: Variant = _target_world_position(
+				board.target_slot_at(index), board.target_index_at(index))
+			if target_position is Vector3:
+				var profile := _projectile_profile(board, index)
+				if profile != null:
+					shot.steer_toward(target_position as Vector3,
+							profile.homing_turn_rate_degrees_per_second)
+		shot.advance_flight(_match_state.projectile_speed_at(board, index))
+
+
+## Story 4-4 (AC 14): the CONTACT GATHER for slot `slot`'s live projectiles — the
+## `_gather_unit_facts` hitbox pass, applied to a shot.
+##
+## THE SAME DIRECT `get_overlapping_areas()` QUERY, never `area_entered`: signal firing order is not
+## guaranteed and would make replay order-dependent (the 1-7 `D-4` reasoning, unchanged).
+##
+## GATED ON THE STATE LAYER'S LIVENESS rather than on a phase, which is the one structural difference
+## from the unit pass: a shot has no active window — it is live from launch until it is consumed or
+## its budget expires, and that IS the window.
+##
+## THE ATTACKER ADDRESS IS THE PROJECTILE PARTITION (`E4-P/R12`,
+## `MatchState.projectile_attacker_index`), so the fact carries the shot's own identity rather than
+## its source unit's — which is what lets a shot resolve after its totem is dead. Same-slot overlaps
+## are filtered at GATHER time exactly as they are for units, so a shot can never hit its own side
+## and a self-contact fact never reaches the seam.
+##
+## THE `attack_index` IS THE SHOT'S FLIGHT CLOCK, and it keys nothing: a projectile's dedupe IS its
+## liveness (`projectile_board.gd`'s header), so no record is opened under this number. It is filled
+## honestly rather than with a placeholder a later reader could mistake for a swing counter.
+func _gather_projectile_facts(attacker_slot: int, player: PlayerState) -> void:
+	var actors: Array = _projectile_actors[attacker_slot]
+	var board := player.projectiles
+	for index: int in actors.size():
+		if not board.is_alive_at(index):
+			continue
+		var node: Node = actors[index]
+		if not is_instance_valid(node):
+			continue
+		var shot := node as ProjectileActor
+		var attacker_address: Array[int] = [attacker_slot,
+				MatchState.projectile_attacker_index(index)]
+		var attack_index := board.flight_ticks_at(index)
+		for area: Area3D in (shot.get_node("Hitbox") as Area3D).get_overlapping_areas():
+			var owner_actor := area.get_parent()
+			var address := _address_of(owner_actor)
+			if address[0] == -1:
+				continue  # a hurtbox this runner cannot address
+			if address[0] == attacker_slot:
+				continue  # a shot never hits its own side
+			var to_attacker := shot.global_position - (owner_actor as Node3D).global_position
+			var dir := Vector2(to_attacker.x, to_attacker.z)
+			if dir.is_zero_approx():
+				continue  # degenerate co-location has no direction -- dropped at gather
+			var fact_dir := dir.normalized()
+			_recorder.capture_push_contact(attacker_address, address, attack_index, fact_dir,
+					MatchState.CONTACT_STRIKE)
+			_match_state.push_contact(attacker_address, address, attack_index, fact_dir,
+					MatchState.CONTACT_STRIKE)
+
+
+## Story 4-4 (AC 18/AC 19): free the actor of any shot the state layer has ended — consumed by a
+## contact, or expired against its 60 m budget. AC 19's "removed from the world" made literal.
+##
+## NO LINGER, unlike a corpse (`4-3d`). A minion's corpse lingers because a dead body is a thing a
+## player expects to see fall and lie there; a projectile that has landed or run out of budget has no
+## such reading — it should simply be gone, which is what "removed from the world" asks for.
+##
+## A `null` HOLE IS LEFT AT THE INDEX rather than the array being compacted, for the reason the unit
+## array leaves one: the index IS the state layer's identity for that shot, so compacting would
+## re-point every later record's actor.
+func _free_dead_projectile_actors(slot: int, player: PlayerState) -> void:
+	var actors: Array = _projectile_actors[slot]
+	for index: int in actors.size():
+		if player.projectiles.is_alive_at(index):
+			continue
+		var node: Node = actors[index]
+		if not is_instance_valid(node):
+			continue
+		node.queue_free()
+		actors[index] = null
+
+
+## This shot's authored projectile profile, resolved through the KIND INDEX its record stores — the
+## runner-side twin of `MatchState._projectile_profile_at`, reading the same replay-aware config
+## handle (CONSTRAINT C / `4-3/R11`).
+func _projectile_profile(board: ProjectileBoard, index: int) -> ProjectileProfile:
+	var balance := _match_state.balance
+	if balance == null:
+		return null
+	var kind := balance.kind_at(board.kind_index_at(index))
+	if kind == null:
+		return null
+	var attack := kind.attack_at(0)
+	return attack.projectile if attack != null else null
 
 
 ## Story 4-4 (AC 6/AC 9): the attack record governing the unit at `index` on `player`'s board, or
@@ -1611,8 +1872,18 @@ func _physics_process(delta: float) -> void:
 			_probe_counter += 1
 			_gather_contact_facts(0, _match_state.p1, _p1_hero)
 			_gather_unit_facts(0, _match_state.p1)
+			_gather_projectile_facts(0, _match_state.p1)
 			_gather_contact_facts(1, _match_state.p2, _p2_hero)
 			_gather_unit_facts(1, _match_state.p2)
+			# Story 4-4 (AC 14): the PROJECTILE pass takes its seat INSIDE the canonical gather
+			# order, after that slot's hero and units. `4-3b/R5`'s order is slot ascending then
+			# attacker INDEX ascending, and a projectile's index is at or below -2 — so gathering
+			# projectiles LAST within a slot does NOT match the sort order, and deliberately so: the
+			# sort is enforced state-side by `_canonical_contact_order()`, which re-orders whatever
+			# this seat produces, and reading hero-then-units-then-projectiles here follows the
+			# order a reader thinks in rather than the order the comparator happens to yield. The
+			# state-side sort is what AC 5 rests on; this seat only has to be deterministic.
+			_gather_projectile_facts(1, _match_state.p2)
 			# Story 3-0c (AC 2): the X5 intent tap. Seated HERE, immediately before advance(),
 			# and NOT at the sample step the architecture doc's pre-code sketch draws it at
 			# (`3-0c/R10` — that text is candidate design, not authority): 3-0b's pause gate
@@ -1650,6 +1921,21 @@ func _physics_process(delta: float) -> void:
 		#     reads, no signal, no state handle, no new `connect_*`.
 		_free_dead_unit_actors(0, _match_state.p1)
 		_free_dead_unit_actors(1, _match_state.p2)
+		# 3c-ter. Story 4-4 (AC 14/AC 18/AC 19): the PROJECTILE poll pair — spawn an actor for every
+		#     record the board gained in the advance() above, then free the actor of every shot that
+		#     advance() ended (consumed by a contact, or expired against its 60 m budget). Same poll
+		#     shape and same seat family as 3b/3c/3c-bis/3d: plain board reads, no signal, no state
+		#     handle, no new `connect_*`, so the observation-seam family stays at EIGHT.
+		#
+		#     SPAWN BEFORE FREE, and the order is load-bearing exactly as it is for units above: a
+		#     shot fired and consumed inside one advance() — a totem firing point-blank into a
+		#     hero's hurtbox — must still get an actor before that actor is freed, or the array
+		#     would fall out of index-alignment with the board and every later shot would be driven
+		#     as the wrong record.
+		_spawn_missing_projectile_actors(0, _match_state.p1)
+		_spawn_missing_projectile_actors(1, _match_state.p2)
+		_free_dead_projectile_actors(0, _match_state.p1)
+		_free_dead_projectile_actors(1, _match_state.p2)
 		# 3d. Story 4-2 (`4-2/R13`): AIM each grey box at the target state acquired for it. PURELY
 		#     PRESENTATIONAL, and it is the live smoke's whole visible signal — with movement out of
 		#     scope (`4-2/R4`) a unit that never moves gives a human nothing to watch, so the box
@@ -1687,6 +1973,13 @@ func _physics_process(delta: float) -> void:
 		#     it: not this file, and not a `UnitActor` field.
 		_approach_unit_actors(0, _match_state.p1, delta)
 		_approach_unit_actors(1, _match_state.p2, delta)
+		# 4c. Story 4-4 (AC 15): STEER AND MOVE the live projectiles. The drive phase is the seat for
+		#     the reason 4a states — `game-architecture.md` names this phase "drive actor movement",
+		#     and this is a move. It takes no `delta`: a projectile advances by the state layer's own
+		#     derived per-tick distance so the actor and the 60 m odometer stay one arithmetic, which
+		#     an engine delta would immediately break.
+		_drive_projectiles(0, _match_state.p1)
+		_drive_projectiles(1, _match_state.p2)
 	# 4b. Split-screen camera follow (story 2-1, ruling 2-1/R1). Copy each hero rig CAMERA's
 	#     framed global transform onto its SubViewport follower camera — AFTER drive() so it
 	#     reflects this tick's move_and_slide. Presentation-only: a deterministic function of

@@ -75,6 +75,22 @@ var units: UnitBoard
 ## anywhere is handed a live record.
 var unit_dedupe: UnitSwingDedupe
 
+## Story 4-4 (AC 14-19, `E4-P/R12`): this player's LIVE PROJECTILES — the FIFTH pure container, owned
+## exactly as `units` is, cleared in the same debug-reset seat, and written only from inside
+## `advance()`'s ordered dispatch.
+##
+## A SEPARATE BOARD RATHER THAN A KIND OF UNIT, and the separation is `E4-P/R12`'s own ruling: a
+## projectile "needs its own attacker identity and dedupe, not a `[slot, index]` unit-board address".
+## It also has none of what a unit record carries — no hp, no attack rhythm, no acquired-target
+## churn, no reach flag — and putting it on `UnitBoard` would mean eight fields that are meaningless
+## for half the rows.
+##
+## PER-PLAYER, NOT MATCH-WIDE, so a shot's OWNER is structural rather than a stored field: the
+## contact fact's attacker slot is the board it came from, and the self-contact invariant at
+## `push_contact` therefore keeps a shot from ever hitting its own side without a filter that could
+## be got wrong.
+var projectiles: ProjectileBoard
+
 ## Story 3-5b (AC 3): the PENDING REPLACEMENT DRAW — a TimingWindow plus an owed COUNTER, the
 ## pair 3-5a's instant refill becomes once the replacement is a debt instead of an event. The
 ## window is advanced at MatchState.advance() step 2 beside the hero/pool timers; DELIVERY is
@@ -148,6 +164,7 @@ func _init(queue: SignalQueue) -> void:
 	discard = DiscardPile.new()
 	units = UnitBoard.new()
 	unit_dedupe = UnitSwingDedupe.new()
+	projectiles = ProjectileBoard.new()
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
 
@@ -336,4 +353,26 @@ func to_snapshot() -> Dictionary:
 		# Record.
 		"unit_kind": units.kind_index_snapshot(),
 		"unit_attack_cooldown": units.attack_cooldown_snapshot(),
+		# Story 4-4 (AC 14-19): the PROJECTILE BOARD joins the hash — SEVEN keys, on the split
+		# `UnitBoard` already established (the target FUSES its two ints because a target is one fact
+		# in two halves; the rest are independent facts that fusing would hide).
+		#
+		# EVERY ONE OF THEM CROSSES TICKS AND DECIDES AN OUTCOME, which is `4-3a/R17`'s test: the
+		# target decides where homing steers, the kind decides every authored number governing the
+		# shot, liveness decides whether a later fact resolves at all (it IS the projectile's dedupe
+		# — see `projectile_board.gd`'s header), the homing flag decides whether AC 16 has already
+		# fired, the flight clock decides the current speed and the odometer decides the 60 m end.
+		# None can be recomputed for free inside the tick that reads it.
+		#
+		# STILL COUNTS, INDICES AND VALUES, NEVER IDENTITIES. Ints, bools and floats only — no
+		# StringName, no object, and no POSITION: `projectile_travelled` is a path LENGTH the state
+		# layer integrates from the authored profile, not a coordinate anything pushed inward, so
+		# `4-3/R2`'s position ownership and the single-intake rule are both untouched.
+		"projectile_targets": projectiles.targets_snapshot(),
+		"projectile_kind": projectiles.kind_index_snapshot(),
+		"projectile_source": projectiles.source_index_snapshot(),
+		"projectile_alive": projectiles.alive_snapshot(),
+		"projectile_homing": projectiles.homing_snapshot(),
+		"projectile_flight_ticks": projectiles.flight_ticks_snapshot(),
+		"projectile_travelled": projectiles.travelled_snapshot(),
 	}

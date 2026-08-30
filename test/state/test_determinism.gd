@@ -5,6 +5,39 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## RE-BASELINED BY STORY 4-4, PASS 2 OF 3 (the projectile), 836afc01 -> d94337cd, ONE CAUSE — and
+## the fact that there is only one is itself a measured finding rather than an omission.
+##   1. SNAPSHOT SHAPE (the ONE mover). `PlayerState.to_snapshot()` gains SEVEN keys, the whole
+##      projectile board: `projectile_targets`, `projectile_kind`, `projectile_source`,
+##      `projectile_alive`, `projectile_homing`, `projectile_flight_ticks`,
+##      `projectile_travelled`. ISOLATED BY CONSTRUCTION rather than by a staged mutation (the 4-1
+##      cause-1 method): the golden fixture's authored kind is a MINION whose attack record carries
+##      no projectile, so the fixture is structurally incapable of launching one and all seven keys
+##      enter the hash at an EMPTY array. MEASURED: 836afc01 -> d94337cd, the value below.
+##      The key set moves TWENTY -> TWENTY-SEVEN here, pinned by test_card_observation.gd.
+##   2. BEHAVIOUR — THERE IS NONE IN THIS FIXTURE, AND THAT IS A REPORTED GAP RATHER THAN A CLEAN
+##      RESULT. Every previous board story (4-1's summon, 4-2's acquired target, 4-3a's hp) got its
+##      behaviour inside determinism coverage BY CONSTRUCTION, because the fixture's ONE recorded
+##      cast at t22 was enough to move the value before the hash is taken at t24. A projectile
+##      cannot reach the hash on that timeline, and the arithmetic is exact rather than approximate:
+##      the unit is summoned at t22, acquires its target at the t23 throttle boundary
+##      (RETARGET_INTERVAL_TICKS 23), the earliest probe that can scope-match its acquired target is
+##      therefore t23, the windup it permits begins at t24 — the hashed tick — and the
+##      windup-to-active transition that LAUNCHES is t25 at the earliest. Getting a live shot into
+##      this hash requires extending the recorded sequence past t24, which is a fixture redesign
+##      this story was not scoped to do and which would re-baseline every unrelated key at once.
+##      SO THE PROJECTILE'S BEHAVIOUR IS GUARDED BY ITS OWN HEADLESS TESTS
+##      (test_projectile_flight.gd) AND BY test/integration/test_projectile_flight_live.gd, NOT by
+##      this hash. Recorded here, and in the Dev Agent Record, as a known coverage boundary for the
+##      operator rather than left to be discovered at a later gate.
+##   3. `rng_state` — PREDICTED A NON-MOVER, CONFIRMED. Nothing about a projectile consumes RNG:
+##      launch is a deterministic consequence of a phase transition, the speed curve is authored
+##      arithmetic, and homing is a rate-limited rotation the RUNNER performs. Confirmed by the
+##      measurement above being fully explained by the seven empty keys.
+## NOT a cause: `data/balance/balance_config.tres`'s authored `ProjectileProfile` (the fixture is
+## built in-test and never loads it), nor the new `projectile_actor.tscn` / `totem_actor.tscn` — the
+## state harness instantiates no scene at all.
+##
 ## RE-BASELINED BY STORY 4-4, PASS 1 OF 3 (the per-kind data conversion), 4a089063 -> 836afc01, TWO
 ## CAUSES MEASURED SEPARATELY AND IN ORDER against the inherited 4a089063 value.
 ##
@@ -502,7 +535,7 @@ extends TestCase
 ##     They are proven in test_unit_attack_rhythm.gd, test_contact_resolution.gd,
 ##     test_unit_damage_and_death.gd and test/integration/test_unit_attack_live.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "836afc013bd310fd47420f656b06fb0f14b87f206827805448334b6e712a536b"
+const GOLDEN := "d94337cd655b3765f97c45aa55db698e234b8212f7741a07cfebccf8cf5a0cad"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

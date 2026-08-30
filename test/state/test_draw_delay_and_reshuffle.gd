@@ -61,7 +61,11 @@ const VULNERABLE_TICKS := 7
 ## `player_state.gd` at these keys for why five of them are one-array-one-key rather than fused.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"deck_size", "discard_size", "hand_size", "hero", "mana", "orbs",
-	"pending_draw", "pending_draw_owed", "stamina",
+	"pending_draw", "pending_draw_owed",
+	# Story 4-4 (AC 14-19): the projectile board contributes SEVEN keys, in sorted position.
+	"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
+	"projectile_source", "projectile_targets", "projectile_travelled",
+	"stamina",
 	# Story 4-4 (AC 1/AC 10): `unit_attack_cooldown` (the firing-cadence countdown) and `unit_kind`
 	# (the per-record kind INDEX — never the StringName) join the set. Sorted position, not appended.
 	"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
