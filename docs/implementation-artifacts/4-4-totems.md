@@ -508,6 +508,22 @@ copy and never `git checkout --`.
 **Still the operator's, unchanged:** the Tier A LIVE SMOKE, and the review's non-blocking findings
 M1-M9 and L1-L5, none of which this pass touched.
 
+### Live smoke — 2026-08-30
+
+Run by the operator's own hand, all six checklist points passed (point 6 only after the deck_size
+20 -> 24 fix below — with the fixed seed, the two accelerator cards never entered the deck, so
+point 6 could not be exercised until that was corrected). Verification re-review: CLOSED, 0
+reopened.
+
+Three feel findings, all deferred by the operator rather than actioned: roll i-frames / animation
+speed; whether block should fully negate a totem's projectile; totem self-rotation, accepted as
+shipped.
+
+One comment nit owed from the review: `unit_board.gd`'s freshness docstring named
+`MatchState._reach_freshness_ticks()` as the source of the `maxi(1, ...)` clamp, but that clamp
+actually lives in `BalanceTicks.minion_retarget_interval_ticks` (`balance_ticks.gd`) — the helper
+only adds 1 to it. Fixed as its own commit, comment-only, ahead of this docs commit.
+
 ### File List
 
 **New — `src/`**
