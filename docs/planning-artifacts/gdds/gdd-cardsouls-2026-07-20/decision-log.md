@@ -7492,3 +7492,83 @@ authoring is a separate `gds-create-story` run, not done by this pass.
 Docs-only pass, one commit: this entry plus `epics.md` (E4 committed-obligations bullet),
 `sprint-status.yaml` (one new backlog entry), and the Sprint Change Proposal artifact. No code
 changed, no golden or suite touched, nothing pushed. Operator reviews the log and pushes.
+
+---
+
+## Session 2026-08-30 -- 4-6 readiness gate fix pass, rulings `4-6/R1`-`4-6/R6`
+
+Docs-only pass on `docs/implementation-artifacts/4-6-camera-lock-on.md`, resolving the four
+blocking findings (B1-B4) from the story's own readiness gate (`_46-gate.md`). All six rulings
+below are the operator's, given in chat; this commit is their first durable record.
+
+`4-6/R1` (ruled, gate B1) THE CAMERA HALF IS IN SCOPE. `DP/R1`'s headline sentence is the camera;
+the FULL variant (`CC/R1`(i)) contains camera-only, it does not replace it. The story gains an AC
+for a per-tick lock-on yaw on each slot's camera rig ROOT, framing that slot's own hero and its
+locked target. Authored framing values (distance/height/pitch, `camera_config.tres`) and the
+load-once pattern stay exactly as they are -- `apply_config()` writes only the CHILD camera's
+`position`/`rotation_degrees` (unaffected); the new yaw is a separate write to the rig root. F1 is
+unaffected: the yaw lands at the runner's existing per-tick seat (`match_runner.gd:1798`), not a
+second `_physics_process`. Story Dev Notes' blanket "Camera rig / config, unaffected" and "this
+story does not touch camera-relative movement" are DELETED (superseded by a corrected note); the
+camera-config Non-Goal is reworded to protect only the framing VALUES and load-once pattern, not
+the rig root.
+
+`4-6/R2` (ruled, gate B1(b)/(c)) THE MOVEMENT-BASIS CONSEQUENCE IS A SECOND, SEPARATELY MEASURED
+GOLDEN CAUSE. Rig yaw makes the pushed camera basis (`match_runner.gd:1857-1860` ->
+`MatchState.set_camera_basis` -> `match_state.gd:2292-2296`) non-identity in live play for the
+first time, changing `world_dir` and the HASHED `HeroState.velocity` -- exactly the divergence
+`3-0c/R2` predicted. The golden-movers AC now names TWO causes (facing ownership; live camera
+basis), each measured and re-baselined separately, per the `4-3a/R17` and `4-4` AC 12 multi-cause
+precedent. `test_camera_relative.gd` and `test_root_rotation_isolation.gd` -- both fixtures assume
+a fixed or only-programmatically-rotated rig, per their own headers -- are RE-EXAMINED (not
+assumed clean) by the dev pass against the new yaw driver; the story does not decide their outcome.
+
+`4-6/R3` (ruled, gate B2) EXISTING RULES WIN OVER "UNCONDITIONALLY EVERY TICK." The DEAD early
+return (`2-3/R14`) and the round-over step-1b freeze (`2-6/R6`) keep skipping the facing write
+unchanged: a dead hero does not turn toward the target, a frozen round-end does not move. The
+facing AC's "unconditionally every tick" now carries an explicit carve-out naming both branches.
+The gate's compounding observation -- facing now feeds `_is_facing`, so its "display-only"
+classification is under tension -- is recorded as an inherited, PRE-EXISTING tension, not resolved
+by this pass.
+
+`4-6/R4` (ruled, gate B3) LOCKED-TARGET DEATH SNAPS THE LOCK IMMEDIATELY. When the locked minion or
+totem dies, the lock moves to the opposing hero on the SAME TICK -- no corpse-hold window, despite
+the corpse lingering on the board for several ticks after death (`4-3d`). This is now an explicit,
+testable AC.
+
+`4-6/R5` (ruled, gate B3 second hole) A DEAD OPPOSING HERO IS INERT UNDER THE STEP-1B FREEZE. When
+the fallback target (the opposing hero) is itself dead, the round is over and `2-6/R6`'s freeze
+makes nothing move or turn regardless of what the lock references -- one sentence added to the same
+AC, citing `2-6/R6`.
+
+`4-6/R6` (ruled, gate B4, confirmation made AT this gate per `CC/R5`) THE LOCKED TARGET'S DIRECTION
+ENTERS `src/state/` AS A PER-TICK PUSHED FACT, through the same seam family as the camera basis
+(`set_camera_basis`) and contact facts (`push_contact`) -- never a live scene/camera query inside
+`src/state/`. Precedent already shipped: `_is_facing(hero, target_to_attacker)`
+(`match_state.gd:1630-1632`) already consumes a runner-gathered `Vector2` direction fact this exact
+way. The exact fact SHAPE (direction vector vs. position; field placement) REMAINS a dev-pass Open
+Question; only the boundary MECHANISM is confirmed here.
+
+Also fixed this pass, not separate rulings (notes N1-N10 from the gate): AC for the keyboard-binding
+proposal reworded as a documentation deliverable, not a testable behavior claim, and cross-referenced
+to its Open Question instead of duplicated (N1); the `FORMAT_VERSION` AC rewritten so the
+MEASUREMENT, not either outcome, is the decided claim, same cross-reference fix (N2); the `aim`
+retirement AC left as a retirement claim with disposition explicitly deferred, and its Open Question
+re-read against `DP/R1`'s own "repurposed, still flowing through `aim`" lean without hard-ruling it
+(N3); the AC 12 (now AC 12) line-span citation corrected (`gamepad_profile.gd` lines 24-28, not
+24-29; line 29 is `deadzone`) (N4); the `4-3a/R16` attribution corrected to `TargetingService.
+HERO_INDEX`'s convention, and the `TargetingService` Non-Goal narrowed to the evaluator/algorithm so
+citing `HERO_INDEX` is not a tension (N5); `camera_rig.gd`'s stale D3(a)-route header comment flagged
+for correction in the same dev pass, per `4-3a/R15` precedent (N6). File hygiene (N7) and the board
+state (unchanged) needed no action. `Status: authored` (N8, cosmetic, no fixed vocabulary broken) is
+left as-is. N9 (`_roll_world_direction`'s neutral-stick fallback meaning a new player-facing
+behavior) is DESIGN-LEVEL, not a fix this pass can make: its Open Question is reworded to say
+explicitly that it is the operator's call, still open, not defaulted by the dev pass. N10 (no silent
+scope beyond `CC/R1`..`CC/R6`) needed no action.
+
+### Close-out
+
+Docs only, one commit: this entry plus the story file's ACs, Non-Goals, Dev Notes, and Open
+Questions. No code touched, no `src/`/`test/`/`project.godot` edit, no golden/suite measurement this
+pass. `4-6-camera-lock-on` stays `authored`, board stays `backlog` -- promotion and any further gate
+pass are the operator's act. Operator reviews the log.
