@@ -87,7 +87,7 @@ development_status:
   4-3c1-swing-commitment: done  # Tier A (implements 4-3c/R19; slot granted 2026-08-16)
   4-3d-minion-strike-alignment-and-corpse-lifecycle: done  # Tier A (cut from 4-3c at its readiness gate, 4-3c/R2; depends on 4-3c)
   4-3e-summon-spawn-placement: done  # Tier A (ran before 4-4)
-  4-4-totems: backlog                    # Tier A (golden clause, not build weight — E4-P/R9)
+  4-4-totems: ready-for-dev                    # Tier A (golden clause, not build weight — E4-P/R9)
   4-5-pooling-60fps-exit: backlog        # Tier B (assigned at 4-1 close-out, E4-P/R8)
 
 story_notes:
