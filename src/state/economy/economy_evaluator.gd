@@ -37,6 +37,14 @@ const MANA := &"mana"
 ## constant rather than repeating a StringName literal that a typo would silently break.
 const SOURCE_MELEE_HIT := &"melee_hit"
 const SOURCE_PASSIVE_TICK := &"passive_tick"
+## Story 4-4 (AC 20): THE THIRD SOURCE — the Mana Accelerator totem's faucet, and the one this
+## file's own header predicted in advance ("the E4 Mana Accelerator totem is a new `.tres` in
+## `data/economy/` and NO code change here"). That prediction is HALF TRUE, and the story's B8
+## correction says which half: the RULE needed no code, and `data/economy/mana_accelerator.tres`
+## really is nothing but authored data read by this unchanged evaluator. What it did need is a
+## CALL SITE — nothing scans authored rules by source, so a rule nobody asks for is loaded and
+## never queried. `MatchState._generate_mana` asks for this source at its third rung.
+const SOURCE_MANA_ACCELERATOR := &"mana_accelerator"
 
 static var _authored: Array[ResourceGenerationRule] = []
 static var _authored_loaded := false

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ResourceGenerationRule" format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/resource_generation_rule.gd" id="1_resgen"]
+
+[resource]
+script = ExtResource("1_resgen")
+source = &"mana_accelerator"
+resource = &"mana"
+amount_domain = 0
+amount_field = &"mana_accelerator_mana"
+required_flag = &"totems"

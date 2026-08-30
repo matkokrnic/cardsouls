@@ -1584,6 +1584,34 @@ func _generate_mana(confirmed_hits: Array[int]) -> void:
 			EconomyEvaluator.MANA, balance, balance_ticks, flags)
 	_regen_mana(p1, per_tick)
 	_regen_mana(p2, per_tick)
+	# THE MANA ACCELERATOR RUNG (story 4-4, AC 20) — the THIRD `amount_for` call site, and the story
+	# named it as a requirement rather than leaving it to be discovered: `EconomyEvaluator` has been
+	# able to LOAD a `mana_accelerator` rule since 3-4 (its header even predicted this totem by
+	# name), but nothing scans authored rules BY SOURCE, so a rule nobody asks for is loaded and
+	# never queried. This is the asking.
+	#
+	# GATED THREE WAYS, and each gate is a different question:
+	#   * THE CADENCE, `_tick % mana_accelerator_interval_ticks` — AC 20's "on some authored
+	#     cadence". The divisor is clamped >= 1 at the conversion boundary, so an authored 0 means
+	#     "every tick" rather than a divide-by-zero (the `minion_retarget_interval_ticks` shape).
+	#   * A LIVE ACCELERATOR ON THAT PLAYER'S OWN BOARD — "while a Mana Accelerator totem is alive".
+	#     Per-player and read fresh every boundary tick, so the faucet opens the tick the totem is
+	#     summoned and closes the tick it dies, with no teardown path to forget.
+	#   * THE `totems` FLAG, which is DATA on the authored rule (`required_flag`) rather than a
+	#     fourth check here — the project-context HARD RULE satisfied the way `melee_hit.tres`
+	#     already satisfies it, so both flag configurations run through the same evaluator call and
+	#     a closed flag simply resolves to 0.0.
+	#
+	# IT ROUTES THROUGH `_regen_mana`, NOT `mana.add()` DIRECTLY, so a DEAD owner earns nothing —
+	# the standing `2-3/R5` doctrine that a corpse runs no economy, inherited rather than re-stated.
+	if _tick % balance_ticks.mana_accelerator_interval_ticks == 0:
+		var accelerated := EconomyEvaluator.amount_for(rules,
+				EconomyEvaluator.SOURCE_MANA_ACCELERATOR, EconomyEvaluator.MANA, balance,
+				balance_ticks, flags)
+		if has_live_kind(p1, CardEffectResolver.KIND_MANA_ACCELERATOR):
+			_regen_mana(p1, accelerated)
+		if has_live_kind(p2, CardEffectResolver.KIND_MANA_ACCELERATOR):
+			_regen_mana(p2, accelerated)
 
 
 ## Step-5 passive mana (story 3-4, AC 4) — the POLICY seat beside _regen_stamina's (D6).
@@ -1607,7 +1635,59 @@ func _regen_stamina(player: PlayerState) -> void:
 	var state := player.hero.action_state
 	var suppressed := state == HeroState.ActionState.BLOCKING \
 			or state == HeroState.ActionState.DEAD
-	player.stamina.advance_regen(balance_ticks.stamina_regen_per_tick, suppressed)
+	# Story 4-4 (AC 21, `4-4/R11`): THE STAMINA ACCELERATOR, applied HERE as a factor on the derived
+	# per-tick rate — the dev-pass mechanism choice the AC leaves open, and the reasoning is recorded
+	# in the story's Dev Agent Record rather than only here.
+	#
+	# OWNER-ONLY IS STRUCTURAL, NOT CHECKED (`4-4/R11`: "only the summoning player's hero's stamina
+	# regen is raised ... the opponent's regen is untouched"). This seat is ALREADY per-player and it
+	# consults `player.units` — that player's OWN board — so there is no cross-player path to get
+	# wrong. A totem on P1's board cannot reach this line for P2 because P2's call passes P2.
+	#
+	# NOT A PER-PLAYER DERIVED RATE AT `apply_balance()`, and that is the `3-1/R2` boundary rather
+	# than a preference. The per-pool reload contract governs POOL BOUNDS (stamina: `set_maximum` +
+	# `refill`); a regen multiplier is not a bound, and deriving it at reload time would make the
+	# accelerator's effect depend on WHEN a reload happened instead of on whether the totem is alive
+	# right now — a totem summoned mid-round would do nothing until the next reload, and one that
+	# died would keep paying out. Read at the regen seat, the factor tracks liveness exactly, and it
+	# returns to the non-accelerated value on the tick the totem dies with nothing to tear down.
+	#
+	# THE POOL IS UNTOUCHED. `advance_regen(amount, suppressed)` already takes the amount per call,
+	# so the pool still owns only the MECHANISM and this stays the POLICY seat (D6).
+	var per_tick := balance_ticks.stamina_regen_per_tick
+	if has_live_kind(player, CardEffectResolver.KIND_STAMINA_ACCELERATOR):
+		per_tick *= balance.stamina_accelerator_regen_multiplier
+	player.stamina.advance_regen(per_tick, suppressed)
+
+
+## Story 4-4 (AC 20/AC 21): whether `player`'s OWN board carries a LIVE unit of the named kind.
+##
+## PUBLIC because both accelerator seats and the tests that pin them ask it, and because it is the
+## one expression of "this totem is currently doing its job" — a second copy at either seat would be
+## a second thing to keep in agreement, which is the `UnitBoard.has_index` discipline applied one
+## level up.
+##
+## IT IS A PURE QUERY over plain facts: a name in, a bool out, no mutation and nothing retained. It
+## is NOT an intake and carries no capture channel, for `unit_attack_phase_multiplier`'s reason —
+## but unlike that one it takes NO data inward that a replay would have to restore, since a replay
+## that reproduces the board reproduces this answer.
+##
+## LIVENESS IS `UnitBoard.is_alive_at`, never a re-derived `hp > 0` (`4-3a/R14`), so a dead totem's
+## hole stops the faucet on the tick it dies without a second liveness seat existing anywhere.
+##
+## AN UNAUTHORED KIND NAME ANSWERS FALSE rather than tripping a guard: `kind_index_of` returns
+## `NO_KIND_INDEX`, which no record can carry (the cast seat refuses to add one), so the scan finds
+## nothing. A faucet whose kind is not authored is simply shut — the graceful-degradation direction.
+func has_live_kind(player: PlayerState, kind_name: StringName) -> bool:
+	if balance == null:
+		return false
+	var kind_index := balance.kind_index_of(kind_name)
+	if kind_index == BalanceConfig.NO_KIND_INDEX:
+		return false
+	for index in player.units.size():
+		if player.units.is_alive_at(index) and player.units.kind_index_at(index) == kind_index:
+			return true
+	return false
 
 
 ## Step-6 deck deal (story 3-3, AC 7/AC 9) — the ONE SEAT. Runs at most once per tick, and only

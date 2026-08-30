@@ -60,9 +60,17 @@ const EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"
 ##
 ## MATCHED BY NAME, NOT BY PURITY — the guard is a source scan and cannot verify a function is pure.
 ## A future seam added here must earn its place with a written reason, exactly as both of these did.
+##
+## `has_live_kind(player, kind_name)` (AC 20/AC 21) IS THE THIRD, and the same category again: a
+## bool answered from the board the caller hands in, mutating nothing and retaining nothing. It is
+## public because both accelerator seats AND the tests that pin them ask it, and because it is the
+## one expression of "this totem is currently doing its job" — a private helper would force a second
+## copy into any test that wanted to assert on it. A replay that reproduces the board reproduces
+## this answer, so there is nothing for a stream to carry.
 const EXEMPT_PURE_QUERIES: Array[String] = [
 	"unit_attack_phase_multiplier",
 	"projectile_speed_at",
+	"has_live_kind",
 ]
 
 ## AC 1: the intake surface VERIFIED BY CONTENT at this story's pass. Pinned by exact set
@@ -125,11 +133,11 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 	var expected_exempt := [EXEMPT_CARRIES_NO_DATA_INWARD] + EXEMPT_PURE_QUERIES
 	expected_exempt.sort()
 	assert_eq(exempt, expected_exempt,
-		"the THREE exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
+		"the FOUR exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
 		+ "no data INWARD (it is the D5 emit half of a queue the runner empties every tick), and "
-		+ "unit_attack_phase_multiplier() and projectile_speed_at() are PURE QUERIES that take "
-		+ "parameters and still carry none (functions of their arguments, returning a float, "
-		+ "writing nothing) — none is an intake, and a FOURTH name appearing here is a real intake "
+		+ "unit_attack_phase_multiplier(), projectile_speed_at() and has_live_kind() are PURE QUERIES that "
+		+ "take parameters and still carry none (functions of their arguments, returning a value, "
+		+ "writing nothing) — none is an intake, and a FIFTH name appearing here is a real intake "
 		+ "escaping its capture channel")
 	assert_eq(egress, ["debug_window_ticks_remaining", "to_snapshot"],
 		"to_snapshot() and debug_window_ticks_remaining() are EGRESS, not intake — they return "

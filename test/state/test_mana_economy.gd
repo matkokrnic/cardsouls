@@ -96,13 +96,38 @@ func _attack_and_advance_through(ms: MatchState, through_tick: int) -> void:
 ## possible: neither rule carries a gameplay number — each names a FIELD on a live balance
 ## object, and the two rules deliberately name DIFFERENT objects (per-event amounts live on
 ## BalanceConfig, per-tick rates on BalanceTicks, the A1 split).
-func test_authored_rule_set_is_the_two_mana_faucets() -> void:
+##
+## STORY 4-4 (AC 20): A THIRD RULE SHIPS — `mana_accelerator.tres` — and it arrives WITH the call
+## site that asks for it, which is the condition this pin exists to enforce. `EconomyEvaluator` has
+## been able to LOAD such a rule since 3-4 (its header predicted this totem by name), but nothing
+## scanned rules BY SOURCE, so a rule shipped without a call site would have been loaded and never
+## queried: authored content that decides nothing. `MatchState._generate_mana`'s third rung is the
+## asking, and test_totem_accelerators.gd proves it pays out.
+##
+## SORTED FILENAME ORDER PUTS IT FIRST — `mana_accelerator.tres` before `melee_hit.tres` before
+## `passive_tick.tres` — so the indices below shift. That order is the loader's own determinism
+## contract, not an accident, and reading the rules by index is what makes a silent reordering fail
+## here rather than somewhere subtler.
+func test_authored_rule_set_is_the_three_mana_faucets() -> void:
 	var rules := EconomyEvaluator.authored_rules()
-	assert_eq(rules.size(), 2, "exactly two authored rules ship (melee_hit + passive_tick)")
-	if rules.size() != 2:
+	assert_eq(rules.size(), 3,
+		"exactly three authored rules ship (mana_accelerator + melee_hit + passive_tick)")
+	if rules.size() != 3:
 		return
-	var melee: ResourceGenerationRule = rules[0]   # sorted filename order: melee_hit.tres first
-	var passive: ResourceGenerationRule = rules[1]
+	var accelerator: ResourceGenerationRule = rules[0]  # sorted: mana_accelerator.tres first
+	var melee: ResourceGenerationRule = rules[1]
+	var passive: ResourceGenerationRule = rules[2]
+	assert_eq(accelerator.source, EconomyEvaluator.SOURCE_MANA_ACCELERATOR)
+	assert_eq(accelerator.resource, EconomyEvaluator.MANA)
+	assert_eq(accelerator.amount_domain, ResourceGenerationRule.AmountDomain.BALANCE,
+		"the accelerator pays a per-EVENT amount on a cadence, not a per-tick rate — so it reads "
+		+ "from BalanceConfig, the melee rule's domain rather than the passive rule's")
+	assert_eq(accelerator.amount_field, &"mana_accelerator_mana",
+		"the rule NAMES its amount's home rather than carrying the number — "
+		+ "`ResourceGenerationRule` forbids a rule carrying its own number, and AC 20 restates it")
+	assert_eq(accelerator.required_flag, &"totems",
+		"the totem layer's flag gate is DATA on the rule, not a fourth check at the call site — "
+		+ "the melee rule's `required_flag` shape applied to the layer `epics.md` commits")
 	assert_eq(melee.source, EconomyEvaluator.SOURCE_MELEE_HIT)
 	assert_eq(melee.resource, EconomyEvaluator.MANA)
 	assert_eq(melee.amount_domain, ResourceGenerationRule.AmountDomain.BALANCE,
@@ -125,8 +150,8 @@ func test_authored_rule_set_is_the_two_mana_faucets() -> void:
 ## the scan finds nothing there — which also pins the type filter (a stray .tres beside the
 ## rules cannot poison the set).
 func test_rule_set_is_a_directory_scan_not_a_hardcoded_list() -> void:
-	assert_eq(EconomyEvaluator.load_rules(EconomyEvaluator.RULES_DIR).size(), 2,
-		"the authored directory yields its two rules")
+	assert_eq(EconomyEvaluator.load_rules(EconomyEvaluator.RULES_DIR).size(), 3,
+		"the authored directory yields its three rules (story 4-4 added mana_accelerator.tres)")
 	assert_eq(EconomyEvaluator.load_rules("res://data/balance/").size(), 0,
 		"a directory of NON-rule .tres yields nothing — the set is the directory's content")
 	assert_eq(EconomyEvaluator.load_rules("res://data/no_such_directory/").size(), 0,

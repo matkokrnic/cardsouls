@@ -70,11 +70,22 @@ const PREFIX_SPELL := "spell_"
 ## Only a kind that DIFFERS earns a row. The failure this cannot hide is the one that matters — a
 ## row naming a kind `BalanceConfig` does not author reaches `NO_KIND_INDEX` at the cast seat and
 ## puts NOTHING on the board, loudly, rather than silently summoning a minion.
+##
+## THE KIND NAMES ARE NAMED CONSTANTS, not literals repeated at the table and again at every reader.
+## Story 4-4's accelerator seats (`MatchState._generate_mana`'s third call site and
+## `_regen_stamina`) each have to ask "is a live totem of THIS kind on this player's board", and a
+## StringName literal at those seats would be a second spelling of a name only this file owns — a
+## typo would silently make a faucet permanently dry with nothing failing. This is the same
+## constant-vocabulary discipline `CastEvaluator.REASON_*` and `EconomyEvaluator.SOURCE_*` already
+## carry, applied to the kind names.
 const KIND_MINION := &"minion"
+const KIND_COMBAT_TOTEM := &"combat_totem"
+const KIND_MANA_ACCELERATOR := &"mana_accelerator"
+const KIND_STAMINA_ACCELERATOR := &"stamina_accelerator"
 const SUMMON_KINDS: Dictionary[StringName, StringName] = {
-	&"summon_combat_totem": &"combat_totem",
-	&"summon_mana_accelerator": &"mana_accelerator",
-	&"summon_stamina_accelerator": &"stamina_accelerator",
+	&"summon_combat_totem": KIND_COMBAT_TOTEM,
+	&"summon_mana_accelerator": KIND_MANA_ACCELERATOR,
+	&"summon_stamina_accelerator": KIND_STAMINA_ACCELERATOR,
 }
 
 ## AC 1: the three ids above are TOTEMS and gate on `FeatureFlags.totems`; every other `summon_*` id

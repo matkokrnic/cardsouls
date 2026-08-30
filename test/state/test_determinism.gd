@@ -5,6 +5,35 @@ extends TestCase
 ## of the resulting state against a golden value. A surprise change means determinism or the
 ## snapshot shape drifted. Regenerate GOLDEN only for a DELIBERATE state/snapshot change.
 
+## NOT RE-BASELINED BY STORY 4-4, PASS 3 OF 3 (the accelerator faucets) — d94337cd UNMOVED, and the
+## non-move is MEASURED AND NAMED rather than a step that was skipped. AC 12 requires the
+## accelerators to be considered as their own cause "separate from any cause introduced by the
+## per-kind conversion or the projectile", and this is that consideration's result.
+##
+## THE THREE CANDIDATE CAUSES, each predicted and each confirmed a NON-MOVER:
+##   1. THE AUTHORED RULE SET GREW, two rules to three (`data/economy/mana_accelerator.tres`). This
+##      is the one candidate that could NOT be dismissed on `BC/R3` grounds, because `3-4/R6`
+##      narrowed that isolation explicitly: `data/economy/*.tres` rule CONTENT is load-bearing for
+##      the golden, since production code scans that directory on the golden's own path. MEASURED
+##      UNMOVED, and the reason is structural: `EconomyEvaluator.amount_for` filters by SOURCE, the
+##      new rule's source is `mana_accelerator`, and the two rungs the fixture reaches ask for
+##      `melee_hit` and `passive_tick`. A rule that matches no queried source contributes nothing.
+##   2. THE THIRD `_generate_mana` CALL SITE. Reached on every cadence boundary, but gated on a LIVE
+##      accelerator on that player's own board — and the fixture's authored kind is a MINION, so
+##      `has_live_kind` is false for both players on every tick of the recorded sequence. The rung
+##      runs and pays nothing.
+##   3. THE STAMINA REGEN FACTOR. The same gate on the same board, so the multiplier is never
+##      applied and `_regen_stamina` computes the identical per-tick amount it always has. Stamina
+##      IS hashed (both players' pools are in the snapshot and the fixture spends and regenerates
+##      through the whole run), so this is the candidate with the most exposure — and it is exactly
+##      why it is worth stating as measured rather than assumed.
+## NOT a cause either: `mana_accelerator_mana`, `mana_accelerator_interval_seconds` and
+## `stamina_accelerator_regen_multiplier` are unauthored in `_golden_config` and default to 0.0 —
+## and the cadence's derived divisor clamps to 1, so the boundary test is true every tick, which
+## means the rung is EXERCISED on every tick rather than skipped. The gate that stops it is the
+## liveness test, not the cadence, which is the stronger of the two ways this could have been a
+## non-mover.
+##
 ## RE-BASELINED BY STORY 4-4, PASS 2 OF 3 (the projectile), 836afc01 -> d94337cd, ONE CAUSE — and
 ## the fact that there is only one is itself a measured finding rather than an omission.
 ##   1. SNAPSHOT SHAPE (the ONE mover). `PlayerState.to_snapshot()` gains SEVEN keys, the whole
