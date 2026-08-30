@@ -7370,3 +7370,65 @@ from line numbers to symbol names per the standing citation discipline.
 Docs only, no code touched, no `src/`/`test/`/`project.godot` edit. `4-4-totems` stays `authored`,
 board stays `backlog` -- promotion is the operator's act. No golden/suite/`project.godot`
 measurement this pass. Operator reviews the log.
+
+## Session 2026-08-30 -- 4-4 review fix pass, rulings `4-4/R14`-`4-4/R15`
+
+`4-4/R14` (ruled, operator) A REACH CONFIRMATION HAS A DERIVED SHELF LIFE. Review finding B2: this
+story added the firing cadence as a third AND on the windup gate, which turned an in-reach flag that
+was consumed on the next IDLE tick into one BANKED FOR A WHOLE COOLDOWN -- so a Combat totem fired a
+homing shot at a target that had walked ~18 m away, twice its authored 8 m range, violating AC 13's
+"never regardless of how long it remains in that state".
+
+THE `4-3b` PROHIBITION STANDS: the reach probe remains SET-ONLY, and AC 13(ii)'s "absence of overlap
+is not a fact" is untouched -- no negative probe was added and nothing outside the board clears the
+flag. Instead the STATE treats a confirmation as FRESH only for a bounded window, and a unit may
+BEGIN an attack only on a fresh confirmation. THE WINDOW IS DERIVED, NEVER A NEW AUTHORED FIELD: a
+confirmation older than one probe cadence (`minion_retarget_interval_ticks`, plus the F1 one-tick
+lag) can no longer be current, because the runner would have re-confirmed it by now if the target
+were still in range. Mechanism was the dev pass's to choose; it chose a per-record countdown of fresh
+ticks, re-seeded (not extended) by each confirmation, aged in `tick_attack_timers` beside the cadence
+cooldown, and consumed by `begin_windup_at` exactly as the bool was.
+
+THE COUNTDOWN IS HASHED STATE BY `4-3a/R17`, and that is the operator's explicit call rather than the
+dev pass's: a value that crosses ticks and decides an outcome cannot sit outside the hash, and how
+much freshness is left decides whether the next windup may begin. The cheaper option -- snapshot only
+the boolean predicate, which keeps `d94337cd` unmoved -- was MEASURED and REFUSED by name, because it
+would have made the remaining count a FOURTH unhashed cross-tick exclusion and put two genuinely
+different states on one hash. GOLDEN RE-BASELINED `d94337cd` -> `a96b123e`, ONE CAUSE: the key SET
+does not move (still 27 per player) and no behaviour in the fixture moves either (every fact it
+pushes is hero-sourced, so the countdown sits empty all run) -- only `unit_in_reach`'s rendering,
+`false` -> `0`. Measured both ways: projecting the count back to a bool reproduces `d94337cd`
+exactly. `UNHASHED_CROSS_TICK_MEMBERS` STAYS AT THREE.
+
+`4-4/R15` (ruled) `RecordFile.FORMAT_VERSION` GOES 4 -> 5, WITH NESTED RESOURCE SERIALISATION.
+Review finding B1, and the fourth bump in this family -- but the first whose cause is the recorded
+BALANCE CONFIG's shape rather than the contact row's. `4-4` gave `BalanceConfig` an
+`Array[UnitKindProfile]`, and `_resource_values` was a one-level capture: it handed live `Resource`
+references to `store_var`, which encodes each as an `EncodedObjectAsID` because `full_objects`
+defaults to false, and assigning that untyped array into the typed property is REJECTED BY THE ENGINE
+WITH NOTHING PRINTED. Measured against the shipped `.tres`: `rebuilt unit_kinds size = 0`. Every
+replay from disk therefore ran with NO KINDS AT ALL -- no hp, speed, damage, attack or priority on
+any summoned unit.
+
+Two halves, both closed. (a) POST-4-4 RECORDS ROUND-TRIP: `_resource_values` / `_rebuilt` recurse
+through Resource-valued properties and Resource-valued arrays, emitting a class-tagged dict per
+nested resource, and typed containers are rebuilt with `Array.assign` / `Dictionary.assign` onto the
+property's own container rather than `set()` (measured on Godot 4.6.3: `set()` with an untyped array
+leaves size 0 even when every element is the right class). (b) PRE-4-4 RECORDS ARE REFUSED: a v4
+record carries the retired flat keys and no `unit_kinds`, so replaying one diverges from the match it
+claims to reproduce. HARD REJECTION WITH A REASON, NO SHIM, on `4-1/R1`'s standing reason.
+
+RESIDUE, written down rather than chased, on `3-0d/R25`'s footing: the nested class tag is matched
+against an explicit three-entry table, and an unknown tag rebuilds as `null` rather than as a named
+refusal. A v5 file can only carry those three because this build's writer is the only thing that
+writes v5; a file carrying a foreign tag is corrupt input of the same family as the five cases
+`3-0d/R25` already records.
+
+### Close-out
+
+Four code commits (B1, B2, H2, and the nine orphan `.uid` files as a separate chore), plus this docs
+commit. Suite `542/4211` -> `548/4270`, 0 failed, 43 integration files PASS, `bash test/run_all.sh`
+exit 0 after every commit. Golden `d94337cd` -> `a96b123e`, one cause, re-baselined on the operator's
+explicit go rather than on the dev pass's judgement. `project.godot` untouched. Review findings
+M1-M9 and L1-L5 deliberately NOT actioned -- they are recorded in `_44-review.md` and are the
+operator's to schedule. The Tier A live smoke remains unspent. Nothing pushed.

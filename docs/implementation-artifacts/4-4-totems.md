@@ -302,6 +302,12 @@ card name.
   stays actor-owned (`4-3/R2`, `4-1/R12` unchanged). The 60 m budget is tracked as an INTEGRATED PATH
   LENGTH the state layer computes from the same authored curve the actor moves by — a scalar of the
   same class as a timer, so no position travels inward and `push_contact` stays the only intake.
+  **"The same curve" was TRUE and "the same value" was NOT, which is review finding H2 (fixed in the
+  fix pass below).** The runner re-derived the SPEED after `advance()` had already incremented the
+  flight clock, so the actor flew at speed(t+1) while the odometer had been charged speed(t) — one
+  tick ahead, permanently. It now asks `MatchState.projectile_step_distance_at()` for the distance
+  the odometer actually spent, which makes "one arithmetic, two readers" true by construction rather
+  than by comment.
   `E4-P/R12`'s "its own attacker identity" is a THIRD PARTITION of the existing `[slot, index]` int
   space (`index <= -2`, `PROJECTILE_INDEX_BASE - i`) rather than a third element on the pair: the
   recorded contact ROW shape, every hero and unit call site, and every replay made before this story
@@ -366,6 +372,12 @@ entangled:
 | 2 | THE PROJECTILE, snapshot shape — seven keys at empty arrays, isolated BY CONSTRUCTION (the fixture's kind is a minion that cannot launch) | `d94337cd` |
 | 3 | THE ACCELERATOR FAUCETS — **measured a NON-MOVER**, all three candidate causes named | `d94337cd` |
 
+*Corrected at the review (D3).* Pass 3's cause-1 wording said "the two rungs the fixture reaches ask
+for `melee_hit` and `passive_tick`", which understates: the third `EconomyEvaluator.amount_for` call
+IS reached on every tick — the cadence divisor clamps to >= 1 — it simply discards its result behind
+the liveness gate. The non-mover argument is unchanged and if anything stronger; only the sentence
+was loose.
+
 Measured non-movers, named rather than assumed: AC 7's per-kind priority read (structural — the
 fixture's kind authors `standard`, the same name the removed `PRIORITY_STANDARD` constant carried);
 AC 10's cadence gate; the attacker-derived damage unification (`attack_damage_percent_of_max_hp`
@@ -402,16 +414,33 @@ loss of audit); 12 above; 13 hold-fire falls out of the in-reach condition — a
 with no timeout path and no distance re-selection anywhere; 14-19 the projectile; 20/21 the
 accelerators.
 
-**Known coverage boundary, reported rather than hidden.** The projectile's BEHAVIOUR is not inside
-determinism coverage. Every previous board story got its behaviour into the golden by construction,
-but the fixture summons at t22 and hashes at t24, and the earliest a shot can launch on that
-timeline is t25 (summon t22 -> target acquired at the t23 throttle boundary -> earliest
-scope-matching probe t23 -> windup t24 -> windup-to-active t25). Getting one in needs the recorded
-sequence extended past t24, which is a fixture redesign that would re-baseline every unrelated key
-at once. Guarded by `test/state/test_projectile_flight.gd` and
-`test/integration/test_projectile_flight_live.gd` instead. Recorded in the determinism header too.
+**Known coverage boundary, reported rather than hidden — AND CORRECTED AT THE REVIEW (findings D1
+and D2).** The projectile's BEHAVIOUR is not inside determinism coverage. Every previous board story
+got its behaviour into the golden by construction, but the fixture summons at t22 and hashes at t24.
 
-**An intermittent this pass introduced, unresolved.** `test/integration/test_debug_instruments.gd`
+*The tick arithmetic was off by one (D2).* Measured against `advance()`'s actual step order — step 3b
+`_advance_unit_attacks` runs BEFORE step 4 `_resolve_contacts`, and step 7 `_update_unit_targets`
+runs last — at t23 step 4 the unit still holds the no-target pair, and the retarget that gives it one
+happens at t23 step 7, AFTER. So the earliest scope-matching mark is t24, the windup begins t25, and
+the launch transition is **t26**, not t25. The error ran against this pass's own margin, so the
+conclusion held a fortiori; the number was still wrong.
+
+*And the remedy sentence was FALSE (D1).* It said getting a shot into the golden "needs the recorded
+sequence extended past t24". **It does not**, and a follow-up story starting from that sentence would
+extend the fixture and measure nothing. Two independent structural reasons, either alone sufficient:
+(i) `mark_in_reach_at` is reached only from `_mark_reach_from_fact`, which returns immediately for a
+HERO attacker, and every fact this fixture pushes is hero-sourced — so the unit's reach flag is empty
+at EVERY tick count and it can never wind up; (ii) the fixture's kind comes from
+`UnitKindFixture.melee()`, which never sets `attack.projectile`, so the launch branch is dead
+regardless. Reason (ii) is the same "isolated by construction" argument cause 2 above rests on, which
+is why it is load-bearing here rather than a coincidence. Bringing a shot into this hash needs a
+fixture that pushes a UNIT-sourced probe against a kind authoring a projectile — a redesign, not a
+longer sequence. Guarded by `test/state/test_projectile_flight.gd` and
+`test/integration/test_projectile_flight_live.gd` instead. Corrected in the determinism header too.
+
+**An intermittent this pass introduced, unresolved** — *and RESOLVED at the review, `747ac31`; see
+the fix-pass section below. The diagnosis recorded here was half wrong and is left standing as what
+this pass actually knew.* `test/integration/test_debug_instruments.gd`
 sometimes prints `ERROR: 1 resources still in use at exit`, and `run_all.sh` fails the suite on
 `^ERROR:`. Measured against a worktree at the pre-pass baseline `500adef`: **0/18 runs at baseline,
 3/18 (~17%) on this tree** — so it is attributable to this pass, not pre-existing. Twelve
@@ -425,6 +454,59 @@ proves the mechanism by machine (fires only in range, actor appears, travels 17.
 1.55 rad toward a laterally-moving target over 89 samples), but AC 5's "stand where you place them",
 the totem's on-screen legibility and whether a homing shot is actually dodgeable by a human are
 `PROC/R8` matters for the operator's eye.
+
+### Review fix pass — 2026-08-30 (`4-4/R14`, `4-4/R15`)
+
+Driven by the review record at `_44-review.md` (verdict CHANGES REQUESTED: B1, B2 blocking, H2 open).
+Baseline `747ac31`, which already carried the review's own two fixes (`638b307` H1, `747ac31` F1 —
+so the "intermittent this pass introduced, unresolved" noted above IS resolved: the review localised
+it to a 0.400 s audio cue outliving a quit 20 ms after `play()`, and silenced the cues the file never
+asserts on; 40 consecutive runs, 0 leaks).
+
+**Four commits, code only; this docs commit is separate.**
+
+1. `fix(record): serialise nested resources and bump FORMAT_VERSION 4 -> 5` — B1.
+2. `fix(state): a reach confirmation goes stale, so a totem cannot fire at a target that left` —
+   B2, per `4-4/R14`. Carries the D1/D2/D3 corrections to `test_determinism.gd`'s header, because
+   that commit rewrites the same block for the re-baseline.
+3. `fix(state): the actor flies the distance the odometer was charged, on the same tick` — H2.
+4. `chore: track generated .uid files from earlier stories` — the nine orphans (dev-pass F2).
+
+**B1 — a saved record lost `unit_kinds` entirely.** `_resource_values` was a one-level capture, so
+each `UnitKindProfile` reached `store_var` as a live reference and came back an `EncodedObjectAsID`;
+assigning that untyped array into the typed property is rejected by the engine with NOTHING PRINTED.
+Every replay from disk ran with no kinds at all. Both halves closed: the serialiser now recurses
+(kind -> attack -> projectile) with a class-tagged dict per nested resource and rebuilds typed
+containers with `Array.assign` / `Dictionary.assign` rather than `set()` (measured: `set()` with an
+untyped array leaves size 0 even when every element is the right class); and `FORMAT_VERSION` goes
+4 -> 5 so pre-4-4 records are refused with a reason rather than replayed kindless. Three tests,
+mutation-proven — the extended round trip, a save/load/save BYTE-IDENTITY test (which names nothing,
+so nothing can be forgotten — this is the assertion the `unit_kinds` loss walked straight through),
+and a real v4-shaped record refused.
+
+**B2 — AC 13 violated, and the fix cost the golden.** The cadence AND this story added turned a flag
+consumed within a tick into one banked for a whole cooldown, so a totem fired at a target ~18 m away.
+`4-4/R14` closes it without a negative probe: a confirmation stays CURRENT for one probe cadence plus
+the F1 lag, derived not authored. **GOLDEN RE-BASELINED, `d94337cd` -> `a96b123e`, one cause**, on
+the operator's explicit go — the freshness countdown is HASHED state by `4-3a/R17`, the key SET does
+not move (still 27), and only `unit_in_reach`'s rendering changed (`false` -> `0`). The cheaper
+option (hash only the boolean projection, keep `d94337cd`) was measured and REFUSED by name: it would
+have made the remaining count a fourth unhashed cross-tick exclusion.
+`UNHASHED_CROSS_TICK_MEMBERS` stays at THREE.
+
+**H2 — the "one arithmetic" invariant was false as written.** See the OQ-3 note above. Fixed by
+exposing the SPENT DISTANCE rather than a speed, with the curve refactored onto an explicit-tick core
+so no path infers its tick from a clock any more. `EXEMPT_PURE_QUERIES` gains a fourth member with
+its reason.
+
+**Measurements.** State suite `542 / 4211 / 0` -> **`548 / 4270 / 0`**. Integration **43 files**, all
+PASS. `bash test/run_all.sh` exits 0 after every commit. Golden `d94337cd` -> **`a96b123e`**, one
+cause. `project.godot` untouched. Per-player snapshot key set unchanged at 27. `UnitBoard` bound
+guards unchanged at 17. Five mutations, five kills, every restore from a SHA256-verified out-of-repo
+copy and never `git checkout --`.
+
+**Still the operator's, unchanged:** the Tier A LIVE SMOKE, and the review's non-blocking findings
+M1-M9 and L1-L5, none of which this pass touched.
 
 ### File List
 
@@ -488,3 +570,5 @@ at EIGHT.
 | Date | Change |
 | --- | --- |
 | 2026-08-30 | Dev pass executed via `gds-dev-story`. Four code commits (three build + one fix), golden re-baselined `4a089063` -> `d94337cd` across three separately measured causes, suite `499/3895` -> `542/4211`, integration 42 -> 43 files. Status -> `review`. Three open findings recorded for the review gate. |
+| 2026-08-30 | Code review via `gds-code-review`: CHANGES REQUESTED, 2 blocking (B1, B2), 2 high (H1 fixed in-review as `638b307`, H2 open), 9 medium, 5 low. Golden chain and address partition both verified PASS. The F1 intermittent localised and fixed as `747ac31`. |
+| 2026-08-30 | Review fix pass. Four code commits (B1, B2, H2, chore). Operator rulings `4-4/R14` (reach confirmations have a derived shelf life; no negative probe) and `4-4/R15` (`FORMAT_VERSION` 4 -> 5 with nested resource serialisation). Golden re-baselined `d94337cd` -> `a96b123e`, ONE cause, on the operator's explicit go; `UNHASHED_CROSS_TICK_MEMBERS` stays at three. Suite `542/4211` -> `548/4270`, integration 43 files. Findings D1/D2/D3 corrected here and in the determinism header. M1-M9 and L1-L5 deliberately untouched; live smoke still owed. |
