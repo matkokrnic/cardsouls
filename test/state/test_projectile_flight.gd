@@ -352,8 +352,8 @@ func test_a_target_that_merely_leaves_the_flight_path_does_not_end_homing() -> v
 	for t in range(2, 8):
 		_advance(ms)
 		assert_true(board.is_homing_at(0),
-			"tick %d: no fact arrived, so nothing ended homing — `4-4/R5`, and it holds by ABSENCE "
-			+ "(there is no lost-the-target test anywhere in src/ to get wrong)" % t)
+			("tick %d: no fact arrived, so nothing ended homing — `4-4/R5`, and it holds by ABSENCE "
+			+ "(there is no lost-the-target test anywhere in src/ to get wrong)") % t)
 		assert_true(board.is_alive_at(0), "...and the shot is still in the air")
 
 

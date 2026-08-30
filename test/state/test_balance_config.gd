@@ -288,8 +288,8 @@ func test_reload_bypasses_the_resource_cache_and_hands_back_a_fresh_instance() -
 		var a: UnitKindProfile = first.unit_kinds[i]
 		var b: UnitKindProfile = second.unit_kinds[i]
 		assert_false(a == b,
-			"kind %d must be a FRESH sub-resource instance — a cached one would ignore a live edit "
-			+ "to that kind's numbers" % i)
+			("kind %d must be a FRESH sub-resource instance — a cached one would ignore a live "
+			+ "edit to that kind's numbers") % i)
 		assert_eq(b.kind_name, a.kind_name, "kind %d reloaded under the same name" % i)
 		assert_eq(b.max_hp, a.max_hp, "kind %d reloaded the same max_hp" % i)
 		assert_eq(b.move_speed, a.move_speed, "kind %d reloaded the same move_speed" % i)
