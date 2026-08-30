@@ -119,6 +119,31 @@ var _quit_at := -1
 func _initialize() -> void:
 	var scene: PackedScene = load("res://src/main/main.tscn")
 	root.add_child(scene.instantiate())
+	_silence_audio_cues(root)
+
+
+## THE FIX FOR THE INTERMITTENT `ERROR: 1 resources still in use at exit`, which run_all.sh's
+## `^ERROR:` grep turns into a red verdict line on a run whose every assertion passed. SAME CLASS,
+## SAME FIX as the 4-4 review finding F1 (`test_debug_instruments.gd`, commit 747ac31) -- an
+## AudioStreamPlayer still mixing a cue when the engine tears down.
+##
+## THE MECHANISM, measured rather than guessed. `--verbose` names the survivor outright:
+## "Resource still in use: res://assets/audio/cue_hit.wav (AudioStreamWAV)". This file's whole
+## Phase B is a minion landing hits, and every landed hit reaches
+## `TelegraphController.on_hit_landed` -> `_cue_hit.play()`. Hits keep landing through the
+## `_quit_at` settle window, so whether the AudioServer has retired the last playback by exit is a
+## race against machine load -- exactly the coin flip 747ac31 measured, and the reason the 4-3b
+## "quit 30 frames later" settle delay above narrowed the window without closing it.
+##
+## IT IS A TEST-SIDE ARTEFACT, NOT A LEAK IN `src/`. Nothing here is under test by this file: it
+## asserts on hp deltas, recorded contact facts, `hit_landed` payloads and probe cadence. A
+## headless run has no audio device anyway; what it has is an AudioServer faithfully mixing a
+## sample this test has no reason to start. Nulling the streams removes the race at its source.
+func _silence_audio_cues(node: Node) -> void:
+	if node is AudioStreamPlayer or node is AudioStreamPlayer2D or node is AudioStreamPlayer3D:
+		node.stream = null
+	for child in node.get_children():
+		_silence_audio_cues(child)
 
 
 func _physics_process(_delta: float) -> bool:
