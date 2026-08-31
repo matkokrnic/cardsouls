@@ -1846,13 +1846,21 @@ func _resolve_retarget(slot: int, intent: InputIntent, controller: Controller,
 	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
 	if not is_instance_valid(hero) or not is_instance_valid(view_cam):
 		return
-	var hero_screen: Variant = _screen_position(view_cam, hero.global_position)
-	if hero_screen == null:
-		return  # this slot cannot see its own hero; there is no screen frame to flick within
 	var addresses: Array[Array] = []
 	var screens: Array[Vector2] = []
-	_gather_flick_candidates(slot, opposing, view_cam, addresses, screens)
-	var pick := LockOnResolver.best_candidate(hero_screen as Vector2, flick, screens)
+	# Story 4-6a (AC 4): the gather now RETURNS the cycling anchor -- the CURRENT target's screen
+	# position -- alongside the pickable set it fills, rather than discarding it. The hero's own
+	# screen position is no longer read here at all: 4-6's `hero_screen` guard existed because the
+	# cone measured direction from the hero, and nothing measures from the hero any more.
+	var anchor: Variant = _gather_flick_candidates(slot, opposing, view_cam, addresses, screens)
+	if anchor == null:
+		# Story 4-6a (AC 5, `4-6a/R1`): the current target is behind this slot's camera or off its
+		# viewport rect, so the anchor has nothing to be adjacent TO and a flick cannot name a
+		# neighbour. That is a NO-OP delivered the AC 2 way -- no request sent, standing lock
+		# untouched -- and the CLICK stays the only route back to an off-frame opposing hero
+		# (`CC/R3`). Structurally the same shape as the hero-anchor guard this replaces.
+		return
+	var pick := LockOnResolver.adjacent_candidate(anchor as Vector2, flick, screens)
 	if pick == -1:
 		return
 	intent.retarget_slot = addresses[pick][0]
@@ -1868,14 +1876,26 @@ func _resolve_retarget(slot: int, intent: InputIntent, controller: Controller,
 ## has no meaning under `CC/R2`'s always-locked camera and would point the hero away from every
 ## threat.
 ##
-## THE CURRENT TARGET IS EXCLUDED, which is what makes a flick a SWITCH: leaving it in would let a
-## flick "retarget" to what is already locked and read as a dead control.
+## THE CURRENT TARGET IS EXCLUDED FROM THE PICKABLE SET, which is what makes a flick a SWITCH:
+## leaving it in would let a flick "retarget" to what is already locked and read as a dead control.
+## Story 4-6a (AC 4) KEEPS THAT EXCLUSION AND STOPS THROWING THE POSITION AWAY WITH IT. Cycling
+## measures adjacency FROM the current target, so its screen position is now the ANCHOR this
+## function RETURNS -- computed on its own line, never appended to `screens`. The exclusion is
+## therefore unchanged in effect (the current target can still never be picked) while the one fact
+## the new algorithm needs stops being collateral of it. Returning it, rather than adding a third
+## out-parameter, is what keeps "the anchor is not a candidate" true by construction: there is no
+## array it could accidentally be in.
+##
+## RETURNS null WHEN THERE IS NO ANCHOR -- the current target is unspawned/freed, or behind this
+## slot's camera, or outside its viewport rect. The caller turns that into AC 5's no-op. The
+## pickable set is still filled in that case (cheap, and it keeps the function's two jobs
+## independent), but the caller never reaches the pick.
 ##
 ## OFF-SCREEN CANDIDATES ARE EXCLUDED BY `_screen_position` RETURNING NULL -- AC 10 says on-screen
 ## candidates, and it is also what makes the click the only route back to an off-screen opposing
 ## hero (AC 9).
 func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
-		addresses: Array[Array], screens: Array[Vector2]) -> void:
+		addresses: Array[Array], screens: Array[Vector2]) -> Variant:
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	var opponent: PlayerState = _match_state.p1 if opposing == 0 else _match_state.p2
 	var current: Array[int] = [player.lock_target_slot, player.lock_target_index]
@@ -1895,6 +1915,29 @@ func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
 			continue
 		addresses.append(address)
 		screens.append(screen as Vector2)
+	return _lock_target_screen_position(slot, view_cam)
+
+
+## Story 4-6a (AC 4/AC 13/AC 14): where this slot's CURRENT locked target sits in this slot's own
+## viewport, or null when it is nowhere visible there. ONE computation, two consumers -- the flick's
+## cycling ANCHOR (AC 4) and the on-screen MARKER (AC 13) ask the identical question, and the 4-6
+## step-1c header states the house rule for exactly this shape: deriving it twice would be two
+## answers to one question.
+##
+## THE ADDRESS COMES FROM STATE, THE POSITION IS COMPUTED HERE, and no position ever travels inward
+## (`4-2/R14`, the `_aim_unit_actors` rule verbatim). Reads `PlayerState.lock_target_*` fresh on
+## every call, which is the whole of AC 14's "follows whichever candidate is currently locked": a
+## lock that snaps under `4-6/R4` (locked-unit death) relocates this the same tick, and one that
+## addresses a freed or unspawned actor returns null so the marker clears rather than lingering on
+## a corpse.
+func _lock_target_screen_position(slot: int, view_cam: Camera3D) -> Variant:
+	if not is_instance_valid(view_cam):
+		return null
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var world: Variant = _target_world_position(player.lock_target_slot, player.lock_target_index)
+	if world == null:
+		return null
+	return _screen_position(view_cam, world as Vector3)
 
 
 ## Story 4-6 (AC 10): unproject a world point into this slot's own viewport, or null when it is
@@ -2177,5 +2220,27 @@ func _physics_process(delta: float) -> void:
 	#     and its default projection matches the rig camera's (both plain Camera3D defaults).
 	_p1_view_cam.global_transform = _p1_rig_cam.global_transform
 	_p2_view_cam.global_transform = _p2_rig_cam.global_transform
+	# 4d. Story 4-6a (AC 13/AC 14): push each slot's LOCKED-TARGET MARKER position into that slot's
+	#     own HUD -- a screen point, or null when the target is not visible in that viewport and the
+	#     marker must hide. Same runner-polls-then-pushes-plain-values shape as the 3-5a card
+	#     selection (step 1b) and the 3-0b window countdown (step 3b): no signal, no state handle,
+	#     no new `connect_*`, so the observation-seam family stays at EIGHT.
+	#
+	#     SEATED AFTER 4b, NOT BESIDE 1b, and the ordering is the point: `_screen_position`
+	#     unprojects through the SubViewport's FOLLOWER camera, and 4b is the line that gives that
+	#     camera this tick's transform. Pushing above it would mark where the target was through
+	#     last tick's camera -- one frame of lag on a cue whose whole job is to sit on the enemy.
+	#
+	#     OUTSIDE THE `ticking` GATE, like camera follow directly above and the card selection at
+	#     1b: the operator must be able to look around while the 3-0b debug pause is held and still
+	#     see what is locked. The lock ADDRESS is frozen while paused (advance() is what moves it),
+	#     so this is a re-projection of an unchanged fact, never a state read that could drift.
+	#
+	#     PER-VIEWPORT BY CONSTRUCTION (AC 13): each `HudRoot` lives inside its own SubViewport
+	#     (`hud_root.gd:4-6`) and is handed only its own slot's point, so P1's marker cannot render
+	#     in P2's view. That is the `HudRoot`-owned branch of Open Question 3, taken precisely
+	#     because it needs no cull-mask discipline on the two SubViewports that share one `World3D`.
+	_huds[0].set_lock_marker(_lock_target_screen_position(0, _p1_view_cam))
+	_huds[1].set_lock_marker(_lock_target_screen_position(1, _p2_view_cam))
 	# 5. Drain queued signals AFTER advance returns (D5).
 	_match_state.drain_signals()

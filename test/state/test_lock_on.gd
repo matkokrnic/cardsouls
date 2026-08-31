@@ -3,7 +3,8 @@ extends TestCase
 ## Story 4-6 (camera lock-on) — the STATE half, headless. Everything the lock does inside
 ## `advance()`: where it rests, how a retarget enters, when it snaps off a dead target, and how it
 ## survives a debug reset. Plus the two PURE presentation policies this story ships —
-## `LockOnResolver.best_candidate` (the flick's screen-space pick) and
+## `LockOnResolver.adjacent_candidate` (the flick's screen-space CYCLING pick, replacing 4-6's
+## cone in story 4-6a) and
 ## `GamepadController.resolve_flick` (the flick EDGE) — both of which are static functions over
 ## plain values precisely so they can be proven here rather than only at a live smoke.
 ##
@@ -218,52 +219,98 @@ func test_lock_resolution_is_inert_once_the_round_is_over() -> void:
 		"a round-over tick never reaches the lock seat, so even an explicit retarget is inert")
 
 
-# ---------------------------------------------------------------- AC 10: the flick's pick
+# ------------------------------------------------- 4-6a AC 1-AC 7: the flick's CYCLING pick
 
-## `LockOnResolver` picks by ALIGNMENT first: every candidate inside the 120-degree cone is a
-## legitimate answer to "that way", and the most aligned one is the best answer.
-func test_the_flick_picks_the_best_aligned_candidate() -> void:
-	var hero := Vector2(100.0, 100.0)
+## Story 4-6a REPLACED THIS BLOCK'S SUBJECT, not merely its expectations. Through 4-6 these four
+## tests described `LockOnResolver.best_candidate`: a 120-degree alignment cone measured FROM THE
+## HERO, ranked by alignment, tied on screen proximity. That algorithm no longer exists (AC 1), so
+## no assertion about cones, alignment or hero-relative direction is carried forward -- keeping one
+## would pin a property the shipped code does not have. What IS carried forward is the TIE-BREAK
+## (AC 7) and the NO-OP DISCIPLINE (AC 2/AC 3), both re-derived below against the new contract.
+##
+## The successor subject is `LockOnResolver.adjacent_candidate`: adjacency by SCREEN X, measured
+## from the CURRENT TARGET's screen position (the anchor), in the flicked direction, no wrap.
+
+## AC 1: a horizontal flick takes the candidate immediately ADJACENT to the anchor in that
+## direction -- the NEXT one over, never the most distant and never the most "aligned".
+func test_the_flick_cycles_to_the_adjacent_candidate_by_screen_x() -> void:
+	var anchor := Vector2(100.0, 100.0)
 	var screens: Array[Vector2] = [
-		Vector2(100.0, 60.0),    # 0: straight UP from the hero
-		Vector2(130.0, 70.0),    # 1: up and to the right, 36.9 deg off
+		Vector2(400.0, 100.0),   # 0: far right
+		Vector2(160.0, 300.0),   # 1: NEAR right -- and far off in Y, which must not matter
+		Vector2(40.0, 100.0),    # 2: left
 	]
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, -1.0), screens), 0,
-		"an UP flick takes the candidate straight up")
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(1.0, -1.0), screens), 1,
-		"...and an up-RIGHT flick takes the up-right one, from the same candidate set")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 0.0), screens), 1,
+		"a RIGHT flick takes the nearest candidate to the right, not the furthest")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(-1.0, 0.0), screens), 2,
+		"...and a LEFT flick takes the one to the left, from the same candidate set")
 
 
-## Ties inside the cone break on SCREEN PROXIMITY — the candidate the player most plausibly meant.
-func test_the_flick_breaks_an_alignment_tie_on_screen_proximity() -> void:
-	var hero := Vector2.ZERO
-	var screens: Array[Vector2] = [Vector2(200.0, 0.0), Vector2(50.0, 0.0)]
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(1.0, 0.0), screens), 1,
-		"both are exactly on the flick axis, so the NEARER one wins")
-
-
-## AC 10: a flick with no candidate in that direction is a NO-OP, and -1 is how this layer says so
-## — the runner turns it into "send no request", which leaves the standing lock alone.
-func test_the_flick_finds_nothing_outside_its_cone() -> void:
-	var hero := Vector2.ZERO
-	var screens: Array[Vector2] = [Vector2(0.0, 100.0)]   # straight DOWN
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, -1.0), screens), -1,
-		"a candidate 180 degrees from the flick is not 'that way' by any reading")
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(1.0, 0.0), screens), -1,
-		"...nor is one at exactly 90 degrees, which is outside the 60-either-side cone")
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2.ZERO, screens), -1,
+## AC 2: NO WRAP. A flick past the last candidate in that direction is a no-op, and -1 is how this
+## layer says so -- the runner turns it into "send no request", which leaves the standing lock
+## alone. AC 5's null-anchor no-op is NOT tested here: it is the CALLER's guard, because only the
+## caller can tell "no anchor" apart from "no candidate" (see _gather_flick_candidates).
+func test_the_flick_does_not_wrap_past_the_last_candidate() -> void:
+	var anchor := Vector2(100.0, 0.0)
+	var screens: Array[Vector2] = [Vector2(300.0, 0.0)]   # the ONLY candidate, to the right
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 0.0), screens), 0,
+		"sanity: the candidate to the right is reachable by a right flick")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(-1.0, 0.0), screens), -1,
+		"a LEFT flick with nothing to the left does NOT wrap around to the right-hand candidate")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2.ZERO, screens), -1,
 		"and a zero flick names no direction at all")
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, 1.0), [] as Array[Vector2]), -1,
-		"an empty candidate set is the ordinary off-screen case, not an error")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 0.0), [] as Array[Vector2]),
+		-1, "an empty candidate set is the ordinary off-screen case, not an error")
 
 
-## A candidate sitting exactly on the hero names no direction and is skipped rather than
-## normalising a zero vector into a NaN.
-func test_a_candidate_on_top_of_the_hero_is_skipped() -> void:
-	var hero := Vector2(10.0, 10.0)
-	var screens: Array[Vector2] = [hero, Vector2(10.0, -90.0)]
-	assert_eq(LockOnResolver.best_candidate(hero, Vector2(0.0, -1.0), screens), 1,
-		"the co-located candidate is skipped and the real one is found")
+## AC 3/AC 6: cycling is HORIZONTAL-ONLY, and the axis is decided by MAGNITUDE (`abs(x) > abs(y)`).
+## A vertical flick is a no-op even when there are candidates it would otherwise reach, and an
+## EXACT diagonal is refused too -- the comparison is strict in favour of the no-op, because a
+## 45-degree gesture names no horizontal intent and silently retargeting on it is the surprise.
+func test_a_vertical_or_diagonal_flick_never_cycles() -> void:
+	var anchor := Vector2(100.0, 100.0)
+	var screens: Array[Vector2] = [Vector2(200.0, 100.0), Vector2(0.0, 100.0)]
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(0.0, -1.0), screens), -1,
+		"a purely UP flick cycles nothing, though both candidates lie horizontally either side")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(0.0, 1.0), screens), -1,
+		"...and neither does a purely DOWN one")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 1.0), screens), -1,
+		"an exact 45-degree diagonal is |x| == |y|, which the strict rule sends to the no-op")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 0.9), screens), 0,
+		"...while a hair past 45 degrees IS horizontal, and the SIGN of x picks rightward")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(-1.0, 0.9), screens), 1,
+		"...and a negative x picks leftward from the identical flick magnitude")
+
+
+## AC 7: two candidates the SAME screen-X distance from the anchor tie, and the LOWER board index
+## wins -- the caller gathers hero-then-units in board-index order, so the lower index is the
+## earlier array slot. This is the tie-break the replaced cone resolver enforced and it is carried
+## forward in MECHANISM as well as outcome: a strict `<`, so the first candidate found at a given
+## distance holds the win. It is the bunched-board case from playtest-log 31.8. item 11.
+func test_the_cycling_tie_breaks_on_the_lower_board_index() -> void:
+	var anchor := Vector2(0.0, 0.0)
+	var stacked: Array[Vector2] = [Vector2(50.0, 10.0), Vector2(50.0, 90.0)]
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 0.0), stacked), 0,
+		"exactly stacked in screen X: the LOWER-index candidate takes the flick")
+	# The same tie in the other direction, so the win cannot be an artefact of scanning order
+	# happening to agree with the flick's sign.
+	var stacked_left: Array[Vector2] = [Vector2(-50.0, 10.0), Vector2(-50.0, 90.0)]
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(-1.0, 0.0), stacked_left), 0,
+		"...and leftward, the lower index wins the identical tie")
+
+
+## The successor of 4-6's `test_a_candidate_on_top_of_the_hero_is_skipped`, whose SUBJECT moved
+## with the anchor: a candidate sharing the ANCHOR's screen X exactly lies neither left nor right
+## of it, so it is skipped rather than being handed to both directions at distance zero. The old
+## test guarded against normalising a zero vector into a NaN; the new algorithm has no
+## normalisation, and the property worth pinning is the direction filter's STRICTNESS.
+func test_a_candidate_on_the_anchors_own_screen_x_is_not_reachable() -> void:
+	var anchor := Vector2(10.0, 10.0)
+	var screens: Array[Vector2] = [Vector2(10.0, -90.0), Vector2(60.0, 10.0)]
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(1.0, 0.0), screens), 1,
+		"the co-X candidate is skipped and the genuinely rightward one is found")
+	assert_eq(LockOnResolver.adjacent_candidate(anchor, Vector2(-1.0, 0.0), screens), -1,
+		"...and it is not silently handed to the LEFT flick either -- it is on neither side")
 
 
 # ---------------------------------------------------------------- AC 10: the flick EDGE

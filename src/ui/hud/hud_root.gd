@@ -97,11 +97,21 @@ var _card_armed_style: StyleBoxFlat
 ## while a replacement draw is in flight.
 var _own_card_labels: Array[Label] = []
 
+## Story 4-6a (AC 13/AC 14): the locked-target dot. One per root, therefore one per SubViewport,
+## therefore per-slot by construction -- see _build_lock_marker.
+var _lock_marker: Panel
+
 ## Story 4-B1 (AC 1): the in-flight placeholder — visually distinct from both a real card id
 ## (always a snake_case CardData.id, never punctuation-only) and from the permanent-hole blank
 ## (""). Cheapest legible treatment at half-width: a caption swap on the existing
 ## `_own_card_labels` machinery, no new StyleBox and no border/style change.
 const IN_FLIGHT_CAPTION := "..."
+
+## Story 4-6a (AC 13): the locked-target marker's pixel footprint. Square, because the dot is drawn
+## as a fully-rounded Panel. Small on purpose -- it marks an enemy at half-width without occluding
+## the enemy it marks; its final legibility is an OPERATOR SMOKE surface (`PROC/R8`), not a number
+## this pass may declare correct.
+const LOCK_MARKER_SIZE := Vector2(14.0, 14.0)
 
 
 func _init() -> void:
@@ -125,6 +135,7 @@ func _ready() -> void:
 	_build_orb_counters()
 	_build_deck_indicator()
 	_build_round_label()
+	_build_lock_marker()
 
 
 # --- Signal-driven consumers (AC 4) -------------------------------------------------------
@@ -468,6 +479,65 @@ func set_card_selection(slot: int, mode: Enums.ModeKind) -> void:
 	for i in _own_card_panels.size():
 		var style: StyleBoxFlat = _card_armed_style if i == slot else _card_base_style
 		_own_card_panels[i].add_theme_stylebox_override("panel", style)
+
+
+## Story 4-6a (AC 13/AC 14): the LOCKED-TARGET MARKER -- the Souls/Sekiro/Elden Ring dot on the
+## enemy you are locked to, requested at the 4-6 smoke ("svakako bi dodao marker tockicu na
+## neprijatelju koji je trenutno targetan", playtest-log 31.8. item 6).
+##
+## A `HudRoot`-OWNED CONTROL, which is Open Question 3's answer. AC 13 required per-viewport
+## visibility under EITHER branch -- P1's marker must never render in P2's view -- and this branch
+## delivers it BY CONSTRUCTION: one `HudRoot` per SubViewport (see this file's header), each handed
+## only its own slot's point by the runner. The world-space alternative (`2-4/R12`'s carve-out)
+## would have needed fresh cull-mask/layer discipline, because `main.tscn`'s two SubViewports share
+## one root `World3D` and declare neither `own_world_3d` nor any `cull_mask` -- new machinery whose
+## only job would be to re-establish a property this branch cannot lose.
+##
+## IT IS NOT A "FOCAL / PERIPHERY" ELEMENT and does not contradict this file's layout doctrine.
+## Every other element here is anchored to a viewport edge or centre and consulted at a known
+## screen location; this one has no resting place at all -- it is a WORLD cue that happens to be
+## drawn with a Control, positioned per tick from an unprojection. That is why it is built last and
+## sized in absolute pixels rather than joining a band.
+##
+## MOUSE-TRANSPARENT AND TOP-MOST: `MOUSE_FILTER_IGNORE` matches the root's own no-input-eating
+## rule, and being added last puts it above the vitals/hand siblings, so a target standing behind
+## the hand row is still marked.
+func _build_lock_marker() -> void:
+	_lock_marker = Panel.new()
+	_lock_marker.name = "LockMarker"
+	_lock_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lock_marker.custom_minimum_size = LOCK_MARKER_SIZE
+	_lock_marker.size = LOCK_MARKER_SIZE
+	var box := StyleBoxFlat.new()
+	# A DOT, not a reticle: full corner radius on a square makes a circle, which reads as a marker
+	# at this size without needing an art asset the project does not have.
+	box.bg_color = Color(0.95, 0.93, 0.85, 0.90)     # bone, near-opaque
+	box.border_color = Color(0.08, 0.07, 0.06, 0.95) # dark rim, so it survives a pale background
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(int(LOCK_MARKER_SIZE.x * 0.5))
+	_lock_marker.add_theme_stylebox_override("panel", box)
+	_lock_marker.visible = false  # nothing is marked until the runner pushes a point
+	add_child(_lock_marker)
+
+
+## Story 4-6a (AC 13/AC 14): the runner's per-tick push -- this slot's locked target's position in
+## THIS viewport, or null when it is not visible here and the marker must hide.
+##
+## THE SAME PLAIN-VALUE PUSH AS `set_card_selection` ABOVE (3-5a AC 10): no signal, no state
+## handle, no `MatchState` reachable from this file. `Variant` rather than an overload pair because
+## null IS the hide case and the runner's `_screen_position` already speaks it -- translating it
+## into a sentinel `Vector2` here would invent a screen point that means "nowhere".
+##
+## CENTRED ON THE POINT, not anchored to it: `position` is a Control's TOP-LEFT, so the marker is
+## offset by half its own size. Without that the dot would sit down-right of the enemy by its own
+## radius, which at this size is exactly the kind of small constant error that reads as "the marker
+## is on the wrong thing" at a smoke.
+func set_lock_marker(point: Variant) -> void:
+	if point == null:
+		_lock_marker.visible = false
+		return
+	_lock_marker.visible = true
+	_lock_marker.position = (point as Vector2) - LOCK_MARKER_SIZE * 0.5
 
 
 func _make_card_face_style(is_own: bool) -> StyleBoxFlat:

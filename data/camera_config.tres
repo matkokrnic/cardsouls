@@ -7,3 +7,4 @@ script = ExtResource("1_camcfg")
 distance = 6.0
 height = 3.0
 pitch_degrees = -20.0
+lock_yaw_smoothing = 0.25
