@@ -7614,3 +7614,29 @@ with the story file's Dev Agent Record, File List, Change Log and `Status: revie
 `review` value is story-file-only (`CFG/R3` precedent, `CFG/R5`); the board stays `ready-for-dev`
 -- promotion to `done` is the operator's chain commit after the live smoke (`CC/R4`: controller is
 primary, and this pass has no pad). Nothing pushed. Operator reviews the log.
+
+## Session 2026-08-31 -- 4-6a readiness gate, operator ruling `4-6a/R1`
+
+The readiness gate on `docs/implementation-artifacts/4-6a-camera-feel.md` found no AC for a flick
+whose cycling anchor -- the CURRENT target's screen position -- does not exist (gate finding B1).
+Ruled in chat before the fix pass, recorded here as its first durable record.
+
+`4-6a/R1` (ruled, chat, 2026-08-31) A NULL CYCLING ANCHOR MAKES THE FLICK A NO-OP. When the CURRENT
+target has no screen position (`_screen_position`, `match_runner.gd:1904-1913`, returns `null` when
+the target is behind the camera or outside the viewport rect), a horizontal flick is a no-op,
+delivered the AC 2 way -- the standing lock is left unchanged, no retarget request sent. The flick
+chooses among what the player SEES; with the anchor invisible the choice is meaningless. The
+right-stick CLICK remains the only route back to an off-frame opposing hero -- exactly why `CC/R3`
+gave it that job. This mirrors the already-coded guard for the hero anchor
+(`match_runner.gd:1849-1851`, "this slot cannot see its own hero; there is no screen frame to flick
+within"); the new current-target anchor gets the same treatment.
+
+SUPERSESSION, recorded alongside (gate finding B9). `CC/R3`'s flick clause -- "switches lock to the
+best on-screen candidate in that screen-space direction" -- is SUPERSEDED by `4-6a` AC 1's
+adjacent-by-screen-X cycling. The CLICK clause is unaffected and stands. Forward-append only;
+`CC/R3` itself is not edited.
+
+### Close-out
+
+One commit, docs only: the story file's B1-B10 fixes and this entry. No code, no board change, no
+push. Operator reviews the log.
