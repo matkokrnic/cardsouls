@@ -1930,14 +1930,51 @@ func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
 ## lock that snaps under `4-6/R4` (locked-unit death) relocates this the same tick, and one that
 ## addresses a freed or unspawned actor returns null so the marker clears rather than lingering on
 ## a corpse.
+##
+## Live-smoke micro-fix (4-6a, operator smoke 2026-08-31): reads `_lock_mark_world_position`
+## rather than `_target_world_position` directly, so the point projected here sits on the target's
+## BODY rather than its ORIGIN. This is the one shared computation the header above locks, so the
+## flick's cycling ANCHOR inherits the same lift -- harmless there because
+## `LockOnResolver.adjacent_candidate` (`lock_on_resolver.gd:80`) compares screen X only and never
+## reads Y.
 func _lock_target_screen_position(slot: int, view_cam: Camera3D) -> Variant:
 	if not is_instance_valid(view_cam):
 		return null
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
-	var world: Variant = _target_world_position(player.lock_target_slot, player.lock_target_index)
+	var world: Variant = _lock_mark_world_position(player.lock_target_slot, player.lock_target_index)
 	if world == null:
 		return null
 	return _screen_position(view_cam, world as Vector3)
+
+
+## Live-smoke micro-fix (4-6a, operator smoke 2026-08-31): the world point the lock MARKER (and,
+## via the shared computation above, the flick ANCHOR) projects -- `_target_world_position`'s
+## answer LIFTED onto the target's body, because that function's answer is the actor ROOT, and the
+## roots disagree about where the body is. `hero.tscn`'s root is already the body CENTRE
+## (`hero.tscn:49`'s "GROUNDING OFFSET" note), so a hero target needs no lift. `unit_actor.tscn` and
+## `totem_actor.tscn` both root at the FEET (`unit_actor.tscn:19`, `totem_actor.tscn:16`) and are
+## lifted by half their authored body-box height -- the SAME offset those scenes already put on
+## their own `Collision`/`Hurtbox` nodes, so this is not a new measurement, only reading the one
+## already on record. A minion (has a `Hitbox`, `unit_actor.tscn:29`) and a totem (deleted
+## `Hitbox`, `totem_actor.tscn:9`) share the one script, so the `Hitbox` presence already used by
+## `_unit_scene_for` (line 773) to pick the scene at spawn time is read again here to tell them
+## apart at mark time.
+##
+## `_target_world_position` ITSELF IS UNTOUCHED: the unit aim/approach loops and `_lock_direction`'s
+## facing (which discards Y for its planar direction) all still walk actors to their ROOT, not a
+## point above it -- lifting that shared function would move minions toward a point in the air.
+const LOCK_MARK_UNIT_LIFT := 0.6  ## unit_actor.tscn body box height 1.2, half (unit_actor.tscn:20).
+const LOCK_MARK_TOTEM_LIFT := 0.7  ## totem_actor.tscn body box height 1.4, half (totem_actor.tscn:13).
+
+func _lock_mark_world_position(target_slot: int, target_index: int) -> Variant:
+	var world: Variant = _target_world_position(target_slot, target_index)
+	if world == null or target_index == TargetingService.HERO_INDEX:
+		return world
+	var unit: Node = (_unit_actors[target_slot] as Array)[target_index]
+	var lift := LOCK_MARK_TOTEM_LIFT
+	if unit is UnitActor and (unit as UnitActor).hitbox != null:
+		lift = LOCK_MARK_UNIT_LIFT
+	return (world as Vector3) + Vector3.UP * lift
 
 
 ## Story 4-6 (AC 10): unproject a world point into this slot's own viewport, or null when it is
