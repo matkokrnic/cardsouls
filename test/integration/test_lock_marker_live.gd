@@ -64,8 +64,9 @@ const MINION_MAX_HP := 10.0
 ## `match_runner.gd`'s own `LOCK_MARK_UNIT_LIFT` -- duplicated here as a literal deliberately
 ## (`4-6a` house rule already applies to the SHARED runner computation; a fixture is a second,
 ## independent reader of the same authored number, not a second producer of it) rather than reached
-## through a private runner member.
-const UNIT_LIFT := 0.6
+## through a private runner member. Live-smoke micro-fix v2: ~3/4 of the skinned model's real AABB
+## height from the ground (match_runner.gd's own derivation), not half the placeholder box anymore.
+const UNIT_LIFT := 1.53
 
 var _p1_hero: Node3D
 var _p2_hero: Node3D
@@ -83,6 +84,7 @@ var _on_target := false
 var _hides := false
 var _restored := false
 var _on_unit_target := false
+var _round_over_hides := false
 var _detail := ""
 
 
@@ -166,7 +168,20 @@ func _physics_process(_delta: float) -> bool:
 			_detail += " p2_minion_never_spawned;"
 		else:
 			_on_unit_target = _marks_lifted(_p1_marker, _p1_cam, _p2_minion, UNIT_LIFT, "P1-unit")
-		_finish(_per_viewport and _on_target and _hides and _restored and _on_unit_target)
+	if _frames == 91:
+		# [ROUND-OVER HIDES, live-smoke micro-fix v2, low priority] Stamp the round-over latch
+		# directly on state -- the same cheaper-than-a-real-kill staging shape frame 48 already
+		# uses for the minion (`_state.p2.units.add`), reaching the field GDScript never actually
+		# makes private rather than driving a real kill through the whole contact pipeline, which
+		# this fixture has no cheap way to stage against a live, moving, always-locked camera.
+		_state._round_over = true
+	if _frames == 92:
+		# Both markers hide on the very next tick once the freeze is up -- the runner reads the
+		# SAME `to_snapshot()["round_over"]` flag both slots share, so this is not a per-slot check.
+		_round_over_hides = not _p1_marker.visible and not _p2_marker.visible
+		if not _round_over_hides:
+			_detail += " round_over_did_not_hide_markers(p1_visible=%s p2_visible=%s);" % [_p1_marker.visible, _p2_marker.visible]
+		_finish(_per_viewport and _on_target and _hides and _restored and _on_unit_target and _round_over_hides)
 	return false
 
 
@@ -206,7 +221,7 @@ func _count_markers(node: Node) -> int:
 
 
 func _finish(ok: bool) -> void:
-	print("lock_marker: per_viewport=%s on_target=%s hides=%s restored=%s on_unit_target=%s%s"
-			% [_per_viewport, _on_target, _hides, _restored, _on_unit_target, _detail])
+	print("lock_marker: per_viewport=%s on_target=%s hides=%s restored=%s on_unit_target=%s round_over_hides=%s%s"
+			% [_per_viewport, _on_target, _hides, _restored, _on_unit_target, _round_over_hides, _detail])
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	quit(0 if ok else 1)

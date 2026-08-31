@@ -1952,19 +1952,36 @@ func _lock_target_screen_position(slot: int, view_cam: Camera3D) -> Variant:
 ## answer LIFTED onto the target's body, because that function's answer is the actor ROOT, and the
 ## roots disagree about where the body is. `hero.tscn`'s root is already the body CENTRE
 ## (`hero.tscn:49`'s "GROUNDING OFFSET" note), so a hero target needs no lift. `unit_actor.tscn` and
-## `totem_actor.tscn` both root at the FEET (`unit_actor.tscn:19`, `totem_actor.tscn:16`) and are
-## lifted by half their authored body-box height -- the SAME offset those scenes already put on
-## their own `Collision`/`Hurtbox` nodes, so this is not a new measurement, only reading the one
-## already on record. A minion (has a `Hitbox`, `unit_actor.tscn:29`) and a totem (deleted
-## `Hitbox`, `totem_actor.tscn:9`) share the one script, so the `Hitbox` presence already used by
-## `_unit_scene_for` (line 773) to pick the scene at spawn time is read again here to tell them
-## apart at mark time.
+## `totem_actor.tscn` both root at the FEET (`unit_actor.tscn:19`, `totem_actor.tscn:16`). A minion
+## (has a `Hitbox`, `unit_actor.tscn:29`) and a totem (deleted `Hitbox`, `totem_actor.tscn:9`) share
+## the one script, so the `Hitbox` presence already used by `_unit_scene_for` (line 773) to pick the
+## scene at spawn time is read again here to tell them apart at mark time.
 ##
 ## `_target_world_position` ITSELF IS UNTOUCHED: the unit aim/approach loops and `_lock_direction`'s
 ## facing (which discards Y for its planar direction) all still walk actors to their ROOT, not a
 ## point above it -- lifting that shared function would move minions toward a point in the air.
-const LOCK_MARK_UNIT_LIFT := 0.6  ## unit_actor.tscn body box height 1.2, half (unit_actor.tscn:20).
-const LOCK_MARK_TOTEM_LIFT := 0.7  ## totem_actor.tscn body box height 1.4, half (totem_actor.tscn:13).
+##
+## Live-smoke micro-fix v2 (4-6a, operator smoke 2026-08-31, verdict: minion too low): v1 lifted the
+## minion by HALF ITS AUTHORED COLLISION BOX (0.6 = 1.2 / 2) rather than by anything read off the
+## actual skinned model, and `unit_actor.tscn:46`'s own description already says the model's
+## on-screen size was never decided -- `skeletonzombie.fbx` renders far taller than the 1.2 m
+## placeholder box the lift was borrowed from, so half of it lands at the minion's CROTCH. Measured
+## once by instancing `unit_actor.tscn` headless and merging the `get_aabb()` of every
+## `VisualInstance3D` under it EXCEPT primitive gizmo meshes (there are none on this scene -- the
+## filter matters for `hero.tscn`'s telegraph cones/discs, not this one): the skinned mesh spans
+## world y [-0.016, 2.046] off its own root, i.e. a real height of ~2.062 m with its feet already
+## essentially at the root. `LOCK_MARK_UNIT_LIFT` is now ~3/4 of that real height (souls-standard
+## chest, `2/3..3/4`, closer to `3/4` per operator ruling) measured from the ground, i.e.
+## `-0.016 + 0.75 * 2.062 ~= 1.53` -- the minion is the one this pass corrects, so it is the only one
+## re-derived from the model.
+##
+## `LOCK_MARK_TOTEM_LIFT` is UNCHANGED: totem smoke verdict was "looks right", the totem carries no
+## skinned model to mismeasure (`totem_actor.tscn`'s `Mesh` IS the authored `BoxMesh_totem`, so the
+## collision box already equals the real visual box), and the operator ruling requires the totem not
+## to visibly move -- touching a value that already matches its own real geometry would be a
+## regression, not a fix.
+const LOCK_MARK_UNIT_LIFT := 1.53  ## skeletonzombie.fbx real AABB height ~2.062, ~3/4 from the ground (see above).
+const LOCK_MARK_TOTEM_LIFT := 0.7  ## totem_actor.tscn body box height 1.4, half (totem_actor.tscn:13) -- unchanged, smoke-verified correct.
 
 func _lock_mark_world_position(target_slot: int, target_index: int) -> Variant:
 	var world: Variant = _target_world_position(target_slot, target_index)
@@ -2277,7 +2294,16 @@ func _physics_process(delta: float) -> void:
 	#     (`hud_root.gd:4-6`) and is handed only its own slot's point, so P1's marker cannot render
 	#     in P2's view. That is the `HudRoot`-owned branch of Open Question 3, taken precisely
 	#     because it needs no cull-mask discipline on the two SubViewports that share one `World3D`.
-	_huds[0].set_lock_marker(_lock_target_screen_position(0, _p1_view_cam))
-	_huds[1].set_lock_marker(_lock_target_screen_position(1, _p2_view_cam))
+	#
+	#     Live-smoke micro-fix v2 (4-6a, operator smoke 2026-08-31, low-priority finding): HIDDEN
+	#     outright while the round-over freeze holds (`MatchState.to_snapshot()`'s own `round_over`
+	#     key, the one flag every state test already reads this way -- no new state accessor, no
+	#     src/state/ edit). Unfrozen, a dead hero's corpse falls while this marker kept floating at
+	#     its last live height, which reads as the marker pointing at nothing. `round_over` latches
+	#     for the whole freeze and only `MatchState.reset()` clears it, so this cannot flicker mid-
+	#     freeze -- it hides once, on the tick the round ends, same as the corpse starting to fall.
+	var round_over: bool = bool(_match_state.to_snapshot().get("round_over", false))
+	_huds[0].set_lock_marker(null if round_over else _lock_target_screen_position(0, _p1_view_cam))
+	_huds[1].set_lock_marker(null if round_over else _lock_target_screen_position(1, _p2_view_cam))
 	# 5. Drain queued signals AFTER advance returns (D5).
 	_match_state.drain_signals()
