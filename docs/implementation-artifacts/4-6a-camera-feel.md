@@ -4,7 +4,7 @@ baseline_commit: 3af5cacea972be3a5298805bb4b2885f03abf383
 
 # Story 4.6a: Camera Feel
 
-Status: authored
+Status: ready-for-dev
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
