@@ -4,7 +4,7 @@ baseline_commit: 3af5cacea972be3a5298805bb4b2885f03abf383
 
 # Story 4.6a: Camera Feel
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -303,23 +303,185 @@ Scaling the work down is the operator's call.
 
 ## Tasks / Subtasks
 
-- [ ] (a) Expose the current-target screen-X anchor (OQ 1); swap `LockOnResolver.best_candidate`'s
+- [x] (a) Expose the current-target screen-X anchor (OQ 1); swap `LockOnResolver.best_candidate`'s
       algorithm (AC 1, AC 5-7); rewrite the affected tests (AC 9).
-- [ ] (b) Resolve OQ 2 (smoothing mechanism, curve, step-1c split); implement, respecting AC 12.
-- [ ] (c) Resolve OQ 3 (marker node type); implement the marker (AC 13-14).
-- [ ] Measure golden + snapshot key set before/after (Golden Prediction section, AC 16); operator
+- [x] (b) Resolve OQ 2 (smoothing mechanism, curve, step-1c split); implement, respecting AC 12.
+- [x] (c) Resolve OQ 3 (marker node type); implement the marker (AC 13-14).
+- [x] Measure golden + snapshot key set before/after (Golden Prediction section, AC 16); operator
       smoke on the three Live Smoke surfaces before further machine passes on them.
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-Claude Sonnet 5 (claude-sonnet-5), story authored via `gds-create-story`.
+Claude Sonnet 5 (claude-sonnet-5), story authored via `gds-create-story`. Dev pass executed by
+Claude Opus 5 via `gds-dev-story` (2026-08-31).
 
 ### Debug Log References
 
+Full dev-pass log: `C:\dev\_46a-dev.md`. Suite captures: `C:\dev\_46a_logs\suite_before.txt`,
+`C:\dev\_46a_logs\suite_after.txt`.
+
+### Open Question decisions (all five, decided in this pass)
+
+**OQ 1 -- cycling anchor exposure. `_gather_flick_candidates` RETURNS the anchor.** Its signature
+becomes `-> Variant`: it still fills `addresses`/`screens` as out-parameters and still skips the
+current target when filling them (AC 4's exclusion is unchanged in effect), and it now computes the
+current target's screen position on its own line and returns it. Returning it rather than adding a
+third out-parameter is what keeps "the anchor is not a candidate" true BY CONSTRUCTION -- there is
+no array it could accidentally be appended to. Returns `null` when there is no anchor, which the
+caller turns into AC 5's no-op.
+
+**OQ 2 -- smoothing mechanism and the step-1c split. Smoothed INSIDE `CameraRig`, on the rig's own
+`rotation.y`; the runner is untouched.** The split AC 11 requires is made by OWNERSHIP rather than
+by a second runner variable: step 1c still computes ONE raw `lock_dirs` value per slot,
+`_match_state.set_lock_direction` still receives it untouched and INSTANT (the block arc keeps zero
+lag, AC 11), and `face_lock_direction` eases toward it using state it keeps itself. The two
+consumers stop sharing a value because one of them now has memory -- the runner never had to learn
+that smoothing exists. Curve: a per-tick `lerp_angle` toward the target bearing by an authored
+fraction (`CameraConfig.lock_yaw_smoothing`, authored 0.25). Per TICK, not per second, which is why
+no `delta`, `Time` or `Engine` is read and no second `_physics_process` appears (F1, AC 12).
+`Vector2.ZERO` still returns early untouched (AC 12). The FIRST heading a rig receives snaps whole
+(a rig with no heading has nothing to ease from; easing from scene-zero would swing the camera
+across the arena at match start -- and would break `4-6`'s own frame-5 framing check, proven by
+mutation M-L below).
+
+**OQ 3 -- marker node type. A `HudRoot`-owned `Control` (a fully-rounded `Panel`), NOT a
+world-space node.** AC 13 required per-viewport visibility under either branch, and this branch
+delivers it by construction (one `HudRoot` per SubViewport, each handed only its own slot's point).
+The world-space branch would have needed fresh cull-mask/layer discipline invented for it, because
+`main.tscn`'s two SubViewports share one root `World3D` -- machinery whose only job would be to
+re-establish a property this branch cannot lose. Pushed per tick by the runner as a plain value,
+the `set_card_selection` pattern (`3-5a` AC 10): no signal, no state handle, no new `connect_*`, so
+the observation-seam family stays at EIGHT.
+
+**OQ 4 -- resolver signature. The parallel-array/index-return SHAPE survives; the NAME does not.**
+`best_candidate` -> `adjacent_candidate`, and `hero_screen` -> `anchor`. The shape is what keeps the
+function a pure geometric pick that never learns what an address is, so it was kept. The name was
+not: there is no ranking left to be "best" at, and a stale name on a replaced algorithm is how a
+reader ends up trusting a cone that is no longer there. `MIN_ALIGNMENT` is deleted.
+
+**OQ 5 -- record channel. NONE needed, and none added.** The smoothing lands on the rig yaw, which
+reaches state only through the pushed camera basis -- already captured and replayed by
+`capture_set_camera_basis` since `3-0c` AC 8. A recording made with smoothing replays bit-for-bit
+through the existing channel. `intent_recorder.gd`, `record_file.gd` and `FORMAT_VERSION` (6) are
+untouched, so AC 15 holds in full.
+
+### Golden Prediction verdict: HELD -- both values measured, neither moved
+
+| Value | BEFORE (measured, dev-pass start) | AFTER (measured, diff complete) |
+| --- | --- | --- |
+| Golden hash | `aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f` | `aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f` |
+| Snapshot key set | 28 keys, `EXPECTED_PLAYER_SNAPSHOT_KEYS` | 28 keys, unchanged (`git diff` on both owning test files is EMPTY) |
+| State suite | 565 tests / 4370 assertions / 0 failed | 566 tests / 4377 assertions / 0 failed |
+| Integration | 44 files, all PASS | 46 files, all PASS (2 added) |
+| `run_all.sh` exit | 0 | 0 |
+
+The hash is not merely unedited, it REPRODUCES: `test_determinism.gd`'s assertion at `:1076` passed
+in both full runs. **No escalation triggered; the story stays Tier B.** The structural reason the
+AC 16 risk did not fire: nothing under `src/state/` was touched at all (see File List), and the
+golden fixture has no runner in it -- it pushes its own bases -- so a rig-side smooth cannot reach
+it. The LIVE consequence `4-6/R2` names is real and is documented rather than avoided: a smoothed
+rig basis means camera-relative movement follows the smoothed camera during a transition. That is
+what cameras do; the alternative (movement snapping to a heading the player cannot see yet) is the
+actual defect. It moves no recorded semantics.
+
+### Mutation-proof table
+
+Provenance: every row was run in THIS pass, against the full state harness or the named integration
+file. Targets were backed up to the scratchpad with SHA256 BEFORE mutating and restored by COPY,
+never `git checkout`, per the standing discipline -- all four post-restore hashes verified identical
+to their pre-mutation values.
+
+| Row | Mutation | Caught by | Result |
+| --- | --- | --- | --- |
+| **M-G** (re-derived; replaces `4-6`'s "remove the resolver's proximity tie-break", whose subject no longer exists) | tie-break strictness `gap < best_gap` -> `gap <= best_gap` (higher index wins the tie) | `test_the_cycling_tie_breaks_on_the_lower_board_index` | 1 failed |
+| M-H | adjacency direction `gap < best_gap` -> `gap > best_gap` (furthest instead of adjacent) | `test_the_flick_cycles_to_the_adjacent_candidate_by_screen_x` | 1 failed |
+| M-I | direction filter `gap <= 0.0` -> `gap < 0.0` (co-X candidates become reachable both ways) | `test_a_candidate_on_the_anchors_own_screen_x_is_not_reachable` | 1 failed |
+| M-J | horizontal rule `absf(x) <= absf(y)` -> `<` (an exact diagonal cycles) | `test_a_vertical_or_diagonal_flick_never_cycles` | 1 failed |
+| M-K | smoothing removed entirely (always snap) | `test_camera_smoothing_live.gd` | FAIL |
+| M-L | first-heading snap removed (ease from scene-zero) | `test_camera_smoothing_live.gd` AND `test_lock_on_live.gd` (4-6's own framing check) | FAIL, both |
+| M-M | `lerp_angle` -> `lerpf` (wrap taken the long way round) | `test_camera_smoothing_live.gd` | FAIL, landed at 1.500 rad instead of 3.071 |
+| M-N | marker centring offset dropped (`- LOCK_MARKER_SIZE * 0.5`) | `test_lock_marker_live.gd` | FAIL, off by 9.9 px |
+| M-O | marker push made one-shot (the runner's per-tick re-push deleted) | `test_lock_marker_live.gd` | FAIL |
+
+### Named gaps and findings
+
+1. **AC 5's null-anchor no-op is covered by INSPECTION, not by a machine test.** The guard lives in
+   `_resolve_retarget`, a runner private with no seam; staging "the current target is behind this
+   slot's camera" in the live scene means fighting the always-locked camera that exists to prevent
+   exactly that. The resolver-side tests deliberately do NOT cover it either, and say so: only the
+   CALLER can tell "no anchor" apart from "no candidate". Flagged rather than papered over.
+2. **AC 7's wording is ambiguous and was implemented on its operative reading.** Read literally
+   ("two candidates share the CURRENT TARGET's screen X"), both such candidates have zero offset
+   from the anchor, are excluded by the strict direction filter, and the tie-break would be
+   unreachable -- a vacuous AC. It is implemented on the reading that is both non-vacuous and
+   mechanically sound: candidates at the same screen-X DISTANCE from the anchor tie, and the lower
+   board index wins. That is the operative content the guardrail names ("lower-board-index
+   tie-break") and it is the bunched-board case from playtest-log 31.8. item 11. Recorded for the
+   operator; no ruling reopened.
+3. **A marker "it moves when you walk" assertion would have been vacuous, and was not written.**
+   Measured, not assumed: under `CC/R2`'s always-locked camera the rig yaws to frame the target, so
+   forty frames of sideways sprint moved the marker 1.1 px -- inside the test's own noise band. The
+   per-tick liveness claim is made the strong way instead (clear the marker directly, then prove the
+   runner restores it correctly on the very next tick; mutation M-O).
+4. **`CameraConfig.lock_yaw_smoothing` defaults to 1.0, breaking that file's "defaults are zero on
+   purpose" doctrine, deliberately.** Zero here would mean "the camera never turns", which is not a
+   conspicuously-wrong default but a broken game that looks like a deliberate one; 1.0 degrades to
+   the shipped 4-6 snap. The reasoning is stated at the field.
+
+### Live Smoke -- HANDED OFF, not iterated on (`PROC/R8`)
+
+Three surfaces are the operator's and were left to the operator once the mechanics were
+machine-proven: the **marker's legibility** at first render (size/colour/placement -- a 14 px bone
+dot with a dark rim, `HudRoot.LOCK_MARKER_SIZE`), the **smoothing feel** (is "pre grub/nagao"
+resolved at `lock_yaw_smoothing = 0.25`? -- a one-line `data/camera_config.tres` edit retunes it,
+with no code and no test change), and **cycling on a bunched board**. Record all three in
+`docs/playtest-log.md` by the operator's own hand.
+
 ### Completion Notes List
+
+- All 16 ACs implemented; all four tasks complete. `src/state/` untouched -- Tier B holds, measured.
+- No new `class_name` was introduced (both `LockOnResolver` and `CameraConfig` already existed), so
+  no editor class-cache scan and no `project.godot` collateral check was needed; `project.godot` is
+  unmodified.
+- Invariants re-checked at close: **F1** -- `grep -rn "func _physics_process" src/` returns exactly
+  one hit, in `match_runner.gd`. **D3(a)** -- the only `Input.` hits outside `src/controllers/` are
+  two doc comments in `match_runner.gd` (`:117`, `:1961`), both pre-existing. **D3(b)/A2** -- zero
+  RNG / `Time` / `OS` / `Engine` hits in `src/state/`.
+- Replay contract untouched (AC 15): no change to `intent_recorder.gd`, `record_file.gd` or
+  `FORMAT_VERSION`.
+- `flick_threshold` (0.7) untouched (AC 8); the controller layer and `GamepadProfile` are unmodified.
 
 ### File List
 
+Modified:
+- `src/main/lock_on_resolver.gd` -- cone/proximity pick REPLACED by adjacent-by-screen-X cycling;
+  `best_candidate` -> `adjacent_candidate`, `MIN_ALIGNMENT` deleted (AC 1-3, AC 6, AC 7).
+- `src/main/match_runner.gd` -- `_gather_flick_candidates` returns the anchor (AC 4); the
+  hero-screen guard replaced by the null-anchor no-op (AC 5); new `_lock_target_screen_position`
+  helper shared by the anchor and the marker; new step 4d marker push (AC 13, AC 14).
+- `src/actors/hero/camera_rig.gd` -- per-tick `lerp_angle` yaw smoothing with a first-heading snap
+  (AC 10-12); reads the authored rate in `apply_config`.
+- `src/actors/hero/camera_config.gd` -- new authored `lock_yaw_smoothing` field.
+- `data/camera_config.tres` -- authored `lock_yaw_smoothing = 0.25`.
+- `src/ui/hud/hud_root.gd` -- `LOCK_MARKER_SIZE`, `_lock_marker`, `_build_lock_marker()`,
+  `set_lock_marker()` (AC 13, AC 14).
+- `test/state/test_lock_on.gd` -- the four pick tests REWRITTEN for the cycling contract; five tests
+  replace four (AC 9).
+
+Added:
+- `test/integration/test_camera_smoothing_live.gd` -- the smoothing MECHANISM (AC 10-12).
+- `test/integration/test_lock_marker_live.gd` -- the marker's per-viewport, on-target, hide and
+  per-tick-liveness claims (AC 13, AC 14).
+
+Not modified, stated because a reader would reasonably expect otherwise: `src/state/**` (nothing at
+all), `project.godot`, `src/controllers/**`, `intent_recorder.gd`, `record_file.gd`,
+`test/state/test_determinism.gd`, `test/state/test_draw_delay_and_reshuffle.gd`,
+`test/state/test_card_observation.gd`.
+
 ## Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-08-31 | Dev pass via `gds-dev-story`. All 16 ACs implemented; OQ 1-5 decided and recorded. Golden Prediction HELD -- golden `aa3566d7...` and the 28-key snapshot set both measured unmoved before and after; Tier B stands, no escalation. Suite 565/4370 -> 566/4377 state, 44 -> 46 integration, 0 failed throughout. Nine mutation rows including the re-derived M-G. Status -> `review`; the three Live Smoke surfaces are handed to the operator. |
