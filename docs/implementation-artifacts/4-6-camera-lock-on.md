@@ -4,7 +4,7 @@ baseline_commit: 6cd6dd187824c211ae2ed804f8cd2276585cde55
 
 # Story 4.6: Camera Lock-On
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
