@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-01 (E4 close-out -- epic-4 marked done; decision-log Session 2026-09-01 "E4 close-out")
+# last_updated: 2026-09-01 (E5 planning -- epic-5 twelve stories added, all backlog; decision-log Session 2026-09-01 "E5 planning")
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -91,6 +91,21 @@ development_status:
   4-5-pooling-60fps-exit: done        # Tier B (assigned at 4-1 close-out, E4-P/R8)
   4-6-camera-lock-on: done        # Tier A (adopted 2026-08-30 via gds-correct-course, DP/R1 + E4-P/R11; board-ordered before 4-5-pooling per operator, numbering historical)
   4-6a-camera-feel: done        # presentation-focused follow-up from the 4-6 live smoke (operator-ruled 2026-08-31); board-ordered before 4-5-pooling per operator; tier expected B by the golden clause, fixed at its gate
+
+  # E5 — Unblockable RPS + Orbs (order + tiers ratified E5-P/R5; decision-log 2026-09-01)
+  epic-5: backlog
+  5-0a-hero-locomotion: backlog  # Tier B
+  5-0b-pad-card-input: backlog  # Tier B
+  5-0c-totem-projectile-models: backlog  # Tier B
+  5-0d-arena-edge: backlog  # Tier B
+  5-1-accelerator-stacking: backlog  # Tier A
+  5-1a-intent-hardening: backlog  # Tier A
+  5-2-unblockable-initiation: backlog  # Tier A
+  5-3-telegraph-presentation: backlog  # Tier B
+  5-4-orbs: backlog  # Tier A
+  5-5-unblockable-defense: backlog  # Tier A
+  5-6-three-tier-ladder: backlog  # Tier A
+  5-7-pad-modes-2-3: backlog  # Tier B
 
 story_notes:
   3-0a-rig-adoption: "DONE 2026-07-31 (3-0a/R1-R16). Skinned paladin + six-clip AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd both green); src/state/ byte-identical, golden 338172010a…21da2 unmoved both directions; suite 164/760/0, 10 integration files individually green (test_rig_clips.gd added, mutation-proven). Live smoke PASSED with two humans on the shipped default (R-D6 re-invoked, SPENT); three non-blocking findings handed to 3-0b (below)."
