@@ -240,7 +240,7 @@ Inspired by Sekiro's Perilous Attacks. A card's color determines which unblockab
 | Dodge or leave range (~20% target) | None | No | No |
 | **Correct color** (~30–40% target) | None | No | **Stun ~1s** |
 
-Clean escalation: **survive → survive and deny → survive, deny, and punish.** Color counter is the *only* response that stops the attacker rather than merely surviving them, so color never becomes optional — but a well-timed roll/disengage is a real, if unreliable, out.
+Clean escalation: **survive → survive and deny → survive, deny, and punish.** Color counter is the *strongest* stopping answer — a full ~1s stun. A melee deflect also punishes the attacker now (a stamina penalty and a markedly shorter stun than the color counter's), so the ladder keeps its escalation gradient even though color is no longer the *only* response that stops the attacker rather than merely surviving them — color still never becomes optional, since it is the strongest answer. A well-timed roll/disengage is a real, if unreliable, out.
 
 > **Do not engineer these percentages — let them emerge.** The ~20% dodge / ~30–40% counter figures are **playtest targets to check against, not values to hardcode.** Dodging emerges from spacing + timing against the generous auto-aim; a color counter requires reading the telegraph *and* holding the color (already ~20% failure from hand-math alone). Both responses stay live in the same window; skill moves the ratio.
 
