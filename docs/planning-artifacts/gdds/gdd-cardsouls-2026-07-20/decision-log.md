@@ -7640,3 +7640,25 @@ adjacent-by-screen-X cycling. The CLICK clause is unaffected and stands. Forward
 
 One commit, docs only: the story file's B1-B10 fixes and this entry. No code, no board change, no
 push. Operator reviews the log.
+
+## Session 2026-09-01 -- 4-6a close-out, operator ruling `4-6a/R2`
+
+Two post-review micro-fixes landed after code review APPROVE, driven by the live smoke on
+2026-08-31 (pad on P2, flip [0,3]): the lock marker read too low on the minion (crotch height) and
+needed to hide during the round-over freeze. Ruled in chat, recorded here as their first durable
+record.
+
+`4-6a/R2` (ruled, chat, 2026-09-01) THE LOCK MARKER SITS ON THE TARGET'S BODY AT ~3/4 OF ITS
+MEASURED MODEL HEIGHT (souls chest standard), MEASURED FROM THE GROUND. For a unit (minion) actor
+this is derived from the actual skinned-model AABB (`skeletonzombie.fbx`, real height ~2.062 m),
+not the authored collision box -- `LOCK_MARK_UNIT_LIFT = 1.53`. Hero and totem markers are
+unchanged: both already read correctly at the smoke on their existing (authored-box-derived)
+lifts, and re-deriving a value that already reads right would be a regression, not a fix. The
+marker is additionally HIDDEN during the round-over freeze, rather than left drawing on the dead
+hero's body under the win/lose label.
+
+### Close-out
+
+One commit, docs only: this entry plus the story file's post-review micro-fixes subsection, AC 7's
+ratified wording, and the board note. No code, no board status change beyond the operator's own
+prior promotion (`59e6c0f`). Nothing pushed. Operator reviews the log.

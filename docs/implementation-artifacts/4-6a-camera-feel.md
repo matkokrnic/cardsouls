@@ -49,8 +49,9 @@ so that lock-on feels controllable and readable, per the 4-6 live controller smo
    of `x` picks the cycling direction (screen and stick share the +Y-down convention,
    `controller.gd:43`). The threshold constant that gates the flick at all (AC 8) stays dev-pass
    terrain; this is the rule that decides which axis a given flick belongs to.
-7. Tie-break: when two candidates share the current target's screen X exactly, the LOWER
-   board-index candidate wins — the same total order `_gather_flick_candidates` already gathers in
+7. Among candidates on the flick side (smallest screen-X DISTANCE from the anchor, in the flicked
+   direction), that smallest distance wins; on an EQUAL screen-X distance, the LOWER board-index
+   candidate wins — the same total order `_gather_flick_candidates` already gathers in
    (hero-then-units, board-index order, `4-3b/R5`), carrying forward the tie-break the replaced
    resolver enforced (`lock_on_resolver.gd:40-44`).
 8. `flick_threshold` (`gamepad_profile.gd:56`, `0.7`) is UNCHANGED — the smoke named it no retune
@@ -226,6 +227,14 @@ Scaling the work down is the operator's call.
 - **Replay untouched, per `4-6`'s Dev Agent Record:** `_resolve_retarget` runs immediately before
   `_recorder.capture_advance(intents)`, live-branch only — the record carries the gesture's
   OUTCOME; scope (a) does not change that seat or the replay fork.
+- **Anchor-lift asymmetry (review M1/M3):** the flick's cycling anchor is projected from the
+  post-review lifted mark position while every other candidate is still projected from the actor
+  root, an accepted screen-X asymmetry of at most a fraction of a pixel that only matters in the
+  sub-pixel near-tie case named at M3 — not fixed here, since fixing it means lifting every
+  candidate too, a wider surface than this story needs.
+- **`lock_yaw_smoothing = 0.0` warning (review M5):** an authored 0.0 is not a safe "no smoothing"
+  value — it freezes both the camera yaw and the camera-relative movement basis at the first
+  heading for the whole match, so never author it; 1.0 is the correct instant-snap value.
 
 ### Project Structure Notes
 
@@ -438,6 +447,38 @@ dot with a dark rim, `HudRoot.LOCK_MARKER_SIZE`), the **smoothing feel** (is "pr
 resolved at `lock_yaw_smoothing = 0.25`? -- a one-line `data/camera_config.tres` edit retunes it,
 with no code and no test change), and **cycling on a bunched board**. Record all three in
 `docs/playtest-log.md` by the operator's own hand.
+
+### Post-review micro-fixes
+
+Two live-smoke-driven commits made after code review APPROVE, both presentation-only:
+
+- **854c0d4** — lock marker lifted onto the target's body by half the authored body box (unit
+  0.6, totem 0.7, hero 0, unchanged). Smoke verdict: hero and totem read right; the minion marker
+  sat at crotch height, too low.
+- **3a2ecc4** — minion (unit) lift re-derived from the measured skinned-model AABB (~2.062 m real
+  height), marker now at ~3/4 of that from the ground (`LOCK_MARK_UNIT_LIFT = 1.53`); totem and
+  hero left unchanged by operator ruling (both already read correctly). Marker additionally hidden
+  during the round-over freeze, via the existing `round_over` snapshot key; `test_lock_marker_live`
+  extended to cover it.
+
+Both fixes are presentation-only: `src/state/` untouched, golden `aa3566d7...` and the 28-key
+snapshot set both measured unmoved, suite `566/4377/0` + 46 integration files, all PASS.
+
+**Recorded deviation from `PROC/R1`:** this v2 pass ran the full suite THREE times (baseline run
+twice — the first capture was truncated — then once after the diff), not exactly twice as `PROC/R1`
+states. Named rather than silently absorbed.
+
+### Live Smoke Results (2026-08-31 / 2026-09-01, pad on P2, flip [0,3])
+
+All three `PROC/R8` feel surfaces PASS: yaw smoothing at `lock_yaw_smoothing = 0.25` reads as
+resolved ("pre grub/nagao" no longer applies), adjacent left/right cycling on a bunched pile reads
+correctly, and `4-6a/R1`'s relock-from-off-frame no-op holds at the stick. The marker v2 lift
+(3a2ecc4) confirmed correctly placed on minion, totem, and hero; the round-over hide (also 3a2ecc4)
+confirmed.
+
+**Deferred, non-blocking:** the marker dot drifts slightly outside the minion's silhouette during
+the walk gait, because the lift is a fixed offset while the animated body moves under it. A
+bone-attached marker is the obvious future fix; not pursued here (presentation polish, not an AC).
 
 ### Completion Notes List
 
