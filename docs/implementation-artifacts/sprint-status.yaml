@@ -90,7 +90,7 @@ development_status:
   4-4-totems: done                    # Tier A (golden clause, not build weight — E4-P/R9)
   4-5-pooling-60fps-exit: backlog        # Tier B (assigned at 4-1 close-out, E4-P/R8)
   4-6-camera-lock-on: done        # Tier A (adopted 2026-08-30 via gds-correct-course, DP/R1 + E4-P/R11; board-ordered before 4-5-pooling per operator, numbering historical)
-  4-6a-camera-feel: ready-for-dev        # presentation-focused follow-up from the 4-6 live smoke (operator-ruled 2026-08-31); board-ordered before 4-5-pooling per operator; tier expected B by the golden clause, fixed at its gate
+  4-6a-camera-feel: done        # presentation-focused follow-up from the 4-6 live smoke (operator-ruled 2026-08-31); board-ordered before 4-5-pooling per operator; tier expected B by the golden clause, fixed at its gate
 
 story_notes:
   3-0a-rig-adoption: "DONE 2026-07-31 (3-0a/R1-R16). Skinned paladin + six-clip AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd both green); src/state/ byte-identical, golden 338172010a…21da2 unmoved both directions; suite 164/760/0, 10 integration files individually green (test_rig_clips.gd added, mutation-proven). Live smoke PASSED with two humans on the shipped default (R-D6 re-invoked, SPENT); three non-blocking findings handed to 3-0b (below)."
