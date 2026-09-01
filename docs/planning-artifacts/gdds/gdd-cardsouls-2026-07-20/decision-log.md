@@ -7721,3 +7721,62 @@ Agent Record, and the board note). Code and docs never share a commit. Tier B he
 and 46 integration files, all PASS, unchanged either side. The story file's Status is `review`
 (story-file-only, `CFG/R5`); the board stays `ready-for-dev` (`CFG/R2`), promotion is the
 operator's chain commit. Operator reviews the log.
+
+## 2026-09-01 -- 4-5 code review: measurement corrections (forward append, `4-5/R2`)
+
+FORWARD APPEND, NOT AN EDIT. The `4-5` entry above stands as written; this note records what the
+code review found wrong in it. The instrument was audited and the measurement reproduced.
+
+**THE VERDICT IS UNCHANGED AND WAS NEVER IN DOUBT: PASS on both halves of `4-5/R1`.** AC 8's
+disposition stands, `src/systems/pool/` stays empty, the E4 pooling obligation stays discharged.
+Reproduced independently at the same forced 1920x1080 on the same machine: 5.31 ms average, 10.79
+ms p95, worst event frame 19.34 ms, zero frames over 33.3 -- higher numbers than the authoritative
+run, same verdict. The corrected instrument also computes the criterion's OWN population directly
+rather than bounding it by argument: the tick-carrying subset's p95 is 8.40 ms against 16.67.
+
+Four numbers in the entry above do not survive.
+
+1. `worst single frame at a spawn or death event 10.39 ms` is VOID -- mis-attributed by one tick.
+   A `SceneTree` subclass's `_physics_process` is the MainLoop callback, which the engine runs
+   BEFORE node propagation, so the harness always polled the board before the runner stepped and
+   read the previous tick's result. Events resolved on tick N were flagged onto the frame carrying
+   tick N+1 -- the frame after the one that paid for `instantiate()` / `queue_free()`. So 10.39 ms
+   is the worst frame ADJACENT to an event, not at one. Re-measured with the fix: 15.46 ms against
+   the ~33 ms ceiling, still PASS by better than 2x.
+2. `64 spawn and 43 death events in the measured stream` were LIFETIME totals including the build
+   phase. In-window: 43 spawns and 42 deaths (21 build spawns + 43 = 64; 1 build death + 42 = 43).
+3. The GPU cross-check ("an order of magnitude clear") measured the ROOT viewport, which only
+   composites the two player `SubViewport` textures -- both `Camera3D`s are inside those
+   SubViewports, so the number excluded essentially all the 3D work. WITHDRAWN. The CPU-bound
+   conclusion survives on the wall/tick split, which never used it.
+4. `+0.3% (4.154 early / 4.166 late)` is run-dependent: a re-run of the same window measured +6.7%,
+   and the quarters are taken over all rendered frames, ~3/4 of which carry no tick, diluting a
+   per-tick drift ~4x. AC 10's disposition is unaffected; the claim weakens to "no cost separable
+   from run-to-run noise with this instrument".
+
+**`4-5/R2` (review, 2026-09-01): the bunched-minion flicker cause returns to UNNAMED, superseding
+the OVERLAPPING-MESH naming in the entry above.** The evidence that named it was read off a
+diagnostic that could not tell a live minion from a corpse: it walked the OLDEST actor slots
+filtered only on `is_instance_valid`, and a corpse stays a valid actor for 600 ticks with its
+collision disabled and its velocity never driven. With a liveness tag added, the three coordinates
+the entry cites -- `(1.4,-0.1)`, `(1.5,0.1)`, `(1.6,-0.0)` -- reproduce EXACTLY and print as DEAD.
+Corpses overlap at 0.1-0.2 m because collision is off and sit at v0.0 because nothing moves them,
+so deadness explains both halves of the argument without any depth-fight. Live bunched units sit
+~0.5-0.7 m apart (inside the 0.9 m spawn clearance) at v0.00, which still argues against push
+jitter but is not the deep interpenetration the conclusion rested on. A THIRD candidate the
+corrected instrument made visible, not among the two the story offered: the 600-tick corpse itself,
+collision-off and overlapping live bodies, as a depth-fight source at 20 units. Naming remains out
+of scope (AC 11 forbids the fix and asked only for a name); this is a finding for the operator.
+
+Also recorded: AC 2's "FULL ROUND" was discharged by a 60 s / 3600-tick PROXY, since the harness
+heals both heroes every tick and no round ever ends. This is legitimate -- AC 1 explicitly
+anticipates rounds ending too fast and delegates the mechanism to OQ 1 -- and the proxy is the
+stronger measurement, since a real round would end at a moment chosen by the combat rather than by
+the criterion. It is recorded as a proxy so "full round" is not read as a round that ran to its end.
+
+Two code commits from the review, neither pushed: `chore(4-5)` tracking four `.uid` sidecars that
+`4-6`/`4-6a` committed without them, and `fix(4-5)` correcting the harness (event attribution,
+event scope, GPU seat, empty-event sentinel, corpse-blind diagnostic; plus a tick-subset p95, a
+round-freeze guard, and the achieved tick count). Tier B still holds -- the review's own full-suite
+run measured 566/4377/0, 46 integration, golden `aa3566d7...` and the 28-key set UNMOVED, and
+`test/perf/` is outside `run_all.sh`'s glob. Story Status stays `review`; the board is untouched.

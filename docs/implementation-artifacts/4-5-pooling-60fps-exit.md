@@ -280,13 +280,18 @@ rather than asserted).**
 | --- | --- | --- | --- |
 | sustained frame time, average | **4.14 ms** | <= 16.67 ms | PASS |
 | sustained frame time, p95 | **7.52 ms** | <= 16.67 ms | PASS |
-| worst single frame at a spawn or death event | **10.39 ms** | <= ~33 ms | PASS |
+| worst single frame at a spawn or death event | ~~**10.39 ms**~~ **VOID — see Code Review Corrections (R-1); re-measured 15.46 ms** | <= ~33 ms | PASS |
 | worst single frame anywhere in the round | 25.42 ms | (no clause) | — |
 | frames over 16.67 ms | 4 of 14483 (0.03%) | — | — |
 | frames over 33.3 ms | **0** | — | — |
 
 Supporting series from the same run: p50 3.63 ms, p99 8.43 ms; measured GPU render time 1.37 ms
 average (1.46 ms p95), so the frame is CPU-bound with the GPU an order of magnitude clear.
+**CORRECTION (R-3): the GPU half of that sentence is WITHDRAWN.** The 1.37 ms was measured on the
+ROOT viewport, which in `main.tscn` only composites the two player `SubViewport` textures and the
+HUD — both `Camera3D`s live inside those SubViewports, so the number excluded essentially all of
+the 3D work. "The GPU is an order of magnitude clear" is not established by it. The CPU-bound
+conclusion itself survives on the wall/tick split, which never depended on the GPU series.
 
 **The pessimistic reading, stated because it is the one a 60 Hz build actually lives in.** With
 vsync off the engine renders ~241 fps, so only 3600 of the 14483 frames carried a physics tick.
@@ -307,7 +312,9 @@ count chosen by the desktop); Godot 4.6.3-stable, Windows, `physics_ticks_per_se
 
 **AC 1 — the population, and what the harness had to do to make it real.** 20 concurrent LIVING
 units, minions and totems, both players combined: measured `live_avg` **19.86**, min 16, max 21
-across the whole window, with 64 spawn events and 43 death events in the measured stream (the
+across the whole window, with ~~64 spawn events and 43 death events~~ **43 spawn and 42 death
+events (CORRECTED, R-2: the 64 was a lifetime total that included the 21 units the build phase put
+on the board — 21 build + 43 measured = 64)** in the measured stream (the
 population is HELD at ~20 by re-summoning as units die, which is what puts deaths in the stream
 rather than letting the count decay). Combat totems firing: 1 on P1 and 3 on P2 at the end, with
 the two projectile boards reaching 44 and 38 records — projectiles neither counted toward the 20
@@ -367,12 +374,19 @@ from **21 records to 64** across the measured round (append-only, `4-3a/R9`), a 
 arrays every per-tick loop walks — and the frame-time trend over the same window is **flat**:
 first-quarter wall average 4.154 ms against last-quarter 4.166 ms, a +0.3% drift that is inside
 run-to-run noise. Board growth had NO measurable per-tick cost at this scale with totems firing.
+**QUALIFIED (R-5):** a review re-run of the same window measured 4.039 -> 4.311 ms, +6.7% early to
+late. The trend is therefore not reliably "flat" across runs, and the quarters are taken over ALL
+rendered frames (~3/4 of which carry no tick), which dilutes a per-tick drift roughly 4x. "No
+measurable per-tick cost" should be read as "no cost large enough to separate from run-to-run
+noise with this instrument", which is a weaker claim and still supports AC 10's disposition.
 Whether that becomes a decision-log line at E4 close-out or its own Tier A story is the operator's
 call from this number (AC 10 reserves it), and the number says the pressure is low.
 
 **AC 11 — the bunched-minion flicker, cause NAMED not fixed, with the evidence for it.** The story
 offers two candidates, physics push jitter versus overlapping-mesh rendering. The evidence points
-at **overlapping-mesh rendering**, and against push jitter. Three live units were observed at
+at **overlapping-mesh rendering**, and against push jitter. **CORRECTION (R-4): the three bodies
+cited below are CORPSES, not live units, and this conclusion is WITHDRAWN as evidenced — see Code
+Review Corrections.** Three live units were observed at
 `(1.4,-0.1)`, `(1.5,0.1)` and `(1.6,-0.0)` — within 0.1-0.2 m of each other, while the spawn
 placement's own clearance radius is 0.9 m, so the skinned bodies are deeply interpenetrating rather
 than merely adjacent. Their velocities at the same moment were pinned at **0.0**, not oscillating:
@@ -429,6 +443,88 @@ the editor touched nothing and no restore was needed.
 **Not claimed here.** The three live-smoke surfaces (`PROC/R8`) are the operator's own hand and are
 NOT asserted by this pass: the 20-unit setup confirmed by eye, the flags-off clean match, and the
 flicker reproduction/naming. The machine numbers above are the machine-checkable half only.
+
+### Code Review Corrections (2026-09-01, `gds-code-review`)
+
+The review reproduced the measurement and audited the instrument. **The VERDICT is unchanged and
+unchallenged: PASS on both halves of `4-5/R1`, so AC 8's disposition stands and no pooling ships.**
+Five recorded numbers did not survive, none of them the verdict. The harness fix is its own commit;
+the decision log gets a forward-append correction note, never an edit.
+
+**R-1 — "worst spawn/death frame 10.39 ms" was mis-attributed by one tick, and is VOID.** A
+`SceneTree` subclass's `_physics_process` is the MainLoop callback, which the engine runs BEFORE it
+propagates the physics notification to nodes — so the harness always ran before `MatchRunner`.
+Polling the board at the top of a tick read what the runner left at the end of the PREVIOUS one, so
+a spawn or death resolved on tick N was flagged onto the frame carrying tick N+1: the frame AFTER
+the one that paid for `instantiate()` / `queue_free()`. 10.39 ms is therefore the worst frame
+*adjacent to* an event, not *at* one — and it is the number `4-5/R1`'s ~33 ms half is decided on.
+Attribution fixed (`_observe_events()` moved to `_process`), and a review re-run of the full 3600-
+tick window with the corrected instrument measured **worst event frame 15.46 ms** (index 14564)
+against the ~33 ms ceiling — **still PASS, by better than 2x**. The original run's per-frame data
+does not survive, so 10.39 cannot be retro-corrected; 15.46 ms is a fresh measurement on the same
+machine and content, and it is the number that should be cited.
+
+**R-2 — "64 spawn events and 43 death events in the measured stream" were lifetime totals.**
+`_observe_events()` runs from the first tick (the cursors must stay current through build), and the
+counters were never scoped to the window, so the 21 units the build phase put on the board were
+counted as measured-window spawns. The corrected harness reports the split directly and the
+arithmetic closes exactly: **21 build spawns + 43 measured spawns = 64**; deaths **1 build + 42
+measured = 43**. In-window figures are **43 spawns and 42 deaths**.
+
+**R-3 — the GPU cross-check measured a compositing pass.** See the correction inline above. This
+also means OQ 2 (ii)'s cross-check was not, as run, watching the subject it was built to watch; the
+wall-clock primary number is unaffected, and the tick/no-tick split carries the CPU-bound
+conclusion on its own.
+
+**R-4 — AC 11's evidence is a corpse pile, and the naming is WITHDRAWN as evidenced.** The
+diagnostic that produced the three coordinates walked actor slots 0..4 filtered only on
+`is_instance_valid` — the OLDEST board indices, hence the likeliest to be dead. A corpse stays a
+valid actor for 600 ticks (`match_runner._free_dead_unit_actors`), its collision is disabled the
+tick it dies, and `_approach_unit_actors` skips dead indices so its velocity is never driven. The
+review added an `L`/`D` liveness tag and re-ran: at `t=360` the p2 line reads
+`D2:k0@(1.4,-0.1)v0.00 D3:k0@(1.5,0.1)v0.00 D4:k0@(1.6,-0.0)v0.01` — **the exact three coordinates
+this record cites as "three live units", all three tagged DEAD**. Corpses interpenetrate at 0.1-0.2
+m *because their collision is off*, and sit at v0.00 *because nothing drives them*, so both halves
+of the argument are explained by deadness rather than by depth-fighting. Live bunched units in the
+same runs sit ~0.5-0.7 m apart (still inside the 0.9 m spawn clearance) with velocities pinned at
+0.00 — which still argues against push jitter, but is NOT the deep interpenetration the conclusion
+rested on. **AC 11's cause returns to UNNAMED**, with one new candidate the corrected instrument
+made visible and worth carrying forward: a 600-tick corpse with collision off, overlapping live
+bodies and other corpses, is itself a depth-fight source at 20 units, and it was not among the two
+candidates the story offered. Naming it remains out of scope here (AC 11 forbids the fix, and the
+story only ever asked for a name); this is a finding for the operator, not a disposition taken.
+
+**R-5 — the AC 10 flat-trend number is run-dependent.** See the qualification inline above.
+
+**AC 2's "FULL ROUND" is a PROXY, and is now stated as one (review target T4).** The harness heals
+both heroes to full every tick, so `round_over` never latches and no round ever ends; what is
+measured is a fixed 3600-tick (60 s) window, not a round. This is LEGITIMATE rather than a
+deviation — AC 1 explicitly anticipates it ("if 20 hostile units end rounds too fast to measure,
+the heroes are kept clear of the fight") and delegates the mechanism to OQ 1, which resolved to
+unkillable heroes. But "over a FULL ROUND" in AC 2 was discharged by a 60 s proxy chosen to be
+longer than an observed round and held at ~20 units for its whole length, and the record should say
+so rather than let "full round" read as a round that ran to its end. The proxy is the stronger
+measurement of the two (a real round would end when a hero dies, i.e. at a moment chosen by the
+combat rather than by the criterion), which is why it is recorded as satisfying AC 1/AC 2 as
+written and not as a gap.
+
+**What the review re-ran, and what reproduced.** The full suite once (566 tests / 4377 assertions /
+0 failed, 46 integration files, ALL PASS; golden `aa3566d7…` and the 28-key set both UNMOVED —
+Tier B holds, and `git diff 23cf3f6..4b75cd6 --stat -- src/state/ project.godot data/` is empty).
+The measurement was reproduced with the harness AS COMMITTED at the same forced 1920x1080: avg
+**5.31 ms**, p95 **10.79 ms**, worst event frame 19.34 ms, 0 frames over 33.3 — **PASS on both
+halves**, numbers higher than the authoritative run's but the verdict identical. Notably the entire
+`population` block came back BIT-IDENTICAL to the authoritative run (same `live_avg` to 12 decimal
+places, same 49/49 casts, same 867 build frames), so the simulation is deterministic run to run and
+only the timing varies — which makes this measurement more reproducible than the record claimed.
+The corrected-harness run additionally computes the criterion's own population directly:
+**tick-carrying p95 = 8.40 ms** against 16.67, so the sustained half no longer rests on the
+record's bounding argument. That run did see 2 frames above 33.3 ms (max 48.6 ms), neither at an
+event, where the authoritative run saw none — run-to-run variance in the tail, no breach of a
+criterion that speaks only to event frames, but it means "0 frames over 33.3 ms" is a property of
+that run rather than of the build. AC 12 was re-run in BOTH directions with the backup-outside-repo
+and SHA-verified restore ritual: ON `casts=8 max_unit_records=8` PASS, OFF `casts=8
+max_unit_records=0` PASS, `data/feature_flags.tres` restored to `05eba18a…4fb3`, byte-identical.
 
 ### File List
 
