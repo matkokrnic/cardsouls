@@ -8123,3 +8123,127 @@ already current. `CLAUDE.md` is NOT touched -- its Story tiers section is a poin
 no tier policy changed here. No story Change Logs touched. No code changed, no golden or suite
 touched, nothing ran. `E4-R/R1`, `R5`, `R6` and `R8` are log-only by design. The operator reviews the
 log and pushes.
+
+## Session 2026-09-01 -- E5 planning
+
+The E5 planning report (`_e5-planning.md`, out-of-repo, REPORT ONLY per its own header) was
+delivered against `9fe3d34` and ratified by the operator with the rulings below; where a ruling
+goes beyond the report's recommendation, this entry is authoritative. Machine state at report time:
+`git log --oneline -1` = `9fe3d34`, `HEAD == origin/main`, tree clean, `sprint-status.yaml:78`
+`epic-4: done`, golden `aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f`
+(`test/state/test_determinism.gd:678`). Two corrections against the inputs, both by content: the
+`(c)`-tagged residuum count is FOURTEEN, not thirteen as `E4-R/R8` item 5 said (the `(b)` count of
+nine is right); and `epics.md`'s E5 section was stale against `E4-R/R8` before this pass's `docs(epics)`
+commit. This session records only what was RULED; the report's own reasoning stays there and is not
+restated here.
+
+`E5-P/R1` (decided by Matko) OPEN DECISION (a), ATTACKER CONSEQUENCE ON BASIC-ATTACK DEFLECT: RESOLVED.
+A deflected basic attack now carries BOTH consequences for the attacker -- a stamina penalty (new
+authored balance field) AND a short stun. The colour-read counter keeps the full ~1 s stun; the
+deflect stun MUST be authored markedly shorter than it, so the three-tier ladder keeps an escalation
+gradient (colour read remains the strongest stopping answer) even though the colour counter is no
+longer the ladder's *only* stopping answer. This is Shape 2 (`_e5-planning.md` Section 2) plus the
+Shape 1 economic penalty folded in, not Shape 2 alone as recommended -- the operator's own
+combination. Values are authored at `5-1`/`5-6`, not here. Consequences: `gdd.md:243` wording
+amended this pass (`docs(gdd)` commit); the `test_balance_authoring.gd` stun exemption is removed at
+`5-6`, which is also where `STUNNED` gets its first inbound edge. `R-D5` (`decision-log.md:373`, no
+attacker consequence) is superseded.
+
+`E5-P/R2` (decided by Matko) ARENA EDGE SLOTTED as `5-0d-arena-edge` (Tier B): a ring of static
+collision in the scene (`main.tscn`), a hard wall the player slides along -- cornering is
+intentional gameplay, not an accident to hide. No state clamp, no `src/state/` edit; golden immobile
+by construction, confirmed by measurement at the story's own gate. Closes the gap `4-3e/R6` opened
+with no owner (`deferred-work.md:305-309`) and removes it from the playtest checklist per
+`deferred-work.md:334`'s own "unless E5 planning has already slotted it" clause.
+
+`E5-P/R3` (decided by Matko) `R-M9` MANA SEAT RESOLVED: Reading A -- each mana accelerator pays its
+own grant per cadence tick (two identical totems grant twice per tick); linear, player-countable,
+matching "each totem contributes its own effect where it sits." Reading B (compounding cadence) is
+rejected as superlinear and not what a player reading the board would expect. The stamina seat stays
+literal `mult^N`, as already ruled by `R-M9` itself (`deferred-work.md:209-213`). Unblocks
+`5-1-accelerator-stacking`.
+
+`E5-P/R4` (decided by Matko) CHARGEUP REACH (the auto-aim question, `_e5-planning.md` Section 6,
+"One design question `5-2` cannot be authored without"): the unblockable is a large committal attack
+with a big authored hit radius (provisional ~8 m, new balance field); souls axe and grab register
+within it. Being inside the radius when the chargeup lands forces the defender to REACT -- roll
+i-frames, or the colour answer once `5-5`/`5-6` exist -- and spacing still matters because the
+radius IS the boundary: being or getting outside it during the chargeup is the escape. Lock-on
+(`4-6`) aims direction only and never extends reach; a chargeup thrown while locked is not thereby
+guaranteed to land regardless of range, closing this session's read of the Reactor/Actor "forbidden
+offload" risk the report raised. Unblocks `5-2-unblockable-initiation`.
+
+`E5-P/R5` (decided by Matko) E5 STORY LIST, ORDER, AND TIERS RATIFIED, twelve stories (the report's
+eleven plus `5-1a`, added by this ruling):
+1. `5-0a-hero-locomotion` -- Tier B, at-risk (hero half of DEBT E: hitboxes that do not follow
+   bones is a contact-geometry change; measure early).
+2. `5-0b-pad-card-input` -- Tier B (the held-L3 scheme, `3-5a` Dev Notes; the two button
+   collisions -- shoulders already attack/block, face buttons vs roll=B -- enter its acceptance
+   criteria explicitly).
+3. `5-0c-totem-projectile-models` -- Tier B (static mesh swap, precondition for nothing).
+4. `5-0d-arena-edge` -- Tier B (`E5-P/R2`).
+5. `5-1-accelerator-stacking` -- Tier A (both seats per `E5-P/R3`; carries `4-4` M2 and M7 as
+   authoring-audit bounds; changes shipped behaviour and moves the golden, so it runs first of the
+   Tier A stories, before any unblockable work, per the `4-6` re-baseline discipline of isolating
+   one measured cause at a time).
+6. `5-1a-intent-hardening` -- Tier A, small (`4-6` M3's hard-rejection of malformed retarget
+   addresses per the `4-1/R1` doctrine, bundled with `4-6` L7/L8's v6-record robustness; own
+   before/after golden measurement, not shared with `5-1`).
+7. `5-2-unblockable-initiation` -- Tier A (`CHARGING`'s first inbound edge; the chargeup timer on
+   the D4 primitive; per-colour damage; carries the S6 mid-roll/mid-block cast gate; reach per
+   `E5-P/R4`).
+8. `5-3-telegraph-presentation` -- Tier B (consumes the state-owned telegraph fact `5-2` produces;
+   carries S5's unhomed audio half and the S8 attack/block-sting discrimination finding).
+9. `5-4-orbs` -- Tier A (`OrbPool` enters `to_snapshot()`; carries the `4-5` D1 flag-matrix split;
+   NO spend path -- Mode 4 is E6).
+10. `5-5-unblockable-defense` -- Tier A (colour match negates damage and orb grant; no stun here).
+11. `5-6-three-tier-ladder` -- Tier A (the dodge/leave-range rung, both stuns, and `E5-P/R1`'s
+    stamina penalty; removes the `test_balance_authoring.gd` audit exemption).
+12. `5-7-pad-modes-2-3` -- Tier B (waits for `5-5`; a mode button for an unresolvable mode is a
+    no-op the operator cannot smoke).
+
+Every Tier B above is a PREDICTION its own gate confirms by measurement, never a lowering, per
+`E4-P/R9`. `5-2` is authored WHOLE; if its gate finds it oversized, the named break line is
+auto-aim/acquisition (`5-2a` state vs `5-2b` actor-side), per `E4-R/R4`'s corollary that the create
+pass writes behaviour, not mechanism. Tier B machine-time budget: operator default ~1 h per story,
+per the E4 retrospective's ruling on `4-B1`-sized work (`decision-log.md:7934-7935`), not raised.
+
+`E5-P/R6` (decided by Matko) THE FOURTEEN `(c)`-TAGGED RESIDUUM ITEMS DISPOSED:
+- `4-4` M2, M7 -> `5-1-accelerator-stacking`, as authoring-audit bounds in
+  `test_balance_authoring.gd` (same file, same pass that re-derives that line for stacking).
+- `4-5` D1 -> `5-4-orbs`, forced by that story's own `unblockable`/`orbs` flag-matrix split.
+- `4-6` M3, L7, L8 -> `5-1a-intent-hardening`, bundled together (same doctrine, same file, one
+  golden measurement).
+- `4-5` D9 RE-TAGGED `(c)` -> `(a)`, CLOSED as process: superseded by `E4-R/R2`'s
+  `LAYER-COMPLETION:` mechanism, which already replaced the enforcement this finding was about; a
+  register audit on log prose is exactly the kind of rule the standing meta-rule
+  (`decision-log.md:7936-7940`) rejects.
+- `4-4` M5 DEFERRED, no E5 slot. Owner: the next story touching `test_projectile_homing`-class
+  coverage, realistically the E6 spell story.
+- `4-4` M6 DEFERRED, owner the E6 close-out spell story (the next thing that adds a `unit_kinds`
+  entry); keep the determinism-adjacent note (a live record re-pointing mid-match) attached.
+- `4-5` D2, D3, D6 DEFERRED as a set, owner whoever next runs the `4-5` perf harness; its
+  re-measure trigger is already written (`deferred-work.md:196-198`: unit population above 20, or
+  materially longer matches).
+- `4-6a` L6, L7 DEFERRED, owner the next story editing `src/actors/camera/`-class code or its
+  tests.
+
+`E5-P/R7` (decided by Matko) OUT OF E5, ratifying `_e5-planning.md` Section 7 as final: all of E6
+(Pitch Zone, Mode 4, the all-colour reset call, affordability read, overlap lockout --
+`pitch_effect` stays UNAUTHORED, `5-4` exposes `reset_all()` and never calls it); spell resolution
+(`R-SPELL` -- no E5 story may assume a spell card resolves, and `5-5`'s hand-of-four math must
+tolerate three unresolvable cards); the melee retune + playtest block, running after the E6
+close-out spell story with all nine `(b)`-tagged findings; open decisions (b) and (e), owned at the
+playtest block (note (e)'s interaction with `5-5`'s hand math, since colour-as-defense's
+hand-of-four reasoning moves if (e) ever answers "yes"); the three remaining named gaps (minions
+freeze on an obstacle; `standard` priority gives a dead arena at 10v10; the AC 11 flicker cause --
+arena edge is `E5-P/R2`, not out); E7 and E8; peripheral mana/deck legibility, deferred until the
+full loop exists at E6; and pooling code, re-measure trigger population > 20.
+
+Docs-only pass, five commits, none pushed: `docs(gdd)` (`gdd.md:243` amended per `E5-P/R1`),
+`docs(epics)` (E5 Committed obligations brought current against `E4-R/R8` and this session's
+rulings), this entry (`docs(decision-log)`, a PURE APPEND -- no existing entry edited), `board`
+(`sprint-status.yaml` epic-5 section, twelve keys per `E5-P/R5`'s order, all `backlog`), and
+`docs(deferred-work)` (the fourteen `(c)` items re-tagged per `E5-P/R6`, the arena-edge checklist
+line updated to "slotted as `5-0d`"). No code changed, no golden or suite touched, nothing ran. The
+operator reviews the log and pushes.
