@@ -203,7 +203,7 @@ Forty-eight findings from the four out-of-repo E4 review files (`_44-review.md`,
 as a block reference (`decision-log.md:7432`) or not at all. Recorded here by id, source, content,
 and disposition tag. Tags: **(a)** closed/accepted as-is, no further action; **(b)** playtest-block
 candidate (gameplay-visible); **(c)** candidate for E5-planning judgment (design/process/coverage);
-**(d)** low-severity, no owner needed. Two findings (M9, M4 below) got their own operator rulings
+**(d)** open, no owner. Two findings (M9, M4 below) got their own operator rulings
 instead of a bare tag and are recorded first.
 
 **4-4 M9 (`_44-review.md:444`) -- accelerators do not stack; the second identical totem silently
@@ -338,3 +338,19 @@ window opens, this checklist is the block's scope:
 - **AC 11 flicker cause** (named gap, above).
 - The operator's own feel notes already recorded in `docs/playtest-log.md` -- read them there, not
   copied here.
+
+**Two open design decisions are answered here too, as QUESTIONS rather than defects** -- operator
+ruling `E4-R/R1` (2026-09-01, decision-log E4 retrospective session). Neither is implementation work;
+both are feel calls that cannot be judged headless, the same reason `E3-R/R3` gave for the melee
+retune. Owner for both: the operator, with a pad in hand.
+
+- **Open decision (b) -- does the reshuffle vulnerable window cost anything mechanically?** It ships
+  at an authored 1.5 s with NO mechanical cost, behind `3-5b/R7`'s negative guard (nothing in `src/`
+  may read it except the code that starts it and the code that emits its event). The question is the
+  window's PRICE, not its existence. Open since 2026-07-22; re-fenced out of E3 and then out of E4
+  (`E4-P/R11`), which is two epics with no owner -- the failure `E4-R/R1`'s rule exists to stop.
+- **Open decision (e) -- does hand size ever vary?** `3-3` shipped `hand_size` as balance data and
+  `3-6/R8` bounded the AUTHORED value at `<= 4` against the HUD's four fixed slots. It got MORE
+  expensive to change during E4: `4-0/R1` bound the `hand_size` snapshot KEY to occupancy, and its
+  N2 finding records the `<= 4` audit bound becoming more load-bearing. If it ever varies, whether
+  the count is public becomes a NEW design question (`E3-RG/R4`). Judge the feel first, then price it.
