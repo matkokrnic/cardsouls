@@ -186,3 +186,11 @@ zamah ukorijenjuje, kretanje je normalno, porblem otkloinjen ali sada uoceavam d
 
 1.9.
 1 tokica je sad na boljoj visini iako opet kako se model gega ona zna mrvicu isapdati iz kontuire mionona ali to je sad nebitno zasda je ovo dovoljno dobro idemo dalje 2 totem i heroj idelj uredu 4 round ouver = markeri nestaju
+
+projektili lete, krene titrat dio ekreana pa mi je tekos rec tjela koja stoje i nemicu se jer su zapela(minoni ne zanju reagirati akd se prepreka nade ispred nih nego se ukipe dok se nesto ne pomjerni) i hodajuci/napdajuci titraju sigurno a cini mi se i lesevi da znaju iako nisam savami siguran al nebi to dodatno ispitiva, svakako nije cesta pojava i  desi se kad je ionako ne situacij koju ne vidim realno u igri
+
+1.9. (4-5 pooling / 60 fps smoke)
+1 mjerni harness (perf_20_units_live): oko 20 jedinica na ploci, obje polovice ekrana, totemi pucaju - projektili lete prema herojima na sredini; minioni se medusobno napadaju i napadaju toteme (standard prioritet iz 4-2, prvi put vidjeno u ovolikoj guzvi)
+2 flags off (minions i totems na false): karte se odigraju, nista se ne spawna, nista ne pukne, run sam zavrsi nakon par sekundi - ok; flagovi vraceni na true, git status prazan
+3 titranje: rijetko, kad je puno miniona na hrpi krene titrati dio ekrana i kamera malo zatrza; titraju sigurno tijela koja hodaju/napadaju i ona koja stoje ukipljena, lesevi mozda, nisam siguran i ne bih to dalje ispitivao - nije cesto i situacija realno nije iz igre
+4 minioni ne znaju reagirati kad im je prepreka ispred, ukipe se dok se nesto ne pomakne (poznato iz 4-3) - za playtest blok
