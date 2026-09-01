@@ -23,8 +23,17 @@ extends CharacterBody3D
 ## `actor.global_position` off the hero and pushes only a DERIVED fact inward. `4-2`'s gate rules
 ## on real position ownership once TargetingService exists as a consumer.
 ##
-## POOLED BY NOBODY THIS STORY (4-5). Units are plain instantiated and `queue_free()`d nodes here;
-## 4-5's tier is assigned at this story's close-out.
+## POOLED BY NOBODY, AND 4-5 MEASURED THAT THIS IS CORRECT RATHER THAN LEAVING IT OPEN. Units are
+## plain instantiated and `queue_free()`d nodes, here and after 4-5. That story built the 20-unit
+## measurement `E4-P/R8` made the precondition for any pooling code
+## (`test/perf/perf_20_units_live.gd`) and applied `4-5/R1`'s criterion to the result: at ~20
+## concurrent units with combat totems firing and both split-screen viewports live, sustained frame
+## time was 4.14 ms average and 7.52 ms p95 against a 16.67 ms budget, and the worst single frame at
+## a spawn or death event was 10.39 ms against a ~33 ms ceiling -- no frame in the whole measured
+## round exceeded 25.42 ms. PASS on both halves, with roughly 4x headroom, so AC 8 fired: no pooling
+## ships, `src/systems/pool/` stays empty, and instantiate/`queue_free()` per unit is the MEASURED
+## answer rather than the deferred one. Re-measure before treating that as permanent -- the number
+## belongs to this content at this population on the recorded machine, not to the design.
 ##
 ## STORY 4-2 ADDS ONE PURELY PRESENTATIONAL METHOD AND NO GAMEPLAY (`4-2/R13`). `aim_at()` yaws the
 ## box toward whatever the runner tells it to look at. Everything above still holds: no
