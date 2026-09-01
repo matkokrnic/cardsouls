@@ -7662,3 +7662,62 @@ hero's body under the win/lose label.
 One commit, docs only: this entry plus the story file's post-review micro-fixes subsection, AC 7's
 ratified wording, and the board note. No code, no board status change beyond the operator's own
 prior promotion (`59e6c0f`). Nothing pushed. Operator reviews the log.
+
+## Session 2026-09-01 -- 4-5 dev pass, operator ruling `4-5/R1`
+
+The ruling that fixed this story's pass/fail line, recorded here as its first durable record in the
+decision log (it was stated by the operator on 2026-09-01 and carried in the story file and the
+board's `story_notes` until now). It SUPERSEDES `4-3/R18`'s 16-unit figure BY CONTENT -- `4-3/R18`
+read "required if the measured frame rate drops below 60 fps at 16 concurrent units on the
+reference machine"; the population it names is raised to 20 and the counting rule is made explicit.
+
+`4-5/R1` (operator, 2026-09-01) TWENTY CONCURRENT UNITS -- minions AND totems, BOTH PLAYERS
+COMBINED. Projectiles are neither counted toward the 20 nor capped. There is no hard unit cap and
+none is added: the economy (mana/stamina costs gating summons) is the only limit.
+
+THE TWO MEASUREMENT FORMS ARE NOT PART OF THIS RULING and are not attributed to the operator. PASS
+requires sustained frame time <= 16.67 ms (one 60 Hz frame) as BOTH average and p95 across a full
+round, AND no single frame at a spawn or death event above ~33 ms; either failing is a FAIL. Those
+two forms were PROPOSED by story `4-5-pooling-60fps-exit` at authoring (2026-09-01) and are
+RATIFIED by the operator's promotion of that story to ready-for-dev -- story-proposed and ratified,
+not ruled, and recorded that way so a later reader does not cite them as an operator ruling.
+
+### The measurement this ruling was written for, and its outcome
+
+Measured 2026-09-01 by `test/perf/perf_20_units_live.gd` over 3600 ticks (60 s at 60 Hz), 14483
+rendered frames, both split-screen viewports live, vsync disabled at runtime, at a forced 1920x1080
+on an i5-12500H / RTX 3050 Laptop (Godot 4.6.3, Forward+, D3D12). Population held at ~20 living
+units (average 19.86) with combat totems firing, 64 spawn and 43 death events in the measured
+stream.
+
+**VERDICT: PASS, on both halves.** Sustained 4.14 ms average and 7.52 ms p95 against the 16.67 ms
+budget; worst single frame at a spawn or death event 10.39 ms against the ~33 ms ceiling; no frame
+in the whole round above 25.42 ms and only 4 of 14483 above 16.67 ms. Restricted to the
+tick-carrying frames -- the only kind that exists at a vsync-locked 60 Hz -- the average is 7.15 ms
+and the marginal cost of one full tick is 4.00 ms.
+
+CONSEQUENCE, and it is the whole point of `E4-P/R8`: the E4 pooling obligation is DISCHARGED BY
+MEASUREMENT WITHOUT POOLING CODE. `src/systems/pool/` stays empty, units remain plain
+`instantiate()` / `queue_free()` nodes, and `unit_actor.gd`'s header now carries the numbers rather
+than the open question. The GDD's E4-row "pooling" item is closed on this evidence. The result
+belongs to this content at this population on this machine -- re-measure before treating it as
+permanent.
+
+Two observations were recorded and deliberately NOT fixed. Board growth (M4, the append-only
+projectile/unit board, `4-3a/R9`): the unit board grew 21 -> 64 records across the round with a
+frame-time trend of +0.3% (4.154 ms early quarter, 4.166 ms late), i.e. no measurable per-tick cost
+at this scale; whether that becomes a line here at E4 close-out or its own Tier A story is the
+operator's call from that number. The bunched-minion flicker: the evidence names OVERLAPPING-MESH
+rendering rather than physics push jitter -- three live units were observed 0.1-0.2 m apart against
+a 0.9 m spawn clearance radius with their velocities pinned at exactly 0.0 by `move_and_slide()`,
+which is a static deep interpenetration, not the oscillation push jitter would produce.
+
+### Close-out
+
+Three commits, none pushed: two code (`feat(4-5)` the measurement harness and the AC 12 flags-off
+check; `perf(4-5)` the comment-only header correction) and one docs (this entry, the story's Dev
+Agent Record, and the board note). Code and docs never share a commit. Tier B held -- golden
+`aa3566d7...` and the 28-key snapshot set both measured UNMOVED before and after, suite 566/4377/0
+and 46 integration files, all PASS, unchanged either side. The story file's Status is `review`
+(story-file-only, `CFG/R5`); the board stays `ready-for-dev` (`CFG/R2`), promotion is the
+operator's chain commit. Operator reviews the log.

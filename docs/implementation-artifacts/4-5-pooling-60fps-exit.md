@@ -4,7 +4,7 @@ baseline_commit: 45ef05dd3f0fd4c4636d62c3e9c57e7c75a58008
 
 # Story 4.5: Pooling / 60 FPS Exit
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -237,24 +237,213 @@ through. Scaling down is the operator's call.
 
 ## Tasks / Subtasks
 
-- [ ] Resolve OQ 1; build the 20-unit, both-totems-firing harness without touching `src/state/`
+- [x] Resolve OQ 1; build the 20-unit, both-totems-firing harness without touching `src/state/`
       (AC 1). HALT and report if impossible without one.
-- [ ] Resolve OQ 2; implement sustained (avg/p95) and worst-single-frame (spawn/death) measurement
+- [x] Resolve OQ 2; implement sustained (avg/p95) and worst-single-frame (spawn/death) measurement
       over a full round (AC 2, AC 3).
-- [ ] Run the measurement; apply the `4-5/R1` criterion (AC 5); record CPU/GPU/resolution (AC 3).
-- [ ] Disposition: AC 8 (pass) or AC 9 (fail — pool the failing node class(es), resolve OQ 3).
-- [ ] Flags-off clean run (AC 12) unless an existing test already proves it.
-- [ ] Name the flicker cause (AC 11) and board-growth observation (AC 10) as findings; do not fix.
-- [ ] Measure golden + snapshot key set before/after; operator live smoke on the three surfaces.
+- [x] Run the measurement; apply the `4-5/R1` criterion (AC 5); record CPU/GPU/resolution (AC 3).
+- [x] Disposition: AC 8 (pass) or AC 9 (fail — pool the failing node class(es), resolve OQ 3).
+- [x] Flags-off clean run (AC 12) unless an existing test already proves it.
+- [x] Name the flicker cause (AC 11) and board-growth observation (AC 10) as findings; do not fix.
+- [x] Measure golden + snapshot key set before/after; operator live smoke on the three surfaces.
+      (Golden and key set measured unmoved both sides; the three live-smoke surfaces are the
+      operator's own hand and are NOT claimed here — see Completion Notes.)
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
 Claude Sonnet 5 (claude-sonnet-5), story authored via `gds-create-story`.
+Dev pass (2026-09-01): Claude Opus 5, via `gds-dev-story`.
 
 ### Debug Log References
 
+- `test/perf/perf_20_units_live.gd`, run four times (2026-09-01). Run 1 measured an INERT arena —
+  21 standing units, zero deaths, zero projectiles for a full minute — and was discarded rather
+  than reported; runs 2-3 were harness iterations at unforced window sizes; run 4 is the
+  AUTHORITATIVE one, at a forced 1920x1080. The harness writes
+  `user://perf_4_5_run.json` (`C:/Users/matko/AppData/Roaming/Godot/app_userdata/CardSouls/`) and
+  prints the same JSON to stdout.
+- `test/perf/flags_off_live.gd`, run twice (AC 12): once with the shipped flags ON, once with both
+  OFF. See the mutation table.
+- Full record of the pass, including the diffs shown before staging: `C:\dev\_45-dev.md` (outside
+  the repo).
+
 ### Completion Notes List
 
+**THE MEASUREMENT (AC 2, AC 3) — authoritative run, 3600 ticks (60 s at 60 Hz), 14483 rendered
+frames, both split-screen viewports live, vsync DISABLED at runtime and `Engine.max_fps = 0`
+(`vsync_mode` 0 and `max_fps` 0 are recorded in the run's own output, so the disable is evidenced
+rather than asserted).**
+
+| measure | value | threshold | verdict |
+| --- | --- | --- | --- |
+| sustained frame time, average | **4.14 ms** | <= 16.67 ms | PASS |
+| sustained frame time, p95 | **7.52 ms** | <= 16.67 ms | PASS |
+| worst single frame at a spawn or death event | **10.39 ms** | <= ~33 ms | PASS |
+| worst single frame anywhere in the round | 25.42 ms | (no clause) | — |
+| frames over 16.67 ms | 4 of 14483 (0.03%) | — | — |
+| frames over 33.3 ms | **0** | — | — |
+
+Supporting series from the same run: p50 3.63 ms, p99 8.43 ms; measured GPU render time 1.37 ms
+average (1.46 ms p95), so the frame is CPU-bound with the GPU an order of magnitude clear.
+
+**The pessimistic reading, stated because it is the one a 60 Hz build actually lives in.** With
+vsync off the engine renders ~241 fps, so only 3600 of the 14483 frames carried a physics tick.
+Those tick-carrying frames — the only kind that exists at a vsync-locked 60 Hz — average
+**7.15 ms** (against 3.15 ms for the rest; marginal cost of one full tick = **4.00 ms**), and their
+worst is 25.42 ms. Their p95 is not computed directly but is BOUNDED: only 4 frames in the entire
+run exceed 16.67 ms, and 5% of 3600 is 180, so the tick-subset p95 is necessarily under 16.67 ms.
+The criterion passes on the strict reading as well as the headline one.
+
+**AC 4 / AC 5 — VERDICT: PASS**, on both halves of `4-5/R1`'s criterion and by roughly a 4x margin
+on the sustained half. No other number was allowed to decide it.
+
+**AC 3 — the machine.** CPU 12th Gen Intel Core i5-12500H (16 threads); GPU NVIDIA GeForce RTX 3050
+Laptop GPU, D3D12 feature level 12_0, Forward+; resolution 1920x1080 windowed, FORCED by the
+harness (two earlier runs inherited 1920x1111 and 1152x648 from the window manager and therefore
+two different GPU loads — a measurement the story must be reproducible from cannot have its pixel
+count chosen by the desktop); Godot 4.6.3-stable, Windows, `physics_ticks_per_second` 60.
+
+**AC 1 — the population, and what the harness had to do to make it real.** 20 concurrent LIVING
+units, minions and totems, both players combined: measured `live_avg` **19.86**, min 16, max 21
+across the whole window, with 64 spawn events and 43 death events in the measured stream (the
+population is HELD at ~20 by re-summoning as units die, which is what puts deaths in the stream
+rather than letting the count decay). Combat totems firing: 1 on P1 and 3 on P2 at the end, with
+the two projectile boards reaching 44 and 38 records — projectiles neither counted toward the 20
+nor capped (AC 6), 0.40 alive on average and 3 at peak.
+
+OQ 1 RESOLVED — a `test/`-tools script, not a `DebugInstrumentPanel` trigger and not a live balance
+reload: it is the only one of the three that adds NO shipping surface. It follows
+`test_summon_actor_live.gd` exactly — a `--script` SceneTree loading the real `main.tscn` and
+driving real Input Map presses through `KeyboardController` into the runner's single
+`_physics_process`. `src/state/` is untouched and no state intake is added (AC 13 holds): the state
+calls are the existing public `mana.add` / `stamina.add` / `hero.heal` and read-only board queries,
+from a test seat, as that file already does.
+
+How the heroes are kept clear (AC 1's named risk): they are made UNKILLABLE by healing them to full
+every tick, rather than moved away. Moving them would make the minions walk away from each other
+and understate the load; healing keeps 20 hostile units permanently engaged on two stationary
+targets and keeps `round_over` from latching and freezing the run mid-measurement.
+
+**The first run measured NOTHING, and the reason is a shipped-content fact worth recording.** It
+reported 21 standing units, ZERO deaths and ZERO projectiles for a full minute. The cause is not a
+harness bug: the `standard` priority authored for every summoned unit is `prefer_hero = false` with
+first-living-index ordering, so every minion on a side acquires the opposing board's INDEX 0 and
+walks at it. The two walls meet in the middle, jam against each other's collision bodies, and never
+come within `stop_distance` of a target standing behind the enemy line — so nobody swings and
+nobody dies. Meanwhile each Combat totem had acquired the enemy HERO, which at the untouched spawn
+separation sits ~11.5 m away, outside the authored 8 m firing range — so no totem ever fired. Two
+harness additions fix it, both recorded in the file: the heroes are CLOSED to +/-2.0 m at build
+start (an actor-position write; position is actor-owned, `4-3/R2`), which brings the enemy hero
+inside totem range, and both heroes SWING on a fixed cadence, which is the only death source a
+stationary observer can drive once the minions cannot reach what they acquired. An aggregate at the
+end of an inert run would have looked like a comfortable PASS; it would have been measuring an
+empty arena.
+
+**AC 7 — no hard unit cap.** Re-measured at this HEAD:
+`grep -n "max_units\|unit_cap\|MAX_UNITS" src/state/unit_board.gd src/main/match_runner.gd` returns
+no matches, and this story adds none — the economy remained the only limit, and the harness reached
+20 units by paying it (topped-up mana) rather than by raising a ceiling.
+
+**AC 8 — DISPOSITION TAKEN (pass).** `src/systems/pool/` stays empty (`.gitkeep` only, unchanged
+and unstaged this pass); `unit_actor.gd`'s "POOLED BY NOBODY THIS STORY (4-5)" header now states
+the measured outcome and the numbers behind it, with an explicit note that the result belongs to
+this content at this population on the recorded machine and should be re-measured before being
+treated as permanent. No pooling code ships. AC 9 did not fire, so OQ 3 is moot and is recorded as
+such rather than answered.
+
+**AC 12 — flags-off clean run.** No existing test discharges it: the nearest,
+`test/state/test_targeting_service.gd`, proves the EVALUATOR returns `REASON_MINIONS_FLAG_CLOSED`
+with the flag closed — a pure-function fact about a static evaluator that says nothing about
+whether the real scene comes up, ticks and plays a clean match. So `test/perf/flags_off_live.gd`
+was built and run in both directions (mutation table below). With `minions` and `totems` both OFF:
+420 frames, 8 summon casts driven, **0 unit records ever reached either board**, no round-over, no
+hero death, no `SCRIPT ERROR` / `ERROR:` in the run's output, exit 0. Clean. The operator's own
+confirmation at live smoke still stands as the ratifying observation (`PROC/R8`).
+
+**AC 10 — the board-growth observation (M4), NOT fixed.** Measured directly: the unit board grew
+from **21 records to 64** across the measured round (append-only, `4-3a/R9`), a 3x growth in the
+arrays every per-tick loop walks — and the frame-time trend over the same window is **flat**:
+first-quarter wall average 4.154 ms against last-quarter 4.166 ms, a +0.3% drift that is inside
+run-to-run noise. Board growth had NO measurable per-tick cost at this scale with totems firing.
+Whether that becomes a decision-log line at E4 close-out or its own Tier A story is the operator's
+call from this number (AC 10 reserves it), and the number says the pressure is low.
+
+**AC 11 — the bunched-minion flicker, cause NAMED not fixed, with the evidence for it.** The story
+offers two candidates, physics push jitter versus overlapping-mesh rendering. The evidence points
+at **overlapping-mesh rendering**, and against push jitter. Three live units were observed at
+`(1.4,-0.1)`, `(1.5,0.1)` and `(1.6,-0.0)` — within 0.1-0.2 m of each other, while the spawn
+placement's own clearance radius is 0.9 m, so the skinned bodies are deeply interpenetrating rather
+than merely adjacent. Their velocities at the same moment were pinned at **0.0**, not oscillating:
+`move_and_slide()` had zeroed them against the opposing wall of bodies. Push jitter would show as
+small non-zero velocities alternating in sign; a static deep overlap of two near-identical animated
+meshes is the classic depth-fight, and it matches the playtest note (flicker while ~4 minions walk
+INTO each other, i.e. exactly while they are interpenetrating and mutually blocked). Named as a
+candidate cause on this evidence — no fix, and no one-line presentation change was found that would
+have qualified as bycatch.
+
+**Bycatch / open findings, none blocking.**
+1. Four `.uid` files for scripts committed by earlier stories (`test/integration/
+   test_camera_smoothing_live.gd.uid`, `test_lock_marker_live.gd.uid`, `test_lock_on_live.gd.uid`,
+   `test/state/test_lock_on.gd.uid`) were generated by this pass's editor import run and are left
+   UNTRACKED and uncommitted — they belong to `4-6`/`4-6a`, not to this story, and committing them
+   here would smuggle unreviewed files into a 4-5 commit. Reported for the operator's chain.
+2. Four frames of 14483 exceeded 16.67 ms (max 25.42 ms), none of them at a spawn or death event
+   and none above 33.3 ms. Recorded as an observation, not a finding against the criterion, which
+   they do not breach.
+3. An earlier, lower-resolution iteration of the run recorded a single 269.75 ms frame. It did not
+   reproduce in the authoritative run (max 25.42 ms) and no `max_index` was captured for it, so it
+   is reported as an unexplained one-off rather than characterised.
+
+**Tier B held (the golden clause, `E4-P/R9`).** Full suite run EXACTLY twice (`PROC/R1`), before
+any file was touched and after the diff was complete:
+
+| | BEFORE (at `23cf3f6`, untouched tree) | AFTER (diff complete) |
+| --- | --- | --- |
+| golden hash | `aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f` | UNMOVED, same value |
+| snapshot key set | 28 keys (`EXPECTED_PLAYER_SNAPSHOT_KEYS`) | UNMOVED, 28 keys |
+| state harness | 566 tests, 0 failed, 4377 assertions | 566 tests, 0 failed, 4377 assertions |
+| integration | 46 files, all PASS | 46 files, all PASS |
+| result | ALL TESTS PASSED | ALL TESTS PASSED |
+
+Neither moved, so no escalation was triggered and Tier B stands. Expected: the whole diff is one
+comment block plus two files under `test/perf/` that nothing in `src/` references. Disclosed
+deviation: the BEFORE invocation was piped through `tail -60`, which cut the harness's own count
+line; the counts were recovered by re-running the STATE HARNESS ALONE at the same untouched tree
+before any edit — a partial run, not a third full-suite run, so `PROC/R1`'s budget of exactly two
+is intact.
+
+**Mutation proofs (provenance: MEASURED).** Targets restored from copies taken OUTSIDE the repo,
+never `git checkout --`.
+
+| # | guard | mutation | expected | observed | restore |
+| --- | --- | --- | --- | --- | --- |
+| M1 | `test/perf/flags_off_live.gd` non-vacuity | `data/feature_flags.tres`: `minions = true` -> `false`, `totems = true` -> `false` | the check must flip its own expectation and still hold: units required to reach a board with the layers ON, required NOT to with them OFF | ON: `casts=8 max_unit_records=8` -> PASS. OFF: `casts=8 max_unit_records=0` -> PASS. A check that ignored the flags would have failed one of the two. | copied back from `C:\dev\_45scratch\feature_flags.tres.orig`; SHA256 `05eba18a…4fb3` identical before and after |
+| M2 | the perf harness's own subject | (not a mutation — recorded here because it is the same class of proof) the harness ABORTS up front if `flags.minions` or `flags.totems` is off, so a run that measured an empty arena because the layers were closed cannot report a number | abort, not a number | not triggered in the authoritative run (both flags on) | n/a |
+
+`project.godot` byte-identity across the `.uid` import pass: SHA256 taken before and after the
+`godot --headless --editor --quit --path .` run, `sha256sum -c` reported `project.godot: OK`, so
+the editor touched nothing and no restore was needed.
+
+**Not claimed here.** The three live-smoke surfaces (`PROC/R8`) are the operator's own hand and are
+NOT asserted by this pass: the 20-unit setup confirmed by eye, the flags-off clean match, and the
+flicker reproduction/naming. The machine numbers above are the machine-checkable half only.
+
 ### File List
+
+- `test/perf/perf_20_units_live.gd` (new) — the 20-unit frame-time measurement harness.
+- `test/perf/perf_20_units_live.gd.uid` (new).
+- `test/perf/flags_off_live.gd` (new) — the AC 12 flags-off live check.
+- `test/perf/flags_off_live.gd.uid` (new).
+- `src/actors/minions/unit_actor.gd` (modified) — AC 8: the pooling header now states the measured
+  outcome. Comment only.
+- `docs/implementation-artifacts/4-5-pooling-60fps-exit.md` (modified) — this record; Status,
+  Tasks, Dev Agent Record, File List.
+- `docs/implementation-artifacts/sprint-status.yaml` (modified) — the skill's own board write and
+  the team override's correction of it (`PROC/R9`), plus this story's `story_notes` line.
+- `docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/decision-log.md` (modified) — forward
+  append of `4-5/R1`.
+
+NOT in this list, deliberately: the four stray `.uid` files named under Bycatch, which this pass
+generated but does not own.
