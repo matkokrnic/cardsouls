@@ -195,3 +195,146 @@
   entirely. OWNER: the next story that touches `src/ui/debug/debug_instrument_panel.gd`. Not urgent
   -- the machine check in `test_debug_instruments.gd` keeps the box provably clear of both HUDs and
   both StateInspectors at 1152x648, so this is ergonomics, not occlusion.
+
+## E4 review residue (recorded at E4 close-out, 2026-09-01)
+
+Forty-eight findings from the four out-of-repo E4 review files (`_44-review.md`, `_45-review.md`,
+`_46-review.md`, `_46a-review.md`) were previously recorded nowhere a future reader would look --
+as a block reference (`decision-log.md:7432`) or not at all. Recorded here by id, source, content,
+and disposition tag. Tags: **(a)** closed/accepted as-is, no further action; **(b)** playtest-block
+candidate (gameplay-visible); **(c)** candidate for E5-planning judgment (design/process/coverage);
+**(d)** low-severity, no owner needed. Two findings (M9, M4 below) got their own operator rulings
+instead of a bare tag and are recorded first.
+
+**4-4 M9 (`_44-review.md:444`) -- accelerators do not stack; the second identical totem silently
+does nothing.** Operator ruling `R-M9` (2026-09-01): accelerators STACK. Each accelerator totem
+contributes its own multiplier where it sits; two identical totems apply two multipliers,
+multiplicative. This changes shipped behaviour. Design ruling only; implementation touches the
+golden path, so it is Tier A -- slot assigned at E5 planning.
+
+**4-4 M4 (`_44-review.md:362`) -- the append-only projectile/unit board grows all match, never
+reclaimed.** Closed by measurement, log line only, no story: `4-5/R1`'s board-growth observation
+(21 -> 64 records) showed a frame-time trend of +0.3% early-vs-late, but `4-5/R2` withdrew that
+figure as run-dependent (a re-run measured +6.7%, and the quarters dilute per-tick drift roughly
+4x) -- the surviving claim is "no cost separable from run-to-run noise with this instrument"
+(`decision-log.md:7781-7783`). Re-measure trigger: unit population above 20, or matches materially
+longer than the 4-5 harness measured.
+
+### 4-4 (`_44-review.md`) -- 14 open
+
+| id | Source | Content | Disposition |
+|---|---|---|---|
+| M1 | `_44-review.md:308` | `push_contact` attacker-index invariant is now vacuous | (d) |
+| M2 | `_44-review.md:330` | `stamina_accelerator_regen_multiplier` defaults to 0.0, so an unauthored config inverts AC 21 | (c) |
+| M3 | `_44-review.md:347` | `_is_totem` means "has a non-default kind", not "is a totem" | (d) |
+| M4 | `_44-review.md:362` | Projectile board grows all match, never reclaimed | closed by measurement, see above |
+| M5 | `_44-review.md:381` | Live homing test cannot tell steering toward from steering away | (c) test-coverage |
+| M6 | `_44-review.md:398` | Reordering `unit_kinds` at an X3 reload silently re-points every live record | (c) |
+| M7 | `_44-review.md:416` | Zero or negative derived projectile speed makes a shot immortal | (c) |
+| M8 | `_44-review.md:432` | The budget's final tick is charged but never flown | (d) |
+| M9 | `_44-review.md:444` | Accelerators do not stack; the second silently does nothing | `R-M9`, see above |
+| L1 | `_44-review.md:461` | A no-target projectile homes on P2's hero | (d) |
+| L2 | `_44-review.md:492` | The projectile gather hard-fails on a missing `Hitbox` | (d) |
+| L3 | `_44-review.md:499` | The hits-to-kill authoring band now constrains kinds it was not written for | (d) |
+| L4 | `_44-review.md:508` | Projectiles resolve newest-first, ahead of their own hero, on an unproven rationale | (d) |
+| L5 | `_44-review.md:485` | `projectile_speed_at` is public and unguarded against a null `balance` | (d) |
+
+The leftover agent worktree noted at `_44-review.md:759` (`.claude/worktrees/agent-a9f2be623cd1e0ac0`)
+self-resolved: the path does not exist in the repo today.
+
+### 4-5 (`_45-review.md`) -- 9 open, all "reported, not fixed"
+
+| id | Content | Disposition |
+|---|---|---|
+| D1 | `flags_off_live.gd` collapses two independent flags into one boolean | (c) |
+| D2 | Counts cast STARTS before any input frame is driven | (c) |
+| D3 | Fixed frame list `CAST_STARTS`, no retry -- a missed start is silent | (c) |
+| D4 | Header justifies a real renderer but every condition it checks is headless-satisfiable | (d) |
+| D5 | Per-tick instrumentation (repeated `living_indices()` allocations) sits inside the measured window | (d) |
+| D6 | `_split_by_tick`'s `maxi(count, 1)` turns an empty population into a plausible 0.0 | (c) |
+| D7 | The first wall sample spans the build->measure transition; the first GPU samples likewise | (d) |
+| D8 | The corrected re-run showed 2 frames over 33.3 ms (max 48.6) where the authoritative run had 0 | (b) perf tail, gameplay-visible as the flicker/stutter class |
+| D9 | The decision-log entry's narrative register vs `E4-P/R9` (Tier B = rulings only) | (c) process |
+
+### 4-6 (`_46-review.md`) -- 16 open. No 4-6 close-out session exists in the decision log; none of
+these ids were previously recorded anywhere in the repo.
+
+| id | Content | Disposition |
+|---|---|---|
+| M1 | `_46-review.md:211` | The retarget tick still faces the PREVIOUS target | (b) |
+| M2 | `_46-review.md:227` | The flick edge is magnitude-only, so a rim sweep never re-fires | (b) |
+| M3 | `_46-review.md:236` | A malformed retarget address is logged and then acted on, and lands in a HASHED key | (c) |
+| M4 | `_46-review.md:262` | `UNHASHED_CROSS_TICK_MEMBERS` counts arguments a human maintains, not entries a machine finds | (d) |
+| M5 | `_46-review.md:276` | Keyboard slots can no longer face anything but the opposing hero | (b) |
+| L4 | `_46-review.md:301` | `best_candidate`'s tie-break uses exact float equality | (d) |
+| L5 | `_46-review.md:307` | Reconnecting a pad with R3 held fires a spurious relock | (b) |
+| L6 | `_46-review.md:314` | Flick candidates are unprojected against LAST tick's camera | (b) |
+| L7 | `_46-review.md:320` | A v6 record with a sparse or truncated `lock_pushes` channel replays wrong | (c) |
+| L8 | `_46-review.md:326` | A v6 intent dict missing `retarget_slot` / `retarget_index` crashes | (c) |
+| L9 | `_46-review.md:330` | `flick_threshold` is unvalidated authored data with a silent dead zone at 0.0 | (d) |
+| L10 | `_46-review.md:334` | R3 and flick edges are consumed and discarded under the 3-0b debug pause | (b) |
+| L11 | `_46-review.md:339` | The lock-on test's final assertion | (d) |
+| L12 | `_46-review.md:344` | The `is_position_behind` seat | (d) |
+| L13 | `_46-review.md:347` | `_gather_flick_candidates`'s loop bound | (d) |
+| L14 | `_46-review.md:353` | The rig yaw is written unguarded | (d) |
+
+(L1-L3 were fixed inside the review itself, `_46-review.md:289-301`, plus three further corrections
+landed as `c5bad2a` -- not open, not listed above.)
+
+### 4-6a (`_46a-review.md`) -- 9 open (about 9 of 14; five discharged: M1/L1/M5 by comment corrections
+`c831ef9`, L4/L5 by marker fixes `854c0d4`/`3a2ecc4`, ratified `4-6a/R2`)
+
+| id | Content | Disposition |
+|---|---|---|
+| M2 | `_46a-review.md:280` | Smoothing lengthens the AC 5 dead window after a click-relock onto an off-frame hero | (b) |
+| M3 | `_46a-review.md:297` | The AC 7 tie-break is close to unreachable in live play; near-ties are the real case | (b) |
+| M4 | `_46a-review.md:320` | Rig smoothing memory survives a DEBUG RESET | (a) adjudicated ACCEPTABLE |
+| L2 | `_46a-review.md:366` | `rotation.y` is left unwrapped by the eased branch | (d) |
+| L3 | `_46a-review.md:377` | `apply_config` writes the smoothing rate after dereferencing `_camera` | (d) |
+| L6 | `_46a-review.md:416` | `_count_markers` cannot see a third marker added as a SIBLING | (c) test-coverage |
+| L7 | `_46a-review.md:425` | The `>= 1.0` fast path is not discriminated by the test that covers it | (c) |
+| L8 | `_46a-review.md:434` | Two guards that no longer guard, and one unreachable mismapping | (d) |
+| L9 | `_46a-review.md:457` | Two stale doc lines outside this story's code (`sprint-status.yaml:2` header) | self-resolved -- the header text the review quotes has already been overwritten by later commits (4-5 close-out), and this close-out's board commit corrects it again |
+
+One further 4-6a deferral is already in the repo, not repeated here: `sprint-status.yaml:121` (the
+lock marker drifts slightly outside the minion silhouette during the walk gait), matching the
+operator's own 1.9. playtest note.
+
+## Named gaps without an owner (recorded at E4 close-out, 2026-09-01)
+
+- **Arena has no edge** -- hero and minion fly off past the floor rather than being stopped.
+  Recorded at `sprint-status.yaml:117` and `4-4-totems.md:135`; observed live, `docs/playtest-log.md`
+  28.8. **OWNER: candidate for its own story at E5 planning.** `4-3e` consciously left this open
+  (deleted the last requirement-shaped reference to an arena bound at its third gate, finding B3).
+- **Minions freeze in front of an obstacle** (`approach()`'s arrived-vs-blocked gap). Fullest record
+  above at "Deferred from: readiness gate of 4-3-minion-approach-and-collision" and its rewrite;
+  re-observed live `docs/playtest-log.md` 28.8. and 1.9. (point 4). **OWNER: the playtest block
+  after E5+E6** -- the operator's own placement on 1.9., superseding the unslotted "later story on
+  richer minion behaviour" language above.
+- **`standard` priority gives a dead arena at 10v10.** The authored `standard` priority is
+  `prefer_hero = false` with first-living-index ordering, so every minion on a side acquires the
+  opposing board's index 0; two walls meet in the middle and jam, nobody swings or dies, while each
+  Combat totem acquires the enemy hero at ~11.5 m, outside its authored 8 m firing range
+  (`4-5-pooling-60fps-exit.md:335-345`, independently confirmed by `_45-review.md:79-84`). A
+  content/design finding, not a harness bug. **OWNER: playtest block after E5+E6** -- a design
+  lever on authored minion priorities, judged once real play exists.
+- **AC 11 flicker cause stays UNNAMED** (`4-5/R2`/`4-5/R3`, `decision-log.md:7757-7793`; three
+  candidates recorded: physics push jitter, overlapping live meshes, the 600-tick collision-off
+  corpse). **OWNER: the playtest block**, the only one of the four gaps with an explicit prior
+  assignment (`4-5/R3`).
+
+## Playtest block after E5+E6 -- checklist
+
+Per operator ruling `R-SPELL` (2026-09-01, decision-log E4 close-out session), the melee retune +
+playtest block deferred on 2026-08-30 runs AFTER the E6 close-out story that gives spell resolution
+its own forcing point, so the playtest sees working spells rather than named no-ops. When that
+window opens, this checklist is the block's scope:
+
+- Every **(b)**-tagged finding above (4-5 D8; 4-6 M1, M2, M5, L5, L6, L10; 4-6a M2, M3).
+- **Arena has no edge** (named gap, above) -- unless E5 planning has already slotted it as its own
+  story by then.
+- **Minions freeze in front of an obstacle** (named gap, above).
+- **`standard` priority gives a dead arena at 10v10** (named gap, above).
+- **AC 11 flicker cause** (named gap, above).
+- The operator's own feel notes already recorded in `docs/playtest-log.md` -- read them there, not
+  copied here.
