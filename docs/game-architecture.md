@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.5'
+version: '1.6'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED', 'A7 (2026-09-01): E4 close-out amendment flush — pooling seam measured, not built. Six stale pooling references corrected to describe what shipped (TargetingService + PlayerState board + src/actors/minions|projectiles/ + data/minions/, all live) and that the object-pool seam was DISCHARGED BY MEASUREMENT, not code (4-5/R1): Project Context technical drivers, D9 decision-table row, Asset-loading line, D9 section, Directory Tree pool/ entry, Entity-creation pattern row']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -115,7 +115,8 @@ buildup → bluff → payoff over an always-on combat heartbeat.
 ### Technical Requirements
 - 60 FPS sustained with two viewports, many autonomous minions, totem targeting, VFX.
 - Combat determinism: timing-critical windows in `_physics_process`, fixed-delta, never `_process`.
-- Object pooling + throttled targeting for the minion/totem layer (seamed).
+- Throttled targeting for the minion/totem layer (seamed, E4, shipped). No object pooling: the E4
+  pooling obligation was discharged by measurement, not pooling code (`4-5/R1`).
 - Signal-driven HUD; no per-frame economy recompute; state pushes via typed signals.
 - All content/balance authored as `.tres`; zero hardcoded gameplay numbers.
 - **Information-model integrity under split-screen (E2 HUD, required capability, not a later
@@ -190,10 +191,11 @@ Netcode is excluded (#2) — no decision below is justified by "network-readines
 | D6 | Data-defined economy | `ResourceGenerationRule` + `CardCastCondition` Resources + pure evaluator | E0/E3 |
 | D7 | Legibility structure | Standalone `TelegraphProfile` Resource (any action, melee incl.) + `CombatCues` bus | E1/E2 |
 | D8 | Fizzle shared-deadline owner | Sole owner `PitchState` in MatchState (seam in E0–E3, machinery E6) | E6 |
-| D9 | E4–E6 seams | `TargetingService` + pool (E4); reserved `OrbPool` (E5); `PitchState` (E6) | E4–E6 |
+| D9 | E4–E6 seams | `TargetingService` + `PlayerState` board (E4, shipped, no pool — discharged by measurement, `4-5/R1`); reserved `OrbPool` (E5); `PitchState` (E6) | E4–E6 |
 
 **Quick confirmations:** Persistence = none (no meta-progression; only `FeatureFlags` + balance `.tres`).
-Networking = excluded. Asset loading = preload `.tres` at startup + scene-based + pooling (no streaming).
+Networking = excluded. Asset loading = preload `.tres` at startup + scene-based (no streaming, no pooling — the E4
+object-pool seam was discharged by measurement, not code, `4-5/R1`).
 UI = Godot `Control`, signal-driven, one HUD root per viewport. AI = a Controller implementation (E7),
 not a subsystem; bluffing AI deferred.
 
@@ -447,13 +449,21 @@ lands in E6. This honors #4 (one owner, no leakage into three classes) without b
 
 ---
 
-### D9 — E4–E6 Seams (named, no machinery)
+### D9 — E4–E6 Seams (E4 now shipped; E5–E6 named, no machinery)
 
-- **Minions/totems (E4):** a `TargetingService` interface (throttled shared-tick provider, story
-  4-2) + an object-pool seam (story 4-5). `PlayerState` will gain a `units`/board collection with
-  its first consumer, story 4-1 (E4-P/R2) — it carries no such reference today. Nothing is built
-  yet: `src/systems/pool/`, `src/actors/minions|totems|projectiles/`, and `data/minions/` are
-  empty PLANNED directories (`.gitkeep` only).
+- **Minions/totems (E4, shipped):** a `TargetingService` interface (throttled shared-tick provider,
+  story 4-2); `PlayerState`'s `units`/board collection (story 4-1); `src/actors/minions/`
+  (`unit_actor.gd`/`.tscn`, `unit_animation_controller.gd`, `totem_actor.tscn`),
+  `src/actors/projectiles/` (`projectile_actor.gd`/`.tscn`), and `data/minions/`
+  (`standard.tres`, `hero_seeker.tres`, `hero_preferring.tres`) all carry shipped content.
+  **No object-pool seam was built.** `src/systems/pool/` stays an empty directory with no
+  `.gitkeep` (`git ls-files src/systems/` returns nothing under it) — the E4 pooling obligation was
+  DISCHARGED BY MEASUREMENT WITHOUT POOLING CODE (`4-5/R1`, decision-log Session 2026-09-01: 20
+  concurrent units/totems across both players, sustained 4.14 ms average / 7.52 ms p95 against a
+  16.67 ms budget, worst event-adjacent frame 15.46 ms against a ~33 ms ceiling). Units and
+  projectiles remain plain `instantiate()` / `queue_free()` nodes in the hot path. This result
+  belongs to this content at this population on this machine — re-measure before treating it as
+  permanent (`4-5/R1`'s own caveat).
 - **RPS/orbs (E5):** `OrbPool` exists as a reserved, flag-off pool in `PlayerState`; resolution
   enters through the D2 command dispatch (steps 4–5). No RPS machinery now.
 - **Pitch (E6):** the `PitchState` owner from D8. Reserved, not built.
@@ -597,7 +607,7 @@ res://
 │   │   │                             #     contacts, seed, injections, reloads), tapped immediately
 │   │   │                             #     before advance(), inside the runner's ticking gate
 │   │   ├── log.gd (X2) · invariant.gd (X1: class Invariant, static func check)
-│   │   └── pool/                     # PLANNED (story 4-5) — empty seam dir, object_pool.gd not authored
+│   │   └── pool/                     # UNBUILT — E4 pooling discharged by measurement, not code (4-5/R1); empty seam dir, no object_pool.gd
 │   ├── controllers/  ⚠️              # D3: the ONLY path where Input.* may appear
 │   │   ├── controller.gd             # interface: sample() -> InputIntent
 │   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2) · null_controller.gd
@@ -947,7 +957,7 @@ tick and under headless test.
 | Concern | Rule |
 |---|---|
 | Communication | State→presentation via **signals** (drained post-`advance()`); the runner **injects** refs at match start; **no** service locator for state |
-| Entity creation | `PackedScene.instantiate()` + `ObjectPool` for hot spawns (E4 seam); never instantiate/`queue_free` per shot in a hot path |
+| Entity creation | `PackedScene.instantiate()` / `queue_free()` for hot spawns (minions/totems/projectiles, E4) — measured at 20 concurrent units well inside budget with no pool built (`4-5/R1`) |
 | Entity state | Pure enum + transitions **in the state layer**; never a scene `StateMachine` for gameplay state |
 | Data access | Content/config via autoload **services**; **state receives schema `Resource`s by injection, never reads a `*Service`** |
 | Invariants | `Invariant.check()` (X1), never bare `assert()` as the sole guard of a playtest-critical rule |
