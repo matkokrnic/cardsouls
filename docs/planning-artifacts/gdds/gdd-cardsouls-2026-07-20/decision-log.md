@@ -7794,3 +7794,127 @@ both discharged by this story; E4 close-out is next.
 
 Two retro notes: Tier B log entries drifted into narrative form (`E4-P/R9` calls for rulings only).
 The suite count line was lost to `tail` in two consecutive passes.
+
+---
+
+## Session 2026-09-01 -- E4 close-out
+
+E4 is complete: all fifteen boarded epic-4 stories are `done`; suite 566/4377/0, 46 integration, golden
+`aa3566d7...` (28-key snapshot set) unmoved. This session flushes the architecture-amendment queue,
+records the review residue from four out-of-repo review files, and discharges or re-forces every
+forcing point that named the E4 close-out.
+
+**Architecture-amendment queue confirmed at ZERO by content, not taken on trust.** Every
+"architect"-adjacent hit in this log after the A6 correction (`E4-P/R3`, Session 2026-08-07) was
+checked: all are citations of `game-architecture.md` line numbers inside story rulings, or the same
+A6 correction made and landed in-session. No entry after `E4-P/R3` uses the phrase "architecture
+amendment queue," and no running count is cited. **The queue itself is empty. The doc is not
+current anyway** -- E4 stopped queueing amendments after `E4-P/R3` established the "fix it
+in-session" pattern, and 4-1, 4-4 and 4-5 each falsified a clause of D9's pooling claim without ever
+re-opening a queue to catch it. Six stale locations corrected as ledger entry A7, `docs(architecture)`
+commit `989eeaa`, version 1.5 -> 1.6: Project Context technical drivers (`:118`), the D9
+decision-table row (`:193`), the Asset-loading line (`:196`), the D9 section itself (`:449-456`,
+rewritten to name what shipped -- `TargetingService`, the `PlayerState` board, `src/actors/minions/`,
+`src/actors/projectiles/`, `data/minions/`), the Directory Tree `pool/` entry (`:600`), and the
+Entity-creation pattern row (`:950`). `src/systems/pool/` is confirmed empty of everything -- no
+`.gitkeep`, not merely no `object_pool.gd`.
+
+`R-M9` (operator, 2026-09-01) ACCELERATORS STACK. Each accelerator totem contributes its own
+multiplier where it sits; two identical totems apply two multipliers, multiplicative (illustrative
+`x1.05 * x1.05`, not authored numbers). This changes shipped behaviour: today the second identical
+accelerator does nothing (4-4 review finding M9, `_44-review.md:444`, recorded in full in
+`deferred-work.md`). Design ruling only; implementation touches the golden path, so it is Tier A.
+Slot assigned at E5 planning.
+
+`R-SPELL` (operator, 2026-09-01) SPELL RESOLUTION STAYS A NAMED NO-OP THROUGH E5 AND E6. New forcing
+point: the E6 close-out, where spell resolution gets its own story -- and the melee-retune +
+playtest block already deferred to after E5+E6 (Session 2026-08-30) runs AFTER that story, so the
+playtest sees working spells rather than named no-ops. `E4-P/R10` ("spell resolution acquires an
+owner at the E4 close-out at the latest") is therefore RE-FORCED, not discharged, to the E6
+close-out. The 4-4 readiness gate's citation (`decision-log.md:7096-7100`) covers the projectile
+INFRASTRUCTURE `E4-P/R10` also names -- a projectile with its own attacker identity and dedupe,
+shared by totems, minions and future hero spell cards -- not card resolution itself, which is what
+`R-SPELL` re-forces.
+
+`E4-P/R12`'s proposed `4-4a` epic cut is SPENT. The operator rejected the cut on 2026-08-26 ("4-4
+ships in one piece": accelerators + combat totem + projectile together), and 4-4 shipped that way
+(`done` 2026-08-30, `35ed365`). This ruling was never recorded in the repo until now; it is recorded
+as spent. `E4-P/R12`'s remaining half -- `spell_*` cards on the shared projectile infrastructure --
+folds into `R-SPELL` above, since it names the same owner E4-P/R10 already did.
+
+**DEBT E splits into a minion half (discharged) and a hero half (new, assigned).** The minion half
+-- `4-3b/R27`'s "rig/model/animation work (DEBT E) ... NO OWNER AND NO SLOT" -- is discharged by
+`4-3c-minion-rig-adoption`, `done` at `09ee13a`, assigned early at the 2026-08-14 session ("4-3c
+readiness gate, fix pass," `4-3c/R1`) rather than at this close-out as `4-3b/R27` had deferred. Three
+strings in the repo still read "the rig story gets an owner and a slot at the E4 close-out" as if
+that assignment were still pending: `decision-log.md` (`4-3b/R27`, this file, ~line 6867),
+`4-3c-minion-rig-adoption.md:17`, and `sprint-status.yaml`'s `4-3b-minion-attack-rhythm` story note.
+None is rewritten -- decision-log entries are pure append, and story files keep their own historical
+record -- but all three are hereby marked SUPERSEDED BY CONTENT: the assignment they describe as
+future already happened, five days after `4-3b` closed and eleven days before this session.
+
+The hero half is NEW, named at this close-out (operator decision, 2026-09-01): the hero's own
+movement-animation gaps observed since `3-0b` -- no strafe/backpedal clips (only forward/idle/attack/
+roll/block/death), the movement-direction blend against facing that produces the "floating" read
+noted in the 4-6 live smoke, and hitboxes that do not follow bones -- get an owner and a slot as
+E5 story `5-0a`, on the `3-0a`/`3-0b`/`4-3c` rig-story precedent. No story file is authored here.
+
+**4-4 M4 (append-only projectile/unit board growth) is closed by measurement, log line only, no
+story.** `4-5/R1`'s board-growth observation (21 -> 64 records, a +0.3% early-vs-late frame-time
+trend) does not survive `4-5/R2`'s correction: a re-run measured +6.7%, and the quarters dilute
+per-tick drift roughly 4x, weakening the claim to "no cost separable from run-to-run noise with this
+instrument" (`:7781-7783`). Re-measure trigger: unit population above 20, or matches materially
+longer than the 4-5 harness measured.
+
+**The four gaps named without an owner across E4 all get one here**, recorded in full in
+`deferred-work.md`: arena has no edge -> candidate for its own story at E5 planning; minions freeze
+on an obstacle -> playtest block after E5+E6 (superseding the unslotted "later story on richer minion
+behaviour" language); `standard` priority gives a dead arena at 10v10 -> playtest block, a design
+lever on authored content; AC 11 flicker cause -> playtest block (`4-5/R3`'s own prior assignment,
+unchanged).
+
+**Review residue: 48 findings from four out-of-repo files, recorded in `deferred-work.md`.** 4-4
+(`_44-review.md`): 14 open, M1-M9/L1-L5, previously recorded only as a block reference
+(`:7432-7434`). 4-5 (`_45-review.md`): 9 open, D1-D9, previously recorded nowhere. 4-6
+(`_46-review.md`): 16 open, M1-M5/L4-L14, previously recorded nowhere -- see below, 4-6 has no
+close-out session at all. 4-6a (`_46a-review.md`): 9 of 14 still open (five discharged by
+`854c0d4`/`3a2ecc4`/`c831ef9`, ratified `4-6a/R2`), previously recorded nowhere. Disposition is the
+inventory's tag for each (a/b/c/d), except M9 (`R-M9` above) and M4 (above).
+
+**Two of E4's four largest stories closed with no close-out decision-log session at all.** `4-6`
+was promoted `done` and pushed at `eed4839`, with its sixteen open review findings recorded only in
+`C:\dev\_46-review.md`, outside the repo, until this pass. `4-4`'s last decision-log entry is its
+review fix pass (`:7374`); its live smoke and promotion (`35ed365`) are unrecorded there. Both are
+named here with their close-out commit hashes and their review files as a retro input -- not
+fabricated as retroactive sessions, per standing discipline.
+
+**Art assignments, recorded not authored.** Hero rig DEBT E (hero half, above) + strafe/backpedal
+clips -> `5-0a`. Totem and projectile models/VFX (currently grey-box) -> `5-0c`, a static mesh swap,
+not a precondition for anything else. Both are E5 stories authored at the E5 planning pass; this
+entry records the assignment only, no story files and no board keys are created here.
+
+### E4 exit criteria discharged
+
+| Criterion | Discharged where |
+|---|---|
+| Cards summon functioning minions | `4-1`, `4-3`/`4-3a`/`4-3b`; live smoke `docs/playtest-log.md` 10.8, 12.8 |
+| Cards summon functioning totems | `4-4`; live smoke 6/6, `docs/playtest-log.md` 30.8 |
+| **60 FPS holds with many units** | `4-5/R3` (`:7790-7793`): both E4 exit criteria discharged by this story. Evidence `4-5/R1` (`:7690-7700`), corrected by `4-5/R2` (`:7725-7783`) |
+| **Flags toggle cleanly** | `4-5/R3`, same line; AC 12 measured both directions |
+| Autonomous minion AI, data-defined priorities | `4-2`; `data/minions/{standard,hero_seeker,hero_preferring}.tres` |
+| Throttled targeting | `4-2`, `E4-P/R7` |
+| **Pooling** | `4-5/R1` -- DISCHARGED BY MEASUREMENT, no pooling code. This is the clause `game-architecture.md` had not caught up with; A7 (above) corrects it |
+| 3 totem subtypes | `4-4`; live smoke point 6, `docs/playtest-log.md` 30.8 |
+| Camera / lock-on (adopted into E4) | `4-6` plus `4-6a`, both `done` |
+
+The E4 retrospective follows via `gds-retrospective`, now that this close-out has discharged
+`E4-P/R11`'s standing prohibition on one before E4 closes. `docs/implementation-artifacts/
+epic-3-retro-2026-08-06.md` is available to it as `previous_retrospective`.
+
+### Close-out
+
+Four commits, docs only, none pushed: `docs(architecture)` (`989eeaa`, A7), `docs(deferred-work)`
+(`15fa409`, review residue + named gaps + playtest checklist), this entry plus one Change Log line
+each in `4-4-totems.md` and `4-3c-minion-rig-adoption.md` pointing at this session
+(`docs(decision-log)`), and `board:` (epic-4 `backlog` -> `done`, stale story notes corrected). No
+code changed, no golden or suite touched, no test run. Operator reviews the log and pushes.
