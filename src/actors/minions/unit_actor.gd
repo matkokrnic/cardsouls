@@ -29,8 +29,10 @@ extends CharacterBody3D
 ## (`test/perf/perf_20_units_live.gd`) and applied `4-5/R1`'s criterion to the result: at ~20
 ## concurrent units with combat totems firing and both split-screen viewports live, sustained frame
 ## time was 4.14 ms average and 7.52 ms p95 against a 16.67 ms budget, and the worst single frame at
-## a spawn or death event was 10.39 ms against a ~33 ms ceiling -- no frame in the whole measured
-## round exceeded 25.42 ms. PASS on both halves, with roughly 4x headroom, so AC 8 fired: no pooling
+## a spawn or death event was 15.46 ms against a ~33 ms ceiling (re-measured after the review's event
+## attribution fix, `4-5/R2`; the earlier 10.39 ms figure is VOID) -- no frame in the authoritative
+## measured round exceeded 25.42 ms (a review re-run saw 48.6 ms on a non-event tail frame). PASS on
+## both halves, with roughly 4x headroom, so AC 8 fired: no pooling
 ## ships, `src/systems/pool/` stays empty, and instantiate/`queue_free()` per unit is the MEASURED
 ## answer rather than the deferred one. Re-measure before treating that as permanent -- the number
 ## belongs to this content at this population on the recorded machine, not to the design.
