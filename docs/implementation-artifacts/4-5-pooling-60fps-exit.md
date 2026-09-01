@@ -20,30 +20,36 @@ evidence rather than by speculative machinery (`E4-P/R8`).
 
 **(a) Harness and measurement**
 
-1. A repeatable way exists to reach and hold 20 concurrent units on the board (minions + totems,
-   both players combined) in the live scene, with combat totems firing, without touching
-   `src/state/` and without adding a new state intake. If it cannot be built this way, HALT and
-   report rather than build one (tier-escalation call, operator's).
-2. Frame time is measured over a FULL ROUND, both split-screen viewports active, 20 units
-   present, combat totems firing: (i) sustained — average and p95 frame time; (ii) worst single
-   frame at each spawn and death event during the round.
+1. A repeatable way exists to reach 20 concurrent units and keep the count at ~20 by re-summoning
+   as units die (deaths are part of the measured spawn/death event stream) for the whole measured
+   round (minions + totems, both players combined), with combat totems firing, without touching
+   `src/state/` or adding a new state intake — HALT and report if it cannot be built this way
+   (tier-escalation call, operator's). A round ends on hero death; if 20 hostile units end rounds
+   too fast to measure, the heroes are kept clear of the fight (mechanism: OQ 1).
+2. Frame time is measured over a FULL ROUND, both split-screen viewports active, 20 units present,
+   combat totems firing: (i) sustained — average and p95 frame time; (ii) worst single frame at
+   each spawn and death event during the round. Must not be vsync-masked — with vsync on, wall
+   frame time quantizes to 16.67 / 33.3 ms and hides both headroom and p95; the run disables vsync
+   for the measurement or reads per-frame cost from the engine's process + physics time monitors.
 3. CPU, GPU, and resolution at measurement time are recorded in this story.
 4. The pass/fail line is exactly `4-5/R1`'s criterion below — no other number decides it.
 
 **(b) The `4-5/R1` criterion**
 
-5. PASS requires BOTH: sustained frame time <= 16.6 ms (average AND p95) across the full round,
-   AND no single frame at a spawn or death event exceeds ~33 ms. Either failing is a FAIL. This
-   supersedes the 16-unit figure in `4-3/R18` (by content: "required if the measured frame rate
-   drops below 60 fps at 16 concurrent units on the reference machine") — `4-5/R1` raises the
-   count to 20 and fixes composition (minions + totems, both players) and the two measurement
-   forms; the 16.6 ms / ~33 ms values restate `4-3/R18`'s "60 FPS" / hitch framing precisely.
+5. PASS requires BOTH: sustained frame time <= 16.67 ms (one 60 Hz frame, 1/60 s) (average AND
+   p95) across the full round, AND no single frame at a spawn or death event exceeds ~33 ms.
+   Either failing is a FAIL. `4-5/R1` (operator, 2026-09-01): 20 concurrent units (minions +
+   totems, both players); projectiles neither counted nor capped; no hard unit cap, economy-only —
+   supersedes `4-3/R18`'s 16-unit figure by content ("required if the measured frame rate drops
+   below 60 fps at 16 concurrent units on the reference machine"). The two measurement forms
+   (avg/p95; worst spawn/death frame, ~33 ms) are this story's PROPOSED criterion, ratified by
+   promotion to ready-for-dev — NOT `4-3/R18`, NOT themselves a ruling.
 6. Projectiles are neither counted toward the 20 nor capped — as many as the live totems produce
    during the round enter the measurement as a side effect, not a controlled variable.
 7. No hard unit cap exists or is added by this story; the economy (mana/stamina costs gating
-   summons) is the only limit on units reaching the board. `unit_board.gd`'s "NO PER-UNIT
-   MAXIMUM, deliberately" comment names the precedent: authored limits live in `BalanceConfig`,
-   not a count ceiling.
+   summons) is the only limit. Measured: `grep -n "max_units\|unit_cap\|MAX_UNITS"
+   src/state/unit_board.gd src/main/match_runner.gd` — no matches; no unit-count ceiling in either
+   file's spawn path.
 
 **(c) Disposition**
 
@@ -84,7 +90,7 @@ evidence rather than by speculative machinery (`E4-P/R8`).
 - A hard unit cap of any kind (AC 7); capping or counting projectiles (AC 6).
 - Fixing the bunched-minion flicker (AC 11) or the append-only projectile board (AC 10) — both
   named findings, not fixes; AC 10's disposition is the operator's.
-- Throttled-targeting retuning — `TargetingService`'s cadence is `E4-P/R7`'s settled ground.
+- Throttled-targeting retuning — the retarget cadence is `4-2/R5`'s settled ground.
 - Any change to `4-4-totems`, `4-3`-series minion behavior, or `4-6`/`4-6a` camera/lock-on — this
   story observes their combined runtime cost, it does not modify them.
 
@@ -118,9 +124,8 @@ evidence rather than by speculative machinery (`E4-P/R8`).
   the closest "geometry, not appearance" precedent (`PROC/R8`) but measures rects, not timing —
   new machinery, likely `Performance`/`Engine.get_frames_per_second()` read from a debug/tooling
   seat outside `src/state/` (D3(b)/A2 already forbids `Engine` reads there).
-- **`unit_board.gd`'s "NO PER-UNIT MAXIMUM, deliberately" comment** is the existing precedent
-  AC 7's no-hard-cap rule generalizes from (it names an HP field, not a count, but the
-  authored-limits-not-ceilings stance carries over).
+- **No unit-count ceiling exists**, measured: `grep -n "max_units\|unit_cap\|MAX_UNITS"
+  src/state/unit_board.gd src/main/match_runner.gd` finds no matches — the fact AC 7 states.
 
 ### Project Structure Notes
 
@@ -202,9 +207,7 @@ through. Scaling down is the operator's call.
   comment AC 8/AC 9 correct.
 - [Source: src/main/match_runner.gd] — `UNIT_SCENE`/`TOTEM_SCENE` preloads, `_physics_process`
   (F1), the summon batch-size/spawn-position machinery (`_compute_spawn_positions`) this story
-  reuses to reach 20 units.
-- [Source: src/state/unit_board.gd] — "NO PER-UNIT MAXIMUM, deliberately" comment, the existing
-  precedent AC 7's no-hard-cap rule generalizes from.
+  reuses to reach 20 units; grepped with `unit_board.gd` for a unit-count ceiling (AC 7), none found.
 - [Source: src/ui/debug/debug_instrument_panel.gd] — the Callable-handoff, runner-reaching control
   pattern (`save_record`, `reload_balance`, `reveal_opponent_hand`) a new trigger would follow.
 - [Source: data/feature_flags.tres] — shipped defaults (`minions = true`, `totems = true`) the AC
@@ -218,12 +221,14 @@ through. Scaling down is the operator's call.
 
 ## Open Questions
 
-1. **Measurement-harness mechanism.** DebugInstrumentPanel trigger, live balance reload to cheapen
-   summon costs, or a `test/`-tools scene — dev-pass call, constrained by AC 1 (no `src/state/`
-   touch, no new state intake; halt and report if none work).
+1. **Measurement-harness mechanism**, and how heroes stay clear if rounds end too fast (AC 1).
+   DebugInstrumentPanel trigger, live balance reload to cheapen summon costs, or a `test/`-tools
+   scene — dev-pass call, constrained by AC 1 (no `src/state/` touch, no new state intake; halt
+   and report if none work).
 2. **Frame-time read source.** `Performance` vs. `Engine.get_frames_per_second()` vs. manual delta
    accumulation, and which node/script owns the read — D3(b)/A2 fixes WHERE it cannot live, not
-   the mechanism.
+   the mechanism (vsync-off vs. reading the engine's time monitors instead is this OQ's call; AC 2
+   fixes only that the number must be unmasked).
 3. **If AC 9 fires, which node class(es) get pooled** and whether one helper serves both units and
    projectiles — depends on which sub-condition failed and what the measurement traces the hitch
    to; not decidable before the numbers exist.
