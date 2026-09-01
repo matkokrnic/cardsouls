@@ -88,7 +88,7 @@ development_status:
   4-3d-minion-strike-alignment-and-corpse-lifecycle: done  # Tier A (cut from 4-3c at its readiness gate, 4-3c/R2; depends on 4-3c)
   4-3e-summon-spawn-placement: done  # Tier A (ran before 4-4)
   4-4-totems: done                    # Tier A (golden clause, not build weight — E4-P/R9)
-  4-5-pooling-60fps-exit: ready-for-dev        # Tier B (assigned at 4-1 close-out, E4-P/R8)
+  4-5-pooling-60fps-exit: done        # Tier B (assigned at 4-1 close-out, E4-P/R8)
   4-6-camera-lock-on: done        # Tier A (adopted 2026-08-30 via gds-correct-course, DP/R1 + E4-P/R11; board-ordered before 4-5-pooling per operator, numbering historical)
   4-6a-camera-feel: done        # presentation-focused follow-up from the 4-6 live smoke (operator-ruled 2026-08-31); board-ordered before 4-5-pooling per operator; tier expected B by the golden clause, fixed at its gate
 
