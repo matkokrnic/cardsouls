@@ -89,7 +89,9 @@ static func adjacent_candidate(anchor: Vector2, flick: Vector2,
 	var best := -1
 	var best_gap := 0.0
 	for i: int in candidate_screens.size():
-		# Signed distance ALONG the flick: positive means "further in the direction I flicked".
+		# Signed distance along screen X ONLY (review L1: `flick.y` is discarded once the axis
+		# test above passes -- this is not a projection along the flick vector). Positive means
+		# "further in the direction I flicked".
 		var gap := (candidate_screens[i].x - anchor.x) * direction
 		if gap <= 0.0:
 			continue  # behind the anchor, or exactly on its screen X -- not "that way"

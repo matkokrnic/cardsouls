@@ -35,6 +35,11 @@ const CONFIG_PATH := "res://data/camera_config.tres"
 ## Story 4-6a (AC 10): the authored yaw-chase rate, read once in apply_config. 1.0 -- the shipped
 ## 4-6 snap -- is the initializer deliberately, so a missing or unreadable .tres degrades to the
 ## previous behaviour rather than to a camera that cannot turn (see CameraConfig.lock_yaw_smoothing).
+##
+## Review M5 warning: never author 0.0. An authored 0.0 freezes BOTH the camera yaw AND the
+## camera-relative movement basis at whatever the first heading was, for the whole match --
+## because the same pushed basis this yaw writes is what movement reads. 1.0 is the 4-6 instant
+## snap; shipped default is 0.25 (`data/camera_config.tres`).
 var _lock_yaw_smoothing := 1.0
 
 ## Story 4-6a (AC 10): has this rig ever been given a heading? The FIRST one snaps and every later

@@ -1919,10 +1919,14 @@ func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
 
 
 ## Story 4-6a (AC 4/AC 13/AC 14): where this slot's CURRENT locked target sits in this slot's own
-## viewport, or null when it is nowhere visible there. ONE computation, two consumers -- the flick's
-## cycling ANCHOR (AC 4) and the on-screen MARKER (AC 13) ask the identical question, and the 4-6
-## step-1c header states the house rule for exactly this shape: deriving it twice would be two
-## answers to one question.
+## viewport, or null when it is nowhere visible there. ONE FUNCTION, TWO CALL SITES -- the flick's
+## cycling ANCHOR (AC 4, read at step 1 before step 4b updates this slot's view camera) and the
+## on-screen MARKER (AC 13, read at step 4d after 4b) ask the same question against two different
+## camera states, up to one tick of yaw apart while the rig is mid-swing (review M1; the "one
+## computation, shared and reused same-tick" doctrine is the 4-6 step-1c one, not this one). Each
+## call site is internally consistent -- the anchor and every flick candidate it is compared
+## against always share the SAME camera read -- so the offset does not corrupt a pick, it only
+## means the marker and the pick can be briefly out of sync during a swing.
 ##
 ## THE ADDRESS COMES FROM STATE, THE POSITION IS COMPUTED HERE, and no position ever travels inward
 ## (`4-2/R14`, the `_aim_unit_actors` rule verbatim). Reads `PlayerState.lock_target_*` fresh on
@@ -1937,6 +1941,14 @@ func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
 ## flick's cycling ANCHOR inherits the same lift -- harmless there because
 ## `LockOnResolver.adjacent_candidate` (`lock_on_resolver.gd:80`) compares screen X only and never
 ## reads Y.
+##
+## ACCEPTED ASYMMETRY (review M3): the anchor above is projected from the LIFTED mark position,
+## while `_gather_flick_candidates` projects every other candidate from the actor ROOT
+## (`_target_world_position`, unlifted). This can put a fraction of a screen-X pixel between where
+## the anchor "really" sits and where an unlifted candidate at the same world position would sit --
+## irrelevant to any ordinary gap, but it is one more source of the sub-pixel noise M3 names as the
+## real cause of unpredictable cycling on a bunched board. Accepted, not a bug: fixing it means
+## lifting every candidate too, which is a wider surface change this story does not need.
 func _lock_target_screen_position(slot: int, view_cam: Camera3D) -> Variant:
 	if not is_instance_valid(view_cam):
 		return null
