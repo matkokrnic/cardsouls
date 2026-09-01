@@ -7918,3 +7918,208 @@ Four commits, docs only, none pushed: `docs(architecture)` (`989eeaa`, A7), `doc
 each in `4-4-totems.md` and `4-3c-minion-rig-adoption.md` pointing at this session
 (`docs(decision-log)`), and `board:` (epic-4 `backlog` -> `done`, stale story notes corrected). No
 code changed, no golden or suite touched, no test run. Operator reviews the log and pushes.
+
+---
+
+## Session 2026-09-01 -- E4 retrospective
+
+The second retrospective held in this project, and the first to follow a close-out that discharged
+its own prohibition (`E4-P/R11`). The retrospective itself is
+`docs/implementation-artifacts/epic-4-retro-2026-09-01.md` (commit `docs(retro): epic 4
+retrospective`); this entry records only what it RULED, per the standing separation between an
+analysis artifact and the decisions it produces. `sprint-status.yaml` is deliberately NOT touched --
+it carries no `epic-N-retrospective` key and its header locks the lifecycle to
+`backlog -> ready-for-dev -> done`, so `gds-retrospective` step 11 is skipped on the E3 precedent.
+Report delivered REPORT-ONLY; the operator ratified every proposal with two inputs, both folded into
+the rulings below: the Tier B budget stays ~1 h for `4-B1`-sized work (NOT raised to the ~3 h two
+stories helped themselves to), and the gate-round cap is adopted.
+
+**THE STANDING META-RULE, recorded because it is the yardstick every process rule in this project is
+now judged against (operator, 2026-09-01): a rule whose enforcement costs the operator more time --
+in trivia, in formality -- than the failure it prevents is REJECTED.** It killed two candidates this
+session (a per-story "is this architecture line still true" check, and a `story_note` length cap) and
+it is why the two rules that survived cost one grep each. Cite it when proposing process.
+
+`E4-R/R1` (decided by Matko) THE THREE E3 OPEN DECISIONS GET OWNERS, AND RE-FENCING WITHOUT ONE
+STOPS. **Open decision (a), attacker consequence on basic-attack deflect: forcing point is the E5
+PLANNING PASS.** `E4-P/R11` re-fenced it out of E4 (`:5779`) and nothing in the E4 range touched it
+-- `STUNNED` still has zero inbound edges, `stun_seconds` is still data-only and still exempted in
+`test_balance_authoring.gd`. **Open decisions (b), the reshuffle vulnerable window's mechanical cost,
+and (e), whether hand size ever varies: BOTH go to the playtest-block checklist in
+`deferred-work.md` as QUESTIONS TO ANSWER WITH A PAD IN HAND, owner the operator at playtest.** They
+are not defects and are not implementation work; both are feel calls that cannot be judged headless,
+the same reason `E3-R/R3` gave for the melee retune. (e) additionally got MORE expensive to change
+during E4 -- `4-0/R1` bound the `hand_size` snapshot key to occupancy and its N2 finding records
+`3-6/R8`'s `<= 4` audit bound becoming more load-bearing (`:5478-5479`) -- so the question is now
+also a cost question. **RULE: no open decision is re-fenced again without an owner or a venue that
+actually convenes.** Evidence for the rule rather than the disposition: (b) has now skipped two
+epics exactly as decision (c) did, and (c) is the case `E3-R/R1` closed by pointing at code that had
+already answered it. Decision (f) is the counter-example and shows what a good fence looks like --
+`E4-P/R11` named a MECHANISM for adoption ("that is a `gds-correct-course`, not silent adoption",
+`:5782-5784`) and the mechanism fired on 2026-08-30.
+
+`E4-R/R2` (decided by Matko) `PROC/R2` AMENDED, `PROC/R6` RETIRED. **The layer-completion line
+becomes a MANDATORY GREPPABLE LINE in the story's review section, on the fixed prefix
+`LAYER-COMPLETION:`, naming each declared layer with its terminal state. A review report that does
+not carry it is REJECTED in the browser and re-run.** This REPLACES `PROC/R2`'s "a review missing
+that line COUNTS AS A STALL" definition, which eleven of fifteen E4 reviews falsified without a
+single one being treated as a stall: the line is present in `4-0`, `4-B1`, `4-1` and `4-2` only, and
+absent from `4-3`, `4-3a`, `4-3b`, `4-3c`, `4-3c1`, `4-3d`, `4-3e`, `4-4`, `4-5`, `4-6` and `4-6a`.
+`4-3:321` uses the word "layers" for PASSES ("dev pass, code review, this fix pass"), and
+`4-3e:426` records THREE layers including the Acceptance Auditor -- the layer `PROC/R2` deleted.
+A definition that classifies eleven stories as stalls while nothing acts on it is not a rule; a fixed
+prefix an operator can grep before accepting the report is. **`PROC/R6`'s stall counter is RETIRED,
+not reset.** Two reasons, both by content: it counted hangs of parallel layers `PROC/R2` had already
+removed from the chain, so the mechanism it measured no longer exists (the same
+guard-mechanism-over-guard-pattern move `PROC/R6` itself made, `3-0d/R20`); and it lived in chat
+rather than in the repo, so it simply stopped -- no `PROC/R6` mention exists anywhere after `:6510`,
+nine stories back. **Tier B suspension is judged at retrospectives, on `PROC/R7` measurements**,
+not by a running counter nobody maintains.
+
+`E4-R/R3` (decided by Matko) `PROC/R7` GETS AN INSTRUMENT AND LOSES SELF-STATED BUDGETS. **The
+instrument is the TIMESTAMPS OF THE SUITE-OUTPUT FILES** -- the before-baseline run and the final
+run, both written outside the repo since 2026-09-01 -- **recorded in the story's close-out log entry
+as start / end / delta.** No stopwatch, no estimate: two files that already exist, subtracted. This
+discharges `PROC/R7`'s never-honoured clause "sessions note their start time and compare against the
+budget at full-suite boundaries" (`:5929-5932`), which produced exactly ONE number in all of E4
+(`4-B1`'s ~113 min at `:5933`) and that one predates the rule. **The budget is set by the OPERATOR at
+the scope conversation. A story NEVER states its own budget.** `4-6a`'s and `4-5`'s self-stated ~3 h
+(`4-6a:165-172`, `4-5:185-192`) are VOID -- a story setting its own budget at three times the
+baseline and then recording no actual is an unfalsifiable budget. Default remains ~1 h for
+`4-B1`-sized work (two ACs, one presentation surface, no `src/state/`), confirmed by the operator
+2026-09-01 and deliberately not raised. **Operator-given figures for `4-5`, recorded now and marked
+as operator-given because they appear in no repo file: ~34 min dev; the review went OVER the ~1 h
+budget and was reported honestly.** The honest report is the tripwire behaving correctly and is
+recorded as the first evidence that it works.
+
+`E4-R/R4` (decided by Matko) GATE-ROUND CAP. **After a story's SECOND readiness gate returning NOT
+READY, the third round is a SCOPE CONVERSATION in the browser -- operator and Claude -- not another
+gate-and-fix round.** Evidence, all measured: the `4-3` family shipped SEVEN stories from one planned
+slot (`E4-P/R1` planned one), 481.4 KB of artifact, 57% of the epic's total; `4-3d` took six gate
+rounds (sessions `:7017`, `:7160`, `:7222`, `:7260` plus its first, 191 log lines, every one
+docs-only) and `4-3e` five, and at least four of those rounds existed ONLY to delete specification an
+earlier round had added. `4-3e`'s fifth gate says it outright: "THIS PASS REMOVED SPECIFICATION
+RATHER THAN ADDING IT ... three of the fifth gate's four blocking findings existed only because AC 4
+had been inflated into a full specification of cluster mechanics for N>1 -- mechanics the story
+itself measures as UNREACHABLE THROUGH PLAY" (`4-3e:955`). `4-3d` ran the same shape on one
+requirement: `R14` authored a REOPEN CONDITION, `R19` found its arithmetic inverted, `R20` found the
+replacement's upper bound "invented, not derived; REMOVED". A third gate round is evidence the
+STORY's scope is wrong, not that its text is; the cheapest correction is a person, not another pass.
+**COROLLARY, and it is the actual defect the cap treats: the create pass writes BEHAVIOUR and
+ACCEPTANCE, not MECHANISM -- except where a ruling already put the mechanism in.** Specification
+inflation is `3-0d/R20`'s guard-pattern widening one layer up, in the story spec instead of the code.
+
+`E4-R/R5` (decided by Matko) THE REPORT-ONLY-THEN-RATIFY SHAPE IS THE STANDING SHAPE for planning
+passes and close-out passes: report-only inventory -> browser rulings -> docs pass. Two for two in
+E4. **E4 planning:** its pre-write re-verification caught the D9 sentence describing `PlayerState` as
+already reserving a `units` collection when `player_state.gd` carried zero such tokens
+(`:5658-5674`), corrected in-session as A6; ratification then produced two operator AMENDMENTS to
+`E4-P/R9` that a single-pass author would not have written. **E4 close-out:** its inventory INVERTED
+the commissioning premise -- there was no amendment queue to flush, the real work being six stale
+pooling claims nobody had queued -- and surfaced 48 review findings recorded nowhere in the repo plus
+`epic-4: backlog` while all fifteen children were `done`. **Against single-pass:** the E3 close-out
+flushed its queue correctly and dropped two riders on the same forcing point (`stories-manual-e3.md`'s
+hygiene items and the twice-parked Change Log author-column question), both of which the E3
+retrospective had to discharge a day later. Residual cost accepted and named: the report artifact
+lives outside the repo, where no future reader can reach it.
+
+`E4-R/R6` (decided by Matko) SUBAGENTS: THE 2026-09-01 READ-ONLY RULE STANDS, AND NOTHING IS ADDED TO
+IT. It is cheap and it forecloses a class this project has not yet suffered -- a subagent committing,
+pushing, or editing a story file mid-review. Recorded honestly: **it covers none of the six incidents
+E4 actually had.** Layer stalls (`4-0` `:5625-5628`, `4-B1` `:5856`, `4-1` `:6076-6079`) are
+indifferent to write permission; a review layer reading `git diff HEAD` and never seeing new files
+(`4-3b/R28`, `:6869`) gets WORSE under read-only, since the layer cannot stage anything to bring
+untracked files into view; a session losing its transcript to compaction and reporting a HEAD
+mismatch (`:6512-6514`, the sixth incident, filed as retro carry-forward rather than as a subagent
+event) is a main-session failure mode entirely. What catches the remaining class -- an agent
+reporting a false claim about its own work, from the unevidenced full-suite re-run (`:5875`) to
+`4-5`'s four withdrawn numbers (`:7737-7755`) -- is `PROC/R2`'s Dev Agent Record evidence audit,
+which is exactly why `E4-R/R2` makes its layer-completion line an acceptance criterion instead of a
+convention. No further subagent rule.
+
+`E4-R/R7` (decided by Matko) `4-3e` HAS NO DECISION-LOG SESSION, AND THE RULE THAT EXPOSES. Measured:
+the string `4-3e` appears ONCE in this log, at `:7487`, as an incidental citation about board
+ordering -- while the story is the largest artifact in the epic (100.7 KB), took five readiness-gate
+fix passes, and carries owner rulings that exist only as story-file prose with no ids. **NO
+RETROACTIVE SESSION IS FABRICATED**, per standing discipline. Instead a dated INDEX below assigns ids
+`4-3e/R1`..`4-3e/R15` to the rulings found BY CONTENT in
+`docs/implementation-artifacts/4-3e-summon-spawn-placement.md`, each with its story-file line and its
+original date. **The index makes ZERO new decisions**; every entry is a pointer to text that was
+written and ratified on 2026-08-27. **RULE: board promotion of a story to `done` requires a
+decision-log close-out session naming that story, and the promotion prompt GREPS for it before
+flipping the status.** Would have caught three E4 stories: `4-3e` (no session at all), `4-6`
+(promoted `done` and pushed at `eed4839` with sixteen open review findings living only in an
+out-of-repo review file), and `4-4` (last entry its review fix pass `:7374`; live smoke and promotion
+`35ed365` unrecorded). It also closes the review-residue leak by construction -- a story can no
+longer close without a session in which to record its findings.
+
+`E4-R/R8` (recorded, not ruled) WHAT E5 INHERITS, AS FACTS ABOUT THE PLAN AND NOT AS A RULING ON IT
+-- the `E3-R/R5` template. Recorded at all because parts of it exist nowhere in the repo.
+1. **E5 opens with THREE Tier B presentation stories, authored at the E5 planning pass** (operator
+   decision, 2026-09-01). **`5-0a` hero locomotion**: strafe/backpedal clips, the movement-direction
+   blend against facing that produces the "floating" read noted at the `4-6` live smoke, and the hero
+   half of DEBT E (hitboxes that do not follow bones) -- already named at the E4 close-out
+   (`:7856-7860`). **`5-0b` pad card input**, on the L3 scheme from `3-5a` Dev Notes: L3 HELD = cast
+   mode; L1 / L2 / R1 / R2 = the four cards; A / B / X / Y = modes and confirm; RELEASING L3 exits.
+   Basic mode ships immediately; modes 2 and 3 get their button with their own E5 story, mode 4 with
+   E6. **MINUS R3, which `4-6` consumed for lock-on retarget and KEEPS** -- `3-5a:110` reasoned
+   explicitly that "the right stick click and the face buttons need the same thumb," and E5 planning
+   reconciles that sentence with what `4-6` shipped. `5-0b` exists nowhere in the repo before this
+   entry. **`5-0c` totem and projectile models**, a static mesh swap, a precondition for nothing
+   (`:7891-7893`). **`5-0a` and `5-0b` must be done before the playtest block.**
+2. `R-SPELL` (E4 close-out, `:7829-7843`): spell resolution stays a named no-op through E5 and E6,
+   forcing point the E6 close-out, with the playtest block AFTER it. Consequence for E5 planning: no
+   E5 story may assume spell cards resolve -- three of nine fixture cards carry `spell_*` ids.
+3. `R-M9` (E4 close-out, `:7822-7827`): accelerators STACK, multiplicatively, per totem. Changes
+   shipped behaviour, touches the golden path, Tier A, SLOT ASSIGNED AT E5 PLANNING -- still unslotted.
+4. **Arena edge: candidate for its own story at E5 planning.** `4-3e` consciously left it open in two
+   steps -- its second gate took the bound out of AC 2 entirely and named the gap as a NON-GOAL with
+   no owner (`4-3e/R6` below), and its third gate deleted the last requirement-shaped reference to a
+   bound anywhere in the story (finding B3, Live Smoke point 4). "Candidate" is still the strongest
+   language in the repo.
+5. The playtest-block checklist in `deferred-work.md`, now carrying open decisions (b) and (e) as
+   questions per `E4-R/R1`; and the thirteen (c)-tagged findings awaiting E5-planning judgment, of
+   which `4-6` M3 (a malformed retarget address is logged and then ACTED ON, landing in a hashed key)
+   and `4-6` L7/L8 (v6 record robustness, where `4-1/R1`'s hard-rejection doctrine is the home) are
+   the determinism-adjacent ones and should be read first.
+6. Open decision (a) is the E5 planning pass's, per `E4-R/R1`. S5's audio half remains unhomed; S6
+   has forcing point E5.
+No ruling is taken on E5's plan here. A retrospective records what the next planning pass must not
+discover late; it does not do that pass's job.
+
+### `4-3e` ruling index (`E4-R/R7`) -- pointers only, zero new decisions
+
+Every entry below was written and ratified on **2026-08-27**, in
+`docs/implementation-artifacts/4-3e-summon-spawn-placement.md`. Line numbers are that file's, at
+`41f4665`. Gate attribution is the story's own wording. Nothing here is decided by this session.
+
+| id | Story line | Gate | Ruling, by content |
+|---|---|---|---|
+| `4-3e/R1` | `:20-23` | first | Placement is HERO-RELATIVE: a summoned unit appears behind the summoning hero, on the side away from the opponent, at the hero's position AT CAST TIME -- not at a fixed scene coordinate authored in `main.tscn`. |
+| `4-3e/R2` | `:45-48` | first | No fixed candidate budget and no "use the last one anyway" early exit; the outward walk continues and the FIRST FREE CANDIDATE WINS. The bounded-set shape was upstream error, not an owner ruling, and is dropped. |
+| `4-3e/R3` | `:83-84` | first | NO MINIMUM DISTANCE FROM THE OPPONENT. A player may run up to the opponent and summon there deliberately; the story adds no proximity restriction of any kind. |
+| `4-3e/R4` | `:100-102` | first | Batch members land NEAR ONE ANOTHER, reading as one group rather than a scatter distributed around the hero. |
+| `4-3e/R5` | `:129-131` | first | A fresh unit keeps whatever heading it spawns with; no change to `_aim_unit_actors` or any facing computation. |
+| `4-3e/R6` | Change Log `:958` | second | THE ARENA BOUND IS OUT OF AC 2 ENTIRELY -- it was the wrong termination device and was upstream error. AC 2 rewritten as an unbounded outward walk terminating on the finiteness of live units. NEW NAMED NON-GOAL: keeping anything inside the arena, hero included, recorded as a PRE-EXISTING GAP WITH NO OWNER. This is the origin of the arena-edge gap now carried in `deferred-work.md`. |
+| `4-3e/R7` | Change Log `:958` | second | Extracting the placement helper is MANDATORY, not the dev agent's choice: a private, directly-callable `MatchRunner` helper that returns positions, reads no scene tree and holds no node reference. |
+| `4-3e/R8` | `:50-51` | third | Termination is by FINITENESS PLUS AN UNBOUNDED RADIUS, and the second half is a REQUIREMENT ON THE SEARCH, not a consequence of the first -- a sequence that densifies inside a bounded region is FORBIDDEN. An acceptance criterion, not latitude. |
+| `4-3e/R9` | `:86` | third | BOTH HEROES COUNT AS OCCUPANTS for the search, alongside the live unit actors of both slots -- because AC 3 blesses summoning while standing on the opponent, which is exactly when "behind me" lands inside a body. |
+| `4-3e/R10` | `:173-174` | third | "GROUND-DERIVED" means the ground-level CONSTANT the runner already uses -- the literal `0.0` at `match_runner.gd:656` -- NOT a raycast and NOT any physics query, which would put a physics read inside a helper required to be pure. |
+| `4-3e/R11` | `:25-26` | fourth | "BEHIND" WINS OVER PROXIMITY, and the property holds of the ACCEPTED CANDIDATE, not merely of the base spot: a ring is a rear ARC, and a crowded rear pushes the unit FURTHER BEHIND, never in front. |
+| `4-3e/R12` | `:56-57` | fourth | THE RADIUS RULE IS PER RING, NOT PER CANDIDATE -- the third gate's per-candidate wording forbade the very ring the story elsewhere mandates. |
+| `4-3e/R13` | `:104` | fourth | EVERY CLUSTER MEMBER IS CLEARED, NOT JUST THE FIRST: members are placed one at a time, each clearing every occupant in the caller's list AND every member of the same batch already placed in that call. |
+| `4-3e/R14` | `:35-37` | fifth | THE DEGENERATE DIRECTION HAS A DEFINED ANSWER, AND IT IS A REQUIREMENT, NOT LATITUDE: when the hero-to-opponent direction is too short to be reliable, the rear arc's axis is the SLOT'S FIXED AWAY-FROM-CENTRE AXIS (P1 toward -x, P2 toward +x), for the arc and not merely for the base spot. |
+| `4-3e/R15` | `:120-123`, Change Log `:955` | fifth | DO NOT SPECIFY, GUARD OR GATE BEHAVIOUR NOTHING CAN EXECUTE. AC 4 collapses to its two surviving claims; the named minimum/maximum in-batch separation bounds and the MANDATORY SYNTHETIC N=3 TEST are DELETED, and correctness for N>1 is carried by REVIEW with the story saying so rather than pretending otherwise. |
+
+### Close-out
+
+Docs-only pass, four commits, none pushed: `docs(retro)` (the retrospective artifact only,
+`0b1ef07`), this entry (`docs(decision-log)`, a PURE APPEND -- no existing entry edited),
+`docs(config)` (the operative half of `E4-R/R2`/`R3`/`R4`/`R7` appended to `project-context.md`'s
+Testing Rules per `PROC/R5`, `rule_count` bumped), and `docs(deferred-work)` (open decisions (b) and
+(e) added to the playtest-block checklist per `E4-R/R1`; the (d) tag legend corrected to read "open,
+no owner"). `sprint-status.yaml` is NOT touched -- no retrospective key exists and `last_updated` is
+already current. `CLAUDE.md` is NOT touched -- its Story tiers section is a pointer to `E4-P/R9` and
+no tier policy changed here. No story Change Logs touched. No code changed, no golden or suite
+touched, nothing ran. `E4-R/R1`, `R5`, `R6` and `R8` are log-only by design. The operator reviews the
+log and pushes.
