@@ -7780,3 +7780,17 @@ event scope, GPU seat, empty-event sentinel, corpse-blind diagnostic; plus a tic
 round-freeze guard, and the achieved tick count). Tier B still holds -- the review's own full-suite
 run measured 566/4377/0, 46 integration, golden `aa3566d7...` and the 28-key set UNMOVED, and
 `test/perf/` is outside `run_all.sh`'s glob. Story Status stays `review`; the board is untouched.
+
+## 2026-09-01 -- 4-5 close-out (operator, `4-5/R2` ratified, `4-5/R3`)
+
+**`4-5/R2` RATIFIED by the operator at close-out.** The review-authored correction above (10.39 ms
+voided, 15.46 ms re-measured; AC 11's OVERLAPPING-MESH naming withdrawn, cause UNNAMED) stands as
+the record.
+
+**`4-5/R3` (operator, 2026-09-01) -- live smoke.** Setup, flags-off, and flicker surfaces (`PROC/R8`)
+all closed per the story's Live Smoke Results section. AC 11's cause stays open and is deferred to
+the playtest block. E4 exit criteria "60 FPS holds with many units" and "flags toggle cleanly" are
+both discharged by this story; E4 close-out is next.
+
+Two retro notes: Tier B log entries drifted into narrative form (`E4-P/R9` calls for rulings only).
+The suite count line was lost to `tail` in two consecutive passes.

@@ -526,6 +526,26 @@ that run rather than of the build. AC 12 was re-run in BOTH directions with the 
 and SHA-verified restore ritual: ON `casts=8 max_unit_records=8` PASS, OFF `casts=8
 max_unit_records=0` PASS, `data/feature_flags.tres` restored to `05eba18a…4fb3`, byte-identical.
 
+### Live Smoke Results (operator, 2026-09-01)
+
+**1 — Setup confirmed by eye.** ~20 units on the board, both split-screen viewports live, combat
+totems firing (projectiles toward the heroes at the centre); unit-vs-unit and unit-vs-totem combat
+visible on both sides (shipped `standard` priority, first time seen at this scale).
+
+**2 — Flags-off run clean by eye.** Casts play, nothing spawns, no crash; the run self-terminates
+after a few seconds. Flags restored to ON afterward, `git status` clean.
+
+**3 — Flicker REPRODUCED.** Rare: when many units pile up, a region of the screen flickers and the
+camera stutters briefly. Walking/attacking bodies and stuck standing bodies flicker for certain;
+corpses possibly (operator unsure, declined to probe further). Operator's judgement: infrequent and
+not a situation seen in real play. AC 11's cause stays UNNAMED (`4-5/R2`'s corpse-collision finding
+is one of three candidates alongside physics push and overlapping live meshes), deferred to the
+playtest block, non-blocking.
+
+**Also recorded.** Minions freeze when an obstacle sits in front of them until something moves
+(known cause: `approach()` does not distinguish arrived from blocked, deferred 4-3 work). The rare
+stutter is consistent with the measured non-event tail frames (the review re-run's 48.6 ms outlier).
+
 ### File List
 
 - `test/perf/perf_20_units_live.gd` (new) — the 20-unit frame-time measurement harness.
