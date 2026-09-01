@@ -4,7 +4,7 @@ baseline_commit: 45ef05dd3f0fd4c4636d62c3e9c57e7c75a58008
 
 # Story 4.5: Pooling / 60 FPS Exit
 
-Status: authored
+Status: ready-for-dev
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
