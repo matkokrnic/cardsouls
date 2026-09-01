@@ -160,11 +160,30 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 **Committed obligations.**
 - State takes ownership of the active telegraph fact for RPS; the fact→profile mapping stays
   presentation (1-10/R1, locked).
-- OPEN decision (a) — attacker consequence on basic-attack deflect / stun — has its forcing point
-  here (decision-log:649); the color-counter stun on the three-tier ladder must reconcile with the
-  melee-deflect consequence already shipped in E1 (1-8, R-D5: no attacker consequence).
+- Open decision (a) — attacker consequence on basic-attack deflect / stun — is RESOLVED
+  (`E5-P/R1`, decision-log Session 2026-09-01): a deflected basic attack now costs the attacker
+  both a stamina penalty (new authored balance field) and a short stun, authored markedly shorter
+  than the color counter's ~1s so the three-tier ladder keeps its escalation gradient.
+  Implementation seat: `5-6-three-tier-ladder`, which also removes the
+  `test_balance_authoring.gd` stun exemption.
 - `ActionState.CHARGING` is already reserved in the enum (`src/state/hero_state.gd:27`), unused
-  until E5 wires Mode ② chargeup.
+  until `5-2-unblockable-initiation` wires Mode ② chargeup. Reach is a large authored hit radius
+  (provisional ~8 m, new balance field, `E5-P/R4`) that forces the defender to react within it;
+  lock-on aims direction only and never extends reach.
+- E5 opens with four Tier B presentation/setup stories, in order: `5-0a-hero-locomotion`,
+  `5-0b-pad-card-input`, `5-0c-totem-projectile-models`, `5-0d-arena-edge` (the arena bound ships
+  as scene collision in `main.tscn`, `E5-P/R2` — no `src/state/` edit, golden immobile by
+  construction). `5-0a` and `5-0b` must land before the playtest block.
+- `5-1a-intent-hardening` (Tier A) closes the retarget-hardening residue carried from E4: `4-6`
+  M3 (a malformed retarget address is logged and then acted on, landing in a hashed key) and
+  `4-6` L7/L8 (v6-record robustness), per the `4-1/R1` hard-rejection doctrine.
+- `R-M9`: accelerators stack, multiplicatively, per totem — each accelerator pays its own grant
+  per cadence tick (mana seat: Reading A, linear and player-countable; stamina seat: literal
+  mult^N). Ships in `5-1-accelerator-stacking` (Tier A), which also carries the `4-4` M2/M7
+  authoring-audit bounds.
+- `R-SPELL`: spell resolution stays a named no-op through E5 (forcing point is the E6 close-out
+  story). No E5 story may assume a spell card resolves; `5-5-unblockable-defense`'s hand-of-four
+  math must tolerate three unresolvable cards.
 
 ---
 
