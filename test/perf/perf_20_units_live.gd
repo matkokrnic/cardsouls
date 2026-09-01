@@ -125,6 +125,8 @@ var _last_usec := 0
 var _wall_ms: Array[float] = []
 var _engine_ms: Array[float] = []
 var _gpu_ms: Array[float] = []
+## Every viewport whose GPU time is summed into `_gpu_ms` -- root plus both player SubViewports.
+var _gpu_viewports: Array[RID] = []
 ## Parallel to `_wall_ms`: whether a unit SPAWN or DEATH resolved on the tick this frame carried.
 var _event_flags: Array[bool] = []
 var _event_this_frame := false
@@ -135,8 +137,17 @@ var _event_this_frame := false
 ## a rendered frame).
 var _tick_flags: Array[bool] = []
 var _tick_this_frame := false
+## Spawn/death events, SPLIT BY PHASE. `_observe_events()` runs from the first tick onward -- the
+## `_prev_*` cursors have to stay current through warmup and build or the first measured tick would
+## report the whole build phase as one spawn burst -- but the build phase's own events belong to
+## reaching the population, NOT to the measured stream. Counting them together made
+## `spawn_events` a lifetime total sitting in a block of window-scoped numbers, which is how a
+## report of "64 spawn events in the measured stream" came to include the 21 units the build phase
+## put on the board (21 build + 43 measured = 64).
 var _spawn_events := 0
 var _death_events := 0
+var _build_spawn_events := 0
+var _build_death_events := 0
 var _projectile_event_frames := 0
 var _projectile_events_this_frame := false
 
@@ -176,8 +187,24 @@ func _initialize() -> void:
 	# OQ 2 (i): vsync off AT RUNTIME, never in project.godot (which this story does not edit).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
-	# OQ 2 (ii): ask the renderer to measure its own GPU time for the root viewport.
-	RenderingServer.viewport_set_measure_render_time(root.get_viewport_rid(), true)
+	# OQ 2 (ii): ask the renderer to measure its own GPU time.
+	#
+	# THE ROOT VIEWPORT IS NOT WHERE THE SCENE IS DRAWN. `main.tscn` renders each player's 3D view
+	# into its own `SubViewport` (`P1View/P1Viewport`, `P2View/P2Viewport`, a `Camera3D` in each);
+	# the root window viewport only COMPOSITES those two textures and the HUD on top. Measurement is
+	# per-viewport-RID, so instrumenting the root alone reports the compositing pass and excludes
+	# essentially all of the work this story is about -- both camera passes over ~20 skinned units.
+	# All three are instrumented and summed, so "the frame is GPU-clear" is a claim about the
+	# renderer's actual load rather than about a blit.
+	_gpu_viewports.append(root.get_viewport_rid())
+	for path: String in ["Main/P1View/P1Viewport", "Main/P2View/P2Viewport"]:
+		var vp := root.get_node_or_null(NodePath(path)) as SubViewport
+		if vp != null:
+			_gpu_viewports.append(vp.get_viewport_rid())
+		else:
+			print("WARNING: %s not found -- its GPU time is NOT in gpu_ms" % path)
+	for rid: RID in _gpu_viewports:
+		RenderingServer.viewport_set_measure_render_time(rid, true)
 	_last_usec = Time.get_ticks_usec()
 
 
@@ -186,12 +213,27 @@ func _process(_delta: float) -> bool:
 	var now := Time.get_ticks_usec()
 	var wall := float(now - _last_usec) / 1000.0
 	_last_usec = now
+	# EVENT ATTRIBUTION IS OBSERVED HERE, NOT IN `_physics_process`, AND THE DIFFERENCE IS ONE TICK.
+	# A `SceneTree` subclass's `_physics_process` is the MainLoop callback, which the engine runs
+	# BEFORE it propagates the physics notification to nodes -- so the runner's `_physics_process`
+	# (the one that instantiates and frees units) always runs AFTER this script's. Polling the board
+	# at the top of a tick therefore reads the state the runner left at the END OF THE PREVIOUS one:
+	# a spawn or death resolved on tick N was flagged onto the frame carrying tick N+1, one frame
+	# after the frame that actually paid for `instantiate()` / `queue_free()`. `_process` runs after
+	# every physics step of the same engine iteration, so observing here attributes the cost to the
+	# frame that bore it. This is the number `4-5/R1`'s ~33 ms half is decided on -- see the review
+	# note in the story record for the measured size of the correction.
+	if _tick_this_frame:
+		_observe_events()
 	if _phase == &"measure":
 		_wall_ms.append(wall)
 		var engine_ms := (Performance.get_monitor(Performance.TIME_PROCESS)
 			+ Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
 		_engine_ms.append(engine_ms)
-		_gpu_ms.append(RenderingServer.viewport_get_measured_render_time_gpu(root.get_viewport_rid()))
+		var gpu := 0.0
+		for rid: RID in _gpu_viewports:
+			gpu += RenderingServer.viewport_get_measured_render_time_gpu(rid)
+		_gpu_ms.append(gpu)
 		_event_flags.append(_event_this_frame)
 		_tick_flags.append(_tick_this_frame)
 		if _projectile_events_this_frame:
@@ -231,8 +273,6 @@ func _physics_process(_delta: float) -> bool:
 	_state.p1.hero.heal(9999.0)
 	_state.p2.hero.heal(9999.0)
 
-	_observe_events()
-
 	if _phase == &"warmup":
 		if _frames >= WARMUP_FRAMES:
 			_close_the_heroes()
@@ -257,6 +297,19 @@ func _physics_process(_delta: float) -> bool:
 		return false
 
 	# --- measure -------------------------------------------------------------------------------
+	# THE FREEZE GUARD. Healing to full every tick prevents death by attrition, but not a single
+	# tick that lands more than a hero's full HP at once -- and `_round_over` is LATCHED
+	# (`match_state.advance()` returns early forever after) and cleared only by the debug reset,
+	# which this harness never presses. A run that froze would keep filling the window with
+	# frozen-arena frames and print a very good-looking number. `_round_over` and hero DEAD are set
+	# together by `_end_round`, so hero liveness is the cheap equivalent test -- cheap matters,
+	# because this runs inside the tick the wall clock is timing.
+	if not _state.p1.hero.is_alive() or not _state.p2.hero.is_alive():
+		print("HARNESS ABORT: a hero died at frame %d despite per-tick healing -- the round froze and"
+			% _frames + " the measured window would be frozen-arena frames. No number reported.")
+		quit(1)
+		return true
+
 	# The population is HELD at ~20 by re-summoning as units die: deaths are part of the measured
 	# spawn/death event stream, not an excuse to let the count decay (AC 1).
 	_drive_casts()
@@ -303,19 +356,40 @@ func _print_diag(elapsed: int) -> void:
 	print("t=%d  %s  |  %s" % [elapsed, parts[0], parts[1]])
 
 
+## LIVENESS IS PART OF THE READING, and leaving it out is how this print was misread once already.
+## The loop used to walk actor slots 0..4 filtered only on `is_instance_valid`, which are the OLDEST
+## board indices and therefore the ones most likely to be DEAD: a corpse stays a valid actor for 600
+## ticks after death (`match_runner._free_dead_unit_actors`), its collision is disabled the tick it
+## dies, and `_approach_unit_actors` skips dead indices so its velocity is never driven and stays
+## exactly 0.0. A pile of corpses therefore prints as bodies 0.1-0.2 m apart at v0.0 -- which is
+## indistinguishable from the AC 11 flicker evidence unless the print says which it is. Living units
+## come FIRST and are tagged `L`; corpses are tagged `D` and kept visible rather than filtered, since
+## whether the overlap is corpses or live bodies is precisely the question AC 11 is asking.
 func _first_unit_position(slot: int) -> String:
 	var player: PlayerState = _state.p1 if slot == 0 else _state.p2
 	var actors: Array = _runner._unit_actors[slot]
-	var out: Array[String] = []
-	for index: int in mini(actors.size(), 5):
+	var live_out: Array[String] = []
+	var dead_out: Array[String] = []
+	for index: int in actors.size():
 		var actor: Variant = actors[index]
 		if not is_instance_valid(actor):
 			continue
+		if not player.units.has_index(index):
+			continue
+		var alive: bool = player.units.is_alive_at(index)
+		if alive and live_out.size() >= 5:
+			continue
+		if not alive and dead_out.size() >= 3:
+			continue
 		var p: Vector3 = (actor as Node3D).global_position
 		var v: Vector3 = (actor as CharacterBody3D).velocity
-		out.append("k%d@(%.1f,%.1f)v%.1f" % [
-			player.units.kind_index_at(index), p.x, p.z, v.length()])
-	return " ".join(out)
+		var cell := "%s%d:k%d@(%.1f,%.1f)v%.2f" % [
+			"L" if alive else "D", index, player.units.kind_index_at(index), p.x, p.z, v.length()]
+		if alive:
+			live_out.append(cell)
+		else:
+			dead_out.append(cell)
+	return " ".join(live_out + dead_out)
 
 
 ## Spawn and death events, per slot, off the boards the runner itself polls. A spawn is the board
@@ -329,8 +403,12 @@ func _observe_events() -> void:
 		var died: int = maxi(0, (_prev_live[slot] + spawned) - live)
 		if spawned > 0 or died > 0:
 			_event_this_frame = true
-			_spawn_events += spawned
-			_death_events += died
+			if _phase == &"measure":
+				_spawn_events += spawned
+				_death_events += died
+			else:
+				_build_spawn_events += spawned
+				_build_death_events += died
 		var proj_size: int = player.projectiles.size()
 		if proj_size != _prev_proj_size[slot]:
 			_projectile_events_this_frame = true
@@ -467,13 +545,18 @@ func _report() -> void:
 			"board_records_end": _board_size_samples[_board_size_samples.size() - 1],
 			"projectiles_live_avg": _avg_int(_proj_live_samples),
 			"projectiles_live_max": _max_int(_proj_live_samples),
+			# MEASURED-WINDOW ONLY. The build phase's own events are reported beside them, never
+			# folded in -- see the `_spawn_events` declaration.
 			"spawn_events": _spawn_events,
 			"death_events": _death_events,
+			"build_spawn_events": _build_spawn_events,
+			"build_death_events": _build_death_events,
 			"casts_attempted": _casts_attempted,
 			"build_frames": _build_frames,
 		},
 		"frames": {
 			"measured_ticks": _measure_ticks,
+			"measured_ticks_achieved": _live_samples.size(),
 			"rendered_frames": _wall_ms.size(),
 			"event_frames": _count_true(_event_flags),
 			"projectile_event_frames": _projectile_event_frames,
@@ -484,6 +567,9 @@ func _report() -> void:
 		"physics_frames": _split_by_tick(),
 		"worst_event_frame_ms": _worst_flagged(_wall_ms, _event_flags),
 		"worst_event_frame_engine_ms": _worst_flagged(_engine_ms, _event_flags),
+		# The INDEX makes the ~33 ms half auditable: it can be read against `wall_ms.max_index` to
+		# see whether the worst frame anywhere in the run was an event frame or a separate outlier.
+		"worst_event_frame_index": _worst_flagged_index(_wall_ms, _event_flags),
 		"trend": _trend(),
 	}
 	var text := JSON.stringify(out, "  ")
@@ -570,10 +656,23 @@ func _split_by_tick() -> Dictionary:
 		else:
 			without_total += _wall_ms[i]
 			without_count += 1
+	# THE CRITERION'S OWN POPULATION, computed rather than bounded by argument. A vsync-locked 60 Hz
+	# build renders only tick-carrying frames, so `wall_ms.p95` -- a percentile over a series that is
+	# ~3/4 tick-free frames -- is not the p95 `4-5/R1`'s sustained half is about. The story record
+	# reached the same verdict by bounding it ("only N frames exceed 16.67 ms and 5% of 3600 is
+	# 180"), which is sound but is an argument where a number was available.
+	var with_sorted: Array[float] = []
+	for i in mini(_wall_ms.size(), _tick_flags.size()):
+		if _tick_flags[i]:
+			with_sorted.append(_wall_ms[i])
+	with_sorted.sort()
 	return {
 		"with_tick_n": with_count,
 		"with_tick_avg_ms": with_total / float(maxi(with_count, 1)),
 		"with_tick_max_ms": with_max,
+		"with_tick_p50_ms": _percentile(with_sorted, 0.50) if with_count > 0 else -1.0,
+		"with_tick_p95_ms": _percentile(with_sorted, 0.95) if with_count > 0 else -1.0,
+		"with_tick_p99_ms": _percentile(with_sorted, 0.99) if with_count > 0 else -1.0,
 		"without_tick_n": without_count,
 		"without_tick_avg_ms": without_total / float(maxi(without_count, 1)),
 		"marginal_tick_cost_ms": (with_total / float(maxi(with_count, 1)))
@@ -581,12 +680,26 @@ func _split_by_tick() -> Dictionary:
 	}
 
 
+## -1.0 when NO frame carried an event, never 0.0. A 0.0 here reads as "the worst spawn/death frame
+## was instant" and passes the ~33 ms clause trivially -- which is exactly what an inert arena would
+## have reported, and run 1 of this harness produced precisely that arena (zero deaths, zero
+## projectiles for a full minute). The sentinel makes an empty event stream unmistakable.
 func _worst_flagged(series: Array[float], flags: Array[bool]) -> float:
-	var worst := 0.0
+	var worst := -1.0
 	for i in mini(series.size(), flags.size()):
 		if flags[i] and series[i] > worst:
 			worst = series[i]
 	return worst
+
+
+func _worst_flagged_index(series: Array[float], flags: Array[bool]) -> int:
+	var worst := -1.0
+	var at := -1
+	for i in mini(series.size(), flags.size()):
+		if flags[i] and series[i] > worst:
+			worst = series[i]
+			at = i
+	return at
 
 
 ## AC 10: the board-growth observation. The unit board is APPEND-ONLY (`4-3a/R9`), so the question
