@@ -64,3 +64,31 @@ extends Resource
 ## resulting magnitude is folded into the recorded InputIntent.move_dir, never a separate flag.
 ## The debug instrument panel flips this IN MEMORY on the shared instance only — never persisted.
 @export var normalize_move_magnitude: bool = true
+
+## Story 5-0b (AC 1): the held modifier that enters card-select (cast) mode, mirroring
+## KeyboardController's `cast_mode` action shape on a pad. L3 (the left-stick click) on the
+## operator's stated pad-layout intent (`3-5a` Dev Notes) — held to select, released to exit the
+## same tick, same discipline as every other field on this resource.
+@export var cast_button: JoyButton = JOY_BUTTON_LEFT_STICK
+
+## Story 5-0b (AC 3): the face button that commits a Basic cast — press-to-select-and-confirm in
+## one, unlike the keyboard's separate `cast_confirm` key (no second button on the pad scheme).
+## B/X/Y are explicit no-ops this story (AC 3); their own commit fields arrive with their modes
+## (`5-7`, the E6 close-out story).
+@export var cast_basic_button: JoyButton = JOY_BUTTON_A
+
+## Story 5-0b (AC 2): how far L2/R2 must be pushed before a trigger counts as PRESSED, as a
+## fraction of full pull. Godot's `JoyButton` enum has no dedicated trigger entries — L2/R2 report
+## as axes, the same family `flick_threshold` already reads for the right stick — so this is the
+## threshold that axis value must CROSS this tick (having been below it last tick) to arm a hand
+## slot once, not once per tick the trigger stays pulled.
+@export var trigger_threshold: float = 0.5
+
+## Story 5-0b (AC 2): the axis indices L2/R2 report on, authored for the same reason
+## `move_axis_x`/`look_axis_x` are — the raw joypad index lives EXACTLY ONCE, as authored data,
+## per this resource's own header discipline (2-2/R2). Not named in the story's field list
+## because trigger reads are new to this resource; kept authored rather than an inline
+## `JOY_AXIS_TRIGGER_LEFT`/`_RIGHT` literal in `GamepadController` for the same reason every other
+## raw index on this file already is.
+@export var trigger_axis_left: JoyAxis = JOY_AXIS_TRIGGER_LEFT
+@export var trigger_axis_right: JoyAxis = JOY_AXIS_TRIGGER_RIGHT
