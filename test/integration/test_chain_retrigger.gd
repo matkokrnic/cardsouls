@@ -94,13 +94,19 @@ func _physics_process(_delta: float) -> bool:
 	# from HeroActor.drive(), so if the fix had been "always restart" applied to BOTH paths,
 	# `run` would reset to frame 0 sixty times a second and never visibly animate. Pinning it
 	# here stops a later simplification from collapsing the evented and polled paths together.
+	#
+	# Story 5-0a widened the push from a scalar speed to (velocity, facing). The argument below
+	# is the same case this always asserted -- moving FORWARD along facing, which still selects
+	# `run` -- restated in the new payload; the idempotency claim is untouched by that widening,
+	# and matters MORE now that the polled path also carries a crossfade (an unguarded play()
+	# every tick would restart the blend every tick and never finish it).
 	ctl.on_action_state_changed(attacking, idle)
-	ctl.on_locomotion(5.0)
+	ctl.on_locomotion(Vector3(0.0, 0.0, 5.0), Vector2(0.0, 1.0))
 	_check(ap.current_animation == &"run",
 		"locomotion push did not select run (current='%s')" % ap.current_animation)
 	ap.advance(MID_CLIP)
 	var before: float = ap.current_animation_position
-	ctl.on_locomotion(5.0)
+	ctl.on_locomotion(Vector3(0.0, 0.0, 5.0), Vector2(0.0, 1.0))
 	_check(absf(ap.current_animation_position - before) <= AT_START_EPS,
 		"repeated locomotion push RESTARTED run (%.4f -> %.4f); the polled path must be idempotent"
 			% [before, ap.current_animation_position])

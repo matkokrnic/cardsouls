@@ -1,18 +1,25 @@
 extends SceneTree
 
-## Story 3-0a (AC 3) machine contract: hero.tscn carries the paladin's AnimationPlayer with
-## EXACTLY the six named clips and their loop flags, and the model's own Mixamo T-pose take
-## ("mixamo_com") is kept OUT of the scene. Instantiates hero.tscn and asserts, scene-wide:
-##   (a) exactly six animations total (no seventh clip riding in from the model import);
-##   (b) the six expected names — idle, run, attack, block, roll, death;
-##   (c) loop ENABLED on idle/run/block, DISABLED on attack/roll/death;
+## Story 3-0a (AC 3) machine contract, EXTENDED BY 5-0a (AC 1) from six clips to NINE:
+## hero.tscn carries the paladin's AnimationPlayer with EXACTLY the nine named clips and their
+## loop flags, and the model's own Mixamo T-pose take ("mixamo_com") is kept OUT of the
+## scene. Instantiates hero.tscn and asserts, scene-wide:
+##   (a) exactly nine animations total (no tenth clip riding in from the model import);
+##   (b) the nine expected names — idle, run, attack, block, roll, death (3-0a), plus
+##       strafe_left, strafe_right, backpedal (5-0a's direction-aware locomotion clips);
+##   (c) loop ENABLED on idle/run/block/strafe_left/strafe_right/backpedal (every repeating
+##       movement or resting pose), DISABLED on attack/roll/death (unchanged by 5-0a);
 ##   (d) no clip named "mixamo_com" anywhere in the instantiated scene.
 ## Structure only — read from the packed scene at instantiation, no frame/_ready needed.
+##
+## The count assertion is derived from EXPECTED_LOOP rather than a second hand-written
+## literal: 3-0a wrote "6" in two places, and this story had to change both. One source.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_rig_clips.gd
 
 const EXPECTED_LOOP := {
 	&"idle": true, &"run": true, &"block": true,
+	&"strafe_left": true, &"strafe_right": true, &"backpedal": true,
 	&"attack": false, &"roll": false, &"death": false,
 }
 
@@ -39,8 +46,9 @@ func _initialize() -> void:
 			if String(n).contains("mixamo"):
 				_failures.append("forbidden clip present: '%s' (model T-pose leaked in)" % n)
 
-	if names.size() != 6:
-		_failures.append("expected exactly 6 clips, found %d: %s" % [names.size(), names])
+	if names.size() != EXPECTED_LOOP.size():
+		_failures.append("expected exactly %d clips, found %d: %s"
+			% [EXPECTED_LOOP.size(), names.size(), names])
 
 	for want: StringName in EXPECTED_LOOP:
 		if not names.has(want):
