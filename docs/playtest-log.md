@@ -194,3 +194,17 @@ projektili lete, krene titrat dio ekreana pa mi je tekos rec tjela koja stoje i 
 2 flags off (minions i totems na false): karte se odigraju, nista se ne spawna, nista ne pukne, run sam zavrsi nakon par sekundi - ok; flagovi vraceni na true, git status prazan
 3 titranje: rijetko, kad je puno miniona na hrpi krene titrati dio ekrana i kamera malo zatrza; titraju sigurno tijela koja hodaju/napadaju i ona koja stoje ukipljena, lesevi mozda, nisam siguran i ne bih to dalje ispitivao - nije cesto i situacija realno nije iz igre
 4 minioni ne znaju reagirati kad im je prepreka ispred, ukipe se dok se nesto ne pomakne (poznato iz 4-3) - za playtest blok
+
+
+2.9.
+ljevi I densi strafe I ostatak lokmocje rade
+## 2026-09-02 — 5-0a live smoke (Matko, pad, flip [0,3])
+- Lock-on + sideways: strafe clips play; FIRST run had left/right visually
+  swapped (Mixamo preview mirror) — fixed by swapping the two source files,
+  re-verified correct in-game.
+- Backpedal correct while locked; diagonal boundary flicker not noticeable.
+- Locomotion transitions crossfaded; attack/block/roll still instant.
+- Attacks land normally (bone-following hitbox); chained swings restart.
+- FPS stable.
+
+

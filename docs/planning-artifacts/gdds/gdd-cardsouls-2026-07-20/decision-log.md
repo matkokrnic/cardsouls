@@ -8247,3 +8247,47 @@ rulings), this entry (`docs(decision-log)`, a PURE APPEND -- no existing entry e
 `docs(deferred-work)` (the fourteen `(c)` items re-tagged per `E5-P/R6`, the arena-edge checklist
 line updated to "slotted as `5-0d`"). No code changed, no golden or suite touched, nothing ran. The
 operator reviews the log and pushes.
+
+## Session 2026-09-02 -- 5-0a close-out (Tier B)
+
+Dev pass and code review (verdict PASS, one LOW deferred to the retune block) both landed before
+this session; live smoke found one defect, fixed, and re-confirmed by the operator in this same
+session. Four rulings recorded, close-out only.
+
+`5-0a/R1` (ruled, live smoke, 2026-09-02) THE OPERATOR'S MIXAMO-PREVIEW STRAFE MAPPING WAS
+OVERTURNED AT LIVE SMOKE — a mirror-class misread, not a code defect. The Mixamo preview camera
+faces the character, so an identification made from that preview reads backwards once driven by
+the hero's own facing in-engine: `strafe_left.fbx`/`strafe_right.fbx` played visually swapped on
+the first live pass. Fixed by a **source-file content swap** (never a key remap in
+`add_paladin_locomotion.gd`, which would have hidden the mismatch instead of correcting the truth
+on disk), re-imported, re-measured (both clips remain net-zero, figures swapped), and re-verified
+correct in-game. Standing lesson for future rig stories: **clip handedness read off an external
+preview tool cannot be trusted — in-engine, driven by the actual facing, is the only judge.**
+
+`5-0a/R2` (recorded, code review, pre-smoke) REVIEW LOW, DEFERRED TO THE RETUNE BLOCK: the
+diagonal angle-band tie-break only ever resolves between `run` and `backpedal`, never `strafe_left`
+or `strafe_right` — an untuned-by-design boundary (AC 2 Non-Goals), not a defect blocking this
+story. Recorded here as retune-block input, alongside the four deferrals `3-0b` already handed
+that block.
+
+`5-0a/R3` (ruled, live smoke, 2026-09-02) SMOKE PASS ON ALL SIX WATCH ITEMS, the fix from `R1`
+re-verified live: strafe reads correctly both directions, backpedal correct while locked, diagonal
+boundary flicker not noticeable, locomotion crossfades cleanly while action-state clips stay
+instant, attacks land normally on the bone-following hitbox with chained swings restarting
+correctly, and FPS stable. `docs/playtest-log.md`'s 2026-09-02 entry is the operator's own hand-
+written record.
+
+`5-0a/R4` (confirmed by measurement) TIER B HOLDS. Golden `aa3566d7...` measured unmoved in both
+directions across the whole story, `src/state/` byte-identical, `project.godot` byte-identical
+across both editor sessions. Machine time 20m35s of the story's ~1h Tier B budget
+(`E5-P/R5`'s note on `decision-log.md:8206-8207`).
+
+### Close-out
+
+Two commits. Commit 1, code + assets: the dev pass's `src/actors/hero/` changes, the four
+integration tests, the two new `tools/` scripts, and `assets/characters/paladin/` (the three
+clips post-`R1`-swap plus the assembled `paladin_anims.res`). Commit 2, docs only, folded per
+`E4-P/R9`/`4-B1` precedent: this entry; the story file's Status -> `done`, Change Log row, and
+Live Smoke Results section (all six items PASS after the `R1` fix); `docs/playtest-log.md`'s
+operator-written entry (already present, verified before this commit); and the board
+(`5-0a-hero-locomotion: ready-for-dev` -> `done`). Nothing pushed; the operator reviews the log.
