@@ -207,4 +207,8 @@ ljevi I densi strafe I ostatak lokmocje rade
 - Attacks land normally (bone-following hitbox); chained swings restart.
 - FPS stable.
 
+## 2026-09-02 — 5-0b pad card input (živi smoke, pad, flip [0,3])
+Sve 1-9 PASS: held-L3 cast mode, slotovi L2/L1/R1/R2 = HUD red, Basic cast + odbijanje bez slota,
+supresija attack/block/roll pod L3, roll escape na puštanje, held-through-exit ne okida, trigger
+ne spama, lock-on netaknut, fps stabilan.
 

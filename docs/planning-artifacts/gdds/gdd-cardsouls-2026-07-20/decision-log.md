@@ -8291,3 +8291,49 @@ clips post-`R1`-swap plus the assembled `paladin_anims.res`). Commit 2, docs onl
 Live Smoke Results section (all six items PASS after the `R1` fix); `docs/playtest-log.md`'s
 operator-written entry (already present, verified before this commit); and the board
 (`5-0a-hero-locomotion: ready-for-dev` -> `done`). Nothing pushed; the operator reviews the log.
+
+## Session 2026-09-02 -- 5-0b close-out (Tier B)
+
+Dev pass and code review (six findings, all applied) landed before this session; live smoke ran
+clean, all nine watch items PASS. Rulings-only, close-out.
+
+`5-0b/R1` (ruled, review) AC 3 RESTORED ON REVIEW — the pad never swallows a card commit; a fresh
+Basic press always reaches state and an unarmed commit lands on the existing `empty_slot` refusal
+(keyboard parity; `Hand.is_slot_empty` treats `index < 0` as empty, confirmed by reading before
+any change).
+
+`5-0b/R2` (ruled, review) THE NEUTRAL/REPLUG PATH PRIMES THE TRIGGER AND BASIC PREVS AS HELD — a
+reconnected pad can never arm or spend without a fresh physical press.
+
+`5-0b/R3` (recorded) SLOT MAPPING L2/L1/R1/R2 -> HAND SLOTS 0..3 (physical left-to-right, matching
+the HUD row) and the L3/A button choices are PROVISIONAL authored values; the pad card UX question
+stays open, revisit belongs to the retune/playtest block.
+
+`5-0b/R4` (recorded) B/X/Y ARE NO-OPS BY OMISSION THIS STORY because state's
+UNBLOCKABLE/DEFENSE/PITCH branches are deliberate `Invariant.check` crashes; each mode's wiring
+ships with its own story (`5-7`, the E6 close-out).
+
+Accepted-without-change review findings, recorded here: the X/Y source-scan guard catches only the
+inline-literal regression form (profile-authored X is invisible to it; accepted — `5-7` wires
+those buttons and its tests take over); the `sample()`<->`resolve_card_tick` dictionary boundary is
+untested (accepted — a key typo crashes the first pad tick, caught deterministically by any live
+smoke); commit does not disarm the slot (keyboard parity, accepted); no profile authoring
+tripwires (accepted, deferred-work territory).
+
+`5-0b/R5` (ruled, live smoke, 2026-09-02) SMOKE PASS ON ALL NINE WATCH ITEMS: held-L3 cast mode
+works; L2/L1/R1/R2 arm slots matching the HUD card row left-to-right; a Basic cast with an armed
+slot spends and resolves; a Basic press with nothing armed is refused state-side without a crash;
+attack/block/roll are suppressed while L3 is held; release-L3-then-B rolls instantly; a button held
+through L3's release fires nothing until freshly pressed; a held trigger arms once, no spam; R3
+lock-on and flick retarget are unchanged in and out of cast mode; fps stable. `docs/playtest-log.md`'s
+2026-09-02 entry is the operator's own hand-written record.
+
+### Close-out
+
+Two commits. Commit 1, code only: `src/controllers/gamepad_controller.gd`,
+`src/controllers/gamepad_profile.gd`, `data/gamepad_profile.tres`,
+`test/state/test_gamepad_controller.gd`. Commit 2, docs only: this entry; the story file's Status
+-> `done`, Change Log row, and Live Smoke Results section (all nine items PASS);
+`docs/playtest-log.md`'s operator-written entry (already present, verified before this commit);
+and the board (`5-0b-pad-card-input: ready-for-dev` -> `done`). Nothing pushed; the operator
+reviews the log.
