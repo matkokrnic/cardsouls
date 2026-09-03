@@ -8337,3 +8337,42 @@ Two commits. Commit 1, code only: `src/controllers/gamepad_controller.gd`,
 `docs/playtest-log.md`'s operator-written entry (already present, verified before this commit);
 and the board (`5-0b-pad-card-input: ready-for-dev` -> `done`). Nothing pushed; the operator
 reviews the log.
+
+## Session 2026-09-02 -- 5-0c close-out (Tier B)
+
+Dev pass, one review-fix pass, and a same-day corrective fix from live smoke all landed before
+this session; re-smoke ran clean. Rulings-only, close-out.
+
+`5-0c/R1` (ruled, live smoke) TOTEMS NEVER ROTATE -- static structures, no visual tracking, the
+Combat totem included; it still fires in all directions (state-side heading, rotation
+presentational only, confirmed by reading the code before the fix). Overturns the `4-4` smoke's
+"self-rotation accepted as shipped" verdict, which was passed on the grey-box placeholder.
+
+`5-0c/R2` (ruled) per-kind tint colors are NAMED CONSTANTS in presentation code, no `data/*.tres`
+-- a tint profile resource arrives only if per-kind totem model VARIANTS ever become real.
+
+`5-0c/R3` (recorded, deferred) combat totem's red reads dim red-brown -- the measured mechanism is
+`emission_operator = MULTIPLY` over a teal rune mask whose red channel is ~0.17, so red tints
+crush; brighter red is wanted but not essential; fix routes (stronger constant, operator change,
+or mask edit) belong to a polish/retune pass, not this story.
+
+`5-0c/R4` (recorded, deferred) projectile stays the yellow emissive sphere (more noticeable,
+two-observer verdict); the operator found the old grey ball read more three-dimensional -- flat
+emissive kills depth cues; shading/depth polish deferred.
+
+Accepted-without-change review findings, recorded here: the projectile glow ships without a
+headless pin (static scene authoring, legibility is the smoke's); the tint dispatch is a
+hardcoded name table (a fourth kind or a rename ships untinted with no test failure -- accepted
+until kinds change); tint test coverage is p1-only (p2 path reasoned-sound).
+
+### Close-out
+
+Two commits. Commit 1, code + assets: `src/actors/minions/totem_actor.tscn`,
+`src/actors/projectiles/projectile_actor.tscn`, `src/main/match_runner.gd`,
+`test/integration/test_totem_tint_live.gd` (+ `.uid`),
+`test/integration/test_totem_no_rotation_live.gd` (+ `.uid`), and `assets/props/totem/` (the
+`.glb`, its `.import`, and every import-generated sibling). Commit 2, docs only: this entry; the
+story file's Status -> `done`, Live Smoke Results section, and one Change Log row;
+`docs/playtest-log.md`'s operator-written entry (already present, verified before this commit);
+and the board (`5-0c-totem-projectile-models: ready-for-dev` -> `done`). Nothing pushed; the
+operator reviews the log.

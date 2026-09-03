@@ -4,7 +4,7 @@ baseline_commit: 60b76e7826df6132657f1400d4fae7dfd735b861
 
 # Story 5.0c: Totem and projectile models
 
-Status: ready-for-dev
+Status: done
 
 ## What this story inherits
 
@@ -65,6 +65,15 @@ any change to how totems or projectiles actually play.
    mechanism actually reads correctly at a glance across all three kinds — is the live smoke's**,
    not this AC's.
 
+3a. **Appended by operator ruling, live smoke 2026-09-02 (overturns `4-4`'s 2026-08-30 smoke
+    verdict "totem self-rotation, accepted as shipped" — that verdict was passed on the grey-box
+    placeholder, not the real model):** a totem is a static structure and MUST NOT visually rotate
+    to face its target, and this holds for the combat totem too — it still FIRES IN ALL DIRECTIONS
+    (state-side targeting/heading, `ProjectileBoard`/`ProjectileActor`, is untouched by this), it
+    just does not visually track. `_aim_unit_actors` (`match_runner.gd`) skips `aim_at`/`aim_along`
+    for any actor under the totem scene shape (`Mesh/Totem` — the same shape `_apply_totem_tint`
+    keys on), degrade-graceful: a minion is never skipped, an unresolvable kind never throws.
+
 **Projectile visual**
 
 4. The projectile's placeholder grey ball (`src/actors/projectiles/projectile_actor.tscn`'s `Mesh`
@@ -87,8 +96,10 @@ any change to how totems or projectiles actually play.
    family stays at eight, per `4-4`'s own "untouched, deliberately" note). This story's touched
    files are confined to `src/actors/minions/totem_actor.tscn`,
    `src/actors/projectiles/projectile_actor.tscn`, `src/main/match_runner.gd` (the spawn-time tint
-   dispatch only, near `_spawn_missing_unit_actors`, `match_runner.gd:729-759`), `assets/props/`,
-   and any new `assets/materials/` resource the tint mechanism needs.
+   dispatch only, near `_spawn_missing_unit_actors`, `match_runner.gd:729-759` — amended by operator
+   ruling, live smoke 2026-09-02, to also name the totem aim skip in `_aim_unit_actors`), plus
+   `test/integration/test_totem_tint_live.gd`, `assets/props/`, and any new `assets/materials/`
+   resource the tint mechanism needs.
 7. **Golden prediction: UNMOVED in both directions.** This story changes only `MeshInstance3D`
    geometry/material and adds a presentation-side read of an ALREADY-STATE-OWNED value (the kind
    index/name) at an ALREADY-EXISTING actor-spawn call site — no new state field, no new snapshot
@@ -230,13 +241,250 @@ any change to how totems or projectiles actually play.
 
 ### Agent Model Used
 
-Sonnet 5 (claude-sonnet-5)
+Sonnet 5 (operator-stated)
 
 ### Debug Log References
 
+- Preconditions verified: HEAD `895d8f900562b4adb733b8d4926bedc64ec622c4` == `origin/main`, tree
+  clean except untracked `assets/props/`, no running Godot processes, story Status
+  `ready-for-dev`.
+- Before-baseline `bash test/run_all.sh` (`C:\dev\_50c-suite-before.txt`): start
+  2026-09-02 13:21:12, end 13:24:20, `=== 577 tests, 0 failed, 4433 assertions ===`, 48
+  integration files, `ALL TESTS PASSED`, `EXIT_CODE=0`.
+- Editor session 1 (`godot --headless --editor --quit --path .`), for the `totem.glb` import:
+  `git diff -- project.godot` empty both before and after; `sha256sum project.godot`
+  unchanged (`8879de49...79700`).
+- Measured the imported model headlessly (throwaway `--script` runs, deleted after use, never
+  committed): combined mesh AABB `position=(-0.133794, 0.002195, -0.164973)`,
+  `size=(0.325282, 0.526651, 0.327314)`; one shared `StandardMaterial3D` ("obelisk") across
+  both mesh instances (obelisk body + stand); `albedo_texture=totem_0.png`,
+  `metallic_texture=totem_1.png`, `roughness_texture=totem_1.png`, `emission_texture=totem_2.png`,
+  `normal_texture=totem_3.png`, `emission_energy_multiplier=1.0` (`totem_4.png` extracted but
+  unreferenced by the measured `StandardMaterial3D` — corrected by review fix 2026-09-02: it is NOT
+  an unused UV-set channel, it is the `KHR_materials_specular` extension's `specularTexture`,
+  confirmed by grepping the raw `.glb` JSON chunk for `KHR_materials_specular`/`specularTexture`;
+  Godot's glTF importer extracts it but `StandardMaterial3D` has no import path for that glTF
+  extension, so it goes unreferenced. Left in place, untouched, per the "no rename/cleanup needed"
+  Dev Notes precondition applying equally to import-generated siblings.)
+- Editor session 2 (same command), for the new `test_totem_tint_live.gd.uid`: `git diff --
+  project.godot` empty; hash unchanged.
+- Headless scene-load sanity check (`totem_actor.tscn`, `projectile_actor.tscn` via throwaway
+  `--script`, deleted after use): both load and instantiate without error; `Mesh/Totem` child
+  present on the totem actor.
+- `test/integration/test_totem_tint_live.gd` run individually: PASS (`actors=3`, all three
+  measured emission colors match).
+- Mutation proofs (table below) run individually against the same file; each mutation FAILED the
+  test as expected, then `src/main/match_runner.gd` was restored by copying back the pre-mutation
+  backup (`C:\dev\_50c_backups\match_runner.gd.orig`) and the SHA-256 verified identical to the
+  pre-mutation hash, never `git checkout`.
+- Regression spot-check after implementation: `test_projectile_flight_live.gd` and
+  `test_summon_actor_live.gd` run individually — both PASS, unchanged behavior.
+- After-baseline `bash test/run_all.sh` (`C:\dev\_50c-suite-after.txt`): start 2026-09-02
+  13:31:23, end 13:34:30, `=== 577 tests, 0 failed, 4433 assertions ===` (identical to
+  before-baseline — golden and per-player snapshot key set unmoved, both directions), 49
+  integration files (48 + `test_totem_tint_live.gd`, new), `ALL TESTS PASSED`, `EXIT_CODE=0`.
+- Tier B budget: 13:21:12 -> 13:34:30, ~13m18s elapsed, well inside the ~1h budget.
+- **Review fix pass 2026-09-02 (operator-ruled review, corrective fix, no board write, Status stays
+  `review`):** preconditions verified — HEAD `895d8f900562b4adb733b8d4926bedc64ec622c4` ==
+  `origin/main`, tree matched the expected modified/untracked set exactly.
+  - Fix 1 (one mechanism, review HIGH+MED+LOW): `totem_actor.tscn`'s `Mesh` node is a mesh-less
+    `MeshInstance3D` container (confirmed via `editor_description` and a live tree dump —
+    `Mesh (mesh=null) -> Totem -> ... -> RootNode -> {obelisk_1_Low, obelisk_stand_Low}`, each
+    holding one real leaf `MeshInstance3D`), so both `_tint_mesh_recursive` and the test's
+    `_collect_emissions` were tinting/measuring a node that never carries the model's real geometry.
+    `_tint_mesh_recursive` now skips any `MeshInstance3D` with `mesh == null` (recurse into children
+    only, no dead `material_override` allocation). `_collect_emissions` does the same skip;
+    `_measured_emission` now returns `null` unless `colors.size() >= 2` (the model mounts body +
+    stand, so a partial or container-only tint reads as failure, matching the docstring correction
+    that also went in — dropped the false "null-on-missing-override-only" promise).
+  - Mutation-proven live (table appended to Mutation Proof Table below): the review's mutation B
+    ("early-return after the first tinted `MeshInstance3D`"), placed where it actually reproduces
+    the described failure — `return` after the recursive call inside the sibling `for` loop, not
+    right after the tint assignment itself (that placement was tried first and does NOT break
+    anything, since the body and stand mesh instances are independent leaf siblings under
+    `RootNode`, not nested — the `return` right after the assignment only ends that leaf's own empty
+    child loop) — now FAILS (`got=<null>` for all three kinds, `colors.size() == 1`). Mutation 2 from
+    the dev table (dispatch call replaced with `pass`) re-run against the fixed file: still FAILS.
+    Unmutated fixed file: PASSES. Each mutation applied/reverted individually with a copy-back +
+    SHA-256 restore against `C:\dev\_50c_backups\match_runner.gd.fixed`
+    (`746660fc88da4dab03f7a7eaa0568372b49187d2c331caadccac2ebc39a64872`), never `git checkout`.
+  - Fix 2 (docs-only, review MED): rewrote the AC 2/AC 3 Completion Note's unmeasured
+    "red/blue/green runes, crystal body unchanged" claim. Measured directly off the live material
+    (throwaway `--script` runs, deleted after use): `emission_operator = 1` (`MULTIPLY`), NOT the
+    `StandardMaterial3D` default `ADD` (`0`) as this fix's own instructions assumed — checked the
+    engine default separately (`StandardMaterial3D.new().emission_operator == 0`) to confirm the
+    totem material was NOT left at default. Sampled `totem_2.png` (the `emission_texture`): a teal
+    `(0.1725, 0.9059, 0.9059)` rune mask on a black `(0,0,0)` field. Under `MULTIPLY` the body reads
+    correctly as unchanged (mask is black there, so the product is zero regardless of tint — true
+    both before and after tinting, not because albedo was untouched), but the rune color is
+    `tint * mask` component-wise, which for `combat_totem`'s red `(0.85, 0.1, 0.1)` crushes down to
+    roughly `(0.15, 0.09, 0.09)` — dim and desaturated, since the mask's own red channel is only
+    `0.17` against `0.91` green/blue — NOT the clean red the old note implied. Also corrected:
+    `totem_4.png` is the `KHR_materials_specular` extension's `specularTexture` (confirmed by
+    grepping the raw `.glb`'s JSON chunk for `KHR_materials_specular`/`specularTexture`, both
+    present), not an unused UV-set channel; `StandardMaterial3D` has no import path for that glTF
+    extension so it goes unreferenced regardless. Also corrected the "Presentation blind-spot pin
+    (Dev Notes' own callout)" mislabel — re-read `## Dev Notes`: it names the presentation-side
+    blind spot as motivating context, it does not order a dedicated test; the tint test was the dev
+    pass's own initiative.
+  - Nothing else touched: projectile glow stays unpinned, `_TOTEM_TINT_BY_KIND` dispatch and the
+    tint-call-before-`actors.append` ordering are untouched, p1-only test coverage untouched, per
+    this fix pass's own instruction.
+  - Single blocking full-suite run at the end (`bash test/run_all.sh`, output
+    `C:\dev\_50c-fix-suite.txt`): `=== 577 tests, 0 failed, 4433 assertions ===`, 49 integration
+    files, `ALL TESTS PASSED`, `EXIT_CODE=0` — identical state-suite counts to both prior baselines
+    (golden and snapshot key set held; no `src/state/` file touched by this fix pass).
+
 ### Completion Notes List
 
+- **AC 1 (model + scale):** `totem.glb` imported with DEFAULT settings, no manual scale
+  correction — `root_scale = 1.0`, `apply_root_scale = true`, `gltf/embedded_image_handling = 1`
+  (extract), `nodes/import_as_skeleton_bones = false`, `animation/import = true` (the model
+  carries none, so this is a no-op default rather than a touched setting). The model's own combined
+  mesh AABB measured after import: `size (0.325282, 0.526651, 0.327314)`, origin near the model's
+  own feet (`min y = 0.002195`) — unlike the `BoxMesh` it replaces (centred on its origin, needing
+  the old `+0.7` node offset), so the new `Mesh` container's transform is a uniform scale of `2.5`
+  plus a small centering/feet-alignment translation, not the old convention's bare `y=0.7`. Result:
+  the model reads at roughly `(0.813, 1.317, 0.818)` in root space against the collision box's
+  `(0.8, 1.4, 0.8)` — footprint within ~2%, height ~94% (a shade under, read as the GDD's
+  "intentionally unimposing" rather than a mismatch). `Collision`/`Hurtbox`/`HurtboxShape` and
+  `BoxShape3D_totembody` are byte-unchanged. The `Mesh` node mirrors the `hero.tscn`
+  grounding-container pattern (a `MeshInstance3D` with no `mesh` of its own, holding only the
+  transform; the model itself instanced as a plain child with no transform of its own) rather than
+  inventing a new convention.
+- **AC 2/AC 3 (tint mechanism, measured then applied, corrected by review fix 2026-09-02):** the
+  imported material carries a SEPARATE `emission_texture` (`totem_2.png`) distinct from its
+  `albedo_texture` (`totem_0.png`) — the importer DOES expose the rune glow as a separable slot, so
+  AC 3's PREFERRED reading applies, not its single-texture fallback: `match_runner.gd`'s
+  `_apply_totem_tint` duplicates each mesh instance's own material (`StandardMaterial3D.duplicate()`,
+  so the two totem body/stand mesh instances and every other spawned totem each carry an independent
+  runtime copy — no shared-state bleed between totems) and overwrites only `emission`/
+  `emission_enabled`, leaving `albedo_texture` (and therefore the crystal body's LIT appearance)
+  completely untouched. Tint colors are named constants (`_TOTEM_TINT_BY_KIND`) per the Dev Notes'
+  review-fix ruling, not a `data/*.tres` resource. An unresolved kind (unrecognized name, or a
+  non-totem spawn with no `Mesh/Totem` child) leaves the model at its native teal — no throw,
+  matching `_unit_scene_for`'s own degrade-gracefully spirit.
+  **The original Completion Note here claimed "red/blue/green runes, crystal body unchanged" — that
+  was never measured, and a corrective pass (2026-09-02) measured it and found it wrong on one
+  point.** The imported material's `emission_operator` is `MULTIPLY` (value `1`), NOT the
+  `StandardMaterial3D` default `ADD` (value `0`) — measured directly off the live material, not
+  assumed. The `emission_texture` (`totem_2.png`) is a teal `(0.17, 0.91, 0.91)` rune mask on a
+  black `(0,0,0)` field (measured by sampling the loaded image). Under `MULTIPLY`, final emission is
+  `tint_color * mask_sample` component-wise: at body pixels (mask is black) the product is always
+  zero regardless of tint, so "crystal body unchanged" DOES hold — but not because albedo is
+  untouched, rather because the body was never emissive in the first place, before or after tinting.
+  At rune pixels the product is `tint * teal`, which is NOT a clean read of the tint color: the mask's
+  own red channel is only `0.17` against `0.91` green/blue, so `combat_totem`'s red tint
+  `(0.85, 0.1, 0.1)` reduces to roughly `(0.15, 0.09, 0.09)` — a dim, desaturated red-brown, not a
+  bright red. `mana_accelerator`'s blue and `stamina_accelerator`'s green tints, whose dominant
+  channels overlap the mask's own green/blue weighting, come through closer to their authored hue.
+  **Smoke-watch (unresolved by this fix, needs a live look, not a further doc edit):** do the three
+  totem kinds read as distinctly different colors at a glance, and — the specific risk this measured
+  math raises — does the Combat totem's tint read as recognizably RED rather than washing out toward
+  the mask's native teal-brown.
+- **AC 3a (totem never rotates, second corrective fix pass 2026-09-02, operator ruling on live
+  smoke):** confirmed from the code, before changing anything, that firing direction/homing is
+  state-side and never reads an actor's rotation — `ProjectileActor.heading` is a private `Vector3`
+  field driven by `launch_toward`/`turn_toward_this_tick` off world POSITIONS
+  (`ProjectileBoard`/`_target_world_position`), and `_face_heading()`'s own doc-comment states
+  "PRESENTATIONAL ONLY — nothing reads this rotation". So skipping a totem's `aim_at`/`aim_along`
+  changes nothing about where or whether it fires; the Combat totem still fires in all directions.
+  `_aim_unit_actors` (`match_runner.gd`) now skips the aim call for any actor whose scene carries a
+  `Mesh/Totem` child — the same scene-shape test `_apply_totem_tint` and its live test already key
+  on, not `_unit_scene_for`'s kind-data resolution, kept symmetrical with the existing 4-3c
+  animation-controller guard immediately above it in the same loop. Degrade-graceful by
+  construction: a minion never carries that child and is never skipped; an unresolvable kind falls
+  to `UNIT_SCENE` (`_unit_scene_for`'s own fallback), which also never carries it.
+- **AC 4 (projectile glow):** `projectile_actor.tscn`'s `Mesh` node keeps the exact same
+  `SphereMesh_projectile` geometry (radius 0.25, same `+0.7` offset) and gains a
+  `material_override` (a new `StandardMaterial3D_projectileglow` sub-resource, `emission_enabled =
+  true`, warm amber `emission`, `emission_energy_multiplier = 3.0`) — the
+  `telegraph_controller.gd:129-130` `_flat_material()` runtime mechanism mirrored as static scene
+  authoring, since the glow never varies per kind or instance (only the Combat totem ever fires).
+  No trail effect authored (AC 4's optional clause; acceptable to ship without one).
+- **AC 5 (projectile hitbox/behavior):** `Hitbox`/`HitboxShape`
+  (`SphereShape3D_projectile`, radius 0.35) and `projectile_actor.gd`/`match_state.gd`'s advance
+  logic are untouched — confirmed by `test_projectile_flight_live.gd` passing unchanged
+  (`no_hitbox=true body_and_hurtbox=true totem_static=true ... steered=true`).
+- **AC 6 (scope discipline):** no `src/state/` file touched; touched files confined to the
+  scene/runner/asset set AC 6 names, plus the new integration test.
+- **AC 7 (golden):** predicted UNMOVED; measured UNMOVED. Both `bash test/run_all.sh` runs report
+  `=== 577 tests, 0 failed, 4433 assertions ===` and `ALL TESTS PASSED` — identical counts before
+  and after, which is what confirms `test_determinism.gd`'s hardcoded golden
+  (`aa3566d7...ded7e4f`) held both times (a moved golden would have failed that one test, not
+  merely changed a number). `project.godot` byte-identical (verified after both editor sessions).
+- **Presentation blind-spot pin** (corrected by review fix 2026-09-02: this was the dev pass's OWN
+  initiative — nothing in Dev Notes ordered it; the Dev Notes section names the presentation-side
+  blind spot as context for why the tint dispatch is needed, it does not call for a dedicated test):
+  `test/integration/test_totem_tint_live.gd` added — spawns all three totem kinds via direct
+  `UnitBoard.add()` injection (not a card cast; `test_summon_actor_live.gd` already covers that
+  resolver path) and asserts the measured `MeshInstance3D.material_override.emission` on the
+  spawned actor's model matches the authored per-kind constant. Mutation-proven (table below): a
+  wrong color and a disabled dispatch call both fail it; the unmutated file passes.
+- **Tier stayed B**, confirmed rather than assumed: no `src/state/` file touched, no
+  `BalanceConfig` field added/removed/renamed, no snapshot key added, golden and snapshot key set
+  (27) measured unmoved both directions.
+
+### Mutation Proof Table
+
+Target: `test/integration/test_totem_tint_live.gd`, run individually
+(`godot --headless --path . --script res://test/integration/test_totem_tint_live.gd`). Backup
+outside the repo (`C:\dev\_50c_backups\match_runner.gd.orig`), restore by copy-back + SHA-256
+verification. Provenance: MEASURED, both runs live this dev pass.
+
+| # | Mutation | `src/main/match_runner.gd` change | Result | Restore verified (SHA-256) |
+| --- | --- | --- | --- | --- |
+| 1 | Wrong tint color | `combat_totem` constant swapped to the `mana_accelerator` color | FAIL — `combat_totem: want=(0.85, 0.1, 0.1, 1.0) got=(0.1, 0.35, 0.9, 1.0)` | `bfa9b040...45e737f15` identical pre/post |
+| 2 | Dispatch never called | `_apply_totem_tint(unit, player, actors.size())` call at the spawn site replaced with `pass` | FAIL — all three kinds `got=<null>` | `bfa9b040...45e737f15` identical pre/post |
+
+Unmutated file: PASS (`actors=3`, no mismatches) — confirmed immediately after each restore.
+
+**Review-fix pass 2026-09-02** (mesh-less-container fix: `_tint_mesh_recursive` in `match_runner.gd`
+now skips any `MeshInstance3D` whose `mesh == null`, and `test_totem_tint_live.gd`'s
+`_collect_emissions` does the same plus `_measured_emission` requires `colors.size() >= 2`). Same
+target and run command; backup `C:\dev\_50c_backups\match_runner.gd.fixed`
+(`746660fc...39a64872`), restore by copy-back + SHA-256 verification each time. Provenance:
+MEASURED, both runs live this fix pass.
+
+| # | Mutation | `src/main/match_runner.gd` change | Result | Restore verified (SHA-256) |
+| --- | --- | --- | --- | --- |
+| 3 | Review mutation B — sibling branch truncated after the first real tint | `for child in node.get_children(): _tint_mesh_recursive(child, color)` gains a `return` right after the recursive call, so `_tint_mesh_recursive` only ever descends into the FIRST child at each tree level; the totem's obelisk-body and stand mesh instances live under separate sibling branches of `RootNode`, so this stops the walk after tinting the body and never reaches the stand. (A literal "return right after the tint assignment" placement was tried first and does NOT reproduce this — the totem's body/stand `MeshInstance3D`s are leaf nodes with no children of their own, and are visited as independent siblings, not nested, so that placement's `return` only ends the leaf's own empty child loop and has no effect. This sibling-loop placement is the one that actually matches "early-return after the first tinted MeshInstance3D".) | FAIL — all three kinds `got=<null>` (only the body mesh got tinted; `colors.size() == 1 < 2` in `_measured_emission`) | `746660fc...39a64872` identical pre/post |
+| 4 | Dispatch never called (re-run against the fixed file) | `_apply_totem_tint(unit, player, actors.size())` call at the spawn site replaced with `pass` | FAIL — all three kinds `got=<null>` | `746660fc...39a64872` identical pre/post |
+
+Unmutated (fixed) file: PASS (`actors=3`, no mismatches) — confirmed immediately after each restore.
+
+**Second corrective fix pass 2026-09-02** (totem no-rotation, `3a` above): target
+`test/integration/test_totem_no_rotation_live.gd`, run individually (`godot --headless --path .
+--script res://test/integration/test_totem_no_rotation_live.gd`). Backup
+`C:\dev\_50c_backups\match_runner.gd.fix2`
+(`31cde1388f52e0bdee26a952d70e16c3602de7bdc49c3ce20518757cfa42fb06`), restore by copy-back +
+SHA-256 verification. Provenance: MEASURED, both runs live this fix pass.
+
+| # | Mutation | `src/main/match_runner.gd` change | Result | Restore verified (SHA-256) |
+| --- | --- | --- | --- | --- |
+| 5 | Aim skip removed | the `if unit.get_node_or_null("Mesh/Totem") != null: continue` guard in `_aim_unit_actors` gated behind `if false and ...` (never taken) | FAIL — `totem_still=false ... totem_rotated(spawn=0.0000 now=-1.5708)` | `31cde138...c9fa42fb06` identical pre/post |
+
+Unmutated file: PASS (`totem_still=true minion_aimed=true`) — confirmed immediately after restore.
+The same run also confirms the guard does not over-reach: `minion_aimed=true` in both the mutated
+and unmutated runs, since the mutation only touched the totem branch.
+
 ### File List
+
+- `src/actors/minions/totem_actor.tscn` (modified — AC 1/AC 2/AC 3)
+- `src/actors/projectiles/projectile_actor.tscn` (modified — AC 4/AC 5)
+- `src/main/match_runner.gd` (modified — AC 2/AC 3 tint dispatch near `_spawn_missing_unit_actors`;
+  second fix pass adds the totem aim skip in `_aim_unit_actors`, AC 3a)
+- `test/integration/test_totem_no_rotation_live.gd` (new — AC 3a presentation pin; no `.uid`
+  companion yet — unlike `test_totem_tint_live.gd.uid`, this file was never opened in the editor
+  this pass, only run headless via `--script`, which does not trigger the editor's filesystem scan)
+- `assets/props/totem/totem.glb` (operator-downloaded, precondition asset; untracked, stays
+  untracked per this dev pass's no-commit instruction)
+- `assets/props/totem/totem.glb.import` (generated by import; untracked)
+- `assets/props/totem/totem_0.png` .. `totem_4.png` (generated by import — texture extraction;
+  untracked)
+- `assets/props/totem/totem_0.png.import` .. `totem_4.png.import` (generated by import; untracked)
+- `test/integration/test_totem_tint_live.gd` (new — AC 2/AC 3 presentation pin)
+- `test/integration/test_totem_tint_live.gd.uid` (generated by editor scan; new)
 
 ### Change Log
 
@@ -244,3 +492,33 @@ Sonnet 5 (claude-sonnet-5)
 | --- | --- |
 | 2026-09-02 | Story authored via `gds-create-story`. Not yet cleared for a dev pass. |
 | 2026-09-02 | Review fix: Dev Notes tint-color bullet ruled inline named constants, not a `data/*.tres` resource (resolves AC 6 <-> Dev Notes contradiction). Promoted authored -> ready-for-dev. |
+| 2026-09-02 | Dev pass: `totem.glb` imported (default settings), totem model mounted per AC 1/AC 2, per-kind emission tint applied via `_apply_totem_tint` (AC 3, separable emission-slot reading measured and used), projectile given a procedural emissive glow (AC 4), `test_totem_tint_live.gd` added and mutation-proven. Golden and snapshot key set measured unmoved both directions (577/0/4433 identical before/after). Status -> review. |
+| 2026-09-02 | Review fix pass: `_tint_mesh_recursive` and the test's measurement walk both now skip mesh-less `MeshInstance3D` containers (the totem's `Mesh` node), killing a dead material allocation and a test blind spot that let a real-model mutation pass GREEN; `_measured_emission` now requires >= 2 contributing mesh instances. Completion Notes corrected: measured `emission_operator = MULTIPLY` (not the assumed default `ADD`), rune color is `tint * teal-mask` (dims/desaturates `combat_totem`'s red), body-unchanged holds for a different reason than originally stated (mask is black there, not because albedo is untouched); `totem_4.png` corrected to the measured `KHR_materials_specular` `specularTexture`; tint-test attribution corrected to the dev pass's own initiative, not a Dev Notes order. Mutation-reproven against the fixed file (2 mutations, both FAIL as expected). Full suite re-run: 577/0/4433 + 49 integration, identical to both prior baselines. Status unchanged (`review`). |
+| 2026-09-02 | Second corrective fix pass, from the operator's live smoke: overturns `4-4`'s 2026-08-30 smoke verdict that totem self-rotation was acceptable — that verdict was passed on the grey-box placeholder, not the real model. Confirmed from the code first that firing direction/homing is state-side and never reads actor rotation (`ProjectileActor.heading`, `_face_heading()`'s own "PRESENTATIONAL ONLY" note), so the fix is presentation-only: `_aim_unit_actors` (`match_runner.gd`) now skips `aim_at`/`aim_along` for any actor carrying the `Mesh/Totem` scene shape; the Combat totem still fires in all directions. New AC 3a appended (acceptance line + AC 6 scope-line amendment, both by operator ruling). Pinned by new `test/integration/test_totem_no_rotation_live.gd`, mutation-proven (guard removed -> FAIL, restored + SHA-256 verified). Status unchanged (`review`). |
+| 2026-09-02 | Close-out: live smoke (pad, flip [0,3], flip reverted) passed with one same-day corrective fix (totem no-rotation, folded into this story as AC 3a) and two accepted DEFERRED polish findings (combat totem tint red-brown, projectile glow flatness). Status -> done. |
+
+## Live Smoke Results
+
+Operator, pad, flip `[0,3]`, flip reverted. Date 2026-09-02.
+
+- All three totem kinds (combat, mana accelerator, stamina accelerator) are distinguishable by
+  color at a glance.
+- Combat totem's red tint reads dim red-brown rather than a clean red — matches the measured
+  mechanism (`emission_operator = MULTIPLY` over a teal rune mask whose red channel is ~0.17, so
+  red tints crush). Brighter would read better but is not essential. **DEFERRED polish**, not
+  fixed this story.
+- The totem model sits right in the world: grounded, fills the footprint the old grey box
+  occupied, no float or sink.
+- Projectile: a yellow glowing sphere, more noticeable at a glance than the old grey ball per two
+  household observers, but the operator judged the old grey ball read more three-dimensional (flat
+  emissive kills depth cues). Stays yellow; depth/shading is **DEFERRED polish**, not fixed this
+  story.
+- **New finding mid-smoke:** the totem visually tracked (rotated to face) its target. The operator
+  ruled totems NEVER rotate — a static structure — overturning `4-4`'s "self-rotation, accepted as
+  shipped" smoke verdict, which was passed on a grey-box placeholder rather than the real model.
+  Fixed same day (AC 3a above): `_aim_unit_actors` now skips the totem's visual aim; firing itself
+  is state-side and unaffected (the Combat totem still fires in all directions, including behind
+  itself).
+- Re-smoke after the fix, 3/3 PASS: totem stays put; still fires 360 degrees including behind
+  itself; minions still aim normally.
+- Gameplay untouched throughout — this story is presentation-only.

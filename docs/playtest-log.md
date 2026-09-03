@@ -212,3 +212,12 @@ Sve 1-9 PASS: held-L3 cast mode, slotovi L2/L1/R1/R2 = HUD red, Basic cast + odb
 supresija attack/block/roll pod L3, roll escape na puštanje, held-through-exit ne okida, trigger
 ne spama, lock-on netaknut, fps stabilan.
 
+3.9.
+## 2026-09-02 — 5-0c totem + projektil modeli (živi smoke + re-smoke, pad, flip [0,3])
+Tri tinta razlučiva na pogled. Crvena na combat totemu prigušena crveno-smeđa (tint*teal maska,
+MULTIPLY) — jarkija bi bila bolja, nije esencijalno, odgođeni polish. Model sjeda u prostor, ne
+lebdi/tone. Projektil žuta kugla — mami i bratu uočljivija od stare, meni stara djelovala
+trodimenzionalnije; ostaje žuta, dubina = odgođeni polish. NALAZ: totem se rotirao za metom —
+presudio da totemi NIKAD ne rotiraju (obara 4-4 "prihvaćena kozmetika", suđeno na sivoj kutiji);
+fixano, re-smoke 3/3: totem miran, puca 360 i iza leđa, minioni se normalno okreću. Gameplay netaknut.
+

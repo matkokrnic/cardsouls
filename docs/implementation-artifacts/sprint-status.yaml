@@ -96,7 +96,7 @@ development_status:
   epic-5: backlog
   5-0a-hero-locomotion: done  # Tier B
   5-0b-pad-card-input: done  # Tier B
-  5-0c-totem-projectile-models: ready-for-dev  # Tier B
+  5-0c-totem-projectile-models: done  # Tier B
   5-0d-arena-edge: backlog  # Tier B
   5-1-accelerator-stacking: backlog  # Tier A
   5-1a-intent-hardening: backlog  # Tier A
@@ -108,7 +108,7 @@ development_status:
   5-7-pad-modes-2-3: backlog  # Tier B
 
 story_notes:
-  5-0c-totem-projectile-models: "ready-for-dev 2026-09-02, operator-reviewed (tint colors ruled inline constants)."
+  5-0c-totem-projectile-models: "done 2026-09-02, Tier B ritual complete (review-hardened tint pin, smoke-ruled no-rotation, re-smoke 3/3)."
   5-0b-pad-card-input: "done 2026-09-02, Tier B ritual complete (review-corrected AC 3, live smoke 9/9 PASS)."
   5-0a-hero-locomotion: "DONE 2026-09-02 (5-0a/R1-R4). Nine-clip library, five-way direction-aware locomotion off the shared yaw, bone-following hitbox; golden unmoved both directions. Live smoke overturned the operator's Mixamo-preview strafe mapping (mirror misread), fixed by a source-file swap; all six smoke items PASS after. One review LOW (diagonal tie-break never resolves strafe) deferred to the retune block."
   3-0a-rig-adoption: "DONE 2026-07-31 (3-0a/R1-R16). Skinned paladin + six-clip AnimationPlayer in hero.tscn; DECISION A intact (root never rotates, test_root_rotation_isolation.gd AND test_visible_facing.gd both green); src/state/ byte-identical, golden 338172010a…21da2 unmoved both directions; suite 164/760/0, 10 integration files individually green (test_rig_clips.gd added, mutation-proven). Live smoke PASSED with two humans on the shipped default (R-D6 re-invoked, SPENT); three non-blocking findings handed to 3-0b (below)."
