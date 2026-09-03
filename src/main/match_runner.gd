@@ -207,6 +207,17 @@ const SPAWN_DEGENERATE_DIRECTION_EPSILON := 0.05
 ## guard would catch it. "Behind the hero" is PLANAR: the hero's `.y` is read for NOTHING, because
 ## the two roots disagree about what y means (hero root = body CENTRE at y 1, unit root = FEET).
 const SPAWN_GROUND_Y := 0.0
+## Story 5-0d fix pass (F1): the ARENA'S half-extent (`main.tscn`'s `Ground` `BoxShape3D`,
+## `size = Vector3(40, 1, 40)`) and the largest half-extent of the two spawnable actor bodies
+## (`totem_actor.tscn`'s `BoxShape3D_totembody`, `size = Vector3(0.8, 1.4, 0.8)`, half-extent 0.4 --
+## bigger than `unit_actor.tscn`'s 0.3, so one shared margin is safe for either kind). Used only to
+## CLAMP an already-accepted candidate back inside the ring (see `_compute_spawn_positions`) -- the
+## rear-arc search itself is untouched, so 4-3e's "behind the hero" semantics are preserved for
+## every candidate that already lands inside the ring; only a candidate that would have landed at
+## or past the wall is pulled back to the ring's edge.
+const SPAWN_ARENA_HALF_EXTENT := 20.0
+const SPAWN_CONTAINMENT_MARGIN := 0.4
+const SPAWN_CONTAINMENT_BOUND := SPAWN_ARENA_HALF_EXTENT - SPAWN_CONTAINMENT_MARGIN
 
 
 func _ready() -> void:
@@ -913,7 +924,14 @@ func _compute_spawn_positions(occupied: Array[Vector3], hero_position: Vector3,
 					break
 			if found:
 				# AC 8: the y is the GROUND CONSTANT, never the hero's. Only x/z are computed.
-				placed.append(Vector3(accepted.x, SPAWN_GROUND_Y, accepted.y))
+				# 5-0d fix pass (F1): clamp the accepted candidate back inside the arena ring --
+				# the rear-arc search has no arena awareness (AC 6/Non-Goals, unchanged here), so a
+				# hero standing near a wall can otherwise accept a candidate at or past it (see the
+				# story's corrected AC 6 note). This is a floor on the OUTPUT, not a change to the
+				# search itself.
+				var contained_x := clampf(accepted.x, -SPAWN_CONTAINMENT_BOUND, SPAWN_CONTAINMENT_BOUND)
+				var contained_z := clampf(accepted.y, -SPAWN_CONTAINMENT_BOUND, SPAWN_CONTAINMENT_BOUND)
+				placed.append(Vector3(contained_x, SPAWN_GROUND_Y, contained_z))
 				break
 			ring += 1
 	return placed

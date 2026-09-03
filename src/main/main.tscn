@@ -10,6 +10,22 @@ size = Vector3(40, 1, 40)
 [sub_resource type="BoxMesh" id="BoxMesh_30cu5"]
 size = Vector3(40, 1, 40)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_wallns"]
+size = Vector3(42, 3, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wallns"]
+size = Vector3(42, 3, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wallew"]
+size = Vector3(1, 3, 40)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wallew"]
+size = Vector3(1, 3, 40)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wallglass"]
+transparency = 1
+albedo_color = Color(0.6, 0.7, 0.85, 0.35)
+
 [node name="Main" type="Node3D" unique_id=1592136353]
 script = ExtResource("1_ab7mr")
 
@@ -25,6 +41,46 @@ shape = SubResource("BoxShape3D_jqarl")
 [node name="GroundMesh" type="MeshInstance3D" parent="Ground" unique_id=29039138]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 mesh = SubResource("BoxMesh_30cu5")
+
+[node name="WallNorth" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 20.5)
+
+[node name="WallNorthCollision" type="CollisionShape3D" parent="WallNorth"]
+shape = SubResource("BoxShape3D_wallns")
+
+[node name="WallNorthMesh" type="MeshInstance3D" parent="WallNorth"]
+mesh = SubResource("BoxMesh_wallns")
+surface_material_override/0 = SubResource("StandardMaterial3D_wallglass")
+
+[node name="WallSouth" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -20.5)
+
+[node name="WallSouthCollision" type="CollisionShape3D" parent="WallSouth"]
+shape = SubResource("BoxShape3D_wallns")
+
+[node name="WallSouthMesh" type="MeshInstance3D" parent="WallSouth"]
+mesh = SubResource("BoxMesh_wallns")
+surface_material_override/0 = SubResource("StandardMaterial3D_wallglass")
+
+[node name="WallEast" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20.5, 1.5, 0)
+
+[node name="WallEastCollision" type="CollisionShape3D" parent="WallEast"]
+shape = SubResource("BoxShape3D_wallew")
+
+[node name="WallEastMesh" type="MeshInstance3D" parent="WallEast"]
+mesh = SubResource("BoxMesh_wallew")
+surface_material_override/0 = SubResource("StandardMaterial3D_wallglass")
+
+[node name="WallWest" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20.5, 1.5, 0)
+
+[node name="WallWestCollision" type="CollisionShape3D" parent="WallWest"]
+shape = SubResource("BoxShape3D_wallew")
+
+[node name="WallWestMesh" type="MeshInstance3D" parent="WallWest"]
+mesh = SubResource("BoxMesh_wallew")
+surface_material_override/0 = SubResource("StandardMaterial3D_wallglass")
 
 [node name="P1Hero" type="CharacterBody3D" parent="." unique_id=1317219649 instance=ExtResource("2_djufw")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 1, 0)
