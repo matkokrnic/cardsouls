@@ -756,6 +756,7 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 		var unit := _unit_scene_for(player, actors.size()).instantiate() as UnitActor
 		add_child(unit)
 		unit.global_position = spot
+		_apply_totem_tint(unit, player, actors.size())
 		actors.append(unit)
 
 
@@ -781,6 +782,65 @@ func _unit_scene_for(player: PlayerState, index: int) -> PackedScene:
 	if attack == null or attack.projectile != null:
 		return TOTEM_SCENE
 	return UNIT_SCENE
+
+
+## Story 5-0c (AC 2/AC 3): per-kind totem tint, NAMED CONSTANTS in presentation code rather than a
+## new `data/*.tres` resource — ruled in Dev Notes (review fix 2026-09-02) because AC 6's
+## touched-files list does not include `data/`, and a small color table gains nothing a `.tres`
+## profile would need until per-kind totem model VARIANTS become real (Non-Goals).
+const _TOTEM_TINT_BY_KIND := {
+	&"combat_totem": Color(0.85, 0.1, 0.1),
+	&"mana_accelerator": Color(0.1, 0.35, 0.9),
+	&"stamina_accelerator": Color(0.15, 0.75, 0.2),
+}
+
+
+## Story 5-0c (AC 2/AC 3): tints the already-spawned totem's model per kind. Reads the SAME kind
+## name `_unit_scene_for` resolves from, at the SAME spawn call site — no new `src/state/` read
+## (the kind index/name already flows through `UnitBoard.kind_index_at`, 4-4's own field).
+## Presentation-only and degrade-gracefully by construction: any unresolved kind (a totem-shaped
+## record whose kind index falls to `NO_KIND_INDEX`, or a MINION spawn, whose `_unit_scene_for`
+## never gives it a `Mesh/Totem` child) leaves the model at its native teal rather than throwing,
+## the same "never disappears or throws for lack of a tint" spirit `_unit_scene_for`'s own header
+## states applies here too.
+##
+## THE TINT MEASURED THEN APPLIED (AC 3): the imported `totem.glb` material carries a SEPARATE
+## emission texture (the rune glow mask) distinct from its albedo texture (the crystal body),
+## measured by loading the imported scene and inspecting `BaseMaterial3D.get_texture()` per slot —
+## so this tints ONLY the `emission` color on a per-instance DUPLICATE of the model's own material,
+## leaving the albedo (crystal body) texture untouched: red/blue/green runes, crystal body
+## unchanged, the AC's preferred reading rather than its single-texture fallback.
+func _apply_totem_tint(unit: UnitActor, player: PlayerState, index: int) -> void:
+	var balance := _match_state.balance
+	if balance == null or not player.units.has_index(index):
+		return
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	if kind == null or not _TOTEM_TINT_BY_KIND.has(kind.kind_name):
+		return
+	var mesh_root := unit.get_node_or_null("Mesh")
+	if mesh_root == null:
+		return
+	_tint_mesh_recursive(mesh_root, _TOTEM_TINT_BY_KIND[kind.kind_name])
+
+
+## Story 5-0c (AC 3): walks every `MeshInstance3D` under the totem model instance — the imported
+## `totem.glb` mounts the obelisk body and its stand as two separate mesh instances sharing one
+## material, measured after import — and gives each its OWN duplicated material so tinting one
+## totem's model can never bleed into another's shared resource.
+func _tint_mesh_recursive(node: Node, color: Color) -> void:
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		var mesh_instance := node as MeshInstance3D
+		var base_material := mesh_instance.get_active_material(0)
+		var tinted: StandardMaterial3D
+		if base_material is StandardMaterial3D:
+			tinted = (base_material as StandardMaterial3D).duplicate()
+		else:
+			tinted = StandardMaterial3D.new()
+		tinted.emission_enabled = true
+		tinted.emission = color
+		mesh_instance.material_override = tinted
+	for child in node.get_children():
+		_tint_mesh_recursive(child, color)
 
 
 ## Story 4-3e (AC 1, 2, 4, 8, 9): the ORDERED LIST OF `batch_size` WORLD POSITIONS one growth batch
@@ -1023,6 +1083,18 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		# with no usable direction -- "still pointing where it last looked" reads honestly, and a
 		# corpse has no target to acquire.
 		if not player.units.is_alive_at(index):
+			continue
+		# Story 5-0c (second corrective fix pass, operator-ruled on live smoke 2026-09-02): A
+		# TOTEM NEVER ROTATES -- it is a static structure, and this holds for the combat totem
+		# too, which still FIRES IN ALL DIRECTIONS (state-side, `ProjectileActor.heading` and its
+		# targeting are entirely independent of this node's rotation -- see the projectile
+		# doc-comments) but must not visually track. Detected by the SAME `Mesh/Totem` scene shape
+		# `_apply_totem_tint` and its live test already key on, deliberately not `_unit_scene_for`'s
+		# TOTEM_SCENE/UNIT_SCENE resolution (that reads authored kind data one spawn-tick earlier;
+		# this is a rig-shape check, symmetrical with the animation-controller guard above). A
+		# MINION never carries this child and is never skipped; an unresolvable kind degrades to
+		# `UNIT_SCENE`, which also never carries it, so this never throws and never over-reaches.
+		if unit.get_node_or_null("Mesh/Totem") != null:
 			continue
 		# Story 4-3b (AC 12): A UNIT THAT IS SWINGING IS AIMED FROM ITS LOCKED DIRECTION, not at its
 		# live target. The direction locks at windup start and must NOT be recomputed -- that is the

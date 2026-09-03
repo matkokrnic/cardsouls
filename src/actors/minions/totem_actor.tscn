@@ -1,11 +1,9 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/actors/minions/unit_actor.gd" id="1_unitactor"]
+[ext_resource type="PackedScene" path="res://assets/props/totem/totem.glb" id="2_totemmdl"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_totembody"]
-size = Vector3(0.8, 1.4, 0.8)
-
-[sub_resource type="BoxMesh" id="BoxMesh_totem"]
 size = Vector3(0.8, 1.4, 0.8)
 
 [node name="TotemActor" type="CharacterBody3D"]
@@ -29,6 +27,8 @@ shape = SubResource("BoxShape3D_totembody")
 editor_description = "Mirrors the BODY collision box exactly - same shape sub-resource, same +0.7 y offset - so 'the hurtbox mirrors the body collision box' is true by construction rather than by two literals agreeing. The unit_actor.tscn HurtboxShape makes the identical choice for the identical reason."
 
 [node name="Mesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
-mesh = SubResource("BoxMesh_totem")
-editor_description = "GREY BOX, and that is the standing bar rather than a placeholder awaiting art: visual fidelity is explicitly out of scope everywhere in this project, and unit_actor.tscn only carries a skinned model because story 4-3c had a rig-adoption AC of its own. A totem needs to be VISIBLE and DISTINGUISHABLE from a minion in the live smoke - taller and squarer than the 0.6 x 1.2 x 0.6 minion body - and this is the least machinery that achieves it. Offset +0.7 in y like every other node here, because the root is at the box's FEET. No material is authored: the default is what every grey box in this project has used."
+editor_description = "Story 5-0c (AC 1). GROUNDING/SCALE CONTAINER, the hero.tscn Mesh precedent verbatim (hero.tscn:55-57): this node carries no mesh of its own and exists only to hold the transform the instanced model needs, exactly as hero.tscn's Mesh holds the paladin FBX's grounding offset. `assets/props/totem/totem.glb`'s own combined mesh AABB, measured after import at default settings (root_scale = 1.0): position (-0.133794, 0.002195, -0.164973), size (0.325282, 0.526651, 0.327314) - the model's own origin already sits at its FEET (min y ~= 0.0022), unlike the BoxMesh this replaces which was centred on its origin and needed a +0.7 offset to reach the same convention. The uniform scale 2.5 below maps that AABB to roughly (0.813, 1.317, 0.818) in root space - within ~2% of the collision box's 0.8 x 0.8 footprint and ~94% of its 1.4 height (AC 1's 'roughly the same footprint and height', deliberately a shade under rather than over, reading as the GDD's 'intentionally unimposing' rather than a size mismatch). The x/z translation centres the model's footprint on the root's x=0, z=0 the same way BoxShape3D_totembody's collision box already sits; the tiny y correction keeps the model's true lowest vertex, not its unscaled AABB corner, exactly at y=0."
+transform = Transform3D(2.5, 0, 0, 0, 2.5, 0, 0, 0, 2.5, -0.0721, -0.0055, 0.0033)
+
+[node name="Totem" parent="Mesh" instance=ExtResource("2_totemmdl")]
+editor_description = "Story 5-0c (AC 1/AC 3). The operator-downloaded obelisk model, instanced with no transform of its own - the hero.tscn Paladin-under-Mesh precedent (hero.tscn:59) verbatim, right down to leaving the child instance's own transform at identity and putting all scale/offset on the parent Mesh container. Its material is tinted per kind at spawn time by `match_runner.gd`'s `_apply_totem_tint` (AC 2/AC 3) - never authored here, since the same model instance serves all three totem kinds."

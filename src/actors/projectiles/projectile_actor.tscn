@@ -9,6 +9,12 @@ radius = 0.35
 radius = 0.25
 height = 0.5
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_projectileglow"]
+albedo_color = Color(1, 0.6, 0.15, 1)
+emission_enabled = true
+emission = Color(1, 0.55, 0.05, 1)
+emission_energy_multiplier = 3.0
+
 [node name="ProjectileActor" type="Node3D"]
 script = ExtResource("1_projectile")
 editor_description = "Story 4-4 (AC 14). The live projectile - 'a distinct entity in the world (not an instant hit) that travels from the totem toward its target rather than resolving contact immediately'. A plain Node3D, NOT a CharacterBody3D: a projectile is not blocked by anything and cannot be walked into, so it carries no body collision, and its movement is a plain translation rather than move_and_slide() (see projectile_actor.gd). It is spawned, steered and freed by the runner; it owns its HEADING and nothing else."
@@ -27,4 +33,5 @@ editor_description = "A SPHERE, not a box, and the choice is load-bearing rather
 [node name="Mesh" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
 mesh = SubResource("SphereMesh_projectile")
-editor_description = "GREY BALL - the standing grey-box bar applied to a sphere. Visual fidelity is out of scope everywhere in this project; what this has to do is be VISIBLE in the live smoke so an operator can watch a shot leave a totem, curve toward a hero, and either land or expire. Offset +0.7 in y to match the hitbox it represents, so what a human sees and what the physics query sees are the same object in the same place."
+material_override = SubResource("StandardMaterial3D_projectileglow")
+editor_description = "Story 5-0c (AC 4). PROCEDURAL GLOWING SPHERE, replacing the standing grey-box bar with an authored emissive material - no downloaded asset, per AC 4's own constraint. Same `SphereMesh_projectile` geometry (radius 0.25) and the same +0.7 y offset as before, unchanged: only the material is new. `material_override` with `emission_enabled = true` is the `telegraph_controller.gd:129-130` `_flat_material()` runtime-material mechanism mirrored as static scene authoring rather than reinvented, since this glow never needs to change per kind or per instance (only the Combat totem ever spawns a projectile, 4-4's own scoping) and can be authored once. AC 5's Hitbox/HitboxShape below are untouched by this story - this node's geometry and offset stay exactly as measured, only its appearance changes."
