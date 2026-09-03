@@ -177,10 +177,12 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 - `5-1a-intent-hardening` (Tier A) closes the retarget-hardening residue carried from E4: `4-6`
   M3 (a malformed retarget address is logged and then acted on, landing in a hashed key) and
   `4-6` L7/L8 (v6-record robustness), per the `4-1/R1` hard-rejection doctrine.
-- `R-M9`: accelerators stack, multiplicatively, per totem — each accelerator pays its own grant
-  per cadence tick (mana seat: Reading A, linear and player-countable; stamina seat: literal
-  mult^N). Ships in `5-1-accelerator-stacking` (Tier A), which also carries the `4-4` M2/M7
-  authoring-audit bounds.
+- `R-M9`: accelerators stack, LINEARLY, per totem, both seats — each accelerator pays its own
+  grant per cadence tick (mana seat: Reading A, linear and player-countable, unchanged; stamina
+  seat: `baseline x (1 + N x step)`, `step` authored so `N=1` is identical to today's shipped
+  behaviour — `5-1/R1`, decision-log Session 2026-09-03, superseding `E5-P/R3`'s stamina clause
+  and this line's prior "literal mult^N" reading). Ships in `5-1-accelerator-stacking` (Tier A),
+  which also carries the `4-4` M2/M7 authoring-audit bounds.
 - `R-SPELL`: spell resolution stays a named no-op through E5 (forcing point is the E6 close-out
   story). No E5 story may assume a spell card resolves; `5-5-unblockable-defense`'s hand-of-four
   math must tolerate three unresolvable cards.

@@ -231,10 +231,12 @@ fixano, re-smoke 3/3: totem miran, puca 360 i iza leđa, minioni se normalno okr
 3. Near-wall/corner summon (F1 containment fix): unit spawns INSIDE the arena behind the hero;
    depenetration nudges the casting hero slightly forward — accepted as cosmetic (the clamp can
    place the spawn within body-overlap distance of a wall-pinned hero), not a defect. PASS.
-4. Camera under lock-on at a wall (SMOKE-WATCH): confirmed — the forced-lock camera ends up
-   outside the ring sighting the hero through an opaque wall; the hero is occluded. Recorded as
-   an observed shortcoming of forced lock-on; candidate remedy: transparent/see-through walls
-   (or camera work). Deferred to the post-E5+E6 playtest/retune block. Not an AC.
+4. Camera under lock-on at a wall (SMOKE-WATCH → RESOLVED in-story, `5-0d/R5`): confirmed — the
+   forced-lock camera ends up outside the ring sighting the hero through an opaque wall; the hero
+   is occluded. Operator ruled transparent walls the right fix on the spot; applied in-story and
+   verified live (see item 8 below). Separately noted, NOT resolved here: the forced lock-on
+   itself (no free camera control) has observed shortcomings, deferred to the post-E5+E6
+   playtest/retune block.
 5. Projectiles pass through the wall visually: accepted by design (AC 7). PASS.
 6. Outer wall overhang above the void: visible from the edge, does not bother. Accepted.
 7. Performance feels fine. Cosmetics: the walls' top-face rendering looks rough and circling the

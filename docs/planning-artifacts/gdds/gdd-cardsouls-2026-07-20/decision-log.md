@@ -8427,3 +8427,38 @@ entry; the story file's fix-pass Change Log row F2/F3 label correction and Statu
 `docs/playtest-log.md`'s operator-written entry (already present, verified before this commit);
 and the board (`5-0d-arena-edge: ready-for-dev` -> `done`). Nothing pushed; the operator reviews
 the log.
+
+## Session 2026-09-03 -- 5-1 readiness gate fix, operator ruling `5-1/R1`
+
+The `5-1-accelerator-stacking` readiness gate found `5-1/R1` recorded only in the uncommitted story
+file, unbacked by any decision-log entry, with `epics.md:180-183` still stating the superseded
+multiplicative/`mult^N` reading (BLOCKING). This entry records the ruling by content, as already
+written in the story file, so a dev pass reading `epics.md` or this log gets the same arithmetic the
+story's ACs are written against.
+
+`5-1/R1` (ruled by Matko) ACCELERATORS STACK LINEARLY, BOTH KINDS. Mana half keeps Reading A
+unchanged (already linear -- each totem pays its own portion per cadence); `5-1` only removes the
+bool gate that currently makes a second identical mana totem do nothing. Stamina seat changes from
+`baseline x mult^N` to `baseline x (1 + N x step)`, step authored so that `N=1` is exactly identical
+to today's shipped behaviour. Supersedes `E5-P/R3`'s stamina clause and the stamina half of `R-M9`.
+Rationale: readability, balance (`mult^N` explodes at the third totem), symmetry with mana.
+`E5-P/R3` (`decision-log.md:8159-8164`, Session 2026-09-01) is NOT rewritten -- it stands as the
+superseded reading; its mana-seat resolution is unaffected.
+
+One-line correction, recorded here rather than in `E5-P/R5` itself: `E5-P/R5`'s ordering premise for
+`5-1` ("changes shipped behaviour and moves the golden, so it runs first ... per the `4-6`
+re-baseline discipline of isolating one measured cause at a time") is contradicted by measurement --
+the readiness gate found the hashed golden fixture authors exactly one unit kind (`&"minion"`), so
+`kind_index_of` returns `NO_KIND_INDEX` for both accelerator kinds and the gate closes at the kind
+lookup before the board is scanned; `N` is identically `0` for both players on every tick, and the
+golden does not move on this story. The ORDERING stands (`5-1` still runs first of the Tier A
+stories); only the golden-movement premise does not hold here -- recorded so nobody later reads the
+story's absent re-baseline as a skipped step.
+
+`epics.md:180-183` corrected this pass (`docs(epics)` commit) from "multiplicatively, per totem ...
+stamina seat: literal `mult^N`" to the linear reading, pointing at `5-1/R1`. `docs/playtest-log.md`'s
+`5-0d` entry point 4 also corrected this pass, unrelated to `5-1`: it still read the transparent-wall
+camera finding as deferred, against `5-0d/R5`'s in-story resolution; aligned to match that ruling.
+
+No `src/`, `test/`, or `data/` file touched; no code ran; no golden or suite touched. The operator
+reviews the log and pushes.
