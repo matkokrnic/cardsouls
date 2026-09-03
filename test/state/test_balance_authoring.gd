@@ -599,6 +599,70 @@ func test_authored_projectile_profile_is_playable() -> void:
 				% [projectile.max_speed, projectile.launch_speed])
 
 
+## ---- M7: the derived projectile speed cannot reach zero (story 5-1, AC 10, `5-1/R3`) -------
+##
+## THIS IS A NAMED REGRESSION GUARD, NOT A FIX. `4-4` M7 (`_44-review.md:416`, "zero or negative
+## derived projectile speed makes a shot immortal") was independently audited at 5-1's readiness gate
+## and found ALREADY CLOSED: under the bounds `test_authored_projectile_profile_is_playable` asserts
+## directly above (`launch_speed > 0`, `acceleration >= 0`, `max_speed >= launch_speed`), every
+## branch of `MatchState._speed_at_flight_ticks` returns `>= launch_speed > 0`, and the only `0.0`
+## return is the null-profile branch, which `_advance_projectiles` consumes before the speed function
+## is ever called. No gap existed to close. The finding is DISCHARGED-AS-ALREADY-CLOSED, and what
+## ships here is the assertion that keeps it closed.
+##
+## IT WALKS THE CURVE RATHER THAN RE-ASSERTING THE BOUNDS. Re-checking `launch_speed > 0` would only
+## restate the test above; the claim M7 actually makes is about the DERIVED value at every point of
+## the flight, so this evaluates the shipped arithmetic tick by tick across a full budget's worth of
+## travel — through the acceleration delay boundary and past `max_speed` saturation — and asserts the
+## speed never reaches zero or below at any of them.
+func test_the_authored_projectile_speed_curve_never_reaches_zero() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var combat := _kind(config, &"combat_totem")
+	if combat == null or combat.attack_at(0) == null or combat.attack_at(0).projectile == null:
+		assert_true(false, "the Combat totem must author a projectile to audit")
+		return
+	var projectile := combat.attack_at(0).projectile
+	var delay_ticks := int(round(projectile.acceleration_delay_seconds * TimingWindow.TICK_HZ))
+	if projectile.launch_speed <= 0.0:
+		assert_true(false,
+			("`4-4` M7 regressed: authored `launch_speed` must be > 0.0 — the budget-ticks sweep "
+			+ "divides by it, and a zero or negative launch speed makes the derived curve "
+			+ "unrunnable (got %.3f)") % projectile.launch_speed)
+		return
+	# A full budget's worth of flight at the SLOWEST speed the curve can produce, so the sweep
+	# outlives any shot this profile can launch, plus a margin past the delay boundary in case the
+	# authored delay ever exceeds that.
+	var budget_ticks := int(ceil(projectile.travel_budget / projectile.launch_speed
+			* TimingWindow.TICK_HZ))
+	var horizon := maxi(budget_ticks, delay_ticks * 2) + 2
+	var slowest := INF
+	var slowest_tick := -1
+	for ticks in range(0, horizon + 1):
+		# `MatchState._speed_at_flight_ticks`' arithmetic, evaluated here against the AUTHORED
+		# profile — the state-layer function needs a live board and an index, which an authoring
+		# audit has no business standing up.
+		var speed := projectile.launch_speed
+		if ticks > delay_ticks:
+			var accelerating_seconds := float(ticks - delay_ticks) / TimingWindow.TICK_HZ
+			speed = minf(projectile.max_speed, projectile.launch_speed
+					+ projectile.acceleration_per_second_squared * accelerating_seconds)
+		if speed < slowest:
+			slowest = speed
+			slowest_tick = ticks
+	assert_true(slowest > 0.0,
+		("`4-4` M7, DISCHARGED-AS-ALREADY-CLOSED and guarded here: the derived speed must stay > 0 "
+		+ "across the whole authored curve — the slowest point of %d sampled flight ticks was %.3f "
+		+ "at tick %d. A zero or negative derived speed makes a shot that never advances its "
+		+ "odometer and therefore never expires: an immortal projectile")
+				% [horizon + 1, slowest, slowest_tick])
+	assert_eq(slowest, projectile.launch_speed,
+		"...and the slowest point of the curve is the LAUNCH speed itself — the profile only ever "
+		+ "accelerates, so `launch_speed > 0` (audited above) is what makes the whole curve positive")
+
+
 ## ---- Accelerator working values (story 4-4, AC 20/AC 21, `4-4/R13`) -----------------------
 ##
 ## `4-4/R13` MAKES THESE DERIVED, NOT PRINCIPLED: the Mana Accelerator's cadence/amount are set
@@ -633,11 +697,23 @@ func test_authored_accelerator_values_are_derived_and_effective() -> void:
 		("the Mana Accelerator (%.3f mana/s) must stay within an order of magnitude of the passive "
 		+ "faucet (%.3f mana/s) — `4-4/R13`: 'same order of magnitude'")
 				% [accelerator_per_second, config.mana_regen_per_second])
-	assert_true(config.stamina_accelerator_regen_multiplier > 1.0,
-		("stamina_accelerator_regen_multiplier must be authored > 1.0 (got %.2f) — AC 21 requires "
-		+ "the owner's regen to be RAISED; 1.0 ships a totem that does nothing and < 1.0 ships one "
-		+ "that harms its owner, and both pass a `> 0` bound")
-				% config.stamina_accelerator_regen_multiplier)
+	# Story 5-1 (AC 7, `5-1/R1`/`5-1/R2`): the field is now the ADDITIVE STEP in `1 + N x step`, so
+	# the failure this bound catches moved with the semantics. Under the old direct multiplier the
+	# do-nothing value was 1.0 and the harmful range was below it; under an additive step the
+	# do-nothing value is 0.0 and the harmful range is below THAT. The bound is not relaxed from
+	# `> 1.0` to `> 0` — it is re-derived, and `> 1.0` would now reject today's correct `0.5`.
+	assert_true(config.stamina_accelerator_regen_step > 0.0,
+		("stamina_accelerator_regen_step must be authored > 0 (got %.2f) — AC 21 still requires the "
+		+ "owner's regen to be RAISED; under `1 + N x step` a 0.0 step ships a totem that does "
+		+ "nothing at every N and a negative one ships one that harms its owner")
+				% config.stamina_accelerator_regen_step)
+	# `5-1/R1`'s derivation, machine-checked rather than left in prose: ONE totem must reproduce
+	# 4-4's shipped factor EXACTLY, so the first accelerator a player summons moves no balance and
+	# only the second and third do. An authored step that drifted off 0.5 would silently re-tune the
+	# single-totem case this story promised not to touch.
+	assert_eq(1.0 + 1.0 * config.stamina_accelerator_regen_step, 1.5,
+		"`5-1/R1`: the authored step is DERIVED from `1 + 1 x step = 1.5` (story 4-4's shipped "
+		+ "single-totem factor), so N=1 is byte-identical to today and stacking starts at N=2")
 
 
 ## The authored kind carrying `kind_name`, or null. A test-local read of the same lookup

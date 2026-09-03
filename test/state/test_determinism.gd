@@ -122,7 +122,9 @@ extends TestCase
 ##      through the whole run), so this is the candidate with the most exposure — and it is exactly
 ##      why it is worth stating as measured rather than assumed.
 ## NOT a cause either: `mana_accelerator_mana`, `mana_accelerator_interval_seconds` and
-## `stamina_accelerator_regen_multiplier` are unauthored in `_golden_config` and default to 0.0 —
+## `stamina_accelerator_regen_step` (carried its multiplicative predecessor's name when this entry
+## was written; RENAMED by story 5-1, `5-1/R2` — the claim below held under that name and holds
+## under this one) are unauthored in `_golden_config` and default to 0.0 —
 ## and the cadence's derived divisor clamps to 1, so the boundary test is true every tick, which
 ## means the rung is EXERCISED on every tick rather than skipped. The gate that stops it is the
 ## liveness test, not the cadence, which is the stronger of the two ways this could have been a

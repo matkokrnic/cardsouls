@@ -234,22 +234,38 @@ extends Resource
 ## which gives an authored 0 the DEFINED meaning "every tick" instead of a divide-by-zero on the
 ## tick ladder. Zero is therefore a legal in-test value; the AUTHORED value is audited > 0.
 @export var mana_accelerator_interval_seconds: float = 0.0
-## Story 4-4 (AC 21, `4-4/R11`/`4-4/R13`): the factor a live Stamina Accelerator totem MULTIPLIES
-## its OWNER's hero stamina regeneration by. Owner-only: the opposing hero's regen is untouched,
-## which the seat makes structural rather than checked (the regen seat is already per-player and
-## consults that player's OWN board).
+## Story 5-1 (AC 7, `5-1/R1`), REPLACING story 4-4's multiplicative predecessor of this field: the
+## PER-TOTEM ADDITIVE STEP each of a player's own live Stamina Accelerators contributes to that
+## player's hero stamina regeneration. The regen seat applies `1 + N x step`, where `N` is the
+## owner's own live count — LINEAR, not the `mult^N` this field's predecessor implied. Owner-only:
+## the opposing hero's regen is untouched, which the seat makes structural rather than checked (the
+## regen seat is already per-player and consults that player's OWN board).
 ##
-## A MULTIPLIER ON THE DERIVED PER-TICK RATE, applied at the regen seat — NOT a second authored
-## rate and NOT a per-pool bound. The `3-1/R2` per-pool reload contract governs POOL BOUNDS
-## (stamina: `set_maximum` + `refill`), and a regen multiplier is not a bound; deriving a per-player
+## LINEAR BY RULING, NOT BY IMPLEMENTATION TASTE (`5-1/R1`): the player counts totems rather than
+## exponents, and `mult^N` explodes at the third totem. The mana seat already stacks this way, so
+## the two accelerators now read the same.
+##
+## A TERM IN A FACTOR ON THE DERIVED PER-TICK RATE, applied at the regen seat — NOT a second
+## authored rate and NOT a per-pool bound. The `3-1/R2` per-pool reload contract governs POOL BOUNDS
+## (stamina: `set_maximum` + `refill`), and a regen factor is not a bound; deriving a per-player
 ## rate at `apply_balance()` instead would make the accelerator's effect depend on when a reload
 ## happened rather than on whether the totem is alive right now.
 ##
-## AUDITED > 1.0, not merely > 0: AC 21 requires the rate to be RAISED ABOVE its non-accelerated
-## value, so an authored 1.0 (or less) ships a totem that does nothing, or actively harms its owner,
-## while every test stays green. A value of exactly 1.0 is the identity and is what a hero WITHOUT
-## the totem effectively runs at — that is the comparison the AC names.
-@export var stamina_accelerator_regen_multiplier: float = 0.0
+## AUDITED > 0, replacing the predecessor's `> 1.0` — the bound moved because the SEMANTICS did, not
+## because it was relaxed. Under `1 + N x step`, `step = 0` is the value that ships a totem doing
+## nothing and `step < 0` the one that harms its owner; `> 0` is exactly where those two failures
+## sit now, and `> 1.0` would forbid perfectly good authoring (today's shipped `0.5`).
+##
+## THE CLASS DEFAULT `0.0` IS THE IDENTITY-SAFE ONE, and that is what discharges `4-4` M2
+## (`_44-review.md:330`). An unauthored config yields `1 + N x 0.0 = 1` at EVERY `N` — no boost, and
+## crucially never a penalty. The predecessor's identical `0.0` default was the DANGEROUS value: as
+## a direct multiplier it ZEROED the stamina regen of the one player who had actually summoned the
+## totem. Same literal, opposite meaning, because the field is additive now.
+##
+## THE AUTHORED VALUE IS DERIVED, NOT PRINCIPLED (`5-1/R1`): `0.5`, solved from
+## `1 + 1 x step = 1.5` so that ONE totem reproduces 4-4's shipped `1.5` factor byte-exactly and the
+## first totem moves no balance. Two totems give `2.0`, three `2.5` — never `1.5^2 = 2.25`.
+@export var stamina_accelerator_regen_step: float = 0.0
 
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0

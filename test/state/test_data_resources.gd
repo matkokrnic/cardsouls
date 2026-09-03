@@ -68,7 +68,12 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# B8 correction), so it is a plain global too. The cadence carries the `_seconds` suffix, so half
 	# (b) below demands a stem-matched `mana_accelerator_interval_ticks` on `BalanceTicks`.
 	"mana_accelerator_mana", "mana_accelerator_interval_seconds",
-	"stamina_accelerator_regen_multiplier",
+	# Story 5-1 (AC 7, `5-1/R2`): the stamina field is RENAMED to `stamina_accelerator_regen_step`
+	# and its semantics change from a direct multiplier to the additive term in `1 + N x step`. Its
+	# multiplicative predecessor is GONE from the codebase rather than left as an unread sibling, so
+	# this hand-maintained list drops that entry and adds this one — the list is audited in BOTH
+	# directions, so a stale entry fails reflection half (a) exactly as a missing one fails half (b).
+	"stamina_accelerator_regen_step",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",

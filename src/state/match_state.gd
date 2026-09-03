@@ -1805,9 +1805,18 @@ func _generate_mana(confirmed_hits: Array[int]) -> void:
 	#   * THE CADENCE, `_tick % mana_accelerator_interval_ticks` — AC 20's "on some authored
 	#     cadence". The divisor is clamped >= 1 at the conversion boundary, so an authored 0 means
 	#     "every tick" rather than a divide-by-zero (the `minion_retarget_interval_ticks` shape).
-	#   * A LIVE ACCELERATOR ON THAT PLAYER'S OWN BOARD — "while a Mana Accelerator totem is alive".
-	#     Per-player and read fresh every boundary tick, so the faucet opens the tick the totem is
-	#     summoned and closes the tick it dies, with no teardown path to forget.
+	#   * HOW MANY LIVE ACCELERATORS ARE ON THAT PLAYER'S OWN BOARD — "while a Mana Accelerator totem
+	#     is alive", generalised from a bool to a COUNT by story 5-1 (AC 5, `R-M9` Reading A per
+	#     `E5-P/R3`). Per-player and read fresh every boundary tick, so the faucet opens the tick the
+	#     totem is summoned and closes the tick it dies, with no teardown path to forget.
+	#
+	# STORY 5-1 (AC 5): THE BOOL GATE IS GONE AND THE COUNT IS THE MULTIPLIER. Each of a player's own
+	# live accelerators pays its own authored amount on the same cadence tick — Reading A, linear and
+	# player-countable ("each totem contributes its own effect where it sits"), NOT the compounding
+	# cadence Reading B that `E5-P/R3` rejected as superlinear. `N = 0` pays nothing, exactly as the
+	# bool gate did: `accelerated * 0` is `0.0`, and `ManaPool.add(0.0)` early-returns before mutating
+	# or signalling (`mana_pool.gd:20-25`), so the un-gated call is byte-identical to not calling —
+	# which is why removing the `if` is safe rather than merely tidy.
 	#   * THE `totems` FLAG, which is DATA on the authored rule (`required_flag`) rather than a
 	#     fourth check here — the project-context HARD RULE satisfied the way `melee_hit.tres`
 	#     already satisfies it, so both flag configurations run through the same evaluator call and
@@ -1819,10 +1828,8 @@ func _generate_mana(confirmed_hits: Array[int]) -> void:
 		var accelerated := EconomyEvaluator.amount_for(rules,
 				EconomyEvaluator.SOURCE_MANA_ACCELERATOR, EconomyEvaluator.MANA, balance,
 				balance_ticks, flags)
-		if has_live_kind(p1, CardEffectResolver.KIND_MANA_ACCELERATOR):
-			_regen_mana(p1, accelerated)
-		if has_live_kind(p2, CardEffectResolver.KIND_MANA_ACCELERATOR):
-			_regen_mana(p2, accelerated)
+		_regen_mana(p1, accelerated * live_kind_count(p1, CardEffectResolver.KIND_MANA_ACCELERATOR))
+		_regen_mana(p2, accelerated * live_kind_count(p2, CardEffectResolver.KIND_MANA_ACCELERATOR))
 
 
 ## Step-5 passive mana (story 3-4, AC 4) — the POLICY seat beside _regen_stamina's (D6).
@@ -1865,9 +1872,27 @@ func _regen_stamina(player: PlayerState) -> void:
 	#
 	# THE POOL IS UNTOUCHED. `advance_regen(amount, suppressed)` already takes the amount per call,
 	# so the pool still owns only the MECHANISM and this stays the POLICY seat (D6).
+	# STORY 5-1 (AC 7, `5-1/R1`): LINEAR, NOT `mult^N`. The bool gate and the single authored
+	# multiplier are replaced by `1 + N x step`, where `N` is the player's own live stamina
+	# accelerator count. Matko's ruling, by content: the player counts totems rather than exponents,
+	# `mult^N` explodes at the third totem, and this is the shape the mana seat already had. The
+	# authored `step` is DERIVED so that `N = 1` reproduces today's shipped factor exactly
+	# (`1 + 1 x 0.5 = 1.5`), so the FIRST totem does not move balance — only the second and third do.
+	#
+	# THE MULTIPLICATION IS UNGATED, and that is deliberate rather than careless. At `N = 0` the
+	# factor is `1 + 0 x step = 1`, the exact identity, so the non-accelerated rate is unchanged
+	# without an `if` to keep in agreement with anything. It also makes M2's defect structurally
+	# impossible instead of merely re-audited: an unauthored `step` defaults to `0.0`, which under an
+	# ADDITIVE term is the identity at every `N` — where the OLD multiplicative field's `0.0` default
+	# ZEROED the regen of the one player who actually had a totem (`4-4` M2, `_44-review.md:330`).
+	#
+	# `balance` IS NULL-GUARDED for `has_live_kind`'s own reason, verbatim: the gate used to swallow a
+	# null balance before the field was ever dereferenced, and un-gating the arithmetic must not
+	# quietly turn that into a crash. A null balance degrades to the identity, not to an error.
 	var per_tick := balance_ticks.stamina_regen_per_tick
-	if has_live_kind(player, CardEffectResolver.KIND_STAMINA_ACCELERATOR):
-		per_tick *= balance.stamina_accelerator_regen_multiplier
+	var accelerators := live_kind_count(player, CardEffectResolver.KIND_STAMINA_ACCELERATOR)
+	var step := 0.0 if balance == null else balance.stamina_accelerator_regen_step
+	per_tick *= 1.0 + float(accelerators) * step
 	player.stamina.advance_regen(per_tick, suppressed)
 
 
@@ -1889,16 +1914,38 @@ func _regen_stamina(player: PlayerState) -> void:
 ## AN UNAUTHORED KIND NAME ANSWERS FALSE rather than tripping a guard: `kind_index_of` returns
 ## `NO_KIND_INDEX`, which no record can carry (the cast seat refuses to add one), so the scan finds
 ## nothing. A faucet whose kind is not authored is simply shut — the graceful-degradation direction.
+## Story 5-1 (AC 1): kept as a ONE-LINE FORWARD onto the counting sibling rather than retired, so
+## every existing caller and the tests that pin them read the same answer from the same scan. Two
+## loops answering "is there one" and "how many" would be two things to keep in agreement, which is
+## the very duplication this function's own header rejects one level down.
 func has_live_kind(player: PlayerState, kind_name: StringName) -> bool:
+	return live_kind_count(player, kind_name) > 0
+
+
+## Story 5-1 (AC 1): how many LIVE units of the named kind sit on `player`'s OWN board — the bool
+## above generalised to the count both accelerator seats now multiply by (AC 5, AC 7).
+##
+## IT INHERITS EVERY PROPERTY OF ITS PREDECESSOR RATHER THAN RESTATING THEM: pure query, per-owner,
+## `UnitBoard.is_alive_at` liveness (never a re-derived `hp > 0`, `4-3a/R14`), and the KIND-LOOKUP
+## EARLY-OUT — an unauthored kind name answers `0` at the lookup, BEFORE the board is scanned, the
+## same graceful degradation `has_live_kind` answered `false` with. That early-out is load-bearing
+## for the golden (AC 11): `_golden_config` authors only `&"minion"`, so both accelerator names miss
+## the lookup and `N` is identically `0` for both players on every recorded tick.
+##
+## NO CAP OF ANY KIND (AC 4, an explicit non-goal): nothing here clamps the count. `N` is bounded
+## only by the deck's `max_copies` and by totems being killable — both facts that already exist
+## outside this story.
+func live_kind_count(player: PlayerState, kind_name: StringName) -> int:
 	if balance == null:
-		return false
+		return 0
 	var kind_index := balance.kind_index_of(kind_name)
 	if kind_index == BalanceConfig.NO_KIND_INDEX:
-		return false
+		return 0
+	var count := 0
 	for index in player.units.size():
 		if player.units.is_alive_at(index) and player.units.kind_index_at(index) == kind_index:
-			return true
-	return false
+			count += 1
+	return count
 
 
 ## Step-6 deck deal (story 3-3, AC 7/AC 9) — the ONE SEAT. Runs at most once per tick, and only

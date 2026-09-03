@@ -1,6 +1,13 @@
 extends TestCase
 
-## Story 4-4 coverage: THE TWO ACCELERATOR TOTEMS (AC 20, AC 21, `4-4/R11`, `4-4/R13`).
+## Story 4-4 coverage: THE TWO ACCELERATOR TOTEMS (AC 20, AC 21, `4-4/R11`, `4-4/R13`), EXTENDED BY
+## STORY 5-1 to the STACKED case (`R-M9`, `E5-P/R3`, `5-1/R1`).
+##
+## WHAT STORY 5-1 ADDS. That a player's accelerator count `N` is per-owner and per-kind at N>1 and
+## not merely at N=1; that the mana seat pays N times the authored amount on ONE cadence tick; that
+## the stamina seat applies `1 + N x step` and never `mult^N`; that N=1 is byte-identical to what
+## 4-4 shipped, so the first totem moves no balance; and that killing one of two totems returns the
+## effect to its N=1 value rather than to zero — the case a return-to-zero test cannot catch.
 ##
 ## WHAT THIS FILE OWNS. That a live Mana Accelerator is a resource-generation source recognised by
 ## the existing `ResourceGenerationRule` / `EconomyEvaluator` seam and pays out on its authored
@@ -35,15 +42,31 @@ const ACCELERATOR_MANA := 5.0
 const ACCELERATOR_INTERVAL_TICKS := 4
 const PASSIVE_PER_SECOND := 30.0        # 0.5 per tick at 60 Hz
 const STAMINA_PER_SECOND := 60.0        # 1.0 per tick at 60 Hz
-const STAMINA_FACTOR := 2.5             # deliberately NOT 2.0: a doubling could coincide with a
-                                        # double-application bug and read as correct
+## Story 5-1 (AC 7, `5-1/R1`): the stamina seat is `1 + N x step` now, so the fixture authors a STEP
+## rather than a factor and every expectation below is re-derived through `_stamina_factor()` rather
+## than carried over. 1.5 is chosen so the N=1 factor is 2.5 — the same number the old multiplicative
+## fixture used, which keeps the N=1 assertions numerically identical and makes the "one totem does
+## not move balance" claim visible right here — while every stacked value stays distinguishable from
+## the readings a broken implementation would produce:
+##   N=1 -> 2.5   N=2 -> 4.0   N=3 -> 5.5
+## against `mult^N`'s 6.25 / 15.625 at N=2/N=3 and against a double-application's 5.0 at N=2. No two
+## of those coincide, so an assertion here cannot pass for the wrong reason.
+const STAMINA_STEP := 1.5
 
 const KIND_MINION := 0
 const KIND_MANA := 1
 const KIND_STAMINA := 2
 
 
-func _config() -> BalanceConfig:
+## Story 5-1 (AC 7): the stamina factor as the seat derives it, expressed ONCE here so no assertion
+## below re-types the arithmetic it is supposed to be checking.
+func _stamina_factor(accelerators: int) -> float:
+	return 1.0 + float(accelerators) * STAMINA_STEP
+
+
+## `author_step == false` leaves `stamina_accelerator_regen_step` UNASSIGNED at its class default —
+## the `4-4` M2 shape (story 5-1, AC 9): a config that never sets the field at all.
+func _config(author_step := true) -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = HERO_MAX_HP
 	c.move_speed = 5.0
@@ -69,7 +92,8 @@ func _config() -> BalanceConfig:
 	c.hero_damage_to_unit = 3.0
 	c.mana_accelerator_mana = ACCELERATOR_MANA
 	c.mana_accelerator_interval_seconds = float(ACCELERATOR_INTERVAL_TICKS) / 60.0
-	c.stamina_accelerator_regen_multiplier = STAMINA_FACTOR
+	if author_step:
+		c.stamina_accelerator_regen_step = STAMINA_STEP
 	# THE KIND NAMES ARE THE RESOLVER'S OWN CONSTANTS, never string literals: the accelerator seats
 	# look kinds up BY NAME, so a fixture that spelled one differently would silently test a totem
 	# no seat can find and every assertion here would pass for the wrong reason.
@@ -89,9 +113,9 @@ func _flags(totems_open := true) -> FeatureFlags:
 	return f
 
 
-func _make_match(totems_open := true) -> MatchState:
+func _make_match(totems_open := true, author_step := true) -> MatchState:
 	var ms := MatchState.new(MatchParams.new(17))
-	ms.apply_balance(_config())
+	ms.apply_balance(_config(author_step))
 	ms.inject_feature_flags(_flags(totems_open))
 	ms.drain_signals()
 	return ms
@@ -226,8 +250,11 @@ func test_a_live_stamina_accelerator_raises_only_its_owners_regen() -> void:
 	assert_eq(p1_before, p2_before, "sanity: both heroes start this measurement level")
 	ms.p1.units.add(12.0, KIND_STAMINA)
 	_advance(ms, 10)
-	assert_eq(ms.p1.stamina.get_current(), p1_before + 1.0 * STAMINA_FACTOR * 10.0,
-		"AC 21: the OWNER's regen is the non-accelerated rate times the authored factor")
+	assert_eq(ms.p1.stamina.get_current(), p1_before + 1.0 * _stamina_factor(1) * 10.0,
+		"AC 21 / story 5-1 AC 7: the OWNER's regen is the non-accelerated rate times `1 + N x step` "
+		+ "at N=1 — RE-DERIVED through the new formula, not carried over from the multiplicative "
+		+ "fixture; that it lands on the same number is `5-1/R1`'s point (one totem must not move "
+		+ "balance), not a coincidence left unchecked")
 	assert_eq(ms.p2.stamina.get_current(), p2_before + 1.0 * 10.0,
 		"`4-4/R11`: the OPPONENT's regen is UNTOUCHED — owner-only, and this is the half a "
 		+ "single-player assertion would miss")
@@ -303,3 +330,245 @@ func test_has_live_kind_answers_both_directions_and_degrades_on_an_unknown_name(
 	assert_false(ms.has_live_kind(ms.p1, &"no_such_kind"),
 		"an unauthored kind name answers FALSE rather than tripping a guard — the faucet is simply "
 		+ "shut, which is the graceful-degradation direction")
+
+
+# ---- Story 5-1 (AC 1-AC 3): the count the two seats now multiply by ------------------------------
+
+func test_live_kind_count_counts_per_owner_and_per_kind_and_degrades_on_an_unknown_name() -> void:
+	# `has_live_kind`'s test above, widened to the answer this story actually consumes. Everything it
+	# pins is pinned here at N>1, because a count is where "is there one" stops being enough.
+	var ms := _make_match()
+	assert_eq(ms.live_kind_count(ms.p1, CardEffectResolver.KIND_MANA_ACCELERATOR), 0,
+		"an empty board counts zero")
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p1.units.add(9.0, KIND_MINION)
+	ms.p2.units.add(12.0, KIND_MANA)
+	assert_eq(ms.live_kind_count(ms.p1, CardEffectResolver.KIND_MANA_ACCELERATOR), 2,
+		"AC 1: two live mana accelerators on the owner's own board count TWO")
+	assert_eq(ms.live_kind_count(ms.p1, CardEffectResolver.KIND_STAMINA_ACCELERATOR), 1,
+		"AC 3: PER-KIND — the stamina totem beside them enters the mana count not at all, and its "
+		+ "own count is its own")
+	assert_eq(ms.live_kind_count(ms.p2, CardEffectResolver.KIND_MANA_ACCELERATOR), 1,
+		"AC 2: PER-OWNER — the opponent counts only their OWN board, never the owner's two")
+	ms.p1.units.apply_damage_at(0, 12.0)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: one of the two is dead")
+	assert_eq(ms.live_kind_count(ms.p1, CardEffectResolver.KIND_MANA_ACCELERATOR), 1,
+		"a dead totem leaves the count — and the count drops to ONE, not to zero: liveness is the "
+		+ "board's own predicate applied per index, never a whole-board bool")
+	assert_eq(ms.live_kind_count(ms.p1, &"no_such_kind"), 0,
+		"AC 1 (`5-1/R5`): an unauthored kind name counts ZERO at the kind lookup, before the board "
+		+ "is scanned — `has_live_kind`'s degradation, widened rather than replaced")
+	assert_false(ms.has_live_kind(ms.p1, &"no_such_kind"),
+		"...and the bool still agrees with it, because it IS it: one scan, two spellings")
+
+
+# ---- Story 5-1 (AC 5): the mana seat stacks linearly --------------------------------------------
+
+## The accelerator's share of one cadence-boundary tick, with the passive faucet's 0.5 removed — so
+## every stacking assertion below is about the accelerator alone rather than about a sum.
+func _accelerator_payout_on_next_boundary(ms: MatchState) -> float:
+	_drain_to_boundary_eve(ms)
+	var before := ms.p1.mana.get_current()
+	_advance(ms)
+	return ms.p1.mana.get_current() - before - 0.5
+
+
+func test_two_mana_accelerators_pay_twice_on_the_same_cadence_tick() -> void:
+	# `R-M9` Reading A (`E5-P/R3`): each totem pays its OWN grant per cadence tick. The measurement
+	# is one tick, not a window, because Reading B (a compounding CADENCE) would also make the owner
+	# richer over time — only a single-tick payout tells the two readings apart.
+	var one := _make_match()
+	one.p1.units.add(12.0, KIND_MANA)
+	assert_eq(_accelerator_payout_on_next_boundary(one), ACCELERATOR_MANA,
+		"N=1 pays the authored amount exactly ONCE — byte-identical to what 4-4 shipped, which is "
+		+ "the case this story promised not to move")
+	var two := _make_match()
+	two.p1.units.add(12.0, KIND_MANA)
+	two.p1.units.add(12.0, KIND_MANA)
+	assert_eq(_accelerator_payout_on_next_boundary(two), 2.0 * ACCELERATOR_MANA,
+		"AC 5: N=2 pays exactly TWICE the one-totem amount on the SAME cadence tick — the second "
+		+ "copy no longer does nothing (`4-4` M9), and it pays linearly rather than compounding")
+
+
+func test_three_mana_accelerators_pay_three_times() -> void:
+	# N=3 is not N=2 restated: a doubling could be produced by a bug that applies the payout twice
+	# regardless of count, and that bug pays 2x at N=3 as well.
+	var ms := _make_match()
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_MANA)
+	assert_eq(_accelerator_payout_on_next_boundary(ms), 3.0 * ACCELERATOR_MANA,
+		"AC 5: N=3 pays exactly THREE times, with no upper bound coded anywhere (AC 4's non-goal)")
+
+
+func test_the_stacked_mana_faucet_is_owner_only() -> void:
+	# AC 2's both-directions discipline at N>1: it is not enough that the owner's two totems pay
+	# twice — the opponent's ONE must still pay once, from the same tick of the same run.
+	var ms := _make_match()
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p2.units.add(12.0, KIND_MANA)
+	_drain_to_boundary_eve(ms)
+	var p1_before := ms.p1.mana.get_current()
+	var p2_before := ms.p2.mana.get_current()
+	_advance(ms)
+	assert_eq(ms.p1.mana.get_current() - p1_before, 2.0 * ACCELERATOR_MANA + 0.5,
+		"the owner's TWO pay twice")
+	assert_eq(ms.p2.mana.get_current() - p2_before, ACCELERATOR_MANA + 0.5,
+		"AC 2: the opponent's own count is ONE and pays once — the owner summoning a second totem "
+		+ "did not raise the opponent's payout, which is the half a one-sided assertion would miss")
+
+
+func test_killing_one_of_two_mana_accelerators_returns_the_payout_to_the_n1_amount() -> void:
+	# The stacking analogue of `test_the_faucet_closes_when_the_accelerator_dies`, and the case that
+	# test cannot reach: an implementation that dropped to ZERO the moment ANY totem died would pass
+	# every "the faucet closes" assertion in this file.
+	var ms := _make_match()
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_MANA)
+	assert_eq(_accelerator_payout_on_next_boundary(ms), 2.0 * ACCELERATOR_MANA,
+		"sanity: both are alive and paying")
+	ms.p1.units.apply_damage_at(0, 12.0)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: one of the two is dead")
+	assert_eq(_accelerator_payout_on_next_boundary(ms), ACCELERATOR_MANA,
+		"AC 12: the payout returns to the N=1 amount — NOT to zero, and not stuck at the N=2 amount "
+		+ "the count had when the pair was summoned")
+
+
+func test_a_second_totem_of_another_kind_does_not_raise_the_mana_payout() -> void:
+	# AC 3 at the seat rather than at the predicate: the count the mana rung multiplies by must be
+	# the MANA count, so a stamina accelerator and a minion beside it change nothing here.
+	var ms := _make_match()
+	ms.p1.units.add(12.0, KIND_MANA)
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p1.units.add(9.0, KIND_MINION)
+	assert_eq(_accelerator_payout_on_next_boundary(ms), ACCELERATOR_MANA,
+		"a stamina accelerator and a minion enter the MANA count not at all — N is per-kind")
+
+
+# ---- Story 5-1 (AC 7, `5-1/R1`): the stamina seat is linear, not `mult^N` -----------------------
+
+## Stamina gained over `ticks` ticks by a player carrying `accelerators` live stamina totems, from a
+## common spend-down point. Returned rather than asserted so each test states its own expectation.
+func _stamina_gain_with(accelerators: int, ticks: int) -> float:
+	var ms := _make_match()
+	ms.p1.stamina.spend(60.0, 0)
+	ms.drain_signals()
+	for _i in accelerators:
+		ms.p1.units.add(12.0, KIND_STAMINA)
+	var before := ms.p1.stamina.get_current()
+	_advance(ms, ticks)
+	return ms.p1.stamina.get_current() - before
+
+
+func test_two_stamina_accelerators_apply_the_linear_factor_not_the_square() -> void:
+	# `5-1/R1` in one assertion: the number this seat must NOT produce is named in the message,
+	# because "greater than one totem" is satisfied by the exponential reading too.
+	var gain := _stamina_gain_with(2, 10)
+	assert_eq(gain, 1.0 * _stamina_factor(2) * 10.0,
+		("AC 7: N=2 gives `1 + 2 x step` = %.2f, LINEAR. Not `mult^2` = %.2f (the explosive reading "
+		+ "`5-1/R1` rejects) and not a doubling of the N=1 factor = %.2f")
+				% [_stamina_factor(2), _stamina_factor(1) * _stamina_factor(1),
+						2.0 * _stamina_factor(1)])
+	assert_eq(_stamina_gain_with(3, 10), 1.0 * _stamina_factor(3) * 10.0,
+		"AC 7: N=3 gives `1 + 3 x step`, still linear and still uncapped (AC 4)")
+
+
+func test_one_stamina_accelerator_is_byte_identical_to_the_unaccelerated_baseline_times_the_shipped_factor() -> void:
+	# `5-1/R1`'s load-bearing promise: the FIRST totem must not change balance. Measured against the
+	# N=0 baseline from the same fixture, so the claim is a ratio this run produced rather than a
+	# constant copied out of story 4-4.
+	var baseline := _stamina_gain_with(0, 10)
+	assert_eq(baseline, 1.0 * 10.0, "sanity: the non-accelerated rate is 1.0 per tick")
+	assert_eq(_stamina_gain_with(1, 10), baseline * _stamina_factor(1),
+		"N=1 is exactly the baseline times the shipped single-totem factor — unchanged from 4-4")
+
+
+func test_killing_one_of_two_stamina_accelerators_returns_the_factor_to_its_n1_value() -> void:
+	var ms := _make_match()
+	ms.p1.stamina.spend(80.0, 0)
+	ms.drain_signals()
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	var before := ms.p1.stamina.get_current()
+	_advance(ms, 5)
+	assert_eq(ms.p1.stamina.get_current() - before, 1.0 * _stamina_factor(2) * 5.0,
+		"sanity: both are alive and the factor is the N=2 one")
+	ms.p1.units.apply_damage_at(0, 12.0)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: one of the two is dead")
+	var after_death := ms.p1.stamina.get_current()
+	_advance(ms, 5)
+	assert_eq(ms.p1.stamina.get_current() - after_death, 1.0 * _stamina_factor(1) * 5.0,
+		"AC 12: the factor returns to its N=1 value — NOT to the unaccelerated 1.0, which is what a "
+		+ "seat that treated any death as 'the accelerator died' would give")
+
+
+func test_the_stacked_stamina_factor_is_owner_only() -> void:
+	var ms := _make_match()
+	ms.p1.stamina.spend(60.0, 0)
+	ms.p2.stamina.spend(60.0, 0)
+	ms.drain_signals()
+	var p1_before := ms.p1.stamina.get_current()
+	var p2_before := ms.p2.stamina.get_current()
+	assert_eq(p1_before, p2_before, "sanity: both heroes start this measurement level")
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p2.units.add(12.0, KIND_STAMINA)
+	_advance(ms, 10)
+	assert_eq(ms.p1.stamina.get_current(), p1_before + 1.0 * _stamina_factor(2) * 10.0,
+		"the owner's TWO give the N=2 factor")
+	assert_eq(ms.p2.stamina.get_current(), p2_before + 1.0 * _stamina_factor(1) * 10.0,
+		"AC 2: the opponent's own ONE still gives the N=1 factor — the owner's second totem did not "
+		+ "reach across the board")
+
+
+func test_a_minion_beside_a_stamina_accelerator_does_not_raise_the_factor() -> void:
+	var ms := _make_match()
+	ms.p1.stamina.spend(60.0, 0)
+	ms.drain_signals()
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p1.units.add(9.0, KIND_MINION)
+	ms.p1.units.add(12.0, KIND_MANA)
+	var before := ms.p1.stamina.get_current()
+	_advance(ms, 10)
+	assert_eq(ms.p1.stamina.get_current(), before + 1.0 * _stamina_factor(1) * 10.0,
+		"AC 3: a minion and a MANA accelerator enter the stamina count not at all — N is per-kind at "
+		+ "the seat, not merely in the predicate")
+
+
+# ---- Story 5-1 (AC 9): `4-4` M2, discharged by the additive default -----------------------------
+
+## `4-4` M2 (`_44-review.md:330`) named a real defect in the OLD mechanism: `stamina_accelerator_
+## regen_multiplier` defaulted to 0.0, and an unauthored config therefore MULTIPLIED the regen of the
+## one player who had actually summoned a totem BY ZERO — inverting AC 21, which asks the totem to
+## help and at worst do nothing. The new mechanism makes that impossible by construction rather than
+## by audit: under `1 + N x step` the same 0.0 default is the IDENTITY at every N.
+##
+## THIS TESTS THE CLASS DEFAULT, NOT THE AUTHORED VALUE. `test_balance_authoring.gd` already audits
+## what the shipped `.tres` carries; M2 is about the config that never sets the field at all, which
+## is why the fixture below deliberately leaves it unassigned.
+func test_an_unauthored_step_leaves_the_regen_alone_rather_than_zeroing_it() -> void:
+	assert_eq(BalanceConfig.new().stamina_accelerator_regen_step, 0.0,
+		"the CLASS DEFAULT is 0.0 — identity-safe for an ADDITIVE step, where the identical literal "
+		+ "was the dangerous value for the MULTIPLICATIVE field it replaces")
+	var ms := _make_match(true, false)
+	assert_eq(ms.balance.stamina_accelerator_regen_step, 0.0,
+		"sanity: this fixture never authored the step, so the seat reads the class default")
+	ms.p1.stamina.spend(50.0, 0)
+	ms.p2.stamina.spend(50.0, 0)
+	ms.drain_signals()
+	var accelerated_before := ms.p1.stamina.get_current()
+	var plain_before := ms.p2.stamina.get_current()
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	ms.p1.units.add(12.0, KIND_STAMINA)
+	_advance(ms, 10)
+	assert_eq(ms.p1.stamina.get_current(), accelerated_before + 1.0 * 10.0,
+		"`4-4` M2: with the step unauthored, an owner carrying TWO live accelerators regenerates at "
+		+ "exactly the non-accelerated rate — no boost, and CRUCIALLY no penalty. Under the old "
+		+ "multiplicative field this owner regenerated NOTHING")
+	assert_eq(ms.p1.stamina.get_current() - accelerated_before,
+			ms.p2.stamina.get_current() - plain_before,
+		"...and the accelerated owner and the bare opponent gained the SAME amount, which is what "
+		+ "'the factor is the identity' means measured rather than asserted")

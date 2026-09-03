@@ -77,11 +77,25 @@ const EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"
 ## category as its three neighbours exactly: a pure function of its arguments returning a float,
 ## writing nothing and storing nothing, needing no capture channel because a replay that reproduces
 ## the board reproduces its answer.
+##
+## `live_kind_count(player, kind_name)` IS THE FIFTH, added by story 5-1 (AC 1), and it is
+## `has_live_kind`'s own argument with the answer widened from a bool to a count: the same scan over
+## the board the caller hands in, mutating nothing and retaining nothing. `has_live_kind` survives
+## as a one-line forward onto it, so the two cannot disagree — which is why BOTH names appear here
+## rather than the older one being retired. It is public for its predecessor's reason exactly: both
+## accelerator seats AND the tests that pin the stacked case ask it. A replay that reproduces the
+## board reproduces the count, so there is nothing for a stream to carry.
+##
+## THIS ENTRY IS THE GUARD DOING ITS JOB, RECORDED AS SUCH: story 5-1's dev pass added
+## `live_kind_count` to `MatchState` and this test went RED on the very next run, claiming it as an
+## unchannelled intake. It is argued out here one at a time, exactly as the derivation rule below
+## demands, rather than by loosening the proxy.
 const EXEMPT_PURE_QUERIES: Array[String] = [
 	"unit_attack_phase_multiplier",
 	"projectile_speed_at",
 	"projectile_step_distance_at",
 	"has_live_kind",
+	"live_kind_count",
 ]
 
 ## AC 1: the intake surface VERIFIED BY CONTENT at this story's pass. Pinned by exact set
@@ -148,12 +162,12 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 	var expected_exempt := [EXEMPT_CARRIES_NO_DATA_INWARD] + EXEMPT_PURE_QUERIES
 	expected_exempt.sort()
 	assert_eq(exempt, expected_exempt,
-		"the FOUR exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
+		"the FIVE exemptions are EXEMPT and this is where that is recorded: drain_signals() carries "
 		+ "no data INWARD (it is the D5 emit half of a queue the runner empties every tick), and "
-		+ "unit_attack_phase_multiplier(), projectile_speed_at(), projectile_step_distance_at() and "
-		+ "has_live_kind() are PURE QUERIES that "
+		+ "unit_attack_phase_multiplier(), projectile_speed_at(), projectile_step_distance_at(), "
+		+ "has_live_kind() and live_kind_count() are PURE QUERIES that "
 		+ "take parameters and still carry none (functions of their arguments, returning a value, "
-		+ "writing nothing) — none is an intake, and a FIFTH name appearing here is a real intake "
+		+ "writing nothing) — none is an intake, and a SIXTH name appearing here is a real intake "
 		+ "escaping its capture channel")
 	assert_eq(egress, ["debug_window_ticks_remaining", "to_snapshot"],
 		"to_snapshot() and debug_window_ticks_remaining() are EGRESS, not intake — they return "
