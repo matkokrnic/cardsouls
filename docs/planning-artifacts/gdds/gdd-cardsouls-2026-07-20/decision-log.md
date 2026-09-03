@@ -8462,3 +8462,36 @@ camera finding as deferred, against `5-0d/R5`'s in-story resolution; aligned to 
 
 No `src/`, `test/`, or `data/` file touched; no code ran; no golden or suite touched. The operator
 reviews the log and pushes.
+
+## Session 2026-09-04 -- 5-1 close-out
+
+`5-1-accelerator-stacking` close-out. `5-1/R1` (linear stacking, both seats, Session 2026-09-03)
+stands as ruled; cited here, not restated.
+
+`5-1/R2` The stamina field REPLACES its multiplicative predecessor everywhere in `src/`, `test/` and
+`data/`: `stamina_accelerator_regen_multiplier` has zero surviving hits, grep-verified twice.
+
+`5-1/R3` `4-4` M7 ("zero or negative derived projectile speed makes a shot immortal") is
+DISCHARGED-AS-ALREADY-CLOSED, not DISCHARGED -- no real gap existed; what ships is a named
+curve-walking regression guard, not a fix.
+
+`5-1/R4` The golden is UNMOVED at all three isolation measurements, NO re-baseline. The prediction
+is proven REACHED, not vacuous: dropping the stamina seat's identity term (`1.0 +`) fails
+`test_state_matches_golden`, which measures that the golden fixture executes the new arithmetic on
+every tick rather than skipping it.
+
+`5-1/R5` `live_kind_count` keeps `has_live_kind`'s kind-lookup early-out; `has_live_kind` survives as
+a one-line forward onto `live_kind_count(...) > 0`.
+
+`5-1/R6` `live_kind_count` is the fifth named pure-query exemption in the intent-recorder intake
+scan (`EXEMPT_PURE_QUERIES`), argued out with a written reason rather than by loosening the proxy.
+
+Accepted without change, one line each: the M7 guard duplicates `_speed_at_flight_ticks` and can go
+stale silently -- named failure mode, owner is whoever next touches that function. The double
+null-balance guard at the stamina seat stays. Remaining review LOWs stand as reported.
+
+`4-4` M9 ("accelerators do not stack; the second identical totem silently does nothing") and `4-4`
+M2 (`stamina_accelerator_regen_multiplier` defaulting to `0.0` inverted AC 21 for an unauthored
+config) are both DISCHARGED by this story.
+
+Live smoke 2026-09-04, 6/6 PASS, no findings (`docs/playtest-log.md`). Board promoted to `done`.
