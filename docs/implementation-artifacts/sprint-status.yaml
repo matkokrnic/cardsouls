@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-03
+# last_updated: 2026-09-04
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-09-03
+last_updated: 2026-09-04
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -98,7 +98,7 @@ development_status:
   5-0b-pad-card-input: done  # Tier B
   5-0c-totem-projectile-models: done  # Tier B
   5-0d-arena-edge: done  # Tier B
-  5-1-accelerator-stacking: ready-for-dev  # Tier A
+  5-1-accelerator-stacking: done  # Tier A
   5-1a-intent-hardening: backlog  # Tier A
   5-2-unblockable-initiation: backlog  # Tier A
   5-3-telegraph-presentation: backlog  # Tier B
@@ -108,7 +108,7 @@ development_status:
   5-7-pad-modes-2-3: backlog  # Tier B
 
 story_notes:
-  5-1-accelerator-stacking: "ready-for-dev 2026-09-03 -- readiness gate fixed (5-1/R2-R5) and promoted; 5-1/R1 (linear accelerator stacking, both seats) recorded in decision-log."
+  5-1-accelerator-stacking: "done 2026-09-04, Tier A ritual complete (linear stacking both seats per 5-1/R1, M2/M7 discharged, golden unmoved/no re-baseline, live smoke 6/6 PASS)."
   5-0d-arena-edge: "done 2026-09-03, Tier B ritual complete (review-fixed spawn containment, hardened all-four-walls test, transparent-wall cosmetic fix from live smoke, smoke 2026-09-03 pass R1-R8)."
   5-0c-totem-projectile-models: "done 2026-09-02, Tier B ritual complete (review-hardened tint pin, smoke-ruled no-rotation, re-smoke 3/3)."
   5-0b-pad-card-input: "done 2026-09-02, Tier B ritual complete (review-corrected AC 3, live smoke 9/9 PASS)."
