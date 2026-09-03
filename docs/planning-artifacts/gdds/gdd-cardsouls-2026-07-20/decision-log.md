@@ -8495,3 +8495,72 @@ M2 (`stamina_accelerator_regen_multiplier` defaulting to `0.0` inverted AC 21 fo
 config) are both DISCHARGED by this story.
 
 Live smoke 2026-09-04, 6/6 PASS, no findings (`docs/playtest-log.md`). Board promoted to `done`.
+
+## Session 2026-09-04 -- 5-1a rulings R1-R12
+
+`5-1a-intent-hardening`'s readiness gate found operator rulings R1-R8 present only in the
+uncommitted story file, unbacked by any decision-log entry -- the same class as `5-1/R1`'s
+gate-found defect (Session 2026-09-03). This entry records them by content, as already written in
+the story file, before the gate's fix pass claims any of them as authority.
+
+`5-1a/R1` -- one job. A record that is not well-formed must be refused at LOAD, with a reason
+naming the offending field, in the same shape as the existing `format_version` and `REQUIRED_KEYS`
+refusals (`record_file.gd:250-294`). Nothing malformed reaches `advance()`.
+
+`5-1a/R2` -- refusal is whole-record. Never skip a bad entry and replay the rest -- a partial
+replay is worse than none.
+
+`5-1a/R3` -- the live path (M3). A malformed retarget address is NOT applied; the lock target
+keeps its previous value and nothing is written to the hashed `lock_target` key. This must hold in
+a build where `assert` is stripped, so the guard cannot be an `assert`.
+
+`5-1a/R4` -- `FORMAT_VERSION` is NOT bumped. The format is unchanged; only the reading is
+stricter. Records that used to load and then crash are now refused with a reason -- that IS the
+intended behaviour change, and it applies to malformed files only.
+
+`5-1a/R5` -- Golden Prediction, inverse form. Golden `aa3566d7...` and the current snapshot key
+set do NOT move, because the new branches are never executed by the hashed run (the fixture's
+recorded intents and record file are already well-formed). Non-vacuity is therefore NOT proven by
+golden movement -- every new refusal branch carries its own falsifiable test plus a mutation proof
+that it goes RED when the branch is removed.
+
+`5-1a/R6` -- scope is locked to the three findings (M3, L7, L8) plus one doctrine line: per-field
+validation for fields that feed a hashed key or the rebuild loop. No general "validate everything"
+sweep of `record_file.gd` or `match_state.gd`.
+
+`5-1a/R7` -- `Invariant.check` being non-load-bearing in exported builds is a GENERAL condition,
+not just M3's (`Invariant.check` is `push_error` + `assert`, and `assert` is stripped in exported
+builds -- `src/systems/invariant.gd:1-15`). This story fixes it ONLY at the `_resolve_lock` seat
+(M3). The general finding is a Non-Goal here and is recorded as a named unowned item at close-out
+-- do not read the narrow fix as a repo-wide verdict.
+
+`5-1a/R8` -- live smoke is a short REGRESSION check (lock, flick, retarget still behave as
+before), not a feel smoke. Nothing player-visible ships.
+
+`5-1a/R9` -- the `_resolve_lock` seat carries NO `Invariant.check` after this story. Keeping one
+alongside the new branch is not an option: `test/run_all.sh:19-22,32-35` greps the state-harness
+and integration output for `INVARIANT VIOLATED` and fails the whole suite on a hit, so AC 2's own
+test and a retained `Invariant.check` cannot coexist in a green run. This settles what the story's
+Open Question 3 left open. Five prior seats in this repo already record that an `Invariant.check`
+cannot be proven by firing it: `src/state/unit_board.gd:315-318`, `test/state/test_card_play.gd:238-241`,
+`test/state/test_discard_pile.gd:107-110`, `test/state/test_intent_recorder.gd:317-319`, and this
+ruling itself as the fifth-plus-one.
+
+`5-1a/R10` -- `lock_pushes` and per-intent field validation happens BEFORE `_from_dictionary` is
+called. `_from_dictionary` (`record_file.gd:491`) returns an `IntentRecorder` and has no refusal
+channel, and by the time its rebuild loop (`record_file.gd:511-528`) reaches a tick's
+`lock_pushes`, the record under construction is already partially built -- refusing there would be
+the partial refusal `5-1a/R2` forbids.
+
+`5-1a/R11` -- a tick absent from the `lock_pushes` dictionary is NOT malformed. The writer
+(`record_file.gd:362-366`) omits every empty tick by design, so sparseness is the only shape this
+class ever produces, golden fixture included. Only a PRESENT entry of the wrong shape or type is
+malformed. Finding L7's filed wording ("a sparse or truncated `lock_pushes` channel") is WRONG on
+the word "sparse", corrected here by measurement of the write path -- the finding is not being
+quietly reworded, the correction is recorded as its own ruling.
+
+`5-1a/R12` -- AC 7's operative claim stands (no `FORMAT_VERSION` bump, no `REQUIRED_KEYS`
+widening) but its justification was false: `retarget_slot`/`retarget_index` are per-intent fields
+written inside each `intents` array element (`record_file.gd:399-400`, read back at `:555-556`),
+not top-level required keys. `REQUIRED_KEYS` (`record_file.gd:178-197`) contains exactly twelve
+entries; neither name is among them.
