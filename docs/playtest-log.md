@@ -221,3 +221,38 @@ trodimenzionalnije; ostaje žuta, dubina = odgođeni polish. NALAZ: totem se rot
 presudio da totemi NIKAD ne rotiraju (obara 4-4 "prihvaćena kozmetika", suđeno na sivoj kutiji);
 fixano, re-smoke 3/3: totem miran, puca 360 i iza leđa, minioni se normalno okreću. Gameplay netaknut.
 
+
+1 klizanje radi dobro na sva cetri tzida 2 kutevi su isto nepopusni ali ni ne zpainjem, dobro je  3 summon iza leda u kutu recimo stvori heroiju iza leda sto ga malo pogurne unaprijed heroja jel, ne summona se vani 4 kamera je malo probelmaticna inace mi se znalo desavati da malo preipsitam odluku o tome da se kamerom ne moze slobodno urpavljati i ne znam kolko je to dobra odluka, ali o tom cemo kasnije nekada, zasad je doboljno zpamatiti da forsirani lock on ima svoje uocene manjakvosti a dodavanje zidova sprjevava da osoba vidi svog heroja kad je blizu zida, mozda bi bilo blje da su zidovi porzirini 5 projektili su ok 6 vanjsk rub zida ne smeta 7 djeuluje ok jedino malo ruzno izgleda redneranje gornje strane zidova i kad se kruzi nekako je pre pravokutno prezentirano ako ima smisla al to nije bitno
+
+## 2026-09-03 — Story 5-0d arena-edge — live smoke (pad flip [0,3])
+
+1. Wall sliding: smooth on all four walls, no bounce, no pass-through. PASS.
+2. Corners: solid, unyielding, no snagging or catching. PASS.
+3. Near-wall/corner summon (F1 containment fix): unit spawns INSIDE the arena behind the hero;
+   depenetration nudges the casting hero slightly forward — accepted as cosmetic (the clamp can
+   place the spawn within body-overlap distance of a wall-pinned hero), not a defect. PASS.
+4. Camera under lock-on at a wall (SMOKE-WATCH): confirmed — the forced-lock camera ends up
+   outside the ring sighting the hero through an opaque wall; the hero is occluded. Recorded as
+   an observed shortcoming of forced lock-on; candidate remedy: transparent/see-through walls
+   (or camera work). Deferred to the post-E5+E6 playtest/retune block. Not an AC.
+5. Projectiles pass through the wall visually: accepted by design (AC 7). PASS.
+6. Outer wall overhang above the void: visible from the edge, does not bother. Accepted.
+7. Performance feels fine. Cosmetics: the walls' top-face rendering looks rough and circling the
+   arena reads "too rectangular" — AC 2 untuned territory, noted for a later art pass. Not
+   blocking.
+
+Verdict: SMOKE PASS.
+4. Camera under lock-on at a wall (SMOKE-WATCH → RESOLVED in-story): confirmed — the forced-lock
+   camera ends up outside the ring and an opaque wall occluded the hero. Operator ruled on the
+   spot that transparent walls are the right call; applied in a cosmetic pass (shared
+   StandardMaterial3D, grey-blue, alpha 0.35, four wall meshes; collision untouched, golden
+   unmoved) and verified live — the wall still reads as a boundary from inside, the hero stays
+   visible through it from an outside-the-ring camera. Separately noted, NOT resolved here: the
+   forced lock-on itself (no free camera control) has observed shortcomings; that question is
+   deferred to the post-E5+E6 playtest/retune block.
+
+8. Transparent walls verified live after the cosmetic pass: boundary still legible from inside,
+   hero visible through the wall under near-wall lock-on, alpha 0.35 judged right, wall top-face
+   rendering acceptable. PASS.
+
+

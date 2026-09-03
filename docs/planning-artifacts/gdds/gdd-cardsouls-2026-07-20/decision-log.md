@@ -8376,3 +8376,54 @@ story file's Status -> `done`, Live Smoke Results section, and one Change Log ro
 `docs/playtest-log.md`'s operator-written entry (already present, verified before this commit);
 and the board (`5-0c-totem-projectile-models: ready-for-dev` -> `done`). Nothing pushed; the
 operator reviews the log.
+
+## Session 2026-09-03 -- 5-0d close-out (Tier B)
+
+`5-0d/R1` AC 10 deviation accepted -- the live test drives a standalone `hero.tscn` probe body
+instead of the Input-Map chain; measured justification (P1/P2 bodies collide at 6 units; the
+forced-lock camera re-yaw arcs any held direction).
+
+`5-0d/R2` Review F1 fixed in-story (operator-approved scope widening beyond the story's original
+"measure, don't fix" AC 6 text): runner-side clamp of the accepted spawn candidate to `|19.6|`
+(arena half-extent 20.0 minus the totem's 0.4 body half-extent), chosen over a candidate-level
+search filter to preserve the 4-3e search's termination argument. Positions never enter
+`src/state/`; golden unmoved. Noted and accepted: the containment test reads its bound from the
+runner constant, so a loosened constant alone would not trip it -- the shipped form is
+mutation-proven and that suffices.
+
+`5-0d/R3` Review F2/F3 record corrections ratified: the AC 6 spawn note's crowding-only conclusion
+replaced by the measured zero-occupant near-wall path; the corner-geometry sentence corrected to a
+precise butt-joint resting on exact float alignment, not an overlap margin.
+
+`5-0d/R4` Review F4 judgement ratified: West-only coverage insufficient -- test hardened to all
+four faces + two opposite corners, per-frame center bound tightened to `19.5 + epsilon`, East-wall
+mutation added (F4-F7 all applied).
+
+`5-0d/R5` Review F8 RESOLVED IN-STORY, not deferred: the live smoke confirmed the forced-lock
+camera exits the ring and an opaque wall occluded the hero. Operator ruled transparent walls the
+right fix; applied as an approved AC 2 deviation (shared `StandardMaterial3D`, grey-blue, alpha
+0.35, on the four wall meshes only; collision untouched, golden unmoved) and verified live. The
+forced lock-on itself remains an open design question (no free camera control), deferred to the
+post-E5+E6 playtest/retune block -- walls only, camera work not in scope here.
+
+`5-0d/R6` Review F9 deferred: `PARKING_LOT (40, 0, 40)` now lies outside a closed ring -- the
+"teleport far away, it walks back" idiom is one-way post-wall; harmless today, documented.
+
+`5-0d/R7` Smoke PASS (pad flip [0,3]): sliding clean on all four walls; corners solid, no
+snagging; near-wall summon lands inside the ring with an accepted cosmetic depenetration nudge on
+the casting hero; projectile wall pass-through accepted by design; outer overhang accepted; perf
+OK.
+
+`5-0d/R8` Wall top-face rendering and the "too rectangular" feel when circling the arena are AC 2
+untuned cosmetics, accepted as-is for a later art pass; judged acceptable after the transparency
+change.
+
+### Close-out
+
+Two commits. Commit 1, code + tests: `src/main/main.tscn`, `src/main/match_runner.gd`,
+`test/integration/test_arena_edge_live.gd` (+ `.uid`),
+`test/integration/test_summon_spawn_containment_live.gd` (+ `.uid`). Commit 2, docs only: this
+entry; the story file's fix-pass Change Log row F2/F3 label correction and Status -> `done`;
+`docs/playtest-log.md`'s operator-written entry (already present, verified before this commit);
+and the board (`5-0d-arena-edge: ready-for-dev` -> `done`). Nothing pushed; the operator reviews
+the log.
