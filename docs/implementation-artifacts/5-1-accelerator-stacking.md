@@ -4,7 +4,7 @@ baseline_commit: 70af8e247a437c0e20c7ad9d3c879c4f3aae102b
 
 # Story 5.1: Accelerator stacking
 
-Status: ready-for-dev
+Status: done
 
 ## What this story inherits
 
@@ -349,6 +349,16 @@ advantage instead of the second copy silently doing nothing.
   at all (a kind whose `unit_kinds` entry was removed by an X3 reload, per the file's own header
   comment at `match_state.gd:1012-1014`) — that path is not M7's "immortal shot" scenario; M7 is
   about a shot whose profile RESOLVES but whose DERIVED speed is non-positive.
+- **Fix-pass note: `test_the_authored_projectile_speed_curve_never_reaches_zero` duplicates
+  `_speed_at_flight_ticks` rather than calling it (review LOW, accepted as written, not changed).**
+  The test re-implements the production formula inline because an authoring audit has no board or
+  index to stand up and call the real method against (see the M7 investigation note above). The
+  accepted failure mode: a future change to `MatchState._speed_at_flight_ticks` can leave this guard
+  green while the property it names — the derived speed never reaching zero — actually breaks,
+  because the guard is checking its OWN copy of the arithmetic, not the shipped one. The only thing
+  actually coupling the two is the shared `TimingWindow.TICK_HZ` constant. Whoever next touches
+  `_speed_at_flight_ticks` MUST re-check this test by hand against the new formula; the suite will
+  not catch a divergence on its own.
 
 ### Project Structure Notes
 
@@ -358,9 +368,11 @@ advantage instead of the second copy silently doing nothing.
   `stamina_accelerator_regen_step`, its default and doc comment, AC 7/AC 9), `data/balance/
   balance_config.tres` (the derived authored value under the new field name), `test/state/
   test_totem_accelerators.gd` + `test/state/test_balance_authoring.gd` (new/extended coverage, AC
-  9/AC 10/AC 12), and `test/state/test_data_resources.gd` (the `E1_BALANCE_FIELDS` hand-maintained
+  9/AC 10/AC 12), `test/state/test_data_resources.gd` (the `E1_BALANCE_FIELDS` hand-maintained
   list, `:70-71`, REQUIRED to drop the old name and add the new one -- `5-1/R2`, readiness-gate
-  finding F10). No new top-level folder; no scene file is touched (this story is entirely
+  finding F10), and `test/state/test_intent_recorder.gd` (a pure-query read of the renamed field
+  through its new name only, no assertion behaviour change -- the pure-query exemption, Completion
+  Note 3). No new top-level folder; no scene file is touched (this story is entirely
   `src/state/` + `data/` + `test/`).
 
 ### Project Context Rules
@@ -417,15 +429,204 @@ advantage instead of the second copy silently doing nothing.
 
 ### Agent Model Used
 
+Opus 5 (operator-stated).
+
 ### Debug Log References
+
+Three full-suite runs from the dev pass, plus one from the fix pass below, all written OUTSIDE the
+repo, all read back from the files rather than from scrollback. Mutation proofs ran the STATE HARNESS
+only (`run_state_tests.gd`), never the full suite, per `PROC/R1`.
+
+| # | File | Written | When | Golden constant | Suite counters | Golden verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `C:\dev\_51-suite-before.txt` | baseline, before any edit | 2026-09-03 23:28:20 | `aa3566d7...ded7e4f` | 577 tests / 0 failed / 4433 assertions + 52 integration | UNMOVED |
+| 2 | `C:\dev\_51-suite-mana.txt` | after the mana change ALONE | 2026-09-03 23:37:39 | `aa3566d7...ded7e4f` | 577 tests / 0 failed / 4433 assertions + 52 integration | UNMOVED |
+| 3 | `C:\dev\_51-suite-final.txt` | after the stamina change on top | 2026-09-03 23:52:15 | `aa3566d7...ded7e4f` | 590 tests / 0 failed / 4469 assertions + 52 integration | UNMOVED |
+| 4 | `C:\dev\_51-fix-suite.txt` | fix pass against review, after FIX 1/FIX 2/FIX 3 | 2026-09-04 | `aa3566d7...ded7e4f` | 590 tests / 0 failed / 4469 assertions + 52 integration | UNMOVED |
+
+Golden in full, unchanged at all three:
+`aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f` (`test_determinism.gd:678`).
+**NO RE-BASELINE WAS PERFORMED.** Delta run 1 -> run 3: +13 tests, +36 assertions, all in the state
+harness; integration count unchanged at 52.
+
+RUN 2 FAILED ON ITS FIRST ATTEMPT and the failure is recorded rather than discarded — see Completion
+Note 3. The re-run is the run 2 measurement; both attempts are in the file.
 
 ### Completion Notes List
 
+1. **AC 5 / AC 6 — the mana seat.** The bool gate is gone: `_generate_mana`'s third rung now reads
+   `_regen_mana(p, accelerated * live_kind_count(p, KIND_MANA_ACCELERATOR))` for each player,
+   un-gated. `N = 0` is byte-identical to not calling, and that is a property rather than a hope:
+   `accelerated * 0` is `0.0` and `ManaPool.add(0.0)` early-returns on `is_equal_approx` before
+   mutating or signalling (`mana_pool.gd:20-25`). The rung still routes through `_regen_mana`, so
+   `2-3/R5` (a corpse runs no economy) and the `totems` flag on the authored rule hold for the
+   stacked case with no new suppression logic (AC 6). No change to
+   `data/economy/mana_accelerator.tres` or to the rule schema — the multiplication is at the call
+   site, as the Non-Goals require.
+2. **AC 1 — the counting sibling.** `live_kind_count(player, kind_name) -> int` is the same scan
+   `has_live_kind` ran, widened from a bool to a count, and it keeps the kind-lookup early-out
+   (`5-1/R5`, F4): an unauthored kind name returns `0` at the lookup, before the board is scanned.
+   `has_live_kind` is KEPT as a one-line forward (`live_kind_count(...) > 0`) rather than retired —
+   the cheapest of the two options the Dev Notes left open, and the one under which the two answers
+   cannot disagree. Its remaining callers after this story's edits are the tests that pin it.
+3. **A GUARD FIRED, AND IT IS A TOUCHED FILE THE STORY DOES NOT NAME.** Run 2's first attempt went
+   RED on `test_intent_recorder.gd::test_every_match_state_intake_has_a_capture_channel`: MatchState's
+   new PUBLIC parameterised `live_kind_count` was claimed as an INTAKE needing a
+   `capture_live_kind_count` channel. It is not one — it is the same PURE QUERY category as the four
+   existing named exemptions (a function of its arguments, returning a value, writing nothing,
+   retaining nothing), and it is `has_live_kind`'s own argument with a wider answer. Argued out as
+   `EXEMPT_PURE_QUERIES`' FIFTH member with its reason written into the file, per that file's own
+   "must earn its place with a written reason" rule, and NOT by loosening the proxy; the assertion
+   message's counts were updated FOUR -> FIVE and FIFTH -> SIXTH. **`test/state/test_intent_recorder.gd`
+   is not in this story's Touched-files list** — reported here rather than patched silently.
+4. **AC 7 — the stamina seat, and its arithmetic recorded rather than re-derived silently.** The
+   seat is now `per_tick *= 1.0 + N * step`, un-gated, with `step =
+   BalanceConfig.stamina_accelerator_regen_step`. THE DERIVATION: story 4-4 shipped an authored
+   factor of `1.5` (`balance_config.tres:116`), so `1 + 1 x step = 1.5` gives **`step = 0.5`**, which
+   is the authored value now in the `.tres`. `N = 0` -> `1.0` (identity), `N = 1` -> `1.5` (exactly
+   4-4's shipped factor — the first totem moves no balance), `N = 2` -> `2.0` (NOT `1.5^2 = 2.25`),
+   `N = 3` -> `2.5`. `balance` is null-guarded at the seat (`step` reads `0.0` when `balance == null`)
+   for `has_live_kind`'s own reason verbatim: the removed gate used to swallow a null balance before
+   the field was dereferenced, and un-gating must not turn that into a crash. AC 8 holds unchanged:
+   the factor scales the AMOUNT handed to `advance_regen`, so BLOCKING and DEAD still regenerate
+   nothing, and the factor returns to `1` on the tick the last totem dies with nothing to tear down.
+5. **AC 7 / `5-1/R2` — the field REPLACES its predecessor; nothing survives.** Renamed to
+   `stamina_accelerator_regen_step` in `balance_config.gd` (class default `0.0`, doc comment rewritten
+   for the new semantics, the new `> 0` audit bound and the M2 reasoning), in the authored `.tres`
+   (`1.5` -> `0.5` under the new name), in `E1_BALANCE_FIELDS`, and in every fixture and assertion.
+   THE FULL-REPO GREP was run before removal, as the Dev Notes demand — see Completion Note 6.
+6. **The rename grep, reported in full.** Hits outside the story's Touched-files set: exactly one,
+   `test/state/test_determinism.gd:125`, and the readiness gate's worry does NOT materialise as a
+   behavioural dependency — the hit is a `##` COMMENT inside the 4-4 PASS-3 re-baseline history
+   block, and `_golden_config()` never assigns the field, which is precisely what that comment
+   records. Handled as a rename note in the historical entry (the claim held under the old name and
+   holds under the new one), not by rewriting the history. Every other hit was already named:
+   `balance_config.tres:116`, `match_state.gd:1870`, `balance_config.gd:252`,
+   `test_balance_authoring.gd:636-640`, `test_data_resources.gd:71`, `test_totem_accelerators.gd:72`.
+   AFTER the pass, `grep stamina_accelerator_regen_multiplier` returns **ZERO hits in `src/`, `test/`
+   and `data/`** — including in prose: the three places that needed to name the retired field say
+   "its multiplicative predecessor" instead, so a future grep finds nothing to mistake for a live
+   consumer. Docs keep their hits, as history.
+7. **AC 9 — `4-4` M2, DISCHARGED.** A real gap existed under the old mechanism and the new one closes
+   it BY CONSTRUCTION rather than by audit: `step`'s class default `0.0` is the identity at every `N`
+   under `1 + N x step`, where the identical literal under a direct multiplier ZEROED the regen of the
+   one player who actually had a totem. Proven behaviourally, not just arithmetically —
+   `test_an_unauthored_step_leaves_the_regen_alone_rather_than_zeroing_it` stands up a fixture that
+   never assigns the field, gives P1 TWO live stamina accelerators, and measures P1's gain equal to
+   the bare opponent's over the same ten ticks.
+8. **AC 10 — `4-4` M7: DISCHARGED-AS-ALREADY-CLOSED.** Not "discharged": the readiness gate's audit
+   (`5-1/R3`, F7) was re-walked and confirmed — under the four bounds
+   `test_authored_projectile_profile_is_playable` already asserts, every branch of
+   `_speed_at_flight_ticks` returns `>= launch_speed > 0`, and the only `0.0` return is the
+   null-profile branch that `_advance_projectiles` consumes before the speed function is called. No
+   gap existed. What ships is the NAMED REGRESSION GUARD the AC requires,
+   `test_the_authored_projectile_speed_curve_never_reaches_zero`, which WALKS THE CURVE rather than
+   restating the bounds: it evaluates the shipped arithmetic at every flight tick across a full
+   travel budget (453 ticks for today's profile), through the acceleration-delay boundary and past
+   `max_speed` saturation, and asserts the derived speed never reaches zero — plus that the slowest
+   point IS the launch speed, which is the structural reason the whole curve is positive.
+9. **AC 11 — the golden, and the prediction proven REACHED rather than vacuous.** Unmoved at all
+   three measurements, no re-baseline, nothing adjusted to match. Better than a prediction confirmed:
+   mutation 6 (dropping the `1.0 +` identity term) FAILS `test_state_matches_golden`, which measures
+   what the story could only argue — the golden fixture EXECUTES the new stamina arithmetic on every
+   tick for both players and is unmoved because `1 + 0 x step = 1` exactly, not because the code is
+   skipped. The mana half stays inert three times over, as predicted.
+10. **AC 12 — headless coverage, and the blind spot named.** Thirteen new tests. Both seats are pure
+    state arithmetic, so the per-owner and per-kind claims are pinned HEADLESSLY in BOTH directions at
+    `N > 1`, with `N = 0` identity and `N = 1` byte-identity against today's shipped numbers — nothing
+    in this story's behaviour was left to smoke. **Smoke-only, named explicitly:** that a player
+    summoning a second accelerator SEES the difference in the bar's climb rate (the story's accepted
+    indirect visibility, Non-Goals) — the suite proves the numbers, not that the HUD reads them at a
+    rate a human notices. Nothing else in this story is smoke-only.
+11. **Mutation table, MEASURED.** Every mutated file was copied to the scratchpad with its SHA-256
+    taken BEFORE mutation and restored by COPY-BACK, never `git checkout --`; all four post-restore
+    hashes verified identical to their pre-mutation values (recorded in `_51-suite-final.txt`).
+
+    | # | Mutation | Result |
+    | --- | --- | --- |
+    | 1 | mana rung: `accelerated * mini(1, count)` (the bool gate restored) | 4 failed |
+    | 2 | mana rung: P2 paid from P1's count | 2 failed (per-owner, AC 2) |
+    | 3 | `live_kind_count`: kind test dropped | 5 failed (per-kind, AC 3) |
+    | 4 | `live_kind_count`: liveness test dropped | 6 failed (both kill-one-of-two tests) |
+    | 5 | stamina: `pow(1 + step, N)` — the rejected `mult^N` | 3 failed; every `N <= 1` test STILL PASSES, which is the point |
+    | 6 | stamina: `N * step` (identity term dropped) | 20 failed, INCLUDING `test_state_matches_golden` |
+    | 7 | class default `0.0` -> `1.0` | 1 failed — the M2 test, and only it |
+    | 8a | authored step `0.5` -> `0.4` | 1 failed (derivation assert only; `> 0` still passes) |
+    | 8b | authored step `0.5` -> `0.0` | 1 failed (both new authoring assertions) |
+    | 9 | `E1_BALANCE_FIELDS`: old name restored | 2 failed (reflection, BOTH directions) |
+    | 10 | authored acceleration `12.0` -> `-12.0` | 2 failed, incl. the M7 guard on its own claim ("slowest point of 453 sampled flight ticks was -77.600 at tick 452") |
+    | 11 | (fix pass, review MED) authored `launch_speed` `8.0` -> `0.0`, against the new pre-division guard | 2 failed, incl. `test_the_authored_projectile_speed_curve_never_reaches_zero` reporting a clean assertion failure naming M7 ("launch_speed must be > 0.0 ... got 0.000") rather than the INF/script-error abort the un-guarded division would have produced |
+
+12. **AC 4 — the non-goal, held.** No cap of any kind entered `src/`: no authored maximum-N field, no
+    clamp on the count, no per-kind ceiling. `live_kind_count` returns what it counts.
+13. **Deviations from the skill and from `project-context.md`, reported rather than absorbed.**
+    (a) The story file carries NO Tasks/Subtasks section, so the skill's Step 5/Step 8 task loop had
+    nothing to iterate and nothing to check off; implementation ran against the numbered ACs directly.
+    (b) `PROC/R1` caps the full suite at TWICE per pass; this story's AC 11 and the operator's
+    instruction mandate THREE, one per isolated cause. The story wins as the later, more specific
+    authority. (c) Red-green-refactor ordering was inverted for the measurement protocol's sake — the
+    isolating runs required code-only changes at run 2, so tests were authored after and their
+    non-vacuity established by the measured mutation table above rather than by a prior red. (d) The
+    skill's Step 9 `sprint-status.yaml` write and the team override's `on_complete` correction of it
+    were collapsed into the single end state both prescribe: board entry left at `ready-for-dev` with
+    its `# Tier A` comment intact, `story_notes` updated, story-file Status set to `review`.
+    (e) `resolve_customization.py` could not run (no `python3` on PATH); the `workflow` block was
+    resolved by hand from `customize.toml` + `_bmad/custom/gds-dev-story.toml` per the documented
+    merge rules. (f) No commits — the operator withheld them; the whole pass is in the working tree.
+    (g) No editor session was needed (no new `.gd` file, so no `.uid`); `project.godot` is untouched,
+    confirmed by `git diff -- project.godot` and by its absence from `git status`.
+14. **Fix pass against code review, MEASURED, no commits.** (a) Review MED —
+    `test_the_authored_projectile_speed_curve_never_reaches_zero`'s `budget_ticks` division by
+    `projectile.launch_speed` now has an explicit early guard that FAILS the assertion naming M7
+    (rather than letting a `0.0` authored speed produce `INF` and abort the run as a script error).
+    Mutation-proven as table row 11 above: `launch_speed` authored to `0.0`, state harness run,
+    confirmed a clean assertion failure naming M7 with the actual value, `.tres` restored by
+    copy-back with SHA-256 verified identical before and after. (b) Review LOW — the test's
+    duplication of `_speed_at_flight_ticks`'s arithmetic is ACCEPTED AS WRITTEN, not changed; the
+    failure mode is now named in Dev Notes rather than left implicit (see the new Dev Notes bullet
+    immediately after the M7 investigation note). (c) Review LOW — `_regen_stamina`'s double
+    null-balance guard (Completion Note 4's "`balance` is null-guarded at the seat... for
+    `has_live_kind`'s own reason verbatim") stays as written: explicit is better than depending on
+    `live_kind_count`'s own null return, and changing it would touch `src/state/match_state.gd`,
+    which this fix pass is scoped to leave untouched. (d) The remaining review LOW items are recorded
+    as reported by the reviewer, with no code or test change against them. (e) The story's
+    Project Structure Notes "Touched files" list omitted `test/state/test_intent_recorder.gd`, which
+    Completion Note 3 already disclosed as touched (the `EXEMPT_PURE_QUERIES` fifth-member argument) —
+    the two lists now agree; see the updated Touched-files line.
+
 ### File List
+
+Modified (8 — no new files, no deletions, no scene files, no `project.godot`):
+
+- `src/state/match_state.gd`
+- `src/state/resources/balance_config.gd`
+- `data/balance/balance_config.tres`
+- `test/state/test_totem_accelerators.gd`
+- `test/state/test_balance_authoring.gd`
+- `test/state/test_data_resources.gd`
+- `test/state/test_intent_recorder.gd` — NOT in the story's Touched-files list (Completion Note 3)
+- `test/state/test_determinism.gd` — comment only (Completion Note 6)
 
 ### Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-09-03 | Story authored via `gds-create-story`. |
+| 2026-09-03 | Dev pass (Opus 5). Both seats stacked linearly: mana rung un-gated and multiplied by the owner's own live count; stamina seat moved to `1 + N x step` with `stamina_accelerator_regen_step` REPLACING its multiplicative predecessor everywhere in `src/`, `test/` and `data/` (authored `0.5`, derived from `1 + 1 x step = 1.5`). New `MatchState.live_kind_count()`; `has_live_kind()` kept as a one-line forward. M2 DISCHARGED (identity-safe additive default, proven behaviourally); M7 DISCHARGED-AS-ALREADY-CLOSED with a named curve-walking regression guard. 13 new tests, 10 measured mutations. Golden UNMOVED at all three measurements, NO re-baseline. Status -> `review`. |
 | 2026-09-03 | Readiness-gate fix pass (`5-1/R2`-`5-1/R5`): AC 7 makes the stamina field rename/replace a requirement, not a dev-pass option (`stamina_accelerator_regen_step`, `test_data_resources.gd` added to Touched-files); AC 10 fixes the M7 outcome word to `DISCHARGED-AS-ALREADY-CLOSED`; AC 11 and the Golden Prediction Dev Note resolve the golden caveat (kind-lookup gate closes before the board scan; no re-baseline, stop-and-report on a surprise); AC 1 gains the kind-lookup early-out. Promoted to `ready-for-dev`. `5-1/R1` (linear stacking) recorded in decision-log Session 2026-09-03, `epics.md:180-183` corrected to match. |
+| 2026-09-04 | Live smoke, 6/6 PASS, no findings. Board promoted to `done`. |
+
+### Live Smoke Results
+
+Operator smoke pass, 2026-09-04, 6/6 PASS, recorded verbatim in `docs/playtest-log.md`'s 5-1 entry.
+No findings.
+
+1. First mana totem indistinguishable from previously shipped behaviour.
+2. Second mana totem visibly faster on both seats (mana climbs at more than one grant per cadence
+   tick).
+3. Same doubling observed on the stamina seat.
+4. Killing one of two live totems of the same kind returns the effect to the `N=1` level, not to
+   zero.
+5. An opponent's totems do not accelerate the owner's own bars (per-owner isolation holds under
+   live play, matching AC 2's headless coverage).
+6. FPS stable throughout.

@@ -258,3 +258,6 @@ Verdict: SMOKE PASS.
    rendering acceptable. PASS.
 
 
+4.9.
+5-1 accelerator stacking — smoke na padu, 6/6 PASS. Prvi mana totem kao i dosad; drugi osjetno brži, bar skače više po tiku. Isto za staminu. Ubijanjem jednog od dva efekt se vraća na razinu jednog, ne na nulu. Protivnikovi totemi ne diraju moje barove. fps stabilan. Bez nalaza.
+
