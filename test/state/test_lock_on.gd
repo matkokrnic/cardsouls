@@ -152,6 +152,101 @@ func test_a_tick_with_no_request_leaves_the_standing_lock_alone() -> void:
 	assert_eq(_lock(ms.p1), [1, 0], "five quiet ticks later the unit lock is still held")
 
 
+# ------------------------------------------- 5-1a AC 1/AC 2: the malformed address is REJECTED
+
+## Story 5-1a (AC 1/AC 2 half (a), `4-6` finding M3) — THE BEHAVIOURAL HALF.
+##
+## Through 4-6 this seat reported a malformed address with two `Invariant.check`s and then assigned
+## it on the very next line, unconditionally. `Invariant.check` is `push_error` + `assert`, and
+## `assert` is STRIPPED in an exported build, so an exported build logged the violation and then
+## wrote the malformed address straight into the hashed `lock_target` key.
+##
+## WHY A PASS HERE ATTRIBUTES THE REJECTION TO THE BRANCH AND TO NOTHING ELSE: an `assert` cannot
+## skip an assignment in ANY build — it aborts or it does nothing — so an observation that the lock
+## target did NOT move can only be a branch declining to write. This test therefore reads the same
+## with assertions compiled in or stripped, which is what makes AC 2's export claim machine-backed
+## at the level a headless suite can reach it (the seat's freedom from `Invariant.check` is pinned
+## by the scan below).
+##
+## MUTATION PROOF: remove the `_is_applicable_retarget` branch and assign unconditionally — this
+## goes RED on the first malformed address, reading `[2, 0]` where `[1, 0]` was held.
+##
+## THE PAIR, in both directions: a WELL-FORMED address is applied before the loop and another is
+## applied after it, so "unchanged" is never the seat simply refusing everything.
+func test_a_malformed_retarget_address_is_rejected_and_the_standing_lock_is_untouched() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(UNIT_MAX_HP, 0)
+	_advance(ms, _retarget_intent(1, 0))
+	assert_eq(_lock(ms.p1), [1, 0], "sanity: a WELL-FORMED address IS applied at this seat")
+	for malformed: Array in [
+		[2, 0],     # a slot outside {0, 1} — the first 4-6 Invariant.check's own condition
+		[7, 3],
+		[-2, 0],    # negative, and NOT the NO_RETARGET resting value, so it is a real request
+		[1, -2],    # a well-formed slot with an index below HERO_INDEX (-1)
+		[0, -99],
+	]:
+		_advance(ms, _retarget_intent(malformed[0], malformed[1]))
+		assert_true(ms.p2.units.is_alive_at(0),
+			"sanity: the locked unit is still alive, so an unchanged lock is not a liveness snap")
+		assert_eq(_lock(ms.p1), [1, 0],
+			("%s is REJECTED: the lock target ends the tick at its PRE-CALL value, so nothing was "
+			+ "written to the hashed `lock_target` key on this tick (AC 1)") % str(malformed))
+		assert_eq(_lock(ms.p2), [0, HERO_INDEX],
+			"...and the other slot's lock is untouched too")
+	# THE RUN CONTINUES CLEAN: a rejection is a declined write, never a halt, and the very next
+	# well-formed address still lands.
+	_advance(ms, _retarget_intent(1, HERO_INDEX))
+	assert_eq(_lock(ms.p1), [1, HERO_INDEX],
+		"the match ran on through five rejections and the next GOOD address is applied normally")
+
+
+## Story 5-1a (AC 2 half (b), `5-1a/R9`) — THE SOURCE SCAN, the `test_targeting_service.gd:161-167`
+## idiom. Two claims a behavioural test cannot make on its own:
+##
+## 1. The `_resolve_lock` seat carries NO `Invariant.check`. Not "one that never fires" — none at
+##    all. Keeping one was never an option: `test/run_all.sh` greps both harnesses for
+##    `INVARIANT VIOLATED` and fails the WHOLE suite on a hit, so the test above and a retained
+##    check cannot both be green.
+## 2. Both halves of the address are assigned ONLY under the guard — after it, and indented deeper
+##    than it. This is the pin that makes the export claim re-checkable by a machine on every
+##    future run rather than an inspection someone did once (no export build exists in this repo).
+##
+## MUTATION PROOF: dedent either assignment back to the function's own indent (an unconditional
+## assignment, the 4-6 shape) and the indent assertion fails; add an `Invariant.check` back to the
+## seat and the first assertion fails.
+func test_the_lock_seat_carries_no_invariant_check_and_guards_both_assignments() -> void:
+	var body := _function_body("res://src/state/match_state.gd", "func _resolve_lock(")
+	assert_true(body.size() > 0, "the seat's body was read (a guard over nothing is vacuous)")
+	var guard_line := -1
+	var guard_indent := -1
+	for i in body.size():
+		var line: String = body[i]
+		assert_false(line.contains("Invariant."),
+			("`5-1a/R9`: the lock seat carries NO Invariant.check — it is `push_error` + a stripped "
+			+ "`assert`, and run_all.sh fails the suite on the print: %s") % line.strip_edges())
+		if guard_line < 0 and line.contains("if ") and line.contains("_is_applicable_retarget("):
+			guard_line = i
+			guard_indent = _indent_width(line)
+	assert_true(guard_line >= 0,
+		"the seat opens with the well-formedness branch, by name — the guard AC 1 rests on")
+	var assignments := 0
+	for i in body.size():
+		var line: String = body[i]
+		if not (line.contains("player.lock_target_slot =")
+				or line.contains("player.lock_target_index =")):
+			continue
+		assignments += 1
+		assert_true(i > guard_line,
+			"the address assignment comes AFTER the guard: %s" % line.strip_edges())
+		assert_true(_indent_width(line) > guard_indent,
+			("...and is indented INSIDE it, so it is reachable only when the guard passes — an "
+			+ "unconditional assignment at the seat's own indent is the 4-6 defect: %s")
+					% line.strip_edges())
+	assert_eq(assignments, 2,
+		"BOTH halves of the address are assigned at this seat (slot and index), and the loop above "
+		+ "put both of them under the guard — a half moved out would drop this count or fail above")
+
+
 # ---------------------------------------------------------------- AC 3: the corpse-free snap
 
 ## AC 3 (`4-6/R4`, `4-6/R5`): a locked UNIT that dies releases the lock IMMEDIATELY, the SAME TICK,
@@ -335,3 +430,49 @@ func test_the_flick_edge_fires_once_per_crossing() -> void:
 func test_a_lock_click_suppresses_the_flick_it_would_have_produced() -> void:
 	assert_eq(GamepadController.resolve_flick(Vector2(1.0, 0.0), 0.0, 0.7, true), Vector2.ZERO,
 		"the click wins, so a re-lock never also fires a spurious retarget")
+
+
+# ---------------------------------------------------------------- Source-scan fixture (5-1a AC 2b)
+
+## Code portion of each line (everything before the first '#'), so a comment cannot false-positive.
+## The `test_targeting_service.gd` helper verbatim — the idiom AC 2 half (b) names.
+func _code_lines(path: String) -> Array[String]:
+	var out: Array[String] = []
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return out
+	while not f.eof_reached():
+		var line := f.get_line()
+		var hash_idx := line.find("#")
+		if hash_idx >= 0:
+			line = line.substr(0, hash_idx)
+		out.append(line)
+	return out
+
+
+## The code lines of ONE function body: everything after the line beginning with `signature`, up to
+## the next line that is non-blank at indent zero (the next top-level declaration). Comment-only
+## lines are already blanked by `_code_lines`, so a docstring between functions cannot end the body
+## early and cannot be scanned as code.
+##
+## Scoped to the ONE seat deliberately: a whole-file scan for `Invariant.` would fail on the
+## fifteen-plus legitimate checks elsewhere in match_state.gd, which `5-1a/R7` explicitly leaves
+## alone.
+func _function_body(path: String, signature: String) -> Array[String]:
+	var out: Array[String] = []
+	var inside := false
+	for line in _code_lines(path):
+		if not inside:
+			inside = line.begins_with(signature)
+			continue
+		if line.strip_edges() != "" and _indent_width(line) == 0:
+			break
+		out.append(line)
+	return out
+
+
+func _indent_width(line: String) -> int:
+	var n := 0
+	while n < line.length() and (line[n] == "\t" or line[n] == " "):
+		n += 1
+	return n

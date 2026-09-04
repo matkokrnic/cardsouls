@@ -81,6 +81,13 @@ const RETARGET_TICK := 2
 const RETARGET_SLOT := 1
 const RETARGET_INDEX := 4
 
+# Story 5-1a (AC 4/AC 5): the ticks the contents corruptions land on. Both are inside the driven
+# run's `TICKS`, so the rebuild loop really does reach them — a tick past `tick_count` would make
+# every refusal below unfalsifiable.
+const LOCK_CORRUPT_TICK := 3
+const INTENT_CORRUPT_TICK := 4
+const INTENT_CORRUPT_SLOT := 0
+
 ## AC 6: ticks driven before the first SAVE, and after it before the second.
 const TICKS_BEFORE_FIRST_SAVE := 6
 const TICKS_BETWEEN_SAVES := 7
@@ -561,6 +568,123 @@ func test_a_record_whose_required_keys_carry_the_wrong_types_is_refused_with_a_r
 		"`has()` is TRUE for a key whose value is null — the gap `3-0d/R21` closes")
 
 
+# ------------------------------------------- 5-1a AC 4/AC 5/AC 6: the CONTENTS of two channels
+
+## Story 5-1a (AC 4/AC 6, `4-6` finding L7). `3-0d/R21` validated the top-level keys and their
+## TYPES; it said nothing about what is INSIDE them. A record whose `lock_pushes` is a perfectly
+## good Dictionary carrying a TRUNCATED pair got all the way into `_from_dictionary`'s rebuild loop
+## and hit `int(push[0])` / `push[1] as Vector2` on it — a script error, or a silent coercion that
+## replays WRONG. The same discipline now runs one level deeper, and BEFORE the rebuild (`5-1a/R10`).
+##
+## Each corruption is one an adversary or a hand-edit really produces, and the reason must NAME the
+## tick: a refusal that says only "malformed" sends the operator through the whole file by hand.
+##
+## MUTATION PROOF: delete the `_lock_pushes_refusal` call from `_contents_refusal` and every case
+## below goes RED — most of them by the load succeeding, and the first by the SCRIPT ERROR the
+## unguarded dereference raises, which `run_all.sh` fails the suite on outright.
+func test_a_record_whose_lock_pushes_carry_a_malformed_entry_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	for corruption: Array in [
+		["not an array", "a tick whose entry list is not an Array at all"],
+		[[7], "an ENTRY that is not an Array — the pair is a bare int"],
+		[[[0]], "a TRUNCATED pair, finding L7's own word"],
+		[[[]], "an EMPTY pair"],
+		[[[0, Vector2(1.0, 0.0), 5]], "an OVER-LONG pair, the other side of the arity check"],
+		[[["zero", Vector2(1.0, 0.0)]], "a slot that is not an int"],
+		[[[0, "north"]], "a direction that is not a Vector2"],
+		[[[0, Vector2(1.0, 0.0)], [1, null]], "a good pair FOLLOWED by a null-carrying one"],
+	]:
+		assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the intact record was written")
+		assert_not_null(RecordFile.load_record(VERSION_PATH)["record"], "...and loads intact")
+		_rewrite_values(VERSION_PATH, {"lock_pushes": {LOCK_CORRUPT_TICK: corruption[0]}})
+		var refused := RecordFile.load_record(VERSION_PATH)
+		assert_null(refused["record"],
+			"%s: the WHOLE record is refused, never partially rebuilt (AC 6)" % corruption[1])
+		assert_ne(refused["error"], "", "%s: ...WITH A REASON" % corruption[1])
+		assert_true(refused["error"].contains("lock_pushes"),
+			"%s: ...naming the channel: %s" % [corruption[1], refused["error"]])
+		assert_true(refused["error"].contains(str(LOCK_CORRUPT_TICK)),
+			"%s: ...and the TICK it is on: %s" % [corruption[1], refused["error"]])
+		_remove(VERSION_PATH)
+	# THE PAIR, and it is what keeps every refusal above attributable to the corruption: a
+	# WELL-FORMED entry written into the same channel at the same tick LOADS. Without this the
+	# guard could be refusing every record that carries a lock push at all.
+	assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the intact record was written")
+	_rewrite_values(VERSION_PATH,
+		{"lock_pushes": {LOCK_CORRUPT_TICK: [[0, Vector2(1.0, 0.0)], [1, Vector2(0.0, -1.0)]]}})
+	assert_not_null(RecordFile.load_record(VERSION_PATH)["record"],
+		"two WELL-FORMED [slot, direction] pairs at the same tick load fine — the refusals above "
+		+ "are caused by the SHAPE and by nothing else")
+	# `5-1a/R11`: SPARSENESS IS NOT MALFORMEDNESS. The writer omits every empty tick by design, so
+	# an EMPTY channel — no tick keys at all — is the golden fixture's own shape and must load.
+	_rewrite_values(VERSION_PATH, {"lock_pushes": {}})
+	assert_not_null(RecordFile.load_record(VERSION_PATH)["record"],
+		"a channel with NO tick keys is the normal write-path output, not a defect (`5-1a/R11`)")
+	_remove(VERSION_PATH)
+
+
+## Story 5-1a (AC 5/AC 6, `4-6` finding L8). `_intent_from_values` reads
+## `values["retarget_slot"]`/`values["retarget_index"]` by DIRECT dict access, with neither a
+## presence nor a type check — unlike `load_record`'s top-level loop, which checks both for every
+## required key before the rebuild runs at all. A v6 intent dict that lost either field crashed the
+## rebuild; one carrying a string coerced silently. Both are refused now, before the rebuild, with
+## the tick, the slot and the FIELD named.
+##
+## `null` is in the table for `3-0d/R21`'s reason, one level down: `has()` is TRUE for a key whose
+## value is null, so a presence check alone would pass it straight through to `int(null)`.
+##
+## MUTATION PROOF: delete the `_intents_refusal` call from `_contents_refusal` and every case goes
+## RED — the two erasures by the SCRIPT ERROR the missing key raises, the rest by loading.
+func test_a_record_whose_intent_dict_lacks_the_retarget_fields_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	for corruption: Array in [
+		[&"erase", "retarget_slot", null, "the field is MISSING outright"],
+		[&"erase", "retarget_index", null, "...and the other one missing"],
+		[&"set", "retarget_slot", "one", "a String where an int is read back"],
+		[&"set", "retarget_index", null, "`null`, which `has()` reports as PRESENT (`3-0d/R21`)"],
+		[&"set", "retarget_index", Vector2.ZERO, "a Vector2, the 4-6 `aim` field's old type"],
+		[&"set", "retarget_slot", 1.5, "a float — `int()` would coerce it silently"],
+	]:
+		assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the intact record was written")
+		assert_not_null(RecordFile.load_record(VERSION_PATH)["record"], "...and loads intact")
+		_rewrite_intent_field(VERSION_PATH, INTENT_CORRUPT_TICK, INTENT_CORRUPT_SLOT,
+				corruption[0] as StringName, corruption[1] as String, corruption[2])
+		var refused := RecordFile.load_record(VERSION_PATH)
+		assert_null(refused["record"],
+			"%s: the WHOLE record is refused — not just that tick (AC 6)" % corruption[3])
+		assert_ne(refused["error"], "", "%s: ...WITH A REASON" % corruption[3])
+		assert_true(refused["error"].contains(corruption[1] as String),
+			"%s: ...naming the FIELD: %s" % [corruption[3], refused["error"]])
+		assert_true(refused["error"].contains("tick %d" % INTENT_CORRUPT_TICK),
+			"%s: ...and the TICK: %s" % [corruption[3], refused["error"]])
+		_remove(VERSION_PATH)
+	# THE PAIR: the same field, at the same tick and slot, REWRITTEN TO A VALID int, loads — so the
+	# refusals above are about the value and not about the seat rejecting every touched record.
+	assert_eq(RecordFile.save_record(record, VERSION_PATH), "", "the intact record was written")
+	_rewrite_intent_field(VERSION_PATH, INTENT_CORRUPT_TICK, INTENT_CORRUPT_SLOT, &"set",
+			"retarget_slot", 1)
+	assert_not_null(RecordFile.load_record(VERSION_PATH)["record"],
+		"a rewritten but WELL-TYPED retarget_slot loads — the refusals above are caused by the "
+		+ "value's shape and by nothing else")
+	_remove(VERSION_PATH)
+
+
+## Story 5-1a (AC 7, `5-1a/R4`/`5-1a/R12`): the story's own NON-goals, pinned. The stricter reading
+## must not have arrived as a format bump or a widened top-level key set — a record well-formed
+## under yesterday's rules still loads identically, which is the whole compatibility claim.
+func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
+	assert_eq(RecordFile.FORMAT_VERSION, 6,
+		"`5-1a/R4`: the v6 SHAPE is unchanged — only its validation is stricter, so nothing that "
+		+ "loaded before this story is refused by a version gate now")
+	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:
+		assert_false(RecordFile.REQUIRED_KEYS.has(field),
+			("`5-1a/R12`: `%s` is a PER-INTENT field inside each `intents` element, never a "
+			+ "top-level key — REQUIRED_KEYS is not widened by this story") % field)
+	assert_eq(RecordFile.REQUIRED_KEYS.size(), 12,
+		"TWELVE top-level required keys, exactly as before 5-1a (`5-1a/R12` counted them at the "
+		+ "readiness gate) — this story validates CONTENTS, never presence at the top level")
+
+
 ## `3-0d/R22`: A SAVE PATH IS CHECKED BY NORMALISATION, NOT BY PREFIX. `3-0d/R16` shipped
 ## `begins_with("user://")`, which a `user://../../…` path satisfies while writing anywhere it
 ## likes. Each traversal form below is resolved and refused, and NOTHING is written — checked at
@@ -982,6 +1106,33 @@ func _rewrite_values(path: String, values: Dictionary) -> void:
 		assert_true(data.has(key), "the record carried `%s` before it was corrupted" % key)
 		data[key] = values[key]
 		assert_true(data.has(key), "...and STILL carries it afterwards — presence is not type")
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## Story 5-1a (AC 5): corrupt ONE field of ONE per-tick, per-slot intent dictionary inside a saved
+## record, leaving every other tick, every other slot and every other key EXACTLY as written — so
+## the refusal under test is about that one field and nothing else. `mode` is `&"erase"` (the
+## missing-key half of L8) or `&"set"` (the wrong-type half).
+func _rewrite_intent_field(path: String, tick: int, slot: int, mode: StringName, field: String,
+		value: Variant) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	var intents: Array = data["intents"]
+	assert_true(tick - 1 < intents.size(), "tick %d is inside the recorded run" % tick)
+	var pair: Array = intents[tick - 1]
+	assert_true(slot < pair.size(), "slot %d exists on tick %d" % [slot, tick])
+	var values: Dictionary = (pair[slot] as Dictionary).duplicate()
+	assert_true(values.has(field), "the intent carried `%s` before it was corrupted" % field)
+	if mode == &"erase":
+		values.erase(field)
+	else:
+		values[field] = value
+	pair[slot] = values
+	intents[tick - 1] = pair
+	data["intents"] = intents
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()

@@ -195,6 +195,25 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	"effects": TYPE_DICTIONARY,
 }
 
+## Story 5-1a (AC 4): the POSITIONAL type signature of one `lock_pushes` entry, in the order
+## `_from_dictionary` dereferences it — `int(push[0])`, `push[1] as Vector2`. A list rather than
+## two named constants so the arity and the types come from ONE place: a third element added to
+## the pair changes this line and the check follows.
+const LOCK_PUSH_TYPES: Array[int] = [TYPE_INT, TYPE_VECTOR2]
+
+## Story 5-1a (AC 5, `5-1a/R12`): the per-intent fields validated before the rebuild, keyed to the
+## type each is read back as. NOT part of `REQUIRED_KEYS` and deliberately not added to it — these
+## live INSIDE each `intents` array element (`_intent_values`), not at the top level, so
+## `REQUIRED_KEYS` is neither widened nor consulted for them and AC 7 holds.
+##
+## The scope is exactly finding L8's two fields (`5-1a/R6`). `move_dir`, `pressed`, `held`,
+## `debug_reset`, `card_slot`, `card_mode` and `card_commit` carry the identical unguarded access
+## and are deliberately NOT validated here.
+const REQUIRED_INTENT_FIELDS: Dictionary[String, int] = {
+	"retarget_slot": TYPE_INT,
+	"retarget_index": TYPE_INT,
+}
+
 ## `3-0d/R16`: the ONE thing a save path must be. The class's own docstring and AC 7 both assert
 ## records go to `user://`; before this guard that was true only of `path_for()`, and the API
 ## accepted any path — proven at the review by writing a record into the repo root. Now the API
@@ -291,7 +310,114 @@ static func load_record(path: String) -> Dictionary:
 		return _refused(("%s carries format version %d but %s — it was not written by this class, "
 				+ "or was written by a build whose shape this one cannot read")
 						% [path, version, ", ".join(wrong)])
+	# Story 5-1a (AC 4/AC 5, `5-1a/R1`/`5-1a/R10`): the same discipline ONE LEVEL DEEPER. The two
+	# loops above check the top-level keys and stop there, so a record with a well-typed
+	# `lock_pushes` Dictionary carrying a TRUNCATED pair inside it, or an `intents` array whose
+	# per-tick dictionaries have lost `retarget_slot`, got all the way into `_from_dictionary`'s
+	# rebuild loop and either died there or coerced silently and replayed WRONG (findings L7/L8).
+	# It runs HERE and not inside the rebuild because `_from_dictionary` returns an IntentRecorder
+	# and has no refusal channel, and by the time its loop reaches a tick the record under
+	# construction is already partway built — refusing there would be the partial replay
+	# `5-1a/R2` forbids.
+	var contents := _contents_refusal(data)
+	if contents != "":
+		return _refused("%s carries format version %d but %s — it is corrupt or was hand-edited"
+				% [path, version, contents])
 	return {"record": _from_dictionary(data), "error": ""}
+
+
+## Story 5-1a: "" if every CONTENT the rebuild loop dereferences is the shape it dereferences it
+## as, or the REASON it is not. WHOLE-RECORD (`5-1a/R2`): the first malformed thing found anywhere
+## refuses the entire load, so no partial replay is ever produced.
+##
+## Scoped to `lock_pushes` and the two retarget fields BY RULING (`5-1a/R6`), not by oversight:
+## `camera_pushes` carries the identical unguarded dereference (`int(push[0])`, `push[1] as Basis`)
+## and is deliberately left open here, recorded as its own close-out line.
+static func _contents_refusal(data: Dictionary) -> String:
+	var locks := _lock_pushes_refusal(data["lock_pushes"])
+	if locks != "":
+		return locks
+	return _intents_refusal(data["intents"])
+
+
+## Story 5-1a (AC 4, finding L7): every PRESENT `lock_pushes` entry is the `[slot, direction]` pair
+## `_from_dictionary` reads it as.
+##
+## A TICK ABSENT FROM THE DICTIONARY IS NOT CHECKED AND IS NOT MALFORMED (`5-1a/R11`). The writer
+## (`_to_dictionary`, the `if not locks.is_empty()` line) omits every empty tick by design, so
+## sparseness is the only shape this channel ever produces — the golden fixture included — and
+## `.get(tick, [])` already handles it. L7's filed word "sparse" was a misreading; this validates
+## the shape of entries that ARE present and says nothing about which ticks appear.
+static func _lock_pushes_refusal(pushes: Dictionary) -> String:
+	for tick: Variant in pushes:
+		var entries: Variant = pushes[tick]
+		if typeof(entries) != TYPE_ARRAY:
+			return ("its lock_pushes channel holds %s at tick %s, not the Array of "
+					+ "[slot, direction] pairs the rebuild reads there") % [
+							type_string(typeof(entries)), str(tick)]
+		var index := 0
+		for entry: Variant in (entries as Array):
+			var reason := _lock_push_entry_refusal(entry)
+			if reason != "":
+				return "its lock_pushes entry %d at tick %s %s" % [index, str(tick), reason]
+			index += 1
+	return ""
+
+
+## One `[slot, direction]` pair, or the reason it is not one. Shape THEN types, in that order:
+## `pair[1]` cannot be type-checked until the pair is known to have a second element.
+static func _lock_push_entry_refusal(entry: Variant) -> String:
+	if typeof(entry) != TYPE_ARRAY:
+		return "is %s, not a [slot, direction] pair" % type_string(typeof(entry))
+	var pair: Array = entry
+	if pair.size() != LOCK_PUSH_TYPES.size():
+		return ("carries %d values, not the %d a [slot, direction] pair carries"
+				% [pair.size(), LOCK_PUSH_TYPES.size()])
+	for half in LOCK_PUSH_TYPES.size():
+		var found := typeof(pair[half])
+		if found != LOCK_PUSH_TYPES[half]:
+			return "carries %s at position %d (expected %s)" % [
+					type_string(found), half, type_string(LOCK_PUSH_TYPES[half])]
+	return ""
+
+
+## Story 5-1a (AC 5, finding L8): `retarget_slot` and `retarget_index` are PRESENT and are ints in
+## every per-tick, per-player intent dictionary, checked before `_intent_from_values` reaches its
+## direct `values["retarget_slot"]` access.
+##
+## The container checks come first because they are what makes the field check well-defined —
+## `has()` cannot be asked of something that is not a Dictionary — not because this story widened
+## into validating the intents channel generally: the other seven fields are untouched (`5-1a/R6`).
+static func _intents_refusal(intents: Array) -> String:
+	for index in intents.size():
+		var tick := index + 1
+		var pair: Variant = intents[index]
+		if typeof(pair) != TYPE_ARRAY:
+			return ("its intents channel holds %s at tick %d, not the Array of per-player intent "
+					+ "dictionaries the rebuild reads there") % [type_string(typeof(pair)), tick]
+		var slot := 0
+		for values: Variant in (pair as Array):
+			if typeof(values) != TYPE_DICTIONARY:
+				return "its intent for tick %d slot %d is %s, not a Dictionary" % [
+						tick, slot, type_string(typeof(values))]
+			var reason := _intent_fields_refusal(values as Dictionary)
+			if reason != "":
+				return "its intent for tick %d slot %d %s" % [tick, slot, reason]
+			slot += 1
+	return ""
+
+
+## `3-0d/R21` again, one level down: `has()` is TRUE for a key whose value is `null` and says
+## nothing about type, so presence and type are both checked and the reason names the field.
+static func _intent_fields_refusal(values: Dictionary) -> String:
+	for field: String in REQUIRED_INTENT_FIELDS:
+		if not values.has(field):
+			return "is missing %s" % field
+		var found := typeof(values[field])
+		if found != REQUIRED_INTENT_FIELDS[field]:
+			return "carries %s as %s (expected %s)" % [
+					field, type_string(found), type_string(REQUIRED_INTENT_FIELDS[field])]
+	return ""
 
 
 static func _refused(reason: String) -> Dictionary:

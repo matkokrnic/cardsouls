@@ -1707,15 +1707,39 @@ func _attacker_attack_damage(attacker: PlayerState, attacker_index: int) -> floa
 ## the standing lock alone: there is no unlock value, because `CC/R2` gives lock-on no unlocked
 ## state (AC 10, and a flick with no candidate is a no-op the RUNNER produces by sending no
 ## request at all).
+##
+## Story 5-1a (AC 1/AC 2, `5-1a/R3`/`5-1a/R9`): the address is now GATED rather than merely
+## reported on. Through 4-6 this seat called `Invariant.check` twice and then assigned
+## UNCONDITIONALLY on the next two lines -- `Invariant.check` is `push_error` + `assert`
+## (`src/systems/invariant.gd:11-14`), and `assert` is stripped in an exported build, so an
+## exported build logged the violation and wrote the malformed address into the hashed
+## `lock_target` key anyway (`player_state.gd:267`). The branch below is what a stripped `assert`
+## cannot skip, and the two `Invariant.check`s are GONE rather than kept alongside it: a retained
+## one would print `INVARIANT VIOLATED`, which `test/run_all.sh` greps for and fails the whole
+## suite on, so the check and AC 2's own test cannot both be green (`5-1a/R9`).
 func _resolve_lock(player: PlayerState, intent: InputIntent, opposing_slot: int) -> void:
-	if intent.retarget_slot != InputIntent.NO_RETARGET:
-		Invariant.check(intent.retarget_slot == 0 or intent.retarget_slot == 1,
-			"retarget slot must be 0 or 1, got %d" % intent.retarget_slot)
-		Invariant.check(intent.retarget_index >= TargetingService.HERO_INDEX,
-			"retarget index must be >= -1 (-1 is the hero), got %d" % intent.retarget_index)
+	if _is_applicable_retarget(intent):
 		player.lock_target_slot = intent.retarget_slot
 		player.lock_target_index = intent.retarget_index
 	_validate_lock(player, opposing_slot)
+
+
+## Story 5-1a (AC 1, `4-6` finding M3): TRUE only for an address this layer will actually apply.
+##
+## REJECTION, NOT A CLAMP (the story's Open Question 2, answered by declining to write): a
+## malformed address leaves `lock_target_slot`/`lock_target_index` at whatever they already held,
+## so nothing is written to the hashed key on that tick and the next `_validate_lock` still runs
+## over the STANDING lock. A clamp would invent an address no one asked for.
+##
+## The resting `NO_RETARGET` (-1) falls out of the slot test rather than needing its own line, but
+## it is named first because it is a DIFFERENT fact about the tick -- no click and no flick (AC 10)
+## -- and a reader who has to derive that from `-1 != 0 and -1 != 1` will eventually derive it
+## wrong.
+static func _is_applicable_retarget(intent: InputIntent) -> bool:
+	if intent.retarget_slot == InputIntent.NO_RETARGET:
+		return false
+	return (intent.retarget_slot == 0 or intent.retarget_slot == 1) \
+			and intent.retarget_index >= TargetingService.HERO_INDEX
 
 
 ## Story 4-6 (AC 3, `4-6/R4`/`4-6/R5`): the lock's liveness rule, and the whole of it. A HERO
