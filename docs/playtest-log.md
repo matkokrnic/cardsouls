@@ -263,3 +263,20 @@ Verdict: SMOKE PASS.
 
 5-1a: regresijski smoke na padu, lock/flick/smrt mete/marker/fps sve kao prije, ništa vidljivo se nije promijenilo
 
+## 2026-09-04 — 5-2 unblockable initiation — REGRESSION smoke, 5/5 PASS
+
+This is a REGRESSION smoke, per `5-2/R15`: mode 2 was NOT observed in motion, because no input
+path can emit it — both controllers hardcode BASIC. The first real playtest of the unblockable is
+at `5-7`.
+
+1. Mode 1 summon casts, card leaves hand, vacated slot refills after the draw delay. PASS.
+2. Melee chain of three, chain window intact, stamina drains and regenerates. PASS.
+3. Roll and block behave as before; movement normal. PASS.
+4. A cast succeeds mid-block and during/immediately after a roll — S6 ratified as correct by
+   `5-2/R11`, and this confirms the gate did not over-reach into BASIC. PASS.
+   Operator observation: casting while holding block DROPS the block on the cast tick. The cast
+   itself succeeded, which is what this check tests. Recorded, not ruled, at `5-2/R17`.
+5. Minions, totems, projectile all behave as before. PASS.
+
+Verdict: SMOKE PASS, 5/5, regression-only.
+
