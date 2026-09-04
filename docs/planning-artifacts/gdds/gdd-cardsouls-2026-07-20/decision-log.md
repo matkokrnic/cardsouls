@@ -8655,3 +8655,89 @@ CLOSED by this ruling. Closes F15.
 `5-2/R12` -- The story ships WHOLE. E5-P/R5's auto-aim cut is NOT taken: the gate measured
 auto-aim as the cheapest AC in the story, one write beside the existing facing write. Closes gate
 item 8.
+
+`5-2/R13` -- AMENDS `5-2/R2`: THE FEATURE-FLAG HALF IS WITHDRAWN AS AN OPERATOR ERROR. `5-2/R2`'s
+mana and orb exclusions STAND UNCHANGED -- `CastEvaluator.refusal_reason` is still never called on
+the unblockable path, and no mana or orb reading is taken there. What is withdrawn is the clause
+that also excluded FEATURE-FLAG evaluation. Mode (2) MUST consult the shipped `unblockable`
+`FeatureFlags` toggle and degrade gracefully, per project-context's feature-flag HARD RULE: a
+gameplay layer that cannot be switched off is the defect, and the overload-isolation instrument
+only works if every layer is independently toggleable. What `5-2/R2` was actually protecting
+against was ROUTING THE CHECK THROUGH `CastEvaluator`, and that protection is intact -- the flag is
+read from the INJECTED resource at the cast seat, `CastEvaluator.REASON_FLAG_CLOSED` is borrowed as
+a reason CONSTANT only, and `refusal_reason` is not called in any form.
+
+MECHANISM, ruled rather than left to the dev pass: the flag check is the FIRST thing
+`_resolve_unblockable_cast` does, AHEAD of the S6 gate -- "does this layer exist at all" is a prior
+question to "may I use it right now", so a hero mid-roll in a build with E5 switched off hears that
+the layer is closed rather than that it is busy. A closed flag refuses through the existing
+`HeroState.reject_action` seam and spends NOTHING: no stamina, no card, no `CHARGING` entry, no
+telegraph -- the insufficient-stamina fallthrough shape, since there is no degraded unblockable to
+fall back to. `BASIC` casts are untouched: the `unblockable` toggle is mode (2)'s layer and closing
+it must not disable mode (1).
+
+RAISED BY THE DEV PASS, NOT BY A LATER GATE. The `5-2` dev pass implemented `5-2/R2` as written,
+shipped the path flag-blind, and reported the contradiction with project-context rather than
+resolving it in code -- which is the behaviour the "STOP and report" rule exists to produce. This
+ruling is the answer to that report. The story's AC 5 text is corrected on the flag clause ONLY;
+the record that the tension was raised stays in the story's Completion Notes.
+
+OPEN, and deliberately not decided here: the AUTHORED `data/feature_flags.tres` still leaves
+`unblockable` at its `false` default. Turning the layer ON in authored data is a separate design
+call about when E5 goes live -- mode (2) is not reachable in live play until `5-7` wires the pad
+anyway -- and no story ships it yet.
+
+`5-2/R14` -- THE `unblockable` LAYER GOES ON IN AUTHORED DATA WITH THE STORY THAT BUILDS IT.
+`data/feature_flags.tres` flips `unblockable` to `true`, closing the item `5-2/R13` left open. Two
+reasons, and the second is the stronger one. FIRST, the `4-4` precedent: that story turned
+`minions` on in the same authored file as it shipped the layer, and the same reading applies here.
+SECOND, a flag left `false` is a SECOND CLOSED GATE that `5-7` would have to remember to open, and
+the failure mode of forgetting it is the worst kind available -- the mechanic does nothing while
+every test in the suite is green, because the tests inject their own `FeatureFlags` and never read
+the authored file. There is no risk in flipping it now, and `5-2/R15` is why: nothing can currently
+produce a mode (2) intent at all, so the layer being open changes no live behaviour.
+
+MEASURED BEFORE FLIPPING, and recorded because the answer is what makes the flip safe: NO test pins
+the authored flag VALUES. `test_data_resources.gd::test_feature_flags_tres_loads_with_all_layer_
+fields` pins field PRESENCE only (`field in flags`), and `test_determinism.gd` records the authored
+file as an explicit NON-cause of the golden -- `_golden_flags()` constructs its own `FeatureFlags`
+in-test, so "flipping the authored minions flag cannot re-baseline this hash" and the same argument
+covers this one. `test_intent_recorder.gd:382` sets `unblockable = true` on its OWN in-test
+resource, not on the authored file.
+
+`5-2/R15` -- MODE (2) HAS NO LIVE PRODUCER, AND THIS IS RECORDED RATHER THAN FIXED HERE. Wiring an
+input for mode (2) is explicitly NOT in `5-2`'s scope.
+
+MEASURED, not assumed: EVERY assignment to `InputIntent.card_mode` anywhere in `src/` hardcodes
+`Enums.ModeKind.BASIC`. There are exactly two, and the story named only one of them --
+`src/controllers/gamepad_controller.gd:172` (the pad, which `5-7` owns) AND
+`src/controllers/keyboard_controller.gd:113` (which no story had named, and which is in the same
+state). `InputIntent.card_mode` itself DEFAULTS to `BASIC`, the enum's zero value, so an unset
+field is BASIC too. The only other places the field is written are pass-throughs that COPY an
+existing value -- `IntentRecorder.copy_intent` and `RecordFile._intent_from_values` -- which can
+carry only what a producer already put there; and `match_runner.gd:2229-2230` passes `BASIC` to the
+HUD for DISPLAY, which is not an intent at all.
+
+THE CONSEQUENCE FOR THE TIER A RITUAL: the live smoke for `5-2` is a REGRESSION SMOKE. It proves
+that nothing already shipped broke -- movement, melee, blocking, rolling, mode (1) casting, the
+draw delay, minions and totems -- and it CANNOT prove that the unblockable works, because no input
+path can initiate one. The first real playtest of mode (2) is at `5-7`. A smoke report for this
+story that claims to have observed a chargeup would be describing something that did not happen.
+
+THE STATE-SIDE CHAIN IS NOT UNTESTED, and the distinction matters: it is covered end to end by
+`test/state/test_unblockable_initiation.gd` against hand-driven intents, which is exactly the
+coverage shape the state layer exists to make possible. What is missing is the INPUT EDGE, not the
+mechanic.
+
+`5-2/R16` -- CLOSE-OUT. Story 5-2 done: gate NOT READY 9 blocking -> fix -> re-gate all closed ->
+dev pass (Opus) -> R13/R14/R15 follow-ups -> review (Sonnet) PASS 0 HIGH / 0 MED / 2 LOW ->
+regression smoke 5/5. Golden re-baselined `aa3566d7` -> `dc2c9ffa`, one measured cause (the
+telegraph snapshot key, 28 -> 29). `FORMAT_VERSION` 6 -> 7, forced by the fourth content channel
+and not by the contact-kind widening. Suite 595/0/4644 -> 627/0/4788.
+
+`5-2/R17` -- OPEN, forcing point 5-5. Casting a card while holding block DROPS the block on the
+cast tick. Nothing ruled this and nothing tests it; it is a consequence of two layers overlapping
+with no stated interaction. It does not matter today. It matters at `5-5`, where a card IS the
+defensive answer to an incoming unblockable: a block that silently drops every time a card is
+played is a gameplay consequence someone has to WANT. Recorded in the S6 shape -- named now, ruled
+by the story that is forced to care.
