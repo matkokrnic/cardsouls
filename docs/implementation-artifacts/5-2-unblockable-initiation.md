@@ -131,13 +131,13 @@ silently accepted or crashing the invariant guard mode ② hits today.
     (`match_state.gd:2469-2527`) gains a `CHARGING` arm in which velocity from move input is a
     hard zero.** No new balance field is added for movement — a multiplier field is explicitly not
     taken, since a non-zero multiplier is not rooted.
-12. Facing rotates toward the enemy hero for the duration of `CHARGING` (AC 3, auto-aim, kept per
+12. Facing rotates toward the enemy hero for the duration of `CHARGING` (Ruling 3, auto-aim, kept per
     `5-2/R12` — the story ships whole). The exact mechanism (reuse the existing
     `_lock_directions[slot]` fact the runner already pushes for lock-on facing,
     `match_state.gd:2549-2551`, vs. a new hero-only auto-aim fact) is an OPEN QUESTION (below) —
     whichever is chosen, it must aim at the enemy HERO specifically (Ruling 8, target-only), not
     at whatever the existing lock-on target happens to be (which can be a minion).
-13. Being hit while `CHARGING` does not interrupt it (AC 4): no transition out of `CHARGING` is
+13. Being hit while `CHARGING` does not interrupt it (Ruling 4): no transition out of `CHARGING` is
     wired to the contact-resolution/damage path. The existing HP/damage application runs exactly as
     it does for any other action state; only the exit-on-hit branch is what this story omits.
 14. **Stamina regeneration is SUPPRESSED for the whole of `CHARGING` (`5-2/R4`): it joins
@@ -257,17 +257,19 @@ question below about the facing-fact mechanism would be moot.
 
 ## Dev Notes
 
-- **Golden Prediction reasoning (AC 17/AC 18).** Every prior E5 story either moved the golden for
+- **Golden Prediction reasoning (AC 22/AC 23).** Every prior E5 story either moved the golden for
   one named structural reason (`5-1`: linear stacking changes shipped output) or predicted and
   measured NO movement (`5-1a`: new refusal branches never triggered by the well-formed fixture).
   This story is the first E5 story whose own fixture-driving recorded intents (if the golden replay
   ever casts mode ②) would actually exercise the new code — check whether the golden's recorded
-  session includes ANY mode ② cast before assuming AC 17's single-cause prediction; if it does not,
-  the reasoning is closer to `5-1a`'s (new branches untouched by the fixture) and the new snapshot
-  KEY still appears even though its VALUE never leaves the default for that particular replay. Say
-  which case actually held, measured, in Completion Notes.
+  session includes ANY mode ② cast before assuming AC 22's prediction holds in its two-cause form
+  (28 → 29 if colour and remaining-time share one key, 28 → 30 if they are two, each key named as
+  its own cause); if the fixture does not cast mode ②, the reasoning is closer to `5-1a`'s (new
+  branches untouched by the fixture) and the new snapshot KEY(S) still appear even though their
+  VALUE never leaves the default for that particular replay. Say which case actually held,
+  measured, in Completion Notes.
 - **Card colour → attack colour (Ruling 2).** The card played (`hand.to_array()[hand_slot]`) already
-  carries an id from which colour is presumably derivable (fixture card ids, `src/data/` schema);
+  carries an id from which colour is presumably derivable (fixture card ids, `src/state/resources/card_data.gd` schema);
   confirm the colour lookup path exists before inventing a new one — this story consumes it, it
   does not define card colour as a concept.
 - **`_resolve_card_action`'s existing DEAD guard and frozen-tick contract (`match_state.gd:2063
@@ -276,20 +278,8 @@ question below about the facing-fact mechanism would be moot.
   tick). No new AC needed; name this explicitly as inherited behaviour in Completion Notes rather
   than re-deriving it.
 - **`reject_action`'s existing shape** (`hero_state.gd:200-203`, queued `action_rejected` signal,
-  `HeroState.reject_action(action: StringName, reason: StringName)`) is the seat AC 2/AC 4 reuse —
+  `HeroState.reject_action(action: StringName, reason: StringName)`) is the seat AC 2/AC 5 reuse —
   no new signal, no new seam, consistent with `5-1a`'s and `3-5a`'s own framing of this rule.
-- **Readiness gate fix pass, 2026-09-04 — superseding notes on the three bullets above.** The gate
-  (`C:\dev\_52-gate.md`) measured that no colour lookup path exists today: `card_data.gd:5` states
-  outright that nothing in `src/state/` reads a `CardData`, and neither `inject_card_costs` nor
-  `inject_card_effects` carries colour. The "Card colour → attack colour" bullet's instruction to
-  "confirm the colour lookup path exists before inventing a new one" is therefore answered: it does
-  NOT exist, and `5-2/R1`'s third injection seam (AC 4 now) is the new path, not an invention to be
-  second-guessed. The AC numbers in the "Golden Prediction reasoning" and `reject_action` bullets
-  above (`AC 17/AC 18`, `AC 2/AC 4`) refer to the PRE-gate numbering; post-gate the same content is
-  AC 22/AC 23 and AC 2/AC 5 respectively — the reasoning stands, only the numbers moved. The Golden
-  Prediction reasoning bullet's own dev-pass question (whether the golden's recorded session
-  includes any mode ② cast) still applies unchanged and gates which half of AC 22's 28→29-or-30
-  prediction is the live one.
 - **Death during the chargeup (`5-2/R3`, AC 15/AC 16).** Every sibling resolution path in
   `match_state.gd` already carries an explicit DEAD branch for this exact reason
   (`:2478`, `:2091`, step 4, step 5) — AC 15/AC 16 are not a new pattern, they are this story's
@@ -395,7 +385,7 @@ question below about the facing-fact mechanism would be moot.
   precedent for `unblockable_chargeup_ticks` (AC 10).
 - [Source: src/state/targeting/targeting_service.gd:59-64] — `HERO_INDEX`/`NO_TARGET_SLOT`
   addressing convention (Ruling 8's enemy-hero-only target).
-- [Source: src/state/resources/player_state.gd:205] — `PlayerState.to_snapshot()`, the pinned
+- [Source: src/state/player_state.gd:205] — `PlayerState.to_snapshot()`, the pinned
   28-key set the AC 21 telegraph fact must ride (`5-2/R9`).
 - [Source: src/state/economy/cast_evaluator.gd:31-58] — the `REASON_*`/`ALLOWED` refusal
   vocabulary the S6 gate's new reason should match (AC 2).
