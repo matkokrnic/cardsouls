@@ -4,7 +4,7 @@ baseline_commit: 8eaa8b85389a05b0c2adb7638e508f135f7a19f3
 
 # Story 5.1a: Intent hardening
 
-Status: ready-for-dev
+Status: done
 
 ## What this story inherits
 
@@ -262,19 +262,147 @@ replay, and every refusal names the field that failed.
 
 ### Agent Model Used
 
-_Not yet run._
+Opus 5 (operator-stated).
 
 ### Debug Log References
 
-_Not yet run._
+**Preconditions, verified before any edit.** `HEAD` == `origin/main` == `093f8e95` (the promotion
+commit `docs(5-1a): gate findings F1-F13 + promote to ready-for-dev`); working tree clean; no
+`godot` process running. The frontmatter `baseline_commit: 8eaa8b85` is PRESERVED as authored (the
+board-promotion baseline), not overwritten with `HEAD`.
+
+**Suite discipline (`PROC/R1`): EXACTLY TWO full `bash test/run_all.sh` runs**, each one blocking
+foreground call, output written OUTSIDE the repo. Every count below is read from the FILE.
+
+| Run | File | Timestamp (local) | State harness | Integration | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| BEFORE (baseline, pre-edit) | `C:\dev\_51a-suite-before.txt` | 2026-09-04 01:53:22.052 +0200 | 590 tests, 0 failed, 4469 assertions | 52 files, all PASS | `ALL TESTS PASSED` |
+| FINAL | `C:\dev\_51a-suite-final.txt` | 2026-09-04 02:16:04.137 +0200 | 595 tests, 0 failed, 4644 assertions | 52 files, all PASS | `ALL TESTS PASSED` |
+
+Machine-time delta between the two file timestamps: **22 min 42 s**.
+
+The two files `diff` IDENTICAL apart from the single counts line -- so the +5 tests / +175
+assertions are the only movement in the whole suite, and no integration file changed verdict.
+
+Iteration and the mutation table ran the STATE HARNESS ALONE
+(`godot --headless --path . --script res://test/run_state_tests.gd`), never `run_all.sh`, per
+`PROC/R1`'s "mutation proofs run ONLY the affected test file".
+
+**Mutation table -- AC 1, AC 2 (both halves), AC 4, AC 5. Every row MEASURED, never reported.**
+Both mutated files were copied to
+`…\scratchpad\51a-backup\` with a SHA-256 taken BEFORE the first mutation, and each restore was a
+COPY-BACK (`git checkout --` never used -- decision-log:799):
+`match_state.gd` = `503667906463F13DBEFAF8B845978EEA616FF453C934656F2C265E42C5C78B8B`,
+`record_file.gd` = `2CE1482AAE554CBFF23A3FAA384740351CF47812C90323F815848ACFC8E6BE78`. Both files
+were re-hashed after the last restore and match those values exactly.
+
+| # | AC | Mutation | Predicted | MEASURED |
+| --- | --- | --- | --- | --- |
+| M1 | AC 1 | `_is_applicable_retarget` weakened to `return true` (guard structurally intact) | AC 2(a) RED, AC 2(b) green | **595 tests, 1 failed** -- `test_lock_on.gd::test_a_malformed_retarget_address_is_rejected_and_the_standing_lock_is_untouched`. AC 2(b)'s scan stayed GREEN, which is the point: a source scan cannot see a weakened predicate, and a behavioural test cannot see a missing structural guard. Neither half subsumes the other. |
+| M2 | AC 2(a) + AC 2(b) | the story's own named mutation -- branch removed, both assignments restored to UNCONDITIONAL at the seat's indent (the shipped 4-6 shape) | both halves RED | **595 tests, 11 failed** -- AC 2(a) RED (the lock moved to the malformed address) AND AC 2(b) RED (the indent assertion). The other nine are collateral: dropping the branch also drops the `NO_RETARGET` no-op, so `test_determinism.gd::test_state_matches_golden` and five sibling lock tests fall too. |
+| M3 | AC 2(b) / `5-1a/R9` | an `Invariant.check` re-added at the seat, guard left intact (behaviour unchanged) | AC 2(b) RED alone, and `INVARIANT VIOLATED` printed | **595 tests, 1 failed** -- `test_lock_on.gd::test_the_lock_seat_carries_no_invariant_check_and_guards_both_assignments`, AC 2(a) GREEN. **5 `INVARIANT VIOLATED` lines** in the harness output -- `run_all.sh:19-22,32-35` greps for exactly that string and fails the WHOLE suite on a hit. `5-1a/R9` is therefore MEASURED, not merely asserted: the check and AC 2(a)'s test cannot both be green. |
+| M4 | AC 4 (L7) | `_lock_pushes_refusal` call deleted from `_contents_refusal` | AC 4 RED | **595 tests, 1 failed** -- `test_record_file.gd::test_a_record_whose_lock_pushes_carry_a_malformed_entry_is_refused_with_a_reason`, plus **6 `SCRIPT ERROR` lines** from the now-unguarded `int(push[0])` dereference (also a `run_all.sh` grep target). |
+| M5 | AC 5 (L8) | `_intents_refusal` call deleted from `_contents_refusal` (lock check left in place) | AC 5 RED | **595 tests, 1 failed** -- `test_record_file.gd::test_a_record_whose_intent_dict_lacks_the_retarget_fields_is_refused_with_a_reason`, plus **4 `SCRIPT ERROR` lines** from the unguarded `values["retarget_slot"]` access. AC 4's test stayed GREEN, so the two guards are independently non-vacuous. |
+
+**Must-stay-green regression set (F7), each verified DELIBERATELY -- `run_all.sh`'s aggregate was
+not allowed to stand in for any of them:**
+
+| Suite | How verified | Result |
+| --- | --- | --- |
+| `test/integration/test_record_save_control.gd` | run standalone, on its own | `RESULT: PASS`, exit 0 |
+| `test/integration/test_replay_verifier_tool.gd` | run standalone, on its own | `RESULT: PASS`, exit 0 |
+| `test/state/test_replay_identity.gd` | all EIGHT of its tests read by name out of the state-harness output file | 8/8 `[ok]`, including `test_the_lock_direction_channel_is_driven_non_zero_and_is_load_bearing` -- so a NON-EMPTY `lock_pushes` channel really does run through the new validator on a real record |
+| `test/tools/replay_file.gd` | not globbed by `run_all.sh` by design, so checked BOTH ways: (a) `test_replay_verifier_tool.gd` spawns it twice on a real v6 record and asserts `RESULT: PASS` + hash identity (`:79-91`) -- PASS above; (b) invoked by hand on the operator's real `user://cardsouls_record_4.rec` | (a) PASS. (b) `REFUSED: record format version 1 does not match this build's 6` -- the SAME refusal as before this story: that file is v1 and the version gate stops it long before the new pre-pass, which runs only after the version and `REQUIRED_KEYS` loops |
+
+**Live smoke (AC 10) is NOT run and is owed to the operator** -- it is a by-hand check of lock,
+flick and retarget and there is no headless substitute. See the Live Smoke Results section.
 
 ### Completion Notes List
 
-_Not yet run._
+**AC 1-3, the live seat (`src/state/match_state.gd`).** `_resolve_lock`'s two `Invariant.check`s
+are GONE and the two address assignments now sit under a plain runtime branch,
+`if _is_applicable_retarget(intent):`. Open Question 2 (REJECT or CLAMP) is answered by
+**REJECTION**: the seat simply declines to write, so `lock_target_slot`/`lock_target_index` end the
+tick at their pre-call values and nothing reaches the hashed `lock_target` key on a rejected tick.
+A clamp would invent an address nobody asked for. `_validate_lock` is untouched and still runs on
+EVERY tick regardless of the branch (AC 3) -- the rejected-address path and the dead-unit liveness
+snap remain two separate mechanisms, as the AC requires.
+
+`InputIntent.NO_RETARGET` (-1) is named explicitly in the predicate rather than left to fall out of
+the `slot == 0 or slot == 1` test. It would fall out correctly, but "no click and no flick this
+tick" is a DIFFERENT fact from "malformed", and a reader who has to re-derive it from `-1` will
+eventually derive it wrong.
+
+**AC 4-7, the replay load (`src/systems/record_file.gd`).** Open Question 1 is answered by a
+**shared pre-pass**: `load_record` calls one new `_contents_refusal(data)` immediately after the
+existing `REQUIRED_KEYS` presence and type loops and immediately BEFORE `_from_dictionary` --
+`5-1a/R10`'s seat exactly. `_from_dictionary` itself is UNCHANGED; it has no refusal channel and
+its rebuild loop is already partway through construction by the time it reaches a tick, so
+refusing there would be the partial replay `5-1a/R2` forbids. Refusal is whole-record: the first
+malformed thing found anywhere returns a reason and no record is built (AC 6).
+
+`_contents_refusal` fans out to `_lock_pushes_refusal` (AC 4) and `_intents_refusal` (AC 5), and
+every reason names the tick -- plus the slot and field for intents, plus the entry index for lock
+pushes. All refusals use the existing `_refused()` shape, so `{"record": null, "error": <reason>}`
+is unchanged for callers.
+
+`5-1a/R11` is implemented as written: `_lock_pushes_refusal` iterates only the tick keys that are
+PRESENT and asserts nothing about which ticks appear. A tick absent from the dictionary is never
+looked at, and the test carries an explicit `lock_pushes == {}` case that must LOAD -- the writer's
+own normal output.
+
+**One scope judgment, flagged rather than taken silently.** `_intents_refusal` checks that each
+`intents` element is an Array and each of its members a Dictionary before checking the two named
+fields. That is not a widening of `5-1a/R6`: `has()` cannot be asked of something that is not a
+Dictionary, so the container check is what makes AC 5's field check well-defined at all. The other
+seven per-intent fields (`move_dir`, `pressed`, `held`, `debug_reset`, `card_slot`, `card_mode`,
+`card_commit`) carry the identical unguarded access and are deliberately NOT validated, and
+`camera_pushes` -- the structural twin named in the Non-Goals -- is deliberately left open. Both
+exclusions are stated in the shipped source comments so the asymmetry is on the record.
+
+**AC 7 is pinned by a test, not only by the diff.** `test_the_contents_validation_bumped_no_version_and_widened_no_required_key`
+asserts `FORMAT_VERSION == 6`, that neither `retarget_slot` nor `retarget_index` is in
+`REQUIRED_KEYS`, and that `REQUIRED_KEYS` still has exactly TWELVE entries -- the count
+`5-1a/R12` took at the readiness gate.
+
+**AC 8, Golden Prediction: HELD, and it proves nothing on its own (`5-1a/R5`).** Golden
+`aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f`
+(`test_determinism.gd:680`) is UNMOVED -- the constant was not edited (the file is not in the File
+List) and `test_state_matches_golden` passed in both suite runs. The 28-key per-player snapshot set
+is likewise unmoved, pinned by `test_card_observation.gd:298` which passed in both runs. Per
+`5-1a/R5` this observation shows only that the new branches do not OVER-trigger on good data; the
+proof obligation is the mutation table above, and it is discharged there.
+
+**Test placement (named here rather than left implicit, per Project Structure Notes).** AC 1/AC 2
+went into the EXISTING `test/state/test_lock_on.gd` rather than a new file -- that file already
+owns the state-layer half of the lock and carries `_retarget_intent`/`_lock`/`_advance`. Its only
+new fixture is the source-scan trio `_code_lines` / `_function_body` / `_indent_width`;
+`_code_lines` is the `test_targeting_service.gd:695-706` helper verbatim, which is the idiom AC 2
+half (b) names. `_function_body` scopes the `Invariant.` scan to the ONE seat: a whole-file scan of
+`match_state.gd` would fail on the many legitimate checks elsewhere, which `5-1a/R7` explicitly
+leaves alone.
+
+**AC 9 is OWED TO CLOSE-OUT and is not discharged by this dev pass.** The general condition --
+`Invariant.check` being non-load-bearing wherever else it is called in `src/` under a stripped
+`assert` -- is fixed ONLY at the `_resolve_lock` seat here. It must be recorded at close-out as a
+named item owned by the FIRST story that adds an exported/distributable build, the same owner class
+`deferred-work.md:176-185` already names for the sibling `DebugInstrumentPanel` gate finding. The
+`camera_pushes` twin (`record_file.gd`, `for push: Array in camera_pushes.get(tick, [])`) owes its
+own close-out line for the same reason.
+
+**NO COMMITS.** Everything above is in the working tree only, per the operator's instruction. Six
+files are modified; nothing is staged and nothing is committed.
 
 ### File List
 
-_Not yet run._
+| File | Change |
+| --- | --- |
+| `src/state/match_state.gd` | MODIFIED -- `_resolve_lock` gated, its two `Invariant.check`s removed; new `_is_applicable_retarget` static predicate (AC 1-3) |
+| `src/systems/record_file.gd` | MODIFIED -- `load_record` calls the new pre-pass; new `LOCK_PUSH_TYPES` / `REQUIRED_INTENT_FIELDS` constants and `_contents_refusal` / `_lock_pushes_refusal` / `_lock_push_entry_refusal` / `_intents_refusal` / `_intent_fields_refusal` (AC 4-7). `_from_dictionary` and `_intent_from_values` UNCHANGED |
+| `test/state/test_lock_on.gd` | MODIFIED -- two new tests (AC 2 halves (a) and (b)) plus the `_code_lines` / `_function_body` / `_indent_width` scan fixture |
+| `test/state/test_record_file.gd` | MODIFIED -- three new tests (AC 4, AC 5, AC 7), three new tick/slot constants, and the `_rewrite_intent_field` corruption helper |
+| `docs/implementation-artifacts/5-1a-intent-hardening.md` | MODIFIED -- Status `ready-for-dev` -> `review`; Dev Agent Record filled |
+| `docs/implementation-artifacts/sprint-status.yaml` | MODIFIED -- `story_notes` only. `development_status` stays `ready-for-dev` per `CFG/R2`/`CFG/R5` -- `review` is a story-file-only value and board promotion is the operator's chain commit |
 
 ### Change Log
 
@@ -282,7 +410,21 @@ _Not yet run._
 | --- | --- |
 | 2026-09-04 | Story authored via `gds-create-story`. |
 | 2026-09-04 | Readiness gate fix pass: AC 2/AC 4/AC 7/AC 8 corrected, OQ 1/OQ 3 resolved, must-stay-green suite set and camera_pushes asymmetry recorded, length trimmed where free; promoted to `ready-for-dev` (`5-1a/R9-R12`). |
+| 2026-09-04 | Dev pass via `gds-dev-story`. AC 1-8 implemented and measured; 5 new tests (590 -> 595, 4469 -> 4644 assertions), golden `aa3566d7` and the 28-key snapshot set UNMOVED, 5-row mutation table all MEASURED RED, four must-stay-green suites verified individually. AC 9 owed to close-out; AC 10 (live smoke) owed to the operator. Status -> `review`. NO COMMITS -- working tree only. |
+| 2026-09-04 | Code review (Sonnet 5): PASS-with-findings, 0 HIGH / 0 MED / 2 LOW. Both LOW findings accepted without change and recorded at close-out. |
+| 2026-09-04 | Live smoke, 5/5 PASS, no findings. Status -> `done`. |
 
 ### Live Smoke Results
 
-_Not yet run._
+Operator smoke pass, 2026-09-04, 5/5 PASS, recorded verbatim in `docs/playtest-log.md`'s 5-1a entry.
+No findings.
+
+1. `R3` click relocks to the opposing hero.
+2. Flick retargets in all four directions.
+3. Killing the locked unit snaps the lock to the hero on the same tick.
+4. The marker sits on the body, disappears on round-over, and returns on reset.
+5. FPS stable throughout, with a clean console.
+
+Nothing in this story changes what any of these DOES on a well-formed address -- the machine
+evidence for that is AC 2(a)'s well-formed pair (applied before and after five rejections) and the
+unmoved golden. The smoke exists to catch a break the suite cannot see.

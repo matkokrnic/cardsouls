@@ -261,3 +261,5 @@ Verdict: SMOKE PASS.
 4.9.
 5-1 accelerator stacking — smoke na padu, 6/6 PASS. Prvi mana totem kao i dosad; drugi osjetno brži, bar skače više po tiku. Isto za staminu. Ubijanjem jednog od dva efekt se vraća na razinu jednog, ne na nulu. Protivnikovi totemi ne diraju moje barove. fps stabilan. Bez nalaza.
 
+5-1a: regresijski smoke na padu, lock/flick/smrt mete/marker/fps sve kao prije, ništa vidljivo se nije promijenilo
+
