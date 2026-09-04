@@ -4,7 +4,7 @@ baseline_commit: 0141179a96c39b9d02e52b99b6ba6933781a25f2
 
 # Story 5.2: Unblockable initiation
 
-Status: ready-for-dev
+Status: done
 
 ## What this story inherits
 
@@ -91,12 +91,19 @@ silently accepted or crashing the invariant guard mode ② hits today.
 
 **Spend and entry (mode-agnostic spend path precedent, `match_state.gd:2141-2229`)**
 
-5. **On an unrefused mode ② cast, no mana/orb/feature-flag evaluation runs at all (`5-2/R2`):**
+5. **On an unrefused mode ② cast, no mana or orb evaluation runs at all (`5-2/R2`):**
    `CastEvaluator.refusal_reason` is NOT called on this path. The empty-slot guard runs first
    (same shape as `_resolve_basic_cast`'s guard order); stamina affordability is the ONLY cost
    refusal. Insufficient stamina refuses through `reject_action` with a named reason, same
    mechanism as insufficient mana does for `BASIC` casts, but via a separate check, not
    `CastEvaluator`.
+   **THE FEATURE-FLAG CLAUSE IS CORRECTED BY `5-2/R13`** (`decision-log.md`, Session 2026-09-04),
+   which withdraws `5-2/R2`'s feature-flag exclusion as an operator error while leaving its mana
+   and orb exclusions untouched: mode ② **MUST** consult the injected `unblockable` `FeatureFlags`
+   toggle and degrade gracefully, per project-context's feature-flag HARD RULE. The check is the
+   FIRST thing the cast does, ahead of the AC 2 gate; a closed flag refuses through the same
+   `reject_action` seam with `CastEvaluator.REASON_FLAG_CLOSED` — the reason CONSTANT borrowed,
+   `refusal_reason` still never called — and spends nothing. `BASIC` casts are untouched.
 6. On an affordable, unrefused cast: stamina is spent via `StaminaPool.spend(amount,
    regen_delay_ticks)` (new `unblockable_stamina_cost` balance field, provisional `20.0`, passed
    with `balance_ticks.stamina_regen_delay_ticks` — the spend restarts the regen delay exactly as
@@ -399,8 +406,272 @@ question below about the facing-fact mechanism would be moot.
 
 ### Agent Model Used
 
+Claude Opus 4.8 (dev pass, 2026-09-04).
+
 ### Debug Log References
+
+- Before-baseline: `/c/dev/_52-before.txt` — `595 tests, 0 failed, 4644 assertions` + 52 integration,
+  golden `aa3566d7`, `FORMAT_VERSION` 6. Matched the expected baseline exactly.
+- After-baseline: `/c/dev/_52-after.txt` — `623 tests, 0 failed, 4775 assertions` + 52 integration,
+  `ALL TESTS PASSED`, golden `dc2c9ffa`, `FORMAT_VERSION` 7.
+- Golden two-direction measurement (AC 22) recorded in `test/state/test_determinism.gd`'s
+  re-baseline block; the reverse direction was measured by deleting the `telegraph` key, running
+  the harness, and restoring `src/state/player_state.gd` from a SHA256-verified out-of-repo copy
+  (`c47154fd81a4509878f63d276f88de4d7bf97fb2d37df276ce121c2b7b86049c`, verified equal on restore).
 
 ### Completion Notes List
 
+**The two pin edits, named SEPARATELY (`5-2/R8` requires this).**
+
+1. **AC 8 — `test/state/test_action_state.gd:82-95`: UNEDITED and PASSING.** The
+   zero-inbound-CHARGING assertion was expected to move at authoring time and does not.
+   `TRANSITION_TABLE` gains no row, so `rows.has(&"charging")` is still false and no edge in any
+   row targets `CHARGING`. Re-proven a second time, by name, in
+   `test_unblockable_initiation.gd::test_charging_entry_added_no_transition_table_row`.
+2. **AC 9 — `test/state/test_card_play.gd`: the ONE deliberate pin edit, NARROWED.**
+   `test_non_basic_modes_are_unreachable_in_e3` is renamed `test_only_shipped_modes_are_reachable`
+   and now scans against a `REACHABLE_MODES` list of exactly `["BASIC", "UNBLOCKABLE"]`. `DEFENSE`
+   and `PITCH` still FAIL the scan. The list itself is pinned by a new sibling test so it cannot
+   quietly grow to four. `test_the_mode_dispatch_carries_a_guard` is untouched and still green —
+   the `_` arm keeps `Invariant.check(false` and the "guarded stub" string.
+
+**AC 7's entry mechanism, named as required.** `player.hero.set_action_state(ActionState.CHARGING)`
+called DIRECTLY at the cast seat in `MatchState._resolve_unblockable_cast`. No
+`TRANSITION_TABLE` row, no `INPUT_PRIORITY` entry, no press to map from. A side effect worth
+recording: `HeroState.transition_row()` already returned `&"charging"` for a state with no table
+row, and `_resolve_actions`'s step (b) returns early on a missing row — so a CHARGING hero accepts
+NO input edge at all, for free and by construction, which is half of "fully committal" delivered by
+existing code rather than by a new guard.
+
+**AC 2's reason name.** `&"unblockable_committed"`, declared as
+`MatchState.REASON_UNBLOCKABLE_COMMITTED` and queued through `HeroState.reject_action(&"card_cast",
+...)` — the shipped seam and the shipped action name. It is declared on `MatchState` rather than on
+`CastEvaluator` deliberately: `CastEvaluator` is not consulted on this path at all (AC 5), and a
+`REASON_*` constant on an evaluator that never returns it would misstate where the refusal comes
+from. The VOCABULARY is the evaluator's, which is what the AC asks for.
+
+**The S6 gate: the Open Question's answer, and one addition beyond AC 2.** The gate is a small
+sibling guard, `MatchState._unblockable_refusal_reason(hero)`, ahead of the dispatch — not
+`CastEvaluator`, and not inline. It refuses `ROLLING`, `BLOCKING`, `ATTACKING` **and `CHARGING`**.
+The fourth state is NOT named by AC 2 and is a deliberate dev-pass addition on the AC's own stated
+reason ("only a duration effect, rooting the hero, needs a reachability gate"): without it a second
+commit mid-chargeup spends a second card and a second 20 stamina, restarts the window and
+overwrites the live telegraph `5-3` is about to render. Flagged for the operator rather than folded
+in silently.
+
+**Guard ORDER (a dev-pass choice, stated so it can be overturned in one line).** S6 gate ->
+empty-slot -> stamina. AC 5 pins the empty-slot guard ahead of the COST check, which it is; the S6
+gate goes ahead of both because it answers a different question, and a hero refused mid-roll should
+hear the reason that actually blocked it. The ordering is also structural: `balance` and
+`balance_ticks` are non-null only BELOW the empty-slot guard (`_resolve_basic_cast`'s own argument),
+which is what keeps this seat free of a `balance == null` check.
+
+**AC 5 confirmed by behaviour, not by inspection.** `CastEvaluator.refusal_reason` is unreachable
+from `_resolve_unblockable_cast`. Proven live: a hero at ZERO mana, against a fixture where every
+card costs 3.0, casts mode (2) successfully with no rejection of any kind
+(`test_an_unblockable_cast_ignores_mana_entirely`).
+
+**AC 12's mechanism (the Open Question's third answer).** Neither of the two options the story
+listed, and better than both: the auto-aim direction is the AC 17 charge-reach fact's OWN `dir`,
+negated. That fact is pushed hero-to-hero by construction, so "aims at the enemy HERO specifically"
+(Ruling 8) is structural rather than a filter applied to `_lock_directions` — which since 4-6 can
+legitimately point at a minion. One new fact serves AC 12 and AC 17 both; no second channel.
+
+**AC 17's mechanism.** Two new contact kinds, `CONTACT_CHARGE_REACH_INSIDE` (2) and
+`CONTACT_CHARGE_REACH_OUTSIDE` (3), pushed through `push_contact` (the sole intake, its `:622` kind
+guard widened as the story expected). The inside/outside answer rides the KIND, which is why no
+seventh `push_contact` parameter and no row-shape change were needed. `push_contact` routes these
+two kinds into a per-slot LATCH (`_charge_reach` / `_charge_reach_dirs`) instead of the contact
+queue, because the landing check resolves at step 3(a) and the queue drains at step 4 — a queued
+fact would arrive one step too late for AC 20's "same tick". Absence is a THIRD value,
+`REACH_UNKNOWN`, and lands nothing; it is never read as "outside".
+
+**AC 21's unit and shape.** ONE key, `telegraph`, on `PlayerState.to_snapshot()`, carrying
+`[colour, remaining_ticks]`. **The unit is TICKS.** The colour is a plain `Enums.CardColor` ordinal
+(`-1` = `PlayerState.NO_TELEGRAPH_COLOR` at rest), never a name and never a `TelegraphProfile`
+(`1-10/R1` intact). The key is DERIVED from `action_state == CHARGING` rather than from a flag
+something has to clear, which makes a stale telegraph unrepresentable — load-bearing, because
+`_apply_debug_reset`'s own contract leaves in-flight windows untouched.
+
+**AC 10's window (the Open Question's first answer).** A new named `TimingWindow` on
+`PlayerState` (`charge_window`), not a reuse of a `HeroState` window. Seated on `PlayerState`
+because AC 21 requires the telegraph on the PINNED per-player key set — a `HeroState` window would
+have moved the golden through the hero sub-dictionary and made AC 22's prediction false while the
+story still appeared to pass. It is a card-layer duration, started by a cast, so it belongs beside
+`pending_draw`; it is ticked at step 2 with every other D4 timer and read at step 3(a).
+
+**AC 15/AC 16 are structural, and proven non-vacuously.** AC 15: the step-3(a) `match` is on
+`hero.action_state`, so a DEAD hero's row is `dead` and the CHARGING arm is not evaluated at all —
+the corpse-resurrecting branch is not written rather than merely guarded. AC 16: the landing tests
+`target.hero.is_alive()`, exercised by killing the enemy outright one tick before expiry (hp
+genuinely zero, not merely flagged DEAD).
+
+**Inherited behaviour, named rather than re-derived (story Dev Notes ask for this).** A mode (2)
+commit on a FROZEN tick is dropped SILENTLY, and a DEAD caster's commit likewise — both inherited
+unchanged from `_resolve_card_action` (step 1b returns before step 2; the DEAD guard sits above the
+dispatch). No new contract, no new AC.
+
+**Test-file choice (AC's "name the choice").** A NEW file,
+`test/state/test_unblockable_initiation.gd`, rather than extending `test_card_play.gd`. The chain
+under test is a DURATION, not a cast: rooting, regen suppression, auto-aim, the death branches and
+the landing all happen ticks after the cast, and `test_card_play.gd`'s fixture authors no stamina
+economy and no durations, so it cannot get a hero into ROLLING or BLOCKING at all. The AC 3
+BASIC-mode regression is asserted in the new file for exactly that reason; `test_card_play.gd`'s own
+BASIC-mode assertions all still pass unedited apart from the AC 9 pin.
+
+**AC 22 — THE GOLDEN, MEASURED IN BOTH DIRECTIONS.** MOVED, `aa3566d7` -> `dc2c9ffa`. Key count
+**28 -> 29**: AC 22 left the count open between 29 (fused) and 30 (split); measured as 29, fused on
+the `lock_target` precedent. **ONE named cause: the presence of the `telegraph` key.** Reverse
+direction: with that key held off `to_snapshot()` and every other change of this story left in
+place, the fixture hashed `aa3566d7` EXACTLY — the pre-story golden. The Dev Notes asked which of
+two shapes held; **the `5-1a` shape held**: the golden's recorded sequence contains NO mode (2)
+cast, so the key hashes at its resting `[-1, 0]` on every tick and its VALUE never moves. Non-movers
+measured and named: the two new contact kinds (the latches are unhashed, classified with
+`_camera_bases`/`_lock_directions`), the fourth injection seam (`_card_colors` is injected content,
+never hashed), and the `FORMAT_VERSION` bump (no path into `to_snapshot()`).
+
+**AC 23 — `FORMAT_VERSION`: MEASURED ANSWER IS YES, 6 -> 7 — but NOT for the reason the AC
+anticipated.** The story made the bump conditional on whether AC 17's new contact kind needs a new
+record channel. **It does not**: `kind` has been a scalar on the recorded contact row since `4-3b`,
+so two new VALUES of an existing element change no row shape, need no new channel, and leave
+`capture_push_contact` and `REQUIRED_KEYS`'s `contacts` entry untouched. The bump is forced by AC 4
+instead. `inject_card_colors` is a new PUBLIC INTAKE on `MatchState`, and
+`test_intent_recorder.gd`'s derived-channel scan (`3-0c` AC 1) makes a matching
+`capture_inject_card_colors` channel mandatory by machine check, not by choice. That channel is the
+FOURTH content channel: `SOUND_CONTENT_ORDER` grows to four, `missing_match_start_channels()` gains
+"card colours", and `RecordFile.REQUIRED_KEYS` gains `colors` (12 -> 13 keys). A v6 record carries
+no colours at all, and rebuilding one by assuming a colour would replay every telegraph in the wrong
+colour — a value that reaches the HASHED `telegraph` key. `record_file.gd:284-287`'s mismatch
+refusal is therefore the correct outcome and the version bumps. Recorder capture channels: 10 -> 11.
+
+**Deviation from the story's own touched-file list, reported rather than worked around.** The
+story's Project Structure Notes do not list `src/systems/intent_recorder.gd` or
+`src/systems/record_file.gd`. Both are required by AC 4 + the machine-checked channel scan, as AC 23
+itself half-anticipates. Ten further test files are touched purely as pin/fixture consequences of
+that channel and of the new snapshot key.
+
+**Tension raised by the dev pass, and RESOLVED by `5-2/R13` — the record of both halves kept.**
+The first dev pass implemented `5-2/R2` as written, which forbade any feature-flag evaluation on
+this path, and therefore shipped mode (2) flag-blind: the `unblockable` toggle was consulted
+nowhere and the layer could not be switched off. The pass REPORTED that as a contradiction with
+`project-context.md`'s feature-flag HARD RULE ("NEVER hardcode a gameplay layer on... unblockable...
+must check the injected FeatureFlags resource and degrade gracefully") rather than resolving it in
+code, because `5-2/R2` was an operator ruling.
+
+`5-2/R13` is the answer: the feature-flag half of `5-2/R2` is WITHDRAWN as an operator error, and
+its mana and orb exclusions STAND. Implemented in a follow-up pass on the same working tree —
+`_resolve_unblockable_cast` now reads the INJECTED `flags` as its FIRST action, ahead of the S6
+gate ("does this layer exist" precedes "may I use it right now"), and a closed flag refuses through
+`HeroState.reject_action` with `CastEvaluator.REASON_FLAG_CLOSED`, spending no stamina, no card, no
+`CHARGING` entry and publishing no telegraph. A NULL `flags` reads as CLOSED, the shipped reading of
+every layer gate in this layer (`CardEffectResolver._minions_open`, `TargetingService`,
+`CastEvaluator._flag_open`): a layer that cannot be VERIFIED open stays shut.
+
+`5-2/R2`'s SURVIVING HALF IS RE-PROVEN, not merely asserted: `CastEvaluator.refusal_reason` is
+still never called, the reason token is borrowed as a CONSTANT only, and
+`test_the_layer_gate_did_not_reintroduce_a_mana_reading` shows an open layer at ZERO mana still
+casting — so no mana reading was smuggled in beside the flag check. `BASIC` is untouched and
+`test_a_closed_unblockable_flag_does_not_touch_basic_casts` pins it.
+
+CLOSED BY `5-2/R14`: the authored `data/feature_flags.tres` now has `unblockable = true`. The
+layer goes on in authored data with the story that builds it — the `4-4` `minions` precedent, and a
+stronger reason beside it: a flag left `false` would be a SECOND closed gate `5-7` would have to
+remember to open, and forgetting it presents as "the mechanic does nothing while every test is
+green", because the tests inject their own `FeatureFlags` and never read the authored file.
+
+MEASURED BEFORE FLIPPING: NO test pins the authored flag VALUES.
+`test_data_resources.gd::test_feature_flags_tres_loads_with_all_layer_fields` pins field PRESENCE
+only (`field in flags`); `test_determinism.gd` records the authored file as an explicit NON-cause
+of the golden (`_golden_flags()` builds its own resource in-test); and
+`test_intent_recorder.gd:382` sets `unblockable = true` on its OWN in-test resource. Measured
+after: the golden did not move.
+
+**`5-2/R15` — MODE (2) HAS NO LIVE PRODUCER, AND THIS STORY'S SMOKE IS THEREFORE A REGRESSION
+SMOKE.** Stated plainly because it changes what the Tier A ritual can honestly claim: **no input
+path in this codebase emits mode (2) today.** Measured — EVERY assignment to `InputIntent.card_mode`
+anywhere in `src/` hardcodes `Enums.ModeKind.BASIC`, and there are exactly two:
+`src/controllers/gamepad_controller.gd:172` (the pad, which `5-7` owns and which this story's
+Non-Goals already named) and `src/controllers/keyboard_controller.gd:113` (which NO story had
+named, and which is in the same state). `InputIntent.card_mode` defaults to `BASIC` — the enum's
+zero value — so an unset field is BASIC too. Everything else that writes the field is a
+pass-through copying an existing value (`IntentRecorder.copy_intent`,
+`RecordFile._intent_from_values`) or a DISPLAY call (`match_runner.gd:2229-2230` handing `BASIC` to
+the HUD), and neither can originate a mode.
+
+So the live smoke for `5-2` proves that nothing already shipped broke — movement, melee, blocking,
+rolling, mode (1) casting, the draw delay, minions and totems — and it CANNOT prove the unblockable
+works, because nothing can initiate one. **The first real playtest of mode (2) is at `5-7`.** A
+smoke report for this story claiming to have observed a chargeup would be describing something that
+did not happen. Wiring an input is explicitly NOT in this story's scope.
+
+The state-side chain is NOT untested, and the distinction matters: it is covered end to end by
+`test/state/test_unblockable_initiation.gd` against hand-driven intents, which is the coverage shape
+the state layer exists to make possible. What is missing is the INPUT EDGE, not the mechanic.
+
 ### File List
+
+**Source (8):**
+- `src/state/match_state.gd` — the `unblockable` LAYER GATE (`5-2/R13`), the `UNBLOCKABLE`
+  dispatch arm (AC 1), the S6 gate (AC 2), the
+  colour injection seam (AC 4), `_resolve_unblockable_cast` (AC 5-7), the two charge-reach contact
+  kinds + the widened `push_contact` kind guard and its latch routing (AC 17), the step-2 chargeup
+  tick (AC 10), the step-3(a) timer-exit/landing arm `_resolve_charge_landing` (AC 15/16/18/19/20),
+  `_regen_stamina`'s CHARGING suppression (AC 14), `_resolve_movement`'s CHARGING root (AC 11) and
+  auto-aim facing (AC 12).
+- `src/state/player_state.gd` — `charge_window`, `charge_color`, `NO_TELEGRAPH_COLOR`, and the
+  `telegraph` snapshot key (AC 10/AC 21).
+- `src/state/resources/balance_config.gd` — the four new authored fields.
+- `data/balance/balance_config.tres` — their authored values (20.0 / 1.0 s / 8.0 / 9.0).
+- `src/state/timing/balance_ticks.gd` — `unblockable_chargeup_ticks` (AC 10, D3 boundary).
+- `src/main/match_runner.gd` — `_derive_card_colors` + the fourth injection call (AC 4), and
+  `_push_charge_reach_facts`, the untethered every-tick reach fact (AC 17).
+- `src/systems/intent_recorder.gd` — the `colors` capture channel, `CHANNEL_COLORS`, the widened
+  `SOUND_CONTENT_ORDER`, `missing_match_start_channels`, `replay_card_colors`,
+  `replay_inject_content` (AC 4 / AC 23).
+- `src/systems/record_file.gd` — `FORMAT_VERSION` 6 -> 7, the `colors` required key, its
+  serialisation and rebuild (AC 23).
+
+**Tests, new (1):**
+- `test/state/test_unblockable_initiation.gd` — the whole dispatch/chargeup/landing chain.
+
+**Data (`5-2/R14`):**
+- `data/feature_flags.tres` — `unblockable` flipped to `true`.
+
+**Docs (`5-2/R13`-`R15` follow-ups, uncommitted alongside the code):**
+- `docs/planning-artifacts/gdds/gdd-cardsouls-2026-07-20/decision-log.md` — `5-2/R13`, `5-2/R14`
+  and `5-2/R15` appended to Session 2026-09-04.
+- `docs/implementation-artifacts/5-2-unblockable-initiation.md` — AC 5's flag clause corrected
+  (that clause ONLY), and this record.
+
+**Tests, pins and fixtures moved (13):**
+- `test/state/test_card_play.gd` — AC 9's forced pin narrowing (+ the reachable-set pin).
+- `test/state/test_determinism.gd` — the golden re-baseline and its two-direction measurement.
+- `test/state/test_card_observation.gd`, `test/state/test_draw_delay_and_reshuffle.gd` — the two
+  per-player snapshot key-set pins, 28 -> 29.
+- `test/state/test_data_resources.gd` — `E1_BALANCE_FIELDS` gains the four new fields.
+- `test/state/test_balance_authoring.gd` — bespoke `> 0` bounds for all four.
+- `test/state/test_intent_recorder.gd` — `EXPECTED_INTAKE_SURFACE` gains `inject_card_colors`; the
+  match-start-channel table and the content-order fixtures gain the fourth channel.
+- `test/state/test_record_file.gd` — `FORMAT_VERSION` 7, `REQUIRED_KEYS` 13, fixture channel.
+- `test/state/test_live_reload.gd` — capture channels 10 -> 11 (constant, list, test name).
+- `test/state/test_replay_identity.gd` — the state-classification pin: `_card_colors` INJECTED,
+  the two latches join exclusion (c) (MEMBERS stays 3), `charge_window`/`charge_color` HASHED.
+- `test/integration/test_replay_contacts.gd`, `test/integration/test_replay_entry_is_inert.gd`,
+  `test/integration/test_replay_verifier_tool.gd` — record fixtures gain the fourth channel.
+
+### Change Log
+
+- 2026-09-04 — Story 5-2 dev pass. Mode (2) initiation implemented whole (all 23 ACs). Golden
+  re-baselined `aa3566d7` -> `dc2c9ffa` (one measured cause: the `telegraph` key, 28 -> 29).
+  `RecordFile.FORMAT_VERSION` bumped 6 -> 7 (measured cause: the fourth content channel, not the
+  contact-kind widening). Suite 595/0/4644 -> 623/0/4775, integration 52 -> 52, all green.
+- 2026-09-04 — `5-2/R13` follow-up (same working tree, uncommitted). The `unblockable` FEATURE-FLAG
+  GATE added to `_resolve_unblockable_cast`, ahead of the S6 gate, refusing with
+  `CastEvaluator.REASON_FLAG_CLOSED` and spending nothing. `5-2/R2`'s mana and orb exclusions
+  untouched and re-proven. FOUR tests added. Golden PREDICTED unmoved (the golden fixture never
+  casts mode (2), so a gate on that path cannot reach the hash) and MEASURED unmoved at
+  `dc2c9ffa`. Suite 623/0/4775 -> 627/0/4788, integration 52 -> 52, all green.
+- 2026-09-04 — `5-2/R14` / `5-2/R15` follow-up (same working tree, uncommitted). Authored
+  `unblockable` flag flipped to `true`; no test pins the authored flag values (measured before the
+  flip). `5-2/R15`'s producer finding recorded: no input path emits mode (2), so this story's live
+  smoke is a REGRESSION smoke. Code unchanged, tests unchanged, golden unmoved at `dc2c9ffa`.
