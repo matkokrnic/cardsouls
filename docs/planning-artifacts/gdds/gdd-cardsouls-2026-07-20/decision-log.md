@@ -8564,3 +8564,40 @@ widening) but its justification was false: `retarget_slot`/`retarget_index` are 
 written inside each `intents` array element (`record_file.gd:399-400`, read back at `:555-556`),
 not top-level required keys. `REQUIRED_KEYS` (`record_file.gd:178-197`) contains exactly twelve
 entries; neither name is among them.
+
+## Session 2026-09-04 -- 5-1a close-out
+
+`5-1a-intent-hardening` close-out. `5-1a/R1`-`5-1a/R12` (Session 2026-09-04, above) stand as
+ruled; cited here, not restated.
+
+`5-1a/R13` -- the review's two LOW findings, accepted without change. (a) `replay_file.gd`'s
+regression cover (`test_replay_verifier_tool.gd`) exercises the new validation only on the happy
+path and is UNPINNED for the new refusal paths -- named owner: whoever next touches
+`_contents_refusal` must check that tool by hand. (b) the pre-pass's extra O(n) walk before the
+rebuild is recorded as a fact, not a debt.
+
+`5-1a/R14` -- the general condition owed by AC 9 and `5-1a/R7`: `Invariant.check` is `push_error`
++ a stripped `assert` (`src/systems/invariant.gd:11-14`), so it is non-load-bearing in an exported
+build EVERYWHERE it is called, not just at the `_resolve_lock` seat this story fixed. Recorded as
+a named item owned by the FIRST story that adds an exported/distributable build. This story fixed
+one seat only and this ruling must not be read as a repo-wide verdict.
+
+`5-1a/R15` -- the `camera_pushes` twin (`record_file.gd:334`, `int(push[0])`, `push[1] as Basis`)
+carries the identical unguarded dereference and was deliberately left open (`5-1a/R6`). Recorded
+here so the asymmetry is on the record rather than accidental.
+
+`5-1a/R16` -- three housekeeping corrections the re-gate found in the story file, each recorded
+without a fix pass: (a) the "Operator rulings" section enumerates only R1-R8 while the story cites
+R9-R12 inline; (b) the story cites "(F7)", a gate-document label the story itself does not carry;
+(c) `5-1a/R9`'s text says "Five prior seats" and then lists four -- a miscount inherited from the
+gate prompt.
+
+`5-1a/R17` -- what the story delivered. The live seat now gates the retarget address instead of
+reporting on it and carries no `Invariant.check`. Validation of `lock_pushes` entries and the two
+retarget fields runs as a pre-pass in `load_record`, before `_from_dictionary`. Refusal is
+whole-record. Sparseness is not malformedness. `FORMAT_VERSION` is unchanged at 6. Golden
+`aa3566d7` and the 28-key snapshot set are unmoved, with non-vacuity carried by the five-row
+mutation table rather than by the golden.
+
+Review (Sonnet 5): PASS-with-findings, 0 HIGH / 0 MED / 2 LOW (`5-1a/R13`). Live smoke 2026-09-04,
+5/5 PASS, no findings (`docs/playtest-log.md`). Board promoted to `done`.
