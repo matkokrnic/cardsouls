@@ -8601,3 +8601,57 @@ mutation table rather than by the golden.
 
 Review (Sonnet 5): PASS-with-findings, 0 HIGH / 0 MED / 2 LOW (`5-1a/R13`). Live smoke 2026-09-04,
 5/5 PASS, no findings (`docs/playtest-log.md`). Board promoted to `done`.
+
+## Session 2026-09-04 -- 5-2 gate rulings
+
+`5-2/R1` -- Card colour reaches the state layer through a THIRD injection seam (card_id ->
+Enums.CardColor), mirroring inject_card_costs and inject_card_effects exactly: load-once, injected
+at the same point, same dictionary shape. `src/state/` still never reads a CardData. Closes F1.
+
+`5-2/R2` -- No mana, orb or feature-flag evaluation runs on the unblockable path.
+CastEvaluator.refusal_reason is NOT called. The empty-slot guard stays; stamina affordability is
+the only cost refusal. Closes F2.
+
+`5-2/R3` -- Death resolves the chargeup to nothing. Charging hero dies -> no landing, and it stays
+DEAD (the timer exit must not return a corpse to IDLE). Enemy hero dies -> no landing. Card and
+stamina stay spent in both cases. Closes F3.
+
+`5-2/R4` -- The stamina spend restarts the regen delay like the three existing seats, AND stamina
+regeneration is SUPPRESSED for the whole of CHARGING -- it joins BLOCKING and DEAD in
+_regen_stamina. Closes F9 and F13.
+
+`5-2/R5` -- Hard root during CHARGING. No new balance field for movement. AC 9's "dev's call" is
+closed. Closes F4.
+
+`5-2/R6` -- Reach is delivered by an UNTHROTTLED hero-to-hero fact pushed EVERY TICK while either
+hero is CHARGING, carrying an explicit inside/outside value. Absence of a fact never means "outside
+reach". A new contact kind and a widened push_contact guard are expected and in scope. State never
+pulls from the runner mid-advance(). Closes F6.
+
+`5-2/R7` -- CHARGING is entered by a direct state set at the cast seat. TRANSITION_TABLE gains NO
+row. test_action_state.gd:82-95's zero-inbound assertion therefore STAYS INTACT and is re-proven,
+not edited. Closes F7.
+
+`5-2/R8` -- The one forced pin change is test_card_play.gd:246's src-wide ModeKind scan. It is
+narrowed so it still fails on DEFENSE and PITCH. Named as the story's deliberate pin edit. Closes
+F8.
+
+`5-2/R9` -- The telegraph fact rides PlayerState.to_snapshot (the pinned 28-key set), not
+HeroState. The golden prediction permits 28 -> 29 or 28 -> 30 with each key named as its own cause.
+Closes F5 and F12.
+
+`5-2/R10` -- Per-colour damage stays OUT of 5-2: one damage value for all three colours.
+E5-P/R5's line assigning per-colour damage to 5-2 is superseded on that point by this operator
+scope ruling; epics.md:150 already agrees. Closes F16.
+
+`5-2/R11` -- S6 is answered in TWO halves, not one. BASIC casts stay UNGATED during ROLLING and
+BLOCKING -- the card layer is deliberately parallel to melee and an instant summon interrupts
+nothing, so the behaviour the operator observed at the 3-5a smoke is RATIFIED AS CORRECT, not a
+defect. UNBLOCKABLE is gated precisely because it roots the hero for a second, which must not be
+reachable out of a roll or from behind a raised shield. The distinction is DURATION, not layer --
+which is exactly why the 3-5a record said an instant mode could not answer this question. S6 is
+CLOSED by this ruling. Closes F15.
+
+`5-2/R12` -- The story ships WHOLE. E5-P/R5's auto-aim cut is NOT taken: the gate measured
+auto-aim as the cheapest AC in the story, one write beside the existing facing write. Closes gate
+item 8.
