@@ -4,5 +4,6 @@
 
 [resource]
 script = ExtResource("1_d6d8t")
+unblockable = true
 minions = true
 totems = true

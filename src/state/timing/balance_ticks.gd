@@ -74,6 +74,11 @@ var roll_duration_ticks: int
 ## Converted like every duration, but DATA ONLY in E1 — nothing starts a stun window until
 ## OPEN decision (a) resolves (see decision-log.md).
 var stun_ticks: int
+## Story 5-2 (AC 10): the mode ② chargeup, in TICKS. The `draw_replacement_delay_ticks` precedent
+## exactly — derived ONCE here, read INLINE at the one seat that starts the window (CONSTRAINT C),
+## and the authored `*_seconds` float never reaches `advance()`. A chargeup measured against a raw
+## seconds value inside the tick ladder is the A1 violation this whole file exists to prevent.
+var unblockable_chargeup_ticks: int
 
 
 static func from_config(config: BalanceConfig) -> BalanceTicks:
@@ -109,6 +114,13 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.roll_iframe_ticks = TimingWindow.seconds_to_ticks(config.roll_iframe_seconds)
 	t.roll_duration_ticks = TimingWindow.seconds_to_ticks(config.roll_duration_seconds)
 	t.stun_ticks = TimingWindow.seconds_to_ticks(config.stun_seconds)
+	# Story 5-2 (AC 10): a PLAIN conversion, deliberately NOT one of the two clamped modulo
+	# divisors above — the chargeup is a WINDOW DURATION, and `seconds_to_ticks` already clamps any
+	# non-zero authored duration to a minimum of 1 tick. An authored 0.0 therefore derives 0 ticks,
+	# which `TimingWindow.start(0)` renders as a window that never runs: mode ② would land on the
+	# very tick it was cast. That degrade is defined rather than crashing, and the authoring audit
+	# is what keeps it out of the shipped `.tres`.
+	t.unblockable_chargeup_ticks = TimingWindow.seconds_to_ticks(config.unblockable_chargeup_seconds)
 	return t
 
 

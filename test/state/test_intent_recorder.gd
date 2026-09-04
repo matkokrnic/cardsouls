@@ -107,13 +107,20 @@ const EXEMPT_PURE_QUERIES: Array[String] = [
 ## intent, which is what the guard-mechanism-over-guard-pattern discipline asks for -- the channel
 ## check below is the falling guard, and it was RED until the channel existed.
 const EXPECTED_INTAKE_SURFACE: Array[String] = [
-	"_init", "advance", "apply_balance", "inject_card_costs", "inject_card_effects",
+	# Story 5-2 (AC 4, `5-2/R1`): `inject_card_colors` is MatchState's TENTH intake and the FOURTH
+	# content channel, and it ships WITH its `capture_inject_card_colors` channel -- the `4-1`
+	# `inject_card_effects` precedent verbatim, including this pin being updated WITH INTENT while
+	# the channel check below is the falling guard that was RED until the channel existed. In sorted
+	# position: the scan sorts before comparing, and `colors` precedes `costs`.
+	"_init", "advance", "apply_balance", "inject_card_colors", "inject_card_costs",
+	"inject_card_effects",
 	"inject_deck", "inject_feature_flags", "push_contact", "set_camera_basis",
 	# Story 4-6 (AC 2, `4-6/R6`): the SIXTH pushed-fact intake -- the per-tick lock direction, in
 	# sorted position beside the basis it is a sibling of. It arrives WITH its
 	# `capture_set_lock_direction` channel, which is exactly what this scan exists to force.
 	"set_lock_direction",
 ]
+
 
 const DECK_IDS: Array[StringName] = [&"rec_card_a", &"rec_card_b", &"rec_card_c"]
 
@@ -283,6 +290,11 @@ func test_content_channels_carry_the_composition_the_costs_the_effects_and_their
 	assert_eq(String(rec.replay_card_effects()[DECK_IDS[0]].effect_id),
 		"summon_%s" % DECK_IDS[0],
 		"...and each effect comes back BY VALUE, rebuilt rather than handed back as a live handle")
+	# Story 5-2 (AC 4): the fourth content channel, on the effect map's own footing.
+	assert_eq(rec.replay_card_colors().keys(), DECK_IDS,
+		"the colour map is total over that composition on the record too")
+	assert_eq(int(rec.replay_card_colors()[DECK_IDS[0]]), int(Enums.CardColor.RED),
+		"...and each colour comes back BY VALUE, as the plain enum it was captured as")
 	assert_eq(rec.content_order(), IntentRecorder.SOUND_CONTENT_ORDER,
 		"the record carries the ORDER, captured from the calls rather than assumed")
 
@@ -302,8 +314,10 @@ func test_content_channels_carry_the_composition_the_costs_the_effects_and_their
 	inverted.capture_inject_card_costs(_costs())
 	inverted.capture_inject_deck(DECK_IDS)
 	inverted.capture_inject_card_effects(_effects())
+	inverted.capture_inject_card_colors(_colors())
 	assert_eq(inverted.content_order(),
-		[IntentRecorder.CHANNEL_COSTS, IntentRecorder.CHANNEL_DECK, IntentRecorder.CHANNEL_EFFECTS],
+		[IntentRecorder.CHANNEL_COSTS, IntentRecorder.CHANNEL_DECK, IntentRecorder.CHANNEL_EFFECTS,
+			IntentRecorder.CHANNEL_COLORS],
 		"sanity: the inverted record really did capture the channels in an unsound order")
 	var broken := _bare_match()
 	assert_false(inverted.replay_inject_content(broken),
@@ -334,6 +348,8 @@ func test_a_record_missing_any_match_start_channel_is_malformed() -> void:
 		"deck": "deck composition",
 		"costs": "cast costs",
 		"effects": "card effects",
+		# Story 5-2 (`5-2/R1`): the SEVENTH match-start channel, on the sixth's exact footing.
+		"colors": "card colours",
 	}
 	for omitted: String in expected:
 		var rec := _match_start_record(omitted)
@@ -504,6 +520,10 @@ func _match_start_record(omit := "") -> IntentRecorder:
 	# the same footing as the five that predate it -- a v2 record missing it is malformed.
 	if omit != "effects":
 		rec.capture_inject_card_effects(_effects())
+	# Story 5-2 (`5-2/R1`): the FOURTH, on the identical footing -- a v7 record missing its colours
+	# is malformed, and the version bump is what that statement is worth.
+	if omit != "colors":
+		rec.capture_inject_card_colors(_colors())
 	return rec
 
 
@@ -559,4 +579,14 @@ func _code_lines(path: String) -> Array[String]:
 		if hash_idx >= 0:
 			line = line.substr(0, hash_idx)
 		out.append(line)
+	return out
+
+
+## Story 5-2 (AC 4, `5-2/R1`): the FOURTH content channel's fixture half. Colours are plain enum
+## values, so unlike `_costs()` and `_effects()` this builds no Resource -- which is exactly why the
+## channel round-trips as ints and needed no new serialisation machinery.
+func _colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for i in DECK_IDS.size():
+		out[DECK_IDS[i]] = Enums.CardColor.RED if i % 2 == 0 else Enums.CardColor.BLUE
 	return out

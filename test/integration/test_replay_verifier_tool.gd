@@ -168,6 +168,7 @@ func _fixture_record(move_scale: float) -> IntentRecorder:
 	record.capture_inject_deck(DECK_IDS)
 	record.capture_inject_card_costs(_costs())
 	record.capture_inject_card_effects(_effects())   # story 4-1: the third content channel
+	record.capture_inject_card_colors(_colors())     # story 5-2: the fourth
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			record.capture_apply_balance(_config(11.0))
@@ -268,3 +269,12 @@ func _finish(measured_hash: String, other_hash: String) -> void:
 		print("FAILED: " + f)
 	print("RESULT: %s" % ("PASS" if _failures.is_empty() else "FAIL"))
 	quit(0 if _failures.is_empty() else 1)
+
+
+## Story 5-2 (`5-2/R1`): the FOURTH content channel's fixture half. Plain enum values, so unlike
+## `_costs()` and `_effects()` this builds no Resource.
+func _colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for i in DECK_IDS.size():
+		out[DECK_IDS[i]] = Enums.CardColor.RED if i % 2 == 0 else Enums.CardColor.BLUE
+	return out

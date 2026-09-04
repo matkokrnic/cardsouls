@@ -150,8 +150,14 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 6,
-		"FORMAT_VERSION is 6 as of story 4-6 (AC 14) -- the intent shape changed (`aim` deleted, "
+	assert_eq(RecordFile.FORMAT_VERSION, 7,
+		"FORMAT_VERSION is 7 as of story 5-2 -- the FOURTH content channel (`inject_card_colors`, "
+		+ "`5-2/R1`) joined the file and a v6 record carries no colours at all, so every "
+		+ "unblockable telegraph would replay in the wrong colour and diverge on the hashed "
+		+ "per-player `telegraph` key. 5-2's OTHER half forced nothing: its two new CHARGE-REACH "
+		+ "contact kinds are new VALUES of the existing `kind` element, so the row is still SEVEN "
+		+ "elements and the assertions below still pin it. It was 6 as of story 4-6 (AC 14) -- the "
+		+ "intent shape changed (`aim` deleted, "
 		+ "`retarget_slot`/`retarget_index` added) and a new per-tick `lock_pushes` channel joined "
 		+ "the file, none of which a v5 record carries (it was 5 through 4-4, 4 through 4-3b, 3 "
 		+ "through 4-3a, 2 through 4-1). The contact row's SHAPE is unchanged at seven elements, "
@@ -673,15 +679,19 @@ func test_a_record_whose_intent_dict_lacks_the_retarget_fields_is_refused_with_a
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 6,
-		"`5-1a/R4`: the v6 SHAPE is unchanged — only its validation is stricter, so nothing that "
-		+ "loaded before this story is refused by a version gate now")
+	assert_eq(RecordFile.FORMAT_VERSION, 7,
+		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
+		+ "version has since moved to 7 for story 5-2's colours channel, which is a different "
+		+ "story's bump and does not weaken 5-1a's own claim: what this asserts is that the number "
+		+ "is whatever the last DELIBERATE bump set it to, and that 5-1a was not one")
 	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:
 		assert_false(RecordFile.REQUIRED_KEYS.has(field),
 			("`5-1a/R12`: `%s` is a PER-INTENT field inside each `intents` element, never a "
 			+ "top-level key — REQUIRED_KEYS is not widened by this story") % field)
-	assert_eq(RecordFile.REQUIRED_KEYS.size(), 12,
-		"TWELVE top-level required keys, exactly as before 5-1a (`5-1a/R12` counted them at the "
+	assert_eq(RecordFile.REQUIRED_KEYS.size(), 13,
+		"THIRTEEN top-level required keys: story 5-2 added `colors`, the fourth content channel, "
+		+ "which is that story's bump and not this one's. It was TWELVE before 5-2 and TWELVE "
+		+ "before 5-1a too (`5-1a/R12` counted them at the "
 		+ "readiness gate) — this story validates CONTENTS, never presence at the top level")
 
 
@@ -878,6 +888,11 @@ func _match_start() -> Dictionary:
 	var effects := _effects()
 	record.capture_inject_card_effects(effects)
 	ms.inject_card_effects(effects)
+	# Story 5-2 (`5-2/R1`): the FOURTH content channel, captured and injected LAST -- the order
+	# deck -> costs -> effects -> colours the live runner produces and SOUND_CONTENT_ORDER pins.
+	var colors := _colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 
@@ -1208,3 +1223,13 @@ func _free_run(count: int) -> int:
 		else:
 			candidate = RecordFile.first_free_index(candidate + offset + 1)
 	return candidate
+
+
+## Story 5-2 (AC 4, `5-2/R1`): the FOURTH content channel's fixture half. Colours are plain enum
+## values, so unlike `_costs()` and `_effects()` this builds no Resource -- which is exactly why the
+## channel round-trips as ints and needed no new serialisation machinery.
+func _colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for i in DECK_IDS.size():
+		out[DECK_IDS[i]] = Enums.CardColor.RED if i % 2 == 0 else Enums.CardColor.BLUE
+	return out

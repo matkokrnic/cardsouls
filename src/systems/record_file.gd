@@ -139,7 +139,22 @@ extends RefCounted
 ## and replaying one against target-derived facing would leave every hero facing its construction
 ## default while the recording's heroes tracked their targets. HARD REJECTION, NO SHIM, the
 ## `4-3a/R10` / `4-3b/R21` / `4-4/R15` discipline unbroken.
-const FORMAT_VERSION := 6
+## STORY 5-2 BUMPS 6 -> 7, and it is a NEW CAPTURE CHANNEL rather than a payload shape change -- the
+## `4-1/R1` shape of bump, not the three contact-row ones. `inject_card_colors` is MatchState's
+## TENTH intake and the FOURTH content channel (`5-2/R1`), and it ships with its
+## `capture_inject_card_colors` channel and its `colors` key below. A v6 file carries neither: it
+## has no colours at all, and rebuilding them by assuming one would replay every unblockable
+## telegraph in the wrong colour -- a value that reaches the HASHED per-player `telegraph` key
+## (`player_state.gd`), so the replay diverges from the match it claims to reproduce. HARD
+## REJECTION, NO SHIM, the `4-1/R1` discipline unbroken.
+##
+## THE OTHER HALF OF 5-2 FORCES NOTHING, and the story asked for that to be MEASURED rather than
+## assumed (its AC 23). The two new CHARGE-REACH contact kinds ride the EXISTING seven-element
+## contact row as new VALUES of the `kind` element `4-3b` already added, so the row shape is
+## untouched, `capture_push_contact` is untouched, and `REQUIRED_KEYS`'s `contacts` entry does not
+## move. Had the reach answer needed an eighth row element, THAT would have been the bump; it did
+## not, and the channel is what did.
+const FORMAT_VERSION := 7
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -193,6 +208,10 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	# arrival IS the version bump -- a v1 file lacks this key, and is refused by the version check
 	# long before this map is consulted.
 	"effects": TYPE_DICTIONARY,
+	# Story 5-2 (`5-2/R1`): the FOURTH content channel, required from FORMAT_VERSION 7 onward. Its
+	# arrival IS the version bump -- a v6 file lacks this key, and is refused by the version check
+	# long before this map is consulted, exactly as `effects` was at v2 and `lock_pushes` at v6.
+	"colors": TYPE_DICTIONARY,
 }
 
 ## Story 5-1a (AC 4): the POSITIONAL type signature of one `lock_pushes` entry, in the order
@@ -470,6 +489,13 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var recorded_effects := record.replay_card_effects()
 	for id: StringName in recorded_effects:
 		effects[id] = _resource_values(recorded_effects[id])
+	# Story 5-2 (AC 4): the colour map goes to disk as plain INTS. `_resource_values` is deliberately
+	# NOT used and is untouched by this story: it serialises RESOURCES (balance, flags, costs,
+	# effects), and a colour is an enum value, not one.
+	var colors: Dictionary = {}
+	var recorded_colors := record.replay_card_colors()
+	for id: StringName in recorded_colors:
+		colors[id] = int(recorded_colors[id])
 	var intents: Array = []
 	var camera_pushes: Dictionary = {}
 	var contacts: Dictionary = {}
@@ -499,6 +525,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"deck": record.replay_deck_contents(),
 		"costs": costs,
 		"effects": effects,
+		"colors": colors,
 		"tick_count": record.tick_count(),
 		"intents": intents,
 		"camera_pushes": camera_pushes,
@@ -630,6 +657,8 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 				record.capture_inject_card_costs(_card_costs(data["costs"]))
 			IntentRecorder.CHANNEL_EFFECTS:
 				record.capture_inject_card_effects(_card_effects(data["effects"]))
+			IntentRecorder.CHANNEL_COLORS:
+				record.capture_inject_card_colors(_card_colors(data["colors"]))
 	var intents: Array = data["intents"]
 	var camera_pushes: Dictionary = data["camera_pushes"]
 	var contacts: Dictionary = data["contacts"]
@@ -687,6 +716,16 @@ static func _deck_ids(raw: Array) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for id in raw:
 		out.append(StringName(id))
+	return out
+
+
+## Story 5-2 (AC 4): the colour map rebuilt from the file. No `_rebuilt` call and no Resource
+## construction -- the round trip is int in, int out, which is the whole reason this channel could
+## be added without touching `_resource_values` or the nesting machinery.
+static func _card_colors(raw: Dictionary) -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id: StringName in raw:
+		out[id] = int(raw[id]) as Enums.CardColor
 	return out
 
 

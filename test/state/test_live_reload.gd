@@ -39,7 +39,9 @@ const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reloa
 ## (`inject_card_effects`) -- which is the only sanctioned reason a channel may appear, since the
 ## set is DERIVED from that surface and not enumerated by choice (`3-0c/R2`). The pin moves with
 ## the story that moves the surface; it is not widened to stop noticing.
-const SHIPPED_CAPTURE_CHANNELS := 10
+## Story 5-2 (`5-2/R1`): TEN -> ELEVEN, the card-colour channel. Moved by the story that ships
+## the channel, exactly as 4-1 moved it 8 -> 9 and 4-6 9 -> 10.
+const SHIPPED_CAPTURE_CHANNELS := 11
 
 
 # ---------------------------------------------------------------- AC 2
@@ -102,7 +104,11 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ## channels` — a test name carrying a COUNT must not go on asserting a different one, the
 ## `test_event_bus_still_carries_exactly_the_two_declared_signals` precedent from 3-5b. The old
 ## name is recorded here verbatim so the pin stays greppable.
-func test_the_recorder_still_ships_exactly_ten_capture_channels() -> void:
+## RENAMED BY STORY 5-2 (`5-2/R1`), the same discipline this file's own header records for the
+## 4-1 rename: a test name carrying a COUNT must not go on asserting a different one. The old
+## name was `test_the_recorder_still_ships_exactly_ten_capture_channels`, recorded here verbatim
+## so the pin stays greppable.
+func test_the_recorder_still_ships_exactly_eleven_capture_channels() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -111,17 +117,23 @@ func test_the_recorder_still_ships_exactly_ten_capture_channels() -> void:
 			channels.append(name)
 	channels.sort()
 	assert_eq(channels, [
-		"capture_advance", "capture_apply_balance", "capture_inject_card_costs",
+		"capture_advance", "capture_apply_balance",
+		# Story 5-2 (`5-2/R1`): the ELEVENTH channel -- the per-card COLOUR map, the FOURTH content
+		# channel and the `capture_inject_card_effects` sibling. In SORTED position, which is ahead
+		# of `..._costs`. The pin moves because the STORY moved it, which is this guard doing its
+		# job and naming the cause; the FORMAT_VERSION bump 6 -> 7 is what that move is worth.
+		"capture_inject_card_colors",
+		"capture_inject_card_costs",
 		"capture_inject_card_effects", "capture_inject_deck", "capture_inject_feature_flags",
 		"capture_push_contact", "capture_seed", "capture_set_camera_basis",
 		# Story 4-6 (AC 2, `4-6/R6`): the TENTH channel -- the per-tick lock direction, the
 		# `capture_set_camera_basis` sibling. The pin moves because the STORY moved it, which is
 		# this guard doing its job and naming the cause.
 		"capture_set_lock_direction",
-	], "the channel set is the EIGHT `3-0c` shipped, plus story 4-1's card-effect channel and "
-		+ "story 4-6's lock-direction channel")
+	], "the channel set is the EIGHT `3-0c` shipped, plus story 4-1's card-effect channel, story "
+		+ "4-6's lock-direction channel and story 5-2's card-colour channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"an ELEVENTH capture channel is a scope violation, and this is where it fails")
+		"a TWELFTH capture channel is a scope violation, and this is where it fails")
 
 
 # ---------------------------------------------------------------- AC 9
@@ -229,6 +241,11 @@ func _match_start() -> Dictionary:
 	var effects := _effects()
 	record.capture_inject_card_effects(effects)
 	ms.inject_card_effects(effects)
+	# Story 5-2 (`5-2/R1`): the FOURTH content channel, captured and injected LAST -- the order
+	# deck -> costs -> effects -> colours the live runner produces and SOUND_CONTENT_ORDER pins.
+	var colors := _colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 
@@ -334,4 +351,14 @@ func _code_lines(path: String) -> Array[String]:
 		if hash_idx >= 0:
 			line = line.substr(0, hash_idx)
 		out.append(line)
+	return out
+
+
+## Story 5-2 (AC 4, `5-2/R1`): the FOURTH content channel's fixture half. Colours are plain enum
+## values, so unlike `_costs()` and `_effects()` this builds no Resource -- which is exactly why the
+## channel round-trips as ints and needed no new serialisation machinery.
+func _colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for i in DECK_IDS.size():
+		out[DECK_IDS[i]] = Enums.CardColor.RED if i % 2 == 0 else Enums.CardColor.BLUE
 	return out

@@ -160,6 +160,35 @@ var vulnerable_window: TimingWindow
 var lock_target_slot: int = TargetingService.NO_TARGET_SLOT
 var lock_target_index: int = TargetingService.HERO_INDEX
 
+## Story 5-2 (AC 10/AC 21, `5-2/R9`): THE MODE ② CHARGEUP — the D4 window it runs on, and the
+## COLOUR of the card that started it.
+##
+## SEATED HERE RATHER THAN ON `HeroState`, and that is a measured choice rather than a stylistic
+## one. AC 21 requires the telegraph to ride the PINNED PER-PLAYER key set, because that is the set
+## `5-2/R9`'s golden prediction is measured against; a window field on `HeroState` would move the
+## golden through the hero sub-dictionary instead and the prediction would read as false while the
+## story still appeared to pass. The chargeup is also a CARD-LAYER duration — it is started by a
+## cast, not by a `TRANSITION_TABLE` edge (AC 7) — so it belongs beside `pending_draw`, the other
+## window a cast starts, rather than beside the eight windows the melee table drives.
+##
+## THE WINDOW IS ADVANCED AT STEP 2 with every other D4 timer and READ at step 3(a) (AC 20), the
+## `pending_draw` idiom verbatim: ticked in one place, consumed in another, never both.
+var charge_window: TimingWindow
+## The spent card's `Enums.CardColor` as a plain INT, or `NO_TELEGRAPH_COLOR` when nothing is
+## charging. A plain int and never a `CardData`, a `StringName` or a colour name: the
+## counts-and-indices rule every container key in this file follows, and the reason is the same one
+## — `CanonicalHash` has no object branch and `Array[StringName].sort()` orders by internal POINTER
+## on this engine.
+##
+## `1-10/R1` STAYS INTACT: this is a COLOUR, not a `TelegraphProfile`. The `ActionState ->
+## TelegraphProfile` mapping remains controller-owned and nothing in `src/state/` names one.
+var charge_color: int = NO_TELEGRAPH_COLOR
+
+## Story 5-2 (AC 21): the resting value of `charge_color`, and it is a THIRD thing rather than a
+## fourth colour — `Enums.CardColor` gets no `NONE` member, exactly as `TargetingService` answers
+## "nothing" with a sentinel rather than by widening the address space. Readers test the NAME.
+const NO_TELEGRAPH_COLOR := -1
+
 ## Story 3-6 (AC 2): retained so notify_cards_changed() can enqueue. The three pools have each
 ## held the queue since E0 for the same reason; this composite needed none until it owned a
 ## signal of its own.
@@ -186,6 +215,7 @@ func _init(queue: SignalQueue) -> void:
 	projectiles = ProjectileBoard.new()
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
+	charge_window = TimingWindow.new()
 
 
 ## Story 3-6 (AC 2): QUEUE one card-observation payload (D5). Called from MatchState at the seats
@@ -412,4 +442,40 @@ func to_snapshot() -> Dictionary:
 		"projectile_homing": projectiles.homing_snapshot(),
 		"projectile_flight_ticks": projectiles.flight_ticks_snapshot(),
 		"projectile_travelled": projectiles.travelled_snapshot(),
+		# Story 5-2 (AC 21/AC 22, `5-2/R9`): the ONE new key this story adds -- the ACTIVE
+		# TELEGRAPH, as `[colour, remaining_ticks]`. The `lock_target` FUSION verbatim and for the
+		# same reason: a telegraph is ONE fact in two halves (what colour, how much longer), and
+		# splitting it would let the halves drift into two keys that could disagree about whether a
+		# telegraph is running at all. Resting value `[-1, 0]` -- `NO_TELEGRAPH_COLOR` and a stopped
+		# window.
+		#
+		# THE UNIT IS TICKS, never seconds. Seconds would put a float derived from `TICK_HZ` into the
+		# hash for a value the tick ladder already holds as an integer, and A1's whole point is that
+		# gameplay-critical timing is counted in ticks.
+		#
+		# IT IS A KEY AT ALL FOR THE `pending_draw` REASON, not the `_deck_deal_pending` one: the
+		# chargeup CROSSES TICKS AND DECIDES AN OUTCOME (when the landing check runs, and therefore
+		# whether the hit lands at all), so it cannot be recomputed for free inside the tick that
+		# reads it -- `4-3a/R17`'s test, passed.
+		#
+		# REMAINING TICKS ALONE IS DETERMINISM-COMPLETE, and that is reasoned rather than assumed: the
+		# window's duration is `balance_ticks.unblockable_chargeup_ticks`, a load-time constant a
+		# replay reproduces from the recorded balance, so `elapsed` is recoverable as
+		# `duration - remaining` and two runs that agree on remaining cannot disagree on elapsed.
+		#
+		# IT IS A PER-PLAYER KEY, NOT A HERO ONE (AC 21 is explicit): seating it inside
+		# `hero.to_snapshot()` would move the golden without moving THIS set, and the story's own
+		# golden prediction is stated against THIS set.
+		#
+		# THE KEY IS GATED ON `CHARGING`, WHICH IS WHAT MAKES A STALE TELEGRAPH UNREPRESENTABLE
+		# RATHER THAN MERELY UNLIKELY (the project's guard-mechanism-over-guard-pattern rule). The
+		# fields below are written ONCE, at the cast, and nothing clears them: a hero that lands, is
+		# killed mid-chargeup (AC 15), or is returned to IDLE by the debug reset would otherwise carry
+		# its last colour forever, because `_apply_debug_reset`'s own contract leaves in-flight
+		# windows untouched ("a live hero mid-swing swings on") and this window is one of them.
+		# Deriving the key from the action state instead means "the active telegraph" is true by
+		# construction, with one writer and no clear path to forget.
+		"telegraph": [charge_color, charge_window.remaining_ticks()] \
+				if hero.action_state == HeroState.ActionState.CHARGING \
+				else [NO_TELEGRAPH_COLOR, 0],
 	}

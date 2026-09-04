@@ -320,6 +320,16 @@ func _ready() -> void:
 		var card_effects := _derive_card_effects()
 		_recorder.capture_inject_card_effects(card_effects)
 		_match_state.inject_card_effects(card_effects)
+		# Story 5-2 (AC 4, `5-2/R1`): card COLOURS, the FOURTH content channel, injected LAST.
+		# The order deck -> costs -> effects -> colours is load-bearing at the same end as the
+		# other three: `inject_card_colors()`'s totality check reads the injected composition,
+		# so colours-before-deck would validate against an empty one and pass vacuously, and
+		# `IntentRecorder.SOUND_CONTENT_ORDER` pins this same order into the record. The
+		# derive+inject pair travels together in this NON-REPLAY branch and nowhere else: a
+		# replay takes the colours the record carries, through `replay_inject_content()`.
+		var card_colors := _derive_card_colors()
+		_recorder.capture_inject_card_colors(card_colors)
+		_match_state.inject_card_colors(card_colors)
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -520,6 +530,89 @@ func _derive_card_effects() -> Dictionary[StringName, CardEffect]:
 			continue
 		out[id] = card.basic_effect
 	return out
+
+
+## Story 5-2 (AC 4, `5-2/R1`): the injected CARD-COLOUR map -- `_derive_card_effects()` directly
+## above, followed VERBATIM, and for the same reason it exists: the runner is the ONE place allowed
+## to read CardDatabase (3-3 AC 2), and no file under src/state/ may so much as name it (3-3 AC 8).
+## The state layer receives plain ids mapped to a plain enum and never learns where they came from,
+## so `src/state/` still never reads a `CardData` (`card_data.gd:5`) even though it now knows what
+## colour a card is.
+##
+## THE WHOLE LIBRARY IS MAPPED, not just the ids the composition happens to use -- the siblings'
+## rationale unchanged: a narrower map would have to be re-derived the moment deckbuilding lets a
+## composition change.
+##
+## NOTHING IS SKIPPED HERE, unlike `_derive_card_effects` one function up, and the difference is in
+## the DATA rather than in the policy: `basic_effect` is a nullable Resource a card may legitimately
+## not author, while `color` is a non-nullable enum with a value on every card by construction. So
+## the map is total over the library automatically, and `inject_card_colors`'s totality check has
+## nothing to catch short of a genuinely absent card.
+func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null:
+			continue
+		out[id] = card.color
+	return out
+
+
+## Story 5-2 (AC 17, `5-2/R6`): THE UNTETHERED CHARGE-REACH FACT -- pushed EVERY TICK, for every
+## slot whose hero is `CHARGING`, carrying an EXPLICIT inside/outside answer in the fact's KIND.
+##
+## IT IS NOT `_push_reach_probe` AND MUST NOT REUSE ITS CADENCE (`5-2/R6`, measured). That probe
+## fires on `_probe_counter % minion_retarget_interval_ticks == 0` -- 1 tick in 12 at the authored
+## 0.2 s -- and the state side tolerates the gap only through `is_in_reach_at`'s freshness window,
+## which means "confirmed RECENTLY". A landing check resolves on ONE exact tick and has no such
+## tolerance to spend, so this fact is produced on every ticking frame instead. The cost is bounded
+## by construction: at most two rows per tick, and only while a chargeup is actually running.
+##
+## THE COMPARISON IS DONE HERE because the runner owns positions and `src/state/` owns none
+## (`4-3/R2`); what crosses inward is the RELATION, exactly as the fact's `dir` has carried
+## position-DERIVED data since 1-8. `unblockable_reach` is read INLINE off the config the runner
+## already applied (CONSTRAINT C) -- never `BalanceConfigService`, never cached on this node, which
+## during a replay would measure reach at the AUTHORED value instead of the RECORDED one.
+##
+## PLANAR (XZ) CENTRE-TO-CENTRE, the same geometry `_push_reach_probe` and `_lock_direction` use, so
+## every distance this file measures is one geometry compared against different authored numbers
+## rather than several geometries that could disagree.
+##
+## A DEGENERATE CO-LOCATION PUSHES NOTHING (the `push_contact` zero-direction rule verbatim), and
+## the LATCH is what makes that harmless rather than a lost hit: state keeps the previous tick's
+## answer, and two heroes close enough to be co-located were inside reach on the tick before.
+##
+## HERO-TO-HERO ONLY (Ruling 8). Minions are neither targets nor obstacles for this attack, and that
+## is structural here -- this function cannot address one.
+func _push_charge_reach_facts() -> void:
+	if _match_state.balance == null:
+		return
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		if player.hero.action_state != HeroState.ActionState.CHARGING:
+			continue
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		var enemy: HeroActor = _p2_hero if slot == 0 else _p1_hero
+		if not is_instance_valid(hero) or not is_instance_valid(enemy):
+			continue
+		var to_attacker := hero.global_position - enemy.global_position
+		var planar := Vector2(to_attacker.x, to_attacker.z)
+		if planar.is_zero_approx():
+			continue
+		var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE \
+				if planar.length() <= _match_state.balance.unblockable_reach \
+				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
+		var attacker_address: Array[int] = [slot, TargetingService.HERO_INDEX]
+		var target_address: Array[int] = [1 - slot, TargetingService.HERO_INDEX]
+		var fact_dir := planar.normalized()
+		# The fact carries the charging hero's own swing counter. It keys nothing -- a charge-reach
+		# fact never registers a dedupe hit -- but every field is filled honestly rather than with a
+		# placeholder a later reader could mistake for something it is not, which is the rule
+		# `_push_reach_probe` states for the same field.
+		_recorder.capture_push_contact(attacker_address, target_address,
+				player.hero.attack_index, fact_dir, kind)
+		_match_state.push_contact(attacker_address, target_address,
+				player.hero.attack_index, fact_dir, kind)
 
 
 ## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
@@ -2210,6 +2303,13 @@ func _physics_process(delta: float) -> void:
 			_match_state.set_lock_direction(0, lock_dirs[0])
 			_recorder.capture_set_lock_direction(1, lock_dirs[1])
 			_match_state.set_lock_direction(1, lock_dirs[1])
+			# Story 5-2 (AC 17, `5-2/R6`): the CHARGE-REACH fact, gathered and tapped in this
+			# same step-2 seat and BEFORE advance() -- which is the whole of AC 17's ordering
+			# requirement: state never pulls from the runner mid-advance(), so the fact the
+			# step-3(a) landing check reads must already be in. It rides `push_contact` and the
+			# existing contacts channel, so a replay restores it through
+			# `replay_push_contacts` above with no new channel and no row-shape change.
+			_push_charge_reach_facts()
 			#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
 			#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
 			# Story 4-3b (AC 5): THE CANONICAL CROSS-ATTACKER GATHER ORDER, and the unit pass's

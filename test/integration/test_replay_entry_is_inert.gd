@@ -180,6 +180,12 @@ func _poison_record() -> IntentRecorder:
 	poison_effect.effect_id = &"summon_poison"
 	effects[&"poison_card"] = poison_effect
 	record.capture_inject_card_effects(effects)
+	# Story 5-2 (`5-2/R1`): the fourth content channel — a v7 record without it is malformed at the
+	# capture seam, and this fixture's whole point is that it is a WELL-FORMED record that must
+	# nonetheless never be replayed.
+	var colors: Dictionary[StringName, Enums.CardColor] = {}
+	colors[&"poison_card"] = Enums.CardColor.GREEN
+	record.capture_inject_card_colors(colors)
 	record.capture_set_camera_basis(0, Basis(Vector3.UP, deg_to_rad(90.0)))
 	record.capture_push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
 	for _tick in 4:

@@ -99,6 +99,14 @@ const UNHASHED_CROSS_TICK: Array[String] = [
 	"player_state.vulnerable_window",
 	"deck._cards", "hand._cards", "discard_pile._cards",
 	"match_state._camera_bases", "match_state._lock_directions",
+	# Story 5-2 (AC 17, `5-2/R6`): TWO MORE ARRAYS ON ARGUMENT (c), NOT A FOURTH ARGUMENT -- the
+	# 4-6 `_lock_directions` precedent applied unchanged. Both hold the runner's per-tick
+	# CHARGE-REACH fact (the inside/outside answer, and the planar direction that answer was
+	# measured along); neither is ever produced by the tick, and both are captured by
+	# `capture_push_contact` -- the fact enters through `push_contact`, the sole intake, and a
+	# replay restores them by replaying those pushes exactly as it restores a lock direction.
+	# MEMBERS therefore STAYS AT THREE.
+	"match_state._charge_reach", "match_state._charge_reach_dirs",
 ]
 const UNHASHED_CROSS_TICK_MEMBERS := 3
 
@@ -121,6 +129,12 @@ const HASHED: Array[String] = [
 	# state and is hashed here; the world-space DIRECTION to it is a pushed runner fact and sits in
 	# exclusion (c) with the camera bases.
 	"player_state.lock_target_slot", "player_state.lock_target_index",
+	# Story 5-2 (AC 21, `5-2/R9`): the mode (2) chargeup's two halves classify HASHED, on
+	# `lock_target`'s exact test rather than a weaker one -- they CROSS TICKS (the window counts
+	# down over the whole chargeup) and DECIDE AN OUTCOME (when the landing check runs, hence
+	# whether the hit lands at all). Both reach the hash through `PlayerState.to_snapshot()`'s ONE
+	# `telegraph` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
+	"player_state.charge_window", "player_state.charge_color",
 	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
 	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the
@@ -229,7 +243,11 @@ const INJECTED: Array[String] = [
 	# Story 4-1 (AC 2 / AC 10): the injected EFFECT map, classified INJECTED for exactly the
 	# reasons its two neighbours are -- never produced by the tick, never changed except through
 	# `inject_card_effects`, which IS a capture channel (`capture_inject_card_effects`).
+	# Story 5-2 (AC 4, `5-2/R1`): the injected COLOUR map, classified INJECTED for its two
+	# neighbours' reasons verbatim -- never produced by the tick, never changed except through
+	# `inject_card_colors`, which IS a capture channel (`capture_inject_card_colors`).
 	"match_state._deck_contents", "match_state._card_costs", "match_state._card_effects",
+	"match_state._card_colors",
 ]
 
 ## Files under src/state/ that carry no runtime match state, with the reason each is exempt from
@@ -516,6 +534,11 @@ func _record_a_driven_run() -> Dictionary:
 	var effects := _effects()
 	record.capture_inject_card_effects(effects)
 	ms.inject_card_effects(effects)
+	# Story 5-2 (`5-2/R1`): the FOURTH content channel, captured and injected LAST -- the order
+	# deck -> costs -> effects -> colours the live runner produces and SOUND_CONTENT_ORDER pins.
+	var colors := _colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			var retuned := _retuned_config()
@@ -740,4 +763,14 @@ func _code_lines(path: String) -> Array[String]:
 		if hash_idx >= 0:
 			line = line.substr(0, hash_idx)
 		out.append(line)
+	return out
+
+
+## Story 5-2 (AC 4, `5-2/R1`): the FOURTH content channel's fixture half. Colours are plain enum
+## values, so unlike `_costs()` and `_effects()` this builds no Resource -- which is exactly why the
+## channel round-trips as ints and needed no new serialisation machinery.
+func _colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for i in DECK_IDS.size():
+		out[DECK_IDS[i]] = Enums.CardColor.RED if i % 2 == 0 else Enums.CardColor.BLUE
 	return out

@@ -69,6 +69,11 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
 	"projectile_source", "projectile_targets", "projectile_travelled",
 	"stamina",
+	# Story 5-2 (AC 21, `5-2/R9`): the TWENTY-NINTH key -- `telegraph`, the active unblockable
+	# chargeup as `[colour, remaining_ticks]`, in sorted position between `stamina` and the
+	# `unit_*` block. Same mechanism, fifth time: this pin and test_card_observation.gd's were BOTH
+	# red before this edit, and the story that adds the key is the story that moves both.
+	"telegraph",
 	# Story 4-4 (AC 1/AC 10): `unit_attack_cooldown` (the firing-cadence countdown) and `unit_kind`
 	# (the per-record kind INDEX — never the StringName) join the set. Sorted position, not appended.
 	"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",

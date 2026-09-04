@@ -286,6 +286,32 @@ extends Resource
 ## decision (a) in the GDD decision log, and authoring this duration does NOT resolve it.
 @export var stun_seconds: float = 0.0
 
+## Story 5-2 (AC 6/AC 10/AC 17/AC 18): mode ② — the unblockable INITIATION. Four numbers, and
+## every one of them is global rather than per-card or per-colour, which is the GDD's own shape
+## ("per-COLOR value, not per-card", card_data.gd's header) narrowed one step further by Ruling 2:
+## this story ships ONE damage value for all three colours and `5-6`'s ladder is what splits it.
+## Colour therefore selects the TELEGRAPH and nothing numeric — there is deliberately no
+## `unblockable_*_red/blue/green` triplet here to become a second source of truth for a value the
+## later story will author properly.
+@export_group("Unblockable")
+## What initiating mode ② costs, spent at the CAST (`5-2/R4`) — the FOURTH stamina seat, joining
+## roll, attack and deflect. Passed to `StaminaPool.spend` with `stamina_regen_delay_ticks` exactly
+## as the other three are, so the spend restarts the regen delay identically.
+@export var unblockable_stamina_cost: float = 0.0
+## How long the hero is rooted in `CHARGING` before the attack lands. Crosses into the tick domain
+## at the ONE boundary (`BalanceTicks.unblockable_chargeup_ticks`, the D3 precedent) and is never
+## compared against a raw float inside `advance()`.
+@export var unblockable_chargeup_seconds: float = 0.0
+## The authored hit radius that IS the boundary (`E5-P/R4`): planar (XZ) centre-to-centre distance
+## between the two HEROES, measured at the moment the chargeup ENDS. Lock-on aims direction only
+## and never extends this. Read by the RUNNER, which owns positions — the state layer receives the
+## inside/outside relation the comparison produces, never a distance and never a position.
+@export var unblockable_reach: float = 0.0
+## What a landed unblockable takes off the enemy hero, as a percentage of that hero's own maximum —
+## the `attack_damage_percent_of_max_hp` convention verbatim, so the two hero-versus-hero damage
+## numbers are read the same way and can be compared at a glance in the authored file.
+@export var unblockable_damage_percent_of_max_hp: float = 0.0
+
 
 ## Story 4-4 (AC 1/AC 2): the sentinel a failed kind lookup returns. NOT -1 by coincidence — it is
 ## the same "no such thing" answer `TargetingService.NO_TARGET_SLOT` and `HERO_INDEX` use in the

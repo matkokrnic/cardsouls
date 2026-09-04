@@ -78,6 +78,42 @@ signal reshuffle_vulnerable_window_opened(slot: int)
 const CONTACT_STRIKE := 0
 const CONTACT_REACH_PROBE := 1
 
+## Story 5-2 (AC 17, `5-2/R6`): the two CHARGE-REACH kinds -- the UNTETHERED, every-tick
+## hero-to-hero relation the mode (2) landing check reads on the exact tick a chargeup expires.
+##
+## TWO KINDS RATHER THAN ONE KIND PLUS A PAYLOAD, and that is what makes the fact carry an EXPLICIT
+## inside/outside VALUE instead of encoding the answer in its own presence. `_push_reach_probe`'s
+## convention -- push only when in reach, absence means out of reach -- is DISQUALIFIED here BY
+## NAME: absence there is ambiguous three ways (out of reach, not probed on this cadence, actor not
+## spawned), and a landing check has no freshness tolerance to spend on it (`is_in_reach_at`'s
+## window means "confirmed RECENTLY"; an expiry tick needs "confirmed NOW"). Here the runner pushes
+## on EVERY tick a hero is CHARGING and the KIND says which answer it measured, so absence stays a
+## THIRD value (`REACH_UNKNOWN`) that lands nothing rather than a silent "outside".
+##
+## THE ANSWER RIDES THE KIND because the recorded contact ROW already carries `kind` as a scalar
+## (`intent_recorder.gd`): a new VALUE on an existing element changes no row shape, needs no new
+## capture channel, and leaves every record written since FORMAT_VERSION 4 replayable. A seventh
+## `push_contact` parameter would have changed the row and forced a version bump for one boolean.
+const CONTACT_CHARGE_REACH_INSIDE := 2
+const CONTACT_CHARGE_REACH_OUTSIDE := 3
+
+## Story 5-2 (AC 17): the resting value of the per-slot charge-reach latch -- NO FACT HAS BEEN
+## PUSHED. Deliberately a THIRD value rather than a default of "outside": a headless MatchState with
+## no runner, and the tick a chargeup BEGINS (the runner gathers before advance(), so the entry tick
+## carries no fact yet), both sit here, and reading either as "outside" would silently decide a
+## landing that no measurement was ever taken for.
+const REACH_UNKNOWN := -1
+
+
+## Story 5-2 (AC 17): whether a contact kind is one of the two CHARGE-REACH kinds. The ONE predicate
+## the seam and the landing check both dispatch on -- nothing re-derives the pair inline, the
+## `is_projectile_index` discipline applied one partition over. STATIC and therefore outside the
+## public INTAKE surface by construction (test_intent_recorder.gd's scan matches `^func`), exactly
+## as the three projectile address helpers below are.
+static func is_charge_reach_kind(kind: int) -> bool:
+	return kind == CONTACT_CHARGE_REACH_INSIDE or kind == CONTACT_CHARGE_REACH_OUTSIDE
+
+
 ## Story 4-4 (`E4-P/R12`): THE PROJECTILE PARTITION of the contact address space. `E4-P/R12` rules
 ## that a projectile "needs its own attacker identity and dedupe, not a `[slot, index]` unit-board
 ## address"; this is that identity, expressed as a THIRD PARTITION of the existing index half rather
@@ -176,6 +212,28 @@ var _lock_directions: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ## dedupe grace tick, see HeroState._swing_dedupe).
 var _contact_queue: Array[Dictionary] = []
 
+## Story 5-2 (AC 17, `5-2/R6`): THE PER-SLOT CHARGE-REACH LATCH -- for each slot, the last
+## charge-reach answer the runner pushed for that slot's HERO as the attacker, held as the KIND
+## itself (`CONTACT_CHARGE_REACH_INSIDE` / `_OUTSIDE`, or `REACH_UNKNOWN` for "nothing pushed").
+##
+## IT IS NOT QUEUED, and that separation is what AC 20 requires rather than a shortcut. The landing
+## check resolves at STEP 3(a), and the contact queue drains at STEP 4 -- a queued charge-reach fact
+## would arrive one whole step after the tick that needs it, so the timer exit and the landing check
+## could not land in the same step. `push_contact` therefore routes these two kinds HERE instead of
+## into the queue: same single intake, same capture channel, different destination.
+##
+## THE SECOND ARRAY IS THE AUTO-AIM FACT (AC 12), and it is the SAME fact rather than a second one:
+## the charge-reach push already carries the planar TARGET-TO-ATTACKER direction every contact fact
+## has carried since 1-8, and the enemy-hero heading AC 12 needs is its negation. Aiming at the
+## enemy HERO specifically (Ruling 8) is therefore structural -- the fact is pushed hero-to-hero and
+## cannot address a minion -- rather than a filter applied to `_lock_directions`, which CAN.
+##
+## EXCLUDED FROM to_snapshot(), the `_lock_directions` / `_camera_bases` classification verbatim:
+## these are runner-gathered pushed facts riding their own capture channel, not state the tick
+## produces. A replay restores them by replaying the pushes, exactly as it restores a lock direction.
+var _charge_reach: Array[int] = [REACH_UNKNOWN, REACH_UNKNOWN]
+var _charge_reach_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
+
 ## Story 3-3 (AC 2): the injected deck COMPOSITION — plain StringName ids, retained so the
 ## step-6 deal seat can lay a fresh pile down on BOTH of its occasions (match start and debug
 ## reset) without a discard pile to recover cards from. EXCLUDED from to_snapshot() for the
@@ -223,6 +281,17 @@ var _card_costs: Dictionary[StringName, CardCastCondition] = {}
 ## is never produced by the tick and never changes except through a seam that IS a capture
 ## channel — which is the classification test_replay_identity.gd's member pin records it under.
 var _card_effects: Dictionary[StringName, CardEffect] = {}
+
+## Story 5-2 (AC 4, `5-2/R1`): the injected per-card COLOUR map, id -> `Enums.CardColor` -- the
+## THIRD injection seam, `_card_costs`'s and `_card_effects`'s twin in every respect, carrying the
+## same obligations for the same reasons. It exists so that `src/state/` can learn a card's colour
+## while STILL never reading a `CardData` (`card_data.gd:5`): the runner is the only reader of
+## CardDatabase, and what crosses the boundary here is a plain id mapped to a plain enum int.
+##
+## NEVER HASHED, like both of its siblings: this is injected CONTENT, never produced by the tick,
+## and it changes only through a seam that IS a capture channel. The colour that DOES reach the hash
+## is the one COPIED onto `PlayerState.charge_color` at a cast -- a single int, not this map.
+var _card_colors: Dictionary[StringName, Enums.CardColor] = {}
 
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
@@ -311,6 +380,13 @@ func advance(intents: Array[InputIntent]) -> void:
 	p2.pending_draw.tick()
 	p1.vulnerable_window.tick()
 	p2.vulnerable_window.tick()
+	# Story 5-2 (AC 10): the mode (2) CHARGEUP counts down HERE, beside every other D4 timer, and
+	# the step-3(a) seat below reads the result -- the `pending_draw` idiom verbatim (ticked at step
+	# 2, consumed later in the same tick), and A1 satisfied by construction: one integer tick per
+	# advance(), never a float accumulator and never a seconds value. Unguarded like its
+	# neighbours, because a pre-injection MatchState never started the window.
+	p1.charge_window.tick()
+	p2.charge_window.tick()
 	# Story 4-3b (AC 1): the UNIT attack rhythm counts down HERE, beside every other D4 timer, and
 	# the step-3 seat below reads the result — the hero's own `tick_timers()` shape, for a container
 	# instead of an object (A1: integer ticks, one per advance(), never a float accumulator). The
@@ -544,6 +620,33 @@ func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 	_card_effects = effects.duplicate()
 
 
+## Story 5-2 (AC 4, `5-2/R1`): the CARD-COLOUR injection seam -- `inject_card_costs` and
+## `inject_card_effects` directly above, followed VERBATIM: runner-only, ONCE at match start,
+## CONTENT ONLY, no reload path, and the same two seam checks in the same order.
+##
+## IT IS THE FOURTH CONTENT CHANNEL AND IT GOES LAST, for the reason the other three are ordered:
+## the totality check below reads `_deck_contents`, so colours-before-deck would validate against an
+## EMPTY composition and pass vacuously. `IntentRecorder.SOUND_CONTENT_ORDER` pins deck -> costs ->
+## effects -> colours into the record and `replay_inject_content()` refuses any other order.
+##
+## THIS IS THE SOURCE AC 21's TELEGRAPH COLOUR READS FROM, and it is why `5-2` needs a seam at all
+## rather than a lookup: colour is authored on `CardData`, nothing under `src/state/` may name a
+## `CardData` or CardDatabase, and the telegraph fact is state the snapshot carries.
+##
+## TWO checks, both Invariant.check at the seam, the pair its two siblings use:
+##   1. NON-EMPTY: a data/cards/ that degraded to empty under an export remap becomes a LOUD failure
+##      at match start rather than a match in which every telegraph is silently RED.
+##   2. TOTAL OVER THE COMPOSITION: every id that can ever reach a hand has a colour entry, which is
+##      what makes an unknown id at cast time structurally unreachable here too.
+func inject_card_colors(colors: Dictionary[StringName, Enums.CardColor]) -> void:
+	Invariant.check(not colors.is_empty(),
+		"injected card colours must be non-empty (empty card set or a failed export remap?)")
+	for id in _deck_contents:
+		Invariant.check(colors.has(id),
+			"injected deck id %s has no card colour entry - inject_card_colors must be total over the composition" % id)
+	_card_colors = colors.duplicate()
+
+
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
 ## through this same call, never a second path. Plain recordable data (X5): attacker
 ## slot, target slot, the attacker's HeroState.attack_index at gather time, and (story
@@ -619,8 +722,10 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 			or is_projectile_index(attacker_index),
 		("contact attacker index must be >= -1 (a unit or the hero) or <= %d (a projectile), got %d")
 				% [PROJECTILE_INDEX_BASE, attacker_index])
-	Invariant.check(kind == CONTACT_STRIKE or kind == CONTACT_REACH_PROBE,
-		"contact kind must be CONTACT_STRIKE or CONTACT_REACH_PROBE, got %d" % kind)
+	Invariant.check(kind == CONTACT_STRIKE or kind == CONTACT_REACH_PROBE
+			or is_charge_reach_kind(kind),
+		"contact kind must be CONTACT_STRIKE, CONTACT_REACH_PROBE or a CHARGE-REACH kind, got %d"
+				% kind)
 	Invariant.check(target.size() == 2,
 		"contact target must be a [slot, index] pair, got %d element(s)" % target.size())
 	var target_slot := target[0] if target.size() == 2 else -1
@@ -633,6 +738,15 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		"self-contact fact is malformed in 1v1 (attacker == target == %d)" % attacker_slot)
 	Invariant.check(not target_to_attacker.is_zero_approx(),
 		"contact target_to_attacker direction must be non-zero (no spatial fact)")
+	# Story 5-2 (AC 17/AC 20): the CHARGE-REACH kinds LATCH instead of QUEUEING, and the split is
+	# seated here -- after every check above, so a charge-reach fact is validated exactly as
+	# strictly as a strike -- because the landing check reads at step 3(a) and this queue drains at
+	# step 4. See `_charge_reach`'s own comment. The latch is keyed by the ATTACKER slot: the fact
+	# describes THAT hero's relation to the enemy hero, and only that hero's chargeup reads it.
+	if is_charge_reach_kind(kind):
+		_charge_reach[attacker_slot] = kind
+		_charge_reach_dirs[attacker_slot] = target_to_attacker
+		return
 	_contact_queue.append({
 		"attacker": attacker_slot,
 		"attacker_index": attacker_index,
@@ -759,6 +873,21 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		HeroState.ActionState.BLOCKING:
 			if not intent.is_held(&"block"):
 				hero.set_action_state(HeroState.ActionState.IDLE)
+		# Story 5-2 (AC 20, `5-2/R3`): the CHARGEUP TIMER EXIT, and the landing check rides it. This
+		# is the seat AC 20 names, and the two halves are ONE arm on purpose: the exit and the
+		# landing must resolve on the SAME tick, and reading the reach fact here (a latch written
+		# before advance() -- `_charge_reach`) rather than through the step-4 contact queue is what
+		# makes that possible. State never pulls from the runner mid-advance(); the fact is already
+		# present or it is `REACH_UNKNOWN`.
+		#
+		# A DEAD HERO CANNOT REACH THIS ARM (AC 15), and the guard is the `match` itself rather than
+		# a test inside it: death writes `action_state = DEAD` at step 8, so a corpse's row is
+		# `dead`, this arm is not evaluated, and nothing returns it to IDLE. That is the strongest
+		# form of the F3 finding's answer -- the corpse-resurrecting branch is not written, not
+		# merely guarded -- and it is the same structural argument the `ROLLING` arm above relies on.
+		HeroState.ActionState.CHARGING:
+			if not player.charge_window.is_running:
+				_resolve_charge_landing(player, slot)
 	# (b) Input-driven edges from the current table row. A press with no entry in the row
 	# is dropped, never buffered (AC 5). Fixed INPUT_PRIORITY order = deterministic
 	# same-tick tiebreak; at most one transition fires per tick.
@@ -1875,8 +2004,13 @@ func _regen_stamina(player: PlayerState) -> void:
 	# (the D6 suppression) — a corpse runs no economy. This extends the existing suppression
 	# flag; it is a DIFFERENT function and step from the P2 movement gate (do not merge them).
 	var state := player.hero.action_state
+	# Story 5-2 (AC 14, `5-2/R4`): CHARGING JOINS THE SUPPRESSION LIST, beside BLOCKING and DEAD and
+	# for BLOCKING's exact reason: the chargeup costs TIME as well as stamina, and a hero whose pool
+	# refilled while rooted would pay less for mode (2) the longer the window is. One more term on
+	# the existing flag, never a second gate.
 	var suppressed := state == HeroState.ActionState.BLOCKING \
-			or state == HeroState.ActionState.DEAD
+			or state == HeroState.ActionState.DEAD \
+			or state == HeroState.ActionState.CHARGING
 	# Story 4-4 (AC 21, `4-4/R11`): THE STAMINA ACCELERATOR, applied HERE as a factor on the derived
 	# per-tick rate — the dev-pass mechanism choice the AC leaves open, and the reasoning is recorded
 	# in the story's Dev Agent Record rather than only here.
@@ -2097,6 +2231,12 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 	match intent.card_mode:
 		Enums.ModeKind.BASIC:
 			_resolve_basic_cast(player, intent.card_slot, slot)
+		# Story 5-2 (AC 1): mode (2) gets its own arm in this same `match`, and stops reaching the
+		# guarded stub below. TWO of the four modes remain unreachable -- DEFENSE is `5-5`'s and
+		# PITCH is E6's -- so the `_` arm keeps its `Invariant.check(false` verbatim and
+		# test_card_play.gd's source scan is NARROWED rather than deleted (AC 9).
+		Enums.ModeKind.UNBLOCKABLE:
+			_resolve_unblockable_cast(player, intent.card_slot, slot)
 		_:
 			Invariant.check(false,
 				"card mode %d is a guarded stub and is unreachable in E3 (only BASIC resolves)"
@@ -2227,6 +2367,197 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# what the HUD should render while a draw is in flight, not a gap to paper over.
 	player.notify_cards_changed()
 	_queue.push(card_cast_resolved.emit.bind(slot, played))
+
+
+## Story 5-2 (AC 2, `5-2/R11`): the S6 GATE's reason -- named, and named HERE rather than on
+## `CastEvaluator`, because `CastEvaluator` is not consulted on this path at all (AC 5, `5-2/R2`)
+## and a `REASON_*` constant living on an evaluator that never returns it would be a lie about where
+## the refusal comes from. The VOCABULARY is the evaluator's (`REASON_EMPTY_SLOT`-style: a lowercase
+## StringName naming the player-visible fact), which is the part AC 2 actually asks for.
+const REASON_UNBLOCKABLE_COMMITTED := &"unblockable_committed"
+
+
+## Story 5-2 (AC 2, `5-2/R11`): THE S6 GATE -- whether this hero may initiate mode (2) right now, as
+## a reason or `&""` for "may proceed". The empty-means-allowed convention is `CastEvaluator`'s, and
+## it is the only thing borrowed from it: `refusal_reason` is NOT called anywhere on this path.
+##
+## A SMALL SIBLING GUARD RATHER THAN AN INLINE `if`, which is the Open Question's second option: it
+## makes the gate directly testable against a state without building a cast, and it keeps the four
+## refused states readable as one list instead of a condition threaded through the spend sequence.
+##
+## NO `Invariant.check` ANYWHERE ON THIS PATH (`5-1a/R7`): this is a PLAYER-REACHABLE refusal, and
+## `Invariant.check` is `push_error` + `assert`, with `assert` stripped in an exported build -- so a
+## guard written that way would log in the editor and let the cast through in the shipped game,
+## which is the exact defect `5-1a` was raised to close on the lock seat.
+##
+## THE FOURTH STATE IS `CHARGING` AND AC 2 DOES NOT NAME IT. The AC names ROLLING, BLOCKING and
+## ATTACKING; a hero already mid-chargeup is added here on the AC's own stated reason ("only a
+## duration effect, rooting the hero, needs a reachability gate" -- AC 3), because without it a
+## second commit during a chargeup spends a second card and a second 20 stamina, restarts the
+## window, and overwrites the live telegraph `5-3` is about to render. Flagged in the dev pass
+## report as an addition beyond AC 2's named three rather than folded in silently.
+##
+## `BASIC` IS NOT GATED BY THIS AND MUST NOT BE (AC 3): `_resolve_basic_cast` never calls it. A
+## basic cast is an instant summon that interrupts nothing and deliberately runs parallel to melee.
+static func _unblockable_refusal_reason(hero: HeroState) -> StringName:
+	var state := hero.action_state
+	if state == HeroState.ActionState.ROLLING \
+			or state == HeroState.ActionState.BLOCKING \
+			or state == HeroState.ActionState.ATTACKING \
+			or state == HeroState.ActionState.CHARGING:
+		return REASON_UNBLOCKABLE_COMMITTED
+	return &""
+
+
+## Story 5-2 (AC 1/AC 2/AC 5/AC 6/AC 7): mode (2) resolution -- THE INITIATION HALF of the RGB read
+## exchange. `_resolve_basic_cast` directly above is the shape this follows; the differences are all
+## ruled, and each is named where it happens.
+##
+## THE GUARD ORDER IS S6 GATE -> EMPTY SLOT -> STAMINA, and it is a dev-pass choice worth stating.
+## AC 5 pins the empty-slot guard ahead of the COST check, which it is. The S6 gate goes ahead of
+## both because it answers a different question -- whether mode (2) may be initiated AT ALL on this
+## tick -- and a hero refused mid-roll should hear the reason that actually blocked it rather than
+## a report about the slot. Reversing the first two would satisfy AC 5's letter equally; the choice
+## is recorded here so it can be overturned in one line.
+##
+## NO MANA AND NO ORB EVALUATION RUNS (AC 5, `5-2/R2`): `CastEvaluator.refusal_reason` is not called
+## and cannot be reached from this function. Stamina affordability is the ONLY cost refusal, and it
+## goes through `StaminaPool.spend` directly -- the FOURTH spend seat, joining roll, attack and
+## deflect, and passing `stamina_regen_delay_ticks` exactly as the other three do so the spend
+## restarts the regen delay identically (`5-2/R4`).
+##
+## THE `unblockable` FEATURE FLAG IS CONSULTED, AND IT IS THE FIRST THING THIS FUNCTION ASKS
+## (`5-2/R13`, amending `5-2/R2`). The dev pass shipped this path flag-blind under `5-2/R2`'s
+## original wording and RAISED that as a conflict with project-context's feature-flag HARD RULE; the
+## ruling withdrew the flag half as an operator error. A gameplay layer that cannot be switched off
+## is the defect. What `5-2/R2` was protecting against was ROUTING THE CHECK THROUGH
+## `CastEvaluator`, and that protection is intact and unweakened: the REASON CONSTANT is borrowed,
+## `refusal_reason` is not called, and no mana or orb reading is taken anywhere on this path.
+##
+## THE FLAG PRECEDES THE S6 GATE, deliberately: "does this layer exist at all" is a different and
+## prior question to "may I use it right now". A hero mid-roll in a build with the unblockable layer
+## switched off should hear that the layer is closed, not that it is busy.
+##
+## `balance` AND `balance_ticks` ARE NON-NULL BELOW THE EMPTY-SLOT GUARD, by construction and for
+## `_resolve_basic_cast`'s exact reason: a hand can only be non-empty if the step-6 deal ran, and
+## the deal returns early while balance is null. This is why the guard order matters structurally as
+## well as legibly -- the stamina read sits behind it.
+##
+## FROZEN TICKS NEVER REACH THIS FUNCTION and a DEAD hero never reaches it either: both are
+## INHERITED from `_resolve_card_action` unchanged (step 1b returns before step 2, and the DEAD
+## guard sits above the dispatch), so a mode (2) commit on a frozen tick is dropped silently exactly
+## as a BASIC one is, for the same structural reason and with no new contract.
+func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -> void:
+	# Story 5-2 (`5-2/R13`): the LAYER GATE. `flags` is read INLINE (CONSTRAINT C), never cached,
+	# and it is the INJECTED resource -- `FeatureFlagsService` is not named anywhere under
+	# `src/state/` and is not named here. A NULL `flags` reads as CLOSED, which is the shipped
+	# reading of every layer gate in this layer (`CardEffectResolver._minions_open`,
+	# `TargetingService`, `CastEvaluator._flag_open`): a layer that cannot be VERIFIED open stays
+	# shut, which is the graceful-degradation direction rather than the permissive one.
+	#
+	# `CastEvaluator.REASON_FLAG_CLOSED` is borrowed as a CONSTANT and nothing more. Inventing a
+	# second token for "this layer is off" would name the same player-visible fact twice -- the
+	# `REASON_EMPTY_SLOT` reuse in `_resolve_basic_cast`, applied again for the same reason.
+	if flags == null or not flags.unblockable:
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_FLAG_CLOSED)
+		return
+	var refusal := _unblockable_refusal_reason(player.hero)
+	if refusal != &"":
+		player.hero.reject_action(&"card_cast", refusal)
+		return
+	if player.hand.is_slot_empty(hand_slot):
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
+		return
+	# The 1-4 FALLTHROUGH shape, not deflect's degrade: there is no degraded unblockable to fall
+	# back to, so an unaffordable commit refuses and NOTHING is spent. Nothing above this line
+	# mutated state, so a refused cast leaves the hand, the discard and the debt untouched.
+	# `&"insufficient_stamina"` is the shipped vocabulary verbatim -- the same reason the roll and
+	# attack seats queue, because it is the same fact about the same pool.
+	if not player.stamina.spend(balance.unblockable_stamina_cost,
+			balance_ticks.stamina_regen_delay_ticks):
+		player.hero.reject_action(&"card_cast", &"insufficient_stamina")
+		return
+	# AC 6: the card leaves the hand and enters the discard, the replacement is owed on the VACATED
+	# slot, and the observation channel announces -- `_resolve_basic_cast`'s ordering mirrored
+	# exactly, all inside this one tick.
+	var played := player.hand.remove_at(hand_slot)
+	player.discard.add(played)
+	# AC 21 / Ruling 2: COLOUR SELECTS THE TELEGRAPH, NOT THE DAMAGE. The colour is COPIED off the
+	# injected map into a plain int here and the map itself is never hashed; damage is one authored
+	# value for all three colours in this story (`5-6` ships the ladder).
+	#
+	# A MISSING ENTRY DEGRADES TO "NO COLOUR" rather than to RED, which is the graceful-degradation
+	# direction every authored-data miss in this project takes (`CardEffectResolver`'s
+	# missing-entry default, `BalanceConfig.kind_index_of`'s refusal to substitute). It is
+	# UNREACHABLE in live play -- `inject_card_colors`'s totality check closes it at the seam -- and
+	# reachable only in a fixture that injects no colours, where inventing RED would be a lie the
+	# snapshot would then carry.
+	player.charge_color = int(_card_colors[played]) if _card_colors.has(played) \
+			else PlayerState.NO_TELEGRAPH_COLOR
+	# AC 10: the chargeup window, read INLINE from the tick domain (CONSTRAINT C) and never from a
+	# seconds float. AC 7 (`5-2/R7`): entry is a DIRECT `set_action_state` call AT THE CAST SEAT --
+	# `HeroState.TRANSITION_TABLE` gains NO row, because CHARGING has no `&"attack"`-style inbound
+	# PRESS to map from. The card layer drives this edge; the table's input-priority rows do not.
+	# That is exactly why test_action_state.gd's zero-inbound-CHARGING assertion stays true and is
+	# re-proven UNEDITED (AC 8).
+	player.charge_window.start(balance_ticks.unblockable_chargeup_ticks)
+	player.hero.set_action_state(HeroState.ActionState.CHARGING)
+	player.pending_draw_owed.append(hand_slot)
+	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+	player.notify_cards_changed()
+	_queue.push(card_cast_resolved.emit.bind(slot, played))
+
+
+## Story 5-2 (AC 15-20): THE LANDING, resolved at step 3(a) on the tick the chargeup window expires.
+## Reached ONLY from the `CHARGING` arm of `_resolve_actions`, which a DEAD hero cannot enter.
+##
+## THE REACH CHECK IS READ, NOT COMPUTED. `_charge_reach[slot]` is the runner's every-tick answer
+## (AC 17) and this layer never sees a distance, a position or the authored `unblockable_reach` --
+## `4-3/R2`'s position ownership intact, `F1` untouched. `REACH_UNKNOWN` lands NOTHING and is NOT
+## the same value as OUTSIDE: absence means no measurement was taken, which is a different fact from
+## a measurement that said "too far", and the distinction is what keeps a missing push from silently
+## deciding a hit.
+##
+## THE CARD AND THE STAMINA STAY SPENT ON EVERY OUTCOME (AC 19). Nothing below is conditional on the
+## hit: AC 6 already ran at the cast, an entire chargeup ago, and mode (2) is fully committal
+## (Ruling 4). A miss is a miss -- no damage, no orb (`5-4`), no HP change on either side.
+##
+## AN ENEMY THAT DIED FIRST IS NOT HIT (AC 16). Like its step-3/4/5/6 siblings this branch is
+## unreachable in natural play -- DEAD and `_round_over` are set together, and step 1b returns
+## before step 2 -- and is written anyway, in exactly that defense-in-depth family, proven
+## non-vacuous by the same forced-DEAD idiom (`set_action_state(DEAD)` with `_round_over` left
+## FALSE).
+##
+## NO BLOCK, NO DEFLECT, NO ARC. The attack is UNBLOCKABLE by name: `block_damage_multiplier`,
+## `is_deflect_window_open()` and `_is_facing` are all deliberately absent from this function. The
+## colour-matched answer is `5-5`'s and the three-tier outcome ladder is `5-6`'s (Non-Goals).
+##
+## NO MANA. `_generate_mana` awards per entry in the list `_resolve_contacts` returns, and a landing
+## resolved here never enters that list -- the `4-3b/R4` gate applied to a second non-swing source,
+## by the same mechanism (staying out of the list) rather than by a second check inside the faucet.
+##
+## `hit_landed` IS EMITTED, on the shipped payload unchanged: the enemy hero really is hurt, so the
+## telegraph flash and sting on that hero are correct -- `4-3b/R5`'s reasoning for the unit-attacker
+## case, which turns on the TARGET being a damaged hero rather than on who swung.
+##
+## `balance` IS NON-NULL HERE by construction: a chargeup can only have been started by a cast that
+## already read `balance.unblockable_stamina_cost`.
+func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
+	var opposing_slot := 1 - slot
+	var target := p2 if slot == 0 else p1
+	if _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE and target.hero.is_alive():
+		# AC 18: the `attack_damage_percent_of_max_hp` expression verbatim, against the TARGET's own
+		# maximum, under the name that says which attack it belongs to. One value for all three
+		# colours in this story (Ruling 2).
+		var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 \
+				* target.hero.get_max_hp()
+		target.hero.take_damage(damage)
+		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
+	# AC 20: the exit is UNCONDITIONAL on hit or miss, and it is the last thing that happens so the
+	# damage above is applied while the hero is still, conceptually, mid-attack. The telegraph key
+	# stops being reported the moment this line runs, because `PlayerState.to_snapshot()` derives it
+	# from `CHARGING` rather than from a flag something has to remember to clear.
+	player.hero.set_action_state(HeroState.ActionState.IDLE)
 
 
 ## Step-6 delivery of ONE owed replacement (story 3-5b, AC 3/AC 5/AC 7/AC 10). Seated after the
@@ -2512,6 +2843,18 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	if player.hero.action_state == HeroState.ActionState.ROLLING:
 		player.hero.velocity = player.hero.roll_direction \
 				* (balance.roll_distance / balance.roll_duration_seconds)
+	elif player.hero.action_state == HeroState.ActionState.CHARGING:
+		# Story 5-2 (AC 11, `5-2/R5`): HARD-ROOTED. A literal zero, not a multiplier read from
+		# balance -- `5-2/R5` refuses a `charging_move_speed_multiplier` field BY NAME, because a
+		# non-zero multiplier is not rooted and authoring one would make "rooted" a tuning value a
+		# retune could quietly switch off. The DEAD branch at the top of this function writes zero
+		# the same way and for the same downstream reason: `HeroActor.drive()` reads this field into
+		# `move_and_slide()` every physics frame, so a SKIPPED write would leave the last live
+		# velocity in place and the rooted hero would glide through its own chargeup.
+		#
+		# THE LUNGE AND THE PHASE MULTIPLIER ARE BOTH BELOW THIS BRANCH and neither applies: they
+		# belong to ATTACKING, and mode (2) is not a swing.
+		player.hero.velocity = Vector3.ZERO
 	else:
 		# Story 3-0b (AC6): the attack LUNGE, ADDED to the input-driven velocity rather than
 		# replacing it — the phase multiplier keeps scaling what the player steers, and the
@@ -2546,8 +2889,26 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	#
 	# `world_dir` STILL FEEDS VELOCITY ABOVE and is untouched by this: camera-relative movement
 	# and target-relative facing are two seams now, split exactly here.
+	# Story 5-2 (AC 12, Ruling 3/Ruling 8): AUTO-AIM OVERRIDES THE LOCK WHILE CHARGING, and it must,
+	# because the two answer different questions. `_lock_directions[slot]` points at whatever this
+	# slot has LOCKED, which since 4-6 can legitimately be a MINION; mode (2) targets the enemy HERO
+	# and nothing else, so a charging hero facing its locked minion would telegraph at one thing and
+	# land on another. The charge-reach fact is pushed hero-to-hero by construction, so reusing its
+	# direction makes "aims at the enemy hero specifically" structural rather than filtered.
+	#
+	# THE SIGN: every contact fact's `dir` runs TARGET -> ATTACKER (the 1-8 convention), and facing
+	# runs hero -> target, so this is its negation. The fact is already a unit vector.
+	#
+	# AN ABSENT FACT LEAVES FACING ALONE, exactly as an absent lock direction does one line below --
+	# the same "no new information, keep the last heading" rule, which is what the entry tick needs:
+	# the runner gathers BEFORE advance(), so the tick a cast enters CHARGING carries no fact yet and
+	# the hero holds the heading it had when it committed.
 	var lock_dir := _lock_directions[slot]
-	if not lock_dir.is_zero_approx():
+	if player.hero.action_state == HeroState.ActionState.CHARGING:
+		var aim := _charge_reach_dirs[slot]
+		if not aim.is_zero_approx():
+			player.hero.facing = -aim
+	elif not lock_dir.is_zero_approx():
 		player.hero.facing = lock_dir
 
 

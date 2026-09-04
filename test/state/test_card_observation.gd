@@ -284,6 +284,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
 		"projectile_source", "projectile_targets", "projectile_travelled",
 		"stamina",
+		# Story 5-2 (AC 21, `5-2/R9`): the ACTIVE TELEGRAPH -- `[colour, remaining_ticks]` -- in
+		# sorted position, which is HERE: `telegraph` follows `stamina` and precedes every `unit_*`.
+		# Counts and indices only, exactly like every sibling: a colour is an enum ORDINAL and never
+		# a name, and the remaining time is an integer TICK count.
+		"telegraph",
 		# Story 4-4 (AC 1/AC 10): two more — `unit_attack_cooldown` and `unit_kind`.
 		"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 		"unit_attack_ticks",
@@ -295,8 +300,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 28,
-		"the per-player snapshot key set is TWENTY-EIGHT keys as of story 4-6, which adds ONE: "
+	assert_eq(keys.size(), 29,
+		"the per-player snapshot key set is TWENTY-NINE keys as of story 5-2, which adds ONE: "
+		+ "`telegraph`, the active unblockable chargeup as `[colour, remaining_ticks]` (AC 21), "
+		+ "hashed because it crosses ticks and decides when the landing check runs. It was "
+		+ "TWENTY-EIGHT as of 4-6, which added ONE: "
 		+ "`lock_target`, the `[slot, index]` address this player's hero is locked onto (AC 2), "
 		+ "hashed because it crosses ticks and decides where the hero faces, which decides the "
 		+ "`_is_facing` block arc. It was TWENTY-SEVEN as of 4-4 (eighteen before it). "

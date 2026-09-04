@@ -116,6 +116,9 @@ func _without_contacts(src: IntentRecorder) -> IntentRecorder:
 	# CONTACT channel "and nothing else", so a channel silently dropped here would make the
 	# resulting record malformed rather than merely contact-less.
 	out.capture_inject_card_effects(src.replay_card_effects())
+	# Story 5-2 (`5-2/R1`): and the FOURTH, for the identical reason -- this helper strips the
+	# CONTACT channel "and nothing else".
+	out.capture_inject_card_colors(src.replay_card_colors())
 	for t in range(1, src.tick_count() + 1):
 		for push: Array in src.camera_pushes_at(t):
 			out.capture_set_camera_basis(int(push[0]), push[1] as Basis)

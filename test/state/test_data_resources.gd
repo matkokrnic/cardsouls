@@ -77,6 +77,17 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	"stun_seconds",
+	# Story 5-2 (AC 6/AC 10/AC 17/AC 18): the FOUR unblockable-initiation tunables. Listed here
+	# because reflection half (a) below fails otherwise -- which is the guard working: a new
+	# BalanceConfig tunable that nothing audits ships unaudited. Only ONE of the four carries the
+	# `_seconds` suffix, so half (b) demands a stem-matched `unblockable_chargeup_ticks` on
+	# `BalanceTicks` and leaves the other three alone (they have no tick-domain counterpart by
+	# design -- a cost, a distance and a percentage are not durations). All four also carry a
+	# BESPOKE authored > 0.0 bound in test_balance_authoring.gd on top of the `>= 0.0` loop below,
+	# for `draw_replacement_delay_seconds`'s reason: `field in config` and `>= 0.0` BOTH pass on the
+	# 0.0 script default, which would ship the whole story invisible in the build.
+	"unblockable_stamina_cost", "unblockable_chargeup_seconds", "unblockable_reach",
+	"unblockable_damage_percent_of_max_hp",
 ]
 
 

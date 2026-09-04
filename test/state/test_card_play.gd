@@ -232,18 +232,37 @@ func test_cast_on_a_frozen_tick_is_dropped_silently() -> void:
 
 # --- AC 2: the guarded stubs -----------------------------------------------------------------
 
+## Story 5-2 (AC 9, `5-2/R8`): the modes that have a REAL resolution arm in
+## `MatchState._resolve_card_action`, and therefore may legally be named in `src/`. Everything else
+## is a guarded stub and the scan below fails on it.
+const REACHABLE_MODES: Array[String] = ["BASIC", "UNBLOCKABLE"]
+
+
 ## AC 2's negative-path test: the modes beyond Basic are UNREACHABLE in E3.
 ##
 ## Proven by SOURCE SCAN rather than by calling the stub, deliberately: the stub is an
 ## `Invariant.check(false, ...)`, which routes through assert() and PRINTS AND CONTINUES at exit 0
 ## (3-0c/R15) rather than aborting — so run_all.sh's grep gate, not a process crash, is what would
 ## turn calling the stub into a suite failure, and for the wrong reason (a deliberate trigger, not
-## a genuine defect). The reachability question is "can anything in src/ ever put a
-## non-BASIC value on an intent" — and that is exactly what this scans for. Every
-## `Enums.ModeKind.<X>` reference in the whole of src/ must name BASIC.
+## a genuine defect). The reachability question is "can anything in src/ ever put an
+## UNREACHABLE mode value on an intent" — and that is exactly what this scans for.
 ##
-## MUTATION: write `Enums.ModeKind.PITCH` anywhere under src/ and this FAILS.
-func test_non_basic_modes_are_unreachable_in_e3() -> void:
+## NARROWED BY STORY 5-2 (AC 9, `5-2/R8`) -- THE ONE DELIBERATE PIN EDIT OF THAT STORY, and it is
+## FORCED rather than chosen: `5-2` gives `UNBLOCKABLE` a real resolution arm in
+## `MatchState._resolve_card_action`, which trips this scan the instant it lands. The guard is
+## NARROWED, never deleted and never weakened past the one mode that shipped: `DEFENSE` (mode 3, a
+## `5-5` story) and `PITCH` (mode 4, E6) still FAIL here, and the test's job is unchanged -- it
+## still answers "can anything in src/ put an UNREACHABLE mode on an intent", against a set of
+## unreachable modes that is now two instead of three.
+##
+## DO NOT CONFLATE THIS WITH `5-2`'s OTHER PIN (`5-2/R8` says so in as many words). Two different
+## tests were in play for two different reasons: `test_action_state.gd:82-95`'s
+## zero-inbound-CHARGING assertion was EXPECTED to move and does NOT (entry is a direct
+## `set_action_state` at the cast seat, so `TRANSITION_TABLE` gains no row -- AC 7/AC 8), while
+## THIS one was not named at authoring time and must.
+##
+## MUTATION: write `Enums.ModeKind.PITCH` (or `.DEFENSE`) anywhere under src/ and this FAILS.
+func test_only_shipped_modes_are_reachable() -> void:
 	var re := RegEx.create_from_string("Enums\\.ModeKind\\.([A-Z_]+)")
 	var offenders: Array[String] = []
 	var scanned := 0
@@ -255,14 +274,26 @@ func test_non_basic_modes_are_unreachable_in_e3() -> void:
 			n += 1
 			for m in re.search_all(line):
 				references += 1
-				if m.get_string(1) != "BASIC":
+				if not REACHABLE_MODES.has(m.get_string(1)):
 					offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
 	assert_true(scanned > 0, "the scan must actually visit files")
 	assert_true(references > 0,
 		"src/ must REFERENCE ModeKind somewhere — otherwise this guard is vacuous")
 	assert_eq(offenders.size(), 0,
-		"a non-BASIC mode is authored in src/ (E5/E6 modes are guarded stubs): %s"
-				% ", ".join(offenders))
+		"an UNREACHABLE mode is authored in src/ (DEFENSE is `5-5`'s, PITCH is E6's, and both are "
+		+ "still guarded stubs): %s" % ", ".join(offenders))
+
+
+## The other half of the narrowing, asserted rather than left implicit: the permitted set is
+## EXACTLY the two modes that have shipped a resolution arm. A story that widened this list without
+## shipping the arm would be caught by `test_the_mode_dispatch_carries_a_guard` below; a story that
+## shipped an arm without widening it is caught by the scan above. This assertion is what keeps the
+## list itself from quietly growing to four and turning the scan vacuous.
+func test_the_reachable_mode_set_is_exactly_basic_and_unblockable() -> void:
+	assert_eq(REACHABLE_MODES, ["BASIC", "UNBLOCKABLE"] as Array[String],
+		"exactly TWO of the four modes resolve today: BASIC (3-5a) and UNBLOCKABLE (5-2). "
+		+ "Widening this list is how a mode becomes reachable, and it may only be widened by the "
+		+ "story that ships that mode's resolution arm")
 
 
 ## STORY 4-0 (AC 7, second part): the ORDER of the two lines is PINNED, by content. The hole is

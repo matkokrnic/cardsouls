@@ -46,7 +46,13 @@ const CHANNEL_COSTS := &"costs"
 ## SOUND_CONTENT_ORDER is what a LIVE match produces; replay_inject_content() refuses anything
 ## else rather than injecting in an order whose checks would mean nothing.
 const CHANNEL_EFFECTS := &"effects"
-const SOUND_CONTENT_ORDER: Array[StringName] = [CHANNEL_DECK, CHANNEL_COSTS, CHANNEL_EFFECTS]
+## Story 5-2 (`5-2/R1`): the FOURTH content channel, and it sits at the END of the ordered contract
+## for the reason both of its predecessors do -- MatchState.inject_card_colors()'s totality check
+## reads _deck_contents too, so any order that puts colours before the composition validates against
+## an EMPTY one and passes vacuously.
+const CHANNEL_COLORS := &"colors"
+const SOUND_CONTENT_ORDER: Array[StringName] = [CHANNEL_DECK, CHANNEL_COSTS, CHANNEL_EFFECTS,
+		CHANNEL_COLORS]
 
 ## The seed channel (AC 3) — captured ONCE, at match start, from the SAME value that reaches
 ## MatchParams. There is deliberately no second, independently-read seed anywhere: MatchState
@@ -76,6 +82,12 @@ var _cost_values: Dictionary = {}   # card id -> CardCastCondition property valu
 ## would let a later data/cards/ edit -- or the resource cache handing back the same instance --
 ## silently re-write what a recording summons.
 var _effect_values: Dictionary = {}
+## Story 5-2 (`5-2/R1`): card id -> `Enums.CardColor` as a plain INT. UNLIKE its three siblings this
+## channel stores no property dictionary and rebuilds no Resource, because a colour is not one: it
+## is a single enum value read off `CardData` by the runner, and an int survives the round trip
+## whole. The by-value discipline is therefore satisfied trivially rather than by machinery -- there
+## is no live handle a later data/cards/ edit could re-colour a recording through.
+var _color_values: Dictionary = {}
 var _content_order: Array[StringName] = []
 
 ## The per-tick, per-slot camera-basis channel (AC 8, `3-0c/R2`). Keyed by the tick the pushed
@@ -182,6 +194,29 @@ func capture_inject_card_effects(effects: Dictionary[StringName, CardEffect]) ->
 		values[id] = _resource_values(effects[id])
 	_effect_values = values
 	_content_order.append(CHANNEL_EFFECTS)
+
+
+## Story 5-2 (AC 4, `5-2/R1`): the CARD-COLOUR channel — MatchState.inject_card_colors(). Match
+## start, before the first tick, the capture_inject_card_effects precedent directly above followed
+## line for line: same non-empty guard, same content-order append, same by-value storage.
+##
+## `RecordFile.FORMAT_VERSION` BUMPS TO 7 for this channel. A v6 record carries no colours at all,
+## and rebuilding one by assuming a colour would replay every telegraph as RED -- a value that
+## reaches the HASHED per-player `telegraph` key (`player_state.gd`), so the replay would diverge
+## from the match it claims to reproduce on the first mode (2) cast. `record_file` refuses a
+## mismatched version outright with a reason and carries no migration path, and that refusal IS the
+## design (`4-1/R1`, `4-3a/R10`, `4-3b/R21`, `4-4/R15`, `4-6`).
+##
+## THE CONTACT-KIND WIDENING THAT SHIPS WITH IT FORCES NOTHING. The two new charge-reach kinds ride
+## the EXISTING seven-element contact row as new VALUES of an element that is already there, so the
+## row shape, `capture_push_contact` and `REQUIRED_KEYS`'s contacts entry are all untouched. The
+## bump is this channel's alone -- measured, not inherited.
+func capture_inject_card_colors(colors: Dictionary[StringName, Enums.CardColor]) -> void:
+	Invariant.check(not colors.is_empty(),
+		"a captured card-colour map must be non-empty (the inject_card_colors precedent)")
+	for id: StringName in colors:
+		_color_values[id] = int(colors[id])
+	_content_order.append(CHANNEL_COLORS)
 
 
 ## The CAMERA-BASIS channel — MatchState.set_camera_basis(). Per tick, per slot. Today the
@@ -295,6 +330,11 @@ func missing_match_start_channels() -> Array[String]:
 	# cast-cost clause directly above, applied to the third content channel.
 	if _effect_values.is_empty():
 		missing.append("card effects")
+	# Story 5-2 (`5-2/R1`): a v7 record missing the colours channel is MALFORMED -- the card-effects
+	# clause directly above, applied to the fourth content channel, for the reason the version bump
+	# states: without it a replay would silently telegraph every unblockable in the wrong colour.
+	if _color_values.is_empty():
+		missing.append("card colours")
 	return missing
 
 
@@ -394,6 +434,16 @@ func replay_card_effects() -> Dictionary[StringName, CardEffect]:
 ## the cost seam's totality check against an empty composition and pass vacuously. Returning
 ## rather than asserting is deliberate: an unsound ORDER is a property of the record, which a
 ## caller can inspect and report, unlike the malformed VALUES the seams themselves reject.
+## The recorded card colours, as `Enums.CardColor` values (story 5-2, AC 4) -- so a card RECOLOURED
+## in data/cards/ after the recording cannot change what the replay telegraphs, exactly as
+## replay_card_costs() keeps a re-priced card from changing what the replay pays.
+func replay_card_colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id: StringName in _color_values:
+		out[id] = int(_color_values[id]) as Enums.CardColor
+	return out
+
+
 func replay_inject_content(ms: MatchState) -> bool:
 	if _content_order != SOUND_CONTENT_ORDER:
 		return false
@@ -405,6 +455,8 @@ func replay_inject_content(ms: MatchState) -> bool:
 				ms.inject_card_costs(replay_card_costs())
 			CHANNEL_EFFECTS:
 				ms.inject_card_effects(replay_card_effects())
+			CHANNEL_COLORS:
+				ms.inject_card_colors(replay_card_colors())
 	return true
 
 

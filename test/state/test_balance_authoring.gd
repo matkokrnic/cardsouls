@@ -86,6 +86,36 @@ func test_authored_stamina_economy_values_are_positive() -> void:
 		"roll_stamina_cost must be authored > 0 (a free roll unguards the 1-4 economy)")
 	assert_true(config.attack_stamina_cost > 0.0,
 		"attack_stamina_cost must be authored > 0 (a free attack is the mashing DP/R2 priced — roll precedent)")
+	assert_true(config.unblockable_stamina_cost > 0.0,
+		"unblockable_stamina_cost must be authored > 0 (a free unblockable is the roll precedent "
+		+ "again, on the FOURTH spend seat — story 5-2, `5-2/R4`)")
+
+
+## Story 5-2 (AC 6/AC 10/AC 17/AC 18): the other THREE unblockable numbers, audited in the
+## defect-by-construction class rather than exempted, because a 0.0 in any of them ships the story
+## INVISIBLE rather than merely untuned — which is exactly the class `draw_replacement_delay_seconds`
+## joined at 3-5b and for the same stated reason.
+##   * chargeup 0.0 s derives 0 ticks, `TimingWindow.start(0)` never runs, and the attack lands on
+##     the tick it was cast — no telegraph window exists at all, so `5-3` has nothing to render and
+##     `5-5`/`5-6` have no window to answer against. The whole read exchange collapses.
+##   * reach 0.0 makes every landing check answer OUTSIDE (planar distance is never <= 0 between two
+##     bodies that cannot occupy one point), so the attack can never land and the boundary
+##     `E5-P/R4` calls "the escape" is the whole board.
+##   * damage 0.0 lands a hit that takes nothing off, which is a miss wearing a hit's clothes.
+func test_authored_unblockable_values_are_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.unblockable_chargeup_seconds > 0.0,
+		"unblockable_chargeup_seconds must be authored > 0 (a zero chargeup lands on the cast tick "
+		+ "and there is no telegraph window at all)")
+	assert_true(config.unblockable_reach > 0.0,
+		"unblockable_reach must be authored > 0 (a zero reach can never be satisfied — the attack "
+		+ "could never land)")
+	assert_true(config.unblockable_damage_percent_of_max_hp > 0.0,
+		"unblockable_damage_percent_of_max_hp must be authored > 0 (a landed hit that takes "
+		+ "nothing off is a miss wearing a hit's clothes)")
 
 
 ## ---- Melee-hit economy pair (story 1-5, B4) — exemption reasoning in the file header. --

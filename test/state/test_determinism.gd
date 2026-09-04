@@ -677,7 +677,61 @@ extends TestCase
 ##     They are proven in test_unit_attack_rhythm.gd, test_contact_resolution.gd,
 ##     test_unit_damage_and_death.gd and test/integration/test_unit_attack_live.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "aa3566d7077c07cc90630d155924b620cf5c54e14e6d0f3809d154d31ded7e4f"
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 5-2 (unblockable initiation), aa3566d7 -> dc2c9ffa, ONE CAUSE MEASURED IN
+## BOTH DIRECTIONS. The story PREDICTED the golden would move, with the pinned per-player key set
+## growing by one key per new fact actually added (`5-2/R9`, its AC 22), and predicted that a move
+## for any OTHER reason would be a FINDING rather than a pass. Measured: it moved for exactly that
+## reason and no other.
+##
+##   THE ONE CAUSE: the SNAPSHOT KEY SET, TWENTY-EIGHT -> TWENTY-NINE. `PlayerState.to_snapshot()`
+##     gains ONE key, `telegraph`, carrying the active mode (2) chargeup as
+##     `[colour, remaining_ticks]`. AC 22 left the count open between 29 (colour and remaining time
+##     fused into one key) and 30 (two separate keys); MEASURED AS 29 -- they are fused, on the
+##     `lock_target` precedent, because a telegraph is ONE fact in two halves and splitting it would
+##     let the halves disagree about whether a telegraph is running at all. Pinned by
+##     test_card_observation.gd and test_draw_delay_and_reshuffle.gd.
+##
+##   ITS PRESENCE IS THE MOVER; ITS VALUE NEVER LEAVES THE RESTING ONE. The story's Dev Notes asked
+##     which of two shapes actually held -- a fixture that CASTS mode (2) (in which case the value
+##     moves too) or one that does not (the `5-1a` shape: new code the fixture never reaches, with
+##     the KEY still appearing). MEASURED: THE SECOND. This fixture's recorded sequence contains no
+##     mode (2) cast, so `charge_color` is never written, no hero ever enters CHARGING, and the key
+##     hashes at `[-1, 0]` -- `NO_TELEGRAPH_COLOR` and a stopped window -- on every tick of the run.
+##     The 3-5a `discard_size` pattern exactly: a new key moving the hash by itself, at its resting
+##     value, before any of the behaviour it describes has run.
+##
+##   THE REVERSE DIRECTION, which is what makes the single cause attributable: with the `telegraph`
+##     key held OFF `PlayerState.to_snapshot()` and EVERYTHING ELSE this story ships left in place
+##     -- the UNBLOCKABLE dispatch arm and its S6 gate, the fourth injection seam, the two new
+##     contact kinds and the latch they write, the CHARGING movement root and auto-aim, the regen
+##     suppression, the chargeup window ticking at step 2, and the step-3(a) landing arm -- this
+##     file hashed aa3566d7 EXACTLY: the pre-story golden, unchanged. Measured at the dev pass by
+##     deleting those three lines, running the harness, and restoring from a SHA256-verified
+##     out-of-repo copy (c47154fd...).
+##
+##   NON-MOVER 1, THE TWO NEW CONTACT KINDS (AC 17), MEASURED not asserted: it falls out of the
+##     reverse-direction run above. The fixture pushes no charge-reach fact, so both latch arrays
+##     stay at `REACH_UNKNOWN` / `Vector2.ZERO` -- and they are UNHASHED anyway, classified with
+##     `_camera_bases` and `_lock_directions` as pushed per-tick spatial facts
+##     (test_replay_identity.gd's exclusion (c), whose MEMBER count stays at THREE).
+##
+##   NON-MOVER 2, THE FOURTH INJECTION SEAM (AC 4): `_card_colors` is injected CONTENT, classified
+##     alongside `_card_costs` and `_card_effects` and never hashed -- the same reason its two
+##     siblings are non-movers. The colour that CAN reach the hash is the single int copied onto
+##     `charge_color` at a cast, and this fixture never casts mode (2).
+##
+##   NON-MOVER 3, THE `FORMAT_VERSION` BUMP 6 -> 7: a record-file concern with no path into
+##     `MatchState.to_snapshot()` at all. Recorded here only because the story asked for the two
+##     questions (AC 22 and AC 23) to be answered separately rather than conflated.
+##
+##   CAUSES UNREACHABLE HERE, named so nobody reads a green golden as coverage of them: the entire
+##     mode (2) chain -- dispatch, the S6 gate, the spend, CHARGING entry, rooting, auto-aim, regen
+##     suppression, the death branches and the landing check -- because the fixture never casts
+##     mode (2) and there is no runner here to push a reach fact. They are proven in
+##     test_unblockable_initiation.gd.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "dc2c9ffa11387e99f47150b90a8449a101104f5a555c7254c14cc8d0d339019b"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
