@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-09-04
+last_updated: 2026-09-05
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -101,13 +101,14 @@ development_status:
   5-1-accelerator-stacking: done  # Tier A
   5-1a-intent-hardening: done  # Tier A
   5-2-unblockable-initiation: done  # Tier A
-  5-3-telegraph-presentation: backlog  # Tier B
+  5-3-telegraph-presentation: ready-for-dev  # Tier B
   5-4-orbs: backlog  # Tier A
   5-5-unblockable-defense: backlog  # Tier A
   5-6-three-tier-ladder: backlog  # Tier A
   5-7-pad-modes-2-3: backlog  # Tier B
 
 story_notes:
+  5-3-telegraph-presentation: "ready-for-dev 2026-09-05, baseline 0c56196, review fixes applied (S5 both-modes success cue + measured-already-live rejection cue, AC 21 dispatch pin, keyboard alternate-confirm resolution)."
   5-2-unblockable-initiation: "done 2026-09-04, Tier A ritual complete (mode 2 dispatch/CHARGING/landing per 5-2/R1-R15, golden aa3566d7 -> dc2c9ffa/29-key set (telegraph), FORMAT_VERSION 6 -> 7 (fourth content channel), review PASS 0 HIGH/0 MED/2 LOW, regression smoke 5/5 PASS per 5-2/R15/R16; R17 open, forcing point 5-5)."
   5-1a-intent-hardening: "done 2026-09-04, Tier A ritual complete (retarget address gated live and at record load per 5-1a/R1-R17, golden aa3566d7/28-key set unmoved, review PASS-with-findings 0 HIGH/0 MED/2 LOW, live smoke 5/5 PASS)."
   5-1-accelerator-stacking: "done 2026-09-04, Tier A ritual complete (linear stacking both seats per 5-1/R1, M2/M7 discharged, golden unmoved/no re-baseline, live smoke 6/6 PASS)."
