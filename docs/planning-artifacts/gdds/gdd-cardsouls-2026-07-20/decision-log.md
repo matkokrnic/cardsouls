@@ -8741,3 +8741,70 @@ with no stated interaction. It does not matter today. It matters at `5-5`, where
 defensive answer to an incoming unblockable: a block that silently drops every time a card is
 played is a gameplay consequence someone has to WANT. Recorded in the S6 shape -- named now, ruled
 by the story that is forced to care.
+
+## Session 2026-09-05 -- 5-3 close-out (Tier B)
+
+Dev pass and review fix pass (4 fixes) both landed before this session; live smoke ran, 10/10
+verdicts recorded, all findings non-blocking. Rulings-only, close-out.
+
+`5-3/R1` -- S5 FULLY DISCHARGED. The success-cue half is wired in both modes this story
+(`card_cast_resolved` -> `on_card_cast_resolved`). The rejection half was already live before this
+story through the pre-existing `action_rejected` -> `TelegraphController` wiring (`1-10`, reused by
+`3-5a`) -- zero new code, no seam widened.
+
+`5-3/R2` -- the three charge clip speeds are named MEASURED native lengths divided by an authored
+chargeup constant, the coupling guarded by `test_balance_authoring.gd` (the `4-3d/R9` branch --
+an inline `BalanceConfigService` read was declined because a replay would then present the
+authored duration instead of the one it recorded). Accepted consequence: retuning
+`unblockable_chargeup_seconds` is no longer a pure one-line `.tres` edit; the suite goes RED and
+names the re-derivation needed.
+
+`5-3/R3` -- the debug reset now clears CHARGING, stops the charge window, and rests the colour --
+the second named exception to the reset contract (`4-1/R5` is the first). Measured pre-fix defect:
+a chargeup crossed the round boundary and landed in the next round (100.0 -> 90.0 hp). This
+story's `src/state` Non-Goal was overridden by operator ruling for this one correction; golden
+measured UNMOVED both directions, not re-baselined. The frozen round-over telegraph (a survivor
+mid-chargeup at round end) is ruled COSMETIC, not fixed, and ends at the reset.
+
+`5-3/R4` -- the `card_cast_resolved` direct connect is the FIRST presentation consumer wired
+straight to a `MatchState` signal outside the eight-seam family. It STANDS (read-only, per-slot
+guarded, dependency direction unchanged) and enters the ARCH AMENDMENT QUEUE as a new member:
+"MatchState-signal direct-connect as a connection shape -- document or forbid before a third
+instance exists."
+
+`5-3/R5` -- TIER STAYS B despite the state touch. The touch was a corrective review finding, not
+planned scope; golden unmoved; the proof burden actually carried (two-model review, mutation
+proofs both directions, own regression guard) already exceeded the Tier A floor. A story that
+PLANS to touch state gets Tier A up front -- this ruling is not a precedent for state edits riding
+Tier B by default.
+
+`5-3/R6` (smoke findings, all OUT of this story, owners named):
+(a) hold-the-button chargeup -- the attacker holds the input for the window, giving the defender a
+readable beat that something big is coming; Sekiro-parity is the stated design target, forcing
+point `5-7` (the input half; the state semantics of hold-vs-commit are decided there or in a
+sibling it names).
+(b) the strike visually stabs air while damage lands at ~8 m -- attacker delivery (lunge/travel at
+landing) is a design question for the post-E5/E6 playtest block; the generous range itself is BY
+DESIGN and stays.
+(c) charge audio is placeholder sine tones; discrimination judged marginal by the operator's ear
+and deferred to a real audio pass, at which point Live Smoke item (c)'s naive-observer
+discrimination is re-judged.
+(d) general locomotion speed / walk-as-default / sprint-costs-stamina recorded for the retune
+block.
+Colour -> clip mapping recorded as a presentation choice: RED=swipe, BLUE=thrust,
+GREEN=jump_attack.
+
+Accepted without change (review findings, no ruling needed): the HUD dead-mode argument;
+`_state` written before the CHARGING early return; fresh material applied per dispatch;
+`telegraph[0]` read unchecked; `.playing` used as an assertion; the audio fade off-by-one.
+
+### Close-out
+
+Two commits. Commit 1, code + assets: the dev-pass and review-fix-pass `src/` changes, the two new
+`tools/` scripts, the new/modified tests, the three new paladin clips + re-assembled
+`paladin_anims.res`, the four new audio cues, the three new telegraph profiles, and the one
+intentional `p1_cast_unblockable` Input Map addition to `project.godot`. Commit 2, docs only: this
+entry; the story file's Status -> `done`, Live Smoke Results section (10/10, SMOKE PASS), and
+Change Log row; `docs/playtest-log.md`'s operator-written "5-3 smoke" entry (already present,
+verified before this commit); and the board (`5-3-telegraph-presentation: ready-for-dev` ->
+`done`, `# Tier B` comment preserved). Nothing pushed; the operator reviews the log.

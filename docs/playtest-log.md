@@ -280,3 +280,8 @@ at `5-7`.
 
 Verdict: SMOKE PASS, 5/5, regression-only.
 
+
+5-3 smoke:
+5.9.
+smoke prolazi sve usporkos ovim opazanjima koja vrejdim imati zapisano:
+1 cast proalzi 2 tri boje tri poze 3 zvukovi su ne prerazliciti ali tu sad nebi radio razlike puno, ruzni ionak cem ih mejnjat 4 vremenski se steta  iudarac prklapaju samo sto je ragne ogroman i neporirodno jako djeluje da igrac ubode zrak ispred sebe a da 8 m dalje portivnik najebe 5 domet sam maloprije komentirao, domat bi svakako trebao bit velik ili bar relativno veci u dnsou na bicne zamahe, tjoest takav da uz pravilno pozicinoiranje i ako protivnik nema previse stanie za pobjec vrlo vejrovatno tjera na roll za kojeg isto moznda nema stamine odnosno na obranu unblockalbe mdoeom 3 sto i je cilje, ali tu ima i do manjkoavosti animacija, a i do toga sto bi trebali mozda genralnu brzinu likova suporiti i napraviti hodanje standradrom a trcanje koje trenutno koristimo necime sto guta staminu ali  tome cemo kasnije isto, ovaj dio bi treba biti doslovnoo 1/1 kopja sekiro mehanike(eventualno malo velikodusniji range) fali taj chageup moment i amicaijiski i imeplentirano toga da se taj napad charrgperupa igrc drzi gumb za to vrijeme to daje dodatan kratak porstor da drugi igrac vidi da se sprema nesto eliko i opasno 6 model osaje u svojoj kutiji-to isto nije zeljeno ponasnje ali mozda to nije dio ovog storya 7 orb o okojem pricas je ovaj telgraf jel to se vidi da iako se ne generiraju orbovi kao resurs koji je posljedica unblcablea uspjesnog ali to vlajda nije jos iplementirano 8 uspio sam ga ubiti tkoom chargeupa prie nego je njegoa steta sletjela i orb se odma ugasio i nema nakon r pogotka niotkud 9 sve ostalo radi noramlno 10 stabilno
