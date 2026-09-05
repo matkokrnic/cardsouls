@@ -469,12 +469,16 @@ func to_snapshot() -> Dictionary:
 		#
 		# THE KEY IS GATED ON `CHARGING`, WHICH IS WHAT MAKES A STALE TELEGRAPH UNREPRESENTABLE
 		# RATHER THAN MERELY UNLIKELY (the project's guard-mechanism-over-guard-pattern rule). The
-		# fields below are written ONCE, at the cast, and nothing clears them: a hero that lands, is
-		# killed mid-chargeup (AC 15), or is returned to IDLE by the debug reset would otherwise carry
-		# its last colour forever, because `_apply_debug_reset`'s own contract leaves in-flight
-		# windows untouched ("a live hero mid-swing swings on") and this window is one of them.
-		# Deriving the key from the action state instead means "the active telegraph" is true by
-		# construction, with one writer and no clear path to forget.
+		# fields below are written at the cast and, on the two paths that end a chargeup WITHOUT a
+		# reset -- a hero that lands, and one killed mid-chargeup (AC 15) -- nothing clears them, so
+		# either would otherwise carry its last colour forever. Deriving the key from the action state
+		# instead means "the active telegraph" is true by construction, with no clear path to forget.
+		#
+		# STORY 5-3 (fix pass) NARROWS THAT LIST BY ONE: the DEBUG RESET now clears all three fields
+		# explicitly (`MatchState._reset_player`, the second named exception to the reset's
+		# "in-flight windows untouched" contract). That is not redundancy with the gate -- the gate
+		# keeps the SNAPSHOT honest, while the reset has to stop the WINDOW itself, or a chargeup
+		# frozen by the round-over freeze would land inside the next round.
 		"telegraph": [charge_color, charge_window.remaining_ticks()] \
 				if hero.action_state == HeroState.ActionState.CHARGING \
 				else [NO_TELEGRAPH_COLOR, 0],

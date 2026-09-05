@@ -16,6 +16,13 @@
 [ext_resource type="PackedScene" path="res://assets/characters/paladin/paladin.fbx" id="14_paldn"]
 [ext_resource type="AnimationLibrary" path="res://assets/characters/paladin/paladin_anims.res" id="15_anims"]
 [ext_resource type="Script" path="res://src/actors/hero/animation_controller.gd" id="16_anctl"]
+[ext_resource type="Resource" path="res://data/telegraphs/charge_red.tres" id="17_tpcred"]
+[ext_resource type="Resource" path="res://data/telegraphs/charge_blue.tres" id="18_tpcblu"]
+[ext_resource type="Resource" path="res://data/telegraphs/charge_green.tres" id="19_tpcgrn"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_charge_red.tres" id="20_wcred"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_charge_blue.tres" id="21_wcblu"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_charge_green.tres" id="22_wcgrn"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_cast_success.tres" id="23_wcast"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_qp0e8"]
 size = Vector3(1, 2, 1)
@@ -45,6 +52,10 @@ height = 0.36
 
 [sub_resource type="BoxMesh" id="BoxMesh_tgflsh"]
 size = Vector3(1.15, 2.15, 1.15)
+
+[sub_resource type="SphereMesh" id="SphereMesh_tgchrg"]
+radius = 0.3
+height = 0.6
 
 [node name="HeroActor" type="CharacterBody3D" unique_id=1317219649]
 script = ExtResource("1_vde01")
@@ -99,7 +110,10 @@ script = ExtResource("3_tgctl")
 attack_profile = ExtResource("4_tpatk")
 block_profile = ExtResource("5_tpblk")
 roll_profile = ExtResource("6_tprol")
-editor_description = "D7 cues layer (story 1-10). READ-ONLY consumer of the queued state signals, wired by the runner through the connect seams - signal payloads only, never a state handle, never a mutator call. AudioStreamPlayer children route to the CombatCues bus; telegraph shapes/spark/flash are in-scene primitives (FacingMarker precedent - no import pipeline for meshes). Shapes are root-relative markers ON PURPOSE: nothing here yaws, so the 1-7b single-yaw-source contract holds (no second atan2). NO _physics_process (F1). HEIGHTS, re-seated in 3-0b Pass 3b: these were authored in 1-10 against the BOX (cone/shield 0.5 above the box top at root +1.0, disc 0.05 above the box floor at root -1.0), when the hero was box-only and no model existed. 3-0a's paladin then landed feet-at-root-0, floating a full 1.0 above the box floor, which hid the mismatch. Pass 3b drops the model to the box floor and drops AttackCone/BlockShield/DeflectSpark by the same 1.0 so they stay with the body: they now read at BODY HEIGHT on the model (root +0.5 / +0.3) rather than overhead. RollDisc and HitFlash are unchanged — both key off the box, which was already correctly grounded. Accepted cost, ruled by the operator at Pass 3b: cone/shield now intersect the model's head and shoulders and are partly occluded by it. Pinned by test/integration/test_vertical_alignment.gd."
+charge_red_profile = ExtResource("17_tpcred")
+charge_blue_profile = ExtResource("18_tpcblu")
+charge_green_profile = ExtResource("19_tpcgrn")
+editor_description = "D7 cues layer (story 1-10, extended 5-3). READ-ONLY consumer of the queued state signals, wired by the runner through the connect seams - signal payloads only, never a state handle, never a mutator call. AudioStreamPlayer children route to the CombatCues bus; telegraph shapes/spark/flash are in-scene primitives (FacingMarker precedent - no import pipeline for meshes). Shapes are root-relative markers ON PURPOSE: nothing here yaws, so the 1-7b single-yaw-source contract holds (no second atan2). NO _physics_process (F1). HEIGHTS, re-seated in 3-0b Pass 3b: these were authored in 1-10 against the BOX (cone/shield 0.5 above the box top at root +1.0, disc 0.05 above the box floor at root -1.0), when the hero was box-only and no model existed. 3-0a's paladin then landed feet-at-root-0, floating a full 1.0 above the box floor, which hid the mismatch. Pass 3b drops the model to the box floor and drops AttackCone/BlockShield/DeflectSpark by the same 1.0 so they stay with the body: they now read at BODY HEIGHT on the model (root +0.5 / +0.3) rather than overhead. RollDisc and HitFlash are unchanged — both key off the box, which was already correctly grounded. Accepted cost, ruled by the operator at Pass 3b: cone/shield now intersect the model's head and shoulders and are partly occluded by it. Pinned by test/integration/test_vertical_alignment.gd. STORY 5-3 (AC 10) adds a SINGLE shared ChargeMarker shape (Shapes/ChargeMarker, an orb) and THREE colour-keyed profiles (charge_red/blue/green) — unlike attack/block/roll, the charge profile's colour is applied to the shared shape's material AT DISPATCH TIME (on_action_state_changed), not pre-baked in _ready(), since one physical node stands in for three colours rather than one shape per profile. Also adds CueCastSuccess (S5, AC 13) played on the EXISTING, previously-unwired card_cast_resolved signal — a one-shot success cue, distinct from the ongoing CHARGING sting."
 
 [node name="StingAttack" type="AudioStreamPlayer" parent="TelegraphController"]
 stream = ExtResource("7_watk")
@@ -129,6 +143,22 @@ bus = &"CombatCues"
 stream = ExtResource("13_wend")
 bus = &"CombatCues"
 
+[node name="StingChargeRed" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("20_wcred")
+bus = &"CombatCues"
+
+[node name="StingChargeBlue" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("21_wcblu")
+bus = &"CombatCues"
+
+[node name="StingChargeGreen" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("22_wcgrn")
+bus = &"CombatCues"
+
+[node name="CueCastSuccess" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("23_wcast")
+bus = &"CombatCues"
+
 [node name="Shapes" type="Node3D" parent="TelegraphController"]
 
 [node name="AttackCone" type="MeshInstance3D" parent="TelegraphController/Shapes"]
@@ -145,6 +175,11 @@ mesh = SubResource("BoxMesh_tgshld")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.95, 0)
 visible = false
 mesh = SubResource("CylinderMesh_tgdisc")
+
+[node name="ChargeMarker" type="MeshInstance3D" parent="TelegraphController/Shapes"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+visible = false
+mesh = SubResource("SphereMesh_tgchrg")
 
 [node name="DeflectSpark" type="MeshInstance3D" parent="TelegraphController"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)

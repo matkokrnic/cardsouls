@@ -444,6 +444,11 @@ func test_no_pitch_stage_or_other_reserved_card_action_ships() -> void:
 ## Story 3-5a (AC 11): the actions this story DOES ship, pinned positively. The negative guard
 ## above cannot tell "correctly added" from "never added", so the pair is what makes the Input
 ## Map edit checkable in both directions — a lost or renamed bind fails here.
+##
+## "BOTH PLAYERS" NAMES THE 3-5a CARD SCHEME ONLY, and the neighbouring asymmetry is INTENTIONAL:
+## `SHIPPED_INPUT_ACTIONS` below carries `p1_cast_unblockable` with no `p2_` twin, because 5-3
+## AC 19 ships that key as a deliberately TEMPORARY, P1-only affordance so a human eye can judge
+## the telegraph (`5-7` replaces it). It is not a missing bind for this test to grow an entry for.
 func test_card_scheme_input_actions_ship_for_both_players() -> void:
 	var missing: Array[String] = []
 	for prefix in ["p1", "p2"]:
@@ -473,7 +478,7 @@ func test_card_scheme_input_actions_ship_for_both_players() -> void:
 const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"debug_pause", "debug_step",
 	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
-	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
+	"p1_cast_confirm", "p1_cast_mode", "p1_cast_unblockable", "p1_debug_reset",
 	"p1_move_down", "p1_move_left", "p1_move_right", "p1_move_up", "p1_roll",
 	"p2_attack", "p2_block", "p2_card_1", "p2_card_2", "p2_card_3", "p2_card_4",
 	"p2_cast_confirm", "p2_cast_mode", "p2_debug_reset",

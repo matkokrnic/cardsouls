@@ -118,6 +118,60 @@ func test_authored_unblockable_values_are_positive() -> void:
 		+ "nothing off is a miss wearing a hit's clothes)")
 
 
+## Story 5-3 (fix pass, Ruling 3): THE CHARGE CLIPS' PLAYBACK SPEEDS MUST STILL DESCRIBE THE
+## AUTHORED CHARGEUP. `AnimationController.CHARGE_CLIP_SPEED` compresses each of the three charge
+## clips to fit `unblockable_chargeup_seconds`; the controller holds no balance reference
+## (CONSTRAINT C — see the constant's own header for why reading `BalanceConfigService` there is
+## barred and why widening the presentation seam was not taken), so the coupling is guarded HERE,
+## on `4-3d/R9`'s precedent (`test_unit_strike_alignment_live.gd` does the identical thing for
+## `UnitAnimationController.ATTACK_ALIGNED_WINDUP_SECONDS`).
+##
+## THE REVIEW'S MUTATION IS WHAT THIS TEST EXISTS FOR: setting all three speeds to 1.0 left the
+## ENTIRE suite green, which made Ruling 3 unpinned and the table a cached derivation of a balance
+## value that nothing checked. This does not merely re-state the table — it RE-DERIVES each speed
+## from the value read off the authored `.tres` at run time, so a retune that moves the chargeup
+## without re-deriving the table fails here and names the re-derivation.
+##
+## THE CLIP LENGTHS ARE NOT AUDITED AGAINST BALANCE, on purpose: they are properties of the `.fbx`
+## sources (`test/integration/test_rig_clips.gd` owns the library's own shape), and asserting them
+## here would be this file claiming authority over an asset rather than over authoring.
+func test_the_charge_clip_speeds_still_describe_the_authored_chargeup() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var authored := config.unblockable_chargeup_seconds
+	if authored <= 0.0:
+		return  # already failed, loudly, in test_authored_unblockable_values_are_positive above
+	assert_true(is_equal_approx(authored, AnimationController.CHARGE_ALIGNED_CHARGEUP_SECONDS),
+		("AUTHORED CHARGEUP MOVED: balance_config ships %.4fs but "
+		+ "AnimationController.CHARGE_ALIGNED_CHARGEUP_SECONDS is %.4fs. The three charge clips no "
+		+ "longer compress to the state-owned window — re-derive them (5-3 Ruling 3).")
+				% [authored, AnimationController.CHARGE_ALIGNED_CHARGEUP_SECONDS])
+	var expected := {
+		Enums.CardColor.RED: AnimationController.SWIPE_NATIVE_SECONDS / authored,
+		Enums.CardColor.BLUE: AnimationController.THRUST_NATIVE_SECONDS / authored,
+		Enums.CardColor.GREEN: AnimationController.JUMP_ATTACK_NATIVE_SECONDS / authored,
+	}
+	var shipped: Dictionary = AnimationController.CHARGE_CLIP_SPEED
+	assert_eq(shipped.size(), expected.size(),
+		"every CardColor must carry a charge clip speed, or a colour would play its clip uncompressed")
+	for colour: int in expected:
+		assert_true(shipped.has(colour),
+			"AnimationController.CHARGE_CLIP_SPEED carries no entry for colour %d" % colour)
+		if not shipped.has(colour):
+			continue
+		# The reported "would run" seconds is the clip's own MEASURED native length divided by the
+		# shipped speed — the real time the clip actually occupies — set against the authored window
+		# it is supposed to fill. `expected * authored` reconstructs that native length exactly.
+		assert_true(is_equal_approx(float(shipped[colour]), float(expected[colour])),
+			("colour %d's charge clip speed is %.4f but the authored %.4fs chargeup derives %.4f — "
+			+ "the clip would run %.4fs against a %.4fs window (5-3 Ruling 3)")
+					% [colour, float(shipped[colour]), authored, float(expected[colour]),
+						float(expected[colour]) * authored / maxf(float(shipped[colour]), 0.0001),
+						authored])
+
+
 ## ---- Melee-hit economy pair (story 1-5, B4) — exemption reasoning in the file header. --
 
 func test_authored_melee_hit_mana_is_positive() -> void:

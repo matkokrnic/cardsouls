@@ -21,14 +21,28 @@ extends Node3D
 @export var block_profile: TelegraphProfile
 @export var roll_profile: TelegraphProfile
 
+## Story 5-3 (AC 10): the CHARGING seat, colour-keyed rather than ActionState-keyed since all
+## three share the one ActionState. Kept as three named exports rather than a typed array so
+## each stays independently visible/re-orderable in the inspector, matching the three fields
+## directly above.
+@export var charge_red_profile: TelegraphProfile
+@export var charge_blue_profile: TelegraphProfile
+@export var charge_green_profile: TelegraphProfile
+
 @onready var _cue_deflect: AudioStreamPlayer = $CueDeflect
 @onready var _cue_hit: AudioStreamPlayer = $CueHit
 @onready var _cue_reject: AudioStreamPlayer = $CueReject
 @onready var _cue_round_end: AudioStreamPlayer = $CueRoundEnd
+@onready var _cue_cast_success: AudioStreamPlayer = $CueCastSuccess
 @onready var _spark: MeshInstance3D = $DeflectSpark
 @onready var _hit_flash: MeshInstance3D = $HitFlash
 
 var _profiles: Dictionary[HeroState.ActionState, TelegraphProfile] = {}
+## Story 5-3 (AC 10): colour (Enums.CardColor int) -> the CHARGING-only profile. Separate from
+## `_profiles` because the ActionState -> profile map is 1:1; CHARGING is 1:3, keyed by a value
+## the transition signal itself does not carry (see AnimationController's twin dict + the
+## match_runner read path, AC 9's analogue for AC 10).
+var _charge_profiles: Dictionary[int, TelegraphProfile] = {}
 var _shapes: Dictionary[StringName, MeshInstance3D] = {}
 var _stings: Dictionary[StringName, AudioStreamPlayer] = {}
 var _spark_tween: Tween
@@ -40,6 +54,11 @@ func _ready() -> void:
 		HeroState.ActionState.ATTACKING: attack_profile,
 		HeroState.ActionState.BLOCKING: block_profile,
 		HeroState.ActionState.ROLLING: roll_profile,
+	}
+	_charge_profiles = {
+		Enums.CardColor.RED: charge_red_profile,
+		Enums.CardColor.BLUE: charge_blue_profile,
+		Enums.CardColor.GREEN: charge_green_profile,
 	}
 	for child in $Shapes.get_children():
 		if child is MeshInstance3D:
@@ -66,9 +85,32 @@ func _ready() -> void:
 ## Seam callback (connect_hero_action_state_changed): show the entered action's telegraph
 ## shape and fire its sting. A chain re-emits ATTACKING -> ATTACKING, so every swing
 ## re-stings; exits to unmapped states (IDLE, DEAD) clear the shape.
-func on_action_state_changed(_previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
+##
+## `charge_color` (story 5-3, AC 10): the ONLY state fed to this seam beyond what
+## `action_state_changed` itself carries — read by the caller (match_runner, AC 9's read
+## path) at the transition instant and forwarded here as a third argument, never stored. A
+## default of `PlayerState.NO_TELEGRAPH_COLOR` keeps every OTHER caller of this seam (there is
+## exactly one today) unaffected — CHARGING is the only branch that ever consults it.
+func on_action_state_changed(_previous: HeroState.ActionState, current: HeroState.ActionState,
+		charge_color: int = PlayerState.NO_TELEGRAPH_COLOR) -> void:
 	for shape: MeshInstance3D in _shapes.values():
 		shape.visible = false
+
+	if current == HeroState.ActionState.CHARGING:
+		var charge_profile: TelegraphProfile = _charge_profiles.get(charge_color)
+		if charge_profile == null:
+			return
+		# Unlike attack/block/roll (tinted once in _ready), the charge shape is ONE shared
+		# node standing in for three colours, so its material is (re)applied every dispatch.
+		var charge_shape: MeshInstance3D = _shapes.get(charge_profile.shape_id)
+		if charge_shape != null:
+			charge_shape.material_override = _flat_material(charge_profile.color)
+			charge_shape.visible = true
+		var charge_sting: AudioStreamPlayer = _stings.get(charge_profile.sting_id)
+		if charge_sting != null:
+			charge_sting.play()
+		return
+
 	var profile: TelegraphProfile = _profiles.get(current)
 	if profile == null:
 		return
@@ -78,6 +120,15 @@ func on_action_state_changed(_previous: HeroState.ActionState, current: HeroStat
 	var sting: AudioStreamPlayer = _stings.get(profile.sting_id)
 	if sting != null:
 		sting.play()
+
+
+## Seam callback (5-3 AC 13): S5's success-cue half. Connected DIRECTLY to the existing,
+## previously-unwired `MatchState.card_cast_resolved` signal by match_runner (a plain connect,
+## not a new `connect_*` wrapper — `test_runner_observation_seams_are_exactly_eight` pins the
+## observation-seam family at eight, 2-6/R7 amended by 3-6/R2, and this file adds no ninth). A
+## one-shot cue at CAST RESOLUTION, distinct from the ongoing CHARGING sting above.
+func on_card_cast_resolved() -> void:
+	_cue_cast_success.play()
 
 
 ## Seam callback (connect_hero_action_rejected): loss legibility — a press the state

@@ -480,6 +480,62 @@ func test_a_dead_enemy_is_not_damaged_by_a_landing() -> void:
 	assert_eq(ms.p1.discard.size(), 1, "the card stays spent on the charging hero's side")
 
 
+# --- Story 5-3 fix pass: a chargeup must not cross a round boundary ---------------------------
+
+## THE REVIEW'S FINDING, GUARDED. Step 1b's round-over freeze returns BEFORE the step-2
+## `charge_window.tick()`, so a chargeup in flight when the round ends STOPS COUNTING but stays
+## ARMED; `_reset_player` forced IDLE only from DEAD, so the charging hero came out of the debug
+## reset still CHARGING with a live window, and the NEXT round's ticks ran that window down and
+## landed the PREVIOUS round's unblockable on whoever was in reach.
+##
+## DRIVEN THROUGH THE REAL PATH, not by poking `_round_over`: P2 is killed outright so step 8's
+## `_check_resolution` latches the round for real, and the reset arrives on an intent exactly as the
+## runner delivers it. The SURVIVOR is the charging hero, which is the case that actually bites --
+## a charging hero that DIED is returned to IDLE by the pre-existing DEAD branch, and its orphaned
+## window is covered by the same two assertions below.
+##
+## THE DAMAGE ASSERTION IS THE LOAD-BEARING ONE. "P1 is IDLE after the reset" alone would pass on a
+## fix that cleared the state and left the window running; the next round is therefore actually run
+## out, with the reach fact pushed on every tick, and P2's hp must be untouched.
+func test_a_chargeup_does_not_survive_the_round_over_freeze_and_the_reset() -> void:
+	var ms := _make_match()
+	_advance(ms, _unblockable_intent(0), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
+		"precondition: P1 is charging")
+	# Kill P2 for real, one tick in, so the round latches while P1's window is still armed.
+	ms.p2.hero.take_damage(MAX_HP)
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.DEAD,
+		"precondition: the round is over and P2 is the corpse")
+	var frozen: Array = ms.to_snapshot()["p1"]["telegraph"]
+	assert_eq(int(frozen[0]), ms.p1.charge_color,
+		"precondition: the telegraph is still lit and frozen across the round-over freeze")
+	# Several frozen ticks: the window must not advance during the freeze (it is why it survives).
+	for _t in 5:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_eq(ms.to_snapshot()["p1"]["telegraph"], frozen,
+		"precondition: the freeze holds the countdown still -- step 1b returns before step 2's tick")
+
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	_advance(ms, reset, InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"the reset clears CHARGING, not only DEAD")
+	assert_false(ms.p1.charge_window.is_running,
+		"and STOPS the window -- a cleared state over a live window would land next round anyway")
+	assert_eq(ms.p1.charge_color, PlayerState.NO_TELEGRAPH_COLOR,
+		"and rests the colour, so no half of the telegraph fact outlives the round")
+	assert_eq(ms.to_snapshot()["p1"]["telegraph"], [PlayerState.NO_TELEGRAPH_COLOR, 0],
+		"the snapshot fact rests with it")
+
+	# The next round, run out past the full chargeup with P1 in reach the whole way.
+	for _t in CHARGEUP_TICKS + 2:
+		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP,
+		"the PREVIOUS round's chargeup lands nothing in the new round -- nobody pressed for it")
+
+
 # --- AC 4 / AC 21: the colour seam and the telegraph fact -------------------------------------
 
 ## AC 21 (`5-2/R9`): while CHARGING the per-player snapshot carries the active telegraph — the

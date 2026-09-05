@@ -1,14 +1,17 @@
 extends SceneTree
 
-## Story 3-0a (AC 3) machine contract, EXTENDED BY 5-0a (AC 1) from six clips to NINE:
-## hero.tscn carries the paladin's AnimationPlayer with EXACTLY the nine named clips and their
-## loop flags, and the model's own Mixamo T-pose take ("mixamo_com") is kept OUT of the
-## scene. Instantiates hero.tscn and asserts, scene-wide:
-##   (a) exactly nine animations total (no tenth clip riding in from the model import);
-##   (b) the nine expected names — idle, run, attack, block, roll, death (3-0a), plus
-##       strafe_left, strafe_right, backpedal (5-0a's direction-aware locomotion clips);
+## Story 3-0a (AC 3) machine contract, EXTENDED BY 5-0a (AC 1) from six clips to NINE, and BY
+## 5-3 (AC 3) from nine to TWELVE: hero.tscn carries the paladin's AnimationPlayer with
+## EXACTLY the twelve named clips and their loop flags, and the model's own Mixamo T-pose
+## take ("mixamo_com") is kept OUT of the scene. Instantiates hero.tscn and asserts,
+## scene-wide:
+##   (a) exactly twelve animations total (no thirteenth clip riding in from the model import);
+##   (b) the twelve expected names — idle, run, attack, block, roll, death (3-0a),
+##       strafe_left, strafe_right, backpedal (5-0a), plus swipe, jump_attack, thrust
+##       (5-3's colour-telegraph attack poses);
 ##   (c) loop ENABLED on idle/run/block/strafe_left/strafe_right/backpedal (every repeating
-##       movement or resting pose), DISABLED on attack/roll/death (unchanged by 5-0a);
+##       movement or resting pose), DISABLED on attack/roll/death/swipe/jump_attack/thrust
+##       (one-shot poses, 5-3's three matching `attack`'s existing flag);
 ##   (d) no clip named "mixamo_com" anywhere in the instantiated scene.
 ## Structure only — read from the packed scene at instantiation, no frame/_ready needed.
 ##
@@ -21,6 +24,7 @@ const EXPECTED_LOOP := {
 	&"idle": true, &"run": true, &"block": true,
 	&"strafe_left": true, &"strafe_right": true, &"backpedal": true,
 	&"attack": false, &"roll": false, &"death": false,
+	&"swipe": false, &"jump_attack": false, &"thrust": false,
 }
 
 var _failures: Array[String] = []

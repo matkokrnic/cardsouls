@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="TelegraphProfile" format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/telegraph_profile.gd" id="1_tgpro"]
+
+[resource]
+script = ExtResource("1_tgpro")
+shape_id = &"ChargeMarker"
+sting_id = &"StingChargeBlue"
+color = Color(0.15, 0.35, 0.95, 1)

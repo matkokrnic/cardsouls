@@ -3123,8 +3123,15 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ## actors off the round_started relay this function already queues below -- no new EventBus
 ## event ships (AC 8).
 ##
-## The parked mana-survives-reset finding stays PARKED. This story adds ONE named exception; it
-## does not open the reset's contract generally.
+## STORY 5-3 (fix pass): A SECOND NAMED EXCEPTION -- the mode (2) CHARGEUP (action state, window and
+## colour), cleared in _reset_player below. Named here for the same reason the unit board is, and
+## for a stronger one: it is a CORRECTION, not an addition. A chargeup could otherwise cross a round
+## boundary and land inside the next round (the trace is in _reset_player). "A live hero mid-swing
+## swings on" is unchanged for every OTHER in-flight window; the chargeup is the one whose survival
+## is a defect rather than a feature, because step 1b freezes its clock while leaving it armed.
+##
+## The parked mana-survives-reset finding stays PARKED. These are TWO named exceptions; they do not
+## open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -3154,9 +3161,32 @@ func _apply_debug_reset() -> void:
 
 func _reset_player(player: PlayerState) -> void:
 	var hero := player.hero
-	if hero.action_state == HeroState.ActionState.DEAD:
+	# STORY 5-3 (fix pass, operator ruling): CHARGING JOINS DEAD IN THE "CLEAR ACTION STATE" ENTRY,
+	# AND ITS WINDOW IS STOPPED IN THE SAME BREATH -- the SECOND named exception to the reset's
+	# "NOTHING else / in-flight windows untouched" contract (the unit board is the first, `4-1/R5`).
+	#
+	# THE DEFECT IT CLOSES, traced rather than assumed. Step 1b (`:350-353`) returns BEFORE the
+	# step-2 `charge_window.tick()` (`:388-389`), so once `_round_over` latches a chargeup STOPS
+	# COUNTING but stays armed; and this function forced IDLE only from DEAD, so a hero that was
+	# CHARGING when the other one died came out of the reset still CHARGING with a live window. That
+	# window then ticks down inside the NEXT round and `_resolve_charge_landing` applies the PREVIOUS
+	# round's chargeup -- a hit nobody in the new round pressed for.
+	#
+	# THE THREE FIELDS ARE CLEARED TOGETHER because they are ONE FACT in three parts (the state, the
+	# window, the colour), exactly as the board / dedupe / projectile clears below are one collection
+	# expressed as three: a stopped window under a CHARGING state, or a colour with no window, are
+	# each half of a telegraph and neither is a thing this game has.
+	#
+	# THE ROUND-OVER FREEZE ITSELF IS DELIBERATELY NOT TOUCHED (operator ruling, story text): a
+	# telegraph left lit on the round-over screen is the same class as every other pose the freeze
+	# holds, it is cosmetic, and it ends HERE -- `set_action_state` queues the transition the
+	# presentation controllers already clear their shape on.
+	if hero.action_state == HeroState.ActionState.DEAD \
+			or hero.action_state == HeroState.ActionState.CHARGING:
 		hero.set_action_state(HeroState.ActionState.IDLE)
 	hero.heal(hero.get_max_hp())
+	player.charge_window.start(0)
+	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 	# Story 4-1 (AC 8, `4-1/R5`): the ONE named exception to the reset's "NOTHING else" contract
 	# -- see _apply_debug_reset's header. Seated in the PER-PLAYER helper because the board is
 	# per-player, and reached only from the reset: no round-end path clears it.

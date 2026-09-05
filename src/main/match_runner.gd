@@ -447,16 +447,52 @@ func _ready() -> void:
 	for slot: int in 2:
 		var actor: HeroActor = _p1_hero if slot == 0 else _p2_hero
 		var cues: TelegraphController = actor.telegraph_controller
-		connect_hero_action_state_changed(slot, cues.on_action_state_changed)
+		var anim: AnimationController = actor.animation_controller
+		# Story 5-3 (AC 9/10): CHARGING's clip/telegraph choice needs the COLOUR, which the
+		# action-state transition signal itself never carries (previous, current only). These
+		# two wrapping lambdas are the new read path: a one-time read of the `telegraph`
+		# snapshot fact (5-2) at the transition instant, via _charge_color_for_slot below. NOT
+		# a new connect_* wrapper (the seam family stays at eight) and NOT a captured
+		# PlayerState (4-B1 review precedent: PlayerState is RefCounted and a reference
+		# captured into a Callable stored inside that same PlayerState's own signal-connection
+		# list is a reference cycle) -- slot is re-resolved to a PlayerState by
+		# _charge_color_for_slot on every call instead, exactly like every other per-slot
+		# lookup in this file.
+		connect_hero_action_state_changed(slot,
+				func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
+					cues.on_action_state_changed(previous, current,
+							_charge_color_for_slot(slot, current)))
 		connect_hero_action_rejected(slot, cues.on_action_rejected)
 		connect_hit_landed(cues.on_hit_landed.bind(slot))
 		connect_deflect_landed(cues.on_deflect_landed.bind(slot))
 		EventBus.round_ended.connect(cues.on_round_ended.bind(slot))
-		# Story 3-0a: the rig animation controller shares the action-state seam — the five
-		# ActionState-driven clips (idle/attack/block/roll/death). The sixth, `run`, is NOT
-		# wired here: HeroActor.drive() pushes it per-tick from velocity (3-0a/R2). Read-only,
-		# no state handle, mirroring the telegraph wiring.
-		connect_hero_action_state_changed(slot, actor.animation_controller.on_action_state_changed)
+		# Story 5-3 (AC 13): S5's success-cue half. card_cast_resolved is an EXISTING state-owned
+		# signal (both _resolve_basic_cast's and _resolve_unblockable_cast's success paths already
+		# emit it) with no listener before this story. A direct connect, not a new connect_* wrapper
+		# -- test_runner_observation_seams_are_exactly_eight pins the family at eight (2-6/R7 amended
+		# by 3-6/R2) and this adds no ninth.
+		#
+		# THIS IS A NEW CONNECTION SHAPE, NAMED AS ONE (5-3 review correction; this comment used to
+		# claim it mirrored the EventBus carve-out, and it does not). That precedent is a relay onto
+		# an OWNERLESS GLOBAL BUS: MatchState.reshuffle_vulnerable_window_opened is relayed to
+		# EventBus (`:346`, `_relay_reshuffle_vulnerable_window_opened`) and the CONSUMERS subscribe
+		# to the bus (`:399`), never to state. Here a PRESENTATION CONSUMER is wired straight to a
+		# MatchState signal with no bus and no seam -- the first of its kind in this file. It is
+		# sound (read-only, per-slot guarded, dependency direction unchanged: visuals -> state) and
+		# the operator has ruled that it STANDS. It is recorded as a candidate for the architecture
+		# amendment queue rather than quietly filed under an existing precedent, because a third and
+		# fourth of these would be a de-facto ninth seam family nobody voted for.
+		_match_state.card_cast_resolved.connect(func(cast_slot: int, _card_id: StringName) -> void:
+			if cast_slot == slot:
+				cues.on_card_cast_resolved())
+		# Story 3-0a: the rig animation controller shares the action-state seam -- the five
+		# ActionState-driven clips (idle/attack/block/roll/death), now six with CHARGING (5-3).
+		# The locomotion clips are NOT wired here: HeroActor.drive() pushes them per-tick from
+		# velocity (3-0a/R2). Read-only, no state handle, mirroring the telegraph wiring.
+		connect_hero_action_state_changed(slot,
+				func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
+					anim.on_action_state_changed(previous, current,
+							_charge_color_for_slot(slot, current)))
 
 
 ## Story 3-3 (AC 4): PROVISIONAL FIXTURE deck composition — walk CardDatabase's explicitly
@@ -739,6 +775,22 @@ func _gamepad_ordinal_for_slot(slot: int) -> int:
 		if slot_controller_kinds[i] == ControllerKind.GAMEPAD:
 			ordinal += 1
 	return ordinal
+
+
+## Story 5-3 (AC 9): the ONE new read path CHARGING's colour needs. Not a `connect_*` seam
+## (no signal, no subscriber) -- a plain synchronous read of the `telegraph` fact `5-2`
+## publishes on `to_snapshot()`, taken only at the instant of a CHARGING transition (colour is
+## fixed for the whole window, so a one-time read at entry suffices -- no per-tick poll).
+## Re-derives `player` from `slot` on every call rather than accepting one as a parameter, the
+## same anti-cycle shape this file already uses throughout (see the wiring loop above): a
+## PlayerState handed to and captured by a caller's closure risks exactly the reference cycle
+## the 4-B1 review fix removed.
+func _charge_color_for_slot(slot: int, current: HeroState.ActionState) -> int:
+	if current != HeroState.ActionState.CHARGING:
+		return PlayerState.NO_TELEGRAPH_COLOR
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var telegraph: Array = player.to_snapshot().get("telegraph", [PlayerState.NO_TELEGRAPH_COLOR, 0])
+	return int(telegraph[0])
 
 
 ## Read-only subscription seam (story 1-3b): consumers (HUD, integration tests) observe
