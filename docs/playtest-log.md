@@ -292,3 +292,7 @@ smoke prolazi sve usporkos ovim opazanjima koja vrejdim imati zapisano:
 5-4:
 smoke proalzi sve, prikazuju se pikupljeni orbovi igracu, orbovi se zarade uspjesnim unblockalbeom u rangeu van toga ne donosi zaradu, usmrcujuci unblockable takoder donosi zaradu, kad kliknemo r broj orbova se resetira, boje se poklapaju, jedino bi trebalo I karte u ruci obojati jos
 
+5-5:
+2 spark tintan samo kada tocnom bojom odgovorim na unblockable napad, porblem je sto trenutno treb znat napamet koja karta je koaj boja, trebalo bi ih primvermo obojtai u boje njhiove, dok nekad kasnije ui ne smislim bolji(dalko)  3 kirva boja prposta potpuno unblockable napad 4 obican parry idalje zut da 6 ne razumijem sto hoces 7 pormesena obrana tiho istnkne, tako je 8 l normalno rolla p1 9 feeling je deifnitvno los i unblockable napada i obrane, ali birna stvar koju sam naucio: prvo napravi stvari onda napravi da ljepo izgldaju tako da to su porblemi zakasnije, iako da feel je ni manje ni vise nego gorzan, brambeni igrac izgleda ko da ne radi nista (a svaka ta akcija bi trebala imat svoju kontra akciju - swwep-skok na glavu, jump atack, presrtanje gadanjem projektilom doj je napad airborne i thrust mikiro ocunter nekakav, rangevi, auto aim svasta nesto, cahrgaup se nikako ne ccita, prozor napada i brane i kada sljeec sto je nejasan, ali radi osnova i to je tneutno bitno) 10 fps okej
+5 blok pada momentalnno 6 animacije ne prestane ali se odmah cuje zvu obrane od unblockablea
+

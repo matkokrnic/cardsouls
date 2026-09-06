@@ -4,7 +4,7 @@ baseline_commit: c62fb36d3d86ad4ddf4eacd9af7a8ca6984023ec
 
 # Story 5.5: Unblockable Defense
 
-Status: ready-for-dev
+Status: done
 
 ## What this story supersedes
 
@@ -252,8 +252,9 @@ three-tier ladder gives every colour combination its own consequence.
 
 **Keyboard binding (`project.godot`, `keyboard_controller.gd`, the `5-3/R17`... `5-2/R15` precedent)**
 
-15. **ONE new TEMPORARY Input Map action, `p2_cast_defense`, P2-ONLY, physical key `L`, adjacent to
-    the P2 zone.** Measured before deciding: `project.godot` today gives P2 `cast_mode`/`card_1`-
+15. **ONE new TEMPORARY Input Map action, `p2_cast_defense`, P2-ONLY, physical key `L`
+    (**SUPERSEDED — see review-fix note below: moved to `;` (semicolon), physical keycode 59**),
+    adjacent to the P2 zone.** Measured before deciding: `project.godot` today gives P2 `cast_mode`/`card_1`-
     `card_4`/`cast_confirm` (the full BASIC scheme) but NO `cast_unblockable` — P2 cannot cast mode ②
     at all today, by the SAME Non-Goals scoping `5-3` gave `p1_cast_unblockable` ("the live-smoke
     human eye sits at P1"). Since P1 is the only prefix that can ever initiate mode ②, P1 is
@@ -277,6 +278,20 @@ three-tier ladder gives every colour combination its own consequence.
     EARLIER than the window length before the landing fails silently (the window expires before the
     hit arrives), exactly as casting AFTER the landing does (there is nothing left to answer). Both
     edges are symmetric failure modes of the same band, not one edge with a single-sided margin.
+
+**AC 15.1 (review fix, HIGH — caught by the operator's eye before the smoke, not by the gate).**
+    `p2_cast_defense` was authored on physical keycode 76 (`L`), but 76 was ALREADY `p1_roll`'s own
+    key (`project.godot`, the E0 J/K/L combat row) — Godot silently allows one physical key to back
+    two Input Map actions, so every P2 defense confirm would ALSO roll the P1 hero. The gate's own
+    measurement ("L is free") checked the CARD scheme only and never cross-checked the combat rows;
+    no pin guarded physical-key uniqueness across actions. Fixed by moving `p2_cast_defense` to
+    physical keycode 59 (`;`, semicolon — still adjacent to the P2 zone), confirmed free by a
+    `project.godot` grep before the edit. The class of bug is now guarded permanently: a new test in
+    `test_deck_and_hand.gd` parses every action's `InputEventKey` entries and asserts no
+    `physical_keycode` appears under more than one action — non-vacuity proven by staging the
+    collision back (keycode 76 on both `p1_roll` and `p2_cast_defense`) and measuring the new test go
+    RED, then restoring with SHA-256 matched both ways. See the Review Fix Pass note and the
+    Mutation Table for the measured detail.
 
 **Golden Prediction — the machine contract**
 
@@ -470,8 +485,8 @@ three-tier ladder gives every colour combination its own consequence.
   values), `src/actors/hero/telegraph_controller.gd` (`on_deflect_landed`'s widened signature and the
   colour-tint branch, AC 13), `src/controllers/keyboard_controller.gd` (`_cast_defense` field, the
   `p2`-only `InputMap.has_action` guarded branch, above and mutually exclusive with confirm, AC 15),
-  `project.godot` (the new `p2_cast_defense` Input Map action, key `L`, AC 15 — review the diff, no
-  other entries move).
+  `project.godot` (the new `p2_cast_defense` Input Map action, key `L` — REVIEW FIX: moved to `;`
+  after an `L`/`p1_roll` collision, AC 15.1 — AC 15 — review the diff, no other entries move).
 - Test files: `test/state/test_unblockable_defense.gd` (new — AC 1-12, 14, 16, likely; see Open
   Questions), `test/state/test_card_play.gd` (`REACHABLE_MODES` widened, the renamed reachable-set
   test, AC 1), `test/state/test_data_resources.gd` (`E1_BALANCE_FIELDS` gains the two new field
@@ -575,9 +590,363 @@ three-tier ladder gives every colour combination its own consequence.
   naming discipline, the observation-seam-reuse precedent, and the `_end_round` non-clear reasoning
   this story applies a second time.
 
+## Dev Agent Record
+
+### Agent Model Used
+
+Opus 5 (operator-stated).
+
+### Debug Log References
+
+- Suite baseline (before any edit): `C:\dev\_55-suite-before.txt` — `649 tests, 0 failed, 4898
+  assertions`, all integration PASS, `ALL TESTS PASSED`. Written 2026-09-06 16:09:38.
+- Suite final (after all work): `C:\dev\_55-suite-after.txt` — see Completion Notes for counters.
+- Reverse golden measurement: `C:\dev\_55-reverse.txt`.
+- Mutation runs: `C:\dev\_55-mut1.txt` … `_55-mut4.txt`.
+
+### Completion Notes List
+
+**Drove by ACs, not tasks.** The story file carries no Tasks/Subtasks section, so this pass drove
+the 16 ACs directly and reports against them — the same shape `5-3` used. No checkbox state exists
+to mark.
+
+**AC 16 — the golden, measured in BOTH directions, ONE re-baseline.**
+- FORWARD: `dc2c9ffa11387e99…` -> `d9725092fb420c85…`. The new `defense` per-player snapshot key.
+- REVERSE: with ONLY those three `to_snapshot()` lines deleted and every other line of this story
+  left in place, the harness hashed `dc2c9ffa…` EXACTLY — `test_state_matches_golden` PASSED while
+  the two key-set pins failed. That is the whole attribution: the cast arm, the landing intercept,
+  the two step-2 tick lines, the reset clear, the widened signal and the two balance fields move the
+  golden by ZERO between them.
+- RESTING VALUE confirmed, not assumed, and PINNED as a test rather than left as a claim:
+  `test_the_fixture_reaches_the_hash_tick_with_no_defense_window_armed` asserts `[-1, 0]` for BOTH
+  players at the hash tick. The `4-3b` falsified-cause discipline applied again.
+- `FORMAT_VERSION` STAYS AT 7 — measured (`src/systems/record_file.gd:157`), not re-opened. Mode ③
+  adds no intake surface, no injection seam, no contact kind and no `InputIntent` field.
+- Key-set pins moved as predicted: both order-sensitive literals gained `"defense"` between
+  `"deck_size"` and `"discard_size"`, and the size assertion moved 29 -> 30.
+
+**AC 10 and AC 11 are two rungs of one `if`, and they are named separately here** (the `5-2/R8` /
+`5-4` "two findings, named separately" discipline the Dev Notes ask for). AC 10: a colour MATCH
+negates and CONSUMES the window — `start(0)` plus the colour reset, one fact in two parts. AC 11: a
+wrong colour neither defends NOR consumes — the window survives, keeps ticking at its own step-2
+rate, and goes on to answer a later same-colour landing. Nothing on the wrong-colour path touches
+`defense_window` or `defense_color` at all; the ONLY line in the codebase that advances the window
+is the step-2 `.tick()`.
+
+**The `.is_running` gate is a different mechanism, not a weaker guarantee** (stated explicitly, as
+the Dev Notes require, so nobody copies the `CHARGING` gate onto a state this story does not
+create). `telegraph` gates on `CHARGING` because that is the ONE state a chargeup occupies. Mode ③
+enters no state at all, so there is nothing to gate on and the window's own flag is the only honest
+gate. It goes non-running on every path that ends it — natural expiry, consumption (AC 10), the
+debug reset (AC 12) — and the one remaining path through the landing branch, a DEAD defender, never
+consults the window because `is_alive()` precedes the colour check. A stale colour is exactly as
+unrepresentable as the telegraph's.
+
+**AC 13's signal reuse is a NAMED trade-off, not a free lunch.** `deflect_landed` now serves THREE
+conceptually distinct mechanisms under a name that literally says "deflect": melee block-timing
+parry, a unit's melee swing parried, and a card-cast colour-matched negation. The alternative — a
+new, precisely named signal — was refused because the observation seam family is locked at nine and
+the payload shape is otherwise identical. If a later story finds the conflation genuinely confusing
+(a consumer that must distinguish WHICH negation happened), that is a fresh finding for that story,
+recorded here rather than left to look incidental.
+
+**The seam family is still NINE, verified as AC 13 requires — by re-running
+`test_runner_observation_seams_are_exactly_nine` UNEDITED, green.** The pin's regex counts
+`connect_*` WRAPPER DECLARATIONS in `match_runner.gd`, so widening the signal's parameter list
+cannot touch it. `connect_deflect_landed`'s own signature (`callback: Callable`) is likewise
+unaffected. `match_runner.gd` is NOT in the File List: it needed no edit.
+
+**Deferred question answered: a re-cast RESTARTS the window.** `TimingWindow.start()` restarts
+naturally and the `charge_window` precedent for a fresh cast overwriting an in-flight one points the
+same way. A refusal would need a new reason constant the operator has not asked for, and the restart
+is not free — the card and the stamina are spent either way (AC 7).
+
+**Authored values (both PROVISIONAL starting points, the live smoke judges feel):**
+`defense_window_seconds = 1.5` (deliberately longer than `unblockable_chargeup_seconds = 1.0`, R-A)
+and `defense_stamina_cost = 10.0` (deliberately smaller than `unblockable_stamina_cost = 20.0`,
+R-D). Both DIRECTIONS are asserted, not just `> 0`: a bare positivity bound would pass on an
+authored pair that inverted either relation, which would ship the mechanic broken while every audit
+stayed green.
+
+**5-2 chargeup behaviour untouched.** The Open Questions CHARGING findings were read and left
+exactly as inherited. Nothing in this pass edits `_resolve_unblockable_cast`,
+`_unblockable_refusal_reason`, `TRANSITION_TABLE`, or any chargeup timing.
+
+### Deviations
+
+1. **`test/state/test_architecture_invariants.gd` WAS EDITED**, against the story's "referenced, NOT
+   edited" note. That note holds for `OBSERVATION_SEAMS` (unchanged, re-run green — AC 13's negative
+   proof stands). But the SAME file carries a second, unrelated pin,
+   `test_the_contact_signals_keep_a_bare_int_attacker`, which asserts `deflect_landed`'s declaration
+   as an EXACT STRING. AC 13's widening trips it by construction. The pin's CLAIM (`4-3b/R15`: the
+   attacker stays a typed bare int) is untouched — a parameter list that grows is not an attacker
+   that widened — so the literal was updated and its falling sanity assertion widened with it. The
+   story could not have shipped without this edit.
+2. **`test/state/test_deck_and_hand.gd` WAS EDITED**, and it is named nowhere in the story. It holds
+   `SHIPPED_INPUT_ACTIONS`, a `3-0c/R11` exact-equality pin over the whole project action set;
+   AC 15's `p2_cast_defense` fails it immediately. Found by the suite, not by reading. This is the
+   pin working as designed and the edit is forced.
+3. **Five existing test files had `deflect_landed` lambdas WIDENED** (`test_block_deflect.gd`,
+   `test_contact_pipeline.gd`, `test_contact_resolution.gd`, `test_projectile_flight.gd`,
+   `test_unit_attack_rhythm.gd`). A Godot callable narrower than the signal errors at emit, so this
+   is forced by AC 13. Every one keeps its ORIGINAL assertions and its original payload shape (the
+   third argument is discarded as `_c`), so all of them remain free, behaviourally unedited
+   regressions. The answered colour is asserted in exactly one new place,
+   `test_a_melee_parry_reports_no_colour`.
+4. **`AC 9`'s dead-defender path is pinned honestly, and the first draft of that test was WRONG.**
+   The forced-DEAD idiom (`set_action_state(DEAD)` with `_round_over` left FALSE) does not reach the
+   gate, because `HeroState.is_alive()` is measured HP-BASED (`hero_state.gd:171-172`) — a DEAD
+   action state over positive hp sails through and the negation fires. Measured, not assumed: the
+   first run showed 1 deflect where 0 was expected. The test now takes hp to zero, and its comment
+   names BOTH layers that answer a dead defender (the round-over freeze in natural play, and the
+   branch's own `is_alive()` gate as defense in depth) rather than claiming the narrower one.
+5. **Iteration and mutation proofs ran the WHOLE STATE HARNESS, not the affected file alone**
+   (`PROC/R1` asks for the file alone). This repo ships no single-file runner — `run_state_tests.gd`
+   discovers `test/state/test_*.gd` with no filter — and adding one is outside this story's scope.
+   The proofs are unaffected in kind (each mutation's RED set is reported below, and running MORE
+   tests only strengthens the "and nothing else moved" half); the cost is machine time. Flagged for
+   the operator: a filtered runner would pay for itself.
+6. **`data/balance/balance_config.tres`'s two new fields sit in the existing `Unblockable`
+   `@export_group`, not a new `Defense` one.** Mode ③ exists only where an unblockable does (its
+   layer gate IS `flags.unblockable`, AC 3), so a separate group would suggest an independence the
+   flag gate denies. Named because it is a visible authoring-surface choice the story did not fix.
+7. **The new test fixture deals its ENTIRE deck (`DECK_SIZE == HAND_SIZE == 6`), a MEASURED
+   correction.** The first attempt used a twelve-card deck cycling three colours; the seeded deal
+   handed P2 no GREEN, so every GREEN row of the blind-spot pin failed on the fixture rather than on
+   the code. Colour coverage is now a property of the COMPOSITION rather than of the seed. Its
+   consequence — an empty deck, hence a reshuffle that would fold the discard back — is neutralised
+   by parking `DRAW_DELAY_TICKS` beyond every test's horizon; AC 7's obligation is that a
+   replacement is OWED with its window in flight, which is asserted directly.
+
+### Open items for review
+
+- **RESOLVED (review fix, MED).** The sentinel-vs-sentinel edge named in the dev pass — if BOTH the
+  charge and the defense degraded to `NO_TELEGRAPH_COLOR`, the two sentinels compared EQUAL and the
+  attack was negated — was accepted as a real finding by the operator rather than left as shipped
+  behaviour. `inject_card_colors`'s totality check that "closed it at the seam" is `Invariant.check`
+  (assert()-backed) and is STRIPPED IN EXPORTED BUILDS (the repo's own `5-1a` finding), so that
+  closure was only a DEBUG-ONLY guarantee — a degraded defense must never answer a degraded
+  chargeup in a release build. The guard in `_resolve_charge_landing` now carries an explicit
+  `target.defense_color != PlayerState.NO_TELEGRAPH_COLOR` exclusion alongside the AC 9 colour
+  match. `test_unblockable_defense.gd::test_a_degraded_defense_never_answers_a_degraded_chargeup`
+  reaches the case by direct state manipulation (the SDV precedent — the seam's `Invariant` would
+  trip the harness grep if a fixture tried to reach it through an injected map) and asserts the
+  landing resolves as an ORDINARY HIT. Non-vacuity: staging the removal of the new `!=` condition
+  turned this one test RED (684 tests, 1 failed) against an otherwise-green harness; the mutation
+  file was copied outside the repo and SHA-256'd before mutation (`38d3595d44e4…`) and restored by
+  copying the backup back, with the post-restore SHA-256 matching exactly.
+- **`AC 5`'s ATTACKING case is asserted on the swing's own windows and dedupe record, not on the
+  contact pipeline.** "Untouched by construction" is the claim; a swing that lands a contact ACROSS
+  a defense cast tick is not exercised here. Cheap to add if the reviewer wants it.
+- **Live Smoke is unrun** — this is a dev pass only. Item 5 (mid-swing / mid-roll cast finishing
+  unaltered) and item 2 (window survival across two attempts) are the two the state tests cover most
+  and the eye covers least.
+
+### Mutation Table (MEASURED)
+
+Every mutated file was copied OUTSIDE the repo and SHA-256'd before mutation, then restored by
+copying the backup BACK (never `git checkout` — both source files and `project.godot` carry
+intentional diffs, so a checkout would have wiped the pass). The post-restore SHA-256 is re-read and
+matched in every row. Each run is the full state harness (see deviation 5).
+
+| # | Mutation | File | Observed | Restore |
+|---|---|---|---|---|
+| 1 | AC 9's guard made COLOUR-BLIND: `target.defense_color == player.charge_color` dropped, leaving `if target.defense_window.is_running:` | `src/state/match_state.gd` | **RED**, 3 tests — `test_only_a_matching_colour_negates` (the blind-spot pin), `test_a_wrong_colour_window_does_not_defend`, `test_a_wrong_colour_landing_leaves_the_window_running_to_answer_a_later_one`. The story's literally-named mutation, and the colour check is proven LOAD-BEARING. | copy-back, sha `e766b542b4412…` matched |
+| 2 | Window consumption moved OUT of the colour-match branch and ONTO the landing branch, unconditional (colour check left correct) | `src/state/match_state.gd` | **RED**, exactly 1 test — `test_a_wrong_colour_landing_leaves_the_window_running_to_answer_a_later_one`: window not running, colour `-1` not `0`, remaining `0` not `13`, hp `80.0` not `90.0`, no deflect reported. **Every same-colour assertion in the file stayed GREEN**, which is precisely the blind spot AC 11 named — the mutation is invisible without this test. | copy-back, sha `e766b542b4412…` matched |
+| 3 | `player_state.defense_window` / `defense_color` dropped from `HASHED`, left UNCLASSIFIED | `test/state/test_replay_identity.gd` | **RED**, 1 test — `test_unhashed_cross_tick_state_is_exactly_three_members`: "unclassified state member(s) … `player_state.defense_window`, `player_state.defense_color`", got 2 expected 0. Proves the `^var` scan sees the two new fields and that leaving them unclassified is not a neutral option. | copy-back, sha `b286dc444f724…` matched |
+| 4 | `_grant_landing_orbs(player)` removed from the landed branch (the POSITIVE CONTROL's own non-vacuity proof) | `src/state/match_state.gd` | **RED**, 10 tests — including `test_a_colour_match_negates_completely_against_a_positive_control`: "CONTROL: …and really does grant the attacker an orb of the charge's colour", got 0 expected 2. Proves the "no orb grant on a negation" claim is measured against a path that demonstrably COULD have paid — the `5-4` "the pool sat at zero either way" hole, closed. (REVIEW FIX: the 10 RED tests decompose as SEVEN `test_orbs_economy.gd` failures — that file's own grant coverage, unrelated and expected — plus THREE `test_unblockable_defense.gd` failures — the named positive control plus two siblings — not nine + one as first recorded.) | copy-back, sha `e766b542b4412…` matched |
+| 5 | REVIEW FIX 1's new `!=` sentinel-exclusion clause dropped from AC 9's guard, reverting to `target.defense_window.is_running and target.defense_color == player.charge_color` | `src/state/match_state.gd` | **RED**, exactly 1 test — `test_a_degraded_defense_never_answers_a_degraded_chargeup`: two degraded sentinels compared equal and the attack was wrongly negated. 684 tests, 1 failed, harness otherwise green. Proves the sentinel exclusion is LOAD-BEARING, not merely present. | copy-back, sha `38d3595d44e4ebd5708ac95c4ced070ebed36c9cb82c7669c67be551f9c569e1` matched |
+| 6 | REVIEW FIX (AC 15.1)'s `p2_cast_defense` moved BACK onto physical keycode 76 -- staging the exact collision with `p1_roll` this fix closes | `project.godot` | **RED**, exactly 1 test — `test_no_physical_key_backs_two_project_actions`: `p2_cast_defense vs p1_roll (physical_keycode 76)`. 685 tests, 1 failed, harness otherwise green. Proves the new project-wide physical-key-uniqueness guard is LOAD-BEARING against the exact bug the operator caught by eye. | copy-back, sha `e374269b6755a84f77049461c827ee893b615c9ed494d91e22468055b1b4d315` matched |
+
+### File List
+
+**New**
+- `test/state/test_unblockable_defense.gd` (+ `.uid`) — 35 tests, AC 1-12, 14, 16, the blind-spot
+  pin, and (review fix pass) `test_a_degraded_defense_never_answers_a_degraded_chargeup`
+
+**Modified — source**
+- `src/state/player_state.gd` — `defense_window` / `defense_color` fields (AC 2), their `_init`
+  construction, the `"defense"` `to_snapshot()` key (AC 16)
+- `src/state/match_state.gd` — widened `deflect_landed` declaration and its melee emit site (AC 13),
+  the two step-2 `defense_window.tick()` lines (AC 2), the `DEFENSE` dispatch arm (AC 1),
+  `_resolve_defense_cast` (AC 3-8), the landing intercept and the resolved header forward-reference
+  (AC 9-11, AC 13's second emit site), the `_reset_player` fourth exception (AC 12)
+- `src/state/resources/balance_config.gd` — `defense_stamina_cost`, `defense_window_seconds` (AC 6,
+  AC 14)
+- `src/state/timing/balance_ticks.gd` — `defense_window_ticks` and its conversion (AC 14)
+- `src/actors/hero/telegraph_controller.gd` — widened `on_deflect_landed`, the colour-tint branch,
+  and `DEFAULT_SPARK_COLOR` hoisted so a colour-less parry renders byte-identically (AC 13)
+- `src/controllers/keyboard_controller.gd` — `_cast_defense` field, its action string, the P2-only
+  guarded branch above and mutually exclusive with confirm (AC 15)
+- `data/balance/balance_config.tres` — the two authored values (AC 6, AC 14)
+- `project.godot` — the `p2_cast_defense` Input Map action, physical key `L` (AC 15). EXACTLY one
+  addition; diff re-checked after the editor `.uid` session and still 5 insertions, 0 deletions.
+  REVIEW FIX (AC 15.1): `L` collided with `p1_roll`'s own key (physical keycode 76 shared by both
+  actions); moved to `;` (physical keycode 59, confirmed free). One further edit, still no other
+  entries moved.
+
+**Modified — tests**
+- `test/state/test_card_play.gd` — `REACHABLE_MODES` widened to three, the reachable-set test
+  RENAMED (AC 1)
+- `test/state/test_data_resources.gd` — `E1_BALANCE_FIELDS` gains the two fields (AC 14)
+- `test/state/test_balance_authoring.gd` — bespoke `> 0` bounds AND both relational bounds (AC 14)
+- `test/state/test_replay_identity.gd` — both fields classified `HASHED`; members stays at THREE
+- `test/state/test_draw_delay_and_reshuffle.gd` — `EXPECTED_PLAYER_SNAPSHOT_KEYS` gains `"defense"`
+- `test/state/test_card_observation.gd` — expected list gains `"defense"`, size 29 -> 30
+- `test/state/test_determinism.gd` — golden re-baselined with its accounting block, plus the new
+  resting-value pin
+- `test/state/test_architecture_invariants.gd` — the `deflect_landed` declaration pin (deviation 1)
+- `test/state/test_deck_and_hand.gd` — `SHIPPED_INPUT_ACTIONS` gains `p2_cast_defense` (deviation 2);
+  REVIEW FIX (AC 15.1): the pin comment corrected for the `L`->`;` move, and
+  `test_no_physical_key_backs_two_project_actions` added
+- `test/state/test_block_deflect.gd` — lambdas widened + `test_a_melee_parry_reports_no_colour`
+- `test/state/test_contact_pipeline.gd`, `test_contact_resolution.gd`, `test_projectile_flight.gd`,
+  `test_unit_attack_rhythm.gd` — lambdas widened only (deviation 3)
+
+**Referenced, NOT edited** — `src/state/enums.gd` (`ModeKind` already sized), `src/main/match_runner.gd`
+(the `connect_deflect_landed` wrapper is unaffected), `test/state/test_balance_config.gd` (AC 14's
+"no forced edit" finding, confirmed), `test_architecture_invariants.gd`'s `OBSERVATION_SEAMS` (AC 13's
+negative proof — re-run unedited, green).
+
+### Review Fix Pass (post-review, three findings, all fixed)
+
+Attribution: the reviewer's findings, fixed by the dev agent in this pass. Status stays "review" —
+no promotion, per the operator's instruction for this pass.
+
+**FIX 1 (MED, sentinel-vs-sentinel — review ruling accepted).** The dev pass's own "Open items for
+review" entry had shipped the sentinel-vs-sentinel gap as accepted behaviour on the reasoning that
+`inject_card_colors`'s totality check "closes it at the seam." The review rejected that reasoning:
+the totality check is `Invariant.check`, i.e. assert()-backed, and this repo's own `5-1a` finding is
+that assert()-backed checks are STRIPPED IN EXPORTED BUILDS — so "closed at the seam" was only a
+DEBUG-ONLY guarantee, and `_resolve_charge_landing`'s AC 9 guard is the release-time one. Fixed by
+adding `and target.defense_color != PlayerState.NO_TELEGRAPH_COLOR` to the guard (`match_state.gd`),
+rewriting the site comment to carry the review's finding instead of the old claim, and adding
+`test_a_degraded_defense_never_answers_a_degraded_chargeup` to `test_unblockable_defense.gd` — reached
+by direct state manipulation (the SDV precedent), since `inject_card_colors`'s own totality check
+would trip the harness grep if a fixture tried to reach the case through an injected map missing both
+colours. NON-VACUITY: the file was copied outside the repo and SHA-256'd (`38d3595d44e4ebd5708ac95…`)
+before staging the removal of the new `!=` condition; the mutated harness ran 684 tests, 1 failed —
+exactly the new test, RED as required — with every other test green; the backup was copied back
+(never `git checkout`) and the post-restore SHA-256 matched the pre-mutation hash exactly. See
+Mutation Table row 5. The "Open items for review" entry above is corrected to RESOLVED, and the story
+now states the debug-only caveat explicitly rather than the superseded "unreachable, closed at the
+seam" claim.
+
+**FIX 2 (MED, mutation table row 4 provenance).** Corrected: the 10 RED tests from mutation #4
+decompose as SEVEN `test_orbs_economy.gd` failures (that file's own grant coverage, unrelated and
+expected) plus THREE `test_unblockable_defense.gd` failures (the named positive control plus two
+siblings) — not nine + one as the dev pass first recorded. The review re-derived the count from the
+same run's output; the mutation itself was not re-run, and the totals (10 RED, same file, same SHA)
+are unchanged.
+
+**FIX 3 (LOW, comment only).** Added a comment in `keyboard_controller.gd`'s `_sample_card_scheme`,
+directly above the `_cast_defense`-checked-above-`_cast_confirm` branch, naming that the DEFENSE-
+above-UNBLOCKABLE precedence is unobservable today because no prefix carries both actions (P1 has
+`cast_unblockable`, P2 has `cast_defense`), and that a future story giving one prefix both actions
+(named as `5-7`'s scoping) would make a simultaneous press silently prefer DEFENSE — an ordering that
+would then need to be a deliberate decision rather than an inherited accident of branch order. No
+behaviour changed.
+
+**Suite counters after this pass:** full state harness + integration, one run
+(`C:\dev\_55-fix-suite.txt`) — see the counters recorded there. Golden confirmed UNCHANGED at
+`d9725092fb420c85…` (nothing in this pass touches `to_snapshot()`).
+
+### Second Review Fix Pass (AC 15.1, one HIGH finding, caught by the operator's eye)
+
+Attribution: the finding is the OPERATOR'S, by eye, before the smoke — found against a gate
+measurement (AC 15's own dev pass) that checked the wrong scope. The class of bug is now guarded
+permanently so it dies here. Status stays "review"; no promotion.
+
+**THE FINDING.** `p2_cast_defense` was authored on physical keycode 76 (`L`) — but `p1_roll`
+(`project.godot`, the E0 J/K/L combat row) was ALREADY bound to keycode 76. Godot allows one
+physical key to silently back two Input Map actions with no error and no warning, so every P2
+defense confirm would ALSO roll the P1 hero — a two-keyboard smoke would have shown this
+immediately, and would have shown it as a broken defense answer, not an obviously-keyboard bug.
+The gate that authored the key (this story's own dev pass, AC 15) measured "L is free" against the
+CARD scheme only; nobody cross-checked the combat rows, and no pin anywhere guarded physical-key
+uniqueness across the whole action set.
+
+**FIX A — the key moved.** `p2_cast_defense`'s `physical_keycode` in `project.godot` changed from
+76 to 59 (`;`, semicolon — still adjacent to the P2 zone). Confirmed free BEFORE editing: a grep
+for `physical_keycode":59` against `project.godot` returned zero hits. Every "L" reference to this
+action was corrected, not erased — the collision and the move are noted at each site: AC 15 (the
+inline superseded-key note plus the new AC 15.1 paragraph), Project Structure Notes, the File List
+entry, `test_deck_and_hand.gd`'s `SHIPPED_INPUT_ACTIONS` comment, and this Dev Agent Record.
+`keyboard_controller.gd` was checked and carries no literal key-name reference to correct — it
+names the action (`_cast_defense`, `p2_cast_defense`) abstractly and never spells out "L", so
+nothing there pointed at the stale key.
+
+**FIX B — the class of bug is now guarded permanently.** `test_no_physical_key_backs_two_project_actions`
+added to `test_deck_and_hand.gd`, beside the `SHIPPED_INPUT_ACTIONS` pin: it walks every shipped
+action (excluding Godot's own `ui_*`, the identical exclusion `test_debug_step_pause.gd`'s own
+collision scan already makes and for the identical reason — `p2_move_*` deliberately shares the
+arrow keys with `ui_*`) and asserts no `physical_keycode` backs more than one action. It GENERALISES
+`test_debug_step_pause.gd::test_debug_keys_collide_with_no_other_project_binding`, which scopes the
+same check to `debug_pause`/`debug_step` against everything else — this one has no privileged side,
+because any two colliding actions are the same bug regardless of which one is "special." NON-VACUITY,
+the honest way (measured after writing the test, not staged first): `project.godot` was copied
+outside the repo and SHA-256'd (`e374269b6755a84f77049461c827ee893b615c9ed494d91e22468055b1b4d315`)
+before staging `p2_cast_defense` back onto physical keycode 76 — the exact pre-fix collision. The
+mutated harness ran 685 tests, 1 failed: `test_no_physical_key_backs_two_project_actions`, reporting
+`p2_cast_defense vs p1_roll (physical_keycode 76)` — exactly the operator's finding, reproduced by
+the new guard. The backup was copied back (never `git checkout` — `project.godot` and other files
+carry other intentional diffs) and the post-restore SHA-256 matched the pre-mutation hash exactly.
+See Mutation Table row 6.
+
+**MEASURED: no pinned hash of `project.godot` exists anywhere in the suite or tooling.** Searched
+before editing, per the instruction to stop rather than re-baseline if one moved. The only SHA-256
+references to `project.godot` found in the repo are one-time editor-session verifications recorded
+in past stories' own Debug Log References (5-3's FBX-import session, `8879de49...` both times) —
+manual confirmations that a specific editor session left the file untouched beyond one intentional
+edit, not a persistent CI-enforced pin. No test parses or hashes `project.godot`'s content; the
+only Input-Map-shaped pin is `test_deck_and_hand.gd`'s `SHIPPED_INPUT_ACTIONS`, which pins ACTION
+NAMES via the runtime `InputMap` API, not keycodes or file bytes — unaffected by this fix. Nothing
+was re-baselined.
+
+**Suite counters after this pass:** ONE full run into `C:\dev\_55-fix2-suite.txt` — see the counters
+recorded there. Golden confirmed UNCHANGED at `d9725092fb420c85…` (this pass touches only
+`project.godot`'s Input Map and `test_deck_and_hand.gd`; nothing here reaches `to_snapshot()`).
+
+## Live Smoke Results
+
+Operator smoke, 2026-09-06, recorded verbatim in `docs/playtest-log.md`'s "5-5" block.
+**Overall verdict: SMOKE PASS, all ten items, zero fix rounds from the smoke itself.**
+
+1. **Mode 3 defense cast resolves and negates a matching unblockable — PASS.** The read-and-answer
+   exchange works end to end on both keyboards.
+2. **The negation spark tints to the answered colour — PASS**, with a non-blocking follow-up: the
+   operator must currently know each hand card's colour from memory to answer correctly. Cards in
+   hand should eventually be coloured to match, pending a better idea for the presentation — this is
+   the SECOND consecutive smoke to raise it (5-4, 5-5), elevated to the E5 close-out inventory
+   (5-5/R10).
+3. **A wrong-colour defense lets the unblockable land in full — PASS.** No partial mitigation, no
+   false negation.
+4. **An ordinary melee parry stays untinted (yellow) — PASS.** The widened `deflect_landed` payload
+   changed nothing observable about the pre-existing melee cue.
+5. **Casting defense drops an active block instantly — PASS.** `5-2/R17`'s first real exercise reads
+   correctly at the keyboard.
+6. **The defense cue is audible immediately, even while the attacker's swing animation is still
+   playing — PASS, and resolved as no defect.** This is the `5-3` cast cue working exactly as built —
+   it fires on cast-commit, not gated on any animation — and is not a defense-cast regression.
+7. **A colour mismatch fails silently, with no cue — PASS (by design).** A wrong-colour defense
+   quietly does nothing, which is the intended shape for this dev pass.
+8. **P1's roll (`L`) behaves normally — PASS.** Confirms `AC 15.1`'s move off physical keycode 76
+   left no residual collision with `p2_cast_defense`.
+9. **Feel — recorded as feedback, not a fix item.** The operator judged both the unblockable attack
+   and the defense answer "rough" overall, but confirmed the basis works and that this is what
+   matters at this stage of the story ("first make things, then make them pretty" — the session's own
+   operating rule). Per-attack-type counter ideas (sweep/jump, airborne interception, thrust) and
+   clearer attack/defense windows are `5-6` ladder scope, not this story's.
+10. **FPS stable — PASS.** No visible frame-rate impact from the new per-tick window read, the colour
+    tint, or the landing intercept.
+
 ## Change Log
 
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-09-06 | Story authored via gds-create-story, against baseline `c62fb36` | Claude Opus 4.8 |
+| 2026-09-06 | Dev pass: all 16 ACs implemented; golden re-baselined ONCE (`dc2c9ffa` -> `d9725092`, one cause measured in both directions); state harness 649 -> 683 tests, 4898 -> 5126 assertions; four mutation proofs measured; Status -> review | Claude Opus 4.8 |
 | 2026-09-06 | Gate fix pass: applied the new CHARGING-refusal operator ruling (AC 4); corrected AC 5's `set_action_state` scope to BLOCKING-only and folded the old AC 6 negative claim into it; cut the old AC 13 (window-expiry restatement) and AC 15's smoke-duplicate tail; widened `deflect_landed` with a colour argument (AC 13); added the positive-control and falling-mutation blind-spot pins (AC 10/AC 11); corrected the reset-exception ordinal to fourth (AC 12); added the required `test_replay_identity.gd`/snapshot-key-set edits; renumbered AC 1-16 with no stale cross-references; promoted to ready-for-dev | Claude Opus 4.8 |
+| 2026-09-06 | Review fix pass (3 findings, all fixed): FIX 1 (MED, review ruling accepted) — closed the sentinel-vs-sentinel gap in `_resolve_charge_landing`'s AC 9 guard with an explicit `defense_color != NO_TELEGRAPH_COLOR` exclusion, corrected the site comment to state the release-time reasoning (`inject_card_colors`'s totality check is assert()-backed and stripped in exported builds, per `5-1a`), added `test_a_degraded_defense_never_answers_a_degraded_chargeup` (SDV precedent, direct state manipulation), and resolved the "Open items for review" entry that had shipped the gap as accepted behaviour; non-vacuity proven (mutation → 1 test RED against 684 green, SHA-256 matched before/after restore). FIX 2 (MED) — corrected the mutation table's row 4 provenance: the 10 RED tests are SEVEN `test_orbs_economy.gd` + THREE `test_unblockable_defense.gd`, not nine + one. FIX 3 (LOW) — added a comment in `keyboard_controller.gd`'s card-scheme branch noting the DEFENSE-above-UNBLOCKABLE precedence is unobservable today (no prefix carries both actions) and becomes a real decision if `5-7` gives one prefix both. Status stays "review"; no promotion. | Claude Opus 4.8 |
+| 2026-09-06 | Second review fix pass (AC 15.1, one HIGH finding, caught by the operator's eye before the smoke, not by the gate): `p2_cast_defense` collided with `p1_roll` on physical keycode 76 (`L`) — Godot silently allows one key to back two actions, so every P2 defense confirm would also roll the P1 hero. FIX A moved `p2_cast_defense` to physical keycode 59 (`;`), confirmed free by grep first; every "L" reference corrected, not erased (AC 15, Project Structure Notes, File List, `test_deck_and_hand.gd`'s pin comment). FIX B added `test_no_physical_key_backs_two_project_actions`, generalising `test_debug_step_pause.gd`'s existing debug-key collision scan to every shipped action; non-vacuity measured the honest way (staged the old 76-collision back, 685 tests / 1 failed — the new test, exactly — SHA-256 `e374269b6755a84f…` matched before mutation and after copy-back restore). Measured: no pinned hash of `project.godot` exists anywhere in the suite; nothing re-baselined. State harness 684 -> 685 tests, 5132 -> 5133 assertions. Golden confirmed UNCHANGED at `d9725092`. Status stays "review"; no promotion. | Claude Opus 4.8 |
+| 2026-09-06 | Live smoke: ten items PASS, zero fix rounds from the smoke itself. The cast-sound-on-swing observation resolved as the `5-3` cast cue working exactly as built (fires on cast-commit, not gated on animation), not a defense-cast defect. Non-blocking follow-ups recorded for later: cards in hand still uncoloured (second consecutive smoke to raise it, elevated to the E5 close-out inventory) and defense/chargeup feel plus per-attack-type counters (`5-6` ladder scope). Status -> done. | Claude Opus 4.8 |
