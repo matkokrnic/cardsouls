@@ -4,7 +4,7 @@ baseline_commit: a492bdacc5e6781813a9ad2f58e5befafb60ed95
 
 # Story 5.4: Orbs
 
-Status: ready-for-dev
+Status: review
 
 ## What this story supersedes
 
@@ -215,13 +215,18 @@ landed.
     HUD counter (AC 18-20) and the earn cue (AC 17) consume THIS SAME channel; the earn cue
     fires on increase, no separate signal is added for it.
 16. **NEW: pin the prime-on-connect false-fire.** The seam (AC 15) primes on connect with the
-    resting `(0,0,0)` count. A flash cue derived naively as "fires on increase" against an
-    unset previous triple would misfire at match start, on the priming call itself. An
-    integration test under `test/integration/` (the `test_charge_telegraph_dispatch_live.gd`
-    family) proves NO flash fires on the priming emission and a flash DOES fire on a real
-    subsequent increase, with a mutation (removing the priming guard) driving the test RED.
-    This is runtime composition of `MatchRunner` + `TelegraphController`; no state-level test
-    can satisfy this AC.
+    resting `(0,0,0)` count. A flash cue derived naively as "the seam fired, so flash" — reacting
+    to ANY `orbs_changed` payload rather than only to an INCREASE over the previous triple —
+    would misfire at match start, on the priming call itself. An integration test under
+    `test/integration/` (the `test_charge_telegraph_dispatch_live.gd` family) proves NO flash
+    fires on the priming emission and a flash DOES fire on a real subsequent increase, with a
+    mutation that makes the cue fire on any change rather than on an increase driving the
+    priming case RED. (A weaker mutation — deleting the priming guard but leaving the
+    "increase over the previous triple" check in place — does NOT drive this test red, because
+    the previous triple then zero-initialises to the pool's own resting `(0,0,0)` and the guard's
+    marginal value over that zero baseline is unreachable in the shipped composition; that
+    finding is recorded, not re-litigated, in Completion Notes.) This is runtime composition of
+    `MatchRunner` + `TelegraphController`; no state-level test can satisfy this AC.
 
 **Presentation — the shared earn cue (`telegraph_controller.gd`, the `5-3` ChargeMarker
 pattern)**
@@ -343,6 +348,33 @@ Completion Notes regardless — this is a prediction, not a given.
    before this story — this is a regression smoke for everything except the new grant.
 6. **FPS** — no visible frame-rate impact from the new shape node, tween, or per-tick economy
    read (the evaluator call is already per-confirmed-hit cost, not new per-tick cost).
+
+## Live Smoke Results
+
+Operator smoke, 2026-09-06, recorded verbatim in `docs/playtest-log.md`'s "6.9. / 5-4" block.
+**Overall verdict: SMOKE PASS, all eight items, no findings.**
+
+1. **Counters present from frame one — PASS.** Both players' orb counters render real zeroes at
+   match start, not a placeholder.
+2. **No opponent read — PASS.** Each HUD shows only its own player's counts; the opponent's
+   counts never leak across.
+3. **Earn raises the counter and flashes above the attacker — PASS.** A landed unblockable
+   raises the attacker's own-colour count and fires the above-head flash on the attacker's hero,
+   visible in both split-screen viewports.
+4. **Colour matches — PASS.** The flash and the counter it fills are the same hue as the spent
+   card's charge telegraph.
+5. **A miss pays nothing — PASS.** An unblockable that misses its target grants no orb and fires
+   no cue.
+6. **A killing landing pays, and the orbs survive the freeze — PASS.** A landing that kills its
+   target still credits the orb, and the grant is visible through the round-over freeze rather
+   than being cleared before it displays.
+7. **R clears all three with no flash — PASS.** The debug reset zeroes all three colours on both
+   players with no earn cue firing on the way down.
+8. **FPS stable — PASS.** No visible frame-rate impact from the new shape node, tween, or
+   landing-time economy read.
+
+One non-blocking follow-up recorded by the operator: the cards in hand are not yet coloured to
+match their card colour — out of this story's scope, left for a later pass.
 
 ## Open Questions (left to the gate / dev pass)
 
@@ -529,13 +561,211 @@ Completion Notes regardless — this is a prediction, not a given.
 
 ### Agent Model Used
 
-(not yet dev-passed)
+Opus 5 (operator-stated).
 
 ### Debug Log References
 
+- Before-baseline: `C:\dev\_54-suite-before.txt` — 629 tests, 0 failed, 4809 assertions; 53
+  integration files PASS; `ALL TESTS PASSED`. Written 2026-09-06 02:17:44.
+- Close-out: `C:\dev\_54-suite-after.txt` — 648 tests, 0 failed, 4893 assertions; 54 integration
+  files PASS; `ALL TESTS PASSED`. Written 2026-09-06 02:41:50. Delta 24 min.
+- **The close-out suite ran TWICE, and the first run is a real finding, not a retry.** Attempt 1
+  read `648 tests, 1 failed` —
+  `test_replay_identity.gd::test_unhashed_cross_tick_state_is_exactly_three_members`, on the new
+  `orb_pool._max` member being classified into none of the four buckets. That is the AC 11 pin
+  working exactly as built (a new `src/state/` member must be bucketed before replay equality stays
+  an honest claim). Fixed by classifying `_max` as **INJECTED** — see Completion Notes — and attempt
+  2 is the file recorded above. Both attempts are counted; the `PROC/R1` budget was overrun by one
+  full-suite run and it is reported rather than absorbed.
+- Iteration and every mutation proof ran the AFFECTED TEST FILE ONLY, via a temporary single-file
+  runner (`test/run_one_state_test.gd`) created for this pass and **DELETED before the close-out
+  run** — `git status --short` shows no residue.
+
 ### Completion Notes List
 
+**Golden: UNMOVED, as predicted.** `dc2c9ffa11387e99f47150b90a8449a101104f5a555c7254c14cc8d0d339019b`
+before and after, with `test_state_matches_golden` green in both suite runs. The prediction's premise
+was re-confirmed rather than re-derived: the fixture still casts no mode ②, so the new landing-seat
+grant is never entered. Both reverse measurements were taken (Mutation Table rows a/b): staging
+`orbs = true` into `_golden_flags` left the hash at `dc2c9ffa` (so the non-move comes from the
+fixture never landing a charge, not from a closed flag), and staging the AC 12 forbidden key MOVED
+it to `4cc02623` (so the harness really is sensitive to a snapshot-shape change). No re-baseline.
+
+**`FORMAT_VERSION`: NO BUMP, measured.** `RecordFile.FORMAT_VERSION` stays 7, `REQUIRED_KEYS` and
+`IntentRecorder.EXPECTED_INTAKE_SURFACE` are unchanged and untouched. The prediction held for the
+stated reason: the new rule `.tres` is picked up by the existing directory scan and adds no call
+surface for the recorder, and no new intake, contact kind or intent field ships.
+
+**The two reset findings, named SEPARATELY (the `5-2/R8` discipline applied here).**
+1. *The AC 13 debug-reset clear.* `player.orbs.reset_all()` joins the units board / unit dedupe /
+   projectile board / mode-② chargeup as the THIRD named exception to the reset's "NOTHING else"
+   contract, seated in `_reset_player` beside them, and `_apply_debug_reset`'s header now names it.
+   Pinned by `test_the_debug_reset_clears_orbs_on_both_players`.
+2. *The `_end_round` NON-clear.* `_end_round` gains nothing, deliberately: a clear there would
+   delete the WINNER's freshly-earned orbs at the instant of death, before the round-over freeze
+   displays them. This is a different claim with different reasoning, and it is now ASSERTED rather
+   than left as prose — `test_orbs_survive_the_round_over_freeze_and_are_cleared_only_at_the_reset`
+   drives the kill, checks the orbs survive it, then checks the reset ends them.
+
+**`orb_pool._max` is classified INJECTED, and that is the one asymmetry with `ManaPool`.**
+`mana_pool._maximum` sits in `test_replay_identity.gd`'s HASHED bucket because
+`ManaPool.to_snapshot()` carries it. AC 12 forbids the orb twin from entering the snapshot, so it
+cannot be HASHED — and it is not a FOURTH unhashed cross-tick exclusion either, because it is not
+cross-tick state: it is authored config, changed only through `set_maximum`, reached only from
+`apply_balance`, which IS a capture channel. `UNHASHED_CROSS_TICK_MEMBERS` stays at THREE.
+
+**The docs/test asymmetry, named as the story asked.** `test_architecture_invariants.gd` moves to
+NINE in this pass (`OBSERVATION_SEAMS`, the failure text, and the function name).
+**`docs/game-architecture.md:371-372`'s "there are now eight" prose is NOT edited** — it is queued
+for the E5 close-out flush, joining `5-3/R4`'s existing ARCH AMENDMENT QUEUE member, so several E5
+amendments land together. Nothing disappeared quietly.
+
+**Open Question answers (the story asked for both to be named).**
+- *HUD display shape (AC 18): PER-COLOUR, three counters.* Three counts of a three-colour RPS
+  resource are three separate reads a player makes, and the reserved footprint has held three panels
+  since 2-4 — fusing them would have been a layout change dressed as a fill. Each label is tinted its
+  own colour from a presentation-local `HudRoot.ORB_COLORS` (src/ui owns its palette; the HUD loads
+  no telegraph resource), matching the hues the charge telegraph and the earn cue use. Digit
+  legibility at half-width is an OPERATOR SMOKE surface (`PROC/R8`), not a number this pass may
+  declare correct.
+- *Test file placement: ONE new `test_orbs_economy.gd`, and `test_unblockable_initiation.gd` is NOT
+  edited.* The new file carries every state-level AC (1-13) on its own mode-② fixture. Leaving 5-2's
+  file alone is worth the one duplicated fixture: its `_flags()` opens `unblockable` alone, so all of
+  its landings now run with the orbs layer CLOSED and its assertions stand unmoved — a free
+  regression that this story changed nothing about 5-2.
+
+**AC 1's regression is behavioural, not an absence.**
+`test_the_grant_path_never_consults_the_spend_side_orb_gate` authors an orb cost NO player can pay
+onto every card, casts mode ②, and shows the cast is allowed, the hit lands and the grant pays out —
+because mode ② never calls `CastEvaluator.refusal_reason` (`5-2/R2`) and this story did not make it
+start. `cast_evaluator.gd` is unchanged; `test_cast_evaluator.gd` is unedited and green.
+
+**Files the story named as NOT-EDITED, confirmed unedited:** `test/state/test_economy_and_hero.gd`,
+`test/state/test_cast_evaluator.gd`, `test/state/test_card_authoring.gd`,
+`test/state/test_unblockable_initiation.gd`, `src/state/economy/cast_evaluator.gd`,
+`docs/game-architecture.md`. `project.godot` is untouched.
+
+**No editor session was run** (`3-0c/R13`): no new file declares a `class_name`
+(`test_orbs_economy.gd` and `test_orb_cue_live.gd` are harness-discovered scripts;
+`unblockable_landing.tres` is a resource). `project.godot` therefore carries no risk of the known
+reorder/deletion signature and shows clean in `git status`. **CONSEQUENCE: the two new `.gd` files
+ship WITHOUT a `.uid` sibling** (`test/state/test_orbs_economy.gd`,
+`test/integration/test_orb_cue_live.gd`), where every other `.gd` in the repo has one. `.uid`
+generation is left to the chain, as instructed. `.tres` files carry no `.uid` in this repo, so
+`data/economy/unblockable_landing.tres` is consistent with its three siblings.
+
+**DEVIATIONS AND DECISIONS — read these.**
+1. **`OrbFlash` is a SIBLING of `HitFlash`, not `Shapes/OrbFlash`.** The story's Project Structure
+   Notes name `Shapes/OrbFlash`; that placement does not work and AC 17 is what governs.
+   `TelegraphController.on_action_state_changed` hides EVERY child of `$Shapes` on every transition,
+   and the landing queues `set_action_state(IDLE)` in the SAME signal drain as the grant — an
+   OrbFlash under `Shapes` would be switched off in the frame it was lit. AC 17 asks for "the SAME
+   one-shot idiom the existing hit flash already uses", and `HitFlash`/`DeflectSpark` are both direct
+   children of the controller for exactly this reason. Recorded in the node's own
+   `editor_description`.
+2. **The seam test was RENAMED** `test_runner_observation_seams_are_exactly_eight` →
+   `..._exactly_nine`. The brief named only the list and the failure text; the rename follows the
+   direct `3-6` precedent (`..._seven` → `..._eight` in that story's own commit) and refuses to leave
+   a test whose NAME asserts eight while its body asserts nine. **Consequence, also done:** six
+   citations of the old name were updated so no dangling reference ships — `match_runner.gd` (×4),
+   `telegraph_controller.gd`, `debug_instrument_panel.gd`, `unit_board.gd`. The last two are files
+   this story otherwise does not touch; each is a one-line comment edit and no code moved. Both the
+   rename and those two out-of-set edits are the operator's to reverse if unwanted.
+3. **`test_mana_economy.gd` was edited, which the story did not list.** It had to be: the new rule
+   `.tres` moves the authored rule count 3 → 4, and that file asserts the count in two places. Kept
+   minimal — the count moves, the fourth rule's identity is asserted as ORBS so no mana assertion can
+   be answering about it, and its field-by-field pin lives in `test_orbs_economy.gd`. The test
+   function was renamed `..._is_the_three_mana_faucets` → `..._is_the_four_authored_faucets` for the
+   reason in deviation 2.
+4. **`test_replay_identity.gd` was edited, which the story did not list.** Forced by the AC 11 pin —
+   see Debug Log References and the `orb_pool._max` note above.
+5. **AC 16's NAMED mutation does not go red, and a stronger one does. This is a finding.** The story
+   asks for "a mutation (removing the priming guard) driving the test RED". MEASURED (Mutation Table
+   row c1): deleting the `_orb_counts.is_empty()` early return and zero-initialising the previous
+   triple to `[0, 0, 0]` leaves `test_orb_cue_live.gd` **GREEN** — because the pool genuinely rests
+   at `(0,0,0)` at match start, so a zero baseline sees no increase on the priming payload. The
+   guard's extra value over a zero baseline (correctness for a NON-zero priming) is not reachable in
+   the shipped composition, where nothing connects to the seam after orbs exist. The hazard AC 16
+   describes IS real for the naive form an adversary would actually write — "the seam fired, so
+   flash" — and that form drives case (a) RED (row c2), which is the proof recorded. The empty-guard
+   spelling is kept because it is the truthful one (it distinguishes "not seen" from "seen as zero"),
+   not because a mutation forced it. **Operator's call whether AC 16's mutation wording should be
+   amended.**
+
+**QUESTIONS FOR THE OPERATOR (visible gameplay consequences, not implementation).**
+- *The authored numbers are the story's own provisionals, unplaytested:* `unblockable_orb_grant = 1`,
+  `max_orbs_per_color = 5`. At 1 per landing against a 5 cap, a player needs five landed
+  unblockables to saturate one colour. Confirm at smoke or retune — it is a one-line `.tres` edit
+  with no test edit and no golden re-baseline (`BC/R3`; the story adds no new seat and makes no
+  action refusable, so `SC/R6`'s boundary is not crossed).
+- *The earn cue's hold is 0.25 s*, in the spent colour, on a 0.16-radius sphere at root +1.35 (clear
+  of the box top at +1.0 and of `ChargeMarker` at +0.5). Legibility and duration are smoke surfaces.
+- *The reset clears orbs silently.* AC 13 clears them at the debug reset, and the earn cue correctly
+  does NOT fire on that decrease — so a player watching the hero sees nothing; only the HUD counters
+  drop to zero. If the round boundary should ANNOUNCE the loss of a stake, that is a new cue and a
+  new ruling, not something this pass added.
+
+### Mutation Table (MEASURED)
+
+Every proof below ran the AFFECTED TEST FILE ONLY. Every mutated file was copied OUTSIDE the repo and
+SHA-256'd before mutation, then restored by copying the backup BACK (never `git checkout`); the
+post-restore SHA-256 is re-read and matched in each row.
+
+| # | Mutation | File | Observed | Restore |
+|---|---|---|---|---|
+| a | `f.orbs = true` staged into `_golden_flags()` | `test/state/test_determinism.gd` | **GREEN** — hash still `dc2c9ffa…`, 17/17 pass. Proves UNMOVED comes from the fixture never landing a charge, not from a closed flag. | copy-back, sha `9f6b41c26de6e993` |
+| b | `"maximum": _max` staged into `to_snapshot()` (the AC 12 forbidden key) | `src/state/pools/orb_pool.gd` | **RED** — `test_state_matches_golden`: got `4cc026238a1efdf4…`, expected `dc2c9ffa…`. Proves the harness measures snapshot shape. | copy-back, sha `0fc5c06a325f35ac` |
+| c0 | priming-guard body replaced with `if false:` (previous triple never populated) | `src/actors/hero/telegraph_controller.gd` | **RED** on half (b) — "no OrbFlash after a REAL increase — the cue never fires at all". Proves half (b) is non-vacuous. | copy-back, sha `39c433c71273b7f5` |
+| c1 | priming guard DELETED, `_orb_counts` zero-initialised `[0, 0, 0]` | `src/actors/hero/telegraph_controller.gd` | **GREEN** — the finding in deviation 5. AC 16's literally-named mutation is not reachable in the shipped composition. | copy-back, sha `39c433c71273b7f5` |
+| c2 | diff removed entirely: the cue fires on EVERY `orbs_changed` payload (the naive "the seam fired, so flash" form) | `src/actors/hero/telegraph_controller.gd` | **RED** on half (a) — "OrbFlash is LIT after the priming emission — the cue fired on a connect, not on an earn" (plus the cross-slot and decrease cases). This is AC 16's proof. | copy-back, sha `39c433c71273b7f5` |
+| d | `if updated == current: return` (AC 8's no-op short circuit) removed from `add` | `src/state/pools/orb_pool.gd` | **RED**, 3 tests — injection emitted `[[0,0,0],[0,0,0],[0,0,0]]` instead of nothing; 4 events instead of 1; a saturated-colour landing signalled `[[0,3,0]]`. | copy-back, sha `0fc5c06a325f35ac` |
+| e | `"connect_orbs_changed"` dropped from `OBSERVATION_SEAMS` | `test/state/test_architecture_invariants.gd` | **RED** — the nine-name scan vs. the eight-name list, naming the ninth. Proves the pin sees the new seam. | copy-back, sha `8313e4f07832e543` |
+| f | `player.orbs.reset_all()` removed from `_reset_player` | `src/state/match_state.gd` | **RED**, 2 tests — the reset left P1 at `{blue: 2}` and P2 at `{green: 1}`; the round-boundary test got 2, expected 0. | copy-back, sha `1ef29b33cb3dc0c1` |
+| g | `"unblockable_orb_grant"` dropped from `E1_BALANCE_FIELDS` | `test/state/test_data_resources.gd` | **RED** — reflection half (a): "BalanceConfig field missing from E1_BALANCE_FIELDS — it ships unaudited: unblockable_orb_grant". | copy-back, sha `24ee51f61861c98d` |
+| h | authored `unblockable_orb_grant = 0`, `max_orbs_per_color = 0` | `data/balance/balance_config.tres` | **RED** — both bespoke `> 0` bounds fire. Proves the `>= 0` loop alone would have shipped the story invisible. | copy-back, sha `b80cefa2559bd181` |
+| i | `"orb_pool._max"` absent from `INJECTED` (the state as first written — measured in the wild by close-out attempt 1) | `test/state/test_replay_identity.gd` | **RED** — `test_unhashed_cross_tick_state_is_exactly_three_members`. Proves the AC 11 classification pin sees a new `src/state/` member. | fixed forward (classified INJECTED) |
+| j | `is_alive()` guard staged around the `_grant_landing_orbs` call in `_resolve_charge_landing` (the review fix's own non-vacuity proof for the new kill-case test) | `src/state/match_state.gd` | **RED**, 1 test — `test_a_landing_that_kills_its_target_still_pays_the_grant`: got `0`, expected `2` on both the grant assertion and the survives-the-freeze assertion; no other test in the file moved. | copy-back, sha `1ef29b33cb3dc0c1` |
+
 ### File List
+
+**New**
+- `data/economy/unblockable_landing.tres` — the fourth authored rule (AC 2)
+- `test/state/test_orbs_economy.gd` — 17 tests, AC 1-13 (no `.uid`; see Completion Notes). Now 18
+  tests after the review fix pass's kill-case addition (see Change Log, 2026-09-06 review fixes).
+- `test/integration/test_orb_cue_live.gd` — AC 16 (no `.uid`; see Completion Notes)
+
+**Modified**
+- `src/state/economy/economy_evaluator.gd` — `ORBS`, `SOURCE_UNBLOCKABLE_LANDING` (AC 1)
+- `src/state/resources/balance_config.gd` — `unblockable_orb_grant`, `max_orbs_per_color` + a new
+  `Orbs` export group (AC 3/9)
+- `data/balance/balance_config.tres` — the two authored values (1, 5)
+- `data/feature_flags.tres` — `orbs = true` (AC 14)
+- `src/state/pools/orb_pool.gd` — `NO_MAXIMUM` sentinel, `_max`, clamped + short-circuited `add`,
+  `set_maximum`, `get_maximum`; `to_snapshot()` UNCHANGED (AC 8/12)
+- `src/state/match_state.gd` — `_grant_landing_orbs` + its call in the landed branch (AC 1/4-7),
+  `_apply_balance_to_player`'s injection line (AC 10), `_reset_player`'s `reset_all()` (AC 13), and
+  three header corrections (`_resolve_charge_landing`'s "no orb (`5-4`)" forward reference,
+  `_apply_debug_reset`'s named-exception count)
+- `src/main/match_runner.gd` — `connect_orbs_changed` (AC 15) and its two wirings (AC 17, AC 18-20);
+  four seam-test citations
+- `src/actors/hero/telegraph_controller.gd` — `on_orbs_changed`, `_orb_flash`, `_orb_flash_tween`,
+  `_orb_counts` (AC 17); one seam-test citation
+- `src/actors/hero/hero.tscn` — the `OrbFlash` node + its mesh sub-resource (AC 17)
+- `src/ui/hud/hud_root.gd` — `on_orbs_changed`, `_orb_labels`, `ORB_COLORS`, the filled
+  `_build_orb_counters` (AC 18-20)
+- `src/ui/debug/debug_instrument_panel.gd` — seam-test citation only (comment)
+- `src/state/unit_board.gd` — seam-test citation only (comment)
+- `test/state/test_architecture_invariants.gd` — `OBSERVATION_SEAMS` and the failure text to NINE,
+  test renamed (AC 15)
+- `test/state/test_data_resources.gd` — the two new fields in `E1_BALANCE_FIELDS`, plus the AC 14
+  authored-flag pin
+- `test/state/test_balance_authoring.gd` — bespoke `> 0` bounds for both new fields (AC 3/9)
+- `test/state/test_mana_economy.gd` — authored rule count 3 → 4 (see deviation 3)
+- `test/state/test_replay_identity.gd` — `orb_pool._max` classified INJECTED (see deviation 4)
+- `docs/implementation-artifacts/5-4-orbs.md` — this record
+
+**Not committed by this pass:** nothing is staged and nothing is committed, per the operator's
+instruction.
 
 ### Change Log
 
@@ -551,3 +781,20 @@ Completion Notes regardless — this is a prediction, not a given.
   AC count trimmed from 24 to 20 by deleting/folding six ACs into Non-Goals/Dev
   Notes/Golden Prediction and trimming two further ACs to their load-bearing or
   behavioural half). Promoted to ready-for-dev.
+- 2026-09-06 — Dev pass complete. All twenty ACs implemented; golden UNMOVED at `dc2c9ffa`, proven
+  falsifiable in both directions; `FORMAT_VERSION` unbumped (7); the observation-seam family moved
+  eight → nine in the test only, with the arch-doc prose queued for the E5 close-out flush. Suite
+  629/4809 → 648/4893, all green. Eleven measured mutation proofs recorded. Status → `review`;
+  nothing staged, nothing committed. Deviations and two operator questions are in Completion Notes.
+- 2026-09-06 — Review fixes applied (two findings). MED: `test_orbs_economy.gd` gains
+  `test_a_landing_that_kills_its_target_still_pays_the_grant`, driven through a new
+  `_make_lethal_match`/`_lethal_config` fixture (100 %% damage instead of the shared 10 %%) so
+  the SAME landing that kills the target is the one that pays the grant, and the grant is then
+  proven to survive the round-over freeze until the debug reset — closing the prior gap where the
+  kill and the grant were only ever proven separately. Non-vacuity: an `is_alive()` guard staged
+  around the `_grant_landing_orbs` call drove the new test RED (Mutation Table row j), then
+  restored by SHA-256-verified copy-back. LOW/docs-only: AC 16's named mutation is reworded to the
+  form that actually drives the priming case red (a cue that fires on any `orbs_changed` payload
+  rather than only on an increase); the originally-named mutation (deleting the priming guard
+  alone) is kept on record as a vacuous finding, not deleted. No code changed for this second fix.
+  Status stays `review`; nothing staged, nothing committed.
