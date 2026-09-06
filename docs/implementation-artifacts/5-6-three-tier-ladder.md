@@ -4,7 +4,7 @@ baseline_commit: 47c4d7c523509075578256277863003a90c23760
 
 # Story 5.6: Three-Tier Ladder
 
-Status: ready-for-dev
+Status: done
 
 ## What this story supersedes / measures against the brief
 
@@ -121,7 +121,13 @@ exploit.
      `deflect_stamina_cost` (`balance_config.gd:23`) — that field is what the DEFENDER spends to
      execute a deflect (`match_state.gd:1433-1434`); this is what the ATTACKER loses as the deflect's
      consequence, authored provisionally `12.0` (Ruling 2), joining the `Defense` `@export_group`
-     (`balance_config.gd:270`) beside `deflect_stamina_cost`.
+     (`balance_config.gd:270`). **CORRECTED by the fix pass (review finding L2):** the field is NOT
+     "beside `deflect_stamina_cost`" — that field lives in the `Stamina` group (`balance_config.gd:23`),
+     a different group entirely, and this text's own two instructions ("joins Defense" / "beside
+     deflect_stamina_cost") conflicted. The dev pass's placement (Defense, grouped by which mechanic
+     OWNS the field, per the field's own comment at `balance_config.gd:286-289`) is correct and is kept
+     unchanged — this is a docs-only correction, not a field move, since moving the field would be the
+     larger true change for zero behavioural gain (`@export_group` is editor-display metadata only).
    - **A NEW `dodged_unblockable_damage_multiplier: float` field**, joining the `Unblockable`
      `@export_group` (`balance_config.gd:296`) beside `unblockable_damage_percent_of_max_hp`, authored
      `0.0` (Ruling 1b's ratified starting value). This generalises the GDD table's hardcoded "None"
@@ -365,6 +371,23 @@ exploit.
     below (`match_state.gd:3141-3147`) — Ruling 3 forbids ACTION and MOVEMENT, not the visual heading;
     this is the same fallthrough `ROLLING`/`ATTACKING` already get (facing tracks the lock while
     velocity is overridden), not a new carve-out.
+
+    **ADDENDUM (fix pass, review finding M1, ACCEPTED + PINNED):** the two `STUNNED` entry points
+    root the hero on DIFFERENT ticks, and this is INTENTIONAL rather than a gap in the text above.
+    The color-counter stun is written inside `_resolve_actions` (step 3), strictly BEFORE that
+    player's own step-3 `_resolve_movement` call, so the hard root above takes effect the SAME tick
+    the stun is entered. The melee-deflect stun (AC 9) is written inside `_resolve_contacts` (step
+    4), which runs strictly AFTER both players' step-3 `_resolve_movement` calls for that tick — so a
+    hero mid-swing keeps that tick's attack-lunge velocity for one full extra tick, and the hard root
+    only takes effect on the FOLLOWING tick's `_resolve_movement`. Zeroing velocity at the step-4
+    entry point would smear this decision into a third function and is invisible at 60 Hz; it is the
+    SAME shape this codebase already accepts for `DEAD`'s one-tick carry (the `2-3/R13` precedent,
+    `test_round_over_freezes_resolution_until_reset`). Pinned by
+    `test_a_melee_deflect_stun_carries_one_ticks_residual_lunge_velocity_then_zeroes`
+    (`test_block_deflect.gd`): nonzero velocity on the entry tick, a literal zero the tick after. The
+    color-counter entry's same-tick rooting is the ASYMMETRIC sibling, and the asymmetry is in the
+    ORDERING (which step writes the stun relative to that tick's own movement resolution), not in the
+    rooting mechanism, which is identical for both.
 15. **`STUNNED` forbids every action by construction, already, with NO new code**: `transition_row()`
     already maps `STUNNED` to `&"stunned"` (`hero_state.gd:321-322`), whose `TRANSITION_TABLE` row is
     already the empty dictionary (`hero_state.gd:65`) — a press with no entry in the row is dropped,
@@ -401,7 +424,16 @@ exploit.
     arm uses its own reason (AC 15) since "committed to an unblockable" does not describe a stunned
     caster. **No other `5-2` chargeup behaviour changes** — this AC touches only `_resolve_basic_cast`;
     `_resolve_unblockable_cast`, `_unblockable_refusal_reason`, and `TRANSITION_TABLE` are all
-    untouched (Non-Goals).
+    untouched (Non-Goals). **AMENDED by the fix pass (review finding H1):** `_unblockable_refusal_
+    reason` is NOT untouched — it gains exactly one `STUNNED` arm returning `REASON_STUNNED`, carved
+    out of this closing sentence and the matching Non-Goals line below. The review found that this
+    function, unlike `_resolve_basic_cast` and `_resolve_defense_cast`, was never gated on `STUNNED`
+    at all: a stunned hero could cast a fresh unblockable, and the successful-cast path's
+    unconditional `set_action_state(CHARGING)` overwrote `STUNNED` outright, un-rooting the hero and
+    escaping the punish this story exists to create. "Committed to an unblockable" does not describe
+    a stunned caster, so the new arm returns `REASON_STUNNED`, not `REASON_UNBLOCKABLE_COMMITTED`.
+    `_resolve_unblockable_cast` and `TRANSITION_TABLE` remain untouched — only the sibling reachability
+    gate gained the one arm.
 
 **Golden Prediction — the machine contract**
 
@@ -492,8 +524,12 @@ exploit.
   (`animation_controller.gd:141`) — the hero visibly freezes on whatever pose it held, which is
   sufficient for the live smoke's "the hero is visibly stopped" check without a new clip. A dedicated
   stun clip/cue, if wanted, is a future presentation story's call, not this one's.
-- **No `5-2` chargeup behaviour changes beyond AC 16.** `_resolve_unblockable_cast`,
-  `_unblockable_refusal_reason`, and `TRANSITION_TABLE`'s absent `charging` row are all untouched.
+- **No `5-2` chargeup behaviour changes beyond AC 16.** `_resolve_unblockable_cast` and
+  `TRANSITION_TABLE`'s absent `charging` row are untouched. **AMENDED by the fix pass (review
+  finding H1):** `_unblockable_refusal_reason` is carved OUT of this line — it gains one `STUNNED`
+  arm (`REASON_STUNNED`), the third card-cast seat AC 15's own "STUNNED forbids every action"
+  opening sentence implied but the dev pass never gated. See AC 16's amended closing sentence for
+  the full account.
 - **No new `FeatureFlags` field, no new `InputIntent` field.**
 
 ## Deferred
@@ -749,15 +785,401 @@ already proved.
 
 ### Agent Model Used
 
+Opus 5 (operator-stated).
+
 ### Debug Log References
+
+**Suite cadence (PROC/R1) -- THREE full `test/run_all.sh` runs, not two, and the third is reported
+rather than hidden.**
+
+| Run | File | Timestamp | Result |
+|-----|------|-----------|--------|
+| Before-baseline | `C:\dev\_56-suite-before.txt` | 2026-09-06 23:35:27 | 685 tests / 5133 assertions / 0 failed; 55 integration PASS |
+| Final (aborted) | `C:\dev\_56-suite-after.txt` (overwritten) | 2026-09-07 00:15:55 | 709 tests / 5273 assertions / **0 failed**, but `SOME TESTS FAILED` |
+| Final | `C:\dev\_56-suite-after.txt` | 2026-09-07 00:20:06 | 709 tests / 5273 assertions / 0 failed; 55 integration PASS; `ALL TESTS PASSED` |
+
+Machine time, from the two surviving instrument timestamps: **44 min 39 s** (23:35:27 -> 00:20:06).
+
+WHY THERE WAS A THIRD RUN. The first final run reported ZERO failed assertions but still exited
+nonzero: `run_all.sh` also fails the suite on any `^ERROR:` line, and two
+`String formatting error: not all arguments converted` lines were emitted from a message string in
+this story's OWN new two-slot boundary test -- `"... %d ..." + "..." % [slot]` binds the `%` to the
+LAST fragment only, which has no format spec. The defect was test-message-only (no assertion
+outcome changed), was found BY the final run, and was fixed by wrapping the concatenation in
+parentheses. Re-running is what the final run is for; the alternative was shipping a suite that
+exits nonzero. A repo-wide scan for the same binding pattern found two other sites
+(`test_action_state.gd:143`, the pre-existing `test_record_file.gd:535`) and both bind correctly.
+
+**Per-file iteration runs.** Development iterated on the STATE HARNESS ALONE
+(`godot --headless --script res://test/run_state_tests.gd`), never `run_all.sh` -- the same
+narrower-than-the-suite instrument `PROC/R1` sanctions for mutation proofs. Every mutation proof
+below used it too.
+
+**Golden attribution runs (AC 17), all state-harness-only.** Five isolation measurements; see the
+re-baseline record in `test_determinism.gd` for the full write-up.
 
 ### Completion Notes List
 
+**All 17 ACs delivered.** Golden re-baselined ONCE: `d9725092` -> `d5bcb7e6`. Suite 685/5133 ->
+709/5273. `project.godot` byte-identical (`git diff -- project.godot` empty); the editor was never
+opened, so there is NO editor session to record and no `.uid` scan was owed (no new `.gd` file was
+created -- every test landed in an existing file).
+
+1. **THE LADDER (AC 5 / AC 7 / AC 8), three tiers in one function.** `_resolve_charge_landing` now
+   reads: colour match -> attacker STUNNED for `color_counter_stun_ticks`, window consumed, EARLY
+   RETURN; else defender's iframe open at the step-3 observation point -> damage scaled by
+   `dodged_unblockable_damage_multiplier`, `hit_landed` emitted ONLY at positive magnitude, no orb;
+   else the unchanged full-damage + orb path. **The exit restructure took shape (a):** one early
+   `return` for the negation, the trailing `IDLE` still covering the other three outcomes
+   unduplicated -- so EVERY outcome takes exactly one `set_action_state`, and no shape relies on a
+   second last-write-wins call. Pinned by the QUEUED TRANSITION LOG, not by final state:
+   `test_each_landing_outcome_takes_exactly_one_action_state_write` asserts the emitted
+   `[previous, current]` pairs, which is the only assertion that can see a phantom `IDLE`.
+
+2. **AC 7's OBSERVATION POINT is a new two-element per-tick latch, `_iframe_open_at_step3`, NOT a
+   resolution reorder** -- the dev-pass choice AC 7 leaves open, argued here. MEASURED: `advance()`
+   runs `_resolve_actions(p1)` COMPLETELY (timer exits including the charge landing, then p1's
+   presses) before `_resolve_actions(p2)`. A live `target.hero.is_iframe_open()` read is therefore
+   SEAT-DEPENDENT: slot 0's landing resolves before the defender's same-tick roll press (no dodge),
+   slot 1's resolves after it (dodge). The latch is written at the top of step 3 -- after step 2's
+   ticks, so the `1-9/R2` grace transient is current, and before any press -- giving the contract
+   AC 7 states: a same-tick roll dodges on NEITHER slot, a previous-tick roll on BOTH. The
+   alternative shape (hoisting both landings ahead of every press) would reorder a step four
+   stories' worth of timing claims rest on, to buy the same contract. **Mutation M4 proves the
+   choice matters**: swapping the latch for the live read fails
+   `test_the_dodge_boundary_is_identical_on_both_slots` on exactly the slot-1 case.
+   `_iframe_open_at_step3` classifies **PER_TICK** in `test_replay_identity.gd` on
+   `_deflect_closed_this_tick`'s exact write-before-read argument -- so no snapshot key, and
+   `UNHASHED_CROSS_TICK_MEMBERS` STAYS AT THREE.
+
+3. **THE MELEE TIER (AC 9 / AC 10 / AC 11).** Hero-only (`attacker_index == HERO_INDEX`), immediate
+   interrupt (the story's recommended reading, shipped as written), punitive `add(-x)` drain. The
+   `add()`-vs-`spend()` contract is pinned on BOTH observable points -- an unaffordable penalty still
+   applies floored at zero, and the regen delay is NOT restarted -- because either alone passes
+   against the wrong mechanism in some fixture. AC 11's widening of `is_hitbox_active()` is what
+   makes the immediate interrupt safe rather than merely convenient, and it is stated as a property
+   of `action_state` (not of `STUNNED`), so any future non-`ATTACKING` interrupt inherits the
+   closure.
+
+4. **A GAP FOUND AND CLOSED IN AC 9's OWN GUARD.** AC 9 names `test_block_deflect.gd:459-472`'s
+   `4-3b/R7` negative guard as this story's regression proof that the hero-only gate holds. MEASURED,
+   IT DOES NOT PROVE THAT: that guard asserts on the deflected MINION's rhythm, and a unit has no
+   `ActionState` or `stun` field -- so it stays GREEN against an implementation that dropped the
+   `HERO_INDEX` gate entirely, because such an implementation stuns the OWNING HERO instead
+   (`attacker` is the `PlayerState` for a unit-sourced fact too). Two assertions were ADDED to that
+   test (owner not stunned, owner's stamina unmoved). The guard is otherwise re-run unedited, and
+   mutation M6 now falls on it.
+
+5. **`STUNNED`'s LIFECYCLE (AC 12-16), all shipped.** Timer arm (natural expiry only, proven by
+   comparison against an untouched control rather than by an absolute assertion); fifth reset
+   exception; hard root as a literal zero with facing deliberately falling through; table-driven
+   actions forbidden by the empty `stunned` row with the DROP-not-BUFFER half asserted; both cast
+   seats refusing, sharing one `REASON_STUNNED` constant, with the basic-cast gate proven to sit
+   AHEAD of the empty-slot gate (an empty-slot cast while CHARGING reports the commitment, not
+   `REASON_EMPTY_SLOT`).
+
+6. **AC 13's ACTION-STATE CLAUSE IS DEFENSIVE-IN-DEPTH, NOT LOAD-BEARING -- measured, reported.**
+   Mutation M10 removed `STUNNED` from `_reset_player`'s action-state clear and the WHOLE SUITE
+   STAYED GREEN. Traced: the reset runs at step 1, `_apply_debug_reset` clears `_round_over` so step
+   1b does not return, and step 3's AC 12 timer arm then sees a stopped window and writes `IDLE` in
+   the SAME tick -- the two implementations are indistinguishable through `advance()`, including in
+   queued-signal order. The load-bearing half is `hero.stun.start(0)`, and mutation M10b DOES fall on
+   it. BOTH halves are kept: AC 13 asks for both, they clear one fact in two parts exactly as the
+   chargeup's three and the defense window's two do, and this codebase has a standing
+   "written anyway, in the defense-in-depth family" precedent (`_resolve_charge_landing`'s own
+   dead-enemy branch). Flagged rather than silently trimmed, and rather than claimed as proven.
+
+7. **THE GOLDEN MOVED FOR TWO CAUSES, BOTH INSIDE AC 9, BOTH MEASURED SEPARATELY.** No new snapshot
+   key -- `hero_state.stun` and `hero_state`'s stamina have been hashed since E1, so this is the
+   `5-4` orbs shape and no key-set literal anywhere in the suite moves. Full write-up in
+   `test_determinism.gd`'s re-baseline record. The five measurements:
+   - **0b (degenerate-value proof, taken first):** both write sets SHIPPED, the two fixture coverage
+     values UNAUTHORED -> hash reproduced the inherited `d9725092` BIT FOR BIT. Without authoring,
+     both new paths would have measured a FALSE NON-MOVER.
+   - **Cause 1, the stun + state pair:** staged out with the drain left in -> `57d3b5a9`.
+   - **Cause 2, the stamina drain:** staged out with the pair left in -> `e3a26c4a`.
+   - **AC 5 predicted and measured a NON-CONTRIBUTOR:** its complete write set staged out with AC 9's
+     complete write set in -> `d5bcb7e6`, UNCHANGED from the shipped tree.
+   - **The full reverse:** BOTH write sets staged out, everything else this story ships left in place
+     -> the inherited `d9725092` EXACTLY. Every other member of the story is a measured non-mover.
+
+8. **AC 17's ACCOUNTING BLOCK IS INCOMPLETE -- A SECOND LOST ITEM, MEASURED AND REPORTED.** AC 17
+   names ONE unconditionally lost item (the t9 chain coverage). Measurement found a second, and it is
+   a CONSEQUENCE of the first rather than independent: **the t13 ORDINARY-BLOCK coverage is also
+   lost.** `CONTACTS[13]` carries `attack_index` 1, an index that only ever existed as P1's CHAINED
+   swing; with the t9 press dropped by the `stunned` row, P1's `attack_index` never leaves 0, no
+   dedupe record for swing 1 is opened, and the fact drops at `register_swing_hit` -- before damage,
+   before `hit_landed`, before the mana confirmation. Consequences on the record: P2 finishes at
+   120.0 HP (was 117.0) and P1's mana is the passive faucet alone (was passive + one 12.0 melee
+   confirmation). AC 17's option (a) (accept the shift) is FOLLOWED AS WRITTEN -- the fixture tables
+   were NOT reworked -- and the loss is now ASSERTED AS A LOSS in
+   `test_golden_sequence_exercises_block_and_deflect` rather than deleted. Equivalent coverage for it
+   already exists and is untouched by this story: the whole ordinary-block ladder in
+   `test_block_deflect.gd`. **This is a correction to AC 17's text that measurement proves, flagged
+   not forced.** A shorter fixture stun (<= 3 ticks) would have preserved it, but AC 17 locks the
+   ~7-tick target and names the t9 drop itself as a GAIN, so the spec was followed.
+
+9. **TWO PRE-EXISTING TESTS CHANGED THAT AC 17 / AC 11 IMPLY BUT DO NOT ENUMERATE**, both reported
+   rather than quietly patched:
+   - `test_contact_resolution.gd::test_dead_attacker_in_flight_window_delivers_nothing` asserted
+     `is_hitbox_active()` TRUE after a forced death, to prove the in-flight window is not
+     early-stopped (`1-9/R3`). AC 11 makes that predicate false for a non-`ATTACKING` hero. The
+     SUBJECT was moved to `active.is_running` -- which states the `1-9/R3` claim directly, about the
+     window rather than about a predicate that has since gained a conjunct -- and the new AC 11
+     behaviour was asserted POSITIVELY beside it instead of inverting the old line silently.
+   - `test_block_deflect.gd::test_second_swing_in_same_window_degrades_to_block_when_pool_short`
+     needs its attacker to swing again at t9 after a t4 deflect. At the file's default 11-tick stun
+     the press is dropped and the test measures nothing about `R-N7`. It now authors a local 2-tick
+     stun, with the reason stated: `R-N7` is a claim about the DEFENDER's pool, and how fast the
+     attacker recovers between swings is fixture scaffolding. Every asserted number is unchanged.
+   - `test_unblockable_defense.gd::test_the_attacker_exits_charging_whether_negated_or_not` (5-5's,
+     asserting the exit is UNCONDITIONAL) is SUPERSEDED by AC 5 and was rewritten, not deleted --
+     see note 1.
+
+10. **AC 2's FIELD PLACEMENT CORRECTED AGAINST THE CODE.** AC 2 says `deflect_stamina_penalty` joins
+    the `Defense` `@export_group` (`balance_config.gd:270`) "beside `deflect_stamina_cost`". Those two
+    instructions conflict: `deflect_stamina_cost` is measured at `balance_config.gd:23`, in the
+    **Stamina** group, not Defense. The field was placed in the **Defense** group (the line AC 2
+    actually cites), grouped by which mechanic owns it, and the discrepancy is noted at the field.
+
+11. **THE STORY'S DEFERRED ITEM IS RESOLVED BY MEASUREMENT, AND PINNED.** An already-running
+    `defense_window` cast before a stun landed is untouched: nothing in this story reads or writes
+    `defense_window`/`defense_color` outside the negation branch, and AC 15 only prevents ARMING a
+    new one. The story leaves it to the dev pass whether this warrants a test; it got one
+    (`test_a_stun_does_not_disturb_an_already_running_defense_window`) -- the claim is cheap to pin
+    and expensive to rediscover.
+
+12. **NON-GOALS HELD.** `_resolve_unblockable_cast`, `_unblockable_refusal_reason` and
+    `TRANSITION_TABLE` are untouched; `FORMAT_VERSION` stays 7; no new snapshot key, no new
+    `InputIntent` or `FeatureFlags` field, no new observation seam (the family stays at nine), no new
+    Input Map action, no `main.tscn` edit, no `game-architecture.md` edit.
+
+13. **LIVE SMOKE NOT RUN** -- this is a dev pass; the smoke is the operator's, after review. Items
+    1-6 of the Live Smoke list are all pinned headless as the story's blind-spot note requires:
+    item 1 = `test_a_negation_stuns_the_attacker_and_only_the_attacker`; item 2 =
+    `test_only_a_matching_colour_negates` (re-run unedited); item 3 =
+    `test_an_open_iframe_dodges_the_landing_silently_at_the_shipped_multiplier`; item 4 =
+    `test_a_deflected_hero_attacker_is_stunned_and_drained`; item 5 =
+    `test_a_stunned_hero_refuses_every_table_action_and_buffers_none` +
+    `test_a_stunned_hero_cannot_cast_basic` / `_defense`; item 6 =
+    `test_a_charging_hero_cannot_cast_basic`. The CUT flip item's premise is discharged by
+    `test_the_dodge_boundary_is_identical_on_both_slots`. Items 7-8 (regression by eye, FPS) and the
+    qualitative "holds pose" read remain smoke-only.
+
+### Fix Pass (post-review), Dev Agent Record — APPENDED, not replacing the notes above
+
+Applied against the code review at `docs/implementation-artifacts/5-6-code-review.md`. No commits;
+`Status` and the board are untouched; everything lands on top of the dev pass's uncommitted working
+tree over `4e5f145`. The review report file stays untracked, unstaged.
+
+14. **H1 FIXED — the third cast seat.** `_unblockable_refusal_reason` (`match_state.gd`) gains a
+    `STUNNED` arm returning `REASON_STUNNED` (the SHARED constant AC 15 already defines, not a fourth
+    reason) — the exact shape AC 15/AC 16's own two seats already take. Caught at review against BOTH
+    the story's own Non-Goals lock ("`_unblockable_refusal_reason` ... untouched") and the dev pass's
+    own instruction (AC 16's closing sentence, which the fix pass now amends alongside Non-Goals to
+    carve out this one-arm addition). New headless test
+    (`test_a_stunned_hero_cannot_cast_unblockable`, `test_unblockable_defense.gd`) asserts the refusal
+    reason, that `action_state` stays `STUNNED` (a successful cast would have overwritten it with
+    `CHARGING`), that the stun window keeps counting down untouched rather than left orphaned, and that
+    no card/chargeup/stamina is spent. Mutation: the new arm removed → the new test FALLS (reproduced
+    live, backed up outside the repo, SHA-256-verified byte-identical after restore — see the mutation
+    table's M21).
+
+15. **M1 ACCEPTED AND PINNED — the melee-deflect stun's one-tick residual lunge, on the `2-3/R13`
+    DEAD-velocity precedent.** No code change: the asymmetry between the two `STUNNED` entry points
+    (color-counter roots same-tick because it is written in step 3 ahead of that tick's own
+    `_resolve_movement`; melee-deflect carries one tick because it is written in step 4, strictly
+    after) is documented in AC 14 (an ADDENDUM naming the precedent) and pinned by a new test,
+    `test_a_melee_deflect_stun_carries_one_ticks_residual_lunge_velocity_then_zeroes`
+    (`test_block_deflect.gd`), which authors a LOCAL nonzero `attack_lunge_distance` (the shared
+    `_config()` leaves it at 0.0, which is why no other test in the file could see this at all) and
+    asserts nonzero velocity on the entry tick, a literal zero the tick after.
+
+16. **M2 MEASURED — confirmed structurally unreachable, no guard added.** Investigated whether one
+    hero attacker's swing can produce two deflected contact facts against the enemy hero in the same
+    tick (which would double the AC 10 stamina drain). MEASURED unreachable: a hero owns exactly one
+    `active` `TimingWindow` (`hero_state.gd:112`), so at most one hitbox is live for it at any instant
+    and the match_runner can gather at most one contact fact from it per tick against a given target —
+    there is no second swing available while the first is still `active` to produce a second fact. A
+    duplicate fact naming the SAME `attack_index` against the same target would separately drop at
+    `_register_attacker_hit`'s dedupe rung, which sits strictly BEFORE the deflect branch in the step-4
+    ladder. A comment recording both halves of this argument is added at the penalty site
+    (`match_state.gd`, immediately above the `attacker_index == HERO_INDEX` block) rather than a
+    speculative per-tick guard, per the ruling: a guard would defend against a fact the ladder's own
+    earlier rungs already make unreachable.
+
+17. **L1 STRENGTHENED — the `_reset_player` `STUNNED` clause is live, not dead; the ORIGINAL test just
+    could not see it.** The pre-existing `test_the_debug_reset_clears_a_stunned_hero_and_its_window`
+    drives the reset through the public `advance()` path, whose step-3 AC-12 timer arm independently
+    re-derives `IDLE` from the stopped window in the SAME tick — exactly what let mutation M10 (the
+    action-state clause removed) leave the whole suite green. A new test,
+    `test_the_reset_seat_itself_clears_a_stunned_hero_immediately`, applies the `2-3/R13` DEAD-branch
+    DIRECT-CALL idiom (`test_match_state.gd`'s `ms._resolve_movement(...)` pattern) to `_reset_player`
+    itself: it calls the reset seat directly and asserts `IDLE` immediately, before any `advance()` —
+    including step 3 — has a chance to run. Re-running M10 against this new test: FALLS (see the
+    mutation table's M10c). Both tests are kept: the original documents the full public-path behaviour
+    (still correctly green), the new one documents the reset seat's OWN contract — post-reset state
+    must not depend on a later step happening to run, unlike `DEAD`'s clear in the same `if`, which has
+    no timer arm to fall back on at all.
+
+18. **L2 RESOLVED — the smaller true change was the docs, not the field.** AC 2's text asked for
+    `deflect_stamina_penalty` to join "the `Defense` group ... beside `deflect_stamina_cost`", but
+    those two instructions conflict (`deflect_stamina_cost` lives in the `Stamina` group). The dev
+    pass's actual placement (`Defense`, grouped by which mechanic owns the field, reasoned at the field
+    itself) is correct and unchanged; AC 2's text is corrected instead, since moving the field would be
+    the larger true change for zero behavioural difference (`@export_group` is editor-display metadata
+    only — no `.tres` edit, no test, no consumer reads it).
+
+19. **L3 ACKNOWLEDGED, NO ACTION.** `dodged_unblockable_damage_multiplier`'s runtime `if dodged > 0.0`
+    guard failing safe against a negative authored value is incidental to the guard's actual purpose
+    (suppressing a zero-magnitude emit), not a deliberate defense against a negative one — worth noting
+    for a future refactor of that line, not a defect today. The authoring-time bound
+    (`test_authored_dodge_multiplier_is_bounded_above`, `<= 1.0`) plus the generic non-negative
+    reflection loop (`test_data_resources.gd`) already jointly close the authored-value gap; the repo's
+    standing pattern is authoring-time bounds for tunables, not redundant runtime clamps, so no runtime
+    guard is added.
+
+20. **L4 ACKNOWLEDGED, NO ACTION.** The `_code_lines` comment-stripping helper's first-`#` truncation
+    (reused from `test_replay_identity.gd`'s pre-existing idiom) would mis-strip a line whose code
+    portion legitimately contains a `#` inside a string literal. No such line exists in any file this
+    helper scans today, and it is a pre-existing idiom rather than new logic from this story — noted for
+    completeness, no action needed.
+
+**Suite (fix pass, state harness only — PROC/R1's narrower-than-the-suite instrument, exactly as the
+dev pass used for its own iteration and mutation proofs):** 712 tests / 5291 assertions / 0 failed
+(three new tests over the dev pass's 709/5273: `test_a_stunned_hero_cannot_cast_unblockable`,
+`test_the_reset_seat_itself_clears_a_stunned_hero_immediately`,
+`test_a_melee_deflect_stun_carries_one_ticks_residual_lunge_velocity_then_zeroes`). The golden constant
+is UNCHANGED at `d5bcb7e6...` (addendum B's pin held — none of the three fixes touch a path the golden
+fixture exercises): H1's new refusal branch is unexercised by the fixture (its one recorded cast is
+`BASIC` at t22, with P1 `IDLE`); M1/M2 are comment/test-only; L1's new test calls `_reset_player`
+directly and never runs through the golden's own `advance()` sequence at all.
+
+**MUTATION TABLE -- every new guard proven to FAIL without the thing it protects.** All targets were
+backed up OUTSIDE the repo and SHA-256-verified byte-identical after restoration; `git checkout --`
+was never used (decision-log:799). Each row is one staged mutation plus one state-harness run.
+
+| # | AC | Mutation | Guard that FALLS | Result |
+|---|----|----------|------------------|--------|
+| M1 | 5 | Colour-counter `stun.start` + `set_action_state(STUNNED)` + `return` removed | `test_a_negation_stuns_the_attacker_and_only_the_attacker` (+7 more incl. the AC 6 enumeration) | FALLS |
+| M2 | 5 | Same writes kept but the `return` dropped, so the trailing `IDLE` also runs (last-write-wins) | `test_each_landing_outcome_takes_exactly_one_action_state_write` (+7) | FALLS |
+| M3 | 7 | Dodge rung disabled (`if false`) | all three dodge tests | FALLS |
+| M4 | 7 | Latch swapped for a LIVE `target.hero.is_iframe_open()` read | `test_the_dodge_boundary_is_identical_on_both_slots`, on the slot-1 case only | FALLS |
+| M5 | 8 | Dodge CONSUMES the iframe window (`roll_iframe.start(0)`) | `test_a_dodge_neither_consumes_nor_shortens_the_iframe_window` | FALLS |
+| M6 | 9 | Hero-only gate removed (`if true`) | `test_deflecting_a_minion_leaves_its_rhythm_...` (via note 4's added assertions) | FALLS |
+| M7 | 10 | `add(-penalty)` replaced by `spend(penalty, delay)` | `test_the_deflect_penalty_is_a_punitive_drain_not_a_refusable_spend`, + the golden and its stamina pin | FALLS |
+| M8 | 11 | `is_hitbox_active()` reverted to bare `active.is_running` | `test_a_stunned_attackers_orphaned_active_window_reports_no_hitbox` + `test_dead_attacker_in_flight_window_delivers_nothing` | FALLS |
+| M9 | 12 | Step-3 `STUNNED` timer arm emptied | 2 lifecycle tests + 6 golden pins | FALLS |
+| M10 | 13 | `STUNNED` removed from `_reset_player`'s action-state clear | *(none)* | **DOES NOT FALL -- see note 6** |
+| M10b | 13 | `hero.stun.start(0)` removed from the reset | `test_the_debug_reset_clears_a_stunned_hero_and_its_window` | FALLS |
+| M11 | 14 | `STUNNED` movement-root branch disabled | `test_a_stunned_hero_is_hard_rooted` | FALLS |
+| M12 | 15 | Defense-cast `STUNNED` refusal removed | `test_a_stunned_hero_cannot_cast_defense` | FALLS |
+| M13 | 16 | Basic-cast two-arm gate removed | all three AC 16 tests | FALLS |
+| M14 | 6 | A THIRD `set_action_state(...STUNNED)` site added under `src/` | `test_stunned_has_exactly_two_authored_non_table_entry_points` | FALLS |
+| M15 | 4 | Authored escalation gradient INVERTED in the `.tres` (0.4 / 1.0) | `test_authored_stun_values_are_positive_and_correctly_ordered` | FALLS |
+| M16 | 1 | `.tres` left on the OLD `stun_seconds` key after the script field was renamed | same test (the field silently authors 0.0 -- the exact silent-drop hazard AC 1 names) | FALLS |
+| M17 | 4 | `deflect_stamina_penalty` authored `0.0` | `test_authored_stamina_economy_values_are_positive` | FALLS |
+| M18 | 4 | `dodged_unblockable_damage_multiplier` authored `1.5` | `test_authored_dodge_multiplier_is_bounded_above` | FALLS |
+| M19 | 3 | `dodged_unblockable_damage_multiplier` dropped from `E1_BALANCE_FIELDS` | `test_balance_config_field_lists_are_complete_by_reflection` | FALLS |
+| M20 | 1 | `deflect_stun_ticks` conversion replaced by a literal 0 | `test_conversion_covers_every_seconds_field` + 4 more | FALLS |
+| M21 | 16 (fix pass, H1) | `STUNNED` arm removed from `_unblockable_refusal_reason` | `test_a_stunned_hero_cannot_cast_unblockable` | FALLS (reproduced live: backed up OUTSIDE the repo, SHA-256-verified byte-identical after restore) |
+| M10c | 13 (fix pass, L1) | `STUNNED` removed from `_reset_player`'s action-state clear, re-run against the NEW direct-call test | `test_the_reset_seat_itself_clears_a_stunned_hero_immediately` | FALLS — unlike M10 (row above), which is UNCHANGED and still does NOT fall against the pre-existing public-path test; the direct call bypasses the step-3 timer arm that masks the missing clause (backed up OUTSIDE the repo, SHA-256-verified byte-identical after restore) |
+
+**Board status (CFG/R2 / CFG/R5).** `development_status` was deliberately NOT written to
+`in-progress` at Step 4 of the skill: the board lifecycle is locked to
+`backlog -> ready-for-dev -> done`, and `in-progress` is not in that set -- the same reason the
+team's `gds-dev-story` override corrects the Step-9 `review` write. The board stays `ready-for-dev`;
+the story file's own `Status` is `review`, a story-file-only value.
+
 ### File List
+
+Source (`src/`):
+- `src/state/resources/balance_config.gd` -- `stun_seconds` renamed to `color_counter_stun_seconds`
+  (AC 1); new `deflect_stun_seconds` (AC 1), `deflect_stamina_penalty` (AC 2),
+  `dodged_unblockable_damage_multiplier` (AC 2); the DATA-ONLY comment corrected (AC 6).
+- `src/state/timing/balance_ticks.gd` -- `stun_ticks` renamed to `color_counter_stun_ticks`, new
+  `deflect_stun_ticks`, both conversions (AC 1); the stale DATA-ONLY comment corrected (AC 6).
+- `src/state/hero_state.gd` -- `is_hitbox_active()` widened (AC 11); the two stale `STUNNED` comments
+  corrected (AC 6). `TRANSITION_TABLE` UNTOUCHED.
+- `src/state/match_state.gd` -- `_iframe_open_at_step3` field + its step-3 capture (AC 7);
+  `_resolve_actions` `STUNNED` timer arm (AC 12); `_resolve_charge_landing` restructured with the
+  colour-counter stun (AC 5) and the dodge rung (AC 7/AC 8), its stale NO-STUN comment corrected
+  (AC 6); `_resolve_contacts` deflect stun + penalty (AC 9/AC 10); `_resolve_movement` `STUNNED`
+  hard root (AC 14); `_reset_player` fifth exception + the stale ordinal header (AC 13);
+  `REASON_STUNNED` (AC 15); `_resolve_defense_cast` `STUNNED` refusal (AC 15); `_resolve_basic_cast`
+  two-arm gate (AC 16).
+
+Data:
+- `data/balance/balance_config.tres` -- `stun_seconds = 0.6` replaced by
+  `color_counter_stun_seconds = 1.0` + `deflect_stun_seconds = 0.4`; new
+  `deflect_stamina_penalty = 12.0` and `dodged_unblockable_damage_multiplier = 0.0`.
+
+Tests (`test/state/`):
+- `test_action_state.gd` -- stale doc-comment corrected (AC 6); NEW positive two-edge enumeration
+  guard + its `_gd_files`/`_code_lines` helpers (AC 6); NEW `STUNNED` lifecycle tests (AC 12/14/15).
+- `test_balance_authoring.gd` -- exemption removed from header and `ACTION_SECONDS_FIELDS`' note
+  (AC 4); NEW `test_authored_stun_values_are_positive_and_correctly_ordered`; NEW
+  `test_authored_dodge_multiplier_is_bounded_above`; sixth stamina-economy line (AC 4).
+- `test_balance_config.gd` -- renamed literal + assertion, new `deflect_stun_ticks` assertion (AC 1).
+- `test_block_deflect.gd` -- fixture authors the two new values; NEW AC 9/AC 10/AC 11 tests and an
+  AC 11 control; two assertions ADDED to the `4-3b/R7` negative guard (note 4); one existing test
+  given a local 2-tick stun (note 9).
+- `test_contact_resolution.gd` -- the AC 11 assertion move (note 9).
+- `test_data_resources.gd` -- `E1_BALANCE_FIELDS` gains/renames four entries (AC 3).
+- `test_determinism.gd` -- `_golden_config()` authors the two coverage values; the re-baseline record;
+  `GOLDEN` -> `d5bcb7e6`; five re-derived pins (AC 17).
+- `test_replay_identity.gd` -- `_iframe_open_at_step3` classified PER_TICK (note 2).
+- `test_unblockable_defense.gd` -- three new constants + three new config lines; NEW dodge/boundary,
+  reset, cast-refusal and Deferred-item tests; `_make_match_with`, `_run_chargeup_dodging`,
+  `_basic_intent`, `_collect_action_states` helpers; `test_a_negation_stuns_nobody` INVERTED and
+  `test_the_attacker_exits_charging_whether_negated_or_not` superseded (AC 5).
+
+NOT touched: `project.godot` (byte-identical), `main.tscn`, `hero.tscn`, `src/main/match_runner.gd`,
+`src/systems/record_file.gd`, any `docs/` file other than this one.
+
+### File List — Fix Pass Addendum (post-review)
+
+- `src/state/match_state.gd` -- `_unblockable_refusal_reason` gains the `STUNNED` arm / `REASON_STUNNED`
+  return (H1); a comment recording the M2 reachability argument added above the deflect-attacker
+  penalty block in `_resolve_contacts`. No other function touched.
+- `test/state/test_unblockable_defense.gd` -- NEW `test_a_stunned_hero_cannot_cast_unblockable` (H1);
+  NEW `test_the_reset_seat_itself_clears_a_stunned_hero_immediately` (L1).
+- `test/state/test_block_deflect.gd` -- NEW
+  `test_a_melee_deflect_stun_carries_one_ticks_residual_lunge_velocity_then_zeroes` (M1).
+- This story file -- AC 16's closing sentence and the matching Non-Goals line amended (H1 carve-out);
+  AC 14 gains an addendum (M1); AC 2's text corrected (L2); Dev Agent Record notes 14-20 appended;
+  mutation table rows M21/M10c appended; this addendum and the Change Log row below.
+
+NOT touched by the fix pass: `data/balance/balance_config.tres`, `src/state/resources/balance_config.gd`,
+`src/state/hero_state.gd`, `src/state/timing/balance_ticks.gd`, every other file in the dev pass's File
+List above, `project.godot`. `docs/implementation-artifacts/5-6-code-review.md` stays untracked and is
+not staged by this pass.
+
+### Live Smoke Results
+
+8/8 PASS, no defects, no flip needed (committed default `[0,1]`):
+
+1. Colour counter stuns the attacker for ~1 s.
+2. Wrong colour, or no answer, resolves as a full hit plus orb -- unchanged from the pre-story
+   unblockable path.
+3. A well-timed roll fully dodges an unblockable, even in range: no damage, no orb. A roll landing
+   on the landing tick does not dodge (intended -- the AC 7/AC 8 observation point).
+4. Deflect punishes with the stamina penalty plus a short stun.
+5. A stunned hero can do nothing, including a fresh unblockable cast (H1 fix confirmed live).
+6. Chargeup refuses mode (1) cards while charging.
+7. Deflected minions do not freeze.
+8. FPS stable.
+
+Operator notes: the deflect stun's 0.4 s "possibly a touch short, not sure" is a tuning
+observation for the retune block -- value unchanged. Stun legibility (pose-hold, no dedicated
+clip) was not assessed.
 
 ## Change Log
 
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-09-06 | Story authored via gds-create-story, against baseline `47c4d7c` | Claude Sonnet 5 |
+| 2026-09-07 | Dev pass (Opus 5): all 17 ACs. Golden re-baselined once `d9725092` -> `d5bcb7e6`, two causes both inside AC 9, each isolated and reproduced in both directions; AC 5 measured a non-contributor. Suite 685/5133 -> 709/5273, 55 integration PASS. 21-row mutation table, 20 falling; M10 reported NOT falling (AC 13's action-state clause is defensive-in-depth). Two AC-text corrections reported: AC 17's accounting block misses a second lost item (t13 block coverage), and AC 2 misplaces `deflect_stamina_cost`. `project.godot` byte-identical. | Claude Opus 5 |
 | 2026-09-06 | Gate fixes + promote to ready-for-dev: American-spelling sweep, AC 6 exit restructure locked to shape (a), AC 8 emit-on-positive-damage, AC 17 reverse-measurement scope, AC 16 two-arm refusal, Live Smoke item 7 cut; golden fixture rewrite (AC 17), new hitbox-under-STUNNED AC, AC 8 dodge-rung observation-point correction + two-slot test, AC 6 test inversion, fifth reset exception AC, AC 5 reshape (bespoke function, not `ACTION_SECONDS_FIELDS`); AC merges (fields, AC 12 folded into AC 9); dangling-reference and stale-comment corrections throughout | Claude Sonnet 5 |
+| 2026-09-07 | Fix pass against `docs/implementation-artifacts/5-6-code-review.md`: H1 fixed (`_unblockable_refusal_reason` gains a `STUNNED` arm, AC 16/Non-Goals amended to carve it out); M1 accepted + pinned (AC 14 addendum, the `2-3/R13` precedent, new residual-velocity test); M2 measured unreachable (comment at the penalty site, no guard); L1 strengthened (new direct-call test proves the `_reset_player` clause live, mutation M10c falls where M10 does not); L2 resolved by correcting AC 2's text (field placement kept, docs-only fix); L3/L4 acknowledged with no action. State harness 709/5273 -> 712/5291, 0 failed. Golden UNCHANGED at `d5bcb7e6...`. No commits; `Status`/board untouched. | Claude Sonnet 5 |
+| 2026-09-07 | Close-out: live smoke 8/8 PASS, no defects, no flip needed; Live Smoke Results section added; `Status` review -> done. | Claude Sonnet 5 |
