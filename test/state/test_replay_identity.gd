@@ -135,6 +135,17 @@ const HASHED: Array[String] = [
 	# whether the hit lands at all). Both reach the hash through `PlayerState.to_snapshot()`'s ONE
 	# `telegraph` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
 	"player_state.charge_window", "player_state.charge_color",
+	# Story 5-5 (AC 2/AC 16): the mode ③ defense window's two halves classify HASHED, on the
+	# `charge_window`/`charge_color` line directly above's exact test rather than a weaker one -- they
+	# CROSS TICKS (the window counts down from the cast until it expires or is consumed) and DECIDE
+	# AN OUTCOME (whether an incoming unblockable lands at all). A replay whose defenders carried a
+	# different window or a different colour would diverge the moment one chargeup landed.
+	#
+	# Both reach the hash through `PlayerState.to_snapshot()`'s ONE `defense` key, so no exemption is
+	# needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE. Leaving them UNCLASSIFIED is not a
+	# neutral option: `_declared_members`'s regex scans every `^var` in `player_state.gd`, so two new
+	# fields in neither bucket fail the zero-`unclassified` assertion outright.
+	"player_state.defense_window", "player_state.defense_color",
 	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
 	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the

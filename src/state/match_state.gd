@@ -34,7 +34,24 @@ signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp
 ## DEFLECT (fully negated: no damage, no hit_landed, no mana), drained by the runner
 ## after advance() (D5). NO runner connect seam in 1-8 — the FIRST consumer (1-10
 ## CombatCues) inherits the seam obligation, the action_rejected precedent.
-signal deflect_landed(attacker_slot: int, target_slot: int)
+##
+## STORY 5-5 (AC 13) WIDENS THE PAYLOAD WITH A THIRD ARGUMENT, `defense_color`, and does NOT build a
+## tenth observation channel. This signal is now shared by THREE conceptually distinct mechanisms
+## under one name that literally says "deflect": melee block-timing parry, a unit's melee swing
+## parried, and a card-cast colour-matched negation of an unblockable (`_resolve_charge_landing`,
+## the SECOND emit site). A new, more precisely named signal was REFUSED because the observation
+## seam family is locked at nine (`5-4/AC 15`) and the payload shape is otherwise identical -- a
+## NAMED trade-off, not a free lunch. If a later story finds the conflation confusing (a consumer
+## that must distinguish WHICH negation happened), that is a fresh finding for that story.
+##
+## THE MELEE EMIT SITE PASSES `PlayerState.NO_TELEGRAPH_COLOR` (-1): an explicit "no colour to
+## report" sentinel, not a fourth invented value -- the same token reused a fourth context over
+## (telegraph, `5-4`'s orb-grant guard, `defense_color`'s resting value, now this).
+##
+## THE ATTACKER STAYS A TYPED BARE INT (`4-3b/R15`, pinned in test_architecture_invariants.gd).
+## Widening the PARAMETER LIST is not widening the attacker: the pin's claim is about the attacker's
+## TYPE, and it is untouched here.
+signal deflect_landed(attacker_slot: int, target_slot: int, defense_color: int)
 
 ## Story 3-5a (AC 5): a Mode ① cast RESOLVED — queued in step 6 after the mana is spent, the
 ## card has left the hand for the discard, and the replacement has been drawn. Payload is the
@@ -387,6 +404,14 @@ func advance(intents: Array[InputIntent]) -> void:
 	# neighbours, because a pre-injection MatchState never started the window.
 	p1.charge_window.tick()
 	p2.charge_window.tick()
+	# Story 5-5 (AC 2): the mode ③ DEFENSE WINDOW counts down HERE, beside its chargeup sibling and
+	# every other D4 timer; the LANDING seat (AC 9) reads the result. The `charge_window` idiom
+	# verbatim, and A1 satisfied by construction: one integer tick per advance(), never a float
+	# accumulator and never a seconds value. Unguarded like its neighbours, because a pre-injection
+	# MatchState never started the window. THIS IS THE ONLY LINE IN THE CODEBASE THAT ADVANCES IT --
+	# no landing path, defended or not, touches it (AC 11).
+	p1.defense_window.tick()
+	p2.defense_window.tick()
 	# Story 4-3b (AC 1): the UNIT attack rhythm counts down HERE, beside every other D4 timer, and
 	# the step-3 seat below reads the result — the hero's own `tick_timers()` shape, for a container
 	# instead of an object (A1: integer ticks, one per advance(), never a float accumulator). The
@@ -1413,7 +1438,11 @@ func _resolve_contacts() -> Array[int]:
 				# FULLY NEGATED (no damage, no `hit_landed`, no mana, `1-8`'s R-D4 unchanged) and
 				# never reaches the common consumption line further down.
 				_consume_projectile_attacker(attacker, attacker_index)
-				_queue.push(deflect_landed.emit.bind(int(fact["attacker"]), int(fact["target"])))
+				# Story 5-5 (AC 13): the melee/unit parry reports NO COLOUR -- this negation is
+				# colour-blind by construction, and the sentinel says so rather than a colour it
+				# would have to invent. Today's untinted cue is what the consumer keeps rendering.
+				_queue.push(deflect_landed.emit.bind(int(fact["attacker"]), int(fact["target"]),
+						PlayerState.NO_TELEGRAPH_COLOR))
 				continue
 			damage *= balance.block_damage_multiplier
 		target.hero.take_damage(damage)
@@ -2237,6 +2266,12 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 		# test_card_play.gd's source scan is NARROWED rather than deleted (AC 9).
 		Enums.ModeKind.UNBLOCKABLE:
 			_resolve_unblockable_cast(player, intent.card_slot, slot)
+		# Story 5-5 (AC 1): mode ③ gets its own arm in this same `match`. ONE of the four modes
+		# now remains unreachable -- PITCH is E6's -- so the `_` arm keeps its
+		# `Invariant.check(false` verbatim and test_card_play.gd's source scan is NARROWED a
+		# SECOND time rather than deleted (the `5-2/R8` precedent, applied again).
+		Enums.ModeKind.DEFENSE:
+			_resolve_defense_cast(player, intent.card_slot, slot)
 		_:
 			Invariant.check(false,
 				"card mode %d is a guarded stub and is unreachable in E3 (only BASIC resolves)"
@@ -2508,6 +2543,104 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	_queue.push(card_cast_resolved.emit.bind(slot, played))
 
 
+## Story 5-5 (AC 1/AC 3-8): mode ③ resolution -- THE ANSWER HALF of the RGB read exchange.
+## `_resolve_unblockable_cast` directly above is the shape this follows; every difference is ruled
+## and named where it happens.
+##
+## THE GUARD ORDER IS LAYER FLAG -> CHARGING -> EMPTY SLOT -> STAMINA, mode ②'s order verbatim and
+## for its stated reasons: "does this layer exist at all" precedes "may I use it right now", which
+## precedes a report about the slot, which precedes the cost.
+##
+## THE LAYER GATE IS `flags.unblockable`, THE SAME FLAG MODE ② READS (AC 3) -- no new `FeatureFlags`
+## field. Defending only matters where an unblockable exists to defend against, so a closed
+## `unblockable` layer closes mode ③ too. Read INLINE (CONSTRAINT C), never cached, `flags == null`
+## reading CLOSED exactly as every other layer gate in this file does, and
+## `CastEvaluator.REASON_FLAG_CLOSED` borrowed as a CONSTANT -- the same borrow mode ② already makes.
+##
+## EXACTLY ONE STATE-BASED REFUSAL: `CHARGING` (AC 4, operator ruling). `ROLLING`, `BLOCKING` and
+## `ATTACKING` are ALL ALLOWED -- the defender must be able to answer mid-swing, mid-roll and
+## mid-block. A chargeup is a large committal attack by the operator's own ruling, and a commitment
+## coverable by a defense is not a commitment: the caster moved first and carries the risk. It also
+## keeps the layers alternating rather than overlapping -- a defender reading a telegraph knows a
+## charging hero can do nothing back.
+##
+## THE REASON IS `REASON_UNBLOCKABLE_COMMITTED`, REUSED VERBATIM rather than invented. This gate is
+## the identical single-state check `_unblockable_refusal_reason` already makes for `CHARGING`, and
+## the existing name reads true here without qualification: an unblockable IS committed, which is
+## exactly why this hero cannot also cast DEFENSE. `CastEvaluator` has no state-shaped reason at all
+## (its five constants are EMPTY_SLOT / UNKNOWN_CARD / FLAG_CLOSED / INSUFFICIENT_MANA /
+## INSUFFICIENT_ORBS), so `MatchState`'s own sibling constant is the only candidate.
+##
+## NO MANA AND NO ORB EVALUATION RUNS, mode ②'s property inherited unchanged:
+## `CastEvaluator.refusal_reason` is not called and cannot be reached from here. Stamina is the ONLY
+## cost refusal and it is the FIFTH spend seat (roll, attack, unblockable, deflect precede it),
+## passing `stamina_regen_delay_ticks` exactly as the other four do. The `1-4` FALLTHROUGH shape,
+## never deflect's degrade -- there is no degraded defense to fall back to.
+##
+## RE-CASTING WHILE A WINDOW IS ALREADY RUNNING RESTARTS IT, and that is a DEV-PASS CHOICE the story
+## left open (Deferred). `TimingWindow.start()` restarts naturally and the `charge_window` precedent
+## for a fresh cast overwriting an in-flight one points the same way; a refusal would need a new
+## reason constant the operator has not asked for. The card and the stamina are spent either way
+## (AC 7), so the restart is not free.
+##
+## NO ACTION STATE, NO ROOTING, NO SLOWING (AC 5, negative). This function introduces no
+## `HeroState.ActionState` member and changes no movement multiplier. The ONE `set_action_state` call
+## below is a transition to the EXISTING `IDLE`, taken ONLY from `BLOCKING`.
+##
+## FROZEN TICKS NEVER REACH THIS FUNCTION and a DEAD hero never reaches it either: both are
+## INHERITED from `_resolve_card_action` unchanged, exactly as for modes ① and ②.
+func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> void:
+	if flags == null or not flags.unblockable:
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_FLAG_CLOSED)
+		return
+	if player.hero.action_state == HeroState.ActionState.CHARGING:
+		player.hero.reject_action(&"card_cast", REASON_UNBLOCKABLE_COMMITTED)
+		return
+	if player.hand.is_slot_empty(hand_slot):
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
+		return
+	if not player.stamina.spend(balance.defense_stamina_cost,
+			balance_ticks.stamina_regen_delay_ticks):
+		player.hero.reject_action(&"card_cast", &"insufficient_stamina")
+		return
+	# AC 7: the card leaves the hand and enters the discard on EVERY commit, hit or miss -- the
+	# replacement owed on the VACATED slot, the observation channel announcing, and
+	# `card_cast_resolved` queued. `_resolve_unblockable_cast`'s ordering mirrored exactly, all
+	# inside this one tick and all UNCONDITIONAL on what happens later at any landing.
+	var played := player.hand.remove_at(hand_slot)
+	player.discard.add(played)
+	# AC 8: the colour is read from the SAME `_card_colors` injected map mode ② already reads, and
+	# copied into a plain int. A MISSING ENTRY DEGRADES TO "NO COLOUR" rather than to an invented
+	# colour -- the identical unreachable-in-live-play sentinel family the cast-time and grant-time
+	# `charge_color` cases already established (`inject_card_colors`'s totality check closes it at
+	# the seam).
+	player.defense_color = int(_card_colors[played]) if _card_colors.has(played) \
+			else PlayerState.NO_TELEGRAPH_COLOR
+	# AC 2: the reaction window opens the INSTANT the cast commits, read INLINE from the tick domain
+	# (CONSTRAINT C) and never from a seconds float.
+	player.defense_window.start(balance_ticks.defense_window_ticks)
+	# AC 5: the ONE state write, and it is BLOCKING-ONLY. This ratifies `5-2/R17` ("casting drops the
+	# block") and gives it its FIRST real exercise -- mode ① never calls `set_action_state` at all,
+	# and mode ②'s unconditional CHARGING write is unreachable from a blocking hero because
+	# `_unblockable_refusal_reason` refuses the cast outright while BLOCKING. Mode ③ is the first
+	# cast that is not state-gated against BLOCKING, so it is the first that can genuinely drop one.
+	#
+	# `ATTACKING` AND `ROLLING` ARE DELIBERATELY LEFT UNTOUCHED, and an unconditional IDLE here would
+	# be a live defect rather than merely over-broad: from ATTACKING it would leave the swing's
+	# `active` window running and still pushing contacts while the hero is no longer rooted and moves
+	# at full speed, with the phase machine never reaching `attack_done`. The swing or roll finishes
+	# on its own contract exactly as if no card had been cast.
+	#
+	# `HeroState.TRANSITION_TABLE` GAINS NO ROW, the identical `5-2/R7` reasoning: the card layer
+	# drives this edge directly, not an inbound press the table maps.
+	if player.hero.action_state == HeroState.ActionState.BLOCKING:
+		player.hero.set_action_state(HeroState.ActionState.IDLE)
+	player.pending_draw_owed.append(hand_slot)
+	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+	player.notify_cards_changed()
+	_queue.push(card_cast_resolved.emit.bind(slot, played))
+
+
 ## Story 5-2 (AC 15-20): THE LANDING, resolved at step 3(a) on the tick the chargeup window expires.
 ## Reached ONLY from the `CHARGING` arm of `_resolve_actions`, which a DEAD hero cannot enter.
 ##
@@ -2532,8 +2665,14 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 ## FALSE).
 ##
 ## NO BLOCK, NO DEFLECT, NO ARC. The attack is UNBLOCKABLE by name: `block_damage_multiplier`,
-## `is_deflect_window_open()` and `_is_facing` are all deliberately absent from this function. The
-## colour-matched answer is `5-5`'s and the three-tier outcome ladder is `5-6`'s (Non-Goals).
+## `is_deflect_window_open()` and `_is_facing` are all deliberately absent from this function.
+##
+## STORY 5-5 RESOLVES THE FORWARD REFERENCE THIS HEADER CARRIED. The colour-matched answer is no
+## longer "`5-5`'s" -- it is the defense rung inside the landed branch below (AC 9-11), and it is
+## still none of the three named above: it consults NEITHER the block multiplier, NOR the deflect
+## window, NOR the facing arc. It asks one question the melee path never asks (does the defender
+## hold an OPEN window in THIS attack's colour) and answers it before any damage is computed. The
+## three-tier outcome ladder remains `5-6`'s (Non-Goals).
 ##
 ## NO MANA. `_generate_mana` awards per entry in the list `_resolve_contacts` returns, and a landing
 ## resolved here never enters that list -- the `4-3b/R4` gate applied to a second non-swing source,
@@ -2549,14 +2688,62 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 	var opposing_slot := 1 - slot
 	var target := p2 if slot == 0 else p1
 	if _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE and target.hero.is_alive():
-		# AC 18: the `attack_damage_percent_of_max_hp` expression verbatim, against the TARGET's own
-		# maximum, under the name that says which attack it belongs to. One value for all three
-		# colours in this story (Ruling 2).
-		var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 \
-				* target.hero.get_max_hp()
-		target.hero.take_damage(damage)
-		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
-		_grant_landing_orbs(player)
+		# STORY 5-5 (AC 9/AC 10): THE DEFENSE RUNG, seated INSIDE the reach+alive gate and BEFORE
+		# `take_damage`. The ladder reads: (a) reach + alive [existing] -> (b) THIS: is the target's
+		# defense window running AND does its colour match the attacker's charge colour? -> if BOTH,
+		# negate and skip (c)/(d); if EITHER is false, fall through UNCHANGED to (c) damage +
+		# `hit_landed` and (d) the orb grant.
+		#
+		# A DEAD DEFENDER CANNOT NEGATE, and that is a property of WHERE this sits rather than a
+		# fourth condition: the branch's own `is_alive()` gate precedes it, so a dead hero's
+		# `defense_window` is never consulted regardless of what it holds.
+		#
+		# REVIEW FIX: the guard carries an EXPLICIT sentinel exclusion
+		# (`defense_color != NO_TELEGRAPH_COLOR`) rather than relying on `inject_card_colors`'s
+		# totality check to keep both colours off the sentinel. That check is `Invariant.check`,
+		# i.e. assert()-backed -- STRIPPED IN EXPORTED BUILDS (the repo's own 5-1a finding) -- so
+		# "closed at the seam" was only a DEBUG-ONLY guarantee. This line is the release-time one:
+		# without it, a degraded defense (colour -1, AC 8's missing-entry path) would compare equal
+		# to a degraded chargeup (colour -1) and negate it -- two failures making a parry. A
+		# degraded defense must never answer a degraded chargeup.
+		#
+		# AC 10 -- A MATCH NEGATES COMPLETELY (R-C): zero damage (`take_damage` never called), no
+		# `hit_landed` (the enemy was never hurt), and NO ORB GRANT (`_grant_landing_orbs` never
+		# called -- the attacker earns nothing because there is no landing to pay for). NO STUN of
+		# any kind on either party: `HeroState.stun` is not started on either hero, and `STUNNED`
+		# stays the zero-inbound-edge row it has been since E1.
+		#
+		# THE WINDOW IS CONSUMED HERE AND ONLY HERE (AC 10 vs AC 11, two rungs of one `if` that must
+		# not be conflated): `start(0)` stops it and the colour resets to the sentinel -- one fact in
+		# two parts, cleared together, the exact pairing the debug reset uses. A WRONG-COLOUR landing
+		# does NOT reach this line and therefore does NOT consume the window (AC 11): it stays
+		# running, ticking down at its own step-2 rate, available to answer a LATER same-colour
+		# landing before it expires. Moving either line below onto the landing branch would pass
+		# every same-colour assertion while silently breaking that -- which is why a test exists that
+		# goes RED against exactly that mutation.
+		#
+		# WRITTEN AS `if / else` RATHER THAN AN EARLY `return`, deliberately: AC 9 requires the
+		# unconditional `set_action_state(IDLE)` exit below to stay UNTOUCHED and to run on every
+		# outcome, negated or not. A `return` here would need a second copy of that line and would
+		# make "the attacker's own chargeup always ends the same way" a duplicated fact instead of a
+		# structural one.
+		if target.defense_window.is_running \
+				and target.defense_color != PlayerState.NO_TELEGRAPH_COLOR \
+				and target.defense_color == player.charge_color:
+			# AC 13: the negation reuses the EXISTING `deflect_landed` seam, widened to carry the
+			# ANSWERED COLOUR. This is the signal's SECOND emit site.
+			_queue.push(deflect_landed.emit.bind(slot, opposing_slot, target.defense_color))
+			target.defense_window.start(0)
+			target.defense_color = PlayerState.NO_TELEGRAPH_COLOR
+		else:
+			# AC 18: the `attack_damage_percent_of_max_hp` expression verbatim, against the TARGET's
+			# own maximum, under the name that says which attack it belongs to. One value for all
+			# three colours in this story (Ruling 2).
+			var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 \
+					* target.hero.get_max_hp()
+			target.hero.take_damage(damage)
+			_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
+			_grant_landing_orbs(player)
 	# AC 20: the exit is UNCONDITIONAL on hit or miss, and it is the last thing that happens so the
 	# damage above is applied while the hero is still, conceptually, mid-attack. The telegraph key
 	# stops being reported the moment this line runs, because `PlayerState.to_snapshot()` derives it
@@ -3250,6 +3437,25 @@ func _reset_player(player: PlayerState) -> void:
 	hero.heal(hero.get_max_hp())
 	player.charge_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	# STORY 5-5 (AC 12): THE FOURTH NAMED EXCEPTION to the reset's "NOTHING else / in-flight windows
+	# untouched" contract -- the mode ③ DEFENSE WINDOW and its colour, cleared here immediately
+	# beside the chargeup on the identical `start(0)` / `= NO_TELEGRAPH_COLOR` shape, and for the
+	# identical traced reason. Step 1b returns BEFORE the step-2 `defense_window.tick()`, so once
+	# `_round_over` latches a defense window STOPS COUNTING but stays armed; carried into the NEXT
+	# round it would let a same-colour landing from an entirely new round be negated by a card played
+	# in the round before.
+	#
+	# THE CHARGEUP CLEAR IS THREE FIELDS AND THIS ONE IS TWO, and the asymmetry is deliberate rather
+	# than a narrower copy: the chargeup owns an `ActionState` (so `action_state` is part of its one
+	# fact), and mode ③ owns none at all (AC 5). There is no third field here to forget.
+	#
+	# `_end_round` GAINS NO MATCHING CLEAR, the `5-4` orb finding applied to a second field:
+	# `_end_round` has never cleared per-player economy or timer state, the debug reset is this
+	# codebase's ONE round-boundary transition mechanism, and a clear inside `_end_round` would end a
+	# still-open defense the instant the OTHER hero dies -- before the round-over freeze displays
+	# anything -- which has no precedent anywhere in this file.
+	player.defense_window.start(0)
+	player.defense_color = PlayerState.NO_TELEGRAPH_COLOR
 	# Story 4-1 (AC 8, `4-1/R5`): the ONE named exception to the reset's "NOTHING else" contract
 	# -- see _apply_debug_reset's header. Seated in the PER-PLAYER helper because the board is
 	# per-player, and reached only from the reset: no round-end path clears it.

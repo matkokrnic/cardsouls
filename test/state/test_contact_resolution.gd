@@ -390,7 +390,7 @@ func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 	var hits := {"n": 0}
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)
 	var deflects := {"n": 0}
-	ms.deflect_landed.connect(func(_a: int, _t: int) -> void: deflects.n += 1)
+	ms.deflect_landed.connect(func(_a: int, _t: int, _c: int) -> void: deflects.n += 1)
 	var p2_hp_before := ms.p2.hero.get_hp()
 	var p1_mana_before := ms.p1.mana.get_current()
 	ms.push_contact([0, -1], [1, -1], atk, Vector2.DOWN, MatchState.CONTACT_STRIKE)    # a fact SOURCED from the DEAD attacker

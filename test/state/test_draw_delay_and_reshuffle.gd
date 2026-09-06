@@ -60,7 +60,12 @@ const VULNERABLE_TICKS := 7
 ## surfaced as its own key, and NONE required a stated reason for not surfacing. See
 ## `player_state.gd` at these keys for why five of them are one-array-one-key rather than fused.
 const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
-	"deck_size", "discard_size", "hand_size", "hero",
+	# Story 5-5 (AC 16): the THIRTIETH key -- `defense`, the armed reaction window as
+	# `[colour, remaining_ticks]`, in SORTED position, which is HERE: between `deck_size` and
+	# `discard_size`, NOT beside `telegraph`. Same mechanism, sixth time: this pin and
+	# test_card_observation.gd's were BOTH red before this edit, and the story that adds the key is
+	# the story that moves both.
+	"deck_size", "defense", "discard_size", "hand_size", "hero",
 	# Story 4-6 (AC 2/AC 4): the lock-on target as a `[slot, index]` pair, in sorted position.
 	"lock_target",
 	"mana", "orbs",

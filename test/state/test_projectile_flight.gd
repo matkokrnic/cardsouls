@@ -597,7 +597,7 @@ func test_a_deflected_hit_consumes_the_shot() -> void:
 	_fire(ms)
 	var board := ms.p1.projectiles
 	var deflects: Array = []
-	ms.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	ms.deflect_landed.connect(func(a: int, t: int, _c: int) -> void: deflects.append([a, t]))
 	var hp_before := ms.p2.hero.get_hp()
 	# Block pressed THIS tick opens the deflect window, and the fact resolves inside it.
 	ms.push_contact(_shot_address(), [1, TargetingService.HERO_INDEX], 1, Vector2.DOWN,

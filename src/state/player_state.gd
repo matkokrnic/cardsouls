@@ -184,6 +184,28 @@ var charge_window: TimingWindow
 ## TelegraphProfile` mapping remains controller-owned and nothing in `src/state/` names one.
 var charge_color: int = NO_TELEGRAPH_COLOR
 
+## Story 5-5 (AC 2): THE MODE ③ DEFENSE WINDOW — the reaction window a defense cast opens, and the
+## COLOUR it can answer.
+##
+## SEATED HERE RATHER THAN ON `HeroState`, for the IDENTICAL reason `charge_window` directly above
+## is: this is a CARD-LAYER duration started by a cast, not a `TRANSITION_TABLE` edge, so it belongs
+## beside the other windows a cast starts rather than beside the eight windows the melee table
+## drives. `HeroState` carries no `defense` window and gains none — its eight are `windup`,
+## `active`, `recovery`, `chain`, `deflect`, `roll_iframe`, `roll_duration`, `stun`, and `deflect`
+## there is `1-8`'s block-timing parry, a different mechanism entirely.
+##
+## THE WINDOW IS ADVANCED AT STEP 2 with every other D4 timer and READ at the LANDING (AC 9), the
+## `charge_window` idiom verbatim: ticked in one place, consumed in another, never both.
+##
+## UNLIKE THE CHARGEUP IT OWNS NO `ActionState` (AC 5): casting mode ③ enters no state, roots
+## nothing and slows nothing. The window is a pure data timer, exactly as `pending_draw` decides an
+## outcome without owning an action state of its own.
+var defense_window: TimingWindow
+## The spent card's `Enums.CardColor` as a plain INT, or `NO_TELEGRAPH_COLOR` when no defense is
+## armed. A plain int and never a `CardData`, a `StringName` or a colour name — `charge_color`'s own
+## reasoning verbatim, for the same hash reason.
+var defense_color: int = NO_TELEGRAPH_COLOR
+
 ## Story 5-2 (AC 21): the resting value of `charge_color`, and it is a THIRD thing rather than a
 ## fourth colour — `Enums.CardColor` gets no `NONE` member, exactly as `TargetingService` answers
 ## "nothing" with a sentinel rather than by widening the address space. Readers test the NAME.
@@ -216,6 +238,7 @@ func _init(queue: SignalQueue) -> void:
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
 	charge_window = TimingWindow.new()
+	defense_window = TimingWindow.new()
 
 
 ## Story 3-6 (AC 2): QUEUE one card-observation payload (D5). Called from MatchState at the seats
@@ -243,6 +266,41 @@ func to_snapshot() -> Dictionary:
 		# reference here would poison the hash outright (the canonical hash has no object branch
 		# and would fall through to a per-allocation instance id).
 		"deck_size": deck.size(),
+		# Story 5-5 (AC 16): the ONE new key this story adds -- the ARMED DEFENSE, as
+		# `[colour, remaining_ticks]`. The `telegraph` FUSION verbatim and for the same reason: a
+		# defense is ONE fact in two halves (what colour, how much longer), and splitting it would
+		# let the halves drift into two keys that could disagree about whether a defense is armed at
+		# all. Resting value `[-1, 0]` -- `NO_TELEGRAPH_COLOR` and a stopped window.
+		#
+		# THE UNIT IS TICKS, never seconds, for `telegraph`'s stated reason (A1).
+		#
+		# IT IS A KEY AT ALL FOR THE `pending_draw` REASON: the window CROSSES TICKS AND DECIDES AN
+		# OUTCOME (whether an incoming unblockable lands at all), so it cannot be recomputed for free
+		# inside the tick that reads it -- `4-3a/R17`'s test, passed. Remaining ticks alone is
+		# determinism-complete on the identical argument: the duration is
+		# `balance_ticks.defense_window_ticks`, a load-time constant a replay reproduces from the
+		# recorded balance, so `elapsed` is recoverable as `duration - remaining`.
+		#
+		# THE GATE IS `.is_running`, NOT AN ACTION STATE, AND THAT DIFFERENCE IS DELIBERATE. Its
+		# `telegraph` sibling gates on `CHARGING` because that is the ONE state a chargeup ever
+		# occupies, which makes a stale colour unrepresentable by construction. Mode ③ has NO
+		# analogous state -- casting it never enters one (AC 5) -- so there is no action state to
+		# gate on, and the window's own flag is the only honest gate. This is NOT a weaker
+		# guarantee: the window goes non-running on EVERY path that ends it (natural expiry;
+		# consumption by a successful defense, AC 10; the debug reset, AC 12), and the one remaining
+		# path through the landing branch -- a DEAD defender -- never consults the window at all,
+		# because the branch's own `is_alive()` gate precedes the colour check. A stale colour is
+		# exactly as unrepresentable as the telegraph's, by a different mechanism because there is a
+		# different shape underneath it. Do NOT copy the `CHARGING` gate onto a state that does not
+		# exist.
+		#
+		# ONE GOLDEN CAUSE RIDES ON THIS KEY: its mere PRESENCE. This is the `5-2` shape and NOT the
+		# `5-4` one -- `5-4`'s `orbs` key already existed, so adding a grant path behind it moved
+		# nothing, while THIS key is genuinely new and its resting value changes the snapshot
+		# dictionary's SHAPE on every tick of every match, cast or not.
+		"defense": [defense_color, defense_window.remaining_ticks()] \
+				if defense_window.is_running \
+				else [NO_TELEGRAPH_COLOR, 0],
 		# Story 4-0 (AC 2, `4-0/R1`): bound to occupied_count(), NOT to size(). Hand.size() now
 		# means WIDTH; occupied_count() is what size() meant when this key was written, so this
 		# binding is what keeps the key's MEANING unchanged across the shape change — and it is

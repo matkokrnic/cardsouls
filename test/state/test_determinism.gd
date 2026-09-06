@@ -731,7 +731,67 @@ extends TestCase
 ##     mode (2) and there is no runner here to push a reach fact. They are proven in
 ##     test_unblockable_initiation.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "dc2c9ffa11387e99f47150b90a8449a101104f5a555c7254c14cc8d0d339019b"
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 5-5 (unblockable defense), dc2c9ffa -> d9725092, ONE CAUSE MEASURED IN BOTH
+## DIRECTIONS. The story PREDICTED the golden would move exactly once, for exactly one reason -- the
+## new `defense` per-player snapshot key (its AC 16) -- and predicted that a move for any OTHER
+## reason would be a FINDING rather than a pass. Measured: it moved for exactly that reason and no
+## other.
+##
+##   THE ONE CAUSE: the SNAPSHOT KEY SET, TWENTY-NINE -> THIRTY. `PlayerState.to_snapshot()` gains
+##     ONE key, `defense`, carrying the armed mode ③ reaction window as `[colour, remaining_ticks]`.
+##     FUSED into one key, not split into two, on the `telegraph`/`lock_target` precedent and for
+##     their reason: a defense is ONE fact in two halves, and splitting it would let the halves
+##     disagree about whether a defense is armed at all. Pinned by test_card_observation.gd (whose
+##     size assertion moves 29 -> 30) and test_draw_delay_and_reshuffle.gd, both ORDER-SENSITIVE
+##     literals -- the key's sorted position is between `deck_size` and `discard_size`, NOT beside
+##     `telegraph`.
+##
+##   ITS PRESENCE IS THE MOVER; ITS VALUE NEVER LEAVES THE RESTING ONE. This is the `5-2` shape and
+##     explicitly NOT the `5-4` one: `5-4`'s `orbs` key ALREADY EXISTED, so hanging a grant path
+##     behind it moved nothing, while THIS key is genuinely new and its resting value changes the
+##     snapshot dictionary's SHAPE on every tick of every match, reached or not. MEASURED, not
+##     argued: the fixture builds its intents from a fixed MOVES table plus ONE named cast at
+##     CAST_TICK, which is mode ①/② content and never DEFENSE -- so no defense window is ever armed
+##     and the key hashes at `[-1, 0]` throughout. That measurement is PINNED as an assertion rather
+##     than left as a claim here, by
+##     test_the_fixture_reaches_the_hash_tick_with_no_defense_window_armed below (the `4-3b`
+##     falsified-cause discipline applied again).
+##
+##   THE REVERSE DIRECTION, which is what makes the single cause attributable: with the `defense`
+##     key held OFF `PlayerState.to_snapshot()` and EVERYTHING ELSE this story ships left in place --
+##     the DEFENSE dispatch arm and `_resolve_defense_cast` with its flag gate, CHARGING refusal,
+##     empty-slot guard and fifth stamina seat; the two new `defense_window.tick()` lines at step 2;
+##     the landing intercept inside `_resolve_charge_landing`; the `_reset_player` fourth exception;
+##     the widened `deflect_landed` signal and its second emit site; and the two new BalanceConfig
+##     fields with their `BalanceTicks` conversion -- this file hashed dc2c9ffa EXACTLY: the
+##     pre-story golden, unchanged. Measured at the dev pass by deleting those three lines, running
+##     the harness (the two key-set pins failed and test_state_matches_golden PASSED, which is the
+##     result), and restoring from a SHA256-verified out-of-repo copy (3ef08797...).
+##
+##   NON-MOVER 1, `FORMAT_VERSION` STAYS AT 7 -- a CLOSED, gate-verified answer restated here as
+##     MEASURED rather than re-opened. Unlike `5-2`'s 6 -> 7 bump (forced by `inject_card_colors`, a
+##     genuinely new MatchState injection seam the recorder had to learn), mode ③ reads the SAME
+##     `_card_colors` map mode ② already injects: no new intake surface, no new injection seam, no
+##     new contact kind, and no new `InputIntent` field (`card_slot`/`card_mode`/`card_commit`
+##     already carry everything it needs). This is the `5-4` shape -- a new resolution arm and new
+##     balance fields over an EXISTING capture channel, not a new channel.
+##
+##   NON-MOVER 2, THE TWO NEW BALANCE FIELDS: `defense_stamina_cost` and `defense_window_seconds` are
+##     authored `.tres` tuning, isolated from this golden by standing `BC/R3` -- `_golden_config()`
+##     builds its own in-test values and never loads the authored file. Re-tuning either cannot
+##     re-baseline this hash.
+##
+##   NON-MOVER 3, THE WIDENED `deflect_landed` PAYLOAD: a SIGNAL, with no path into
+##     `MatchState.to_snapshot()` at all. Named here only so a reader does not go looking for it
+##     among the causes.
+##
+##   CAUSES UNREACHABLE HERE, named so nobody reads a green golden as coverage of them: the entire
+##     mode ③ chain -- dispatch, the layer gate, the CHARGING refusal, the spend, the window, the
+##     colour copy, the landing intercept and the reset clear -- because the fixture never casts
+##     mode ③ and pushes no charge-reach fact. They are proven in test_unblockable_defense.gd.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "d9725092fb420c855bf7ff1efef2510f1d285785729bbfa4feb3bf6ffa2fa014"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1677,6 +1737,29 @@ func _run() -> String:
 ## story gives this fixture a reach fact, a hitbox, or a runner, the unit WILL swing, the dedupe key
 ## WILL carry a record, and the golden will move for a reason the block above says is impossible --
 ## and this fails first, naming it.
+## Story 5-5 (AC 16): THE SECOND MEASURED HALF OF THIS STORY'S RE-BASELINE, pinned as an assertion on
+## the precedent directly below rather than left as a claim in the accounting block.
+##
+## The block says this story's ONE cause is the `defense` key's mere PRESENCE at its RESTING value.
+## That is only true while the fixture never casts mode ③ — and the fixture builds its intents from a
+## fixed MOVES table plus ONE named cast at CAST_TICK, which is mode ①/② content. If a future story
+## gives this fixture a DEFENSE commit, the window WILL run, the key WILL carry a live
+## `[colour, remaining_ticks]`, and the golden will move for a reason the block calls impossible —
+## and this fails first, naming it.
+##
+## ASSERTED FOR BOTH PLAYERS, because the key is per-player and a resting claim about one of them is
+## not a claim about the set the hash actually takes.
+func test_the_fixture_reaches_the_hash_tick_with_no_defense_window_armed() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	for player: PlayerState in [ms.p1, ms.p2]:
+		assert_false(player.defense_window.is_running,
+			"the fixture never casts mode ③, so no defense window is armed at the hash tick")
+		assert_eq(player.to_snapshot()["defense"], [PlayerState.NO_TELEGRAPH_COLOR, 0],
+			"...so the `defense` key hashes at its RESTING value — which is why this story's ONE "
+			+ "golden cause is the key's mere PRESENCE and not a behavioural second cause")
+
+
 func test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record() -> void:
 	var ms := _make_match()
 	_play_sequence(ms)

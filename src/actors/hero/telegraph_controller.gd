@@ -43,6 +43,12 @@ extends Node3D
 ## HitFlash) all sit outside $Shapes for exactly this reason; this joins them.
 @onready var _orb_flash: MeshInstance3D = $OrbFlash
 
+## Story 5-5 (AC 13): the deflect spark's ORIGINAL hue, hoisted to a constant because it is now
+## applied from TWO places -- `_ready` and, as the fallback for a colour-less parry, the widened
+## `on_deflect_landed`. The value is `1-10`'s verbatim; hoisting it is what keeps a melee parry's
+## cue byte-identical to what it renders today rather than approximately so.
+const DEFAULT_SPARK_COLOR := Color(1.0, 0.95, 0.6, 1.0)
+
 var _profiles: Dictionary[HeroState.ActionState, TelegraphProfile] = {}
 ## Story 5-3 (AC 10): colour (Enums.CardColor int) -> the CHARGING-only profile. Separate from
 ## `_profiles` because the ActionState -> profile map is 1:1; CHARGING is 1:3, keyed by a value
@@ -87,7 +93,7 @@ func _ready() -> void:
 		var shape: MeshInstance3D = _shapes.get(profile.shape_id)
 		if shape != null:
 			shape.material_override = _flat_material(profile.color)
-	_spark.material_override = _flat_material(Color(1.0, 0.95, 0.6, 1.0))
+	_spark.material_override = _flat_material(DEFAULT_SPARK_COLOR)
 	var flash := _flat_material(Color(1.0, 0.1, 0.1, 0.4))
 	flash.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_hit_flash.material_override = flash
@@ -216,9 +222,28 @@ func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _targe
 ## Seam callback (connect_deflect_landed, slot bound at wiring): the story's
 ## FIRST-PRIORITY cue (1-8 finding: the parry was observable only as the absence of a
 ## number) — bright spark + metallic sting on the DEFLECTING hero.
-func on_deflect_landed(_attacker_slot: int, target_slot: int, my_slot: int) -> void:
+##
+## STORY 5-5 (AC 13): the payload gains a THIRD argument, the ANSWERED COLOUR, and this callback
+## widens with it (`my_slot` stays the bound trailing argument). The spark is TINTED to that colour
+## when it is not the sentinel -- a `5-5` colour-matched negation of an unblockable. An ORDINARY
+## MELEE PARRY passes `NO_TELEGRAPH_COLOR` and keeps today's untinted cue EXACTLY as it renders now:
+## the widening is additive and no existing consumer's observable behaviour changes.
+##
+## THE TINT ANSWERS THE PRIVACY OBJECTION RATHER THAN AVOIDING IT. The negation ALREADY reveals the
+## answered colour deductively -- only a matching colour negates, so the attacker learns it the
+## instant the attack vanishes, tint or no tint. What the tint stops is the cue LYING that an
+## ordinary, colour-blind parry happened.
+##
+## THE COLOUR VOCABULARY IS THE AUTHORED `TelegraphProfile` ONE, reused from `_charge_profiles` --
+## the same map the charge telegraph and the orb flash already read. No fourth colour vocabulary
+## ships, and an unknown colour falls back to the default spark rather than inventing a hue.
+func on_deflect_landed(_attacker_slot: int, target_slot: int, defense_color: int,
+		my_slot: int) -> void:
 	if target_slot != my_slot:
 		return
+	var profile: TelegraphProfile = _charge_profiles.get(defense_color)
+	_spark.material_override = _flat_material(profile.color) if profile != null \
+			else _flat_material(DEFAULT_SPARK_COLOR)
 	_cue_deflect.play()
 	_spark.visible = true
 	_spark.scale = Vector3.ONE * 0.4

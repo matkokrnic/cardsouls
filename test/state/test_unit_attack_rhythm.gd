@@ -578,7 +578,7 @@ func _mixed_attacker_hash(reversed: bool) -> Dictionary:
 	assert_true(ms.p1.hero.is_hitbox_active(), "sanity: the HERO's window is open")
 	assert_true(ms.p1.units.is_hitbox_active_at(0), "sanity: and the UNIT's is open on the same tick")
 	var deflects: Array = []
-	ms.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	ms.deflect_landed.connect(func(a: int, t: int, _c: int) -> void: deflects.append([a, t]))
 	var mana_before := ms.p1.mana.get_current()
 	# DOWN is dead ahead of P2's default facing, so the block/deflect ladder is actually reached
 	# rather than falling through the arc gate.

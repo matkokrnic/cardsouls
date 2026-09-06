@@ -327,6 +327,30 @@ extends Resource
 ## like every other field: an unauthored grant ships the story invisible, which is why this carries
 ## a BESPOKE authored `> 0` bound in test_balance_authoring.gd on top of the `>= 0` loop.
 @export var unblockable_orb_grant: int = 0
+## Story 5-5 (AC 6/AC 14): what initiating mode ③ costs, spent at the CAST -- the FIFTH stamina seat,
+## joining roll, attack, deflect and unblockable. Passed to `StaminaPool.spend` with
+## `stamina_regen_delay_ticks` exactly as the other four are, so the spend restarts the regen delay
+## identically. PROVISIONAL and deliberately SMALLER than `unblockable_stamina_cost` (R-D): the
+## defender is answering a commitment already made, not making one.
+##
+## SEATED IN THE `Unblockable` GROUP rather than a new `Defense` one, a dev-pass choice: mode ③
+## exists only where an unblockable does (its layer gate IS `flags.unblockable`, AC 3), so a
+## separate group would suggest an independence the flag gate denies.
+##
+## Zero default like every sibling, and therefore a BESPOKE authored `> 0` bound in
+## test_balance_authoring.gd on top of the `>= 0.0` loop -- a free defense is the roll precedent
+## again, on the fifth spend seat.
+@export var defense_stamina_cost: float = 0.0
+## Story 5-5 (AC 2/AC 14): how long the reaction window a defense cast opens stays open. Crosses into
+## the tick domain at the ONE boundary (`BalanceTicks.defense_window_ticks`, the
+## `unblockable_chargeup_ticks` precedent) and is never compared against a raw float inside
+## `advance()`.
+##
+## PROVISIONAL, and deliberately LONGER than `unblockable_chargeup_seconds` (R-A): the defender must
+## be able to pre-arm and still be covered when the chargeup lands. A 0.0 here derives 0 ticks,
+## `TimingWindow.start(0)` never runs, and no cast could EVER negate anything -- the whole answer
+## half of the read exchange ships invisible, which is why this carries a bespoke `> 0` bound too.
+@export var defense_window_seconds: float = 0.0
 
 @export_group("Orbs")
 ## Story 5-4 (AC 9): the per-colour CEILING on OrbPool, one value applied to each colour

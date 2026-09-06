@@ -139,6 +139,41 @@ func test_authored_orb_economy_values_are_positive() -> void:
 		+ "injection, which looks exactly like a working faucet paying into a hole)")
 
 
+## Story 5-5 (AC 6/AC 14): the TWO mode ③ numbers, in the same defect-by-construction class as the
+## unblockable three and the orb two above, and for the same stated reason -- a 0.0 in either ships
+## the story INVISIBLE rather than merely untuned, and the `>= 0.0` loop in test_data_resources.gd
+## passes on the 0.0 script default.
+##   * a 0.0 window derives 0 ticks, `TimingWindow.start(0)` never runs, and `is_running` is false at
+##     every landing -- so no defense cast could EVER negate anything. The cast still spends the card
+##     and the stamina, so the machinery looks healthy from every angle except the one that matters.
+##   * a 0.0 cost makes defending free, which is the roll precedent again on the FIFTH spend seat:
+##     an answer with no price is not a read exchange, it is a button to hold.
+##
+## THE RELATIONAL BOUND IS ALSO ASSERTED, unlike the unblockable family's: R-A and R-D both state
+## DIRECTIONS rather than values (the window LONGER than the chargeup, the cost SMALLER than the
+## unblockable's), and a bare `> 0` would pass on an authored pair that inverted either one. These
+## are PROVISIONAL starting points the live smoke judges -- the assertions pin the DIRECTION the
+## operator ratified, not the numbers.
+func test_authored_defense_values_are_positive_and_correctly_ordered() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.defense_window_seconds > 0.0,
+		"defense_window_seconds must be authored > 0 (a zero window never runs, so no defense cast "
+		+ "could ever negate anything while still spending the card and the stamina)")
+	assert_true(config.defense_stamina_cost > 0.0,
+		"defense_stamina_cost must be authored > 0 (a free defense is the roll precedent again, on "
+		+ "the FIFTH spend seat)")
+	assert_true(config.defense_window_seconds > config.unblockable_chargeup_seconds,
+		"defense_window_seconds must be authored LONGER than unblockable_chargeup_seconds (R-A): a "
+		+ "window shorter than the chargeup cannot be opened in reaction to a telegraph and still "
+		+ "be open when the attack lands")
+	assert_true(config.defense_stamina_cost < config.unblockable_stamina_cost,
+		"defense_stamina_cost must be authored SMALLER than unblockable_stamina_cost (R-D): the "
+		+ "defender answers a commitment already made rather than making one")
+
+
 ## Story 5-3 (fix pass, Ruling 3): THE CHARGE CLIPS' PLAYBACK SPEEDS MUST STILL DESCRIBE THE
 ## AUTHORED CHARGEUP. `AnimationController.CHARGE_CLIP_SPEED` compresses each of the three charge
 ## clips to fit `unblockable_chargeup_seconds`; the controller holds no balance reference

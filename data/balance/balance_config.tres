@@ -126,4 +126,6 @@ unblockable_chargeup_seconds = 1.0
 unblockable_reach = 8.0
 unblockable_damage_percent_of_max_hp = 9.0
 unblockable_orb_grant = 1
+defense_stamina_cost = 10.0
+defense_window_seconds = 1.5
 max_orbs_per_color = 5

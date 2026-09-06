@@ -96,7 +96,11 @@ func _play(ms: MatchState, through_tick: int, p1_press := {}, p2_block_ranges :=
 
 
 func _collect_deflects(ms: MatchState, into: Array) -> void:
-	ms.deflect_landed.connect(func(attacker: int, target: int) -> void:
+	# Story 5-5 (AC 13): the payload gained a THIRD argument (the answered colour). The lambda widens
+	# to match -- a callable narrower than the signal errors at emit -- but this helper still appends
+	# the PAIR, so every assertion built on it stays a free, unedited regression. The colour itself is
+	# asserted once, deliberately, by test_a_melee_parry_reports_no_colour below.
+	ms.deflect_landed.connect(func(attacker: int, target: int, _color: int) -> void:
 		into.append([attacker, target]))
 
 
@@ -119,6 +123,24 @@ func test_contact_inside_window_deflects_fully() -> void:
 	assert_eq(ms.p1.mana.get_current(), 0.0, "a deflected contact generates NO mana")
 	assert_eq(deflects, [[0, 1]], "deflect_landed queued with (attacker, target)")
 	assert_eq(hits.size(), 0, "no hit_landed on a deflect — deflect_landed is the only signal")
+
+
+## Story 5-5 (AC 13): the melee parry's HALF of the widened payload. This negation is colour-blind by
+## construction, so it reports `NO_TELEGRAPH_COLOR` -- an explicit "no colour to report" sentinel,
+## not a fourth invented value, and the token reused a fourth context over. It is what keeps today's
+## UNTINTED spark rendering exactly as it does now: the widening is additive, and no existing
+## consumer's observable behaviour changes.
+##
+## ASSERTED ONCE, HERE, rather than by widening `_collect_deflects`: that helper deliberately keeps
+## appending the PAIR so every assertion built on it stays an unedited free regression.
+func test_a_melee_parry_reports_no_colour() -> void:
+	var ms := _make_match()
+	var payloads: Array = []
+	ms.deflect_landed.connect(func(a: int, t: int, c: int) -> void: payloads.append([a, t, c]))
+	_play(ms, 4, {1: [&"attack"]}, [[1, 10]], {4: [[0, 1, 0, Vector2.DOWN]]})
+	assert_eq(payloads, [[0, 1, PlayerState.NO_TELEGRAPH_COLOR]],
+		"a melee parry carries the SENTINEL as its third argument (AC 13) — a colour-blind "
+		+ "negation has no colour to report, and inventing one would make the cue lie")
 
 
 func test_contact_on_grace_tick_still_deflects() -> void:
@@ -406,7 +428,7 @@ func test_the_hero_defensive_ladder_applies_unchanged_to_a_unit_attack() -> void
 	var deflecting := _match_4_3b()
 	_p1_unit_into_active_4_3b(deflecting)
 	var deflects: Array = []
-	deflecting.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	deflecting.deflect_landed.connect(func(a: int, t: int, _c: int) -> void: deflects.append([a, t]))
 	var stamina_before := deflecting.p2.stamina.get_current()
 	var hp_before := deflecting.p2.hero.get_hp()
 	deflecting.push_contact([0, 0], [1, -1], deflecting.p1.units.attack_count_at(0), Vector2.DOWN,
@@ -460,7 +482,7 @@ func _rhythm_after_swing(deflect: bool) -> Dictionary:
 	var ms := _match_4_3b()
 	_p1_unit_into_active_4_3b(ms)
 	var deflects: Array = []
-	ms.deflect_landed.connect(func(a: int, t: int) -> void: deflects.append([a, t]))
+	ms.deflect_landed.connect(func(a: int, t: int, _c: int) -> void: deflects.append([a, t]))
 	if not deflect:
 		# The control run must differ ONLY in whether the fact was deflected, so P2 still BLOCKS --
 		# it simply cannot afford the deflect and the hit degrades to a block.

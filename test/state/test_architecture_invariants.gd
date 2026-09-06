@@ -600,7 +600,15 @@ func test_the_contact_signals_keep_a_bare_int_attacker() -> void:
 	var expected := {
 		"hit_landed":
 			"signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float)",
-		"deflect_landed": "signal deflect_landed(attacker_slot: int, target_slot: int)",
+		# STORY 5-5 (AC 13) MOVES THIS ONE LITERAL, and the CLAIM the pin guards is unchanged. AC 13
+		# widens `deflect_landed` with a THIRD argument, the answered `defense_color`; the ATTACKER
+		# stays a typed BARE INT, which is the whole of `4-3b/R15`'s rule. A parameter LIST that
+		# grows is not an attacker that widened -- the falling assertions below still reject
+		# `attacker: Array[int]` in both signals, so the guard discriminates exactly what it always
+		# did. Note what did NOT move: `OBSERVATION_SEAMS` above stays at NINE, because its regex
+		# counts `connect_*` WRAPPER DECLARATIONS in `match_runner.gd`, not signal arity.
+		"deflect_landed":
+			"signal deflect_landed(attacker_slot: int, target_slot: int, defense_color: int)",
 	}
 	var found: Dictionary = {}
 	for line in lines:
@@ -621,5 +629,6 @@ func test_the_contact_signals_keep_a_bare_int_attacker() -> void:
 	assert_ne(expected["hit_landed"],
 		"signal hit_landed(attacker: Array[int], target_slot: int, damage: float, target_hp: float)",
 		"sanity: the widened attacker form is a DIFFERENT string, so the equality above discriminates")
-	assert_ne(expected["deflect_landed"], "signal deflect_landed(attacker: Array[int], target_slot: int)",
-		"sanity: and so is the deflect one")
+	assert_ne(expected["deflect_landed"],
+		"signal deflect_landed(attacker: Array[int], target_slot: int, defense_color: int)",
+		"sanity: and so is the deflect one, widened third argument and all")

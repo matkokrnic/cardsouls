@@ -79,6 +79,12 @@ var stun_ticks: int
 ## and the authored `*_seconds` float never reaches `advance()`. A chargeup measured against a raw
 ## seconds value inside the tick ladder is the A1 violation this whole file exists to prevent.
 var unblockable_chargeup_ticks: int
+## Story 5-5 (AC 2/AC 14): the mode ③ defense window, in TICKS. The line directly above's precedent
+## verbatim -- derived ONCE here, read INLINE at the one seat that starts the window (CONSTRAINT C),
+## and the authored `*_seconds` float never reaches `advance()`. This is also what
+## test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of any new
+## `*_seconds` field: a stem-matched twin on this object.
+var defense_window_ticks: int
 
 
 static func from_config(config: BalanceConfig) -> BalanceTicks:
@@ -121,6 +127,13 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# very tick it was cast. That degrade is defined rather than crashing, and the authoring audit
 	# is what keeps it out of the shipped `.tres`.
 	t.unblockable_chargeup_ticks = TimingWindow.seconds_to_ticks(config.unblockable_chargeup_seconds)
+	# Story 5-5 (AC 2/AC 14): the mode ③ defense window's duration, a PLAIN conversion on the line
+	# directly above's exact shape and for the same reasons -- a window duration, already clamped to
+	# a minimum of 1 tick for any non-zero authored value. An authored 0.0 derives 0 ticks, which
+	# `TimingWindow.start(0)` renders as a window that never runs: a defense cast would spend the
+	# card and the stamina and negate nothing, ever. That degrade is defined rather than crashing,
+	# and the authoring audit is what keeps it out of the shipped `.tres`.
+	t.defense_window_ticks = TimingWindow.seconds_to_ticks(config.defense_window_seconds)
 	return t
 
 

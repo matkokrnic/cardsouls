@@ -278,7 +278,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# StringName, no object and NO POSITION joins the hash: the lock's world-space DIRECTION is a
 	# pushed runner fact excluded from the snapshot (`4-6/R6`), and only the ADDRESS is here.
 	var expected: Array = [
-		"deck_size", "discard_size", "hand_size", "hero", "lock_target", "mana", "orbs",
+		# Story 5-5 (AC 16): the ARMED DEFENSE -- `[colour, remaining_ticks]` -- in sorted position,
+		# which is between `deck_size` and `discard_size` and NOT beside `telegraph`. Counts and
+		# indices only, exactly like its `telegraph` sibling: a colour is an enum ORDINAL and never a
+		# name, and the remaining time is an integer TICK count.
+		"deck_size", "defense", "discard_size", "hand_size", "hero", "lock_target", "mana", "orbs",
 		"pending_draw", "pending_draw_owed",
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
 		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
@@ -300,8 +304,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 29,
-		"the per-player snapshot key set is TWENTY-NINE keys as of story 5-2, which adds ONE: "
+	assert_eq(keys.size(), 30,
+		"the per-player snapshot key set is THIRTY keys as of story 5-5, which adds ONE: "
+		+ "`defense`, the armed reaction window as `[colour, remaining_ticks]` (AC 16), hashed "
+		+ "because it crosses ticks and decides whether an incoming unblockable lands at all. "
+		+ "It was TWENTY-NINE as of story 5-2, which added ONE: "
 		+ "`telegraph`, the active unblockable chargeup as `[colour, remaining_ticks]` (AC 21), "
 		+ "hashed because it crosses ticks and decides when the landing check runs. It was "
 		+ "TWENTY-EIGHT as of 4-6, which added ONE: "

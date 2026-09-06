@@ -114,6 +114,18 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# top of the `>= 0` loop below: `field in config` and `>= 0` BOTH pass on the 0 script default,
 	# and a 0 grant or a 0 cap ships the whole orb economy invisible in the build.
 	"unblockable_orb_grant", "max_orbs_per_color",
+	# Story 5-5 (AC 6/AC 14): the TWO mode ③ tunables -- the FIFTH stamina seat's cost, and the
+	# reaction window's duration. Listed here because reflection half (a) below fails otherwise, the
+	# guard working exactly as it did for the 5-2 four and the 5-4 two above.
+	#
+	# ONLY ONE OF THE TWO CARRIES THE `_seconds` SUFFIX, so half (b) independently demands a
+	# stem-matched `defense_window_ticks` on `BalanceTicks` -- and it would demand it even if this
+	# list had never been touched, which is why AC 14 calls the named list only HALF of this file's
+	# obligation. `defense_stamina_cost` has no suffix and no tick-domain counterpart by design (a
+	# cost is not a duration). BOTH carry a BESPOKE authored `> 0` bound in test_balance_authoring.gd
+	# on top of the `>= 0.0` loop below: a 0.0 cost makes the defense free, and a 0.0 window derives
+	# 0 ticks, never runs, and makes every defense cast negate nothing -- the story shipped invisible.
+	"defense_stamina_cost", "defense_window_seconds",
 ]
 
 

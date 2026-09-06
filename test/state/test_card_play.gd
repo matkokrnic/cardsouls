@@ -235,7 +235,13 @@ func test_cast_on_a_frozen_tick_is_dropped_silently() -> void:
 ## Story 5-2 (AC 9, `5-2/R8`): the modes that have a REAL resolution arm in
 ## `MatchState._resolve_card_action`, and therefore may legally be named in `src/`. Everything else
 ## is a guarded stub and the scan below fails on it.
-const REACHABLE_MODES: Array[String] = ["BASIC", "UNBLOCKABLE"]
+##
+## WIDENED A SECOND TIME BY STORY 5-5 (AC 1), and the `5-2/R8` discipline is applied unchanged: the
+## guard is NARROWED, never deleted and never weakened past the one mode that shipped. `DEFENSE`
+## gains a real `_resolve_defense_cast` arm, so it may now legally be named in `src/` (it is, in
+## `match_state.gd`'s dispatch and in `keyboard_controller.gd`'s new commit branch); `PITCH` (mode 4,
+## E6) still FAILS here, against an unreachable set that is now one instead of two.
+const REACHABLE_MODES: Array[String] = ["BASIC", "UNBLOCKABLE", "DEFENSE"]
 
 
 ## AC 2's negative-path test: the modes beyond Basic are UNREACHABLE in E3.
@@ -289,11 +295,15 @@ func test_only_shipped_modes_are_reachable() -> void:
 ## shipping the arm would be caught by `test_the_mode_dispatch_carries_a_guard` below; a story that
 ## shipped an arm without widening it is caught by the scan above. This assertion is what keeps the
 ## list itself from quietly growing to four and turning the scan vacuous.
-func test_the_reachable_mode_set_is_exactly_basic_and_unblockable() -> void:
-	assert_eq(REACHABLE_MODES, ["BASIC", "UNBLOCKABLE"] as Array[String],
-		"exactly TWO of the four modes resolve today: BASIC (3-5a) and UNBLOCKABLE (5-2). "
-		+ "Widening this list is how a mode becomes reachable, and it may only be widened by the "
-		+ "story that ships that mode's resolution arm")
+##
+## RENAMED BY STORY 5-5 (AC 1), not merely re-valued: a test whose NAME asserts a stale set does not
+## survive the story that moves the set -- the same discipline `5-4`'s deviation 2 applied to
+## `test_runner_observation_seams_are_exactly_eight`.
+func test_the_reachable_mode_set_is_exactly_basic_unblockable_and_defense() -> void:
+	assert_eq(REACHABLE_MODES, ["BASIC", "UNBLOCKABLE", "DEFENSE"] as Array[String],
+		"exactly THREE of the four modes resolve today: BASIC (3-5a), UNBLOCKABLE (5-2) and "
+		+ "DEFENSE (5-5). Widening this list is how a mode becomes reachable, and it may only be "
+		+ "widened by the story that ships that mode's resolution arm")
 
 
 ## STORY 4-0 (AC 7, second part): the ORDER of the two lines is PINNED, by content. The hole is
