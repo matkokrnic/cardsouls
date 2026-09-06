@@ -108,12 +108,24 @@ func _attack_and_advance_through(ms: MatchState, through_tick: int) -> void:
 ## `passive_tick.tres` — so the indices below shift. That order is the loader's own determinism
 ## contract, not an accident, and reading the rules by index is what makes a silent reordering fail
 ## here rather than somewhere subtler.
-func test_authored_rule_set_is_the_three_mana_faucets() -> void:
+## STORY 5-4 (AC 1/AC 2): A FOURTH RULE SHIPS — `unblockable_landing.tres` — and it is the FIRST
+## non-mana one, which is why this MANA file only counts it. Its own field-by-field pin (source /
+## resource / domain / field / flag) lives in test_orbs_economy.gd, beside the behaviour it drives;
+## what belongs HERE is that the directory now yields four and that the three mana faucets keep
+## their identities and their SORTED indices. Sorted filename order puts the newcomer LAST
+## (`mana_accelerator` < `melee_hit` < `passive_tick` < `unblockable_landing`), so every index below
+## is unmoved — and reading by index is what makes a silent reordering fail here rather than subtler.
+func test_authored_rule_set_is_the_four_authored_faucets() -> void:
 	var rules := EconomyEvaluator.authored_rules()
-	assert_eq(rules.size(), 3,
-		"exactly three authored rules ship (mana_accelerator + melee_hit + passive_tick)")
-	if rules.size() != 3:
+	assert_eq(rules.size(), 4,
+		"exactly four authored rules ship (mana_accelerator + melee_hit + passive_tick + "
+		+ "unblockable_landing)")
+	if rules.size() != 4:
 		return
+	assert_eq(rules[3].source, EconomyEvaluator.SOURCE_UNBLOCKABLE_LANDING,
+		"the fourth rule is the orb faucet, sorted last — pinned in full in test_orbs_economy.gd")
+	assert_eq(rules[3].resource, EconomyEvaluator.ORBS,
+		"...and it pays ORBS, so none of the mana assertions below can be answering about it")
 	var accelerator: ResourceGenerationRule = rules[0]  # sorted: mana_accelerator.tres first
 	var melee: ResourceGenerationRule = rules[1]
 	var passive: ResourceGenerationRule = rules[2]
@@ -150,8 +162,9 @@ func test_authored_rule_set_is_the_three_mana_faucets() -> void:
 ## the scan finds nothing there — which also pins the type filter (a stray .tres beside the
 ## rules cannot poison the set).
 func test_rule_set_is_a_directory_scan_not_a_hardcoded_list() -> void:
-	assert_eq(EconomyEvaluator.load_rules(EconomyEvaluator.RULES_DIR).size(), 3,
-		"the authored directory yields its three rules (story 4-4 added mana_accelerator.tres)")
+	assert_eq(EconomyEvaluator.load_rules(EconomyEvaluator.RULES_DIR).size(), 4,
+		"the authored directory yields its four rules (4-4 added mana_accelerator.tres, "
+		+ "5-4 added unblockable_landing.tres — both with NO loader change, which is D6's promise)")
 	assert_eq(EconomyEvaluator.load_rules("res://data/balance/").size(), 0,
 		"a directory of NON-rule .tres yields nothing — the set is the directory's content")
 	assert_eq(EconomyEvaluator.load_rules("res://data/no_such_directory/").size(), 0,

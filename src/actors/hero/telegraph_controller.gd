@@ -36,6 +36,12 @@ extends Node3D
 @onready var _cue_cast_success: AudioStreamPlayer = $CueCastSuccess
 @onready var _spark: MeshInstance3D = $DeflectSpark
 @onready var _hit_flash: MeshInstance3D = $HitFlash
+## Story 5-4 (AC 17): the earn cue's shape. A SIBLING of HitFlash, deliberately NOT a child of
+## $Shapes -- `on_action_state_changed` hides every child of $Shapes on EVERY transition, and the
+## landing queues `set_action_state(IDLE)` in the SAME drain as the orb grant, so an OrbFlash under
+## $Shapes would be switched off in the same frame it was lit. The one-shot cues (DeflectSpark,
+## HitFlash) all sit outside $Shapes for exactly this reason; this joins them.
+@onready var _orb_flash: MeshInstance3D = $OrbFlash
 
 var _profiles: Dictionary[HeroState.ActionState, TelegraphProfile] = {}
 ## Story 5-3 (AC 10): colour (Enums.CardColor int) -> the CHARGING-only profile. Separate from
@@ -47,6 +53,11 @@ var _shapes: Dictionary[StringName, MeshInstance3D] = {}
 var _stings: Dictionary[StringName, AudioStreamPlayer] = {}
 var _spark_tween: Tween
 var _flash_tween: Tween
+var _orb_flash_tween: Tween
+## Story 5-4 (AC 16/AC 17): the LAST orb triple this controller was told about, indexed by
+## `Enums.CardColor`. EMPTY means "the priming emission has not arrived yet" -- see
+## on_orbs_changed for why that distinction is the whole of AC 16.
+var _orb_counts: Array[int] = []
 
 
 func _ready() -> void:
@@ -80,6 +91,10 @@ func _ready() -> void:
 	var flash := _flat_material(Color(1.0, 0.1, 0.1, 0.4))
 	flash.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_hit_flash.material_override = flash
+	# The orb flash is tinted PER EVENT, not in _ready: like ChargeMarker it is one physical node
+	# standing in for three colours, so its material is (re)applied at each dispatch from the same
+	# authored TelegraphProfile colour the charge telegraph used. No fourth colour vocabulary ships.
+	_orb_flash.visible = false
 
 
 ## Seam callback (connect_hero_action_state_changed): show the entered action's telegraph
@@ -124,11 +139,56 @@ func on_action_state_changed(_previous: HeroState.ActionState, current: HeroStat
 
 ## Seam callback (5-3 AC 13): S5's success-cue half. Connected DIRECTLY to the existing,
 ## previously-unwired `MatchState.card_cast_resolved` signal by match_runner (a plain connect,
-## not a new `connect_*` wrapper — `test_runner_observation_seams_are_exactly_eight` pins the
-## observation-seam family at eight, 2-6/R7 amended by 3-6/R2, and this file adds no ninth). A
+## not a new `connect_*` wrapper — `test_runner_observation_seams_are_exactly_nine` pins the
+## observation-seam family, which stood at eight when this line shipped and is nine since 5-4 AC 15;
+## THIS connection adds none of them). A
 ## one-shot cue at CAST RESOLUTION, distinct from the ongoing CHARGING sting above.
 func on_card_cast_resolved() -> void:
 	_cue_cast_success.play()
+
+
+## Seam callback (connect_orbs_changed, story 5-4 AC 17) -- the NINTH seam's cue consumer, bound to
+## this hero's own slot at wiring. A ONE-SHOT above-head flash in the spent colour, on the HitFlash
+## idiom below (show, kill any running tween, hold briefly, hide) and deliberately NOT on the
+## ChargeMarker toggle-on-state-entry idiom above: earning an orb is an EVENT, not an ongoing state.
+## It is a WORLD-SPACE cue on the attacker's own hero actor, so both split-screen viewports show it,
+## exactly as ChargeMarker already is.
+##
+## THE PRIMING EMISSION IS SWALLOWED, AND THAT IS THIS FUNCTION'S LOAD-BEARING HALF (AC 16). The seam
+## PRIMES ON CONNECT with the resting (0,0,0) count at match start. A cue derived naively as "fires
+## on increase" against an unset previous triple would compare against implicit zeroes and misfire on
+## the priming call itself -- every hero flashing at match start, before anything was earned. The
+## EMPTY `_orb_counts` is the guard: the first call RECORDS and returns, and only a later call can
+## flash. Pinned by test/integration/test_orb_cue_live.gd, which drives it RED by removing this guard.
+##
+## ONLY AN INCREASE FIRES. The round-boundary reset drops all three counts to zero through this same
+## channel; a decrease and a no-change are both silent, so a reset is not an earn.
+func on_orbs_changed(red: int, blue: int, green: int) -> void:
+	var counts: Array[int] = [red, blue, green]
+	if _orb_counts.is_empty():
+		_orb_counts = counts
+		return
+	var earned := -1
+	for i in counts.size():
+		if counts[i] > _orb_counts[i]:
+			earned = i
+			break
+	_orb_counts = counts
+	if earned == -1:
+		return
+	# The colour vocabulary is the one already authored for the charge telegraph, read back off the
+	# same profiles -- so the orb a player earns flashes in the same hue the chargeup they landed
+	# was telegraphed in, with no second colour table to drift from it.
+	var profile: TelegraphProfile = _charge_profiles.get(earned)
+	if profile == null:
+		return
+	_orb_flash.material_override = _flat_material(profile.color)
+	_orb_flash.visible = true
+	if _orb_flash_tween != null:
+		_orb_flash_tween.kill()
+	_orb_flash_tween = create_tween()
+	_orb_flash_tween.tween_interval(0.25)
+	_orb_flash_tween.tween_callback(func() -> void: _orb_flash.visible = false)
 
 
 ## Seam callback (connect_hero_action_rejected): loss legibility — a press the state

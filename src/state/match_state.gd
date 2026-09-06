@@ -2520,7 +2520,10 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 ##
 ## THE CARD AND THE STAMINA STAY SPENT ON EVERY OUTCOME (AC 19). Nothing below is conditional on the
 ## hit: AC 6 already ran at the cast, an entire chargeup ago, and mode (2) is fully committal
-## (Ruling 4). A miss is a miss -- no damage, no orb (`5-4`), no HP change on either side.
+## (Ruling 4). A miss is a miss -- no damage, no orb, no HP change on either side. THE ORB HALF IS
+## NO LONGER A FORWARD REFERENCE: story 5-4 landed the grant inside the landed branch below
+## (`_grant_landing_orbs`), so "no orb on a miss" is now a property of where that call sits rather
+## than a promise about a story that had not shipped.
 ##
 ## AN ENEMY THAT DIED FIRST IS NOT HIT (AC 16). Like its step-3/4/5/6 siblings this branch is
 ## unreachable in natural play -- DEAD and `_round_over` are set together, and step 1b returns
@@ -2553,11 +2556,56 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 				* target.hero.get_max_hp()
 		target.hero.take_damage(damage)
 		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
+		_grant_landing_orbs(player)
 	# AC 20: the exit is UNCONDITIONAL on hit or miss, and it is the last thing that happens so the
 	# damage above is applied while the hero is still, conceptually, mid-attack. The telegraph key
 	# stops being reported the moment this line runs, because `PlayerState.to_snapshot()` derives it
 	# from `CHARGING` rather than from a flag something has to remember to clear.
 	player.hero.set_action_state(HeroState.ActionState.IDLE)
+
+
+## Story 5-4 (AC 1/AC 4-7): THE PAYOUT HALF of the RGB read exchange -- a landed unblockable credits
+## its attacker orbs of the spent card's own colour. Reached ONLY from the landed branch above, so
+## a miss pays nothing without a second test saying so.
+##
+## COMPUTED BY THE SAME PURE EVALUATOR `_generate_mana` CALLS (AC 1). No second evaluator, no inline
+## formula: `EconomyEvaluator.amount_for` sums the authored `data/economy/unblockable_landing.tres`
+## rule against the live balance and flags, and THIS function applies the number -- the PURE/APPLY
+## split `EconomyEvaluator`'s own header states as doctrine (it computes, MatchState applies), not a
+## free placement choice.
+##
+## NO SECOND FLAG GATE (AC 6). `flags.orbs` is read ONCE, as DATA, by `_flag_open` inside the
+## evaluator, because the rule carries `required_flag = &"orbs"`. A closed flag sums to 0.0 and the
+## `> 0` guard below turns that into no call and no signal at all -- the `melee_mana_generation`
+## precedent verbatim ("a faucet that cannot be verified open stays shut"), never a duplicated check
+## here. The damage above is deliberately OUTSIDE this function: a closed orbs layer still lands a
+## full-damage hit.
+##
+## THE COLOUR IS READ, NEVER RECOMPUTED (AC 5). `player.charge_color` has been resident since the
+## cast (`_resolve_unblockable_cast`, an entire chargeup ago) and this is a read of that one fact.
+## The `NO_TELEGRAPH_COLOR` guard is the SAME recorded family as the cast-time sentinel case at the
+## `charge_color` assignment above -- one unreachable-in-live-play case seen from both ends, not two:
+## `inject_card_colors`'s totality check closes it at the seam, and a fixture that injects no colours
+## grants NOTHING rather than crediting an invented RED.
+##
+## `roundi`, NOT `int()` (AC 4), and the conversion happens ONCE, here. `amount_for` returns a float
+## because it SUMS over rules; `OrbPool` stores ints. The sum of authored ints is exact at these
+## magnitudes today, so the two spellings agree -- `roundi` is chosen for the day a second `orbs`
+## rule is authored and the sum stops being whole, where truncation would silently swallow it.
+## Negative results are impossible (every authored `orbs` amount is non-negative) and are not
+## guarded for; the `> 0` guard below is about the ZERO case, not the negative one.
+func _grant_landing_orbs(player: PlayerState) -> void:
+	if player.charge_color == PlayerState.NO_TELEGRAPH_COLOR:
+		return
+	var grant := roundi(EconomyEvaluator.amount_for(EconomyEvaluator.authored_rules(),
+			EconomyEvaluator.SOURCE_UNBLOCKABLE_LANDING, EconomyEvaluator.ORBS,
+			balance, balance_ticks, flags))
+	# AC 7: a zero grant calls neither `add` nor emits `orbs_changed`, so a closed-flag landing
+	# produces no observable orb event AT ALL. Distinct from `OrbPool.add`'s own internal
+	# no-op-on-no-change short circuit (AC 8) -- that one is about a clamp that changed nothing,
+	# this one is about a faucet that paid nothing.
+	if grant > 0:
+		player.orbs.add(player.charge_color, grant)
 
 
 ## Step-6 delivery of ONE owed replacement (story 3-5b, AC 3/AC 5/AC 7/AC 10). Seated after the
@@ -3078,6 +3126,14 @@ func _apply_balance_to_player(player: PlayerState, config: BalanceConfig,
 	# constructor seeding left to double-write.
 	player.stamina.refill()
 	player.mana.set_maximum(config.max_mana)
+	# Story 5-4 (AC 10): orbs join the per-pool reload contract on MANA's side of the asymmetry,
+	# not stamina's -- set_maximum ONLY, on EVERY injection including the first, NEVER a refill.
+	# Orbs are EARNED (the mode (2) payout), so handing back a full pool on a reload would be the
+	# same defect the mana line above exists to avoid, one resource over. Match start still yields
+	# EMPTY orbs, and for the reason the header's mana entry gives: a fresh PlayerState constructs
+	# its OrbPool at all-zero, so there is nothing for this line to preserve at the first injection
+	# and nothing for it to invent.
+	player.orbs.set_maximum(config.max_orbs_per_color)
 
 
 ## Story 3-1 (AC 5, 3-1/R3): joins the `balance_ticks == null` gated family (step 3's
@@ -3130,8 +3186,15 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ## swings on" is unchanged for every OTHER in-flight window; the chargeup is the one whose survival
 ## is a defect rather than a feature, because step 1b freezes its clock while leaving it armed.
 ##
-## The parked mana-survives-reset finding stays PARKED. These are TWO named exceptions; they do not
-## open the reset's contract generally.
+## STORY 5-4 (AC 13): A THIRD NAMED EXCEPTION -- the per-player ORB POOL, cleared in _reset_player
+## below. Named here for the unit board's own reason (per-player state that must not cross a round
+## boundary, and this path is the only round boundary this codebase has), and _end_round is again
+## deliberately UNTOUCHED: a clear there would delete the winner's freshly-earned orbs at the instant
+## of death, before the round-over freeze displays them.
+##
+## The parked mana-survives-reset finding stays PARKED -- and orbs deliberately do NOT follow mana
+## here, a NAMED divergence: orbs are a per-round stake in the RPS exchange, mana is a persistent
+## flywheel. These are THREE named exceptions; they do not open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -3202,3 +3265,20 @@ func _reset_player(player: PlayerState) -> void:
 	# surviving a board clear, both would name records that no longer exist. Clearing the two
 	# together is what keeps "units gone but their shots still flying" unrepresentable.
 	player.projectiles.clear()
+	# STORY 5-4 (AC 13): THE THIRD NAMED EXCEPTION to the reset's "NOTHING else" contract -- the
+	# per-player ORB POOL, cleared here beside the board / dedupe / projectiles / chargeup for the
+	# same reason they are: this is per-player state that must not survive a round boundary, and the
+	# debug reset is this codebase's ONLY round-boundary transition (there is no automatic
+	# round-restart path). Orbs are a PER-ROUND STAKE in the RPS exchange, which is why they follow
+	# the board's precedent rather than mana's -- the parked "mana survives reset" finding stays
+	# parked and UNTOUCHED, and this divergence between the two pools is NAMED, not accidental.
+	#
+	# `_end_round` gains NO matching clear, deliberately: clearing there would delete the WINNER's
+	# freshly-earned orbs the instant the loser dies, before the round-over freeze even displays
+	# them -- against the freeze-survives-until-reset behaviour every other piece of round-crossing
+	# state already has (`4-1/R5`'s reasoning for the unit board, verbatim).
+	#
+	# `reset_all()` is REUSED, not reinvented: OrbPool authored it for E6's Pitch-Effect activation
+	# (all three colours to zero, TDD 8.2). Different call site, same method, no modification -- and
+	# its own no-op-on-already-empty guard means a reset with no orbs earned signals nothing.
+	player.orbs.reset_all()

@@ -57,6 +57,10 @@ size = Vector3(1.15, 2.15, 1.15)
 radius = 0.3
 height = 0.6
 
+[sub_resource type="SphereMesh" id="SphereMesh_tgorb"]
+radius = 0.16
+height = 0.32
+
 [node name="HeroActor" type="CharacterBody3D" unique_id=1317219649]
 script = ExtResource("1_vde01")
 
@@ -189,6 +193,12 @@ mesh = SubResource("SphereMesh_tgsprk")
 [node name="HitFlash" type="MeshInstance3D" parent="TelegraphController"]
 visible = false
 mesh = SubResource("BoxMesh_tgflsh")
+
+[node name="OrbFlash" type="MeshInstance3D" parent="TelegraphController"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
+visible = false
+mesh = SubResource("SphereMesh_tgorb")
+editor_description = "Earn cue (story 5-4, AC 17): a one-shot ABOVE-HEAD flash in the spent card's colour, fired when this hero's own orb count for a colour goes UP (TelegraphController.on_orbs_changed, off the ninth observation seam connect_orbs_changed). SIBLING OF HitFlash, NOT a child of Shapes, and that placement is load-bearing rather than tidy: on_action_state_changed hides every child of Shapes on EVERY transition, and the landing that grants the orb queues set_action_state(IDLE) in the SAME signal drain -- an OrbFlash under Shapes would be switched off in the frame it was lit. The other one-shot cues (DeflectSpark, HitFlash) sit outside Shapes for the same reason. Root +1.35 puts it clear of the box top (+1.0) and of ChargeMarker (+0.5), so an earn reads as a distinct overhead event rather than as part of the charge telegraph. Tinted PER EVENT from the charge TelegraphProfile of the colour earned -- one physical node standing in for three colours, the ChargeMarker precedent, so no fourth colour vocabulary ships."
 
 [node name="AnimationController" type="Node3D" parent="."]
 script = ExtResource("16_anctl")

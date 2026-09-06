@@ -311,6 +311,34 @@ extends Resource
 ## the `attack_damage_percent_of_max_hp` convention verbatim, so the two hero-versus-hero damage
 ## numbers are read the same way and can be compared at a glance in the authored file.
 @export var unblockable_damage_percent_of_max_hp: float = 0.0
+## Story 5-4 (AC 3): what ONE landed unblockable pays its attacker, in orbs of the spent card's own
+## colour. Per-EVENT amount, NOT tick-domain -- never on BalanceTicks. Named into the
+## `unblockable_*` family because the EVENT is an unblockable landing; the CONTAINER's bound is a
+## separate, generic field (`max_orbs_per_color` below), since `5-5`/`5-6` will clamp the same pool
+## against events this family does not name.
+##
+## NO PER-COLOUR SCALING (Non-Goals): one value for RED, BLUE and GREEN alike, exactly as
+## `unblockable_damage_percent_of_max_hp` directly above ships one damage value for all three
+## (Ruling 2). `5-6`'s ladder is what splits both. There is deliberately no
+## `unblockable_orb_grant_red/blue/green` triplet here to become a second source of truth.
+##
+## An INT, because OrbPool stores ints -- but `EconomyEvaluator.amount_for` returns a float (it sums
+## over rules), so the conversion back happens ONCE, at the landing seat, via `roundi`. Zero default
+## like every other field: an unauthored grant ships the story invisible, which is why this carries
+## a BESPOKE authored `> 0` bound in test_balance_authoring.gd on top of the `>= 0` loop.
+@export var unblockable_orb_grant: int = 0
+
+@export_group("Orbs")
+## Story 5-4 (AC 9): the per-colour CEILING on OrbPool, one value applied to each colour
+## INDEPENDENTLY. A generic cap on the CONTAINER, in the `max_hp` / `max_stamina` / `max_mana`
+## naming family rather than in the `unblockable_*` one, because the pool it bounds outlives the
+## event that fills it: `5-5`/`5-6` read and clamp this same pool against their own events.
+##
+## Injected on EVERY apply_balance through `OrbPool.set_maximum` (the `mana.set_maximum` line's
+## shape), which RE-CLAMPS the current counts into the new bound and NEVER refills -- orbs are
+## earned, never handed out. Zero default, bespoke `> 0` bound: a 0 cap makes every grant a no-op
+## and would ship the story invisible.
+@export var max_orbs_per_color: int = 0
 
 
 ## Story 4-4 (AC 1/AC 2): the sentinel a failed kind lookup returns. NOT -1 by coincidence — it is

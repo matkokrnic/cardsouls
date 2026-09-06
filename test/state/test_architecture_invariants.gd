@@ -281,14 +281,32 @@ func test_state_layer_never_names_the_recorder_or_the_replay_controller() -> voi
 ## observation channel (PlayerState.cards_changed). This is the operator-approved amendment
 ## `3-6/R2`, not a refactor: the count moved because a DESIGN decision moved it, the guard's name
 ## and list moved WITH it in the same commit, and a ninth is the operator's call all over again.
+##
+## STORY 5-4 (AC 15) MOVES IT TO NINE, THE SECOND SUCH EXCEPTION — `connect_orbs_changed`. See the
+## entry beside that name in the list below for why it had to be a new seam and which two
+## alternative shapes were refused. NOTE THE DELIBERATE ASYMMETRY: this TEST moves in 5-4's own
+## commit because it is load-bearing and must stay accurate, while
+## `docs/game-architecture.md:371-372`'s "there are now eight" prose does NOT — it is queued for the
+## E5 close-out flush so several E5 amendments land together (`5-3/R4` is the queue's other member).
 const OBSERVATION_SEAMS: Array[String] = [
 	"connect_hero_action_state_changed", "connect_hero_action_rejected", "connect_hit_landed",
 	"connect_deflect_landed", "connect_hero_hp_changed", "connect_stamina_changed",
 	"connect_mana_changed", "connect_cards_changed",
+	# Story 5-4 (AC 15) MOVES THE COUNT TO NINE -- THE SECOND SANCTIONED AMENDMENT, and it is the
+	# same shape as 3-6's: a DESIGN decision moved the count, and the guard's name and list moved
+	# WITH it in the same commit. The HUD cannot learn an orb count any other way (`orbs` is in
+	# to_snapshot(), but hud_root.gd holds no MatchState handle and never polls -- `2-4/R7`), and
+	# the earn cue needs the same per-slot channel; both consume THIS one seam rather than a second
+	# one. The refused alternatives are recorded at connect_orbs_changed itself: a
+	# `MatchState.orb_granted` signal (not built) and a second direct presentation-to-MatchState
+	# connect (explicitly refused, because `5-3/R4` left that form unresolved in the architecture
+	# amendment queue and it must not be settled by accident here). A TENTH is the operator's call
+	# all over again.
+	"connect_orbs_changed",
 ]
 
 
-func test_runner_observation_seams_are_exactly_eight() -> void:  # 2-6/R7, amended 3-6/R2
+func test_runner_observation_seams_are_exactly_nine() -> void:  # 2-6/R7, amended 3-6/R2, 5-4 AC 15
 	var re := RegEx.create_from_string("^func\\s+(connect_[A-Za-z0-9_]*)\\s*\\(")
 	# The pattern must match the form it counts — a regex typo must not silently disarm this.
 	assert_true(re.search("func connect_hit_landed(callback: Callable) -> void:") != null,
@@ -308,8 +326,9 @@ func test_runner_observation_seams_are_exactly_eight() -> void:  # 2-6/R7, amend
 	var expected := OBSERVATION_SEAMS.duplicate()
 	expected.sort()
 	assert_eq(found, expected,
-		"the runner's observation-seam family is FROZEN AT EIGHT (2-6/R7, amended once by 3-6/R2). "
-		+ "A ninth seam is a design change and the operator's call, not a refactor — and a removed "
+		"the runner's observation-seam family is FROZEN AT NINE (2-6/R7, amended by 3-6/R2 to eight "
+		+ "and by 5-4 AC 15 to nine). "
+		+ "A TENTH seam is a design change and the operator's call, not a refactor — and a removed "
 		+ "one is as loud as an added one: %s" % ", ".join(found))
 
 

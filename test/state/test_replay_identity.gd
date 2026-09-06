@@ -248,6 +248,20 @@ const INJECTED: Array[String] = [
 	# `inject_card_colors`, which IS a capture channel (`capture_inject_card_colors`).
 	"match_state._deck_contents", "match_state._card_costs", "match_state._card_effects",
 	"match_state._card_colors",
+	# Story 5-4 (AC 8/AC 10/AC 12): the ORB POOL's per-colour MAXIMUM, and it lands in THIS bucket
+	# rather than beside `mana_pool._maximum` in HASHED -- the one asymmetry between the two pools,
+	# named here because this file is where it becomes checkable.
+	#
+	# `mana_pool._maximum` is HASHED because `ManaPool.to_snapshot()` carries it: mana's bound is
+	# itself reloadable content a replay must reproduce identically. `OrbPool.to_snapshot()`
+	# deliberately does NOT carry this one (5-4's AC 12, a NEGATIVE AC with its own non-vacuity
+	# proof), so it cannot be HASHED -- and it is not a FOURTH unhashed cross-tick exclusion either,
+	# because it is not cross-tick STATE at all. It is authored config: never produced by the tick,
+	# and changed only through `OrbPool.set_maximum`, reached ONLY from
+	# `MatchState._apply_balance_to_player`, i.e. through `apply_balance` -- which IS a capture
+	# channel (`capture_apply_balance`, AC 4). Restoring the recorded BalanceConfig restores this
+	# exactly as it restores `balance_ticks`. UNHASHED_CROSS_TICK_MEMBERS therefore STAYS AT THREE.
+	"orb_pool._max",
 ]
 
 ## Files under src/state/ that carry no runtime match state, with the reason each is exempt from

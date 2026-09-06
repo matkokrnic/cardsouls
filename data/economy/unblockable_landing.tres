@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ResourceGenerationRule" format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/resource_generation_rule.gd" id="1_resgen"]
+
+[resource]
+script = ExtResource("1_resgen")
+source = &"unblockable_landing"
+resource = &"orbs"
+amount_domain = 0
+amount_field = &"unblockable_orb_grant"
+required_flag = &"orbs"

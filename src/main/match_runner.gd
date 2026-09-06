@@ -371,6 +371,11 @@ func _ready() -> void:
 		connect_hero_hp_changed(slot, hud.on_hp_changed)
 		connect_stamina_changed(slot, hud.on_stamina_changed)
 		connect_mana_changed(slot, hud.on_mana_changed)
+		# Story 5-4 (AC 18-20): the NINTH seam's HUD consumer, bound to this root's own slot
+		# exactly like the three economy seams above (2-4/R7 no-opponent-read). It PRIMES ON
+		# CONNECT with the resting (0,0,0), so the reserved orb region renders real zeroes from
+		# frame one rather than a placeholder, and updates live from the landing seat afterwards.
+		connect_orbs_changed(slot, hud.on_orbs_changed)
 		# Story 3-6 (AC 2): the eighth seam's ONE production consumer, bound to this root's own
 		# slot exactly like the three economy seams above (2-4/R7 no-opponent-read).
 		# Story 4-B1 (AC 1): wrapped rather than passed bare, so this player's OWN
@@ -395,7 +400,8 @@ func _ready() -> void:
 		# Story 3-6 (AC 4): the reshuffle flag. BOTH viewports subscribe to the SAME ownerless bus
 		# event (E3-RG/R3 — "this player's deck ran out" is a match-wide public fact), each binding
 		# its OWN slot so it can render the event against itself: the round_ended wiring directly
-		# below, second time. A plain bus connect, not a seam — the family stays at eight.
+		# below, second time. A plain bus connect, not a seam — the family stayed at eight here
+		# (5-4 later moved it to nine with connect_orbs_changed; this line still adds none).
 		EventBus.reshuffle_vulnerable_window_opened.connect(
 				hud.on_reshuffle_vulnerable_window_opened.bind(slot))
 		# Story 2-6 (AC 1): the label's single CLEAR seat — a debug reset hides it on BOTH
@@ -452,7 +458,8 @@ func _ready() -> void:
 		# action-state transition signal itself never carries (previous, current only). These
 		# two wrapping lambdas are the new read path: a one-time read of the `telegraph`
 		# snapshot fact (5-2) at the transition instant, via _charge_color_for_slot below. NOT
-		# a new connect_* wrapper (the seam family stays at eight) and NOT a captured
+		# a new connect_* wrapper (the seam family was at eight here; 5-4 moved it to nine, and
+			# this read path still adds none) and NOT a captured
 		# PlayerState (4-B1 review precedent: PlayerState is RefCounted and a reference
 		# captured into a Callable stored inside that same PlayerState's own signal-connection
 		# list is a reference cycle) -- slot is re-resolved to a PlayerState by
@@ -465,11 +472,20 @@ func _ready() -> void:
 		connect_hero_action_rejected(slot, cues.on_action_rejected)
 		connect_hit_landed(cues.on_hit_landed.bind(slot))
 		connect_deflect_landed(cues.on_deflect_landed.bind(slot))
+		# Story 5-4 (AC 17): the earn cue, the NINTH seam's SECOND consumer. Bound to this
+		# hero's own slot exactly like the four combat seams above, and it needs no slot argument
+		# of its own because the channel is already per-slot. The controller derives "a colour
+		# went UP" by diffing successive payloads and deliberately swallows the PRIMING call (see
+		# TelegraphController.on_orbs_changed) -- pinned by test/integration/test_orb_cue_live.gd
+		# (AC 16), because wiring order x controller state is runtime COMPOSITION that no
+		# state-level test reaches (`3-0b/R34`).
+		connect_orbs_changed(slot, cues.on_orbs_changed)
 		EventBus.round_ended.connect(cues.on_round_ended.bind(slot))
 		# Story 5-3 (AC 13): S5's success-cue half. card_cast_resolved is an EXISTING state-owned
 		# signal (both _resolve_basic_cast's and _resolve_unblockable_cast's success paths already
 		# emit it) with no listener before this story. A direct connect, not a new connect_* wrapper
-		# -- test_runner_observation_seams_are_exactly_eight pins the family at eight (2-6/R7 amended
+		# -- test_runner_observation_seams_are_exactly_nine pins the family (at eight when this
+			# line shipped, nine since 5-4 AC 15) (2-6/R7 amended
 		# by 3-6/R2) and this adds no ninth.
 		#
 		# THIS IS A NEW CONNECTION SHAPE, NAMED AS ONE (5-3 review correction; this comment used to
@@ -728,7 +744,8 @@ func trigger_live_balance_reload() -> void:
 ## Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the DebugInstrumentPanel's READ ACCESSOR for both players'
 ## hand contents — a Callable the panel CALLS on demand (its own toggle handler), not a push seam
 ## and not a poll: no new `connect_*`, no per-tick call from `_physics_process`, and
-## `test_runner_observation_seams_are_exactly_eight` is untouched (the seam family stays at eight).
+## `test_runner_observation_seams_are_exactly_nine` is untouched by THIS seat (the family was at
+## eight when this line shipped; 5-4 AC 15 moved it to nine via connect_orbs_changed).
 ## The same "hand the panel a way to ASK" shape as `save_recorded_stream` /
 ## `trigger_live_balance_reload` above, generalised from an action to a read.
 ##
@@ -1521,6 +1538,46 @@ func connect_cards_changed(slot: int, callback: Callable) -> void:
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	player.cards_changed.connect(callback)
 	callback.call(player.hand.to_array(), player.deck.size(), player.discard.size())
+
+
+## Read-only subscription seam (story 5-4, AC 15) — THE NINTH, and the SECOND amendment to the
+## family `2-6/R7` froze at seven (`3-6/R2` made it eight). A LINE-FOR-LINE clone of
+## connect_mana_changed directly above: same slot guard, same pool-owned source signal, same
+## no-state-handle discipline, same PRIME ON CONNECT (2-4/R2). Payload: this player's three orb
+## counts (red, blue, green).
+##
+## A POOL-OWNED SOURCE SIGNAL IS THE NORM FOR THIS SHAPE, not a novelty — mana and stamina both work
+## exactly this way, and `OrbPool.orbs_changed` already existed for it. What is NEW is only that
+## something finally consumes it.
+##
+## THE ALTERNATIVE SHAPE IS EXPLICITLY REFUSED: no `MatchState.orb_granted` signal is built and no
+## second direct presentation-to-MatchState connect is added. `5-3` left one such direct connect
+## (card_cast_resolved -> TelegraphController) standing but UNRESOLVED in the architecture amendment
+## queue (`5-3/R4`), and settling that question by accident with a second instance is precisely what
+## that entry exists to prevent. This is a seam, counted as one.
+##
+## BOTH new consumers ride THIS channel: the HUD's own-slot orb counters (AC 18-20) and the
+## TelegraphController earn cue (AC 17), which derives "a colour went up" by diffing successive
+## payloads. That makes the priming call a REAL hazard rather than a theoretical one — a naive
+## increase test fires on the priming (0,0,0) at match start — which is why the diff's first-call
+## guard is pinned by its own integration test (AC 16).
+##
+## OWN SLOT ONLY (`2-4/R7` / `3-6/R7`): the consumer is bound to one slot's channel at construction
+## and the payload carries no slot index, so a HUD is structurally incapable of reading the
+## opponent's orb counts.
+##
+## THE ARCH DOC IS NOT EDITED BY THIS STORY. `docs/game-architecture.md:371-372` still reads "there
+## are now eight"; that amendment is QUEUED for the E5 close-out flush, joining `5-3/R4`'s existing
+## member, so several E5 amendments land together. The pinning TEST
+## (test_architecture_invariants.gd) IS moved to nine in this story's own commit — it is
+## load-bearing and must stay accurate. Nothing disappears quietly.
+func connect_orbs_changed(slot: int, callback: Callable) -> void:
+	Invariant.check(slot == 0 or slot == 1, "hero slot must be 0 or 1, got %d" % slot)
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	player.orbs.orbs_changed.connect(callback)
+	callback.call(player.orbs.get_count(Enums.CardColor.RED),
+			player.orbs.get_count(Enums.CardColor.BLUE),
+			player.orbs.get_count(Enums.CardColor.GREEN))
 
 
 ## Story 1-7 (AC 2): step-2 contact-fact gathering for one attacker slot. Direct query

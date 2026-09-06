@@ -125,3 +125,5 @@ unblockable_stamina_cost = 20.0
 unblockable_chargeup_seconds = 1.0
 unblockable_reach = 8.0
 unblockable_damage_percent_of_max_hp = 9.0
+unblockable_orb_grant = 1
+max_orbs_per_color = 5

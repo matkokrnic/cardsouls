@@ -52,7 +52,7 @@ extends Control
 ## Callable-handoff shape generalised from an action to a read) and prints them to the panel's own
 ## output Label. ON-DEMAND ONLY: the accessor is called from the toggle's own `toggled` handler,
 ## never per-frame and never a new observation seam — HudRoot never learns of it, and
-## `test_runner_observation_seams_are_exactly_eight` stays untouched. The pinned control set in
+## `test_runner_observation_seams_are_exactly_nine` stays untouched. The pinned control set in
 ## `test/integration/test_record_save_control.gd` IS amended to five names, a reviewed named
 ## exception on the `3-6/R2` precedent (`4-B1/R1`). Unpressed by default and reachable only by a
 ## manual mouse click (`4-B1/R2`): it never reveals anything in the shipped default configuration,

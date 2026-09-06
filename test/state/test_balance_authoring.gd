@@ -118,6 +118,27 @@ func test_authored_unblockable_values_are_positive() -> void:
 		+ "nothing off is a miss wearing a hit's clothes)")
 
 
+## Story 5-4 (AC 3/AC 9): the TWO orb numbers, in the same defect-by-construction class as the three
+## above and for the same stated reason -- a 0 in either ships the story INVISIBLE rather than merely
+## untuned, and the `>= 0` loop in test_data_resources.gd passes on the 0 script default.
+##   * a 0 grant makes every landed unblockable pay nothing, so the whole payout half of the RGB read
+##     exchange is dead machinery that `5-5`/`5-6` have no earned orbs to answer against.
+##   * a 0 cap clamps every colour to zero at the FIRST injection, which is the same outcome reached
+##     from the other end -- orbs are granted and immediately clamped away, with the grant path
+##     looking healthy the whole time.
+func test_authored_orb_economy_values_are_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.unblockable_orb_grant > 0,
+		"unblockable_orb_grant must be authored > 0 (a landed unblockable that pays no orb leaves "
+		+ "the payout half of the read exchange dead)")
+	assert_true(config.max_orbs_per_color > 0,
+		"max_orbs_per_color must be authored > 0 (a zero cap clamps every grant away at the first "
+		+ "injection, which looks exactly like a working faucet paying into a hole)")
+
+
 ## Story 5-3 (fix pass, Ruling 3): THE CHARGE CLIPS' PLAYBACK SPEEDS MUST STILL DESCRIBE THE
 ## AUTHORED CHARGEUP. `AnimationController.CHARGE_CLIP_SPEED` compresses each of the three charge
 ## clips to fit `unblockable_chargeup_seconds`; the controller holds no balance reference

@@ -32,6 +32,13 @@ const RULES_DIR := "res://data/economy/"
 
 ## Resource names (the `resource` field's vocabulary).
 const MANA := &"mana"
+## Story 5-4 (AC 1): THE SECOND RESOURCE, and the first consumer of the `resource` field's own
+## stated purpose -- `ResourceGenerationRule.resource`'s header has said since 3-4 that "only
+## &"mana" has a consumer today; the field exists so a stamina or orb faucet is a new .tres rather
+## than a new evaluator". This is that .tres arriving, and the evaluator is unchanged by it: the
+## grant is a `resource`/`source` pair on an existing call, not a second evaluator and not an
+## inline formula at the landing seat.
+const ORBS := &"orbs"
 
 ## Source names (the `source` field's vocabulary). Named here so call sites reference a
 ## constant rather than repeating a StringName literal that a typo would silently break.
@@ -45,6 +52,18 @@ const SOURCE_PASSIVE_TICK := &"passive_tick"
 ## CALL SITE — nothing scans authored rules by source, so a rule nobody asks for is loaded and
 ## never queried. `MatchState._generate_mana` asks for this source at its third rung.
 const SOURCE_MANA_ACCELERATOR := &"mana_accelerator"
+## Story 5-4 (AC 1/AC 2): THE FOURTH SOURCE and the first NON-MANA one -- a landed mode (2)
+## unblockable hit, paying the attacker orbs of the spent card's own colour. Its rule
+## (`data/economy/unblockable_landing.tres`) carries `required_flag = &"orbs"`, the SAME flag
+## `CastEvaluator._orbs_affordable` already reads on the SPEND side, which is what closes the
+## `4-5` D1 flag-matrix split symmetrically rather than leaving it half-real: `unblockable` gates
+## whether mode (2) exists at all, `orbs` gates whether landing one pays out.
+##
+## The COLOUR is deliberately NOT part of the rule vocabulary. A rule answers "how much", the
+## landing seat answers "into which colour" (from `PlayerState.charge_color`) -- one value for all
+## three colours in this story (`5-2` Ruling 2's fixed-damage precedent applied to the payout side;
+## `5-6` owns tiering).
+const SOURCE_UNBLOCKABLE_LANDING := &"unblockable_landing"
 
 static var _authored: Array[ResourceGenerationRule] = []
 static var _authored_loaded := false

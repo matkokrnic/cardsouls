@@ -11,6 +11,24 @@ func test_feature_flags_tres_loads_with_all_layer_fields() -> void:
 		assert_true(field in flags, "FeatureFlags has '%s'" % field)
 
 
+## Story 5-4 (AC 14): THE SHIPPED DEFAULT IS OPEN. A layer flag is turned on once its own mechanism
+## ships (the `unblockable` / `minions` / `totems` precedent), and this asserts the AUTHORED resource
+## rather than the script default -- a `.tres` that quietly lost the line would otherwise fall back
+## to `feature_flags.gd`'s `false` with nothing failing, shipping E5's payout half dark.
+##
+## MEASURED BLAST RADIUS, stated rather than assumed: no authored card carries an `orb_costs` entry
+## (pinned at test_card_authoring.gd, referenced not edited), so opening this flag changes NOTHING
+## for `CastEvaluator._orbs_affordable`. Only the 5-4 grant path newly fires in real play.
+func test_feature_flags_tres_opens_the_orbs_layer() -> void:
+	var flags: Variant = load("res://data/feature_flags.tres")
+	assert_not_null(flags, "feature_flags.tres loads")
+	assert_true(flags is FeatureFlags)
+	if not (flags is FeatureFlags):
+		return
+	assert_true((flags as FeatureFlags).orbs,
+		"data/feature_flags.tres must ship orbs = true — its mechanism landed in 5-4")
+
+
 ## Every E1 melee field authored in story 1-1 (AC 1/4). Kept in sync with BalanceConfig.
 const E1_BALANCE_FIELDS: Array[String] = [
 	"max_hp", "move_speed",
@@ -88,6 +106,14 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# 0.0 script default, which would ship the whole story invisible in the build.
 	"unblockable_stamina_cost", "unblockable_chargeup_seconds", "unblockable_reach",
 	"unblockable_damage_percent_of_max_hp",
+	# Story 5-4 (AC 3/AC 9): the orb GRANT (per landed unblockable) and the per-colour CONTAINER cap.
+	# Listed here because reflection half (a) below fails otherwise -- the guard working, as for the
+	# 5-2 four directly above. Neither carries the `_seconds` suffix, so half (b) leaves them alone
+	# (a count and a ceiling are not durations). Both are INTs, which the reflection scan covers
+	# alongside floats, and both carry a BESPOKE authored `> 0` bound in test_balance_authoring.gd on
+	# top of the `>= 0` loop below: `field in config` and `>= 0` BOTH pass on the 0 script default,
+	# and a 0 grant or a 0 cap ships the whole orb economy invisible in the build.
+	"unblockable_orb_grant", "max_orbs_per_color",
 ]
 
 

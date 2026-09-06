@@ -32,16 +32,21 @@ extends Control
 ##     the lower-centre band; the PITCH ZONE timer placeholder sits dead-centre where the
 ##     "incoming" read lands. HP rides with stamina — it is the other value a player checks
 ##     the instant a hit connects.
-##   - Periphery (own-tempo): the three ORB totals and the DECK / reshuffle count are read
-##     between exchanges, never mid-reaction, so they sit in the top corners.
+##   - Periphery (own-tempo): the three ORB totals (live since 5-4) and the DECK / reshuffle count
+##     are read between exchanges, never mid-reaction, so they sit in the top corners.
 ##   - The 4-card HAND strip is the player's own-tempo action surface; it takes the
 ##     bottom-centre where it is visible without competing with the reactive focal centre.
 ## (The centre "incoming telegraph" cue named in P4 is a WORLD-SPACE cue, not a HUD element —
 ## 2-4/R12 — so it is not built here; only the pitch timer placeholder occupies the centre.)
 ##
+## Story 5-4 adds the FIFTH channel — connect_orbs_changed, the runner's ninth seam (AC 15) — feeding
+## the three orb counters (AC 18-20). Per-slot and PRIVATE like the three economy ones and the card
+## one; no orb fact about the opponent reaches this root.
+##
 ## Story 3-6: the hand strip and the deck/reshuffle indicator are NO LONGER PLACEHOLDERS — they
 ## are the first two reserved regions to gain real content, and this story owns their final
-## sizing (AC 6). The orb counters and the pitch zone stay reserved (E4/E5, E6). Card ART and a
+## sizing (AC 6). Story 5-4 spends the THIRD reservation, the orb counters; only the pitch zone
+## stays reserved (E6). Card ART and a
 ## display-name field are out of scope for every scheduled story, so a card renders as its
 ## `CardData.id` text (`3-6/R4`).
 
@@ -62,6 +67,24 @@ var _round_label: Label
 ## from the eighth seam's payload; the flag comes from the ownerless bus event alone.
 var _deck_label: Label
 var _reshuffle_label: Label
+
+## Story 5-4 (AC 18): the three orb count labels, index-aligned with `Enums.CardColor`
+## (RED, BLUE, GREEN) -- the SAME order the ninth seam's payload arrives in, so the write is a
+## positional copy with no lookup to get wrong. Filling the region 2-4 reserved, not a new layout.
+var _orb_labels: Array[Label] = []
+
+## Story 5-4 (AC 18): PER-COLOUR display was chosen over a fused one. Three counts of a
+## three-colour RPS resource are three separate reads a player makes ("can I answer RED yet?"), and
+## the reserved footprint already held three panels since 2-4 -- fusing them would have been a
+## layout change dressed as a fill. Presentation-local hues, deliberately NOT read off
+## data/telegraphs/: src/ui/ owns its own palette and the HUD loads no telegraph resource. They are
+## the same three hues the charge telegraph uses, so the counter a player watches and the orb that
+## flashed over the hero read as one colour.
+const ORB_COLORS: Array[Color] = [
+	Color(0.95, 0.30, 0.30),
+	Color(0.40, 0.55, 0.98),
+	Color(0.35, 0.90, 0.45),
+]
 
 ## Story 3-6 (AC 4): the authored vulnerable-window duration in SECONDS, handed over by the runner
 ## at construction (the `gamepad_profile` / `huds` static-handoff precedent), before add_child.
@@ -156,6 +179,24 @@ func on_stamina_changed(current: float, maximum: float) -> void:
 ## every confirmed melee hit, blocked hits included.
 func on_mana_changed(current: float, maximum: float) -> void:
 	_apply_bar(_mana_bar, _mana_value, current, maximum)
+
+
+## Seam callback (connect_orbs_changed, the runner's NINTH seam — story 5-4, AC 15/AC 18-20).
+## PRIMED ON CONNECT with the resting (0,0,0), so the reserved region renders real zeroes from frame
+## one rather than a placeholder dash.
+##
+## OWN SLOT ONLY, structurally (AC 19). The runner binds this root to ONE slot's channel at
+## construction and the payload carries NO slot index — there is nothing here to read the opponent's
+## counts WITH, which is the `2-4/R7` / `3-6/R7` doctrine applied to orbs rather than a rule this
+## function has to remember to obey.
+##
+## NO POLLING (AC 20). The counts CLEAR to zero on the debug reset and at match start through this
+## same channel — `MatchState._reset_player` calls `OrbPool.reset_all()`, which signals — so this
+## function is the single write seat for every direction the number can move.
+func on_orbs_changed(red: int, blue: int, green: int) -> void:
+	var counts := [red, blue, green]
+	for i in _orb_labels.size():
+		_orb_labels[i].text = str(counts[i])
 
 
 ## Seam callback (connect_cards_changed, the runner's EIGHTH seam — story 3-6, AC 2). Primed on
@@ -554,8 +595,15 @@ func _make_card_face_style(is_own: bool) -> StyleBoxFlat:
 	return box
 
 
-## Three orb counters placeholder (E4 / E5). Top-right periphery own-tempo totals. Reserved
-## footprint only.
+## The three orb counters — story 5-4 (AC 18) fills the region 2-4 RESERVED here, so this is the
+## reservation being spent rather than a new layout decision. Top-right periphery, own-tempo per P4:
+## an orb total is read BETWEEN exchanges ("can I answer RED yet?"), never mid-reaction, so it stays
+## in the corner rather than moving toward the focal band.
+##
+## The footprint, the three panels and the "0" captions all predate this story; what it adds is the
+## per-colour TINT that says WHICH count each panel is, and keeping the labels so the ninth seam can
+## write them. Legibility of a small digit at half-width is an OPERATOR SMOKE surface (`PROC/R8`),
+## not a number this pass may declare correct.
 func _build_orb_counters() -> void:
 	var orbs := HBoxContainer.new()
 	orbs.name = "OrbCounters"
@@ -574,12 +622,15 @@ func _build_orb_counters() -> void:
 		orb.name = "Orb%d" % i
 		orb.custom_minimum_size = Vector2(36.0, 36.0)
 		var count := Label.new()
+		count.name = "OrbCount%d" % i
 		count.text = "0"
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		count.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		count.add_theme_color_override("font_color", ORB_COLORS[i])
 		orb.add_child(count)
 		orbs.add_child(orb)
+		_orb_labels.append(count)
 
 
 ## Deck count + reshuffle flag (story 3-6, AC 4) — the 2-4 top-left periphery placeholder, now

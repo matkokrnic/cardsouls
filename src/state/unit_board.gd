@@ -404,7 +404,7 @@ func is_alive_at(index: int) -> bool:
 ## existing spawn/aim/approach poll shape), so the locked count of eight `connect_*` seams is
 ## untouched. (`seven` here until 4-3e AC 6(b): the family moved to EIGHT at `3-6/R2`, and
 ## `test_architecture_invariants.gd:291` has read
-## `test_runner_observation_seams_are_exactly_eight` ever since. Stale citation, one word.)
+## `test_runner_observation_seams_are_exactly_nine` ever since (nine since 5-4 AC 15). Stale citation, one word.)
 func apply_damage_at(index: int, amount: float) -> void:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
