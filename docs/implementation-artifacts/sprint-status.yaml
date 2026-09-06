@@ -103,12 +103,12 @@ development_status:
   5-2-unblockable-initiation: done  # Tier A
   5-3-telegraph-presentation: done  # Tier B
   5-4-orbs: done  # Tier A
-  5-5-unblockable-defense: ready-for-dev  # Tier A
+  5-5-unblockable-defense: done  # Tier A
   5-6-three-tier-ladder: backlog  # Tier A
   5-7-pad-modes-2-3: backlog  # Tier B
 
 story_notes:
-  5-5-unblockable-defense: "ready-for-dev 2026-09-06, gate fixes applied (CHARGING refusal ruling, AC 5/12/13 corrections, blind-spot pins, renumbered AC 1-16)."
+  5-5-unblockable-defense: "done 2026-09-06, Tier A close-out complete (mode 3 dispatch/window/negation/reset per 5-5/R1-R10, golden dc2c9ffa -> d9725092/30-key set (defense), smoke PASS 10/10, decision-log session 5-5 close-out)."
   5-4-orbs: "done 2026-09-06, Tier A close-out complete (orb grant/reset/ninth-seam/cue per 5-4/R1-R8, smoke PASS 8/8, decision-log session 5-4 close-out)."
   5-3-telegraph-presentation: "done 2026-09-05, Tier B close-out complete (colour telegraph + charge clips + cast-success cue, smoke PASS 10/10 findings non-blocking, golden unmoved, decision-log session 5-3 close-out)."
   5-2-unblockable-initiation: "done 2026-09-04, Tier A ritual complete (mode 2 dispatch/CHARGING/landing per 5-2/R1-R15, golden aa3566d7 -> dc2c9ffa/29-key set (telegraph), FORMAT_VERSION 6 -> 7 (fourth content channel), review PASS 0 HIGH/0 MED/2 LOW, regression smoke 5/5 PASS per 5-2/R15/R16; R17 open, forcing point 5-5)."
