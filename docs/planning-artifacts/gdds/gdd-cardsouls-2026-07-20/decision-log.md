@@ -8808,3 +8808,53 @@ entry; the story file's Status -> `done`, Live Smoke Results section (10/10, SMO
 Change Log row; `docs/playtest-log.md`'s operator-written "5-3 smoke" entry (already present,
 verified before this commit); and the board (`5-3-telegraph-presentation: ready-for-dev` ->
 `done`, `# Tier B` comment preserved). Nothing pushed; the operator reviews the log.
+
+## Session 2026-09-06 -- 5-4 close-out (Tier A)
+
+`5-4/R1` -- orbs are granted immediately at the landing, never dropped or picked up; a per-round
+stake, cleared at the debug reset (the only round boundary) and NOT at `_end_round` -- clearing
+there would delete the winner's orbs before the freeze displays them.
+
+`5-4/R2` -- `OrbPool.to_snapshot()` stays `{red, blue, green}`; the authored maximum is config, not
+state, and never enters the hash -- a deliberate divergence from `ManaPool`, proven falsifiable
+(staging the key moved the golden to `4cc02623`).
+
+`5-4/R3` -- a pre-injection `OrbPool` is UNBOUNDED via the `NO_MAXIMUM` (-1) sentinel, not bounded
+at zero; `test_economy_and_hero.gd` and `test_cast_evaluator.gd` document that real behaviour and
+were deliberately left unedited.
+
+`5-4/R4` -- the observation-seam family moves EIGHT -> NINE (`connect_orbs_changed`, a clone of
+`connect_mana_changed` with prime-on-connect). A second `MatchState` direct-connect was REFUSED
+because `5-3/R4` left that form unresolved. The test moved in this story; the
+`game-architecture.md` prose did NOT -- it is the SECOND member of the arch amendment queue,
+forcing point E5 close-out.
+
+`5-4/R5` -- `orb_pool._max` is classified INJECTED: every path to it runs through `apply_balance`,
+which is unconditionally paired with `capture_apply_balance` at both runner call sites, so a
+replay reconstructs it. `UNHASHED_CROSS_TICK_MEMBERS` stays at three.
+
+`5-4/R6` -- a landing that KILLS its target still pays the grant; proven by a dedicated test whose
+non-vacuity was shown by staging an `is_alive()` guard.
+
+`5-4/R7` -- AC 16's named mutation was vacuous and was corrected to the form that falls (a cue
+firing on any payload rather than on an increase); the vacuous form stays on record.
+
+`5-4/R8` -- authored values are PROVISIONAL: `unblockable_orb_grant` 1, `max_orbs_per_color` 5.
+Retune is a `.tres` edit with no test edit and no re-baseline.
+
+Accepted without change (review findings, no ruling needed): none beyond the AC 16 mutation
+correction folded into `5-4/R7`.
+
+The close-out suite ran THREE times, not two: a real classification failure (`orb_pool._max`
+landing in none of the four `test_replay_identity.gd` buckets) failed the first attempt; `PROC/R1`'s
+run-budget was overrun by one full run and is reported here, not absorbed.
+
+### Close-out
+
+Four commits, in this order (reordered from the plan so the board promotion's grep for this entry
+finds it): Commit 1, code + tests: the `src/` and `data/` changes, the two new test files
+(`test_orbs_economy.gd`, `test_orb_cue_live.gd`) plus their `.uid` sidecars, and the five modified
+test files. Commit 2, docs: the story file's Status -> `review`, Dev Agent Record, and Live Smoke
+Results section (8/8, SMOKE PASS); `docs/playtest-log.md`'s operator-written "5-4" entry. Commit 3,
+docs: this entry. Commit 4, board: `5-4-orbs: ready-for-dev` -> `done`, `# Tier A` comment
+preserved. Nothing pushed; the operator reviews the log.
