@@ -6,9 +6,12 @@ extends TestCase
 ## ACTION duration is a config authoring DEFECT, not a tuning choice. The audit enforces
 ## authored non-zero; it never supplies values.
 ##
-## EXEMPT: stun_seconds. It is a data-only field until OPEN decision (a) (attacker
-## consequence on deflect, decision-log Session 2026-07-22) is resolved — no E1 code path
-## ever starts the stun window, so a zero there is inert, not degenerate.
+## Story 5-6 (AC 4) REMOVES THE `stun_seconds` EXEMPTION this header used to carry. That exemption
+## rested entirely on "no E1 code path ever starts the stun window, so a zero there is inert" —
+## which stopped being true the moment `E5-P/R1` resolved OPEN decision (a) and `5-6` gave `STUNNED`
+## its two inbound edges. The field itself is gone too, split into `color_counter_stun_seconds` and
+## `deflect_stun_seconds`; both are audited below in their OWN bespoke function rather than joining
+## ACTION_SECONDS_FIELDS (see that constant's note for why).
 ##
 ## Story 1-4 (D7) adds the NON-DURATION stamina-economy class below, with one exemption:
 ## EXEMPT: stamina_regen_delay_seconds — 0 is legitimate tuning (no delay), not a defect.
@@ -37,8 +40,15 @@ extends TestCase
 const CONFIG_PATH := "res://data/balance/balance_config.tres"
 
 ## Every action `*_seconds` duration the 1-3 machine consumes (attack windup/active/
-## recovery/chain window, deflect window, roll iframe/duration). stun_seconds is exempt
-## (see header) and deliberately absent.
+## recovery/chain window, deflect window, roll iframe/duration).
+##
+## Story 5-6 (AC 4): THE TWO STUN DURATIONS DO NOT JOIN THIS LIST, and the reason is scope rather
+## than exemption. This list is "every action `*_seconds` duration THE 1-3 MACHINE CONSUMES", i.e.
+## the ATTACKING phase machine; a stun is not a 1-3 phase. Neither later duration family joined it
+## either — the `5-2` chargeup / `5-5` defense-window pair each took its own bespoke function — and
+## this story follows that same precedent instead of widening this constant's stated scope. The two
+## stuns are audited (positivity AND their directional order) in
+## test_authored_stun_values_are_positive_and_correctly_ordered below.
 const ACTION_SECONDS_FIELDS: Array[StringName] = [
 	&"attack_windup_seconds",
 	&"attack_active_seconds",
@@ -89,6 +99,13 @@ func test_authored_stamina_economy_values_are_positive() -> void:
 	assert_true(config.unblockable_stamina_cost > 0.0,
 		"unblockable_stamina_cost must be authored > 0 (a free unblockable is the roll precedent "
 		+ "again, on the FOURTH spend seat — story 5-2, `5-2/R4`)")
+	# Story 5-6 (AC 4): the SIXTH line of this class. Not a spend seat — a PUNITIVE DRAIN
+	# (`StaminaPool.add(-x)`, AC 10) — but the same defect-by-construction argument applies verbatim:
+	# a zero silently disarms `E5-P/R1`'s whole attacker consequence while every other audit stays
+	# green, exactly as a zero `attack_stamina_cost` silently disarms the anti-spam lever.
+	assert_true(config.deflect_stamina_penalty > 0.0,
+		"deflect_stamina_penalty must be authored > 0 (a zero penalty silently disarms `E5-P/R1` — "
+		+ "the deflected attacker pays nothing and the ladder's melee tier ships invisible)")
 
 
 ## Story 5-2 (AC 6/AC 10/AC 17/AC 18): the other THREE unblockable numbers, audited in the
@@ -172,6 +189,59 @@ func test_authored_defense_values_are_positive_and_correctly_ordered() -> void:
 	assert_true(config.defense_stamina_cost < config.unblockable_stamina_cost,
 		"defense_stamina_cost must be authored SMALLER than unblockable_stamina_cost (R-D): the "
 		+ "defender answers a commitment already made rather than making one")
+
+
+## Story 5-6 (AC 4): THE TWO STUN DURATIONS, on the function directly above's template exactly --
+## positivity in the defect-by-construction class, PLUS the directional bound the ratified ruling
+## states rather than merely implies.
+##   * a 0.0 stun derives 0 ticks, `TimingWindow.start(0)` never runs, and the step-3 timer arm
+##     (AC 12) returns the hero to IDLE on the very tick it was stunned. The window start and the
+##     `STUNNED` write both still happen, so the mechanism looks healthy from every angle except the
+##     one that matters -- the punish lasts no time at all. "0-tick stuns degenerate the mechanism"
+##     applies to both durations exactly as it would inside ACTION_SECONDS_FIELDS.
+##   * THE DIRECTION IS THE HALF A BARE `> 0` WOULD MISS. `E5-P/R1`'s own text
+##     (`decision-log.md:8142-8144`) requires the colour counter's ~1s to be MARKEDLY LONGER than the
+##     melee deflect's "so the three-tier ladder keeps its escalation gradient". An authored pair that
+##     INVERTED that gradient -- a heavier punish for the easier read -- would ship a broken ladder
+##     with every other audit green, which is the `5-5` "both directions asserted, not just `> 0`"
+##     precedent (there: `defense_window_seconds > unblockable_chargeup_seconds`,
+##     `defense_stamina_cost < unblockable_stamina_cost`) applied a second time. These are PROVISIONAL
+##     starting points the live smoke judges -- the assertion pins the DIRECTION, not the numbers.
+func test_authored_stun_values_are_positive_and_correctly_ordered() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.color_counter_stun_seconds > 0.0,
+		"color_counter_stun_seconds must be authored > 0 (a 0-tick stun ends on the tick it began — "
+		+ "the negation's whole attacker consequence, shipped invisible)")
+	assert_true(config.deflect_stun_seconds > 0.0,
+		"deflect_stun_seconds must be authored > 0 (same degeneracy on the melee tier)")
+	assert_true(config.color_counter_stun_seconds > config.deflect_stun_seconds,
+		"color_counter_stun_seconds must be authored LONGER than deflect_stun_seconds (`E5-P/R1`): "
+		+ "reading the colour is the harder read and pays the bigger punish — an inverted pair "
+		+ "ships a broken escalation gradient with every other audit green")
+
+
+## Story 5-6 (AC 4): the dodge rung's damage multiplier, and it takes a NARROWER bound than
+## `block_damage_multiplier`'s strict open interval on purpose.
+##
+## THE `>= 0.0` HALF IS NOT RE-ASSERTED HERE -- it is ALREADY covered by test_data_resources.gd's
+## `E1_BALANCE_FIELDS` non-negative loop, which AC 3 puts this field into. Citing the existing guard
+## rather than asserting the same bound in two files.
+##
+## THE UPPER BOUND IS `<= 1.0`, NOT `< 1.0`: at exactly 1.0 a dodge stops reducing anything relative
+## to Ruling 1c's full hit, which is the boundary rather than a defect, and Ruling 1b's ratified
+## authored value is 0.0 -- so unlike `block_damage_multiplier` (where 0.0 would be a free total
+## negation obsoleting deflect) the audit must PASS at zero on day one.
+func test_authored_dodge_multiplier_is_bounded_above() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.dodged_unblockable_damage_multiplier <= 1.0,
+		"dodged_unblockable_damage_multiplier must be authored <= 1.0 (above it a 'dodge' would hurt "
+		+ "MORE than taking the hit undefended, inverting the ladder's middle rung)")
 
 
 ## Story 5-3 (fix pass, Ruling 3): THE CHARGE CLIPS' PLAYBACK SPEEDS MUST STILL DESCRIBE THE

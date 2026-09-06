@@ -275,6 +275,19 @@ extends Resource
 ## compares the fact's target-to-attacker direction against HeroState.facing within
 ## +/- half this arc. Scalar degrees, NOT tick-domain — never on BalanceTicks.
 @export var block_facing_arc_degrees: float = 0.0
+## Story 5-6 (AC 2, `E5-P/R1`): what a DEFLECTED ATTACKER LOSES, and it is a DIFFERENT NUMBER from
+## `deflect_stamina_cost` in the Stamina group above rather than a second name for it. That field is
+## what the DEFENDER SPENDS to execute a deflect (an affordability-gated, voluntary cost, refused
+## outright when unaffordable); this is what the ATTACKER is DRAINED BY as the deflect's consequence
+## — punitive, always applied, floored at zero, and therefore taken through `StaminaPool.add(-x)`
+## rather than `spend()` (AC 10). A stamina-starved attacker must not escape the penalty by being
+## poor, which is exactly what `spend()`'s refusal would grant it.
+##
+## SEATED IN THE `Defense` GROUP rather than beside `deflect_stamina_cost` in `Stamina` (which AC 2's
+## own text names as its neighbour — measured, that field lives in the Stamina group at line 23, not
+## here): the two are grouped by WHICH MECHANIC OWNS THEM, and this number belongs to the deflect
+## outcome that `deflect_window_seconds` and `block_damage_multiplier` directly above also describe.
+@export var deflect_stamina_penalty: float = 0.0
 
 @export_group("Roll")
 @export var roll_iframe_seconds: float = 0.0
@@ -282,9 +295,24 @@ extends Resource
 @export var roll_distance: float = 0.0
 
 @export_group("Stun")
-## DATA FIELD ONLY. No E1 code path enters STUNNED — attacker-stun-on-deflect is OPEN
-## decision (a) in the GDD decision log, and authoring this duration does NOT resolve it.
-@export var stun_seconds: float = 0.0
+## Story 5-6 (AC 1/AC 6, `E5-P/R1`): NO LONGER A DATA-ONLY FIELD. OPEN decision (a) (attacker
+## consequence on deflect) is RESOLVED, and this story is the resolution — `STUNNED` gains its first
+## two inbound edges, both direct `set_action_state` calls from `MatchState` rather than
+## `TRANSITION_TABLE` edges (the `DEAD`-entry precedent).
+##
+## RENAMED FROM `stun_seconds` (AC 1). Once TWO stun durations exist, a name that says neither which
+## ladder tier it belongs to nor how it differs from its sibling is ambiguous by construction. THIS
+## one is the COLOR-COUNTER stun: what the ATTACKER holds after a colour-matched defense negates its
+## unblockable (`_resolve_charge_landing`, AC 5) — the heavier of the two, the GDD's own "~1s"
+## (`gdd.md:241`).
+@export var color_counter_stun_seconds: float = 0.0
+## Story 5-6 (AC 1/AC 9, `E5-P/R1`): the LIGHTER sibling — what the ATTACKER holds after an ordinary
+## MELEE swing is deflected (`_resolve_contacts`, AC 9). Deliberately SHORTER than
+## `color_counter_stun_seconds` above, and the ORDER is asserted rather than merely intended
+## (`test_balance_authoring.gd`): an authored pair that inverted the gradient would ship a broken
+## three-tier ladder with every other audit green. Reading a colour is the harder read and pays the
+## bigger punish; landing a deflect is E1 melee content available every swing.
+@export var deflect_stun_seconds: float = 0.0
 
 ## Story 5-2 (AC 6/AC 10/AC 17/AC 18): mode ② — the unblockable INITIATION. Four numbers, and
 ## every one of them is global rather than per-card or per-colour, which is the GDD's own shape
@@ -311,6 +339,27 @@ extends Resource
 ## the `attack_damage_percent_of_max_hp` convention verbatim, so the two hero-versus-hero damage
 ## numbers are read the same way and can be compared at a glance in the authored file.
 @export var unblockable_damage_percent_of_max_hp: float = 0.0
+## Story 5-6 (AC 2, Ruling 1b): what a landed unblockable deals when the defender's ROLL IFRAME was
+## open at the landing — the middle rung of the three-tier ladder, expressed as a MULTIPLIER on the
+## full damage directly above rather than as a second damage value, so a retune of the full number
+## carries the dodged one with it and the two can never drift into disagreeing about what a dodge is
+## worth.
+##
+## AUTHORED 0.0, which is Ruling 1b's ratified starting point and NOT a placeholder: a clean dodge
+## takes nothing. The multiply-and-emit-on-surviving-magnitude shape is the `block_damage_multiplier`
+## precedent, and it is written that way so a future non-zero retune needs no code change — at 0.0
+## the effective damage is exactly zero and the landing is SILENT (no `hit_landed`), which is a
+## stronger statement than a zero-magnitude emit.
+##
+## THE GDD TABLE'S DAMAGE CELL READS "None" TODAY (`gdd.md:240`) and the shipped 0.0 keeps that claim
+## true, so NO `docs(gdd)` amendment is owed now. A future non-zero retune of this field owes one at
+## that time.
+##
+## BOUNDED `<= 1.0` in test_balance_authoring.gd, NOT in `block_damage_multiplier`'s strict-open
+## interval: 0.0 is the authored value here, so the audit must pass at it on day one, and 1.0 is the
+## boundary at which a dodge stops reducing anything relative to Ruling 1c's full hit. The `>= 0.0`
+## half is already covered by test_data_resources.gd's `E1_BALANCE_FIELDS` non-negative loop.
+@export var dodged_unblockable_damage_multiplier: float = 0.0
 ## Story 5-4 (AC 3): what ONE landed unblockable pays its attacker, in orbs of the spent card's own
 ## colour. Per-EVENT amount, NOT tick-domain -- never on BalanceTicks. Named into the
 ## `unblockable_*` family because the EVENT is an unblockable landing; the CONTAINER's bound is a

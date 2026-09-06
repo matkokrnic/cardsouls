@@ -384,8 +384,18 @@ func test_dead_attacker_in_flight_window_delivers_nothing() -> void:
 	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD directly; _round_over stays FALSE
 	assert_false(bool(ms.to_snapshot()["round_over"]),
 		"hand-constructed: DEAD attacker with _round_over FALSE")
-	assert_true(ms.p1.hero.is_hitbox_active(),
+	# STORY 5-6 (AC 11): THE SUBJECT MOVES FROM THE DERIVED PREDICATE TO THE WINDOW ITSELF, and the
+	# claim is unchanged. What this line has always asserted is that death does NOT early-stop an
+	# in-flight window (1-9/R3) — `active.is_running` says exactly that, and says it about the window
+	# rather than about a predicate that has since gained a second conjunct.
+	# `is_hitbox_active()` now ALSO requires `ATTACKING`, so a corpse (or a stunned attacker, AC 9)
+	# reports no hitbox even while its window runs. That is the ORPHANED-SWING hole closing, asserted
+	# positively on the line below rather than silently inverting this one.
+	assert_true(ms.p1.hero.active.is_running,
 		"the in-flight active window keeps ticking after death (1-9/R3 intact)")
+	assert_false(ms.p1.hero.is_hitbox_active(),
+		"...but it no longer reports a live hitbox, because the hero is not ATTACKING (5-6 AC 11) — "
+		+ "the runner stops querying the instant `action_state` leaves ATTACKING, whatever the reason")
 	assert_eq(ms.p1.hero.attack_index, atk, "swing index unchanged by death")
 	var hits := {"n": 0}
 	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: hits.n += 1)

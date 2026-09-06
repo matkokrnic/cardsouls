@@ -53,7 +53,10 @@ func test_conversion_covers_every_seconds_field() -> void:
 		"deflect_window_seconds": 0.15,
 		"roll_iframe_seconds": 0.3,
 		"roll_duration_seconds": 0.5,
-		"stun_seconds": 0.6,
+		# Story 5-6 (AC 1): the renamed colour-counter stun and its new melee-deflect sibling, both
+		# converting through the same plain `seconds_to_ticks` boundary every duration above uses.
+		"color_counter_stun_seconds": 0.6,
+		"deflect_stun_seconds": 0.25,
 		# Story 4-4 (AC 20): the Mana Accelerator cadence converts like every sibling above, but
 		# CLAMPED to at least one tick — it is a modulo divisor on the tick ladder, the
 		# `minion_retarget_interval_seconds` shape rather than the plain-duration shape.
@@ -67,7 +70,10 @@ func test_conversion_covers_every_seconds_field() -> void:
 	assert_eq(t.deflect_window_ticks, 9)
 	assert_eq(t.roll_iframe_ticks, 18)
 	assert_eq(t.roll_duration_ticks, 30)
-	assert_eq(t.stun_ticks, 36, "stun converts like any duration (DATA ONLY in E1)")
+	assert_eq(t.color_counter_stun_ticks, 36,
+		"the colour-counter stun converts like any duration (story 5-6 renamed it from `stun_ticks`)")
+	assert_eq(t.deflect_stun_ticks, 15,
+		"...and its melee-deflect sibling through the same boundary (story 5-6, AC 1)")
 	assert_eq(t.mana_accelerator_interval_ticks, 15)
 
 

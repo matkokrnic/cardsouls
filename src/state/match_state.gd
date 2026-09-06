@@ -251,6 +251,35 @@ var _contact_queue: Array[Dictionary] = []
 var _charge_reach: Array[int] = [REACH_UNKNOWN, REACH_UNKNOWN]
 var _charge_reach_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 
+## Story 5-6 (AC 7): THE DODGE RUNG'S OBSERVATION POINT, per slot — each hero's `is_iframe_open()`
+## AS OF THE START OF STEP 3, captured before ANY same-tick press has been resolved.
+##
+## IT EXISTS BECAUSE THE PREDICATE ALONE IS NOT SYMMETRIC ACROSS THE TWO SEATS, which is a measured
+## fact about this function's own ordering rather than a hypothetical. Step 3 runs
+## `_resolve_actions(p1)` fully — timer exits INCLUDING `_resolve_charge_landing`, then p1's
+## input-driven edges — before `_resolve_actions(p2)` runs at all. So a charge landing on SLOT 0
+## resolves BEFORE the defender's (p2's) same-tick roll press is read, while a charge landing on
+## SLOT 1 resolves AFTER the defender's (p1's) same-tick roll press has already opened its iframe.
+## Reading `target.hero.is_iframe_open()` live at the landing would therefore let a same-tick roll
+## dodge from ONE seat and not the other: a seat-dependent mechanic, which nothing in this game is.
+##
+## THE CONTRACT THIS PINS: a roll PRESSED on the very tick the charge lands dodges on NEITHER slot;
+## a roll from the PREVIOUS tick — the `1-9/R2` grace-tick transient included, since this reads the
+## same `is_iframe_open()` predicate the generic step-4 ladder does — dodges on BOTH, identically.
+## Proven by the four-case two-slot boundary test in test_unblockable_defense.gd.
+##
+## CAPTURED, NOT RESTRUCTURED. The alternative shape — hoisting both slots' charge landings ahead of
+## every press — would reorder a step that four stories' worth of timing claims already rest on, to
+## buy the same contract. A two-element per-tick latch is the smaller change and states the contract
+## where a reader of the landing will see it.
+##
+## PER-TICK, NEVER CROSS-TICK: written at the top of step 3 on every tick that reaches step 3, and
+## read only later within that same step — the `HeroState._deflect_closed_this_tick` /
+## `_roll_iframe_closed_this_tick` classification verbatim, which is why it is EXCLUDED from
+## to_snapshot() with no determinism or replay hole. A round-over tick returns at step 1b and neither
+## writes nor reads it; the next tick that does reach step 3 overwrites it before any read.
+var _iframe_open_at_step3: Array[bool] = [false, false]
+
 ## Story 3-3 (AC 2): the injected deck COMPOSITION — plain StringName ids, retained so the
 ## step-6 deal seat can lay a fresh pile down on BOTH of its occasions (match start and debug
 ## reset) without a discard pile to recover cards from. EXCLUDED from to_snapshot() for the
@@ -427,6 +456,12 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    never write velocity — both halves of the 1-3 coupling deferral now live in
 	#    _resolve_movement (1-5 attack commitment; 1-9 roll override reading the
 	#    entry-locked roll_direction, captured here in step 3 at the ROLLING transition).
+	# Story 5-6 (AC 7): THE DODGE RUNG'S OBSERVATION POINT, captured HERE and nowhere else — after
+	# step 2 has advanced every window (so the `1-9/R2` grace-tick transient is already recomputed for
+	# this tick) and BEFORE the first press of this tick is resolved. See `_iframe_open_at_step3` for
+	# why the landing cannot simply read the predicate live.
+	_iframe_open_at_step3[0] = p1.hero.is_iframe_open()
+	_iframe_open_at_step3[1] = p2.hero.is_iframe_open()
 	_resolve_actions(p1, p1_intent, 0)
 	_resolve_movement(p1, p1_intent, 0)
 	_resolve_actions(p2, p2_intent, 1)
@@ -894,6 +929,18 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 					hero.set_action_state(HeroState.ActionState.IDLE)
 		HeroState.ActionState.ROLLING:
 			if not hero.roll_duration.is_running:
+				hero.set_action_state(HeroState.ActionState.IDLE)
+		# Story 5-6 (AC 12): THE STUN'S ONLY EXIT, on the `ROLLING` arm directly above's exact shape.
+		# Without this arm a stunned hero would never leave `STUNNED` at all — `stun` would tick to
+		# zero and stay there forever, because nothing else in this function reads it and this `match`
+		# has no default arm.
+		#
+		# NATURAL EXPIRY ONLY (Ruling 3, reasserting the `1-9` precedent): nothing this story adds cuts
+		# a running `stun` window short anywhere, exactly as `ROLLING`'s arm gives `roll_duration` and
+		# `CHARGING`'s gives `charge_window`. The debug reset's fifth exception (AC 13) is a RESET, not
+		# an early stop — it clears the window and the state together, outside normal play.
+		HeroState.ActionState.STUNNED:
+			if not hero.stun.is_running:
 				hero.set_action_state(HeroState.ActionState.IDLE)
 		HeroState.ActionState.BLOCKING:
 			if not intent.is_held(&"block"):
@@ -1443,6 +1490,55 @@ func _resolve_contacts() -> Array[int]:
 				# would have to invent. Today's untinted cue is what the consumer keeps rendering.
 				_queue.push(deflect_landed.emit.bind(int(fact["attacker"]), int(fact["target"]),
 						PlayerState.NO_TELEGRAPH_COLOR))
+				# STORY 5-6 (AC 9/AC 10, `E5-P/R1`): THE DEFLECT'S CONSEQUENCE FOR ITS ATTACKER, and
+				# the SECOND (and last) authored inbound edge to `STUNNED` in the whole project.
+				#
+				# HERO ATTACKERS ONLY, gated on `attacker_index == TargetingService.HERO_INDEX` — the
+				# `4-3b/R4` mana-gate discriminant applied a second time to a second hero-only
+				# consequence. `attacker` (the `PlayerState`) is already resolved whether the fact came
+				# from the hero or from one of that player's minions, so `attacker_index` is the field
+				# that actually distinguishes "this fact's origin was the hero itself".
+				#
+				# A UNIT IS EXCLUDED BY `4-3b/R7`, CARRIED FORWARD UNCHANGED ("deflecting a minion does
+				# NOT stun it, for now") — and structurally true regardless: a unit has no
+				# `ActionState` and no `stun` window to enter. The gate exists because a HERO does,
+				# not merely as an extra guard. test_block_deflect.gd's existing negative guard is
+				# re-run UNEDITED as this story's own proof the gate holds.
+				#
+				# IT INTERRUPTS THE SWING IMMEDIATELY (the story's Open Question, shipped on the
+				# recommended reading): the attacker is necessarily `ATTACKING` with `active` running
+				# when a contact fact was gathered from it, so this write REPLACES `ATTACKING` and
+				# abandons the swing's `active`/`recovery`/`chain` windows mid-flight. The orphaned
+				# windows keep ticking to their own expiry (`1-9`'s never-early-stop discipline) and
+				# are harmless ONLY BECAUSE AC 11 ships with this: `is_hitbox_active()` now also
+				# requires `ATTACKING`, so the orphaned `active` window cannot gather a further fact
+				# from a hero the game is already punishing for that swing.
+				#
+				# THE DRAIN USES `add(-x)`, NOT `spend()` (AC 10), and the distinction is the contract
+				# rather than a preference. `spend()` REFUSES OUTRIGHT when the amount exceeds the
+				# balance — correct for a VOLUNTARY, affordability-gated cost (roll, attack, the
+				# defender's own deflect cost two lines above), where an unaffordable action simply
+				# does not happen. A PUNITIVE drain is the opposite: it must ALWAYS apply, floored at
+				# zero, never silently skipped because the attacker happened to be poor. `add()` already
+				# clamps to `[0, maximum]` and is the mechanism `refill()` and the per-tick regen use
+				# for an unconditional adjustment. It also does NOT restart `_regen_delay` (only
+				# `spend()` does), which is the correct scope: the penalty moves the CURRENT balance,
+				# not the regen cadence — a consequence, not a cost.
+				#
+				# NO PER-TICK "ALREADY PUNISHED" GUARD, deliberately (`5-6` fix pass, review finding
+				# M2, MEASURED not assumed): this rung cannot run twice for the same attacker against
+				# this SAME hero target in one tick. A hero owns exactly one `active` TimingWindow
+				# (`hero_state.gd:112`), so at most one hitbox is live for it at any instant and the
+				# match_runner can gather at most one contact fact from it per tick against a given
+				# target — there is no second swing to produce a second fact while the first is still
+				# `active`. A duplicate fact naming the SAME `attack_index` against this target would in
+				# any case drop at `_register_attacker_hit`'s dedupe rung above, strictly BEFORE this
+				# branch in the ladder. A guard here would be defending against a fact this ladder's own
+				# earlier rungs already make unreachable.
+				if attacker_index == TargetingService.HERO_INDEX:
+					attacker.hero.stun.start(balance_ticks.deflect_stun_ticks)
+					attacker.hero.set_action_state(HeroState.ActionState.STUNNED)
+					attacker.stamina.add(-balance.deflect_stamina_penalty)
 				continue
 			damage *= balance.block_damage_multiplier
 		target.hero.take_damage(damage)
@@ -2313,6 +2409,26 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# replacement is in flight, which is a statement about that slot being empty, not about the
 	# debt. "Mana stays the only throttle" is SUPERSEDED: mana remains the only ECONOMIC throttle,
 	# and slot occupancy is now a second, structural, player-observable precondition.
+	# STORY 5-6 (AC 16): THE CHARGING HOLE CLOSES, and it closes HERE -- the FIRST gate, ahead of the
+	# empty-slot check, mirroring `_resolve_defense_cast`'s exact ordering (state gate before slot
+	# gate). Until this story `_resolve_basic_cast` read `action_state` NOWHERE in its body: `5-5`'s
+	# AC 3 states the omission BY DESIGN for BLOCKING/ATTACKING/ROLLING ("an instant summon that
+	# interrupts nothing"), but that reasoning never covered CHARGING, and `5-5`'s own Open Questions
+	# named the gap and assigned it here. A hero mid-chargeup could summon; a stunned hero could too.
+	#
+	# TWO ARMS, ONE GATE, TWO REASONS. `REASON_UNBLOCKABLE_COMMITTED` is reused VERBATIM for CHARGING
+	# (it already reads true: "cannot cast because committed to an unblockable"); the STUNNED arm takes
+	# the shared `REASON_STUNNED`, since "committed to an unblockable" does not describe a stunned
+	# caster.
+	#
+	# NOTHING ELSE ABOUT MODE (1) OR THE `5-2` CHARGEUP CHANGES (Non-Goals):
+	# `_resolve_unblockable_cast`, `_unblockable_refusal_reason` and `TRANSITION_TABLE` are untouched.
+	if player.hero.action_state == HeroState.ActionState.CHARGING:
+		player.hero.reject_action(&"card_cast", REASON_UNBLOCKABLE_COMMITTED)
+		return
+	elif player.hero.action_state == HeroState.ActionState.STUNNED:
+		player.hero.reject_action(&"card_cast", REASON_STUNNED)
+		return
 	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
 		return
@@ -2411,13 +2527,28 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 ## StringName naming the player-visible fact), which is the part AC 2 actually asks for.
 const REASON_UNBLOCKABLE_COMMITTED := &"unblockable_committed"
 
+## Story 5-6 (AC 15/AC 16): the SECOND state-shaped refusal reason, named HERE beside its sibling for
+## that constant's own stated rule -- `CastEvaluator` is not consulted on EITHER refusal path, so a
+## `REASON_*` living on it would be a lie about where the refusal comes from. What is borrowed from
+## `CastEvaluator` is therefore narrower than "its vocabulary": only the TOKEN CONVENTION (a lowercase
+## `StringName` naming the player-visible fact, `REASON_EMPTY_SLOT`-style).
+##
+## A SEPARATE REASON RATHER THAN REUSING `REASON_UNBLOCKABLE_COMMITTED` a fourth time, because "an
+## unblockable is committed" does not read true for a STUNNED caster -- the stun may have come from a
+## deflected melee swing with no unblockable anywhere in it.
+##
+## ONE SHARED CONSTANT SERVES BOTH REFUSAL SEATS (`_resolve_defense_cast` and `_resolve_basic_cast`),
+## the `REASON_EMPTY_SLOT` reuse precedent applied a second time: the player-visible fact is the same
+## fact in both places, so inventing a per-seat token would name the mechanism instead of the fact.
+const REASON_STUNNED := &"stunned"
+
 
 ## Story 5-2 (AC 2, `5-2/R11`): THE S6 GATE -- whether this hero may initiate mode (2) right now, as
 ## a reason or `&""` for "may proceed". The empty-means-allowed convention is `CastEvaluator`'s, and
 ## it is the only thing borrowed from it: `refusal_reason` is NOT called anywhere on this path.
 ##
 ## A SMALL SIBLING GUARD RATHER THAN AN INLINE `if`, which is the Open Question's second option: it
-## makes the gate directly testable against a state without building a cast, and it keeps the four
+## makes the gate directly testable against a state without building a cast, and it keeps the
 ## refused states readable as one list instead of a condition threaded through the spend sequence.
 ##
 ## NO `Invariant.check` ANYWHERE ON THIS PATH (`5-1a/R7`): this is a PLAYER-REACHABLE refusal, and
@@ -2432,6 +2563,23 @@ const REASON_UNBLOCKABLE_COMMITTED := &"unblockable_committed"
 ## window, and overwrites the live telegraph `5-3` is about to render. Flagged in the dev pass
 ## report as an addition beyond AC 2's named three rather than folded in silently.
 ##
+## THE FIFTH STATE IS `STUNNED`, ADDED IN THE `5-6` FIX PASS (review finding H1) rather than by the
+## dev pass. AC 15's own opening sentence ("STUNNED forbids every action by construction") implies
+## this seat, and the dev pass's Non-Goals/AC 16 text left this function untouched on the reading
+## that AC 16 only ever named `_resolve_basic_cast` -- but the review found the gap live: nothing
+## here gated `STUNNED`, so `_resolve_unblockable_cast`'s unconditional `set_action_state(CHARGING)`
+## on a successful cast OVERWROTE `STUNNED` outright, un-rooting a stunned hero and letting it cast a
+## fresh unblockable to answer the very commitment (a deflected melee swing, a color-counter
+## negation) that stunned it -- the exact escape AC 15's own rationale for gating `CHARGING` here
+## ("a duration effect, rooting the hero, needs a reachability gate") already covers for `STUNNED`
+## identically. The reason is `REASON_STUNNED` (AC 15's shared constant, `_resolve_basic_cast` and
+## `_resolve_defense_cast`'s own token), not `REASON_UNBLOCKABLE_COMMITTED` -- "committed to an
+## unblockable" does not describe a stunned caster, the same distinction AC 15 already draws for its
+## two seats. The story's own Non-Goals ("`_unblockable_refusal_reason` ... untouched") and AC 16's
+## closing sentence are AMENDED by this fix pass to carve out exactly this one-arm addition; nothing
+## else about mode (2) changes, `TRANSITION_TABLE` gains no row, and `_resolve_basic_cast` is
+## unaffected (it never calls this function).
+##
 ## `BASIC` IS NOT GATED BY THIS AND MUST NOT BE (AC 3): `_resolve_basic_cast` never calls it. A
 ## basic cast is an instant summon that interrupts nothing and deliberately runs parallel to melee.
 static func _unblockable_refusal_reason(hero: HeroState) -> StringName:
@@ -2441,6 +2589,8 @@ static func _unblockable_refusal_reason(hero: HeroState) -> StringName:
 			or state == HeroState.ActionState.ATTACKING \
 			or state == HeroState.ActionState.CHARGING:
 		return REASON_UNBLOCKABLE_COMMITTED
+	if state == HeroState.ActionState.STUNNED:
+		return REASON_STUNNED
 	return &""
 
 
@@ -2593,8 +2743,23 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	if flags == null or not flags.unblockable:
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_FLAG_CLOSED)
 		return
+	# Story 5-6 (AC 15): the EXISTING `CHARGING` gate WIDENED to a second state rather than joined by
+	# a second `if` — both are commitments the caster cannot answer from, and expressing them as one
+	# gate keeps "a committed hero cannot cast defense" a single fact. Each arm keeps its OWN reason:
+	# `REASON_UNBLOCKABLE_COMMITTED` already reads true for a charging caster, and does not for a
+	# stunned one.
+	#
+	# THIS ONLY PREVENTS ARMING A NEW WINDOW. An ALREADY-RUNNING `defense_window` cast before the stun
+	# landed is untouched by this story and keeps ticking down at its ordinary step-2 rate -- exactly
+	# `5-5` AC 11's wrong-colour survival, and the story's Deferred item resolved by measurement:
+	# nothing here reads or writes `defense_window`/`defense_color`, so there is no interaction to
+	# build. It is pinned by a test anyway (the `5-5` referenced-not-edited discipline is about not
+	# EDITING those fields, not about leaving the claim unasserted).
 	if player.hero.action_state == HeroState.ActionState.CHARGING:
 		player.hero.reject_action(&"card_cast", REASON_UNBLOCKABLE_COMMITTED)
+		return
+	if player.hero.action_state == HeroState.ActionState.STUNNED:
+		player.hero.reject_action(&"card_cast", REASON_STUNNED)
 		return
 	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
@@ -2709,9 +2874,16 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 		#
 		# AC 10 -- A MATCH NEGATES COMPLETELY (R-C): zero damage (`take_damage` never called), no
 		# `hit_landed` (the enemy was never hurt), and NO ORB GRANT (`_grant_landing_orbs` never
-		# called -- the attacker earns nothing because there is no landing to pay for). NO STUN of
-		# any kind on either party: `HeroState.stun` is not started on either hero, and `STUNNED`
-		# stays the zero-inbound-edge row it has been since E1.
+		# called -- the attacker earns nothing because there is no landing to pay for).
+		#
+		# STORY 5-6 (AC 5/AC 6) CORRECTS THE "NO STUN OF ANY KIND ON EITHER PARTY" CLAUSE THIS BLOCK
+		# CARRIED. It was true of the DEFENDER always, and of the ATTACKER only until this story.
+		# `E5-P/R1` resolves OPEN decision (a): the ATTACKER whose chargeup was answered in colour is
+		# now STUNNED for `color_counter_stun_ticks` (the heavier of the two ladder stuns), written
+		# below. THE DEFENDER STILL NEVER STUNS — reading the colour correctly is the reward, not a
+		# second cost. `STUNNED` also stops being the zero-inbound-edge row: this is its FIRST of
+		# exactly two authored entry points, both direct `set_action_state` calls rather than
+		# `TRANSITION_TABLE` edges (the `DEAD`-entry precedent), enumerated by test_action_state.gd.
 		#
 		# THE WINDOW IS CONSUMED HERE AND ONLY HERE (AC 10 vs AC 11, two rungs of one `if` that must
 		# not be conflated): `start(0)` stops it and the colour resets to the sentinel -- one fact in
@@ -2722,11 +2894,22 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 		# every same-colour assertion while silently breaking that -- which is why a test exists that
 		# goes RED against exactly that mutation.
 		#
-		# WRITTEN AS `if / else` RATHER THAN AN EARLY `return`, deliberately: AC 9 requires the
-		# unconditional `set_action_state(IDLE)` exit below to stay UNTOUCHED and to run on every
-		# outcome, negated or not. A `return` here would need a second copy of that line and would
-		# make "the attacker's own chargeup always ends the same way" a duplicated fact instead of a
-		# structural one.
+		# STORY 5-6 (AC 5) RESHAPES THE EXIT, and `5-5`'s "written as if/else rather than an early
+		# return" note above is SUPERSEDED rather than merely stale. `5-5` could rely on one
+		# unconditional `set_action_state(IDLE)` covering every outcome; this story's negation branch
+		# ends in `STUNNED` instead, and it must get there via EXACTLY ONE `set_action_state` call.
+		#
+		# WHY A SECOND, LAST-WRITE-WINS CALL IS REJECTED AS A SHAPE, not merely discouraged:
+		# `action_state` transitions are observed through QUEUED signals (`action_state_changed`, D5,
+		# relayed by `connect_hero_action_state_changed`). A consumer draining an unconditional `IDLE`
+		# followed by a `STUNNED` would see the hero pass through `IDLE` on a tick it was never
+		# actually `IDLE` on — a phantom transition reaching presentation code that then acts on a
+		# state that never existed. EXACTLY ONE `set_action_state` PER OUTCOME, full stop.
+		#
+		# THE SHAPE CHOSEN: ONE early `return` for the negation (whose own write is `STUNNED`), and the
+		# trailing `IDLE` line still covering the other THREE outcomes — miss, dodge, and full damage —
+		# unduplicated. That keeps "every non-negated chargeup ends the same way" structural, which is
+		# what `5-5`'s note was actually protecting, while giving the negation its own single write.
 		if target.defense_window.is_running \
 				and target.defense_color != PlayerState.NO_TELEGRAPH_COLOR \
 				and target.defense_color == player.charge_color:
@@ -2735,10 +2918,54 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 			_queue.push(deflect_landed.emit.bind(slot, opposing_slot, target.defense_color))
 			target.defense_window.start(0)
 			target.defense_color = PlayerState.NO_TELEGRAPH_COLOR
+			# STORY 5-6 (AC 5): THE COLOUR-COUNTER STUN. The stunned party is `player` — the CASTER
+			# whose chargeup just landed and was answered — never `target`, who answered it. Read
+			# INLINE from the tick domain (CONSTRAINT C), like every other window start in this file.
+			player.hero.stun.start(balance_ticks.color_counter_stun_ticks)
+			player.hero.set_action_state(HeroState.ActionState.STUNNED)
+			return
+		# STORY 5-6 (AC 7): THE DODGE RUNG — the ladder's MIDDLE tier, and entirely new logic rather
+		# than a pre-existing behaviour surfaced. This function's own header enumerates what it does
+		# NOT consult (no block, no deflect, no arc) and, measured, it never consulted the defender's
+		# iframe either: the generic step-4 contact ladder's `1-9/R1` iframe drop
+		# (`_resolve_contacts`) is a STRUCTURALLY SEPARATE function and none of it applies here.
+		#
+		# THE PREDICATE IS READ FROM THE STEP-3 LATCH, NOT LIVE (AC 7's correction) — see
+		# `_iframe_open_at_step3` for why a live read would make the dodge seat-dependent. It is the
+		# defender's slot that is indexed, i.e. `opposing_slot`.
+		#
+		# READ-ONLY (AC 8): `roll_iframe` is neither consumed nor cleared here, and
+		# `_roll_iframe_closed_this_tick` is untouched — the SAME "read the predicate, drop the
+		# outcome" idiom the generic ladder uses. Dodging an unblockable neither ends the iframe
+		# window early nor extends it; it runs its own course exactly as `1-9/R3` already requires for
+		# every other contact.
+		#
+		# NO STUN ON THIS BRANCH, deliberately and not by oversight: Ruling 1b names an attacker
+		# consequence for the COLOUR counter (above) and none for a dodge. Do not add one by analogy.
+		#
+		# NO ORB GRANT EITHER WAY (Ruling 1b): `_grant_landing_orbs` is simply not called on this
+		# branch, the same "stay out of the list" mechanism the mana gate uses rather than a second
+		# check inside the grant.
+		if _iframe_open_at_step3[opposing_slot]:
+			# THE MULTIPLY-AND-EMIT-AT-SURVIVING-MAGNITUDE PRECEDENT (`block_damage_multiplier`,
+			# `:1447-1456`): the full damage is computed exactly as the Ruling 1c path below computes
+			# it and then scaled. At the authored `dodged_unblockable_damage_multiplier = 0.0` the
+			# effective damage is EXACTLY zero, so the guard below suppresses the emit entirely and a
+			# clean dodge is SILENT — the same full suppression the colour-match tier gets, not a
+			# zero-magnitude `hit_landed` a consumer would render as a hit for no damage. Retune the
+			# multiplier positive and the same lines emit at the surviving magnitude, with no code
+			# change: that is what makes this a genuine rung rather than a hardcoded "None".
+			var dodged := balance.unblockable_damage_percent_of_max_hp / 100.0 \
+					* target.hero.get_max_hp() * balance.dodged_unblockable_damage_multiplier
+			if dodged > 0.0:
+				target.hero.take_damage(dodged)
+				_queue.push(hit_landed.emit.bind(slot, opposing_slot, dodged, target.hero.get_hp()))
 		else:
 			# AC 18: the `attack_damage_percent_of_max_hp` expression verbatim, against the TARGET's
 			# own maximum, under the name that says which attack it belongs to. One value for all
-			# three colours in this story (Ruling 2).
+			# three colours in this story (Ruling 2). Story 5-6 (Ruling 1c): the ladder's THIRD tier
+			# — the UNANSWERED landing — reached only when neither the colour counter nor the dodge
+			# answered it, and UNTOUCHED by this story beyond becoming an `else`.
 			var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 \
 					* target.hero.get_max_hp()
 			target.hero.take_damage(damage)
@@ -2748,6 +2975,10 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 	# damage above is applied while the hero is still, conceptually, mid-attack. The telegraph key
 	# stops being reported the moment this line runs, because `PlayerState.to_snapshot()` derives it
 	# from `CHARGING` rather than from a flag something has to remember to clear.
+	#
+	# STORY 5-6 (AC 5): it now covers THREE of the four outcomes rather than all four — the negation
+	# returns above with its own single `STUNNED` write. Miss, dodge and full damage all still end
+	# here, exactly once each.
 	player.hero.set_action_state(HeroState.ActionState.IDLE)
 
 
@@ -3090,6 +3321,21 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 		# THE LUNGE AND THE PHASE MULTIPLIER ARE BOTH BELOW THIS BRANCH and neither applies: they
 		# belong to ATTACKING, and mode (2) is not a swing.
 		player.hero.velocity = Vector3.ZERO
+	elif player.hero.action_state == HeroState.ActionState.STUNNED:
+		# Story 5-6 (AC 14): HARD-ROOTED, as a THIRD sibling of the two branches above rather than a
+		# new mechanism. `5-2/R5`'s reasoning applies identically and verbatim: a LITERAL ZERO, never
+		# a `stunned_move_speed_multiplier` read from balance, because a non-zero multiplier is not
+		# rooted and authoring one would make "rooted" a tuning value a retune could quietly soften.
+		# The write must happen rather than be skipped for the same downstream reason `CHARGING` and
+		# `DEAD` write it: `HeroActor.drive()` reads this field into `move_and_slide()` every physics
+		# frame, so a skipped write would leave the last live velocity in place and the stunned hero
+		# would glide through its own punish.
+		#
+		# FACING IS DELIBERATELY LEFT TO FALL THROUGH to the generic lock-direction branch below.
+		# Ruling 3 forbids ACTION and MOVEMENT, not the visual heading — the same fallthrough
+		# `ROLLING` and `ATTACKING` already get (facing tracks the lock while velocity is overridden),
+		# not a new carve-out.
+		player.hero.velocity = Vector3.ZERO
 	else:
 		# Story 3-0b (AC6): the attack LUNGE, ADDED to the input-driven velocity rather than
 		# replacing it — the phase multiplier keeps scaling what the player steers, and the
@@ -3381,7 +3627,17 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ##
 ## The parked mana-survives-reset finding stays PARKED -- and orbs deliberately do NOT follow mana
 ## here, a NAMED divergence: orbs are a per-round stake in the RPS exchange, mana is a persistent
-## flywheel. These are THREE named exceptions; they do not open the reset's contract generally.
+## flywheel.
+##
+## STORY 5-5 (AC 12): A FOURTH NAMED EXCEPTION -- the mode (3) DEFENSE WINDOW and its colour, cleared
+## in _reset_player below for the chargeup's traced reason verbatim (step 1b freezes the clock while
+## leaving the window armed, so it would answer a landing in the NEXT round).
+##
+## STORY 5-6 (AC 13): A FIFTH NAMED EXCEPTION -- the hero's `stun` WINDOW and the `STUNNED` action
+## state, cleared together in _reset_player below for the identical traced reason. `_end_round` again
+## gains no matching clear.
+##
+## These are FIVE named exceptions; they do not open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -3431,12 +3687,32 @@ func _reset_player(player: PlayerState) -> void:
 	# telegraph left lit on the round-over screen is the same class as every other pose the freeze
 	# holds, it is cosmetic, and it ends HERE -- `set_action_state` queues the transition the
 	# presentation controllers already clear their shape on.
+	#
+	# STORY 5-6 (AC 13): `STUNNED` JOINS THIS ENTRY AS THE FIFTH NAMED EXCEPTION to the reset's
+	# "NOTHING else / in-flight windows untouched" contract (the unit board is first, `4-1/R5`; the
+	# chargeup second, `5-3`; the orb pool third, `5-4`; the defense window fourth, `5-5` AC 12), and
+	# its window is stopped in the same breath below for the identical traced reason.
+	#
+	# THE DEFECT IT CLOSES, traced on exactly the `5-3`/`5-5` shape: step 1b returns BEFORE step 2's
+	# `tick_timers()`, so once `_round_over` latches a running `stun` window STOPS COUNTING but stays
+	# ARMED. Without this exception a hero stunned just before the other one died would come out of
+	# the reset still `STUNNED` with a live window, carrying the stun into the NEXT round exactly as
+	# an uncleared chargeup or defense window would — and, because AC 12's timer arm is the only
+	# normal-play exit, it would then serve out the previous round's punish in the new one.
+	#
+	# THE ROUND-OVER FREEZE ITSELF IS UNTOUCHED, the same "latched round-over freezes but does not
+	# disarm the window" property `5-3`/`5-5` already established: this is a RESET-time clear, not an
+	# `_end_round`-time one.
 	if hero.action_state == HeroState.ActionState.DEAD \
-			or hero.action_state == HeroState.ActionState.CHARGING:
+			or hero.action_state == HeroState.ActionState.CHARGING \
+			or hero.action_state == HeroState.ActionState.STUNNED:
 		hero.set_action_state(HeroState.ActionState.IDLE)
 	hero.heal(hero.get_max_hp())
 	player.charge_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
+	# fact in two parts, exactly as the chargeup's three and the defense window's two are.
+	hero.stun.start(0)
 	# STORY 5-5 (AC 12): THE FOURTH NAMED EXCEPTION to the reset's "NOTHING else / in-flight windows
 	# untouched" contract -- the mode ③ DEFENSE WINDOW and its colour, cleared here immediately
 	# beside the chargeup on the identical `start(0)` / `= NO_TELEGRAPH_COLOR` shape, and for the

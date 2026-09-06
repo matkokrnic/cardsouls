@@ -56,6 +56,16 @@ const UNBLOCKABLE_DAMAGE := 10.0   # 10 % of 100.0 max hp
 const REACH := 8.0
 const ORB_GRANT := 2
 const MAX_ORBS := 9
+## Story 5-6 (AC 1/AC 5/AC 9): the two ladder stuns, authored DISTINCT from every other count this
+## fixture carries ({1, 2, 6, 9, 20, 600}) and from each other, so an off-by-one or a swapped field
+## lands on a wrong number rather than coinciding with a right one. The ORDER (colour counter LONGER)
+## mirrors the authored `.tres` gradient the authoring audit pins, so this fixture never models a
+## ladder shape the shipped config forbids.
+const COLOR_COUNTER_STUN_TICKS := 14
+const DEFLECT_STUN_TICKS := 5
+## Story 5-6 (AC 10): the deflected attacker's punitive drain. DISTINCT from both stamina costs above
+## (2.0 / 1.0) so a seat that read the wrong field lands on a different balance.
+const DEFLECT_PENALTY := 7.0
 
 ## The planar TARGET -> ATTACKER direction the runner would compute (the 1-8 convention).
 const FACT_DIR := Vector2(0.0, 1.0)
@@ -400,31 +410,54 @@ func test_a_successful_defense_consumes_the_window_and_its_colour() -> void:
 	assert_eq(ms.p2.defense_color, PlayerState.NO_TELEGRAPH_COLOR, "...and its colour reset WITH it")
 
 
-## AC 10's negative claim (R-C): NO STUN of any kind on either party. `HeroState.stun` is not started
-## on either hero, and `STUNNED` stays the zero-inbound-edge row it has been since E1.
-func test_a_negation_stuns_nobody() -> void:
+## STORY 5-6 (AC 5): THIS TEST INVERTS ON ITS ATTACKER HALF, and the inversion is the story's own
+## regression fix rather than a dropped guard. `5-5` shipped it asserting the attacker is NOT stunned
+## with the reason written into the message ("that decision is `5-6`'s"). That decision is now made:
+## `E5-P/R1` stuns the ATTACKER on a colour-matched negation, so P1's two assertions FLIP to positive
+## checks. P2's — the DEFENDER's — stay exactly as `5-5` shipped them, unchanged and still negative:
+## reading the colour correctly is the reward, not a second cost.
+func test_a_negation_stuns_the_attacker_and_only_the_attacker() -> void:
 	var ms := _make_match()
 	_cast_defense(ms, Enums.CardColor.RED)
 	_run_chargeup(ms, Enums.CardColor.RED)
-	assert_false(ms.p1.hero.stun.is_running, "the ATTACKER is not stunned (that decision is `5-6`'s)")
-	assert_false(ms.p2.hero.stun.is_running, "...and neither is the DEFENDER")
-	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "no STUNNED state on either")
-	assert_ne(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "hero, from either direction")
+	assert_true(ms.p1.hero.stun.is_running,
+		"the ATTACKER IS stunned — `E5-P/R1`, the decision `5-5` deferred to this story")
+	assert_eq(ms.p1.hero.stun.remaining_ticks(), COLOR_COUNTER_STUN_TICKS,
+		"...for the authored colour-counter duration, converted through BalanceTicks (AC 1)")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...and the state write lands with it — the FIRST of exactly two authored inbound edges")
+	assert_false(ms.p2.hero.stun.is_running, "the DEFENDER is still not stunned...")
+	assert_ne(ms.p2.hero.action_state, HeroState.ActionState.STUNNED,
+		"...on either half — answering in colour is the reward, not a second cost")
 
 
-## AC 9: the attacker's own chargeup ALWAYS ends the same way. The unconditional exit to IDLE runs on
-## every outcome, negated or not — which is why the intercept is an `if/else` rather than an early
-## return.
-func test_the_attacker_exits_charging_whether_negated_or_not() -> void:
+## STORY 5-6 (AC 5) SUPERSEDES `5-5`'s "the exit is unconditional" claim, which this test used to
+## assert on both halves. It is now conditional BY OUTCOME, and the pin is that each outcome takes
+## EXACTLY ONE `set_action_state` — the negation to `STUNNED` (via its own early return), everything
+## else to `IDLE` (via the one trailing line). A shape that left the trailing `IDLE` unconditional and
+## relied on a second, later `STUNNED` write would still satisfy the STATE assertions below, so the
+## TRANSITION LOG is what actually pins it: a phantom `IDLE` the hero was never in would appear there.
+func test_each_landing_outcome_takes_exactly_one_action_state_write() -> void:
 	var negated := _make_match()
 	_cast_defense(negated, Enums.CardColor.RED)
+	var negated_log := _collect_action_states(negated.p1)
 	_run_chargeup(negated, Enums.CardColor.RED)
-	assert_eq(negated.p1.hero.action_state, HeroState.ActionState.IDLE,
-		"a NEGATED chargeup still ends in IDLE")
+	assert_eq(negated.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"a NEGATED chargeup ends in STUNNED, not IDLE (AC 5)")
+	assert_eq(negated_log, [
+			[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.CHARGING)],
+			[int(HeroState.ActionState.CHARGING), int(HeroState.ActionState.STUNNED)]],
+		"CHARGING -> STUNNED directly: NO phantom IDLE in between, which is what a second "
+		+ "last-write-wins `set_action_state` would put on this queued channel")
 	var landed := _make_match()
+	var landed_log := _collect_action_states(landed.p1)
 	_run_chargeup(landed, Enums.CardColor.RED)
 	assert_eq(landed.p1.hero.action_state, HeroState.ActionState.IDLE,
-		"...and so does a LANDED one — the exit is unconditional (AC 9)")
+		"...and an UNANSWERED landing still ends in IDLE — the trailing line, unchanged")
+	assert_eq(landed_log, [
+			[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.CHARGING)],
+			[int(HeroState.ActionState.CHARGING), int(HeroState.ActionState.IDLE)]],
+		"...through exactly one write, with no STUNNED anywhere on the landed path")
 
 
 ## AC 9's FOURTH PATH: a DEAD defender never negates. The window is never consulted, whatever it
@@ -565,6 +598,117 @@ func test_only_a_matching_colour_negates() -> void:
 						% [charge_color, defense_color])
 
 
+# --- Story 5-6 (AC 7 / AC 8): the DODGE RUNG, the ladder's middle tier -------------------------
+##
+## Ladder order, per Ruling 1: (a) colour match [tested above] -> if false, (b) is the DEFENDER's
+## roll iframe open -> if true, damage is scaled by `dodged_unblockable_damage_multiplier` and NO orb
+## is granted -> if false, (c) the unchanged full-damage + orb path.
+
+## AC 7 at the SHIPPED authoring (`dodged_unblockable_damage_multiplier = 0.0`, Ruling 1b): a clean
+## dodge is SILENT. No damage, no `hit_landed` at all (not a zero-magnitude emit), and no orb —
+## the same full suppression the colour-match tier gets.
+func test_an_open_iframe_dodges_the_landing_silently_at_the_shipped_multiplier() -> void:
+	var ms := _make_match()
+	var hits := _collect_hits(ms)
+	var deflects := _collect_deflects(ms)
+	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "a DODGED unblockable deals nothing at the shipped 0.0")
+	assert_eq(hits, [], "...and emits NO `hit_landed` at all — full suppression, not a zero-magnitude "
+		+ "emit a consumer would render as a hit for no damage")
+	assert_eq(deflects, [], "...and no `deflect_landed` either: a dodge is not a colour answer")
+	assert_eq(ms.p1.orbs.get_count(Enums.CardColor.RED), 0,
+		"...and pays NO ORB (Ruling 1b) — `_grant_landing_orbs` is never called on this branch")
+
+
+## AC 7's OTHER half, and the reason the rung is a multiply rather than a hardcoded "None": retuned
+## POSITIVE, the same lines emit at the surviving magnitude with no code change. The orb suppression
+## is INDEPENDENT of the damage and stays in force at any multiplier.
+func test_a_retuned_dodge_multiplier_emits_at_the_surviving_magnitude() -> void:
+	var config := _config()
+	config.dodged_unblockable_damage_multiplier = 0.5
+	var ms := _make_match_with(config)
+	var hits := _collect_hits(ms)
+	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE * 0.5,
+		"a retuned dodge takes HALF the full landing's damage — the multiply is real")
+	assert_eq(hits.size(), 1, "...and `hit_landed` DOES emit once, at the surviving magnitude...")
+	assert_eq(float(hits[0][2]), UNBLOCKABLE_DAMAGE * 0.5, "...carrying that magnitude, not the full one")
+	assert_eq(ms.p1.orbs.get_count(Enums.CardColor.RED), 0,
+		"...and STILL no orb: the orb suppression is Ruling 1b's, independent of the damage value")
+
+
+## AC 7's ladder ORDER, asserted rather than assumed: a colour match wins even when the defender is
+## ALSO mid-roll. The colour tier is checked first and returns, so the attacker is STUNNED (the
+## colour tier's consequence) rather than merely dodged (which carries none).
+func test_a_colour_match_outranks_an_open_iframe() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "either tier would negate the damage, so HP proves nothing")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...but only the COLOUR tier stuns the attacker — so the ladder checked colour FIRST (AC 7)")
+	assert_false(ms.p2.defense_window.is_running,
+		"...and consumed the defense window, which the dodge rung never touches")
+
+
+## AC 7's negative: NO STUN OF ANY KIND on the dodge branch. Ruling 1b names an attacker consequence
+## for the COLOUR counter and none for a dodge; adding one by analogy is the failure this pins.
+func test_a_dodge_stuns_nobody() -> void:
+	var ms := _make_match()
+	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
+	assert_false(ms.p1.hero.stun.is_running, "a dodged attacker is NOT stunned (AC 7, negative)...")
+	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "...on either half")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"...it takes the ordinary trailing IDLE exit, exactly like a miss or a full landing")
+	assert_false(ms.p2.hero.stun.is_running, "and neither is the DEFENDER")
+
+
+## AC 8: READ-ONLY. The dodge neither consumes nor clears `roll_iframe` — the window runs its own
+## course exactly as `1-9/R3` requires for every other contact. Measured as a COMPARISON against a
+## control that dodged nothing, because an absolute assertion ("the window is still running") would
+## pass against an implementation that shortened it without stopping it.
+func test_a_dodge_neither_consumes_nor_shortens_the_iframe_window() -> void:
+	var dodged := _make_match()
+	_run_chargeup_dodging(dodged, 0, Enums.CardColor.RED, 1)
+	var control := _make_match()
+	_run_chargeup_dodging(control, 0, Enums.CardColor.RED, 1, false)   # same roll, NO landing
+	assert_true(dodged.p2.hero.roll_iframe.is_running, "the iframe window is still running...")
+	assert_eq(dodged.p2.hero.roll_iframe.remaining_ticks(),
+		control.p2.hero.roll_iframe.remaining_ticks(),
+		"...at EXACTLY the countdown an undodged roll leaves it — not ended early, not extended (AC 8)")
+	assert_eq(dodged.p2.hero.action_state, control.p2.hero.action_state,
+		"...and the roll itself is untouched too")
+
+
+## AC 7's CORRECTION, and the highest-value test in this file: THE OBSERVATION POINT IS SEAT-SYMMETRIC.
+##
+## Four cases in one test — {slot 0 charging, slot 1 charging} x {roll on the PREVIOUS tick, roll on
+## the LANDING tick}. The contract: a previous-tick roll dodges on BOTH slots; a landing-tick roll
+## dodges on NEITHER.
+##
+## WITHOUT `_iframe_open_at_step3` THIS TEST FALLS, and on exactly one of the four cases, which is
+## what makes it worth its length. `advance()` runs `_resolve_actions(p1)` — timer exits INCLUDING
+## the charge landing, then p1's presses — completely before `_resolve_actions(p2)`. So with a live
+## `target.hero.is_iframe_open()` read: slot 0's landing resolves BEFORE p2's same-tick roll press
+## (no dodge, correct), while slot 1's landing resolves AFTER p1's same-tick roll press has already
+## opened its iframe (a DODGE — wrong, and seat-dependent). This is also the headless replacement for
+## the Live Smoke's cut seat-symmetry flip item.
+func test_the_dodge_boundary_is_identical_on_both_slots() -> void:
+	for charging_slot: int in 2:
+		var defending_slot := 1 - charging_slot
+		var previous := _make_match()
+		_run_chargeup_dodging(previous, charging_slot, Enums.CardColor.RED, 1)
+		var late := _make_match()
+		_run_chargeup_dodging(late, charging_slot, Enums.CardColor.RED, 0)
+		var prev_defender: PlayerState = previous.p1 if defending_slot == 0 else previous.p2
+		var late_defender: PlayerState = late.p1 if defending_slot == 0 else late.p2
+		assert_eq(prev_defender.hero.get_hp(), MAX_HP,
+			"slot %d charging: a roll from the PREVIOUS tick DODGES" % [charging_slot])
+		assert_eq(late_defender.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+			("slot %d charging: a roll pressed ON the landing tick does NOT dodge — the press had "
+			+ "not been resolved when step 3 observed the iframe") % [charging_slot])
+
+
 # --- AC 12: the fourth reset exception ----------------------------------------------------------
 
 ## AC 12: the debug reset clears BOTH fields, in the same seat and on the same shape as the chargeup
@@ -594,6 +738,193 @@ func test_the_round_end_does_not_clear_the_defense_window() -> void:
 	assert_true(ms.p2.defense_window.is_running,
 		"the round ending does NOT clear the window — the debug reset is this codebase's one "
 		+ "round-boundary transition mechanism (AC 12)")
+
+
+# --- Story 5-6 (AC 13): the FIFTH reset exception ----------------------------------------------
+
+## AC 13: a stunned hero comes out of the debug reset IDLE, un-stunned, with the window STOPPED.
+## The traced defect, on the `5-3`/`5-5` shape exactly: step 1b returns BEFORE step 2's tick, so once
+## `_round_over` latches a running stun STOPS COUNTING but stays ARMED — and since AC 12's timer arm
+## is the only normal-play exit, an uncleared stun would serve out the previous round's punish in the
+## next one.
+func test_the_debug_reset_clears_a_stunned_hero_and_its_window() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup(ms, Enums.CardColor.RED)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "precondition: P1 is stunned")
+	assert_true(ms.p1.hero.stun.is_running, "...with a live window mid-count")
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	_advance(ms, reset, InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"the reset clears the STUNNED state (AC 13, the fifth named exception)")
+	assert_false(ms.p1.hero.stun.is_running,
+		"...and STOPS the window in the same breath — one fact in two parts, exactly as the "
+		+ "chargeup's three and the defense window's two are")
+
+
+## L1 (5-6 fix pass, review finding, Ruling 4 / addendum A): THE RESET'S OWN CONTRACT, proven
+## through a path the test above cannot exercise. The debug reset runs INSIDE `advance()`'s step 1,
+## so "IDLE immediately after the reset, before any advance" is not observable through the PUBLIC
+## path above — that test's `_advance()` call runs step 3's AC-12 STUNNED timer arm in the SAME
+## tick, which independently re-derives IDLE from a stopped window and would mask a missing
+## action-state clause (this is exactly what mutation M10 measured: removing the clause left the
+## whole suite green). The `2-3/R13` DEAD-branch precedent's DIRECT-CALL idiom
+## (`test_match_state.gd`'s `ms._resolve_movement(...)` calls, "DIRECT step call — no advance(), no
+## step 1b") is applied here to `_reset_player` itself: call the reset seat directly and assert
+## immediately, before any `advance()` — including step 3 — has a chance to run and paper over a
+## missing clause. This is the reset's OWN contract: post-reset state must not depend on a LATER
+## step happening to run, unlike `DEAD`'s clear in the same `if`, which has no timer arm at all to
+## fall back on.
+func test_the_reset_seat_itself_clears_a_stunned_hero_immediately() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup(ms, Enums.CardColor.RED)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "precondition: P1 is stunned")
+	ms._reset_player(ms.p1)   # DIRECT call — no advance(), no step 3 timer arm to mask the clause
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"the reset seat ITSELF clears STUNNED to IDLE, immediately — not merely by the time the "
+		+ "next step 3 timer arm gets a chance to re-derive it (AC 13, L1)")
+	assert_false(ms.p1.hero.stun.is_running, "...and the window is stopped in the same call")
+
+
+## AC 13's other half, the `5-4`/`5-5` finding applied to a third field: `_end_round` gains NO
+## matching clear. The debug reset is this codebase's ONE round-boundary transition mechanism, and a
+## clear inside `_end_round` would end a stun the instant the OTHER hero dies — before the round-over
+## freeze displays anything.
+func test_the_round_end_does_not_clear_a_stun() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup(ms, Enums.CardColor.RED)
+	assert_true(ms.p1.hero.stun.is_running, "precondition: a stun is in flight")
+	ms.p2.hero.take_damage(MAX_HP)
+	ms.drain_signals()
+	# The FIRST advance still runs in full -- `_round_over` is latched at step 8, AFTER step 2's tick
+	# -- so the stun counts down once more here. The freeze begins on the tick AFTER that, which is
+	# the `2-3/R13` one-tick carry every other window already has.
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	var remaining := ms.p1.hero.stun.remaining_ticks()
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p1.hero.stun.is_running, "the round ending does NOT clear the stun (AC 13)...")
+	assert_eq(ms.p1.hero.stun.remaining_ticks(), remaining,
+		"...and the round-over FREEZE stops it counting without disarming it — step 1b returns "
+		+ "before step 2, which is the very defect the reset exception above closes")
+
+
+# --- Story 5-6 (AC 15 / AC 16): a committed hero cannot cast --------------------------------------
+
+## AC 15: `_resolve_defense_cast`'s existing CHARGING gate widens to a second state, each arm keeping
+## its OWN reason. "An unblockable is committed" does not read true for a hero stunned by a deflected
+## melee swing, which is why `REASON_STUNNED` exists rather than a fourth reuse.
+func test_a_stunned_hero_cannot_cast_defense() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup(ms, Enums.CardColor.RED)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "precondition: P1 is stunned")
+	var rejections := _collect_rejections(ms.p1)
+	var stamina_before := ms.p1.stamina.get_current()
+	var hand_before := ms.p1.hand.occupied_count()
+	_advance(ms, _defense_intent(_slot_of_color(ms.p1, Enums.CardColor.BLUE)), InputIntent.new())
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_STUNNED]],
+		"refused with REASON_STUNNED, not REASON_UNBLOCKABLE_COMMITTED (AC 15)")
+	assert_false(ms.p1.defense_window.is_running, "no window armed...")
+	assert_eq(ms.p1.stamina.get_current(), stamina_before, "...no stamina spent...")
+	assert_eq(ms.p1.hand.occupied_count(), hand_before, "...and the card stayed in hand")
+
+
+## AC 16: THE CHARGING HOLE, closed. Until this story `_resolve_basic_cast` read `action_state`
+## nowhere, so a hero mid-chargeup could summon.
+func test_a_charging_hero_cannot_cast_basic() -> void:
+	var ms := _make_match()
+	_cast_unblockable(ms, 0, Enums.CardColor.RED)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "precondition: P1 is charging")
+	var rejections := _collect_rejections(ms.p1)
+	var hand_before := ms.p1.hand.occupied_count()
+	_advance(ms, _basic_intent(_slot_of_color(ms.p1, Enums.CardColor.BLUE)), InputIntent.new())
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_UNBLOCKABLE_COMMITTED]],
+		"refused with the reason that already reads true for a charging caster (AC 16)")
+	assert_eq(ms.p1.hand.occupied_count(), hand_before, "...and the card stayed in hand")
+
+
+## H1 (5-6 fix pass, review finding): THE THIRD CAST SEAT. Before this fix, `_unblockable_refusal_
+## reason` gated mode (2) initiation on ROLLING/BLOCKING/ATTACKING/CHARGING but not STUNNED, and
+## `_resolve_unblockable_cast`'s successful-cast path unconditionally wrote CHARGING — overwriting
+## STUNNED outright, un-rooting the hero and leaving its stun window running orphaned in the
+## background while the hero cast a FRESH unblockable in answer to the very commitment (a deflect,
+## a color-counter negation) that stunned it. Mirrors `test_a_stunned_hero_cannot_cast_basic`/
+## `_defense` exactly, plus the two observables a shared-reason assertion alone cannot see: the
+## action_state staying STUNNED (a successful cast would have moved it to CHARGING) and the stun
+## window still counting down, untouched rather than orphaned.
+func test_a_stunned_hero_cannot_cast_unblockable() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup(ms, Enums.CardColor.RED)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "precondition: P1 is stunned")
+	var remaining := ms.p1.hero.stun.remaining_ticks()
+	var rejections := _collect_rejections(ms.p1)
+	var stamina_before := ms.p1.stamina.get_current()
+	var hand_before := ms.p1.hand.occupied_count()
+	_advance(ms, _unblockable_intent(_slot_of_color(ms.p1, Enums.CardColor.BLUE)), InputIntent.new())
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_STUNNED]],
+		"refused with the SHARED REASON_STUNNED constant (AC 15/AC 16's own token), not "
+		+ "REASON_UNBLOCKABLE_COMMITTED — \"committed to an unblockable\" does not describe a stunned "
+		+ "caster (H1)")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...action_state stays STUNNED — a successful cast would have overwritten it with CHARGING")
+	assert_true(ms.p1.hero.stun.is_running, "...the stun window keeps running, not left orphaned")
+	assert_eq(ms.p1.hero.stun.remaining_ticks(), remaining - 1,
+		"...ticking down at its ordinary per-tick rate — untouched, not restarted or cleared")
+	assert_false(ms.p1.charge_window.is_running, "...no chargeup window armed")
+	assert_eq(ms.p1.stamina.get_current(), stamina_before, "...no stamina spent")
+	assert_eq(ms.p1.hand.occupied_count(), hand_before, "...and the card stayed in hand")
+
+
+## AC 16's second arm, with its own reason.
+func test_a_stunned_hero_cannot_cast_basic() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	_run_chargeup(ms, Enums.CardColor.RED)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "precondition: P1 is stunned")
+	var rejections := _collect_rejections(ms.p1)
+	var hand_before := ms.p1.hand.occupied_count()
+	_advance(ms, _basic_intent(_slot_of_color(ms.p1, Enums.CardColor.BLUE)), InputIntent.new())
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_STUNNED]],
+		"refused with the SHARED REASON_STUNNED constant — one player-visible fact, one token, two "
+		+ "refusal seats (AC 15/AC 16)")
+	assert_eq(ms.p1.hand.occupied_count(), hand_before, "...and the card stayed in hand")
+
+
+## AC 16's ORDERING, which is the half a pair of positive refusals cannot see: the state gate is the
+## FIRST gate, ahead of the empty-slot check, mirroring `_resolve_defense_cast` exactly. Cast against
+## a slot that is ALSO empty and the reason must be the STATE's, not the slot's — a gate seated after
+## `is_slot_empty` would report the wrong fact to the player.
+func test_the_basic_cast_state_gate_precedes_the_empty_slot_gate() -> void:
+	var ms := _make_match()
+	_cast_unblockable(ms, 0, Enums.CardColor.RED)
+	var rejections := _collect_rejections(ms.p1)
+	_advance(ms, _basic_intent(HAND_SIZE + 3), InputIntent.new())   # out of range == empty
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_UNBLOCKABLE_COMMITTED]],
+		"the STATE gate answers first — an empty slot cast while CHARGING reports the commitment, "
+		+ "not REASON_EMPTY_SLOT (AC 16)")
+
+
+## THE STORY'S DEFERRED ITEM, RESOLVED BY MEASUREMENT rather than left open: an ALREADY-RUNNING
+## defense window cast BEFORE the stun landed is untouched by this story and keeps ticking down at
+## its ordinary step-2 rate. AC 15 only prevents ARMING a NEW one. This is `5-5` AC 11's wrong-colour
+## survival applied to a second interruption, and it is asserted rather than argued from "nothing
+## touches these fields" — the claim is cheap to pin and expensive to rediscover.
+func test_a_stun_does_not_disturb_an_already_running_defense_window() -> void:
+	var ms := _make_match()
+	_cast_defense(ms, Enums.CardColor.RED)
+	var remaining := ms.p2.defense_window.remaining_ticks()
+	ms.p2.hero.stun.start(4)
+	ms.p2.hero.set_action_state(HeroState.ActionState.STUNNED)
+	ms.drain_signals()
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p2.defense_window.is_running, "the in-flight window survives the stun...")
+	assert_eq(ms.p2.defense_window.remaining_ticks(), remaining - 1,
+		"...and counts down at its ordinary step-2 rate, neither frozen nor cut short")
+	assert_eq(ms.p2.defense_color, Enums.CardColor.RED, "...with its colour intact")
 
 
 # --- AC 14 / AC 16: the tick conversion and the snapshot key ------------------------------------
@@ -696,6 +1027,13 @@ func _config() -> BalanceConfig:
 	c.max_orbs_per_color = MAX_ORBS
 	c.defense_stamina_cost = DEFENSE_COST
 	c.defense_window_seconds = float(DEFENSE_WINDOW_TICKS) / TimingWindow.TICK_HZ
+	# Story 5-6: the ladder's own numbers. `dodged_unblockable_damage_multiplier` is left at the
+	# resource's 0.0 default DELIBERATELY -- that is the SHIPPED authored value (Ruling 1b), so the
+	# dodge tests below assert the shipped behaviour rather than a fixture-only one, and the
+	# retune-positive path gets its own test that authors the value locally.
+	c.color_counter_stun_seconds = float(COLOR_COUNTER_STUN_TICKS) / TimingWindow.TICK_HZ
+	c.deflect_stun_seconds = float(DEFLECT_STUN_TICKS) / TimingWindow.TICK_HZ
+	c.deflect_stamina_penalty = DEFLECT_PENALTY
 	return c
 
 
@@ -707,6 +1045,46 @@ func _flags(unblockable_open: bool) -> FeatureFlags:
 	f.unblockable = unblockable_open
 	f.orbs = true
 	return f
+
+
+## Story 5-6: the same construction as `_make_match` against a CALLER-SUPPLIED config, so a test that
+## needs one authored value changed (the dodge multiplier) does not have to duplicate the whole
+## fixture or parameterise `_config()` for a one-off.
+func _make_match_with(config: BalanceConfig) -> MatchState:
+	var ms := MatchState.new(MatchParams.new(SEED))
+	ms.apply_balance(config)
+	ms.inject_feature_flags(_flags(true))
+	ms.inject_deck(_deck_contents())
+	ms.inject_card_costs(_costs())
+	ms.inject_card_colors(_colors())
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	return ms
+
+
+## Story 5-6 (AC 7): `charging_slot` casts UNBLOCKABLE in `color` and runs the whole chargeup inside
+## reach, while the DEFENDER presses roll `roll_lead` ticks before the landing tick.
+##
+##   roll_lead == 1 -> the roll is pressed on the tick BEFORE the landing: its iframe is open when
+##                     step 3 observes it, so the landing is dodged.
+##   roll_lead == 0 -> the roll is pressed ON the landing tick: step 3 observed the iframe BEFORE any
+##                     press of that tick was resolved, so it is NOT dodged.
+##
+## `land` false runs the identical roll but pushes NO reach fact, so the chargeup expires OUT of
+## reach and nothing lands -- the control for AC 8's comparison.
+func _run_chargeup_dodging(ms: MatchState, charging_slot: int, color: int, roll_lead: int,
+		land := true) -> void:
+	var defending_slot := 1 - charging_slot
+	_cast_unblockable(ms, charging_slot, color)
+	for t in CHARGEUP_TICKS:
+		if land:
+			_push_reach(ms, charging_slot)
+		# The landing resolves on the LAST of these ticks, i.e. `t == CHARGEUP_TICKS - 1`.
+		var roll := t == CHARGEUP_TICKS - 1 - roll_lead
+		var defender_intent := _press(&"roll") if roll else InputIntent.new()
+		if defending_slot == 0:
+			_advance(ms, defender_intent, InputIntent.new())
+		else:
+			_advance(ms, InputIntent.new(), defender_intent)
 
 
 func _make_match(unblockable_open := true, inject_colors := true) -> MatchState:
@@ -750,6 +1128,16 @@ func _unblockable_intent(slot: int) -> InputIntent:
 	var i := InputIntent.new()
 	i.card_slot = slot
 	i.card_mode = Enums.ModeKind.UNBLOCKABLE
+	i.card_commit = true
+	return i
+
+
+## Story 5-6 (AC 16): a mode ① commit, for the two refusal tests. The defense/unblockable siblings
+## above verbatim, differing only in the mode.
+func _basic_intent(slot: int) -> InputIntent:
+	var i := InputIntent.new()
+	i.card_slot = slot
+	i.card_mode = Enums.ModeKind.BASIC
 	i.card_commit = true
 	return i
 
@@ -807,6 +1195,18 @@ func _collect_hits(ms: MatchState) -> Array:
 func _collect_deflects(ms: MatchState) -> Array:
 	var out: Array = []
 	ms.deflect_landed.connect(func(a: int, t: int, c: int) -> void: out.append([a, t, c]))
+	return out
+
+
+## Story 5-6 (AC 5): every `action_state_changed` this player emits from the moment of subscription,
+## as `[previous, current]` int pairs. The QUEUED channel is the point — a shape that wrote `IDLE`
+## and then `STUNNED` in the same tick would show BOTH here, which is exactly the phantom transition
+## AC 5 rejects and which a final-state assertion alone cannot see.
+func _collect_action_states(player: PlayerState) -> Array:
+	var out: Array = []
+	player.hero.action_state_changed.connect(
+		func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
+			out.append([int(previous), int(current)]))
 	return out
 
 

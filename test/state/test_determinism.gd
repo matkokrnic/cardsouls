@@ -732,6 +732,103 @@ extends TestCase
 ##     test_unblockable_initiation.gd.
 ## ---------------------------------------------------------------------------------------------
 ## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 5-6 (three-tier ladder), d9725092 -> d5bcb7e6, TWO CAUSES, BOTH BEHAVIOURAL,
+## BOTH MEASURED SEPARATELY AND IN BOTH DIRECTIONS -- and NO new snapshot key, which is the shape
+## this story's AC 17 predicted and measurement confirmed.
+##
+## THE KEY SET STAYS AT THIRTY. `hero_state.stun` has been a `to_snapshot()` key since E1 and HASHED
+## in test_replay_identity.gd since then; `stamina` likewise. This is therefore the `5-4` ORBS shape
+## ("the key already existed, a path behind it moved a resting value"), NOT the `5-2`/`5-5` shape
+## (a genuinely new key whose mere presence moves the hash). No `HASHED`/`UNHASHED` classification
+## obligation, and no key-set literal anywhere in the suite moves.
+##
+## WHY THE FIXTURE REACHES THIS STORY AT ALL, and it is not something the story added: `CONTACTS[5]`
+## has been P1's swing landing on a front-facing, deflect-window-open P2 since 1-8, and it DEFLECTS by
+## design. P1 is the attacker and a HERO, so AC 9's `HERO_INDEX` gate fires on coverage that was
+## already there. `_resolve_charge_landing` is NEVER reached (the fixture's one recorded cast is
+## `ModeKind.BASIC`), so AC 5 / AC 7 / AC 8 contribute nothing here BY CONSTRUCTION -- proven below,
+## not assumed -- and are covered by test_unblockable_defense.gd instead.
+##
+##   0. THE INHERITED VALUE, for reference: d9725092 (story 5-5).
+##
+##   0b. THE DEGENERATE-VALUE MEASUREMENT, taken FIRST and worth recording because it is the reason
+##      the two `_golden_config()` lines exist at all. With BOTH new write sets fully SHIPPED but
+##      `deflect_stun_seconds` and `deflect_stamina_penalty` left UNAUTHORED in the fixture, the hash
+##      reproduced d9725092 BIT FOR BIT. `seconds_to_ticks` maps `<= 0.0` to 0, `TimingWindow.start(0)`
+##      never runs, the step-3 timer arm returns the hero to IDLE on the very tick it was stunned, and
+##      `add(-0.0)` changes nothing -- so an unauthored fixture would have measured a FALSE NON-MOVER
+##      and shipped both new paths outside determinism coverage while the golden looked healthy. This
+##      is the standing lesson of every value in `_golden_config()`, hit again.
+##
+##   1. THE DEFLECT STUN AND ITS STATE TRANSITION (AC 9's `stun.start` + `set_action_state` pair).
+##      Staged by holding those TWO lines off the shipped tree with the stamina drain LEFT IN.
+##      MEASURED: the drain alone reaches
+##      57d3b5a9f96845bb2ed42f7374376218a5e3a32c8c07479ef8fb00dc826d8888 -- so restoring the pair on
+##      top of it is what completes the move to d5bcb7e6, and the pair is a mover in its own right.
+##
+##      IT IS A REAL BEHAVIOURAL CAUSE, NOT MERELY A WINDOW VALUE, and the knock-on chain is the whole
+##      of it: P1 leaves ATTACKING for STUNNED at t5, so `active_done` never fires, `recovery` and
+##      `chain` are never started, the t9 chain press is DROPPED by the empty `stunned` row, and P1 is
+##      hard-rooted (AC 14) from t6 to t11. `hero_state.stun` itself hashes at
+##      `[duration 7, elapsed 7, running false]` instead of the all-zero resting value it has carried
+##      since E1. All of it is pinned by name in test_recorded_sequence_exercises_all_transitions.
+##
+##   2. THE DEFLECT STAMINA PENALTY (AC 9's `attacker.stamina.add(-...)`). Staged by holding that ONE
+##      line off with the stun pair LEFT IN. MEASURED: the pair alone reaches
+##      e3a26c4a571cd12ed012726e334776dfd7186254c25453e73115fd995d3ea2df -- so the drain, too, is a
+##      mover in its own right, and the two causes are genuinely separable rather than one fact
+##      counted twice. `stamina_pool._current` is HASHED, and the drain moves P1's final reading to
+##      19.0. Its own mechanism (AC 10: `add(-x)`, NOT `spend()`, so the regen delay is NOT restarted
+##      and regen runs on t6) is pinned as arithmetic in
+##      test_golden_sequence_exercises_stamina_spend_and_regen -- a `spend()` implementation lands on
+##      a different final value, which is what makes AC 10 a golden-level fact here.
+##
+##   3. THE COLOUR-COUNTER PATH (AC 5) -- PREDICTED A NON-CONTRIBUTOR, MEASURED A NON-CONTRIBUTOR.
+##      With AC 9's complete write set IN and AC 5's complete write set (`stun.start`,
+##      `set_action_state(STUNNED)` and its early `return`) staged OUT, the hash was d5bcb7e6:
+##      UNCHANGED from the fully-shipped tree. The colour-counter path contributes EXACTLY ZERO,
+##      measured rather than argued from "the fixture never casts UNBLOCKABLE".
+##
+##   THE FULL REVERSE, which is what makes the pair attributable as a whole: with BOTH write sets
+##     staged out -- AC 5's pair-plus-return and AC 9's triple -- and EVERYTHING ELSE this story ships
+##     left in place (the renamed/added balance fields and their tick conversions, the widened
+##     `is_hitbox_active()` (AC 11), the step-3 STUNNED timer arm (AC 12), the fifth reset exception
+##     (AC 13), the STUNNED movement root (AC 14), both cast refusals (AC 15/AC 16), the per-tick
+##     `_iframe_open_at_step3` capture and the dodge rung itself (AC 7/AC 8)) -- the hash reproduced
+##     the INHERITED d9725092 EXACTLY. Every other member of this story is therefore a measured
+##     non-mover on this fixture, and the move belongs to AC 9's two causes alone.
+##
+##   THE COVERAGE ACCOUNTING (AC 17's option (a), coverage shift ACCEPTED). Named rather than
+##     absorbed, and the SECOND item is a correction to AC 17's own accounting block, proven by
+##     measurement rather than reasoned:
+##       LOST (1), named by AC 17: the t9 CHAINED-SWING coverage. `STUNNED` replaces `ATTACKING`
+##         immediately, so the chain window never opens and the t9 press is dropped. Equivalent
+##         coverage already exists and is unaffected by this story: test_action_state.gd's chain
+##         block (last-tick accept, post-close drop, cap, roll-cancel reset).
+##       LOST (2), NOT named by AC 17 -- REPORTED, not smoothed over: the t13 ORDINARY-BLOCK coverage,
+##         which is a CONSEQUENCE of loss (1) rather than an independent one. `CONTACTS[13]` carries
+##         `attack_index` 1, an index that only ever existed as P1's CHAINED swing; with the t9 press
+##         dropped, P1's `attack_index` never leaves 0, no dedupe record for swing 1 is opened, and the
+##         fact drops at `register_swing_hit`. Equivalent coverage: the entire ordinary-block ladder in
+##         test_block_deflect.gd, unaffected by this story. The loss is now ASSERTED as a loss (P2 at
+##         120.0 at t13 and t24) rather than left implicit.
+##       PRESERVED, as AC 17 predicted and measurement confirms: the t17 roll-cancel press (P1 is back
+##         to IDLE at t12, well clear of it), the t19/t20 iframe grace-tick boundary (P1 is ROLLING,
+##         not STUNNED, at both), and `roll_direction`'s `4-6/R7` fallback coverage.
+##       GAINED: `STUNNED` appears in the hashed record at all, on a fixture that had never exercised
+##         the state; a positive golden-level proof that a press against the empty `stunned` row is
+##         DROPPED, never buffered; the orphaned-window shape (`attack_phase()` resting at
+##         `active_done`); and AC 10's `add()`-not-`spend()` regen contract, visible as arithmetic.
+##
+##   NOT a cause: any snapshot SHAPE change (there is none -- no new key, no widened key); the two
+##     `.tres` authored values AC 1/AC 2 ship (`_golden_config` is built in-test, so `BC/R3` survives
+##     intact -- which is exactly why those values needed their own bespoke audit); the dodge rung,
+##     whose multiplier this fixture deliberately does not author because the path is unreachable here;
+##     `color_counter_stun_seconds`, for the same reason; and `_iframe_open_at_step3`, which is a
+##     per-tick transient excluded from `to_snapshot()` by the `_deflect_closed_this_tick` argument.
+## Previous golden d9725092fb420c855bf7ff1efef2510f1d285785729bbfa4feb3bf6ffa2fa014
+## (story 5-5, unblockable defense -- the record below).
+##
 ## RE-BASELINED BY STORY 5-5 (unblockable defense), dc2c9ffa -> d9725092, ONE CAUSE MEASURED IN BOTH
 ## DIRECTIONS. The story PREDICTED the golden would move exactly once, for exactly one reason -- the
 ## new `defense` per-player snapshot key (its AC 16) -- and predicted that a move for any OTHER
@@ -791,7 +888,7 @@ extends TestCase
 ##     colour copy, the landing intercept and the reset clear -- because the fixture never casts
 ##     mode ③ and pushes no charge-reach fact. They are proven in test_unblockable_defense.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "d9725092fb420c855bf7ff1efef2510f1d285785729bbfa4feb3bf6ffa2fa014"
+const GOLDEN := "d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1054,6 +1151,44 @@ func _golden_config() -> BalanceConfig:
 	c.block_damage_multiplier = 0.25
 	c.deflect_stamina_cost = 20.0
 	c.block_facing_arc_degrees = 180.0
+	# Story 5-6 (AC 17) — THE TWO LINES THAT CARRY THIS STORY'S RE-BASELINE, and without them BOTH new
+	# paths are hash-neutral degenerates rather than measured non-movers: `seconds_to_ticks` maps
+	# `<= 0.0` to 0, `TimingWindow.start(0)` never runs, and `add(-0.0)` changes nothing. MEASURED
+	# EXACTLY THAT WAY FIRST (see the re-baseline record above) — with the code in and these two lines
+	# absent, the hash reproduced the inherited `d9725092...` bit for bit.
+	#
+	# WHY THE FIXTURE REACHES AC 9 AT ALL: `CONTACTS[5]` is P1's swing landing on a front-facing,
+	# deflect-window-open P2 at t5, and it DEFLECTS by design (it has since 1-8). P1 is the attacker
+	# and a HERO, so AC 9's `HERO_INDEX` gate fires. Nothing was added to the tables to make this
+	# happen; the coverage was already there and this story gave it a consequence.
+	#
+	# 7 TICKS, coverage-not-feel like every value here and NOT the authored 0.4 s / 24 ticks. Chosen
+	# DISTINCT from every other count this fixture carries ({2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 15, 16,
+	# 17, 20, 22, 23, 24, 40, 60, 75, 90, 120, 180}) so a selector bug that read the wrong tick field
+	# lands on a different number and MOVES the hash rather than silently coinciding. It is also
+	# chosen SHORT on purpose: the stun starts at t5 and ends at t12, which leaves the t17 roll-cancel
+	# press, the t19/t20 iframe grace boundary and `roll_direction` coverage all intact.
+	c.deflect_stun_seconds = 7.0 / 60.0
+	# 18.0, and every constraint on it is a stamina-legibility one (the `attack_stamina_cost` comment
+	# above's discipline). P1: t1 attack 40 -> 34, regen t4 -> 35; t5 the deflect penalty and that
+	# tick's regen both land (step 4 then step 5) -> 35 - 18 + 1 = 18; regen t6-t16 -> 29; t17 roll
+	# spends 15 -> 14, delay t17-t19, regen t20-t24 -> 19 at the hashed final tick. NEVER CLAMPED at
+	# the 40.0 maximum on any tick (which would erase the penalty from the record entirely — the
+	# reason a smaller value was rejected) and never negative, and the t17 roll stays AFFORDABLE (29
+	# >= 15) so the roll coverage survives. 18.0 is distinct from every other stamina magnitude here
+	# (40 / 20 / 15 / 6 / 1.0).
+	#
+	# IT ALSO MAKES AC 10's `add()`-NOT-`spend()` CONTRACT VISIBLE TO THE HASH: `add()` does not
+	# restart `_regen_delay`, so regen continues uninterrupted from t6. A `spend()` implementation
+	# would suppress t5-t7 and land on a different final value — this line is what makes that
+	# distinction a golden-level fact rather than a unit-test-only one.
+	c.deflect_stamina_penalty = 18.0
+	# `color_counter_stun_seconds` and `dodged_unblockable_damage_multiplier` are deliberately NOT
+	# authored here, for `reshuffle_vulnerable_window_seconds`'s stated reason: this fixture's ONE
+	# recorded cast is `ModeKind.BASIC` (`_play_sequence`), never `UNBLOCKABLE`, so
+	# `_resolve_charge_landing` is never reached and neither value can decide anything. Authoring a
+	# duration for a path this sequence does not take would be coverage of nothing. AC 5 / AC 7 / AC 8
+	# are proven by test_unblockable_defense.gd instead, exactly as `5-5`'s `defense` key was.
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0
 	# Story 1-9 (gate finding 1-9/N1): authored so the t17 roll exercises the REAL
@@ -1210,8 +1345,23 @@ func test_recorded_sequence_exercises_all_transitions() -> void:
 	var atk := int(HeroState.ActionState.ATTACKING)
 	var roll := int(HeroState.ActionState.ROLLING)
 	var blk := int(HeroState.ActionState.BLOCKING)
-	assert_eq(p1_log, [[idle, atk], [atk, atk], [atk, roll], [roll, idle]],
-		"p1: attack, chain (self-transition), recovery roll-cancel, roll end")
+	# STORY 5-6 (AC 17): P1's LOG IS RE-DERIVED, NOT PATCHED TO MATCH. The t5 contact has DEFLECTED by
+	# design since 1-8; this story gives that deflect a consequence (AC 9), so P1 leaves ATTACKING for
+	# STUNNED at t5 instead of running its swing out. Two knock-on facts follow and both are visible
+	# here rather than absorbed silently:
+	#   * THE t9 CHAINED-SWING COVERAGE IS LOST. `STUNNED` replaces `ATTACKING` immediately, so
+	#     `active_done` never fires, the chain window never opens, and the t9 press is DROPPED by the
+	#     empty `stunned` table row. AC 17 names this as the one unconditionally lost item and accepts
+	#     it (option (a)); the equivalent coverage lives in test_action_state.gd's chain-window block
+	#     (last-tick accept, post-close drop, cap, roll-cancel reset), unaffected by this story.
+	#   * THE t9 DROP IS ITSELF NEW COVERAGE, and it is the GAIN AC 17 names: this fixture now proves
+	#     at golden level that a press against the empty `stunned` row is dropped, never buffered.
+	# The t17 roll-cancel is PRESERVED (P1 is back to IDLE at t12, well before it) — note it is now a
+	# roll from IDLE rather than from recovery, which the `idle -> rolling` pair below records.
+	var stunned := int(HeroState.ActionState.STUNNED)
+	assert_eq(p1_log, [[idle, atk], [atk, stunned], [stunned, idle], [idle, roll], [roll, idle]],
+		"p1: attack, DEFLECTED into STUNNED at t5 (5-6 AC 9), timer exit to IDLE at t12 (AC 12), "
+		+ "the t17 roll, roll end — and NO t9 chain, because the `stunned` row accepts nothing")
 	assert_eq(p2_log, [[idle, blk], [blk, idle], [idle, blk], [blk, idle], [idle, atk]],
 		"p2: two block spans (story 1-8) then the t15 attack (story 1-9) — release and press fire the same tick")
 
@@ -1228,12 +1378,32 @@ func test_golden_sequence_exercises_stamina_spend_and_regen() -> void:
 	var maximum := ms.p1.stamina.get_maximum()
 	var post_spend := readings[17 - 1]
 	var final := readings[TICKS - 1]
-	assert_eq(post_spend, 23.0,
-		"t17 roll spend: 38 - 15 (the two attack spends preceded it — E3-RG/R2)")
+	# STORY 5-6 (AC 17): RE-DERIVED, and the arithmetic now encodes THREE things instead of two — the
+	# spend, the regen, and the deflect PENALTY. Full derivation: t1 attack 40 -> 34, delay t1-t3,
+	# regen t4 -> 35; t5 the penalty (step 4) and that tick's regen (step 5) both land, 35 - 18 + 1 =
+	# 18; regen t6-t16 (11 ticks) -> 29 — UNCLAMPED throughout, which is what keeps the penalty on the
+	# record; t17 roll spends 15 -> 14, delay t17-t19; regen t20-t24 -> 19.
+	#
+	# THE SECOND ATTACK SPEND IS GONE and that is not an omission: the t9 press is dropped by the
+	# `stunned` row (see the transition pin above), so there is exactly ONE attack spend on P1's record
+	# now, not two.
+	#
+	# THE PENALTY'S OWN MECHANISM IS PINNED BY THE t6 REGEN, not merely by the magnitude: `add(-x)`
+	# does NOT restart `_regen_delay` (AC 10), so regen runs on t6. A `spend()` implementation would
+	# suppress t5-t7 and land the final reading three points lower — this arithmetic is what makes
+	# that a golden-level distinction.
+	assert_eq(readings[5 - 1], 18.0,
+		"t5: the deflect penalty (18) and that tick's regen (+1) both land — 35 -> 18 (5-6 AC 9/AC 10)")
+	assert_eq(readings[6 - 1], 19.0,
+		"t6: regen runs the very next tick — `add(-x)` does not restart the regen delay (AC 10); "
+		+ "a `spend()` implementation would suppress t5-t7 here")
+	assert_eq(post_spend, 14.0,
+		"t17 roll spend: 29 - 15 (ONE attack spend preceded it — the t9 press was dropped by the "
+		+ "`stunned` row, and the t5 penalty is in this number too)")
 	assert_true(post_spend < maximum, "stamina dipped below maximum after the t17 roll")
 	assert_true(final > post_spend, "regen visibly ran before the run ended")
 	assert_true(final < maximum, "pool left MID-REGEN at t24 — below maximum")
-	assert_eq(final, 28.0, "23 + 5 regen ticks (delay covers t17-t19, 1.0/tick t20-t24)")
+	assert_eq(final, 19.0, "14 + 5 regen ticks (delay covers t17-t19, 1.0/tick t20-t24)")
 
 
 ## Story 1-8 (supersedes the 1-5 hit/mana pin — the combat analogue of the stamina pin
@@ -1263,15 +1433,31 @@ func test_golden_sequence_exercises_block_and_deflect() -> void:
 	assert_eq(mana_readings[5 - 1], 5 * PASSIVE_PER_TICK,
 		"t5: a deflected contact generates NO MELEE mana (R-D4) — the passive faucet is untouched by it")
 	assert_eq(p2_stamina_readings[5 - 1], 20.0, "t5: deflect cost 20 paid AT LANDING (40 -> 20)")
-	assert_eq(hp_readings[13 - 1], 117.0, "t13: ordinary BLOCK — 12.0 chip x 0.25 = 3.0")
-	assert_eq(mana_readings[13 - 1], 12.0 + 13 * PASSIVE_PER_TICK,
-		"t13: a blocked hit is CONFIRMED — full flat mana ON TOP of 13 passive ticks")
-	assert_eq(hp_readings[TICKS - 1], 117.0, "t24: NON-FULL HP on record (no HP regen exists)")
+	# STORY 5-6 (AC 17): THE t13 BLOCK COVERAGE IS LOST, and it is asserted as a LOSS here rather than
+	# quietly deleted. This is a SECOND unconditionally lost item that AC 17's own accounting block
+	# does not name (it names only the t9 chain) — reported, not smoothed over, and MEASURED rather
+	# than reasoned: the t13 fact carries `attack_index` 1, which only ever existed as P1's CHAINED
+	# swing. With the t9 press dropped by the `stunned` row, P1's `attack_index` never leaves 0, no
+	# dedupe record for swing 1 is ever opened, and `register_swing_hit(1, ...)` returns false — so the
+	# fact drops at the dedupe rung, before damage, before `hit_landed` and before the mana
+	# confirmation. It is a consequence of the t9 loss, not an independent one.
+	#
+	# THE COVERAGE IT CARRIED IS NOT A HOLE: the ordinary-BLOCK path (facing arc, multiplier, the
+	# blocked hit still confirming for mana) is covered directly and unaffected by this story in
+	# test_block_deflect.gd, which owns that ladder. What this fixture still guards at golden level is
+	# the DEFLECT half (t5) — asserted above — plus, now, the dedupe rung's own refusal below.
+	assert_eq(hp_readings[13 - 1], 120.0,
+		"t13: the fact is DROPPED at dedupe — its `attack_index` 1 names a chained swing that the t5 "
+		+ "stun prevented from ever happening (5-6 AC 17, the second lost item)")
+	assert_eq(mana_readings[13 - 1], 13 * PASSIVE_PER_TICK,
+		"t13: a dropped fact is not a resolution — no melee mana, only the passive faucet")
+	assert_eq(hp_readings[TICKS - 1], 120.0,
+		"t24: P2 is UNTOUCHED on the hashed record — the deflect negated t5 and t13 never resolved")
 	# Story 3-5a: the t22 cast is the FIRST mana SINK this fixture has ever had, so the final
-	# reading is the accumulation MINUS the price. The t4/t5/t13 readings above are untouched —
-	# they all precede CAST_TICK, which is what keeps this pin's block/deflect subject intact.
-	assert_eq(mana_readings[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
-		"t24: one hit plus the passive accumulation, LESS the t22 cast's price")
+	# reading is the accumulation MINUS the price. Story 5-6: with no melee confirmation left on P1's
+	# record, that accumulation is now the passive faucet ALONE.
+	assert_eq(mana_readings[TICKS - 1], TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
+		"t24: the passive accumulation alone, LESS the t22 cast's price")
 	assert_eq(p2_stamina_readings[TICKS - 1], 21.0,
 		"t24: P2 MID-REGEN — 20, then its t15 attack spends 6 (E3-RG/R2) and restarts the "
 		+ "delay (t15-t17), regen t18-t24 -> 21; the hash encodes both spends and the regen")
@@ -1339,7 +1525,15 @@ func test_golden_sequence_exercises_per_phase_movement_and_lunge() -> void:
 		p1_vel.append(ms.p1.hero.velocity)
 		p2_vel.append(ms.p2.hero.velocity))
 	var lunge_speed := 2.0 / (7.0 / 60.0)
-	assert_eq(ms.p1.hero.attack_phase(), &"attack_done", "sanity: P1's swings are long over by t24")
+	# Story 5-6 (AC 17): `active_done`, not `attack_done`, and the difference is the ORPHANED SWING
+	# made visible. `STUNNED` replaced `ATTACKING` at t5 while `active` was still running, so step 3's
+	# ATTACKING arm never ran again and `recovery` was never started -- `attack_phase()` therefore
+	# falls to `_has_run(active)` instead of `_has_run(recovery)`. The claim this line makes is
+	# unchanged (P1 is carrying no live attack window at t24); the derived label for "no live window"
+	# is what moved.
+	assert_eq(ms.p1.hero.attack_phase(), &"active_done",
+		"sanity: P1 carries no live attack window at t24 -- the t5 stun orphaned `active` and "
+		+ "`recovery` was never started (5-6 AC 9)")
 	var lunge_dir := Vector3(LOCK_DIRS[0].x, 0.0, LOCK_DIRS[0].y)
 	assert_true(p1_vel[5 - 1].is_equal_approx(lunge_dir * lunge_speed),
 		"t5: P1's ACTIVE-phase velocity is the lunge ALONE (zero move intent), along the LOCKED "
@@ -1361,8 +1555,13 @@ func test_golden_sequence_exercises_passive_mana_regen() -> void:
 	_play_sequence(ms, func(_t: int) -> void: p1_mana.append(ms.p1.mana.get_current()))
 	assert_eq(p1_mana[1 - 1], PASSIVE_PER_TICK,
 		"t1: the passive rung ran on the very FIRST tick — no delay window (sealed, AC 4)")
-	assert_eq(p1_mana[TICKS - 1], 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
-		"t24 (hashed): P1's hit (12.0) plus 24 passive ticks at 1.25, LESS the t22 cast price")
+	# Story 5-6 (AC 17): P1's melee hit is gone from this record (see the block/deflect pin), so the
+	# reading is 24 passive ticks LESS the cast price. The ASYMMETRY against P2 below is what this
+	# assertion is actually for and it is UNWEAKENED -- P2 still carries its own melee confirmation
+	# from t20, so a faucet wrongly seated on the attacker path still shows here.
+	assert_eq(p1_mana[TICKS - 1], TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
+		"t24 (hashed): 24 passive ticks at 1.25, LESS the t22 cast price -- no melee hit survives "
+		+ "on P1's record once the t9 chain is stunned away")
 	# Story 3-5a: P2 never casts, so its reading is the UNSPENT accumulation. The asymmetry is now
 	# doing double duty — it still catches a faucet wrongly seated on the attacker path, and it
 	# additionally catches a cast that debited the wrong player.
@@ -1468,7 +1667,11 @@ func test_golden_sequence_exercises_the_recorded_cast() -> void:
 		"...and that slot is the hole, so the delivery has somewhere of its own to land (AC 4)")
 	assert_true(ms.p1.pending_draw.is_running,
 		"...with its window still running, so both new snapshot keys are non-idle in the hash")
-	assert_eq(ms.p1.mana.get_current(), 12.0 + TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
+	# Story 5-6 (AC 17): the accumulation is now the PASSIVE FAUCET ALONE -- P1's one melee
+	# confirmation was the t13 blocked hit, whose fact is dropped at the dedupe rung once the t5 stun
+	# prevents the chained swing that fact names. The claim this line makes is unchanged (the price
+	# came out of the accumulation); only the accumulation is smaller.
+	assert_eq(ms.p1.mana.get_current(), TICKS * PASSIVE_PER_TICK - CAST_MANA_COST,
 		"the PRICE was paid out of the accumulation (cause 3)")
 	var all: Array[StringName] = []
 	all.append_array(ms.p1.deck.to_array())

@@ -17,6 +17,11 @@ extends TestCase
 ## Vector2.DOWN default: a DOWN fact direction is dead ahead, UP is directly behind.
 
 
+## Story 5-6 (AC 9/AC 10): the deflected attacker's stun length and punitive stamina drain.
+const DEFLECT_STUN_TICKS := 11
+const DEFLECT_PENALTY := 13.0
+
+
 func _config(deflect_window_seconds := 4.0 / 60.0, deflect_cost := 8.0,
 		stamina_max := 50.0) -> BalanceConfig:
 	var c := BalanceConfig.new()
@@ -45,6 +50,13 @@ func _config(deflect_window_seconds := 4.0 / 60.0, deflect_cost := 8.0,
 	c.block_facing_arc_degrees = 180.0
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0
+	# Story 5-6 (AC 9/AC 10): the deflect's consequence for its ATTACKER. Both authored DISTINCT from
+	# every other count and magnitude this fixture carries ({2, 3, 4, 5, 6} ticks; 6.0 / 8.0 / 10.0 /
+	# 50.0 / 80.0) so a seat that read the wrong field lands on a different value rather than
+	# coinciding with a right one. `deflect_stamina_penalty` is deliberately LARGER than
+	# `deflect_stamina_cost` so the two can never be confused in an assertion.
+	c.deflect_stun_seconds = float(DEFLECT_STUN_TICKS) / TimingWindow.TICK_HZ
+	c.deflect_stamina_penalty = DEFLECT_PENALTY
 	return c
 
 
@@ -291,15 +303,28 @@ func test_repeated_fact_same_swing_after_block_damages_once() -> void:
 ## ---- R-N7: second swing inside one window, insufficient remaining stamina ---------------
 
 func test_second_swing_in_same_window_degrades_to_block_when_pool_short() -> void:
-	var ms := _make_match(_config(20.0 / 60.0, 30.0))  # 20-tick window, cost 30
+	var config := _config(20.0 / 60.0, 30.0)  # 20-tick window, cost 30
+	# STORY 5-6 (AC 9): THIS TEST NEEDS ITS ATTACKER BACK ON ITS FEET BY t9, so it authors a SHORT
+	# 2-tick stun instead of the file's 11. The t4 deflect now STUNS P1 (AC 9), and at the file's
+	# default length P1 would still be stunned at t9: the press would be dropped by the empty
+	# `stunned` row, swing 1 would never exist, and its t12 fact would drop at dedupe — the test would
+	# pass its first two assertions and measure NOTHING about R-N7.
+	#
+	# THE SUBJECT IS UNCHANGED AND SO IS EVERY NUMBER BELOW. R-N7 is a claim about the DEFENDER's pool
+	# being short on a second deflect inside one window; how quickly the attacker recovers between its
+	# two swings is fixture scaffolding, not the rule. The one visible difference is that swing 1 is
+	# now a FRESH swing from IDLE rather than a chain from recovery — `attack_index` still increments
+	# to 1, so the t12 fact addresses it exactly as before.
+	config.deflect_stun_seconds = 2.0 / 60.0
+	var ms := _make_match(config)
 	var deflects: Array = []
 	var hits: Array = []
 	_collect_deflects(ms, deflects)
 	_collect_hits(ms, hits)
 	# Block held t1-20 (window runs t1-20). Swing 0 (attack t1): active t4-7, deflected
-	# at t4 (50 - 30 = 20 left). Chain t9 -> swing 1: active t12-15; its t12 contact is
-	# INSIDE the still-open window but 20 < 30 — the spend fails and the contact
-	# degrades to an ordinary block (graceful, R-N7).
+	# at t4 (50 - 30 = 20 left), P1 stunned t4-t6 and IDLE from t7. Attack t9 -> swing 1:
+	# active t12-15; its t12 contact is INSIDE the still-open window but 20 < 30 — the
+	# spend fails and the contact degrades to an ordinary block (graceful, R-N7).
 	_play(ms, 13, {1: [&"attack"], 9: [&"attack"]}, [[1, 20]],
 		{4: [[0, 1, 0, Vector2.DOWN]], 12: [[0, 1, 1, Vector2.DOWN]]})
 	assert_eq(deflects, [[0, 1]], "first swing deflected")
@@ -307,6 +332,149 @@ func test_second_swing_in_same_window_degrades_to_block_when_pool_short() -> voi
 	assert_eq(ms.p2.hero.get_hp(), 98.5, "second swing degraded to a block (6.0 x 0.25)")
 	assert_eq(hits.size(), 1, "the degraded contact is a confirmed (blocked) hit")
 	assert_eq(ms.p1.mana.get_current(), 8.0, "and pays its mana")
+
+
+## ---- Story 5-6 (AC 9 / AC 10 / AC 11): the deflect's consequence for its ATTACKER --------
+##
+## The SECOND of `STUNNED`'s two authored inbound edges (the first is the colour-counter negation,
+## test_unblockable_defense.gd). `4-3b/R7`'s negative guard — deflecting a MINION stuns nothing —
+## sits directly below, RE-RUN UNEDITED as this story's own proof that the hero-only gate holds.
+
+## AC 9: a deflected HERO attacker is stunned for the authored duration and drained by the authored
+## penalty, both read inline from the injected balance (CONSTRAINT C). The DEFENDER is untouched
+## beyond the deflect cost it already paid.
+func test_a_deflected_hero_attacker_is_stunned_and_drained() -> void:
+	# REGEN OFF for this one, so the stamina assertion is the PENALTY and nothing else. With the
+	# file's default 1.0/tick the pool sits clamped at its maximum until the penalty lands and then
+	# regains a point in the same tick's step 5 -- true, but it would make this assertion read as an
+	# off-by-one rather than as the penalty. The regen INTERACTION is the next test's subject.
+	var config := _config()
+	config.stamina_regen_per_second = 0.0
+	var ms := _make_match(config)
+	var before := ms.p1.stamina.get_current()
+	_play(ms, 5, {1: [&"attack"]}, [[1, 10]], {5: [[0, 1, 0, Vector2.DOWN]]})
+	assert_true(ms.p1.hero.stun.is_running, "the deflected ATTACKER is stunned (AC 9)...")
+	assert_eq(ms.p1.hero.stun.remaining_ticks(), DEFLECT_STUN_TICKS,
+		"...for the authored deflect duration, converted through BalanceTicks (AC 1)")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...with the state write landing in the same breath")
+	assert_eq(ms.p1.stamina.get_current(), before - DEFLECT_PENALTY,
+		"...and drained by deflect_stamina_penalty — NOT deflect_stamina_cost, which is a different "
+		+ "field the DEFENDER pays (AC 2)")
+	assert_false(ms.p2.hero.stun.is_running, "the DEFENDER is not stunned...")
+	assert_ne(ms.p2.hero.action_state, HeroState.ActionState.STUNNED,
+		"...on either half: deflecting is the reward, not a cost")
+
+
+## AC 10, THE HALF A MAGNITUDE ASSERTION CANNOT SEE: the drain is `add(-x)`, not `spend(...)`, and
+## the two differ on exactly two observable points. Both are asserted, because either one alone would
+## pass against the wrong mechanism in some fixture.
+##   (i) AN UNAFFORDABLE PENALTY STILL APPLIES, floored at zero. `spend()` REFUSES outright when the
+##       amount exceeds the balance and changes nothing — so a stamina-starved attacker would escape
+##       the penalty entirely, the exact opposite of `E5-P/R1`'s intent.
+##  (ii) IT DOES NOT RESTART THE REGEN DELAY. Only `spend()` does. The penalty is a consequence, not
+##       a cost, so it moves the current balance and leaves the regen cadence alone.
+func test_the_deflect_penalty_is_a_punitive_drain_not_a_refusable_spend() -> void:
+	var no_regen := _config()
+	no_regen.stamina_regen_per_second = 0.0
+	var poor := _make_match(no_regen)
+	poor.p1.stamina.spend(poor.p1.stamina.get_current() - 1.0, 0)   # 1.0 left, far under the penalty
+	poor.drain_signals()
+	_play(poor, 5, {1: [&"attack"]}, [[1, 10]], {5: [[0, 1, 0, Vector2.DOWN]]})
+	assert_eq(poor.p1.stamina.get_current(), 0.0,
+		"an UNAFFORDABLE penalty still applies, floored at zero (AC 10) -- `spend()` would have "
+		+ "refused and left 1.0, letting a poor attacker escape the punish entirely")
+	# (ii) THE REGEN CADENCE, on the file's DEFAULT config (1.0/tick, 3-tick post-spend delay). The
+	# pool sits clamped at its 50.0 maximum until t5, where the penalty lands at step 4 and that
+	# tick's regen at step 5: 50 - 13 + 1 = 38, then 39 at t6. UNDER `spend()` BOTH READINGS WOULD BE
+	# 37.0 -- the spend would restart the 3-tick delay and suppress regen across t5-t7 -- so either
+	# assertion alone distinguishes the two mechanisms, and both are pinned.
+	var ms := _make_match()
+	_play(ms, 5, {1: [&"attack"]}, [[1, 10]], {5: [[0, 1, 0, Vector2.DOWN]]})
+	assert_eq(ms.p1.stamina.get_current(), 38.0,
+		"t5: the penalty (13) AND that tick's regen (+1) both land, off a pool clamped at 50")
+	_play(ms, 1)   # ONE further tick (`_play` counts ticks to run, not an absolute tick index)
+	assert_eq(ms.p1.stamina.get_current(), 39.0,
+		"t6: regen runs the very NEXT tick too -- the penalty did not restart the 3-tick regen "
+		+ "delay, which is what `add()` buys over `spend()` (AC 10); `spend()` reads 37.0 at both")
+
+
+## AC 11: THE ORPHANED-SWING HOLE, closed at the SOURCE. The stun replaces ATTACKING while the swing's
+## `active` window is still running, and that window is deliberately never early-stopped (`1-9/R3`) —
+## so before this story a hitbox query against it would still have gathered contact facts from a hero
+## the game was simultaneously punishing for that very swing.
+##
+## THE ASSERTION IS ON `is_hitbox_active()` BECAUSE THAT PREDICATE IS THE WHOLE GATE: it is the ONLY
+## question `match_runner.gd::_gather_contact_facts` asks before querying overlaps, and it has exactly
+## one consumer. A false predicate is the fact being dropped at the SOURCE — no fact is produced at
+## all, which is strictly stronger than a fact dropped downstream at dedupe.
+##
+## THE DEDUPE FACT IS RESTATED rather than relied on, because it is what would MASK a missing fix:
+## the deflected fact already consumed this swing's dedupe record for that target, so a second fact
+## from the orphaned window would be refused downstream anyway — against THAT target. The source-level
+## drop is what protects every OTHER target the orphaned window could still reach.
+func test_a_stunned_attackers_orphaned_active_window_reports_no_hitbox() -> void:
+	var ms := _make_match()
+	_play(ms, 5, {1: [&"attack"]}, [[1, 10]], {5: [[0, 1, 0, Vector2.DOWN]]})
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "precondition: stunned at t5")
+	assert_true(ms.p1.hero.active.is_running,
+		"precondition: the swing's ACTIVE window is STILL RUNNING (t4-7) — never early-stopped, "
+		+ "`1-9/R3` intact")
+	assert_false(ms.p1.hero.is_hitbox_active(),
+		"the orphaned window reports NO hitbox, so the runner never queries it and no further fact "
+		+ "is produced AT THE SOURCE (AC 11)")
+	assert_false(ms.p1.hero.register_swing_hit(ms.p1.hero.attack_index, 1, -1),
+		"...and the dedupe record for this swing/target was already consumed by the deflected fact — "
+		+ "restated so it is clear this test does NOT rely on it: dedupe protects only the target "
+		+ "already hit, while the source-level drop protects every other")
+
+
+## AC 11's control, and it is what makes the assertion above non-vacuous: on the very same fixture
+## with NO deflect, the same window at the same tick DOES report a live hitbox.
+func test_an_undeflected_attackers_active_window_still_reports_a_hitbox() -> void:
+	var ms := _make_match()
+	_play(ms, 5, {1: [&"attack"]})
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.ATTACKING, "no deflect, still ATTACKING")
+	assert_true(ms.p1.hero.active.is_running, "the same window at the same tick...")
+	assert_true(ms.p1.hero.is_hitbox_active(), "...reports a live hitbox (AC 11 gates on the STATE)")
+
+
+## M1 (5-6 fix pass, review finding, ACCEPTED + PINNED on the `2-3/R13` DEAD-velocity precedent):
+## the two `STUNNED` entry points root the hero on DIFFERENT ticks. The color-counter stun is
+## written inside `_resolve_actions` (step 3), strictly BEFORE that same player's step-3
+## `_resolve_movement` call, so AC 14's hard root takes effect the SAME tick the stun is entered —
+## rooted same-tick. The melee-deflect stun, by contrast, is written inside `_resolve_contacts`
+## (step 4), which runs strictly AFTER both players' step-3 `_resolve_movement` calls for that tick
+## — so a hero mid-swing keeps THAT tick's attack-lunge velocity for one full extra tick, and the
+## hard root only takes effect on the FOLLOWING tick's `_resolve_movement`. This is INTENTIONAL, not
+## a defect: zeroing velocity at the step-4 entry point would smear the rooting decision into a
+## THIRD function (`_resolve_contacts` reaching into a field `_resolve_movement` owns), and it is
+## invisible at 60 Hz — the same shape this codebase already accepts for `DEAD`'s one-tick carry
+## (`2-3/R13`, `test_round_over_freezes_resolution_until_reset` pins it the identical way: nonzero
+## velocity on the kill tick, zeroed the tick after). The color-counter entry is the ASYMMETRIC
+## sibling: it roots same-tick because step 3 (where it is written) runs BEFORE that tick's own
+## `_resolve_movement`, not because it is more careful — the ordering, not the mechanism, is what
+## differs.
+##
+## `attack_lunge_distance` IS AUTHORED NONZERO LOCALLY, ONLY HERE: the file's shared `_config()`
+## leaves it at its declared default (0.0, no lunge), which is why no other test in this file can
+## see this asymmetry — a zero lunge makes the residual velocity zero too, indistinguishable from an
+## already-rooted hero. A nonzero lunge is the only way to observe the carry at all.
+func test_a_melee_deflect_stun_carries_one_ticks_residual_lunge_velocity_then_zeroes() -> void:
+	var config := _config()
+	config.attack_lunge_distance = 3.0
+	var ms := _make_match(config)
+	_play(ms, 4, {1: [&"attack"]}, [[1, 10]], {4: [[0, 1, 0, Vector2.DOWN]]})
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"precondition: deflected and stunned on entry (t4), same fixture as the AC 9 test above")
+	assert_false(ms.p1.hero.velocity.is_zero_approx(),
+		"the ENTRY tick keeps this tick's attack-lunge velocity — step 4's stun write ran strictly "
+		+ "AFTER this tick's own step-3 _resolve_movement, so the hard root has not applied yet "
+		+ "(the 2-3/R13 shape, M1)")
+	_play(ms, 1)   # ONE further tick (_play counts ticks to run, not an absolute tick index)
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3.ZERO),
+		"...and is a literal zero on the very NEXT tick's _resolve_movement, once STUNNED is live "
+		+ "for that tick's own step 3")
 
 
 ## ---- D5 queue discipline (AC 2) ---------------------------------------------------------
@@ -475,6 +643,18 @@ func test_deflecting_a_minion_leaves_its_rhythm_exactly_where_an_undeflected_swi
 		"...and so is its COUNTDOWN, to the tick: nothing was frozen, extended or cut short")
 	assert_eq(deflected["count"], undeflected["count"],
 		"...and its swing counter, so the rhythm was not restarted either")
+	# STORY 5-6 (AC 9): THE ASSERTION THAT MAKES THE HERO-ONLY GATE FALL. The three above are about
+	# the UNIT, and a unit has no `ActionState` or `stun` field to enter -- so they stay green even
+	# against an implementation that dropped `attacker_index == HERO_INDEX` entirely, because that
+	# implementation would stun the OWNING HERO instead (`attacker` is the PlayerState either way).
+	# `4-3b/R7` is a claim about the minion's swing being unpunished, and punishing its owner would
+	# violate it just as surely.
+	assert_false(deflected["owner_stunned"],
+		"deflecting a MINION does not stun its OWNER'S HERO either (AC 9's `HERO_INDEX` gate) -- "
+		+ "`attacker` is the PlayerState for a unit-sourced fact too, so without that gate the hero "
+		+ "behind the minion would take the punish for a swing it never made")
+	assert_eq(deflected["owner_stamina"], undeflected["owner_stamina"],
+		"...and its owner's STAMINA is exactly where an undeflected swing leaves it: no penalty either")
 
 
 ## One unit swing against P2, deflected or not, reported as the unit's rhythm state a few ticks on.
@@ -496,4 +676,8 @@ func _rhythm_after_swing(deflect: bool) -> Dictionary:
 		"ticks": ms.p1.units.attack_ticks_at(0),
 		"count": ms.p1.units.attack_count_at(0),
 		"deflects": deflects.size(),
+		# Story 5-6 (AC 9): the OWNER's own state, so the hero-only gate is measurable from here.
+		"owner_stunned": ms.p1.hero.stun.is_running
+				or ms.p1.hero.action_state == HeroState.ActionState.STUNNED,
+		"owner_stamina": ms.p1.stamina.get_current(),
 	}

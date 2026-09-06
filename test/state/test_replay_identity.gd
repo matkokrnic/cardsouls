@@ -234,6 +234,16 @@ const HASHED: Array[String] = [
 ## emptied every tick; one inside advance, one immediately after.
 const PER_TICK: Array[String] = [
 	"match_state._queue", "match_state._contact_queue", "match_state._deck_deal_pending",
+	# Story 5-6 (AC 7): the dodge rung's OBSERVATION POINT, and it classifies PER_TICK on
+	# `hero_state._deflect_closed_this_tick`'s exact test rather than a weaker one. It is written at
+	# the top of step 3 on every tick that reaches step 3 and read only later within that same step,
+	# so no tick can observe a previous tick's value — write-before-read within every advance(),
+	# which is precisely what keeps it out of `to_snapshot()` with no determinism or replay hole
+	# (a replay recomputes it identically inside each tick before any consumer runs).
+	#
+	# IT IS THEREFORE NOT A FOURTH UNHASHED CROSS-TICK EXCLUSION: it is not cross-tick state at all.
+	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
+	"match_state._iframe_open_at_step3",
 	"hero_state._queue", "hero_state._deflect_closed_this_tick",
 	"hero_state._roll_iframe_closed_this_tick",
 	"mana_pool._queue", "orb_pool._queue", "stamina_pool._queue",

@@ -71,9 +71,16 @@ var attack_chain_window_ticks: int
 var deflect_window_ticks: int
 var roll_iframe_ticks: int
 var roll_duration_ticks: int
-## Converted like every duration, but DATA ONLY in E1 — nothing starts a stun window until
-## OPEN decision (a) resolves (see decision-log.md).
-var stun_ticks: int
+## Story 5-6 (AC 1/AC 6): NO LONGER DATA ONLY. OPEN decision (a) is RESOLVED and `5-6` is the
+## resolution — `_resolve_charge_landing`'s colour-counter branch (AC 5) starts a window with THIS
+## count, and `_resolve_contacts`' melee-deflect branch (AC 9) starts one with the sibling below.
+## RENAMED from `stun_ticks` in lockstep with `BalanceConfig.color_counter_stun_seconds`.
+var color_counter_stun_ticks: int
+## Story 5-6 (AC 1/AC 9): the melee-deflect stun in TICKS — the line directly above's precedent
+## verbatim, derived ONCE here and read INLINE at the one seat that starts the window (CONSTRAINT C).
+## This is also what test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of
+## any new `*_seconds` field: a stem-matched twin on this object.
+var deflect_stun_ticks: int
 ## Story 5-2 (AC 10): the mode ② chargeup, in TICKS. The `draw_replacement_delay_ticks` precedent
 ## exactly — derived ONCE here, read INLINE at the one seat that starts the window (CONSTRAINT C),
 ## and the authored `*_seconds` float never reaches `advance()`. A chargeup measured against a raw
@@ -119,7 +126,13 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.deflect_window_ticks = TimingWindow.seconds_to_ticks(config.deflect_window_seconds)
 	t.roll_iframe_ticks = TimingWindow.seconds_to_ticks(config.roll_iframe_seconds)
 	t.roll_duration_ticks = TimingWindow.seconds_to_ticks(config.roll_duration_seconds)
-	t.stun_ticks = TimingWindow.seconds_to_ticks(config.stun_seconds)
+	# Story 5-6 (AC 1): TWO plain conversions where there was one, on the `unblockable_*` family's
+	# exact idiom. Both are WINDOW DURATIONS, so `seconds_to_ticks` already clamps any non-zero
+	# authored value to a minimum of 1 tick; an authored 0.0 derives 0 ticks and `TimingWindow.start(0)`
+	# renders a window that never runs — a stun that ends on the tick it began. That degrade is defined
+	# rather than crashing, and the authoring audit is what keeps it out of the shipped `.tres`.
+	t.color_counter_stun_ticks = TimingWindow.seconds_to_ticks(config.color_counter_stun_seconds)
+	t.deflect_stun_ticks = TimingWindow.seconds_to_ticks(config.deflect_stun_seconds)
 	# Story 5-2 (AC 10): a PLAIN conversion, deliberately NOT one of the two clamped modulo
 	# divisors above — the chargeup is a WINDOW DURATION, and `seconds_to_ticks` already clamps any
 	# non-zero authored duration to a minimum of 1 tick. An authored 0.0 therefore derives 0 ticks,

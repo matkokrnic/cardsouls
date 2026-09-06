@@ -94,7 +94,22 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"stamina_accelerator_regen_step",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
-	"stun_seconds",
+	# Story 5-6 (AC 1/AC 3): `stun_seconds` RENAMED to `color_counter_stun_seconds` and joined by
+	# `deflect_stun_seconds` -- one duration per tier of the three-tier ladder that stuns. BOTH carry
+	# the `_seconds` suffix, so reflection half (b) independently demands stem-matched
+	# `color_counter_stun_ticks` / `deflect_stun_ticks` twins on `BalanceTicks`, and it would demand
+	# them even if this list had never been touched. Both also carry a BESPOKE authored `> 0.0` bound
+	# PLUS a directional `>` bound in test_balance_authoring.gd, whose `stun_seconds` exemption AC 4
+	# REMOVES: the field is no longer data-only, so a zero is no longer inert.
+	"color_counter_stun_seconds", "deflect_stun_seconds",
+	# Story 5-6 (AC 2/AC 3): the deflected ATTACKER's stamina penalty (distinct from the DEFENDER's
+	# `deflect_stamina_cost` above) and the dodge rung's damage multiplier. Neither carries the
+	# `_seconds` suffix, so half (b) leaves them alone -- a penalty and a multiplier are not
+	# durations. `deflect_stamina_penalty` carries a bespoke `> 0.0` bound in test_balance_authoring.gd
+	# (a zero silently disarms `E5-P/R1`); `dodged_unblockable_damage_multiplier` carries only a
+	# bespoke `<= 1.0` upper bound there, because 0.0 IS its ratified authored value and the `>= 0.0`
+	# half is exactly what the non-negative loop below already asserts -- cited rather than duplicated.
+	"deflect_stamina_penalty", "dodged_unblockable_damage_multiplier",
 	# Story 5-2 (AC 6/AC 10/AC 17/AC 18): the FOUR unblockable-initiation tunables. Listed here
 	# because reflection half (a) below fails otherwise -- which is the guard working: a new
 	# BalanceConfig tunable that nothing audits ships unaudited. Only ONE of the four carries the

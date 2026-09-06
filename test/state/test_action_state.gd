@@ -73,12 +73,20 @@ func _advance_until_idle(ms: MatchState) -> void:
 
 ## ---- STUNNED / CHARGING / DEAD guard (bite-verified both ways) --------------------------
 
-## Enumerates the transition table: E1 must have ZERO inbound STUNNED edges (entering
-## STUNNED would resolve OPEN decision (a) by accident) and zero inbound CHARGING edges
-## (reserved E5). The STUNNED row itself must exist as data (accepts nothing); CHARGING
-## must have no row at all (absent, not stubbed). Story 1-7 (D-3) extends the guard to
+## Enumerates the transition table: there must be ZERO inbound STUNNED edges and zero inbound
+## CHARGING edges (reserved E5). The STUNNED row itself must exist as data (accepts nothing);
+## CHARGING must have no row at all (absent, not stubbed). Story 1-7 (D-3) extends the guard to
 ## DEAD: row present, accepts nothing, and ZERO inbound table edges — DEAD is entered
 ## only by the step-8 resolution (a non-table path) and exited only by the debug reset.
+##
+## STORY 5-6 (AC 6) CORRECTS THIS DOC-COMMENT AND NOTHING ELSE HERE — the function body is
+## FUNCTIONALLY UNEDITED (a comment-only touch, stated rather than claimed byte-identical). The
+## stale line said entering STUNNED "would resolve OPEN decision (a) by accident". That decision is
+## now resolved deliberately, by `E5-P/R1`, and `STUNNED` has TWO inbound edges — but neither is a
+## TABLE edge, so every assertion below still holds unchanged, exactly as they hold for DEAD. The
+## POSITIVE half of the guard (that the two non-table entry points are exactly two, and where they
+## are) is the separate test directly beneath this one; this negative scan is joined by it, not
+## replaced.
 func test_table_has_no_inbound_stunned_charging_or_dead_edges() -> void:
 	var rows: Dictionary = HeroState.TRANSITION_TABLE
 	assert_true(rows.has(&"stunned"), "STUNNED row present (table data)")
@@ -95,6 +103,169 @@ func test_table_has_no_inbound_stunned_charging_or_dead_edges() -> void:
 				"inbound CHARGING edge forbidden until E5 (row %s, action %s)" % [row_key, action])
 			assert_ne(int(edges[action]), int(HeroState.ActionState.DEAD),
 				"inbound DEAD edge forbidden — death is a step-8 resolution outcome (row %s, action %s)" % [row_key, action])
+
+
+## STORY 5-6 (AC 6): THE POSITIVE HALF — the guard that REPLACES the old negative-only framing rather
+## than deleting it. The scan above proves `STUNNED` has no TABLE edge; on its own that is now a
+## MISLEADING guard, because `STUNNED` IS reachable and the table simply is not how. This test names
+## the exactly-two AUTHORED non-table entry points and pins the count, the same "positive enumeration
+## of a locked set, not merely an absence" shape `OBSERVATION_SEAMS` and `SHIPPED_INPUT_ACTIONS`
+## already use elsewhere in this suite.
+##
+## IT SCANS ALL OF `src/`, NOT JUST `match_state.gd`. The claim AC 6 makes is about THE WHOLE PROJECT,
+## and a future story could open a third entry point from anywhere under `src/` — a scan narrowed to
+## one file would not see it.
+##
+## COMMENTS ARE STRIPPED (the `_code_lines` idiom, test_replay_identity.gd's): `match_state.gd`'s own
+## negation-branch comment block MENTIONS this token in prose, and a scan that counted prose would
+## report three sites for two.
+##
+## BOTH CALL SITES ARE WRITTEN ON ONE LINE EACH TODAY, and that is worth stating because it is what
+## this line-based count relies on. A future formatter that split either call across lines would make
+## this test FAIL SAFE (undercounting to 1) rather than silently pass — a loud, fixable failure that
+## should not surprise the reader who hits it.
+func test_stunned_has_exactly_two_authored_non_table_entry_points() -> void:
+	var re := RegEx.new()
+	re.compile(r"set_action_state\(\s*HeroState\.ActionState\.STUNNED\s*\)")
+	var sites: Array[String] = []
+	for path in _gd_files("res://src/"):
+		var n := 0
+		for line in _code_lines(path):
+			if re.search(line) != null:
+				n += 1
+		if n > 0:
+			sites.append("%s x%d" % [path, n])
+	sites.sort()
+	assert_eq(sites, ["res://src/state/match_state.gd x2"],
+		"EXACTLY TWO authored inbound edges to STUNNED in all of src/, both in match_state.gd: the "
+		+ "colour-counter negation in `_resolve_charge_landing` (AC 5) and the melee deflect in "
+		+ "`_resolve_contacts` (AC 9). A third site anywhere under src/ fails here and must be "
+		+ "argued, not merely added — got %s" % [sites])
+
+
+## ---- STUNNED's own lifecycle (story 5-6, AC 12 / AC 14 / AC 15) --------------------------
+##
+## THE STATE IS FORCED HERE rather than produced by a deflect, and that is the shipped idiom for a
+## non-table entry point, not a shortcut: `test_contact_resolution.gd` forces DEAD the same way and
+## for the same reason — these tests are about what STUNNED DOES once entered, and building a whole
+## deflect to reach it would make them tests of `_resolve_contacts` instead. The two REAL entry paths
+## are proven where they live (test_block_deflect.gd for AC 9, test_unblockable_defense.gd for AC 5),
+## including that they read their tick counts inline from `balance_ticks` (CONSTRAINT C).
+
+const STUN_TICKS := 9
+
+
+func _stun(ms: MatchState, ticks := STUN_TICKS) -> void:
+	ms.p1.hero.stun.start(ticks)
+	ms.p1.hero.set_action_state(HeroState.ActionState.STUNNED)
+	ms.drain_signals()
+
+
+## AC 12: the timer arm is the exit, and it fires on the EXACT tick the window empties — one tick
+## per advance() (A1), never one early and never one late. Without this arm a stunned hero would sit
+## in STUNNED forever, because nothing else in `_resolve_actions` reads `stun` and its `match` has no
+## default arm.
+func test_a_stunned_hero_exits_to_idle_on_the_exact_tick_the_window_empties() -> void:
+	var ms := _make_match()
+	_stun(ms)
+	for i in STUN_TICKS:
+		assert_eq(ms.p1.hero.stun.remaining_ticks(), STUN_TICKS - i,
+			"one integer tick per advance() — never a float accumulator (A1)")
+		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+			"still STUNNED with %d ticks left" % [STUN_TICKS - i])
+		_advance(ms)
+	assert_false(ms.p1.hero.stun.is_running, "the window has emptied...")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"...and the SAME tick's step-3 arm returned the hero to IDLE (AC 12)")
+
+
+## AC 12's other half, stated as a NEGATIVE: NATURAL EXPIRY ONLY. Nothing this story adds cuts a
+## running stun short — not a press, not a contact, not another stun's arrival. Asserted by driving
+## every input this hero has at a stunned hero and measuring the countdown against an untouched
+## control: an absolute assertion ("still STUNNED") would pass against an implementation that
+## shortened the window without ending it.
+func test_nothing_cuts_a_running_stun_short() -> void:
+	var pressed := _make_match()
+	_stun(pressed)
+	var control := _make_match()
+	_stun(control)
+	for action: StringName in [&"attack", &"roll", &"block"]:
+		_advance(pressed, _intent([action], [action]))
+		_advance(control)
+	assert_eq(pressed.p1.hero.stun.remaining_ticks(), control.p1.hero.stun.remaining_ticks(),
+		"a stunned hero's countdown is exactly where an unpressed one leaves it — no early-stop "
+		+ "path exists (AC 12, the `1-9` precedent Ruling 3 reasserts)")
+	assert_eq(pressed.p1.hero.action_state, HeroState.ActionState.STUNNED, "and still STUNNED")
+
+
+## AC 15: STUNNED forbids attack, roll and block BY CONSTRUCTION — `transition_row()` maps it to the
+## `stunned` row, which is the empty dictionary, and a press with no entry in the row is DROPPED,
+## NEVER BUFFERED. The drop half is what needs asserting: a buffered press would fire on the exit
+## tick, which is exactly the failure this pins.
+func test_a_stunned_hero_refuses_every_table_action_and_buffers_none() -> void:
+	var ms := _make_match()
+	# FIVE ticks, not three, and the margin is load-bearing: step 3(a) runs the timer exit BEFORE
+	# step 3(b) reads the table row, so a press made on the EXIT tick lands on the `idle` row and is
+	# accepted — correctly, and exactly as `ROLLING`'s and `CHARGING`'s exits already behave. Keeping
+	# all three presses strictly INSIDE the window is what makes the drop claim below about buffering
+	# rather than about that boundary.
+	_stun(ms, 5)
+	assert_eq(ms.p1.hero.transition_row(), &"stunned", "the row is `stunned`...")
+	assert_eq((HeroState.TRANSITION_TABLE[&"stunned"] as Dictionary).size(), 0, "...and it is empty")
+	for action: StringName in [&"attack", &"roll", &"block"]:
+		_advance(ms, _intent([action], [action]))
+		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+			"`%s` pressed while STUNNED changes nothing" % [action])
+	_advance(ms)
+	_advance(ms)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"the window emptied with no press on the exit tick, so the hero is IDLE...")
+	_advance(ms)
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"...and STAYS idle on the next tick: none of the three presses was buffered")
+
+
+## AC 14: HARD-ROOTED. A literal zero, not a multiplier — so a full-magnitude move intent produces
+## exactly no velocity, and the proof is the CONTROL: the same intent on an IDLE hero moves it.
+func test_a_stunned_hero_is_hard_rooted() -> void:
+	var ms := _make_match()
+	var moving := _intent()
+	moving.move_dir = Vector2(1, 0)
+	_advance(ms, moving)
+	assert_true(ms.p1.hero.velocity.length() > 0.0, "control: an IDLE hero moves on this intent")
+	_stun(ms)
+	_advance(ms, moving)
+	assert_eq(ms.p1.hero.velocity, Vector3.ZERO,
+		"a STUNNED hero's velocity is a LITERAL zero on the same intent (AC 14) — not a scaled "
+		+ "value a retune could quietly soften")
+
+
+func _gd_files(root: String) -> Array[String]:
+	var out: Array[String] = []
+	var dir := DirAccess.open(root)
+	if dir == null:
+		return out
+	for f in dir.get_files():
+		if f.ends_with(".gd"):
+			out.append(root + f)
+	for d in dir.get_directories():
+		out.append_array(_gd_files(root + d + "/"))
+	return out
+
+
+## Code portion of each line (everything before the first '#'), so comments cannot false-positive.
+func _code_lines(path: String) -> Array[String]:
+	var out: Array[String] = []
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return out
+	while not f.eof_reached():
+		var line := f.get_line()
+		var hash_idx := line.find("#")
+		if hash_idx >= 0:
+			line = line.substr(0, hash_idx)
+		out.append(line)
+	return out
 
 
 ## ---- Exact-tick entry/exit --------------------------------------------------------------

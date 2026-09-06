@@ -37,10 +37,14 @@ enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING, DEAD }
 ## (= chain, gated by the chain window + attack_chain_length) and roll (roll-cancel).
 ## BLOCKING/ROLLING exit on release/expiry, which are not input edges.
 ##
-## STUNNED: row PRESENT but UNREACHABLE — zero inbound edges anywhere in E1. Entering
-## STUNNED would resolve OPEN decision (a) (attacker consequence on deflect, decision-log
-## Session 2026-07-22) by accident; stun stays data only. Guarded by the inbound-edge
-## enumeration test in test_action_state.gd.
+## STUNNED (story 5-6, AC 6): row PRESENT and REACHED — but STILL with zero inbound TABLE edges.
+## OPEN decision (a) (attacker consequence on deflect, decision-log Session 2026-07-22) is RESOLVED
+## by `E5-P/R1`, and `5-6` is the resolution: `STUNNED` is entered by exactly TWO direct
+## `MatchState.set_action_state` calls — the colour-counter negation inside `_resolve_charge_landing`
+## and the melee-deflect branch inside `_resolve_contacts` — which is the DEAD-entry precedent
+## exactly (a non-table path). The table itself is untouched, and the inbound-edge enumeration test
+## in test_action_state.gd still guards it, joined there by a POSITIVE enumeration pinning the two
+## authored non-table entry points at exactly two.
 ## CHARGING: reserved for E5 — no row, no inbound edge; deliberately absent, not stubbed.
 ## DEAD (story 1-7, D-3): row present, accepts nothing, zero inbound TABLE edges — entry
 ## is ONLY MatchState's step-8 resolution (a non-table path), exit is ONLY the D-1 debug
@@ -98,7 +102,10 @@ var move_speed: float          # injected (balance .tres in E3); tunable, not ha
 ## BLOCKING entry when the deflect cost is affordable (R-D1, story 1-8) and is read by the
 ## step-4 resolution with a +1 grace tick (R-N2); roll_iframe/roll_duration at ROLLING
 ## entry (1-9).
-## stun is owned and advanced but NEVER start()ed by any E1 path — see TRANSITION TABLE.
+## stun is owned and advanced here; story 5-6 (AC 5/AC 9) gives it its FIRST two start() sites —
+## `MatchState._resolve_charge_landing`'s colour-counter negation and `_resolve_contacts`' melee
+## deflect, both against the ATTACKER. Its exit is the step-3 timer arm (natural expiry only, no
+## early-stop path anywhere) plus the debug reset's fifth named exception. See TRANSITION TABLE.
 ## Durations are always injected by MatchState from balance_ticks at start() time
 ## (CONSTRAINT C) — HeroState never sees a BalanceTicks object.
 var windup := TimingWindow.new()
@@ -204,11 +211,22 @@ func reject_action(action: StringName, reason: StringName) -> void:
 
 
 ## Story 1-5 (N3): DERIVED accessor, no stored flag — same "phases are derived, not
-## stored" family as attack_phase(). True iff the attack active window is running, which
-## only happens during ATTACKING. Actor-side consumption (the runner gathering overlaps
+## stored" family as attack_phase(). Actor-side consumption (the runner gathering overlaps
 ## for state-flagged-active hitboxes) is 1-7 scope.
+##
+## STORY 5-6 (AC 11): WIDENED from bare `active.is_running`, and the added conjunct is what closes
+## the ORPHANED-SWING hole. The old comment's claim — "the active window is running, which only
+## happens during ATTACKING" — became FALSE the moment anything could interrupt a swing: AC 9 writes
+## `STUNNED` over `ATTACKING` at the instant a swing is deflected, and the `active` window keeps
+## ticking to its own expiry (the 1-9 discipline of never early-stopping a window). Between that
+## write and the window's expiry a hitbox query would gather contact facts from a hero the game is
+## simultaneously punishing for that very swing.
+##
+## STATED AS A PROPERTY OF `action_state`, NOT OF `STUNNED`, deliberately: the hitbox stops being
+## queried the instant the hero is no longer ATTACKING, whatever the reason — so any FUTURE
+## non-`ATTACKING` interrupt gets the same closure without a second edit here.
 func is_hitbox_active() -> bool:
-	return active.is_running
+	return active.is_running and action_state == ActionState.ATTACKING
 
 
 ## Story 1-8 (R-N2): the deflect window as step-4 resolution judges it — running, OR
