@@ -4,7 +4,7 @@ baseline_commit: a492bdacc5e6781813a9ad2f58e5befafb60ed95
 
 # Story 5.4: Orbs
 
-Status: review
+Status: done
 
 ## What this story supersedes
 
