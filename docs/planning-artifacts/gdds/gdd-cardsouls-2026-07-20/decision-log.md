@@ -8858,3 +8858,69 @@ test files. Commit 2, docs: the story file's Status -> `review`, Dev Agent Recor
 Results section (8/8, SMOKE PASS); `docs/playtest-log.md`'s operator-written "5-4" entry. Commit 3,
 docs: this entry. Commit 4, board: `5-4-orbs: ready-for-dev` -> `done`, `# Tier A` comment
 preserved. Nothing pushed; the operator reviews the log.
+
+## Session 2026-09-06 -- 5-5 close-out (Tier A)
+
+`5-5/R1` -- Mode 3 ships: same-colour negation inside an authored window (1.5 s provisional), card
+always consumed, small stamina cost (10 provisional), defender never rooted by the cast; window
+opens at cast, is consumed only by a successful negation, survives wrong-colour landings, expires
+silently.
+
+`5-5/R2` -- A negated landing pays NOTHING: no damage, no `hit_landed`, no orb grant -- the `5-4`
+grant contract is "a landing pays", and a negation is not a landing.
+
+`5-5/R3` -- EXACTLY ONE state-based refusal: `CHARGING`, reusing `REASON_UNBLOCKABLE_COMMITTED` --
+a chargeup is a committal attack and a commitment coverable by a defense is not a commitment.
+`ROLLING`/`BLOCKING`/`ATTACKING` remain castable. Measured inheritance: a `CHARGING` hero already
+cannot swing/roll/block (no `TRANSITION_TABLE` row) but CAN cast a basic card -- inherited from
+`5-2`, owner `5-6`, untouched here.
+
+`5-5/R4` -- The cast interrupts what is HELD, not what is in flight: `BLOCKING` -> `IDLE`
+(`5-2/R17` ratified, first real exercise); `ATTACKING`/`ROLLING` untouched -- the gate proved the
+unconditional form was a live defect (orphaned mobile hitbox; silently voided chargeup).
+
+`5-5/R5` -- New "defense" per-player snapshot key `[colour, remaining_ticks]`, key set 29 -> 30,
+golden re-baselined ONCE `dc2c9ffa` -> `d9725092`, one cause measured in both directions;
+`FORMAT_VERSION` stays 7; `defense_window`/`defense_color` classify HASHED.
+
+`5-5/R6` -- Legibility rides the widened `deflect_landed` (third argument: answered colour; melee
+sites pass the sentinel; spark tints to the answered colour). Seam family stays NINE -- the pin
+counts `connect_*` wrappers, not arity. Privacy: the negation already reveals the colour
+deductively; the tint only stops the cue lying.
+
+`5-5/R7` -- Sentinel guard (review fix, MED): `defense_color != NO_TELEGRAPH_COLOR` added to the
+negation guard -- the `inject_card_colors` totality check is `assert()`-backed and STRIPPED IN
+EXPORTED BUILDS (`5-1a`), so "closed at the seam" was debug-only; two degraded colours must not
+make a parry.
+
+`5-5/R8` -- Keycode collision (operator's eye, HIGH): `p2_cast_defense` authored on `L` == P1's
+roll key; Godot allows one physical key on two actions silently; moved to semicolon (keycode 59)
+and the CLASS killed by a permanent project-wide uniqueness guard in `test_deck_and_hand.gd`
+(generalising the debug-key scan). The gate had measured "L is free" against the card scheme only.
+
+`5-5/R9` -- Temporary binding contract: `p2_cast_defense` + one branch arm + its field + its
+action-string line = exactly what `5-7` deletes. Defense-above-confirm branch order is
+unobservable today (no prefix carries both cast actions) -- becomes a real decision only if `5-7`
+gives one prefix both.
+
+`5-5/R10` -- Smoke findings with owners: cards in hand uncoloured -- SECOND consecutive smoke
+(`5-4`, `5-5`), operator wants a provisional tint pending better UI -- decision seat E5 close-out
+inventory, elevated signal; defense feel reads as "the defender did nothing" + chargeup unreadable
++ attack/defense windows unclear -> retune/polish block; per-attack-type counter ideas
+(sweep/jump/thrust counters, ranges, auto-aim) -> `5-6` ladder scope talk. Basis works; "first make
+things, then make them pretty" is the operating rule.
+
+Accepted without change (review findings, no ruling needed): `deflect_landed` serving three
+mechanisms is a NAMED trade-off; mutation-table row-4 provenance corrected (7+3, not 9+1).
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C4 -> C3 (the decision-log commit precedes the board commit -- the
+promotion grep requires the log to already name the story). Commit 1, code + tests: the `src/state/`
+changes, `data/balance/balance_config.tres`, `src/actors/hero/telegraph_controller.gd`,
+`src/controllers/keyboard_controller.gd`, `project.godot`, every modified `test/state/` file, and
+the new `test_unblockable_defense.gd` + `.uid`. Commit 2, docs: the story file's Status -> `done`,
+Live Smoke Results section (10/10, SMOKE PASS, zero fix rounds), Change Log row; `docs/
+playtest-log.md`'s operator-written "5-5" entry (byte-identical, verified before this commit).
+Commit 3, docs: this entry. Commit 4, board: `5-5-unblockable-defense: ready-for-dev` -> `done`,
+`# Tier A` comment preserved. Nothing pushed; the operator reviews the log.
