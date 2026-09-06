@@ -8924,3 +8924,69 @@ Live Smoke Results section (10/10, SMOKE PASS, zero fix rounds), Change Log row;
 playtest-log.md`'s operator-written "5-5" entry (byte-identical, verified before this commit).
 Commit 3, docs: this entry. Commit 4, board: `5-5-unblockable-defense: ready-for-dev` -> `done`,
 `# Tier A` comment preserved. Nothing pushed; the operator reviews the log.
+
+## Session 2026-09-07 -- 5-6 close-out (Tier A)
+
+`5-6/R1` -- The three-tier ladder ships: colour counter = full negation + attacker stun; dodge =
+roll iframe open at the landing, damage times the authored `dodged_unblockable_damage_multiplier`
+(`0.0`) and zero orbs; unanswered = full damage + orbs unchanged. The GDD's ~20% is an
+occurrence-rate target, the multiplier is a knob, and any non-zero retune owes a `docs(gdd)`
+amendment.
+
+`5-6/R2` -- Stun is ONE system resolving open decision (a): colour-counter `1.0` s, deflect `0.4` s
+(direction colour > deflect pinned, not just positivity); deflect stamina penalty `12.0` via
+`StaminaPool.add()` not `spend()` (punitive drain always applies, no regen-delay restart). All
+values provisional.
+
+`5-6/R3` -- `STUNNED` forbids ALL actions -- table-driven three by the empty row, all THREE cast
+seats by explicit gates (the third, `_unblockable_refusal_reason`, added at review as finding H1
+against the story's own Non-Goals lock -- the lock protected `5-2` scope, not a hole contradicting
+the ratified ruling); hard root, literal zero; windows tick out, natural expiry only;
+`REASON_STUNNED` one shared constant across all three seats.
+
+`5-6/R4` -- The dodge rung's observation point is the START OF STEP 3 -- a roll pressed on the
+landing tick dodges on NEITHER slot, a previous-tick roll on BOTH; seat symmetry pinned by the
+four-case two-slot test, which also discharged the cut smoke flip item; the committed default
+`[0,1]` needs no flip for two-keyboard smokes.
+
+`5-6/R5` -- `is_hitbox_active()` gains "and `action_state == ATTACKING`" -- a stunned (or otherwise
+interrupted) hero's orphaned active window stops being queried at the source; stated as a property
+of `action_state`, closing future non-`ATTACKING` interrupts too.
+
+`5-6/R6` -- Fifth named reset exception: stun window + `STUNNED` clear in `_reset_player`; the
+reset seat's OWN contract (`IDLE` immediately, not via the next tick's timer arm) pinned by a
+direct-call test -- the public-path mutation stayed green (masked), the direct-call one goes red.
+
+`5-6/R7` -- Golden `d9725092` -> `d5bcb7e6`, ONE re-baseline; cause = AC 9's complete write set
+(stun window + state + stamina drain, the two sub-causes isolated separately); fixture authors
+coverage values (7-tick stun, 18.0 penalty); TWO lost coverage items accounted (t9 chain, and its
+consequence the t13 block resolution), equivalents live in `test_action_state.gd` and
+`test_block_deflect.gd`; gained: `STUNNED` in the hashed record; `FORMAT_VERSION` stays 7, key set
+unchanged.
+
+`5-6/R8` -- The melee-deflect stun carries ONE tick of residual lunge velocity (step 4 writes
+after that tick's movement) -- intentional, the `2-3/R13` DEAD-velocity precedent, pinned; the
+colour-counter entry roots same-tick.
+
+`5-6/R9` -- A double deflect-penalty in one tick is structurally unreachable (one active window
+per hero + the dedupe rung precedes the deflect branch) -- comment at the site, no speculative
+guard.
+
+`5-6/R10` -- Smoke findings with owners: PASS 8/8 no defects; deflect stun possibly a touch short
+= tuning note, retune block owns it; stun legibility (pose-hold, no dedicated clip) not assessed =
+retune/polish block.
+
+Process: the 5-6 code review ran as a subagent of the dev session rather than a fresh session
+(prompt defect, caught after the fact); findings were independently reproduced by hand and
+accepted; future dev prompts end at the report with HALT.
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C4 -> C3 (the decision-log commit precedes the board commit -- the
+promotion grep requires the log to already name the story). Commit 1, code + tests: `src/state/
+match_state.gd`, `src/state/hero_state.gd`, `src/state/resources/balance_config.gd`, `src/state/
+timing/balance_ticks.gd`, `data/balance/balance_config.tres`, and the nine modified `test/state/`
+files. Commit 2, docs: the story file's Status -> `done`, Live Smoke Results section (8/8 PASS, no
+defects), Change Log row; `docs/playtest-log.md`'s operator-written "5-6" entry (verbatim). Commit
+3, docs: this entry. Commit 4, board: `5-6-three-tier-ladder: ready-for-dev` -> `done`, `# Tier A`
+comment preserved. Nothing pushed; the operator reviews the log.
