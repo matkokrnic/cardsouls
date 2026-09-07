@@ -18,8 +18,9 @@
   call would have satisfied both the literal `while` shape and AC9's one-call-per-batch requirement
   — they were not actually in conflict. The underlying growth/no-reuse property is independently
   verified intact; this is a self-report rigor gap in future dev-pass write-ups, not a code defect.
-- **AC6(b)'s "one-word correction" claim (`unit_board.gd:303`) understates its own diff** — three
-  lines of `3-6/R2` citation commentary were also appended. Still comment-only, still satisfies AC7.
+- **AC6(b)'s "one-word correction" claim (`unit_board.gd:404-407`, moved from `:303` since this
+  entry was written) understates its own diff** — three lines of `3-6/R2` citation commentary were
+  also appended. Still comment-only, still satisfies AC7.
 
 ## Deferred from: readiness gate of 4-3a-minion-damage-and-death (2026-08-10)
 
@@ -325,6 +326,45 @@ operator's own 1.9. playtest note.
   corpse). **OWNER: the playtest block**, the only one of the four gaps with an explicit prior
   assignment (`4-5/R3`).
 
+## E5 residue (recorded at E5 close-out, 2026-09-07)
+
+Findings and retune items from the twelve E5 stories that had no durable home before this pass —
+each was previously reachable only by walking the decision log story by story.
+
+**Retune entries (feel calls, not defects; judge with a pad in hand):**
+
+- **Deflect stun (0.4 s) vs the full colour-counter stun (~1.0 s) — possibly too short a
+  gradation.** `5-6/R2` authored deflect stun at 0.4 s against the colour counter's 1.0 s;
+  `5-6/R10` flags the deflect value as possibly a touch short. Retune block.
+- **Stun legibility — pose-hold only, no dedicated clip, NOT ASSESSED.** `5-6/R10`. Retune/polish
+  block.
+- **Defense feel reads as "the defender did nothing."** `5-5/R10`. Retune/polish block.
+- **Chargeup unreadable.** `5-5/R10`. Retune/polish block.
+- **Charge audio is placeholder sine tones; cast-vs-deflect discrimination is marginal.**
+  `5-3/R6(c)`. Deferred to a real audio pass.
+
+**Other E5 items with no durable home:**
+
+- **`5-0a` diagonal strafe tie-break never resolves.** Review LOW, recorded only at
+  `decision-log.md:8267-8270` / `sprint-status.yaml:122`. Retune block.
+- **`5-0c` tint dispatch is a hardcoded name table; a 4th kind ships untinted with no test
+  failure.** `decision-log.md:8365-8366`. Accepted, no owner.
+- **`5-0c` tint test coverage is p1-only; p2 is reasoned-sound but unmeasured.**
+  `decision-log.md:8366`. Accepted, no owner.
+- **Attack/defense windows unclear.** `5-5/R10`. Retune/polish block.
+- **`5-3/R6(b)` — the strike stabs air; damage lands at roughly 8 m (attacker delivery).**
+  Post-E5/E6 playtest block.
+- **`5-3/R6(d)` — locomotion speed / walk-as-default / sprint-costs-stamina.** Retune block.
+- **Per-attack-type counter ideas (sweep/jump/thrust, ranges, auto-aim) — ORPHANED.** `5-5/R10`
+  handed these to the `5-6` ladder scope talk; the `5-6` close-out session (`decision-log.md:8928-8992`)
+  contains no ruling on them. No owner. Re-homed here as an E6-planning input.
+
+**Standing exception to the tuning-isolation fact (`5-3/R2`).** The repo's operating guidance says a
+tuning change is a one-line `.tres` edit with no test edit and no golden re-baseline (`BC/R3`). As
+of `5-3`, `unblockable_chargeup_seconds` is a **named exception**: `5-3/R2` records that retuning it
+is no longer a one-line `.tres` edit. This contradicts the standing fact for that one field only —
+do not assume it generalizes to other authored values without checking the specific ruling.
+
 ## Playtest block after E5+E6 -- checklist
 
 Per operator ruling `R-SPELL` (2026-09-01, decision-log E4 close-out session), the melee retune +
@@ -338,6 +378,10 @@ window opens, this checklist is the block's scope:
 - **Minions freeze in front of an obstacle** (named gap, above).
 - **`standard` priority gives a dead arena at 10v10** (named gap, above).
 - **AC 11 flicker cause** (named gap, above).
+- **Two-pad mode-2/mode-3 exchange (`5-7`) — NOT RUN, no second physical pad.**
+  `decision-log.md:9050-9052`; mirrored at `sprint-status.yaml:111` and
+  `5-7-pad-modes-2-3.md:282+`. The whole point of this item is two humans on two pads.
+- See also `## E5 residue` above for the E5 retune entries this block should also pick up.
 - The operator's own feel notes already recorded in `docs/playtest-log.md` -- read them there, not
   copied here.
 
