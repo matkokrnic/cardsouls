@@ -145,11 +145,12 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 **Goal.** The combat core of the vision — the RGB read exchange and its payout.
 
 **Key stories.**
-- Unblockable Initiation (Mode ②): chargeup + color telegraph (**shape + sound**, <0.5 s), stamina cost, generous auto-aim that does **not** absorb spacing (Reactor/Actor).
-- Unblockable Defense (Mode ③): instant, color-match, within the chargeup window.
-- **Three-tier outcome ladder** — no-answer/wrong-color → full dmg + attacker orb; dodge/leave-range → none; correct color → none + attacker stun ~1 s. Per-**color** fixed damage (balance `.tres`).
-- Orb resource: acquisition on land, per-color storage (no cap), HUD counters, all-color-reset hook (spent in E6).
+- Unblockable Initiation (Mode ②): chargeup + color telegraph (**shape + sound**, <0.5 s), stamina cost, generous auto-aim that does **not** absorb spacing (Reactor/Actor). (`5-2-unblockable-initiation`; telegraph presentation split into `5-3-telegraph-presentation`.)
+- Unblockable Defense (Mode ③): instant, color-match, within the chargeup window. (`5-5-unblockable-defense`.)
+- **Three-tier outcome ladder** — no-answer/wrong-color → full dmg + attacker orb; dodge/leave-range → none; correct color → none + attacker stun ~1 s. One fixed damage value for all three colors (balance `.tres`) — per-color damage was cut, `5-2/R10`. (`5-6-three-tier-ladder`.)
+- Orb resource: acquisition on land, authored per-color storage cap (`max_orbs_per_color = 5`, provisional, `5-4/R8`), HUD counters, all-color-reset hook (spent in E6). (`5-4-orbs`.)
 - Color-as-defense: Mode ③ requires a matching-color card in the 4-card hand.
+- Pad card-input and dual pad-mode select (mode ② initiation vs mode ③ defense on B/X). (`5-0b-pad-card-input` seats input; `5-7-pad-modes-2-3` ships modes 2/3.)
 - `FeatureFlags: unblockable, orbs` (degrade).
 - Headless tests: RPS outcomes, orb grant, three-tier resolution, timing via fixed `delta`.
 

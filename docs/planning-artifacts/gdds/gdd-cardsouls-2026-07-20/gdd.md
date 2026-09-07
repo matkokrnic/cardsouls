@@ -236,7 +236,7 @@ Inspired by Sekiro's Perilous Attacks. A card's color determines which unblockab
 
 | Defender response | Damage | Orb to attacker | Attacker punished? |
 | --- | --- | --- | --- |
-| No answer / wrong color | **Full** (per-**color** value, not per-card) | **Yes** (1 orb of color) | No |
+| No answer / wrong color | **Full** (one damage value for all three colors, not per-card — shipped `5-2/R10`) | **Yes** (1 orb of color) | No |
 | Dodge or leave range (~20% target) | None | No | No |
 | **Correct color** (~30–40% target) | None | No | **Stun ~1s** |
 
@@ -251,7 +251,7 @@ Clean escalation: **survive → survive and deny → survive, deny, and punish.*
 ### D. Orb Resource
 
 - **Acquisition:** *exclusively* by landing an un-countered unblockable → 1 orb of the attack's color. (Orbs are the tangible reward for winning the RPS read — and the reason the touchstone attacker must land an unblockable to afford the pitch.)
-- **Storage:** no cap; per-color counts shown in HUD. **On Pitch activation, all three colors reset to 0** (not just the spent color — TDD §8.2; easy to implement wrong). Prevents stockpiling; forces the "when to spend" decision.
+- **Storage:** authored per-color cap, `max_orbs_per_color = 5` (provisional — shipped `5-4/R8`); per-color counts shown in HUD. **On Pitch activation, all three colors reset to 0** (not just the spent color — TDD §8.2; easy to implement wrong). Prevents stockpiling; forces the "when to spend" decision.
 - **Usage:** *exclusively* to pay a Pitch Effect (Mode ④) cost. No other use.
 
 ### E. Pitch Zone (the signature bluff system — P3)
