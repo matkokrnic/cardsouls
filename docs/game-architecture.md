@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.6'
+version: '1.7'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED', 'A7 (2026-09-01): E4 close-out amendment flush — pooling seam measured, not built. Six stale pooling references corrected to describe what shipped (TargetingService + PlayerState board + src/actors/minions|projectiles/ + data/minions/, all live) and that the object-pool seam was DISCHARGED BY MEASUREMENT, not code (4-5/R1): Project Context technical drivers, D9 decision-table row, Asset-loading line, D9 section, Directory Tree pool/ entry, Entity-creation pattern row']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED', 'A7 (2026-09-01): E4 close-out amendment flush — pooling seam measured, not built. Six stale pooling references corrected to describe what shipped (TargetingService + PlayerState board + src/actors/minions|projectiles/ + data/minions/, all live) and that the object-pool seam was DISCHARGED BY MEASUREMENT, not code (4-5/R1): Project Context technical drivers, D9 decision-table row, Asset-loading line, D9 section, Directory Tree pool/ entry, Entity-creation pattern row', 'A8 (2026-09-07): E5 close-out amendment queue flush — observation-seam family EIGHT -> NINE (connect_orbs_changed, 5-4/R4) and the fourteen stale seam-count sites it left behind corrected; MatchState-signal direct-connect (card_cast_resolved, 5-3/R4) documented as a named exception per Option A']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -368,9 +368,9 @@ autoload is reserved for genuinely global, ownerless events only. It now carries
 consumer that wants an indicator to turn itself off runs its own presentation-local countdown from
 the OPEN event rather than reading state (3-6/R3).
 
-**Observation seam registry (2-4/2-6/3-6 amendment).** Consumers reach state exclusively through
-runner connect seams (`match_runner.gd`), never a state handle. There are now **eight**, plus the
-EventBus signals above:
+**Observation seam registry (2-4/2-6/3-6/5-4 amendment).** Consumers reach state through
+runner connect seams (`match_runner.gd`), never a state handle. There are now **nine**, plus the
+EventBus signals above and one named direct-connect exception (below):
 
 - **Four combat seams:** `connect_hero_action_state_changed`, `connect_hit_landed`,
   `connect_hero_action_rejected`, `connect_deflect_landed`.
@@ -383,6 +383,17 @@ EventBus signals above:
   (3-6/R7): the payload carries no slot index and a consumer is bound to one slot's channel, so a HUD
   is structurally incapable of reading the opponent's counts — card identity/order still never reach
   `to_snapshot()` (the 3-0c AC11 exclusion is untouched); this is a live push, never a state read.
+- **One orb seam (added in 5-4, story 5-4/R4):** `connect_orbs_changed` — per-slot, payload
+  `{red, blue, green}`, PRIMES ON CONNECT and is own-slot-only, same discipline as `connect_cards_changed`.
+
+- **Direct connect, NAMED EXCEPTION (5-3/R4).** A presentation consumer may subscribe straight to
+  a `MatchState` signal, with no runner seam and no bus relay, when all four hold: read-only, the
+  handler is per-slot guarded, no state handle is retained, and the fact is a *one-shot cue* with
+  no priming semantics (nothing to emit on connect). The sole instance is
+  `card_cast_resolved` -> `HeroCues.on_card_cast_resolved` (`match_runner.gd:501`). Priming
+  consumers (a value a HUD must show before the first change) may NOT use this form — they get a
+  seam, which is why `connect_orbs_changed` was built rather than a second direct connect
+  (`5-4/R4`). A third instance is a design change and the operator's call.
 
 Invariants unchanged: signal payloads only, never a state handle; signals are queued during
 `advance()` and drained afterwards.
@@ -523,9 +534,10 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
   relays `round_started` from the queued signal drain, same as `round_ended`. The single seat for
   clearing the round-over label is `HudRoot.on_round_started`. Deliberately **no prime-on-connect** for
   `round_started`/`round_ended`/the reshuffle event — each is an *event*, not a value.
-- **Eight `connect_*` seams, frozen count (2-6/R7, raised by 3-6/R2).** The debug `StateInspector`
-  displays only what the eight D5 connect seams already carry; per-tick timing-window countdown
-  streaming is deliberately deferred — it would firehose state internals through the queued-drain path.
+- **Nine `connect_*` seams, frozen count (2-6/R7, raised by 3-6/R2, raised again by 5-4/R4).** The
+  debug `StateInspector` displays only what the nine D5 connect seams already carry; per-tick
+  timing-window countdown streaming is deliberately deferred — it would firehose state internals
+  through the queued-drain path.
 
 ### Debug Tools (gated behind a `debug` flag)
 
