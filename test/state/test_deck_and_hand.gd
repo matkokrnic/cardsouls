@@ -445,10 +445,10 @@ func test_no_pitch_stage_or_other_reserved_card_action_ships() -> void:
 ## above cannot tell "correctly added" from "never added", so the pair is what makes the Input
 ## Map edit checkable in both directions — a lost or renamed bind fails here.
 ##
-## "BOTH PLAYERS" NAMES THE 3-5a CARD SCHEME ONLY, and the neighbouring asymmetry is INTENTIONAL:
-## `SHIPPED_INPUT_ACTIONS` below carries `p1_cast_unblockable` with no `p2_` twin, because 5-3
-## AC 19 ships that key as a deliberately TEMPORARY, P1-only affordance so a human eye can judge
-## the telegraph (`5-7` replaces it). It is not a missing bind for this test to grow an entry for.
+## "BOTH PLAYERS" NAMES THE 3-5a CARD SCHEME ONLY. Story 5-7 (AC 13) retired the two TEMPORARY,
+## single-player confirm keys that used to make `SHIPPED_INPUT_ACTIONS` below asymmetric
+## (`p1_cast_unblockable` from 5-3, `p2_cast_defense` from 5-5) -- the pad's B and X confirm those
+## two modes now, so the keyboard scheme is symmetric again and this test is unchanged by that.
 func test_card_scheme_input_actions_ship_for_both_players() -> void:
 	var missing: Array[String] = []
 	for prefix in ["p1", "p2"]:
@@ -478,20 +478,16 @@ func test_card_scheme_input_actions_ship_for_both_players() -> void:
 const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"debug_pause", "debug_step",
 	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
-	"p1_cast_confirm", "p1_cast_mode", "p1_cast_unblockable", "p1_debug_reset",
+	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
 	"p1_move_down", "p1_move_left", "p1_move_right", "p1_move_up", "p1_roll",
 	"p2_attack", "p2_block", "p2_card_1", "p2_card_2", "p2_card_3", "p2_card_4",
-	# Story 5-5 (AC 15): `p2_cast_defense` (physical key semicolon -- REVIEW FIX: authored on L,
-	# which collided with `p1_roll`'s own L; moved to the free semicolon key) joins the pinned set,
-	# in sorted position.
-	# TEMPORARY, and named for `5-7` to delete alongside `p1_cast_unblockable`. P2-ONLY, which is the
-	# MIRROR of that action's P1-only scoping rather than an inconsistency with it: P2 has no
-	# `cast_unblockable` and so can never INITIATE mode ②, making P1 structurally the attacker and P2
-	# the defender for any smoke of this mechanic — so only the DEFENDER side needs a key.
-	#
-	# The pin working exactly as `3-0c/R11` built it: an added action fails as loudly as a removed
-	# one, and the story that ships the consumer is the story that moves the list.
-	"p2_cast_confirm", "p2_cast_defense", "p2_cast_mode", "p2_debug_reset",
+	# Story 5-7 (AC 13): `p1_cast_unblockable` (5-3) and `p2_cast_defense` (5-5) LEAVE this list,
+	# because this is the story that retires their consumers -- the pad's B and X confirm modes ②
+	# and ③ now, so both TEMPORARY keyboard keys and their Input Map actions are deleted. The pin
+	# working exactly as `3-0c/R11` built it, run in reverse: the story that ships the consumer is
+	# the story that moves the list, and so is the story that retires it. This story adds NO action,
+	# so the set only shrinks.
+	"p2_cast_confirm", "p2_cast_mode", "p2_debug_reset",
 	"p2_move_down", "p2_move_left", "p2_move_right", "p2_move_up", "p2_roll",
 ]
 
@@ -514,11 +510,13 @@ func test_shipped_input_map_action_set_is_exactly_pinned() -> void:
 
 ## Story 5-5 (AC 15.1, REVIEW FIX — caught by the operator's eye, not by any prior gate): a
 ## permanent guard against a physical key silently backing TWO project actions. Godot allows this
-## without complaint — `p2_cast_defense` shipped on physical keycode 76 (`L`), already `p1_roll`'s
-## own key, so every P2 defense confirm would ALSO roll the P1 hero. The gate that authored
-## `p2_cast_defense` measured "L is free" against the CARD scheme only and never cross-checked the
-## combat rows; this test widens the scope to EVERY shipped action, project-wide, so the next new
-## key collides here instead of at the keyboard.
+## without complaint — `p2_cast_defense` once shipped on physical keycode 76 (`L`), already
+## `p1_roll`'s own key, so every P2 defense confirm would ALSO roll the P1 hero. The gate that
+## authored `p2_cast_defense` measured "L is free" against the CARD scheme only and never
+## cross-checked the combat rows; this test widens the scope to EVERY shipped action, project-wide,
+## so the next new key collides here instead of at the keyboard. `p2_cast_defense` itself is gone
+## as of `5-7` (its keyboard confirm was retired alongside `p1_cast_unblockable`), but the guard it
+## provoked stays — it is project-wide and permanent, not scoped to the action that first found it.
 ##
 ## `test_debug_step_pause.gd::test_debug_keys_collide_with_no_other_project_binding` is the
 ## PRECEDENT this generalises — that one scopes to `debug_pause`/`debug_step` against everything

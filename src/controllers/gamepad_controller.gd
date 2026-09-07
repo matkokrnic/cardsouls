@@ -45,6 +45,18 @@ const _LOCK_KEY := &"__lock"
 ## NOT a member of INTENT_ACTIONS.
 const _CAST_BASIC_KEY := &"__cast_basic"
 
+## Story 5-7 (AC 1/AC 7): the `_prev_held` keys the UNBLOCKABLE (B) and DEFENSE (X) commit edges are
+## remembered under -- `_CAST_BASIC_KEY`'s reasoning directly above, applied unchanged to the two
+## face buttons this story wires. Both are resolved into `InputIntent.card_mode`/`card_commit` here
+## and never carried as their own intent action, so neither is a member of INTENT_ACTIONS.
+##
+## B's key is DELIBERATELY SEPARATE from `&"roll"`, even though both read the same physical button
+## today: the two edges answer different questions (has the dodge been pressed vs has the
+## unblockable confirm been pressed) and a shared entry would make the answer to one depend on
+## whether the other had been consumed.
+const _CAST_UNBLOCKABLE_KEY := &"__cast_unblockable"
+const _CAST_DEFENSE_KEY := &"__cast_defense"
+
 var _device: int = NO_DEVICE
 var _profile: GamepadProfile
 ## Previous-tick held state per intent key. Raw device buttons have no engine-tracked
@@ -121,10 +133,16 @@ func sample() -> InputIntent:
 		# new press. Priming HELD forces every card input to be released and freshly pressed again
 		# after reconnect before it can arm or commit, matching the `_prev_held.clear()` an
 		# attack/block/roll RELEASE-before-press gets, just approached from the opposite prime.
+		#
+		# Story 5-7 (AC 7): the two NEW commit edges join that same priming set, for the identical
+		# reason and with no new rule -- a replug must not be able to spend a card via UNBLOCKABLE
+		# or DEFENSE any more than it can via BASIC.
 		_armed_slot = -1
 		_prev_l2 = 1.0
 		_prev_r2 = 1.0
 		_prev_held[_CAST_BASIC_KEY] = true
+		_prev_held[_CAST_UNBLOCKABLE_KEY] = true
+		_prev_held[_CAST_DEFENSE_KEY] = true
 		return intent
 	# Y SIGN (2-2 review D2), verified by content + test, NOT an accident: raw Y is read
 	# DIRECTLY, no inversion. JOY_AXIS_LEFT_Y is positive-DOWN, so a stick pushed UP reads a
@@ -149,6 +167,12 @@ func sample() -> InputIntent:
 	var l2_value := Input.get_joy_axis(_device, _profile.trigger_axis_left)
 	var r2_value := Input.get_joy_axis(_device, _profile.trigger_axis_right)
 	var basic_raw := Input.is_joy_button_pressed(_device, _profile.cast_basic_button)
+	# Story 5-7 (AC 1): B and X, read the SAME device-filtered way as every button above and through
+	# their own authored `GamepadProfile` fields -- no raw joypad index appears here. Y is read on no
+	# line of this file and has no field to read at all, which is what leaves mode ④ PITCH
+	# structurally unreachable from the pad (AC 2).
+	var unblockable_raw := Input.is_joy_button_pressed(_device, _profile.cast_unblockable_button)
+	var defense_raw := Input.is_joy_button_pressed(_device, _profile.cast_defense_button)
 
 	var result := resolve_card_tick(
 		cast_held,
@@ -158,6 +182,8 @@ func sample() -> InputIntent:
 		l2_value, _prev_l2,
 		r2_value, _prev_r2,
 		basic_raw, _prev_held.get(_CAST_BASIC_KEY, false),
+		unblockable_raw, _prev_held.get(_CAST_UNBLOCKABLE_KEY, false),
+		defense_raw, _prev_held.get(_CAST_DEFENSE_KEY, false),
 		_profile.trigger_threshold,
 		_armed_slot)
 
@@ -169,13 +195,18 @@ func sample() -> InputIntent:
 	intent.pressed[&"roll"] = result["roll_pressed"]
 	if result["card_commit"]:
 		intent.card_slot = result["card_slot"]
-		intent.card_mode = Enums.ModeKind.BASIC
+		# Story 5-7 (AC 15): the mode the fired confirm button actually selected, replacing the
+		# hardcoded BASIC `5-2/R15` named as this story's to fix. No new InputIntent field -- the
+		# three card fields already carry everything modes ①-③ need.
+		intent.card_mode = result["card_mode"]
 		intent.card_commit = true
 
 	_prev_held[&"attack"] = attack_raw
 	_prev_held[&"block"] = block_raw
 	_prev_held[&"roll"] = roll_raw
 	_prev_held[_CAST_BASIC_KEY] = basic_raw
+	_prev_held[_CAST_UNBLOCKABLE_KEY] = unblockable_raw
+	_prev_held[_CAST_DEFENSE_KEY] = defense_raw
 	_prev_l2 = l2_value
 	_prev_r2 = r2_value
 	_armed_slot = result["armed_slot"]
@@ -258,9 +289,7 @@ static func resolve_trigger_edge(value: float, prev_value: float, threshold: flo
 ## A fresh Basic press ALWAYS raises the commit, with `card_slot = armed_slot` even when that is
 ## -1 (nothing armed): the state-side `empty_slot` refusal AC 3 describes is reached, not
 ## swallowed here -- the keyboard's parity precedent exactly (`Hand.is_slot_empty` treats a
-## negative index as empty, so slot -1 lands on the same refusal a real empty slot does). B/X/Y
-## are true no-ops: this function has no parameter for them at all, so they cannot arm or commit
-## anything -- a no-op by omission, not a checked branch (AC 3, AC 9).
+## negative index as empty, so slot -1 lands on the same refusal a real empty slot does).
 ##
 ## AC 4/AC 5: attack/block/roll are SUPPRESSED on the returned `*_held`/`*_pressed` whenever
 ## `cast_held` is true this tick -- L1/R1/B are reassigned to card-slot/mode-select buttons and
@@ -268,6 +297,33 @@ static func resolve_trigger_edge(value: float, prev_value: float, threshold: flo
 ## suppression, so a button already held through `cast_button`'s release produces no press edge on
 ## exit (the edge needs a genuine false->true transition in the RAW reads, which a still-held
 ## button never gives), while a fresh press the tick after release registers normally.
+##
+## ---------------------------------------------------------------------------------------------
+## STORY 5-7 (AC 1, AC 2, AC 9, AC 15): the OTHER TWO CONFIRM BUTTONS, and the mode they carry.
+##
+## AC 1: B commits the armed slot as UNBLOCKABLE and X commits it as DEFENSE, both on the EXACT
+## `basic_pressed` shape above -- one PRESS-EDGE press that both selects and confirms, no separate
+## step, and a fresh press ALWAYS raises the commit even with `armed_slot == -1`, so the same
+## state-side `empty_slot` refusal is reached rather than swallowed here. That is Basic's own
+## review-fix precedent applied identically to both new buttons rather than re-decided.
+##
+## AC 2: Y is STILL a no-op BY OMISSION -- this function has no parameter for it, `GamepadProfile`
+## has no field defaulting to it, and `sample()` reads it on no line. Mode ④ PITCH (ordinal 3) is a
+## deliberate crash-on-reach in `_resolve_card_action`'s `_` catch-all, so "structurally incapable
+## of producing that value" is the guarantee that matters, not "a branch that declines to".
+##
+## AC 9: A/B/X pressed the SAME tick (unreachable on real hardware, reachable from a test) resolve
+## to AT MOST ONE commit, deterministically -- the golden/replay contract requires an answer
+## regardless of reachability. The three are checked in the face cluster's PHYSICAL LEFT-TO-RIGHT
+## order (X leftmost, A centre, B rightmost) and the last write wins, so a triple-press resolves to
+## B / UNBLOCKABLE. That is the SAME "last write wins -> rightmost" rule AC 2's four-slot arming
+## chord already resolves by, stated once and applied to both chords rather than a second,
+## differently-shaped tie-break. `card_commit` is one bool and `card_mode` one value, so at most
+## one commit can leave here by construction, not by the branch order being careful.
+##
+## AC 15: `card_mode` is RETURNED rather than hardcoded by the caller -- `sample()`'s
+## `Enums.ModeKind.BASIC` (the site `5-2/R15` named) now reads this key. BASIC remains the value
+## when nothing fired; it is only ever read under `card_commit`.
 static func resolve_card_tick(
 		cast_held: bool,
 		attack_raw: bool, prev_attack_raw: bool,
@@ -276,6 +332,8 @@ static func resolve_card_tick(
 		l2_value: float, prev_l2_value: float,
 		r2_value: float, prev_r2_value: float,
 		basic_raw: bool, prev_basic_raw: bool,
+		unblockable_raw: bool, prev_unblockable_raw: bool,
+		defense_raw: bool, prev_defense_raw: bool,
 		trigger_threshold: float,
 		prev_armed_slot: int) -> Dictionary:
 	var attack_pressed := attack_raw and not prev_attack_raw
@@ -284,10 +342,13 @@ static func resolve_card_tick(
 	var l2_pressed := resolve_trigger_edge(l2_value, prev_l2_value, trigger_threshold)
 	var r2_pressed := resolve_trigger_edge(r2_value, prev_r2_value, trigger_threshold)
 	var basic_pressed := basic_raw and not prev_basic_raw
+	var unblockable_pressed := unblockable_raw and not prev_unblockable_raw
+	var defense_pressed := defense_raw and not prev_defense_raw
 
 	var armed_slot := prev_armed_slot
 	var card_slot := -1
 	var card_commit := false
+	var card_mode := Enums.ModeKind.BASIC
 	if cast_held:
 		if l2_pressed:
 			armed_slot = 0
@@ -297,8 +358,18 @@ static func resolve_card_tick(
 			armed_slot = 2
 		if r2_pressed:
 			armed_slot = 3
+		# The three confirms, in physical left-to-right order (AC 9): X, A, B -- last write wins.
+		if defense_pressed:
+			card_slot = armed_slot
+			card_mode = Enums.ModeKind.DEFENSE
+			card_commit = true
 		if basic_pressed:
 			card_slot = armed_slot
+			card_mode = Enums.ModeKind.BASIC
+			card_commit = true
+		if unblockable_pressed:
+			card_slot = armed_slot
+			card_mode = Enums.ModeKind.UNBLOCKABLE
 			card_commit = true
 	else:
 		armed_slot = -1
@@ -307,6 +378,7 @@ static func resolve_card_tick(
 		"armed_slot": armed_slot,
 		"card_slot": card_slot,
 		"card_commit": card_commit,
+		"card_mode": card_mode,
 		"attack_held": attack_raw and not cast_held,
 		"attack_pressed": attack_pressed and not cast_held,
 		"block_held": block_raw and not cast_held,

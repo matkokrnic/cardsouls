@@ -73,9 +73,30 @@ extends Resource
 
 ## Story 5-0b (AC 3): the face button that commits a Basic cast — press-to-select-and-confirm in
 ## one, unlike the keyboard's separate `cast_confirm` key (no second button on the pad scheme).
-## B/X/Y are explicit no-ops this story (AC 3); their own commit fields arrive with their modes
-## (`5-7`, the E6 close-out story).
+## B/X were explicit no-ops at 5-0b and gained their own commit fields at `5-7` (directly below);
+## Y still has none, which is what keeps mode ④ PITCH structurally unreachable from the pad.
 @export var cast_basic_button: JoyButton = JOY_BUTTON_A
+
+## Story 5-7 (AC 1/AC 3): the OTHER two face buttons that commit a cast — B commits the armed slot
+## as UNBLOCKABLE (mode ②) and X commits it as DEFENSE (mode ③), each in ONE press, the
+## `cast_basic_button` shape directly above rather than a separate confirm step.
+##
+## DEDICATED FIELDS, not a reuse of `roll_button` (AC 3 leaves the choice to the dev pass and names
+## both precedents). `cast_basic_button` is the precedent followed: a field that carries the
+## CAST-MODE meaning, distinct from any live-play field. `roll_button` happens to default to the
+## same physical `JOY_BUTTON_B` today, but the two meanings are independent — re-authoring the
+## dodge button must move the dodge and NOT silently move the UNBLOCKABLE confirm with it, and a
+## reused field could not express that. It also keeps B and X symmetrical: X has no live-play field
+## to reuse at all, so one dedicated field each is the only shape that reads the same on both.
+##
+## PROVISIONAL, exactly as L3/A were at `5-0b` (`5-0b/R3`): the card-mode-select UX is still the
+## open high-P4 GDD question, and this is one more working scheme, not a settled one.
+##
+## Same discipline as every field on this resource: typed with the engine's `JoyButton` enum and
+## defaulted to a NAMED constant (2-2 review D1), so the raw joypad index lives EXACTLY ONCE as
+## authored data and never as a literal in `GamepadController`.
+@export var cast_unblockable_button: JoyButton = JOY_BUTTON_B
+@export var cast_defense_button: JoyButton = JOY_BUTTON_X
 
 ## Story 5-0b (AC 2): how far L2/R2 must be pushed before a trigger counts as PRESSED, as a
 ## fraction of full pull. Godot's `JoyButton` enum has no dedicated trigger entries — L2/R2 report
