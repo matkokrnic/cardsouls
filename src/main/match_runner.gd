@@ -341,8 +341,8 @@ func _ready() -> void:
 	_match_state.round_started.connect(_relay_round_started)
 	# Story 3-5b (AC 6): the vulnerable-window relay, wired here for the same reason and in the
 	# same shape as the two above — one line in _ready(), no new per-slot connect_ seam, so the
-	# frozen seven-seam family (2-6/R7) is untouched. State owns the signal; the bus is the
-	# runner's to reach.
+	# observation-seam family (seven at 2-6/R7, nine as of 5-4/R4) is untouched. State owns the
+	# signal; the bus is the runner's to reach.
 	_match_state.reshuffle_vulnerable_window_opened.connect(
 			_relay_reshuffle_vulnerable_window_opened)
 	# Story 2-4 (2-4/R3): the throwaway 1-3c debug overlay is RETIRED here — E2 replaces it
@@ -668,8 +668,9 @@ func _push_charge_reach_facts() -> void:
 
 
 ## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
-## runner-owned plain object — NOT an eighth observation seam and deliberately not a `connect_`
-## method (AC 13 pins that family at seven): no signal, no callback, no state handle. A replay is
+## runner-owned plain object — NOT an observation seam and deliberately not a `connect_`
+## method (AC 13 pins that family at seven then; nine as of 5-4/R4): no signal, no callback, no
+## state handle. A replay is
 ## started by assigning `replay_record` before this node enters the tree; persisting a record to
 ## `user://` and the operator control that starts and stops one are `3-0d`'s (`3-0c/R5`).
 ##
@@ -2332,7 +2333,8 @@ func _physics_process(delta: float) -> void:
 	#     CONTROLLER, not off state — the indicator shows what the player has SELECTED, which is
 	#     a controller fact that never enters the tick or the snapshot. Same
 	#     runner-polls-then-pushes-plain-values shape as the 3-0b window countdown (step 3b), so
-	#     this is not an eighth observation seam: no signal, no state handle, plain ints only.
+	#     this is not a new observation seam (family stays at nine, 5-4/R4): no signal, no state
+	#     handle, plain ints only.
 	#     OUTSIDE the `ticking` gate deliberately — the selection must stay visible and
 	#     responsive while the debug pause is held, exactly as camera follow (4b) does.
 	_huds[0].set_card_selection(_p1_controller.armed_slot(), Enums.ModeKind.BASIC)
@@ -2495,7 +2497,7 @@ func _physics_process(delta: float) -> void:
 		# 3c. Story 4-1 (AC 7): SPAWN one grey-box actor per unit record the board has gained. Read
 		#     off the state-owned COUNT right after advance(), the step-3b poll directly above in
 		#     shape and seat: no signal, no state handle held, no new `connect_*` -- so the
-		#     observation-seam family stays at EIGHT and needs no 3-6/R2-style amendment.
+		#     observation-seam family stays at NINE (5-4/R4) and needs no further amendment.
 		#
 		#     IDENTICAL LIVE AND REPLAY BY CONSTRUCTION (AC 10). This reads the board, not the
 		#     effect map and not the cast: whatever put the record there -- a live cast resolving
@@ -2519,7 +2521,7 @@ func _physics_process(delta: float) -> void:
 		#     record the board gained in the advance() above, then free the actor of every shot that
 		#     advance() ended (consumed by a contact, or expired against its 60 m budget). Same poll
 		#     shape and same seat family as 3b/3c/3c-bis/3d: plain board reads, no signal, no state
-		#     handle, no new `connect_*`, so the observation-seam family stays at EIGHT.
+		#     handle, no new `connect_*`, so the observation-seam family stays at NINE (5-4/R4).
 		#
 		#     SPAWN BEFORE FREE, and the order is load-bearing exactly as it is for units above: a
 		#     shot fired and consumed inside one advance() — a totem firing point-blank into a
@@ -2537,7 +2539,7 @@ func _physics_process(delta: float) -> void:
 		#
 		#     THE SAME SEAT AND SHAPE AS 3b AND 3c DIRECTLY ABOVE: a POLL right after advance(), plain
 		#     values only, no signal, no state handle held, no new `connect_*` — so the observation-seam
-		#     family stays at EIGHT and needs no `3-6/R2`-style amendment (`4-2/R15`'s own stated
+		#     family stays at NINE (5-4/R4) and needs no further amendment (`4-2/R15`'s own stated
 		#     consequence). Nothing here decides a target; the decision was made inside advance() by
 		#     TargetingService, and this reads the answer.
 		#
@@ -2589,7 +2591,7 @@ func _physics_process(delta: float) -> void:
 	#     own HUD -- a screen point, or null when the target is not visible in that viewport and the
 	#     marker must hide. Same runner-polls-then-pushes-plain-values shape as the 3-5a card
 	#     selection (step 1b) and the 3-0b window countdown (step 3b): no signal, no state handle,
-	#     no new `connect_*`, so the observation-seam family stays at EIGHT.
+	#     no new `connect_*`, so the observation-seam family stays at NINE (5-4/R4).
 	#
 	#     SEATED AFTER 4b, NOT BESIDE 1b, and the ordering is the point: `_screen_position`
 	#     unprojects through the SubViewport's FOLLOWER camera, and 4b is the line that gives that

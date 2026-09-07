@@ -60,8 +60,8 @@ signal deflect_landed(attacker_slot: int, target_slot: int, defense_color: int)
 ## DELIBERATELY UNCONSUMED IN E3, and that is the correct state rather than a gap: the story's
 ## Dev Notes rule that "a resolved cast queuing an unconsumed signal is the correct E3 state; a
 ## fake placeholder actor is not". Nothing binds it — there is NO runner connect_ seam and no
-## presentation consumer — so the seven locked observation seams are still seven and this is
-## NOT an eighth. The FIRST consumer inherits the seam obligation, exactly as action_rejected
+## presentation consumer — so the observation-seam family (seven then, nine as of 5-4/R4) is
+## untouched. The FIRST consumer inherits the seam obligation, exactly as action_rejected
 ## (1-4 -> 1-10) and deflect_landed (1-8 -> 1-10) each did.
 ##
 ## CARRIES THE CARD ID, NOT A CardEffect. The injected map is COSTS (AC 4), so the state layer
@@ -77,8 +77,8 @@ signal card_cast_resolved(slot: int, card_id: StringName)
 ## round_ended mechanism exactly (E3-RG/R3), because "this player's deck ran out" is a match-wide
 ## public fact rather than a per-entity state change.
 ##
-## NOT AN EIGHTH OBSERVATION SEAM. The frozen family (2-6/R7) is per-slot CONNECT-seam
-## observation and stays at SEVEN connect_* methods on the runner; this rides the bus, where
+## NOT A NEW OBSERVATION SEAM. The frozen family (2-6/R7, nine as of 5-4/R4) is per-slot
+## CONNECT-seam observation; this rides the bus, where
 ## round_started and round_ended already live, and the runner bridges it in _ready() with a plain
 ## relay and no new seam. The payload is the vulnerable player's SLOT INDEX and nothing else —
 ## no card, no count, no window handle.
@@ -873,7 +873,7 @@ func to_snapshot() -> Dictionary:
 ##
 ## This is DEBUG INSTRUMENTATION, NOT an eighth observation seam: the runner POLLS it after
 ## advance() and pushes the plain payload into DebugInstrumentPanel. No signal, no state handle,
-## no mutator — presentation receives VALUES, never internals, the same discipline the seven
+## no mutator — presentation receives VALUES, never internals, the same discipline the nine
 ## seams already follow (the standing "hands the state layer's internals to presentation"
 ## objection is answered by the return type: ints keyed by name). to_snapshot() is deliberately
 ## NOT extended, so the replay contract never learns this instrument exists.

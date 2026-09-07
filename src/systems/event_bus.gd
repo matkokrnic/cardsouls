@@ -30,6 +30,6 @@ signal round_started()
 ##
 ## OWNER-ONLY FACT ON AN OWNERLESS BUS, and that pairing is deliberate (E3-RG/R3): "P1's deck ran
 ## out" is a match-wide public event both viewports react to, not a per-entity state change, so
-## it belongs here rather than on a per-slot connect_ seam. The runner's seven connect_* seams
-## are UNCHANGED by this story — this is not an eighth.
+## it belongs here rather than on a per-slot connect_ seam. The runner's connect_* seams (seven
+## then, nine as of 5-4/R4) are UNCHANGED by this story — this is not a new one.
 signal reshuffle_vulnerable_window_opened(slot: int)
