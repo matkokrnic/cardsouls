@@ -8990,3 +8990,65 @@ files. Commit 2, docs: the story file's Status -> `done`, Live Smoke Results sec
 defects), Change Log row; `docs/playtest-log.md`'s operator-written "5-6" entry (verbatim). Commit
 3, docs: this entry. Commit 4, board: `5-6-three-tier-ladder: ready-for-dev` -> `done`, `# Tier A`
 comment preserved. Nothing pushed; the operator reviews the log.
+
+## Session 2026-09-07 -- 5-7 close-out (Tier B)
+
+`5-7/R1` -- B and X each commit on ONE dedicated `GamepadProfile` field of their own
+(`cast_unblockable_button`, `cast_defense_button`), not a reuse of `roll_button`: `cast_basic_button`
+is the precedent followed, a field carrying the CAST-MODE meaning distinct from any live-play
+field, so re-authoring the dodge button cannot silently move the UNBLOCKABLE confirm with it.
+Mapping is PROVISIONAL exactly as `5-0b/R3` left L3/A -- the card-mode-select UX is still the open
+high-P4 GDD question, and this is one more working scheme, not a settled one.
+
+`5-7/R2` -- The same-tick confirm chord (unreachable on real hardware, reachable from a test) ties
+to the PHYSICAL left-to-right face-cluster order X -> A -> B, last write wins, so a triple resolves
+to B / UNBLOCKABLE. One rule, shared verbatim with the four-slot arming chord's own tie-break
+(`5-0b`'s), rather than a second differently-shaped rule someone has to remember separately.
+
+`5-7/R3` -- Y is a no-op BY CONSTRUCTION, not by omission of a branch: no authored `GamepadProfile`
+button field may carry `JOY_BUTTON_Y`, so a read of Y is not expressible through the controller's
+one read route (`_profile.<x>_button`), and mode PITCH (a deliberate crash-on-reach stub) stays
+structurally unreachable from the pad. PITCH remains reachable from nowhere until its own E6 story
+revisits the guard.
+
+`5-7/R4` -- Both TEMPORARY keyboard confirms are deleted: `F` (`p1_cast_unblockable`, 5-3) and `;`
+(`p2_cast_defense`, 5-5), branch/field/action-string/Input-Map-action each, the four-part inventory
+both stories named. The keyboard is Basic-only again; modes ②/③ are pad-only from this story on.
+
+`5-7/R5` -- A B or X press with nothing armed still raises the commit carrying `card_slot == -1`,
+reaching the state-side `empty_slot` refusal rather than being swallowed in the controller -- the
+Basic review-fix precedent extended to both new confirms identically, not re-decided.
+
+`5-7/R6` -- OPERATOR RULING, hold-to-charge (`5-3/R6` debt carried forward): the operator wants the
+Sekiro hold-through-chargeup shape for mode ② -- hold the confirm through the telegraph rather than
+a single press. Press-edge (this story's shape) ships as the interim. Hold-to-charge is
+STATE-TOUCHING (an early release needs a `CHARGING` teardown `src/state/` does not have today) and
+gets its own Tier A story; slot assigned at E5 close-out / E6 planning. Early-release semantics are
+decided at that story's own scope conversation, not pre-empted here.
+
+`5-7/R7` -- Accepted review findings, one line each: LOW-1/LOW-2 (the Y-guard's untested evasion
+forms, and its blanket ban on any future Y binding) kept as-is until the E6 story that actually
+wires Y forces the question; LOW-4 (5-6's closed-story smoke prose naming actions this story
+deleted) is history and is not rewritten, per the standing rule that a closed story's record is
+never edited to stay current; LOW-5 (`>= 8` vacuity floor doubling as a field-count pin) is
+intentional, left as-is; LOW-3 (stale shipping-voice prose naming `p2_cast_defense` as still
+shipped) fixed in commit 1, comment-only, state harness re-run confirmed identical counts
+(720/5363/0).
+
+`5-7/R8` -- Process note: a subagent incident recurred (create-pass forks wrote to tracked files
+despite a read-only brief -- the second instance of this class of failure). Create and docs-only
+passes now run with NO subagents at all, for any story; the mechanism is replaced, not tightened
+further.
+
+### Close-out
+
+Two commits (Tier B precedent, no separate gate pass). Commit 1, code + tests + data: the seven
+files -- `src/controllers/gamepad_controller.gd`, `src/controllers/gamepad_profile.gd`,
+`data/gamepad_profile.tres`, `src/controllers/keyboard_controller.gd`, `project.godot`,
+`test/state/test_gamepad_controller.gd`, `test/state/test_deck_and_hand.gd` -- including the
+LOW-3 comment-only review fix, state harness re-run identical (720/5363/0). Commit 2, docs: the
+story file's Status -> `done`, Live Smoke Results section transcribed from the operator's
+playtest-log entry (six core items PASS, the optional two-pad exchange NOT RUN -- no second
+physical pad); `docs/playtest-log.md`'s operator-written "5-7" entry, byte-identical; this entry;
+board `5-7-pad-modes-2-3: ready-for-dev` -> `done`, `# Tier B` comment preserved. Nothing pushed;
+the operator reviews the log.

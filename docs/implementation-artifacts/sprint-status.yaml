@@ -105,10 +105,10 @@ development_status:
   5-4-orbs: done  # Tier A
   5-5-unblockable-defense: done  # Tier A
   5-6-three-tier-ladder: done  # Tier A
-  5-7-pad-modes-2-3: ready-for-dev  # Tier B
+  5-7-pad-modes-2-3: done  # Tier B
 
 story_notes:
-  5-7-pad-modes-2-3: "promoted for dev 2026-09-07 -- pad confirms for modes 2/3 plus deletion of the two temporary keyboard keys."
+  5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
   5-5-unblockable-defense: "done 2026-09-06, Tier A close-out complete (mode 3 dispatch/window/negation/reset per 5-5/R1-R10, golden dc2c9ffa -> d9725092/30-key set (defense), smoke PASS 10/10, decision-log session 5-5 close-out)."
   5-4-orbs: "done 2026-09-06, Tier A close-out complete (orb grant/reset/ninth-seam/cue per 5-4/R1-R8, smoke PASS 8/8, decision-log session 5-4 close-out)."

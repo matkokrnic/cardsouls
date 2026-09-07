@@ -299,3 +299,10 @@ smoke proalzi sve, prikazuju se pikupljeni orbovi igracu, orbovi se zarade uspje
 5-6:
 1 obrana bojom stuna napadaca 2 kriva boja ili ne odgvoreno proupsut da slete amiljsne posljedice 3 dodge moze potpuno izbjeci pirmanje teti i zaradu orba portoivniku cak i u arngeu ako je dobro tajmiran 4 deflect kaznjaava, ali mi se mrvicu prekrakto mozda cini duljina sutna nisam siguran 5 stunan igc ne moze nista 6 chargeup odbacija igarti kartice u modu 1 7 minioni se ne zamrzavaju na deflect 8 fps stabilan
 
+5-7:
+## 2026-09-07 — 5-7 pad modovi 2/3 (živi smoke, pad, flip [0,3])
+Sve jezgrene stavke PASS: L3+B = unblockable chargeup s pada (prvi put), L3+X = defense cast
+(karta/stamina/cue), Y ne radi ništa, supresija attack/block/roll pod L3 i sve živo na release,
+F i ; mrtvi, fps stabilan.
+Dvopadna razmjena nije odrađena (nema drugog pada) — zapisano kao izostanak.
+

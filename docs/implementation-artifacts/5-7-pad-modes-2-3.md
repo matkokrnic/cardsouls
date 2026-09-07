@@ -4,7 +4,7 @@ baseline_commit: ce10b96f01a2e55e153b3b0ae7a1b6a8f6330785
 
 # Story 5.7: Pad Modes ②③
 
-Status: ready-for-dev
+Status: done
 
 ## What this story inherits and supersedes
 
@@ -279,6 +279,23 @@ takes the i-th connected joypad):**
    halves of the exchange have been driven by a pad in the same live pass; run it only if two
    physical pads are available, and record its absence rather than skip it silently if not.
 
+## Live Smoke Results
+
+Transcribed from the operator's `docs/playtest-log.md` entry, 2026-09-07 ("5-7 pad modovi 2/3,
+živi smoke, pad, flip [0,3]"):
+
+**Core (single pad) — all six items PASS:**
+
+1. Held-L3, press B — the first PAD-TRIGGERED mode ② UNBLOCKABLE chargeup. PASS.
+2. Held-L3, press X — the DEFENSE cast's new input edge. PASS.
+3. Held-L3, press Y — no-op, nothing happens. PASS.
+4. Suppression regression (attack/block/roll suppressed under L3, live again on release). PASS.
+5. Both retired keyboard confirms are dead (`F` and `;` produce no effect). PASS.
+6. FPS stable throughout. PASS.
+
+**Optional (two pads, item 7): NOT RUN — no second physical pad was available.** Recorded as an
+absence per the smoke plan's own instruction, not silently omitted.
+
 ## Open Questions (left to the gate / dev pass)
 
 - **Test file placement**: extend `test/state/test_gamepad_controller.gd` in place (the file
@@ -375,8 +392,155 @@ takes the i-th connected joypad):**
 
 ### Agent Model Used
 
+Claude Opus 4.8 (repo commit-trailer constant; see project-context.md "Commit trailer").
+
 ### Debug Log References
+
+- Suite at OPEN (before any edit), full `test/run_all.sh`: `712 tests, 0 failed, 5291 assertions`
+  + 55 integration tests, `ALL TESTS PASSED`.
+- Suite at CLOSE, full `test/run_all.sh`: `720 tests, 0 failed, 5363 assertions` + 55 integration
+  tests, `ALL TESTS PASSED`. (+8 state tests = 9 added, 1 retired; `PROC/R1` cadence honoured — the
+  full suite ran exactly twice, and the four mutation proofs below ran the state harness only.)
+- Golden measured explicitly at both ends with an out-of-repo scratchpad script that instantiates
+  the shipped `test_determinism.gd` fixture and prints its own `_run()`; see Golden Prediction below.
+- Suite re-run after the close-out review fix (LOW-3, comment-only rewrite of the stale
+  `p2_cast_defense` prose at `test_deck_and_hand.gd:511-517`): `720 tests, 0 failed, 5363
+  assertions` + 55 integration tests, `ALL TESTS PASSED` — identical counts, as expected for a
+  comment-only change.
 
 ### Completion Notes List
 
+**AC-by-AC coverage**
+
+- **AC 1** — `GamepadProfile.cast_unblockable_button` (`JOY_BUTTON_B`) and `cast_defense_button`
+  (`JOY_BUTTON_X`) are read device-filtered in `sample()` and resolved in `resolve_card_tick()` on
+  `basic_pressed`'s exact press-edge shape (no hold, no separate confirm). The EXPLICIT NEGATIVE is
+  covered: a fresh B or X press with `armed_slot == -1` still raises `card_commit` carrying
+  `card_slot == -1`, so the state-side `REASON_EMPTY_SLOT` refusal is reached rather than swallowed
+  (`test_resolve_card_tick_mode_confirms_commit_empty_slot_rather_than_swallow`). Behaviour proven
+  by `test_resolve_card_tick_b_commits_unblockable_and_x_commits_defense`.
+- **AC 2** — Y remains a no-op BY OMISSION: no `GamepadProfile` field, no `resolve_card_tick`
+  parameter, no read in `gamepad_controller.gd`. The retired 5-0b source-scan is REPLACED, not
+  narrowed, by `test_no_authored_button_maps_to_y_so_pitch_is_structurally_unreachable`, which
+  proves the property BY CONSTRUCTION (`3-0d/R20`): the controller reads buttons through exactly
+  one route, `_profile.<x>_button`, so if no authored button field on either the defaults or the
+  shipped `.tres` equals `JOY_BUTTON_Y`, a read of Y is not expressible and `card_mode` can never
+  become `PITCH`. The old inline-literal scan is kept as a cheap second net, narrowed to Y. A
+  vacuity guard asserts the field scan really found >= 8 button fields.
+- **AC 3** — DEDICATED fields (dev call, recorded below).
+- **AC 4** — B's new meaning lives only inside the `cast_held` branch;
+  `test_mode_confirms_do_nothing_outside_cast_mode` pins that with B physically down the tick after
+  release: no commit, and `roll_pressed` fires — the 5-0b roll escape unchanged.
+- **AC 5** — X had no prior field or read (verified by grep before the edit); nothing to suppress
+  or preserve. Covered incidentally by the same tests as AC 1.
+- **AC 6** — `test_mode_confirm_exit_edge_sequences`, the SAME shape as
+  `test_resolve_card_tick_exit_edge_sequences`: held-through-entry, held-through-exit-and-re-entry,
+  and release-then-fresh-press, run over both buttons.
+- **AC 7** — both new `_prev_held` keys join the neutral/no-device priming set (primed HELD, not
+  cleared). `test_replug_priming_covers_the_new_commit_edges` drives the real `sample()` neutral
+  path (reachable headless — the harness has no joypad), reads the primed values back, and feeds
+  them into the decision to show a replug with L3 + every confirm button down commits nothing.
+- **AC 8** — no suppression rule added or changed;
+  `test_mode_confirms_add_no_suppression_rule` asserts attack/block/roll are still all suppressed
+  on the very tick a B press commits mode ②, and A's BASIC path is asserted unchanged in AC 1's test.
+- **AC 9** — tie-break chosen and pinned (dev call, recorded below).
+- **AC 10** — no arming input added; `test_arming_chord_is_untouched_by_the_new_confirm_buttons`
+  re-runs 5-0b's four-input chord with B and X ALSO down and still gets slot 3.
+- **AC 11** — `project.godot` diff is exactly two deletions, both action blocks whole, nothing else
+  moved (verified on the diff).
+- **AC 12** — `keyboard_controller.gd` lost both branches, both fields (`_cast_unblockable`,
+  `_cast_defense`), and both `_action(prefix, ...)` lines, plus the now-stale prose that named them.
+  The HOLD/PRESS/RELEASE sequence and the surviving `_cast_confirm` BASIC branch are unchanged.
+- **AC 13** — `SHIPPED_INPUT_ACTIONS` lost both entries and their explanatory comments; the two
+  neighbouring tests stay green unedited.
+- **AC 14** — `test_no_physical_key_backs_two_project_actions` green; this story adds no Input Map
+  action, and the set only shrank.
+- **AC 15** — `sample()`'s hardcoded `Enums.ModeKind.BASIC` is gone; `card_mode` is now returned by
+  `resolve_card_tick()` and written from `result["card_mode"]`. No new `InputIntent` field.
+- **AC 16** — `src/state/` untouched; no new `BalanceConfig`/`FeatureFlags` field, no snapshot key.
+  Touched files are exactly the seven named in Project Structure Notes.
+- **AC 17** — see Golden Prediction below.
+
+**THE THREE OPEN DEV CALLS**
+
+1. **AC 3 — DEDICATED `GamepadProfile` fields for B and X**, not a reuse of `roll_button`.
+   Reasoning: `cast_basic_button` is the precedent that fits — a field carrying the CAST-MODE
+   meaning, distinct from any live-play field. `roll_button` and `cast_unblockable_button` happen to
+   default to the same physical `JOY_BUTTON_B` today, but the two meanings are independent:
+   re-authoring the dodge button must move the dodge and NOT silently move the UNBLOCKABLE confirm
+   with it, which a reused field cannot express. It also keeps B and X symmetrical — X has no
+   live-play field to reuse at all, so one dedicated field each is the only shape that reads the
+   same on both. Cost: one extra `.tres` property whose default duplicates `roll_button`'s index.
+   The `attack_button`/`block_button` reuse precedent was rejected because those buttons are reused
+   for ARMING (a different question), whereas this is a second, independent MEANING for the same
+   button in a different mode.
+2. **AC 9 — the confirm chord resolves to the PHYSICAL RIGHTMOST face button: B / UNBLOCKABLE.**
+   The three confirms are checked in face-cluster left-to-right order (X, A, B) with last-write-
+   wins, which is the SAME rule AC 2's four-slot arming chord already resolves by — one rule stated
+   once and applied to both chords, rather than a second differently-shaped tie-break someone must
+   remember separately. At most one commit can leave BY CONSTRUCTION (`card_commit` is one bool,
+   `card_mode` one value), so the branch order decides WHICH, never HOW MANY. Pinned by
+   `test_resolve_card_tick_same_tick_confirm_chord_resolves_rightmost` on the 5-0b chord-test
+   precedent, at the triple AND at all three pairs so the order is fixed at every edge.
+3. **Test placement — extended `test/state/test_gamepad_controller.gd` IN PLACE.** 5-0b's own
+   precedent, and AC 6 explicitly asks for the SAME test shape as the existing exit-edge coverage
+   rather than a new, differently-shaped guarantee — which a sibling file would quietly become
+   (the pure `resolve_card_tick()` contract and its `_profile()` fixture both already live here).
+   The 9 new tests sit under their own banner comment beneath the 5-0b block.
+
+**MUTATION PROOFS** (state harness only, per `PROC/R1`; each file backed up to the out-of-repo
+scratchpad with a SHA256 taken BEFORE the mutation and restored by copying back, never
+`git checkout` — decision-log:799):
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | `cast_defense_button` default flipped to `JOY_BUTTON_Y` | RED — `..._pitch_is_structurally_unreachable` (defaults arm) |
+| M1b | authored `.tres` `cast_defense_button = 3` (Y) | RED — same test (`.tres` arm; the two arms bite independently) |
+| M2 | the three confirm blocks reordered so X is the last write | RED — `..._same_tick_confirm_chord_resolves_rightmost` |
+| M3 | the two new `_prev_held` primes dropped from the neutral path | RED — `test_replug_priming_covers_the_new_commit_edges` |
+| M4 | both new modes collapsed back to `BASIC` (the AC 15 regression) | RED — 5 tests |
+
+All four restored and re-verified by SHA256 before the closing suite run.
+
+**GOLDEN PREDICTION — MEASURED, BOTH DIRECTIONS (AC 17)**
+
+- BEFORE (clean tree at `805a392`): `d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d`, `RecordFile.FORMAT_VERSION == 7`.
+- AFTER (all changes in the working tree): `d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d`, `RecordFile.FORMAT_VERSION == 7`.
+- UNMOVED, as predicted. The reasoning is `5-0b`'s, cited not re-derived: `test_determinism.gd`
+  never instantiates a `Controller`, and `InputIntent`'s card fields are excluded from
+  `to_snapshot()`. Both measurements were taken with a scratchpad script OUTSIDE the repo that
+  instantiates the shipped fixture and prints its own `_run()` — an explicit number, not "the test
+  was green".
+
+**Deviations from the skill / operator instruction**
+
+- `python3` is not on PATH on this machine, so `resolve_customization.py` could not run; the
+  `workflow` block was resolved by hand from `customize.toml` + `_bmad/custom/gds-dev-story.toml`
+  per the documented merge rules (the only non-default value is `on_complete`).
+- The story file carries NO Tasks/Subtasks section, so the skill's Step 5/8 checkbox loop had no
+  checkboxes to drive; the ACs were used as the task list instead.
+- Per the operator's explicit instruction, Step 9's Status write was NOT performed: **Status stays
+  `ready-for-dev`** (the review flips it), `sprint-status.yaml` is untouched, and nothing was
+  committed — every change is in the working tree. The `on_complete` override is therefore moot
+  this run (there is no `review` write to undo).
+- No code review was run or spawned; that happens in a fresh session.
+
+**Live Smoke — NOT RUN.** All six core items and the optional two-pad item 7 need a physical pad
+and are the operator's. Item 1's correction stands as the story states it: this proves the first
+PAD-TRIGGERED mode ② cast, not the first playtest of the mechanic.
+
 ### File List
+
+- `src/controllers/gamepad_profile.gd` — modified (two new authored fields; `cast_basic_button`'s
+  stale B/X/Y note corrected).
+- `data/gamepad_profile.tres` — modified (`cast_unblockable_button = 1`, `cast_defense_button = 2`).
+- `src/controllers/gamepad_controller.gd` — modified (two `_prev_held` key constants, two raw reads,
+  two `resolve_card_tick` parameter pairs, the confirm tie-break, the returned `card_mode`, replug
+  priming).
+- `src/controllers/keyboard_controller.gd` — modified (two branches, two fields, two action-string
+  lines and their prose deleted).
+- `project.godot` — modified (exactly two Input Map actions deleted).
+- `test/state/test_gamepad_controller.gd` — modified (1 test retired, 9 added, existing
+  `resolve_card_tick` call sites widened by the two new parameter pairs).
+- `test/state/test_deck_and_hand.gd` — modified (`SHIPPED_INPUT_ACTIONS` loses two entries and their
+  explanatory comments).
