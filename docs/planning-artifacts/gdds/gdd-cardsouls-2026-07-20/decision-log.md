@@ -9052,3 +9052,65 @@ playtest-log entry (six core items PASS, the optional two-pad exchange NOT RUN -
 physical pad); `docs/playtest-log.md`'s operator-written "5-7" entry, byte-identical; this entry;
 board `5-7-pad-modes-2-3: ready-for-dev` -> `done`, `# Tier B` comment preserved. Nothing pushed;
 the operator reviews the log.
+
+## Session 2026-09-07 -- E5 close-out
+
+`E5-C/R1` -- Epic-5 promotes `backlog` -> `done`, matching epic-0..4. All twelve E5 story keys
+carry `Status: done` with zero drift between board and story files; `epic-5: backlog` was simply
+the un-promoted pre-close-out state, not a standing precedent to leave.
+
+`E5-C/R2` -- The `card_cast_resolved` MatchState-signal direct-connect (`5-3/R4`) is DOCUMENTED
+as a named exception (Option A), not banned: it stands when read-only, per-slot guarded, no state
+handle retained, and a one-shot cue with no priming semantics. Sole instance today is
+`match_runner.gd:501`. A third instance (a second already exists nowhere; `connect_orbs_changed`
+was built instead, `5-4/R4`) is the operator's call.
+
+`E5-C/R3` -- The observation-seam family moves EIGHT -> NINE (`connect_orbs_changed`, `5-4/R4`).
+Fourteen stale seam-count sites corrected (3 doc, 11 code comments), state harness re-run
+identical (720/5363/0). Three close-out-inventory premises corrected in the same pass: the
+epic-line precedent was PROMOTION, not "leave at backlog" (both prior instances read backwards);
+the two named stale-comment suspects (`unit_board.gd:303`, `match_runner.gd:143-145`) were both
+wrong sites -- the real trail led to a stale line reference at `deferred-work.md:21` (now fixed to
+`:404-407`); and the `unit_board.gd:404-407` seam comment had already self-corrected before this
+pass touched it.
+
+`E5-C/R4` -- The 5-2 close-out has no separately-headed session, but is not a missing record: its
+ruling lives as `5-2/R16` inside `Session 2026-09-04 -- 5-2 gate rulings` (`:8732`). Findability
+defect only, no rewrite of a closed session (`5-7/R7`'s standing rule). Pointer recorded here
+rather than editing that session.
+
+`E5-C/R5` -- OPERATOR RULING: card-hand tint (uncoloured hand, second consecutive smoke finding
+per `5-5/R10`) is slotted as the FIRST E6 story. No story key created now; the slot is assigned at
+E6 planning.
+
+`E5-C/R6` -- OPERATOR RULING: the hold-to-charge Tier A story (`5-7/R6`) gets its slot at E6
+planning. Early-release (CHARGING teardown) semantics are decided at that story's own scope talk,
+not pre-empted here. Operator veto on the shape stays open.
+
+`E5-C/R7` -- Deferred-work and retune items given a durable home (`docs/implementation-artifacts/
+deferred-work.md`, new `## E5 residue` section): five retune entries (deflect stun 0.4s vs the
+colour-counter's ~1s, stun legibility, defense feel, chargeup readability, audio cast-vs-deflect
+discrimination); `5-0a` diagonal-strafe LOW; `5-0c`'s two accepted tint findings; `5-3/R6(b)`
+attacker delivery and `5-3/R6(d)` locomotion feel; `5-5/R10`'s per-attack-type counter ideas,
+orphaned when the `5-6` ladder scope talk ruled on none of them -- re-homed as an E6-planning
+input, nothing disappears silently. Playtest-block checklist gains the two-pad mode-2/mode-3
+exchange NOT RUN in `5-7` (no second pad). `5-3/R2`'s correction to the `BC/R3` tuning-isolation
+fact (`unblockable_chargeup_seconds` is no longer a one-line `.tres` edit) recorded as a named
+standing exception.
+
+`E5-C/R8` -- `gdd.md`/`epics.md` reconciled to shipped E5: per-colour damage claim (`gdd.md:239`)
+corrected to one damage value for all three colours (`5-2/R10`); orb storage "no cap" (`gdd.md:254`,
+`epics.md:151`) corrected to the authored cap `max_orbs_per_color = 5` (provisional, `5-4/R8`).
+`epics.md`'s E5 section now names all twelve delivered story keys.
+
+`E5-C/R9` -- Operator's E6-planning inputs recorded by content, not yet slotted: mode-2 chargeup
+animation (crouch/leap, short mid-air hover, auto-aim toward a target in radius -- pairs with the
+hold-to-charge story); defense animation and sound synced to the attack animation (today a click
+with an ugly sound at an ugly point); walk/run with position and speed as a resource -- a NEW
+gameplay system, operator ruling at E6 planning; walk and turn-in-place animations; additional
+camera freedom (unspecified); smarter, more natural minions that never stop dead on an obstacle
+(`approach()` still cannot tell "arrived" from "blocked" -- nav story candidate).
+
+### Close-out
+
+Next steps: E5 retrospective, then E6 planning.
