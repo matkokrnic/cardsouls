@@ -229,8 +229,8 @@ longer than the 4-5 harness measured.
 | M2 | `_44-review.md:330` | `stamina_accelerator_regen_multiplier` defaults to 0.0, so an unauthored config inverts AC 21 | `5-1-accelerator-stacking` (`E5-P/R6`) |
 | M3 | `_44-review.md:347` | `_is_totem` means "has a non-default kind", not "is a totem" | (d) |
 | M4 | `_44-review.md:362` | Projectile board grows all match, never reclaimed | closed by measurement, see above |
-| M5 | `_44-review.md:381` | Live homing test cannot tell steering toward from steering away | DEFERRED (`E5-P/R6`), owner: next story touching `test_projectile_homing`-class coverage (likely the E6 spell story) |
-| M6 | `_44-review.md:398` | Reordering `unit_kinds` at an X3 reload silently re-points every live record | DEFERRED (`E5-P/R6`), owner: the E6 close-out spell story (next to add a `unit_kinds` entry); determinism-adjacent note kept |
+| M5 | `_44-review.md:381` | Live homing test cannot tell steering toward from steering away | OWNER NAMED: **`6-5-spell-resolution`** (`E6-P/R2`/`R8`), was DEFERRED (`E5-P/R6`) to "likely the E6 spell story" |
+| M6 | `_44-review.md:398` | Reordering `unit_kinds` at an X3 reload silently re-points every live record | OWNER NAMED: **`6-5-spell-resolution`** (`E6-P/R2`/`R8`), was DEFERRED (`E5-P/R6`) to "the E6 close-out spell story"; determinism-adjacent note kept |
 | M7 | `_44-review.md:416` | Zero or negative derived projectile speed makes a shot immortal | `5-1-accelerator-stacking` (`E5-P/R6`) |
 | M8 | `_44-review.md:432` | The budget's final tick is charged but never flown | (d) |
 | M9 | `_44-review.md:444` | Accelerators do not stack; the second silently does nothing | `R-M9`, see above |
@@ -313,7 +313,9 @@ operator's own 1.9. playtest note.
   above at "Deferred from: readiness gate of 4-3-minion-approach-and-collision" and its rewrite;
   re-observed live `docs/playtest-log.md` 28.8. and 1.9. (point 4). **OWNER: the playtest block
   after E5+E6** -- the operator's own placement on 1.9., superseding the unslotted "later story on
-  richer minion behaviour" language above.
+  richer minion behaviour" language above. RE-CONFIRMED at E6 planning (`E6-P/R11`): the operator's
+  "smarter, more natural minions" input (`E5-C/R9`) is THIS item, and it keeps this owner rather
+  than becoming an E6 nav story.
 - **`standard` priority gives a dead arena at 10v10.** The authored `standard` priority is
   `prefer_hero = false` with first-living-index ordering, so every minion on a side acquires the
   opposing board's index 0; two walls meet in the middle and jam, nobody swings or dies, while each
@@ -338,15 +340,17 @@ each was previously reachable only by walking the decision log story by story.
   `5-6/R10` flags the deflect value as possibly a touch short. Retune block.
 - **Stun legibility — pose-hold only, no dedicated clip, NOT ASSESSED.** `5-6/R10`. Retune/polish
   block.
-- **Defense feel reads as "the defender did nothing."** `5-5/R10`. Retune/polish block.
-- **Chargeup unreadable.** `5-5/R10`. Retune/polish block.
+- **Defense feel reads as "the defender did nothing."** `5-5/R10`. Retune/polish block — EXPECTED
+  DISCHARGE by `6-6-defense-presentation` (`E6-P/R8` amendment (i)).
+- **Chargeup unreadable.** `5-5/R10`. Retune/polish block — EXPECTED DISCHARGE by
+  `6-1b-chargeup-presentation` (`E6-P/R8` amendment (i)).
 - **Charge audio is placeholder sine tones; cast-vs-deflect discrimination is marginal.**
   `5-3/R6(c)`. Deferred to a real audio pass.
 
 **Other E5 items with no durable home:**
 
 - **`5-0a` diagonal strafe tie-break never resolves.** Review LOW, recorded only at
-  `decision-log.md:8267-8270` / `sprint-status.yaml:122`. Retune block.
+  `decision-log.md:8267-8270` / `sprint-status.yaml:149`. Retune block.
 - **`5-0c` tint dispatch is a hardcoded name table; a 4th kind ships untinted with no test
   failure.** `decision-log.md:8365-8366`. Accepted, no owner.
 - **`5-0c` tint test coverage is p1-only; p2 is reasoned-sound but unmeasured.**
@@ -354,10 +358,14 @@ each was previously reachable only by walking the decision log story by story.
 - **Attack/defense windows unclear.** `5-5/R10`. Retune/polish block.
 - **`5-3/R6(b)` — the strike stabs air; damage lands at roughly 8 m (attacker delivery).**
   Post-E5/E6 playtest block.
-- **`5-3/R6(d)` — locomotion speed / walk-as-default / sprint-costs-stamina.** Retune block.
-- **Per-attack-type counter ideas (sweep/jump/thrust, ranges, auto-aim) — ORPHANED.** `5-5/R10`
+- ~~**`5-3/R6(d)` — locomotion speed / walk-as-default / sprint-costs-stamina.**~~ SUPERSEDED by
+  `E6-P/R3` (two gaits, walk the new default, run drains stamina) — seat `6-7-locomotion-gaits`;
+  the walk / turn-in-place animations are its presentation half, `6-7b-locomotion-presentation`
+  (`E6-P/R8` amendment (ii)). Ruled, no longer deferred.
+- **Per-attack-type counter ideas (sweep/jump/thrust, ranges, auto-aim).** `5-5/R10`
   handed these to the `5-6` ladder scope talk; the `5-6` close-out session (`decision-log.md:8928-8992`)
-  contains no ruling on them. No owner. Re-homed here as an E6-planning input.
+  contains no ruling on them. No longer orphaned — **OWNER: the post-E6 playtest block, judged with
+  a pad** (`E6-P/R6`). See the checklist below.
 
 **Standing exception to the tuning-isolation fact (`5-3/R2`).** The repo's operating guidance says a
 tuning change is a one-line `.tres` edit with no test edit and no golden re-baseline (`BC/R3`). As
@@ -379,9 +387,13 @@ window opens, this checklist is the block's scope:
 - **`standard` priority gives a dead arena at 10v10** (named gap, above).
 - **AC 11 flicker cause** (named gap, above).
 - **Two-pad mode-2/mode-3 exchange (`5-7`) — NOT RUN, no second physical pad.**
-  `decision-log.md:9050-9052`; mirrored at `sprint-status.yaml:111` and
+  `decision-log.md:9050-9052`; mirrored at `sprint-status.yaml:138` and
   `5-7-pad-modes-2-3.md:282+`. The whole point of this item is two humans on two pads.
-- See also `## E5 residue` above for the E5 retune entries this block should also pick up.
+- **Per-attack-type counter ideas (sweep/jump/thrust, ranges, auto-aim)** — `E6-P/R6`, ruled OUT of
+  E6 and given this block as their first named owner. See `## E5 residue` above.
+- See also `## E5 residue` above for the E5 retune entries this block should also pick up — noting
+  that two of them (`chargeup unreadable`, `defense feel`) are expected to be discharged inside E6
+  by `6-1b` and `6-6`, and `5-3/R6(d)` is superseded outright by `E6-P/R3`.
 - The operator's own feel notes already recorded in `docs/playtest-log.md` -- read them there, not
   copied here.
 
