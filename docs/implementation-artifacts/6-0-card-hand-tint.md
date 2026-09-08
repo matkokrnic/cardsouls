@@ -4,7 +4,7 @@ baseline_commit: 438198a9e84206f022add48d965e579cb3539d70
 
 # Story 6.0: Card Hand Tint
 
-Status: authored
+Status: ready-for-dev
 
 > **Scope note.** FIRST story of E6 (`E5-C/R5`, `E6-P/R2` board order), promoted to this slot after a
 > second consecutive live-smoke finding (5-4, 5-5) that the own-hand row renders uncoloured card ids
