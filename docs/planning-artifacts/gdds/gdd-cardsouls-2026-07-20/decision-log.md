@@ -9411,3 +9411,61 @@ only, pointers not prose). The log commit PRECEDES the board commit, the `5-5` c
 No story file is touched -- none exists yet. No code, no golden, no test.
 
 Next steps: the `6-0-card-hand-tint` create pass. The operator reviews the log and pushes.
+
+## Session 2026-09-08 -- 6-0-card-hand-tint close-out
+
+`6-0/R1` (proposed by Claude, ratified) -- PRESENTATION-SIDE CARD TINT MAY READ CardDatabase ON
+BOTH THE LIVE AND THE REPLAY PATH, narrower than the runner's old blanket comment claimed. The
+HUD-wiring `_derive_card_colors()` call (`match_runner.gd:368`) runs unconditionally, unlike the
+`5-2` state-injection call at `:330`, which stays non-replay-only. The invariant that actually
+holds: STATE and DETERMINISM never read `CardDatabase` under replay; PRESENTATION does, on the same
+footing as the caption, which already renders recorded ids with today's presentation. One
+consequence is accepted and documented rather than guarded -- a recorded id absent from today's
+database has no colour entry, so its swatch stays hidden while the caption still shows the id.
+Nothing in the golden or the replay record depends on the tint, so this is not a determinism
+concern. The runner comment at `match_runner.gd:292` is reworded to say this precisely (F-5).
+
+`6-0/R2` -- TEST HARDENING, three findings closed as one ruling. `test_card_tint_live.gd`'s
+`_live_tint_correct` flag was initialised `true` and only ever falsified inside a loop an all-EMPTY
+hand skips, a vacuous-PASS shape the mutation table did not independently cover (F-1); the test
+indexed `Hand.to_array()` slots blind, so a hole in slot 0 or 2 raised a SCRIPT ERROR that
+`run_all.sh` reads as a whole-suite failure rather than a test failure (F-2); every assertion
+computed its expectation from production's own `ORB_COLORS[card.color]` expression, so a permuted
+palette would still pass (F-10). All three fixed in the code-review fix pass: dynamic occupied-slot
+selection, a comparison counter, and a hard-coded palette pin, re-proven non-vacuous by the
+measured mutation/restore cycle in the story's Dev Agent Record.
+
+`6-0/R3` -- SWATCH GEOMETRY REWORKED against the panel's true 84x92 box; the dev pass's claim that
+the swatch "never overlaps" the caption was arithmetically false by 5px (F-3), and the swatch
+occluded the top 2px of the armed panel's inward 5px gold bottom border across 86% of panel width,
+degrading the armed tell on exactly the slots AC 5 exists to protect (F-4). Both closed by moving
+the caption's bottom inset from -4.0 to -13.0 (costing roughly one wrapped line at font_size 12,
+ellipsis overrun already configured) and re-deriving the swatch band to y in [80, 86], clearing the
+caption above and the armed border's bottom band below by one pixel each. Whether the resulting bar
+reads at a glance stays the operator smoke's call (`PROC/R8`), not the arithmetic's.
+
+`6-0/R4` -- DEFERRED: `ORB_COLORS[color as int]` has no upper-bound guard (F-9). Unreachable today
+-- three palette entries, three `CardColor` members -- but the failure mode is asymmetric: a `null`
+colour degrades gracefully to a hidden swatch, an out-of-domain colour raises index-out-of-bounds
+mid-frame inside a signal handler. Recorded in `deferred-work.md`; OWNER is the first story that
+touches the `CardColor` enum or the shared `ORB_COLORS` palette, not this one.
+
+### Close-out
+
+Two commits (Tier B precedent, no separate gate pass). Commit 1, code + tests:
+`src/main/match_runner.gd`, `src/ui/hud/hud_root.gd`, `test/integration/test_card_tint_live.gd` (+
+its `.uid`). Commit 2, docs: story file Status -> `done` (Live Smoke task box checked); board
+`6-0-card-hand-tint: ready-for-dev` -> `done`, `# Tier B` comment preserved, `story_notes` updated;
+this entry; `deferred-work.md` and `docs/playtest-log.md` (operator's own hand-written entry,
+untouched by this pass) ride the docs commit as-is.
+
+Budget interval: dev pass BEFORE suite run (2026-09-08 22:37:16 +0200) to this close-out chain's
+suite run end (2026-09-08 23:32:57 +0200), delta 55m 41s. Suite: 720/0/5363 state + 56/56
+integration, `ALL TESTS PASSED`, unmoved from the story's own BEFORE/AFTER measurement -- golden and
+snapshot key set both confirmed unmoved again by this run.
+
+Operator smoke: PASS 4/4 -- colours read per slot, empty states stay untinted, the armed tell stays
+intact alongside tint, and card captions remain legible after the caption-inset rework. Recorded by
+the operator's own hand in `docs/playtest-log.md`, 2026-09-08.
+
+Story `6-0-card-hand-tint` is `done`. Nothing pushed; the operator reviews the log.

@@ -306,3 +306,7 @@ Sve jezgrene stavke PASS: L3+B = unblockable chargeup s pada (prvi put), L3+X = 
 F i ; mrtvi, fps stabilan.
 Dvopadna razmjena nije odrađena (nema drugog pada) — zapisano kao izostanak.
 
+
+6-0:
+8.9.
+1 svaka karta ima jednu od tri boje 2 prazna stanja nemaju boju 3 okvir koji pokazuje koja je karta armirana ne remeti vidljivost kojoj boji pripada karta 4 imena karata ostala su citljiva i nakon promjena koje smo uveli

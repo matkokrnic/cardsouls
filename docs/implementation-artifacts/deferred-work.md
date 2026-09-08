@@ -1,5 +1,18 @@
 # Deferred Work
 
+## Deferred from: code review of 6-0-card-hand-tint (2026-09-08)
+
+- **`ORB_COLORS[color as int]` has no upper-bound guard** (`src/ui/hud/hud_root.gd`,
+  `_set_swatch_color`). `ORB_COLORS` holds exactly three entries and `Enums.CardColor` has exactly
+  three members, so the index domain is closed today and this is NOT reachable. It is recorded
+  because the function's two failure modes are asymmetric: the `null` case (no colour for this
+  slot) degrades gracefully to a hidden swatch, while an out-of-domain colour is an
+  index-out-of-bounds raised inside a signal handler, mid-frame. A fourth `CardColor` member, or
+  any map value >= 3 reaching the HUD through the deliberately untyped `Dictionary` the wrapper
+  hands over, turns a presentation concern into a crash. OWNER: the first story that touches the
+  `CardColor` enum or the shared `ORB_COLORS` palette — whichever comes first; the guard costs one
+  line and should be added by whoever widens the domain, not before.
+
 ## Deferred from: code review of 4-3e-summon-spawn-placement (2026-08-27)
 
 - **`test_unit_spawn_placement_live.gd`'s `_actor_at(index)` indexes `_unit_actors[0]` by raw
