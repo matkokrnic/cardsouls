@@ -9114,3 +9114,154 @@ camera freedom (unspecified); smarter, more natural minions that never stop dead
 ### Close-out
 
 Next steps: E5 retrospective, then E6 planning.
+
+## Session 2026-09-07 -- E5 retrospective
+
+The third epic retrospective in this project. The retrospective itself is
+`docs/implementation-artifacts/epic-5-retro-2026-09-07.md` (commit `docs(retro): epic 5
+retrospective`); this entry records only what it RULED, per the standing separation between an
+analysis artifact and the decisions it produces. `sprint-status.yaml` is deliberately NOT touched --
+no `epic-N-retrospective` key exists and the header locks the lifecycle to
+`backlog -> ready-for-dev -> done`, so `gds-retrospective` step 11 is skipped on the E3/E4
+precedent. Report delivered REPORT-ONLY; the operator ratified EVERY proposal AS PROPOSED, blanket,
+with no amendments. The standing meta-rule (`decision-log.md:7937-7941`) was the yardstick again:
+the three rulings that change process cost one file write, one subtraction, and one word.
+
+`E5-R/R1` (ratified) E4'S ACTION ITEMS: EIGHT FOR EIGHT, NONE DROPPED, AND THE (c)-RESIDUUM
+CORRECTION RECORDED. `E4-R/R1` discharged open decision (a) at the venue it named (`E5-P/R1`) and
+`5-6/R2` then shipped it; (b) and (e) sit on the playtest checklist with the operator as named
+owner. `E4-R/R4` held without ever firing. `E4-R/R5` went two for two again, four for four
+cumulative. `E4-R/R7` visibly shaped commit ORDER at `5-4`, `5-5` and `5-6`. `E4-R/R8`'s six
+inherited items all landed, and two IMPROVED on the ruling that produced them -- `R-M9`'s
+multiplicative reading was overturned by measurement at `5-1`'s gate (`5-1/R1`, linear), and (a) was
+not merely owned but implemented. **CORRECTION OF RECORD: the `(c)`-tagged residuum was FOURTEEN
+items, not the thirteen `E4-R/R8` item 5 stated.** First measured at the E5 planning pass
+(`decision-log.md:8135`) and re-confirmed by content this pass; recorded here so the count in
+`E4-R/R8` is not read forward. GENERALISATION, ratified as the lesson: **a forcing point discharges
+a queue; a fence does not** -- the arch amendment queue (`5-3/R4`, `5-4/R4`) emptied itself at the
+E5 close-out because that venue was named, where E4's queue had no venue and leaked six stale
+claims.
+
+`E5-R/R2` (ratified) `E4-R/R2` AMENDED: THE REPORT GETS AN ARTIFACT, THE LOG GETS THE LAYER STATES.
+Measured: the string `LAYER-COMPLETION` appears in ZERO of the twelve E5 story files, and for ten of
+twelve stories NO review report artifact exists anywhere -- not in the repo, not in `C:\dev`.
+`5-6-three-tier-ladder.md:971` cites `docs/implementation-artifacts/5-6-code-review.md`, a path that
+has never existed in git history. The two survivors are `_51a-review.md` (canonical four-line form)
+and `_52-review.md` (eight lines naming topics rather than declared layers). The substance did NOT
+leak -- every E5 close-out session carries an "Accepted without change (review findings, no ruling
+needed)" block, so E4 finding B does not recur -- but the terminal state of each layer is
+unauditable for ten stories. **RULE, three parts: (1) the review report is WRITTEN WITH THE WRITE
+TOOL to `C:\dev\_<story>-review.md`, so the artifact survives the session that produced it; (2) the
+story's CLOSE-OUT LOG SESSION carries ONE LINE naming each declared layer with its terminal state;
+(3) the browser still REJECTS a report that does not carry its `LAYER-COMPLETION:` line, unchanged
+from `E4-R/R2`.** Two writes, no new check.
+
+`E5-R/R3` (ratified) `E4-R/R3` AMENDED: THE INTERVAL IS THE FULL STORY CYCLE, AND THE VENUE IS THE
+LOG. E5 produced 41 suite-output files against E4's single number -- the instrument is real and cost
+nothing. But every recorded delta stops at the DEV PASS, while `E4-R/R3`'s own words name "the
+before-baseline run and the final run", and for `5-0b`/`5-0c`/`5-0d` the final run is the review-fix
+run. **The measured interval is the FIRST before-baseline run to the LAST suite run of the WHOLE
+story cycle, review fixes included. The venue is the CLOSE-OUT LOG ENTRY, as `E4-R/R3` already said
+and only `5-0a` honoured. AN OVERRUN IS REPORTED, NEVER BLOCKING** -- the number is an instrument
+for the operator at the scope conversation, not a gate. Measured record, five of six Tier B stories
+instrumented: `5-0a` 20m35s (log venue, correct); `5-0b` recorded ~13 min, full cycle 39m26s; `5-0c`
+recorded 13m18s, full cycle 35m05s plus a next-day fix run; **`5-0d` recorded 17m43s and described
+as "well inside the ~1h budget", full cycle 16:44:15 -> 17:58:36 = ~74 MINUTES, OVER BUDGET**;
+`5-3` no budget line at all; `5-7` no line and no suite files. `5-0d`'s overrun is **REPORTED, NOT
+ACTIONED** -- the story is closed and pushed, its work is sound, and `E5-R/R7` forbids editing it.
+Minor discrepancy also on record: `5-0c`'s stated start `13:21:12` matches no surviving file
+(`_50c-suite-before.txt` is `13:24:20`).
+
+`E5-R/R4` (ratified) `E4-R/R4` KEPT UNCHANGED. The gate-round cap never had to fire: the maximum in
+E5 was TWO rounds (`5-1a` gate plus re-gate; `5-2` gate NOT READY with nine blocking findings, one
+fix pass, re-gate all closed at `5-2/R16`), against `4-3d`'s six and `4-3e`'s five. Every story
+carries exactly ONE `docs(5-x): gate fixes` commit. Zero docs-only rounds existed to delete
+specification an earlier round had added -- E4's dominant sink, gone. `5-2` also DECLINED its own
+pre-named break line, its gate measuring auto-aim as the cheapest AC in the story (`5-2/R12`), which
+is `E4-R/R4`'s corollary (behaviour and acceptance, not mechanism) producing a measurement instead
+of a split. A rule that shaped an epic without firing is working; widening it would cost the
+operator time the failure no longer costs.
+
+`E5-R/R5` (ratified) `PROC/R1` IS RECLASSIFIED AS A DISCLOSURE RULE, NOT A CAP. **Two runs stay the
+default; more runs are legitimate WITH A STATED REASON; every run beyond the second is ALWAYS
+REPORTED, NEVER ABSORBED.** This ratifies three epics of observed behaviour rather than changing it.
+E5's two bends: `5-3`'s dev pass ran five (before plus four after, `5-3:559-574`), disclosed with
+its cause -- a genuine RED on the first after-run; `5-4`'s close-out ran three, disclosed in the log
+as "`PROC/R1`'s run-budget was overrun by one full run and is reported here, not absorbed"
+(`:8848-8850`). Every bend on record across E3, E4 and E5 was already disclosed with its cause.
+Treating an honest extra run as a violation is exactly the formality the meta-rule rejects.
+
+`E5-R/R6` (ratified) SUBAGENTS: `5-7/R8` STANDS AS THE STANDING RULE, AND NOTHING FURTHER IS ADDED.
+`E4-R/R6` called the write class "a class this project has not yet suffered" on 2026-09-01; the
+project suffered it TWICE within six days -- create-pass forks writing to tracked files despite a
+read-only brief (`5-7/R8`, `:9038-9041`). The response was to REPLACE the mechanism, not widen the
+check: create and docs-only passes now run with NO subagents at all, for any story. That is
+`3-0d/R20`'s move (a guard evaded twice gets its mechanism replaced, not its pattern widened a third
+time) applied to process instead of code, and it costs the operator nothing because it removes a
+capability rather than adding a rule to police. The dev-prompt correction from the third incident
+stands with it: the `5-6` code review ran as a subagent OF THE DEV SESSION rather than as a fresh
+session (`:8979-8981`), so a dev prompt ends at the report with HALT and the review runs fresh.
+Recorded honestly: **the FIRST instance of the write class appears nowhere in the repo as its own
+record** -- it is reachable only through `5-7/R8`'s phrase "the second instance", the same shape as
+E4's sixth incident. Zero layer stalls in E5.
+
+`E5-R/R7` (ratified) EVIDENCE CORRECTIONS TO A CLOSED, PUSHED STORY LIVE IN THE RETROSPECTIVE AND
+THIS LOG, NEVER AS AN EDIT TO THE STORY FILE. This generalises `5-7/R7` ("a closed story's record is
+never edited to stay current") from prose to evidence, and it is why `sprint-status.yaml` and all
+twelve story files were untouched by this pass. TWO CORRECTIONS, both found by content:
+1. **`5-0b-pad-card-input.md:418` names the wrong golden.** Its Change Log row states "Golden
+   `7fbb4b7f...` CONFIRMED unmoved both directions". The golden at that story's own code commit was
+   `aa3566d7...` (`git show 7d20317:test/state/test_determinism.gd`); `7fbb4b7f` is TWO
+   re-baselines stale. The CLAIM (unmoved) is sound -- `test_state_matches_golden` would have failed
+   otherwise -- and only the IDENTIFIER is wrong, in the exact place `PROC/R2`'s Dev Agent Record
+   evidence audit exists to check.
+2. **`5-6-three-tier-ladder.md:971` cites a review file that never existed.** It names
+   `docs/implementation-artifacts/5-6-code-review.md` as the file its fix pass was applied against;
+   `git log --all --` returns nothing for that path and it is not on disk.
+Neither is repaired in place. Lesson ratified with them: a record can be TRUE and still be WRONG --
+the suite catches a real drift, nothing catches a stale identifier in prose, and nothing needs to,
+but a reader trusting the number would be misled.
+
+`E5-R/R8` (recorded, not ruled) WHAT E6 INHERITS -- the `E3-R/R5` / `E4-R/R8` template. Recorded at
+all because parts of it exist nowhere else. Full evidence in the retrospective, section 7.
+1. Two Tier A stories pre-slotted and unauthored: **card-hand tint, the FIRST E6 story** (`E5-C/R5`,
+   a second consecutive smoke finding across `5-4` and `5-5`), and **hold-to-charge** (`E5-C/R6`,
+   `5-7/R6`) -- state-touching, since an early release needs a `CHARGING` teardown that does not
+   exist; early-release semantics are decided at that story's own scope conversation, operator veto
+   on the shape open.
+2. `R-SPELL`'s forcing point is the E6 close-out, playtest block after it. Three of nine fixture
+   cards still carry `spell_*` ids and take the named no-op path.
+3. Mode 4 / Pitch Zone is E6's remaining loop: `5-4` exposes `reset_all()` and never calls it,
+   `pitch_effect` is UNAUTHORED, and `5-7/R3` made mode PITCH structurally unreachable from the pad
+   by construction -- the E6 pitch story must revisit that guard deliberately, not discover it.
+4. The `## E5 residue` section (`deferred-work.md:329-366`, `E5-C/R7`) is the durable home for five
+   retune entries and four unowned items, including `5-5/R10`'s per-attack-type counter ideas,
+   orphaned when the `5-6` scope talk ruled on none of them.
+5. Named standing exception to `BC/R3`: as of `5-3/R2`, retuning `unblockable_chargeup_seconds` is
+   NO LONGER a one-line `.tres` edit.
+6. `5-1a/R14` is owed by the first story that adds an exported build (`Invariant.check` is
+   non-load-bearing there EVERYWHERE, not just the one seat `5-1a` fixed); `5-1a/R15` records the
+   `camera_pushes` twin left deliberately open.
+7. `5-2/R17` is live via `5-5/R4` -- a cast interrupts what is HELD, not what is in flight. A
+   `CHARGING` hero still CAN cast a basic card: owner named as `5-6`, untouched there (`5-5/R3`).
+   The one inherited item E5 gave an owner and did not discharge.
+8. The playtest block gains the two-pad mode-2/mode-3 exchange, NOT RUN in `5-7` (no second pad).
+9. `E5-C/R9`'s six operator inputs stay unslotted, of which **walk/run with position and speed as a
+   resource is a NEW gameplay system needing an operator ruling at E6 planning**.
+No ruling is taken on E6's plan here. A retrospective records what the next planning pass must not
+discover late; it does not do that pass's job.
+
+### Close-out
+
+Docs-only pass, three commits, none pushed: `docs(retro)` (the retrospective artifact only), this
+entry (`docs(decision-log)`, a PURE APPEND -- no existing entry edited), and `docs(config)` (the
+operative half of `E5-R/R2`/`R3`/`R5` amended onto the three existing `project-context.md` Testing
+Rules bullets per `PROC/R5`; no bullet added or removed, `rule_count` 71 -> 73 for the two NEW
+obligations `E5-R/R2` introduces -- the surviving report artifact and the close-out layer-state
+line -- and `Last Updated` moved to 2026-09-07).
+`sprint-status.yaml` is NOT touched -- no retrospective key exists. No story file is touched, per
+`E5-R/R7`. `CLAUDE.md` is NOT touched -- no tier policy changed here. No code changed, no golden or
+suite touched, nothing ran. `E5-R/R1`, `R4`, `R6`, `R7` and `R8` are log-only by design.
+
+Next steps: E6 planning pass, manual and report-only per `E4-R/R5`; card-hand tint is the first E6
+story (`E5-C/R5`). The operator reviews the log and pushes.
