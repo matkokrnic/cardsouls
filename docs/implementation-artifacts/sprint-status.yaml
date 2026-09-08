@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-07
+# last_updated: 2026-09-08
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -107,7 +107,34 @@ development_status:
   5-6-three-tier-ladder: done  # Tier A
   5-7-pad-modes-2-3: done  # Tier B
 
+  # E6 — Pitch Zone (Vision Complete). Eleven stories; keys/tiers/order ratified
+  # E6-P/R2 (decision-log 2026-09-08). Listed in BOARD order — the numeral is
+  # creation order, not board order (the 4-3a..4-3e precedent).
+  epic-6: backlog
+  6-0-card-hand-tint: backlog  # Tier B
+  6-1-hold-to-charge: backlog  # Tier A
+  6-1b-chargeup-presentation: backlog  # Tier B
+  6-2-pitch-staging: backlog  # Tier A
+  6-3-pitch-hud: backlog  # Tier B
+  6-4-pitch-activation: backlog  # Tier A
+  6-7-locomotion-gaits: backlog  # Tier A
+  6-7b-locomotion-presentation: backlog  # Tier B
+  6-8-camera-freedom: backlog  # Tier B
+  6-6-defense-presentation: backlog  # Tier B
+  6-5-spell-resolution: backlog  # Tier A
+
 story_notes:
+  6-0-card-hand-tint: "FIRST E6 story (E5-C/R5). Tier B contingent on a measured before/after; colour rides the existing cards_changed seam wrapper, the HUD never reads CardDatabase (E6-P/R8 item 1)."
+  6-1-hold-to-charge: "Tier A, state-touching — an early release needs a CHARGING teardown src/state/ does not have (5-7/R6, E5-C/R6). Early-release semantics decided at its own scope talk; operator veto on the shape open. Carries E5-R/R8 item 7 (a CHARGING hero can still cast a basic card)."
+  6-1b-chargeup-presentation: "Tier B. The chargeup animation (crouch/leap, hover, auto-aim), E5-C/R9. Expected to discharge the 'chargeup unreadable' retune entry in passing (E6-P/R8 amendment i)."
+  6-2-pitch-staging: "Tier A, golden moves by construction (MatchState.to_snapshot already carries the pitch key). Scope talk owes the pitch-cost authoring seat, E6-P/R9. Carries the per-player/independent-staging rule, E6-P/R4."
+  6-3-pitch-hud: "Tier B AT RISK of Tier A. May NOT add a second MatchState direct-connect (E5-C/R2); uses the observation-seam family. Owes the anchor A/B verdict (2-6/R19 finding S4)."
+  6-4-pitch-activation: "Tier A. Wires pad Y and ends mode 4's structural unreachability; owes the Y-guard question 5-7/R7 kept open for exactly this story (LOW-1/LOW-2)."
+  6-7-locomotion-gaits: "Tier A. Two gaits per E6-P/R3 — walk new/slower/free/default, run the current speed, held, draining stamina. Walk speed and drain-per-second authored here. Supersedes the 5-3/R6(d) retune entry."
+  6-7b-locomotion-presentation: "Tier B. ASSET PREREQUISITE (E6-P/R10): the Mixamo walk clips for the paladin must physically be in the repo BEFORE the create pass."
+  6-8-camera-freedom: "Tier B AT RISK of Tier A. Two behaviours (E6-P/R7): lock-on cycling reaches all live targets including those behind the hero (full 360), and the camera unlocks for manual rotation when not locked on. Exact controls at its scope talk."
+  6-6-defense-presentation: "Tier B AT RISK of Tier A — 'synced to the incoming attack' may need a state-owned attacker-window fact. Expected to discharge the 'defense feel' retune entry in passing (E6-P/R8 amendment i)."
+  6-5-spell-resolution: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Carries M5 and M6 (deferred-work.md:232-233)."
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
   5-5-unblockable-defense: "done 2026-09-06, Tier A close-out complete (mode 3 dispatch/window/negation/reset per 5-5/R1-R10, golden dc2c9ffa -> d9725092/30-key set (defense), smoke PASS 10/10, decision-log session 5-5 close-out)."
