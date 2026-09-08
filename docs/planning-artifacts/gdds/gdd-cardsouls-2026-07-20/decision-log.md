@@ -9469,3 +9469,51 @@ intact alongside tint, and card captions remain legible after the caption-inset 
 the operator's own hand in `docs/playtest-log.md`, 2026-09-08.
 
 Story `6-0-card-hand-tint` is `done`. Nothing pushed; the operator reviews the log.
+
+## Session 2026-09-09 -- 6-1 readiness gate
+
+`6-1/R1` (operator, recorded) EARLY RELEASE BEFORE THE CHARGEUP ELAPSES IS A PAID FEINT. Card and
+stamina stay spent; no landing/damage/orb/rung resolution; the telegraph clears; the hero returns to
+IDLE and is fully controllable on the release tick. A tap is the identical feint, with no grace
+window. No recovery window follows any release. Release after the chargeup completes is a no-op --
+the landing resolves normally.
+
+`6-1/R2` (operator, recorded) THE BASIC-WHILE-CHARGING GATE `5-6` SHIPPED STAYS. `5-6`'s own ruling
+(`5-6/R3`, decision-log.md:8941-8945) closed the CHARGING-can-cast-BASIC hole; `E5-R/R8` item 7
+(:9245-9247) and `E6-P/R2`'s repetition of the same claim (:9311-9313) are RECORD ERRORS, corrected
+here without editing either pushed entry (standing meta-rule -- pushed/ratified text is never
+edited). `match_state.gd:2426-2428` is not touched by `6-1`; `test_a_charging_hero_cannot_cast_basic`
+stays green, unedited, and joins the standing guard list.
+
+`6-1/R3` AUTHORED CHARGEUP IS 1.0s = 60 DERIVED TICKS (`balance_ticks.gd:142`), not 24. The story's
+"24" was `test_unblockable_initiation.gd`'s own fixture constant, a deliberate `BC/R3` isolation
+value, not the authored number.
+
+`6-1/R4` `FORMAT_VERSION` BUMPS 7 -> 8, WITH HARD REJECTION OF v7 RECORDS. Not forced by the
+serialization shape (a `held` key round-trips generically with no edits) but by the semantic
+incompatibility: an existing v7 recording of a mode (2) cast would silently reinterpret under hold
+semantics as an instant feint instead of the landing it originally produced. The dev pass verifies
+the round-trip.
+
+`6-1/R5` TEST BLAST RADIUS FOR THE CHARGING-DRIVING HELPERS IS EXACTLY THREE FILES, MEASURED:
+`test_unblockable_initiation.gd`, `test_unblockable_defense.gd`, `test_orbs_economy.gd`. The
+integration driver (direct `set_action_state`) and the keyboard path are out, by measurement --
+`KeyboardController` cannot reach mode (2) at all.
+
+`6-1/R6` MINIMUM OBSERVABLE FEINT IS ONE HELD TICK. A press+release inside one sample interval
+produces no edge at all -- no commit, no spend, nothing happened. This is an input-sampling fact, not
+a grace window.
+
+`6-1/R7` A FEINT LEAVES AN ARMED MODE (3) DEFENSE WINDOW UNTOUCHED BY CONSTRUCTION. The window
+self-expires (advanced unconditionally at `match_state.gd:441-442`) and is consumed only inside
+`_resolve_charge_landing`, which a feint never calls. No window-clearing code may be added for the
+feint path.
+
+### Close-out
+
+Docs-only pass against the readiness gate report (round 1 of 2, baseline `cf7489b`). Pure append, no
+existing entry edited. Two commits: this entry (`docs(decision-log)`); the story fix pass
+(`docs(6-1)`, story file corrected per the gate's F1-F10 findings, board `6-1-hold-to-charge`
+promoted to `ready-for-dev`). No code, no test, no golden.
+
+Next steps: dev pass on `6-1-hold-to-charge`.
