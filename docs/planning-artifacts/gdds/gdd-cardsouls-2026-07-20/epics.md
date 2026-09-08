@@ -194,27 +194,89 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 
 **Goal.** Close the buildup→bluff→payoff loop; make the Design Touchstone playable.
 
-**Key stories.**
-- Pitch Zone slot; stage a card from hand; **public** cost + countdown timer (20 vs 30 s TBD) visible to the opponent.
-- Exit paths: activate (cost met) / cancel (return to hand) / **fizzle** (timer expires → discard + draw, no refund of accumulated mana/orbs).
-- Pitch Effect (Mode ④) resolution; **all-color orb reset on activation**.
-- Affordability surfaced in HUD (read, not computed) — Reactor/Actor offload.
-- Overlap handling: **lockout** (working assumption) — one staged card per player; cross-player staging locked out for N seconds. (Alternatives a/c logged.)
-- Staged card still counts toward the hand of 4.
+**Key stories.** ELEVEN, keyed and tiered at the E6 planning pass (decision-log Session 2026-09-08,
+`E6-P/R2`). Keys are creation order; the list below is **board order** (the `4-3a`..`4-3e`
+precedent — the numeral is historical, not the board's). Tier per `E4-P/R9`; every Tier B is
+contingent on a measured before/after showing golden and snapshot key set unmoved, and tier may be
+raised, never lowered.
+
+1. `6-0-card-hand-tint` (**Tier B**) — the four own-hand card faces carry their card's colour; the
+   face-down opponent row is untouched. FIRST E6 story by ruling (`E5-C/R5`).
+2. `6-1-hold-to-charge` (**Tier A**) — mode ② is held through the chargeup instead of press-edge; an
+   early release needs a `CHARGING` teardown `src/state/` does not have (`5-7/R6`, `E5-C/R6`).
+3. `6-1b-chargeup-presentation` (**Tier B**) — the chargeup animation: crouch/leap, short mid-air
+   hover, auto-aim toward a target in radius (`E5-C/R9`).
+4. `6-2-pitch-staging` (**Tier A**) — `PitchState` gains content: stage from hand, the fizzle
+   `TimingWindow`, cancel and fizzle exits, staged card still counts toward the hand of 4.
+5. `6-3-pitch-hud` (**Tier B**, at risk of Tier A) — public cost + countdown + affordability read
+   (read, not computed — the Reactor/Actor offload), on both viewports.
+6. `6-4-pitch-activation` (**Tier A**) — Mode ④ resolves: cost paid, **all-colour orb reset**, pad Y
+   wired, PITCH stops being structurally unreachable.
+7. `6-7-locomotion-gaits` (**Tier A**) — the two-gait system ruled at planning: walk is new, slower,
+   free and the default; run is the current speed, held, draining the same stamina bar. Walk speed
+   and drain-per-second are authored here.
+8. `6-7b-locomotion-presentation` (**Tier B**) — walk and turn-in-place animations, the presentation
+   half of `6-7`.
+9. `6-8-camera-freedom` (**Tier B**, at risk of Tier A) — lock-on cycling reaches ALL live targets
+   including those behind the hero (full 360, not a front arc), and the camera can be unlocked and
+   manually rotated when not locked on.
+10. `6-6-defense-presentation` (**Tier B**, at risk of Tier A) — defence animation and sound synced
+    to the incoming attack (`E5-C/R9`).
+11. `6-5-spell-resolution` (**Tier A**) — the E6 CLOSE-OUT story: the three `spell_*` fixture cards
+    stop taking the named no-op path. LAST by ruling — `R-SPELL`'s forcing point is the close-out,
+    and the playtest block runs after it.
+
+- Pitch Zone ownership is **per-player**, both zones visible to both players, staging independent
+  (simultaneous pitches legal) — `E6-P`, PROVISIONAL, judged at the post-E6 playtest. This replaces
+  the overlap-with-lockout working assumption; the GDD's three disagreeing statements were
+  reconciled to it in the same pass.
+- Timer **20 s provisional**, an authored balance field (`E6-P`).
 - `FeatureFlag: pitch-zone` (off → pitch modes unavailable; if orbs off, pitch cost is mana-only).
+  The flag exists and defaults `false` (`src/state/resources/feature_flags.gd:18`); it is absent
+  from `data/feature_flags.tres`, so it ships off by export default until a pitch story authors it.
 
 **Exit criteria.** The full touchstone is playable in split-screen; buildup→bluff→payoff exists end-to-end.
 
 **Milestone.** **The vision is now testable.** The go/no-go validation playtests (and the playtester-composition instrumentation from Success Metrics) begin here.
 
 **Committed obligations.**
-- `PitchState` gains content; it carries none until E6 (2-6/R9).
-- Whether the Pitch Zone mechanic is shared between players or owned per-player remains OPEN,
-  reserved for E6 (2-6/R9) — the only lock: the pitched card is the sole public information, hands
-  stay private otherwise.
-- Pitch zone placement judgment stays open; the first A/B reading (2-6/R19, finding S4) found
-  anchor B (left of the vitals bars) reads better than dead-centre anchor A — a first reading only,
-  not a verdict.
+- `PitchState` gains content at `6-2`; it carries none until E6 (2-6/R9).
+- Whether the Pitch Zone mechanic is shared between players or owned per-player was OPEN (2-6/R9 —
+  NOT the 2-4 smoke, a citation corrected at E6 planning) and is now RULED per-player, provisional
+  (above). Locked and unchanged: the pitched card is the sole public information, hands stay
+  private otherwise.
+- Pitch zone placement carries into `6-3`: the first A/B reading (2-6/R19, finding S4) found anchor
+  B (left of the vitals bars) reads better than dead-centre anchor A — a first reading only, and
+  `6-3` owes the verdict.
+- **`6-2` scope talk owes the pitch-cost authoring seat.** `CardData` has ONE `cast_condition`
+  (`src/state/resources/card_data.gd:40`) shared across modes, `pitch_effect` (`:37`) is unauthored
+  on all nine fixture cards, and `CardCastCondition.orb_costs` is empty everywhere by design
+  (`src/state/resources/card_cast_condition.gd:29-35`) — so a Mode ④ cost of "mana (higher) + orbs"
+  (`gdd.md:178`) has nowhere to live today. Adding a field is codebase-shaping, so it is decided at
+  that story's scope talk, not by the implementing pass.
+- **`6-4` owes the Y-guard question.** `5-7/R7` kept LOW-1/LOW-2 (the guard's untested evasion forms
+  and its blanket ban on any future Y binding) as-is "until the E6 story that actually wires Y
+  forces the question" — `6-4` is that story. Y is a no-op BY OMISSION (`GamepadProfile` has no Y
+  field, `gamepad_profile.gd:77`; `GamepadController` reads Y on no line, `gamepad_controller.gd:170-175`)
+  and mode PITCH is a deliberate CRASH-ON-REACH in state (`Invariant.check(false, ...)`,
+  `src/state/match_state.gd:2371-2374`) — both must be revisited deliberately, not discovered.
+- **`6-5` (close-out) carries `R-SPELL` plus two deferred E4 review findings** given it as owner at
+  E5 planning: M5 (the live homing test cannot tell steering-toward from steering-away) and M6
+  (reordering `unit_kinds` at an X3 reload silently re-points every live record) —
+  `deferred-work.md:232-233`. Three fixture cards carry `spell_*` ids today
+  (`data/cards/{ember_lash,frost_dart,bramble_snare}.tres:9`).
+- **`6-7b` has an ASSET PREREQUISITE:** the Mixamo walk clips for the paladin must physically be in
+  the repo BEFORE that story's create pass. Operator-owned manual step, recorded here because E3
+  learned it the hard way.
+- `6-1b` and `6-6` are expected to discharge the "chargeup unreadable" and "defense feel reads as
+  the defender did nothing" retune entries in passing (`deferred-work.md`, E5 residue). The rule
+  that retune stays out of E6 bars slotting a retune ENTRY as a story; it does not forbid fixing one
+  an E6 story lands on anyway.
+- `6-7` SUPERSEDES the `5-3/R6(d)` retune entry (locomotion speed / walk-as-default /
+  sprint-costs-stamina) — same ground, now ruled rather than deferred.
+- `6-3` may NOT reach for a second `MatchState` direct-connect: `E5-C/R2` documents that exception
+  at exactly one instance (`src/main/match_runner.gd:501`) and a third is the operator's call. The
+  observation-seam family (nine members since `connect_orbs_changed`, `E5-C/R3`) is the route.
 
 ---
 
