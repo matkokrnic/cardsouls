@@ -116,9 +116,9 @@ The color-read exchange resolves. Land it → orb + fixed damage, the pitch goes
 
 **Nesting.** ① is the continuous heartbeat (approach / basic attack / block-deflect-roll / manage stamina and spacing) that never stops. ② and ③ are the spikes that punctuate it. The heartbeat forces the decisions; the spikes resolve them.
 
-**Pacing target.** A round should see roughly **2–4 full buildup→bluff→payoff cycles** — each pitch a real commitment worth building toward, not background noise (fast/frequent pitches cheapen the payoff and crowd toward parallel demands, fighting P4; a single climax risks dead air and swingy misreads, fighting P2). This is a *tuning target* realized through pitch cost, orb-acquisition rate, and the pitch timer length (20s vs 30s, TBD per TDD §5.6) — not a hardcoded value. Associated target: **~60–120s of active play per round**, against which timer and costs are tuned.
+**Pacing target.** A round should see roughly **2–4 full buildup→bluff→payoff cycles** — each pitch a real commitment worth building toward, not background noise (fast/frequent pitches cheapen the payoff and crowd toward parallel demands, fighting P4; a single climax risks dead air and swingy misreads, fighting P2). This is a *tuning target* realized through pitch cost, orb-acquisition rate, and the pitch timer length (20 s provisional, `E6-P`) — not a hardcoded value. Associated target: **~60–120s of active play per round**, against which timer and costs are tuned.
 
-> **[NOTE FOR DESIGNER] Pitch overlap — open, flagged for playtest.** Each player owns their own Pitch Zone, so *simultaneous* pitches are possible. If both stage at once, a defender must track their own timer, the opponent's timer, a color telegraph, stamina, and spacing at the same time — a textbook P4 violation (parallel, not sequential). This is a cadence-of-*overlap* question, not just frequency. Candidate resolutions: **(a) global Pitch Zone** — only one staged card in the match at a time (cleanest for P4, but removes the bluff-vs-bluff exchange); **(b) overlap-with-lockout** — while one card is staged, the other player cannot stage for N seconds (*current working assumption*); **(c) free overlap** — richest, most dangerous for cognitive load. Resolved at playtest; the GDD states the question rather than leaving it implicit. Detailed in the Pitch Zone spec below.
+> **[NOTE FOR DESIGNER] Pitch overlap — RULED at E6 planning (`E6-P`), provisional.** The Pitch Zone is **per-player**: each player owns their own zone, **both zones are visible to both players**, and staging is **independent** — both players may hold a staged card at the same time. Candidates (a) global Pitch Zone (one staged card in the match) and (b) overlap-with-lockout (the prior working assumption) are **not taken**; free overlap is. The P4 cost is real and known — with both zones live a defender tracks two timers, a color telegraph, stamina and spacing at once — which is exactly why this is **provisional and judged at the post-E6 playtest**, not settled. Detailed in the Pitch Zone spec below.
 
 ### Win/Loss Conditions
 
@@ -136,10 +136,11 @@ The player-facing capabilities. Concrete tuning numbers live in **Hybrid Systems
 
 **Hero resources.**
 - **HP** — absolute value TBD (set relative to spell/minion damage in balance). No passive regeneration; healing only via cards. Ordinary melee hit deals ~5–8% HP (per kill-source rule, keeps chip a credible finisher).
-- **Stamina** — regenerates automatically over time (souls-style). Consumed by: Roll, Deflect, Unblockable Initiation, Unblockable Defense. At zero, the player cannot roll, deflect, or use Unblockable modes until it recovers. (Stamina is the resource that makes "I spent two rolls to get in range" cost something — see touchstone.)
+- **Stamina** — regenerates automatically over time (souls-style). Consumed by: Run, Roll, Deflect, Unblockable Initiation, Unblockable Defense. At zero, the player cannot run, roll, deflect, or use Unblockable modes until it recovers. (Stamina is the resource that makes "I spent two rolls to get in range" cost something — see touchstone.)
 - **Mana** — three stacking sources (passive auto-regen floor; melee-hit generation; Mana Accelerator totem). Spent on **Basic** and **Pitch Effect** card modes. Detailed in Hybrid Systems → Mana Economy.
 
 **Hero combat actions.**
+- **Move (Walk / Run)** — **two gaits.** Walking is the default: slower, free, always available. Running is a held button at the faster speed and **drains stamina** while held (Elden Ring reference), so closing distance competes with rolling and defending for the same bar. Walk speed and drain-per-second are authored balance values (TBD-in-playtest).
 - **Basic Attack** — melee chain, no resource cost. Deals chip damage *and* generates mana on hit (the flywheel, P2).
 - **Block / Deflect** — hold to block; a precise timing window triggers a **Deflect** (parry). Costs stamina.
 - **Roll (Dodge)** — i-frame dodge in the movement direction. Costs stamina.
@@ -154,7 +155,7 @@ The player-facing capabilities. Concrete tuning numbers live in **Hybrid Systems
 
 **Local play.** The demo runs **local split-screen**: **per-player split viewports**, each with its own camera and HUD, so each player's hand stays private (only a shared single camera would leak it). Two input profiles (P1/P2) select their controller implementations independently. *(Technical means in Technical Specifications.)*
 
-**Action set (to map in the Input Map):** move, basic attack, block/deflect (hold + release-timing for parry), roll/dodge (directional), play-card, stage-card-to-Pitch-Zone, activate/cancel Pitch, and card-mode selection.
+**Action set (to map in the Input Map):** move (walk by default), run (hold), basic attack, block/deflect (hold + release-timing for parry), roll/dodge (directional), play-card, stage-card-to-Pitch-Zone, activate/cancel Pitch, and card-mode selection.
 
 > **[NOTE FOR DESIGNER] Card-mode selection UX — open, high P4 relevance.** Choosing one of a card's four modes *in real time under pressure* is a core input-feel problem (radial menu? hold-modifier + slot? per-mode bind?). It directly touches P4 (must not become a parallel demand mid-combat) and the touchstone (committing an unblockable / staging a pitch must feel immediate). Deferred to UX design (`gds-ux`); flagged here so it is not assumed trivial.
 
@@ -258,10 +259,10 @@ Clean escalation: **survive → survive and deny → survive, deny, and punish.*
 
 A single public card slot with a countdown timer (TDD §5.6).
 - Drag a card from hand to stage it. Its **cost (mana + required orbs) and a countdown timer become visible to the opponent** on both screens.
-- Timer **20s vs 30s TBD** (20 = pressured/aggressive, 30 = strategic).
+- Timer **20 s, PROVISIONAL** (`E6-P`) — an authored balance field, not a constant. 20 = pressured/aggressive against 30 = strategic; the final verdict is the post-E6 playtest's.
 - Staging does **not** reduce hand below 4 — the staged card still counts as in-hand until resolved.
 - **Exit paths:** (a) player activates when cost is met; (b) player cancels → returns to hand; (c) **fizzle** — timer expires → card discarded + draw, and accumulated mana/orbs are **not** refunded; (d) opponent card removes it (*future content — out of demo scope*).
-- **One card in a player's Pitch Zone at a time.** Cross-player overlap is the open P4 question (candidates a/b/c; working assumption = overlap-with-lockout) — see Core Loop `[NOTE FOR DESIGNER]`.
+- **One card in a player's Pitch Zone at a time**, and the zone is **per-player** — both zones are visible to both players, and the two stage independently, so simultaneous pitches are legal (`E6-P`, provisional; judged at the post-E6 playtest). See Core Loop `[NOTE FOR DESIGNER]`.
 - **Reactor/Actor offload:** the HUD surfaces affordability (the player reads "one orb short," never computes it).
 
 > **Design intent — the timer is a shared deadline, not decoration (TDD §5.6).** The fizzle timer cuts *both* ways: the threatening player **cannot park a card indefinitely while farming orbs** (the clock forces commitment), and the defending player **knows exactly how long they must survive the threat**. That mutual, visible deadline is what turns the Pitch Zone into open-information bluffing (P3) rather than an untimed looming threat — and it is why 20 s (pressured) vs 30 s (strategic) is a genuine feel decision, not a cosmetic one.
@@ -411,7 +412,7 @@ One-screen summary; full breakdown (goals, stories, exit criteria, dependencies,
 | **E3** | Card system + mana economy | CardData `.tres`, deck 20 / hand 4, draw/reshuffle, mode-select UX, Basic mode, mana (passive + melee-hit). | melee-mana-gen |
 | **E4** | Minions & totems | Autonomous minion AI (data-defined priorities), pooling, throttled targeting, 3 totem subtypes. | minions, totems |
 | **E5** | Unblockable RPS + orbs | Chargeup + telegraph (Mode ②), color defense (Mode ③), three-tier ladder, stun, per-color dmg, orbs, color-as-defense. | unblockable, orbs |
-| **E6** | Pitch Zone | Stage / timer / cost, activate / cancel / fizzle, all-orb reset, affordability read, Pitch effects (Mode ④), overlap-lockout. **← vision complete; touchstone playable; go/no-go playtests begin.** | pitch-zone |
+| **E6** | Pitch Zone | Stage / timer / cost, activate / cancel / fizzle, all-orb reset, affordability read, Pitch effects (Mode ④), per-player zones with independent staging. Also E6 (`E6-P`): card-hand tint, hold-to-charge, the two-gait locomotion system, camera freedom, spell resolution. **← vision complete; touchstone playable; go/no-go playtests begin.** | pitch-zone |
 | **E7** | Scripted bot | AI controller impl (circle / interval attack / occasional roll / fixed unblockable). Solo iteration. | — |
 | **E8** | Equipment | 4 slots, data-defined passives, pre-match select (placeholder stats). | equipment |
 
