@@ -9265,3 +9265,149 @@ suite touched, nothing ran. `E5-R/R1`, `R4`, `R6`, `R7` and `R8` are log-only by
 
 Next steps: E6 planning pass, manual and report-only per `E4-R/R5`; card-hand tint is the first E6
 story (`E5-C/R5`). The operator reviews the log and pushes.
+
+## Session 2026-09-08 -- E6 planning
+
+The planning pass ran MANUAL and REPORT-ONLY (`E4-R/R5`), with no subagents (`5-7/R8` / `E5-R/R6`),
+against `gds-sprint-planning` (ruled unusable for report-only planning, 2026-09-01) and
+`gds-investigate` (2026-09-04); their evidence grading and path:line citation discipline were
+borrowed, their mechanisms were not. Report at `C:\dev\_e6-planning.md`, the artifact venue
+`E5-R/R2` established. Every ruling below was ratified by the operator; where the report proposed
+and the operator amended, the amendment is named as such.
+
+`E6-P/R1` -- CORRECTIONS OF RECORD, five, each found by content against the planning prompt.
+1. **The Pitch Zone shared-vs-per-player question was logged at `2-6/R9` (`:829`), NOT at the 2-4
+   smoke.** The 2-6 smoke's contribution is a different item -- `2-6/R19` finding S4, the anchor
+   A/B PLACEMENT reading (`:859`), which says in its own words that it "touches neither".
+2. **Mode ④ PITCH on the pad is a no-op BY OMISSION, and the state side is not a stub at all.**
+   `GamepadProfile` has no Y field (`src/controllers/gamepad_profile.gd:77`) and
+   `GamepadController` reads Y on no line (`gamepad_controller.gd:170-175`, `:310-313`); reaching
+   mode PITCH in state is a deliberate CRASH-ON-REACH, `Invariant.check(false, ...)` in
+   `_resolve_card_action`'s `_` arm (`src/state/match_state.gd:2371-2374`). What IS a reserved stub
+   is `PitchState`: one never-started `TimingWindow` plus `to_snapshot()`
+   (`src/state/pitch/pitch_state.gd:8`, `:11-12`).
+3. **The GDD did not read the ownership question as open.** `gdd.md:121` stated "Each player owns
+   their own Pitch Zone" with a global zone as candidate (a), `gdd.md:264` stated "One card in a
+   PLAYER'S Pitch Zone at a time", and the epic table stated "overlap-lockout" flatly, while
+   `epics.md:212` called the whole question OPEN. Three confidences in two documents; reconciled by
+   `E6-P/R4` rather than left to be discovered mid-story.
+4. **Two E6-planning inputs COLLIDE with retune entries that were to stay out of E6** -- the
+   chargeup animation against "chargeup unreadable", the defence animation/sound against "defense
+   feel reads as the defender did nothing". Reported rather than silently reconciled; resolved by
+   `E6-P/R8`(i).
+5. **There is no authoring seat for a pitch cost** -- see `E6-P/R9`. Discovered by content, not
+   inherited from any prior ruling.
+
+`E6-P/R2` (ratified) THE E6 STORY LIST IS ELEVEN STORIES. Keys are creation order; the board order
+is the ruled one and the two are not the same (the `4-3a`..`4-3e` precedent). Board order:
+`6-0-card-hand-tint` (B), `6-1-hold-to-charge` (A), `6-1b-chargeup-presentation` (B),
+`6-2-pitch-staging` (A), `6-3-pitch-hud` (B, at risk of A), `6-4-pitch-activation` (A),
+`6-7-locomotion-gaits` (A), `6-7b-locomotion-presentation` (B), `6-8-camera-freedom` (B, at risk of
+A), `6-6-defense-presentation` (B, at risk of A), `6-5-spell-resolution` (A). Tint is FIRST by
+`E5-C/R5`; spell resolution is LAST because `R-SPELL`'s forcing point is the E6 close-out and the
+playtest block runs after it. THREE stories are new at this pass, not carried from the report's
+eight: `6-7`, `6-7b` and `6-8`, created by the operator's rulings `E6-P/R3` and `E6-P/R7`.
+Hold-to-charge takes the SECOND slot -- it is independent of pitch, it discharges the one
+undischarged inherited item (`E5-R/R8` item 7, the CHARGING-hero-can-cast question `5-6` was given
+and did not take), its early-release scope talk is better had early, and its golden re-baseline
+lands ahead of the pitch chain rather than interleaved with it. Golden movement PREDICTED at `6-1`,
+`6-2`, `6-4`, `6-5`, `6-7` -- one named cause each, the `E3-RG/R2` discipline. `6-2`'s is certain by
+construction: `MatchState.to_snapshot()` already carries the `"pitch"` key (`match_state.gd:864`),
+so any field `PitchState` gains moves the hash.
+
+`E6-P/R3` (operator ruling, Q1) LOCOMOTION IS TWO GAITS, AND WALK IS THE NEW DEFAULT. Walk is NEW,
+slower, free, and the default gait; RUN is the CURRENT speed, a held button, and drains the SAME
+stamina bar that attack, roll and deflect already spend (the Elden Ring reference the operator
+named). Closing distance therefore competes with defending for one resource. Walk speed and
+drain-per-second are AUTHORED AT `6-7`, not here. This SUPERSEDES the `5-3/R6(d)` retune entry
+(locomotion speed / walk-as-default / sprint-costs-stamina) -- same ground, now ruled rather than
+deferred. Of the report's three shapes the operator took the second (two gaits) over the
+recommended first (sprint-costs-stamina on one speed); the momentum-as-a-resource shape is not
+taken. Today's build has ONE `move_speed` (`src/state/resources/balance_config.gd:16`), so this is
+a genuinely new system and Tier A by the golden clause, not a retune.
+
+`E6-P/R4` (operator ruling, Q2) THE PITCH ZONE IS PER-PLAYER, BOTH ZONES VISIBLE TO BOTH PLAYERS,
+STAGING INDEPENDENT -- PROVISIONAL. Both players may hold a staged card simultaneously. Candidate
+(a) global zone and candidate (b) overlap-with-lockout (the standing working assumption since the
+GDD was written) are NOT taken; the effect is candidate (c), free overlap. The P4 cost is known and
+accepted for now -- with both zones live a defender tracks two timers, a colour telegraph, stamina
+and spacing at once -- which is exactly why the ruling is PROVISIONAL and the post-E6 playtest is
+named as its judge. LOCKED AND UNCHANGED: the pitched card is the ONLY public information; hands
+stay private. `gdd.md` reconciled in the same pass (`E6-P/R1` item 3).
+
+`E6-P/R5` (operator ruling, Q3) THE PITCH TIMER IS 20 s, PROVISIONAL, AS AN AUTHORED BALANCE FIELD.
+Not a constant, not a hardcoded value; the 20-vs-30 verdict belongs to the post-E6 playtest. The
+design-intent blockquote at `gdd.md` is deliberately NOT edited -- its argument (the timer is a
+shared deadline and the choice is a feel decision) survives the number being provisionally set.
+
+`E6-P/R6` (operator ruling, Q4) PER-ATTACK-TYPE COUNTER IDEAS GO TO THE POST-E6 PLAYTEST BLOCK,
+JUDGED WITH A PAD. `5-5/R10`'s sweep/jump/thrust counters, their ranges and auto-aim were orphaned
+when the `5-6` ladder scope talk ruled on none of them and were re-homed as an E6-planning input by
+`E5-C/R7`. They expand the combat layer rather than close the loop, so they are OUT of E6 and now
+have a named owner for the first time.
+
+`E6-P/R7` (operator ruling, Q6) CAMERA FREEDOM IS SPECIFIED AND SEATED AT `6-8`. Two behaviours:
+(a) lock-on cycling must reach ALL live targets INCLUDING those behind the hero -- full 360, not a
+front arc; (b) the camera can be UNLOCKED and manually rotated when not locked on. Exact controls
+are decided at that story's scope talk. This closes the report's objection that "additional camera
+freedom (unspecified)" could not be scoped.
+
+`E6-P/R8` (ratified, with two amendments) THE IMPLEMENTATION RULINGS CLAUDE TAKES. Items 1-8 of the
+report's S5 block 1 stand as written: (1) card colour reaches the HUD by riding the EXISTING
+`cards_changed` seam wrapper in the runner (`src/main/match_runner.gd:395-398`, the `4-B1`
+precedent) -- the HUD never reads `CardDatabase`, which only the runner may (`:522`); (2) the pitch
+HUD gets a NEW MEMBER of the observation-seam family (the `connect_orbs_changed` precedent,
+`E5-C/R3`), never a second `MatchState` direct-connect -- `E5-C/R2`'s named exception stays at its
+one instance (`match_runner.gd:501`) unless the operator rules otherwise; (3) the overlap rule is an
+OBLIGATION on `6-2`, not its own story key; (4) keys `6-0`..`6-8`, creation order, not board order;
+(5) the chargeup ANIMATION is its own Tier B story, separate from the state-side hold-to-charge --
+the `5-2`/`5-3` state-then-presentation split applied again; (6) spell resolution is last, carrying
+M5 and M6 (`deferred-work.md:232-233`); (7) tier assignments as tabled, every Tier B provisional on
+its measured before/after; (8) the pitch-cost seat is FLAGGED, not taken -- see `E6-P/R9`.
+**AMENDMENT (i), operator:** the two retune collisions of `E6-P/R1` item 4 are RESOLVED IN FAVOUR
+OF THE E6 STORIES. `6-1b` and `6-6` stay in E6 and discharge "chargeup unreadable" and "defense feel
+reads as the defender did nothing" IN PASSING. The standing rule that retune stays out of E6 bars
+SLOTTING A RETUNE ENTRY AS A STORY; it does not forbid fixing one an E6 story lands on anyway.
+**AMENDMENT (ii), operator:** walk and turn-in-place animations are not a deferred item awaiting the
+locomotion ruling -- they are the PRESENTATION HALF of the locomotion system, seated at `6-7b`.
+
+`E6-P/R9` (ratified) THE PITCH-COST AUTHORING SEAT IS A NAMED OBLIGATION ON THE `6-2` SCOPE TALK.
+`CardData` carries ONE `cast_condition` shared across all four modes
+(`src/state/resources/card_data.gd:40`), `pitch_effect` (`:37`) is UNAUTHORED on all nine fixture
+cards (no `pitch` line in any `data/cards/*.tres`), and `CardCastCondition.orb_costs` is empty
+everywhere BY DESIGN (`src/state/resources/card_cast_condition.gd:29-35`). So the GDD's Mode ④ cost
+of "Mana (higher) + orbs" (`gdd.md:178`) has nowhere to live today. Adding a field is
+codebase-shaping under CLAUDE.md's autonomy test, so it is DECIDED AT THAT SCOPE TALK and not by the
+implementing pass. UNMEASURED and named as such: what authoring nine cards' worth of Mode-④ content
+actually costs. This is the largest unpriced piece of E6.
+
+`E6-P/R10` (operator, recorded) THE MIXAMO WALK CLIPS MUST PHYSICALLY BE IN THE REPO BEFORE THE
+`6-7b` CREATE PASS. An operator-owned manual step, recorded because E3 learned it the hard way
+(`3-0a`). No story may be created against an asset that is not yet on disk.
+
+`E6-P/R11` (recorded, not ruled) WHAT E6 DOES NOT TAKE, and what still has no owner. The five E5
+retune entries stay OUT as ENTRIES (`deferred-work.md` E5 residue), with the two `E6-P/R8`(i)
+exceptions and the one `E6-P/R3` supersession. The playtest + melee retune block stays deferred
+until AFTER E6; E6's exit feeds it. Already-owned gaps are unchanged: minions stalling on obstacles,
+`standard` priority giving a dead arena at 10v10, the AC 11 flicker cause, and the two-pad
+mode-2/mode-3 exchange NOT RUN at `5-7` -- all the playtest block's. The operator's "smarter, more
+natural minions" input (`E5-C/R9`) is the SAME item as the stall gap and takes its existing owner
+rather than a new story. Open decisions (b) reshuffle-window price and (e) hand-size variation stay
+with the operator and a pad; (e) INTERACTS with pitch staging, since the staged card still counts
+toward the hand of 4 (`gdd.md:262`, `src/state/cards/hand.gd:25`), but is not forced by it. Two
+items reach E6 with NO E6 owner and are recorded so they are not read as discharged: `5-1a/R14`
+(`Invariant.check` non-load-bearing in an exported build) is owed by the first story that adds an
+exported build, and NO E6 story does; `5-1a/R15`'s `camera_pushes` twin stays deliberately open --
+note `6-8` touches the camera but not that seat.
+
+### Close-out
+
+Docs-only pass, five commits, none pushed, no suite run, no subagents. `docs(gdd)` (pitch ownership,
+timer, the two-gait locomotion seats, the epic-table E6 row); `docs(epics)` (the E6 section rewritten
+to the eleven keyed stories plus the obligations block); this entry (`docs(decision-log)`, a PURE
+APPEND -- no existing entry edited, per `E5-R/R7`); `board` (`sprint-status.yaml` gains `epic-6:
+backlog` and the eleven story keys, lifecycle vocabulary untouched); `docs(deferred-work)` (re-tags
+only, pointers not prose). The log commit PRECEDES the board commit, the `5-5` close-out ordering.
+No story file is touched -- none exists yet. No code, no golden, no test.
+
+Next steps: the `6-0-card-hand-tint` create pass. The operator reviews the log and pushes.
