@@ -120,6 +120,20 @@ var _card_armed_style: StyleBoxFlat
 ## while a replacement draw is in flight.
 var _own_card_labels: Array[Label] = []
 
+## Story 6-0 (AC 1/AC 5): the four colour SWATCHES, one per own-row panel, index-aligned with
+## `_own_card_panels`/`_own_card_labels`. A SEPARATE child control, not a mutation of
+## `_card_base_style`/`_card_armed_style` -- `set_card_selection` (below) rewrites the WHOLE panel
+## stylebox on every call for whichever style it picks, so a tint painted INTO that stylebox would
+## be silently dropped on the next arm/disarm. A sibling control `set_card_selection` never
+## touches survives every call by construction, which is the deliberate answer to AC 5 (see the
+## Dev Notes' "styling crux is AC 5, not AC 1").
+var _own_card_swatches: Array[Panel] = []
+## One UNSHARED `StyleBoxFlat` PER swatch (unlike `_card_base_style`/`_card_armed_style`, which are
+## deliberately shared across all four panels) -- each panel's swatch needs an INDEPENDENT colour,
+## so mutating this instance in place is the correct move here, not the shared-instance bug
+## `_make_card_armed_style`'s docstring warns against.
+var _own_card_swatch_styles: Array[StyleBoxFlat] = []
+
 ## Story 4-6a (AC 13/AC 14): the locked-target dot. One per root, therefore one per SubViewport,
 ## therefore per-slot by construction -- see _build_lock_marker.
 var _lock_marker: Panel
@@ -220,16 +234,44 @@ func on_orbs_changed(red: int, blue: int, green: int) -> void:
 ## IN_FLIGHT_CAPTION; a blank slot that does NOT appear here is 4-0 AC 8's permanent hole and stays
 ## truly blank — the deferred-work.md finding this discharges. Defaulted to an empty Array so the
 ## two pre-existing test call sites (3-arg) keep exercising the permanent-hole branch unchanged.
+## Story 6-0 (AC 1/AC 2/AC 3): `card_colors` is the SAME id->colour map `_derive_card_colors()`
+## builds runner-side (AC 3, reused rather than re-derived a second time here), riding this
+## existing wrapper alongside `pending_draw_owed` rather than a tenth `connect_*` seam (AC 2).
+## `HudRoot` never reads `CardDatabase` itself -- the runner hands a plain
+## `Dictionary[StringName, Enums.CardColor]` (AC 3). Defaulted to an empty Dictionary so the
+## pre-existing 3-arg and 4-arg test call sites keep exercising their branches unchanged.
 func on_cards_changed(
-		hand_ids: Array, deck_count: int, _discard_count: int, pending_draw_owed: Array = []) -> void:
+		hand_ids: Array, deck_count: int, _discard_count: int, pending_draw_owed: Array = [],
+		card_colors: Dictionary = {}) -> void:
 	for i in _own_card_labels.size():
 		if i < hand_ids.size() and hand_ids[i] != Hand.EMPTY:
-			_own_card_labels[i].text = str(hand_ids[i])
+			var id: StringName = hand_ids[i]
+			_own_card_labels[i].text = str(id)
+			# AC 1: a slot holding a real card id is tinted; AC 1's "exhaustively" list of
+			# untinted states (EMPTY, permanent hole, in-flight) all fall out of this branch never
+			# running for them -- none of the three has a card id to look colour up by.
+			_set_swatch_color(i, card_colors.get(id, null))
 		elif pending_draw_owed.has(i):
 			_own_card_labels[i].text = IN_FLIGHT_CAPTION
+			_set_swatch_color(i, null)
 		else:
 			_own_card_labels[i].text = ""
+			_set_swatch_color(i, null)
 	_deck_label.text = "DECK %d" % deck_count
+
+
+## Story 6-0 (AC 1): the single write seat for the colour swatch. `color` is an
+## `Enums.CardColor` or `null` (no colour found / no card in the slot) -- `null` hides the
+## swatch rather than guessing a colour for a card the runner's map does not carry.
+func _set_swatch_color(index: int, color: Variant) -> void:
+	if index >= _own_card_swatches.size():
+		return
+	var swatch := _own_card_swatches[index]
+	if color == null:
+		swatch.visible = false
+		return
+	_own_card_swatch_styles[index].bg_color = ORB_COLORS[color as int]
+	swatch.visible = true
 
 
 ## EventBus.reshuffle_vulnerable_window_opened (slot bound at wiring, the on_round_ended shape —
@@ -462,12 +504,53 @@ func _build_hand_row() -> void:
 		caption.offset_left = 5.0
 		caption.offset_right = -5.0
 		caption.offset_top = 4.0
-		caption.offset_bottom = -4.0
+		# Story 6-0: -13.0, was -4.0. The caption's bottom inset was PULLED UP to open a band for
+		# the colour swatch below it. See the swatch's own comment for the arithmetic -- the short
+		# version is that the old -4.0 left no room at all: the swatch needs a band, and the armed
+		# style's 5px inward border owns the bottom 5px, so the caption had to give some back.
+		caption.offset_bottom = -13.0
 		card.add_child(caption)
+		# Story 6-0 (AC 1/AC 5): the colour swatch -- a thin bar along the panel's bottom edge.
+		# A sibling of `caption`, not a child of it and not a mutation of `card_style` -- see the
+		# swatch fields' own doc comment for why it must stay outside the swapped stylebox. Hidden
+		# by default: nothing is tinted until on_cards_changed says so, so a slot that never
+		# receives a real card id (Hand.EMPTY, permanent hole, in-flight) stays untinted by
+		# construction rather than by remembering to skip a colour lookup.
+		#
+		# THE REAL RECTS, in the panel's own 84x92 space (custom_minimum_size above; the HandStrip
+		# is 92 tall and the HBox gives each child the full height). These numbers are computed,
+		# not asserted -- an earlier revision of this comment claimed the swatch sat "BELOW the
+		# caption's -4.0 inset so it never overlaps", which was arithmetically FALSE by 5px:
+		#   caption   y in [4, 79]   (PRESET_FULL_RECT, offset_top 4 / offset_bottom -13)
+		#   swatch    y in [80, 86]  (anchored to the bottom, offset_top -12 / offset_bottom -6)
+		#   armed border, bottom band  y in [87, 92]  (set_border_width_all(5), grows INWARD)
+		# One pixel of clearance on each side: the swatch touches neither the caption's text rect
+		# above it nor the armed tell's gold band below it. Horizontally x in [6, 78] clears the
+		# armed border's side bands ([0,5] and [79,84]) the same way, which is why the 6.0/-6.0
+		# insets are not merely decorative. Whether the resulting bar READS at a glance is the
+		# operator smoke's call (PROC/R8), not this arithmetic's.
+		var swatch := Panel.new()
+		swatch.name = "ColorSwatch"
+		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		swatch.anchor_left = 0.0
+		swatch.anchor_right = 1.0
+		swatch.anchor_top = 1.0
+		swatch.anchor_bottom = 1.0
+		swatch.offset_left = 6.0
+		swatch.offset_right = -6.0
+		swatch.offset_top = -12.0
+		swatch.offset_bottom = -6.0
+		var swatch_style := StyleBoxFlat.new()
+		swatch_style.set_corner_radius_all(2)
+		swatch.add_theme_stylebox_override("panel", swatch_style)
+		swatch.visible = false
+		card.add_child(swatch)
 		# Story 3-5a (AC 10): the panels are retained for the selection indicator; story 3-6 adds
 		# the index-aligned captions for the hand contents.
 		_own_card_panels.append(card)
 		_own_card_labels.append(caption)
+		_own_card_swatches.append(swatch)
+		_own_card_swatch_styles.append(swatch_style)
 	_card_base_style = card_style
 	_card_armed_style = _make_card_armed_style()
 

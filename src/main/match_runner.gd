@@ -292,9 +292,21 @@ func _ready() -> void:
 	# Story 3-0c (AC 5/AC 6): both content channels are captured here, in this order, and the
 	# ORDER ITSELF enters the record. On replay the recorder re-injects in the recorded order and
 	# refuses an unsound one — the cost seam's totality check reads _deck_contents, so
-	# costs-before-deck would validate against an empty composition and pass vacuously. Replay
-	# never reads CardDatabase: without this channel a recording would silently depend on the
-	# contents of data/cards/, which change without a trace.
+	# costs-before-deck would validate against an empty composition and pass vacuously.
+	#
+	# STATE AND DETERMINISM never read CardDatabase under replay: without this channel a recording
+	# would silently depend on the contents of data/cards/, which change without a trace. That is
+	# the invariant, and it is about the simulation only.
+	#
+	# Story 6-0 sharpened the wording, because PRESENTATION is a different matter and the blanket
+	# claim this comment used to make ("replay never reads CardDatabase") had become false. The HUD
+	# tint reads static database content at wiring time, on BOTH paths, and under replay it
+	# therefore reflects TODAY's database rather than the recorded one. That is accepted and
+	# deliberate, on the same footing as the caption: a replay already renders recorded ids with
+	# today's presentation. The one visible consequence, documented rather than guarded: a recorded
+	# id that no longer exists in today's database has no colour entry, so its swatch stays hidden
+	# while the caption still shows the id. Presentation drifts with the database; the simulation
+	# does not, and nothing in the golden or the replay record depends on the tint.
 	if replaying:
 		Invariant.check(_replay_record.replay_inject_content(_match_state),
 			"recorded content order is unsound — the cast-cost totality check would be vacuous")
@@ -358,6 +370,14 @@ func _ready() -> void:
 	# the tree) BEFORE these connects, so the bars exist when the priming call lands.
 	var hud_viewports: Array[SubViewport] = [$P1View/P1Viewport, $P2View/P2Viewport]
 	var huds: Array[HudRoot] = []
+	# Story 6-0 (AC 2/AC 3/AC 4): the same TOTAL id->colour map _derive_card_colors() builds for
+	# the state-injection channel (line ~330, non-replay only), built AGAIN here so it is
+	# available under BOTH replay and live play -- this read is CardDatabase content, static and
+	# load-once with no live/replay divergence risk (unlike the _card_colors MatchState injects,
+	# which this HUD wrapper does not touch). Held as a local, captured by the cards_changed
+	# wrapper lambda below -- a plain Dictionary carries no reference-cycle risk the way a
+	# PlayerState capture did (4-B1 code review, see the lambda's own comment).
+	var card_colors_by_id := _derive_card_colors()
 	for slot: int in 2:
 		var hud := HudRoot.new()
 		# Story 3-6 (AC 4): the authored vulnerable-window duration, handed over BEFORE add_child
@@ -394,8 +414,11 @@ func _ready() -> void:
 		var slot_index := slot
 		connect_cards_changed(slot, func(hand_ids: Array, deck_count: int, discard_count: int) -> void:
 			var player: PlayerState = _match_state.p1 if slot_index == 0 else _match_state.p2
+			# Story 6-0 (AC 2): card_colors_by_id rides this SAME wrapper -- no tenth connect_* seam
+			# (the nine-seam family stays exactly nine, test_architecture_invariants.gd). Reused, not
+			# re-derived: the local built once above this loop, read inline here (CONSTRAINT C).
 			hud.on_cards_changed(hand_ids, deck_count, discard_count,
-					player.pending_draw_owed.duplicate()))
+					player.pending_draw_owed.duplicate(), card_colors_by_id))
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
 		# Story 3-6 (AC 4): the reshuffle flag. BOTH viewports subscribe to the SAME ownerless bus
 		# event (E3-RG/R3 — "this player's deck ran out" is a match-wide public fact), each binding
