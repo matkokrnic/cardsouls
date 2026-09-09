@@ -113,7 +113,7 @@ development_status:
   epic-6: in-progress
   6-0-card-hand-tint: done  # Tier B
   6-1-hold-to-charge: done  # Tier A
-  6-1b-chargeup-presentation: backlog  # Tier B
+  6-1b-chargeup-presentation: ready-for-dev  # Tier B
   6-2-pitch-staging: backlog  # Tier A
   6-3-pitch-hud: backlog  # Tier B
   6-4-pitch-activation: backlog  # Tier A
@@ -126,7 +126,7 @@ development_status:
 story_notes:
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
   6-1-hold-to-charge: "done 2026-09-09, Tier A close-out complete (hold-through-chargeup + paid feint per 6-1/R1-R15, golden and 30-key set unmoved, suite 735/0/5430 + 56 integration, smoke 6/7 PASS (item 5 machine-pinned, named finding for 6-1b), decision-log session 6-1 close-out)."
-  6-1b-chargeup-presentation: "Tier B. The chargeup animation (crouch/leap, hover, auto-aim), E5-C/R9. Expected to discharge the 'chargeup unreadable' retune entry in passing (E6-P/R8 amendment i)."
+  6-1b-chargeup-presentation: "Tier B, ready-for-dev. Chargeup readability: uniform-speed compression front-loads the swing so the strike reads done mid-window (6-1/R15, corrected framing); fix = progress-driven playhead, strike frame at expiry, held beat as feel knob. src/state/ byte-identical; 6-1c owns aim/reach/travel."
   6-2-pitch-staging: "Tier A, golden moves by construction (MatchState.to_snapshot already carries the pitch key). Scope talk owes the pitch-cost authoring seat, E6-P/R9. Carries the per-player/independent-staging rule, E6-P/R4."
   6-3-pitch-hud: "Tier B AT RISK of Tier A. May NOT add a second MatchState direct-connect (E5-C/R2); uses the observation-seam family. Owes the anchor A/B verdict (2-6/R19 finding S4)."
   6-4-pitch-activation: "Tier A. Wires pad Y and ends mode 4's structural unreachability; owes the Y-guard question 5-7/R7 kept open for exactly this story (LOW-1/LOW-2)."
