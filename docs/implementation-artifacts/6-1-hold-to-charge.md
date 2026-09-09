@@ -4,7 +4,7 @@ baseline_commit: cf7489bb49e3765af893eecf165b9aa559573271
 
 # Story 6.1: Hold-to-Charge
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** SECOND E6 story (`E6-P/R2` board order), and the first E6 story that touches
 > `src/state/`. Tier A by the golden clause AND by content — `CHARGING` gets its first exit path
@@ -304,43 +304,43 @@ and never happened, so there is nothing left to name as a second candidate.)
 
 ## Tasks / Subtasks
 
-- [ ] Read the full MEASURED findings section above and the cited line ranges in `match_state.gd`,
+- [x] Read the full MEASURED findings section above and the cited line ranges in `match_state.gd`,
       `input_intent.gd`, `gamepad_controller.gd`, `gamepad_profile.gd`, and
       `test_unblockable_initiation.gd`/`test_unblockable_defense.gd` BEFORE writing any code (AC: all)
-- [ ] Decide the intent-stream shape for the release signal (Dev Notes/Open Questions) — the
+- [x] Decide the intent-stream shape for the release signal (Dev Notes/Open Questions) — the
       `BLOCKING` `intent.is_held(&"block")` precedent is the strongest candidate but is a dev-pass
       call, not pre-ruled (AC: 1, 2, 5)
-- [ ] Wire the chosen shape through `GamepadController` (`cast_unblockable_button`,
+- [x] Wire the chosen shape through `GamepadController` (`cast_unblockable_button`,
       `_prev_held`/reconnect-priming discipline, the L3 (`cast_button`) chord interaction named as
       an open question below) (AC: 1, 2, 5)
-- [ ] Add the early-release exit arm to `MatchState._resolve_actions`'s `CHARGING` case
+- [x] Add the early-release exit arm to `MatchState._resolve_actions`'s `CHARGING` case
       (`match_state.gd:960-962`), reading the new intent fact ahead of (or alongside) the existing
       timer read, and the three-part teardown (`set_action_state(IDLE)` /
       `charge_window.start(0)` / `charge_color = NO_TELEGRAPH_COLOR`) mirroring
       `_reset_player`'s exact shape (AC: 1, 2, 3, 4)
-- [ ] Update `_unblockable_intent()`/`_run_chargeup()` and every direct CHARGING-driving helper in
+- [x] Update `_unblockable_intent()`/`_run_chargeup()` and every direct CHARGING-driving helper in
       all three files (`test_unblockable_initiation.gd`, `test_unblockable_defense.gd`,
       `test_orbs_economy.gd` — see finding 4/AC 8) to hold the new release fact true throughout,
       per the MEASURED finding on the existing tests' blast radius (AC: 1, 8)
-- [ ] Write new tests for: the paid feint on early release (card/stamina spent, no landing, no
+- [x] Write new tests for: the paid feint on early release (card/stamina spent, no landing, no
       orb, telegraph cleared, IDLE immediately), the tap case (AC 3), and the commit-until-landing /
       release-after-completion-is-a-no-op case (AC 1) (AC: 1, 2, 3, 4). Each new test must be shown
       RED against the absence of the exit arm before it is shown green, per the dev-pass restore
       discipline (back up the mutated file to scratchpad + SHA256 before mutating; restore by
       copying back, never `git checkout`) — a test that would pass against the un-mutated code is
       not a test.
-- [ ] Confirm `test_a_charging_hero_cannot_cast_basic` (`test_unblockable_defense.gd:837-846`) and
+- [x] Confirm `test_a_charging_hero_cannot_cast_basic` (`test_unblockable_defense.gd:837-846`) and
       `test_table_has_no_inbound_stunned_charging_or_dead_edges`
       (`test_action_state.gd:91-105`) both stay green, UNEDITED, as regression pins (AC: 6, 8)
-- [ ] Measure and record the BEFORE golden hash + snapshot key set; implement; measure AFTER; fill
+- [x] Measure and record the BEFORE golden hash + snapshot key set; implement; measure AFTER; fill
       in the Golden Prediction section's result (AC: 9)
-- [ ] Measure and record BOTH parts of the `FORMAT_VERSION` question (Dev Notes/Open Questions,
+- [x] Measure and record BOTH parts of the `FORMAT_VERSION` question (Dev Notes/Open Questions,
       `6-1/R4`): (a) does the chosen shape force a bump by the round-trip test alone, and (b) does
       an existing v7 recording of a mode ② cast replay to a DIFFERENT outcome under the new
       mechanism. Bump 7 -> 8 with hard v7 rejection is the settled answer; verify the round-trip
       and record both measurements (AC: 5)
-- [ ] Run the full suite (`bash test/run_all.sh`) and record BEFORE/AFTER counts (AC: 8)
-- [ ] Live smoke with a single physical pad, flip `[0,3]` — see the Live Smoke section below
+- [x] Run the full suite (`bash test/run_all.sh`) and record BEFORE/AFTER counts (AC: 8)
+- [x] Live smoke with a single physical pad, flip `[0,3]` — see the Live Smoke section below
 
 ## Live Smoke
 
@@ -359,6 +359,24 @@ Single physical pad, flip `[0,3]` (covers both slots — modes ②/③ are pad-o
 6. **Ordinary regression** — melee, roll, block, and a Basic cast from an IDLE hero all behave as
    before; the L3-held suppression from AC 4 observed and recorded as expected, not as a defect.
 7. **fps** recorded.
+
+## Live Smoke Results
+
+Single physical pad, flip `[0,3]`; flip reverted after.
+
+Items 1, 2, 3, 4, 6, 7: **PASS.**
+
+Item 5: **NOT JUDGEABLE BY EYE.** The state boundary this item exercises — a release on or after the
+expiry tick still lands — is machine-pinned by `test_a_release_on_the_landing_tick_itself_still_lands`
+and mutation B (see the Mutation table in the Dev Agent Record below); it is not resting on this
+smoke pass to prove it. The operator observed that the chargeup ANIMATION finishes before the
+authored 1.0s window expires, so a release that looks late by eye, judged against the finished
+animation, is state-wise still an early release and correctly feints. Recorded as a named
+presentation finding assigned to `6-1b` — the chargeup clip under-runs the authored window; the
+animation is not final regardless (Non-Goals) and `6-1b` is where presentation timing is owned. See
+decision-log `6-1/R15`.
+
+[Source: docs/playtest-log.md, 2026-09-09 entry]
 
 ## Dev Notes
 
@@ -513,10 +531,197 @@ Single physical pad, flip `[0,3]` (covers both slots — modes ②/③ are pad-o
 
 ### Agent Model Used
 
-(to be filled in by the dev pass)
+Opus 5 (operator-stated). The pass's full record is APPENDED below as "Dev Agent Record — appended by the dev pass (2026-09-09)"; this stub is left in place rather than replaced.
 
 ### Debug Log References
 
 ### Completion Notes List
 
 ### File List
+
+---
+
+## Dev Agent Record — appended by the dev pass (2026-09-09)
+
+### Agent Model Used
+
+Opus 5 (operator-stated)
+
+### Debug Log References
+
+Full-suite outputs were written OUTSIDE the repo, per the ratified suite mechanism, and read by
+opening the file rather than tailing it:
+
+| Run | File | mtime | Result |
+| --- | --- | --- | --- |
+| 1 — BEFORE baseline, before any edit | `C:\dev\_61-suite-before.txt` | 2026-09-09 11:46:52 | 720 tests / 0 failed / 5363 assertions; 56 integration PASS; ALL TESTS PASSED |
+| 2 — AFTER the diff | `C:\dev\_61-suite-after.txt` | 2026-09-09 12:03:49 | 735 / 0 / 5430 state PASS; **1 integration FAIL** (`test_charge_telegraph_dispatch_live.gd`); SOME TESTS FAILED |
+| 3 — final certification | `C:\dev\_61-suite-after2.txt` | 2026-09-09 12:08:49 | 735 tests / 0 failed / 5430 assertions; 56 integration PASS; ALL TESTS PASSED |
+
+**THE THIRD RUN IS DISCLOSED WITH ITS REASON rather than folded into the second.** Run 2 surfaced a
+GENUINE regression this story's own MEASURED finding 4 had mis-measured (see Completion Note 3); a
+run after the fix was the only way to certify the final state. Budget interval: 11:46:52 to 12:08:49
+(21m57s). Iteration between the runs used the state harness and single integration files directly,
+which write no suite file and are not full-suite runs.
+
+### Completion Notes List
+
+**1. DEV CALL — the intent-stream shape for the release signal: a `held` dictionary key,
+`&"card_cast"`, and NOT a new typed `InputIntent` field.** The `BLOCKING` precedent
+(`match_state.gd:944-946`) is followed exactly as the story's Open Question expected: `held` is the
+dictionary the state layer already reads live per tick, the key is PREFIX-FREE and names no pad
+button (`input_intent.gd:20-23`'s contract), and `BLOCKING`'s own exit needed no new field either.
+The name `&"card_cast"` is the token the codebase ALREADY uses for this action — it is the
+`reject_action(&"card_cast", ...)` label at every cast refusal seat — so no new vocabulary enters
+the system. `InputIntent` is UNCHANGED: not one line, which is the outcome the story's
+Files-expected list preferred.
+
+**2. DEV CALL — the L3 chord fork: the release signal reads B's OWN raw state, ALONE.**
+`card_cast_held` is `unblockable_raw`, deliberately not `unblockable_raw and cast_held`. Reasoning,
+recorded because the story asked for it to be named: L3 (`cast_button`) is the ARMING modifier and
+its entire product is `armed_slot`, a job that is finished the instant the commit fires — the
+chargeup it started belongs to B. Conjoining them would let the release of a MODIFIER destroy an
+already-paid attack, and would do it on the one input the player has most reason to let go of
+(`resolve_card_tick`'s own `else` arm resets `armed_slot` to -1 precisely because L3-up means "done
+selecting"). AC 4's pad-layer suppression is unchanged either way. Pinned directly by
+`test_resolve_card_tick_reports_the_unblockable_confirm_as_held`, whose third row IS this decision,
+and mutation-proven against the rejected alternative (mutation D below). The other two confirms
+(A/X) are excluded for the same class of reason: neither mode ① nor mode ③ has a hold contract, and
+folding them in would let a held A keep a chargeup alive.
+
+**3. MEASURED CORRECTION TO THIS STORY'S OWN FINDING 4 — `test_charge_telegraph_dispatch_live.gd`
+IS inside the blast radius, and the story says it is not.** Finding 4 excluded it on the ground that
+it "enters `CHARGING` by a direct `set_action_state` with no intent at all". That is true of the
+ENTRY and is not the whole question: the poke must SURVIVE `CHECK_DELAY` frames to be measurable,
+and each of those frames is a real `advance()` driven by real controllers, which with no pad
+connected emit a neutral intent — a release. MEASURED (run 2, then reproduced in isolation): all
+three colours read clip `idle`, a dark ChargeMarker and total silence. Fixed at the INPUT SEAM,
+where the new fact lives: the test installs a `HoldingController` stand-in on P1 for the frames it
+measures. Re-run in isolation: PASS, non-vacuously (`[swipe, thrust, jump_attack]`,
+`[StingChargeRed, StingChargeBlue, StingChargeGreen]`). P2 keeps its real controller, so the file's
+cross-slot claim is untouched. **The general lesson, recorded rather than left to be rediscovered:
+finding 4's own sentence ("every direct call site that drives CHARGING past its first tick") is the
+correct rule; its exclusion list applied that rule to entry points only.**
+
+**4. AC 6's "UNEDITED" CLAUSE COULD NOT SURVIVE THE MECHANISM THE SAME STORY RATIFIES — three test
+bodies gained one argument each, and this is flagged for the operator rather than absorbed.** The
+gate at `match_state.gd:2426-2428` is UNTOUCHED and every assertion in every affected test is
+UNCHANGED; what changed is the FIXTURE's expression of "the hero is still charging". Cause,
+measured: `_resolve_actions` is step 3 and `_resolve_card_action` is step 6, so on a tick whose
+intent carries no `card_cast` held key the feint fires BEFORE the cast is evaluated, and the hero
+the gate is meant to refuse is already IDLE. This is finding 4's predicted blast radius reaching
+three tests the story listed as outside it. Affected, in `test_unblockable_defense.gd`:
+`test_a_charging_hero_cannot_cast_basic`, `test_a_charging_hero_cannot_cast_defense`,
+`test_the_basic_cast_state_gate_precedes_the_empty_slot_gate`. Each now passes `[&"card_cast"]`
+through the file's own established `held: Array = []` helper idiom (`_defense_intent` already had
+that seat; `_basic_intent` gained it). On real hardware this is live-play truth — B stays down while
+A or X is pressed. **The two guards named in Project Context Rules are genuinely UNEDITED and green:
+`test_table_has_no_inbound_stunned_charging_or_dead_edges` and
+`test_runner_observation_seams_are_exactly_nine` (their files carry no diff at all).**
+
+**5. THE ARM'S ORDER IS THE WHOLE OF AC 1's LAST SENTENCE, and it is structural rather than a second
+check.** The timer is the `if` and the release the `elif`, so once the window has stopped running
+the chargeup is COMPLETE and a release observed on that same tick LANDS. There is no tick on which
+both are true and the wrong one wins. Mutation-proven in both directions (B and C below).
+
+**6. `_charge_reach` STALENESS ACROSS FEINT-THEN-RECHARGE — confirmed, not assumed from the
+non-feint case.** The latch is written every tick a NEW chargeup is active (`match_runner.gd:667`),
+and a feint is strictly SHORTER than a full chargeup, so the next chargeup has strictly MORE ticks
+of fresh pushes before its own landing than a full-length one does. The feint case is therefore
+strictly safer than the sequence `5-2/R6` already absorbs. No code needed;
+`test_a_feint_frees_the_next_cast_while_the_charging_gate_stays_shut` drives feint-then-recharge and
+the new chargeup behaves normally.
+
+**7. `_reset_player` WAS NOT REFACTORED into a shared teardown helper.** The three lines are written
+inline in the new arm, citing `_reset_player` by line. That function clears the action state only
+under a three-state gate and clears `hero.stun` and the defense window in the same breath; the
+SHARED shape is these three lines, not that function's body, and factoring it out would have made
+the new arm depend on a gate it does not want.
+
+**8. LIVE SMOKE IS NOT DONE — the one task left unchecked.** It needs a physical pad and the
+operator; this pass ran headless only. All seven smoke items stand as written.
+
+### FORMAT_VERSION — BOTH parts measured (`6-1/R4`)
+
+**(a) Does the chosen shape force a bump by the round trip alone? MEASURED: NO.** `held` is walked
+generically by key at both ends (`copy_intent`, `_intent_from_values`), so the new key round-trips
+with ZERO serialization edits. Committed as a test rather than argued:
+`test_a_new_held_key_round_trips_without_any_serialization_edit` (`test_record_file.gd`) saves and
+loads a `card_cast` held key and gets it back — and asserts the other direction too, that an ABSENT
+key comes back ABSENT and is never invented as `true`, which is exactly the read a v7 record gets.
+
+**(b) Does an existing v7 recording of a mode ② cast replay to a DIFFERENT outcome? MEASURED: YES,
+and (a)'s "no" does not answer it.** A v7 record carries no `card_cast` key, so `is_held` reads
+false on every tick after the commit and a chargeup that LANDED when it was recorded replays as an
+instant paid feint — loaded without complaint, because a matching version is all the loader checks.
+The divergence is measured at the state layer by a pair of tests with identical per-tick
+`card_slot`/`card_mode`/`card_commit` values; the tests differ in length:
+`test_holding_the_confirm_through_the_whole_chargeup_lands_as_before` (lands 10.0 damage, one
+`hit_landed`) versus `test_a_one_tick_tap_is_the_same_paid_feint` (no damage, nothing announced).
+
+**Resolution: `FORMAT_VERSION` 7 -> 8 with HARD rejection of v7**, via the pre-existing exact-match
+refusal (`record_file.gd:303-306`) — no migration shim, per the `4-1/R1` family reasoning. This is
+the first bump in this file's history that the SHAPE did not force, and the constant's docblock says
+so. Both version pins in `test_record_file.gd` were updated to 8 and mutation-proven (mutation E).
+
+### Golden and snapshot key set — BEFORE and AFTER
+
+| | BEFORE | AFTER | Moved? |
+| --- | --- | --- | --- |
+| `GOLDEN` (`test_determinism.gd:891`) | `d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d` | `d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d` | **NO** |
+| Per-player snapshot key set (`test_card_observation.gd`) | 30 | 30 | **NO** |
+
+**The prediction held, and it held for the structural reason the story gave rather than by luck.**
+The golden fixture never casts mode ② and no hero in it ever enters `CHARGING`, so the new arm is
+never evaluated by the golden sequence; the teardown writes only fields that were already snapshot
+keys; and `telegraph` is present on every tick regardless of state (gated in its VALUE at
+`player_state.gd:539-541`), so the feint can neither add nor remove a key. Neither
+`test_determinism.gd` nor `test_card_observation.gd` carries a diff — both values above are read
+from files this pass did not touch, and both files pass in run 3. **Nothing was re-baselined.**
+
+### Mutation table
+
+Every mutation was applied to a file first backed up to a scratchpad OUTSIDE the repo with its
+SHA-256, and restored by COPY-BACK with the hash re-verified — never `git checkout`.
+
+| # | Mutation | Effect |
+| --- | --- | --- |
+| A | `match_state.gd` — the early-release arm DELETED entirely | **8 of 13** new tests in `test_unblockable_hold.gd` RED: the IDLE-on-release-tick, three-part-teardown, paid-spend, no-landing, defense-window, tap, regen and no-recovery-window tests |
+| B | `match_state.gd` — arm order INVERTED (release read before the timer) | **1** RED: `test_a_release_on_the_landing_tick_itself_still_lands` — the AC 1 boundary, and the only test that can see this |
+| C | `match_state.gd` — the arm fires regardless of the hold (`elif true:`) | **46** RED suite-wide, including `test_holding_the_confirm_through_the_whole_chargeup_lands_as_before` and `test_the_same_armed_window_does_answer_a_chargeup_that_is_held_out` — proof the three sibling files' updated helpers now drive a REAL hold rather than decorating one |
+| D | `gamepad_controller.gd` — `card_cast_held: unblockable_raw and cast_held` (the REJECTED L3 fork) | **1** RED: `test_resolve_card_tick_reports_the_unblockable_confirm_as_held` — the dev call of note 2 is pinned, not merely commented |
+| E | `record_file.gd` — `FORMAT_VERSION` back to 7 | **2** RED: both version pins in `test_record_file.gd` |
+
+Two tests were STRENGTHENED when mutation A found them green:
+`test_an_early_release_is_paid_the_card_and_the_stamina_stay_spent` gained an IDLE precondition
+(without it, "nothing was refunded" is trivially true of a chargeup still running) and
+`test_releasing_after_the_chargeup_completed_changes_nothing` gained a landing-happened
+precondition. They are RED under A and C respectively afterwards.
+`test_a_new_held_key_round_trips_without_any_serialization_edit` is labelled honestly as a
+MEASUREMENT of half (a), not a new-behaviour test — its subject is that the existing generic walk
+needed no edit, and no mutation of this story's own code turns it red.
+
+### File List
+
+Production (3):
+
+- `src/state/match_state.gd` — the early-release arm in `_resolve_actions`'s `CHARGING` case
+- `src/controllers/gamepad_controller.gd` — `card_cast_held` in `resolve_card_tick`, written to `intent.held[&"card_cast"]` in `sample()`
+- `src/systems/record_file.gd` — `FORMAT_VERSION` 7 to 8 and its reason
+
+Tests (7, one new):
+
+- `test/state/test_unblockable_hold.gd` — **NEW**, 13 tests, this story's own behaviour
+- `test/state/test_unblockable_initiation.gd` — `_holding()`; chargeup-driving sites hold (two sites deliberately left bare, each with its reason in place)
+- `test/state/test_unblockable_defense.gd` — `_holding()`; `_basic_intent` gains the `held` seat; three AC-6-family fixtures state the hold (see note 4)
+- `test/state/test_orbs_economy.gd` — `_holding()`; chargeup-driving sites hold
+- `test/state/test_record_file.gd` — two version pins to 8; the new round-trip measurement
+- `test/state/test_gamepad_controller.gd` — the L3-chord fork pinned
+- `test/integration/test_charge_telegraph_dispatch_live.gd` — `HoldingController` stand-in (see note 3)
+
+NOT touched, verified by `git status`: `project.godot` (zero diffs, no new Input Map action),
+`src/state/input/input_intent.gd`, `src/controllers/gamepad_profile.gd`, `data/`, `main.tscn`,
+`test/state/test_determinism.gd`, `test/state/test_card_observation.gd`,
+`test/state/test_action_state.gd`, `test/state/test_architecture_invariants.gd`. No new snapshot
+key, no new observation seam (the family stays at NINE), no new `class_name` (so no editor scan was
+run this pass; the new test file's `.uid` is left to the chain).
