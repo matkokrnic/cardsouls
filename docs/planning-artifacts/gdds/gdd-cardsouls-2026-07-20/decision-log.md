@@ -9517,3 +9517,79 @@ existing entry edited. Two commits: this entry (`docs(decision-log)`); the story
 promoted to `ready-for-dev`). No code, no test, no golden.
 
 Next steps: dev pass on `6-1-hold-to-charge`.
+
+## Session 2026-09-09 -- 6-1 close-out (Tier A)
+
+`6-1/R8` RELEASE SIGNAL IS A HELD DICTIONARY KEY, `card_cast` -- the `BLOCKING` precedent
+(`match_state.gd:944-946`), not a new typed field. `InputIntent` is unchanged, zero lines. The
+token names no pad button; it is the codebase's own existing cast-refusal label
+(`reject_action(&"card_cast", ...)`), so no new vocabulary enters the system.
+
+`6-1/R9` THE L3 CHORD FORK: THE HOLD READS B ALONE, NEVER CONJOINED WITH L3. Releasing the arming
+modifier (`cast_button`) never destroys an already-paid attack -- L3's whole job is `armed_slot`,
+finished the instant the commit fires. Conjoining would let letting go of the modifier the player
+has most reason to release destroy a paid chargeup. Pinned directly by
+`test_resolve_card_tick_reports_the_unblockable_confirm_as_held`, mutation-proven against the
+rejected fork (mutation D).
+
+`6-1/R10` (ratified dev deviation) `test_charge_telegraph_dispatch_live.gd` IS INSIDE THE BLAST
+RADIUS -- the story's finding 4 excluded it correctly at the rule but wrongly at the exclusion
+list, applying "every call site that drives CHARGING past its first tick" to entry points only.
+Fixed at the input seam with a `HoldingController` stand-in on P1 for the measured frames; P2 keeps
+its real controller, so the file's cross-slot claim is untouched.
+
+`6-1/R11` (ratified dev deviation) AC 6's "UNEDITED" CLAUSE IS AMENDED TO ASSERTIONS, NOT FIXTURES.
+The gate at `match_state.gd:2426-2428` and every assertion in every affected test stay
+byte-identical; three fixtures in `test_unblockable_defense.gd`
+(`test_a_charging_hero_cannot_cast_basic`, `test_a_charging_hero_cannot_cast_defense`,
+`test_the_basic_cast_state_gate_precedes_the_empty_slot_gate`) now state the hold on the commit
+tick, because that is live-play truth -- B stays down while A or X is pressed.
+
+`6-1/R12` (review MED-1, accepted as correct) A PAD DISCONNECT MID-CHARGEUP READS AS ALL-BUTTONS-
+RELEASED AND FEINTS AT FULL COST. Consistent with `BLOCKING`'s own disconnect semantics; a replay
+driven past its recorded end is the same class of case. No code.
+
+`6-1/R13` (review MED-2, accepted as correct) SAME-TICK RELEASE + RECOMMIT OF ANOTHER MODE IS AC 4
+WORKING AS RULED, NOT A BYPASS. The hero is free on the release tick, including for a cast; the
+gate's own condition genuinely ended in step 3. No code.
+
+`6-1/R14` `FORMAT_VERSION` BUMPS 7 -> 8, HARD REJECTION OF v7, EXECUTED PER `6-1/R4`. Both halves
+measured: the shape forces no bump (a `held` key round-trips generically, zero serialization
+edits) but a v7 recording of a landed mode (2) cast would replay as an instant feint under the new
+semantics -- hard rejection, no migration shim, per the `4-1/R1` family reasoning.
+
+`6-1/R15` (operator smoke) LIVE SMOKE 6/7 PASS ON ONE PAD; ITEM 5 NOT EYE-JUDGEABLE TODAY. The
+release-on/after-the-landing-tick boundary is machine-pinned
+(`test_a_release_on_the_landing_tick_itself_still_lands`, mutation B) and does not rest on the
+smoke pass to prove it. The operator observed the chargeup ANIMATION finishing before the authored
+1.0s window expires, so an apparently-late release is state-wise still early and feints correctly.
+NAMED FINDING for `6-1b`: the chargeup clip under-runs the authored window.
+
+LOW dispositions, one line each: the BEFORE-baseline integration count's "55" was a transcription
+typo against its own cited file, corrected to 56 in the story file's dev pass; the v7-divergence
+pair's "identical streams" phrasing was loose (the two tests differ in length) and is corrected to
+"identical per-tick `card_slot`/`card_mode`/`card_commit` values"; the three-file helper-name
+duplication (`_holding()` in each of `test_unblockable_initiation.gd`,
+`test_unblockable_defense.gd`, `test_orbs_economy.gd`) is accepted per the sibling
+`_unblockable_intent()`/`_run_chargeup()` precedent already duplicated the same way across those
+same three files.
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C3 -> C4 (docs precede board, per `E5-R/R3` -- the promotion grep
+requires the log to already name the story). Commit 1, code + tests: `src/state/match_state.gd`,
+`src/controllers/gamepad_controller.gd`, `src/systems/record_file.gd`, and the seven modified
+`test/` files (one new, `test_unblockable_hold.gd`). Commit 2, docs: the story file's Status ->
+`done`, Live Smoke Results section, two Dev Agent Record corrections against the review report.
+Commit 3, docs: this entry. Commit 4, board: `6-1-hold-to-charge`: `ready-for-dev` -> `done`, `#
+Tier A` comment preserved.
+
+Budget interval per `E5-R/R3`: suite files 11:46:52 -> 12:08:49 (21m57s), plus the review run
+(report at `C:\dev\_61-review.md`, outside the repo).
+
+Suite: 735/0/5430 state + 56/56 integration, `ALL TESTS PASSED`. Golden `d5bcb7e6...` and the
+30-key snapshot set both confirmed unmoved, per the story's own measured prediction.
+
+Nothing pushed; the operator reviews the log.
+
+Next steps: `6-1b-chargeup-presentation` (the named `6-1/R15` finding is its first item).

@@ -310,3 +310,7 @@ Dvopadna razmjena nije odrađena (nema drugog pada) — zapisano kao izostanak.
 6-0:
 8.9.
 1 svaka karta ima jednu od tri boje 2 prazna stanja nemaju boju 3 okvir koji pokazuje koja je karta armirana ne remeti vidljivost kojoj boji pripada karta 4 imena karata ostala su citljiva i nakon promjena koje smo uveli
+
+6-1:
+9.9.
+hm pa sve tocke ti mogu reci da prolaze osim 5 jer ne razumiem bas, zna se desit da se animacija npr napada koskom odvije cijela ali steta slece dovoljno nakandno da idalje stignem psutit gumb izmedu dovresene animacije i stete da se steta ne desi, ali osim toga svakako trenutno stnaje naimacija nije finalano dapac u e6 cem puno raditit na tome, tako da ne znamo sto zakljuciti
