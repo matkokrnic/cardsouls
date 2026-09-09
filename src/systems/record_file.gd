@@ -154,7 +154,21 @@ extends RefCounted
 ## untouched, `capture_push_contact` is untouched, and `REQUIRED_KEYS`'s `contacts` entry does not
 ## move. Had the reach answer needed an eighth row element, THAT would have been the bump; it did
 ## not, and the channel is what did.
-const FORMAT_VERSION := 7
+##
+## STORY 6-1 BUMPS 7 -> 8, AND THE SHAPE FORCED NOTHING -- the SEMANTICS did (`6-1/R4`). The new
+## `card_cast` held key round-trips with ZERO serialization edits, because `copy_intent`
+## (intent_recorder.gd) and `_intent_from_values` below both walk `held`/`pressed` by whatever keys
+## are present, with no enumerated action list to extend. MEASURED: the round-trip test alone says
+## "no bump needed", and that answer is not the question.
+##
+## THE QUESTION IS SILENT DIVERGENCE. A v7 recording of a mode ② cast carries no `card_cast` key,
+## so under this build `is_held(&"card_cast")` reads false on the tick after the commit and the
+## chargeup that ORIGINALLY LANDED now replays as an instant paid feint -- loaded without complaint,
+## because a matching version number is the only thing the loader checks. That is exactly the
+## silently-wrong replay the exact-match refusal at `:303-306` exists to make impossible, so v7 is
+## rejected HARD rather than migrated: an unloadable record is a correct answer, a divergent one is
+## not. (The `5 -> 6` bump directly above took this same reasoning from the resting-`aim` case.)
+const FORMAT_VERSION := 8
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

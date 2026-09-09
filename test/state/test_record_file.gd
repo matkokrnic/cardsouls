@@ -150,8 +150,16 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 7,
-		"FORMAT_VERSION is 7 as of story 5-2 -- the FOURTH content channel (`inject_card_colors`, "
+	assert_eq(RecordFile.FORMAT_VERSION, 8,
+		"FORMAT_VERSION is 8 as of story 6-1 (`6-1/R4`), and this bump is a pure SEMANTICS bump -- "
+		+ "the first one in this file's history that the SHAPE did not force. Mode ②'s new "
+		+ "hold-through-chargeup reads a `card_cast` held key, and `held` is serialized "
+		+ "generically by key at both ends, so the channel round-trips with zero serialization "
+		+ "edits and the round-trip half of the measurement says 'no bump needed'. The bump is for "
+		+ "what a round-trip inside one build cannot see: a v7 recording of a mode ② cast carries "
+		+ "no such key, so the chargeup that LANDED when it was recorded now replays as an instant "
+		+ "paid feint -- loaded without complaint, because the version is all the loader checks. "
+		+ "It was 7 as of story 5-2 -- the FOURTH content channel (`inject_card_colors`, "
 		+ "`5-2/R1`) joined the file and a v6 record carries no colours at all, so every "
 		+ "unblockable telegraph would replay in the wrong colour and diverge on the hashed "
 		+ "per-player `telegraph` key. 5-2's OTHER half forced nothing: its two new CHARGE-REACH "
@@ -675,13 +683,52 @@ func test_a_record_whose_intent_dict_lacks_the_retarget_fields_is_refused_with_a
 	_remove(VERSION_PATH)
 
 
+## STORY 6-1 (AC 5, `6-1/R4`): HALF (a) OF THE FORMAT MEASUREMENT — does mode ②'s new hold fact
+## force a bump by the ROUND TRIP? MEASURED HERE: NO. `held` is walked generically by key at both
+## ends (`copy_intent` on the way out, `_intent_from_values` on the way in), so a key no version of
+## this file has ever heard of survives a save and a load untouched, with zero serialization edits.
+##
+## THIS TEST IS DELIBERATELY NOT AN ARGUMENT FOR THE BUMP — it is the measurement that says the
+## SHAPE did not force one, recorded so a later reader does not mistake the version number for a
+## serialization consequence. The bump's real cause is half (b), which no round trip inside a
+## single build can see: a v7 record carries no such key at all, so a chargeup that LANDED when it
+## was recorded replays as an instant paid feint. That divergence is what the exact-match refusal
+## is for, and it is measured at the state layer by the pair
+## `test_holding_the_confirm_through_the_whole_chargeup_lands_as_before` /
+## `test_a_one_tick_tap_is_the_same_paid_feint` in test_unblockable_hold.gd — two runs whose
+## card_slot/card_mode/card_commit streams are identical and which differ ONLY in the presence of
+## this key, one landing and one feinting.
+##
+## THE GENERIC WALK IS PINNED IN BOTH DIRECTIONS: a key present survives as present, and a key
+## ABSENT does not come back invented as `true` — which is exactly the read a v7 record gets.
+func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
+	var driven := _match_start()
+	var record: IntentRecorder = driven["record"]
+	var holding := InputIntent.new()
+	holding.held[&"card_cast"] = true
+	var empty := InputIntent.new()
+	var intents: Array[InputIntent] = [holding, empty]
+	_tick(driven, intents)
+
+	var loaded := _save_and_load(record, ROUND_TRIP_PATH)
+	var back := loaded.intents_at(1)
+	assert_true(back[0].is_held(&"card_cast"),
+		"the `card_cast` held key survived save + load with NO serialization edit — the shape "
+		+ "forces no bump (`6-1/R4` half (a), MEASURED)")
+	assert_false(back[1].is_held(&"card_cast"),
+		"...and an ABSENT key comes back absent, never invented — which is precisely how a v7 "
+		+ "record reads under this build, and precisely why v7 is refused rather than migrated")
+	_remove(ROUND_TRIP_PATH)
+
+
 ## Story 5-1a (AC 7, `5-1a/R4`/`5-1a/R12`): the story's own NON-goals, pinned. The stricter reading
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 7,
+	assert_eq(RecordFile.FORMAT_VERSION, 8,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 7 for story 5-2's colours channel, which is a different "
+		+ "version has since moved to 8 (5-2's colours channel, then 6-1's mode ② hold "
+		+ "semantics), which is a different "
 		+ "story's bump and does not weaken 5-1a's own claim: what this asserts is that the number "
 		+ "is whatever the last DELIBERATE bump set it to, and that 5-1a was not one")
 	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:

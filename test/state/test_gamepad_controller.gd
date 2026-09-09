@@ -607,6 +607,54 @@ func test_arming_chord_is_untouched_by_the_new_confirm_buttons() -> void:  # AC 
 		"the arming chord still resolves to slot 3 (rightmost) with B and X also pressed")
 
 
+## STORY 6-1 (AC 1/2/5): THE HOLD FACT mode ②'s chargeup reads, and THE L3-CHORD FORK, pinned.
+##
+## The story named the fork and required the dev pass to pick one and add a direct test for exactly
+## this case: L3 (`cast_button`) released while B (`cast_unblockable_button`) stays held partway
+## through a chargeup. THE PICK IS B ALONE — `card_cast_held` is `unblockable_raw` and is NOT
+## conjoined with `cast_held`, so letting go of the ARMING modifier cannot destroy an already-paid
+## attack. Row 3 below is that decision; without it, `card_cast_held` would read false there and a
+## thumb slipping off L3 would feint.
+##
+## The other two rows are what make row 3 a decision rather than a tautology: the key follows B's
+## raw state in both directions, and neither of the OTHER two confirms can stand in for it.
+func test_resolve_card_tick_reports_the_unblockable_confirm_as_held() -> void:  # Story 6-1
+	# B held, inside cast mode: the ordinary mid-chargeup tick.
+	var held := GamepadController.resolve_card_tick(true,
+		false, false, false, false, false, false,
+		0.0, 0.0, 0.0, 0.0,
+		false, false, true, true, false, false, 0.5, 2)
+	assert_true(held["card_cast_held"], "B still down -> the chargeup's confirm reads HELD")
+
+	# B released: the fact goes false the same tick, no edge and no latch (CONSTRAINT C).
+	var released := GamepadController.resolve_card_tick(true,
+		false, false, false, false, false, false,
+		0.0, 0.0, 0.0, 0.0,
+		false, false, false, true, false, false, 0.5, 2)
+	assert_false(released["card_cast_held"],
+		"B up -> released on that very tick, read live rather than derived from an edge")
+
+	# THE FORK: L3 released, B still down. The confirm still reads HELD.
+	var l3_gone := GamepadController.resolve_card_tick(false,
+		false, false, false, false, false, false,
+		0.0, 0.0, 0.0, 0.0,
+		false, false, true, true, false, false, 0.5, 2)
+	assert_true(l3_gone["card_cast_held"],
+		"releasing L3 while B stays held does NOT feint — the hold belongs to the confirm that "
+		+ "committed the attack, not to the arming modifier whose job ended at the commit")
+	assert_eq(l3_gone["armed_slot"], -1,
+		"...while L3's OWN product still clears the same tick it releases (AC 1 of 5-0b, "
+		+ "unchanged) — which is precisely why the two facts must not be conjoined")
+
+	# The other two confirms are not substitutes: A and X held, B up, still released.
+	var wrong_buttons := GamepadController.resolve_card_tick(true,
+		false, false, false, false, false, false,
+		0.0, 0.0, 0.0, 0.0,
+		true, true, false, false, true, true, 0.5, 2)
+	assert_false(wrong_buttons["card_cast_held"],
+		"a held BASIC or DEFENSE confirm cannot keep a mode ② chargeup alive — only B can")
+
+
 func test_resolve_card_tick_suppresses_attack_block_roll_while_cast_held() -> void:  # AC 4/AC 5
 	var r := GamepadController.resolve_card_tick(true,
 		true, false, true, false, true, false,  # attack/block/roll all freshly pressed

@@ -41,6 +41,26 @@ extends SceneTree
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_charge_telegraph_dispatch_live.gd
 
+## STORY 6-1 (AC 1), AND A CORRECTION TO THAT STORY'S OWN MEASURED FINDING 4. That finding listed
+## this file as OUTSIDE the hold-through blast radius because it enters `CHARGING` by a direct
+## `set_action_state` with no intent at all — true of the ENTRY, and not the whole question. The
+## poke has to SURVIVE `CHECK_DELAY` frames to be measurable, and every one of those frames is a
+## real `advance()` driven by real controllers; with no pad connected those emit a neutral intent,
+## which since 6-1 reads as "the cast confirm was released" and feints the poked chargeup back to
+## IDLE before this file ever looks at it. Measured, not predicted: without the stand-in below all
+## three colours read clip `idle`, a dark marker and silence.
+##
+## THE STAND-IN IS AT THE INPUT SEAM, which is where the new fact actually lives — the alternative
+## (re-poking `CHARGING` every frame) would fight the state layer with a second write per frame and
+## make the dispatch under test fire repeatedly instead of once. P2 keeps its real controller: this
+## file's cross-slot claim is that P1's dispatch is P1's alone.
+class HoldingController extends Controller:
+	func sample() -> InputIntent:
+		var intent := InputIntent.new()
+		intent.held[&"card_cast"] = true
+		return intent
+
+
 const CHECK_DELAY := 2  ## frames between a poke and reading its result (test_totem_tint_live precedent)
 
 var _frames := 0
@@ -88,6 +108,9 @@ func _physics_process(_delta: float) -> bool:
 			print("RESULT: FAIL")
 			quit(1)
 			return false
+		# Story 6-1: P1's controller is replaced by the stand-in declared at the top of this file,
+		# so the poked chargeup is HELD for the frames this test measures it over.
+		_runner._p1_controller = HoldingController.new()
 		# Baseline: nothing has charged yet, so no charge clip/shape should be live.
 		var idle_clip: StringName = _hero.animation_controller.animation_player.current_animation
 		if idle_clip == &"swipe" or idle_clip == &"thrust" or idle_clip == &"jump_attack":

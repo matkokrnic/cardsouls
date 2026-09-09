@@ -957,9 +957,42 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		# `dead`, this arm is not evaluated, and nothing returns it to IDLE. That is the strongest
 		# form of the F3 finding's answer -- the corpse-resurrecting branch is not written, not
 		# merely guarded -- and it is the same structural argument the `ROLLING` arm above relies on.
+		# STORY 6-1 (AC 1-4): THE EARLY-RELEASE EXIT, the chargeup's THIRD exit path beside natural
+		# landing and death (`5-2/R3`), and the first one that reads a LIVE INTENT rather than a
+		# timer. It mirrors `BLOCKING`'s arm above -- the one existing intent-read exit -- and, like
+		# it, is a direct `_resolve_actions` arm and NEVER a `TRANSITION_TABLE` row, so the
+		# zero-inbound-CHARGING guard (test_action_state.gd) stays true UNEDITED.
+		#
+		# THE TIMER IS CHECKED FIRST, AND THE ORDER IS THE WHOLE OF AC 1's LAST SENTENCE. Once the
+		# window has stopped running the chargeup is COMPLETE, so a release observed on that same
+		# tick must land, not feint. Making the landing the `if` and the release the `elif` buys
+		# that guarantee structurally rather than with a second condition that could rot: there is
+		# no tick on which both are true and the wrong one wins.
+		#
+		# THE TEARDOWN IS `_reset_player`'s THREE-PART FACT (`:3706-3712`), reused verbatim for a
+		# new trigger -- state, window and colour are ONE fact and are cleared together. It is
+		# written inline rather than factored out of `_reset_player`, because that function clears
+		# the state only under a three-state gate and clears `hero.stun`/the defense window in the
+		# same breath; the shared shape is these three lines, not that function's body.
+		#
+		# THE CARD AND THE STAMINA STAY SPENT (AC 2). Nothing here refunds, un-discards or credits:
+		# the spend ran an entire chargeup ago inside `_resolve_unblockable_cast`, and this arm is
+		# a state transition, not an undo. `_resolve_charge_landing` is NOT called, which is what
+		# makes "no landing check, no damage, no orb, no `hit_landed`, no defense-rung negation"
+		# structural -- the defender's `defense_window` is advanced at step 2 unconditionally and
+		# CONSUMED only inside that function, so a feint leaves it running to self-expire (`6-1/R7`:
+		# no window-clearing code may be added here).
+		#
+		# NO RECOVERY WINDOW (AC 4) and REGEN RESUMES ON THIS TICK: step 3 runs before step 5's
+		# `_regen_stamina`, which reads `action_state` fresh with no latch, so the hero is already
+		# IDLE when regen is evaluated on the release tick itself.
 		HeroState.ActionState.CHARGING:
 			if not player.charge_window.is_running:
 				_resolve_charge_landing(player, slot)
+			elif not intent.is_held(&"card_cast"):
+				hero.set_action_state(HeroState.ActionState.IDLE)
+				player.charge_window.start(0)
+				player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 	# (b) Input-driven edges from the current table row. A press with no entry in the row
 	# is dropped, never buffered (AC 5). Fixed INPUT_PRIORITY order = deterministic
 	# same-tick tiebreak; at most one transition fires per tick.

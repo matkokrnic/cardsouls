@@ -130,10 +130,10 @@ func test_no_orbs_are_granted_at_the_cast_or_during_the_chargeup() -> void:
 	assert_eq(ms.p1.orbs.get_count(color), 0, "the CAST tick grants nothing")
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, InputIntent.new(), InputIntent.new())
+		_advance(ms, _holding(), InputIntent.new())
 		assert_eq(ms.p1.orbs.get_count(color), 0, "...and nor does any tick of the chargeup")
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	_advance(ms, InputIntent.new(), InputIntent.new())
+	_advance(ms, _holding(), InputIntent.new())
 	assert_eq(ms.p1.orbs.get_count(color), ORB_GRANT,
 		"the grant lands on the EXPIRY tick and nowhere earlier")
 
@@ -498,8 +498,18 @@ func _make_lethal_match() -> MatchState:
 	return ms
 
 
-func _unblockable_intent(hand_slot: int) -> InputIntent:
+## Story 6-1 (AC 1): A CONTINUING TICK OF A CHARGEUP — an otherwise-empty intent that keeps mode
+## ②'s confirm HELD. Since 6-1 a bare `InputIntent.new()` on the charging player's slot means "the
+## confirm was RELEASED", i.e. a paid feint that grants no orb at all; every loop that means to run
+## a chargeup out to its grant must say so on every tick.
+func _holding() -> InputIntent:
 	var i := InputIntent.new()
+	i.held[&"card_cast"] = true
+	return i
+
+
+func _unblockable_intent(hand_slot: int) -> InputIntent:
+	var i := _holding()
 	i.card_slot = hand_slot
 	i.card_mode = Enums.ModeKind.UNBLOCKABLE
 	i.card_commit = true
@@ -517,7 +527,7 @@ func _push_reach(ms: MatchState, slot: int, kind: int) -> void:
 func _run_chargeup(ms: MatchState, kind: int) -> void:
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms, 0, kind)
-		_advance(ms, InputIntent.new(), InputIntent.new())
+		_advance(ms, _holding(), InputIntent.new())
 
 
 ## Cast P1's hand slot 0 in mode (2) and return the colour that became resident — READ off the
