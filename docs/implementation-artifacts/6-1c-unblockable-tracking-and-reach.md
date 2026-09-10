@@ -4,7 +4,7 @@ baseline_commit: c7676b3c4292b0307f0004cfb92146ccde99ce38
 
 # Story 6.1c: Unblockable Tracking and Reach
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** Adopted into E6 immediately after `6-1b` by operator ruling — named successor
 > `6-1c` in the `6-1b` close-out (decision-log.md:9658, :9684). Tier A: adds a new state-machine
@@ -308,25 +308,182 @@ them; feel tuning reopens at retune per `6-1b/R9`, not as a change owed by this 
 
 ## Tasks / Subtasks
 
-- [ ] Read all cited line ranges above before writing code (AC: all)
-- [ ] Decide the commit+launch phase shape and committed-direction storage (Open Questions) (AC: 2, 3, 9)
-- [ ] Write the regression-pin test for AC 1 (tracking already holds) (AC: 1)
-- [ ] Implement the commit-time facing freeze, verified against DEAD/round-over (AC: 2, 3, 7)
-- [ ] Implement per-colour launch travel off the 3-0b lunge shape (AC: 4)
-- [ ] Extend the runner's reach-kind computation to per-colour geometry, still a KIND (AC: 5, 6)
-- [ ] Author per-colour travel/reach/arc fields in `balance_config.gd` + `.tres` (AC: 4, 5)
-- [ ] Confirm the `6-1b` progress-push contract against the new phase shape (AC: 9)
-- [ ] Implement the launch progress channel so the strike swing lands at resolution, not before (AC: 11)
-- [ ] Measure BEFORE/AFTER golden hash + 30-key snapshot set (AC: 10)
-- [ ] Run the full suite (`bash test/run_all.sh`) (AC: 8)
+- [x] Read all cited line ranges above before writing code (AC: all)
+- [x] Decide the commit+launch phase shape and committed-direction storage (Open Questions) (AC: 2, 3, 9)
+- [x] Write the regression-pin test for AC 1 (tracking already holds) (AC: 1)
+- [x] Implement the commit-time facing freeze, verified against DEAD/round-over (AC: 2, 3, 7)
+- [x] Implement per-colour launch travel off the 3-0b lunge shape (AC: 4)
+- [x] Extend the runner's reach-kind computation to per-colour geometry, still a KIND (AC: 5, 6)
+- [x] Author per-colour travel/reach/arc fields in `balance_config.gd` + `.tres` (AC: 4, 5)
+- [x] Confirm the `6-1b` progress-push contract against the new phase shape (AC: 9)
+- [x] Implement the launch progress channel so the strike swing lands at resolution, not before (AC: 11)
+- [x] Measure BEFORE/AFTER golden hash + 30-key snapshot set (AC: 10)
+- [x] Run the full suite (`bash test/run_all.sh`) (AC: 8)
 - [ ] Live smoke with a single physical pad, flip `[0,3]` (see Live Smoke)
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5 (`claude-opus-5[1m]`) in Claude Code, `gds-dev-story` skill (team `on_complete`
+override). The commit trailer is the repo constant "Claude Sonnet 5" per `6-1c/R7`, not the model
+name.
+
 ### Debug Log References
+
+- Working record (outside the repo): `C:\dev\_61c-dev.md`; mutation raw output
+  `C:\dev\_61c-mutations.txt`; full feat diff `C:\dev\_61c-feat.diff`.
+- Suite BEFORE (`C:\dev\_61c-dev-suite-before.txt`, 2026-09-11 00:34:13): 737 tests / 0 failed /
+  5553 assertions + 57 integration suite headers, ALL PASS.
+- Suite run 2 (`C:\dev\_61c-dev-suite-after-run2-FAILED.txt`, 01:35:28): 755 / 1 failed / 5915 +
+  58 headers, 1 integration FAIL -- see Completion Notes, finding F1.
+- Suite run 3 FINAL (`C:\dev\_61c-dev-suite-after.txt`, 01:40:22): **755 tests / 0 failed / 5916
+  assertions + 58 integration suite headers, ALL PASS, exit 0.** THREE full runs, the third
+  disclosed (`PROC/R1`): run 2 failed and the fixes had to be proven suite-wide.
+- Two session connection drops; after each the tree was audited (the second audit SHA-verified
+  `player_state.gd` against its pre-mutation out-of-repo copy, `822ec841...`) -- CLEAN both times.
 
 ### Completion Notes List
 
+**Open Questions -- the five dev-pass choices, named with why.**
+
+1. **Phase shape: a sub-phase INSIDE `CHARGING`, no new `ActionState`.** A second window,
+   `PlayerState.landing_window`, starts AT THE CAST with `chargeup + launch(colour)` ticks beside
+   `charge_window`. `charge_window` running = chargeup (rooted, tracking, releasable);
+   `charge_window` stopped + `landing_window` running = COMMITTED launch; `landing_window` stopped
+   = the landing at step 3(a). Why: every existing `CHARGING` gate (cast refusals, regen
+   suppression, reset teardown, telegraph, reach push, progress push) covers the launch with no
+   edit; `TRANSITION_TABLE` and the zero-inbound-CHARGING guard are untouched; the commit exists by
+   construction the instant the chargeup window closes (no flag to leave stale); starting the
+   landing window with its FULL duration at the cast means an X3 reload can move neither the
+   commit nor the landing (D4), and no "has the launch started" test is needed.
+2. **Committed direction: NOT stored.** It is `HeroState.facing`, frozen by construction -- the
+   `CHARGING` facing branch re-reads `_charge_reach_dirs` only while `charge_window` runs. The
+   launch velocity and the landing arc both read that held value. No new field for the direction.
+3. **Authoring shape: four flat per-colour triplets** on `BalanceConfig` --
+   `unblockable_reach_*`, `unblockable_arc_degrees_*`, `unblockable_launch_distance_*`,
+   `unblockable_launch_seconds_*` (`_red/_blue/_green`) -- with `*_for(color)` lookups used by both
+   runner and state. `unblockable_reach` is REMOVED (the `3-0b` no-two-sources precedent). Why
+   triplets over a profile resource: Fact 8 names the triplet shape, and flat fields tune directly
+   in the `.tres`/inspector. The arc defaults to 360 (the pre-6-1c circle, Fact 3) so unauthored
+   in-test fixtures keep today's behaviour; a colourless (degraded) chargeup reads 0 reach /
+   0 launch / 360 arc -- it can never land live, and headless fixtures that push the kind by hand
+   resolve as before.
+4. **Launch span: per colour**, `unblockable_launch_seconds_*`, converted once to
+   `BalanceTicks.unblockable_launch_ticks_*` for timing; the seconds float is read only as the
+   travel-speed divisor (the roll / `3-0b` lunge precedent). Travel = frozen facing *
+   `launch_distance / launch_seconds`, on exactly the launch ticks.
+5. **Launch progress channel mechanism:** `AnimationController.charge_attack_progress(
+   landing_remaining, C, L) = 1 - remaining / (C + L)`, a pure static beside
+   `charge_playhead_seconds`, called by the runner's UNCHANGED `CHARGING`-gated
+   `_push_charge_progress`. The chargeup maps to `[0, C/(C+L)]` of the existing playhead curve (the
+   pre-strike portion), the launch to the rest (the strike swing plays during the travel), and 1.0
+   falls exactly on the landing tick. `charge_playhead_seconds` and `_CHARGE_HOLD_KNOBS` are
+   unchanged; the knobs' felt timing now spans cast-to-landing (the Dev Note's anticipated retune,
+   `6-1b/R9`, not done here).
+
+**AC coverage.**
+- AC 1: `test_charging_facing_tracks_the_enemy_hero_every_tick_over_a_minion_lock` -- locked onto a
+  real P2 unit, lock direction pushed at the minion every tick, enemy hero moving; facing follows
+  the enemy hero every tick, never the lock; the lock stays on the minion (6-1c/R1).
+- AC 2: freeze held on every launch tick; release after commit does not feint; move input does not
+  steer; release before commit still feints and clears the landing window.
+- AC 3: sidestep after commit whiffs (headless + live `side` cases); sidestep before commit is
+  tracked and hit; entering the frozen line after commit is hit.
+- AC 4: per-colour travel equals the authored distance along the frozen line on exactly L ticks,
+  not adaptive (headless); live `far` cases measure the real body's displacement.
+- AC 5: runner radius KIND per colour from positions only (live `far`/`near`, latched kind
+  asserted); arc judged in state per colour against the frozen direction (headless boundary cases
+  + live `side`); the runner still never reads `facing` (1-8/R-B3 split unchanged).
+- AC 6: `_is_in_charge_arc` is one more conjunct in the existing single entry gate of
+  `_resolve_charge_landing`; colour-counter negation still answers through it, and a whiff leaves
+  the defense window unconsumed.
+- AC 7: DEAD (`2-3/R14`) and round-over (`2-6/R6`) branches unedited; their existing pins pass
+  unedited; plus `test_a_hero_killed_mid_launch_takes_the_dead_carve_out`.
+- AC 8: suite run 3 green (above).
+- AC 9: `6-1b/R6` re-verified against the chosen shape -- the exit edge is still the single
+  synchronous `CHARGING` exit, now on the landing-window close. Direct test
+  `test_launch_progress_is_below_one_until_the_landing_tick_and_one_exactly_on_it` (progress < 1
+  and strictly rising on every charging tick, commit at C/(C+L), exit exactly at cast + C + L,
+  1.0 on that tick, damage on that tick only) and `test_with_a_zero_launch_...` (L = 0 reproduces
+  the pre-story edge). Live: no stale re-seek of the charge clip after the landing.
+- AC 10: see Golden below.
+- AC 11: live test asserts on every CHARGING frame the playhead is strictly below the colour's
+  strike frame, never moves backwards, and moves during the launch.
+
+**Golden (AC 10) -- prediction vs measurement.** Prediction: NO MOVE unless a new hashed field is
+added, which would then be the single named cause. MEASURED: the phase shape adds one hashed field
+(`landing_window`) -> new per-player key `landing`; golden `d5bcb7e6` ->
+`9679fa80f19358d15c9b33b1f9a3706264095ada871e5d2530cf29b6cbce8315`; per-player key set 30 -> 31.
+Both directions: with every other story change in place and ONLY the `"landing"` line removed,
+`test_determinism` hashed `d5bcb7e6` and the 30-key pins passed; restored from an out-of-repo copy,
+SHA-verified. The only reds before re-baseline were the two key-set pins and
+`test_state_matches_golden` -- no other movement. Value stays at rest in the fixture (pinned:
+`test_the_fixture_never_starts_a_landing_window`). `FORMAT_VERSION` stays 8. Feel knobs are
+`.tres` values pinned by no test (the authoring audit checks bounds only: reach > 0, arc in
+(0, 360]).
+
+**Mutation table (MEASURED, targeted file only, each restored from an out-of-repo copy with SHA
+verification).**
+
+| id | mutation | target | result |
+|----|----------|--------|--------|
+| M1 | CHARGING facing branch disabled (falls to the minion lock) | headless | 9/17 FAIL incl. the AC 1 pin |
+| M2 | commit freeze removed (aim re-read during launch) | headless | 6/17 FAIL |
+| M3 | release during launch feints | headless | 1/17 FAIL |
+| M4 | launch velocity -> zero | headless | 2/17 FAIL |
+| M4b | same | live | FAIL (travel 0, near missed) |
+| M5 | arc gate -> true | headless | 3/17 FAIL |
+| M5b | same | live | FAIL (RED/BLUE sidesteps hit) |
+| M6 | runner radius always RED's | live | FAIL (BLUE near missed) |
+| M7 | `charge_attack_progress` total = C only | headless | 1/17 FAIL (AC 9 test) |
+| M7b | same | live | PASS -- survived, correctly: it still reaches 1.0 only on the landing tick, so it is not the AC 11 defect; replaced by M7c |
+| M7c | runner progress reverted to the pre-6-1c `1 - charge_remaining / C` | live | FAIL: playhead at strike frame before the landing |
+| M8 | landing window started without the chargeup span | headless | 17/17 FAIL |
+| M9 | reset no longer clears the landing window | headless | 1/17 FAIL |
+
+**Findings.**
+- F1 (own miss, fixed): my pre-read blast-radius sweep missed two test-contract consequences of the
+  new field, both surfaced by suite run 2 -- `test_replay_identity`'s member-classification pin
+  (`landing_window` classified HASHED) and `test_charge_telegraph_dispatch_live.gd`'s chargeup
+  poke (now arms `landing_window` too, as the cast does). Neither is golden or key-set movement.
+- F2: the first live-test draft printed `ERROR: 1 resources still in use at exit` (charge stings
+  still playing); fixed with the dispatch test's stop + 100 ms + drain teardown.
+- F3: `test/integration/test_charge_playhead_live.gd` (6-1b) is unedited and still green; it
+  simulates a chargeup-only window, so the live runner-path proof for the launch channel is the
+  new `test_unblockable_reach_live.gd`.
+- Live smoke (last task) is NOT done -- it needs the operator's physical pad and the R-D6
+  collateral procedure; left unchecked for the operator's smoke pass.
+
 ### File List
+
+- `data/balance/balance_config.tres` (modified -- per-colour knobs replace `unblockable_reach`)
+- `src/actors/hero/animation_controller.gd` (modified -- `charge_attack_progress`, docs)
+- `src/main/match_runner.gd` (modified -- per-colour radius KIND, launch progress push)
+- `src/state/match_state.gd` (modified -- landing window tick, CHARGING arm, cast, commit freeze,
+  launch velocity, arc gate, reset)
+- `src/state/player_state.gd` (modified -- `landing_window`, `landing` snapshot key)
+- `src/state/resources/balance_config.gd` (modified -- per-colour triplets + lookups)
+- `src/state/timing/balance_ticks.gd` (modified -- launch tick twins + lookup)
+- `test/state/test_unblockable_tracking_and_reach.gd` (new)
+- `test/integration/test_unblockable_reach_live.gd` (new)
+- `test/integration/test_charge_telegraph_dispatch_live.gd` (modified -- poke arms landing window)
+- `test/state/test_balance_authoring.gd` (modified -- per-colour reach/arc bounds)
+- `test/state/test_card_observation.gd` (modified -- key set 30 -> 31)
+- `test/state/test_data_resources.gd` (modified -- E1 field list)
+- `test/state/test_determinism.gd` (modified -- GOLDEN, re-baseline record, fixture pin)
+- `test/state/test_draw_delay_and_reshuffle.gd` (modified -- key set)
+- `test/state/test_replay_identity.gd` (modified -- `landing_window` HASHED)
+- `test/state/test_orbs_economy.gd`, `test/state/test_unblockable_defense.gd`,
+  `test/state/test_unblockable_hold.gd`, `test/state/test_unblockable_initiation.gd` (modified --
+  fixture `unblockable_reach` -> per-colour)
+- `docs/implementation-artifacts/6-1c-unblockable-tracking-and-reach.md`,
+  `docs/implementation-artifacts/sprint-status.yaml` (docs commit)
+
+## Change Log
+
+- 2026-09-11: dev pass -- commit/launch sub-phase of CHARGING via `PlayerState.landing_window`,
+  commit freeze by construction, per-colour launch travel and honest reach (runner radius KIND +
+  state arc), launch progress channel; golden `d5bcb7e6` -> `9679fa80` (single cause: `landing`
+  key, 30 -> 31); suite 755/0/5916 + 58 integration. Feat commit `2faa084`. Status -> review;
+  live smoke pending (operator).
