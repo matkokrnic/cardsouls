@@ -89,43 +89,91 @@ const _CHARGE_CLIP := {
 	Enums.CardColor.GREEN: &"jump_attack",
 }
 
-## Story 5-3 (Ruling 3): THE THREE CHARGE CLIPS' MEASURED NATIVE LENGTHS. These are properties of
-## the `.fbx` SOURCES, not balance — they change only when a clip is reimported or retimed — so they
-## are named here, presentation-side, exactly like `UnitAnimationController`'s
-## `ATTACK_STRIKE_FRAME_SECONDS`. MEASURED, not assumed (dev pass,
-## `tools/measure_hips_displacement.gd`'s own `len` column).
-const SWIPE_NATIVE_SECONDS := 1.7333
-const THRUST_NATIVE_SECONDS := 2.1333
-const JUMP_ATTACK_NATIVE_SECONDS := 3.6667
-
-## The authored `unblockable_chargeup_seconds` (`data/balance/balance_config.tres`) these three
-## clips are scaled to fit. NOT read from `BalanceConfigService`, and that is CONSTRAINT C plus the
-## replay rule rather than a convenience: this controller holds no state handle and no balance
-## reference by design (see the file header), the action-state seam carries `charge_color` and
-## nothing else, and a controller reading the SERVICE would present the AUTHORED duration during a
-## replay that recorded a different one (`4-3/R11`, `match_runner.gd:264-267`). Widening the seam to
-## carry the duration is an API change to the presentation seam and is NOT taken unasked --
-## `4-3d/R9`'s ruling on the identical shape, one story earlier.
+## Story 6-1b (AC 1/AC 2/AC 11, finding 2/6): THE THREE CHARGE CLIPS' MEASURED STRIKE FRAMES --
+## the native-clip-time timestamp at which the blade completes its STRIKE swing ("the blade
+## arrives"), measured by `tools/measure_charge_strike_frames.gd` (dev pass, MEASURED not
+## assumed) and picked from its per-frame reach/speed tables using an IMPACT criterion, not
+## global max reach: the last major reach maximum that follows the swing's own peak speed.
 ##
-## SO THE COUPLING IS GUARDED BY TEST RATHER THAN BY COMMENT, on that same precedent:
-## `test/state/test_balance_authoring.gd::test_the_charge_clip_speeds_still_describe_the_authored_chargeup`
-## reads the AUTHORED value and re-derives all three speeds from it, so retuning
-## `unblockable_chargeup_seconds` without re-deriving this constant turns the suite RED and names
-## the re-derivation needed. Re-tuning this ONE field is therefore no longer a pure one-line `.tres`
-## edit -- the `4-3d/R9` consequence, accepted here for the same reason and recorded in the story.
-const CHARGE_ALIGNED_CHARGEUP_SECONDS := 1.0
+## FIX PASS (round-1 live smoke, criterion corrected): the first pass took the tool's printed
+## `max_reach` verbatim for all three clips. That is equivalent to the impact criterion for
+## RED and BLUE, whose tables have exactly one swing phase, so their values are UNCHANGED. It is
+## WRONG for GREEN: `jump_attack`'s global max reach (1.0870 @ t=1.2375, 34% of the clip) is the
+## sword extended at the AIRBORNE APEX of the jump, not the ground-impact swing -- a measurement
+## artifact the operator's round-1 finding named ("holds mid-air then never lands"). The corrected
+## GREEN value is the reach peak at t=2.1542 (0.7038m), the first clear local reach maximum after
+## the post-apex descent (character landing, blade completing its downward arc) -- i.e. AFTER the
+## apex, per the sanity check that a jump attack's impact cannot sit at 34% of its clip.
+##
+## THIS RETIRES 5-3's `CHARGE_ALIGNED_CHARGEUP_SECONDS` / `CHARGE_CLIP_SPEED` pair (a uniform
+## `custom_speed` compression to the authored window) -- the `6-1/R15` finding was that a UNIFORM
+## speed cannot place "about to strike" at a fixed point in the AUTHORED WINDOW independent of
+## where the swing's own strike beat happens to fall in the clip's native timeline; only a
+## re-tempo keyed to the strike frame itself can. `charge_playhead_seconds` below drives the
+## playhead from window PROGRESS every tick instead, landing on exactly this timestamp at
+## progress 1.0 regardless of native clip length -- so the coupling to the AUTHORED chargeup
+## duration no longer lives here at all (it lives in `match_runner._push_charge_progress`, which
+## computes progress from `MatchState.balance_ticks.unblockable_chargeup_ticks`); this file needs
+## no balance reference for it, same as before (CONSTRAINT C, `4-3d/R9`).
+const SWIPE_STRIKE_FRAME_SECONDS := 0.8450
+const THRUST_STRIKE_FRAME_SECONDS := 0.9067
+const JUMP_ATTACK_STRIKE_FRAME_SECONDS := 2.1542
 
-## Story 5-3 (Ruling 3): the 1.0s chargeup is AUTHORED, not clip-dictated — these three clips are
-## scaled to fit it, never the other way around. `AnimationPlayer`'s `custom_speed` COMPRESSES
-## (speed > 1.0 plays faster/shorter), so a longer native clip gets a bigger factor. DERIVED from
-## the two constant blocks above rather than written as three literals, so the arithmetic cannot
-## drift from the numbers it claims to be: `UnitAnimationController.ATTACK_PLAYBACK_RATE`'s own
-## shape (`rate = measured_clip_seconds / authored_seconds`), three times instead of once.
-const CHARGE_CLIP_SPEED := {
-	Enums.CardColor.RED: SWIPE_NATIVE_SECONDS / CHARGE_ALIGNED_CHARGEUP_SECONDS,
-	Enums.CardColor.BLUE: THRUST_NATIVE_SECONDS / CHARGE_ALIGNED_CHARGEUP_SECONDS,
-	Enums.CardColor.GREEN: JUMP_ATTACK_NATIVE_SECONDS / CHARGE_ALIGNED_CHARGEUP_SECONDS,
+const _CHARGE_STRIKE_FRAME_SECONDS := {
+	Enums.CardColor.RED: SWIPE_STRIKE_FRAME_SECONDS,
+	Enums.CardColor.BLUE: THRUST_STRIKE_FRAME_SECONDS,
+	Enums.CardColor.GREEN: JUMP_ATTACK_STRIKE_FRAME_SECONDS,
 }
+
+## Story 6-1b (AC 2/AC 3, Sekiro-grammar ruling): the re-tempo's three progress breakpoints --
+## ONE mechanism (AC 3: "same mechanism, no per-clip special case"), but PER-CLIP PARAMETER
+## VALUES rather than three shared constants. FIX PASS (round-1 live smoke): RED froze near the
+## END of its spin (a late coil pose reads as "the swing already happened"), BLUE's thrust
+## wind-up was visually subtle at the shared hold point, and GREEN's hold sat at 85% of the way
+## to a strike frame that (pre-fix) was itself the airborne apex -- each clip needed its OWN
+## commitment point, not a shared curve applied uniformly. `charge_playhead_seconds` stays a
+## single pure function; only its knob VALUES vary per colour, which is why this is still "the
+## same mechanism" for AC 3 (operator ruling to record at close-out) rather than a per-clip
+## special case. Each triple: `hold_start`/`hold_end` place the held beat as a fraction of WINDOW
+## progress (so it lands at the same relative moment in the commitment regardless of a clip's
+## native length), and `hold_fraction` places the held POSE as a fraction of the clip's own
+## strike frame. The held beat HOLDS ON A SINGLE FRAME -- a fixed seek, not a slow crawl (the
+## simpler of the two Open-Questions options, chosen so it reads unambiguously as "paused" rather
+## than risking a crawl rate that reads as a glitch).
+##
+## OPERATOR FEEL KNOBS -- starting points for round-2 tuning, not final, hand-editable literals:
+##   RED   (swipe):       early-rotation coil, held well before the old late-spin freeze.
+##   BLUE  (thrust):      deepest pre-thrust pull-back, made visually legible vs the shared value.
+##   GREEN (jump_attack): held ON the airborne apex -- `hold_fraction` is the corrected apex
+##                        timestamp (1.2375s) as a fraction of the corrected strike frame
+##                        (2.1542s): 1.2375 / 2.1542 = 0.5744.
+const _CHARGE_HOLD_KNOBS := {
+	Enums.CardColor.RED: {"hold_start": 0.3, "hold_end": 0.45, "hold_fraction": 0.15},
+	Enums.CardColor.BLUE: {"hold_start": 0.40, "hold_end": 0.55, "hold_fraction": 0.17},
+	Enums.CardColor.GREEN: {"hold_start": 0.40, "hold_end": 0.55, "hold_fraction": 0.5744},
+}
+
+
+## THE RE-TEMPO MAPPING (AC 1/AC 2/AC 11): window PROGRESS (0..1, computed runner-side per
+## finding 5) -> this clip's native playhead seconds. A PURE function -- no scene, no
+## `AnimationPlayer` -- so AC 11's two-endpoint pin can call it directly from a headless unit
+## test: progress 0.0 maps to 0.0 (the clip's own rest pose) and progress 1.0 maps to
+## `strike_frame_seconds` (never the clip's end -- the follow-through is not scheduled inside the
+## window, AC 2). Between them: a SLOWED wind-up to the held pose, a HELD BEAT (flat), then a FAST
+## close from the held pose to the strike frame. `hold_start_progress`/`hold_end_progress`/
+## `hold_playhead_fraction` are the per-clip knobs from `_CHARGE_HOLD_KNOBS` -- passed explicitly
+## so the function stays pure and testable per clip without reading the dictionary itself.
+static func charge_playhead_seconds(progress: float, strike_frame_seconds: float,
+		hold_start_progress: float, hold_end_progress: float,
+		hold_playhead_fraction: float) -> float:
+	var p := clampf(progress, 0.0, 1.0)
+	var hold_playhead := strike_frame_seconds * hold_playhead_fraction
+	if p <= hold_start_progress:
+		return lerpf(0.0, hold_playhead, p / hold_start_progress)
+	if p <= hold_end_progress:
+		return hold_playhead
+	var span := 1.0 - hold_end_progress
+	return lerpf(hold_playhead, strike_frame_seconds, (p - hold_end_progress) / span)
 
 var _state: HeroState.ActionState = HeroState.ActionState.IDLE
 
@@ -161,11 +209,40 @@ func on_action_state_changed(_previous: HeroState.ActionState, current: HeroStat
 	if current == HeroState.ActionState.CHARGING:
 		var charge_clip: StringName = _CHARGE_CLIP.get(charge_color, &"")
 		if charge_clip != &"":
-			_restart(charge_clip, CHARGE_CLIP_SPEED.get(charge_color, 1.0))
+			# Story 6-1b: speed 0.0 PINS the playhead -- on_charge_progress below is now the ONLY
+			# thing that ever moves it, never AnimationPlayer's own idle-process advance. _restart
+			# still seeks to 0.0 so a fresh CHARGING entry always starts from the clip's rest pose.
+			_restart(charge_clip, 0.0)
 		return
 	var clip: StringName = _CLIP.get(current, &"")
 	if clip != &"":
 		_restart(clip)
+
+
+## Story 6-1b (AC 1/AC 4, finding 5): pushed every tick the hero is CHARGING -- a NEW call site
+## (`match_runner._push_charge_progress`), never a `connect_*` seam (AC 7). `progress` arrives
+## already computed runner-side from EXISTING public state
+## (`PlayerState.charge_window.remaining_ticks()` / `MatchState.balance_ticks.unblockable_chargeup_ticks`,
+## finding 5) -- this controller still reads no balance and holds no window handle (CONSTRAINT C).
+##
+## THE `_state != CHARGING` GUARD is belt-and-braces on the `on_locomotion` precedent above (which
+## guards `_state != IDLE` the same way), not the sole defence against the finding-4 ordering
+## hazard: the caller already stops calling the instant `action_state` flips off CHARGING, because
+## it reads the same state-side field `set_action_state` updates SYNCHRONOUSLY, ahead of the
+## QUEUED seam signal that later fires this controller's own cut to `idle`. So a stale push cannot
+## reach here AT ALL on the tick a chargeup ends, and this guard only covers a caller that someday
+## stops honouring that contract.
+func on_charge_progress(charge_color: int, progress: float) -> void:
+	if _state != HeroState.ActionState.CHARGING:
+		return
+	var strike_frame: float = _CHARGE_STRIKE_FRAME_SECONDS.get(charge_color, 0.0)
+	if strike_frame <= 0.0:
+		return
+	var knobs: Dictionary = _CHARGE_HOLD_KNOBS.get(charge_color, {})
+	if knobs.is_empty():
+		return
+	animation_player.seek(charge_playhead_seconds(progress, strike_frame,
+		knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"]), true)
 
 
 ## Pushed every tick from HeroActor.drive() (gate ruling 3-0a/R2, widened by 5-0a AC 2): while

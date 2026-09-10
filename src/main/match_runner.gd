@@ -690,6 +690,39 @@ func _push_charge_reach_facts() -> void:
 				player.hero.attack_index, fact_dir, kind)
 
 
+## Story 6-1b (AC 1/AC 6/AC 7, finding 5): THE PRESENTATION-SIDE CHARGE PROGRESS PUSH -- a NEW
+## call site on this function's own precedent (AC 7: a direct per-tick call, never a `connect_*`
+## seam), but seated AFTER `advance()` rather than beside `_push_charge_reach_facts`'s
+## before-advance seat, because progress needs the JUST-TICKED `remaining_ticks()` (CONSTRAINT C:
+## read inline, never cached) and the FRESH post-advance() `action_state` -- both writes this same
+## `advance()` call already made.
+##
+## READING `action_state` HERE (not the AnimationController's own `_state`, which only updates
+## when the queued seam signal drains later this same frame) is what makes the early-release
+## ordering hazard (finding 4) impossible rather than merely guarded: `HeroState.set_action_state`
+## flips the field SYNCHRONOUSLY, so on the very tick a chargeup ends -- landing or release -- this
+## poll already reads the new state and pushes nothing for that slot.
+##
+## `drive()` (HeroState only) is NOT widened to carry this: `charge_window` lives on PlayerState,
+## and a new call site here costs nothing `_push_charge_reach_facts` one function up doesn't
+## already pay for the reach fact.
+func _push_charge_progress() -> void:
+	if _match_state.balance_ticks == null:
+		return
+	var total_ticks := _match_state.balance_ticks.unblockable_chargeup_ticks
+	if total_ticks <= 0:
+		return
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		if player.hero.action_state != HeroState.ActionState.CHARGING:
+			continue
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		if not is_instance_valid(hero):
+			continue
+		var progress := 1.0 - float(player.charge_window.remaining_ticks()) / float(total_ticks)
+		hero.animation_controller.on_charge_progress(player.charge_color, progress)
+
+
 ## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
 ## runner-owned plain object — NOT an observation seam and deliberately not a `connect_`
 ## method (AC 13 pins that family at seven then; nine as of 5-4/R4): no signal, no callback, no
@@ -2517,6 +2550,9 @@ func _physics_process(delta: float) -> void:
 		#     instrumentation, NOT an eighth observation seam: no signal, no state handle, and
 		#     to_snapshot() is untouched, so the replay contract never learns it exists.
 		_instrument_panel.set_window_countdown(_match_state.debug_window_ticks_remaining())
+		# 3a-bis. Story 6-1b: the charge-progress poll, same seat and shape as 3b directly above --
+		#     a POLL right after advance(), no signal, no state handle, no new `connect_*` (AC 7).
+		_push_charge_progress()
 		# 3c. Story 4-1 (AC 7): SPAWN one grey-box actor per unit record the board has gained. Read
 		#     off the state-owned COUNT right after advance(), the step-3b poll directly above in
 		#     shape and seat: no signal, no state handle held, no new `connect_*` -- so the
