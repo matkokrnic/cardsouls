@@ -114,7 +114,7 @@ development_status:
   6-0-card-hand-tint: done  # Tier B
   6-1-hold-to-charge: done  # Tier A
   6-1b-chargeup-presentation: done  # Tier B
-  6-1c-unblockable-tracking-and-reach: backlog  # Tier A
+  6-1c-unblockable-tracking-and-reach: ready-for-dev  # Tier A
   6-2-pitch-staging: backlog  # Tier A
   6-3-pitch-hud: backlog  # Tier B
   6-4-pitch-activation: backlog  # Tier A
@@ -128,7 +128,7 @@ story_notes:
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
   6-1-hold-to-charge: "done 2026-09-09, Tier A close-out complete (hold-through-chargeup + paid feint per 6-1/R1-R15, golden and 30-key set unmoved, suite 735/0/5430 + 56 integration, smoke 6/7 PASS (item 5 machine-pinned, named finding for 6-1b), decision-log session 6-1 close-out)."
   6-1b-chargeup-presentation: "done 2026-09-09, Tier B close-out complete (progress-driven playhead per-clip, strike-frame impact criterion, per-clip hold knobs per 6-1b/R1-R9; src/state/ byte-identical, golden and 30-key set unmoved; suite 737/0/5553 + 57 integration; round-2 smoke items 1-7 PASS / 8 fps stable; decision-log session 6-1b close-out)."
-  6-1c-unblockable-tracking-and-reach: "Tier A, adds a commit/launch phase to mode 2 (tracking pin, commit-freeze, per-colour launch travel + reach/arc geometry), named successor per 6-1b close-out (decision-log:9658); not cleared for dev."
+  6-1c-unblockable-tracking-and-reach: "Tier A, adds a commit/launch phase to mode 2 (tracking pin, commit-freeze, per-colour launch travel + reach/arc geometry), named successor per 6-1b close-out (decision-log:9658); promoted to ready-for-dev 2026-09-10 after gate rounds 1-2 + micro-fix (rulings 6-1c/R1-R7)."
   6-2-pitch-staging: "Tier A, golden moves by construction (MatchState.to_snapshot already carries the pitch key). Scope talk owes the pitch-cost authoring seat, E6-P/R9. Carries the per-player/independent-staging rule, E6-P/R4."
   6-3-pitch-hud: "Tier B AT RISK of Tier A. May NOT add a second MatchState direct-connect (E5-C/R2); uses the observation-seam family. Owes the anchor A/B verdict (2-6/R19 finding S4)."
   6-4-pitch-activation: "Tier A. Wires pad Y and ends mode 4's structural unreachability; owes the Y-guard question 5-7/R7 kept open for exactly this story (LOW-1/LOW-2)."

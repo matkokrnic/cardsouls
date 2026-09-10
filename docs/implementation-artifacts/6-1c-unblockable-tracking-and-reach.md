@@ -4,7 +4,7 @@ baseline_commit: c7676b3c4292b0307f0004cfb92146ccde99ce38
 
 # Story 6.1c: Unblockable Tracking and Reach
 
-Status: authored
+Status: ready-for-dev
 
 > **Scope note.** Adopted into E6 immediately after `6-1b` by operator ruling — named successor
 > `6-1c` in the `6-1b` close-out (decision-log.md:9658, :9684). Tier A: adds a new state-machine
