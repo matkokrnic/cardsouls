@@ -9682,3 +9682,48 @@ values): RED (swipe) `hold_start = 0.30`, `hold_end = 0.45`, `hold_fraction = 0.
 Nothing pushed; the operator reviews the log.
 
 Next steps: `6-1c` (aim/reach/travel + reach VFX) -- scope talk next session.
+
+## Session 2026-09-10 -- 6-1c readiness gate
+
+`6-1c/R1` (closes B1) AC 1 NAMED THE WRONG TARGET. Corrected to name the auto-aimed ENEMY HERO
+(via `_charge_reach_dirs`), OVERRIDING this slot's general lock (`5-2` Ruling 3/Ruling 8) rather
+than tracking "the locked target." The regression pin must cover the locked-onto-a-minion case,
+since the hero-to-hero case alone cannot prove the override.
+
+`6-1c/R2` (operator ruling; closes B2) THE VISIBLE STRIKE MUST LAND ON THE TICK DAMAGE ACTUALLY
+RESOLVES, NEVER BEFORE. The strike swing plays DURING the launch: the chargeup window keeps
+mapping to the pre-strike portion of the clip, and a new launch progress channel carries the
+swing to the strike frame at resolution. `animation_controller.gd` is withdrawn from "NOT expected
+to change" -- it is in scope. New AC 11 states the honesty rule as a verifiable claim; AC 9 and
+Measured Fact 7 now cover the launch channel against the `6-1b/R6` tick-ordering contract. The
+mechanism (whether travel plays under the strike swing or under a follow-through) stays a
+dev-pass Open Question; the honesty rule itself is not.
+
+`6-1c/R3` (closes B3) MODE (2) LANDING ADOPTS THE EXISTING 1-8 CONTACT-FACT SHAPE, UNCHANGED, FOR
+BOTH ATTACK PATHS. The runner computes the per-colour radius KIND from positions and pushes the
+planar direction fact from positions only -- it never reads `HeroState.facing`. The arc
+comparison is STATE policy, performed against the frozen committed direction (AC 2) using the
+per-colour authored arc field. No carve-out to the 1-8/R-B3 comment (`match_runner.gd:1680-1684`)
+is needed. The committed-direction STORAGE question stays open for the dev pass.
+
+`6-1c/R4` (closes B4) R-D6 SMOKE ACCEPTANCE RE-INVOKED AT THIS GATE. Flip `[0,3]` is
+KEYBOARD_P1 + GAMEPAD on slot 1, a killable human-driven slot, so the standing rule
+(decision-log.md:456) fires. The residual defects R-D6 originally accepted are fixed and shipped
+since story 2-3 (`match_state.gd:3308-3310`), so the substantive acceptance is moot -- but the
+binding editor-collateral revert procedure is restated verbatim in the story's Live Smoke section
+and remains binding for this and every future killable-human-slot smoke.
+
+`6-1c/R5` (closes B5) BOARD FORMATTING AND STORY-NOTE LENGTH CORRECTED TO MATCH NEIGHBOURS. Two
+spaces before `# Tier A`; `story_note` trimmed from a four-sentence close-out-length note to the
+one-sentence backlog house style.
+
+### Close-out
+
+Docs-only pass against the readiness gate report (round 1 of 2, baseline `c7676b3`). Pure append,
+no existing entry edited. One commit: story file (AC/Fact/Live-Smoke/Dev-Notes corrections per
+B1-B5 + N1-N5), `sprint-status.yaml` (board line + story_note), and this entry, together
+(docs-only). No code, no test, no golden. Story Status stays `authored` -- promotion is a
+separate later step.
+
+Next steps: operator review of this fix pass; a second readiness-gate round if further findings
+surface, else promotion to `ready-for-dev`.
