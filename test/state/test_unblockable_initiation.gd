@@ -662,7 +662,9 @@ func _config() -> BalanceConfig:
 	c.draw_replacement_delay_seconds = float(DRAW_DELAY_TICKS) / TimingWindow.TICK_HZ
 	c.unblockable_stamina_cost = UNBLOCKABLE_COST
 	c.unblockable_chargeup_seconds = float(CHARGEUP_TICKS) / TimingWindow.TICK_HZ
-	c.unblockable_reach = REACH
+	c.unblockable_reach_red = REACH
+	c.unblockable_reach_blue = REACH
+	c.unblockable_reach_green = REACH
 	c.unblockable_damage_percent_of_max_hp = 10.0
 	return c
 

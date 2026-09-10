@@ -66,6 +66,11 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# test_card_observation.gd's were BOTH red before this edit, and the story that adds the key is
 	# the story that moves both.
 	"deck_size", "defense", "discard_size", "hand_size", "hero",
+	# Story 6-1c (AC 2/AC 4): the THIRTY-FIRST key -- `landing`, the mode (2) landing window's
+	# remaining ticks, in SORTED position between `hero` and `lock_target`. Same mechanism, seventh
+	# time: this pin and test_card_observation.gd's were BOTH red before this edit, and the story
+	# that adds the key is the story that moves both.
+	"landing",
 	# Story 4-6 (AC 2/AC 4): the lock-on target as a `[slot, index]` pair, in sorted position.
 	"lock_target",
 	"mana", "orbs",

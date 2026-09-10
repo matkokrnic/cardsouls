@@ -645,9 +645,21 @@ func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 ##
 ## THE COMPARISON IS DONE HERE because the runner owns positions and `src/state/` owns none
 ## (`4-3/R2`); what crosses inward is the RELATION, exactly as the fact's `dir` has carried
-## position-DERIVED data since 1-8. `unblockable_reach` is read INLINE off the config the runner
-## already applied (CONSTRAINT C) -- never `BalanceConfigService`, never cached on this node, which
-## during a replay would measure reach at the AUTHORED value instead of the RECORDED one.
+## position-DERIVED data since 1-8. The reach is read INLINE off the config the runner already
+## applied (CONSTRAINT C) -- never `BalanceConfigService`, never cached on this node, which during a
+## replay would measure reach at the AUTHORED value instead of the RECORDED one.
+##
+## STORY 6-1c (AC 5, `6-1c/R3`): THE RADIUS IS PER COLOUR, AND IT IS STILL ONLY A KIND. The one
+## `unblockable_reach` circle became `unblockable_reach_for(charge_color)` -- the charging player's
+## own colour selects the swipe's, the thrust's or the jump's radius -- and what crosses inward is
+## unchanged: the INSIDE/OUTSIDE kind and the planar direction, both from positions only. The
+## per-colour ARC is NOT judged here: it is state policy against the attacker's frozen committed
+## direction (`MatchState._is_in_charge_arc`), exactly the 1-8/R-B3 split `_gather_contact_facts`
+## states below -- this function still never reads `HeroState.facing`.
+##
+## PUSHED THROUGH THE LAUNCH TOO: the hero stays `CHARGING` from the cast to the landing (the launch
+## is a phase of it, not a state), so the fact the landing reads is measured on the landing tick
+## itself, after the launch has carried the attacker.
 ##
 ## PLANAR (XZ) CENTRE-TO-CENTRE, the same geometry `_push_reach_probe` and `_lock_direction` use, so
 ## every distance this file measures is one geometry compared against different authored numbers
@@ -674,8 +686,9 @@ func _push_charge_reach_facts() -> void:
 		var planar := Vector2(to_attacker.x, to_attacker.z)
 		if planar.is_zero_approx():
 			continue
+		var reach := _match_state.balance.unblockable_reach_for(player.charge_color)
 		var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE \
-				if planar.length() <= _match_state.balance.unblockable_reach \
+				if planar.length() <= reach \
 				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
 		var attacker_address: Array[int] = [slot, TargetingService.HERO_INDEX]
 		var target_address: Array[int] = [1 - slot, TargetingService.HERO_INDEX]
@@ -706,12 +719,20 @@ func _push_charge_reach_facts() -> void:
 ## `drive()` (HeroState only) is NOT widened to carry this: `charge_window` lives on PlayerState,
 ## and a new call site here costs nothing `_push_charge_reach_facts` one function up doesn't
 ## already pay for the reach fact.
+##
+## STORY 6-1c (AC 9/AC 11): THE LAUNCH PROGRESS CHANNEL EXTENDS THIS PUSH ACROSS THE LAUNCH. The hero
+## stays `CHARGING` through the commit and the launch, so this same gate keeps pushing after the
+## chargeup closes, and the progress now runs over the whole attack off the LANDING window
+## (`AnimationController.charge_attack_progress`): the strike swing plays during the launch and
+## progress 1.0 falls on the landing tick. The `6-1b/R6` guarantee carries over UNCHANGED because it
+## is keyed to the SAME edge -- `_resolve_charge_landing` writes `IDLE`/`STUNNED` synchronously on the
+## tick the landing window closes, so this poll already reads a non-`CHARGING` state there and
+## pushes nothing stale; the feint and the reset stop the landing window in the same breath as they
+## leave `CHARGING`.
 func _push_charge_progress() -> void:
 	if _match_state.balance_ticks == null:
 		return
-	var total_ticks := _match_state.balance_ticks.unblockable_chargeup_ticks
-	if total_ticks <= 0:
-		return
+	var chargeup_ticks := _match_state.balance_ticks.unblockable_chargeup_ticks
 	for slot: int in 2:
 		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 		if player.hero.action_state != HeroState.ActionState.CHARGING:
@@ -719,7 +740,12 @@ func _push_charge_progress() -> void:
 		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
 		if not is_instance_valid(hero):
 			continue
-		var progress := 1.0 - float(player.charge_window.remaining_ticks()) / float(total_ticks)
+		var launch_ticks := _match_state.balance_ticks.unblockable_launch_ticks_for(
+				player.charge_color)
+		if chargeup_ticks + launch_ticks <= 0:
+			continue
+		var progress := AnimationController.charge_attack_progress(
+				player.landing_window.remaining_ticks(), chargeup_ticks, launch_ticks)
 		hero.animation_controller.on_charge_progress(player.charge_color, progress)
 
 

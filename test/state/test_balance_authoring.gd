@@ -127,9 +127,19 @@ func test_authored_unblockable_values_are_positive() -> void:
 	assert_true(config.unblockable_chargeup_seconds > 0.0,
 		"unblockable_chargeup_seconds must be authored > 0 (a zero chargeup lands on the cast tick "
 		+ "and there is no telegraph window at all)")
-	assert_true(config.unblockable_reach > 0.0,
-		"unblockable_reach must be authored > 0 (a zero reach can never be satisfied — the attack "
-		+ "could never land)")
+	# Story 6-1c (AC 5): the one reach became three, and the bound goes with each -- a zero radius in
+	# ANY colour makes that colour's attack unable to land, the same defect for one third of the deck.
+	# The ARC joins the class for the same reason: 0 degrees admits no direction, so the colour could
+	# never land, and above 360 is not an angle. These are BOUNDS, not pins: any authored value inside
+	# them passes, so tuning the feel knobs never needs this file.
+	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
+		assert_true(config.unblockable_reach_for(color) > 0.0,
+			"the colour-%d unblockable reach must be authored > 0 (a zero reach can never be "
+			% color + "satisfied — that colour's attack could never land)")
+		var arc := config.unblockable_arc_degrees_for(color)
+		assert_true(arc > 0.0 and arc <= 360.0,
+			"the colour-%d unblockable arc must be authored in (0, 360] degrees, got %.1f"
+			% [color, arc])
 	assert_true(config.unblockable_damage_percent_of_max_hp > 0.0,
 		"unblockable_damage_percent_of_max_hp must be authored > 0 (a landed hit that takes "
 		+ "nothing off is a miss wearing a hit's clothes)")

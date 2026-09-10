@@ -183,6 +183,30 @@ var charge_window: TimingWindow
 ## `1-10/R1` STAYS INTACT: this is a COLOUR, not a `TelegraphProfile`. The `ActionState ->
 ## TelegraphProfile` mapping remains controller-owned and nothing in `src/state/` names one.
 var charge_color: int = NO_TELEGRAPH_COLOR
+## Story 6-1c (AC 2/AC 4/AC 11): THE LANDING WINDOW -- counts the ticks from the cast to the LANDING,
+## i.e. the chargeup PLUS this colour's launch span. Started at the cast in the same breath as
+## `charge_window` above, and advanced beside it at step 2.
+##
+## TWO WINDOWS RUNNING TOGETHER, AND THAT IS THE WHOLE PHASE SHAPE. mode (2) stays ONE `ActionState`
+## (`CHARGING`) from cast to landing; which half of it the hero is in is DERIVED from which window is
+## running -- the `HeroState.attack_phase()` "phases are expressed by which window is running"
+## precedent -- never stored as a flag:
+##   * `charge_window` running          -> the CHARGEUP: rooted, tracking, releasable (a feint).
+##   * `charge_window` stopped, this running -> COMMITTED: the launch -- facing frozen, travelling
+##                                        along it, the release ignored.
+##   * this stopped                     -> the LANDING, resolved at step 3(a) on that very tick.
+## The commit point therefore exists BY CONSTRUCTION the instant the chargeup window closes: there
+## is no "committed" bit an adversarial mutation could leave stale, and nothing can un-commit a hero
+## because nothing restarts `charge_window` except a new cast.
+##
+## STARTED AT THE CAST WITH ITS FULL DURATION rather than at the commit, so a mid-attack X3 reload
+## cannot move the landing tick (the D4 rule: a window in flight keeps its duration) and so no
+## "has the launch started yet" test is needed at the commit. It can never close BEFORE the chargeup
+## window: both start on the same tick and its duration is the chargeup's plus a non-negative span.
+##
+## SEATED HERE, beside `charge_window`, for that window's stated reason: a card-layer duration a
+## cast starts, riding the per-player key set.
+var landing_window: TimingWindow
 
 ## Story 5-5 (AC 2): THE MODE ③ DEFENSE WINDOW — the reaction window a defense cast opens, and the
 ## COLOUR it can answer.
@@ -238,6 +262,7 @@ func _init(queue: SignalQueue) -> void:
 	pending_draw = TimingWindow.new()
 	vulnerable_window = TimingWindow.new()
 	charge_window = TimingWindow.new()
+	landing_window = TimingWindow.new()
 	defense_window = TimingWindow.new()
 
 
@@ -540,4 +565,24 @@ func to_snapshot() -> Dictionary:
 		"telegraph": [charge_color, charge_window.remaining_ticks()] \
 				if hero.action_state == HeroState.ActionState.CHARGING \
 				else [NO_TELEGRAPH_COLOR, 0],
+		# Story 6-1c (AC 2/AC 4): the ONE new key this story adds -- the LANDING WINDOW's remaining
+		# ticks. It is a key at all for the `pending_draw` reason: the window CROSSES TICKS AND DECIDES
+		# AN OUTCOME (when the attack commits, how long it travels, and on which tick it lands), so it
+		# cannot be recomputed for free inside the tick that reads it -- `4-3a/R17`'s test, passed.
+		#
+		# REMAINING TICKS ALONE IS DETERMINISM-COMPLETE, on `telegraph`'s own argument: the duration is
+		# `unblockable_chargeup_ticks + unblockable_launch_ticks_for(charge_color)`, load-time constants
+		# a replay reproduces from the recorded balance, so `elapsed` is recoverable. Together with
+		# `telegraph` it also pins the PHASE: chargeup remaining > 0 is the chargeup; chargeup 0 with
+		# this > 0 is the launch.
+		#
+		# UNGATED, unlike `telegraph`, deliberately: there is no colour here to go stale, only a window
+		# whose own remaining count is the truth on every path -- it reads 0 at rest, after a landing,
+		# after a feint and after a reset (each of those stops it), and a hero killed mid-launch
+		# carries the window's real count until it expires. Gating it on CHARGING would HIDE that
+		# count from the hash rather than make anything unrepresentable.
+		#
+		# ONE GOLDEN CAUSE RIDES ON THIS KEY: its mere PRESENCE (the `5-2`/`5-5` shape). The golden
+		# fixture never casts mode (2), so its VALUE is the resting 0 on every hashed tick.
+		"landing": landing_window.remaining_ticks(),
 	}

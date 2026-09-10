@@ -147,6 +147,10 @@ func _physics_process(_delta: float) -> bool:
 		# would resolve away on the very next tick, undoing the transition before this test
 		# ever measures it. Armed generously past CHECK_DELAY so it is still running when read.
 		_player.charge_window.start(1000)
+		# Story 6-1c: the LANDING now fires when `landing_window` stops (it runs from the cast through
+		# the launch), not when `charge_window` does -- so the poke arms it too, exactly as the cast seat
+		# does, or the unarmed landing window resolves the poked chargeup away on the next tick.
+		_player.landing_window.start(1000)
 		_player.hero.set_action_state(HeroState.ActionState.CHARGING)
 		_phase = "poked"
 		_phase_frame = _frames

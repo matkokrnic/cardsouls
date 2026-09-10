@@ -330,11 +330,49 @@ extends Resource
 ## at the ONE boundary (`BalanceTicks.unblockable_chargeup_ticks`, the D3 precedent) and is never
 ## compared against a raw float inside `advance()`.
 @export var unblockable_chargeup_seconds: float = 0.0
-## The authored hit radius that IS the boundary (`E5-P/R4`): planar (XZ) centre-to-centre distance
-## between the two HEROES, measured at the moment the chargeup ENDS. Lock-on aims direction only
-## and never extends this. Read by the RUNNER, which owns positions — the state layer receives the
-## inside/outside relation the comparison produces, never a distance and never a position.
-@export var unblockable_reach: float = 0.0
+## Story 6-1c (AC 5, Fact 8): THE HONEST REACH, PER COLOUR -- `5-2`'s single `unblockable_reach`
+## circle is REMOVED, not kept alongside (the `3-0b` precedent: a half-migration would leave two
+## sources of truth for one radius). Each is the authored hit radius that IS the boundary
+## (`E5-P/R4`) for that colour's attack: planar (XZ) centre-to-centre distance between the two
+## HEROES, measured on the LANDING tick (after the launch has carried the attacker). Lock-on aims
+## direction only and never extends it. Read by the RUNNER, which owns positions -- the state layer
+## receives the inside/outside KIND the comparison produces, never a distance and never a position.
+##
+## A TRIPLET, NOT A PROFILE RESOURCE, and Fact 8 is why: these ARE the per-colour numbers `5-2`'s
+## Ruling 2 deferred to "the later story", and three flat fields per knob read and tune directly in
+## the authored file and the inspector. One colour's attack is one row across the four triplets
+## below (reach, arc, launch distance, launch span): RED the wide swipe, BLUE the narrow long
+## thrust, GREEN the radial jump. FEEL KNOBS -- no test pins their authored values.
+@export var unblockable_reach_red: float = 0.0
+@export var unblockable_reach_blue: float = 0.0
+@export var unblockable_reach_green: float = 0.0
+## Story 6-1c (AC 5, `6-1c/R3`): each colour's hit ARC, in degrees, centred on the attack's FROZEN
+## committed direction (AC 2). STATE policy, judged at the landing seat against the runner's planar
+## direction fact -- the 1-8 `block_facing_arc_degrees` shape. 360 is radial: every direction inside
+## the radius is hit.
+##
+## DEFAULT 360.0, NOT 0.0, and deliberately against the zero-default house rule: 360 is exactly the
+## pre-6-1c behaviour (Fact 3 -- one circle, no angle), so an unauthored arc -- every in-test
+## `BalanceConfig.new()` fixture -- degrades to what shipped rather than to an attack that can
+## never land. The authoring audit bounds each to (0, 360].
+@export var unblockable_arc_degrees_red: float = 360.0
+@export var unblockable_arc_degrees_blue: float = 360.0
+@export var unblockable_arc_degrees_green: float = 360.0
+## Story 6-1c (AC 4): how far the LAUNCH carries the attacker along its frozen direction -- a FIXED
+## authored displacement, never adaptive to where the defender is. Applied by the STATE layer as a
+## velocity over the launch span below (`MatchState._charge_launch_velocity`, the `3-0b`
+## `attack_lunge_distance` shape), never root motion. Zero default: no travel, the pre-6-1c shape.
+@export var unblockable_launch_distance_red: float = 0.0
+@export var unblockable_launch_distance_blue: float = 0.0
+@export var unblockable_launch_distance_green: float = 0.0
+## Story 6-1c (AC 2/AC 4/AC 11): the LAUNCH SPAN -- how long the committed attack travels between
+## the chargeup's close (the commit point) and the landing. Crosses into the tick domain at the ONE
+## boundary (`BalanceTicks.unblockable_launch_ticks_for`) for timing; the float is read directly only
+## as the divisor of the travel SPEED (the `roll_distance / roll_duration_seconds` precedent). Zero
+## default: the landing resolves on the chargeup-close tick, exactly the pre-6-1c shape.
+@export var unblockable_launch_seconds_red: float = 0.0
+@export var unblockable_launch_seconds_blue: float = 0.0
+@export var unblockable_launch_seconds_green: float = 0.0
 ## What a landed unblockable takes off the enemy hero, as a percentage of that hero's own maximum —
 ## the `attack_damage_percent_of_max_hp` convention verbatim, so the two hero-versus-hero damage
 ## numbers are read the same way and can be compared at a glance in the authored file.
@@ -412,6 +450,47 @@ extends Resource
 ## earned, never handed out. Zero default, bespoke `> 0` bound: a 0 cap makes every grant a no-op
 ## and would ship the story invisible.
 @export var max_orbs_per_color: int = 0
+
+
+## Story 6-1c: the per-colour lookups over the four unblockable triplets above -- the ONE place a
+## `charge_color` int selects a field, so the runner and the state layer can never disagree about
+## which colour owns which number. Read INLINE at point of use off the live config (CONSTRAINT C).
+##
+## A colour with no authored shape (`PlayerState.NO_TELEGRAPH_COLOR`, the degraded-cast sentinel
+## `inject_card_colors`' totality check keeps out of live play) reads a ZERO reach, distance and span
+## and a RADIAL arc: no radius admits it in the runner, so a colourless chargeup never lands live,
+## while the arc half stays the pre-6-1c "no angle" so a headless fixture pushing the kind by hand
+## resolves exactly as it always has. Never a substitute colour -- the `kind_at` refusal rule.
+func unblockable_reach_for(color: int) -> float:
+	return _unblockable_by_color(color, unblockable_reach_red, unblockable_reach_blue,
+		unblockable_reach_green, 0.0)
+
+
+func unblockable_arc_degrees_for(color: int) -> float:
+	return _unblockable_by_color(color, unblockable_arc_degrees_red, unblockable_arc_degrees_blue,
+		unblockable_arc_degrees_green, 360.0)
+
+
+func unblockable_launch_distance_for(color: int) -> float:
+	return _unblockable_by_color(color, unblockable_launch_distance_red,
+		unblockable_launch_distance_blue, unblockable_launch_distance_green, 0.0)
+
+
+func unblockable_launch_seconds_for(color: int) -> float:
+	return _unblockable_by_color(color, unblockable_launch_seconds_red,
+		unblockable_launch_seconds_blue, unblockable_launch_seconds_green, 0.0)
+
+
+static func _unblockable_by_color(color: int, red: float, blue: float, green: float,
+		none: float) -> float:
+	match color:
+		Enums.CardColor.RED:
+			return red
+		Enums.CardColor.BLUE:
+			return blue
+		Enums.CardColor.GREEN:
+			return green
+	return none
 
 
 ## Story 4-4 (AC 1/AC 2): the sentinel a failed kind lookup returns. NOT -1 by coincidence — it is

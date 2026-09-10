@@ -282,7 +282,10 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# which is between `deck_size` and `discard_size` and NOT beside `telegraph`. Counts and
 		# indices only, exactly like its `telegraph` sibling: a colour is an enum ORDINAL and never a
 		# name, and the remaining time is an integer TICK count.
-		"deck_size", "defense", "discard_size", "hand_size", "hero", "lock_target", "mana", "orbs",
+		# Story 6-1c (AC 2/AC 4): the LANDING WINDOW's remaining ticks, in sorted position between
+		# `hero` and `lock_target`. A plain integer TICK count, like every sibling's time value.
+		"deck_size", "defense", "discard_size", "hand_size", "hero", "landing", "lock_target",
+		"mana", "orbs",
 		"pending_draw", "pending_draw_owed",
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
 		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
@@ -304,8 +307,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 30,
-		"the per-player snapshot key set is THIRTY keys as of story 5-5, which adds ONE: "
+	assert_eq(keys.size(), 31,
+		"the per-player snapshot key set is THIRTY-ONE keys as of story 6-1c, which adds ONE: "
+		+ "`landing`, the mode (2) landing window's remaining ticks (AC 2/AC 4), hashed because it "
+		+ "crosses ticks and decides when the attack commits and lands. It was THIRTY as of story "
+		+ "5-5, which added ONE: "
 		+ "`defense`, the armed reaction window as `[colour, remaining_ticks]` (AC 16), hashed "
 		+ "because it crosses ticks and decides whether an incoming unblockable lands at all. "
 		+ "It was TWENTY-NINE as of story 5-2, which added ONE: "

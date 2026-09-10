@@ -732,6 +732,49 @@ extends TestCase
 ##     test_unblockable_initiation.gd.
 ## ---------------------------------------------------------------------------------------------
 ## ---------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 6-1c (unblockable tracking and reach), d5bcb7e6 -> 9679fa80, ONE CAUSE,
+## MEASURED IN BOTH DIRECTIONS. The story's Golden Prediction was NO MOVE in the inverse form --
+## UNLESS the chosen phase shape added a NEW HASHED FIELD, which would then be the single named cause.
+## The dev pass's phase shape (a second window, `PlayerState.landing_window`, running from the cast to
+## the landing beside `charge_window`) added exactly one such field, and the golden moved for exactly
+## that reason and no other.
+##
+##   THE ONE CAUSE: the SNAPSHOT KEY SET, THIRTY -> THIRTY-ONE. `PlayerState.to_snapshot()` gains ONE
+##     key, `landing`, the landing window's remaining ticks -- hashed because the window crosses ticks
+##     and decides when the attack commits and lands. Pinned by test_card_observation.gd (size 30 ->
+##     31) and test_draw_delay_and_reshuffle.gd, both ORDER-SENSITIVE literals: the key's sorted
+##     position is between `hero` and `lock_target`.
+##
+##   ITS PRESENCE IS THE MOVER; ITS VALUE NEVER LEAVES THE RESTING ONE -- the `5-2`/`5-5` shape. This
+##     fixture never casts mode (2), so the landing window is never started and the key hashes 0 on
+##     every tick. PINNED as an assertion rather than left as a claim here, by
+##     test_the_fixture_never_starts_a_landing_window below.
+##
+##   THE REVERSE DIRECTION, which is what makes the single cause attributable: with ONLY the
+##     `"landing"` line held off `PlayerState.to_snapshot()` and EVERYTHING ELSE this story ships left
+##     in place -- the landing window and its step-2 tick, the reshaped CHARGING arm, the commit
+##     freeze in the facing branch, the launch velocity, the per-colour arc gate at the landing seat,
+##     the reset/feint clears, the twelve per-colour BalanceConfig fields and their three BalanceTicks
+##     twins -- this file hashed d5bcb7e6 EXACTLY and the thirty-key pins passed. Measured at the dev
+##     pass by deleting that one line, running this file and test_card_observation.gd (both green),
+##     and restoring from a SHA256-verified out-of-repo copy (822ec841...).
+##
+##   NON-MOVER, `FORMAT_VERSION` STAYS AT 8: no new input channel, no new intake seam, no new
+##     contact kind -- the committed direction is DERIVED state (the frozen `facing`), never a
+##     recorded input, and the per-colour radius rides the existing CHARGE-REACH kinds unchanged.
+##
+##   NON-MOVER, THE TWELVE AUTHORED FEEL KNOBS (per-colour reach / arc / launch distance / launch
+##     span): authored `.tres` tuning, isolated from this golden by standing `BC/R3` --
+##     `_golden_config()` never loads the authored file, and their unauthored in-test defaults (360
+##     arc, 0 launch) reproduce the pre-story shape exactly.
+##
+##   CAUSES UNREACHABLE HERE, named so nobody reads a green golden as coverage of them: tracking,
+##     the commit, the launch and the per-colour geometry -- the fixture never enters CHARGING. They
+##     are proven in test_unblockable_tracking_and_reach.gd.
+## Previous golden d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d
+## (story 5-6, three-tier ladder -- the record below).
+##
 ## RE-BASELINED BY STORY 5-6 (three-tier ladder), d9725092 -> d5bcb7e6, TWO CAUSES, BOTH BEHAVIOURAL,
 ## BOTH MEASURED SEPARATELY AND IN BOTH DIRECTIONS -- and NO new snapshot key, which is the shape
 ## this story's AC 17 predicted and measurement confirmed.
@@ -888,7 +931,7 @@ extends TestCase
 ##     colour copy, the landing intercept and the reset clear -- because the fixture never casts
 ##     mode ③ and pushes no charge-reach fact. They are proven in test_unblockable_defense.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d"
+const GOLDEN := "9679fa80f19358d15c9b33b1f9a3706264095ada871e5d2530cf29b6cbce8315"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1961,6 +2004,20 @@ func test_the_fixture_reaches_the_hash_tick_with_no_defense_window_armed() -> vo
 		assert_eq(player.to_snapshot()["defense"], [PlayerState.NO_TELEGRAPH_COLOR, 0],
 			"...so the `defense` key hashes at its RESTING value — which is why this story's ONE "
 			+ "golden cause is the key's mere PRESENCE and not a behavioural second cause")
+
+
+## Story 6-1c (AC 10): THE MEASURED CLAIM BEHIND THE RE-BASELINE, PINNED -- the fixture never casts
+## mode (2), so the landing window is never STARTED anywhere in the run (a start would record a
+## non-zero duration; only a mode (2) cast starts one with a duration), and the new `landing` key
+## hashes at its resting 0. Which is why this story's ONE golden cause is the key's mere PRESENCE.
+func test_the_fixture_never_starts_a_landing_window() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	for player: PlayerState in [ms.p1, ms.p2]:
+		assert_eq(int(player.landing_window.to_snapshot()["duration_ticks"]), 0,
+			"the fixture never casts mode (2), so no landing window was ever started")
+		assert_eq(int(player.to_snapshot()["landing"]), 0,
+			"...so the `landing` key hashes at its RESTING value on the hash tick")
 
 
 func test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record() -> void:

@@ -175,6 +175,39 @@ static func charge_playhead_seconds(progress: float, strike_frame_seconds: float
 	var span := 1.0 - hold_end_progress
 	return lerpf(hold_playhead, strike_frame_seconds, (p - hold_end_progress) / span)
 
+## Story 6-1c (AC 11, `6-1c/R2`/`R6`): THE LAUNCH PROGRESS CHANNEL -- the progress fed to
+## `charge_playhead_seconds` above, composed over the WHOLE ATTACK rather than the chargeup alone.
+##
+## WHY THE DOMAIN WIDENS. Before 6-1c the chargeup window's close WAS the landing, so chargeup
+## progress 1.0 was the resolution tick. 6-1c inserts a launch between the two (the chargeup's close
+## is now the COMMIT), and a progress still measured over the chargeup alone would reach 1.0 -- the
+## STRIKE FRAME -- at the commit and then hold it for the whole launch: the frozen strike-pose glide
+## AC 11 forbids, with the blade arriving before the damage. So the progress runs over the chargeup
+## PLUS the colour's launch span, off the ONE window that spans both (`PlayerState.landing_window`,
+## which closes on exactly the tick `_resolve_charge_landing` fires):
+##   * the chargeup maps to [0, C / (C + L)] of the playhead curve -- the PRE-STRIKE portion, the
+##     wind-up and the held beat;
+##   * the launch maps to [C / (C + L), 1.0] -- the strike swing itself, played DURING the travel;
+##   * 1.0 falls exactly on the landing tick, never before (AC 11). The runner stops pushing the
+##     instant the hero leaves `CHARGING`, which happens synchronously on that same tick (the
+##     `6-1b/R6` contract, keyed to the SAME edge -- the landing -- see
+##     `match_runner._push_charge_progress`), so the last value it pushes is (C + L - 1) / (C + L).
+## With no authored launch (L = 0) this is exactly 6-1b's chargeup progress.
+##
+## THE `_CHARGE_HOLD_KNOBS` ARE UNCHANGED and remain fractions of this progress, i.e. of the whole
+## commitment from cast to landing; their felt timing shifts with the launch span, which is the retune
+## the story's Dev Note anticipates (`6-1b/R9`), not a change owed here.
+##
+## PURE AND STATIC, `charge_playhead_seconds`' own shape: plain ints in, a clamped float out, no
+## balance handle and no window handle (CONSTRAINT C), so a headless test can call it with the SAME
+## inputs the runner passes and prove the landing-tick claim against a real state tick.
+static func charge_attack_progress(landing_remaining_ticks: int, chargeup_ticks: int,
+		launch_ticks: int) -> float:
+	var total := chargeup_ticks + launch_ticks
+	if total <= 0:
+		return 1.0
+	return clampf(1.0 - float(landing_remaining_ticks) / float(total), 0.0, 1.0)
+
 var _state: HeroState.ActionState = HeroState.ActionState.IDLE
 
 
@@ -221,9 +254,11 @@ func on_action_state_changed(_previous: HeroState.ActionState, current: HeroStat
 
 ## Story 6-1b (AC 1/AC 4, finding 5): pushed every tick the hero is CHARGING -- a NEW call site
 ## (`match_runner._push_charge_progress`), never a `connect_*` seam (AC 7). `progress` arrives
-## already computed runner-side from EXISTING public state
-## (`PlayerState.charge_window.remaining_ticks()` / `MatchState.balance_ticks.unblockable_chargeup_ticks`,
-## finding 5) -- this controller still reads no balance and holds no window handle (CONSTRAINT C).
+## already computed runner-side from EXISTING public state -- since 6-1c through
+## `charge_attack_progress` above, over the chargeup PLUS the launch
+## (`PlayerState.landing_window.remaining_ticks()` / `MatchState.balance_ticks`' chargeup and
+## per-colour launch ticks) -- and this controller still reads no balance and holds no window handle
+## (CONSTRAINT C).
 ##
 ## THE `_state != CHARGING` GUARD is belt-and-braces on the `on_locomotion` precedent above (which
 ## guards `_state != IDLE` the same way), not the sole defence against the finding-4 ordering

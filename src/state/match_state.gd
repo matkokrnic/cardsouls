@@ -433,6 +433,11 @@ func advance(intents: Array[InputIntent]) -> void:
 	# neighbours, because a pre-injection MatchState never started the window.
 	p1.charge_window.tick()
 	p2.charge_window.tick()
+	# Story 6-1c (AC 2/AC 4): the LANDING window counts down beside its chargeup sibling, on the
+	# identical idiom -- ticked here, read at step 3(a). Which of the two is still running is what
+	# says whether a charging hero is in its chargeup, committed to its launch, or landing THIS tick.
+	p1.landing_window.tick()
+	p2.landing_window.tick()
 	# Story 5-5 (AC 2): the mode ③ DEFENSE WINDOW counts down HERE, beside its chargeup sibling and
 	# every other D4 timer; the LANDING seat (AC 9) reads the result. The `charge_window` idiom
 	# verbatim, and A1 satisfied by construction: one integer tick per advance(), never a float
@@ -986,12 +991,26 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		# NO RECOVERY WINDOW (AC 4) and REGEN RESUMES ON THIS TICK: step 3 runs before step 5's
 		# `_regen_stamina`, which reads `action_state` fresh with no latch, so the hero is already
 		# IDLE when regen is evaluated on the release tick itself.
+		#
+		# STORY 6-1c (AC 2/AC 4): THE LANDING NOW RIDES THE LANDING WINDOW, AND THE CHARGEUP'S CLOSE IS
+		# THE COMMIT. The arm reads two windows that started together at the cast (see
+		# `PlayerState.landing_window`): the landing fires when the LANDING window stops, and the
+		# release-to-feint path exists only while the CHARGEUP window still runs. Between the two --
+		# chargeup closed, landing window running -- the hero is COMMITTED: this arm does nothing at
+		# all, so a release is ignored (AC 2) and `_resolve_movement` carries the launch. That middle
+		# phase is the whole of the commit; it needs no branch of its own, and no flag.
+		#
+		# `6-1`'s AC 1 ORDERING SURVIVES INTACT: the landing is still the `if` and the release still
+		# the `elif`, and the tick the chargeup completes can no longer feint at all -- with a launch
+		# span the release on that tick is ignored and the attack lands later; with none, the landing
+		# window closes on that same tick and the `if` lands it, exactly as before this story.
 		HeroState.ActionState.CHARGING:
-			if not player.charge_window.is_running:
+			if not player.landing_window.is_running:
 				_resolve_charge_landing(player, slot)
-			elif not intent.is_held(&"card_cast"):
+			elif player.charge_window.is_running and not intent.is_held(&"card_cast"):
 				hero.set_action_state(HeroState.ActionState.IDLE)
 				player.charge_window.start(0)
+				player.landing_window.start(0)
 				player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 	# (b) Input-driven edges from the current table row. A press with no entry in the row
 	# is dropped, never buffered (AC 5). Fixed INPUT_PRIORITY order = deterministic
@@ -2070,6 +2089,26 @@ func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
 			<= deg_to_rad(balance.block_facing_arc_degrees * 0.5)
 
 
+## Story 6-1c (AC 5, `6-1c/R3`): THE ARC HALF OF HONEST REACH -- pure state policy over the
+## runner-reported direction fact, the 1-8 `_is_facing` shape directly above adopted UNCHANGED for
+## mode (2). The runner computes the radius KIND and the planar TARGET -> ATTACKER direction from
+## positions only and never reads `facing`; the ANGLE is judged here, against the attacker's frozen
+## committed direction (the facing the commit freeze holds), using the colour's authored arc.
+##
+## THE SIGN: the fact runs target -> attacker (the 1-8 convention) and the attack points attacker ->
+## target, so the defender's bearing is the fact's NEGATION -- the same negation the auto-aim applies.
+##
+## 360 AND ABOVE IS RADIAL and answers true without a comparison, so the GREEN jump needs no special
+## case and an unauthored arc (the 360 default) is the pre-6-1c circle exactly. The direction read is
+## the one latched with the KIND by the same push (`push_contact`), so the two halves of the gate
+## always describe the same measurement.
+func _is_in_charge_arc(player: PlayerState, slot: int) -> bool:
+	var arc := balance.unblockable_arc_degrees_for(player.charge_color)
+	if arc >= 360.0:
+		return true
+	return absf(player.hero.facing.angle_to(-_charge_reach_dirs[slot])) <= deg_to_rad(arc * 0.5)
+
+
 ## Step-5 mana generation (story 3-4, AC 1/AC 2) — the D6 EVALUATOR seat. The direct
 ## `balance.melee_hit_mana` grant story 1-5 shipped here is GONE, not kept behind a flag:
 ## the authored `melee_hit` rule now names that same field and the evaluator dereferences
@@ -2719,6 +2758,13 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	# That is exactly why test_action_state.gd's zero-inbound-CHARGING assertion stays true and is
 	# re-proven UNEDITED (AC 8).
 	player.charge_window.start(balance_ticks.unblockable_chargeup_ticks)
+	# Story 6-1c (AC 2/AC 4): the LANDING window starts in the same breath, with its FULL duration --
+	# the chargeup plus this colour's launch span, both read inline from the tick domain (CONSTRAINT
+	# C) and AFTER `charge_color` is set above, because the span is the colour's. Starting it here
+	# rather than at the commit is what lets a mid-attack reload move neither the commit nor the
+	# landing (see `PlayerState.landing_window`).
+	player.landing_window.start(balance_ticks.unblockable_chargeup_ticks
+			+ balance_ticks.unblockable_launch_ticks_for(player.charge_color))
 	player.hero.set_action_state(HeroState.ActionState.CHARGING)
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
@@ -2843,7 +2889,7 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 ## Reached ONLY from the `CHARGING` arm of `_resolve_actions`, which a DEAD hero cannot enter.
 ##
 ## THE REACH CHECK IS READ, NOT COMPUTED. `_charge_reach[slot]` is the runner's every-tick answer
-## (AC 17) and this layer never sees a distance, a position or the authored `unblockable_reach` --
+## (AC 17) and this layer never sees a distance, a position or the authored per-colour reach --
 ## `4-3/R2`'s position ownership intact, `F1` untouched. `REACH_UNKNOWN` lands NOTHING and is NOT
 ## the same value as OUTSIDE: absence means no measurement was taken, which is a different fact from
 ## a measurement that said "too far", and the distinction is what keeps a missing push from silently
@@ -2862,8 +2908,13 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 ## non-vacuous by the same forced-DEAD idiom (`set_action_state(DEAD)` with `_round_over` left
 ## FALSE).
 ##
-## NO BLOCK, NO DEFLECT, NO ARC. The attack is UNBLOCKABLE by name: `block_damage_multiplier`,
+## NO BLOCK, NO DEFLECT, NO BLOCK ARC. The attack is UNBLOCKABLE by name: `block_damage_multiplier`,
 ## `is_deflect_window_open()` and `_is_facing` are all deliberately absent from this function.
+##
+## STORY 6-1c (AC 5) ADDS AN ARC, AND IT IS THE ATTACKER'S, NOT THE DEFENDER'S. `_is_facing` asks
+## whether the DEFENDER faces its attacker (a block); `_is_in_charge_arc` asks whether the defender
+## lies inside the ATTACKER's per-colour threat shape, around the attacker's frozen committed
+## direction. It joins the reach KIND in the one entry gate below and answers nothing a block does.
 ##
 ## STORY 5-5 RESOLVES THE FORWARD REFERENCE THIS HEADER CARRIED. The colour-matched answer is no
 ## longer "`5-5`'s" -- it is the defense rung inside the landed branch below (AC 9-11), and it is
@@ -2885,7 +2936,13 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 	var opposing_slot := 1 - slot
 	var target := p2 if slot == 0 else p1
-	if _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE and target.hero.is_alive():
+	# STORY 6-1c (AC 5/AC 6): THE ONE REACH GATE GROWS ONE CONJUNCT, AND STAYS ONE GATE. The runner's
+	# KIND still answers the per-colour RADIUS; `_is_in_charge_arc` answers the per-colour ARC against
+	# the frozen committed direction. Both sit in this single condition, ahead of the ladder, so an
+	# attack outside either reaches NONE of the rungs below -- no second landing check exists, and no
+	# rung is reachable around this one.
+	if _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE and _is_in_charge_arc(player, slot) \
+			and target.hero.is_alive():
 		# STORY 5-5 (AC 9/AC 10): THE DEFENSE RUNG, seated INSIDE the reach+alive gate and BEFORE
 		# `take_damage`. The ladder reads: (a) reach + alive [existing] -> (b) THIS: is the target's
 		# defense window running AND does its colour match the attacker's charge colour? -> if BOTH,
@@ -3353,7 +3410,16 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 		#
 		# THE LUNGE AND THE PHASE MULTIPLIER ARE BOTH BELOW THIS BRANCH and neither applies: they
 		# belong to ATTACKING, and mode (2) is not a swing.
-		player.hero.velocity = Vector3.ZERO
+		#
+		# STORY 6-1c (AC 4): THE ROOT HOLDS FOR THE CHARGEUP ONLY. Once the chargeup window has closed
+		# the attack is COMMITTED and the LAUNCH carries the hero along its frozen facing
+		# (`_charge_launch_velocity`); `5-2/R5`'s literal zero is untouched for every chargeup tick,
+		# which is the phase that ruling was about. Input steers neither phase: `world_dir` is never
+		# read on this branch.
+		if player.charge_window.is_running:
+			player.hero.velocity = Vector3.ZERO
+		else:
+			player.hero.velocity = _charge_launch_velocity(player)
 	elif player.hero.action_state == HeroState.ActionState.STUNNED:
 		# Story 5-6 (AC 14): HARD-ROOTED, as a THIRD sibling of the two branches above rather than a
 		# new mechanism. `5-2/R5`'s reasoning applies identically and verbatim: a LITERAL ZERO, never
@@ -3417,10 +3483,19 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	# the same "no new information, keep the last heading" rule, which is what the entry tick needs:
 	# the runner gathers BEFORE advance(), so the tick a cast enters CHARGING carries no fact yet and
 	# the hero holds the heading it had when it committed.
+	#
+	# STORY 6-1c (AC 2/AC 7): THE COMMIT FREEZE IS THE THIRD RUNG OF THE FACING CARVE-OUT LADDER, and
+	# it joins it BY CONSTRUCTION rather than as a flag: the aim is re-read only while the CHARGEUP
+	# window runs. From the tick that window closes -- the commit -- through the landing, this branch
+	# writes nothing, so facing holds the heading of the last chargeup tick, and that held value IS
+	# the committed direction every later reader uses (the launch velocity, the landing arc). It is
+	# derived, never stored: no field records it, because `facing` already carries it. The other two
+	# rungs are untouched -- the DEAD return at the top of this function (2-3/R14) and the round-over
+	# freeze (step 1b, 2-6/R6) -- and, like them, the freeze skips the write rather than writing.
 	var lock_dir := _lock_directions[slot]
 	if player.hero.action_state == HeroState.ActionState.CHARGING:
 		var aim := _charge_reach_dirs[slot]
-		if not aim.is_zero_approx():
+		if player.charge_window.is_running and not aim.is_zero_approx():
 			player.hero.facing = -aim
 	elif not lock_dir.is_zero_approx():
 		player.hero.facing = lock_dir
@@ -3547,6 +3622,31 @@ func _attack_lunge_velocity(hero: HeroState) -> Vector3:
 		return Vector3.ZERO
 	var dir := hero.facing.normalized()
 	return Vector3(dir.x, 0.0, dir.y) * (balance.attack_lunge_distance / span)
+
+
+## Story 6-1c (AC 4): THE LAUNCH as a STATE-SIDE velocity term -- `_attack_lunge_velocity`'s shape
+## directly above, for mode (2): the colour's authored DISPLACEMENT over its authored SPAN, along the
+## hero's facing. Never root motion and never adaptive: nothing here reads where the defender is, so
+## the attacker travels the same fixed distance whether the target stood still, closed in or ran.
+##
+## FACING IS THE COMMITTED DIRECTION HERE, not a live one, and that is a property of the caller: this
+## runs only once the chargeup window has closed, and from that tick `_resolve_movement` stops writing
+## `facing` (the commit freeze). Reading it LIVE is therefore reading the frozen value.
+##
+## Speed follows the ROLL precedent verbatim (`roll_distance / roll_duration_seconds`): a *_seconds
+## float read here is a SPEED derivation, not window timing -- the span's TIMING is the landing
+## window's, in ticks. Both operands read inline off the colour (CONSTRAINT C).
+##
+## Guards, the lunge's own: a zero-or-negative span has no speed (an unauthored launch -- the landing
+## then resolves on the chargeup-close tick anyway, so this branch is never reached for it) and a
+## zero facing has no direction.
+func _charge_launch_velocity(player: PlayerState) -> Vector3:
+	var span := balance.unblockable_launch_seconds_for(player.charge_color)
+	if span <= 0.0 or player.hero.facing.is_zero_approx():
+		return Vector3.ZERO
+	var dir := player.hero.facing.normalized()
+	return Vector3(dir.x, 0.0, dir.y) \
+			* (balance.unblockable_launch_distance_for(player.charge_color) / span)
 
 
 ## Yaw-only camera-space -> world mapping (AC 3): the basis' right/back columns are
@@ -3742,6 +3842,10 @@ func _reset_player(player: PlayerState) -> void:
 		hero.set_action_state(HeroState.ActionState.IDLE)
 	hero.heal(hero.get_max_hp())
 	player.charge_window.start(0)
+	# Story 6-1c: the landing window is part of the same one fact and is stopped with it -- a launch
+	# frozen by the round-over freeze must not land inside the next round, the exact defect the
+	# chargeup clear above closes for the chargeup half.
+	player.landing_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
 	# fact in two parts, exactly as the chargeup's three and the defense window's two are.

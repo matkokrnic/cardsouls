@@ -146,6 +146,11 @@ const HASHED: Array[String] = [
 	# neutral option: `_declared_members`'s regex scans every `^var` in `player_state.gd`, so two new
 	# fields in neither bucket fail the zero-`unclassified` assertion outright.
 	"player_state.defense_window", "player_state.defense_color",
+	# Story 6-1c (AC 2/AC 4): the mode (2) LANDING WINDOW classifies HASHED, on the `charge_window` line's
+	# exact test -- it CROSSES TICKS (cast to landing) and DECIDES AN OUTCOME (when the attack commits
+	# and on which tick it lands). It reaches the hash through `PlayerState.to_snapshot()`'s ONE new
+	# `landing` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
+	"player_state.landing_window",
 	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
 	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the

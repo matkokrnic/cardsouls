@@ -92,6 +92,28 @@ var unblockable_chargeup_ticks: int
 ## test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of any new
 ## `*_seconds` field: a stem-matched twin on this object.
 var defense_window_ticks: int
+## Story 6-1c (AC 2/AC 4/AC 11): each colour's LAUNCH SPAN in TICKS -- the chargeup line above's
+## precedent verbatim, derived ONCE here and read INLINE at the one seat that starts the landing
+## window (the cast, CONSTRAINT C). Three stem-matched twins, one per authored
+## `unblockable_launch_seconds_*`, which is exactly what test_data_resources.gd's reflective
+## `*_seconds` -> `*_ticks` probe demands. Read through `unblockable_launch_ticks_for` below.
+var unblockable_launch_ticks_red: int
+var unblockable_launch_ticks_blue: int
+var unblockable_launch_ticks_green: int
+
+
+## Story 6-1c: the colour lookup over the three launch twins above -- `BalanceConfig`'s
+## `unblockable_*_for` shape, and the same answer for a colour with no authored shape (0 ticks: the
+## landing resolves on the chargeup-close tick, the pre-6-1c shape).
+func unblockable_launch_ticks_for(color: int) -> int:
+	match color:
+		Enums.CardColor.RED:
+			return unblockable_launch_ticks_red
+		Enums.CardColor.BLUE:
+			return unblockable_launch_ticks_blue
+		Enums.CardColor.GREEN:
+			return unblockable_launch_ticks_green
+	return 0
 
 
 static func from_config(config: BalanceConfig) -> BalanceTicks:
@@ -147,6 +169,16 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# card and the stamina and negate nothing, ever. That degrade is defined rather than crashing,
 	# and the authoring audit is what keeps it out of the shipped `.tres`.
 	t.defense_window_ticks = TimingWindow.seconds_to_ticks(config.defense_window_seconds)
+	# Story 6-1c (AC 4/AC 11): the three launch spans, PLAIN conversions on the chargeup's exact shape
+	# -- window durations, clamped to a minimum of 1 tick for any non-zero authored value. An authored
+	# 0.0 derives 0 ticks, and the landing window then closes WITH the chargeup: no launch at all, the
+	# pre-6-1c landing tick. That degrade is the defined unauthored shape, not an error.
+	t.unblockable_launch_ticks_red = TimingWindow.seconds_to_ticks(
+			config.unblockable_launch_seconds_red)
+	t.unblockable_launch_ticks_blue = TimingWindow.seconds_to_ticks(
+			config.unblockable_launch_seconds_blue)
+	t.unblockable_launch_ticks_green = TimingWindow.seconds_to_ticks(
+			config.unblockable_launch_seconds_green)
 	return t
 
 

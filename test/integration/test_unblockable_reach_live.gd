@@ -1,0 +1,235 @@
+extends SceneTree
+
+## Story 6-1c (AC 3/AC 4/AC 5/AC 9/AC 11): THE LIVE HALF -- mode (2)'s commit, launch and honest
+## reach through the REAL runner: `_push_charge_reach_facts` measuring the per-colour radius KIND from
+## real actor positions, `advance()` carrying the launch, `move_and_slide()` moving the real body, and
+## `_push_charge_progress` driving the real AnimationPlayer across the launch.
+##
+## THE LAYOUT IS DERIVED FROM THE AUTHORED `.tres`, NEVER PINNED (the `test_contact_pipeline.gd`
+## precedent): every distance below is computed from the live per-colour reach / launch distance /
+## arc, so a feel retune reschedules this test instead of breaking it -- operator tuning never needs a
+## suite edit (the story's Live Smoke note).
+##
+## THREE CASES PER COLOUR, each a full chargeup -> commit -> launch -> landing:
+##   far  -- the defender stands dead ahead at (travel + reach + MARGIN): after the launch it is just
+##           OUTSIDE the colour's radius. MISS, the runner's latched kind is OUTSIDE, and the attacker
+##           travelled the colour's authored distance along the frozen line (AC 4, fixed not adaptive).
+##   near -- the same, at (travel + reach - MARGIN): just INSIDE after the launch. HIT (AC 5 radius).
+##   side -- the defender starts dead ahead (tracked through the chargeup, AC 1) and is teleported,
+##           the instant the chargeup closes, to 90 degrees off the frozen line beside where the launch
+##           ends, well inside the radius. The latched kind is INSIDE, so only the ARC decides: a HIT
+##           exactly when the colour's authored arc reaches 90 degrees either side (GREEN's radial
+##           jump), a MISS otherwise (AC 3: dodging after the commit whiffs; AC 5: state-side arc).
+##
+## ON EVERY CHARGING FRAME (AC 9/AC 11): the charge clip's playhead is strictly BELOW the colour's
+## measured strike frame, never moves backwards, and keeps MOVING through the launch (no frozen pose
+## while the body travels); on the first frame after the landing the clip is no longer the charge
+## clip -- no stale progress push re-seeks it.
+##
+## THE CHARGEUP IS POKED, NOT CAST (the `test_charge_telegraph_dispatch_live.gd` precedent): colour,
+## the two windows the cast seat starts, and CHARGING -- with P1's controller replaced by a stand-in
+## that HOLDS the cast confirm so the chargeup is not feinted. The cast seat itself is covered
+## headless (test_unblockable_tracking_and_reach.gd).
+##
+## Run: godot --headless --path . --script res://test/integration/test_unblockable_reach_live.gd
+
+class HoldingController extends Controller:
+	func sample() -> InputIntent:
+		var intent := InputIntent.new()
+		intent.held[&"card_cast"] = true
+		return intent
+
+
+const CONFIG_PATH := "res://data/balance/balance_config.tres"
+const MARGIN := 0.75
+const TRAVEL_EPS := 0.1
+const SETTLE := 3
+const AFTER := 2
+const DEADLINE := 4000
+const P1_START := Vector3(-6.0, 0.0, 0.0)
+
+var _frames := 0
+var _runner: Node
+var _state: MatchState
+var _p1_actor: HeroActor
+var _p2_actor: HeroActor
+var _config: BalanceConfig
+var _ticks: BalanceTicks
+var _failures: Array[String] = []
+
+var _cases: Array = []   # [colour, kind] with kind in {"far", "near", "side"}
+var _case_index := 0
+var _phase := "setup"
+var _phase_frame := 0
+var _hp_before := 0.0
+var _cast_pos := Vector3.ZERO
+var _committed := false
+var _commit_playhead := -1.0
+var _last_playhead := -1.0
+var _y := 0.0
+
+
+func _initialize() -> void:
+	root.add_child((load("res://src/main/main.tscn") as PackedScene).instantiate())
+	_config = load(CONFIG_PATH)
+	_ticks = BalanceTicks.from_config(_config)
+	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
+		for kind in ["far", "near", "side"]:
+			_cases.append([color, kind])
+
+
+func _check(ok: bool, message: String) -> void:
+	if not ok:
+		_failures.append(message)
+
+
+func _physics_process(_delta: float) -> bool:
+	_frames += 1
+	if _frames == 1:
+		_runner = root.get_node_or_null("Main")
+		_state = _runner._match_state if _runner != null else null
+		_p1_actor = _runner._p1_hero if _runner != null else null
+		_p2_actor = _runner._p2_hero if _runner != null else null
+		if _state == null or _p1_actor == null or _p2_actor == null:
+			_failures.append("main scene did not yield a runner, a MatchState and two heroes")
+			_report()
+			return true
+		_runner._p1_controller = HoldingController.new()
+		_y = _p1_actor.position.y
+		return false
+	if _phase == "draining":
+		if _frames - _phase_frame >= SETTLE:
+			_report()
+			return true
+		return false
+	if _frames > DEADLINE:
+		_failures.append("deadline: stuck in case %d phase %s" % [_case_index, _phase])
+		_finish()
+		return false
+	if _case_index >= _cases.size():
+		_finish()
+		return false
+	var color: int = _cases[_case_index][0]
+	var kind: String = _cases[_case_index][1]
+	var label := "colour %d %s" % [color, kind]
+	var travel := _config.unblockable_launch_distance_for(color)
+	var reach := _config.unblockable_reach_for(color)
+	var arc := _config.unblockable_arc_degrees_for(color)
+	var player := _state.p1
+
+	if _phase == "setup":
+		var d := travel + reach + MARGIN if kind == "far" \
+				else (travel + reach - MARGIN if kind == "near" else travel + reach * 0.5)
+		_p1_actor.position = P1_START + Vector3(0.0, _y, 0.0)
+		_p2_actor.position = P1_START + Vector3(d, _y, 0.0)
+		_phase = "settle"
+		_phase_frame = _frames
+		return false
+
+	if _phase == "settle" and _frames - _phase_frame >= SETTLE:
+		_hp_before = _state.p2.hero.get_hp()
+		_cast_pos = _p1_actor.position
+		_committed = false
+		_commit_playhead = -1.0
+		_last_playhead = -1.0
+		# The cast seat's three writes, in its order: colour first (the runner reads it at the
+		# CHARGING transition), then the two windows, then the state.
+		player.charge_color = color
+		player.charge_window.start(_ticks.unblockable_chargeup_ticks)
+		player.landing_window.start(_ticks.unblockable_chargeup_ticks
+				+ _ticks.unblockable_launch_ticks_for(color))
+		player.hero.set_action_state(HeroState.ActionState.CHARGING)
+		_phase = "charging"
+		_phase_frame = _frames
+		return false
+
+	if _phase == "charging":
+		if _frames - _phase_frame < 2:
+			return false  # let the seam drain the CHARGING transition into the controller
+		var anim := _p1_actor.animation_controller.animation_player
+		var strike: float = AnimationController._CHARGE_STRIKE_FRAME_SECONDS[color]
+		if player.hero.action_state == HeroState.ActionState.CHARGING:
+			var playhead := anim.current_animation_position
+			_check(playhead < strike - 1e-4,
+				"%s: playhead %.4f reached the strike frame %.4f before the landing (AC 11)"
+					% [label, playhead, strike])
+			_check(playhead >= _last_playhead - 1e-4,
+				"%s: playhead moved backwards %.4f -> %.4f" % [label, _last_playhead, playhead])
+			_last_playhead = playhead
+			if not player.charge_window.is_running and not _committed:
+				_committed = true
+				_commit_playhead = playhead
+				if kind == "side":
+					# 90 degrees off the frozen (+x) line, beside where the launch will END, well
+					# inside the radius: a dodge AFTER the commit.
+					_p2_actor.position = _cast_pos + Vector3(travel, 0.0, reach * 0.5)
+			return false
+		# First frame after the landing.
+		_check(_committed, "%s: never observed a committed (launch) frame" % label)
+		_check(_last_playhead > _commit_playhead + 1e-4,
+			"%s: the playhead did not move during the launch (%.4f -> %.4f) -- a frozen pose while "
+				% [label, _commit_playhead, _last_playhead] + "the body travels (AC 11)")
+		_check(anim.current_animation != AnimationController._CHARGE_CLIP[color],
+			"%s: still on the charge clip after the landing" % label)
+		var hit := _state.p2.hero.get_hp() < _hp_before
+		var latched: int = _state._charge_reach[0]
+		match kind:
+			"far":
+				_check(not hit, "%s: a defender just OUTSIDE the radius after the launch was hit" % label)
+				_check(latched == MatchState.CONTACT_CHARGE_REACH_OUTSIDE,
+					"%s: the runner latched kind %d, want OUTSIDE" % [label, latched])
+				var moved := _p1_actor.position - _cast_pos
+				_check(absf(moved.x - travel) <= TRAVEL_EPS and absf(moved.z) <= TRAVEL_EPS,
+					"%s: the launch carried the attacker %s, want %.3f along +x (AC 4)"
+						% [label, moved, travel])
+			"near":
+				_check(hit, "%s: a defender just INSIDE the radius after the launch was missed" % label)
+			"side":
+				_check(latched == MatchState.CONTACT_CHARGE_REACH_INSIDE,
+					"%s: the runner latched kind %d, want INSIDE (only the arc may decide)"
+						% [label, latched])
+				if arc * 0.5 >= 100.0:
+					_check(hit, "%s: arc %.0f covers 90 deg off the line, the sidestep must be hit"
+						% [label, arc])
+				elif arc * 0.5 <= 80.0:
+					_check(not hit, "%s: arc %.0f does not cover 90 deg -- a sidestep after the "
+						% [label, arc] + "commit must WHIFF (AC 3)")
+				else:
+					print("  note: %s arc %.0f is within 10 deg of the probe bearing, not judged"
+						% [label, arc])
+		_phase = "after"
+		_phase_frame = _frames
+		return false
+
+	if _phase == "after":
+		var anim2 := _p1_actor.animation_controller.animation_player
+		_check(anim2.current_animation != AnimationController._CHARGE_CLIP[color],
+			"%s: a stale progress push re-seeked the charge clip after the landing" % label)
+		if _frames - _phase_frame >= AFTER:
+			_case_index += 1
+			_phase = "setup"
+		return false
+	return false
+
+
+## The `test_charge_telegraph_dispatch_live.gd` teardown, for its measured reason: every CHARGING
+## transition here starts a charge sting, and a still-playing AudioStreamPlayer torn down on the
+## frame it stops leaks its mixer playback resource across quit() (an `ERROR:` line run_all.sh fails
+## on). Every player on both heroes is stopped, a real delay lets the audio thread retire them, and a
+## few frames drain before the report.
+func _finish() -> void:
+	for actor: Node in [_p1_actor, _p2_actor]:
+		if is_instance_valid(actor):
+			for node in actor.find_children("*", "AudioStreamPlayer", true, false):
+				(node as AudioStreamPlayer).stop()
+	OS.delay_msec(100)
+	_phase = "draining"
+	_phase_frame = _frames
+
+
+func _report() -> void:
+	var ok := _failures.is_empty()
+	for f in _failures:
+		print("  FAILED: " + f)
+	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
+	quit(0 if ok else 1)
