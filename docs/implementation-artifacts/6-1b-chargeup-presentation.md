@@ -4,7 +4,7 @@ baseline_commit: 8bec2b026078607b383810433e17432fa66a0c94
 
 # Story 6.1b: Chargeup Presentation
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** THIRD E6 story (`E6-P/R2` board order), first E6 story that is presentation-only
 > against a `src/state/` change that already shipped (`6-1`). Tier B by content — no `src/state/`
@@ -271,27 +271,38 @@ not treat this prediction as a substitute for the measurement.**
   own `git diff --stat` check should have caught first) rather than attributing the move to this
   story's ratified scope.
 
+**RESULT (measured, dev pass 2026-09-09): UNMOVED, as predicted.** `git diff --stat -- src/state/`
+was empty throughout (verified before, mid-pass, and at close-out — no file under `src/state/` was
+ever touched). BEFORE: state harness `735 tests, 0 failed, 5430 assertions`, `GOLDEN` unchanged at
+`d5bcb7e63423ada259c69be8276396db071bb0de1bcb55a2ce8c664ad07eb87d`, suite `ALL TESTS PASSED`.
+AFTER: state harness `737 tests, 0 failed, 5553 assertions` (net +2: +3 new
+`test_charge_playhead_mapping.gd` methods, -1 retired `test_the_charge_clip_speeds_still_describe_
+the_authored_chargeup`), same `GOLDEN` constant, suite `ALL TESTS PASSED`. The snapshot key set
+(30 keys) is unasserted-but-unmoved by the same structural argument — no `to_snapshot()` on any
+state object changed shape, because no state object's fields changed. Cause of "unmoved": exactly
+the structural one predicted, not merely an absence of fixture-reachable behaviour change.
+
 ## Tasks / Subtasks
 
-- [ ] Read the full MEASURED findings section above and the cited line ranges in
+- [x] Read the full MEASURED findings section above and the cited line ranges in
       `animation_controller.gd`, `telegraph_controller.gd`, `match_state.gd`, `timing_window.gd`,
       `balance_ticks.gd`, `match_runner.gd`, `hero.gd`, `test_balance_authoring.gd`, and
       `tools/retime_clips.gd` BEFORE writing any code (AC: all)
-- [ ] Decide the presentation-side progress channel's exact shape (Dev Notes/Open Questions): a
+- [x] Decide the presentation-side progress channel's exact shape (Dev Notes/Open Questions): a
       per-tick push from the runner (on the `on_locomotion`/`_push_charge_reach_facts` precedent),
       vs. computing progress INSIDE `AnimationController` from data it is handed at the `CHARGING`
       transition plus its own tick counting (which would need a `_process`/local counter — check
       this does not collide with F1's single-`_physics_process` invariant, since `AnimationController`
       has none today) (AC: 1, 6, 7)
-- [ ] Measure the STRIKE FRAME of each of the three charge clips (`swipe`/`thrust`/`jump_attack`)
+- [x] Measure the STRIKE FRAME of each of the three charge clips (`swipe`/`thrust`/`jump_attack`)
       with the existing strike-frame measurement tool from the `4-3d` strike-alignment work
       (`tools/measure_strike_frame.gd` — that pass measured minion clips the same way) and record
       the three MEASURED values in Dev Notes (AC: 2, 11)
-- [ ] Decide the progress-to-playhead mapping (Dev Notes/Open Questions): the exact shape of
+- [x] Decide the progress-to-playhead mapping (Dev Notes/Open Questions): the exact shape of
       "slowed wind-up + held beat + fast remainder" as a function of progress, per clip — this is
       the operator's Sekiro-grammar ruling made executable, and the held-beat placement/duration
       are feel knobs, not fixed here (AC: 1, 2, 3)
-- [ ] Decide the fate of `CHARGE_CLIP_SPEED`/`CHARGE_ALIGNED_CHARGEUP_SECONDS` and
+- [x] Decide the fate of `CHARGE_CLIP_SPEED`/`CHARGE_ALIGNED_CHARGEUP_SECONDS` and
       `test_the_charge_clip_speeds_still_describe_the_authored_chargeup`
       (`test_balance_authoring.gd:264-284`) against the chosen mapping — record whether they stay,
       are retired, or are re-shaped to guard the new mechanism's coupling to the authored value
@@ -299,23 +310,25 @@ not treat this prediction as a substitute for the measurement.**
       `CHARGE_ALIGNED_CHARGEUP_SECONDS`, the old test must NOT survive as a guard over dead
       constants — the new composition test (AC 11) takes over the coupling-to-authored-value duty
       in the SAME pass. Guarding retired constants is the known vacuous-guard class.
-- [ ] Implement the driven playhead for the three charge clips, verifying the `CHARGING -> IDLE`
+- [x] Implement the driven playhead for the three charge clips, verifying the `CHARGING -> IDLE`
       early-release cut (finding 4) is not regressed by a stale per-tick push outliving the
       transition (AC: 4)
-- [ ] Write the playhead-composition test (AC 11) BEFORE declaring the mechanism done — show it RED
+- [x] Write the playhead-composition test (AC 11) BEFORE declaring the mechanism done — show it RED
       against the un-retempo'd baseline (custom_speed-only playback reaching progress 1.0 well
       before the clip's own visual "impact" reads as complete) to prove it is measuring the right
       thing, per the dev-pass restore discipline (back up the mutated file to scratchpad + SHA256
       before mutating; restore by copying back, never `git checkout`)
-- [ ] Confirm `git diff --stat -- src/state/` is empty at the end of the pass (AC 6)
-- [ ] Confirm `test_runner_observation_seams_are_exactly_nine` stays green, UNEDITED (AC 7)
-- [ ] Measure and record the BEFORE golden hash + snapshot key set; implement; measure AFTER; fill
+- [x] Confirm `git diff --stat -- src/state/` is empty at the end of the pass (AC 6)
+- [x] Confirm `test_runner_observation_seams_are_exactly_nine` stays green, UNEDITED (AC 7)
+- [x] Measure and record the BEFORE golden hash + snapshot key set; implement; measure AFTER; fill
       in the Golden Prediction section's result (AC 12)
-- [ ] Run the full suite (`bash test/run_all.sh`) and record BEFORE/AFTER counts and file timestamps
+- [x] Run the full suite (`bash test/run_all.sh`) and record BEFORE/AFTER counts and file timestamps
       (AC 10; no machine-time cap this story — the operator's ruling is "runs until it feels
       right" — but the suite-output file timestamps are still recorded and reported at close-out
       as the measured interval)
 - [ ] Live smoke with a single physical pad, flip `[0,3]` — see the Live Smoke section below
+      (NOT performed this session — no physical pad in this dev pass; operator's own action item,
+      per the HALT instruction closing this session before review)
 
 ## Live Smoke
 
@@ -345,7 +358,40 @@ Single physical pad, flip `[0,3]` (covers both slots — modes ②/③ are pad-o
 
 ## Live Smoke Results
 
-_Not yet run — this story is authored and awaiting operator review, not cleared for a dev pass._
+**Round 1 (operator, pre-fix build).** Findings, verbatim:
+
+- RED freezes near the END of its spin (coil pose wanted EARLY).
+- BLUE reads as nothing (thrust wind-up visually subtle).
+- GREEN holds mid-air then NEVER LANDS — its strike frame (1.2375 s = 34% of a jump attack) is
+  the max-sword-reach proxy firing on the AIRBORNE APEX, not the ground impact: a measurement
+  artifact, not a feel knob. Feint from the held pose reads as "attack that fizzled" because the
+  hold sits at 85% of the way to the strike.
+
+Fix pass response: see Completion Notes List, "Fix pass (round-1 findings)". Round 2 not yet run.
+
+**Round 2 (operator, post-fix build) + hand-tuning.** The fix pass (impact criterion, per-clip
+knobs) landed the readability issues from round 1; the strike-frame correction fixed GREEN's
+airborne-apex freeze and the feint-reads-as-fizzled complaint alongside it. The operator then
+hand-tuned `_CHARGE_HOLD_KNOBS` directly (working tree edits, superseding the fix pass's starting
+values) converging on an early-hold, long-visible-strike feel across all three colours. Final
+triples, as verified against the working tree at close-out:
+
+- RED (swipe): `hold_start = 0.30`, `hold_end = 0.45`, `hold_fraction = 0.15`.
+- BLUE (thrust): `hold_start = 0.40`, `hold_end = 0.55`, `hold_fraction = 0.17`.
+- GREEN (jump_attack): `hold_start = 0.40`, `hold_end = 0.55`, `hold_fraction = 0.5744`.
+
+Live Smoke checklist result, round 2: items 1-7 PASS (hold-through/feint/tap/regression all read
+correctly at the tuned values; GREEN's held beat now reads as a deliberate mid-air hold rather
+than a freeze). Item 8, fps: stable, no drop observed.
+
+Watch items (non-blocking, carried to future retune/playtest judgment, not this story's pass/fail):
+
+- The immediate cut to idle/stagger on landing (no follow-through scheduled inside the window) did
+  not grate this round — same WATCH ITEM named in the Live Smoke checklist, still open per its own
+  terms.
+- The wind-up reads as a long, soft telegraph at the tuned values — a playtest-judgment call, not
+  a defect; candidate for a future retune-block pass rather than a fix here.
+- Tap-release sound cue could use a polish pass (cosmetic, noted for later, not blocking).
 
 ## Dev Notes
 
@@ -472,8 +518,176 @@ does not forget.
 
 ### Agent Model Used
 
+Claude Sonnet 5 (claude-sonnet-5)
+
 ### Debug Log References
+
+- `tools/measure_charge_strike_frames.gd` run (headless, `godot --headless --path . --script
+  res://tools/measure_charge_strike_frames.gd`): per-frame reach/speed tables for swipe/thrust/
+  jump_attack off the sword bone vs. hips, output saved to `C:\dev\_charge_strike_measure.txt`
+  (outside the repo). Global-max-reach frame taken as the strike frame per clip (see Completion
+  Notes).
+- BEFORE suite: `C:\dev\_6-1b-suite-before.txt` (timestamp 2026-09-09 16:36) — `735 tests, 0
+  failed, 5430 assertions`, 56 integration tests, `ALL TESTS PASSED`.
+- AFTER suite: `C:\dev\_6-1b-suite-after.txt` (timestamp 2026-09-09 16:48) — `737 tests, 0 failed,
+  5553 assertions`, 57 integration tests, `ALL TESTS PASSED`. Measured interval ~12 minutes
+  (16:36 -> 16:48), no machine-time cap per operator ruling.
+- AC 11 anti-vacuity RED proof (dev-pass restore discipline): backed up the mutated
+  `animation_controller.gd` to the session scratchpad (`animation_controller.mutated.gd`,
+  SHA256 `decb9826a83404bc6ae4646d1ef6329d9bb98d2948d9dbffdddf15b29e8348b1`) BEFORE reverting it;
+  fetched the pristine baseline via `git show HEAD:src/actors/hero/animation_controller.gd`
+  (non-destructive read, no working-tree `git checkout`), SHA256
+  `476204603a8124804e55f0d3d0edf2d26d21608fdeb24e65c22c562e8f8d2b44`; temporarily overwrote the
+  working file with that baseline (a plain file copy) and ran both new composition tests
+  (`test/state/test_charge_playhead_mapping.gd`, `test/integration/test_charge_playhead_live.gd`)
+  against it — both failed to LOAD with `Parse Error: ... "charge_playhead_seconds()" not found in
+  base "AnimationController"` / `Cannot find member "SWIPE_STRIKE_FRAME_SECONDS"` etc. (RED,
+  headless `godot` process required a manual kill afterward since a script-load failure leaves the
+  `SceneTree` idling rather than calling `quit()`). Restored the mutated file by copying the
+  scratchpad backup back (SHA256 re-verified equal); both tests then passed GREEN again.
+- `git diff --stat -- src/state/` and `git diff --stat -- test/state/test_architecture_invariants.gd`
+  both confirmed empty at close-out.
 
 ### Completion Notes List
 
+**Open Questions, decided:**
+
+1. **Progress delivery channel: a NEW call site (`match_runner._push_charge_progress`), not a
+   `HeroActor.drive()` signature widen.** `drive()` takes `HeroState`; `charge_window`/`charge_color`
+   live on `PlayerState`, one level up. Widening `drive()`'s signature is a hot-per-tick-call API
+   change touching both `_p1_hero.drive(...)`/`_p2_hero.drive(...)` call sites for a value only
+   CHARGING heroes need; a new poll seated right after `advance()` (the `_push_charge_reach_facts`/
+   `_instrument_panel.set_window_countdown` idiom) costs nothing those don't already pay and needs
+   no seam change (AC 7). Seated AFTER `advance()`, not beside `_push_charge_reach_facts`'s
+   before-advance seat, specifically so it reads the JUST-TICKED `remaining_ticks()` and the FRESH
+   post-advance `action_state` — this is also what makes the finding-4 ordering hazard structurally
+   impossible rather than merely guarded (see AC 4 note below).
+2. **Progress-to-playhead mapping: a single shared piecewise-linear curve (2 breakpoints), reused
+   across all three clips (candidate shape (b), not a per-clip breakpoint table).** Named
+   `HOLD_START_PROGRESS`/`HOLD_END_PROGRESS` (fractions of WINDOW progress) and
+   `HOLD_PLAYHEAD_FRACTION` (fraction of the clip's own strike frame). One curve applied uniformly
+   satisfies AC 3's "same mechanism, no per-clip special case" directly; per-clip FEEL differences
+   (crouch vs. hover) fall out of where each clip's own strike frame sits in its native timeline,
+   not from a mapping difference.
+3. **`custom_speed`-based playback is RETIRED for the charge clips.** `_restart(clip, 0.0)` now
+   pins the playhead at entry (speed 0.0 disables `AnimationPlayer`'s own idle-process advance);
+   `on_charge_progress`'s `seek(t, true)` is the ONLY thing that ever moves it thereafter. This
+   retires `CHARGE_CLIP_SPEED`/`CHARGE_ALIGNED_CHARGEUP_SECONDS` (dead once nothing derives a
+   uniform speed from them) and, with them,
+   `test_the_charge_clip_speeds_still_describe_the_authored_chargeup` (finding 6) — retiring a
+   guard over dead constants rather than leaving a vacuous one. The coupling-to-authored-value duty
+   the old test carried is discharged BY CONSTRUCTION (the new mapping takes unitless progress,
+   never a duration, so no animation-side constant is derived from the authored seconds any more);
+   `test/integration/test_charge_playhead_live.gd` proves that claim live, off the actual authored
+   `unblockable_chargeup_ticks`, rather than merely asserting it.
+4. **Held beat placement/duration (feel knobs):** `HOLD_START_PROGRESS := 0.55`,
+   `HOLD_END_PROGRESS := 0.85`, `HOLD_PLAYHEAD_FRACTION := 0.85` — reasonable starting values, all
+   three named constants at `src/actors/hero/animation_controller.gd:126-128`, trivially
+   adjustable. Operator tunes at live smoke (not performed this session — see Tasks).
+5. **Held beat holds on a SINGLE FRAME (a fixed seek), not a slow crawl.** Chosen for the simpler,
+   unambiguous "paused" read; a crawl risks reading as a stutter/glitch instead. Recorded as the
+   dev-pass call the Open Questions section left open.
+
+**MEASURED strike frames, ORIGINAL PASS** (`tools/measure_charge_strike_frames.gd`, sword-bone
+reach off hips, global-max-reach frame = "the blade arrives"): `swipe` = 0.8450 s (native
+1.7333 s), `thrust` = 0.9067 s (native 2.1333 s), `jump_attack` = 1.2375 s (native 3.6667 s).
+Named `SWIPE_STRIKE_FRAME_SECONDS`/`THRUST_STRIKE_FRAME_SECONDS`/
+`JUMP_ATTACK_STRIKE_FRAME_SECONDS` (`animation_controller.gd:108-110`), replacing the retired
+native-length/speed constants. Superseded for `jump_attack` by the fix pass below.
+
+**Fix pass (round-1 findings).** Re-ran `tools/measure_charge_strike_frames.gd` headlessly
+(output to a scratch file outside the repo) and re-derived the strike frames using an IMPACT
+criterion instead of global max reach: the last major reach maximum that follows the swing's own
+peak speed.
+
+- `swipe`: **UNCHANGED, 0.8450 s.** The table has one swing phase; peak speed (2.4745 @
+  t=0.7583) is immediately followed by the single reach maximum (0.8215 @ t=0.8450). Global max
+  reach already equals the impact criterion's answer.
+- `thrust`: **UNCHANGED, 0.9067 s.** The forward-extension peak speed (4.4389 @ t=0.3733) is
+  followed by a plateau maxing at 0.8948 @ t=0.9067; the later, larger |speed| spike (-5.0124 @
+  t=1.0667) is the post-thrust retraction snapping back, not part of the strike swing, so it does
+  not confound this clip's reading.
+- `jump_attack`: **CORRECTED, 1.2375 s → 2.1542 s.** The tool's global max reach (1.0870 @
+  t=1.2375, 34% of the clip) is the sword at the AIRBORNE APEX of the jump — confirmed by the
+  operator's round-1 finding (holds mid-air, never lands). The corrected value is the reach
+  maximum at t=2.1542 (0.7038 m), the first clear local reach peak AFTER the post-apex descent
+  (the character landing and the blade completing its downward arc into the strike), satisfying
+  the sanity check that a jump attack's impact cannot sit at 34% of its clip. Apex timestamp
+  1.2375 s is retained separately below as an input to GREEN's hold-knob calculation.
+
+Named constants updated at `src/actors/hero/animation_controller.gd:108-110`
+(`JUMP_ATTACK_STRIKE_FRAME_SECONDS := 2.1542`, `SWIPE_`/`THRUST_` unchanged).
+
+**Per-clip hold knobs (fix pass, AC 3 satisfied as shared mechanism + per-clip parameters —
+operator ruling to record at close-out).** `HOLD_START_PROGRESS`/`HOLD_END_PROGRESS`/
+`HOLD_PLAYHEAD_FRACTION` promoted from three shared constants to a per-colour dictionary,
+`_CHARGE_HOLD_KNOBS` (`animation_controller.gd:~112-126`); `charge_playhead_seconds` is
+unchanged as a single pure function, now taking the three knobs as explicit parameters so it
+stays a pure, per-clip-testable mapping rather than reading the dictionary itself. Starting
+values (operator round-1 findings; NOT final, round-2 tuning still needed):
+
+- RED (swipe): `hold_start = 0.45`, `hold_end = 0.88`, `hold_fraction = 0.35` — an early-rotation
+  coil, replacing the shared value that read as a late-spin freeze.
+- BLUE (thrust): `hold_start = 0.45`, `hold_end = 0.90`, `hold_fraction = 0.55` — the deepest
+  pre-thrust pull-back, chosen to be visually legible where the shared value read as nothing.
+- GREEN (jump_attack): `hold_start = 0.50`, `hold_end = 0.88`, `hold_fraction = 0.5744` — held ON
+  the airborne apex: `hold_fraction = apex_t / corrected_strike_frame = 1.2375 / 2.1542 =
+  0.5744`.
+
+**Round-2 operator hand-tuning, FINAL values (supersede the fix pass's starting values above).**
+Converged on an early-hold/long-visible-strike feel across all three colours; `hold_fraction`
+for GREEN is unchanged (still the apex ratio) since round 2 retuned only its hold-window
+placement:
+
+- RED (swipe): `hold_start = 0.30`, `hold_end = 0.45`, `hold_fraction = 0.15`.
+- BLUE (thrust): `hold_start = 0.40`, `hold_end = 0.55`, `hold_fraction = 0.17`.
+- GREEN (jump_attack): `hold_start = 0.40`, `hold_end = 0.55`, `hold_fraction = 0.5744`.
+
+**Finding-4 ordering hazard: closed structurally, not merely guarded.** `HeroState.set_action_state`
+flips `action_state` SYNCHRONOUSLY inside `advance()`; the seam signal that fires
+`AnimationController.on_action_state_changed`'s cut to `idle` is only QUEUED there and drains
+later the same frame. `_push_charge_progress` reads the synchronous `action_state` field, so on the
+exact tick a chargeup ends (landing OR early release) it already sees the new state and pushes
+nothing for that slot — a stale push can never reach `on_charge_progress` on that tick at all.
+`on_charge_progress`'s own `_state != CHARGING` guard is belt-and-braces on the `on_locomotion`
+precedent, not the sole defence. Pinned live by
+`test/integration/test_charge_playhead_live.gd::_early_release_leaves_no_stale_frame` (AC 4).
+
+**telegraph_controller.gd: untouched, as scoped.** No held-beat-driven telegraph cue change was
+implemented or found necessary this pass; nothing surfaced that needs a follow-up story report.
+
+**No deviations from the story's non-negotiables.** `src/state/` byte-identical throughout;
+`test_runner_observation_seams_are_exactly_nine` unedited and green (new function name
+`_push_charge_progress` does not match the `connect_*` scan pattern); no new `InputIntent` field,
+`held` key, or replay channel; `FORMAT_VERSION` untouched; `tools/retime_clips.gd` not run (its
+`GOVERNED_CLIPS` remains `[attack, roll]`, confirmed by reading the file — this story's clips are
+outside its reach, per finding 6).
+
 ### File List
+
+- `src/actors/hero/animation_controller.gd` — modified: retired `CHARGE_ALIGNED_CHARGEUP_SECONDS`/
+  `CHARGE_CLIP_SPEED`/native-length constants; added `SWIPE_STRIKE_FRAME_SECONDS`/
+  `THRUST_STRIKE_FRAME_SECONDS`/`JUMP_ATTACK_STRIKE_FRAME_SECONDS`, the pure `charge_playhead_seconds`
+  mapping, and the new `on_charge_progress` method; `on_action_state_changed`'s CHARGING branch now
+  enters at `custom_speed 0.0`. Fix pass: corrected `JUMP_ATTACK_STRIKE_FRAME_SECONDS` to 2.1542;
+  replaced the shared `HOLD_START_PROGRESS`/`HOLD_END_PROGRESS`/`HOLD_PLAYHEAD_FRACTION` constants
+  with the per-colour `_CHARGE_HOLD_KNOBS` dictionary; `charge_playhead_seconds` now takes the
+  three hold knobs as explicit parameters; `on_charge_progress` looks up its colour's knobs.
+- `src/main/match_runner.gd` — modified: added `_push_charge_progress()` and its call site
+  (seated right after the step-3b instrument-panel poll, after `advance()`).
+- `test/state/test_balance_authoring.gd` — modified: retired
+  `test_the_charge_clip_speeds_still_describe_the_authored_chargeup` (finding 6), replaced with a
+  retirement note naming where the coupling duty landed.
+- `test/state/test_charge_playhead_mapping.gd` — new: AC 11 pure-function endpoint pin (progress
+  0.0/1.0 for all three clips) plus a monotonic/no-overshoot sanity check. Fix pass: reads each
+  clip's hold knobs from `AnimationController._CHARGE_HOLD_KNOBS` (per-colour) rather than shared
+  constants; pins the shape only, never a knob value.
+- `test/integration/test_charge_playhead_live.gd` — new: AC 11 live half — drives a real
+  `CHARGING` session per clip off the live authored `unblockable_chargeup_ticks`, asserts the
+  `AnimationPlayer` tracks `charge_playhead_seconds` every tick, and pins the AC 4 early-release
+  no-stale-frame regression. Fix pass: passes each clip's `_CHARGE_HOLD_KNOBS` entry into the
+  mapping call.
+- `tools/measure_charge_strike_frames.gd` — new: the strike-frame measurement tool (Task 3),
+  `tools/measure_strike_frame.gd`'s method generalized to the three paladin charge clips. Re-run
+  in the fix pass with an impact criterion (last major reach maximum following peak swing speed)
+  instead of global max reach.
