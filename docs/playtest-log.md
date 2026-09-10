@@ -314,3 +314,23 @@ Dvopadna razmjena nije odrađena (nema drugog pada) — zapisano kao izostanak.
 6-1:
 9.9.
 hm pa sve tocke ti mogu reci da prolaze osim 5 jer ne razumiem bas, zna se desit da se animacija npr napada koskom odvije cijela ali steta slece dovoljno nakandno da idalje stignem psutit gumb izmedu dovresene animacije i stete da se steta ne desi, ali osim toga svakako trenutno stnaje naimacija nije finalano dapac u e6 cem puno raditit na tome, tako da ne znamo sto zakljuciti
+
+## 2026-09-09 — 6-1b chargeup presentation (live smoke, 2 kruga + rucni feel tuning)
+
+- Krug 1 (dijeljeni knobs, strike frame = max reach): FAIL na feel — RED freeze na krivom
+  mjestu (kasno u vrtnji), BLUE bez vidljive promjene (thrust vizualno stur), GREEN hover na
+  apexu pa animacija NESTANE — nikad ne landa (strike frame bio airborne apex, mjerni
+  artefakt, ne feel problem). Feint iz kasne hold poze citao kao "napad koji je fiznuo".
+- Fix pass: strike frame kriterij korigiran (impact nakon peak speeda; GREEN 1.2375 -> 2.1542 s),
+  knobs per-boja umjesto dijeljenih.
+- Krug 2 + rucno vrtenje (Matko, notepad + relaunch, bez suite runa): konvergencija na ranu
+  stanku + dug vidljiv udarac za sve tri boje. Konacne trojke (hold_start/hold_end/hold_fraction):
+  RED 0.30/0.45/0.15, BLUE 0.40/0.55/0.17, GREEN 0.40/0.55/0.5744 (hover ostao na apexu).
+  Lekcija: mali hold_fraction trazi nizi hold_end (velik ostatak klipa treba sirok rep prozora
+  ili je blur).
+- Presude: stavke 1-7 PASS (hold-through sve tri boje cita se do isteka, udarac vidljiv; coil/
+  hover/prijetnja OK s ranim stankama; feint i tap cisti; regresija cista), 8 fps stabilan.
+- Watch (bez presude): trenutni rez na landingu (bez follow-througha) — postojeci gameplay,
+  nije zasmetao ovaj krug. Telegraf sad dug i mek (stanka zavrsava na pola prozora) — sud na
+  playtestu s protivnikom, retune blok. Polish biljeska: tap zvuk ruzan.
+- Feel tuning se PONOVNO otvara kad cijeli gameplay loop bude ziv (Matkova odluka, retune blok).

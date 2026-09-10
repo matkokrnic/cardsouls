@@ -9593,3 +9593,92 @@ Suite: 735/0/5430 state + 56/56 integration, `ALL TESTS PASSED`. Golden `d5bcb7e
 Nothing pushed; the operator reviews the log.
 
 Next steps: `6-1b-chargeup-presentation` (the named `6-1/R15` finding is its first item).
+
+
+## Session 2026-09-09 -- 6-1b close-out (Tier B)
+
+`6-1b/R1` (citing entry, corrects `6-1/R15` without editing the pushed log) THE `6-1/R15` FINDING
+WAS READABILITY UNDER-RUN, NEVER A TICKING-RATE BUG. `6-1b`'s create pass measured the true cause:
+uniform `custom_speed` compression front-loads the swing so the clip's own strike beat lands well
+before the authored window expires, independent of tick timing. The state-side boundary `6-1/R15`
+observed against was already correct; only the presentation under-ran.
+
+`6-1b/R2` STRIKE-FRAME CRITERION = THE LAST MAJOR REACH MAXIMUM AFTER PEAK SWING SPEED, NOT GLOBAL
+MAX REACH. Global max reach is the wrong proxy for a multi-phase clip: `jump_attack`'s global
+maximum (1.0870 @ t=1.2375, 34% of the clip) is the sword at the airborne apex, not the ground-
+impact swing, confirmed by the operator's round-1 finding (hold mid-air, never lands). Corrected
+to the reach peak at t=2.1542 (0.7038 m), the first clear local maximum after the post-apex
+descent. `swipe`/`thrust` are single-phase and unaffected by the correction (global max reach
+already equals the impact criterion's answer for both).
+
+`6-1b/R3` (operator ruling) AC 3 IS RATIFIED AS SHARED MECHANISM + PER-CLIP PARAMETERS. One pure
+function, `charge_playhead_seconds`, satisfies "same mechanism, no per-clip special case"; only
+its knob VALUES vary per colour (`_CHARGE_HOLD_KNOBS`). Promoting the fix pass's shared
+`HOLD_START_PROGRESS`/`HOLD_END_PROGRESS`/`HOLD_PLAYHEAD_FRACTION` constants to a per-colour
+dictionary is therefore still "the same mechanism" for AC 3, not a drift into per-clip special
+casing.
+
+`6-1b/R4` THE HELD BEAT HOLDS ON A SINGLE FRAME, NOT A SLOW CRAWL. Chosen for the simpler,
+unambiguous "paused" read against the Open Questions' second option, whose crawl rate risked
+reading as a stutter/glitch rather than a deliberate hold.
+
+`6-1b/R5` THE COUPLING-TO-AUTHORED-DUTY IS DISCHARGED BY CONSTRUCTION, NOT REPLACED BY AN
+EQUIVALENT GUARD. Retiring `CHARGE_CLIP_SPEED`/`CHARGE_ALIGNED_CHARGEUP_SECONDS` retired
+`test_the_charge_clip_speeds_still_describe_the_authored_chargeup` with them (a guard over dead
+constants is the vacuous-guard class this project rules out) rather than leaving it in place.
+The new mapping takes unitless progress, never a duration, so no animation-side constant derives
+from `unblockable_chargeup_seconds` any more; `test/integration/test_charge_playhead_live.gd`
+proves the claim live, off the actual authored `unblockable_chargeup_ticks`, and keeps passing
+across a chargeup retune instead of turning red and demanding a re-derivation.
+
+`6-1b/R6` FINDING-4'S ORDERING HAZARD CLOSURE IS STRUCTURAL. `HeroState.set_action_state` flips
+`action_state` synchronously inside `advance()`; the seam signal that fires
+`AnimationController.on_action_state_changed`'s cut to `idle` is only queued there and drains
+later the same frame. `_push_charge_progress` reads the synchronous field, so on the exact tick a
+chargeup ends (landing or early release) it already sees the new state and pushes nothing for
+that slot -- a stale push cannot reach `on_charge_progress` on that tick at all, triple-traced in
+review (the seam ordering, the synchronous write, and the live regression pin).
+
+`6-1b/R7` REVIEW'S 3 LOW FINDINGS ACCEPTED AS RECORDED NOTES, NO FIX TAKEN. Guard-scope test
+coverage, the exact-1.0-vs-last-real-tick cosmetic gap at window end, and the `EPS 0.02` tolerance
+choice are all accepted as-is; none change behaviour worth a code change against this story's
+scope.
+
+`6-1b/R8` (operator feel lesson, recorded for future retunes) A SMALL `hold_fraction` REQUIRES A
+LOWER `hold_end` OR THE STRIKE READS AS BLUR. Observed converging round 2's final triples: RED and
+BLUE both pair a low `hold_fraction` (0.15/0.17) with an early `hold_end` (0.45/0.55) so the fast
+close from the held pose to the strike frame has a short enough span to read as a clean strike
+rather than a smear.
+
+`6-1b/R9` FEEL TUNING REOPENS ONLY WITH THE FULL GAMEPLAY LOOP. The round-2 hand-tuned triples are
+this story's close, not a final ruling on feel in isolation -- retuning `_CHARGE_HOLD_KNOBS`
+again is expected once the full gameplay loop (not solo charge-clip smoke) is playable, and is
+scoped to a future retune-block pass, not this story reopening.
+
+Named successor: `6-1c` (aim/reach/travel + reach VFX) -- scope talk next session.
+
+### Close-out
+
+Three commits, order C1 -> C2 -> C3 (docs precede board would be a fourth commit here, but board
+flip rides this same C3 per the operator's compressed chain for this Tier B story). Commit 1,
+code + tests: `src/actors/hero/animation_controller.gd`, `src/main/match_runner.gd`,
+`test/state/test_balance_authoring.gd`, two new test files
+(`test/state/test_charge_playhead_mapping.gd`, `test/integration/test_charge_playhead_live.gd`),
+`tools/measure_charge_strike_frames.gd`. Commit 2, docs: the story file's Status -> `done`, round-2
+Live Smoke Results, and the Dev Agent Record's final hand-tuned triples superseding the fix pass's
+starting values. Commit 3, docs: this entry, `docs/playtest-log.md`'s 6-1b entry, and the board
+flip.
+
+Suite: 737/0/5553 state assertions, 0 failed; 57 integration suites listed, all PASS; `ALL TESTS
+PASSED`. Golden and the 30-key snapshot set predicted unmoved (Tier B clause) -- not re-measured
+in this close-out pass beyond the full-suite run above (no `src/state/` file touched, confirmed by
+`git diff --stat -- src/state/` empty at C1).
+
+Final tuned knob triples (operator hand-tuning, round 2, superseding the fix pass's starting
+values): RED (swipe) `hold_start = 0.30`, `hold_end = 0.45`, `hold_fraction = 0.15`; BLUE (thrust)
+`hold_start = 0.40`, `hold_end = 0.55`, `hold_fraction = 0.17`; GREEN (jump_attack)
+`hold_start = 0.40`, `hold_end = 0.55`, `hold_fraction = 0.5744`.
+
+Nothing pushed; the operator reviews the log.
+
+Next steps: `6-1c` (aim/reach/travel + reach VFX) -- scope talk next session.
