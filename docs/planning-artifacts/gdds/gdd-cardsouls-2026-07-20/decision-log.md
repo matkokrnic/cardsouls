@@ -9727,3 +9727,23 @@ separate later step.
 
 Next steps: operator review of this fix pass; a second readiness-gate round if further findings
 surface, else promotion to `ready-for-dev`.
+
+## Session 2026-09-10 -- 6-1c re-gate round 2 fixes
+
+`6-1c/R6` (citing entry; clarifies R2's trailing sentence) THE STRIKE-VS-FOLLOW-THROUGH BINARY IS
+SETTLED BY R2'S HEADLINE, NOT OPEN. The strike swing plays during the launch, arriving at the
+strike frame on the resolution tick -- that shape is ruled, not optional. Only the MECHANISM by
+which the launch progress channel is extended past the chargeup window to land progress 1.0 on
+that tick is the dev pass's to choose.
+
+`6-1c/R7` Co-Authored-By TRAILER CONSTANT RE-RATIFIED AS "Claude Sonnet 5 <noreply@anthropic.com>".
+This matches the shipped house pattern of the last several commits and supersedes the earlier
+"Claude Opus 4.8" constant note from the round-2 re-gate. Pushed history is never rewritten to
+match; this governs new commits only.
+
+### Close-out
+
+Docs-only pass against re-gate round 2 findings RO1/RO2. Pure append, no existing entry edited.
+One commit: story file (Open Questions + Project Context Rules + AC 5 corrections) and this
+entry, together (docs-only). No code, no test, no golden. Round 2 of the readiness gate is spent;
+no third full gate is required for this micro-fix pass.

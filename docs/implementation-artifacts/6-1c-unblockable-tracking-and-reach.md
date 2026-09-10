@@ -121,8 +121,9 @@ reach.
    positions and pushes the planar direction fact FROM POSITIONS ONLY — mirroring the 1-8/R-B3
    shape, the runner never reads `HeroState.facing`; the arc comparison is STATE policy, performed
    against the frozen committed direction (AC 2) using the per-colour authored arc field (6-1c/R3).
-   Still crosses as a KIND only, never a distance/position/angle (D3(b)/A2). Numbers are feel knobs
-   tuned at live smoke, not fixed here.
+   What crosses the seam is the radius KIND plus the planar direction fact (the 1-8/R-B3 shape) —
+   never a distance/position/angle beyond that fact (D3(b)/A2). Numbers are feel knobs tuned at
+   live smoke, not fixed here.
 
 **Resolution seat and facing ladder (structural, Facts 4/6).**
 
@@ -237,12 +238,11 @@ them; feel tuning reopens at retune per `6-1b/R9`, not as a change owed by this 
 - **Launch span** the travel distance divides by (the `3-0b` lunge precedent uses
   `attack_windup_seconds + attack_active_seconds`, authored distance over an authored span applied
   as velocity during the committed phase) — needs its own authored span, likely per-colour.
-- **Launch progress channel (AC 11).** How the `6-1b` progress-driven playhead mechanism
-  (`charge_playhead_seconds`) extends past the chargeup window to drive the strike swing across the
-  launch span, so progress 1.0 lands at the resolution tick rather than at window-close. Whether the
-  travel plays under the strike swing (retiming window/travel so progress 1.0 = resolution) or under
-  a follow-through is Matko's call (design), not a dev-pass one — the mechanism that implements
-  whichever is ruled is the dev's. The honesty rule itself (AC 11) is not open; only the mechanism is.
+- **Launch progress channel (AC 11).** `6-1c/R2` settles the shape: the strike swing plays DURING
+  the launch, arriving at the strike frame exactly on the tick `_resolve_charge_landing` fires (AC
+  11 binds it, not conditionally). Only the MECHANISM is open — how the `6-1b` progress-driven
+  playhead (`charge_playhead_seconds`) extends past the chargeup window so that progress 1.0 lands
+  on that resolution tick. This is a dev-pass Open Question, per `6-1c/R2`.
 
 ### Files expected to change
 
@@ -265,8 +265,10 @@ them; feel tuning reopens at retune per `6-1b/R9`, not as a change owed by this 
 - **HARD RULE — State/visual separation.** The commit freeze and launch travel are state-layer
   decisions; presentation only reacts to whatever `action_state`/phase facts result. [Source:
   CLAUDE.md; project-context.md]
-- **D3(b)/A2 — no world coordinates in `src/state/`.** The per-colour geometry check stays in the
-  runner (Measured Fact 3/6); state receives only the KIND. [Source: CLAUDE.md]
+- **D3(b)/A2 — no world coordinates in `src/state/`.** The runner computes the per-colour radius
+  KIND and reports the planar direction FROM POSITIONS ONLY — it never reads `HeroState.facing`.
+  State performs the arc comparison against the frozen committed direction (the per-colour
+  authored arc field). No world coordinates ever enter `src/state/` (6-1c/R3). [Source: CLAUDE.md]
 - **CONSTRAINT C — read balance inline.** All new per-colour fields read fresh at point of use,
   never cached. [Source: project-context.md]
 - **Data as Resources.** Travel/reach/arc are authored `.tres` values, tunable without recompiling,
