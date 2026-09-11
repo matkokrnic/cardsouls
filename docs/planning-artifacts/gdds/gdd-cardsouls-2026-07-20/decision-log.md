@@ -9844,7 +9844,7 @@ deferred rather than grown.
 `6-1d/R5` AC 2 NARROWED to `6-1c/R10`'s actual subject: per-colour REACH and HOMING SPEED only.
 Arc, launch distance, and launch seconds are EXEMPT (R4 requires moving the latter two). AC 2
 must be proven by a TEST -- a configuration geometrically reachable but outside authored
-reach/arc MISSES -- not only a diff against `balance_config.tres`.
+reach/homing speed MISSES -- not only a diff against `balance_config.tres`.
 
 `6-1d/R6` SWING-AT-COMMIT KNOB gets its own AC, moved out of Non-Goals: the field exists, default
 OFF, OFF reproduces today's behaviour. Live Smoke item 6 keeps the ON-vs-OFF verdict; the knob is

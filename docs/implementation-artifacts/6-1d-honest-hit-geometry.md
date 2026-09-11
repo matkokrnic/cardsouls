@@ -4,7 +4,7 @@ baseline_commit: e50bc94705cfba8c5471731391806410f6e7a04e
 
 # Story 6.1d: Honest Hit Geometry
 
-Status: authored
+Status: ready-for-dev
 
 > **Scope note.** Not on the E6 board from planning — no correct-course run. Named successor to
 > `6-1c` in that story's close-out (`6-1c/R10`, decision-log.md:9770-9776). Tier A: touches the
@@ -12,7 +12,7 @@ Status: authored
 > own close-out (already present at `docs/implementation-artifacts/sprint-status.yaml:118`,
 > `backlog  # Tier A`, with a `story_notes` entry at line 133 — no insertion needed this pass).
 > **Readiness gate, round 1:** NOT READY, four blockers, closed by rulings `6-1d/R1`-`R7`
-> (decision-log.md:9806-9859). Status stays `authored` pending round 2.
+> (decision-log.md:9806-9859). Re-gate round 2 CLOSED all four blockers, promoted to `ready-for-dev` 2026-09-12.
 
 ## Measured Facts
 
@@ -319,7 +319,7 @@ changes.
 - [Source: src/main/match_runner.gd:674-704 (`_push_charge_reach_facts`, Fact 3), :1672-1733
   (`_gather_contact_facts`, one-tick-lag header, Fact 4), :2505 (`_push_charge_reach_facts` seat,
   before `advance()`), :2581 (`_push_charge_progress` seat, after `advance()`), :2638-2639
-  (`drive()` seat, step 4), :178-189 (`SPAWN_CLEARANCE_RADIUS`, hero inradius precedent, Fact 5)]
+  (`drive()` seat, step 4), :178-189 (`SPAWN_CLEARANCE_RADIUS`, hero inradius precedent REJECTED by Fact 5)]
 - [Source: src/state/match_state.gd:2105-2109 (`_is_in_charge_arc`), :2936-3013
   (`_resolve_charge_landing`), :1839-1845 (`_register_attacker_hit`, Fact 4),
   :3641-3648 (`_charge_launch_velocity`, Fact 6)]
