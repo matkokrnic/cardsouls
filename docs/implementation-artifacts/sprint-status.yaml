@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-09-11
+last_updated: 2026-09-12
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -130,7 +130,7 @@ story_notes:
   6-1-hold-to-charge: "done 2026-09-09, Tier A close-out complete (hold-through-chargeup + paid feint per 6-1/R1-R15, golden and 30-key set unmoved, suite 735/0/5430 + 56 integration, smoke 6/7 PASS (item 5 machine-pinned, named finding for 6-1b), decision-log session 6-1 close-out)."
   6-1b-chargeup-presentation: "done 2026-09-09, Tier B close-out complete (progress-driven playhead per-clip, strike-frame impact criterion, per-clip hold knobs per 6-1b/R1-R9; src/state/ byte-identical, golden and 30-key set unmoved; suite 737/0/5553 + 57 integration; round-2 smoke items 1-7 PASS / 8 fps stable; decision-log session 6-1b close-out)."
   6-1c-unblockable-tracking-and-reach: "done 2026-09-12, Tier A close-out complete (commit/launch sub-phase of CHARGING per 6-1c/R1-R10, per-colour launch travel and honest reach, golden d5bcb7e6 -> 9679fa80 single cause landing key 30 -> 31, suite 757/0/5993 + 58 integration, smoke PASS on tracking/dodge/ground-coverage/fps with one named defect (blade/damage geometry gap) carried to 6-1d-honest-hit-geometry, decision-log session 6-1c close-out)."
-  6-1d-honest-hit-geometry: "Tier A, opened at 6-1c close-out (6-1c/R10). Landing reach from measured strike-frame geometry (blade tip + body radius) instead of an authored centre-to-centre radius, plus GREEN's homing shifted more into the airborne phase; per-colour reach/homing numbers are not raised before this lands."
+  6-1d-honest-hit-geometry: "authored 2026-09-12, readiness gate round 1 (NOT READY, 4 blockers) closed same day by operator rulings 6-1d/R1-R7 (decision-log session '6-1d readiness gate') -- still awaits round 2 before ready-for-dev. Mechanism narrowed: share melee's existing get_overlapping_areas() query in the committed launch phase instead of an authored centre-to-centre radius; A/B blade-source fork and the body-radius problem struck (Hurtbox box IS the body geometry, no new constant). AC 2 narrowed to reach/homing-speed, test-provable; AC 6 now a named supersession of 6-1c AC 3 (dodge after commit is no longer an automatic escape); new AC 7 delivers 6-1c/R10(b)'s GREEN travel profile and adopts P6, with a halt condition; new AC 8 builds the swing-at-commit knob (moved out of Non-Goals). Story file 381 lines over its 320 budget, disclosed in-file."
   6-2-pitch-staging: "Tier A, golden moves by construction (MatchState.to_snapshot already carries the pitch key). Scope talk owes the pitch-cost authoring seat, E6-P/R9. Carries the per-player/independent-staging rule, E6-P/R4."
   6-3-pitch-hud: "Tier B AT RISK of Tier A. May NOT add a second MatchState direct-connect (E5-C/R2); uses the observation-seam family. Owes the anchor A/B verdict (2-6/R19 finding S4)."
   6-4-pitch-activation: "Tier A. Wires pad Y and ends mode 4's structural unreachability; owes the Y-guard question 5-7/R7 kept open for exactly this story (LOW-1/LOW-2)."

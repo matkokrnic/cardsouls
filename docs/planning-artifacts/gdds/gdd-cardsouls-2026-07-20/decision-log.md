@@ -9802,3 +9802,77 @@ one: `test(6-1c)` (D2 bound widened, D1 comment corrected, suite 757/0/5993 + 58
 this docs commit (story file Dev Agent Record / Live Smoke Results / Change Log sections, this
 entry, `sprint-status.yaml`) -- pure append here, zero deletions. Promotion to `done` is a
 separate, later commit.
+
+## Session 2026-09-12 -- 6-1d readiness gate
+
+`6-1d/R1` MECHANISM NARROWED. Melee has been bone-honest since 5-0a: the Hitbox shape is written
+onto the sword bone every tick and melee resolves contact via `get_overlapping_areas()` against
+the defender's Hurtbox. Mode (2) is the ONLY damage-crediting family still on an authored
+centre-to-centre radius. The mechanism: let the EXISTING overlap query run during the committed
+launch phase and derive the INSIDE/OUTSIDE kind from the overlap instead of
+`planar.length() <= reach`. The A/B blade-source fork and the body-radius problem (old Open
+Questions / old Fact 5) are STRUCK -- an authored blade curve is a second source of truth against
+a shipped mechanism melee already trusts, and the Hurtbox box IS the body geometry, no derived
+constant needed. Fact 4's "no shared seat between attack families" reasoning conflated GATHER
+with RESOLUTION and is withdrawn (`6-1c/R3` and `1-8/R-B3` govern what crosses the seam, not who
+measures); its valid residue stays: `is_hitbox_active()` is melee-owned and must not grow a
+CHARGING branch, the launch-phase query needs its own gate. `_resolve_charge_landing` remains the
+one landing seat, ladder unchanged. AC 4/AC 5 (per-tick evaluation, one resolution per swing per
+target) are the real work and stay as authored.
+
+`6-1d/R2` CONTACT WINDOW OPENS AT COMMIT, NEVER DURING THE FEINTABLE CHARGEUP, even though the
+blade is visibly in motion there (measured at `6-1c`: commit-frame swing progress RED ~64%,
+BLUE ~49%, GREEN ~31%). An attack the attacker can still cancel never credits damage -- a named
+behavioural guarantee in the ACs, not a Dev Note.
+
+`6-1d/R3` `6-1c` AC 3 IS SUPERSEDED, EXPLICITLY. Continuous contact means a dodge after commit is
+no longer an automatic escape: the defender must clear the blade's path for the WHOLE flight, not
+merely be outside an authored radius on the window-close tick. AC 6 stays (clearing the path every
+evaluated tick still MISSES) as the surviving half of `6-1c`'s guarantee, reworded rather than
+restated. This ratifies the design choice behind readiness-gate finding A1 (dodge-after-commit
+semantics) rather than leaving it to the dev pass.
+
+`6-1d/R4` AC 7 STRUCK; `6-1c/R10(b)` DELIVERED PROPERLY. Continuous sampling changes WHEN a hit
+is detected, not how far the hero travels. (b) is delivered as a per-colour front-loaded travel
+profile across the launch span (more distance covered early/mid-airborne, less on the landing
+tick), GREEN the named subject. Since `_charge_launch_velocity` is being rewritten anyway, P6 is
+ADOPTED in the same edit: derive launch speed from the TICK span, not
+`launch_distance / launch_seconds`. HALT CONDITION: if the travel profile needs a new hashed
+snapshot field or any change to `landing_window`'s tick contract, the dev pass halts and (b) is
+deferred rather than grown.
+
+`6-1d/R5` AC 2 NARROWED to `6-1c/R10`'s actual subject: per-colour REACH and HOMING SPEED only.
+Arc, launch distance, and launch seconds are EXEMPT (R4 requires moving the latter two). AC 2
+must be proven by a TEST -- a configuration geometrically reachable but outside authored
+reach/arc MISSES -- not only a diff against `balance_config.tres`.
+
+`6-1d/R6` SWING-AT-COMMIT KNOB gets its own AC, moved out of Non-Goals: the field exists, default
+OFF, OFF reproduces today's behaviour. Live Smoke item 6 keeps the ON-vs-OFF verdict; the knob is
+built, not decided, in this story.
+
+`6-1d/R7` GATE FINDINGS S4 AND S5 REFUTED, ABSORBED. S4: contact facts are RECORDED and replay
+supplies them from the record (`match_runner.gd:78-82`, `:1723-1726`) -- a clip swap affects live
+play only, not a new determinism class; melee precedent 5-0a. Collapsed into one Dev Note; the
+seek-determinism argument old Fact 2 carried is dropped as unneeded. S5:
+`test_hitbox_follows_bone.gd` instantiates `hero.tscn` headless with real frames and measures
+blade world position to 0.5 mm -- AC 1 is machine-provable, no smoke-only status.
+
+### Gate disposition
+
+Round 1 verdict NOT READY, four blockers (B1/S1 -> R1, B2/S2a + B3/S2b -> R4/R5, B4/S3+A1 ->
+R6/R3), all closed by this pass. Notes: N1(S4)/N2(S5) folded into R7; N3 (Fact 2's overstated
+"uniformly tick-fresh" claim) resolved by dropping the seek argument per R7; N4 (the existing
+dedupe primitive fails on LIFECYCLE grounds -- no `_start_swing` call and no `active` window to
+reap the grace record for a CHARGING landing, not the ladder reason originally named) and N5
+(`swing_dedupe` is already a hashed key nested in the hero snapshot, so extending an existing
+record moves no snapshot key) carried into the story's Open Questions and Golden Prediction; N6
+(two mis-cites -- `register_swing_hit` is `hero_state.gd:291`, not `match_state.gd:1839-1845`;
+`HurtboxShape` is `hero.tscn:100-101`, not `:103-104`) corrected in place; N7 (AC 11 is a process
+statement) moved to Golden Prediction, ACs renumbered; N8 (AC 2 needs a test, not a diff) folded
+into R5.
+
+### Close-out
+
+Docs-only pass, one commit: story file (rulings R1-R7 applied, ACs renumbered, Open Questions
+narrowed, mis-cites fixed) and this entry, together. Story Status stays `authored` -- promotion
+to `ready-for-dev` is a separate pass. No code, no test, no suite run.
