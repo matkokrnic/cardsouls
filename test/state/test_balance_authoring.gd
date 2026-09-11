@@ -192,10 +192,18 @@ func test_authored_defense_values_are_positive_and_correctly_ordered() -> void:
 	assert_true(config.defense_stamina_cost > 0.0,
 		"defense_stamina_cost must be authored > 0 (a free defense is the roll precedent again, on "
 		+ "the FIFTH spend seat)")
-	assert_true(config.defense_window_seconds > config.unblockable_chargeup_seconds,
-		"defense_window_seconds must be authored LONGER than unblockable_chargeup_seconds (R-A): a "
-		+ "window shorter than the chargeup cannot be opened in reaction to a telegraph and still "
-		+ "be open when the attack lands")
+	# Code review 6-1c (D2): the landing is now chargeup + launch(colour), not chargeup alone -- a
+	# window that only outlasts the chargeup can still expire before a slower colour's launch ends.
+	# Pinned against the LONGEST authored launch span so the bound holds for every colour, read off
+	# the authored triplet rather than a literal (BC/R3 tuning isolation).
+	var longest_launch: float = maxf(config.unblockable_launch_seconds_red,
+		maxf(config.unblockable_launch_seconds_blue, config.unblockable_launch_seconds_green))
+	assert_true(
+		config.defense_window_seconds > config.unblockable_chargeup_seconds + longest_launch,
+		"defense_window_seconds must be authored LONGER than unblockable_chargeup_seconds + the "
+		+ "longest unblockable_launch_seconds_* (R-A, widened 6-1c/R9): a window that only outlasts "
+		+ "the chargeup can still expire before the slowest colour's launch lands, even though it "
+		+ "was opened on the telegraph's first tick")
 	assert_true(config.defense_stamina_cost < config.unblockable_stamina_cost,
 		"defense_stamina_cost must be authored SMALLER than unblockable_stamina_cost (R-D): the "
 		+ "defender answers a commitment already made rather than making one")

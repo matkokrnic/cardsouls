@@ -185,9 +185,15 @@ static func charge_playhead_seconds(progress: float, strike_frame_seconds: float
 ## AC 11 forbids, with the blade arriving before the damage. So the progress runs over the chargeup
 ## PLUS the colour's launch span, off the ONE window that spans both (`PlayerState.landing_window`,
 ## which closes on exactly the tick `_resolve_charge_landing` fires):
-##   * the chargeup maps to [0, C / (C + L)] of the playhead curve -- the PRE-STRIKE portion, the
-##     wind-up and the held beat;
-##   * the launch maps to [C / (C + L), 1.0] -- the strike swing itself, played DURING the travel;
+##   * the chargeup maps to [0, C / (C + L)] of the playhead curve and the launch maps to
+##     [C / (C + L), 1.0], but this is NOT a clean wind-up/strike-swing partition: the swing itself
+##     begins at the `hold_end` knob (a fraction of the WHOLE curve, unchanged by this story), which
+##     falls INSIDE the chargeup span for every authored colour -- measured on the commit frame, RED
+##     ~64%, BLUE ~49%, GREEN ~31% of the swing (hold -> strike) has already played before the
+##     commit. AC 11's verifiable claim (the strike frame never arrives before the landing tick; no
+##     frozen glide) still holds regardless. Code review `6-1c/D1`, ruled `6-1c/R8`: accepted as-is
+##     for this story; anchoring the swing start to the commit (chargeup -> [0, hold_end], launch ->
+##     [hold_end, 1]) is offered as a smoke-time option to the successor story `6-1d`;
 ##   * 1.0 falls exactly on the landing tick, never before (AC 11). The runner stops pushing the
 ##     instant the hero leaves `CHARGING`, which happens synchronously on that same tick (the
 ##     `6-1b/R6` contract, keyed to the SAME edge -- the landing -- see
