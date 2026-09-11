@@ -9747,3 +9747,58 @@ Docs-only pass against re-gate round 2 findings RO1/RO2. Pure append, no existin
 One commit: story file (Open Questions + Project Context Rules + AC 5 corrections) and this
 entry, together (docs-only). No code, no test, no golden. Round 2 of the readiness gate is spent;
 no third full gate is required for this micro-fix pass.
+
+## Session 2026-09-12 -- 6-1c close-out
+
+`6-1c/R8` (closes review finding D1) THE SWING/COMMIT PARTITION IS ACCEPTED AS-IS FOR THIS STORY,
+COMMENT CORRECTED, NO MECHANISM CHANGE. The strike swing begins at the `hold_end` knob, which
+falls inside the feintable chargeup for every authored colour (measured at the commit frame: RED
+~64%, BLUE ~49%, GREEN ~31% of the swing already played) -- not at the chargeup/launch boundary
+the code comment claimed. AC 11's verifiable claim (the strike frame never arrives before the
+landing tick; no frozen glide) still holds regardless, so no mechanism change is owed here.
+Anchoring the swing start to the commit (chargeup -> `[0, hold_end]`, launch -> `[hold_end, 1]`)
+is offered as a SMOKE-TIME OPTION to the successor story (`6-1c/R10`), not built now.
+
+`6-1c/R9` (closes review finding D2) THE R-A DEFENSE BOUND WIDENS TO CHARGEUP + THE LONGEST
+AUTHORED LAUNCH SPAN. The landing is now chargeup + launch(colour), so a window that only
+outlasts the chargeup can expire before a slower colour's launch lands even when opened on the
+telegraph's first tick. `test_balance_authoring.gd`'s R-A assertion now reads
+`defense_window_seconds > unblockable_chargeup_seconds + max(unblockable_launch_seconds_*)`,
+pinning the relation against the authored triplet, not a literal (keeps `BC/R3` tuning
+isolation). Authored values hold by the same 0.05 s margin as before (1.5 > 1.0 + 0.45).
+
+`6-1c/R10` SUCCESSOR STORY OPENED: `6-1d-honest-hit-geometry`, Tier A, ordered BEFORE `6-2`.
+Carries three items surfaced by live smoke and the code review, not fixed in this story: (a)
+landing reach derived from MEASURED geometry at the strike frame (blade tip + target body radius)
+instead of the authored centre-to-centre radius -- damage only on real model contact (smoke items
+1/5/7, one defect); (b) GREEN's homing moved mostly into the airborne phase, travelling less on
+landing, for a more natural read (operator, live smoke); (c) swing-start-at-commit (`6-1c/R8`,
+deferred here) offered as a smoke-time option -- build the knob, operator rules at that story's
+smoke. Reach and homing-speed numbers are NOT raised before (a) lands: widening reach on
+centre-to-centre geometry would amplify the exact defect (a) removes.
+
+`6-1c/R11` RETUNE-BLOCK OBSERVATIONS FROM LIVE SMOKE, NO OWNER YET. Operator, smoke 2026-09-11
+(`docs/playtest-log.md`): dodge stamina cost should exceed unblockable initiation cost (dodge
+currently reads too cheap relative to what it negates); dodge/roll coverage now reads generous;
+per-colour reach and homing speed are to be raised only AFTER `6-1d` lands (see R10's closing
+sentence -- raising them first would amplify the geometry defect that story removes).
+
+`6-1c/R12` DEFERRED REVIEW FINDINGS, UNOWNED, CANDIDATES FOR A FUTURE E6 CLOSE-OUT. P6: launch
+travel (`match_state.gd:3644-3649`, distance / seconds) is exact only because the authored spans
+are tick-aligned; a retune to a non-tick-aligned span (e.g. 8.0 m over 0.41 s) would travel 8.13 m
+and could fail the live test's `far` case, which is operator tuning requiring a suite edit against
+the standing knob-isolation rule -- the unambiguous fix is deriving speed from the tick span
+(`distance / (launch_ticks / TICK_HZ)`), a `src/state/` change belonging to a dev pass with its
+own suite run, not a review fix. D3: launch distance and seconds are not audited as a pair --
+distance > 0 with seconds 0 silently zeroes travel, seconds > 0 with distance 0 roots the hero for
+a frozen pause of the launch span; only `>= 0` is checked today, and whether a zero launch stays a
+legal authored shape is a tuning-semantics call for whoever picks this up.
+
+### Close-out
+
+Close-out pass after operator live smoke (`docs/playtest-log.md`, 2026-09-11 entry) and the
+code-review report (`C:\dev\_61c-review.md`, review commit `2921b1e`). Two commits ahead of this
+one: `test(6-1c)` (D2 bound widened, D1 comment corrected, suite 757/0/5993 + 58 re-run clean) and
+this docs commit (story file Dev Agent Record / Live Smoke Results / Change Log sections, this
+entry, `sprint-status.yaml`) -- pure append here, zero deletions. Promotion to `done` is a
+separate, later commit.

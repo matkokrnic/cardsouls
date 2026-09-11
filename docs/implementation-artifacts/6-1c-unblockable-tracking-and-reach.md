@@ -399,7 +399,17 @@ name.
   `_resolve_charge_landing`; colour-counter negation still answers through it, and a whiff leaves
   the defense window unconsumed.
 - AC 7: DEAD (`2-3/R14`) and round-over (`2-6/R6`) branches unedited; their existing pins pass
-  unedited; plus `test_a_hero_killed_mid_launch_takes_the_dead_carve_out`.
+  unedited. Code review commit `2921b1e` (finding P1) found the original single pin,
+  `test_a_hero_killed_mid_launch_takes_the_dead_carve_out`, actually proved the round-over freeze
+  (natural death latches `_round_over` first, so the DEAD branch of `_resolve_movement` is never
+  reached) and its HP assertion ran two ticks into a twelve-tick launch, before any landing was
+  possible -- mutation X4 (DEAD early return removed) left it green. Fixed, no mechanism change:
+  the original test renamed to `test_a_hero_killed_mid_launch_takes_the_round_over_freeze` and run
+  past the landing tick, plus a new `test_a_forced_dead_hero_mid_launch_takes_the_dead_carve_out`
+  (the codebase's forced-DEAD idiom) that actually reaches the DEAD branch -- X4 now fails it. The
+  same review commit closed three more gaps this AC list did not separately call out: AC 2 (P2,
+  "input does not steer" compared against a same-tick capture that could not fail), AC 11 (P4, the
+  live path proved only an upper bound), and the commit-tick release boundary (P3, unpinned).
 - AC 8: suite run 3 green (above).
 - AC 9: `6-1b/R6` re-verified against the chosen shape -- the exit edge is still the single
   synchronous `CHARGING` exit, now on the landing-window close. Direct test
@@ -480,6 +490,32 @@ verification).**
 - `docs/implementation-artifacts/6-1c-unblockable-tracking-and-reach.md`,
   `docs/implementation-artifacts/sprint-status.yaml` (docs commit)
 
+### Live Smoke Results
+
+2026-09-11, single physical pad per the Live Smoke procedure above (operator, `docs/playtest-log.md`
+"6-1c" entry). Verdicts by item:
+
+1. **PASS.** Strafing around a charging opponent, tracking holds through the whole chargeup;
+   damage lands in every case except a narrow BLUE arc miss while strafing, which is correct by
+   design (the colour's authored arc, not a bug).
+2. **PASS.** A real-time dodge negates the unblockable in every case.
+3. **PASS.** All colours cover ground on launch; the animation-free slide reads well (noted as
+   reading like an existing lunge attack, not a defect).
+4. **PASS, with a caveat.** Walking backward at mid range can still escape once launch begins,
+   partly because "walking" is currently a run -- the story that slows walking is expected to
+   narrow this further, not a defect of this story.
+5. **NAMED DEFECT, carried forward.** Max-reach hits read as ghost hits: damage registers with a
+   gap between blade and player model. Same defect as items 1 and 7 below (one cause, three smoke
+   items).
+6. **PASS.** No regression observed in melee lunge or mode 3 defense-by-colour/dodge.
+7. **NAMED DEFECT (same as 5).** The blade and the damage do not visually line up -- damage lands
+   slightly before real contact, because the landing arc is judged on an authored centre-to-centre
+   radius rather than measured blade/model geometry.
+8. **PASS.** FPS stable throughout.
+
+The item 1/5/7 defect is not fixed in this story; see ruling `6-1c/R10` below for the successor
+story that owns it.
+
 ## Change Log
 
 - 2026-09-11: dev pass -- commit/launch sub-phase of CHARGING via `PlayerState.landing_window`,
@@ -487,3 +523,8 @@ verification).**
   state arc), launch progress channel; golden `d5bcb7e6` -> `9679fa80` (single cause: `landing`
   key, 30 -> 31); suite 755/0/5916 + 58 integration. Feat commit `2faa084`. Status -> review;
   live smoke pending (operator).
+- 2026-09-12: code review close-out -- review commit `2921b1e` (four test gaps fixed, mutation-
+  proven); D1 (swing/commit partition) accepted as-is with the comment corrected, `6-1c/R8`; D2
+  (R-A defense bound) widened to chargeup + the longest authored launch span, `6-1c/R9`;
+  successor story `6-1d-honest-hit-geometry` opened for the blade/damage geometry defect named at
+  live smoke, `6-1c/R10`. Suite 757/0/5993 + 58 integration.
