@@ -118,10 +118,17 @@ func test_facing_freezes_at_the_commit_and_ignores_every_later_aim() -> void:
 ## AC 2: "no further re-aim or steering from any input". A release of the cast confirm AFTER the
 ## commit is not a feint -- the attack still lands on the authored tick -- and full move input does
 ## not bend the launch velocity off the frozen line.
+##
+## Code review 6-1c: the velocity is compared against the FROZEN-LINE vector the launch must carry
+## (the colour's authored distance over its authored span, along the committed facing), not against
+## a capture taken under the same constant move input -- a steered launch would equal such a capture
+## on every tick and pass.
 func test_after_the_commit_a_release_does_not_feint_and_input_does_not_steer() -> void:
 	var ms := _make_match(Enums.CardColor.GREEN)
 	_cast_and_charge(ms, DIR_AHEAD)
-	var committed_velocity := Vector3.ZERO
+	var span_seconds := float(_launch(Enums.CardColor.GREEN)) / TimingWindow.TICK_HZ
+	var speed := float(LAUNCH_DISTANCE[Enums.CardColor.GREEN]) / span_seconds
+	var committed_velocity := Vector3(-DIR_AHEAD.x, 0.0, -DIR_AHEAD.y) * speed
 	for t in _launch(Enums.CardColor.GREEN) - 1:
 		var released := InputIntent.new()
 		released.move_dir = Vector2(1.0, 0.0)
@@ -129,14 +136,37 @@ func test_after_the_commit_a_release_does_not_feint_and_input_does_not_steer() -
 		_advance(ms, released, InputIntent.new())
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 			"launch tick %d: a RELEASE after the commit does not feint" % t)
-		if t == 0:
-			committed_velocity = ms.p1.hero.velocity
-		assert_eq(ms.p1.hero.velocity, committed_velocity,
-			"launch tick %d: move input does not steer the launch" % t)
+		assert_true(ms.p1.hero.velocity.is_equal_approx(committed_velocity),
+			"launch tick %d: move input does not steer the launch -- velocity %s, want the frozen line %s"
+				% [t, ms.p1.hero.velocity, committed_velocity])
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
 	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"the released attack still LANDS on the authored landing tick")
+
+
+## AC 2 boundary, the other side (code review 6-1c): a release ON the commit tick itself -- the tick
+## step 2 closes the chargeup window -- is already ignored. `_cast_and_charge` holds through that
+## tick and the test above releases only from the tick after it, so without this the sharpest edge
+## of the `charge_window.is_running` conjunct in the CHARGING arm was unpinned.
+func test_a_release_on_the_commit_tick_itself_is_ignored() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	_advance(ms, _unblockable_intent(0), InputIntent.new())
+	for _t in CHARGEUP_TICKS - 1:
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_true(ms.p1.charge_window.is_running, "sanity: one chargeup tick still to run")
+	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_false(ms.p1.charge_window.is_running, "sanity: this tick closed the chargeup (the commit)")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
+		"a release on the commit tick is ignored -- the attack is already committed")
+	assert_true(ms.p1.landing_window.is_running, "...and the launch runs on")
+	for _t in _launch(Enums.CardColor.BLUE):
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+		"the attack released on its commit tick still lands on the authored landing tick")
 
 
 ## AC 2 boundary: a release on the LAST chargeup tick still feints (the chargeup is not yet over),
@@ -390,20 +420,52 @@ func test_a_debug_reset_mid_launch_clears_the_landing_window() -> void:
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "nothing lands after the reset")
 
 
-## AC 7: a hero killed MID-LAUNCH takes the DEAD carve-out, unchanged: velocity zeroed, facing held,
-## and the launch never lands.
-func test_a_hero_killed_mid_launch_takes_the_dead_carve_out() -> void:
+## AC 7: a hero killed MID-LAUNCH in natural play takes the ROUND-OVER freeze (step 1b, `2-6/R6`),
+## unchanged: death is set at step 8 together with `_round_over`, so from the next tick step 1b zeroes
+## velocity, skips the facing write and returns before step 3 -- the launch never lands.
+##
+## Code review 6-1c: this test was named for the DEAD carve-out, but on this path the DEAD branch of
+## `_resolve_movement` is never reached (step 1b returns first); removing that branch left it green.
+## Renamed to what it pins, and the landing assertion now runs past the authored landing tick -- it
+## used to check the HP two ticks into a twelve-tick launch, before any landing was possible. The
+## DEAD rung itself is pinned mid-launch by the forced-DEAD test below.
+func test_a_hero_killed_mid_launch_takes_the_round_over_freeze() -> void:
 	var ms := _make_match(Enums.CardColor.GREEN)
 	_cast_and_charge(ms, DIR_AHEAD)
 	ms.p1.hero.take_damage(MAX_HP)
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
 	_advance(ms, _holding(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "died mid-launch")
+	assert_true(bool(ms.to_snapshot()["round_over"]), "sanity: natural death latches the round over")
 	var facing := ms.p1.hero.facing
-	_advance(ms, _holding(), InputIntent.new())
-	assert_eq(ms.p1.hero.velocity, Vector3.ZERO, "a corpse does not keep launching")
-	assert_eq(ms.p1.hero.facing, facing, "a corpse's facing holds")
+	for _t in _launch(Enums.CardColor.GREEN) + 2:
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
+		_advance(ms, _holding(), InputIntent.new())
+		assert_eq(ms.p1.hero.velocity, Vector3.ZERO, "a corpse does not keep launching")
+		assert_eq(ms.p1.hero.facing, facing, "a corpse's facing holds")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "and the dead hero's launch never lands")
+
+
+## AC 7: the DEAD carve-out (`2-3/R14`) itself, mid-launch, by the codebase's forced-DEAD idiom
+## (`set_action_state(DEAD)` with `_round_over` left FALSE) -- the only way to reach that branch,
+## since natural death always latches the round over first. The DEAD return at the top of
+## `_resolve_movement` must win over the new CHARGING launch branch: velocity zero, facing held even
+## while the lock keeps pushing a direction, and no landing past the authored landing tick.
+func test_a_forced_dead_hero_mid_launch_takes_the_dead_carve_out() -> void:
+	var ms := _make_match(Enums.CardColor.GREEN)
+	_cast_and_charge(ms, DIR_AHEAD)
+	var facing := ms.p1.hero.facing
+	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)
+	for _t in _launch(Enums.CardColor.GREEN) + 2:
+		ms.set_lock_direction(0, MINION_DIR)
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
+		var moving := _holding()
+		moving.move_dir = Vector2(1.0, 0.0)
+		_advance(ms, moving, InputIntent.new())
+		assert_false(bool(ms.to_snapshot()["round_over"]), "sanity: the forced idiom keeps the round live")
+		assert_eq(ms.p1.hero.velocity, Vector3.ZERO, "a DEAD hero does not keep launching")
+		assert_eq(ms.p1.hero.facing, facing, "a DEAD hero's facing holds, lock or no lock")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "and the DEAD hero's launch never lands")
 
 
 # --- helpers ----------------------------------------------------------------------------------

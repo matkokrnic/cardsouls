@@ -26,6 +26,13 @@ extends SceneTree
 ## while the body travels); on the first frame after the landing the clip is no longer the charge
 ## clip -- no stale progress push re-seeks it.
 ##
+## AND ON THE REAL RUNNER PATH, THE TWO ANCHORS OF THE MAPPING (code review 6-1c): on the commit frame
+## the playhead is exactly the curve at C / (C + L), and on the last charging frame exactly the curve
+## at (C + L - 1) / (C + L) -- the value `_push_charge_progress` must push one tick before the landing.
+## The bounds above alone ("below the strike frame, never backwards, moving") pass a runner that feeds
+## the helper wrong spans; these two equalities are what tie the live push to the mapping the headless
+## AC 9 test proves, so "arrives at the strike frame on the landing tick" is measured here, not assumed.
+##
 ## THE CHARGEUP IS POKED, NOT CAST (the `test_charge_telegraph_dispatch_live.gd` precedent): colour,
 ## the two windows the cast seat starts, and CHARGING -- with P1's controller replaced by a stand-in
 ## that HOLDS the cast confirm so the chargeup is not feinted. The cast seat itself is covered
@@ -46,6 +53,7 @@ const TRAVEL_EPS := 0.1
 const SETTLE := 3
 const AFTER := 2
 const DEADLINE := 4000
+const PLAYHEAD_EPS := 1e-3
 const P1_START := Vector3(-6.0, 0.0, 0.0)
 
 var _frames := 0
@@ -159,6 +167,10 @@ func _physics_process(_delta: float) -> bool:
 			if not player.charge_window.is_running and not _committed:
 				_committed = true
 				_commit_playhead = playhead
+				var want_commit := _expected_playhead(color, _ticks.unblockable_launch_ticks_for(color))
+				_check(absf(playhead - want_commit) < PLAYHEAD_EPS,
+					"%s: commit-frame playhead %.4f, want the curve at C/(C+L) = %.4f"
+						% [label, playhead, want_commit])
 				if kind == "side":
 					# 90 degrees off the frozen (+x) line, beside where the launch will END, well
 					# inside the radius: a dodge AFTER the commit.
@@ -166,6 +178,10 @@ func _physics_process(_delta: float) -> bool:
 			return false
 		# First frame after the landing.
 		_check(_committed, "%s: never observed a committed (launch) frame" % label)
+		var want_last := _expected_playhead(color, 1)
+		_check(absf(_last_playhead - want_last) < PLAYHEAD_EPS,
+			"%s: last charging-frame playhead %.4f, want the curve at (C+L-1)/(C+L) = %.4f"
+				% [label, _last_playhead, want_last])
 		_check(_last_playhead > _commit_playhead + 1e-4,
 			"%s: the playhead did not move during the launch (%.4f -> %.4f) -- a frozen pose while "
 				% [label, _commit_playhead, _last_playhead] + "the body travels (AC 11)")
@@ -210,6 +226,17 @@ func _physics_process(_delta: float) -> bool:
 			_phase = "setup"
 		return false
 	return false
+
+
+## The playhead the runner's progress push must produce with `landing_remaining` ticks left, through
+## the SAME two pure statics the runner and the controller call -- read off the authored spans.
+func _expected_playhead(color: int, landing_remaining: int) -> float:
+	var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[color]
+	var progress := AnimationController.charge_attack_progress(landing_remaining,
+			_ticks.unblockable_chargeup_ticks, _ticks.unblockable_launch_ticks_for(color))
+	return AnimationController.charge_playhead_seconds(progress,
+			AnimationController._CHARGE_STRIKE_FRAME_SECONDS[color],
+			knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"])
 
 
 ## The `test_charge_telegraph_dispatch_live.gd` teardown, for its measured reason: every CHARGING
