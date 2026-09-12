@@ -137,6 +137,7 @@ unblockable_launch_distance_green = 4.5
 unblockable_launch_seconds_red = 0.25
 unblockable_launch_seconds_blue = 0.3
 unblockable_launch_seconds_green = 0.45
+unblockable_swing_at_commit = false
 unblockable_damage_percent_of_max_hp = 9.0
 dodged_unblockable_damage_multiplier = 0.0
 unblockable_orb_grant = 1

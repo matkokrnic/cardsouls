@@ -373,6 +373,23 @@ extends Resource
 @export var unblockable_launch_seconds_red: float = 0.0
 @export var unblockable_launch_seconds_blue: float = 0.0
 @export var unblockable_launch_seconds_green: float = 0.0
+## Story 6-1d (AC 8, `6-1d/R6`): THE SWING-AT-COMMIT KNOB -- the option `6-1c`'s code review
+## (`6-1c/D1`, ruled `6-1c/R8`) offered forward to this story, BUILT here and left OFF.
+##
+## OFF (the default, and what ships): the charge clip's playhead runs LINEARLY over the whole
+## commitment, chargeup plus launch, so the swing itself -- which begins at the clip's own `hold_end`
+## knob -- is already partly played at the commit (measured at `6-1c`: RED ~64 %, BLUE ~49 %,
+## GREEN ~31 % of the hold-to-strike swing gone before the attacker is committed).
+##
+## ON: the chargeup is mapped onto `[0, hold_end]` and the launch onto `[hold_end, 1]`, so the swing
+## STARTS at the commit and the whole of it plays across the launch -- the blade's visible motion and
+## the tick the attack becomes unfeintable become the same moment.
+##
+## PRESENTATION ONLY, and that is why it is a plain bool with no tick-domain twin: it re-times a
+## playhead and touches no window, no damage, no reach and no state. It is judged ON vs OFF at Live
+## Smoke, not decided here (AC 8 claims only that it exists, defaults OFF, and that OFF reproduces
+## today's mapping exactly).
+@export var unblockable_swing_at_commit: bool = false
 ## What a landed unblockable takes off the enemy hero, as a percentage of that hero's own maximum —
 ## the `attack_damage_percent_of_max_hp` convention verbatim, so the two hero-versus-hero damage
 ## numbers are read the same way and can be compared at a glance in the authored file.
@@ -476,6 +493,13 @@ func unblockable_launch_distance_for(color: int) -> float:
 		unblockable_launch_distance_blue, unblockable_launch_distance_green, 0.0)
 
 
+## Story 6-1d (AC 7, P6 adopted): NO PRODUCTION CALLER DIVIDES BY THIS ANY MORE, and that is the
+## point of P6 rather than an oversight. The launch SPAN is asked for in the tick domain
+## (`BalanceTicks.unblockable_launch_ticks_for`), the same span the landing window counts, so a
+## retune off the tick grid cannot make the travel and the timing disagree. The lookup is kept for
+## the family's sake -- the four triplets are read through four matching functions and a missing one
+## would invite a caller to reach past them into a per-colour field -- but a new divisor here would
+## be re-opening the class P6 closed.
 func unblockable_launch_seconds_for(color: int) -> float:
 	return _unblockable_by_color(color, unblockable_launch_seconds_red,
 		unblockable_launch_seconds_blue, unblockable_launch_seconds_green, 0.0)

@@ -913,3 +913,23 @@ func test_authored_accelerator_values_are_derived_and_effective() -> void:
 ## every assertion above is about the profile's fields.
 func _kind(config: BalanceConfig, kind_name: StringName) -> UnitKindProfile:
 	return config.kind_at(config.kind_index_of(kind_name))
+
+
+## Story 6-1d (AC 8, `6-1d/R6`): THE SWING-AT-COMMIT KNOB SHIPS OFF, in BOTH places that can decide
+## it -- the script default and the authored `.tres`. This is not a bound like the audits above; it
+## is the claim AC 8 actually makes, that the knob is BUILT and INERT, with the ON verdict left to
+## the operator at Live Smoke rather than taken here.
+##
+## Both halves matter. The script default is what an in-test `BalanceConfig.new()` gets, so the whole
+## unit suite runs against the OFF mapping; the authored value is what SHIPS. A pass on one and a
+## fail on the other is exactly the drift this asserts against.
+func test_the_swing_at_commit_knob_is_authored_off() -> void:
+	assert_false(BalanceConfig.new().unblockable_swing_at_commit,
+		"the script default must be OFF -- it is what every in-test config inherits")
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_false(config.unblockable_swing_at_commit,
+		"unblockable_swing_at_commit ships OFF (AC 8: built and inert; the ON verdict is Live "
+		+ "Smoke item 6's, not this story's)")

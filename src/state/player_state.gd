@@ -280,6 +280,31 @@ func notify_cards_changed() -> void:
 	_queue.push(cards_changed.emit.bind(hand.to_array(), deck.size(), discard.size()))
 
 
+## Story 6-1d (AC 4): THE CONTACT WINDOW -- is this player's mode ② attack committed, i.e. may a
+## geometric contact observed RIGHT NOW credit its landing?
+##
+## ONE DEFINITION, TWO CALLERS, and that is the whole reason this is a method on `PlayerState`
+## rather than an expression written twice. The RUNNER reads it to decide whether to run the blade
+## overlap query at all (the launch-phase gate `6-1d/R1` requires -- `is_hitbox_active()` is melee's
+## and must not grow a CHARGING branch), and `MatchState.push_contact` reads THE SAME call to decide
+## whether an arriving charge-reach fact may latch. Two layers agreeing by construction instead of
+## by two expressions that could drift apart.
+##
+## READ FROM THE WINDOWS, never from a flag: the phase shape this file already describes above --
+## `charge_window` running is the feintable chargeup, stopped is the commit. `remaining_ticks() <= 1`
+## rather than `not is_running` because both callers read it BEFORE `advance()` ticks the windows, so
+## the tick that will CLOSE the chargeup still reports one tick left when they ask. That tick is
+## already past feinting (the CHARGING arm's landing/release ordering makes a release on it land),
+## and it is the ONLY evaluated tick when a colour authors no launch span at all -- excluding it
+## would make every launch-less chargeup miss by construction.
+##
+## THE UPPER BOUND IS `landing_window`: once it has stopped the landing has resolved and nothing
+## more may be credited. AC 4's "opens AT COMMIT and never earlier" is therefore a property of this
+## expression, not of a caller remembering to check a phase.
+func is_contact_window_open() -> bool:
+	return landing_window.is_running and charge_window.remaining_ticks() <= 1
+
+
 func to_snapshot() -> Dictionary:
 	return {
 		"hero": hero.to_snapshot(),

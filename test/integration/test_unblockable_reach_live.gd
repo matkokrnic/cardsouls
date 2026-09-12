@@ -10,16 +10,25 @@ extends SceneTree
 ## arc, so a feel retune reschedules this test instead of breaking it -- operator tuning never needs a
 ## suite edit (the story's Live Smoke note).
 ##
+## STORY 6-1d REWRITES WHAT THE THREE CASES ASSERT, AND THAT REWRITE IS THE STORY. Through `6-1c` a
+## defender anywhere inside the authored radius was hit, gap or no gap; the authored radius is now an
+## UPPER BOUND on an honest blade-vs-body overlap (`6-1d` AC 1/AC 2), so ALL THREE layouts below --
+## every one of which leaves visible daylight between the models -- are MISSES with a latched OUTSIDE.
+## The positive half, a blade that actually touches, has its own file
+## (`test_honest_hit_geometry_live.gd`): this one keeps the LAUNCH, PLAYHEAD and upper-bound claims.
+##
 ## THREE CASES PER COLOUR, each a full chargeup -> commit -> launch -> landing:
 ##   far  -- the defender stands dead ahead at (travel + reach + MARGIN): after the launch it is just
 ##           OUTSIDE the colour's radius. MISS, the runner's latched kind is OUTSIDE, and the attacker
-##           travelled the colour's authored distance along the frozen line (AC 4, fixed not adaptive).
-##   near -- the same, at (travel + reach - MARGIN): just INSIDE after the launch. HIT (AC 5 radius).
+##           travelled the colour's authored distance along the frozen line (AC 4, fixed not adaptive
+##           -- and, since `6-1d` AC 7, redistributed across the launch without changing that total).
+##   near -- the same, at (travel + reach - MARGIN): just INSIDE the authored radius after the launch,
+##           and metres from the blade. A HIT here through `6-1c`; a MISS since `6-1d` AC 1. This is
+##           the exact layout the operator saw land across a gap at `6-1c`'s smoke.
 ##   side -- the defender starts dead ahead (tracked through the chargeup, AC 1) and is teleported,
 ##           the instant the chargeup closes, to 90 degrees off the frozen line beside where the launch
-##           ends, well inside the radius. The latched kind is INSIDE, so only the ARC decides: a HIT
-##           exactly when the colour's authored arc reaches 90 degrees either side (GREEN's radial
-##           jump), a MISS otherwise (AC 3: dodging after the commit whiffs; AC 5: state-side arc).
+##           ends, well inside the radius. Inside the radius, nowhere near the blade: a MISS for every
+##           colour now, including GREEN, whose radial arc used to make this one land.
 ##
 ## ON EVERY CHARGING FRAME (AC 9/AC 11): the charge clip's playhead is strictly BELOW the colour's
 ## measured strike frame, never moves backwards, and keeps MOVING through the launch (no frozen pose
@@ -199,20 +208,25 @@ func _physics_process(_delta: float) -> bool:
 					"%s: the launch carried the attacker %s, want %.3f along +x (AC 4)"
 						% [label, moved, travel])
 			"near":
-				_check(hit, "%s: a defender just INSIDE the radius after the launch was missed" % label)
-			"side":
-				_check(latched == MatchState.CONTACT_CHARGE_REACH_INSIDE,
-					"%s: the runner latched kind %d, want INSIDE (only the arc may decide)"
+				# STORY 6-1d (AC 1): the named defect. Inside the authored radius is no longer a
+				# hit -- the blade is metres from the model here, and damage across that gap is
+				# what this story exists to stop.
+				_check(not hit, "%s: a defender INSIDE the authored radius but nowhere near the "
+					% label + "blade was hit -- damage across a visible gap (AC 1)")
+				_check(latched == MatchState.CONTACT_CHARGE_REACH_OUTSIDE,
+					"%s: the runner latched kind %d, want OUTSIDE (no overlap, no contact)"
 						% [label, latched])
-				if arc * 0.5 >= 100.0:
-					_check(hit, "%s: arc %.0f covers 90 deg off the line, the sidestep must be hit"
-						% [label, arc])
-				elif arc * 0.5 <= 80.0:
-					_check(not hit, "%s: arc %.0f does not cover 90 deg -- a sidestep after the "
-						% [label, arc] + "commit must WHIFF (AC 3)")
-				else:
-					print("  note: %s arc %.0f is within 10 deg of the probe bearing, not judged"
-						% [label, arc])
+			"side":
+				# STORY 6-1d: a sidestep after the commit leaves the blade's path, so it misses on
+				# GEOMETRY for every colour. The ARC is no longer what carries this case -- it is
+				# still a state-side conjunct, and its own per-colour behaviour is pinned headless
+				# (test_unblockable_tracking_and_reach.gd, AC 5) where the kind can be driven
+				# directly.
+				_check(latched == MatchState.CONTACT_CHARGE_REACH_OUTSIDE,
+					"%s: the runner latched kind %d, want OUTSIDE -- a sidestepped defender is not "
+						% [label, latched] + "touched by the blade whatever the arc says")
+				_check(not hit, "%s: a sidestep after the commit must WHIFF (arc %.0f)"
+					% [label, arc])
 		_phase = "after"
 		_phase_frame = _frames
 		return false

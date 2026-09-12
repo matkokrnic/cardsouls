@@ -214,6 +214,43 @@ static func charge_attack_progress(landing_remaining_ticks: int, chargeup_ticks:
 		return 1.0
 	return clampf(1.0 - float(landing_remaining_ticks) / float(total), 0.0, 1.0)
 
+
+## Story 6-1d (AC 8, `6-1d/R6`): THE SWING-AT-COMMIT REMAP -- `6-1c/R8`'s offered option, built.
+##
+## The linear progress directly above is bent so the two PHASES land on the two halves of the curve
+## the clip itself is already divided into: the chargeup fills `[0, hold_end]` (the wind-up and the
+## held beat) and the launch fills `[hold_end, 1]` (the fast close to the strike frame). The swing
+## then BEGINS at the commit instead of being ~a third to two thirds spent by it.
+##
+## IT IS A REPARAMETRISATION AND NOTHING ELSE. Both endpoints are fixed -- 0 maps to 0, 1 maps to 1
+## -- and it is monotonic, so every claim `6-1c` AC 11 pins about the playhead still holds under it:
+## the strike frame still arrives on the landing tick and never before, and the playhead never runs
+## backwards. `charge_playhead_seconds` is untouched and the `_CHARGE_HOLD_KNOBS` keep their
+## meaning; this only changes WHICH progress value a given tick reports.
+##
+## DEGENERATE SPANS RETURN THE INPUT UNCHANGED (a commit fraction at or outside `[0, 1]`, or a
+## `hold_end` at or outside it): there is no second phase to stretch into, and inventing one would
+## divide by zero. The OFF path never calls this at all -- the caller branches -- so "OFF reproduces
+## today exactly" is a property of the call site, not of a zero-valued argument here.
+static func charge_commit_anchored_progress(progress: float, commit_fraction: float,
+		hold_end_progress: float) -> float:
+	var p := clampf(progress, 0.0, 1.0)
+	if commit_fraction <= 0.0 or commit_fraction >= 1.0 \
+			or hold_end_progress <= 0.0 or hold_end_progress >= 1.0:
+		return p
+	if p <= commit_fraction:
+		return hold_end_progress * (p / commit_fraction)
+	return hold_end_progress \
+			+ (1.0 - hold_end_progress) * ((p - commit_fraction) / (1.0 - commit_fraction))
+
+
+## Story 6-1d (AC 8): the colour's `hold_end` knob, exposed so the RUNNER can compose the remap above
+## with the spans only it knows (the chargeup and launch tick counts). Returns 0.0 for a colour with
+## no authored knobs, which the remap reads as "no second phase" and passes the progress through.
+static func charge_hold_end_for(color: int) -> float:
+	var knobs: Dictionary = _CHARGE_HOLD_KNOBS.get(color, {})
+	return float(knobs.get("hold_end", 0.0))
+
 var _state: HeroState.ActionState = HeroState.ActionState.IDLE
 
 

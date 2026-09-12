@@ -665,6 +665,12 @@ func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 ## every distance this file measures is one geometry compared against different authored numbers
 ## rather than several geometries that could disagree.
 ##
+## STORY 6-1d (AC 1/AC 3): CENTRE-TO-CENTRE NO LONGER DECIDES CONTACT -- it decides the AUTHORED
+## BOUND and the AUTO-AIM DIRECTION, which is all it was ever honest about. Whether damage may be
+## credited is now the blade-vs-body OVERLAP below. The direction fact is unchanged in every
+## respect, still computed FROM POSITIONS ONLY and still never reading `HeroState.facing` (AC 3):
+## the arc comparison stays state policy exactly as `6-1c` left it.
+##
 ## A DEGENERATE CO-LOCATION PUSHES NOTHING (the `push_contact` zero-direction rule verbatim), and
 ## the LATCH is what makes that harmless rather than a lost hit: state keeps the previous tick's
 ## answer, and two heroes close enough to be co-located were inside reach on the tick before.
@@ -686,9 +692,29 @@ func _push_charge_reach_facts() -> void:
 		var planar := Vector2(to_attacker.x, to_attacker.z)
 		if planar.is_zero_approx():
 			continue
+		# STORY 6-1d (AC 1/AC 2/AC 4): THE KIND IS HONEST GEOMETRY NOW, not a centre-to-centre
+		# radius. Three conjuncts, in the order that makes the cheap ones refuse first:
+		#
+		#   (i)  THE CONTACT WINDOW (AC 4) -- `PlayerState.is_contact_window_open()`, the SAME call
+		#        `push_contact` makes on the other side of the seam, so the two layers cannot
+		#        disagree about which ticks count. `HeroState.is_hitbox_active()` is deliberately
+		#        NOT consulted and grows no CHARGING branch (`6-1d/R1`): it is melee's own phase
+		#        gate, mode ② is not a swing, and the launch phase needs a gate of its own.
+		#   (ii) THE AUTHORED PER-COLOUR REACH, kept as a PRE-FILTER (AC 2). It is an UPPER BOUND
+		#        and nothing else: a configuration the blade can physically touch but which sits
+		#        outside this colour's authored reach is NOT a hit. Pre- rather than post-filtering
+		#        costs the overlap query nothing when the answer is already no, and it mirrors the
+		#        gate order the landing itself reads.
+		#   (iii)THE OVERLAP (AC 1) -- melee's own `get_overlapping_areas()` query, run against the
+		#        defender's REAL `Hurtbox` shape. No authored blade curve, no body-radius constant:
+		#        the geometry is the `Shape3D` the scene already carries (`6-1d/R1`, Fact 5).
+		#
+		# WHAT LEAVES THIS FUNCTION IS STILL A KIND (D3(b)/A2, the `1-8/R-B3` shape unchanged): the
+		# runner measures, state decides. No distance, no angle and no world position crosses.
 		var reach := _match_state.balance.unblockable_reach_for(player.charge_color)
 		var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE \
-				if planar.length() <= reach \
+				if player.is_contact_window_open() and planar.length() <= reach \
+						and _blade_overlaps_body(hero, enemy) \
 				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
 		var attacker_address: Array[int] = [slot, TargetingService.HERO_INDEX]
 		var target_address: Array[int] = [1 - slot, TargetingService.HERO_INDEX]
@@ -701,6 +727,30 @@ func _push_charge_reach_facts() -> void:
 				player.hero.attack_index, fact_dir, kind)
 		_match_state.push_contact(attacker_address, target_address,
 				player.hero.attack_index, fact_dir, kind)
+
+
+## Story 6-1d (AC 1): DOES THE TRACKED BLADE ACTUALLY TOUCH THAT HERO'S BODY?
+##
+## MELEE'S EXACT QUERY, SHARED RATHER THAN COPIED IN SPIRIT (`6-1d/R1`): the same `Area3D`
+## (`HeroActor.hitbox`, whose child shape `_track_weapon_bone()` reparks on the paladin's
+## `mixamorig_Sword_joint` every tick since 5-0a), the same `get_overlapping_areas()` call, and the
+## same `get_parent()` identity resolution `_gather_contact_facts` uses. What it does NOT share is
+## melee's phase gate -- see the caller.
+##
+## THE DEFENDER'S BODY IS ITS `Hurtbox`'s OWN `Shape3D`, read where it lives: this asks the physics
+## server whether the two authored boxes overlap, so no inradius constant is derived and no
+## body-radius field is authored. The hero's `Hurtbox` is the only `Area3D` on it that this hitbox's
+## mask can see (the `Hitbox` itself is `monitorable = false`), so the identity test alone is the
+## whole filter.
+##
+## ONE-TICK LAG, THE STANDING ONE: this runs in frame step 2, so the overlap reflects tick N-1's
+## physics flush -- `_gather_contact_facts`' own contract, inherited unchanged rather than a new
+## lag class.
+func _blade_overlaps_body(attacker: HeroActor, defender: HeroActor) -> bool:
+	for area: Area3D in attacker.hitbox.get_overlapping_areas():
+		if area.get_parent() == defender:
+			return true
+	return false
 
 
 ## Story 6-1b (AC 1/AC 6/AC 7, finding 5): THE PRESENTATION-SIDE CHARGE PROGRESS PUSH -- a NEW
@@ -746,6 +796,16 @@ func _push_charge_progress() -> void:
 			continue
 		var progress := AnimationController.charge_attack_progress(
 				player.landing_window.remaining_ticks(), chargeup_ticks, launch_ticks)
+		# Story 6-1d (AC 8): the SWING-AT-COMMIT knob, read INLINE off balance every tick
+		# (CONSTRAINT C) and OFF by default. The branch is what makes AC 8's "OFF reproduces today's
+		# behaviour exactly" structural rather than arithmetic: with the knob closed this line is
+		# not reached and the value pushed is byte-for-byte the one `6-1c` pushed. The remap needs
+		# the COMMIT FRACTION, which only this seat knows (the two spans), and the clip's `hold_end`,
+		# which only the controller knows -- hence the composition here rather than inside either.
+		if _match_state.balance != null and _match_state.balance.unblockable_swing_at_commit:
+			progress = AnimationController.charge_commit_anchored_progress(progress,
+					float(chargeup_ticks) / float(chargeup_ticks + launch_ticks),
+					AnimationController.charge_hold_end_for(player.charge_color))
 		hero.animation_controller.on_charge_progress(player.charge_color, progress)
 
 

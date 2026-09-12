@@ -62,3 +62,68 @@ func test_the_mapping_is_monotonic_and_never_overshoots_the_strike_frame() -> vo
 				"%s: playhead %.4f overshot the strike frame %.4f at progress %.2f"
 					% [clip, playhead, strike_frame, progress])
 			previous = playhead
+
+
+# --- Story 6-1d (AC 8): the SWING-AT-COMMIT remap -----------------------------------------------
+
+## AC 8's shape claim: the remap is a REPARAMETRISATION, so both endpoints are fixed. If either
+## moved, the clip would start part-played or stop short of the strike frame, and every `6-1c` AC 11
+## guarantee riding on `charge_playhead_seconds` would have to be re-proven rather than inherited.
+func test_the_commit_anchored_remap_fixes_both_endpoints() -> void:
+	for clip: String in _CLIPS:
+		var color: int = _CLIPS[clip]["color"]
+		var hold_end := AnimationController.charge_hold_end_for(color)
+		assert_true(hold_end > 0.0 and hold_end < 1.0,
+			"%s: sanity -- the clip has an authored hold_end inside (0, 1), got %.3f"
+				% [clip, hold_end])
+		assert_eq(AnimationController.charge_commit_anchored_progress(0.0, 0.6, hold_end), 0.0,
+			"%s: progress 0 still maps to 0" % clip)
+		assert_eq(AnimationController.charge_commit_anchored_progress(1.0, 0.6, hold_end), 1.0,
+			"%s: progress 1 still maps to 1" % clip)
+
+
+## AC 8's behavioural claim, and the reason the knob exists: the COMMIT lands exactly on the clip's
+## `hold_end` -- i.e. the swing starts when the attack becomes unfeintable, instead of being part
+## spent by then. Asserted per clip against its own knob, never against a pinned number.
+##
+## MUTATION: return the input unchanged (an identity remap) and this goes RED for every clip whose
+## commit fraction differs from its hold_end, which is all three.
+func test_the_commit_fraction_maps_onto_the_clips_hold_end() -> void:
+	for clip: String in _CLIPS:
+		var color: int = _CLIPS[clip]["color"]
+		var hold_end := AnimationController.charge_hold_end_for(color)
+		for commit_fraction: float in [0.25, 0.5, 0.8]:
+			var got := AnimationController.charge_commit_anchored_progress(
+				commit_fraction, commit_fraction, hold_end)
+			assert_true(absf(got - hold_end) < 0.0001,
+				"%s: the commit (linear progress %.2f) must map to hold_end %.3f, got %.4f"
+					% [clip, commit_fraction, hold_end, got])
+			assert_true(absf(commit_fraction - hold_end) < 0.0001
+					or absf(got - commit_fraction) > 0.0001,
+				"%s: at commit fraction %.2f the remap must BEND the progress, not pass it through"
+					% [clip, commit_fraction])
+
+
+## The remap must be monotonic for the same reason the mapping it feeds is: a playhead that moved
+## backwards would read as a glitch. Swept across the whole domain, per clip.
+func test_the_commit_anchored_remap_is_monotonic() -> void:
+	for clip: String in _CLIPS:
+		var hold_end := AnimationController.charge_hold_end_for(_CLIPS[clip]["color"])
+		var previous := -1.0
+		var steps := 40
+		for i in steps + 1:
+			var out := AnimationController.charge_commit_anchored_progress(
+				float(i) / float(steps), 0.65, hold_end)
+			assert_true(out >= previous - 0.0001,
+				"%s: the remap moved backwards at %.3f (%.4f -> %.4f)"
+					% [clip, float(i) / float(steps), previous, out])
+			previous = out
+
+
+## A degenerate commit fraction or hold_end has no second phase to stretch into -- the input passes
+## through rather than dividing by zero. This is what makes an unauthored colour safe under the knob.
+func test_a_degenerate_span_passes_the_progress_through() -> void:
+	for bad: Array in [[0.0, 0.5], [1.0, 0.5], [0.6, 0.0], [0.6, 1.0], [-0.2, 0.5], [0.6, 1.4]]:
+		for p: float in [0.0, 0.3, 0.75, 1.0]:
+			assert_eq(AnimationController.charge_commit_anchored_progress(p, bad[0], bad[1]), p,
+				"commit fraction %.2f / hold_end %.2f: progress %.2f passes through" % [bad[0], bad[1], p])
