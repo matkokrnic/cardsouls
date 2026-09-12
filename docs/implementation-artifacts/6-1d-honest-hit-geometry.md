@@ -4,7 +4,7 @@ baseline_commit: e50bc94705cfba8c5471731391806410f6e7a04e
 
 # Story 6.1d: Honest Hit Geometry
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** Not on the E6 board from planning — no correct-course run. Named successor to
 > `6-1c` in that story's close-out (`6-1c/R10`, decision-log.md:9770-9776). Tier A: touches the
@@ -335,6 +335,156 @@ changes.
 - [Source: test/state/test_card_observation.gd:310 (31-key snapshot pin)]
 - [Source: src/systems/record_file.gd:171 (`FORMAT_VERSION := 8`)]
 
+## Dev Agent Record
+
+### Implementation Plan (as built)
+
+**One latch, no new field.** `MatchState._charge_reach` keeps its name, its type (`Array[int]`, two
+entries) and its `REACH_UNKNOWN` third value; `push_contact` changes what it WRITES. Outside the
+contact window it is CLEARED to `REACH_UNKNOWN`; inside it, `INSIDE` is ABSORBING and `OUTSIDE`
+writes only over a non-`INSIDE` value. The contact window is
+`PlayerState.is_contact_window_open()` == `landing_window.is_running and
+charge_window.remaining_ticks() <= 1` — ONE definition, read by BOTH the runner (whether to run the
+overlap query) and `push_contact` (whether the arriving fact may latch), so the two layers cannot
+drift. `remaining_ticks() <= 1` rather than `not is_running` because both callers read BEFORE
+`advance()` ticks the windows, and because with no authored launch span the chargeup-close tick is
+the ONLY evaluated tick.
+
+**N4 answered by not having a record.** `register_swing_hit` is NOT adopted (Open Question
+resolved: a landing-specific twin, and not even a dictionary one). There is nothing to reap: the
+store is a fixed two-element `Array[int]` that cannot grow, and the clearing arm means every
+committed flight starts from "nothing measured" with no reset call anywhere. Proven directly by
+`test_the_contact_verdict_rests_at_unknown_outside_a_committed_flight`, not by consequence.
+
+**AC 2 as a PRE-filter** (Open Question resolved): `planar.length() <= reach` stays in the runner,
+ahead of the overlap query — cheaper, and it mirrors the landing's own gate order.
+
+**AC 7** rewrites `_charge_launch_velocity`: span from `BalanceTicks.unblockable_launch_ticks_for`
+(P6 adopted), and launch tick `i` weighted `2 - (2i+1)/L` of the flat share. The weights sum to
+exactly `L`, so the authored total distance is preserved. The index is derived from
+`landing_window.remaining_ticks()`.
+
+**AC 7 HALT CONDITION: NOT TRIGGERED.** No new hashed snapshot field and no change to
+`landing_window`'s duration, start seat or close tick. `6-1c/R10(b)` is delivered in full, not
+deferred.
+
+**AC 8** adds `BalanceConfig.unblockable_swing_at_commit: bool = false` (also written `false` into
+the authored `.tres`). ON composes `AnimationController.charge_commit_anchored_progress` over the
+existing linear progress; OFF never reaches that line, so the pushed value is byte-identical to
+`6-1c`'s — "OFF reproduces today exactly" is a property of the call site, not of arithmetic.
+
+**Rejected shape, named:** unconditional stickiness in state with the phase gate only in the runner.
+It would have flipped `test_unblockable_initiation::test_the_landing_reads_the_answer_from_the_expiry_tick_only`
+(a launch-less fixture whose eleven pre-commit `INSIDE` pushes would have latched) for reasons
+unrelated to AC 6's deliberate supersession. The state-side window gate preserves it.
+
+### Debug Log
+
+- Suite cadence: BEFORE baseline `C:\dev\_61d-dev-suite-before.txt` = **757 / 0 / 5993 + 58
+  integration**, EXIT=0 — matching the prompt's expected baseline exactly. FINAL
+  `C:\dev\_61d-dev-suite-after.txt` = **769 / 0 / 6251 + 59 integration, ALL TESTS PASSED**, EXIT=0.
+- TWO EXTRA RUNS beyond the mandated two, named here as required: (a) a state-harness-only
+  parse/logic probe before the first full run, which caught one real defect (a duplicate `attacker`
+  parameter name in `push_contact`); (b) a re-run after fixing one NEW test's own fixture bug (it
+  released on the commit tick, where a release is ignored by `6-1c` AC 2, so it never feinted).
+  Two background runs were killed by host memory pressure, not by anything in the repo; the final
+  run was taken in the foreground and completed.
+- DEVIATION FROM THE SKILL, disclosed: this story file has **no `Tasks/Subtasks` section**.
+  `gds-dev-story` Step 1 routes "no incomplete tasks" straight to the completion sequence, which
+  would have ended the pass with nothing built. The ACs were treated as the task list and the work
+  was executed; no checkbox was ticked because there are none to tick. Live Smoke's numbered items
+  are not checkboxes and were left untouched.
+- DEVIATION, disclosed: `sprint-status.yaml`'s `story_note` for this key is committed alongside the
+  story file in the docs commit, rather than the story file strictly alone, because the skill's
+  `on_complete` mandates that write and leaving it uncommitted would hand the operator a dirty tree.
+  The board STATUS line is untouched — still `ready-for-dev  # Tier A` (CFG/R2).
+- Full working notes: `C:\dev\_61d-dev.md`.
+
+### Golden verdict — measured in inverse form, NOT MOVED
+
+- `test_determinism.gd` UNEDITED through the whole pass; `GOLDEN` still
+  `9679fa80f19358d15c9b33b1f9a3706264095ada871e5d2530cf29b6cbce8315` and the golden test PASSES.
+- MEASURED THIS PASS, not cited: a temporary probe in `_play_sequence` printed on any tick where
+  either hero was `CHARGING` or either `landing_window` was running. **Zero prints across the whole
+  golden run.** NON-VACUITY: the same seat with the condition changed to `IDLE` printed **184**
+  times. Backup + SHA256 `1d55b5c18bf07b67…7b2c7e85` taken before the probe and re-verified after
+  restoring by copying the backup back (never `git checkout`).
+- The single named admissible exception did not arise: **no new TOP-LEVEL hashed field anywhere**.
+  `_charge_reach` was already excluded from `to_snapshot()` and already listed in
+  `test_replay_identity.gd`'s `UNHASHED_CROSS_TICK`; its name, type, size and exclusion are all
+  unchanged, so `UNHASHED_CROSS_TICK_MEMBERS` stays at 3 and that file needed no edit.
+- 31-key snapshot pin (`test_card_observation.gd:310`) PASSES unchanged. `FORMAT_VERSION` still 8.
+
+### Mutation table
+
+Every mutation: the CURRENT file copied to `C:\dev\_61d-mut\` with SHA256 first, mutated by python
+byte-replace, run, restored by copying the backup back (never `git checkout --`), SHA re-verified.
+
+| # | mutation | observed | provenance |
+|---|---|---|---|
+| M1 | `push_contact`: drop the `is_contact_window_open()` clearing arm (`INSIDE` absorbing always) | 3 RED: `test_contact_during_the_feintable_chargeup_credits_nothing`, `test_the_contact_verdict_rests_at_unknown_outside_a_committed_flight`, and `test_unblockable_initiation::test_the_landing_reads_the_answer_from_the_expiry_tick_only` | MEASURED |
+| M2 | `push_contact`: drop the `INSIDE` stickiness (last write wins inside the window) | 1 RED: `test_a_defender_touched_on_one_launch_tick_is_hit_even_after_it_clears_the_blade` | MEASURED |
+| M3 | `_charge_launch_velocity`: flatten the ramp (`share := 1.0`) | 2 RED: `test_the_launch_travel_is_front_loaded_and_still_sums_to_the_authored_distance`, `test_after_the_commit_a_release_does_not_feint_and_input_does_not_steer` | MEASURED |
+| M4 | `_charge_launch_velocity`: restore `unblockable_launch_seconds_for` as the divisor | 1 RED: `test_the_launch_speed_derives_from_the_tick_span_not_the_seconds_float` | MEASURED |
+| M5 | `charge_commit_anchored_progress`: identity on the first arm | 2 RED: `test_the_commit_fraction_maps_onto_the_clips_hold_end`, `test_the_commit_anchored_remap_is_monotonic` | MEASURED |
+| M6 | `unblockable_swing_at_commit` script default flipped to `true` | 1 RED: `test_the_swing_at_commit_knob_is_authored_off` | MEASURED |
+| M7a | runner: drop the `_blade_overlaps_body(...)` conjunct | `test_unblockable_reach_live` RED on `near` (hit across the gap) and `side`, all three colours; the new file PASSES | MEASURED |
+| M7b | runner: drop the `planar.length() <= reach` pre-filter | `test_honest_hit_geometry_live` RED on `clamp`, all three colours; `test_unblockable_reach_live` PASSES | MEASURED |
+| M7c | runner: drop `is_contact_window_open()` from the kind derivation, leaving the state gate standing | BOTH integration files PASS — **a real finding, recorded not papered over** | MEASURED |
+
+**On M7c.** The runner's copy of the contact-window gate is a COST and CLARITY gate, not the
+guarantee: M1 shows the load-bearing refusal is the state one, which is the right place for it
+("guard mechanism over guard pattern"). The two cannot drift because both call the same
+`PlayerState.is_contact_window_open()`; the runner's copy is what stops a physics query running on a
+tick whose answer state would refuse anyway.
+
+### Superseded tests (deliberate, named)
+
+- `test_the_arc_never_widens_an_outside_kind` — the fixture now pushes `OUTSIDE` from the COMMIT
+  tick on, not only across the launch. The claim is unchanged and not weakened (no touch, no hit,
+  whatever the arc says); only the tick range the fixture must speak for grew, because contact is
+  latched across the whole committed flight now.
+- `test_after_the_commit_a_release_does_not_feint_and_input_does_not_steer` — compared against a
+  CONSTANT launch velocity, now against the authored per-tick share (still written out from the
+  authored distance and the tick span, never captured from the run under test).
+- `test_unblockable_reach_live.gd` — `near` and `side` flip from HIT / arc-decides to MISS +
+  latched `OUTSIDE`. This is AC 1 and AC 6 landing: both layouts leave visible daylight, and `near`
+  is the exact layout the operator watched land across a gap at `6-1c`'s smoke.
+
+### Completion Notes
+
+- AC 1-11 satisfied. AC 2 proved by a TEST (`clamp`, the authored config duplicated in memory with
+  its reaches pulled below body contact) rather than by a `.tres` diff; the authored file on disk
+  gains only the AC 8 knob and no reach or speed number moved.
+- AC 4's window opens AT the commit: proven both headless (M1) and live (the `charge` case, which
+  also asserts a REAL overlap was observed during the chargeup, so it cannot pass vacuously).
+- AC 6's supersession and its surviving half are a proved PAIR — neither test passes against an
+  implementation that always lands or never lands.
+- Live Smoke checkboxes deliberately left untouched; the operator runs that. Live Smoke item 6
+  (the ON/OFF verdict on the swing-at-commit knob) is his call, as AC 8 says.
+
+## File List
+
+- `src/state/player_state.gd` — new `is_contact_window_open()` predicate (AC 4).
+- `src/state/match_state.gd` — `push_contact`'s charge-reach latch rule (AC 4/5/6);
+  `_charge_launch_velocity` rewritten (AC 7); `_charge_reach` declaration comment; a note on the
+  unedited landing gate.
+- `src/main/match_runner.gd` — `_push_charge_reach_facts` derives the kind from the overlap (AC
+  1/2/4); new `_blade_overlaps_body()`; `_push_charge_progress` composes the AC 8 knob.
+- `src/actors/hero/animation_controller.gd` — new `charge_commit_anchored_progress()` and
+  `charge_hold_end_for()` (AC 8).
+- `src/state/resources/balance_config.gd` — new `unblockable_swing_at_commit` (AC 8); a note on
+  `unblockable_launch_seconds_for` now having no production divisor caller (P6).
+- `data/balance/balance_config.tres` — `unblockable_swing_at_commit = false` (one line).
+- `test/state/test_unblockable_tracking_and_reach.gd` — seven new tests (AC 4/5/6/7), the
+  `_cast_and_charge_kind` / `_launch_velocity` helpers, two superseded tests updated.
+- `test/state/test_charge_playhead_mapping.gd` — four new tests (AC 8's remap).
+- `test/state/test_balance_authoring.gd` — one new test (AC 8's default-OFF, both halves).
+- `test/integration/test_honest_hit_geometry_live.gd` — NEW. Four live cases per colour: `touch`,
+  `clamp`, `charge`, `flee` (AC 1/2/4/5/6).
+- `test/integration/test_unblockable_reach_live.gd` — `near` and `side` reworked to the new
+  semantics; the launch/playhead claims kept.
+
 ## Change Log
 
 - 2026-09-12: story authored (`gds-create-story`, measure-first pass; no dev work done). Board
@@ -352,6 +502,15 @@ changes.
   directions) moved to the Golden Prediction section as a process statement, ACs renumbered 1-11
   with no dangling cross-references. Two mis-cites fixed (`register_swing_hit` at
   `hero_state.gd:291`, `HurtboxShape` at `hero.tscn:100-101`). Status stays `authored`.
+
+- 2026-09-12: DEV PASS (`gds-dev-story`, Tier A). Honest hit geometry implemented: the charge-reach
+  KIND is now derived from melee's own `get_overlapping_areas()` query against the defender's real
+  Hurtbox shape, gated by a shared `PlayerState.is_contact_window_open()` predicate and latched
+  across the whole committed flight; `_charge_launch_velocity` rewritten for P6 + a front-loaded
+  travel ramp; the swing-at-commit knob built and left OFF. Suite 757/0/5993+58 before ->
+  769/0/6251+59 after, all pass. Golden NOT MOVED, measured in inverse form (the fixture never
+  enters CHARGING: zero probe hits against a 184-hit non-vacuity control). No new hashed field.
+  AC 7's halt condition NOT triggered. Status `ready-for-dev` -> `review`.
 
 ## DEVIATIONS
 
