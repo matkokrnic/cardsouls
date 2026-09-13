@@ -475,8 +475,11 @@ LOW-1..7). Source of rulings: the operator's fix-pass prompt, recorded in the de
   `charge_window.is_running`). `_charge_reach_dirs` is still written on every push, unchanged.
 - New per-slot store `MatchState._charge_contact_dirs`, written in the arm of `push_contact` that
   latches `INSIDE` (and cleared with the verdict in the clearing arm). `_is_in_charge_arc` reads it.
-  An `OUTSIDE` after an `INSIDE` writes neither half. A later `INSIDE` re-latches both halves
-  together, so with several contact ticks the arc judges the LAST contact's bearing (see DEVIATIONS).
+  An `OUTSIDE` after an `INSIDE` writes neither half. With several contact ticks, an in-arc bearing
+  is ABSORBING (`6-1d/R13`, review fix pass 2 below): a later `INSIDE` re-latches both halves only
+  when the bearing already latched does not pass the arc, so any in-arc contact during the flight
+  is a hit and an all-out-of-arc flight still misses. (As first built in this pass the bearing
+  re-latched on every `INSIDE`, judging the last contact; R13 replaced that.)
 - The arc still can only REMOVE a hit: it is consulted only behind `_charge_reach == INSIDE`.
 - `_is_in_charge_arc`'s docstring is true again and says which commit broke it (`e7afe21`, the
   dev pass) and which ruling restored it.
@@ -575,6 +578,67 @@ A 30 % retune without the heal still PASSED: the new `frozen` case's debug reset
 colour, so two landing cases per colour (60 %) never kill it. 55 % (110 % per colour) was used to
 reproduce MEDIUM-2's deadline, and the heal is still needed at that value.
 
+### Review fix pass 2 (2026-09-13, ruling `6-1d/R13`)
+
+Source of the ruling: the operator's fix-pass-2 prompt, recorded in the decision-log session
+2026-09-13 (6-1d review fix pass). Working files, backups and mutation outputs: `C:\dev\_61d-r13\`.
+
+**`6-1d/R13` -- an in-arc contact is absorbing; a later out-of-arc contact never overwrites it.**
+- `push_contact`'s INSIDE arm latches the verdict and the bearing UNLESS the verdict is already
+  `INSIDE` and the already-latched bearing passes `_is_in_charge_arc` against the attacker's facing.
+  The arc is only ever asked of the bearing ALREADY latched, never of the push being latched; the
+  code comment states why that makes the commit tick correct (nothing is latched on the commit
+  push -- the R9 cast-seat clear -- and every later push arrives after the facing freeze).
+- No new store: `_charge_contact_dirs` is reused. `UNHASHED_CROSS_TICK` unchanged.
+- The two R8 tests pass unchanged.
+
+**R3-superseded fixtures (named, not collateral).** Each reported an INSIDE contact dead ahead on
+the COMMIT tick, then moved the defender off the line. Under R3 that commit-tick touch is a real
+in-arc contact and, under R13, absorbing -- so each would have tested a hit. Each now pushes OUTSIDE
+through the chargeup and the commit tick and INSIDE only from the sidestep onward (the
+`test_the_arc_never_widens_an_outside_kind` correction), so the claim "with the ONLY contact off the
+line, the authored arc decides" is unchanged and not weakened. All three went RED with the code
+change alone (`C:\dev\_61d-r13\state_pre_fixture.txt`):
+- `test_a_defender_who_leaves_the_frozen_line_after_the_commit_is_missed` -- commit-tick INSIDE dead
+  ahead made the 90-degree sidestep a hit.
+- `test_each_colour_judges_its_own_arc_against_the_committed_direction` -- commit-tick INSIDE dead
+  ahead made the RED 65 / BLUE 25 just-outside cases hits.
+- `test_the_colour_counter_still_answers_through_the_one_landing_seat` (`missed` half) -- commit-tick
+  INSIDE dead ahead made the whiff land and consume the defense window.
+
+**Proved both ways on BLUE (in-test arc 40).** Launch tick 0 is the commit tick (the
+`_launch_velocity` index convention); a new helper `_charge_to_the_commit_tick` runs the feintable
+chargeup OUTSIDE and stops one tick short of it.
+- (a) `test_an_in_arc_touch_on_the_commit_tick_survives_later_out_of_arc_touches` -- in arc (10 deg)
+  on tick 0, INSIDE at 90 deg on every later tick through the landing: HIT.
+- (b) `test_any_in_arc_touch_during_the_flight_is_a_hit` -- 90 deg on tick 0, in arc on tick 3, 90 deg
+  on every other tick (so neither the first nor the last contact is in arc): HIT.
+- (c) `test_a_flight_touched_only_out_of_arc_still_misses` -- INSIDE at 90 deg on every tick: MISS,
+  with the verdict asserted `INSIDE` so only the arc refuses it.
+
+**Named-hazard finding, measured.** (a) and (b) assert the facing after the commit tick is still the
+pre-commit aim. `advance()` ticks `charge_window` in step 2, before `_resolve_movement`, so the commit
+tick's own push does NOT re-aim the facing -- the prompt's premise that it does is not what the code
+does. The rule was implemented exactly as ruled and does not depend on this detail; see DEVIATIONS.
+
+**Mutation table (this pass).** Procedure: `match_state.gd` copied to `C:\dev\_61d-r13\` with SHA256
+first (`f925c4e2...`), mutated by python byte-replace, state harness run, restored by copying the
+backup back (never `git checkout --`), SHA re-verified MATCH on both rows.
+
+| # | mutation | observed | provenance |
+|---|---|---|---|
+| M12a | "always overwrite": the INSIDE arm's R13 guard replaced by `if true:` (the R8 behaviour) | 2 RED: (a) and (b); (c) passes (777/2/6305) | MEASURED |
+| M12b | "always hit": `_is_in_charge_arc(player, slot)` in the landing gate replaced by `true` | 5 RED: (c), the three R3-superseded fixtures, and R8's drifting-in test (777/5/6305) | MEASURED |
+
+**Golden verdict -- predicted NO MOVE, measured NOT MOVED.** The change is inside the CHARGING-only
+charge-reach arm the golden fixture never enters, on the unhashed `_charge_reach` /
+`_charge_contact_dirs`. `test_determinism.gd` is absent from the diff, `GOLDEN` is still
+`9679fa80f19358d15c9b33b1f9a3706264095ada871e5d2530cf29b6cbce8315`, and the golden test passes in the
+final suite run. 31-key snapshot pin and `FORMAT_VERSION` 8 unchanged.
+
+**Suite.** Before: 774 / 0 / 6293 + 59 integration (previous pass final). After, one final run:
+**777 / 0 / 6305 + 59 integration, ALL TESTS PASSED, EXIT=0** (`C:\dev\_61d-r13\suite_final.txt`).
+
 ## File List
 
 - `src/state/player_state.gd` — new `is_contact_window_open()` predicate (AC 4).
@@ -612,6 +676,13 @@ Review fix pass (2026-09-13):
 - `test/integration/test_honest_hit_geometry_live.gd` -- P2 healed per case, `clamp`
   non-vacuity guard (R11); new `frozen` case (R9); controller can issue one debug reset.
 
+Review fix pass 2 (2026-09-13):
+
+- `src/state/match_state.gd` -- `push_contact` INSIDE arm: in-arc latch absorbing (R13); comment
+  on `_is_in_charge_arc`'s history.
+- `test/state/test_unblockable_tracking_and_reach.gd` -- three new tests (R13 a/b/c), helper
+  `_charge_to_the_commit_tick`, three R3-superseded fixtures corrected.
+
 ## Change Log
 
 - 2026-09-12: story authored (`gds-create-story`, measure-first pass; no dev work done). Board
@@ -644,6 +715,11 @@ Review fix pass (2026-09-13):
   launch span and index from the running windows; MEDIUM-2 and LOW-2c closed in the live fixture;
   LOWs dispositioned above. Suite 769/0/6251+59 -> 774/0/6293+59. Final run after the docs edit:
   774/0/6293+59, ALL TESTS PASSED, EXIT=0 (`C:\dev\_61d-fix\suite_final.txt`). Golden NOT MOVED. Status stays `review`; board untouched (CFG/R2).
+
+- 2026-09-13: REVIEW FIX PASS 2 (ruling `6-1d/R13`). An in-arc contact is absorbing; a later
+  out-of-arc contact never overwrites it. Three R3-superseded 6-1c fixtures corrected and named.
+  Suite 774/0/6293+59 -> 777/0/6305+59, ALL TESTS PASSED. Golden NOT MOVED. Status stays
+  `review`; board untouched.
 
 ## DEVIATIONS
 
@@ -683,6 +759,8 @@ Review fix pass (2026-09-13):
   arm that latches `INSIDE`, and that arm runs on every `INSIDE` push. So a later out-of-arc touch
   replaces an earlier in-arc one. Latching only the FIRST contact would have flipped three 6-1c
   AC 3/AC 5 headless tests that push `INSIDE` on every tick. Named here as a design seam for Matko.
+  **Resolved by `6-1d/R13`** (review fix pass 2): neither first nor last -- an in-arc contact is
+  absorbing.
 - **New read-only accessor `TimingWindow.duration_ticks()`.** R10 required reading the window's
   duration, and `TimingWindow` exposed only `remaining_ticks()`. There is no new write path.
 - **New live case `frozen`**, not named in the rulings. It is the mutation evidence the house rule
@@ -690,4 +768,18 @@ Review fix pass (2026-09-13):
   The clearing arm in `push_contact` also clears the bearing, so the two halves stay one fact.
 - **Commit trailer** follows this pass's prompt (`Claude Sonnet 5`), which differs from CLAUDE.md's
   constant; LOW-4 therefore not applied.
+- No subagents, forks, or parallel sessions. No push.
+
+### This pass (review fix 2, 2026-09-13)
+
+- **The named hazard's premise did not match the code.** The prompt said the commit tick's
+  `advance()` turns the facing toward the pushed direction. Measured: step 2 stops `charge_window`
+  before `_resolve_movement`, so the facing on the commit tick is the last chargeup tick's aim and
+  the commit push does not re-aim it. The rule was implemented as ruled (the arc is never asked of
+  the push being latched) and the comment records both the reason and the measured ordering. (a)
+  and (b) pin the ordering with a sanity assert.
+- **(b)'s fixture adds an out-of-arc touch AFTER the in-arc one.** Taken literally ("out of arc on
+  tick 0, in arc later"), a last in-arc touch passes under "always overwrite" too, so it could not
+  meet the required mutation. The extra later out-of-arc touches make it fail there, and they test
+  the ruling's own words: any in-arc contact wins.
 - No subagents, forks, or parallel sessions. No push.

@@ -9923,3 +9923,29 @@ each not applied; no scope expansion. The `hitbox` null-deref LOW is inherited f
 Two commits: `story 6-1d: review fixes (rulings 6-1d/R8-R12)` (code + tests) and
 `docs(6-1d): review fix record` (story file + this entry). Suite 769/0/6251+59 -> 774/0/6293+59.
 Golden NOT MOVED (`9679fa80`). Story Status stays `review`; board untouched (CFG/R2). Not pushed.
+
+### Review fix pass 2 (ruling `6-1d/R13`)
+
+`6-1d/R13` AN IN-ARC CONTACT IS ABSORBING; A LATER OUT-OF-ARC CONTACT NEVER OVERWRITES IT (resolves
+the R8 dev note above). Neither "first contact" nor "last contact" is the rule: if ANY contact tick
+of the committed flight had a bearing inside the colour's authored arc, the landing is a HIT; the
+arc can still only REMOVE a hit, so a flight whose contacts were ALL out of arc still misses. In
+`push_contact`'s INSIDE arm the verdict and bearing are latched unless the verdict is already
+`INSIDE` and the latched bearing already passes `_is_in_charge_arc`. The arc is only ever evaluated
+for the bearing ALREADY latched, on a later tick, never for the push being latched -- the commit
+tick has nothing latched (R9's cast-seat clear) and every later tick sees the frozen facing (6-1c).
+No new store (`_charge_contact_dirs` reused); golden predicted and measured NOT MOVED.
+
+Three 6-1c headless fixtures are R3-superseded, not collateral: they reported an INSIDE contact dead
+ahead on the commit tick, which R3 makes a real in-arc touch. Each now pushes OUTSIDE through the
+commit tick and INSIDE only from the sidestep on, keeping the claim that with the only contact off
+the line the arc decides: `test_a_defender_who_leaves_the_frozen_line_after_the_commit_is_missed`,
+`test_each_colour_judges_its_own_arc_against_the_committed_direction`,
+`test_the_colour_counter_still_answers_through_the_one_landing_seat`.
+
+Dev note (for operator confirmation): measured, the commit tick's push does not re-aim the facing
+(step 2 closes the chargeup before `_resolve_movement`); the rule does not depend on it.
+
+Two commits: `story 6-1d: in-arc contact is absorbing (6-1d/R13)` (code + tests) and
+`docs(6-1d): R13 record` (story file + this entry). Suite 774/0/6293+59 -> 777/0/6305+59.
+Story Status stays `review`; board untouched. Not pushed.
