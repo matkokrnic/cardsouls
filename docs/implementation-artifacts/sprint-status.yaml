@@ -116,7 +116,7 @@ development_status:
   6-1b-chargeup-presentation: done  # Tier B
   6-1c-unblockable-tracking-and-reach: done  # Tier A
   6-1d-honest-hit-geometry: done  # Tier A
-  6-2-pitch-staging: backlog  # Tier A
+  6-2-pitch-staging: ready-for-dev  # Tier A
   6-3-pitch-hud: backlog  # Tier B
   6-4-pitch-activation: backlog  # Tier A
   6-7-locomotion-gaits: backlog  # Tier A
@@ -131,7 +131,7 @@ story_notes:
   6-1b-chargeup-presentation: "done 2026-09-09, Tier B close-out complete (progress-driven playhead per-clip, strike-frame impact criterion, per-clip hold knobs per 6-1b/R1-R9; src/state/ byte-identical, golden and 30-key set unmoved; suite 737/0/5553 + 57 integration; round-2 smoke items 1-7 PASS / 8 fps stable; decision-log session 6-1b close-out)."
   6-1c-unblockable-tracking-and-reach: "done 2026-09-12, Tier A close-out complete (commit/launch sub-phase of CHARGING per 6-1c/R1-R10, per-colour launch travel and honest reach, golden d5bcb7e6 -> 9679fa80 single cause landing key 30 -> 31, suite 757/0/5993 + 58 integration, smoke PASS on tracking/dodge/ground-coverage/fps with one named defect (blade/damage geometry gap) carried to 6-1d-honest-hit-geometry, decision-log session 6-1c close-out)."
   6-1d-honest-hit-geometry: "done 2026-09-13; smoke PASS; knob stays OFF (R15); retune block unlocked (R16)."
-  6-2-pitch-staging: "Tier A, golden moves by construction (MatchState.to_snapshot already carries the pitch key). Scope talk owes the pitch-cost authoring seat, E6-P/R9. Carries the per-player/independent-staging rule, E6-P/R4."
+  6-2-pitch-staging: "ready-for-dev 2026-09-13, Tier A, golden moves by construction; readiness gate fixes applied (hand conservation fifth term, mana-at-staging no refund, READY derived not latched, pitch_zone flag opens this story per 5-2/R14, pitch costs authored provisionally, FORMAT_VERSION 8->9, mode-guard retired, orb-clear switch ruled, cancel deferral recorded at 6-4)."
   6-3-pitch-hud: "Tier B AT RISK of Tier A. May NOT add a second MatchState direct-connect (E5-C/R2); uses the observation-seam family. Owes the anchor A/B verdict (2-6/R19 finding S4)."
   6-4-pitch-activation: "Tier A. Wires pad Y and ends mode 4's structural unreachability; owes the Y-guard question 5-7/R7 kept open for exactly this story (LOW-1/LOW-2)."
   6-7-locomotion-gaits: "Tier A. Two gaits per E6-P/R3 — walk new/slower/free/default, run the current speed, held, draining stamina. Walk speed and drain-per-second authored here. Supersedes the 5-3/R6(d) retune entry."

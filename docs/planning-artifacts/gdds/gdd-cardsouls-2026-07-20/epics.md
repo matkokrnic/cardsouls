@@ -211,7 +211,8 @@ raised, never lowered.
 5. `6-3-pitch-hud` (**Tier B**, at risk of Tier A) — public cost + countdown + affordability read
    (read, not computed — the Reactor/Actor offload), on both viewports.
 6. `6-4-pitch-activation` (**Tier A**) — Mode ④ resolves: cost paid, **all-colour orb reset**, pad Y
-   wired, PITCH stops being structurally unreachable.
+   wired, PITCH stops being structurally unreachable; also takes the cancel exit `6-2` deferred
+   (`6-2` scope note, 2026-09-13 readiness gate).
 7. `6-7-locomotion-gaits` (**Tier A**) — the two-gait system ruled at planning: walk is new, slower,
    free and the default; run is the current speed, held, draining the same stamina bar. Walk speed
    and drain-per-second are authored here.
