@@ -261,6 +261,18 @@ var _contact_queue: Array[Dictionary] = []
 var _charge_reach: Array[int] = [REACH_UNKNOWN, REACH_UNKNOWN]
 var _charge_reach_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 
+## Story 6-1d review fix (`6-1d/R8`): THE CONTACT BEARING -- for each slot, the planar TARGET -> ATTACKER
+## direction carried by the push that LATCHED `INSIDE` into `_charge_reach`, written in the SAME arm and
+## only there. `_charge_reach_dirs` above keeps being written on EVERY push, because the CHARGING facing
+## track (auto-aim during the chargeup) reads it; this store is what the landing's ARC reads, so the
+## verdict and the bearing it is judged against are one measurement again.
+##
+## CLEARED WITH THE VERDICT, never on its own: in `push_contact`'s clearing arm, at the CAST SEAT and in
+## `_reset_player` (`6-1d/R9`). EXCLUDED FROM to_snapshot() for `_charge_reach`'s reason verbatim -- it is
+## a runner-pushed fact restored on replay by replaying the pushes (`test_replay_identity.gd` exclusion
+## (c)).
+var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
+
 ## Story 5-6 (AC 7): THE DODGE RUNG'S OBSERVATION POINT, per slot — each hero's `is_iframe_open()`
 ## AS OF THE START OF STEP 3, captured before ANY same-tick press has been resolved.
 ##
@@ -826,12 +838,16 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		# OUTSIDE THE CONTACT WINDOW THE LATCH IS CLEARED, not written (AC 4). The runner keeps
 		# pushing every chargeup tick because the FACING TRACK needs the direction above, but a
 		# chargeup touch must credit nothing -- an attack the attacker can still feint never lands
-		# damage. Clearing rather than skipping is what makes the window's OPENING self-reaping:
-		# the last pre-commit push always leaves `REACH_UNKNOWN` behind, so the committed phase
-		# always starts from "nothing measured" with NO reset call anywhere and NO per-swing record
-		# to erase. That is the direct answer to the `6-1d` N4 hazard -- `register_swing_hit`'s
-		# dictionary record is not adopted here at all, and this store cannot grow: it is a
-		# fixed TWO-element `Array[int]`, one slot per hero, for the life of the match.
+		# damage. `register_swing_hit`'s dictionary record is not adopted here at all, and this
+		# store cannot grow: it is a fixed TWO-element `Array[int]`, one slot per hero, for the life
+		# of the match.
+		#
+		# THE REAPING BETWEEN ATTACKS IS OWNED, NOT EMERGENT (`6-1d/R9`). The dev pass relied on this
+		# clearing arm alone to reset the verdict before each commit, which silently required at least
+		# one pre-commit push -- a one-tick chargeup has none, and a stale absorbing `INSIDE` from the
+		# previous attack then credited a flight in which nothing was measured. The verdict and its
+		# bearing are now cleared at the CAST SEAT (`_resolve_unblockable_cast`) and in
+		# `_reset_player`; this arm still clears too, and that is what keeps chargeup touches out.
 		#
 		# INSIDE THE WINDOW `INSIDE` IS ABSORBING (AC 6's supersession of `6-1c` AC 3). Contact is
 		# evaluated on every committed tick, and a defender touched on ANY of them is hit even if it
@@ -846,10 +862,18 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		# targets nor obstacles) and a chargeup never calls `_start_swing`, so `attack_index` does
 		# not move across a chargeup and would key nothing.
 		var charging: PlayerState = p1 if attacker_slot == 0 else p2
+		# THE BEARING IS LATCHED IN THE ARM THAT LATCHES `INSIDE`, and only there (`6-1d/R8`). The
+		# landing's arc is judged against the direction of the push that recorded the contact, not
+		# against the last push's, so a defender touched in-arc who strafes out before the landing is
+		# HIT, and one touched out-of-arc who drifts in is MISSED. A later `INSIDE` re-latches both
+		# halves together; an `OUTSIDE` after an `INSIDE` writes neither.
 		if not charging.is_contact_window_open():
 			_charge_reach[attacker_slot] = REACH_UNKNOWN
-		elif kind == CONTACT_CHARGE_REACH_INSIDE \
-				or _charge_reach[attacker_slot] != CONTACT_CHARGE_REACH_INSIDE:
+			_charge_contact_dirs[attacker_slot] = Vector2.ZERO
+		elif kind == CONTACT_CHARGE_REACH_INSIDE:
+			_charge_reach[attacker_slot] = kind
+			_charge_contact_dirs[attacker_slot] = target_to_attacker
+		elif _charge_reach[attacker_slot] != CONTACT_CHARGE_REACH_INSIDE:
 			_charge_reach[attacker_slot] = kind
 		return
 	_contact_queue.append({
@@ -2140,13 +2164,21 @@ func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
 ##
 ## 360 AND ABOVE IS RADIAL and answers true without a comparison, so the GREEN jump needs no special
 ## case and an unauthored arc (the 360 default) is the pre-6-1c circle exactly. The direction read is
-## the one latched with the KIND by the same push (`push_contact`), so the two halves of the gate
-## always describe the same measurement.
+## `_charge_contact_dirs[slot]`, latched by `push_contact` in the SAME arm that latches the `INSIDE`
+## kind, so the two halves of the gate always describe the same measurement.
+##
+## THAT SENTENCE WAS FALSE FOR ONE COMMIT, and the history is recorded so it is not re-broken. Through
+## 6-1c both halves were overwritten on every push and so both described the last tick. Story 6-1d's
+## dev pass (`e7afe21`) made the verdict ABSORBING across the flight but left this reading the
+## every-push `_charge_reach_dirs`, so a verdict from one tick was judged against a bearing from
+## another. The 6-1d review fix (`6-1d/R8`) restored it with the latched bearing. The arc is still a
+## conjunct that can only REMOVE a hit the geometry admitted: it reads nothing unless the kind is
+## already `INSIDE`, and it can never turn an `OUTSIDE` into a hit.
 func _is_in_charge_arc(player: PlayerState, slot: int) -> bool:
 	var arc := balance.unblockable_arc_degrees_for(player.charge_color)
 	if arc >= 360.0:
 		return true
-	return absf(player.hero.facing.angle_to(-_charge_reach_dirs[slot])) <= deg_to_rad(arc * 0.5)
+	return absf(player.hero.facing.angle_to(-_charge_contact_dirs[slot])) <= deg_to_rad(arc * 0.5)
 
 
 ## Step-5 mana generation (story 3-4, AC 1/AC 2) — the D6 EVALUATOR seat. The direct
@@ -2805,6 +2837,11 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	# landing (see `PlayerState.landing_window`).
 	player.landing_window.start(balance_ticks.unblockable_chargeup_ticks
 			+ balance_ticks.unblockable_launch_ticks_for(player.charge_color))
+	# Story 6-1d review fix (`6-1d/R9`): THE CONTACT VERDICT AND ITS BEARING START EVERY ATTACK FROM
+	# "NOTHING MEASURED", cleared HERE beside the windows that bound the flight. Owned rather than left
+	# to the pre-commit pushes, which a one-tick chargeup never gets -- see `push_contact`.
+	_charge_reach[slot] = REACH_UNKNOWN
+	_charge_contact_dirs[slot] = Vector2.ZERO
 	player.hero.set_action_state(HeroState.ActionState.CHARGING)
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
@@ -2987,7 +3024,8 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 	# the SAME single ladder, and fires exactly once on the tick `landing_window` closes. The whole
 	# change lives in what `push_contact` writes into `_charge_reach[slot]` and when -- see there.
 	# The arc conjunct is still state policy over the runner's direction fact and can still only
-	# REMOVE a hit the geometry admitted; it never widens one.
+	# REMOVE a hit the geometry admitted; it never widens one. Since `6-1d/R8` it reads the bearing
+	# latched WITH the `INSIDE` verdict, so both conjuncts judge the same tick's measurement.
 	if _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE and _is_in_charge_arc(player, slot) \
 			and target.hero.is_alive():
 		# STORY 5-5 (AC 9/AC 10): THE DEFENSE RUNG, seated INSIDE the reach+alive gate and BEFORE
@@ -3686,22 +3724,33 @@ func _attack_lunge_velocity(hero: HeroState) -> Vector3:
 ## (a) P6 ADOPTED (`6-1c/R12`, Fact 6). The span is taken from the TICK domain
 ##     (`unblockable_launch_ticks_for` / `TimingWindow.TICK_HZ`) instead of from the authored
 ##     `*_seconds` float. The two agreed only because today's authored spans happen to be
-##     tick-aligned; a retune to, say, 0.27 s rounds to 16 ticks but divided by 0.27 s, so the hero
-##     would have covered the authored distance with ticks still to run and then kept going --
-##     overshoot by construction. Reading the span the LANDING actually uses removes the class.
+##     tick-aligned; a retune to, say, 0.26 s rounds UP to 16 ticks but is divided by 0.26 s, so the
+##     hero covers the authored distance before the window closes and keeps going -- overshoot by
+##     construction (0.27 s rounds DOWN to 16 and undershoots instead: the same class, the other
+##     sign). Reading the span the LANDING actually uses removes the class.
 ##
 ## (b) THE TRAVEL IS FRONT-LOADED (`6-1c/R10(b)`, GREEN the named subject). A flat speed spends the
 ##     same distance on the last tick as on the first, which is what makes the long GREEN leap read
 ##     as a lurch arriving on the landing tick. The per-tick displacement now runs down a straight
-##     ramp across the launch, `2 - (2i+1)/L` of the flat share on launch tick `i` -- twice the flat
-##     share at the start, a vanishing sliver at the end, and the weights SUM TO EXACTLY `L`, so the
-##     total distance covered is the authored one to the float. Nothing is authored for the ramp:
+##     ramp across the launch, `2 - (2i+1)/L` of the flat share on launch tick `i` -- `2 - 1/L` (just
+##     under twice the flat share) at the start, `1/L` at the end, and the weights SUM TO EXACTLY
+##     `L`, so the total distance covered is the authored one to the float. Nothing is authored for the ramp:
 ##     shape is not a feel knob here, the DISTANCE and the SPAN are, and both stay where they were.
 ##
 ## NO NEW HASHED FIELD AND NO NEW TICK CONTRACT (AC 7's halt condition, checked rather than
-## assumed): the launch tick index is DERIVED from `landing_window.remaining_ticks()`, the same
-## window the landing and the progress push already read, so nothing is stored, nothing is
-## snapshotted, and `landing_window`'s duration and close tick are exactly as `6-1c` left them.
+## assumed): the launch tick index is DERIVED from `landing_window`'s own duration minus its
+## remaining ticks, the same window the landing and the progress push already read, so nothing is
+## stored, nothing is snapshotted, and `landing_window`'s duration and close tick are exactly as
+## `6-1c` left them.
+##
+## THE SPAN AND THE INDEX COME FROM THE WINDOWS, NEVER FROM A LIVE BALANCE READ (`6-1d/R10`). Both
+## windows snapshot their durations at the cast and keep them across a balance hot-reload
+## (`TimingWindow.start`), so `L = landing.duration - charge.duration` and
+## `i = (landing.duration - landing.remaining) - charge.duration` describe the flight that is actually
+## running. The dev pass read `L` live off `balance_ticks`; a mid-flight reload that shortened the span
+## then drove the raw index negative and the clamp pinned it at the ramp's PEAK share for many ticks,
+## multiplying the travel. The authored DISTANCE is still read live, so a retuned distance takes effect
+## at once but can only scale the total, never pin the index.
 ##
 ## Guards, the lunge's own: a zero-or-negative span has no speed (an unauthored launch -- the landing
 ## then resolves on the chargeup-close tick anyway, so this branch is never reached for it) and a
@@ -3710,11 +3759,12 @@ func _attack_lunge_velocity(hero: HeroState) -> Vector3:
 func _charge_launch_velocity(player: PlayerState) -> Vector3:
 	if balance_ticks == null:
 		return Vector3.ZERO
-	var launch_ticks := balance_ticks.unblockable_launch_ticks_for(player.charge_color)
+	var chargeup_ticks := player.charge_window.duration_ticks()
+	var launch_ticks := player.landing_window.duration_ticks() - chargeup_ticks
 	if launch_ticks <= 0 or player.hero.facing.is_zero_approx():
 		return Vector3.ZERO
-	var index := clampi(launch_ticks - player.landing_window.remaining_ticks(),
-			0, launch_ticks - 1)
+	var index := clampi(player.landing_window.duration_ticks()
+			- player.landing_window.remaining_ticks() - chargeup_ticks, 0, launch_ticks - 1)
 	var share := 2.0 - float(2 * index + 1) / float(launch_ticks)
 	var flat_speed := balance.unblockable_launch_distance_for(player.charge_color) \
 			* TimingWindow.TICK_HZ / float(launch_ticks)
@@ -3920,6 +3970,11 @@ func _reset_player(player: PlayerState) -> void:
 	# chargeup clear above closes for the chargeup half.
 	player.landing_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	# Story 6-1d review fix (`6-1d/R9`): the contact verdict and its bearing are part of the same fact
+	# and are cleared with it, so a flight frozen by the round-over freeze credits nothing next round.
+	var reset_slot := 0 if player == p1 else 1
+	_charge_reach[reset_slot] = REACH_UNKNOWN
+	_charge_contact_dirs[reset_slot] = Vector2.ZERO
 	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
 	# fact in two parts, exactly as the chargeup's three and the defense window's two are.
 	hero.stun.start(0)

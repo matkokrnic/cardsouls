@@ -656,6 +656,152 @@ func test_the_launch_speed_derives_from_the_tick_span_not_the_seconds_float() ->
 		"a span off the tick grid still travels the authored 2.4, got %.5f" % travelled.length())
 
 
+# --- 6-1d review fix: the arc and the verdict are one measurement (`6-1d/R8`) -----------------
+
+## `6-1d/R8`, the HIT direction. BLUE's in-test arc is 40 degrees, NARROW on purpose: GREEN's radial 360
+## short-circuits the arc and cannot see which bearing it was judged against, which is exactly why the
+## dev pass's AC 6 pair did not catch this. The defender is touched ONCE, 10 degrees off the frozen line
+## (inside the arc), on the first launch tick after the commit, then strafes 90 degrees off it and is
+## never touched again. The arc is judged against the bearing AT THE CONTACT, so this is a HIT -- AC 6's
+## supersession delivered for a narrow colour too.
+##
+## MUTATION: point `_is_in_charge_arc` back at the every-push `_charge_reach_dirs` and this goes RED --
+## the landing judges the defender's last, out-of-arc bearing and misses.
+func test_a_narrow_arc_judges_the_bearing_at_contact_so_a_strafe_after_the_touch_is_hit() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	_cast_and_charge_kind(ms, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
+	var in_arc := DIR_AHEAD.rotated(deg_to_rad(10.0))
+	for t in _launch(Enums.CardColor.BLUE):
+		if t == 0:
+			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, in_arc)
+		else:
+			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_SIDE)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+		"touched INSIDE the 40-degree arc, then strafed out of it: judged at the contact, a HIT")
+
+
+## `6-1d/R8`, the MISS direction -- the mirror the review named. The blade touches the defender while it
+## is 90 degrees off the frozen line (OUTSIDE BLUE's arc), and the defender then walks INTO the arc,
+## untouched, by the landing. A touch that was never inside the arc when it happened credits nothing:
+## the arc can still only REMOVE a hit, and the bearing it removes it by is the contact's own.
+##
+## MUTATION: point `_is_in_charge_arc` back at `_charge_reach_dirs` and this goes RED -- the landing
+## judges the last, in-arc bearing and lands a hit no in-arc contact ever earned.
+func test_a_narrow_arc_judges_the_bearing_at_contact_so_drifting_in_after_the_touch_is_missed() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	_cast_and_charge_kind(ms, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
+	for t in _launch(Enums.CardColor.BLUE):
+		if t == 0:
+			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
+		else:
+			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
+	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
+		"sanity: the contact verdict itself is INSIDE -- only the arc can refuse this one")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP,
+		"touched OUTSIDE the 40-degree arc, then drifted into it untouched: a MISS")
+
+
+# --- 6-1d review fix: the latch's clearing is owned (`6-1d/R9`) --------------------------------
+
+## `6-1d/R9`: the `C == 1` cross-arena free hit is dead. With a ONE-TICK chargeup the first push of an
+## attack already lands inside the contact window, so no pre-commit push ever runs the clearing arm.
+## Attack #1 lands with the verdict latched `INSIDE`; attack #2 is flown with the defender reported
+## OUTSIDE on every evaluated tick. The stale verdict must not survive into it.
+##
+## MUTATION: delete the two clears at the CAST SEAT (`_resolve_unblockable_cast`) and this goes RED --
+## attack #2 lands full damage off attack #1's absorbing `INSIDE`.
+func test_a_one_tick_chargeup_does_not_inherit_the_previous_attacks_verdict() -> void:
+	var ms := _make_match(Enums.CardColor.GREEN)
+	var c := _config(true)
+	c.unblockable_chargeup_seconds = 1.0 / TimingWindow.TICK_HZ
+	ms.apply_balance(c)
+	assert_eq(ms.balance_ticks.unblockable_chargeup_ticks, 1, "sanity: a ONE-tick chargeup")
+	_advance(ms, _unblockable_intent(0), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: attack #1 cast")
+	for _t in 1 + _launch(Enums.CardColor.GREEN):
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: attack #1 resolved")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "sanity: attack #1 landed")
+	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
+		"sanity: attack #1 left its verdict latched INSIDE -- the stale value under test")
+	for _t in 200:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	_advance(ms, _unblockable_intent(0), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: attack #2 cast")
+	for _t in 1 + _launch(Enums.CardColor.GREEN):
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: attack #2 resolved")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+		"attack #2 measured OUTSIDE on every evaluated tick and must MISS, not inherit attack #1's hit")
+
+
+## `6-1d/R9`: the verdict and its bearing are part of the chargeup's one fact, so the debug reset clears
+## them beside the windows and the colour. Read directly: after a landed attack nothing else touches the
+## store, so only the reset can put it back at rest.
+##
+## MUTATION: delete the two clears in `_reset_player` and this goes RED.
+func test_the_debug_reset_clears_the_contact_verdict_and_its_bearing() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	_cast_and_charge(ms, DIR_AHEAD)
+	_run_launch(ms, Enums.CardColor.BLUE, DIR_AHEAD)
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "sanity: landed")
+	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE, "sanity: latched INSIDE")
+	assert_eq(ms._charge_contact_dirs[0], DIR_AHEAD, "sanity: the contact bearing was latched with it")
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	_advance(ms, reset, InputIntent.new())
+	assert_eq(ms._charge_reach[0], MatchState.REACH_UNKNOWN, "the reset clears the verdict")
+	assert_eq(ms._charge_contact_dirs[0], Vector2.ZERO, "...and the bearing latched with it")
+
+
+# --- 6-1d review fix: the launch index comes from the window (`6-1d/R10`) ----------------------
+
+## `6-1d/R10`: a balance hot-reload MID-FLIGHT that shortens this colour's launch span cannot pin the
+## launch index. The running windows keep the durations they snapshotted at the cast, so the flight
+## still moves on exactly its original 12 launch ticks, still front-loaded, and still sums to the
+## authored distance -- AC 7's arithmetic re-proven across the reload rather than only before it.
+##
+## MUTATION: read the span live again (`balance_ticks.unblockable_launch_ticks_for(...)`, index
+## `launch_ticks - landing_window.remaining_ticks()`) and this goes RED -- the raw index goes negative,
+## the clamp pins it at the ramp's peak share and the travel runs to several times the authored distance.
+func test_a_mid_flight_span_retune_cannot_pin_the_launch_index() -> void:
+	var ms := _make_match(Enums.CardColor.GREEN)
+	_cast_and_charge(ms, DIR_AHEAD)
+	var steps: Array[float] = [ms.p1.hero.velocity.length() / TimingWindow.TICK_HZ]
+	var travelled := ms.p1.hero.velocity / TimingWindow.TICK_HZ
+	var retuned := _config(true)
+	retuned.unblockable_launch_seconds_green = 3.0 / TimingWindow.TICK_HZ
+	ms.apply_balance(retuned)
+	assert_eq(ms.balance_ticks.unblockable_launch_ticks_for(Enums.CardColor.GREEN), 3,
+		"sanity: the reloaded span really is shorter than the running flight's 12")
+	var moving_ticks := 1
+	while ms.p1.hero.action_state == HeroState.ActionState.CHARGING and moving_ticks < 100:
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
+		_advance(ms, _holding(), InputIntent.new())
+		if ms.p1.hero.velocity.is_zero_approx():
+			continue
+		moving_ticks += 1
+		steps.append(ms.p1.hero.velocity.length() / TimingWindow.TICK_HZ)
+		travelled += ms.p1.hero.velocity / TimingWindow.TICK_HZ
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the flight landed")
+	assert_eq(moving_ticks, _launch(Enums.CardColor.GREEN),
+		"the flight moves on its ORIGINAL %d launch ticks across the reload, got %d"
+			% [_launch(Enums.CardColor.GREEN), moving_ticks])
+	for i in steps.size() - 1:
+		assert_true(steps[i] > steps[i + 1],
+			"launch tick %d covered %.5f, tick %d covered %.5f -- still front-loaded across the reload"
+				% [i, steps[i], i + 1, steps[i + 1]])
+	var want := Vector3(-DIR_AHEAD.x, 0.0, -DIR_AHEAD.y) * float(LAUNCH_DISTANCE[Enums.CardColor.GREEN])
+	assert_true(travelled.is_equal_approx(want),
+		"the reloaded flight still travels the authored %s, got %s" % [want, travelled])
+
+
 # --- helpers ----------------------------------------------------------------------------------
 
 func _launch(color: int) -> int:
@@ -664,8 +810,11 @@ func _launch(color: int) -> int:
 
 ## Story 6-1d (AC 7): the velocity the FRONT-LOADED launch profile must produce on launch tick
 ## `index` (0 = the commit tick), along the frozen direction whose TARGET -> ATTACKER fact is `aim`.
-## Written out from the authored distance and the TICK span rather than read back off the
-## implementation, so a profile that quietly flattened would fail here.
+## Computed from the authored distance and the TICK span rather than captured from the run under
+## test, so a flattened profile fails here -- but the ramp FORMULA is the production expression
+## transcribed, so a formula wrong the same way in both places would pass. The ramp's SHAPE is
+## pinned independently by `test_the_launch_travel_is_front_loaded_and_still_sums_to_the_authored_
+## distance` (strictly decreasing steps, a first step above the flat share, the authored total).
 func _launch_velocity(color: int, index: int, aim: Vector2) -> Vector3:
 	var l := _launch(color)
 	var share := 2.0 - float(2 * index + 1) / float(l)

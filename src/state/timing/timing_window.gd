@@ -40,6 +40,13 @@ func tick() -> void:
 		is_running = false
 
 
+## Story 6-1d review fix (`6-1d/R10`): the duration SNAPSHOTTED by the last start(), which is what a
+## running window keeps across a balance hot-reload -- read by `_charge_launch_velocity` so the launch
+## span and tick index describe the flight actually running rather than the reloaded config.
+func duration_ticks() -> int:
+	return _duration_ticks
+
+
 func remaining_ticks() -> int:
 	return maxi(0, _duration_ticks - _elapsed_ticks)
 

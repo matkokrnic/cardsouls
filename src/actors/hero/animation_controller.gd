@@ -228,7 +228,7 @@ static func charge_attack_progress(landing_remaining_ticks: int, chargeup_ticks:
 ## backwards. `charge_playhead_seconds` is untouched and the `_CHARGE_HOLD_KNOBS` keep their
 ## meaning; this only changes WHICH progress value a given tick reports.
 ##
-## DEGENERATE SPANS RETURN THE INPUT UNCHANGED (a commit fraction at or outside `[0, 1]`, or a
+## DEGENERATE SPANS RETURN THE INPUT, CLAMPED TO `[0, 1]` (a commit fraction at or outside `[0, 1]`, or a
 ## `hold_end` at or outside it): there is no second phase to stretch into, and inventing one would
 ## divide by zero. The OFF path never calls this at all -- the caller branches -- so "OFF reproduces
 ## today exactly" is a property of the call site, not of a zero-valued argument here.

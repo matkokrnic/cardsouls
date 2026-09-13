@@ -27,6 +27,11 @@ extends SceneTree
 ##             supersession of `6-1c` AC 3: touched at any evaluated tick is no longer a guaranteed
 ##             miss). The teleport is triggered off an OBSERVED contact rather than a tick count, so
 ##             the case fails loudly instead of passing vacuously if contact never happened.
+##   frozen -- `6-1d/R9`: the defender is parked clear, the attacker commits, and the round is then
+##             forced over mid-launch with the defender moved onto the blade. The round-over freeze
+##             holds the contact window open while the rig keeps its pose, and the runner must push
+##             NOTHING: the verdict never becomes INSIDE although real overlap is observed. A debug
+##             reset then ends the frozen flight and must leave the verdict at REACH_UNKNOWN.
 ##
 ## THE LAYOUT IS DERIVED, NEVER PINNED (the `test_contact_pipeline.gd` precedent): the standing
 ## distance is the colour's authored launch travel plus one body width, and every case is skipped
@@ -40,9 +45,14 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://test/integration/test_honest_hit_geometry_live.gd
 
 class HoldingController extends Controller:
+	## `6-1d/R9` frozen case: one debug reset on the next sample, then back to holding.
+	var reset_next := false
+
 	func sample() -> InputIntent:
 		var intent := InputIntent.new()
 		intent.held[&"card_cast"] = true
+		intent.debug_reset = reset_next
+		reset_next = false
 		return intent
 
 
@@ -61,6 +71,9 @@ const AFTER := 2
 const DEADLINE := 6000
 const HP_EPS := 1e-3
 const P1_START := Vector3(-6.0, 0.0, 0.0)
+## `6-1d/R9` frozen case: frames the round-over freeze is observed for, then frames the reset settles.
+const FROZEN_FRAMES := 20
+const RESET_SETTLE := 3
 
 var _frames := 0
 var _runner: Node
@@ -82,6 +95,9 @@ var _saw_overlap := false
 var _fled := false
 var _contact_ticks := 0
 var _y := 0.0
+var _holder: HoldingController
+var _frozen_frame := -1
+var _frozen_inside := false
 
 
 func _initialize() -> void:
@@ -96,7 +112,7 @@ func _initialize() -> void:
 	_clamped.unblockable_reach_blue = CLAMPED_REACH
 	_clamped.unblockable_reach_green = CLAMPED_REACH
 	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
-		for kind in ["touch", "clamp", "charge", "flee"]:
+		for kind in ["touch", "clamp", "charge", "flee", "frozen"]:
 			_cases.append([color, kind])
 
 
@@ -116,7 +132,8 @@ func _physics_process(_delta: float) -> bool:
 			_failures.append("main scene did not yield a runner, a MatchState and two heroes")
 			_report()
 			return true
-		_runner._p1_controller = HoldingController.new()
+		_holder = HoldingController.new()
+		_runner._p1_controller = _holder
 		_y = _p1_actor.position.y
 		return false
 	if _phase == "draining":
@@ -147,10 +164,16 @@ func _physics_process(_delta: float) -> bool:
 			_case_index += 1
 			return false
 		_state.apply_balance(_clamped if kind == "clamp" else _config)
+		# `6-1d/R11`: P2 starts every case at full HP. Six cases are EXPECTED to land, and no HP regen
+		# exists, so an authored damage retune could otherwise kill P2 mid-run -- the round-over freeze
+		# would then hold P1 in CHARGING forever and the run would burn to DEADLINE instead of judging.
+		_state.p2.hero.heal(_state.p2.hero.get_max_hp())
 		_p1_actor.position = P1_START + Vector3(0.0, _y, 0.0)
 		# "charge" parks the defender against the attacker for the chargeup; every other case parks
 		# it where the LAUNCH will bring the blade onto it.
 		var d := BODY if kind == "charge" else travel + BODY
+		if kind == "frozen":
+			d = travel + reach + CLEAR
 		_p2_actor.position = P1_START + Vector3(d, _y, 0.0)
 		_phase = "settle"
 		_phase_frame = _frames
@@ -162,6 +185,8 @@ func _physics_process(_delta: float) -> bool:
 		_saw_overlap = false
 		_fled = false
 		_contact_ticks = 0
+		_frozen_frame = -1
+		_frozen_inside = false
 		# The cast seat's three writes, in its order.
 		player.charge_color = color
 		player.charge_window.start(_ticks.unblockable_chargeup_ticks)
@@ -175,6 +200,9 @@ func _physics_process(_delta: float) -> bool:
 	if _phase == "charging":
 		if _frames - _phase_frame < 2:
 			return false  # let the seam drain the CHARGING transition into the controller
+		if kind == "frozen":
+			_step_frozen(label, player)
+			return false
 		if player.hero.action_state == HeroState.ActionState.CHARGING:
 			if _blade_overlaps():
 				_saw_overlap = true
@@ -221,6 +249,10 @@ func _physics_process(_delta: float) -> bool:
 					+ "landed. Reach must be an UPPER BOUND that can only REMOVE a hit (AC 2)")
 				_check(latched == MatchState.CONTACT_CHARGE_REACH_OUTSIDE,
 					"%s: the runner latched kind %d, want OUTSIDE" % [label, latched])
+				# `6-1d/R11`: non-vacuity -- the blade really did reach the body, so the MISS above is
+				# the clamp refusing a real contact rather than geometry that never touched.
+				_check(_contact_ticks > 0, "%s: the blade never overlapped the body -- the clamp "
+					% label + "had nothing to refuse and the case would pass vacuously")
 			"charge":
 				_check(_fled, "%s: never reached the pre-commit teleport" % label)
 				_check(not hit, "%s: contact during the FEINTABLE chargeup credited damage -- the "
@@ -242,6 +274,51 @@ func _physics_process(_delta: float) -> bool:
 			_phase = "setup"
 		return false
 	return false
+
+
+## `6-1d/R9`: the round-over freeze pushes no charge-reach fact, and the debug reset clears the verdict.
+func _step_frozen(label: String, player: PlayerState) -> void:
+	if _frozen_frame < 0:
+		if player.charge_window.is_running or player.hero.action_state != HeroState.ActionState.CHARGING:
+			return
+		# Committed, launch running, parked clear so far: force the round over and put the defender
+		# on the blade -- its body centre just beyond the tracked blade shape, along the line from the
+		# attacker's centre, so the hurtbox box contains the blade wherever this colour's pose left it.
+		_check(_state._charge_reach[0] != MatchState.CONTACT_CHARGE_REACH_INSIDE,
+			"%s: sanity -- the parked defender was already latched INSIDE before the freeze" % label)
+		_state._end_round(_state.p2, 1)
+		var blade: Vector3 = _p1_actor.hitbox_shape.global_position
+		var out := Vector3(blade.x - _p1_actor.global_position.x, 0.0,
+				blade.z - _p1_actor.global_position.z)
+		out = out.normalized() if not out.is_zero_approx() else Vector3(1.0, 0.0, 0.0)
+		_p2_actor.global_position = Vector3(blade.x, _p2_actor.global_position.y, blade.z) 				+ out * (BODY * 0.4)
+		_frozen_frame = _frames
+		return
+	var since := _frames - _frozen_frame
+	if since <= FROZEN_FRAMES:
+		_check(player.is_contact_window_open(),
+			"%s: sanity -- the freeze should hold the contact window OPEN (frame %d)" % [label, since])
+		if since > 2 and _blade_overlaps():
+			_contact_ticks += 1
+		if _state._charge_reach[0] == MatchState.CONTACT_CHARGE_REACH_INSIDE:
+			_frozen_inside = true
+		if since == FROZEN_FRAMES:
+			_check(_contact_ticks > 0, "%s: the blade never overlapped the body during the freeze "
+				% label + "-- the gate had nothing to refuse and the case would pass vacuously")
+			_check(not _frozen_inside, "%s: the runner latched INSIDE during the round-over freeze "
+				% label + "from geometry no one played (`6-1d/R9`), %d overlapping frame(s)"
+					% _contact_ticks)
+			_holder.reset_next = true
+		return
+	if since < FROZEN_FRAMES + RESET_SETTLE:
+		return
+	_check(player.hero.action_state != HeroState.ActionState.CHARGING,
+		"%s: sanity -- the debug reset should have ended the frozen flight" % label)
+	_check(_state._charge_reach[0] == MatchState.REACH_UNKNOWN,
+		"%s: the debug reset left the verdict at kind %d, want REACH_UNKNOWN (`6-1d/R9`)"
+			% [label, _state._charge_reach[0]])
+	_phase = "after"
+	_phase_frame = _frames
 
 
 ## The runner's own question, asked independently here so a case can prove it was not vacuous: does

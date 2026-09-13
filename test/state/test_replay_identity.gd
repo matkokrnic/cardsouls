@@ -107,6 +107,11 @@ const UNHASHED_CROSS_TICK: Array[String] = [
 	# replay restores them by replaying those pushes exactly as it restores a lock direction.
 	# MEMBERS therefore STAYS AT THREE.
 	"match_state._charge_reach", "match_state._charge_reach_dirs",
+	# Story 6-1d review fix (`6-1d/R8`): A THIRD ARRAY ON ARGUMENT (c), still NOT A FOURTH ARGUMENT --
+	# the 5-2 pair's precedent applied unchanged. `_charge_contact_dirs` holds the direction carried by
+	# the push that latched `INSIDE`: a copy of a pushed fact, never produced by the tick, captured by
+	# `capture_push_contact` and restored on replay by replaying those pushes. MEMBERS STAYS AT THREE.
+	"match_state._charge_contact_dirs",
 ]
 const UNHASHED_CROSS_TICK_MEMBERS := 3
 

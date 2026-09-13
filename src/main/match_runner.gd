@@ -680,6 +680,16 @@ func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 func _push_charge_reach_facts() -> void:
 	if _match_state.balance == null:
 		return
+	# Story 6-1d review fix (`6-1d/R9`): THE ROUND-OVER FREEZE PUSHES NOTHING. Step 1b returns before
+	# step 2 for the whole freeze, so a committed hero keeps its contact window OPEN while the rig keeps
+	# sweeping -- without this gate a frozen match would go on latching verdicts from geometry no one
+	# played. Nothing is recorded either, so a replay sees the same silence. The snapshot read is
+	# `_huds`' lock-marker precedent in `_physics_process`, and it is taken only while a chargeup runs.
+	if _match_state.p1.hero.action_state != HeroState.ActionState.CHARGING \
+			and _match_state.p2.hero.action_state != HeroState.ActionState.CHARGING:
+		return
+	if bool(_match_state.to_snapshot().get("round_over", false)):
+		return
 	for slot: int in 2:
 		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 		if player.hero.action_state != HeroState.ActionState.CHARGING:
