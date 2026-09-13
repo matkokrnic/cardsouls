@@ -9949,3 +9949,46 @@ Dev note (for operator confirmation): measured, the commit tick's push does not 
 Two commits: `story 6-1d: in-arc contact is absorbing (6-1d/R13)` (code + tests) and
 `docs(6-1d): R13 record` (story file + this entry). Suite 774/0/6293+59 -> 777/0/6305+59.
 Story Status stays `review`; board untouched. Not pushed.
+
+## Session 2026-09-13 -- 6-1d close-out
+
+Review LOW touch-ups closed (`C:\dev\_61d-review2.md`, LOWs B/D/E), then a live smoke run against
+the story's ACs on the operator's own pad. Findings and log: `docs/playtest-log.md` (13.9. entry).
+
+`6-1d/R14` LIVE SMOKE PASS on the story's ACs. Items 1/2 PASS (damage only on real contact, the gap
+defect is gone); 6/7 PASS (regressions clean, fps stable).
+
+`6-1d/R15` SWING-AT-COMMIT KNOB STAYS OFF. ON had NO observable effect on GREEN. Cause CLASSIFIED,
+not guessed: the knob is wired and non-degenerate (GREEN `hold_end 0.55` in
+`_CHARGE_HOLD_KNOBS`), but GREEN's held pose sits at `hold_fraction 0.5744` of the clip -- already
+airborne -- so re-timing WHEN the hold plays cannot move the takeoff out of the chargeup. The fix
+is a clip knob (a held pose BEFORE the takeoff), owned by the retune block, not this story.
+RED/BLUE under ON were not judged.
+
+`6-1d/R16` RETUNE BLOCK, UNLOCKED. `6-1c/R10`'s hard constraint ("no reach or homing number before
+(a) lands") is DISCHARGED -- (a) landed. Handed to the retune block (post-E6, per the 30.8.
+ruling), no owner yet: (i) homing range reads small; reach and homing speed retune TOGETHER; (ii)
+dodge after commit still escapes easily -- dodge stamina must cost more than initiating an
+unblockable, unblockables want a little more reach (`6-1c/R11` restated with the smoke evidence);
+(iii) GREEN should cover ~2/3 of its travel by the apex -- AC 7's front-loaded profile did not read
+that way because the takeoff is in the chargeup (R15); needs the clip knob first, then the profile
+re-judged.
+
+`6-1d/R17` E6 CLOSE-OUT CANDIDATES, no owner: review2 LOW-A (arc hot-reload mid-flight), LOW-C
+(`_charge_reach_dirs` never cleared; a one-tick chargeup has no aim tick -- predates 6-1d, no
+config uses it, the real question is what aiming in zero ticks means), LOW-F (no replay test for
+`_charge_contact_dirs`), C5 (runner's round-over gate deep-copies a snapshot to read one bool, and
+`.get("round_over", false)` silently disables the gate on a key rename), and CLAUDE.md's trailer
+line disagreeing with `6-1c/R7` (repo wins; align CLAUDE.md). D3 and F-9 remain deferred,
+unchanged.
+
+Also recorded: R-D6 SPENT again on this smoke; the suite counters from the LOW touch-up pass
+(777/0/6305 + 59 integration, ALL TESTS PASSED, EXIT=0, golden `9679fa80` unmoved).
+
+### Close-out
+
+Three commits: `story 6-1d: review LOW touch-ups` (code + tests), `docs(6-1d): playtest-log +
+close-out record` (playtest-log + story file + this entry), and `docs(6-1d): promote to done`
+(status/board promotion). Suite unchanged in count by the docs commits (777/0/6305+59 stands).
+Story Status `review` -> `done`; board -> `done  # Tier A`. Pushed to `origin/main` on operator
+confirmation of the log.

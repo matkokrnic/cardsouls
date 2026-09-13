@@ -233,6 +233,38 @@ Items:
 Feel knobs (per-colour travel/reach/arc/geometry clamps) stay named, editable `.tres` values;
 tests must not pin their numbers (`6-1b`/`6-1c` precedent).
 
+### Live Smoke Results (2026-09-13)
+
+Source: `docs/playtest-log.md`, 6-1c/6-1d sessions of 11.9. and 13.9. (operator's own numbered
+points, distinct from this list's numbering). Rulings recorded in decision-log session "6-1d
+close-out": `6-1d/R14`-`R17`.
+
+1. **PASS.** No damage across a visible gap; the 6-1c-carried gap defect is gone. Operator (13.9.,
+   points 1-2): "mac sad radi stetu samo kada dira protivnika" (the sword now deals damage only
+   when it touches the opponent).
+2. **PASS**, same log line as item 1 — the blade-passing-through case was not separately
+   distinguished in the log, and the operator judged the anchor read live and correct.
+3. **PASS, functionally** — dodge during the swing still negates (AC 6 holds), but the operator
+   flags it reads as too easy to escape by dodging after the commit and wants dodge stamina raised
+   relative to unblockable initiation cost (13.9., point 3). Not a defect; carried to the retune
+   block as `6-1d/R16(ii)`, alongside `6-1c/R11`'s reach note it restates.
+4. **Not addressed this smoke pass.** The operator's log does not comment on the per-colour clamp
+   case; not claimed here.
+5. **Inconclusive, not a clean PASS.** GREEN's homing does not read as travelling toward the
+   target during the pre-apex phase — it rises first, then flies to the enemy, where the operator
+   expected roughly two-thirds of the travel toward the target by the apex (13.9., point 4:
+   "green let uopce ne radi homing u djelu animacije prije nego je skakac u najvisoj toci"). Per
+   `6-1d/R15`/`R16(iii)`, this is because GREEN's held pose is already airborne before the apex —
+   a clip-knob problem, not this story's launch-velocity ramp. Carried to the retune block.
+6. **Judged, no operator-observable effect.** The operator did not recognize what was being asked
+   ("ne znam o kakvom gumbu pricamo", 13.9., point 5) — the knob's effect is not visible from play.
+   `6-1d/R15`: ON has no observable effect on GREEN (classified: the held pose already sits past
+   the takeoff, so re-timing WHEN it plays cannot move the takeoff out of the chargeup). Knob
+   **stays OFF**. RED/BLUE not separately judged.
+7. **PASS.** Regression clean — melee lunge, mode ③ defense/dodge, and the carried `6-1c` items all
+   still hold. Operator (13.9., point 6): "ostalo radi" (the rest works).
+8. **PASS.** fps stable. Operator (13.9., point 7): "fps stabilan".
+
 ## Dev Notes
 
 ### Open Questions for the dev pass (named, not pre-ruled)
@@ -683,6 +715,15 @@ Review fix pass 2 (2026-09-13):
 - `test/state/test_unblockable_tracking_and_reach.gd` -- three new tests (R13 a/b/c), helper
   `_charge_to_the_commit_tick`, three R3-superseded fixtures corrected.
 
+Review LOW touch-ups (2026-09-13, review2 LOWs B/D/E):
+
+- `test/integration/test_honest_hit_geometry_live.gd` -- the `frozen` case's placement gains a
+  reach-sanity check beside its overlap check (LOW-B); the mangled tab-continuation line in the
+  same teleport is un-mangled (LOW-E).
+- `test/state/test_unblockable_tracking_and_reach.gd` -- corrected the copy-pasted sidestep
+  language on `test_each_colour_judges_its_own_arc_against_the_committed_direction`, which has no
+  sidestep (LOW-D).
+
 ## Change Log
 
 - 2026-09-12: story authored (`gds-create-story`, measure-first pass; no dev work done). Board
@@ -720,6 +761,19 @@ Review fix pass 2 (2026-09-13):
   out-of-arc contact never overwrites it. Three R3-superseded 6-1c fixtures corrected and named.
   Suite 774/0/6293+59 -> 777/0/6305+59, ALL TESTS PASSED. Golden NOT MOVED. Status stays
   `review`; board untouched.
+
+- 2026-09-13: REVIEW LOW TOUCH-UPS (`C:\dev\_61d-review2.md`, LOWs B/D/E). The `frozen` live case
+  gains a reach-sanity check beside its overlap check (LOW-B); a copy-pasted sidestep comment on a
+  test with no sidestep is corrected (LOW-D); a mangled tab-continuation line is fixed (LOW-E).
+  Suite 777/0/6305+59, unchanged in count (B adds an assertion, not a new test), ALL TESTS PASSED.
+  Golden NOT MOVED. Status stays `review`; board untouched.
+
+- 2026-09-13: CLOSE-OUT. Live smoke run against this story's ACs (operator's log,
+  `docs/playtest-log.md`), rulings `6-1d/R14`-`R17` (decision-log session "6-1d close-out"): smoke
+  PASS on damage-only-on-contact and regression/fps; the swing-at-commit knob stays OFF (no
+  observable effect, R15); the retune block is unlocked for the next story to pick up (R16), and
+  four small close-out candidates are recorded with no owner (R17). Status `review` -> `done`;
+  board -> `done  # Tier A`.
 
 ## DEVIATIONS
 
@@ -783,3 +837,10 @@ Review fix pass 2 (2026-09-13):
   meet the required mutation. The extra later out-of-arc touches make it fail there, and they test
   the ruling's own words: any in-arc contact wins.
 - No subagents, forks, or parallel sessions. No push.
+
+### This pass (close-out, 2026-09-13)
+
+- No subagents, forks, or parallel sessions were used, per the chain prompt's own instruction.
+- The Live Smoke Results section reports only what the operator's log states; where the log is
+  silent (item 4, the per-colour clamp) it is marked not addressed rather than assumed passing.
+- `docs/playtest-log.md` was staged and committed exactly as the operator wrote it; not edited.
