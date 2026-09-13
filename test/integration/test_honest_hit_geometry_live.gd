@@ -291,7 +291,21 @@ func _step_frozen(label: String, player: PlayerState) -> void:
 		var out := Vector3(blade.x - _p1_actor.global_position.x, 0.0,
 				blade.z - _p1_actor.global_position.z)
 		out = out.normalized() if not out.is_zero_approx() else Vector3(1.0, 0.0, 0.0)
-		_p2_actor.global_position = Vector3(blade.x, _p2_actor.global_position.y, blade.z) 				+ out * (BODY * 0.4)
+		_p2_actor.global_position = Vector3(blade.x, _p2_actor.global_position.y, blade.z) \
+				+ out * (BODY * 0.4)
+		# `6-1d/R14` (review2 LOW-B): the overlap check above only proves the blade shape touches
+		# the body -- it says nothing about the runner's OTHER conjunct, the reach pre-filter. A
+		# retune that shrinks reach below this placement would make the overlap-vacuity check pass
+		# for the wrong reason (the runner would have refused on reach, never reaching the arc gate
+		# this case exists to prove). Assert the placement is still inside reach too.
+		var reach := _config.unblockable_reach_for(player.charge_color)
+		var planar := Vector2(_p2_actor.global_position.x - _p1_actor.global_position.x,
+				_p2_actor.global_position.z - _p1_actor.global_position.z)
+		_check(planar.length() <= reach,
+			"%s: sanity -- the frozen placement (%.2f) is outside colour %d's authored reach "
+				% [label, planar.length(), player.charge_color]
+				+ "(%.2f), so a real runner would refuse on reach alone and the overlap proof "
+					% reach + "would be vacuous")
 		_frozen_frame = _frames
 		return
 	var since := _frames - _frozen_frame

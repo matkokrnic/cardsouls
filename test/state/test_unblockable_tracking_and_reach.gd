@@ -288,10 +288,11 @@ func test_the_chargeup_stays_hard_rooted_up_to_the_commit() -> void:
 ## just inside and just outside each colour's in-test half-arc; GREEN (radial) is hit from straight
 ## BEHIND. The kind is INSIDE in every case, so only the arc decides.
 ##
-## STORY 6-1d (`6-1d/R13`, R3-superseded fixture): the chargeup and the COMMIT tick now push OUTSIDE,
-## and INSIDE only from the sidestep onward. The old fixture reported an INSIDE contact
-## dead ahead on the commit tick, which R3 made a real in-arc touch -- and R13 makes an in-arc touch
-## absorbing, so that fixture would test a hit. The claim is unchanged and not weakened: with the ONLY
+## STORY 6-1d (`6-1d/R13`, R3-superseded fixture): the chargeup and the COMMIT tick now push OUTSIDE;
+## the launch then pushes INSIDE, but already at the case's off angle -- there is no sidestep here,
+## every launch push lands on the same line. The old fixture reported an INSIDE contact dead ahead
+## on the commit tick, which R3 made a real in-arc touch -- and R13 makes an in-arc touch absorbing,
+## so that fixture would test a hit. The claim is unchanged and not weakened: with the ONLY
 ## contact off the line, the authored arc decides.
 func test_each_colour_judges_its_own_arc_against_the_committed_direction() -> void:
 	var cases := [
