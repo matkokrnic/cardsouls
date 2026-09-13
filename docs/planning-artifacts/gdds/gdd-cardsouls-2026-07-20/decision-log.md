@@ -9876,3 +9876,50 @@ into R5.
 Docs-only pass, one commit: story file (rulings R1-R7 applied, ACs renumbered, Open Questions
 narrowed, mis-cites fixed) and this entry, together. Story Status stays `authored` -- promotion
 to `ready-for-dev` is a separate pass. No code, no test, no suite run.
+
+## Session 2026-09-13 -- 6-1d review fix pass
+
+Findings: `C:\dev\_61d-review.md` (code review of `e7afe21`/`d7f5b28`, verdict CHANGES REQUESTED).
+Rulings ratified by the operator in the fix-pass prompt; recorded here so every label cited in code
+and story comments has a home.
+
+`6-1d/R8` THE ARC IS JUDGED AGAINST THE BEARING AT THE MOMENT OF CONTACT (closes HIGH-1). The dev
+pass made the charge-reach verdict absorbing but left the arc reading the every-push direction, so
+the landing ANDed a verdict from one tick with a bearing from another. The bearing is now latched in
+the same `push_contact` arm that latches `INSIDE` (new unhashed per-slot store
+`_charge_contact_dirs`, classified in `test_replay_identity.gd`'s `UNHASHED_CROSS_TICK`), and
+`_is_in_charge_arc` reads it. `_charge_reach_dirs` keeps being written every push for the CHARGING
+facing track, unchanged. The arc stays a conjunct that can only REMOVE a hit. Consequence: AC 6's
+supersession is fully delivered in live play -- a defender touched mid-flight who then leaves a
+narrow arc is hit; a touch taken outside the arc is not credited by drifting in. Proven both
+directions on a narrow-arc colour.
+
+`6-1d/R9` THE LATCH'S CLEARING IS OWNED, NOT EMERGENT (closes MEDIUM-1 and the round-over/reset
+leak). The verdict and its bearing are cleared at the cast seat and in `_reset_player`; no
+`chargeup_ticks >= 2` authoring assert. `_push_charge_reach_facts` pushes nothing during the
+round-over freeze. The `C == 1` cross-arena free hit is proven dead by test.
+
+`6-1d/R10` THE LAUNCH INDEX COMES FROM THE WINDOW (closes MEDIUM-3). Launch span and tick index are
+derived from the running windows' snapshotted durations, not a live `balance_ticks` read, leaning
+on `TimingWindow`'s hot-reload guarantee instead of adding a refusal. AC 7's arithmetic re-proven,
+including across a mid-flight span retune.
+
+`6-1d/R11` TEST-ONLY REPAIRS (closes MEDIUM-2 and LOW-2c). The live fixture heals P2 in `setup`;
+the `clamp` case asserts `_contact_ticks > 0`.
+
+`6-1d/R12` THE SEVEN LOWs. Apply the one-line correctness/comment fixes; give a one-line reason for
+each not applied; no scope expansion. The `hitbox` null-deref LOW is inherited from
+`_gather_contact_facts` and is OUT. Dispositions are in the story file's review-fix record.
+
+### Dev notes against the rulings (for operator confirmation)
+
+- R8's count: `UNHASHED_CROSS_TICK_MEMBERS` kept at 3. MEMBERS counts arguments (`4-6/R6`), and
+  the new store joins argument (c) as `_charge_reach_dirs` did at 5-2.
+- R8, several contact ticks: the bearing re-latches on every `INSIDE`, so the last contact's bearing
+  is judged. First-contact latching was the alternative; it is a design seam, left for Matko.
+
+### Close-out
+
+Two commits: `story 6-1d: review fixes (rulings 6-1d/R8-R12)` (code + tests) and
+`docs(6-1d): review fix record` (story file + this entry). Suite 769/0/6251+59 -> 774/0/6293+59.
+Golden NOT MOVED (`9679fa80`). Story Status stays `review`; board untouched (CFG/R2). Not pushed.

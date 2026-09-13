@@ -407,7 +407,7 @@ unrelated to AC 6's deliberate supersession. The state-side window gate preserve
 - MEASURED THIS PASS, not cited: a temporary probe in `_play_sequence` printed on any tick where
   either hero was `CHARGING` or either `landing_window` was running. **Zero prints across the whole
   golden run.** NON-VACUITY: the same seat with the condition changed to `IDLE` printed **184**
-  times. Backup + SHA256 `1d55b5c18bf07b67…7b2c7e85` taken before the probe and re-verified after
+  times. Backup + SHA256 `1d55b5c18bf07b76782feb18cb5637930ce41194931409bc3a3cb60b7f2c7e85` taken before the probe and re-verified after
   restoring by copying the backup back (never `git checkout`).
 - The single named admissible exception did not arise: **no new TOP-LEVEL hashed field anywhere**.
   `_charge_reach` was already excluded from `to_snapshot()` and already listed in
@@ -463,6 +463,118 @@ tick whose answer state would refuse anyway.
 - Live Smoke checkboxes deliberately left untouched; the operator runs that. Live Smoke item 6
   (the ON/OFF verdict on the swing-at-commit knob) is his call, as AC 8 says.
 
+### Review fix pass (2026-09-13, rulings `6-1d/R8`-`R12`)
+
+Source of findings: `C:\dev\_61d-review.md` (verdict CHANGES REQUESTED: HIGH-1, MEDIUM-1..3,
+LOW-1..7). Source of rulings: the operator's fix-pass prompt, recorded in the decision-log session
+2026-09-13. Working files, backups and mutation outputs: `C:\dev\_61d-fix\`.
+
+**`6-1d/R8` -- the arc is judged against the bearing at the moment of contact (HIGH-1).**
+- The CHARGING facing track's read was verified by content before any edit
+  (`_resolve_movement`: `var aim := _charge_reach_dirs[slot]`, written to `facing` only while
+  `charge_window.is_running`). `_charge_reach_dirs` is still written on every push, unchanged.
+- New per-slot store `MatchState._charge_contact_dirs`, written in the arm of `push_contact` that
+  latches `INSIDE` (and cleared with the verdict in the clearing arm). `_is_in_charge_arc` reads it.
+  An `OUTSIDE` after an `INSIDE` writes neither half. A later `INSIDE` re-latches both halves
+  together, so with several contact ticks the arc judges the LAST contact's bearing (see DEVIATIONS).
+- The arc still can only REMOVE a hit: it is consulted only behind `_charge_reach == INSIDE`.
+- `_is_in_charge_arc`'s docstring is true again and says which commit broke it (`e7afe21`, the
+  dev pass) and which ruling restored it.
+- The new store is excluded from `to_snapshot()` and listed in `test_replay_identity.gd`'s
+  `UNHASHED_CROSS_TICK`. **That test edit is EXPECTED and is not a golden move.** It joins
+  argument (c) beside `_charge_reach` / `_charge_reach_dirs`, so `UNHASHED_CROSS_TICK_MEMBERS`
+  stays at 3 -- see DEVIATIONS.
+- **Consequence, stated plainly: AC 6's supersession is now FULLY delivered in live play, not
+  partially.** A defender touched mid-flight who then leaves a narrow arc (BLUE 40, RED 120) is HIT.
+  The mirror is closed too: a touch taken while OUTSIDE the arc is not credited because the defender
+  drifted into the arc by the landing.
+- Proved in BOTH directions with a NARROW-arc colour (BLUE, in-test 40):
+  `test_a_narrow_arc_judges_the_bearing_at_contact_so_a_strafe_after_the_touch_is_hit` and
+  `..._so_drifting_in_after_the_touch_is_missed`. Both go RED under the opposite mutation (M8).
+
+**`6-1d/R9` -- the latch's clearing is owned, not emergent (MEDIUM-1 + round-over/reset leak).**
+- `_charge_reach[slot]` and `_charge_contact_dirs[slot]` are cleared at the CAST SEAT
+  (`_resolve_unblockable_cast`, beside the two window starts) and in `_reset_player` beside the
+  three-part chargeup clear. No `chargeup_ticks >= 2` authoring assert was added.
+- `_push_charge_reach_facts` returns while the round-over freeze holds (read through
+  `to_snapshot()["round_over"]`, the `_physics_process` lock-marker precedent, taken only while a
+  hero is CHARGING). Nothing is pushed and nothing is recorded, so replay sees the same silence.
+- `C == 1` free hit proven dead: `test_a_one_tick_chargeup_does_not_inherit_the_previous_attacks_verdict`
+  (attack #1 lands and leaves `INSIDE`; attack #2, reported OUTSIDE on every evaluated tick, misses).
+- Reset clear: `test_the_debug_reset_clears_the_contact_verdict_and_its_bearing`.
+- Freeze gate: new live case `frozen` in `test_honest_hit_geometry_live.gd` -- commit with the
+  defender parked clear, force the round over mid-launch, move the defender onto the blade, observe
+  real overlap (non-vacuity guard) for 20 frames with the contact window open, assert the verdict
+  never becomes `INSIDE`; then a debug reset through the controller must leave `REACH_UNKNOWN`.
+
+**`6-1d/R10` -- the launch index comes from the window (MEDIUM-3).**
+- `_charge_launch_velocity` now takes `L = landing_window.duration - charge_window.duration` and
+  `i = (landing_window.duration - landing_window.remaining) - charge_window.duration`. Both
+  durations are snapshotted at the cast and survive a hot-reload (`TimingWindow.start`), so no
+  refusal was added. A read-only `TimingWindow.duration_ticks()` accessor was added for this.
+- AC 7's arithmetic re-proven: on in-phase tick `k = C + i` the landing window's elapsed count is
+  `C + i`, so `i` runs `0..L-1` exactly as before; the weights `2 - (2i+1)/L` still sum to `L` and
+  the flat speed is still `D * 60 / L`, so the total is `D`. With no reload, `L` and `i` are
+  numerically identical to the dev pass's values -- every pre-existing AC 7 test passes unedited.
+- New `test_a_mid_flight_span_retune_cannot_pin_the_launch_index` (GREEN L = 12 reloaded to 3
+  after the commit tick): still 12 moving ticks, still strictly front-loaded, still the authored
+  3.0 in total.
+
+**`6-1d/R11` -- test-only repairs (MEDIUM-2 + LOW-2c).**
+- `setup` heals P2 to max beside `apply_balance`.
+- `clamp` now asserts `_contact_ticks > 0`.
+
+**`6-1d/R12` -- LOW dispositions.**
+
+| LOW | disposition |
+|---|---|
+| LOW-1 P6 worked example backwards | APPLIED: 0.26 s rounds UP (overshoot), 0.27 s named as the undershoot sign |
+| LOW-2a "twice the flat share" | APPLIED: `2 - 1/L` at the start, `1/L` at the end |
+| LOW-2b degenerate span "unchanged" | APPLIED (comment): returns the input CLAMPED to `[0, 1]`; code untouched |
+| LOW-2c `clamp` non-vacuity | APPLIED under R11 |
+| LOW-3 probe SHA transcription | APPLIED: corrected in place to the full hash, re-hashed this pass from `C:\dev\_61d-mut\test_determinism.gd` |
+| LOW-4 commit trailer | NOT APPLIED: this pass's prompt fixes the trailer for its own commits; history not rewritten |
+| LOW-5 helper comment over-claims independence | APPLIED: comment now names the transcription and points at the shape test |
+| LOW-6 AC 8 ON path uncovered at the composition seat | NOT APPLIED: coverage expansion, not a one-line fix; stays a Live Smoke item 6 note |
+| LOW-7 `hitbox` null-deref | OUT by ruling: inherited from `_gather_contact_facts` |
+
+**Correction to the dev pass's M7c wording (review T3).** The runner's copy of the contact-window
+conjunct is a cost, clarity AND RECORDING gate: `capture_push_contact` records the kind it
+produced, so without it the recorded fact stream would carry `INSIDE` on chargeup ticks. State and
+determinism are unaffected; the state arm is still the guarantee.
+
+**Golden verdict -- predicted NO MOVE, measured NOT MOVED.** `test_determinism.gd`,
+`test_card_observation.gd` and `record_file.gd` are absent from the diff; `GOLDEN` is still
+`9679fa80f19358d15c9b33b1f9a3706264095ada871e5d2530cf29b6cbce8315` and the golden test passes in the
+suite run. Every new write is either in the CHARGING-only paths the golden never enters (dev pass
+probe: zero CHARGING ticks) or on unhashed stores (`_charge_reach`, `_charge_contact_dirs`) at the
+cast seat / reset. The `test_replay_identity.gd` list edit is a classification, not a golden move.
+31-key snapshot pin and `FORMAT_VERSION` 8 unchanged.
+
+**Suite.** Before (review baseline at `d7f5b28`): 769 / 0 / 6251 + 59 integration. After (run 1,
+all fixes in): **774 / 0 / 6293 + 59 integration, ALL TESTS PASSED, EXIT=0**
+(`C:\dev\_61d-fix\suite1.txt`). Final run: see the Change Log entry.
+
+**Mutation table (this pass).** Procedure: the current file copied to `C:\dev\_61d-fix\` with
+SHA256 first, mutated by python byte-replace, run, restored by copying the backup back (never
+`git checkout --`), SHA re-verified MATCH on every row. State rows ran the state harness; live rows
+ran `test_honest_hit_geometry_live.gd`.
+
+| # | mutation | observed | provenance |
+|---|---|---|---|
+| M8 | `_is_in_charge_arc` reads `_charge_reach_dirs` again | 2 RED: both narrow-arc R8 tests (774/2/6293) | MEASURED |
+| M9a | delete the two cast-seat clears | 1 RED: `test_a_one_tick_chargeup_does_not_inherit_the_previous_attacks_verdict` | MEASURED |
+| M9b | delete the two `_reset_player` clears | 1 RED: `test_the_debug_reset_clears_the_contact_verdict_and_its_bearing` | MEASURED |
+| M9c | runner round-over gate disabled (`if false and ...`) | live `frozen` RED on all three colours: "latched INSIDE during the round-over freeze", 18 overlapping frames each | MEASURED |
+| M10 | span/index read live off `balance_ticks` again | 1 RED: `test_a_mid_flight_span_retune_cannot_pin_the_launch_index` | MEASURED |
+| M11a | in-memory damage retune to 55 %, heal KEPT | live PASS | MEASURED |
+| M11b | same retune, heal REMOVED | live RED: `deadline: stuck in case 4 phase charging` | MEASURED |
+| M11c | `clamp` parked clear of the blade | live RED on all three colours: the new `_contact_ticks > 0` guard fires | MEASURED |
+
+A 30 % retune without the heal still PASSED: the new `frozen` case's debug reset heals P2 once per
+colour, so two landing cases per colour (60 %) never kill it. 55 % (110 % per colour) was used to
+reproduce MEDIUM-2's deadline, and the heal is still needed at that value.
+
 ## File List
 
 - `src/state/player_state.gd` — new `is_contact_window_open()` predicate (AC 4).
@@ -484,6 +596,21 @@ tick whose answer state would refuse anyway.
   `clamp`, `charge`, `flee` (AC 1/2/4/5/6).
 - `test/integration/test_unblockable_reach_live.gd` — `near` and `side` reworked to the new
   semantics; the launch/playhead claims kept.
+
+Review fix pass (2026-09-13):
+
+- `src/state/match_state.gd` -- `_charge_contact_dirs` store; latch arm split (R8); arc reads the
+  latched bearing; cast-seat and `_reset_player` clears (R9); `_charge_launch_velocity` span/index
+  from the windows (R10); comment corrections (LOW-1, LOW-2a).
+- `src/state/timing/timing_window.gd` -- read-only `duration_ticks()` accessor (R10).
+- `src/main/match_runner.gd` -- `_push_charge_reach_facts` skips the round-over freeze (R9).
+- `src/actors/hero/animation_controller.gd` -- comment only (LOW-2b).
+- `test/state/test_unblockable_tracking_and_reach.gd` -- five new tests (R8 x2, R9 x2, R10);
+  helper comment (LOW-5).
+- `test/state/test_replay_identity.gd` -- `_charge_contact_dirs` classified in
+  `UNHASHED_CROSS_TICK` (expected edit, not a golden move; MEMBERS stays 3).
+- `test/integration/test_honest_hit_geometry_live.gd` -- P2 healed per case, `clamp`
+  non-vacuity guard (R11); new `frozen` case (R9); controller can issue one debug reset.
 
 ## Change Log
 
@@ -511,6 +638,12 @@ tick whose answer state would refuse anyway.
   769/0/6251+59 after, all pass. Golden NOT MOVED, measured in inverse form (the fixture never
   enters CHARGING: zero probe hits against a 184-hit non-vacuity control). No new hashed field.
   AC 7's halt condition NOT triggered. Status `ready-for-dev` -> `review`.
+- 2026-09-13: REVIEW FIX PASS (rulings `6-1d/R8`-`R12`, findings `C:\dev\_61d-review.md`). HIGH-1
+  closed by latching the contact bearing with the verdict; MEDIUM-1 and the reset/round-over leak
+  closed by owned clears plus a freeze gate on the runner push; MEDIUM-3 closed by deriving the
+  launch span and index from the running windows; MEDIUM-2 and LOW-2c closed in the live fixture;
+  LOWs dispositioned above. Suite 769/0/6251+59 -> 774/0/6293+59. Final run after the docs edit:
+  774/0/6293+59, ALL TESTS PASSED, EXIT=0 (`C:\dev\_61d-fix\suite_final.txt`). Golden NOT MOVED. Status stays `review`; board untouched (CFG/R2).
 
 ## DEVIATIONS
 
@@ -538,3 +671,23 @@ tick whose answer state would refuse anyway.
   deletions) before committing. Condensing the seven rulings further risked losing the halt
   condition (R4) or the named supersession (R3), both load-bearing for the dev pass.
 - No subagents, forks, or parallel sessions were used. No suite run. No push.
+
+### This pass (review fix, 2026-09-13)
+
+- **`UNHASHED_CROSS_TICK_MEMBERS` NOT bumped; it stays at 3.** R8 asked for the count to be updated
+  with the list edit. The test counts ARGUMENTS, not arrays (`4-6/R6`), and the 5-2 precedent added
+  `_charge_reach_dirs` to argument (c) without a bump. `_charge_contact_dirs` is the same kind of
+  member: a copy of a pushed fact, restored by replaying the pushes. A bump to 4 would contradict the
+  pin's own doctrine. The list entry, the expected edit, WAS made. Operator to confirm.
+- **Several contact ticks: the arc judges the LAST contact's bearing.** R8 put the bearing in the
+  arm that latches `INSIDE`, and that arm runs on every `INSIDE` push. So a later out-of-arc touch
+  replaces an earlier in-arc one. Latching only the FIRST contact would have flipped three 6-1c
+  AC 3/AC 5 headless tests that push `INSIDE` on every tick. Named here as a design seam for Matko.
+- **New read-only accessor `TimingWindow.duration_ticks()`.** R10 required reading the window's
+  duration, and `TimingWindow` exposed only `remaining_ticks()`. There is no new write path.
+- **New live case `frozen`**, not named in the rulings. It is the mutation evidence the house rule
+  requires for the R9 freeze gate, and it also proves the reset clear through the real runner.
+  The clearing arm in `push_contact` also clears the bearing, so the two halves stay one fact.
+- **Commit trailer** follows this pass's prompt (`Claude Sonnet 5`), which differs from CLAUDE.md's
+  constant; LOW-4 therefore not applied.
+- No subagents, forks, or parallel sessions. No push.
