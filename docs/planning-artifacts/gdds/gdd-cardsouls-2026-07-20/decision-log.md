@@ -9992,3 +9992,84 @@ close-out record` (playtest-log + story file + this entry), and `docs(6-1d): pro
 (status/board promotion). Suite unchanged in count by the docs commits (777/0/6305+59 stands).
 Story Status `review` -> `done`; board -> `done  # Tier A`. Pushed to `origin/main` on operator
 confirmation of the log.
+
+## Session 2026-09-13 -- 6-2-pitch-staging readiness gate outcome
+
+Docs-only gate-fix pass on `6-2-pitch-staging`, promoted `authored` -> `ready-for-dev`. No source or
+test file touched -- the ACs below describe what the dev pass builds.
+
+Hand ruling and its conservation consequence: staging vacates the hand slot through the SAME
+`hand.remove_at()` hole a cast produces, but does NOT append to `pending_draw_owed` at staging --
+the replacement is owed only when the card leaves the zone, which in this story is fizzle only. The
+existing `occupied + owed == hand_size` identity grows a fifth term (`+ staged`), and no existing
+test currently exercises it because none stages a card -- a new test closes that blind spot. A
+consequence stated plainly: `hand_size` in the snapshot (which binds to `occupied_count()`) reads
+ONE LOWER while a card is staged; `epics.md`'s "still counts toward the hand of 4" is satisfied
+structurally (the slot is reserved, not dealt into), not by the snapshot number itself.
+
+Mana is paid at staging, with no refund on fizzle -- a card that fizzles takes its mana with it.
+READY is derived fresh every tick from live orb affordability, never latched: nothing can make READY
+false again once mana is already spent at staging, so no stored flag is needed or authored.
+
+The `pitch_zone` flag opens in `data/feature_flags.tres` THIS story (not `6-4`), per the `5-2/R14`
+precedent measured before flipping `unblockable`: no test pins the authored file's values, only
+presence, and the flag opening changes no live behaviour until `6-4` wires a reachable path. The
+gate itself is MODE-LEVEL, in the pitch resolution arm, the shape modes 2 and 3 already use
+(`flags == null or not flags.pitch_zone` -> refuse with the flag-closed reason) -- never delegated
+to a per-card `required_flag`, which would make the layer non-toggleable.
+
+Pitch costs are authored, provisionally, on all nine cards: mana equal to that card's own Mode ①
+cost, 1 orb of the card's colour on the six 2/3-mana cards, 2 orbs on the three 5-mana totems. A
+`.tres` edit alone can retune these; the post-E6 playtest judges the numbers. This removes the
+null-cost case from shipped data, but the injection seam still does not `Invariant.check` totality
+(a future card with no authored pitch entry stays legal) -- and reaching that case refuses through a
+NEW reason constant, never `CastEvaluator.REASON_UNKNOWN_CARD`, whose own header documents it
+unreachable by construction (a guarantee this story's injection deliberately does not make).
+
+The new pitch-cost map is a new recorded channel: `FORMAT_VERSION` moves 8 -> 9, a v8 record refused
+with a reason and no shim, the `6-1` shape repeated. The mode-reachability guard (narrowed at `5-2`
+and `5-5`) is RETIRED rather than narrowed a third time, now that all four `Enums.ModeKind` values
+are reachable -- its guard tests are renamed/re-valued, not deleted, the `5-5` renaming discipline.
+
+The orb-clear optional rule (`BalanceConfig` bool, default OFF) is ruled "pitching clears, not the
+price clears" -- staging always empties the pool when ON, even for a card whose own cost needs no
+orbs, because the clear is keyed to the act of staging. Both branches are test-covered with a named
+expected visible effect, and the deadline (post-E6 playtest; losing branch and the bool both
+deleted) is recorded where it actually applies.
+
+The cancel exit deferral (named, not silent, in the story's Scope note) is now also recorded as
+`6-4`'s committed scope in `epics.md`'s `6-4` line, with a STRONGER reason than the story's own
+framing: cancel needs a new `InputIntent` shape (nothing today expresses "abandon what is already
+staged"), which is a recorded-input change touching `FORMAT_VERSION` and the replay machinery, not
+merely a state transition with no player-triggered consumer yet.
+
+Four gate-premise corrections, measured before ruling on them: `OrbPool.reset_all()` already has one
+real caller (`MatchState._reset_player`, the round-boundary reset) and lives at
+`src/state/pools/orb_pool.gd`, not `economy/` -- the story's optional rule is its SECOND caller, not
+its first. The story's guarded-stub-test citation named a test that does not exist in the repo;
+replaced with the three real reachability-guard test names in `test_card_play.gd`. Fact 9 and an
+Open Question reopened an already-settled seam-ownership ruling (`E6-P/R8`(2): the pitch HUD gets a
+NEW observation-seam member, never a second `MatchState` direct-connect) -- the reopening is
+deleted, the Non-Goal stands, the seam-count prediction for this story alone stays at nine. The
+Hellburst citation (`gdd.md:207`) was verified correct as authored.
+
+**DOCS DEBT, recorded without fixing:**
+- `gdd.md`'s "activates when cost is met" (Mode ④, the cast-condition table) and `epics.md`'s `6-4`
+  line's "cost paid" phrasing are both superseded for the MANA half by this story's staging-time
+  payment ruling -- neither is edited in this pass (docs and code never share a commit is not the
+  reason; the ruling belongs to `6-2`, the wording lives in two OTHER documents this pass does not
+  own).
+- Three stale source headers, unchanged: `PitchState`'s own "nothing is staged" framing (Measured
+  Facts 1/2 of the pre-gate-fix story draft, now false the moment `6-2` lands); the cast-condition
+  schema's Mode ① wording ("what Mode ① costs," `card_data.gd:40`, now shares the schema with Mode
+  ④ per AC 1); `OrbPool.reset_all()`'s own comment, "E6 resolution calls this," now describes its
+  SECOND caller, not a still-future first one.
+- The commit-trailer constant: measured, the repo's actual recent trailers read `Claude Sonnet 5`,
+  matching this session's own attribution and the story's Dev Notes -- NO disagreement found this
+  time. `6-1d/R17` already flagged a SEPARATE, still-open trailer disagreement (CLAUDE.md's own
+  `Claude Opus 4.8` line vs. the repo's practice) as an E6 close-out candidate with no owner; not
+  re-litigated here, only cross-referenced.
+
+One commit: `docs(decision-log): 6-2 readiness gate outcome` (this entry). Story Status `authored` ->
+`ready-for-dev`; board `backlog` -> `ready-for-dev  # Tier A`; `epics.md`'s `6-4` line gains the
+cancel clause. Not pushed.
