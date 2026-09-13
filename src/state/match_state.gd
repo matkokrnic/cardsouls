@@ -864,15 +864,35 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		var charging: PlayerState = p1 if attacker_slot == 0 else p2
 		# THE BEARING IS LATCHED IN THE ARM THAT LATCHES `INSIDE`, and only there (`6-1d/R8`). The
 		# landing's arc is judged against the direction of the push that recorded the contact, not
-		# against the last push's, so a defender touched in-arc who strafes out before the landing is
-		# HIT, and one touched out-of-arc who drifts in is MISSED. A later `INSIDE` re-latches both
-		# halves together; an `OUTSIDE` after an `INSIDE` writes neither.
+		# against the last push's. An `OUTSIDE` after an `INSIDE` writes neither half.
+		#
+		# AN IN-ARC CONTACT IS ABSORBING (`6-1d/R13`). Neither "first contact" nor "last contact" is
+		# the rule: if ANY contact tick of the committed flight had a bearing inside the colour's arc,
+		# the landing is a HIT. So an `INSIDE` push re-latches both halves UNLESS the verdict is
+		# already `INSIDE` and the bearing already latched passes `_is_in_charge_arc` -- a later
+		# out-of-arc touch never overwrites an earlier in-arc one, while an out-of-arc latch is still
+		# replaced by any later touch. The arc still only REMOVES a hit: a flight whose contacts were
+		# ALL out of arc latches an out-of-arc bearing and misses at the landing.
+		#
+		# THE ARC IS ONLY EVER ASKED OF THE BEARING ALREADY LATCHED, NEVER OF THE PUSH BEING LATCHED,
+		# and that ordering is what keeps the COMMIT TICK correct. The commit tick's push is the first
+		# inside the contact window, and it arrives BEFORE that tick's `advance()` -- before the step-2
+		# `charge_window.tick()` closes the chargeup, i.e. before the tick that freezes the facing for
+		# the flight has run. Nothing is latched on it (the cast seat, and the clearing arm on any
+		# pre-commit push, left `REACH_UNKNOWN`, `6-1d/R9`), so it simply latches and no arc is
+		# evaluated against a facing the rule has not yet seen frozen. (Measured: step 2 stops the
+		# chargeup before `_resolve_movement`, so the commit tick's own push does not re-aim the
+		# facing either -- but the rule does not depend on that detail.) Every later push in the
+		# window arrives after the freeze (`6-1c`), so "does the latched bearing already pass" is asked
+		# against exactly the facing the landing's `_is_in_charge_arc` will read.
 		if not charging.is_contact_window_open():
 			_charge_reach[attacker_slot] = REACH_UNKNOWN
 			_charge_contact_dirs[attacker_slot] = Vector2.ZERO
 		elif kind == CONTACT_CHARGE_REACH_INSIDE:
-			_charge_reach[attacker_slot] = kind
-			_charge_contact_dirs[attacker_slot] = target_to_attacker
+			if not (_charge_reach[attacker_slot] == CONTACT_CHARGE_REACH_INSIDE
+					and _is_in_charge_arc(charging, attacker_slot)):
+				_charge_reach[attacker_slot] = kind
+				_charge_contact_dirs[attacker_slot] = target_to_attacker
 		elif _charge_reach[attacker_slot] != CONTACT_CHARGE_REACH_INSIDE:
 			_charge_reach[attacker_slot] = kind
 		return
@@ -2171,7 +2191,8 @@ func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
 ## 6-1c both halves were overwritten on every push and so both described the last tick. Story 6-1d's
 ## dev pass (`e7afe21`) made the verdict ABSORBING across the flight but left this reading the
 ## every-push `_charge_reach_dirs`, so a verdict from one tick was judged against a bearing from
-## another. The 6-1d review fix (`6-1d/R8`) restored it with the latched bearing. The arc is still a
+## another. The 6-1d review fix (`6-1d/R8`) restored it with the latched bearing, and `6-1d/R13` made an
+## in-arc latch absorbing (`push_contact` asks this function of the latched bearing). The arc is still a
 ## conjunct that can only REMOVE a hit the geometry admitted: it reads nothing unless the kind is
 ## already `INSIDE`, and it can never turn an `OUTSIDE` into a hit.
 func _is_in_charge_arc(player: PlayerState, slot: int) -> bool:

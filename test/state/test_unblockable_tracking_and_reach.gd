@@ -194,9 +194,15 @@ func test_a_release_before_the_commit_still_feints_and_clears_the_landing_window
 ## AC 3, first sentence: the defender was dead ahead at the commit and has stepped to the side (still
 ## well inside the RADIUS -- the kind stays INSIDE) by the landing. Against the frozen direction that
 ## is 90 degrees off a 40-degree thrust: a MISS. The cost stays paid, like every miss.
+##
+## STORY 6-1d (`6-1d/R13`, R3-superseded fixture): the chargeup and the COMMIT tick now push OUTSIDE,
+## and INSIDE only from the sidestep onward. The old fixture reported an INSIDE contact
+## dead ahead on the commit tick, which R3 made a real in-arc touch -- and R13 makes an in-arc touch
+## absorbing, so that fixture would test a hit. The claim is unchanged and not weakened: with the ONLY
+## contact off the line, the authored arc decides.
 func test_a_defender_who_leaves_the_frozen_line_after_the_commit_is_missed() -> void:
 	var ms := _make_match(Enums.CardColor.BLUE)
-	_cast_and_charge(ms, DIR_AHEAD)
+	_cast_and_charge_kind(ms, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
 	_run_launch(ms, Enums.CardColor.BLUE, DIR_SIDE)
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "the attack resolved")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "a sidestep after the commit WHIFFS (AC 3)")
@@ -281,6 +287,12 @@ func test_the_chargeup_stays_hard_rooted_up_to_the_commit() -> void:
 ## AC 5: each colour's arc is judged against the frozen committed direction, in state. Directions
 ## just inside and just outside each colour's in-test half-arc; GREEN (radial) is hit from straight
 ## BEHIND. The kind is INSIDE in every case, so only the arc decides.
+##
+## STORY 6-1d (`6-1d/R13`, R3-superseded fixture): the chargeup and the COMMIT tick now push OUTSIDE,
+## and INSIDE only from the sidestep onward. The old fixture reported an INSIDE contact
+## dead ahead on the commit tick, which R3 made a real in-arc touch -- and R13 makes an in-arc touch
+## absorbing, so that fixture would test a hit. The claim is unchanged and not weakened: with the ONLY
+## contact off the line, the authored arc decides.
 func test_each_colour_judges_its_own_arc_against_the_committed_direction() -> void:
 	var cases := [
 		[Enums.CardColor.RED, 55.0, true], [Enums.CardColor.RED, 65.0, false],
@@ -289,7 +301,7 @@ func test_each_colour_judges_its_own_arc_against_the_committed_direction() -> vo
 	]
 	for case: Array in cases:
 		var ms := _make_match(case[0])
-		_cast_and_charge(ms, DIR_AHEAD)
+		_cast_and_charge_kind(ms, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
 		var off := DIR_AHEAD.rotated(deg_to_rad(case[1]))
 		_run_launch(ms, case[0], off)
 		var want := MAX_HP - UNBLOCKABLE_DAMAGE if case[2] else MAX_HP
@@ -320,6 +332,12 @@ func test_the_arc_never_widens_an_outside_kind() -> void:
 ## AC 6: a colour-matched defense still NEGATES through the same seat after a launch (the attacker
 ## is stunned, the defender unhurt) -- and a defender OUTSIDE the arc is simply missed, with its
 ## defense window left RUNNING (not consumed): the arc gates the whole ladder, it does not bypass it.
+##
+## STORY 6-1d (`6-1d/R13`, R3-superseded fixture): the chargeup and the COMMIT tick now push OUTSIDE,
+## and INSIDE only from the sidestep onward (the `missed` half). The old fixture reported an INSIDE contact
+## dead ahead on the commit tick, which R3 made a real in-arc touch -- and R13 makes an in-arc touch
+## absorbing, so that fixture would test a hit. The claim is unchanged and not weakened: with the ONLY
+## contact off the line, the authored arc decides.
 func test_the_colour_counter_still_answers_through_the_one_landing_seat() -> void:
 	var ms := _make_match(Enums.CardColor.BLUE)
 	_cast_and_charge(ms, DIR_AHEAD)
@@ -331,7 +349,7 @@ func test_the_colour_counter_still_answers_through_the_one_landing_seat() -> voi
 	assert_false(ms.p2.defense_window.is_running, "the answering window was consumed")
 
 	var missed := _make_match(Enums.CardColor.BLUE)
-	_cast_and_charge(missed, DIR_AHEAD)
+	_cast_and_charge_kind(missed, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
 	missed.p2.defense_window.start(100)
 	missed.p2.defense_color = Enums.CardColor.BLUE
 	_run_launch(missed, Enums.CardColor.BLUE, DIR_SIDE)
@@ -705,6 +723,72 @@ func test_a_narrow_arc_judges_the_bearing_at_contact_so_drifting_in_after_the_to
 		"touched OUTSIDE the 40-degree arc, then drifted into it untouched: a MISS")
 
 
+# --- 6-1d review fix 2: an in-arc contact is absorbing (`6-1d/R13`) ---------------------------
+
+## `6-1d/R13` (a), the case "last contact" got wrong. BLUE (in-test arc 40). The defender is touched 10
+## degrees off the line on LAUNCH TICK 0 -- the commit tick itself, the first push inside the contact
+## window -- and is still overlapping the blade, but 90 degrees off it, on EVERY later tick through the
+## landing. One in-arc contact is enough: a HIT.
+##
+## The commit tick is used on purpose: its push arrives before that tick's `advance()`. The sanity
+## assert on the facing pins the measured ordering the rule's comment names -- the commit tick's push
+## does not re-aim the frozen line.
+##
+## MUTATION: always overwrite the bearing on an `INSIDE` push (the R8 behaviour) and this goes RED --
+## the landing judges the last, out-of-arc touch and misses.
+func test_an_in_arc_touch_on_the_commit_tick_survives_later_out_of_arc_touches() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	var in_arc := DIR_AHEAD.rotated(deg_to_rad(10.0))
+	_charge_to_the_commit_tick(ms)
+	for t in 1 + _launch(Enums.CardColor.BLUE):
+		var dir := in_arc if t == 0 else DIR_SIDE
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, dir)
+		_advance(ms, _holding(), InputIntent.new())
+		if t == 0:
+			assert_eq(ms.p1.hero.facing, -DIR_AHEAD, "sanity: the frozen line is the pre-commit aim")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+		"touched IN arc on the commit tick, then out of arc on every later tick: a HIT")
+
+
+## `6-1d/R13` (b): ANY in-arc contact wins, not the first. The commit tick touches the defender 90
+## degrees off the line (out of arc), a later launch tick touches it 10 degrees off (in arc), and every
+## other tick touches it out of arc again -- so neither the first nor the last contact is in arc.
+##
+## MUTATION: always overwrite the bearing on an `INSIDE` push and this goes RED (the last touch is out
+## of arc).
+func test_any_in_arc_touch_during_the_flight_is_a_hit() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	var in_arc := DIR_AHEAD.rotated(deg_to_rad(10.0))
+	_charge_to_the_commit_tick(ms)
+	for t in 1 + _launch(Enums.CardColor.BLUE):
+		var dir := in_arc if t == 3 else DIR_SIDE
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, dir)
+		_advance(ms, _holding(), InputIntent.new())
+		if t == 0:
+			assert_eq(ms.p1.hero.facing, -DIR_AHEAD, "sanity: the frozen line is the pre-commit aim")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+		"out of arc first, in arc on one later tick, out of arc last: a HIT")
+
+
+## `6-1d/R13` (c), the surviving half: touched on every tick from the commit through the landing, but
+## ALWAYS 90 degrees off BLUE's 40-degree line. The verdict is `INSIDE` and the arc refuses it -- the
+## arc can still only REMOVE a hit, and an absorbing in-arc latch never widens one.
+##
+## MUTATION: make every `INSIDE` flight land (skip the arc) and this goes RED.
+func test_a_flight_touched_only_out_of_arc_still_misses() -> void:
+	var ms := _make_match(Enums.CardColor.BLUE)
+	_charge_to_the_commit_tick(ms)
+	for _t in 1 + _launch(Enums.CardColor.BLUE):
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
+	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
+		"sanity: every tick touched -- only the arc can refuse this one")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "touched only out of arc on every tick: a MISS")
+
+
 # --- 6-1d review fix: the latch's clearing is owned (`6-1d/R9`) --------------------------------
 
 ## `6-1d/R9`: the `C == 1` cross-arena free hit is dead. With a ONE-TICK chargeup the first push of an
@@ -848,6 +932,16 @@ func _cast_and_charge_kind(ms: MatchState, aim: Vector2, kind: int) -> void:
 		_advance(ms, _holding(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: committed, not landed")
 	assert_false(ms.p1.charge_window.is_running, "sanity: the chargeup window has closed")
+
+
+## Cast on slot 0 and run the FEINTABLE chargeup only, aiming dead ahead and touching nothing, stopping
+## one tick short of the commit: the caller's next push is the commit tick's (`6-1d/R13`).
+func _charge_to_the_commit_tick(ms: MatchState) -> void:
+	_advance(ms, _unblockable_intent(0), InputIntent.new())
+	for _t in CHARGEUP_TICKS - 1:
+		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
+		_advance(ms, _holding(), InputIntent.new())
+	assert_true(ms.p1.charge_window.is_running, "sanity: still feintable, the commit is the next tick")
 
 
 ## Run the rest of the launch (after `_cast_and_charge`) through the landing tick, pushing INSIDE with
