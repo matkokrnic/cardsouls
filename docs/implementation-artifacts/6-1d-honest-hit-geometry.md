@@ -4,7 +4,7 @@ baseline_commit: e50bc94705cfba8c5471731391806410f6e7a04e
 
 # Story 6.1d: Honest Hit Geometry
 
-Status: review
+Status: done
 
 > **Scope note.** Not on the E6 board from planning — no correct-course run. Named successor to
 > `6-1c` in that story's close-out (`6-1c/R10`, decision-log.md:9770-9776). Tier A: touches the
