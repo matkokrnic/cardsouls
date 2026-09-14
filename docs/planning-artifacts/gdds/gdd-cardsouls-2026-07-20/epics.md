@@ -148,7 +148,7 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 - Unblockable Initiation (Mode ②): chargeup + color telegraph (**shape + sound**, <0.5 s), stamina cost, generous auto-aim that does **not** absorb spacing (Reactor/Actor). (`5-2-unblockable-initiation`; telegraph presentation split into `5-3-telegraph-presentation`.)
 - Unblockable Defense (Mode ③): instant, color-match, within the chargeup window. (`5-5-unblockable-defense`.)
 - **Three-tier outcome ladder** — no-answer/wrong-color → full dmg + attacker orb; dodge/leave-range → none; correct color → none + attacker stun ~1 s. One fixed damage value for all three colors (balance `.tres`) — per-color damage was cut, `5-2/R10`. (`5-6-three-tier-ladder`.)
-- Orb resource: acquisition on land, authored per-color storage cap (`max_orbs_per_color = 5`, provisional, `5-4/R8`), HUD counters, all-color-reset hook (spent in E6). (`5-4-orbs`.)
+- Orb resource: acquisition on land, authored per-color storage cap (`max_orbs_per_color = 5`, provisional, `5-4/R8`), HUD counters, an all-color-reset hook (`OrbPool.reset_all()`) used at the round boundary and, optionally, by `6-2`'s staging-clear knob — NOT by `6-3a`'s activation spend, which spends only the priced orbs (`6-3-split/R-SPEND`). (`5-4-orbs`.)
 - Color-as-defense: Mode ③ requires a matching-color card in the 4-card hand.
 - Pad card-input and dual pad-mode select (mode ② initiation vs mode ③ defense on B/X). (`5-0b-pad-card-input` seats input; `5-7-pad-modes-2-3` ships modes 2/3.)
 - `FeatureFlags: unblockable, orbs` (degrade).
@@ -195,10 +195,13 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 **Goal.** Close the buildup→bluff→payoff loop; make the Design Touchstone playable.
 
 **Key stories.** ELEVEN, keyed and tiered at the E6 planning pass (decision-log Session 2026-09-08,
-`E6-P/R2`). Keys are creation order; the list below is **board order** (the `4-3a`..`4-3e`
-precedent — the numeral is historical, not the board's). Tier per `E4-P/R9`; every Tier B is
-contingent on a measured before/after showing golden and snapshot key set unmoved, and tier may be
-raised, never lowered.
+`E6-P/R2`); briefly merged to TEN at the `6-3-pitch-hud-and-activation` create pass (2026-09-14,
+board items 5/6 combined), then split back to ELEVEN the same day at that story's readiness gate
+(`6-3-split/R-SPLIT`) after the gate found the merge's forcing premise disproved. Keys are creation
+order; the list below is **board order**
+(the `4-3a`..`4-3e` precedent — the numeral is historical, not the board's). Tier per `E4-P/R9`;
+every Tier B is contingent on a measured before/after showing golden and snapshot key set unmoved,
+and tier may be raised, never lowered.
 
 1. `6-0-card-hand-tint` (**Tier B**) — the four own-hand card faces carry their card's colour; the
    face-down opponent row is untouched. FIRST E6 story by ruling (`E5-C/R5`).
@@ -207,12 +210,19 @@ raised, never lowered.
 3. `6-1b-chargeup-presentation` (**Tier B**) — the chargeup animation: crouch/leap, short mid-air
    hover, auto-aim toward a target in radius (`E5-C/R9`).
 4. `6-2-pitch-staging` (**Tier A**) — `PitchState` gains content: stage from hand, the fizzle
-   `TimingWindow`, cancel and fizzle exits, staged card still counts toward the hand of 4.
-5. `6-3-pitch-hud` (**Tier B**, at risk of Tier A) — public cost + countdown + affordability read
-   (read, not computed — the Reactor/Actor offload), on both viewports.
-6. `6-4-pitch-activation` (**Tier A**) — Mode ④ resolves: cost paid, **all-colour orb reset**, pad Y
-   wired, PITCH stops being structurally unreachable; also takes the cancel exit `6-2` deferred
-   (`6-2` scope note, 2026-09-13 readiness gate).
+   `TimingWindow`, the fizzle exit, staged card still counts toward the hand of 4.
+5. `6-3a-pitch-activation` (**Tier A**) — Y wired as the fourth card mode: staging, activation, both
+   refusals (occupied-zone stage refusal, not-ready activation refusal), activation's consequence
+   (`6-3-split/R-SPEND`: only the priced orbs are spent, surplus remains), the intent shape, the
+   Y-guard retirement, the golden. Live smoke runs on surfaces that already ship (orb counters,
+   in-flight caption, mana bar, the existing rejection cue, the existing cast-success cue) — no HUD
+   work. Split from the merged `6-3-pitch-hud-and-activation` at that story's readiness gate
+   (2026-09-14, `6-3-split/R-SPLIT`), after the gate disproved the merge's premise that activation
+   could not be smoke-tested without a HUD.
+6. `6-3b-pitch-hud` (**Tier A**) — the tenth observation seam, both pitch zones (own + opponent), the
+   hand ghost, the cross-slot guard, retiring the `2-6` placeholder and its shared A/B switch, and
+   the anchor A/B verdict. Driven live by `6-3a`'s Y, so it needs no scaffolding either. Same split,
+   same ruling as `6-3a` above.
 7. `6-7-locomotion-gaits` (**Tier A**) — the two-gait system ruled at planning: walk is new, slower,
    free and the default; run is the current speed, held, draining the same stamina bar. Walk speed
    and drain-per-second are authored here.
@@ -246,21 +256,26 @@ raised, never lowered.
   NOT the 2-4 smoke, a citation corrected at E6 planning) and is now RULED per-player, provisional
   (above). Locked and unchanged: the pitched card is the sole public information, hands stay
   private otherwise.
-- Pitch zone placement carries into `6-3`: the first A/B reading (2-6/R19, finding S4) found anchor
-  B (left of the vitals bars) reads better than dead-centre anchor A — a first reading only, and
-  `6-3` owes the verdict.
+- Pitch zone placement carries into `6-3b-pitch-hud`: the first A/B reading (2-6/R19, finding S4)
+  found anchor B (left of the vitals bars) reads better than dead-centre anchor A — a first reading
+  only, and that story owes the verdict.
+- **Cancel has no owning story.** `6-2` deferred it into the (now-superseded)
+  `6-3-pitch-hud-and-activation` slot at its 2026-09-13 readiness gate; neither `6-3a-pitch-activation`
+  nor `6-3b-pitch-hud` picks it up at the 2026-09-14 split (`6-3-split/R-SPLIT`). OUT, with two open
+  questions carried forward: does a future cancel refund staged mana; does it restore orbs cleared
+  by `pitch_stage_clears_orbs` if that knob was ON at stage time.
 - **`6-2` scope talk owes the pitch-cost authoring seat.** `CardData` has ONE `cast_condition`
   (`src/state/resources/card_data.gd:40`) shared across modes, `pitch_effect` (`:37`) is unauthored
   on all nine fixture cards, and `CardCastCondition.orb_costs` is empty everywhere by design
   (`src/state/resources/card_cast_condition.gd:29-35`) — so a Mode ④ cost of "mana (higher) + orbs"
   (`gdd.md:178`) has nowhere to live today. Adding a field is codebase-shaping, so it is decided at
   that story's scope talk, not by the implementing pass.
-- **`6-4` owes the Y-guard question.** `5-7/R7` kept LOW-1/LOW-2 (the guard's untested evasion forms
-  and its blanket ban on any future Y binding) as-is "until the E6 story that actually wires Y
-  forces the question" — `6-4` is that story. Y is a no-op BY OMISSION (`GamepadProfile` has no Y
-  field, `gamepad_profile.gd:77`; `GamepadController` reads Y on no line, `gamepad_controller.gd:170-175`)
-  and mode PITCH is a deliberate CRASH-ON-REACH in state (`Invariant.check(false, ...)`,
-  `src/state/match_state.gd:2371-2374`) — both must be revisited deliberately, not discovered.
+- **`6-3a-pitch-activation` owes the Y-guard question.** `5-7/R7` kept LOW-1/LOW-2 (the guard's
+  untested evasion forms and its blanket ban on any future Y binding) as-is "until the E6 story that
+  actually wires Y forces the question" — that story is this one. Y is a no-op BY OMISSION
+  (`GamepadProfile` has no Y field; `GamepadController` reads Y on no line) and mode PITCH already
+  has a live dispatch arm for STAGING (`match_state.gd`, since `6-2`) but activation itself has no
+  dispatch at all yet — both must be revisited deliberately, not discovered.
 - **`6-5` (close-out) carries `R-SPELL` plus two deferred E4 review findings** given it as owner at
   E5 planning: M5 (the live homing test cannot tell steering-toward from steering-away) and M6
   (reordering `unit_kinds` at an X3 reload silently re-points every live record) —
@@ -275,9 +290,10 @@ raised, never lowered.
   an E6 story lands on anyway.
 - `6-7` SUPERSEDES the `5-3/R6(d)` retune entry (locomotion speed / walk-as-default /
   sprint-costs-stamina) — same ground, now ruled rather than deferred.
-- `6-3` may NOT reach for a second `MatchState` direct-connect: `E5-C/R2` documents that exception
-  at exactly one instance (`src/main/match_runner.gd:501`) and a third is the operator's call. The
-  observation-seam family (nine members since `connect_orbs_changed`, `E5-C/R3`) is the route.
+- `6-3b-pitch-hud` may NOT reach for a second `MatchState` direct-connect: `E5-C/R2` documents that
+  exception at exactly one instance (`src/main/match_runner.gd:501`) and a third is the operator's
+  call. The observation-seam family (nine members since `connect_orbs_changed`, `E5-C/R3`) is the
+  route.
 
 ---
 

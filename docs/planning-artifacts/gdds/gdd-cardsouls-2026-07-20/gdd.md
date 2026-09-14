@@ -32,7 +32,7 @@ The overlap of **souls / Sekiro players** (who want combat reads and execution) 
 
 - **Two real-time layers, equally decisive.** Not a card game with combat flavor, nor an action game with a card gimmick — real-time soulsborne melee *and* a real-time card economy that must both be mastered (P1).
 - **Aggression *is* your economy.** Landing melee hits funds your cards; the player winning the fight has the resources to escalate it (P2). A flywheel, not two separate meters.
-- **Open-information bluffing (poker, not hidden-hand).** The Pitch Zone publishes *what* is coming and *how long* — but not whether you can afford it or intend to follow through. Threats are visible; delivery is uncertain (P3).
+- **Open-information bluffing (poker, not hidden-hand).** The Pitch Zone publishes *what* is coming, *how long*, and whether it is already READY to fire — but never the exact shortfall, nor intent to follow through (`6-3-split/R-INFO`). Threats are visible; delivery is uncertain (P3).
 - **Your hand is your defense.** Color-as-defense makes your 4-card hand a live defensive toolkit and your deck's color ratio a defensive decision — deckbuild reaches directly into moment-to-moment combat.
 - **The Sekiro-style read, weaponized by a resource.** The RGB unblockable RPS resolves through a sub-second telegraph read *and* pays out the orbs that fuel your biggest threats.
 
@@ -72,7 +72,7 @@ Neither layer wins alone. A player cannot turtle-and-durdle to victory on cards,
 Landing ordinary attacks generates mana; mana plays cards; cards escalate pressure. Forward play funds the game plan; turtling starves it. *Steering test:* economy and damage numbers must reward being in the opponent's face — any mechanic that makes passivity the optimal economy is a defect.
 
 **P3 — Visible threat, uncertain delivery (open-information bluffing).**
-The Pitch Zone publishes *what* is coming and *how long* the opponent has to react — but not whether the attacker can actually afford it, nor whether they intend to follow through. Closer to poker than to hidden-hand card games: the read is on delivery and intent, not on hidden information. *Steering test:* telegraph the threat and the clock; keep affordability and follow-through ambiguous. Fully revealing capability/intent designs bluff *out* of the game; hiding the threat entirely designs the reads *out* — both violate this pillar.
+The Pitch Zone publishes *what* is coming and *how long* the opponent has to react, and whether it is already READY to fire — but not the exact shortfall if it isn't, nor whether the attacker intends to follow through. Closer to poker than to hidden-hand card games: the read is on delivery and intent, not on hidden information. *Steering test:* telegraph the threat and the clock; keep the staged card's EXACT affordability (which colors, how many orbs short) and follow-through ambiguous — whether the zone is READY to fire right now is deliberately public (`6-3-split/R-INFO`). Fully revealing capability/intent designs bluff *out* of the game; hiding the threat entirely designs the reads *out* — both violate this pillar.
 
 **P4 — One thing at a time: layers alternate, they do not stack.**
 The enemy is *parallel* demands, not *difficult* ones. A high skill ceiling at Sekiro / TCG level is the **point** — P4 exists to protect *mastery*, not to cap difficulty, and must never be read as a mandate to simplify. The distinction: Sekiro is brutally demanding yet almost never asks the player to track two things in the same second — its load is **deep, not wide**. Two clocks running at once is not a higher ceiling, it is worse legibility; a player who loses because they missed a second timer feels that something *slipped past them*, not that they were outplayed. **Sequential demands can be mastered; parallel demands can only be endured.** During an unblockable chargeup, the color read is the only decision that exists. *Steering test:* every mechanic is measured on whether it adds a demand *in sequence* (good — masterable) or *in parallel* (bad — mere endurance) — **never on whether it is hard**. The single biggest risk to CardSouls is asking the player to track melee spacing, stamina, mana, a 4-card hand, a color telegraph, and a pitch timer *at the same instant*.
@@ -89,7 +89,7 @@ The game must be as **legible and intuitive as possible** — and legibility is 
 Concrete obligations this creates (binding on Art, Audio, and UI):
 - The **color telegraph** must be recognizable in **under half a second, pre-verbally** — distinct *shape and sound*, not hue alone (this is also the colorblind path).
 - The **outcome of every exchange** must be immediately obvious: did I gain an orb, is my opponent stunned, did my counter register.
-- **Pitch affordability is read, not computed** (the Reactor/Actor offload, already locked).
+- **Pitch affordability is read, not computed, for your OWN zone** (the Reactor/Actor offload, already locked); **the opponent's zone reads READY, never the shortfall** (`6-3-split/R-INFO`).
 
 > **Interpretation rule (playtests):** a player may legitimately not know how to *win* — that is difficulty. A player must **never** not know why they *lost* — that is a legibility defect. (See Success Metrics for the full playtest-signal ruleset.)
 
@@ -97,7 +97,7 @@ Concrete obligations this creates (binding on Art, Audio, and UI):
 
 The canonical ten-second image of a match going right. Any mechanic that does not appear here, or that competes with this moment for the player's attention, needs justification.
 
-> I stage a card in the Pitch Zone. My opponent sees its cost and the shared timer running down. He knows I'm one Red orb short. He also knows the only way I get that orb is by landing an unblockable. So he has to choose: press me aggressively and deny me space, or back off and let the timer expire. I commit to a chargeup — red telegraph. He has half a second to decide whether that's the real cash-in or a feint. If he reads the color, I lose the card and the tempo. If he misses, the orb is mine and the pitch goes through — and all of this while my stamina is draining from the two rolls I had to spend just to get in range.
+> I stage a card in the Pitch Zone. My opponent sees its cost and the shared timer running down — and whether it's already READY to fire, but not how close I am if it isn't (`6-3-split/R-INFO`). He knows the only way I bank orbs at all is by landing an unblockable. So he has to choose: press me aggressively and deny me space, or back off and let the timer expire. I commit to a chargeup — red telegraph. He has half a second to decide whether that's the real cash-in or a feint. If he reads the color, I lose the card and the tempo. If he misses, the orb is mine and the pitch goes through — and all of this while my stamina is draining from the two rolls I had to spend just to get in range.
 
 ### Core Gameplay Loop
 
@@ -176,7 +176,7 @@ This section merges the card-game and fighting genre conventions as **co-primary
 | ① | Basic | Summon minion/totem/accelerator, or cast a lesser spell (per card) | Mana (per card) | Yes → discard, draw 1 |
 | ② | Unblockable Initiation | Hero performs the unblockable attack of this card's color | Stamina only | Yes → discard, draw 1 |
 | ③ | Unblockable Defense | Hero performs the counter of this card's color | Stamina only | Yes → discard, draw 1 |
-| ④ | Pitch Effect | Powerful effect on the card, activated from the Pitch Zone | Mana (higher) + orbs (per card); all orbs reset to 0 on activation | Yes (or fizzles) |
+| ④ | Pitch Effect | Powerful effect on the card, activated from the Pitch Zone | Mana (higher) + orbs (per card); only the priced orbs are spent, surplus remains (`6-3-split/R-SPEND`) | Yes (or fizzles) |
 
 > **⚑ CORE DESIGN PILLAR — color-as-defense (confirmed, intended, core).** Because Mode ③ requires a card *of the incoming attack's color in hand*, a player's **4-card hand composition is their real-time defensive toolkit.** No Red card in hand ⇒ cannot *color-counter* a Red unblockable this instant (though it can still be dodged — see the three-tier ladder below). Consequences, all intended:
 > - Hand management is a defensive skill, not just offensive economy; an attacker can **bait** — throw or feint a color the opponent likely can't answer, burning their colored cards before the real commit.
@@ -204,7 +204,7 @@ This section merges the card-game and fighting genre conventions as **co-primary
 | ① Basic | Summon Imp | Summon 1 Imp minion, Standard priority (nearest enemy) | 3 Mana |
 | ② Unblockable Init. | Red attack | Hero performs the Red unblockable (Swipe/Headstomp) | Stamina |
 | ③ Unblockable Def. | Red counter | Hero performs the Red counter (Headstomp defense) | Stamina |
-| ④ Pitch — *Hellburst* | Detonate Imps | All of this player's living Imps simultaneously explode, each dealing AoE damage at its position | 5 Mana + 2 Green orbs (all orbs reset to 0) |
+| ④ Pitch — *Hellburst* | Detonate Imps | All of this player's living Imps simultaneously explode, each dealing AoE damage at its position | 5 Mana + 2 Green orbs (only the 2 Green are spent; Red/Blue and any Green surplus above 2 remain — `6-3-split/R-SPEND`) |
 
 Note how a *single Red card* is at once a summon, a Red attack, a Red defense, and — once enough Green orbs are banked — a board-wide detonation. This is the four-mode density every card carries, and why hand composition is simultaneously offense, defense (color-as-defense), and pitch potential.
 
@@ -252,7 +252,7 @@ Clean escalation: **survive → survive and deny → survive, deny, and punish.*
 ### D. Orb Resource
 
 - **Acquisition:** *exclusively* by landing an un-countered unblockable → 1 orb of the attack's color. (Orbs are the tangible reward for winning the RPS read — and the reason the touchstone attacker must land an unblockable to afford the pitch.)
-- **Storage:** authored per-color cap, `max_orbs_per_color = 5` (provisional — shipped `5-4/R8`); per-color counts shown in HUD. **On Pitch activation, all three colors reset to 0** (not just the spent color — TDD §8.2; easy to implement wrong). Prevents stockpiling; forces the "when to spend" decision.
+- **Storage:** authored per-color cap, `max_orbs_per_color = 5` (provisional — shipped `5-4/R8`); per-color counts shown in HUD. **On Pitch activation, only the orbs that card's price required are spent** (not all three colors reset to 0 — TDD §8.2's all-reset framing is superseded, `6-3-split/R-SPEND`). Surplus orbs remain; the per-color cap is what bounds stockpiling, not a spend-time reset.
 - **Usage:** *exclusively* to pay a Pitch Effect (Mode ④) cost. No other use.
 
 ### E. Pitch Zone (the signature bluff system — P3)
@@ -263,7 +263,7 @@ A single public card slot with a countdown timer (TDD §5.6).
 - Staging does **not** reduce hand below 4 — the staged card still counts as in-hand until resolved.
 - **Exit paths:** (a) player activates when cost is met; (b) player cancels → returns to hand; (c) **fizzle** — timer expires → card discarded + draw, and accumulated mana/orbs are **not** refunded; (d) opponent card removes it (*future content — out of demo scope*).
 - **One card in a player's Pitch Zone at a time**, and the zone is **per-player** — both zones are visible to both players, and the two stage independently, so simultaneous pitches are legal (`E6-P`, provisional; judged at the post-E6 playtest). See Core Loop `[NOTE FOR DESIGNER]`.
-- **Reactor/Actor offload:** the HUD surfaces affordability (the player reads "one orb short," never computes it).
+- **Reactor/Actor offload:** the HUD surfaces whether the zone is READY (the player reads "it could go off now," never computes it) — not the exact shortfall; the opponent never reads "one orb short" (`6-3-split/R-INFO`).
 
 > **Design intent — the timer is a shared deadline, not decoration (TDD §5.6).** The fizzle timer cuts *both* ways: the threatening player **cannot park a card indefinitely while farming orbs** (the clock forces commitment), and the defending player **knows exactly how long they must survive the threat**. That mutual, visible deadline is what turns the Pitch Zone into open-information bluffing (P3) rather than an untimed looming threat — and it is why 20 s (pressured) vs 30 s (strategic) is a genuine feel decision, not a cosmetic one.
 
@@ -319,7 +319,7 @@ Four interlocking resources (full specs in Hybrid Systems); all values TBD-in-ba
 | **HP** | Attrition clock | None (heal only via cards) | — (loss at 0) |
 | **Stamina** | Defensive/aggression currency | Auto over time (souls-style) | Roll, Deflect, Unblockable init & defense |
 | **Mana** | Card/offense currency | 3 sources (passive, melee-hit, accelerator) | Basic (①) + Pitch (④) |
-| **Orbs** | RPS-won pitch fuel | Won only by landing unblockables | Pitch Effect cost (all colors reset to 0 on spend) |
+| **Orbs** | RPS-won pitch fuel | Won only by landing unblockables | Pitch Effect cost (only the priced orbs are spent, surplus remains — `6-3-split/R-SPEND`) |
 
 The interlinking *is* the game: **aggression → mana → cards** (P2); **unblockable reads → orbs → pitch** (P3 payoff); **stamina gates both defense and aggression** (the pressure valve). No resource is an isolated meter.
 
@@ -412,7 +412,7 @@ One-screen summary; full breakdown (goals, stories, exit criteria, dependencies,
 | **E3** | Card system + mana economy | CardData `.tres`, deck 20 / hand 4, draw/reshuffle, mode-select UX, Basic mode, mana (passive + melee-hit). | melee-mana-gen |
 | **E4** | Minions & totems | Autonomous minion AI (data-defined priorities), pooling, throttled targeting, 3 totem subtypes. | minions, totems |
 | **E5** | Unblockable RPS + orbs | Chargeup + telegraph (Mode ②), color defense (Mode ③), three-tier ladder, stun, per-color dmg, orbs, color-as-defense. | unblockable, orbs |
-| **E6** | Pitch Zone | Stage / timer / cost, activate / cancel / fizzle, all-orb reset, affordability read, Pitch effects (Mode ④), per-player zones with independent staging. Also E6 (`E6-P`): card-hand tint, hold-to-charge, the two-gait locomotion system, camera freedom, spell resolution. **← vision complete; touchstone playable; go/no-go playtests begin.** | pitch-zone |
+| **E6** | Pitch Zone | Stage / timer / cost, activate / cancel / fizzle, priced-orb spend (`6-3-split/R-SPEND`, not an all-orb reset), affordability read, Pitch effects (Mode ④), per-player zones with independent staging. Also E6 (`E6-P`): card-hand tint, hold-to-charge, the two-gait locomotion system, camera freedom, spell resolution. **← vision complete; touchstone playable; go/no-go playtests begin.** | pitch-zone |
 | **E7** | Scripted bot | AI controller impl (circle / interval attack / occasional roll / fixed unblockable). Solo iteration. | — |
 | **E8** | Equipment | 4 slots, data-defined passives, pre-match select (placeholder stats). | equipment |
 
