@@ -346,3 +346,24 @@ nema nikakvog efekta to opet animacija do svog zenita putuje samo vertikalno, is
 
 14.9. 
 nakon pocinjanja impemetacije pitcha ikao ga jos nevidmo ostatak postojecih stvari radi kako spada
+
+2026-09-14 — 6-3a pitch aktivacija, smoke
+
+Flip [0, 3], ja na padu kao P2. Prošlo šest od sedam stavki.
+
+Stageanje kartom kroz L3 + Y radi, mana padne, slot ostane prazan bez natpisa.
+Sva četiri odbijanja rade i razlozi se razlikuju u inspectoru — zona zauzeta,
+prazan slot, prazna zona, nije spremna. Ništa se ne troši ni na jednom.
+
+Aktivacija: zaradio dva orba pa stageao kartu koja košta jedan. Y je odigrao
+kartu, brojač pao za točno jedan, drugi orb ostao — to je ono što sam htio
+vidjeti. Zvuk uspjeha se jasno razlikuje od odbijanja. Tek tad se u ruci
+pojavio natpis da karta dolazi.
+
+Aktivacija dok nabijam prolazi, probao.
+
+NISAM provjerio: odbijanje dok sam stunan. Za to mi treba drugi pad ili drugi
+igrač, nisam imao ni jedno. Vjerujem da radi jer je pokriveno testom, ali
+okom nije viđeno — ostaje za playtest s bratom.
+
+fps uredan.

@@ -4,7 +4,7 @@ baseline_commit: 5d7084709df6c6928363fd35f22d9ae6585013e7
 
 # Story 6.3a: Pitch Activation
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** E6 planning pass, board order item 5 (decision-log Session 2026-09-08, `E6-P/R2`;
 > renumbered by the 2026-09-14 split, `6-3-split/R-SPLIT`). Tier A by the golden clause (`E4-P/R9`).
@@ -79,11 +79,11 @@ Status: ready-for-dev
 
 3. **The staging guard order (Fact 2's list) is unchanged by this story; activation's guard order is
    NEW and separately reachable for the first time.** Nothing in `_resolve_pitch_stage` is touched.
-   `_resolve_pitch_activate` (new) reads: LAYER FLAG (`flags.pitch_zone`, the same gate) → OWN ZONE
-   EMPTY (`not pitch.is_staged(slot)`) → NOT READY (`not pitch.is_ready(slot, player.orbs, flags)`).
-   No CHARGING/STUNNED gate on this path (Fact 9). Both new refusal reasons are reachable from a
-   live Y press with the modifier not held, for the first time — Y was previously unreachable in
-   full (Fact 1).
+   `_resolve_pitch_activate` (new) reads: LAYER FLAG (`flags.pitch_zone`, the same gate) → STUNNED
+   (`REASON_STUNNED`, `6-3a-gate/R-HERO-STATE`) → OWN ZONE EMPTY (`not pitch.is_staged(slot)`) → NOT
+   READY (`not pitch.is_ready(slot, player.orbs, flags)`). CHARGING is not gated (Fact 9). Both new
+   refusal reasons are reachable from a live Y press with the modifier not held, for the first time —
+   Y was previously unreachable in full (Fact 1).
 
 4. **Dispatch seat: a NEW `InputIntent.card_activate: bool` field, defaulting `false`.** `InputIntent`
    documents its card half as "exactly three things about a cast" (`input_intent.gd:32-36`) — reusing
@@ -694,3 +694,210 @@ live pad (a real press, timing, or perceptual judgment call).
   two-landing orb script added, the expiry tick declared headless-only). Docs-only; no code or test
   file touched — the ACs below describe what the dev pass builds. Promoted `authored` ->
   `ready-for-dev`.
+- 2026-09-14: Dev pass (`gds-dev-story`). All 12 ACs implemented; FORMAT_VERSION 9 -> 10; Y wired on
+  both sides of L3; `_resolve_pitch_activate` added; golden measured UNMOVED; 29 mutation rows, all
+  killed, all restores SHA-256-verified. Nothing committed. Status `ready-for-dev` -> `review`
+  (story-file-only; the board stays `ready-for-dev` per CFG/R2).
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (1M context), `claude-opus-5[1m]`.
+
+### Preconditions (verified before any edit)
+
+HEAD == origin/main == `9237731`; working tree clean; no godot process running; story Status
+`ready-for-dev`, board `6-3a-pitch-activation: ready-for-dev  # Tier A`; frontmatter `baseline_commit`
+`5d70847` (the authoring sha, left as found).
+
+### Dev-pass choices (the three the story left open)
+
+1. **Y's position in the confirm check order: X, Y, A, B, last write wins.** This is the face cluster's
+   reading order: left to right, and within the centre column top (Y) before bottom (A). Why: none of
+   `5-7`'s pinned answers change (A+X -> A, B+X -> B, A+B -> B, the triple -> B), so B still wins every
+   chord it is part of. The only new answers are Y+X -> Y and Y+A -> A. Any seat for Y after B would
+   have changed four existing pins. The chord can only happen inside cast mode, since outside it Y is
+   the only confirm that commits at all. Pinned by `test_four_confirm_chord_resolves_in_the_order_x_y_a_b`.
+2. **Refusal reason constants: `REASON_EMPTY_PITCH_ZONE := &"empty_pitch_zone"` and
+   `REASON_PITCH_NOT_READY := &"pitch_not_ready"`** on `MatchState`, next to `REASON_PITCH_ZONE_OCCUPIED`.
+   These are the story's own example names, and the Live Smoke text already cites
+   `REASON_EMPTY_PITCH_ZONE`, so a different name would have made the smoke script wrong. The token
+   values follow the lowercase-player-visible-fact convention.
+3. **How the reconnect-priming test drives its reconnect:** the harness has no joypad, so `sample()`
+   always takes the `NO_DEVICE` / disconnected branch. That branch is the reconnect's first tick, and it
+   is the precedent `test_replug_priming_covers_the_new_commit_edges` already uses. To make the test
+   non-vacuous, it first writes `_prev_held[_CAST_PITCH_KEY] = false` (the memory a pad unplugged with Y
+   up leaves behind). It then calls `sample()`, asserts the prime reads `true`, and feeds the primed
+   memory back into `resolve_card_tick` with Y physically down, once with `cast_held` true and once
+   with it false: no commit and no activation either way. A control press against an un-primed memory
+   does activate, which shows the prime is what blocks it. Mutation M04 kills it.
+
+### Fact found inconsistent (reported, not reinterpreted)
+
+- **Fact 3 contradicts Fact 9, AC 6, and ruling `6-3a-gate/R-HERO-STATE`.** Fact 3 still says
+  "No CHARGING/STUNNED gate on this path (Fact 9)" and lists the activation guard order without a
+  STUNNED gate. Fact 9 and AC 6 (both rewritten by the gate fix pass) rule that STUNNED is refused
+  through a NEW gate. This is an inconsistency inside the story, not a Fact wrong against the code.
+  The AC and the ruling are unambiguous, so the STUNNED refusal is implemented as AC 6 requires. The one
+  thing Fact 3's stale sentence left unstated is where the STUNNED gate goes. It is placed second
+  (FLAG -> STUNNED -> EMPTY ZONE -> NOT READY), mirroring `_resolve_pitch_stage`'s own "layer gate, then
+  state gate, then zone facts" order (`5-2/R13`). **Operator: confirm this seat, or rule otherwise.** It
+  decides which reason text appears when a stunned player presses Y with an empty zone or an unready card
+  (today: `stunned`).
+- No Fact was found wrong against the code. Cited line numbers drift by a few lines in places (e.g. the
+  reconnect-priming block is `gamepad_controller.gd:143-145`, not `:138-140`); the substance of every
+  Fact checked matched.
+- Observation, not acted on (out of scope): `match_state.gd`'s `_reset_player` comment
+  (`# reset_all() is REUSED ... OrbPool authored it for E6's Pitch-Effect activation (all three colours
+  to zero, TDD 8.2)`) repeats the same misdescription the Non-Goals had corrected on `OrbPool.reset_all()`.
+  Only the method's own doc was corrected, as the Non-Goal names.
+
+### Implementation Plan / Notes
+
+- **Controller (AC 1-3).** `GamepadProfile.cast_pitch_button = JOY_BUTTON_Y`, authored explicitly in
+  the `.tres` as `cast_pitch_button = 3`. `GamepadController` gains `_CAST_PITCH_KEY`, the raw read,
+  the positional `pitch_raw, prev_pitch_raw` pair directly after the defense pair (in both the signature
+  and the one call site), the write-back, the priming line, and `intent.card_activate =
+  result["card_activate"]` inside `sample()`'s commit block. `resolve_card_tick` returns
+  `"card_activate"`. The 44 existing test call sites gained a `false, false` pair in the same seat, done
+  mechanically. The fifth, the replug test, was edited by hand. The retired guard's `>= 8` field-count
+  floor carries into the replacement test.
+- **Intent and record (AC 4).** Tenth field `InputIntent.card_activate`, plus `copy_intent`,
+  `_intent_values`, `_intent_from_values`, and `REQUIRED_INTENT_FIELDS["card_activate"] = TYPE_BOOL`.
+  `FORMAT_VERSION` goes 10, and the two tests pinning the literal move to 10. The round-trip driven
+  fixture carries a refused bare-Y activation at `ACTIVATE_TICK = 16`, before `STAGE_TICK`, so the zone
+  is empty, the refusal is `empty_pitch_zone`, and the fixture's end state is unchanged. That makes the
+  tenth-field comparison load-bearing. The field count goes 9 -> 10. `Enums.ModeKind` is unchanged.
+- **Dispatch and activation (AC 5-10).** The PITCH arm branches on `card_activate`. `_resolve_pitch_stage`
+  is untouched. `_resolve_pitch_activate` runs FLAG -> STUNNED -> EMPTY ZONE -> NOT READY, then spends
+  the priced orbs per colour in `CastEvaluator.sorted_orb_colors()` order, reading
+  `pitch.staged_orb_costs(slot)`. Then: discard, `pitch.clear`, owed append, `pending_draw.start`,
+  `notify_cards_changed`, `card_cast_resolved`. There is no `is_expired` read and no `Invariant.check`.
+  `PitchState.is_ready` reads through the new `staged_orb_costs` accessor. `orb_costs_affordable`
+  consumes the extracted `sorted_orb_colors`. `OrbPool.reset_all()`'s doc is corrected (Non-Goals).
+- **Activation tests** live in `test_pitch_staging.gd`, in a new section, to reuse its fixture. That
+  keeps AC 10's test on the same fixture and tick as its unmodified control,
+  `test_a_ready_card_still_fizzles_and_consumes_no_orbs`.
+- **Editor scan: not run, not needed.** No new `class_name` was introduced. `git diff -- project.godot`
+  is empty.
+
+### Golden measurement (both directions)
+
+- **Before (HEAD `9237731`, no edits):** `C:\dev\_63a-suite-before.txt` shows 808 tests, 0 failed. So
+  `test_determinism.gd::test_state_matches_golden` passed against `GOLDEN = 9ed4c903…`.
+- **After (every change in place):** `C:\dev\_63a-suite-final.txt` shows 824 tests, 0 failed. The same
+  test passed against the same, unedited constant (`test_determinism.gd` is not in the diff).
+- **Result: golden UNMOVED, as predicted.** No re-baseline, and none needed. The snapshot key set is
+  unchanged: no `to_snapshot()` edited, and the top-level key-set pins passed in both runs.
+  `UNHASHED_CROSS_TICK_MEMBERS` is unedited (4). The observation-seam count test is unedited (nine) and
+  passed.
+
+### Suite runs (counters read from the output files)
+
+| Run | File | State harness | Integration | Exit |
+|---|---|---|---|---|
+| Before-baseline (before any edit) | `C:\dev\_63a-suite-before.txt` | 808 tests, 0 failed, 6560 assertions, PASS | 59 files, all PASS | 0 |
+| Final | `C:\dev\_63a-suite-final.txt` | 824 tests, 0 failed, 6754 assertions, PASS | 59 files, all PASS | 0 |
+
+Two full runs, no extras. The targeted runs below went through a scratch runner outside the repo
+(`run_some.gd`, in the session scratchpad) over named test files only. They are not full-suite runs,
+and they are disclosed here:
+
+- 1 iteration run over the five touched or affected state test files after implementation: 117 tests,
+  0 failed (`C:\dev\_63a-iter1.txt`).
+- 29 mutation runs (table below), one per mutation (`C:\dev\_63a_mut\M*.txt`).
+- 2 assertion-attribution runs over the same five files, one against a `git archive HEAD` export at
+  `C:\dev\_63a_base` (class cache built there with `--editor --quit`; the repo was not touched) and one
+  against the working tree (`C:\dev\_63a-asserts-base.txt`, `C:\dev\_63a-asserts-final.txt`).
+
+**Delta, explained line by line (+16 tests, +194 assertions, 0 integration; per-file counts MEASURED by
+the attribution runs, and the sums match the suite exactly):**
+
+| File | Tests before -> after | Assertions before -> after | Explanation |
+|---|---|---|---|
+| `test_gamepad_controller.gd` | 28 -> 34 (+6) | 166 -> 197 (+31) | -1 retired `test_no_authored_button_maps_to_y_so_pitch_is_structurally_unreachable`; +1 `test_cast_pitch_button_reads_y_on_the_default_and_the_shipped_profile`; +6 `test_y_inside_cast_mode_stages_the_armed_slot`, `test_bare_y_outside_cast_mode_activates`, `test_card_activate_is_raised_only_by_a_bare_y`, `test_four_confirm_chord_resolves_in_the_order_x_y_a_b`, `test_replug_priming_covers_the_pitch_edge_on_both_sides_of_the_modifier`, `test_sample_carries_y_and_card_activate_into_the_intent` |
+| `test_pitch_staging.gd` | 24 -> 33 (+9) | 173 -> 285 (+112) | +9 `test_activation_spends_only_the_priced_orbs_and_resolves_the_card`, `test_activation_refusals_consume_nothing_and_leave_the_countdown_running`, `test_a_charging_hero_can_activate`, `test_a_press_on_the_expiry_tick_activates_rather_than_fizzles`, `test_with_the_orbs_layer_off_the_spend_floors_silently_at_zero`, `test_the_five_term_conservation_identity_holds_across_stage_wait_and_activate`, `test_activation_restarts_a_refill_already_in_flight`, `test_card_activate_is_what_separates_an_unarmed_stage_from_an_activation`, `test_activation_reads_the_price_through_the_shared_seats_and_never_the_expiry` |
+| `test_record_file.gd` | 23 -> 24 (+1) | 721 -> 770 (+49) | +1 `test_a_v9_record_without_card_activate_is_refused_with_a_reason`; the round trip gains a `card_activate` comparison per tick per slot (18 x 2 = +36) and a non-default read-back assertion; the v9 test and its strip helper account for the rest |
+| `test_intent_recorder.gd` | 10 -> 10 (0) | 83 -> 85 (+2) | renamed `test_all_nine_…` -> `test_all_ten_input_intent_fields_round_trip_per_tick_per_slot`; +1 non-default assertion, +1 read-back assertion |
+| every other file | unchanged | unchanged | `test_card_play.gd` measured 16 / 61 on both trees |
+
+### Mutation table (every row MEASURED in this pass by `mut.sh`)
+
+Protocol for each row: check the target's SHA-256 against its out-of-repo backup
+(`C:\dev\_63a_bak\`, manifest `SHA256.txt`); apply ONE exact-text substitution (perl, which exits
+nonzero if the text was not found); confirm the SHA changed; run the named test files; restore by
+COPYING the backup back; confirm the SHA-256 equals the backup. Never `git checkout`. A final sweep
+confirmed all nine targets equal their backups before the final suite run. Raw output is in
+`C:\dev\_63a_mut\M*.txt`, and the one-line-per-row results are in `C:\dev\_63a_mut\SUMMARY.txt`.
+
+| # | Target | Mutation | Killed by | Restore SHA ok |
+|---|---|---|---|---|
+| M01 | `gamepad_controller.gd` | delete Y's in-cast-mode stage block | `test_y_inside_cast_mode_stages_the_armed_slot`, `test_four_confirm_chord_…` | yes |
+| M02 | `gamepad_controller.gd` | delete the bare-Y activation block (else arm) | `test_bare_y_outside_cast_mode_activates`, `test_replug_priming_…_pitch_edge_…` (control) | yes |
+| M03 | `gamepad_controller.gd` | delete `intent.card_activate = result["card_activate"]` in `sample()` | `test_sample_carries_y_and_card_activate_into_the_intent` | yes |
+| M04 | `gamepad_controller.gd` | delete `_prev_held[_CAST_PITCH_KEY] = true` (priming) | `test_replug_priming_covers_the_pitch_edge_on_both_sides_of_the_modifier`, `test_sample_carries_…` | yes |
+| M05 | `gamepad_controller.gd` | move the Y check after A (order X, A, Y, B) | `test_four_confirm_chord_resolves_in_the_order_x_y_a_b` | yes |
+| M06 | `gamepad_controller.gd` | delete `_prev_held[_CAST_PITCH_KEY] = pitch_raw` (write-back) | `test_sample_carries_y_and_card_activate_into_the_intent` | yes |
+| M07 | `gamepad_profile.gd` | default `JOY_BUTTON_Y` -> `JOY_BUTTON_X` | `test_cast_pitch_button_reads_y_on_the_default_and_the_shipped_profile` | yes |
+| M08 | `data/gamepad_profile.tres` | delete `cast_pitch_button = 3` | `test_cast_pitch_button_reads_y_on_…` (explicit-authoring half) | yes |
+| M09 | `intent_recorder.gd` | delete `out.card_activate = src.card_activate` | `test_all_ten_input_intent_fields_…`, `test_the_round_trip_carries_every_channel_verbatim` | yes |
+| M10 | `record_file.gd` | delete the `card_activate` key from `_intent_values` | 14 `test_record_file.gd` tests, incl. both round trips and the v9 test (REQUIRED_INTENT_FIELDS refuses every saved record; 10 script errors from the rebuild) | yes |
+| M11 | `record_file.gd` | delete `intent.card_activate = bool(values["card_activate"])` | `test_the_round_trip_carries_every_channel_verbatim` AND `test_a_saved_record_reloads_and_re_saves_to_the_identical_BYTES` (both named round trips) | yes |
+| M12 | `record_file.gd` | delete `"card_activate": TYPE_BOOL` from `REQUIRED_INTENT_FIELDS` | `test_a_v9_record_without_card_activate_is_refused_with_a_reason` (the relabelled-v10 half reaches the rebuild's direct key read; 36 script errors, and the named-field assertion fails) | yes |
+| M13 | `record_file.gd` | `FORMAT_VERSION := 10` -> `9` | `test_the_format_version_and_the_widened_contact_row_move_together`, `test_the_contents_validation_bumped_no_version_…` | yes |
+| M14 | `match_state.gd` | PITCH arm `if intent.card_activate:` -> `if false:` (always stage) | 8 activation tests in `test_pitch_staging.gd` | yes |
+| M15 | `match_state.gd` | delete the STUNNED gate in `_resolve_pitch_activate` | `test_activation_refusals_consume_nothing_and_leave_the_countdown_running` | yes |
+| M16 | `match_state.gd` | delete the empty-zone guard | `test_activation_refusals_…`, `test_card_activate_is_what_separates_…` | yes |
+| M17 | `match_state.gd` | delete the not-ready guard | `test_activation_refusals_…`, `test_activation_reads_the_price_…` | yes |
+| M18 | `match_state.gd` | spend loop body -> `pass` | `test_activation_spends_only_the_priced_orbs_…`, `test_a_press_on_the_expiry_tick_…`, `test_a_charging_hero_can_activate` | yes |
+| M19 | `match_state.gd` | delete the `card_cast_resolved` push | `test_activation_spends_only_the_priced_orbs_…`, `test_a_press_on_the_expiry_tick_…` | yes |
+| M20 | `match_state.gd` | ADD `if pitch.is_expired(slot): return` (the ruled-against guard) | `test_a_press_on_the_expiry_tick_activates_rather_than_fizzles`, `test_activation_reads_the_price_…` | yes |
+| M21 | `match_state.gd` | delete `notify_cards_changed()` in activation | `test_activation_spends_only_the_priced_orbs_…` | yes |
+| M22 | `match_state.gd` | also refuse CHARGING at the STUNNED gate | `test_a_charging_hero_can_activate` | yes |
+| M23 | `match_state.gd` | delete `player.discard.add(card_id)` | spend test, boundary test, charging test, activation conservation identity | yes |
+| M24 | `match_state.gd` | delete `pending_draw.start(...)` in activation | spend test, boundary test, refill-restart test, activation conservation identity | yes |
+| M25 | `pitch_state.gd` | `is_ready` reads `_orb_costs[slot]` directly (behaviour-identical) | `test_activation_reads_the_price_through_the_shared_seats_and_never_the_expiry` | yes |
+| M26 | `cast_evaluator.gd` | re-inline `keys()`/`sort()` in `orb_costs_affordable` (behaviour-identical) | `test_activation_reads_the_price_…` | yes |
+| M27 | `orb_pool.gd` | delete `add()`'s `if updated == current: return` | `test_with_the_orbs_layer_off_the_spend_floors_silently_at_zero` | yes |
+| M28 | `match_state.gd` | spend reads `_pitch_costs.get(...).orb_costs` via `:=` | **INVALID PROOF, superseded by M28b**: killed by a PARSE error (Variant inference), not by an assertion | yes |
+| M28b | `match_state.gd` | same re-derivation, typed `var orb_costs: Dictionary = (… as CardCastCondition).orb_costs` (behaviour-identical) | `test_activation_reads_the_price_through_the_shared_seats_and_never_the_expiry`, 0 script errors | yes |
+
+No new `Invariant.check` guard ships, so no row proves one by triggering it. M25, M26 and M28b are the
+source-scan proofs for the three wiring properties no behaviour can tell apart.
+
+### Completion Notes
+
+- AC 1 ✅ field and `.tres` authored. AC 2 ✅ Y read on both sides; `sample()` wiring; priming; chord
+  order chosen and pinned. AC 3 ✅ Y guard retired, not narrowed; replacement pin keeps the `>= 8` floor.
+- AC 4 ✅ tenth field on all four seats; FORMAT_VERSION 10; v9 refused in both halves; no fifth ModeKind.
+- AC 5 ✅ PITCH arm branches; staging untouched. AC 6 ✅ four refusals (STUNNED, flag, empty zone, not
+  ready), each consuming nothing, countdown untouched; CHARGING activates. AC 7 ✅ priced-only spend
+  through `staged_orb_costs` and `sorted_orb_colors`; no `Invariant.check`; orbs-off silent floor.
+- AC 8 ✅ discard, clear, fresh owed append, window restart (in-flight refill pushed back, tested).
+  AC 9 ✅ `cards_changed` and `card_cast_resolved`; refusals leave the countdown unchanged; five-term
+  identity across stage/wait/activate. AC 10 ✅ boundary-tick press activates (three observables), with
+  the unmodified fizzle test as the control.
+- AC 11 ✅ no `to_snapshot()` change; golden measured unmoved both directions; UNHASHED count and seam
+  count unchanged. AC 12 ✅ full suite green (`C:\dev\_63a-suite-final.txt`).
+- Live Smoke is REQUIRED and still pending: the operator's pass, with the manual `main.tscn` gamepad
+  flip and its revert-and-diff check.
+
+## File List
+
+- `data/gamepad_profile.tres` (modified)
+- `src/controllers/gamepad_controller.gd` (modified)
+- `src/controllers/gamepad_profile.gd` (modified)
+- `src/state/economy/cast_evaluator.gd` (modified)
+- `src/state/input/input_intent.gd` (modified)
+- `src/state/match_state.gd` (modified)
+- `src/state/pitch/pitch_state.gd` (modified)
+- `src/state/pools/orb_pool.gd` (modified, doc comment only)
+- `src/systems/intent_recorder.gd` (modified)
+- `src/systems/record_file.gd` (modified)
+- `test/state/test_gamepad_controller.gd` (modified)
+- `test/state/test_intent_recorder.gd` (modified)
+- `test/state/test_pitch_staging.gd` (modified)
+- `test/state/test_record_file.gd` (modified)
+- `docs/implementation-artifacts/6-3a-pitch-activation.md` (this file: Status, Change Log, Dev Agent Record, File List)
+- `docs/implementation-artifacts/sprint-status.yaml` (story_notes line and last_updated only; board value unchanged)
