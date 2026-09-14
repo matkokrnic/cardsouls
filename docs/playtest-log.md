@@ -343,3 +343,6 @@ prije nego pocnemo izgleda vec bolje nego sto sam ocekivao ajmo sada po tockama 
 13.9.
 1 i 2mac sad radi stetu samo kada dira protivnika(napomena za kasnije je da mi se range hominga cini mozda malen, mmjenjanjem doega trebati ce i namjestit brzinu hominga), zasad super 3dodge poslje komita ne znam sto pitas ali lagano se pobjegne, tako da bi digao cijenu dodgea sto se stamine tice i dodao malo dometa kasnije nekada unblockable napadima 4 green let uopce ne radi homing u djelu animacije prije nego je skakac u najvisoj toci dakle prvo skoci u vis iznad tocke u kojoj se nalazi a onda odleti do neprijatlje a trebao bi barem dvije trecine leta prema nerpijatleju odraditi do najvise tocke a ostatak nakon 5 ne znam o kakvom gumbu pricamo i koja bi mu tebala biti namjena? 6 ostalo radi 7 fps stabilan
 nema nikakvog efekta to opet animacija do svog zenita putuje samo vertikalno, iskreno psuito bi to zasad i isao bi dalje implementirati stvari za gameplay loop, pa kad sve imamo krenuo došmikavat ovakve stvari
+
+14.9. 
+nakon pocinjanja impemetacije pitcha ikao ga jos nevidmo ostatak postojecih stvari radi kako spada

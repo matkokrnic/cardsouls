@@ -4,7 +4,7 @@ baseline_commit: 74c1ddd6568fead41705c591646a3eda741de187
 
 # Story 6.2: Pitch Staging
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** E6 planning pass, board order item 4 (decision-log Session 2026-09-08,
 > `E6-P/R2`). Tier A by the golden clause (`E4-P/R9`) — `E6-P/R2` itself predicts the golden
@@ -364,18 +364,28 @@ so that the buildup half of the pitch's open-information bluff (`P3`) exists in 
     top-level key set (Golden Prediction below); the one-object-with-per-slot-records shape (the
     `_lock_directions[slot]` precedent, Fact 1) keeps the single `"pitch"` key and grows only its
     nested shape.
-14b. **New `PitchState` members are HASHED; the new pitch-cost map is INJECTED** (the `flags`/
-    `_card_costs` split, Fact 6) — the replay-identity scan (`test_replay_identity.gd`) fails on any
-    unclassified member, so both need explicit classification in the same pass. The staged hand-slot
-    index and the staged card id are HASHED members despite being "identity" data — a departure from
-    `3-3`'s "counts-only" rule for hashed card identity — RULED safe and intended here, in words:
-    the staged card is PUBLIC information by GDD design (unlike hand contents, which stay excluded
-    from `to_snapshot()` by three separate prior rulings), so hashing its id leaks nothing a replay
-    observer couldn't already see live.
-14c. `UNHASHED_CROSS_TICK_MEMBERS` (`test_replay_identity.gd:116`) STAYS AT THREE, provided the
-    staged card id, its slot index, and the fizzle timer all ride the existing `"pitch"` snapshot
-    key rather than becoming new top-level `MatchState` members — pinned by measurement, not
-    assumed.
+14b. **New `PitchState` IDENTITY members are HASHED; the ORB PRICE is NOT; the new pitch-cost map
+    is INJECTED** (the `flags`/`_card_costs` split, Fact 6) — the replay-identity scan
+    (`test_replay_identity.gd`) fails on any unclassified member, so all three need explicit
+    classification in the same pass. The staged hand-slot index and the staged card id are HASHED
+    members despite being "identity" data — a departure from `3-3`'s "counts-only" rule for hashed
+    card identity — RULED safe and intended here, in words: the staged card is PUBLIC information
+    by GDD design (unlike hand contents, which stay excluded from `to_snapshot()` by three separate
+    prior rulings), so hashing its id leaks nothing a replay observer couldn't already see live.
+    **The orb PRICE is a separate question from identity, and answers differently (review fix H1):**
+    it is card `.tres` CONTENT, not identity, and `3-2`'s close-out ruled card content permanently
+    out of the hashed run — a `.tres` reprice must never re-baseline the golden. `PitchState` still
+    caches the price per slot (copied by value at staging) so `is_ready()` can keep reading it live
+    across ticks, but that cache is UNHASHED and excluded from `to_snapshot()`; the "frozen at
+    staging" guarantee comes from the injection discipline (the price is copied off a map injected
+    once at match start, no reload path), not from being hashed.
+14c. `UNHASHED_CROSS_TICK_MEMBERS` (`test_replay_identity.gd`) MOVES FROM THREE TO FOUR (review fix
+    H1). The staged card id and its slot index ride the existing `"pitch"` snapshot key and add no
+    new top-level `MatchState` member, exactly as originally pinned. The orb price is the new,
+    fourth argument: it genuinely crosses ticks (frozen at staging until `clear()`, read by
+    `is_ready()` on every tick in between) so it cannot be PER_TICK, and it is never injected
+    per-call so it cannot be INJECTED — UNHASHED_CROSS_TICK is its only honest home, and the count
+    pays for that rather than being held at three by construction.
 14d. The debug reset clears the Pitch Zone (both players') as part of its existing "nothing else"
     contract (Fact 5's `_reset_player`) — an unclear zone would have the next deal duplicate the
     staged card's id into the freshly-dealt hand while the same id also sits staged. Pinned by a
@@ -479,6 +489,19 @@ until `6-3` lands. A live smoke of an invisible mechanism cannot be judged (the 
 an effect a smoke can't perceive can't be classified pass/fail). State-layer correctness is proven
 by the headless suite (AC 18) and any new integration test the dev pass adds.
 
+### Live Smoke Results (2026-09-14)
+
+Source: `docs/playtest-log.md`, 14.9. entry (one line, the operator's own words). This story defines
+no numbered Live Smoke items of its own (above: deferred to `6-3`, nothing pitch-specific is
+perceivable) — the pass actually run is REGRESSION-ONLY, confirming the existing systems still work
+with the fix-pass changes in place, not a pitch-specific checklist.
+
+**PASS, no findings.** Operator (14.9.): "nakon pocinjanja impemetacije pitcha [i]ako ga jos ne
+vidimo ostatak postojecih stvari radi kako spada" (after starting the pitch implementation, although
+we still can't see it, the rest of the existing stuff works as it should). No regression against any
+prior story's carried Live Smoke items; nothing pitch-specific was or could be judged, matching this
+section's own prediction above.
+
 ## Dev Notes
 
 ### Open Questions for the dev pass (named, not pre-ruled)
@@ -575,11 +598,262 @@ by the headless suite (AC 18) and any new integration test the dev pass adds.
 
 ### Agent Model Used
 
+Claude Opus 5 (1M context), single main session, no subagents / forks. No commits made.
+
 ### Debug Log References
+
+Suite output files (outside the repo), counters read by opening the files:
+
+| Run | File | Written | Result |
+|---|---|---|---|
+| 1 before-baseline (before any edit) | `C:\dev\_62-suite-before.txt` | 2026-09-14 01:02:09 | state **777 tests, 0 failed, 6305 assertions**; integration **59/59 PASS**; exit 0 |
+| 2 EXTRA (disclosed) pre-re-baseline proof | `C:\dev\_62-suite-prebaseline.txt` | 2026-09-14 01:29:57 | state 808 tests, **3 failed**, 6551 assertions; integration 59/59 PASS; exit 1 |
+| 3 final | `C:\dev\_62-suite-after.txt` | 2026-09-14 01:35:24 | state **808 tests, 0 failed, 6551 assertions**; integration **59/59 PASS**; exit 0 |
+
+**Cadence disclosure.** THREE full runs, one over the default two. Reason for run 2: the prompt's golden
+discipline requires every non-golden test to be proven green BEFORE the single re-baseline, and that
+needs a full run with the golden still un-rebaselined. Run 2 was NOT clean: besides the expected
+`test_determinism.gd::test_state_matches_golden`, it caught two failures in `test_live_reload.gd`
+(`test_the_recorder_still_ships_exactly_eleven_capture_channels`, and
+`test_the_replay_side_consumes_the_live_event_with_no_new_code` via the new match-start completeness
+Invariant) — a recorder fixture I had missed. Fixed (count 11 -> 12, renamed, fixture captures the
+channel), proven green by running that file alone, then re-baselined. I did NOT spend a fourth full run
+to re-prove "non-golden green" after that one-file fix; run 3 (after the re-baseline) is the complete
+proof. No host OOM; all runs backgrounded. Development and mutation runs used a scratchpad
+single-file runner (`run_files.gd`, outside the repo) over only the affected files.
+
+**Golden measurement (both directions).** Old `9679fa80`, new
+**`72d3cc6ed5caeeff8b1dded3a054faefa479bc371117c82982bccf04af6a9595`**. Named cause:
+`PitchState.to_snapshot()`'s nested shape (`{"fizzle": ...}` -> `{"p1": {card_id, hand_slot,
+orb_costs, fizzle}, "p2": {...}}`).
+- G0 — all 6-2 changes in place: `test_state_matches_golden` got `72d3cc6e…`, expected `9679fa80…`.
+- G1 (reverse) — ONLY `PitchState.to_snapshot()` returned to its pre-story shape
+  (`{"fizzle": _fizzle[0].to_snapshot()}`), everything else 6-2 in place: `test_determinism.gd`
+  19 tests, **0 failed** — i.e. hash == `9679fa80` exactly. Restored by copy-back, SHA-256
+  `16fe7c36…aa88b0` before == after.
+- G2 (flag claim) — `pitch_zone = true` line removed from `data/feature_flags.tres`, all code 6-2:
+  got `72d3cc6e…`, identical to G0. **The story's claim holds by measurement: the flag flip does not
+  move the golden.** Restored, SHA-256 `56b8d9c6…6e23e6` before == after.
+- ONE re-baseline, in `test_determinism.gd`, with the cause block above `const GOLDEN`.
+- Top-level snapshot key set unchanged: `test_debug_window_countdown.gd`'s top-level pin
+  (`["p1","p2","pitch","rng_state","round_over","tick"]`) and `test_card_observation.gd` green.
+
+**Mutation table — ALL rows MEASURED by this dev pass (6-2), single affected file(s) only.** Every
+mutated file was copied to the scratchpad before mutation and restored by copy-back; SHA-256 compared
+before/after, all RESTORED-OK.
+
+| ID | File / mutation | Guard(s) that went RED | Restore SHA-256 (before == after) |
+|---|---|---|---|
+| M1 | `match_state.gd`: ON-branch `player.orbs.reset_all()` -> `pass` (AC 13) | `test_orb_clear_on_staging_empties_every_colour_before_ready_is_read`, `test_orb_clear_on_a_zero_orb_card_still_clears_the_pool_and_is_still_ready` | e385cf9d…4b89f2 |
+| M2 | `match_state.gd`: `Enums.ModeKind.PITCH:` arm deleted (AC 17a) | `test_card_play.gd::test_every_declared_mode_has_its_own_dispatch_arm` | e385cf9d…4b89f2 |
+| M3 | `intent_recorder.gd`: `missing.append("pitch costs")` -> `pass` | `test_a_record_missing_any_match_start_channel_is_malformed`, `test_an_empty_pitch_cost_capture_is_a_complete_match_start` | 10c94f2a…0d641 |
+| M4 | `test_replay_identity.gd` fixture: the STAGE_TICK commit made `false` (driven run no longer stages) | `test_dropping_any_single_channel_diverges_the_replay` ("dropping the pitch_costs channel must DIVERGE"), `test_the_recorded_run_exercises_every_channel` — proves AC 16's stated dependency: the drop only bites because the run stages. (A first M4 attempt inserted the `false` BEFORE the existing `= true` and was therefore a no-op mutation — green; re-done correctly, recorded here rather than dropped.) | 5c576f0f…6e3a |
+| M5 | `match_state.gd`: `pitch.clear(reset_slot)` -> `pass` (AC 14d) | `test_the_debug_reset_clears_both_zones` | e385cf9d…4b89f2 |
+| M6 | `match_state.gd`: fizzle seat moved AFTER `_deliver_pending_draw` (AC 14e) | `test_a_zero_tick_countdown_fizzles_and_refills_on_the_staging_tick` | e385cf9d…4b89f2 |
+| M7 | `match_state.gd`: `pitch.tick()` hoisted above the step-1b freeze (AC 14e freeze). (First attempt's sed also hit `_check_resolution`'s `if _round_over:` — 7 reds, noisy; re-done on the first occurrence only.) | `test_the_countdown_freezes_on_round_over_ticks` | e385cf9d…4b89f2 |
+| M8 | `match_state.gd`: staging calls full `CastEvaluator.refusal_reason` (orb-gated) (AC 4) | 12 staging tests incl. `test_staging_is_not_gated_on_orb_affordability` | e385cf9d…4b89f2 |
+| M9 | `match_state.gd`: `pending_draw_owed.append(hand_slot)` added at staging (the ruled-out mechanism, AC 3/8) | 6 incl. `test_the_five_term_conservation_identity_holds_across_stage_wait_and_fizzle`, `test_staging_pays_the_mana_vacates_the_slot_and_owes_no_draw` | e385cf9d…4b89f2 |
+| M10 | `record_file.gd`: writer omits `"pitch_costs"` | 12 `test_record_file.gd` tests (round trip, byte identity, required keys …) | d7808714…088c1 |
+| M11 | `match_runner.gd`: `_match_state.inject_pitch_costs(...)` -> `pass` | integration `test_deck_injection.gd` (`pitch=false`, RESULT: FAIL) | b4cb0b43…a3b7e8 |
+| M12 | `intent_recorder.gd`: `replay_inject_content` skips the pitch channel | 6 `test_replay_identity.gd` tests + `test_record_file.gd::test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash` | 10c94f2a…0d641 |
+| M13 | `match_state.gd`: `flags.pitch_zone` layer gate -> `if false:` (AC 5) | `test_a_closed_pitch_zone_layer_refuses_with_flag_closed` | e385cf9d…4b89f2 |
+| M14 | `data/feature_flags.tres`: `pitch_zone = true` deleted (AC 2a) | `test_data_resources.gd::test_feature_flags_tres_opens_the_pitch_zone_layer` | 56b8d9c6…6e23e6 |
+| M15 | `balance_config.tres`: `pitch_stage_clears_orbs = true` (AC 13 authored-off) | `test_the_pitch_orb_clear_rule_is_authored_off` | 88e7a3f2…7e5229 |
+| M16 | `balance_config.tres`: `pitch_stage_timer_seconds = 0.0` | `test_authored_pitch_stage_timer_is_positive` | 88e7a3f2…7e5229 |
+| M17 | `storm_kite.tres`: `pitch_condition` line deleted (AC 1b) | `test_card_authoring.gd::test_basic_mode_only_pitch_and_orbs_left_unauthored` | 5a6dd1d2…f0cc9 |
+| M18 | all nine `data/cards/*.tres`: orb-price entries deleted (the "orb_costs really parses" sanity) | same test, the `priced_in_orbs > 0` sanity. (A first single-card M18 — malformed dict syntax on ONE card — stayed GREEN: the sanity is library-wide by design, so one card cannot trip it. Recorded, not dropped.) | 9/9 files `sha256sum -c` OK |
+| M19 | `record_file.gd`: `FORMAT_VERSION := 8` | `test_the_format_version_and_the_widened_contact_row_move_together`, `test_the_contents_validation_bumped_no_version_and_widened_no_required_key` | d7808714…088c1 |
+| M20 | `record_file.gd`: `"pitch_costs"` removed from `REQUIRED_KEYS` | `test_a_v8_record_without_pitch_costs_is_refused_with_a_reason`, `test_the_required_key_set_is_exactly_what_a_saved_record_carries`, `test_the_contents_validation_...` | d7808714…088c1 |
+
+**Finding from M19, reported not hidden:** `test_a_v8_record_without_pitch_costs_is_refused_with_a_reason`
+stays GREEN when `FORMAT_VERSION` is reverted to 8, because a stripped v8 body is then refused for its
+missing key and `"8"` satisfies both "names the version" substrings. That test alone does NOT guard the
+bump; the version pin tests do (M19), and it does guard the required key (M20). No Invariant.check was
+proven by deliberately tripping it; M9 may incidentally print a `Hand.fill_at` invariant while its
+behaviour assertions fail — the red verdict rests on the assertions.
 
 ### Completion Notes List
 
+**The three choices the story left open.**
+1. *Per-slot record shape* — ONE `PitchState` (ruled), INDEX-ALIGNED top-level arrays, slot 0 = P1:
+   `_card_ids: Array[StringName]` (`NO_CARD := &""`), `_hand_slots: Array[int]` (`NO_HAND_SLOT := -1`),
+   `_orb_costs: Array[Dictionary]` (price copied by value at staging), `_fizzle: Array[TimingWindow]`
+   (the existing member name kept). Why: the `_lock_directions[slot]` / `UnitBoard` precedent, and
+   top-level `var`s stay visible to `test_replay_identity.gd`'s `^var` member scan — an inner record
+   class would have hidden its fields from the classification guard. Snapshot:
+   `{"p1": {card_id (String value), hand_slot, orb_costs (int colour keys), fizzle}, "p2": {...}}`.
+   Methods: `stage`, `clear`, `tick`, `is_staged`, `is_expired`, `staged_card_id`, `staged_hand_slot`,
+   `is_ready(slot, orbs, flags)`. READY lives on `PitchState`, not `MatchState`, so no sixth
+   `EXEMPT_PURE_QUERIES` entry was needed on the intake scan.
+2. *Flag+mana-only check* — a NEW ENTRY POINT, `CastEvaluator.flag_and_mana_refusal_reason(condition,
+   mana_current, flags)`; `refusal_reason` now calls it, so the two share the flag/mana half by
+   construction. Rejected: a skip parameter (a second behaviour on Mode ①'s single caller) and
+   tolerate-and-discard (correct only while the orb check stays last). The READY check reuses the orb
+   loop via a new public `CastEvaluator.orb_costs_affordable(orb_costs, orbs, flags)`, which
+   `_orbs_affordable` forwards to.
+3. *Injection mechanics* — a SECOND DICTIONARY mirroring `inject_card_costs`:
+   `MatchState.inject_pitch_costs` / `_pitch_costs` (NO Invariant.check at all — not total, empty
+   legal), `IntentRecorder.capture_inject_pitch_costs` / `replay_pitch_costs` / `CHANNEL_PITCH_COSTS`
+   (last in `SOUND_CONTENT_ORDER`), `RecordFile` key `pitch_costs`, runner `_derive_pitch_costs()`.
+   Why: the four-seam precedent verbatim; a wider per-card record would have reshaped the Mode ① costs
+   channel and its record key. Record completeness is keyed to a `_pitch_costs_captured` bool, not
+   emptiness, because an empty map is a legal capture.
+
+**State counts (as asked).** `FORMAT_VERSION` 8 -> **9**, v8 refused with a reason, no shim (6-1's
+shape verified by content first: 6-1 moved the version-pin literals and relied on the generic
+unknown-version refusal; 6-2 does the same plus a dedicated stripped-v8 test). Observation seams stay
+**nine** (`test_runner_observation_seams_are_exactly_nine` green; no `connect_*` added).
+`UNHASHED_CROSS_TICK_MEMBERS` stays **three** (new members classified: `pitch_state._card_ids /
+_hand_slots / _orb_costs` HASHED, `match_state._pitch_costs` INJECTED). No new `class_name` —
+no editor scan run, no `.uid` sidecars generated, `project.godot` untouched.
+
+**AC status.** 1 ✔ (`CardData.pitch_condition`, same `CardCastCondition`). 1a ✔ (nine cards: mana =
+Mode ① mana; 1 own-colour orb on the six 2/3-mana cards, 2 on the three 5-mana totems; also authored
+`required_flag = &"pitch_zone"` — see deviations). 1b ✔. 2 ✔ (no totality check). 2a ✔. 3 ✔. 4 ✔.
+5 ✔ (`REASON_NO_PITCH_COST := &"no_pitch_cost"`). 6 ✔ (`REASON_PITCH_ZONE_OCCUPIED :=
+&"pitch_zone_occupied"`). 7 ✔. 8 ✔ (five-term identity + staged-inclusive permutation, new test). 8a ✔.
+9 ✔. 10 ✔ (no stored READY; hash of `"pitch"` unchanged when READY flips). 11 ✔. 12 ✔
+(`BalanceConfig.pitch_stage_clears_orbs`). 13 ✔ (both branches; ON proven by M1; authored-off pin).
+14 ✔ (golden moved, one cause, both directions). 14a ✔. 14b ✔. 14c ✔. 14d ✔. 14e ✔. 15 ✔. 16 ✔ (drop
+test stages — stated in the test, proven by M4). 17 ✔. 17a ✔ (scan retired, set test renamed, message
+reworded, pinned substring updated). 18 ✔ (run 3).
+
+**Deviations and false premises found (reported, not silently adapted).**
+- *No Tasks/Subtasks section exists in the story.* The dev-story workflow assumes one; the ACs were used
+  as the task list. Nothing was checked off because there is nothing to check.
+- *A hard layer gate was added* (`flags.pitch_zone`, first check, `REASON_FLAG_CLOSED`) in ADDITION to
+  the condition's `required_flag`. The story's AC 3/4 describe only the `required_flag` gate; the
+  project-context HARD RULE and the `5-2/R13` mode ②/③ precedent require the layer itself to be
+  switchable regardless of data. The nine cards also author `required_flag = &"pitch_zone"`, which
+  AC 1a does not rule — harmless redundancy, easy to drop at review if unwanted.
+- *`test_card_authoring.gd::CARD_DATA_FIELDS` had to move six -> seven* (`pitch_condition`) — the story
+  does not name that pin; it fails otherwise by design.
+- *AC 1b's test name is now partly stale* (`test_basic_mode_only_pitch_and_orbs_left_unauthored`) —
+  kept, because AC 1b says EXTEND not replace; flag for review under the `5-5` rename discipline.
+- *AC 17's premise verified true*: the reflection loop skips bools (`if kind != TYPE_FLOAT and kind !=
+  TYPE_INT: continue`); `pitch_stage_clears_orbs` needs no `E1_BALANCE_FIELDS` entry.
+- *Unnamed ripple*: `test_live_reload.gd` pins the capture-channel COUNT (11 -> 12, renamed); four other
+  recorder fixtures (`test_intent_recorder`, `test_record_file`, `test_replay_identity`, integration
+  `test_replay_contacts` / `test_replay_entry_is_inert` / `test_replay_verifier_tool`) had to capture
+  the new channel. The story named only the drop test.
+- *The v8-refusal test does not guard the version bump by itself* (M19 finding above).
+- *Fix-pass note, not fixed (review finding M2, record only):* `_resolve_pitch_stage`'s CHARGING
+  guard reuses `REASON_UNBLOCKABLE_COMMITTED` verbatim for a staging refusal, the same token every
+  prior use describes for mode ②'s own commitment state. This is INTENTIONAL, not a copy-paste
+  reuse to tidy up later: the token names the CAUSE (the hero IS committed to an unblockable,
+  regardless of what it just tried to do next), not the attempted action, and that cause is
+  identical whether the refused action was a mode ② cast or a mode ④ stage. A future consumer that
+  reads this reason string as implying "mode ② was attempted" would misclassify a staging refusal —
+  named here so a later reader does not "fix" it into a pitch-specific reason without cause.
+- *Script default of `pitch_stage_timer_seconds` is 0.0* (authored 20.0), sibling-duration convention,
+  with a bespoke `> 0` authored bound — the story said "provisional 20.0" without saying where.
+- *No `card_cast_resolved` is queued at staging* (nothing resolved); staging's only announcement is
+  `notify_cards_changed()` (AC 8a).
+- *Presentation note for 6-3*: a staged slot is a hole that is NOT in `pending_draw_owed`, so the HUD
+  would currently paint it like a permanent hole. Unreachable live until 6-4 wires the input.
+- Board: see the Change Log entry — only the custom `on_complete` wrote `sprint-status.yaml`.
+
 ### File List
+
+Modified:
+- `data/balance/balance_config.tres`
+- `data/cards/bramble_snare.tres`, `data/cards/ember_lash.tres`, `data/cards/frost_dart.tres`,
+  `data/cards/hellforge_totem.tres`, `data/cards/imp_summoner.tres`, `data/cards/storm_kite.tres`,
+  `data/cards/thornback_guardian.tres`, `data/cards/tidal_wardstone.tres`,
+  `data/cards/verdant_wardstone.tres`
+- `data/feature_flags.tres`
+- `src/main/match_runner.gd`
+- `src/state/economy/cast_evaluator.gd`
+- `src/state/match_state.gd`
+- `src/state/pitch/pitch_state.gd`
+- `src/state/resources/balance_config.gd`
+- `src/state/resources/card_data.gd`
+- `src/state/timing/balance_ticks.gd`
+- `src/systems/intent_recorder.gd`
+- `src/systems/record_file.gd`
+- `test/integration/test_deck_injection.gd`
+- `test/integration/test_replay_contacts.gd`
+- `test/integration/test_replay_entry_is_inert.gd`
+- `test/integration/test_replay_verifier_tool.gd`
+- `test/state/test_balance_authoring.gd`
+- `test/state/test_card_authoring.gd`
+- `test/state/test_card_play.gd`
+- `test/state/test_cast_evaluator.gd`
+- `test/state/test_data_resources.gd`
+- `test/state/test_determinism.gd`
+- `test/state/test_intent_recorder.gd`
+- `test/state/test_live_reload.gd`
+- `test/state/test_record_file.gd`
+- `test/state/test_replay_identity.gd`
+- `docs/implementation-artifacts/6-2-pitch-staging.md` (this record)
+- `docs/implementation-artifacts/sprint-status.yaml` (custom `on_complete` only: `story_notes` +
+  `last_updated`)
+
+New (untracked, dev pass's own):
+- `test/state/test_pitch_staging.gd`
+
+### Fix Pass Record (post-review, code review report `C:\dev\_62-review.md`)
+
+Fresh Sonnet 5 session, `/clear` done before this pass, no subagents/forks. Status stayed `review`;
+no commits made; board untouched.
+
+**Fix 1 (H1) — the orb PRICE came out of the hash; identity stays in.** `PitchState._zone_snapshot()`
+no longer emits `"orb_costs"`; `_orb_costs` stays a per-slot member but is now an UNHASHED cache
+read only by `is_ready()`, frozen at staging by the injection discipline (a map injected once at
+match start, no reload path), not by being hashed. AC 14b/14c reworded above to address identity and
+price separately (see those ACs for the full reasoning); `PitchState`'s class doc and `_orb_costs`'s
+own doc updated to match. `test_replay_identity.gd`: the driven-run assertion now asserts
+`card_id` IS in the hashed zone and `orb_costs` is NOT; `_orb_costs` moved from the `HASHED` bucket
+to `UNHASHED_CROSS_TICK`, and `UNHASHED_CROSS_TICK_MEMBERS` moves from **3 to 4** (the pin's first
+increase, disclosed not hidden — the orb price is a genuinely new argument, not a member of the
+existing three). `test_pitch_staging.gd`'s two snapshot assertions that pinned `orb_costs` (a keyed
+value and an empty-zone equality) now assert its ABSENCE from the zone dict instead.
+
+**Golden — SECOND re-baseline, cause named separately from the first.** Old
+`72d3cc6ed5caeeff8b1dded3a054faefa479bc371117c82982bccf04af6a9595`, new
+`9ed4c9035a89b3219623dc129d73693e6871049bc9c48f672bc5554d49f5d5b2`. THE CAUSE:
+`PitchState.to_snapshot()`'s per-zone dict shape shrinks from four keys (`card_id`, `hand_slot`,
+`orb_costs`, `fizzle`) to three (`card_id`, `hand_slot`, `fizzle`) — a SHAPE change, moving the hash
+even though this fixture's zones hash empty on every tick (the same "shape is the mover, values
+never leave the empty record" reasoning the FIRST re-baseline's cause block already established).
+Measured in both directions: forward (all fix-pass changes in place) hashed `9ed4c903…`; reverse
+(ONLY `_zone_snapshot()` returned to its four-key shape, every other fix-pass change left in place)
+hashed `72d3cc6e…` exactly, reproducing the pre-fix-pass golden. `pitch_state.gd` was copied to the
+scratchpad before the reverse mutation and restored by copy-back, SHA-256
+`5cf13c9514029570b3a452ed1c3e8c7fab6498d5b4e252fde9fa1fdc596ef3fc` before == after. Full cause block
+in `test_determinism.gd` above `const GOLDEN`.
+
+**Fix 2 (M1) — the redundant per-card flag dropped.** `required_flag = &"pitch_zone"` removed from
+all nine `data/cards/*.tres` (line 21 in each, the shared authored shape). Verified BEFORE deleting,
+by content, that no test reads the authored `pitch_condition.required_flag` value: the only tests
+touching `required_flag` build in-test `CardCastCondition`/`ResourceGenerationRule` fixtures
+(`test_card_authoring.gd`'s own shape-mirror test reads `cast_condition.required_flag`, a DIFFERENT
+field, always `""`; `test_cast_evaluator.gd`, `test_mana_economy.gd`, `test_orbs_economy.gd`,
+`test_totem_accelerators.gd` all construct their own conditions/rules in-test;
+`test_pitch_staging.gd`'s own `required_flag` test sets `&"totems"` on an in-test fixture to prove
+the mechanism is general-purpose, never reading the shipped `.tres`). The mechanism on
+`CardCastCondition` itself is untouched.
+
+**Fix 3 (M3) — the orb-price guard moved inside the per-card loop.** `test_card_authoring.gd::
+test_basic_mode_only_pitch_and_orbs_left_unauthored`'s library-wide `priced_in_orbs > 0` (survived a
+single card regressing to an empty price) replaced with a per-card `card.pitch_condition.orb_costs.
+size() > 0` assertion inside the loop that already visits every card. Non-vacuity proof below.
+
+**Suite (see Suite Mechanism results below for the actual counts/hashes filled in after the runs).**
+
+**Judgment calls made, not pre-scripted by the fix prompt:**
+- Kept `_orb_costs` as PitchState's own internal member (an unhashed cache) rather than deleting it
+  and having `is_ready()` re-derive the price from `MatchState._pitch_costs` on every call. Both
+  satisfy "stop hashing the price"; the cache keeps `is_ready(slot, orbs, flags)`'s signature and
+  every one of its ~14 existing call sites (tests included) unchanged, and `PitchState` stays a pure
+  container that never reads `MatchState`'s injected map directly — a smaller, lower-risk diff for
+  the same architectural outcome. Recorded so a reader does not mistake the cache for an oversight.
+- `test_replay_identity.gd`'s identity assertion (card_id present) is now proven against
+  `live.pitch.staged_card_id(0)` rather than a hardcoded literal card id, since the staged card at
+  STAGE_TICK is a fixture-shuffle outcome not previously pinned by name in that test.
+
+Added:
+- `test/state/test_pitch_staging.gd`
 
 ## Change Log
 
@@ -600,3 +874,9 @@ by the headless suite (AC 18) and any new integration test the dev pass adds.
   `economy/`; the cited guarded-stub test name did not exist, replaced with the three real names;
   Fact 9/Open Question 2 reopened an already-settled seam-ownership question and was deleted; the
   Hellburst citation was verified correct as-is. Reviewed against the repo by content throughout.
+- 2026-09-14: Dev pass (`gds-dev-story`, Opus 5, no commits). Mode ④ staging built per ACs 1-18; golden
+  9679fa80 -> 72d3cc6e (one cause, both directions measured); FORMAT_VERSION 8 -> 9; seams stay nine;
+  unhashed cross-tick members stay three; 20-row mutation table in the Dev Agent Record; three full
+  suite runs (one extra, disclosed). Status -> `review` (story-file-only). Board: the dev-story skill's
+  own in-progress/review writes were NOT made (operator instruction: board not this pass's); the custom
+  `on_complete` then set only `story_notes` and `last_updated`, entry left at `ready-for-dev # Tier A`.
