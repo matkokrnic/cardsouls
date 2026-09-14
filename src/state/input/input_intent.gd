@@ -62,6 +62,14 @@ var card_mode: Enums.ModeKind = Enums.ModeKind.BASIC
 ## The COMMIT EDGE for this tick — just-pressed semantics, like debug_reset. Held commits do
 ## not re-cast: one press, one cast attempt.
 var card_commit: bool = false
+## Story 6-3a (AC 4): the FOURTH card field, and the one exception to "exactly three" above. Meaningful
+## only under `card_mode == PITCH`: `false` (the resting value, and every pre-6-3a recorded commit) is
+## a STAGE of `card_slot`; `true` is an ACTIVATION of the committing player's own staged card, and
+## `card_slot` is then irrelevant. A separate field rather than a reinterpretation of `card_slot == -1`,
+## because a PITCH commit with no slot armed already means "refused as an empty slot" and must keep
+## meaning that -- two commits the state layer has to tell apart cannot share one encoding.
+## `Enums.ModeKind` gains no fifth value for this: the GDD has four modes, and activation is mode ④'s.
+var card_activate: bool = false
 
 ## Story 4-6 (AC 11, `CC/R5`): the LOCK/RETARGET half of the intent -- the RESULT of a
 ## right-stick click or flick, never the deflection that produced it. Screen-space candidate

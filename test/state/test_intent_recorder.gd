@@ -198,11 +198,14 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 
 # ---------------------------------------------------------------- AC 2
 
-## AC 2: EVERY InputIntent FIELD RIDES THE STREAM VERBATIM, per tick, per slot. All nine fields
+## AC 2: EVERY InputIntent FIELD RIDES THE STREAM VERBATIM, per tick, per slot. All ten fields
 ## are given a NON-DEFAULT value (asserted non-default, or the round-trip would pass against a
 ## recorder that dropped them and returned a fresh object), captured, and read back through the
 ## real ReplayController — the same path the runner uses, not a private accessor.
-func test_all_nine_input_intent_fields_round_trip_per_tick_per_slot() -> void:
+##
+## RENAMED BY STORY 6-3a (AC 4) from `test_all_nine_input_intent_fields_round_trip_per_tick_per_slot`:
+## `card_activate` is the tenth field, and a test whose name counts the fields moves with the count.
+func test_all_ten_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	var loud := InputIntent.new()
 	loud.move_dir = Vector2(0.25, -0.75)
 	loud.retarget_slot = 1
@@ -213,6 +216,7 @@ func test_all_nine_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	loud.card_slot = 2
 	loud.card_mode = Enums.ModeKind.PITCH
 	loud.card_commit = true
+	loud.card_activate = true
 	var resting := InputIntent.new()
 	assert_ne(loud.move_dir, resting.move_dir, "move_dir is non-default")
 	assert_ne(loud.retarget_slot, resting.retarget_slot, "retarget_slot is non-default")
@@ -222,6 +226,7 @@ func test_all_nine_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	assert_ne(loud.card_slot, resting.card_slot, "card_slot is non-default")
 	assert_ne(int(loud.card_mode), int(resting.card_mode), "card_mode is non-default")
 	assert_ne(loud.card_commit, resting.card_commit, "card_commit is non-default")
+	assert_ne(loud.card_activate, resting.card_activate, "card_activate is non-default")
 
 	var rec := _match_start_record()
 	var slot1 := InputIntent.new()
@@ -240,6 +245,7 @@ func test_all_nine_input_intent_fields_round_trip_per_tick_per_slot() -> void:
 	assert_eq(got.card_slot, loud.card_slot, "card_slot")
 	assert_eq(int(got.card_mode), int(loud.card_mode), "card_mode")
 	assert_eq(got.card_commit, loud.card_commit, "card_commit")
+	assert_eq(got.card_activate, loud.card_activate, "card_activate")
 	assert_eq(ReplayController.new(rec, 1).sample().move_dir, slot1.move_dir,
 		"slot 1 reads its OWN column of the stream, not slot 0's")
 	# The D3 LIFETIME contract holds for a replay too: a FRESH value object per sample(), never

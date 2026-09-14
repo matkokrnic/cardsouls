@@ -74,7 +74,7 @@ extends Resource
 ## Story 5-0b (AC 3): the face button that commits a Basic cast — press-to-select-and-confirm in
 ## one, unlike the keyboard's separate `cast_confirm` key (no second button on the pad scheme).
 ## B/X were explicit no-ops at 5-0b and gained their own commit fields at `5-7` (directly below);
-## Y still has none, which is what keeps mode ④ PITCH structurally unreachable from the pad.
+## Y gained its own at `6-3a` (`cast_pitch_button`, below them).
 @export var cast_basic_button: JoyButton = JOY_BUTTON_A
 
 ## Story 5-7 (AC 1/AC 3): the OTHER two face buttons that commit a cast — B commits the armed slot
@@ -97,6 +97,15 @@ extends Resource
 ## authored data and never as a literal in `GamepadController`.
 @export var cast_unblockable_button: JoyButton = JOY_BUTTON_B
 @export var cast_defense_button: JoyButton = JOY_BUTTON_X
+
+## Story 6-3a (AC 1): the FOURTH face button, Y, and the mode it carries -- mode ④ PITCH. The
+## `cast_unblockable_button`/`cast_defense_button` shape directly above, with ONE difference that lives
+## in `GamepadController`, not here: Y is read on BOTH sides of the arming modifier. With L3 held it
+## commits the armed slot as a STAGE; with L3 released it ACTIVATES the player's own staged card.
+##
+## Authoring this field is what retires `5-7`'s "no button maps to Y" guard (`6-3-split/R-Y`): that
+## guard existed for exactly one fact, and this line makes it false by construction.
+@export var cast_pitch_button: JoyButton = JOY_BUTTON_Y
 
 ## Story 5-0b (AC 2): how far L2/R2 must be pushed before a trigger counts as PRESSED, as a
 ## fraction of full pull. Godot's `JoyButton` enum has no dedicated trigger entries — L2/R2 report

@@ -97,8 +97,10 @@ func get_maximum() -> int:
 	return _max
 
 
-## Activating a Pitch Effect resets ALL three colors to 0, not just the spent color
-## (TDD 8.2 — an easy-to-break invariant). E6 resolution calls this.
+## Empty ALL three colours to 0, signalling once if anything moved. Two call sites: the debug reset
+## (`MatchState._reset_player`) and the optional staging clear (`MatchState._resolve_pitch_stage`,
+## `pitch_stage_clears_orbs`). It is NOT activation's spend: activating a staged card spends only the
+## priced orbs through `add()` and leaves surplus and unpriced colours untouched (`6-3-split/R-SPEND`).
 func reset_all() -> void:
 	if _red == 0 and _blue == 0 and _green == 0:
 		return

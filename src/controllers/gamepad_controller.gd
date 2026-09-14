@@ -56,6 +56,11 @@ const _CAST_BASIC_KEY := &"__cast_basic"
 ## whether the other had been consumed.
 const _CAST_UNBLOCKABLE_KEY := &"__cast_unblockable"
 const _CAST_DEFENSE_KEY := &"__cast_defense"
+## Story 6-3a (AC 2): the `_prev_held` key the PITCH (Y) confirm edge is remembered under -- the two
+## keys directly above, applied unchanged to the fourth face button. ONE key serves both of Y's
+## meanings (stage with L3 held, activate with L3 released): they are one physical press edge, and
+## which meaning it carries is decided by `cast_held` inside `resolve_card_tick`, not by a second memory.
+const _CAST_PITCH_KEY := &"__cast_pitch"
 
 var _device: int = NO_DEVICE
 var _profile: GamepadProfile
@@ -137,12 +142,16 @@ func sample() -> InputIntent:
 		# Story 5-7 (AC 7): the two NEW commit edges join that same priming set, for the identical
 		# reason and with no new rule -- a replug must not be able to spend a card via UNBLOCKABLE
 		# or DEFENSE any more than it can via BASIC.
+		#
+		# Story 6-3a (AC 2): Y joins the same set, for the same reason -- a replug with Y already held
+		# must fire neither a stage (L3 held) nor an activation (L3 released) with no new press.
 		_armed_slot = -1
 		_prev_l2 = 1.0
 		_prev_r2 = 1.0
 		_prev_held[_CAST_BASIC_KEY] = true
 		_prev_held[_CAST_UNBLOCKABLE_KEY] = true
 		_prev_held[_CAST_DEFENSE_KEY] = true
+		_prev_held[_CAST_PITCH_KEY] = true
 		return intent
 	# Y SIGN (2-2 review D2), verified by content + test, NOT an accident: raw Y is read
 	# DIRECTLY, no inversion. JOY_AXIS_LEFT_Y is positive-DOWN, so a stick pushed UP reads a
@@ -168,11 +177,11 @@ func sample() -> InputIntent:
 	var r2_value := Input.get_joy_axis(_device, _profile.trigger_axis_right)
 	var basic_raw := Input.is_joy_button_pressed(_device, _profile.cast_basic_button)
 	# Story 5-7 (AC 1): B and X, read the SAME device-filtered way as every button above and through
-	# their own authored `GamepadProfile` fields -- no raw joypad index appears here. Y is read on no
-	# line of this file and has no field to read at all, which is what leaves mode ④ PITCH
-	# structurally unreachable from the pad (AC 2).
+	# their own authored `GamepadProfile` fields -- no raw joypad index appears here.
 	var unblockable_raw := Input.is_joy_button_pressed(_device, _profile.cast_unblockable_button)
 	var defense_raw := Input.is_joy_button_pressed(_device, _profile.cast_defense_button)
+	# Story 6-3a (AC 2): Y, the fourth confirm, through its own authored field the same way.
+	var pitch_raw := Input.is_joy_button_pressed(_device, _profile.cast_pitch_button)
 
 	var result := resolve_card_tick(
 		cast_held,
@@ -184,6 +193,7 @@ func sample() -> InputIntent:
 		basic_raw, _prev_held.get(_CAST_BASIC_KEY, false),
 		unblockable_raw, _prev_held.get(_CAST_UNBLOCKABLE_KEY, false),
 		defense_raw, _prev_held.get(_CAST_DEFENSE_KEY, false),
+		pitch_raw, _prev_held.get(_CAST_PITCH_KEY, false),
 		_profile.trigger_threshold,
 		_armed_slot)
 
@@ -206,6 +216,9 @@ func sample() -> InputIntent:
 		# three card fields already carry everything modes ①-③ need.
 		intent.card_mode = result["card_mode"]
 		intent.card_commit = true
+		# Story 6-3a (AC 2/AC 4): the tenth InputIntent field. Without this line the resolver computes
+		# an activation and it never reaches state -- every bare-Y press would stage instead.
+		intent.card_activate = result["card_activate"]
 
 	_prev_held[&"attack"] = attack_raw
 	_prev_held[&"block"] = block_raw
@@ -213,6 +226,7 @@ func sample() -> InputIntent:
 	_prev_held[_CAST_BASIC_KEY] = basic_raw
 	_prev_held[_CAST_UNBLOCKABLE_KEY] = unblockable_raw
 	_prev_held[_CAST_DEFENSE_KEY] = defense_raw
+	_prev_held[_CAST_PITCH_KEY] = pitch_raw
 	_prev_l2 = l2_value
 	_prev_r2 = r2_value
 	_armed_slot = result["armed_slot"]
@@ -313,10 +327,7 @@ static func resolve_trigger_edge(value: float, prev_value: float, threshold: flo
 ## state-side `empty_slot` refusal is reached rather than swallowed here. That is Basic's own
 ## review-fix precedent applied identically to both new buttons rather than re-decided.
 ##
-## AC 2: Y is STILL a no-op BY OMISSION -- this function has no parameter for it, `GamepadProfile`
-## has no field defaulting to it, and `sample()` reads it on no line. Mode ④ PITCH (ordinal 3) is a
-## deliberate crash-on-reach in `_resolve_card_action`'s `_` catch-all, so "structurally incapable
-## of producing that value" is the guarantee that matters, not "a branch that declines to".
+## AC 2 (5-7's "Y is a no-op by omission") is SUPERSEDED by story 6-3a, directly below.
 ##
 ## AC 9: A/B/X pressed the SAME tick (unreachable on real hardware, reachable from a test) resolve
 ## to AT MOST ONE commit, deterministically -- the golden/replay contract requires an answer
@@ -330,6 +341,24 @@ static func resolve_trigger_edge(value: float, prev_value: float, threshold: flo
 ## AC 15: `card_mode` is RETURNED rather than hardcoded by the caller -- `sample()`'s
 ## `Enums.ModeKind.BASIC` (the site `5-2/R15` named) now reads this key. BASIC remains the value
 ## when nothing fired; it is only ever read under `card_commit`.
+##
+## ---------------------------------------------------------------------------------------------
+## STORY 6-3a (AC 2, `6-3-split/R-Y`): Y, THE FOURTH CONFIRM, READ ON BOTH SIDES OF `cast_held`.
+##
+## INSIDE cast mode Y is a fourth confirm on the exact `basic_pressed` shape: it commits the armed
+## slot as PITCH with `card_activate = false` (a STAGE), and a fresh press ALWAYS raises the commit
+## even with `armed_slot == -1`, so state's existing `empty_slot` refusal is reached, not swallowed.
+##
+## OUTSIDE cast mode Y -- and only Y -- still commits: PITCH with `card_activate = true` and
+## `card_slot = -1`. An activation addresses the player's OWN Pitch Zone, never a hand slot, so the
+## slot is irrelevant and stays at its resting value. `card_activate` is what tells state the two
+## "PITCH, slot -1" commits apart (Fact 4): one is an empty-slot stage refusal, the other an activation.
+##
+## THE FOUR-CONFIRM CHORD ORDER (the dev-pass choice AC 2 left open): X, Y, A, B -- last write wins.
+## The face cluster's left-to-right reading order, with the centre column read top (Y) before bottom
+## (A). Y's seat there changes NONE of `5-7`'s pinned pairs (A+X -> A, B+X -> B, A+B -> B, the triple
+## -> B), so B still wins any chord it is in; the only new answers are Y+X -> Y and Y+A -> A. The chord
+## is only ever reachable inside cast mode -- outside it Y is the only confirm that commits at all.
 static func resolve_card_tick(
 		cast_held: bool,
 		attack_raw: bool, prev_attack_raw: bool,
@@ -340,6 +369,7 @@ static func resolve_card_tick(
 		basic_raw: bool, prev_basic_raw: bool,
 		unblockable_raw: bool, prev_unblockable_raw: bool,
 		defense_raw: bool, prev_defense_raw: bool,
+		pitch_raw: bool, prev_pitch_raw: bool,
 		trigger_threshold: float,
 		prev_armed_slot: int) -> Dictionary:
 	var attack_pressed := attack_raw and not prev_attack_raw
@@ -350,11 +380,13 @@ static func resolve_card_tick(
 	var basic_pressed := basic_raw and not prev_basic_raw
 	var unblockable_pressed := unblockable_raw and not prev_unblockable_raw
 	var defense_pressed := defense_raw and not prev_defense_raw
+	var pitch_pressed := pitch_raw and not prev_pitch_raw
 
 	var armed_slot := prev_armed_slot
 	var card_slot := -1
 	var card_commit := false
 	var card_mode := Enums.ModeKind.BASIC
+	var card_activate := false
 	if cast_held:
 		if l2_pressed:
 			armed_slot = 0
@@ -364,10 +396,14 @@ static func resolve_card_tick(
 			armed_slot = 2
 		if r2_pressed:
 			armed_slot = 3
-		# The three confirms, in physical left-to-right order (AC 9): X, A, B -- last write wins.
+		# The four confirms, in reading order (5-7 AC 9, 6-3a AC 2): X, Y, A, B -- last write wins.
 		if defense_pressed:
 			card_slot = armed_slot
 			card_mode = Enums.ModeKind.DEFENSE
+			card_commit = true
+		if pitch_pressed:
+			card_slot = armed_slot
+			card_mode = Enums.ModeKind.PITCH
 			card_commit = true
 		if basic_pressed:
 			card_slot = armed_slot
@@ -379,12 +415,18 @@ static func resolve_card_tick(
 			card_commit = true
 	else:
 		armed_slot = -1
+		# Story 6-3a (AC 2): the bare-Y ACTIVATION. No hand slot is addressed, so `card_slot` stays -1.
+		if pitch_pressed:
+			card_mode = Enums.ModeKind.PITCH
+			card_commit = true
+			card_activate = true
 
 	return {
 		"armed_slot": armed_slot,
 		"card_slot": card_slot,
 		"card_commit": card_commit,
 		"card_mode": card_mode,
+		"card_activate": card_activate,
 		"attack_held": attack_raw and not cast_held,
 		"attack_pressed": attack_pressed and not cast_held,
 		"block_held": block_raw and not cast_held,

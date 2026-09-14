@@ -553,13 +553,15 @@ func replay_intent(tick: int, slot: int) -> InputIntent:
 	return copy_intent(pair[slot])
 
 
-## All NINE InputIntent fields, verbatim (AC 2). Written as explicit field assignments rather
-## than a property-list walk so that adding a tenth field to InputIntent leaves this function
+## All TEN InputIntent fields, verbatim (AC 2). Written as explicit field assignments rather
+## than a property-list walk so that adding an eleventh field to InputIntent leaves this function
 ## visibly incomplete instead of silently widening the contract.
 ##
 ## Story 4-6 (AC 8/AC 11): EIGHT -> NINE. `aim` is GONE (its free-rotation route is superseded,
 ## not supplemented) and the two retarget-address fields take its place -- so this is a shape
 ## change in both directions at once, which is half of why `RecordFile.FORMAT_VERSION` bumps to 6.
+##
+## Story 6-3a (AC 4): NINE -> TEN. `card_activate` joins, and `RecordFile.FORMAT_VERSION` bumps 9 -> 10.
 static func copy_intent(src: InputIntent) -> InputIntent:
 	var out := InputIntent.new()
 	out.move_dir = src.move_dir
@@ -571,6 +573,7 @@ static func copy_intent(src: InputIntent) -> InputIntent:
 	out.card_slot = src.card_slot
 	out.card_mode = src.card_mode
 	out.card_commit = src.card_commit
+	out.card_activate = src.card_activate
 	out.retarget_slot = src.retarget_slot
 	out.retarget_index = src.retarget_index
 	return out

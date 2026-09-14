@@ -2581,10 +2581,15 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 		# SECOND time rather than deleted (the `5-2/R8` precedent, applied again).
 		Enums.ModeKind.DEFENSE:
 			_resolve_defense_cast(player, intent.card_slot, slot)
-		# Story 6-2 (AC 3): mode ④ gets its own arm, the fourth and last. What it resolves is STAGING
-		# -- the card enters its owner's Pitch Zone; activation and cancel are `6-4`'s.
+		# Story 6-2 (AC 3): mode ④ gets its own arm, the fourth and last. Story 6-3a (AC 5) branches it
+		# on `card_activate`: `false` (the resting value, and every pre-6-3a commit) STAGES the armed hand
+		# slot exactly as before; `true` ACTIVATES this player's own staged card. Reusing this arm is
+		# what hands activation the DEAD guard above and `advance()`'s round-over freeze for free.
 		Enums.ModeKind.PITCH:
-			_resolve_pitch_stage(player, intent.card_slot, slot)
+			if intent.card_activate:
+				_resolve_pitch_activate(player, slot)
+			else:
+				_resolve_pitch_stage(player, intent.card_slot, slot)
 		_:
 			Invariant.check(false,
 				"card mode %d has no dispatch arm (every declared ModeKind resolves; this int is not one)"
@@ -2846,8 +2851,75 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 	player.notify_cards_changed()
 
 
-## Story 6-2 (AC 8/AC 8a/AC 11): THE FIZZLE EXIT -- the ONLY way a card leaves the Pitch Zone in this
-## story (cancel and activation are `6-4`'s). When a staged card's countdown has closed, READY or not,
+## Story 6-3a (AC 6): an activation press with NOTHING in the player's own Pitch Zone. Its own token rather
+## than `CastEvaluator.REASON_EMPTY_SLOT`: an empty ZONE is a different player-visible fact from an empty
+## HAND SLOT, and both are reachable from the same Y button (L3 released vs L3 held with nothing armed).
+## The `REASON_PITCH_ZONE_OCCUPIED` token convention, and seated beside it for the same reason.
+const REASON_EMPTY_PITCH_ZONE := &"empty_pitch_zone"
+
+## Story 6-3a (AC 6): an activation press on a staged card whose orb price is not banked yet. READY is
+## derived live (`PitchState.is_ready`), so this refusal is a reading of the pool at the press, not a flag.
+const REASON_PITCH_NOT_READY := &"pitch_not_ready"
+
+
+## Story 6-3a (AC 5-10): mode ④ ACTIVATION -- the payoff half of the pitch. The player's own staged card
+## resolves: its orb price is spent, it goes to the discard, the zone clears, and the vacated hand slot's
+## replacement is owed. `_resolve_pitch_expiry` is the shape for everything after the spend.
+##
+## THE GUARD ORDER IS LAYER FLAG -> STUNNED -> EMPTY ZONE -> NOT READY. Layer first and the state gate
+## second is `_resolve_pitch_stage`'s own ordering ("does this layer exist" precedes "may I use it right
+## now"); the two zone facts follow. Nothing above the spend mutates anything, so every refusal leaves
+## the orbs, the zone, its countdown, the discard and the owed list untouched.
+##
+## STUNNED IS REFUSED, CHARGING IS NOT (`6-3a-gate/R-HERO-STATE`): a stun is a punishment a button press
+## must not step around; a chargeup is the player's own choice. DEAD and the round-over freeze need no
+## guard here -- `_resolve_card_action` and `advance()` stop both before this function is reached.
+##
+## NO EXPIRY GUARD (`6-3a-gate/R-EXPIRY`). `pitch.is_expired()` is read nowhere on this path: on the tick
+## a staged card's countdown closes, card dispatch runs BEFORE the fizzle exit in step 6, so a press on
+## that exact tick ACTIVATES. Ruled in the player's favour.
+##
+## ONLY THE PRICED ORBS ARE SPENT (`6-3-split/R-SPEND`), read off `pitch.staged_orb_costs()` -- the same
+## seat `is_ready()` reads -- and walked in `CastEvaluator.sorted_orb_colors()` order. Surplus and unpriced
+## colours are untouched. NO `Invariant.check` on the spend, unlike the mana spend at staging: with the
+## orbs layer OFF, READY reads satisfied regardless of the pool, and `OrbPool.add` floors at 0 (silently,
+## no signal when nothing moved), so a floored spend is the graceful-degrade rule working, not a
+## disagreement. MANA is not touched: it was paid at staging.
+##
+## `card_cast_resolved` IS QUEUED, unlike staging and the fizzle: activation IS a resolution -- the
+## `4-1/R3`/`4-1/R10` "a no-op spell is still a successful cast" ruling. No per-card effect resolves here.
+##
+## THE OWED REFILL RESTARTS THE SHARED `pending_draw` WINDOW at the full delay, exactly as every other
+## append does -- including one already in flight for a different slot.
+func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
+	if flags == null or not flags.pitch_zone:
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_FLAG_CLOSED)
+		return
+	if player.hero.action_state == HeroState.ActionState.STUNNED:
+		player.hero.reject_action(&"card_cast", REASON_STUNNED)
+		return
+	if not pitch.is_staged(slot):
+		player.hero.reject_action(&"card_cast", REASON_EMPTY_PITCH_ZONE)
+		return
+	if not pitch.is_ready(slot, player.orbs, flags):
+		player.hero.reject_action(&"card_cast", REASON_PITCH_NOT_READY)
+		return
+	var orb_costs := pitch.staged_orb_costs(slot)
+	for color: Enums.CardColor in CastEvaluator.sorted_orb_colors(orb_costs):
+		player.orbs.add(color, -int(orb_costs[color]))
+	var card_id := pitch.staged_card_id(slot)
+	var hand_slot := pitch.staged_hand_slot(slot)
+	player.discard.add(card_id)
+	pitch.clear(slot)
+	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
+	player.pending_draw_owed.append(hand_slot)
+	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+	player.notify_cards_changed()
+	_queue.push(card_cast_resolved.emit.bind(slot, card_id))
+
+
+## Story 6-2 (AC 8/AC 8a/AC 11): THE FIZZLE EXIT -- one of the two ways a card leaves the Pitch Zone
+## (story 6-3a adds activation, directly above; cancel has no owning story). When a staged card's countdown has closed, READY or not,
 ## the card goes to its owner's DISCARD (never back to the hand), and ONLY NOW is the replacement owed:
 ## the reserved slot index is appended to `pending_draw_owed` and the window started at the normal
 ## delay, the identical FIFO `_resolve_basic_cast` feeds, triggered at a different tick. This is the

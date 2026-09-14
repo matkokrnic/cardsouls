@@ -19,6 +19,7 @@ cast_button = 7
 cast_basic_button = 0
 cast_unblockable_button = 1
 cast_defense_button = 2
+cast_pitch_button = 3
 trigger_threshold = 0.5
 trigger_axis_left = 4
 trigger_axis_right = 5

@@ -177,7 +177,14 @@ extends RefCounted
 ## the hashed `"pitch"` key and the staging player's mana. HARD REJECTION, NO SHIM, the `4-1/R1`
 ## discipline unbroken. The intent SHAPE forced nothing: a stage is `card_mode == PITCH` on the existing
 ## card fields.
-const FORMAT_VERSION := 9
+##
+## STORY 6-3a BUMPS 9 -> 10, and it is an INTENT SHAPE change -- the `4-6` (AC 14) shape of bump.
+## `InputIntent` gains a tenth field, `card_activate`, which no v9 record carries in any intent. A v9 file
+## is REFUSED rather than defaulted: it cannot hold an activation, so defaulting would be harmless for
+## that file today, but the per-intent field check (`REQUIRED_INTENT_FIELDS`) exists precisely so a
+## dropped field is never silently read as its resting value -- here that would replay every recorded
+## activation as a stage attempt. HARD REJECTION, NO SHIM.
+const FORMAT_VERSION := 10
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -252,12 +259,17 @@ const LOCK_PUSH_TYPES: Array[int] = [TYPE_INT, TYPE_VECTOR2]
 ## live INSIDE each `intents` array element (`_intent_values`), not at the top level, so
 ## `REQUIRED_KEYS` is neither widened nor consulted for them and AC 7 holds.
 ##
-## The scope is exactly finding L8's two fields (`5-1a/R6`). `move_dir`, `pressed`, `held`,
+## The scope was exactly finding L8's two fields (`5-1a/R6`). `move_dir`, `pressed`, `held`,
 ## `debug_reset`, `card_slot`, `card_mode` and `card_commit` carry the identical unguarded access
 ## and are deliberately NOT validated here.
+##
+## Story 6-3a (AC 4) WIDENS THAT SCOPE BY ONE FIELD, deliberately: `card_activate` decides which state
+## mutation a PITCH commit performs (activate or stage), the way the retarget pair decides a retarget,
+## and a dropped bool read back as its resting `false` would replay every activation as a stage.
 const REQUIRED_INTENT_FIELDS: Dictionary[String, int] = {
 	"retarget_slot": TYPE_INT,
 	"retarget_index": TYPE_INT,
+	"card_activate": TYPE_BOOL,
 }
 
 ## `3-0d/R16`: the ONE thing a save path must be. The class's own docstring and AC 7 both assert
@@ -434,6 +446,8 @@ static func _lock_push_entry_refusal(entry: Variant) -> String:
 ## The container checks come first because they are what makes the field check well-defined —
 ## `has()` cannot be asked of something that is not a Dictionary — not because this story widened
 ## into validating the intents channel generally: the other seven fields are untouched (`5-1a/R6`).
+## Story 6-3a adds `card_activate` to the checked set (see `REQUIRED_INTENT_FIELDS`); the same seven
+## stay unchecked.
 static func _intents_refusal(intents: Array) -> String:
 	for index in intents.size():
 		var tick := index + 1
@@ -569,9 +583,9 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	}
 
 
-## All NINE InputIntent fields, verbatim — written as explicit field reads for the same reason
-## IntentRecorder.copy_intent is: a tenth field leaves this visibly incomplete instead of silently
-## narrowing what survives a save.
+## All TEN InputIntent fields, verbatim — written as explicit field reads for the same reason
+## IntentRecorder.copy_intent is: an eleventh field leaves this visibly incomplete instead of silently
+## narrowing what survives a save. (Story 6-3a added the tenth, `card_activate`: FORMAT_VERSION 10.)
 ##
 ## Story 4-6 (AC 8/AC 11/AC 14): `aim` is GONE and the two retarget-address fields replace it —
 ## half of the FORMAT_VERSION 5 -> 6 bump (see the constant's own block).
@@ -584,6 +598,7 @@ static func _intent_values(intent: InputIntent) -> Dictionary:
 		"card_slot": intent.card_slot,
 		"card_mode": int(intent.card_mode),
 		"card_commit": intent.card_commit,
+		"card_activate": intent.card_activate,
 		"retarget_slot": intent.retarget_slot,
 		"retarget_index": intent.retarget_index,
 	}
@@ -746,6 +761,7 @@ static func _intent_from_values(values: Dictionary) -> InputIntent:
 	intent.card_slot = int(values["card_slot"])
 	intent.card_mode = int(values["card_mode"]) as Enums.ModeKind
 	intent.card_commit = bool(values["card_commit"])
+	intent.card_activate = bool(values["card_activate"])
 	intent.retarget_slot = int(values["retarget_slot"])
 	intent.retarget_index = int(values["retarget_index"])
 	return intent

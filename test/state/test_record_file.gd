@@ -44,6 +44,8 @@ const RESAVE_PATH := "user://test_4_4_resave.rec"
 const RETIRED_VERSION_PATH := "user://test_4_4_retired_version.rec"
 ## Story 6-2 (AC 16): the v8-refusal test writes its own file, for the same no-racing reason.
 const PRE_6_2_PATH := "user://test_6_2_pre_pitch_costs.rec"
+## Story 6-3a (AC 4): the v9-refusal test writes its own file, for the same no-racing reason.
+const PRE_6_3A_PATH := "user://test_6_3a_pre_card_activate.rec"
 
 ## Story 4-4: the in-test `unit_kinds` list the recorded config carries, and the nested values the
 ## round trip is measured on. Deliberately THREE LEVELS DEEP (kind -> attack -> projectile),
@@ -73,6 +75,11 @@ const STAGE_TICK := 17
 const STAGE_SLOT := 0
 const PITCH_MANA_COST := 3.0
 const PITCH_TIMER_TICKS := 30
+## Story 6-3a (AC 4): ONE tick carries a bare-Y ACTIVATION commit (`card_activate = true`), so the tenth
+## intent field is non-default in the recorded stream. Deliberately BEFORE `STAGE_TICK`: P1's zone is
+## empty then, so the activation is refused (`empty_pitch_zone`) and the driven run's end state -- the
+## card still waiting at the final tick -- is exactly what it was before this story.
+const ACTIVATE_TICK := 16
 
 const DECK_IDS: Array[StringName] = [
 	&"file_card_0", &"file_card_1", &"file_card_2", &"file_card_3", &"file_card_4", &"file_card_5",
@@ -160,8 +167,11 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 9,
-		"FORMAT_VERSION is 9 as of story 6-2 (AC 16) -- a NEW CAPTURE CHANNEL, the fifth content "
+	assert_eq(RecordFile.FORMAT_VERSION, 10,
+		"FORMAT_VERSION is 10 as of story 6-3a (AC 4) -- an INTENT SHAPE change, the tenth InputIntent "
+		+ "field `card_activate`, which no v9 record carries (pinned by "
+		+ "test_a_v9_record_without_card_activate_is_refused_with_a_reason). "
+		+ "It was 9 as of story 6-2 (AC 16) -- a NEW CAPTURE CHANNEL, the fifth content "
 		+ "channel `pitch_costs`, which a v8 record does not carry, so every staging it recorded would "
 		+ "refuse on replay (pinned by test_a_v8_record_without_pitch_costs_is_refused_with_a_reason). "
 		+ "It was 8 as of story 6-1 (`6-1/R4`), and that bump is a pure SEMANTICS bump -- "
@@ -333,14 +343,16 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 			assert_eq(got.card_slot, want.card_slot, "t%d s%d card_slot" % [tick, slot])
 			assert_eq(int(got.card_mode), int(want.card_mode), "t%d s%d card_mode" % [tick, slot])
 			assert_eq(got.card_commit, want.card_commit, "t%d s%d card_commit" % [tick, slot])
+			# Story 6-3a (AC 4): the TENTH field, and the count moves NINE -> TEN with FORMAT_VERSION 10.
+			assert_eq(got.card_activate, want.card_activate, "t%d s%d card_activate" % [tick, slot])
 			# Story 4-6 (AC 8/AC 11): `aim` is GONE from the intent and the two retarget-address
 			# fields replace it -- so the per-field count moves EIGHT -> NINE with the format
 			# bump, and this loop is where a field that silently stopped surviving a save fails.
 			assert_eq(got.retarget_slot, want.retarget_slot, "t%d s%d retarget_slot" % [tick, slot])
 			assert_eq(got.retarget_index, want.retarget_index, "t%d s%d retarget_index" % [tick, slot])
-			fields += 9
-	assert_eq(fields, TICKS * 2 * 9,
-		"all nine intent fields were compared for both slots on every tick (got %d)" % fields)
+			fields += 10
+	assert_eq(fields, TICKS * 2 * 10,
+		"all ten intent fields were compared for both slots on every tick (got %d)" % fields)
 	# ...and the driven values really were non-default, or the comparison above proves nothing.
 	var loud := loaded.replay_intent(CAST_TICK, 0)
 	assert_eq(loud.card_slot, CAST_SLOT, "the cast tick's card fields came back non-default")
@@ -350,6 +362,8 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 	var retargeted := loaded.replay_intent(RETARGET_TICK, 0)
 	assert_eq(retargeted.retarget_slot, RETARGET_SLOT, "the retarget address came back non-default")
 	assert_eq(retargeted.retarget_index, RETARGET_INDEX, "...both halves of it")
+	assert_true(loaded.replay_intent(ACTIVATE_TICK, 0).card_activate,
+		"card_activate came back SET on the activation tick, so its comparison above is load-bearing")
 	_remove(ROUND_TRIP_PATH)
 
 
@@ -489,6 +503,39 @@ func test_a_v8_record_without_pitch_costs_is_refused_with_a_reason() -> void:
 	assert_not_null(RecordFile.load_record(PRE_6_2_PATH)["record"],
 		"the intact record at the CURRENT version loads")
 	_remove(PRE_6_2_PATH)
+
+
+## Story 6-3a (AC 4): A v9 RECORD IS REFUSED WITH A REASON, NO SHIM -- the v8 refusal's shape directly
+## above, applied to this bump. The body is rewritten to what a v9 build actually wrote -- NO
+## `card_activate` key in ANY per-tick intent, version 9 -- so the refusal is measured against a real v9
+## body and not a relabelled v10 one.
+##
+## THE SECOND HALF IS THE ONE THAT MATTERS: the SAME stripped body relabelled at v10 is refused again, for
+## the missing per-intent field BY NAME. That is `REQUIRED_INTENT_FIELDS` doing its job -- without the
+## `card_activate` entry the rebuild would reach `values["card_activate"]` on a key that is not there.
+func test_a_v9_record_without_card_activate_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_3A_PATH), "", "the record was written")
+	_rewrite_as_pre_6_3a(PRE_6_3A_PATH)
+	var refused := RecordFile.load_record(PRE_6_3A_PATH)
+	assert_null(refused["record"],
+		"a v9 record is REFUSED -- no intent in it carries card_activate")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("9"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	_rewrite_format_version(PRE_6_3A_PATH, RecordFile.FORMAT_VERSION)
+	var truncated := RecordFile.load_record(PRE_6_3A_PATH)
+	assert_null(truncated["record"], "a current-version body with no card_activate is refused too")
+	assert_true(truncated["error"].contains("card_activate"),
+		"...and that refusal names the missing field: %s" % truncated["error"])
+	assert_true(truncated["error"].contains("tick 1"),
+		"...at the first tick that lacks it: %s" % truncated["error"])
+	# ...and the intact record at the current version loads, so neither refusal was file damage.
+	assert_eq(RecordFile.save_record(record, PRE_6_3A_PATH), "", "rewritten intact")
+	assert_not_null(RecordFile.load_record(PRE_6_3A_PATH)["record"],
+		"the intact record at the CURRENT version loads")
+	_remove(PRE_6_3A_PATH)
 
 
 ## AC 5's neighbours: a file that is not a record at all is refused the same way, and a record
@@ -782,10 +829,10 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 9,
+	assert_eq(RecordFile.FORMAT_VERSION, 10,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 9 (5-2's colours channel, 6-1's mode ② hold semantics, then "
-		+ "6-2's pitch-cost channel), which is a different "
+		+ "version has since moved to 10 (5-2's colours channel, 6-1's mode ② hold semantics, "
+		+ "6-2's pitch-cost channel, then 6-3a's `card_activate` intent field), which is a different "
 		+ "story's bump and does not weaken 5-1a's own claim: what this asserts is that the number "
 		+ "is whatever the last DELIBERATE bump set it to, and that 5-1a was not one")
 	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:
@@ -1039,7 +1086,7 @@ func _camera_pushes() -> Array:
 	return [[0, Basis(Vector3.UP, deg_to_rad(CAMERA_YAW_DEGREES))], [1, Basis.IDENTITY]]
 
 
-## Every one of InputIntent's NINE fields is driven non-default somewhere in the run, so the
+## Every one of InputIntent's TEN fields is driven non-default somewhere in the run, so the
 ## round trip is compared against a stream that actually carries them. Story 4-6 replaces `aim`
 ## (driven every tick) with the retarget address, driven on ONE tick -- because that is what the
 ## field's resting value MEANS: `retarget_slot == NO_RETARGET` is a tick with no click and no
@@ -1057,6 +1104,10 @@ func _intents(t: int) -> Array[InputIntent]:
 	if t == ATTACK_TICK:
 		i1.pressed[&"attack"] = true
 		i1.held[&"attack"] = true
+	if t == ACTIVATE_TICK:
+		i1.card_mode = Enums.ModeKind.PITCH
+		i1.card_commit = true
+		i1.card_activate = true
 	if t == STAGE_TICK:
 		i1.card_slot = STAGE_SLOT
 		i1.card_mode = Enums.ModeKind.PITCH
@@ -1324,6 +1375,24 @@ func _rewrite_as_pre_6_2(path: String) -> void:
 	data.erase("pitch_costs")
 	var order: Array = data["content_order"]
 	order.erase(IntentRecorder.CHANNEL_PITCH_COSTS)
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## Story 6-3a (AC 4): turn a saved record into what a v9 build wrote -- version 9, and NO `card_activate`
+## key in any per-tick, per-player intent. Everything else exactly as written.
+func _rewrite_as_pre_6_3a(path: String) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	data["format_version"] = 9
+	var stripped := 0
+	for pair: Array in (data["intents"] as Array):
+		for values: Dictionary in pair:
+			if values.erase("card_activate"):
+				stripped += 1
+	assert_eq(stripped, TICKS * 2, "every intent carried `card_activate` before it was stripped")
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()

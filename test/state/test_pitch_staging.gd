@@ -4,6 +4,10 @@ extends TestCase
 ## zone, its mana is paid, its public countdown runs, READY is derived live from the owner's orbs, and a
 ## card whose countdown closes FIZZLES to the discard, owing its replacement only then.
 ##
+## Story 6-3a extends this file with the payoff half, ACTIVATION (its own section below), rather than a
+## sibling file: every activation needs a staged card first, and its boundary-tick test is defined against
+## `test_a_ready_card_still_fizzles_and_consumes_no_orbs` in this file, on this fixture.
+##
 ## Fixture shape: every card carries the SAME Mode ① price and the SAME pitch price, so no test has to
 ## predict which id the shuffle put in which slot. Counts are distinct from each other (deck 8, hand 4,
 ## pitch mana 2.0, cast mana 3.0, start mana 10.0, timer 6 ticks, delay 3 ticks, orb price 2) so an
@@ -454,6 +458,237 @@ func test_the_countdown_freezes_on_round_over_ticks() -> void:
 	assert_true(ms.pitch.is_staged(0), "...and the card did not fizzle during the freeze")
 
 
+# --- Story 6-3a: ACTIVATION --------------------------------------------------------------------
+
+## AC 5/AC 7/AC 8/AC 9, every consequence asserted separately. The price is TWO colours (RED 2, GREEN 1) so
+## the sorted spend loop walks more than one key, and the pool holds SURPLUS in a priced colour (RED 3) and
+## an UNPRICED colour (BLUE 4): only the price leaves. Mana is untouched by the activation, the card lands
+## in the discard, the zone empties, the vacated slot is owed at the normal delay, and both announcements
+## fire -- `cards_changed` and, unlike staging, `card_cast_resolved`.
+func test_activation_spends_only_the_priced_orbs_and_resolves_the_card() -> void:
+	var ms := _make_match(START_MANA, _two_colour_pitch_costs())
+	ms.p1.orbs.add(PITCH_COLOR, 3)
+	ms.p1.orbs.add(Enums.CardColor.GREEN, 1)
+	ms.p1.orbs.add(Enums.CardColor.BLUE, 4)
+	ms.drain_signals()
+	var id: StringName = ms.p1.hand.to_array()[STAGE_SLOT]
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	assert_true(ms.pitch.is_ready(0, ms.p1.orbs, ms.flags), "sanity: staged and READY")
+	var mana_after_staging := ms.p1.mana.get_current()
+	var rejections := _rejections(ms.p1)
+	var resolved := _cast_resolutions(ms)
+	var announced := _announcements(ms.p1)
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_eq(rejections, [], "the activation was not refused")
+	assert_eq(ms.p1.orbs.to_snapshot(), {"red": 1, "blue": 4, "green": 0},
+		"ONLY the price left the pool: RED 3 - 2 keeps its surplus, GREEN 1 - 1, BLUE (unpriced) untouched")
+	assert_almost_eq(ms.p1.mana.get_current(), mana_after_staging, 0.0001,
+		"no mana was spent -- it was paid at staging")
+	assert_false(ms.pitch.is_staged(0), "the zone is empty")
+	assert_eq(ms.to_snapshot()["pitch"]["p1"],
+		{"card_id": "", "hand_slot": PitchState.NO_HAND_SLOT,
+			"fizzle": {"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false}},
+		"...back to the empty hashed record, the one a fizzle leaves")
+	assert_eq(ms.p1.discard.to_array(), [id] as Array[StringName], "the card went to the discard")
+	assert_eq(ms.p1.pending_draw_owed, [STAGE_SLOT] as Array[int], "the vacated slot is owed NOW")
+	assert_eq(ms.p1.pending_draw.to_snapshot(),
+		{"duration_ticks": DELAY_TICKS, "elapsed_ticks": 0, "is_running": true},
+		"...at the normal delay")
+	assert_eq(resolved, [[0, id]], "card_cast_resolved was queued ONCE, for P1's activated card")
+	assert_eq(announced[0], 1, "cards_changed announced once on the activation tick")
+	for _t in DELAY_TICKS:
+		_tick(ms)
+	assert_false(ms.p1.hand.is_slot_empty(STAGE_SLOT), "the replacement landed in the reserved slot")
+
+
+## AC 6/AC 9: every refusal rides `action_rejected` with `card_cast`, and NOTHING moves -- orbs, mana, the
+## zone, the discard, the owed list -- and the staged card's countdown is UNTOUCHED: it advances by exactly
+## the one ordinary tick every countdown gets, never restarted and never stopped. One case per reason.
+func test_activation_refusals_consume_nothing_and_leave_the_countdown_running() -> void:
+	var empty_zone := _make_match()
+	_assert_activation_refused(empty_zone, MatchState.REASON_EMPTY_PITCH_ZONE, "nothing staged")
+	assert_ne(MatchState.REASON_EMPTY_PITCH_ZONE, CastEvaluator.REASON_EMPTY_SLOT,
+		"an empty ZONE is its own token, not the empty hand-slot reason")
+
+	var not_ready := _make_match()
+	_advance(not_ready, _stage_intent(STAGE_SLOT), InputIntent.new())
+	_tick(not_ready)
+	_assert_activation_refused(not_ready, MatchState.REASON_PITCH_NOT_READY, "zero orbs banked")
+
+	var short := _make_match()
+	short.p1.orbs.add(PITCH_COLOR, PITCH_ORBS - 1)
+	short.drain_signals()
+	_advance(short, _stage_intent(STAGE_SLOT), InputIntent.new())
+	_assert_activation_refused(short, MatchState.REASON_PITCH_NOT_READY, "one orb short")
+
+	var closed := _make_match()
+	closed.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	closed.drain_signals()
+	_advance(closed, _stage_intent(STAGE_SLOT), InputIntent.new())
+	closed.flags.pitch_zone = false
+	_assert_activation_refused(closed, CastEvaluator.REASON_FLAG_CLOSED, "pitch_zone layer closed")
+
+	var stunned := _make_match()
+	stunned.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	stunned.drain_signals()
+	_advance(stunned, _stage_intent(STAGE_SLOT), InputIntent.new())
+	stunned.p1.hero.set_action_state(HeroState.ActionState.STUNNED)
+	stunned.p1.hero.stun.start(60)
+	stunned.drain_signals()
+	_assert_activation_refused(stunned, MatchState.REASON_STUNNED, "stunned (6-3a-gate/R-HERO-STATE)")
+
+
+## AC 6, `6-3a-gate/R-HERO-STATE`'s other half: a CHARGING hero ACTIVATES. The chargeup is the player's own
+## commitment, not a punishment, so it is the one state staging refuses and activation does not.
+func test_a_charging_hero_can_activate() -> void:
+	var ms := _make_match()
+	ms.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	ms.drain_signals()
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	ms.p1.hero.set_action_state(HeroState.ActionState.CHARGING)
+	ms.p1.charge_window.start(60)
+	ms.p1.landing_window.start(90)
+	ms.p1.charge_color = Enums.CardColor.RED
+	ms.drain_signals()
+	var rejections := _rejections(ms.p1)
+	var activate := _activate_intent()
+	activate.held[&"card_cast"] = true
+	_advance(ms, activate, InputIntent.new())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: still mid-chargeup")
+	assert_eq(rejections, [], "a charging hero's activation is NOT refused")
+	assert_false(ms.pitch.is_staged(0), "...the card left the zone")
+	assert_eq(ms.p1.discard.size(), 1, "...into the discard")
+	assert_eq(ms.p1.orbs.get_count(PITCH_COLOR), 0, "...and its price was spent")
+
+
+## AC 10, `6-3a-gate/R-EXPIRY`: A PRESS ON THE BOUNDARY TICK ACTIVATES. The fixture is
+## `test_a_ready_card_still_fizzles_and_consumes_no_orbs` exactly -- orbs banked, staged, ticked forward
+## `TIMER_TICKS` -- with the LAST of those ticks carrying the press. That test, unmodified, is the no-press
+## CONTROL on the same tick: it fizzles, spends nothing and resolves nothing. Here the three observables a
+## fizzle cannot produce all read true: the price is spent, `card_cast_resolved` is queued, no refusal.
+func test_a_press_on_the_expiry_tick_activates_rather_than_fizzles() -> void:
+	var ms := _make_match()
+	ms.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	ms.drain_signals()
+	var id: StringName = ms.p1.hand.to_array()[STAGE_SLOT]
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	for _t in TIMER_TICKS - 1:
+		_tick(ms)
+	assert_true(ms.pitch.is_staged(0), "sanity: one tick before the deadline the card is still staged")
+	assert_eq(ms.to_snapshot()["pitch"]["p1"]["fizzle"]["elapsed_ticks"], TIMER_TICKS - 1,
+		"sanity: the NEXT tick is the one that closes the countdown (the control's fizzle tick)")
+	var rejections := _rejections(ms.p1)
+	var resolved := _cast_resolutions(ms)
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_eq(ms.p1.orbs.get_count(PITCH_COLOR), 0, "the priced orbs were SPENT -- a fizzle spends none")
+	assert_eq(resolved, [[0, id]], "card_cast_resolved was queued -- a fizzle never queues it")
+	assert_eq(rejections, [], "no card_cast refusal fired")
+	assert_eq(ms.p1.discard.to_array(), [id] as Array[StringName], "the card is in the discard ONCE")
+	assert_eq(ms.p1.pending_draw_owed, [STAGE_SLOT] as Array[int],
+		"...owing ONE replacement: the fizzle exit found an empty zone and owed nothing more")
+
+
+## AC 7: ORBS LAYER OFF -> READY reads satisfied with the price never banked, and the spend against the
+## empty pool FLOORS SILENTLY: the count stays 0 and `orbs_changed` never fires. The graceful-degrade rule
+## on the one path this story adds that spends orbs -- and the activation itself still happens.
+func test_with_the_orbs_layer_off_the_spend_floors_silently_at_zero() -> void:
+	var orbs_off := _flags()
+	orbs_off.orbs = false
+	var ms := _make_match(START_MANA, _pitch_costs(), orbs_off)
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	assert_eq(ms.p1.orbs.get_count(PITCH_COLOR), 0, "sanity: the priced colour was never banked")
+	var changes: Array = []
+	ms.p1.orbs.orbs_changed.connect(
+		func(red: int, blue: int, green: int) -> void: changes.append([red, blue, green]))
+	var rejections := _rejections(ms.p1)
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_eq(rejections, [], "READY under the graceful-degrade rule: not refused")
+	assert_false(ms.pitch.is_staged(0), "the card activated")
+	assert_eq(ms.p1.orbs.to_snapshot(), {"red": 0, "blue": 0, "green": 0}, "the pool floored at 0")
+	assert_eq(changes, [], "...and no orbs_changed signal fired, because nothing changed")
+
+
+## AC 9: THE FIVE-TERM IDENTITY holds across stage -> wait -> bank -> activate -> delivery delay -> refill,
+## the activation twin of `test_the_five_term_conservation_identity_holds_across_stage_wait_and_fizzle`.
+## No new term: the card moves hand -> zone -> discard, the three piles the identity already counts.
+func test_the_five_term_conservation_identity_holds_across_stage_wait_and_activate() -> void:
+	var ms := _make_match()
+	_assert_conserved(ms, "before staging")
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	_assert_conserved(ms, "on the staging tick")
+	assert_eq(_staged_term(ms), 1, "sanity: the staged term really is 1 here, not a vacuous 0")
+	for t in 2:
+		_tick(ms)
+		_assert_conserved(ms, "waiting, tick %d" % (t + 1))
+	ms.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	ms.drain_signals()
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_false(ms.pitch.is_staged(0), "sanity: the card activated on this tick")
+	assert_eq(ms.p1.pending_draw_owed, [STAGE_SLOT] as Array[int], "sanity: the debt is owed now")
+	_assert_conserved(ms, "on the activation tick")
+	for t in DELAY_TICKS:
+		_tick(ms)
+		_assert_conserved(ms, "delivery delay, tick %d" % (t + 1))
+	assert_eq(ms.p1.hand.occupied_count(), HAND_SIZE, "the reserved slot was refilled after the delay")
+
+
+## AC 8's stated consequence: the owed refill RESTARTS the one shared `pending_draw` window, so a Mode ①
+## replacement already counting down for a DIFFERENT slot is pushed back to the full delay too.
+func test_activation_restarts_a_refill_already_in_flight() -> void:
+	var ms := _make_match()
+	ms.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	ms.drain_signals()
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	_advance(ms, _cast_intent(0), InputIntent.new())
+	assert_eq(ms.p1.pending_draw_owed, [0] as Array[int], "sanity: slot 0's refill is in flight")
+	_tick(ms)
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_eq(ms.p1.pending_draw_owed, [0, STAGE_SLOT] as Array[int], "both refills owed, FIFO")
+	assert_eq(ms.p1.pending_draw.to_snapshot()["elapsed_ticks"], 0,
+		"the shared window RESTARTED at the activation, two ticks into slot 0's delay")
+	_tick(ms)
+	assert_true(ms.p1.hand.is_slot_empty(0),
+		"slot 0 was NOT refilled on the tick its original delay would have closed")
+	for _t in DELAY_TICKS - 1:
+		_tick(ms)
+	assert_false(ms.p1.hand.is_slot_empty(0), "slot 0 was refilled a full delay after the activation")
+
+
+## Fact 4 / AC 4-5, the ambiguity `card_activate` exists to resolve: the SAME `PITCH, slot -1` commit is an
+## empty-SLOT stage refusal with the field false and an empty-ZONE activation refusal with it true.
+func test_card_activate_is_what_separates_an_unarmed_stage_from_an_activation() -> void:
+	var ms := _make_match()
+	var rejections := _rejections(ms.p1)
+	_advance(ms, _stage_intent(-1), InputIntent.new())
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_eq(rejections, [[&"card_cast", CastEvaluator.REASON_EMPTY_SLOT],
+			[&"card_cast", MatchState.REASON_EMPTY_PITCH_ZONE]],
+		"card_activate false -> the staging arm's empty_slot; true -> the activation arm's empty zone")
+
+
+## AC 7/AC 10 by CONTENT, for the two properties no behaviour can distinguish: the spend reads the price
+## through the SAME accessor `is_ready()` reads, walks it in `CastEvaluator.sorted_orb_colors()` order (the
+## one ordering seat both loops consume), and the activation path consults the expiry query NOWHERE and
+## wraps the spend in no `Invariant.check`.
+func test_activation_reads_the_price_through_the_shared_seats_and_never_the_expiry() -> void:
+	var activate := _function_body("res://src/state/match_state.gd", "func _resolve_pitch_activate(")
+	assert_true(activate.length() > 0, "the scan must find _resolve_pitch_activate's body")
+	assert_true(activate.contains("pitch.staged_orb_costs(slot)"), "the spend reads staged_orb_costs()")
+	assert_true(activate.contains("CastEvaluator.sorted_orb_colors("), "...in sorted_orb_colors() order")
+	assert_true(activate.contains("pitch.is_ready(slot, player.orbs, flags)"), "READY is the gate")
+	assert_false(activate.contains("is_expired"), "no expiry guard (6-3a-gate/R-EXPIRY)")
+	assert_false(activate.contains("Invariant.check"), "no Invariant.check on the spend (Fact 6)")
+	var ready := _function_body("res://src/state/pitch/pitch_state.gd", "func is_ready(")
+	assert_true(ready.contains("staged_orb_costs(slot)"), "is_ready() reads the SAME accessor")
+	assert_false(ready.contains("_orb_costs["), "...and not the private cache directly")
+	var affordable := _function_body("res://src/state/economy/cast_evaluator.gd",
+			"static func orb_costs_affordable(")
+	assert_true(affordable.contains("sorted_orb_colors("), "the READ loop consumes the same ordering seat")
+	assert_false(affordable.contains(".sort()"), "...and keeps no second sort of its own")
+	assert_eq(CastEvaluator.sorted_orb_colors({Enums.CardColor.GREEN: 1, Enums.CardColor.RED: 2}),
+		[Enums.CardColor.RED, Enums.CardColor.GREEN], "sorted_orb_colors orders by the enum's int value")
+
+
 # --- helpers ---------------------------------------------------------------------------------
 
 func _assert_refused_unchanged(ms: MatchState, intent: InputIntent, reason: StringName,
@@ -580,6 +815,84 @@ func _cast_intent(slot: int) -> InputIntent:
 	i.card_mode = Enums.ModeKind.BASIC
 	i.card_commit = true
 	return i
+
+
+## Story 6-3a: the bare-Y ACTIVATION commit, exactly as `GamepadController` emits it -- PITCH, slot -1.
+func _activate_intent() -> InputIntent:
+	var i := InputIntent.new()
+	i.card_mode = Enums.ModeKind.PITCH
+	i.card_commit = true
+	i.card_activate = true
+	return i
+
+
+## Story 6-3a (AC 6/AC 9): one activation press, refused with `reason`, and NOTHING consumed -- no orb,
+## no mana, no zone change, no discard, no owed draw, no `card_cast_resolved` -- and the staged card's
+## countdown untouched: a running window advances by exactly the one ordinary tick and a stopped one
+## stays stopped. A restart would read elapsed 0; a stop would read not running.
+func _assert_activation_refused(ms: MatchState, reason: StringName, occasion: String) -> void:
+	var orbs_before := ms.p1.orbs.to_snapshot()
+	var mana_before := ms.p1.mana.get_current()
+	var zone_before: Dictionary = (ms.to_snapshot()["pitch"]["p1"] as Dictionary).duplicate(true)
+	var discard_before := ms.p1.discard.size()
+	var owed_before := ms.p1.pending_draw_owed.duplicate()
+	var rejections := _rejections(ms.p1)
+	var resolved := _cast_resolutions(ms)
+	_advance(ms, _activate_intent(), InputIntent.new())
+	assert_eq(rejections, [[&"card_cast", reason]], "refused with %s (%s)" % [reason, occasion])
+	assert_eq(resolved, [], "no card_cast_resolved (%s)" % occasion)
+	assert_eq(ms.p1.orbs.to_snapshot(), orbs_before, "no orb moved (%s)" % occasion)
+	assert_eq(ms.p1.mana.get_current(), mana_before, "no mana moved (%s)" % occasion)
+	assert_eq(ms.p1.discard.size(), discard_before, "nothing was discarded (%s)" % occasion)
+	assert_eq(ms.p1.pending_draw_owed, owed_before, "nothing new was owed (%s)" % occasion)
+	var zone: Dictionary = ms.to_snapshot()["pitch"]["p1"]
+	assert_eq(zone["card_id"], zone_before["card_id"], "the zone still holds what it held (%s)" % occasion)
+	assert_eq(zone["hand_slot"], zone_before["hand_slot"], "...from the same slot (%s)" % occasion)
+	var fizzle_before: Dictionary = zone_before["fizzle"]
+	var expected_fizzle := fizzle_before.duplicate()
+	if fizzle_before["is_running"]:
+		expected_fizzle["elapsed_ticks"] = int(fizzle_before["elapsed_ticks"]) + 1
+	assert_eq(zone["fizzle"], expected_fizzle,
+		"the countdown was neither restarted nor stopped -- one ordinary tick only (%s)" % occasion)
+
+
+func _cast_resolutions(ms: MatchState) -> Array:
+	var out: Array = []
+	ms.card_cast_resolved.connect(
+		func(player_slot: int, card_id: StringName) -> void: out.append([player_slot, card_id]))
+	return out
+
+
+## A counter, not a list: the tests below only ask HOW MANY `cards_changed` announcements fired.
+func _announcements(player: PlayerState) -> Array:
+	var out: Array = [0]
+	player.cards_changed.connect(
+		func(_hand: Array[StringName], _deck: int, _discard: int) -> void: out[0] += 1)
+	return out
+
+
+## Story 6-3a (AC 7): a TWO-colour pitch price, RED 2 + GREEN 1, so the sorted spend walks more than one key.
+func _two_colour_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out := _pitch_costs()
+	for id: StringName in out:
+		out[id].orb_costs[Enums.CardColor.GREEN] = 1
+	return out
+
+
+## The body of the top-level function whose declaration starts with `signature`, as text: from the line
+## after the declaration up to the next line that is not indented (the next declaration or doc block).
+func _function_body(path: String, signature: String) -> String:
+	var lines := FileAccess.get_file_as_string(path).split("\n")
+	var out: PackedStringArray = []
+	var inside := false
+	for line in lines:
+		if not inside:
+			inside = line.begins_with(signature)
+			continue
+		if line != "" and not line.begins_with("\t"):
+			break
+		out.append(line)
+	return "\n".join(out)
 
 
 func _tick(ms: MatchState) -> void:

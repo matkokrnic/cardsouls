@@ -129,9 +129,18 @@ static func orb_costs_affordable(orb_costs: Dictionary, orbs: OrbPool,
 		return true
 	if orbs == null:
 		return false
-	var colors: Array = orb_costs.keys()
-	colors.sort()
-	for color: Enums.CardColor in colors:
+	for color: Enums.CardColor in sorted_orb_colors(orb_costs):
 		if orbs.get_count(color) < int(orb_costs[color]):
 			return false
 	return true
+
+
+## Story 6-3a (AC 7): the ORDERING half of the loop directly above, extracted -- the ONE place the
+## sort-the-colour-keys decision lives (plain `Enums.CardColor` ints, never StringNames; see
+## `_orbs_affordable`'s note). TWO consumers, not one shared loop: the READ loop above, and the WRITE
+## loop in `MatchState._resolve_pitch_activate` that spends the price. The spend stays in MatchState
+## because this file COMPUTES and never APPLIES (the header).
+static func sorted_orb_colors(orb_costs: Dictionary) -> Array:
+	var colors: Array = orb_costs.keys()
+	colors.sort()
+	return colors

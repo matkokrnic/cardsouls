@@ -260,25 +260,25 @@ func test_resolve_card_tick_arms_slots_left_to_right() -> void:  # AC 2
 	var r := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.6, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 0, "L2 (trigger crossing) arms slot 0")
 	# L1 (block_button) -> slot 1.
 	r = GamepadController.resolve_card_tick(true,
 		false, false, true, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 1, "L1 (block) arms slot 1")
 	# R1 (attack_button) -> slot 2.
 	r = GamepadController.resolve_card_tick(true,
 		true, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 2, "R1 (attack) arms slot 2")
 	# R2 -> slot 3.
 	r = GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.6, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 3, "R2 (trigger crossing) arms slot 3")
 
 
@@ -289,7 +289,7 @@ func test_resolve_card_tick_same_tick_chord_resolves_rightmost() -> void:  # AC 
 	var r := GamepadController.resolve_card_tick(true,
 		true, false, true, false, false, false,
 		0.6, 0.0, 0.6, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 3, "a same-tick chord of all four arming inputs resolves to slot 3 (rightmost)")
 
 
@@ -299,7 +299,7 @@ func test_resolve_card_tick_trigger_already_held_does_not_rearm() -> void:  # AC
 	var r := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.9, 0.9, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], -1,
 		"trigger already held past threshold does not arm without a fresh crossing")
 
@@ -311,7 +311,7 @@ func test_resolve_card_tick_basic_always_commits_on_fresh_press() -> void:  # AC
 	var r := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, false, false, false, false, false, 0.5, -1)
+		true, false, false, false, false, false, false, false, 0.5, -1)
 	assert_true(r["card_commit"], "a fresh Basic press ALWAYS raises a commit, even with nothing armed")
 	assert_eq(r["card_slot"], -1, "the commit carries slot -1, unarmed -- state refuses it, not the controller")
 	assert_eq(r["armed_slot"], -1, "still nothing armed")
@@ -320,7 +320,7 @@ func test_resolve_card_tick_basic_always_commits_on_fresh_press() -> void:  # AC
 	r = GamepadController.resolve_card_tick(true,
 		true, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, false, false, false, false, false, 0.5, -1)
+		true, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 2, "R1 arms slot 2")
 	assert_true(r["card_commit"], "Basic commits the newly-armed slot in the same tick")
 	assert_eq(r["card_slot"], 2, "commit carries the armed slot")
@@ -329,7 +329,7 @@ func test_resolve_card_tick_basic_always_commits_on_fresh_press() -> void:  # AC
 	r = GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, true, false, false, false, false, 0.5, 1)
+		true, true, false, false, false, false, false, false, 0.5, 1)
 	assert_false(r["card_commit"], "Basic held (not freshly pressed) does not commit")
 
 
@@ -341,22 +341,16 @@ func test_resolve_card_tick_basic_always_commits_on_fresh_press() -> void:  # AC
 ## ============================================================================================
 
 
-## AC 2, REPLACING 5-0b's retired `test_gamepad_controller_never_reads_x_or_y_face_buttons`. That
-## test asserted the source text of `gamepad_controller.gd` contains neither `JOY_BUTTON_X` nor
-## `JOY_BUTTON_Y` -- and 5-0b's own close-out accepted (decision-log :8316-8318) that it catches
-## only the INLINE-LITERAL regression form. It would now pass BY ACCIDENT: X is wired live this
-## story and still never appears as a literal here, because the raw index lives on `GamepadProfile`
-## and is read as `_profile.<field>`. A guard that a shipped feature satisfies while asserting
-## something no longer true is worse than none.
+## STORY 6-3a (AC 3): REPLACES 5-7's `test_no_authored_button_maps_to_y_so_pitch_is_structurally_
+## unreachable`, RETIRED rather than narrowed (Fact 8). That guard existed for exactly one fact -- no
+## button maps to Y -- and `cast_pitch_button` makes it false by construction; there is no other button
+## left to assert unmapped. Its two open items (the untested evasion forms, the blanket ban on a Y
+## binding) were reasons to keep it alive and retire with it.
 ##
-## So the MECHANISM is replaced, not the pattern widened (`3-0d/R20`): Y is unreadable BY
-## CONSTRUCTION because NO `GamepadProfile` field carries its index. `GamepadController` reads
-## joypad buttons through exactly one route -- `_profile.<some>_button` -- so if no authored button
-## field equals `JOY_BUTTON_Y`, no read of Y is expressible at all, and `card_mode` can never become
-## PITCH (ordinal 3), whose state arm is a deliberate crash-on-reach. The source scan is kept
-## alongside as the cheap second net, narrowed to Y alone.
-func test_no_authored_button_maps_to_y_so_pitch_is_structurally_unreachable() -> void:  # AC 2
-	# (a) BY CONSTRUCTION: every authored button field, on BOTH the defaults and the shipped .tres.
+## What replaces it is the pin every other confirm button already has: the field reads Y on BOTH the
+## script default and the shipped `.tres`. The retired guard's field-count floor is carried forward, so
+## the scan still cannot pass on an emptied property list; with Y authored it is NINE button fields.
+func test_cast_pitch_button_reads_y_on_the_default_and_the_shipped_profile() -> void:  # 6-3a AC 1/AC 3
 	for profile: GamepadProfile in [GamepadProfile.new(), load("res://data/gamepad_profile.tres")]:
 		var button_fields: Array[String] = []
 		for p in profile.get_property_list():
@@ -366,20 +360,15 @@ func test_no_authored_button_maps_to_y_so_pitch_is_structurally_unreachable() ->
 		assert_true(button_fields.size() >= 8,
 			"sanity: the scan really found the button fields, so an emptied list cannot pass "
 			+ "vacuously (found %d: %s)" % [button_fields.size(), ", ".join(button_fields)])
-		for name in button_fields:
-			assert_ne(profile.get(name), JOY_BUTTON_Y,
-				"no GamepadProfile button field may carry JOY_BUTTON_Y -- Y is the ONE face button "
-				+ "left unwired, and that is what keeps mode ④ PITCH (a crash-on-reach stub) "
-				+ "structurally unreachable from the pad (%s)" % name)
-	# (b) THE CHEAP SECOND NET: no inline literal either.
-	var f := FileAccess.open("res://src/controllers/gamepad_controller.gd", FileAccess.READ)
-	assert_true(f != null,
-		"gamepad_controller.gd must be openable for the source scan (FileAccess error %d)"
-				% FileAccess.get_open_error())
-	if f == null:
-		return
-	assert_false(f.get_as_text().contains("JOY_BUTTON_Y"),
-		"gamepad_controller.gd must never read JOY_BUTTON_Y as an inline literal either")
+		assert_true(button_fields.has("cast_pitch_button"),
+			"...and `cast_pitch_button` is one of them (found: %s)" % ", ".join(button_fields))
+		assert_eq(profile.get("cast_pitch_button"), JOY_BUTTON_Y,
+			"cast_pitch_button reads JOY_BUTTON_Y (%s)" % profile.resource_path)
+	var shipped: GamepadProfile = load("res://data/gamepad_profile.tres")
+	var text := FileAccess.get_file_as_string("res://data/gamepad_profile.tres")
+	assert_true(text.contains("cast_pitch_button = %d" % JOY_BUTTON_Y),
+		"the shipped .tres AUTHORS the value explicitly rather than inheriting the script default "
+		+ "(%s)" % shipped.resource_path)
 
 
 ## AC 1: B commits UNBLOCKABLE and X commits DEFENSE on the armed slot, in ONE press-edge press --
@@ -391,7 +380,7 @@ func test_resolve_card_tick_b_commits_unblockable_and_x_commits_defense() -> voi
 	var r := GamepadController.resolve_card_tick(true,
 		true, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, false, false, false, 0.5, -1)
+		false, false, true, false, false, false, false, false, 0.5, -1)
 	assert_true(r["card_commit"], "a fresh B press commits")
 	assert_eq(r["card_slot"], 2, "...the slot R1 armed this same tick")
 	assert_eq(r["card_mode"], Enums.ModeKind.UNBLOCKABLE, "B selects mode ② UNBLOCKABLE")
@@ -400,7 +389,7 @@ func test_resolve_card_tick_b_commits_unblockable_and_x_commits_defense() -> voi
 	r = GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.6, 0.0, 0.0, 0.0,
-		false, false, false, false, true, false, 0.5, -1)
+		false, false, false, false, true, false, false, false, 0.5, -1)
 	assert_true(r["card_commit"], "a fresh X press commits")
 	assert_eq(r["card_slot"], 0, "...the slot L2 armed this same tick")
 	assert_eq(r["card_mode"], Enums.ModeKind.DEFENSE, "X selects mode ③ DEFENSE")
@@ -409,7 +398,7 @@ func test_resolve_card_tick_b_commits_unblockable_and_x_commits_defense() -> voi
 	r = GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, false, false, false, false, false, 0.5, 3)
+		true, false, false, false, false, false, false, false, 0.5, 3)
 	assert_true(r["card_commit"], "A still commits")
 	assert_eq(r["card_mode"], Enums.ModeKind.BASIC, "...and still as BASIC")
 
@@ -417,7 +406,7 @@ func test_resolve_card_tick_b_commits_unblockable_and_x_commits_defense() -> voi
 	r = GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, true, true, true, 0.5, 1)
+		false, false, true, true, true, true, false, false, 0.5, 1)
 	assert_false(r["card_commit"],
 		"B and X merely HELD (not freshly pressed) commit nothing -- both are press-edge")
 
@@ -425,7 +414,7 @@ func test_resolve_card_tick_b_commits_unblockable_and_x_commits_defense() -> voi
 	r = GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, 1)
+		false, false, false, false, false, false, false, false, 0.5, 1)
 	assert_false(r["card_commit"], "no confirm pressed -> no commit")
 
 
@@ -436,7 +425,7 @@ func test_resolve_card_tick_mode_confirms_commit_empty_slot_rather_than_swallow(
 	var b := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, false, false, false, 0.5, -1)
+		false, false, true, false, false, false, false, false, 0.5, -1)
 	assert_true(b["card_commit"], "a fresh B press ALWAYS raises a commit, even with nothing armed")
 	assert_eq(b["card_slot"], -1, "the commit carries slot -1 -- state refuses it, not the controller")
 	assert_eq(b["card_mode"], Enums.ModeKind.UNBLOCKABLE, "...still carrying B's mode")
@@ -444,7 +433,7 @@ func test_resolve_card_tick_mode_confirms_commit_empty_slot_rather_than_swallow(
 	var x := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, true, false, 0.5, -1)
+		false, false, false, false, true, false, false, false, 0.5, -1)
 	assert_true(x["card_commit"], "a fresh X press ALWAYS raises a commit, even with nothing armed")
 	assert_eq(x["card_slot"], -1, "the commit carries slot -1 -- state refuses it, not the controller")
 	assert_eq(x["card_mode"], Enums.ModeKind.DEFENSE, "...still carrying X's mode")
@@ -457,7 +446,7 @@ func test_mode_confirms_do_nothing_outside_cast_mode() -> void:  # AC 1/AC 4
 	var r := GamepadController.resolve_card_tick(false,
 		false, false, false, false, true, false,   # B is physically down: roll_raw fresh too
 		0.0, 0.0, 0.0, 0.0,
-		true, false, true, false, true, false, 0.5, 2)
+		true, false, true, false, true, false, false, false, 0.5, 2)
 	assert_false(r["card_commit"], "no confirm commits while cast mode is not held")
 	assert_eq(r["armed_slot"], -1, "and the armed slot clears the same tick cast mode is inactive")
 	assert_true(r["roll_pressed"],
@@ -473,7 +462,7 @@ func test_resolve_card_tick_same_tick_confirm_chord_resolves_rightmost() -> void
 	var triple := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, false, true, false, true, false, 0.5, 1)
+		true, false, true, false, true, false, false, false, 0.5, 1)
 	assert_true(triple["card_commit"], "the chord commits")
 	assert_eq(triple["card_mode"], Enums.ModeKind.UNBLOCKABLE,
 		"A+B+X the same tick resolves to B (rightmost) -- UNBLOCKABLE")
@@ -483,17 +472,17 @@ func test_resolve_card_tick_same_tick_confirm_chord_resolves_rightmost() -> void
 	var ax := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, false, false, false, true, false, 0.5, 1)
+		true, false, false, false, true, false, false, false, 0.5, 1)
 	assert_eq(ax["card_mode"], Enums.ModeKind.BASIC, "A+X resolves to A (right of X) -- BASIC")
 	var bx := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, false, true, false, 0.5, 1)
+		false, false, true, false, true, false, false, false, 0.5, 1)
 	assert_eq(bx["card_mode"], Enums.ModeKind.UNBLOCKABLE, "B+X resolves to B -- UNBLOCKABLE")
 	var ab := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, false, true, false, false, false, 0.5, 1)
+		true, false, true, false, false, false, false, false, 0.5, 1)
 	assert_eq(ab["card_mode"], Enums.ModeKind.UNBLOCKABLE, "A+B resolves to B -- UNBLOCKABLE")
 
 
@@ -510,7 +499,7 @@ func test_mode_confirm_exit_edge_sequences() -> void:  # AC 6
 			false, false, false, false, false, false,
 			0.0, 0.0, 0.0, 0.0,
 			false, false,
-			not is_defense, not is_defense, is_defense, is_defense, 0.5, 2)
+			not is_defense, not is_defense, is_defense, is_defense, false, false, 0.5, 2)
 		assert_false(entry["card_commit"],
 			"%s already held as cast mode is entered fires no commit" % label)
 
@@ -520,13 +509,13 @@ func test_mode_confirm_exit_edge_sequences() -> void:  # AC 6
 			false, false, false, false, false, false,
 			0.0, 0.0, 0.0, 0.0,
 			false, false,
-			not is_defense, not is_defense, is_defense, is_defense, 0.5, entry["armed_slot"])
+			not is_defense, not is_defense, is_defense, is_defense, false, false, 0.5, entry["armed_slot"])
 		assert_false(exited["card_commit"], "%s cannot commit outside cast mode at all" % label)
 		var reentered := GamepadController.resolve_card_tick(true,
 			false, false, false, false, false, false,
 			0.0, 0.0, 0.0, 0.0,
 			false, false,
-			not is_defense, not is_defense, is_defense, is_defense, 0.5, 2)
+			not is_defense, not is_defense, is_defense, is_defense, false, false, 0.5, 2)
 		assert_false(reentered["card_commit"],
 			"%s held through the exit and the next entry STILL fires no commit" % label)
 
@@ -535,13 +524,13 @@ func test_mode_confirm_exit_edge_sequences() -> void:  # AC 6
 			false, false, false, false, false, false,
 			0.0, 0.0, 0.0, 0.0,
 			false, false,
-			false, not is_defense, false, is_defense, 0.5, 2)
+			false, not is_defense, false, is_defense, false, false, 0.5, 2)
 		assert_false(released["card_commit"], "%s released this tick -> no commit" % label)
 		var fresh := GamepadController.resolve_card_tick(true,
 			false, false, false, false, false, false,
 			0.0, 0.0, 0.0, 0.0,
 			false, false,
-			not is_defense, false, is_defense, false, 0.5, 2)
+			not is_defense, false, is_defense, false, false, false, 0.5, 2)
 		assert_true(fresh["card_commit"],
 			"a fresh %s press the tick after release commits normally" % label)
 		assert_eq(fresh["card_mode"], mode, "...carrying its own mode")
@@ -570,6 +559,7 @@ func test_replug_priming_covers_the_new_commit_edges() -> void:  # AC 7
 		true, c._prev_held.get(GamepadController._CAST_BASIC_KEY, false),
 		true, c._prev_held.get(GamepadController._CAST_UNBLOCKABLE_KEY, false),
 		true, c._prev_held.get(GamepadController._CAST_DEFENSE_KEY, false),
+		false, false,
 		0.5, -1)
 	assert_false(r["card_commit"],
 		"a replug with L3 + every confirm button already held commits nothing")
@@ -583,7 +573,7 @@ func test_mode_confirms_add_no_suppression_rule() -> void:  # AC 8
 	var r := GamepadController.resolve_card_tick(true,
 		true, false, true, false, true, false,   # attack/block/roll all freshly pressed
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, false, false, false, 0.5, -1)
+		false, false, true, false, false, false, false, false, 0.5, -1)
 	assert_false(r["roll_held"], "roll still suppressed while cast is held (5-0b, untouched)")
 	assert_false(r["roll_pressed"], "roll press still suppressed while cast is held")
 	assert_false(r["attack_held"], "attack still suppressed")
@@ -602,7 +592,7 @@ func test_arming_chord_is_untouched_by_the_new_confirm_buttons() -> void:  # AC 
 	var r := GamepadController.resolve_card_tick(true,
 		true, false, true, false, false, false,
 		0.6, 0.0, 0.6, 0.0,
-		false, false, true, false, true, false, 0.5, -1)
+		false, false, true, false, true, false, false, false, 0.5, -1)
 	assert_eq(r["armed_slot"], 3,
 		"the arming chord still resolves to slot 3 (rightmost) with B and X also pressed")
 
@@ -623,14 +613,14 @@ func test_resolve_card_tick_reports_the_unblockable_confirm_as_held() -> void:  
 	var held := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, true, false, false, 0.5, 2)
+		false, false, true, true, false, false, false, false, 0.5, 2)
 	assert_true(held["card_cast_held"], "B still down -> the chargeup's confirm reads HELD")
 
 	# B released: the fact goes false the same tick, no edge and no latch (CONSTRAINT C).
 	var released := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, true, false, false, 0.5, 2)
+		false, false, false, true, false, false, false, false, 0.5, 2)
 	assert_false(released["card_cast_held"],
 		"B up -> released on that very tick, read live rather than derived from an edge")
 
@@ -638,7 +628,7 @@ func test_resolve_card_tick_reports_the_unblockable_confirm_as_held() -> void:  
 	var l3_gone := GamepadController.resolve_card_tick(false,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, true, true, false, false, 0.5, 2)
+		false, false, true, true, false, false, false, false, 0.5, 2)
 	assert_true(l3_gone["card_cast_held"],
 		"releasing L3 while B stays held does NOT feint — the hold belongs to the confirm that "
 		+ "committed the attack, not to the arming modifier whose job ended at the commit")
@@ -650,7 +640,7 @@ func test_resolve_card_tick_reports_the_unblockable_confirm_as_held() -> void:  
 	var wrong_buttons := GamepadController.resolve_card_tick(true,
 		false, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		true, true, false, false, true, true, 0.5, 2)
+		true, true, false, false, true, true, false, false, 0.5, 2)
 	assert_false(wrong_buttons["card_cast_held"],
 		"a held BASIC or DEFENSE confirm cannot keep a mode ② chargeup alive — only B can")
 
@@ -659,7 +649,7 @@ func test_resolve_card_tick_suppresses_attack_block_roll_while_cast_held() -> vo
 	var r := GamepadController.resolve_card_tick(true,
 		true, false, true, false, true, false,  # attack/block/roll all freshly pressed
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_false(r["attack_held"], "attack suppressed on the intent while cast is held")
 	assert_false(r["attack_pressed"], "attack press suppressed while cast is held")
 	assert_false(r["block_held"], "block suppressed on the intent while cast is held")
@@ -677,7 +667,7 @@ func test_resolve_card_tick_restores_attack_block_roll_the_tick_after_release() 
 	var t1 := GamepadController.resolve_card_tick(true,
 		true, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_false(t1["attack_held"], "attack suppressed while cast is held")
 
 	# Tick N+1: cast_button released, but R1 is STILL physically held through the release -> no
@@ -685,7 +675,7 @@ func test_resolve_card_tick_restores_attack_block_roll_the_tick_after_release() 
 	var t2 := GamepadController.resolve_card_tick(false,
 		true, true, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, t1["armed_slot"])
+		false, false, false, false, false, false, false, false, 0.5, t1["armed_slot"])
 	assert_false(t2["attack_pressed"], "R1 held through cast_button's release fires no press edge")
 	assert_true(t2["attack_held"], "R1 still reads held (live-play truth) once cast mode is inactive")
 	assert_eq(t2["armed_slot"], -1, "armed slot clears the same tick cast mode exits")
@@ -694,12 +684,12 @@ func test_resolve_card_tick_restores_attack_block_roll_the_tick_after_release() 
 	var t3 := GamepadController.resolve_card_tick(false,
 		false, true, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, t2["armed_slot"])
+		false, false, false, false, false, false, false, false, 0.5, t2["armed_slot"])
 	# ...then Tick N+3: R1 is freshly pressed again -> registers as a normal attack press.
 	var t4 := GamepadController.resolve_card_tick(false,
 		true, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, t3["armed_slot"])
+		false, false, false, false, false, false, false, false, 0.5, t3["armed_slot"])
 	assert_true(t4["attack_pressed"], "a fresh press the tick after release registers normally")
 
 
@@ -707,12 +697,12 @@ func test_resolve_card_tick_clears_armed_slot_the_same_tick_cast_releases() -> v
 	var t1 := GamepadController.resolve_card_tick(true,
 		true, false, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_eq(t1["armed_slot"], 2, "R1 arms slot 2 while cast is held")
 	var t2 := GamepadController.resolve_card_tick(false,
 		true, true, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, t1["armed_slot"])
+		false, false, false, false, false, false, false, false, 0.5, t1["armed_slot"])
 	assert_eq(t2["armed_slot"], -1,
 		"armed slot clears the SAME tick cast_button releases, no released-edge delay")
 
@@ -724,14 +714,14 @@ func test_resolve_card_tick_exit_edge_sequences() -> void:  # AC 5 (review fix: 
 	var roll_exit := GamepadController.resolve_card_tick(false,
 		false, false, false, false, true, true,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_false(roll_exit["roll_pressed"], "roll held through cast_button's release fires no press edge")
 	assert_true(roll_exit["roll_held"], "roll still reads held (live-play truth) once cast mode is inactive")
 
 	var attack_exit := GamepadController.resolve_card_tick(false,
 		true, true, false, false, false, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_false(attack_exit["attack_pressed"], "attack held through cast_button's release fires no press edge")
 	assert_true(attack_exit["attack_held"], "attack still reads held once cast mode is inactive")
 
@@ -741,7 +731,7 @@ func test_resolve_card_tick_exit_edge_sequences() -> void:  # AC 5 (review fix: 
 	var same_tick := GamepadController.resolve_card_tick(false,
 		false, false, false, false, true, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_true(same_tick["roll_pressed"], "release-then-press B on the same tick registers a real roll")
 
 	# (c) FRESH PRESS THE TICK AFTER RELEASE: B released one tick, then freshly pressed the next
@@ -749,12 +739,12 @@ func test_resolve_card_tick_exit_edge_sequences() -> void:  # AC 5 (review fix: 
 	var released := GamepadController.resolve_card_tick(false,
 		false, false, false, false, false, true,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_false(released["roll_pressed"], "B released this tick -> no press edge")
 	var fresh_press := GamepadController.resolve_card_tick(false,
 		false, false, false, false, true, false,
 		0.0, 0.0, 0.0, 0.0,
-		false, false, false, false, false, false, 0.5, -1)
+		false, false, false, false, false, false, false, false, 0.5, -1)
 	assert_true(fresh_press["roll_pressed"], "a fresh B press the tick after release registers normally")
 
 
@@ -797,3 +787,134 @@ func test_card_scheme_and_lock_on_paths_are_disjoint() -> void:  # AC 6 (review 
 	for token in ["_armed_slot", "_prev_l2", "_prev_r2", "_CAST_BASIC_KEY"]:
 		assert_false(lock_src.contains(token),
 			"_sample_lock_controls must never reference card-scheme state (%s)" % token)
+
+
+
+## ============================================================================================
+## STORY 6-3a: Y, the fourth confirm (AC 2). Read on BOTH sides of `cast_held`: inside cast mode it
+## STAGES the armed slot (`card_activate = false`), outside it ACTIVATES the player's own staged card
+## (`card_activate = true`, `card_slot = -1`). Driven through the pure resolver like every case above.
+## ============================================================================================
+
+
+## One tick of the pure resolver with only the confirm cluster (and R1's arming edge) varied -- every
+## other raw read at rest. Positional through the REAL signature, so a mis-seated Y pair fails here.
+func _confirm_tick(cast_held: bool, basic: bool, unblockable: bool, defense: bool, pitch: bool,
+		prev_pitch := false, prev_armed := -1, r1_pressed := false) -> Dictionary:
+	return GamepadController.resolve_card_tick(cast_held,
+		r1_pressed, false, false, false, false, false,
+		0.0, 0.0, 0.0, 0.0,
+		basic, false, unblockable, false, defense, false, pitch, prev_pitch,
+		0.5, prev_armed)
+
+
+## AC 2, inside cast mode: Y commits the ARMED slot as a PITCH STAGE, on the `basic_pressed` shape --
+## including "a fresh press always commits, even with nothing armed" (state refuses slot -1 as an
+## empty slot, the controller never swallows it), and press-edge only.
+func test_y_inside_cast_mode_stages_the_armed_slot() -> void:  # 6-3a AC 2
+	var armed := _confirm_tick(true, false, false, false, true, false, -1, true)
+	assert_true(armed["card_commit"], "L3 held + R1 + a fresh Y commits")
+	assert_eq(armed["card_slot"], 2, "...the slot R1 armed this same tick")
+	assert_eq(armed["card_mode"], Enums.ModeKind.PITCH, "...as mode ④ PITCH")
+	assert_false(armed["card_activate"], "...and as a STAGE, never an activation")
+
+	var unarmed := _confirm_tick(true, false, false, false, true)
+	assert_true(unarmed["card_commit"], "a fresh Y with NOTHING armed still raises the commit")
+	assert_eq(unarmed["card_slot"], -1, "...carrying slot -1, which state refuses as an empty slot")
+	assert_eq(unarmed["card_mode"], Enums.ModeKind.PITCH, "...still as PITCH")
+	assert_false(unarmed["card_activate"],
+		"...and still a STAGE: this is the commit `card_activate` exists to tell apart from a bare Y")
+
+	var held := _confirm_tick(true, false, false, false, true, true, 1)
+	assert_false(held["card_commit"], "Y merely HELD inside cast mode commits nothing (press edge)")
+
+
+## AC 2, outside cast mode: a fresh Y -- and ONLY Y -- raises a commit, and it is an ACTIVATION.
+func test_bare_y_outside_cast_mode_activates() -> void:  # 6-3a AC 2
+	var r := _confirm_tick(false, false, false, false, true, false, 2)
+	assert_true(r["card_commit"], "a bare Y with L3 released commits")
+	assert_eq(r["card_mode"], Enums.ModeKind.PITCH, "...as mode ④ PITCH")
+	assert_true(r["card_activate"], "...as an ACTIVATION")
+	assert_eq(r["card_slot"], -1, "...addressing no hand slot, even though slot 2 was armed last tick")
+	assert_eq(r["armed_slot"], -1, "...and L3's release still clears the armed slot the same tick")
+
+	var held := _confirm_tick(false, false, false, false, true, true)
+	assert_false(held["card_commit"], "Y merely HELD outside cast mode commits nothing (press edge)")
+
+	var others := _confirm_tick(false, true, true, true, false)
+	assert_false(others["card_commit"],
+		"A, B and X still commit NOTHING outside cast mode -- Y is the only confirm with a meaning there")
+
+
+## AC 2/AC 4: `card_activate` is raised by the bare-Y path and NOTHING else -- not by the other three
+## confirms, and not on a tick with no commit.
+func test_card_activate_is_raised_only_by_a_bare_y() -> void:  # 6-3a AC 2/AC 4
+	for pressed: Array in [[true, false, false], [false, true, false], [false, false, true]]:
+		var r := _confirm_tick(true, pressed[0], pressed[1], pressed[2], false, false, 0)
+		assert_true(r["card_commit"], "sanity: the confirm %s committed" % [pressed])
+		assert_false(r["card_activate"], "a BASIC/UNBLOCKABLE/DEFENSE commit never activates %s" % [pressed])
+	assert_false(_confirm_tick(true, false, false, false, false)["card_activate"],
+		"no press, no activation (cast mode held)")
+	assert_false(_confirm_tick(false, false, false, false, false)["card_activate"],
+		"no press, no activation (cast mode released)")
+
+
+## AC 2's dev-pass choice, pinned: the four-confirm chord resolves in reading order X, Y, A, B with the
+## last write winning. Y's seat changes none of 5-7's pairs and adds exactly two new answers:
+## Y+X -> Y, Y+A -> A.
+func test_four_confirm_chord_resolves_in_the_order_x_y_a_b() -> void:  # 6-3a AC 2
+	var yx := _confirm_tick(true, false, false, true, true, false, 1)
+	assert_eq(yx["card_mode"], Enums.ModeKind.PITCH, "Y+X resolves to Y (right of X) -- PITCH")
+	assert_false(yx["card_activate"], "...as a stage: the chord is only reachable inside cast mode")
+	var ya := _confirm_tick(true, true, false, false, true, false, 1)
+	assert_eq(ya["card_mode"], Enums.ModeKind.BASIC, "Y+A resolves to A (below Y) -- BASIC")
+	var yb := _confirm_tick(true, false, true, false, true, false, 1)
+	assert_eq(yb["card_mode"], Enums.ModeKind.UNBLOCKABLE, "Y+B resolves to B -- UNBLOCKABLE")
+	var all := _confirm_tick(true, true, true, true, true, false, 1)
+	assert_true(all["card_commit"], "the four-button chord commits")
+	assert_eq(all["card_mode"], Enums.ModeKind.UNBLOCKABLE, "all four resolve to B -- UNBLOCKABLE")
+	assert_eq(all["card_slot"], 1, "...once, on the armed slot")
+	assert_false(all["card_activate"], "...and nothing about it is an activation")
+
+
+## AC 2: Y JOINS THE RECONNECT-PRIMING SET. Driven the way `test_replug_priming_covers_the_new_commit_edges`
+## drives it -- the harness has no joypad, so `sample()` takes the neutral path -- but made NON-VACUOUS
+## first: the Y memory is set to RELEASED (the state a pad unplugged with Y up leaves behind), so the
+## assertion below can only pass if the neutral path itself wrote the prime. Then the prime is fed back
+## into the decision with Y physically down, on BOTH sides of `cast_held`: no stage, no activation.
+func test_replug_priming_covers_the_pitch_edge_on_both_sides_of_the_modifier() -> void:  # 6-3a AC 2
+	var c := GamepadController.new(0, _profile())
+	c._prev_held[GamepadController._CAST_PITCH_KEY] = false
+	c.sample()  # the neutral path (no device bound in the harness) -- the reconnect's first tick
+	var primed: bool = c._prev_held.get(GamepadController._CAST_PITCH_KEY, false)
+	assert_true(primed, "the neutral path primes Y's memory HELD, overwriting the released state")
+	for cast_held: bool in [true, false]:
+		var r := _confirm_tick(cast_held, false, false, false, true, primed)
+		assert_false(r["card_commit"],
+			"a replug with Y already down commits nothing (cast_held = %s)" % cast_held)
+		assert_false(r["card_activate"], "...and activates nothing (cast_held = %s)" % cast_held)
+	assert_true(_confirm_tick(false, false, false, false, true, false)["card_commit"],
+		"control: the same Y press against an UN-primed memory does activate, so the prime is the cause")
+
+
+## AC 2's caller path: `sample()` is not headless-drivable past the neutral path, so its wiring is pinned
+## by CONTENT -- each line whose absence would silently drop Y between the device and the intent.
+## Positional seat included: the Y pair must sit directly after the defense pair, where the signature
+## declares it, or a bool lands in a parameter of the same type with no error.
+func test_sample_carries_y_and_card_activate_into_the_intent() -> void:  # 6-3a AC 2
+	var text := FileAccess.get_file_as_string("res://src/controllers/gamepad_controller.gd")
+	var start := text.find("func sample() -> InputIntent:")
+	var end := text.find("func _sample_lock_controls() -> void:")
+	assert_true(start != -1 and end > start, "sample()'s source region must be found by both markers")
+	var body := text.substr(start, end - start)
+	for needle: String in [
+		"var pitch_raw := Input.is_joy_button_pressed(_device, _profile.cast_pitch_button)",
+		"defense_raw, _prev_held.get(_CAST_DEFENSE_KEY, false),\n\t\tpitch_raw, _prev_held.get(_CAST_PITCH_KEY, false),",
+		"_prev_held[_CAST_PITCH_KEY] = pitch_raw",
+		"_prev_held[_CAST_PITCH_KEY] = true",
+	]:
+		assert_true(body.contains(needle), "sample() carries: %s" % needle)
+	var commit_block := body.substr(body.find("if result[\"card_commit\"]:"))
+	commit_block = commit_block.substr(0, commit_block.find("\n\n"))
+	assert_true(commit_block.contains("intent.card_activate = result[\"card_activate\"]"),
+		"sample() writes card_activate onto the intent INSIDE the commit block")
