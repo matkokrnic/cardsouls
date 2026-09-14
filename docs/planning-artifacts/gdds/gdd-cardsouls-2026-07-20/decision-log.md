@@ -10310,3 +10310,71 @@ now-empty pointer phrases are removed; the story cites only real seats.
 
 One commit: `docs(decision-log): 6-3a readiness gate outcome` (this entry). Story Status `authored`
 -> `ready-for-dev`; board `backlog` -> `ready-for-dev  # Tier A`. Not pushed.
+
+## Session 2026-09-14 -- 6-3a-pitch-activation close-out
+
+Dev pass + operator smoke + review on `6-3a-pitch-activation`, review outcome APPROVE, zero
+findings. Numbers assigned here for the first time; the readiness-gate entry above (`6-3a-gate/R-
+EXPIRY`, `6-3a-gate/R-HERO-STATE`) is cited, not renumbered.
+
+`6-3a/R1` DEV PASS OUTCOME: all 12 ACs implemented. Suite 808/0/6560 -> 824/0/6754, integration
+59/59 unchanged, `EXIT=0` both runs. Golden measured UNMOVED in both directions (before HEAD
+`9237731`, after every change in place) against the unedited constant `9ed4c9035a89...`; no
+re-baseline needed. `FORMAT_VERSION` 9 -> 10 for the new `InputIntent.card_activate` channel. 29
+mutation rows, all killed, every restore SHA-256-verified against the out-of-repo backup.
+
+`6-3a/R2` Y'S SEAT IN THE FOUR-CONFIRM ORDER IS X, Y, A, B (last write wins). Reading order of the
+face cluster: left to right, and within the centre column top (Y) before bottom (A). None of
+`5-7`'s pinned chord answers move -- B still wins every chord it was already part of; the two new
+answers are Y+X -> Y and Y+A -> A. Any seat for Y after B would have moved four existing pins.
+Pinned by `test_four_confirm_chord_resolves_in_the_order_x_y_a_b`.
+
+`6-3a/R3` TWO NEW REFUSAL REASON CONSTANTS ON `MatchState`: `REASON_EMPTY_PITCH_ZONE :=
+&"empty_pitch_zone"`, `REASON_PITCH_NOT_READY := &"pitch_not_ready"`, beside the existing
+`REASON_PITCH_ZONE_OCCUPIED`. Names taken from the story's own examples; the Live Smoke script
+already cited `REASON_EMPTY_PITCH_ZONE`, so any other name would have made the smoke text wrong.
+
+`6-3a/R4` THE RECONNECT-PRIMING TEST DRIVES ITS RECONNECT THROUGH THE HARNESS'S NO-DEVICE BRANCH
+(`test_replug_priming_covers_the_new_commit_edges`'s own precedent -- no joypad exists in the test
+harness, so `sample()` always takes the disconnected branch, which IS the reconnect's first tick).
+Made non-vacuous by writing `_prev_held[_CAST_PITCH_KEY] = false` before the prime (the memory a
+pad unplugged with Y up leaves behind), then asserting the primed read is `true` and that a control
+press against an UN-primed memory does activate -- proving the prime, not the press, is what
+blocks it. Mutation M04 kills it.
+
+`6-3a/R5` OPERATOR-CONFIRMED ACTIVATION GUARD ORDER: LAYER FLAG -> STUNNED -> EMPTY ZONE -> NOT
+READY. Reason: a stunned player must hear "stunned", not "not ready" -- stun is the overriding
+fact, and a player who is both stunned and holding an empty or unready zone needs to know the
+punishment is what stopped them, not a coincidental zone state. This resolves the inconsistency the
+dev pass found and did not reinterpret: the story's Fact 3 still described the pre-gate-fix guard
+order with no STUNNED gate at all, contradicting its own Fact 9, AC 6, and `6-3a-gate/R-HERO-STATE`
+(all three already correct). Fact 3 is corrected in this pass to state only what ships today, no
+"superseded" language -- that history lives here, not in the story.
+
+`6-3a/R6` REVIEW OUTCOME: APPROVE, three layers, zero findings.
+
+`6-3a/R7` LIVE SMOKE, recorded honestly, not embellished. Six of seven checklist items PASSED live:
+stage, occupied-zone refusal, empty-slot refusal, empty-zone refusal, not-ready refusal, activation
+with surplus orbs surviving. Activation during CHARGING was also confirmed live and passed. The
+seventh item -- activation refused while STUNNED -- was NOT exercised: it requires two pads or a
+second player, and the operator had neither at hand this session. Recorded as a NAMED DEVIATION,
+not a pass and not a failure, the `2-6` precedent (an acceptance item run solo and logged as a
+deviation): the STUNNED refusal is covered headless by the refusal tests, but was not seen live.
+Operator's log, `docs/playtest-log.md`, 2026-09-14 entry ("6-3a pitch aktivacija, smoke").
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C4 -> C3 (docs precede board, per `E5-R/R3` -- the promotion grep
+requires the log to already name the story being promoted): `story 6-3a: pitch activation` (code +
+tests + data); `docs(6-3a): dev pass record` (story file Dev Agent Record, playtest-log entry,
+`sprint-status.yaml`'s dev-pass `story_notes` write); `docs(decision-log): 6-3a close-out` (this
+entry); `board: promote 6-3a-pitch-activation to done (review passed)` (story Status `review` ->
+`done`; board `ready-for-dev` -> `done  # Tier A`).
+
+Budget interval, file modification times of `C:\dev\_63a-suite-before.txt` (2026-09-14 22:05:31)
+and `C:\dev\_63a-suite-final.txt` (2026-09-14 22:25:03): **19m32s**.
+
+Suite: 824 state tests / 0 failed / 6754 assertions, integration 59/59, `EXIT=0`. Golden
+`9ed4c903...`, unmoved. `FORMAT_VERSION` 10. Observation seams: nine, unchanged.
+
+Not pushed; the operator reviews the log.
