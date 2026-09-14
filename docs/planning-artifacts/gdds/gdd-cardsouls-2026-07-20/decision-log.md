@@ -10182,3 +10182,62 @@ Suite: 808 state tests / 0 failed / 6560 assertions, integration 59/59, `EXIT=0`
 `9ed4c903...`. `FORMAT_VERSION` 9. Observation seams: nine, unchanged.
 
 Not pushed; the operator reviews the log.
+
+## Session 2026-09-14 -- 6-3 readiness-gate split ruling
+
+Docs-only recording pass, labels assigned here for the first time (`6-3-split/*`, none reused).
+The merged story `6-3-pitch-hud-and-activation` (authored the same day, `07c0203`) failed its
+readiness gate with 14 blocking findings. Measured, not ruled: the merge was argued on the premise
+that activation could not be smoke-tested without a HUD; the gate DISPROVED that premise by
+measurement — activation is smoke-visible today through surfaces that already ship: the orb
+counters drop, the in-flight caption appears in the vacated hand slot, the mana bar already shows
+staging's spend, the existing rejection cue plays on a refused press, and the existing cast-success
+cue fires on resolution. That measurement is why the split below is correct, not a preference.
+Also measured: the gate's own base-rate tally has been stale since `4-0`, which it still reads as
+`23/23` — the running count needs re-establishing at the E6 retro, not carried forward blind.
+
+`6-3-split/R-SPLIT` THE STORY SPLITS BACK INTO TWO, in board order: `6-3a-pitch-activation`
+(**Tier A**) — Y wired as the fourth card mode, staging, activation, both refusals, activation's
+consequence, the intent shape, the Y-guard retirement, the golden; live smoke runs on the
+already-shipped surfaces named above, no HUD work — and `6-3b-pitch-hud` (**Tier A**) — the tenth
+observation seam, both pitch zones, the hand ghost, the cross-slot guard, retiring the `2-6`
+placeholder and its shared A/B switch, and the anchor A/B verdict; driven live by `6-3a`'s Y, so it
+needs no scaffolding either. Reason: the merge's forcing premise (neither half is smoke-testable
+alone) is false, so the Tier-A-by-seam-growth and Tier-A-by-state-mutation reasons that justified
+one story now justify two independently smokeable ones instead.
+
+`6-3-split/R-Y` Y IS THE FOURTH CARD MODE, using the existing arming mechanism; arming is what
+disambiguates, and arming requires the existing modifier to be HELD. Modifier held + a slot armed +
+own zone empty -> stage that card. Modifier held + a slot armed + own zone occupied -> refused,
+nothing consumed, reusing the occupied-zone reason `6-2` already authored
+(`REASON_PITCH_ZONE_OCCUPIED`). Modifier held + NO slot armed -> follows the existing precedent for
+the other three modes (the empty-slot refusal); not an activation. Y with the modifier NOT held ->
+addresses the player's own pitch zone: activates if READY, otherwise refused with nothing consumed.
+Reason: this closes the ambiguous case (bare Y meaning stage-or-activate) the gate found, without a
+new binding shape.
+
+`6-3-split/R-SPEND` ON ACTIVATION, ONLY THE ORBS THE CARD'S PRICE REQUIRED ARE SPENT; surplus
+remains. Activation does NOT reset all colours to zero. `gdd.md` currently says otherwise in two
+places and is corrected in this pass to match. This is UNRELATED to the separate `6-2` knob
+(`BalanceConfig.pitch_stage_clears_orbs`, `6-2/R10`) deciding whether STAGING clears orbs — that
+knob is unchanged, still defaults OFF, still judged at the post-E6 playtest. Two different moments,
+two different rules, recorded separately so a later reader does not collapse them.
+
+`6-3-split/R-INFO` THE OPPONENT'S PITCH ZONE PUBLISHES the card, the countdown, and whether it is
+READY — NOT the orb shortfall. Reason: shortfall plus the public price reveals the opponent's exact
+held count per colour, while READY reveals only that the threat is live now — the tension the zone
+exists to create. `gdd.md` contradicts itself on affordability publicity (one passage keeps it
+ambiguous, another says the HUD surfaces it); this ruling resolves it and `gdd.md` is corrected in
+this pass to match.
+
+`6-3-split/R-REFUSE` NO HUD CONSUMER OF THE REJECTION SEAM IS ADDED, in either split story. A
+refused press is already audible today through the existing rejection cue, and the debug inspector
+already shows the reason text. The recorded ruling that those combat seams belong to the telegraph
+consumer stands unamended.
+
+Docs written, nothing committed: `gdd.md` (two orb-reset passages, the affordability-publicity
+contradiction), `epics.md` (the merged item replaced by the two split items, the `6-2` stale cancel
+reference fixed, cancel recorded explicitly OUT with both open questions), `sprint-status.yaml`
+(the merged key replaced by the two split keys, both `backlog`). `6-3-pitch-hud-and-activation.md`
+deleted (never committed; both successor stories authored fresh). Neither successor story is
+authored by this pass.
