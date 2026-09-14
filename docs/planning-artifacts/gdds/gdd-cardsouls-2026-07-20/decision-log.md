@@ -10073,3 +10073,112 @@ Hellburst citation (`gdd.md:207`) was verified correct as authored.
 One commit: `docs(decision-log): 6-2 readiness gate outcome` (this entry). Story Status `authored` ->
 `ready-for-dev`; board `backlog` -> `ready-for-dev  # Tier A`; `epics.md`'s `6-4` line gains the
 cancel clause. Not pushed.
+
+## Session 2026-09-14 -- 6-2-pitch-staging close-out
+
+Dev pass + fix pass + live smoke on `6-2-pitch-staging`, review outcome APPROVE WITH FINDINGS.
+Numbers assigned here for the first time; the readiness-gate and dev-pass entries above described
+these rulings, not numbered them.
+
+`6-2/R1` THE STAGED CARD STILL COUNTS TOWARD THE HAND OF 4. Staging vacates the slot through the
+existing hole mechanism (`hand.remove_at()`) and owes NO draw at staging; the replacement draw is
+owed only when the card leaves the zone, which in this story is fizzle. The `occupied + owed ==
+hand_size` conservation identity gains a fifth (staged) term, pinned by a test that actually stages
+a card.
+
+`6-2/R2` MANA IS PAID AT STAGING. A card that fizzles takes its mana with it -- no refund.
+
+`6-2/R3` READY IS DERIVED EVERY TICK, NEVER LATCHED. Nothing can make READY false again once mana is
+already spent at staging, so no stored flag exists or is needed.
+
+`6-2/R4` `pitch_zone` OPENED IN AUTHORED DATA THIS STORY (the `5-2/R14` precedent), GATE IS
+MODE-LEVEL. The nine per-card `required_flag` values were authored and then REMOVED on review (fix
+M1): two enforcement points for one toggle is the shape the gate forbade, and the per-card values
+were inert because the mode gate short-circuits first. The `required_flag` mechanism on the shared
+`CardCastCondition` schema stays, general-purpose, for a future card that actually needs it.
+
+`6-2/R5` PITCH COSTS AUTHORED PROVISIONALLY on all nine cards (mana equal to the basic cast; 1 orb
+on the six 2/3-mana cards, 2 on the three totems). Retune is a `.tres` edit; the post-E6 playtest
+judges the numbers.
+
+`6-2/R6` CARD IDENTITY IS HASHED IN THE STAGED RECORD (public by GDD design); THE CARD'S PRICE IS
+NOT (fix H1) -- it was hashed in the dev pass and taken out on review, because `3-2`'s close-out
+ruled card content never enters the hashed run so that adding or repricing a card cannot
+re-baseline the golden. AC 14b originally reasoned only about identity; the price is a separate
+question, answered the opposite way.
+
+`6-2/R7` `UNHASHED_CROSS_TICK_MEMBERS` 3 -> 4 (fix H1). `_orb_costs` is a per-slot unhashed cache,
+frozen at staging by the injection discipline (a map injected once at match start, no reload path),
+not by being hashed. The alternative -- delete the member, derive the price from `card_id` on every
+`is_ready()` read -- was considered and REJECTED as a larger, riskier diff after two re-baselines,
+for the same architectural outcome (keeps `is_ready(slot, orbs, flags)`'s signature and its ~14
+existing call sites unchanged). Ruled intentional, not an oversight.
+
+`6-2/R8` `FORMAT_VERSION` 8 -> 9 for the new pitch-cost channel. A v8 record is refused with a
+reason, no shim.
+
+`6-2/R9` THE MODE-REACHABILITY GUARD IS RETIRED, not narrowed a fourth time, now that all four
+`Enums.ModeKind` values are reachable. Its set-naming test is renamed/re-valued, not deleted (the
+`5-5` renaming discipline).
+
+`6-2/R10` THE ORB-CLEAR SWITCH (`BalanceConfig.pitch_stage_clears_orbs`, default OFF): "pitching
+clears, not the price clears." Both branches are tested, with the ON branch proven to fail (mutation
+M1) when the clear call is removed. DEADLINE: the post-E6 playtest decides, and the losing branch
+AND the bool are both deleted then.
+
+`6-2/R11` `REASON_UNBLOCKABLE_COMMITTED` REUSED FOR A STAGING REFUSAL DURING `CHARGING` IS
+INTENTIONAL, not a copy-paste shortcut to clean up later -- the token names the CAUSE (the hero IS
+committed to an unblockable) not the attempted action, and that cause is identical whether the
+refused action was a mode 2 cast or a mode 4 stage. Recorded so a later reader does not "fix" it
+into a pitch-specific reason without cause.
+
+`6-2/R12` CANCEL STAYS DEFERRED TO `6-4` as committed scope, with the recorded-input reason (a new
+`InputIntent` shape, touching `FORMAT_VERSION` and the replay machinery) already recorded at the
+readiness gate above.
+
+`6-2/R13` TWO GOLDEN RE-BASELINES THIS STORY, causes named separately in `test_determinism.gd`: the
+FIRST (`9679fa80` -> `72d3cc6e`) is `PitchState.to_snapshot()`'s nested shape landing (`{"fizzle":
+...}` -> `{"p1": {...}, "p2": {...}}`); the SECOND (`72d3cc6e` -> `9ed4c903`, the fix pass) is the
+same per-zone dict SHRINKING from four keys to three when the price left the hash (`R6`/`R7`) -- a
+shape change moves the hash even though the fixture's zones hash empty on every tick, the same
+"shape is the mover" reasoning both times. Both measured in both directions (forward and a reverse
+mutation reproducing the prior hash exactly), scratchpad-backed, SHA-256 before == after on every
+restore.
+
+`6-2/R14` REVIEW OUTCOME: APPROVE WITH FINDINGS (1 HIGH, 3 MED, 3 LOW). H1 (price in the hash), M1
+(redundant per-card `required_flag`), and M3 (the orb-price authoring guard's non-vacuity) FIXED.
+M2 recorded as intentional (`R11`, no change). L1/L2 recorded without action, below, as E6 close-out
+candidates.
+
+`6-2/R15` LIVE SMOKE: PASS, no findings, REGRESSION-ONLY. Nothing about pitch is operator-visible
+until `6-4` wires an input, matching this story's own Live Smoke section (which predicted exactly
+that and deferred pitch-specific items to `6-3`); the smoke proved no regression in the existing
+systems. Operator's log, `docs/playtest-log.md` 14.9. entry (one line).
+
+**E6 CLOSE-OUT CANDIDATES, no owner:**
+- L1: the refusal priority between "zone occupied" and "no pitch cost" is unpinned when both hold.
+- L2: `PitchState.clear()` leaves the fizzle window indistinguishable from "just expired" to any
+  future caller that bypasses `is_staged`/`is_expired`.
+- L3: the full-suite proof of "all non-golden green" landed AFTER the dev pass's first re-baseline,
+  not before -- self-disclosed by the dev pass; the fix pass did it correctly the second time. A
+  measurement for the E6 retro, not a defect.
+- For `6-3`: a staged slot is an empty slot with no replacement owed, so today's HUD would draw it
+  as a permanent hole.
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C4 -> C3 (docs precede board, per `E5-R/R3` -- the promotion grep
+requires the log to already name the story being promoted): `story 6-2: pitch staging` (code +
+tests + data, including the golden re-baseline); `docs(6-2): dev pass record` (story file Dev Agent
+Record/Fix Pass Record/Live Smoke Results, playtest-log, `sprint-status.yaml`'s dev-pass
+`story_notes` write); `docs(decision-log): 6-2 close-out` (this entry); `board: promote
+6-2-pitch-staging to done (review passed)` (story Status `review` -> `done`; board `ready-for-dev`
+-> `done  # Tier A`).
+
+Budget interval, file modification times of `C:\dev\_62-suite-before.txt` (2026-09-14 01:02:09) and
+`C:\dev\_62-fix-suite-final.txt` (2026-09-14 02:18:00): **1h15m51s**.
+
+Suite: 808 state tests / 0 failed / 6560 assertions, integration 59/59, `EXIT=0`. Golden
+`9ed4c903...`. `FORMAT_VERSION` 9. Observation seams: nine, unchanged.
+
+Not pushed; the operator reviews the log.
