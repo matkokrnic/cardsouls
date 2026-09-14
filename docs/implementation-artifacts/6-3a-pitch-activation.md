@@ -4,7 +4,7 @@ baseline_commit: 5d7084709df6c6928363fd35f22d9ae6585013e7
 
 # Story 6.3a: Pitch Activation
 
-Status: review
+Status: done
 
 > **Scope note.** E6 planning pass, board order item 5 (decision-log Session 2026-09-08, `E6-P/R2`;
 > renumbered by the 2026-09-14 split, `6-3-split/R-SPLIT`). Tier A by the golden clause (`E4-P/R9`).
