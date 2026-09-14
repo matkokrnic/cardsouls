@@ -4,7 +4,7 @@ baseline_commit: 74c1ddd6568fead41705c591646a3eda741de187
 
 # Story 6.2: Pitch Staging
 
-Status: review
+Status: done
 
 > **Scope note.** E6 planning pass, board order item 4 (decision-log Session 2026-09-08,
 > `E6-P/R2`). Tier A by the golden clause (`E4-P/R9`) — `E6-P/R2` itself predicts the golden
