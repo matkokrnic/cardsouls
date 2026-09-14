@@ -10241,3 +10241,72 @@ reference fixed, cancel recorded explicitly OUT with both open questions), `spri
 (the merged key replaced by the two split keys, both `backlog`). `6-3-pitch-hud-and-activation.md`
 deleted (never committed; both successor stories authored fresh). Neither successor story is
 authored by this pass.
+
+## Session 2026-09-14 -- 6-3a-pitch-activation readiness gate outcome
+
+Docs-only gate-fix pass on `6-3a-pitch-activation`, promoted `authored` -> `ready-for-dev`. No
+source or test file touched -- the ACs describe what the dev pass builds. The gate returned NOT
+READY with 7 blocking findings; all 7 are closed in this pass. Labels assigned here for the first
+time (`6-3a-gate/*`), none reused.
+
+`6-3a-gate/R-EXPIRY` THE EXPIRY-TICK EDGE ACTIVATES, IN THE PLAYER'S FAVOUR. A press landing on the
+exact tick a staged card's countdown reaches zero ACTIVATES; it does not fizzle. No guard against
+`pitch.is_expired(slot)` is added to `_resolve_pitch_activate`. Fizzle and activation share their
+visible outcome on this boundary tick (discard, zone clear, refill owed), so AC 10 is rewritten to
+pin the tick on the three observables that actually separate them -- the priced orbs are spent, the
+success signal is queued, no rejection fires -- with a control run (no press, same tick) alongside.
+The gate measured that an AC written only to the shared outcome would pass under either ordering;
+this closes that gap rather than merely asserting the outcome again.
+
+`6-3a-gate/R-HERO-STATE` ACTIVATION IS REFUSED WHILE STUNNED, ALLOWED WHILE CHARGING. Reason: stun
+is a punishment, and a punishment a player can step around with a button press is not one; charging
+is the player's own choice, not a penalty imposed on them. Legality: refused when DEAD (inherited,
+unconditional for every mode), refused during a frozen round-over tick (inherited, `advance()` step
+1b), refused while STUNNED (a NEW gate, reusing the existing `REASON_STUNNED` constant
+`_resolve_pitch_stage` already uses -- no new reason token), legal otherwise, CHARGING included.
+The gate was right that this had no recorded source before now -- it was an assumption carried in
+an earlier draft, not a ruling, until this session.
+
+**The other five findings, closed by measurement rather than by ruling:**
+- The price source was unnamed, risking a second re-derivation from `CardData`. `PitchState` gains
+  one public accessor, `staged_orb_costs(slot)`; `is_ready()` and the activation spend both read
+  through it, never a private field directly.
+- The "single seat" sorted-colour claim was imprecise: the extraction is one ORDERING function
+  (`CastEvaluator.sorted_orb_colors`) with TWO consumers (the existing read loop, a new write loop),
+  not one shared loop. Corrected in Fact 7/AC 7, plus an orbs-disabled test (orb layer off, priced
+  colour never banked, spend floors silently with no `orbs_changed` signal -- `OrbPool.add`'s own
+  "if updated == current: return" floor-with-no-signal behaviour, measured).
+- Serializer safety was asserted, not proven: the two round-trip tests that would actually catch a
+  dropped field are now named (`test_the_round_trip_carries_every_channel_verbatim`,
+  `test_a_saved_record_reloads_and_re_saves_to_the_identical_BYTES`, both moving to ten fields with
+  a non-default `card_activate` tick), `card_activate` joins `REQUIRED_INTENT_FIELDS`, and a v9-
+  refusal test is named on the `test_a_v8_record_without_pitch_costs_is_refused_with_a_reason`
+  precedent. The AC's "old records decode to a default" argument is deleted -- it contradicted the
+  story's own FORMAT_VERSION refusal (a v9 record is refused outright, never decoded).
+- The controller path covered only the pure resolver, not the caller: `sample()` must also assign
+  `intent.card_activate = result["card_activate"]` or activation never reaches state regardless of
+  how correct `resolve_card_tick()` is. Y gains its own previous-held key (`_CAST_PITCH_KEY`) and
+  joins the reconnect-priming set, with a reconnect test, the `5-7/R7` precedent applied to a fourth
+  confirm.
+- Live Smoke assumed a HUD-free surface set was sufficient without naming how to reach the pad: the
+  shipped default is two keyboard slots, so the gamepad flip is now named as a manual `main.tscn`
+  edit, reverted with a diff check. The missing bare-Y-nothing-staged refusal case is added; the
+  shared rejection cue is now paired with "read the inspector reason text, not the ear"; the
+  discard-count HUD read (nothing renders it) is dropped; the blank-slot-at-staging and the in-
+  flight-caption-at-activation are un-conflated; the surplus-orb claim is scripted (two landings
+  before staging); the expiry tick is declared headless-only, pinned by `R-EXPIRY`'s own test.
+
+**Also fixed, cheap and true:** the draw delay restarts a shared `pending_draw` window rather than
+resuming it, so activation can push back an already-in-flight refill for a different slot -- stated
+in AC 8, not new behaviour, previously unstated near pitch. Refusal tests now also assert the
+fizzle countdown is unchanged. The five-term conservation identity
+(`test_the_five_term_conservation_identity_holds_across_stage_wait_and_fizzle`) is required to hold
+across an activation too, via a new stage/wait/activate sequence. The retired Y-guard test's field-
+count floor (`button_fields.size() >= 8`) carries forward into its replacement. One wrong citation
+found and fixed by content: the "L-note" framing for `6-2`'s "a staged slot is an empty slot"
+close-out candidate was unlabelled in that entry, not an `L`-numbered item -- corrected, not
+re-cited by a line number that was never right. Four references to an unnamed "the brief" and two
+now-empty pointer phrases are removed; the story cites only real seats.
+
+One commit: `docs(decision-log): 6-3a readiness gate outcome` (this entry). Story Status `authored`
+-> `ready-for-dev`; board `backlog` -> `ready-for-dev  # Tier A`. Not pushed.
