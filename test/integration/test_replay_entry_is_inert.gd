@@ -186,6 +186,11 @@ func _poison_record() -> IntentRecorder:
 	var colors: Dictionary[StringName, Enums.CardColor] = {}
 	colors[&"poison_card"] = Enums.CardColor.GREEN
 	record.capture_inject_card_colors(colors)
+	# Story 6-2 (AC 16): the fifth content channel — a v9 record without it is malformed at the capture
+	# seam. An EMPTY map is a legal capture for this channel (AC 2), which is all a record that must never
+	# be replayed needs.
+	var pitch_costs: Dictionary[StringName, CardCastCondition] = {}
+	record.capture_inject_pitch_costs(pitch_costs)
 	record.capture_set_camera_basis(0, Basis(Vector3.UP, deg_to_rad(90.0)))
 	record.capture_push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
 	for _tick in 4:

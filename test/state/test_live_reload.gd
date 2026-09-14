@@ -41,7 +41,8 @@ const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reloa
 ## the story that moves the surface; it is not widened to stop noticing.
 ## Story 5-2 (`5-2/R1`): TEN -> ELEVEN, the card-colour channel. Moved by the story that ships
 ## the channel, exactly as 4-1 moved it 8 -> 9 and 4-6 9 -> 10.
-const SHIPPED_CAPTURE_CHANNELS := 11
+## Story 6-2 (AC 16): ELEVEN -> TWELVE, the pitch-cost channel, moved by the story that ships it.
+const SHIPPED_CAPTURE_CHANNELS := 12
 
 
 # ---------------------------------------------------------------- AC 2
@@ -108,7 +109,10 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ## 4-1 rename: a test name carrying a COUNT must not go on asserting a different one. The old
 ## name was `test_the_recorder_still_ships_exactly_ten_capture_channels`, recorded here verbatim
 ## so the pin stays greppable.
-func test_the_recorder_still_ships_exactly_eleven_capture_channels() -> void:
+## RENAMED BY STORY 6-2 (AC 16) for the same count-in-the-name reason. The old name was
+## `test_the_recorder_still_ships_exactly_eleven_capture_channels`, recorded verbatim so the pin stays
+## greppable.
+func test_the_recorder_still_ships_exactly_twelve_capture_channels() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -125,15 +129,18 @@ func test_the_recorder_still_ships_exactly_eleven_capture_channels() -> void:
 		"capture_inject_card_colors",
 		"capture_inject_card_costs",
 		"capture_inject_card_effects", "capture_inject_deck", "capture_inject_feature_flags",
+		# Story 6-2 (AC 16): the TWELFTH channel -- the per-card PITCH-COST map, the FIFTH content channel.
+		# Sorted position; the FORMAT_VERSION bump 8 -> 9 is what the move is worth.
+		"capture_inject_pitch_costs",
 		"capture_push_contact", "capture_seed", "capture_set_camera_basis",
 		# Story 4-6 (AC 2, `4-6/R6`): the TENTH channel -- the per-tick lock direction, the
 		# `capture_set_camera_basis` sibling. The pin moves because the STORY moved it, which is
 		# this guard doing its job and naming the cause.
 		"capture_set_lock_direction",
 	], "the channel set is the EIGHT `3-0c` shipped, plus story 4-1's card-effect channel, story "
-		+ "4-6's lock-direction channel and story 5-2's card-colour channel")
+		+ "4-6's lock-direction channel, story 5-2's card-colour channel and story 6-2's pitch-cost channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"a TWELFTH capture channel is a scope violation, and this is where it fails")
+		"a THIRTEENTH capture channel is a scope violation, and this is where it fails")
 
 
 # ---------------------------------------------------------------- AC 9
@@ -246,6 +253,10 @@ func _match_start() -> Dictionary:
 	var colors := _colors()
 	record.capture_inject_card_colors(colors)
 	ms.inject_card_colors(colors)
+	# Story 6-2 (AC 16): the FIFTH content channel, captured and injected LAST. Empty is a legal capture.
+	var pitch_costs: Dictionary[StringName, CardCastCondition] = {}
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 

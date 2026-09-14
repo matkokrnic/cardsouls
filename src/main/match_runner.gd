@@ -342,6 +342,13 @@ func _ready() -> void:
 		var card_colors := _derive_card_colors()
 		_recorder.capture_inject_card_colors(card_colors)
 		_match_state.inject_card_colors(card_colors)
+		# Story 6-2 (AC 2/AC 16): PITCH COSTS, the FIFTH content channel, injected LAST -- the order the
+		# record's `SOUND_CONTENT_ORDER` pins. Its seam checks nothing against the composition, so its
+		# position is not load-bearing for totality; the derive+inject pair travels in this NON-REPLAY
+		# branch and nowhere else, and a replay takes the pitch costs the record carries.
+		var pitch_costs := _derive_pitch_costs()
+		_recorder.capture_inject_pitch_costs(pitch_costs)
+		_match_state.inject_pitch_costs(pitch_costs)
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -630,6 +637,21 @@ func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 		if card == null:
 			continue
 		out[id] = card.color
+	return out
+
+
+## Story 6-2 (AC 1/AC 2): the injected PITCH-COST map -- `_derive_card_costs()` followed verbatim, over
+## `CardData.pitch_condition` instead of `cast_condition`, for the same reason: the runner is the ONE
+## place allowed to read CardDatabase. The WHOLE library is mapped; a card with no authored pitch
+## condition is SKIPPED rather than mapped to null -- and unlike the Mode ① map, nothing downstream
+## demands totality: that card simply refuses to stage (`MatchState.REASON_NO_PITCH_COST`).
+func _derive_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null or card.pitch_condition == null:
+			continue
+		out[id] = card.pitch_condition
 	return out
 
 

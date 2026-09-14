@@ -100,6 +100,10 @@ var defense_window_ticks: int
 var unblockable_launch_ticks_red: int
 var unblockable_launch_ticks_blue: int
 var unblockable_launch_ticks_green: int
+## Story 6-2 (AC 9): the Pitch Zone countdown, in TICKS -- the `defense_window_ticks` precedent verbatim,
+## derived ONCE here and read INLINE at the one seat that starts the fizzle window (the staging tick,
+## CONSTRAINT C). The authored `pitch_stage_timer_seconds` float never reaches `advance()`.
+var pitch_stage_timer_ticks: int
 
 
 ## Story 6-1c: the colour lookup over the three launch twins above -- `BalanceConfig`'s
@@ -179,6 +183,12 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 			config.unblockable_launch_seconds_blue)
 	t.unblockable_launch_ticks_green = TimingWindow.seconds_to_ticks(
 			config.unblockable_launch_seconds_green)
+	# Story 6-2 (AC 9): the pitch countdown, a PLAIN conversion on the defense window's exact shape -- a
+	# window duration, clamped to a minimum of 1 tick for any non-zero authored value. An authored 0.0
+	# derives 0 ticks, and a staged card then fizzles on the tick it was staged (its replacement owed
+	# that same tick). That degrade is defined rather than crashing; the authoring audit keeps it out
+	# of the shipped `.tres`.
+	t.pitch_stage_timer_ticks = TimingWindow.seconds_to_ticks(config.pitch_stage_timer_seconds)
 	return t
 
 

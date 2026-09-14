@@ -42,6 +42,8 @@ const FORMAT_PIN_PATH := "user://test_4_3a_format_pin.rec"
 ## their own file, for the same no-racing reason.
 const RESAVE_PATH := "user://test_4_4_resave.rec"
 const RETIRED_VERSION_PATH := "user://test_4_4_retired_version.rec"
+## Story 6-2 (AC 16): the v8-refusal test writes its own file, for the same no-racing reason.
+const PRE_6_2_PATH := "user://test_6_2_pre_pitch_costs.rec"
 
 ## Story 4-4: the in-test `unit_kinds` list the recorded config carries, and the nested values the
 ## round trip is measured on. Deliberately THREE LEVELS DEEP (kind -> attack -> projectile),
@@ -63,6 +65,14 @@ const CONTACT_TICK := 9      # a fact inside that active window -> a CONFIRMED h
 const RELOAD_TICK := 12      # the live mid-run apply_balance: reload event #1
 const CAST_TICK := 15
 const CAST_SLOT := 1
+## Story 6-2 (AC 16): a Mode ④ STAGE rides the driven run, so the pitch-cost channel is LOAD-BEARING in
+## every round trip below rather than a key that is written and never read. Slot 0 on P1 (the cast took
+## slot 1); the countdown is authored long enough that the card is still STAGED on the final tick, so
+## the staged record itself reaches the hashed snapshot every hash equality here compares.
+const STAGE_TICK := 17
+const STAGE_SLOT := 0
+const PITCH_MANA_COST := 3.0
+const PITCH_TIMER_TICKS := 30
 
 const DECK_IDS: Array[StringName] = [
 	&"file_card_0", &"file_card_1", &"file_card_2", &"file_card_3", &"file_card_4", &"file_card_5",
@@ -150,8 +160,11 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 8,
-		"FORMAT_VERSION is 8 as of story 6-1 (`6-1/R4`), and this bump is a pure SEMANTICS bump -- "
+	assert_eq(RecordFile.FORMAT_VERSION, 9,
+		"FORMAT_VERSION is 9 as of story 6-2 (AC 16) -- a NEW CAPTURE CHANNEL, the fifth content "
+		+ "channel `pitch_costs`, which a v8 record does not carry, so every staging it recorded would "
+		+ "refuse on replay (pinned by test_a_v8_record_without_pitch_costs_is_refused_with_a_reason). "
+		+ "It was 8 as of story 6-1 (`6-1/R4`), and that bump is a pure SEMANTICS bump -- "
 		+ "the first one in this file's history that the SHAPE did not force. Mode ②'s new "
 		+ "hold-through-chargeup reads a `card_cast` held key, and `held` is serialized "
 		+ "generically by key at both ends, so the channel round-trips with zero serialization "
@@ -238,6 +251,8 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 		"...and it was CONFIRMED: P2 took damage, so the channel is load-bearing here")
 	assert_true(live.p1.mana.get_current() > 0.0, "the flags channel is load-bearing (melee mana)")
 	assert_eq(live.p1.discard.size(), 1, "the cast landed, so the cost map is load-bearing")
+	assert_true(live.pitch.is_staged(0),
+		"the stage landed and is still waiting, so the pitch-cost channel is load-bearing (story 6-2)")
 
 	var loaded := _save_and_load(record, ROUND_TRIP_PATH)
 	assert_eq(loaded.tick_count(), record.tick_count(), "every tick survived the file")
@@ -248,6 +263,14 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 		"the cost map's ids survived")
 	assert_eq(loaded.replay_card_costs()[DECK_IDS[0]].mana_cost, CAST_MANA_COST,
 		"...and their VALUES, rebuilt as fresh CardCastConditions")
+	# Story 6-2 (AC 16): the FIFTH content channel, on the cost map's footing -- ids, mana AND the typed
+	# orb price, which is the half `_rebuilt`'s dictionary `assign` exists for.
+	assert_eq(loaded.replay_pitch_costs().keys(), record.replay_pitch_costs().keys(),
+		"the pitch-cost map's ids survived")
+	assert_eq(loaded.replay_pitch_costs()[DECK_IDS[0]].mana_cost, PITCH_MANA_COST,
+		"...their mana price")
+	assert_eq(loaded.replay_pitch_costs()[DECK_IDS[0]].orb_costs, {Enums.CardColor.BLUE: 2},
+		"...and their ORB price, rebuilt into the typed dictionary rather than dropped")
 	# Story 4-1 (`4-1/R1`): the THIRD content channel, on the cost map's own footing -- "carries
 	# EVERY channel" is this test's name, so a channel added to the writer is added here.
 	assert_eq(loaded.replay_card_effects().keys(), record.replay_card_effects().keys(),
@@ -432,6 +455,40 @@ func test_a_record_whose_format_version_is_unknown_is_refused_with_a_reason() ->
 		"restoring the version makes the SAME file load again — the refusal was the version, not "
 		+ "damage done by rewriting it")
 	_remove(VERSION_PATH)
+
+
+## Story 6-2 (AC 16): A v8 RECORD IS REFUSED WITH A REASON, NO SHIM -- the `4-4` pre-bump refusal's shape
+## (`test_a_record_from_the_version_before_unit_kinds_is_refused_with_a_reason`), applied to this bump.
+## The body is rewritten to what a v8 build actually wrote -- no `pitch_costs` key, no pitch channel in
+## the content order -- so the refusal is measured against a real v8 body and not a relabelled v9 one.
+##
+## WHY REFUSED RATHER THAN MIGRATED: a v8 record has no pitch costs, so every stage it recorded would
+## refuse on replay (`no_pitch_cost`) -- no mana spent, nothing in the zone -- and the replay would
+## diverge on the hashed `"pitch"` key while loading without complaint. An unloadable record is a correct
+## answer; a divergent one is not (the `6-1/R4` reasoning).
+func test_a_v8_record_without_pitch_costs_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_2_PATH), "", "the record was written")
+	_rewrite_as_pre_6_2(PRE_6_2_PATH)
+	var refused := RecordFile.load_record(PRE_6_2_PATH)
+	assert_null(refused["record"],
+		"a v8 record is REFUSED -- it carries no pitch costs, so its stagings would refuse on replay")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("8"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is the VERSION: the same stripped body relabelled at the current version is refused
+	# for its MISSING KEY instead, naming `pitch_costs` -- a v9 file cannot omit the channel either.
+	_rewrite_format_version(PRE_6_2_PATH, RecordFile.FORMAT_VERSION)
+	var truncated := RecordFile.load_record(PRE_6_2_PATH)
+	assert_null(truncated["record"], "a current-version body without pitch_costs is refused too")
+	assert_true(truncated["error"].contains("pitch_costs"),
+		"...and that refusal names the missing key: %s" % truncated["error"])
+	# ...and the intact record at the current version loads, so neither refusal was file damage.
+	assert_eq(RecordFile.save_record(record, PRE_6_2_PATH), "", "rewritten intact")
+	assert_not_null(RecordFile.load_record(PRE_6_2_PATH)["record"],
+		"the intact record at the CURRENT version loads")
+	_remove(PRE_6_2_PATH)
 
 
 ## AC 5's neighbours: a file that is not a record at all is refused the same way, and a record
@@ -725,19 +782,20 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 8,
+	assert_eq(RecordFile.FORMAT_VERSION, 9,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 8 (5-2's colours channel, then 6-1's mode ② hold "
-		+ "semantics), which is a different "
+		+ "version has since moved to 9 (5-2's colours channel, 6-1's mode ② hold semantics, then "
+		+ "6-2's pitch-cost channel), which is a different "
 		+ "story's bump and does not weaken 5-1a's own claim: what this asserts is that the number "
 		+ "is whatever the last DELIBERATE bump set it to, and that 5-1a was not one")
 	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:
 		assert_false(RecordFile.REQUIRED_KEYS.has(field),
 			("`5-1a/R12`: `%s` is a PER-INTENT field inside each `intents` element, never a "
 			+ "top-level key — REQUIRED_KEYS is not widened by this story") % field)
-	assert_eq(RecordFile.REQUIRED_KEYS.size(), 13,
-		"THIRTEEN top-level required keys: story 5-2 added `colors`, the fourth content channel, "
-		+ "which is that story's bump and not this one's. It was TWELVE before 5-2 and TWELVE "
+	assert_eq(RecordFile.REQUIRED_KEYS.size(), 14,
+		"FOURTEEN top-level required keys: story 6-2 added `pitch_costs`, the fifth content channel, "
+		+ "and story 5-2 added `colors`, the fourth -- both those stories' bumps and not this one's. "
+		+ "It was THIRTEEN before 6-2, TWELVE before 5-2 and TWELVE "
 		+ "before 5-1a too (`5-1a/R12` counted them at the "
 		+ "readiness gate) — this story validates CONTENTS, never presence at the top level")
 
@@ -940,6 +998,11 @@ func _match_start() -> Dictionary:
 	var colors := _colors()
 	record.capture_inject_card_colors(colors)
 	ms.inject_card_colors(colors)
+	# Story 6-2 (AC 16): the FIFTH content channel, captured and injected LAST -- the order the live
+	# runner produces and SOUND_CONTENT_ORDER pins.
+	var pitch_costs := _pitch_costs()
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 
@@ -994,6 +1057,10 @@ func _intents(t: int) -> Array[InputIntent]:
 	if t == ATTACK_TICK:
 		i1.pressed[&"attack"] = true
 		i1.held[&"attack"] = true
+	if t == STAGE_TICK:
+		i1.card_slot = STAGE_SLOT
+		i1.card_mode = Enums.ModeKind.PITCH
+		i1.card_commit = true
 	if t == CAST_TICK:
 		i1.card_slot = CAST_SLOT
 		i1.card_mode = Enums.ModeKind.BASIC
@@ -1061,6 +1128,8 @@ func _config() -> BalanceConfig:
 	# reload-event channel serialises, so putting the kind list here is what makes the round-trip
 	# assertions measure the three-level nesting rather than a flat wall of floats.
 	c.unit_kinds = [_ranged_kind()]
+	# Story 6-2 (AC 16): long enough that the driven run's staged card is still in the zone at the end.
+	c.pitch_stage_timer_seconds = PITCH_TIMER_TICKS / 60.0
 	return c
 
 
@@ -1104,6 +1173,8 @@ func _flags() -> FeatureFlags:
 	# unit record. Without it the effects channel would ride the record while changing nothing in
 	# the hash, and every proof that rests on it would be VACUOUS.
 	f.minions = true
+	# Story 6-2: the pitch layer ON, so the driven run's STAGE_TICK stage actually stages.
+	f.pitch_zone = true
 	return f
 
 
@@ -1116,6 +1187,18 @@ func _effects() -> Dictionary[StringName, CardEffect]:
 		var e := CardEffect.new()
 		e.effect_id = StringName("summon_%s" % id)
 		out[id] = e
+	return out
+
+
+## Story 6-2 (AC 16): the pitch-cost map -- every id priced, each carrying an ORB price so the typed
+## `orb_costs` dictionary is exercised through store_var and `_rebuilt`, not just a float.
+func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in DECK_IDS:
+		var c := CardCastCondition.new()
+		c.mana_cost = PITCH_MANA_COST
+		c.orb_costs[Enums.CardColor.BLUE] = 2
+		out[id] = c
 	return out
 
 
@@ -1225,6 +1308,22 @@ func _rewrite_as_pre_4_4(path: String) -> void:
 		values.erase("unit_kinds")
 		values["unit_max_hp"] = KIND_MAX_HP
 		values["unit_damage_per_hit"] = KIND_DAMAGE
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## Story 6-2 (AC 16): turn a saved record into what a v8 build wrote -- version 8, no `pitch_costs` key,
+## and no pitch channel in the recorded content order. Everything else exactly as written.
+func _rewrite_as_pre_6_2(path: String) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	data["format_version"] = 8
+	assert_true(data.has("pitch_costs"), "the record carried `pitch_costs` before it was stripped")
+	data.erase("pitch_costs")
+	var order: Array = data["content_order"]
+	order.erase(IntentRecorder.CHANNEL_PITCH_COSTS)
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()

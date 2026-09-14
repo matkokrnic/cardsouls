@@ -50,12 +50,34 @@ static func refusal_reason(condition: CardCastCondition, mana_current: float,
 		orbs: OrbPool, flags: FeatureFlags) -> StringName:
 	if condition == null:
 		return REASON_UNKNOWN_CARD
+	var reason := flag_and_mana_refusal_reason(condition, mana_current, flags)
+	if reason != ALLOWED:
+		return reason
+	if not _orbs_affordable(condition, orbs, flags):
+		return REASON_INSUFFICIENT_ORBS
+	return ALLOWED
+
+
+## Story 6-2 (AC 4): the FIRST TWO CHECKS of `refusal_reason` directly above, as their own entry
+## point -- the flag gate, then the mana price, in that fixed order, and NOTHING about orbs.
+##
+## A NEW ENTRY POINT, NOT A SKIP PARAMETER AND NOT A TOLERATE-AND-DISCARD CALLER (the dev-pass choice
+## AC 4 left open). Pitch STAGING must not be gated on orbs -- the orb price is evaluated
+## continuously afterwards as READY -- and each rejected shape had a real cost: a `skip_orbs` bool
+## would give Mode ①'s single production call a second behaviour to get wrong, and a staging caller
+## that discarded `REASON_INSUFFICIENT_ORBS` would stay correct only while the orb check remained the
+## LAST check in `refusal_reason`. Here the order is shared BY CONSTRUCTION instead: `refusal_reason`
+## calls this, so the two paths cannot disagree about the flag or the mana half.
+##
+## NON-NULL `condition` IS THE CALLER'S OBLIGATION. `refusal_reason` handles null before calling in;
+## the staging seat refuses a missing pitch entry with its OWN reason before calling in (AC 5), so
+## `REASON_UNKNOWN_CARD`'s "unreachable by construction" contract above is not weakened by this path.
+static func flag_and_mana_refusal_reason(condition: CardCastCondition, mana_current: float,
+		flags: FeatureFlags) -> StringName:
 	if not _flag_open(condition, flags):
 		return REASON_FLAG_CLOSED
 	if condition.mana_cost > mana_current:
 		return REASON_INSUFFICIENT_MANA
-	if not _orbs_affordable(condition, orbs, flags):
-		return REASON_INSUFFICIENT_ORBS
 	return ALLOWED
 
 
@@ -91,15 +113,25 @@ static func _flag_open(condition: CardCastCondition, flags: FeatureFlags) -> boo
 ## avoids everywhere: Array[StringName].sort() orders by internal POINTER on this engine.)
 static func _orbs_affordable(condition: CardCastCondition, orbs: OrbPool,
 		flags: FeatureFlags) -> bool:
-	if condition.orb_costs.is_empty():
+	return orb_costs_affordable(condition.orb_costs, orbs, flags)
+
+
+## Story 6-2 (AC 10): the body of `_orbs_affordable` directly above, over a bare orb price rather than
+## a whole condition, and PUBLIC -- because the pitch zone's READY check asks exactly this question
+## about the price it copied at staging, and a second copy of the sorted-colour loop would be a second
+## place the iteration-order discipline could drift. `_orbs_affordable` forwards here, so Mode ①'s
+## refusal and a staged card's READY are one reading of one rule.
+static func orb_costs_affordable(orb_costs: Dictionary, orbs: OrbPool,
+		flags: FeatureFlags) -> bool:
+	if orb_costs.is_empty():
 		return true
 	if flags == null or not flags.orbs:
 		return true
 	if orbs == null:
 		return false
-	var colors: Array = condition.orb_costs.keys()
+	var colors: Array = orb_costs.keys()
 	colors.sort()
 	for color: Enums.CardColor in colors:
-		if orbs.get_count(color) < int(condition.orb_costs[color]):
+		if orbs.get_count(color) < int(orb_costs[color]):
 			return false
 	return true

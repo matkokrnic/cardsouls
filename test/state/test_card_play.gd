@@ -230,80 +230,59 @@ func test_cast_on_a_frozen_tick_is_dropped_silently() -> void:
 	assert_eq(signals, [], "NO signal — not a resolution and not even a rejection")
 
 
-# --- AC 2: the guarded stubs -----------------------------------------------------------------
+# --- AC 2 / story 6-2 AC 17a: every declared mode has its own dispatch arm -------------------
 
-## Story 5-2 (AC 9, `5-2/R8`): the modes that have a REAL resolution arm in
-## `MatchState._resolve_card_action`, and therefore may legally be named in `src/`. Everything else
-## is a guarded stub and the scan below fails on it.
+## Story 6-2 (AC 17a): THE REACHABILITY SCAN IS RETIRED, NOT NARROWED A FOURTH TIME.
 ##
-## WIDENED A SECOND TIME BY STORY 5-5 (AC 1), and the `5-2/R8` discipline is applied unchanged: the
-## guard is NARROWED, never deleted and never weakened past the one mode that shipped. `DEFENSE`
-## gains a real `_resolve_defense_cast` arm, so it may now legally be named in `src/` (it is, in
-## `match_state.gd`'s dispatch and in `keyboard_controller.gd`'s new commit branch); `PITCH` (mode 4,
-## E6) still FAILS here, against an unreachable set that is now one instead of two.
-const REACHABLE_MODES: Array[String] = ["BASIC", "UNBLOCKABLE", "DEFENSE"]
-
-
-## AC 2's negative-path test: the modes beyond Basic are UNREACHABLE in E3.
+## `test_only_shipped_modes_are_reachable` source-scanned `src/` for any `Enums.ModeKind.<NAME>` outside
+## a hand-kept REACHABLE set, so an UNREACHABLE mode could not be authored before its resolution arm
+## shipped. It was narrowed by `5-2` (UNBLOCKABLE, `5-2/R8`) and again by `5-5` (DEFENSE). With PITCH's
+## arm shipping here, all four declared modes resolve, the unreachable set is EMPTY, and the scan could
+## no longer fail on anything -- vacuous by its own documented reasoning. It is deleted rather than
+## kept as a green line that guards nothing.
 ##
-## Proven by SOURCE SCAN rather than by calling the stub, deliberately: the stub is an
-## `Invariant.check(false, ...)`, which routes through assert() and PRINTS AND CONTINUES at exit 0
-## (3-0c/R15) rather than aborting — so run_all.sh's grep gate, not a process crash, is what would
-## turn calling the stub into a suite failure, and for the wrong reason (a deliberate trigger, not
-## a genuine defect). The reachability question is "can anything in src/ ever put an
-## UNREACHABLE mode value on an intent" — and that is exactly what this scans for.
-##
-## NARROWED BY STORY 5-2 (AC 9, `5-2/R8`) -- THE ONE DELIBERATE PIN EDIT OF THAT STORY, and it is
-## FORCED rather than chosen: `5-2` gives `UNBLOCKABLE` a real resolution arm in
-## `MatchState._resolve_card_action`, which trips this scan the instant it lands. The guard is
-## NARROWED, never deleted and never weakened past the one mode that shipped: `DEFENSE` (mode 3, a
-## `5-5` story) and `PITCH` (mode 4, E6) still FAIL here, and the test's job is unchanged -- it
-## still answers "can anything in src/ put an UNREACHABLE mode on an intent", against a set of
-## unreachable modes that is now two instead of three.
-##
-## DO NOT CONFLATE THIS WITH `5-2`'s OTHER PIN (`5-2/R8` says so in as many words). Two different
-## tests were in play for two different reasons: `test_action_state.gd:82-95`'s
-## zero-inbound-CHARGING assertion was EXPECTED to move and does NOT (entry is a direct
-## `set_action_state` at the cast seat, so `TRANSITION_TABLE` gains no row -- AC 7/AC 8), while
-## THIS one was not named at authoring time and must.
-##
-## MUTATION: write `Enums.ModeKind.PITCH` (or `.DEFENSE`) anywhere under src/ and this FAILS.
-func test_only_shipped_modes_are_reachable() -> void:
-	var re := RegEx.create_from_string("Enums\\.ModeKind\\.([A-Z_]+)")
-	var offenders: Array[String] = []
-	var scanned := 0
-	var references := 0
-	for path in _gd_files("res://src/"):
-		scanned += 1
-		var n := 0
-		for line in _code_lines(path):
-			n += 1
-			for m in re.search_all(line):
-				references += 1
-				if not REACHABLE_MODES.has(m.get_string(1)):
-					offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
-	assert_true(scanned > 0, "the scan must actually visit files")
-	assert_true(references > 0,
-		"src/ must REFERENCE ModeKind somewhere — otherwise this guard is vacuous")
-	assert_eq(offenders.size(), 0,
-		"an UNREACHABLE mode is authored in src/ (DEFENSE is `5-5`'s, PITCH is E6's, and both are "
-		+ "still guarded stubs): %s" % ", ".join(offenders))
+## WHAT REPLACES IT is the claim that is now true and falsifiable: the set of modes the dispatch
+## resolves is EXACTLY the declared enum, arm for arm.
+const DISPATCHED_MODES: Array[String] = ["BASIC", "UNBLOCKABLE", "DEFENSE", "PITCH"]
 
 
-## The other half of the narrowing, asserted rather than left implicit: the permitted set is
-## EXACTLY the two modes that have shipped a resolution arm. A story that widened this list without
-## shipping the arm would be caught by `test_the_mode_dispatch_carries_a_guard` below; a story that
-## shipped an arm without widening it is caught by the scan above. This assertion is what keeps the
-## list itself from quietly growing to four and turning the scan vacuous.
+## RENAMED BY STORY 6-2 (AC 17a) from `test_the_reachable_mode_set_is_exactly_basic_unblockable_and_
+## defense` -- the `5-5` renaming discipline: a test whose NAME asserts a stale set does not survive the
+## story that moves the set.
 ##
-## RENAMED BY STORY 5-5 (AC 1), not merely re-valued: a test whose NAME asserts a stale set does not
-## survive the story that moves the set -- the same discipline `5-4`'s deviation 2 applied to
-## `test_runner_observation_seams_are_exactly_eight`.
-func test_the_reachable_mode_set_is_exactly_basic_unblockable_and_defense() -> void:
-	assert_eq(REACHABLE_MODES, ["BASIC", "UNBLOCKABLE", "DEFENSE"] as Array[String],
-		"exactly THREE of the four modes resolve today: BASIC (3-5a), UNBLOCKABLE (5-2) and "
-		+ "DEFENSE (5-5). Widening this list is how a mode becomes reachable, and it may only be "
-		+ "widened by the story that ships that mode's resolution arm")
+## Two halves. (a) The pinned list is the whole of `Enums.ModeKind`, in declaration order, so a FIFTH
+## mode declared later fails here until the list -- and an arm -- are added deliberately. (b) Each name
+## appears as its OWN `match` arm inside `MatchState._resolve_card_action`, read from that function's
+## body only, so a mode whose arm is deleted (or folded into the `_` default) fails.
+##
+## MUTATION (story 6-2 table, M2): delete the `Enums.ModeKind.PITCH:` arm and half (b) fails.
+func test_every_declared_mode_has_its_own_dispatch_arm() -> void:
+	var declared: Array[String] = []
+	for key: String in Enums.ModeKind.keys():
+		declared.append(key)
+	assert_eq(declared, DISPATCHED_MODES,
+		"all FOUR declared modes resolve as of story 6-2: BASIC (3-5a), UNBLOCKABLE (5-2), DEFENSE "
+		+ "(5-5) and PITCH (6-2). A new ModeKind must arrive with its own arm and this list")
+	var body: Array[String] = []
+	var inside := false
+	for line in _code_lines("res://src/state/match_state.gd"):
+		if line.begins_with("func _resolve_card_action("):
+			inside = true
+			continue
+		if inside and line.begins_with("func "):
+			break
+		if inside:
+			body.append(line)
+	assert_true(body.size() > 0, "the scan must find _resolve_card_action's body")
+	for mode in DISPATCHED_MODES:
+		var arm := RegEx.create_from_string("^\\s*Enums\\.ModeKind\\.%s:\\s*$" % mode)
+		var found := false
+		for line in body:
+			if arm.search(line) != null:
+				found = true
+				break
+		assert_true(found,
+			"_resolve_card_action carries its own `Enums.ModeKind.%s:` arm" % mode)
 
 
 ## STORY 4-0 (AC 7, second part): the ORDER of the two lines is PINNED, by content. The hole is
@@ -336,8 +315,12 @@ func test_the_empty_slot_guard_precedes_the_cost_lookup() -> void:
 		+ "reach the cost map at all (AC 7)")
 
 
-## The stub branch must actually EXIST — the other half of the guard above, which would pass
-## vacuously against a dispatch that silently ignored an unknown mode instead of refusing it.
+## The DEFAULT branch must actually EXIST -- a dispatch that silently ignored an int that is not a
+## ModeKind would pass the arm test above while dropping a corrupt intent without a word.
+##
+## STORY 6-2 (AC 17a): the message this pins was three stories stale ("a guarded stub ... unreachable
+## in E3 (only BASIC resolves)" survived 5-2, 5-5 and now 6-2 each adding a real arm). It is reworded
+## to a mode-agnostic message IN THE SAME CHANGE, and the pinned substring moves with it.
 func test_the_mode_dispatch_carries_a_guard() -> void:
 	# Two tokens on two lines — the guard is written across a call and its message string, and
 	# _code_lines strips comments, so both halves are asserted separately rather than on one line.
@@ -346,10 +329,10 @@ func test_the_mode_dispatch_carries_a_guard() -> void:
 	for line in _code_lines("res://src/state/match_state.gd"):
 		if line.contains("Invariant.check(false"):
 			has_check = true
-		if line.contains("guarded stub"):
+		if line.contains("has no dispatch arm"):
 			has_message = true
 	assert_true(has_check,
-		"match_state.gd's mode dispatch must guard its non-BASIC branch with Invariant.check(false")
+		"match_state.gd's mode dispatch must guard its default branch with Invariant.check(false")
 	assert_true(has_message, "...and say what it is guarding")
 
 

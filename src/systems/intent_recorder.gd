@@ -51,8 +51,13 @@ const CHANNEL_EFFECTS := &"effects"
 ## reads _deck_contents too, so any order that puts colours before the composition validates against
 ## an EMPTY one and passes vacuously.
 const CHANNEL_COLORS := &"colors"
+## Story 6-2 (AC 16): the FIFTH content channel, and it sits at the END of the ordered contract. Unlike
+## its predecessors its seam (`MatchState.inject_pitch_costs`) checks nothing against _deck_contents, so
+## its position is not load-bearing for totality -- it goes last so the contract stays the one straight
+## line the live runner produces.
+const CHANNEL_PITCH_COSTS := &"pitch_costs"
 const SOUND_CONTENT_ORDER: Array[StringName] = [CHANNEL_DECK, CHANNEL_COSTS, CHANNEL_EFFECTS,
-		CHANNEL_COLORS]
+		CHANNEL_COLORS, CHANNEL_PITCH_COSTS]
 
 ## The seed channel (AC 3) — captured ONCE, at match start, from the SAME value that reaches
 ## MatchParams. There is deliberately no second, independently-read seed anywhere: MatchState
@@ -88,6 +93,12 @@ var _effect_values: Dictionary = {}
 ## whole. The by-value discipline is therefore satisfied trivially rather than by machinery -- there
 ## is no live handle a later data/cards/ edit could re-colour a recording through.
 var _color_values: Dictionary = {}
+## Story 6-2 (AC 16): card id -> CardCastCondition property values for Mode ④'s price, BY VALUE for
+## `_cost_values`'s reason exactly. A CAPTURED FLAG rides beside it, because unlike every other content
+## channel this map may LEGALLY BE EMPTY (no card authoring pitch content is ordinary, AC 2) -- so
+## "was it captured" cannot be read off emptiness the way `_cost_values.is_empty()` is.
+var _pitch_cost_values: Dictionary = {}
+var _pitch_costs_captured := false
 var _content_order: Array[StringName] = []
 
 ## The per-tick, per-slot camera-basis channel (AC 8, `3-0c/R2`). Keyed by the tick the pushed
@@ -219,6 +230,24 @@ func capture_inject_card_colors(colors: Dictionary[StringName, Enums.CardColor])
 	_content_order.append(CHANNEL_COLORS)
 
 
+## Story 6-2 (AC 16): the PITCH-COST channel -- MatchState.inject_pitch_costs(). Match start, before
+## the first tick, the capture_inject_card_costs precedent directly above for storage (by value,
+## content-order append) and for its RECORD-SIDE MANDATORY status: a record reaching its first tick
+## without this channel is malformed, because a replay missing it would refuse every staging the live
+## match performed -- a silent divergence on the hashed `"pitch"` key and the staging player's mana.
+##
+## NO NON-EMPTY GUARD, deliberately unlike all four siblings, and for the seam's own reason: an empty
+## pitch-cost map is legal content (AC 2), so capturing one is a faithful record rather than a defect.
+## `RecordFile.FORMAT_VERSION` BUMPS 8 -> 9 for this channel: a v8 file carries no pitch costs at all.
+func capture_inject_pitch_costs(costs: Dictionary[StringName, CardCastCondition]) -> void:
+	var values: Dictionary = {}
+	for id: StringName in costs:
+		values[id] = _resource_values(costs[id])
+	_pitch_cost_values = values
+	_pitch_costs_captured = true
+	_content_order.append(CHANNEL_PITCH_COSTS)
+
+
 ## The CAMERA-BASIS channel — MatchState.set_camera_basis(). Per tick, per slot. Today the
 ## pushed basis is always identity in live play, but its value is READ during movement
 ## resolution and reaches HeroState.velocity, which IS hashed — so a replay that does not
@@ -335,6 +364,10 @@ func missing_match_start_channels() -> Array[String]:
 	# states: without it a replay would silently telegraph every unblockable in the wrong colour.
 	if _color_values.is_empty():
 		missing.append("card colours")
+	# Story 6-2 (AC 16): a v9 record missing the pitch-cost channel is MALFORMED -- keyed to CAPTURE, not
+	# to emptiness, because an empty pitch-cost map is a legal capture.
+	if not _pitch_costs_captured:
+		missing.append("pitch costs")
 	return missing
 
 
@@ -444,6 +477,18 @@ func replay_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 	return out
 
 
+## The recorded PITCH costs (story 6-2, AC 16), each CardCastCondition rebuilt from values -- so a card
+## re-priced for Mode ④ in data/cards/ after the recording cannot change what the replay's staging pays,
+## exactly as replay_card_costs() does for Mode ①.
+func replay_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id: StringName in _pitch_cost_values:
+		var cost := CardCastCondition.new()
+		_apply_values(cost, _pitch_cost_values[id])
+		out[id] = cost
+	return out
+
+
 func replay_inject_content(ms: MatchState) -> bool:
 	if _content_order != SOUND_CONTENT_ORDER:
 		return false
@@ -457,6 +502,8 @@ func replay_inject_content(ms: MatchState) -> bool:
 				ms.inject_card_effects(replay_card_effects())
 			CHANNEL_COLORS:
 				ms.inject_card_colors(replay_card_colors())
+			CHANNEL_PITCH_COSTS:
+				ms.inject_pitch_costs(replay_pitch_costs())
 	return true
 
 

@@ -30,6 +30,13 @@ const CONTACT_TICK := 9      # a fact inside that active window -> a CONFIRMED h
 const RELOAD_TICK := 14      # mid-run apply_balance: reload event #1
 const CAST_TICK := 20
 const CAST_SLOT := 1
+## Story 6-2 (AC 16): a Mode ④ STAGE on P1, two ticks after the cast, so the pitch-cost channel's drop
+## below has something to diverge ON. The countdown outlasts the run, so the staged record -- id, slot,
+## the orb price copied off the INJECTED cost -- is still in the hashed zone on the final tick.
+const STAGE_TICK := 22
+const STAGE_SLOT := 0
+const PITCH_MANA_COST := 3.0
+const PITCH_TIMER_TICKS := 30
 
 ## The composition, built IN-TEST with OPAQUE ids — data/cards/ is unreachable from the state
 ## harness and these ids are nothing the card library contains, so card content can never reach
@@ -112,8 +119,18 @@ const UNHASHED_CROSS_TICK: Array[String] = [
 	# the push that latched `INSIDE`: a copy of a pushed fact, never produced by the tick, captured by
 	# `capture_push_contact` and restored on replay by replaying those pushes. MEMBERS STAYS AT THREE.
 	"match_state._charge_contact_dirs",
+	# Story 6-2 review fix (H1): a FOURTH argument, not a member of any of the first three. Card
+	# identity is PUBLIC by GDD design (AC 14b) and hashes; the staged card's ORB PRICE is card
+	# `.tres` CONTENT, and `3-2`'s close-out ruled card content permanently out of the hashed run so
+	# that repricing a card can never re-baseline the golden. `_orb_costs` genuinely CROSSES TICKS
+	# (frozen from staging until `clear()`, read by `is_ready()` on every tick in between) so it
+	# cannot be PER_TICK, and it is never injected so it cannot be INJECTED -- UNHASHED_CROSS_TICK is
+	# its only honest home. UNHASHED_CROSS_TICK_MEMBERS THEREFORE MOVES FROM THREE TO FOUR below --
+	# the first increase since this pin existed, disclosed here rather than slipped in quietly,
+	# because the pin's own point is that a new argument is a real cost to notice.
+	"pitch_state._orb_costs",
 ]
-const UNHASHED_CROSS_TICK_MEMBERS := 3
+const UNHASHED_CROSS_TICK_MEMBERS := 4
 
 ## Reaches CanonicalHash through the to_snapshot() chain (MatchState -> PlayerState/PitchState ->
 ## HeroState/pools/TimingWindow). The card containers are here because their SIZES are hashed;
@@ -230,6 +247,14 @@ const HASHED: Array[String] = [
 	"hero_state.chain", "hero_state.deflect", "hero_state.roll_iframe",
 	"hero_state.roll_duration", "hero_state.stun", "hero_state._hp", "hero_state._max_hp",
 	"hero_state._swing_dedupe",
+	# Story 6-2 (AC 14b/AC 14c), narrowed by the review fix (H1): the Pitch Zone's card-identity and
+	# hand-slot records classify HASHED beside the fizzle window they share an object with -- they
+	# CROSS TICKS (staging to fizzle) and DECIDE AN OUTCOME (which card fizzles, into which slot the
+	# replacement is owed). Card identity in the hash is RULED safe here: the staged card is PUBLIC by
+	# GDD design. Both ride the existing `"pitch"` key, so no exemption is needed for them (AC 14c).
+	# `_orb_costs` does NOT classify here any more -- it is card `.tres` CONTENT (H1), and moved to
+	# UNHASHED_CROSS_TICK below.
+	"pitch_state._card_ids", "pitch_state._hand_slots",
 	"pitch_state._fizzle",
 	"mana_pool._current", "mana_pool._maximum",
 	"orb_pool._red", "orb_pool._blue", "orb_pool._green",
@@ -279,6 +304,10 @@ const INJECTED: Array[String] = [
 	# `inject_card_colors`, which IS a capture channel (`capture_inject_card_colors`).
 	"match_state._deck_contents", "match_state._card_costs", "match_state._card_effects",
 	"match_state._card_colors",
+	# Story 6-2 (AC 14b/AC 16): the injected PITCH-COST map, classified INJECTED for its four neighbours'
+	# reasons verbatim -- never produced by the tick, changed only through `inject_pitch_costs`, which IS
+	# a capture channel (`capture_inject_pitch_costs`). UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
+	"match_state._pitch_costs",
 	# Story 5-4 (AC 8/AC 10/AC 12): the ORB POOL's per-colour MAXIMUM, and it lands in THIS bucket
 	# rather than beside `mana_pool._maximum` in HASHED -- the one asymmetry between the two pools,
 	# named here because this file is where it becomes checkable.
@@ -357,6 +386,13 @@ func test_the_recorded_run_exercises_every_channel() -> void:
 		"the flags channel is load-bearing: melee mana was generated, which the flag gates")
 	assert_eq(live.p1.discard.size(), 1,
 		"the cast LANDED, so the cost-map channel is load-bearing (an unpriced card is refused)")
+	assert_true(live.pitch.is_staged(0),
+		"the t22 STAGE landed and is still waiting, so the pitch-cost channel is load-bearing (story 6-2)")
+	assert_eq(live.to_snapshot()["pitch"]["p1"]["card_id"], String(live.pitch.staged_card_id(0)),
+		"...carrying the staged card's IDENTITY into the hash -- public by GDD design (AC 14b)")
+	assert_false(live.to_snapshot()["pitch"]["p1"].has("orb_costs"),
+		"...and NOT the price: card `.tres` content stays out of the hashed run (3-2), so an "
+		+ "orb-price retune can never re-baseline the golden")
 	assert_eq(record.camera_pushes_at(TICKS).size(), 2,
 		"both slots' bases ride the record on every tick")
 	assert_eq(record.intents_at(CAST_TICK)[0].card_slot, CAST_SLOT,
@@ -384,8 +420,12 @@ func test_dropping_any_single_channel_diverges_the_replay() -> void:
 	# same footing as "costs". It diverges because the fixture's t20 cast carries a `summon_`
 	# effect id and the minion flag is on, so a replay without the channel resolves that cast to
 	# the missing-entry default and ends the run with unit_count 0 against the live run's 1.
-	for channel in ["seed", "balance", "flags", "deck", "costs", "effects", "reload", "bases",
-			"contacts", "intents"]:
+	# Story 6-2 (AC 16) adds "pitch_costs" -- the fifth content channel. It diverges ONLY because the
+	# driven run STAGES a card at STAGE_TICK (stated, not assumed): without the channel that stage refuses
+	# with `no_pitch_cost`, so the replay ends with P1's zone empty and P1's mana unspent against the live
+	# run's staged card. A run that never staged would leave this drop invisible.
+	for channel in ["seed", "balance", "flags", "deck", "costs", "effects", "pitch_costs", "reload",
+			"bases", "contacts", "intents"]:
 		assert_ne(CanonicalHash.of(_replay(record, channel).to_snapshot()), live_hash,
 			"dropping the %s channel must DIVERGE the replay" % channel)
 
@@ -490,12 +530,14 @@ func test_the_lock_direction_channel_is_driven_non_zero_and_is_load_bearing() ->
 ## has to be pinned or the equality claim is dishonest. Every declared member of every runtime
 ## state class under src/state/ is classified into exactly one bucket, and the unhashed cross-tick
 ## bucket must be exactly the three members named at the top of this file. A FOURTH fails here.
-func test_unhashed_cross_tick_state_is_exactly_three_members() -> void:
-	assert_eq(UNHASHED_CROSS_TICK_MEMBERS, 3,
-		"the pin is THREE members: the vulnerable window, the card containers' contents/order, "
-		+ "and MatchState's pushed per-tick spatial facts -- the camera bases (`3-0c/R8`) and, "
-		+ "since story 4-6, the lock directions beside them. The second array joined argument (c), "
-		+ "it did not open a fourth argument (`4-6/R6`)")
+func test_unhashed_cross_tick_state_is_exactly_four_members() -> void:
+	assert_eq(UNHASHED_CROSS_TICK_MEMBERS, 4,
+		"the pin is FOUR arguments: the vulnerable window, the card containers' contents/order, "
+		+ "MatchState's pushed per-tick spatial facts -- the camera bases (`3-0c/R8`), since story "
+		+ "4-6 the lock directions, and since 5-2/6-1d the charge-reach facts, all sharing argument "
+		+ "(c) rather than opening a fourth (`4-6/R6`) -- and, since the 6-2 review fix (H1), the "
+		+ "staged card's orb price, which genuinely IS a fourth argument: card `.tres` content that "
+		+ "`3-2` rules must never enter the hash, a reason none of the first three share")
 	var classified: Dictionary = {}
 	for bucket: Array in [HASHED, PER_TICK, INJECTED, UNHASHED_CROSS_TICK]:
 		for key: String in bucket:
@@ -584,6 +626,10 @@ func _record_a_driven_run() -> Dictionary:
 	var colors := _colors()
 	record.capture_inject_card_colors(colors)
 	ms.inject_card_colors(colors)
+	# Story 6-2 (AC 16): the FIFTH content channel, captured and injected LAST.
+	var pitch_costs := _pitch_costs()
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			var retuned := _retuned_config()
@@ -625,6 +671,12 @@ func _replay(record: IntentRecorder, drop := "") -> MatchState:
 		# divergence below can only be the effects channel.
 		ms.inject_deck(record.replay_deck_contents())
 		ms.inject_card_costs(record.replay_card_costs())
+	elif drop == "pitch_costs":
+		# Story 6-2: every content channel but the pitch costs, in the sound order.
+		ms.inject_deck(record.replay_deck_contents())
+		ms.inject_card_costs(record.replay_card_costs())
+		ms.inject_card_effects(record.replay_card_effects())
+		ms.inject_card_colors(record.replay_card_colors())
 	elif drop != "deck":
 		assert_true(record.replay_inject_content(ms),
 			"the recorded content order replays (deck, then costs, then effects)")
@@ -662,6 +714,10 @@ func _intents(t: int) -> Array[InputIntent]:
 	if t == ATTACK_TICK:
 		i1.pressed[&"attack"] = true
 		i1.held[&"attack"] = true
+	if t == STAGE_TICK:
+		i1.card_slot = STAGE_SLOT
+		i1.card_mode = Enums.ModeKind.PITCH
+		i1.card_commit = true
 	if t == CAST_TICK:
 		i1.card_slot = CAST_SLOT
 		i1.card_mode = Enums.ModeKind.BASIC
@@ -712,6 +768,8 @@ func _config() -> BalanceConfig:
 	# asserts (`[1, -1]`) is exactly what the removed hardcoded lookup produced.
 	c.unit_kinds = UnitKindFixture.minion_only(9.0, 3.0, 0, 0, 0, 2.0)
 	c.hero_damage_to_unit = 3.0
+	# Story 6-2 (AC 16): long enough that the t22 stage is still waiting on the hashed final tick.
+	c.pitch_stage_timer_seconds = PITCH_TIMER_TICKS / 60.0
 	return c
 
 
@@ -730,6 +788,8 @@ func _flags() -> FeatureFlags:
 	# unit record. Without it the effects channel would ride the record while changing nothing in
 	# the hash, and every proof that rests on it would be VACUOUS.
 	f.minions = true
+	# Story 6-2: the pitch layer ON, so the t22 stage stages and the pitch-cost channel is load-bearing.
+	f.pitch_zone = true
 	return f
 
 
@@ -742,6 +802,21 @@ func _effects() -> Dictionary[StringName, CardEffect]:
 		var e := CardEffect.new()
 		e.effect_id = StringName("summon_%s" % id)
 		out[id] = e
+	return out
+
+
+## Story 6-2 (AC 16), narrowed by the review fix (H1): every id priced for Mode ④, each with an ORB
+## price. The price itself is NOT hashed (H1) -- what makes a replay whose rebuilt condition drops
+## this channel diverge is that `condition == null` REFUSES the stage outright (`REASON_NO_PITCH_COST`),
+## so the hashed `card_id`/`hand_slot` never land at all. The channel is load-bearing through the
+## refusal, not through the price.
+func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in DECK_IDS:
+		var c := CardCastCondition.new()
+		c.mana_cost = PITCH_MANA_COST
+		c.orb_costs[Enums.CardColor.GREEN] = 2
+		out[id] = c
 	return out
 
 

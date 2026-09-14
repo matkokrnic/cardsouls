@@ -933,3 +933,33 @@ func test_the_swing_at_commit_knob_is_authored_off() -> void:
 	assert_false(config.unblockable_swing_at_commit,
 		"unblockable_swing_at_commit ships OFF (AC 8: built and inert; the ON verdict is Live "
 		+ "Smoke item 6's, not this story's)")
+
+
+## Story 6-2 (AC 9): the Pitch Zone countdown is authored > 0, the `defense_window_seconds` bespoke
+## bound's reason verbatim: `field in config` and `>= 0.0` both pass on the 0.0 script default, and a 0.0
+## derives 0 ticks, so every staged card would fizzle on its own staging tick -- the buildup half of the
+## bluff shipped invisible. The PROVISIONAL value (20 s, `E6-P/R5`) is not pinned; the playtest judges it.
+func test_authored_pitch_stage_timer_is_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.pitch_stage_timer_seconds > 0.0,
+		"pitch_stage_timer_seconds must be authored > 0 (a zero countdown fizzles every staged card "
+		+ "on the tick it was staged)")
+
+
+## Story 6-2 (AC 13): THE ORB-CLEAR RULE SHIPS OFF, in BOTH places that can decide it -- the script
+## default every in-test config inherits, and the authored `.tres` that ships. The shape of
+## `test_the_swing_at_commit_knob_is_authored_off` directly above. UNLIKE that knob this one gates HASHED
+## state, so both branches are behaviour-tested in test_pitch_staging.gd; this pin is only about which
+## branch ships until the post-E6 playtest deletes the loser.
+func test_the_pitch_orb_clear_rule_is_authored_off() -> void:
+	assert_false(BalanceConfig.new().pitch_stage_clears_orbs,
+		"the script default must be OFF -- it is what every in-test config inherits")
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_false(config.pitch_stage_clears_orbs,
+		"pitch_stage_clears_orbs ships OFF (AC 12/AC 13: orbs banked before staging count toward READY)")

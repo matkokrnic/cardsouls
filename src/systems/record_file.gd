@@ -168,7 +168,16 @@ extends RefCounted
 ## silently-wrong replay the exact-match refusal at `:303-306` exists to make impossible, so v7 is
 ## rejected HARD rather than migrated: an unloadable record is a correct answer, a divergent one is
 ## not. (The `5 -> 6` bump directly above took this same reasoning from the resting-`aim` case.)
-const FORMAT_VERSION := 8
+##
+## STORY 6-2 BUMPS 8 -> 9, and it is a NEW CAPTURE CHANNEL -- the `5-2` shape of bump, not `6-1`'s
+## semantics one. `inject_pitch_costs` is MatchState's ELEVENTH intake and the FIFTH content channel
+## (AC 16), shipping with its `capture_inject_pitch_costs` channel and its `pitch_costs` key below. A v8
+## file carries neither: replaying one would find no pitch cost for any card, so every staging the
+## recorded match performed would REFUSE on replay -- no mana spent, nothing in the zone -- diverging on
+## the hashed `"pitch"` key and the staging player's mana. HARD REJECTION, NO SHIM, the `4-1/R1`
+## discipline unbroken. The intent SHAPE forced nothing: a stage is `card_mode == PITCH` on the existing
+## card fields.
+const FORMAT_VERSION := 9
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -226,6 +235,10 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	# arrival IS the version bump -- a v6 file lacks this key, and is refused by the version check
 	# long before this map is consulted, exactly as `effects` was at v2 and `lock_pushes` at v6.
 	"colors": TYPE_DICTIONARY,
+	# Story 6-2 (AC 16): the FIFTH content channel, required from FORMAT_VERSION 9 onward. Its arrival IS
+	# the version bump -- a v8 file lacks this key, and is refused by the version check long before this
+	# map is consulted, exactly as `colors` was at v7.
+	"pitch_costs": TYPE_DICTIONARY,
 }
 
 ## Story 5-1a (AC 4): the POSITIONAL type signature of one `lock_pushes` entry, in the order
@@ -510,6 +523,13 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var recorded_colors := record.replay_card_colors()
 	for id: StringName in recorded_colors:
 		colors[id] = int(recorded_colors[id])
+	# Story 6-2 (AC 16): the pitch-cost map, serialised exactly as the Mode ① costs above are -- through
+	# the recorder's PUBLIC replay-side read, each condition by value. An EMPTY map is written as an empty
+	# dictionary: empty is legal content for this channel (AC 2), so the key is always present.
+	var pitch_costs: Dictionary = {}
+	var recorded_pitch_costs := record.replay_pitch_costs()
+	for id: StringName in recorded_pitch_costs:
+		pitch_costs[id] = _resource_values(recorded_pitch_costs[id])
 	var intents: Array = []
 	var camera_pushes: Dictionary = {}
 	var contacts: Dictionary = {}
@@ -540,6 +560,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"costs": costs,
 		"effects": effects,
 		"colors": colors,
+		"pitch_costs": pitch_costs,
 		"tick_count": record.tick_count(),
 		"intents": intents,
 		"camera_pushes": camera_pushes,
@@ -673,6 +694,10 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 				record.capture_inject_card_effects(_card_effects(data["effects"]))
 			IntentRecorder.CHANNEL_COLORS:
 				record.capture_inject_card_colors(_card_colors(data["colors"]))
+			IntentRecorder.CHANNEL_PITCH_COSTS:
+				# Story 6-2: the same by-value rebuild as the Mode ① costs -- `_card_costs` builds fresh
+				# CardCastConditions, `orb_costs` assigned onto its typed dictionary by `_rebuilt`.
+				record.capture_inject_pitch_costs(_card_costs(data["pitch_costs"]))
 	var intents: Array = data["intents"]
 	var camera_pushes: Dictionary = data["camera_pushes"]
 	var contacts: Dictionary = data["contacts"]

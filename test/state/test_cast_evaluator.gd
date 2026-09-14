@@ -134,6 +134,56 @@ func test_multi_colour_shortfall_refuses_deterministically() -> void:
 			"the same cost yields the same reason every time")
 
 
+# --- story 6-2: the flag + mana entry point and the bare orb-price reading --------------------
+
+## Story 6-2 (AC 4): `flag_and_mana_refusal_reason` answers the flag and the mana half and NOTHING about
+## orbs -- an orb price the pool cannot pay, with the orbs layer ON, is still ALLOWED here, while the
+## full `refusal_reason` refuses the same condition. That pair is what makes staging not orb-gated.
+func test_the_flag_and_mana_entry_point_never_refuses_for_orbs() -> void:
+	var orbs := OrbPool.new(SignalQueue.new())
+	var c := _condition(2.0)
+	c.orb_costs = {Enums.CardColor.RED: 3}
+	var f := FeatureFlags.new()
+	f.orbs = true
+	assert_eq(CastEvaluator.refusal_reason(c, 10.0, orbs, f), CastEvaluator.REASON_INSUFFICIENT_ORBS,
+		"sanity: the full evaluator refuses this condition for orbs")
+	assert_eq(CastEvaluator.flag_and_mana_refusal_reason(c, 10.0, f), CastEvaluator.ALLOWED,
+		"...and the flag + mana entry point allows it: orbs are not its question")
+
+
+## Story 6-2 (AC 4): the entry point keeps `refusal_reason`'s FIXED ORDER for its two checks -- flag
+## before price -- and both reasons in both directions.
+func test_the_flag_and_mana_entry_point_refuses_flag_then_mana() -> void:
+	var c := _condition(5.0)
+	c.required_flag = &"pitch_zone"
+	var closed := FeatureFlags.new()
+	assert_eq(CastEvaluator.flag_and_mana_refusal_reason(c, 1.0, closed),
+		CastEvaluator.REASON_FLAG_CLOSED, "a closed gate outranks an unaffordable price")
+	var open := FeatureFlags.new()
+	open.pitch_zone = true
+	assert_eq(CastEvaluator.flag_and_mana_refusal_reason(c, 1.0, open),
+		CastEvaluator.REASON_INSUFFICIENT_MANA, "gate open, price unaffordable: insufficient mana")
+	assert_eq(CastEvaluator.flag_and_mana_refusal_reason(c, 5.0, open), CastEvaluator.ALLOWED,
+		"gate open, exact price: allowed")
+
+
+## Story 6-2 (AC 10): `orb_costs_affordable` is the READY reading over a bare price -- the same answers
+## `_orbs_affordable` gives for a whole condition, including both graceful-degrade reads.
+func test_orb_costs_affordable_reads_a_bare_price() -> void:
+	var orbs := OrbPool.new(SignalQueue.new())
+	var on := FeatureFlags.new()
+	on.orbs = true
+	var price: Dictionary = {Enums.CardColor.BLUE: 2, Enums.CardColor.GREEN: 1}
+	assert_true(CastEvaluator.orb_costs_affordable({}, orbs, on), "an empty price is satisfied")
+	assert_true(CastEvaluator.orb_costs_affordable(price, orbs, FeatureFlags.new()),
+		"orbs layer off: any price is satisfied")
+	assert_false(CastEvaluator.orb_costs_affordable(price, orbs, on), "empty pool, layer on: not")
+	orbs.add(Enums.CardColor.BLUE, 2)
+	assert_false(CastEvaluator.orb_costs_affordable(price, orbs, on), "one colour short: not")
+	orbs.add(Enums.CardColor.GREEN, 1)
+	assert_true(CastEvaluator.orb_costs_affordable(price, orbs, on), "every colour covered: satisfied")
+
+
 func _condition(cost: float) -> CardCastCondition:
 	var c := CardCastCondition.new()
 	c.mana_cost = cost

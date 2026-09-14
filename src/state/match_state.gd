@@ -170,7 +170,7 @@ static func projectile_index_of(attacker_index: int) -> int:
 
 var p1: PlayerState
 var p2: PlayerState
-var pitch: PitchState        # reserved fizzle-deadline owner (D8), machinery in E6
+var pitch: PitchState        # fizzle-deadline owner (D8): both players' Pitch Zones (story 6-2)
 
 ## Injected via apply_balance() (story 1-1). `balance` holds the non-duration authored
 ## values; `balance_ticks` holds every `*_seconds` field pre-converted to integer ticks —
@@ -361,6 +361,20 @@ var _card_effects: Dictionary[StringName, CardEffect] = {}
 ## is the one COPIED onto `PlayerState.charge_color` at a cast -- a single int, not this map.
 var _card_colors: Dictionary[StringName, Enums.CardColor] = {}
 
+## Story 6-2 (AC 1/AC 2, discharging `E6-P/R9`): the injected per-card PITCH COST map, id ->
+## CardCastCondition -- the FIFTH injection seam, `_card_costs`'s twin in every respect but ONE. It
+## carries Mode ④'s price (mana paid at staging, orbs read as READY afterwards), which genuinely differs
+## per mode, so it is its own map rather than a wider Mode ① record.
+##
+## THE ONE DIFFERENCE: IT IS NOT TOTAL. `inject_pitch_costs` enforces no totality over the composition,
+## because a card whose pitch cost is unauthored is ordinary, legal content (AC 2) that refuses to
+## stage with `REASON_NO_PITCH_COST`, not a load-time crash.
+##
+## NEVER HASHED, like all four siblings: injected CONTENT, never produced by the tick, changed only
+## through a seam that IS a capture channel (`capture_inject_pitch_costs`). What reaches the hash is the
+## orb price COPIED into `PitchState` at staging.
+var _pitch_costs: Dictionary[StringName, CardCastCondition] = {}
+
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
 ## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
@@ -468,6 +482,12 @@ func advance(intents: Array[InputIntent]) -> void:
 	# no landing path, defended or not, touches it (AC 11).
 	p1.defense_window.tick()
 	p2.defense_window.tick()
+	# Story 6-2 (AC 9/AC 14e): both Pitch Zone FIZZLE countdowns advance HERE, beside every other D4
+	# timer, and the step-6 expiry seat reads the result -- the `pending_draw` idiom verbatim (ticked at
+	# step 2, consumed later in the same tick). Seated after step 1b, so a round-over tick never reaches
+	# this line and a staged card's countdown FREEZES with the round (the `2-6/R14` shape every other
+	# countdown here shares). Unguarded like its neighbours: an empty zone's window is stopped.
+	pitch.tick()
 	# Story 4-3b (AC 1): the UNIT attack rhythm counts down HERE, beside every other D4 timer, and
 	# the step-3 seat below reads the result — the hero's own `tick_timers()` shape, for a container
 	# instead of an object (A1: integer ticks, one per advance(), never a float accumulator). The
@@ -557,6 +577,14 @@ func advance(intents: Array[InputIntent]) -> void:
 	_deal_pending_decks()
 	_resolve_card_action(p1, p1_intent, 0)
 	_resolve_card_action(p2, p2_intent, 1)
+	#    Story 6-2 (AC 11/AC 14e): the PITCH FIZZLE EXIT, seated AFTER the card dispatch and BEFORE the
+	#    pending-draw delivery, and both edges are load-bearing. After the dispatch, so a card staged
+	#    THIS tick against a zero-tick countdown fizzles on its own staging tick rather than one late.
+	#    Before the delivery, so the replacement the fizzle owes rides the SAME delivery pass: with a
+	#    zero delay too, the vacated slot is refilled on the fizzle tick itself -- `_resolve_basic_cast`'s
+	#    zero-delay degrade, reached from a different debt.
+	_resolve_pitch_expiry(p1, 0)
+	_resolve_pitch_expiry(p2, 1)
 	#    Story 3-5b (AC 3/AC 5): the PENDING-DRAW DELIVERY, third and last in this one seat, and
 	#    the ordering is load-bearing in both directions. AFTER the cast dispatch, because a
 	#    derived delay of ZERO ticks must still refill on the cast tick (TimingWindow.start(0)
@@ -732,6 +760,26 @@ func inject_card_colors(colors: Dictionary[StringName, Enums.CardColor]) -> void
 		Invariant.check(colors.has(id),
 			"injected deck id %s has no card colour entry - inject_card_colors must be total over the composition" % id)
 	_card_colors = colors.duplicate()
+
+
+## Story 6-2 (AC 2, `E6-P/R9`): the PITCH-COST injection seam -- the fifth content channel, and the
+## four seams above followed for everything but their checks: runner-only, ONCE at match start,
+## CONTENT ONLY, no reload path, a copy retained. It rides the record on its own capture channel
+## (`capture_inject_pitch_costs`), so a card re-priced in data/cards/ after a recording cannot change
+## what a replay's staging pays.
+##
+## NO `Invariant.check` AT ALL, AND THAT IS THE AC (AC 2), not an omission. Its siblings enforce
+## non-empty and total-over-the-composition because a missing Mode ① cost or colour is a broken card.
+## A missing PITCH cost is not: the pitch numbers are provisional content, and a card added without one
+## is legal -- it simply refuses to stage with `REASON_NO_PITCH_COST`. An EMPTY map is legal for the
+## same reason (no card authors pitch content). Enforcing totality here would turn authoring a new card
+## into a load-time crash.
+##
+## ORDER-INSENSITIVE, UNLIKE ITS SIBLINGS: with no check reading `_deck_contents`, nothing about this
+## seam depends on the composition already being in. It is still injected LAST, after the colours, so
+## `IntentRecorder.SOUND_CONTENT_ORDER` stays one straight line the runner and the record both follow.
+func inject_pitch_costs(costs: Dictionary[StringName, CardCastCondition]) -> void:
+	_pitch_costs = costs.duplicate()
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -2514,10 +2562,10 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 		return
 	if player.hero.action_state == HeroState.ActionState.DEAD:
 		return
-	# AC 2's guarded stubs. ONE mode resolves in E3; the other three are declared so they CAN be
-	# guarded (see Enums.ModeKind) and are unreachable — the controller never produces them, and
-	# reaching one is a programming error, not a player-facing refusal. Invariant.check is the
-	# guard helper (`check_invariant` names no real symbol anywhere in this repo).
+	# Story 6-2 (AC 17a): EVERY declared `Enums.ModeKind` now has its own arm below, so the `_` arm is no
+	# longer a guarded stub for an unshipped mode -- it is the total-function default for an int that
+	# is not a ModeKind at all (a corrupt intent), and reaching it is still a programming error, not a
+	# player-facing refusal. Invariant.check is the guard helper.
 	match intent.card_mode:
 		Enums.ModeKind.BASIC:
 			_resolve_basic_cast(player, intent.card_slot, slot)
@@ -2533,9 +2581,13 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 		# SECOND time rather than deleted (the `5-2/R8` precedent, applied again).
 		Enums.ModeKind.DEFENSE:
 			_resolve_defense_cast(player, intent.card_slot, slot)
+		# Story 6-2 (AC 3): mode ④ gets its own arm, the fourth and last. What it resolves is STAGING
+		# -- the card enters its owner's Pitch Zone; activation and cancel are `6-4`'s.
+		Enums.ModeKind.PITCH:
+			_resolve_pitch_stage(player, intent.card_slot, slot)
 		_:
 			Invariant.check(false,
-				"card mode %d is a guarded stub and is unreachable in E3 (only BASIC resolves)"
+				"card mode %d has no dispatch arm (every declared ModeKind resolves; this int is not one)"
 						% int(intent.card_mode))
 
 
@@ -2706,6 +2758,114 @@ const REASON_UNBLOCKABLE_COMMITTED := &"unblockable_committed"
 ## the `REASON_EMPTY_SLOT` reuse precedent applied a second time: the player-visible fact is the same
 ## fact in both places, so inventing a per-seat token would name the mechanism instead of the fact.
 const REASON_STUNNED := &"stunned"
+
+
+## Story 6-2 (AC 5): a card with NO INJECTED PITCH COST refuses to stage with THIS reason -- minted here
+## rather than borrowing `CastEvaluator.REASON_UNKNOWN_CARD`, whose own header documents it
+## "UNREACHABLE BY CONSTRUCTION" because `inject_card_costs` is total. `inject_pitch_costs` deliberately
+## is NOT total (AC 2), so this refusal is a real, reachable path for any card whose pitch content is
+## unauthored, and reusing that constant would falsify its documented invariant. Lowercase StringName
+## naming the player-visible fact, the `REASON_STUNNED` token convention.
+const REASON_NO_PITCH_COST := &"no_pitch_cost"
+
+## Story 6-2 (AC 6): ONE STAGED CARD PER PLAYER. A stage attempt while this player's zone already holds
+## a card -- waiting or READY alike -- refuses with this reason: never a crash and never a silent
+## overwrite of the card already there. A state-side OCCUPANCY conflict the evaluator never sees, so it
+## lives here beside `REASON_UNBLOCKABLE_COMMITTED` / `REASON_STUNNED` and not on `CastEvaluator`.
+const REASON_PITCH_ZONE_OCCUPIED := &"pitch_zone_occupied"
+
+
+## Story 6-2 (AC 3-8a/AC 12): mode ④ resolution -- STAGING. The card leaves the hand into its owner's
+## Pitch Zone, its mana is paid, and its public countdown starts. `_resolve_basic_cast` is the shape;
+## every difference is ruled, and each is named where it happens.
+##
+## THE GUARD ORDER IS LAYER FLAG -> STATE GATE -> EMPTY SLOT -> OCCUPIED ZONE -> PITCH-COST LOOKUP ->
+## FLAG + MANA. The layer gate first is modes ② and ③'s `5-2/R13` ordering: "does this layer exist at
+## all" precedes "may I use it right now". The state gate mirrors `_resolve_basic_cast`'s CHARGING /
+## STUNNED pair, reasons included. The empty-slot guard precedes the cost lookup for `4-0`'s AC 7
+## reason (a hole never reaches a cost map). Nothing above the spend mutates anything, so every refusal
+## leaves the hand, the mana, the orbs and the zone untouched (AC 5).
+##
+## `CastEvaluator.refusal_reason` IS NOT CALLED (AC 4): its orb check would refuse a player who has not
+## banked the orbs yet, and staging is exactly how a player commits BEFORE banking them. The flag + mana
+## half is `CastEvaluator.flag_and_mana_refusal_reason`, which `refusal_reason` itself calls -- so the
+## two paths share that half by construction.
+##
+## THE HOLE IS MADE, THE DEBT IS NOT (AC 3/AC 8, Fact 7's ruling). `hand.remove_at()` vacates the slot
+## exactly as a cast does, but NOTHING is appended to `pending_draw_owed` here: the slot is held empty
+## and RESERVED -- its index is recorded in the zone -- and the replacement is owed only when the card
+## LEAVES the zone (`_resolve_pitch_expiry`). Nothing can deal into it meanwhile: delivery only ever
+## fills an OWED slot.
+##
+## THE OPTIONAL ORB CLEAR (AC 12) fires AFTER the spend and hole and BEFORE the record exists, so READY is
+## first read against the cleared pool. It is keyed to the ACT of staging -- "pitching clears", not
+## "the price clears" -- so a zero-orb-cost card clears the pool too when the switch is ON.
+## `OrbPool.reset_all()` is reused (its second call site; `_reset_player` is the first).
+##
+## NO `card_cast_resolved` IS QUEUED: nothing resolved -- the card is waiting, not played. The ONE
+## announcement is `notify_cards_changed()` (AC 8a), because the hand's occupancy changed.
+##
+## FROZEN TICKS AND A DEAD HERO never reach this function, inherited from `_resolve_card_action`
+## unchanged, exactly as for modes ① to ③.
+func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> void:
+	# The LAYER GATE, read INLINE (CONSTRAINT C) from the INJECTED flags; null reads CLOSED, and
+	# `CastEvaluator.REASON_FLAG_CLOSED` is borrowed as a constant -- modes ② and ③'s shape exactly.
+	if flags == null or not flags.pitch_zone:
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_FLAG_CLOSED)
+		return
+	if player.hero.action_state == HeroState.ActionState.CHARGING:
+		player.hero.reject_action(&"card_cast", REASON_UNBLOCKABLE_COMMITTED)
+		return
+	elif player.hero.action_state == HeroState.ActionState.STUNNED:
+		player.hero.reject_action(&"card_cast", REASON_STUNNED)
+		return
+	if player.hand.is_slot_empty(hand_slot):
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
+		return
+	if pitch.is_staged(slot):
+		player.hero.reject_action(&"card_cast", REASON_PITCH_ZONE_OCCUPIED)
+		return
+	var id: StringName = player.hand.to_array()[hand_slot]
+	var condition: CardCastCondition = _pitch_costs.get(id)
+	if condition == null:
+		player.hero.reject_action(&"card_cast", REASON_NO_PITCH_COST)
+		return
+	var reason := CastEvaluator.flag_and_mana_refusal_reason(condition,
+			player.mana.get_current(), flags)
+	if reason != CastEvaluator.ALLOWED:
+		player.hero.reject_action(&"card_cast", reason)
+		return
+	Invariant.check(player.mana.spend(condition.mana_cost),
+		"an ALLOWED staging must be affordable — CastEvaluator and ManaPool disagree")
+	var staged := player.hand.remove_at(hand_slot)
+	# `balance` / `balance_ticks` are non-null below the empty-slot guard, `_resolve_basic_cast`'s
+	# reason: a hand is non-empty only once the step-6 deal ran, and the deal needs balance.
+	if balance.pitch_stage_clears_orbs:
+		player.orbs.reset_all()
+	pitch.stage(slot, staged, hand_slot, condition.orb_costs, balance_ticks.pitch_stage_timer_ticks)
+	player.notify_cards_changed()
+
+
+## Story 6-2 (AC 8/AC 8a/AC 11): THE FIZZLE EXIT -- the ONLY way a card leaves the Pitch Zone in this
+## story (cancel and activation are `6-4`'s). When a staged card's countdown has closed, READY or not,
+## the card goes to its owner's DISCARD (never back to the hand), and ONLY NOW is the replacement owed:
+## the reserved slot index is appended to `pending_draw_owed` and the window started at the normal
+## delay, the identical FIFO `_resolve_basic_cast` feeds, triggered at a different tick. This is the
+## GDD's "fizzle -> discarded + draw" as exactly ONE draw.
+##
+## THE MANA IS NOT REFUNDED. It was paid at staging for a chance; the chance expired.
+##
+## THE SECOND ANNOUNCEMENT SEAT (AC 8a), its own call rather than a reuse of the staging one: the discard
+## pile and the owed list both changed on this tick.
+func _resolve_pitch_expiry(player: PlayerState, slot: int) -> void:
+	if not pitch.is_expired(slot):
+		return
+	var hand_slot := pitch.staged_hand_slot(slot)
+	player.discard.add(pitch.staged_card_id(slot))
+	pitch.clear(slot)
+	player.pending_draw_owed.append(hand_slot)
+	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+	player.notify_cards_changed()
 
 
 ## Story 5-2 (AC 2, `5-2/R11`): THE S6 GATE -- whether this hero may initiate mode (2) right now, as
@@ -3914,7 +4074,11 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ## state, cleared together in _reset_player below for the identical traced reason. `_end_round` again
 ## gains no matching clear.
 ##
-## These are FIVE named exceptions; they do not open the reset's contract generally.
+## STORY 6-2 (AC 14d): A SIXTH NAMED EXCEPTION -- both players' PITCH ZONES, emptied in _reset_player
+## below. A staged card must not survive into the redeal (its id would exist twice) and its countdown,
+## frozen by step 1b, must not fizzle in the next round. `_end_round` again gains no matching clear.
+##
+## These are SIX named exceptions; they do not open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -3996,6 +4160,14 @@ func _reset_player(player: PlayerState) -> void:
 	var reset_slot := 0 if player == p1 else 1
 	_charge_reach[reset_slot] = REACH_UNKNOWN
 	_charge_contact_dirs[reset_slot] = Vector2.ZERO
+	# STORY 6-2 (AC 14d): THE SIXTH NAMED EXCEPTION -- this player's PITCH ZONE, emptied with its
+	# countdown stopped. Without it the step-6 deal this same reset re-arms would lay the FULL composition
+	# back down while the staged card's id still sat in the zone -- one card in two places -- and a
+	# countdown frozen by the round-over freeze would fizzle into the next round. NOTHING goes to the
+	# discard and NO replacement is owed: the deal re-lays the whole composition, which is where the
+	# staged card returns to (the `pending_draw_owed.clear()` reasoning in `_deal_player`). The spent
+	# mana is not refunded, the parked mana-survives-reset finding unchanged.
+	pitch.clear(reset_slot)
 	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
 	# fact in two parts, exactly as the chargeup's three and the defense window's two are.
 	hero.stun.start(0)

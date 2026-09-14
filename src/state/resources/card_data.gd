@@ -34,10 +34,23 @@ extends Resource
 
 ## Mode ④ (Pitch): reserved for E6. Left UNAUTHORED (null) on every card this story ships —
 ## the pitch mode is not designed yet and its cost side (mana + orbs) is not authored here.
+## (Story 6-2 authors the COST side as `pitch_condition` below; this EFFECT field stays null.)
 @export var pitch_effect: CardEffect
 
 ## What Mode ① costs. Literal per-card content — see CardCastCondition.
 @export var cast_condition: CardCastCondition
+
+## Story 6-2 (AC 1, discharging `E6-P/R9`): what Mode ④ COSTS to stage -- the SAME CardCastCondition
+## schema `cast_condition` uses, reused verbatim rather than a new Resource type, because the cost
+## genuinely differs per mode (GDD's Hellburst: 5 mana + 2 orbs against a 3-mana basic cast) and a
+## single shared field could not say so. Its `mana_cost` is paid at staging, its `orb_costs` are the
+## READY requirement read afterwards, and its `required_flag` is the flag half of the staging check.
+##
+## AUTHORED on all nine starter cards, PROVISIONALLY (AC 1a) -- a `.tres` edit retunes it. NULLABLE by
+## contract all the same: a card without one is ordinary unauthored pitch content that refuses to
+## stage with its own reason, never a load-time crash (AC 2). The EFFECT side, `pitch_effect` above,
+## stays unauthored.
+@export var pitch_condition: CardCastCondition
 
 ## Deck-building cap: how many copies of this card one 20-card deck may hold. PER-CARD DATA,
 ## not a BalanceConfig field — discharging the obligation 3-1's gate assigned here (its Q1

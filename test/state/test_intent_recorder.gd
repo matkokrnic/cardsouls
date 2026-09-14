@@ -114,7 +114,12 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 	# position: the scan sorts before comparing, and `colors` precedes `costs`.
 	"_init", "advance", "apply_balance", "inject_card_colors", "inject_card_costs",
 	"inject_card_effects",
-	"inject_deck", "inject_feature_flags", "push_contact", "set_camera_basis",
+	"inject_deck", "inject_feature_flags",
+	# Story 6-2 (AC 16): `inject_pitch_costs` is MatchState's ELEVENTH intake and the FIFTH content
+	# channel, shipping WITH `capture_inject_pitch_costs` -- the `5-2` colours precedent verbatim, this
+	# pin updated with intent while the channel check below is the falling guard. Sorted position.
+	"inject_pitch_costs",
+	"push_contact", "set_camera_basis",
 	# Story 4-6 (AC 2, `4-6/R6`): the SIXTH pushed-fact intake -- the per-tick lock direction, in
 	# sorted position beside the basis it is a sibling of. It arrives WITH its
 	# `capture_set_lock_direction` channel, which is exactly what this scan exists to force.
@@ -123,6 +128,7 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 
 
 const DECK_IDS: Array[StringName] = [&"rec_card_a", &"rec_card_b", &"rec_card_c"]
+const PITCH_MANA := 6.0
 
 
 # ---------------------------------------------------------------- AC 1
@@ -295,6 +301,13 @@ func test_content_channels_carry_the_composition_the_costs_the_effects_and_their
 		"the colour map is total over that composition on the record too")
 	assert_eq(int(rec.replay_card_colors()[DECK_IDS[0]]), int(Enums.CardColor.RED),
 		"...and each colour comes back BY VALUE, as the plain enum it was captured as")
+	# Story 6-2 (AC 16): the fifth content channel. NOT total (AC 2) -- the fixture prices ONE card --
+	# and its orb price must survive BY VALUE into the typed dictionary, not come back silently empty.
+	assert_eq(rec.replay_pitch_costs().keys(), [DECK_IDS[0]] as Array[StringName],
+		"the pitch-cost map comes back as captured, partial coverage and all")
+	var pitch: CardCastCondition = rec.replay_pitch_costs()[DECK_IDS[0]]
+	assert_eq(pitch.mana_cost, PITCH_MANA, "...its mana price by value")
+	assert_eq(pitch.orb_costs, {Enums.CardColor.GREEN: 2}, "...and its ORB price by value")
 	assert_eq(rec.content_order(), IntentRecorder.SOUND_CONTENT_ORDER,
 		"the record carries the ORDER, captured from the calls rather than assumed")
 
@@ -315,9 +328,10 @@ func test_content_channels_carry_the_composition_the_costs_the_effects_and_their
 	inverted.capture_inject_deck(DECK_IDS)
 	inverted.capture_inject_card_effects(_effects())
 	inverted.capture_inject_card_colors(_colors())
+	inverted.capture_inject_pitch_costs(_pitch_costs())
 	assert_eq(inverted.content_order(),
 		[IntentRecorder.CHANNEL_COSTS, IntentRecorder.CHANNEL_DECK, IntentRecorder.CHANNEL_EFFECTS,
-			IntentRecorder.CHANNEL_COLORS],
+			IntentRecorder.CHANNEL_COLORS, IntentRecorder.CHANNEL_PITCH_COSTS],
 		"sanity: the inverted record really did capture the channels in an unsound order")
 	var broken := _bare_match()
 	assert_false(inverted.replay_inject_content(broken),
@@ -350,6 +364,9 @@ func test_a_record_missing_any_match_start_channel_is_malformed() -> void:
 		"effects": "card effects",
 		# Story 5-2 (`5-2/R1`): the SEVENTH match-start channel, on the sixth's exact footing.
 		"colors": "card colours",
+		# Story 6-2 (AC 16): the EIGHTH match-start channel. Keyed to CAPTURE, not emptiness -- see
+		# test_an_empty_pitch_cost_capture_is_a_complete_match_start below for the other half.
+		"pitch_costs": "pitch costs",
 	}
 	for omitted: String in expected:
 		var rec := _match_start_record(omitted)
@@ -357,6 +374,18 @@ func test_a_record_missing_any_match_start_channel_is_malformed() -> void:
 			"a record with no %s is malformed" % omitted)
 		assert_eq(rec.missing_match_start_channels(), [expected[omitted]],
 			"...and says exactly which channel is missing")
+
+
+## Story 6-2 (AC 2/AC 16): the OTHER half of the pitch-cost clause. An EMPTY pitch-cost map is legal
+## content (no card authoring pitch content), so capturing one completes match start -- the clause is
+## keyed to the capture having HAPPENED, which is why it cannot be read off emptiness like its siblings.
+func test_an_empty_pitch_cost_capture_is_a_complete_match_start() -> void:
+	var rec := _match_start_record("pitch_costs")
+	assert_false(rec.has_complete_match_start(), "sanity: with no pitch-cost capture it is incomplete")
+	var empty: Dictionary[StringName, CardCastCondition] = {}
+	rec.capture_inject_pitch_costs(empty)
+	assert_true(rec.has_complete_match_start(), "an EMPTY pitch-cost capture completes match start")
+	assert_eq(rec.content_order(), IntentRecorder.SOUND_CONTENT_ORDER, "...in the sound order")
 
 
 func test_the_match_start_completeness_guard_is_wired_at_the_capture_seam() -> void:
@@ -490,6 +519,18 @@ func _effects() -> Dictionary[StringName, CardEffect]:
 	return out
 
 
+## Story 6-2 (AC 16): the pitch-cost map for the fixture -- deliberately PARTIAL (one card priced),
+## because non-totality is legal for this channel (AC 2), and carrying an orb price so the by-value
+## rebuild of the typed `orb_costs` dictionary is actually exercised.
+func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	var c := CardCastCondition.new()
+	c.mana_cost = PITCH_MANA
+	c.orb_costs[Enums.CardColor.GREEN] = 2
+	out[DECK_IDS[0]] = c
+	return out
+
+
 func _bare_match() -> MatchState:
 	var ms := MatchState.new(MatchParams.new(1337))
 	ms.apply_balance(_config())
@@ -524,6 +565,9 @@ func _match_start_record(omit := "") -> IntentRecorder:
 	# is malformed, and the version bump is what that statement is worth.
 	if omit != "colors":
 		rec.capture_inject_card_colors(_colors())
+	# Story 6-2 (AC 16): the FIFTH content channel, captured LAST and omittable on the same footing.
+	if omit != "pitch_costs":
+		rec.capture_inject_pitch_costs(_pitch_costs())
 	return rec
 
 

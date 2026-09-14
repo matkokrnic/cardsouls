@@ -931,7 +931,69 @@ extends TestCase
 ##     colour copy, the landing intercept and the reset clear -- because the fixture never casts
 ##     mode ③ and pushes no charge-reach fact. They are proven in test_unblockable_defense.gd.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "9679fa80f19358d15c9b33b1f9a3706264095ada871e5d2530cf29b6cbce8315"
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 6-2 (pitch staging), 9679fa80 -> 72d3cc6e, ONE CAUSE, MEASURED IN BOTH
+## DIRECTIONS. The story's Golden Prediction was MOVED, certain by construction, single named cause.
+##
+##   THE ONE CAUSE: `PitchState.to_snapshot()`'s NESTED SHAPE. The `"pitch"` key already sat in the
+##     hashed run carrying a constant `{"fizzle": <stopped window>}`; it now carries both players' zone
+##     records, `{"p1": {card_id, hand_slot, orb_costs, fizzle}, "p2": {...}}`. The TOP-LEVEL key set is
+##     unchanged (`"pitch"` existed), pinned by test_debug_window_countdown.gd's top-level assertion.
+##
+##   ITS SHAPE IS THE MOVER; ITS VALUES NEVER LEAVE THE EMPTY RECORD. This fixture never commits
+##     `card_mode == PITCH`, so both zones hash empty on every tick.
+##
+##   THE REVERSE DIRECTION, which is what makes the single cause attributable: with ONLY
+##     `PitchState.to_snapshot()` returning its pre-story shape (`{"fizzle": _fizzle[0].to_snapshot()}`)
+##     and EVERYTHING ELSE this story ships left in place -- the per-slot zone members, the step-2
+##     `pitch.tick()`, the PITCH dispatch arm and staging seat, the step-6 fizzle seat, the reset clear,
+##     the fifth injection seam, the two BalanceConfig fields and their BalanceTicks twin -- this file
+##     hashed 9679fa80 EXACTLY (test_state_matches_golden PASSED). Measured at the dev pass and restored
+##     from a SHA256-verified out-of-repo copy.
+##
+##   NON-MOVER 1, `data/feature_flags.tres`'s `pitch_zone = true` (AC 2a): MEASURED, not assumed. With the
+##     authored line removed and every code change in place this file hashed 72d3cc6e, identical to the
+##     flag-open run -- `_golden_flags()` builds its own FeatureFlags and never reads the authored file.
+##
+##   NON-MOVER 2, `FORMAT_VERSION` 8 -> 9 and the new `capture_inject_pitch_costs` channel: the recorder
+##     has no path into `MatchState.to_snapshot()`, and this fixture injects no pitch-cost map at all
+##     (the seam is optional state-side, AC 2).
+##
+##   NON-MOVER 3, the nine authored card pitch costs and the two new balance fields: `.tres` content
+##     isolated by `BC/R3` -- the golden builds its own config, composition and costs in-test.
+##
+##   CAUSES UNREACHABLE HERE, named so nobody reads a green golden as coverage of them: the whole
+##     staging chain -- layer gate, refusals, spend, hole, optional orb clear, countdown, READY, fizzle
+##     and its owed replacement, reset clear -- because the fixture never stages. They are proven in
+##     test_pitch_staging.gd and, through a recorded run that stages, in test_replay_identity.gd.
+## ---------------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED A SECOND TIME BY STORY 6-2's REVIEW FIX PASS (finding H1), 72d3cc6e -> 9ed4c903,
+## ONE CAUSE, MEASURED IN BOTH DIRECTIONS. A SEPARATE cause from the first re-baseline above.
+##
+##   THE ONE CAUSE: `PitchState.to_snapshot()`'s per-zone dict SHRINKS. Review finding H1 found the
+##     staged card's orb PRICE hashed alongside its identity -- card `.tres` CONTENT, which `3-2`'s
+##     close-out rules must never enter the hashed run (a reprice must never re-baseline the golden).
+##     The `"orb_costs"` key is removed from `_zone_snapshot()`; each zone now carries three keys
+##     (`card_id`, `hand_slot`, `fizzle`), not four. `_orb_costs` stays a `PitchState` member (an
+##     unhashed cache `is_ready()` reads live), so nothing about READY or staging behaviour changed --
+##     only the snapshot's SHAPE.
+##
+##   ITS SHAPE IS THE MOVER AGAIN; ITS VALUES NEVER LEFT THE EMPTY RECORD EITHER TIME. This fixture
+##     still never commits `card_mode == PITCH` (the first re-baseline's note above, unchanged), so
+##     both zones hash empty on every tick before and after this fix.
+##
+##   THE REVERSE DIRECTION: with ONLY `_zone_snapshot()` returning the FOUR-key shape again
+##     (`orb_costs` restored) and every other review fix in place, this file hashed `72d3cc6e…`
+##     EXACTLY (`test_state_matches_golden` PASSED) -- the pre-fix-pass golden, reproduced. Measured
+##     at the fix pass and restored from a SHA-256-verified out-of-repo copy
+##     (`5cf13c9514029570b3a452ed1c3e8c7fab6498d5b4e252fde9fa1fdc596ef3fc`, before == after).
+##
+##   NOTHING ELSE MOVED: `UNHASHED_CROSS_TICK_MEMBERS` moving 3 -> 4 (`_orb_costs` reclassified,
+##     `test_replay_identity.gd`) is a CLASSIFICATION change, not a snapshot-shape change, and carries
+##     no hash consequence by construction -- confirmed by this being the ONLY named cause above.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "9ed4c9035a89b3219623dc129d73693e6871049bc9c48f672bc5554d49f5d5b2"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

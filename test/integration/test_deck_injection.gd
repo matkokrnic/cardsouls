@@ -62,18 +62,20 @@ func _physics_process(_delta: float) -> bool:
 	var seam_ok := false
 	var counts_ok := false
 	var composition_ok := false
+	var pitch_ok := false
 	if state != null and config != null and db != null:
 		seam_ok = state.p1.deck.size() > 0 and state.p2.deck.size() > 0
 		if not seam_ok:
 			_notes.append("live decks are EMPTY — the injection seam did not reach state")
 		counts_ok = _check_counts(state, config)
 		composition_ok = _check_composition(state, db, config)
+		pitch_ok = _check_pitch_costs(runner, state, db)
 	else:
 		_notes.append("could not reach runner / MatchState / CardDatabase / authored config")
 
-	var ok := sorted_ok and seam_ok and counts_ok and composition_ok
-	print("deck_injection: sorted=%s seam=%s counts=%s composition=%s | %s" % [
-		sorted_ok, seam_ok, counts_ok, composition_ok, "; ".join(_notes)])
+	var ok := sorted_ok and seam_ok and counts_ok and composition_ok and pitch_ok
+	print("deck_injection: sorted=%s seam=%s counts=%s composition=%s pitch=%s | %s" % [
+		sorted_ok, seam_ok, counts_ok, composition_ok, pitch_ok, "; ".join(_notes)])
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	quit(0 if ok else 1)
 	return true
@@ -128,6 +130,44 @@ func _check_counts(state: MatchState, config: BalanceConfig) -> bool:
 				int(slot[0]) + 1, player.deck.size(), config.deck_size - config.hand_size])
 			ok = false
 	return ok
+
+
+## Story 6-2 (AC 2/AC 16): the runner DERIVES the pitch-cost map from the live CardDatabase, INJECTS it
+## into MatchState and CAPTURES it on the recorder -- all three checked against the library itself: an
+## entry for exactly the cards that author a `pitch_condition` (all nine today, AC 1a), the SAME authored
+## condition reaching state, and the same ids on the record. Private `_pitch_costs` is read for this
+## file's stated reason: no presentation surface exists for pitch content until 6-3.
+func _check_pitch_costs(runner: Node, state: MatchState, db: Node) -> bool:
+	var expected: Array[StringName] = []
+	for id: StringName in db.sorted_ids():
+		var card := db.get_card(id) as CardData
+		if card != null and card.pitch_condition != null:
+			expected.append(id)
+	if expected.is_empty():
+		_notes.append("no authored card carries a pitch_condition -- the check below would be vacuous")
+		return false
+	# Compared as sorted STRINGS: Array[StringName].sort() orders by internal POINTER on this engine.
+	var injected := _sorted_strings(state._pitch_costs.keys())
+	if injected != _sorted_strings(expected):
+		_notes.append("injected pitch-cost ids %s != authored %s" % [injected, expected])
+		return false
+	for id: StringName in expected:
+		if state._pitch_costs[id] != (db.get_card(id) as CardData).pitch_condition:
+			_notes.append("injected pitch cost for %s is not the authored condition" % id)
+			return false
+	var recorded := _sorted_strings((runner.recorded_stream() as IntentRecorder).replay_pitch_costs().keys())
+	if recorded != _sorted_strings(expected):
+		_notes.append("recorded pitch-cost ids %s != authored %s" % [recorded, expected])
+		return false
+	return true
+
+
+func _sorted_strings(ids: Array) -> Array[String]:
+	var out: Array[String] = []
+	for id: Variant in ids:
+		out.append(String(id))
+	out.sort()
+	return out
 
 
 ## AC 4. Deck + hand is the injected composition; check the walk's rule on it directly.

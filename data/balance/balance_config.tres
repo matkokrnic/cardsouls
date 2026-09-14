@@ -144,3 +144,5 @@ unblockable_orb_grant = 1
 defense_stamina_cost = 10.0
 defense_window_seconds = 1.5
 max_orbs_per_color = 5
+pitch_stage_timer_seconds = 20.0
+pitch_stage_clears_orbs = false

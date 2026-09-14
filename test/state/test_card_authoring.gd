@@ -26,6 +26,9 @@ const MAX_COPIES := 3
 ## below hold for spellings nobody thought to ban.
 const CARD_DATA_FIELDS: Array[String] = [
 	"id", "color", "basic_effect", "pitch_effect", "cast_condition", "max_copies",
+	# Story 6-2 (AC 1, `E6-P/R9`): the Mode ④ COST seat, the SEVENTH authored field -- the "story that
+	# asks for it" this pin's own header demands.
+	"pitch_condition",
 ]
 
 
@@ -41,7 +44,7 @@ func test_card_data_exports_exactly_the_authored_field_set() -> void:
 	declared.sort()
 	var expected := CARD_DATA_FIELDS.duplicate()
 	expected.sort()
-	assert_eq(declared, expected, "CardData exports exactly the six authored fields")
+	assert_eq(declared, expected, "CardData exports exactly the seven authored fields")
 
 
 ## AC 7, the negative guard, stated as its own test so the failure message names the RULE.
@@ -177,6 +180,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	assert_eq(spells, 3, "...and three are spells (`4-1/R3`: no authored card is a third kind)")
 
 
+## STORY 6-2 (AC 1b): EXTENDED, not replaced. `pitch_effect` still stays null on every card -- the
+## EFFECT side of Mode ④ is unauthored -- and its inverse is now asserted on the same fixtures: the COST
+## side, `pitch_condition`, is NON-null on every card (AC 1a). The provisional NUMBERS are deliberately
+## not pinned here, so a retune stays a `.tres` edit with no test edit (`BC/R3`).
 func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 	for card in _load_cards():
 		assert_not_null(card.basic_effect, "card '%s' authors a basic effect" % card.id)
@@ -185,6 +192,19 @@ func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 		assert_null(card.pitch_effect, "card '%s' leaves pitch_effect unauthored (E6)" % card.id)
 		assert_eq(card.cast_condition.orb_costs.size(), 0,
 			"card '%s' pays no orbs for Mode ① — orbs are pitch-only (GDD §D)" % card.id)
+		assert_not_null(card.pitch_condition,
+			"card '%s' authors a pitch COST (story 6-2, AC 1a) -- the inverse of pitch_effect above" % card.id)
+		if card.pitch_condition != null:
+			# PER-CARD, not library-wide (`M3`): a library-wide `priced_in_orbs > 0` survives a SINGLE
+			# card's price regressing to empty (`pitch_condition` stays non-null, only `orb_costs` empties)
+			# because some other card still counts. Asserted here, inside the loop that already visits
+			# every card, so one card's regression fails on that card alone.
+			assert_true(card.pitch_condition.orb_costs.size() > 0,
+				("card '%s' authors an orb price for its pitch cost (AC 1a) -- the typed `orb_costs` "
+				+ "dictionary really parses out of the .tres rather than loading silently empty") % card.id)
+			for color: Variant in card.pitch_condition.orb_costs:
+				assert_true(Enums.CardColor.values().has(int(color)) and int(card.pitch_condition.orb_costs[color]) > 0,
+					"card '%s' prices its pitch in real colours, positive counts" % card.id)
 
 
 ## AC 2's "same shape ResourceGenerationRule.required_flag uses", checked rather than asserted

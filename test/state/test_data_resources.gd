@@ -152,6 +152,13 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# on top of the `>= 0.0` loop below: a 0.0 cost makes the defense free, and a 0.0 window derives
 	# 0 ticks, never runs, and makes every defense cast negate nothing -- the story shipped invisible.
 	"defense_stamina_cost", "defense_window_seconds",
+	# Story 6-2 (AC 9/AC 17): the Pitch Zone countdown. Its `_seconds` suffix makes half (b) below demand a
+	# stem-matched `pitch_stage_timer_ticks` on BalanceTicks; half (a) demands this entry. The optional
+	# orb-clear BOOL (`pitch_stage_clears_orbs`) is NOT listed and does not need to be: reflection below
+	# collects only TYPE_FLOAT / TYPE_INT properties, so a bool is invisible to both halves by
+	# construction -- the `unblockable_swing_at_commit` precedent. It carries a bespoke > 0 bound in
+	# test_balance_authoring.gd, for the `defense_window_seconds` reason.
+	"pitch_stage_timer_seconds",
 ]
 
 
@@ -410,3 +417,21 @@ func _find_tres(root: String) -> Array[String]:
 	for d in dir.get_directories():
 		out.append_array(_find_tres(root + d + "/"))
 	return out
+
+
+## Story 6-2 (AC 2a): THE PITCH ZONE LAYER SHIPS OPEN, asserted against the AUTHORED resource -- the
+## `orbs` pin directly above's sibling, and the `5-2/R14` precedent ("THE LAYER GOES ON IN AUTHORED DATA
+## WITH THE STORY THAT BUILDS IT"). A `.tres` that lost the line would fall back to `feature_flags.gd`'s
+## `false` with every test still green, because the tests inject their own FeatureFlags -- a second
+## closed gate the wiring story (6-4) would have to remember to open.
+##
+## MEASURED BLAST RADIUS, stated rather than assumed: no live path produces `card_mode == PITCH` yet
+## (6-4 wires the input), so opening the flag changes no live behaviour today.
+func test_feature_flags_tres_opens_the_pitch_zone_layer() -> void:
+	var flags: Variant = load("res://data/feature_flags.tres")
+	assert_not_null(flags, "feature_flags.tres loads")
+	assert_true(flags is FeatureFlags)
+	if not (flags is FeatureFlags):
+		return
+	assert_true((flags as FeatureFlags).pitch_zone,
+		"data/feature_flags.tres must ship pitch_zone = true -- its staging mechanism landed in 6-2")

@@ -468,6 +468,33 @@ extends Resource
 ## and would ship the story invisible.
 @export var max_orbs_per_color: int = 0
 
+@export_group("Pitch")
+## Story 6-2 (AC 9, `E6-P/R5` provisional 20 s): how long a staged card may wait in its owner's Pitch
+## Zone before it FIZZLES to the discard. Crosses into the tick domain at the ONE boundary
+## (`BalanceTicks.pitch_stage_timer_ticks`, the `defense_window_seconds` shape) and is never compared
+## against a raw float inside `advance()`.
+##
+## Zero default like every sibling duration, and therefore a BESPOKE authored `> 0` bound in
+## test_balance_authoring.gd: a 0.0 derives 0 ticks, `TimingWindow.start(0)` never runs, and every
+## staged card would fizzle on the tick it was staged -- the buildup half of the bluff shipped
+## invisible.
+@export var pitch_stage_timer_seconds: float = 0.0
+## Story 6-2 (AC 12/AC 13): THE OPTIONAL ORB-CLEAR RULE -- "pitching clears, not the price clears".
+## When ON, staging a card empties ALL THREE of the staging player's orb colours at the staging tick,
+## BEFORE READY is first read, whatever the staged card's own orb price is (a zero-orb card included).
+## OFF (the default, and what ships): orbs banked before staging count toward READY immediately.
+##
+## A RULE INSIDE A LIVE SYSTEM, so a BalanceConfig bool and not a FeatureFlags layer -- the
+## `unblockable_swing_at_commit` precedent (`6-1d/R6`) for WHERE it lives, and deliberately NOT for how
+## lightly it is treated: that knob is presentation-only, while this one decides HASHED state (whether
+## orbs are zeroed at a mid-round call site), so both branches are test-covered. Deadline, recorded
+## where it applies: the post-E6 playtest picks a branch, and the losing branch AND this bool are both
+## deleted then.
+##
+## A BOOL, so it is invisible to test_data_resources.gd's float/int reflection and carries no
+## `E1_BALANCE_FIELDS` entry (AC 17) -- its authored-off pin lives in test_balance_authoring.gd.
+@export var pitch_stage_clears_orbs: bool = false
+
 
 ## Story 6-1c: the per-colour lookups over the four unblockable triplets above -- the ONE place a
 ## `charge_color` int selects a field, so the runner and the state layer can never disagree about

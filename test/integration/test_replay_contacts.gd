@@ -119,6 +119,8 @@ func _without_contacts(src: IntentRecorder) -> IntentRecorder:
 	# Story 5-2 (`5-2/R1`): and the FOURTH, for the identical reason -- this helper strips the
 	# CONTACT channel "and nothing else".
 	out.capture_inject_card_colors(src.replay_card_colors())
+	# Story 6-2 (AC 16): and the FIFTH, for the identical reason.
+	out.capture_inject_pitch_costs(src.replay_pitch_costs())
 	for t in range(1, src.tick_count() + 1):
 		for push: Array in src.camera_pushes_at(t):
 			out.capture_set_camera_basis(int(push[0]), push[1] as Basis)

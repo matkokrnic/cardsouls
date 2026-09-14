@@ -169,6 +169,8 @@ func _fixture_record(move_scale: float) -> IntentRecorder:
 	record.capture_inject_card_costs(_costs())
 	record.capture_inject_card_effects(_effects())   # story 4-1: the third content channel
 	record.capture_inject_card_colors(_colors())     # story 5-2: the fourth
+	var no_pitch_costs: Dictionary[StringName, CardCastCondition] = {}
+	record.capture_inject_pitch_costs(no_pitch_costs)  # story 6-2: the fifth (empty is legal, AC 2)
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			record.capture_apply_balance(_config(11.0))

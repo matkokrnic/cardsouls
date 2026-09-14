@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CardData" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="CardData" load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/state/resources/card_data.gd" id="1_card"]
 [ext_resource type="Script" path="res://src/state/resources/card_effect.gd" id="2_effect"]
@@ -12,10 +12,18 @@ effect_id = &"summon_combat_totem"
 script = ExtResource("3_cast")
 mana_cost = 5.0
 
+[sub_resource type="Resource" id="Resource_pitch"]
+script = ExtResource("3_cast")
+mana_cost = 5.0
+orb_costs = Dictionary[int, int]({
+0: 2
+})
+
 [resource]
 script = ExtResource("1_card")
 id = &"hellforge_totem"
 color = 0
 basic_effect = SubResource("Resource_basic")
 cast_condition = SubResource("Resource_cast")
+pitch_condition = SubResource("Resource_pitch")
 max_copies = 2
