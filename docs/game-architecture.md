@@ -368,8 +368,8 @@ autoload is reserved for genuinely global, ownerless events only. It now carries
 consumer that wants an indicator to turn itself off runs its own presentation-local countdown from
 the OPEN event rather than reading state (3-6/R3).
 
-**Observation seam registry (2-4/2-6/3-6/5-4 amendment).** Consumers reach state through
-runner connect seams (`match_runner.gd`), never a state handle. There are now **nine**, plus the
+**Observation seam registry (2-4/2-6/3-6/5-4/6-3b amendment).** Consumers reach state through
+runner connect seams (`match_runner.gd`), never a state handle. There are now **ten**, plus the
 EventBus signals above and one named direct-connect exception (below):
 
 - **Four combat seams:** `connect_hero_action_state_changed`, `connect_hit_landed`,
@@ -385,6 +385,13 @@ EventBus signals above and one named direct-connect exception (below):
   `to_snapshot()` (the 3-0c AC11 exclusion is untouched); this is a live push, never a state read.
 - **One orb seam (added in 5-4, story 5-4/R4):** `connect_orbs_changed` — per-slot, payload
   `{red, blue, green}`, PRIMES ON CONNECT and is own-slot-only, same discipline as `connect_cards_changed`.
+- **One pitch seam (added in 6-3b, `E6-P/R8`(2)):** `connect_pitch_changed` — MATCH-LEVEL like
+  `connect_hit_landed` (no slot argument; the OWNER slot rides the payload), payload `(slot, card_id,
+  hand_slot, ready, remaining_ticks, duration_ticks)`, does NOT prime. Signal home is `MatchState`, because
+  READY needs the zone, the owner's `OrbPool` and the injected flags together. Both HudRoots receive both
+  zones and bind their own slot at wiring. The payload carries no orb count or shortfall (a zone is
+  public; orb counts are not). The countdown is pushed on an authored throttle
+  (`pitch_countdown_push_interval_seconds`), never per tick.
 
 - **Direct connect, NAMED EXCEPTION (5-3/R4).** A presentation consumer may subscribe straight to
   a `MatchState` signal, with no runner seam and no bus relay, when all four hold: read-only, the
@@ -393,7 +400,10 @@ EventBus signals above and one named direct-connect exception (below):
   `card_cast_resolved` -> `HeroCues.on_card_cast_resolved` (`match_runner.gd:501`). Priming
   consumers (a value a HUD must show before the first change) may NOT use this form — they get a
   seam, which is why `connect_orbs_changed` was built rather than a second direct connect
-  (`5-4/R4`). A third instance is a design change and the operator's call.
+  (`5-4/R4`). A third instance is a design change and the operator's call. Since 6-3b the raw
+  `_match_state.<signal>.connect(` sites under `src/main/` are machine-pinned by shape
+  (`test_raw_match_state_connects_are_pinned_by_shape`): wrapper bodies, EventBus relays, and this one
+  inline consumer.
 
 Invariants unchanged: signal payloads only, never a state handle; signals are queued during
 `advance()` and drained afterwards.
@@ -534,8 +544,8 @@ Patterns binding on ALL systems. (Event flow is specified in D5 and not restated
   relays `round_started` from the queued signal drain, same as `round_ended`. The single seat for
   clearing the round-over label is `HudRoot.on_round_started`. Deliberately **no prime-on-connect** for
   `round_started`/`round_ended`/the reshuffle event — each is an *event*, not a value.
-- **Nine `connect_*` seams, frozen count (2-6/R7, raised by 3-6/R2, raised again by 5-4/R4).** The
-  debug `StateInspector` displays only what the nine D5 connect seams already carry; per-tick
+- **Ten `connect_*` seams, frozen count (2-6/R7, raised by 3-6/R2, again by 5-4/R4, and by 6-3b AC 1).**
+  The debug `StateInspector` displays only what the D5 connect seams already carry; per-tick
   timing-window countdown streaming is deliberately deferred — it would firehose state internals
   through the queued-drain path.
 

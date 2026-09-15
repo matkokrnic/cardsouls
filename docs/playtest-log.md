@@ -367,3 +367,32 @@ igrač, nisam imao ni jedno. Vjerujem da radi jer je pokriveno testom, ali
 okom nije viđeno — ostaje za playtest s bratom.
 
 fps uredan.
+
+### 2026-09-15 — 6-3b-pitch-hud (live smoke, 7/7 PASS)
+
+P1 keyboard, P2 gamepad, split screen, one operator. All seven steps passed; no named
+deviation (6-3a closed six-of-seven).
+
+What is now visible that was not before:
+- Two pitch zones per half — own left of the vitals bars (anchor B), opponent's right.
+  The 2-6 dead-centre placeholder and its A/B switch are gone.
+- A staged card shows id, a draining countdown bar and a READY state in both zones.
+- NO orb number appears in either zone. Shortfall is read by eye from the 5-4 orb
+  counters against the card's price.
+- The staged card's hand slot shows a dimmed ghost of that card, not a blank slot, and
+  becomes "..." when the window expires.
+
+Observed behaviour worth carrying into the playtest block:
+- READY flips on both halves on the same tick the landing grants the orb — the
+  match-level seam means both players learn it simultaneously. Confirmed by eye.
+- The countdown bar moves twice a second (30-tick push). Legible under F2 stepping;
+  looked smooth at full speed.
+- Anchor B ratified (6-3b/R3, closing finding S4 open since the 2-6 smoke): the zone
+  left of the bars reads without pulling the eye off the fight.
+
+Open for the playtest block, NOT for this story:
+- Whether the opponent zone's READY state alone is enough information, or whether the
+  missing shortfall number makes your own zone harder to plan against. Own-slot
+  shortfall is a named deferral with no owner (6-3b/R1).
+- Whether the 20-second fizzle window is the right length once pitches are being used
+  for real rather than demonstrated.

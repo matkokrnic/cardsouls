@@ -4,7 +4,7 @@ baseline_commit: 5c34e1bb547b66e20d87040d544fb8aa9b33f540
 
 # Story 6.3b: Pitch HUD
 
-Status: ready-for-dev
+Status: review
 
 > **Scope note.** E6 planning pass, board order item 6 (decision-log Session 2026-09-08,
 > `E6-P/R2`; renumbered by the 2026-09-14 split, `6-3-split/R-SPLIT`). Tier A by the golden clause
@@ -596,15 +596,349 @@ as its own small story after playtest. No owner.
 | 2026-09-15 | Docs-only fix pass: added the cross-slot HUD bind guard as its own AC (now ten total), corrected the ghost AC/Dev Notes to test against the three existing looks (Fact 5) rather than an unimplementable "four looks" distinction, moved Open Questions to a top-level section holding only the genuinely open throttle-interval question, and moved the signal-placement seat to Dev Notes. | Claude Sonnet 5 |
 | 2026-09-15 | Docs-only gate-fix pass against the readiness gate report (`C:\dev\_6-3b-gate.md`, verdict NOT READY). Operator rulings folded in: orb shortfall removed from both zones and from the story entirely (no shortfall reader, no runner-owned HUD push; named deferral in Dev Notes); the countdown interval ruled at 30 ticks as its own authored balance field, and the Open Questions section removed. Gate blockers fixed: the direct-connect guard rewritten to pin the six measured raw-connect sites by shape; the cross-slot test rewritten onto a synthetic replay record with a stated non-vacuity precondition; undefined ruling labels replaced by their content; signal home fixed on MatchState with every emission site enumerated; the rejection-consumer criterion given a guard that can fall; the Live Smoke sequence rewritten for one operator at a split screen. Gate notes folded in: ghost own-slot binding and survive-a-later-rewrite case, retirement fallout enumerated, anchor-B rejection path, corrected line citations. Criteria renumbered; this row cites none by number. Reversal from the pre-fix draft, not previously named here: the old AC (numbered 10 pre-fix) said the pitch signal's payload is "never added to or read from the snapshot"; the no-new-accessor fix to Ruling A/B4 means AC 1 and AC 9 now have every emission READ `pitch.to_snapshot()`'s `"fizzle"` entry instead — a deliberate consequence of that fix, harmless to determinism (a pure read), but an inversion of the earlier sentence. Not yet cleared for a dev pass. | Claude Opus 5 |
 | 2026-09-15 | Docs-only fix pass against readiness gate 2 (`C:\dev\_6-3b-gate-2.md`, verdict READY, 0 blockers, 14 notes). Folded in: AC 7's closed "nothing is queued" claim replaced with a mandatory closing grep the dev pass runs and records, classifying every hit as fixed or left historical (N8); Live Smoke steps 2 and 3 now state the mana-regen wait and the same-colour/price-1 hand precondition the operator must arrange before staging, in the operator's own terms (N10); the false `E6-P/R8`(2) citation in Dev Notes corrected — it names `connect_orbs_changed` as the precedent, not a ruling on shape (N14); the dropped Non-Goal clause restored ("presentation-only, does not gate on `pitch_zone` beyond what `6-2`/`6-3a` already do", N12); the unnamed reversal from old AC 10 to the current fizzle-entry read named above in this same row's predecessor entry (N13); the Live Smoke controller-configuration step corrected from "set" to "add … under `[node name="Main"]`" (N11); AC 3's non-vacuity precondition now also asserts the two payloads' READY values differ, not just their card ids (N1). Status stays authored; still not cleared for a dev pass. | Claude Sonnet 5 |
+| 2026-09-15 | Dev pass (gds-dev-story). AC 1-9 implemented and headless-tested: tenth seam `connect_pitch_changed`; `MatchState.pitch_changed` queued at the six AC 1 sites; authored 0.5 s / 30-tick push interval; both pitch zones and the staged-card ghost; 2-6 placeholder, its switch and the panel's `huds` handoff retired; three guards (seam count TEN, raw-connect shape pin, no `action_rejected` HUD consumer). Golden 9ed4c903 MEASURED unmoved both ways. Suite 824/0/6754 + 59 -> 842/0/6877 + 61, two full runs. 42 mutation runs (40 rows) and the 168-hit closing grep classification in the Dev Agent Record. Live Smoke not run (operator). Status -> review. Cleared for a dev pass. | Claude Opus 5 |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5 (1M context), `claude-opus-5[1m]`, dev pass run through the `gds-dev-story` skill on
+2026-09-15. Single session, no subagents.
+
 ### Debug Log References
+
+Every artifact below is outside the repo.
+
+- Suite runs: `C:\dev\_6-3b-suite-1.txt` (before-baseline, written 03:10:03) and
+  `C:\dev\_6-3b-suite-2.txt` (final, written 03:33:57).
+- Red and green iteration runs, each over named files only: `C:\dev\_63b-red-ac5.txt`, `_63b-red-ac1.txt`,
+  `_63b-green-ac1.txt`, `_63b-red-inv.txt`, `_63b-iter1.txt`, `_63b-iter2.txt`, `_63b-ghost-1.txt`,
+  `_63b-it-*.txt`, `_63b-ctl-*.txt`, `_63b-ctl-ghost2.txt`.
+- Mutation runs: `C:\dev\_63b_mut\M*.txt`. Harness: `C:\dev\_63b_mut\mut.sh`. Pre-mutation file copies:
+  `C:\dev\_63b_mut\bak\`.
+- Closing grep output: `C:\dev\_63b-closing-grep-final.txt` (168 lines).
+- Scratch state-test runner (named files only): `run_some.gd` in the session scratchpad.
 
 ### Completion Notes List
 
+**Status: dev pass complete. Every headless-provable AC is implemented and tested. The Live Smoke
+(seven steps, including the anchor verdict in step 4) is NOT run. It is operator-only, so AC 4's
+legibility and anchor verdict and AC 5's visible cadence remain open.**
+
+#### Deviations from the prompt or the skill, each with its reason
+
+1. **The customization resolver was resolved by hand.** `python3` does not exist on this machine. I read
+   `customize.toml` and `_bmad/custom/gds-dev-story.toml` directly; `gds-dev-story.user.toml` does not
+   exist. Result: `activation_steps_prepend` and `activation_steps_append` are empty,
+   `persistent_facts` is `project-context.md`, and `on_complete` comes from the team override.
+2. **The story has no Tasks/Subtasks section.** The skill's task loop uses checkboxes, and none exist
+   here, so the nine ACs served as the task list, in AC order. There are no checkboxes to tick.
+3. **The frontmatter `baseline_commit` is `5c34e1b`, not HEAD `4636c9a`.** It was already set, and the
+   skill says to preserve an existing value. `4636c9a` is the board-promotion commit only.
+4. **PROC/R3's edit fallback is a python byte-replace, and python is unavailable.** Multi-line edits to
+   files containing em-dashes went through `perl -0pi` with a `die` on no-match, so an edit either
+   applied exactly or failed loudly. No Edit tool call failed.
+5. **One test was strengthened after its mutation survived (M36, table below).** The ghost test's
+   distinguishability check compared the ghost against a DIFFERENT card's full look, so the caption
+   text alone made them differ, whatever the modulate was. It now compares against the same card's
+   full look in the same slot and asserts alpha < 1. The mutation then fell.
+6. **Two stale comment references to a member this story deleted were fixed; the story did not list
+   them.** `DebugInstrumentPanel.huds` existed only for the retired switch, so it is deleted (AC 7:
+   no dead code), along with the runner's `panel.huds = huds`. The comments naming "the
+   `gamepad_profile` / `huds` precedent" (`match_runner.gd` x2, `hud_root.gd` x1,
+   `debug_instrument_panel.gd` x1) now name `gamepad_profile` alone. `HudRoot._make_placeholder_panel`
+   had one caller, the retired pitch panel, so it is deleted too.
+
+#### What was built, by AC
+
+- **AC 1.** `MatchState.pitch_changed(slot, card_id, hand_slot, ready, remaining_ticks, duration_ticks)`
+  is declared beside `hit_landed`.
+  - It is queued from one helper, `_queue_pitch_changed(slot)`, at the six sites (a) to (f).
+  - Site (e) sits inside `_grant_landing_orbs`'s `grant > 0` branch and fires only when the owner's zone
+    is staged.
+  - Site (f) is a two-slot loop after `_resolve_pitch_expiry(p2, 1)`, gated by `is_staged` and by
+    `_tick % balance_ticks.pitch_countdown_push_interval_ticks == 0`.
+  - The countdown is read from `pitch.to_snapshot()`'s `"fizzle"` entry. No accessor and no member
+    were added.
+  - `connect_pitch_changed(callback)` is a match-level wrapper with no priming.
+  - `OBSERVATION_SEAMS` gains the entry, and the test is renamed `..._are_exactly_ten` with its
+    message updated.
+  - Tests: `test/state/test_pitch_changed.gd`, 14 tests covering every site plus the negatives (a
+    non-boundary staged tick, an empty zone, a grant with no staged zone, a refused stage, a refused
+    activation, a round-over freeze).
+- **AC 2.** `test_raw_match_state_connects_are_pinned_by_shape` with the pinned list
+  `RAW_MATCH_STATE_CONNECTS`. Its non-vacuity samples include all four sanctioned forms, a
+  named-method UNCLASSIFIED form, a nested receiver, and the two near misses. The red run before the
+  seam existed showed exactly the six baseline sites (`_63b-red-inv.txt`).
+- **AC 3.** `test/integration/test_pitch_hud_live.gd`: a probe phase, then a synthetic record, then a
+  replay.
+  - Measured pair: X=`tidal_wardstone` (P1 slot 0), Y=`bramble_snare` (P2 slot 0).
+  - Two payloads, READY `true` / `false`.
+  - The precondition is asserted first, then both roots in both directions and the digit check.
+- **AC 4.** Both zones are built by `HudRoot._build_pitch_zone(name, offsets)`: `OwnPitch` at
+  -286/-196/-186/-108 and `OpponentPitch` at 186/-196/286/-108, anchors 0.5/0.5/1/1.
+  - Each holds a `Card` Label, a `Countdown` ProgressBar (80 px, `show_percentage = false`) and a
+    `Ready` Label.
+  - Anchors are checked in `test_debug_instruments.gd` (`_pitch_zones_ok`), and `_check_panel_layout`
+    now covers both zones (M34 proves the -198 boundary bites).
+  - I named the nodes `OwnPitch`/`OpponentPitch`, not `*PitchZone*`, so the closing grep would not hit
+    the new code.
+- **AC 5.** `BalanceConfig.pitch_countdown_push_interval_seconds` (default 0.0, "Pitch" group),
+  `BalanceTicks.pitch_countdown_push_interval_ticks` derived as `maxi(1, ...)`, and `.tres` = 0.5, plus
+  the three test seats. `UNHASHED_CROSS_TICK_MEMBERS` was not touched.
+- **AC 6.**
+  - Memory: `HudRoot` keeps `_last_hand_ids`, `_last_pending_draw_owed`, `_last_card_colors`,
+    `_own_staged_card` and `_own_staged_hand_slot`.
+  - Render: `on_cards_changed` and `on_pitch_changed` both render through `_render_hand_row()`.
+  - Ghost look: caption id and swatch at `GHOST_MODULATE` (alpha 0.35); every other look writes WHITE
+    back.
+  - Tests: `test/integration/test_pitch_ghost.gd`, cases (i) to (v).
+- **AC 7.** The placeholder, its members, `set_pitch_zone_placement`, the CheckButton, its handler and
+  the `huds` handoff are deleted. Both integration tests are rewritten, and the stale prose is fixed per
+  the closing-grep classification below.
+- **AC 8.** `test_action_rejected_has_no_hud_consumer`: `ACTION_REJECTED_CONSUMERS` =
+  `cues.on_action_rejected`, `inspector.on_action_rejected`, plus the raw-site pin to
+  `match_runner.gd:callback`. It passed unmodified at baseline (`_63b-red-inv.txt`: only the two
+  seam-count guards failed there, as expected).
+- **AC 9.** Nothing new to guard. `FORMAT_VERSION`, both `to_snapshot()` functions and
+  `UNHASHED_CROSS_TICK_MEMBERS` are untouched (not in the diff). The existing pins
+  (`test_debug_window_countdown.gd` key set, `test_replay_identity.gd` `^var` scan) passed in both
+  full runs.
+- **Editor scan: not run, not needed.** None of the three new `.gd` files declares `class_name` (grep:
+  0 hits). `git diff -- project.godot` is empty. `src/main/main.tscn` is not in the diff.
+- **Existing staging tests and exact drained-signal sets (the Golden Prediction's second
+  measurement):** no existing state test asserts one that the new emissions change.
+  `test_pitch_staging.gd` (33 tests) is unedited and passed in `_63b-green-ac1.txt` and in both full
+  runs. No test listens to `pitch_changed` except the new ones.
+  [fix pass correction: `_63b-green-ac1.txt` names no files -- it is only a `105 tests, 0 failed`
+  state-suite total, so it does not on its own support the `test_pitch_staging.gd` claim above; the
+  claim is true instead by the two full-suite runs cited under Debug Log References.]
+
+#### Golden measurement (both directions): MEASURED UNMOVED
+
+- **Before (HEAD `4636c9a`, no edits):** `_6-3b-suite-1.txt` shows 824 tests, 0 failed. So
+  `test_determinism.gd::test_state_matches_golden` passed against
+  `GOLDEN = 9ed4c9035a89b3219623dc129d73693e6871049bc9c48f672bc5554d49f5d5b2`.
+- **After (every change in place):** `_6-3b-suite-2.txt` shows 842 tests, 0 failed. The same test
+  passed against the same constant, and `test_determinism.gd` is not in the diff (`git diff --quiet`
+  confirmed).
+- **Result: golden UNMOVED.** No re-baseline. The snapshot key set is unchanged.
+
+#### Suite runs (counters read from the output files)
+
+| Run | File | State harness | Integration | Exit |
+|---|---|---|---|---|
+| Before-baseline (before any edit) | `C:\dev\_6-3b-suite-1.txt` | 824 tests, 0 failed, 6754 assertions | 59 files, all PASS, ALL TESTS PASSED | 0 |
+| Final | `C:\dev\_6-3b-suite-2.txt` | 842 tests, 0 failed, 6877 assertions | 61 files, all PASS, ALL TESTS PASSED | 0 |
+
+**Two full runs, no extras.** State tests grew by 18: `test_pitch_changed.gd` +14,
+`test_architecture_invariants.gd` +2, `test_balance_config.gd` +1, `test_balance_authoring.gd` +1.
+Integration files grew by 2: `test_pitch_ghost.gd` and `test_pitch_hud_live.gd`.
+
+Targeted runs, disclosed but not full-suite:
+- 4 red/green runs over named state files;
+- 2 iteration runs (10 files, 175 tests, 0 failed; then 2 files, 32 tests, 0 failed);
+- 9 single-integration-file runs while building and controlling;
+- 42 mutation runs (table below).
+
+#### Mutation table: MEASURED by this pass (2026-09-15)
+
+Method: back up the file to `C:\dev\_63b_mut\bak\` and take its SHA256, mutate it with `perl -0pi`
+(`die` on no match), run ONLY the affected test file, then restore by copy and re-verify the SHA. Every
+row reads "restored" (SHA match), and none restored via `git checkout`. Unless a row says otherwise,
+there was no parse error (the mutation fell by assertion).
+
+| # | AC | File mutated | Mutation (the falling case) | Test run | Result |
+|---|---|---|---|---|---|
+| M01 | 1(a) | match_state.gd | delete the STAGE emission | test_pitch_changed | FELL: 3 staging tests |
+| M02 | 1(b) | match_state.gd | delete the ACTIVATE emission | test_pitch_changed | FELL: activation_emits_an_empty_zone |
+| M03 | 1(c) | match_state.gd | delete the EXPIRY emission | test_pitch_changed | FELL: expiry_emits_an_empty_zone... |
+| M04 | 1(d) | match_state.gd | delete the DEBUG RESET emission | test_pitch_changed | FELL: the_debug_reset_emits... |
+| M05 | 1(e) | match_state.gd | grant emission guarded `if false` | test_pitch_changed | FELL: an_orb_grant_inside_a_staged_window_flips_ready_on_the_landing_tick |
+| M06 | 1(e) | match_state.gd | grant emission ignores "staged" (`if true`) | test_pitch_changed | FELL: an_orb_grant_with_no_staged_zone_emits_nothing |
+| M07 | 1(f) | match_state.gd | delete the throttle emission | test_pitch_changed | FELL: 2 throttle tests |
+| M08 | 1(f) | match_state.gd | throttle ignores "staged" | test_pitch_changed | FELL: an_empty_zone_never_throttles (+2) |
+| M09 | 1(f)/5 | match_state.gd | throttle ignores the modulo (every tick) | test_pitch_changed | FELL: 7 tests incl. the non-boundary-emits-nothing test |
+| M10 | 5 | match_state.gd | throttle reuses `minion_retarget_interval_ticks` | test_pitch_changed | FELL: 7 tests incl. the_throttle_reads_the_authored_interval |
+| M11 | 1 | match_state.gd | READY latched `false` | test_pitch_changed | FELL: 2 READY tests |
+| M12 | 1 | match_state.gd | remaining = duration (never moves) | test_pitch_changed | FELL: throttle + grant tests |
+| M13 | 1 | match_state.gd | owner slot hardcoded 0 | test_pitch_changed | FELL: p2_staging_carries_owner_one, debug reset |
+| M14 | 1 | match_state.gd | an emission inside the round-over freeze branch | test_pitch_changed | FELL: nothing_emits_while_the_round_is_frozen |
+| M15 | 5 | balance_config.tres | authored interval 0.5 -> 0.0 | test_balance_authoring | FELL: authored_pitch_countdown_push_interval_is_positive |
+| M16 | 5 | balance_ticks.gd | drop the `maxi(1, ...)` clamp | test_balance_config | FELL: conversion_derives_the_pitch_countdown_push_interval_with_the_modulo_clamp |
+| M17 | 5 | test_data_resources.gd | drop the `E1_BALANCE_FIELDS` entry | test_data_resources | FELL: balance_config_field_lists_are_complete_by_reflection |
+| M18 | 1 | match_runner.gd | add an ELEVENTH `func connect_extra_seam(` | test_architecture_invariants | FELL: runner_observation_seams_are_exactly_ten |
+| M19 | 1 | match_runner.gd | rename the seam declaration and its call (count drops to nine) | test_architecture_invariants | FELL: ..._are_exactly_ten. The first attempt left the call site dangling (parse error in a test that loads the runner); re-run parse-clean |
+| M20 | 2 | match_runner.gd | named-method consumer `_match_state.pitch_changed.connect(hud.on_pitch_changed)` | test_architecture_invariants | FELL: raw_match_state_connects_are_pinned_by_shape |
+| M21 | 2 | match_runner.gd | a second inline lambda on `pitch_changed` | test_architecture_invariants | FELL: raw_..._pinned_by_shape |
+| M22 | 2 | match_runner.gd | a second relay (`round_ended` -> `_relay_round_started`) | test_architecture_invariants | FELL: raw_..._pinned_by_shape |
+| M23 | 2 | match_runner.gd | remove the `round_started` relay site | test_architecture_invariants | FELL: raw_..._pinned_by_shape |
+| M24 | 2 | match_runner.gd | aliased receiver (`var ms_alias := _match_state`) | test_architecture_invariants | SURVIVED, the STATED LIMITATION in AC 2, recorded as expected |
+| M26 | 8 | match_runner.gd | HUD consumer `connect_hero_action_rejected(slot, hud.on_action_rejected)` | test_architecture_invariants | FELL: action_rejected_has_no_hud_consumer |
+| M27 | 8 | match_runner.gd | lambda consumer `connect_hero_action_rejected(slot, func(...))` | test_architecture_invariants | FELL: action_rejected_has_no_hud_consumer |
+| M28 | 8 | state_inspector.gd | raw `hero.action_rejected.connect(on_action_rejected)` | test_architecture_invariants | FELL: action_rejected_has_no_hud_consumer. The first attempt had a parse error in the probe code; re-run parse-clean |
+| M30 | 3 | match_runner.gd | HudRoot bound to the wrong slot (`.bind(0)`) | test_pitch_hud_live | FELL: all four P2 assertions |
+| M31 | 3 | hud_root.gd | own-slot filter compares the wrong value (`hand_slot == my_slot`) | test_pitch_hud_live | FELL: P1 zones and ghost |
+| M32 | 3 | test_pitch_hud_live.gd | record flags with `orbs = false` | test_pitch_hud_live | FELL: the non-vacuity PRECONDITION (READY values no longer differ) |
+| M33 | 3/4 | hud_root.gd | READY label shows the remaining ticks (`"READY %d"`) | test_pitch_hud_live | FELL: the digit check on all four zones |
+| M34 | 4 | hud_root.gd | own zone `offset_top` -196 -> -200 | test_debug_instruments | FELL: pitch_zones AND panel_layout (P2 OwnPitch intersects InstrumentBox at y 448, the Fact 8 boundary measured) |
+| M35 | 4 | hud_root.gd | opponent zone `offset_left` 186 -> 176 | test_debug_instruments | FELL: pitch_zones |
+| M36 | 6(i) | hud_root.gd | `GHOST_MODULATE` alpha 0.35 -> 1.0 | test_pitch_ghost | SURVIVED on the first run (test weakness, deviation 5); FELL after the test fix: 2 failures in (i) |
+| M37 | 6(ii) | hud_root.gd | opponent payloads write the ghost memory (`if true`) | test_pitch_ghost | FELL: (ii) |
+| M38 | 6(iii) | hud_root.gd | `on_cards_changed` clears the ghost memory | test_pitch_ghost | FELL: (iii), (iv) |
+| M39 | 6(iv) | hud_root.gd | `on_pitch_changed` does not re-render the row | test_pitch_ghost | FELL: (i), (iv) |
+| M40 | 6(v) | hud_root.gd | NO_CARD keeps the old card id (slot still resets) | test_pitch_ghost | SURVIVED: an EQUIVALENT mutant, because `_own_staged_hand_slot` still became -1, so the ghost cleared anyway. Replaced by M40b |
+| M40b | 6(v) | hud_root.gd | an own NO_CARD payload is ignored for memory entirely | test_pitch_ghost | FELL: (i), (ii), (v) |
+| M41 | 7 | hud_root.gd | a Panel named `PitchZone` re-added | test_debug_instruments | FELL: pitch_zones |
+| M42 | 7 | debug_instrument_panel.gd | CheckButton `PitchZoneLeftOfBars` re-added | test_record_save_control | FELL: control-set assertion |
+
+M25 and M29 were never used (numbering gaps). M36 was run twice and M19/M28 were each re-run once, so
+the table has 40 rows over 42 mutation runs.
+
+#### Closing grep (AC 7): MEASURED by this pass on the final tree
+
+Command: `grep -rn -i -E "nine|ninth|PitchZone|placeholder|A/B|exactly_nine" src test docs/game-architecture.md`.
+**168 hits** (`C:\dev\_63b-closing-grep-final.txt`). Every hit is classified below; the four groups sum
+to 168.
+
+**FIXED in this story, still matching because the rewritten or new line carries the word (4):**
+- `test/state/test_architecture_invariants.gd:340`: the renamed guard's message ("by 5-4 AC 15 to nine
+  and by 6-3b AC 1 to ten").
+- `:751`: the ex-`:608` line, now "stayed at nine at 5-5 (6-3b later moved it to ten)".
+- `src/state/unit_board.gd:407`: the test-name citation is updated to `_exactly_ten`; the dated count
+  "(nine since 5-4 AC 15, ten since 6-3b AC 1)" is kept.
+- `test/integration/test_debug_instruments.gd:180`: the new retirement assertion
+  `get_node_or_null("PitchZone") == null`.
+
+**FIXED in this story, no longer matching** (by baseline line, the story's own list):
+- `match_runner.gd`: `:425`, `:455-456`, `:517` (test name), `:922` (test name), `:926-929`
+  (debug_hand_contents' "only caller" doc), `:2510`, `:2677`, `:2701`, `:2719`, `:2771`.
+- `match_state.gd`: `:43`, `:1013`.
+- `test_architecture_invariants.gd`: `:273`, `:309`, `:329-330`, `:608`.
+- `telegraph_controller.gd:148` (test name).
+- `hud_root.gd`: `:32-34`, `:40`, `:48-49`, `:163`, `:400-448` (deleted, with `_make_placeholder_panel`).
+- `debug_instrument_panel.gd`: `:23-27`, `:35-36`, `:55`, `:56-57`, `:63-65`, `:181-188`, `:330-335`
+  (deleted or rewritten).
+- `state_inspector.gd:40-41`.
+- `test_debug_instruments.gd:17-18`, `:173-181`.
+- `test_record_save_control.gd:176-178`.
+- DOCS commit: `game-architecture.md:372`, `:537`, `:538`.
+
+**LEFT AS HISTORICAL: dated seam-count or seam-ordinal records, true when written and still true (26):**
+- `docs/game-architecture.md:9`: amendment A8 "EIGHT -> NINE".
+- `src/actors/hero/hero.tscn:201`: "the ninth observation seam", the ordinal of `connect_orbs_changed`.
+- `telegraph_controller.gd:149` ("stood at eight when this line shipped and is nine since 5-4") and
+  `:156` (ordinal).
+- `match_runner.gd` (11): `:363`, `:401`, `:438`, `:494`, `:508`, `:521`, `:522`, `:849`, `:926`,
+  `:1735`, `:1764`. (`:533` is not a dated count -- see NOT seam counts below.)
+- `match_state.gd`: `:85`, `:102`. (`:84` matches on "placeholder", not a seam count -- see NOT seam
+  counts below.)
+- `event_bus.gd:34`.
+- `hud_root.gd` ordinals of the orb seam: `:42`, `:76`, `:236`, `:792`.
+- `test/integration/test_orb_cue_live.gd:5`.
+- `test_architecture_invariants.gd`: `:284`, `:286`, `:303`.
+
+**NOT seam counts, no action (138):**
+- **"nine" counting something else, including one hypothetical (53)**: cards, clips, fields, arrays,
+  snapshot keys, capture channels, rebaselines, consumers.
+  - `animation_controller.gd:5`, `hero.gd:97`, `hero.tscn:206`
+  - `match_runner.gd:533` ("a de-facto ninth seam family nobody voted for" -- a hypothetical, not a
+    dated count), `:558`, `:608`, `:888`
+  - `card_effect_resolver.gd:5`, `:37`, `:123`
+  - `hand.gd:64`, `:105`
+  - `card_data.gd:49`
+  - `unit_board.gd:177`, `:209`, `:300`
+  - `intent_recorder.gd:560`, `:564`
+  - `test_card_database.gd:26`
+  - `test_deck_injection.gd:39`, `:137`
+  - `test_rig_clips.gd:3`, `:4`
+  - `test_summon_actor_live.gd:17`
+  - `test_card_authoring.gd:7`, `:14`, `:35`, `:37`, `:93`, `:133`, `:156`, `:178`
+  - `test_card_effect_resolution.gd:123`
+  - `test_card_observation.gd:75`, `:317`
+  - `test_data_resources.gd:182`
+  - `test_deck_and_hand.gd:367`
+  - `test_determinism.gd:631`, `:687`, `:881`, `:962`
+  - `test_draw_delay_and_reshuffle.gd:82`
+  - `test_gamepad_controller.gd:352`
+  - `test_intent_recorder.gd:105`, `:206`
+  - `test_live_reload.gd:35`, `:38`, `:99`, `:100`
+  - `test_record_file.gd:346`, `:349`
+  - `test_targeting_service.gd:371`
+  - `test_unblockable_defense.gd:120`
+- **"placeholder" meaning something other than the pitch zone (32)**:
+  - `hero.tscn:86`
+  - `unit_actor.gd:8`, `unit_actor.tscn:46`
+  - `match_runner.gd:10`, `:259`, `:404`, `:759`, `:2088`, `:2238`, `:2464`
+  - `match_state.gd:84` ("a fake placeholder actor is not" -- the E3 unconsumed-signal note; its
+    seam count is on `:85`)
+  - `player_state.gd:41`
+  - `balance_config.gd:9`, `:74`, `:403`
+  - `minion_priority.gd:31`
+  - `unit_board.gd:230`
+  - `card_database.gd:9`
+  - `hud_root.gd:53`, `:145`, `:238`, `:824`, `:832`
+  - `test_card_hud.gd:19`, `:95`, `:213`
+  - `test_deck_reshuffle.gd:10`
+  - `test_hero_movement.gd:23`
+  - `test_lock_marker_live.gd:68`
+  - `test_totem_no_rotation_live.gd:5`
+  - `test_telegraph_profiles.gd:4`, `:29`
+- **"A/B" as gamepad buttons (2)**: `gamepad_controller.gd:332`, `test_gamepad_controller.gd:457`.
+- **Case-insensitive "A/B" matching the `data/balance` path (51)**:
+  - `unit_animation_controller.gd:95`, `match_runner.gd:11`, `economy_evaluator.gd:21`,
+    `balance_config.gd:4`, `balance_config_service.gd:18`
+  - `test_card_hud.gd:33`, `test_charge_playhead_live.gd:8`, `:24`, `test_clip_timing.gd:13`, `:50`
+  - `test_contact_pipeline.gd:73`, `test_deck_injection.gd:61`, `test_deck_reshuffle.gd:18`, `:37`
+  - `test_hero_movement.gd:22`, `test_honest_hit_geometry_live.gd:59`, `test_lock_marker_live.gd:41`,
+    `:58`, `test_roll_displacement.gd:23`, `test_unblockable_reach_live.gd:59`, `test_unit_aim_live.gd:18`
+  - `test_balance_authoring.gd:3`, `:40`, `test_balance_config.gd:257`, `:271`
+  - `test_data_resources.gd:171`, `test_deck_and_hand.gd:751`
+  - `test_determinism.gd:179`, `:224`, `:266`, `:387`, `:1173`, `:1247`, `:1309`, `:1317`, `:1323`
+  - `test_draw_delay_and_reshuffle.gd:16`, `:746`
+  - `test_intent_recorder.gd:489`, `test_mana_economy.gd:161`, `:168`, `test_projectile_flight.gd:18`
+  - `test_replay_identity.gd:51`, `:440`, `:662`, `:731`
+  - `test_targeting_service.gd:4`, `test_unit_attack_rhythm.gd:21`, `test_unit_damage_and_death.gd:21`
+  - `test/unit_kind_fixture.gd:15`, `game-architecture.md:430`
+
+#### Not done as written, and why
+
+- **Live Smoke (all seven steps), including the anchor verdict (step 4).** This is operator-only: one
+  person, a split screen, a gamepad. Nothing from it is recorded here. Step 4's verdict belongs in these
+  Dev Notes and the decision-log when the operator runs it.
+- **No commits** (per the prompt). Docs and code will need separate commits when the operator commits:
+  `docs/game-architecture.md` goes in the docs commit, everything else in the code commit.
+
 ### File List
 
-Cleared for a dev pass
+Modified:
+- `data/balance/balance_config.tres`
+- `docs/game-architecture.md` (docs commit)
+- `docs/implementation-artifacts/6-3b-pitch-hud.md` (this record)
+- `docs/implementation-artifacts/sprint-status.yaml` (board: back to `ready-for-dev`, plus story_note and
+  last_updated) [fix pass correction: the diff changes only `story_notes` for `6-3b-pitch-hud`;
+  `development_status` stays `ready-for-dev  # Tier A` at both `4636c9a` and now, and `last_updated` is
+  untouched -- the parenthetical above overstates the edit]
+- `src/actors/hero/telegraph_controller.gd`
+- `src/main/match_runner.gd`
+- `src/state/match_state.gd`
+- `src/state/resources/balance_config.gd`
+- `src/state/timing/balance_ticks.gd`
+- `src/state/unit_board.gd`
+- `src/ui/debug/debug_instrument_panel.gd`
+- `src/ui/debug/state_inspector.gd`
+- `src/ui/hud/hud_root.gd`
+- `test/integration/test_debug_instruments.gd`
+- `test/integration/test_record_save_control.gd`
+- `test/state/test_architecture_invariants.gd`
+- `test/state/test_balance_authoring.gd`
+- `test/state/test_balance_config.gd`
+- `test/state/test_data_resources.gd`
+
+Added:
+- `test/state/test_pitch_changed.gd`
+- `test/integration/test_pitch_ghost.gd`
+- `test/integration/test_pitch_hud_live.gd`
+
+Not touched (checked): `project.godot`, `src/main/main.tscn`, `test/state/test_determinism.gd`,
+`src/state/pitch/pitch_state.gd`, `src/systems/record_file.gd`.
