@@ -270,7 +270,8 @@ func test_state_layer_never_names_the_recorder_or_the_replay_controller() -> voi
 ## (test_contact_pipeline.gd, test_live_attack.gd, test_telegraph_profiles.gd), never as a count
 ## assertion. Nothing in the suite would have failed if an eighth seam had shipped.
 ##
-## THE PROOF RUNS FALLING: a NINTH `connect_*` anywhere under src/main/ must make this FAIL.
+## THE PROOF RUNS FALLING: any `connect_*` anywhere under src/main/ beyond the pinned list below must
+## make this FAIL (at 3-0c that was an eighth; the family has since been amended, see below).
 ## 3-0c added none — its recorder is a plain runner-owned object called directly at the capture
 ## points, and `recorded_stream()` is a read accessor, not a seam (no signal, no callback, no
 ## state handle), which is why it is deliberately NOT named `connect_*`.
@@ -288,6 +289,13 @@ func test_state_layer_never_names_the_recorder_or_the_replay_controller() -> voi
 ## commit because it is load-bearing and must stay accurate, while
 ## `docs/game-architecture.md:371-372`'s "there are now eight" prose does NOT — it is queued for the
 ## E5 close-out flush so several E5 amendments land together (`5-3/R4` is the queue's other member).
+##
+## STORY 6-3b (AC 1) MOVES IT TO TEN, THE THIRD SANCTIONED EXCEPTION -- `connect_pitch_changed`
+## (`E6-P/R8`(2): the pitch HUD gets a NEW MEMBER of this family, never a second `MatchState`
+## direct-connect). Match-level like `connect_hit_landed`, because READY needs `MatchState`'s pool and
+## flags together. The test's NAME and message move with the list in the same commit; the
+## direct-connect shape guard below (`test_raw_match_state_connects_are_pinned_by_shape`) is what
+## makes "never a second direct-connect" fail the suite rather than rest on review.
 const OBSERVATION_SEAMS: Array[String] = [
 	"connect_hero_action_state_changed", "connect_hero_action_rejected", "connect_hit_landed",
 	"connect_deflect_landed", "connect_hero_hp_changed", "connect_stamina_changed",
@@ -303,10 +311,12 @@ const OBSERVATION_SEAMS: Array[String] = [
 	# amendment queue and it must not be settled by accident here). A TENTH is the operator's call
 	# all over again.
 	"connect_orbs_changed",
+	# Story 6-3b (AC 1) MOVES THE COUNT TO TEN -- the THIRD sanctioned amendment (`E6-P/R8`(2)).
+	"connect_pitch_changed",
 ]
 
 
-func test_runner_observation_seams_are_exactly_nine() -> void:  # 2-6/R7, amended 3-6/R2, 5-4 AC 15
+func test_runner_observation_seams_are_exactly_ten() -> void:  # 2-6/R7, amended 3-6/R2, 5-4 AC 15, 6-3b AC 1
 	var re := RegEx.create_from_string("^func\\s+(connect_[A-Za-z0-9_]*)\\s*\\(")
 	# The pattern must match the form it counts — a regex typo must not silently disarm this.
 	assert_true(re.search("func connect_hit_landed(callback: Callable) -> void:") != null,
@@ -326,10 +336,143 @@ func test_runner_observation_seams_are_exactly_nine() -> void:  # 2-6/R7, amende
 	var expected := OBSERVATION_SEAMS.duplicate()
 	expected.sort()
 	assert_eq(found, expected,
-		"the runner's observation-seam family is FROZEN AT NINE (2-6/R7, amended by 3-6/R2 to eight "
-		+ "and by 5-4 AC 15 to nine). "
-		+ "A TENTH seam is a design change and the operator's call, not a refactor — and a removed "
+		"the runner's observation-seam family is FROZEN AT TEN (2-6/R7, amended by 3-6/R2 to eight, "
+		+ "by 5-4 AC 15 to nine and by 6-3b AC 1 to ten). "
+		+ "An ELEVENTH seam is a design change and the operator's call, not a refactor — and a removed "
 		+ "one is as loud as an added one: %s" % ", ".join(found))
+
+
+## Story 6-3b (AC 2, `E6-P/R8`(2)): THE RAW `_match_state.<signal>.connect(` SITES UNDER src/main/ ARE
+## PINNED BY SHAPE. The declaration guard above counts `func connect_*(` DECLARATIONS and is silent
+## about a presentation consumer wired straight to a MatchState signal -- which is exactly the second
+## direct-connect `E6-P/R8`(2) forbids. Three sanctioned shapes exist, told apart by the callback token:
+##   - `wrapper` (token exactly `callback`): the match-level seam bodies themselves;
+##   - `relay`   (token begins `_relay_`): the runner relaying state onto the ownerless EventBus
+##     (`game-architecture.md`'s runner-relay shape), not a presentation consumer;
+##   - `inline`  (token exactly `func`): `card_cast_resolved`'s ONE sanctioned direct consumer (`E5-C/R2`).
+## Anything else is `UNCLASSIFIED:<token>` and fails -- a named-method consumer such as
+## `_match_state.pitch_changed.connect(hud.on_pitch_changed)` included. A second inline lambda, a second
+## relay, or a removed site each change the sorted list and fail too.
+##
+## IT COUNTS SOURCE SITES, NOT LIVE CONNECTIONS: the `card_cast_resolved` site sits inside
+## `for slot: int in 2`, so one site makes two live connections, and this list names it once.
+##
+## THE TEXT IS JOINED BEFORE MATCHING, so `\s*` spans the line break of a connect whose callback sits on
+## the next line (`reshuffle_vulnerable_window_opened`), and a nested receiver (`_match_state.pitch.x.
+## connect(`) is still caught by the dotted receiver group. Comments are stripped per line first.
+##
+## STATED LIMITATION: only the literal `_match_state.` receiver is seen. An aliased receiver
+## (`var ms := _match_state`) evades it -- the same class of limit the declaration guard above has.
+const RAW_MATCH_STATE_CONNECTS: Array[String] = [
+	"card_cast_resolved:inline", "deflect_landed:wrapper", "hit_landed:wrapper",
+	"pitch_changed:wrapper", "reshuffle_vulnerable_window_opened:relay", "round_ended:relay",
+	"round_started:relay",
+]
+
+
+func test_raw_match_state_connects_are_pinned_by_shape() -> void:  # 6-3b AC 2, E6-P/R8(2)
+	var re := RegEx.create_from_string(
+		"_match_state\\.([A-Za-z0-9_.]+)\\.connect\\(\\s*([A-Za-z_][A-Za-z0-9_.]*)")
+	# NON-VACUITY: the pattern matches every sanctioned form and neither near miss.
+	assert_eq(_raw_connect_entries(re, "\t_match_state.round_ended.connect(_relay_round_ended)"),
+		["round_ended:relay"] as Array[String], "a one-line relay matches")
+	assert_eq(_raw_connect_entries(re,
+			"\t_match_state.reshuffle_vulnerable_window_opened.connect(\n\t\t\t_relay_reshuffle_x)"),
+		["reshuffle_vulnerable_window_opened:relay"] as Array[String], "a two-line relay matches")
+	assert_eq(_raw_connect_entries(re,
+			"\t\t_match_state.card_cast_resolved.connect(func(cast_slot: int, _id: StringName) -> void:"),
+		["card_cast_resolved:inline"] as Array[String], "an inline-func consumer matches")
+	assert_eq(_raw_connect_entries(re, "\t_match_state.hit_landed.connect(callback)"),
+		["hit_landed:wrapper"] as Array[String], "a wrapper body matches")
+	assert_eq(_raw_connect_entries(re, "\t_match_state.pitch_changed.connect(hud.on_pitch_changed)"),
+		["pitch_changed:UNCLASSIFIED:hud.on_pitch_changed"] as Array[String],
+		"a named-method consumer is UNCLASSIFIED")
+	assert_eq(_raw_connect_entries(re, "\t_match_state.pitch.zone_moved.connect(callback)"),
+		["pitch.zone_moved:wrapper"] as Array[String], "a nested receiver is still caught")
+	assert_eq(_raw_connect_entries(re, "\t\tconnect_hit_landed(cues.on_hit_landed.bind(slot))"),
+		[] as Array[String], "a seam CALL is not a raw connect")
+	assert_eq(_raw_connect_entries(re, "\t\tEventBus.round_ended.connect(hud.on_round_ended.bind(slot))"),
+		[] as Array[String], "a bus connect is not a raw MatchState connect")
+	var scanned := 0
+	var found: Array[String] = []
+	for path in _gd_files("res://src/main/"):
+		scanned += 1
+		found.append_array(_raw_connect_entries(re, "\n".join(_code_lines(path))))
+	assert_true(scanned > 0, "src/main/ scan found no .gd files (guard would be vacuous)")
+	found.sort()
+	var expected := RAW_MATCH_STATE_CONNECTS.duplicate()
+	expected.sort()
+	assert_eq(found, expected,
+		"the raw `_match_state.<signal>.connect(` SOURCE SITES under src/main/ are pinned by shape "
+		+ "(`E6-P/R8`(2): a presentation consumer reaches MatchState through a connect_* seam, never a "
+		+ "second direct-connect). This counts SOURCE SITES, not live connections -- the one inline "
+		+ "site sits in a two-slot loop. Got: %s" % ", ".join(found))
+
+
+## `"<signal>:<shape>"` for every raw MatchState connect in `text` -- see the guard above.
+func _raw_connect_entries(re: RegEx, text: String) -> Array[String]:
+	var out: Array[String] = []
+	for m in re.search_all(text):
+		var token := m.get_string(2)
+		var shape := "UNCLASSIFIED:%s" % token
+		if token == "callback":
+			shape = "wrapper"
+		elif token.begins_with("_relay_"):
+			shape = "relay"
+		elif token == "func":
+			shape = "inline"
+		out.append("%s:%s" % [m.get_string(1), shape])
+	return out
+
+
+## Story 6-3b (AC 8, `6-3-split/R-REFUSE`): NO `action_rejected` HUD CONSUMER. Neither guard above can
+## see one: the declaration guard counts `func connect_*(` declarations, not calls, and the raw-connect
+## guard sees only `_match_state.` receivers, while `action_rejected` is HeroState-owned. So the CALLS of
+## the per-slot seam are pinned by their consumer token -- the telegraph (`cues`) and the debug
+## inspector, and nothing else -- and the raw `action_rejected.connect(` sites are pinned to the one
+## wrapper body. A HudRoot consumer (`hud.on_...`), a lambda (`func`), or a raw connect each change a
+## list and fail. Comment-stripped, over every `.gd` under src/.
+##
+## STATED LIMITATION, the same class as the two guards above: a consumer bound through an alias of the
+## seam (a stored Callable of `connect_hero_action_rejected`) evades the call pattern.
+const ACTION_REJECTED_CONSUMERS: Array[String] = [
+	"cues.on_action_rejected", "inspector.on_action_rejected",
+]
+
+
+func test_action_rejected_has_no_hud_consumer() -> void:  # 6-3b AC 8, 6-3-split/R-REFUSE
+	var call_re := RegEx.create_from_string(
+		"(?<!func )connect_hero_action_rejected\\(\\s*[A-Za-z_][A-Za-z0-9_]*\\s*,\\s*([A-Za-z_][A-Za-z0-9_.]*)")
+	var raw_re := RegEx.create_from_string("action_rejected\\.connect\\(\\s*([A-Za-z_][A-Za-z0-9_.]*)")
+	# NON-VACUITY: the call pattern sees a call and not the declaration.
+	var sample := call_re.search("\t\tconnect_hero_action_rejected(slot, cues.on_action_rejected)")
+	assert_true(sample != null and sample.get_string(1) == "cues.on_action_rejected",
+		"the call pattern must capture a real consumer token")
+	assert_null(call_re.search(
+			"func connect_hero_action_rejected(slot: int, callback: Callable) -> void:"),
+		"the seam DECLARATION is not a consumer call")
+	assert_true(raw_re.search("\tplayer.hero.action_rejected.connect(callback)") != null,
+		"the raw pattern must match the wrapper body")
+	var scanned := 0
+	var consumers: Array[String] = []
+	var raw_sites: Array[String] = []
+	for path in _gd_files("res://src/"):
+		scanned += 1
+		var text := "\n".join(_code_lines(path))
+		for m in call_re.search_all(text):
+			consumers.append(m.get_string(1))
+		for m in raw_re.search_all(text):
+			raw_sites.append("%s:%s" % [path, m.get_string(1)])
+	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
+	consumers.sort()
+	var expected := ACTION_REJECTED_CONSUMERS.duplicate()
+	expected.sort()
+	assert_eq(consumers, expected,
+		"`connect_hero_action_rejected` consumers are the telegraph and the debug inspector ONLY -- no "
+		+ "HUD consumer (`6-3-split/R-REFUSE`). Got: %s" % ", ".join(consumers))
+	assert_eq(raw_sites, ["res://src/main/match_runner.gd:callback"] as Array[String],
+		"the only raw `action_rejected.connect(` is the seam's wrapper body. Got: %s"
+				% ", ".join(raw_sites))
 
 
 ## Story 4-3 (AC 5, `4-3/R13`): "NO STATE DECISION READS PHYSICS" IS MEASURED, NOT ASSERTED. AC 4
@@ -605,8 +748,9 @@ func test_the_contact_signals_keep_a_bare_int_attacker() -> void:
 		# stays a typed BARE INT, which is the whole of `4-3b/R15`'s rule. A parameter LIST that
 		# grows is not an attacker that widened -- the falling assertions below still reject
 		# `attacker: Array[int]` in both signals, so the guard discriminates exactly what it always
-		# did. Note what did NOT move: `OBSERVATION_SEAMS` above stays at NINE, because its regex
-		# counts `connect_*` WRAPPER DECLARATIONS in `match_runner.gd`, not signal arity.
+		# did. Note what did NOT move: `OBSERVATION_SEAMS` above stayed at nine at 5-5 (6-3b later moved
+		# it to ten), because its regex counts `connect_*` WRAPPER DECLARATIONS in `match_runner.gd`, not
+		# signal arity.
 		"deflect_landed":
 			"signal deflect_landed(attacker_slot: int, target_slot: int, defense_color: int)",
 	}

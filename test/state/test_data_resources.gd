@@ -159,6 +159,11 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# construction -- the `unblockable_swing_at_commit` precedent. It carries a bespoke > 0 bound in
 	# test_balance_authoring.gd, for the `defense_window_seconds` reason.
 	"pitch_stage_timer_seconds",
+	# Story 6-3b (AC 5): the pitch HUD's countdown push cadence -- a MODULO DIVISOR on the
+	# `mana_accelerator_interval_seconds` shape. Its `_seconds` suffix makes half (b) below demand the
+	# stem-matched `pitch_countdown_push_interval_ticks` on BalanceTicks; half (a) demands this entry.
+	# A bespoke authored `> 0` bound lives in test_balance_authoring.gd.
+	"pitch_countdown_push_interval_seconds",
 ]
 
 

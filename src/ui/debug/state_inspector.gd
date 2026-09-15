@@ -38,7 +38,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	# Left edge, below the HUD's top-left deck indicator — a compact debug readout clear of the
-	# lower-centre vitals and the centre pitch/telegraph focal band. Never eats gameplay input.
+	# lower-centre vitals, the two pitch zones flanking them (story 6-3b) and the centre telegraph band. Never eats gameplay input.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var panel := PanelContainer.new()
 	panel.anchor_left = 0.0

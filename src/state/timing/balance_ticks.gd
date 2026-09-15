@@ -104,6 +104,10 @@ var unblockable_launch_ticks_green: int
 ## derived ONCE here and read INLINE at the one seat that starts the fizzle window (the staging tick,
 ## CONSTRAINT C). The authored `pitch_stage_timer_seconds` float never reaches `advance()`.
 var pitch_stage_timer_ticks: int
+## Story 6-3b (AC 5): the pitch HUD's countdown push cadence in ticks. A MODULO DIVISOR, so it takes
+## `minion_retarget_interval_ticks`'s clamp rather than the plain conversion -- an authored 0 means
+## "every tick" instead of a divide-by-zero at the `_tick % interval` throttle in `MatchState`.
+var pitch_countdown_push_interval_ticks: int
 
 
 ## Story 6-1c: the colour lookup over the three launch twins above -- `BalanceConfig`'s
@@ -189,6 +193,10 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# that same tick). That degrade is defined rather than crashing; the authoring audit keeps it out
 	# of the shipped `.tres`.
 	t.pitch_stage_timer_ticks = TimingWindow.seconds_to_ticks(config.pitch_stage_timer_seconds)
+	# Story 6-3b (AC 5): the pitch HUD push cadence takes the modulo-divisor clamp, for
+	# `minion_retarget_interval_ticks`'s reason and not by analogy -- it is read as `_tick % interval`.
+	t.pitch_countdown_push_interval_ticks = maxi(1,
+			TimingWindow.seconds_to_ticks(config.pitch_countdown_push_interval_seconds))
 	return t
 
 

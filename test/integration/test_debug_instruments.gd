@@ -14,8 +14,11 @@ extends SceneTree
 ##   [AC 4 magnitude switch] Flipping the panel's Normalize switch mutates
 ##     GamepadProfile.normalize_move_magnitude on the SHARED cached resource instance (the test
 ##     loads the same res:// path the runner handed the panel). In memory only.
-##   [AC 5 pitch A/B shared] Flipping the panel's Pitch Zone switch moves BOTH viewports' PitchZone
-##     placeholder together (dead-centre offset_left -70 -> left-of-bars -286), and back.
+##   [Story 6-3b AC 4/AC 7 pitch zones] The 2-6 placement switch and the dead-centre panel it moved
+##     are RETIRED; each HudRoot instead carries both real pitch zones at FIXED anchors -- its own
+##     zone left of the vitals bars (offsets -286/-196/-186/-108) and the opponent's mirrored right
+##     of them (186/-196/286/-108), both anchored bottom-centre -- and neither viewport has the old
+##     panel. The PANEL LAYOUT check below covers both zones: neither may rise into InstrumentBox.
 ##   [Story 4-B1 AC 2/AC 3 reveal toggle] Unpressed by default and having produced NOTHING (never
 ##     reveals in the shipped default configuration, `4-B1/R2`); pressing it reads BOTH players'
 ##     real hand contents through the runner's read accessor and prints the two SNAP lines to the
@@ -57,7 +60,7 @@ var _panel: Node
 
 var _inspectors_exist := false
 var _primed_ok := false
-var _pitch_ab_ok := false
+var _pitch_zones_ok := false
 var _magnitude_ok := false
 var _panel_layout_ok := false
 var _label_set_ok := false
@@ -133,12 +136,12 @@ func _physics_process(_delta: float) -> bool:
 			_p2_state_stayed_blank = false
 	if _frames >= ROLL_FRAME + 20:
 		Input.action_release(&"p1_move_up")
-		var ok := (_inspectors_exist and _primed_ok and _pitch_ab_ok and _magnitude_ok
+		var ok := (_inspectors_exist and _primed_ok and _pitch_zones_ok and _magnitude_ok
 			and _panel_layout_ok and _label_set_ok and _label_cleared_via_advance
 			and _p1_saw_rolling and _p2_state_stayed_blank and _reveal_default_off
 			and _reveal_shows_real_hands and _reveal_clears_on_untoggle)
-		print("instruments: inspectors=%s primed=%s pitch_ab=%s magnitude=%s panel_layout=%s label_set=%s label_cleared_via_advance=%s (bus_round_started=%d) p1_rolling=%s p2_blank=%s reveal_default_off=%s reveal_shows_hands=%s reveal_clears=%s" % [
-			_inspectors_exist, _primed_ok, _pitch_ab_ok, _magnitude_ok, _panel_layout_ok,
+		print("instruments: inspectors=%s primed=%s pitch_zones=%s magnitude=%s panel_layout=%s label_set=%s label_cleared_via_advance=%s (bus_round_started=%d) p1_rolling=%s p2_blank=%s reveal_default_off=%s reveal_shows_hands=%s reveal_clears=%s" % [
+			_inspectors_exist, _primed_ok, _pitch_zones_ok, _magnitude_ok, _panel_layout_ok,
 			_label_set_ok, _label_cleared_via_advance, _bus_round_started_count,
 			_p1_saw_rolling, _p2_state_stayed_blank, _reveal_default_off,
 			_reveal_shows_real_hands, _reveal_clears_on_untoggle])
@@ -169,16 +172,14 @@ func _run_static_checks() -> void:
 	_primed_ok = (p1_hp != null and p1_hp.text != "--" and p2_hp != null and p2_hp.text != "--"
 		and _p1_state != null and _p1_state.text == "--" and _p2_state != null and _p2_state.text == "--")
 
-	# AC 5: the pitch A/B switch moves BOTH placeholders together. offset_left: A -70, B -286.
-	var p1_pitch: Control = p1_hud.get_node("PitchZone")
-	var p2_pitch: Control = p2_hud.get_node("PitchZone")
-	var start_a: bool = is_equal_approx(p1_pitch.offset_left, -70.0) and is_equal_approx(p2_pitch.offset_left, -70.0)
-	var pitch_switch: CheckButton = panel.find_child("PitchZoneLeftOfBars", true, false)
-	pitch_switch.button_pressed = true
-	var both_b: bool = is_equal_approx(p1_pitch.offset_left, -286.0) and is_equal_approx(p2_pitch.offset_left, -286.0)
-	pitch_switch.button_pressed = false
-	var both_a_again: bool = is_equal_approx(p1_pitch.offset_left, -70.0) and is_equal_approx(p2_pitch.offset_left, -70.0)
-	_pitch_ab_ok = start_a and both_b and both_a_again
+	# Story 6-3b (AC 4/AC 7): both real pitch zones at their FIXED anchors on BOTH HudRoots, and the
+	# retired dead-centre panel gone from both (get_node_or_null finds hidden nodes too, so this is a
+	# deletion assertion, not a visibility one). No switch exists to flip any more.
+	_pitch_zones_ok = true
+	for hud: Node in [p1_hud, p2_hud]:
+		_pitch_zones_ok = (_pitch_zones_ok and hud.get_node_or_null("PitchZone") == null
+			and _zone_at(hud, "OwnPitch", [-286.0, -196.0, -186.0, -108.0])
+			and _zone_at(hud, "OpponentPitch", [186.0, -196.0, 286.0, -108.0]))
 
 	# AC 4: the magnitude switch mutates the SHARED profile instance in memory.
 	var profile: GamepadProfile = load("res://data/gamepad_profile.tres")
@@ -317,3 +318,22 @@ func _hud_screen_rects() -> Array:
 				var r: Rect2 = c.get_global_rect()
 				out.append(["%s/StateInspector" % view_name, Rect2(r.position + origin, r.size)])
 	return out
+
+
+## Story 6-3b (AC 4): `name` under `hud` is a Control anchored bottom-centre (0.5, 0.5, 1, 1) at exactly
+## `offsets` = [left, top, right, bottom].
+func _zone_at(hud: Node, zone_name: String, offsets: Array) -> bool:
+	var zone := hud.get_node_or_null(zone_name) as Control
+	if zone == null:
+		print("PITCH ZONES: %s missing under %s" % [zone_name, hud.get_path()])
+		return false
+	var ok := (is_equal_approx(zone.anchor_left, 0.5) and is_equal_approx(zone.anchor_right, 0.5)
+		and is_equal_approx(zone.anchor_top, 1.0) and is_equal_approx(zone.anchor_bottom, 1.0)
+		and is_equal_approx(zone.offset_left, offsets[0]) and is_equal_approx(zone.offset_top, offsets[1])
+		and is_equal_approx(zone.offset_right, offsets[2])
+		and is_equal_approx(zone.offset_bottom, offsets[3]))
+	if not ok:
+		print("PITCH ZONES: %s at anchors (%s,%s,%s,%s) offsets (%s,%s,%s,%s), expected %s" % [zone_name,
+			zone.anchor_left, zone.anchor_right, zone.anchor_top, zone.anchor_bottom, zone.offset_left,
+			zone.offset_top, zone.offset_right, zone.offset_bottom, offsets])
+	return ok

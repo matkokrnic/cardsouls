@@ -29,6 +29,27 @@ signal round_started()
 ## (match_runner.connect_hit_landed) and never hold a MatchState handle.
 signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float)
 
+## Story 6-3b (AC 1): one player's Pitch Zone, as the pitch HUD renders it -- the OWNER slot, the staged
+## card id (`PitchState.NO_CARD` when empty), its origin hand slot (`PitchState.NO_HAND_SLOT` when
+## empty), READY read live at the emission instant (never latched), and the countdown as
+## `remaining_ticks` of `duration_ticks` (both 0 when empty). Consumers subscribe through the runner's
+## match-level seam (`match_runner.connect_pitch_changed`, the `hit_landed` shape) and never hold a
+## MatchState handle; BOTH HudRoots receive BOTH zones and tell them apart by the owner slot.
+##
+## HOMED HERE, NOT ON `PitchState`: READY needs the zone, the owner's `OrbPool` and the injected
+## `flags` together, and only MatchState holds all three. `PitchState` stays a signal-free container.
+##
+## NO ORB COST, NO SHORTFALL AND NO PER-COLOUR ORB NUMBER RIDES THE PAYLOAD (operator ruling
+## 2026-09-15): a zone shows the card, the countdown and READY, so no number exists here that could
+## reveal a player's exact orb count to the other (`6-3-split/R-INFO`, satisfied by construction).
+##
+## QUEUED from ONE helper (`_queue_pitch_changed`) at exactly six seats: stage, activate, expiry, debug
+## reset, an orb grant inside a staged window, and the authored step-6 countdown throttle. Every
+## emission READS the live zone and pool; nothing hashed is added (FORMAT_VERSION and the snapshot key
+## set are untouched, AC 9).
+signal pitch_changed(slot: int, card_id: StringName, hand_slot: int, ready: bool,
+		remaining_ticks: int, duration_ticks: int)
+
 ## Story 1-8 (R-D4): MatchState-owned two-player event (the hit_landed precedent — a
 ## deflect has an attacker AND a target). Queued in step 4 when a contact resolves as a
 ## DEFLECT (fully negated: no damage, no hit_landed, no mana), drained by the runner
@@ -40,9 +61,10 @@ signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp
 ## under one name that literally says "deflect": melee block-timing parry, a unit's melee swing
 ## parried, and a card-cast colour-matched negation of an unblockable (`_resolve_charge_landing`,
 ## the SECOND emit site). A new, more precisely named signal was REFUSED because the observation
-## seam family is locked at nine (`5-4/AC 15`) and the payload shape is otherwise identical -- a
-## NAMED trade-off, not a free lunch. If a later story finds the conflation confusing (a consumer
-## that must distinguish WHICH negation happened), that is a fresh finding for that story.
+## seam family is frozen (`5-4/AC 15`, pinned in test_architecture_invariants.gd) and the payload
+## shape is otherwise identical -- a NAMED trade-off, not a free lunch. If a later story
+## finds the conflation confusing (a consumer that must distinguish WHICH negation happened), that
+## is a fresh finding for that story.
 ##
 ## THE MELEE EMIT SITE PASSES `PlayerState.NO_TELEGRAPH_COLOR` (-1): an explicit "no colour to
 ## report" sentinel, not a fourth invented value -- the same token reused a fourth context over
@@ -585,6 +607,17 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    zero-delay degrade, reached from a different debt.
 	_resolve_pitch_expiry(p1, 0)
 	_resolve_pitch_expiry(p2, 1)
+	#    Story 6-3b (AC 1 site (f), AC 5): the PITCH HUD COUNTDOWN THROTTLE, at the tail of the fizzle
+	#    exit so a card that fizzled THIS tick is already empty and never throttles. Only a STAGED zone,
+	#    and only on a multiple of the authored interval (`_tick % interval`, the step-7 retarget
+	#    throttle's shape) -- presentation gets no per-tick timing-window firehose (`2-6/R7`). It also
+	#    refreshes READY, which is how a mid-window balance reload lowering `max_orbs_per_color` reaches
+	#    the HUD within one interval. NO NEW STATE: `_tick` is already hashed, and the emission reads.
+	#    A round-over tick returned at step 1b, so nothing emits while the countdown is frozen.
+	for pitch_slot: int in 2:
+		if pitch.is_staged(pitch_slot) \
+				and _tick % balance_ticks.pitch_countdown_push_interval_ticks == 0:
+			_queue_pitch_changed(pitch_slot)
 	#    Story 3-5b (AC 3/AC 5): the PENDING-DRAW DELIVERY, third and last in this one seat, and
 	#    the ordering is load-bearing in both directions. AFTER the cast dispatch, because a
 	#    derived delay of ZERO ticks must still refill on the cast tick (TimingWindow.start(0)
@@ -1010,7 +1043,7 @@ func to_snapshot() -> Dictionary:
 ##
 ## This is DEBUG INSTRUMENTATION, NOT an eighth observation seam: the runner POLLS it after
 ## advance() and pushes the plain payload into DebugInstrumentPanel. No signal, no state handle,
-## no mutator — presentation receives VALUES, never internals, the same discipline the nine
+## no mutator — presentation receives VALUES, never internals, the same discipline the observation
 ## seams already follow (the standing "hands the state layer's internals to presentation"
 ## objection is answered by the return type: ints keyed by name). to_snapshot() is deliberately
 ## NOT extended, so the replay contract never learns this instrument exists.
@@ -2848,6 +2881,7 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 	if balance.pitch_stage_clears_orbs:
 		player.orbs.reset_all()
 	pitch.stage(slot, staged, hand_slot, condition.orb_costs, balance_ticks.pitch_stage_timer_ticks)
+	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (a))
 	player.notify_cards_changed()
 
 
@@ -2911,6 +2945,7 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	var hand_slot := pitch.staged_hand_slot(slot)
 	player.discard.add(card_id)
 	pitch.clear(slot)
+	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (b))
 	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
@@ -2935,6 +2970,7 @@ func _resolve_pitch_expiry(player: PlayerState, slot: int) -> void:
 	var hand_slot := pitch.staged_hand_slot(slot)
 	player.discard.add(pitch.staged_card_id(slot))
 	pitch.clear(slot)
+	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (c))
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	player.notify_cards_changed()
@@ -3452,6 +3488,25 @@ func _grant_landing_orbs(player: PlayerState) -> void:
 	# this one is about a faucet that paid nothing.
 	if grant > 0:
 		player.orbs.add(player.charge_color, grant)
+		# Story 6-3b (AC 1 site (e)): the one seat where orbs GROW inside a staged window, so READY
+		# reaches the pitch HUD on the tick it becomes true rather than up to one throttle interval
+		# late. Only a staged zone -- an empty one has no READY to flip.
+		var grant_slot := 0 if player == p1 else 1
+		if pitch.is_staged(grant_slot):
+			_queue_pitch_changed(grant_slot)
+
+
+## Story 6-3b (AC 1): THE ONE EMISSION HELPER for `pitch_changed`, called from the six seats that doc
+## enumerates. Every value is READ at the call: the zone's card and hand slot, READY derived live
+## against the owner's pool and the injected flags, and the countdown off the zone's own `"fizzle"`
+## snapshot entry -- no new `PitchState` or `MatchState` accessor, no new member, no latch. Queued with
+## its payload bound at push (D5), the `card_cast_resolved` shape.
+func _queue_pitch_changed(slot: int) -> void:
+	var owner: PlayerState = p1 if slot == 0 else p2
+	var fizzle: Dictionary = pitch.to_snapshot()["p1" if slot == 0 else "p2"]["fizzle"]
+	var duration := int(fizzle["duration_ticks"])
+	_queue.push(pitch_changed.emit.bind(slot, pitch.staged_card_id(slot), pitch.staged_hand_slot(slot),
+			pitch.is_ready(slot, owner.orbs, flags), duration - int(fizzle["elapsed_ticks"]), duration))
 
 
 ## Step-6 delivery of ONE owed replacement (story 3-5b, AC 3/AC 5/AC 7/AC 10). Seated after the
@@ -4240,6 +4295,7 @@ func _reset_player(player: PlayerState) -> void:
 	# staged card returns to (the `pending_draw_owed.clear()` reasoning in `_deal_player`). The spent
 	# mana is not refunded, the parked mana-survives-reset finding unchanged.
 	pitch.clear(reset_slot)
+	_queue_pitch_changed(reset_slot)  # Story 6-3b (AC 1 site (d))
 	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
 	# fact in two parts, exactly as the chargeup's three and the defense window's two are.
 	hero.stun.start(0)

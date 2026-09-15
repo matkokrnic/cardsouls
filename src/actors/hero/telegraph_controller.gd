@@ -145,9 +145,9 @@ func on_action_state_changed(_previous: HeroState.ActionState, current: HeroStat
 
 ## Seam callback (5-3 AC 13): S5's success-cue half. Connected DIRECTLY to the existing,
 ## previously-unwired `MatchState.card_cast_resolved` signal by match_runner (a plain connect,
-## not a new `connect_*` wrapper — `test_runner_observation_seams_are_exactly_nine` pins the
-## observation-seam family, which stood at eight when this line shipped and is nine since 5-4 AC 15;
-## THIS connection adds none of them). A
+## not a new `connect_*` wrapper — `test_runner_observation_seams_are_exactly_ten` pins the
+## observation-seam family, which stood at eight when this line shipped, nine since 5-4 AC 15, ten
+## since 6-3b AC 1; THIS connection adds none of them). A
 ## one-shot cue at CAST RESOLUTION, distinct from the ongoing CHARGING sting above.
 func on_card_cast_resolved() -> void:
 	_cue_cast_success.play()

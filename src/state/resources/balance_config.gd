@@ -479,6 +479,20 @@ extends Resource
 ## staged card would fizzle on the tick it was staged -- the buildup half of the bluff shipped
 ## invisible.
 @export var pitch_stage_timer_seconds: float = 0.0
+## Story 6-3b (AC 5, operator ruling 2026-09-15: N = 30 ticks): how often a STAGED card's countdown
+## and READY are re-pushed to the pitch HUD through `MatchState.pitch_changed` -- the `2-6/R7` rule
+## that presentation gets no per-tick timing-window firehose. Its OWN field, never a reuse of
+## `minion_retarget_interval_seconds`, which feeds three minion-AI seats: sharing it would let a
+## minion retune silently re-pace the pitch bar, and the reverse.
+##
+## A DURATION, so it converts once at load (A1) to `BalanceTicks.pitch_countdown_push_interval_ticks`,
+## read INLINE at the step-6 throttle seat (CONSTRAINT C).
+##
+## A MODULO DIVISOR, so it takes `minion_retarget_interval_ticks`'s clamp rather than the plain
+## `seconds_to_ticks()` the countdown above uses: the derived value is clamped to at least 1 tick,
+## which gives an authored 0 the DEFINED meaning "every tick" instead of a divide-by-zero on the
+## tick ladder. Zero is therefore a legal in-test value; the AUTHORED value is audited > 0.
+@export var pitch_countdown_push_interval_seconds: float = 0.0
 ## Story 6-2 (AC 12/AC 13): THE OPTIONAL ORB-CLEAR RULE -- "pitching clears, not the price clears".
 ## When ON, staging a card empties ALL THREE of the staging player's orb colours at the staging tick,
 ## BEFORE READY is first read, whatever the staged card's own orb price is (a zero-orb card included).

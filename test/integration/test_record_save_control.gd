@@ -15,8 +15,8 @@ extends SceneTree
 ##     overwrite), carries MORE ticks, and is LARGER on disk. SAVE is a snapshot of an always-on
 ##     stream (AC 6), not a stop — and here that is measured on the LIVE runner rather than on a
 ##     fixture's imitation of it.
-##   [TWO CONTROLS, EXACT SET] The panel's control set is asserted to be exactly the two shipped
-##     2-6 switches plus SAVE and RELOAD (`3-0d/R13`): no start control and no load control ships
+##   [EXACT SET] The panel's control set is asserted to be exactly the one shipped
+##     2-6 switch plus SAVE and RELOAD (`3-0d/R13`): no start control and no load control ships
 ##     (`3-0d/R1`, `3-0d/R2`). **As of `3-0d/R20` this is the WHOLE pin, not half of one.** The
 ##     source-scan half in test/state/test_replay_surface_pins.gd is DELETED — it enumerated
 ##     declaration TEXT and six declaration forms were found that evaded it — and this check
@@ -143,10 +143,11 @@ func _press_reload() -> void:
 	button.pressed.emit()
 
 
-## AC 7 (amended `3-0d/R13`, and THE ONLY PANEL PIN as of `3-0d/R20`; amended AGAIN `4-B1/R1`): the
-## panel ships EXACTLY the two 2-6 switches, this story's TWO controls SAVE and RELOAD, plus 4-B1's
-## REVEAL toggle — an exact set, not a count. `4-B1/R1` names this a reviewed, named exception on
-## exactly the `3-6/R2` precedent (a pinned set amended by an operator ruling, not a widened regex).
+## AC 7 (amended `3-0d/R13`, and THE ONLY PANEL PIN as of `3-0d/R20`; amended AGAIN `4-B1/R1`; the
+## pitch placement switch retired by 6-3b): the panel ships EXACTLY the one 2-6 switch, this
+## story's TWO controls SAVE and RELOAD, plus 4-B1's REVEAL toggle — an exact set, not a count.
+## `4-B1/R1` names this a reviewed, named exception on exactly the `3-6/R2` precedent (a pinned
+## set amended by an operator ruling, not a widened regex).
 ##
 ## THIS IS NOW THE WHOLE MECHANISM. The source scan that used to sit beside it in
 ## test/state/test_replay_surface_pins.gd — enumerating the panel's `Callable` MEMBERS by matching
@@ -173,10 +174,10 @@ func _check_control_set() -> void:
 	for node in _panel.find_children("*", "BaseButton", true, false):
 		names.append(String(node.name))
 	names.sort()
-	_check(names == ["NormalizeMagnitude", "PitchZoneLeftOfBars", "ReloadBalance",
-			"RevealOpponentHand", "SaveRecord"],
-		"the panel's controls are the two switches plus SAVE, RELOAD and REVEAL — no start control "
-		+ "and no load control (`3-0d/R1`, `3-0d/R2`), REVEAL amended in by `4-B1/R1`: got %s"
+	_check(names == ["NormalizeMagnitude", "ReloadBalance", "RevealOpponentHand", "SaveRecord"],
+		"the panel's controls are the one switch plus SAVE, RELOAD and REVEAL — no start control "
+		+ "and no load control (`3-0d/R1`, `3-0d/R2`), REVEAL amended in by `4-B1/R1`, the pitch "
+		+ "placement switch retired by 6-3b: got %s"
 				% str(names))
 	# NON-VACUITY, in the form the old `"Button"` query was blind to: the query must SEE a
 	# BaseButton subclass that is not a Button. Built, counted, freed — never added to the panel.

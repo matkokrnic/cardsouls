@@ -190,6 +190,24 @@ func test_conversion_derives_minion_retarget_interval_ticks() -> void:
 ##
 ## THE CLAMP LIVES AT THE CONVERSION BOUNDARY, not at the consumer, which is what makes it
 ## impossible to bypass: no consumer can read an unclamped value because none exists.
+## Story 6-3b (AC 5): the pitch HUD's countdown push cadence converts at load on the MODULO-DIVISOR
+## shape -- the authored 0.5 s is 30 ticks, and an authored 0 clamps to 1 ("push every tick") rather
+## than dividing by zero at `MatchState`'s step-6 throttle. Its own field, never a reuse of
+## `minion_retarget_interval_ticks`, so a minion retune cannot re-pace the pitch bar.
+func test_conversion_derives_the_pitch_countdown_push_interval_with_the_modulo_clamp() -> void:
+	var half := BalanceTicks.from_config(
+		_make_config({"pitch_countdown_push_interval_seconds": 0.5}))
+	assert_eq(half.pitch_countdown_push_interval_ticks, 30, "0.5 s at 60 Hz -> 30 ticks")
+	var zero := BalanceTicks.from_config(
+		_make_config({"pitch_countdown_push_interval_seconds": 0.0}))
+	assert_eq(zero.pitch_countdown_push_interval_ticks, 1,
+		"an authored 0 clamps to 1 tick -- 'push every tick', never a modulo by zero")
+	var minion := BalanceTicks.from_config(_make_config({
+		"pitch_countdown_push_interval_seconds": 0.5, "minion_retarget_interval_seconds": 0.2}))
+	assert_eq(minion.pitch_countdown_push_interval_ticks, 30,
+		"the minion retarget cadence does not re-pace the pitch push (its own field)")
+
+
 func test_conversion_clamps_the_retarget_interval_to_at_least_one_tick() -> void:
 	var zero := BalanceTicks.from_config(_make_config({"minion_retarget_interval_seconds": 0.0}))
 	assert_eq(zero.minion_retarget_interval_ticks, 1,

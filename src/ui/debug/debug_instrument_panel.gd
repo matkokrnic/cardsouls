@@ -6,25 +6,23 @@ extends Control
 ## src/ui/debug/ with NO .tscn. It is the narrowed heir of old AC1's FeatureFlags overlay: it
 ## flips ONLY presentation-local and controller-local switches, NEVER a FeatureFlags member
 ## (2-6/R4 — flags stay load-once and runtime-immutable so replay has no silent hole). No
-## _process / _physics_process (F1); it is driven entirely by the two switches' toggled signals.
+## _process / _physics_process (F1); it is driven entirely by its controls' own signals.
 ##
 ## Story 3-0b (AC 2) adds a third instrument — the per-slot window countdown — and RE-FITS the
 ## box to hold it (see _ready). It is a READ-ONLY display: the runner polls MatchState's
 ## read-only debug accessor after each advance() and pushes PLAIN INTEGERS here. No state
 ## handle, no signal, no eighth observation seam, no to_snapshot() extension.
 ##
-## Two switches:
+## Switches (2-6 shipped two; story 6-3b retired the second):
 ##   1. Analog magnitude (AC 4, 2-6/R8) — flips GamepadProfile.normalize_move_magnitude on the
 ##      SHARED in-memory resource instance the gamepad controllers already read fresh every tick
 ##      via sample(). IN MEMORY ONLY: it NEVER calls ResourceSaver and never writes the .tres back
 ##      to disk, so the authored default (true) returns on the next launch. In the shipped default
 ##      config (two keyboards) no gamepad controller exists, so the flip is inert on gameplay this
 ##      session — the AC delivers the toggle only; the feel verdict is animation-gated (rig story).
-##   2. Pitch Zone A/B (AC 5, 2-6/R9) — moves BOTH viewports' Pitch Zone placeholder together
-##      between its dead-centre anchor (A) and a left-of-the-vitals-bars anchor (B). The switch is
-##      SHARED (one switch, both viewports) purely for A/B COMPARABILITY. This decides NOTHING
-##      about whether the eventual pitch MECHANIC is shared or per-player (that stays open for E6);
-##      it is placeholder geometry only.
+##   2. RETIRED by story 6-3b (AC 7): the 2-6 pitch-zone placement switch, together with the
+##      dead-centre pitch panel it moved. The HUD now renders both real pitch zones at fixed anchors,
+##      so there is nothing left to move and the panel no longer holds the HudRoots.
 
 ## Story 3-0d (AC 7) adds the panel's THIRD and FOURTH controls, its first two runner-reaching
 ## ones — SAVE, which writes the record so far to `user://` (RECORDING CONTINUES AFTERWARDS: SAVE
@@ -32,9 +30,9 @@ extends Control
 ## triggers a live mid-match balance reload on the SAME reload channel `3-0c` shipped. This panel
 ## holds no recorder handle, no state handle and no BalanceConfigService reference to do either
 ## with — only the two Callables below. There is deliberately NO start control and NO load control
-## (`3-0d/R1`, `3-0d/R2`): the panel's INSTANTIATED control set is pinned at the exact four names
-## {NormalizeMagnitude, PitchZoneLeftOfBars, SaveRecord, ReloadBalance} by
-## test/integration/test_record_save_control.gd, which enumerates the real controls in a built
+## (`3-0d/R1`, `3-0d/R2`): the panel's INSTANTIATED control set was pinned then at
+## four names (the magnitude switch, the since-retired pitch placement switch, SaveRecord and
+## ReloadBalance) by test/integration/test_record_save_control.gd, which enumerates the real controls in a built
 ## panel at runtime.
 ##
 ## CORRECTED (`3-0d/R20`): this header used to point at a SOURCE SCAN over this file
@@ -52,21 +50,20 @@ extends Control
 ## Callable-handoff shape generalised from an action to a read) and prints them to the panel's own
 ## output Label. ON-DEMAND ONLY: the accessor is called from the toggle's own `toggled` handler,
 ## never per-frame and never a new observation seam — HudRoot never learns of it, and
-## `test_runner_observation_seams_are_exactly_nine` stays untouched. The pinned control set in
-## `test/integration/test_record_save_control.gd` IS amended to five names, a reviewed named
-## exception on the `3-6/R2` precedent (`4-B1/R1`). Unpressed by default and reachable only by a
+## `test_runner_observation_seams_are_exactly_ten` stays untouched. The pinned control set in
+## `test/integration/test_record_save_control.gd` WAS amended to five names, a reviewed named
+## exception on the `3-6/R2` precedent (`4-B1/R1`); story 6-3b's retirement of the pitch placement
+## switch brings it back to four. Unpressed by default and reachable only by a
 ## manual mouse click (`4-B1/R2`): it never reveals anything in the shipped default configuration,
 ## and it changes no FeatureFlags member and no state-layer value.
 
-## Set by the runner BEFORE add_child (so _ready sees them). The shared gamepad profile instance
-## (the runner loads it via the same res:// path, so the resource cache hands both the same object)
-## and both per-viewport HudRoots (whose pitch placeholder the A/B switch repositions).
+## Set by the runner BEFORE add_child (so _ready sees it). The shared gamepad profile instance
+## (the runner loads it via the same res:// path, so the resource cache hands both the same object).
 var gamepad_profile: GamepadProfile
-var huds: Array[HudRoot] = []
 
 ## Story 3-0d (AC 7): THE FIRST OF THE PANEL'S TWO RUNNER-REACHING SEAMS — a runner-owned Callable
-## handed over before add_child, exactly like the two references above (the `gamepad_profile` /
-## `huds` precedent generalised, the Dev Note's first option). A Callable rather than a signal the
+## handed over before add_child, exactly like the reference above (the `gamepad_profile`
+## precedent generalised, the Dev Note's first option). A Callable rather than a signal the
 ## runner connects to, because it is the shape this file already uses for "the runner hands the
 ## panel what it may touch".
 var save_record: Callable = Callable()
@@ -177,15 +174,6 @@ func _ready() -> void:
 	magnitude.button_pressed = gamepad_profile == null or gamepad_profile.normalize_move_magnitude
 	magnitude.toggled.connect(_on_normalize_toggled)
 	switches.add_child(magnitude)
-
-	# Switch 2: Pitch Zone A/B. Pressed == the left-of-bars candidate (B); unpressed == dead-centre
-	# (A, the shipped placement). Starts unpressed so both viewports begin at the current anchor.
-	var pitch := CheckButton.new()
-	pitch.name = "PitchZoneLeftOfBars"
-	pitch.text = "Pitch Zone: left of bars"
-	pitch.button_pressed = false
-	pitch.toggled.connect(_on_pitch_placement_toggled)
-	switches.add_child(pitch)
 
 	# Instrument 3 (story 3-0b, AC 2): the per-slot window countdown, one read-only row per slot.
 	_build_window_countdown(row)
@@ -310,7 +298,7 @@ func _on_normalize_toggled(pressed: bool) -> void:
 
 ## Story 3-0d (AC 7): hand the press to the runner and do nothing else. The panel does not know
 ## where the record goes, holds nothing to write it with, and cannot stop the recording — the
-## same "act only on what you were handed" shape as the two switches above, with a Callable in
+## same "act only on what you were handed" shape as the magnitude switch above, with a Callable in
 ## place of a resource. Null-guarded so a panel built outside the runner is inert, not a crash.
 func _on_save_pressed() -> void:
 	if save_record.is_valid():
@@ -325,14 +313,6 @@ func _on_save_pressed() -> void:
 func _on_reload_pressed() -> void:
 	if reload_balance.is_valid():
 		reload_balance.call()
-
-
-## AC 5: move BOTH viewports' pitch placeholder together (shared switch, A/B comparability). The
-## left-of-bars anchor is computed by HudRoot from its own vitals-column geometry, independent of
-## OpponentHandStrip (2-6/R9 — that provisional 2-5 row must not be anchored to).
-func _on_pitch_placement_toggled(left_of_bars: bool) -> void:
-	for hud in huds:
-		hud.set_pitch_zone_placement(left_of_bars)
 
 
 ## Story 4-B1 (AC 2/AC 3, `4-B1/R1`/`4-B1/R2`): pressed == read both hands ONCE, right now, and

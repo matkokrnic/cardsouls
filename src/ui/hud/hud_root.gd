@@ -29,26 +29,32 @@ extends Control
 ## the focal band (screen centre and the glanceable lower-centre); elements consulted at the
 ## player's OWN TEMPO, between exchanges, sit at the periphery (corners).
 ##   - Focal (reaction-critical): the STAMINA bar gates the reactive roll/block, so it rides
-##     the lower-centre band; the PITCH ZONE timer placeholder sits dead-centre where the
-##     "incoming" read lands. HP rides with stamina — it is the other value a player checks
-##     the instant a hit connects.
+##     the lower-centre band. HP rides with stamina — it is the other value a player checks
+##     the instant a hit connects. The two PITCH ZONES (story 6-3b) flank those bars in the same
+##     band: this player's own zone to their left, the opponent's to their right.
 ##   - Periphery (own-tempo): the three ORB totals (live since 5-4) and the DECK / reshuffle count
 ##     are read between exchanges, never mid-reaction, so they sit in the top corners.
 ##   - The 4-card HAND strip is the player's own-tempo action surface; it takes the
 ##     bottom-centre where it is visible without competing with the reactive focal centre.
 ## (The centre "incoming telegraph" cue named in P4 is a WORLD-SPACE cue, not a HUD element —
-## 2-4/R12 — so it is not built here; only the pitch timer placeholder occupies the centre.)
+## 2-4/R12 — so it is not built here.)
 ##
 ## Story 5-4 adds the FIFTH channel — connect_orbs_changed, the runner's ninth seam (AC 15) — feeding
 ## the three orb counters (AC 18-20). Per-slot and PRIVATE like the three economy ones and the card
 ## one; no orb fact about the opponent reaches this root.
 ##
+## Story 6-3b adds the SIXTH channel — connect_pitch_changed, the runner's tenth seam (AC 1) — feeding
+## BOTH pitch zones. Unlike every channel above it is MATCH-LEVEL: this root receives both players'
+## zones and tells them apart by the payload's owner slot against the slot the runner BOUND at wiring
+## (the on_round_ended shape). That is safe to receive because a zone is PUBLIC by GDD design and the
+## payload carries no orb count or shortfall — the card, the countdown and READY only (operator
+## ruling 2026-09-15, `6-3-split/R-INFO`).
+##
 ## Story 3-6: the hand strip and the deck/reshuffle indicator are NO LONGER PLACEHOLDERS — they
 ## are the first two reserved regions to gain real content, and this story owns their final
-## sizing (AC 6). Story 5-4 spends the THIRD reservation, the orb counters; only the pitch zone
-## stays reserved (E6). Card ART and a
-## display-name field are out of scope for every scheduled story, so a card renders as its
-## `CardData.id` text (`3-6/R4`).
+## sizing (AC 6). Story 5-4 spends the THIRD reservation, the orb counters, and story 6-3b the last,
+## the pitch zones. Card ART and a display-name field are out of scope for every scheduled story, so
+## a card renders as its `CardData.id` text (`3-6/R4`).
 
 # The pixel offsets below are tuned against the nominal half-width footprint ~576x648 (the
 # default 1152x648 window split in two). Anchors keep every element attached to its viewport
@@ -60,8 +66,6 @@ var _stamina_bar: ProgressBar
 var _stamina_value: Label
 var _mana_bar: ProgressBar
 var _mana_value: Label
-var _pitch_panel: Panel
-var _pitch_timer: Label
 var _round_label: Label
 ## Story 3-6 (AC 4): the deck-count read-out and the reshuffle flag beside it. The count comes
 ## from the eighth seam's payload; the flag comes from the ownerless bus event alone.
@@ -87,7 +91,7 @@ const ORB_COLORS: Array[Color] = [
 ]
 
 ## Story 3-6 (AC 4): the authored vulnerable-window duration in SECONDS, handed over by the runner
-## at construction (the `gamepad_profile` / `huds` static-handoff precedent), before add_child.
+## at construction (the `gamepad_profile` static-handoff precedent), before add_child.
 ## PRESENTATION-LOCAL AND FOR THE FLAG ONLY: it seeds the one-shot timer that turns the flag back
 ## off, so the HUD never reads PlayerState.vulnerable_window — which stays WRITE-ONLY unhashed
 ## state that nothing consults (3-5b/R20), the property keeping the window's mechanical cost a
@@ -150,6 +154,39 @@ const IN_FLIGHT_CAPTION := "..."
 ## this pass may declare correct.
 const LOCK_MARKER_SIZE := Vector2(14.0, 14.0)
 
+## Story 6-3b (AC 6): the staged-card GHOST -- a FOURTH hand-slot look, distinct from the full card
+## (id caption at full opacity, swatch shown), the in-flight `"..."` and the blank hole. It shows the
+## staged card's id and swatch DIMMED through this modulate, so the slot reads "that card is in your
+## pitch zone" rather than "empty". Every other look writes `Color.WHITE` back, so a ghost never
+## lingers on a slot that has moved on. Whether it reads at a glance is operator smoke (`PROC/R8`).
+const GHOST_MODULATE := Color(1.0, 1.0, 1.0, 0.35)
+
+## Story 6-3b (AC 4): the two pitch zones' fixed geometry, both anchored bottom-centre
+## (`anchor 0.5,0.5,1,1`) and flanking the vitals column (centre ± 180). OWN is the 2-6 "anchor B"
+## gutter LEFT of the bars; OPPONENT is its mirror RIGHT of them. 100 x 88 each. `offset_top` stays at
+## -196: above -198 a zone would intersect the debug InstrumentBox (test_debug_instruments.gd's
+## `_check_panel_layout`), which the -196 top clears by 2 px at the shipped 1152x648 window.
+const OWN_PITCH_OFFSETS := [-286.0, -196.0, -186.0, -108.0]   # left, top, right, bottom
+const OPPONENT_PITCH_OFFSETS := [186.0, -196.0, 286.0, -108.0]
+
+## Story 6-3b (AC 4): the two zones, each a Panel holding a card caption, a countdown bar and a READY
+## label -- the same three facts in both, and no number of any kind.
+var _own_pitch: Panel
+var _opponent_pitch: Panel
+
+## Story 6-3b (AC 6): HUD-LOCAL MEMORY for the one shared hand-row render path (the `_reshuffle_token`
+## precedent for memory held here; nothing is added to state). `on_cards_changed` rewrites every slot
+## on every call, so a ghost painted by `on_pitch_changed` alone would be wiped by the next unrelated
+## hand payload (a refill of a DIFFERENT slot) -- instead both callbacks store their latest payload here
+## and re-render the whole row from both, so the result does not depend on which arrives first.
+var _last_hand_ids: Array = []
+var _last_pending_draw_owed: Array = []
+var _last_card_colors: Dictionary = {}
+## This root's OWN staged card and the hand slot it left, from the last OWN `pitch_changed` payload.
+## An opponent payload never writes these.
+var _own_staged_card: StringName = PitchState.NO_CARD
+var _own_staged_hand_slot: int = PitchState.NO_HAND_SLOT
+
 
 func _init() -> void:
 	name = "HudRoot"
@@ -160,7 +197,8 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # the HUD never eats gameplay input
 	_build_vitals()
-	_build_pitch_zone()
+	_own_pitch = _build_pitch_zone("OwnPitch", OWN_PITCH_OFFSETS)
+	_opponent_pitch = _build_pitch_zone("OpponentPitch", OPPONENT_PITCH_OFFSETS)
 	# Story 3-6 (AC 1): ONE hand row — the owning player's, face-up. The opponent's face-down
 	# row 2-5 built here is DELETED, not hidden and not repointed (E3-RG/R4): it rendered a
 	# four-card COUNT whose publicity was never decided, and the GDD makes the pitched card the
@@ -240,33 +278,92 @@ func on_orbs_changed(red: int, blue: int, green: int) -> void:
 ## `HudRoot` never reads `CardDatabase` itself -- the runner hands a plain
 ## `Dictionary[StringName, Enums.CardColor]` (AC 3). Defaulted to an empty Dictionary so the
 ## pre-existing 3-arg and 4-arg test call sites keep exercising their branches unchanged.
+##
+## Story 6-3b (AC 6): the payload is REMEMBERED and the row rendered through `_render_hand_row`, the one
+## path `on_pitch_changed` shares, so a staged card's ghost survives this call rewriting every slot.
 func on_cards_changed(
 		hand_ids: Array, deck_count: int, _discard_count: int, pending_draw_owed: Array = [],
 		card_colors: Dictionary = {}) -> void:
+	_last_hand_ids = hand_ids.duplicate()
+	_last_pending_draw_owed = pending_draw_owed.duplicate()
+	_last_card_colors = card_colors
+	_render_hand_row()
+	_deck_label.text = "DECK %d" % deck_count
+
+
+## Seam callback (connect_pitch_changed, the runner's TENTH seam — story 6-3b, AC 1/AC 3/AC 4/AC 6),
+## `my_slot` BOUND at wiring (the on_round_ended shape). MATCH-LEVEL: this root receives BOTH players'
+## zones. The payload's owner is compared with `my_slot` to pick the zone it drives -- own zone left of
+## the bars, opponent zone right of them -- and ONLY an own payload touches the ghost memory, so an
+## opponent's staged hand slot can never ghost this player's row. Not primed: both zones start empty.
+##
+## Both zones render the same three facts and nothing else: the card id, the countdown as a bar, and
+## READY. No orb count and no shortfall exists in the payload to render (`6-3-split/R-INFO`).
+func on_pitch_changed(slot: int, card_id: StringName, hand_slot: int, ready: bool,
+		remaining_ticks: int, duration_ticks: int, my_slot: int) -> void:
+	var own := slot == my_slot
+	_render_pitch_zone(_own_pitch if own else _opponent_pitch, card_id, ready, remaining_ticks,
+			duration_ticks)
+	if own:
+		_own_staged_card = card_id
+		_own_staged_hand_slot = hand_slot
+		_render_hand_row()
+
+
+## Story 6-3b (AC 6): THE ONE hand-row render path, from the remembered hand payload and the own pitch
+## memory. Four looks, in precedence order: a real card (full opacity, tinted); the in-flight `"..."`;
+## the GHOST of the own staged card -- only for a slot EMPTY in the hand payload, NOT owed, and equal
+## to the own staged hand slot; otherwise blank (the permanent hole and the ordinary empty slot).
+func _render_hand_row() -> void:
 	for i in _own_card_labels.size():
-		if i < hand_ids.size() and hand_ids[i] != Hand.EMPTY:
-			var id: StringName = hand_ids[i]
-			_own_card_labels[i].text = str(id)
+		var label := _own_card_labels[i]
+		if i < _last_hand_ids.size() and _last_hand_ids[i] != Hand.EMPTY:
+			var id: StringName = _last_hand_ids[i]
+			label.text = str(id)
+			label.modulate = Color.WHITE
 			# AC 1: a slot holding a real card id is tinted; AC 1's "exhaustively" list of
 			# untinted states (EMPTY, permanent hole, in-flight) all fall out of this branch never
 			# running for them -- none of the three has a card id to look colour up by.
-			_set_swatch_color(i, card_colors.get(id, null))
-		elif pending_draw_owed.has(i):
-			_own_card_labels[i].text = IN_FLIGHT_CAPTION
+			_set_swatch_color(i, _last_card_colors.get(id, null))
+		elif _last_pending_draw_owed.has(i):
+			label.text = IN_FLIGHT_CAPTION
+			label.modulate = Color.WHITE
 			_set_swatch_color(i, null)
+		elif _own_staged_card != PitchState.NO_CARD and i == _own_staged_hand_slot:
+			label.text = str(_own_staged_card)
+			label.modulate = GHOST_MODULATE
+			_set_swatch_color(i, _last_card_colors.get(_own_staged_card, null), GHOST_MODULATE)
 		else:
-			_own_card_labels[i].text = ""
+			label.text = ""
+			label.modulate = Color.WHITE
 			_set_swatch_color(i, null)
-	_deck_label.text = "DECK %d" % deck_count
+
+
+## Story 6-3b (AC 4): one zone's three facts. An empty zone (`NO_CARD`) renders blank: no caption, an
+## empty bar, no READY. The bar is the countdown as `remaining / duration`; it moves only when a payload
+## arrives (on the authored throttle, AC 5), never per frame.
+func _render_pitch_zone(zone: Panel, card_id: StringName, ready: bool, remaining_ticks: int,
+		duration_ticks: int) -> void:
+	var staged := card_id != PitchState.NO_CARD
+	var caption: Label = zone.get_node("Card")
+	var bar: ProgressBar = zone.get_node("Countdown")
+	var ready_label: Label = zone.get_node("Ready")
+	caption.text = str(card_id) if staged else ""
+	bar.max_value = maxi(1, duration_ticks)
+	bar.value = remaining_ticks if staged else 0
+	ready_label.visible = staged and ready
 
 
 ## Story 6-0 (AC 1): the single write seat for the colour swatch. `color` is an
 ## `Enums.CardColor` or `null` (no colour found / no card in the slot) -- `null` hides the
 ## swatch rather than guessing a colour for a card the runner's map does not carry.
-func _set_swatch_color(index: int, color: Variant) -> void:
+## Story 6-3b (AC 6): `tint_modulate` dims the swatch for the ghost look; every other look passes the
+## default, so a slot leaving the ghost look is restored to full opacity.
+func _set_swatch_color(index: int, color: Variant, tint_modulate := Color.WHITE) -> void:
 	if index >= _own_card_swatches.size():
 		return
 	var swatch := _own_card_swatches[index]
+	swatch.modulate = tint_modulate
 	if color == null:
 		swatch.visible = false
 		return
@@ -397,55 +494,63 @@ func _make_bar_row(caption: String, fill: Color) -> Array:
 	return [bar, value_label, row]
 
 
-## Pitch Zone slot + timer placeholder (E6). Dead-centre focal anchor. Reserved footprint
-## only — consumes no signal.
-func _build_pitch_zone() -> void:
-	var panel := _make_placeholder_panel("PitchZone", "PITCH ZONE")
-	_pitch_panel = panel
-	add_child(panel)
-	set_pitch_zone_placement(false)  # start at anchor A (dead-centre, the shipped placement)
-	_pitch_timer = Label.new()
-	_pitch_timer.name = "PitchTimer"
-	_pitch_timer.text = "0.0"
-	_pitch_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pitch_timer.anchor_left = 0.0
-	_pitch_timer.anchor_right = 1.0
-	_pitch_timer.anchor_top = 1.0
-	_pitch_timer.anchor_bottom = 1.0
-	_pitch_timer.offset_top = 2.0
-	_pitch_timer.offset_bottom = 22.0
-	panel.add_child(_pitch_timer)
-
-
-## Story 2-6 (AC 5, 2-6/R9): move THIS viewport's Pitch Zone placeholder between the two A/B
-## candidate anchors. `false` = anchor A, the shipped dead-centre focal position; `true` = anchor
-## B, just LEFT of the lower-centre vitals bars. The B anchor is derived from the vitals column's
-## own geometry (that column spans centre ± 180, see _build_vitals) — NOT from OpponentHandStrip
-## (2-5's provisional face-down row, which may be deleted in E3 and must never be anchored to).
-## The instrument panel drives BOTH viewports through this one method (shared switch). The
-## _pitch_timer child rides along automatically (its anchors are relative to this panel).
-func set_pitch_zone_placement(left_of_bars: bool) -> void:
-	_pitch_panel.anchor_left = 0.5
-	_pitch_panel.anchor_right = 0.5
-	if left_of_bars:
-		# Anchor B: a 100x88 panel in the gutter just LEFT of the vitals column. The column's left
-		# edge is at centre-180 (see _build_vitals); the panel's right edge sits 6px left of it
-		# (centre-186) and it is 100 wide, fitting the ~108px gutter to the viewport's left edge at
-		# the nominal half-width. Derived from the vitals geometry — NOT from OpponentHandStrip.
-		_pitch_panel.anchor_top = 1.0
-		_pitch_panel.anchor_bottom = 1.0
-		_pitch_panel.offset_left = -286.0
-		_pitch_panel.offset_right = -186.0
-		_pitch_panel.offset_top = -196.0
-		_pitch_panel.offset_bottom = -108.0
-	else:
-		# Anchor A: the shipped dead-centre focal placement.
-		_pitch_panel.anchor_top = 0.5
-		_pitch_panel.anchor_bottom = 0.5
-		_pitch_panel.offset_left = -70.0
-		_pitch_panel.offset_right = 70.0
-		_pitch_panel.offset_top = -110.0
-		_pitch_panel.offset_bottom = -22.0
+## Story 6-3b (AC 4): one pitch zone -- REPLACING the 2-6 dead-centre pitch panel and its placement
+## switch, both deleted. A bordered 100x88 panel at `offsets` ([left, top, right, bottom], anchored
+## bottom-centre) holding exactly three children, the same in the own and the opponent zone: `Card`,
+## the staged id caption; `Countdown`, a ~80 px bar (so one throttle move is ~2 px at the authored
+## 20 s / 30-tick cadence); and `Ready`, hidden until a payload says READY. Built EMPTY -- no caption,
+## an empty bar, no READY -- which is the correct render until the first staging, because the seam does
+## not prime. The bar shows no percentage: no number of any kind appears in a zone.
+func _build_pitch_zone(node_name: String, offsets: Array) -> Panel:
+	var zone := Panel.new()
+	zone.name = node_name
+	zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	zone.anchor_left = 0.5
+	zone.anchor_right = 0.5
+	zone.anchor_top = 1.0
+	zone.anchor_bottom = 1.0
+	zone.offset_left = offsets[0]
+	zone.offset_top = offsets[1]
+	zone.offset_right = offsets[2]
+	zone.offset_bottom = offsets[3]
+	add_child(zone)
+	var caption := Label.new()
+	caption.name = "Card"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	caption.clip_text = true
+	caption.add_theme_font_size_override("font_size", 12)
+	caption.anchor_right = 1.0
+	caption.offset_left = 4.0
+	caption.offset_right = -4.0
+	caption.offset_top = 4.0
+	caption.offset_bottom = 44.0
+	zone.add_child(caption)
+	var bar := ProgressBar.new()
+	bar.name = "Countdown"
+	bar.show_percentage = false
+	bar.max_value = 1.0
+	bar.value = 0.0
+	bar.anchor_right = 1.0
+	bar.offset_left = 10.0
+	bar.offset_right = -10.0
+	bar.offset_top = 48.0
+	bar.offset_bottom = 60.0
+	zone.add_child(bar)
+	var ready_label := Label.new()
+	ready_label.name = "Ready"
+	ready_label.text = "READY"
+	ready_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ready_label.add_theme_font_size_override("font_size", 14)
+	ready_label.add_theme_color_override("font_color", Color(0.98, 0.84, 0.30))
+	ready_label.anchor_right = 1.0
+	ready_label.offset_top = 62.0
+	ready_label.offset_bottom = 84.0
+	ready_label.visible = false
+	zone.add_child(ready_label)
+	return zone
 
 
 ## The OWN hand row — the bottom-centre own-tempo action surface reserved by 2-4, face-up since
@@ -778,17 +883,3 @@ func _build_round_label() -> void:
 	_round_label.offset_bottom = 30.0
 	_round_label.visible = false
 	add_child(_round_label)
-
-
-## A bordered Panel with a caption Label, for the reserved-region placeholders. The border
-## makes the reserved footprint identifiable at half-width (AC 10 legibility).
-func _make_placeholder_panel(node_name: String, caption: String) -> Panel:
-	var panel := Panel.new()
-	panel.name = node_name
-	var caption_label := Label.new()
-	caption_label.text = caption
-	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caption_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	panel.add_child(caption_label)
-	return panel

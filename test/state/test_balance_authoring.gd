@@ -949,6 +949,20 @@ func test_authored_pitch_stage_timer_is_positive() -> void:
 		+ "on the tick it was staged)")
 
 
+## Story 6-3b (AC 5): the pitch HUD's countdown push cadence is authored > 0. `field in config` and
+## `>= 0.0` both pass on the 0.0 script default, which clamps to 1 tick and ships the `2-6/R7`
+## per-tick firehose the authored throttle exists to prevent. The ruled value (0.5 s -> 30 ticks) is
+## not pinned here; the conversion test pins the arithmetic.
+func test_authored_pitch_countdown_push_interval_is_positive() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.pitch_countdown_push_interval_seconds > 0.0,
+		"pitch_countdown_push_interval_seconds must be authored > 0 (a zero clamps to 1 tick and "
+		+ "pushes the countdown to presentation every tick)")
+
+
 ## Story 6-2 (AC 13): THE ORB-CLEAR RULE SHIPS OFF, in BOTH places that can decide it -- the script
 ## default every in-test config inherits, and the authored `.tres` that ships. The shape of
 ## `test_the_swing_at_commit_knob_is_authored_off` directly above. UNLIKE that knob this one gates HASHED

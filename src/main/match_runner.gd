@@ -388,7 +388,7 @@ func _ready() -> void:
 	for slot: int in 2:
 		var hud := HudRoot.new()
 		# Story 3-6 (AC 4): the authored vulnerable-window duration, handed over BEFORE add_child
-		# on the `gamepad_profile` / `huds` static-handoff precedent. The HUD renders the reshuffle
+		# on the `gamepad_profile` static-handoff precedent. The HUD renders the reshuffle
 		# flag from the ownerless EventBus event plus this number and NOTHING else — it never reads
 		# the window's tick count, which stays write-only unhashed state (3-5b/R20, 3-6/R3). Read
 		# inline off the already-loaded authored config (CONSTRAINT C).
@@ -421,12 +421,16 @@ func _ready() -> void:
 		var slot_index := slot
 		connect_cards_changed(slot, func(hand_ids: Array, deck_count: int, discard_count: int) -> void:
 			var player: PlayerState = _match_state.p1 if slot_index == 0 else _match_state.p2
-			# Story 6-0 (AC 2): card_colors_by_id rides this SAME wrapper -- no tenth connect_* seam
-			# (the nine-seam family stays exactly nine, test_architecture_invariants.gd). Reused, not
+			# Story 6-0 (AC 2): card_colors_by_id rides this SAME wrapper -- no new connect_* seam
+			# (this wrapper adds no member to the family test_architecture_invariants.gd pins). Reused, not
 			# re-derived: the local built once above this loop, read inline here (CONSTRAINT C).
 			hud.on_cards_changed(hand_ids, deck_count, discard_count,
 					player.pending_draw_owed.duplicate(), card_colors_by_id))
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
+		# Story 6-3b (AC 1/AC 3): the TENTH seam's HUD consumer. Match-level, so BOTH roots receive BOTH
+		# zones and each binds its OWN slot to tell them apart -- the on_round_ended bind directly above,
+		# second time. No priming: both zones are empty until the first staging.
+		connect_pitch_changed(hud.on_pitch_changed.bind(slot))
 		# Story 3-6 (AC 4): the reshuffle flag. BOTH viewports subscribe to the SAME ownerless bus
 		# event (E3-RG/R3 — "this player's deck ran out" is a match-wide public fact), each binding
 		# its OWN slot so it can render the event against itself: the round_ended wiring directly
@@ -449,20 +453,19 @@ func _ready() -> void:
 		connect_stamina_changed(slot, inspector.on_stamina_changed)
 		connect_mana_changed(slot, inspector.on_mana_changed)
 	# Story 2-6 (AC 4/5): the ONE global debug instrument panel. Added as a top-level Control child
-	# of the runner root so it renders over the whole window (both switches are window-global). It
+	# of the runner root so it renders over the whole window (its controls are window-global). It
 	# flips only presentation/controller-local switches (2-6/R4): the magnitude switch mutates the
 	# SHARED gamepad profile IN MEMORY (load() returns the resource-cache instance the gamepad
-	# controllers also read — never persisted), the Pitch Zone A/B switch moves both viewports'
-	# placeholder together via HudRoot.set_pitch_zone_placement.
+	# controllers also read — never persisted). Story 6-3b retired its Pitch Zone placement switch with
+	# the dead-centre pitch panel it moved; the panel holds no HudRoot reference any more.
 	var panel := DebugInstrumentPanel.new()
 	panel.gamepad_profile = load("res://data/gamepad_profile.tres") as GamepadProfile
-	panel.huds = huds
 	# Story 3-0d (AC 7, `3-0d/R13`): the panel's TWO runner-reaching controls — SAVE and RELOAD.
-	# Each handed its own Callable before add_child, the gamepad_profile / huds precedent
+	# Each handed its own Callable before add_child, the gamepad_profile precedent
 	# generalised: the panel receives a way to ASK, never the recorder itself, never a state
 	# handle and never the BalanceConfigService reference. No start control and no load control
 	# ship (`3-0d/R1`, `3-0d/R2`), and no Input Map action is added — both are mouse-only, exactly
-	# like the two switches beside them.
+	# like the one switch beside them.
 	panel.save_record = save_recorded_stream
 	panel.reload_balance = trigger_live_balance_reload
 	# Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the panel's FIFTH control and its THIRD runner-reaching
@@ -514,9 +517,9 @@ func _ready() -> void:
 		# Story 5-3 (AC 13): S5's success-cue half. card_cast_resolved is an EXISTING state-owned
 		# signal (both _resolve_basic_cast's and _resolve_unblockable_cast's success paths already
 		# emit it) with no listener before this story. A direct connect, not a new connect_* wrapper
-		# -- test_runner_observation_seams_are_exactly_nine pins the family (at eight when this
-			# line shipped, nine since 5-4 AC 15) (2-6/R7 amended
-		# by 3-6/R2) and this adds no ninth.
+		# -- test_runner_observation_seams_are_exactly_ten pins the family (at eight when this
+			# line shipped, nine since 5-4 AC 15, ten since 6-3b AC 1) (2-6/R7 amended
+		# by 3-6/R2) and this adds no eleventh.
 		#
 		# THIS IS A NEW CONNECTION SHAPE, NAMED AS ONE (5-3 review correction; this comment used to
 		# claim it mirrored the EventBus carve-out, and it does not). That precedent is a relay onto
@@ -919,16 +922,17 @@ func trigger_live_balance_reload() -> void:
 ## Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the DebugInstrumentPanel's READ ACCESSOR for both players'
 ## hand contents — a Callable the panel CALLS on demand (its own toggle handler), not a push seam
 ## and not a poll: no new `connect_*`, no per-tick call from `_physics_process`, and
-## `test_runner_observation_seams_are_exactly_nine` is untouched by THIS seat (the family was at
+## `test_runner_observation_seams_are_exactly_ten` is untouched by THIS seat (the family was at
 ## eight when this line shipped; 5-4 AC 15 moved it to nine via connect_orbs_changed).
 ## The same "hand the panel a way to ASK" shape as `save_recorded_stream` /
 ## `trigger_live_balance_reload` above, generalised from an action to a read.
 ##
 ## Read INLINE at call time (CONSTRAINT C) — both hands come straight off the live containers via
 ## their own `to_array()` copies, nothing is cached here or on the panel, and nothing here mutates
-## state. Debug-only (`4-B1/R2`): this method's only caller is the panel's CheckButton handler,
+## state. Debug-only (`4-B1/R2`): its only PRODUCTION caller is the panel's CheckButton handler,
 ## reachable by a manual mouse press alone — no Input Map action, no FeatureFlags read, and it
-## never fires in the shipped default configuration unless the operator toggles it.
+## never fires in the shipped default configuration unless the operator toggles it. Story 6-3b's
+## integration test (test_pitch_hud_live.gd) also calls it, to read which hand slots staging emptied.
 func debug_hand_contents() -> Array:
 	return [_match_state.p1.hand.to_array(), _match_state.p2.hand.to_array()]
 
@@ -1023,6 +1027,19 @@ func connect_hero_action_rejected(slot: int, callback: Callable) -> void:
 ## Payload: (attacker_slot, target_slot).
 func connect_deflect_landed(callback: Callable) -> void:
 	_match_state.deflect_landed.connect(callback)
+
+
+## Read-only subscription seam (story 6-3b, AC 1) — THE TENTH, and the THIRD amendment to the family
+## `2-6/R7` froze at seven (`E6-P/R8`(2): the pitch HUD gets a new member of this family, never a second
+## MatchState direct-connect). Match-level wrap of the MatchState-owned pitch_changed, mirroring
+## connect_hit_landed exactly: the OWNER slot rides the payload, so there is no slot argument, and a
+## consumer that needs "is this zone mine" binds its own slot at wiring. Payload: (slot, card_id,
+## hand_slot, ready, remaining_ticks, duration_ticks).
+##
+## DOES NOT PRIME, the hit_landed family's rule: both zones are empty when consumers wire in _ready(),
+## before the first advance(), so the empty render is the consumer's construction default.
+func connect_pitch_changed(callback: Callable) -> void:
+	_match_state.pitch_changed.connect(callback)
 
 
 ## Story 1-7 (AC 4.3): MatchState.round_ended -> EventBus.round_ended. Runner-owned
@@ -2507,7 +2524,7 @@ func _physics_process(delta: float) -> void:
 	#     CONTROLLER, not off state — the indicator shows what the player has SELECTED, which is
 	#     a controller fact that never enters the tick or the snapshot. Same
 	#     runner-polls-then-pushes-plain-values shape as the 3-0b window countdown (step 3b), so
-	#     this is not a new observation seam (family stays at nine, 5-4/R4): no signal, no state
+	#     this is not a new observation seam (no member added to the pinned family): no signal, no state
 	#     handle, plain ints only.
 	#     OUTSIDE the `ticking` gate deliberately — the selection must stay visible and
 	#     responsive while the debug pause is held, exactly as camera follow (4b) does.
@@ -2674,7 +2691,7 @@ func _physics_process(delta: float) -> void:
 		# 3c. Story 4-1 (AC 7): SPAWN one grey-box actor per unit record the board has gained. Read
 		#     off the state-owned COUNT right after advance(), the step-3b poll directly above in
 		#     shape and seat: no signal, no state handle held, no new `connect_*` -- so the
-		#     observation-seam family stays at NINE (5-4/R4) and needs no further amendment.
+		#     observation-seam family gains no member and needs no further amendment.
 		#
 		#     IDENTICAL LIVE AND REPLAY BY CONSTRUCTION (AC 10). This reads the board, not the
 		#     effect map and not the cast: whatever put the record there -- a live cast resolving
@@ -2698,7 +2715,7 @@ func _physics_process(delta: float) -> void:
 		#     record the board gained in the advance() above, then free the actor of every shot that
 		#     advance() ended (consumed by a contact, or expired against its 60 m budget). Same poll
 		#     shape and same seat family as 3b/3c/3c-bis/3d: plain board reads, no signal, no state
-		#     handle, no new `connect_*`, so the observation-seam family stays at NINE (5-4/R4).
+		#     handle, no new `connect_*`, so the observation-seam family gains no member.
 		#
 		#     SPAWN BEFORE FREE, and the order is load-bearing exactly as it is for units above: a
 		#     shot fired and consumed inside one advance() — a totem firing point-blank into a
@@ -2716,7 +2733,7 @@ func _physics_process(delta: float) -> void:
 		#
 		#     THE SAME SEAT AND SHAPE AS 3b AND 3c DIRECTLY ABOVE: a POLL right after advance(), plain
 		#     values only, no signal, no state handle held, no new `connect_*` — so the observation-seam
-		#     family stays at NINE (5-4/R4) and needs no further amendment (`4-2/R15`'s own stated
+		#     family gains no member and needs no further amendment (`4-2/R15`'s own stated
 		#     consequence). Nothing here decides a target; the decision was made inside advance() by
 		#     TargetingService, and this reads the answer.
 		#
@@ -2768,7 +2785,7 @@ func _physics_process(delta: float) -> void:
 	#     own HUD -- a screen point, or null when the target is not visible in that viewport and the
 	#     marker must hide. Same runner-polls-then-pushes-plain-values shape as the 3-5a card
 	#     selection (step 1b) and the 3-0b window countdown (step 3b): no signal, no state handle,
-	#     no new `connect_*`, so the observation-seam family stays at NINE (5-4/R4).
+	#     no new `connect_*`, so the observation-seam family gains no member.
 	#
 	#     SEATED AFTER 4b, NOT BESIDE 1b, and the ordering is the point: `_screen_position`
 	#     unprojects through the SubViewport's FOLLOWER camera, and 4b is the line that gives that
