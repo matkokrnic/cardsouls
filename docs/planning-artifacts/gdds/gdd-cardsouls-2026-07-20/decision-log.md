@@ -10415,7 +10415,7 @@ Status `review` -> `done`; board `ready-for-dev` -> `done  # Tier A`); `docs(dec
 close-out` (this entry).
 
 Suite: 824 state tests / 0 failed / 6754 assertions + 59 integration -> 842 state tests / 0 failed
-/ 6877 assertions + 61 integration, two full runs. Golden `9ed4c903...`, unmoved, measured both
+/ 6898 assertions + 61 integration, two full runs. Golden `9ed4c903...`, unmoved, measured both
 directions, no re-baseline. `FORMAT_VERSION` 10, unchanged. Observation seams: nine -> ten
 (`connect_pitch_changed`).
 
@@ -10423,7 +10423,7 @@ Not pushed; the operator reviews the log.
 
 `6-3b/R5` E6 CLOSE-OUT CANDIDATES, no owner, appended after this session's close-out commit:
 `test_unit_strike_alignment_live.gd` failed once during a full run of this story and passed both
-standalone and on a clean re-run of the full suite (842/0/6877 -- MEASURED, not diagnosed). Two new
+standalone and on a clean re-run of the full suite (842/0/6898 -- MEASURED, not diagnosed). Two new
 integration files entered the glob ahead of it this story, and `4-3e` has a precedent of this test
 failing for shared-state reasons -- worth a look, not this story's to fix. Mutation evidence
 reproducibility (review A-F2): the mutation harness never recorded its perl expressions, the
