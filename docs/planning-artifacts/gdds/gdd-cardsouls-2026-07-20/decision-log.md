@@ -10420,3 +10420,12 @@ directions, no re-baseline. `FORMAT_VERSION` 10, unchanged. Observation seams: n
 (`connect_pitch_changed`).
 
 Not pushed; the operator reviews the log.
+
+`6-3b/R5` E6 CLOSE-OUT CANDIDATES, no owner, appended after this session's close-out commit:
+`test_unit_strike_alignment_live.gd` failed once during a full run of this story and passed both
+standalone and on a clean re-run of the full suite (842/0/6877 -- MEASURED, not diagnosed). Two new
+integration files entered the glob ahead of it this story, and `4-3e` has a precedent of this test
+failing for shared-state reasons -- worth a look, not this story's to fix. Mutation evidence
+reproducibility (review A-F2): the mutation harness never recorded its perl expressions, the
+post-mutation SHA manifest omitted untracked files, and the ghost test was edited after some
+mutation rows ran, so those rows are proven only against an earlier revision.
