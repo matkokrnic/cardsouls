@@ -10378,3 +10378,45 @@ Suite: 824 state tests / 0 failed / 6754 assertions, integration 59/59, `EXIT=0`
 `9ed4c903...`, unmoved. `FORMAT_VERSION` 10. Observation seams: nine, unchanged.
 
 Not pushed; the operator reviews the log.
+
+## Session 2026-09-15 -- 6-3b-pitch-hud close-out
+
+Dev pass + operator live smoke + review on `6-3b-pitch-hud`, review outcome APPROVE WITH
+FINDINGS, eleven findings, none blocking.
+
+`6-3b/R1` ORB SHORTFALL CUT FROM THE STORY ENTIRELY. Both zones show card, countdown and READY
+only; neither shows an orb number. Reason: its only delivery shape was a first-of-its-kind
+runner-owned push of player-private state that no existing guard could see. `6-3-split/R-INFO` is
+unchanged and now holds by construction. Own-slot shortfall is a NAMED DEFERRAL with no owner; it
+returns, if at all, as its own small story after playtest.
+
+`6-3b/R2` COUNTDOWN PUSH INTERVAL RULED AT 30 TICKS (0.5 s), authored as its own balance field
+`pitch_countdown_push_interval_seconds`. Explicitly NOT borrowed from
+`minion_retarget_interval_ticks`, which feeds three minion-AI seats -- reuse would make a minion
+retune silently re-pace the pitch bar and vice versa.
+
+`6-3b/R3` ANCHOR B RATIFIED AT LIVE SMOKE (2026-09-15) -- the own pitch zone sits left of the
+vitals bars, opponent's right. This closes finding S4, open since the `2-6` smoke.
+
+`6-3b/R4` TWO READINESS GATE ROUNDS. Gate 1 NOT READY, six blockers; gate 2 READY, zero blockers,
+fourteen notes. Review APPROVE WITH FINDINGS, eleven findings, none blocking; the two substantive
+ones (untested ghost swatch, round-over test that never asserted the zone stayed staged) were fixed
+and each proven by mutation.
+
+Live smoke 7/7 PASS, no named deviation -- unlike `6-3a`, which closed six-of-seven.
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C4 -> C3 (board precedes this entry, per our standing rule): `story
+6-3b: pitch HUD` (code + tests + data); `docs(6-3b): dev pass record` (story file Dev Agent Record,
+playtest-log entry, `sprint-status.yaml`'s dev-pass `story_notes` write, `game-architecture.md`'s
+seam-registry NINE -> TEN update); `board: promote 6-3b-pitch-hud to done (review passed)` (story
+Status `review` -> `done`; board `ready-for-dev` -> `done  # Tier A`); `docs(decision-log): 6-3b
+close-out` (this entry).
+
+Suite: 824 state tests / 0 failed / 6754 assertions + 59 integration -> 842 state tests / 0 failed
+/ 6877 assertions + 61 integration, two full runs. Golden `9ed4c903...`, unmoved, measured both
+directions, no re-baseline. `FORMAT_VERSION` 10, unchanged. Observation seams: nine -> ten
+(`connect_pitch_changed`).
+
+Not pushed; the operator reviews the log.
