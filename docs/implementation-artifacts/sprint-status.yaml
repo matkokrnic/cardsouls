@@ -119,7 +119,7 @@ development_status:
   6-2-pitch-staging: done  # Tier A
   6-3a-pitch-activation: done  # Tier A
   6-3b-pitch-hud: done  # Tier A
-  6-7-locomotion-gaits: backlog  # Tier A
+  6-7-locomotion-gaits: ready-for-dev  # Tier A
   6-7b-locomotion-presentation: backlog  # Tier B
   6-8-camera-freedom: backlog  # Tier B
   6-6-defense-presentation: backlog  # Tier B
@@ -131,6 +131,7 @@ story_notes:
   6-1b-chargeup-presentation: "done 2026-09-09, Tier B close-out complete (progress-driven playhead per-clip, strike-frame impact criterion, per-clip hold knobs per 6-1b/R1-R9; src/state/ byte-identical, golden and 30-key set unmoved; suite 737/0/5553 + 57 integration; round-2 smoke items 1-7 PASS / 8 fps stable; decision-log session 6-1b close-out)."
   6-1c-unblockable-tracking-and-reach: "done 2026-09-12, Tier A close-out complete (commit/launch sub-phase of CHARGING per 6-1c/R1-R10, per-colour launch travel and honest reach, golden d5bcb7e6 -> 9679fa80 single cause landing key 30 -> 31, suite 757/0/5993 + 58 integration, smoke PASS on tracking/dodge/ground-coverage/fps with one named defect (blade/damage geometry gap) carried to 6-1d-honest-hit-geometry, decision-log session 6-1c close-out)."
   6-1d-honest-hit-geometry: "done 2026-09-13; smoke PASS; knob stays OFF (R15); retune block unlocked (R16)."
+  6-7-locomotion-gaits: "authored, gate 1 NOT READY (7 blockers), fix pass, gate 2 NOT READY (5 blockers), amendment, narrow re-check READY FOR DEV per 6-7/R21, baseline df28167; promoted 2026-09-15."
   6-2-pitch-staging: "done 2026-09-14, Tier A close-out complete (mode 4 staging per 6-2/R1-R15; golden 9679fa80 -> 9ed4c903, two re-baselines separately caused; FORMAT_VERSION 8->9; UNHASHED_CROSS_TICK_MEMBERS 3->4; suite 808/0/6560 + 59 integration; live smoke PASS, regression-only; review APPROVE WITH FINDINGS, H1/M1/M3 fixed; decision-log session 6-2-pitch-staging close-out)."
   6-3a-pitch-activation: "done 2026-09-14, Tier A close-out complete (activation per 6-3a/R1-R7; golden 9ed4c903 unmoved, measured both directions, no re-baseline; FORMAT_VERSION 9->10; suite 824/0/6754 + 59 integration; live smoke six-of-seven PASS, STUNNED refusal a named deviation (covered headless, not seen live); review APPROVE, zero findings; decision-log session 6-3a-pitch-activation close-out)."
   6-3b-pitch-hud: "done 2026-09-15, Tier A close-out complete (tenth observation seam connect_pitch_changed, both pitch zones and staged-card ghost per 6-3b/R1-R4; golden 9ed4c903 unmoved, measured both directions, no re-baseline; suite 824/0/6754 + 59 -> 842/0/6898 + 61 integration; two readiness gate rounds (gate 1 NOT READY six blockers, gate 2 READY zero blockers); review APPROVE WITH FINDINGS, eleven findings none blocking, two fixed and mutation-proven; live smoke 7/7 PASS, no named deviation)."
