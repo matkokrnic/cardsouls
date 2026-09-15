@@ -4,7 +4,7 @@ baseline_commit: 5c34e1bb547b66e20d87040d544fb8aa9b33f540
 
 # Story 6.3b: Pitch HUD
 
-Status: review
+Status: done
 
 > **Scope note.** E6 planning pass, board order item 6 (decision-log Session 2026-09-08,
 > `E6-P/R2`; renumbered by the 2026-09-14 split, `6-3-split/R-SPLIT`). Tier A by the golden clause

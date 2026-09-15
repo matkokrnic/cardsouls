@@ -118,7 +118,7 @@ development_status:
   6-1d-honest-hit-geometry: done  # Tier A
   6-2-pitch-staging: done  # Tier A
   6-3a-pitch-activation: done  # Tier A
-  6-3b-pitch-hud: ready-for-dev  # Tier A
+  6-3b-pitch-hud: done  # Tier A
   6-7-locomotion-gaits: backlog  # Tier A
   6-7b-locomotion-presentation: backlog  # Tier B
   6-8-camera-freedom: backlog  # Tier B
@@ -133,7 +133,7 @@ story_notes:
   6-1d-honest-hit-geometry: "done 2026-09-13; smoke PASS; knob stays OFF (R15); retune block unlocked (R16)."
   6-2-pitch-staging: "done 2026-09-14, Tier A close-out complete (mode 4 staging per 6-2/R1-R15; golden 9679fa80 -> 9ed4c903, two re-baselines separately caused; FORMAT_VERSION 8->9; UNHASHED_CROSS_TICK_MEMBERS 3->4; suite 808/0/6560 + 59 integration; live smoke PASS, regression-only; review APPROVE WITH FINDINGS, H1/M1/M3 fixed; decision-log session 6-2-pitch-staging close-out)."
   6-3a-pitch-activation: "done 2026-09-14, Tier A close-out complete (activation per 6-3a/R1-R7; golden 9ed4c903 unmoved, measured both directions, no re-baseline; FORMAT_VERSION 9->10; suite 824/0/6754 + 59 integration; live smoke six-of-seven PASS, STUNNED refusal a named deviation (covered headless, not seen live); review APPROVE, zero findings; decision-log session 6-3a-pitch-activation close-out)."
-  6-3b-pitch-hud: "dev pass complete 2026-09-15; story-file Status is review (story-file-only), awaiting code review, live smoke and the operator commit chain."
+  6-3b-pitch-hud: "done 2026-09-15, Tier A close-out complete (tenth observation seam connect_pitch_changed, both pitch zones and staged-card ghost per 6-3b/R1-R4; golden 9ed4c903 unmoved, measured both directions, no re-baseline; suite 824/0/6754 + 59 -> 842/0/6877 + 61 integration; two readiness gate rounds (gate 1 NOT READY six blockers, gate 2 READY zero blockers); review APPROVE WITH FINDINGS, eleven findings none blocking, two fixed and mutation-proven; live smoke 7/7 PASS, no named deviation)."
   6-7-locomotion-gaits: "Tier A. Two gaits per E6-P/R3 — walk new/slower/free/default, run the current speed, held, draining stamina. Walk speed and drain-per-second authored here. Supersedes the 5-3/R6(d) retune entry."
   6-7b-locomotion-presentation: "Tier B. ASSET PREREQUISITE (E6-P/R10): the Mixamo walk clips for the paladin must physically be in the repo BEFORE the create pass."
   6-8-camera-freedom: "Tier B AT RISK of Tier A. Two behaviours (E6-P/R7): lock-on cycling reaches all live targets including those behind the hero (full 360), and the camera unlocks for manual rotation when not locked on. Exact controls at its scope talk."
