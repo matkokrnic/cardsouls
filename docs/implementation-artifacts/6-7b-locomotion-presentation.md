@@ -4,7 +4,7 @@ baseline_commit: 4f8536b2f8167f69ad8f30e693e6bb87c6bbf37a
 
 # Story 6.7b: Locomotion Presentation
 
-Status: review
+Status: done
 
 > **Scope note.** Board order item 8 of eleven (decision-log Session 2026-09-08, `E6-P/R2`). Tier
 > B by content: presentation-only against `6-7`'s already-shipped state-side two-gait system.
