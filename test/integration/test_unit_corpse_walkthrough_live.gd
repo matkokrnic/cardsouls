@@ -60,11 +60,16 @@ const SIDE_OFFSET := 0.35
 const MAX_FRAMES := 2000
 
 ## The walk-through probe. The obstacle is parked this far along +x from the hero, the hero is
-## then driven right for this many frames. At the authored 5.0 move speed that is ~3.3 units of
-## travel -- far more than enough to pass a 0.6-wide body, and far more than enough to be visibly
-## stopped by one.
+## then driven right for enough frames to cover DRIVE_TRAVEL units -- far more than enough to pass a
+## 0.6-wide body, and far more than enough to be visibly stopped by one.
+##
+## Story 6-7b (Task 7, the `M3` correction): this was `DRIVE_FRAMES := 40`, sized in a comment
+## against "the authored 5.0 move speed" -- a literal tied to a tempo `R1` retuned to 6.0. The TRAVEL
+## is the property the probe needs, so it is the constant now, and the frame count is re-derived
+## from the authored run speed READ LIVE off the applied config (`_drive_frames`). At 5.0 that
+## reproduces the old 40 frames exactly (ceil(3.3 * 60 / 5.0) = 40); no margin was widened.
 const OBSTACLE_GAP := 1.2
-const DRIVE_FRAMES := 40
+const DRIVE_TRAVEL := 3.3
 ## How far PAST the obstacle's own x the hero must end up for "walked through" to be true, and how
 ## far SHORT of it for "blocked" to be true. Both are outside the two bodies' combined half-widths
 ## (0.3 + 0.3), so neither verdict can be produced by resting against the obstacle.
@@ -227,14 +232,14 @@ func _run_stage() -> void:
 		# mapping end-to-end.
 				Input.action_press(&"p1_move_up")
 				# Story 6-7 (Task 6(d) shape): also hold `p1_run` -- MOVE_SPEED is now the RUN speed,
-				# and DRIVE_FRAMES/OBSTACLE_GAP/the margins below are all sized against it (the
-				# "~3.3 units of travel" comment at DRIVE_FRAMES's declaration). Without this the
+				# and the drive length (`_drive_frames`, from DRIVE_TRAVEL) is sized against it.
+				# Without this the
 				# hero WALKS at half that speed and both this stage's and stage 2's probes under-run.
 				Input.action_press(&"p1_run")
 			# Re-parked every frame: the friendly unit is walking toward its own target, and an
 			# obstacle that wandered off would make "blocked" unfalsifiable.
 			live.global_position = Vector3(_obstacle_x, 0.0, hero.global_position.z)
-			if elapsed >= DRIVE_FRAMES:
+			if elapsed >= _drive_frames():
 				Input.action_release(&"p1_move_up")
 				Input.action_release(&"p1_run")
 				_live_probe_dx = hero.global_position.x - _obstacle_x
@@ -257,7 +262,7 @@ func _run_stage() -> void:
 				Input.action_press(&"p1_move_up")
 				# Story 6-7 (Task 6(d) shape): also hold `p1_run` -- see stage 1's identical note.
 				Input.action_press(&"p1_run")
-			if elapsed >= DRIVE_FRAMES:
+			if elapsed >= _drive_frames():
 				Input.action_release(&"p1_move_up")
 				Input.action_release(&"p1_run")
 				_corpse_probe_dx = hero.global_position.x - _obstacle_x
@@ -483,3 +488,10 @@ func _choose_summon_slot(player: PlayerState, prefix: String) -> bool:
 				_p2_action = action
 			return true
 	return false
+
+
+## Story 6-7b (Task 7): frames of held run input that cover DRIVE_TRAVEL at the AUTHORED run speed,
+## read inline off the config the runner applied (the `test_unit_approach_live.gd` precedent).
+func _drive_frames() -> int:
+	var run_speed := maxf(_state.balance.move_speed, 0.0001)
+	return ceili(DRIVE_TRAVEL * maxf(Engine.physics_ticks_per_second, 1.0) / run_speed)

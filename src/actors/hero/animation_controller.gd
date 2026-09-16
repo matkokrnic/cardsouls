@@ -42,6 +42,20 @@ extends Node3D
 ##   right   = v.x * facing.y - v.z * facing.x
 ## Two projections of the same two values drive() already has. No angle is ever formed, nothing
 ## here is written to a transform, and the Hitbox/Mesh yaw is untouched.
+##
+## STORY 6-7b ADDS THE PRESENTATION HALF OF 6-7's TWO GAITS, still on that one push:
+##   * WALK vs RUN FAMILY (AC 4/AC 5), keyed on the PUSHED PLANAR SPEED against the MIDPOINT of the
+##     authored walk/run pair (`gait_threshold`), which the push now carries as two plain floats.
+##     The controller receives no gait fact; the direction split above then picks the member.
+##   * TURN IN PLACE (AC 6): an IDLE hero standing still whose pushed facing keeps changing plays
+##     `turn_left`/`turn_right`, chosen by the SIGN of a cross term of consecutive facings -- still
+##     no angle, no atan2 (`_track_facing`).
+##   * PER-CLIP PLAYBACK RATE (AC 8) through play()'s own custom speed, never the player-wide
+##     `speed_scale`, scoped to the ten locomotion/turn clips.
+## LEFT/RIGHT NAMING (6-7b finding, operator ruling: recorded, not renamed): "right" throughout this
+## file is local +X, and ANATOMICALLY local +X is the paladin's LEFT (rig `mixamorig_LeftHand` rests
+## at x +0.657, toes at +Z). Clip FILES follow this file's convention, not anatomy -- 5-0a's strafe
+## swap and 6-7b's walk-strafe and turn swaps all line clip content up with local +X = "right".
 
 ## Path to the paladin's AnimationPlayer (under Mesh/Paladin so its Skeleton3D track paths
 ## resolve). Set in hero.tscn; presentation-local, never handed a state object. Resolved in
@@ -67,7 +81,76 @@ const STRAFE_BAND_RATIO := 1.0
 ## clips by the movement vector) is explicitly deferred to a future retune pass (Non-Goals).
 ## This applies ONLY to the polled locomotion path: action-state transitions keep the 3-0a/R5
 ## immediate-win, no-blend policy, and _restart() below is deliberately not given a blend.
-const LOCOMOTION_BLEND_SECONDS := 0.12
+const LOCOMOTION_BLEND_SECONDS := 0.25
+
+## Story 6-7b (AC 8): each locomotion FAMILY's NATIVE ground speed -- the hero speed at which that
+## family's clips play at rate 1.0 with no foot slide. The eight family clips play at
+## `pushed_speed / native_speed`, so their rate follows any future tempo retune on its own.
+##   RUN: 5.0, the pre-6-7b authored `move_speed` the run family already played correctly at
+##        (story-stated, not re-measured); at the retuned 6.0 the family plays at 1.2x.
+##   WALK: a STARTING VALUE MEASURED FROM THE CLIP, for the live smoke to tune. Scratch probe (6-7b
+##        dev pass) of the planted toe's slide speed in model space: `walk` 1.4097, `run` 3.8648 on
+##        the same method, so walk = 5.0 * 1.4097 / 3.8648 = 1.82 when calibrated to RUN's 5.0.
+## Presentation knobs beside RUN_SPEED_EPS / STRAFE_BAND_RATIO -- never BalanceConfig fields.
+const RUN_FAMILY_NATIVE_SPEED := 5.0
+const WALK_FAMILY_NATIVE_SPEED := 1.82
+
+## Fix pass (2026-09-16, operator live smoke item 4): TURN PLAYBACK RATE, proportional to the actual
+## rotation rate instead of the retired fixed `TURN_CLIP_SPEED := 1.0`. The defect this replaces: a
+## far, slow-circling lock target has a low angular rate, but `TURN_MIN_FACING_CROSS` (below) used to
+## sit at ~30 deg/s, so anything selected as a turn ALREADY exceeded a fixed 1.0x-native rotation
+## speed by a wide margin and the played clip visibly outran the body's actual rotation -- reading as
+## a slide in the idle pose rather than a step. Playing the clip at `rotation_rate / native_rate`
+## instead ties the two together at every rate, clamped to a feel range.
+##
+## NATIVE RATE, MEASURED (`tools/measure_hips_displacement.gd`'s rotation table, both directions):
+## `turn_right` source Hips yaw 99.318 deg over 0.9333 s = 106.4159 deg/s; `turn_left` 99.319 deg over
+## the same 0.9333 s = 106.4170 deg/s. The two agree to 0.001 deg/s (same source rig, opposite sign),
+## so ONE constant serves both clips; the value below is their average.
+const TURN_NATIVE_ROTATION_RATE_DEG_PER_SEC := 106.4165
+
+## Live-smoke knobs (final values, not pinned by tests): the clamp on `rotation_rate /
+## TURN_NATIVE_ROTATION_RATE_DEG_PER_SEC` so a very slow turn still reads as stepping (floor) and a
+## very fast snap-turn does not play the clip absurdly fast (ceiling). TURN_MIN_PLAYBACK_RATE was
+## 0.25 at the dev pass; operator re-smoke (6-7b live smoke item 4, round 2) raised it to 0.6 because
+## 0.25 looked worse than the pre-fix behaviour even though it was continuous.
+const TURN_MIN_PLAYBACK_RATE := 0.6
+const TURN_MAX_PLAYBACK_RATE := 2.0
+
+## Story 6-7b (AC 6): THE TURN FLICKER GUARD, two named UNTUNED knobs. A turn clip is selected only
+## once the per-tick facing change -- the cross term `prev.x*cur.y - prev.y*cur.x`, the SINE of the
+## per-tick yaw change for unit facings -- has been at least TURN_MIN_FACING_CROSS in magnitude, with
+## the SAME sign, for TURN_MIN_HOLD_TICKS consecutive pushes. The hold is 3 ticks (50 ms), so a
+## slow-circling lock target that hovers at the threshold does not alternate turn/idle tick by tick.
+## BY CONSTRUCTION a one-tick facing SNAP (an instant re-lock) never reaches the hold and plays no
+## turn clip.
+##
+## Fix pass (2026-09-16, operator live smoke item 4, ruling option (a)): this was 0.0087 ~ sin(0.5
+## deg) per tick (~30 deg/s at 60 Hz) and doubled as the de-facto MINIMUM SELECTABLE ROTATION RATE --
+## a far, low-angular-rate lock target never cleared it, so the body rotated in the idle pose instead
+## of stepping (the reported defect). The floor is now a true NOISE floor, far below any realistic
+## lock rotation rate, and rate-proportional playback (above) covers the low end instead. FINAL value
+## (operator re-smoke, round 2): 0.00087 ~ sin(0.05 deg) per tick, ~3 deg/s at 60 Hz -- rotations
+## below this floor stay in the idle pose by operator choice, not by measurement.
+const TURN_MIN_FACING_CROSS := 0.00087
+const TURN_MIN_HOLD_TICKS := 3
+
+## Replays the current locomotion clip only when its wanted rate moved by more than this -- float
+## residue in the pushed speed must not re-issue play() every tick.
+const _PLAYBACK_SPEED_EPS := 0.01
+
+## Story 6-7b (AC 4): the run-family clip the direction split picks -> its walk-family counterpart.
+const _WALK_FAMILY := {
+	&"run": &"walk",
+	&"strafe_left": &"walk_strafe_left",
+	&"strafe_right": &"walk_strafe_right",
+	&"backpedal": &"walk_backpedal",
+}
+
+## The walk-family members as a const list, so the per-tick rate lookup allocates nothing.
+const _WALK_FAMILY_MEMBERS: Array[StringName] = [
+	&"walk", &"walk_strafe_left", &"walk_strafe_right", &"walk_backpedal",
+]
 
 const _CLIP := {
 	HeroState.ActionState.IDLE: &"idle",
@@ -253,6 +336,26 @@ static func charge_hold_end_for(color: int) -> float:
 
 var _state: HeroState.ActionState = HeroState.ActionState.IDLE
 
+## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
+## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
+var _has_prev_facing := false
+var _prev_facing := Vector2.ZERO
+var _turn_sign := 0
+var _turn_ticks := 0
+
+## Fix pass (2026-09-16): the RAW per-tick cross term from the most recent `_track_facing` call,
+## signed -- kept separately from the HELD `_turn_sign` because the playback-rate calculation needs
+## the actual current-tick magnitude, not just whether a turn is selected.
+var _last_cross := 0.0
+
+
+## Story 6-7b (AC 4): the walk/run family boundary -- the MIDPOINT of the authored pair. In IDLE the
+## pushed speed is discrete (zero, walk, or run), so the midpoint sits as far from each as it can;
+## a bare `walk_speed` threshold would flip a walking hero to the run family on the float residue of
+## a velocity length landing a hair above it. Pure and static so it can be asserted directly.
+static func gait_threshold(walk_speed: float, run_speed: float) -> float:
+	return (walk_speed + run_speed) * 0.5
+
 
 func _ready() -> void:
 	animation_player = get_node(animation_player_path)
@@ -336,10 +439,67 @@ func on_charge_progress(charge_color: int, progress: float) -> void:
 ## This path is POLLED, not evented, so it uses the idempotent _play(): re-selecting the clip
 ## already playing must be a no-op or the selected clip would restart from frame 0 on every
 ## single tick and never visibly animate. The two paths are deliberately NOT the same call.
-func on_locomotion(velocity: Vector3, facing: Vector2) -> void:
+##
+## STORY 6-7b: `walk_speed`/`run_speed` are the authored gait pair (AC 4). The facing memory for turn
+## detection advances BEFORE the IDLE gate, on every push (AC 6(b)): otherwise a facing change made
+## during a roll or attack would still be pending when IDLE resumed and fire a spurious turn. Only
+## the turn-clip SELECTION is IDLE-gated, and it is also gated on standing still, so a moving hero
+## never turns in place by construction (Non-Goal).
+func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_speed: float) -> void:
+	var turn := _track_facing(facing)
 	if _state != HeroState.ActionState.IDLE:
 		return
-	_play(_locomotion_clip(velocity, facing))
+	var planar_speed := Vector2(velocity.x, velocity.z).length()
+	if planar_speed <= RUN_SPEED_EPS and turn != 0:
+		# Negative cross = facing rotating toward local +X, this file's "right" (header).
+		_play(&"turn_right" if turn < 0 else &"turn_left", _turn_playback_rate())
+		return
+	var clip := _locomotion_clip(velocity, facing, walk_speed, run_speed)
+	_play(clip, _playback_speed(clip, planar_speed))
+
+
+## Story 6-7b (AC 6): advances the facing memory and returns the HELD turn sign -- +1 / -1 once the
+## same-signed cross term has cleared TURN_MIN_FACING_CROSS for TURN_MIN_HOLD_TICKS pushes in a row,
+## else 0. The first push ever has nothing to compare against and reads as no change.
+func _track_facing(facing: Vector2) -> int:
+	var cross := 0.0
+	if _has_prev_facing:
+		cross = _prev_facing.x * facing.y - _prev_facing.y * facing.x
+	_last_cross = cross
+	_prev_facing = facing
+	_has_prev_facing = true
+	var turn_sign := 0
+	if absf(cross) >= TURN_MIN_FACING_CROSS:
+		turn_sign = 1 if cross > 0.0 else -1
+	if turn_sign == 0 or turn_sign != _turn_sign:
+		_turn_ticks = 0
+	_turn_sign = turn_sign
+	if turn_sign != 0:
+		_turn_ticks += 1
+	return _turn_sign if _turn_ticks >= TURN_MIN_HOLD_TICKS else 0
+
+
+## Fix pass (2026-09-16, operator live smoke item 4): the turn clips' rate, `rotation_rate /
+## TURN_NATIVE_ROTATION_RATE_DEG_PER_SEC` clamped to the feel range -- see the knobs' header comment.
+## `_last_cross` is the SIGNED per-tick sine-of-yaw term from `_track_facing`'s most recent call, i.e.
+## this same tick's (small-angle approximation, no atan2, `DECISION A` precedent above); only its
+## MAGNITUDE feeds the rate (direction already picked the clip). `Engine.physics_ticks_per_second`
+## converts the per-tick angle to a per-second rate -- legal here (this file is not `src/state/`,
+## D3(b)/A2 scopes that ban to the state layer only).
+func _turn_playback_rate() -> float:
+	var rate_deg_per_sec := rad_to_deg(absf(_last_cross)) * Engine.physics_ticks_per_second
+	var ratio := rate_deg_per_sec / TURN_NATIVE_ROTATION_RATE_DEG_PER_SEC
+	return clampf(ratio, TURN_MIN_PLAYBACK_RATE, TURN_MAX_PLAYBACK_RATE)
+
+
+## Story 6-7b (AC 8): `pushed_speed / family native speed` for the eight family clips, 1.0 for
+## everything else (`idle` plays native, as before).
+func _playback_speed(clip: StringName, planar_speed: float) -> float:
+	if _WALK_FAMILY.has(clip):
+		return planar_speed / RUN_FAMILY_NATIVE_SPEED
+	if _WALK_FAMILY_MEMBERS.has(clip):
+		return planar_speed / WALK_FAMILY_NATIVE_SPEED
+	return 1.0
 
 
 ## The five-way split, as a pure function of the two pushed values so it can be asserted
@@ -349,7 +509,11 @@ func on_locomotion(velocity: Vector3, facing: Vector2) -> void:
 ## survivable rather than fatal: with no direction to be relative TO, the projections collapse
 ## to zero and this falls through to `run` — the pre-5-0a behaviour for a moving hero, which is
 ## the right thing to degrade to.
-func _locomotion_clip(velocity: Vector3, facing: Vector2) -> StringName:
+##
+## STORY 6-7b (AC 4): the split below picks the RUN-family name as it always has; a pushed planar
+## speed under `gait_threshold` of the authored pair then swaps it for its walk-family counterpart.
+func _locomotion_clip(velocity: Vector3, facing: Vector2, walk_speed: float,
+		run_speed: float) -> StringName:
 	var planar := Vector2(velocity.x, velocity.z)
 	if planar.length() <= RUN_SPEED_EPS:
 		return &"idle"
@@ -357,18 +521,29 @@ func _locomotion_clip(velocity: Vector3, facing: Vector2) -> StringName:
 	# two dot products, never an angle, so no second atan2 enters the codebase.
 	var forward := planar.x * facing.x + planar.y * facing.y
 	var right := planar.x * facing.y - planar.y * facing.x
+	var clip: StringName
 	if absf(right) > absf(forward) * STRAFE_BAND_RATIO:
-		return &"strafe_right" if right > 0.0 else &"strafe_left"
-	return &"run" if forward >= 0.0 else &"backpedal"
+		clip = &"strafe_right" if right > 0.0 else &"strafe_left"
+	else:
+		clip = &"run" if forward >= 0.0 else &"backpedal"
+	if planar.length() < gait_threshold(walk_speed, run_speed):
+		return _WALK_FAMILY[clip]
+	return clip
 
 
 ## Idempotent selection for the polled locomotion path: switch only on an actual change, and
 ## when it IS a change, crossfade rather than cut (5-0a AC 2). The guard is what makes the
 ## blend meaningful as well as what makes the path idempotent — an unguarded play() every tick
 ## would restart the blend every tick and never finish it.
-func _play(clip: StringName) -> void:
-	if animation_player.current_animation != clip:
-		animation_player.play(clip, LOCOMOTION_BLEND_SECONDS)
+##
+## STORY 6-7b (AC 8): `speed` is play()'s own per-playback custom speed, NEVER the player-wide
+## `AnimationPlayer.speed_scale` (which would also retime attack/roll and desync 6-1b's seek-driven
+## charge playhead). A rate change on the clip already playing re-issues play() with the new speed:
+## measured on Godot 4.6.3, that updates the rate without restarting or moving the playhead.
+func _play(clip: StringName, speed: float = 1.0) -> void:
+	if animation_player.current_animation != clip \
+			or absf(animation_player.get_playing_speed() - speed) > _PLAYBACK_SPEED_EPS:
+		animation_player.play(clip, LOCOMOTION_BLEND_SECONDS, speed)
 
 
 ## Unconditional restart for the evented transition path. NO custom_blend here on purpose: the

@@ -35,6 +35,12 @@ extends SceneTree
 
 const TICK := 1.0 / 60.0
 
+## Story 6-7b (AC 4): drive() now also forwards the authored walk/run pair to the animation
+## controller. This file drives at ZERO velocity and poses `attack` by hand, so the pair never picks
+## a clip here; a fixture pair (the shipped 2.0/6.0) satisfies the signature.
+const FIXTURE_WALK_SPEED := 2.0
+const FIXTURE_RUN_SPEED := 6.0
+
 ## Half a millimetre. The two compositions are the same product of the same transforms in a
 ## different order of operations, so anything above float noise is a real disagreement.
 const POS_EPS := 0.0005
@@ -73,7 +79,7 @@ func _pose_and_drive(t: float, facing: Vector2) -> Vector3:
 	_player.seek(t, true)
 	_state.velocity = Vector3.ZERO
 	_state.facing = facing
-	_hero.drive(_state, TICK)
+	_hero.drive(_state, TICK, FIXTURE_WALK_SPEED, FIXTURE_RUN_SPEED)
 	return _hero.hitbox_shape.position
 
 

@@ -20,9 +20,16 @@ extends SceneTree
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_rig_clips.gd
 
+## Story 6-7b (AC 3): TWELVE -> EIGHTEEN. The walk family (`walk`, `walk_strafe_left`,
+## `walk_strafe_right`, `walk_backpedal`) and the two turn-in-place clips (`turn_left`,
+## `turn_right`) all LOOP -- the walk family on the run family's own precedent, the turn pair RULED
+## `true` because lock-driven rotation is continuous and a one-shot would freeze on its end pose.
+## (The header's "twelve" wording above is 5-3's; the count below is derived, never a literal.)
 const EXPECTED_LOOP := {
 	&"idle": true, &"run": true, &"block": true,
 	&"strafe_left": true, &"strafe_right": true, &"backpedal": true,
+	&"walk": true, &"walk_strafe_left": true, &"walk_strafe_right": true, &"walk_backpedal": true,
+	&"turn_left": true, &"turn_right": true,
 	&"attack": false, &"roll": false, &"death": false,
 	&"swipe": false, &"jump_attack": false, &"thrust": false,
 }

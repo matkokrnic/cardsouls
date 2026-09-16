@@ -35,6 +35,10 @@ const AT_START_EPS := 0.0001
 ## is exactly why the live bug skipped the middle swing and not the last one).
 const MID_CLIP := 0.30
 
+## Story 6-7b: the fixture walk/run pair the locomotion push now carries (see the push below).
+const FIXTURE_WALK_SPEED := 2.0
+const FIXTURE_RUN_SPEED := 6.0
+
 var _hero: Node3D
 var _failures: Array[String] = []
 var _frames := 0
@@ -100,13 +104,17 @@ func _physics_process(_delta: float) -> bool:
 	# `run` -- restated in the new payload; the idempotency claim is untouched by that widening,
 	# and matters MORE now that the polled path also carries a crossfade (an unguarded play()
 	# every tick would restart the blend every tick and never finish it).
+	#
+	# Story 6-7b widened it again by the authored walk/run pair (AC 4). The pair here is a fixture
+	# (the shipped 2.0/6.0), chosen so 5.0 still sits above its midpoint and still selects `run`:
+	# this file pins idempotency, not the gait split (test_hero_clip_selection.gd owns that).
 	ctl.on_action_state_changed(attacking, idle)
-	ctl.on_locomotion(Vector3(0.0, 0.0, 5.0), Vector2(0.0, 1.0))
+	ctl.on_locomotion(Vector3(0.0, 0.0, 5.0), Vector2(0.0, 1.0), FIXTURE_WALK_SPEED, FIXTURE_RUN_SPEED)
 	_check(ap.current_animation == &"run",
 		"locomotion push did not select run (current='%s')" % ap.current_animation)
 	ap.advance(MID_CLIP)
 	var before: float = ap.current_animation_position
-	ctl.on_locomotion(Vector3(0.0, 0.0, 5.0), Vector2(0.0, 1.0))
+	ctl.on_locomotion(Vector3(0.0, 0.0, 5.0), Vector2(0.0, 1.0), FIXTURE_WALK_SPEED, FIXTURE_RUN_SPEED)
 	_check(absf(ap.current_animation_position - before) <= AT_START_EPS,
 		"repeated locomotion push RESTARTED run (%.4f -> %.4f); the polled path must be idempotent"
 			% [before, ap.current_animation_position])

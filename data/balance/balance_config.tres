@@ -84,8 +84,8 @@ attacks = Array[Resource]([])
 [resource]
 script = ExtResource("1_balcfg")
 max_hp = 100.0
-move_speed = 5.0
-walk_speed = 2.5
+move_speed = 5.5
+walk_speed = 2.2
 max_stamina = 50.0
 stamina_regen_per_second = 15.0
 stamina_regen_delay_seconds = 0.8

@@ -2744,8 +2744,17 @@ func _physics_process(delta: float) -> void:
 		_aim_unit_actors(0, _match_state.p1)
 		_aim_unit_actors(1, _match_state.p2)
 		# 4. Drive actor movement — each actor reads HeroState.velocity, never the intent.
-		_p1_hero.drive(_match_state.p1.hero, delta)
-		_p2_hero.drive(_match_state.p2.hero, delta)
+		#    Story 6-7b (AC 4): plus the AUTHORED walk/run speed pair, so the rig's animation
+		#    controller can split the walk family from the run family on the pair's MIDPOINT. Read
+		#    INLINE off `_match_state.balance` (CONSTRAINT C) -- the replay-aware handle 4a below
+		#    explains, so a replay or a live RELOAD retunes the split with the movement it presents.
+		#    Plain floats only; no config reference reaches the actor. A missing config (nothing
+		#    applied yet) pushes a zero pair, whose zero midpoint degrades to the run family.
+		var drive_balance := _match_state.balance
+		var walk_speed := drive_balance.walk_speed if drive_balance != null else 0.0
+		var run_speed := drive_balance.move_speed if drive_balance != null else 0.0
+		_p1_hero.drive(_match_state.p1.hero, delta, walk_speed, run_speed)
+		_p2_hero.drive(_match_state.p2.hero, delta, walk_speed, run_speed)
 		# 4a. Story 4-3 (AC 1/AC 3, `4-3/R10`): WALK each grey box toward the target it acquired.
 		#     THE DRIVE PHASE IS THE SEAT, deliberately not step 3d's `_aim_unit_actors` loop —
 		#     `game-architecture.md:965-971` names this phase "drive actor movement

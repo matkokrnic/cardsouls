@@ -54,7 +54,10 @@ func _ready() -> void:
 			+ "cannot follow the weapon and stays at its authored offset")
 
 
-func drive(hero_state: HeroState, _delta: float) -> void:
+## `walk_speed`/`run_speed` (story 6-7b, AC 4): the AUTHORED gait pair, read inline off the applied
+## config by the runner every tick and forwarded untouched to the animation controller -- plain
+## floats, never a config reference (CONSTRAINT C). drive() itself does not use them.
+func drive(hero_state: HeroState, _delta: float, walk_speed: float, run_speed: float) -> void:
 	velocity = hero_state.velocity  # world velocity decided by advance(); never the raw intent
 	# Story 1-7 (N6) / 1-7b: facing tracks state by rotating CHILD nodes — the hero ROOT
 	# never rotates (DECISION A: the camera rig is a child of the root, so a root rotation
@@ -81,7 +84,9 @@ func drive(hero_state: HeroState, _delta: float) -> void:
 	# from them by dot product. SAME call, SAME per-tick cadence: no new seam, no state handle,
 	# no second _physics_process (F1 intact), and NO second atan2 (the yaw above is still the
 	# only one) — the controller needs direction as DATA, never as a rotation.
-	animation_controller.on_locomotion(velocity, hero_state.facing)
+	# Story 6-7b (AC 4/AC 6): widened again by the authored gait pair, for the walk/run family split.
+	# Still the same call and cadence; the turn-in-place check rides it too, and reads facing only.
+	animation_controller.on_locomotion(velocity, hero_state.facing, walk_speed, run_speed)
 	move_and_slide()
 
 
