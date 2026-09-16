@@ -10429,3 +10429,115 @@ failing for shared-state reasons -- worth a look, not this story's to fix. Mutat
 reproducibility (review A-F2): the mutation harness never recorded its perl expressions, the
 post-mutation SHA manifest omitted untracked files, and the ghost test was edited after some
 mutation rows ran, so those rows are proven only against an earlier revision.
+
+## Session 2026-09-16 -- 6-7-locomotion-gaits close-out
+
+Dev pass + follow-up pass + Senior Developer Review (CHANGES REQUESTED) + fix pass + Re-Review
+(APPROVE WITH FINDINGS) + a closure pass + operator live smoke, all on `6-7-locomotion-gaits`.
+Twenty-one rulings, `6-7/R1`-`R21`, spanning two readiness gates and the create pass itself; full
+text lives in the story file, not restated here.
+
+`6-7/R1`-`R5` (create pass, bare numbers, distinct from the fix pass's later reuse of the same
+numbers): facing stays world-space planar; the STUNNED velocity-zeroing branch named as a third
+sibling of ROLLING/CHARGING; the walk/run split and its authored fields; the gamepad `run_held`
+derivation; the keyboard `INTENT_ACTIONS` seat.
+
+`6-7/R6-STRUCK` `p1_run`/`p2_run` Right-Ctrl ruling, STRUCK. Superseded by `6-7/R18` (Numpad 0):
+Right Ctrl's acceptance rested on the false premise that the shipped default is two keyboards, when
+the delivered config is P1-keyboard/P2-pad. Renamed, not deleted, per the readiness-gate-2 rule-ID
+collision cleanup: the fix pass's own `R1`/`R2`/`R4`/`R5`/`R6`/`R-B2`-`R-B4` reused numbers already
+carrying different meanings in the create pass, and were renumbered in order of first appearance to
+`6-7/R9`-`R15` (STUNNED carve-out, BLOCKING-forces-walk, the per-file `walk_speed` migration rule,
+the FORMAT_VERSION bump, the "actually running" predicate, auto-resume, the regen-delay seat) --
+the struck key-binding ruling alone was left at `6-7/R6-STRUCK` rather than folded into that range,
+so every bare `R6` citation elsewhere in the story (the R6 hysteresis latch itself) stays
+unambiguous.
+
+`6-7/R16`-`R18` "EMPTY" MEANS `is_zero_approx`, ATTACKING JOINS THE EXCLUSION LIST, `p2_run` IS
+NUMPAD 0. `R16`: raw `> 0.0` sticks the pool on a `~1.649e-13` residual forever at the authored
+values (`max_stamina=50.0`, drain `10.0`/s) -- `StaminaPool.add()` early-returns on
+`is_equal_approx`, so the residual spend is a no-op, not a clamp to exact zero (measured and
+corrected again at the Re-Review, which found the ORIGINAL review's own restated reason for this
+fact was itself wrong -- P2's verdict held, its reasoning did not). `R17`: the "actually running"
+predicate's clause (3) excludes ATTACKING, resolving a contradiction with AC 11. `R18`: `p2_run`
+FINAL at Numpad 0, no Left/Right variant to accept a consequence for.
+
+`6-7/R19` LIVE SMOKE'S BINDING-FLIP PROCEDURE REPLACED WHOLESALE WITH A TWO-GAMEPAD SMOKE.
+`main.tscn` carried no `slot_controller_kinds` line at all, so the story's original "flip
+`KEYBOARD_P2`" text was an executable no-op; the ratified procedure sets `slot_controller_kinds =
+[3, 3]` (both slots to `GAMEPAD`) with the editor closed, runs every step on two pads, and reverts
+`main.tscn` wholesale afterward (never `project.godot`, which carries the intentional `p1_run`/
+`p2_run` edit and may only be sorted per-diff). **DEVIATION, recorded not silently absorbed:** the
+operator's actual smoke ran config `[0, 3]` -- P1 keyboard, P2 pad -- not `[3, 3]`. Reason given:
+single operator, every pad step in the procedure is coverable on one pad, and running the keyboard
+half instead gave the `p1_run` Space binding (AC 3) a live check the two-gamepad procedure would
+never have exercised. All nine steps ran; results at `6-7/R20` below and in the story's Live Smoke
+record.
+
+`6-7/R20` DEBUG-PANEL FOCUS RE-FIRE: MEASURED LIVE, REPRODUCES, WIDER THAN PREDICTED, FIXED. The
+dev pass's headless attempt was genuinely inconclusive (this environment's GUI input pipeline fires
+no `pressed` signal for any synthetic input method, mouse click included), so the question carried
+to the live smoke by design. There, it reproduced -- and wider than the story's own worry: ANY
+last-clicked debug-panel button, not only `ReloadBalance`, retains keyboard focus and re-fires on
+Space (`p1_run`, colliding with the engine's `ui_accept` default). Fixed exactly as bounded:
+`focus_mode = Control.FOCUS_NONE` on all three panel buttons (`SaveRecord`, `ReloadBalance`,
+`RevealOpponentHand`) at their construction sites in `debug_instrument_panel.gd`, nothing else in
+the panel touched. Full suite re-run unaffected (the integration panel tests click buttons
+programmatically via signals, never through focus-mediated input).
+
+`6-7/R21` A NARROW RE-CHECK REPLACES A THIRD READINESS GATE for the `0.4` docs-only amendment; see
+the story's Change Log for the four carries it folded in at promotion.
+
+**Golden move.** `9ed4c9035a89b3219623dc129d73693e6871049bc9c48f672bc5554d49f5d5b2` ->
+`71a7b45f...`, single cause: the new hashed `HeroState.run_locked_out` field, proven in both
+directions by a temporary removal-and-restore experiment (removing the key reproduces the pre-story
+hash; the field's own snapshot-key pin in `test_debug_window_countdown.gd` fails during that same
+removal run, which is why the isolation run's own test counts were never invented and are recorded
+only as "golden passed, pin failed").
+
+**FORMAT bump.** `RecordFile.FORMAT_VERSION` 10 -> 11, both pins updated
+(`test_record_file.gd:170-171` and its second pin at `:832`), plus a new
+`test_a_v10_record_is_refused_with_a_reason` proving ONLY the version-refusal half of the `v9`
+precedent -- deliberately NOT a field-strip refusal for a missing `run`/`walk_speed` key, since
+`REQUIRED_INTENT_FIELDS` was never asked to cover either one and a v11-labelled body missing them
+loads without complaint today.
+
+**Decision (c) superseded, DEBT E moot.** This story CLOSES the open decision (c) from `2-2/R5`
+(variable analog magnitude, forcing point `2-6`, never adopted) and SUPERSEDES the `5-3/R6(d)`
+retune entry (locomotion speed / walk-as-default / sprint-costs-stamina) outright -- DEBT E was
+already ruled moot at `epic-3-retro-2026-08-06.md:276`, so this is a formal close of a decision
+already dead in practice, not a new ruling that kills it.
+
+**`E5-R/R2` sidecar exception.** No durable review-report artifact was written to
+`C:\dev\_6-7-review.md` for either review pass, the standing rule `E5-R/R2` otherwise requires.
+Reason: the operator's explicit instruction scoped both review passes' findings to the story file
+itself (Status stays `review`, no sidecar, nothing staged) -- a deliberate, named exception for this
+story, not an omission; both review sections say so in place.
+
+**E6 close-out candidates, no owner, named here:**
+1. **Feel retune, walk too fast / run too slow** (`docs/playtest-log.md`, 2026-09-16 entry). Both
+   are authored `BalanceConfig` fields (`walk_speed 2.5`, `move_speed 5.0`); a one-line-per-field
+   `.tres` edit, foldable into the next story's dev pass as a minor item. Named consequence:
+   `test/integration/test_hero_movement.gd` pins `MOVE_SPEED := 5.0` as a local constant and reads
+   the authored `.tres`, so a run-speed retune must update that constant in the same pass;
+   `test_unit_approach_live.gd` reads `walk_speed` live and follows automatically.
+2. **Mid-match balance reload's one-tick walk at full stamina** (review finding 7, `[Low,
+   advisory]`, dismissed as non-blocking but never actioned). `_apply_balance_to_player` refills
+   stamina but does not clear `run_locked_out`; the next tick still reads the latch and walks for
+   exactly one tick before that same tick's `_regen_stamina` clears it (stamina is at max, well
+   above the resume threshold). Debug-reload path only, self-healing, no player-facing consequence
+   measured -- named so a future pass touching the reload seat or the latch does not rediscover it
+   as a new defect.
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C3 -> C4: `feat(state): story 6-7 two-gait locomotion (walk/run)`
+(code + tests + data); `docs(6-7): dev pass record through 0.10, live smoke closure` (story file);
+`board: promote 6-7-locomotion-gaits to done, playtest log entry` (`sprint-status.yaml`'s
+`development_status` and `story_notes`, `docs/playtest-log.md`); `docs(decision-log): 6-7
+close-out` (this entry).
+
+Suite: state `854 tests, 0 failed, 6965 assertions`, integration `61/61 PASS`, both foreground,
+both halves, unchanged across the close-out chain. Golden `71a7b45f...`. `FORMAT_VERSION` 11.
+
+Pushed; `origin/main` confirmed equal to `HEAD` after.
