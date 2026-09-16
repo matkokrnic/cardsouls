@@ -26,13 +26,16 @@ off state and more than two things are ever worth aiming at.
    - locked on a minion or totem -> click returns the lock to the enemy hero (`4-6` AC 9, unchanged).
    - locked on the enemy hero -> click UNLOCKS.
    - unlocked -> click locks the enemy hero.
-2. There is now an UNLOCKED state. `CC/R2`'s "no unlock state exists at any point" is SUPERSEDED
-   by this story (see "What this story supersedes" below) -- not by `4-6a`, which never touched it.
+2. There is now an UNLOCKED state. `CC/R3`'s "No unlock state" (carried into `4-6` AC 10) is
+   SUPERSEDED by this story (see "What this story supersedes" below) -- not by `4-6a`, which never
+   touched it.
 
 **Unlocked behaviour (S3)**
 
 3. While unlocked, the hero's facing reverts to the pre-`4-6` rule: input-derived, following
-   movement direction (`4-6` AC 2's target-derived facing applies only while locked).
+   movement direction (`4-6` AC 2's target-derived facing applies only while locked). A neutral
+   stick leaves facing unchanged; rotating the unlocked camera alone does not change facing (the
+   pre-`4-6` zero-guard, `4-6` AC 2).
 4. While unlocked, a neutral-stick roll goes FORWARD (the pre-`4-6` rule). `4-6/R7`'s
    away-from-target backstep applies only while locked -- there is no locked target to back away
    from.
@@ -46,7 +49,10 @@ off state and more than two things are ever worth aiming at.
 7. While unlocked, the right stick rotates the camera rig's yaw horizontally, driven by player
    input rather than by a locked target's direction (`4-6` AC 1's yaw source). Height and pitch
    stay exactly as authored (`data/camera_config.tres`, unchanged, `4-6` Non-Goals) -- this story
-   adds no vertical camera freedom (see Non-Goals).
+   adds no vertical camera freedom (see Non-Goals). Pushing the right stick right turns the view
+   right (not inverted); pushing it left turns the view left (operator browser review 2026-09-16
+   (readiness gate 1), G1). A headless test pins it; the dev pass proves which rig yaw sign that
+   is -- the direction itself is not open.
 8. Rotation speed is an authored knob (per-tick, on the `CameraConfig.lock_yaw_smoothing`
    discipline -- no `delta`/`Time`/`Engine` read, F1-safe), tuned at this story's own live smoke.
 9. On UNLOCK, the camera keeps its current heading -- no snap to a default or to the direction of
@@ -68,17 +74,22 @@ off state and more than two things are ever worth aiming at.
 14. Candidates are ordered by ANGLE AROUND THE LOCKING HERO (a full-circle bearing from the hero
     to each candidate), not by screen position. The current target is the cycling anchor by its
     bearing, not its screen X (`4-6a` AC 4's screen-X anchor is superseded for this purpose).
-15. A flick RIGHT cycles to the next candidate in the on-screen-right rotational direction from
-    the current target's bearing; a flick LEFT cycles the other way. ("On-screen-right rotational
-    direction" pins which of the two angular senses around the circle -- e.g. clockwise as viewed
-    from above with the camera's current forward -- a screen-space convention the dev pass must
-    fix and test against; see Open Questions.)
+15. A flick RIGHT selects the candidate whose bearing is reached first when sweeping from the
+    current target's bearing toward screen-right. With the locked camera looking along the lock
+    direction, that is clockwise viewed from above. Testable claim: with candidates to the left
+    and right of the current target on screen, the first right flick selects the nearest one by
+    angle on the right side, and the first left flick selects the nearest on the left. A flick
+    LEFT sweeps the other way.
 16. The cycling order WRAPS: past the last candidate in a direction, cycling continues from the
     first (the opposite of `4-6a` AC 2's explicit no-wrap, which this AC supersedes).
 17. Ties (two candidates at the identical bearing) break on the lower board index, the `4-6a` AC 7
-    tie-break convention carried forward unchanged in mechanism.
-18. `4-6a` AC 1's vertical-flick-is-a-no-op rule (AC 3 of that story) is UNCHANGED: cycling stays
-    horizontal-only.
+    tie-break convention carried forward unchanged in mechanism. The current target holds its own
+    place in the bearing-ordered circle. A candidate at exactly the current target's bearing is
+    ordered against it by the same lower-board-index tie-break. One full sweep of flicks in either
+    direction visits every candidate exactly once before returning to the current target (operator
+    browser review 2026-09-16 (readiness gate 1), G2).
+18. `4-6a` AC 3's vertical-flick no-op, with AC 6's `abs(x) > abs(y)` horizontal boundary, is
+    UNCHANGED: cycling stays horizontal-only.
 19. `flick_threshold` (`gamepad_profile.gd`, 0.7) is unchanged; not reopened by this story.
 
 **Unchanged (S6)**
@@ -88,27 +99,30 @@ off state and more than two things are ever worth aiming at.
 22. The DEAD early return and the round-over step-1b freeze (`2-3/R14`, `2-6/R6`) still carve out
     facing, roll-direction, and camera-yaw writes exactly as `4-6` AC 2/AC 3 established -- this
     story adds an unlocked state to the facing/roll/camera RULES, not a third carve-out.
-23. `flick_threshold` = 0.7 stays the gate for whether a stick deflection counts as a flick at all,
-    whether that flick is then read as a retarget-cycle (locked) or a camera-rotate magnitude
-    (unlocked) -- see Open Questions for whether unlocked camera rotation reuses this gate or an
-    authored rate of its own.
 
 **Keyboard parity (S7)**
 
-24. Both keyboard slots (`KeyboardController`) get a lock/unlock key, camera-rotate-left and
-    camera-rotate-right keys, and cycle-left and cycle-right keys -- proposals only (documentation
-    deliverables, the `4-6` AC 13 precedent), not implemented. Controller stays primary and
-    carries the live smokes (`CC/R4`).
-25. Proposed bindings use only PHYSICALLY UNIQUE keys -- every keyboard `InputEventKey` in
+23. Both keyboard slots (`KeyboardController`) implement the gamepad's lock controls: a lock key
+    with the AC 1 three-way behaviour, camera-rotate-left/right keys that rotate the unlocked
+    camera per AC 7-10 (no-op while locked), and cycle-left/right keys that are a horizontal flick
+    per AC 13-17 (no-op while unlocked). The physical key choice is ratified (operator browser
+    review 2026-09-16 (readiness gate 1)); see Dev Notes for the table. Controller stays primary
+    and carries the live smokes (`CC/R4`). Closes deferred-work M5.
+24. Proposed bindings use only PHYSICALLY UNIQUE keys -- every keyboard `InputEventKey` in
     `project.godot` today carries `"location":0`, so a binding must not rely on a location-generic
-    modifier (Shift/Ctrl/Alt) or on Enter, which already exist elsewhere in the map with the same
-    ambiguity. See Dev Notes for the specific proposal and the stale-binding finding it corrects.
+    modifier (Shift/Ctrl/Alt), or on Enter/Space, which the engine's built-in `ui_accept` also
+    reads. See Dev Notes for the specific proposal and the stale-binding finding it corrects.
 
 ## What this story supersedes
 
 - **`CC/R3` "No unlock state."** `4-6`'s own controls ruling said no unlock state exists at any
-  point. This story adds one (AC 2). `CC/R3`'s click-instantly-relocks and flick-picks-a-candidate
-  clauses are otherwise the ancestry AC 1/AC 13 build on, not discarded.
+  point. This story adds one (AC 2). `CC/R3`'s click-instantly-relocks clause is otherwise the
+  ancestry AC 1 builds on, not discarded; its flick-picks-a-candidate clause was already
+  superseded by `4-6a` AC 1's adjacent-by-screen-X cycling (`4-6a/R1`), not this story's doing.
+- **`CC/R2` "Always lock-on ... Never a free camera."** Superseded by AC 2/AC 7; its
+  default/fallback-target clause stands unchanged (AC 20).
+- **`4-6` Non-Goal "No free camera and no camera-rotation input route is added or revived"**
+  (`4-6-camera-lock-on.md:119`). Superseded by AC 7-10.
 - **`4-6a` AC 1's on-screen-only candidate set and AC 4's screen-X anchor** -- superseded by AC
   13/AC 14: candidates are no longer filtered to what's on-screen, and the anchor is no longer a
   screen coordinate.
@@ -124,7 +138,7 @@ off state and more than two things are ever worth aiming at.
 ## Non-Goals
 
 - **Vertical camera.** No pitch input, no camera-height control. `data/camera_config.tres`'s
-  authored `height`/`pitch_degrees` and the load-once pattern (`camera_rig.gd:26-27`, `4-6`
+  authored `height`/`pitch_degrees` and the load-once pattern (`camera_rig.gd:29-31,52`, `4-6`
   Non-Goals, `4-6a` Non-Goals) stay exactly as they are.
 - **Auto-recenter.** An unlocked camera never snaps back to a default heading on its own (AC 10).
 - **Separating body yaw from hitbox yaw** (the "wait, then step" turn variant `6-7b/R4` named as a
@@ -151,19 +165,19 @@ used for this exact system:
 1. **How "unlocked" is represented in the snapshot.** `PlayerState.lock_target_slot`/
    `lock_target_index` are already hashed (`4-6` OQ 1). Adding an unlocked value to that shape (a
    sentinel, or a new field) is a snapshot-shape change and a candidate golden mover on its own.
-2. **Intent-stream growth.** `FORMAT_VERSION` is currently 11 (`record_file.gd:195`). A lock-toggle
-   request and a manual camera-rotation input both look like candidates for new `InputIntent`/
-   recorded-fact channels (the `4-6` OQ 3 precedent, FORMAT_VERSION 5 -> 6) -- whether either needs
-   one depends on fitting an existing channel (the no-shim measurement discipline). 12 is a
-   candidate value, not a decided one.
+2. **Intent-stream growth.** Candidate record-format change (`FORMAT_VERSION` 11 -> 12,
+   `record_file.gd:195`); a golden mover only if it adds hashed state. Whether a lock-toggle
+   request and/or a manual camera-rotation input need a new `InputIntent`/recorded-fact channel
+   depends on fitting an existing channel (the no-shim measurement discipline, the `4-6` OQ 3
+   precedent, FORMAT_VERSION 5 -> 6). No value predicted, measured before/after.
 3. **Facing/roll-fallback reversion while unlocked.** AC 3/AC 4 make `HeroState.facing`'s source
    and `_roll_world_direction`'s fallback CONDITIONAL on lock state for the first time (`4-6` AC 2
-   made facing always target-derived). Both are hashed -- a confirmed behavioural mover, isolated
-   from cause 1 per the `4-6` cause-splitting precedent.
-4. **Whether the golden fixture ever retargets or unlocks.** `4-6`'s own re-baseline noted
-   `test_determinism.gd` calls `set_camera_basis` zero times, never exercising the live camera-yaw
-   path ("Cause 4's non-move is structural"). Whether the fixture's scripted inputs ever unlock or
-   360-cycle is a fact to MEASURE -- if not, cause 3 may be a non-mover the same way.
+   made facing always target-derived) -- hashed fields (`facing`, `roll_direction`), but the golden
+   fixture never unlocks: it pushes a constant non-zero lock direction every tick
+   (`test_determinism.gd`'s `LOCK_DIRS`) and its one neutral roll (t17) is locked. Predicted
+   structural non-mover unless the locked path itself changes (`4-6`'s own re-baseline noted
+   `set_camera_basis` is called zero times, "Cause 4's non-move is structural"); measured both
+   directions.
 
 Baseline: current golden `71a7b45f...` (`6-7b` close-out, decision-log Session 2026-09-16),
 `FORMAT_VERSION` 11. Both are re-measured fresh at dev-pass start per the golden-clause discipline.
@@ -181,8 +195,14 @@ Two pads, per the pad-smoke ruling (`6-7/R19`: live smokes run primarily on cont
 - **360 cycling with targets behind the hero, including wrap (S5/AC 13-17).** Lock onto a minion,
   physically walk or turn so a totem sits behind the hero, flick to confirm it is reachable; cycle
   past the last candidate in one direction and confirm it wraps to the first rather than stopping.
-- **Keyboard parity spot check (S7/AC 24-25).** Confirm the proposed keys do not collide with any
-  existing bound action on either keyboard slot, even though the scheme itself is not built.
+  Also flick through one full sweep in a single direction and confirm every live candidate is
+  visited exactly once with no back-and-forth (no ping-pong) before returning to the start (AC 17,
+  G2).
+- **Keyboard parity spot check (S7/AC 23-24).** Exercise all five actions (lock/unlock,
+  camera-rotate-left/right, cycle-left/right) on BOTH keyboard slots, using the shipped default (no
+  `main.tscn` `slot_controller_kinds` override -- both slots are KEYBOARD, `6-7/R18` precedent).
+  Run the P2 numpad bindings once with NumLock on and once with NumLock off (N9, unmeasured, low
+  confidence).
 - **Camera/wall behaviour**, per the Non-Goals carve-out: record what an unlocked camera does near
   the arena boundary as a named finding, not a blocker.
 
@@ -190,13 +210,13 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 
 ## Dev Notes
 
-- **Tier: A, per operator scope talk ruling S1 (2026-09-16), overriding the board's inherited
-  `# Tier B` comment.** Reason stated in the ruling: the unlocked state hands hero facing back to
-  input inside `src/state/` (AC 3) and adds a new request to the intent stream (candidate cause 2
-  above) -- both are golden-clause triggers on their own, independent of the sprint-status note's
-  earlier "AT RISK of Tier A" hedge (`sprint-status.yaml:139`, pre-dating this scope talk). Tier may
-  be raised, never lowered, mid-story (`CLAUDE.md` Story tiers) -- it is fixed at Tier A here, at
-  the story's own authoring, and stays there.
+- **Tier: A, by operator ruling S1 (operator scope talk 2026-09-16), overriding the board's
+  inherited `# Tier B` comment.** Author's rationale, not stated in the ruling itself: the unlocked
+  state hands hero facing back to input inside `src/state/` (AC 3), a golden-clause trigger on its
+  own; growing the intent stream (candidate cause 2 above) is a candidate value, not a decided one,
+  and is not load-bearing for the tier call. Tier may be raised, never lowered, mid-story
+  (`CLAUDE.md` Story tiers) -- it is fixed at Tier A here, at the story's own authoring, and stays
+  there.
 - **`PlayerState.lock_target_slot`/`lock_target_index`** (`player_state.gd:160-161`): today always
   a valid address, default `TargetingService.NO_TARGET_SLOT`/`HERO_INDEX` semantics at construction
   but SEEDED to the opposing hero by `MatchState` before the round starts (`4-6` Dev Notes) -- there
@@ -235,20 +255,23 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   copied forward as-is. Measured inventory of every bound physical key today (`project.godot`,
   grepped): P1 uses W/S/A/D (move), J/K/L (attack/block/roll), Space (run), Q (cast_mode), 1-4
   (cards), E (cast_confirm), R (debug_reset). P2 uses the arrow keys (move), `.`/`,`/`/` (attack/
-  block/roll), Right Shift (run), O (cast_mode), 6-9 (cards), P (cast_confirm), `'` (debug_reset).
-  Global: F1 (debug_pause), F2 (debug_step). Every one of these events carries `"location":0`
-  (grepped), confirming AC 25's constraint. A non-conflicting proposal for this story's five new
-  actions per slot (lock/unlock, camera-rotate-left, camera-rotate-right, cycle-left, cycle-right):
+  block/roll), `Numpad 0` (run, `6-7/R18`), O (cast_mode), 6-9 (cards), P (cast_confirm), `'`
+  (debug_reset). Global: F1 (debug_pause), F2 (debug_step). Every one of these events carries
+  `"location":0` (grepped), confirming AC 24's constraint. A non-conflicting proposal for this
+  story's five new actions per slot (lock/unlock, camera-rotate-left, camera-rotate-right,
+  cycle-left, cycle-right), RATIFIED (operator browser review 2026-09-16 (readiness gate 1)):
 
   | action | P1 | P2 |
   |---|---|---|
-  | lock/unlock (the R3 click) | `T` | `Numpad 0` |
+  | lock/unlock (the R3 click) | `T` | `Numpad 5` |
   | camera rotate left / right | `F` / `G` | `Numpad 4` / `Numpad 6` |
   | cycle left / right | `Z` / `C` | `Numpad 1` / `Numpad 3` |
 
-  P2's numpad half is unchanged in spirit from `4-6`'s original (never implemented, so not stale in
-  the same way) with two rotation keys added on the same pad in the natural 4/6 left/right position.
-  Not built, by AC 24's own wording -- a documentation deliverable, per the `4-6` AC 13 precedent.
+  P2's lock/unlock key moved off `Numpad 0` (that key is `p2_run`, `6-7/R18`) to `Numpad 5`,
+  grep-confirmed unbound in `project.godot`. The rotation and cycle keys are unchanged in spirit
+  from `4-6`'s original proposal (never implemented, so not stale in the same way), with two
+  rotation keys added on the same pad in the natural 4/6 left/right position. Built by this pass
+  (AC 23), per the `4-6` AC 13 precedent for proposing keyboard bindings before implementing them.
 - **`InputIntent`/`RecordFile` channel fit is a dev-pass measurement**, not decided here, on the
   `4-6` OQ 3/AC 14 precedent verbatim: does a lock-toggle request and/or a manual camera-rotation
   input fit inside an existing channel, or does either need a new one. If either needs one,
@@ -311,9 +334,9 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   every right-stick consumer in the codebase (grepped).
 - [Source: src/controllers/keyboard_controller.gd] — confirmed no lock/retarget on keyboard today.
 - [Source: project.godot `[input]` section] — every bound physical key both slots, confirming AC
-  25's `"location":0` premise and the `4-6` OQ 5 `Q`-collision finding.
+  24's `"location":0` premise and the `4-6` OQ 5 `Q`-collision finding.
 - [Source: deferred-work.md:282, id M5, `_46-review.md:276`] — "Keyboard slots can no longer face
-  anything but the opposing hero," the gap AC 24 addresses; disposition (b), open until this story.
+  anything but the opposing hero," disposition (b); closed by AC 23 (S7).
 - [Source: src/state/player_state.gd:150-161,405; input_intent.gd:15-18,88-89;
   targeting_service.gd:59,64] — current lock-target/retarget shape, the `HERO_INDEX ==
   NO_TARGET_SLOT` coincidence Open Question 1 resolves around.
@@ -338,13 +361,12 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
    standing-still facing changes; whether an unlocked hero's input-derived facing (AC 3) interacts
    with turn-in-place any differently than pre-`4-6` movement-derived facing did is unexamined by
    either story and must be checked, not assumed clean.
-5. **The exact screen-space convention for AC 15's "on-screen-right rotational direction."** Which
-   of the two angular senses around the hero a rightward flick selects, pinned against the existing
-   `4-6a` adjacency test conventions (which used screen-X sign, not a rotational sense) -- do not
-   assume the two conventions agree; state and test the mapping explicitly.
-6. **Whether unlocked camera rotation reuses `flick_threshold` (0.7) as its input gate**, or needs
-   its own authored deadzone/rate -- the two are different questions (flick is an edge-triggered
-   gesture; unlocked rotation is continuous), named in AC 23 but not settled.
+5. **The proof method for AC 15's mapping.** How the world-axis sign maps to clockwise in
+   `src/main/`, and a headless test pinning that mapping. The direction itself is not open (fixed
+   by AC 15).
+6. **The unlocked camera's right-stick dead zone and response curve** (linear or shaped, rate at
+   full deflection). Independent of `flick_threshold`, which gates only the locked-state flick edge
+   (AC 19). Dev-pass call, tuned at live smoke with AC 8's rate knob.
 
 ## Tasks / Subtasks
 
@@ -354,13 +376,22 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [ ] (S4) Resolve OQ 2 (manual-rotation input shape and record channel); implement unlocked
       camera rotation with an authored rate (AC 7-12).
 - [ ] (S5) Replace `LockOnResolver`'s algorithm with bearing-based 360 cycling, wrapping, tie-break
-      carried forward (AC 13-19); resolve OQ 5 (rotational-direction convention).
+      carried forward (AC 13-19); resolve OQ 5 (proof method for AC 15's clockwise mapping).
 - [ ] (S6) Confirm the unchanged rules (round-start default, death-snap, DEAD/round-over carve-outs,
-      `flick_threshold`) still hold under the new lock-state branch (AC 20-23).
-- [ ] (S7) Write the keyboard binding proposal into the story's own Dev Agent Record, verified
-      non-colliding against `project.godot` (AC 24-25) -- not implemented.
+      `flick_threshold`) still hold under the new lock-state branch (AC 20-22).
+- [ ] (S7) Implement keyboard parity in `KeyboardController` (AC 23-24): lock/unlock,
+      camera-rotate-left/right, and cycle-left/right, on the ratified key table (Dev Notes). Edit
+      `project.godot` on the `6-7` Task 2 discipline (diff contains only the new action blocks);
+      update the `SHIPPED_INPUT_ACTIONS` pin (`test_deck_and_hand.gd:478`). Add headless tests for
+      the keyboard edges.
 - [ ] Resolve OQ 3 (intent/record shape, `FORMAT_VERSION`); measure golden + snapshot key set
       before/after (Golden Prediction section); operator smoke on every Live Smoke surface.
+
+## Change Log
+
+| Date | Version | Description | Author |
+|------|---------|-------------|--------|
+| 2026-09-16 | 0.1 | Docs-only fix pass against readiness gate 1 (`C:\dev\_6-8-gate.md`, verdict NOT READY, 6 blockers, 10 notes, 2 operator gameplay questions). Blockers B1-B6 applied: B1, AC 23 (was AC 24) now requires `KeyboardController` to IMPLEMENT the gamepad's lock controls, not merely propose them, with the physical key choice ratified up front (no operator gate before Task S7 edits `project.godot`); Task S7 rewritten to implement, add the `project.godot`/`SHIPPED_INPUT_ACTIONS` discipline, and headless edge tests; closes deferred-work M5. B2, the P2 key inventory corrected (`Numpad 0` is `p2_run`, `6-7/R18`, not Right Shift/run); P2 lock/unlock moved to `Numpad 5` (grep-confirmed unbound); key table labelled ratified. B3, AC 23 (old numbering, the self-contradictory `flick_threshold` gate for unlocked rotation) deleted and every following AC/Task/Live-Smoke/Reference renumbered (AC 24->23, AC 25->24); OQ 6 rewritten to the dead-zone/response-curve question, independent of `flick_threshold`. B4, AC 2's misattributed ruling corrected to `CC/R3` (carried into `4-6` AC 10); "What this story supersedes" gained `CC/R2`'s "Always lock-on ... Never a free camera" and `4-6`'s "No free camera" Non-Goal. B5, Golden Prediction causes 3 and 4 merged into one predicted structural non-mover (the golden fixture never unlocks, per `LOCK_DIRS` and the locked t17 roll), and cause 2 reworded as a record-format change that moves the golden only if it adds hashed state. B6, AC 15 rewritten to a testable sweep-direction claim; OQ 5 reduced to the proof method only, the direction itself no longer open. Operator gameplay answers landed: G1 adds the stick-right-turns-view-right convention to AC 7, headless-test-pinned; G2 extends AC 17 with the current-target's-own-place and no-ping-pong-sweep rule, adds the Live Smoke 360 no-ping-pong check, and disposes N2. Non-blocking notes applied: N1 (AC 18 citation corrected to `4-6a` AC 3/AC 6), N3 (Dev Notes Tier rationale re-labelled as the author's, intent-stream clause marked candidate), N5 (`CC/R3`'s flick clause named as already superseded by `4-6a/R1`, only the click clause carried as ancestry), N6 (AC 25 Enter citation corrected to the engine `ui_accept` default, also covering Space), N7 (`camera_rig.gd` load-once citation corrected to `:29-31,52`; the stale `sprint-status.yaml:139` citation removed by the N3 rewrite; `epics.md:232`'s stale Tier B note left unedited, out of scope for this file pair), N8 (keyboard Live Smoke item rewritten to both keyboard slots, all five actions, naming the shipped default -- no `slot_controller_kinds` override -- as the keyboard configuration), N9 (NumLock on/off added to the keyboard smoke item), N10 (AC 3 gained the explicit neutral-stick/zero-guard sentence). Board `story_note` rewritten to drop the N3/N4 errors; status stays `authored`, board stays `backlog`. | Claude Sonnet 5 |
 
 ## Dev Agent Record
 
