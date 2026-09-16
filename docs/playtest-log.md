@@ -424,3 +424,13 @@ foldable into the NEXT story's dev pass as a minor item. NOTE for whoever does i
 test/integration/test_hero_movement.gd pins MOVE_SPEED := 5.0 as a local constant and reads the
 authored .tres, so a run-speed change must update that constant in the same pass;
 test_unit_approach_live.gd reads walk_speed live and follows automatically.
+
+## 16.9.2026 — 6-7b locomotion presentation (smoke, dva pada)
+
+- Hod sporiji nego prije, ne klizi. Trk brži, noge prate tlo.
+- Strafe i hod unatrag pod lockom, u hodu i u trku: animacija na pravu stranu.
+- Okret u mjestu: prvo su se koraci palili samo kad meta kruži blizu ili brzo; kad je daleko, lik se okretao klizeći u idle pozi. Fix: koraci za svaki okret, brzina koraka prati brzinu okretanja. Onda je radilo stalno, ali čudno izgledalo. Nakon štimanja (min brzina koraka 0.6, prag ~3°/s) bolje. Nije idealno, ali prihvatljivo.
+- Prijelazi hod/trk znali su biti grubi; blend 0.12 -> 0.25 pomogao. Ostatak je nagla promjena brzine, za retune.
+- Tempo: probao hod 2.5 / trk 5.5, ostaje hod 2.2 / trk 5.5.
+- Hod u bloku klizi. Radije bi da ne klizi, ali nema animacije; kasnije.
+- fps uredan.
