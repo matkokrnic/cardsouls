@@ -575,7 +575,7 @@ suite/golden/mutation evidence and the story-file edit scope) all PASS.
 - **M1** (`camera_rig.gd:79,159-162`) — `free_yaw_degrees_per_tick`/`rotate_free_yaw`'s `axis` carry
   no upper bound or `is_finite`/NaN guard (unlike the sibling `_lock_yaw_smoothing` clamp); a NaN
   poisons `rotation.y` permanently, with no recovery on relock. Disposition: deferred hardening
-  (`E5-R/R11` M1).
+  (`6-8/R11` M1).
 - **M2** (`match_runner.gd:1630-1633`) — `_target_world_position` resolves any non-P1 slot,
   including the UNLOCKED sentinel, to P2's hero; not reachable today since both lock call sites
   guard on `is_locked()` first. Disposition: deferred hardening (`R11` M2).
