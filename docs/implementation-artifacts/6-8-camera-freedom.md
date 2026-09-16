@@ -4,7 +4,7 @@ baseline_commit: 5eacaf9dfa0c7c90bd6daadabde112793f47a309
 
 # Story 6.8: Camera Freedom
 
-Status: authored
+Status: ready-for-dev
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

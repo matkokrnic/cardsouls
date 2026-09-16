@@ -121,7 +121,7 @@ development_status:
   6-3b-pitch-hud: done  # Tier A
   6-7-locomotion-gaits: done  # Tier A
   6-7b-locomotion-presentation: done  # Tier B
-  6-8-camera-freedom: backlog  # Tier A
+  6-8-camera-freedom: ready-for-dev  # Tier A
   6-6-defense-presentation: backlog  # Tier B
   6-5-spell-resolution: backlog  # Tier A
 
@@ -136,7 +136,7 @@ story_notes:
   6-3a-pitch-activation: "done 2026-09-14, Tier A close-out complete (activation per 6-3a/R1-R7; golden 9ed4c903 unmoved, measured both directions, no re-baseline; FORMAT_VERSION 9->10; suite 824/0/6754 + 59 integration; live smoke six-of-seven PASS, STUNNED refusal a named deviation (covered headless, not seen live); review APPROVE, zero findings; decision-log session 6-3a-pitch-activation close-out)."
   6-3b-pitch-hud: "done 2026-09-15, Tier A close-out complete (tenth observation seam connect_pitch_changed, both pitch zones and staged-card ghost per 6-3b/R1-R4; golden 9ed4c903 unmoved, measured both directions, no re-baseline; suite 824/0/6754 + 59 -> 842/0/6898 + 61 integration; two readiness gate rounds (gate 1 NOT READY six blockers, gate 2 READY zero blockers); review APPROVE WITH FINDINGS, eleven findings none blocking, two fixed and mutation-proven; live smoke 7/7 PASS, no named deviation)."
   6-7b-locomotion-presentation: "done 2026-09-16, Tier B close-out complete (walk family + turn-in-place + tempo retune per 6-7b/R1-R9; golden 71a7b45f unmoved, measured both directions; suite 854/0/6965 + 62 integration; live smoke 7/8 PASS + item 4 (turn-in-place slide at low angular rate) fixed and re-smoke accepted; decision-log session 6-7b-locomotion-presentation close-out (Tier B))."
-  6-8-camera-freedom: "authored 2026-09-16 via gds-create-story, Tier A (operator scope talk S1), gate 1 NOT READY findings applied, keyboard parity implemented (S7), awaiting re-gate."
+  6-8-camera-freedom: "ready-for-dev 2026-09-16, Tier A: gate 1 NOT READY (6 blockers) -> fix 4b8eab2 -> re-gate ALL CLOSED (0120d85); awaiting dev pass."
   6-6-defense-presentation: "Tier B AT RISK of Tier A — 'synced to the incoming attack' may need a state-owned attacker-window fact. Expected to discharge the 'defense feel' retune entry in passing (E6-P/R8 amendment i)."
   6-5-spell-resolution: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Carries M5 and M6 (deferred-work.md:232-233)."
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
