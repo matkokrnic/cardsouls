@@ -10610,3 +10610,79 @@ entry); `board: promote 6-7b-locomotion-presentation to done` (`sprint-status.ya
 
 Suite: state `854 tests, 0 failed, 6965 assertions`, integration `62/62 PASS`, both foreground,
 unchanged across the close-out chain. Golden `71a7b45f...` unmoved. `FORMAT_VERSION` 11.
+
+## Session 2026-09-17 -- 6-8-camera-freedom close-out
+
+Author pass + two readiness gates + dev pass (Claude Opus 5) + Senior Developer Review (Claude
+Sonnet 5, three layers COMPLETED, APPROVE WITH FINDINGS) + operator live smoke + this close-out,
+all on `6-8-camera-freedom`. Twelve rulings, `6-8/R1`-`R12`; full text lives in the story file, not
+restated here.
+
+`6-8/R1` TIER A (operator scope talk 2026-09-16, S1). Unlocked facing hands `src/state/` back to
+input.
+
+`6-8/R2` LOCK BUTTON THREE-WAY (S2). Minion/totem lock -> enemy hero; enemy hero lock -> unlock;
+unlocked -> enemy hero.
+
+`6-8/R3` UNLOCKED = PRE-4-6 RULES (S3). Facing follows movement, neutral roll forward, block
+orientation matters, no marker.
+
+`6-8/R4` UNLOCKED CAMERA (S4). Yaw only, authored rate, heading kept on unlock, no recenter, flick
+no-op while unlocked, relock eases with 4-6a smoothing.
+
+`6-8/R5` 360 CYCLING (S5). All live opposing targets on- or off-screen, ordered by bearing around
+the locking hero, wraps, ties -> lower board index.
+
+`6-8/R6` UNCHANGED (S6). Round starts locked on the enemy hero, target death -> enemy hero same
+tick, DEAD/round-over carve-outs, `flick_threshold` 0.7.
+
+`6-8/R7` KEYBOARD PARITY IMPLEMENTED (S7 plus operator browser review 2026-09-16, readiness gate 1
+B1/B2). Ratified keys P1 T / F G / Z C, P2 Numpad 5 / Numpad 4 6 / Numpad 1 3.
+
+`6-8/R8` STICK RIGHT TURNS THE VIEW RIGHT, NOT INVERTED (gate 1 G1).
+
+`6-8/R9` THE CURRENT TARGET HOLDS ITS OWN PLACE IN THE CIRCLE; ONE FULL SWEEP VISITS EVERY
+CANDIDATE EXACTLY ONCE (gate 1 G2).
+
+`6-8/R10` WHILE UNLOCKED, THE MODE (2) CHARGEUP STILL AIMS AT THE ENEMY HERO, KEEPING THE 5-2 RULE
+(operator decision, 2026-09-16 dev pass question).
+
+`6-8/R11` REVIEW DISPOSITIONS. M1, M2, L2 deferred as hardening (`deferred-work.md` rows); L1 and
+L4 no action (documented behaviour); L3 accepted (the unlocked camera may rotate through
+round-over, continuity with `6-1d/R9`).
+
+`6-8/R12` SMOKE 8/8 PASS; the camera ignoring the arena wall is accepted as intended;
+`free_yaw_degrees_per_tick` 3.0 accepted as shipped.
+
+**Supersessions, recorded forward, old entries not edited.** `CC/R2` "Always lock-on ... Never a
+free camera" (the default-target clause stands, only the "never" half is superseded); `CC/R3` "No
+unlock state"; the `4-6` Non-Goal "No free camera"; `4-6a` AC 1/AC 2/AC 4 (screen-X adjacency, no
+wrap, on-screen-only); `4-6a/R1` moot.
+
+**Chain.** Create `614acbc`; gate 1 NOT READY (6 blockers) -> fix `4b8eab2` -> re-gate ALL CLOSED
+with mechanical fixes `0120d85` -> N8 residual `2991a62` -> promotion `e75579e` (pushed); dev pass
+(Claude Opus 5); review (Claude Sonnet 5, three layers COMPLETED); smoke; this close-out chain.
+
+**Measurements.** Golden `71a7b45f...` unmoved, causes 1-3 measured separately (cause 3 live via
+the unlocked variant hash `bf861e0b...`); `FORMAT_VERSION` stays 11 (unlock is a new value on the
+existing retarget pair); `UNHASHED_CROSS_TICK_MEMBERS` 4 and observation seams 10 unchanged; suite
+`854/0/6965` + 62 integration -> `869/0/7103` + 63 integration; mutations 12/12 RED and restored.
+
+**Smoke configuration deviation.** The story's Live Smoke wording asked for two pads; the operator
+ran Config A `slot_controller_kinds = [0, 3]` (P1 keyboard, P2 pad, reverted after the session) plus
+Config B (shipped default, both slots keyboard). Reason: single operator, and keyboard parity
+needed both keyboard slots exercised regardless.
+
+### Close-out
+
+Four commits, order C1 -> C2 -> C3 -> C4: `feat(camera): 6-8 camera freedom (unlock, free yaw, 360
+cycling, keyboard parity)` (`9f35863`, code + tests + data); `docs(6-8): review and smoke records,
+story done` (`571c370`, story file); `board: promote 6-8-camera-freedom to done` (`4b644d4`,
+`sprint-status.yaml` + `docs/playtest-log.md` + `deferred-work.md` + `epics.md`);
+`docs(decision-log): 6-8 close-out` (this entry).
+
+Suite: state `854 tests, 0 failed, 6965 assertions` -> `869 tests, 0 failed, 7103 assertions`,
+integration `62/62 PASS` -> `63/63 PASS`, both foreground, both halves. Golden `71a7b45f...`
+unmoved. `FORMAT_VERSION` 11.
+
+Pushed; `origin/main` confirmed equal to `HEAD` after.
