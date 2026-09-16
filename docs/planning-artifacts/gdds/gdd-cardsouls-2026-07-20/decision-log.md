@@ -10541,3 +10541,72 @@ Suite: state `854 tests, 0 failed, 6965 assertions`, integration `61/61 PASS`, b
 both halves, unchanged across the close-out chain. Golden `71a7b45f...`. `FORMAT_VERSION` 11.
 
 Pushed; `origin/main` confirmed equal to `HEAD` after.
+
+## Session 2026-09-16 -- 6-7b-locomotion-presentation close-out (Tier B)
+
+Dev pass + fix pass (operator live smoke item 4) + close-out chain, all on
+`6-7b-locomotion-presentation`. Nine rulings, `6-7b/R1`-`R9`.
+
+**R1 Walk/run family selection.** Keyed on pushed planar speed vs. the MIDPOINT of the authored
+walk/run pair. The pair is passed as plain floats through `HeroActor.drive()` ->
+`on_locomotion`, read inline per tick (CONSTRAINT C). No `src/state/` change, no new seam.
+
+**R2 Playback rates.**
+- Eight family clips play at pushed speed / family native speed: `RUN_FAMILY_NATIVE_SPEED := 5.0`,
+  `WALK_FAMILY_NATIVE_SPEED := 1.82` (measured from planted-toe slide).
+- `play()` custom speed only; `AnimationPlayer.speed_scale` never written; `idle` native.
+
+**R3 Turn in place.**
+- IDLE and standing still only; facing memory advances on every push; 3-tick hold; turn clips loop.
+- Clip Hips yaw neutralised yaw-only in the library tool, source FBX untouched.
+
+**R4 Turn playback rate.**
+- rotation rate / measured native `106.4165` deg/s, clamped `[0.6, 2.0]`.
+- Noise floor `0.00087` (~3 deg/s); slower rotations stay idle by operator choice.
+- Operator verdict: acceptable, not ideal.
+- Better options (smaller-turn clip, or wait-then-step, which needs body/hitbox yaw decoupling) =
+  their own future story.
+
+**R5 L/R naming.**
+- Controller local +X = "right" = the paladin's anatomical LEFT; clip files follow the controller
+  convention.
+- 6-7b swapped `walk_strafe` and `turn` source files (source-file swap mechanism, operator ruling).
+- CORRECTION ENTRY citing `5-0a/R1`: its "Mixamo preview mirrors L/R" cause was most likely this
+  anatomical inversion. The old entry is not edited.
+
+**R6 Tempo final.** `move_speed 5.5` / `walk_speed 2.2` (HEAD `5.0`/`2.5`; the dev pass `6.0`/`2.0`
+superseded at smoke). `LOCOMOTION_BLEND_SECONDS` `0.12 -> 0.25`.
+
+**R7 Integration tests run the real runner on the AUTHORED `.tres` and are NOT `BC/R3`-isolated.**
+- `test_hero_movement.gd` reads `move_speed` live.
+- `test_unit_corpse_walkthrough_live.gd` derives its frame count from live `move_speed`
+  (`DRIVE_TRAVEL 3.3`).
+- Integration count is 62 (the dev pass typed 60/61 in prose; file lists verified).
+
+**R8 Review APPROVE WITH FINDINGS accepted.**
+- M1: the debug pause does not freeze the hero `AnimationPlayer`. Pre-existing, no fix.
+- M2 accepted, deferred: `test_balance_authoring.gd::
+  test_authored_gait_values_are_positive_and_correctly_ordered` asserts `walk_speed <=
+  move_speed`, not the strict `walk_speed < move_speed` — the non-strict form does not fully pin
+  the ordering M2 raised.
+- L1-L3 accepted without change.
+- LAYER-COMPLETION: Blind Hunter completed / Edge Case Hunter completed / Acceptance Auditor
+  completed inline.
+
+**R9 Deferred to the retune block/wishlist.** Walking-block slide (needs block-walk animation or
+per-bone blend); turn-in-place feel; transition softness (acceleration); strafe/backpedal possible
+slight slide at the shared family rate.
+
+Budget line (`E5-R/R3`): start `C:\dev\_6-7b-suite-before-state.txt` 15:47:11, end
+`C:\dev\_6-7b-chain-suite-int.txt` 20:06:32, delta 4h19m21s. No cap (operator), reported.
+
+E6 retro input: suite run as separate foreground calls with an explicit timeout finished without
+backgrounding across dev, review, fix and chain passes.
+
+Four commits, order C1 -> C2 -> C3 -> C4: `story 6-7b: locomotion presentation (walk family, turn
+in place, tempo retune)` (code + tests); `docs(6-7b): dev pass record, live smoke results,
+playtest log entry` (story file + playtest log); `docs(decision-log): 6-7b close-out` (this
+entry); `board: promote 6-7b-locomotion-presentation to done` (`sprint-status.yaml`).
+
+Suite: state `854 tests, 0 failed, 6965 assertions`, integration `62/62 PASS`, both foreground,
+unchanged across the close-out chain. Golden `71a7b45f...` unmoved. `FORMAT_VERSION` 11.
