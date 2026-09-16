@@ -4,7 +4,7 @@ baseline_commit: 5eacaf9dfa0c7c90bd6daadabde112793f47a309
 
 # Story 6.8: Camera Freedom
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -379,28 +379,30 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 
 ## Tasks / Subtasks
 
-- [ ] (S2) Add the unlocked state (OQ 1); wire the three-way click behavior (AC 1).
-- [ ] (S3) Make facing and the roll neutral-fallback conditional on lock state (AC 3-5); suppress
+- [x] (S2) Add the unlocked state (OQ 1); wire the three-way click behavior (AC 1).
+- [x] (S3) Make facing and the roll neutral-fallback conditional on lock state (AC 3-5); suppress
       the lock marker while unlocked (AC 6).
-- [ ] (S4) Resolve OQ 2 (manual-rotation input shape and record channel); implement unlocked
+- [x] (S4) Resolve OQ 2 (manual-rotation input shape and record channel); implement unlocked
       camera rotation with an authored rate (AC 7-12).
-- [ ] (S5) Replace `LockOnResolver`'s algorithm with bearing-based 360 cycling, wrapping, tie-break
+- [x] (S5) Replace `LockOnResolver`'s algorithm with bearing-based 360 cycling, wrapping, tie-break
       carried forward (AC 13-19); resolve OQ 5 (proof method for AC 15's clockwise mapping).
-- [ ] (S6) Confirm the unchanged rules (round-start default, death-snap, DEAD/round-over carve-outs,
+- [x] (S6) Confirm the unchanged rules (round-start default, death-snap, DEAD/round-over carve-outs,
       `flick_threshold`) still hold under the new lock-state branch (AC 20-22).
-- [ ] (S7) Implement keyboard parity in `KeyboardController` (AC 23-24): lock/unlock,
+- [x] (S7) Implement keyboard parity in `KeyboardController` (AC 23-24): lock/unlock,
       camera-rotate-left/right, and cycle-left/right, on the ratified key table (Dev Notes). Edit
       `project.godot` on the `6-7` Task 2 discipline (diff contains only the new action blocks);
       update the `SHIPPED_INPUT_ACTIONS` pin (`test_deck_and_hand.gd:478`). Add headless tests for
       the keyboard edges.
-- [ ] Resolve OQ 3 (intent/record shape, `FORMAT_VERSION`); measure golden + snapshot key set
+- [x] Resolve OQ 3 (intent/record shape, `FORMAT_VERSION`); measure golden + snapshot key set
       before/after (Golden Prediction section); operator smoke on every Live Smoke surface.
 
 ## Change Log
 
 | Date | Version | Description | Author |
 |------|---------|-------------|--------|
+| 2026-09-17 | 0.4 | Close-out: Senior Developer Review (AI) recorded (APPROVE WITH FINDINGS, 0 H / 2 M / 4 L, three layers COMPLETED, R1-R9 all PASS); Live Smoke Results recorded (8/8 PASS, Config A `[0, 3]` plus Config B shipped default, single-operator deviation named). Final task ticked. Status `review` -> `done`. | Claude Sonnet 5 |
 | 2026-09-16 | 0.1 | Docs-only fix pass against readiness gate 1 (`C:\dev\_6-8-gate.md`, verdict NOT READY, 6 blockers, 10 notes, 2 operator gameplay questions). Blockers B1-B6 applied: B1, AC 23 (was AC 24) now requires `KeyboardController` to IMPLEMENT the gamepad's lock controls, not merely propose them, with the physical key choice ratified up front (no operator gate before Task S7 edits `project.godot`); Task S7 rewritten to implement, add the `project.godot`/`SHIPPED_INPUT_ACTIONS` discipline, and headless edge tests; closes deferred-work M5. B2, the P2 key inventory corrected (`Numpad 0` is `p2_run`, `6-7/R18`, not Right Shift/run); P2 lock/unlock moved to `Numpad 5` (grep-confirmed unbound); key table labelled ratified. B3, AC 23 (old numbering, the self-contradictory `flick_threshold` gate for unlocked rotation) deleted and every following AC/Task/Live-Smoke/Reference renumbered (AC 24->23, AC 25->24); OQ 6 rewritten to the dead-zone/response-curve question, independent of `flick_threshold`. B4, AC 2's misattributed ruling corrected to `CC/R3` (carried into `4-6` AC 10); "What this story supersedes" gained `CC/R2`'s "Always lock-on ... Never a free camera" and `4-6`'s "No free camera" Non-Goal. B5, Golden Prediction causes 3 and 4 merged into one predicted structural non-mover (the golden fixture never unlocks, per `LOCK_DIRS` and the locked t17 roll), and cause 2 reworded as a record-format change that moves the golden only if it adds hashed state. B6, AC 15 rewritten to a testable sweep-direction claim; OQ 5 reduced to the proof method only, the direction itself no longer open. Operator gameplay answers landed: G1 adds the stick-right-turns-view-right convention to AC 7, headless-test-pinned; G2 extends AC 17 with the current-target's-own-place and no-ping-pong-sweep rule, adds the Live Smoke 360 no-ping-pong check, and disposes N2. Non-blocking notes applied: N1 (AC 18 citation corrected to `4-6a` AC 3/AC 6), N3 (Dev Notes Tier rationale re-labelled as the author's, intent-stream clause marked candidate), N5 (`CC/R3`'s flick clause named as already superseded by `4-6a/R1`, only the click clause carried as ancestry), N6 (AC 25 Enter citation corrected to the engine `ui_accept` default, also covering Space), N7 (`camera_rig.gd` load-once citation corrected to `:29-31,52`; the stale `sprint-status.yaml:139` citation removed by the N3 rewrite; `epics.md:232`'s stale Tier B note left unedited, out of scope for this file pair), N8 (keyboard Live Smoke item rewritten to both keyboard slots, all five actions, naming the shipped default -- no `slot_controller_kinds` override -- as the keyboard configuration), N9 (NumLock on/off added to the keyboard smoke item), N10 (AC 3 gained the explicit neutral-stick/zero-guard sentence). Board `story_note` rewritten to drop the N3/N4 errors; status stays `authored`, board stays `backlog`. | Claude Sonnet 5 |
+| 2026-09-16 | 0.3 | Dev pass (gds-dev-story, Tier A). Unlocked state as the sentinel address `[PlayerState.UNLOCKED_SLOT, HERO_INDEX]` with a three-way click resolved by the runner; lock-conditional facing, neutral roll and marker; unlocked camera rotation (`CameraRig.rotate_free_yaw`, `Controller.camera_rotate`, authored `CameraConfig.free_yaw_degrees_per_tick` = 3.0); bearing-based 360 cycling with wrap and index tie-break (`LockOnResolver.cycle_candidate`/`bearing_of`, replacing `adjacent_candidate`); keyboard parity with ten new Input Map actions on the ratified table. Golden `71a7b45f` and the 198-key snapshot set unmoved (three causes measured separately); `FORMAT_VERSION` stays 11; suite 854/0/6965 + 62 -> 869/0/7103 + 63 integration; 12/12 mutations RED and restored. Tasks S2-S7 ticked; the smoke-bearing final task stays open. Full record `C:\dev\_6-8-dev.md`. | Claude Opus 5 |
 | 2026-09-16 | 0.2 | Live Smoke gained two items closing the N8 residual left open by the re-gate (`0120d85`): flick direction (AC 15, confirming first-right/first-left lands on the nearest target on that side) and blocking while unlocked (AC 5, confirming the block arc is dodgeable by turning away and restored by facing the attacker), both cited to operator browser review 2026-09-16. | Claude Sonnet 5 |
 
 ## Dev Agent Record
@@ -408,9 +410,199 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 ### Agent Model Used
 
 Claude Sonnet 5 (claude-sonnet-5), story authored via `gds-create-story`.
+Dev pass: Claude Opus 5 (claude-opus-5, 1M context) via `gds-dev-story`, 2026-09-16.
 
 ### Debug Log References
 
+- Full record (measurements, mutation table, deviations): `C:\dev\_6-8-dev.md`.
+- Suite, two full runs only, counts read from the files. BEFORE `C:\dev\_6-8-suite-before-state.txt`
+  854/0/6965 (mtime 21:47:14, run start 21:46:50) and `C:\dev\_6-8-suite-before-int.txt` 62 PASS
+  (21:51:30). AFTER `C:\dev\_6-8-suite-after-state.txt` 869/0/7103 (22:13:00) and
+  `C:\dev\_6-8-suite-after-int.txt` 63 PASS (22:17:16). Budget interval about 30m26s.
+- Golden (MEASURED, `C:\dev\_6-8-golden-before.txt` / `-after.txt` / `-causes.txt`): hash
+  `71a7b45f...` before and after, 198-key snapshot set identical.
+  - Cause 1 (snapshot shape): NON-MOVER. The unlocked key set equals the locked one; only the value
+    changes, to `[-2, -1]`.
+  - Cause 2 (record format): NON-MOVER. No new intent field and `FORMAT_VERSION` stays 11; `[-2, -1]`
+    round-trips through `copy_intent` and the file codec.
+  - Cause 3 (facing/roll fallback): STRUCTURAL NON-MOVER. The fixture is locked 24/24 ticks, and the
+    same fixture with P1 unlocked hashes `bf861e0b...`, so the branch is live.
+  - No re-baseline.
+- Pins unchanged: `UNHASHED_CROSS_TICK_MEMBERS` = 4; observation seams = 10.
+- Mutations (MEASURED, `C:\dev\_6-8-mutations.txt`): 12/12 RED, 12/12 restored by out-of-repo copy
+  with sha256 verified. M1 unlock branch, M2 unlocked facing branch, M3 forward neutral roll, M4 flick
+  sign, M5 tie-break, M6 free-yaw sign, M7 three-way click, M8 behind-camera filter, M9 keyboard
+  lock-suppresses-cycle, M10 camera dead zone, M11 marker unlocked guard, M12 `p2_lock` keycode.
+- `project.godot`: +50/-0, the ten new action blocks only; each new physical keycode occurs once;
+  `physics_ticks_per_second=60` intact after the one headless editor scan. `.uid` created:
+  `test/integration/test_camera_freedom_live.gd.uid` only.
+
 ### Completion Notes List
 
+- **OQ 1** -- unlocked is the sentinel address `[PlayerState.UNLOCKED_SLOT (-2), HERO_INDEX]` in the
+  existing lock ints, read through `PlayerState.is_locked()`.
+  - The snapshot key set is unchanged.
+  - -1 is the pre-seed default, so it could not double as "unlocked".
+  - Pinning the index to HERO_INDEX keeps `[-2, 0]` malformed (5-1a) and makes `_validate_lock` leave
+    an unlocked player alone.
+- **OQ 2** -- rotation input:
+  - The pad reuses `look_axis_x` via the pure `GamepadController.resolve_camera_rotate`; the keyboard
+    uses the rotate keys.
+  - The runner polls `Controller.camera_rotate()`; the value is not on the intent.
+  - `CameraRig.rotate_free_yaw` is a new entry point, and `face_lock_direction` is untouched.
+  - `MatchRunner._aim_rig` at step 1c picks one rig write path from the standing lock.
+  - No new record channel: `capture_set_camera_basis` already carries the result.
+- **OQ 3** -- no new intent field. The unlock is a new value on `retarget_slot`/`retarget_index`,
+  and the runner resolves the three-way click and stamps only the outcome. `FORMAT_VERSION` stays 11
+  because no v11 record can carry slot -2 (the 5-2 new-value precedent). Proven by
+  `test/state/test_record_file.gd::test_an_unlock_saves_loads_and_replays_to_the_live_hash`.
+- **OQ 4** -- turn-in-place needs no change.
+  - Unlocked facing only changes on a non-zero, moving stick, so an unlocked hero is never idle while
+    its facing changes.
+  - A relock snap is one tick, which 6-7b's hold guard excludes.
+  - Evidence: `test/state/test_camera_basis.gd::test_unlocked_facing_follows_the_camera_rotated_move_and_holds_on_a_neutral_stick`;
+    `test/integration/test_hero_turn_in_place.gd` green. The live check stays with the smoke.
+- **OQ 5** -- `LockOnResolver.bearing_of = fposmod(atan2(x, -z), TAU)` increases toward screen-right.
+  - World half: `test/state/test_lock_on.gd::test_bearing_of_sweeps_clockwise_from_minus_z`.
+  - Camera half: `test/integration/test_camera_freedom_live.gd` [OQ5 MAPPING], where the real rig's
+    screen-right bearing is +PI/2 at four headings.
+- **OQ 6** -- an axial dead zone on X using the existing `GamepadProfile.deadzone` (0.2), then a
+  linear response to +/-1. The rate knob is `CameraConfig.free_yaw_degrees_per_tick` (script default
+  0.0, authored 3.0). Both are tuned at smoke.
+- **S2 (AC 1-2)** evidence:
+  - `test/state/test_lock_on.gd::test_the_unlock_address_unlocks_and_a_hero_address_relocks`
+  - `test/state/test_lock_on.gd::test_only_the_exact_sentinel_pair_unlocks`
+  - Live three-way click: `test/integration/test_camera_freedom_live.gd` [AC 1 HERO->UNLOCK],
+    [AC 1 UNLOCK->HERO] and [AC 1 UNIT->HERO].
+- **S3 (AC 3-6)** evidence:
+  - `test/state/test_camera_basis.gd::test_unlocked_facing_follows_the_camera_rotated_move_and_holds_on_a_neutral_stick`
+  - `test/state/test_roll_iframes.gd::test_roll_direction_neutral_stick_goes_forward_while_unlocked`
+  - `test/state/test_block_deflect.gd::test_an_unlocked_block_can_be_turned_away_from_and_a_facing_one_still_blocks`
+  - `test/integration/test_camera_freedom_live.gd` [AC 6]
+- **S4 (AC 7-12)** evidence:
+  - `test/integration/test_camera_freedom_live.gd` [G1 SIGN], [AC 7/AC 8], [AC 9], [AC 10], [AC 11]
+    and [AC 12]
+  - `test/state/test_gamepad_controller.gd::test_resolve_camera_rotate_dead_zone_linear_and_signed`
+  - `test/state/test_controller.gd::test_base_controller_lock_accessors_are_neutral`
+- **S5 (AC 13-19)** evidence:
+  - `test/state/test_lock_on.gd::test_a_right_flick_takes_the_nearest_bearing_clockwise_and_left_the_nearest_counterclockwise`
+    (AC 15)
+  - `::test_a_target_behind_the_hero_is_reachable` (AC 13)
+  - `::test_cycling_wraps_past_the_last_candidate` (AC 16)
+  - `::test_a_full_sweep_visits_every_candidate_once_through_ties_and_the_current_bearing` (AC 17/G2)
+  - `::test_vertical_diagonal_lone_and_anchorless_flicks_are_no_ops` (AC 18)
+  - `::test_the_flick_edge_fires_once_per_crossing` (AC 19, threshold 0.7; `gamepad_profile.gd`
+    untouched)
+  - Live gather with a target behind the camera: `test/integration/test_camera_freedom_live.gd`
+    [AC 13]
+- **S6 (AC 20-22)** evidence:
+  - `test/state/test_lock_on.gd::test_a_fresh_match_is_already_locked_on_the_opposing_hero`
+  - `::test_a_debug_reset_relocks_an_unlocked_player` (AC 20)
+  - `::test_a_locked_units_death_snaps_the_lock_to_the_opposing_hero_on_the_kill_tick` (AC 21)
+  - `::test_an_unlock_request_is_inert_once_the_round_is_over`
+  - `::test_lock_resolution_is_inert_once_the_round_is_over` (AC 22)
+  - The DEAD early return in `_resolve_movement` still precedes the new facing branch (AC 22).
+- **S7 (AC 23-24)** evidence:
+  - `test/state/test_controller.gd::test_keyboard_cycle_keys_resolve_to_a_horizontal_flick`
+  - `::test_keyboard_rotate_keys_resolve_to_a_signed_axis`
+  - `::test_keyboard_lock_controls_read_their_prefixed_actions`
+  - `::test_keyboard_lock_controls_ship_on_the_ratified_keys` (physical keycode, location 0, no
+    modifier)
+  - `test/state/test_deck_and_hand.gd::test_shipped_input_map_action_set_is_exactly_pinned` (pin
+    updated)
+  - P2 live: `test/integration/test_camera_freedom_live.gd` [AC 23 P2]
+- **Final task left open.** It bundles the operator smoke. Its OQ 3 and golden halves are done
+  (above).
+- **Deviations** (full text in the record file):
+  - `run_all.sh` was split into two scratch halves so state and integration ran as separate calls.
+  - One single-file dev run hung on a parse-error debugger prompt; I killed it (PID 13416). It was
+    not a suite run.
+  - The keyboard edge test is frame-scoped, so release-clears-edge is covered live only.
+  - Five superseded 4-6a resolver tests were removed along with `adjacent_candidate`.
+  - The lock direction is still pushed after `set_camera_basis` inside the step-2 seat, as before this
+    story (not reordered).
+- **Operator notes (non-blocking):**
+  - Mode (2) chargeup auto-aim still takes precedence while unlocked; I kept the existing 5-2 AC 12
+    rule.
+  - The unlocked camera does not rotate while the 3-0b debug pause is held.
+
 ### File List
+
+- `data/camera_config.tres`
+- `project.godot`
+- `src/actors/hero/camera_config.gd`
+- `src/actors/hero/camera_rig.gd`
+- `src/controllers/controller.gd`
+- `src/controllers/gamepad_controller.gd`
+- `src/controllers/keyboard_controller.gd`
+- `src/main/lock_on_resolver.gd`
+- `src/main/match_runner.gd`
+- `src/state/input/input_intent.gd`
+- `src/state/match_state.gd`
+- `src/state/player_state.gd`
+- `test/integration/test_camera_freedom_live.gd` (new)
+- `test/integration/test_camera_freedom_live.gd.uid` (new)
+- `test/state/test_block_deflect.gd`
+- `test/state/test_camera_basis.gd`
+- `test/state/test_controller.gd`
+- `test/state/test_deck_and_hand.gd`
+- `test/state/test_gamepad_controller.gd`
+- `test/state/test_lock_on.gd`
+- `test/state/test_record_file.gd`
+- `test/state/test_roll_iframes.gd`
+- `docs/implementation-artifacts/6-8-camera-freedom.md`
+- `docs/implementation-artifacts/sprint-status.yaml` (story_note only)
+
+## Senior Developer Review (AI)
+
+Reviewer: gds-code-review (main session, Claude Sonnet 5) + 2 read-only subagent layers, 2026-09-16.
+Baseline `e75579e` (HEAD == origin/main at review start). Full report:
+`C:\dev\_6-8-review.md`.
+
+`LAYER-COMPLETION: Acceptance-Auditor=COMPLETED(inline, main session); Blind-Hunter=COMPLETED(subagent, read-only); Edge-Case-Hunter=COMPLETED(subagent, read-only)`
+
+### Verdict: APPROVE WITH FINDINGS
+
+No AC violations, no correctness bugs in reachable shipped behavior, no golden/replay/invariant
+breaks. `R1`-`R9` (every read of the lock-target sentinel across `src/`; the record/replay
+non-vacuity proof; the five removed 4-6a resolver tests' dispositions; the F1/D3/root-rotation/
+single-yaw-source/no-clock invariants; the `project.godot` diff shape; the AC 15/17 bearing sweep
+and sign proof; the `_aim_rig` write-path and tick-order claims; the step-2 push order; the
+suite/golden/mutation evidence and the story-file edit scope) all PASS.
+
+### Findings
+
+- **M1** (`camera_rig.gd:79,159-162`) — `free_yaw_degrees_per_tick`/`rotate_free_yaw`'s `axis` carry
+  no upper bound or `is_finite`/NaN guard (unlike the sibling `_lock_yaw_smoothing` clamp); a NaN
+  poisons `rotation.y` permanently, with no recovery on relock. Disposition: deferred hardening
+  (`E5-R/R11` M1).
+- **M2** (`match_runner.gd:1630-1633`) — `_target_world_position` resolves any non-P1 slot,
+  including the UNLOCKED sentinel, to P2's hero; not reachable today since both lock call sites
+  guard on `is_locked()` first. Disposition: deferred hardening (`R11` M2).
+- **L1** (`match_state.gd:2243-2245`) — `_validate_lock`'s single guard coincidentally covers both
+  the UNLOCKED sentinel and an ordinary hero-lock; confirmed intentional, no defect. Disposition:
+  no action (documented behaviour, `R11`).
+- **L2** (`gamepad_controller.gd:283-289`) — `resolve_camera_rotate` has no guard against a negative
+  authored `deadzone`. Disposition: deferred hardening (`R11` L2).
+- **L3** (`match_runner.gd`, `_aim_rig`) — unlocked camera rotation is not gated by the round-over
+  freeze; mirrors the pre-existing accepted locked-rig behaviour (`6-1d/R9`). Disposition: accepted,
+  continuity with `6-1d/R9` (`R11`).
+- **L4** (`match_runner.gd:2402-2427`, `_gather_cycle_candidates`) — a flick silently no-ops when the
+  current target's world position is transiently null; matches the function's documented contract.
+  Disposition: no action (documented behaviour, `R11`).
+
+## Live Smoke Results
+
+Operator: Matko, 2026-09-17. Full record: `docs/playtest-log.md`, "2026-09-17 -- 6-8-camera-freedom
+live smoke (Tier A)".
+
+Two configurations, single operator: Config A `slot_controller_kinds = [0, 3]` (P1 keyboard, P2 pad)
+in `src/main/main.tscn`, reverted after the session; Config B the shipped default (both slots
+keyboard), for keyboard parity and the unlocked block check. Deviation from the story's "two pads"
+wording, named: single operator, and keyboard parity needed both keyboard slots.
+
+Verdict: **8/8 PASS**. The R3 three-way lock click, unlocked facing/roll/camera-independence,
+unlocked camera rate and heading behaviour, flick direction, 360 cycling with no ping-pong, keyboard
+parity across both slots and all five ratified actions, and block while unlocked all PASSED. One
+finding, not a blocker: item 6, the unlocked camera ignoring the arena wall, accepted as intended
+behaviour, no follow-up. Rate `free_yaw_degrees_per_tick` 3.0 (180 deg/s) accepted as shipped.
