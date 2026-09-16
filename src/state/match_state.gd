@@ -412,10 +412,10 @@ func _init(params: MatchParams) -> void:
 	p2 = PlayerState.new(_queue)
 	pitch = PitchState.new()
 	# Story 4-6 (`CC/R2`, AC 2): THE RESTING LOCK IS THE OPPOSING HERO, and it is seeded HERE
-	# because this is the only place that knows which slot each PlayerState is. There is no
-	# unlocked state at any point in a match's life -- not at construction, not after a debug
-	# reset (`_reset_lock` below is called from both), and not after the locked target dies
-	# (AC 3 snaps back to this same address).
+	# because this is the only place that knows which slot each PlayerState is. Story 6-8 (AC 20)
+	# adds an unlocked state but NOT at rest: a match starts locked, and so does the round after a
+	# debug reset (`_reset_lock` below is called from both). A locked target's death still snaps
+	# back to this same address (AC 21); an unlocked player has no target to lose.
 	_reset_lock(p1, 1)
 	_reset_lock(p2, 0)
 
@@ -1557,9 +1557,15 @@ func _projectile_acceleration_delay_ticks_at(board: ProjectileBoard, index: int)
 ## DIRECTED STICK INPUT IS UNCHANGED: below the neutral branch the roll follows the stick
 ## exactly as it always has. The ruling is explicitly REVERSIBLE -- one sign, revisited at
 ## playtest -- which is why it is one operator, not a branch.
+##
+## Story 6-8 (AC 4): the backstep is now LOCK-CONDITIONAL. While unlocked there is no target to back
+## away from, and facing is input-derived again (AC 3), so the neutral roll reverts to the pre-`4-6`
+## rule verbatim: FORWARD, along the last heading.
 func _roll_world_direction(hero: HeroState, move_dir: Vector2, slot: int) -> Vector3:
 	if move_dir.is_zero_approx():
-		return -Vector3(hero.facing.x, 0.0, hero.facing.y).normalized()
+		var forward := Vector3(hero.facing.x, 0.0, hero.facing.y).normalized()
+		var player: PlayerState = p1 if slot == 0 else p2
+		return -forward if player.is_locked() else forward
 	var dir := move_dir
 	if dir.length() > 1.0:
 		dir = dir.normalized()
@@ -2209,6 +2215,12 @@ func _resolve_lock(player: PlayerState, intent: InputIntent, opposing_slot: int)
 static func _is_applicable_retarget(intent: InputIntent) -> bool:
 	if intent.retarget_slot == InputIntent.NO_RETARGET:
 		return false
+	# Story 6-8 (AC 1/AC 2): THE UNLOCK REQUEST is exactly the sentinel address and nothing near it --
+	# `[UNLOCKED_SLOT, HERO_INDEX]` applies, while `[UNLOCKED_SLOT, 0]` still falls through to the
+	# malformed rejection below. Written as an address so the two guarded assignments in
+	# `_resolve_lock` stay the seat's only writes (`5-1a/R9`'s scan).
+	if intent.retarget_slot == PlayerState.UNLOCKED_SLOT:
+		return intent.retarget_index == TargetingService.HERO_INDEX
 	return (intent.retarget_slot == 0 or intent.retarget_slot == 1) \
 			and intent.retarget_index >= TargetingService.HERO_INDEX
 
@@ -2224,6 +2236,10 @@ static func _is_applicable_retarget(intent: InputIntent) -> bool:
 ## cleared board would read past its arrays.
 ##
 ## IDEMPOTENT BY CONSTRUCTION, which is what lets step 1c and step 4b both call it.
+##
+## Story 6-8 (AC 2/AC 21): the UNLOCKED sentinel carries `HERO_INDEX` in its index half, so it takes
+## the hero early-return below and is never "snapped" back -- an unlocked player stays unlocked
+## until they relock. That is structural, not a second branch.
 func _validate_lock(player: PlayerState, opposing_slot: int) -> void:
 	if player.lock_target_index == TargetingService.HERO_INDEX:
 		return
@@ -3963,11 +3979,21 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 	# derived, never stored: no field records it, because `facing` already carries it. The other two
 	# rungs are untouched -- the DEAD return at the top of this function (2-3/R14) and the round-over
 	# freeze (step 1b, 2-6/R6) -- and, like them, the freeze skips the write rather than writing.
+	#
+	# STORY 6-8 (AC 3): FACING IS TARGET-DERIVED ONLY WHILE LOCKED. An unlocked hero's facing reverts
+	# to the pre-`4-6` rule verbatim -- the camera-rotated movement direction `world_dir`, behind the
+	# old zero-guard on the INPUT, so a neutral stick leaves facing unchanged and rotating the camera
+	# alone (a basis change with no movement) turns nothing. The CHARGING override stays FIRST for
+	# both states: mode (2) aims at the enemy hero whether or not the player holds a lock. The DEAD
+	# and round-over carve-outs return above this line exactly as before (AC 22).
 	var lock_dir := _lock_directions[slot]
 	if player.hero.action_state == HeroState.ActionState.CHARGING:
 		var aim := _charge_reach_dirs[slot]
 		if player.charge_window.is_running and not aim.is_zero_approx():
 			player.hero.facing = -aim
+	elif not player.is_locked():
+		if not dir.is_zero_approx():
+			player.hero.facing = Vector2(world_dir.x, world_dir.z)
 	elif not lock_dir.is_zero_approx():
 		player.hero.facing = lock_dir
 	# Story 6-7 (Dev Notes, Open Question 5): the ONE "actually running" fact for this tick,

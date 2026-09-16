@@ -31,10 +31,14 @@ func armed_slot() -> int:
 ## (AC 11), and resolving needs a camera the controller has no business holding. The raw gesture
 ## dies here; only its outcome travels inward and into the record.
 ##
-## Base returns false so every controller with no right-stick scheme -- NullController,
-## KeyboardController (AC 13 leaves keyboard a documented PROPOSAL), and ReplayController, whose
-## recorded intent already carries the resolved address and must never be re-resolved -- needs no
-## stub of its own.
+## Base returns false so every controller with no lock scheme -- NullController, and
+## ReplayController, whose recorded intent already carries the resolved address and must never be
+## re-resolved -- needs no stub of its own. (Story 6-8, AC 23: KeyboardController now overrides all
+## three lock accessors; 4-6 AC 13 had left the keyboard a documented proposal.)
+##
+## Story 6-8 (AC 1): what the click MEANS is now three-way (unit lock -> hero, hero lock -> unlock,
+## unlocked -> hero), and the runner resolves that against the standing lock. This edge is still
+## only "the lock control was pressed".
 func relock_pressed() -> bool:
 	return false
 
@@ -48,3 +52,18 @@ func relock_pressed() -> bool:
 ## Same base-returns-neutral reasoning as `relock_pressed()` above.
 func retarget_flick() -> Vector2:
 	return Vector2.ZERO
+
+
+## Story 6-8 (AC 7, Open Question 2): the UNLOCKED camera's rotation axis this tick, in [-1, 1] --
+## +1 turns the view fully right, -1 fully left, 0 leaves it where it is. A LEVEL, not an edge: unlike
+## `retarget_flick()` the rotation is continuous, so a held input keeps turning.
+##
+## POLLED BY THE RUNNER, NOT CARRIED ON THE INTENT, on the `relock_pressed()` precedent above -- and
+## here the reason is stronger: the rotation reaches state only as the rig basis the runner already
+## pushes and records every tick (`capture_set_camera_basis`), so carrying the raw axis inward as well
+## would be a second record of one fact.
+##
+## Base returns 0.0 for the same no-stub reasoning; ReplayController in particular must not turn a
+## replayed rig from a live input.
+func camera_rotate() -> float:
+	return 0.0

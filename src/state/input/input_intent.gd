@@ -83,8 +83,16 @@ var card_activate: bool = false
 ## `[slot, index]`, and `index == -1` is that slot's HERO.
 ##
 ## -1 IS NO REQUEST, and it is the resting value -- the `card_slot` shape verbatim. A tick with
-## no click and no flick leaves the standing lock untouched; there is no "unlock" value, because
-## `CC/R2` says there is no unlocked state (AC 10).
+## no click and no flick leaves the standing lock untouched.
+##
+## Story 6-8 (AC 1/AC 2, Open Question 3): THE UNLOCK REQUEST IS AN ADDRESS VALUE, not a new field --
+## `[PlayerState.UNLOCKED_SLOT, HERO_INDEX]`, the same sentinel pair the lock itself holds while
+## unlocked. The runner resolves the click's three-way meaning (unit -> hero, hero -> unlock,
+## unlocked -> hero) against the standing lock and stamps only the OUTCOME here, the `CC/R5`
+## result-not-gesture rule unchanged. No v11 record can carry slot -2 (the only producer is this
+## story's runner), so every existing recording decodes to the meaning it was recorded with and
+## `RecordFile.FORMAT_VERSION` does not move -- the `5-2` "new VALUE in an existing element forces
+## nothing" measurement, applied to the intent.
 var retarget_slot: int = NO_RETARGET
 var retarget_index: int = TargetingService.HERO_INDEX
 

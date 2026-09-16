@@ -2298,6 +2298,11 @@ func _lock_direction(slot: int) -> Vector2:
 	if not is_instance_valid(hero):
 		return Vector2.ZERO
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	# Story 6-8 (AC 7): an UNLOCKED slot has no target, so no direction -- the ZERO "no fact". State
+	# ignores the lock direction while unlocked anyway (AC 3); returning ZERO here is what keeps the
+	# sentinel address from ever being walked to an actor.
+	if not player.is_locked():
+		return Vector2.ZERO
 	var target_position: Variant = _target_world_position(
 		player.lock_target_slot, player.lock_target_index)
 	if target_position == null:
@@ -2309,108 +2314,124 @@ func _lock_direction(slot: int) -> Vector2:
 	return planar.normalized()
 
 
+## Story 6-8 (AC 7-AC 10/AC 12): the step-1c RIG seat for one slot -- the ONE place the runner
+## decides what turns a camera this tick, so the two rig write paths can never both fire.
+##
+## LOCKED: `face_lock_direction` with the step-1c direction, exactly as 4-6/4-6a shipped it -- which
+## is also AC 12's relock swing, since a rig that already has a heading EASES onto a new one.
+## UNLOCKED: `rotate_free_yaw` with this slot's controller rotation axis (Open Question 2). Nothing
+## else writes the unlocked rig: no snap on unlock (AC 9) and no recenter (AC 10) fall out of there
+## being no other call.
+##
+## WHICH STATE: the STANDING lock, read before this tick's advance() -- the same read `_lock_direction`
+## makes one line up, so the rig and the direction pushed into state agree about whether this slot
+## is locked. A click takes effect in state this tick and on the rig from the next, the one-tick
+## F1 order every pushed fact already has.
+##
+## THE ROTATION IS NOT RECORDED AS INPUT and does not need to be: the rig's yaw reaches state only
+## through the basis pushed at step 2, and that basis is captured by `capture_set_camera_basis` and
+## replayed by `replay_push_camera_bases` exactly as the smoothed lock yaw is (4-6a Open Question 5).
+## In replay the controller is a `ReplayController`, whose base `camera_rotate()` is 0.0, so the
+## replayed rig does not turn -- presentation, which replay does not promise to reproduce.
+func _aim_rig(slot: int, rig: CameraRig, lock_dir: Vector2, controller: Controller) -> void:
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	if player.is_locked():
+		rig.face_lock_direction(lock_dir)
+	else:
+		rig.rotate_free_yaw(controller.camera_rotate())
+
+
 ## Story 4-6 (AC 9/AC 10/AC 11): turn one slot's right-stick gesture into a retarget ADDRESS on
 ## that slot's intent. Writes nothing when there is no gesture, and nothing when a flick finds no
-## candidate -- AC 10's no-op is delivered by sending no request at all, which leaves the standing
-## lock untouched state-side (there is no unlock value to send).
+## candidate -- the no-op is delivered by sending no request at all, which leaves the standing
+## lock untouched state-side.
 ##
-## CLICK BEATS FLICK, checked first (AC 9: "regardless of current target"). The controller already
-## suppresses a flick on a click tick; stating the precedence at both layers costs one branch and
-## means neither can silently disagree with the other.
-func _resolve_retarget(slot: int, intent: InputIntent, controller: Controller,
-		view_cam: Camera3D) -> void:
+## CLICK BEATS FLICK, checked first. The controller already suppresses a flick on a click tick;
+## stating the precedence at both layers costs one branch and means neither can silently disagree
+## with the other.
+##
+## Story 6-8 (AC 1): THE CLICK IS THREE-WAY, and the runner resolves which way against the STANDING
+## lock -- the lock state after last tick, which is exactly what the player is looking at -- and
+## stamps only the outcome, the `CC/R5` result-not-gesture rule unchanged. Locked on a minion or
+## totem, or unlocked: the opposing hero. Locked on the opposing hero: the UNLOCKED sentinel address.
+##
+## Story 6-8 (AC 11): a flick while UNLOCKED is a no-op -- there is no standing lock to cycle from.
+func _resolve_retarget(slot: int, intent: InputIntent, controller: Controller) -> void:
 	var opposing := 1 - slot
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	if controller.relock_pressed():
-		intent.retarget_slot = opposing
+		if player.lock_target_slot == opposing \
+				and player.lock_target_index == TargetingService.HERO_INDEX:
+			intent.retarget_slot = PlayerState.UNLOCKED_SLOT
+		else:
+			intent.retarget_slot = opposing
 		intent.retarget_index = TargetingService.HERO_INDEX
 		return
 	var flick := controller.retarget_flick()
-	if flick.is_zero_approx():
-		return
-	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
-	if not is_instance_valid(hero) or not is_instance_valid(view_cam):
+	if flick.is_zero_approx() or not player.is_locked():
 		return
 	var addresses: Array[Array] = []
-	var screens: Array[Vector2] = []
-	# Story 4-6a (AC 4): the gather now RETURNS the cycling anchor -- the CURRENT target's screen
-	# position -- alongside the pickable set it fills, rather than discarding it. The hero's own
-	# screen position is no longer read here at all: 4-6's `hero_screen` guard existed because the
-	# cone measured direction from the hero, and nothing measures from the hero any more.
-	var anchor: Variant = _gather_flick_candidates(slot, opposing, view_cam, addresses, screens)
-	if anchor == null:
-		# Story 4-6a (AC 5, `4-6a/R1`): the current target is behind this slot's camera or off its
-		# viewport rect, so the anchor has nothing to be adjacent TO and a flick cannot name a
-		# neighbour. That is a NO-OP delivered the AC 2 way -- no request sent, standing lock
-		# untouched -- and the CLICK stays the only route back to an off-frame opposing hero
-		# (`CC/R3`). Structurally the same shape as the hero-anchor guard this replaces.
+	var bearings: Array[float] = []
+	var current := _gather_cycle_candidates(slot, opposing, addresses, bearings)
+	if current == -1:
 		return
-	var pick := LockOnResolver.adjacent_candidate(anchor as Vector2, flick, screens)
+	var pick := LockOnResolver.cycle_candidate(flick, bearings, current)
 	if pick == -1:
 		return
 	intent.retarget_slot = addresses[pick][0]
 	intent.retarget_index = addresses[pick][1]
 
 
-## Story 4-6 (AC 10): the ON-SCREEN candidate set for a flick -- the OPPOSING HERO plus every
+## Story 6-8 (AC 13/AC 14): the 360-degree candidate set for a flick -- the OPPOSING HERO plus every
 ## LIVING unit on the opposing board (minions and totems alike, which are one board), gathered
-## hero-then-units in board-index order so an exact geometric tie in the resolver breaks on the
-## same total order the contact pipeline uses (`4-3b/R5`).
+## hero-then-units in board-index order so `LockOnResolver.cycle_candidate`'s index tie-break is the
+## lower-board-index rule (AC 17, the `4-3b/R5` total order).
 ##
-## OPPOSING SLOT ONLY. A player locks onto things that can be fought; a lock onto one's own minion
-## has no meaning under `CC/R2`'s always-locked camera and would point the hero away from every
-## threat.
+## REPLACES 4-6a's `_gather_flick_candidates`. Two things changed and both are the story's: nothing
+## is filtered on SCREEN VISIBILITY any more (a target behind the hero is a candidate, AC 13), and
+## the CURRENT TARGET IS INCLUDED rather than excluded, because in a bearing circle it holds its own
+## place (AC 17). Each candidate becomes a BEARING around this slot's hero from WORLD positions,
+## never a screen projection; no camera is read.
 ##
-## THE CURRENT TARGET IS EXCLUDED FROM THE PICKABLE SET, which is what makes a flick a SWITCH:
-## leaving it in would let a flick "retarget" to what is already locked and read as a dead control.
-## Story 4-6a (AC 4) KEEPS THAT EXCLUSION AND STOPS THROWING THE POSITION AWAY WITH IT. Cycling
-## measures adjacency FROM the current target, so its screen position is now the ANCHOR this
-## function RETURNS -- computed on its own line, never appended to `screens`. The exclusion is
-## therefore unchanged in effect (the current target can still never be picked) while the one fact
-## the new algorithm needs stops being collateral of it. Returning it, rather than adding a third
-## out-parameter, is what keeps "the anchor is not a candidate" true by construction: there is no
-## array it could accidentally be in.
+## OPPOSING SLOT ONLY, unchanged: a player locks onto things that can be fought.
 ##
-## RETURNS null WHEN THERE IS NO ANCHOR -- the current target is unspawned/freed, or behind this
-## slot's camera, or outside its viewport rect. The caller turns that into AC 5's no-op. The
-## pickable set is still filled in that case (cheap, and it keeps the function's two jobs
-## independent), but the caller never reaches the pick.
-##
-## OFF-SCREEN CANDIDATES ARE EXCLUDED BY `_screen_position` RETURNING NULL -- AC 10 says on-screen
-## candidates, and it is also what makes the click the only route back to an off-screen opposing
-## hero (AC 9).
-func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
-		addresses: Array[Array], screens: Array[Vector2]) -> Variant:
+## RETURNS the current target's index into `bearings`, or -1 when it has none -- its actor is not
+## spawned, or it is co-located with the hero so it has no bearing. The caller turns that into a
+## no-op. A candidate whose actor is unspawned or co-located is skipped the same way; it has no place
+## in a circle of bearings.
+func _gather_cycle_candidates(slot: int, opposing: int, addresses: Array[Array],
+		bearings: Array[float]) -> int:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	if not is_instance_valid(hero):
+		return -1
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	var opponent: PlayerState = _match_state.p1 if opposing == 0 else _match_state.p2
-	var current: Array[int] = [player.lock_target_slot, player.lock_target_index]
 	var candidates: Array[Array] = [[opposing, TargetingService.HERO_INDEX]]
 	var actors: Array = _unit_actors[opposing]
 	for index: int in actors.size():
 		if opponent.units.has_index(index) and opponent.units.is_alive_at(index):
 			candidates.append([opposing, index])
+	var current := -1
 	for address: Array in candidates:
-		if address[0] == current[0] and address[1] == current[1]:
-			continue
 		var world: Variant = _target_world_position(address[0], address[1])
 		if world == null:
 			continue
-		var screen: Variant = _screen_position(view_cam, world as Vector3)
-		if screen == null:
+		var offset: Vector3 = (world as Vector3) - hero.global_position
+		var planar := Vector2(offset.x, offset.z)
+		if planar.is_zero_approx():
 			continue
+		if address[0] == player.lock_target_slot and address[1] == player.lock_target_index:
+			current = addresses.size()
 		addresses.append(address)
-		screens.append(screen as Vector2)
-	return _lock_target_screen_position(slot, view_cam)
+		bearings.append(LockOnResolver.bearing_of(planar))
+	return current
 
 
-## Story 4-6a (AC 4/AC 13/AC 14): where this slot's CURRENT locked target sits in this slot's own
-## viewport, or null when it is nowhere visible there. ONE FUNCTION, TWO CALL SITES -- the flick's
-## cycling ANCHOR (AC 4, read at step 1 before step 4b updates this slot's view camera) and the
-## on-screen MARKER (AC 13, read at step 4d after 4b) ask the same question against two different
-## camera states, up to one tick of yaw apart while the rig is mid-swing (review M1; the "one
-## computation, shared and reused same-tick" doctrine is the 4-6 step-1c one, not this one). Each
-## call site is internally consistent -- the anchor and every flick candidate it is compared
-## against always share the SAME camera read -- so the offset does not corrupt a pick, it only
-## means the marker and the pick can be briefly out of sync during a swing.
+## Story 4-6a (AC 13/AC 14): where this slot's CURRENT locked target sits in this slot's own
+## viewport, or null when it is nowhere visible there. Story 6-8 (AC 14) leaves this function ONE
+## CALL SITE, the on-screen MARKER (step 4d, after 4b): the flick's cycling anchor is now the current
+## target's BEARING (`_gather_cycle_candidates`), so 4-6a's second call site and review M1's
+## marker-versus-pick offset are gone with it.
 ##
 ## THE ADDRESS COMES FROM STATE, THE POSITION IS COMPUTED HERE, and no position ever travels inward
 ## (`4-2/R14`, the `_aim_unit_actors` rule verbatim). Reads `PlayerState.lock_target_*` fresh on
@@ -2421,30 +2442,24 @@ func _gather_flick_candidates(slot: int, opposing: int, view_cam: Camera3D,
 ##
 ## Live-smoke micro-fix (4-6a, operator smoke 2026-08-31): reads `_lock_mark_world_position`
 ## rather than `_target_world_position` directly, so the point projected here sits on the target's
-## BODY rather than its ORIGIN. This is the one shared computation the header above locks, so the
-## flick's cycling ANCHOR inherits the same lift -- harmless there because
-## `LockOnResolver.adjacent_candidate` (`lock_on_resolver.gd:80`) compares screen X only and never
-## reads Y.
-##
-## ACCEPTED ASYMMETRY (review M3): the anchor above is projected from the LIFTED mark position,
-## while `_gather_flick_candidates` projects every other candidate from the actor ROOT
-## (`_target_world_position`, unlifted). This can put a fraction of a screen-X pixel between where
-## the anchor "really" sits and where an unlifted candidate at the same world position would sit --
-## irrelevant to any ordinary gap, but it is one more source of the sub-pixel noise M3 names as the
-## real cause of unpredictable cycling on a bunched board. Accepted, not a bug: fixing it means
-## lifting every candidate too, which is a wider surface change this story does not need.
+## BODY rather than its ORIGIN. (4-6a review M3's lifted-anchor asymmetry no longer exists: story 6-8
+## measures the cycling anchor as a planar bearing from actor roots, where a vertical lift has no
+## effect.)
 func _lock_target_screen_position(slot: int, view_cam: Camera3D) -> Variant:
 	if not is_instance_valid(view_cam):
 		return null
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	# Story 6-8 (AC 6): the marker is a LOCKED-ONLY cue. Unlocked, there is nothing to mark, and the
+	# null hides it through the same path an off-screen target already takes.
+	if not player.is_locked():
+		return null
 	var world: Variant = _lock_mark_world_position(player.lock_target_slot, player.lock_target_index)
 	if world == null:
 		return null
 	return _screen_position(view_cam, world as Vector3)
 
 
-## Live-smoke micro-fix (4-6a, operator smoke 2026-08-31): the world point the lock MARKER (and,
-## via the shared computation above, the flick ANCHOR) projects -- `_target_world_position`'s
+## Live-smoke micro-fix (4-6a, operator smoke 2026-08-31): the world point the lock MARKER projects -- `_target_world_position`'s
 ## answer LIFTED onto the target's body, because that function's answer is the actor ROOT, and the
 ## roots disagree about where the body is. `hero.tscn`'s root is already the body CENTRE
 ## (`hero.tscn:49`'s "GROUNDING OFFSET" note), so a hero target needs no lift. `unit_actor.tscn` and
@@ -2558,8 +2573,8 @@ func _physics_process(delta: float) -> void:
 		#     does NOT do is push this live direction into state -- it drains the RECORDED one in
 		#     the fork below, exactly as it does for the camera basis.
 		var lock_dirs: Array[Vector2] = [_lock_direction(0), _lock_direction(1)]
-		_p1_rig.face_lock_direction(lock_dirs[0])
-		_p2_rig.face_lock_direction(lock_dirs[1])
+		_aim_rig(0, _p1_rig, lock_dirs[0], _p1_controller)
+		_aim_rig(1, _p2_rig, lock_dirs[1], _p2_controller)
 		# Story 3-0c (AC 9): the REPLAY FORK. In replay mode the runner performs NO Area3D overlap
 		# query and pushes NO live camera basis — it pushes the recorded bases and drains the
 		# recorded facts for this tick instead, in recorded push order. Everything downstream
@@ -2675,8 +2690,8 @@ func _physics_process(delta: float) -> void:
 			# address, and ReplayController's inherited neutral accessors would overwrite it with
 			# "no request" if this ran there -- so the guard is structural (this is inside the
 			# `else`), not a flag.
-			_resolve_retarget(0, intents[0], _p1_controller, _p1_view_cam)
-			_resolve_retarget(1, intents[1], _p2_controller, _p2_view_cam)
+			_resolve_retarget(0, intents[0], _p1_controller)
+			_resolve_retarget(1, intents[1], _p2_controller)
 			_recorder.capture_advance(intents)
 		# 3. Advance state (enqueues signals only).
 		_match_state.advance(intents)

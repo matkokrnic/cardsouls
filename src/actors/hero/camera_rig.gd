@@ -4,6 +4,11 @@ extends Node3D
 ## Actor-side camera rig (story 1-2). Third-person, framing (distance/height/pitch) FIXED and
 ## data-authored; no zoom.
 ##
+## STORY 6-8 (AC 7) REOPENS A ROTATION ROUTE, while UNLOCKED only, and not the retired one: the
+## runner polls `Controller.camera_rotate()` and calls rotate_free_yaw() below at the same step-1c
+## seat; nothing rides `InputIntent` (see match_runner.gd `_aim_rig`). The paragraph below is the
+## 4-6 history it supersedes, kept as history.
+##
 ## STORY 4-6 (AC 1/AC 8) CORRECTS THIS HEADER'S ROUTE SENTENCE, which had gone stale in the same
 ## pass that made it stale (`4-3a/R15`). It used to read "when a later story adds a look action it
 ## MUST flow controller -> InputIntent.aim -> runner -> rig". THAT ROUTE IS RETIRED: `CC/R2`
@@ -42,6 +47,11 @@ const CONFIG_PATH := "res://data/camera_config.tres"
 ## snap; shipped default is 0.25 (`data/camera_config.tres`).
 var _lock_yaw_smoothing := 1.0
 
+## Story 6-8 (AC 8): the authored UNLOCKED rotation rate in radians per tick, read once in
+## apply_config from `CameraConfig.free_yaw_degrees_per_tick`. 0.0 until a config is applied, the
+## camera_config.gd zero-default doctrine: an unauthored rate is a camera that visibly cannot turn.
+var _free_yaw_per_tick := 0.0
+
 ## Story 4-6a (AC 10): has this rig ever been given a heading? The FIRST one snaps and every later
 ## one eases -- see face_lock_direction. Not derivable from `rotation.y` itself: zero is a legal
 ## heading, not an absence of one.
@@ -64,6 +74,9 @@ func apply_config(config: CameraConfig) -> void:
 	# load-once path as the framing above. Clamped rather than trusted: this multiplies an angle
 	# every tick, and a value outside [0,1] would overshoot or wind the rig instead of easing it.
 	_lock_yaw_smoothing = clampf(config.lock_yaw_smoothing, 0.0, 1.0)
+	# Story 6-8 (AC 8): the unlocked rotation rate, same resource and same load-once path. Clamped
+	# at zero so a negative authored rate cannot silently invert AC 7's stick-right-turns-right.
+	_free_yaw_per_tick = deg_to_rad(maxf(config.free_yaw_degrees_per_tick, 0.0))
 
 
 ## Story 4-6 (AC 1): the per-tick LOCK-ON YAW. Points this ROOT so that camera-forward (the
@@ -126,3 +139,24 @@ func face_lock_direction(direction: Vector2) -> void:
 	# spin the camera the long way round the arena on the one transition most likely to happen
 	# mid-fight (a target crossing directly behind the hero).
 	rotation.y = lerp_angle(rotation.y, target_yaw, _lock_yaw_smoothing)
+
+
+## Story 6-8 (AC 7-AC 10): the per-tick UNLOCKED yaw. `axis` is the controller's rotation reading in
+## [-1, 1] -- +1 is the right stick (or the rotate-right key) fully right -- and the rig turns by
+## `axis * free_yaw_degrees_per_tick` this tick. A zero axis writes nothing, which is the whole of
+## AC 9 (unlock keeps the heading) and AC 10 (no auto-recenter): nothing else writes an unlocked rig.
+##
+## THE SIGN, proven rather than asserted (AC 7, G1: stick right turns the view right). Camera-forward
+## is this node's -Z and screen-right its +X. For a yaw `y` those are world (-sin y, -cos y) and
+## (cos y, -sin y) in (x, z); d/dy of forward is (-cos y, sin y) = -right. So turning forward TOWARD
+## right needs `y` to DECREASE: `+axis` subtracts. Pinned against the real node's basis by
+## `test/integration/test_camera_freedom_live.gd`.
+##
+## SAME DISCIPLINE AS face_lock_direction: YAW ONLY, on this ROOT, never the child camera (height
+## and pitch stay authored, `4-6/R1`); no `delta`, `Time` or `Engine` -- the per-tick rate IS the
+## clock (F1). The result is wrapped to [-PI, PI) so an unlocked player spinning for a whole match
+## never grows `rotation.y` without bound, and a later relock eases the short way via lerp_angle.
+func rotate_free_yaw(axis: float) -> void:
+	if is_zero_approx(axis):
+		return
+	rotation.y = wrapf(rotation.y - clampf(axis, -1.0, 1.0) * _free_yaw_per_tick, -PI, PI)

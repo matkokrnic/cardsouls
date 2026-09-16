@@ -199,6 +199,27 @@ func test_roll_direction_neutral_stick_backsteps_away_from_the_lock() -> void:
 		"the inverted fallback direction drives the roll velocity, at the unchanged roll speed")
 
 
+## Story 6-8 (AC 4): the backstep is LOCK-CONDITIONAL. Unlocked, a neutral-stick roll goes FORWARD
+## along the input-derived facing -- the pre-4-6 rule -- and a stale lock fact pointing the other way
+## changes nothing, because an unlocked hero has no target to back away from.
+##
+## MUTATION PROOF: drop the `is_locked()` condition in `_roll_world_direction` (always backstep) and
+## this reads (-1, 0, 0).
+func test_roll_direction_neutral_stick_goes_forward_while_unlocked() -> void:
+	var ms := _make_match()
+	ms.p1.lock_target_slot = PlayerState.UNLOCKED_SLOT
+	ms.p1.lock_target_index = TargetingService.HERO_INDEX
+	ms.set_lock_direction(0, Vector2(-1, 0))
+	_step(ms, _intent([], Vector2(1, 0)))   # t1: unlocked, walking +X -> facing (1, 0)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(1, 0)),
+		"sanity: unlocked facing followed the stick, not the pushed lock fact")
+	_step(ms, _intent([&"roll"]))           # t2: neutral-stick roll
+	assert_true(ms.p1.hero.roll_direction.is_equal_approx(Vector3(1, 0, 0)),
+		"unlocked, a neutral roll goes FORWARD along facing (the pre-4-6 rule)")
+	assert_true(ms.p1.hero.velocity.is_equal_approx(Vector3(ROLL_SPEED, 0, 0)),
+		"...at the unchanged roll speed")
+
+
 ## `4-6/R7`'s other half, and the one that keeps the ruling narrow: DIRECTED stick input is
 ## UNCHANGED. A roll entered with the stick pushed follows the stick exactly as it always has --
 ## the inversion is the FALLBACK only, which is what makes the ruling one operator rather than a

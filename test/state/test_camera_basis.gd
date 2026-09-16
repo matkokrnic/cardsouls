@@ -136,6 +136,38 @@ func test_facing_tracks_the_lock_with_no_movement_and_freezes_with_no_lock_fact(
 		"...and movement alone still does not turn it: facing is no longer input-derived at all")
 
 
+## Story 6-8 (AC 3): WHILE UNLOCKED, FACING REVERTS TO THE PRE-4-6 RULE -- the camera-rotated
+## movement direction, behind the zero-guard on the INPUT. Four halves, one run:
+##   (a) moving: facing is `world_dir` (basis-rotated), and a stale pushed lock fact is IGNORED;
+##   (b) a neutral stick leaves facing unchanged;
+##   (c) rotating the camera alone (a new basis, no movement) turns nothing;
+##   (d) relocking hands facing straight back to the pushed lock direction.
+##
+## MUTATION PROOF: delete the `elif not player.is_locked()` branch in `_resolve_movement` and (a)
+## reads the pushed (0.6, 0.8) instead of the basis-rotated (-1, 0).
+func test_unlocked_facing_follows_the_camera_rotated_move_and_holds_on_a_neutral_stick() -> void:
+	var ms := _make_match()
+	ms.p1.lock_target_slot = PlayerState.UNLOCKED_SLOT
+	ms.p1.lock_target_index = TargetingService.HERO_INDEX
+	ms.set_camera_basis(0, Basis(Vector3.UP, PI / 2.0))
+	ms.set_lock_direction(0, Vector2(0.6, 0.8))
+	_step(ms, Vector2(0, -1))                        # (a) camera-forward = world -X
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(-1, 0)),
+		"unlocked facing is the camera-rotated move direction, not the pushed lock fact: %s"
+				% ms.p1.hero.facing)
+	_step(ms, Vector2.ZERO)                          # (b)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(-1, 0)),
+		"a neutral stick leaves an unlocked hero's facing where it was")
+	ms.set_camera_basis(0, Basis(Vector3.UP, PI))    # (c)
+	_step(ms, Vector2.ZERO)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(-1, 0)),
+		"rotating the unlocked camera alone does not turn the hero")
+	ms.p1.lock_target_slot = 1                        # (d)
+	_step(ms, Vector2.ZERO)
+	assert_true(ms.p1.hero.facing.is_equal_approx(Vector2(0.6, 0.8)),
+		"relocked, facing is target-derived again from the very next resolved tick")
+
+
 func test_basis_is_excluded_from_snapshot() -> void:
 	var ms := _make_match()
 	var before := ms.to_snapshot()

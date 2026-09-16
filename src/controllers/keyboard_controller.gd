@@ -68,6 +68,26 @@ var _cast_confirm: StringName
 var _card_actions: Array[StringName] = []
 var _armed_slot: int = -1
 
+## Story 6-8 (AC 23/AC 24): THE LOCK CONTROLS, keyboard parity with the pad (closes deferred-work M5).
+## Five Input Map actions per prefix, bound to physically unique keys (the ratified table: P1 T / F G
+## / Z C, P2 Numpad 5 / Numpad 4 6 / Numpad 1 3):
+##   PRESS pX_lock                         the R3 click -- three-way, resolved by the runner (AC 1)
+##   HOLD  pX_camera_left / _camera_right  rotate the UNLOCKED camera (AC 7-10), a level in [-1, 1]
+##   PRESS pX_cycle_left / _cycle_right    a horizontal flick (AC 13-17), an edge
+## The runner applies rotation only while unlocked and cycling only while locked, exactly as for
+## the pad, so a key pressed in the wrong state is a no-op without this controller knowing the state.
+##
+## SAMPLED IN sample(), read back through the accessors -- the GamepadController discipline, so an
+## edge fires once per sample however many times the runner asks.
+var _lock: StringName
+var _camera_left: StringName
+var _camera_right: StringName
+var _cycle_left: StringName
+var _cycle_right: StringName
+var _lock_pressed := false
+var _flick := Vector2.ZERO
+var _camera_rotate := 0.0
+
 
 func _init(prefix: StringName) -> void:
 	_up = _action(prefix, "move_up")
@@ -81,6 +101,11 @@ func _init(prefix: StringName) -> void:
 	_cast_confirm = _action(prefix, "cast_confirm")
 	for i in CARD_SLOTS:
 		_card_actions.append(_action(prefix, "card_%d" % (i + 1)))
+	_lock = _action(prefix, "lock")
+	_camera_left = _action(prefix, "camera_left")
+	_camera_right = _action(prefix, "camera_right")
+	_cycle_left = _action(prefix, "cycle_left")
+	_cycle_right = _action(prefix, "cycle_right")
 
 
 func sample() -> InputIntent:
@@ -94,7 +119,36 @@ func sample() -> InputIntent:
 	# action, carried on the intent rather than any out-of-band channel.
 	intent.debug_reset = Input.is_action_just_pressed(_debug_reset)
 	_sample_card_scheme(intent)
+	_sample_lock_controls()
 	return intent
+
+
+## Story 6-8 (AC 23): the three lock readings for this tick. Input.* is read here and nowhere else in
+## the lock half (D3(a)); the decisions are the pure functions below.
+func _sample_lock_controls() -> void:
+	_lock_pressed = Input.is_action_just_pressed(_lock)
+	_flick = resolve_cycle_keys(Input.is_action_just_pressed(_cycle_left),
+			Input.is_action_just_pressed(_cycle_right), _lock_pressed)
+	_camera_rotate = resolve_rotate_keys(Input.is_action_pressed(_camera_left),
+			Input.is_action_pressed(_camera_right))
+
+
+## Story 6-8 (AC 23): the cycle keys as a FLICK, PURE so the edge policy is headless-testable. A
+## fresh press of one key is a unit horizontal flick in that direction -- the same `Vector2(+/-1, 0)`
+## a pad flick past `flick_threshold` normalises to, so `LockOnResolver` cannot tell the two apart.
+## Both pressed on the same tick name no direction and are a no-op. The lock key wins the tick, the
+## pad's R3-suppresses-the-flick rule (`GamepadController.resolve_flick`) kept at parity.
+static func resolve_cycle_keys(left_pressed: bool, right_pressed: bool, lock_pressed: bool) -> Vector2:
+	if lock_pressed or left_pressed == right_pressed:
+		return Vector2.ZERO
+	return Vector2(1.0, 0.0) if right_pressed else Vector2(-1.0, 0.0)
+
+
+## Story 6-8 (AC 23): the rotate keys as the unlocked camera's axis, PURE for the same reason. Held
+## right is +1 (view turns right, AC 7), held left -1, both or neither 0 -- the digital case of
+## `GamepadController.resolve_camera_rotate`, at full rate while held.
+static func resolve_rotate_keys(left_held: bool, right_held: bool) -> float:
+	return (1.0 if right_held else 0.0) - (1.0 if left_held else 0.0)
 
 
 ## The card half of sample(), kept in its own function so the scheme is one readable block and
@@ -133,6 +187,21 @@ func _sample_card_scheme(intent: InputIntent) -> void:
 ## from the fields above, and the HUD receives a plain int, never this object.
 func armed_slot() -> int:
 	return _armed_slot
+
+
+## Story 6-8 (AC 23): the lock key's edge, sampled in sample(). See `Controller.relock_pressed`.
+func relock_pressed() -> bool:
+	return _lock_pressed
+
+
+## Story 6-8 (AC 23): the cycle keys' flick, sampled in sample(). See `Controller.retarget_flick`.
+func retarget_flick() -> Vector2:
+	return _flick
+
+
+## Story 6-8 (AC 23): the rotate keys' axis, sampled in sample(). See `Controller.camera_rotate`.
+func camera_rotate() -> float:
+	return _camera_rotate
 
 
 static func _action(prefix: StringName, name: String) -> StringName:

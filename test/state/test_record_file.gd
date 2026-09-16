@@ -100,6 +100,10 @@ const RETARGET_TICK := 2
 const RETARGET_SLOT := 1
 const RETARGET_INDEX := 4
 
+## Story 6-8: the tick a recorded run UNLOCKS on, and the file it round-trips through.
+const UNLOCK_TICK := 2
+const UNLOCK_ROUND_TRIP_PATH := "user://test_6_8_unlock_round_trip.rec"
+
 # Story 5-1a (AC 4/AC 5): the ticks the contents corruptions land on. Both are inside the driven
 # run's `TICKS`, so the rebuild loop really does reach them — a tick past `tick_count` would make
 # every refusal below unfalsifiable.
@@ -1115,6 +1119,50 @@ func _tick(driven: Dictionary, intents: Array[InputIntent]) -> void:
 	var ms: MatchState = driven["state"]
 	ms.advance(intents)
 	ms.drain_signals()
+
+
+## Story 6-8 (AC 2, Golden Prediction cause 2 / Open Question 3): an UNLOCK survives SAVE and LOAD and
+## replays to the live hash WITH NO FORMAT BUMP. The unlock rides the existing `retarget_slot`/
+## `retarget_index` pair as the sentinel address `[PlayerState.UNLOCKED_SLOT, HERO_INDEX]` -- a new
+## VALUE, not a new field -- so the intent codec and `REQUIRED_INTENT_FIELDS` carry it untouched.
+##
+## NON-VACUITY: the same run WITHOUT the unlock hashes differently (the unlocked hero's facing follows
+## its moving stick; the locked one, with no lock fact pushed, holds its default), so the equality
+## below is a claim about a value that actually reached the hash.
+func test_an_unlock_saves_loads_and_replays_to_the_live_hash() -> void:
+	var unlocked := _record_an_unlock_run(true)
+	var ms: MatchState = unlocked["state"]
+	assert_eq([ms.p1.lock_target_slot, ms.p1.lock_target_index],
+		[PlayerState.UNLOCKED_SLOT, TargetingService.HERO_INDEX], "sanity: the live run ended unlocked")
+	var live_hash := CanonicalHash.of(ms.to_snapshot())
+	var loaded := _save_and_load(unlocked["record"], UNLOCK_ROUND_TRIP_PATH)
+	var got := loaded.replay_intent(UNLOCK_TICK, 0)
+	assert_eq([got.retarget_slot, got.retarget_index],
+		[PlayerState.UNLOCKED_SLOT, TargetingService.HERO_INDEX], "the unlock address came back from the file")
+	var replayed := _replay(loaded)
+	assert_eq(CanonicalHash.of(replayed.to_snapshot()), live_hash,
+		"the loaded record replays the unlocked run to the same canonical hash")
+	assert_false(replayed.p1.is_locked(), "...and the replayed P1 is unlocked too")
+	var still_locked: MatchState = _record_an_unlock_run(false)["state"]
+	assert_ne(CanonicalHash.of(still_locked.to_snapshot()), live_hash,
+		"the unlock is load-bearing on the hash, so the replay equality above is not vacuous")
+	_remove(UNLOCK_ROUND_TRIP_PATH)
+
+
+func _record_an_unlock_run(unlock: bool) -> Dictionary:
+	var driven := _match_start()
+	var record: IntentRecorder = driven["record"]
+	var ms: MatchState = driven["state"]
+	for t in range(1, TICKS + 1):
+		for push: Array in _camera_pushes():
+			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
+			ms.set_camera_basis(int(push[0]), push[1] as Basis)
+		var intents := _marked_intents(t)
+		if unlock and t == UNLOCK_TICK:
+			intents[0].retarget_slot = PlayerState.UNLOCKED_SLOT
+			intents[0].retarget_index = TargetingService.HERO_INDEX
+		_tick(driven, intents)
+	return driven
 
 
 ## Non-identity on slot 0, identity on slot 1 — both paths of the basis channel covered, and a

@@ -213,6 +213,36 @@ func test_facing_arc_half_width_both_sides_of_the_boundary() -> void:
 	assert_eq(outside.p2.hero.get_hp(), 94.0, "just outside the half-arc: full damage")
 
 
+## Story 6-8 (AC 5): WHILE UNLOCKED THE BLOCK ARC CAN BE DODGED BY TURNING AWAY again, because
+## `_is_facing` reads the input-derived facing rather than one pinned to the lock. The attack comes
+## from BEHIND P2's resting facing (DOWN; fact dir UP) in all three matches, and P2 is pushed a lock
+## direction pointing AT the attacker in all three:
+##   locked               -> facing tracks the lock onto the attacker -> blocked (98.5)
+##   unlocked, turned away -> the lock fact is ignored, facing stays DOWN -> full damage (94.0)
+##   unlocked, facing it   -> the same arc, facing the attacker -> blocked (98.5)
+##
+## MUTATION PROOF: delete the `elif not player.is_locked()` facing branch and the unlocked-turned-away
+## match blocks, reading 98.5.
+func test_an_unlocked_block_can_be_turned_away_from_and_a_facing_one_still_blocks() -> void:
+	var locked := _make_match()
+	locked.set_lock_direction(1, Vector2.UP)
+	_play(locked, 6, {1: [&"attack"]}, [[1, 10]], {6: [[0, 1, 0, Vector2.UP]]})
+	assert_eq(locked.p2.hero.get_hp(), 98.5, "locked: facing tracks the attacker, the block mitigates")
+	var away := _make_match()
+	away.set_lock_direction(1, Vector2.UP)
+	away.p2.lock_target_slot = PlayerState.UNLOCKED_SLOT
+	away.p2.lock_target_index = TargetingService.HERO_INDEX
+	_play(away, 6, {1: [&"attack"]}, [[1, 10]], {6: [[0, 1, 0, Vector2.UP]]})
+	assert_eq(away.p2.hero.get_hp(), 94.0, "unlocked and turned away: the hit from behind lands in full")
+	var facing := _make_match()
+	facing.set_lock_direction(1, Vector2.UP)
+	facing.p2.lock_target_slot = PlayerState.UNLOCKED_SLOT
+	facing.p2.lock_target_index = TargetingService.HERO_INDEX
+	facing.p2.hero.facing = Vector2.UP
+	_play(facing, 6, {1: [&"attack"]}, [[1, 10]], {6: [[0, 1, 0, Vector2.UP]]})
+	assert_eq(facing.p2.hero.get_hp(), 98.5, "unlocked and facing the attacker: blocked")
+
+
 ## ---- R-D1 entry precondition / degrade path (AC 3, AC 9) --------------------------------
 
 func test_entry_check_neither_spends_nor_restarts_regen_delay() -> void:

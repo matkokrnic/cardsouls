@@ -480,6 +480,10 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
 	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
 	"p1_move_down", "p1_move_left", "p1_move_right", "p1_move_up", "p1_roll",
+	# Story 6-8 (AC 23/AC 24): the five keyboard LOCK CONTROLS per slot JOIN the list -- this story
+	# ships their consumer (`KeyboardController`), on the same `3-0c/R11` discipline. Ratified table:
+	# P1 `T` lock, `F`/`G` camera left/right, `Z`/`C` cycle left/right.
+	"p1_lock", "p1_camera_left", "p1_camera_right", "p1_cycle_left", "p1_cycle_right",
 	# Story 6-7 (AC 3): `p1_run`/`p2_run` JOIN the list -- the ONE `project.godot` edit this story
 	# makes (`p1_run` = Space, `p2_run` = NUMPAD 0, `6-7/R18`), on the same `3-0c/R11` pin
 	# discipline: the story that ships the consumer is the story that moves the list.
@@ -494,6 +498,9 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"p2_cast_confirm", "p2_cast_mode", "p2_debug_reset",
 	"p2_move_down", "p2_move_left", "p2_move_right", "p2_move_up", "p2_roll",
 	"p2_run",
+	# Story 6-8: P2 `Numpad 5` lock, `Numpad 4`/`Numpad 6` camera left/right, `Numpad 1`/`Numpad 3`
+	# cycle left/right.
+	"p2_lock", "p2_camera_left", "p2_camera_right", "p2_cycle_left", "p2_cycle_right",
 ]
 
 

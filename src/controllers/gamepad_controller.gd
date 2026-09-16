@@ -86,6 +86,9 @@ var _flick := Vector2.ZERO
 ## therefore flicks ONCE, not once per tick, which is the same one-press-one-action rule attack
 ## and roll get from `_prev_held`.
 var _prev_flick_magnitude := 0.0
+## Story 6-8 (AC 7): the unlocked camera's rotation axis, sampled in sample() with the two edges
+## above and read back through `camera_rotate()`. A level, not an edge.
+var _camera_rotate := 0.0
 
 ## Story 5-0b (AC 2/AC 9): the hand slot currently ARMED by cast mode, or -1 for none -- the
 ## `KeyboardController._armed_slot` precedent exactly, exposed the same way through
@@ -132,6 +135,8 @@ func sample() -> InputIntent:
 		_lock_pressed = false
 		_flick = Vector2.ZERO
 		_prev_flick_magnitude = 0.0
+		# Story 6-8: an unplugged pad must not keep turning the camera at its last deflection.
+		_camera_rotate = 0.0
 		# Story 5-0b: same neutral path, opposite reasoning -- these three prevs are primed HELD,
 		# not cleared, because clearing them would PRIME the trigger/Basic edges: a replug with
 		# L3+trigger+A already held would then read as a fresh crossing and arm-and-commit with no
@@ -256,6 +261,30 @@ func _sample_lock_controls() -> void:
 		Input.get_joy_axis(_device, _profile.look_axis_y))
 	_flick = resolve_flick(raw, _prev_flick_magnitude, _profile.flick_threshold, _lock_pressed)
 	_prev_flick_magnitude = raw.length()
+	# Story 6-8 (AC 7, Open Question 2): the SAME right-stick X read, resolved a second way. Both
+	# readings are always produced; the runner applies the flick only while locked (AC 11) and the
+	# rotation only while unlocked, so the one stick never does both in a tick.
+	_camera_rotate = resolve_camera_rotate(raw.x, _profile.deadzone)
+
+
+## Story 6-8 (AC 7, Open Questions 2 and 6): the unlocked camera's rotation axis from the right
+## stick's raw X, PURE for the `resolve_flick` reason (joypad axes are not headless-samplable).
+##
+## OPEN QUESTION 6'S ANSWER: an AXIAL dead zone on X alone, reusing the profile's authored `deadzone`
+## (the stick-at-rest threshold every other stick read here already uses -- no new profile field),
+## then a LINEAR response rescaled so the output starts at 0 just past the dead zone and reaches
+## +/-1 at full deflection. Axial rather than radial so a thumb resting slightly up or down does not
+## eat horizontal travel; linear because the feel knob is the RATE (`CameraConfig
+## .free_yaw_degrees_per_tick`, AC 8), tuned at smoke, and a curve would be a second knob on the
+## same feel. Independent of `flick_threshold` (AC 19), which gates only the locked flick edge.
+##
+## THE SIGN IS THE STICK'S: +X (pushed right) returns positive, which `CameraRig.rotate_free_yaw`
+## turns into a view that turns right (AC 7). Y is ignored -- no vertical camera (Non-Goals).
+static func resolve_camera_rotate(raw_x: float, deadzone: float) -> float:
+	var magnitude := absf(raw_x)
+	if magnitude <= deadzone or deadzone >= 1.0:
+		return 0.0
+	return signf(raw_x) * clampf((magnitude - deadzone) / (1.0 - deadzone), 0.0, 1.0)
 
 
 ## Story 4-6 (AC 10): the FLICK EDGE policy, factored out as a PURE function for the reason
@@ -477,6 +506,11 @@ func relock_pressed() -> bool:
 ## direction, or ZERO for no flick this tick.
 func retarget_flick() -> Vector2:
 	return _flick
+
+
+## Story 6-8 (AC 7): the rotation axis sampled by `_sample_lock_controls`.
+func camera_rotate() -> float:
+	return _camera_rotate
 
 
 ## Deadzone policy (2-2/R5), factored out as a PURE function so the contract is

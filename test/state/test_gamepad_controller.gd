@@ -197,6 +197,20 @@ func test_gamepad_ordinal_is_pure_function_of_config() -> void:  # Story 2-2 (re
 ## ============================================================================================
 
 
+## Story 6-8 (AC 7, Open Question 6): the unlocked camera axis from the right stick's raw X -- an
+## axial dead zone on the profile's `deadzone`, then linear to +/-1, sign preserved (right is +).
+func test_resolve_camera_rotate_dead_zone_linear_and_signed() -> void:
+	var dz := 0.2
+	assert_eq(GamepadController.resolve_camera_rotate(0.0, dz), 0.0, "at rest")
+	assert_eq(GamepadController.resolve_camera_rotate(0.2, dz), 0.0, "exactly at the dead zone: still 0")
+	assert_eq(GamepadController.resolve_camera_rotate(-0.15, dz), 0.0, "inside the dead zone, left")
+	assert_almost_eq(GamepadController.resolve_camera_rotate(0.6, dz), 0.5, 1e-6,
+		"halfway through the live range reads half rate")
+	assert_almost_eq(GamepadController.resolve_camera_rotate(-0.6, dz), -0.5, 1e-6, "and signed left")
+	assert_eq(GamepadController.resolve_camera_rotate(1.0, dz), 1.0, "full right is full rate")
+	assert_eq(GamepadController.resolve_camera_rotate(-1.2, dz), -1.0, "clamped past full deflection")
+
+
 func test_resolve_trigger_edge_requires_crossing_not_holding() -> void:  # AC 2
 	var t := 0.5
 	assert_true(GamepadController.resolve_trigger_edge(0.6, 0.0, t),

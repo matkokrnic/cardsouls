@@ -32,3 +32,16 @@ extends Resource
 ## authoring it here rather than as a script literal is what makes retuning it a one-line .tres
 ## edit at the smoke, with no code change and no test change.
 @export_range(0.0, 1.0) var lock_yaw_smoothing: float = 1.0
+
+## Story 6-8 (AC 8): how fast the UNLOCKED camera turns under a full right-stick deflection (or a
+## held rotate key), in DEGREES PER TICK. Per tick for `lock_yaw_smoothing`'s reason verbatim: the
+## runner calls `CameraRig.rotate_free_yaw()` once per physics tick, so no `delta` and no wall clock
+## are needed (F1), and the basis it feeds stays a pure function of the tick index (A1).
+##
+## ZERO DEFAULT, per this file's doctrine and NOT `lock_yaw_smoothing`'s exception: an unauthored 0
+## is a camera that conspicuously does not turn when unlocked -- visibly wrong, the case the doctrine
+## exists for -- while locked play is unaffected. The authored value lives in the .tres.
+##
+## ITS FEEL IS AN OPERATOR SMOKE SURFACE (`PROC/R8`, story 6-8 Live Smoke): the shipped number is a
+## starting point for tuning, not a value this pass may declare correct.
+@export var free_yaw_degrees_per_tick: float = 0.0

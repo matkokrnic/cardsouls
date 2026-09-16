@@ -149,16 +149,39 @@ var vulnerable_window: TimingWindow
 ## `_target_indices`: the read is per-tick and per-player and a pair allocates. They surface as
 ## ONE snapshot key (`lock_target`), the `unit_targets` fusion verbatim.
 ##
-## THERE IS NO UNLOCKED STATE (`CC/R2`, AC 10). The resting value is the OPPOSING HERO, set by
-## `MatchState._init` and restored by `MatchState._apply_debug_reset` -- both know the slot, which this
-## object deliberately does not (a PlayerState has never known its own index, and giving it one
-## for this would be a new coupling for one field).
+## THE RESTING VALUE is the OPPOSING HERO, set by `MatchState._init` and restored by
+## `MatchState._apply_debug_reset` -- both know the slot, which this object deliberately does not (a
+## PlayerState has never known its own index, and giving it one for this would be a new coupling
+## for one field).
+##
+## Story 6-8 (AC 2, Open Question 1): THERE IS NOW AN UNLOCKED STATE, superseding `CC/R3`'s "No
+## unlock state". It is a SENTINEL ADDRESS, `[UNLOCKED_SLOT, HERO_INDEX]`, held in these same two
+## ints -- not a separate bool -- so the snapshot keeps ONE `lock_target` key with the same shape
+## and the hashed key set does not move (Golden Prediction cause 1). See `UNLOCKED_SLOT` below.
 ##
 ## HASHED, not excluded: it CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`) -- it decides where
 ## the hero faces, which decides the `_is_facing` block arc, so a replay whose heroes carried a
 ## different lock would diverge the moment one of them blocked.
 var lock_target_slot: int = TargetingService.NO_TARGET_SLOT
 var lock_target_index: int = TargetingService.HERO_INDEX
+
+## Story 6-8 (AC 2, Open Question 1): the SLOT half of the unlocked sentinel address
+## `[UNLOCKED_SLOT, TargetingService.HERO_INDEX]`.
+##
+## -2, NOT -1, and that is the measured reason the sentinel is distinguishable at all:
+## `TargetingService.NO_TARGET_SLOT` and `HERO_INDEX` are both -1, so `[-1, -1]` is the
+## pre-seed construction default and cannot also mean "unlocked" without making every
+## unseeded PlayerState read as a deliberate player choice. No valid address has a slot outside
+## {0, 1}, so -2 collides with nothing. The INDEX half is pinned to `HERO_INDEX` so `[-2, 0]` stays
+## a malformed request the lock seat rejects (`5-1a` AC 1), not a second spelling of "unlock".
+const UNLOCKED_SLOT := -2
+
+
+## Story 6-8 (AC 2): TRUE unless this player has unlocked. A plain read of the two ints above, so
+## the facing/roll rules in `MatchState` and the runner's camera and marker seats all ask the same
+## question the same way.
+func is_locked() -> bool:
+	return lock_target_slot != UNLOCKED_SLOT
 
 ## Story 5-2 (AC 10/AC 21, `5-2/R9`): THE MODE ② CHARGEUP — the D4 window it runs on, and the
 ## COLOUR of the card that started it.
