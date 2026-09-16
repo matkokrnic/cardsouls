@@ -108,17 +108,19 @@ off state and more than two things are ever worth aiming at.
     per AC 13-17 (no-op while unlocked). The physical key choice is ratified (operator browser
     review 2026-09-16 (readiness gate 1)); see Dev Notes for the table. Controller stays primary
     and carries the live smokes (`CC/R4`). Closes deferred-work M5.
-24. Proposed bindings use only PHYSICALLY UNIQUE keys -- every keyboard `InputEventKey` in
+24. The new bindings use only PHYSICALLY UNIQUE keys -- every keyboard `InputEventKey` in
     `project.godot` today carries `"location":0`, so a binding must not rely on a location-generic
     modifier (Shift/Ctrl/Alt), or on Enter/Space, which the engine's built-in `ui_accept` also
-    reads. See Dev Notes for the specific proposal and the stale-binding finding it corrects.
+    reads. See Dev Notes for the ratified table and the stale-binding finding it corrects.
 
 ## What this story supersedes
 
 - **`CC/R3` "No unlock state."** `4-6`'s own controls ruling said no unlock state exists at any
   point. This story adds one (AC 2). `CC/R3`'s click-instantly-relocks clause is otherwise the
   ancestry AC 1 builds on, not discarded; its flick-picks-a-candidate clause was already
-  superseded by `4-6a` AC 1's adjacent-by-screen-X cycling (`4-6a/R1`), not this story's doing.
+  superseded by `4-6a` AC 1's adjacent-by-screen-X cycling (decision-log Session 2026-08-31, the
+  SUPERSESSION recorded alongside `4-6a/R1`, gate finding B9 -- not `4-6a/R1` itself, the
+  null-anchor no-op), not this story's doing.
 - **`CC/R2` "Always lock-on ... Never a free camera."** Superseded by AC 2/AC 7; its
   default/fallback-target clause stands unchanged (AC 20).
 - **`4-6` Non-Goal "No free camera and no camera-rotation input route is added or revived"**
