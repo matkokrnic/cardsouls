@@ -532,9 +532,9 @@ func advance(intents: Array[InputIntent]) -> void:
 	_iframe_open_at_step3[0] = p1.hero.is_iframe_open()
 	_iframe_open_at_step3[1] = p2.hero.is_iframe_open()
 	_resolve_actions(p1, p1_intent, 0)
-	_resolve_movement(p1, p1_intent, 0)
+	var p1_actually_running := _resolve_movement(p1, p1_intent, 0)
 	_resolve_actions(p2, p2_intent, 1)
-	_resolve_movement(p2, p2_intent, 1)
+	var p2_actually_running := _resolve_movement(p2, p2_intent, 1)
 	# 3b. Story 4-3b (AC 1/AC 13): the UNIT attack rhythm's phase progression — the step-3 FAMILY's
 	#    third member, seated after both heroes for the same fixed P1 -> P2 determinism every other
 	#    per-player loop in this function follows. It is AI-driven, not input-driven: no
@@ -581,8 +581,8 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    authored rule's amount and applies it to the pool. Same single null guard rationale
 	#    as step 3: a pre-injection MatchState stays inert, no scattered checks below.
 	if balance_ticks != null:
-		_regen_stamina(p1)
-		_regen_stamina(p2)
+		_regen_stamina(p1, p1_actually_running)
+		_regen_stamina(p2, p2_actually_running)
 		_generate_mana(confirmed_hits)
 	# 6. Card / economy        the DECK DEAL seat (story 3-3, AC 7/AC 9) — the ONE seat, serving
 	#    BOTH occasions: match start (armed by the injection seam) and the debug reset (armed at
@@ -2370,7 +2370,7 @@ func _regen_mana(player: PlayerState, amount_per_tick: float) -> void:
 ## free, so block must cost time or holding it would be free and P2 ("aggression is
 ## economy") unenforced; suppressed likewise while DEAD, since a corpse runs no economy
 ## (story 2-3). Every other action state regenerates.
-func _regen_stamina(player: PlayerState) -> void:
+func _regen_stamina(player: PlayerState, actually_running: bool) -> void:
 	# Story 2-3 (AC2, 2-3/R5): a DEAD hero is skipped the SAME way a BLOCKING one already is
 	# (the D6 suppression) — a corpse runs no economy. This extends the existing suppression
 	# flag; it is a DIFFERENT function and step from the P2 movement gate (do not merge them).
@@ -2379,9 +2379,15 @@ func _regen_stamina(player: PlayerState) -> void:
 	# for BLOCKING's exact reason: the chargeup costs TIME as well as stamina, and a hero whose pool
 	# refilled while rooted would pay less for mode (2) the longer the window is. One more term on
 	# the existing flag, never a second gate.
+	# Story 6-7 (AC 8): RUNNING JOINS THE SUPPRESSION LIST, a fourth disjunct on the same policy
+	# seat -- `actually_running` is the exact AC 7 predicate this tick's `_resolve_movement` already
+	# computed (Dev Notes Open Question 5: computed once and handed back, never re-derived here),
+	# so a run-held-but-forced-to-walk tick (the R6 lockout) never wrongly suppresses regen the
+	# moment the design needs it running so the bar can cross the resume threshold (Fact M3).
 	var suppressed := state == HeroState.ActionState.BLOCKING \
 			or state == HeroState.ActionState.DEAD \
-			or state == HeroState.ActionState.CHARGING
+			or state == HeroState.ActionState.CHARGING \
+			or actually_running
 	# Story 4-4 (AC 21, `4-4/R11`): THE STAMINA ACCELERATOR, applied HERE as a factor on the derived
 	# per-tick rate — the dev-pass mechanism choice the AC leaves open, and the reasoning is recorded
 	# in the story's Dev Agent Record rather than only here.
@@ -2423,6 +2429,13 @@ func _regen_stamina(player: PlayerState) -> void:
 	var step := 0.0 if balance == null else balance.stamina_accelerator_regen_step
 	per_tick *= 1.0 + float(accelerators) * step
 	player.stamina.advance_regen(per_tick, suppressed)
+	# Story 6-7 (AC 10, `6-7/R14`): THE LATCH CLEARS HERE, automatically, the instant stamina
+	# reaches the authored resume threshold -- the earliest a crossing tick's OWN gait read can
+	# reflect it is therefore the NEXT tick's `_resolve_movement` (this function runs AFTER it in
+	# advance()'s step order), matching AC 10's "next tick, no re-press" ruling exactly.
+	if balance != null and player.hero.run_locked_out and player.stamina.get_current() \
+			>= balance.run_resume_stamina_percent / 100.0 * balance.max_stamina:
+		player.hero.run_locked_out = false
 
 
 ## Story 4-4 (AC 20/AC 21): whether `player`'s OWN board carries a LIVE unit of the named kind.
@@ -3746,7 +3759,23 @@ func _retarget_units(owner: PlayerState, opponent: PlayerState, opposing_slot: i
 		owner.units.set_target_at(index, pair[0], pair[1])
 
 
-func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> void:
+## Story 6-7 (`6-7/R13`): clauses (1)-(3) of the ONE "actually running" predicate -- run key
+## held, move_dir non-zero (the controllers already apply deadzone, D3(a); this is a plain
+## zero-check at the state boundary), and action_state reads movement normally (none of
+## ATTACKING/ROLLING/CHARGING/STUNNED/BLOCKING -- `6-7/R9`/`R10`/`R17`). Clauses (4)/(5) -- the
+## latch and the stamina-empty read -- are the caller's job, since they also drive the
+## latch-SET decision, which this pure clause-(1)-(3) fact alone does not.
+static func _run_pursuit_active(state: HeroState.ActionState, intent: InputIntent) -> bool:
+	if state == HeroState.ActionState.ATTACKING \
+			or state == HeroState.ActionState.ROLLING \
+			or state == HeroState.ActionState.CHARGING \
+			or state == HeroState.ActionState.STUNNED \
+			or state == HeroState.ActionState.BLOCKING:
+		return false
+	return intent.is_held(&"run") and not intent.move_dir.is_zero_approx()
+
+
+func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> bool:
 	# Story 2-3 (AC2, 2-3/R5): a DEAD hero exhibits no live movement. ASYMMETRIC by
 	# downstream consumption (see story Dev Notes): velocity is EXPLICITLY written to zero
 	# EVERY tick — HeroActor.drive() reads hero_state.velocity straight into move_and_slide()
@@ -3757,7 +3786,8 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 	# No new snapshot field: only velocity's VALUE on the DEAD branch changes.
 	if player.hero.action_state == HeroState.ActionState.DEAD:
 		player.hero.velocity = Vector3.ZERO
-		return
+		return false
+	var actually_running := false
 	var dir := intent.move_dir
 	if dir.length() > 1.0:
 		dir = dir.normalized()  # analog safety; never speed up past move_speed
@@ -3829,18 +3859,66 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 		# not a new carve-out.
 		player.hero.velocity = Vector3.ZERO
 	else:
+		var state := player.hero.action_state
+		# Story 6-7 (AC 6/AC 16): GAIT SELECTION, landing before the speed read it replaces,
+		# alongside (never inside) the ROLLING/CHARGING/STUNNED carve-outs above. `balance ==
+		# null` keeps the pre-injection fallback the ordinary case always had (plain
+		# `hero.move_speed`, no gait) -- ATTACKING/ROLLING/CHARGING/STUNNED are already
+		# documented unreachable pre-injection, but IDLE is not, and this branch is IDLE's home.
+		var speed: float
+		if balance == null:
+			speed = player.hero.move_speed
+		else:
+			# `6-7/R13`: clauses (1)-(3) from `_run_pursuit_active`, plus (4) the latch and (5)
+			# the honest-empty stamina read (`6-7/R16`, `is_zero_approx`) -- evaluated against
+			# stamina BEFORE this tick's own drain below. Review finding 2 (fix-pass correction):
+			# a PRE-drain-only read let a player dodge the latch by releasing run on the very
+			# tick the drain empties the pool (that tick still reads non-empty here, and the
+			# NEXT tick's `pursuing` is false if the key is released, so the latch never sets).
+			# The drain below now ALSO sets the latch, same tick, the instant its own spend()
+			# leaves the pool at `is_zero_approx` -- so the latch is live from the emptying tick
+			# itself, one tick earlier than AC 9's original "tick-301" reading (corrected: the
+			# residual now reads zero AND locked-out starting the SAME tick the drain reaches it).
+			var pursuing := _run_pursuit_active(state, intent)
+			var stamina_empty := is_zero_approx(player.stamina.get_current())
+			if pursuing and stamina_empty:
+				player.hero.run_locked_out = true
+			actually_running = pursuing and not player.hero.run_locked_out and not stamina_empty
+			if state == HeroState.ActionState.BLOCKING:
+				# `6-7/R10` (AC 16): BLOCKING is forced to walk speed regardless of the run key --
+				# it already suppresses regen (`_regen_stamina`'s own disjunct), and letting it
+				# also run at full speed would put two different stamina policies on one state.
+				speed = balance.walk_speed
+			elif actually_running:
+				speed = player.hero.move_speed
+			else:
+				speed = balance.walk_speed
 		# Story 3-0b (AC6): the attack LUNGE, ADDED to the input-driven velocity rather than
 		# replacing it — the phase multiplier keeps scaling what the player steers, and the
 		# lunge is the separate committed push the swing itself carries. At the authored
 		# multipliers (0.0 = full root) the lunge is therefore the whole of the attack's
 		# velocity, which is the intended shape: input steers nothing mid-swing, the swing
 		# still carries the hero forward.
-		var speed := player.hero.move_speed
 		var lunge := Vector3.ZERO
-		if player.hero.action_state == HeroState.ActionState.ATTACKING:
+		if state == HeroState.ActionState.ATTACKING:
 			speed *= _attack_phase_multiplier(player.hero.attack_phase())
 			lunge = _attack_lunge_velocity(player.hero)
 		player.hero.velocity = world_dir * speed + lunge
+		# Story 6-7 (AC 7): THE DRAIN SEAT, ratified -- `spend()` with the requested amount
+		# clamped to `get_current()`, which is what lets the pool reach an honest zero (`6-7/R16`)
+		# instead of refusing just above it, and restarts the regen-delay window on every
+		# actually-running tick (AC 17's 0.8s release delay, the same mechanism a roll/attack/
+		# deflect spend already gives).
+		if actually_running:
+			player.stamina.spend(
+					minf(balance_ticks.run_stamina_drain_per_tick, player.stamina.get_current()),
+					balance_ticks.stamina_regen_delay_ticks)
+			# Review finding 2: close the latch bypass at its source -- if THIS tick's own
+			# drain is what leaves the pool empty, the latch must already be set before a
+			# later tick can read `pursuing` as false (run released) and skip it entirely
+			# (the release-on-the-emptying-tick exploit the comment above names).
+			if is_zero_approx(player.stamina.get_current()):
+				player.hero.run_locked_out = true
 	# Story 4-6 (AC 2, `CC/R1`(i)): FACING IS TARGET-DERIVED, NOT INPUT-DERIVED. Still
 	# WORLD-SPACE planar (story 1-7 review R1, unchanged) and still reaching the actor through
 	# this one field, so the 1-7b single-yaw-source contract at hero.gd:31-42 is untouched
@@ -3892,6 +3970,11 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> v
 			player.hero.facing = -aim
 	elif not lock_dir.is_zero_approx():
 		player.hero.facing = lock_dir
+	# Story 6-7 (Dev Notes, Open Question 5): the ONE "actually running" fact for this tick,
+	# handed back to advance() so `_regen_stamina`'s suppression disjunct (AC 8) reads the exact
+	# same value this function used for its own speed/drain decisions above -- computed once,
+	# never re-derived, so the two seats can never disagree.
+	return actually_running
 
 
 ## Story 3-0b (AC5): per-phase attack movement multiplier. Selects one of the three

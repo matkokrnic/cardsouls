@@ -16,6 +16,9 @@ func _config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = 5.0
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed -- no call site here presses `&"run"`,
+	# so an IDLE hero still moves on a plain intent (the STUNNED-vs-IDLE control this file needs).
+	c.walk_speed = 5.0
 	c.max_stamina = 50.0
 	c.attack_windup_seconds = 3.0 / 60.0
 	c.attack_active_seconds = 4.0 / 60.0

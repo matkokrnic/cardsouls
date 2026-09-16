@@ -19,6 +19,9 @@ func _config(windup_mult := 0.0, active_mult := 0.0, recovery_mult := 0.0,
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = 5.0
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed -- no call site here presses `&"run"`,
+	# so gait is a no-op and every steered/lunge assertion below holds unchanged.
+	c.walk_speed = 5.0
 	c.max_stamina = 50.0
 	c.stamina_regen_per_second = 60.0          # 1.0 per tick
 	c.stamina_regen_delay_seconds = 3.0 / 60.0  # 3 ticks

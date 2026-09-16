@@ -108,6 +108,31 @@ func test_authored_stamina_economy_values_are_positive() -> void:
 		+ "the deflected attacker pays nothing and the ladder's melee tier ships invisible)")
 
 
+## Story 6-7 (AC 13): the two-gait system's three new fields — positivity in the defect-by-
+## construction class PLUS the two directional bounds AC 13 names, not merely `>= 0.0`
+## (E1_BALANCE_FIELDS's blanket non-negativity check above).
+##   * walk_speed 0.0 freezes the hero at empty stamina with no gait left to fall back to (the R6
+##     latch's whole point is that RUN degrades to something, not to nothing).
+##   * walk_speed > move_speed would invert the two-gait premise itself — WALK is never faster
+##     than RUN, exactly the `5-5`/`5-6` "both directions asserted" precedent applied here.
+##   * run_resume_stamina_percent <= 0.0 would make the R6 latch resume before it can ever be
+##     observed set; > 100.0 would make it never resume at all.
+func test_authored_gait_values_are_positive_and_correctly_ordered() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.walk_speed > 0.0,
+		"walk_speed must be authored > 0 (a zero walk speed freezes the hero at empty stamina with "
+		+ "no gait to fall back to)")
+	assert_true(config.walk_speed <= config.move_speed,
+		"walk_speed must be authored <= move_speed (WALK is never faster than RUN, the whole "
+		+ "premise of the two-gait system)")
+	assert_true(config.run_resume_stamina_percent > 0.0 and config.run_resume_stamina_percent <= 100.0,
+		"run_resume_stamina_percent must be authored in (0, 100] — <= 0 resumes the R6 latch before "
+		+ "it can ever be observed set, and > 100 would make it never resume")
+
+
 ## Story 5-2 (AC 6/AC 10/AC 17/AC 18): the other THREE unblockable numbers, audited in the
 ## defect-by-construction class rather than exempted, because a 0.0 in any of them ships the story
 ## INVISIBLE rather than merely untuned — which is exactly the class `draw_replacement_delay_seconds`

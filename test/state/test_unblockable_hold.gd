@@ -459,6 +459,9 @@ func _config() -> BalanceConfig:
 	# left it there would have made "fully controllable on the release tick" pass or fail on the
 	# authored speed rather than on the root. Measured during this dev pass, not assumed.
 	c.move_speed = 4.0
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed -- no call site here presses `&"run"`,
+	# so AC 4's "movement is observable on release" assertion holds unchanged.
+	c.walk_speed = 4.0
 	c.deck_size = DECK_SIZE
 	c.hand_size = HAND_SIZE
 	c.stamina_regen_per_second = 6.0

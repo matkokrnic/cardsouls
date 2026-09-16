@@ -209,6 +209,10 @@ func _config(move_speed: float) -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = move_speed
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed -- no call site here presses `&"run"`,
+	# so gait is a no-op and the move_dir-sign divergence this tool hashes the replay to detect
+	# still reaches a non-zero, direction-dependent velocity instead of freezing both fixtures at 0.0.
+	c.walk_speed = move_speed
 	c.max_stamina = 30.0
 	c.stamina_regen_per_second = 60.0
 	c.stamina_regen_delay_seconds = 2.0 / 60.0

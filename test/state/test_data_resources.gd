@@ -32,6 +32,10 @@ func test_feature_flags_tres_opens_the_orbs_layer() -> void:
 ## Every E1 melee field authored in story 1-1 (AC 1/4). Kept in sync with BalanceConfig.
 const E1_BALANCE_FIELDS: Array[String] = [
 	"max_hp", "move_speed",
+	# Story 6-7 (AC 13): the two-gait system's three new fields, hand-maintained same as every
+	# sibling in this list -- `attack_stamina_cost`/`block_facing_arc_degrees` shipped unaudited
+	# before this file's own history (below) forced the point once already.
+	"walk_speed", "run_stamina_drain_per_second", "run_resume_stamina_percent",
 	"max_stamina", "stamina_regen_per_second", "stamina_regen_delay_seconds",
 	"roll_stamina_cost", "deflect_stamina_cost",
 	# FOUND BY STORY 3-5b's reflective guard below, on its first run, and repaired here:

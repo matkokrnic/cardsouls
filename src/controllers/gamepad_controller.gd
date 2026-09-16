@@ -163,7 +163,7 @@ func sample() -> InputIntent:
 	var raw := Vector2(
 		Input.get_joy_axis(_device, _profile.move_axis_x),
 		Input.get_joy_axis(_device, _profile.move_axis_y))
-	intent.move_dir = resolve_move_dir(raw, _profile.deadzone, _profile.normalize_move_magnitude)
+	intent.move_dir = resolve_move_dir(raw, _profile.deadzone)
 
 	# Story 5-0b: sample() reads raw device state ONLY -- every decision (suppression, slot
 	# arming, commit) is made by the pure resolve_card_tick() below, on the resolve_move_dir /
@@ -203,6 +203,9 @@ func sample() -> InputIntent:
 	intent.pressed[&"block"] = result["block_pressed"]
 	intent.held[&"roll"] = result["roll_held"]
 	intent.pressed[&"roll"] = result["roll_pressed"]
+	# Story 6-7 (AC 4): the impure write, mirroring attack/block/roll directly above -- the VALUE
+	# is computed in the pure resolve_card_tick() above; this write is the only impure step.
+	intent.held[&"run"] = result["run_held"]
 	# Story 6-1 (AC 1/2/5): THE HOLD FACT for mode ②, on the `attack`/`block`/`roll` held-key shape
 	# directly above rather than a new typed InputIntent field -- `BLOCKING`'s own exit needed none
 	# and neither does this one. The key is PREFIX-FREE and carries no pad button name (the key
@@ -433,6 +436,11 @@ static func resolve_card_tick(
 		"block_pressed": block_pressed and not cast_held,
 		"roll_held": roll_raw and not cast_held,
 		"roll_pressed": roll_pressed and not cast_held,
+		# Story 6-7 (AC 4): bare A drives RUN outside cast mode, on the attack_held/block_held/
+		# roll_held shape directly above -- deliberately NOT `basic_pressed` (an edge), since
+		# running is a HOLD fact like the other three, and deliberately suppressed by cast_held
+		# so the same A that arms/confirms a card inside cast mode never also drives running.
+		"run_held": basic_raw and not cast_held,
 		# STORY 6-1 (AC 1/2/5, and the L3-chord fork the story asked to be picked and named):
 		# the mode ② confirm's RAW held state, `unblockable_raw` ALONE -- deliberately NOT
 		# `and cast_held`, and deliberately not any of the other two confirms.
@@ -471,19 +479,13 @@ func retarget_flick() -> Vector2:
 	return _flick
 
 
-## Deadzone + magnitude policy (2-2/R5, extended by 2-6/R8), factored out as a PURE function so
-## the contract is headless-testable without a physical pad (joypad axes are not
-## headless-samplable). Below the deadzone -> ZERO always. Above it, the magnitude policy is the
-## authored GamepadProfile.normalize_move_magnitude, passed in so this stays pure:
-##   normalize == true  (shipped default) -> the stick DIRECTION at unit length (2-2/R5 binary
-##                        speed, keyboard parity).
-##   normalize == false -> the stick's actual magnitude, clamped to length 1.0 — a partial
-##                        deflection yields a partial move_dir magnitude (variable analog speed).
-## The clamp reuses the analog-safety rule already in _resolve_movement (never exceed unit length,
-## so downstream never speeds past move_speed). The default keeps every 2-arg caller unchanged.
-static func resolve_move_dir(raw: Vector2, deadzone: float, normalize_magnitude := true) -> Vector2:
+## Deadzone policy (2-2/R5), factored out as a PURE function so the contract is
+## headless-testable without a physical pad (joypad axes are not headless-samplable). Below the
+## deadzone -> ZERO. Above it, ALWAYS normalized to unit length (2-2/R5 binary speed, keyboard
+## parity) -- story 6-7 (AC 12) retires the variable-magnitude toggle open decision (c) opened
+## (`2-6/R8`); gait (walk/run) is now the discrete, authored answer to that question, never a
+## function of stick deflection.
+static func resolve_move_dir(raw: Vector2, deadzone: float) -> Vector2:
 	if raw.length() < deadzone:
 		return Vector2.ZERO
-	if normalize_magnitude or raw.length() > 1.0:
-		return raw.normalized()
-	return raw
+	return raw.normalized()

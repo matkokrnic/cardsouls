@@ -509,7 +509,7 @@ func test_dead_hero_stamina_does_not_regen() -> void:
 	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)  # forced DEAD; _round_over stays FALSE
 	assert_false(bool(ms.to_snapshot()["round_over"]), "hand-constructed: DEAD with _round_over FALSE")
 	for i in range(4):
-		ms._regen_stamina(ms.p1)  # DIRECT call — advance()'s step 1b would skip step 5 entirely
+		ms._regen_stamina(ms.p1, false)  # DIRECT call — advance()'s step 1b would skip step 5 entirely
 	assert_eq(ms.p1.stamina.get_current(), 30.0,
 		"DEAD: regen suppressed across every direct call (suppressed like BLOCKING)")
 

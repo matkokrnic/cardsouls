@@ -18,6 +18,10 @@ var stamina_regen_delay_ticks: int
 ## advance() takes no delta (A1), so the per-second authoring value is never consumed
 ## directly — this field is the only regen amount the state layer reads.
 var stamina_regen_per_tick: float
+## Story 6-7 (AC 2): the RUN gait's fixed per-tick stamina cost -- run_stamina_drain_per_second /
+## TICK_HZ, derived once per load on the stamina_regen_per_tick precedent directly above and for
+## the same reason (advance() takes no delta, A1: never rate x delta).
+var run_stamina_drain_per_tick: float
 ## Story 3-4 (AC 4): the PASSIVE mana faucet's fixed per-tick amount —
 ## mana_regen_per_second / TICK_HZ, derived once per load on the stamina_regen_per_tick
 ## precedent above and for the same reason (advance() takes no delta, A1: never rate x delta).
@@ -128,6 +132,7 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	var t := BalanceTicks.new()
 	t.stamina_regen_delay_ticks = TimingWindow.seconds_to_ticks(config.stamina_regen_delay_seconds)
 	t.stamina_regen_per_tick = config.stamina_regen_per_second / TimingWindow.TICK_HZ
+	t.run_stamina_drain_per_tick = config.run_stamina_drain_per_second / TimingWindow.TICK_HZ
 	t.mana_regen_per_tick = config.mana_regen_per_second / TimingWindow.TICK_HZ
 	t.draw_replacement_delay_ticks = TimingWindow.seconds_to_ticks(
 			config.draw_replacement_delay_seconds)

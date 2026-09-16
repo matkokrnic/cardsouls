@@ -184,7 +184,15 @@ extends RefCounted
 ## that file today, but the per-intent field check (`REQUIRED_INTENT_FIELDS`) exists precisely so a
 ## dropped field is never silently read as its resting value -- here that would replay every recorded
 ## activation as a stage attempt. HARD REJECTION, NO SHIM.
-const FORMAT_VERSION := 10
+##
+## STORY 6-7 BUMPS 10 -> 11, on the `6-1` SILENT-DIVERGENCE reasoning verbatim, not an intent-shape
+## bump (`&"run"` round-trips with zero serialization edits, exactly as `card_cast` did -- `held` is
+## walked by whatever keys are present, `6-7/R12`). A v10 recording carries no `run` held key AND no
+## `walk_speed` value; `_rebuilt` (below) sets only keys present in the file, so a replayed v10
+## record's `walk_speed` stays at `BalanceConfig`'s zero default and every hero in that replay moves
+## at speed 0 from the tick gait selection lands -- loaded without complaint, silently wrong, exactly
+## the case this constant exists to prevent. v10 is refused HARD rather than migrated.
+const FORMAT_VERSION := 11
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

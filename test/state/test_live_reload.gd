@@ -312,6 +312,9 @@ func _config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = MOVE_SPEED
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO MOVE_SPEED -- no call site here presses `&"run"`,
+	# so gait is a no-op and move_speed's reload/replay assertions hold unchanged.
+	c.walk_speed = MOVE_SPEED
 	c.max_stamina = MAX_STAMINA
 	c.max_mana = MAX_MANA
 	c.deck_size = DECK_IDS.size()
@@ -325,6 +328,8 @@ func _config() -> BalanceConfig:
 func _retuned_config() -> BalanceConfig:
 	var c := _config()
 	c.move_speed = RETUNED_MOVE_SPEED
+	# Story 6-7 (Fact M5(d)): retune walk_speed alongside move_speed, named individually.
+	c.walk_speed = RETUNED_MOVE_SPEED
 	c.max_stamina = RETUNED_MAX_STAMINA
 	return c
 

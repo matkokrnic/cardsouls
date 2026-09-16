@@ -11,9 +11,9 @@ extends SceneTree
 ##     its economy rows prime on connect (HP reads a real value, not "--"), and its action-state
 ##     row is bound per-slot — rolling P1 makes P1's STATE read ROLLING while P2's STATE, never
 ##     having transitioned, stays "--". A cross-wire would light P2's inspector instead.
-##   [AC 4 magnitude switch] Flipping the panel's Normalize switch mutates
-##     GamepadProfile.normalize_move_magnitude on the SHARED cached resource instance (the test
-##     loads the same res:// path the runner handed the panel). In memory only.
+##   [Story 6-7 AC 12] The magnitude switch this file once checked here is RETIRED along with
+##     GamepadProfile.normalize_move_magnitude — nothing replaces it, the Switches column is now
+##     empty, and nothing here checks it any more.
 ##   [Story 6-3b AC 4/AC 7 pitch zones] The 2-6 placement switch and the dead-centre panel it moved
 ##     are RETIRED; each HudRoot instead carries both real pitch zones at FIXED anchors -- its own
 ##     zone left of the vitals bars (offsets -286/-196/-186/-108) and the opponent's mirrored right
@@ -61,7 +61,6 @@ var _panel: Node
 var _inspectors_exist := false
 var _primed_ok := false
 var _pitch_zones_ok := false
-var _magnitude_ok := false
 var _panel_layout_ok := false
 var _label_set_ok := false
 var _label_cleared_via_advance := false
@@ -136,12 +135,12 @@ func _physics_process(_delta: float) -> bool:
 			_p2_state_stayed_blank = false
 	if _frames >= ROLL_FRAME + 20:
 		Input.action_release(&"p1_move_up")
-		var ok := (_inspectors_exist and _primed_ok and _pitch_zones_ok and _magnitude_ok
+		var ok := (_inspectors_exist and _primed_ok and _pitch_zones_ok
 			and _panel_layout_ok and _label_set_ok and _label_cleared_via_advance
 			and _p1_saw_rolling and _p2_state_stayed_blank and _reveal_default_off
 			and _reveal_shows_real_hands and _reveal_clears_on_untoggle)
-		print("instruments: inspectors=%s primed=%s pitch_zones=%s magnitude=%s panel_layout=%s label_set=%s label_cleared_via_advance=%s (bus_round_started=%d) p1_rolling=%s p2_blank=%s reveal_default_off=%s reveal_shows_hands=%s reveal_clears=%s" % [
-			_inspectors_exist, _primed_ok, _pitch_zones_ok, _magnitude_ok, _panel_layout_ok,
+		print("instruments: inspectors=%s primed=%s pitch_zones=%s panel_layout=%s label_set=%s label_cleared_via_advance=%s (bus_round_started=%d) p1_rolling=%s p2_blank=%s reveal_default_off=%s reveal_shows_hands=%s reveal_clears=%s" % [
+			_inspectors_exist, _primed_ok, _pitch_zones_ok, _panel_layout_ok,
 			_label_set_ok, _label_cleared_via_advance, _bus_round_started_count,
 			_p1_saw_rolling, _p2_state_stayed_blank, _reveal_default_off,
 			_reveal_shows_real_hands, _reveal_clears_on_untoggle])
@@ -180,16 +179,6 @@ func _run_static_checks() -> void:
 		_pitch_zones_ok = (_pitch_zones_ok and hud.get_node_or_null("PitchZone") == null
 			and _zone_at(hud, "OwnPitch", [-286.0, -196.0, -186.0, -108.0])
 			and _zone_at(hud, "OpponentPitch", [186.0, -196.0, 286.0, -108.0]))
-
-	# AC 4: the magnitude switch mutates the SHARED profile instance in memory.
-	var profile: GamepadProfile = load("res://data/gamepad_profile.tres")
-	var mag_switch: CheckButton = panel.find_child("NormalizeMagnitude", true, false)
-	var default_on: bool = profile.normalize_move_magnitude == true
-	mag_switch.button_pressed = false
-	var flipped_off: bool = profile.normalize_move_magnitude == false
-	mag_switch.button_pressed = true
-	var flipped_back: bool = profile.normalize_move_magnitude == true
-	_magnitude_ok = default_on and flipped_off and flipped_back
 
 	# AC 1 relay scaffolding: SET the label visible via the round_ended path (not the link under
 	# test), and connect a counter to EventBus.round_started so the CLEAR below is confirmed to

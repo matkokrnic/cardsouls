@@ -13,13 +13,14 @@ extends Control
 ## read-only debug accessor after each advance() and pushes PLAIN INTEGERS here. No state
 ## handle, no signal, no eighth observation seam, no to_snapshot() extension.
 ##
-## Switches (2-6 shipped two; story 6-3b retired the second):
-##   1. Analog magnitude (AC 4, 2-6/R8) — flips GamepadProfile.normalize_move_magnitude on the
-##      SHARED in-memory resource instance the gamepad controllers already read fresh every tick
-##      via sample(). IN MEMORY ONLY: it NEVER calls ResourceSaver and never writes the .tres back
-##      to disk, so the authored default (true) returns on the next launch. In the shipped default
-##      config (two keyboards) no gamepad controller exists, so the flip is inert on gameplay this
-##      session — the AC delivers the toggle only; the feel verdict is animation-gated (rig story).
+## Switches (2-6 shipped two; story 6-3b retired the second, story 6-7 retired the first):
+##   1. RETIRED by story 6-7 (AC 12): the 2-6 analog-magnitude switch (open decision (c)), together
+##      with GamepadProfile.normalize_move_magnitude itself — gait (walk/run) is now the discrete
+##      authored answer to the question variable analog magnitude was asking (`6-7/R8`), so there
+##      is nothing left to flip. The `Switches` VBoxContainer this switch alone justified is now
+##      EMPTY — left in place (constructing an empty column is harmless) rather than removed, since
+##      removing it would also require re-deriving the neighbouring RecordControls column's sizing
+##      from a two-column, not three-column, row (see `_build_record_controls`'s comment).
 ##   2. RETIRED by story 6-3b (AC 7): the 2-6 pitch-zone placement switch, together with the
 ##      dead-centre pitch panel it moved. The HUD now renders both real pitch zones at fixed anchors,
 ##      so there is nothing left to move and the panel no longer holds the HudRoots.
@@ -53,7 +54,8 @@ extends Control
 ## `test_runner_observation_seams_are_exactly_ten` stays untouched. The pinned control set in
 ## `test/integration/test_record_save_control.gd` WAS amended to five names, a reviewed named
 ## exception on the `3-6/R2` precedent (`4-B1/R1`); story 6-3b's retirement of the pitch placement
-## switch brings it back to four. Unpressed by default and reachable only by a
+## switch brought it back to four, and story 6-7's retirement of the analog-magnitude switch (AC
+## 12) brings it down again to three. Unpressed by default and reachable only by a
 ## manual mouse click (`4-B1/R2`): it never reveals anything in the shipped default configuration,
 ## and it changes no FeatureFlags member and no state-layer value.
 
@@ -161,19 +163,12 @@ func _ready() -> void:
 	row.name = "InstrumentColumns"
 	row.add_theme_constant_override("separation", 12)
 	column.add_child(row)
+	# Story 6-7 (AC 12): EMPTY as of this story -- the one switch it held (analog magnitude) is
+	# retired. Left in place rather than removed (see the class doc block's Switches note).
 	var switches := VBoxContainer.new()
 	switches.name = "Switches"
 	switches.add_theme_constant_override("separation", 2)
 	row.add_child(switches)
-
-	# Switch 1: analog magnitude. Pressed == normalize (the authored default true), so the button
-	# starts pressed and toggling OFF selects variable magnitude.
-	var magnitude := CheckButton.new()
-	magnitude.name = "NormalizeMagnitude"
-	magnitude.text = "Normalize analog magnitude"
-	magnitude.button_pressed = gamepad_profile == null or gamepad_profile.normalize_move_magnitude
-	magnitude.toggled.connect(_on_normalize_toggled)
-	switches.add_child(magnitude)
 
 	# Instrument 3 (story 3-0b, AC 2): the per-slot window countdown, one read-only row per slot.
 	_build_window_countdown(row)
@@ -215,9 +210,10 @@ func _build_window_countdown(row: HBoxContainer) -> void:
 ## re-fit used. The box lives in the empty band y[356,450] (94px); a ROW here would push the box
 ## out of the band and over the vitals bars, exactly the S1/S2 regression
 ## test_debug_instruments.gd's layout assertion exists to catch. The band is empty across the FULL
-## window width, so the spare room is horizontal — TWO buttons stacked in this one column measure
-## the same height as the two-row Switches column beside it (test_debug_instruments.gd's layout
-## assertion is the machine check, not this comment).
+## window width, so the spare room is horizontal — TWO buttons stacked in this one column set the
+## row's height today (story 6-7, AC 12: the Switches column beside it is now EMPTY and
+## contributes nothing to measure against; test_debug_instruments.gd's layout assertion is the
+## machine check, not this comment).
 func _build_record_controls(row: HBoxContainer) -> void:
 	var column := VBoxContainer.new()
 	column.name = "RecordControls"
@@ -226,11 +222,13 @@ func _build_record_controls(row: HBoxContainer) -> void:
 	var save := Button.new()
 	save.name = "SaveRecord"
 	save.text = "Save record"
+	save.focus_mode = Control.FOCUS_NONE
 	save.pressed.connect(_on_save_pressed)
 	column.add_child(save)
 	var reload := Button.new()
 	reload.name = "ReloadBalance"
 	reload.text = "Reload balance"
+	reload.focus_mode = Control.FOCUS_NONE
 	reload.pressed.connect(_on_reload_pressed)
 	column.add_child(reload)
 
@@ -257,6 +255,7 @@ func _build_reveal_control(row: HBoxContainer) -> void:
 	toggle.name = "RevealOpponentHand"
 	toggle.text = "Reveal opponent hand"
 	toggle.button_pressed = false
+	toggle.focus_mode = Control.FOCUS_NONE
 	toggle.toggled.connect(_on_reveal_toggled)
 	column.add_child(toggle)
 
@@ -286,14 +285,6 @@ static func _format_windows(windows: Dictionary) -> String:
 	for key: StringName in windows:
 		parts.append("%s %d" % [key, int(windows[key])])
 	return "  ".join(parts)
-
-
-## AC 4: flip the AUTHORED field on the shared in-memory GamepadProfile instance. IN MEMORY ONLY —
-## no ResourceSaver, no .tres write (2-6/R8). `pressed` true == normalize (unit length), false ==
-## variable magnitude. Null-guarded: in a config with no gamepad the field simply has no reader.
-func _on_normalize_toggled(pressed: bool) -> void:
-	if gamepad_profile != null:
-		gamepad_profile.normalize_move_magnitude = pressed
 
 
 ## Story 3-0d (AC 7): hand the press to the runner and do nothing else. The panel does not know

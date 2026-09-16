@@ -247,6 +247,12 @@ const HASHED: Array[String] = [
 	"hero_state.chain", "hero_state.deflect", "hero_state.roll_iframe",
 	"hero_state.roll_duration", "hero_state.stun", "hero_state._hp", "hero_state._max_hp",
 	"hero_state._swing_dedupe",
+	# Story 6-7 (AC 5, Fact M6 Direction B): the R6 gait-lockout latch classifies HASHED, on the
+	# `lock_target_slot`/`charge_window` precedent's exact test -- it CROSSES TICKS (persists until
+	# stamina crosses the resume threshold) and DECIDES AN OUTCOME (whether RUN may resume). Rides
+	# the existing `"hero_state"` key through `player_state.hero`, so no exemption is needed and
+	# UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"hero_state.run_locked_out",
 	# Story 6-2 (AC 14b/AC 14c), narrowed by the review fix (H1): the Pitch Zone's card-identity and
 	# hand-slot records classify HASHED beside the fizzle window they share an object with -- they
 	# CROSS TICKS (staging to fizzle) and DECIDE AN OUTCOME (which card fizzles, into which slot the
@@ -735,6 +741,10 @@ func _config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = MOVE_SPEED
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed -- no call site here presses `&"run"`,
+	# so gait is a no-op and every MOVE_SPEED-based assertion below (including the camera-basis
+	# divergence proof, which needs a NON-zero velocity to diverge from) holds unchanged.
+	c.walk_speed = MOVE_SPEED
 	c.max_stamina = 30.0
 	c.stamina_regen_per_second = 60.0
 	c.stamina_regen_delay_seconds = 2.0 / 60.0
@@ -778,6 +788,11 @@ func _config() -> BalanceConfig:
 func _retuned_config() -> BalanceConfig:
 	var c := _config()
 	c.move_speed = RETUNED_MOVE_SPEED
+	# Story 6-7 (Fact M5(d)): retune walk_speed alongside move_speed, on the same `walk_speed ==
+	# move_speed` no-op rule -- otherwise the reload would land but silently stop reaching
+	# velocity (no call site here presses `&"run"`), passing the mid-run-reload assertion while
+	# proving nothing about the reload it claims to test.
+	c.walk_speed = RETUNED_MOVE_SPEED
 	return c
 
 

@@ -993,7 +993,30 @@ extends TestCase
 ##     `test_replay_identity.gd`) is a CLASSIFICATION change, not a snapshot-shape change, and carries
 ##     no hash consequence by construction -- confirmed by this being the ONLY named cause above.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "9ed4c9035a89b3219623dc129d73693e6871049bc9c48f672bc5554d49f5d5b2"
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 6-7 (locomotion gaits), 9ed4c903 -> 71a7b45f, ONE re-baseline, ONE named
+## cause, PREDICTED in the story's Golden Prediction section (Fact M6 Direction B) and CONFIRMED
+## the sole cause by measurement in both directions, exactly as AC 15 requires.
+##
+##   THE ONE CAUSE: `HeroState.to_snapshot()` gains `"run_locked_out"` -- the R6 gait-lockout
+##     hysteresis latch (AC 5), a genuinely new hashed member reaching the snapshot through the
+##     existing `player_state.hero` chain. It CROSSES TICKS (persists until stamina crosses the
+##     authored resume threshold) and DECIDES AN OUTCOME (whether RUN may resume), the
+##     `lock_target_slot`/`charge_window` precedent's exact test -- HASHED, no
+##     `UNHASHED_CROSS_TICK_MEMBERS` bump (stays at 4).
+##
+##   NOT A CAUSE, MEASURED: `walk_speed`/`run_stamina_drain_per_second`/`run_resume_stamina_percent`
+##     are authored balance VALUES, not new state members. `_golden_config()` authors `walk_speed`
+##     EQUAL TO `MOVE_SPEED` (Task 6(c)) specifically so gait is a no-op in the golden fixture (no
+##     golden intent builder presses `&"run"`) -- per the standing `BC/R3` isolation, these three
+##     fields alone move nothing.
+##
+##   ISOLATED BOTH DIRECTIONS: with `"run_locked_out"` temporarily removed from `to_snapshot()`
+##     and nothing else changed, `test_state_matches_golden` hashed `9ed4c903…` EXACTLY (the
+##     pre-story golden, reproduced) -- confirming the latch field is the one and only cause. The
+##     removal was reverted immediately after measuring; no other line moved.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "71a7b45f1a54eda463b762c95daceba4fd5d9b8078ed3ea2f6c34900f595fcb1"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1201,6 +1224,11 @@ func _golden_config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = MAX_HP
 	c.move_speed = MOVE_SPEED
+	# Story 6-7 (Fact M6 Direction B guard, Task 6(c)): authored EQUAL TO MOVE_SPEED so the golden
+	# moves for exactly the ONE named cause (the new gait-lockout latch field) and not a second,
+	# unrelated one (every walk-gait velocity in the golden run going to 0.0) -- no golden intent
+	# builder presses `&"run"`, so gait is a no-op here exactly like every other fixture in Task 6.
+	c.walk_speed = MOVE_SPEED
 	c.max_stamina = MAX_STAMINA
 	c.stamina_regen_per_second = 60.0          # 1.0 per tick
 	c.stamina_regen_delay_seconds = 3.0 / 60.0  # 3 ticks

@@ -96,6 +96,19 @@ var facing := Vector2.DOWN
 ## read across ticks, so excluding it would be a determinism/replay hole.
 var roll_direction := Vector3.ZERO
 var move_speed: float          # injected (balance .tres in E3); tunable, not hardcoded-in-place
+## Story 6-7 (AC 5, the R6 hysteresis latch): set whenever a pursuing run key's own drain
+## leaves stamina empty (`6-7/R16`: `is_zero_approx`) -- widened by the fix-pass review's
+## finding 2 from the narrower "set when a held run key drains stamina to empty" reading:
+## the set happens on the SAME tick the drain reaches empty, not merely on a later tick where
+## the key is still held, and it fires from ANY source that empties the bar while a pursuing
+## run key is held (a roll or attack spend, not only this story's own drain), matching AC 9's
+## own text. While set, RUN is refused regardless of the run key, even at
+## non-zero stamina, until current stamina is `>=` `run_resume_stamina_percent` of `max_stamina`
+## (MatchState._regen_stamina clears it). CROSSES TICKS and DECIDES AN OUTCOME (whether running
+## may resume) -- HASHED via the existing to_snapshot() chain, the `lock_target_slot`/
+## `charge_window` precedent (test_replay_identity.gd:144-158) -- no `UNHASHED_CROSS_TICK_MEMBERS`
+## bump needed.
+var run_locked_out := false
 
 ## The eight per-action D4 windows (story 1-3). windup/active/recovery are the phases of
 ## one attack swing; chain is the input window for ATTACKING -> ATTACKING; deflect opens at
@@ -469,6 +482,7 @@ func to_snapshot() -> Dictionary:
 		# Story 1-9: the ONE snapshot delta of the story — the entry-locked roll direction.
 		"roll_direction": roll_direction,
 		"move_speed": move_speed,
+		"run_locked_out": run_locked_out,
 		"windup": windup.to_snapshot(),
 		"active": active.to_snapshot(),
 		"recovery": recovery.to_snapshot(),

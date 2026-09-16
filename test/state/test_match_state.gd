@@ -11,6 +11,9 @@ func _stats_config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = 5.0
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed, making gait a no-op -- no test call
+	# site here presses `&"run"`, so this file's existing velocity assertions hold unchanged.
+	c.walk_speed = 5.0
 	c.max_stamina = 50.0
 	return c
 
@@ -22,11 +25,16 @@ func _stats_match(seed_value: int) -> MatchState:
 	return ms
 
 
-func _step(ms: MatchState, d1: Vector2, d2: Vector2) -> void:
+## `run_held` defaults false (matching every existing call site's no-run-key behavior, `6-7/R13`
+## Dev Notes Open Question 4's dev-pass choice) -- only test_analog_input_clamped_to_move_speed
+## passes true, to drive the RUN gait specifically.
+func _step(ms: MatchState, d1: Vector2, d2: Vector2, run_held := false) -> void:
 	var i1 := InputIntent.new()
 	i1.move_dir = d1
+	i1.held[&"run"] = run_held
 	var i2 := InputIntent.new()
 	i2.move_dir = d2
+	i2.held[&"run"] = run_held
 	var intents: Array[InputIntent] = [i1, i2]
 	ms.advance(intents)
 	ms.drain_signals()
@@ -54,9 +62,17 @@ func test_movement_seam_computes_world_velocity() -> void:
 
 
 func test_analog_input_clamped_to_move_speed() -> void:
-	var ms := _stats_match(42)
-	_step(ms, Vector2(3, 4), Vector2.ZERO)  # length 5 input
-	assert_almost_eq(ms.p1.hero.velocity.length(), 5.0, 1e-4, "never exceeds move_speed")
+	# Story 6-7 (Fact M5(g)): its OWN config, `walk_speed != move_speed`, so RUN and WALK are
+	# distinguishable -- the blanket `walk_speed = move_speed` fix on `_stats_config` would make
+	# this test pass identically at either gait, proving nothing about clamping while RUNNING
+	# specifically, which is what its name claims.
+	var c := _stats_config()
+	c.walk_speed = 2.0
+	var ms := MatchState.new(MatchParams.new(42))
+	ms.apply_balance(c)
+	ms.drain_signals()
+	_step(ms, Vector2(3, 4), Vector2.ZERO, true)  # length 5 input, RUN held
+	assert_almost_eq(ms.p1.hero.velocity.length(), 5.0, 1e-4, "never exceeds move_speed while running")
 
 
 func test_tick_counter_advances() -> void:
@@ -183,6 +199,9 @@ func _b1_config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = 5.0
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed, the `_stats_config` precedent
+	# directly above -- no call site here presses `&"run"`, so gait is a no-op.
+	c.walk_speed = 5.0
 	c.max_stamina = 50.0
 	c.stamina_regen_per_second = 60.0
 	c.stamina_regen_delay_seconds = 3.0 / 60.0

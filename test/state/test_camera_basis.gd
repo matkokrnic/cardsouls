@@ -16,6 +16,9 @@ func _make_match() -> MatchState:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = SPEED
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO move_speed -- no call site here presses `&"run"`,
+	# so gait is a no-op and every SPEED-based assertion below holds unchanged.
+	c.walk_speed = SPEED
 	c.max_stamina = 50.0
 	ms.apply_balance(c)
 	ms.drain_signals()

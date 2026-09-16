@@ -106,6 +106,10 @@ func test_snapshot_shape_is_untouched_by_the_instrument() -> void:
 	hero.sort()
 	assert_eq(hero, ["action_state", "active", "chain", "chain_index", "deflect", "facing", "hp",
 			"max_hp", "move_speed", "recovery", "roll_direction", "roll_duration", "roll_iframe",
+			# Story 6-7 (AC 5): the R6 gait-lockout latch joins the hero snapshot -- named here so
+			# this pin fails loudly rather than silently, on the same "gains no instrument key"
+			# discipline that pin at :103 already enforces at the top level.
+			"run_locked_out",
 			"stun", "swing_dedupe", "velocity", "windup"],
 		"the hero snapshot is unchanged — the countdown is instrumentation, not state")
 

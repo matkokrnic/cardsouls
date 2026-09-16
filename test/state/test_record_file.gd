@@ -46,6 +46,8 @@ const RETIRED_VERSION_PATH := "user://test_4_4_retired_version.rec"
 const PRE_6_2_PATH := "user://test_6_2_pre_pitch_costs.rec"
 ## Story 6-3a (AC 4): the v9-refusal test writes its own file, for the same no-racing reason.
 const PRE_6_3A_PATH := "user://test_6_3a_pre_card_activate.rec"
+## Story 6-7 (AC 15): the v10-refusal test writes its own file, for the same no-racing reason.
+const PRE_6_7_PATH := "user://test_6_7_pre_run_gait.rec"
 
 ## Story 4-4: the in-test `unit_kinds` list the recorded config carries, and the nested values the
 ## round trip is measured on. Deliberately THREE LEVELS DEEP (kind -> attack -> projectile),
@@ -167,8 +169,12 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 10,
-		"FORMAT_VERSION is 10 as of story 6-3a (AC 4) -- an INTENT SHAPE change, the tenth InputIntent "
+	assert_eq(RecordFile.FORMAT_VERSION, 11,
+		"FORMAT_VERSION is 11 as of story 6-7 (AC 15) -- a SILENT-DIVERGENCE bump on the `6-1` "
+		+ "reasoning, not an intent-shape one: a v10 record carries no `run` held key and no "
+		+ "`walk_speed` value, and would replay every hero at speed 0 from the tick gait selection "
+		+ "lands (pinned by test_a_v10_record_is_refused_with_a_reason). "
+		+ "It was 10 as of story 6-3a (AC 4) -- an INTENT SHAPE change, the tenth InputIntent "
 		+ "field `card_activate`, which no v9 record carries (pinned by "
 		+ "test_a_v9_record_without_card_activate_is_refused_with_a_reason). "
 		+ "It was 9 as of story 6-2 (AC 16) -- a NEW CAPTURE CHANNEL, the fifth content "
@@ -538,6 +544,36 @@ func test_a_v9_record_without_card_activate_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_3A_PATH)
 
 
+## Story 6-7 (AC 15): A v10 RECORD IS REFUSED WITH A REASON, NO SHIM -- but on the SIMPLER
+## `test_a_record_whose_format_version_is_unknown_is_refused_with_a_reason` shape (only the
+## version FIELD is rewritten, the body left otherwise intact), not the v8/v9 stripped-content
+## shape, because the round-trip SHAPE forces no bump here (`&"run"` walks the existing `held`
+## dictionary like every prior held key, `6-7/R12`) -- there is no per-field strip to rehearse.
+##
+## THIS PROVES ONLY THE VERSION-REFUSAL HALF (AC 15's correction), DELIBERATELY: a relabelled-at-
+## v11 body missing `run`/`walk_speed` loads WITHOUT complaint today -- `REQUIRED_INTENT_FIELDS`
+## was never asked to cover `run` (a `held` dictionary key, round-tripped as a whole dictionary) or
+## `walk_speed` (a config value `_rebuilt` sets only if present) -- so this test does not, and must
+## not, also assert a field-strip refusal the way the v8/v9 tests above do.
+func test_a_v10_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_7_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_7_PATH, 10)
+	var refused := RecordFile.load_record(PRE_6_7_PATH)
+	assert_null(refused["record"],
+		"a v10 record is REFUSED -- it carries no `run` held key and no `walk_speed` value, and "
+		+ "would replay every hero at speed 0 from the tick gait selection lands")
+	assert_true(refused["error"].contains("10"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_7_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_7_PATH)["record"],
+		"restoring the version makes the SAME file load again — the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_7_PATH)
+
+
 ## AC 5's neighbours: a file that is not a record at all is refused the same way, and a record
 ## that never completed match start is refused AT THE WRITE, so a malformed file cannot exist to
 ## be loaded later. Both are reasons, never crashes — a save is an operator action.
@@ -829,10 +865,11 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 10,
+	assert_eq(RecordFile.FORMAT_VERSION, 11,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 10 (5-2's colours channel, 6-1's mode ② hold semantics, "
-		+ "6-2's pitch-cost channel, then 6-3a's `card_activate` intent field), which is a different "
+		+ "version has since moved to 11 (5-2's colours channel, 6-1's mode ② hold semantics, "
+		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, then 6-7's silent-divergence "
+		+ "bump for `run`/`walk_speed`), which is a different "
 		+ "story's bump and does not weaken 5-1a's own claim: what this asserts is that the number "
 		+ "is whatever the last DELIBERATE bump set it to, and that 5-1a was not one")
 	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:
@@ -1155,6 +1192,9 @@ func _config() -> BalanceConfig:
 	var c := BalanceConfig.new()
 	c.max_hp = 100.0
 	c.move_speed = MOVE_SPEED
+	# Story 6-7 (`6-7/R11`): authored EQUAL TO MOVE_SPEED -- no call site here presses `&"run"`,
+	# so gait is a no-op and move_speed's round-trip assertions hold unchanged.
+	c.walk_speed = MOVE_SPEED
 	c.max_stamina = 30.0
 	c.stamina_regen_per_second = 60.0
 	c.stamina_regen_delay_seconds = 2.0 / 60.0
@@ -1214,6 +1254,9 @@ func _ranged_kind() -> UnitKindProfile:
 func _retuned_config() -> BalanceConfig:
 	var c := _config()
 	c.move_speed = RETUNED_MOVE_SPEED
+	# Story 6-7 (Fact M5(d)): retune walk_speed alongside move_speed, unaffected by (a) but still
+	# needed for consistency with this file's own mid-run retune.
+	c.walk_speed = RETUNED_MOVE_SPEED
 	return c
 
 

@@ -41,10 +41,15 @@ func _physics_process(_delta: float) -> bool:
 	# Press AFTER the tree is live (pressing in _initialize races the input system).
 	if _frames == 5:
 		Input.action_press(&"p1_move_right")
+		# Story 6-7 (AC 1/AC 6): MOVE_SPEED is the RUN speed as of this story -- press the run key
+		# too (Task 6(d)), matching the delivered default two-keyboard config, or the hero would
+		# move at the authored walk_speed (2.5) instead and this assertion would fail.
+		Input.action_press(&"p1_run")
 		_x0 = _p1.global_position.x
 		_z0 = _p1.global_position.z
 	if _frames >= 35:
 		Input.action_release(&"p1_move_right")
+		Input.action_release(&"p1_run")
 		var dx := _p1.global_position.x - _x0
 		var actor_velocity := _p1.velocity  # set by HeroActor.drive from HeroState.velocity
 		var travelled := Vector2(dx, _p1.global_position.z - _z0).length()

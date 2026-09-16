@@ -480,6 +480,10 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
 	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
 	"p1_move_down", "p1_move_left", "p1_move_right", "p1_move_up", "p1_roll",
+	# Story 6-7 (AC 3): `p1_run`/`p2_run` JOIN the list -- the ONE `project.godot` edit this story
+	# makes (`p1_run` = Space, `p2_run` = NUMPAD 0, `6-7/R18`), on the same `3-0c/R11` pin
+	# discipline: the story that ships the consumer is the story that moves the list.
+	"p1_run",
 	"p2_attack", "p2_block", "p2_card_1", "p2_card_2", "p2_card_3", "p2_card_4",
 	# Story 5-7 (AC 13): `p1_cast_unblockable` (5-3) and `p2_cast_defense` (5-5) LEAVE this list,
 	# because this is the story that retires their consumers -- the pad's B and X confirm modes ②
@@ -489,6 +493,7 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	# so the set only shrinks.
 	"p2_cast_confirm", "p2_cast_mode", "p2_debug_reset",
 	"p2_move_down", "p2_move_left", "p2_move_right", "p2_move_up", "p2_roll",
+	"p2_run",
 ]
 
 

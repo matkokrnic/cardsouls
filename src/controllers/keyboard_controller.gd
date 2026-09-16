@@ -10,7 +10,7 @@ extends Controller
 ## Intent keys are PREFIX-FREE (story 1-3): the state layer reads &"attack" / &"block" /
 ## &"roll" and never knows which player slot or Input Map action produced them. The
 ## p1_/p2_ prefix is this controller's PRIVATE mapping to the Input Map.
-const INTENT_ACTIONS: Array[StringName] = [&"attack", &"block", &"roll"]
+const INTENT_ACTIONS: Array[StringName] = [&"attack", &"block", &"roll", &"run"]
 
 ## Story 3-5a (AC 1): the hand size this scheme binds keys for. PRESENTATION-LOCAL CONSTANT, the
 ## HudRoot card-row precedent (2-5/R1) — the hand is four at all times per the GDD, and reading

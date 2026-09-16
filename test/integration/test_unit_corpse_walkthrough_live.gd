@@ -226,11 +226,17 @@ func _run_stage() -> void:
 		# fixed this pressed `p1_move_right`; test_camera_relative.gd is the file that pins the new
 		# mapping end-to-end.
 				Input.action_press(&"p1_move_up")
+				# Story 6-7 (Task 6(d) shape): also hold `p1_run` -- MOVE_SPEED is now the RUN speed,
+				# and DRIVE_FRAMES/OBSTACLE_GAP/the margins below are all sized against it (the
+				# "~3.3 units of travel" comment at DRIVE_FRAMES's declaration). Without this the
+				# hero WALKS at half that speed and both this stage's and stage 2's probes under-run.
+				Input.action_press(&"p1_run")
 			# Re-parked every frame: the friendly unit is walking toward its own target, and an
 			# obstacle that wandered off would make "blocked" unfalsifiable.
 			live.global_position = Vector3(_obstacle_x, 0.0, hero.global_position.z)
 			if elapsed >= DRIVE_FRAMES:
 				Input.action_release(&"p1_move_up")
+				Input.action_release(&"p1_run")
 				_live_probe_dx = hero.global_position.x - _obstacle_x
 				_blocked_by_live = _live_probe_dx < -BLOCKED_MARGIN
 				if not _blocked_by_live:
@@ -249,8 +255,11 @@ func _run_stage() -> void:
 				_obstacle_x = hero.global_position.x + OBSTACLE_GAP
 				corpse.global_position = Vector3(_obstacle_x, 0.0, hero.global_position.z)
 				Input.action_press(&"p1_move_up")
+				# Story 6-7 (Task 6(d) shape): also hold `p1_run` -- see stage 1's identical note.
+				Input.action_press(&"p1_run")
 			if elapsed >= DRIVE_FRAMES:
 				Input.action_release(&"p1_move_up")
+				Input.action_release(&"p1_run")
 				_corpse_probe_dx = hero.global_position.x - _obstacle_x
 				_passed_corpse = _corpse_probe_dx > PAST_MARGIN
 				if not _passed_corpse:

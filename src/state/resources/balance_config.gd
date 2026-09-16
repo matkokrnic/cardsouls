@@ -14,6 +14,9 @@ extends Resource
 @export_group("Hero")
 @export var max_hp: float = 0.0
 @export var move_speed: float = 0.0
+## Story 6-7 (AC 1): the WALK gait's speed, the two-gait system's slower default. `move_speed`
+## above is unrenamed and becomes "the run speed" (Dev Notes: the rename-avoidance reasoning).
+@export var walk_speed: float = 0.0
 
 @export_group("Stamina")
 @export var max_stamina: float = 0.0
@@ -21,6 +24,14 @@ extends Resource
 @export var stamina_regen_delay_seconds: float = 0.0
 @export var roll_stamina_cost: float = 0.0
 @export var deflect_stamina_cost: float = 0.0
+## Story 6-7 (AC 1): the RUN gait's per-second stamina cost while actually running (`6-7/R13`'s
+## predicate). Converted once to `BalanceTicks.run_stamina_drain_per_tick` (AC 2), the
+## `stamina_regen_per_tick` precedent verbatim.
+@export var run_stamina_drain_per_second: float = 0.0
+## Story 6-7 (AC 1/AC 5): the R6 hysteresis latch's resume threshold, 0-100 scale (the
+## `attack_damage_percent_of_max_hp` convention). While the latch is set, RUN is refused until
+## current stamina is `>=` this percent of `max_stamina`.
+@export var run_resume_stamina_percent: float = 0.0
 ## Stamina-cost corrective pass (E3-RG/R2; OPEN decision (d) RESOLVED at DP/R2): the basic
 ## attack's per-swing cost — an ANTI-SPAM lever, not an economy constraint (melee stays the
 ## 1-5 mana faucet). Charged per SWING, so a chain of N costs N x this. Spent at the step-3
@@ -47,6 +58,12 @@ extends Resource
 ## value, not a missing one — exempt from the >0 authoring audit with that reason); the
 ## Pass 2 migration authored all three at the flat field's 0.0 so live feel is unchanged
 ## by the seat itself, leaving the per-phase VALUES to this story's AC8 tuning verdict.
+## Story 6-7 (review finding 6, advisory): ATTACKING is excluded from the "actually running"
+## predicate (`6-7/R17`), so an attacking hero always takes the WALK branch in
+## `_resolve_movement` — these three multipliers scale `walk_speed`, never `move_speed`, even
+## when the hero was running the tick before the swing started. Inert today (all three are
+## 0.0), but a future non-zero retune gets half the in-swing steering this scaled from run
+## speed would imply. No AC rules it either way; named here so a retune reads the true base.
 @export var attack_windup_move_speed_multiplier: float = 0.0
 @export var attack_active_move_speed_multiplier: float = 0.0
 @export var attack_recovery_move_speed_multiplier: float = 0.0

@@ -45,9 +45,10 @@ extends Resource
 @export var lock_button: JoyButton = JOY_BUTTON_RIGHT_STICK       # R3 - re-lock onto the opposing hero
 
 ## Story 4-6 (AC 10): how far the right stick must be pushed before it counts as a FLICK, as a
-## fraction of full deflection. AUTHORED here rather than hardcoded for the reason `deadzone` and
-## `normalize_move_magnitude` are: it is input FEEL, it belongs to the load-once controller-owned
-## profile, and it is deliberately OUTSIDE BalanceConfig and the X3 hot-reload path (2-2/R2).
+## fraction of full deflection. AUTHORED here rather than hardcoded for the reason `deadzone` is
+## (`normalize_move_magnitude`, its former live sibling, was retired by story 6-7 AC 12 -- see
+## below): it is input FEEL, it belongs to the load-once controller-owned profile, and it is
+## deliberately OUTSIDE BalanceConfig and the X3 hot-reload path (2-2/R2).
 ##
 ## DELIBERATELY WELL ABOVE `deadzone`. The deadzone answers "is the stick being touched"; this
 ## answers "did the player mean to switch targets", and a retarget triggered by a resting thumb is
@@ -55,15 +56,11 @@ extends Resource
 ## this is the threshold the stick must CROSS, not one it must be held past.
 @export var flick_threshold: float = 0.7
 
-## Story 2-6 (AC 4, 2-6/R8): variable-analog-magnitude toggle. TRUE (shipped default) = today's
-## behaviour — above the deadzone the stick vector is normalized to unit length, so a partial
-## deflection is binary-speed movement (keyboard parity, 2-2/R5). FALSE = the stick's actual
-## magnitude passes through (clamped to length 1.0), so a partial deflection yields a partial
-## move_dir magnitude. An AUTHORED field on this same load-once resource that already owns the
-## mapping and deadzone — NOT a FeatureFlags member (2-6/R4): replay stays safe because the
-## resulting magnitude is folded into the recorded InputIntent.move_dir, never a separate flag.
-## The debug instrument panel flips this IN MEMORY on the shared instance only — never persisted.
-@export var normalize_move_magnitude: bool = true
+## RETIRED by story 6-7 (AC 12): open decision (c), variable analog magnitude, is CLOSED --
+## `6-7/R8`'s ruling is "two gaits are the answer to the question (c) was asking," gait is now a
+## discrete authored run-key choice (walk/run), never a function of stick deflection.
+## `normalize_move_magnitude` (2-6 AC 4, 2-6/R8) is gone; `resolve_move_dir` always normalizes
+## above the deadzone again (the pre-2-6 behaviour, keyboard parity).
 
 ## Story 5-0b (AC 1): the held modifier that enters card-select (cast) mode, mirroring
 ## KeyboardController's `cast_mode` action shape on a pad. L3 (the left-stick click) on the

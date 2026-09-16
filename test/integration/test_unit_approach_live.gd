@@ -144,7 +144,10 @@ func _physics_process(_delta: float) -> bool:
 		_stop_distance = kind.stop_distance
 		# The hero's OWN authored move speed, needed only to size the WALK window (`4-3/R22`) --
 		# distinct from `_speed` (`unit_move_speed`), which the unit's approach uses.
-		_hero_speed = maxf(_state.balance.move_speed, 0.0001)
+		# Story 6-7 (Task 6(d)): re-derived from `walk_speed`, not `move_speed` (the RUN speed as
+		# of this story) -- this file never presses `p1_run`, so the hero actually approaches at
+		# the WALK-gated speed, and sizing the window from the run speed would under-run it.
+		_hero_speed = maxf(_state.balance.walk_speed, 0.0001)
 		_ticks_per_second = maxf(Engine.physics_ticks_per_second, 1.0)
 		if _speed <= 0.0 or _stop_distance <= 0.0:
 			print("authored balance ships the mechanic invisible: unit_move_speed=%f "
