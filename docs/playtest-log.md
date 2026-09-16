@@ -434,3 +434,24 @@ test_unit_approach_live.gd reads walk_speed live and follows automatically.
 - Tempo: probao hod 2.5 / trk 5.5, ostaje hod 2.2 / trk 5.5.
 - Hod u bloku klizi. Radije bi da ne klizi, ali nema animacije; kasnije.
 - fps uredan.
+
+## 2026-09-17 -- 6-8-camera-freedom live smoke (Tier A)
+
+Operator: Matko. Two configurations, one operator:
+- Config A: `slot_controller_kinds = [0, 3]` in `src/main/main.tscn` (P1 keyboard, P2 pad). Pad-driven camera items played on P2's pad. Flip reverted after the session.
+- Config B: shipped default (both slots keyboard), for keyboard parity and the unlocked block check.
+
+Deviation from the story's "two pads" Live Smoke wording: single operator; keyboard parity needed both keyboard slots anyway.
+
+| # | Item | Result |
+|---|------|--------|
+| 1 | R3 click: hero lock -> unlock (marker hides); unlocked -> locks hero; minion/totem lock -> back to hero | PASS |
+| 2 | Unlocked hero: faces movement; neutral roll goes forward; no turn on stick release; camera rotation alone does not turn the hero | PASS |
+| 3 | Unlocked camera: stick right turns view right; unlock keeps heading; no recenter; relock eases back; rate 3.0 deg/tick (180 deg/s) accepted as shipped | PASS |
+| 4 | Flick direction while locked: first right flick = nearest target on the right, first left flick = nearest on the left | PASS |
+| 5 | 360 cycling: target behind the hero reachable; order wraps; one full sweep visits every target exactly once, no ping-pong | PASS |
+| 6 | Unlocked camera near the arena wall | Finding, not a blocker: the camera ignores the wall. Accepted as the intended behaviour, no follow-up. |
+| 7 | Keyboard parity, both slots, all five actions (P1 T / F G / Z C, P2 Numpad 5 / Numpad 4 6 / Numpad 1 3), P2 numpad with NumLock on and off | PASS |
+| 8 | Block while unlocked: turned away -> hit lands; facing the attacker -> blocked | PASS |
+
+Verdict: smoke PASS 8/8, no retune from this session.

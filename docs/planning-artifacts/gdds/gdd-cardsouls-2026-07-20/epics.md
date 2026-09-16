@@ -228,7 +228,7 @@ and tier may be raised, never lowered.
    and drain-per-second are authored here.
 8. `6-7b-locomotion-presentation` (**Tier B**) — walk and turn-in-place animations, the presentation
    half of `6-7`.
-9. `6-8-camera-freedom` (**Tier B**, at risk of Tier A) — lock-on cycling reaches ALL live targets
+9. `6-8-camera-freedom` (**Tier A**, raised at the 2026-09-16 scope talk) — lock-on cycling reaches ALL live targets
    including those behind the hero (full 360, not a front arc), and the camera can be unlocked and
    manually rotated when not locked on.
 10. `6-6-defense-presentation` (**Tier B**, at risk of Tier A) — defence animation and sound synced

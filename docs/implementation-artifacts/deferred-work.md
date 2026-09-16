@@ -279,7 +279,7 @@ these ids were previously recorded anywhere in the repo.
 | M2 | `_46-review.md:227` | The flick edge is magnitude-only, so a rim sweep never re-fires | (b) |
 | M3 | `_46-review.md:236` | A malformed retarget address is logged and then acted on, and lands in a HASHED key | `5-1a-intent-hardening` (`E5-P/R6`) |
 | M4 | `_46-review.md:262` | `UNHASHED_CROSS_TICK_MEMBERS` counts arguments a human maintains, not entries a machine finds | (d) |
-| M5 | `_46-review.md:276` | Keyboard slots can no longer face anything but the opposing hero | (b) |
+| M5 | `_46-review.md:276` | Keyboard slots can no longer face anything but the opposing hero | CLOSED by `6-8-camera-freedom` AC 23 -- keyboard parity implements lock/unlock, camera-rotate-left/right and cycle-left/right on the ratified key table |
 | L4 | `_46-review.md:301` | `best_candidate`'s tie-break uses exact float equality | (d) |
 | L5 | `_46-review.md:307` | Reconnecting a pad with R3 held fires a spurious relock | (b) |
 | L6 | `_46-review.md:314` | Flick candidates are unprojected against LAST tick's camera | (b) |
@@ -313,6 +313,14 @@ landed as `c5bad2a` -- not open, not listed above.)
 One further 4-6a deferral is already in the repo, not repeated here: `sprint-status.yaml:121` (the
 lock marker drifts slightly outside the minion silhouette during the walk gait), matching the
 operator's own 1.9. playtest note.
+
+### 6-8 (`_6-8-review.md`) -- 3 open, deferred hardening
+
+| id | Source | Content | Disposition |
+|---|---|---|---|
+| M1 | `_6-8-review.md:21` | No upper bound or NaN guard on the free-yaw rate or axis (`camera_rig.gd:79,159-162`); a NaN permanently corrupts rig yaw, and relock does not recover it | deferred hardening |
+| M2 | `_6-8-review.md:57` | `_target_world_position` resolves any non-zero slot to P2's hero (`match_runner.gd:1630-1633`); not reachable today, since both lock callers guard on `is_locked()` | deferred hardening |
+| L2 | `_6-8-review.md:107` | `resolve_camera_rotate` has no guard against a negative authored deadzone (`gamepad_controller.gd:283-289`) | deferred hardening |
 
 ## Named gaps without an owner (recorded at E4 close-out, 2026-09-01)
 
