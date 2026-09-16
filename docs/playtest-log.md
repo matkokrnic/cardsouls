@@ -396,3 +396,31 @@ Open for the playtest block, NOT for this story:
   shortfall is a named deferral with no owner (6-3b/R1).
 - Whether the 20-second fizzle window is the right length once pitches are being used
   for real rather than demonstrated.
+
+## 2026-09-16 — Story 6-7 locomotion gaits, live smoke (config [0, 3]: P1 keyboard, P2 pad)
+
+Deviation from 6-7/R19's two-pad procedure, named: single operator; every pad step coverable on
+one pad; the keyboard half gave p1_run (Space) a live check a two-pad run would not have.
+
+1. Walk default — PASS. No button: visibly slower, minion closes distance.
+1a. Keyboard split — PASS. Space+direction runs, without it walks; same drain, same threshold.
+2. Run on held A — PASS. Old speed, bar drains ~5 s full-to-empty, regen suppressed while running.
+3. Empty + threshold — PASS. Drops to walk at zero; holding A does NOT resume until ~20%, then
+   resumes by itself, no re-press.
+4. Release — PASS. Regen starts only after ~0.8 s.
+5. Actions out of run — PASS. Attack (RB) rooted and normal, run self-resumes on exit with A
+   still held; same for roll (B).
+6. Block — PASS. LB+stick+A: walk speed, bar does NOT drain.
+7. L3 chord — PASS. L3+A confirms BASIC, no running; release L3, hold A: runs.
+8. Task 10 — REPRODUCES, wider than predicted: the last-clicked debug-panel button keeps keyboard
+   focus and re-fires on Space, whichever it was (not only ReloadBalance). Fix per 6-7/R20:
+   FOCUS_NONE on all three panel buttons.
+9. FPS — stable ~60 throughout.
+
+FEEL VERDICT (operator, retune candidate, NOT this story): walk is too fast and run is too slow —
+the gap between the gaits should widen. Both are authored balance fields (walk_speed 2.5,
+move_speed 5.0 in data/balance/balance_config.tres), so this is a one-line-per-field .tres tweak
+foldable into the NEXT story's dev pass as a minor item. NOTE for whoever does it:
+test/integration/test_hero_movement.gd pins MOVE_SPEED := 5.0 as a local constant and reads the
+authored .tres, so a run-speed change must update that constant in the same pass;
+test_unit_approach_live.gd reads walk_speed live and follows automatically.
