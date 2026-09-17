@@ -182,9 +182,12 @@ func test_every_match_state_intake_has_a_capture_channel() -> void:
 		+ "take parameters and still carry none (functions of their arguments, returning a value, "
 		+ "writing nothing) — none is an intake, and a SIXTH name appearing here is a real intake "
 		+ "escaping its capture channel")
-	assert_eq(egress, ["debug_window_ticks_remaining", "to_snapshot"],
-		"to_snapshot() and debug_window_ticks_remaining() are EGRESS, not intake — they return "
-		+ "state and receive none")
+	# Story 6-6a review (D2): `hit_landed_was_blocked()` is the THIRD egress, updated here with intent after
+	# this assertion went RED on it. It takes nothing and returns whether the `hit_landed` currently being
+	# emitted took the block branch -- a fact the tick already decided, read by the runner's rig closure.
+	assert_eq(egress, ["debug_window_ticks_remaining", "hit_landed_was_blocked", "to_snapshot"],
+		"to_snapshot(), debug_window_ticks_remaining() and hit_landed_was_blocked() are EGRESS, not "
+		+ "intake — they return state and receive none")
 	var channels := _recorder_method_names()
 	var uncovered: Array[String] = []
 	for intake in intakes:

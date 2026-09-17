@@ -295,6 +295,10 @@ const PER_TICK: Array[String] = [
 	# at step 6b of the SAME advance(), with no return between the two, so no tick can observe a previous
 	# tick's value. Not cross-tick state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"match_state._landing_package_pending",
+	# Story 6-6a review (D2): the "this `hit_landed` was blocked" fact, raised and lowered around ONE queued
+	# emission inside the drain -- false at every point a tick or a snapshot can observe. Not cross-tick
+	# state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"match_state._hit_landed_blocked",
 	"hero_state._queue", "hero_state._deflect_closed_this_tick",
 	"hero_state._roll_iframe_closed_this_tick",
 	# Story 6-6a (AC 8): the get-up iframes' one-tick close grace, `_roll_iframe_closed_this_tick`'s twin.

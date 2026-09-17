@@ -213,6 +213,34 @@ func test_facing_arc_half_width_both_sides_of_the_boundary() -> void:
 	assert_eq(outside.p2.hero.get_hp(), 94.0, "just outside the half-arc: full damage")
 
 
+## Story 6-6a review (D2): `hit_landed_was_blocked()` answers, from INSIDE each `hit_landed` handler,
+## whether THAT hit took the block branch -- so `block_impact` can be chosen for blocked hits only. A hit
+## on a blocker from BEHIND (the facing arc fails, full damage) is on a BLOCKING hero but NOT blocked, and
+## must read false; so must a hit on a hero that is not blocking at all. Outside an emission it is false.
+##
+## MUTATION PROOF: raise `blocked` on the BLOCKING test alone (dropping the `_is_facing` half) and the
+## back-facing row reads true.
+func test_hit_landed_reports_whether_that_hit_was_blocked() -> void:
+	var rows := [
+		["in the arc, past the grace tick", [[1, 10]], Vector2.DOWN, 1.5, true],
+		["from behind, while blocking", [[1, 10]], Vector2.UP, 6.0, false],
+		["not blocking at all", [], Vector2.DOWN, 6.0, false],
+	]
+	for row: Array in rows:
+		var ms := _make_match()
+		var seen: Array = []
+		# The handler captures `ms` and sits in `ms`'s own connection list -- a reference cycle -- so it is
+		# disconnected once the play is over.
+		var record := func(_a: int, _t: int, damage: float, _hp: float) -> void:
+			seen.append([damage, ms.hit_landed_was_blocked()])
+		ms.hit_landed.connect(record)
+		_play(ms, 6, {1: [&"attack"]}, row[1], {6: [[0, 1, 0, row[2]]]})
+		ms.hit_landed.disconnect(record)
+		assert_eq(seen, [[row[3], row[4]]],
+			"%s: one hit_landed at %.1f damage, read as blocked == %s" % [row[0], row[3], row[4]])
+		assert_false(ms.hit_landed_was_blocked(), "%s: ...and false again once the emission is over" % row[0])
+
+
 ## Story 6-8 (AC 5): WHILE UNLOCKED THE BLOCK ARC CAN BE DODGED BY TURNING AWAY again, because
 ## `_is_facing` reads the input-derived facing rather than one pinned to the lock. The attack comes
 ## from BEHIND P2's resting facing (DOWN; fact dir UP) in all three matches, and P2 is pushed a lock

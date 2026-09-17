@@ -356,6 +356,21 @@ var _iframe_open_at_step3: Array[bool] = [false, false]
 ## verbatim, which is why it is EXCLUDED from to_snapshot() with no determinism or replay hole.
 var _landing_package_pending: Array[bool] = [false, false]
 
+## Story 6-6a review (D2, operator ruling): WAS THE `hit_landed` BEING EMITTED RIGHT NOW A BLOCKED HIT --
+## the step-4 non-deflect block branch, `block_damage_multiplier` applied, the `_is_facing` arc passed?
+## A presentation consumer cannot tell that from the payload (a full-damage hit from outside the arc on a
+## BLOCKING hero looks the same), and the payload stays at four (`TelegraphController.on_hit_landed`'s
+## fixed arity), so the runner reads this beside it on the `stun_flavor` shape.
+##
+## SET ONLY BY `_emit_hit_landed`, around the one emit it wraps, and false again before it returns. So it
+## describes the SAME hit the consumer is handling off the FIFO drain -- never a live or per-tick summary,
+## which would be wrong the moment two hits on one hero share a tick (one blocked, one from behind).
+##
+## PER-TICK, NEVER CROSS-TICK: written and cleared inside a single queued emission, false at every point
+## `advance()` or `to_snapshot()` can observe it. EXCLUDED from to_snapshot() on the `_queue` /
+## `_landing_package_pending` classification; it decides nothing in state.
+var _hit_landed_blocked := false
+
 ## Story 3-3 (AC 2): the injected deck COMPOSITION — plain StringName ids, retained so the
 ## step-6 deal seat can lay a fresh pile down on BOTH of its occasions (match start and debug
 ## reset) without a discard pile to recover cards from. EXCLUDED from to_snapshot() for the
@@ -1063,6 +1078,21 @@ func drain_signals() -> void:
 	_queue.drain()
 
 
+## Story 6-6a review (D2): true only while a BLOCKED hit's `hit_landed` is being emitted -- see
+## `_hit_landed_blocked`. A `hit_landed` consumer calls this from inside its handler.
+func hit_landed_was_blocked() -> bool:
+	return _hit_landed_blocked
+
+
+## Story 6-6a review (D2): the step-4 hero-contact `hit_landed`, emitted with `_hit_landed_blocked` raised
+## for exactly its own duration. The signal and its four-argument payload are unchanged.
+func _emit_hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp: float,
+		blocked: bool) -> void:
+	_hit_landed_blocked = blocked
+	hit_landed.emit(attacker_slot, target_slot, damage, target_hp)
+	_hit_landed_blocked = false
+
+
 func to_snapshot() -> Dictionary:
 	return {
 		"tick": _tick,
@@ -1747,6 +1777,7 @@ func _resolve_contacts() -> Array[int]:
 		# totem's shot would deal the HERO's own swing percentage — a number belonging to a different
 		# attacker entirely — and the totem's authored damage would decide nothing.
 		var damage := _damage_against_hero(attacker, attacker_index, target)
+		var blocked := false
 		if target.hero.action_state == HeroState.ActionState.BLOCKING \
 				and _is_facing(target.hero, fact["dir"]):
 			if target.hero.is_deflect_window_open() and target.stamina.spend(
@@ -1814,6 +1845,7 @@ func _resolve_contacts() -> Array[int]:
 					attacker.stamina.add(-balance.deflect_stamina_penalty)
 				continue
 			damage *= balance.block_damage_multiplier
+			blocked = true
 		target.hero.take_damage(damage)
 		# Story 4-3b (AC 8, `4-3b/R5`): `hit_landed` IS emitted when a UNIT damages a HERO — the hero
 		# is really hurt, so the telegraph flash and sting on that hero are correct. A DELIBERATE
@@ -1821,8 +1853,11 @@ func _resolve_contacts() -> Array[int]:
 		# does not re-litigate it as an inconsistency: the two are not the same rule. Payload
 		# UNCHANGED per AC 3 — the bare-int attacker slot is enough, because the consumer gates on the
 		# TARGET (telegraph_controller.gd underscores the attacker).
-		_queue.push(hit_landed.emit.bind(
-			int(fact["attacker"]), int(fact["target"]), damage, target.hero.get_hp()))
+		#
+		# Story 6-6a review (D2): pushed through `_emit_hit_landed` so the drain can say whether THIS hit
+		# took the block branch above -- the payload itself is still the unchanged four.
+		_queue.push(_emit_hit_landed.bind(
+			int(fact["attacker"]), int(fact["target"]), damage, target.hero.get_hp(), blocked))
 		# Story 4-3b (AC 7, `4-3b/R4`): A UNIT-SOURCED CONFIRMATION GENERATES NO MANA, and THIS LINE
 		# is the whole mechanism — the `4-3a/R3` unit-TARGET precedent applied to the unit-ATTACKER
 		# side. `_generate_mana` awards per entry in the list this function returns, so keeping a
