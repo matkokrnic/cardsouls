@@ -1131,8 +1131,13 @@ func test_knockdown_from_idle() -> void:
 ## ATTACKING, so the orphaned windows cannot gather a fact from the downed hero.
 func test_knockdown_from_attacking() -> void:
 	var ms := _kd_match()
+	# 6-6a review: the precondition is checked ON the landing tick (the rolling row's shape), so a
+	# shortened fixture windup cannot quietly turn this row into a second IDLE row.
+	var check := func() -> void:
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.ATTACKING,
+			"precondition: still mid-swing on the landing tick")
 	_land(ms, 0, Enums.CardColor.RED, func(t: int) -> InputIntent:
-		return _press(&"attack") if t == 2 else InputIntent.new())
+		return _press(&"attack") if t == 2 else InputIntent.new(), check)
 	assert_eq(ms.p2.hero.attack_index, 0, "precondition: the victim did start a swing")
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "ATTACKING -> knocked down")
 	assert_false(ms.p2.hero.is_hitbox_active(), "...and the abandoned swing reports no live hitbox")
@@ -1177,6 +1182,7 @@ func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() ->
 		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.CHARGING,
 			"precondition: the victim is mid-chargeup on the landing tick")
 		ms._charge_reach[1] = MatchState.CONTACT_CHARGE_REACH_INSIDE
+		ms._charge_contact_dirs[1] = Vector2(0.6, 0.8)
 	_land(ms, 0, Enums.CardColor.RED, victim_at, before)
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "CHARGING -> knocked down")
 	assert_false(ms.p2.charge_window.is_running, "the chargeup window is cleared...")
@@ -1184,6 +1190,8 @@ func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() ->
 	assert_eq(ms.p2.charge_color, PlayerState.NO_TELEGRAPH_COLOR, "...and the colour, as one fact")
 	assert_eq(ms._charge_reach[1], MatchState.CONTACT_CHARGE_REACH_INSIDE,
 		"`_charge_reach` is NOT part of the teardown -- cleared with the verdict, never on its own")
+	assert_eq(ms._charge_contact_dirs[1], Vector2(0.6, 0.8),
+		"...and neither is `_charge_contact_dirs` (6-6a review: AC 5 names both)")
 	assert_eq(ms.p2.stamina.get_current(), MAX_STAMINA - UNBLOCKABLE_COST, "the stamina stays spent")
 	assert_eq(ms.p2.discard.size(), 1, "...and the card stays in the discard")
 	for _t in CHARGEUP_TICKS:
@@ -1365,19 +1373,29 @@ func test_the_debug_reset_clears_an_armed_get_up_iframe_window() -> void:
 # --- AC 12: the landing package's internal order ---------------------------------------------------------
 
 ## AC 12: the knockdown write precedes its `hit_landed` push on the ONE shared queue, so a consumer that
-## mirrors the action state has already left BLOCKING when it reads the hit.
+## mirrors the action state has already left BLOCKING when it reads the hit. Asserted on BOTH victim seats
+## (6-6a review): AC 12 pins the order "on both seats", through the one deferred package loop.
+## (Damage-before-write is the lethal test's pin: the `is_alive()` gate reads the post-damage hp.)
 func test_the_knockdown_write_precedes_its_hit_landed_on_the_shared_queue() -> void:
-	var ms := _kd_match()
-	_advance(ms, InputIntent.new(), _press(&"block"))
-	var order: Array = []
-	ms.p2.hero.action_state_changed.connect(
-		func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
-			order.append("state %d->%d" % [previous, current]))
-	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: order.append("hit"))
-	_land(ms, 0, Enums.CardColor.RED, func(_t: int) -> InputIntent: return _held(&"block"))
-	assert_eq(order, ["state %d->%d" % [HeroState.ActionState.BLOCKING, HeroState.ActionState.STUNNED],
-			"hit"],
-		"damage, then the knockdown write, then `hit_landed` -- in that order on the drained queue")
+	for victim_slot: int in 2:
+		var ms := _kd_match()
+		var victim: PlayerState = ms.p1 if victim_slot == 0 else ms.p2
+		var block := _press(&"block")
+		if victim_slot == 0:
+			_advance(ms, block, InputIntent.new())
+		else:
+			_advance(ms, InputIntent.new(), block)
+		var order: Array = []
+		victim.hero.action_state_changed.connect(
+			func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
+				order.append("state %d->%d" % [previous, current]))
+		ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: order.append("hit"))
+		_land(ms, 1 - victim_slot, Enums.CardColor.RED,
+			func(_t: int) -> InputIntent: return _held(&"block"))
+		assert_eq(order, ["state %d->%d" % [HeroState.ActionState.BLOCKING, HeroState.ActionState.STUNNED],
+				"hit"],
+			"victim slot %d: the knockdown write, then `hit_landed` -- in that order on the drained queue"
+			% victim_slot)
 
 
 func _deck_contents() -> Array[StringName]:

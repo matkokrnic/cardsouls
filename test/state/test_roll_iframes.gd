@@ -101,6 +101,31 @@ func test_contact_during_running_iframe_is_dropped() -> void:
 	assert_eq(ms.p2.mana.get_current(), 0.0, "no mana on a dropped fact")
 
 
+## Story 6-6a review (AC 8): the GET-UP iframes register in the same step-4 fact drop, with the same
+## +1 grace tick -- `HeroState.is_iframe_open()` is the one predicate, so this is the roll pair above
+## replayed on the other window. Until this pin the melee half was covered only indirectly (the
+## predicate asserted true, and the unblockable dodge rung exercised). The window is started directly,
+## at the seat the knockdown's timer exit starts it (t1's step 3), so its timeline matches the roll's:
+## covered t2, grace t3, full damage t4.
+func test_a_contact_during_the_get_up_iframes_is_dropped_with_the_same_grace() -> void:
+	var ms := _make_match()
+	var hits: Array = []
+	_collect_hits(ms, hits)
+	_step(ms, null, _intent([&"attack"]))  # t1: P2 starts a swing
+	ms.p1.hero.get_up_iframe.start(2)
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	_step(ms)  # t2: get-up window running -> FACT DROP
+	assert_eq(ms.p1.hero.get_hp(), 100.0, "a contact inside the get-up iframes is dropped -- no damage")
+	assert_eq(ms.p2.mana.get_current(), 0.0, "...and no mana")
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	_step(ms)  # t3: window closed in this step 2 -> +1 grace -> still dropped
+	assert_eq(ms.p1.hero.get_hp(), 100.0, "the close+1 arrival is dropped by the get-up grace transient")
+	assert_eq(hits.size(), 0, "no hit_landed on either dropped fact")
+	ms.push_contact([1, -1], [0, -1], 0, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	_step(ms)  # t4: past the grace -> lands
+	assert_eq(ms.p1.hero.get_hp(), 94.0, "control: past the grace the same swing lands in full")
+
+
 ## ---- The negation boundary pair, SAME swing (1-9/R2 + the drop-not-register pin) --------
 ## A fact arriving on close+1 (t3 — the grace transient; physically the last iframe tick)
 ## NEGATES; a fact arriving on close+2 (t4) from the SAME swing deals FULL damage. The t4
