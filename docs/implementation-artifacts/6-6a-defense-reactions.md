@@ -4,7 +4,7 @@ baseline_commit: 6a88b78e2ff1cc9ae5c25fefe3d664f6173ee246
 
 # Story 6.6a: Defense Reactions
 
-Status: authored
+Status: ready-for-dev
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -269,7 +269,7 @@ separately:
    the golden's own script must be re-measured against it even though the fixture never reaches
    knockdown by construction (an unarmed window still needs to round-trip through the snapshot
    machinery cleanly). Separately, and now UPGRADED FROM CONDITIONAL TO EXPECTED by operator ruling
-   **R-PRESS** (AC 6): the dev pass almost certainly needs a deferred-write latch so a same-tick
+   **R-PRESS** (AC 6): the dev pass almost certainly needs a deferred-package latch so a same-tick
    knockdown write does not apply before the victim seat's own step-3 processing runs — the
    `_iframe_open_at_step3` precedent — and that latch, if it lands, is ALSO a new `src/state/` var
    owing a definite replay-identity bucket classification at implementation time. If the dev pass
@@ -329,9 +329,10 @@ this explicitly if `[3, 3]` is unavailable and skip the unreachable items rather
   `[0, 3]` as P2) in turn; confirm `stunned.fbx` plays and holds on the ATTACKER for each, distinct
   from the knockdown clip, and that the held pose does not look like a loop restarting.
 - **Block impact and exit blend (AC 12-13).** Hold block and take a non-deflected melee hit; confirm
-  `block_impact.fbx` plays, including on an unanswered unblockable landing on a blocking victim
-  (confirm knockdown presentation plays — `knockdown.fbx`, not `hit_react.fbx` — not a stale
-  `block_impact.fbx`). Enter and exit block
+  `block_impact.fbx` plays (confirmed on an ordinary non-deflected melee hit only). Separately, on an
+  unanswered unblockable landing on a blocking victim, confirm KNOCKDOWN presentation plays instead —
+  `knockdown.fbx`, not `hit_react.fbx`, and not a stale `block_impact.fbx` — matching AC 12. Enter and
+  exit block
   repeatedly; confirm ENTRY stays an instant, un-blended cut (per `3-0b/R23`) and EXIT is visibly
   softened by the blend (per `3-0b/R24`, this story's OQ 1 resolution) — record that this is the
   shipped shape, not the "enter and exit both blend" reading of the original AC text.
@@ -432,7 +433,8 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   mechanism must fire on BOTH triggers — a `STUNNED` entry (via the two closures above) AND a
   same-state escalation. The named candidate for the second trigger: since every knockdown arrives with
   a hit, re-check the stun flavor at `hit_landed` consumption, on the same FIFO drain that carries the
-  (possibly deferred) `STUNNED` write ahead of the `hit_landed` push (AC 6/AC 12) — comparing the
+  (possibly deferred) landing package, whose internal order keeps the `STUNNED` write ahead of the
+  `hit_landed` push (AC 6/AC 12) — comparing the
   running `stun.duration_ticks()` at that moment against the three
   known `BalanceTicks` constants (`deflect_stun_ticks`, `color_counter_stun_ticks`,
   `knockdown_stun_ticks`) and forwarding the matched reason as a widened argument, the same shape as
@@ -498,13 +500,16 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   still misfires on the unblockable path specifically: the ladder's unanswered tier ignores block
   (`:3306-3307`), so an unanswered unblockable landing on a BLOCKING victim would emit `hit_landed`
   while the mirror still reads `BLOCKING`, selecting a stale `block_impact.fbx` for what is really a
-  full-damage unblocked knockdown hit. FIX: push the AC 3 knockdown `STUNNED` write BEFORE the
-  `hit_landed` push in that specific branch, so the mirror has already advanced off `BLOCKING` by the
+  full-damage unblocked knockdown hit. FIX: the AC 3 knockdown `STUNNED` write precedes its
+  `hit_landed` push WITHIN the landing package (damage application, the knockdown write, and the
+  `hit_landed` push, internal order preserved), whether or not the package is deferred per the R-PRESS
+  latch, on both seats, so the mirror has already advanced off `BLOCKING` by the
   time clip selection runs — do NOT widen `hit_landed`'s payload to carry a "this was unblockable"
   flag (`TelegraphController.on_hit_landed` has fixed arity 4 + a bound slot,
   `telegraph_controller.gd:210`, bound at `match_runner.gd:506`, and widening breaks that call site).
   "Mirrored `_state`, never a live read" is the wording to carry forward verbatim into both the Dev
-  Notes here and the implementing Task.
+  Notes here and the implementing Task. To be explicit about the R-PRESS latch's scope (AC 6): its
+  unit of deferral is the WHOLE landing package, not the `STUNNED` write alone.
 
 - **FBX import.** Five new source clips sit untracked in `assets/characters/paladin/`
   (`hit_react.fbx`, `stunned.fbx`, `knockdown.fbx`, `get_up.fbx`, `block_impact.fbx`) — the asset
@@ -541,7 +546,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   AC 13. State-layer edits land in AC 3 (the knockdown write itself), AC 4 (the new authored
   `BalanceConfig`/`BalanceTicks` fields — `BC/R3`-isolated from the golden and unit suite, but still a
   `src/state/` addition, not presentation), AC 5 (the CHARGING-abandonment cleanup and the
-  STUNNED-escalation write), AC 6 (the simultaneous-trade fix and its possible latch), AC 7 (the
+  STUNNED-escalation write), AC 6 (the simultaneous-trade fix and its expected latch), AC 7 (the
   floor-rule guard) and AC 8 (the get-up-iframe `TimingWindow` addition and its arming). AC 9 (the
   reset exception) is also state-layer. The
   presentation half follows the `3-0a`/`5-0a`/`6-7b` split exactly: clip selection and hold/stretch
@@ -640,7 +645,8 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
    exactly such a same-state write (AC 5). The named candidate: since every knockdown arrives with a
    hit, re-check the stun flavor at `hit_landed` consumption (reading the forwarded reason/duration off
    the running `stun` window at that moment), on the same FIFO drain that also carries the (possibly
-   deferred, AC 6/AC 12) `STUNNED` write ahead of the `hit_landed` push. Duration-threshold comparison
+   deferred, AC 6/AC 12) landing package, whose internal order keeps the `STUNNED` write ahead of the
+   `hit_landed` push. Duration-threshold comparison
    in ticks (recommended) vs. some other widened-argument shape achieving the same "no new hashed
    field, no new seam" property — exact wiring is a dev-pass call within the sanctioned widening-arity
    constraint; the escalation-visibility test (AC 5) is REQUIRED either way.
@@ -656,7 +662,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 8. **The AC 6 same-tick press/knockdown ordering fix's exact mechanism** — operator ruling
    **R-PRESS** pins the OUTCOME (seat-symmetric: the press resolves first, the knockdown write then
    overwrites) but leaves the MECHANISM a dev-pass choice: an ordering/scheduling change needing no
-   new storage, vs. a deferred-write latch (a new `src/state/` var owing its own replay-identity
+   new storage, vs. a deferred-package latch (a new `src/state/` var owing its own replay-identity
    bucket classification, the `_iframe_open_at_step3` precedent). Golden Prediction cause 4's latch
    clause is now EXPECTED rather than conditional — if the dev pass instead finds a no-new-storage
    ordering fix, that expectation simply discharges and cause 4 is closed out as such.
@@ -759,6 +765,8 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 | 2026-09-17 | Story authored via gds-create-story from the board split of `6-6-defense-presentation` (operator ruling, scope talk 2026-09-17). Status `authored`, awaiting operator review before promotion to `ready-for-dev`. | Claude Sonnet 5 |
 | 2026-09-17 | Readiness gate 1 findings B1-B10 applied, with operator rulings on B3 (simultaneous-trade seat-symmetry), B4 (CHARGING knockdown abandons the chargeup), B5 (floor rule, no knockdown upper bound, get-up iframes), B7 (hit_react state-scope, unvetoed), B9 (no get_up/iframe on debug reset, unvetoed). Acceptance Criteria rewritten and expanded 11 -> 13 (merges per N4, new ACs for B3-B9); Golden Prediction cause 1 corrected (target-side write, not a replacement of the caster's IDLE exit) and cause 4 rewritten (a definite new get-up-iframe `TimingWindow`, a conditional new var for a B3 latch); fixture-coverage flag (OQ 4) and block-entry OQ (OQ 1) resolved; Live Smoke rewritten for the `[0, 3]` deviation's reachable subset and the new trade/floor items; citation and line-number drift from the gate's N3 sweep corrected throughout. Status remains `authored`; not promoted. | Claude Sonnet 5 |
 | 2026-09-17 | Readiness gate 2 residuals applied, plus three operator rulings (R-STUNSTACK, R-PRESS, R-IFRAME-UNBLOCKABLE): AC 5's STUNNED prior-state row split into the ordinary-stun-escalates and already-knocked-down sub-cases; AC 6's same-tick press paragraph rewritten seat-symmetric, deleting the false "existing, unedited seat-order behavior" claim; AC 7 scoped explicitly to the knockdown flavor only; AC 8 gains the get-up-iframe-vs-unblockable ruling; AC 9's reset exception corrected to the SEVENTH (not sixth) and its flavor-memory wording corrected to route through the stun-reason forwarding mechanism, not an entry signal; AC 12 rewritten to name the actual outcome (knockdown presentation, not hit_react) with a non-blocking lethal-chip note; Golden Prediction cause 4's latch upgraded from conditional to expected and FORMAT_VERSION corrected to a STAY-11 prediction; the AC 5 CHARGING cleanup corrected to mirror the actual `6-1` feint-teardown fields; a new Open Question and Task added for the reset-vs-timer-exit distinguishing mechanism (round-2 gate finding); an integration test added to AC 2's Task; Project Structure Notes and multiple citations (feint teardown, FIFO queue site, refusal-gate count, reset-exception line range, `on_action_state_changed`/`_state` line numbers, both-slots test) corrected throughout. Status remains `authored`; not promoted. | Claude Sonnet 5 |
+| 2026-09-17 | Readiness gate 3 residuals applied: the escalation mechanism's dual-trigger shape (STUNNED entry and same-state escalation, with the hit_landed re-check named for the second trigger) written out explicitly in AC 11/Dev Notes/Open Question 3; AC 12, its Task, and AC 6 rewritten to the landing-package ordering (the STUNNED write precedes its hit_landed push WITHIN the landing package, not a standalone reorder); the smoke block-impact item's clip expectation corrected, a stale citation fixed, and Project Structure Notes wording aligned. Status remains `authored`; not promoted. | Claude Sonnet 5 |
+| 2026-09-17 | Readiness gate 4 wording residuals applied: the Live Smoke block item's self-contradiction resolved (block_impact.fbx confirmed on an ordinary non-deflected melee hit only; the unblockable-on-blocker case split into its own sentence expecting knockdown presentation, matching AC 12); Dev Notes aligned to the landing-package deferral unit in three places (the forwarding paragraph, Open Question 3, and the block-impact paragraph's fix description), plus an explicit sentence stating the R-PRESS latch's unit of deferral is the whole landing package, not the STUNNED write alone; two leftover phrasings corrected ("its possible latch" -> "its expected latch"; "deferred-write latch" -> "deferred-package latch" at Golden cause 4 and Open Question 8). Promoted to `ready-for-dev`. | Claude Sonnet 5 |
 
 ## Dev Agent Record
 
