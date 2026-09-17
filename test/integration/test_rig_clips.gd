@@ -32,6 +32,11 @@ const EXPECTED_LOOP := {
 	&"turn_left": true, &"turn_right": true,
 	&"attack": false, &"roll": false, &"death": false,
 	&"swipe": false, &"jump_attack": false, &"thrust": false,
+	# Story 6-6a (asset prerequisite): EIGHTEEN -> TWENTY-THREE. The five defense reactions are all
+	# ONE-SHOTS -- `stunned`/`knockdown` are HELD on their final frame for the stun window (AC 10), never
+	# looped; `hit_react`/`block_impact`/`get_up` are single reactions.
+	&"hit_react": false, &"stunned": false, &"knockdown": false, &"get_up": false,
+	&"block_impact": false,
 }
 
 var _failures: Array[String] = []

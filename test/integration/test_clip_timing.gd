@@ -115,6 +115,39 @@ func _initialize() -> void:
 			print("roll Hips excursion: planar %.4f (max %.4f), vertical %.4f" % [
 				peak_xz, ROLL_HIPS_PLANAR_MAX, peak_y])
 
+	# Story 6-6a (asset prerequisite): the `knockdown` clip takes the roll's fix (Hips X/Z pinned, Y kept
+	# -- `tools/add_paladin_defense_reactions.gd`), because its source fell 0.55 planar backward and
+	# ended 0.63 from where `get_up` starts: the body would slide out from over the rooted capsule while
+	# down and POP on the get-up cut. Pinned under the SAME ceiling for the same geometric reason, and
+	# the fall's vertical drop is guarded against over-correction exactly as the roll's dip is.
+	var knockdown: Animation = clips.get(&"knockdown")
+	if knockdown == null:
+		_failures.append("clip 'knockdown' missing from hero.tscn")
+	else:
+		var kd_track := -1
+		for t in knockdown.get_track_count():
+			if knockdown.track_get_type(t) == Animation.TYPE_POSITION_3D \
+					and String(knockdown.track_get_path(t)).ends_with("mixamorig_Hips"):
+				kd_track = t
+		if kd_track < 0:
+			_failures.append("clip 'knockdown' has no mixamorig_Hips position track to measure")
+		else:
+			var kd_first: Vector3 = knockdown.track_get_key_value(kd_track, 0)
+			var kd_peak_xz := 0.0
+			var kd_peak_y := 0.0
+			for k in knockdown.track_get_key_count(kd_track):
+				var d: Vector3 = knockdown.track_get_key_value(kd_track, k) - kd_first
+				kd_peak_xz = maxf(kd_peak_xz, Vector2(d.x, d.z).length())
+				kd_peak_y = maxf(kd_peak_y, absf(d.y))
+			if kd_peak_xz > ROLL_HIPS_PLANAR_MAX:
+				_failures.append(
+					"knockdown Hips planar excursion %.4f exceeds %.4f -- the downed body slides off its capsule"
+					% [kd_peak_xz, ROLL_HIPS_PLANAR_MAX])
+			if kd_peak_y <= 0.0:
+				_failures.append("knockdown Hips vertical drop was flattened (peakY %.4f)" % kd_peak_y)
+			print("knockdown Hips excursion: planar %.4f (max %.4f), vertical %.4f" % [
+				kd_peak_xz, ROLL_HIPS_PLANAR_MAX, kd_peak_y])
+
 	# The Animation resources stay alive in `clips` (RefCounted), so the scene can go.
 	hero.free()
 
