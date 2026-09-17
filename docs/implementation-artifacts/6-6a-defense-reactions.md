@@ -67,30 +67,57 @@ close-out, not its create pass). Tracked in Docs Debt below.
    provisional value is an implementation choice within that bound, not a design decision requiring a
    stop.
 5. The victim's PRIOR state at the moment knockdown lands is enumerated, one test per state: IDLE,
-   ATTACKING, BLOCKING, ROLLING (iframe closed at step 3), CHARGING, and STUNNED (AC 8 governs this
-   last case, the floor rule). ATTACKING, ROLLING and BLOCKING are safe by construction
-   (`is_hitbox_active` needs ATTACKING, `hero_state.gd:230-236`; the deflect path needs BLOCKING,
-   `match_state.gd:1701`) but are still asserted, not merely argued. CHARGING is the one case with a
-   real effect: a knockdown on a CHARGING victim ABANDONS their chargeup (operator ruling — the
-   Sekiro read: eat a perilous, lose your attack). The card and stamina already spent on that charge
-   stay spent; the interrupted charge's data — `charge_color`, `landing_window`, the `_charge_reach`
-   latch — is CLEANED on the knockdown write, the `6-1` feint-teardown shape (three-part fact cleared
-   together, not left stale).
+   ATTACKING, BLOCKING, ROLLING (iframe closed at step 3), CHARGING, and STUNNED — which splits into
+   two sub-cases, one test each (operator ruling **R-STUNSTACK**): a victim already in an ORDINARY
+   stun (color-counter or deflect flavor) is KNOCKED DOWN — the knockdown write proceeds,
+   `stun.start(knockdown ticks)` REPLACES the shorter window, and the flavor becomes knockdown (the
+   Sekiro read: staggered + perilous = you go down); a victim already in the KNOCKDOWN flavor is
+   governed by AC 7's floor rule instead (damage only, never restart/extend). This is a one-way
+   escalation and cannot loop: once down, the floor rule holds, so no knockdown lock results (this is
+   what resolves the round-1 gate's B5 lock concern, by construction, not by a separate guard).
+   Presentation must prove the ordinary-stun -> knockdown escalation is visible (the clip switches to
+   `knockdown.fbx` and the window visibly extends) with a test — the flavor change reaches
+   presentation via the stun-reason forwarding mechanism (Open Question 3), NOT via a state-entry
+   signal, since `set_action_state` on previous==current emits nothing (`hero_state.gd:211-212`), and
+   an ordinary-stun-to-knockdown write is a same-state (`STUNNED` -> `STUNNED`) write. ATTACKING,
+   ROLLING and BLOCKING are safe by construction (`is_hitbox_active` needs ATTACKING,
+   `hero_state.gd:230-236`; the deflect path needs BLOCKING, `match_state.gd:1701`) but are still
+   asserted, not merely argued. CHARGING is the one case with a real effect: a knockdown on a
+   CHARGING victim ABANDONS their chargeup (operator ruling — the Sekiro read: eat a perilous, lose
+   your attack). The card and stamina already spent on that charge stay spent; the interrupted
+   charge's data is CLEANED on the knockdown write, mirroring the `6-1` feint-teardown exactly
+   (`match_state.gd:1175-1179`): `charge_window`, `landing_window` and `charge_color` are cleared
+   together as one fact, with the state write. `_charge_reach`/`_charge_contact_dirs` are NOT part of
+   that cleanup — they follow their own `6-1d`/`R9` discipline ("CLEARED WITH THE VERDICT, never on
+   its own," `match_state.gd:291-294`) and the feint path itself leaves them untouched, so the
+   knockdown-abandonment write does the same.
 6. Simultaneous unblockable landings — one per seat, same tick — are SEAT-SYMMETRIC (operator ruling):
    BOTH land, BOTH victims are knocked down. Neither landing is cancelled by the other's knockdown
    write within the same tick, even though tick order runs p1 actions -> p1 movement -> p2 actions ->
    p2 movement (`match_state.gd:534-537`) and a naive write would flip the second seat to `STUNNED`
    before its own `CHARGING` landing arm runs. Pinned by a both-slots test on the
-   `_iframe_open_at_step3` shape (`test_unblockable_defense.gd:298-325`). Non-simultaneous seat order
-   is otherwise unchanged: a landing that stuns a seat before that seat's OWN same-tick press runs
-   refuses that press (no stamina spent, since refusal happens pre-spend); a landing that stuns a seat
-   AFTER that seat's own same-tick press has already resolved (stamina spent, movement applied) simply
-   overwrites the resulting state on the same tick — both are existing, unedited seat-order behavior,
-   asserted here only for the knockdown edge.
+   `_iframe_open_at_step3` shape — the latch is documented at `match_state.gd:298-325`, and the
+   both-slots precedent this new test follows is `test_the_dodge_boundary_is_identical_on_both_slots`
+   (`test_unblockable_defense.gd:701`).
+
+   Same-tick PRESS semantics are SEAT-SYMMETRIC as well (operator ruling **R-PRESS**), superseding
+   this AC's earlier "existing, unedited seat-order behavior" claim: this is the FIRST cross-player
+   write to land in step 3, and `match_state.gd:300-307`'s own doc already says seat-dependence "is
+   not a thing this game has," so the two directions cannot simply inherit whatever the p1-before-p2
+   tick order happens to produce. The pinned OUTCOME, identical for both seats and both directions: a
+   press on the same tick as an incoming knockdown ALWAYS resolves first (stamina/card spent, action
+   taken), and the knockdown write then overwrites the resulting state. Tests cover both seats:
+   press-then-knockdown ordering, and the simultaneous double-landing trade above. The MECHANISM is a
+   dev-pass choice (Open Question 8) — the implementation almost certainly needs a deferred-write
+   latch so the knockdown write does not apply before the victim seat's own step-3 processing runs on
+   that tick; if a no-new-storage ordering fix is found instead, the latch is unneeded and Golden
+   Prediction cause 4's conditional clause simply discharges.
 7. A hit that lands on an ALREADY-knocked-down hero (victim is STUNNED via the knockdown flavor) deals
    its damage but does NOT restart or extend the running stun window — the original window ticks out
-   on its own schedule, unaffected (the "floor rule," operator ruling). This applies regardless of
-   which of the three `STUNNED` flavors the new hit would otherwise have authored; a knockdown victim
+   on its own schedule, unaffected (the "floor rule," operator ruling **R-STUNSTACK**). The floor rule
+   applies ONLY to a victim already in the KNOCKDOWN flavor; a victim in an ORDINARY stun
+   (color-counter or deflect flavor) is NOT covered by the floor here — see AC 5's STUNNED
+   prior-state row for that case, which is a one-way escalation, not a restart. A knockdown victim
    cannot be re-stunned into a longer or fresh window while still down. No visual change results from
    a second landing on a downed hero beyond the ordinary hurt/damage feedback (the knockdown clip's
    hold is not restarted).
@@ -103,13 +130,26 @@ close-out, not its create pass). Tracked in Docs Debt below.
    felt window). This is a real `src/state/` addition — a new `TimingWindow` (on `HeroState` or
    `PlayerState`; measure which owns it per the `5-5` `defense_window` precedent) — so the Golden
    Prediction and replay-identity sections below carry it as a definite new hashed or named-unhashed
-   member, not a conditional one.
+   member, not a conditional one. **Operator ruling R-IFRAME-UNBLOCKABLE:** the get-up iframe window
+   registers wherever `roll_iframe` does — the unblockable dodge rung (`is_iframe_open`/
+   `_iframe_open_at_step3`) sees it too, so get-up iframes are valid against unblockables, not only
+   against melee. A carve-out for unblockables would defeat the whole point of the window, which is
+   that nothing can be timed into the get-up.
 9. The debug-reset exit from a knockdown-flavored `STUNNED` does NOT play `get_up.fbx` and does NOT
    arm the get-up iframe window — reset snaps straight to `IDLE` (operator ruling). The stun-flavor
-   memory used for presentation selection (AC 11) is OVERWRITTEN on every `STUNNED` entry and CLEARED
-   on ANY `STUNNED` exit, reset included. The reset path additionally clears the AC 8 iframe window if
-   it happens to be armed at reset time — a sixth reset-exception line item alongside the existing five
-   (`match_state.gd:4373-4386`), traced the way `5-6` traced its own reset exceptions.
+   discrimination used for presentation selection (AC 11) is NOT a stored "memory" field cleared on
+   exit — as AC 5's escalation case shows, `set_action_state` on a same-state (`STUNNED` -> `STUNNED`)
+   write emits nothing (`hero_state.gd:211-212`), so presentation cannot rely on an entry signal
+   firing at every flavor change; it is derived at consumption time via the stun-reason forwarding
+   mechanism (Open Question 3), reading the running `stun` window's own duration. The reset path
+   additionally clears the AC 8 iframe window if it happens to be armed at reset time. This is the
+   SEVENTH reset-exception line item, not the sixth: `6-2`'s pitch-zone clear
+   (`match_state.gd:4313-4317`) is already the sixth of six named exceptions the header at
+   `match_state.gd:4279-4317` currently enumerates (unit board `4-1/R5`, chargeup `5-3`, orb pool
+   `5-4`, defense window `5-5` AC 12, stun window/`STUNNED` state `5-6` AC 13, pitch zones `6-2` AC
+   14d) — this story's iframe-window clear is the seventh, added alongside those, and the header's
+   "These are SIX named exceptions" line (`match_state.gd:4317`) must be updated to SEVEN by the dev
+   pass. Traced the way `5-6` traced its own reset exception.
 
 **Existing stuns get a pose (Ruling 3)**
 
@@ -133,15 +173,23 @@ close-out, not its create pass). Tracked in Docs Debt below.
 
 12. A blocked hit (damage scaled by `block_damage_multiplier`, the non-deflect block branch) plays
     `block_impact.fbx` on the blocker, read from the ANIMATION CONTROLLER'S OWN mirrored `_state`
-    (`animation_controller.gd:337,397`) at signal-consumption time — never a live read of
+    (`animation_controller.gd:337,387`) at signal-consumption time — never a live read of
     `hero.action_state` from the runner (the `_charge_color_for_slot` shape,
     `match_runner.gd:984-990`, is live-and-post-advance, and is the wrong pattern to copy here). This
     matters on the unblockable path specifically: because Ruling 2's knockdown write (AC 3) is pushed
-    BEFORE the `hit_landed` push in that branch, an unanswered unblockable landing on a BLOCKING victim
-    still selects `hit_react.fbx`, not `block_impact.fbx`, even though the mirror has not yet advanced
-    off `BLOCKING` when the push ordering is read naively — the push-order fix is what keeps the two
-    consistent. `hit_landed`'s signal arity is NOT widened for this AC or any other in this story
-    (`TelegraphController.on_hit_landed` has fixed arity 4 + a bound slot,
+    BEFORE the `hit_landed` push in that branch, the mirror has already advanced off `BLOCKING` to
+    `STUNNED` by the time clip selection runs on an unanswered unblockable landing on a BLOCKING
+    victim — the push-order fix is what keeps `block_impact.fbx` from firing stale, not what makes
+    `hit_react.fbx` fire. The actual selected outcome is KNOCKDOWN presentation
+    (`knockdown.fbx`, via the `on_action_state_changed` path), NOT `hit_react.fbx`: AC 2 scopes
+    `hit_react.fbx` to IDLE-family victims only, and the mirror at consumption time reads `STUNNED`,
+    not IDLE, so AC 2's hit_react branch is never reached here — this AC's point is only that no stale
+    `block_impact.fbx` fires. One non-blocking note for the dev pass: on a LETHAL unanswered
+    unblockable landing on a blocker, the `is_alive()` gate (AC 3) skips the `STUNNED` write entirely,
+    so the mirror still reads `BLOCKING` and would select `block_impact.fbx` — the step-8 `DEAD`
+    transition arrives in the same drain, so this stale selection is not expected to be visible, but
+    it should not surprise the dev pass. `hit_landed`'s signal arity is NOT widened for this AC or any
+    other in this story (`TelegraphController.on_hit_landed` has fixed arity 4 + a bound slot,
     `telegraph_controller.gd:210`, bound at `match_runner.gd:506`, and an extra argument would break
     that call site).
 13. Block EXIT — and ONLY exit, `BLOCKING -> IDLE` — gets a blend transition, reusing the existing
@@ -149,7 +197,7 @@ close-out, not its create pass). Tracked in Docs Debt below.
     `animation_controller.gd:543-546`) in place of today's instant `_restart()` cut, on `3-0b/R24`'s
     pre-cleared terms: `block -> attack`/`block -> roll` stay instant (they start real mechanical
     content immediately), and the conditional lives in `on_action_state_changed`'s non-CHARGING branch
-    (`animation_controller.gd:407-409`), not in a generic `_play()` change. Block ENTRY stays an
+    (`animation_controller.gd:396-398`), not in a generic `_play()` change. Block ENTRY stays an
     instant, un-blended `_restart()` cut, per `3-0b/R23`'s standing mechanical ruling: `enter_block()`
     opens the 9-tick (0.15 s) deflect window on the entry tick itself, and a blend on entry would show
     a "shield still rising" pose while the deflect window is already live, corrupting the parry read.
@@ -214,16 +262,21 @@ separately:
    DEFINITE new hashed-or-named-unhashed member, unlike the knockdown `STUNNED`/`stun` reuse below, and
    the golden's own script must be re-measured against it even though the fixture never reaches
    knockdown by construction (an unarmed window still needs to round-trip through the snapshot
-   machinery cleanly). Separately, and CONDITIONALLY: if the dev pass implements the AC 6 simultaneous-
-   trade fix via a deferred-write latch (rather than an ordering/scheduling change that needs no new
-   storage), that latch is ALSO a new `src/state/` var — the `_iframe_open_at_step3` precedent — and
-   owes its own replay-identity bucket classification at implementation time; it is not assumed here
-   either way. Aside from these two, no new snapshot key is expected: knockdown's `STUNNED`
-   `ActionState` (already hashed) and `stun` `TimingWindow` (already hashed since `5-6/R7`) are REUSED —
-   a third `start()` call site with a new duration is not itself a new field. No new player input,
-   recorded fact, or `InputIntent` channel is added by this story (block/hurt/stun reactions consume
-   existing state; nothing new is captured). `FORMAT_VERSION` is predicted to MOVE from 11 (the get-up
-   iframe window is a new persisted member) — measured and stated at the dev pass, not assumed.
+   machinery cleanly). Separately, and now UPGRADED FROM CONDITIONAL TO EXPECTED by operator ruling
+   **R-PRESS** (AC 6): the dev pass almost certainly needs a deferred-write latch so a same-tick
+   knockdown write does not apply before the victim seat's own step-3 processing runs — the
+   `_iframe_open_at_step3` precedent — and that latch, if it lands, is ALSO a new `src/state/` var
+   owing a definite replay-identity bucket classification at implementation time. If the dev pass
+   instead finds a no-new-storage ordering/scheduling solution, this second obligation simply
+   discharges (see Open Question 8). Aside from these two, no new snapshot key is expected: knockdown's
+   `STUNNED` `ActionState` (already hashed) and `stun` `TimingWindow` (already hashed since `5-6/R7`)
+   are REUSED — a third `start()` call site with a new duration is not itself a new field. No new
+   player input, recorded fact, or `InputIntent` channel is added by this story (block/hurt/stun
+   reactions consume existing state; nothing new is captured). `FORMAT_VERSION` is predicted to STAY
+   11: `RecordFile.FORMAT_VERSION` (`record_file.gd:195`) moves only when a RECORDED INPUT CHANNEL
+   changes (`:241-256`), and both `5-5`'s `defense_window` and `5-6`'s `STUNNED`/`stun` additions left
+   it unmoved on the identical precedent — a new state/snapshot member is a replay-identity/hash-bucket
+   question, never a format bump. Measured and stated at the dev pass, not assumed.
 
 Baseline: current golden `71a7b45f...` (`6-8-camera-freedom` close-out, decision-log Session
 2026-09-17), `FORMAT_VERSION` 11. Both are re-measured fresh at dev-pass start per the golden-clause
@@ -302,7 +355,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   (`block -> attack`/`block -> roll` must stay instant — they start real mechanical content
   immediately), and it requires amending `3-0a`'s "a transition arriving mid-clip wins immediately
   with NO blending" policy plus a conditional — living in `on_action_state_changed`'s non-CHARGING
-  branch (`animation_controller.gd:407-409`, since that is where `BLOCKING -> IDLE` actually arrives),
+  branch (`animation_controller.gd:396-398`, since that is where `BLOCKING -> IDLE` actually arrives),
   not a generic `_play()` change. The operator has ratified: AC 13 (originally AC 11)'s "block
   enter/exit gets transitions" text was DRIFT from R24's already-cleared exit-only shape, not an
   intentional supersession of R23 — ship EXIT-only blending on R24's pre-cleared terms and leave ENTRY
@@ -354,7 +407,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   and `balance_config.gd:320-332`'s own header comment reads as JUSTIFYING the two-durations-so-far
   naming precedent, not as anticipating a third — reword only if touched for the new field, not
   required on its own. `AnimationController.on_action_state_changed`
-  (`animation_controller.gd:385-409`) is the seam that would select the clip, and it already receives
+  (`animation_controller.gd:385-398`) is the seam that would select the clip, and it already receives
   a WIDENED, runner-computed, forwarded argument beyond the state-layer signal's own
   `(previous, current)` shape: `charge_color`, computed per-call by `_charge_color_for_slot`
   (`match_runner.gd:984`) and forwarded identically to both `cues.on_action_state_changed` and
@@ -399,11 +452,19 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   rate, `animation_controller.gd:497-502`). Knockdown's `knockdown.fbx` (AC 3) plausibly wants the
   same hold treatment while down, with `get_up.fbx` firing as an ordinary one-shot `_restart` — but
   ONLY on the timer-driven `STUNNED -> IDLE` exit (AC 8/AC 9): unlike the two existing stun kinds,
-  where every `STUNNED` exit today fires the same unconditional `IDLE` re-entry
-  (`match_state.gd:1112-1114`) with no distinction needed, knockdown's exit must distinguish the
-  ordinary timer exit (plays `get_up.fbx`, arms the get-up iframe window) from the debug-reset exit
-  (plays neither, per the operator's B9 ruling) — the flavor-memory-cleared-on-any-exit /
-  overwritten-on-every-entry rule (AC 9) is what makes that distinction possible without a new signal.
+  where every `STUNNED` exit today fires the same unconditional `IDLE` re-entry with no distinction
+  needed, knockdown's exit must distinguish the ordinary timer exit (plays `get_up.fbx`, arms the
+  get-up iframe window) from the debug-reset exit (plays neither, per the operator's B9 ruling). The
+  round-2 gate found this cannot be argued from "cleared on any exit / overwritten on every entry": the
+  timer path (`match_state.gd:1112-1114`) and the reset path (`match_state.gd:4384-4386`) both queue an
+  IDENTICAL `STUNNED -> IDLE` `set_action_state` write, and the controller holds the knockdown flavor
+  across both — nothing in that write itself tells the two exits apart. The distinguishing mechanism is
+  therefore a DEV-PASS FIND, not something this story's text can pin: a candidate is the reset path's
+  own OTHER observable effects at the same drain (e.g. `round_started` also queued by
+  `_apply_debug_reset`, or a controller-side marker set at reset time and consumed on the same drain) —
+  not assumed here. Pinned by a REQUIRED controller integration test proving the timer exit plays
+  `get_up.fbx` and arms the get-up iframes, while the reset exit plays neither (see Open Questions and
+  Tasks below).
 
 - **Block-impact wiring, and the mirror-vs-live-read pitfall (AC 12, round-1 gate B8).** The
   non-deflect block branch already exists (`match_state.gd:1766`,
@@ -412,10 +473,10 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   reached ONLY when `target.hero.action_state == BLOCKING` and facing (the guard at
   `match_state.gd:1701-1702`) and the deflect window did NOT open/spend — i.e. it is a SUBSET of the
   same `hit_landed` emissions AC 1's hurt-reaction wiring already observes. Clip selection MUST read
-  the ANIMATION CONTROLLER'S OWN mirrored `_state` (`animation_controller.gd:337`, set at `:397`),
+  the ANIMATION CONTROLLER'S OWN mirrored `_state` (`animation_controller.gd:337`, set at `:387`),
   never a live read of `hero.action_state` from the runner. The mirror is SAFE if it uses the
   controller's own FIFO-ordered queue (the runner forwards signals in the order emitted from ONE
-  shared queue, `match_runner.gd:408-412`, `player_state.gd:275` — a step-4 `hit_landed` drains before
+  shared queue, `match_state.gd:408-412`, `player_state.gd:275` — a step-4 `hit_landed` drains before
   a step-8 `BLOCKING -> DEAD` write, so lethal chip damage still correctly selects `block_impact`). It
   is UNSAFE read live, the exact mistake `_charge_color_for_slot` makes for a different purpose
   (`match_runner.gd:984-990` — that value is the POST-advance state, wrong for this use). The mirror
@@ -460,12 +521,18 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 
 ### Project Structure Notes
 
-- All five ACs are presentation-only except AC 3/AC 6 (the knockdown write). The presentation half
-  follows the `3-0a`/`5-0a`/`6-7b` split exactly: clip selection and hold/stretch logic in
-  `src/actors/hero/animation_controller.gd`; new seam CONSUMERS (not new seams) wired in
-  `src/main/match_runner.gd`'s existing per-slot loop. The one state-layer edit
-  (AC 3/AC 5/AC 6) lands in `src/state/match_state.gd`'s existing unblockable-ladder resolution
-  function, plus the AC 8 get-up-iframe `TimingWindow` addition on `HeroState`/`PlayerState`, and
+- Of the thirteen ACs, presentation-only work (`src/actors/hero/animation_controller.gd` and the
+  `match_runner.gd` wiring loop, no `src/state/` edit) covers AC 1, AC 2, AC 4 (the authored value's
+  own consumption), AC 10, AC 11, AC 12 and AC 13. State-layer edits land in AC 3 (the knockdown
+  write itself), AC 5 (the CHARGING-abandonment cleanup and the STUNNED-escalation write), AC 6 (the
+  simultaneous-trade fix and its possible latch), AC 7 (the floor-rule guard) and AC 8 (the get-up-
+  iframe `TimingWindow` addition and its arming). AC 9 (the reset exception) is also state-layer. The
+  presentation half follows the `3-0a`/`5-0a`/`6-7b` split exactly: clip selection and hold/stretch
+  logic in `src/actors/hero/animation_controller.gd`; new seam CONSUMERS (not new seams) wired in
+  `src/main/match_runner.gd`'s existing per-slot loop. The state-layer edits
+  (AC 3/AC 5/AC 6/AC 7/AC 8/AC 9) land in `src/state/match_state.gd`'s existing unblockable-ladder
+  resolution function and its reset path, plus the AC 8 get-up-iframe `TimingWindow` addition on
+  `HeroState`/`PlayerState`, and
   `src/state/resources/balance_config.gd`/`src/state/timing/balance_ticks.gd` (two new fields —
   `knockdown_stun_seconds`/`knockdown_stun_ticks` and the get-up-iframe duration — on the
   `color_counter_stun_seconds`/`deflect_stun_seconds` naming precedent. Note the precedent's own
@@ -517,9 +584,10 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [Source: src/state/hero_state.gd:15,27,118-131,352] — `ActionState` enum, `action_state_changed`
   signal shape, the `stun` `TimingWindow`, `STUNNED`'s movement-root entry.
 - [Source: src/state/match_state.gd:1690-1764 (deflect stun entry), :3340-3430 (three-tier ladder,
-  color-counter stun entry and the unanswered-tier exit this story edits), :2827,2713-2962 (
-  `REASON_STUNNED`, the three cast-seat refusal gates), :4368-4385 (fifth reset exception), :30
-  (`hit_landed` signal shape)] — every site this story's dev pass reads or edits.
+  color-counter stun entry; the unanswered-tier exit write this story edits is at :3475), :2827,
+  2713-2962 (`REASON_STUNNED`, the five cast-seat refusal gates at :2713,2886,2961,3054,3235),
+  :4373-4386 (fifth reset exception; the header enumerating all six existing exceptions runs
+  :4279-4317), :30 (`hit_landed` signal shape)] — every site this story's dev pass reads or edits.
 - [Source: src/state/resources/balance_config.gd:307,320-332; src/state/timing/balance_ticks.gd:81-87,
   169-170; data/balance/balance_config.tres:123,127-128] — the existing two stun durations/ticks and
   the naming precedent the new field follows.
@@ -560,11 +628,19 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 7. **Which struct owns the AC 8 get-up-iframe `TimingWindow` — `HeroState` or `PlayerState`** — a
    dev-pass call on the `5-5` `defense_window` precedent, to be argued in the Golden Prediction/
    replay-identity rewrite at implementation time.
-8. **The AC 6 simultaneous-trade fix's exact mechanism** — an ordering/scheduling change needing no
+8. **The AC 6 same-tick press/knockdown ordering fix's exact mechanism** — operator ruling
+   **R-PRESS** pins the OUTCOME (seat-symmetric: the press resolves first, the knockdown write then
+   overwrites) but leaves the MECHANISM a dev-pass choice: an ordering/scheduling change needing no
    new storage, vs. a deferred-write latch (a new `src/state/` var owing its own replay-identity
-   bucket classification, the `_iframe_open_at_step3` precedent) — a dev-pass implementation choice;
-   if a latch is used, the Golden Prediction cause 4 conditional above must be resolved as definite,
-   not left conditional, at close-out.
+   bucket classification, the `_iframe_open_at_step3` precedent). Golden Prediction cause 4's latch
+   clause is now EXPECTED rather than conditional — if the dev pass instead finds a no-new-storage
+   ordering fix, that expectation simply discharges and cause 4 is closed out as such.
+9. **The reset-exit-vs-timer-exit distinguishing mechanism for `get_up.fbx`/iframe-arming (AC 8/AC
+   9)** — round-2 gate finding: both exits queue an identical `STUNNED -> IDLE` write
+   (`match_state.gd:1112-1114` and `:4384-4386`), so nothing in that write itself tells them apart.
+   A dev-pass find (candidate: the reset path's own other observable effects at the same drain, or a
+   controller-side marker consumed on the same drain), pinned by a REQUIRED controller integration
+   test proving the timer exit plays `get_up.fbx` and arms iframes while the reset exit plays neither.
 
 ## Tasks / Subtasks
 
@@ -577,7 +653,8 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [ ] Wire `AnimationController` as a second `connect_hit_landed` consumer, gated on
       `target_slot == slot`; select `hit_react.fbx` vs `block_impact.fbx` by the CONTROLLER'S OWN
       mirrored `_state` at signal-consumption time, never a live `hero.action_state` read (AC 1, AC 2,
-      AC 12).
+      AC 12). Add an integration test on the `test_hero_clip_selection.gd` shape covering the
+      IDLE-family scoping and the locomotion-yield rule (round-2 gate B7, AC 2).
 - [ ] Give `hit_react.fbx`/`get_up.fbx` their locomotion-yield rule so `on_locomotion`'s per-tick
       `_play()` does not steal either clip mid-play; scope `hit_react` to IDLE-family victims only
       (AC 2).
@@ -591,21 +668,37 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [ ] Amend `test_stunned_has_exactly_two_authored_non_table_entry_points`
       (`test_action_state.gd:122-147`) 2 -> 3 call sites, write the argument into its doc-comment,
       and re-prove its falling mutation; update the two drifted "SECOND (and last)"/"FIRST of exactly
-      two" comments (`match_state.gd:~1718`, `test_unblockable_defense.gd:433`, `match_state.gd:~3380`)
+      two" comments (`match_state.gd:1717`, `test_unblockable_defense.gd:433`, `match_state.gd:~3417`)
       (AC 3, round-1 gate B2).
 - [ ] Enumerate the knockdown victim's prior-state results (IDLE, ATTACKING, BLOCKING, ROLLING,
-      CHARGING, STUNNED), one test per state; on CHARGING, clear `charge_color`, `landing_window` and
-      the `_charge_reach` latch on the knockdown write, the `6-1` feint-teardown shape, while leaving
-      the spent card/stamina unrefunded (AC 5).
-- [ ] Implement the simultaneous-landing trade fix (seat-symmetric, both land, both go down) and its
-      both-slots test on the `_iframe_open_at_step3` shape; classify any new storage it needs per
-      Open Question 8 (AC 6).
+      CHARGING, and STUNNED split into its two R-STUNSTACK sub-cases), one test per state/sub-case; on
+      CHARGING, clear `charge_window`, `landing_window` and `charge_color` on the knockdown write, the
+      `6-1` feint-teardown shape verbatim (`match_state.gd:1175-1179`) — leaving `_charge_reach`/
+      `_charge_contact_dirs` untouched, per their own `6-1d/R9` discipline — while leaving the spent
+      card/stamina unrefunded; on the ordinary-stun sub-case, prove the escalation to knockdown is
+      visible (clip switches, window extends) (AC 5).
+- [ ] Implement the same-tick press/knockdown ordering fix (seat-symmetric outcome per R-PRESS: press
+      resolves first, knockdown write then overwrites) and the simultaneous-landing trade fix
+      (seat-symmetric, both land, both go down) with its both-slots test on the
+      `_iframe_open_at_step3` shape (latch documented at `match_state.gd:298-325`, both-slots
+      precedent `test_the_dodge_boundary_is_identical_on_both_slots`,
+      `test_unblockable_defense.gd:701`); classify any new storage the press fix needs per Open
+      Question 8, and resolve Golden Prediction cause 4's now-expected latch clause definitely one way
+      or the other at close-out (AC 6).
 - [ ] Implement the floor rule (a hit on an already-downed hero deals damage, never restarts/extends
       the running window) and the get-up-iframe `TimingWindow` armed only on the timer-driven exit,
-      reusing the `roll_iframe` mechanism's shape (AC 7, AC 8).
+      reusing the `roll_iframe` mechanism's shape and registering wherever `roll_iframe` does so it
+      also guards against unblockables (R-IFRAME-UNBLOCKABLE) (AC 7, AC 8).
 - [ ] Implement the reset exception: no `get_up.fbx`/iframe-arming on the debug-reset exit; clear the
-      stun-flavor memory and the AC 8 window on that exit as a sixth reset-exception line item
-      alongside the existing five (`match_state.gd:4373-4386`) (AC 9).
+      AC 8 window on that exit as the SEVENTH reset-exception line item alongside the existing six
+      (`match_state.gd:4279-4317`, updating the header's "SIX named exceptions" line to SEVEN), traced
+      the `5-6` way (AC 9).
+- [ ] Find and pin the reset-exit-vs-timer-exit distinguishing mechanism (Open Question 9, round-2
+      gate finding): both exits currently queue an identical `STUNNED -> IDLE` write
+      (`match_state.gd:1112-1114`, `:4384-4386`), so the distinction must come from something else
+      (a candidate: the reset path's own other observable effects at the same drain, or a
+      controller-side marker). REQUIRED controller integration test proving the timer exit plays
+      `get_up.fbx` and arms iframes while the reset exit plays neither (AC 8, AC 9).
 - [ ] Add `knockdown_stun_seconds`/`knockdown_stun_ticks` and the get-up-iframe duration field to
       `BalanceConfig`/`BalanceTicks`; extend `test_balance_authoring.gd`'s deflect-less-than-
       color-counter pin to the full three-way bound, asserted in ticks (AC 4, round-1 gate B2/N9).
@@ -635,7 +728,8 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 | Date | Change | Author |
 |---|---|---|
 | 2026-09-17 | Story authored via gds-create-story from the board split of `6-6-defense-presentation` (operator ruling, scope talk 2026-09-17). Status `authored`, awaiting operator review before promotion to `ready-for-dev`. | Claude Sonnet 5 |
-| 2026-09-17 | Readiness gate 1 findings B1-B10 applied, with operator rulings on B3 (simultaneous-trade seat-symmetry), B4 (CHARGING knockdown abandons the chargeup), B5 (floor rule, no knockdown upper bound, get-up iframes), B7 (hit_react state-scope, unvetoed), B9 (no get_up/iframe on debug reset, unvetoed). Acceptance Criteria rewritten and expanded 11 -> 12 (merges per N4, new ACs for B3-B9); Golden Prediction cause 1 corrected (target-side write, not a replacement of the caster's IDLE exit) and cause 4 rewritten (a definite new get-up-iframe `TimingWindow`, a conditional new var for a B3 latch); fixture-coverage flag (OQ 4) and block-entry OQ (OQ 1) resolved; Live Smoke rewritten for the `[0, 3]` deviation's reachable subset and the new trade/floor items; citation and line-number drift from the gate's N3 sweep corrected throughout. Status remains `authored`; not promoted. | Claude Sonnet 5 |
+| 2026-09-17 | Readiness gate 1 findings B1-B10 applied, with operator rulings on B3 (simultaneous-trade seat-symmetry), B4 (CHARGING knockdown abandons the chargeup), B5 (floor rule, no knockdown upper bound, get-up iframes), B7 (hit_react state-scope, unvetoed), B9 (no get_up/iframe on debug reset, unvetoed). Acceptance Criteria rewritten and expanded 11 -> 13 (merges per N4, new ACs for B3-B9); Golden Prediction cause 1 corrected (target-side write, not a replacement of the caster's IDLE exit) and cause 4 rewritten (a definite new get-up-iframe `TimingWindow`, a conditional new var for a B3 latch); fixture-coverage flag (OQ 4) and block-entry OQ (OQ 1) resolved; Live Smoke rewritten for the `[0, 3]` deviation's reachable subset and the new trade/floor items; citation and line-number drift from the gate's N3 sweep corrected throughout. Status remains `authored`; not promoted. | Claude Sonnet 5 |
+| 2026-09-17 | Readiness gate 2 residuals applied, plus three operator rulings (R-STUNSTACK, R-PRESS, R-IFRAME-UNBLOCKABLE): AC 5's STUNNED prior-state row split into the ordinary-stun-escalates and already-knocked-down sub-cases; AC 6's same-tick press paragraph rewritten seat-symmetric, deleting the false "existing, unedited seat-order behavior" claim; AC 7 scoped explicitly to the knockdown flavor only; AC 8 gains the get-up-iframe-vs-unblockable ruling; AC 9's reset exception corrected to the SEVENTH (not sixth) and its flavor-memory wording corrected to route through the stun-reason forwarding mechanism, not an entry signal; AC 12 rewritten to name the actual outcome (knockdown presentation, not hit_react) with a non-blocking lethal-chip note; Golden Prediction cause 4's latch upgraded from conditional to expected and FORMAT_VERSION corrected to a STAY-11 prediction; the AC 5 CHARGING cleanup corrected to mirror the actual `6-1` feint-teardown fields; a new Open Question and Task added for the reset-vs-timer-exit distinguishing mechanism (round-2 gate finding); an integration test added to AC 2's Task; Project Structure Notes and multiple citations (feint teardown, FIFO queue site, refusal-gate count, reset-exception line range, `on_action_state_changed`/`_state` line numbers, both-slots test) corrected throughout. Status remains `authored`; not promoted. | Claude Sonnet 5 |
 
 ## Dev Agent Record
 
