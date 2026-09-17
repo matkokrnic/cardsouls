@@ -1340,6 +1340,57 @@ func test_get_up_iframes_dodge_an_unblockable_landing() -> void:
 			assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "control: ...and knocks down")
 
 
+## 6-6a review D1 (operator ruling: the exit tick is part of the get-up): THE GET-UP BOUNDARY, on BOTH
+## victim seats. A second landing on the knockdown's EXACT exit tick -- the stun runs out at that tick's
+## step 2, so the step-3 dodge latch is taken BEFORE the STUNNED arm has opened the get-up window -- is
+## DODGED. A landing ONE TICK EARLIER, with the victim still down, lands and hits the floor rule instead.
+## The `test_the_dodge_boundary_is_identical_on_both_slots` shape.
+##
+## Without `_gets_up_this_tick` in the latch, the exit-tick case lands unanswered and, the victim being
+## IDLE by step 6b, knocks it straight back down with its fresh get-up window still running underneath.
+func test_the_get_up_boundary_is_identical_on_both_slots() -> void:
+	# The second `_land` takes CHARGEUP_TICKS + 1 ticks and lands on its last: `lead` idle ticks put that
+	# landing on knockdown tick `lead + CHARGEUP_TICKS + 1` counted from the first landing.
+	var exit_lead := KNOCKDOWN_STUN_TICKS - CHARGEUP_TICKS - 1
+	for victim_slot: int in 2:
+		var caster_slot := 1 - victim_slot
+		var on_exit := _kd_match()
+		var exit_victim: PlayerState = on_exit.p1 if victim_slot == 0 else on_exit.p2
+		var exit_caster: PlayerState = on_exit.p1 if caster_slot == 0 else on_exit.p2
+		_land(on_exit, caster_slot, Enums.CardColor.RED)
+		_idle_ticks(on_exit, exit_lead)
+		var exit_check := func() -> void:
+			assert_eq(exit_victim.hero.action_state, HeroState.ActionState.STUNNED,
+				"victim slot %d: precondition: still down going into the exit tick" % victim_slot)
+			assert_eq(exit_victim.hero.stun.remaining_ticks(), 1,
+				"victim slot %d: precondition: ...with ONE tick left, so it runs out at the landing tick's step 2"
+				% victim_slot)
+		_land(on_exit, caster_slot, Enums.CardColor.BLUE, Callable(), exit_check)
+		assert_eq(exit_victim.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+			"victim slot %d: a landing on the EXACT exit tick is DODGED -- no second damage" % victim_slot)
+		assert_eq(exit_victim.hero.action_state, HeroState.ActionState.IDLE,
+			"victim slot %d: ...and the hero gets up, not knocked straight back down" % victim_slot)
+		assert_eq(exit_victim.hero.get_up_iframe.remaining_ticks(), GET_UP_IFRAME_TICKS,
+			"victim slot %d: ...its get-up window opened that tick, untouched by the dodge" % victim_slot)
+		assert_eq(exit_caster.orbs.get_count(Enums.CardColor.BLUE), 0,
+			"victim slot %d: ...and the dodged landing pays no orb" % victim_slot)
+		var still_down := _kd_match()
+		var down_victim: PlayerState = still_down.p1 if victim_slot == 0 else still_down.p2
+		_land(still_down, caster_slot, Enums.CardColor.RED)
+		_idle_ticks(still_down, exit_lead - 1)
+		_land(still_down, caster_slot, Enums.CardColor.BLUE)
+		assert_eq(down_victim.hero.get_hp(), MAX_HP - 2.0 * UNBLOCKABLE_DAMAGE,
+			"victim slot %d: a landing ONE TICK BEFORE the exit, the victim still down, LANDS" % victim_slot)
+		assert_eq(down_victim.hero.action_state, HeroState.ActionState.STUNNED,
+			"victim slot %d: ...the victim stays down" % victim_slot)
+		assert_eq(down_victim.hero.stun.duration_ticks(), KNOCKDOWN_STUN_TICKS,
+			"victim slot %d: ...on the SAME knockdown window" % victim_slot)
+		assert_eq(down_victim.hero.stun.remaining_ticks(), 1,
+			"victim slot %d: ...neither restarted nor extended -- the floor rule" % victim_slot)
+		assert_false(down_victim.hero.get_up_iframe.is_running,
+			"victim slot %d: ...and no get-up window is open yet" % victim_slot)
+
+
 ## AC 9: the DEBUG-RESET exit from a knockdown arms NO get-up iframes -- reset snaps straight to IDLE.
 func test_the_debug_reset_exit_from_a_knockdown_arms_no_get_up_iframes() -> void:
 	var ms := _kd_match()

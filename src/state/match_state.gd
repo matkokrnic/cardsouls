@@ -322,6 +322,9 @@ var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ## `_roll_iframe_closed_this_tick` classification verbatim, which is why it is EXCLUDED from
 ## to_snapshot() with no determinism or replay hole. A round-over tick returns at step 1b and neither
 ## writes nor reads it; the next tick that does reach step 3 overwrites it before any read.
+##
+## Story 6-6a review (D1): the latch also reads true for a hero getting up from a knockdown ON THIS TICK
+## (`_gets_up_this_tick`), whose get-up iframes open later in this same step. A read, not a new member.
 var _iframe_open_at_step3: Array[bool] = [false, false]
 
 ## Story 6-6a (AC 3/AC 6/AC 12, operator ruling R-PRESS): THE DEFERRED LANDING PACKAGE, per ATTACKER
@@ -557,9 +560,10 @@ func advance(intents: Array[InputIntent]) -> void:
 	# Story 5-6 (AC 7): THE DODGE RUNG'S OBSERVATION POINT, captured HERE and nowhere else — after
 	# step 2 has advanced every window (so the `1-9/R2` grace-tick transient is already recomputed for
 	# this tick) and BEFORE the first press of this tick is resolved. See `_iframe_open_at_step3` for
-	# why the landing cannot simply read the predicate live.
-	_iframe_open_at_step3[0] = p1.hero.is_iframe_open()
-	_iframe_open_at_step3[1] = p2.hero.is_iframe_open()
+	# why the landing cannot simply read the predicate live. Story 6-6a review (D1): a hero whose
+	# knockdown ran out at THIS tick's step 2 counts as iframed too -- see `_gets_up_this_tick`.
+	_iframe_open_at_step3[0] = p1.hero.is_iframe_open() or _gets_up_this_tick(p1.hero)
+	_iframe_open_at_step3[1] = p2.hero.is_iframe_open() or _gets_up_this_tick(p2.hero)
 	_resolve_actions(p1, p1_intent, 0)
 	var p1_actually_running := _resolve_movement(p1, p1_intent, 0)
 	_resolve_actions(p2, p2_intent, 1)
@@ -1153,6 +1157,8 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		HeroState.ActionState.STUNNED:
 			if not hero.stun.is_running:
 				hero.set_action_state(HeroState.ActionState.IDLE)
+				# Story 6-6a review (D1): `_gets_up_this_tick` restates this arming condition for the
+				# step-3 dodge latch, which is taken BEFORE this arm runs. Keep the two in step.
 				if balance_ticks.is_knockdown_stun(hero.stun.duration_ticks()):
 					hero.get_up_iframe.start(balance_ticks.get_up_iframe_ticks)
 		HeroState.ActionState.BLOCKING:
@@ -3570,6 +3576,27 @@ func _apply_landing_packages() -> void:
 				target.landing_window.start(0)
 				target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
+
+
+## Story 6-6a review (D1, operator ruling: the exit tick is part of the get-up): does this hero get up
+## from a KNOCKDOWN on THIS tick? True when its knockdown `stun` ran out at this tick's step 2 and the
+## step-3 STUNNED arm is about to write IDLE and open the get-up iframes.
+##
+## WHY THE STEP-3 LATCH NEEDS IT. `_iframe_open_at_step3` is taken before either seat's
+## `_resolve_actions`, and the get-up window only starts INSIDE the victim's STUNNED arm, so on the exact
+## exit tick the latch read false: an unblockable landing there was unanswered, and at step 6b the victim
+## was already IDLE (not floored), so it was knocked straight back down -- with its fresh get-up window
+## still running under the new knockdown, and repeatably, every exit tick. Step-4 melee on that same tick
+## already read the live predicate AFTER the arm and was dropped, so the two attack types disagreed.
+##
+## The arm's own arming condition restated, no new storage: STUNNED, `stun` no longer running, the window
+## a knockdown by the one classifier, and a get-up window actually authored (a zero window arms nothing
+## and so protects nothing). Read before both seats, so it stays seat-symmetric. A knockdown with ticks
+## left (the tick before the exit) is still down: its landing is not dodged and hits the floor rule.
+func _gets_up_this_tick(hero: HeroState) -> bool:
+	return hero.action_state == HeroState.ActionState.STUNNED and not hero.stun.is_running \
+			and balance_ticks != null and balance_ticks.get_up_iframe_ticks > 0 \
+			and balance_ticks.is_knockdown_stun(hero.stun.duration_ticks())
 
 
 ## Story 5-4 (AC 1/AC 4-7): THE PAYOUT HALF of the RGB read exchange -- a landed unblockable credits
