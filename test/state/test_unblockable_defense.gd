@@ -975,6 +975,411 @@ func test_no_card_identity_reaches_the_snapshot_through_the_defense_key() -> voi
 
 # --- helpers ------------------------------------------------------------------------------------
 
+# --- Story 6-6a (AC 3-9, AC 12): THE KNOCKDOWN -- the unanswered tier's consequence for its VICTIM --
+##
+## Every test in this section builds its match from `_knockdown_config()`, which authors the two 6-6a
+## durations on top of `_config()`. The tests above deliberately keep `_config()` UNEDITED (knockdown
+## unauthored, 0 ticks): their landings still write the one-tick STUNNED a 0-tick knockdown degrades to,
+## and they stay green without edits -- the `5-5` "leave the older fixture unedited" discipline.
+##
+## KNOCKDOWN_STUN_TICKS is authored DISTINCT from every count above ({1, 2, 5, 6, 9, 14, 20, 600}) and
+## LONGER than COLOR_COUNTER_STUN_TICKS, mirroring AC 4's authored order; GET_UP_IFRAME_TICKS likewise.
+## The landing helper `_land` gives the VICTIM an intent on every tick of the exchange, cast tick
+## included (t == -1), so held state such as a block is never dropped by the fixture itself.
+
+const KNOCKDOWN_STUN_TICKS := 40
+const GET_UP_IFRAME_TICKS := 11
+
+
+func _knockdown_config() -> BalanceConfig:
+	var c := _config()
+	c.knockdown_stun_seconds = float(KNOCKDOWN_STUN_TICKS) / TimingWindow.TICK_HZ
+	c.get_up_iframe_seconds = float(GET_UP_IFRAME_TICKS) / TimingWindow.TICK_HZ
+	return c
+
+
+func _kd_match() -> MatchState:
+	return _make_match_with(_knockdown_config())
+
+
+## `caster_slot` casts UNBLOCKABLE in `color` and lands it inside reach. `victim_at.call(t)` supplies the
+## victim's intent for tick t: t == -1 is the cast tick, 0 .. CHARGEUP_TICKS - 1 the chargeup, and the
+## landing resolves on the LAST of them. `before_landing` runs just before the landing tick's advance().
+func _land(ms: MatchState, caster_slot: int, color: int, victim_at := Callable(),
+		before_landing := Callable()) -> void:
+	var caster: PlayerState = ms.p1 if caster_slot == 0 else ms.p2
+	var hand_slot := _slot_of_color(caster, color)
+	assert_true(hand_slot >= 0, "fixture: the caster holds a card of colour %d" % color)
+	for t in range(-1, CHARGEUP_TICKS):
+		if t >= 0:
+			_push_reach(ms, caster_slot)
+		if t == CHARGEUP_TICKS - 1 and before_landing.is_valid():
+			before_landing.call()
+		var caster_intent := _unblockable_intent(hand_slot) if t == -1 else _holding()
+		var victim_intent: InputIntent = victim_at.call(t) if victim_at.is_valid() else InputIntent.new()
+		if caster_slot == 0:
+			_advance(ms, caster_intent, victim_intent)
+		else:
+			_advance(ms, victim_intent, caster_intent)
+
+
+func _idle_ticks(ms: MatchState, n: int) -> void:
+	for _t in n:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+
+
+func _held(action: StringName) -> InputIntent:
+	var i := InputIntent.new()
+	i.held[action] = true
+	return i
+
+
+## AC 3: an unanswered landing knocks its VICTIM down for the authored knockdown ticks -- the
+## `test_a_negation_stuns_the_attacker_and_only_the_attacker` shape, with the party reversed.
+func test_an_unanswered_landing_knocks_the_victim_down_for_the_authored_ticks() -> void:
+	var ms := _kd_match()
+	var hits := _collect_hits(ms)
+	_land(ms, 0, Enums.CardColor.RED)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED,
+		"the VICTIM of an unanswered unblockable is knocked down (AC 3)")
+	assert_eq(ms.p2.hero.stun.duration_ticks(), KNOCKDOWN_STUN_TICKS,
+		"...for the authored knockdown duration, converted through BalanceTicks (AC 4)")
+	assert_eq(ms.p2.hero.stun.remaining_ticks(), KNOCKDOWN_STUN_TICKS,
+		"...started on the landing tick itself, so not one tick of it has run yet")
+	assert_eq(hits, [[0, 1, UNBLOCKABLE_DAMAGE, MAX_HP - UNBLOCKABLE_DAMAGE]],
+		"the full damage still lands, on the unchanged `hit_landed` payload")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
+		"the CASTER is never knocked down -- it takes its ordinary trailing IDLE exit")
+	assert_false(ms.p1.hero.stun.is_running, "...and holds no stun of its own")
+
+
+## AC 3: ONE WRITE PER OUTCOME, PER HERO. The caster's `CHARGING -> IDLE` exit is untouched and the
+## victim's knockdown is a SEPARATE write on the victim -- pinned on the queued channel, where a
+## replacement of the caster's line (the earlier draft's defect) would show up.
+func test_the_knockdown_is_a_separate_write_on_the_victim_and_the_casters_exit_is_untouched() -> void:
+	var ms := _kd_match()
+	var caster_log := _collect_action_states(ms.p1)
+	var victim_log := _collect_action_states(ms.p2)
+	_land(ms, 0, Enums.CardColor.RED)
+	assert_eq(caster_log, [
+			[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.CHARGING)],
+			[int(HeroState.ActionState.CHARGING), int(HeroState.ActionState.IDLE)]],
+		"the caster's log is exactly 5-6's landed path: CHARGING -> IDLE, once")
+	assert_eq(victim_log, [[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.STUNNED)]],
+		"the victim takes exactly ONE write: IDLE -> STUNNED")
+
+
+## AC 3, the other two ladder rungs: a COLOUR-COUNTERED landing and a DODGED landing knock nobody down.
+func test_a_countered_or_dodged_landing_knocks_nobody_down() -> void:
+	var countered := _kd_match()
+	_cast_defense(countered, Enums.CardColor.RED)
+	_land(countered, 0, Enums.CardColor.RED)
+	assert_ne(countered.p2.hero.action_state, HeroState.ActionState.STUNNED,
+		"a colour-countered landing does not knock the defender down")
+	assert_eq(countered.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...(the ATTACKER takes the colour-counter stun instead, unchanged)")
+	var dodged := _kd_match()
+	_run_chargeup_dodging(dodged, 0, Enums.CardColor.RED, 1)
+	assert_eq(dodged.p2.hero.action_state, HeroState.ActionState.ROLLING,
+		"a dodged landing does not knock the roller down -- the roll runs on")
+
+
+## AC 3: THE LETHAL GATE. `is_alive()` is read AFTER the damage, so a killing landing writes NO
+## `STUNNED` -- step 8 writes `DEAD` alone and presentation never sees a phantom knockdown.
+func test_a_lethal_landing_writes_no_knockdown() -> void:
+	var ms := _kd_match()
+	ms.p2.hero.take_damage(MAX_HP - UNBLOCKABLE_DAMAGE * 0.5)
+	ms.drain_signals()
+	var victim_log := _collect_action_states(ms.p2)
+	_land(ms, 0, Enums.CardColor.RED)
+	assert_false(ms.p2.hero.is_alive(), "precondition: the landing killed the victim")
+	assert_eq(victim_log, [[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.DEAD)]],
+		"a lethal landing writes DEAD only -- no STUNNED on the queued channel first")
+	assert_false(ms.p2.hero.stun.is_running, "...and no knockdown window was started")
+
+
+## AC 3: WHILE DOWN, every action is refused and the hero is rooted -- the existing `STUNNED` contract
+## (`5-6/R3`) applied unedited to the third edge.
+func test_a_knocked_down_hero_refuses_every_action_and_is_rooted() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	var attack_index := ms.p2.hero.attack_index
+	var rejections := _collect_rejections(ms.p2)
+	for action: StringName in [&"attack", &"roll", &"block"]:
+		var press := _press(action)
+		press.move_dir = Vector2(1.0, 0.0)
+		_advance(ms, InputIntent.new(), press)
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED,
+			"a %s press while down is dropped" % action)
+		assert_eq(ms.p2.hero.velocity, Vector3.ZERO, "...and the downed hero does not move")
+	assert_eq(ms.p2.hero.attack_index, attack_index, "no swing was started")
+	var slot := _slot_of_color(ms.p2, Enums.CardColor.RED)
+	_advance(ms, InputIntent.new(), _defense_intent(slot))
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_STUNNED]],
+		"a card cast while down is refused with REASON_STUNNED")
+
+
+# --- AC 5: the victim's prior state -----------------------------------------------------------------
+
+func test_knockdown_from_idle() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "IDLE -> knocked down")
+
+
+## ATTACKING: the swing is abandoned exactly as a deflect abandons one -- `is_hitbox_active()` needs
+## ATTACKING, so the orphaned windows cannot gather a fact from the downed hero.
+func test_knockdown_from_attacking() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED, func(t: int) -> InputIntent:
+		return _press(&"attack") if t == 2 else InputIntent.new())
+	assert_eq(ms.p2.hero.attack_index, 0, "precondition: the victim did start a swing")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "ATTACKING -> knocked down")
+	assert_false(ms.p2.hero.is_hitbox_active(), "...and the abandoned swing reports no live hitbox")
+	assert_eq(ms.p2.hero.chain_index, 0, "...and its sequence ends for good")
+
+
+func test_knockdown_from_blocking() -> void:
+	var ms := _kd_match()
+	_advance(ms, InputIntent.new(), _press(&"block"))
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.BLOCKING, "precondition: blocking")
+	_land(ms, 0, Enums.CardColor.RED, func(_t: int) -> InputIntent: return _held(&"block"))
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "the block does not reduce an unblockable")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "BLOCKING -> knocked down")
+
+
+## ROLLING with the iframe already CLOSED at step 3 (a still-open iframe is the dodge rung instead). The
+## roll is pressed 22 ticks before the landing: iframes 18 ticks, the roll itself 30 (this fixture).
+func test_knockdown_from_rolling_with_the_iframe_closed() -> void:
+	var ms := _kd_match()
+	_advance(ms, InputIntent.new(), _press(&"roll"))
+	_idle_ticks(ms, 15)
+	var check := func() -> void:
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.ROLLING,
+			"precondition: still rolling on the landing tick")
+		assert_false(ms.p2.hero.is_iframe_open(), "precondition: ...with the iframe already closed")
+	_land(ms, 0, Enums.CardColor.RED, Callable(), check)
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "not dodged: the iframe had closed")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "ROLLING -> knocked down")
+
+
+## CHARGING: the one prior state with a real effect -- the victim ABANDONS its chargeup. The three-part
+## `6-1` feint teardown runs with the write; the card and the stamina stay spent; the abandoned
+## attack never lands; `_charge_reach` is left alone (`6-1d/R9`).
+func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() -> void:
+	var ms := _kd_match()
+	var victim_slot := _slot_of_color(ms.p2, Enums.CardColor.BLUE)
+	var victim_at := func(t: int) -> InputIntent:
+		if t == 1:
+			return _unblockable_intent(victim_slot)
+		return _holding() if t > 1 else InputIntent.new()
+	var before := func() -> void:
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.CHARGING,
+			"precondition: the victim is mid-chargeup on the landing tick")
+		ms._charge_reach[1] = MatchState.CONTACT_CHARGE_REACH_INSIDE
+	_land(ms, 0, Enums.CardColor.RED, victim_at, before)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "CHARGING -> knocked down")
+	assert_false(ms.p2.charge_window.is_running, "the chargeup window is cleared...")
+	assert_false(ms.p2.landing_window.is_running, "...the landing window with it...")
+	assert_eq(ms.p2.charge_color, PlayerState.NO_TELEGRAPH_COLOR, "...and the colour, as one fact")
+	assert_eq(ms._charge_reach[1], MatchState.CONTACT_CHARGE_REACH_INSIDE,
+		"`_charge_reach` is NOT part of the teardown -- cleared with the verdict, never on its own")
+	assert_eq(ms.p2.stamina.get_current(), MAX_STAMINA - UNBLOCKABLE_COST, "the stamina stays spent")
+	assert_eq(ms.p2.discard.size(), 1, "...and the card stays in the discard")
+	for _t in CHARGEUP_TICKS:
+		_push_reach(ms, 1)
+		_advance(ms, InputIntent.new(), _holding())
+	assert_eq(ms.p1.hero.get_hp(), MAX_HP, "the abandoned chargeup never lands")
+
+
+## STUNNED, ordinary flavor (R-STUNSTACK): a colour-counter-stunned victim is KNOCKED DOWN -- the longer
+## window REPLACES the shorter one. A same-state write, so the queued channel carries nothing new.
+## Forced stun, the `test_action_state.gd` idiom for a non-table entry.
+func test_an_ordinary_stun_escalates_to_a_knockdown() -> void:
+	var ms := _kd_match()
+	var victim_log := _collect_action_states(ms.p2)
+	var force_ordinary_stun := func() -> void:
+		ms.p2.hero.stun.start(COLOR_COUNTER_STUN_TICKS)
+		ms.p2.hero.set_action_state(HeroState.ActionState.STUNNED)
+	_land(ms, 0, Enums.CardColor.RED, Callable(), force_ordinary_stun)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "still STUNNED...")
+	assert_eq(ms.p2.hero.stun.duration_ticks(), KNOCKDOWN_STUN_TICKS,
+		"...but the window is now the KNOCKDOWN's -- the ordinary stun escalated")
+	assert_eq(ms.p2.hero.stun.remaining_ticks(), KNOCKDOWN_STUN_TICKS,
+		"...restarted at full length, replacing the shorter window")
+	assert_eq(victim_log, [[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.STUNNED)]],
+		"the escalation is a same-state write: no second transition reaches the queued channel")
+
+
+## AC 7 -- THE FLOOR RULE (R-STUNSTACK): a second landing on an already-DOWN hero deals its damage but
+## neither restarts nor extends the running knockdown. A REAL second landing, not a forced one.
+func test_a_second_landing_on_a_downed_hero_deals_damage_but_never_extends_the_knockdown() -> void:
+	var ms := _kd_match()
+	var hits := _collect_hits(ms)
+	_land(ms, 0, Enums.CardColor.RED)
+	_land(ms, 0, Enums.CardColor.BLUE)
+	var elapsed := CHARGEUP_TICKS + 1
+	assert_eq(hits.size(), 2, "both landings emit `hit_landed`...")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - 2.0 * UNBLOCKABLE_DAMAGE, "...and both deal their damage")
+	assert_eq(ms.p2.hero.stun.duration_ticks(), KNOCKDOWN_STUN_TICKS, "the window was not restarted...")
+	assert_eq(ms.p2.hero.stun.remaining_ticks(), KNOCKDOWN_STUN_TICKS - elapsed,
+		"...nor extended: it ticks out on its original schedule")
+
+
+# --- AC 6: same-tick semantics are SEAT-SYMMETRIC (R-PRESS) -------------------------------------------
+
+## AC 6: two unblockables landing on the SAME tick, one per seat, BOTH land and BOTH victims go down.
+## Without the deferred package, P1's knockdown would flip P2 to STUNNED before P2's own landing arm ran.
+func test_simultaneous_landings_knock_both_heroes_down() -> void:
+	var ms := _kd_match()
+	var hits := _collect_hits(ms)
+	var p1_slot := _slot_of_color(ms.p1, Enums.CardColor.RED)
+	var p2_slot := _slot_of_color(ms.p2, Enums.CardColor.RED)
+	_advance(ms, _unblockable_intent(p1_slot), _unblockable_intent(p2_slot))
+	for _t in CHARGEUP_TICKS:
+		_push_reach(ms, 0)
+		_push_reach(ms, 1)
+		_advance(ms, _holding(), _holding())
+	for player: PlayerState in [ms.p1, ms.p2]:
+		assert_eq(player.hero.action_state, HeroState.ActionState.STUNNED, "BOTH heroes are knocked down")
+		assert_eq(player.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "...and BOTH took the damage")
+	assert_eq(hits.size(), 2, "both landings resolved -- neither was cancelled by the other's write")
+
+
+## AC 6 (R-PRESS): a press on the knockdown tick ALWAYS resolves first -- the action taken, its cost
+## spent -- and the knockdown then overwrites the result. Asserted on BOTH seats, for a step-3 press
+## (attack) and a step-6 card press (defense), because those are the two seats a naive write gets wrong.
+func test_a_press_on_the_knockdown_tick_resolves_first_on_both_slots() -> void:
+	for victim_slot: int in 2:
+		var caster_slot := 1 - victim_slot
+		var attack := _kd_match()
+		var attacker: PlayerState = attack.p1 if victim_slot == 0 else attack.p2
+		var attack_log := _collect_action_states(attacker)
+		_land(attack, caster_slot, Enums.CardColor.RED, func(t: int) -> InputIntent:
+			return _press(&"attack") if t == CHARGEUP_TICKS - 1 else InputIntent.new())
+		assert_eq(attacker.hero.attack_index, 0,
+			"victim slot %d: the attack pressed on the knockdown tick STARTED" % victim_slot)
+		assert_eq(attacker.stamina.get_current(), MAX_STAMINA - 1.0,
+			"victim slot %d: ...and spent its stamina" % victim_slot)
+		assert_eq(attack_log, [
+				[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.ATTACKING)],
+				[int(HeroState.ActionState.ATTACKING), int(HeroState.ActionState.STUNNED)]],
+			"victim slot %d: ...and the knockdown then overwrote it" % victim_slot)
+		var card := _kd_match()
+		var caster_of_card: PlayerState = card.p1 if victim_slot == 0 else card.p2
+		var card_slot := _slot_of_color(caster_of_card, Enums.CardColor.GREEN)
+		_land(card, caster_slot, Enums.CardColor.RED, func(t: int) -> InputIntent:
+			return _defense_intent(card_slot) if t == CHARGEUP_TICKS - 1 else InputIntent.new())
+		assert_true(caster_of_card.defense_window.is_running,
+			"victim slot %d: the card cast on the knockdown tick RESOLVED" % victim_slot)
+		assert_eq(caster_of_card.stamina.get_current(), MAX_STAMINA - DEFENSE_COST,
+			"victim slot %d: ...its stamina spent" % victim_slot)
+		assert_eq(caster_of_card.discard.size(), 1, "victim slot %d: ...its card spent" % victim_slot)
+		assert_eq(caster_of_card.hero.action_state, HeroState.ActionState.STUNNED,
+			"victim slot %d: ...and the knockdown still landed on top" % victim_slot)
+
+
+# --- AC 8 / AC 9: the get-up and its iframes ------------------------------------------------------------
+
+## AC 8: the ordinary TIMER exit from a knockdown opens the get-up iframes, on the exact exit tick.
+func test_the_timer_exit_from_a_knockdown_opens_the_get_up_iframes() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	_idle_ticks(ms, KNOCKDOWN_STUN_TICKS - 1)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "still down one tick before the end")
+	assert_false(ms.p2.hero.get_up_iframe.is_running, "...with no get-up window yet")
+	_idle_ticks(ms, 1)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE, "up on the tick the window empties")
+	assert_true(ms.p2.hero.get_up_iframe.is_running, "...with the get-up iframes OPEN")
+	assert_eq(ms.p2.hero.get_up_iframe.remaining_ticks(), GET_UP_IFRAME_TICKS,
+		"...for the authored get-up duration")
+	assert_true(ms.p2.hero.is_iframe_open(),
+		"...and registered wherever roll iframes are: the shared `is_iframe_open()` predicate")
+
+
+## AC 8's negative: an ORDINARY stun's exit opens nothing -- the get-up belongs to the knockdown flavor.
+func test_an_ordinary_stun_exit_opens_no_get_up_iframes() -> void:
+	var ms := _kd_match()
+	ms.p2.hero.stun.start(COLOR_COUNTER_STUN_TICKS)
+	ms.p2.hero.set_action_state(HeroState.ActionState.STUNNED)
+	ms.drain_signals()
+	_idle_ticks(ms, COLOR_COUNTER_STUN_TICKS)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE, "precondition: the stun ran out")
+	assert_false(ms.p2.hero.get_up_iframe.is_running, "an ordinary stun's exit arms no get-up iframes")
+
+
+## R-IFRAME-UNBLOCKABLE: the get-up iframes DODGE an unblockable landing, not only melee. The second
+## landing is timed onto the second tick of the get-up window; the control authors a zero get-up window
+## and the same landing knocks the hero straight back down.
+func test_get_up_iframes_dodge_an_unblockable_landing() -> void:
+	for authored: bool in [true, false]:
+		var config := _knockdown_config()
+		if not authored:
+			config.get_up_iframe_seconds = 0.0
+		var ms := _make_match_with(config)
+		_land(ms, 0, Enums.CardColor.RED)
+		_idle_ticks(ms, KNOCKDOWN_STUN_TICKS - CHARGEUP_TICKS)
+		_land(ms, 0, Enums.CardColor.BLUE)
+		if authored:
+			assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+				"a landing inside the get-up window is DODGED -- no second damage")
+			assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+				"...and the hero is not knocked back down")
+			assert_eq(ms.p1.orbs.get_count(Enums.CardColor.BLUE), 0, "...and the dodged landing pays no orb")
+		else:
+			assert_eq(ms.p2.hero.get_hp(), MAX_HP - 2.0 * UNBLOCKABLE_DAMAGE,
+				"control: with no get-up window the same landing hits")
+			assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "control: ...and knocks down")
+
+
+## AC 9: the DEBUG-RESET exit from a knockdown arms NO get-up iframes -- reset snaps straight to IDLE.
+func test_the_debug_reset_exit_from_a_knockdown_arms_no_get_up_iframes() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	_advance(ms, reset, InputIntent.new())
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE, "the reset clears the knockdown")
+	assert_false(ms.p2.hero.get_up_iframe.is_running, "...and arms NO get-up iframes")
+
+
+## AC 9: THE SEVENTH NAMED RESET EXCEPTION -- an ARMED get-up window is cleared by the reset, through the
+## public path and through the reset seat directly (`test_the_reset_seat_itself_clears_a_stunned_hero_
+## immediately`'s idiom).
+func test_the_debug_reset_clears_an_armed_get_up_iframe_window() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	_idle_ticks(ms, KNOCKDOWN_STUN_TICKS)
+	assert_true(ms.p2.hero.get_up_iframe.is_running, "precondition: the get-up window is armed")
+	var reset := InputIntent.new()
+	reset.debug_reset = true
+	_advance(ms, InputIntent.new(), reset)
+	assert_false(ms.p2.hero.get_up_iframe.is_running, "the reset STOPS the armed get-up window")
+	var direct := _kd_match()
+	_land(direct, 0, Enums.CardColor.RED)
+	_idle_ticks(direct, KNOCKDOWN_STUN_TICKS)
+	direct._reset_player(direct.p2)
+	assert_false(direct.p2.hero.get_up_iframe.is_running, "...and the reset seat itself does, immediately")
+
+
+# --- AC 12: the landing package's internal order ---------------------------------------------------------
+
+## AC 12: the knockdown write precedes its `hit_landed` push on the ONE shared queue, so a consumer that
+## mirrors the action state has already left BLOCKING when it reads the hit.
+func test_the_knockdown_write_precedes_its_hit_landed_on_the_shared_queue() -> void:
+	var ms := _kd_match()
+	_advance(ms, InputIntent.new(), _press(&"block"))
+	var order: Array = []
+	ms.p2.hero.action_state_changed.connect(
+		func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
+			order.append("state %d->%d" % [previous, current]))
+	ms.hit_landed.connect(func(_a: int, _t: int, _d: float, _hp: float) -> void: order.append("hit"))
+	_land(ms, 0, Enums.CardColor.RED, func(_t: int) -> InputIntent: return _held(&"block"))
+	assert_eq(order, ["state %d->%d" % [HeroState.ActionState.BLOCKING, HeroState.ActionState.STUNNED],
+			"hit"],
+		"damage, then the knockdown write, then `hit_landed` -- in that order on the drained queue")
+
+
 func _deck_contents() -> Array[StringName]:
 	var out: Array[StringName] = []
 	for i in DECK_SIZE:

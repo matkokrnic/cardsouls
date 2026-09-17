@@ -106,6 +106,11 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# PLUS a directional `>` bound in test_balance_authoring.gd, whose `stun_seconds` exemption AC 4
 	# REMOVES: the field is no longer data-only, so a zero is no longer inert.
 	"color_counter_stun_seconds", "deflect_stun_seconds",
+	# Story 6-6a (AC 4/AC 8): the knockdown stun and the get-up iframes, on the two stun lines above's
+	# precedent -- both `_seconds`, so half (b) demands the `knockdown_stun_ticks` /
+	# `get_up_iframe_ticks` twins independently. The knockdown joins the bespoke three-way TICK order
+	# bound in test_balance_authoring.gd; the get-up iframes carry their own `> 0` bound there.
+	"knockdown_stun_seconds", "get_up_iframe_seconds",
 	# Story 5-6 (AC 2/AC 3): the deflected ATTACKER's stamina penalty (distinct from the DEFENDER's
 	# `deflect_stamina_cost` above) and the dodge rung's damage multiplier. Neither carries the
 	# `_seconds` suffix, so half (b) leaves them alone -- a penalty and a multiplier are not

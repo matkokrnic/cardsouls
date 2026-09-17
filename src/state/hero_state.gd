@@ -38,6 +38,9 @@ enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING, DEAD }
 ## BLOCKING/ROLLING exit on release/expiry, which are not input edges.
 ##
 ## STUNNED (story 5-6, AC 6): row PRESENT and REACHED — but STILL with zero inbound TABLE edges.
+## STORY 6-6a (AC 3) adds a THIRD direct entry: the knockdown, `MatchState._apply_landing_packages`'s
+## write on the VICTIM of an unanswered unblockable. The two-entry text below is 5-6's and is kept as
+## that story's record; test_action_state.gd pins the count at three now.
 ## OPEN decision (a) (attacker consequence on deflect, decision-log Session 2026-07-22) is RESOLVED
 ## by `E5-P/R1`, and `5-6` is the resolution: `STUNNED` is entered by exactly TWO direct
 ## `MatchState.set_action_state` calls — the colour-counter negation inside `_resolve_charge_landing`
@@ -129,6 +132,19 @@ var deflect := TimingWindow.new()
 var roll_iframe := TimingWindow.new()
 var roll_duration := TimingWindow.new()
 var stun := TimingWindow.new()
+## Story 6-6a (AC 8): THE GET-UP IFRAMES -- the ninth D4 window, opened by `MatchState` on the ordinary
+## timer-driven `STUNNED -> IDLE` exit from a KNOCKDOWN (never on the debug reset, AC 9, which stops it
+## instead). The `roll_iframe` mechanism's shape reused rather than a second mechanism: it ticks in
+## `tick_timers()` beside `roll_iframe`, carries the same one-tick close grace
+## (`_get_up_iframe_closed_this_tick`), has no early-stop path, and registers WHEREVER `roll_iframe`
+## does -- `is_iframe_open()` below -- so the step-4 fact drop AND the unblockable dodge rung both see it
+## (operator ruling R-IFRAME-UNBLOCKABLE). OWNED HERE rather than on `PlayerState`: the `5-5`
+## `defense_window` precedent put that window on the player because it belongs to the CARD layer (a
+## cast arms it, a landing consumes it); this one belongs to the BODY -- it is armed by an action-state
+## exit and read by the same predicate as the roll's iframes, both of which live on this object.
+## HASHED through `to_snapshot()`'s `get_up_iframe` key: it crosses ticks and decides an outcome
+## (whether a hit lands at all).
+var get_up_iframe := TimingWindow.new()
 
 var _hp: float
 var _max_hp: float
@@ -150,6 +166,11 @@ var _deflect_closed_this_tick := false
 ## deliberately EXCLUDED from to_snapshot(): no determinism/replay hole, because replay
 ## recomputes it identically inside each tick before any consumer runs.
 var _roll_iframe_closed_this_tick := false
+
+## Story 6-6a (AC 8): TRANSIENT grace marker for `get_up_iframe` -- the `_roll_iframe_closed_this_tick`
+## mirror, for the identical reason and with the identical write-before-read, never-snapshotted
+## contract.
+var _get_up_iframe_closed_this_tick := false
 
 ## Story 1-5 (B7b/N2): per-swing dedupe records, keyed by attack_index. Each record is
 ## {"hit": Array of [slot, index] TARGET ADDRESSES already resolved this swing, "grace": int}.
@@ -256,8 +277,15 @@ func is_deflect_window_open() -> bool:
 ## both roll windows start only in enter_roll with no early-stop path, so the window
 ## cannot legitimately outlive the roll — any future early-stop path must re-open that
 ## ruling.
+##
+## Story 6-6a (AC 8, R-IFRAME-UNBLOCKABLE): WIDENED to the get-up iframes. Every consumer of this
+## predicate -- the step-4 fact drop and `MatchState._iframe_open_at_step3` (the unblockable dodge rung)
+## -- therefore protects a hero getting up exactly as it protects a rolling one, with no second call
+## site to keep in step. The same window-alone judgement: `get_up_iframe` starts only at the knockdown
+## timer exit and has no early-stop path (the debug reset clears it outside normal play).
 func is_iframe_open() -> bool:
-	return roll_iframe.is_running or _roll_iframe_closed_this_tick
+	return roll_iframe.is_running or _roll_iframe_closed_this_tick \
+			or get_up_iframe.is_running or _get_up_iframe_closed_this_tick
 
 
 ## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
@@ -430,6 +458,7 @@ func tick_timers() -> void:
 	var was_active := active.is_running
 	var deflect_was_running := deflect.is_running
 	var iframe_was_running := roll_iframe.is_running
+	var get_up_iframe_was_running := get_up_iframe.is_running
 	windup.tick()
 	active.tick()
 	recovery.tick()
@@ -444,6 +473,9 @@ func tick_timers() -> void:
 	_roll_iframe_closed_this_tick = iframe_was_running and not roll_iframe.is_running
 	roll_duration.tick()
 	stun.tick()
+	get_up_iframe.tick()
+	# Story 6-6a (AC 8): recomputed EVERY tick, the `_roll_iframe_closed_this_tick` line's exact shape.
+	_get_up_iframe_closed_this_tick = get_up_iframe_was_running and not get_up_iframe.is_running
 	for index in _swing_dedupe.keys():
 		var grace := int(_swing_dedupe[index]["grace"])
 		if grace > 0:
@@ -491,4 +523,6 @@ func to_snapshot() -> Dictionary:
 		"roll_iframe": roll_iframe.to_snapshot(),
 		"roll_duration": roll_duration.to_snapshot(),
 		"stun": stun.to_snapshot(),
+		# Story 6-6a (AC 8): the get-up iframes -- a NEW snapshot key, present (at rest) on every hero.
+		"get_up_iframe": get_up_iframe.to_snapshot(),
 	}

@@ -85,6 +85,11 @@ var color_counter_stun_ticks: int
 ## This is also what test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of
 ## any new `*_seconds` field: a stem-matched twin on this object.
 var deflect_stun_ticks: int
+## Story 6-6a (AC 3/AC 4): the knockdown stun in TICKS -- the two lines above's precedent verbatim,
+## derived ONCE here and read INLINE at the one seat that starts the window (CONSTRAINT C).
+var knockdown_stun_ticks: int
+## Story 6-6a (AC 8): the get-up iframe window in TICKS, on the `roll_iframe_ticks` precedent.
+var get_up_iframe_ticks: int
 ## Story 5-2 (AC 10): the mode ② chargeup, in TICKS. The `draw_replacement_delay_ticks` precedent
 ## exactly — derived ONCE here, read INLINE at the one seat that starts the window (CONSTRAINT C),
 ## and the authored `*_seconds` float never reaches `advance()`. A chargeup measured against a raw
@@ -128,6 +133,25 @@ func unblockable_launch_ticks_for(color: int) -> int:
 	return 0
 
 
+## Story 6-6a (AC 7/AC 8/AC 11): THE STUN-FLAVOR CLASSIFIER -- is a stun window of this duration a
+## KNOCKDOWN rather than an ordinary (colour-counter or deflect) stun? `TimingWindow` carries no reason
+## field by design (D4), and no stored flavor is added to the snapshot, so the flavor is DERIVED from
+## the window's own snapshotted duration against this object's knockdown count. ONE classifier, read by
+## the state layer (the floor rule and the get-up arming) and by presentation (clip selection) alike,
+## so the two can never disagree about which stun is which.
+##
+## SOUND ONLY WHILE THE THREE DURATIONS ARE DISTINCT, and AC 4's authoring audit pins that order in
+## ticks (`knockdown > color_counter > deflect`). Named fragility, not solved here: a retune that
+## authored two of them equal would make this comparison silently wrong. A running window also keeps
+## its duration across a balance reload (D4), so a knockdown reload that RAISES the count mid-knockdown
+## reads the in-flight window as ordinary until it ends.
+##
+## A ZERO knockdown count classifies NOTHING as a knockdown (every in-test config that never authors the
+## field): a 0-tick knockdown never runs, and "every stun is a knockdown" would be the wrong degrade.
+func is_knockdown_stun(duration_ticks: int) -> bool:
+	return knockdown_stun_ticks > 0 and duration_ticks >= knockdown_stun_ticks
+
+
 static func from_config(config: BalanceConfig) -> BalanceTicks:
 	var t := BalanceTicks.new()
 	t.stamina_regen_delay_ticks = TimingWindow.seconds_to_ticks(config.stamina_regen_delay_seconds)
@@ -168,6 +192,10 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# rather than crashing, and the authoring audit is what keeps it out of the shipped `.tres`.
 	t.color_counter_stun_ticks = TimingWindow.seconds_to_ticks(config.color_counter_stun_seconds)
 	t.deflect_stun_ticks = TimingWindow.seconds_to_ticks(config.deflect_stun_seconds)
+	# Story 6-6a (AC 4/AC 8): the knockdown stun and the get-up iframes, PLAIN conversions on the two
+	# stun lines' exact shape -- window durations, clamped to >= 1 tick for any non-zero authored value.
+	t.knockdown_stun_ticks = TimingWindow.seconds_to_ticks(config.knockdown_stun_seconds)
+	t.get_up_iframe_ticks = TimingWindow.seconds_to_ticks(config.get_up_iframe_seconds)
 	# Story 5-2 (AC 10): a PLAIN conversion, deliberately NOT one of the two clamped modulo
 	# divisors above — the chargeup is a WINDOW DURATION, and `seconds_to_ticks` already clamps any
 	# non-zero authored duration to a minimum of 1 tick. An authored 0.0 therefore derives 0 ticks,

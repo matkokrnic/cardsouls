@@ -104,7 +104,10 @@ func test_snapshot_shape_is_untouched_by_the_instrument() -> void:
 		"to_snapshot() gains NO instrument key — the replay contract never learns it exists")
 	var hero: Array = ms.to_snapshot()["p1"]["hero"].keys()
 	hero.sort()
-	assert_eq(hero, ["action_state", "active", "chain", "chain_index", "deflect", "facing", "hp",
+	assert_eq(hero, ["action_state", "active", "chain", "chain_index", "deflect", "facing",
+			# Story 6-6a (AC 8): the get-up iframe window joins the hero snapshot -- STATE, named here on
+			# the 6-7 line's precedent below so this pin fails loudly rather than silently.
+			"get_up_iframe", "hp",
 			"max_hp", "move_speed", "recovery", "roll_direction", "roll_duration", "roll_iframe",
 			# Story 6-7 (AC 5): the R6 gait-lockout latch joins the hero snapshot -- named here so
 			# this pin fails loudly rather than silently, on the same "gains no instrument key"

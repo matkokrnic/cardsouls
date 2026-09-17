@@ -1016,7 +1016,30 @@ extends TestCase
 ##     pre-story golden, reproduced) -- confirming the latch field is the one and only cause. The
 ##     removal was reverted immediately after measuring; no other line moved.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "71a7b45f1a54eda463b762c95daceba4fd5d9b8078ed3ea2f6c34900f595fcb1"
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 6-6a (defense reactions), 71a7b45f -> d437432f, ONE re-baseline, ONE named
+## cause -- the story's Golden Prediction cause 4 -- CONFIRMED the sole cause by measurement in both
+## directions. Snapshot key-path set 198 -> 206; `RecordFile.FORMAT_VERSION` measured 11 before and 11
+## after (no recorded input channel changed).
+##
+##   THE ONE CAUSE: `HeroState.to_snapshot()` gains `"get_up_iframe"` -- the get-up iframe TimingWindow
+##     (AC 8), HASHED on `roll_iframe`'s test. The fixture never knocks anyone down, so the key reaches
+##     the hash tick AT REST on both heroes (`{duration 0, elapsed 0, running false}`) -- its mere
+##     PRESENCE is the move, the `5-5` `defense` key's shape (pinned below by
+##     test_the_fixture_reaches_the_hash_tick_with_no_get_up_iframe_armed).
+##
+##   NOT A CAUSE, MEASURED (causes 1-3): the knockdown write, the deferred landing package and its
+##     per-tick latch (`_landing_package_pending`, PER_TICK -- never snapshotted), the CHARGING
+##     abandonment and the floor rule all sit on the unanswered-unblockable path this fixture never
+##     reaches (it never enters CHARGING, see the 5-2 block above); `knockdown_stun_seconds` /
+##     `get_up_iframe_seconds` are authored balance (`BC/R3`); the presentation changes touch nothing
+##     under src/state/.
+##
+##   ISOLATED BOTH DIRECTIONS: with the two heroes' `get_up_iframe` keys erased from the finished
+##     fixture snapshot (a scratch probe, no source edit) the hash is `71a7b45f…` EXACTLY -- the
+##     pre-story golden reproduced with every other 6-6a change in place.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "d437432f7823379c8992276f4061ca16161b156fe2a8a7eb732d9b9750262d56"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -2108,6 +2131,19 @@ func test_the_fixture_never_starts_a_landing_window() -> void:
 			"the fixture never casts mode (2), so no landing window was ever started")
 		assert_eq(int(player.to_snapshot()["landing"]), 0,
 			"...so the `landing` key hashes at its RESTING value on the hash tick")
+
+
+## Story 6-6a (AC 8): THE MEASURED CLAIM BEHIND THE RE-BASELINE, PINNED on the landing-window pin
+## directly above's shape -- no hero in the fixture is ever knocked down, so the get-up iframe window is
+## never STARTED (a start at the knockdown's timer exit would record a non-zero duration), and the new
+## `get_up_iframe` key hashes at rest. Which is why this story's ONE golden cause is the key's PRESENCE.
+func test_the_fixture_reaches_the_hash_tick_with_no_get_up_iframe_armed() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	for player: PlayerState in [ms.p1, ms.p2]:
+		assert_eq(player.hero.to_snapshot()["get_up_iframe"],
+			{"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false},
+			"the fixture never knocks a hero down, so the `get_up_iframe` key hashes at its RESTING value")
 
 
 func test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record() -> void:

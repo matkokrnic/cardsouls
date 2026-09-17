@@ -330,6 +330,20 @@ extends Resource
 ## three-tier ladder with every other audit green. Reading a colour is the harder read and pays the
 ## bigger punish; landing a deflect is E1 melee content available every swing.
 @export var deflect_stun_seconds: float = 0.0
+## Story 6-6a (AC 3/AC 4): the THIRD stun duration -- what the VICTIM of an UNANSWERED unblockable
+## landing holds (the knockdown, `_apply_landing_packages`). Named on the two siblings' precedent
+## above: once a third duration exists, the name says which rung it belongs to. The HEAVIEST of the
+## three, and the order is asserted in TICKS (`test_balance_authoring.gd`, AC 4):
+## `knockdown > color_counter > deflect`. The ordering is also load-bearing beyond the ladder's
+## gradient: `BalanceTicks.is_knockdown_stun` tells a knockdown from an ordinary stun by the running
+## window's duration alone (no stored reason field), which is only sound while the three stay distinct.
+@export var knockdown_stun_seconds: float = 0.0
+## Story 6-6a (AC 8): the GET-UP IFRAMES -- opened on the ordinary timer-driven `STUNNED -> IDLE` exit
+## from a knockdown and never on the debug reset (AC 9). Registers wherever `roll_iframe_seconds`
+## does (`HeroState.is_iframe_open`, operator ruling R-IFRAME-UNBLOCKABLE). Authored from the
+## measured length of the `get_up` clip (2.0333 s at the 6-6a dev pass); live smoke judges the felt
+## window.
+@export var get_up_iframe_seconds: float = 0.0
 
 ## Story 5-2 (AC 6/AC 10/AC 17/AC 18): mode ② — the unblockable INITIATION. Four numbers, and
 ## every one of them is global rather than per-card or per-colour, which is the GDD's own shape

@@ -168,6 +168,15 @@ func _physics_process(_delta: float) -> bool:
 		# exists, so an authored damage retune could otherwise kill P2 mid-run -- the round-over freeze
 		# would then hold P1 in CHARGING forever and the run would burn to DEADLINE instead of judging.
 		_state.p2.hero.heal(_state.p2.hero.get_max_hp())
+		# Story 6-6a: a case that LANDS now knocks P2 down (AC 3), and the get-up that follows opens
+		# iframes that dodge an unblockable (R-IFRAME-UNBLOCKABLE) -- so a later case's landing could be
+		# answered by an earlier case's knockdown rather than by its own geometry (measured: both
+		# `flee` cases after a `touch` landed inside the get-up window). Every case therefore starts P2
+		# UP and UNPROTECTED, on the full-HP line's reasoning directly above.
+		if _state.p2.hero.action_state == HeroState.ActionState.STUNNED:
+			_state.p2.hero.set_action_state(HeroState.ActionState.IDLE)
+		_state.p2.hero.stun.start(0)
+		_state.p2.hero.get_up_iframe.start(0)
 		_p1_actor.position = P1_START + Vector3(0.0, _y, 0.0)
 		# "charge" parks the defender against the attacker for the chargeup; every other case parks
 		# it where the LAUNCH will bring the blade onto it.

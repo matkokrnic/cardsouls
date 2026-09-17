@@ -111,7 +111,7 @@ func test_table_has_no_inbound_stunned_charging_or_dead_edges() -> void:
 ## STORY 5-6 (AC 6): THE POSITIVE HALF — the guard that REPLACES the old negative-only framing rather
 ## than deleting it. The scan above proves `STUNNED` has no TABLE edge; on its own that is now a
 ## MISLEADING guard, because `STUNNED` IS reachable and the table simply is not how. This test names
-## the exactly-two AUTHORED non-table entry points and pins the count, the same "positive enumeration
+## the exactly-two (three since 6-6a) AUTHORED non-table entry points and pins the count, the same "positive enumeration
 ## of a locked set, not merely an absence" shape `OBSERVATION_SEAMS` and `SHIPPED_INPUT_ACTIONS`
 ## already use elsewhere in this suite.
 ##
@@ -125,9 +125,23 @@ func test_table_has_no_inbound_stunned_charging_or_dead_edges() -> void:
 ##
 ## BOTH CALL SITES ARE WRITTEN ON ONE LINE EACH TODAY, and that is worth stating because it is what
 ## this line-based count relies on. A future formatter that split either call across lines would make
-## this test FAIL SAFE (undercounting to 1) rather than silently pass — a loud, fixable failure that
+## this test FAIL SAFE (undercounting) rather than silently pass — a loud, fixable failure that
 ## should not surprise the reader who hits it.
-func test_stunned_has_exactly_two_authored_non_table_entry_points() -> void:
+##
+## STORY 6-6a (AC 3) AMENDS THE PIN 2 -> 3, AND THE THIRD SITE IS ARGUED HERE, AS THE FAILURE MESSAGE
+## BELOW HAS ALWAYS DEMANDED. The third site is the KNOCKDOWN, `MatchState._apply_landing_packages`: an
+## UNANSWERED unblockable (the `5-6` ladder's third tier -- neither colour-countered nor dodged) knocks
+## its VICTIM down. The argument for a third entry rather than a reuse of either existing one:
+##   * it stuns a DIFFERENT PARTY. Both `5-6` edges punish the ATTACKER for being answered; this one
+##     punishes the DEFENDER for failing to answer, so neither existing write's subject can carry it.
+##   * it is still a direct `set_action_state` call and never a `TRANSITION_TABLE` edge -- the
+##     `DEAD`/`5-6` precedent (the table scan above stays unedited and still green), because no PRESS
+##     maps to it: the card layer's landing drives it.
+##   * it is ONE site, not one per prior state. The prior state's consequences (a CHARGING victim's
+##     abandoned chargeup, an ordinary stun escalated, the knockdown floor) are branches AROUND the one
+##     write, not further writes.
+## MUTATION (6-6a dev pass): the new write deleted -> this pin reads `x2` and goes RED; restored -> green.
+func test_stunned_has_exactly_three_authored_non_table_entry_points() -> void:
 	var re := RegEx.new()
 	re.compile(r"set_action_state\(\s*HeroState\.ActionState\.STUNNED\s*\)")
 	var sites: Array[String] = []
@@ -139,11 +153,12 @@ func test_stunned_has_exactly_two_authored_non_table_entry_points() -> void:
 		if n > 0:
 			sites.append("%s x%d" % [path, n])
 	sites.sort()
-	assert_eq(sites, ["res://src/state/match_state.gd x2"],
-		"EXACTLY TWO authored inbound edges to STUNNED in all of src/, both in match_state.gd: the "
-		+ "colour-counter negation in `_resolve_charge_landing` (AC 5) and the melee deflect in "
-		+ "`_resolve_contacts` (AC 9). A third site anywhere under src/ fails here and must be "
-		+ "argued, not merely added — got %s" % [sites])
+	assert_eq(sites, ["res://src/state/match_state.gd x3"],
+		"EXACTLY THREE authored inbound edges to STUNNED in all of src/, all in match_state.gd: the "
+		+ "colour-counter negation in `_resolve_charge_landing` (5-6 AC 5), the melee deflect in "
+		+ "`_resolve_contacts` (5-6 AC 9), and the knockdown in `_apply_landing_packages` (6-6a AC 3). "
+		+ "A fourth site anywhere under src/ fails here and must be argued, not merely added — got %s"
+		% [sites])
 
 
 ## ---- STUNNED's own lifecycle (story 5-6, AC 12 / AC 14 / AC 15) --------------------------

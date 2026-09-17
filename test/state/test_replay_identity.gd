@@ -253,6 +253,11 @@ const HASHED: Array[String] = [
 	# the existing `"hero_state"` key through `player_state.hero`, so no exemption is needed and
 	# UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"hero_state.run_locked_out",
+	# Story 6-6a (AC 8): the GET-UP IFRAME window classifies HASHED, on `roll_iframe`'s exact test -- it
+	# CROSSES TICKS (armed at the knockdown's timer exit, runs its authored span) and DECIDES AN OUTCOME
+	# (whether a hit, or an unblockable, lands at all). It reaches the hash through `HeroState.to_snapshot()`'s
+	# ONE new `get_up_iframe` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"hero_state.get_up_iframe",
 	# Story 6-2 (AC 14b/AC 14c), narrowed by the review fix (H1): the Pitch Zone's card-identity and
 	# hand-slot records classify HASHED beside the fizzle window they share an object with -- they
 	# CROSS TICKS (staging to fizzle) and DECIDE AN OUTCOME (which card fizzles, into which slot the
@@ -285,8 +290,15 @@ const PER_TICK: Array[String] = [
 	# IT IS THEREFORE NOT A FOURTH UNHASHED CROSS-TICK EXCLUSION: it is not cross-tick state at all.
 	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
 	"match_state._iframe_open_at_step3",
+	# Story 6-6a (AC 6, R-PRESS): THE DEFERRED LANDING PACKAGE classifies PER_TICK on
+	# `_iframe_open_at_step3`'s exact test -- written only at step 3 (the landing) and consumed-and-cleared
+	# at step 6b of the SAME advance(), with no return between the two, so no tick can observe a previous
+	# tick's value. Not cross-tick state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"match_state._landing_package_pending",
 	"hero_state._queue", "hero_state._deflect_closed_this_tick",
 	"hero_state._roll_iframe_closed_this_tick",
+	# Story 6-6a (AC 8): the get-up iframes' one-tick close grace, `_roll_iframe_closed_this_tick`'s twin.
+	"hero_state._get_up_iframe_closed_this_tick",
 	"mana_pool._queue", "orb_pool._queue", "stamina_pool._queue",
 	# Story 3-6 (AC 2): the FIFTH `_queue` reference, and it classifies exactly like its four
 	# siblings above — a shared reference to the ONE SignalQueue the runner drains after every

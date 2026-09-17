@@ -264,6 +264,26 @@ func test_authored_stun_values_are_positive_and_correctly_ordered() -> void:
 		"color_counter_stun_seconds must be authored LONGER than deflect_stun_seconds (`E5-P/R1`): "
 		+ "reading the colour is the harder read and pays the bigger punish — an inverted pair "
 		+ "ships a broken escalation gradient with every other audit green")
+	# Story 6-6a (AC 4): THE THIRD STUN AND THE FULL THREE-WAY BOUND, ASSERTED IN TICKS. Seconds alone
+	# under-test it: two distinct authored second-values can round to the SAME tick count through
+	# `seconds_to_ticks`, and the tick count is what the state layer runs and what
+	# `BalanceTicks.is_knockdown_stun` compares -- two equal counts would silently merge two flavors.
+	# The seconds-domain line above stays as the authoring-intent half; these are the enforcement half.
+	assert_true(config.knockdown_stun_seconds > 0.0,
+		"knockdown_stun_seconds must be authored > 0 (a 0-tick knockdown never runs, and the "
+		+ "flavor classifier then treats nothing as a knockdown)")
+	var ticks := BalanceTicks.from_config(config)
+	assert_true(ticks.knockdown_stun_ticks > ticks.color_counter_stun_ticks,
+		"knockdown_stun_ticks (%d) must be LONGER than color_counter_stun_ticks (%d) — AC 4's bound, "
+		% [ticks.knockdown_stun_ticks, ticks.color_counter_stun_ticks]
+		+ "in ticks: the knockdown flavor is told apart by duration alone")
+	assert_true(ticks.color_counter_stun_ticks > ticks.deflect_stun_ticks,
+		"color_counter_stun_ticks (%d) must be LONGER than deflect_stun_ticks (%d) in ticks too"
+		% [ticks.color_counter_stun_ticks, ticks.deflect_stun_ticks])
+	# Story 6-6a (AC 8): the get-up iframes, in the defect-by-construction class -- a 0-tick window never
+	# opens, so the timer exit would arm nothing and the get-up could be timed into after all.
+	assert_true(config.get_up_iframe_seconds > 0.0,
+		"get_up_iframe_seconds must be authored > 0 (a 0-tick window arms nothing on the get-up)")
 
 
 ## Story 5-6 (AC 4): the dodge rung's damage multiplier, and it takes a NARROWER bound than

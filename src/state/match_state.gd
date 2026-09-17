@@ -324,6 +324,35 @@ var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ## writes nor reads it; the next tick that does reach step 3 overwrites it before any read.
 var _iframe_open_at_step3: Array[bool] = [false, false]
 
+## Story 6-6a (AC 3/AC 6/AC 12, operator ruling R-PRESS): THE DEFERRED LANDING PACKAGE, per ATTACKER
+## slot -- true when that slot's unblockable landed UNANSWERED this tick (the ladder's third tier), and
+## its package is owed to the opposing hero.
+##
+## WHY THE PACKAGE CANNOT APPLY AT THE LANDING. `_resolve_charge_landing` runs inside the CASTER's step-3
+## seat, and step 3 is p1 actions -> p1 movement -> p2 actions -> p2 movement. A knockdown written there
+## would land on p2 BEFORE p2's own same-tick presses were read, but on p1 AFTER p1's -- the first
+## CROSS-PLAYER write in step 3, and exactly the seat-dependence `_iframe_open_at_step3` above exists to
+## refuse. It would also flip a p2 victim whose OWN chargeup lands this tick to `STUNNED` before its
+## landing arm runs, cancelling that landing (AC 6's simultaneous trade).
+##
+## THE PINNED OUTCOME, identical for both seats: a press on the tick an incoming knockdown lands ALWAYS
+## resolves first -- stamina or card spent, action taken -- and the knockdown then overwrites the
+## resulting state. "Press" covers the step-6 CARD presses as well as step 3's attack/roll/block (R-PRESS
+## names the card spend), so the package is applied AFTER step 6 (`_apply_landing_packages`), not merely
+## after step 3.
+##
+## THE UNIT OF DEFERRAL IS THE WHOLE PACKAGE -- damage, the knockdown write, and the `hit_landed` push,
+## in that internal order (AC 12) -- never the `STUNNED` write alone. The LADDER itself (reach, colour
+## counter, dodge rung, orb grant) still resolves at the landing: only what happens TO the victim moves.
+##
+## A BOOL, NOT A RECORD: the package's content is fully determined by the attacker slot (the target is the
+## opposing hero, the damage is the authored percent of its max hp, read inline at the apply seat).
+##
+## PER-TICK, NEVER CROSS-TICK: written only at step 3 and consumed-and-cleared at the apply seat later in
+## the SAME advance(), with no return between the two -- the `_iframe_open_at_step3` classification
+## verbatim, which is why it is EXCLUDED from to_snapshot() with no determinism or replay hole.
+var _landing_package_pending: Array[bool] = [false, false]
+
 ## Story 3-3 (AC 2): the injected deck COMPOSITION — plain StringName ids, retained so the
 ## step-6 deal seat can lay a fresh pile down on BOTH of its occasions (match start and debug
 ## reset) without a discard pile to recover cards from. EXCLUDED from to_snapshot() for the
@@ -630,6 +659,12 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    since AC 16. A naive "tick and draw together at step 2" would have opened a second seat.
 	_deliver_pending_draw(p1, 0)
 	_deliver_pending_draw(p2, 1)
+	# 6b. Story 6-6a (AC 3/AC 6, R-PRESS): THE LANDING-PACKAGE SEAT -- every unanswered unblockable that
+	#    landed at step 3 this tick is applied to its victim HERE, after BOTH seats' step-3 presses and
+	#    step-6 card presses have resolved, so a same-tick press resolves first on either seat and the
+	#    knockdown then overwrites the result. Before step 8, so a lethal landing still ends the round on
+	#    its own tick. Fixed P1 -> P2 package order, like every other per-player loop in this function.
+	_apply_landing_packages()
 	# 7. Board update          the SHARED THROTTLED TARGETING TICK (story 4-2, AC 7, `4-2/R15`).
 	#    This line replaces the literal `[E4 minion/totem throttled-tick seam]` comment that
 	#    reserved the seat from E4 planning onward — the seat is now filled by the thing it was
@@ -1109,9 +1144,17 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		# a running `stun` window short anywhere, exactly as `ROLLING`'s arm gives `roll_duration` and
 		# `CHARGING`'s gives `charge_window`. The debug reset's fifth exception (AC 13) is a RESET, not
 		# an early stop — it clears the window and the state together, outside normal play.
+		#
+		# STORY 6-6a (AC 8/AC 9): THE GET-UP. This timer exit -- and ONLY this one; the debug reset writes
+		# the same `STUNNED -> IDLE` from `_reset_player` and arms nothing -- opens the get-up iframes when
+		# the stun that just ran out was a KNOCKDOWN, told apart by the window's own snapshotted duration
+		# (`BalanceTicks.is_knockdown_stun`, no stored reason field). Presentation plays `get_up` off the
+		# SAME fact: the window this line starts is what the runner forwards.
 		HeroState.ActionState.STUNNED:
 			if not hero.stun.is_running:
 				hero.set_action_state(HeroState.ActionState.IDLE)
+				if balance_ticks.is_knockdown_stun(hero.stun.duration_ticks()):
+					hero.get_up_iframe.start(balance_ticks.get_up_iframe_ticks)
 		HeroState.ActionState.BLOCKING:
 			if not intent.is_held(&"block"):
 				hero.set_action_state(HeroState.ActionState.IDLE)
@@ -1714,7 +1757,8 @@ func _resolve_contacts() -> Array[int]:
 				_queue.push(deflect_landed.emit.bind(int(fact["attacker"]), int(fact["target"]),
 						PlayerState.NO_TELEGRAPH_COLOR))
 				# STORY 5-6 (AC 9/AC 10, `E5-P/R1`): THE DEFLECT'S CONSEQUENCE FOR ITS ATTACKER, and
-				# the SECOND (and last) authored inbound edge to `STUNNED` in the whole project.
+				# the SECOND authored inbound edge to `STUNNED` (the last until story 6-6a added the
+				# knockdown in `_apply_landing_packages`, the third).
 				#
 				# HERO ATTACKERS ONLY, gated on `attacker_index == TargetingService.HERO_INDEX` — the
 				# `4-3b/R4` mana-gate discriminant applied a second time to a second hero-only
@@ -3377,6 +3421,7 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 		# second cost. `STUNNED` also stops being the zero-inbound-edge row: this is its FIRST of
 		# exactly two authored entry points, both direct `set_action_state` calls rather than
 		# `TRANSITION_TABLE` edges (the `DEAD`-entry precedent), enumerated by test_action_state.gd.
+		# (Story 6-6a: now the first of THREE -- the knockdown in `_apply_landing_packages` is third.)
 		#
 		# THE WINDOW IS CONSUMED HERE AND ONLY HERE (AC 10 vs AC 11, two rungs of one `if` that must
 		# not be conflated): `start(0)` stops it and the colour resets to the sentinel -- one fact in
@@ -3459,10 +3504,13 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 			# three colours in this story (Ruling 2). Story 5-6 (Ruling 1c): the ladder's THIRD tier
 			# — the UNANSWERED landing — reached only when neither the colour counter nor the dodge
 			# answered it, and UNTOUCHED by this story beyond becoming an `else`.
-			var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 \
-					* target.hero.get_max_hp()
-			target.hero.take_damage(damage)
-			_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
+			#
+			# STORY 6-6a (AC 3/AC 6/R-PRESS): THE DAMAGE, THE KNOCKDOWN AND `hit_landed` ARE NO LONGER
+			# APPLIED HERE -- they are one LANDING PACKAGE, owed to the victim and applied after step 6 by
+			# `_apply_landing_packages` (see `_landing_package_pending` for why a write at this seat would
+			# be seat-dependent). The orb grant STAYS: it is the CASTER's payout for a landing this ladder
+			# has already decided, not something that happens to the victim.
+			_landing_package_pending[slot] = true
 			_grant_landing_orbs(player)
 	# AC 20: the exit is UNCONDITIONAL on hit or miss, and it is the last thing that happens so the
 	# damage above is applied while the hero is still, conceptually, mid-attack. The telegraph key
@@ -3473,6 +3521,55 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 	# returns above with its own single `STUNNED` write. Miss, dodge and full damage all still end
 	# here, exactly once each.
 	player.hero.set_action_state(HeroState.ActionState.IDLE)
+
+
+## Story 6-6a (AC 3/AC 5/AC 6/AC 7/AC 12): THE LANDING PACKAGE, applied at step 6b -- see
+## `_landing_package_pending` for why it is deferred from the landing and why the unit of deferral is the
+## whole package. For each owed slot, in fixed P1 -> P2 order, the INTERNAL ORDER is pinned:
+##   1. DAMAGE -- the unanswered tier's expression verbatim, against the victim's own maximum.
+##   2. THE KNOCKDOWN, the THIRD authored inbound edge to `STUNNED` (after the colour counter and the
+##      melee deflect), written on the VICTIM -- never the caster, whose own `CHARGING -> IDLE` exit at
+##      the landing is untouched ("one write per outcome" holds per hero). GATED on `is_alive()` AFTER
+##      the damage, so a lethal landing writes nothing here and step 8 writes `DEAD` alone -- no phantom
+##      `STUNNED` for presentation to see and then have stomped.
+##   3. `hit_landed` -- pushed AFTER the knockdown write, so a presentation consumer mirroring the
+##      action state through the SAME FIFO drain has already left `BLOCKING` by the time it reads the
+##      hit (AC 12: no stale `block_impact` on a knockdown).
+##
+## THE FLOOR RULE (AC 7, R-STUNSTACK): a victim ALREADY in a knockdown takes the damage and the signal but
+## NO write -- the running window is neither restarted nor extended, so a downed hero cannot be held down
+## by repeated landings. A victim in an ORDINARY stun (colour counter or deflect) is NOT floored: the
+## write proceeds, `stun.start` REPLACES the shorter window and the flavor becomes knockdown -- a ONE-WAY
+## escalation (once down, the floor holds), so no lock can result. That escalation is a same-state
+## `STUNNED -> STUNNED` write and emits nothing (`HeroState.set_action_state`); presentation re-reads the
+## flavor at `hit_landed`, which this package pushes right after.
+##
+## A CHARGING VICTIM ABANDONS ITS CHARGEUP (AC 5): `charge_window`, `landing_window` and `charge_color`
+## are cleared with the state write as ONE fact -- the `6-1` feint teardown's three lines verbatim. The
+## card and the stamina stay spent. `_charge_reach`/`_charge_contact_dirs` are NOT cleared, for `6-1d/R9`'s
+## reason ("cleared with the verdict, never on its own"), exactly as the feint path leaves them.
+##
+## `balance` and `balance_ticks` are non-null: a package is only ever owed by a landing, which needs both.
+func _apply_landing_packages() -> void:
+	for slot: int in 2:
+		if not _landing_package_pending[slot]:
+			continue
+		_landing_package_pending[slot] = false
+		var opposing_slot := 1 - slot
+		var target := p2 if slot == 0 else p1
+		var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
+		target.hero.take_damage(damage)
+		var already_down := target.hero.action_state == HeroState.ActionState.STUNNED \
+				and balance_ticks.is_knockdown_stun(target.hero.stun.duration_ticks())
+		if target.hero.is_alive() and not already_down:
+			var was_charging := target.hero.action_state == HeroState.ActionState.CHARGING
+			target.hero.stun.start(balance_ticks.knockdown_stun_ticks)
+			target.hero.set_action_state(HeroState.ActionState.STUNNED)
+			if was_charging:
+				target.charge_window.start(0)
+				target.landing_window.start(0)
+				target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
 
 
 ## Story 5-4 (AC 1/AC 4-7): THE PAYOUT HALF of the RGB read exchange -- a landed unblockable credits
@@ -4314,7 +4411,14 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ## below. A staged card must not survive into the redeal (its id would exist twice) and its countdown,
 ## frozen by step 1b, must not fizzle in the next round. `_end_round` again gains no matching clear.
 ##
-## These are SIX named exceptions; they do not open the reset's contract generally.
+## STORY 6-6a (AC 9): A SEVENTH NAMED EXCEPTION -- the hero's GET-UP IFRAME window, stopped in
+## _reset_player below. Traced the `5-6` way: step 1b returns BEFORE step 2's `tick_timers()`, so a
+## get-up window armed just before the other hero died stops counting but stays armed, and would carry
+## invulnerability into the NEXT round. The reset's own `STUNNED -> IDLE` exit from a knockdown ARMS
+## NOTHING (only the step-3 timer exit does), so this clear covers the one window a reset could inherit.
+## `_end_round` again gains no matching clear.
+##
+## These are SEVEN named exceptions; they do not open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -4408,6 +4512,9 @@ func _reset_player(player: PlayerState) -> void:
 	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
 	# fact in two parts, exactly as the chargeup's three and the defense window's two are.
 	hero.stun.start(0)
+	# Story 6-6a (AC 9): THE SEVENTH NAMED EXCEPTION -- the get-up iframes, stopped beside the stun whose
+	# knockdown arms them (see _apply_debug_reset's header for the trace).
+	hero.get_up_iframe.start(0)
 	# STORY 5-5 (AC 12): THE FOURTH NAMED EXCEPTION to the reset's "NOTHING else / in-flight windows
 	# untouched" contract -- the mode ③ DEFENSE WINDOW and its colour, cleared here immediately
 	# beside the chargeup on the identical `start(0)` / `= NO_TELEGRAPH_COLOR` shape, and for the
