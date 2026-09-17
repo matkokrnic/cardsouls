@@ -102,16 +102,20 @@ close-out, not its create pass). Tracked in Docs Debt below.
 
    Same-tick PRESS semantics are SEAT-SYMMETRIC as well (operator ruling **R-PRESS**), superseding
    this AC's earlier "existing, unedited seat-order behavior" claim: this is the FIRST cross-player
-   write to land in step 3, and `match_state.gd:300-307`'s own doc already says seat-dependence "is
-   not a thing this game has," so the two directions cannot simply inherit whatever the p1-before-p2
+   write to land in step 3, and `match_state.gd:300-308`'s own doc already calls seat-dependence "a
+   seat-dependent mechanic, which nothing in this game is," so the two directions cannot simply
+   inherit whatever the p1-before-p2
    tick order happens to produce. The pinned OUTCOME, identical for both seats and both directions: a
    press on the same tick as an incoming knockdown ALWAYS resolves first (stamina/card spent, action
    taken), and the knockdown write then overwrites the resulting state. Tests cover both seats:
    press-then-knockdown ordering, and the simultaneous double-landing trade above. The MECHANISM is a
    dev-pass choice (Open Question 8) — the implementation almost certainly needs a deferred-write
    latch so the knockdown write does not apply before the victim seat's own step-3 processing runs on
-   that tick; if a no-new-storage ordering fix is found instead, the latch is unneeded and Golden
-   Prediction cause 4's conditional clause simply discharges.
+   that tick; if this latch lands, its unit of deferral is the WHOLE landing package — damage
+   application, the knockdown `STUNNED` write, and the `hit_landed` push, deferred together with their
+   internal order preserved (AC 12) — not the `STUNNED` write alone. If a no-new-storage ordering fix
+   is found instead, the latch is unneeded and Golden Prediction cause 4's now-expected latch clause
+   simply discharges.
 7. A hit that lands on an ALREADY-knocked-down hero (victim is STUNNED via the knockdown flavor) deals
    its damage but does NOT restart or extend the running stun window — the original window ticks out
    on its own schedule, unaffected (the "floor rule," operator ruling **R-STUNSTACK**). The floor rule
@@ -176,11 +180,13 @@ close-out, not its create pass). Tracked in Docs Debt below.
     (`animation_controller.gd:337,387`) at signal-consumption time — never a live read of
     `hero.action_state` from the runner (the `_charge_color_for_slot` shape,
     `match_runner.gd:984-990`, is live-and-post-advance, and is the wrong pattern to copy here). This
-    matters on the unblockable path specifically: because Ruling 2's knockdown write (AC 3) is pushed
-    BEFORE the `hit_landed` push in that branch, the mirror has already advanced off `BLOCKING` to
-    `STUNNED` by the time clip selection runs on an unanswered unblockable landing on a BLOCKING
-    victim — the push-order fix is what keeps `block_impact.fbx` from firing stale, not what makes
-    `hit_react.fbx` fire. The actual selected outcome is KNOCKDOWN presentation
+    matters on the unblockable path specifically: the knockdown `STUNNED` write precedes its
+    `hit_landed` push WITHIN the landing package — damage application, the knockdown write, and the
+    `hit_landed` push, in that internal order — whether or not the package is deferred (see AC 6/Dev
+    Notes: the deferred package is the R-PRESS latch's unit of deferral), on both seats, so the mirror
+    has already advanced off `BLOCKING` to `STUNNED` by the time clip selection runs on an unanswered
+    unblockable landing on a BLOCKING victim — this internal ordering is what keeps `block_impact.fbx`
+    from firing stale, not what makes `hit_react.fbx` fire. The actual selected outcome is KNOCKDOWN presentation
     (`knockdown.fbx`, via the `on_action_state_changed` path), NOT `hit_react.fbx`: AC 2 scopes
     `hit_react.fbx` to IDLE-family victims only, and the mirror at consumption time reads `STUNNED`,
     not IDLE, so AC 2's hit_react branch is never reached here — this AC's point is only that no stale
@@ -324,7 +330,8 @@ this explicitly if `[3, 3]` is unavailable and skip the unreachable items rather
   from the knockdown clip, and that the held pose does not look like a loop restarting.
 - **Block impact and exit blend (AC 12-13).** Hold block and take a non-deflected melee hit; confirm
   `block_impact.fbx` plays, including on an unanswered unblockable landing on a blocking victim
-  (confirm `hit_react.fbx`/knockdown plays, not a stale `block_impact.fbx`). Enter and exit block
+  (confirm knockdown presentation plays — `knockdown.fbx`, not `hit_react.fbx` — not a stale
+  `block_impact.fbx`). Enter and exit block
   repeatedly; confirm ENTRY stays an instant, un-blended cut (per `3-0b/R23`) and EXIT is visibly
   softened by the blend (per `3-0b/R24`, this story's OQ 1 resolution) — record that this is the
   shipped shape, not the "enter and exit both blend" reading of the original AC text.
@@ -417,10 +424,18 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
   scope named ("widening an existing signal's arity is the sanctioned shape — the `5-5`
   `deflect_landed` precedent — NEVER a new `MatchState` direct-connect"): a runner-side computed value
   forwarded as an extra positional argument, no new state signal, no new seam, no new hashed field.
-  RECOMMENDED MECHANISM (dev-pass implementation choice, not a design decision — HOW, not WHAT): at
-  each transition into `STUNNED`, compare the just-started `stun.duration_ticks()` against the three
+  These closures alone, however, are INSUFFICIENT for the stun-reason forwarding mechanism: they fire
+  only on a `STUNNED` entry (previous != STUNNED), never on the same-state (`STUNNED` -> `STUNNED`)
+  escalation write AC 5 adds, since `set_action_state` on previous==current emits nothing
+  (`hero_state.gd:211-212`).
+  RECOMMENDED MECHANISM (dev-pass implementation choice, not a design decision — HOW, not WHAT): the
+  mechanism must fire on BOTH triggers — a `STUNNED` entry (via the two closures above) AND a
+  same-state escalation. The named candidate for the second trigger: since every knockdown arrives with
+  a hit, re-check the stun flavor at `hit_landed` consumption, on the same FIFO drain that carries the
+  (possibly deferred) `STUNNED` write ahead of the `hit_landed` push (AC 6/AC 12) — comparing the
+  running `stun.duration_ticks()` at that moment against the three
   known `BalanceTicks` constants (`deflect_stun_ticks`, `color_counter_stun_ticks`,
-  `knockdown_stun_ticks`) and forward the matched reason as a widened argument alongside
+  `knockdown_stun_ticks`) and forwarding the matched reason as a widened argument, the same shape as
   `charge_color`. This is safe FROM COLLISION by construction because AC 4 already pins the three
   durations in strict directional order (knockdown > color-counter 1.0 s > deflect 0.4 s) — but note
   the fragility named honestly: if a future retune ever authors two of the three durations equal, a
@@ -522,22 +537,24 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 ### Project Structure Notes
 
 - Of the thirteen ACs, presentation-only work (`src/actors/hero/animation_controller.gd` and the
-  `match_runner.gd` wiring loop, no `src/state/` edit) covers AC 1, AC 2, AC 4 (the authored value's
-  own consumption), AC 10, AC 11, AC 12 and AC 13. State-layer edits land in AC 3 (the knockdown
-  write itself), AC 5 (the CHARGING-abandonment cleanup and the STUNNED-escalation write), AC 6 (the
-  simultaneous-trade fix and its possible latch), AC 7 (the floor-rule guard) and AC 8 (the get-up-
-  iframe `TimingWindow` addition and its arming). AC 9 (the reset exception) is also state-layer. The
+  `match_runner.gd` wiring loop, no `src/state/` edit) covers AC 1, AC 2, AC 10, AC 11, AC 12 and
+  AC 13. State-layer edits land in AC 3 (the knockdown write itself), AC 4 (the new authored
+  `BalanceConfig`/`BalanceTicks` fields — `BC/R3`-isolated from the golden and unit suite, but still a
+  `src/state/` addition, not presentation), AC 5 (the CHARGING-abandonment cleanup and the
+  STUNNED-escalation write), AC 6 (the simultaneous-trade fix and its possible latch), AC 7 (the
+  floor-rule guard) and AC 8 (the get-up-iframe `TimingWindow` addition and its arming). AC 9 (the
+  reset exception) is also state-layer. The
   presentation half follows the `3-0a`/`5-0a`/`6-7b` split exactly: clip selection and hold/stretch
   logic in `src/actors/hero/animation_controller.gd`; new seam CONSUMERS (not new seams) wired in
   `src/main/match_runner.gd`'s existing per-slot loop. The state-layer edits
   (AC 3/AC 5/AC 6/AC 7/AC 8/AC 9) land in `src/state/match_state.gd`'s existing unblockable-ladder
   resolution function and its reset path, plus the AC 8 get-up-iframe `TimingWindow` addition on
-  `HeroState`/`PlayerState`, and
-  `src/state/resources/balance_config.gd`/`src/state/timing/balance_ticks.gd` (two new fields —
+  `HeroState`/`PlayerState`. AC 4's two new fields land in
+  `src/state/resources/balance_config.gd`/`src/state/timing/balance_ticks.gd` —
   `knockdown_stun_seconds`/`knockdown_stun_ticks` and the get-up-iframe duration — on the
   `color_counter_stun_seconds`/`deflect_stun_seconds` naming precedent. Note the precedent's own
   comment (`balance_config.gd:320-332`) JUSTIFIES naming once two durations already exist; it does not
-  itself anticipate a third — read it as precedent, not as forward anticipation). No new top-level
+  itself anticipate a third — read it as precedent, not as forward anticipation. No new top-level
   folder is implied by anything measured above.
 
 ### Project Context Rules
@@ -594,7 +611,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [Source: src/state/timing/timing_window.gd] — confirms no reason field exists on the primitive; the
   duration-comparison mechanism this story's Dev Notes recommend works around that absence.
 - [Source: src/actors/hero/animation_controller.gd:1-27 (header, STUNNED unmapped),
-  155-161 (`_CLIP`), 175-226 (`6-1b` hold mechanism), 385-409 (`on_action_state_changed`),
+  155-161 (`_CLIP`), 175-226 (`6-1b` hold mechanism), 385-398 (`on_action_state_changed`),
   489-502 (`6-7b` playback-rate precedent), 543-558 (`_play`/`_restart`)] — the presentation seam
   this story's dev pass extends.
 - [Source: src/main/match_runner.gd:486-544 (per-slot wiring loop), 984 (`_charge_color_for_slot`,
@@ -616,9 +633,17 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 2. **Hold vs. stretch for `stunned.fbx`/`knockdown.fbx` (AC 10/AC 3).** Two mechanisms sketched in Dev
    Notes (restart-then-pin-last-frame vs. a computed hold-duration playback rate); a dev-pass call,
    confirmed at live smoke against the felt read.
-3. **The stun-reason forwarding mechanism's exact shape (AC 11).** Duration-threshold comparison in
-   ticks (recommended) vs. some other widened-argument shape achieving the same "no new hashed field,
-   no new seam" property — dev-pass call within the sanctioned widening-arity constraint.
+3. **The stun-reason forwarding mechanism's exact shape (AC 11).** The mechanism MUST fire both on a
+   `STUNNED` entry AND on a same-state (`STUNNED` -> `STUNNED`) escalation — the two existing
+   `on_action_state_changed` closures alone are insufficient, since `set_action_state` on
+   previous==current emits nothing (`hero_state.gd:211-212`) and an ordinary-stun -> knockdown write is
+   exactly such a same-state write (AC 5). The named candidate: since every knockdown arrives with a
+   hit, re-check the stun flavor at `hit_landed` consumption (reading the forwarded reason/duration off
+   the running `stun` window at that moment), on the same FIFO drain that also carries the (possibly
+   deferred, AC 6/AC 12) `STUNNED` write ahead of the `hit_landed` push. Duration-threshold comparison
+   in ticks (recommended) vs. some other widened-argument shape achieving the same "no new hashed
+   field, no new seam" property — exact wiring is a dev-pass call within the sanctioned widening-arity
+   constraint; the escalation-visibility test (AC 5) is REQUIRED either way.
 4. **RESOLVED at the round-1 gate.** Coverage-by-suite is accepted; the golden fixture is NOT
    extended. See the Golden Prediction section's fixture-coverage paragraph above.
 5. **`knockdown_stun_seconds`'s exact provisional value**, subject only to the directional bound (AC
@@ -662,13 +687,15 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
       three-tier ladder in `match_state.gd`, as the VICTIM's own separate write (never replacing the
       caster's trailing `IDLE` exit at `:3475`), gated on `target.hero.is_alive()` after
       `take_damage` (AC 3).
-- [ ] Push the knockdown `STUNNED` write BEFORE the `hit_landed` push in that branch, so the mirrored
-      `_state` block-impact selection (above) does not misfire on an unanswered unblockable landing on
-      a blocking victim (AC 3, AC 12).
+- [ ] Ensure the knockdown `STUNNED` write precedes its `hit_landed` push WITHIN the landing package
+      (damage application, the knockdown write, and the `hit_landed` push, deferred or not, as one
+      unit — the R-PRESS latch's unit of deferral, AC 6), so the mirrored `_state` block-impact
+      selection (above) does not misfire on an unanswered unblockable landing on a blocking victim
+      (AC 3, AC 6, AC 12).
 - [ ] Amend `test_stunned_has_exactly_two_authored_non_table_entry_points`
       (`test_action_state.gd:122-147`) 2 -> 3 call sites, write the argument into its doc-comment,
       and re-prove its falling mutation; update the two drifted "SECOND (and last)"/"FIRST of exactly
-      two" comments (`match_state.gd:1717`, `test_unblockable_defense.gd:433`, `match_state.gd:~3417`)
+      two" comments (`match_state.gd:1717`, `test_unblockable_defense.gd:433`, `match_state.gd:~3380`)
       (AC 3, round-1 gate B2).
 - [ ] Enumerate the knockdown victim's prior-state results (IDLE, ATTACKING, BLOCKING, ROLLING,
       CHARGING, and STUNNED split into its two R-STUNSTACK sub-cases), one test per state/sub-case; on
@@ -702,8 +729,10 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [ ] Add `knockdown_stun_seconds`/`knockdown_stun_ticks` and the get-up-iframe duration field to
       `BalanceConfig`/`BalanceTicks`; extend `test_balance_authoring.gd`'s deflect-less-than-
       color-counter pin to the full three-way bound, asserted in ticks (AC 4, round-1 gate B2/N9).
-- [ ] Wire the stun-reason forwarding mechanism (Open Question 3) alongside `charge_color` at the two
-      existing `on_action_state_changed` closures (AC 11).
+- [ ] Wire the stun-reason forwarding mechanism (Open Question 3) so it fires on BOTH a `STUNNED`
+      entry (alongside `charge_color` at the two existing `on_action_state_changed` closures) AND a
+      same-state escalation (the `hit_landed`-driven flavor re-check is the named candidate); add the
+      escalation-visibility test required by AC 5 (AC 5, AC 11).
 - [ ] Map `STUNNED` in `AnimationController._CLIP`/a parallel table to `stunned.fbx`
       (color-counter/deflect) or `knockdown.fbx` (knockdown), by the forwarded reason; resolve Open
       Question 2 (hold vs. stretch) (AC 10, AC 11).
