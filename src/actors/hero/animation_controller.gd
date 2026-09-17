@@ -16,8 +16,8 @@ extends Node3D
 ## CHARGING maps to ONE OF THREE clips (swipe/thrust/jump_attack) keyed by `charge_color`, a
 ## third seam argument this story adds (see on_action_state_changed below) — the reservation
 ## `3-0a` left for it is claimed here, not by widening the one-clip-per-state table above.
-## DEFLECT is not an ActionState (the block pose covers it); STUNNED alone stays unmapped
-## (zero inbound edges) and leaves the current pose untouched. The LOCOMOTION clips have NO
+## DEFLECT is not an ActionState (the block pose covers it). STUNNED stayed unmapped until 6-6a
+## (see below), leaving the pose untouched. The LOCOMOTION clips have NO
 ## ActionState of their own: a moving hero is IDLE
 ## with non-zero velocity, and velocity crosses the move threshold with no state transition, so
 ## the seam can never carry them (gate ruling 3-0a/R2). Instead HeroActor.drive() PUSHES the
@@ -52,6 +52,24 @@ extends Node3D
 ##     no angle, no atan2 (`_track_facing`).
 ##   * PER-CLIP PLAYBACK RATE (AC 8) through play()'s own custom speed, never the player-wide
 ##     `speed_scale`, scoped to the ten locomotion/turn clips.
+## STORY 6-6a ADDS THE DEFENSE REACTIONS, on the SAME two paths and with no new seam:
+##   * STUNNED gets a pose (AC 10/AC 11): `stunned` for the two ordinary flavors (colour counter,
+##     deflect), `knockdown` for the knockdown -- told apart by a RUNNER-COMPUTED `stun_flavor` forwarded
+##     beside `charge_color` (the stun window's own duration through `BalanceTicks.is_knockdown_stun`),
+##     never by a flavor this controller remembers. Both are one-shots HELD on their final frame for the
+##     rest of the window (`_play_stun`), never looped.
+##   * `get_up` plays on the timer-driven `STUNNED -> IDLE` exit from a knockdown ONLY (AC 8/AC 9) --
+##     keyed on the forwarded `get_up_armed`, i.e. on the state layer having just opened the get-up
+##     iframes, which the debug reset never does.
+##   * `hit_react` / `block_impact` (AC 1/AC 2/AC 12) on the EXISTING `hit_landed` seam, this controller
+##     its second consumer: selected by the MIRRORED `_state` at consumption time, never a live read.
+##   * the knockdown ESCALATION (AC 5): an ordinary stun overwritten by a knockdown is a same-state write
+##     that emits no transition, so `on_hit_landed` re-checks the forwarded flavor on the drain that
+##     carries the knockdown's own `hit_landed`.
+##   * ONE-SHOT LOCOMOTION YIELD (AC 2): `hit_react`/`get_up` are not stolen by the per-tick `_play()`.
+##   * BLOCK EXIT BLENDS (AC 13, `3-0b/R24`): `BLOCKING -> IDLE` crossfades through `_play()`; block
+##     ENTRY and `block -> attack/roll` stay instant `_restart()` cuts (`3-0b/R23`).
+##
 ## LEFT/RIGHT NAMING (6-7b finding, operator ruling: recorded, not renamed): "right" throughout this
 ## file is local +X, and ANATOMICALLY local +X is the paladin's LEFT (rig `mixamorig_LeftHand` rests
 ## at x +0.657, toes at +Z). Clip FILES follow this file's convention, not anatomy -- 5-0a's strafe
@@ -146,6 +164,12 @@ const _WALK_FAMILY := {
 	&"strafe_right": &"walk_strafe_right",
 	&"backpedal": &"walk_backpedal",
 }
+
+## Story 6-6a (AC 11): the runner-computed stun flavor forwarded with a transition or a hit -- NONE when
+## the hero is not STUNNED. Presentation constants, never state: the state layer holds no flavor field.
+const STUN_FLAVOR_NONE := 0
+const STUN_FLAVOR_ORDINARY := 1
+const STUN_FLAVOR_KNOCKDOWN := 2
 
 ## The walk-family members as a const list, so the per-tick rate lookup allocates nothing.
 const _WALK_FAMILY_MEMBERS: Array[StringName] = [
@@ -336,6 +360,10 @@ static func charge_hold_end_for(color: int) -> float:
 
 var _state: HeroState.ActionState = HeroState.ActionState.IDLE
 
+## Story 6-6a (AC 2): the yielding one-shot currently owed its play-out (`hit_react`/`get_up`), or empty.
+## Cleared by every transition and by `on_locomotion` once the clip has stopped playing.
+var _one_shot: StringName = &""
+
 ## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
 ## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
 var _has_prev_facing := false
@@ -382,9 +410,30 @@ func _ready() -> void:
 ## transition instant and forwarded here, never stored. A default of
 ## `PlayerState.NO_TELEGRAPH_COLOR` keeps every other transition unaffected; CHARGING is the
 ## only branch that ever consults it.
-func on_action_state_changed(_previous: HeroState.ActionState, current: HeroState.ActionState,
-		charge_color: int = PlayerState.NO_TELEGRAPH_COLOR) -> void:
+##
+## STORY 6-6a widens the forwarded tail by three runner-computed values, on `charge_color`'s shape:
+##   `stun_flavor` / `stun_seconds` -- the STUNNED clip and how long to hold it (AC 10/AC 11);
+##   `get_up_armed` -- true when the state layer has just opened the get-up iframes, which only the
+##   knockdown's TIMER exit does (AC 8), so the debug reset's identical `STUNNED -> IDLE` plays no get-up.
+## And `BLOCKING -> IDLE` is the one transition that BLENDS (AC 13): through `_play()`, not `_restart()`.
+func on_action_state_changed(previous: HeroState.ActionState, current: HeroState.ActionState,
+		charge_color: int = PlayerState.NO_TELEGRAPH_COLOR, stun_flavor: int = STUN_FLAVOR_NONE,
+		stun_seconds: float = 0.0, get_up_armed: bool = false) -> void:
 	_state = current
+	_one_shot = &""
+	if current == HeroState.ActionState.STUNNED:
+		_play_stun(stun_flavor, stun_seconds)
+		return
+	if current == HeroState.ActionState.IDLE:
+		if previous == HeroState.ActionState.STUNNED and get_up_armed:
+			_restart(&"get_up")
+			_one_shot = &"get_up"
+			return
+		if previous == HeroState.ActionState.BLOCKING:
+			# `3-0b/R24`'s pre-cleared shape: EXIT only, and only to IDLE. Entry and block -> attack/roll
+			# never reach this line (they are not IDLE entries), so they keep the instant cut.
+			_play(&"idle")
+			return
 	if current == HeroState.ActionState.CHARGING:
 		var charge_clip: StringName = _CHARGE_CLIP.get(charge_color, &"")
 		if charge_clip != &"":
@@ -426,6 +475,36 @@ func on_charge_progress(charge_color: int, progress: float) -> void:
 		knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"]), true)
 
 
+## Story 6-6a (AC 1/AC 2/AC 5/AC 12): the SECOND consumer of the existing `hit_landed` seam, gated on
+## this hero's own slot exactly as `TelegraphController.on_hit_landed` is. The payload is the seam's
+## unchanged four plus the bound slot; `stun_flavor`/`stun_seconds` are runner-computed and forwarded by
+## the wiring closure, the `charge_color` shape -- the signal itself is never widened.
+##
+## SELECTION READS THE MIRRORED `_state`, NEVER A LIVE `action_state`: the queued transitions and this
+## hit drain FIFO from one queue, so `_state` is what the hero was when the hit was pushed.
+##   IDLE     -> `hit_react` (a yielding one-shot). No other state is interrupted: mid-action flinch is
+##               the deferred hitstun system's (AC 2).
+##   BLOCKING -> `block_impact` (AC 12). A knockdown's own write precedes its hit on the queue, so an
+##               unanswered unblockable on a blocker reads STUNNED here and never reaches this branch.
+##   STUNNED  -> no hurt clip; but a forwarded KNOCKDOWN over a clip that is not already `knockdown` is
+##               the AC 5 ESCALATION and switches to it. A knockdown already playing is left alone --
+##               a second landing never restarts the hold (AC 7/AC 11).
+func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _target_hp: float,
+		my_slot: int, stun_flavor: int = STUN_FLAVOR_NONE, stun_seconds: float = 0.0) -> void:
+	if target_slot != my_slot:
+		return
+	match _state:
+		HeroState.ActionState.IDLE:
+			_restart(&"hit_react")
+			_one_shot = &"hit_react"
+		HeroState.ActionState.BLOCKING:
+			_restart(&"block_impact")
+		HeroState.ActionState.STUNNED:
+			if stun_flavor == STUN_FLAVOR_KNOCKDOWN \
+					and animation_player.assigned_animation != &"knockdown":
+				_play_stun(stun_flavor, stun_seconds)
+
+
 ## Pushed every tick from HeroActor.drive() (gate ruling 3-0a/R2, widened by 5-0a AC 2): while
 ## the hero is IDLE, the velocity vector RELATIVE TO FACING picks one of the five locomotion
 ## clips. Ignored in every other state — attack/block/roll/death own the body while they
@@ -449,6 +528,12 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 	var turn := _track_facing(facing)
 	if _state != HeroState.ActionState.IDLE:
 		return
+	# Story 6-6a (AC 2): THE LOCOMOTION YIELD. A `hit_react`/`get_up` still playing keeps the body; the
+	# idempotent `_play()` below would otherwise crossfade it away on the very next tick.
+	if _one_shot != &"":
+		if animation_player.current_animation == _one_shot and animation_player.is_playing():
+			return
+		_one_shot = &""
 	var planar_speed := Vector2(velocity.x, velocity.z).length()
 	if planar_speed <= RUN_SPEED_EPS and turn != 0:
 		# Negative cross = facing rotating toward local +X, this file's "right" (header).
@@ -544,6 +629,34 @@ func _play(clip: StringName, speed: float = 1.0) -> void:
 	if animation_player.current_animation != clip \
 			or absf(animation_player.get_playing_speed() - speed) > _PLAYBACK_SPEED_EPS:
 		animation_player.play(clip, LOCOMOTION_BLEND_SECONDS, speed)
+
+
+## Story 6-6a (AC 10/AC 11): the STUNNED pose -- `knockdown` for the knockdown flavor, `stunned` for the
+## two ordinary ones -- played ONCE and HELD, never looped (both clips are LOOP_NONE, so the player stops
+## on the final frame and the pose stays). An unknown flavor leaves the current pose, as before 6-6a.
+##
+## HOLD, WITH A FLOOR ON TEMPO (Open Question 2, dev-pass call): a clip LONGER than the stun is sped up
+## just enough to finish on the exit tick (so a 0.4 s deflect still shows the whole 0.7 s reaction rather
+## than being cut mid-motion); a clip SHORTER than the stun plays at its native rate and holds its last
+## frame for the remainder. Never slowed below native -- a stretched fall reads as slow motion.
+func _play_stun(stun_flavor: int, stun_seconds: float) -> void:
+	var clip: StringName
+	match stun_flavor:
+		STUN_FLAVOR_KNOCKDOWN:
+			clip = &"knockdown"
+		STUN_FLAVOR_ORDINARY:
+			clip = &"stunned"
+		_:
+			return
+	_restart(clip, held_clip_speed(animation_player.get_animation(clip).length, stun_seconds))
+
+
+## Story 6-6a (Open Question 2): the playback rate for a clip held over a `hold_seconds` window -- the
+## rule `_play_stun` documents, as a pure function a test can pin directly.
+static func held_clip_speed(clip_seconds: float, hold_seconds: float) -> float:
+	if hold_seconds <= 0.0 or clip_seconds <= hold_seconds:
+		return 1.0
+	return clip_seconds / hold_seconds
 
 
 ## Unconditional restart for the evented transition path. NO custom_blend here on purpose: the

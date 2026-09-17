@@ -538,10 +538,26 @@ func _ready() -> void:
 		# ActionState-driven clips (idle/attack/block/roll/death), now six with CHARGING (5-3).
 		# The locomotion clips are NOT wired here: HeroActor.drive() pushes them per-tick from
 		# velocity (3-0a/R2). Read-only, no state handle, mirroring the telegraph wiring.
+		#
+		# Story 6-6a (AC 8-11): the rig closure forwards THREE more runner-computed values on
+		# `charge_color`'s exact shape -- the stun flavor and its hold span (the STUNNED pose), and whether
+		# the get-up iframes were just armed (the get-up clip on the timer exit only). Still one closure,
+		# still no new seam; the telegraph closure above is unchanged.
 		connect_hero_action_state_changed(slot,
 				func(previous: HeroState.ActionState, current: HeroState.ActionState) -> void:
 					anim.on_action_state_changed(previous, current,
-							_charge_color_for_slot(slot, current)))
+							_charge_color_for_slot(slot, current), _stun_flavor_for_slot(slot),
+							_stun_seconds_for_slot(slot), _get_up_armed_for_slot(slot)))
+		# Story 6-6a (AC 1/AC 2/AC 5/AC 12): the rig controller becomes the SECOND consumer of the existing
+		# `hit_landed` seam, beside `cues.on_hit_landed` above -- this grows the seam's CONSUMER count, not
+		# the `connect_*` family (still ten). The signal's payload is NOT widened (TelegraphController's
+		# bound handler has fixed arity); the closure forwards the four arguments, this hero's slot, and
+		# the runner-computed stun flavor/span the AC 5 escalation re-check needs. The controller gates on
+		# `target_slot == slot` itself, exactly as the telegraph handler does.
+		connect_hit_landed(func(attacker_slot: int, target_slot: int, damage: float,
+				target_hp: float) -> void:
+			anim.on_hit_landed(attacker_slot, target_slot, damage, target_hp, slot,
+					_stun_flavor_for_slot(slot), _stun_seconds_for_slot(slot)))
 
 
 ## Story 3-3 (AC 4): PROVISIONAL FIXTURE deck composition — walk CardDatabase's explicitly
@@ -987,6 +1003,42 @@ func _charge_color_for_slot(slot: int, current: HeroState.ActionState) -> int:
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	var telegraph: Array = player.to_snapshot().get("telegraph", [PlayerState.NO_TELEGRAPH_COLOR, 0])
 	return int(telegraph[0])
+
+
+## Story 6-6a (AC 11): the STUNNED flavor for the rig controller -- `_charge_color_for_slot`'s shape, a
+## plain synchronous read taken when the queued signal is CONSUMED. `STUN_FLAVOR_NONE` unless the hero is
+## STUNNED; otherwise the running stun window's own duration through `BalanceTicks.is_knockdown_stun`,
+## the SAME classifier the state layer's floor rule and get-up arming use (CONSTRAINT C: `balance_ticks`
+## read inline, never cached). Read at consumption rather than carried on the signal because the AC 5
+## escalation is a same-state write that emits nothing -- the next `hit_landed` is what re-reads it.
+func _stun_flavor_for_slot(slot: int) -> int:
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var ticks := _match_state.balance_ticks
+	if player.hero.action_state != HeroState.ActionState.STUNNED or ticks == null:
+		return AnimationController.STUN_FLAVOR_NONE
+	if ticks.is_knockdown_stun(player.hero.stun.duration_ticks()):
+		return AnimationController.STUN_FLAVOR_KNOCKDOWN
+	return AnimationController.STUN_FLAVOR_ORDINARY
+
+
+## Story 6-6a (AC 10): the running stun window's snapshotted span in seconds, for the held pose's tempo.
+func _stun_seconds_for_slot(slot: int) -> float:
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	return float(player.hero.stun.duration_ticks()) / TimingWindow.TICK_HZ
+
+
+## Story 6-6a (AC 8/AC 9, Open Question 9): whether the state layer ARMED the get-up iframes ON THIS TICK
+## -- the discriminator between the knockdown's TIMER exit (which starts the window in the same step-3 arm
+## that writes IDLE) and the debug reset's identical `STUNNED -> IDLE` write (which stops it). Read at
+## consumption. "This tick" is `running with nothing elapsed`: step 2 ticks every window before step 3
+## can start one, so elapsed 0 on a running window happens only on its start tick. That is what keeps an
+## ORDINARY stun's exit from playing `get_up` while an earlier get-up window is still running (a hero
+## deflected mid-get-up-iframes, say). The window is at least one tick long whenever it was armed (the
+## authoring audit pins `get_up_iframe_seconds > 0`).
+func _get_up_armed_for_slot(slot: int) -> bool:
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var window := player.hero.get_up_iframe
+	return window.is_running and window.remaining_ticks() == window.duration_ticks()
 
 
 ## Read-only subscription seam (story 1-3b): consumers (HUD, integration tests) observe
