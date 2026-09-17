@@ -142,9 +142,18 @@ func unblockable_launch_ticks_for(color: int) -> int:
 ##
 ## SOUND ONLY WHILE THE THREE DURATIONS ARE DISTINCT, and AC 4's authoring audit pins that order in
 ## ticks (`knockdown > color_counter > deflect`). Named fragility, not solved here: a retune that
-## authored two of them equal would make this comparison silently wrong. A running window also keeps
-## its duration across a balance reload (D4), so a knockdown reload that RAISES the count mid-knockdown
-## reads the in-flight window as ordinary until it ends.
+## authored two of them equal (or inverted) would make this comparison silently wrong. A running window
+## also keeps its duration across a balance reload (D4), and the three-way order is audited on the
+## authored `.tres` only, never at `apply_balance` -- so a live reload can reclassify an IN-FLIGHT stun,
+## on the state side (and so in the recorded replay), not just in presentation:
+##   * RAISING the knockdown count (or zeroing it) mid-knockdown reads that window as ordinary: a second
+##     landing escalates it into a FRESH knockdown instead of being floored (AC 7), and its exit arms no
+##     get-up iframes (AC 8) and so plays no `get_up`.
+##   * LOWERING the knockdown count to at or below an in-flight ORDINARY stun's duration reads that
+##     window as a knockdown: a landing on it is floored instead of escalating (AC 5), and its exit arms
+##     the get-up iframes.
+## Presentation couples to the same arming: with `get_up_iframe_ticks == 0` the timer exit arms nothing,
+## so the runner forwards no get-up and the `get_up` clip is skipped (the authored audit pins `> 0`).
 ##
 ## A ZERO knockdown count classifies NOTHING as a knockdown (every in-test config that never authors the
 ## field): a 0-tick knockdown never runs, and "every stun is a knockdown" would be the wrong degrade.
