@@ -235,6 +235,19 @@ func _block_transitions() -> void:
 	_check(absf(_hips_y(skeleton, bone) - attack_y) < absf(_hips_y(skeleton, bone) - block_y),
 		"block -> attack stays an instant cut: one tick in, the hips are at attack height (%.4f; attack %.4f, block %.4f)"
 		% [_hips_y(skeleton, bone), attack_y, block_y])
+	# 6-6a review: `block -> roll` is the other half of `3-0b/R24`'s "must stay instant" pair, and each
+	# nearer-than comparison needs its own distinguishability guard, as block/idle has above.
+	var roll_y := _first_hips_y(&"roll")
+	_check(absf(block_y - attack_y) > 0.05, "fixture: block and attack hips heights are distinguishable")
+	_check(absf(block_y - roll_y) > 0.05, "fixture: block and roll hips heights are distinguishable")
+	_settle_idle()
+	_transition(IDLE, BLOCKING)
+	_player.advance(0.5)
+	_transition(BLOCKING, ROLLING)
+	_player.advance(TICK)
+	_check(absf(_hips_y(skeleton, bone) - roll_y) < absf(_hips_y(skeleton, bone) - block_y),
+		"block -> roll stays an instant cut: one tick in, the hips are at roll height (%.4f; roll %.4f, block %.4f)"
+		% [_hips_y(skeleton, bone), roll_y, block_y])
 
 
 func _first_hips_y(clip: StringName) -> float:
