@@ -210,6 +210,27 @@
   -- the machine check in `test_debug_instruments.gd` keeps the box provably clear of both HUDs and
   both StateInspectors at 1152x648, so this is ergonomics, not occlusion.
 
+## Deferred from: code review of 6-6a-defense-reactions (2026-09-17)
+
+- **A downed hero keeps a defense window armed on or before the landing tick, and can colour-counter
+  while down.** `_apply_landing_packages` tears down only the chargeup. This is consistent with the
+  `5-6` STUNNED contract ("running windows tick out") and asserted by the R-PRESS test. Judge at the
+  `[3, 3]` smoke.
+- **`block_impact`'s held final frame stands in for the block pose for the rest of the hold.** The
+  only evidence of a match is the Hips, which are identical at both ends (Y 0.6915, yaw -67.03). The
+  arms and shield were never measured. Smoke.
+- **A hero moving during `get_up`/`hit_react` slides in the one-shot pose until it ends.** AC 2
+  mandates the locomotion yield. Smoke.
+- **Retune hazard: `dodged_unblockable_damage_multiplier > 0` (authored 0.0).** The dodge rung would
+  then deal chip damage during the get-up iframes and cut `get_up` with `hit_react`. The rung is
+  `5-6`'s, and it still applies at step 3 while the unanswered tier applies at 6b.
+- **The knockdown-last / get_up-first Hips junction is measured but not pinned** (0.0067 planar after
+  the `knockdown` planar pin). `test_clip_timing.gd` pins only the knockdown's own excursion.
+- **`MatchState.debug_window_ticks_remaining()` does not list the get-up iframe window** (6-6a Dev
+  Note 6).
+- **`test_replay_identity.gd`'s `_iframe_open_at_step3` comment still reads "STAYS AT THREE"** beside
+  the current count of 4. Pre-existing, not introduced by 6-6a.
+
 ## E4 review residue (recorded at E4 close-out, 2026-09-01)
 
 Forty-eight findings from the four out-of-repo E4 review files (`_44-review.md`, `_45-review.md`,

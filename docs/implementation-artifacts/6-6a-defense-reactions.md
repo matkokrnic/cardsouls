@@ -758,6 +758,169 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [ ] `[3, 3]` two-pad live smoke (name the reachable `[0, 3]` subset if unavailable), recorded in
       `docs/playtest-log.md`, including the simultaneous-trade and floor-hit items.
 
+### Review Findings
+
+Code review 2026-09-17 (gds-code-review, Claude Opus 5; the Blind Hunter, Edge Case Hunter and
+Acceptance Auditor layers all returned). The review covered `4507560..e356a2a`. Verdict: **CHANGES
+REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 decision_needed,
+6 patch (all fixed in this pass), 7 defer, 11 dismissed as noise.
+
+- [ ] [Review][Decision] **D1 (High) An unblockable can land on the knockdown's EXACT exit tick,
+  knocking the hero straight back down.** All three layers found this independently.
+  - **Mechanism.** `_iframe_open_at_step3` latches for both seats (`match_state.gd:561-562`) before
+    either seat's `_resolve_actions`. The get-up window only starts inside the victim's STUNNED arm,
+    so a landing on the exit tick reads a false latch and is unanswered. At step 6b the victim is
+    already IDLE, so `already_down` is false and the knockdown is written again.
+  - **Consequences Dev Note 1 does not mention.**
+    - The re-downed hero keeps its running get-up window, 122 of the next 150 ticks. `is_iframe_open()`
+      then drops every melee and unit fact and dodges any unblockable while they are DOWN.
+    - The two attack types disagree on the exit tick itself: step-4 melee reads the live predicate
+      and is dropped, but the unblockable is not.
+    - It repeats. An attacker who lands every exit tick keeps the victim down, taking unblockable
+      damage each cycle. It is frame-exact and costs a card plus stamina per cycle.
+  - **Why this is not outside the ACs.** It contradicts AC 5's "no knockdown lock results, by
+    construction" and AC 8's R-IFRAME-UNBLOCKABLE rationale, "nothing can be timed into the get-up".
+    The counter-precedent is `5-6`'s "roll pressed on the landing tick dodges on neither slot", but a
+    get-up is a timer, not a press.
+  - **Options.**
+    - **(a) Recommended.** Widen the step-3 latch so a hero whose KNOCKDOWN stun ran out at this tick's
+      step 2 counts as iframed: STUNNED, `stun` not running, `is_knockdown_stun(duration)`, and
+      `get_up_iframe_ticks > 0`. This needs no new storage, stays seat-symmetric because it latches
+      before both seats, and matches what step 4 already does for melee. It needs a both-slots
+      boundary test (a landing on the exit tick is dodged; the exit tick minus one still lands and
+      hits the floor rule).
+    - **(b)** Accept and record the 1-tick seam as ruled.
+  - **This review changed nothing here: it is a boundary-semantics call.**
+- [ ] [Review][Decision] **D2 (Med) `block_impact` plays on a FULL-damage hit from outside the block
+  arc** (Dev Note 3). This is inside AC 12's scope, and the spec premise behind it is wrong.
+  - AC 12 scopes `block_impact` to "a blocked hit (the non-deflect block branch)". The Dev Notes
+    treat mirrored `BLOCKING` and the blocked branch as the same set, but the `_is_facing` guard
+    (`match_state.gd:1744-1745`) splits them.
+  - The player sees "blocked" feedback for an unblocked hit, which is exactly the read this story
+    targets.
+  - The controller cannot tell the two apart without the widened `hit_landed` that AC 12 forbids.
+  - **Options.** (a) Accept for now and judge at smoke. (b) Rule a sanctioned discriminator: a
+    runner-forwarded value, on the `stun_flavor` shape, forwarded beside the unchanged payload.
+- [ ] [Review][Decision] **D3 (Med) The get-up iframes do not end when the hero acts** (Dev Note 5).
+  - For 2.03 s the hero can attack, cast or charge while melee is dropped and unblockables are
+    dodged.
+  - This matches AC 8 as locked ("no early-stop path"), so it is not a defect. It is a feel and
+    tuning call, and changing the shape re-opens AC 8's text.
+  - Route: `[3, 3]` smoke first; if it is too strong, rule either a shorter window or an early stop
+    on action.
+- [x] [Review][Patch] The classifier's reload fragilities were named in one direction only
+  [src/state/timing/balance_ticks.gd:143] -- fixed `e64286e` (comment only). A live reload can
+  reclassify an IN-FLIGHT stun in either direction, on the state side and so in replay:
+  - Lowering the knockdown count floors an ordinary stun and arms get-up iframes on its exit.
+  - Raising or zeroing the count un-floors a knockdown.
+  - The `get_up` clip is coupled to `get_up_iframe_ticks > 0`.
+- [x] [Review][Patch] AC 5 CHARGING row never asserted that `_charge_contact_dirs` survives the teardown
+  [test/state/test_unblockable_defense.gd] -- fixed `824438f`. Mutation MR1 (clear it in the teardown)
+  turns the test RED.
+- [x] [Review][Patch] AC 5 ATTACKING row had no landing-tick precondition; a shortened fixture windup
+  would silently turn it into a second IDLE row [test/state/test_unblockable_defense.gd] -- fixed
+  `824438f`.
+- [x] [Review][Patch] AC 12 package order was pinned only for victim slot 1
+  [test/state/test_unblockable_defense.gd] -- fixed `824438f` (both victim seats). Mutation MR2 (slot-1
+  package pushes `hit_landed` before its write) turns it RED.
+- [x] [Review][Patch] AC 8 melee fact drop during the get-up iframes was covered only indirectly, and
+  its +1 grace term was UNPINNED [test/state/test_roll_iframes.gd] -- fixed `824438f`.
+  - MR3 (get-up removed from `is_iframe_open`) turns this test plus two existing tests RED.
+  - MR4 (grace term removed) turns ONLY the new test RED, which proves the gap was real.
+- [x] [Review][Patch] AC 13 `block -> roll` instant cut unpinned; the `block -> attack` check lacked a
+  distinguishability guard [test/integration/test_hero_reaction_clips.gd] -- fixed `5eee33e`
+  (presentation, not mutation-run).
+- [x] [Review][Defer] A defense card cast on (or before) the landing tick stays armed through the
+  knockdown, so a downed hero can colour-counter [src/state/match_state.gd `_apply_landing_packages`] --
+  deferred to smoke. It is consistent with the `5-6` STUNNED contract ("running windows tick out") and
+  is asserted by the R-PRESS test.
+- [x] [Review][Defer] `block_impact`'s held final frame stands in for the block pose for the rest of the
+  hold. The only evidence that it matches is Hips-only (Y 0.6915 / yaw -67.03 at both ends); the arms
+  and shield were not measured [src/actors/hero/animation_controller.gd:501] -- deferred to smoke.
+- [x] [Review][Defer] A hero moving during `get_up`/`hit_react` slides in the one-shot pose until it
+  ends. The yield is mandated by AC 2 [src/actors/hero/animation_controller.gd:533] -- deferred to smoke.
+- [x] [Review][Defer] With `dodged_unblockable_damage_multiplier > 0` (authored 0.0), a landing dodged
+  by the get-up iframes would deal chip damage and cut `get_up` with `hit_react`
+  [src/state/match_state.gd dodge rung] -- deferred. This is a retune-only hazard; the dodge rung is
+  `5-6`'s.
+- [x] [Review][Defer] The knockdown-last / get_up-first Hips junction is measured (0.0067 planar) but
+  not pinned [test/integration/test_clip_timing.gd] -- deferred.
+- [x] [Review][Defer] `debug_window_ticks_remaining()` omits the get-up window (Dev Note 6)
+  [src/state/match_state.gd:1085] -- deferred.
+- [x] [Review][Defer] The `test_replay_identity.gd` `_iframe_open_at_step3` comment still says "STAYS AT
+  THREE" beside the current 4 [test/state/test_replay_identity.gd] -- deferred, pre-existing.
+
+**Special-attention items verified sound (no finding):**
+- **R-PRESS seat symmetry at step 6b.**
+  - The latch is taken before both seats.
+  - There is no `return` between step 3 and 6b, so `_landing_package_pending` is truly PER_TICK.
+  - Steps 4-6 see the pre-package victim on both seats.
+  - The two packages are independent: each reads and writes only its own victim.
+  - The only seat-ordered output is the P1-then-P2 `hit_landed` push order, which only per-slot
+    consumers observe.
+  - No other consumer of step-3 state observes a seat-dependent intermediate. Moving the damage off
+    the caster's seat REMOVED one: a victim's step-3 liveness no longer depends on which seat cast.
+- **AC 12 through the deferred package.** The order holds on both seats (now pinned). The lethal
+  landing on a blocker behaves as the story's note predicts: `block_impact`, then `death`, on the
+  same drain, never rendered.
+- **AC 8/AC 9 `_get_up_armed_for_slot` ("running with nothing elapsed").** It is sound across every
+  interleaving checked:
+  - An ordinary stun ending inside a running get-up window. Live phase 6 genuinely sets this up: a
+    deflect stun of about 24 ticks inside a 122-tick window, with a "still running" setup check, and
+    P13 is a real mutation.
+  - A re-knockdown on the exit tick: `get_up`, then `knockdown`, on one drain, and the final clip is
+    correct.
+  - A reset at step 1, which stops the window before any timer exit.
+  - A round-over freeze after the exit tick.
+  - A 1-tick window.
+  - The runner drains once per `advance()` (`match_runner.gd:2749/2892`).
+
+  Its only coupling is `get_up_iframe_ticks == 0`, now named in the doc and audit-pinned `> 0`.
+- **`is_knockdown_stun`.**
+  - The named fragilities are accurate. The UNNAMED ones were the lower and zero reload directions
+    and the `get_up` coupling (fixed above, as documentation).
+  - D4 guarantees in-flight windows keep their duration, which is exactly what makes a reload
+    reclassify them.
+  - Reloads are recorded, so replay stays deterministic.
+- **Knockdown Hips pin.**
+  - `duplicate(true)` precedes `_pin_hips_planar`, and the source FBX take is untouched.
+  - `_66a-hips-after.txt` shows a non-zero `maxPosDiff` on `knockdown` only (0.695938, the removed
+    travel) and 0 on every other clip.
+  - `test_clip_timing.gd` would catch a rebuild without the pin (the source's peak planar travel,
+    0.61, is over the 0.25 ceiling).
+- **Golden accounting.**
+  - 198 -> 206 key paths = 2 x (`get_up_iframe` + 3 children).
+  - `FORMAT_VERSION` 11 was read in `_66a-golden-after.txt`.
+  - The resting-key pin is in place.
+  - The replay buckets are correct (`get_up_iframe` HASHED; `_get_up_iframe_closed_this_tick` and
+    `_landing_package_pending` PER_TICK).
+  - The isolation probe was a scratch run and was taken from the dev record, not re-derived.
+- **Dev-flagged edge behaviours.**
+  - Note 1 is INACCURATE BY OMISSION: see D1.
+  - Note 2 (roll iframes continue while down) is accurate and harmless (`1-9/R3`).
+  - Note 3 is inside AC 12: see D2.
+  - Note 4 is accurate on HP but incomplete. On the landing tick, an ATTACKING victim's live hitbox
+    still reaches the caster at step 4, and step-5 regen/mana is evaluated before the knockdown.
+    Dodged-rung damage still applies at step 3 while unanswered damage applies at 6b. All of this is
+    harmless to the ACs, and consistent with R-PRESS.
+  - Note 5 is accurate: see D3.
+  - Note 6 is accurate: deferred.
+
+**Review runs, disclosed.**
+- **Scratch runner.** Affected files only (`test_unblockable_defense.gd` + `test_roll_iframes.gd`, and
+  `test_hero_reaction_clips.gd`), green before any mutation.
+- **Mutations** MR1-MR4, each restored from an out-of-repo copy with SHA256 re-verified (log:
+  `C:\dev\_66a-review-mutations.txt`). One run is DISCARDED: MR3's first substitution did not apply,
+  so it ran unmutated code; it was re-run with a working edit.
+- **Full suite, one pass on the final tree, two invocations.**
+  - State harness: **891 / 0 / 7244** (`C:\dev\_66a-review-state.txt`).
+  - Integration: **65 / 65** (`C:\dev\_66a-review-integration.txt`).
+  - Delta from the dev pass's 890 / 7235: +1 test, +9 assertions.
+- **Golden, snapshot keys and `project.godot`:** not touched by the review commits.
+- **Board and status.** `sprint-status.yaml` is untouched (`CFG/R2`/`R4`: board promotion is the
+  operator's). The story Status stays `review` pending the operator's rulings on D1-D3, rather than
+  the skill's default `in-progress`.
+
 ## Change Log
 
 | Date | Change | Author |
@@ -768,6 +931,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 | 2026-09-17 | Readiness gate 3 residuals applied: the escalation mechanism's dual-trigger shape (STUNNED entry and same-state escalation, with the hit_landed re-check named for the second trigger) written out explicitly in AC 11/Dev Notes/Open Question 3; AC 12, its Task, and AC 6 rewritten to the landing-package ordering (the STUNNED write precedes its hit_landed push WITHIN the landing package, not a standalone reorder); the smoke block-impact item's clip expectation corrected, a stale citation fixed, and Project Structure Notes wording aligned. Status remains `authored`; not promoted. | Claude Sonnet 5 |
 | 2026-09-17 | Readiness gate 4 wording residuals applied: the Live Smoke block item's self-contradiction resolved (block_impact.fbx confirmed on an ordinary non-deflected melee hit only; the unblockable-on-blocker case split into its own sentence expecting knockdown presentation, matching AC 12); Dev Notes aligned to the landing-package deferral unit in three places (the forwarding paragraph, Open Question 3, and the block-impact paragraph's fix description), plus an explicit sentence stating the R-PRESS latch's unit of deferral is the whole landing package, not the STUNNED write alone; two leftover phrasings corrected ("its possible latch" -> "its expected latch"; "deferred-write latch" -> "deferred-package latch" at Golden cause 4 and Open Question 8). Promoted to `ready-for-dev`. | Claude Sonnet 5 |
 | 2026-09-17 | Dev pass (gds-dev-story): five FBX imported, library 18 -> 23 (`knockdown` Hips planar pinned, `3-0b/R27` route); knockdown as the third `STUNNED` inbound edge on the victim, applied through a deferred per-tick landing package at a new step 6b (R-PRESS, both seats); floor rule, CHARGING abandonment, lethal gate; get-up iframe `TimingWindow` on `HeroState` (HASHED), armed on the knockdown's timer exit only, registered in `is_iframe_open()`; seventh reset exception; `knockdown_stun_seconds` 2.5 / `get_up_iframe_seconds` 2.0333 authored, three-way tick bound; presentation: `hit_react`/`block_impact` on a second `hit_landed` consumer, `stunned`/`knockdown` held poses, `get_up` on the armed exit, escalation re-check, locomotion yield, block-exit-only blend. Golden 71a7b45f -> d437432f (one cause: the resting `get_up_iframe` key), FORMAT_VERSION 11 -> 11 measured. Suite 869/0/7103 + 63 -> 890/0/7235 + 65. Live smoke NOT run (operator's). Status -> `review`. | Claude Opus 5 |
+| 2026-09-17 | Code review (gds-code-review, three layers): CHANGES REQUESTED on D1 (exact-exit-tick re-knockdown), plus decisions D2 (out-of-arc `block_impact`) and D3 (get-up iframes survive acting) for the operator. Six Low patches fixed in `824438f` (state test pins), `5eee33e` (block -> roll cut pin) and `e64286e` (classifier doc); seven items deferred. Suite 891/0/7244 + 65/65. Status stays `review`. | Claude Opus 5 |
 
 ## Dev Agent Record
 
