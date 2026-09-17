@@ -765,8 +765,12 @@ Acceptance Auditor layers all returned). The review covered `4507560..e356a2a`. 
 REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 decision_needed,
 6 patch (all fixed in this pass), 7 defer, 11 dismissed as noise.
 
-- [ ] [Review][Decision] **D1 (High) An unblockable can land on the knockdown's EXACT exit tick,
-  knocking the hero straight back down.** All three layers found this independently.
+- [x] [Review][Decision] **D1 (High) An unblockable can land on the knockdown's EXACT exit tick,
+  knocking the hero straight back down.** All three layers found this independently. -- RESOLVED
+  `880c63d`, operator ruling option (a), the exit tick is part of the get-up: the step-3 latch also
+  reads `_gets_up_this_tick` (STUNNED, `stun` not running, `is_knockdown_stun`, `get_up_iframe_ticks >
+  0`), no new storage; both-slots boundary test pins exit tick = dodged, one tick earlier = lands on
+  the floor rule.
   - **Mechanism.** `_iframe_open_at_step3` latches for both seats (`match_state.gd:561-562`) before
     either seat's `_resolve_actions`. The get-up window only starts inside the victim's STUNNED arm,
     so a landing on the exit tick reads a false latch and is unanswered. At step 6b the victim is
@@ -791,8 +795,13 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
       hits the floor rule).
     - **(b)** Accept and record the 1-tick seam as ruled.
   - **This review changed nothing here: it is a boundary-semantics call.**
-- [ ] [Review][Decision] **D2 (Med) `block_impact` plays on a FULL-damage hit from outside the block
-  arc** (Dev Note 3). This is inside AC 12's scope, and the spec premise behind it is wrong.
+- [x] [Review][Decision] **D2 (Med) `block_impact` plays on a FULL-damage hit from outside the block
+  arc** (Dev Note 3). This is inside AC 12's scope, and the spec premise behind it is wrong. --
+  RESOLVED `149da25` + `4fcf791`, operator ruling option (b), a runner-forwarded discriminator: the
+  step-4 `hit_landed` is queued through `_emit_hit_landed`, which raises the PER_TICK
+  `_hit_landed_blocked` for that one emission; the rig closure forwards `hit_landed_was_blocked()`
+  beside the unchanged 4-arg payload. `block_impact` plays only for a blocked hit; an out-of-arc hit
+  on a blocker plays NOTHING (BLOCKING is not IDLE-family, AC 2 -- the mid-action outcome).
   - AC 12 scopes `block_impact` to "a blocked hit (the non-deflect block branch)". The Dev Notes
     treat mirrored `BLOCKING` and the blocked branch as the same set, but the `_is_facing` guard
     (`match_state.gd:1744-1745`) splits them.
@@ -932,6 +941,7 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
 | 2026-09-17 | Readiness gate 4 wording residuals applied: the Live Smoke block item's self-contradiction resolved (block_impact.fbx confirmed on an ordinary non-deflected melee hit only; the unblockable-on-blocker case split into its own sentence expecting knockdown presentation, matching AC 12); Dev Notes aligned to the landing-package deferral unit in three places (the forwarding paragraph, Open Question 3, and the block-impact paragraph's fix description), plus an explicit sentence stating the R-PRESS latch's unit of deferral is the whole landing package, not the STUNNED write alone; two leftover phrasings corrected ("its possible latch" -> "its expected latch"; "deferred-write latch" -> "deferred-package latch" at Golden cause 4 and Open Question 8). Promoted to `ready-for-dev`. | Claude Sonnet 5 |
 | 2026-09-17 | Dev pass (gds-dev-story): five FBX imported, library 18 -> 23 (`knockdown` Hips planar pinned, `3-0b/R27` route); knockdown as the third `STUNNED` inbound edge on the victim, applied through a deferred per-tick landing package at a new step 6b (R-PRESS, both seats); floor rule, CHARGING abandonment, lethal gate; get-up iframe `TimingWindow` on `HeroState` (HASHED), armed on the knockdown's timer exit only, registered in `is_iframe_open()`; seventh reset exception; `knockdown_stun_seconds` 2.5 / `get_up_iframe_seconds` 2.0333 authored, three-way tick bound; presentation: `hit_react`/`block_impact` on a second `hit_landed` consumer, `stunned`/`knockdown` held poses, `get_up` on the armed exit, escalation re-check, locomotion yield, block-exit-only blend. Golden 71a7b45f -> d437432f (one cause: the resting `get_up_iframe` key), FORMAT_VERSION 11 -> 11 measured. Suite 869/0/7103 + 63 -> 890/0/7235 + 65. Live smoke NOT run (operator's). Status -> `review`. | Claude Opus 5 |
 | 2026-09-17 | Code review (gds-code-review, three layers): CHANGES REQUESTED on D1 (exact-exit-tick re-knockdown), plus decisions D2 (out-of-arc `block_impact`) and D3 (get-up iframes survive acting) for the operator. Six Low patches fixed in `824438f` (state test pins), `5eee33e` (block -> roll cut pin) and `e64286e` (classifier doc); seven items deferred. Suite 891/0/7244 + 65/65. Status stays `review`. | Claude Opus 5 |
+| 2026-09-17 | Continuation dev pass on the operator-ratified review decisions. D1 (option a) `880c63d`: the get-up exit tick dodges an unblockable -- the step-3 latch reads `_gets_up_this_tick`, no new storage; both-slots boundary test. D2 (option b/a) `149da25` + `4fcf791`: per-hit "was blocked" fact (`_hit_landed_blocked`, PER_TICK, excluded from snapshot) raised around the step-4 emit and forwarded by the rig closure; `block_impact` for blocked hits only, an out-of-arc hit on a blocker plays nothing; intent-recorder EGRESS pin gains `hit_landed_was_blocked`. Mutations: D1 latch reverted -> boundary RED both seats; `stun.is_running` dropped -> early half RED; runner discriminator forced true -> live 7a RED; controller ignores `blocked` -> both integration files RED; state `blocked` without the arc -> state test RED. Golden `d437432f` and the 206-key snapshot set measured UNMOVED both directions; FORMAT_VERSION 11 measured. Suite 893/0/7281 + 65/65 (one disclosed extra state run: the first final run was RED on the egress pin and leaked a test-lambda reference cycle, both fixed). D3 stays open for smoke. Status stays `review`. | Claude Opus 5 |
 
 ## Dev Agent Record
 
