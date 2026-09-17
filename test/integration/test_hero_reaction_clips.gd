@@ -9,7 +9,8 @@ extends SceneTree
 ##     their clip, and a hit on the OTHER slot changes nothing.
 ##   * AC 2 -- THE LOCOMOTION YIELD: `hit_react` and `get_up` survive the per-tick `drive()` push, even
 ##     with the hero moving, until they finish; then locomotion resumes.
-##   * AC 12 -- a hit on a BLOCKING hero plays `block_impact`.
+##   * AC 12 -- a BLOCKED hit on a BLOCKING hero plays `block_impact`; an unblocked one (outside the arc,
+##     6-6a review D2) plays nothing.
 ##   * AC 10/AC 11 -- STUNNED plays `stunned` for the ordinary flavor and `knockdown` for the knockdown,
 ##     HELD (the clip stops on its last frame and is not looping), at the Open Question 2 tempo rule.
 ##   * AC 8/AC 9 -- `get_up` on `STUNNED -> IDLE` only when the runner forwards `get_up_armed`; an
@@ -61,8 +62,8 @@ func _transition(previous: HeroState.ActionState, current: HeroState.ActionState
 
 
 func _hit(target_slot: int = 0, flavor: int = AnimationController.STUN_FLAVOR_NONE,
-		seconds: float = 0.0) -> void:
-	_anim.on_hit_landed(1 - target_slot, target_slot, 5.0, 95.0, 0, flavor, seconds)
+		seconds: float = 0.0, blocked: bool = false) -> void:
+	_anim.on_hit_landed(1 - target_slot, target_slot, 5.0, 95.0, 0, flavor, seconds, blocked)
 
 
 ## One drive() tick with this velocity: the real locomotion push, then one tick of playback.
@@ -104,13 +105,19 @@ func _hit_react_scoping() -> void:
 			% [state, row[0], _player.assigned_animation])
 
 
-## AC 12: a hit on a BLOCKING hero plays block_impact.
+## AC 12: a BLOCKED hit on a BLOCKING hero plays block_impact. 6-6a review D2: a hit the runner forwards
+## as NOT blocked (full damage from outside the arc) plays nothing -- the block pose stays, and it is not
+## `hit_react` either (a BLOCKING hero is not IDLE-family, AC 2).
 func _block_impact() -> void:
 	_settle_idle()
 	_transition(IDLE, BLOCKING)
-	_hit(0)
+	_hit(0, AnimationController.STUN_FLAVOR_NONE, 0.0, false)
+	_check(_player.current_animation == &"block",
+		"an UNBLOCKED hit on a BLOCKING hero (outside the arc) keeps 'block' -- no block_impact, no hit_react (got '%s')"
+		% _player.current_animation)
+	_hit(0, AnimationController.STUN_FLAVOR_NONE, 0.0, true)
 	_check(_player.current_animation == &"block_impact",
-		"a hit on a BLOCKING hero plays block_impact (got '%s')" % _player.current_animation)
+		"a BLOCKED hit on a BLOCKING hero plays block_impact (got '%s')" % _player.current_animation)
 
 
 ## AC 2: the one-shots survive the per-tick push while they play, then locomotion takes over again.

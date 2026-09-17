@@ -62,7 +62,8 @@ extends Node3D
 ##     keyed on the forwarded `get_up_armed`, i.e. on the state layer having just opened the get-up
 ##     iframes, which the debug reset never does.
 ##   * `hit_react` / `block_impact` (AC 1/AC 2/AC 12) on the EXISTING `hit_landed` seam, this controller
-##     its second consumer: selected by the MIRRORED `_state` at consumption time, never a live read.
+##     its second consumer: selected by the MIRRORED `_state` at consumption time, never a live read --
+##     and `block_impact` only for a hit the runner forwards as actually `blocked` (6-6a review D2).
 ##   * the knockdown ESCALATION (AC 5): an ordinary stun overwritten by a knockdown is a same-state write
 ##     that emits no transition, so `on_hit_landed` re-checks the forwarded flavor on the drain that
 ##     carries the knockdown's own `hit_landed`.
@@ -484,13 +485,18 @@ func on_charge_progress(charge_color: int, progress: float) -> void:
 ## hit drain FIFO from one queue, so `_state` is what the hero was when the hit was pushed.
 ##   IDLE     -> `hit_react` (a yielding one-shot). No other state is interrupted: mid-action flinch is
 ##               the deferred hitstun system's (AC 2).
-##   BLOCKING -> `block_impact` (AC 12). A knockdown's own write precedes its hit on the queue, so an
-##               unanswered unblockable on a blocker reads STUNNED here and never reaches this branch.
+##   BLOCKING -> `block_impact` (AC 12), but ONLY when the runner forwards `blocked` -- the hit really took
+##               the block branch. A full-damage hit from OUTSIDE the block arc plays NOTHING (6-6a
+##               review D2): the hero is BLOCKING, not IDLE-family, so AC 2 gives it no `hit_react`
+##               either, exactly like a hit landing mid-attack. A knockdown's own write precedes its hit
+##               on the queue, so an unanswered unblockable on a blocker reads STUNNED here and never
+##               reaches this branch.
 ##   STUNNED  -> no hurt clip; but a forwarded KNOCKDOWN over a clip that is not already `knockdown` is
 ##               the AC 5 ESCALATION and switches to it. A knockdown already playing is left alone --
 ##               a second landing never restarts the hold (AC 7/AC 11).
 func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _target_hp: float,
-		my_slot: int, stun_flavor: int = STUN_FLAVOR_NONE, stun_seconds: float = 0.0) -> void:
+		my_slot: int, stun_flavor: int = STUN_FLAVOR_NONE, stun_seconds: float = 0.0,
+		blocked: bool = false) -> void:
 	if target_slot != my_slot:
 		return
 	match _state:
@@ -498,7 +504,8 @@ func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _targe
 			_restart(&"hit_react")
 			_one_shot = &"hit_react"
 		HeroState.ActionState.BLOCKING:
-			_restart(&"block_impact")
+			if blocked:
+				_restart(&"block_impact")
 		HeroState.ActionState.STUNNED:
 			if stun_flavor == STUN_FLAVOR_KNOCKDOWN \
 					and animation_player.assigned_animation != &"knockdown":

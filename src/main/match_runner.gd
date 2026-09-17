@@ -554,10 +554,15 @@ func _ready() -> void:
 		# bound handler has fixed arity); the closure forwards the four arguments, this hero's slot, and
 		# the runner-computed stun flavor/span the AC 5 escalation re-check needs. The controller gates on
 		# `target_slot == slot` itself, exactly as the telegraph handler does.
+		#
+		# 6-6a review (D2): plus whether THIS hit was actually BLOCKED, read from the state layer while the
+		# hit is being emitted (`MatchState.hit_landed_was_blocked`), so `block_impact` plays for a blocked
+		# hit only and never for a full-damage hit from outside the block arc.
 		connect_hit_landed(func(attacker_slot: int, target_slot: int, damage: float,
 				target_hp: float) -> void:
 			anim.on_hit_landed(attacker_slot, target_slot, damage, target_hp, slot,
-					_stun_flavor_for_slot(slot), _stun_seconds_for_slot(slot)))
+					_stun_flavor_for_slot(slot), _stun_seconds_for_slot(slot),
+					_match_state.hit_landed_was_blocked()))
 
 
 ## Story 3-3 (AC 4): PROVISIONAL FIXTURE deck composition — walk CardDatabase's explicitly

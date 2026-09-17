@@ -25,6 +25,13 @@ extends SceneTree
 ##   6. an ORDINARY stun that starts and ends while that get-up window is STILL RUNNING: its exit plays no
 ##      `get_up`. This is why the runner forwards "armed ON THIS TICK" (running with nothing elapsed)
 ##      rather than merely "running" -- a hero deflected during its get-up iframes, say.
+##   7. 6-6a review D2, a BLOCKING P2 and the runner's `blocked` discriminator, each clip read from INSIDE the
+##      hit's own emission (a handler connected after the runner's), since the headless P2 holds no block key
+##      and drops back to IDLE on the very next advance:
+##        a. a full-damage hit from OUTSIDE the arc (the state's own step-4 emit, `blocked` false): NOT
+##           `block_impact` -- the block pose stays;
+##        b. a BLOCKED hit (`blocked` true): `block_impact`;
+##        c. an unanswered unblockable on the blocker (the landing package): `knockdown`, not `block_impact`.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_defense_reactions_live.gd
 
@@ -41,6 +48,7 @@ var _phase := "hit"
 var _phase_frame := 0
 var _done_frame := -1
 var _failures: Array[String] = []
+var _p2_hit_clips: Array[StringName] = []   ## P2's clip as each hit on P2 finishes its runner consumers
 
 
 func _initialize() -> void:
@@ -81,6 +89,11 @@ func _physics_process(_delta: float) -> bool:
 		if _state == null or _p1 == null or _p2 == null or _state.balance_ticks == null:
 			_failures.append("setup: runner/state/heroes/balance missing")
 			_done_frame = _frames
+		else:
+			# Connected AFTER the runner wired its own consumers in _ready, so it runs after the rig closure.
+			_state.hit_landed.connect(func(_a: int, target_slot: int, _d: float, _hp: float) -> void:
+				if target_slot == 1:
+					_p2_hit_clips.append(_clip(_p2)))
 		_next("hit")
 		return false
 	var since := _frames - _phase_frame
@@ -155,5 +168,43 @@ func _physics_process(_delta: float) -> bool:
 				if _clip(_p2) == &"get_up":
 					_failures.append("6. an ORDINARY stun's exit played get_up because an older get-up "
 						+ "window was still running")
+				_block_p2_and_hit(false)
+				_next("arc_out_check")
+		"arc_out_check":
+			if since >= CHECK_DELAY:
+				if _last_p2_hit_clip() != &"block":
+					_failures.append("7a. a full-damage hit from OUTSIDE the arc on a BLOCKING P2 must not play "
+						+ "block_impact -- the block pose stays (got '%s')" % _last_p2_hit_clip())
+				_block_p2_and_hit(true)
+				_next("arc_in_check")
+		"arc_in_check":
+			if since >= CHECK_DELAY:
+				if _last_p2_hit_clip() != &"block_impact":
+					_failures.append("7b. a BLOCKED hit on a BLOCKING P2 plays block_impact (got '%s')"
+						% _last_p2_hit_clip())
+				p2.set_action_state(HeroState.ActionState.BLOCKING)
+				_knock_down_p2()
+				_next("unblockable_check")
+		"unblockable_check":
+			if since >= CHECK_DELAY:
+				if _last_p2_hit_clip() != &"knockdown":
+					_failures.append("7c. an unanswered unblockable on a BLOCKING P2 plays knockdown, never a "
+						+ "stale block_impact (got '%s')" % _last_p2_hit_clip())
+				# Two knockdown packages (phases 3 and 5) + the three hits of phase 7.
+				if _p2_hit_clips.size() != 5:
+					_failures.append("7. setup: five hits on P2 reached the recorder (got %d)" % _p2_hit_clips.size())
 				_done_frame = _frames
 	return false
+
+
+## P2 enters BLOCKING and takes one step-4-shaped hit whose block verdict is `blocked` -- through the state
+## layer's OWN emit seat, `_emit_hit_landed`, which is what `_resolve_contacts` queues. Both are drained by
+## the runner's next tick, the transition first.
+func _block_p2_and_hit(blocked: bool) -> void:
+	_state.p2.hero.set_action_state(HeroState.ActionState.BLOCKING)
+	var damage := 1.5 if blocked else 6.0
+	_state._queue.push(_state._emit_hit_landed.bind(0, 1, damage, _state.p2.hero.get_hp(), blocked))
+
+
+func _last_p2_hit_clip() -> StringName:
+	return _p2_hit_clips.back() if not _p2_hit_clips.is_empty() else &""
