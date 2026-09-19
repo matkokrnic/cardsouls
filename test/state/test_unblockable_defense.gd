@@ -989,12 +989,19 @@ func test_no_card_identity_reaches_the_snapshot_through_the_defense_key() -> voi
 
 const KNOCKDOWN_STUN_TICKS := 40
 const GET_UP_IFRAME_TICKS := 11
+const WALK_SPEED := 4.0
 
 
 func _knockdown_config() -> BalanceConfig:
 	var c := _config()
 	c.knockdown_stun_seconds = float(KNOCKDOWN_STUN_TICKS) / TimingWindow.TICK_HZ
 	c.get_up_iframe_seconds = float(GET_UP_IFRAME_TICKS) / TimingWindow.TICK_HZ
+	# Post-smoke ruling (pending `6-6a/R` number): A ROOT IS ONLY PROVABLE AGAINST A NON-ZERO SPEED.
+	# `_config()` leaves both gaits at 0.0, which made every `velocity == ZERO` assertion in this
+	# section pass for the wrong reason -- the hero had no speed to be denied. Authored HERE rather
+	# than in `_config()` so the older fixtures stay untouched (`5-5`'s discipline), and this one
+	# fixture carries the walk speed every rooting claim below is measured against.
+	c.walk_speed = WALK_SPEED
 	return c
 
 
@@ -1419,6 +1426,137 @@ func test_the_debug_reset_clears_an_armed_get_up_iframe_window() -> void:
 	_idle_ticks(direct, KNOCKDOWN_STUN_TICKS)
 	direct._reset_player(direct.p2)
 	assert_false(direct.p2.hero.get_up_iframe.is_running, "...and the reset seat itself does, immediately")
+
+
+# --- Post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION ---------------------------
+##
+## The `[3, 3]` live smoke (2026-09-19) found the victim able to act the instant `get_up` starts --
+## attack, roll, card and block all available while the AC 8 window still ran -- which reads as
+## "teleport to your feet", and which review finding D3 (2 s invulnerable while fully able to act)
+## compounded. The window is now a LOCK as well as a shield: every intent is refused and the hero is
+## rooted for its duration. The I-FRAMES ARE UNCHANGED, and the tests above prove that by staying green
+## unedited -- same window, same duration, still dodging unblockables, still latched by D1's
+## `_gets_up_this_tick` on the exit tick.
+##
+## Table presses (attack/roll/block) drop SILENTLY and the card seat ANNOUNCES, which is not two
+## policies but `STUNNED`'s own shape repeated: a downed hero's table row carries no edges (no
+## `action_rejected`), while `_resolve_card_action` refuses by an explicit gate with a reason token.
+
+## Every intent kind, refused on one continuous window: the three table presses, a defense cast, and a
+## mode ② initiation. Movement is asserted the only way the state layer can -- `velocity`, the single
+## field `HeroActor.drive()` integrates into a position (`test_a_knocked_down_hero_refuses_every_action_
+## and_is_rooted`'s own idiom, reused rather than re-invented).
+func test_every_intent_is_refused_while_the_hero_is_getting_up() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	_idle_ticks(ms, KNOCKDOWN_STUN_TICKS)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+		"precondition: the victim is up on the knockdown's timer-exit tick")
+	assert_true(ms.p2.hero.is_getting_up(), "precondition: ...with the get-up window open")
+	var attack_index := ms.p2.hero.attack_index
+	var stamina := ms.p2.stamina.get_current()
+	var rejections := _collect_rejections(ms.p2)
+	for action: StringName in [&"attack", &"roll", &"block"]:
+		var press := _press(action)
+		press.move_dir = Vector2(1.0, 0.0)
+		_advance(ms, InputIntent.new(), press)
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+			"a %s press while getting up is refused -- the hero stays IDLE" % action)
+		assert_eq(ms.p2.hero.velocity, Vector3.ZERO,
+			"...and the hero is ROOTED with that same press's move_dir live")
+	assert_eq(ms.p2.hero.attack_index, attack_index, "no swing was started...")
+	assert_eq(ms.p2.stamina.get_current(), stamina, "...and no stamina was spent by any of the three")
+	assert_eq(rejections, [],
+		"the three table presses drop SILENTLY -- the `STUNNED` register, not a new refusal channel")
+	var defense_slot := _slot_of_color(ms.p2, Enums.CardColor.RED)
+	_advance(ms, InputIntent.new(), _defense_intent(defense_slot))
+	assert_false(ms.p2.defense_window.is_running, "a defense cast while getting up is refused...")
+	assert_eq(ms.p2.discard.size(), 0, "...with no card spent")
+	var unblockable_slot := _slot_of_color(ms.p2, Enums.CardColor.BLUE)
+	_advance(ms, InputIntent.new(), _unblockable_intent(unblockable_slot))
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+		"a mode (2) initiation while getting up is refused -- no CHARGING")
+	assert_false(ms.p2.charge_window.is_running, "...and no chargeup window started")
+	assert_eq(ms.p2.stamina.get_current(), stamina, "...and neither cast spent its stamina")
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_GETTING_UP],
+			[&"card_cast", MatchState.REASON_GETTING_UP]],
+		"the CARD seat announces, both modes, with the get-up's own reason -- never REASON_STUNNED, "
+		+ "which would be a false statement about a stun that has already run out")
+	assert_true(ms.p2.hero.is_getting_up(), "the window is still open -- every refusal above was inside it")
+
+
+## The BOUNDARY: the window's LAST running tick still refuses, and the very next tick -- the first after
+## step 2 empties the window -- accepts input normally. `is_getting_up()` reads the window ALONE, so the
+## +1 close grace `is_iframe_open()` carries for contact facts costs the player no input tick.
+func test_input_is_accepted_on_the_first_tick_after_the_get_up_window_expires() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	_idle_ticks(ms, KNOCKDOWN_STUN_TICKS)
+	_idle_ticks(ms, GET_UP_IFRAME_TICKS - 2)
+	assert_eq(ms.p2.hero.get_up_iframe.remaining_ticks(), 2,
+		"precondition: two ticks of the get-up window left")
+	var stamina := ms.p2.stamina.get_current()
+	_advance(ms, InputIntent.new(), _press(&"attack"))
+	assert_eq(ms.p2.hero.get_up_iframe.remaining_ticks(), 1,
+		"the window's LAST running tick...")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE, "...still refuses the press")
+	assert_eq(ms.p2.stamina.get_current(), stamina, "...and charges nothing for it")
+	_advance(ms, InputIntent.new(), _press(&"attack"))
+	assert_false(ms.p2.hero.get_up_iframe.is_running, "the window emptied at this tick's step 2...")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.ATTACKING,
+		"...and the very next press is accepted normally -- no extra locked tick from the close grace")
+	assert_eq(ms.p2.stamina.get_current(), stamina - 1.0,
+		"...and paid for at the fixture's authored attack cost, as any swing is")
+
+
+## A block HOLD carried through the window produces no `BLOCKING` -- during it (refused) or after it
+## (`block` is a PRESS edge, never a level, which is the existing hold semantics this ruling does not
+## touch). A fresh press once the window is gone engages normally.
+func test_a_block_held_through_the_get_up_never_engages_until_it_is_re_pressed() -> void:
+	var ms := _kd_match()
+	_land(ms, 0, Enums.CardColor.RED)
+	_idle_ticks(ms, KNOCKDOWN_STUN_TICKS)
+	_advance(ms, InputIntent.new(), _press(&"block"))
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+		"the block pressed on the arming tick is refused")
+	for _t in GET_UP_IFRAME_TICKS:
+		_advance(ms, InputIntent.new(), _held(&"block"))
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+			"...and holding it through the window -- and past its end -- engages nothing")
+	assert_false(ms.p2.hero.is_getting_up(), "precondition: the window has emptied by now")
+	_advance(ms, InputIntent.new(), _press(&"block"))
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.BLOCKING,
+		"a FRESH press after the window engages the block normally")
+
+
+## COMPOSITION WITH THE D1 LATCH, on the exact knockdown-exit tick and on BOTH victim seats: the latch
+## defers/dodges the ATTACKER's landing package while the lock refuses the VICTIM's own press, on one
+## tick. Neither weakens the other -- the hero is invulnerable AND unable to act, which is what closes
+## review finding D3 by construction.
+func test_the_get_up_lock_and_the_d1_latch_compose_on_the_exit_tick() -> void:
+	var exit_lead := KNOCKDOWN_STUN_TICKS - CHARGEUP_TICKS - 1
+	for victim_slot: int in 2:
+		var caster_slot := 1 - victim_slot
+		var ms := _kd_match()
+		var victim: PlayerState = ms.p1 if victim_slot == 0 else ms.p2
+		var caster: PlayerState = ms.p1 if caster_slot == 0 else ms.p2
+		_land(ms, caster_slot, Enums.CardColor.RED)
+		_idle_ticks(ms, exit_lead)
+		var check := func() -> void:
+			assert_eq(victim.hero.stun.remaining_ticks(), 1,
+				"victim slot %d: precondition: the stun runs out at THIS tick's step 2" % victim_slot)
+		_land(ms, caster_slot, Enums.CardColor.BLUE, func(t: int) -> InputIntent:
+			return _press(&"attack") if t == CHARGEUP_TICKS - 1 else InputIntent.new(), check)
+		assert_eq(victim.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+			"victim slot %d: D1 intact -- the landing on the exact exit tick is still DODGED" % victim_slot)
+		assert_eq(caster.orbs.get_count(Enums.CardColor.BLUE), 0,
+			"victim slot %d: ...paying no orb" % victim_slot)
+		assert_eq(victim.hero.action_state, HeroState.ActionState.IDLE,
+			"victim slot %d: ...and the victim's own press on that same tick is REFUSED" % victim_slot)
+		assert_eq(victim.hero.attack_index, -1,
+			"victim slot %d: ...no swing started" % victim_slot)
+		assert_eq(victim.hero.get_up_iframe.remaining_ticks(), GET_UP_IFRAME_TICKS,
+			"victim slot %d: ...on a get-up window armed that tick, untouched by either" % victim_slot)
 
 
 # --- AC 12: the landing package's internal order ---------------------------------------------------------

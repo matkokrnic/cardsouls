@@ -1256,6 +1256,30 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 				player.charge_window.start(0)
 				player.landing_window.start(0)
 				player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	# STORY 6-6a POST-SMOKE RULING (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION. The live
+	# smoke found the hero able to act the instant `get_up` starts -- attack, roll, card, block all
+	# available while the AC 8 iframes still ran -- which reads as "teleport to your feet" and, with the
+	# window covering unblockables too, made the get-up a free 2 s of invulnerable offence (review
+	# finding D3). The window is now a LOCK as well as a shield.
+	#
+	# IT SITS BETWEEN (a) AND (b), WHICH IS THE WHOLE OF ITS SCOPE: the timer arms above still run (this
+	# is where the window itself is opened, one tick before anything could read it), and only the
+	# INPUT-DRIVEN edges below are refused. Attack, roll and block therefore drop SILENTLY, which is not
+	# a new contract but the one `STUNNED` already has -- its table row carries no edges, so a press on a
+	# downed hero is dropped with no `action_rejected` either. The card seat (`_resolve_card_action`,
+	# step 6) DOES announce, for the same reason it announces for `STUNNED`: that path refuses by an
+	# explicit gate with a reason token, not by an empty row.
+	#
+	# A HELD BLOCK IS NOT BUFFERED. `block` is an `is_pressed` edge, so a hold carried through the
+	# get-up produces no `BLOCKING` when the window empties; re-pressing engages it. That is the
+	# existing hold semantics unchanged (`3-0b/R23`/`R24` untouched), not a new rule about block.
+	#
+	# THE AC 8 I-FRAMES THEMSELVES ARE UNTOUCHED: same window, same duration, still registered in
+	# `is_iframe_open()`, still covering unblockables (R-IFRAME-UNBLOCKABLE), and `_gets_up_this_tick`
+	# (the D1 latch) still reads its own arming condition at step 3. The two compose: the latch defers
+	# the ATTACKER's landing package on the exit tick, this lock refuses the VICTIM's own presses.
+	if hero.is_getting_up():
+		return
 	# (b) Input-driven edges from the current table row. A press with no entry in the row
 	# is dropped, never buffered (AC 5). Fixed INPUT_PRIORITY order = deterministic
 	# same-tick tiebreak; at most one transition fires per tick.
@@ -2709,6 +2733,18 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 		return
 	if player.hero.action_state == HeroState.ActionState.DEAD:
 		return
+	# Story 6-6a post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION -- the CARD
+	# half of it. One gate ahead of the mode dispatch covers all four modes, so an unblockable
+	# initiation, a defense answer, a summon and a pitch are refused identically while the AC 8 window
+	# runs; the per-mode `STUNNED` gates further down are untouched and still do their own job.
+	#
+	# IT ANNOUNCES, unlike the step-3 half (see `_resolve_actions`): this path refuses by an explicit
+	# gate with a reason token, exactly as it does for `STUNNED`, so the player hears why. BELOW the
+	# DEAD guard, deliberately -- a corpse gets no rejection feedback, and its sibling guards all sit
+	# under that same line.
+	if player.hero.is_getting_up():
+		player.hero.reject_action(&"card_cast", REASON_GETTING_UP)
+		return
 	# Story 6-2 (AC 17a): EVERY declared `Enums.ModeKind` now has its own arm below, so the `_` arm is no
 	# longer a guarded stub for an unshipped mode -- it is the total-function default for an int that
 	# is not a ModeKind at all (a corrupt intent), and reaching it is still a programming error, not a
@@ -2910,6 +2946,19 @@ const REASON_UNBLOCKABLE_COMMITTED := &"unblockable_committed"
 ## the `REASON_EMPTY_SLOT` reuse precedent applied a second time: the player-visible fact is the same
 ## fact in both places, so inventing a per-seat token would name the mechanism instead of the fact.
 const REASON_STUNNED := &"stunned"
+
+## Story 6-6a post-smoke ruling (pending `6-6a/R` number): a cast attempted while the caster is GETTING
+## UP. A SEPARATE TOKEN rather than a fourth reuse of `REASON_STUNNED`, on that constant's own stated
+## reason: the token names the PLAYER-VISIBLE FACT, and a hero getting up is not stunned -- it is IDLE,
+## its stun window has already run out, and its get-up window is what refuses. Telling the player
+## "stunned" there would be a false statement about a state they can see has ended. Same lowercase
+## `StringName` convention, minted here for the same reason `REASON_STUNNED` is: `CastEvaluator` sees
+## neither fact.
+##
+## ONE SEAT, EVERY MODE: this is raised in `_resolve_card_action` ahead of the mode dispatch, so all
+## four modes (basic, unblockable initiation, defense, pitch) refuse identically. The per-mode
+## `REASON_STUNNED` gates below are untouched.
+const REASON_GETTING_UP := &"getting_up"
 
 
 ## Story 6-2 (AC 5): a card with NO INJECTED PITCH COST refuses to stage with THIS reason -- minted here
@@ -4032,6 +4081,24 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 		# Ruling 3 forbids ACTION and MOVEMENT, not the visual heading — the same fallthrough
 		# `ROLLING` and `ATTACKING` already get (facing tracks the lock while velocity is overridden),
 		# not a new carve-out.
+		player.hero.velocity = Vector3.ZERO
+	elif player.hero.is_getting_up():
+		# Story 6-6a post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION -- the
+		# MOVEMENT half. A FOURTH sibling of the three branches above, written in their exact shape and
+		# for their exact reasons: a LITERAL ZERO, never a `get_up_move_speed_multiplier` read from
+		# balance (`5-2/R5`'s refusal, applied a third time -- a non-zero multiplier is not rooted), and
+		# the write HAPPENS rather than being skipped, because `HeroActor.drive()` reads this field into
+		# `move_and_slide()` every physics frame and a skipped write would leave the last live velocity
+		# in place, sliding the hero across the floor through its own get-up.
+		#
+		# THE STATE HERE IS `IDLE`, which is why this branch keys on the WINDOW and not on a state: the
+		# knockdown's timer exit writes `IDLE` and opens the window in the same arm (step 3(a)), so
+		# `action_state` has nothing left to distinguish. It sits BELOW the three state branches so
+		# their behaviour is bit-identical to before this pass; the window cannot legitimately be open
+		# in any of those states anyway, since every entry to them is refused while it runs.
+		#
+		# FACING FALLS THROUGH to the generic lock-direction branch below, `STUNNED`'s own carve-out
+		# repeated verbatim: the ruling forbids ACTION and MOVEMENT, not the visual heading.
 		player.hero.velocity = Vector3.ZERO
 	else:
 		var state := player.hero.action_state

@@ -288,6 +288,22 @@ func is_iframe_open() -> bool:
 			or get_up_iframe.is_running or _get_up_iframe_closed_this_tick
 
 
+## Story 6-6a post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION. Derived from
+## the SAME `get_up_iframe` window `is_iframe_open()` above already reads -- one window, one source of
+## truth, no second timer and no stored flag. While it is true, `MatchState` refuses every intent this
+## hero presses (attack, unblockable initiation, roll, card mode select/cast, block) and roots it, the
+## `STUNNED` register applied to the get-up: the hero is invulnerable AND unable to act, instead of
+## teleporting to its feet straight into a swing.
+##
+## THE WINDOW ALONE, NOT `is_iframe_open()`: the +1 close grace those two transient markers carry exists
+## so a CONTACT FACT gathered on the window's last running tick still drops a tick late (the F1 fact
+## lag). An INTENT has no such lag -- it is read in the same tick it is pressed -- so reading the grace
+## here would eat one extra tick of input for no reason. The tick after the window empties accepts
+## input normally.
+func is_getting_up() -> bool:
+	return get_up_iframe.is_running
+
+
 ## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
 ## contact resolution for THIS hero as the attacker. Returns true iff the fact's
 ## attack_index matches a live dedupe record AND this swing has not already damaged
