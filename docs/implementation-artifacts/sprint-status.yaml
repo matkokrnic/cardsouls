@@ -122,7 +122,7 @@ development_status:
   6-7-locomotion-gaits: done  # Tier A
   6-7b-locomotion-presentation: done  # Tier B
   6-8-camera-freedom: done  # Tier A
-  6-6a-defense-reactions: ready-for-dev  # Tier A
+  6-6a-defense-reactions: done  # Tier A
   6-6b-color-counters: backlog  # Tier A
   6-5-spell-resolution: backlog  # Tier A
 
@@ -138,9 +138,9 @@ story_notes:
   6-3b-pitch-hud: "done 2026-09-15, Tier A close-out complete (tenth observation seam connect_pitch_changed, both pitch zones and staged-card ghost per 6-3b/R1-R4; golden 9ed4c903 unmoved, measured both directions, no re-baseline; suite 824/0/6754 + 59 -> 842/0/6898 + 61 integration; two readiness gate rounds (gate 1 NOT READY six blockers, gate 2 READY zero blockers); review APPROVE WITH FINDINGS, eleven findings none blocking, two fixed and mutation-proven; live smoke 7/7 PASS, no named deviation)."
   6-7b-locomotion-presentation: "done 2026-09-16, Tier B close-out complete (walk family + turn-in-place + tempo retune per 6-7b/R1-R9; golden 71a7b45f unmoved, measured both directions; suite 854/0/6965 + 62 integration; live smoke 7/8 PASS + item 4 (turn-in-place slide at low angular rate) fixed and re-smoke accepted; decision-log session 6-7b-locomotion-presentation close-out (Tier B))."
   6-8-camera-freedom: "done 2026-09-17, Tier A close-out complete (unlock via R3 three-way click, free yaw, bearing-based 360 cycling with wrap, keyboard parity per 6-8/R1-R12; golden 71a7b45f unmoved, three causes measured; FORMAT_VERSION stays 11; suite 854/0/6965 + 62 -> 869/0/7103 + 63; review APPROVE WITH FINDINGS; live smoke 8/8 PASS; decision-log session 6-8-camera-freedom close-out)."
-  6-6a-defense-reactions: "dev pass complete 2026-09-17, story-file Status is `review` (story-file-only), awaiting code review and the operator's commit chain."
+  6-6a-defense-reactions: "done 2026-09-19, Tier A close-out complete (hurt/knockdown/stun-pose/block-impact reactions per Rulings 1-4, R-STUNSTACK/R-PRESS/R-IFRAME-UNBLOCKABLE plus 6-6a/R1-R7 -- R1 CHARGING abandonment, R2 simultaneous-landing seat symmetry, R3 get-up iframes, R4 no get-up on debug reset, R5 D1 exit-tick latch widening, R6 D2 blocked-hit discriminator, R7 post-smoke get-up lock closing D3 by construction; golden d437432f MEASURED UNMOVED both directions, no re-baseline; FORMAT_VERSION 11, no bump; suite 897/0/7339 + 65/65 integration; review CHANGES REQUESTED -> D1/D2 fixed, D3 closed by construction in the post-smoke pass; live smoke PASS mechanically clean nine items/three notes, re-smoke of the get-up-lock fix 5/5 PASS; decision-log session 6-6a close-out)."
   6-6b-color-counters: "three color counters per attack type, Sekiro-style timing; scope talk pending; supersedes the E6-planning deferral of per-attack-type counters per operator ruling 2026-09-17"
-  6-5-spell-resolution: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Carries M5 and M6 (deferred-work.md:232-233)."
+  6-5-spell-resolution: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Carries M5 and M6 (deferred-work.md:301-302)."
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
   5-5-unblockable-defense: "done 2026-09-06, Tier A close-out complete (mode 3 dispatch/window/negation/reset per 5-5/R1-R10, golden dc2c9ffa -> d9725092/30-key set (defense), smoke PASS 10/10, decision-log session 5-5 close-out)."

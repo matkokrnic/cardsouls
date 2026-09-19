@@ -10686,3 +10686,83 @@ integration `62/62 PASS` -> `63/63 PASS`, both foreground, both halves. Golden `
 unmoved. `FORMAT_VERSION` 11.
 
 Pushed; `origin/main` confirmed equal to `HEAD` after.
+
+## Session 2026-09-19 -- 6-6a-defense-reactions close-out
+
+Author pass + four readiness gate rounds + dev pass (Claude Opus 5) + Senior Developer Review
+(gds-code-review, three layers, CHANGES REQUESTED on D1) + continuation fix pass (D1/D2) + operator
+live smoke + post-smoke fix pass (Claude Opus 5) + operator re-smoke + this close-out, all on
+`6-6a-defense-reactions`. Seven rulings, `6-6a/R1`-`R7`; full text lives in the story file, not
+restated here. The story's own Rulings 1-4 (AC headers) and the named rulings `R-STUNSTACK`,
+`R-PRESS`, `R-IFRAME-UNBLOCKABLE` already carried their own labels and were left as-is; `6-6a/R1`-`R7`
+cover only the operator rulings that were still unlabelled.
+
+`6-6a/R1` CHARGING ABANDONMENT (AC 5). A knockdown on a CHARGING victim abandons the chargeup --
+`charge_window`, `landing_window` and `charge_color` cleared together with the knockdown write, the
+`6-1` feint-teardown shape verbatim; `_charge_reach`/`_charge_contact_dirs` untouched per their own
+`6-1d/R9` discipline.
+
+`6-6a/R2` SIMULTANEOUS-LANDING SEAT SYMMETRY (AC 6). One unblockable landing per seat on the same
+tick: BOTH land, BOTH victims go down, neither cancelled by the other's write.
+
+`6-6a/R3` GET-UP IFRAMES (AC 8). A new `TimingWindow` opens on the timer-driven knockdown exit only,
+reusing the `roll_iframe` mechanism's shape and registering wherever it does -- `R-IFRAME-UNBLOCKABLE`
+names that this covers unblockables too, not only melee.
+
+`6-6a/R4` NO GET-UP / NO IFRAME ON DEBUG RESET (AC 9). The reset exit snaps straight to `IDLE`; the
+seventh named reset exception.
+
+`6-6a/R5` D1 RESOLUTION (review, option a). An unblockable landing on the knockdown's exact exit tick
+is now iframed: the step-3 latch also reads `_gets_up_this_tick` (STUNNED, `stun` not running,
+`is_knockdown_stun`, `get_up_iframe_ticks > 0`) -- no new storage, seat-symmetric by construction.
+
+`6-6a/R6` D2 RESOLUTION (review, option b). `block_impact.fbx` no longer plays on a full-damage hit
+from outside the block arc: a per-hit `_hit_landed_blocked` PER_TICK fact, raised around the step-4
+emit, forwarded by the rig closure beside the unchanged 4-arg `hit_landed` payload.
+
+`6-6a/R7` THE GET-UP IS A LOCKED ACTION (post-smoke, operator-ratified 2026-09-19). While
+`get_up_iframe` runs, every intent from that hero is refused -- attack, unblockable initiation, roll,
+card mode select/cast, block -- and the hero is rooted, the `STUNNED` register applied to the get-up.
+`HeroState.is_getting_up()` derives from the window alone, no new member. CLOSES review finding D3 (the
+get-up iframes surviving action) BY CONSTRUCTION: an invulnerable hero unable to act has no offence
+left to price, so AC 8's authored window length and no-early-stop-path contract are untouched.
+
+**Measurements.** Golden `d437432f...` MEASURED UNMOVED both directions across the whole story (dev
+pass, continuation pass, post-smoke pass); the one prior re-baseline (`71a7b45f...` -> `d437432f...`)
+landed at the dev pass, sole cause the resting `get_up_iframe` snapshot key set (206 key paths).
+`FORMAT_VERSION` stays 11 throughout -- no recorded input channel changed at any pass.
+`UNHASHED_CROSS_TICK_MEMBERS` stays 4. Suite: state `869/0/7103` -> `897/0/7339`, integration
+`63/63` -> `65/65`, across the dev pass, continuation pass and post-smoke pass combined.
+
+**Live smoke.** `[3, 3]` two-pad smoke 2026-09-19: mechanically clean, nine items, three notes (the
+`6-6a/R7` finding, a TUNING deferral on the knockdown/get-up durations, a POLISH deferral on
+one-shot-reaction floor slide -- both in `deferred-work.md`). Re-smoke of the `6-6a/R7` fix,
+2026-09-19: 5/5 PASS. The simultaneous trade was the one item not robotically verifiable -- hit only
+after many manual attempts, both heroes went down, counted as verified with the method's imprecision
+noted rather than a deviation.
+
+**Chain.** Create -> four readiness gate rounds (rulings on B3/B4/B5/B7/B9, R-STUNSTACK, R-PRESS,
+R-IFRAME-UNBLOCKABLE) -> promotion -> dev pass (Claude Opus 5) -> Senior Developer Review (three
+layers, CHANGES REQUESTED on D1) -> continuation fix pass, D1/D2 resolved (`880c63d`, `149da25`,
+`4fcf791`) -> operator live smoke -> post-smoke fix pass, AC 14/`6-6a/R7` (get-up lock) -> operator
+re-smoke -> this close-out.
+
+**Docs corrections folded in.** `epics.md:234` corrected from the stale `6-6-defense-presentation
+... Tier B, at risk of Tier A` to record the 2026-09-17 split and this story's `done` state (Docs Debt
+item, deferred since authoring per the `6-8` close-out precedent). `sprint-status.yaml`'s
+`6-5-spell-resolution` note's citation of M5/M6 corrected from `deferred-work.md:232-233` to the
+current `:301-302` (drifted after this story's own two new deferred-work.md entries). The two 6-6a
+smoke deferrals (TUNING durations, POLISH reaction-pose slide) were already correctly filed and the
+TUNING one already on the playtest/retune checklist -- verified, not duplicated.
+
+### Close-out
+
+Three commits: `docs(6-6a): close-out ruling numbers and live smoke result` (`2766942`, story file +
+the comment-only rig-comment edits in `src/state/hero_state.gd`/`src/state/match_state.gd`);
+`board: promote 6-6a-defense-reactions to done` (sprint-status.yaml + epics.md, this entry);
+`docs: playtest log` (`docs/playtest-log.md`, the operator's own hand, untouched).
+
+Suite: state `897 tests, 0 failed, 7339 assertions`, integration `65/65 PASS`, both foreground, both
+halves. Golden `d437432f...` unmoved. `FORMAT_VERSION` 11.
+
+Not pushed; awaiting the operator's confirmation of the log.

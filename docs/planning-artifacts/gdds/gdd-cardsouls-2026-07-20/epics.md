@@ -231,8 +231,10 @@ and tier may be raised, never lowered.
 9. `6-8-camera-freedom` (**Tier A**, raised at the 2026-09-16 scope talk) — lock-on cycling reaches ALL live targets
    including those behind the hero (full 360, not a front arc), and the camera can be unlocked and
    manually rotated when not locked on.
-10. `6-6-defense-presentation` (**Tier B**, at risk of Tier A) — defence animation and sound synced
-    to the incoming attack (`E5-C/R9`).
+10. `6-6-defense-presentation` — SPLIT 2026-09-17 (`6-3-split/R-SPLIT` precedent, scope talk
+    2026-09-17) into `6-6a-defense-reactions` (**Tier A**, DONE 2026-09-19 — hurt/knockdown/stun-pose/
+    block-impact reactions) and `6-6b-color-counters` (**Tier A**, backlog — three color counters per
+    attack type). Defence animation and sound synced to the incoming attack (`E5-C/R9`).
 11. `6-5-spell-resolution` (**Tier A**) — the E6 CLOSE-OUT story: the three `spell_*` fixture cards
     stop taking the named no-op path. LAST by ruling — `R-SPELL`'s forcing point is the close-out,
     and the playtest block runs after it.
