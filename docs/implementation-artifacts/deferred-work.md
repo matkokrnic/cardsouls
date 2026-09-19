@@ -231,6 +231,41 @@
 - **`test_replay_identity.gd`'s `_iframe_open_at_step3` comment still reads "STAYS AT THREE"** beside
   the current count of 4. Pre-existing, not introduced by 6-6a.
 
+## Deferred from: live smoke of 6-6a-defense-reactions (2026-09-19)
+
+Two notes from the `[3, 3]` two-pad smoke. The smoke's THIRD finding -- the hero able to act the
+instant `get_up` starts -- was ruled a code fix and shipped in that story's post-smoke pass; it is
+NOT deferred and is not listed here. See `6-6a-defense-reactions.md`, Post-Smoke Amendment.
+
+- **TUNING: the knockdown lie and the get-up both feel somewhat too long.** Authored
+  `knockdown_stun_seconds = 2.5` (150 ticks) and `get_up_iframe_seconds = 2.0333` (122 ticks, the
+  measured `get_up` clip length). In live play both read as slightly overlong -- the operator's own
+  smoke note. SHORTEN BOTH SLIGHTLY, RATIO PRESERVED; the exact values are a retune-block decision,
+  not this pass's. Deliberately NOT changed now: a felt duration judged once, mid-smoke, is exactly
+  the kind of value the retune block exists to set with the rest of the combat clock in front of it.
+  Note the coupling when it is retuned: `get_up_iframe_seconds` is tied to the `get_up` CLIP's length
+  (shortening the window below it leaves the clip still playing past the window, which is now also the
+  input lock -- see the post-smoke ruling), and `knockdown_stun_seconds` must stay above
+  `color_counter_stun_seconds` (1.0) for AC 4's directional bound AND for
+  `BalanceTicks.is_knockdown_stun`, the duration classifier that tells the three stun flavours apart.
+  Both are ordinary authored values -- `BC/R3` isolation holds, so this is a `.tres` edit with no test
+  edit and no golden re-baseline. OWNER: the post-E5/E6 playtest/retune block; added to its checklist
+  below.
+
+- **POLISH: `hit_react` (and one-shot reaction poses generally) SLIDE when the victim moves during
+  the clip.** The hero keeps its locomotion velocity while a one-shot reaction pose plays, so the mesh
+  glides across the floor in a static pose. This is AC 2's locomotion-yield rule working as specified
+  -- the one-shot must not be stolen mid-play -- rather than a defect in it, which is why the fix is
+  not "stop yielding". THE PROPER FIX IS A LAYERED / PARTIAL-BODY BLEND: the upper body plays the
+  reaction while the legs keep the locomotion clip. That is an `AnimationTree` (or additive/second
+  `AnimationPlayer`) pattern, which `6-6a` explicitly refused to introduce as a new architectural
+  pattern inside a reaction story. Deferred as presentation polish. The same shape reaches `get_up`,
+  though the post-smoke lock now roots the hero for that window, so `get_up` no longer slides --
+  `hit_react` is the live case. OWNER: the story or pass that introduces a real animation-layering
+  pattern for the hero rig. This SUPERSEDES the narrower 6-6a review deferral of the same
+  observation ("A hero moving during `get_up`/`hit_react` slides in the one-shot pose", recorded
+  above) -- same fact, now with the smoke's confirmation and a named fix shape.
+
 ## E4 review residue (recorded at E4 close-out, 2026-09-01)
 
 Forty-eight findings from the four out-of-repo E4 review files (`_44-review.md`, `_45-review.md`,
@@ -433,6 +468,8 @@ window opens, this checklist is the block's scope:
   `5-7-pad-modes-2-3.md:282+`. The whole point of this item is two humans on two pads.
 - **Per-attack-type counter ideas (sweep/jump/thrust, ranges, auto-aim)** — `E6-P/R6`, ruled OUT of
   E6 and given this block as their first named owner. See `## E5 residue` above.
+- **Knockdown lie (2.5 s) and get-up (2.0333 s) durations both read slightly too long** -- shorten
+  both, ratio preserved (6-6a live smoke, 2026-09-19; full entry and its couplings above).
 - See also `## E5 residue` above for the E5 retune entries this block should also pick up — noting
   that two of them (`chargeup unreadable`, `defense feel`) are expected to be discharged inside E6
   by `6-1b` and `6-6`, and `5-3/R6(d)` is superseded outright by `E6-P/R3`.

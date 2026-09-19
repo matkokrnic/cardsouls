@@ -211,6 +211,25 @@ close-out, not its create pass). Tracked in Docs Debt below.
     drift from `R24`'s already-cleared exit-only shape, not an intentional re-opening of `R23` — ENTRY
     stays instant.
 
+**The get-up is a locked action (post-smoke ruling, pending `6-6a/R` number)**
+
+14. While a hero's get-up is in progress -- i.e. while the AC 8 `get_up_iframe` `TimingWindow` on
+    `HeroState` is RUNNING, the single source of truth, no second timer -- ALL of that hero's intents
+    are refused: attack, unblockable initiation, roll, card mode select/cast, block, and movement (the
+    hero is rooted, the same register as the swing/stun roots). A block HOLD carried through the
+    get-up produces no `BLOCKING` until the window expires, and whether it engages afterwards follows
+    the existing hold semantics (`3-0b/R23`/`R24` untouched -- `block` is a press edge, so a fresh
+    press engages). The first tick AFTER the window expires accepts input normally: the lock reads the
+    window alone, never `is_iframe_open()`, whose +1 close grace exists for the F1 contact-fact lag
+    that an intent does not have. THE I-FRAMES ARE UNCHANGED -- same window, same duration, still
+    registered in `is_iframe_open()`, still covering unblockables (R-IFRAME-UNBLOCKABLE), and still
+    satisfying the D1 latch (`_gets_up_this_tick`) on the exact knockdown-exit tick. The lock and the
+    latch COMPOSE and neither is weakened: the latch defers the ATTACKER's landing package on the exit
+    tick, the lock refuses the VICTIM's own presses on that same tick. This CLOSES review finding D3
+    (get-up iframes that do not end when the hero acts) BY CONSTRUCTION rather than by a shorter window
+    or an early-stop path: the hero is invulnerable AND unable to act, so there is no window of
+    invulnerable offence left to price. See the Post-Smoke Amendment section below.
+
 ## Non-Goals
 
 - **Hitstun on ordinary hits** (AC 1's second sentence) — named, deferred to the post-E6
@@ -930,6 +949,126 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
   operator's). The story Status stays `review` pending the operator's rulings on D1-D3, rather than
   the skill's default `in-progress`.
 
+## Post-Smoke Amendment (2026-09-19): the get-up is a locked action
+
+The `[3, 3]` two-pad live smoke ran on 2026-09-19 and is recorded in `docs/playtest-log.md` by the
+operator's own hand (`PROC/R8`). Mechanically everything the dev and review passes shipped behaved as
+written: the hurt reaction fires on idle only and interrupts nothing, an unanswered unblockable knocks
+down while a countered or dodged one does not, all actions are refused while down, the manually-timed
+trade puts BOTH heroes on the floor, a floor hit deals damage without extending the lie, `get_up` plays
+once with its i-frames, and the deflect/defense stuns hold their own pose distinct from the knockdown.
+The smoke produced ONE code finding, ratified by the operator, and two deferred notes.
+
+### The finding, and the ruling
+
+**Finding.** As shipped, the moment `get_up` starts the hero can act -- attack, roll, card play, block
+are all available while the AC 8 window still runs. The victim "teleports to their feet" straight into
+an attack, and review finding D3 (2 s invulnerable while fully able to act) compounds it: the get-up
+was a free window of invulnerable offence.
+
+**Ruling (operator, post-smoke, pending `6-6a/R` number).** The get-up becomes a LOCKED ACTION. The
+existing `get_up_iframe` window is now a lock as well as a shield; its duration, registration and
+dodge semantics are untouched. Written out as AC 14 above.
+
+**D3 is CLOSED BY CONSTRUCTION, not priced.** The review left D3 open as a feel/tuning call with two
+sketched outcomes (a shorter window, or an early stop on action). Neither is taken: the window keeps
+its authored length and keeps its "no early-stop path" contract (AC 8 as locked), and what changes is
+that there is no longer anything to stop early FOR -- an invulnerable hero who cannot act has no
+offence to cut short. AC 8's text is not re-opened.
+
+### What the state layer gained
+
+| seat | change |
+|---|---|
+| `hero_state.gd` | `is_getting_up()` -- derived from `get_up_iframe.is_running` ALONE. No new member, no second timer, no stored flag. |
+| `match_state.gd` `_resolve_actions` | a guard BETWEEN (a) and (b): the timer arms still run (that is where the window is opened), the input-driven table edges return early. Attack/roll/block drop SILENTLY -- `STUNNED`'s own shape, whose table row carries no edges either. |
+| `match_state.gd` `_resolve_card_action` | one gate ahead of the mode dispatch, so all four modes refuse identically, ANNOUNCING with a new `REASON_GETTING_UP`. A separate token rather than a fourth `REASON_STUNNED` reuse: the hero is IDLE and its stun has already run out, so "stunned" would be a false statement about a state the player can see has ended. |
+| `match_state.gd` `_resolve_movement` | a FOURTH rooted branch beside `ROLLING`/`CHARGING`/`STUNNED` -- literal zero (`5-2/R5`'s refusal of a multiplier, applied a third time), the write happening rather than being skipped, facing falling through exactly as `STUNNED`'s does. |
+
+Two announcement policies on one lock is not an inconsistency but `STUNNED`'s shape repeated: the
+table path refuses by an EMPTY ROW (nothing to announce), the card path by an explicit gate with a
+reason token.
+
+### Test and mutation evidence
+
+Four new tests in `test/state/test_unblockable_defense.gd`, in the section the ruling's own name heads:
+
+- `test_every_intent_is_refused_while_the_hero_is_getting_up` -- the three table presses, a defense
+  cast and a mode (2) initiation, on one continuous window; nothing spent, no swing started, the three
+  table presses silent and both casts announcing `REASON_GETTING_UP`.
+- `test_input_is_accepted_on_the_first_tick_after_the_get_up_window_expires` -- the window's LAST
+  running tick still refuses, and the very next tick accepts and charges for the swing.
+- `test_a_block_held_through_the_get_up_never_engages_until_it_is_re_pressed` -- the hold engages
+  nothing during the window or after it; a fresh press engages normally.
+- `test_the_get_up_lock_and_the_d1_latch_compose_on_the_exit_tick` -- BOTH victim seats: on the exact
+  exit tick the landing is still dodged and pays no orb (D1 intact) while the victim's own press on
+  that same tick is refused.
+
+MOVEMENT IS ASSERTED ON `velocity`, not on a position: `HeroState` holds no position (it is
+actor-owned, F1), and `velocity` is the single field `HeroActor.drive()` integrates into one. This is
+`test_a_knocked_down_hero_refuses_every_action_and_is_rooted`'s own idiom, reused rather than
+re-invented.
+
+**A vacuity defect found and fixed in the older knockdown fixture.** `_config()` leaves both gaits at
+`0.0`, so `_knockdown_config()` inherited a hero with no speed -- and every `velocity == ZERO`
+assertion in this section, including the pre-existing rooted-while-down one, had been passing for the
+wrong reason. `_knockdown_config()` now authors `walk_speed`. The proof that this was real rather than
+cosmetic is mutation MU3 below: it PASSED against the old fixture (that run is disclosed and
+discarded) and goes RED against the fixed one.
+
+| id | mutation | result |
+|---|---|---|
+| MU1 | `_resolve_actions`' `if hero.is_getting_up(): return` deleted | RED: all four new tests |
+| MU2 | `_resolve_card_action`'s get-up gate deleted | RED: `test_every_intent_is_refused_while_the_hero_is_getting_up` |
+| MU3 | `_resolve_movement`'s get-up root branch deleted | RED: `test_every_intent_is_refused_while_the_hero_is_getting_up` (GREEN before the `walk_speed` fix -- that run is the fix's own non-vacuity proof) |
+| MU4 | `is_getting_up()` widened to `or _get_up_iframe_closed_this_tick` (the close grace) | RED: `test_input_is_accepted_on_the_first_tick_after_the_get_up_window_expires` |
+
+Each mutation was applied to a file backed up to the scratchpad with its SHA-256 taken BEFORE the
+first write, restored by copying that backup back (never `git checkout`), and the restore re-verified
+with `sha256sum -c`. Only the affected file was run, through a scratch single-file runner created for
+the pass and deleted before the commit.
+
+### Golden, snapshot keys, `FORMAT_VERSION`
+
+**Prediction before measuring.** Whether the golden moves depends on whether any golden stream
+contains a post-knockdown action inside the get-up window. It cannot: the fixture never enters
+`CHARGING` (`test_determinism.gd:699,722`), so no unblockable is ever cast or landed, so no hero is
+ever knocked down, so no `get_up_iframe` is ever armed and the three new guards are unreachable from
+the fixture's own script. Predicted NON-MOVER.
+
+**Measured, both directions.** BEFORE (the pass's edits stashed, full suite on the `55649de` tree):
+`d437432f7823379c8992276f4061ca16161b156fe2a8a7eb732d9b9750262d56`, green. AFTER (final tree): the
+same hash, green. UNMOVED, prediction confirmed, no re-baseline and no justification owed.
+
+**Snapshot key set: UNMOVED, and structurally so.** This pass adds no state member at all --
+`is_getting_up()` is a derived predicate over the window AC 8 already snapshots, and the three guards
+store nothing. The 206-key set therefore cannot have moved, and the unmoved hash is the measurement of
+that (the hash is a function of the snapshot; a changed key set cannot leave it fixed).
+
+**`FORMAT_VERSION`: NO BUMP, stated explicitly.** It stays at 11. `RecordFile.FORMAT_VERSION`
+(`src/systems/record_file.gd:195`) moves only when a RECORDED INPUT CHANNEL changes. No snapshot key
+and no input channel changes here -- no new `InputIntent` field, no new capture seam, nothing new
+recorded. The intents this pass refuses are the ones already being recorded.
+
+**Replay identity: no new bucket.** No new storage of any kind, so `UNHASHED_CROSS_TICK_MEMBERS` stays
+at 4 and `test_replay_identity.gd` needed no edit (it re-ran unedited and green).
+
+### Suite
+
+Before (the pass's edits stashed, measured fresh rather than quoted): **893 / 0 / 7281** state +
+**65 / 65** integration. After (final tree): **897 / 0 / 7339** + **65 / 65**. +4 tests, +58
+assertions, all in `test_unblockable_defense.gd`. Two full runs, no discarded run.
+
+### Still open after this pass
+
+- **The `[3, 3]` live-smoke Task line stays UNCHECKED.** The smoke itself ran and is logged, but a
+  short RE-SMOKE of this fix happens before close-out; the box is the operator's to tick then.
+- **Ruling numbering** is deliberately left to close-out -- this section refers to the ruling as
+  "post-smoke ruling (pending `6-6a/R` number)" throughout, in the code comments as well.
+- **Two smoke deferrals** are recorded in `docs/implementation-artifacts/deferred-work.md` (a TUNING
+  entry for the knockdown/get-up durations, a POLISH entry for the reaction-pose slide), not here.
+- `sprint-status.yaml` and this story's `Status` field are untouched by this pass.
+
 ## Change Log
 
 | Date | Change | Author |
@@ -942,6 +1081,7 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
 | 2026-09-17 | Dev pass (gds-dev-story): five FBX imported, library 18 -> 23 (`knockdown` Hips planar pinned, `3-0b/R27` route); knockdown as the third `STUNNED` inbound edge on the victim, applied through a deferred per-tick landing package at a new step 6b (R-PRESS, both seats); floor rule, CHARGING abandonment, lethal gate; get-up iframe `TimingWindow` on `HeroState` (HASHED), armed on the knockdown's timer exit only, registered in `is_iframe_open()`; seventh reset exception; `knockdown_stun_seconds` 2.5 / `get_up_iframe_seconds` 2.0333 authored, three-way tick bound; presentation: `hit_react`/`block_impact` on a second `hit_landed` consumer, `stunned`/`knockdown` held poses, `get_up` on the armed exit, escalation re-check, locomotion yield, block-exit-only blend. Golden 71a7b45f -> d437432f (one cause: the resting `get_up_iframe` key), FORMAT_VERSION 11 -> 11 measured. Suite 869/0/7103 + 63 -> 890/0/7235 + 65. Live smoke NOT run (operator's). Status -> `review`. | Claude Opus 5 |
 | 2026-09-17 | Code review (gds-code-review, three layers): CHANGES REQUESTED on D1 (exact-exit-tick re-knockdown), plus decisions D2 (out-of-arc `block_impact`) and D3 (get-up iframes survive acting) for the operator. Six Low patches fixed in `824438f` (state test pins), `5eee33e` (block -> roll cut pin) and `e64286e` (classifier doc); seven items deferred. Suite 891/0/7244 + 65/65. Status stays `review`. | Claude Opus 5 |
 | 2026-09-17 | Continuation dev pass on the operator-ratified review decisions. D1 (option a) `880c63d`: the get-up exit tick dodges an unblockable -- the step-3 latch reads `_gets_up_this_tick`, no new storage; both-slots boundary test. D2 (option b/a) `149da25` + `4fcf791`: per-hit "was blocked" fact (`_hit_landed_blocked`, PER_TICK, excluded from snapshot) raised around the step-4 emit and forwarded by the rig closure; `block_impact` for blocked hits only, an out-of-arc hit on a blocker plays nothing; intent-recorder EGRESS pin gains `hit_landed_was_blocked`. Mutations: D1 latch reverted -> boundary RED both seats; `stun.is_running` dropped -> early half RED; runner discriminator forced true -> live 7a RED; controller ignores `blocked` -> both integration files RED; state `blocked` without the arc -> state test RED. Golden `d437432f` and the 206-key snapshot set measured UNMOVED both directions; FORMAT_VERSION 11 measured. Suite 893/0/7281 + 65/65 (one disclosed extra state run: the first final run was RED on the egress pin and leaked a test-lambda reference cycle, both fixed). D3 stays open for smoke. Status stays `review`. | Claude Opus 5 |
+| 2026-09-19 | Post-smoke pass on the operator-ratified smoke finding. THE GET-UP IS A LOCKED ACTION (AC 14, new): while `get_up_iframe` runs every intent from that hero is refused -- attack, unblockable initiation, roll, card mode select/cast, block -- and the hero is rooted; new `HeroState.is_getting_up()` (derived from the window alone, no new member), guards in `_resolve_actions` (silent, the `STUNNED` register), `_resolve_card_action` (announcing, new `REASON_GETTING_UP`) and `_resolve_movement` (a fourth rooted branch). The AC 8 i-frames are UNCHANGED and the D1 latch still composes with the lock on the exit tick; review finding D3 is CLOSED BY CONSTRUCTION. Four new tests, mutations MU1-MU4; `_knockdown_config()` gains an authored `walk_speed` after MU3 exposed every rooting assertion in that section as vacuous. Golden `d437432f` MEASURED UNMOVED both directions; no new state member, so no snapshot key moves; `FORMAT_VERSION` 11, NO BUMP (no recorded input channel changed). Suite 893/0/7281 + 65/65 -> 897/0/7339 + 65/65. Ruling numbering left to close-out. Status, sprint board and the live-smoke Task line all untouched -- a re-smoke of the fix precedes close-out. | Claude Opus 5 |
 
 ## Dev Agent Record
 
