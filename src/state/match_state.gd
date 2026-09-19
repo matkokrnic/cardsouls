@@ -1256,7 +1256,7 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 				player.charge_window.start(0)
 				player.landing_window.start(0)
 				player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
-	# STORY 6-6a POST-SMOKE RULING (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION. The live
+	# STORY 6-6a POST-SMOKE RULING `6-6a/R7`: THE GET-UP IS A LOCKED ACTION. The live
 	# smoke found the hero able to act the instant `get_up` starts -- attack, roll, card, block all
 	# available while the AC 8 iframes still ran -- which reads as "teleport to your feet" and, with the
 	# window covering unblockables too, made the get-up a free 2 s of invulnerable offence (review
@@ -2733,7 +2733,7 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 		return
 	if player.hero.action_state == HeroState.ActionState.DEAD:
 		return
-	# Story 6-6a post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION -- the CARD
+	# Story 6-6a post-smoke ruling `6-6a/R7`: THE GET-UP IS A LOCKED ACTION -- the CARD
 	# half of it. One gate ahead of the mode dispatch covers all four modes, so an unblockable
 	# initiation, a defense answer, a summon and a pitch are refused identically while the AC 8 window
 	# runs; the per-mode `STUNNED` gates further down are untouched and still do their own job.
@@ -2947,7 +2947,7 @@ const REASON_UNBLOCKABLE_COMMITTED := &"unblockable_committed"
 ## fact in both places, so inventing a per-seat token would name the mechanism instead of the fact.
 const REASON_STUNNED := &"stunned"
 
-## Story 6-6a post-smoke ruling (pending `6-6a/R` number): a cast attempted while the caster is GETTING
+## Story 6-6a post-smoke ruling `6-6a/R7`: a cast attempted while the caster is GETTING
 ## UP. A SEPARATE TOKEN rather than a fourth reuse of `REASON_STUNNED`, on that constant's own stated
 ## reason: the token names the PLAYER-VISIBLE FACT, and a hero getting up is not stunned -- it is IDLE,
 ## its stun window has already run out, and its get-up window is what refuses. Telling the player
@@ -4083,7 +4083,7 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 		# not a new carve-out.
 		player.hero.velocity = Vector3.ZERO
 	elif player.hero.is_getting_up():
-		# Story 6-6a post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION -- the
+		# Story 6-6a post-smoke ruling `6-6a/R7`: THE GET-UP IS A LOCKED ACTION -- the
 		# MOVEMENT half. A FOURTH sibling of the three branches above, written in their exact shape and
 		# for their exact reasons: a LITERAL ZERO, never a `get_up_move_speed_multiplier` read from
 		# balance (`5-2/R5`'s refusal, applied a third time -- a non-zero multiplier is not rooted), and

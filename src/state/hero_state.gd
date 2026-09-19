@@ -288,7 +288,7 @@ func is_iframe_open() -> bool:
 			or get_up_iframe.is_running or _get_up_iframe_closed_this_tick
 
 
-## Story 6-6a post-smoke ruling (pending `6-6a/R` number): THE GET-UP IS A LOCKED ACTION. Derived from
+## Story 6-6a post-smoke ruling `6-6a/R7`: THE GET-UP IS A LOCKED ACTION. Derived from
 ## the SAME `get_up_iframe` window `is_iframe_open()` above already reads -- one window, one source of
 ## truth, no second timer and no stored flag. While it is true, `MatchState` refuses every intent this
 ## hero presses (attack, unblockable initiation, roll, card mode select/cast, block) and roots it, the

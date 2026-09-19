@@ -4,7 +4,7 @@ baseline_commit: 6a88b78e2ff1cc9ae5c25fefe3d664f6173ee246
 
 # Story 6.6a: Defense Reactions
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -83,16 +83,16 @@ close-out, not its create pass). Tracked in Docs Debt below.
    ROLLING and BLOCKING are safe by construction (`is_hitbox_active` needs ATTACKING,
    `hero_state.gd:230-236`; the deflect path needs BLOCKING, `match_state.gd:1701`) but are still
    asserted, not merely argued. CHARGING is the one case with a real effect: a knockdown on a
-   CHARGING victim ABANDONS their chargeup (operator ruling — the Sekiro read: eat a perilous, lose
-   your attack). The card and stamina already spent on that charge stay spent; the interrupted
+   CHARGING victim ABANDONS their chargeup (operator ruling **6-6a/R1** — the Sekiro read: eat a
+   perilous, lose your attack). The card and stamina already spent on that charge stay spent; the interrupted
    charge's data is CLEANED on the knockdown write, mirroring the `6-1` feint-teardown exactly
    (`match_state.gd:1175-1179`): `charge_window`, `landing_window` and `charge_color` are cleared
    together as one fact, with the state write. `_charge_reach`/`_charge_contact_dirs` are NOT part of
    that cleanup — they follow their own `6-1d`/`R9` discipline ("CLEARED WITH THE VERDICT, never on
    its own," `match_state.gd:291-294`) and the feint path itself leaves them untouched, so the
    knockdown-abandonment write does the same.
-6. Simultaneous unblockable landings — one per seat, same tick — are SEAT-SYMMETRIC (operator ruling):
-   BOTH land, BOTH victims are knocked down. Neither landing is cancelled by the other's knockdown
+6. Simultaneous unblockable landings — one per seat, same tick — are SEAT-SYMMETRIC (operator ruling
+   **6-6a/R2**): BOTH land, BOTH victims are knocked down. Neither landing is cancelled by the other's knockdown
    write within the same tick, even though tick order runs p1 actions -> p1 movement -> p2 actions ->
    p2 movement (`match_state.gd:534-537`) and a naive write would flip the second seat to `STUNNED`
    before its own `CHARGING` landing arm runs. Pinned by a both-slots test on the
@@ -127,7 +127,7 @@ close-out, not its create pass). Tracked in Docs Debt below.
    hold is not restarted).
 8. `get_up.fbx` plays once, and ONLY once, on the ordinary timer-driven `STUNNED -> IDLE` exit from a
    knockdown-flavored stun (never on the debug-reset exit — AC 9). On that same exit, a NEW timing
-   window opens: get-up iframes (operator ruling), reusing the `roll_iframe` mechanism's shape (`1-9`
+   window opens: get-up iframes (operator ruling **6-6a/R3**), reusing the `roll_iframe` mechanism's shape (`1-9`
    class: a fact-drop pre-dedupe rule, no damage taken, no orbs generated while it is open, the window
    ticks out on its own with no early-stop path). Its duration is a new authored `BalanceConfig` field
    tied to the measured length of the `get_up.fbx` clip (dev measures the value; live smoke judges the
@@ -140,7 +140,7 @@ close-out, not its create pass). Tracked in Docs Debt below.
    against melee. A carve-out for unblockables would defeat the whole point of the window, which is
    that nothing can be timed into the get-up.
 9. The debug-reset exit from a knockdown-flavored `STUNNED` does NOT play `get_up.fbx` and does NOT
-   arm the get-up iframe window — reset snaps straight to `IDLE` (operator ruling). The stun-flavor
+   arm the get-up iframe window — reset snaps straight to `IDLE` (operator ruling **6-6a/R4**). The stun-flavor
    discrimination used for presentation selection (AC 11) is NOT a stored "memory" field cleared on
    exit — as AC 5's escalation case shows, `set_action_state` on a same-state (`STUNNED` -> `STUNNED`)
    write emits nothing (`hero_state.gd:211-212`), so presentation cannot rely on an entry signal
@@ -211,7 +211,7 @@ close-out, not its create pass). Tracked in Docs Debt below.
     drift from `R24`'s already-cleared exit-only shape, not an intentional re-opening of `R23` — ENTRY
     stays instant.
 
-**The get-up is a locked action (post-smoke ruling, pending `6-6a/R` number)**
+**The get-up is a locked action (post-smoke ruling `6-6a/R7`)**
 
 14. While a hero's get-up is in progress -- i.e. while the AC 8 `get_up_iframe` `TimingWindow` on
     `HeroState` is RUNNING, the single source of truth, no second timer -- ALL of that hero's intents
@@ -361,6 +361,40 @@ this explicitly if `[3, 3]` is unavailable and skip the unreachable items rather
   revisits) — a felt judgment call, not a headless-provable one.
 
 Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC/R8`.
+
+## Live Smoke Result
+
+Recorded in `docs/playtest-log.md` by the operator's own hand, per `PROC/R8`.
+
+**2026-09-19, `[3, 3]` two-pad smoke (pre-fix).** Mechanically clean across all nine items on this
+section's list: hurt reaction idle-only and non-interrupting; unanswered unblockable knocks down,
+countered/dodged does not; all actions refused while down (card, roll, block all attempted and all
+refused); `get_up` plays once with its i-frames; the manually-timed trade put BOTH heroes down; a
+floor hit dealt damage without extending the lie; the deflect/colour-counter stuns held their own
+pose distinct from `knockdown.fbx`; `block_impact.fbx` played on a blocked hit and not on a stale
+selection; block entry stayed an instant cut and exit visibly blended; the deflect window still read
+as immediately available with entry unblended. Three notes came out of this session: (1) the code
+finding that became `6-6a/R7` (the hero could act, and swing, the instant `get_up` started — "teleport
+to your feet"); (2) the knockdown/get-up durations both read slightly too long (TUNING deferral,
+`deferred-work.md`); (3) `hit_react`/`get_up` slide across the floor when the victim keeps moving
+(POLISH deferral, `deferred-work.md`). Full narrative: Post-Smoke Amendment section above.
+
+**2026-09-19, re-smoke of the `6-6a/R7` fix — 5/5 PASS.** While the hero lies down, nothing is
+accepted (unchanged from the pre-fix smoke). Through the whole get-up — not just the lying-down half
+— the hero is rooted and every intent is refused: attack, roll, block, card, movement; the
+"teleport to your feet" read is gone. The first input after the window closes is accepted normally.
+The i-frames still hold: a hit landed during the get-up deals no damage. A block held through the
+get-up does not engage and needs a fresh press afterward.
+
+**One item the smoke could not verify robotically: the simultaneous trade.** Landing both players'
+unblockables on the identical tick, unanswered on both sides, took many manual attempts by hand —
+there is no scripted way to force it live — but it was eventually hit, and it DID put both heroes
+down. This counts as verified; the note is the imprecision of the method (many tries needed), not a
+deviation from the AC.
+
+**The colour-counter-from-the-floor item behaved as desired.** Attempting a card cast (the colour
+counter) while down was refused, matching the Knockdown item's "attempt a card cast, a roll, a
+block — all refused" expectation.
 
 ## Dev Notes
 
@@ -774,7 +808,7 @@ Record all items in `docs/playtest-log.md` by the operator's own hand, per `PROC
 - [x] Full suite before/after; golden hash and snapshot key set measured both directions (Golden
       Prediction); `FORMAT_VERSION` measured and stated, not assumed; mutation-proof every new
       knockdown-path test and the new `BalanceConfig` fields' bounds.
-- [ ] `[3, 3]` two-pad live smoke (name the reachable `[0, 3]` subset if unavailable), recorded in
+- [x] `[3, 3]` two-pad live smoke (name the reachable `[0, 3]` subset if unavailable), recorded in
       `docs/playtest-log.md`, including the simultaneous-trade and floor-hit items.
 
 ### Review Findings
@@ -786,7 +820,7 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
 
 - [x] [Review][Decision] **D1 (High) An unblockable can land on the knockdown's EXACT exit tick,
   knocking the hero straight back down.** All three layers found this independently. -- RESOLVED
-  `880c63d`, operator ruling option (a), the exit tick is part of the get-up: the step-3 latch also
+  `880c63d`, operator ruling **6-6a/R5**, option (a), the exit tick is part of the get-up: the step-3 latch also
   reads `_gets_up_this_tick` (STUNNED, `stun` not running, `is_knockdown_stun`, `get_up_iframe_ticks >
   0`), no new storage; both-slots boundary test pins exit tick = dodged, one tick earlier = lands on
   the floor rule.
@@ -816,7 +850,7 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
   - **This review changed nothing here: it is a boundary-semantics call.**
 - [x] [Review][Decision] **D2 (Med) `block_impact` plays on a FULL-damage hit from outside the block
   arc** (Dev Note 3). This is inside AC 12's scope, and the spec premise behind it is wrong. --
-  RESOLVED `149da25` + `4fcf791`, operator ruling option (b), a runner-forwarded discriminator: the
+  RESOLVED `149da25` + `4fcf791`, operator ruling **6-6a/R6**, option (b), a runner-forwarded discriminator: the
   step-4 `hit_landed` is queued through `_emit_hit_landed`, which raises the PER_TICK
   `_hit_landed_blocked` for that one emission; the rig closure forwards `hit_landed_was_blocked()`
   beside the unchanged 4-arg payload. `block_impact` plays only for a blocked hit; an out-of-arc hit
@@ -829,7 +863,9 @@ REQUESTED**, on D1 alone. Everything else is approved with findings. Counts: 3 d
   - The controller cannot tell the two apart without the widened `hit_landed` that AC 12 forbids.
   - **Options.** (a) Accept for now and judge at smoke. (b) Rule a sanctioned discriminator: a
     runner-forwarded value, on the `stun_flavor` shape, forwarded beside the unchanged payload.
-- [ ] [Review][Decision] **D3 (Med) The get-up iframes do not end when the hero acts** (Dev Note 5).
+- [x] [Review][Decision] **D3 (Med) The get-up iframes do not end when the hero acts** (Dev Note 5).
+  -- CLOSED BY CONSTRUCTION, `6-6a/R7`: the get-up is now a locked action, so there is no window of
+  invulnerable offence left to price. See the Post-Smoke Amendment section.
   - For 2.03 s the hero can attack, cast or charge while melee is dropped and unblockables are
     dodged.
   - This matches AC 8 as locked ("no early-stop path"), so it is not a defect. It is a feel and
@@ -966,7 +1002,7 @@ are all available while the AC 8 window still runs. The victim "teleports to the
 an attack, and review finding D3 (2 s invulnerable while fully able to act) compounds it: the get-up
 was a free window of invulnerable offence.
 
-**Ruling (operator, post-smoke, pending `6-6a/R` number).** The get-up becomes a LOCKED ACTION. The
+**Ruling (operator, post-smoke, `6-6a/R7`).** The get-up becomes a LOCKED ACTION. The
 existing `get_up_iframe` window is now a lock as well as a shield; its duration, registration and
 dodge semantics are untouched. Written out as AC 14 above.
 
@@ -1059,15 +1095,16 @@ Before (the pass's edits stashed, measured fresh rather than quoted): **893 / 0 
 **65 / 65** integration. After (final tree): **897 / 0 / 7339** + **65 / 65**. +4 tests, +58
 assertions, all in `test_unblockable_defense.gd`. Two full runs, no discarded run.
 
-### Still open after this pass
+### Still open after this pass (historical — resolved at close-out, see Live Smoke Result above)
 
-- **The `[3, 3]` live-smoke Task line stays UNCHECKED.** The smoke itself ran and is logged, but a
-  short RE-SMOKE of this fix happens before close-out; the box is the operator's to tick then.
-- **Ruling numbering** is deliberately left to close-out -- this section refers to the ruling as
-  "post-smoke ruling (pending `6-6a/R` number)" throughout, in the code comments as well.
+- The `[3, 3]` live-smoke Task line stayed UNCHECKED at the time this section was written; the
+  RE-SMOKE of this fix ran 2026-09-19 (5/5 PASS) and the box is now ticked.
+- **Ruling numbering** is assigned at close-out as `6-6a/R7`; the earlier "pending `6-6a/R` number"
+  placeholder in this section and in the code comments has been replaced throughout.
 - **Two smoke deferrals** are recorded in `docs/implementation-artifacts/deferred-work.md` (a TUNING
   entry for the knockdown/get-up durations, a POLISH entry for the reaction-pose slide), not here.
-- `sprint-status.yaml` and this story's `Status` field are untouched by this pass.
+- `sprint-status.yaml` and this story's `Status` field were untouched by this pass; both are set at
+  this story's close-out.
 
 ## Change Log
 
@@ -1082,6 +1119,7 @@ assertions, all in `test_unblockable_defense.gd`. Two full runs, no discarded ru
 | 2026-09-17 | Code review (gds-code-review, three layers): CHANGES REQUESTED on D1 (exact-exit-tick re-knockdown), plus decisions D2 (out-of-arc `block_impact`) and D3 (get-up iframes survive acting) for the operator. Six Low patches fixed in `824438f` (state test pins), `5eee33e` (block -> roll cut pin) and `e64286e` (classifier doc); seven items deferred. Suite 891/0/7244 + 65/65. Status stays `review`. | Claude Opus 5 |
 | 2026-09-17 | Continuation dev pass on the operator-ratified review decisions. D1 (option a) `880c63d`: the get-up exit tick dodges an unblockable -- the step-3 latch reads `_gets_up_this_tick`, no new storage; both-slots boundary test. D2 (option b/a) `149da25` + `4fcf791`: per-hit "was blocked" fact (`_hit_landed_blocked`, PER_TICK, excluded from snapshot) raised around the step-4 emit and forwarded by the rig closure; `block_impact` for blocked hits only, an out-of-arc hit on a blocker plays nothing; intent-recorder EGRESS pin gains `hit_landed_was_blocked`. Mutations: D1 latch reverted -> boundary RED both seats; `stun.is_running` dropped -> early half RED; runner discriminator forced true -> live 7a RED; controller ignores `blocked` -> both integration files RED; state `blocked` without the arc -> state test RED. Golden `d437432f` and the 206-key snapshot set measured UNMOVED both directions; FORMAT_VERSION 11 measured. Suite 893/0/7281 + 65/65 (one disclosed extra state run: the first final run was RED on the egress pin and leaked a test-lambda reference cycle, both fixed). D3 stays open for smoke. Status stays `review`. | Claude Opus 5 |
 | 2026-09-19 | Post-smoke pass on the operator-ratified smoke finding. THE GET-UP IS A LOCKED ACTION (AC 14, new): while `get_up_iframe` runs every intent from that hero is refused -- attack, unblockable initiation, roll, card mode select/cast, block -- and the hero is rooted; new `HeroState.is_getting_up()` (derived from the window alone, no new member), guards in `_resolve_actions` (silent, the `STUNNED` register), `_resolve_card_action` (announcing, new `REASON_GETTING_UP`) and `_resolve_movement` (a fourth rooted branch). The AC 8 i-frames are UNCHANGED and the D1 latch still composes with the lock on the exit tick; review finding D3 is CLOSED BY CONSTRUCTION. Four new tests, mutations MU1-MU4; `_knockdown_config()` gains an authored `walk_speed` after MU3 exposed every rooting assertion in that section as vacuous. Golden `d437432f` MEASURED UNMOVED both directions; no new state member, so no snapshot key moves; `FORMAT_VERSION` 11, NO BUMP (no recorded input channel changed). Suite 893/0/7281 + 65/65 -> 897/0/7339 + 65/65. Ruling numbering left to close-out. Status, sprint board and the live-smoke Task line all untouched -- a re-smoke of the fix precedes close-out. | Claude Opus 5 |
+| 2026-09-19 | Close-out. Ruling numbering assigned: `6-6a/R1`-`R6` to the operator rulings that were still unlabelled (CHARGING abandonment, simultaneous-landing seat-symmetry, get-up iframes' existence, no get-up/iframe on debug reset, and the D1/D2 review resolutions), `6-6a/R7` to the post-smoke get-up-lock ruling, replacing the "pending `6-6a/R` number" placeholder throughout this file and in `src/state/hero_state.gd`/`src/state/match_state.gd` (comment-only). Live Smoke Result section added: the 2026-09-19 two-pad smoke (mechanically clean, nine items, three notes) and the 2026-09-19 re-smoke of the `6-6a/R7` fix (5/5 PASS); the simultaneous trade named as the one item verified only by many manual attempts, not a deviation; the colour-counter-from-the-floor item confirmed refused as desired. Review finding D3 ticked, CLOSED BY CONSTRUCTION per `6-6a/R7`. Live-smoke Task line ticked. Status -> `done`. | Claude Sonnet 5 |
 
 ## Dev Agent Record
 
@@ -1313,8 +1351,7 @@ Modified:
 
 ## Docs Debt
 
-- `epics.md:234` (`6-6-defense-presentation ... Tier B, at risk of Tier A`) is stale as of this
-  story's authoring — the board split above supersedes it. Per `CLAUDE.md`'s close-out-debt
-  discipline and the explicit instruction governing this pass, `epics.md` is NOT edited here; a
-  future close-out (this story's own, or `6-6b`'s) owns correcting it, on the `6-8` close-out
-  precedent for deferred `epics.md` edits.
+- `epics.md:234` (`6-6-defense-presentation ... Tier B, at risk of Tier A`) was stale as of this
+  story's authoring — the board split above superseded it. CLOSED at this story's close-out
+  (2026-09-19): `epics.md` corrected to record the split and this story's `done` state, on the `6-8`
+  close-out precedent for deferred `epics.md` edits.
