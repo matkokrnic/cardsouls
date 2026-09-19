@@ -455,3 +455,12 @@ Deviation from the story's "two pads" Live Smoke wording: single operator; keybo
 | 8 | Block while unlocked: turned away -> hit lands; facing the attacker -> blocked | PASS |
 
 Verdict: smoke PASS 8/8, no retune from this session.
+
+## 2026-09-19 — 6-6a defense reactions (živi smoke s bratom, dva pada, flip [3,3])
+Hurt reaction: trzaj samo na idle, akcije se ne prekidaju, napadačev zamah netaknut. Knockdown:
+neodgovoreni unblockable obara, dok ležiš sve odbijeno, get_up jednom s i-frameovima; kontrirani/
+dodgani ne obaraju. Trade ručno potrefljen — oba padnu. Floor hit: šteta ide, ležanje se ne
+produžuje. Deflect/obrana stunovi drže vlastitu pozu, različitu od knockdowna. Blok/parry štima.
+Nalazi: (1) čim get_up krene sve akcije dostupne — "teleport na noge", ide fix (get_up zaključan,
+i-frameovi ostaju); (2) knockdown + get_up trajanja oboje pomalo predugo — retune blok; (3)
+klizanje u hit_react pozi kad se krećem — polish, defer. Kontra s poda željeno nemoguća (mode 3).
