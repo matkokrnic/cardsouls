@@ -4,7 +4,7 @@ baseline_commit: 3f6be78074348a44e72794f60b8cf187b6d9456f
 
 # Story 6.6b: Color Counters
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -357,24 +357,24 @@ call.
 
 ## Tasks / Subtasks
 
-- [ ] Author the eligibility span, the three per-colour busy durations, BLUE's travel distance
+- [x] Author the eligibility span, the three per-colour busy durations, BLUE's travel distance
       (`BalanceConfig`, `BalanceTicks`, `.tres`, authoring audit); one reused window, no new hashed member.
       (AC 1, 2, 9, 15)
-- [ ] Busy gate at the three seats: card seat, step-3 input edges, movement root; BLUE's travel branch with
+- [x] Busy gate at the three seats: card seat, step-3 input edges, movement root; BLUE's travel branch with
       the press-time direction lock and zero-fact fallback; new refusal token. (AC 2, 9)
-- [ ] Judgement at the CHARGING-arm seat with the step-3 capture and the commit-tick no-latch rule; teardown +
+- [x] Judgement at the CHARGING-arm seat with the step-3 capture and the commit-tick no-latch rule; teardown +
       attacker knockdown at the new fourth STUNNED entry point; remove the landing rung; `deflect_landed`
       emit. (AC 3-8)
-- [ ] Replace the `5-5`/`5-6` landing-negation tests; add AC 3-8 tests incl. adjacent-at-commit, both-slots,
+- [x] Replace the `5-5`/`5-6` landing-negation tests; add AC 3-8 tests incl. adjacent-at-commit, both-slots,
       boundaries in ticks, stunned/getting-up gap, feint, wrong colour (observable-half mutation proof);
       move `test_action_state.gd` pin 3 -> 4 with its argument; direction-bounds test for the busy numbers;
       the tests listed in AC 16. (AC 5, 7, 8, 16)
-- [ ] Tool + import: four clips into `paladin_anims.res` (23 -> 27), measure strike frames, cut, slide
+- [x] Tool + import: four clips into `paladin_anims.res` (23 -> 27), measure strike frames, cut, slide
       planar pin; `test_rig_clips.gd` matrix; name and diff the full import collateral. (AC 13)
-- [ ] `AnimationController` counter playback (RED sequence), runner edge read, dagger presentation node,
+- [x] `AnimationController` counter playback (RED sequence), runner edge read, dagger presentation node,
       spark reuse. (AC 10-12, 14)
-- [ ] Measure golden both directions; suite before/after; live smoke on `[3, 3]`. (AC 16, 17)
-- [ ] Commit chain: asset commit (untracked FBX + `assets/props/dagger/` incl. `ReadMe.txt`, which carries the
+- [x] Measure golden both directions; suite before/after; live smoke on `[3, 3]`. (AC 16, 17)
+- [x] Commit chain: asset commit (untracked FBX + `assets/props/dagger/` incl. `ReadMe.txt`, which carries the
       author credit, plus the generated sidecars) separate from code, code separate from docs.
 
 ## DEVIATIONS (from the skill and from the brief -- mandatory section)
@@ -411,6 +411,256 @@ call.
   `project-context.md` if the rule set moves.
 - `color_counter_stun_seconds` orphan note (Dev-pass decision).
 
+## Dev Agent Record
+
+**Agent Model Used:** Opus 5 (operator-stated)
+
+### Suite, golden and gates (MEASURED)
+
+| | before | after |
+|---|---|---|
+| state harness | 897 tests, 0 failed, 7339 assertions | **909 tests, 0 failed, 7497 assertions** |
+| integration | 65/65 PASS | **66/66 PASS** (`test_counter_reactions_live.gd` added) |
+| golden | `d437432f7823379c…` | **`d437432f7823379c…` UNMOVED** |
+| `RecordFile.FORMAT_VERSION` | 11 | **11** |
+| snapshot key-path set | 206 | **206** |
+| `UNHASHED_CROSS_TICK_MEMBERS` | 4 | **4** |
+
+Exactly two full runs (`C:\dev\_66b-suite-before.txt`, `C:\dev\_66b-suite-after.txt`). The before run
+was taken before any edit. Extra runs, each named: four interim state-harness runs during development
+(`_66b-check1..4`), one parse-only `--check-only` per edited `src/` file, one targeted integration
+sweep of the five clip/contact tests after the presentation landed, and fifteen mutation runs (below).
+
+**Golden, measured both directions.** `test_state_matches_golden` is green in the before run and green
+in the after run, against the same `GOLDEN` constant — no re-baseline, and none was needed. The
+inverse-form argument the story predicted holds as written: the fixture casts mode 1 only and no hero
+ever enters `CHARGING`, so the judgement, the four new authored durations, the busy gates and BLUE's
+displacement all sit behind a mode-3 press the fixture never makes.
+
+**Key set, measured structurally and confirmed by the hash.** `player_state.gd` and `hero_state.gd` are
+not in the File List at all: no `to_snapshot()` anywhere was touched, so no key path can have moved —
+and the 6-6a close-out's own argument applies unchanged (the hash is a function of the snapshot; a
+changed key set cannot leave it fixed). `test_the_player_snapshot_key_set_is_exactly_the_expected_set`
+survives unedited and green. `FORMAT_VERSION` stays 11: no intent channel was added.
+
+**`UNHASHED_CROSS_TICK_MEMBERS` does not move.** Two members were classified, neither a new argument:
+`_counter_travel_dirs` joins argument (c) as a FOURTH array (the `6-1d` `_charge_contact_dirs`
+precedent — a copy of a runner-pushed spatial fact, restored on replay by replaying the pushes), and
+`_counter_color_at_step3` classifies `PER_TICK` on `_iframe_open_at_step3`'s exact test. Arguments,
+not arrays, is what the pin counts (`6-1d` precedent).
+
+### DEVIATIONS measured against the story's own predictions
+
+1. **The `STUNNED` entry-point pin stays at THREE, not 3 → 4** (AC 16 predicted a move).
+   MEASURED: the retired landing rung (AC 5) took its own `set_action_state(STUNNED)` with it in the
+   same pass, and the counter's arrived at a new seat — one site out, one site in. So the count is
+   unchanged and only the ENUMERATION moves.
+   `test_stunned_has_exactly_three_authored_non_table_entry_points` keeps its name and its number; its
+   argument and its failure message are rewritten to describe a MOVE, in the shape 6-6a used for its
+   third (different subject, different seat, no damage, still not a `TRANSITION_TABLE` edge). This is
+   a weaker change than the story expected, not a stronger one: no fourth entry point was opened.
+2. **Further blast radius beyond the gate's section-2 list**, all disclosed rather than absorbed:
+   * `test_unblockable_defense.gd` `:82` and `:106` — assert the window's LENGTH, which is now the
+     colour's busy span. Constant swap only.
+   * `:368` `test_a_missing_colour_entry_degrades_to_the_sentinel` — the degraded cast now opens NO
+     window (see decision D1). Its "the cast still resolved" assertion moves from the window to the
+     discard, and two assertions are added for the ruled degrade.
+   * `:824`/`:866`/`:891`/`:755`/`:784`/`:800` — six tests that produced their STUNNED hero through
+     the retired landing rung. Each moves to `_kd_match()` + `_counter_run()`; every CLAIM is
+     unchanged, because none of them is a test about the stun.
+   * `test_unblockable_tracking_and_reach.gd`
+     `test_the_colour_counter_still_answers_through_the_one_landing_seat` — not on the gate's list.
+     The seat it names no longer exists. REPLACED (never deleted) by
+     `test_a_counter_at_the_commit_beats_reach_and_beats_a_whiff_alike`, which is the natural home for
+     AC 5's two RULED consequences: this is the only fixture that can express "the attack would have
+     missed". That file's `_config` gains the two counter durations and its header's AC 6 line is
+     corrected.
+   * `test_data_resources.gd`, `test_balance_authoring.gd`, `test_replay_identity.gd`,
+     `test_rig_clips.gd` — the four audit lists the five new authored fields, the two new members and
+     the four new clips are owed to.
+3. **`defense_window_seconds` is now an ORPHAN**, like `color_counter_stun_seconds` (the story's own
+   Dev-pass decision). Nothing in `src/` reads it. It is KEPT authored and KEPT converted, and
+   `test_authored_defense_values_are_positive_and_correctly_ordered` is left untouched and green —
+   including its `> chargeup + longest_launch` relational bound, which is now a true statement about a
+   field nothing consumes. Retiring the field and that bound is a separate call; recorded in Docs Debt.
+4. **No STOP condition was reached.** No new snapshot key, no new hashed member, no eighth reset
+   exception, no new observation seam, no AC found infeasible as written.
+
+### Dev decisions (the four the story left open, plus one it did not)
+
+**D1 — the degraded-colour busy span (not listed; decided and recorded).** `counter_busy_ticks_for`
+answers ZERO for `NO_TELEGRAPH_COLOR`, on `unblockable_launch_ticks_for`'s shape. A colourless defense
+can never counter anything (AC 3 excludes the sentinel on both sides) and has no presentation to be
+busy for, so it opens no window at all: the card and the stamina are still spent and the `defense` key
+reports its resting value, which is the truth about it. The two alternatives were both worse — a
+substitute colour violates the `kind_at` refusal rule, and falling back to `defense_window_ticks`
+would resurrect the superseded value as live behaviour on one path and make AC 1's supersession untrue.
+Blast radius: `test_a_missing_colour_entry_degrades_to_the_sentinel`, disclosed above.
+
+**D2 — BLUE's direction storage.** `_counter_travel_dirs`, a two-element `Array[Vector2]` on
+`MatchState`, written at the press and read by the movement branch. NO SNAPSHOT KEY, so the story's
+STOP rule is not triggered: it is a COPY of `_charge_reach_dirs`, which is itself excluded from
+`to_snapshot()` as a runner-pushed fact restored on replay by replaying the pushes — exactly what
+`_charge_contact_dirs` already is (`6-1d/R8`). The alternatives were a new hashed member (STOP class)
+or reusing `hero.roll_direction` (which a concurrent roll would corrupt — AC 1 lets a ROLLING hero
+cast).
+
+**D3 — the busy refusal token.** `REASON_COUNTERING := &"countering"`, minted in `match_state.gd`
+beside `REASON_GETTING_UP` and for its stated reason: the token names the player-visible fact, and a
+countering hero is neither stunned nor getting up. Raised at ONE seat ahead of the mode dispatch, so
+all four modes refuse identically.
+
+**D4 — how the clips are cut and mapped.** A single per-colour table,
+`AnimationController._COUNTER_PRESENTATION`, of ordered `{clip, from, to}` steps in the clip's own
+native seconds, plus `COUNTER_DAGGER_RELEASE_FRACTION`. NOTHING there names a duration: the shared
+playback rate is DERIVED from the total cut length against the colour's authored busy span
+(`counter_clip_speed`, never slower than native — the 6-6a `held_clip_speed` rule). So the
+presentation is mapped INTO the busy span and a `.tres` retune re-fits the clips with no code edit,
+which is AC 2's requirement. The clips go into the library RAW and UNCUT (AC 13).
+
+**D5 — the dagger's node shape.** `src/actors/props/dagger_actor.gd`, a `class_name DaggerActor`
+extending `Node3D` with the imported model as its only child and a straight-line `advance()`. A SCRIPT
+and no `.tscn`: the totem/projectile precedent is a scene because those actors compose a body, a
+collision shape and a hurtbox a designer edits, and this one composes nothing. A scene file would be an
+empty wrapper with a uid to maintain, and it would invite exactly the `Hitbox` AC 11 forbids being
+added "just like the others". No `_physics_process` (F1): the runner advances it.
+
+### Measured facts produced by this pass
+
+**Import and library (AC 13).** `project.godot` SHA-256 `252ef7e9…640e` before the headless editor
+scan and **byte-identical after it** — zero collateral, both scans. The four `counter_*.fbx.import`
+sidecars generated with `[params]` VERIFIED IDENTICAL to `roll.fbx.import`. `dagger.fbx.import` and
+the four `dagger_*.png.import` sidecars generated; extracted textures landed in git-ignored `.godot/`
+and are not a commit concern. Library **23 → 27**.
+
+**The backflip's -360° Hips winding, VERIFIED not assumed** (the story required this): the imported
+quaternion track's first→last key angle is **0.0000°** for both `counter_jump` and `counter_backflip`
+— a full revolution is not representable on a quaternion track and does not survive import. Residuals
+on the other two are bounded and inside a one-shot (`counter_slide` 13.14°, `counter_throw` 9.36°),
+the same class 6-6a accepted for `knockdown`/`get_up`. No yaw neutralisation on any of the four.
+
+**Hips planar pin (AC 9/AC 13).** `counter_slide` ONLY, 50 position keys pinned via `_pin_hips_planar`
+— its raw 4.3135 m of planar travel is seventeen times the `3-0b/R27` ceiling and BLUE's body is
+carried by STATE, so the clip must not move it twice. The other three are inside the ceiling and are
+left as authored.
+
+**Impact frames (`tools/measure_counter_strike_frames.gd`, the 6-1b criterion).**
+
+| clip | len s | hand reach max | peak speed | read |
+|---|---|---|---|---|
+| `counter_jump` | 0.8333 | 0.7917 @ 0.3646 | 2.6445 @ 0.6458 | Hips apex 1.531 @ 0.406; a complete in-place jump, no cut |
+| `counter_backflip` | 2.1667 | 1.0592 @ 0.7042 | 5.1054 @ 0.5146 | flip completes ~1.90; last 0.27 s is a static hold, cut there |
+| `counter_slide` | 1.7667 | 1.0125 @ 0.3312 | 5.1939 @ 0.0442 | Hips 0.892 → 0.218 between 0.265 and 0.574; cut at 0.3533, drop committed, no run stride left |
+| `counter_throw` | 1.8333 | **0.9679 @ 0.6646** | 4.1861 @ 0.7563 | the reach peak IS the RELEASE (the retraction right after is the clip's peak speed) — 36.25 % of the clip, which CONFIRMS the operator's ~36 % starting point by measurement |
+
+**The cut table that follows, and the rates it derives** (all NAMED, editable constants in
+`AnimationController._COUNTER_PRESENTATION`; no test pins a value):
+
+| colour | steps (cut s) | cut total | busy span | derived rate |
+|---|---|---|---|---|
+| RED | `counter_jump` [0, 0.8333] then `counter_backflip` [0, 1.9000] | 2.7333 | 1.5 | 1.822 |
+| BLUE | `counter_slide` [0.3533, 1.7667] | 1.4134 | 1.2 | 1.178 |
+| GREEN | `counter_throw` [0.6646, 1.3444] | 0.6798 | 0.7 | 1.000 (floored; holds the last cut frame 0.02 s) |
+
+GREEN's dagger release offset is **0.0 s into the busy span** — the measured release frame IS the
+cut's first frame, so the throw reads as instant, which a 0.7 s counter needs.
+
+**Where the feel knobs live** (operator, for the smoke):
+* the three busy spans, the eligibility span and BLUE's travel distance —
+  `data/balance/balance_config.tres` (a one-line `.tres` edit; NO test edit and NO golden re-baseline,
+  `BC/R3` standing, and the only thing pinned is the direction `busy > eligibility > 0`);
+* the per-colour cut ranges, the shared-rate rule and the dagger release fraction —
+  `AnimationController._COUNTER_PRESENTATION` / `counter_clip_speed` /
+  `COUNTER_DAGGER_RELEASE_FRACTION`;
+* the dagger's flight height — `match_runner.DAGGER_THROW_HEIGHT`.
+
+### Mutation table (MEASURED this pass; every restore by copy-back + SHA-256, never `git checkout`)
+
+Driver, backups and the raw log are outside the repo (`C:\dev\_66b-mut\`, `C:\dev\_66b-mutations*.txt`).
+Every target was SHA-256'd before the edit and the restored file's SHA-256 verified equal afterwards.
+
+| # | mutation | went RED |
+|---|---|---|
+| M1 | delete the counter's `set_action_state(STUNNED)` | 17 tests, incl. `…knocks_the_attacker_down_and_only_the_attacker` |
+| M2 | consult `_charge_reach` on the commit tick too | 18, incl. `…adjacent_at_the_commit_is_still_countered` |
+| M3 | drop the eligibility check | 2: `…eligibility_span_has_closed_counters_nothing`, `…boundary_is_exact_and_identical_on_both_slots` |
+| M4 | read the defender LIVE instead of from the step-3 capture | 1: `test_both_counters_land_on_one_tick_regardless_of_seat_order` (and ONLY that one — the seat-symmetry pin is exact) |
+| M5 | drop the colour comparison | 3, incl. `test_only_a_matching_colour_counters` |
+| M6 | drop the STUNNED / getting-up defender gates | 1: `test_a_downed_or_getting_up_defender_cannot_counter` |
+| M7 | make the counter CONSUME the window | 4, incl. `…later_judged_tick_inside_the_eligibility_span_still_counters` |
+| M8 | remove the busy gate at the card seat | 1: `test_every_intent_is_refused_while_the_hero_is_countering` |
+| M9 | remove the busy gate at the step-3 edges | 2, incl. `…input_is_accepted_on_the_first_tick_after_the_counter_window_expires` |
+| M10 | remove the counter-busy movement branch | 3, incl. `test_blue_travels_toward_the_attacker_and_red_and_green_do_not` |
+| M11 | read BLUE's bearing LIVE instead of from the press-time lock | 1: `test_blues_bearing_is_locked_at_the_press_and_never_re_read` |
+| M12 | make the sentinel busy span fall back to `defense_window_ticks` | 2, incl. `…durations_convert_at_the_one_boundary` |
+| M13 | drop `counter_slide` from the rig-clip matrix | `test_rig_clips.gd` FAIL |
+| M14 | unwire `_push_counter_presentation()` from the runner tick | `test_counter_reactions_live.gd` FAIL |
+
+**M11 FIRST CAME BACK VACUOUS, and that is recorded rather than quietly fixed.** The first draft of
+the lock test asserted the travel survived the attacker's teardown, reasoning that `push_contact`'s
+clearing arm zeroes the bearing. MEASURED: `_charge_reach_dirs` is written on EVERY push,
+unconditionally, AHEAD of the contact-window check — only `_charge_reach` and `_charge_contact_dirs`
+are cleared there. So a live read held the same value and the test passed under the mutation. The test
+was rewritten to push a MOVED bearing after the press (the attacker circling), which is what actually
+falsifies a live read; M11 then went RED. `Invariant.check` is nowhere proven by triggering it.
+
+### Explicit assertions the story asked for by name
+
+* **The busy defender's hitbox gathers nothing** (AC 9): a counter starts no `active` window and the
+  busy gate refuses every new attack press, so `is_hitbox_active()` is never true for a countering
+  hero that was not ALREADY mid-swing — and for that one case AC 1 requires the swing to finish on its
+  own contract, which `test_a_swing_in_progress_finishes_across_the_busy_span` pins directly (it
+  observes the `active` phase running INSIDE the busy span, which is the honest statement: the lock is
+  on new presses, not on a swing already sold).
+* **The seam family is still TEN**: `test_runner_observation_seams_are_exactly_ten` green, unedited.
+  The press rides the `defense` snapshot key, success rides the colour-carrying `deflect_landed`
+  (which keeps TWO emit sites, told apart by the colour sentinel), the fall rides
+  `action_state_changed` plus the flavour read.
+* **F1 / D3(a) / D3(b) / A2**: green, untouched. The new `DaggerActor` has no `_physics_process`; the
+  runner advances it from the one existing loop.
+
+### Live Smoke
+
+NOT RUN — the operator's, on `[3, 3]` with two pads. Its checkboxes are deliberately left unchecked.
+
+## File List
+
+**Assets (new, untracked before this pass)**
+- `assets/characters/paladin/counter_jump.fbx` (+ `.import`)
+- `assets/characters/paladin/counter_backflip.fbx` (+ `.import`)
+- `assets/characters/paladin/counter_slide.fbx` (+ `.import`)
+- `assets/characters/paladin/counter_throw.fbx` (+ `.import`)
+- `assets/props/dagger/dagger.fbx` (+ `.import`), `dagger_BaseColor.png`, `dagger_Metallic.png`,
+  `dagger_Normal.png`, `dagger_Roughness.png` (+ their four `.import`s), `ReadMe.txt`
+- `assets/characters/paladin/paladin_anims.res` (modified: 23 -> 27 clips)
+- `tools/add_paladin_counter_clips.gd` (+ `.uid`) — new
+- `tools/measure_counter_strike_frames.gd` (+ `.uid`) — new
+
+**State**
+- `src/state/match_state.gd`
+- `src/state/resources/balance_config.gd`
+- `src/state/timing/balance_ticks.gd`
+- `data/balance/balance_config.tres`
+
+**State tests**
+- `test/state/test_unblockable_defense.gd`
+- `test/state/test_unblockable_hold.gd`
+- `test/state/test_unblockable_tracking_and_reach.gd`
+- `test/state/test_action_state.gd`
+- `test/state/test_balance_authoring.gd`
+- `test/state/test_data_resources.gd`
+- `test/state/test_replay_identity.gd`
+
+**Presentation**
+- `src/actors/hero/animation_controller.gd`
+- `src/actors/props/dagger_actor.gd` (+ `.uid`) — new
+- `src/main/match_runner.gd`
+
+**Integration tests**
+- `test/integration/test_counter_reactions_live.gd` (+ `.uid`) — new
+- `test/integration/test_rig_clips.gd`
+
+
 ## Change Log
 
 | Date | Change |
@@ -418,3 +668,4 @@ call.
 | 2026-09-20 | Story authored (`gds-create-story`, Sonnet 5) at baseline `3f6be78`; Status `authored`; awaiting operator review. |
 | 2026-09-20 | Readiness gate round 1 findings B1-B4 + operator rulings: commit-tick ordering ruled (AC 3, no new state); three per-colour busy durations over one reused window (AC 2); BLUE state travel with zero-fact fallback (new AC 9); attacker knockdown as a new fourth STUNNED entry point (AC 4, AC 16); AC merges, Open Questions retired. |
 | 2026-09-20 | Readiness gate round 2 READY; promoted to ready-for-dev; AC 3 ordering clause made explicit. |
+| 2026-09-20 | Dev pass complete (Opus 5). All ACs implemented; suite 897/0/7339 + 65 -> 909/0/7497 + 66; golden `d437432f` MEASURED UNMOVED both directions, no re-baseline; FORMAT_VERSION 11, 206-key set and `UNHASHED_CROSS_TICK_MEMBERS` 4 all unmoved; library 23 -> 27 with zero `project.godot` collateral; 14 mutations measured RED (M11 first came back vacuous and its test was corrected). DEVIATION: the `STUNNED` entry-point pin stays at THREE, not 3 -> 4 -- the retired landing rung took its own site with it, so the count holds and only the argument moves. Status -> review. |
