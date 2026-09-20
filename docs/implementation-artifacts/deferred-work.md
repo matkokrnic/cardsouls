@@ -212,8 +212,9 @@
 
 ## Deferred from: code review of 6-6a-defense-reactions (2026-09-17)
 
-- **A downed hero keeps a defense window armed on or before the landing tick, and can colour-counter
-  while down.** `_apply_landing_packages` tears down only the chargeup. This is consistent with the
+- **CLOSED by 6-6b AC 7 (2026-09-20, decision-log session 6-6b close-out): a downed hero cannot counter.**
+  ~~A downed hero keeps a defense window armed on or before the landing tick, and can colour-counter
+  while down.~~ `_apply_landing_packages` tears down only the chargeup. This is consistent with the
   `5-6` STUNNED contract ("running windows tick out") and asserted by the R-PRESS test. Judge at the
   `[3, 3]` smoke.
 - **`block_impact`'s held final frame stands in for the block pose for the rest of the hold.** The
@@ -491,3 +492,19 @@ retune. Owner for both: the operator, with a pad in hand.
   expensive to change during E4: `4-0/R1` bound the `hand_size` snapshot KEY to occupancy, and its
   N2 finding records the `<= 4` audit bound becoming more load-bearing. If it ever varies, whether
   the count is public becomes a NEW design question (`E3-RG/R4`). Judge the feel first, then price it.
+
+## Deferred from: close-out of 6-6b-color-counters (2026-09-20)
+
+Owners in decision-log session "6-6b-color-counters close-out (Tier A)".
+
+- **Click-to-commit superseding the 6-1 hold/feint** -> new story `6-9` (Tier A, next on the board).
+- **Card mode as a toggle (click L3), and "held L3 kills L2 block"** (live smoke item 8b) -> new story
+  `6-10` (Tier B).
+- **Homing range and attack readability** -> retune block.
+- **Attacker mid-air pop into the knockdown** -> polish.
+- **Suspicious hitboxes** (operator, solo re-smoke) -> playtest block.
+- **A hold/pause on the attacker's head before RED's bounce** (presentation knob at the jump -> backflip
+  join, `6-1b` hold precedent) -> retune block.
+- **Dagger impact alignment** (the "hit" is the knockdown moment; align it to the dagger's arrival) -> polish.
+- **"Countering an unblockable may not reward enough"** (levers: the attacker's knockdown length, a
+  defender reward such as orb/mana) -> retune block, judged at the friends playtest.

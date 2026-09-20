@@ -10766,3 +10766,127 @@ Suite: state `897 tests, 0 failed, 7339 assertions`, integration `65/65 PASS`, b
 halves. Golden `d437432f...` unmoved. `FORMAT_VERSION` 11.
 
 Not pushed; awaiting the operator's confirmation of the log.
+
+## Session 2026-09-20 -- 6-6b-color-counters close-out (Tier A)
+
+Author pass + two readiness gate rounds + dev pass (Claude Opus 5) + Senior Developer Review
+(`PROC/R2`, three layers, APPROVE WITH FINDINGS) + post-review fix pass + operator live smoke
+(`[3, 3]`, two pads) + post-smoke fix pass + operator solo re-smoke (`[0, 3]`, the `6-D1` keys) + this
+close-out, all on `6-6b-color-counters`. Twenty-one rulings, `6-6b/R1`-`R21`, numbered by content in the
+order gate, review, post-smoke, supersession. Full text lives in the story file, not restated here.
+
+**Gate rulings.**
+
+`6-6b/R1` THE COMMIT TICK IS JUDGED BEFORE THAT TICK'S PUSH (AC 3). The counter is judged at the
+attacker's commit tick ahead of the push and discards a same-tick INSIDE latch, so an attacker adjacent at
+commit is answered rather than hitting. No new state.
+
+`6-6b/R2` THREE PER-COLOUR BUSY SPANS OVER THE ONE REUSED `defense_window` (AC 2). Busy is DERIVED from
+the window; no new `ActionState`, no second window; the `defense` snapshot key's arity and resting value
+unchanged.
+
+`6-6b/R3` BLUE STATE TRAVEL WITH A PRESS-TIME DIRECTION LOCK (AC 9). The slide is state, along a bearing
+locked at the press, with a zero-travel fallback when nothing is charging.
+
+`6-6b/R4` THE KNOCKDOWN PACKAGE IS WRITTEN AT THE ATTACKER'S OWN STEP-3 SEAT (AC 4). The existing
+knockdown package (stun, flavour, get-up lock, get-up iframes), no damage, no orbs, no `hit_landed`.
+
+`6-6b/R5` AC 5'S MUTATION TARGETS THE OBSERVABLE HALF. The wrong-colour pass-through is proven by mutating the
+observable half (a later matching launch tick inside the same still-running window still counters), not
+non-consumption.
+
+**Review dispositions** (review commit `d202265`, fix pass `d9f4512`).
+
+`6-6b/R6` H1 STALE CHARGE-REACH BEARING. `_charge_reach_dirs` is cleared nowhere, so an early BLUE press
+slid along a stale bearing; the lock now gates on the attacker actually being CHARGING.
+
+`6-6b/R7` H2 ATTACKING IS EXCLUDED FROM THE BUSY MOVEMENT BRANCH. A swing that cast mid-flight keeps its
+own windows and velocity contract.
+
+`6-6b/R8` P1/P3 THE COUNTER OWNS THE PRESENTATION FOR THE WHOLE SPAN. It resumes into IDLE after an
+interrupting transition, and no `hit_react` plays over a counter. STUNNED and DEAD still win outright.
+
+`6-6b/R9` P2 A RE-CAST WITH NO FALLING EDGE IS DETECTED AS A NEW PRESS: colour changed OR remaining rose.
+
+`6-6b/R10` P4 THE POLL READS THE KEY'S THREE FIELDS DIRECTLY, not two `to_snapshot()` builds per tick. AC
+10 names the FACT observed.
+
+`6-6b/R11` P6 PARITY WITH THE GET-UP REGISTER: NO GATE AT THE LOCK SEAT. `_resolve_lock` is ungated for
+the get-up, so it is ungated for the busy lock; AC 2 reads "every input the get-up lock refuses".
+
+`6-6b/R12` P7 THE `STUNNED` PIN STAYS AT THREE. The retired 5-5 landing rung took its site; AC 4's word
+"fourth" was the error, not the code.
+
+`6-6b/R13` P8 ORPHAN FIELDS RETIRED: `defense_window_seconds` and `color_counter_stun_seconds`, with the
+relational bound in the authored-values test.
+
+**Post-smoke rulings** (the story's R-S1..R-S6).
+
+`6-6b/R14` (R-S1) RED TRAVELS OUT AND BACK, with a collision pass-through for RED's span only and an
+authored turn-around fraction; net displacement zero.
+
+`6-6b/R15` (R-S2) TRAVEL DISTANCES ARE REACH-SIZED PER COLOUR (RED 4.0 m, BLUE 6.0 m), `.tres` only.
+
+`6-6b/R16` (R-S3) THE DEFENDER FACES THE ATTACKER FOR THE WHOLE BUSY SPAN, through the single yaw source.
+
+`6-6b/R17` (R-S4) SPANS CUT TO 1.0 / 0.8 / 0.5 s (RED / BLUE / GREEN); kept at the re-smoke.
+
+`6-6b/R18` (R-S5) DAGGER DRAWN AT x2.5, presentation constant, flight origin unchanged.
+
+`6-6b/R19` (R-S6) THE WHOLE BUSY SPAN IS THE COUNTER WINDOW. No eligibility head;
+`counter_eligibility_seconds` / `_ticks` removed. "Too early" now means the counter ran out. Orphan set
+closed: `defense_window_seconds`, `counter_eligibility_seconds`, `color_counter_stun_seconds`.
+
+**Supersessions, stated explicitly.**
+
+`6-6b/R20` `5-5`'s 1.5 s PRE-ARM DEFENCE and `5-6`'s COLOUR-COUNTER STUN ON THE ATTACKER are SUPERSEDED by
+`6-6b`: the counter is judged at the commit / in flight and the attacker is KNOCKED DOWN.
+
+`6-6b/R21` The `E6-P` decision "counters per attack type after E6" is SUPERSEDED on the 17.9 split, by
+this story's colour counters.
+
+**Deferred / next, each with an owner.**
+
+* Click-to-commit superseding the `6-1` hold/feint -> NEW story `6-9` (Tier A, next on the board).
+* Card mode as a toggle (click L3) and "held L3 kills L2 block" (smoke item 8b) -> NEW story `6-10`
+  (Tier B).
+* Homing range and attack readability -> the retune block.
+* Attacker mid-air pop into the knockdown -> polish.
+* Suspicious hitboxes (operator, re-smoke) -> the playtest block.
+* A hold/pause on the attacker's head before RED's bounce (a presentation knob at the jump -> backflip
+  join, the `6-1b` hold precedent) -> the retune block.
+* Dagger impact alignment -> polish.
+* "Countering an unblockable may not reward enough" (levers: the attacker's knockdown length, a
+  defender reward) -> the retune block, judged at the friends playtest.
+* The `6-6a` deferred-work item "a downed hero can colour-counter with an armed window" is CLOSED by
+  `6-6b` AC 7; `deferred-work.md` updated in the same commit.
+* Docs debt: `epics.md` bullets for `6-9` / `6-10`, for the E6 close-out (not edited here).
+
+**Measurements.** Golden `d437432f` MEASURED UNMOVED throughout; `FORMAT_VERSION` 11; 206-key snapshot
+set and `UNHASHED_CROSS_TICK_MEMBERS` 4 unmoved; observation seams TEN; the `STUNNED` pin at THREE. Suite:
+state `897/0/7339` -> `915/0/7604`, integration `65` -> `66`. Not re-run at close-out; the last measured
+runs stand.
+
+**E5-R/R3 budget line.** From `C:\dev\_66b-suite-before.txt` (2026-09-20 02:27) to the latest
+`C:\dev\_66b-smokefix-suite-after-*.txt` (integration half 2026-09-20 21:12): about 18 h 45 min of
+wall-clock across dev, review, both fix passes and the smoke, by file timestamps. Review
+LAYER-COMPLETION: BLIND-HUNTER: COMPLETE | EDGE-CASE-HUNTER: COMPLETE | ACCEPTANCE-AUDITOR (inline):
+COMPLETE.
+
+**Live smoke.** `[3, 3]` two pads: 13/13 mechanical items PASS, five feel findings and one window ruling
+(R14-R19). Solo re-smoke `[0, 3]` with the `6-D1` keys: broadly good, spans kept.
+
+## Session 2026-09-20 -- 6-D1-solo-smoke-keys close-out (Tier B)
+
+Debug story, on the `p1_debug_reset` precedent. Two rulings.
+
+`6-D1/R1` DEBUG KEYS X / V / B, P1-ONLY. A press casts an unblockable of RED / BLUE / GREEN with the
+FIRST card of that colour in P1's hand and holds `card_cast` for 2.0 s (`DEBUG_HOLD_TICKS` 120),
+longer than the authored 1.0 s chargeup, whether or not the key is released. Nothing in the hand ->
+nothing happens. No new intent field; `FORMAT_VERSION` 11; golden `d437432f` unmoved.
+
+`6-D1/R2` THE CONTROLLER RECEIVES HAND COLOURS THROUGH THE EXISTING `cards_changed` WRAPPER
+(`Controller.observe_hand_colors`, base a no-op) -- the HUD-tint route, NOT a new seam and never a state
+handle.
+
+Suite `915/0/7604` -> `920/0/7755` + `66/66`. Live smoke: the operator's solo check PASS (playtest log).
