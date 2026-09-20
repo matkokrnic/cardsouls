@@ -661,6 +661,50 @@ NOT RUN — the operator's, on `[3, 3]` with two pads. Its checkboxes are delibe
 - `test/integration/test_rig_clips.gd`
 
 
+## Code Review Record
+
+Ran 2026-09-20 over `0ea7183..9d30ee8` (`PROC/R2` form: Blind Hunter + Edge Case Hunter in parallel,
+Acceptance Auditor inline). Full report: `C:\dev\_66b-review.md`. Verdict **APPROVE WITH FINDINGS**.
+
+**Fixed by the review** (commit `d202265`, `fix(state)`, each mutation-proven, suite
+909/0/7497 + 66 -> **911/0/7518 + 66**, golden `d437432f` UNMOVED and no gate moved):
+
+- **H1 -- AC 9's zero-travel fallback was false in live play.** `_charge_reach_dirs` is written on
+  every push and cleared NOWHERE, so its `Vector2.ZERO` rest holds only until the first chargeup of
+  the process; an early BLUE press afterwards slid the defender along a stale bearing. The press now
+  gates on the other hero actually being `CHARGING`. The two existing BLUE-travel fixtures had no
+  live chargeup at the press either (the bare P1 intent feints at step 3, before step 6 arms the
+  window) and were passing off the same stale store -- both corrected and now assert `CHARGING` at
+  the press.
+- **H2 -- the counter-busy movement branch preempted `ATTACKING`.** Its own comment claimed ROLLING
+  and ATTACKING both won from above; ATTACKING is not a branch above but lives in the `else` arm
+  with the phase multiplier and the `3-0b` lunge, so a swing that cast DEFENSE mid-flight kept its
+  windows and lost its whole velocity -- AC 1's "finishes on its own contract" broken in its
+  movement half. Now excluded in the branch's own condition.
+- Comment/doc corrections in place: the `_counter_travel_dirs` sign claim, the branch's
+  co-occurrence argument, the live test's "the dagger is released" header claim, a doc reference to
+  a helper never written, and a stray UTF-8 BOM (the only one in the repo).
+
+**Not fixed -- carried to the operator** (full argument in the report):
+
+| # | finding | disposition |
+|---|---|---|
+| P1 | any `action_state` transition or `on_hit_landed` during the busy span kills the counter presentation permanently (`_counter_index = -1`, nothing re-arms); mid-swing/mid-roll it never advances at all, because `on_locomotion` returns before the cut enforcement when the state is not `IDLE` | operator ruling + smoke: what the body should do when a transition interrupts a counter is a design call |
+| P2 | a counter re-cast on the window's LAST tick produces neither a rising nor a falling edge (step 2 stops the window, step 6 restarts it, the runner polls once), so the previous colour's paused frame is held for the new span | operator ruling; presentation only |
+| P3 | a counter cast from `BLOCKING` is destroyed on the frame it starts -- the queued `IDLE` drains AFTER the presentation poll | same class as P1 |
+| P4 | `_push_counter_presentation` builds two full `to_snapshot()` dictionaries per tick to read one key; the precedent it cites (`_push_charge_progress`) reads the fields directly | AC 10 names the snapshot key, so the cheaper read is the operator's call |
+| P5 | `COUNTER_DAGGER_RELEASE_FRACTION` only shortens the flight; it never delays the spawn. Latent -- correct only because it is `0.0` today | accept as note; retuning it breaks AC 11's stated contract |
+| P6 | the busy lock is not applied at the lock/retarget seat (`_resolve_lock`, step 1c), so a "takes no input" hero can still re-aim mid-counter | operator ruling against AC 2's "every input" |
+| P7 | AC 16 predicted the `STUNNED` pin would move 3 -> 4; it stays at THREE because the retired landing rung took its own site. Independently re-grepped: exactly three sites, the rewritten argument matches | **accept as a docs amendment at close-out**; AC 4's word "fourth" is what needs correcting, not the code |
+| P8 | `defense_window_seconds` is an orphan whose relational authoring bound now describes a field nothing consumes | already in Docs Debt; retire at close-out with `color_counter_stun_seconds` |
+
+**Evidence re-derived by the review, not taken on report:** the before-claim suite (909/0/7497 + 66,
+reproduced exactly); mutations M2, M4 and M11 re-run by hand with out-of-repo backups and SHA-256
+verified copy-back restores (M2 17 RED incl. the adjacent-at-commit pin -- the record says 18; M4
+exactly 1, the seat-symmetry pin; M11 exactly 1, the corrected bearing-lock pin); the five
+`.import` sidecars' `[params]` blocks byte-identical to `roll.fbx.import`; `project.godot` absent
+from the diff entirely; the File List complete against `git diff --name-only`; AC text unedited.
+
 ## Change Log
 
 | Date | Change |
@@ -669,3 +713,4 @@ NOT RUN — the operator's, on `[3, 3]` with two pads. Its checkboxes are delibe
 | 2026-09-20 | Readiness gate round 1 findings B1-B4 + operator rulings: commit-tick ordering ruled (AC 3, no new state); three per-colour busy durations over one reused window (AC 2); BLUE state travel with zero-fact fallback (new AC 9); attacker knockdown as a new fourth STUNNED entry point (AC 4, AC 16); AC merges, Open Questions retired. |
 | 2026-09-20 | Readiness gate round 2 READY; promoted to ready-for-dev; AC 3 ordering clause made explicit. |
 | 2026-09-20 | Dev pass complete (Opus 5). All ACs implemented; suite 897/0/7339 + 65 -> 909/0/7497 + 66; golden `d437432f` MEASURED UNMOVED both directions, no re-baseline; FORMAT_VERSION 11, 206-key set and `UNHASHED_CROSS_TICK_MEMBERS` 4 all unmoved; library 23 -> 27 with zero `project.godot` collateral; 14 mutations measured RED (M11 first came back vacuous and its test was corrected). DEVIATION: the `STUNNED` entry-point pin stays at THREE, not 3 -> 4 -- the retired landing rung took its own site with it, so the count holds and only the argument moves. Status -> review. |
+| 2026-09-20 | Code review (`gds-code-review`, `PROC/R2` three layers) over `0ea7183..9d30ee8`: APPROVE WITH FINDINGS. Two state-layer defects fixed in `d202265` (H1 stale charge-reach bearing broke AC 9's zero-travel fallback and two fixtures were passing off the stale store; H2 the counter-busy movement branch preempted `ATTACKING` and ate the swing's lunge against AC 1), each mutation-proven; suite 909/0/7497 + 66 -> 911/0/7518 + 66, golden `d437432f` UNMOVED, no gate moved. Six presentation/seat findings and two docs amendments carried to the operator (Code Review Record above). |
