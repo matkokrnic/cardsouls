@@ -23,6 +23,35 @@ Board key `6-6b-color-counters` already exists in `docs/implementation-artifacts
 line and `last_updated` changed. Authored from the operator scope talk of 2026-09-17 and 2026-09-20
 (rulings SETTLED -- restated below by content; numbers are assigned at close-out).
 
+## Post-Smoke Amendment
+
+The live smoke ran on `[3, 3]` with two pads and PASSED every mechanical item (results filled in
+under Live Smoke below). What it did NOT pass is FEEL, and the findings it produced break the
+project rule "what you see must be what happens" -- a counter that plays a headstomp animation
+beside a standing attacker, a slide that stops short of the hero it is answering, a throw pointing
+one way while the dagger flies another. Those are fixed IN THIS STORY on the `6-6a` post-smoke N1
+precedent, not deferred to polish, because each one is the presentation lying about the state.
+
+The operator's findings and the rulings that answer them, by content (numbers assigned at close-out;
+the labels below are this pass's working names):
+
+| finding (live smoke) | ruling |
+|---|---|
+| RED's counter plays ON THE SPOT. The jump and the backflip are a headstomp that never reaches the head, because the attacker is standing a reach away. | **R-S1** RED gets REAL state travel, the AC 9 mechanism extended per colour: FORWARD along the locked bearing for the jump step, BACKWARD by the same authored distance for the backflip step, NET ZERO, each leg derived inline from an authored per-colour distance over that step's share of the busy span. During RED's counter the defender's body IGNORES the attacker's body collider (presentation, for the span only) so the forward travel completes and the jump clip's own Hips arc puts the model above the attacker before the backflip returns it. |
+| BLUE's slide does not arrive. 1.5 m against an attacker that commits from up to its own reach away. | **R-S2** `counter_travel_distance_blue` becomes reach-sized, `.tres` only. The slide still STOPS on the attacker's collider -- BLUE keeps its collision, which is how a slide arrives. |
+| The defender counters in whatever direction it happened to be facing. GREEN's throw animation plays one way while the dagger flies another. | **R-S3** THE DEFENDER FACES THE ATTACKER FOR THE WHOLE BUSY SPAN: facing locked at the press to the same bearing the travel uses (defender -> attacker) and written at the movement seat every busy tick, through the single yaw source. Nothing charging at the press -> facing untouched. |
+| All three counters read as a hesitation the player is locked inside. | **R-S4** BUSY SPANS CUT: RED 1.5 -> 1.0 s, BLUE 1.2 -> 0.8 s, GREEN 0.7 -> 0.5 s, `.tres` only. The cut tables re-fit by construction (the rate is derived from the span). |
+| The dagger is too small to see cross the gap. | **R-S5** dagger drawn at x2.5 (a presentation constant on the prop). Flight ORIGIN unchanged (the throwing hand's height). |
+| "As long as you initiate the defence before the attack touches you, it should defend." | **R-S6** THE WHOLE BUSY SPAN IS THE COUNTER WINDOW, superseding AC 1's eligibility head. A counter lands iff the defender's window is RUNNING at the commit tick or on a launch tick before the first honest contact. `counter_eligibility_seconds` / `counter_eligibility_ticks`, the `busy > eligibility` bound and the elapsed check are REMOVED; "too early" now means the counter RAN OUT, never that the press was refused. The feint bait (AC 6) is unchanged: a feinted chargeup never reaches a judged tick. The field is retired alongside `defense_window_seconds` and `color_counter_stun_seconds` as the close-out orphan set. |
+
+**NOT in this pass**, recorded as close-out items with no code owed here:
+* card mode as a TOGGLE (click L3, like lock-on) instead of a held modifier, and "held L3 turns L2 off
+  block" -- a new Tier B controller story;
+* CLICK-TO-COMMIT for the unblockable, superseding `6-1`'s hold/feint (operator decision after three
+  playtests) -- a new Tier A story, next on the board after this one;
+* homing range / attack readability -- the retune block (`6-1d/R16`, already unlocked);
+* the attacker's mid-air pop into knockdown (GREEN) -- polish.
+
 ## Acceptance Criteria
 
 **The press and the window**
@@ -30,11 +59,13 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
 1. Pressing card mode 3 with a card of color X consumes the card and spends `defense_stamina_cost`
    exactly as `5-5` does (`_resolve_defense_cast`, `match_state.gd:3350-3394`), and starts the ONE reused
    `PlayerState.defense_window` (with `defense_color`) at the COLOUR'S OWN busy tick count (AC 2). Inside
-   that run, a SHORT counter-ELIGIBILITY span is read as elapsed ticks --
-   `duration_ticks() - remaining_ticks() <= counter_eligibility_ticks` -- from a NEW authored value,
-   provisional 0.3 s (18 ticks at 60 Hz). The `5-5` 1.5 s pre-arm value (`defense_window_seconds = 1.5`,
-   `data/balance/balance_config.tres:150`) is superseded as a counter window (the supersession log entry is
-   written at this story's close-out). The window expires silently when nothing answers it. Every existing
+   that run, a SHORT counter-ELIGIBILITY span was read as elapsed ticks from a NEW authored value,
+   provisional 0.3 s. **AMENDED POST-SMOKE (R-S6, and the live smoke is the cause): THERE IS NO
+   ELIGIBILITY SPAN.** The whole busy span is the counter window (new AC 18), so the authored value,
+   its tick twin and the elapsed check are REMOVED rather than retuned. The `5-5` 1.5 s pre-arm value
+   (`defense_window_seconds`) was superseded as a counter window and is now RETIRED outright beside it,
+   with `color_counter_stun_seconds`, as the close-out orphan set. The window expires silently when
+   nothing answers it. Every existing
    refusal is unchanged: flag closed, CHARGING (`REASON_UNBLOCKABLE_COMMITTED`), STUNNED (`REASON_STUNNED`),
    empty slot, insufficient stamina. A press with a block held still drops the block (`5-5`,
    `match_state.gd:3395-3409`); a swing or roll in progress still finishes on its own contract (`5-5`'s
@@ -67,7 +98,9 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
    launch tick BEFORE the first honest contact (`6-1c` commit, `6-1d` contact latch). Measured seat: the
    CHARGING arm of `_resolve_actions` (`match_state.gd:1251-1258`), where the landing window is running and
    the chargeup window has stopped (`6-1c`). The counter lands iff, on a judged tick, ALL of: the
-   defender's eligibility span is open; the window's colour equals the attacker's `charge_color` and neither
+   defender's window is still RUNNING (AMENDED POST-SMOKE, R-S6: it read "the eligibility span is
+   open" -- the smoke retired the head, so the only timing question left is whether the counter has
+   run out); the window's colour equals the attacker's `charge_color` and neither
    is the `NO_TELEGRAPH_COLOR` sentinel (the `5-5` review-fix rule, `match_state.gd:3493-3500`, kept -- a
    degraded defense must never answer a degraded chargeup); the attacker's reach latch is not yet `INSIDE`
    (`_charge_reach`, `match_state.gd:1023-1033`); and the defender is alive, not STUNNED and not getting up
@@ -93,14 +126,17 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
    apply (a CHARGING attacker is not down). The defender takes no damage, the attacker earns no orbs
    (`_grant_landing_orbs` never runs), and no `hit_landed` is emitted. The answered color is announced on
    the existing `deflect_landed(attacker_slot, target_slot, defense_color)` signal (`match_state.gd:76`).
-5. TIMING FAILURES and the RETIRED LANDING RUNG. A window whose eligibility span ended before the commit
-   (too early), or one opened after the first honest contact registered or after the landing (too late),
+5. TIMING FAILURES and the RETIRED LANDING RUNG. A window that ENDED before the commit (too early --
+   AMENDED POST-SMOKE, R-S6: it read "whose eligibility span ended"; the smoke made "too early" mean
+   the counter RAN OUT, never that a press inside a running window was refused), or one opened after
+   the first honest contact registered or after the landing (too late),
    leaves the attack to the `5-6` ladder untouched (reach -> dodge rung -> unanswered package). The card and
    stamina are spent regardless. The dodge rung stays the universal, card-less fallback. A WRONG-COLOUR
    press neither counters nor consumes anything (the `5-5` rule kept, now true by construction: nothing
    consumes the window, and 1v1 has one attacker that a success tears down and locks for 2.5 s knockdown +
    2.0333 s get-up). The mutation proof for it targets the OBSERVABLE half -- a later matching launch tick
-   inside the eligibility span still counters -- not non-consumption. The `5-5` landing-tick negation rung
+   inside the same still-running window still counters -- not non-consumption. The `5-5`
+   landing-tick negation rung
    (`match_state.gd:3541-3554`, including the attacker's `color_counter_stun_ticks` stun written there) no
    longer exists as a way to answer an unblockable: an eligible window on the landing tick with first
    contact already registered does NOT negate. The dodge rung and the unanswered-package tier below it are
@@ -137,14 +173,21 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
    presses). Two further boundaries are pinned on BOTH slots identically: a press on the very tick of the
    commit is too late (card presses run at step 6, after step 3), and the last eligible tick / first
    ineligible tick are exact in ticks, on the `5-5` window's own start/tick convention.
-9. BLUE TRAVELS AS STATE; RED AND GREEN DO NOT. BLUE's counter carries REAL defender travel toward the
-   attacker as state, on the `1-9` `roll_direction` x distance precedent (velocity written inline in
+9. **AMENDED POST-SMOKE (R-S1/R-S2, the live smoke is the cause): RED AND BLUE TRAVEL AS STATE; GREEN
+   DOES NOT.** As written this AC gave travel to BLUE alone, and the smoke found both travel halves
+   wrong in the same way -- nothing arrived. RED's out-and-back profile and its collision pass-through
+   are new AC 19; BLUE's distance becomes reach-sized (`.tres` only, R-S2) and its slide still stops on
+   the attacker's collider. GREEN keeps the root fixed: its dagger crosses the gap instead of its body.
+   The mechanism below is unchanged and simply applies to two colours. BLUE's counter carries REAL
+   defender travel toward the attacker as state, on the `1-9` `roll_direction` x distance precedent
+   (velocity written inline in
    `_resolve_movement`, `match_state.gd:4046-4048`, from an authored distance over a time): authored
    distance, provisional 1.5 m spread over BLUE's busy span; direction locked at the press from the live
    charge-reach direction (`_charge_reach_dirs[attacker_slot]`, the hero-to-hero bearing pushed on every
    chargeup tick, `match_state.gd:969`, `:4189-4193`; NOT `_lock_directions`, which can legitimately point
    at a minion). The seat is a counter-busy movement branch sibling to the get-up branch (`:4085`), keyed on
-   the window, with no new `ActionState`; RED and GREEN write zero velocity there (root fixed, mesh-only).
+   the window, with no new `ActionState`; GREEN writes zero velocity there (root fixed, mesh-only), and
+   RED writes the out-and-back profile of AC 19.
    The mesh Hips are planar-pinned for the slide via the existing `_pin_hips_planar` route
    (`tools/add_paladin_defense_reactions.gd`, `3-0b/R27`), so the body is carried by state and the clip
    contributes no second displacement. FALLBACK: when no attacker is charging at the press (early press, no
@@ -170,7 +213,12 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
     is spawned by the runner off the projectile board; the dagger is a separate plain `Node3D` visual that
     borrows only its "plain translation, no body" idea. It is launched at the throw clip's release frame and
     freed on arrival or on counter teardown; it never gates or changes an outcome.
-12. The knocked-down attacker plays the existing `knockdown` / `get_up` reactions, chosen by the existing
+12. AMENDED POST-SMOKE (R-S1/R-S4): the attacker's fall is unchanged, and the two numbers around it
+    moved. RED's busy span is 1.0 s (R-S4) against the attacker's 2.5 s knockdown plus 2.0333 s get-up,
+    so the margin smoke item 9 asks about is wider than it was, and RED's collision pass-through
+    (AC 19) is released on the SAME falling edge that ends the presentation -- comfortably before the
+    attacker is back on its feet, so two solid bodies never resume overlapping.
+    The knocked-down attacker plays the existing `knockdown` / `get_up` reactions, chosen by the existing
     stun-flavour classifier (`BalanceTicks.is_knockdown_stun`, `balance_ticks.gd:160`;
     `_stun_flavor_for_slot`, `match_runner.gd`). The attacker's charge clip cuts straight to `knockdown` (the
     `6-6a` CHARGING-victim cut). No "knocked out of the air" clip and no per-counter fall variants
@@ -222,6 +270,48 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
     `git checkout`).
 17. Live smoke, section below, run on `[3, 3]` with two pads; R-D6 (live smoke against a killable slot) is
     re-invoked on this gate.
+
+**Post-smoke** (three new ACs, each a post-smoke ruling pending a `6-6b/R` number at close-out)
+
+18. THE WHOLE BUSY SPAN IS THE COUNTER WINDOW (post-smoke ruling, pending 6-6b/R number; supersedes
+    AC 1's eligibility head). A counter lands iff the defender's window is RUNNING at the attacker's
+    commit tick or on a launch tick before the first honest contact -- there is no separate
+    eligibility span, no authored `counter_eligibility_seconds`, no `counter_eligibility_ticks`, no
+    `busy > eligibility` bound and no elapsed check in `_counter_color_of`. The per-colour `busy > 0`
+    bound stays. "TOO EARLY" now means the defender's counter ENDED before the attack committed --
+    the counter ran out; a press inside a running window is never refused for being early. A press on
+    the judged tick ITSELF is still too late, and still structurally (step 6 resolves after step 3)
+    rather than by a bound. AC 6's feint bait is untouched: a feinted chargeup never reaches a judged
+    tick, so the counter still expires into nothing and still costs the card, the stamina and the busy
+    time. The retired field joins `defense_window_seconds` and `color_counter_stun_seconds` as the
+    close-out orphan set, all three removed in this pass. Pinned: a press on ANY running tick counters
+    and the LAST running tick is the last countering tick; the first tick after expiry counters
+    nothing; both on BOTH slots. The old eligibility boundary tests are REWRITTEN into these, never
+    deleted.
+19. RED REACHES THE ATTACKER AND BOUNCES BACK (post-smoke ruling, pending 6-6b/R number; extends AC 9
+    per colour). RED's counter carries REAL state travel: FORWARD along the press-locked bearing for
+    the jump step, BACKWARD by the SAME authored distance for the backflip step, NET DISPLACEMENT ZERO
+    across the span, both derived INLINE (CONSTRAINT C) from an authored per-colour distance over that
+    step's share of the busy span. The authored distances are provisionally the unblockable's own
+    per-colour REACH (RED 4.0, BLUE 6.0) -- feel knobs, unpinned by value. During RED's counter ONLY,
+    the defender's body IGNORES THE ATTACKER'S BODY COLLIDER for the span (actor/presentation layer;
+    never state, which holds no position by `4-3/R2`), so the forward travel completes and the jump
+    clip's own Hips arc puts the model above the attacker before the backflip returns it. BLUE keeps
+    its collision and still stops on arrival; GREEN travels nowhere. Pinned: RED's forward-then-back
+    profile and its zero net on both slots; RED / BLUE / GREEN travel told apart; the pass-through
+    present during RED and absent during GREEN, in the LIVE test, read off the engine's own exception
+    list.
+20. THE DEFENDER FACES THE ATTACKER FOR THE WHOLE BUSY SPAN (post-smoke ruling, pending 6-6b/R
+    number). Facing is locked at the press to the SAME bearing the travel uses (defender -> attacker,
+    `_counter_travel_dirs`) and written at the movement seat on every busy tick, through the one
+    existing facing field -- the `1-7b` single-yaw-source contract is untouched (`HeroActor.drive()`
+    stays the only `atan2`). It is the FIRST rung of the facing carve-out ladder and weakens none of
+    the others: a countering hero cannot be CHARGING. FALLBACK: nothing charging at the press locks no
+    bearing, and facing is left at its last value. This also fixes GREEN's throw playing in one
+    direction while the dagger flies in another. Pinned: facing equals the bearing on every busy tick
+    (all three colours); facing unchanged when nothing was charging at the press, against the STALE
+    bearing store that made review finding H1; ordinary target-derived steering restored on the first
+    tick after the span.
 
 ## Non-Goals
 
@@ -325,28 +415,45 @@ dev pass, not assumed.
 
 Setup: flip `slot_controller_kinds = Array[int]([3, 3])` in `src/main/main.tscn` (root `Main` block) as a TEXT
 edit with the editor closed; `git diff` after `add` and after the revert; the flip is never committed and
-`project.godot` is diffed after every editor session. Each item names PASS/FAIL.
+`project.godot` is diffed after every editor session.
 
-1. **RED / BLUE / GREEN, matching press in the window**: attacker drops mid-flight, defender takes no
-   damage, no orb appears, `deflect_landed` cue tinted to the colour.
-2. **Early press**: eligibility ends before commit -> card gone, full hit, orb granted.
-3. **Late press**: pressed after first contact -> card gone, full hit.
-4. **Wrong colour** passes through (a later correct launch tick inside the eligibility span still counters).
-5. **Press against an attack that would miss** (attacker flying wide): the attacker is still knocked down
-   (AC 5 consequence), judged as intended.
-6. **Feint bait**: attacker feints (release during chargeup) after the defender presses; defender plays the
-   full counter animation into nothing and is BUSY for it (no attack/roll/block/card).
-7. **Downed defender**: knocked down / deflect-stunned / getting up with a window armed cannot counter.
-8. **Dodge rung** still works with no card; ordinary melee, block and deflect regress clean.
-9. **RED** two-clip sequence reads as jump then backflip inside its busy span (cut clean at the join); note
-   the margin -- RED busy (provisional 1.5 s) against the attacker's 2.5 s knockdown + 2.0333 s get-up lock.
-10. **BLUE** slide travels toward the attacker as state and reads as a slide, not a treadmill or a pop at clip
-    end; **BLUE early press** (no live chargeup) slides on the spot with zero travel (AC 9).
-11. **GREEN** dagger visibly flies defender -> attacker and the attacker is knocked down.
-12. **Adjacent-at-commit and landing tick**: attacker starts a chargeup adjacent to the defender who holds a
-    matching open window -> the counter lands at commit (AC 3 ordering); and a counter on the LANDING tick
-    with no contact ever registered lands rather than the attack whiffing (AC 5).
-13. fps stable through repeated counters.
+Items 2, 3 and 4 are re-worded for R-S6: the eligibility head they were written against no longer
+exists, so what they exercise now is the span's own end.
+
+| # | Item | Result |
+|---|------|--------|
+| 1 | **RED / BLUE / GREEN, matching press inside the span**: attacker drops mid-flight, defender takes no damage, no orb appears, `deflect_landed` cue tinted to the colour | PASS |
+| 2 | **Early press -- the counter RAN OUT** (the busy span ended before the commit): card gone, full hit, orb granted | PASS |
+| 3 | **Late press**: pressed after first contact -> card gone, full hit | PASS |
+| 4 | **Wrong colour** passes through (a later correct launch tick inside the SAME still-running window still counters) | PASS |
+| 5 | **Press against an attack that would miss** (attacker flying wide): the attacker is still knocked down (AC 5 consequence) | PASS |
+| 6 | **Feint bait**: defender plays the full counter animation into nothing and is BUSY for it | PASS |
+| 7 | **Downed defender**: knocked down / deflect-stunned / getting up with a window armed cannot counter | PASS |
+| 8 | **Dodge rung** still works with no card; ordinary melee, block and deflect regress clean | PASS |
+| 8b | **Counter from a HELD BLOCK** | FINDING, not a counter defect: it cannot be pressed at all, because holding L3 for card mode turns L2 off block. A CONTROLLER-layer fact -- routed to the new Tier B controller story with the card-mode toggle, no code here (the state seat is green and pinned: `5-5`'s "a press with a block held drops the block", AC 1) |
+| 9 | **RED** two-clip sequence reads as jump then backflip inside its busy span | PASS mechanically -- and the FEEL finding behind R-S1: it plays on the spot, so the headstomp reaches nothing |
+| 10 | **BLUE** slide travels toward the attacker as state; **BLUE early press** slides on the spot with zero travel | PASS mechanically -- and the FEEL finding behind R-S2: 1.5 m does not reach an attacker that commits from its own reach away |
+| 11 | **GREEN** dagger visibly flies defender -> attacker and the attacker is knocked down | PASS mechanically -- FEEL findings behind R-S5 (the prop is too small to see) and R-S3 (the throw plays in one direction while the dagger flies in another) |
+| 12 | **Adjacent-at-commit and landing tick**: the counter lands at commit (AC 3 ordering); a counter on the LANDING tick with no contact ever registered lands rather than the attack whiffing | PASS |
+| 13 | fps stable through repeated counters | PASS |
+
+**Verdict: every mechanical item PASSED, and the session's output is FIVE FEEL FINDINGS plus one
+window ruling** -- R-S1 (RED "jumps in place and does a backflip instead of homing toward the
+attacker"), R-S2 (BLUE's slide makes "no contact with the character unless they are extremely
+close"), R-S3 (the throw animation "is performed in the direction he is facing while the knife flies
+toward the opponent"), R-S4 (the spans "should last a bit shorter, i.e. be faster"), R-S5 (the dagger
+"is seen extremely poorly -- I would enlarge it") and R-S6 ("as long as you initiate the defence
+before the attack touches you"). All six are fixed in this story under the Post-Smoke Amendment
+above. Two further findings carry OUT of the story: the held-block/card-mode collision (8b) and
+"raise the range for homing of those attacks, and the readability of the attacks themselves", which
+is the already-unlocked retune block.
+
+**Source, and one recording note.** `docs/playtest-log.md` carries the operator's own 6-6b entry,
+written by hand in his words; the rows above are those words mapped onto this section's item list.
+His numbering is his own and does not line up with the numbered items one-for-one past item 8 -- the
+mapping is by CONTENT, not by number, and where his note covers several items at once (his item 1
+carries the RED, BLUE and GREEN animation findings together) the finding is recorded against every
+item it describes.
 
 ## Dev-pass decision (no design content)
 
@@ -565,10 +672,14 @@ left as authored.
 GREEN's dagger release offset is **0.0 s into the busy span** — the measured release frame IS the
 cut's first frame, so the throw reads as instant, which a 0.7 s counter needs.
 
-**Where the feel knobs live** (operator, for the smoke):
-* the three busy spans, the eligibility span and BLUE's travel distance —
+**Where the feel knobs live** (operator; UPDATED by the post-smoke fix pass):
+* the three busy spans, the TWO travel distances and RED's forward fraction --
   `data/balance/balance_config.tres` (a one-line `.tres` edit; NO test edit and NO golden re-baseline,
-  `BC/R3` standing, and the only thing pinned is the direction `busy > eligibility > 0`);
+  `BC/R3` standing, and the only things pinned are `busy > 0` per colour, each distance `> 0`, and
+  RED's fraction strictly inside (0, 1)). The eligibility span is GONE from this list with its field
+  (R-S6). Shipped: RED 1.0 / BLUE 0.8 / GREEN 0.5 s; RED 4.0 m out-and-back, BLUE 6.0 m forward;
+  forward fraction 0.305;
+* the dagger's drawn size -- `DaggerActor.MODEL_SCALE` (presentation constant, R-S5);
 * the per-colour cut ranges, the shared-rate rule and the dagger release fraction —
   `AnimationController._COUNTER_PRESENTATION` / `counter_clip_speed` /
   `COUNTER_DAGGER_RELEASE_FRACTION`;
@@ -621,7 +732,131 @@ falsifies a live read; M11 then went RED. `Invariant.check` is nowhere proven by
 
 ### Live Smoke
 
-NOT RUN — the operator's, on `[3, 3]` with two pads. Its checkboxes are deliberately left unchecked.
+RUN by the operator on `[3, 3]` with two pads; results and findings are in the Live Smoke section
+above, mapped by content from his own 6-6b entry in `docs/playtest-log.md`. That entry is HIS and is
+left exactly as he wrote it -- this pass does not edit the playtest log.
+
+### Post-smoke fix pass (2026-09-20, R-S1..R-S6)
+
+The operator's live smoke passed every mechanical item and produced five FEEL findings plus one
+window ruling (Post-Smoke Amendment and Live Smoke above). All six are fixed here, on the `6-6a`
+post-smoke N1 precedent, because each is the presentation contradicting the state.
+
+| | before (`C:\dev\_66b-smokefix-suite-before-*.txt`) | after (`C:\dev\_66b-smokefix-suite-after-*.txt`) |
+|---|---|---|
+| state harness | **911 tests, 0 failed, 7518 assertions** | **915 / 0 / 7604**, RESULT: PASS |
+| integration | **66/66 PASS** | **66/66 PASS** |
+
+The before-claim run was taken BEFORE any edit and reproduces `a907ebf` exactly. Gates re-measured on
+the after run, NONE moved: golden `d437432f...` (`test_state_matches_golden` `[ok]`, the constant
+untouched, no re-baseline -- the inverse-form argument is unchanged, since the fixture still never
+casts mode 3 and no hero ever enters `CHARGING`, so the new travel, the facing rung and the widened
+window are all unreachable from it), `FORMAT_VERSION` 11, the 206-key set
+(`test_the_player_snapshot_key_set_is_exactly_the_expected_set` `[ok]`; `player_state.gd`'s only edit
+is a comment), `UNHASHED_CROSS_TICK_MEMBERS` 4 (no member added -- the facing lock REUSES
+`_counter_travel_dirs`), observation seams TEN, the `STUNNED` entry-point pin at THREE, F1 re-scanned
+by hand (`func _physics_process` appears exactly once in `src/`, in `match_runner.gd`). Extra runs,
+each named: one interim state-harness run mid-edit (`_66b-smokefix-check1.txt`), one `--check-only`
+parse per edited file, two hand runs of the live test alone while diagnosing MS7/MS8 (below), eleven
+mutation runs, and one state-harness re-run after a WHITESPACE-ONLY repair
+(`_66b-smokefix-check2-continuations.txt`, 915/0/7604 again): two line continuations in the travel
+branch had been folded onto one line by a patch whose backslashes were eaten in transit -- valid
+GDScript that parsed and ran, but not this file's style, so it was repaired and re-measured rather
+than left.
+
+**The mechanism chosen, per ruling.**
+
+* **R-S1 -- RED travels out and back, and the collider is the presentation's problem.** The
+  counter-busy movement branch now derives BOTH legs from `counter_travel_distance_for(colour)` over
+  the ticks that leg actually moves. The divisor is `duration - 1`, not the busy span, and that is
+  what makes the net EXACTLY zero rather than nearly so: movement resolves at step 5 and the press at
+  step 6, so the press tick never travels, and the window empties at step 2 of its last tick, so that
+  one does not either -- the moving ticks are exactly elapsed 1..duration-1. Forward while
+  `elapsed <= forward_ticks`, backward after, each at its own distance-over-its-own-leg speed. At the
+  shipped authoring: 59 moving ticks, 18 out (0.30 s at 13.33 m/s) and 41 back (0.68 s at 5.85 m/s).
+  **The turn-around point is a NEW AUTHORED FIELD** (`counter_travel_forward_fraction_red`, 0.305) and
+  that is a decision worth naming: RED's two legs are the JUMP and the BACKFLIP, which are
+  presentation steps, and `src/state/` cannot read `AnimationController._COUNTER_PRESENTATION` to
+  learn where one ends. The alternatives were a hard-coded state constant (a duplicate of the cut
+  table that would silently disagree with it after a retune) or splitting the span down the middle
+  (which desyncs the turn from the flip by a fifth of the span). An authored fraction beside the
+  distance it splits is the one form the operator can retune in the same `.tres` edit. Provisional
+  0.305 IS the jump's share of the measured cut total (0.8333 of 2.7333), so the body turns on the
+  frame the flip starts; nothing enforces that agreement and the field says so.
+  **THE PASS-THROUGH IS A COLLISION EXCEPTION, not a mask edit** (`HeroActor.set_body_pass_through`,
+  driven from the runner's existing counter edges). Measured reason: the root body masks layer 1,
+  which also carries the arena floor and the `5-0d` edge, so clearing the bit would let a countering
+  hero leave the arena -- `add_collision_exception_with` names the ONE body to ignore, is reversible
+  by name, and is idempotent on both sides. RED only; it is released on the same falling edge that
+  ends the presentation, including the edge a re-cast synthesises (R-P2).
+* **R-S2 -- BLUE is reach-sized, `.tres` only.** 1.5 -> 6.0 m, which is `unblockable_reach_blue`.
+  **Per-colour reach, not one shared number, and the reading is disclosed**: the ruling says "the
+  unblockable's reach (read the per-colour reach fields for the number)" while R-S2 says "the same
+  provisional number as R-S1". Those two readings differ (RED 4.0 vs BLUE 6.0) and this pass took the
+  per-colour one, because reach is exactly how far away an attacker OF THAT COLOUR stands when it
+  commits -- a BLUE counter authored at RED's 4.0 would still fall 2 m short, which is the finding
+  R-S2 exists to fix. Both are feel knobs, unpinned by value, so a one-line `.tres` edit reverses it.
+* **R-S3 -- one bearing feeds facing and travel.** A new FIRST rung on the facing ladder, gated on
+  `defense_window.is_running` and a non-zero `_counter_travel_dirs[slot]`. No new member and no new
+  atan2: the bearing runs defender -> attacker and facing runs hero -> target, which here is the same
+  direction, so it is used UNNEGATED (unlike the CHARGING aim below it). The zero-guard IS the ruled
+  fallback -- nothing charging at the press locked `Vector2.ZERO`, and facing is then left alone.
+  Sitting first weakens no carve-out: a countering hero cannot be CHARGING (the busy gate refuses
+  initiating one, and the cast seat refuses casting while CHARGING).
+* **R-S4 -- the spans are cut and the clips re-fit themselves.** `.tres` only, no presentation edit,
+  which is AC 2's requirement working. Derived playback rates at the new spans (cut totals unchanged):
+  RED 2.7333 s of cut into 1.0 s = **2.733**; BLUE 1.4134 into 0.8 = **1.767**; GREEN 0.6798 into
+  0.5 = **1.360** (no longer floored at native, so GREEN's hold at the last cut frame is gone).
+* **R-S5 -- `DaggerActor.MODEL_SCALE = 2.5`**, applied to the instanced model in `_ready`. The flight
+  ORIGIN is untouched (`match_runner.DAGGER_THROW_HEIGHT`), as the ruling says.
+* **R-S6 -- the window is the whole span, and three orphans go with it.** `_counter_color_of` lost its
+  elapsed check; `counter_eligibility_seconds` / `counter_eligibility_ticks` are removed, and with
+  them `defense_window_seconds` / `defense_window_ticks` and `color_counter_stun_seconds` /
+  `color_counter_stun_ticks` -- the close-out orphan set, retired together as the ruling groups them.
+  Consequences carried rather than absorbed: the authoring audit's `busy > eligibility` bound is gone
+  (replaced by `busy > 0` per colour); the `defense_window_seconds > chargeup + longest launch`
+  relational bound is gone with its field and NOTHING replaces it, because "still open when the attack
+  lands" stopped being a property the defender pre-arms; and the ladder gradient the `5-6` audit pins
+  is now `knockdown > deflect`, the middle rung having been replaced by a knockdown at `6-6b` AC 4.
+  `test_defense_reactions_live.gd` needed the one edit that follows -- its "ordinary stun" is now the
+  deflect stun, which is what `is_knockdown_stun` still classifies as ordinary.
+
+**Blast radius beyond the ruled seats**, disclosed rather than absorbed: `test_balance_authoring.gd`
+(three audits), `test_data_resources.gd` (the audited-field list, both halves), `test_balance_config.gd`
+(the conversion fixture), `test_determinism.gd` (comments naming the retired fields), the three
+`test_unblockable_*` fixtures (`_config()` lines and the constants they fed), and
+`test_defense_reactions_live.gd`. The eligibility boundary tests were REWRITTEN into the span's own
+boundary, never deleted, as the brief requires.
+
+**Mutation table** (driver `<scratchpad>/smokemut.py`; backups OUTSIDE the repo in
+`C:\dev\_66b-smokefix-mut\`, anchor count asserted `== 1`, restore by COPY-BACK with the restored
+SHA-256 verified EQUAL, never `git checkout`).
+
+| # | mutation (the fix reverted) | went RED |
+|---|---|---|
+| MS1 | drop RED's backward leg (always forward) | 1: `test_reds_counter_travels_out_and_back_to_exactly_where_it_started` |
+| MS2 | split the span down the middle instead of at the authored fraction | 2, incl. `test_red_and_blue_travel_toward_the_attacker_and_green_does_not` |
+| MS3 | remove the counter facing rung | 2: the every-tick facing pin and the resume-after-expiry pin |
+| MS4 | drop the facing rung's zero-guard (lock even with no bearing) | 2, incl. `test_the_counter_leaves_facing_alone_when_nothing_was_charging_at_the_press` |
+| MS5 | restore an eligibility head in `_counter_color_of` | 2: `test_the_whole_busy_span_counters_and_its_end_is_exact_on_both_slots`, and `test_unblockable_hold.gd`'s countering fixture |
+| MS6 | give GREEN a travel distance | 1: `test_red_and_blue_travel_toward_the_attacker_and_green_does_not` |
+| MS7 | never arm RED's pass-through | `test_counter_reactions_live.gd` FAIL (the span row) |
+| MS8 | `MODEL_SCALE := 1.0` | `test_counter_reactions_live.gd` FAIL (the enlargement row) |
+| MS9 | drop the `model.scale` assignment | `test_counter_reactions_live.gd` FAIL (the wiring row) |
+
+**MS7 AND MS8 FIRST CAME BACK GREEN, and the cause is recorded rather than quietly fixed.** It was not
+a vacuous test -- it was NO test: the first edit that was supposed to add the live assertions matched
+nothing (the phase blocks are tab-indented inside a `match` arm and the patch anchors were written
+against a differently-indented copy), the write succeeded silently, and the suite passed because the
+claims had never been added. The tell was a debug print inside the same block that also never fired.
+The edits were re-applied with every anchor asserting `count == 1` -- which is now the driver's own
+rule too -- and both mutations then went RED. Nothing about the production code changed as a result;
+what changed is that the claims exist. `Invariant.check` is nowhere proven by triggering it.
+
+**`src/state/` is untouched by anything presentation-only**: the pass-through and the dagger scale
+live in `hero.gd`, `dagger_actor.gd` and the runner, and state still never learns a position
+(`4-3/R2`).
+
 
 ## File List
 
@@ -801,4 +1036,5 @@ swing, with `attack` asserted as the setup precondition; MF4 then went RED.
 | 2026-09-20 | Readiness gate round 2 READY; promoted to ready-for-dev; AC 3 ordering clause made explicit. |
 | 2026-09-20 | Dev pass complete (Opus 5). All ACs implemented; suite 897/0/7339 + 65 -> 909/0/7497 + 66; golden `d437432f` MEASURED UNMOVED both directions, no re-baseline; FORMAT_VERSION 11, 206-key set and `UNHASHED_CROSS_TICK_MEMBERS` 4 all unmoved; library 23 -> 27 with zero `project.godot` collateral; 14 mutations measured RED (M11 first came back vacuous and its test was corrected). DEVIATION: the `STUNNED` entry-point pin stays at THREE, not 3 -> 4 -- the retired landing rung took its own site with it, so the count holds and only the argument moves. Status -> review. |
 | 2026-09-20 | Code review (`gds-code-review`, `PROC/R2` three layers) over `0ea7183..9d30ee8`: APPROVE WITH FINDINGS. Two state-layer defects fixed in `d202265` (H1 stale charge-reach bearing broke AC 9's zero-travel fallback and two fixtures were passing off the stale store; H2 the counter-busy movement branch preempted `ATTACKING` and ate the swing's lunge against AC 1), each mutation-proven; suite 909/0/7497 + 66 -> 911/0/7518 + 66, golden `d437432f` UNMOVED, no gate moved. Six presentation/seat findings and two docs amendments carried to the operator (Code Review Record above). |
+| 2026-09-20 | Post-smoke fix pass (R-S1..R-S6) over the operator's live smoke, which passed 13/13 mechanically and produced five feel findings plus one window ruling. RED gets out-and-back state travel with a RED-only collision pass-through (new AC 19), the defender faces the attacker for the whole busy span (new AC 20), and THE WHOLE BUSY SPAN IS THE COUNTER WINDOW (new AC 18) -- `counter_eligibility_seconds`/`_ticks` removed, and `defense_window_seconds` and `color_counter_stun_seconds` retired with it as the close-out orphan set. `.tres` knobs: busy spans 1.0 / 0.8 / 0.5 s, travel 4.0 (RED) / 6.0 (BLUE) m, forward fraction 0.305; dagger drawn at x2.5. AC 1/3/5/9/12 amended with the smoke named as the cause. Suite 911/0/7518 + 66 -> 915/0/7604 + 66; golden `d437432f` UNMOVED and no gate moved; nine mutations RED (MS7/MS8 first came back green because the live assertions had never been applied -- recorded). Status stays `review`. |
 | 2026-09-20 | Post-review fix pass (`d9f4512`, `fix(presentation)`): operator rulings R-P1/P3 (the counter owns the body for the whole busy span -- the span survives transitions, an action borrows the body, IDLE resumes at the elapsed point, no `hit_react` over a counter), R-P2 (a re-cast with no falling edge is detected as a new press) and R-P4 (the poll reads the `defense` key's three fields directly). R-P6 MEASURED to need no code: the get-up lock does not refuse lock/retarget either, so `src/state/` is untouched and the `fix(state)` commit was skipped. Suite 911/0/7518 + 66 before and after; golden `d437432f` UNMOVED and no gate moved; four mutations RED. Five close-out docs items recorded. Status stays `review`. |
