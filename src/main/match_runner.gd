@@ -161,6 +161,19 @@ var _unit_actors: Array[Array] = [[], []]
 ## `_unit_actors`.
 var _projectile_actors: Array[Array] = [[], []]
 
+## Story 6-6b (AC 10/AC 11): the counter presentation's runner-local bookkeeping -- whether each slot's
+## `defense` snapshot key was running at the END of the previous tick (so a rising and a falling edge
+## can be told apart), and each slot's in-flight dagger prop or null. Presentation only: neither
+## reaches `to_snapshot()`, and a replay reproduces both by reproducing the key they are read from.
+var _counter_armed: Array[bool] = [false, false]
+var _counter_daggers: Array = [null, null]
+
+## Story 6-6b (AC 11): how high off the hero root the thrown dagger flies, in metres -- roughly chest
+## height on this rig, so it reads as thrown rather than slid along the floor. A presentation constant
+## beside `LOCK_MARK_TOTEM_LIFT`, never a `BalanceConfig` field: nothing in state knows this prop
+## exists.
+const DAGGER_THROW_HEIGHT := 1.2
+
 ## Story 4-3e: WHERE A SUMMONED UNIT STANDS. Actor-owned position (`4-1/R12`), chosen by the
 ## runner and computed FRESH AT CAST TIME from the summoning hero's LIVE position: a spot BEHIND
 ## that hero, on the side away from the opponent (AC 1). This REPLACES the frozen per-slot row
@@ -863,6 +876,86 @@ func _push_charge_progress() -> void:
 					float(chargeup_ticks) / float(chargeup_ticks + launch_ticks),
 					AnimationController.charge_hold_end_for(player.charge_color))
 		hero.animation_controller.on_charge_progress(player.charge_color, progress)
+
+
+## Story 6-6b (AC 10/AC 11/AC 14): THE COUNTER PRESENTATION POLL -- the same seat and shape as
+## `_push_charge_progress` directly above: a POLL right after `advance()`, plain values only, no
+## signal, no state handle held, no new `connect_*`, so the observation-seam family STAYS AT TEN.
+##
+## WHAT IT READS IS THE `defense` SNAPSHOT KEY AND NOTHING ELSE (AC 10). `[colour, remaining_ticks]`
+## while a counter window runs, `[-1, 0]` at rest -- so a RISING edge of that key is the PRESS and a
+## FALLING edge is the end of the busy span. That is the whole legibility channel for the press half:
+## the answered colour rides the existing `deflect_landed` seam, and the attacker's fall rides
+## `action_state_changed` plus the flavour read (AC 14). Nothing new was needed and nothing new was
+## added.
+##
+## THE EDGE IS TRACKED HERE, in a two-element runner-local latch, rather than inferred from the
+## controller's own state: the controller is a pure consumer and must not have to remember whether it
+## was told. `_counter_armed` is presentation bookkeeping -- it never reaches `to_snapshot()` and a
+## replay reproduces it by reproducing the key.
+##
+## GREEN SPAWNS THE DAGGER (AC 11) at the throw clip's measured release offset into the span, flown
+## from the DEFENDER to the ATTACKER over what is left of it. It is freed on arrival or on the
+## falling edge, whichever comes first, so a counter torn down early leaves nothing behind.
+func _push_counter_presentation() -> void:
+	if _match_state.balance_ticks == null:
+		return
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		var defense: Array = player.to_snapshot().get(
+				"defense", [PlayerState.NO_TELEGRAPH_COLOR, 0])
+		var color := int(defense[0])
+		var running := color != PlayerState.NO_TELEGRAPH_COLOR
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		if running and not _counter_armed[slot]:
+			var busy_seconds := float(
+					_match_state.balance_ticks.counter_busy_ticks_for(color)) / TimingWindow.TICK_HZ
+			if is_instance_valid(hero):
+				hero.animation_controller.on_counter_started(color, busy_seconds)
+			_spawn_counter_dagger(slot, color, busy_seconds)
+		elif not running and _counter_armed[slot]:
+			if is_instance_valid(hero):
+				hero.animation_controller.on_counter_ended()
+			_free_counter_dagger(slot)
+		_counter_armed[slot] = running
+		_advance_counter_dagger(slot)
+
+
+## Story 6-6b (AC 11): the dagger's launch. GREEN only -- the other two colours throw nothing, which
+## is a property of this gate rather than of an empty model.
+##
+## THE FLIGHT IS DEFENDER -> ATTACKER, read from the two hero ACTORS' own positions, which is where
+## every other presentation-side position in this file comes from (`4-2/R14`: no position ever travels
+## inward). Lifted to roughly chest height so it reads as thrown rather than slid along the floor.
+func _spawn_counter_dagger(slot: int, color: int, busy_seconds: float) -> void:
+	if color != Enums.CardColor.GREEN:
+		return
+	var thrower: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	var target: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	if not is_instance_valid(thrower) or not is_instance_valid(target):
+		return
+	_free_counter_dagger(slot)
+	var dagger := DaggerActor.new()
+	add_child(dagger)
+	_counter_daggers[slot] = dagger
+	var lift := Vector3(0.0, DAGGER_THROW_HEIGHT, 0.0)
+	var flight := busy_seconds - AnimationController.counter_release_seconds(color, busy_seconds)
+	dagger.launch(thrower.global_position + lift, target.global_position + lift, flight)
+
+
+func _advance_counter_dagger(slot: int) -> void:
+	var dagger: DaggerActor = _counter_daggers[slot]
+	if not is_instance_valid(dagger):
+		return
+	if dagger.advance(1.0 / TimingWindow.TICK_HZ):
+		_free_counter_dagger(slot)
+
+
+func _free_counter_dagger(slot: int) -> void:
+	var dagger: DaggerActor = _counter_daggers[slot]
+	if is_instance_valid(dagger):
+		dagger.queue_free()
+	_counter_daggers[slot] = null
 
 
 ## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
@@ -2760,6 +2853,12 @@ func _physics_process(delta: float) -> void:
 		# 3a-bis. Story 6-1b: the charge-progress poll, same seat and shape as 3b directly above --
 		#     a POLL right after advance(), no signal, no state handle, no new `connect_*` (AC 7).
 		_push_charge_progress()
+		# 3a-ter. Story 6-6b (AC 10/AC 11): the COUNTER presentation poll, the same seat and shape
+		#     as 3a-bis directly above -- a read of the `defense` snapshot key right after advance(),
+		#     no signal, no state handle, no new `connect_*`, so the observation-seam family stays at
+		#     TEN (AC 14). It owns the dagger prop's whole life as well: spawned on the rising edge of
+		#     a GREEN counter, advanced here, freed on arrival or on the falling edge.
+		_push_counter_presentation()
 		# 3c. Story 4-1 (AC 7): SPAWN one grey-box actor per unit record the board has gained. Read
 		#     off the state-owned COUNT right after advance(), the step-3b poll directly above in
 		#     shape and seat: no signal, no state handle held, no new `connect_*` -- so the

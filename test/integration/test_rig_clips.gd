@@ -37,6 +37,13 @@ const EXPECTED_LOOP := {
 	# looped; `hit_react`/`block_impact`/`get_up` are single reactions.
 	&"hit_react": false, &"stunned": false, &"knockdown": false, &"get_up": false,
 	&"block_impact": false,
+	# Story 6-6b (AC 13): TWENTY-THREE -> TWENTY-SEVEN. The four colour-counter clips are all
+	# ONE-SHOTS: each is a single reaction played once inside its colour's authored BUSY span (AC 2),
+	# cut and speed-mapped by `AnimationController._COUNTER_PRESENTATION` rather than looped. RED's
+	# two (`counter_jump` then `counter_backflip`) are ONE SEQUENCE and still two one-shots -- the
+	# join is a presentation cut, not a loop.
+	&"counter_jump": false, &"counter_backflip": false, &"counter_slide": false,
+	&"counter_throw": false,
 }
 
 var _failures: Array[String] = []

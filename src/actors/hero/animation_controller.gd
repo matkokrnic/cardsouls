@@ -255,6 +255,76 @@ const _CHARGE_STRIKE_FRAME_SECONDS := {
 ##   GREEN (jump_attack): held ON the airborne apex -- `hold_fraction` is the corrected apex
 ##                        timestamp (1.2375s) as a fraction of the corrected strike frame
 ##                        (2.1542s): 1.2375 / 2.1542 = 0.5744.
+## Story 6-6b (AC 2/AC 10/AC 13): THE COLOUR COUNTER'S PRESENTATION, one entry per colour -- the
+## ordered list of clips a counter plays and the CUT RANGE of each, in the clip's own native seconds.
+##
+## THE PRESENTATION IS MAPPED INTO THE BUSY SPAN, NEVER THE REVERSE (AC 2, the `6-1b` precedent).
+## Nothing here names a duration: the playback RATE is derived at the press from the total cut length
+## against the colour's authored busy span (`counter_clip_speed`), so retuning `counter_busy_seconds_*`
+## in the `.tres` re-fits the clip with no edit here, and retuning a cut here re-fits the rate with no
+## edit there. That is what makes these FEEL KNOBS rather than a second source of truth for timing,
+## and it is why NO TEST PINS THE VALUES BELOW -- only the direction bounds on the authored spans are
+## pinned (test_balance_authoring.gd).
+##
+## THE CUTS ARE MEASURED, NOT GUESSED (`tools/measure_counter_strike_frames.gd`, this pass; the `6-1b`
+## impact criterion -- the last big reach maximum that follows the swing's own peak speed, never the
+## global max reach). Raw clip lengths and the measured beats:
+##   RED   `counter_jump` 0.8333 s, a complete in-place jump (Hips apex 1.531 at t=0.406); then
+##         `counter_backflip` 2.1667 s, whose flip completes at t~1.90 and whose last 0.27 s is a
+##         static hold -- so the backflip is cut at 1.90 and the pair spans 2.7333 s of clip.
+##   BLUE  `counter_slide` 1.7667 s. The Hips drop from standing (0.892) to the slide floor (0.218)
+##         between t=0.265 and t=0.574; before that the body is still running. The cut starts at
+##         0.3533, where the drop is committed (Hips 0.500) and no run stride is left, and runs to the
+##         clip's end so the stand-up completes the counter. The clip's 4.31 m of planar travel is
+##         PINNED OUT at assembly (`tools/add_paladin_counter_clips.gd`) because BLUE's body is carried
+##         by STATE (AC 9) and the clip must not move it a second time.
+##   GREEN `counter_throw` 1.8333 s. The hand's reach peaks at 0.9679 at t=0.6646 (36.25 % of the
+##         clip) and then retracts at the clip's own peak speed -- that peak IS the RELEASE, and it
+##         confirms the operator's ~36 % starting point by measurement. The cut runs from there to
+##         0.7333 of the clip (1.3444 s), the operator's ~74 %.
+const _COUNTER_PRESENTATION := {
+	Enums.CardColor.RED: [
+		{"clip": &"counter_jump", "from": 0.0, "to": 0.8333},
+		{"clip": &"counter_backflip", "from": 0.0, "to": 1.9000},
+	],
+	Enums.CardColor.BLUE: [
+		{"clip": &"counter_slide", "from": 0.3533, "to": 1.7667},
+	],
+	Enums.CardColor.GREEN: [
+		{"clip": &"counter_throw", "from": 0.6646, "to": 1.3444},
+	],
+}
+
+## Story 6-6b (AC 11): how far into GREEN's BUSY SPAN the dagger leaves the hand, as a fraction of it.
+## ZERO because the measured release frame IS the cut's first frame (see above): the throw reads as
+## instant, which is what a 0.7 s counter needs. A feel knob like the cuts, read by the RUNNER (which
+## owns the prop) through `counter_release_fraction` below, so the measurement lives in one file.
+const COUNTER_DAGGER_RELEASE_FRACTION := 0.0
+
+
+## Story 6-6b (AC 2/AC 10): the playback rate for a counter whose cut ranges total `clip_seconds`
+## against a busy span of `busy_seconds` -- the rule `_COUNTER_PRESENTATION` documents, as a pure
+## function a test can pin directly.
+##
+## NEVER SLOWER THAN NATIVE, `held_clip_speed`'s own rule (6-6a) applied to a second held
+## presentation and for its reason: a stretched counter reads as slow motion. A cut SHORTER than the
+## busy span therefore plays at 1.0 and holds its last cut frame for the remainder -- which is what
+## GREEN does at the shipped authoring (0.6798 s of clip against a 0.7 s span).
+static func counter_clip_speed(clip_seconds: float, busy_seconds: float) -> float:
+	if busy_seconds <= 0.0 or clip_seconds <= busy_seconds:
+		return 1.0
+	return clip_seconds / busy_seconds
+
+
+## Story 6-6b (AC 11): the dagger's release offset in SECONDS into GREEN's busy span, exposed so the
+## runner can schedule the prop without learning the cut table. Zero for every colour but GREEN,
+## which is the only one that throws anything.
+static func counter_release_seconds(color: int, busy_seconds: float) -> float:
+	if color != Enums.CardColor.GREEN:
+		return 0.0
+	return busy_seconds * COUNTER_DAGGER_RELEASE_FRACTION
+
+
 const _CHARGE_HOLD_KNOBS := {
 	Enums.CardColor.RED: {"hold_start": 0.3, "hold_end": 0.45, "hold_fraction": 0.15},
 	Enums.CardColor.BLUE: {"hold_start": 0.40, "hold_end": 0.55, "hold_fraction": 0.17},
@@ -365,6 +435,17 @@ var _state: HeroState.ActionState = HeroState.ActionState.IDLE
 ## Cleared by every transition and by `on_locomotion` once the clip has stopped playing.
 var _one_shot: StringName = &""
 
+## Story 6-6b (AC 10): the counter presentation currently running -- the colour's step list from
+## `_COUNTER_PRESENTATION`, which step of it is playing, and the one derived rate every step shares.
+## `_counter_index < 0` means no counter is playing. Presentation-local, never a state field: the
+## state layer owns the window and this owns the clips.
+##
+## ONE RATE FOR THE WHOLE SEQUENCE is what makes RED's two-clip join read as one move rather than two
+## clips at two tempos: the rate is derived once, from the TOTAL cut length against the busy span.
+var _counter_steps: Array = []
+var _counter_index := -1
+var _counter_speed := 1.0
+
 ## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
 ## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
 var _has_prev_facing := false
@@ -422,6 +503,10 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 		stun_seconds: float = 0.0, get_up_armed: bool = false) -> void:
 	_state = current
 	_one_shot = &""
+	# Story 6-6b (AC 10): a real transition WINS over a counter in flight, the `_one_shot` line
+	# directly above's own rule. In practice the transition that can arrive mid-counter is a
+	# knockdown or a death, and either must take the body immediately rather than wait for a cut.
+	_counter_index = -1
 	if current == HeroState.ActionState.STUNNED:
 		_play_stun(stun_flavor, stun_seconds)
 		return
@@ -535,6 +620,15 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 	var turn := _track_facing(facing)
 	if _state != HeroState.ActionState.IDLE:
 		return
+	# Story 6-6b (AC 10): THE COUNTER OWNS THE BODY for its whole busy span, and it rides THIS per-tick
+	# push rather than a clock of its own -- F1 is untouched and no new seam is added (AC 14). The push
+	# is what advances the cut: `AnimationPlayer` has no "play this sub-range" primitive, so the END of
+	# a cut is enforced by checking the playhead each tick, which is exactly the tick rate this
+	# controller already runs at. A countering hero is IDLE (the counter owns no `ActionState`, AC 2),
+	# so this line is reached on every tick of the span.
+	if _counter_index >= 0:
+		_advance_counter()
+		return
 	# Story 6-6a (AC 2): THE LOCOMOTION YIELD. A `hit_react`/`get_up` still playing keeps the body; the
 	# idempotent `_play()` below would otherwise crossfade it away on the very next tick.
 	if _one_shot != &"":
@@ -548,6 +642,73 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 		return
 	var clip := _locomotion_clip(velocity, facing, walk_speed, run_speed)
 	_play(clip, _playback_speed(clip, planar_speed))
+
+
+## Story 6-6b (AC 10): THE COUNTER STARTS ON THE PRESS, not on the resolution -- pushed by the runner
+## on the RISING EDGE of the `defense` snapshot key (`match_runner._push_counter_presentation`), the
+## `on_charge_progress` call site's precedent exactly: a plain per-tick read of an EXISTING public
+## fact, no signal, no state handle, no new `connect_*` (AC 14).
+##
+## SO A PAID FEINT BAITS A FULL COUNTER ANIMATION INTO NOTHING, which is the whole point of keying on
+## the press: nothing here waits to learn whether the counter landed, and nothing here is ever told.
+##
+## `busy_seconds` IS THE COLOUR'S AUTHORED SPAN, converted from ticks by the runner (the
+## `_stun_seconds_for_slot` shape). It is used for ONE thing -- deriving the shared playback rate --
+## so this controller still reads no balance and holds no window handle (CONSTRAINT C).
+##
+## AN UNKNOWN COLOUR PLAYS NOTHING and leaves the pose alone, `_play_stun`'s degrade verbatim. The
+## sentinel reaches here only from a degraded cast, which the state layer already gives no window and
+## therefore no rising edge at all.
+func on_counter_started(color: int, busy_seconds: float) -> void:
+	var steps: Array = _COUNTER_PRESENTATION.get(color, [])
+	if steps.is_empty():
+		return
+	var total := 0.0
+	for step: Dictionary in steps:
+		total += float(step["to"]) - float(step["from"])
+	_counter_steps = steps
+	_counter_speed = counter_clip_speed(total, busy_seconds)
+	_counter_index = 0
+	_play_counter_step()
+
+
+## Story 6-6b (AC 10): pushed on the FALLING edge of the same key -- the busy span is over, so the
+## body goes back to the locomotion push. Without it the last cut frame would be held forever, since
+## a cut END is a pause rather than a finished clip and `on_locomotion`'s `_one_shot` yield reads
+## "still playing".
+func on_counter_ended() -> void:
+	_counter_index = -1
+	_one_shot = &""
+
+
+## Plays the current step from its cut START at the sequence's shared rate. `_restart` seeks to 0
+## first (its own documented reason), so the seek to the cut start has to follow it.
+func _play_counter_step() -> void:
+	var step: Dictionary = _counter_steps[_counter_index]
+	_restart(step["clip"], _counter_speed)
+	animation_player.seek(float(step["from"]), true)
+	_one_shot = step["clip"]
+
+
+## Story 6-6b (AC 10): the per-tick cut enforcement. Past the current step's cut END, move to the next
+## step; past the LAST one, PAUSE on that frame and hold it for whatever is left of the busy span
+## (`counter_clip_speed` never slows a clip below native, so a short cut genuinely has time left to
+## hold -- the `_play_stun` hold rule, applied to a second held presentation).
+func _advance_counter() -> void:
+	var step: Dictionary = _counter_steps[_counter_index]
+	# A cut END is reached EITHER by the playhead passing it OR by the clip running out on its own --
+	# and the second case has to be handled explicitly, because a LOOP_NONE animation that finishes
+	# clears `current_animation` (it survives only on `assigned_animation`). A step whose cut END is
+	# the clip's own length, which RED's `counter_jump` is, reaches the join that way and no other.
+	var ended: bool = animation_player.current_animation != step["clip"] \
+			or animation_player.current_animation_position >= float(step["to"])
+	if not ended:
+		return
+	if _counter_index + 1 < _counter_steps.size():
+		_counter_index += 1
+		_play_counter_step()
+		return
+	animation_player.pause()
 
 
 ## Story 6-7b (AC 6): advances the facing memory and returns the HELD turn sign -- +1 / -1 once the
