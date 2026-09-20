@@ -47,6 +47,33 @@ const SWORD_BONE := &"mixamorig_Sword_joint"
 var _sword_bone: int = -1
 
 
+## Story 6-6b POST-SMOKE (R-S1): PASS THROUGH ANOTHER HERO'S BODY, or stop doing so. Set for the
+## length of RED's counter and cleared at its end, both by the runner off the same edge that starts
+## and ends the counter presentation.
+##
+## WHY IT IS HERE AND NOT IN STATE: the state layer knows nothing about position, bodies or
+## colliders (`4-3/R2`) -- it writes a velocity and `move_and_slide()` decides what that runs into.
+## RED's counter travels the attacker's whole reach FORWARD and back again, so without this the
+## slide stops dead on the attacker's collision box a metre short and the jump lands beside it
+## rather than on it: the body would contradict what the state layer actually did, which is the rule
+## this fix exists to restore. BLUE keeps its collision, ruled: its slide is SUPPOSED to arrive and
+## stop (R-S2).
+##
+## A COLLISION EXCEPTION AND NOT A MASK EDIT, a dev-pass choice with a measured reason: the root
+## body masks layer 1, which also carries the arena floor and the `5-0d` edge, so clearing the bit
+## would let a countering hero leave the arena. `add_collision_exception_with` names the ONE body to
+## ignore and nothing else, which is exactly what the ruling asks for and is reversible by name.
+## Idempotent on both sides -- Godot's exception list is a set, and removing an absent entry is a
+## no-op -- so the runner can push the same state on any tick without bookkeeping.
+func set_body_pass_through(other: PhysicsBody3D, enabled: bool) -> void:
+	if not is_instance_valid(other):
+		return
+	if enabled:
+		add_collision_exception_with(other)
+	else:
+		remove_collision_exception_with(other)
+
+
 func _ready() -> void:
 	_sword_bone = skeleton.find_bone(SWORD_BONE)
 	if _sword_bone < 0:

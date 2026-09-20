@@ -36,6 +36,13 @@ extends SceneTree
 ##   8. RE-CAST WITH NO FALLING EDGE -- a second press while the key still reads running is a NEW
 ##                press: the old presentation ends (its dagger freed) and the new colour starts.
 ##
+## POST-SMOKE FIX PASS (R-S1/R-S5) adds the two presentation facts the operator's live smoke asked
+## for, both pinned where the counter they belong to already runs:
+##   * RED PASSES THROUGH THE ATTACKER'S BODY for its span and gets its collision back at the end
+##     (phase 3), so the out-and-back travel the state layer writes actually happens instead of
+##     stopping on a collision box -- and GREEN does NOT (phase 1), because the ruling is RED-only;
+##   * THE DAGGER IS DRAWN AT `DaggerActor.MODEL_SCALE` and that scale is an ENLARGEMENT (phase 1).
+##
 ## Run: godot --headless --path . --script res://test/integration/test_counter_reactions_live.gd
 
 const CHECK_DELAY := 3
@@ -53,6 +60,9 @@ var _done_frame := -1
 var _failures: Array[String] = []
 var _saw_jump := false
 var _saw_backflip := false
+## Story 6-6b POST-SMOKE (R-S1): whether RED's span was ever seen passing through the attacker's
+## body. Sampled every frame of the span rather than once, for `_saw_jump`'s reason.
+var _saw_pass_through := false
 
 
 func _initialize() -> void:
@@ -78,6 +88,13 @@ func _arm_counter(color: int) -> void:
 
 func _dagger() -> Node:
 	return _runner._counter_daggers[1]
+
+
+## Story 6-6b POST-SMOKE (R-S1): does the counterer's body currently IGNORE the attacker's collider?
+## Read off the engine's own exception list, which is what `move_and_slide()` consults -- never off
+## the runner's bookkeeping, so the test cannot pass on an intention the physics never received.
+func _passes_through() -> bool:
+	return _p2.get_collision_exceptions().has(_p1)
 
 
 func _physics_process(_delta: float) -> bool:
@@ -120,6 +137,22 @@ func _physics_process(_delta: float) -> bool:
 					_failures.append("1. ...launched to a real position, not the origin")
 				if _runner._counter_daggers[0] != null:
 					_failures.append("1. ...and only the counterer's slot gets one")
+				# R-S5: the prop is DRAWN BIGGER than the model authors it. Two claims, because one
+				# alone is vacuous: the instanced model carries the constant (the wiring), and the
+				# constant is an ENLARGEMENT (the ruling -- a dagger at authored scale is what the
+				# smoke could not see cross the gap).
+				if _dagger() != null:
+					var model: Node3D = _dagger().get_child(0)
+					if not is_equal_approx(model.scale.x, DaggerActor.MODEL_SCALE):
+						_failures.append(("1. ...the model carries MODEL_SCALE (R-S5): got %.3f, "
+							+ "want %.3f") % [model.scale.x, DaggerActor.MODEL_SCALE])
+					if DaggerActor.MODEL_SCALE <= 1.0:
+						_failures.append("1. ...and MODEL_SCALE is an ENLARGEMENT (R-S5): got %.3f"
+							% DaggerActor.MODEL_SCALE)
+				# R-S1: GREEN keeps its collision -- only RED steps through the attacker.
+				if _passes_through():
+					_failures.append("1. ...and a GREEN counter does NOT pass through the attacker's "
+						+ "body (R-S1 is RED only)")
 				_next("expire_wait")
 		"expire_wait":
 			if not _state.p2.defense_window.is_running:
@@ -138,6 +171,10 @@ func _physics_process(_delta: float) -> bool:
 				_arm_counter(Enums.CardColor.RED)
 				_next("red_watch")
 		"red_watch":
+			# R-S1: the pass-through is armed for the WHOLE span, so sampling it every frame here
+			# samples it while the counter is actually travelling.
+			if _passes_through():
+				_saw_pass_through = true
 			# RED is a SEQUENCE: watch every frame of the span rather than sampling one, because the
 			# join is the claim and a single sample could land on either side of it.
 			if _clip(_p2) == &"counter_jump":
@@ -161,6 +198,12 @@ func _physics_process(_delta: float) -> bool:
 					_failures.append("3. ...then counter_backflip after the join (AC 10)")
 				if _runner._counter_daggers[1] != null:
 					_failures.append("3. ...and a non-GREEN counter throws NO dagger (AC 11)")
+				if not _saw_pass_through:
+					_failures.append("3. ...and RED's counter passes THROUGH the attacker's body for "
+						+ "the span, so the travel completes (R-S1)")
+				if _passes_through():
+					_failures.append("3. ...and gets its collision back on the falling edge -- the "
+						+ "pass-through is the SPAN's, not the match's (R-S1)")
 				_arm_counter(Enums.CardColor.GREEN)
 				_next("interrupt")
 		"interrupt":

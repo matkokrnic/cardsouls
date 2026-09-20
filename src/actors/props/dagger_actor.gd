@@ -24,6 +24,14 @@ extends Node3D
 
 const MODEL := preload("res://assets/props/dagger/dagger.fbx")
 
+## Story 6-6b POST-SMOKE (R-S5): how much bigger than authored the thrown dagger is drawn. At the
+## model's own scale the smoke could not SEE it cross the gap -- a correctly flying prop that reads
+## as nothing is the same defect as no prop at all, and "what you see must be what happens" is what
+## this number restores. PRESENTATION ONLY, on the node's own transform: the dagger has no hitbox,
+## no board entry and no `push_contact` (AC 11), so a scale cannot reach an outcome. Its flight
+## ORIGIN is unchanged (the runner's throwing-hand height), which R-S5 keeps as it was.
+const MODEL_SCALE := 2.5
+
 ## Metres per second along the straight line to the target, set at launch from the distance and the
 ## time left in the busy span, so the dagger ARRIVES with the counter rather than at a fixed speed.
 var _speed := 0.0
@@ -32,7 +40,9 @@ var _arrived := false
 
 
 func _ready() -> void:
-	add_child(MODEL.instantiate())
+	var model := MODEL.instantiate()
+	model.scale = Vector3.ONE * MODEL_SCALE
+	add_child(model)
 
 
 ## Aim this dagger at `target` and cross the gap in `seconds`. A non-positive time or a zero gap

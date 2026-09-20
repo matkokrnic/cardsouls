@@ -933,6 +933,7 @@ func _push_counter_presentation() -> void:
 		if _counter_armed[slot] and (not running or restarted):
 			if is_instance_valid(hero):
 				hero.animation_controller.on_counter_ended()
+			_set_counter_pass_through(slot, false)
 			_free_counter_dagger(slot)
 			_counter_armed[slot] = false
 		if running and not _counter_armed[slot]:
@@ -940,6 +941,7 @@ func _push_counter_presentation() -> void:
 					_match_state.balance_ticks.counter_busy_ticks_for(color)) / TimingWindow.TICK_HZ
 			if is_instance_valid(hero):
 				hero.animation_controller.on_counter_started(color, busy_seconds)
+			_set_counter_pass_through(slot, color == Enums.CardColor.RED)
 			_spawn_counter_dagger(slot, color, busy_seconds)
 		# R-P1/P3: and every running tick pushes HOW FAR INTO THE SPAN it is, which is what lets a
 		# counter interrupted by a swing, a roll or the cast's own block drop rejoin its sequence at
@@ -952,6 +954,24 @@ func _push_counter_presentation() -> void:
 		_counter_color[slot] = color
 		_counter_remaining[slot] = remaining
 		_advance_counter_dagger(slot)
+
+
+## Story 6-6b POST-SMOKE (R-S1): RED'S COUNTER PASSES THROUGH THE ATTACKER'S BODY, for the length of
+## the span and no longer. Armed on the same rising edge that starts the presentation and cleared on
+## the same falling edge that ends it -- including the falling edge a RE-CAST synthesises (R-P2), so
+## a RED counter replaced mid-span by another colour gives its collision back with its clip.
+##
+## PRESENTATION, DELIBERATELY: the state layer writes RED's out-and-back velocity knowing nothing
+## about bodies (`4-3/R2`), and this is what lets that velocity actually happen -- the jump arrives
+## ON the attacker instead of stopping a metre short on its collision box. RED ONLY (R-S2 keeps
+## BLUE's slide solid, which is how it stops on arrival), so every other colour pushes `false` and
+## the call is a no-op for a hero that never had an exception.
+func _set_counter_pass_through(slot: int, enabled: bool) -> void:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	if not is_instance_valid(hero):
+		return
+	hero.set_body_pass_through(other, enabled)
 
 
 ## Story 6-6b (AC 11): the dagger's launch. GREEN only -- the other two colours throw nothing, which
