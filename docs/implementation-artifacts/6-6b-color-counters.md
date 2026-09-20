@@ -4,7 +4,7 @@ baseline_commit: 3f6be78074348a44e72794f60b8cf187b6d9456f
 
 # Story 6.6b: Color Counters
 
-Status: review
+Status: done
 
 ## Story
 
@@ -78,8 +78,10 @@ the labels below are this pass's working names):
    precedent: cut range plus playhead/speed): RED's jump-then-backflip sequence fits inside 1.5 s, GREEN
    starts from the 36-74 % cut of `counter_throw`, BLUE plays a run-up-cut `counter_slide`; the raw clip
    lengths stay measured data (Measured Fact 11). The numbers are feel knobs tuned at smoke and NEVER pinned
-   by tests except the direction bounds `busy > eligibility > 0` per colour. While busy, every input
-   (attack, roll, block, every card mode, unblockable initiation) is refused and the hero is rooted, exactly
+   by tests except the direction bounds `busy > eligibility > 0` per colour. While busy, every input the
+   get-up lock refuses (attack, roll, block, every card mode, unblockable initiation; **AMENDED AT CLOSE-OUT,
+   `6-6b/R11`: it read "every input" -- the lock/retarget seat, `_resolve_lock` step 1c, was MEASURED ungated
+   for the get-up and for this busy lock alike, so a counter never gated re-aim either**) is refused and the hero is rooted, exactly
    the `6-6a` get-up register (`HeroState.is_getting_up`, `hero_state.gd:303`; card seat gate
    `match_state.gd:2745`; movement root `match_state.gd:4085`), EXCEPT BLUE's authored travel (AC 9), which
    is state-driven, not input. Card presses announce a refusal with a new reason token naming the
@@ -119,8 +121,9 @@ the labels below are this pass's working names):
    `set_action_state` call (no `IDLE` in between, the `5-6` one-write-per-outcome rule). THE ATTACKER IS
    KNOCKED DOWN via the existing knockdown PACKAGE (`stun.start(knockdown_stun_ticks)`, the
    `BalanceTicks.is_knockdown_stun` flavour classifier, the get-up lock and get-up iframes; no new stun kind,
-   no new duration field) written at a NEW fourth authored STUNNED entry point at the attacker's own step-3
-   seat, with no damage. It is not the `6-6a` seat: `_apply_landing_packages` writes the VICTIM at step 6b
+   no new duration field) written at the attacker's own step-3 seat (**AMENDED AT CLOSE-OUT, `6-6b/R12`: it read "a NEW fourth
+   authored STUNNED entry point" -- the retired 5-5 landing rung took its own site with it, so the pin stays at
+   THREE and this seat replaced that rung's**), with no damage. It is not the `6-6a` seat: `_apply_landing_packages` writes the VICTIM at step 6b
    and applies damage unconditionally (`match_state.gd:3643-3662`); this writes the attacker's OWN hero, so
    the cross-player-write prohibition (`:334-347`) does not bite. The `already_down` floor rule does not
    apply (a CHARGING attacker is not down). The defender takes no damage, the attacker earns no orbs
@@ -203,8 +206,9 @@ the labels below are this pass's working names):
 10. The counter presentation STARTS ON THE PRESS, not on the resolution, so a paid feint baits a full counter
     animation into nothing. RED plays `counter_jump` then `counter_backflip` as one sequence; BLUE plays
     `counter_slide`; GREEN plays `counter_throw` and the dagger prop. All are one-shots, cut and speed-mapped
-    to fit the colour's busy span (AC 2). The runner reads the `defense` snapshot key `[colour, remaining]`
-    per tick for the rising edge, the `on_charge_progress` call site's precedent (`match_runner.gd:865`);
+    to fit the colour's busy span (AC 2). The runner reads the FACT the `defense` snapshot key `[colour, remaining]`
+    names (**AMENDED AT CLOSE-OUT, `6-6b/R10`: read directly from the three fields the key is built from, not
+    through two `to_snapshot()` builds per tick; the key stays the contract, not the access path**) per tick for the rising edge, the `on_charge_progress` call site's precedent (`match_runner.gd:865`);
     nothing new is added to the observation-seam family (AC 14).
 11. GREEN's dagger (`assets/props/dagger/dagger.fbx` + the four PBR PNGs) flies from the defender to the
     attacker as PURE PRESENTATION: no state object, no hitbox, no board entry, no `push_contact`. The `4-4`
@@ -271,9 +275,9 @@ the labels below are this pass's working names):
 17. Live smoke, section below, run on `[3, 3]` with two pads; R-D6 (live smoke against a killable slot) is
     re-invoked on this gate.
 
-**Post-smoke** (three new ACs, each a post-smoke ruling pending a `6-6b/R` number at close-out)
+**Post-smoke** (three new ACs, each a post-smoke ruling, numbered at close-out: `6-6b/R19`, `6-6b/R14` and `6-6b/R16`)
 
-18. THE WHOLE BUSY SPAN IS THE COUNTER WINDOW (post-smoke ruling, pending 6-6b/R number; supersedes
+18. THE WHOLE BUSY SPAN IS THE COUNTER WINDOW (post-smoke ruling, `6-6b/R19`; supersedes
     AC 1's eligibility head). A counter lands iff the defender's window is RUNNING at the attacker's
     commit tick or on a launch tick before the first honest contact -- there is no separate
     eligibility span, no authored `counter_eligibility_seconds`, no `counter_eligibility_ticks`, no
@@ -288,7 +292,7 @@ the labels below are this pass's working names):
     and the LAST running tick is the last countering tick; the first tick after expiry counters
     nothing; both on BOTH slots. The old eligibility boundary tests are REWRITTEN into these, never
     deleted.
-19. RED REACHES THE ATTACKER AND BOUNCES BACK (post-smoke ruling, pending 6-6b/R number; extends AC 9
+19. RED REACHES THE ATTACKER AND BOUNCES BACK (post-smoke ruling, `6-6b/R14`; extends AC 9
     per colour). RED's counter carries REAL state travel: FORWARD along the press-locked bearing for
     the jump step, BACKWARD by the SAME authored distance for the backflip step, NET DISPLACEMENT ZERO
     across the span, both derived INLINE (CONSTRAINT C) from an authored per-colour distance over that
@@ -301,8 +305,7 @@ the labels below are this pass's working names):
     profile and its zero net on both slots; RED / BLUE / GREEN travel told apart; the pass-through
     present during RED and absent during GREEN, in the LIVE test, read off the engine's own exception
     list.
-20. THE DEFENDER FACES THE ATTACKER FOR THE WHOLE BUSY SPAN (post-smoke ruling, pending 6-6b/R
-    number). Facing is locked at the press to the SAME bearing the travel uses (defender -> attacker,
+20. THE DEFENDER FACES THE ATTACKER FOR THE WHOLE BUSY SPAN (post-smoke ruling, `6-6b/R16`). Facing is locked at the press to the SAME bearing the travel uses (defender -> attacker,
     `_counter_travel_dirs`) and written at the movement seat on every busy tick, through the one
     existing facing field -- the `1-7b` single-yaw-source contract is untouched (`HeroActor.drive()`
     stays the only `atan2`). It is the FIRST rung of the facing carve-out ladder and weakens none of
@@ -447,6 +450,16 @@ before the attack touches you"). All six are fixed in this story under the Post-
 above. Two further findings carry OUT of the story: the held-block/card-mode collision (8b) and
 "raise the range for homing of those attacks, and the readability of the attacks themselves", which
 is the already-unlocked retune block.
+
+**RE-SMOKE (operator, solo, 2026-09-20 evening, `[0, 3]` with the `6-D1` keys X/V/B, after the
+post-smoke fix).** Broadly good. RED now really jumps to the attacker, lands on the head and returns by
+backflip; BLUE's slide reaches the attacker (it connects); the defender faces the attacker for the whole
+counter, so the throw and the dagger go the same way and the dagger reads; the window is the whole
+counter -- pressed at any point before the attack touches, it defends. Spans 1.0 / 0.8 / 0.5 s KEPT.
+Operator note: "a few suspicious hitboxes" -- NAMED for the playtest block, not a defect of this story.
+Findings carried out (owners in the decision-log close-out session): slow the moment between landing on the head and
+the bounce, refine the dagger's hit alignment, and the counter may under-reward -- judged at the friends
+playtest. His words are in `docs/playtest-log.md`, unedited.
 
 **Source, and one recording note.** `docs/playtest-log.md` carries the operator's own 6-6b entry,
 written by hand in his words; the rows above are those words mapped onto this section's item list.
@@ -1027,6 +1040,25 @@ swing, with `attack` asserted as the setup precondition; MF4 then went RED.
 5. Review P5 stands as a note: `COUNTER_DAGGER_RELEASE_FRACTION` shortens the flight and never delays
    the spawn; correct only while it is `0.0`.
 
+## Close-out (2026-09-20)
+
+Amendments the cycle owed, each with its cause:
+
+* **AC 4 "fourth" STUNNED entry point** -> the pin stays at THREE (`6-6b/R12`, review P7): the retired 5-5
+  landing rung took its site.
+* **AC 2 "every input"** -> "every input the get-up lock refuses" (`6-6b/R11`, review P6): the lock/retarget
+  seat was measured ungated for both.
+* **AC 10 wording** -> the `defense` key names the FACT observed, read directly from its three fields
+  (`6-6b/R10`, review P4).
+* **AC 1 / 3 / 5** already carry the eligibility removal as R-S6 (= `6-6b/R19`).
+* **Retired orphan set**: `defense_window_seconds`, `counter_eligibility_seconds`,
+  `color_counter_stun_seconds` (`6-6b/R13`, `6-6b/R19`).
+* **Post-smoke label map**: R-S1 = `6-6b/R14`, R-S2 = `R15`, R-S3 = `R16`, R-S4 = `R17`, R-S5 = `R18`,
+  R-S6 = `R19`.
+
+Close-out commits: playtest log, this record, decision-log `6-6b and 6-D1 close-out`, board. Nothing
+pushed; no suite run at close-out -- the last measured run stands (915/0/7604 + 66, golden `d437432f`).
+
 ## Change Log
 
 | Date | Change |
@@ -1038,3 +1070,4 @@ swing, with `attack` asserted as the setup precondition; MF4 then went RED.
 | 2026-09-20 | Code review (`gds-code-review`, `PROC/R2` three layers) over `0ea7183..9d30ee8`: APPROVE WITH FINDINGS. Two state-layer defects fixed in `d202265` (H1 stale charge-reach bearing broke AC 9's zero-travel fallback and two fixtures were passing off the stale store; H2 the counter-busy movement branch preempted `ATTACKING` and ate the swing's lunge against AC 1), each mutation-proven; suite 909/0/7497 + 66 -> 911/0/7518 + 66, golden `d437432f` UNMOVED, no gate moved. Six presentation/seat findings and two docs amendments carried to the operator (Code Review Record above). |
 | 2026-09-20 | Post-smoke fix pass (R-S1..R-S6) over the operator's live smoke, which passed 13/13 mechanically and produced five feel findings plus one window ruling. RED gets out-and-back state travel with a RED-only collision pass-through (new AC 19), the defender faces the attacker for the whole busy span (new AC 20), and THE WHOLE BUSY SPAN IS THE COUNTER WINDOW (new AC 18) -- `counter_eligibility_seconds`/`_ticks` removed, and `defense_window_seconds` and `color_counter_stun_seconds` retired with it as the close-out orphan set. `.tres` knobs: busy spans 1.0 / 0.8 / 0.5 s, travel 4.0 (RED) / 6.0 (BLUE) m, forward fraction 0.305; dagger drawn at x2.5. AC 1/3/5/9/12 amended with the smoke named as the cause. Suite 911/0/7518 + 66 -> 915/0/7604 + 66; golden `d437432f` UNMOVED and no gate moved; nine mutations RED (MS7/MS8 first came back green because the live assertions had never been applied -- recorded). Status stays `review`. |
 | 2026-09-20 | Post-review fix pass (`d9f4512`, `fix(presentation)`): operator rulings R-P1/P3 (the counter owns the body for the whole busy span -- the span survives transitions, an action borrows the body, IDLE resumes at the elapsed point, no `hit_react` over a counter), R-P2 (a re-cast with no falling edge is detected as a new press) and R-P4 (the poll reads the `defense` key's three fields directly). R-P6 MEASURED to need no code: the get-up lock does not refuse lock/retarget either, so `src/state/` is untouched and the `fix(state)` commit was skipped. Suite 911/0/7518 + 66 before and after; golden `d437432f` UNMOVED and no gate moved; four mutations RED. Five close-out docs items recorded. Status stays `review`. |
+| 2026-09-20 | Close-out (Tier A): operator solo re-smoke PASS after the post-smoke fix (`[0, 3]` with the `6-D1` keys); amendments to AC 2, AC 4, AC 10 recorded with their causes; orphan set recorded; pending labels replaced by `6-6b/R14`/`R16`/`R19`; Status `review` -> `done`. |
