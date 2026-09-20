@@ -10890,3 +10890,81 @@ nothing happens. No new intent field; `FORMAT_VERSION` 11; golden `d437432f` unm
 handle.
 
 Suite `915/0/7604` -> `920/0/7755` + `66/66`. Live smoke: the operator's solo check PASS (playtest log).
+
+## Session 2026-09-21 -- 6-9 readiness gate (Tier A, docs only)
+
+Gate round 1 of story `6-9-click-to-commit` (mode 2 becomes click and commit; supersedes `6-1`). The
+gate found five blocking defects, all in the story text, none in its design; the operator ruled nine
+dispositions. No `src/` or `test/` change; nothing measured or run in this session.
+
+`6-9/R1` THE HOLD SUITE HAS THIRTEEN TESTS, NOT TWELVE. `test/state/test_unblockable_hold.gd` declares
+13 `func test_*`; the story said 12 in AC 8 and Measured Fact 6. Corrected, and the gate's 13-row
+FEINT-ONLY / SURVIVING classification is lifted into the story so the dev pass inherits it. Three rows
+SURVIVE (full chargeup lands; a held-out chargeup IS countered; a still-CHARGING hero may not cast
+mode 2), each with the suite that already covers it; ten are FEINT-ONLY.
+
+`6-9/R2` A SECOND `FORMAT_VERSION == 11` PIN. Besides `test_record_file.gd:176`, the assertion at
+`test_record_file.gd:872` (inside `test_the_contents_validation_bumped_no_version_and_widened_no_required_key`)
+also pins 11 and would break on the bump. Named in Fact 8 and Task 5; its history string gains the
+`6-9` clause.
+
+`6-9/R3` A FOURTH TRACKING TEST PERFORMS A FEINT. `test_unblockable_tracking_and_reach.gd:589`
+(`test_the_contact_verdict_rests_at_unknown_outside_a_committed_flight`) reaches its middle reading
+(a paid chargeup that ends with no landing verdict) by a feint, which no input produces after this
+story. RULING: that reading is re-reached through the KNOCKDOWN ABANDONMENT
+(`match_state.gd:3776-3778`, `6-6a/R1`), NOT the debug reset. Reason: the knockdown is a real in-match
+path that ends a paid chargeup with no landing verdict, exactly the condition the reading tests; the
+debug reset is an operator tool and would make the claim untestable in play. It goes in Fact 4's
+tracking list and Fact 6's REWRITE bucket, and Fact 6's "complete list" is reworded to say what was
+searched and what it covers.
+
+`6-9/R4` AC 1 COMPARISON RUN. "A run that holds every button" was ambiguous over the one key this
+story deletes, so it contradicted AC 7 ("no fixture produces the key"). Replaced by the gate's
+wording: the bare-intent run is compared with a run whose every post-commit intent holds every LIVE
+held key (`attack`, `block`, `roll`, `run`) and a full move vector; neither run sets
+`held[&"card_cast"]`. Task 3(a) repeats the correction.
+
+`6-9/R5` AC 2 IS A FINITE TABLE. "Every input the player can produce" cannot be checked over a
+continuous `move_dir`. AC 2 now enumerates seven input rows: bare intent; each live held key alone;
+each live pressed key alone; all of those at once; `move_dir` at zero, +X, -X, +Y, -Y and one diagonal;
+a second card press in each of the four modes (REFUSED with `REASON_UNBLOCKABLE_COMMITTED`, never
+leaves CHARGING); and `debug_reset = true`. Row 7 is asserted as an EXIT, not a stay: it is what keeps
+the table non-vacuous, since without a legitimate exit a broken `_resolve_actions` that does nothing
+would satisfy "stays CHARGING". The four non-input exits in AC 2's second half stand as written.
+
+`6-9/R6` THE TWO ANTI-VACUITY RULINGS (the `6-1b/F4` class). (a) `test_record_file.gd:848`
+`test_a_new_held_key_round_trips_without_any_serialization_edit` is RE-POINTED at the live held key
+`&"run"`, not retired: the generic `held` walk it guards (`intent_recorder.gd:570-571`,
+`record_file.gd:604`, `:767`) is alive and is the reasoning the 11 -> 12 bump stands on; only the
+example key dies. `run` is the newest held key (`6-7`, v10 -> v11), so its "absent reads absent" half
+stays literally true, and it avoids confusion with `block`, which AC 9 keeps in `_basic_intent`.
+(b) `test_gamepad_controller.gd:581` is RETIRED outright: all four readings are of the returned key
+`card_cast_held`, which AC 7 removes. Its one non-held claim (L3 release clears `armed_slot` the same
+tick) is independently covered at `test_gamepad_controller.gd:666`.
+
+`6-9/R7` KEEP THE REGEN-RESUME CLAIM AS A NEW CLAIM. The release-tick form of
+`test_stamina_regen_resumes_on_the_release_tick_itself` dies with the feint, but its landing-tick form
+is a real property of the surviving code that no suite asserts today. Task 3 gains an assertion that
+`_regen_stamina` reads `action_state` fresh at step 5 with no latch, so regen resumes on the tick the
+hero leaves CHARGING by landing. Recorded as a NEW claim this story adds, not a surviving one.
+
+`6-9/R8` THE NON-BLOCKING FINDINGS ARE APPLIED, all cheap: the tracking suite's other wording sites
+(`:9`, `:126`, `:560`, `:566`, `:572`, `:577`, `:964`, `:971`) join the Reword bucket; the dangling
+`6-1/R4` docblock at `test_record_file.gd:839-844` is rewritten onto the `6-7`/v11 reasoning; the
+three `is_held(&"card_cast")` lines inside tests AC 10 KEEPS (`test_controller.gd:164`, `:191`,
+`:201`) are named; `test_unblockable_defense.gd:1828` ("the `6-1` feint teardown") joins the Reword
+bucket; and the story states the `load(balance_config.tres)` read leaves `test_controller.gd` with the
+retired debug-hold test.
+
+`6-9/R9` AC 7 GETS A MECHANICAL SEARCH. Replaces "nothing except comments marked superseded" with
+the gate's command: `Get-ChildItem src,test -Recurse -Filter *.gd | Select-String -Pattern
+'card_cast_held|held\[&"card_cast"\]|is_held\(&"card_cast"\)'`. A clean result is ZERO lines, so
+`record_file.gd:165`'s history comment is reworded to "the `card_cast` held key" (history survives,
+the callable form goes). Negative control: `Select-String -Pattern 'reject_action\(&"card_cast"'` over
+`src/` counts 26 at HEAD `690f162` and must read 26 after; that token is the ACTION NAME on
+`action_rejected`, a different thing, and is out of scope.
+
+**Held by the gate, unchanged.** Every Measured Facts citation verified by content, no drift; the
+golden prediction (`d437432f` unmoved, 206 keys, `UNHASHED_CROSS_TICK_MEMBERS` 4) independently
+confirmed; the `6-D1` press edge is structurally independent of the hold; no committed record fixture
+exists, so the v11 refusal breaks none. Gate round 1 of at most 2.
