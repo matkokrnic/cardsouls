@@ -705,6 +705,93 @@ exactly 1, the seat-symmetry pin; M11 exactly 1, the corrected bearing-lock pin)
 `.import` sidecars' `[params]` blocks byte-identical to `roll.fbx.import`; `project.godot` absent
 from the diff entirely; the File List complete against `git diff --name-only`; AC text unedited.
 
+### Post-review fix pass (2026-09-20, `d9f4512`)
+
+Operator rulings R-P1/P3, R-P2, R-P4 and R-P6 applied over the review's carried findings. Story AC and
+Dev Notes text is UNCHANGED; three items are recorded for the close-out amendment instead. Status stays
+`review`, board untouched, Live Smoke checkboxes still unchecked, nothing pushed.
+
+| | before (`C:\dev\_66b-fix-suite-before-*.txt`) | after (`C:\dev\_66b-fix-suite-after-*.txt`) |
+|---|---|---|
+| state harness | **911 tests, 0 failed, 7518 assertions** | **911 / 0 / 7518**, RESULT: PASS |
+| integration | **66/66 PASS** | **66/66 PASS** |
+
+The before-claim run was taken BEFORE any edit and reproduces the review commit's numbers exactly. Gates
+re-measured on the after run, none moved: golden `d437432f…` (`test_state_matches_golden` `[ok]`;
+`test_determinism.gd` is not in the diff, and the inverse-form argument is untouched -- the fix is
+presentation-only and no fixture casts mode 3), `FORMAT_VERSION` 11, the 206-key set
+(`test_the_player_snapshot_key_set_is_exactly_the_expected_set` `[ok]`; `player_state.gd` not in the
+diff), `UNHASHED_CROSS_TICK_MEMBERS` 4, observation seams TEN, the `STUNNED` pin at THREE, F1 re-scanned
+by hand (`func _physics_process` appears exactly once in `src/`, in `match_runner.gd`). Extra runs, each
+named: four mutation runs (below) and ONE re-run of the live test alone after a comment-only repair to a
+header paragraph my first edit had split mid-sentence.
+
+**The mechanism chosen, per ruling.**
+
+* **R-P1/P3 -- the span is now a fact the controller keeps, and the clip is a separate one.**
+  `_counter_running` is armed on the press and cleared ONLY by the falling edge the runner pushes;
+  `_counter_index` means "a counter clip is playing right now" and nothing more. A transition therefore
+  clears the clip and leaves the span, which is what makes (a)-(d) fall out of one change rather than
+  four special cases. (a) `on_hit_landed`'s IDLE arm returns early while the span runs, so no
+  `hit_react` -- and the frozen/skipped-join defect the review found goes with it, since that came from
+  restarting a clip WITHOUT clearing the index. (b) the IDLE branch of `on_action_state_changed` calls
+  the new `_resume_counter()`, which spends `elapsed * rate` seconds of CUT across the step list in
+  order and seeks there, so a resumed RED rejoins at the backflip rather than restarting at the jump.
+  (c) STUNNED and DEAD return before that branch and still win outright. (d) `on_counter_started` arms
+  but only PLAYS when the mirrored state is IDLE, so a swing, roll or held block keeps its own clip.
+  **What feeds the resume**: a new per-tick `on_counter_progress(elapsed_seconds)` push from the
+  EXISTING poll, `on_charge_progress`'s shape exactly -- a plain float, no window handle, no balance
+  read, no `connect_*`. The seam family is unmoved at TEN and pinned green.
+  **One recorded consequence**: the get-up one-shot is seated AHEAD of the resume, because a get-up is
+  the tail of a knockdown that ruling (c) already let win. With the authored numbers it is unreachable
+  (the 2.5 s knockdown outlasts the 1.5 s longest span, so the falling edge has already fired).
+* **R-P2 -- the restart is detected, not the edge.** The runner keeps the colour and the remaining
+  count the key carried last tick; a re-cast is `colour changed OR remaining rose` (a window otherwise
+  counts down monotonically, so only a fresh `start()` can raise it). The old presentation is ended and
+  its dagger freed, then the new one starts -- the falling-then-rising semantics the ruling asked for,
+  produced without a second poll.
+* **R-P4 -- the two `to_snapshot()` builds are gone**, replaced by `defense_window.is_running`,
+  `defense_color` and `remaining_ticks()`, which is what `player_state.gd` builds the key FROM (resting
+  value included). No observable change; the live test is the pin.
+* **R-P6 -- MEASURED FIRST, and the measurement answers it: NO CODE.** `_resolve_lock` (step 1c) and
+  `_is_applicable_retarget`/`_validate_lock` carry NO `is_getting_up()` gate -- the get-up lock lives
+  at step 3 (`match_state.gd:1372`) and refuses the input-driven table edges only, never lock/retarget.
+  So by the parity the ruling sets, the busy lock does not gate that seat either, and `src/state/` is
+  untouched by this pass (the `fix(state)` commit is skipped). **Close-out item: AC 2's "every input"
+  is amended to "every input the get-up lock refuses".**
+
+**Mutation table** (driver `<scratchpad>/fixmut.py`; backup OUTSIDE the repo in `C:\dev\_66b-fix-mut\`,
+anchor count asserted `== 1`, restore by COPY-BACK with the restored SHA-256 verified EQUAL, never
+`git checkout`). All four are pinned by the extended live test.
+
+| # | mutation (the fix reverted) | went RED |
+|---|---|---|
+| MF1 | drop the IDLE-branch resume | 3 rows: the BLOCKING-drop cast, the mid-swing resume, the hit |
+| MF2 | drop `on_hit_landed`'s countering guard | 1 row: the counter loses the body to the flinch |
+| MF3 | `restarted := false` (the re-cast is invisible again) | 2 rows: RED never starts, the dagger is not freed |
+| MF4 | let `on_counter_started` play regardless of state | 1 row: the counter played over the swing |
+
+Restores verified: `animation_controller.gd`
+`c9e542b7a9f88b4235c4f735335215bb4414cd788661aa3cca0bf0b1dc175142`, `match_runner.gd`
+`150e878ad762fce65c386b6dc78edb1a2a17f8722873b5c1c1c085e58d8482b8`. `Invariant.check` is nowhere proven
+by triggering.
+
+**MF4 first came back GREEN, and the FIXTURE was corrected rather than the claim dropped.** The first
+draft of phase 6 armed the counter in the SAME frame as `enter_attack`, so the rising edge reached the
+controller while its mirrored state was still IDLE and the `attack` clip won simply by arriving second
+-- which proves nothing about a counter pressed mid-swing. The cast now happens a few frames INTO the
+swing, with `attack` asserted as the setup precondition; MF4 then went RED.
+
+**Close-out items carried out of this pass** (docs only, no code owed):
+1. AC 2's "every input ... is refused" becomes "every input the get-up lock refuses" (R-P6, measured).
+2. AC 4's "a NEW fourth authored STUNNED entry point" -> the pin stays at THREE (review P7).
+3. `defense_window_seconds` retired beside `color_counter_stun_seconds`, with the relational bound in
+   `test_authored_defense_values_are_positive_and_correctly_ordered` (review P8).
+4. AC 10's wording names the `defense` snapshot KEY as the fact the runner observes, not as the API it
+   reads it through (R-P4) -- the runner now reads the three fields the key is built from.
+5. Review P5 stands as a note: `COUNTER_DAGGER_RELEASE_FRACTION` shortens the flight and never delays
+   the spawn; correct only while it is `0.0`.
+
 ## Change Log
 
 | Date | Change |
@@ -714,3 +801,4 @@ from the diff entirely; the File List complete against `git diff --name-only`; A
 | 2026-09-20 | Readiness gate round 2 READY; promoted to ready-for-dev; AC 3 ordering clause made explicit. |
 | 2026-09-20 | Dev pass complete (Opus 5). All ACs implemented; suite 897/0/7339 + 65 -> 909/0/7497 + 66; golden `d437432f` MEASURED UNMOVED both directions, no re-baseline; FORMAT_VERSION 11, 206-key set and `UNHASHED_CROSS_TICK_MEMBERS` 4 all unmoved; library 23 -> 27 with zero `project.godot` collateral; 14 mutations measured RED (M11 first came back vacuous and its test was corrected). DEVIATION: the `STUNNED` entry-point pin stays at THREE, not 3 -> 4 -- the retired landing rung took its own site with it, so the count holds and only the argument moves. Status -> review. |
 | 2026-09-20 | Code review (`gds-code-review`, `PROC/R2` three layers) over `0ea7183..9d30ee8`: APPROVE WITH FINDINGS. Two state-layer defects fixed in `d202265` (H1 stale charge-reach bearing broke AC 9's zero-travel fallback and two fixtures were passing off the stale store; H2 the counter-busy movement branch preempted `ATTACKING` and ate the swing's lunge against AC 1), each mutation-proven; suite 909/0/7497 + 66 -> 911/0/7518 + 66, golden `d437432f` UNMOVED, no gate moved. Six presentation/seat findings and two docs amendments carried to the operator (Code Review Record above). |
+| 2026-09-20 | Post-review fix pass (`d9f4512`, `fix(presentation)`): operator rulings R-P1/P3 (the counter owns the body for the whole busy span -- the span survives transitions, an action borrows the body, IDLE resumes at the elapsed point, no `hit_react` over a counter), R-P2 (a re-cast with no falling edge is detected as a new press) and R-P4 (the poll reads the `defense` key's three fields directly). R-P6 MEASURED to need no code: the get-up lock does not refuse lock/retarget either, so `src/state/` is untouched and the `fix(state)` commit was skipped. Suite 911/0/7518 + 66 before and after; golden `d437432f` UNMOVED and no gate moved; four mutations RED. Five close-out docs items recorded. Status stays `review`. |
