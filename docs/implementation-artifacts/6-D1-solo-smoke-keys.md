@@ -1,6 +1,6 @@
 # Story 6-D1: Solo Smoke Keys
 
-Status: review
+Status: done
 
 ## Story
 
@@ -93,7 +93,10 @@ Commits: code `b58c407`; docs (this file, board row) follows it.
 
 Config `[0, 3]` (P1 keyboard, P2 pad). P1's hand must hold the colour pressed.
 
-- [ ] X / V / B cast RED / BLUE / GREEN unblockable from P1 with one tap; the chargeup completes and
+- [x] X / V / B cast RED / BLUE / GREEN unblockable from P1 with one tap; the chargeup completes and
       launches with the key already released.
-- [ ] Pad P2 counters with the matching colour card.
-- [ ] Pressing a colour P1's hand does not hold does nothing.
+- [x] Pad P2 counters with the matching colour card.
+- [x] Pressing a colour P1's hand does not hold does nothing.
+
+Result: operator's solo check PASS (2026-09-20), recorded in `docs/playtest-log.md`: X/V/B each cast an
+unblockable of the colour from one tap and hold the chargeup; the counters were smoked solo with the pad.
