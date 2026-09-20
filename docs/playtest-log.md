@@ -464,3 +464,19 @@ produžuje. Deflect/obrana stunovi drže vlastitu pozu, različitu od knockdowna
 Nalazi: (1) čim get_up krene sve akcije dostupne — "teleport na noge", ide fix (get_up zaključan,
 i-frameovi ostaju); (2) knockdown + get_up trajanja oboje pomalo predugo — retune blok; (3)
 klizanje u hit_react pozi kad se krećem — polish, defer. Kontra s poda željeno nemoguća (mode 3).
+
+6-6b:
+20.9.
+1 sad su mu cudnije nego inace vremenski rozor kad mogu obraniti unblockable, svakako nije vizualno intuitivan, osim toga animacije se i ne poklapaju bas jedne s drugim kao par unblockable anpad i obrana, npr nas lik skici u mejsti i napravi beck lfip umejsto da homea pream napadacu skicu mu na glavu nogmaa i odande se odrazi nazad, isto ide i za slide, ne konaketa s likom osim ako nisu iznimno blizu, kod degera to nije problem, iako se on iznimno slabo vidi povecao bi ga da gase nagalsi i skuzio sam da di god gleda onaj koji brai animaciju bacanja izvodi u smjeru di gleda a noz leti prema protivniku jako cudno to izgleda 2 da prerano karta porpadne i bude pun pogodak, samo nije bas jasno to, osim toga kazem vizualno se stvari trebaju poklapati s radnjama nemoze se odviti jedno a vidjeti drugo 3 prekasno da obrane trebju biti brze generlanoo, ikao nije intuitvan taj prozor, ja bi radije da neam fainte i da nema cahrgeupa na drzanju za unblocakble nad t osam vec rekao 4 kriva boja napad porlazi 5 prolazi da iako kazem vec sto mislim o feintanju,  a to je da ga nebi tebalo biti 6 mislim da bi malo krace trebali trajati tj bit brzi osim 7 kad je netko na podu kontra ne porlazi 8 da 9nemoze se kontra iz drzanog bolka jer kad drzimo l3 l2 prestane bit blok, osim toga razisljam da za armiranje naij potrebno drzati l2 nego kao lock on klik za takav mod klik za obicne bindove 10 kontra usred zamaham nakon dovrsneog zamaha ide 11nemogu oba kontrirarat ako oba chargaju valjda zaboga 12 to je sve oej 13 ha okej je generalno bi mozda malo podigao range za homing tih napada, i ctiljivost samih napada i korisaciju tih dvoje animacija
+2 prozor pa dokle god stignes preteci to da te napad takne tj landa bi trebao moci obraniti a samo abrana bi trebala biti realitvno brza, ubiti dakle ako iniciras obranu prije nego li te napad takne jel 3 idalje ne znam o cem se rade tj sto opisuju navedene trojke
+
+jos neki nalazi: 
+Pauza na glavi prije odskoka — prezentacijski gumb (hold na spoju skok→backflip, ista mehanika kao 6-1b stanke) → retune blok.
+Pogađanje nožem — polish (dagger je čista prezentacija; "pogodak" je trenutak rušenja, može se poravnati s dolaskom noža).
+Kontra premalo nagrađuje — balans; poluge su duljina napadačevog knockdowna i eventualna nagrada branitelju (orb/mana) → retune blok, sud na playtestu s prijateljima.
+
+Re-smoke sam, 20.9. navecer, [0,3] s 6-D1 tipkama (X/V/B na tipkovnici kastaju unblockable po boji, ja na padu kontriram). Sve manje-vise dobro: crveni sad stvarno skoci do napadaca, sleti mu na glavu i backflipom se vrati; plavi slide dode do njega; lik gleda u napadaca cijelu kontru pa bacanje ide u istom smjeru kao i noz; prozor je sad cijela kontra - pritisnem bilo kad prije nego me takne i obrani. Trajanja 1.0/0.8/0.5 ostaju za sad. Vidio sam par sumnjivih hitboxeva, to cemo detaljnije na pravom playtestu s prijateljima. Jos: usporiti trenutak izmedu doskoka na glavu i odskoka, profinit pogadanje nozem, i obrana od unblockablea mi se cini da mozda ne nagraduje dovoljno - vidjet cemo na playtestu.
+
+## 6-D1 solo smoke keys (20.9.2026)
+
+Tipke X/V/B za P1 rade: jedan pritisak kasta unblockable prvom kartom te boje i sam drzi chargeup, pa mogu sam smokeati kontre bez brata.
