@@ -42,10 +42,9 @@ const REGEN_DELAY_TICKS := 12
 const DRAW_DELAY_TICKS := 30
 const UNBLOCKABLE_DAMAGE := 10.0   # 10 % of 100.0 max hp
 const REACH := 8.0
-## Story 6-6b (AC 1/AC 2): the counter's two counts, authored here so the one test below that arms
-## a defense window can reach the eligibility span at all. DISTINCT from every count this fixture
-## already carries ({6, 8, 9, 12, 24, 30}).
-const COUNTER_ELIGIBILITY_TICKS := 4
+## Story 6-6b (AC 1/AC 2), POST-SMOKE (R-S6): the counter's ONE count -- the busy span, the whole of
+## which is the counter window. The eligibility span that stood beside it is retired with its field.
+## DISTINCT from every count this fixture already carries ({6, 8, 9, 12, 24, 30}).
 const COUNTER_BUSY_TICKS := 20
 
 const LAUNCH_TICKS := {
@@ -1027,13 +1026,11 @@ func _config(with_launch: bool) -> BalanceConfig:
 	c.attack_recovery_seconds = 0.2
 	c.roll_duration_seconds = 0.5
 	c.roll_iframe_seconds = 0.2
-	c.counter_eligibility_seconds = float(COUNTER_ELIGIBILITY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.roll_distance = 3.0
 	c.deflect_window_seconds = 0.1
-	c.color_counter_stun_seconds = 1.0
 	c.draw_replacement_delay_seconds = float(DRAW_DELAY_TICKS) / TimingWindow.TICK_HZ
 	c.unblockable_stamina_cost = UNBLOCKABLE_COST
 	c.unblockable_chargeup_seconds = float(CHARGEUP_TICKS) / TimingWindow.TICK_HZ

@@ -917,8 +917,9 @@ extends TestCase
 ##     already carry everything it needs). This is the `5-4` shape -- a new resolution arm and new
 ##     balance fields over an EXISTING capture channel, not a new channel.
 ##
-##   NON-MOVER 2, THE TWO NEW BALANCE FIELDS: `defense_stamina_cost` and `defense_window_seconds` are
-##     authored `.tres` tuning, isolated from this golden by standing `BC/R3` -- `_golden_config()`
+##   NON-MOVER 2, THE NEW BALANCE FIELDS: `defense_stamina_cost` and the defense window's own
+##     duration (`defense_window_seconds` at 5-5; the per-colour `counter_busy_seconds_*` since
+##     6-6b) are authored `.tres` tuning, isolated from this golden by standing `BC/R3` -- `_golden_config()`
 ##     builds its own in-test values and never loads the authored file. Re-tuning either cannot
 ##     re-baseline this hash.
 ##
@@ -1339,11 +1340,12 @@ func _golden_config() -> BalanceConfig:
 	# would suppress t5-t7 and land on a different final value — this line is what makes that
 	# distinction a golden-level fact rather than a unit-test-only one.
 	c.deflect_stamina_penalty = 18.0
-	# `color_counter_stun_seconds` and `dodged_unblockable_damage_multiplier` are deliberately NOT
-	# authored here, for `reshuffle_vulnerable_window_seconds`'s stated reason: this fixture's ONE
-	# recorded cast is `ModeKind.BASIC` (`_play_sequence`), never `UNBLOCKABLE`, so
-	# `_resolve_charge_landing` is never reached and neither value can decide anything. Authoring a
-	# duration for a path this sequence does not take would be coverage of nothing. AC 5 / AC 7 / AC 8
+	# `dodged_unblockable_damage_multiplier` is deliberately NOT authored here, for
+	# `reshuffle_vulnerable_window_seconds`'s stated reason: this fixture's ONE recorded cast is
+	# `ModeKind.BASIC` (`_play_sequence`), never `UNBLOCKABLE`, so `_resolve_charge_landing` is never
+	# reached and the value cannot decide anything. Authoring it for a path this sequence does not
+	# take would be coverage of nothing. (Its companion `color_counter_stun_seconds` was named here
+	# on the same footing until 6-6b post-smoke retired the field, R-S6.) AC 5 / AC 7 / AC 8
 	# are proven by test_unblockable_defense.gd instead, exactly as `5-5`'s `defense` key was.
 	c.roll_iframe_seconds = 2.0 / 60.0
 	c.roll_duration_seconds = 5.0 / 60.0

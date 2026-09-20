@@ -75,11 +75,9 @@ var attack_chain_window_ticks: int
 var deflect_window_ticks: int
 var roll_iframe_ticks: int
 var roll_duration_ticks: int
-## Story 5-6 (AC 1/AC 6): NO LONGER DATA ONLY. OPEN decision (a) is RESOLVED and `5-6` is the
-## resolution — `_resolve_charge_landing`'s colour-counter branch (AC 5) starts a window with THIS
-## count, and `_resolve_contacts`' melee-deflect branch (AC 9) starts one with the sibling below.
-## RENAMED from `stun_ticks` in lockstep with `BalanceConfig.color_counter_stun_seconds`.
-var color_counter_stun_ticks: int
+## Story 6-6b POST-SMOKE (R-S6): `color_counter_stun_ticks` stood here and is RETIRED with its
+## authored `color_counter_stun_seconds` -- the colour counter has KNOCKED THE ATTACKER DOWN since
+## `6-6b` AC 4 replaced the `5-5`/`5-6` landing rung, so nothing has started a window with it since.
 ## Story 5-6 (AC 1/AC 9): the melee-deflect stun in TICKS — the line directly above's precedent
 ## verbatim, derived ONCE here and read INLINE at the one seat that starts the window (CONSTRAINT C).
 ## This is also what test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of
@@ -95,24 +93,10 @@ var get_up_iframe_ticks: int
 ## and the authored `*_seconds` float never reaches `advance()`. A chargeup measured against a raw
 ## seconds value inside the tick ladder is the A1 violation this whole file exists to prevent.
 var unblockable_chargeup_ticks: int
-## Story 5-5 (AC 2/AC 14): the mode ③ defense window, in TICKS. The line directly above's precedent
-## verbatim -- derived ONCE here, read INLINE at the one seat that starts the window (CONSTRAINT C),
-## and the authored `*_seconds` float never reaches `advance()`. This is also what
-## test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of any new
-## `*_seconds` field: a stem-matched twin on this object.
-var defense_window_ticks: int
-## Story 6-6b (AC 1): the COUNTER ELIGIBILITY span in TICKS -- the head of the one reused defense
-## window during which a commit or launch tick can still be answered. The `defense_window_ticks`
-## precedent verbatim: derived ONCE here, read INLINE at the one seat that judges it (the step-3
-## capture, CONSTRAINT C), and the authored `*_seconds` float never reaches `advance()`. Its stem
-## matches, so test_data_resources.gd's reflective probe demands exactly this twin.
-##
-## AN AUTHORED 0.0 DERIVES 0 TICKS, which is a DEFINED degrade and not a crash: the window's elapsed
-## count is at least 1 on every tick a judgement can read it (the press resolves at step 6, after
-## that tick's step 3), so a 0-tick eligibility makes every counter miss -- the answer half ships
-## invisible. The authoring audit is what keeps that out of the shipped `.tres`, on
-## `defense_window_ticks`' own footing.
-var counter_eligibility_ticks: int
+## Story 6-6b POST-SMOKE (R-S6): `defense_window_ticks` and `counter_eligibility_ticks` stood here
+## and are RETIRED with the two authored fields they converted. The one reused defense window is
+## started at the COLOUR'S BUSY span below, and THE WHOLE OF THAT SPAN IS THE COUNTER WINDOW -- there
+## is no head to measure elapsed ticks against any more, so the judgement reads `is_running` alone.
 ## Story 6-6b (AC 2): each colour's BUSY span in TICKS -- the length the one reused defense window is
 ## started at. Three stem-matched twins of the three authored `counter_busy_seconds_*` fields, the
 ## `unblockable_launch_ticks_*` triplet's shape exactly, read through `counter_busy_ticks_for` below.
@@ -133,7 +117,7 @@ var counter_busy_ticks_green: int
 var unblockable_launch_ticks_red: int
 var unblockable_launch_ticks_blue: int
 var unblockable_launch_ticks_green: int
-## Story 6-2 (AC 9): the Pitch Zone countdown, in TICKS -- the `defense_window_ticks` precedent verbatim,
+## Story 6-2 (AC 9): the Pitch Zone countdown, in TICKS -- the `unblockable_chargeup_ticks` precedent,
 ## derived ONCE here and read INLINE at the one seat that starts the fizzle window (the staging tick,
 ## CONSTRAINT C). The authored `pitch_stage_timer_seconds` float never reaches `advance()`.
 var pitch_stage_timer_ticks: int
@@ -168,8 +152,8 @@ func unblockable_launch_ticks_for(color: int) -> int:
 ## be busy for. A zero busy span therefore opens no window: the card and the stamina are still spent,
 ## the hero is never rooted, and the `defense` snapshot key reports its resting `[-1, 0]`, which is
 ## exactly the truth about a colourless defense. Never a substitute colour (the `kind_at` refusal
-## rule), and never `defense_window_ticks` -- resurrecting the superseded value as a live fallback
-## would make AC 1's supersession untrue on one path.
+## rule), and never a one-size fallback: the superseded `defense_window_seconds` is retired outright
+## (R-S6), so there is nothing left to resurrect on any path.
 func counter_busy_ticks_for(color: int) -> int:
 	match color:
 		Enums.CardColor.RED:
@@ -242,12 +226,12 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.deflect_window_ticks = TimingWindow.seconds_to_ticks(config.deflect_window_seconds)
 	t.roll_iframe_ticks = TimingWindow.seconds_to_ticks(config.roll_iframe_seconds)
 	t.roll_duration_ticks = TimingWindow.seconds_to_ticks(config.roll_duration_seconds)
-	# Story 5-6 (AC 1): TWO plain conversions where there was one, on the `unblockable_*` family's
-	# exact idiom. Both are WINDOW DURATIONS, so `seconds_to_ticks` already clamps any non-zero
-	# authored value to a minimum of 1 tick; an authored 0.0 derives 0 ticks and `TimingWindow.start(0)`
-	# renders a window that never runs — a stun that ends on the tick it began. That degrade is defined
-	# rather than crashing, and the authoring audit is what keeps it out of the shipped `.tres`.
-	t.color_counter_stun_ticks = TimingWindow.seconds_to_ticks(config.color_counter_stun_seconds)
+	# Story 5-6 (AC 1): a plain conversion on the `unblockable_*` family's exact idiom. It is a WINDOW
+	# DURATION, so `seconds_to_ticks` already clamps any non-zero authored value to a minimum of 1
+	# tick; an authored 0.0 derives 0 ticks and `TimingWindow.start(0)` renders a window that never
+	# runs — a stun that ends on the tick it began. That degrade is defined rather than crashing, and
+	# the authoring audit is what keeps it out of the shipped `.tres`. (Its colour-counter sibling was
+	# retired with the field it converted, 6-6b post-smoke R-S6.)
 	t.deflect_stun_ticks = TimingWindow.seconds_to_ticks(config.deflect_stun_seconds)
 	# Story 6-6a (AC 4/AC 8): the knockdown stun and the get-up iframes, PLAIN conversions on the two
 	# stun lines' exact shape -- window durations, clamped to >= 1 tick for any non-zero authored value.
@@ -260,16 +244,13 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# very tick it was cast. That degrade is defined rather than crashing, and the authoring audit
 	# is what keeps it out of the shipped `.tres`.
 	t.unblockable_chargeup_ticks = TimingWindow.seconds_to_ticks(config.unblockable_chargeup_seconds)
-	# Story 5-5 (AC 2/AC 14): the mode ③ defense window's duration, a PLAIN conversion on the line
-	# directly above's exact shape and for the same reasons -- a window duration, already clamped to
-	# a minimum of 1 tick for any non-zero authored value. An authored 0.0 derives 0 ticks, which
-	# `TimingWindow.start(0)` renders as a window that never runs: a defense cast would spend the
-	# card and the stamina and negate nothing, ever. That degrade is defined rather than crashing,
-	# and the authoring audit is what keeps it out of the shipped `.tres`.
-	t.defense_window_ticks = TimingWindow.seconds_to_ticks(config.defense_window_seconds)
-	# Story 6-6b (AC 1/AC 2): the eligibility span and the three per-colour busy spans, PLAIN
-	# conversions on the defense window's exact shape directly above and for its stated reasons.
-	t.counter_eligibility_ticks = TimingWindow.seconds_to_ticks(config.counter_eligibility_seconds)
+	# Story 6-6b (AC 1/AC 2): the three per-colour busy spans, PLAIN conversions on the chargeup's
+	# exact shape directly above and for its stated reasons -- window durations, already clamped to a
+	# minimum of 1 tick for any non-zero authored value. An authored 0.0 derives 0 ticks, which
+	# `TimingWindow.start(0)` renders as a window that never runs: that colour's defense cast would
+	# spend the card and the stamina and counter nothing, ever. Defined rather than crashing, and the
+	# authoring audit is what keeps it out of the shipped `.tres`. (The superseded one-size defense
+	# window and the eligibility span were retired here, 6-6b post-smoke R-S6.)
 	t.counter_busy_ticks_red = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_red)
 	t.counter_busy_ticks_blue = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_blue)
 	t.counter_busy_ticks_green = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_green)

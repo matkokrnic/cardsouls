@@ -295,9 +295,14 @@ var _charge_reach_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ## (c)).
 var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 
-## Story 6-6b (AC 9): BLUE's LOCKED COUNTER-TRAVEL DIRECTION, per DEFENDER slot -- the planar
-## defender-to-attacker bearing captured at the PRESS, which `_resolve_movement`'s counter-busy branch
-## reads on every tick of BLUE's busy span to carry the defender toward the attacker.
+## Story 6-6b (AC 9): THE LOCKED COUNTER BEARING, per DEFENDER slot -- the planar defender-to-attacker
+## bearing captured at the PRESS, which `_resolve_movement`'s counter-busy branch reads on every tick
+## of the busy span for BOTH of the two things a counter needs to point at the attacker:
+##   * THE TRAVEL (AC 9, widened post-smoke by R-S1/R-S2 from BLUE alone to RED and BLUE);
+##   * THE FACING (R-S3), locked for the WHOLE busy span. The smoke found the defender counter-moving
+##     in whatever direction it happened to be facing -- GREEN's throw animation playing one way while
+##     the dagger flew another, RED jumping past the attacker's shoulder. One bearing feeds both, so
+##     the body cannot point one way while the counter travels another.
 ##
 ## IT IS A COPY OF A PUSHED FACT, WHICH IS ITS WHOLE CLASSIFICATION -- `_charge_contact_dirs` directly
 ## above in every respect the argument turns on. The value copied is `_charge_reach_dirs[attacker_slot]`,
@@ -369,7 +374,7 @@ var _iframe_open_at_step3: Array[bool] = [false, false]
 ## The `_iframe_open_at_step3` shape directly above, for the same measured reason and with the same
 ## per-tick lifetime.
 ##
-## ONE INT CARRIES EVERY CONJUNCT (window open, eligibility span still inside its head, alive, not
+## ONE INT CARRIES EVERY CONJUNCT (window still running, alive, not
 ## STUNNED, not getting up, and the colour itself) because they are ONE question -- "may this hero
 ## counter right now, and in what colour" -- and splitting them into a bool array plus a live colour
 ## read would let the two halves be captured at different instants.
@@ -378,7 +383,7 @@ var _iframe_open_at_step3: Array[bool] = [false, false]
 ## `_resolve_actions(p1)` -- the CHARGING arm's counter judgement included -- completely before
 ## `_resolve_actions(p2)`. A LIVE read of the defender's facts would therefore let P1's seat write
 ## `STUNNED` onto P1 and P2's seat then see a stunned defender and refuse its own counter: with both
-## heroes committed and both holding a matching eligible window on one tick, ONE counter would land
+## heroes committed and both holding a matching RUNNING window on one tick, ONE counter would land
 ## instead of two, and WHICH one would depend on seat order. The capture makes both seats judge the
 ## facts as they stood before either resolved, so BOTH counters land and BOTH heroes go down -- the
 ## `6-6a` simultaneous-landing precedent, not a trade decided by seat order.
@@ -392,7 +397,7 @@ var _counter_color_at_step3: Array[int] = [NO_COUNTER_COLOR, NO_COUNTER_COLOR]
 ## The resting value of `_counter_color_at_step3` -- "this hero can counter nothing this tick". It is
 ## `PlayerState.NO_TELEGRAPH_COLOR`'s own value under a name that says what the ABSENCE means here,
 ## because the two facts coincide but are not the same statement: a hero may hold a window whose colour
-## is a real colour and still be captured as unable to answer (stunned, or past its eligibility span).
+## is a real colour and still be captured as unable to answer (dead, stunned, or getting up).
 const NO_COUNTER_COLOR := PlayerState.NO_TELEGRAPH_COLOR
 
 ## Story 6-6a (AC 3/AC 6/AC 12, operator ruling R-PRESS): THE DEFERRED LANDING PACKAGE, per ATTACKER
@@ -649,8 +654,8 @@ func advance(intents: Array[InputIntent]) -> void:
 	_iframe_open_at_step3[1] = p2.hero.is_iframe_open() or _gets_up_this_tick(p2.hero)
 	# Story 6-6b (AC 8): the COUNTER's observation point, captured HERE and nowhere else, on the exact
 	# line above's seat and for the seat-symmetry reason `_counter_color_at_step3` states. Taken after
-	# step 2 has advanced every window (so this tick's elapsed count is the one the eligibility span is
-	# judged against) and BEFORE either seat's `_resolve_actions` has resolved anything.
+	# step 2 has advanced every window (so a window that emptied at this tick's step 2 is captured as
+	# spent) and BEFORE either seat's `_resolve_actions` has resolved anything.
 	_counter_color_at_step3[0] = _counter_color_of(p1)
 	_counter_color_at_step3[1] = _counter_color_of(p2)
 	_resolve_actions(p1, p1_intent, 0)
@@ -2861,7 +2866,7 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 	#
 	# IT SUPERSEDES `5-5`'s "re-casting while a window is already running RESTARTS it" dev-pass choice,
 	# which was a choice about a PRE-ARM: restarting a busy span mid-counter would let a second press
-	# extend the root indefinitely and would re-open the eligibility head for free. The card and the
+	# extend the root -- and, post-R-S6, the counter window with it -- indefinitely. The card and the
 	# stamina are NOT spent on the refusal (this gate precedes every mutation), so a mashed second press
 	# costs nothing but the refusal.
 	if player.defense_window.is_running:
@@ -3778,12 +3783,17 @@ func _apply_landing_packages() -> void:
 ## Returns the colour, or `NO_COUNTER_COLOR` for every reason it cannot. Called ONLY from the step-3
 ## capture (`_counter_color_at_step3`), never live at a judgement -- see that member for why.
 ##
-## THE ELIGIBILITY SPAN IS ELAPSED TICKS OF THE ONE REUSED WINDOW, not a second window:
-## `duration_ticks() - remaining_ticks()` is exactly `TimingWindow`'s own `_elapsed_ticks` while it
-## runs, so the short head of the busy span is readable with no new member and no new snapshot key.
-## The press resolves at STEP 6, after that tick's step 3, so the smallest elapsed count any judgement
-## can ever read is 1 -- which is precisely what makes AC 8's "a press on the very tick of the commit
-## is too late" structural rather than an off-by-one to defend.
+## POST-SMOKE (R-S6): THE WHOLE BUSY SPAN IS THE COUNTER WINDOW. The short ELIGIBILITY HEAD this
+## function used to measure -- `duration_ticks() - remaining_ticks() <= counter_eligibility_ticks` --
+## IS GONE, with the authored field and its tick twin. The operator's ruling after the live smoke:
+## "as long as you initiate the defence before the attack touches you, it should defend". So the one
+## timing question left is `is_running`, and "too early" now means the counter RAN OUT before the
+## attack committed -- the counter was spent, the press was never refused. AC 6's feint bait is
+## untouched by the widening: a feinted chargeup never reaches a judged tick at all.
+##
+## THE PRESS STILL CANNOT ANSWER ITS OWN TICK, and that stays structural rather than a boundary to
+## defend: the press resolves at STEP 6, after that tick's step 3, so a window pressed on the commit
+## tick is not yet running when this is read.
 ##
 ## THE DEFENDER-STATE GATES ARE AC 7's, and they close the `6-6a` deferred-work item "a downed hero
 ## keeps a defense window armed ... and can colour-counter while down". `5-5`/`5-6` refused only the
@@ -3798,11 +3808,12 @@ func _apply_landing_packages() -> void:
 ## is symmetric -- a degraded defense must never answer a degraded chargeup, and stating it once where
 ## both colours are in hand is what keeps the two halves from drifting apart. In practice a degraded
 ## cast opens no window at all (`BalanceTicks.counter_busy_ticks_for`), so this returns early anyway.
+##
+## `balance_ticks` IS STILL CHECKED, even though no count is read here any more: the capture runs on
+## every tick of every match, including the pre-injection ones a headless fixture can build, and the
+## rest of the counter path (the busy span that opened this window) cannot exist without it.
 func _counter_color_of(player: PlayerState) -> int:
 	if balance_ticks == null or not player.defense_window.is_running:
-		return NO_COUNTER_COLOR
-	var elapsed := player.defense_window.duration_ticks() - player.defense_window.remaining_ticks()
-	if elapsed > balance_ticks.counter_eligibility_ticks:
 		return NO_COUNTER_COLOR
 	if not player.hero.is_alive():
 		return NO_COUNTER_COLOR
@@ -4367,9 +4378,11 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 		# to finish on its own contract, so a hero that cast DEFENSE mid-roll keeps rolling and this
 		# branch takes over when the roll ends. The get-up branch co-occurs too -- a window armed before
 		# a knockdown keeps ticking through it (`5-5`, and `_counter_color_of`'s own `is_getting_up()`
-		# gate exists because that state is reachable) -- and both write the same literal zero, so which
-		# of the two answers is not observable. `DEAD` never reaches here at all: the early return at the
-		# top of this function zeroes a corpse's velocity first.
+		# gate exists because that state is reachable) -- and the GET-UP WINS, which since R-S1 is a
+		# visible answer rather than two zeroes agreeing: a hero getting up off the floor stays rooted
+		# instead of being carried by the counter travel of a window that outlived its knockdown.
+		# `DEAD` never reaches here at all: the early return at the top of this function zeroes a
+		# corpse's velocity first.
 		#
 		# `ATTACKING` IS THE ONE SIBLING THAT IS NOT A BRANCH ABOVE -- it lives in the `else` arm below,
 		# where the phase multiplier and the `3-0b` LUNGE are applied -- so AC 1's "finishes on its own
@@ -4378,36 +4391,57 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 		# won "from above" and the code gave it the root instead (REVIEW finding H2); the guard below is
 		# what makes the claim true, and the swing's own contract is unchanged from before this story.
 		#
-		# RED AND GREEN WRITE A LITERAL ZERO -- `5-2/R5`'s refusal of a tunable "rooted", applied a
-		# fourth time -- and the write HAPPENS rather than being skipped for its siblings' downstream
-		# reason: `HeroActor.drive()` reads this field into `move_and_slide()` every physics frame, so
-		# a skipped write would leave the last live velocity in place and slide the hero through its
-		# own counter.
+		# GREEN WRITES A LITERAL ZERO -- `5-2/R5`'s refusal of a tunable "rooted", applied a fourth
+		# time -- and the write HAPPENS rather than being skipped for its siblings' downstream reason:
+		# `HeroActor.drive()` reads this field into `move_and_slide()` every physics frame, so a
+		# skipped write would leave the last live velocity in place and slide the hero through its
+		# own counter. GREEN moves nothing because its counter throws a DAGGER across the gap
+		# (presentation, AC 11) instead of carrying the body.
 		#
-		# BLUE WRITES REAL TRAVEL, the `1-9` roll's own expression verbatim: the locked press-time
-		# bearing at `counter_travel_distance_blue / busy_seconds(BLUE)`, both read INLINE at the
-		# moment of use (CONSTRAINT C). The distance is authored in metres and the span in ticks, so
-		# the quotient converts the span back to seconds at `TimingWindow.TICK_HZ` -- the one place a
-		# tick count becomes a duration again, and it is a SPEED derivation, not window timing.
+		# RED AND BLUE WRITE REAL TRAVEL, the `1-9` roll's own expression: an authored distance over a
+		# span, both read INLINE at the moment of use (CONSTRAINT C). POST-SMOKE (R-S1/R-S2) that is
+		# two colours rather than one, and they carry DIFFERENT PROFILES over the same derivation:
+		#   * BLUE, forward-only for the whole span -- the slide, which stops when it arrives because
+		#     `move_and_slide()` meets the attacker's collider.
+		#   * RED, FORWARD then BACKWARD, net ZERO: out along the bearing for the jump's share of the
+		#     span (`counter_travel_forward_fraction_red`) and back by the SAME authored distance over
+		#     whatever is left of it. The smoke found RED stomping the air beside a standing attacker;
+		#     this is what makes the jump arrive on its head and the backflip return it. Its collider
+		#     is stepped out of the way for the span by PRESENTATION (`HeroActor`, R-S1) -- state never
+		#     learns a position (`4-3/R2`) and knows nothing about who is solid.
+		#
+		# THE TICK COUNT THE SPEEDS DIVIDE BY IS `duration - 1`, NOT the busy span, and that is what
+		# makes RED's net zero EXACT rather than nearly so. Movement resolves at step 5 and the press
+		# at step 6, so the press tick itself never travels; the window's last tick empties at step 2
+		# and this branch is not entered on it either. The moving ticks are therefore exactly the
+		# elapsed counts 1..duration-1, and each leg's speed is its own distance over its own share of
+		# THOSE. Under two moving ticks there is no room for a profile at all and travel is zero.
 		#
 		# THE SIGN: `_counter_travel_dirs` holds the charge-reach bearing, which runs TARGET ->
 		# ATTACKER by the `1-8` convention (here: defender -> attacker, since the counter's defender IS
-		# the attacker's target). Travel toward the attacker is therefore the fact UNNEGATED -- unlike
-		# facing, which runs hero -> target and negates it.
+		# the attacker's target). Travel toward the attacker is therefore the fact UNNEGATED -- and the
+		# same bearing feeds the FACING lock below, where hero -> target is the same direction again.
 		#
 		# ZERO TRAVEL IS THE FALLBACK AND COSTS NO BRANCH: an early press with no live chargeup locked
 		# `Vector2.ZERO`, and zero times any speed is zero. What STOPS the travel is
 		# `HeroActor.drive()` / `move_and_slide()` -- the attacker's collider, the `5-0d` arena edge --
 		# and state never learns a position (`4-3/R2` intact).
 		var travel := Vector3.ZERO
-		if player.defense_color == Enums.CardColor.BLUE and balance != null \
-				and balance_ticks != null:
-			var busy_ticks := balance_ticks.counter_busy_ticks_for(Enums.CardColor.BLUE)
-			if busy_ticks > 0:
-				var to_attacker := _counter_travel_dirs[slot]
-				var speed := balance.counter_travel_distance_blue \
-						/ (float(busy_ticks) / TimingWindow.TICK_HZ)
-				travel = Vector3(to_attacker.x, 0.0, to_attacker.y) * speed
+		var distance := 0.0 if balance == null \
+				else balance.counter_travel_distance_for(player.defense_color)
+		var moving_ticks := player.defense_window.duration_ticks() - 1
+		if distance > 0.0 and moving_ticks >= 2:
+			var elapsed := player.defense_window.duration_ticks() \
+					- player.defense_window.remaining_ticks()
+			var forward_ticks := moving_ticks
+			if player.defense_color == Enums.CardColor.RED:
+				forward_ticks = clampi(int(round(balance.counter_travel_forward_fraction_red
+						* float(moving_ticks))), 1, moving_ticks - 1)
+			var outbound := elapsed <= forward_ticks
+			var leg_ticks := forward_ticks if outbound else moving_ticks - forward_ticks
+			var to_attacker := _counter_travel_dirs[slot]
+			var speed := distance / (float(leg_ticks) / TimingWindow.TICK_HZ)
+			travel = Vector3(to_attacker.x, 0.0, to_attacker.y) * speed * (1.0 if outbound else -1.0)
 		player.hero.velocity = travel
 	else:
 		var state := player.hero.action_state
@@ -4521,8 +4555,31 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 	# alone (a basis change with no movement) turns nothing. The CHARGING override stays FIRST for
 	# both states: mode (2) aims at the enemy hero whether or not the player holds a lock. The DEAD
 	# and round-over carve-outs return above this line exactly as before (AC 22).
+	#
+	# STORY 6-6b POST-SMOKE (R-S3): THE COUNTER'S FACING LOCK IS THE FOURTH RUNG, and it is FIRST
+	# because it is the most specific: a countering hero is answering ONE attacker and must be turned
+	# to it for the WHOLE busy span. The smoke found the opposite -- the defender counter-moved in
+	# whatever direction it was already facing, so GREEN's throw animation played one way while the
+	# dagger flew another, and RED's jump left the attacker over its shoulder.
+	#
+	# THE BEARING IS THE ONE THE TRAVEL USES, read from the same press-time lock (`_counter_travel_dirs`)
+	# so the body can never point one way while the counter carries it another. It runs defender ->
+	# attacker (the `1-8` convention, see the travel branch), and facing runs hero -> target, which
+	# here is the same direction -- so it is used UNNEGATED, unlike the CHARGING aim below.
+	#
+	# THE ZERO-GUARD IS THE RULED FALLBACK, not a convenience: with nothing charging at the press the
+	# lock copied `Vector2.ZERO`, and facing is then left ALONE -- the "no new information, keep the
+	# last heading" rule this whole ladder is built on. A counter that answers nothing turns nowhere.
+	#
+	# NO CARVE-OUT IS WEAKENED BY SITTING FIRST: a countering hero cannot be CHARGING (the busy gate
+	# refuses initiating one, and `_resolve_defense_cast` refuses casting while CHARGING), so the rung
+	# below it is unreachable at the same time rather than merely outranked. This writes on every busy
+	# tick, which is what "for the whole busy span" means, and normal steering resumes on the first
+	# tick after the window empties.
 	var lock_dir := _lock_directions[slot]
-	if player.hero.action_state == HeroState.ActionState.CHARGING:
+	if player.defense_window.is_running and not _counter_travel_dirs[slot].is_zero_approx():
+		player.hero.facing = _counter_travel_dirs[slot]
+	elif player.hero.action_state == HeroState.ActionState.CHARGING:
 		var aim := _charge_reach_dirs[slot]
 		if player.charge_window.is_running and not aim.is_zero_approx():
 			player.hero.facing = -aim

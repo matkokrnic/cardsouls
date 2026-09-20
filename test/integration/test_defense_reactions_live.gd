@@ -109,7 +109,11 @@ func _physics_process(_delta: float) -> bool:
 					_failures.append("1. a hit on idle P1 plays hit_react (got '%s')" % _clip(_p1))
 				if _clip(_p2) == &"hit_react":
 					_failures.append("1. P1's hit played hit_react on P2 -- the consumer is cross-wired")
-				p2.stun.start(_state.balance_ticks.color_counter_stun_ticks)
+				# 6-6b post-smoke (R-S6): the colour-counter stun was retired with its field (the
+				# counter knocks the attacker down instead), so the ORDINARY stun this phase needs
+				# is the one that remains -- the melee deflect's, still classified as ordinary by
+				# `is_knockdown_stun`, which is the only property this phase turns on.
+				p2.stun.start(_state.balance_ticks.deflect_stun_ticks)
 				p2.set_action_state(HeroState.ActionState.STUNNED)
 				_next("stun_check")
 		"stun_check":

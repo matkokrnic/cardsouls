@@ -38,13 +38,14 @@ const MAX_STAMINA := 50.0
 const UNBLOCKABLE_COST := 20.0
 const DEFENSE_COST := 4.0
 const CHARGEUP_TICKS := 16
-const DEFENSE_WINDOW_TICKS := 30
-## Story 6-6b (AC 1/AC 2): the counter's two counts. `DEFENSE_WINDOW_TICKS` above is superseded as
-## the window's LENGTH (AC 1) and is left authored only so its own conversion stays exercised; the
-## window this file arms is now the colour's BUSY span, and the head of it is the ELIGIBILITY span.
-## Both are DISTINCT from every other count here ({4, 6, 16, 30, 40}).
-const COUNTER_ELIGIBILITY_TICKS := 5
+## Story 6-6b (AC 1/AC 2), POST-SMOKE (R-S6): the counter's ONE count. The `5-5` one-size
+## `DEFENSE_WINDOW_TICKS` and the ELIGIBILITY span that briefly superseded it are both retired with
+## their fields; the window this file arms is the colour's BUSY span, and the WHOLE of it answers.
+## DISTINCT from every other count here ({4, 6, 16, 40}).
 const COUNTER_BUSY_TICKS := 24
+## How far ahead of the judged tick the one countering test presses. Any lead the busy span outlives
+## answers identically now (R-S6); this one is small so the test is about the counter, not a boundary.
+const COUNTER_PRESS_LEAD_TICKS := 5
 const REGEN_DELAY_TICKS := 6
 const DRAW_DELAY_TICKS := 40
 const UNBLOCKABLE_DAMAGE := 10.0   # 10 % of 100.0 max hp
@@ -233,16 +234,16 @@ func test_a_feint_neither_consumes_nor_is_answered_by_an_armed_defense_window() 
 ## eligibility span, DOES counter. Without this the test above would pass against a build where mode
 ## 3 never worked at all.
 ##
-## THE PRESS MOVES LATE (6-6b): `5-5` could arm the window before the cast and still be answered a
-## whole chargeup later, because the old rung read the window at the LANDING. The eligibility span is
-## the point of this story, so the press now sits `COUNTER_ELIGIBILITY_TICKS` ticks before the judged
-## tick -- which is exactly the window's elapsed count when the judgement reads it.
+## WHERE THE PRESS SITS (6-6b, POST-SMOKE R-S6): anywhere whose busy span is still RUNNING at the
+## judged tick. The dev pass parked it a few ticks ahead to sit inside the then-live eligibility
+## head; that head is gone, so it is parked a few ticks ahead simply because a press on the judged
+## tick itself is too late (step 6 resolves after step 3) and this test is about neither boundary.
 func test_the_same_fixture_does_counter_a_chargeup_that_is_held_out() -> void:
 	var ms := _make_match()
 	var deflects := _collect_deflects(ms)
 	var color: Enums.CardColor = _colors()[ms.p2.hand.to_array()[_first_occupied(ms.p2)]]
 	_cast_unblockable_of_color(ms, color)
-	var press_at := CHARGEUP_TICKS - 1 - COUNTER_ELIGIBILITY_TICKS
+	var press_at := CHARGEUP_TICKS - 1 - COUNTER_PRESS_LEAD_TICKS
 	for t in CHARGEUP_TICKS:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
 		var defender_intent := InputIntent.new()
@@ -509,7 +510,6 @@ func _config() -> BalanceConfig:
 	c.deflect_stamina_cost = 5.0
 	c.attack_windup_seconds = 0.5
 	c.attack_active_seconds = 0.1
-	c.counter_eligibility_seconds = float(COUNTER_ELIGIBILITY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
@@ -526,7 +526,6 @@ func _config() -> BalanceConfig:
 	c.unblockable_reach_green = REACH
 	c.unblockable_damage_percent_of_max_hp = UNBLOCKABLE_DAMAGE
 	c.defense_stamina_cost = DEFENSE_COST
-	c.defense_window_seconds = float(DEFENSE_WINDOW_TICKS) / TimingWindow.TICK_HZ
 	return c
 
 

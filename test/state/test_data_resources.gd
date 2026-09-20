@@ -98,14 +98,15 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	"stamina_accelerator_regen_step",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
-	# Story 5-6 (AC 1/AC 3): `stun_seconds` RENAMED to `color_counter_stun_seconds` and joined by
-	# `deflect_stun_seconds` -- one duration per tier of the three-tier ladder that stuns. BOTH carry
-	# the `_seconds` suffix, so reflection half (b) independently demands stem-matched
-	# `color_counter_stun_ticks` / `deflect_stun_ticks` twins on `BalanceTicks`, and it would demand
-	# them even if this list had never been touched. Both also carry a BESPOKE authored `> 0.0` bound
-	# PLUS a directional `>` bound in test_balance_authoring.gd, whose `stun_seconds` exemption AC 4
-	# REMOVES: the field is no longer data-only, so a zero is no longer inert.
-	"color_counter_stun_seconds", "deflect_stun_seconds",
+	# Story 5-6 (AC 1/AC 3): `stun_seconds` RENAMED and split in two, one duration per tier of the
+	# ladder that stuns -- and 6-6b post-smoke (R-S6) RETIRED the colour-counter half: the counter
+	# knocks the attacker down (6-6b AC 4), so nothing starts a window with it. What is left carries
+	# the `_seconds` suffix, so reflection half (b) independently demands the stem-matched
+	# `deflect_stun_ticks` twin on `BalanceTicks`, and it would demand it even if this list had never
+	# been touched. It also carries a BESPOKE authored `> 0.0` bound PLUS a directional `>` bound in
+	# test_balance_authoring.gd, whose `stun_seconds` exemption AC 4 REMOVES: the field is no longer
+	# data-only, so a zero is no longer inert.
+	"deflect_stun_seconds",
 	# Story 6-6a (AC 4/AC 8): the knockdown stun and the get-up iframes, on the two stun lines above's
 	# precedent -- both `_seconds`, so half (b) demands the `knockdown_stun_ticks` /
 	# `get_up_iframe_ticks` twins independently. The knockdown joins the bespoke three-way TICK order
@@ -149,36 +150,34 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# top of the `>= 0` loop below: `field in config` and `>= 0` BOTH pass on the 0 script default,
 	# and a 0 grant or a 0 cap ships the whole orb economy invisible in the build.
 	"unblockable_orb_grant", "max_orbs_per_color",
-	# Story 5-5 (AC 6/AC 14): the TWO mode ③ tunables -- the FIFTH stamina seat's cost, and the
-	# reaction window's duration. Listed here because reflection half (a) below fails otherwise, the
-	# guard working exactly as it did for the 5-2 four and the 5-4 two above.
+	# Story 5-5 (AC 6/AC 14): the FIFTH stamina seat's cost. Listed here because reflection half (a)
+	# below fails otherwise, the guard working exactly as it did for the 5-2 four and the 5-4 two
+	# above. It has no `_seconds` suffix and no tick-domain counterpart by design (a cost is not a
+	# duration), and it carries a BESPOKE authored `> 0` bound in test_balance_authoring.gd on top of
+	# the `>= 0.0` loop below: a 0.0 cost makes the defense free.
 	#
-	# ONLY ONE OF THE TWO CARRIES THE `_seconds` SUFFIX, so half (b) independently demands a
-	# stem-matched `defense_window_ticks` on `BalanceTicks` -- and it would demand it even if this
-	# list had never been touched, which is why AC 14 calls the named list only HALF of this file's
-	# obligation. `defense_stamina_cost` has no suffix and no tick-domain counterpart by design (a
-	# cost is not a duration). BOTH carry a BESPOKE authored `> 0` bound in test_balance_authoring.gd
-	# on top of the `>= 0.0` loop below: a 0.0 cost makes the defense free, and a 0.0 window derives
-	# 0 ticks, never runs, and makes every defense cast negate nothing -- the story shipped invisible.
-	"defense_stamina_cost", "defense_window_seconds",
-	# Story 6-6b (AC 1/AC 2/AC 9): the colour counter's five authored tunables. ONLY
-	# `counter_eligibility_seconds` carries the `_seconds` SUFFIX, so half (b) below demands a
-	# stem-matched `counter_eligibility_ticks` on `BalanceTicks` and leaves the other four alone --
-	# the three per-colour busy spans take the `unblockable_launch_seconds_*` naming shape (the
-	# suffix is the COLOUR, not `_seconds`) and `counter_travel_distance_blue` is a distance, not a
-	# duration. Half (a) demands all five entries here, and all five carry BESPOKE bounds in
-	# test_balance_authoring.gd on top of the `>= 0.0` loop below: the busy spans are audited in the
-	# ONE direction AC 2 pins (`busy > eligibility > 0`, per colour), and the travel distance `> 0`
-	# on `roll_distance`'s footing -- a zero would ship BLUE's whole travel half invisible.
-	"counter_eligibility_seconds",
+	# ITS SIBLING `defense_window_seconds` WAS RETIRED at 6-6b post-smoke (R-S6) together with
+	# `counter_eligibility_seconds`: the counter window is each colour's own busy span below, so the
+	# one-size pre-arm and the eligibility head it was superseded by are both gone, and with them the
+	# `defense_window_ticks` / `counter_eligibility_ticks` twins half (b) used to demand.
+	"defense_stamina_cost",
+	# Story 6-6b (AC 1/AC 2/AC 9), POST-SMOKE (R-S1/R-S2): the colour counter's six authored
+	# tunables. NOT ONE OF THEM carries the `_seconds` SUFFIX, so half (b) below leaves all six
+	# alone: the three per-colour busy spans take the `unblockable_launch_seconds_*` naming shape
+	# (the suffix is the COLOUR, not `_seconds`), the two travel distances are distances, and the
+	# forward fraction is a ratio. Half (a) demands all six entries here, and every one carries a
+	# BESPOKE bound in test_balance_authoring.gd on top of the `>= 0.0` loop below: each busy span
+	# `> 0` (a zero opens no window at all for that colour), each travel distance `> 0` on
+	# `roll_distance`'s footing, and RED's forward fraction strictly inside (0, 1).
 	"counter_busy_seconds_red", "counter_busy_seconds_blue", "counter_busy_seconds_green",
-	"counter_travel_distance_blue",
+	"counter_travel_distance_red", "counter_travel_distance_blue",
+	"counter_travel_forward_fraction_red",
 	# Story 6-2 (AC 9/AC 17): the Pitch Zone countdown. Its `_seconds` suffix makes half (b) below demand a
 	# stem-matched `pitch_stage_timer_ticks` on BalanceTicks; half (a) demands this entry. The optional
 	# orb-clear BOOL (`pitch_stage_clears_orbs`) is NOT listed and does not need to be: reflection below
 	# collects only TYPE_FLOAT / TYPE_INT properties, so a bool is invisible to both halves by
 	# construction -- the `unblockable_swing_at_commit` precedent. It carries a bespoke > 0 bound in
-	# test_balance_authoring.gd, for the `defense_window_seconds` reason.
+	# test_balance_authoring.gd, for the `unblockable_chargeup_seconds` reason.
 	"pitch_stage_timer_seconds",
 	# Story 6-3b (AC 5): the pitch HUD's countdown push cadence -- a MODULO DIVISOR on the
 	# `mana_accelerator_interval_seconds` shape. Its `_seconds` suffix makes half (b) below demand the

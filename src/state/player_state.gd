@@ -351,8 +351,8 @@ func to_snapshot() -> Dictionary:
 		# OUTCOME (whether an incoming unblockable lands at all), so it cannot be recomputed for free
 		# inside the tick that reads it -- `4-3a/R17`'s test, passed. Remaining ticks alone is
 		# determinism-complete on the identical argument: the duration is
-		# `balance_ticks.defense_window_ticks`, a load-time constant a replay reproduces from the
-		# recorded balance, so `elapsed` is recoverable as `duration - remaining`.
+		# `balance_ticks.counter_busy_ticks_for(defense_color)`, a load-time constant a replay
+		# reproduces from the recorded balance, so `elapsed` is recoverable as `duration - remaining`.
 		#
 		# THE GATE IS `.is_running`, NOT AN ACTION STATE, AND THAT DIFFERENCE IS DELIBERATE. Its
 		# `telegraph` sibling gates on `CHARGING` because that is the ONE state a chargeup ever

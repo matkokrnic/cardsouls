@@ -312,29 +312,23 @@ extends Resource
 @export var roll_distance: float = 0.0
 
 @export_group("Stun")
-## Story 5-6 (AC 1/AC 6, `E5-P/R1`): NO LONGER A DATA-ONLY FIELD. OPEN decision (a) (attacker
-## consequence on deflect) is RESOLVED, and this story is the resolution — `STUNNED` gains its first
-## two inbound edges, both direct `set_action_state` calls from `MatchState` rather than
-## `TRANSITION_TABLE` edges (the `DEAD`-entry precedent).
+## Story 5-6 (AC 1/AC 9, `E5-P/R1`): what the ATTACKER holds after an ordinary MELEE swing is
+## deflected (`_resolve_contacts`, AC 9) -- the LIGHTER of the two stuns that survive, and the only
+## non-knockdown one left.
 ##
-## RENAMED FROM `stun_seconds` (AC 1). Once TWO stun durations exist, a name that says neither which
-## ladder tier it belongs to nor how it differs from its sibling is ambiguous by construction. THIS
-## one is the COLOR-COUNTER stun: what the ATTACKER holds after a colour-matched defense negates its
-## unblockable (`_resolve_charge_landing`, AC 5) — the heavier of the two, the GDD's own "~1s"
-## (`gdd.md:241`).
-@export var color_counter_stun_seconds: float = 0.0
-## Story 5-6 (AC 1/AC 9, `E5-P/R1`): the LIGHTER sibling — what the ATTACKER holds after an ordinary
-## MELEE swing is deflected (`_resolve_contacts`, AC 9). Deliberately SHORTER than
-## `color_counter_stun_seconds` above, and the ORDER is asserted rather than merely intended
-## (`test_balance_authoring.gd`): an authored pair that inverted the gradient would ship a broken
-## three-tier ladder with every other audit green. Reading a colour is the harder read and pays the
-## bigger punish; landing a deflect is E1 melee content available every swing.
+## STORY 6-6b POST-SMOKE (R-S6): its heavier sibling `color_counter_stun_seconds` IS RETIRED HERE,
+## with `defense_window_seconds` and `counter_eligibility_seconds`, as the close-out orphan set. The
+## colour counter stopped stunning the attacker when `6-6b` replaced the `5-5`/`5-6` landing rung
+## with an attacker KNOCKDOWN (AC 4), so nothing in `src/` has read that field since; keeping it
+## authored kept a dead number in the ladder audit and a dead rung in the three-way gradient. The
+## gradient the audit still pins is `knockdown > deflect`, which is the whole of what ships.
 @export var deflect_stun_seconds: float = 0.0
 ## Story 6-6a (AC 3/AC 4): the THIRD stun duration -- what the VICTIM of an UNANSWERED unblockable
 ## landing holds (the knockdown, `_apply_landing_packages`). Named on the two siblings' precedent
 ## above: once a third duration exists, the name says which rung it belongs to. The HEAVIEST of the
 ## three, and the order is asserted in TICKS (`test_balance_authoring.gd`, AC 4):
-## `knockdown > color_counter > deflect`. The ordering is also load-bearing beyond the ladder's
+## `knockdown > deflect` (6-6b post-smoke: the middle rung retired with
+## `color_counter_stun_seconds`). The ordering is also load-bearing beyond the ladder's
 ## gradient: `BalanceTicks.is_knockdown_stun` tells a knockdown from an ordinary stun by the running
 ## window's duration alone (no stored reason field), which is only sound while the three stay distinct.
 @export var knockdown_stun_seconds: float = 0.0
@@ -476,33 +470,17 @@ extends Resource
 ## test_balance_authoring.gd on top of the `>= 0.0` loop -- a free defense is the roll precedent
 ## again, on the fifth spend seat.
 @export var defense_stamina_cost: float = 0.0
-## Story 5-5 (AC 2/AC 14): how long the reaction window a defense cast opens stays open. Crosses into
-## the tick domain at the ONE boundary (`BalanceTicks.defense_window_ticks`, the
-## `unblockable_chargeup_ticks` precedent) and is never compared against a raw float inside
-## `advance()`.
+## Story 6-6b POST-SMOKE (R-S6): `defense_window_seconds` and `counter_eligibility_seconds` STOOD
+## HERE and are RETIRED, with `color_counter_stun_seconds`, as the close-out orphan set.
 ##
-## PROVISIONAL, and deliberately LONGER than `unblockable_chargeup_seconds` (R-A): the defender must
-## be able to pre-arm and still be covered when the chargeup lands. A 0.0 here derives 0 ticks,
-## `TimingWindow.start(0)` never runs, and no cast could EVER negate anything -- the whole answer
-## half of the read exchange ships invisible, which is why this carries a bespoke `> 0` bound too.
-@export var defense_window_seconds: float = 0.0
-## Story 6-6b (AC 1): HOW LONG AFTER THE PRESS A COUNTER MAY STILL ANSWER -- the Sekiro-style
-## ELIGIBILITY span, read as ELAPSED ticks of the one reused `defense_window`
-## (`duration_ticks() - remaining_ticks() <= counter_eligibility_ticks`) rather than as a second
-## window. The window's total length is the colour's BUSY span below; this is the short head of it
-## during which an attacker's commit or launch tick can be answered.
+## `defense_window_seconds` was the `5-5` 1.5 s PRE-ARM, superseded as the counter window by the
+## three per-colour busy spans below and read by nothing in `src/` since. `counter_eligibility_
+## seconds` was the short head of the busy span during which a commit or launch tick could still be
+## answered -- the live smoke retired the idea itself: THE WHOLE BUSY SPAN IS THE COUNTER WINDOW
+## ("as long as you initiate the defence before the attack touches you, it should defend"), so a
+## counter lands iff the window is RUNNING at the judged tick and "too early" means the counter RAN
+## OUT, never that the press was refused. One span, one number per colour, nothing to order against.
 ##
-## IT SUPERSEDES `defense_window_seconds` ABOVE AS THE COUNTER WINDOW. That field is no longer read
-## by any seat in `src/` (the `5-5`/`5-6` landing-tick negation rung it served is retired, AC 5); it
-## is kept authored rather than deleted, with its supersession recorded in the decision log at this
-## story's close-out, on the `color_counter_stun_seconds` orphan's own treatment.
-##
-## Crosses into the tick domain at the ONE boundary (`BalanceTicks.counter_eligibility_ticks`), the
-## `defense_window_seconds` shape, and is never compared against a raw float inside `advance()`.
-## Zero default like every sibling duration, and therefore a BESPOKE authored bound in
-## test_balance_authoring.gd -- and a STRICTER one than `> 0`: every colour's busy span must exceed
-## it (`busy > eligibility > 0`), which is the ONE direction AC 2 pins about the three feel knobs.
-@export var counter_eligibility_seconds: float = 0.0
 ## Story 6-6b (AC 2): HOW LONG THE PRESSER IS BUSY, one authored value PER COLOUR -- the total length
 ## the one reused `defense_window` is started at, selected at the press from `defense_color`. Busy IS
 ## the window running: while it runs every input is refused and the hero is rooted (except BLUE's
@@ -522,24 +500,56 @@ extends Resource
 ## THE `unblockable_launch_seconds_*` NAMING SHAPE verbatim -- a per-colour triplet whose names do
 ## NOT end in `_seconds`, so test_data_resources.gd's reflective stem probe leaves them alone exactly
 ## as it leaves that triplet alone; their tick twins are demanded by the bespoke audit instead.
-## PROVISIONAL feel knobs (RED 1.5 / BLUE 1.2 / GREEN 0.7), tuned at the live smoke and pinned by
-## tests in ONE direction only: `busy > eligibility > 0`, per colour.
+## PROVISIONAL feel knobs, tuned at the live smoke and pinned by tests in ONE direction only:
+## `busy > 0`, per colour. POST-SMOKE (R-S4) they were CUT -- RED 1.5 -> 1.0, BLUE 1.2 -> 0.8,
+## GREEN 0.7 -> 0.5: every one of the three read as a hesitation the player was locked inside rather
+## than as a counter. The cut tables re-fit BY CONSTRUCTION (the rate is derived from this span), so
+## this stayed a `.tres` edit with no presentation edit, which is what AC 2 asks these numbers to be.
 @export var counter_busy_seconds_red: float = 0.0
 @export var counter_busy_seconds_blue: float = 0.0
 @export var counter_busy_seconds_green: float = 0.0
-## Story 6-6b (AC 9): HOW FAR BLUE's counter carries the defender toward the attacker, in metres,
-## spread over BLUE's busy span above -- the `1-9` `roll_distance` / `roll_duration_seconds`
-## precedent exactly, including that the SPEED is derived at the movement seat as distance over
-## duration and read inline there (CONSTRAINT C).
+## Story 6-6b (AC 9): HOW FAR A COUNTER CARRIES THE DEFENDER, in metres, spread over the colour's own
+## busy span above -- the `1-9` `roll_distance` / `roll_duration_seconds` precedent exactly, including
+## that the SPEED is derived at the movement seat as distance over duration and read inline there
+## (CONSTRAINT C).
 ##
-## BLUE ONLY, and the absence of a RED and a GREEN field is the AC rather than an omission: those two
-## counters keep the root fixed and move the mesh alone. A colour with no authored distance travels
-## zero, which is also what an early BLUE press with no live chargeup does (the zero-fact fallback).
+## POST-SMOKE (R-S1/R-S2) THIS IS A PER-COLOUR PAIR, not BLUE alone. The smoke found BOTH travel
+## halves wrong in the same way -- nothing arrived:
+##   * RED played its jump-and-backflip ON THE SPOT while the attacker stood a reach away, so the
+##     "headstomp" landed on nothing. RED now travels FORWARD along the locked bearing for the jump's
+##     share of the span and BACK by the same distance for the backflip's, net ZERO (`_resolve_
+##     movement`'s counter-busy branch) -- it reaches the attacker's head and bounces back.
+##   * BLUE's 1.5 m slide stopped short of an attacker that commits from up to its own reach away.
 ##
-## PROVISIONAL 1.5 m. A DISTANCE, not a duration, so it carries no `BalanceTicks` twin and no
-## reflective-probe obligation -- only the `>= 0.0` loop and a bespoke authored `> 0` bound, on
-## `roll_distance`'s own footing: a zero would ship BLUE's whole travel half invisible.
+## PROVISIONAL = THE UNBLOCKABLE'S OWN REACH, PER COLOUR (`unblockable_reach_red` 4.0,
+## `unblockable_reach_blue` 6.0). That is the operator's number and the only one with a reason behind
+## it: reach is exactly how far away an attacker of that colour can be standing when it commits, so a
+## counter authored shorter than it can be dodged by standing still. A feel knob, unpinned by value.
+##
+## GREEN HAS NO FIELD AND TRAVELS ZERO, which is the ruling rather than an omission: its counter is a
+## THROW, and the dagger crosses the gap instead of the body. `counter_travel_distance_for` answers
+## 0.0 for it and for the sentinel, `unblockable_reach_for`'s totality shape.
+##
+## DISTANCES, not durations, so they carry no `BalanceTicks` twin and no reflective-probe obligation
+## -- only the `>= 0.0` loop and a bespoke authored `> 0` bound each, on `roll_distance`'s own
+## footing: a zero would ship that colour's whole travel half invisible.
+@export var counter_travel_distance_red: float = 0.0
 @export var counter_travel_distance_blue: float = 0.0
+## Story 6-6b POST-SMOKE (R-S1): WHERE RED'S TRAVEL TURNS AROUND -- the share of RED's busy span spent
+## going FORWARD, the rest of it spent coming BACK. A fraction in (0, 1).
+##
+## IT EXISTS BECAUSE THE TURN HAS TO BE A STATE FACT AND THE CLIP JOIN IS A PRESENTATION ONE. RED's
+## body travel is two steps (out on `counter_jump`, back on `counter_backflip`) and the state layer
+## cannot read `AnimationController._COUNTER_PRESENTATION` to learn where one ends -- so the split is
+## authored here, beside the distance it splits, instead of being duplicated as a state constant that
+## silently disagrees with the cut table after the next retune.
+##
+## PROVISIONAL 0.305 = the jump's share of RED's measured cut total (0.8333 of 2.7333 s), so the body
+## turns around on the frame the flip starts. Retuning the cut table means retuning this; nothing
+## enforces the agreement, and that is stated rather than hidden. NET ZERO does not depend on it: the
+## backward leg is derived from whatever is left of the span, so any fraction still returns the hero
+## exactly where it started.
+@export var counter_travel_forward_fraction_red: float = 0.0
 
 @export_group("Orbs")
 ## Story 5-4 (AC 9): the per-colour CEILING on OrbPool, one value applied to each colour
@@ -556,7 +566,7 @@ extends Resource
 @export_group("Pitch")
 ## Story 6-2 (AC 9, `E6-P/R5` provisional 20 s): how long a staged card may wait in its owner's Pitch
 ## Zone before it FIZZLES to the discard. Crosses into the tick domain at the ONE boundary
-## (`BalanceTicks.pitch_stage_timer_ticks`, the `defense_window_seconds` shape) and is never compared
+## (`BalanceTicks.pitch_stage_timer_ticks`, the `unblockable_chargeup_seconds` shape) and is never compared
 ## against a raw float inside `advance()`.
 ##
 ## Zero default like every sibling duration, and therefore a BESPOKE authored `> 0` bound in
@@ -607,6 +617,15 @@ extends Resource
 func unblockable_reach_for(color: int) -> float:
 	return _unblockable_by_color(color, unblockable_reach_red, unblockable_reach_blue,
 		unblockable_reach_green, 0.0)
+
+
+## Story 6-6b POST-SMOKE (R-S1/R-S2): the per-colour lookup over the counter TRAVEL pair --
+## `unblockable_reach_for`'s shape verbatim, including what it answers for a colour with no authored
+## distance. GREEN and the sentinel read ZERO and travel nowhere, which is the ruling (GREEN throws a
+## dagger across the gap instead of moving the body) and the degrade in one answer.
+func counter_travel_distance_for(color: int) -> float:
+	return _unblockable_by_color(color, counter_travel_distance_red, counter_travel_distance_blue,
+		0.0, 0.0)
 
 
 func unblockable_arc_degrees_for(color: int) -> float:

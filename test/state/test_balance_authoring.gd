@@ -9,9 +9,10 @@ extends TestCase
 ## Story 5-6 (AC 4) REMOVES THE `stun_seconds` EXEMPTION this header used to carry. That exemption
 ## rested entirely on "no E1 code path ever starts the stun window, so a zero there is inert" —
 ## which stopped being true the moment `E5-P/R1` resolved OPEN decision (a) and `5-6` gave `STUNNED`
-## its two inbound edges. The field itself is gone too, split into `color_counter_stun_seconds` and
-## `deflect_stun_seconds`; both are audited below in their OWN bespoke function rather than joining
-## ACTION_SECONDS_FIELDS (see that constant's note for why).
+## its two inbound edges. The field itself is gone too, split at `5-6` into `color_counter_stun_seconds`
+## and `deflect_stun_seconds` -- and the first of that pair is itself retired at 6-6b post-smoke
+## (R-S6), the counter having knocked the attacker down since 6-6b AC 4. What remains is audited
+## below in its OWN bespoke function rather than joining ACTION_SECONDS_FIELDS (see that constant).
 ##
 ## Story 1-4 (D7) adds the NON-DURATION stamina-economy class below, with one exemption:
 ## EXEMPT: stamina_regen_delay_seconds — 0 is legitimate tuning (no delay), not a defect.
@@ -211,75 +212,60 @@ func test_authored_defense_values_are_positive_and_correctly_ordered() -> void:
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.defense_window_seconds > 0.0,
-		"defense_window_seconds must be authored > 0 (a zero window never runs, so no defense cast "
-		+ "could ever negate anything while still spending the card and the stamina)")
 	assert_true(config.defense_stamina_cost > 0.0,
 		"defense_stamina_cost must be authored > 0 (a free defense is the roll precedent again, on "
 		+ "the FIFTH spend seat)")
-	# Code review 6-1c (D2): the landing is now chargeup + launch(colour), not chargeup alone -- a
-	# window that only outlasts the chargeup can still expire before a slower colour's launch ends.
-	# Pinned against the LONGEST authored launch span so the bound holds for every colour, read off
-	# the authored triplet rather than a literal (BC/R3 tuning isolation).
-	var longest_launch: float = maxf(config.unblockable_launch_seconds_red,
-		maxf(config.unblockable_launch_seconds_blue, config.unblockable_launch_seconds_green))
-	assert_true(
-		config.defense_window_seconds > config.unblockable_chargeup_seconds + longest_launch,
-		"defense_window_seconds must be authored LONGER than unblockable_chargeup_seconds + the "
-		+ "longest unblockable_launch_seconds_* (R-A, widened 6-1c/R9): a window that only outlasts "
-		+ "the chargeup can still expire before the slowest colour's launch lands, even though it "
-		+ "was opened on the telegraph's first tick")
+	# Story 6-6b POST-SMOKE (R-S6): THE WINDOW-LENGTH BOUND IS GONE WITH THE FIELD IT BOUNDED.
+	# `defense_window_seconds` -- the `5-5` one-size pre-arm, and the `> chargeup + longest launch`
+	# relation the 6-1c review widened -- is retired outright: the counter window is each colour's
+	# own busy span now (audited in the function below), and a bound on a field nothing reads was a
+	# true statement about nothing. NOTHING REPLACES IT, and that is the ruling rather than a gap:
+	# "still open when the attack lands" stopped being something the defender pre-arms.
 	assert_true(config.defense_stamina_cost < config.unblockable_stamina_cost,
 		"defense_stamina_cost must be authored SMALLER than unblockable_stamina_cost (R-D): the "
 		+ "defender answers a commitment already made rather than making one")
 
 
-## Story 6-6b (AC 1/AC 2/AC 9): THE COLOUR COUNTER'S FIVE TUNABLES, on the function directly above's
-## template exactly -- positivity in the defect-by-construction class, PLUS the ONE directional bound
-## the ruling states.
+## Story 6-6b (AC 1/AC 2/AC 9), POST-SMOKE (R-S1/R-S2/R-S4/R-S6): THE COLOUR COUNTER'S SIX TUNABLES,
+## on the function directly above's template exactly -- positivity in the defect-by-construction
+## class, plus the one bound that is a DIRECTION rather than a value.
 ##
-## THE NUMBERS ARE FEEL KNOBS AND ARE DELIBERATELY NOT PINNED (AC 2 says so in as many words: RED
-## 1.5 / BLUE 1.2 / GREEN 0.7 are provisional and the live smoke tunes them). What IS pinned is the
-## single direction that makes the mechanism coherent at all, asserted PER COLOUR:
-##
-##     busy(colour) > eligibility > 0
-##
-## Each half is a defect by construction and neither is caught by the `>= 0.0` reflective loop:
-##   * a 0.0 ELIGIBILITY derives 0 ticks, and the elapsed count is at least 1 on every tick a
-##     judgement can read (the press resolves at step 6, after that tick's step 3), so EVERY counter
-##     would miss while still costing the card, the stamina and the busy time -- the answer half of
-##     the read exchange shipped invisible;
+## THE NUMBERS ARE FEEL KNOBS AND ARE DELIBERATELY NOT PINNED (AC 2 says so in as many words; the
+## post-smoke pass cut all three busy spans and re-sized both travel distances without touching this
+## file, which is `BC/R3` working). What survives is only what a zero or an inversion would BREAK:
 ##   * a 0.0 BUSY span for a colour derives 0 ticks, `TimingWindow.start(0)` never runs, and that
-##     colour's press opens no window at all -- no eligibility, no counter, no presentation;
-##   * an eligibility at or above a colour's busy span would make that colour's whole window eligible,
-##     which is the 1.5 s pre-arm this story exists to retire, wearing the new field's name.
+##     colour's press opens no window at all -- no counter window, no busy time, no presentation;
+##   * a 0.0 TRAVEL DISTANCE for RED or BLUE ships that colour's whole travel half invisible: BLUE's
+##     slide never arrives and RED's jump stomps the spot it started on, which is exactly what the
+##     live smoke found and what R-S1/R-S2 exist to fix;
+##   * RED's FORWARD FRACTION must lie strictly INSIDE (0, 1): at 0 the jump never goes out, at 1 the
+##     backflip never comes back, and either way the out-and-back profile is not a profile at all.
 ##
-## `counter_travel_distance_blue` carries `roll_distance`'s own bound and for its reason: a zero
-## distance ships BLUE's travel half invisible, and the travel is the ONE thing that distinguishes
-## BLUE from the other two mechanically identical counters.
+## THE `busy > eligibility > 0` BOUND IS GONE WITH THE ELIGIBILITY SPAN (R-S6). The whole busy span
+## is the counter window now, so there is no head left to be shorter than the span containing it.
 func test_authored_counter_values_are_positive_and_correctly_ordered() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.counter_eligibility_seconds > 0.0,
-		"counter_eligibility_seconds must be authored > 0 (a zero span derives 0 ticks and every "
-		+ "counter misses, while the card, the stamina and the busy time are still spent)")
+	assert_true(config.counter_travel_distance_red > 0.0,
+		"counter_travel_distance_red must be authored > 0 (a zero distance leaves RED stomping the "
+		+ "spot it started on -- the live-smoke finding R-S1 exists to fix)")
 	assert_true(config.counter_travel_distance_blue > 0.0,
-		"counter_travel_distance_blue must be authored > 0 (a zero distance ships BLUE's travel "
-		+ "half invisible -- the one thing that distinguishes BLUE mechanically)")
-	# Read off the three authored fields through the SAME per-colour lookup the state layer uses, so
+		"counter_travel_distance_blue must be authored > 0 (a zero distance ships BLUE's slide "
+		+ "invisible -- it never reaches the attacker it is answering)")
+	assert_true(config.counter_travel_forward_fraction_red > 0.0
+			and config.counter_travel_forward_fraction_red < 1.0,
+		"counter_travel_forward_fraction_red must be authored strictly INSIDE (0, 1): at 0 RED never "
+		+ "travels out, at 1 it never comes back (got %f)"
+				% config.counter_travel_forward_fraction_red)
+	# Read off the three authored spans through the SAME per-colour lookup the state layer uses, so
 	# a colour the lookup forgot lands here as a zero rather than being silently skipped.
 	var ticks := BalanceTicks.from_config(config)
-	assert_true(ticks.counter_eligibility_ticks > 0,
-		"...and it survives the seconds->ticks boundary as at least one tick")
 	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
-		var busy := ticks.counter_busy_ticks_for(color)
-		assert_true(busy > ticks.counter_eligibility_ticks,
-			("colour %d: counter_busy_ticks (%d) must be authored GREATER than "
-			+ "counter_eligibility_ticks (%d) -- a busy span at or inside the eligibility span "
-			+ "makes the whole window eligible, which is the 1.5 s pre-arm this story retires")
-					% [color, busy, ticks.counter_eligibility_ticks])
+		assert_true(ticks.counter_busy_ticks_for(color) > 0,
+			("colour %d: counter_busy_ticks must survive the seconds->ticks boundary as at least "
+			+ "one tick -- a zero span opens no window, so that colour can never counter") % color)
 
 
 ## Story 5-6 (AC 4): THE TWO STUN DURATIONS, on the function directly above's template exactly --
@@ -295,23 +281,23 @@ func test_authored_counter_values_are_positive_and_correctly_ordered() -> void:
 ##     melee deflect's "so the three-tier ladder keeps its escalation gradient". An authored pair that
 ##     INVERTED that gradient -- a heavier punish for the easier read -- would ship a broken ladder
 ##     with every other audit green, which is the `5-5` "both directions asserted, not just `> 0`"
-##     precedent (there: `defense_window_seconds > unblockable_chargeup_seconds`,
-##     `defense_stamina_cost < unblockable_stamina_cost`) applied a second time. These are PROVISIONAL
-##     starting points the live smoke judges -- the assertion pins the DIRECTION, not the numbers.
+##     precedent (there: `defense_stamina_cost < unblockable_stamina_cost`) applied a second time.
+##     These are PROVISIONAL starting points the live smoke judges -- the assertion pins the
+##     DIRECTION, not the numbers. POST-SMOKE (R-S6) the pair it was written about is a pair no
+##     longer: the gradient asserted below is `knockdown > deflect`.
 func test_authored_stun_values_are_positive_and_correctly_ordered() -> void:
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_true(config.color_counter_stun_seconds > 0.0,
-		"color_counter_stun_seconds must be authored > 0 (a 0-tick stun ends on the tick it began — "
-		+ "the negation's whole attacker consequence, shipped invisible)")
+	# Story 6-6b POST-SMOKE (R-S6): THE MIDDLE RUNG IS RETIRED. `color_counter_stun_seconds` and the
+	# `> deflect` bound it carried went with it: since 6-6b AC 4 the colour counter KNOCKS THE
+	# ATTACKER DOWN rather than stunning it, so the ladder's top rung IS the counter's punish and the
+	# gradient that remains is `knockdown > deflect`, asserted in ticks below. `E5-P/R1`'s reasoning
+	# is not overturned, it is satisfied by a heavier consequence than the one it authored.
 	assert_true(config.deflect_stun_seconds > 0.0,
-		"deflect_stun_seconds must be authored > 0 (same degeneracy on the melee tier)")
-	assert_true(config.color_counter_stun_seconds > config.deflect_stun_seconds,
-		"color_counter_stun_seconds must be authored LONGER than deflect_stun_seconds (`E5-P/R1`): "
-		+ "reading the colour is the harder read and pays the bigger punish — an inverted pair "
-		+ "ships a broken escalation gradient with every other audit green")
+		"deflect_stun_seconds must be authored > 0 (a 0-tick stun ends on the tick it began -- the "
+		+ "melee tier's whole attacker consequence, shipped invisible)")
 	# Story 6-6a (AC 4): THE THIRD STUN AND THE FULL THREE-WAY BOUND, ASSERTED IN TICKS. Seconds alone
 	# under-test it: two distinct authored second-values can round to the SAME tick count through
 	# `seconds_to_ticks`, and the tick count is what the state layer runs and what
@@ -321,13 +307,11 @@ func test_authored_stun_values_are_positive_and_correctly_ordered() -> void:
 		"knockdown_stun_seconds must be authored > 0 (a 0-tick knockdown never runs, and the "
 		+ "flavor classifier then treats nothing as a knockdown)")
 	var ticks := BalanceTicks.from_config(config)
-	assert_true(ticks.knockdown_stun_ticks > ticks.color_counter_stun_ticks,
-		"knockdown_stun_ticks (%d) must be LONGER than color_counter_stun_ticks (%d) — AC 4's bound, "
-		% [ticks.knockdown_stun_ticks, ticks.color_counter_stun_ticks]
-		+ "in ticks: the knockdown flavor is told apart by duration alone")
-	assert_true(ticks.color_counter_stun_ticks > ticks.deflect_stun_ticks,
-		"color_counter_stun_ticks (%d) must be LONGER than deflect_stun_ticks (%d) in ticks too"
-		% [ticks.color_counter_stun_ticks, ticks.deflect_stun_ticks])
+	assert_true(ticks.knockdown_stun_ticks > ticks.deflect_stun_ticks,
+		"knockdown_stun_ticks (%d) must be LONGER than deflect_stun_ticks (%d) — AC 4's bound, "
+		% [ticks.knockdown_stun_ticks, ticks.deflect_stun_ticks]
+		+ "in ticks: the knockdown flavor is told apart by duration alone, so two equal counts "
+		+ "would silently merge the two flavors that remain")
 	# Story 6-6a (AC 8): the get-up iframes, in the defect-by-construction class -- a 0-tick window never
 	# opens, so the timer exit would arm nothing and the get-up could be timed into after all.
 	assert_true(config.get_up_iframe_seconds > 0.0,
@@ -1028,8 +1012,8 @@ func test_the_swing_at_commit_knob_is_authored_off() -> void:
 		+ "Smoke item 6's, not this story's)")
 
 
-## Story 6-2 (AC 9): the Pitch Zone countdown is authored > 0, the `defense_window_seconds` bespoke
-## bound's reason verbatim: `field in config` and `>= 0.0` both pass on the 0.0 script default, and a 0.0
+## Story 6-2 (AC 9): the Pitch Zone countdown is authored > 0, the `unblockable_chargeup_seconds`
+## bespoke bound's reason verbatim: `field in config` and `>= 0.0` both pass on the 0.0 script default, and a 0.0
 ## derives 0 ticks, so every staged card would fizzle on its own staging tick -- the buildup half of the
 ## bluff shipped invisible. The PROVISIONAL value (20 s, `E6-P/R5`) is not pinned; the playtest judges it.
 func test_authored_pitch_stage_timer_is_positive() -> void:
