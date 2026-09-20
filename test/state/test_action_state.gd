@@ -141,6 +141,23 @@ func test_table_has_no_inbound_stunned_charging_or_dead_edges() -> void:
 ##     abandoned chargeup, an ordinary stun escalated, the knockdown floor) are branches AROUND the one
 ##     write, not further writes.
 ## MUTATION (6-6a dev pass): the new write deleted -> this pin reads `x2` and goes RED; restored -> green.
+##
+## STORY 6-6b MOVES THE FIRST SITE AND DOES NOT ADD A FOURTH -- a MEASURED correction to that story's
+## own prediction (its AC 16 expected 3 -> 4). The colour answer left `_resolve_charge_landing`
+## entirely: the `5-5`/`5-6` landing-tick negation rung is RETIRED (6-6b AC 5) and its
+## `set_action_state(STUNNED)` went with it, while the counter's own write arrived at a NEW seat in
+## the same pass. One site out, one site in, so the COUNT is unchanged and only the enumeration below
+## moves. The argument the failure message demands is therefore about a MOVE, and it is the shape
+## `6-6a` used for its third:
+##   * a DIFFERENT SUBJECT from the knockdown site: this one punishes the ATTACKER for being answered,
+##     that one punishes the VICTIM for failing to answer.
+##   * a DIFFERENT SEAT from the one it replaced: the attacker's own step-3 CHARGING arm, judged at
+##     the COMMIT and on every pre-contact launch tick, not step 3(a)'s landing and not step 6b's
+##     deferred package.
+##   * NO DAMAGE, unlike `_apply_landing_packages`, which applies it unconditionally.
+##   * still a direct `set_action_state` call and never a `TRANSITION_TABLE` edge -- the table scan
+##     above stays unedited and still green, because no PRESS maps to it.
+## MUTATION (6-6b dev pass): delete the counter's write -> this pin reads `x2` and goes RED.
 func test_stunned_has_exactly_three_authored_non_table_entry_points() -> void:
 	var re := RegEx.new()
 	re.compile(r"set_action_state\(\s*HeroState\.ActionState\.STUNNED\s*\)")
@@ -155,9 +172,10 @@ func test_stunned_has_exactly_three_authored_non_table_entry_points() -> void:
 	sites.sort()
 	assert_eq(sites, ["res://src/state/match_state.gd x3"],
 		"EXACTLY THREE authored inbound edges to STUNNED in all of src/, all in match_state.gd: the "
-		+ "colour-counter negation in `_resolve_charge_landing` (5-6 AC 5), the melee deflect in "
-		+ "`_resolve_contacts` (5-6 AC 9), and the knockdown in `_apply_landing_packages` (6-6a AC 3). "
-		+ "A fourth site anywhere under src/ fails here and must be argued, not merely added — got %s"
+		+ "COLOUR COUNTER in `_resolve_color_counter` (6-6b AC 4, which MOVED here from the retired "
+		+ "landing rung in `_resolve_charge_landing`), the melee deflect in `_resolve_contacts` "
+		+ "(5-6 AC 9), and the knockdown in `_apply_landing_packages` (6-6a AC 3). "
+		+ "A fourth site anywhere under src/ fails here and must be argued, not merely added -- got %s"
 		% [sites])
 
 

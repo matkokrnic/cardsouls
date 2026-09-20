@@ -161,6 +161,18 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# on top of the `>= 0.0` loop below: a 0.0 cost makes the defense free, and a 0.0 window derives
 	# 0 ticks, never runs, and makes every defense cast negate nothing -- the story shipped invisible.
 	"defense_stamina_cost", "defense_window_seconds",
+	# Story 6-6b (AC 1/AC 2/AC 9): the colour counter's five authored tunables. ONLY
+	# `counter_eligibility_seconds` carries the `_seconds` SUFFIX, so half (b) below demands a
+	# stem-matched `counter_eligibility_ticks` on `BalanceTicks` and leaves the other four alone --
+	# the three per-colour busy spans take the `unblockable_launch_seconds_*` naming shape (the
+	# suffix is the COLOUR, not `_seconds`) and `counter_travel_distance_blue` is a distance, not a
+	# duration. Half (a) demands all five entries here, and all five carry BESPOKE bounds in
+	# test_balance_authoring.gd on top of the `>= 0.0` loop below: the busy spans are audited in the
+	# ONE direction AC 2 pins (`busy > eligibility > 0`, per colour), and the travel distance `> 0`
+	# on `roll_distance`'s footing -- a zero would ship BLUE's whole travel half invisible.
+	"counter_eligibility_seconds",
+	"counter_busy_seconds_red", "counter_busy_seconds_blue", "counter_busy_seconds_green",
+	"counter_travel_distance_blue",
 	# Story 6-2 (AC 9/AC 17): the Pitch Zone countdown. Its `_seconds` suffix makes half (b) below demand a
 	# stem-matched `pitch_stage_timer_ticks` on BalanceTicks; half (a) demands this entry. The optional
 	# orb-clear BOOL (`pitch_stage_clears_orbs`) is NOT listed and does not need to be: reflection below

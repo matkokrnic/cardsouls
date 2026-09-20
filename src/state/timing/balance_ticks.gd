@@ -101,6 +101,30 @@ var unblockable_chargeup_ticks: int
 ## test_data_resources.gd's reflective `*_seconds` -> `*_ticks` probe demands of any new
 ## `*_seconds` field: a stem-matched twin on this object.
 var defense_window_ticks: int
+## Story 6-6b (AC 1): the COUNTER ELIGIBILITY span in TICKS -- the head of the one reused defense
+## window during which a commit or launch tick can still be answered. The `defense_window_ticks`
+## precedent verbatim: derived ONCE here, read INLINE at the one seat that judges it (the step-3
+## capture, CONSTRAINT C), and the authored `*_seconds` float never reaches `advance()`. Its stem
+## matches, so test_data_resources.gd's reflective probe demands exactly this twin.
+##
+## AN AUTHORED 0.0 DERIVES 0 TICKS, which is a DEFINED degrade and not a crash: the window's elapsed
+## count is at least 1 on every tick a judgement can read it (the press resolves at step 6, after
+## that tick's step 3), so a 0-tick eligibility makes every counter miss -- the answer half ships
+## invisible. The authoring audit is what keeps that out of the shipped `.tres`, on
+## `defense_window_ticks`' own footing.
+var counter_eligibility_ticks: int
+## Story 6-6b (AC 2): each colour's BUSY span in TICKS -- the length the one reused defense window is
+## started at. Three stem-matched twins of the three authored `counter_busy_seconds_*` fields, the
+## `unblockable_launch_ticks_*` triplet's shape exactly, read through `counter_busy_ticks_for` below.
+##
+## PLAIN CONVERSIONS, never the clamped modulo-divisor kind: these are WINDOW DURATIONS, so
+## `seconds_to_ticks` already clamps any non-zero authored value to a minimum of 1 tick. An authored
+## 0.0 derives 0 ticks and `TimingWindow.start(0)` renders a window that never runs -- the press
+## spends its card and stamina, the hero is never busy and no counter can ever land. Defined rather
+## than crashing; the authoring audit keeps it out of the shipped `.tres`.
+var counter_busy_ticks_red: int
+var counter_busy_ticks_blue: int
+var counter_busy_ticks_green: int
 ## Story 6-1c (AC 2/AC 4/AC 11): each colour's LAUNCH SPAN in TICKS -- the chargeup line above's
 ## precedent verbatim, derived ONCE here and read INLINE at the one seat that starts the landing
 ## window (the cast, CONSTRAINT C). Three stem-matched twins, one per authored
@@ -130,6 +154,30 @@ func unblockable_launch_ticks_for(color: int) -> int:
 			return unblockable_launch_ticks_blue
 		Enums.CardColor.GREEN:
 			return unblockable_launch_ticks_green
+	return 0
+
+
+## Story 6-6b (AC 2): the colour lookup over the three busy twins above --
+## `unblockable_launch_ticks_for`'s shape verbatim, including what it answers for a colour with no
+## authored shape.
+##
+## THE SENTINEL ANSWERS ZERO, and that is a RULED degrade rather than a gap. A degraded defense cast
+## (`PlayerState.NO_TELEGRAPH_COLOR`, the missing-map-entry path `inject_card_colors`' totality check
+## keeps out of live play) can never counter anything -- AC 3's explicit sentinel exclusion refuses
+## it against a degraded chargeup too -- so there is no counter and no counter PRESENTATION for it to
+## be busy for. A zero busy span therefore opens no window: the card and the stamina are still spent,
+## the hero is never rooted, and the `defense` snapshot key reports its resting `[-1, 0]`, which is
+## exactly the truth about a colourless defense. Never a substitute colour (the `kind_at` refusal
+## rule), and never `defense_window_ticks` -- resurrecting the superseded value as a live fallback
+## would make AC 1's supersession untrue on one path.
+func counter_busy_ticks_for(color: int) -> int:
+	match color:
+		Enums.CardColor.RED:
+			return counter_busy_ticks_red
+		Enums.CardColor.BLUE:
+			return counter_busy_ticks_blue
+		Enums.CardColor.GREEN:
+			return counter_busy_ticks_green
 	return 0
 
 
@@ -219,6 +267,12 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# card and the stamina and negate nothing, ever. That degrade is defined rather than crashing,
 	# and the authoring audit is what keeps it out of the shipped `.tres`.
 	t.defense_window_ticks = TimingWindow.seconds_to_ticks(config.defense_window_seconds)
+	# Story 6-6b (AC 1/AC 2): the eligibility span and the three per-colour busy spans, PLAIN
+	# conversions on the defense window's exact shape directly above and for its stated reasons.
+	t.counter_eligibility_ticks = TimingWindow.seconds_to_ticks(config.counter_eligibility_seconds)
+	t.counter_busy_ticks_red = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_red)
+	t.counter_busy_ticks_blue = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_blue)
+	t.counter_busy_ticks_green = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_green)
 	# Story 6-1c (AC 4/AC 11): the three launch spans, PLAIN conversions on the chargeup's exact shape
 	# -- window durations, clamped to a minimum of 1 tick for any non-zero authored value. An authored
 	# 0.0 derives 0 ticks, and the landing window then closes WITH the chargeup: no launch at all, the

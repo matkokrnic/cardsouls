@@ -486,6 +486,60 @@ extends Resource
 ## `TimingWindow.start(0)` never runs, and no cast could EVER negate anything -- the whole answer
 ## half of the read exchange ships invisible, which is why this carries a bespoke `> 0` bound too.
 @export var defense_window_seconds: float = 0.0
+## Story 6-6b (AC 1): HOW LONG AFTER THE PRESS A COUNTER MAY STILL ANSWER -- the Sekiro-style
+## ELIGIBILITY span, read as ELAPSED ticks of the one reused `defense_window`
+## (`duration_ticks() - remaining_ticks() <= counter_eligibility_ticks`) rather than as a second
+## window. The window's total length is the colour's BUSY span below; this is the short head of it
+## during which an attacker's commit or launch tick can be answered.
+##
+## IT SUPERSEDES `defense_window_seconds` ABOVE AS THE COUNTER WINDOW. That field is no longer read
+## by any seat in `src/` (the `5-5`/`5-6` landing-tick negation rung it served is retired, AC 5); it
+## is kept authored rather than deleted, with its supersession recorded in the decision log at this
+## story's close-out, on the `color_counter_stun_seconds` orphan's own treatment.
+##
+## Crosses into the tick domain at the ONE boundary (`BalanceTicks.counter_eligibility_ticks`), the
+## `defense_window_seconds` shape, and is never compared against a raw float inside `advance()`.
+## Zero default like every sibling duration, and therefore a BESPOKE authored bound in
+## test_balance_authoring.gd -- and a STRICTER one than `> 0`: every colour's busy span must exceed
+## it (`busy > eligibility > 0`), which is the ONE direction AC 2 pins about the three feel knobs.
+@export var counter_eligibility_seconds: float = 0.0
+## Story 6-6b (AC 2): HOW LONG THE PRESSER IS BUSY, one authored value PER COLOUR -- the total length
+## the one reused `defense_window` is started at, selected at the press from `defense_color`. Busy IS
+## the window running: while it runs every input is refused and the hero is rooted (except BLUE's
+## authored travel, AC 9), so this is the whole real cost of a missed counter beside the card and the
+## stamina.
+##
+## THREE FIELDS AND NOT ONE, which is a measured decision rather than a preference. The three
+## presentations are of wildly different lengths (RED is a two-clip jump-then-backflip sequence,
+## GREEN a short throw), and one field sized to the longest would leave a GREEN counter rooted and
+## silent for seconds after its clip ended -- three mechanically identical counters with wildly
+## different real cost, which the story's Non-Goals refuse by name.
+##
+## THE PRESENTATION IS MAPPED INTO THESE, NEVER THE REVERSE (`6-1b`'s precedent): the per-colour cut
+## ranges on `AnimationController._COUNTER_PRESENTATION` derive their playback rate from the busy
+## span, so retuning a number here re-fits the clip with no presentation edit.
+##
+## THE `unblockable_launch_seconds_*` NAMING SHAPE verbatim -- a per-colour triplet whose names do
+## NOT end in `_seconds`, so test_data_resources.gd's reflective stem probe leaves them alone exactly
+## as it leaves that triplet alone; their tick twins are demanded by the bespoke audit instead.
+## PROVISIONAL feel knobs (RED 1.5 / BLUE 1.2 / GREEN 0.7), tuned at the live smoke and pinned by
+## tests in ONE direction only: `busy > eligibility > 0`, per colour.
+@export var counter_busy_seconds_red: float = 0.0
+@export var counter_busy_seconds_blue: float = 0.0
+@export var counter_busy_seconds_green: float = 0.0
+## Story 6-6b (AC 9): HOW FAR BLUE's counter carries the defender toward the attacker, in metres,
+## spread over BLUE's busy span above -- the `1-9` `roll_distance` / `roll_duration_seconds`
+## precedent exactly, including that the SPEED is derived at the movement seat as distance over
+## duration and read inline there (CONSTRAINT C).
+##
+## BLUE ONLY, and the absence of a RED and a GREEN field is the AC rather than an omission: those two
+## counters keep the root fixed and move the mesh alone. A colour with no authored distance travels
+## zero, which is also what an early BLUE press with no live chargeup does (the zero-fact fallback).
+##
+## PROVISIONAL 1.5 m. A DISTANCE, not a duration, so it carries no `BalanceTicks` twin and no
+## reflective-probe obligation -- only the `>= 0.0` loop and a bespoke authored `> 0` bound, on
+## `roll_distance`'s own footing: a zero would ship BLUE's whole travel half invisible.
+@export var counter_travel_distance_blue: float = 0.0
 
 @export_group("Orbs")
 ## Story 5-4 (AC 9): the per-colour CEILING on OrbPool, one value applied to each colour

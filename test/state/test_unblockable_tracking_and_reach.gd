@@ -11,7 +11,10 @@ extends TestCase
 ##            after the commit is HIT. The freeze is on direction, not on a defender.
 ##   AC 4  -- the launch carries the attacker along the frozen line at a per-colour FIXED distance.
 ##   AC 5  -- the arc comparison is STATE policy against the frozen direction, per colour.
-##   AC 6  -- the colour-counter and dodge rungs still answer through the ONE landing seat.
+##   AC 6  -- the dodge rung still answers through the ONE landing seat. Story 6-6b RE-SEATED the
+##            colour half: the counter is judged in the attacker's own CHARGING arm at the COMMIT
+##            and on every pre-contact launch tick, never at the landing, so what this file pins
+##            about it now is the two consequences AC 5 RULED rather than left to smoke.
 ##   AC 9  -- the launch progress the runner pushes keys off the LANDING edge: strictly below 1.0 on
 ##            every tick the hero is still charging, exactly 1.0 on the landing tick, never frozen.
 ##
@@ -39,6 +42,11 @@ const REGEN_DELAY_TICKS := 12
 const DRAW_DELAY_TICKS := 30
 const UNBLOCKABLE_DAMAGE := 10.0   # 10 % of 100.0 max hp
 const REACH := 8.0
+## Story 6-6b (AC 1/AC 2): the counter's two counts, authored here so the one test below that arms
+## a defense window can reach the eligibility span at all. DISTINCT from every count this fixture
+## already carries ({6, 8, 9, 12, 24, 30}).
+const COUNTER_ELIGIBILITY_TICKS := 4
+const COUNTER_BUSY_TICKS := 20
 
 const LAUNCH_TICKS := {
 	Enums.CardColor.RED: 6,
@@ -330,33 +338,52 @@ func test_the_arc_never_widens_an_outside_kind() -> void:
 
 # --- AC 6: the single seat --------------------------------------------------------------------
 
-## AC 6: a colour-matched defense still NEGATES through the same seat after a launch (the attacker
-## is stunned, the defender unhurt) -- and a defender OUTSIDE the arc is simply missed, with its
-## defense window left RUNNING (not consumed): the arc gates the whole ladder, it does not bypass it.
+## Story 6-6b (AC 3/AC 5): THE TWO RULED CONSEQUENCES OF THE NEW SEAT, recorded as decisions here
+## rather than left to be discovered at the live smoke. This file is their home because it already
+## owns the fixture that can express "the attack would have missed": the arc, the reach kind and the
+## pushed direction are all under a test's control here and nowhere else.
 ##
-## STORY 6-1d (`6-1d/R13`, R3-superseded fixture): the chargeup and the COMMIT tick now push OUTSIDE,
-## and INSIDE only from the sidestep onward (the `missed` half). The old fixture reported an INSIDE contact
-## dead ahead on the commit tick, which R3 made a real in-arc touch -- and R13 makes an in-arc touch
-## absorbing, so that fixture would test a hit. The claim is unchanged and not weakened: with the ONLY
-## contact off the line, the authored arc decides.
-func test_the_colour_counter_still_answers_through_the_one_landing_seat() -> void:
-	var ms := _make_match(Enums.CardColor.BLUE)
-	_cast_and_charge(ms, DIR_AHEAD)
-	ms.p2.defense_window.start(100)
-	ms.p2.defense_color = Enums.CardColor.BLUE
-	_run_launch(ms, Enums.CardColor.BLUE, DIR_AHEAD)
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "negated: no damage")
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "the attacker is stunned")
-	assert_false(ms.p2.defense_window.is_running, "the answering window was consumed")
-
-	var missed := _make_match(Enums.CardColor.BLUE)
-	_cast_and_charge_kind(missed, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
-	missed.p2.defense_window.start(100)
-	missed.p2.defense_color = Enums.CardColor.BLUE
-	_run_launch(missed, Enums.CardColor.BLUE, DIR_SIDE)
-	assert_eq(missed.p1.hero.action_state, HeroState.ActionState.IDLE, "a whiff is not a counter")
-	assert_true(missed.p2.defense_window.is_running,
-		"a whiffed attack never reached the ladder, so the defense window is NOT consumed")
+## (a) A DEFENDER ALREADY IN REACH AT THE COMMIT IS STILL COUNTERED. The commit tick's own push
+##     latches `INSIDE` before the judgement runs, and AC 3's ruling DISCARDS it -- so this half goes
+##     RED against an implementation that consults `_charge_reach` on the commit tick.
+## (b) A CORRECT PRESS AGAINST AN ATTACK THAT WOULD HAVE MISSED STILL KNOCKS THE ATTACKER DOWN. With
+##     the landing rung retired the counter no longer waits for a landing to answer, so an attack
+##     flying wide is countered exactly as one that would have connected. That FOLLOWS from AC 3 as
+##     ruled; AC 5 names it so it is a decision rather than a surprise.
+##
+## THE WINDOW IS INJECTED ONE TICK SHORT OF THE COMMIT, through `_charge_to_the_commit_tick`, so the
+## step-2 tick of the commit tick itself puts the window at elapsed 1 -- the first count any
+## judgement can ever read, and comfortably inside this fixture's eligibility span.
+##
+## AND IT IS NOT CONSUMED, on either half: nothing consumes a counter window any more (AC 5).
+func test_a_counter_at_the_commit_beats_reach_and_beats_a_whiff_alike() -> void:
+	for would_hit: bool in [true, false]:
+		var ms := _make_match(Enums.CardColor.BLUE)
+		_charge_to_the_commit_tick(ms)
+		ms.p2.defense_window.start(COUNTER_BUSY_TICKS)
+		ms.p2.defense_color = Enums.CardColor.BLUE
+		ms.drain_signals()
+		# The COMMIT tick: dead ahead and INSIDE (the attack would connect), or off the line and
+		# OUTSIDE (it is flying wide and would whiff).
+		var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE if would_hit \
+				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
+		var dir := DIR_AHEAD if would_hit else DIR_SIDE
+		_push_reach_dir(ms, 0, kind, dir)
+		_advance(ms, _holding(), InputIntent.new())
+		var label := "would hit" if would_hit else "would whiff"
+		if would_hit:
+			assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
+				"%s: precondition: the commit tick's own push HAS latched INSIDE" % label)
+		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+			"%s: the counter lands at the COMMIT and knocks the attacker down (6-6b AC 3/AC 5)"
+					% label)
+		assert_eq(ms.p2.hero.get_hp(), MAX_HP, "%s: ...the defender is unhurt" % label)
+		assert_false(ms.p1.charge_window.is_running, "%s: ...the attack is torn down..." % label)
+		assert_false(ms.p1.landing_window.is_running, "%s: ...both windows..." % label)
+		assert_eq(ms.p1.charge_color, PlayerState.NO_TELEGRAPH_COLOR,
+			"%s: ...and its colour, as one fact" % label)
+		assert_true(ms.p2.defense_window.is_running,
+			"%s: ...and the answering window is NOT consumed -- nothing consumes it (AC 5)" % label)
 
 
 # --- AC 9: the launch progress channel keys off the landing edge -------------------------------
@@ -1000,6 +1027,10 @@ func _config(with_launch: bool) -> BalanceConfig:
 	c.attack_recovery_seconds = 0.2
 	c.roll_duration_seconds = 0.5
 	c.roll_iframe_seconds = 0.2
+	c.counter_eligibility_seconds = float(COUNTER_ELIGIBILITY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_busy_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_busy_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_busy_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.roll_distance = 3.0
 	c.deflect_window_seconds = 0.1
 	c.color_counter_stun_seconds = 1.0

@@ -234,6 +234,54 @@ func test_authored_defense_values_are_positive_and_correctly_ordered() -> void:
 		+ "defender answers a commitment already made rather than making one")
 
 
+## Story 6-6b (AC 1/AC 2/AC 9): THE COLOUR COUNTER'S FIVE TUNABLES, on the function directly above's
+## template exactly -- positivity in the defect-by-construction class, PLUS the ONE directional bound
+## the ruling states.
+##
+## THE NUMBERS ARE FEEL KNOBS AND ARE DELIBERATELY NOT PINNED (AC 2 says so in as many words: RED
+## 1.5 / BLUE 1.2 / GREEN 0.7 are provisional and the live smoke tunes them). What IS pinned is the
+## single direction that makes the mechanism coherent at all, asserted PER COLOUR:
+##
+##     busy(colour) > eligibility > 0
+##
+## Each half is a defect by construction and neither is caught by the `>= 0.0` reflective loop:
+##   * a 0.0 ELIGIBILITY derives 0 ticks, and the elapsed count is at least 1 on every tick a
+##     judgement can read (the press resolves at step 6, after that tick's step 3), so EVERY counter
+##     would miss while still costing the card, the stamina and the busy time -- the answer half of
+##     the read exchange shipped invisible;
+##   * a 0.0 BUSY span for a colour derives 0 ticks, `TimingWindow.start(0)` never runs, and that
+##     colour's press opens no window at all -- no eligibility, no counter, no presentation;
+##   * an eligibility at or above a colour's busy span would make that colour's whole window eligible,
+##     which is the 1.5 s pre-arm this story exists to retire, wearing the new field's name.
+##
+## `counter_travel_distance_blue` carries `roll_distance`'s own bound and for its reason: a zero
+## distance ships BLUE's travel half invisible, and the travel is the ONE thing that distinguishes
+## BLUE from the other two mechanically identical counters.
+func test_authored_counter_values_are_positive_and_correctly_ordered() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.counter_eligibility_seconds > 0.0,
+		"counter_eligibility_seconds must be authored > 0 (a zero span derives 0 ticks and every "
+		+ "counter misses, while the card, the stamina and the busy time are still spent)")
+	assert_true(config.counter_travel_distance_blue > 0.0,
+		"counter_travel_distance_blue must be authored > 0 (a zero distance ships BLUE's travel "
+		+ "half invisible -- the one thing that distinguishes BLUE mechanically)")
+	# Read off the three authored fields through the SAME per-colour lookup the state layer uses, so
+	# a colour the lookup forgot lands here as a zero rather than being silently skipped.
+	var ticks := BalanceTicks.from_config(config)
+	assert_true(ticks.counter_eligibility_ticks > 0,
+		"...and it survives the seconds->ticks boundary as at least one tick")
+	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
+		var busy := ticks.counter_busy_ticks_for(color)
+		assert_true(busy > ticks.counter_eligibility_ticks,
+			("colour %d: counter_busy_ticks (%d) must be authored GREATER than "
+			+ "counter_eligibility_ticks (%d) -- a busy span at or inside the eligibility span "
+			+ "makes the whole window eligible, which is the 1.5 s pre-arm this story retires")
+					% [color, busy, ticks.counter_eligibility_ticks])
+
+
 ## Story 5-6 (AC 4): THE TWO STUN DURATIONS, on the function directly above's template exactly --
 ## positivity in the defect-by-construction class, PLUS the directional bound the ratified ruling
 ## states rather than merely implies.

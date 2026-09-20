@@ -39,6 +39,12 @@ const UNBLOCKABLE_COST := 20.0
 const DEFENSE_COST := 4.0
 const CHARGEUP_TICKS := 16
 const DEFENSE_WINDOW_TICKS := 30
+## Story 6-6b (AC 1/AC 2): the counter's two counts. `DEFENSE_WINDOW_TICKS` above is superseded as
+## the window's LENGTH (AC 1) and is left authored only so its own conversion stays exercised; the
+## window this file arms is now the colour's BUSY span, and the head of it is the ELIGIBILITY span.
+## Both are DISTINCT from every other count here ({4, 6, 16, 30, 40}).
+const COUNTER_ELIGIBILITY_TICKS := 5
+const COUNTER_BUSY_TICKS := 24
 const REGEN_DELAY_TICKS := 6
 const DRAW_DELAY_TICKS := 40
 const UNBLOCKABLE_DAMAGE := 10.0   # 10 % of 100.0 max hp
@@ -188,11 +194,18 @@ func test_a_feint_lands_nothing_even_though_the_enemy_was_in_reach_throughout() 
 	assert_eq(landed, [], "and no hit_landed was emitted")
 
 
-## AC 2 / `6-1/R7`: a feint against an ARMED, COLOUR-MATCHING mode ③ window negates nothing and
-## CONSUMES nothing — the window is left running to self-expire, and no window-clearing code exists
+## AC 2 / `6-1/R7`: a feint against an ARMED, COLOUR-MATCHING mode 3 window answers nothing and
+## CONSUMES nothing -- the window is left running to self-expire, and no window-clearing code exists
 ## on this path. The pairing is what makes the claim non-vacuous: the same fixture that leaves the
-## window untouched on a feint CONSUMES it on a completed landing.
-func test_a_feint_neither_consumes_nor_is_negated_by_an_armed_defense_window() -> void:
+## window untouched on a feint COUNTERS on a chargeup that is held out.
+##
+## STORY 6-6b (AC 6) MAKES THIS THE FEINT BAIT, which is a stronger claim than `6-1` could make. The
+## counter is judged only once the chargeup window has STOPPED, so a feinted chargeup never reaches a
+## judged tick at all -- and the defender has already paid the card, the stamina and (new) the whole
+## BUSY span for a counter that answered nothing. That is the bait the counter presentation exists to
+## make possible, and it is structural: `_resolve_color_counter` returns at its first line while the
+## chargeup still runs.
+func test_a_feint_neither_consumes_nor_is_answered_by_an_armed_defense_window() -> void:
 	var ms := _make_match()
 	var deflects := _collect_deflects(ms)
 	var color := _arm_matching_defense(ms)
@@ -202,30 +215,49 @@ func test_a_feint_neither_consumes_nor_is_negated_by_an_armed_defense_window() -
 	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "precondition: the feint fired")
 	assert_true(ms.p2.defense_window.is_running,
-		"the defender's window is STILL OPEN — a feint consumes nothing (`6-1/R7`)")
+		"the defender's window is STILL OPEN -- a feint consumes nothing (`6-1/R7`)")
 	assert_eq(ms.p2.defense_window.remaining_ticks(), remaining - 2,
 		"...and it counted down at its ordinary step-2 rate across both ticks, neither cut short "
 		+ "nor frozen: nothing on the feint path touches it")
-	assert_eq(deflects, [], "no deflect_landed — there was no landing for the rung to answer")
-	assert_eq(ms.p1.hero.get_hp(), MAX_HP,
-		"and the colour-counter stun's damage-free punish never fired either, because it is "
-		+ "written INSIDE the landing branch this path never enters")
+	assert_eq(deflects, [], "no deflect_landed -- the chargeup never reached a judged tick")
+	assert_eq(ms.p1.hero.get_hp(), MAX_HP, "and the attacker takes no damage from a counter...")
+	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...and is NOT knocked down: the judgement is gated on the chargeup having STOPPED, and a "
+		+ "feint stops it by leaving CHARGING instead (6-6b AC 6)")
+	assert_eq(ms.p2.stamina.get_current(), MAX_STAMINA - DEFENSE_COST,
+		"the baited defender still paid its stamina...")
+	assert_eq(ms.p2.discard.size(), 1, "...and its card")
 
 
-## The pairing above's other half: the identical fixture, held to completion, DOES reach the rung.
-## Without this the test above would pass against a build where mode ③ never worked at all.
-func test_the_same_armed_window_does_answer_a_chargeup_that_is_held_out() -> void:
+## The pairing above's other half: the identical fixture, held to completion AND pressed inside the
+## eligibility span, DOES counter. Without this the test above would pass against a build where mode
+## 3 never worked at all.
+##
+## THE PRESS MOVES LATE (6-6b): `5-5` could arm the window before the cast and still be answered a
+## whole chargeup later, because the old rung read the window at the LANDING. The eligibility span is
+## the point of this story, so the press now sits `COUNTER_ELIGIBILITY_TICKS` ticks before the judged
+## tick -- which is exactly the window's elapsed count when the judgement reads it.
+func test_the_same_fixture_does_counter_a_chargeup_that_is_held_out() -> void:
 	var ms := _make_match()
 	var deflects := _collect_deflects(ms)
-	var color := _arm_matching_defense(ms)
+	var color: Enums.CardColor = _colors()[ms.p2.hand.to_array()[_first_occupied(ms.p2)]]
 	_cast_unblockable_of_color(ms, color)
-	for _t in CHARGEUP_TICKS:
+	var press_at := CHARGEUP_TICKS - 1 - COUNTER_ELIGIBILITY_TICKS
+	for t in CHARGEUP_TICKS:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		var defender_intent := InputIntent.new()
+		if t == press_at:
+			defender_intent = _defense_intent(_first_occupied(ms.p2))
+		_advance(ms, _holding(), defender_intent)
 	assert_eq(deflects.size(), 1,
-		"NON-VACUITY: held out, the SAME window answers the SAME colour — so the test above is "
-		+ "about the feint and not about a defense rung that never fires")
-	assert_false(ms.p2.defense_window.is_running, "...and the landing CONSUMED it")
+		"NON-VACUITY: held out and pressed inside the eligibility span, the SAME fixture counters "
+		+ "the SAME colour -- so the test above is about the feint and not about a counter that "
+		+ "never fires")
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"...knocking the attacker down (6-6b AC 4)")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "...and sparing the defender")
+	assert_true(ms.p2.defense_window.is_running,
+		"...while the window itself is NOT consumed: nothing consumes it any more (6-6b AC 5)")
 
 
 ## AC 2's fourth bullet, regen half: `_regen_stamina` reads the action state fresh at step 5, and
@@ -360,7 +392,12 @@ func _defense_intent(slot: int) -> InputIntent:
 
 
 ## P2 casts a mode ③ window on whatever colour its hand can actually supply, and the colour is
-## RETURNED rather than assumed — no assertion here may depend on what the seeded shuffle did.
+## RETURNED rather than assumed -- no assertion here may depend on what the seeded shuffle did.
+##
+## Story 6-6b: this arms the window on ITS OWN TICK, which is now a TIMING statement and not just a
+## setup step -- the counter answers only inside the window's short ELIGIBILITY head. A caller that
+## needs the window to still be eligible at the attacker's commit has to arm it late, which is what
+## `_counter_matching_defense` below does.
 func _arm_matching_defense(ms: MatchState) -> Enums.CardColor:
 	var slot := _first_occupied(ms.p2)
 	assert_true(slot >= 0, "fixture: P2 holds a card to cast")
@@ -471,6 +508,10 @@ func _config() -> BalanceConfig:
 	c.deflect_stamina_cost = 5.0
 	c.attack_windup_seconds = 0.5
 	c.attack_active_seconds = 0.1
+	c.counter_eligibility_seconds = float(COUNTER_ELIGIBILITY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_busy_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_busy_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_busy_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.attack_recovery_seconds = 0.2
 	c.roll_duration_seconds = 0.5
 	c.roll_iframe_seconds = 0.2

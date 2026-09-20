@@ -119,6 +119,14 @@ const UNHASHED_CROSS_TICK: Array[String] = [
 	# the push that latched `INSIDE`: a copy of a pushed fact, never produced by the tick, captured by
 	# `capture_push_contact` and restored on replay by replaying those pushes. MEMBERS STAYS AT THREE.
 	"match_state._charge_contact_dirs",
+	# Story 6-6b (AC 9): A FOURTH ARRAY ON ARGUMENT (c), still NOT A FIFTH ARGUMENT -- the `6-1d`
+	# `_charge_contact_dirs` precedent applied unchanged, one story later. `_counter_travel_dirs` holds a
+	# COPY of `_charge_reach_dirs` taken at a mode-3 press: a runner-pushed spatial fact, never produced
+	# by the tick, captured by `capture_push_contact` and restored on a replay by replaying those pushes
+	# -- the press falls on the same tick with the same pushes behind it, so the copy is identical. It
+	# decides BLUE's counter travel, which is exactly the class of consequence `_charge_contact_dirs`
+	# already has (it decides the landing arc). MEMBERS STAYS AT FOUR.
+	"match_state._counter_travel_dirs",
 	# Story 6-2 review fix (H1): a FOURTH argument, not a member of any of the first three. Card
 	# identity is PUBLIC by GDD design (AC 14b) and hashes; the staged card's ORB PRICE is card
 	# `.tres` CONTENT, and `3-2`'s close-out ruled card content permanently out of the hashed run so
@@ -295,6 +303,12 @@ const PER_TICK: Array[String] = [
 	# at step 6b of the SAME advance(), with no return between the two, so no tick can observe a previous
 	# tick's value. Not cross-tick state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"match_state._landing_package_pending",
+	# Story 6-6b (AC 8): THE COUNTER'S OBSERVATION POINT classifies PER_TICK on
+	# `_iframe_open_at_step3`'s exact test, which is the member it is modelled on: written at the top of
+	# step 3 on every tick that reaches step 3, read only later within that same step, and never carried
+	# across an `advance()` boundary. A round-over tick returns at step 1b and neither writes nor reads
+	# it, and the next tick that does reach step 3 overwrites it before any read.
+	"match_state._counter_color_at_step3",
 	# Story 6-6a review (D2): the "this `hit_landed` was blocked" fact, raised and lowered around ONE queued
 	# emission inside the drain -- false at every point a tick or a snapshot can observe. Not cross-tick
 	# state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
