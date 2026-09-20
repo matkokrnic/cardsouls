@@ -4,7 +4,7 @@ baseline_commit: 3f6be78074348a44e72794f60b8cf187b6d9456f
 
 # Story 6.6b: Color Counters
 
-Status: authored
+Status: ready-for-dev
 
 ## Story
 
@@ -79,7 +79,7 @@ line and `last_updated` changed. Authored from the operator scope talk of 2026-0
    clears outside it, `:1023-1025`; the window's `remaining_ticks() <= 1` first reads true on the commit
    tick, `player_state.gd:327-328`), and it needs zero new state and no edit to `push_contact`. On every
    LATER launch tick the live latch read stands (a latch there means a contact has registered, whichever
-   tick wrote it). Pinned by a test that has an adjacent attacker commit against an open matching window.
+   tick wrote it). Pinned by a test that has an adjacent attacker commit against an open matching window. The counter judgement runs BEFORE the landing resolution within the same CHARGING arm of `_resolve_actions` (`match_state.gd:1251-1258`, where `_resolve_charge_landing` is that arm's first branch), so a counter and a landing that fall on the same tick resolve as a counter.
 4. THE COUNTER LANDS: the attack is torn down -- the `6-6a` CHARGING-abandonment form
    (`match_state.gd:3655-3661`): `charge_window` and `landing_window` stopped, `charge_color` reset, the card
    and stamina stay spent; the attacker leaves `CHARGING` by the knockdown write below in exactly one
@@ -417,3 +417,4 @@ call.
 |---|---|
 | 2026-09-20 | Story authored (`gds-create-story`, Sonnet 5) at baseline `3f6be78`; Status `authored`; awaiting operator review. |
 | 2026-09-20 | Readiness gate round 1 findings B1-B4 + operator rulings: commit-tick ordering ruled (AC 3, no new state); three per-colour busy durations over one reused window (AC 2); BLUE state travel with zero-fact fallback (new AC 9); attacker knockdown as a new fourth STUNNED entry point (AC 4, AC 16); AC merges, Open Questions retired. |
+| 2026-09-20 | Readiness gate round 2 READY; promoted to ready-for-dev; AC 3 ordering clause made explicit. |
