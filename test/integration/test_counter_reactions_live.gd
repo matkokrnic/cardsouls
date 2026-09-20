@@ -25,6 +25,17 @@ extends SceneTree
 ##                window any more (AC 5), so a stun leaves it running and the prop keeps flying to
 ##                its arrival. Its release is pinned on the FALLING edge instead, in phase 2.
 ##
+## POST-REVIEW FIX PASS (findings P1/P2/P3, rulings R-P1/P3 and R-P2) adds the INTERRUPTED shapes --
+## the half of AC 2's "busy for the whole counter presentation" that phases 1-4 never reached, because
+## every one of them runs with the hero standing IDLE for the entire span:
+##   5. BLOCK-HELD CAST -- the cast drops the block, so the queued `BLOCKING -> IDLE` drains in the
+##                SAME frame as the rising edge, AFTER the poll. The counter must survive it.
+##   6. MID-SWING CAST -- while the swing owns the body its own clip plays (the span ticks anyway),
+##                and the counter RESUMES when the swing ends inside the span.
+##   7. HIT MID-COUNTER -- an ordinary hit plays no `hit_react` over a counter.
+##   8. RE-CAST WITH NO FALLING EDGE -- a second press while the key still reads running is a NEW
+##                press: the old presentation ends (its dagger freed) and the new colour starts.
+##
 ## Run: godot --headless --path . --script res://test/integration/test_counter_reactions_live.gd
 
 const CHECK_DELAY := 3
@@ -165,5 +176,114 @@ func _physics_process(_delta: float) -> bool:
 				if _clip(_p2) != &"knockdown":
 					_failures.append("4. a real transition WINS over a counter in flight -- the "
 						+ "knockdown takes the body (got '%s')" % _clip(_p2))
+				_next("settle")
+		"settle":
+			# Back to a clean slate before the interrupted shapes: the knockdown's stun, its get-up
+			# lock and the GREEN window it was countering with all have to be gone, or phase 5 would
+			# be measuring the tail of phase 4.
+			if _state.p2.hero.action_state == HeroState.ActionState.IDLE \
+					and not _state.p2.hero.is_getting_up() \
+					and not _state.p2.defense_window.is_running:
+				_next("block_cast")
+			elif since > SPAN_BUDGET_FRAMES:
+				_failures.append("5. setup: the knockdown never cleared within %d frames"
+					% SPAN_BUDGET_FRAMES)
+				_done_frame = _frames
+		"block_cast":
+			if since >= CHECK_DELAY:
+				# The cast-from-BLOCKING shape, in the state layer's own two moves and in the ONE
+				# frame the real cast makes them: the block is engaged and the window armed before
+				# this frame's tick, so `_resolve_actions`' BLOCKING arm drops the block (nothing
+				# holds it) INSIDE the same advance() whose poll takes the rising edge -- and the
+				# queued `BLOCKING -> IDLE` reaches the controller only at the drain, after the
+				# counter has started. That order is the whole of finding P3.
+				_state.p2.hero.set_action_state(HeroState.ActionState.BLOCKING)
+				_arm_counter(Enums.CardColor.GREEN)
+				_next("block_cast_check")
+		"block_cast_check":
+			if since >= CHECK_DELAY:
+				if _clip(_p2) != &"counter_throw":
+					_failures.append("5. a counter cast from BLOCKING owns the body for its span -- "
+						+ "the block drop must not kill it (got '%s')" % _clip(_p2))
+				if not _state.p2.defense_window.is_running:
+					_failures.append("5. setup: the busy span ended before the check")
+				_next("swing_settle")
+		"swing_settle":
+			if not _state.p2.defense_window.is_running:
+				_next("swing_cast")
+			elif since > SPAN_BUDGET_FRAMES:
+				_failures.append("6. setup: GREEN's span never expired within %d frames"
+					% SPAN_BUDGET_FRAMES)
+				_done_frame = _frames
+		"swing_cast":
+			if since >= CHECK_DELAY:
+				# A REAL swing through the state layer's own entry (what `_try_transition` calls), so
+				# the windup/active/recovery machine ends it on its own contract (AC 1). RED's 1.5 s
+				# span outlasts the 0.75 s authored swing, so there is span left to resume into.
+				_state.p2.hero.enter_attack(_state.balance_ticks.attack_windup_ticks)
+				_next("swing_arm")
+		"swing_arm":
+			if since >= CHECK_DELAY:
+				# The cast is made a few frames INTO the swing, deliberately: armed in the same frame
+				# as the transition, the rising edge would reach the controller while its mirrored
+				# state is still IDLE and the `attack` clip would win by arriving second, which proves
+				# nothing about a counter pressed mid-swing.
+				if _clip(_p2) != &"attack":
+					_failures.append("6. setup: the swing owns the body before the cast (got '%s')"
+						% _clip(_p2))
+				_arm_counter(Enums.CardColor.RED)
+				_next("swing_watch")
+		"swing_watch":
+			if _state.p2.hero.action_state == HeroState.ActionState.ATTACKING:
+				if String(_clip(_p2)).begins_with("counter_"):
+					_failures.append("6. a swing in progress keeps ITS OWN clip across the busy span "
+						+ "-- the counter played over it (got '%s')" % _clip(_p2))
+					_done_frame = _frames
+			elif _state.p2.defense_window.is_running:
+				_next("swing_check")
+			else:
+				_failures.append("6. setup: the swing outlasted RED's busy span")
+				_done_frame = _frames
+		"swing_check":
+			if since >= CHECK_DELAY:
+				if not String(_clip(_p2)).begins_with("counter_"):
+					_failures.append("6. the counter RESUMES when the swing ends inside the span "
+						+ "(got '%s')" % _clip(_p2))
+				# Still inside RED's span, so the hit shape rides the same counter.
+				_state._queue.push(_state.hit_landed.emit.bind(0, 1, 1.0, _state.p2.hero.get_hp()))
+				_next("hit_check")
+		"hit_check":
+			if since >= CHECK_DELAY:
+				if _clip(_p2) == &"hit_react":
+					_failures.append("7. an ordinary hit plays NO hit_react over a counter -- a "
+						+ "countering hero is an acting one (the 6-6a AC 2 register)")
+				elif not String(_clip(_p2)).begins_with("counter_"):
+					_failures.append("7. ...and the counter keeps the body through it (got '%s')"
+						% _clip(_p2))
+				_next("recast_settle")
+		"recast_settle":
+			if not _state.p2.defense_window.is_running:
+				_arm_counter(Enums.CardColor.GREEN)
+				_next("recast")
+			elif since > SPAN_BUDGET_FRAMES:
+				_failures.append("8. setup: RED's span never expired within %d frames"
+					% SPAN_BUDGET_FRAMES)
+				_done_frame = _frames
+		"recast":
+			if since >= CHECK_DELAY:
+				if _clip(_p2) != &"counter_throw" or _dagger() == null:
+					_failures.append("8. setup: a GREEN counter with its dagger is in flight")
+				# The re-cast: a second press while the key STILL READS RUNNING, which is what the
+				# last-tick case looks like to a poll that runs once per tick. No falling edge ever
+				# appears; only the colour changing and the count RISING say a new press happened.
+				_arm_counter(Enums.CardColor.RED)
+				_next("recast_check")
+		"recast_check":
+			if since >= CHECK_DELAY:
+				if _clip(_p2) != &"counter_jump" and _clip(_p2) != &"counter_backflip":
+					_failures.append("8. a re-cast with no falling edge is a NEW press -- RED's "
+						+ "sequence must start (got '%s')" % _clip(_p2))
+				if _dagger() != null:
+					_failures.append("8. ...and the ended counter's dagger is freed with it")
 				_done_frame = _frames
 	return false

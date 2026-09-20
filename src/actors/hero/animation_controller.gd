@@ -442,9 +442,20 @@ var _one_shot: StringName = &""
 ##
 ## ONE RATE FOR THE WHOLE SEQUENCE is what makes RED's two-clip join read as one move rather than two
 ## clips at two tempos: the rate is derived once, from the TOTAL cut length against the busy span.
+##
+## POST-REVIEW FIX PASS (findings P1/P3, operator ruling R-P1/P3): THE COUNTER OWNS THE PRESENTATION
+## FOR THE WHOLE BUSY SPAN, so the span is remembered ACROSS transitions rather than destroyed by the
+## first one. `_counter_running` is the span (armed on the press, cleared only on the falling edge the
+## runner pushes) and `_counter_index` is only whether a counter clip is playing RIGHT NOW: an action
+## that owns the body (ROLLING/ATTACKING/BLOCKING) clears the second and leaves the first, and the
+## transition back INTO IDLE resumes the sequence at the point the span has already reached.
+## `_counter_elapsed` is what positions that resume -- seconds into the busy span, pushed every tick by
+## the runner (`on_counter_progress`), never counted here.
 var _counter_steps: Array = []
 var _counter_index := -1
 var _counter_speed := 1.0
+var _counter_running := false
+var _counter_elapsed := 0.0
 
 ## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
 ## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
@@ -503,17 +514,33 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 		stun_seconds: float = 0.0, get_up_armed: bool = false) -> void:
 	_state = current
 	_one_shot = &""
-	# Story 6-6b (AC 10): a real transition WINS over a counter in flight, the `_one_shot` line
-	# directly above's own rule. In practice the transition that can arrive mid-counter is a
-	# knockdown or a death, and either must take the body immediately rather than wait for a cut.
+	# Story 6-6b (AC 10): a real transition takes the body from a counter clip in flight, the
+	# `_one_shot` line directly above's own rule -- a knockdown or a death must not wait for a cut.
+	#
+	# POST-REVIEW FIX PASS (R-P1/P3): IT NO LONGER ENDS THE SPAN, only the clip. `_counter_running`
+	# survives, so STUNNED/DEAD still win outright (nothing below returns the body while they hold the
+	# state) while ROLLING/ATTACKING/BLOCKING merely borrow it -- and the IDLE branch below RESUMES the
+	# sequence at the span's elapsed point when the window is still running. Before this pass the first
+	# transition of any kind set this to -1 with nothing left to re-arm it: the runner's rising edge had
+	# already passed, so the rest of the span played no counter at all.
 	_counter_index = -1
 	if current == HeroState.ActionState.STUNNED:
 		_play_stun(stun_flavor, stun_seconds)
 		return
 	if current == HeroState.ActionState.IDLE:
 		if previous == HeroState.ActionState.STUNNED and get_up_armed:
+			# The get-up is the TAIL of a knockdown, which ruling (c) already let win outright, so it
+			# keeps the body ahead of a resume. With the authored numbers this cannot even be reached:
+			# the knockdown stun (2.5 s) outlasts the longest busy span (RED, 1.5 s), so the falling
+			# edge has ended the counter before this line runs.
 			_restart(&"get_up")
 			_one_shot = &"get_up"
+			return
+		# R-P1/P3 (b): a transition INTO IDLE while the window still runs STARTS or RESUMES the
+		# counter. Both interrupted shapes land here -- the block dropped by the cast in the same frame
+		# as the press (the poll ran before this drain, so the span is already armed), and a swing or
+		# roll that finished inside the span.
+		if _counter_running and _resume_counter():
 			return
 		if previous == HeroState.ActionState.BLOCKING:
 			# `3-0b/R24`'s pre-cleared shape: EXIT only, and only to IDLE. Entry and block -> attack/roll
@@ -586,6 +613,14 @@ func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _targe
 		return
 	match _state:
 		HeroState.ActionState.IDLE:
+			# POST-REVIEW FIX PASS (R-P1(a)): a COUNTERING hero keeps its counter clip. The 6-6a AC 2
+			# register applied to the one state that has no `ActionState` of its own -- `hit_react`
+			# interrupts nobody mid-action, and a hero inside its busy span is acting. Before this pass
+			# the flinch restarted over the counter WITHOUT clearing `_counter_index`, so the next cut
+			# check read the changed clip as "the cut ended" and either froze on a `hit_react` frame or
+			# jumped RED straight to its backflip.
+			if _counter_running:
+				return
 			_restart(&"hit_react")
 			_one_shot = &"hit_react"
 		HeroState.ActionState.BLOCKING:
@@ -668,17 +703,65 @@ func on_counter_started(color: int, busy_seconds: float) -> void:
 		total += float(step["to"]) - float(step["from"])
 	_counter_steps = steps
 	_counter_speed = counter_clip_speed(total, busy_seconds)
-	_counter_index = 0
-	_play_counter_step()
+	_counter_elapsed = 0.0
+	_counter_running = true
+	_counter_index = -1
+	# POST-REVIEW FIX PASS (R-P1/P3 (d)): while an ACTION owns the body its own clip plays and the
+	# counter only arms -- the span keeps ticking from the press regardless, off the runner's push, and
+	# the transition back into IDLE resumes it wherever the span has got to.
+	if _state == HeroState.ActionState.IDLE:
+		_resume_counter()
+
+
+## Story 6-6b (AC 10), POST-REVIEW FIX PASS (R-P1/P3): pushed every tick the window runs, right beside
+## the edges above and from the same poll -- `elapsed` seconds into the busy span, computed runner-side
+## from the window the `defense` key is built from. It moves no clip: it is the position a RESUME needs,
+## so that a counter which spent part of its span inside a swing rejoins its sequence where the span
+## actually is rather than restarting it. `on_charge_progress`'s shape (a plain float, no window handle,
+## no balance read -- CONSTRAINT C), and like it, not a seam (AC 14: the `connect_*` family stays TEN).
+func on_counter_progress(elapsed_seconds: float) -> void:
+	_counter_elapsed = elapsed_seconds
 
 
 ## Story 6-6b (AC 10): pushed on the FALLING edge of the same key -- the busy span is over, so the
 ## body goes back to the locomotion push. Without it the last cut frame would be held forever, since
 ## a cut END is a pause rather than a finished clip and `on_locomotion`'s `_one_shot` yield reads
 ## "still playing".
+##
+## POST-REVIEW FIX PASS: this is now the ONLY thing that ends the span (`_counter_running`), which is
+## what makes a transition borrow the body rather than destroy the presentation. The runner also pushes
+## it ahead of a RE-CAST's new start (R-P2), so the old counter ends -- and its dagger is freed --
+## before the new one begins.
 func on_counter_ended() -> void:
+	_counter_running = false
+	_counter_steps = []
 	_counter_index = -1
+	_counter_elapsed = 0.0
 	_one_shot = &""
+
+
+## POST-REVIEW FIX PASS (R-P1/P3 (b)): START or RESUME the sequence at the span's ELAPSED point. The
+## elapsed seconds buy `elapsed * _counter_speed` seconds of CUT at the sequence's one shared rate, and
+## that budget is spent across the steps in order -- so RED's join still lands where it belongs instead
+## of the backflip restarting from the top after a swing. Past the last cut end it clamps to that frame,
+## which is the hold `_advance_counter` would already be sitting on. Returns false for an armed span
+## with no steps, so the caller can fall through to its own clip choice.
+func _resume_counter() -> bool:
+	if _counter_steps.is_empty():
+		return false
+	var consumed := maxf(_counter_elapsed, 0.0) * _counter_speed
+	for i: int in _counter_steps.size():
+		var step: Dictionary = _counter_steps[i]
+		var from := float(step["from"])
+		var to := float(step["to"])
+		if consumed < to - from or i == _counter_steps.size() - 1:
+			_counter_index = i
+			_restart(step["clip"], _counter_speed)
+			animation_player.seek(minf(from + consumed, to), true)
+			_one_shot = step["clip"]
+			return true
+		consumed -= to - from
+	return false
 
 
 ## Plays the current step from its cut START at the sequence's shared rate. `_restart` seeks to 0

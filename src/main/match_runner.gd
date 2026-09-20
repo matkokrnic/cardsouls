@@ -165,7 +165,15 @@ var _projectile_actors: Array[Array] = [[], []]
 ## `defense` snapshot key was running at the END of the previous tick (so a rising and a falling edge
 ## can be told apart), and each slot's in-flight dagger prop or null. Presentation only: neither
 ## reaches `to_snapshot()`, and a replay reproduces both by reproducing the key they are read from.
+##
+## POST-REVIEW FIX PASS (finding P2, ruling R-P2): plus the COLOUR and the REMAINING TICKS the key
+## carried at the end of the previous tick, because "running" alone cannot see a RE-CAST. A press on
+## the window's very last tick expires the old window at step 2 and starts a new one at step 6, so this
+## poll -- which runs once, after `advance()` -- reads `running` on both sides of it and would fire
+## neither edge, holding the old colour's paused frame over the whole new span.
 var _counter_armed: Array[bool] = [false, false]
+var _counter_color: Array[int] = [PlayerState.NO_TELEGRAPH_COLOR, PlayerState.NO_TELEGRAPH_COLOR]
+var _counter_remaining: Array[int] = [0, 0]
 var _counter_daggers: Array = [null, null]
 
 ## Story 6-6b (AC 11): how high off the hero root the thrown dagger flies, in metres -- roughly chest
@@ -889,6 +897,15 @@ func _push_charge_progress() -> void:
 ## `action_state_changed` plus the flavour read (AC 14). Nothing new was needed and nothing new was
 ## added.
 ##
+## POST-REVIEW FIX PASS (finding P4, ruling R-P4): it reads THE KEY'S OWN THREE FACTS DIRECTLY --
+## `defense_window.is_running`, `defense_color`, `remaining_ticks()` -- instead of building two whole
+## player snapshots per tick to pull one entry out of them. That is `_push_charge_progress`'s precedent
+## verbatim (it reads `charge_color` and `landing_window.remaining_ticks()` the same way), and it is
+## the same fact: `player_state.gd`'s `defense` key IS those three fields, resting value included. The
+## per-frame dictionary construction it replaces was a hot-loop allocation `project-context.md` forbids
+## by name, and the `.get(..., default)` it replaces silently answered "no counter" forever if the key
+## were ever renamed.
+##
 ## THE EDGE IS TRACKED HERE, in a two-element runner-local latch, rather than inferred from the
 ## controller's own state: the controller is a pure consumer and must not have to remember whether it
 ## was told. `_counter_armed` is presentation bookkeeping -- it never reaches `to_snapshot()` and a
@@ -902,22 +919,38 @@ func _push_counter_presentation() -> void:
 		return
 	for slot: int in 2:
 		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
-		var defense: Array = player.to_snapshot().get(
-				"defense", [PlayerState.NO_TELEGRAPH_COLOR, 0])
-		var color := int(defense[0])
-		var running := color != PlayerState.NO_TELEGRAPH_COLOR
+		var window: TimingWindow = player.defense_window
+		var running := window.is_running
+		var color := player.defense_color if running else PlayerState.NO_TELEGRAPH_COLOR
+		var remaining := window.remaining_ticks() if running else 0
 		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		# R-P2: a RE-CAST is a NEW PRESS even though `running` never went false -- detected as the
+		# COLOUR changing or the remaining count RISING, which only a fresh `start()` can do (a window
+		# otherwise counts down monotonically). The falling-then-rising order is preserved exactly:
+		# the old presentation is ended and its dagger freed before the new one begins.
+		var restarted := running and _counter_armed[slot] \
+				and (color != _counter_color[slot] or remaining > _counter_remaining[slot])
+		if _counter_armed[slot] and (not running or restarted):
+			if is_instance_valid(hero):
+				hero.animation_controller.on_counter_ended()
+			_free_counter_dagger(slot)
+			_counter_armed[slot] = false
 		if running and not _counter_armed[slot]:
 			var busy_seconds := float(
 					_match_state.balance_ticks.counter_busy_ticks_for(color)) / TimingWindow.TICK_HZ
 			if is_instance_valid(hero):
 				hero.animation_controller.on_counter_started(color, busy_seconds)
 			_spawn_counter_dagger(slot, color, busy_seconds)
-		elif not running and _counter_armed[slot]:
-			if is_instance_valid(hero):
-				hero.animation_controller.on_counter_ended()
-			_free_counter_dagger(slot)
+		# R-P1/P3: and every running tick pushes HOW FAR INTO THE SPAN it is, which is what lets a
+		# counter interrupted by a swing, a roll or the cast's own block drop rejoin its sequence at
+		# the right frame instead of dying on the transition. `duration_ticks()` survives the window's
+		# own stop, so the subtraction is the elapsed count on every tick the window runs.
+		if running and is_instance_valid(hero):
+			hero.animation_controller.on_counter_progress(
+					float(window.duration_ticks() - remaining) / TimingWindow.TICK_HZ)
 		_counter_armed[slot] = running
+		_counter_color[slot] = color
+		_counter_remaining[slot] = remaining
 		_advance_counter_dagger(slot)
 
 
