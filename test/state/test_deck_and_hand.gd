@@ -479,6 +479,9 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"debug_pause", "debug_step",
 	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
 	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
+	# Story 6-D1 (DEBUG): the three P1 solo-smoke keys (X / V / B) JOIN the list, on the `3-0c/R11`
+	# discipline -- the story that ships the consumer moves the pin.
+	"p1_debug_unblockable_red", "p1_debug_unblockable_blue", "p1_debug_unblockable_green",
 	"p1_move_down", "p1_move_left", "p1_move_right", "p1_move_up", "p1_roll",
 	# Story 6-8 (AC 23/AC 24): the five keyboard LOCK CONTROLS per slot JOIN the list -- this story
 	# ships their consumer (`KeyboardController`), on the same `3-0c/R11` discipline. Ratified table:

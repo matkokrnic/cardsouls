@@ -446,7 +446,13 @@ func _ready() -> void:
 			# (this wrapper adds no member to the family test_architecture_invariants.gd pins). Reused, not
 			# re-derived: the local built once above this loop, read inline here (CONSTRAINT C).
 			hud.on_cards_changed(hand_ids, deck_count, discard_count,
-					player.pending_draw_owed.duplicate(), card_colors_by_id))
+					player.pending_draw_owed.duplicate(), card_colors_by_id)
+			# Story 6-D1 (debug): the same hand + colour map the HUD tint reads, forwarded to the
+			# controller as plain ints (-1 = empty slot). No state handle crosses; base is a no-op.
+			var hand_colors: Array[int] = []
+			for id: StringName in hand_ids:
+				hand_colors.append(card_colors_by_id.get(id, -1))
+			(_p1_controller if slot_index == 0 else _p2_controller).observe_hand_colors(hand_colors))
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
 		# Story 6-3b (AC 1/AC 3): the TENTH seam's HUD consumer. Match-level, so BOTH roots receive BOTH
 		# zones and each binds its OWN slot to tell them apart -- the on_round_ended bind directly above,

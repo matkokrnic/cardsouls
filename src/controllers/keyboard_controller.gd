@@ -88,6 +88,20 @@ var _lock_pressed := false
 var _flick := Vector2.ZERO
 var _camera_rotate := 0.0
 
+## Story 6-D1 (DEBUG, the `p1_debug_reset` precedent): P1-only keys that cast mode 2 (UNBLOCKABLE) with
+## the FIRST card of a colour in hand, so one operator can smoke colour counters alone (keyboard P1
+## attacks, pad P2 counters). NOT a replacement for the ordinary cast keys 5-7 deleted.
+##
+## A press is press-AND-HOLD: `held[&"card_cast"]` stays true for DEBUG_HOLD_TICKS (120 = 2.0 s at
+## 60 Hz, longer than the authored 1.0 s chargeup) so a single tap charges through to launch and
+## releasing the key never feints. The hold is counted in sampled ticks, not wall-clock, so it needs
+## no Time read. The intent fields are the pad path's own (slot / mode / commit / held card_cast).
+const DEBUG_HOLD_TICKS := 120
+var _debug_actions: Dictionary[int, StringName] = {}  # Enums.CardColor -> Input Map action (P1 only)
+var _hand_colors: Array[int] = []
+var _debug_hold_left := 0
+var _debug_prev: Dictionary = {}  # Enums.CardColor -> was down last sample
+
 
 func _init(prefix: StringName) -> void:
 	_up = _action(prefix, "move_up")
@@ -106,6 +120,10 @@ func _init(prefix: StringName) -> void:
 	_camera_right = _action(prefix, "camera_right")
 	_cycle_left = _action(prefix, "cycle_left")
 	_cycle_right = _action(prefix, "cycle_right")
+	if prefix == &"p1":
+		_debug_actions[Enums.CardColor.RED] = &"p1_debug_unblockable_red"
+		_debug_actions[Enums.CardColor.BLUE] = &"p1_debug_unblockable_blue"
+		_debug_actions[Enums.CardColor.GREEN] = &"p1_debug_unblockable_green"
 
 
 func sample() -> InputIntent:
@@ -119,8 +137,36 @@ func sample() -> InputIntent:
 	# action, carried on the intent rather than any out-of-band channel.
 	intent.debug_reset = Input.is_action_just_pressed(_debug_reset)
 	_sample_card_scheme(intent)
+	_sample_debug_unblockable(intent)
 	_sample_lock_controls()
 	return intent
+
+
+## Story 6-D1: see DEBUG_HOLD_TICKS. A press with no card of that colour in hand does nothing (no
+## substitute slot, no refusal); the hold, once started, outlives the key.
+func _sample_debug_unblockable(intent: InputIntent) -> void:
+	var fired := -1
+	for color: int in _debug_actions:
+		# The edge is taken here from the level (`_debug_prev`, the GamepadController shape) rather than
+		# `is_action_just_pressed`, so it is a property of successive samples, not of the engine frame.
+		var down := Input.is_action_pressed(_debug_actions[color])
+		if down and not _debug_prev.get(color, false) and fired < 0:
+			fired = color
+		_debug_prev[color] = down
+	if fired >= 0:
+		var slot := _hand_colors.find(fired)
+		if slot >= 0:
+			intent.card_slot = slot
+			intent.card_mode = Enums.ModeKind.UNBLOCKABLE
+			intent.card_commit = true
+			_debug_hold_left = DEBUG_HOLD_TICKS
+	if _debug_hold_left > 0:
+		intent.held[&"card_cast"] = true
+		_debug_hold_left -= 1
+
+
+func observe_hand_colors(colors: Array[int]) -> void:
+	_hand_colors = colors
 
 
 ## Story 6-8 (AC 23): the three lock readings for this tick. Input.* is read here and nowhere else in

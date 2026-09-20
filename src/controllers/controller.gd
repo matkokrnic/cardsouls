@@ -21,6 +21,13 @@ func armed_slot() -> int:
 	return -1
 
 
+## Story 6-D1: the hand's per-slot colours (`Enums.CardColor` as int, -1 for an empty slot), PUSHED by
+## the runner from the same `cards_changed` wrapper that feeds the HUD tint -- never read off state.
+## Only the P1 debug keys consume it; base is a no-op so no other controller needs a stub.
+func observe_hand_colors(_colors: Array[int]) -> void:
+	pass
+
+
 ## Story 4-6 (AC 9, `CC/R3`): the right-stick CLICK EDGE -- an instant re-lock onto the opposing
 ## hero, regardless of what is currently locked. The ONLY way to resolve an off-screen opposing
 ## hero back into lock, which is why it is a distinct control from the flick and not its

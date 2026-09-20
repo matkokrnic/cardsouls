@@ -130,3 +130,92 @@ func test_keyboard_lock_controls_ship_on_the_ratified_keys() -> void:
 func test_keyboard_fresh_intent_per_sample() -> void:
 	var kc := KeyboardController.new(&"p1")
 	assert_ne(kc.sample(), kc.sample(), "fresh instance per sample")
+
+
+## Story 6-D1 (DEBUG): the P1 solo-smoke keys. A press casts mode 2 (UNBLOCKABLE) with the FIRST card of
+## that colour in hand, as press-AND-HOLD -- `held[card_cast]` outlives the key for DEBUG_HOLD_TICKS so
+## a tap charges through. Hand: slot0 BLUE, slot1 RED, slot2 GREEN, slot3 RED (RED must pick slot 1).
+const DEBUG_HAND: Array[int] = [1, 0, 2, 0]
+const DEBUG_KEYS := {
+	Enums.CardColor.RED: &"p1_debug_unblockable_red",
+	Enums.CardColor.BLUE: &"p1_debug_unblockable_blue",
+	Enums.CardColor.GREEN: &"p1_debug_unblockable_green",
+}
+const DEBUG_EXPECTED_SLOT := {
+	Enums.CardColor.RED: 1, Enums.CardColor.BLUE: 0, Enums.CardColor.GREEN: 2,
+}
+
+
+func _debug_kc(prefix: StringName = &"p1") -> KeyboardController:
+	var kc := KeyboardController.new(prefix)
+	kc.observe_hand_colors(DEBUG_HAND.duplicate())
+	kc.sample()  # prime the edge state with everything released
+	return kc
+
+
+func test_debug_key_casts_first_card_of_colour_unblockable() -> void:
+	for color: int in DEBUG_KEYS:
+		var kc := _debug_kc()
+		Input.action_press(DEBUG_KEYS[color])
+		var s := kc.sample()
+		assert_true(s.card_commit, "color %d: press commits" % color)
+		assert_eq(s.card_slot, DEBUG_EXPECTED_SLOT[color], "color %d: first card of that colour" % color)
+		assert_eq(s.card_mode, Enums.ModeKind.UNBLOCKABLE, "color %d: mode 2" % color)
+		assert_true(s.is_held(&"card_cast"), "color %d: card_cast held on the press tick" % color)
+		assert_false(kc.sample().card_commit, "color %d: a held key is one commit, not one per tick" % color)
+		Input.action_release(DEBUG_KEYS[color])
+
+
+func test_debug_key_holds_card_cast_after_release_for_the_debug_duration() -> void:
+	var kc := _debug_kc()
+	Input.action_press(DEBUG_KEYS[Enums.CardColor.RED])
+	kc.sample()  # tick 1 of the hold
+	Input.action_release(DEBUG_KEYS[Enums.CardColor.RED])
+	for i in KeyboardController.DEBUG_HOLD_TICKS - 1:
+		assert_true(kc.sample().is_held(&"card_cast"), "still held %d ticks after release" % i)
+	assert_false(kc.sample().is_held(&"card_cast"), "the hold ends after DEBUG_HOLD_TICKS")
+	# 120 ticks is 2.0 s at the project's 60 Hz -- longer than the authored 1.0 s chargeup.
+	var cfg: BalanceConfig = load("res://data/balance/balance_config.tres")
+	assert_true(float(KeyboardController.DEBUG_HOLD_TICKS) / 60.0 > cfg.unblockable_chargeup_seconds,
+		"the hold outlasts the authored chargeup")
+
+
+func test_debug_key_with_no_card_of_that_colour_is_neutral() -> void:
+	var kc := KeyboardController.new(&"p1")
+	kc.observe_hand_colors([1, 1, 2, 2] as Array[int])  # no RED
+	kc.sample()
+	Input.action_press(DEBUG_KEYS[Enums.CardColor.RED])
+	var s := kc.sample()
+	assert_false(s.card_commit, "no commit")
+	assert_eq(s.card_slot, -1, "no substitute slot")
+	assert_false(s.is_held(&"card_cast"), "no hold started")
+	Input.action_release(DEBUG_KEYS[Enums.CardColor.RED])
+
+
+func test_debug_keys_are_p1_only() -> void:
+	var kc2 := _debug_kc(&"p2")
+	for action: StringName in DEBUG_KEYS.values():
+		Input.action_press(action)
+	var s := kc2.sample()
+	assert_false(s.card_commit, "a p2 controller ignores the p1 debug keys")
+	assert_false(s.is_held(&"card_cast"), "...and starts no hold")
+	for action: StringName in DEBUG_KEYS.values():
+		Input.action_release(action)
+	assert_false(InputMap.has_action(&"p2_debug_unblockable_red"), "no p2 debug action exists")
+
+
+const DEBUG_KEYCODES := {
+	&"p1_debug_unblockable_red": KEY_X, &"p1_debug_unblockable_blue": KEY_V,
+	&"p1_debug_unblockable_green": KEY_B,
+}
+
+
+func test_debug_keys_ship_on_their_physical_keys() -> void:
+	for action: StringName in DEBUG_KEYCODES:
+		var events := InputMap.action_get_events(action)
+		assert_eq(events.size(), 1, "%s has exactly one binding" % action)
+		for e: InputEvent in events:
+			var key := e as InputEventKey
+			assert_not_null(key, "%s is a key binding" % action)
+			if key != null:
+				assert_eq(key.physical_keycode, DEBUG_KEYCODES[action], "%s on its key" % action)
