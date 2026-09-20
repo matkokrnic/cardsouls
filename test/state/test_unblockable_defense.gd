@@ -1,4 +1,4 @@
-﻿extends TestCase
+extends TestCase
 
 ## Story 5-5: mode ③ — UNBLOCKABLE DEFENSE, the ANSWER half of the RGB read exchange. The dispatch
 ## arm and its one state refusal, the window a cast opens, the landing intercept that negates a
@@ -883,6 +883,48 @@ func test_a_swing_in_progress_finishes_across_the_busy_span() -> void:
 		"...and the swing completed on its own contract")
 
 
+## Story 6-6b REVIEW (finding H2): AC 1's "a swing or roll in progress still finishes on its own
+## contract", the MOVEMENT half -- measured as VELOCITY, the one field `HeroActor.drive()` integrates
+## into a position (`4-3/R2`: state never learns one).
+##
+## THE SIBLING ABOVE PROVES THE TIMER ARMS survive the busy span; this proves the VELOCITY does. They
+## are different seats and only the first was pinned: the step-3 busy lock sits below the timer arms
+## (`match_state.gd:1383`), but `_resolve_movement`'s counter-busy branch is an `elif` ABOVE the `else`
+## arm where `ATTACKING`'s phase multiplier and its `3-0b` LUNGE live -- so a busy branch that did not
+## exclude `ATTACKING` would leave the swing's windows running while silently zeroing its lunge.
+##
+## A PAIRED CONTROL, never a literal: the same fixture, the same tick, with and without the cast. The
+## expectation is therefore whatever the swing's own contract produces, so this test cannot drift when
+## the lunge or the phase multipliers are retuned -- and the `assert_ne` below is what keeps it from
+## passing on two zeroes.
+func test_a_swing_in_progress_keeps_its_own_velocity_across_the_busy_span() -> void:
+	var control := _kd_match()
+	var busy := _kd_match()
+	for ms: MatchState in [control, busy]:
+		_advance(ms, InputIntent.new(), _press(&"attack"))
+		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.ATTACKING,
+			"precondition: the swing is running")
+		# No lock direction and no charge-reach fact is pushed in this fixture, so facing is left at
+		# its last value every tick ("no new information, keep the last heading") and this one holds.
+		ms.p2.hero.facing = FACT_DIR
+	_cast_defense(busy, Enums.CardColor.RED)
+	_advance(control, InputIntent.new(), InputIntent.new())
+	assert_true(busy.p2.defense_window.is_running,
+		"precondition: the cast armed the counter window mid-swing (AC 1 permits it)")
+	assert_eq(busy.p2.hero.action_state, HeroState.ActionState.ATTACKING,
+		"precondition: the swing was not interrupted by the cast (5-5 AC 5)")
+	assert_ne(control.p2.hero.velocity, Vector3.ZERO,
+		"NON-VACUITY: the un-busy control swing really carries a velocity at this tick, so an "
+		+ "equality below is a claim and not two zeroes agreeing")
+	for t in 3:
+		assert_eq(busy.p2.hero.velocity, control.p2.hero.velocity,
+			("tick %d: the BUSY swing carries the SAME velocity as the un-busy one -- the "
+			+ "counter-busy branch does not preempt ATTACKING, so the swing finishes on its own "
+			+ "contract (AC 1)") % t)
+		_advance(control, InputIntent.new(), InputIntent.new())
+		_advance(busy, InputIntent.new(), InputIntent.new())
+
+
 ## AC 9: BLUE TRAVELS AS STATE; RED AND GREEN DO NOT. Measured as VELOCITY, the single field
 ## `HeroActor.drive()` integrates into a position -- the state layer never learns a position
 ## (`4-3/R2`), so velocity is the only honest observable and the rooting tests above use it too.
@@ -902,7 +944,12 @@ func test_blue_travels_toward_the_attacker_and_red_and_green_do_not() -> void:
 		_advance(ms, _holding(), InputIntent.new())
 		assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 			"precondition: a live charge-reach bearing exists for the press to lock")
-		_cast_defense(ms, color)
+		# REVIEW (finding H1): P1 HOLDS its confirm across the press tick. Without this the bare
+		# default intent feints at step 3 and the press at step 6 finds nothing charging -- the
+		# travel then rode the STALE bearing store rather than a live chargeup.
+		_cast_defense(ms, color, [], _holding())
+		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
+			"precondition: the attacker is STILL charging at the press -- the fact AC 9 locks")
 		_advance(ms, _holding(), InputIntent.new())
 		if color == Enums.CardColor.BLUE:
 			assert_eq(ms.p2.hero.velocity, expected,
@@ -927,6 +974,43 @@ func test_blue_travels_nowhere_when_nothing_was_charging_at_the_press() -> void:
 			"BLUE's slide plays ON THE SPOT when it answered nothing (AC 9's zero-travel fallback)")
 
 
+## Story 6-6b REVIEW (finding H1): AC 9's ZERO-TRAVEL FALLBACK against the state a REAL match reaches,
+## which the sibling directly above cannot express.
+##
+## THAT SIBLING ARMS ITS PRESS IN A MATCH WHERE NO CHARGEUP EVER RAN, so it proves only that the
+## RESTING value of `_charge_reach_dirs` produces no travel. But that store is written on EVERY push
+## (`push_contact`, `:1036`) and CLEARED NOWHERE -- `push_contact`'s clearing arm clears only
+## `_charge_reach` and `_charge_contact_dirs` (the M11 measurement), the cast seat clears those two,
+## and `_reset_player` clears those two plus `_counter_travel_dirs`. So after the FIRST chargeup of a
+## match the store keeps that chargeup's last bearing for the rest of the process, across a round
+## boundary and across a debug reset.
+##
+## THIS IS THE TRAP: an early BLUE press with nothing charging, in a match where something charged
+## EARLIER, must still travel nowhere. A lock that copied the store unconditionally would slide the
+## defender 1.5 m along a bearing captured from an arbitrary earlier moment -- which is the live-smoke
+## item ("BLUE early press slides on the spot with zero travel") failing in a way no test saw.
+func test_blue_travels_nowhere_when_the_only_chargeup_already_ended() -> void:
+	var ms := _kd_match()
+	_cast_unblockable(ms, 0, Enums.CardColor.RED)
+	_push_reach(ms, 0)
+	_advance(ms, _holding(), InputIntent.new())
+	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
+		"precondition: P1's chargeup pushed a LIVE hero-to-hero bearing")
+	# P1 releases: the paid feint ends the chargeup, so nothing is charging at the press below.
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
+		"precondition: the chargeup is OVER -- no attacker is charging at the press")
+	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
+		"...and the pushed bearing is STALE, not cleared -- nothing anywhere clears this store, "
+		+ "which is exactly why the fallback cannot be the resting value alone")
+	_cast_defense(ms, Enums.CardColor.BLUE)
+	for t in 3:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+		assert_eq(ms.p2.hero.velocity, Vector3.ZERO,
+			("tick %d: with no attacker CHARGING at the press, BLUE travels NOWHERE (AC 9's "
+			+ "zero-travel fallback) -- a stale bearing must not carry the defender") % t)
+
+
 ## AC 9: THE BEARING IS LOCKED AT THE PRESS AND NEVER RE-READ, and this test is a MEASURED
 ## correction to a first draft that could not tell the two apart.
 ##
@@ -949,7 +1033,10 @@ func test_blues_bearing_is_locked_at_the_press_and_never_re_read() -> void:
 	_advance(ms, _holding(), InputIntent.new())
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"precondition: the bearing the press is about to lock")
-	_cast_defense(ms, Enums.CardColor.BLUE)
+	# REVIEW (finding H1): P1 HOLDS across the press tick -- see `_cast_defense`'s header.
+	_cast_defense(ms, Enums.CardColor.BLUE, [], _holding())
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
+		"precondition: the attacker is STILL charging at the press")
 	# The attacker CIRCLES: every later push carries a different hero-to-hero bearing.
 	for _t in 3:
 		_push_reach_dir(ms, 0, MOVED_DIR)
@@ -2035,6 +2122,10 @@ func _config() -> BalanceConfig:
 	c.attack_active_seconds = 0.2
 	c.attack_recovery_seconds = 0.3
 	c.attack_chain_window_seconds = 0.2
+	# Story 6-6b REVIEW (finding H2): the `3-0b` LUNGE, authored here so the paired-control test
+	# below has a NON-ZERO swing velocity to compare against. Without it the ATTACKING path and
+	# the counter-busy root both read `Vector3.ZERO` and the comparison proves nothing.
+	c.attack_lunge_distance = 2.0
 	c.attack_chain_length = 3
 	c.attack_damage_percent_of_max_hp = 5.0
 	c.roll_duration_seconds = 0.5
@@ -2203,10 +2294,18 @@ func _press(action: StringName) -> InputIntent:
 
 
 ## P2 casts DEFENSE in `color`, on the slot that actually holds one.
-func _cast_defense(ms: MatchState, color: int, held: Array = []) -> void:
+##
+## Story 6-6b REVIEW (finding H1): `p1_intent` exists because the default BARE P1 intent is a
+## paid FEINT on any tick P1 is CHARGING, and step 3 resolves it BEFORE step 6 arms the window --
+## so a caller that means "press while an attacker is genuinely mid-chargeup" must hold the
+## confirm out here, or its press lands on a tick where nothing is charging any more. AC 9's
+## direction lock reads exactly that fact, so the distinction is load-bearing and not cosmetic.
+func _cast_defense(ms: MatchState, color: int, held: Array = [],
+		p1_intent: InputIntent = null) -> void:
 	var slot := _slot_of_color(ms.p2, color)
 	assert_true(slot >= 0, "fixture: the hand holds a card of colour %d" % color)
-	_advance(ms, InputIntent.new(), _defense_intent(slot, held))
+	_advance(ms, p1_intent if p1_intent != null else InputIntent.new(),
+		_defense_intent(slot, held))
 
 
 ## `slot` casts UNBLOCKABLE in `color`, on the slot that actually holds one.

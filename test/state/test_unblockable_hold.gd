@@ -396,8 +396,9 @@ func _defense_intent(slot: int) -> InputIntent:
 ##
 ## Story 6-6b: this arms the window on ITS OWN TICK, which is now a TIMING statement and not just a
 ## setup step -- the counter answers only inside the window's short ELIGIBILITY head. A caller that
-## needs the window to still be eligible at the attacker's commit has to arm it late, which is what
-## `_counter_matching_defense` below does.
+## needs the window to still be eligible at the attacker's commit has to arm it LATE instead, which
+## `test_the_same_fixture_does_counter_a_chargeup_that_is_held_out` does inline (its `press_at`
+## arithmetic) rather than through this helper.
 func _arm_matching_defense(ms: MatchState) -> Enums.CardColor:
 	var slot := _first_occupied(ms.p2)
 	assert_true(slot >= 0, "fixture: P2 holds a card to cast")

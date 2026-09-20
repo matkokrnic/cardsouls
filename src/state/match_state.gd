@@ -301,8 +301,11 @@ var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ##
 ## IT IS A COPY OF A PUSHED FACT, WHICH IS ITS WHOLE CLASSIFICATION -- `_charge_contact_dirs` directly
 ## above in every respect the argument turns on. The value copied is `_charge_reach_dirs[attacker_slot]`,
-## the hero-to-hero bearing the runner pushes on EVERY chargeup tick (`push_contact`, `:969`), negated
-## into defender-to-attacker at the read. NOT `_lock_directions`, which `:4186-4190` records can
+## the hero-to-hero bearing the runner pushes on EVERY chargeup tick (`push_contact`, `:969`). It ALREADY
+## runs defender-to-attacker -- every contact fact's `dir` runs TARGET -> ATTACKER (the `1-8` convention)
+## and the counter's defender IS the attacker's target -- so the read uses it UNNEGATED (see the branch).
+## The member header said "negated at the read" through this story's dev pass; it was wrong and the code
+## was right (REVIEW finding L1). NOT `_lock_directions`, which `:4186-4190` records can
 ## legitimately point at a MINION -- the charge-reach fact is pushed hero-to-hero by construction, so
 ## "travel toward the ATTACKER" is structural rather than filtered.
 ##
@@ -311,10 +314,14 @@ var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ## bearing one push later -- a branch re-reading it every tick would slide to a halt mid-slide the
 ## instant the counter landed.
 ##
-## THE ZERO-FACT FALLBACK IS THE RESTING VALUE ITSELF (AC 9): with no attacker charging at the press,
-## `_charge_reach_dirs` rests at `Vector2.ZERO` (`:284`), the lock copies that zero, and the branch
-## writes zero velocity -- the slide plays on the spot, planar-pinned. A counter that answers nothing
-## also goes nowhere, and it costs no extra fact to say so.
+## THE ZERO-FACT FALLBACK IS AN EXPLICIT GATE AT THE PRESS (AC 9), and the REVIEW's finding H1 is why
+## it cannot be the resting value alone: `_charge_reach_dirs` is written on EVERY push and CLEARED
+## NOWHERE -- not by `push_contact`'s clearing arm (which clears only `_charge_reach` and
+## `_charge_contact_dirs`, the M11 measurement), not at the cast seat, and not in `_reset_player`.
+## Its `Vector2.ZERO` rest (`:284`) therefore holds only until the FIRST chargeup of the process, after
+## which the store keeps the last bearing that chargeup pushed, across rounds and across a debug reset.
+## So the press gates on the other hero ACTUALLY BEING `CHARGING` -- "no live chargeup" in the AC's own
+## words -- and copies `Vector2.ZERO` otherwise. A counter that answers nothing goes nowhere.
 ##
 ## EXCLUDED FROM to_snapshot() on `_charge_reach` / `_charge_reach_dirs` / `_charge_contact_dirs`'
 ## classification VERBATIM (`test_replay_identity.gd` exclusion (c)): a runner-pushed spatial fact,
@@ -3535,9 +3542,19 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	# charge-reach bearing of the OTHER slot -- the hero-to-hero fact the runner pushes on every
 	# chargeup tick. Written for EVERY colour and read only by BLUE's movement branch, because a lock
 	# that only ran for one colour would leave a stale bearing behind for the next press to inherit;
-	# writing it unconditionally makes "this press's fact" structural. `Vector2.ZERO` when no attacker
-	# is charging is the AC's own zero-travel fallback, carried by the resting value itself.
-	_counter_travel_dirs[slot] = _charge_reach_dirs[1 - slot]
+	# writing it unconditionally makes "this press's fact" structural.
+	#
+	# THE ZERO-TRAVEL FALLBACK IS THE `CHARGING` GATE BELOW, not the store's resting value (REVIEW
+	# finding H1). `_charge_reach_dirs` is written on every push and cleared NOWHERE, so it rests at
+	# `Vector2.ZERO` only until the first chargeup of the process and holds that chargeup's last
+	# bearing afterwards -- across rounds and across a debug reset. AC 9's fallback says "no live
+	# chargeup", so this reads exactly that and copies zero otherwise. NOTE the tick ordering it
+	# depends on: a chargeup FEINTED at step 3 of this very tick has already left `CHARGING` by the
+	# time this step-6 seat runs, and such a press correctly locks nothing.
+	var counter_attacker: PlayerState = p2 if slot == 0 else p1
+	_counter_travel_dirs[slot] = _charge_reach_dirs[1 - slot] \
+			if counter_attacker.hero.action_state == HeroState.ActionState.CHARGING \
+			else Vector2.ZERO
 	# AC 5: the ONE state write, and it is BLOCKING-ONLY. This ratifies `5-2/R17` ("casting drops the
 	# block") and gives it its FIRST real exercise -- mode ① never calls `set_action_state` at all,
 	# and mode ②'s unconditional CHARGING write is unreachable from a blocking hero because
@@ -4338,17 +4355,28 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 		# FACING FALLS THROUGH to the generic lock-direction branch below, `STUNNED`'s own carve-out
 		# repeated verbatim: the ruling forbids ACTION and MOVEMENT, not the visual heading.
 		player.hero.velocity = Vector3.ZERO
-	elif player.defense_window.is_running:
+	elif player.defense_window.is_running \
+			and player.hero.action_state != HeroState.ActionState.ATTACKING:
 		# Story 6-6b (AC 2/AC 9): THE COUNTER-BUSY MOVEMENT BRANCH -- a FIFTH sibling of the four
 		# branches above, written in the get-up branch's exact shape (`:4085`) and for its exact
 		# reason: it keys on a WINDOW and not on a state, because the counter introduces no
 		# `ActionState` of its own and `action_state` has nothing left to distinguish.
 		#
-		# IT SITS BELOW THE THREE STATE BRANCHES so their behaviour is bit-identical to before this
-		# pass, and BELOW the get-up branch, which cannot legitimately co-occur (the card seat refuses
-		# every mode while a hero is getting up). ROLLING and ATTACKING above DO co-occur and win, by
-		# design: AC 1 requires a swing or roll in progress to finish on its own contract, so a hero
-		# that cast DEFENSE mid-roll keeps rolling and this branch takes over when the roll ends.
+		# IT SITS BELOW THE FOUR BRANCHES ABOVE so their behaviour is bit-identical to before this pass.
+		# ROLLING co-occurs and WINS from up there, by design: AC 1 requires a swing or roll in progress
+		# to finish on its own contract, so a hero that cast DEFENSE mid-roll keeps rolling and this
+		# branch takes over when the roll ends. The get-up branch co-occurs too -- a window armed before
+		# a knockdown keeps ticking through it (`5-5`, and `_counter_color_of`'s own `is_getting_up()`
+		# gate exists because that state is reachable) -- and both write the same literal zero, so which
+		# of the two answers is not observable. `DEAD` never reaches here at all: the early return at the
+		# top of this function zeroes a corpse's velocity first.
+		#
+		# `ATTACKING` IS THE ONE SIBLING THAT IS NOT A BRANCH ABOVE -- it lives in the `else` arm below,
+		# where the phase multiplier and the `3-0b` LUNGE are applied -- so AC 1's "finishes on its own
+		# contract" has to be said HERE, in this branch's own condition, or the busy root silently eats
+		# the lunge of a swing that cast DEFENSE mid-flight. The dev pass's comment claimed ATTACKING
+		# won "from above" and the code gave it the root instead (REVIEW finding H2); the guard below is
+		# what makes the claim true, and the swing's own contract is unchanged from before this story.
 		#
 		# RED AND GREEN WRITE A LITERAL ZERO -- `5-2/R5`'s refusal of a tunable "rooted", applied a
 		# fourth time -- and the write HAPPENS rather than being skipped for its siblings' downstream

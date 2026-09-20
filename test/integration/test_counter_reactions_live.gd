@@ -20,7 +20,10 @@ extends SceneTree
 ##   3. RED    -- the two-clip SEQUENCE: `counter_jump` first, and `counter_backflip` after the join,
 ##                with no third clip and no loop (AC 10). No dagger on a non-GREEN counter.
 ##   4. knockdown mid-counter -- a real transition WINS over a counter in flight: the pose becomes
-##                `knockdown` (AC 12's classifier, untouched) and the dagger, if any, is released.
+##                `knockdown` (AC 12's classifier, untouched). The DAGGER is NOT released by the
+##                knockdown and this phase does not assert that it is: nothing consumes the counter
+##                window any more (AC 5), so a stun leaves it running and the prop keeps flying to
+##                its arrival. Its release is pinned on the FALLING edge instead, in phase 2.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_counter_reactions_live.gd
 
