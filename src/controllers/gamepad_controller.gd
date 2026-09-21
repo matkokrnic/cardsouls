@@ -61,6 +61,10 @@ const _CAST_DEFENSE_KEY := &"__cast_defense"
 ## meanings (stage with L3 held, activate with L3 released): they are one physical press edge, and
 ## which meaning it carries is decided by `cast_held` inside `resolve_card_tick`, not by a second memory.
 const _CAST_PITCH_KEY := &"__cast_pitch"
+## Story 6-10 (AC 5/AC 10): the `_prev_held` key L3's raw read is remembered under, so the TOGGLE scheme can
+## see a press EDGE. Tracked every tick under either switch value (HOLD ignores it), and primed HELD on the
+## neutral path like the confirm edges above, so a replug with L3 already held toggles nothing.
+const _CAST_TOGGLE_KEY := &"__cast_toggle"
 
 var _device: int = NO_DEVICE
 var _profile: GamepadProfile
@@ -101,6 +105,11 @@ var _armed_slot: int = -1
 ## cast mode begins; only a fresh CROSSING arms a slot.
 var _prev_l2 := 0.0
 var _prev_r2 := 0.0
+## Story 6-10 (AC 5-9): whether card mode is on. Under TOGGLE it is the memory the L3 press edges flip; under
+## HOLD it just mirrors the raw L3 level each sample. Controller-local presentation memory, never state,
+## never on the intent -- the `_armed_slot` precedent. Cleared on the neutral path and by
+## `force_card_mode_off()`.
+var _card_mode_on := false
 
 
 ## slot_gamepad_ordinal: WHICH gamepad this is among the configured GAMEPAD slots (the i-th
@@ -151,6 +160,10 @@ func sample() -> InputIntent:
 		# Story 6-3a (AC 2): Y joins the same set, for the same reason -- a replug with Y already held
 		# must fire neither a stage (L3 held) nor an activation (L3 released) with no new press.
 		_armed_slot = -1
+		# Story 6-10 (AC 9d/AC 10): card mode is off after every disconnect, and L3 joins the priming set
+		# HELD so a replug with L3 already held is not read as a fresh click.
+		_card_mode_on = false
+		_prev_held[_CAST_TOGGLE_KEY] = true
 		_prev_l2 = 1.0
 		_prev_r2 = 1.0
 		_prev_held[_CAST_BASIC_KEY] = true
@@ -174,7 +187,11 @@ func sample() -> InputIntent:
 	# arming, commit) is made by the pure resolve_card_tick() below, on the resolve_move_dir /
 	# resolve_flick precedent directly below. Joypad reads are not headless-samplable (see file
 	# header), so keeping the DECISION pure is what makes AC 9's coverage list reachable at all.
+	# Story 6-10 (AC 5): under TOGGLE the raw L3 level is turned into the mode by the pure
+	# resolve_cast_mode() (press edge flips it); under HOLD it is the level itself, as before. Either way
+	# `cast_held` below is what resolve_card_tick() has always taken, so that function is untouched.
 	var cast_held := Input.is_joy_button_pressed(_device, _profile.cast_button)
+	cast_held = _advance_cast_mode(cast_held)
 	var attack_raw := Input.is_joy_button_pressed(_device, _profile.attack_button)
 	var block_raw := Input.is_joy_button_pressed(_device, _profile.block_button)
 	var roll_raw := Input.is_joy_button_pressed(_device, _profile.roll_button)
@@ -231,7 +248,9 @@ func sample() -> InputIntent:
 	_prev_held[_CAST_PITCH_KEY] = pitch_raw
 	_prev_l2 = l2_value
 	_prev_r2 = r2_value
-	_armed_slot = result["armed_slot"]
+	# Story 6-10 (AC 11): under TOGGLE a commit press disarms and mode stays on; HOLD is untouched (AC 4).
+	_armed_slot = resolve_armed_after_commit(_profile.card_mode_toggle, result["card_commit"],
+			result["armed_slot"])
 
 	_sample_lock_controls()
 	return intent
@@ -478,6 +497,54 @@ static func resolve_card_tick(
 ## `KeyboardController.armed_slot()` precedent exactly, overriding `Controller`'s base -1.
 func armed_slot() -> int:
 	return _armed_slot
+
+
+## Story 6-10 (AC 9/AC 20): card mode on, for the HUD lift. See Controller's base declaration.
+func card_mode_on() -> bool:
+	return _card_mode_on
+
+
+## Story 6-10 (AC 9): a knockdown, round end or debug reset ended card mode. Clears the mode and the armed
+## slot. The raw L3 memory is deliberately LEFT ALONE: an L3 still physically held through this has no new
+## press edge, so it cannot turn the mode back on -- only a fresh release-then-press does.
+func force_card_mode_off() -> void:
+	if not _profile.card_mode_toggle:
+		return  # R3 is TOGGLE-only: HOLD's mode is the live L3 level and stays byte-identical
+	_card_mode_on = false
+	_armed_slot = -1
+
+
+## Story 6-10 (AC 5): one sample's card-mode step -- resolve the mode from this tick's raw L3 read, then
+## remember both the raw read (the edge memory) and the mode. Split out of sample() so the memory wiring is
+## testable without a pad; the decision itself stays the pure function below.
+func _advance_cast_mode(l3_raw: bool) -> bool:
+	_card_mode_on = resolve_cast_mode(_profile.card_mode_toggle, l3_raw,
+			_prev_held.get(_CAST_TOGGLE_KEY, false), _card_mode_on)
+	_prev_held[_CAST_TOGGLE_KEY] = l3_raw
+	return _card_mode_on
+
+
+## Story 6-10 (AC 5/AC 6/AC 8): the pure card-mode decision, joypad reads passed in so it is testable
+## without a pad. HOLD (`toggle` false): the mode IS the raw L3 level. TOGGLE: a press edge (raw true this
+## sample, false the last) flips the current mode; nothing else changes it -- holding L3 and releasing L3
+## are both no-ops. The result feeds resolve_card_tick()'s `cast_held`, so entry and exit take effect the
+## same tick and exit clears the armed slot there.
+static func resolve_cast_mode(toggle: bool, l3_raw: bool, prev_l3_raw: bool, mode_on: bool) -> bool:
+	if not toggle:
+		return l3_raw
+	if l3_raw and not prev_l3_raw:
+		return not mode_on
+	return mode_on
+
+
+## Story 6-10 (AC 11, AC 4): the armed slot after this tick. TOGGLE and a commit was raised (any of the four
+## confirms, accepted by state or not): disarmed. Otherwise exactly what resolve_card_tick() returned, which
+## is HOLD's behaviour (a commit does not clear the armed slot). A bare-Y activation also raises
+## `card_commit`, but with mode off nothing is armed, so clearing changes nothing.
+static func resolve_armed_after_commit(toggle: bool, commit: bool, armed: int) -> int:
+	if toggle and commit:
+		return -1
+	return armed
 
 
 ## Story 4-6 (AC 9): the click edge sampled by `_sample_lock_controls`. See Controller's base

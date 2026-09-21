@@ -118,6 +118,10 @@ var _replay_tick := 0
 ## out of this file while F1 keeps the tick gate in it.
 var _debug_input := DebugInputReader.new()
 var _paused := false
+## Story 6-10 (AC 9a): per-slot "was knocked down last frame", runner-local presentation memory for the
+## step 1b poll, so card mode is dropped on the knockdown's RISING edge only -- a player may click L3 again
+## while still down (Open Question 3) without being forced off every frame.
+var _was_knocked_down: Array[bool] = [false, false]
 
 ## Story 3-0b (AC 2): the ONE debug instrument panel, kept so the runner can push the polled
 ## window-countdown payload into it after each advance(). A Control reference, never a seam.
@@ -1252,10 +1256,20 @@ func connect_pitch_changed(callback: Callable) -> void:
 	_match_state.pitch_changed.connect(callback)
 
 
+## Story 6-10 (AC 9): push "card mode ended" to both controllers. Base no-op except the pad's TOGGLE scheme.
+func _force_card_mode_off_all() -> void:
+	if _p1_controller != null:
+		_p1_controller.force_card_mode_off()
+	if _p2_controller != null:
+		_p2_controller.force_card_mode_off()
+
+
 ## Story 1-7 (AC 4.3): MatchState.round_ended -> EventBus.round_ended. Runner-owned
 ## because src/state/ never touches an autoload.
 func _relay_round_ended(loser_index: int) -> void:
 	EventBus.round_ended.emit(loser_index)
+	# Story 6-10 (AC 9b): the round ending drops card mode on both pads, on this EXISTING relay.
+	_force_card_mode_off_all()
 
 
 ## Story 2-6 (AC 1, 2-6/R5): MatchState.round_started -> EventBus.round_started. Runner-owned
@@ -1263,6 +1277,8 @@ func _relay_round_ended(loser_index: int) -> void:
 ## — the reset is a whole-match event, not per-player.
 func _relay_round_started() -> void:
 	EventBus.round_started.emit()
+	# Story 6-10 (AC 9c): the debug reset (the only thing that fires round_started) drops card mode too.
+	_force_card_mode_off_all()
 	# Story 4-1 (AC 8): the DEBUG RESET clears each player's UnitBoard (MatchState._reset_player,
 	# the one named exception to that function's "NOTHING else" contract), and the grey-box actors
 	# go with it. Wired onto THIS EXISTING RELAY deliberately -- no new EventBus event and no new
@@ -2753,6 +2769,18 @@ func _physics_process(delta: float) -> void:
 	#     handle, plain ints only.
 	#     OUTSIDE the `ticking` gate deliberately — the selection must stay visible and
 	#     responsive while the debug pause is held, exactly as camera follow (4b) does.
+	# Story 6-10 (AC 9a): knockdown drops card mode on its rising edge. The same `_stun_flavor_for_slot`
+	# read the rig closure already uses (no new seam, no new connect), polled here rather than driven from
+	# the action-state signal because the ordinary-to-knockdown escalation is a same-state write that emits
+	# nothing. An ordinary stun never triggers it (AC 9a).
+	for knock_slot: int in 2:
+		var knocked := _stun_flavor_for_slot(knock_slot) == AnimationController.STUN_FLAVOR_KNOCKDOWN
+		if knocked and not _was_knocked_down[knock_slot]:
+			(_p1_controller if knock_slot == 0 else _p2_controller).force_card_mode_off()
+		_was_knocked_down[knock_slot] = knocked
+	# Story 6-10 (AC 16/AC 20): the card-mode lift rides the same poll-and-push, own HUD only.
+	_huds[0].set_card_mode(_p1_controller.card_mode_on())
+	_huds[1].set_card_mode(_p2_controller.card_mode_on())
 	_huds[0].set_card_selection(_p1_controller.armed_slot(), Enums.ModeKind.BASIC)
 	_huds[1].set_card_selection(_p2_controller.armed_slot(), Enums.ModeKind.BASIC)
 	# Story 3-0b (AC 1): steps 2, 3 and 4 — gather, advance, drive — are THE freeze. While paused

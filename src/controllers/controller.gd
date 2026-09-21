@@ -21,6 +21,21 @@ func armed_slot() -> int:
 	return -1
 
 
+## Story 6-10 (AC 9/AC 20): whether this controller is in card mode right now. PRESENTATION-FACING and
+## controller-local, polled by the runner beside `armed_slot()` and pushed into the HUD's own hand-row
+## lift -- never on InputIntent, never read from state. Base returns false, so a controller with no
+## pad card scheme (Null, Replay, Keyboard) shows no lift and needs no stub.
+func card_mode_on() -> bool:
+	return false
+
+
+## Story 6-10 (AC 9): the runner PUSHES "something ended your card mode" (knockdown, round end, debug
+## reset). Only the pad's TOGGLE scheme has a memory to clear; base is a no-op on the
+## `observe_hand_colors` precedent so no other controller needs a stub.
+func force_card_mode_off() -> void:
+	pass
+
+
 ## Story 6-D1: the hand's per-slot colours (`Enums.CardColor` as int, -1 for an empty slot), PUSHED by
 ## the runner from the same `cards_changed` wrapper that feeds the HUD tint -- never read off state.
 ## Only the P1 debug keys consume it; base is a no-op so no other controller needs a stub.

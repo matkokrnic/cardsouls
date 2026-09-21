@@ -110,6 +110,11 @@ var _reshuffle_token := 0
 ## is the owning player's, and 2-4/R7's no-opponent-read discipline is not weakened by a
 ## highlight either).
 var _own_card_panels: Array[Panel] = []
+## Story 6-10 (AC 16-18): the own hand row's container, the card-mode flag pushed each frame, and the armed
+## slot last pushed -- the three facts the LIFT is a pure function of.
+var _hand_strip: HBoxContainer
+var _card_mode_on := false
+var _armed_slot := -1
 ## The two styles the indicator swaps between. `_card_base_style` is the SHARED StyleBoxFlat the
 ## row already used for all four panels (2-5/R4's single seat, unchanged); `_card_armed_style` is
 ## the one new affordance this story ships. Held as references so the swap is an override write
@@ -166,6 +171,14 @@ const GHOST_MODULATE := Color(1.0, 1.0, 1.0, 0.35)
 ## gutter LEFT of the bars; OPPONENT is its mirror RIGHT of them. 100 x 88 each. `offset_top` stays at
 ## -196: above -198 a zone would intersect the debug InstrumentBox (test_debug_instruments.gd's
 ## `_check_panel_layout`), which the -196 top clears by 2 px at the shipped 1152x648 window.
+## Story 6-10 (AC 18): the LIFT knobs, in pixels. While card mode is on the whole own hand row rises
+## CARD_MODE_ROW_LIFT_PX (4 = exactly the 4 px gap between the strip's -112 top and the vitals column's
+## -116 bottom, so the lifted row does not overlap the vitals); the ARMED card rises a further
+## CARD_MODE_ARMED_LIFT_PX on top of that. Pure position: no modulate, no swatch or caption write, no resize.
+## Exact amounts are a smoke call (AC 18).
+const CARD_MODE_ROW_LIFT_PX := 4.0
+const CARD_MODE_ARMED_LIFT_PX := 6.0
+
 const OWN_PITCH_OFFSETS := [-286.0, -196.0, -186.0, -108.0]   # left, top, right, bottom
 const OPPONENT_PITCH_OFFSETS := [186.0, -196.0, 286.0, -108.0]
 
@@ -584,6 +597,7 @@ func _build_hand_row() -> void:
 	strip.offset_right = 184.0
 	strip.offset_top = -112.0
 	strip.offset_bottom = -20.0
+	_hand_strip = strip
 	add_child(strip)
 	var card_style := _make_card_face_style(true)
 	for i in 4:
@@ -708,6 +722,29 @@ func set_card_selection(slot: int, mode: Enums.ModeKind) -> void:
 	for i in _own_card_panels.size():
 		var style: StyleBoxFlat = _card_armed_style if i == slot else _card_base_style
 		_own_card_panels[i].add_theme_stylebox_override("panel", style)
+	_armed_slot = slot
+	_apply_card_lift()
+
+
+## Story 6-10 (AC 16/AC 20): the mode-on flag, pushed by the runner each frame beside `set_card_selection`
+## (outside the ticking gate). Presentation-local like the armed slot: no signal, no state read.
+func set_card_mode(on: bool) -> void:
+	_card_mode_on = on
+	_apply_card_lift()
+
+
+## Story 6-10 (AC 18/AC 19): the LIFT. Row: the strip's top/bottom offsets shift together (position only,
+## size unchanged). Armed card: its own `position.y`, applied only while mode is on, so a card is never
+## lifted alone. Written every call, so a container re-sort that reset a child position is corrected on the
+## next frame's push. No `modulate`, no swatch or caption touched, so the 6-0 tint is untouched.
+func _apply_card_lift() -> void:
+	if _hand_strip == null:
+		return
+	var row_lift := CARD_MODE_ROW_LIFT_PX if _card_mode_on else 0.0
+	_hand_strip.offset_top = -112.0 - row_lift
+	_hand_strip.offset_bottom = -20.0 - row_lift
+	for i in _own_card_panels.size():
+		_own_card_panels[i].position.y = -CARD_MODE_ARMED_LIFT_PX 				if (_card_mode_on and i == _armed_slot) else 0.0
 
 
 ## Story 4-6a (AC 13/AC 14): the LOCKED-TARGET MARKER -- the Souls/Sekiro/Elden Ring dot on the

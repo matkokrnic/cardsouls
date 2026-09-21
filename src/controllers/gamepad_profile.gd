@@ -68,6 +68,15 @@ extends Resource
 ## same tick, same discipline as every other field on this resource.
 @export var cast_button: JoyButton = JOY_BUTTON_LEFT_STICK
 
+## Story 6-10 (AC 1, R1): which card-mode SCHEME `cast_button` drives. false = HOLD, exactly the 5-0b
+## behaviour above (held L3 is card mode, released exits the same tick). true = TOGGLE: an L3 press
+## edge turns card mode on, the next press edge turns it off. NOT a joypad button index -- a plain
+## bool, so the profile tests that sweep button fields do not see it (AC 2). Read once when a
+## `GamepadController` is constructed; flipping it is one `.tres` line plus a restart, and it applies
+## to every pad slot at once because both read the same resource. The shipped `.tres` carries NO line
+## for it: an absent property loads as this default, so HOLD holds with no authored edit.
+@export var card_mode_toggle: bool = false
+
 ## Story 5-0b (AC 3): the face button that commits a Basic cast — press-to-select-and-confirm in
 ## one, unlike the keyboard's separate `cast_confirm` key (no second button on the pad scheme).
 ## B/X were explicit no-ops at 5-0b and gained their own commit fields at `5-7` (directly below);
