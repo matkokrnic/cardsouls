@@ -480,3 +480,17 @@ Re-smoke sam, 20.9. navecer, [0,3] s 6-D1 tipkama (X/V/B na tipkovnici kastaju u
 ## 6-D1 solo smoke keys (20.9.2026)
 
 Tipke X/V/B za P1 rade: jedan pritisak kasta unblockable prvom kartom te boje i sam drzi chargeup, pa mogu sam smokeati kontre bez brata.
+
+## 2026-09-21 — 6-9 click-to-commit (solo smoke [0,3], X/V/B + pad)
+
+Unblockable je sad klik i commit, bez držanja i bez feinta. Solo smoke, tipkovnica P1 kasta preko X/V/B, pad P2 brani.
+
+- Tap i pusti: napad ide do kraja i sleti, nijednom se nije prekinuo.
+- Poslije tapa sam hodao, blokirao, napadao i rolao na tipkovnici — napad je i dalje letio isto, ništa ga nije otkazalo.
+- Animacija punjenja svaki put dođe do udarca, 6-1b tempo izgleda isto kao prije.
+- Kontra bojom na padu i dalje obori napadača.
+- Regresija OK: običan melee, roll i blok rade kao prije.
+- fps stabilan.
+
+Presuda: PASS. Klik i commit se osjeća kako sam htio — odluka pada na pritisak, a protivnik mora pogoditi boju.
+Otvoreno za playtest: je li unblockable bez feinta preslab, i nagrađuje li kontra dovoljno.

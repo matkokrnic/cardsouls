@@ -4,7 +4,7 @@ baseline_commit: 690f162a4b508d4c3e3718277e452555d949078e
 
 # Story 6.9: Click-to-Commit
 
-Status: ready-for-dev
+Status: done
 
 <!-- Tier A: touches src/state/ (match_state.gd CHARGING arm), FORMAT_VERSION, and replay. Full gate + review + live smoke ritual. -->
 
@@ -49,7 +49,14 @@ Behaviour, not mechanism, except where a ruling above fixed the mechanism (the r
    5. `move_dir` at each of `Vector2.ZERO`, a unit vector along +X, -X, +Y, -Y, and one diagonal;
    6. a second card press, `card_commit = true` with `card_mode = UNBLOCKABLE`, and again with `BASIC`,
       `DEFENSE` and `PITCH`: REFUSED with `REASON_UNBLOCKABLE_COMMITTED`, and the hero does not leave
-      `CHARGING`;
+      `CHARGING`. **AMENDED at close-out (review N1):** the refusal claim covers an unblockable, a
+      basic, a defense and a pitch STAGE press. A pitch ACTIVATION of an already-staged card
+      (`card_activate = true`, e.g. a pad Y press outside cast mode) is NOT refused while `CHARGING`:
+      it resolves (orbs spent, card discarded, draw window restarted) and the hero stays `CHARGING`.
+      Operator ruling 2026-09-21: allowed, consistent with `6-3a-gate/R-HERO-STATE`;
+      `_resolve_pitch_activate` (`match_state.gd:3216-3240`) has no `CHARGING` arm and writes no
+      action state, so it cannot be an exit. The delivered test drives row 6 as a stage press;
+      the activation is out of the row's refusal claim, not a gap in it;
    7. `debug_reset = true`, which DOES leave `CHARGING` (`_reset_player`, `match_state.gd:4987-4992`) and
       is asserted as an exit, not a stay. This row keeps the table non-vacuous: without a legitimate
       exit, "stays `CHARGING`" would be satisfied by a `_resolve_actions` that does nothing.
@@ -407,18 +414,18 @@ Any movement is a **STOP and report**, never a re-baseline. The stop conditions,
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: pre-edit baseline** (AC 14). `bash test/run_all.sh` (state, then integration, each
+- [x] **Task 0: pre-edit baseline** (AC 14). `bash test/run_all.sh` (state, then integration, each
       foreground, `GODOT=/c/Godot/godot.exe`) on the clean tree; record suite counts, golden hash, key
       count. Back up every file to be edited to the scratchpad WITH SHA-256 before mutating anything;
       restore by copy-back, never `git checkout`.
-- [ ] **Task 1: state arm** (AC 1, 2, 5, 6). Delete the `elif` release arm; rewrite its comment block;
+- [x] **Task 1: state arm** (AC 1, 2, 5, 6). Delete the `elif` release arm; rewrite its comment block;
       reword the stale comments in Fact 1, including `record_file.gd:165` so AC 7's search is clean. The
       surviving `if not player.landing_window.is_running: _resolve_charge_landing(player, slot)`
       (`match_state.gd:1348-1349`) and the counter-first `return` (`:1346-1347`) come out byte-identical.
-- [ ] **Task 2: controllers** (AC 7, 10). Remove `card_cast_held` from `resolve_card_tick` and the
+- [x] **Task 2: controllers** (AC 7, 10). Remove `card_cast_held` from `resolve_card_tick` and the
       `intent.held[&"card_cast"]` write in `GamepadController`; remove `DEBUG_HOLD_TICKS`,
       `_debug_hold_left`, the hold write and the docblock in `KeyboardController`.
-- [ ] **Task 3: click-to-commit tests** (AC 1, 2, 3, 5), a new `test/state/test_click_to_commit.gd`:
+- [x] **Task 3: click-to-commit tests** (AC 1, 2, 3, 5), a new `test/state/test_click_to_commit.gd`:
       (a) bare intents from the commit tick land on the same tick, with identical hero HP, orb, stamina,
       card and `hit_landed` outcomes, as a run whose every post-commit intent holds every LIVE held key
       (`attack`, `block`, `roll`, `run`) and a full move vector; neither run sets `held[&"card_cast"]`
@@ -431,30 +438,30 @@ Any movement is a **STOP and report**, never a re-baseline. The stop conditions,
       suite asserts it today, `test_unblockable_initiation.gd:335` covers only the suppression half).
       Non-vacuity: (a) and (b) must FAIL against HEAD's release arm (against HEAD the bare-intent run
       feints on the tick after the commit and the two runs diverge); that is the before-claim.
-- [ ] **Task 4: retire and reverse** (AC 8, 9, 10). Confirm the Fact 6 classification, then delete
+- [x] **Task 4: retire and reverse** (AC 8, 9, 10). Confirm the Fact 6 classification, then delete
       `test_unblockable_hold.gd`; delete / reframe / rewrite the tests in Fact 6 (including the tracking test
       at `:589` through the knockdown abandonment); take every fixture in Fact 4 back to bare intents;
       remove the helpers; retire the `6-1` chord-fork test (`test_gamepad_controller.gd:581`) and the `6-D1`
       hold test; re-point `test_record_file.gd:848` at `&"run"` (`6-9/R6`); strip the three `is_held` lines
       inside the kept `test_controller.gd` tests.
-- [ ] **Task 5: format** (AC 11). `FORMAT_VERSION := 12`, the `6-9` paragraph beside the `6-1` one, the
+- [x] **Task 5: format** (AC 11). `FORMAT_VERSION := 12`, the `6-9` paragraph beside the `6-1` one, the
       `== 12` pin and history string, `test_a_v11_record_is_refused_with_a_reason` (new
       `PRE_6_9_PATH` beside `PRE_6_7_PATH`; copy the eight-line shape of
       `test_a_v10_record_is_refused_with_a_reason`, `test_record_file.gd:562`), and a v12 round-trip. BOTH
       constant pins move to 12: `test_record_file.gd:176` and `test_record_file.gd:872` (inside
       `test_the_contents_validation_bumped_no_version_and_widened_no_required_key`), and the `:872` test's
       history string (`:873-878`) gains the `6-9` clause.
-- [ ] **Task 6: presentation check** (AC 12, 13). Re-measure question (a) on the finished tree;
+- [x] **Task 6: presentation check** (AC 12, 13). Re-measure question (a) on the finished tree;
       `git diff --stat` shows only comments under `src/actors/` and `src/main/`, and nothing under `6-6b`
       state.
-- [ ] **Task 7: mutation proofs** (backup outside the repo, SHA-256, restore by copy-back): (M1) reinstate
+- [x] **Task 7: mutation proofs** (backup outside the repo, SHA-256, restore by copy-back): (M1) reinstate
       the release arm, the (a)/(b) tests fail; (M2) reinstate `card_cast_held` on the pad path, the pad
       suite fails; (M3) reinstate the debug hold, the debug tap test fails; (M4) `FORMAT_VERSION` back to
       11, the pins fail; (M5) drop the explicit `charge_color` clear at `_reset_player` or the knockdown
       site, the existing reset / abandonment tests fail (proves the kept clears are still live).
-- [ ] **Task 8: full gate** (AC 14, 15). Full suite after; golden unmoved, key count 206; architecture
+- [x] **Task 8: full gate** (AC 14, 15). Full suite after; golden unmoved, key count 206; architecture
       invariants green; `project.godot` untouched.
-- [ ] **Task 9: live smoke** (below), then the operator's verdict.
+- [x] **Task 9: live smoke** (below), then the operator's verdict. PASS 2026-09-21, see Live Smoke Results.
 
 ## Live Smoke (operator, solo)
 
@@ -480,6 +487,27 @@ P1 (P1's hand must hold the colour pressed). Refine as the build shows what is j
 
 The pad-side click (B in cast mode) gets one confirming press if a pad is on hand; the solo path is the
 keyboard keys.
+
+### Live Smoke Results (operator, 2026-09-21, solo `[0, 3]`, keyboard X / V / B casts, pad P2 defends)
+
+Source: the operator's entry "2026-09-21 - 6-9 click-to-commit" in `docs/playtest-log.md`. Verdict PASS,
+all six items the operator exercised PASS, fps stable.
+
+| # | item | result |
+|---|---|---|
+| 1 | A tap commits and lands | PASS. Tap and release: the attack goes the whole way and lands, never once interrupted. |
+| 2 | No way to cancel after the press | PASS. After the tap, walking, blocking, attacking and rolling on the keyboard did not cancel it or change its flight. |
+| 3 | Chargeup clip plays through to the strike | PASS. It reaches the strike every time; the `6-1b` tempo looks as before. |
+| 5 | Counter still works | PASS. A matching colour on the pad still knocks the attacker down. |
+| 7 | Regression | PASS. Plain melee, roll and block behave as before. |
+| 8 | fps | PASS. Stable. |
+
+Items 4 (costs), 6 (stale-record refusal) and the pad-side click were not separately called out in the
+log. Item 4 is machine-pinned by `test_click_to_commit.gd` (the press pays, the attack resolves once)
+and item 6 by `test_a_v11_record_is_refused_with_a_reason`.
+
+Open for playtest (operator, not a defect of this story): is the unblockable too weak without a feint,
+and does the colour counter reward enough. Recorded in the decision-log, session "6-9 close-out (Tier A)".
 
 ## Supersession bookkeeping (recorded now, EXECUTED AT CLOSE-OUT, not in this pass)
 
@@ -564,8 +592,262 @@ keyboard keys.
 
 ### Agent Model Used
 
+Opus 5 (operator-stated).
+
 ### Debug Log References
+
+- Suite output, PRE-EDIT baseline: `C:\dev\_69-suite-before.txt` (written 00:46:44 - 00:51:10).
+- Suite output, FINAL: `C:\dev\_69-suite-after.txt` (written 01:49:57 - 01:55:28).
+- Full dev-pass record: `C:\dev\_69-dev.md`. Full diff: `C:\dev\_69-dev-diff.txt`.
+- Out-of-repo backups: `C:\dev\_69-backup\` (whole `src/` + `test/` trees, 192 `.gd` files with a
+  SHA-256 manifest, taken before the first edit) and `C:\dev\_69-mut\` (per-file copies with
+  SHA-256, taken before each mutation). Every restore was a COPY-BACK with the SHA re-verified;
+  `git checkout --` was never used.
 
 ### Completion Notes List
 
+**Measurements (both directions).**
+
+| | before (HEAD `9b414c7`) | after |
+|---|---|---|
+| state harness | 920 tests / 0 failed / 7755 assertions | **915 / 0 / 8039** |
+| integration | 66 files, 66 PASS | **66 files, 66 PASS** |
+| golden | `d437432f` | **`d437432f` (byte-identical)** |
+| snapshot key-paths | 206 | **206** |
+| `UNHASHED_CROSS_TICK_MEMBERS` | 4 | **4** |
+| `project.godot` | - | **not edited (zero diff)** |
+
+The brief predicted a 915/7604 baseline; the MEASURED baseline was 920/7755, which is the count the
+`6-D1` close-out records (the brief's number predates `6-D1`). No assumption was used.
+
+**Test-count arithmetic (AC 8, so the after-count is explained rather than observed).** The harness
+discovers `test/state/test_*.gd` by DIRECTORY SCAN (`run_state_tests.gd:59-69`), so deleting a file
+needs no registration edit; there is no registry to update. Removed: 13 tests
+(`test_unblockable_hold.gd`, whole file), 1 (`test_a_release_before_the_commit_still_feints_...`),
+1 (`test_resolve_card_tick_reports_the_unblockable_confirm_as_held`, `6-9/R6`), 1
+(`test_debug_key_holds_card_cast_after_release_for_the_debug_duration`) = **-16**. Added: 9
+(`test_click_to_commit.gd`) + 2 (`test_a_v11_record_is_refused_with_a_reason`,
+`test_a_v12_record_round_trips_inside_this_build`) = **+11**. Net **-5**, and 920 - 5 = 915. The
+assertion count moves +284 because the new suite is table-driven (463 assertions measured
+standalone) while the retired file's were per-case.
+
+**AC-by-AC.**
+
+- **AC 1, 2, 3, 5** - `test/state/test_click_to_commit.gd` (new, 9 tests / 463 assertions).
+- **AC 2 row 6 (watch item)** - `REASON_UNBLOCKABLE_COMMITTED` was VERIFIED to exist at HEAD before
+  anything asserted on it, and verified to be the reason all four modes take while CHARGING:
+  `_resolve_basic_cast` (`match_state.gd:2942`), `_unblockable_refusal_reason` (`:3311`),
+  `_resolve_defense_cast` (`:3491`), `_resolve_pitch_stage` (`:3141`). **One measured boundary,
+  reported not invented:** the PITCH ACTIVATE path (`_resolve_pitch_activate`, `:3219`) is gated on
+  `STUNNED` only and is NOT state-gated on `CHARGING` - pre-existing `6-3a` behaviour, untouched by
+  this story. The row is driven as a PITCH STAGE (a card press against a hand slot), which is what
+  "a second card press" means; the activation is not a second card press and is left alone.
+- **AC 2 row 7** - asserted as an EXIT, in the same test as the stays, which is where the
+  non-vacuity argument lives.
+- **AC 4** - no `.tres` edited. Confirmed mechanically: the complete set of NON-COMMENT changed
+  lines under `src/` is 13 deletions plus `FORMAT_VERSION 11 -> 12`, listed in `_69-dev.md`.
+- **AC 6** - the `elif` and its four-line body are the only deletion; `match_state.gd`'s
+  `if _resolve_color_counter(...) / return / if not landing_window.is_running /
+  _resolve_charge_landing(...)` came out BYTE-IDENTICAL (spliced, not retyped, and diffed).
+- **AC 7** - the mechanical search returns **ZERO lines**, comments included; the negative control
+  reads **26**, unchanged. New comments were reworded off the literal tokens (the same treatment
+  `record_file.gd:165` was given) so the search stays clean.
+- **AC 8** - the 13-row classification was CONFIRMED by content before deletion; every row matched
+  the gate's table, including the three SURVIVING rows (1, 9, 13) and their homes.
+- **AC 9** - `_holding()` removed in all five files; call sites reverted: 4 / 3 / 29 / 23 / 39.
+  `_defense_intent`/`_cast_defense`'s `held` parameter STAYS (it carries `&"block"` at `:232` and
+  `:251`).
+- **AC 10** - `DEBUG_HOLD_TICKS`, `_debug_hold_left` and the hold write are gone; the three kept
+  `6-D1` tests lost only their `is_held` lines; the balance `.tres` load went with the deleted test
+  (measured: it was that test's only reader).
+- **AC 11** - `FORMAT_VERSION := 12`, the `6-9` paragraph beside `6-1`'s, both constant pins moved
+  with their history strings, the new v11 refusal and a v12 round trip. The stale `:303-306`
+  citation was corrected to the MEASURED `:365-368` (and the `6-9` paragraph cites the same).
+- **AC 12, 13** - question (a) re-measured on the finished tree: nothing under `src/actors/`,
+  `src/main/` or `src/ui/` reads any held key; `match_state.gd`'s only held reads are `&"block"`
+  (`:1276`) and `&"run"` (`:4254`). The `src/actors` + `src/main` diffs are COMMENT-ONLY (zero
+  non-comment changed lines, measured). No `6-6b` state was edited.
+- **AC 14** - golden and key-path count unmoved in both directions. None of the five stop
+  conditions fired.
+- **AC 15** - all 18 `test_architecture_invariants.gd` tests green; `project.godot` untouched (zero
+  diff, SHA `9C3089BC...`). The new test file carries no `class_name`, so the `3-0c/R13` editor
+  scan does not apply and is left to the chain.
+
+**Dev decisions taken and recorded (not asked).**
+
+1. **The AC 2 table is ONE test with rows**, not a test per row: the rows share one claim and one
+   drive, the failure message names the row, and the exit row has to sit beside the stays for the
+   vacuity argument to be visible. A second test carries the REFUSAL REASON for row 6, because that
+   is a different assertion about the same rows.
+2. **`resolve_card_tick` loses the whole ENTRY**, not just the value. It is a pure product read by
+   key; the only consumers were the intent write (deleted) and the retired chord-fork test, so a key
+   nobody reads would be dead surface. `unblockable_raw` is still read, for the commit press edge.
+3. **The tracking test's knockdown re-reach (`6-9/R3`) is fixtured by making P2 cast FIRST** and
+   cutting P1 in once P2's landing is `CHARGEUP_TICKS - 2` ticks away, so P2's attack lands while P1
+   is still mid-chargeup. Driven off the LANDING WINDOW's remaining count rather than tick
+   arithmetic, so it does not silently rot if a span is retuned.
+4. **`test_controller.gd` no longer needs its `balance_config.tres` load** - measured: the deleted
+   hold test was its only reader, and it went with it.
+5. **`_cast_defense`'s `p1_intent` parameter is REMOVED** (with the `6-6b` finding-H1 note): it
+   existed only because a bare P1 intent was a feint, which is no longer true. `_basic_intent`'s
+   `held` parameter is removed too - see the correction below.
+6. **`_run_chargeup_to_its_landing` (defence suite)** is how the two "P1 releases" fixtures now
+   reach "nothing is charging at the press": the chargeup runs OUT, with nothing pushed during the
+   flight, so it whiffs and leaves the bearing store exactly as stale as the feint did.
+
+**Corrections to the story's own text (repo wins, reported not edited).**
+
+- **Deviation 3 is wrong as measured.** `_basic_intent`'s `held` parameter does NOT carry `block`:
+  its only two callers passed `[&"card_cast"]`. `block` reaches `_defense_intent` through
+  `_cast_defense` (`:232`, `:251`). AC 9's wording ("stays wherever it carries `block`") is
+  satisfied either way; the now-unused parameter on `_basic_intent` was removed.
+- **Fact 2's `test_record_file.gd:852` / Fact 6's `:848`** were correct; the re-point landed on
+  `&"run"` as `6-9/R6` directs, and `test_gamepad_controller.gd:581` was retired, not swapped.
+
+**Mutation table (MEASURED this pass; each mutation restored by copy-back with the SHA
+re-verified).** Every mutation ran against the AFFECTED FILE ONLY, never the full harness.
+
+| # | Mutation | Expected | Result |
+|---|---|---|---|
+| M1 | reinstate the release arm (`match_state.gd`) | (a)/(b) fail | **RED - 8 of 9** tests in `test_click_to_commit.gd`, including AC 1's two-run comparison, the input table, the costs, both abandonment exits and the regen claim |
+| M2 | reinstate `card_cast_held` + the intent write on the pad path | pad suite fails | ~~GREEN - disclosed~~ **CORRECTED by the post-review fix pass (review N2): the original reasoning was WRONG.** It claimed no test can guard the key's absence because AC 7's source search would match it; an ALLOW-LIST assertion names no removed key at all. **Re-run with `test_resolve_card_tick_produces_exactly_the_live_held_keys`: RED** (`got [attack_held, block_held, card_cast_held, roll_held, run_held]`). The guard is now runtime, not only AC 7's search. |
+| M3 | reinstate the `6-D1` auto-hold (`keyboard_controller.gd`) | debug tap test fails | ~~GREEN - disclosed, same cause as M2~~ **CORRECTED (review N2): same wrong reasoning as M2.** The surviving tests asserted only the COMMIT, which an auto-hold does not change; the auto-hold's signature is a key outliving the physical key. **Re-run with the live-key allow-list in `test_debug_key_casts_first_card_of_colour_unblockable` (tap tick, next sample, and after release): RED** on all three readings for all three colours. |
+| M4 | `FORMAT_VERSION` back to 11 | the pins fail | **RED** - measured as the pre-bump state: the two constant pins AND the new v11 refusal test all failed before the constant moved, and went green with it (the bump was written test-first) |
+| M5a | `_reset_player` stops clearing `charge_color` | reset tests fail | **RED** - `test_the_debug_reset_tears_a_committed_chargeup_down_in_all_three_parts` |
+| M5b | the knockdown abandonment stops clearing `charge_color` | abandonment tests fail | **RED** - `test_a_knockdown_still_abandons_a_committed_chargeup` |
+| M6 | the load side stops rebuilding `held` (`record_file.gd:781-782`) | the round trips fail | **RED** - the re-pointed `test_a_new_held_key_round_trips_...` AND the new `test_a_v12_record_round_trips_inside_this_build` (plus two pre-existing round-trip tests) |
+| M7 | remove the `telegraph` key's `CHARGING` gate (`player_state.gd`) | the telegraph test fails | **RED** - `test_the_telegraph_rests_after_the_landing`, the one test M1 left green (under a feint the telegraph also rests, so M1 could not prove it) |
+| M8 | `_resolve_color_counter` never judges | the counter exit fails | **RED** - `test_the_colour_counter_still_ends_a_committed_chargeup` |
+| M9 | latch the regen suppression on the landing tick | the (f) claim fails | **RED** - `test_stamina_regen_resumes_on_the_landing_tick_itself`, targeting the no-latch claim itself rather than the arm |
+
+Every new or rewritten assertion therefore has a red-before-green: M1 covers 8 of the new suite's 9
+tests, M7 the 9th, M9 the `6-9/R7` claim specifically, M4 the format pins and M6 both round trips.
+
+**Two defects found in this pass's own work, fixed here.**
+
+1. Two mutations (an early M5b, an early M6) were MALFORMED - they left an empty `if` body and a
+   broken dictionary literal, i.e. parse errors rather than behaviour changes, and hung the headless
+   run instead of failing it. Both were re-done minimally and validly; the hung runs were killed,
+   every Godot process confirmed gone, and the tree restored by SHA-verified copy-back.
+2. The hang exposed a real defect in the tests this pass wrote: two `while` drives in
+   `test_click_to_commit.gd` and two in `test_unblockable_tracking_and_reach.gd` were UNBOUNDED. A
+   test that can spin forever is useless as a mutation proof, because a broken build hangs the
+   harness instead of reporting. All four are now bounded with an explicit fixture assertion.
+
+**Suite cadence (`PROC/R1` disclosure).** Exactly **TWO full-suite runs**: the pre-edit baseline
+(Task 0) and the final gate (Task 8). Everything in between was SINGLE-FILE runs (the mutation-proof
+rule), via a temporary `test/_run_one.gd` runner plus a temporary `test/_probe_keypaths.gd` probe -
+neither matches `test_*.gd`, so neither was ever discovered by the harness, and **both were DELETED
+before the final run and the final diff** (the working tree carries no trace of either).
+
+**Machine-time.** Budget instrument = the two suite-output files: `_69-suite-before.txt` 00:51:10 ->
+`_69-suite-after.txt` 01:55:28, **delta 1 h 04 m 18 s** for the dev pass (first suite call started
+00:46:44). No budget was set for this story (the ~1 h instrument is Tier B's; this is Tier A), so
+this is reported as a fact, not against a target.
+
+**Not done, and why.** Task 9 (live smoke) is the operator's, and nothing was committed: every edit
+is left UNCOMMITTED in the working tree, per the brief. `baseline_commit` in the frontmatter is left
+at `690f162` (the value the create pass wrote; the skill preserves an existing one) - note that HEAD
+for this dev pass was `9b414c7`, the two gate commits later.
+
+### Post-review fix pass
+
+Tests and record only; `src/` was not edited (the two controller files were mutated for M2/M3 and
+restored by SHA-verified copy-back; `git diff` of both is byte-identical to its pre-mutation state).
+Review: `C:\dev\_69-review.md`. N1, N4, N6 are close-out wording and were deliberately NOT acted on.
+
+| finding | what changed |
+|---|---|
+| **N2** | Two runtime allow-lists on the live held keys, neither naming a removed key. (a) `test_gamepad_controller.gd`: new `test_resolve_card_tick_produces_exactly_the_live_held_keys`, beside the surviving armed-slot test; it drives cast mode and non-cast mode with the unblockable confirm physically down and compares the sorted `*_held` products the resolver returns to `attack/block/roll/run`. **`sample()`'s own `intent.held` writes are not headless-reachable (no device binds; file header), so the resolver's product is the seam: every `intent.held` write reads one.** (b) `test_controller.gd`: `_held_keys()` helper, and the kept `6-D1` tap test asserts the key set on the tap tick, on the next sample, and after the physical key is released. M2/M3 table rows and the "none can" claim corrected above. |
+| **N5** | `test_unblockable_tracking_and_reach.gd`: an execution counter on the conditional "nothing is credited yet" reading, asserted `> 0` after the loop. |
+| **N7** | `test_controller.gd`: the `6-D1` docblock now describes the tap-commits behaviour; it names no held key. |
+| **N8** | `test_unblockable_defense.gd`: identical ternary arms collapsed to one expression; identical if/else bodies collapsed to one call with a comment saying where the seat symmetry actually lives; the stale `6-1` comment above the bare intents reworded. `test_honest_hit_geometry_live.gd`: the spliced sentence repaired. |
+| **N9** | `HoldingController` -> `BareController` in the three integration files, every reference updated (class, the `_holder` type, both construction sites). |
+| **N3 (small half)** | `test_click_to_commit.gd`: the dead pre-loop `stamina_while_committed` read replaced by a plain `0.0` declaration; the comparison is untouched. |
+
+**One defect in this pass's own first draft, fixed:** the (b) helper first compared `StringName` keys
+sorted, and StringName order is not alphabetical, so it failed on an unmutated tree; it now compares
+sorted Strings. The first M3 attempt applied NO mutation (an anchor did not match, the script's own
+assertion tripped) and its "GREEN" was discarded as invalid; M3 was redone with the right anchor.
+
+**M2/M3 re-run (affected file only, single-file runner outside the repo).** SHA-256 taken before, restored
+by copy-back, SHA re-verified equal: `gamepad_controller.gd` `b846dec6...`, `keyboard_controller.gd`
+`2518fe85...`.
+
+| mutation | affected file | result |
+|---|---|---|
+| M2 (reinstate the pad's held product + intent write) | `test_gamepad_controller.gd` | **RED**, 1 test, both cast states |
+| M3 (reinstate the debug auto-hold) | `test_controller.gd` | **RED**, `test_debug_key_casts_first_card_of_colour_unblockable`, all three readings x three colours |
+
+Unmutated, both files were green (33/0, 12/0) before each mutation.
+
+**Gate.** One final suite (`C:\dev\_69-fix-suite.txt`).
+
+| | before (review run) | after |
+|---|---|---|
+| state harness | 915 / 0 / 8039 | **916 / 0 / 8051** (+1 test, +12 assertions) |
+| integration | 66 / 66 | **66 / 66** |
+| golden | `d437432f` | **`d437432f` (unmoved; `test_state_matches_golden` ok)** |
+| AC 7 search | 0 lines | **0 lines** (negative control **26**) |
+
+**Record honesty (close-out, review N6 and N4).** Two readings of the numbers above that the raw counts
+invite and the code does not support:
+
+- The +284 assertion delta in the dev-pass measurements is mostly ONE assertion, "still `CHARGING`",
+  repeated across the AC 2 table's 19 rows x 20 ticks (380 of the new file's 463 assertions). "Table-driven"
+  is true; 284 independent claims is not.
+- 11 of the AC 2 table's 19 stay-rows are structurally incapable of failing that assertion: row 1 (the
+  bare-intent control), row 2's four held keys and row 5's six move vectors drive fields that no
+  `src/state/` path reads on a `CHARGING` tick. The table as a whole is non-vacuous: it is anchored by
+  row 7 (`debug_reset` asserted as an exit), row 3 (pressed keys, which do reach the transition step) and
+  row 6 (card presses), plus the per-row landing assertion (authored tick, authored damage), which no
+  do-nothing `_resolve_actions` satisfies.
+
 ### File List
+
+Modified (24 files, all `src/` changes listed non-comment-complete above):
+
+- `src/state/match_state.gd` - the release arm deleted; its comment block rewritten; six stale
+  comment sites reworded
+- `src/state/player_state.gd` - four comment sites
+- `src/state/resources/balance_config.gd` - one comment (the `6-1d` knob's wording)
+- `src/controllers/gamepad_controller.gd` - the held product and the intent write removed
+- `src/controllers/keyboard_controller.gd` - `DEBUG_HOLD_TICKS`, `_debug_hold_left`, the hold write
+- `src/main/match_runner.gd` - two comments
+- `src/actors/hero/animation_controller.gd` - one comment
+- `src/systems/record_file.gd` - `FORMAT_VERSION 11 -> 12` + the `6-9` paragraph; two citations fixed
+- `test/state/test_unblockable_defense.gd`, `test_unblockable_initiation.gd`,
+  `test_unblockable_tracking_and_reach.gd`, `test_orbs_economy.gd`, `test_pitch_changed.gd`,
+  `test_pitch_staging.gd`, `test_controller.gd`, `test_gamepad_controller.gd`,
+  `test_record_file.gd`, `test_determinism.gd`, `test_charge_playhead_mapping.gd`
+- `test/integration/test_charge_playhead_live.gd`, `test_charge_telegraph_dispatch_live.gd`,
+  `test_honest_hit_geometry_live.gd`, `test_unblockable_reach_live.gd`
+
+Post-review fix pass touched (tests + this record only, no `src/`): `test/state/test_gamepad_controller.gd`,
+`test_controller.gd`, `test_unblockable_tracking_and_reach.gd`, `test_unblockable_defense.gd`,
+`test_click_to_commit.gd`; `test/integration/test_charge_telegraph_dispatch_live.gd`,
+`test_honest_hit_geometry_live.gd`, `test_unblockable_reach_live.gd`.
+
+Added:
+
+- `test/state/test_click_to_commit.gd`
+
+Deleted:
+
+- `test/state/test_unblockable_hold.gd`
+
+### Change Log
+
+- 2026-09-21: post-review fix pass (review N2, N3-small, N5, N7, N8, N9). Tests and record only, no
+  `src/` edit. Two runtime live-held-key allow-lists (pad resolver, keyboard debug tap); M2 and M3
+  re-run and now RED, their table rows and the "none can" claim corrected. Suite 916/0/8051 + 66/66,
+  golden `d437432f` unmoved. Nothing committed; Status stays review.
+
+- 2026-09-21: dev pass. Mode ② becomes click-to-commit: the release arm and the `card_cast` held key
+  are deleted, the `6-D1` debug hold with them, `FORMAT_VERSION` moves 11 -> 12 with a v11 refusal
+  and a v12 round trip, the feint suite is retired against a confirmed 13-row classification and
+  replaced by `test_click_to_commit.gd`. Golden `d437432f` and the 206-key snapshot set unmoved in
+  both directions; suite 915/0/8039 + 66/66 integration. Nothing committed; Status -> review.
+- 2026-09-21: close-out. Live smoke PASS (operator, solo `[0, 3]`); AC 2 row 6 amended for the pitch
+  activation (review N1, operator ruling); record-honesty lines for N4 and N6; Status done. Code and
+  tests committed as `5a98e79`; decision-log session "6-9 close-out (Tier A)" carries the rulings.
