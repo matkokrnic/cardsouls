@@ -11043,3 +11043,55 @@ of it), review, post-review fix, the operator's live smoke and idle time between
   playtest / retune block (operator's open question in the playtest log; no tuning change made here).
 - GDD wording that still frames the unblockable as "cash-in or feint" (`gdd.md`, three sites), and the
   `epics.md` bullets for `6-9` and `6-10` -> E6 close-out docs debt.
+
+## Session 2026-09-22 -- 6-10 close-out (Tier B)
+
+Story `6-10-card-mode-toggle` closes. The pad's card mode gains a TOGGLE scheme beside HOLD, chosen by one
+authored profile line, plus a hand-row LIFT on the HUD. Code and tests are commit `e598678`; the story
+record, review dispositions and the operator's playtest entry are `67495b1`. Rulings `6-10/R1` onward.
+
+`6-10/R1` SWITCH. `GamepadProfile.card_mode_toggle`, default false = HOLD, byte-identical to before; one
+`.tres` line plus a restart flips it. `6-10/R2` TOGGLE: an L3 press edge turns card mode on, the next
+press edge turns it off; nothing else the player presses turns it off. `6-10/R3` FORCED OFF (TOGGLE
+only): knockdown, round end, the debug reset (the only `round_started`), pad disconnect. `6-10/R4` A
+commit clears the ARMED slot and mode stays on (TOGGLE); HOLD is unchanged. `6-10/R5` Inside card mode
+everything is exactly HOLD; block is NOT available there. `6-10/R6` HUD channel LIFT, both switch
+values: own row +4 px, armed card a further +6 px, pure position (no `modulate`), 6-0 tint untouched.
+`6-10/R7` Keyboard untouched. `6-10/R8` HOLD vs TOGGLE is judged in the playtest / retune block; the
+loser is removed by its own story. `6-10/R9` Tier B budget about 1 h (operator-set).
+
+`6-10/R10` OPEN QUESTION DISPOSITIONS. (1) New `Controller` base methods `card_mode_on()` and
+`force_card_mode_off()` RATIFIED on the `6-D1` `observe_hand_colors` precedent. (2) Knockdown only; an
+ordinary stun does not drop the mode. (3) An L3 click while down or frozen is allowed. (4) One-tick
+force-off latency accepted (state's stunned refusal covers it). (5) LIFT confirmed; amounts were a
+smoke call. (6) A keyboard lift is allowed only if it falls out of the shared path; it did not (none).
+
+`6-10/R11` KNOCKDOWN VIA A RUNNER POLL, RATIFIED. Step 1b polls the EXISTING `_stun_flavor_for_slot` and
+pushes `force_card_mode_off()` on the RISING edge (runner-local `_was_knocked_down`). The controller
+never reads state; no new seam (family stays TEN), no new `_match_state.<signal>.connect(` site. A poll
+rather than the action-state closure because the ordinary-to-knockdown escalation is a same-state
+write that emits nothing.
+
+`6-10/R12` REVIEW: APPROVE WITH FINDINGS, 0 blocking, 11 non-blocking, 6 dismissed. N1 / N2 / N4 fixed
+in tests only and mutation-proven (three rows in the story); N3 smoke-cleared; N5 accepted as disclosed;
+N6 not seen on smoke; N7-N9, N11 and the cosmetic frame-late lift noted and left; N10 record-honesty
+correction (one extra mid-story state run, not two; `_610-dev.md` is a summary) recorded in the story.
+
+`6-10/R13` LAYER-COMPLETION, final: Blind Hunter COMPLETE, Edge Case Hunter COMPLETE, Acceptance
+Auditor COMPLETE (inline). No layer stalled.
+
+`6-10/R14` GOLDEN AND SNAPSHOT MEASURED UNMOVED. Golden `d437432f` `[ok]`, `FORMAT_VERSION` 12,
+`git diff --stat -- src/state` empty, `project.godot` SHA unchanged. Suite `916/0/8051` + 66 ->
+`936/0/8454` + 67 integration (+20 state, +1 integration); final run `C:\dev\_610-chain-suite.txt`.
+Live smoke PASS, HOLD and TOGGLE, solo `[0, 3]` (playtest log 2026-09-22).
+
+`6-10/R15` BUDGET INTERVAL (`E5-R/R3`). Start = `_610-suite-before.txt`, 2026-09-21 18:13:59. End =
+`_610-chain-suite.txt`, 2026-09-22 01:11:16. Delta 6h 57m 17s. Wall clock across the dev pass, review,
+the operator's smoke and idle time; not machine time and not the dev pass alone, so it overruns the
+R9 ~1 h budget only in the wall-clock sense; the dev pass was not timed separately.
+
+`6-10/R16` DEFERRED, WITH OWNERS.
+- HOLD vs TOGGLE, the choice -> the playtest / retune block (R8).
+- Smoke finding 8b, counter from a held block impossible on pad -> the playtest / retune block.
+- Accidental L3 under TOGGLE while running (not a problem on this smoke) -> the playtest / retune block.
+- `epics.md` bullets for `6-9` / `6-10` and the GDD "cash-in or feint" wording -> E6 close-out docs debt.
