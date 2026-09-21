@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-21
+# last_updated: 2026-09-22
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-09-21
+last_updated: 2026-09-22
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -126,7 +126,7 @@ development_status:
   6-6b-color-counters: done  # Tier A
   6-D1-solo-smoke-keys: done  # Tier B
   6-9-click-to-commit: done  # Tier A
-  6-10-card-mode-toggle: ready-for-dev  # Tier B
+  6-10-card-mode-toggle: done  # Tier B
   6-5-spell-resolution: backlog  # Tier A
 
 story_notes:
@@ -145,7 +145,7 @@ story_notes:
   6-6b-color-counters: "done 2026-09-20, Tier A close-out complete (colour counters judged at the commit, attacker knocked down, 6-6b/R1-R21; golden d437432f unmoved, suite 915/0/7604 + 66; review APPROVE WITH FINDINGS; solo re-smoke good; decision-log session 6-6b close-out)."
   6-D1-solo-smoke-keys: "done 2026-09-20, Tier B close-out complete (P1 keyboard X/V/B cast a held unblockable per 6-D1/R1-R2; golden d437432f unmoved, suite 920/0/7755 + 66; operator solo check PASS; decision-log session 6-D1 close-out)."
   6-9-click-to-commit: "done 2026-09-21, Tier A close-out complete (mode 2 is click-to-commit: a press commits, no hold, no feint, supersedes 6-1 hold/feint and 6-6b feint-bait clauses; FORMAT_VERSION 11 -> 12 hard refusal of v11; 6-9/R10-R19; golden d437432f unmoved, suite 916/0/8051 + 66/66; review APPROVE WITH FINDINGS, N2 fixed by runtime allow-lists; live smoke PASS solo; decision-log session 6-9 close-out; GDD cash-in-or-feint wording and epics.md bullets owed at the E6 close-out)."
-  6-10-card-mode-toggle: "promoted to ready-for-dev 2026-09-21 after operator review; baseline dcc9712"
+  6-10-card-mode-toggle: "done 2026-09-22, Tier B close-out complete (pad card mode gains a TOGGLE scheme beside HOLD via GamepadProfile.card_mode_toggle, default HOLD, plus a hand-row LIFT; 6-10/R1-R16; golden d437432f unmoved, suite 936/0/8454 + 67; review APPROVE WITH FINDINGS, N1/N2/N4 fixed in tests; live smoke PASS both schemes; decision-log session 6-10 close-out; HOLD vs TOGGLE judged at the playtest / retune block)."
   6-5-spell-resolution: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Carries M5 and M6 (deferred-work.md:301-302)."
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
