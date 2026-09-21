@@ -494,3 +494,13 @@ Unblockable je sad klik i commit, bez držanja i bez feinta. Solo smoke, tipkovn
 
 Presuda: PASS. Klik i commit se osjeća kako sam htio — odluka pada na pritisak, a protivnik mora pogoditi boju.
 Otvoreno za playtest: je li unblockable bez feinta preslab, i nagrađuje li kontra dovoljno.
+
+## 22.9.2026 — 6-10 card mode toggle, solo smoke [0,3]
+
+Smoke 6-10 na padu (P2), P1 tipkovnica s X/V/B za unblockable. Oba nacina provjerena:
+- HOLD (default): drzanje L3 digne ruku, armirana karta ide vise, pustanje vraca sve dolje; izvan moda napad/blok/roll normalni.
+- TOGGLE (card_mode_toggle = true u gamepad_profile.tres): klik L3 pali i gasi mod, odigrana karta brise armiranje a mod ostaje, knockdown i reset/kraj runde gase mod, klik dok lezim radi.
+- Armirana karta i mana bar: nista odrezano nije mi zapelo za oko.
+- Slucajni klik L3 dok trcim: nije problem na smokeu.
+- fps stabilan.
+Sve prolazi. Koji je nacin bolji (hold ili toggle) odlucujem na playtestu.
