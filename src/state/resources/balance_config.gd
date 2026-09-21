@@ -408,7 +408,8 @@ extends Resource
 ##
 ## ON: the chargeup is mapped onto `[0, hold_end]` and the launch onto `[hold_end, 1]`, so the swing
 ## STARTS at the commit and the whole of it plays across the launch -- the blade's visible motion and
-## the tick the attack becomes unfeintable become the same moment.
+## the tick the chargeup window closes become the same moment (`6-9`: the attack was never
+## feintable to begin with -- the press commits it).
 ##
 ## PRESENTATION ONLY, and that is why it is a plain bool with no tick-domain twin: it re-times a
 ## playhead and touches no window, no damage, no reach and no state. It is judged ON vs OFF at Live

@@ -567,52 +567,14 @@ func test_arming_chord_is_untouched_by_the_new_confirm_buttons() -> void:  # AC 
 		"the arming chord still resolves to slot 3 (rightmost) with B and X also pressed")
 
 
-## STORY 6-1 (AC 1/2/5): THE HOLD FACT mode ②'s chargeup reads, and THE L3-CHORD FORK, pinned.
-##
-## The story named the fork and required the dev pass to pick one and add a direct test for exactly
-## this case: L3 (`cast_button`) released while B (`cast_unblockable_button`) stays held partway
-## through a chargeup. THE PICK IS B ALONE — `card_cast_held` is `unblockable_raw` and is NOT
-## conjoined with `cast_held`, so letting go of the ARMING modifier cannot destroy an already-paid
-## attack. Row 3 below is that decision; without it, `card_cast_held` would read false there and a
-## thumb slipping off L3 would feint.
-##
-## The other two rows are what make row 3 a decision rather than a tautology: the key follows B's
-## raw state in both directions, and neither of the OTHER two confirms can stand in for it.
-func test_resolve_card_tick_reports_the_unblockable_confirm_as_held() -> void:  # Story 6-1
-	# B held, inside cast mode: the ordinary mid-chargeup tick.
-	var held := GamepadController.resolve_card_tick(true,
-		false, false, false, false, false, false,
-		0.0, 0.0, 0.0, 0.0,
-		false, false, true, true, false, false, false, false, 0.5, 2)
-	assert_true(held["card_cast_held"], "B still down -> the chargeup's confirm reads HELD")
-
-	# B released: the fact goes false the same tick, no edge and no latch (CONSTRAINT C).
-	var released := GamepadController.resolve_card_tick(true,
-		false, false, false, false, false, false,
-		0.0, 0.0, 0.0, 0.0,
-		false, false, false, true, false, false, false, false, 0.5, 2)
-	assert_false(released["card_cast_held"],
-		"B up -> released on that very tick, read live rather than derived from an edge")
-
-	# THE FORK: L3 released, B still down. The confirm still reads HELD.
-	var l3_gone := GamepadController.resolve_card_tick(false,
-		false, false, false, false, false, false,
-		0.0, 0.0, 0.0, 0.0,
-		false, false, true, true, false, false, false, false, 0.5, 2)
-	assert_true(l3_gone["card_cast_held"],
-		"releasing L3 while B stays held does NOT feint — the hold belongs to the confirm that "
-		+ "committed the attack, not to the arming modifier whose job ended at the commit")
-	assert_eq(l3_gone["armed_slot"], -1,
-		"...while L3's OWN product still clears the same tick it releases (AC 1 of 5-0b, "
-		+ "unchanged) — which is precisely why the two facts must not be conjoined")
-
-	# The other two confirms are not substitutes: A and X held, B up, still released.
-	var wrong_buttons := GamepadController.resolve_card_tick(true,
-		false, false, false, false, false, false,
-		0.0, 0.0, 0.0, 0.0,
-		true, true, false, false, true, true, false, false, 0.5, 2)
-	assert_false(wrong_buttons["card_cast_held"],
-		"a held BASIC or DEFENSE confirm cannot keep a mode ② chargeup alive — only B can")
+## STORY 6-9 (AC 7), RULING `6-9/R6`: `6-1`'s `test_resolve_card_tick_reports_the_unblockable_confirm_as_held`
+## IS RETIRED HERE, not re-pointed. All four of its readings were of the returned `card_cast` held
+## entry, which click-to-commit removes, so they are uncompilable rather than merely vacuous -- and
+## there is no live key to re-point at, `6-1/R9`'s L3-chord fork having gone with the hold it forked
+## on (with no hold there is nothing to conjoin). Its ONE non-held claim, that L3's own product
+## `armed_slot` clears the same tick it releases, is independently covered by
+## `test_resolve_card_tick_clears_armed_slot_the_same_tick_cast_releases` below, which this story
+## does not touch.
 
 
 func test_resolve_card_tick_suppresses_attack_block_roll_while_cast_held() -> void:  # AC 4/AC 5
@@ -675,6 +637,29 @@ func test_resolve_card_tick_clears_armed_slot_the_same_tick_cast_releases() -> v
 		false, false, false, false, false, false, false, false, 0.5, t1["armed_slot"])
 	assert_eq(t2["armed_slot"], -1,
 		"armed slot clears the SAME tick cast_button releases, no released-edge delay")
+
+
+## STORY 6-9 post-review fix (N2): the RUNTIME guard on a deleted held key's absence, in the slot the
+## retired `..._reports_the_unblockable_confirm_as_held` vacated. An ALLOW-LIST: the held products the
+## pure resolver returns are exactly the four live ones, whatever the cast state and whichever confirm is
+## physically down. It names no removed key, so it is not a text the AC 7 source search can match.
+## (`sample()`'s own `intent.held` writes are not headless-reachable -- no device binds, see the file
+## header -- but every one of them reads a `*_held` product of this dict, so the product is the seam.)
+func test_resolve_card_tick_produces_exactly_the_live_held_keys() -> void:
+	var live: Array = ["attack_held", "block_held", "roll_held", "run_held"]
+	# Cast mode, the unblockable confirm (B/X slot of the args) physically down, then the same outside cast mode.
+	for cast_held: bool in [true, false]:
+		var r := GamepadController.resolve_card_tick(cast_held,
+			false, false, false, false, false, false,
+			0.0, 0.0, 0.0, 0.0,
+			false, false, true, false, false, false, false, false, 0.5, -1)
+		var produced: Array = []
+		for k: String in r.keys():
+			if k.ends_with("_held"):
+				produced.append(k)
+		produced.sort()
+		assert_eq(produced, live,
+			"cast_held=%s: the resolver returns exactly the live held products and no other" % cast_held)
 
 
 func test_resolve_card_tick_exit_edge_sequences() -> void:  # AC 5 (review fix: trivial-only coverage)

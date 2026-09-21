@@ -214,13 +214,14 @@ var charge_color: int = NO_TELEGRAPH_COLOR
 ## (`CHARGING`) from cast to landing; which half of it the hero is in is DERIVED from which window is
 ## running -- the `HeroState.attack_phase()` "phases are expressed by which window is running"
 ## precedent -- never stored as a flag:
-##   * `charge_window` running          -> the CHARGEUP: rooted, tracking, releasable (a feint).
-##   * `charge_window` stopped, this running -> COMMITTED: the launch -- facing frozen, travelling
-##                                        along it, the release ignored.
+##   * `charge_window` running          -> the CHARGEUP: rooted, tracking, and -- since `6-9` --
+##                                        already committed, with nothing to release.
+##   * `charge_window` stopped, this running -> THE LAUNCH: facing frozen, travelling along it.
 ##   * this stopped                     -> the LANDING, resolved at step 3(a) on that very tick.
-## The commit point therefore exists BY CONSTRUCTION the instant the chargeup window closes: there
-## is no "committed" bit an adversarial mutation could leave stale, and nothing can un-commit a hero
-## because nothing restarts `charge_window` except a new cast.
+## The LAUNCH point therefore exists BY CONSTRUCTION the instant the chargeup window closes: there
+## is no "launched" bit an adversarial mutation could leave stale, and nothing can un-commit a hero
+## because nothing restarts `charge_window` except a new cast. Since `6-9` the COMMITMENT is older
+## still -- it is the PRESS (`_resolve_unblockable_cast`), and no input undoes it.
 ##
 ## STARTED AT THE CAST WITH ITS FULL DURATION rather than at the commit, so a mid-attack X3 reload
 ## cannot move the landing tick (the D4 rule: a window in flight keeps its duration) and so no
@@ -314,10 +315,10 @@ func notify_cards_changed() -> void:
 ## by two expressions that could drift apart.
 ##
 ## READ FROM THE WINDOWS, never from a flag: the phase shape this file already describes above --
-## `charge_window` running is the feintable chargeup, stopped is the commit. `remaining_ticks() <= 1`
+## `charge_window` running is the chargeup, stopped is the launch. `remaining_ticks() <= 1`
 ## rather than `not is_running` because both callers read it BEFORE `advance()` ticks the windows, so
 ## the tick that will CLOSE the chargeup still reports one tick left when they ask. That tick is
-## already past feinting (the CHARGING arm's landing/release ordering makes a release on it land),
+## already inside the launch for reach purposes (and since `6-9` no input ends a chargeup at all),
 ## and it is the ONLY evaluated tick when a colour authors no launch span at all -- excluding it
 ## would make every launch-less chargeup miss by construction.
 ##
@@ -626,7 +627,8 @@ func to_snapshot() -> Dictionary:
 		#
 		# UNGATED, unlike `telegraph`, deliberately: there is no colour here to go stale, only a window
 		# whose own remaining count is the truth on every path -- it reads 0 at rest, after a landing,
-		# after a feint and after a reset (each of those stops it), and a hero killed mid-launch
+		# after a knockdown or counter abandonment and after a reset (each of those stops it), and a
+		# hero killed mid-launch
 		# carries the window's real count until it expires. Gating it on CHARGING would HIDE that
 		# count from the hash rather than make anything unrepresentable.
 		#

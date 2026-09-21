@@ -40,17 +40,18 @@ extends SceneTree
 ##
 ## THE CHARGEUP IS POKED, NOT CAST (the `test_unblockable_reach_live.gd` precedent): colour, the two
 ## windows the cast seat starts, and CHARGING -- with P1's controller replaced by a stand-in that
-## HOLDS the cast confirm so the chargeup is not feinted. The cast seat is covered headless.
+## sends a BARE intent every tick (story 6-9). It used to hold the cast confirm so the chargeup was
+## not feinted; nothing feints any more, and the debug-reset case below is the only thing this
+## controller still varies. The cast seat is covered headless.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_honest_hit_geometry_live.gd
 
-class HoldingController extends Controller:
-	## `6-1d/R9` frozen case: one debug reset on the next sample, then back to holding.
+class BareController extends Controller:
+	## `6-1d/R9` frozen case: one debug reset on the next sample, then back to bare intents.
 	var reset_next := false
 
 	func sample() -> InputIntent:
 		var intent := InputIntent.new()
-		intent.held[&"card_cast"] = true
 		intent.debug_reset = reset_next
 		reset_next = false
 		return intent
@@ -95,7 +96,7 @@ var _saw_overlap := false
 var _fled := false
 var _contact_ticks := 0
 var _y := 0.0
-var _holder: HoldingController
+var _holder: BareController
 var _frozen_frame := -1
 var _frozen_inside := false
 
@@ -132,7 +133,7 @@ func _physics_process(_delta: float) -> bool:
 			_failures.append("main scene did not yield a runner, a MatchState and two heroes")
 			_report()
 			return true
-		_holder = HoldingController.new()
+		_holder = BareController.new()
 		_runner._p1_controller = _holder
 		_y = _p1_actor.position.y
 		return false
@@ -221,7 +222,7 @@ func _physics_process(_delta: float) -> bool:
 				_contact_ticks += 1
 			if kind == "charge" and player.charge_window.remaining_ticks() <= 6 and not _fled:
 				# Well before the commit: the blade has been inside the body for most of the
-				# feintable chargeup and the defender is gone with ticks to spare.
+				# chargeup and the defender is gone with ticks to spare.
 				_fled = true
 				_check(_saw_overlap, "%s: the defender never actually overlapped the blade during "
 					% label + "the chargeup -- the case would pass vacuously")

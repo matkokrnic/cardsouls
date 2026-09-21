@@ -54,11 +54,9 @@ extends SceneTree
 ## (re-poking `CHARGING` every frame) would fight the state layer with a second write per frame and
 ## make the dispatch under test fire repeatedly instead of once. P2 keeps its real controller: this
 ## file's cross-slot claim is that P1's dispatch is P1's alone.
-class HoldingController extends Controller:
+class BareController extends Controller:
 	func sample() -> InputIntent:
-		var intent := InputIntent.new()
-		intent.held[&"card_cast"] = true
-		return intent
+		return InputIntent.new()
 
 
 const CHECK_DELAY := 2  ## frames between a poke and reading its result (test_totem_tint_live precedent)
@@ -110,7 +108,7 @@ func _physics_process(_delta: float) -> bool:
 			return false
 		# Story 6-1: P1's controller is replaced by the stand-in declared at the top of this file,
 		# so the poked chargeup is HELD for the frames this test measures it over.
-		_runner._p1_controller = HoldingController.new()
+		_runner._p1_controller = BareController.new()
 		# Baseline: nothing has charged yet, so no charge clip/shape should be live.
 		var idle_clip: StringName = _hero.animation_controller.animation_player.current_animation
 		if idle_clip == &"swipe" or idle_clip == &"thrust" or idle_clip == &"jump_attack":

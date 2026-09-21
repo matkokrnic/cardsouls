@@ -844,10 +844,10 @@ func _blade_overlaps_body(attacker: HeroActor, defender: HeroActor) -> bool:
 ## `advance()` call already made.
 ##
 ## READING `action_state` HERE (not the AnimationController's own `_state`, which only updates
-## when the queued seam signal drains later this same frame) is what makes the early-release
+## when the queued seam signal drains later this same frame) is what makes the chargeup-end
 ## ordering hazard (finding 4) impossible rather than merely guarded: `HeroState.set_action_state`
-## flips the field SYNCHRONOUSLY, so on the very tick a chargeup ends -- landing or release -- this
-## poll already reads the new state and pushes nothing for that slot.
+## flips the field SYNCHRONOUSLY, so on the very tick a chargeup ends -- landing, counter, knockdown
+## or reset -- this poll already reads the new state and pushes nothing for that slot.
 ##
 ## `drive()` (HeroState only) is NOT widened to carry this: `charge_window` lives on PlayerState,
 ## and a new call site here costs nothing `_push_charge_reach_facts` one function up doesn't
@@ -860,8 +860,9 @@ func _blade_overlaps_body(attacker: HeroActor, defender: HeroActor) -> bool:
 ## progress 1.0 falls on the landing tick. The `6-1b/R6` guarantee carries over UNCHANGED because it
 ## is keyed to the SAME edge -- `_resolve_charge_landing` writes `IDLE`/`STUNNED` synchronously on the
 ## tick the landing window closes, so this poll already reads a non-`CHARGING` state there and
-## pushes nothing stale; the feint and the reset stop the landing window in the same breath as they
-## leave `CHARGING`.
+## pushes nothing stale; the knockdown abandonment, the counter teardown and the reset stop the
+## landing window in the same breath as they leave `CHARGING` (`6-9` retired the fourth, the
+## release).
 func _push_charge_progress() -> void:
 	if _match_state.balance_ticks == null:
 		return

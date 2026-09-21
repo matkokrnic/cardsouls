@@ -1051,8 +1051,10 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		#
 		# OUTSIDE THE CONTACT WINDOW THE LATCH IS CLEARED, not written (AC 4). The runner keeps
 		# pushing every chargeup tick because the FACING TRACK needs the direction above, but a
-		# chargeup touch must credit nothing -- an attack the attacker can still feint never lands
-		# damage. `register_swing_hit`'s dictionary record is not adopted here at all, and this
+		# chargeup touch must credit nothing -- damage is the LANDING's verdict alone, and the
+		# chargeup window runs before the launch has even started (`6-9`: the press commits the
+		# attack, but the commit is what STARTS the flight, not what lands it).
+		# `register_swing_hit`'s dictionary record is not adopted here at all, and this
 		# store cannot grow: it is a fixed TWO-element `Array[int]`, one slot per hero, for the life
 		# of the match.
 		#
@@ -1285,48 +1287,35 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		# `dead`, this arm is not evaluated, and nothing returns it to IDLE. That is the strongest
 		# form of the F3 finding's answer -- the corpse-resurrecting branch is not written, not
 		# merely guarded -- and it is the same structural argument the `ROLLING` arm above relies on.
-		# STORY 6-1 (AC 1-4): THE EARLY-RELEASE EXIT, the chargeup's THIRD exit path beside natural
-		# landing and death (`5-2/R3`), and the first one that reads a LIVE INTENT rather than a
-		# timer. It mirrors `BLOCKING`'s arm above -- the one existing intent-read exit -- and, like
-		# it, is a direct `_resolve_actions` arm and NEVER a `TRANSITION_TABLE` row, so the
-		# zero-inbound-CHARGING guard (test_action_state.gd) stays true UNEDITED.
+		# STORY 6-9 (AC 1, 2, 6): THE PRESS COMMITS, AND THIS ARM READS NO INTENT AT ALL. Mode 2 is
+		# click-to-commit: the card and the stamina are spent on the press inside
+		# `_resolve_unblockable_cast`, and the attack carries to its landing with no further input
+		# from that player. Story `6-1`'s early-release `elif` -- a `card_cast` held key going false
+		# while the chargeup window still ran, the paid feint -- IS DELETED, and with it the only
+		# intent read this seat ever had. There is nothing to hold and nothing to cancel.
 		#
-		# THE TIMER IS CHECKED FIRST, AND THE ORDER IS THE WHOLE OF AC 1's LAST SENTENCE. Once the
-		# window has stopped running the chargeup is COMPLETE, so a release observed on that same
-		# tick must land, not feint. Making the landing the `if` and the release the `elif` buys
-		# that guarantee structurally rather than with a second condition that could rot: there is
-		# no tick on which both are true and the wrong one wins.
+		# THE FOUR EXITS FROM `CHARGING` ARE ALL NON-INPUT, which is what makes "a press commits"
+		# structural rather than asserted: the landing below, the colour counter judging it (`6-6b`,
+		# the branch above), a knockdown abandoning it (`6-6a/R1`, `:3776-3778`) and death / the
+		# debug reset (`_reset_player`). No branch here tests a key, so no key can add a fifth.
 		#
-		# THE TEARDOWN IS `_reset_player`'s THREE-PART FACT (`:3706-3712`), reused verbatim for a
-		# new trigger -- state, window and colour are ONE fact and are cleared together. It is
-		# written inline rather than factored out of `_reset_player`, because that function clears
-		# the state only under a three-state gate and clears `hero.stun`/the defense window in the
-		# same breath; the shared shape is these three lines, not that function's body.
+		# THE TELEGRAPH FACT RESTS AGAIN AT THE LANDING (AC 5) WITHOUT ANY CLEAR BEING WRITTEN HERE.
+		# `PlayerState.to_snapshot`'s `telegraph` is DERIVED under an `action_state == CHARGING`
+		# gate, and `_resolve_charge_landing` writes `IDLE` / `STUNNED` synchronously, so the gate
+		# hides the colour by construction. The three explicit three-part teardowns that remain --
+		# the knockdown abandonment, the colour-counter teardown and `_reset_player` -- are all
+		# non-input edges; the one that hung off the release edge left with the `elif`.
 		#
-		# THE CARD AND THE STAMINA STAY SPENT (AC 2). Nothing here refunds, un-discards or credits:
-		# the spend ran an entire chargeup ago inside `_resolve_unblockable_cast`, and this arm is
-		# a state transition, not an undo. `_resolve_charge_landing` is NOT called, which is what
-		# makes "no landing check, no damage, no orb, no `hit_landed`, no defense-rung negation"
-		# structural -- the defender's `defense_window` is advanced at step 2 unconditionally and
-		# CONSUMED only inside that function, so a feint leaves it running to self-expire (`6-1/R7`:
-		# no window-clearing code may be added here).
+		# THE CARD AND THE STAMINA STAY SPENT (AC 3). Nothing on any path through this arm refunds,
+		# un-discards or credits: the spend ran an entire chargeup ago, and the only question left
+		# open at the commit is which verdict the landing or the counter returns.
 		#
-		# NO RECOVERY WINDOW (AC 4) and REGEN RESUMES ON THIS TICK: step 3 runs before step 5's
-		# `_regen_stamina`, which reads `action_state` fresh with no latch, so the hero is already
-		# IDLE when regen is evaluated on the release tick itself.
-		#
-		# STORY 6-1c (AC 2/AC 4): THE LANDING NOW RIDES THE LANDING WINDOW, AND THE CHARGEUP'S CLOSE IS
+		# STORY 6-1c (AC 2/AC 4): THE LANDING RIDES THE LANDING WINDOW, AND THE CHARGEUP'S CLOSE IS
 		# THE COMMIT. The arm reads two windows that started together at the cast (see
-		# `PlayerState.landing_window`): the landing fires when the LANDING window stops, and the
-		# release-to-feint path exists only while the CHARGEUP window still runs. Between the two --
-		# chargeup closed, landing window running -- the hero is COMMITTED: this arm does nothing at
-		# all, so a release is ignored (AC 2) and `_resolve_movement` carries the launch. That middle
-		# phase is the whole of the commit; it needs no branch of its own, and no flag.
-		#
-		# `6-1`'s AC 1 ORDERING SURVIVES INTACT: the landing is still the `if` and the release still
-		# the `elif`, and the tick the chargeup completes can no longer feint at all -- with a launch
-		# span the release on that tick is ignored and the attack lands later; with none, the landing
-		# window closes on that same tick and the `if` lands it, exactly as before this story.
+		# `PlayerState.landing_window`): the landing fires when the LANDING window stops. Between the
+		# two -- chargeup closed, landing window running -- the hero is IN FLIGHT and this arm does
+		# nothing at all, so `_resolve_movement` carries the launch. That middle phase is the whole
+		# of the commit; it needs no branch of its own, and no flag.
 		# STORY 6-6b (AC 3): THE COLOUR COUNTER IS JUDGED HERE, FIRST, INSIDE THIS SAME ARM. The
 		# attacker's own CHARGING seat is where the counter resolves, because the counter's whole
 		# subject is THIS attack: the commit tick and every launch tick before the first honest
@@ -1347,11 +1336,6 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 				return
 			if not player.landing_window.is_running:
 				_resolve_charge_landing(player, slot)
-			elif player.charge_window.is_running and not intent.is_held(&"card_cast"):
-				hero.set_action_state(HeroState.ActionState.IDLE)
-				player.charge_window.start(0)
-				player.landing_window.start(0)
-				player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 	# STORY 6-6a POST-SMOKE RULING `6-6a/R7`: THE GET-UP IS A LOCKED ACTION. The live
 	# smoke found the hero able to act the instant `get_up` starts -- attack, roll, card, block all
 	# available while the AC 8 iframes still ran -- which reads as "teleport to your feet" and, with the
@@ -3554,8 +3538,10 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	# `Vector2.ZERO` only until the first chargeup of the process and holds that chargeup's last
 	# bearing afterwards -- across rounds and across a debug reset. AC 9's fallback says "no live
 	# chargeup", so this reads exactly that and copies zero otherwise. NOTE the tick ordering it
-	# depends on: a chargeup FEINTED at step 3 of this very tick has already left `CHARGING` by the
-	# time this step-6 seat runs, and such a press correctly locks nothing.
+	# depends on: a chargeup ABANDONED at step 3 of this very tick -- countered (`6-6b`) or knocked
+	# down (`6-6a/R1`) -- has already left `CHARGING` by the time this step-6 seat runs, and such a
+	# press correctly locks nothing. Since `6-9` no INPUT can produce that edge at all; the two
+	# non-input abandonments still can.
 	var counter_attacker: PlayerState = p2 if slot == 0 else p1
 	_counter_travel_dirs[slot] = _charge_reach_dirs[1 - slot] \
 			if counter_attacker.hero.action_state == HeroState.ActionState.CHARGING \
@@ -3752,9 +3738,10 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 ## flavor at `hit_landed`, which this package pushes right after.
 ##
 ## A CHARGING VICTIM ABANDONS ITS CHARGEUP (AC 5): `charge_window`, `landing_window` and `charge_color`
-## are cleared with the state write as ONE fact -- the `6-1` feint teardown's three lines verbatim. The
+## are cleared with the state write as ONE fact -- the same three lines the colour-counter teardown and
+## `_reset_player` write (`6-1`'s release arm wrote them too; `6-9` deleted that arm). The
 ## card and the stamina stay spent. `_charge_reach`/`_charge_contact_dirs` are NOT cleared, for `6-1d/R9`'s
-## reason ("cleared with the verdict, never on its own"), exactly as the feint path leaves them.
+## reason ("cleared with the verdict, never on its own"), exactly as the counter teardown leaves them.
 ##
 ## `balance` and `balance_ticks` are non-null: a package is only ever owed by a landing, which needs both.
 func _apply_landing_packages() -> void:
@@ -3788,8 +3775,9 @@ func _apply_landing_packages() -> void:
 ## IS GONE, with the authored field and its tick twin. The operator's ruling after the live smoke:
 ## "as long as you initiate the defence before the attack touches you, it should defend". So the one
 ## timing question left is `is_running`, and "too early" now means the counter RAN OUT before the
-## attack committed -- the counter was spent, the press was never refused. AC 6's feint bait is
-## untouched by the widening: a feinted chargeup never reaches a judged tick at all.
+## attack committed -- the counter was spent, the press was never refused. `6-6b` AC 6's feint bait is
+## SUPERSEDED by `6-9` (click-to-commit): there is no feint left to bait with, so every paid chargeup
+## reaches a judged tick. The widening this paragraph describes is itself untouched.
 ##
 ## THE PRESS STILL CANNOT ANSWER ITS OWN TICK, and that stays structural rather than a boundary to
 ## defend: the press resolves at STEP 6, after that tick's step 3, so a window pressed on the commit
@@ -3857,12 +3845,13 @@ func _is_commit_tick(player: PlayerState) -> bool:
 ## CHARGING seat. Returns true when the counter LANDED, which the caller reads as "this arm is done".
 ##
 ## THE JUDGED SPAN IS THE COMMIT THROUGH THE LANDING TICK, expressed as "the chargeup window has
-## stopped". That is the one fact that says COMMITTED (`6-1c`: chargeup running = feintable, stopped =
-## committed), and it stays true on the landing tick, which is what AC 5's "a counter on the landing
-## tick with no contact ever registered lands rather than the attack whiffing" requires. During the
-## chargeup this returns false at the first line, so a counter pressed against a chargeup that is then
-## FEINTED expires silently and the defender still pays the card, the stamina and the busy time -- the
-## bait the whole counter presentation exists to make possible (AC 6).
+## stopped". That is the one fact that says LAUNCHED (`6-1c`: chargeup running = pre-launch, stopped =
+## committed to the flight), and it stays true on the landing tick, which is what AC 5's "a counter on
+## the landing tick with no contact ever registered lands rather than the attack whiffing" requires.
+## During the chargeup this returns false at the first line, so a counter pressed against a chargeup
+## that is then ABANDONED BY A KNOCKDOWN (`6-6a/R1`) expires silently and the defender still pays the
+## card, the stamina and the busy time. `6-9` retired the other way that could happen: no input
+## feints any more, so an unanswered counter is now the knockdown case or none at all.
 ##
 ## EVERY FACT ABOUT THE DEFENDER COMES FROM THE STEP-3 CAPTURE (AC 8) and not one is read live, so the
 ## mutual case resolves seat-symmetrically: both counters land and both heroes go down. The ATTACKER's
@@ -3902,7 +3891,7 @@ func _is_commit_tick(player: PlayerState) -> bool:
 ## `IDLE` in between, because the caller returns before `_resolve_charge_landing`'s trailing `IDLE`.
 ##
 ## `_charge_reach` / `_charge_contact_dirs` ARE DELIBERATELY NOT CLEARED, `6-1d/R9`'s "cleared with the
-## verdict, never on its own" applied exactly as the feint and knockdown teardowns apply it: with
+## verdict, never on its own" applied exactly as the knockdown teardown applies it: with
 ## `landing_window` stopped, `is_contact_window_open()` is false and the very next push takes the
 ## clearing arm, and the next cast seat resets both anyway.
 ##

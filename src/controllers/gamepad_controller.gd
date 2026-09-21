@@ -211,12 +211,6 @@ func sample() -> InputIntent:
 	# Story 6-7 (AC 4): the impure write, mirroring attack/block/roll directly above -- the VALUE
 	# is computed in the pure resolve_card_tick() above; this write is the only impure step.
 	intent.held[&"run"] = result["run_held"]
-	# Story 6-1 (AC 1/2/5): THE HOLD FACT for mode ②, on the `attack`/`block`/`roll` held-key shape
-	# directly above rather than a new typed InputIntent field -- `BLOCKING`'s own exit needed none
-	# and neither does this one. The key is PREFIX-FREE and carries no pad button name (the key
-	# contract, input_intent.gd:20-23); which physical button produces it stays this file's private
-	# business, exactly as the slot/mode resolution already does.
-	intent.held[&"card_cast"] = result["card_cast_held"]
 	if result["card_commit"]:
 		intent.card_slot = result["card_slot"]
 		# Story 5-7 (AC 15): the mode the fired confirm button actually selected, replacing the
@@ -470,23 +464,13 @@ static func resolve_card_tick(
 		# running is a HOLD fact like the other three, and deliberately suppressed by cast_held
 		# so the same A that arms/confirms a card inside cast mode never also drives running.
 		"run_held": basic_raw and not cast_held,
-		# STORY 6-1 (AC 1/2/5, and the L3-chord fork the story asked to be picked and named):
-		# the mode ② confirm's RAW held state, `unblockable_raw` ALONE -- deliberately NOT
-		# `and cast_held`, and deliberately not any of the other two confirms.
-		#
-		# WHY B ALONE AND NOT THE L3 CHORD. L3 (`cast_button`) is the ARMING modifier and its only
-		# product is `armed_slot`, a job that is finished the instant the commit fires -- the
-		# chargeup it started belongs to B. Requiring L3 to stay held would make the release of a
-		# modifier destroy an already-paid attack, and would do it on the one input the player has
-		# most reason to let go of (its `else` arm below resets `armed_slot` to -1 precisely
-		# because L3-up means "done selecting"). AC 4's pad-layer suppression is unchanged either
-		# way: while L3 is held, attack/block/roll stay suppressed as they have since `5-0b`.
-		#
-		# WHY NOT THE OTHER TWO CONFIRMS. `basic_raw`/`defense_raw` commit modes ① and ③, neither
-		# of which has a hold contract; folding them in would let a held A keep a chargeup alive.
-		# CHARGING is reachable only from a mode ② commit, so B's raw state IS "the confirm that
-		# started this chargeup is still down" for every tick the state layer ever reads this key.
-		"card_cast_held": unblockable_raw,
+		# STORY 6-9 (AC 7): the mode ② confirm's RAW HELD STATE IS NO LONGER RETURNED. Click-to-
+		# commit leaves the state layer nothing to read it with -- the press commits the attack and
+		# no release ends it -- so the returned held entry and the `intent.held` write for the
+		# `card_cast` key above it are both gone, and with them `6-1/R9`'s L3-chord fork (with no hold there
+		# is no chord to pick). `unblockable_raw` is still read, for the COMMIT PRESS EDGE alone
+		# (`unblockable_pressed`, above). Arming, the commit chord and "L3 release clears
+		# `armed_slot`" are untouched.
 	}
 
 

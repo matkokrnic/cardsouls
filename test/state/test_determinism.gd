@@ -755,7 +755,7 @@ extends TestCase
 ##     `"landing"` line held off `PlayerState.to_snapshot()` and EVERYTHING ELSE this story ships left
 ##     in place -- the landing window and its step-2 tick, the reshaped CHARGING arm, the commit
 ##     freeze in the facing branch, the launch velocity, the per-colour arc gate at the landing seat,
-##     the reset/feint clears, the twelve per-colour BalanceConfig fields and their three BalanceTicks
+##     the reset and abandonment clears, the twelve per-colour BalanceConfig fields and their three BalanceTicks
 ##     twins -- this file hashed d5bcb7e6 EXACTLY and the thirty-key pins passed. Measured at the dev
 ##     pass by deleting that one line, running this file and test_card_observation.gd (both green),
 ##     and restoring from a SHA256-verified out-of-repo copy (822ec841...).

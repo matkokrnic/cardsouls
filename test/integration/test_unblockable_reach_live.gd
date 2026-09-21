@@ -44,16 +44,14 @@ extends SceneTree
 ##
 ## THE CHARGEUP IS POKED, NOT CAST (the `test_charge_telegraph_dispatch_live.gd` precedent): colour,
 ## the two windows the cast seat starts, and CHARGING -- with P1's controller replaced by a stand-in
-## that HOLDS the cast confirm so the chargeup is not feinted. The cast seat itself is covered
+## that sends a bare intent every tick (story 6-9: a press commits, nothing is held). The cast seat itself is covered
 ## headless (test_unblockable_tracking_and_reach.gd).
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_unblockable_reach_live.gd
 
-class HoldingController extends Controller:
+class BareController extends Controller:
 	func sample() -> InputIntent:
-		var intent := InputIntent.new()
-		intent.held[&"card_cast"] = true
-		return intent
+		return InputIntent.new()
 
 
 const CONFIG_PATH := "res://data/balance/balance_config.tres"
@@ -111,7 +109,7 @@ func _physics_process(_delta: float) -> bool:
 			_failures.append("main scene did not yield a runner, a MatchState and two heroes")
 			_report()
 			return true
-		_runner._p1_controller = HoldingController.new()
+		_runner._p1_controller = BareController.new()
 		_y = _p1_actor.position.y
 		return false
 	if _phase == "draining":

@@ -133,8 +133,9 @@ func test_keyboard_fresh_intent_per_sample() -> void:
 
 
 ## Story 6-D1 (DEBUG): the P1 solo-smoke keys. A press casts mode 2 (UNBLOCKABLE) with the FIRST card of
-## that colour in hand, as press-AND-HOLD -- `held[card_cast]` outlives the key for DEBUG_HOLD_TICKS so
-## a tap charges through. Hand: slot0 BLUE, slot1 RED, slot2 GREEN, slot3 RED (RED must pick slot 1).
+## that colour in hand as a single TAP (story 6-9): the tap commits the attack and nothing outlives the
+## key -- the intent carries no held state of the tap's own on any later sample.
+## Hand: slot0 BLUE, slot1 RED, slot2 GREEN, slot3 RED (RED must pick slot 1).
 const DEBUG_HAND: Array[int] = [1, 0, 2, 0]
 const DEBUG_KEYS := {
 	Enums.CardColor.RED: &"p1_debug_unblockable_red",
@@ -153,31 +154,33 @@ func _debug_kc(prefix: StringName = &"p1") -> KeyboardController:
 	return kc
 
 
+func _held_keys(intent: InputIntent) -> Array:
+	var keys: Array = []
+	for k: StringName in intent.held.keys():
+		keys.append(String(k))  # sorted as Strings: StringName order is not alphabetical
+	keys.sort()
+	return keys
+
+
 func test_debug_key_casts_first_card_of_colour_unblockable() -> void:
+	# Story 6-9 post-review fix (N2): the live held keys, as an allow-list -- the runtime guard that no
+	# auto-hold key rides the tap or outlives the physical key.
+	var live_keys: Array = ["attack", "block", "roll", "run"]
 	for color: int in DEBUG_KEYS:
 		var kc := _debug_kc()
 		Input.action_press(DEBUG_KEYS[color])
 		var s := kc.sample()
+		assert_eq(_held_keys(s), live_keys, "color %d: the tap tick holds exactly the live keys" % color)
 		assert_true(s.card_commit, "color %d: press commits" % color)
 		assert_eq(s.card_slot, DEBUG_EXPECTED_SLOT[color], "color %d: first card of that colour" % color)
 		assert_eq(s.card_mode, Enums.ModeKind.UNBLOCKABLE, "color %d: mode 2" % color)
-		assert_true(s.is_held(&"card_cast"), "color %d: card_cast held on the press tick" % color)
-		assert_false(kc.sample().card_commit, "color %d: a held key is one commit, not one per tick" % color)
+		var next := kc.sample()
+		assert_false(next.card_commit, "color %d: a held key is one commit, not one per tick" % color)
+		assert_eq(_held_keys(next), live_keys, "color %d: the next sample holds exactly the live keys" % color)
 		Input.action_release(DEBUG_KEYS[color])
-
-
-func test_debug_key_holds_card_cast_after_release_for_the_debug_duration() -> void:
-	var kc := _debug_kc()
-	Input.action_press(DEBUG_KEYS[Enums.CardColor.RED])
-	kc.sample()  # tick 1 of the hold
-	Input.action_release(DEBUG_KEYS[Enums.CardColor.RED])
-	for i in KeyboardController.DEBUG_HOLD_TICKS - 1:
-		assert_true(kc.sample().is_held(&"card_cast"), "still held %d ticks after release" % i)
-	assert_false(kc.sample().is_held(&"card_cast"), "the hold ends after DEBUG_HOLD_TICKS")
-	# 120 ticks is 2.0 s at the project's 60 Hz -- longer than the authored 1.0 s chargeup.
-	var cfg: BalanceConfig = load("res://data/balance/balance_config.tres")
-	assert_true(float(KeyboardController.DEBUG_HOLD_TICKS) / 60.0 > cfg.unblockable_chargeup_seconds,
-		"the hold outlasts the authored chargeup")
+		# The auto-hold's signature: a key that outlives the physical key.
+		assert_eq(_held_keys(kc.sample()), live_keys,
+			"color %d: after the key is released the intent still holds exactly the live keys" % color)
 
 
 func test_debug_key_with_no_card_of_that_colour_is_neutral() -> void:
@@ -188,7 +191,6 @@ func test_debug_key_with_no_card_of_that_colour_is_neutral() -> void:
 	var s := kc.sample()
 	assert_false(s.card_commit, "no commit")
 	assert_eq(s.card_slot, -1, "no substitute slot")
-	assert_false(s.is_held(&"card_cast"), "no hold started")
 	Input.action_release(DEBUG_KEYS[Enums.CardColor.RED])
 
 
@@ -198,7 +200,6 @@ func test_debug_keys_are_p1_only() -> void:
 		Input.action_press(action)
 	var s := kc2.sample()
 	assert_false(s.card_commit, "a p2 controller ignores the p1 debug keys")
-	assert_false(s.is_held(&"card_cast"), "...and starts no hold")
 	for action: StringName in DEBUG_KEYS.values():
 		Input.action_release(action)
 	assert_false(InputMap.has_action(&"p2_debug_unblockable_red"), "no p2 debug action exists")

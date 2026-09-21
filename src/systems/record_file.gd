@@ -161,11 +161,11 @@ extends RefCounted
 ## are present, with no enumerated action list to extend. MEASURED: the round-trip test alone says
 ## "no bump needed", and that answer is not the question.
 ##
-## THE QUESTION IS SILENT DIVERGENCE. A v7 recording of a mode ② cast carries no `card_cast` key,
-## so under this build `is_held(&"card_cast")` reads false on the tick after the commit and the
-## chargeup that ORIGINALLY LANDED now replays as an instant paid feint -- loaded without complaint,
+## THE QUESTION IS SILENT DIVERGENCE. A v7 recording of a mode ② cast carries no `card_cast` held
+## key, so under the build of the day the release arm read that key false on the tick after the commit
+## and the chargeup that ORIGINALLY LANDED replayed as an instant paid feint -- loaded without complaint,
 ## because a matching version number is the only thing the loader checks. That is exactly the
-## silently-wrong replay the exact-match refusal at `:303-306` exists to make impossible, so v7 is
+## silently-wrong replay the exact-match refusal at `:365-368` exists to make impossible, so v7 is
 ## rejected HARD rather than migrated: an unloadable record is a correct answer, a divergent one is
 ## not. (The `5 -> 6` bump directly above took this same reasoning from the resting-`aim` case.)
 ##
@@ -192,7 +192,22 @@ extends RefCounted
 ## record's `walk_speed` stays at `BalanceConfig`'s zero default and every hero in that replay moves
 ## at speed 0 from the tick gait selection lands -- loaded without complaint, silently wrong, exactly
 ## the case this constant exists to prevent. v10 is refused HARD rather than migrated.
-const FORMAT_VERSION := 11
+##
+## STORY 6-9 BUMPS 11 -> 12, on the `6-1` SILENT-DIVERGENCE reasoning once more -- and this story
+## REMOVES a held key rather than adding one, so it forces even less of the shape than `6-7` did.
+## Mode ② became CLICK-TO-COMMIT: the press spends the card and the stamina and the attack carries
+## to its landing, the `card_cast` held key is written by no controller any more, and the
+## early-release arm that read it is deleted. Nothing in the serialization changed at all.
+##
+## THE SEMANTICS DID. A v11 recording of a mode ② cast whose `card_cast` held key went false
+## mid-chargeup recorded a FEINT: an attack that resolved no landing, dealt no damage and left the
+## defender's window unanswered. Under this build no arm reads that key, so the identical intent
+## stream replays as a full attack carried to its landing -- damage the recorded match never dealt,
+## a knockdown it never suffered, loaded without complaint because a matching version number is all
+## the loader checks. That is the silently-wrong replay the exact-match refusal at `:365-368` exists
+## to make impossible, so v11 is rejected HARD rather than migrated: an unloadable record is a
+## correct answer, a divergent one is not.
+const FORMAT_VERSION := 12
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

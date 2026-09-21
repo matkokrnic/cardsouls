@@ -83,8 +83,9 @@ func test_the_commit_anchored_remap_fixes_both_endpoints() -> void:
 
 
 ## AC 8's behavioural claim, and the reason the knob exists: the COMMIT lands exactly on the clip's
-## `hold_end` -- i.e. the swing starts when the attack becomes unfeintable, instead of being part
-## spent by then. Asserted per clip against its own knob, never against a pinned number.
+## `hold_end` -- i.e. the swing starts when the chargeup window closes and the attack launches,
+## instead of being part spent by then. Asserted per clip against its own knob, never against a
+## pinned number.
 ##
 ## MUTATION: return the input unchanged (an identity remap) and this goes RED for every clip whose
 ## commit fraction differs from its hold_end, which is all three.

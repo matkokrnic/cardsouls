@@ -684,8 +684,10 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 ## `on_charge_progress` call site's precedent exactly: a plain per-tick read of an EXISTING public
 ## fact, no signal, no state handle, no new `connect_*` (AC 14).
 ##
-## SO A PAID FEINT BAITS A FULL COUNTER ANIMATION INTO NOTHING, which is the whole point of keying on
+## SO A COUNTER THAT ANSWERS NOTHING STILL PLAYS IN FULL, which is the whole point of keying on
 ## the press: nothing here waits to learn whether the counter landed, and nothing here is ever told.
+## `6-9` superseded the paid feint this paragraph used to name as the bait; a counter pressed against
+## no attack at all, or against one a knockdown abandons, is the case that remains.
 ##
 ## `busy_seconds` IS THE COLOUR'S AUTHORED SPAN, converted from ticks by the runner (the
 ## `_stun_seconds_for_slot` shape). It is used for ONE thing -- deriving the shared playback rate --

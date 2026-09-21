@@ -48,6 +48,8 @@ const PRE_6_2_PATH := "user://test_6_2_pre_pitch_costs.rec"
 const PRE_6_3A_PATH := "user://test_6_3a_pre_card_activate.rec"
 ## Story 6-7 (AC 15): the v10-refusal test writes its own file, for the same no-racing reason.
 const PRE_6_7_PATH := "user://test_6_7_pre_run_gait.rec"
+## Story 6-9 (AC 11): the v11-refusal test writes its own file, for the same no-racing reason.
+const PRE_6_9_PATH := "user://test_6_9_pre_click_to_commit.rec"
 
 ## Story 4-4: the in-test `unit_kinds` list the recorded config carries, and the nested values the
 ## round trip is measured on. Deliberately THREE LEVELS DEEP (kind -> attack -> projectile),
@@ -173,8 +175,16 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 11,
-		"FORMAT_VERSION is 11 as of story 6-7 (AC 15) -- a SILENT-DIVERGENCE bump on the `6-1` "
+	assert_eq(RecordFile.FORMAT_VERSION, 12,
+		"FORMAT_VERSION is 12 as of story 6-9 (AC 11) -- a SILENT-DIVERGENCE bump on the `6-1` "
+		+ "reasoning, and the SHAPE forced nothing again: mode ② became CLICK-TO-COMMIT, the "
+		+ "`card_cast` held key and the release arm that read it are both gone, and a held key "
+		+ "nobody writes needs no serialization edit. What a round trip inside one build cannot "
+		+ "see is the semantics: a v11 recording of a mode ② cast whose held key went false was a "
+		+ "FEINT when it was recorded, and under this build there is no arm to read it, so it "
+		+ "replays as a full attack that lands -- loaded without complaint, because the version is "
+		+ "all the loader checks (pinned by test_a_v11_record_is_refused_with_a_reason). "
+		+ "It was 11 as of story 6-7 (AC 15) -- a SILENT-DIVERGENCE bump on the `6-1` "
 		+ "reasoning, not an intent-shape one: a v10 record carries no `run` held key and no "
 		+ "`walk_speed` value, and would replay every hero at speed 0 from the tick gait selection "
 		+ "lands (pinned by test_a_v10_record_is_refused_with_a_reason). "
@@ -578,6 +588,61 @@ func test_a_v10_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_7_PATH)
 
 
+## Story 6-9 (AC 11): A v11 RECORD IS REFUSED WITH A REASON, NO SHIM -- the v10 test directly above
+## verbatim in shape, and for the same kind of cause. The round-trip SHAPE forces nothing here
+## either (`6-9` REMOVES a held key rather than adding one, and `held` is walked generically at both
+## ends), so there is no per-field strip to rehearse and only the version FIELD is rewritten.
+##
+## THE SEMANTICS ARE THE WHOLE BUMP: a v11 recording of a mode ② cast whose `card_cast` held key
+## went false mid-chargeup was authored under an arm that no longer exists. Under this build the key
+## is read by nothing, so that recorded FEINT replays as a full attack carried to its landing --
+## damage the recorded match never dealt, loaded without complaint. Hard refusal, no migration.
+func test_a_v11_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_9_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_9_PATH, 11)
+	var refused := RecordFile.load_record(PRE_6_9_PATH)
+	assert_null(refused["record"],
+		"a v11 record is REFUSED -- a mode ② cast it recorded as a FEINT would replay as a full "
+		+ "attack under click-to-commit, since no arm reads the `card_cast` held key any more")
+	assert_true(refused["error"].contains("11"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_9_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_9_PATH)["record"],
+		"restoring the version makes the SAME file load again — the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_9_PATH)
+
+
+## Story 6-9 (AC 11): THE v12 ROUND TRIP INSIDE THIS BUILD, the other half of the bump's
+## measurement. A record saved and loaded at the LIVE version returns the same intents it was given
+## -- so the refusal above is the version alone, and the bump broke nothing it did not mean to.
+func test_a_v12_record_round_trips_inside_this_build() -> void:
+	var driven := _match_start()
+	var record: IntentRecorder = driven["record"]
+	var pressing := InputIntent.new()
+	pressing.card_slot = 1
+	pressing.card_mode = Enums.ModeKind.UNBLOCKABLE
+	pressing.card_commit = true
+	pressing.held[&"run"] = true
+	pressing.move_dir = Vector2(0.5, -0.25)
+	var bare := InputIntent.new()
+	var intents: Array[InputIntent] = [pressing, bare]
+	_tick(driven, intents)
+
+	var loaded := _save_and_load(record, ROUND_TRIP_PATH)
+	var back := loaded.intents_at(1)
+	assert_eq(back[0].card_slot, 1, "the committed slot came back")
+	assert_eq(back[0].card_mode, int(Enums.ModeKind.UNBLOCKABLE), "...its mode")
+	assert_true(back[0].card_commit, "...and the commit itself -- the press IS the attack now")
+	assert_true(back[0].is_held(&"run"), "...with the surviving held key intact")
+	assert_true(back[0].move_dir.is_equal_approx(Vector2(0.5, -0.25)), "...and the move vector")
+	assert_false(back[1].card_commit, "the other slot pressed nothing, and comes back pressing nothing")
+	_remove(ROUND_TRIP_PATH)
+
+
 ## AC 5's neighbours: a file that is not a record at all is refused the same way, and a record
 ## that never completed match start is refused AT THE WRITE, so a malformed file cannot exist to
 ## be loaded later. Both are reasons, never crashes — a save is an operator action.
@@ -827,41 +892,45 @@ func test_a_record_whose_intent_dict_lacks_the_retarget_fields_is_refused_with_a
 	_remove(VERSION_PATH)
 
 
-## STORY 6-1 (AC 5, `6-1/R4`): HALF (a) OF THE FORMAT MEASUREMENT — does mode ②'s new hold fact
-## force a bump by the ROUND TRIP? MEASURED HERE: NO. `held` is walked generically by key at both
-## ends (`copy_intent` on the way out, `_intent_from_values` on the way in), so a key no version of
-## this file has ever heard of survives a save and a load untouched, with zero serialization edits.
+## STORY 6-7 (`6-7/R12`) / STORY 6-9 (`6-9/R6`): HALF (a) OF EVERY FORMAT MEASUREMENT THIS FILE'S
+## HISTORY RECORDS — does a NEW held key force a bump by the ROUND TRIP? MEASURED HERE: NO. `held`
+## is walked generically by key at both ends (`copy_intent` on the way out, `_intent_from_values` on
+## the way in), so a key no version of this file has ever heard of survives a save and a load
+## untouched, with zero serialization edits.
 ##
-## THIS TEST IS DELIBERATELY NOT AN ARGUMENT FOR THE BUMP — it is the measurement that says the
+## THE EXAMPLE KEY IS `&"run"`, RE-POINTED BY `6-9` off the `card_cast` held key it used to drive.
+## Click-to-commit deleted that key outright; the MECHANISM this test guards is untouched and is the
+## reasoning each silent-divergence bump stands on, so retiring its only guard would be backwards.
+## `run` is the NEWEST held key (`6-7`, the v10 -> v11 bump this file's history strings narrate), so
+## "precisely how a pre-`6-7` record reads under this build" stays literally true of it.
+##
+## THIS TEST IS DELIBERATELY NOT AN ARGUMENT FOR ANY BUMP — it is the measurement that says the
 ## SHAPE did not force one, recorded so a later reader does not mistake the version number for a
-## serialization consequence. The bump's real cause is half (b), which no round trip inside a
-## single build can see: a v7 record carries no such key at all, so a chargeup that LANDED when it
-## was recorded replays as an instant paid feint. That divergence is what the exact-match refusal
-## is for, and it is measured at the state layer by the pair
-## `test_holding_the_confirm_through_the_whole_chargeup_lands_as_before` /
-## `test_a_one_tick_tap_is_the_same_paid_feint` in test_unblockable_hold.gd — two runs whose
-## card_slot/card_mode/card_commit streams are identical and which differ ONLY in the presence of
-## this key, one landing and one feinting.
+## serialization consequence. The real cause is always half (b), which no round trip inside a single
+## build can see: a record from before the key carries it nowhere, so the build reads its resting
+## value and replays something the recorded match never did. For `6-9` that reasoning is written out
+## at `RecordFile.FORMAT_VERSION`'s own 11 -> 12 paragraph, which is where it belongs; the pair of
+## state-layer tests `6-1` cited here went with the feint.
 ##
 ## THE GENERIC WALK IS PINNED IN BOTH DIRECTIONS: a key present survives as present, and a key
-## ABSENT does not come back invented as `true` — which is exactly the read a v7 record gets.
+## ABSENT does not come back invented as `true` — which is exactly the read a pre-`6-7` record gets.
 func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 	var driven := _match_start()
 	var record: IntentRecorder = driven["record"]
 	var holding := InputIntent.new()
-	holding.held[&"card_cast"] = true
+	holding.held[&"run"] = true
 	var empty := InputIntent.new()
 	var intents: Array[InputIntent] = [holding, empty]
 	_tick(driven, intents)
 
 	var loaded := _save_and_load(record, ROUND_TRIP_PATH)
 	var back := loaded.intents_at(1)
-	assert_true(back[0].is_held(&"card_cast"),
-		"the `card_cast` held key survived save + load with NO serialization edit — the shape "
-		+ "forces no bump (`6-1/R4` half (a), MEASURED)")
-	assert_false(back[1].is_held(&"card_cast"),
-		"...and an ABSENT key comes back absent, never invented — which is precisely how a v7 "
-		+ "record reads under this build, and precisely why v7 is refused rather than migrated")
+	assert_true(back[0].is_held(&"run"),
+		"the `run` held key survived save + load with NO serialization edit — the shape "
+		+ "forces no bump (`6-7/R12`, MEASURED, and the identical measurement `6-1/R4` made)")
+	assert_false(back[1].is_held(&"run"),
+		"...and an ABSENT key comes back absent, never invented — which is precisely how a v10 "
+		+ "record reads under this build, and precisely why v10 is refused rather than migrated")
 	_remove(ROUND_TRIP_PATH)
 
 
@@ -869,11 +938,12 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 11,
+	assert_eq(RecordFile.FORMAT_VERSION, 12,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 11 (5-2's colours channel, 6-1's mode ② hold semantics, "
-		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, then 6-7's silent-divergence "
-		+ "bump for `run`/`walk_speed`), which is a different "
+		+ "version has since moved to 12 (5-2's colours channel, 6-1's mode ② hold semantics, "
+		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, 6-7's silent-divergence "
+		+ "bump for `run`/`walk_speed`, then 6-9's silent-divergence bump for click-to-commit, "
+		+ "which RETIRED 6-1's hold semantics), which is a different "
 		+ "story's bump and does not weaken 5-1a's own claim: what this asserts is that the number "
 		+ "is whatever the last DELIBERATE bump set it to, and that 5-1a was not one")
 	for field: String in RecordFile.REQUIRED_INTENT_FIELDS:

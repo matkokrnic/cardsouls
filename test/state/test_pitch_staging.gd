@@ -113,16 +113,14 @@ func test_a_card_with_no_pitch_cost_refuses_with_its_own_reason() -> void:
 
 func test_a_charging_or_stunned_hero_cannot_stage() -> void:
 	var charging := _make_match()
-	# A real chargeup's parts, not a bare state write: both windows running (or step 3 lands it) and
-	# the commit tick still HOLDING the cast (or 6-1's early-release arm feints the hero to IDLE first).
+	# A real chargeup's parts, not a bare state write: both windows running (or step 3 lands it).
+	# Story 6-9: the held cast `6-1`'s early-release arm needed here is gone with the arm.
 	charging.p1.hero.set_action_state(HeroState.ActionState.CHARGING)
 	charging.p1.charge_window.start(60)
 	charging.p1.landing_window.start(90)
 	charging.p1.charge_color = Enums.CardColor.RED
 	charging.drain_signals()
-	var held := _stage_intent(STAGE_SLOT)
-	held.held[&"card_cast"] = true
-	_assert_refused_unchanged(charging, held,
+	_assert_refused_unchanged(charging, _stage_intent(STAGE_SLOT),
 			MatchState.REASON_UNBLOCKABLE_COMMITTED, "mid-chargeup")
 	var stunned := _make_match()
 	stunned.p1.hero.set_action_state(HeroState.ActionState.STUNNED)
@@ -551,9 +549,7 @@ func test_a_charging_hero_can_activate() -> void:
 	ms.p1.charge_color = Enums.CardColor.RED
 	ms.drain_signals()
 	var rejections := _rejections(ms.p1)
-	var activate := _activate_intent()
-	activate.held[&"card_cast"] = true
-	_advance(ms, activate, InputIntent.new())
+	_advance(ms, _activate_intent(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: still mid-chargeup")
 	assert_eq(rejections, [], "a charging hero's activation is NOT refused")
 	assert_false(ms.pitch.is_staged(0), "...the card left the zone")

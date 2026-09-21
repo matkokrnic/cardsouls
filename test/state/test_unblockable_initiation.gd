@@ -268,11 +268,11 @@ func test_the_chargeup_exits_on_the_exact_authored_tick() -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 		"still CHARGING one tick before the authored end")
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
 		"back to IDLE on the exact tick the timer ended (AC 20)")
 
@@ -285,7 +285,7 @@ func test_the_hero_is_hard_rooted_for_the_whole_chargeup() -> void:
 	var ms := _make_match()
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
-		var moving := _holding()
+		var moving := InputIntent.new()
 		moving.move_dir = Vector2(1.0, 0.0)
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
 		_advance(ms, moving, InputIntent.new())
@@ -300,7 +300,7 @@ func test_facing_auto_aims_at_the_enemy_hero_while_charging() -> void:
 	var ms := _make_match()
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.facing, -FACT_DIR,
 		"facing is the hero -> enemy heading, i.e. the negation of the fact's target -> attacker "
 		+ "direction")
@@ -315,13 +315,13 @@ func test_damage_taken_mid_chargeup_does_not_interrupt_it() -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in 3:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	ms.p1.hero.take_damage(25.0)
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 		"still CHARGING immediately after the hit")
 	for _t in CHARGEUP_TICKS - 3:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "it ended ON SCHEDULE")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"...and the attack still landed")
@@ -338,7 +338,7 @@ func test_stamina_does_not_regenerate_while_charging() -> void:
 	var at_entry := ms.p1.stamina.get_current()
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.stamina.get_current(), at_entry,
 		"not one tick of regen arrived during the chargeup")
 	# ...and the faucet is REAL: the same pool, IDLE, over the same number of ticks, refills.
@@ -395,7 +395,7 @@ func test_an_absent_reach_fact_lands_nothing() -> void:
 	var ms := _make_match()
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS:
-		_advance(ms, _holding(), InputIntent.new())   # nothing pushed, ever
+		_advance(ms, InputIntent.new(), InputIntent.new())   # nothing pushed, ever
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "an unmeasured relation lands nothing")
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "and the hero still exits")
 
@@ -408,9 +408,9 @@ func test_the_landing_reads_the_answer_from_the_expiry_tick_only() -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP,
 		"leaving reach on the LAST tick is the escape (`E5-P/R4`) — eleven ticks inside do not "
 		+ "buy the hit")
@@ -423,9 +423,9 @@ func test_arriving_inside_reach_on_the_expiry_tick_lands() -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"arriving inside reach on the expiry tick lands the hit")
 
@@ -437,8 +437,6 @@ func test_a_charge_reach_fact_never_resolves_as_a_strike() -> void:
 	var ms := _make_match()
 	for _t in 5:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		# Story 6-1: NOT `_holding()`, and the difference is the point — nothing is charging here,
-		# so there is no confirm to hold and the bare intent says exactly that.
 		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP,
 		"a charge-reach fact is not a strike and deals nothing through the step-4 ladder")
@@ -455,7 +453,7 @@ func test_a_hero_that_dies_mid_chargeup_lands_nothing_and_stays_dead() -> void:
 	ms.p1.hero.set_action_state(HeroState.ActionState.DEAD)
 	for _t in CHARGEUP_TICKS + 2:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD,
 		"the corpse is NOT returned to IDLE by the chargeup exit (the F3 finding, closed)")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "and no landing check ran")
@@ -473,11 +471,11 @@ func test_a_dead_enemy_is_not_damaged_by_a_landing() -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	ms.p2.hero.take_damage(MAX_HP)
 	assert_false(ms.p2.hero.is_alive(), "precondition: the enemy is dead before the expiry tick")
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(landed, [], "no damage is applied to a dead hero (AC 16)")
 	assert_eq(ms.p1.discard.size(), 1, "the card stays spent on the charging hero's side")
 
@@ -506,7 +504,7 @@ func test_a_chargeup_does_not_survive_the_round_over_freeze_and_the_reset() -> v
 		"precondition: P1 is charging")
 	# Kill P2 for real, one tick in, so the round latches while P1's window is still armed.
 	ms.p2.hero.take_damage(MAX_HP)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.DEAD,
 		"precondition: the round is over and P2 is the corpse")
 	var frozen: Array = ms.to_snapshot()["p1"]["telegraph"]
@@ -514,7 +512,7 @@ func test_a_chargeup_does_not_survive_the_round_over_freeze_and_the_reset() -> v
 		"precondition: the telegraph is still lit and frozen across the round-over freeze")
 	# Several frozen ticks: the window must not advance during the freeze (it is why it survives).
 	for _t in 5:
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.to_snapshot()["p1"]["telegraph"], frozen,
 		"precondition: the freeze holds the countdown still -- step 1b returns before step 2's tick")
 
@@ -531,8 +529,6 @@ func test_a_chargeup_does_not_survive_the_round_over_freeze_and_the_reset() -> v
 		"the snapshot fact rests with it")
 
 	# The next round, run out past the full chargeup with P1 in reach the whole way.
-	# Story 6-1: bare intents, NOT `_holding()` — the assertion below is "nobody pressed for it",
-	# and holding a confirm nobody pressed would weaken exactly the claim this loop exists to make.
 	for _t in CHARGEUP_TICKS + 2:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
 		_advance(ms, InputIntent.new(), InputIntent.new())
@@ -569,12 +565,12 @@ func test_the_telegraph_counts_down_and_rests_after_the_landing() -> void:
 		"resting before any cast")
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(int(ms.to_snapshot()["p1"]["telegraph"][1]), CHARGEUP_TICKS - 1,
 		"one tick of the window has been consumed")
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.to_snapshot()["p1"]["telegraph"], [PlayerState.NO_TELEGRAPH_COLOR, 0],
 		"and RESTING again the moment the hero left CHARGING — the key is derived from the action "
 		+ "state, so a stale telegraph is unrepresentable rather than merely unlikely")
@@ -700,18 +696,8 @@ func _flags(unblockable_open: bool) -> FeatureFlags:
 	return f
 
 
-## Story 6-1 (AC 1): A CONTINUING TICK OF A CHARGEUP — an otherwise-empty intent that keeps mode
-## ②'s confirm HELD. Since 6-1 a bare `InputIntent.new()` on a charging player's slot means "the
-## confirm was RELEASED", which is a paid feint; every loop that means to run a chargeup out must
-## say so on every tick, exactly as a sustained block already says `held[&"block"]`.
-func _holding() -> InputIntent:
-	var i := InputIntent.new()
-	i.held[&"card_cast"] = true
-	return i
-
-
 func _unblockable_intent(slot: int) -> InputIntent:
-	var i := _holding()
+	var i := InputIntent.new()
 	i.card_slot = slot
 	i.card_mode = Enums.ModeKind.UNBLOCKABLE
 	i.card_commit = true
@@ -739,7 +725,7 @@ func _run_chargeup(ms: MatchState, kind: int) -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms, 0, kind)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 
 
 ## The id the deal actually put in `slot` — read rather than assumed, so no assertion depends on

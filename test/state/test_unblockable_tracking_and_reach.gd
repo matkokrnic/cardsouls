@@ -6,7 +6,8 @@ extends TestCase
 ##   AC 1  -- while the chargeup runs, facing tracks the ENEMY HERO through the charge-reach fact
 ##            even when this slot is LOCKED ONTO A MINION (the override, not the lock).
 ##   AC 2  -- the instant the chargeup window closes the attack is COMMITTED: facing stops re-reading
-##            the aim and holds, no release feints, no move input steers.
+##            the aim and holds, no move input steers. (Since `6-9` there is no release to feint
+##            with either: the press commits the attack.)
 ##   AC 3  -- a defender who leaves the frozen line after the commit is MISSED; one who enters it
 ##            after the commit is HIT. The freeze is on direction, not on a defender.
 ##   AC 4  -- the launch carries the attacker along the frozen line at a per-colour FIXED distance.
@@ -94,7 +95,7 @@ func test_charging_facing_tracks_the_enemy_hero_every_tick_over_a_minion_lock() 
 		var aim := DIR_AHEAD.rotated(0.05 * float(t + 1))
 		ms.set_lock_direction(0, MINION_DIR)
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, aim)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_true(ms.p1.hero.facing.is_equal_approx(-aim),
 			"tick %d: facing tracks the ENEMY HERO's live heading %s, got %s" % [t, -aim,
 				ms.p1.hero.facing])
@@ -115,85 +116,72 @@ func test_facing_freezes_at_the_commit_and_ignores_every_later_aim() -> void:
 	for t in _launch(Enums.CardColor.BLUE) - 1:
 		ms.set_lock_direction(0, MINION_DIR)
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 			"launch tick %d: still in the attack" % t)
 		assert_eq(ms.p1.hero.facing, -DIR_AHEAD,
 			"launch tick %d: facing HELD at the committed direction, not re-aimed" % t)
 
 
-## AC 2: "no further re-aim or steering from any input". A release of the cast confirm AFTER the
-## commit is not a feint -- the attack still lands on the authored tick -- and full move input does
-## not bend the launch velocity off the frozen line.
+## AC 2: "no further re-aim or steering from any input". Full move input after the commit does not
+## bend the launch velocity off the frozen line, and the attack still lands on the authored tick.
+##
+## Story 6-9 REFRAMED this test off the RELEASE it used to be written around. Its subject was never
+## the release: it is that NO INPUT reaches the launch. The intents it drives are bare, which under
+## `6-1` was a release and is now simply an ordinary tick -- the assertions are unchanged.
 ##
 ## Code review 6-1c: the velocity is compared against the FROZEN-LINE vector the launch must carry
 ## (the colour's authored distance over its authored span, along the committed facing), not against
 ## a capture taken under the same constant move input -- a steered launch would equal such a capture
 ## on every tick and pass.
-func test_after_the_commit_a_release_does_not_feint_and_input_does_not_steer() -> void:
+func test_after_the_commit_no_input_steers_the_launch() -> void:
 	var ms := _make_match(Enums.CardColor.GREEN)
 	_cast_and_charge(ms, DIR_AHEAD)
 	# Story 6-1d (AC 7): the launch speed is FRONT-LOADED now, so the vector to compare against is
 	# the colour's authored travel share for THAT launch tick rather than one constant -- computed
 	# from the authored distance and the tick span, never captured from the run under test.
 	for t in _launch(Enums.CardColor.GREEN) - 1:
-		var released := InputIntent.new()
-		released.move_dir = Vector2(1.0, 0.0)
+		var steering := InputIntent.new()
+		steering.move_dir = Vector2(1.0, 0.0)
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, released, InputIntent.new())
+		_advance(ms, steering, InputIntent.new())
 		var want := _launch_velocity(Enums.CardColor.GREEN, t + 1, DIR_AHEAD)
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
-			"launch tick %d: a RELEASE after the commit does not feint" % t)
+			"launch tick %d: input after the commit does not end the attack" % t)
 		assert_true(ms.p1.hero.velocity.is_equal_approx(want),
 			"launch tick %d: move input does not steer the launch -- velocity %s, want the frozen line %s"
 				% [t, ms.p1.hero.velocity, want])
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
 	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
-		"the released attack still LANDS on the authored landing tick")
+		"the attack still LANDS on the authored landing tick")
 
 
-## AC 2 boundary, the other side (code review 6-1c): a release ON the commit tick itself -- the tick
-## step 2 closes the chargeup window -- is already ignored. `_cast_and_charge` holds through that
-## tick and the test above releases only from the tick after it, so without this the sharpest edge
-## of the `charge_window.is_running` conjunct in the CHARGING arm was unpinned.
-func test_a_release_on_the_commit_tick_itself_is_ignored() -> void:
+## AC 2 boundary, the other side (code review 6-1c): the tick step 2 CLOSES the chargeup window is
+## the sharpest edge the old `charge_window.is_running` conjunct had, and it is still worth driving
+## explicitly -- the attack must carry on across it and land on the authored tick.
+##
+## Story 6-9 REFRAMED: under `6-1` this drove a RELEASE on that tick and pinned that it was ignored.
+## The conjunct and the release are both gone; what the tick has to prove now is that the commit
+## edge itself is not an exit, which the same drive asserts.
+func test_the_commit_tick_itself_is_not_an_exit() -> void:
 	var ms := _make_match(Enums.CardColor.BLUE)
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_true(ms.p1.charge_window.is_running, "sanity: one chargeup tick still to run")
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
 	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_false(ms.p1.charge_window.is_running, "sanity: this tick closed the chargeup (the commit)")
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
-		"a release on the commit tick is ignored -- the attack is already committed")
+		"the commit tick is not an exit -- the attack is already committed")
 	assert_true(ms.p1.landing_window.is_running, "...and the launch runs on")
 	for _t in _launch(Enums.CardColor.BLUE):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
 		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
-		"the attack released on its commit tick still lands on the authored landing tick")
-
-
-## AC 2 boundary: a release on the LAST chargeup tick still feints (the chargeup is not yet over),
-## and the feint tears the landing window down with the chargeup -- one fact, cleared together.
-func test_a_release_before_the_commit_still_feints_and_clears_the_landing_window() -> void:
-	var ms := _make_match(Enums.CardColor.BLUE)
-	_advance(ms, _unblockable_intent(0), InputIntent.new())
-	for _t in CHARGEUP_TICKS - 2:
-		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
-	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-	_advance(ms, InputIntent.new(), InputIntent.new())
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
-		"a release while the chargeup still runs is a feint")
-	assert_false(ms.p1.landing_window.is_running, "the feint stopped the landing window")
-	assert_eq(int(ms.to_snapshot()["p1"]["landing"]), 0, "...and the snapshot rests")
-	for _t in _launch(Enums.CardColor.BLUE) + 2:
-		_advance(ms, InputIntent.new(), InputIntent.new())
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "a feinted attack never lands later")
+		"the attack still lands on the authored landing tick")
 
 
 # --- AC 3: dodging after the commit whiffs; entering the line after it is hit ------------------
@@ -233,9 +221,9 @@ func test_a_defender_who_enters_the_frozen_line_after_the_commit_is_hit() -> voi
 	_cast_and_charge(ms, DIR_AHEAD)
 	for _t in _launch(Enums.CardColor.BLUE) - 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"a defender INSIDE the frozen line at the landing is hit, wherever it was at the commit")
 
@@ -258,7 +246,7 @@ func test_the_launch_travels_the_colours_fixed_distance_along_the_frozen_line() 
 		for _t in _launch(color) - 1:
 			# The enemy hero is somewhere else entirely: travel does not ADAPT to it.
 			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-			_advance(ms, _holding(), InputIntent.new())
+			_advance(ms, InputIntent.new(), InputIntent.new())
 			travelled += ms.p1.hero.velocity / TimingWindow.TICK_HZ
 			moving_ticks += 1 if not ms.p1.hero.velocity.is_zero_approx() else 0
 		assert_eq(moving_ticks, _launch(color),
@@ -267,7 +255,7 @@ func test_the_launch_travels_the_colours_fixed_distance_along_the_frozen_line() 
 		assert_true(travelled.is_equal_approx(want),
 			"colour %d: travelled %s along the frozen line, want %s" % [color, travelled, want])
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "landed")
 		assert_eq(ms.p1.hero.velocity, Vector3.ZERO,
 			"colour %d: no launch velocity survives the landing tick" % color)
@@ -279,13 +267,13 @@ func test_the_chargeup_stays_hard_rooted_up_to_the_commit() -> void:
 	var ms := _make_match(Enums.CardColor.GREEN)
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for t in CHARGEUP_TICKS - 1:
-		var moving := _holding()
+		var moving := InputIntent.new()
 		moving.move_dir = Vector2(1.0, 0.0)
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
 		_advance(ms, moving, InputIntent.new())
 		assert_eq(ms.p1.hero.velocity, Vector3.ZERO, "chargeup tick %d: rooted" % t)
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_false(ms.p1.hero.velocity.is_zero_approx(), "the commit tick is the first launch tick")
 
 
@@ -331,7 +319,7 @@ func test_the_arc_never_widens_an_outside_kind() -> void:
 	_cast_and_charge_kind(ms, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
 	for _t in _launch(Enums.CardColor.GREEN):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "OUTSIDE the radius is a miss, arc or no arc")
 
 
@@ -368,7 +356,7 @@ func test_a_counter_at_the_commit_beats_reach_and_beats_a_whiff_alike() -> void:
 				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
 		var dir := DIR_AHEAD if would_hit else DIR_SIDE
 		_push_reach_dir(ms, 0, kind, dir)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		var label := "would hit" if would_hit else "would whiff"
 		if would_hit:
 			assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
@@ -406,7 +394,7 @@ func test_launch_progress_is_below_one_until_the_landing_tick_and_one_exactly_on
 	var landing_tick := -1
 	for t in range(1, c + l + 3):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		if ms.p1.hero.action_state != HeroState.ActionState.CHARGING:
 			landing_tick = t
 			break
@@ -434,10 +422,10 @@ func test_with_a_zero_launch_the_landing_is_the_chargeup_close_edge_as_before() 
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for t in CHARGEUP_TICKS - 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "tick %d" % t)
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "lands on the chargeup close")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "...and hits")
 
@@ -486,13 +474,13 @@ func test_a_hero_killed_mid_launch_takes_the_round_over_freeze() -> void:
 	_cast_and_charge(ms, DIR_AHEAD)
 	ms.p1.hero.take_damage(MAX_HP)
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "died mid-launch")
 	assert_true(bool(ms.to_snapshot()["round_over"]), "sanity: natural death latches the round over")
 	var facing := ms.p1.hero.facing
 	for _t in _launch(Enums.CardColor.GREEN) + 2:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p1.hero.velocity, Vector3.ZERO, "a corpse does not keep launching")
 		assert_eq(ms.p1.hero.facing, facing, "a corpse's facing holds")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "and the dead hero's launch never lands")
@@ -511,7 +499,7 @@ func test_a_forced_dead_hero_mid_launch_takes_the_dead_carve_out() -> void:
 	for _t in _launch(Enums.CardColor.GREEN) + 2:
 		ms.set_lock_direction(0, MINION_DIR)
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-		var moving := _holding()
+		var moving := InputIntent.new()
 		moving.move_dir = Vector2(1.0, 0.0)
 		_advance(ms, moving, InputIntent.new())
 		assert_false(bool(ms.to_snapshot()["round_over"]), "sanity: the forced idiom keeps the round live")
@@ -537,7 +525,7 @@ func test_a_defender_touched_on_one_launch_tick_is_hit_even_after_it_clears_the_
 		var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE if t == 0 \
 				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
 		_push_reach_dir(ms, 0, kind, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"touched on ONE committed tick and clear at the landing: a HIT (AC 6 supersedes 6-1c AC 3)")
 
@@ -551,30 +539,30 @@ func test_a_defender_clear_on_every_evaluated_tick_is_still_missed() -> void:
 	_cast_and_charge_kind(ms, DIR_AHEAD, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
 	for _t in _launch(Enums.CardColor.GREEN):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP,
 		"clear on every evaluated tick is still a MISS -- 'checked every tick' is not 'always hits'")
 
 
 ## Story 6-1d AC 4: THE CONTACT WINDOW OPENS AT THE COMMIT AND NEVER EARLIER. The defender is in
-## contact for the ENTIRE feintable chargeup -- every tick but the last -- and clear from the commit
-## tick onwards. An attack the attacker could still have cancelled credits nothing, so this is a MISS.
+## contact for the ENTIRE chargeup -- every tick but the last -- and clear from the commit tick
+## onwards. A touch before the attack has launched credits nothing, so this is a MISS.
 ##
 ## MUTATION: delete the `is_contact_window_open()` clearing arm in `MatchState.push_contact` (leaving
 ## `INSIDE` unconditionally absorbing) and this test goes RED -- the chargeup's touches would latch
 ## and the attack would land.
-func test_contact_during_the_feintable_chargeup_credits_nothing() -> void:
+func test_contact_during_the_chargeup_credits_nothing() -> void:
 	var ms := _make_match(Enums.CardColor.GREEN)
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
-	assert_true(ms.p1.charge_window.is_running, "sanity: still feintable, the commit is next tick")
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p1.charge_window.is_running, "sanity: still charging, the commit is next tick")
 	for _t in _launch(Enums.CardColor.GREEN) + 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP,
-		"a blade already in motion during the FEINTABLE chargeup credits nothing (AC 4)")
+		"a blade already in motion during the CHARGEUP credits nothing (AC 4)")
 
 
 ## Story 6-1d AC 4/AC 5, the store's REAPING, proven directly rather than by consequence (the `6-1d`
@@ -582,35 +570,66 @@ func test_contact_during_the_feintable_chargeup_credits_nothing() -> void:
 ## verdict is one int per slot, and every pre-commit push CLEARS it -- so the property to prove is
 ## that it rests at `REACH_UNKNOWN` outside a committed flight, whatever happened before.
 ##
-## Three readings: while touches arrive throughout the FEINTABLE chargeup (nothing is credited and
-## nothing accumulates), after a FEINT -- the path that resolves no landing at all, so the one most
-## likely to leak a record -- and after a LANDED attack, where a single further push with no attack
-## in flight puts the store back at rest.
+## Three readings: while touches arrive throughout the CHARGEUP (nothing is credited and nothing
+## accumulates), after a chargeup ABANDONED with no landing verdict -- the path that resolves no
+## landing at all, so the one most likely to leak a record -- and after a LANDED attack, where a
+## single further push with no attack in flight puts the store back at rest.
+##
+## STORY 6-9, RULING `6-9/R3`: the middle reading used to execute a FEINT, which no input can
+## produce any more. It is re-reached through the KNOCKDOWN ABANDONMENT -- P2's own unblockable
+## landing on P1 mid-chargeup -- which is a real in-match path that ends a paid chargeup with no
+## landing verdict, exactly the condition this reading tests. The debug reset would reach the same
+## state and is deliberately NOT used: it is an operator tool, and the claim would stop being
+## testable in play.
 func test_the_contact_verdict_rests_at_unknown_outside_a_committed_flight() -> void:
 	var ms := _make_match(Enums.CardColor.GREEN)
+	# P2 casts FIRST, so that its landing falls while P1 is still mid-chargeup. P1 is cast in once
+	# P2's landing is CHARGEUP_TICKS - 2 ticks away: P1 then charges for 24 and is knocked down on
+	# its 22nd chargeup tick, with its own landing still two ticks out.
+	_advance(ms, InputIntent.new(), _unblockable_intent(0))
+	# BOUNDED: a drive that can spin forever is useless as a mutation proof -- a broken build would
+	# hang the harness instead of reporting.
+	for _t in CHARGEUP_TICKS + _launch(Enums.CardColor.GREEN):
+		if ms.p2.landing_window.remaining_ticks() <= CHARGEUP_TICKS - 2:
+			break
+		_push_reach_dir(ms, 1, MatchState.CONTACT_CHARGE_REACH_INSIDE, -DIR_AHEAD)
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p2.landing_window.remaining_ticks() <= CHARGEUP_TICKS - 2,
+		"fixture: P2's attack is close enough to its landing to catch P1 mid-chargeup")
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
-	# Two short of the chargeup's close, so the release below lands on the LAST FEINTABLE tick: a
-	# release on the commit tick itself is ignored (`6-1c` AC 2), which would make this no feint.
-	for t in CHARGEUP_TICKS - 2:
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
+		"precondition: P1 is charging, with P2's attack already in the air")
+	var readings := 0
+	for _t in CHARGEUP_TICKS:
+		if ms.p1.hero.action_state != HeroState.ActionState.CHARGING \
+				or not ms.p1.charge_window.is_running:
+			break
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
-		assert_eq(ms._charge_reach[0], MatchState.REACH_UNKNOWN,
-			"chargeup tick %d: touches arrive but nothing is credited yet" % t)
-	# The feint: release while the chargeup still runs. No landing resolves at all, and the one
-	# committed-window push this attack ever got (the commit tick's) is all the store can hold.
-	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-	_advance(ms, InputIntent.new(), InputIntent.new())
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: feinted")
-	assert_false(ms.p1.landing_window.is_running, "sanity: the feint tore the landing window down")
+		_push_reach_dir(ms, 1, MatchState.CONTACT_CHARGE_REACH_INSIDE, -DIR_AHEAD)
+		_advance(ms, InputIntent.new(), InputIntent.new())
+		if ms.p1.hero.action_state == HeroState.ActionState.CHARGING:
+			readings += 1
+			assert_eq(ms._charge_reach[0], MatchState.REACH_UNKNOWN,
+				"chargeup tick: touches arrive but nothing is credited yet")
+	assert_true(readings > 0,
+		"the conditional reading above actually executed (a drift that skips it must not go green)")
+	# The abandonment: P2's landing knocked P1 down mid-chargeup. No landing verdict resolves for
+	# P1 at all, and the one committed-window push its attack ever got is all the store could hold.
+	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
+		"sanity: P1 was KNOCKED DOWN mid-chargeup -- the abandonment, not a landing")
+	assert_false(ms.p1.charge_window.is_running, "sanity: the abandonment tore the chargeup down")
+	assert_false(ms.p1.landing_window.is_running, "sanity: ...and the landing window with it")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "sanity: P1's own attack never landed on P2")
 	# ...and the very next push with nothing in flight puts it back at rest. There is no record to
 	# erase and no counter to reap: the clearing arm runs on every push outside a committed flight.
 	_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
 	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms._charge_reach[0], MatchState.REACH_UNKNOWN,
-		"a feinted attack leaves nothing behind that a later push does not clear")
-	# The same, after a LANDED attack rather than a feinted one. Idle first: the feinted cast's
-	# stamina stays spent (`E5-P/R4`), so the pool has to regenerate before a second one is affordable.
-	for _t in 200:
+		"an abandoned attack leaves nothing behind that a later push does not clear")
+	# The same, after a LANDED attack rather than an abandoned one. Idle first: the abandoned cast's
+	# stamina stays spent (`E5-P/R4`), so the pool has to regenerate before a second one is
+	# affordable -- and P1's stun has to run out.
+	for _t in 300:
 		_advance(ms, InputIntent.new(), InputIntent.new())
 	_cast_and_charge(ms, DIR_AHEAD)
 	_run_launch(ms, Enums.CardColor.GREEN, DIR_AHEAD)
@@ -648,7 +667,7 @@ func test_the_launch_travel_is_front_loaded_and_still_sums_to_the_authored_dista
 		var travelled := ms.p1.hero.velocity / TimingWindow.TICK_HZ
 		for _t in _launch(color) - 1:
 			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-			_advance(ms, _holding(), InputIntent.new())
+			_advance(ms, InputIntent.new(), InputIntent.new())
 			steps.append(ms.p1.hero.velocity.length() / TimingWindow.TICK_HZ)
 			travelled += ms.p1.hero.velocity / TimingWindow.TICK_HZ
 		for i in steps.size() - 1:
@@ -691,11 +710,11 @@ func test_the_launch_speed_derives_from_the_tick_span_not_the_seconds_float() ->
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	var travelled := ms.p1.hero.velocity / TimingWindow.TICK_HZ
 	for _t in ticks - 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		travelled += ms.p1.hero.velocity / TimingWindow.TICK_HZ
 	assert_true(absf(travelled.length() - 2.4) < 0.0001,
 		"a span off the tick grid still travels the authored 2.4, got %.5f" % travelled.length())
@@ -721,7 +740,7 @@ func test_a_narrow_arc_judges_the_bearing_at_contact_so_a_strafe_after_the_touch
 			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, in_arc)
 		else:
 			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_SIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"touched INSIDE the 40-degree arc, then strafed out of it: judged at the contact, a HIT")
@@ -742,7 +761,7 @@ func test_a_narrow_arc_judges_the_bearing_at_contact_so_drifting_in_after_the_to
 			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
 		else:
 			_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
 	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
 		"sanity: the contact verdict itself is INSIDE -- only the arc can refuse this one")
@@ -770,7 +789,7 @@ func test_an_in_arc_touch_on_the_commit_tick_survives_later_out_of_arc_touches()
 	for t in 1 + _launch(Enums.CardColor.BLUE):
 		var dir := in_arc if t == 0 else DIR_SIDE
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, dir)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		if t == 0:
 			assert_eq(ms.p1.hero.facing, -DIR_AHEAD, "sanity: the frozen line is the pre-commit aim")
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
@@ -791,7 +810,7 @@ func test_any_in_arc_touch_during_the_flight_is_a_hit() -> void:
 	for t in 1 + _launch(Enums.CardColor.BLUE):
 		var dir := in_arc if t == 3 else DIR_SIDE
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, dir)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		if t == 0:
 			assert_eq(ms.p1.hero.facing, -DIR_AHEAD, "sanity: the frozen line is the pre-commit aim")
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
@@ -809,7 +828,7 @@ func test_a_flight_touched_only_out_of_arc_still_misses() -> void:
 	_charge_to_the_commit_tick(ms)
 	for _t in 1 + _launch(Enums.CardColor.BLUE):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_SIDE)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: the attack resolved")
 	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
 		"sanity: every tick touched -- only the arc can refuse this one")
@@ -835,7 +854,7 @@ func test_a_one_tick_chargeup_does_not_inherit_the_previous_attacks_verdict() ->
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: attack #1 cast")
 	for _t in 1 + _launch(Enums.CardColor.GREEN):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: attack #1 resolved")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "sanity: attack #1 landed")
 	assert_eq(ms._charge_reach[0], MatchState.CONTACT_CHARGE_REACH_INSIDE,
@@ -846,7 +865,7 @@ func test_a_one_tick_chargeup_does_not_inherit_the_previous_attacks_verdict() ->
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: attack #2 cast")
 	for _t in 1 + _launch(Enums.CardColor.GREEN):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE, "sanity: attack #2 resolved")
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
 		"attack #2 measured OUTSIDE on every evaluated tick and must MISS, not inherit attack #1's hit")
@@ -894,7 +913,7 @@ func test_a_mid_flight_span_retune_cannot_pin_the_launch_index() -> void:
 	var moving_ticks := 1
 	while ms.p1.hero.action_state == HeroState.ActionState.CHARGING and moving_ticks < 100:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		if ms.p1.hero.velocity.is_zero_approx():
 			continue
 		moving_ticks += 1
@@ -956,19 +975,19 @@ func _cast_and_charge_kind(ms: MatchState, aim: Vector2, kind: int) -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS:
 		_push_reach_dir(ms, 0, kind, aim)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "sanity: committed, not landed")
 	assert_false(ms.p1.charge_window.is_running, "sanity: the chargeup window has closed")
 
 
-## Cast on slot 0 and run the FEINTABLE chargeup only, aiming dead ahead and touching nothing, stopping
+## Cast on slot 0 and run the CHARGEUP only, aiming dead ahead and touching nothing, stopping
 ## one tick short of the commit: the caller's next push is the commit tick's (`6-1d/R13`).
 func _charge_to_the_commit_tick(ms: MatchState) -> void:
 	_advance(ms, _unblockable_intent(0), InputIntent.new())
 	for _t in CHARGEUP_TICKS - 1:
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
-	assert_true(ms.p1.charge_window.is_running, "sanity: still feintable, the commit is the next tick")
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p1.charge_window.is_running, "sanity: still charging, the commit is the next tick")
 
 
 ## Run the rest of the launch (after `_cast_and_charge`) through the landing tick, pushing INSIDE with
@@ -976,14 +995,14 @@ func _charge_to_the_commit_tick(ms: MatchState) -> void:
 func _run_launch(ms: MatchState, color: int, defender: Vector2) -> void:
 	for _t in _launch(color):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, defender)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 
 
 ## Cast and run an attack all the way out, dead ahead.
 func _cast_rest(ms: MatchState, color: int) -> void:
 	for _t in CHARGEUP_TICKS + _launch(color):
 		_push_reach_dir(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE, DIR_AHEAD)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 
 
 func _deck_contents() -> Array[StringName]:
@@ -1066,14 +1085,8 @@ func _make_match(color: int, with_launch := true) -> MatchState:
 	return ms
 
 
-func _holding() -> InputIntent:
-	var i := InputIntent.new()
-	i.held[&"card_cast"] = true
-	return i
-
-
 func _unblockable_intent(slot: int) -> InputIntent:
-	var i := _holding()
+	var i := InputIntent.new()
 	i.card_slot = slot
 	i.card_mode = Enums.ModeKind.UNBLOCKABLE
 	i.card_commit = true

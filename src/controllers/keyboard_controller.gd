@@ -92,14 +92,12 @@ var _camera_rotate := 0.0
 ## the FIRST card of a colour in hand, so one operator can smoke colour counters alone (keyboard P1
 ## attacks, pad P2 counters). NOT a replacement for the ordinary cast keys 5-7 deleted.
 ##
-## A press is press-AND-HOLD: `held[&"card_cast"]` stays true for DEBUG_HOLD_TICKS (120 = 2.0 s at
-## 60 Hz, longer than the authored 1.0 s chargeup) so a single tap charges through to launch and
-## releasing the key never feints. The hold is counted in sampled ticks, not wall-clock, so it needs
-## no Time read. The intent fields are the pad path's own (slot / mode / commit / held card_cast).
-const DEBUG_HOLD_TICKS := 120
+## Story 6-9 (AC 10): A PRESS IS A SINGLE TAP. `6-D1`'s press-AND-HOLD -- a `DEBUG_HOLD_TICKS`
+## auto-hold of the `card_cast` held key, which existed only to carry the tap past `6-1`'s release arm --
+## is GONE with the arm it served. One tap commits the attack and the state layer never reads a key
+## again. The intent fields are the pad path's own (slot / mode / commit).
 var _debug_actions: Dictionary[int, StringName] = {}  # Enums.CardColor -> Input Map action (P1 only)
 var _hand_colors: Array[int] = []
-var _debug_hold_left := 0
 var _debug_prev: Dictionary = {}  # Enums.CardColor -> was down last sample
 
 
@@ -142,8 +140,8 @@ func sample() -> InputIntent:
 	return intent
 
 
-## Story 6-D1: see DEBUG_HOLD_TICKS. A press with no card of that colour in hand does nothing (no
-## substitute slot, no refusal); the hold, once started, outlives the key.
+## Story 6-D1: one commit per press. A press with no card of that colour in hand does nothing (no
+## substitute slot, no refusal). Since `6-9` the commit is the whole of it: there is nothing to hold.
 func _sample_debug_unblockable(intent: InputIntent) -> void:
 	var fired := -1
 	for color: int in _debug_actions:
@@ -159,10 +157,6 @@ func _sample_debug_unblockable(intent: InputIntent) -> void:
 			intent.card_slot = slot
 			intent.card_mode = Enums.ModeKind.UNBLOCKABLE
 			intent.card_commit = true
-			_debug_hold_left = DEBUG_HOLD_TICKS
-	if _debug_hold_left > 0:
-		intent.held[&"card_cast"] = true
-		_debug_hold_left -= 1
 
 
 func observe_hand_colors(colors: Array[int]) -> void:

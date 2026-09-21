@@ -75,7 +75,12 @@ func _drive_session(color: int, clip: StringName, strike_frame: float, total_tic
 ## AC 4 regression pin: a per-tick push arriving AFTER the CHARGING -> IDLE cut must be a no-op
 ## and never re-assert a stale charge-clip frame, the finding-4 ordering hazard the retempo's
 ## driven playhead introduces that the old single-shot _restart never had.
-func _early_release_leaves_no_stale_frame() -> void:
+##
+## Story 6-9: the cut is no longer reachable by an early RELEASE -- it is reached by the landing,
+## a knockdown, the colour counter and the reset, all of which write the same CHARGING -> IDLE or
+## CHARGING -> STUNNED edge this drives directly. The assertion is unchanged; only its name and
+## this paragraph move off the feint.
+func _the_charging_cut_leaves_no_stale_frame() -> void:
 	_hero.animation_controller.on_action_state_changed(
 		HeroState.ActionState.IDLE, HeroState.ActionState.CHARGING, Enums.CardColor.RED)
 	_hero.animation_controller.on_charge_progress(Enums.CardColor.RED, 0.9)
@@ -105,7 +110,7 @@ func _physics_process(_delta: float) -> bool:
 			AnimationController.THRUST_STRIKE_FRAME_SECONDS, total)
 		_drive_session(Enums.CardColor.GREEN, &"jump_attack",
 			AnimationController.JUMP_ATTACK_STRIKE_FRAME_SECONDS, total)
-		_early_release_leaves_no_stale_frame()
+		_the_charging_cut_leaves_no_stale_frame()
 
 	if is_instance_valid(_hero):
 		_hero.queue_free()

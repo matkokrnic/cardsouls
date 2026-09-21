@@ -194,7 +194,7 @@ func test_an_orb_grant_inside_a_staged_window_flips_ready_on_the_landing_tick() 
 	var landed := false
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		if ms.p1.orbs.get_count(PITCH_COLOR) > 0:
 			landed = true
 			var fizzle: Dictionary = ms.to_snapshot()["pitch"]["p1"]["fizzle"]
@@ -212,7 +212,7 @@ func test_an_orb_grant_with_no_staged_zone_emits_nothing() -> void:
 	var landed := false
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		landed = landed or ms.p1.orbs.get_count(PITCH_COLOR) > 0
 		assert_eq(_drained, [], "no staged zone: the grant emits no pitch payload")
 	assert_true(landed, "the unblockable landed and paid orbs (non-vacuity)")
@@ -333,15 +333,8 @@ func _activate_intent() -> InputIntent:
 	return i
 
 
-## A continuing chargeup tick: mode ②'s confirm HELD (story 6-1 -- a bare intent is a release).
-func _holding() -> InputIntent:
-	var i := InputIntent.new()
-	i.held[&"card_cast"] = true
-	return i
-
-
 func _unblockable_intent(hand_slot: int) -> InputIntent:
-	var i := _holding()
+	var i := InputIntent.new()
 	i.card_slot = hand_slot
 	i.card_mode = Enums.ModeKind.UNBLOCKABLE
 	i.card_commit = true

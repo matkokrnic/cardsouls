@@ -205,12 +205,12 @@ func test_a_charging_hero_cannot_cast_defense() -> void:
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.CHARGING, "precondition: CHARGING")
 	var rejections := _collect_rejections(ms.p2)
 	var stamina_before := ms.p2.stamina.get_current()
-	# Story 6-1: the commit tick must say the chargeup is STILL HELD, or step 3's new early-release
-	# arm feints P2 to IDLE before step 6 ever evaluates this cast and the gate under test is never
-	# reached. On the pad this is live-play truth — B stays down while X is pressed. The CLAIM and
-	# every assertion below are unchanged; only the fixture now states the fact it always relied on.
+	# Story 6-9: a BARE intent again. `6-1`'s held confirm was here only to survive the release arm
+	# that ended a chargeup on a bare intent; with the arm gone the chargeup runs on by itself and
+	# the gate under test is reached without the fixture saying anything. The CLAIM and every
+	# assertion below are unchanged.
 	_advance(ms, InputIntent.new(),
-		_defense_intent(_slot_of_color(ms.p2, Enums.CardColor.RED), [&"card_cast"]))
+		_defense_intent(_slot_of_color(ms.p2, Enums.CardColor.RED)))
 	assert_eq(rejections, [[&"card_cast", MatchState.REASON_UNBLOCKABLE_COMMITTED]],
 		"a CHARGING hero is refused, on the sibling constant mode ② already uses for this exact "
 		+ "state — an unblockable IS committed, which is why this hero cannot also defend (AC 4)")
@@ -650,7 +650,7 @@ func test_both_counters_land_on_one_tick_regardless_of_seat_order() -> void:
 			for player: PlayerState in [ms.p1, ms.p2]:
 				player.defense_color = Enums.CardColor.RED
 				player.defense_window.start(COUNTER_BUSY_TICKS_RED)
-		_advance(ms, _holding(), _holding())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	for player: PlayerState in [ms.p1, ms.p2]:
 		assert_eq(player.hero.action_state, HeroState.ActionState.STUNNED,
 			"BOTH heroes are knocked down by the other's counter, on the same tick")
@@ -981,16 +981,13 @@ func test_red_and_blue_travel_toward_the_attacker_and_green_does_not() -> void:
 		# P1 charges so a live hero-to-hero bearing exists to lock at the press.
 		_cast_unblockable(ms, 0, Enums.CardColor.RED)
 		_push_reach(ms, 0)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 			"precondition: a live charge-reach bearing exists for the press to lock")
-		# REVIEW (finding H1): P1 HOLDS its confirm across the press tick. Without this the bare
-		# default intent feints at step 3 and the press at step 6 finds nothing charging -- the
-		# travel then rode the STALE bearing store rather than a live chargeup.
-		_cast_defense(ms, color, [], _holding())
+		_cast_defense(ms, color)
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 			"precondition: the attacker is STILL charging at the press -- the fact AC 9 locks")
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p2.hero.velocity, expected[color],
 			("colour %d's FIRST travelling tick: RED and BLUE carry real travel toward the "
 			+ "attacker at their own authored distance over their own leg; GREEN keeps the root "
@@ -1019,16 +1016,15 @@ func test_reds_counter_travels_out_and_back_to_exactly_where_it_started() -> voi
 		var defender: PlayerState = ms.p1 if defender_slot == 0 else ms.p2
 		_cast_unblockable(ms, attacker_slot, Enums.CardColor.RED)
 		_push_reach(ms, attacker_slot)
-		if attacker_slot == 0:
-			_advance(ms, _holding(), InputIntent.new())
-		else:
-			_advance(ms, InputIntent.new(), _holding())
+		# Both seats are bare on this tick (click-to-commit: the attacker needs no held key), so the
+		# seat symmetry lives in which slot is cast and pushed above, and which defends below.
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		var hand_slot := _slot_of_color(defender, Enums.CardColor.RED)
 		assert_true(hand_slot >= 0, "fixture: the defender holds a RED card")
 		if defender_slot == 0:
-			_advance(ms, _defense_intent(hand_slot), _holding())
+			_advance(ms, _defense_intent(hand_slot), InputIntent.new())
 		else:
-			_advance(ms, _holding(), _defense_intent(hand_slot))
+			_advance(ms, InputIntent.new(), _defense_intent(hand_slot))
 		assert_true(defender.defense_window.is_running,
 			"slot %d: precondition -- the RED counter is armed" % defender_slot)
 		var net := Vector3.ZERO
@@ -1081,13 +1077,14 @@ func test_blue_travels_nowhere_when_the_only_chargeup_already_ended() -> void:
 	var ms := _kd_match()
 	_cast_unblockable(ms, 0, Enums.CardColor.RED)
 	_push_reach(ms, 0)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"precondition: P1's chargeup pushed a LIVE hero-to-hero bearing")
-	# P1 releases: the paid feint ends the chargeup, so nothing is charging at the press below.
-	_advance(ms, InputIntent.new(), InputIntent.new())
-	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
-		"precondition: the chargeup is OVER -- no attacker is charging at the press")
+	# Story 6-9: the chargeup RUNS OUT to its landing, which is how a fixture reaches "nothing is
+	# charging at the press" now that no input can end one. Nothing is pushed during the flight, so
+	# the attack whiffs and the defender is untouched -- the trap below needs a STALE bearing, not a
+	# hit.
+	_run_chargeup_to_its_landing(ms, 0)
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"...and the pushed bearing is STALE, not cleared -- nothing anywhere clears this store, "
 		+ "which is exactly why the fallback cannot be the resting value alone")
@@ -1118,11 +1115,10 @@ func test_blues_bearing_is_locked_at_the_press_and_never_re_read() -> void:
 	var ms := _kd_match()
 	_cast_unblockable(ms, 0, Enums.CardColor.RED)
 	_push_reach(ms, 0)
-	_advance(ms, _holding(), InputIntent.new())
+	_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"precondition: the bearing the press is about to lock")
-	# REVIEW (finding H1): P1 HOLDS across the press tick -- see `_cast_defense`'s header.
-	_cast_defense(ms, Enums.CardColor.BLUE, [], _holding())
+	_cast_defense(ms, Enums.CardColor.BLUE)
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 		"precondition: the attacker is STILL charging at the press")
 	# The attacker CIRCLES: every later push carries a different hero-to-hero bearing.
@@ -1150,9 +1146,9 @@ func test_the_counter_faces_the_attacker_on_every_tick_of_the_busy_span() -> voi
 		var ms := _kd_match()
 		_cast_unblockable(ms, 0, Enums.CardColor.RED)
 		_push_reach(ms, 0)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 		ms.p2.hero.facing = MOVED_DIR
-		_cast_defense(ms, color, [], _holding())
+		_cast_defense(ms, color)
 		assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
 			"precondition: the attacker is STILL charging at the press")
 		for t in COUNTER_BUSY_TICKS_GREEN - 1:
@@ -1174,11 +1170,10 @@ func test_the_counter_leaves_facing_alone_when_nothing_was_charging_at_the_press
 	var ms := _kd_match()
 	_cast_unblockable(ms, 0, Enums.CardColor.RED)
 	_push_reach(ms, 0)
-	_advance(ms, _holding(), InputIntent.new())
-	# P1 releases: the paid feint ends the chargeup, so nothing is charging at the press below.
 	_advance(ms, InputIntent.new(), InputIntent.new())
-	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
-		"precondition: the chargeup is OVER -- no attacker is charging at the press")
+	# Story 6-9: the chargeup RUNS OUT to its landing (see the sibling test above) -- the surviving
+	# way to reach "nothing is charging at the press" with a stale bearing left behind.
+	_run_chargeup_to_its_landing(ms, 0)
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"...and the pushed bearing is STALE, not cleared -- the trap this test exists for")
 	_cast_defense(ms, Enums.CardColor.GREEN)
@@ -1197,8 +1192,8 @@ func test_ordinary_facing_resumes_on_the_first_tick_after_the_counter_window_exp
 	var ms := _kd_match()
 	_cast_unblockable(ms, 0, Enums.CardColor.RED)
 	_push_reach(ms, 0)
-	_advance(ms, _holding(), InputIntent.new())
-	_cast_defense(ms, Enums.CardColor.GREEN, [], _holding())
+	_advance(ms, InputIntent.new(), InputIntent.new())
+	_cast_defense(ms, Enums.CardColor.GREEN)
 	# The runner's ordinary per-tick lock push, pointing somewhere the counter's bearing is not.
 	ms.set_lock_direction(1, MOVED_DIR)
 	_idle_ticks(ms, COUNTER_BUSY_TICKS_GREEN - 1)
@@ -1275,7 +1270,7 @@ func test_a_counter_outranks_an_open_iframe() -> void:
 			defender_intent = _press(&"roll")
 		elif t == press_at:
 			defender_intent = _defense_intent(defense_slot)
-		_advance(ms, _holding(), defender_intent)
+		_advance(ms, InputIntent.new(), defender_intent)
 	assert_true(ms.p2.hero.is_iframe_open(),
 		"precondition: the defender's roll iframe really is open at the judged tick, so the dodge "
 		+ "rung WOULD have answered this landing")
@@ -1476,9 +1471,9 @@ func test_a_charging_hero_cannot_cast_basic() -> void:
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING, "precondition: P1 is charging")
 	var rejections := _collect_rejections(ms.p1)
 	var hand_before := ms.p1.hand.occupied_count()
-	# Story 6-1: the confirm stays HELD on the commit tick — see `_basic_intent`. The gate under
-	# test, its reason and every assertion here are unchanged.
-	_advance(ms, _basic_intent(_slot_of_color(ms.p1, Enums.CardColor.BLUE), [&"card_cast"]),
+	# Story 6-9: a bare mode ① commit again — nothing has to be held for P1 to still be CHARGING
+	# when step 6 reads the gate. The gate, its reason and every assertion here are unchanged.
+	_advance(ms, _basic_intent(_slot_of_color(ms.p1, Enums.CardColor.BLUE)),
 		InputIntent.new())
 	assert_eq(rejections, [[&"card_cast", MatchState.REASON_UNBLOCKABLE_COMMITTED]],
 		"refused with the reason that already reads true for a charging caster (AC 16)")
@@ -1539,8 +1534,8 @@ func test_the_basic_cast_state_gate_precedes_the_empty_slot_gate() -> void:
 	var ms := _make_match()
 	_cast_unblockable(ms, 0, Enums.CardColor.RED)
 	var rejections := _collect_rejections(ms.p1)
-	# Story 6-1: still held — see `_basic_intent`. The ORDERING claim is unchanged.
-	_advance(ms, _basic_intent(HAND_SIZE + 3, [&"card_cast"]), InputIntent.new())  # out of range
+	# Story 6-9: bare again — see the test above. The ORDERING claim is unchanged.
+	_advance(ms, _basic_intent(HAND_SIZE + 3), InputIntent.new())  # out of range
 	assert_eq(rejections, [[&"card_cast", MatchState.REASON_UNBLOCKABLE_COMMITTED]],
 		"the STATE gate answers first — an empty slot cast while CHARGING reports the commitment, "
 		+ "not REASON_EMPTY_SLOT (AC 16)")
@@ -1669,7 +1664,7 @@ func _land(ms: MatchState, caster_slot: int, color: int, victim_at := Callable()
 			_push_reach(ms, caster_slot)
 		if t == CHARGEUP_TICKS - 1 and before_landing.is_valid():
 			before_landing.call()
-		var caster_intent := _unblockable_intent(hand_slot) if t == -1 else _holding()
+		var caster_intent := _unblockable_intent(hand_slot) if t == -1 else InputIntent.new()
 		var victim_intent: InputIntent = victim_at.call(t) if victim_at.is_valid() else InputIntent.new()
 		if caster_slot == 0:
 			_advance(ms, caster_intent, victim_intent)
@@ -1825,15 +1820,19 @@ func test_knockdown_from_rolling_with_the_iframe_closed() -> void:
 
 
 ## CHARGING: the one prior state with a real effect -- the victim ABANDONS its chargeup. The three-part
-## `6-1` feint teardown runs with the write; the card and the stamina stay spent; the abandoned
-## attack never lands; `_charge_reach` is left alone (`6-1d/R9`).
+## teardown runs with the write; the card and the stamina stay spent; the abandoned attack never
+## lands; `_charge_reach` is left alone (`6-1d/R9`).
+##
+## Story 6-9: this is now one of only TWO in-match paths that end a paid chargeup with no landing
+## verdict (the other is the colour counter). The release arm that was the third is gone, which
+## makes this proof load-bearing rather than one of several.
 func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() -> void:
 	var ms := _kd_match()
 	var victim_slot := _slot_of_color(ms.p2, Enums.CardColor.BLUE)
 	var victim_at := func(t: int) -> InputIntent:
 		if t == 1:
 			return _unblockable_intent(victim_slot)
-		return _holding() if t > 1 else InputIntent.new()
+		return InputIntent.new()
 	var before := func() -> void:
 		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.CHARGING,
 			"precondition: the victim is mid-chargeup on the landing tick")
@@ -1852,7 +1851,7 @@ func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() ->
 	assert_eq(ms.p2.discard.size(), 1, "...and the card stays in the discard")
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms, 1)
-		_advance(ms, InputIntent.new(), _holding())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	assert_eq(ms.p1.hero.get_hp(), MAX_HP, "the abandoned chargeup never lands")
 
 
@@ -1903,7 +1902,7 @@ func test_simultaneous_landings_knock_both_heroes_down() -> void:
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms, 0)
 		_push_reach(ms, 1)
-		_advance(ms, _holding(), _holding())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 	for player: PlayerState in [ms.p1, ms.p2]:
 		assert_eq(player.hero.action_state, HeroState.ActionState.STUNNED, "BOTH heroes are knocked down")
 		assert_eq(player.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "...and BOTH took the damage")
@@ -2366,12 +2365,12 @@ func _run_chargeup_dodging(ms: MatchState, charging_slot: int, color: int, roll_
 		# The landing resolves on the LAST of these ticks, i.e. `t == CHARGEUP_TICKS - 1`.
 		var roll := t == CHARGEUP_TICKS - 1 - roll_lead
 		var defender_intent := _press(&"roll") if roll else InputIntent.new()
-		# Story 6-1 (AC 1): the CHARGING side holds its confirm for every tick of the chargeup;
+		# Story 6-9: the CHARGING side sends a bare intent every tick (a press commits, nothing holds);
 		# the DEFENDER's intent is untouched — it is rolling, not charging.
 		if defending_slot == 0:
-			_advance(ms, defender_intent, _holding())
+			_advance(ms, defender_intent, InputIntent.new())
 		else:
-			_advance(ms, _holding(), defender_intent)
+			_advance(ms, InputIntent.new(), defender_intent)
 
 
 func _make_match(unblockable_open := true, inject_colors := true) -> MatchState:
@@ -2411,18 +2410,8 @@ func _defense_intent(slot: int, held: Array = []) -> InputIntent:
 	return i
 
 
-## Story 6-1 (AC 1): A CONTINUING TICK OF A CHARGEUP — an otherwise-empty intent that keeps mode
-## ②'s confirm HELD. Since 6-1 a bare `InputIntent.new()` on the CHARGING player's slot means "the
-## confirm was RELEASED", i.e. a paid feint; a loop that means to run a chargeup out must say so on
-## every tick. Sites where nobody is charging keep their bare intents deliberately.
-func _holding() -> InputIntent:
-	var i := InputIntent.new()
-	i.held[&"card_cast"] = true
-	return i
-
-
 func _unblockable_intent(slot: int) -> InputIntent:
-	var i := _holding()
+	var i := InputIntent.new()
 	i.card_slot = slot
 	i.card_mode = Enums.ModeKind.UNBLOCKABLE
 	i.card_commit = true
@@ -2431,16 +2420,15 @@ func _unblockable_intent(slot: int) -> InputIntent:
 
 ## Story 5-6 (AC 16): a mode ① commit, for the two refusal tests. The defense/unblockable siblings
 ## above verbatim, differing only in the mode.
-## Story 6-1: `held` gains the same seat its `_defense_intent` sibling already had, and for the same
-## kind of load-bearing reason — a mode ① commit tested against a CHARGING caster must carry
-## `&"card_cast"`, or step 3's early-release arm ends the chargeup before step 6 reads the gate.
-func _basic_intent(slot: int, held: Array = []) -> InputIntent:
+##
+## Story 6-9: the `held` seat `6-1` gave this helper IS GONE. Its only two callers passed
+## `&"card_cast"` to survive the release arm; measured at this pass, no caller passes `block` here
+## (that use is `_cast_defense`/`_defense_intent`'s, where the parameter stays).
+func _basic_intent(slot: int) -> InputIntent:
 	var i := InputIntent.new()
 	i.card_slot = slot
 	i.card_mode = Enums.ModeKind.BASIC
 	i.card_commit = true
-	for k: StringName in held:
-		i.held[k] = true
 	return i
 
 
@@ -2453,17 +2441,29 @@ func _press(action: StringName) -> InputIntent:
 
 ## P2 casts DEFENSE in `color`, on the slot that actually holds one.
 ##
-## Story 6-6b REVIEW (finding H1): `p1_intent` exists because the default BARE P1 intent is a
-## paid FEINT on any tick P1 is CHARGING, and step 3 resolves it BEFORE step 6 arms the window --
-## so a caller that means "press while an attacker is genuinely mid-chargeup" must hold the
-## confirm out here, or its press lands on a tick where nothing is charging any more. AC 9's
-## direction lock reads exactly that fact, so the distinction is load-bearing and not cosmetic.
-func _cast_defense(ms: MatchState, color: int, held: Array = [],
-		p1_intent: InputIntent = null) -> void:
+## Story 6-9: the `6-6b` REVIEW (finding H1) `p1_intent` parameter IS GONE. It existed because a
+## bare P1 intent was a paid FEINT on any tick P1 was CHARGING, so a caller meaning "press while an
+## attacker is genuinely mid-chargeup" had to hold the confirm out through here. No input ends a
+## chargeup any more, so a bare P1 intent IS "still charging" and the distinction it drew no longer
+## exists. `held` stays: it carries `&"block"` for the two cast-drops-block fixtures.
+func _cast_defense(ms: MatchState, color: int, held: Array = []) -> void:
 	var slot := _slot_of_color(ms.p2, color)
 	assert_true(slot >= 0, "fixture: the hand holds a card of colour %d" % color)
-	_advance(ms, p1_intent if p1_intent != null else InputIntent.new(),
-		_defense_intent(slot, held))
+	_advance(ms, InputIntent.new(), _defense_intent(slot, held))
+
+
+## Story 6-9: A CHARGEUP RUN OUT TO ITS LANDING, with NO reach pushed during the flight, so it
+## resolves as a whiff and the defender is untouched. This is how a fixture reaches "nothing is
+## charging" now that `6-1`'s feint is gone; the landing is not, and it leaves the bearing store
+## exactly as stale as the feint did (nothing clears it).
+func _run_chargeup_to_its_landing(ms: MatchState, slot: int) -> void:
+	var hero: HeroState = (ms.p1 if slot == 0 else ms.p2).hero
+	for _t in 400:
+		if hero.action_state != HeroState.ActionState.CHARGING:
+			break
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_ne(hero.action_state, HeroState.ActionState.CHARGING,
+		"fixture: the chargeup ran out to its landing -- no attacker is charging at the press")
 
 
 ## `slot` casts UNBLOCKABLE in `color`, on the slot that actually holds one.
@@ -2551,9 +2551,9 @@ func _counter_run(ms: MatchState, caster_slot: int, charge_color: int, defense_c
 		if t == CHARGEUP_TICKS - 1 and before_judged.is_valid():
 			before_judged.call()
 		if caster_slot == 0:
-			_advance(ms, _holding(), defender_intent)
+			_advance(ms, InputIntent.new(), defender_intent)
 		else:
-			_advance(ms, defender_intent, _holding())
+			_advance(ms, defender_intent, InputIntent.new())
 
 
 ## P1 casts UNBLOCKABLE in `color` and the whole chargeup runs out INSIDE reach, so the landing
@@ -2562,7 +2562,7 @@ func _run_chargeup(ms: MatchState, color: int) -> void:
 	_cast_unblockable(ms, 0, color)
 	for _t in CHARGEUP_TICKS:
 		_push_reach(ms, 0)
-		_advance(ms, _holding(), InputIntent.new())
+		_advance(ms, InputIntent.new(), InputIntent.new())
 
 
 func _collect_hits(ms: MatchState) -> Array:
