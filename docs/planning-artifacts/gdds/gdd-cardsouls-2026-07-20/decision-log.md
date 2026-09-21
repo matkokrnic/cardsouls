@@ -10968,3 +10968,78 @@ the callable form goes). Negative control: `Select-String -Pattern 'reject_actio
 golden prediction (`d437432f` unmoved, 206 keys, `UNHASHED_CROSS_TICK_MEMBERS` 4) independently
 confirmed; the `6-D1` press edge is structurally independent of the hold; no committed record fixture
 exists, so the v11 refusal breaks none. Gate round 1 of at most 2.
+
+## Session 2026-09-21 -- 6-9 close-out (Tier A)
+
+Story `6-9-click-to-commit` closes. Mode 2 (unblockable) is now click and commit: an accepted press
+carries the attack to its landing with no further input, and no input can end it. Code and tests are
+commit `5a98e79`; the story record and the operator's playtest entry are `685d7c4`. Rulings `6-9/R10`
+onward (`R1`-`R9` are the readiness gate, above).
+
+`6-9/R10` SUPERSESSIONS, RECORDED FORWARD (no closed story file is edited, `E5-R/R7`).
+(a) Story `6-1` hold-to-charge and the paid feint are superseded by click-to-commit: `6-1/R1` (paid
+feint), `R6` (minimum observable feint), `R7` (a feint leaves the defence window), `R8` (the `card_cast`
+held key), `R9` (L3 chord fork), `R11`, `R12` (pad disconnect reads as a release) and `R13` (same-tick
+release and recommit) are dead. `6-1/R2` (the `5-6` basic-while-charging gate), `R3` (1.0 s = 60 ticks)
+and `R4` / `R14` (the FORMAT_VERSION bump precedent) STAND.
+(b) Story `6-6b` AC 6 ("hold-to-charge and the paid feint are untouched ... the bait the counter
+presentation exists to make possible"), the `6-6b` AC 10 clause "a paid feint baits a full counter", and
+the R-S6 sentence "the feint bait (AC 6) is unchanged" are dead on delivery: there is no feint to bait
+with. The `6-6b` colour counter itself is untouched and still ends a committed chargeup.
+(c) The `6-D1` auto-hold (`DEBUG_HOLD_TICKS` 120, `_debug_hold_left`) is retired: the X / V / B debug
+keys still cast, and a tap now commits like any press.
+
+`6-9/R11` FORMAT_VERSION 11 -> 12, HARD REFUSAL OF v11. The bump is semantic, not a shape change: a v11
+record encodes `held[&"card_cast"]` intents whose meaning (release feints) no longer exists, so
+replaying it would diverge silently. Same reasoning and same refusal shape as the `6-1/R4` precedent;
+`test_a_v11_record_is_refused_with_a_reason` and `test_a_v12_record_round_trips_inside_this_build` pin it.
+
+`6-9/R12` REVIEW N1: A PITCH ACTIVATION MID-CHARGEUP IS ALLOWED (operator ruling 2026-09-21). A
+`card_activate` press of an already-staged pitch card while CHARGING resolves: orbs are spent, the card
+is discarded, the draw window restarts, and the hero stays CHARGING. Consistent with
+`6-3a-gate/R-HERO-STATE`; `_resolve_pitch_activate` has no CHARGING arm and writes no action state, so it
+cannot be an exit and AC 2's "no input-driven exit" claim holds structurally. Story AC 2 row 6 amended:
+its refusal claim covers unblockable, basic, defense and pitch STAGE presses only.
+
+`6-9/R13` REVIEW N2: THE DEV RECORD'S "NO TEST CAN GUARD THE ABSENCE" WAS WRONG. Mutations M2
+(reinstate the pad's held product) and M3 (reinstate the debug auto-hold) were reported GREEN and
+excused by AC 7's source search. An allow-list on the live held keys guards them at runtime without
+naming the removed key. Added: `test_resolve_card_tick_produces_exactly_the_live_held_keys`
+(`test_gamepad_controller.gd`) and a held-key-set assertion on the kept `6-D1` tap test, on the tap
+tick, the next sample and after key release (`test_controller.gd`). M2 and M3 re-run: both RED.
+Rule of thumb this reaffirms (`3-0d/R20`): make a property impossible by construction or guard it at
+runtime; a dev-time text scan alone is not a guard.
+
+`6-9/R14` REVIEW N3 (small half), N5, N7, N8, N9 FIXED IN THE POST-REVIEW PASS (tests and record only,
+no `src/` edit): a dead pre-loop stamina read removed (N3); an execution counter asserted `> 0` on the
+conditional "nothing is credited yet" reading in the tracking suite, so it cannot go silently vacuous
+(N5); the `6-D1` docblock rewritten to tap-commits (N7); identical-arm ternary and if/else collapsed,
+a stale `6-1` comment and a spliced sentence repaired (N8); `HoldingController` renamed
+`BareController` in three integration files (N9).
+
+`6-9/R15` REVIEW N4 AND N6 ARE RECORD-HONESTY, NO CODE. The +284 assertion delta is mostly one
+assertion ("still CHARGING") repeated across 19 rows x 20 ticks (380 of 463). 11 of the AC 2 table's 19
+stay-rows are structurally incapable of failing; the table as a whole is non-vacuous through row 7
+(the exit) and the per-row landing assertion. Both recorded in the story's Dev Agent Record.
+
+`6-9/R16` LAYERS. Review verdict APPROVE WITH FINDINGS, 0 blocking, 9 non-blocking. LAYER-COMPLETION
+final state: blind-hunter COMPLETE (12 findings, 8 accepted); edge-case-hunter COMPLETE (3 findings and
+1 guard note, all accepted); acceptance-auditor COMPLETE (inline, T1-T11 all measured, 0 stalled). No
+finding tagged `[manual-<layer>]`.
+
+`6-9/R17` GOLDEN AND SNAPSHOT MEASURED UNMOVED BOTH DIRECTIONS. Golden `d437432f`, 206 snapshot
+key-paths, `UNHASHED_CROSS_TICK_MEMBERS` 4. The surviving CHARGING arm is byte-identical to HEAD
+`9b414c7` (tabs included); the only non-comment `src/` changes are 13 deletions plus the constant bump.
+No re-baseline. Suite `920/0/7755` -> `916/0/8051` + `66/66` integration (final run
+`C:\dev\_69-chain-suite.txt`). Live smoke PASS, solo `[0, 3]` (playtest log 2026-09-21).
+
+`6-9/R18` BUDGET INTERVAL (`E5-R/R3`, full story cycle). Start = the before-baseline suite file's
+timestamp, `_69-suite-before.txt`, 2026-09-21 00:51:10. End = the last suite run of the cycle,
+`_69-chain-suite.txt`, 2026-09-21 13:41:32. Delta 12h 50m 22s. Wall clock across the dev pass (~1h 04m
+of it), review, post-review fix, the operator's live smoke and idle time between them; not machine time.
+
+`6-9/R19` DEFERRED, WITH OWNERS.
+- Is the unblockable too weak without a feint, and does the colour counter reward enough -> the
+  playtest / retune block (operator's open question in the playtest log; no tuning change made here).
+- GDD wording that still frames the unblockable as "cash-in or feint" (`gdd.md`, three sites), and the
+  `epics.md` bullets for `6-9` and `6-10` -> E6 close-out docs debt.
