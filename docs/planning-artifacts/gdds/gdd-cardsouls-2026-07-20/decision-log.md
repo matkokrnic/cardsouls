@@ -11233,3 +11233,63 @@ DEFERRED (not this story): presentation debt surfaced by the live smoke -- cards
 (normal cast and pitch, mana and orbs), a clause added to `6-5b`; hand rendered as icons instead of
 text cards, plus a visual response when a card resolves, both deferred to a Tier B presentation story
 after `6-5f`.
+
+## Session 2026-09-23 -- 6-5b scope + readiness gate (2026-09-23)
+
+`6-5b/R1` Corpse enters state without position: owner, dead board index, remaining lifetime in ticks
+only; position stays actor-owned (F1); Raise Dead/rendering read location from the actor.
+`6-5b/R2` Corpse lifetime is a new authored `.tres` field, default 20 s, replacing the actor's
+`LINGER_TICKS = 600` constant; converts seconds -> ticks the same way every other duration does
+(round, clamp to a minimum of 1 tick).
+`6-5b/R3` A step-4 combat-hit death, a Culling kill, and a Drain sacrifice all route through one
+shared death seat; every minion death leaves a corpse (seat location: `6-5b/R13`).
+`6-5b/R4` Culling and Drain KILL, not DAMAGE: neither passes through the 6-5a damage funnel, so
+Vampiric Aura/Bloodlust never touch a Culling or Drain kill.
+`6-5b/R5` Culling kills every one of the caster's own living minions (totems excluded) and grants
+mana per kill at the spec's authored rate, clamped by the existing mana-pool maximum.
+`6-5b/R6` Drain's target is the minion at smallest angle between hero facing and the hero-to-minion
+direction (ties: smaller distance, then lower index), superseding `deck-1-spec.md:23`'s "nearest to
+you" wording, on the `6-5a/R2` precedent (Bloodhound Step's distance multiplier superseding a spec
+number by ruling). `deck-1-spec.md` is not amended for this one (only Grave Ward's wording is, per
+`6-5b/R7`).
+`6-5b/R7` Grave Ward, at resolution, ADDS its extension to the remaining lifetime of each corpse the
+caster owns that exists at that instant; nothing is stored on `PlayerState` (no `RULE_*` slot, no
+`RULE_COUNT` bump); repeated casts add again to whatever remains; a corpse created afterward is
+untouched. The tint is a per-corpse "was extended" mark lasting until that corpse is removed.
+`deck-1-spec.md:19`'s "per-player timed rule" wording is SUPERSEDED and amended to this per-corpse
+model, on the `6-5a/R2` precedent.
+`6-5b/R8` Raise Dead raises every one of the caster's own corpses at resolution: new board index
+(holes never reused), full HP, at the corpse's own last-known actor location; each raised corpse is
+consumed.
+`6-5b/R9` A card with nothing to act on is refused with nothing spent (Drain/Culling: no own living
+minion; Grave Ward/Raise Dead: no own corpse), identically for cast and pitch-activation; mode-specific
+mechanics at `6-5b/R14`.
+`6-5b/R10` Totems and heroes leave no corpse, ever; corpses clear at the debug reset only, never round
+end, matching `4-1/R5`.
+`6-5b/R11` Every card in a player's own hand row shows both its mode-1 and mode-4 price (including orb
+costs); legibility is judged at smoke (`PROC/R8`), not asserted from character counts.
+`6-5b/R12` Fireball (X-cost pitch, spends all current mana min 3 cap 10, plus 1 red orb, damage per
+mana T[1.5]) replaces Bloodlust as Bloodhound Step's pitch; built in 6-5d. Until then Bloodhound Step
+stays paired with Bloodlust exactly as 6-5a shipped it; Bloodlust stays in code.
+`6-5b/R13` (gate B3) The death seat is CREATED -- none exists today (`unit_board.gd:409-412`'s hp
+clamp IS the death per `match_state.gd:2350-2352`; death was a derived predicate, `is_alive_at`, not
+an event). It lives on `UnitBoard`, beside `apply_damage_at`, with exactly three callers (step-4
+contact, Culling, Drain) and is idempotent for an already-dead unit.
+`6-5b/R14` (gate B4) Mode 1 refusal is a board-aware pre-spend gate beside the existing
+insufficient-mana refusal, before the mana spend -- SUPERSEDING, for Culling/Grave Ward/Drain/Raise
+Dead only, 6-5a AC 5 and `4-1/R3`/`4-1/R10`'s "nothing below this line is conditional" rule. Mode 4
+refusal fires before the orb spend; orbs are not spent; the card stays staged and READY, its countdown
+keeps running toward the normal fizzle; the staging mana (already spent at staging,
+`match_state.gd:3350`) is never refunded, per the standing rule at `match_state.gd:3444`.
+`6-5b/R15` (gate B5) Culling's cap is a flat `@export kill_cap` on the Culling effect, default 99 --
+the maximum number of the caster's own living minions one Culling kills; above the cap it kills in
+board-index order (oldest first) and grants mana for exactly the ones killed.
+`6-5b/R16` (gate B7) 6-5b records no undo data for any of its four effects; 6-5f owns undo data for
+ALL effects, including 6-5a's `last_resolved_card` (`[id, mode]`).
+`6-5b/R17` (gate OQ3) Corpse data lives on `UnitBoard`, at the dead unit's own board index (no
+separate container); a consumed or expired corpse is marked there.
+
+`6-5b` readiness gate ROUND 1 (`C:\dev\_65b-gate.md`, report-only): VERDICT NOT READY, 7 blocking / 7
+major / 8 minor. Every blocking item (B1-B7) and every major/minor item not requiring an
+operator/design choice outside the rulings above were fixed in this same session; no second gate round
+was run (the `6-9`/`6-5a` precedent for a same-session fix-and-clear). Story Status -> `ready-for-dev`.
