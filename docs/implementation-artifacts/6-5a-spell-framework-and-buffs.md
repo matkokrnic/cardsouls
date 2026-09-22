@@ -4,7 +4,7 @@ baseline_commit: 92f0dd950e0795f28e70ac6eee5d7ade14ae063e
 
 # Story 6.5a: Spell Framework and Buffs
 
-Status: ready-for-dev
+Status: done
 
 <!-- Tier A. Split from 6-5-spell-resolution by operator ruling (2026-09-22) into six sub-stories
 (6-5a..6-5f); this is the first. Golden PREDICTED to move (new hashed per-player state), key set
@@ -192,14 +192,17 @@ that promotion needs is the readiness gate recorded below and in the decision-lo
       introduces (new buff/no-op ids do not take the `summon_`/`spell_` prefix);
     - `test_card_authoring.gd:187-207`: `assert_null(card.pitch_effect)` on every card -> rewritten,
       since Deck 1 authors all seven pitch effects;
-    - `test_colours_are_card_color_enum_values_three_per_colour` (`:96-104`) -> Deck 1's GREEN
-      3 / RED 2 / BLUE 2 (`deck-1-spec.md` §1-7: Vanguard/Culling and Grave Ward/Raise Dead and
-      Drain/Vampiric Aura are GREEN; Rocksling/Boom and Bloodhound/Bloodlust are RED; Honed
+    - `test_deck_1_colours_are_card_color_values_green_3_red_2_blue_2` (`:96-104`, renamed by review
+      N12 from `test_colours_are_card_color_enum_values_three_per_colour`; the claim is unchanged) ->
+      Deck 1's GREEN 3 / RED 2 / BLUE 2 (`deck-1-spec.md` §1-7: Vanguard/Culling and Grave Ward/Raise
+      Dead and Drain/Vampiric Aura are GREEN; Rocksling/Boom and Bloodhound/Bloodlust are RED; Honed
       Bolt/Counterspell and Frostbite/Corpse Bomb are BLUE — 3 green, 2 red, 2 blue);
-    - `test_each_colour_prices_one_card_at_each_tier` (`:107-124`, the sealed 2/3/5-per-colour
-      tiering) -> Deck 1 prices 2-4 mana per the spec's authored `T[...]` brackets, so this test's
-      SHAPE (one price per colour tier) no longer holds and the assertion is rewritten to whatever
-      Deck 1's authored prices actually are, named as a DELIBERATE departure from the "sealed
+    - `test_each_deck_1_card_is_priced_at_its_authored_mode_1_and_mode_4_prices` (`:107-124`, renamed
+      by review N12 from `test_each_colour_prices_one_card_at_each_tier`; the claim is unchanged), the
+      sealed 2/3/5-per-colour tiering -> Deck 1 prices 2-4 mana per the spec's authored `T[...]`
+      brackets, so this test's SHAPE (one price per colour tier) no longer holds and the assertion is
+      rewritten to whatever Deck 1's authored prices actually are, named as a DELIBERATE departure
+      from the "sealed
       nine-card decision" comment at `:14`;
     - Deck size is the sum of the deck list's copies (Deck 1 = 20, provisional data). The authored
       `BalanceConfig.deck_size` is KEPT (changed `24` -> `20` in `data/balance/balance_config.tres:110`
@@ -335,30 +338,34 @@ edit, full suite after, `git diff --stat` under `src/state/`, golden hash / key 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 (AC 1-3) `CardEffect` flat-export vocabulary + `visual_id`; `data/effects/` folder;
+- [x] Task 1 (AC 1-3) `CardEffect` flat-export vocabulary + `visual_id`; `data/effects/` folder;
       round-trip through `RecordFile` proven by a test (save/load a synthetic record carrying a new
       field, assert it survives).
-- [ ] Task 2 (AC 4-5, 15) Whole-id dispatch in `CardEffectResolver` for the five implemented buff
+- [x] Task 2 (AC 4-5, 15) Whole-id dispatch in `CardEffectResolver` for the five implemented buff
       effects plus the named Deck1-not-yet-resolved no-op for the other nine; the summon path (Ruin
       Vanguard) reuses the existing table unchanged.
-- [ ] Task 3 (AC 6) `_derive_pitch_effects()` injection channel in `match_runner.gd`; pitch
+- [x] Task 3 (AC 6) `_derive_pitch_effects()` injection channel in `match_runner.gd`; pitch
       activation resolves the pitch effect at `_resolve_pitch_activate` (`match_state.gd:3215-3240`).
-- [ ] Task 4 (AC 7) `card_cast_resolved` gains a mode argument; every connect site updated (source
+- [x] Task 4 (AC 7) `card_cast_resolved` gains a mode argument; every connect site updated (source
       seam count stays TEN).
-- [ ] Task 5 (AC 8-9) Timed-rule seat on `PlayerState`; damage funnel wired at every seat AC 9 names.
-- [ ] Task 6 (AC 10) Hashed last-resolved-card record, written at both APPLY seats.
-- [ ] Task 7 (AC 11-14) Deck list authoring + `_derive_deck_contents` successor; authoring-test
+- [x] Task 5 (AC 8-9) Timed-rule seat on `PlayerState`; damage funnel wired at every seat AC 9 names.
+- [x] Task 6 (AC 10) Hashed last-resolved-card record, written at both APPLY seats.
+- [x] Task 7 (AC 11-14) Deck list authoring + `_derive_deck_contents` successor; authoring-test
       rewrites, each named; new deck-composition test.
-- [ ] Task 8 (AC 15) Seven Deck 1 `CardData` `.tres` files, 14 effect `.tres` files, numbers from
+- [x] Task 8 (AC 15) Seven Deck 1 `CardData` `.tres` files, 14 effect `.tres` files, numbers from
       `docs/planning-artifacts/deck-1-spec.md`.
-- [ ] Task 9 (AC 16) `FeatureFlags.spells`; five implemented effects gated; `data/feature_flags.tres`
+- [x] Task 9 (AC 16) `FeatureFlags.spells`; five implemented effects gated; `data/feature_flags.tres`
       turns it on.
-- [ ] Task 10 (Golden Prediction) Baseline full suite before any edit (save outside the repo); after
+- [x] Task 10 (Golden Prediction) Baseline full suite before any edit (save outside the repo); after
       the pass, full suite again; golden re-baseline if and only if the measured key set moved;
       `FORMAT_VERSION` 12 -> 13 with v12 refusal test.
-- [ ] Task 11 Tests for every AC above, each mutation-proven per this repo's standing protocol (copy
+- [x] Task 11 Tests for every AC above, each mutation-proven per this repo's standing protocol (copy
       to scratchpad + SHA256 before mutating; restore by copying back, never `git checkout`).
-- [ ] Task 12 (OPERATOR-OWNED) Live Smoke above, then Dev Agent Record.
+- [x] Task 12 (OPERATOR-OWNED) Live Smoke above, then Dev Agent Record. **PASS 7/7** (operator, two
+      pads, flip config [3,3]): Ruin Vanguard summons; Bloodhound Step's roll travels further with the
+      same duration and is invulnerable throughout; Frostbite visibly slows walk and run, including on
+      a blocked hit; Bloodlust doubles damage both ways; Vampiric Aura heals while attacking; all nine
+      deferred effects cast cleanly with no error or crash; regression and fps fine.
 
 ## Open Questions (for the readiness gate; none blocks authoring, none is a STOP)
 
@@ -422,6 +429,17 @@ edit, full suite after, `git diff --stat` under `src/state/`, golden hash / key 
   session's commit attribution rule; validation worth proving is committed as a test, never
   written-then-deleted.
 
+- **Operator rulings issued with the dev-pass instruction (2026-09-22), recorded as rulings:**
+  - **N10** Re-casting a timed buff while it is active REFRESHES its duration (no stacking; two
+    Bloodlusts are still 2x). Round end and debug reset clear every active timed rule and armed trigger.
+    Vampiric Aura heals 50% of the damage ACTUALLY removed from the target (after block and all
+    multipliers, capped by the target's remaining HP).
+  - **N11** All seven Deck 1 cards and all 14 effect resources are authored with ids and costs; numeric
+    effect exports exist only for the five effects implemented here. Deferred effects get their numbers
+    in their own stories.
+  - **N12** (asked mid-pass, operator answered) The Deck 1 2-copy card is Honed Bolt / Counterspell; the
+    other six cards are 3 copies each (`deck-1-spec.md:12` left it unspecified).
+
 ### Project Structure Notes
 
 - New folder: `data/effects/` (design-shape call, locked by this story's own scope, R-item 1 of the
@@ -469,13 +487,116 @@ edit, full suite after, `git diff --stat` under `src/state/`, golden hash / key 
 
 ### Agent Model Used
 
-(not yet dev-passed)
+Claude Opus 5 (1M context), gds-dev-story, 2026-09-22 (one HALT for a memory reap, resumed the same day).
 
 ### Debug Log References
 
+- Before-baseline (pre-edit): `C:\dev\_65a-suite-before.txt` -- 936 / 0 / 8454 state, 67/67 integration.
+- After (final, the second counted full run): `C:\dev\_65a-suite-after.txt` -- 972 / 0 / 9137 state, 67/67
+  integration. State 19:30:37-19:30:49, integration 19:30:50-19:35:14.
+- Full record: `C:\dev\_65a-dev.md`. Golden probe output and mutation logs: `C:\dev\_65a-mut\`.
+- Review: `C:\dev\_65a-review.md`. Review FIX pass: record `C:\dev\_65a-fix.md`, suite
+  `C:\dev\_65a-fix-suite.txt` -- 980 / 0 / 9183 state, 67/67 integration. Its mutation logs
+  (`M16`, `M17a`, `M17b`, `M18`, `M19`, `G1`) and `FIX.*.orig` backups are in the same `C:\dev\_65a-mut\`.
+
 ### Completion Notes List
 
+- **Suite:** before 936 / 0 / 8454 + 67/67 integration; after 972 / 0 / 9137 + 67/67 integration (+36 tests,
+  +683 assertions). Dev-iteration SUBSET runs between the two counted runs are disclosed in `C:\dev\_65a-dev.md`.
+- **Golden** `d437432f` -> `59e9a42c`, re-baselined once, three causes measured separately (`timed_rules`
+  presence; `last_resolved_card` presence at rest; its t22 value). Key paths 206 -> 210; per-player keys
+  31 -> 33 (no hero-nested key). `RecordFile.FORMAT_VERSION` 12 -> 13, v12 refused hard.
+- **Mutations:** M1-M15 all KILLED, none GREEN (table below).
+- **HALT and resume (2026-09-22):** the first mutation batch ran in the background and was reaped for low
+  memory with M5 applied; `match_state.gd` was restored from its SHA-verified backup. Root cause found on
+  resume: the M5 snippet was malformed (a comment after a `\` continuation), so the test file failed to
+  parse and the scratch runner hung. Resumed with every mutation in the foreground, a fail-fast runner
+  and a hard kill timeout.
+- Task 12 (live smoke) is OPERATOR-OWNED and left unchecked.
+
+#### Review fix pass (2026-09-22, `C:\dev\_65a-fix.md`) -- EXTENDS the notes above, replaces none of them
+
+- Contract `C:\dev\_65a-review.md`: 1 blocking + 13 non-blocking. **B1 and N1-N12 applied; N13 is
+  operator-confirmation only and needed no code.** ACs and Operator Rulings untouched -- no fix required
+  one, so the pass never had to STOP.
+- **Suite (a THIRD counted full run, `C:\dev\_65a-fix-suite.txt`):** 980 / 0 / 9183 state + 67/67
+  integration, against the dev pass's 972 / 0 / 9137. +8 tests, +46 assertions, all in
+  `test_spell_framework.gd` (24 -> 32). Reason for the run: a full-suite check that the review fixes --
+  which touch the movement seat, the contact ladder, `PlayerState` and the runner's deck seam -- moved
+  nothing else. State 22:12:53-22:13:05, integration 22:13:12-22:18:14.
+- **Golden NEPOMAKNUT at `59e9a42c`, measured in BOTH directions:** green against the unchanged constant
+  in the counted run, and mutation G1 (one hex digit flipped) printed the live fixture hash back as
+  `59e9a42c...ad86b1bd`. No re-baseline; the constant was never edited outside that restored mutation.
+- **Two AC texts now name a test by its OLD name** (`:195`, `:199`, quoting
+  `test_colours_are_card_color_enum_values_three_per_colour` and
+  `test_each_colour_prices_one_card_at_each_tier`). N12 renamed both, and each new docstring records its
+  old name verbatim so the AC stays greppable. The ACs themselves are UNCHANGED and still satisfied --
+  they require the tests to be repointed at Deck 1, not to keep a particular name.
+- **A new public method on `PlayerState`:** `clear_resolved_card()`, named by the B1 ruling.
+- Nothing committed. `project.godot` untouched; no new file added to the repo by this pass.
+#### Mutation table (provenance: `C:\dev\_65a-mut\<label>.txt`, backups `<label>.*.orig`, SHA-256 verified on restore)
+
+| # | Mutation | File | Test run | Result |
+|---|---|---|---|---|
+| M1 | melee-seat funnel removed | match_state.gd | test_spell_framework.gd | KILLED (3 tests) |
+| M2 | unit-seat funnel removed | match_state.gd | test_spell_framework.gd | KILLED (1 test) |
+| M3 | dodged-unblockable-seat funnel removed | match_state.gd | test_unblockable_defense.gd | KILLED (1 test) |
+| M4 | landing-package-seat funnel removed | match_state.gd | test_unblockable_defense.gd | KILLED (1 test) |
+| M5 (void x2) | Vampiric lifesteal from a minion hit | match_state.gd | test_spell_framework.gd | VOID: the mutant snippet put a comment after a `\` continuation -> Parse error -> the scratch runner hung (the likely cause of the first reap). Resume attempt: hung Godot killed, file restored, SHA `D21086E7...` verified. Snippet fixed, runner made fail-fast on load errors, helper given a 240 s hard kill. |
+| M5 | Vampiric lifesteal from a minion hit (hero-index gate dropped) | match_state.gd | test_spell_framework.gd | KILLED (1 test: caster healed 82.0 vs 80.0). Mutated SHA `FA8ED4F3...`, restored `D21086E7...` verified. `M5.txt` |
+| M6 | Bloodhound consumed by a stamina-refused roll | match_state.gd | test_spell_framework.gd | KILLED (1 test). Mutated `BC673EF1...`, restored `D21086E7...` verified. `M6.txt` |
+| M7 | Frostbite consumed on a deflected hit | match_state.gd | test_spell_framework.gd | KILLED (1 test). Mutated `9DB261C0...`, restored `D21086E7...` verified. `M7.txt` |
+| M8 | last-card record not written on pitch activation | match_state.gd | test_spell_framework.gd | KILLED (1 test). Mutated `F21C277B...`, restored `D21086E7...` verified. `M8.txt` |
+| M9 | pitch effect resolved at staging | match_state.gd | test_spell_framework.gd | KILLED (1 test). Mutated `ABA82E10...`, restored `D21086E7...` verified. `M9.txt` |
+| M10 | deck list ignores copies (runner `_derive_deck_contents`) | match_runner.gd | integration test_deck_injection | KILLED (counts + composition). Orig/restored `BE5E21A9...` verified, mutated `B05A7C18...`. `M10.txt` |
+| M11 | spell flag ignored by the resolver | card_effect_resolver.gd | test_spell_framework.gd | KILLED (2 tests). Orig/restored `8F0BCF13...` verified, mutated `AACCEEC7...`. `M11.txt` |
+| M12 | Bloodhound i-frame clamp removed | match_state.gd | test_spell_framework.gd | KILLED (36 vs 30 ticks). Mutated `E3B6F755...`, restored `D21086E7...` verified. `M12.txt` |
+| M13 | Frostbite slow skips block-walk | match_state.gd | test_spell_framework.gd | KILLED (4.0 vs 2.0). Mutated `92778925...`, restored `D21086E7...` verified. `M13.txt` |
+| M14 | re-cast STACKS the magnitude (N10 refresh broken) | player_state.gd | test_spell_framework.gd | KILLED (a 4.0 vs 2.0; hit 24 vs 12). Orig/restored `1B81CE01...` verified, mutated `8196122A...`. `M14.txt` |
+| M15 | round end clears no timed rule (N10) | match_state.gd | test_spell_framework.gd | KILLED (1 test). Mutated `627925F9...`, restored `D21086E7...` verified. `M15.txt` |
+| M16 | totem counted as a Bloodlust body (`_is_bloodlust_body` returns true for a non-minion) | match_state.gd | test_spell_framework.gd | KILLED (1 test: totem took 6.0 vs 3.0). Mutated `940E8418...`, restored `9B6D7A4A...` verified. `M16.txt` |
+| M17 (two states) | the stale-boost guard `else: cancel_rule(RULE_ROLL_BOOST)` deleted | match_state.gd | test_spell_framework.gd | **GREEN first** (`M17a.txt`, 31/0/211 -- the guard had no test, exactly as review N10 predicted). Test STRENGTHENED, not weakened: new `test_an_unboosted_roll_cancels_a_stale_roll_boost_instead_of_riding_it` seats a stale boost directly. Re-run with the SAME mutant: **KILLED** (`M17b.txt`, stale boost still active, roll 18.0 vs 6.0). Mutated `7B39D051...`, restored `9B6D7A4A...` verified. |
+| M18 | the BASIC-seat last-resolved write removed | match_state.gd | test_spell_framework.gd | KILLED (1 test, 2 assertions: `["", -1]` vs `["sf_hound", 0]`). Mutated `11BA3405...`, restored `9B6D7A4A...` verified. `M18.txt` |
+| M19 | the new B1 last-resolved CLEAR removed from BOTH paths (round end and `_reset_player`) | match_state.gd | test_spell_framework.gd | KILLED (1 test, 4 assertions -- both seats on both paths). Mutated `5816ABBE...`, restored `9B6D7A4A...` verified. `M19.txt` |
+| G1 | one hex digit flipped in the `GOLDEN` constant (the golden's SECOND direction) | test_determinism.gd | test_determinism.gd | KILLED (`G1.txt`) -- and its failure message PRINTS the live fixture hash as `59e9a42c...ad86b1bd`, which is the measured proof the golden did not move. Mutated file restored, `D7F903F8...` verified. |
+
+**M1-M15: no mutation came back GREEN.** Every KILLED verdict was checked for real `[XX]` assertion
+failures (no `FAILED TO LOAD` / Parse Error in its output).
+
+**M16-M19 + G1 are the REVIEW FIX PASS's mutations** (2026-09-22, `C:\dev\_65a-fix.md`), added under the
+same protocol. M17 is the one that came back GREEN, and it is recorded in BOTH states rather than
+retried until it looked good: the guard was real but unproven, so the TEST gained an assertion until
+the same mutant died.
+
+An earlier M1-M5 attempt was VOID (PowerShell `&` did not wait for the GUI Godot binary; empty outputs,
+files restored, SHA verified); rerun with `Start-Process -Wait`.
+
 ### File List
+
+All uncommitted in the working tree.
+
+- Modified src: `src/state/match_state.gd`, `src/state/player_state.gd`,
+  `src/state/economy/card_effect_resolver.gd`, `src/state/resources/card_effect.gd`,
+  `src/state/resources/feature_flags.gd`, `src/main/match_runner.gd`, `src/systems/intent_recorder.gd`,
+  `src/systems/record_file.gd`
+- New src: `src/state/resources/deck_list.gd`, `src/state/resources/deck_list.gd.uid`
+- Modified data: `data/balance/balance_config.tres` (deck_size 24 -> 20), `data/feature_flags.tres` (spells)
+- New data: `data/cards/{ruin_vanguard,grave_ward,drain,rocksling,bloodhound_step,honed_bolt,frostbite}.tres`;
+  `data/effects/{summon_ruin_vanguard,culling,grave_ward,raise_dead,drain,vampiric_aura,rocksling,boom,
+  bloodhound_step,bloodlust,honed_bolt,counterspell,frostbite,corpse_bomb}.tres`; `data/decks/deck_1.tres`
+- New tests: `test/state/test_spell_framework.gd` (+ `.uid`), `test/live_summon_deck.gd` (+ `.uid`)
+- Modified state tests: `test_card_authoring.gd`, `test_card_effect_resolution.gd`,
+  `test_card_observation.gd`, `test_card_play.gd`, `test_data_resources.gd`, `test_deck_and_hand.gd`,
+  `test_determinism.gd`, `test_draw_delay_and_reshuffle.gd`, `test_intent_recorder.gd`,
+  `test_live_reload.gd`, `test_pitch_staging.gd`, `test_record_file.gd`, `test_replay_identity.gd`,
+  `test_unblockable_defense.gd`
+- Modified integration tests: `test_card_database.gd`, `test_deck_injection.gd`,
+  `test_cast_success_cue_live.gd`, `test_pitch_hud_live.gd`, `test_replay_contacts.gd`,
+  `test_replay_entry_is_inert.gd`, `test_replay_verifier_tool.gd`, `test_summon_actor_live.gd`,
+  `test_summon_spawn_containment_live.gd`, `test_two_units_converge_live.gd`, `test_unit_aim_live.gd`,
+  `test_unit_approach_live.gd`, `test_unit_attack_live.gd`, `test_unit_spawn_placement_live.gd`,
+  `test_unit_strike_alignment_live.gd`
+- Docs: this story file; `docs/implementation-artifacts/sprint-status.yaml` (story_notes / last_updated only)
 
 ## Change Log
 
@@ -488,3 +609,21 @@ edit, full suite after, `git diff --stat` under `src/state/`, golden hash / key 
   -> `ready-for-dev`. Rulings recorded in the decision-log, session "6-5 scope + 6-5a readiness gate",
   `6-5a/R1..Rn`. `docs/planning-artifacts/deck-1-spec.md` added (byte-identical copy of the operator's
   spec); every story reference to it repointed to the repo path.
+- 2026-09-22: dev pass (gds-dev-story). Tasks 1-11 implemented and tested; golden re-baselined
+  `d437432f` -> `59e9a42c`; FORMAT_VERSION 12 -> 13; mutation proofs M1-M15 all killed; suite
+  972/0/9137 + 67/67. One HALT (memory reap during mutations) and a same-day resume. Status -> `review`.
+  Task 12 (live smoke) awaits the operator. Nothing committed.
+- 2026-09-22: code review (report-only, `C:\dev\_65a-review.md`) -- CHANGES REQUESTED, 1 blocking /
+  13 non-blocking.
+- 2026-09-22: review FIX pass (`C:\dev\_65a-fix.md`). B1 and N1-N12 applied under operator rulings;
+  N13 needed no code. Four new mutations M16-M19 plus the golden probe G1; M17 came back GREEN and the
+  test was strengthened until the same mutant died, both states recorded. Golden UNMOVED at `59e9a42c`,
+  measured both directions. Suite 980/0/9183 + 67/67. ACs and Operator Rulings untouched. Status stays
+  `review`; Task 12 still awaits the operator. Nothing committed.
+- 2026-09-22: close-out chain (commits `C1`-`C5`). Live smoke PASS 7/7 (operator, two pads, flip
+  [3,3]); Status -> `done`. Two AC 13 test citations updated for the N12 rename (claims unchanged).
+  Before the chain's Step 0 suite run, a malformed format string in a new test's assertion message
+  (`test_spell_framework.gd:439`, a literal `50%` colliding with GDScript's `%` format operator) threw
+  a Godot engine `ERROR:` on every run without failing the assertion; fixed (`50%%`) and the full suite
+  re-run clean, because `test/run_all.sh` fails the harness gate on any `^ERROR:` line regardless of
+  test outcome, and this one would have broken a later run for no real defect.
