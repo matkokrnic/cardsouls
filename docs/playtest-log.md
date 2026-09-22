@@ -504,3 +504,14 @@ Smoke 6-10 na padu (P2), P1 tipkovnica s X/V/B za unblockable. Oba nacina provje
 - Slucajni klik L3 dok trcim: nije problem na smokeu.
 - fps stabilan.
 Sve prolazi. Koji je nacin bolji (hold ili toggle) odlucujem na playtestu.
+
+6-5a spell framework + Deck 1 buffovi, smoke na dva pada, flip [3,3] — PASS 7/7.
+Vanguard summona, Bloodhound roll ide dalje i cijeli je neranjiv, Frostbite vidljivo uspori
+protivnika (i na blokiranom pogotku), Bloodlust duplira štetu na obje strane, Vampiric Aura
+vraca HP dok udaram. Svih devet neimplementiranih efekata se odigra bez greške i bez pada.
+Regresija OK, fps stabilan.
+
+Nalazi (nisu regresija, prezentacijski dug):
+- karte ne pokazuju cijene — treba i cijena normalnog casta i cijena pitcha (mana + orbovi);
+- ruka bi vjerojatno trebala biti ikone umjesto kartica s tekstom, HUD treba redizajn;
+- nema nikakvog vizualnog odjeka kad se karta odigra.
