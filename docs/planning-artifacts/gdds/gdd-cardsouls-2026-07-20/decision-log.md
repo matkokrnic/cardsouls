@@ -11162,3 +11162,74 @@ all nine entries; comment-only naming is no longer allowed.
 17 non-blocking. Every blocking item (B1-B11) and every non-blocking item that was a pure
 text/citation correction were fixed in this same session; no second gate round was run (the `6-9`
 precedent for a same-session fix-and-clear). Story Status -> `ready-for-dev`.
+
+## Session 2026-09-22 -- 6-5a close-out
+
+Dev pass, code review and review fix pass all complete uncommitted at session open (`C:\dev\_65a-dev.md`,
+`C:\dev\_65a-review.md`, `C:\dev\_65a-fix.md`); this session commits the chain (`C1`-`C5`) and rules on
+what the dev pass and the review left the operator. Rulings continue the numbering `6-5a/R1..R19`
+already used by the readiness gate.
+
+`6-5a/R20` (dev-pass N10) Re-casting a timed buff while active REFRESHES its duration, never stacks
+(two Bloodlusts stay 2x); round end and debug reset clear every active timed rule and armed trigger;
+Vampiric Aura heals 50% of damage ACTUALLY removed (post-block/multipliers, capped by remaining HP).
+`6-5a/R21` (dev-pass N11) All seven Deck 1 cards and all 14 effect resources are authored with ids and
+costs; numeric effect exports exist only for the five effects this story implements, deferred effects
+get their numbers in their own stories. `6-5a/R22` (dev-pass N12) The Deck 1 2-copy card is Honed
+Bolt/Counterspell; the other six cards are 3 copies each.
+
+`6-5a/R23` (review B1) `PlayerState.clear_resolved_card()` clears the hashed last-resolved-card record
+at BOTH seats on BOTH round-crossing paths (`_end_round`, `_reset_player`), named the NINTH reset
+exception; pinned in both directions by an extended test and mutation M19. `6-5a/R24` (N1) "never
+reordered" dropped from the funnel comments/assertions -- the block/dodge-then-funnel order is
+UNOBSERVABLE (both scalar factors), not enforced; no behaviour change. `6-5a/R25` (N2) Frostbite's
+trigger is no longer consumed on a killing blow or a computed slow duration `<= 0`. `6-5a/R26` (N3)
+`start_rule` with a `<= 0` duration now cancels the rule instead of writing a stale magnitude onto a
+stopped window. `6-5a/R27` (N4) The Frostbite slow is gated off the ATTACKING state, pinned with
+in-test non-zero attack-phase multipliers (authored data untouched, `BC/R3` isolation intact).
+`6-5a/R28` (N5) ACCEPTED as-is: run stamina drain is unscaled by the slow, documented at the seat and
+pinned by a test that authors a non-zero drain rate in test. `6-5a/R29` (N6) `_derive_deck_contents`
+gains `Invariant.check`s on list alignment, unknown ids, non-positive copies and expanded size; no
+`max_copies` check at this seam, so `test/live_summon_deck.gd`'s deliberate 20-over-3 still passes.
+`6-5a/R30` (N7) `_active_deck_list()` null-checks its load with a named failure; `capture_inject_deck`
+moved to after the non-empty check so a degraded run can no longer record an empty deck as replayable.
+`6-5a/R31` (N8) The hp-based (not `action_state`-based) lifesteal gate is ruled deliberate -- an
+`action_state`-based gate would let a mutual-kill heal revive the attacker before step 8 -- documented
+in `_apply_lifesteal`'s docstring and pinned by a mutual-kill test. `6-5a/R32` (N9) Three Vampiric Aura
+gaps closed: a hero hit that kills a unit heals off what the unit HAD, the max-hp clamp returns the
+heal actually applied, a dead caster heals nothing. `6-5a/R33` (N10, review's own numbering) Four new
+mutations added (M16 totem-as-Bloodlust-body, M17 the stale roll-boost guard, M18 the BASIC-seat
+last-resolved write, M19 the R23 clear); M17 came back GREEN first (the guard was real but unproven,
+exactly as the review predicted) and the TEST was strengthened, never the mutant weakened, until the
+same mutant KILLED -- both states recorded in the story file's mutation table. `6-5a/R34` (N11) Both
+Deck-1 authoring tests that were vacuous-on-shrink now iterate the `DECK_1_IDS` literal through a
+`_card_for(id)` helper that fails loudly on a missing card. `6-5a/R35` (N12) The two tests review found
+misnamed are renamed (`test_deck_1_colours_are_card_color_values_green_3_red_2_blue_2`,
+`test_each_deck_1_card_is_priced_at_its_authored_mode_1_and_mode_4_prices`); each docstring records its
+old name verbatim, the `test_no_pitch_effect_consumer_ships` convention.
+
+Accepted deviations (review N13, operator-owned, ruled now): `6-5a/R36` Vampiric Aura heals off a
+HERO hit on a UNIT target, not only a hero target -- R4's "damage the caster's HERO deals" contrasts
+the SOURCE (hero vs. minion/totem), not the target; live-play difference accepted (Aura sustains
+through minion trading). `6-5a/R37` `match_runner.deck_list_override` is APPROVED as a new public
+runner seam -- AC 13 already sanctioned "injecting a summon-bearing TEST deck list through the
+runner's deck-list seat"; this is that seam made concrete. `6-5a/R38` Deck 1 prices are pinned exactly
+in `test_card_authoring.gd`, a named departure from `BC/R3`'s no-test-edit-on-a-retune precedent
+(content, not balance, the story's own AC 13 ruling).
+
+Golden re-baselined ONCE, `d437432f` -> `59e9a42c` (measured in both directions by the review fix
+pass's mutation G1). Three causes, each measured separately: (1) new hashed key `timed_rules`,
+PRESENCE at rest; (2) new hashed key `last_resolved_card`, PRESENCE at rest; (3) `last_resolved_card`
+VALUE from the golden fixture's t22 BASIC cast. Key-path set 206 -> 210; per-player top-level keys
+31 -> 33; no hero-nested key. `RecordFile.FORMAT_VERSION` 12 -> 13, v12 refused hard -- caused by the
+new required `pitch_effects` record key (AC 6) plus changed resolution semantics (buff ids now apply),
+not by signal arity or "new hashed fields" generically.
+
+Budget interval, first before-baseline to the last suite run (dev pass BEFORE `18:15:22` to the review
+fix pass's counted run end `22:18:14`): **4 h 2 m 52 s**. Suite finished at 980/0/9183 state + 67/67
+integration, golden `59e9a42c`.
+
+DEFERRED (not this story): presentation debt surfaced by the live smoke -- cards must show BOTH prices
+(normal cast and pitch, mana and orbs), a clause added to `6-5b`; hand rendered as icons instead of
+text cards, plus a visual response when a card resolves, both deferred to a Tier B presentation story
+after `6-5f`.
