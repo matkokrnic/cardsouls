@@ -11095,3 +11095,70 @@ R9 ~1 h budget only in the wall-clock sense; the dev pass was not timed separate
 - Smoke finding 8b, counter from a held block impossible on pad -> the playtest / retune block.
 - Accidental L3 under TOGGLE while running (not a problem on this smoke) -> the playtest / retune block.
 - `epics.md` bullets for `6-9` / `6-10` and the GDD "cash-in or feint" wording -> E6 close-out docs debt.
+
+## Session 2026-09-22 -- 6-5 scope + 6-5a readiness gate
+
+`6-5-spell-resolution` is SPLIT into six board keys per operator ruling, scope cut from the S4 section
+of `C:\dev\_65-inventory.md` (report-only inventory at `92f0dd9`): `6-5a-spell-framework-and-buffs`
+(framework, whole-id dispatch, pitch-effect channel, damage funnel, timed-rule seat, hashed
+last-resolved-card record, Deck 1 selection; Ruin Vanguard/Bloodlust/Vampiric Aura/Bloodhound
+Step/Frostbite) depends on nothing prior in the split; `6-5b-corpses-and-own-minions` (corpse
+lifetime, Grave Ward, Culling, Drain, Raise Dead) depends on `6-5a`; `6-5c-hero-cast-honed-bolt`
+(cast window, Honed Bolt, stun, root) depends on `6-5a`; `6-5d-hero-and-corpse-projectiles`
+(hero/corpse projectile sources, Rocksling-without-Boulder, Corpse Bomb, carries M5/M6,
+`deferred-work.md:302-303`) depends on `6-5b`/`6-5c`; `6-5e-boulder-injection` (Boulder foreign-card
+injection, Boom) depends on `6-5d`; `6-5f-counterspell` (Counterspell, undo semantics for
+`6-5a..6-5e`) depends on all prior, and inherits `6-5-spell-resolution`'s status as the E6 CLOSE-OUT
+story and `R-SPELL`'s forcing point. All six keys are `backlog # Tier A` on the split.
+
+Deck 1 is ADOPTED as the deck both players use until a second deck exists. Spec:
+`docs/planning-artifacts/deck-1-spec.md` (copied into the repo this session, byte-identical to the
+operator's `C:\dev\_deck1-spec.md`). Operator amendments to the spec, binding for `6-5a` onward:
+Culling costs 3 mana + 1 green orb, no field cap (`T[99]` is "effectively no cap"); Rocksling places
+a Boulder on EVERY hit, `boulders_per_cast` T[3]; Honed Bolt is 4 mana, 4 damage, STUN 0.4 s then ROOT
+2.5 s; Counterspell is RETROACTIVE, exact undo semantics ruled at `6-5f`; card modes 2 (unblockable)
+and 3 (colour defence) are unchanged on every Deck 1 card; attack spells (Rocksling, Honed Bolt, any
+hero-cast projectile) get a visible cast the opponent can react to, buffs resolve instantly but get a
+visual; Mixamo animation clips are supplied by the operator when the consuming story (`6-5c`/`6-5d`)
+comes up.
+
+`6-5a/R1` R-SPELL discharged by Deck 1 across `6-5a..6-5f`; the three `spell_*` fixtures
+(`ember_lash`, `frost_dart`, `bramble_snare`) stay dormant, not in the deck list -- recorded as an
+AMENDMENT of `epics.md:238-240`, the edit owed at the `6-5` series close-out (`6-5f`), not now.
+`6-5a/R2` Bloodhound Step: 3x distance / 2x i-frames (clamped to roll duration), authored as a
+distance multiplier 3.0 superseding the spec's `T[1.5]`; a roll refused for stamina does NOT consume
+the armed flag. `6-5a/R3` Bloodlust: 10 s, hero AND owned minions 2x damage out/in; totems are NOT
+minions for any Deck 1 effect. `6-5a/R4` Vampiric Aura: 15 s, 50% of the caster's HERO-source damage
+only (melee/unblockable/projectile) heals; minion and totem damage do not. `6-5a/R5` Frostbite:
+triggers on the next CONFIRMED hero melee hit (blocked counts, deflected does not), slows walk, run,
+AND block-walk to 50% for 4 s -- spec deviation, block-walk added; roll/CHARGING/counter
+travel/attack lunge are NOT slowed. `6-5a/R6` Counterspell's undo is NOT built in `6-5a`; every timed
+effect gets exactly one stop point, every one-shot effect returns its applied delta, so a future undo
+has something to act on. `6-5a/R7` Pitch cost stays the shipped 6-2/6-3a seat: mana at staging, orbs
+at activation; no mana-at-activation seat added. `6-5a/R8` Buff visuals are grey placeholders this
+story; attack-cast Mixamo clips are owed at `6-5c`/`6-5d`.
+
+`6-5a/R9` (B1) Deck size is the sum of the deck list's copies (Deck 1 = 20). `BalanceConfig.deck_size`
+is KEPT, changed `24` -> `20` in `balance_config.tres:110` by the dev pass, asserted equal to the list
+sum by a new authoring test. `6-5a/R10` (B2/OQ4) `DeckList` APPROVED: new `Resource` schema under
+`src/state/resources/`, authored at `data/decks/deck_1.tres`, an ORDERED `Array` of entries (id +
+copies, never a `Dictionary`), read only by the runner; each entry's copies `<=` `max_copies`,
+asserted in a test. `6-5a/R11` (B3) Frostbite's trigger seat and deflect/block boundary fixed per R5
+above. `6-5a/R12` (B4) Bloodhound's authored numbers fixed per R2 above; AC 15's "exact spec numbers"
+clause excludes it. `6-5a/R13` (B5/OQ1,OQ3) Timed-rule seat shape and no-op token naming stay the dev
+pass's choice; OQ4 closes per R10. `6-5a/R14` (B6) R2's i-frame-window citation corrected to 0.6 s
+vs. a 0.5 s roll, `data/balance/balance_config.tres:124-125`; ticks `min(2 x 18, 30) = 30`. `6-5a/R15`
+(B7) AC 7 corrected to the real four `card_cast_resolved` emit sites (`:3036`, `:3240`, `:3425`,
+`:3568`) and every connect/emit site named. `6-5a/R16` (B8) AC 6 gains the full `pitch_effects`
+capture-channel wiring; Golden Prediction cause 3 corrected to the new required record key plus
+changed resolution semantics, not signal arity or "new hashed fields". `6-5a/R17` (B9) AC 13's
+test-rewrite inventory completed with every item the gate found missing, including the 12 live tests
+that need a summon dealt on Deck 1. `6-5a/R18` (B10) AC 16 corrected: the four buff effects gate on
+`spells`; Ruin Vanguard keeps gating on `minions`. `6-5a/R19` (B11) AC 15's no-op owner-naming is a
+resolver-side `Dictionary[StringName, StringName]` constant, machine-checked by a unit test asserting
+all nine entries; comment-only naming is no longer allowed.
+
+`6-5a` readiness gate ROUND 1 (`C:\dev\_65a-gate.md`, report-only): VERDICT NOT READY, 11 blocking /
+17 non-blocking. Every blocking item (B1-B11) and every non-blocking item that was a pure
+text/citation correction were fixed in this same session; no second gate round was run (the `6-9`
+precedent for a same-session fix-and-clear). Story Status -> `ready-for-dev`.
