@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-22
+# last_updated: 2026-09-23
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -128,7 +128,7 @@ development_status:
   6-9-click-to-commit: done  # Tier A
   6-10-card-mode-toggle: done  # Tier B
   6-5a-spell-framework-and-buffs: done  # Tier A
-  6-5b-corpses-and-own-minions: backlog  # Tier A
+  6-5b-corpses-and-own-minions: ready-for-dev  # Tier A
   6-5c-hero-cast-honed-bolt: backlog  # Tier A
   6-5d-hero-and-corpse-projectiles: backlog  # Tier A
   6-5e-boulder-injection: backlog  # Tier A
@@ -152,7 +152,7 @@ story_notes:
   6-9-click-to-commit: "done 2026-09-21, Tier A close-out complete (mode 2 is click-to-commit: a press commits, no hold, no feint, supersedes 6-1 hold/feint and 6-6b feint-bait clauses; FORMAT_VERSION 11 -> 12 hard refusal of v11; 6-9/R10-R19; golden d437432f unmoved, suite 916/0/8051 + 66/66; review APPROVE WITH FINDINGS, N2 fixed by runtime allow-lists; live smoke PASS solo; decision-log session 6-9 close-out; GDD cash-in-or-feint wording and epics.md bullets owed at the E6 close-out)."
   6-10-card-mode-toggle: "done 2026-09-22, Tier B close-out complete (pad card mode gains a TOGGLE scheme beside HOLD via GamepadProfile.card_mode_toggle, default HOLD, plus a hand-row LIFT; 6-10/R1-R16; golden d437432f unmoved, suite 936/0/8454 + 67; review APPROVE WITH FINDINGS, N1/N2/N4 fixed in tests; live smoke PASS both schemes; decision-log session 6-10 close-out; HOLD vs TOGGLE judged at the playtest / retune block)."
   6-5a-spell-framework-and-buffs: "done 2026-09-22, Tier A close-out complete (spell framework, whole-id dispatch, timed-rule seat + damage funnel, hashed last-resolved-card record, Deck 1 selection per 6-5a/R1-R38; golden d437432f -> 59e9a42c, three causes measured; FORMAT_VERSION 12 -> 13, v12 refused hard; review 1 blocking / 13 non-blocking, all applied; suite 980/0/9183 + 67/67; live smoke PASS 7/7; decision-log session 6-5a close-out)."
-  6-5b-corpses-and-own-minions: "Tier A. Split from 6-5-spell-resolution (2026-09-22): corpse lifetime into state, Grave Ward, Culling, Drain (nearest-minion fact), Raise Dead. Depends on 6-5a."
+  6-5b-corpses-and-own-minions: "ready-for-dev 2026-09-23, readiness gate fix pass complete (Tier A; corpse lifetime into state per-corpse on UnitBoard, Grave Ward per-corpse extension superseding deck-1-spec.md's timed-rule wording, Culling with flat kill_cap export default 99, Drain facing-angle fact superseding 'nearest', Raise Dead, hand-row both-prices; death seat created on UnitBoard; refusal split mode 1/mode 4 superseding 6-5a AC 5 for these four effects; undo deferred entirely to 6-5f; decision-log session 6-5b scope + readiness gate, 6-5b/R1-R17; AC 23's price-channel shape left open for the operator). Depends on 6-5a (done)."
   6-5c-hero-cast-honed-bolt: "Tier A. Split from 6-5-spell-resolution (2026-09-22): hero cast window, Honed Bolt, stun, root. Depends on 6-5a."
   6-5d-hero-and-corpse-projectiles: "Tier A. Split from 6-5-spell-resolution (2026-09-22): hero/corpse projectile sources, Rocksling-without-Boulder, Corpse Bomb, carries M5/M6 (deferred-work.md:302-303). Depends on 6-5b, 6-5c."
   6-5e-boulder-injection: "Tier A. Split from 6-5-spell-resolution (2026-09-22): Boulder foreign-card injection, Boom. Depends on 6-5d."

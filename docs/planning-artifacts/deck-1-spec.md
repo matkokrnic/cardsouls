@@ -47,3 +47,23 @@ Attack spells (Rocksling, Honed Bolt, any hero-cast projectile) have a visible c
 2. Honed Bolt stun+root into unblockable.
 3. Vampiric Aura %.
 4. Three Boulders lock three of four hand slots (boulders_per_cast can drop to 1).
+
+## Amendment (2026-09-22, recorded by 6-5b's authoring pass)
+
+**Fireball** (operator's idea, accepted) REPLACES Bloodlust as the pitch of Bloodhound Step: an X-cost
+pitch spell that spends ALL of the caster's current mana (minimum 3, cap 10) plus 1 red orb; a homing
+projectile dealing damage per mana spent, T[1.5] per mana (tunable). Built in 6-5d, sharing the
+hero-projectile machinery Rocksling needs. Until 6-5d lands, Bloodhound Step stays paired with
+Bloodlust exactly as 6-5a shipped it, so the card is never left with an empty pitch. Bloodlust stays
+in code and simply leaves the Deck 1 card list once Fireball takes its slot. (Recorded in
+`docs/implementation-artifacts/6-5b-corpses-and-own-minions.md`'s Deferred section; owned by 6-5d.)
+
+## Amendment (2026-09-23, recorded by 6-5b's readiness gate fix pass)
+
+**Grave Ward** (line 19) is amended: "For the next T[20] s your corpses do not despawn... New:
+per-player timed rule suspending corpse despawn" is SUPERSEDED by operator ruling `6-5b/R7`, on the
+same `6-5a/R2` precedent as the Drain facing-rule supersession (`6-5b/R6`) above. Grave Ward does not
+start a per-player timed rule; at resolution it ADDS T[20] s to the remaining lifetime of each corpse
+the caster owns that exists at that instant, and repeated casts stack additively rather than
+refreshing. A corpse created after resolution is unaffected. (Recorded in
+`docs/implementation-artifacts/6-5b-corpses-and-own-minions.md`'s Discrepancies section.)
