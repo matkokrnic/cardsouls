@@ -36,11 +36,27 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://test/integration/test_deck_injection.gd
 ## (read ${PIPESTATUS[0]} / set -o pipefail so grep can't mask the exit code.)
 
-## The nine authored ids in ASCENDING order — what sorted_ids() must return.
+## STORY 6-5a (AC 11-14) REWRITES THE COMPOSITION HALF OF THIS FILE, each rewrite named where it happens.
+## The composition is no longer a sorted-prefix walk of the library up to each `max_copies`: it is the
+## AUTHORED DECK LIST (`data/decks/deck_1.tres`) expanded in list order. The sorted ACCESSOR is still a
+## library-wide CardDatabase fact and is still pinned below, now over sixteen ids.
+
+## The authored ids in ASCENDING order — what sorted_ids() must return. REWRITTEN BY STORY 6-5a
+## (AC 13): nine -> sixteen, the whole library (Deck 1's seven plus the nine dormant fixtures, R1).
 const EXPECTED_SORTED_IDS: Array[StringName] = [
-	&"bramble_snare", &"ember_lash", &"frost_dart", &"hellforge_totem", &"imp_summoner",
-	&"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"verdant_wardstone",
+	&"bloodhound_step", &"bramble_snare", &"drain", &"ember_lash", &"frost_dart", &"frostbite",
+	&"grave_ward", &"hellforge_totem", &"honed_bolt", &"imp_summoner", &"rocksling",
+	&"ruin_vanguard", &"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"verdant_wardstone",
 ]
+
+## Story 6-5a (AC 13/AC 14): Deck 1's seven ids and their copies, in LIST order -- LITERAL on purpose,
+## the same don't-re-derive-from-the-thing-under-test reason as the list above. The injected
+## composition must be exactly these, each repeated its copies, in this order.
+const DECK_1_IDS: Array[StringName] = [
+	&"ruin_vanguard", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
+	&"frostbite",
+]
+const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 3, 2, 3]
 
 var _frames := 0
 var _notes: Array[String] = []
@@ -69,7 +85,7 @@ func _physics_process(_delta: float) -> bool:
 			_notes.append("live decks are EMPTY — the injection seam did not reach state")
 		counts_ok = _check_counts(state, config)
 		composition_ok = _check_composition(state, db, config)
-		pitch_ok = _check_pitch_costs(runner, state, db)
+		pitch_ok = _check_pitch_costs(runner, state, db) and _check_pitch_effects(runner, state, db)
 	else:
 		_notes.append("could not reach runner / MatchState / CardDatabase / authored config")
 
@@ -170,7 +186,39 @@ func _sorted_strings(ids: Array) -> Array[String]:
 	return out
 
 
+## Story 6-5a (AC 6): the PITCH-EFFECT map, derived from the live library, injected, and captured -- the
+## pitch-cost check directly above verbatim: exactly the cards that author a `pitch_effect` (Deck 1's
+## seven), the SAME authored resource reaching state, and the same ids on the record.
+func _check_pitch_effects(runner: Node, state: MatchState, db: Node) -> bool:
+	var expected: Array[StringName] = []
+	for id: StringName in db.sorted_ids():
+		var card := db.get_card(id) as CardData
+		if card != null and card.pitch_effect != null:
+			expected.append(id)
+	if _sorted_strings(expected) != _sorted_strings(DECK_1_IDS):
+		_notes.append("library pitch effects %s != Deck 1's seven" % [expected])
+		return false
+	var injected := _sorted_strings(state._pitch_effects.keys())
+	if injected != _sorted_strings(expected):
+		_notes.append("injected pitch-effect ids %s != authored %s" % [injected, expected])
+		return false
+	for id: StringName in expected:
+		if state._pitch_effects[id] != (db.get_card(id) as CardData).pitch_effect:
+			_notes.append("injected pitch effect for %s is not the authored effect" % id)
+			return false
+	var recorded := _sorted_strings((runner.recorded_stream() as IntentRecorder).replay_pitch_effects().keys())
+	if recorded != _sorted_strings(expected):
+		_notes.append("recorded pitch-effect ids %s != authored %s" % [recorded, expected])
+		return false
+	return true
+
+
 ## AC 4. Deck + hand is the injected composition; check the walk's rule on it directly.
+## REWRITTEN BY STORY 6-5a (AC 13/AC 14): the rule is now the DECK LIST's. The composition's size is the
+## list's copy sum (and the authored `deck_size`, 20); its multiset is exactly the list's per-entry
+## copies -- each within `max_copies` -- and it holds no id the list does not name; and the PRE-SHUFFLE
+## order (the recorded composition, which is what reached `inject_deck`) is the list expanded in list
+## order. That last clause REPLACES 3-3's sorted-prefix fill rule, which the deck list abolishes.
 func _check_composition(state: MatchState, db: Node, config: BalanceConfig) -> bool:
 	var all: Array = state.p1.deck.to_array()
 	all.append_array(state.p1.hand.occupied_ids())
@@ -178,36 +226,48 @@ func _check_composition(state: MatchState, db: Node, config: BalanceConfig) -> b
 	for id: StringName in all:
 		counts[id] = int(counts.get(id, 0)) + 1
 	var ok := true
-	if all.size() != config.deck_size:
-		_notes.append("composition holds %d, authored deck_size %d" % [all.size(), config.deck_size])
+	var list_sum := 0
+	for copies in DECK_1_COPIES:
+		list_sum += copies
+	if all.size() != list_sum or all.size() != config.deck_size:
+		_notes.append("composition holds %d; Deck 1's copy sum %d, authored deck_size %d" % [
+			all.size(), list_sum, config.deck_size])
 		ok = false
-	# Every id honours its own max_copies, and at least one is AT the cap (non-vacuity: a walk
-	# that ignored max_copies entirely would still pass the <= check if no card ever reached it).
-	var any_at_cap := false
-	for id: StringName in counts:
+	# Re-derived from the DECK LIST's per-entry copies (was: max_copies / at-cap): every listed id
+	# appears exactly its listed copies, within its own max_copies, and nothing unlisted appears.
+	for index in DECK_1_IDS.size():
+		var id := DECK_1_IDS[index]
 		var card := db.get_card(id) as CardData
 		if card == null:
-			_notes.append("composition holds unknown id %s" % id)
+			_notes.append("Deck 1 id %s is not in the library" % id)
 			ok = false
 			continue
-		if int(counts[id]) > card.max_copies:
-			_notes.append("%s appears %d times, max_copies %d" % [id, int(counts[id]), card.max_copies])
+		if int(counts.get(id, 0)) != DECK_1_COPIES[index]:
+			_notes.append("%s appears %d times, the list says %d" % [id, int(counts.get(id, 0)),
+				DECK_1_COPIES[index]])
 			ok = false
-		if int(counts[id]) == card.max_copies:
-			any_at_cap = true
-	if not any_at_cap:
-		_notes.append("no card reached its max_copies — the cap is unproven on this data")
+		if DECK_1_COPIES[index] > card.max_copies:
+			_notes.append("%s lists %d copies over its max_copies %d" % [id, DECK_1_COPIES[index],
+				card.max_copies])
+			ok = false
+	for id: StringName in counts:
+		if not DECK_1_IDS.has(id):
+			_notes.append("composition holds %s, which Deck 1 does not list (a fixture leaked?)" % id)
+			ok = false
+	# THE RULE ITSELF, rewritten: the composition that reached `inject_deck` -- the RECORDED one, taken
+	# before the seeded shuffle -- is the list expanded IN LIST ORDER. Both players receive it.
+	var expected_order: Array[StringName] = []
+	for index in DECK_1_IDS.size():
+		for _copy in DECK_1_COPIES[index]:
+			expected_order.append(DECK_1_IDS[index])
+	var runner: Node = root.get_node_or_null("Main")
+	var recorded: Array[StringName] = (runner.recorded_stream() as IntentRecorder).replay_deck_contents()
+	if recorded != expected_order:
+		_notes.append("injected composition %s is not Deck 1 in list order" % [recorded])
 		ok = false
-	# THE RULE ITSELF: sorted-order PREFIX fill. Walking sorted_ids(), no id may be taken unless
-	# every id before it was already at its cap. A composition assembled in any other order (or
-	# from an unsorted accessor) breaks this even when the totals happen to match.
-	var exhausted_prefix := true
-	for id: StringName in db.sorted_ids():
-		var card := db.get_card(id) as CardData
-		var taken := int(counts.get(id, 0))
-		if taken > 0 and not exhausted_prefix:
-			_notes.append("%s was taken while an earlier sorted id was below its cap" % id)
-			ok = false
-		if card == null or taken < card.max_copies:
-			exhausted_prefix = false
+	var p2_all: Array = state.p2.deck.to_array()
+	p2_all.append_array(state.p2.hand.occupied_ids())
+	if _sorted_strings(p2_all) != _sorted_strings(all):
+		_notes.append("P2's composition differs from P1's -- both players get Deck 1 (AC 11)")
+		ok = false
 	return ok

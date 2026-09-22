@@ -19,3 +19,7 @@ extends Resource
 @export var minions: bool = false                # E4
 @export var totems: bool = false                 # E4
 @export var equipment: bool = false              # E8
+## Story 6-5a (AC 16): the SPELL layer -- the Deck 1 buff effects (Bloodlust, Vampiric Aura,
+## Bloodhound Step, Frostbite). Off, a buff card still casts (mana/orbs spent, card discarded,
+## replacement owed) and simply applies nothing. Ruin Vanguard is a summon and gates on `minions`.
+@export var spells: bool = false                 # E6

@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CardEffect" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/card_effect.gd" id="1_effect"]
+
+[resource]
+script = ExtResource("1_effect")
+effect_id = &"vampiric_aura"
+duration_seconds = 15.0
+lifesteal_fraction = 0.5

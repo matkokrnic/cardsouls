@@ -181,6 +181,17 @@ const HASHED: Array[String] = [
 	# and on which tick it lands). It reaches the hash through `PlayerState.to_snapshot()`'s ONE new
 	# `landing` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
 	"player_state.landing_window",
+	# Story 6-5a (AC 8): the TIMED-RULE SEAT's three index-aligned arrays classify HASHED, on
+	# `defense_window`'s exact test -- every rule CROSSES TICKS (a buff's duration, an armed trigger's
+	# window) and DECIDES AN OUTCOME (a damage multiplier, a heal, a roll's reach, a slow). All three
+	# reach the hash through `PlayerState.to_snapshot()`'s ONE `timed_rules` key, so no exemption is
+	# needed and UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"player_state.rule_windows", "player_state.rule_a", "player_state.rule_b",
+	# Story 6-5a (AC 10): the LAST RESOLVED CARD's two halves classify HASHED -- they CROSS TICKS and
+	# 6-5f's Counterspell decides an outcome from them. Card identity in the hash is ruled safe here on
+	# the `pitch_state._card_ids` precedent (a resolved card is public), held as a String VALUE. Both
+	# ride the ONE `last_resolved_card` key: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"player_state.last_resolved_card_id", "player_state.last_resolved_card_mode",
 	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
 	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the
@@ -344,6 +355,10 @@ const INJECTED: Array[String] = [
 	# reasons verbatim -- never produced by the tick, changed only through `inject_pitch_costs`, which IS
 	# a capture channel (`capture_inject_pitch_costs`). UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
 	"match_state._pitch_costs",
+	# Story 6-5a (AC 6): the injected PITCH-EFFECT map, classified INJECTED for `_pitch_costs`'s reasons
+	# verbatim -- changed only through `inject_pitch_effects`, which IS a capture channel
+	# (`capture_inject_pitch_effects`). UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"match_state._pitch_effects",
 	# Story 5-4 (AC 8/AC 10/AC 12): the ORB POOL's per-colour MAXIMUM, and it lands in THIS bucket
 	# rather than beside `mana_pool._maximum` in HASHED -- the one asymmetry between the two pools,
 	# named here because this file is where it becomes checkable.
@@ -666,6 +681,10 @@ func _record_a_driven_run() -> Dictionary:
 	var pitch_costs := _pitch_costs()
 	record.capture_inject_pitch_costs(pitch_costs)
 	ms.inject_pitch_costs(pitch_costs)
+	# Story 6-5a (AC 6): the SIXTH content channel, captured and injected LAST (empty is legal).
+	var pitch_effects: Dictionary[StringName, CardEffect] = {}
+	record.capture_inject_pitch_effects(pitch_effects)
+	ms.inject_pitch_effects(pitch_effects)
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			var retuned := _retuned_config()

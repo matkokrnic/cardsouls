@@ -358,11 +358,26 @@ func test_the_board_snapshot_key_is_a_plain_count() -> void:
 ## AC 9, the negative half: NOTHING resembling an identity, an effect id or a position appears
 ## anywhere in the per-player snapshot. Scanned over the whole flattened snapshot rather than the
 ## one key, so a second board key smuggled in elsewhere is caught too.
+##
+## REWRITTEN BY STORY 6-5a (AC 10): ONE path is now EXEMPT BY NAME, and only one --
+## `/last_resolved_card[0]`, the last-resolved card's id, hashed as a String VALUE by ruling (a resolved
+## card is PUBLIC, the `pitch` key's staged-card precedent; never a StringName, never a key). The
+## exemption is asserted rather than assumed: the path must actually carry a TYPE_STRING (not a
+## StringName) naming the card just cast, and every OTHER path is scanned exactly as before.
+const LAST_RESOLVED_ID_PATH := "/last_resolved_card[0]"
+
+
 func test_no_effect_id_or_position_reaches_the_snapshot() -> void:
 	var ms := _make_match()
 	_advance(ms, _cast_intent(1), InputIntent.new())
+	var snap: Dictionary = ms.p1.to_snapshot()
 	var offenders: Array[String] = []
-	_scan_snapshot(ms.p1.to_snapshot(), "", offenders)
+	_scan_snapshot(snap, "", offenders)
+	var exempt := "%s (%s)" % [LAST_RESOLVED_ID_PATH, type_string(TYPE_STRING)]
+	assert_true(offenders.has(exempt),
+		"sanity: the last-resolved card id reached the snapshot as a String VALUE (6-5a, AC 10)")
+	assert_eq(typeof(snap["last_resolved_card"][0]), TYPE_STRING, "...a String, never a StringName")
+	offenders.erase(exempt)
 	assert_eq(offenders.size(), 0,
 		"a StringName or an object reached the per-player snapshot (AC 9 counts-only): %s"
 				% ", ".join(offenders))

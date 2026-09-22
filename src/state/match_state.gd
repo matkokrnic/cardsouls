@@ -91,7 +91,12 @@ signal deflect_landed(attacker_slot: int, target_slot: int, defense_color: int)
 ## built for a signal that has no listener — speculative machinery of exactly the kind the
 ## pose_id retirement precedent exists to prevent. A consumer that needs the effect resolves
 ## `id -> CardEffect` on the presentation side, where CardDatabase is already readable.
-signal card_cast_resolved(slot: int, card_id: StringName)
+##
+## Story 6-5a (AC 7): A THIRD ARGUMENT, `mode` -- the `Enums.ModeKind` the card resolved in, as an int.
+## Without it a consumer cannot tell a Mode ① cast of a card from a Mode ④ ACTIVATION of the same card,
+## and only those two can carry a buff. Emitted at all four resolution sites, each passing its own
+## mode. No new seam: the arity grows, the seam family does not.
+signal card_cast_resolved(slot: int, card_id: StringName, mode: int)
 
 ## Story 3-5b (AC 6): a player's discard has just been folded back into their deck and they are
 ## VULNERABLE for the authored window. Queued in step 6 at the reshuffle, drained by the runner
@@ -517,6 +522,15 @@ var _card_colors: Dictionary[StringName, Enums.CardColor] = {}
 ## orb price COPIED into `PitchState` at staging.
 var _pitch_costs: Dictionary[StringName, CardCastCondition] = {}
 
+## Story 6-5a (AC 6): the injected per-card PITCH EFFECT map, id -> CardEffect -- the SIXTH injection
+## seam, `_card_effects`'s twin for Mode ④, resolved at ACTIVATION (`_resolve_pitch_activate`) and
+## never at staging. NOT TOTAL, on `_pitch_costs`'s ruling: a card with no pitch effect authored is
+## legal content whose activation resolves to `REASON_NO_EFFECT_ENTRY`.
+##
+## NEVER HASHED, like all five siblings: injected CONTENT, changed only through a seam that IS a capture
+## channel (`capture_inject_pitch_effects`).
+var _pitch_effects: Dictionary[StringName, CardEffect] = {}
+
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
 ## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
@@ -624,6 +638,11 @@ func advance(intents: Array[InputIntent]) -> void:
 	# no landing path, defended or not, touches it (AC 11).
 	p1.defense_window.tick()
 	p2.defense_window.tick()
+	# Story 6-5a (AC 8): the TIMED-RULE SEAT counts down HERE, beside every other D4 window, on the
+	# identical idiom -- ticked in one place, read at the seats that apply each rule. A round-over tick
+	# returns at step 1b and never reaches this line, so a running buff freezes with the round.
+	p1.tick_rules()
+	p2.tick_rules()
 	# Story 6-2 (AC 9/AC 14e): both Pitch Zone FIZZLE countdowns advance HERE, beside every other D4
 	# timer, and the step-6 expiry seat reads the result -- the `pending_draw` idiom verbatim (ticked at
 	# step 2, consumed later in the same tick). Seated after step 1b, so a round-over tick never reaches
@@ -946,6 +965,14 @@ func inject_card_colors(colors: Dictionary[StringName, Enums.CardColor]) -> void
 ## `IntentRecorder.SOUND_CONTENT_ORDER` stays one straight line the runner and the record both follow.
 func inject_pitch_costs(costs: Dictionary[StringName, CardCastCondition]) -> void:
 	_pitch_costs = costs.duplicate()
+
+
+## Story 6-5a (AC 6): the PITCH-EFFECT injection seam -- the sixth content channel, `inject_pitch_costs`
+## directly above followed for everything including its ABSENCE of checks, and for its reason: a card
+## without a pitch effect is legal content, and an empty map is legal. Injected LAST, after the pitch
+## costs, so `IntentRecorder.SOUND_CONTENT_ORDER` stays one straight line.
+func inject_pitch_effects(effects: Dictionary[StringName, CardEffect]) -> void:
+	_pitch_effects = effects.duplicate()
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -1441,7 +1468,23 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState, intent:
 					balance.roll_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
 				hero.reject_action(&"roll", &"insufficient_stamina")
 				return false
-			hero.enter_roll(balance_ticks.roll_duration_ticks, balance_ticks.roll_iframe_ticks,
+			# Story 6-5a (R2): BLOODHOUND STEP IS CONSUMED HERE, and only here -- BELOW the stamina
+			# refusal, so a roll refused for stamina leaves the armed trigger untouched for the next
+			# attempt. The boosted roll keeps its duration; its distance multiplier rides a ROLL_BOOST
+			# rule that runs exactly as long as the roll (read by `_resolve_movement`), and its i-frames
+			# are multiplied and then CLAMPED to the roll's duration, so the `1-9/R3` audit's
+			# i-frames <= roll invariant holds for the boosted roll too (min(2 x 18, 30) = 30).
+			var iframe_ticks := balance_ticks.roll_iframe_ticks
+			if player.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED):
+				iframe_ticks = mini(int(round(float(iframe_ticks)
+						* player.rule_b[PlayerState.RULE_BLOODHOUND_ARMED])),
+						balance_ticks.roll_duration_ticks)
+				player.start_rule(PlayerState.RULE_ROLL_BOOST, balance_ticks.roll_duration_ticks,
+						player.rule_a[PlayerState.RULE_BLOODHOUND_ARMED], 0.0)
+				player.cancel_rule(PlayerState.RULE_BLOODHOUND_ARMED)
+			else:
+				player.cancel_rule(PlayerState.RULE_ROLL_BOOST)
+			hero.enter_roll(balance_ticks.roll_duration_ticks, iframe_ticks,
 					_roll_world_direction(hero, intent.move_dir, slot))
 		HeroState.ActionState.BLOCKING:
 			# Story 1-8 (R-D1): affordability PRECONDITION only — no spend, no regen-delay
@@ -1968,7 +2011,30 @@ func _resolve_contacts() -> Array[int]:
 				continue
 			damage *= balance.block_damage_multiplier
 			blocked = true
+		# Story 6-5a (AC 9): THE DAMAGE FUNNEL, seated AFTER the block multiplier.
+		#
+		# 6-5a REVIEW N1: the dev pass said "and never reordered with it", which is a claim no test can
+		# falsify and none makes -- both steps are scalar multiplies, so `(d * BLOCK) * 2.0` and
+		# `(d * 2.0) * BLOCK` are the same number (the authored factors are powers of two, so exactly
+		# the same, not merely close). THE ORDER IS UNOBSERVABLE, at rest and under Bloodlust alike.
+		# What IS load-bearing is that the funnel sees post-block damage at all: Vampiric Aura heals off
+		# the hp actually removed, so the funnel must not run on a number the block has yet to cut.
+		# Should a non-commuting step (a clamp, a floor) ever land between them, the order becomes real
+		# and a test must be added in the same breath.
+		# At rest (no Bloodlust on either side) it returns `damage` untouched, so every hit this seat has
+		# ever resolved is bit-identical. The hp read around `take_damage` is what makes Vampiric Aura
+		# heal the damage ACTUALLY removed (N10): after block and every multiplier, capped by what the
+		# target had left.
+		damage = _funnel_damage(attacker, attacker_index, target, TargetingService.HERO_INDEX, damage)
+		var hp_before := target.hero.get_hp()
 		target.hero.take_damage(damage)
+		_apply_lifesteal(attacker, attacker_index, hp_before - target.hero.get_hp())
+		# Story 6-5a (R5): FROSTBITE'S TRIGGER SEAT -- a CONFIRMED hero melee hit on the enemy hero,
+		# BLOCKED INCLUDED (blocked is confirmed, `1-8`). The deflect path `continue`d above and the
+		# i-frame drop earlier, so neither reaches this line; unit targets branched off before the
+		# hero ladder, and projectile / unit attackers fail the hero-index gate.
+		if attacker_index == TargetingService.HERO_INDEX:
+			_consume_frostbite(attacker, target)
 		# Story 4-3b (AC 8, `4-3b/R5`): `hit_landed` IS emitted when a UNIT damages a HERO — the hero
 		# is really hurt, so the telegraph flash and sting on that hero are correct. A DELIBERATE
 		# ASYMMETRY against `4-3a/R12`'s suppression for unit TARGETS, recorded here so a later gate
@@ -2289,7 +2355,13 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# `4-3a/R21a` narrowed the Open Question to rather than an assertion: step 1b returns from
 	# advance() before step 4 is ever reached, so a frozen tick never resolves a contact and
 	# therefore never kills a unit. Pinned in test_unit_damage_and_death.gd.
-	target.units.apply_damage_at(index, _damage_against_unit(attacker, attacker_index))
+	# Story 6-5a (AC 9): the UNIT damage seat, through the same funnel as the hero seats -- a minion on
+	# either side is Bloodlust's, a totem never is (R3). Vampiric Aura heals off a hero's hit on a unit
+	# too (R4: all damage the caster's hero deals), measured as the hp the unit actually lost.
+	var unit_hp_before := target.units.hp_at(index)
+	target.units.apply_damage_at(index, _funnel_damage(attacker, attacker_index, target, index,
+			_damage_against_unit(attacker, attacker_index)))
+	_apply_lifesteal(attacker, attacker_index, unit_hp_before - target.units.hp_at(index))
 	# Story 4-4 (AC 16 second sentence / AC 18): a projectile that lands on a UNIT is consumed here,
 	# the hero ladder's common consumption line applied to the short ladder. AC 16's second sentence
 	# is satisfied BY ABSENCE rather than by code: this ladder has no i-frame, block or deflect rung
@@ -2381,6 +2453,89 @@ func _attacker_attack_damage(attacker: PlayerState, attacker_index: int) -> floa
 		return 0.0
 	var attack := kind.attack_at(0)
 	return attack.damage if attack != null else 0.0
+
+
+## Story 6-5a (AC 9, R3): THE DAMAGE FUNNEL -- ONE function every damage seat calls with the damage it
+## has already computed (block / dodge multipliers included), returning what Bloodlust makes of it. The
+## four seats are the melee/unit/projectile-on-hero seat in `_resolve_contacts`, the unit seat in
+## `_resolve_unit_contact`, the dodged-unblockable seat and the unblockable landing package.
+##
+## BIT-IDENTICAL AT REST, by construction rather than by `x * 1.0`: with no Bloodlust running on either
+## side neither branch is taken and `damage` comes back as the same float it went in.
+##
+## THE BUFFED BODIES ARE THE HERO AND ITS MINIONS, NEVER A TOTEM (R3) -- and never a projectile, which
+## today only a totem fires. Outgoing uses the attacker side's dealt multiplier, incoming the target
+## side's taken multiplier; both sides buffed compound (2x out, then 2x in).
+func _funnel_damage(attacker: PlayerState, attacker_index: int, target: PlayerState,
+		target_index: int, damage: float) -> float:
+	if attacker.is_rule_active(PlayerState.RULE_BLOODLUST) \
+			and _is_bloodlust_body(attacker, attacker_index):
+		damage *= attacker.rule_a[PlayerState.RULE_BLOODLUST]
+	if target.is_rule_active(PlayerState.RULE_BLOODLUST) and _is_bloodlust_body(target, target_index):
+		damage *= target.rule_b[PlayerState.RULE_BLOODLUST]
+	return damage
+
+
+## Whether `index` on `player`'s side is a body Bloodlust covers: the hero, or a MINION on the board.
+## The minion test reads the record's kind index against the authored minion kind's index -- the
+## resolver's `KIND_MINION` name, never a second literal.
+func _is_bloodlust_body(player: PlayerState, index: int) -> bool:
+	if index == TargetingService.HERO_INDEX:
+		return true
+	if is_projectile_index(index):
+		return false
+	return player.units.kind_index_at(index) == balance.kind_index_of(CardEffectResolver.KIND_MINION)
+
+
+## Story 6-5a (R4, N10): VAMPIRIC AURA -- the caster's HERO heals `lifesteal_fraction` of the damage it
+## ACTUALLY removed. `removed` is measured by the caller as the target's hp before minus after, so it is
+## already past block, every multiplier and the target's own floor. Minion, totem and projectile damage
+## never heal (the hero-index gate); a dead caster never heals.
+##
+## RETURNS THE HEAL IT ACTUALLY APPLIED (R6: a one-shot effect's delta, clamped by the caster's max hp),
+## so a later undo has something to reverse.
+##
+## 6-5a REVIEW N8: THE hp-BASED LIVENESS GATE (`hero.is_alive()`, i.e. hp > 0) IS DELIBERATE AND MUST NOT
+## BE "MADE CONSISTENT" WITH `_attacker_is_dead`, which tests `action_state == DEAD`. The two disagree on
+## exactly one tick and that is the point: on a MUTUAL-KILL tick a hero at 0 hp has not yet been written
+## `DEAD` (step 8 does that), so its queued fact still resolves and deals full funnelled damage -- but a
+## heal here would put it back above zero BEFORE step 8 reads liveness, reviving the attacker and
+## flipping the round's outcome. Switching this gate to `action_state != DEAD` introduces that revive.
+## Pinned by `test_spell_framework.gd::test_vampiric_aura_never_revives_its_caster_on_a_mutual_kill`.
+func _apply_lifesteal(attacker: PlayerState, attacker_index: int, removed: float) -> float:
+	if attacker_index != TargetingService.HERO_INDEX \
+			or not attacker.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA) \
+			or removed <= 0.0 or not attacker.hero.is_alive():
+		return 0.0
+	var before := attacker.hero.get_hp()
+	attacker.hero.heal(removed * attacker.rule_a[PlayerState.RULE_VAMPIRIC_AURA])
+	return attacker.hero.get_hp() - before
+
+
+## Story 6-5a (R5): the armed Frostbite trigger is CONSUMED by this confirmed hero melee hit and the slow
+## lands on the struck enemy hero -- a REFRESH if one is already running (N10). A trigger that is not
+## armed does nothing.
+##
+## 6-5a REVIEW N2 (operator ruling): THE TRIGGER IS NOT SPENT ON A HIT THAT CAN CARRY NO SLOW. Two such
+## hits, both of which the dev pass consumed for nothing:
+##   (a) THE KILLING BLOW -- the hit that drops the enemy to 0 hp. `_end_round` clears the slow on the
+##       same tick, so cancelling here would burn a 4-mana card's whole payload on a corpse. The gate is
+##       hp-based (`is_alive()`), matching `_apply_lifesteal`'s, because `DEAD` is not written until
+##       step 8 (see that function's own N8 note).
+##   (b) A ZERO-OR-SHORTER SLOW -- an effect authored with `slow_duration_seconds` that converts to <= 0
+##       ticks. `start_rule` would cancel the slot (N3) while the trigger was spent regardless.
+## Both leave the trigger ARMED for the next confirmed hit, the stamina-refused roll's precedent (R2).
+func _consume_frostbite(attacker: PlayerState, target: PlayerState) -> void:
+	if not attacker.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED):
+		return
+	if not target.hero.is_alive():
+		return
+	if int(attacker.rule_b[PlayerState.RULE_FROSTBITE_ARMED]) <= 0:
+		return
+	target.start_rule(PlayerState.RULE_FROSTBITE_SLOW,
+			int(attacker.rule_b[PlayerState.RULE_FROSTBITE_ARMED]),
+			attacker.rule_a[PlayerState.RULE_FROSTBITE_ARMED], 0.0)
+	attacker.cancel_rule(PlayerState.RULE_FROSTBITE_ARMED)
 
 
 ## Story 4-6 (AC 9/AC 10/AC 11): the step-1c LOCK seat for one player. INGEST then VALIDATE.
@@ -2989,27 +3144,13 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# "each resolve to a distinct on-board kind AT CAST TIME". The resolver answers two questions in
 	# sequence — is this a summon at all (unchanged), and if so WHICH kind — and this seat APPLIES
 	# the second answer by turning the kind NAME into the plain int index the record stores.
-	var effect: CardEffect = _card_effects.get(played)
-	if CardEffectResolver.outcome(effect, flags) == CardEffectResolver.OUTCOME_SUMMON:
-		# Story 4-4 (AC 1/AC 6): the kind index and THAT KIND'S authored maximum are both read
-		# INLINE here (CONSTRAINT C) and handed DOWN to the board, which is what keeps `UnitBoard` a
-		# pure container with no config dependency — the `4-3a/R6` shape, widened by exactly one
-		# argument. `balance` is non-null on this path by construction: the cast reached here through
-		# CastEvaluator, which a pre-injection MatchState never does.
-		var kind_index := balance.kind_index_of(CardEffectResolver.kind_for(effect))
-		var kind := balance.kind_at(kind_index)
-		# AN UNAUTHORED KIND PUTS NOTHING ON THE BOARD, LOUDLY-BY-ABSENCE RATHER THAN SILENTLY AS A
-		# MINION (`BalanceConfig.kind_index_of`'s own "never a fallback to another kind" contract,
-		# the `TargetingService.priority_named` posture applied to a second lookup). Substituting a
-		# default kind would summon a minion from a totem card with nothing saying so.
-		#
-		# NOTHING BELOW THIS BRANCH IS CONDITIONAL ON IT, which is `4-1/R3`/`4-1/R10` unchanged: the
-		# cast has already passed CastEvaluator, so mana stays spent, the card stays discarded and
-		# the replacement stays owed. A cast that resolves to an unauthored kind is a SUCCESSFUL
-		# cast that happens to put nothing on the board, exactly as a `spell_*` no-op is — and it
-		# takes no `reject_action`, on the same ruling.
-		if kind != null:
-			player.units.add(kind.max_hp, kind_index)
+	#
+	# STORY 6-5a (AC 4/AC 5): the APPLY half now lives in `_apply_card_effect`, SHARED with pitch
+	# activation so the whole-id dispatch has exactly one apply seat. The summon branch moved there
+	# verbatim; its behaviour is unchanged.
+	_apply_card_effect(player, _card_effects.get(played))
+	# Story 6-5a (AC 10): the hashed last-resolved-card record, written at the resolution seat.
+	player.record_resolved_card(played, Enums.ModeKind.BASIC)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
 	# exactly here; it is REPLACED, not kept behind a flag. The debt is incremented and the window
 	# started, and the delivery happens at the end of this same step 6 — immediately if the
@@ -3033,7 +3174,53 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# until the delivery announces again — which is a true statement about the match and exactly
 	# what the HUD should render while a draw is in flight, not a gap to paper over.
 	player.notify_cards_changed()
-	_queue.push(card_cast_resolved.emit.bind(slot, played))
+	_queue.push(card_cast_resolved.emit.bind(slot, played, Enums.ModeKind.BASIC))
+
+
+## Story 6-5a (AC 4/AC 5, AC 15/AC 16): THE ONE APPLY SEAT for a resolved card effect, reached from the
+## two resolutions that can carry one -- a Mode ① cast and a Mode ④ ACTIVATION. `CardEffectResolver`
+## COMPUTES the outcome and touches nothing; this function APPLIES it inside `advance()`'s ordered
+## dispatch (D6). Every outcome that is not handled below -- a no-op, a closed layer, a missing entry,
+## an unknown id -- applies nothing, and the cast has still resolved (`4-1/R3`/`4-1/R10`): nothing here
+## refunds and nothing reaches `reject_action`.
+##
+## EVERY BUFF IS STARTED ON THE CASTER'S TIMED-RULE SEAT, with its authored seconds converted to ticks
+## here, once, at the application (A1). Re-applying a running buff REFRESHES it (N10, `start_rule`).
+## `balance` is non-null on both paths by construction: a card only resolves after the step-6 deal ran.
+func _apply_card_effect(player: PlayerState, effect: CardEffect) -> void:
+	match CardEffectResolver.outcome(effect, flags):
+		CardEffectResolver.OUTCOME_SUMMON:
+			# Story 4-4 (AC 1/AC 6): the kind index and THAT KIND'S authored maximum are both read
+			# INLINE here (CONSTRAINT C) and handed DOWN to the board, which is what keeps `UnitBoard` a
+			# pure container with no config dependency — the `4-3a/R6` shape, widened by exactly one
+			# argument.
+			var kind_index := balance.kind_index_of(CardEffectResolver.kind_for(effect))
+			var kind := balance.kind_at(kind_index)
+			# AN UNAUTHORED KIND PUTS NOTHING ON THE BOARD, LOUDLY-BY-ABSENCE RATHER THAN SILENTLY AS A
+			# MINION (`BalanceConfig.kind_index_of`'s own "never a fallback to another kind" contract).
+			# A cast that resolves to an unauthored kind is a SUCCESSFUL cast that happens to put nothing
+			# on the board, exactly as a `spell_*` no-op is — and it takes no `reject_action`.
+			if kind != null:
+				player.units.add(kind.max_hp, kind_index)
+		CardEffectResolver.OUTCOME_BLOODLUST:
+			player.start_rule(PlayerState.RULE_BLOODLUST,
+					TimingWindow.seconds_to_ticks(effect.duration_seconds),
+					effect.damage_dealt_multiplier, effect.damage_taken_multiplier)
+		CardEffectResolver.OUTCOME_VAMPIRIC_AURA:
+			player.start_rule(PlayerState.RULE_VAMPIRIC_AURA,
+					TimingWindow.seconds_to_ticks(effect.duration_seconds),
+					effect.lifesteal_fraction, 0.0)
+		CardEffectResolver.OUTCOME_BLOODHOUND_STEP:
+			player.start_rule(PlayerState.RULE_BLOODHOUND_ARMED,
+					TimingWindow.seconds_to_ticks(effect.duration_seconds),
+					effect.roll_distance_multiplier, effect.roll_iframe_multiplier)
+		CardEffectResolver.OUTCOME_FROSTBITE:
+			# The slow's own duration rides the trigger as TICKS (`b`), converted here once, so the
+			# consuming hit starts the slow without re-reading the effect.
+			player.start_rule(PlayerState.RULE_FROSTBITE_ARMED,
+					TimingWindow.seconds_to_ticks(effect.duration_seconds),
+					effect.slow_speed_multiplier,
+					float(TimingWindow.seconds_to_ticks(effect.slow_duration_seconds)))
 
 
 ## Story 5-2 (AC 2, `5-2/R11`): the S6 GATE's reason -- named, and named HERE rather than on
@@ -3233,11 +3420,18 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	player.discard.add(card_id)
 	pitch.clear(slot)
 	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (b))
+	# Story 6-5a (AC 6): THE PITCH EFFECT RESOLVES HERE, AT ACTIVATION -- after the orbs are spent and the
+	# card has left the zone, through the same apply seat a Mode ① cast uses, off the card's PITCH effect
+	# (the sixth injected map). Staging (`_resolve_pitch_stage`) stays cost-only and reads no effect. The
+	# header's "No per-card effect resolves here" is SUPERSEDED by this line.
+	_apply_card_effect(player, _pitch_effects.get(card_id))
+	# Story 6-5a (AC 10): the second APPLY seat of the last-resolved-card record.
+	player.record_resolved_card(card_id, Enums.ModeKind.PITCH)
 	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	player.notify_cards_changed()
-	_queue.push(card_cast_resolved.emit.bind(slot, card_id))
+	_queue.push(card_cast_resolved.emit.bind(slot, card_id, Enums.ModeKind.PITCH))
 
 
 ## Story 6-2 (AC 8/AC 8a/AC 11): THE FIZZLE EXIT -- one of the two ways a card leaves the Pitch Zone
@@ -3422,7 +3616,7 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	player.notify_cards_changed()
-	_queue.push(card_cast_resolved.emit.bind(slot, played))
+	_queue.push(card_cast_resolved.emit.bind(slot, played, Enums.ModeKind.UNBLOCKABLE))
 
 
 ## Story 5-5 (AC 1/AC 3-8): mode ③ resolution -- THE ANSWER HALF of the RGB read exchange.
@@ -3565,7 +3759,7 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	player.notify_cards_changed()
-	_queue.push(card_cast_resolved.emit.bind(slot, played))
+	_queue.push(card_cast_resolved.emit.bind(slot, played, Enums.ModeKind.DEFENSE))
 
 
 ## Story 5-2 (AC 15-20): THE LANDING, resolved at step 3(a) on the tick the chargeup window expires.
@@ -3688,8 +3882,18 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 			# change: that is what makes this a genuine rung rather than a hardcoded "None".
 			var dodged := balance.unblockable_damage_percent_of_max_hp / 100.0 \
 					* target.hero.get_max_hp() * balance.dodged_unblockable_damage_multiplier
+			# Story 6-5a (AC 9): the funnel is SEATED after the dodge multiplier, the block seat's
+			# seating. Like there the ORDER is unobservable -- both are scalar factors, so the product
+			# is the same either way (6-5a REVIEW N1); what the seating buys is that `_apply_lifesteal`
+			# below measures the hp a POST-dodge number actually removed. A zero stays zero through any
+			# order, so a clean dodge stays silent under Bloodlust too.
+			dodged = _funnel_damage(player, TargetingService.HERO_INDEX, target,
+					TargetingService.HERO_INDEX, dodged)
 			if dodged > 0.0:
+				var dodged_hp_before := target.hero.get_hp()
 				target.hero.take_damage(dodged)
+				_apply_lifesteal(player, TargetingService.HERO_INDEX,
+						dodged_hp_before - target.hero.get_hp())
 				_queue.push(hit_landed.emit.bind(slot, opposing_slot, dodged, target.hero.get_hp()))
 		else:
 			# AC 18: the `attack_damage_percent_of_max_hp` expression verbatim, against the TARGET's
@@ -3752,7 +3956,13 @@ func _apply_landing_packages() -> void:
 		var opposing_slot := 1 - slot
 		var target := p2 if slot == 0 else p1
 		var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
+		# Story 6-5a (AC 9): the landing seat's funnel; the caster (`slot`'s player) is the attacker.
+		var caster := p1 if slot == 0 else p2
+		damage = _funnel_damage(caster, TargetingService.HERO_INDEX, target,
+				TargetingService.HERO_INDEX, damage)
+		var landing_hp_before := target.hero.get_hp()
 		target.hero.take_damage(damage)
+		_apply_lifesteal(caster, TargetingService.HERO_INDEX, landing_hp_before - target.hero.get_hp())
 		var already_down := target.hero.action_state == HeroState.ActionState.STUNNED \
 				and balance_ticks.is_knockdown_stun(target.hero.stun.duration_ticks())
 		if target.hero.is_alive() and not already_down:
@@ -4299,8 +4509,16 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 	# unreachable pre-injection too, and the authoring audit guarantees
 	# roll_duration_seconds > 0.
 	if player.hero.action_state == HeroState.ActionState.ROLLING:
-		player.hero.velocity = player.hero.roll_direction \
-				* (balance.roll_distance / balance.roll_duration_seconds)
+		# Story 6-5a (R2): a BLOODHOUND-boosted roll covers `roll_distance_multiplier` times the distance
+		# in the SAME duration -- the speed is what scales. An unboosted roll takes the original
+		# expression, untouched, so every roll this seat has ever resolved is bit-identical.
+		if player.is_rule_active(PlayerState.RULE_ROLL_BOOST):
+			player.hero.velocity = player.hero.roll_direction \
+					* (balance.roll_distance * player.rule_a[PlayerState.RULE_ROLL_BOOST]
+							/ balance.roll_duration_seconds)
+		else:
+			player.hero.velocity = player.hero.roll_direction \
+					* (balance.roll_distance / balance.roll_duration_seconds)
 	elif player.hero.action_state == HeroState.ActionState.CHARGING:
 		# Story 5-2 (AC 11, `5-2/R5`): HARD-ROOTED. A literal zero, not a multiplier read from
 		# balance -- `5-2/R5` refuses a `charging_move_speed_multiplier` field BY NAME, because a
@@ -4467,6 +4685,24 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 				speed = player.hero.move_speed
 			else:
 				speed = balance.walk_speed
+			# Story 6-5a (R5): FROSTBITE'S SLOW scales the gait just chosen -- walk, run AND block-walk
+			# (the ruling's named spec widening), and nothing else: roll, CHARGING, counter travel and
+			# the stun/get-up roots are separate branches above, and the attack LUNGE below is added
+			# after this and is never scaled. Unslowed, `speed` is untouched.
+			#
+			# 6-5a REVIEW N4 (operator ruling): THE `ATTACKING` GATE. R5 enumerates THREE gaits and the
+			# attack is not one of them -- but an ATTACKING hero falls through the BLOCKING /
+			# `actually_running` ladder to `walk_speed` and would be scaled here, a FOURTH gait the
+			# ruling never named. It is latent at shipped tuning only because all three
+			# `attack_*_move_speed_multiplier` values are authored `0.0`, so the product is zero either
+			# way; the moment a retune makes any phase multiplier non-zero, a TUNING-ONLY edit would
+			# change what the slow means. Gated here instead, so the three named gaits are the three
+			# scaled gaits at any tuning. Pinned by
+			# `test_spell_framework.gd::test_the_frostbite_slow_never_scales_the_attacking_gait`, which
+			# authors non-zero phase multipliers IN TEST (never in data/, `BC/R3`).
+			if player.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW) \
+					and state != HeroState.ActionState.ATTACKING:
+				speed *= player.rule_a[PlayerState.RULE_FROSTBITE_SLOW]
 		# Story 3-0b (AC6): the attack LUNGE, ADDED to the input-driven velocity rather than
 		# replacing it — the phase multiplier keeps scaling what the player steers, and the
 		# lunge is the separate committed push the swing itself carries. At the authored
@@ -4478,6 +4714,15 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 			speed *= _attack_phase_multiplier(player.hero.attack_phase())
 			lunge = _attack_lunge_velocity(player.hero)
 		player.hero.velocity = world_dir * speed + lunge
+		# 6-5a REVIEW N5 (operator ruling): THE FROSTBITE SLOW DOES NOT SCALE THIS DRAIN, and that is
+		# the RULED behaviour rather than an oversight -- a slowed hero pays the FULL stamina price for
+		# HALF the distance. The slow's tax is the distance, not the pool; R5 names no stamina term, and
+		# scaling the drain here would hand the slowed player a second, unstated effect (a longer sprint
+		# for the same bar) in the middle of being punished. `actually_running` above is likewise
+		# computed BEFORE the slow, so being slowed neither starts nor stops a run. The drain was already
+		# unscaled in the dev pass; what this pass adds is the ruling and its pin,
+		# `test_spell_framework.gd::test_the_frostbite_slow_halves_run_speed_and_not_run_stamina_drain`.
+		#
 		# Story 6-7 (AC 7): THE DRAIN SEAT, ratified -- `spend()` with the requested amount
 		# clamped to `get_current()`, which is what lets the pool reach an honest zero (`6-7/R16`)
 		# instead of refusing just above it, and restarts the regen-delay window on every
@@ -4845,6 +5090,16 @@ func _check_resolution() -> void:
 ## channel as every transition (the locked observation seam).
 func _end_round(loser: PlayerState, loser_index: int) -> void:
 	_round_over = true
+	# Story 6-5a (N10): round end clears every running timed rule and armed trigger on BOTH sides -- the
+	# one clear this function has ever carried, named as an operator ruling rather than a precedent.
+	#
+	# Story 6-5a (REVIEW B1, operator ruling): the LAST-RESOLVED-CARD record clears here too, beside the
+	# rules and for the rules' reason -- it is round-crossing hashed state, and a round that has ended
+	# holds no card that "was just resolved" for 6-5f's Counterspell to answer.
+	p1.clear_rules()
+	p2.clear_rules()
+	p1.clear_resolved_card()
+	p2.clear_resolved_card()
 	loser.hero.set_action_state(HeroState.ActionState.DEAD)
 	_queue.push(round_ended.emit.bind(loser_index))
 
@@ -4902,7 +5157,19 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 ## NOTHING (only the step-3 timer exit does), so this clear covers the one window a reset could inherit.
 ## `_end_round` again gains no matching clear.
 ##
-## These are SEVEN named exceptions; they do not open the reset's contract generally.
+## STORY 6-5a (N10): AN EIGHTH NAMED EXCEPTION -- the TIMED-RULE SEAT (every buff and armed trigger),
+## cleared in _reset_player below. Unlike the seven above, `_end_round` DOES gain the matching clear, by
+## operator ruling: a running Bloodlust must not survive into the round-over freeze either.
+##
+## STORY 6-5a (REVIEW B1, operator ruling): A NINTH NAMED EXCEPTION -- the LAST-RESOLVED-CARD RECORD,
+## cleared in _reset_player below and, like the eighth, in `_end_round` as well. The dev pass left it
+## cleared by NEITHER path, which made it the only round-crossing hashed field added since 4-1 without a
+## named exception: a reset re-armed the deal while the per-player snapshot still hashed the card
+## resolved BEFORE the reset, so a reset match and a fresh match were not at the same resting snapshot
+## at the same point. It follows `timed_rules` exactly, and both directions are pinned by
+## `test_spell_framework.gd::test_round_end_and_the_debug_reset_clear_every_rule`.
+##
+## These are NINE named exceptions; they do not open the reset's contract generally.
 func _apply_debug_reset() -> void:
 	_round_over = false
 	_reset_player(p1)
@@ -5056,3 +5323,9 @@ func _reset_player(player: PlayerState) -> void:
 	# (all three colours to zero, TDD 8.2). Different call site, same method, no modification -- and
 	# its own no-op-on-already-empty guard means a reset with no orbs earned signals nothing.
 	player.orbs.reset_all()
+	# Story 6-5a (N10): the eighth named exception -- every timed rule and armed trigger, see
+	# `_apply_debug_reset`.
+	player.clear_rules()
+	# Story 6-5a (REVIEW B1, operator ruling): the ninth named exception -- the last-resolved-card
+	# record, cleared beside the rules and for the same reason, see `_apply_debug_reset`.
+	player.clear_resolved_card()

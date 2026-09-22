@@ -855,7 +855,10 @@ func _assert_activation_refused(ms: MatchState, reason: StringName, occasion: St
 func _cast_resolutions(ms: MatchState) -> Array:
 	var out: Array = []
 	ms.card_cast_resolved.connect(
-		func(player_slot: int, card_id: StringName) -> void: out.append([player_slot, card_id]))
+		# Story 6-5a (AC 7): the third argument is the resolved mode; the PITCH value is pinned in
+		# test_spell_framework.gd, so this recorder keeps its two-element payload unfiltered.
+		func(player_slot: int, card_id: StringName, _mode: int) -> void:
+			out.append([player_slot, card_id]))
 	return out
 
 

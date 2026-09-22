@@ -119,6 +119,10 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 	# channel, shipping WITH `capture_inject_pitch_costs` -- the `5-2` colours precedent verbatim, this
 	# pin updated with intent while the channel check below is the falling guard. Sorted position.
 	"inject_pitch_costs",
+	# Story 6-5a (AC 6): `inject_pitch_effects` is MatchState's TWELFTH intake and the SIXTH content
+	# channel, shipping WITH `capture_inject_pitch_effects` -- the `6-2` pitch-cost precedent verbatim,
+	# this pin updated with intent while the channel check below is the falling guard. Sorted position.
+	"inject_pitch_effects",
 	"push_contact", "set_camera_basis",
 	# Story 4-6 (AC 2, `4-6/R6`): the SIXTH pushed-fact intake -- the per-tick lock direction, in
 	# sorted position beside the basis it is a sibling of. It arrives WITH its
@@ -129,6 +133,9 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 
 const DECK_IDS: Array[StringName] = [&"rec_card_a", &"rec_card_b", &"rec_card_c"]
 const PITCH_MANA := 6.0
+## Story 6-5a (AC 6): the pitch-effect fixture's two non-default flat numbers.
+const PITCH_EFFECT_SECONDS := 7.5
+const PITCH_EFFECT_TAKEN := 3.0
 
 
 # ---------------------------------------------------------------- AC 1
@@ -317,6 +324,14 @@ func test_content_channels_carry_the_composition_the_costs_the_effects_and_their
 	var pitch: CardCastCondition = rec.replay_pitch_costs()[DECK_IDS[0]]
 	assert_eq(pitch.mana_cost, PITCH_MANA, "...its mana price by value")
 	assert_eq(pitch.orb_costs, {Enums.CardColor.GREEN: 2}, "...and its ORB price by value")
+	# Story 6-5a (AC 6): the SIXTH content channel, on the pitch-cost channel's footing -- partial, and
+	# its flat effect numbers must survive BY VALUE (AC 2's round-trip claim, made at the recorder).
+	assert_eq(rec.replay_pitch_effects().keys(), [DECK_IDS[0]] as Array[StringName],
+		"the pitch-effect map comes back as captured, partial coverage and all")
+	var pitch_effect: CardEffect = rec.replay_pitch_effects()[DECK_IDS[0]]
+	assert_eq(pitch_effect.effect_id, &"bloodlust", "...its id by value")
+	assert_eq(pitch_effect.duration_seconds, PITCH_EFFECT_SECONDS, "...and its flat duration by value")
+	assert_eq(pitch_effect.damage_taken_multiplier, PITCH_EFFECT_TAKEN, "...and a multiplier by value")
 	assert_eq(rec.content_order(), IntentRecorder.SOUND_CONTENT_ORDER,
 		"the record carries the ORDER, captured from the calls rather than assumed")
 
@@ -338,9 +353,11 @@ func test_content_channels_carry_the_composition_the_costs_the_effects_and_their
 	inverted.capture_inject_card_effects(_effects())
 	inverted.capture_inject_card_colors(_colors())
 	inverted.capture_inject_pitch_costs(_pitch_costs())
+	inverted.capture_inject_pitch_effects(_pitch_effects())
 	assert_eq(inverted.content_order(),
 		[IntentRecorder.CHANNEL_COSTS, IntentRecorder.CHANNEL_DECK, IntentRecorder.CHANNEL_EFFECTS,
-			IntentRecorder.CHANNEL_COLORS, IntentRecorder.CHANNEL_PITCH_COSTS],
+			IntentRecorder.CHANNEL_COLORS, IntentRecorder.CHANNEL_PITCH_COSTS,
+			IntentRecorder.CHANNEL_PITCH_EFFECTS],
 		"sanity: the inverted record really did capture the channels in an unsound order")
 	var broken := _bare_match()
 	assert_false(inverted.replay_inject_content(broken),
@@ -376,6 +393,8 @@ func test_a_record_missing_any_match_start_channel_is_malformed() -> void:
 		# Story 6-2 (AC 16): the EIGHTH match-start channel. Keyed to CAPTURE, not emptiness -- see
 		# test_an_empty_pitch_cost_capture_is_a_complete_match_start below for the other half.
 		"pitch_costs": "pitch costs",
+		# Story 6-5a (AC 6): the NINTH match-start channel, keyed to capture on the pitch-cost footing.
+		"pitch_effects": "pitch effects",
 	}
 	for omitted: String in expected:
 		var rec := _match_start_record(omitted)
@@ -388,12 +407,21 @@ func test_a_record_missing_any_match_start_channel_is_malformed() -> void:
 ## Story 6-2 (AC 2/AC 16): the OTHER half of the pitch-cost clause. An EMPTY pitch-cost map is legal
 ## content (no card authoring pitch content), so capturing one completes match start -- the clause is
 ## keyed to the capture having HAPPENED, which is why it cannot be read off emptiness like its siblings.
+##
+## REWRITTEN BY STORY 6-5a (AC 6): the fixture now stops BEFORE BOTH pitch channels (`pitch_tail`), so the
+## empty pitch-cost capture can still land in the sound order with the sixth channel after it -- and the
+## same claim is made for an EMPTY pitch-EFFECT capture, which is legal for the identical reason.
 func test_an_empty_pitch_cost_capture_is_a_complete_match_start() -> void:
-	var rec := _match_start_record("pitch_costs")
+	var rec := _match_start_record("pitch_tail")
 	assert_false(rec.has_complete_match_start(), "sanity: with no pitch-cost capture it is incomplete")
 	var empty: Dictionary[StringName, CardCastCondition] = {}
 	rec.capture_inject_pitch_costs(empty)
-	assert_true(rec.has_complete_match_start(), "an EMPTY pitch-cost capture completes match start")
+	assert_eq(rec.missing_match_start_channels(), ["pitch effects"],
+		"an EMPTY pitch-cost capture discharges the pitch-cost clause -- only the sixth channel is left")
+	var no_effects: Dictionary[StringName, CardEffect] = {}
+	rec.capture_inject_pitch_effects(no_effects)
+	assert_true(rec.has_complete_match_start(),
+		"an EMPTY pitch-effect capture completes match start too (story 6-5a, AC 6)")
 	assert_eq(rec.content_order(), IntentRecorder.SOUND_CONTENT_ORDER, "...in the sound order")
 
 
@@ -540,6 +568,18 @@ func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 	return out
 
 
+## Story 6-5a (AC 6): the pitch-EFFECT map for the fixture -- partial like the pitch costs, and carrying
+## non-default flat numbers so the by-value rebuild of CardEffect's new exports is actually exercised.
+func _pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	var e := CardEffect.new()
+	e.effect_id = &"bloodlust"
+	e.duration_seconds = PITCH_EFFECT_SECONDS
+	e.damage_taken_multiplier = PITCH_EFFECT_TAKEN
+	out[DECK_IDS[0]] = e
+	return out
+
+
 func _bare_match() -> MatchState:
 	var ms := MatchState.new(MatchParams.new(1337))
 	ms.apply_balance(_config())
@@ -575,8 +615,11 @@ func _match_start_record(omit := "") -> IntentRecorder:
 	if omit != "colors":
 		rec.capture_inject_card_colors(_colors())
 	# Story 6-2 (AC 16): the FIFTH content channel, captured LAST and omittable on the same footing.
-	if omit != "pitch_costs":
+	if omit != "pitch_costs" and omit != "pitch_tail":
 		rec.capture_inject_pitch_costs(_pitch_costs())
+	# Story 6-5a (AC 6): the SIXTH content channel, captured LAST and omittable on the same footing.
+	if omit != "pitch_effects" and omit != "pitch_tail":
+		rec.capture_inject_pitch_effects(_pitch_effects())
 	return rec
 
 

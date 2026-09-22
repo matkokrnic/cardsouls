@@ -369,13 +369,33 @@ func test_no_deck_exhaustion_surface_ships() -> void:
 ## in src/ before E6 designs the pitch mode is still exactly the drift this fence exists to
 ## catch. The E6 story that builds the pitch mode retires it deliberately, as this one did the
 ## basic half.
-func test_no_pitch_effect_consumer_ships() -> void:
+##
+## RETIRED AND NARROWED BY STORY 6-5a (AC 6), WHICH IS THE E6 STORY THE CLAUSE DIRECTLY ABOVE NAMES. 6-5a
+## builds the pitch EFFECT: the runner derives the map, MatchState holds it and resolves it at
+## ACTIVATION, IntentRecorder and RecordFile carry it on the sixth content channel. So the blanket ban is
+## retired -- and the fence is NARROWED, never deleted, to what is still unconsumed by ruling: the
+## pitch effect is read ONLY in those four sanctioned files, and INSIDE MatchState only at the activation
+## seat, never at STAGING (`_resolve_pitch_stage` stays cost-only, AC 6). The old name is recorded here
+## verbatim so the Fence Inventory stays greppable: `test_no_pitch_effect_consumer_ships`.
+const PITCH_EFFECT_SANCTIONED: Array[String] = [
+	"/main/match_runner.gd", "/state/match_state.gd", "/systems/intent_recorder.gd",
+	"/systems/record_file.gd",
+]
+
+
+func test_the_pitch_effect_is_consumed_only_at_its_sanctioned_seats() -> void:
 	var re := RegEx.create_from_string("(pitch_effect)")
 	var offenders: Array[String] = []
 	var scanned := 0
 	for path in _gd_files("res://src/"):
 		if path.ends_with("/card_data.gd"):
 			continue          # the schema DECLARES the field; declaring is not consuming
+		var sanctioned := false
+		for tail in PITCH_EFFECT_SANCTIONED:
+			if path.ends_with(tail):
+				sanctioned = true
+		if sanctioned:
+			continue
 		scanned += 1
 		var n := 0
 		for line in _code_lines(path):
@@ -383,16 +403,35 @@ func test_no_pitch_effect_consumer_ships() -> void:
 			if re.search(line) != null:
 				offenders.append("%s:%d %s" % [path, n, line.strip_edges()])
 	assert_true(scanned > 0, "src/ scan found no .gd files (guard would be vacuous)")
-	# NON-VACUITY, two ways. The pattern must MATCH the form it bans, and must NOT match the
-	# Mode (1) read story 4-1 legitimately ships -- a regex that caught both would be failing
-	# green against this story's own resolver rather than against a real pitch consumer.
 	assert_true(re.search("var effect: CardEffect = card.pitch_effect") != null,
 		"the pattern must match what it bans -- a regex typo must not silently disarm this")
-	assert_null(re.search("out[id] = card.basic_effect"),
-		"...and must NOT match the sanctioned Mode (1) read that story 4-1 ships")
 	assert_eq(offenders.size(), 0,
-		"a PITCH-effect consumer shipped in src/ (Mode (4) is E6's; 4-1 consumes basic_effect "
-		+ "alone): %s" % ", ".join(offenders))
+		"a PITCH-effect consumer shipped outside the four sanctioned files: %s" % ", ".join(offenders))
+	# The narrowed subject: inside MatchState the pitch map is read at ACTIVATION and never at STAGING.
+	var stage_body := _function_body("res://src/state/match_state.gd", "_resolve_pitch_stage")
+	var activate_body := _function_body("res://src/state/match_state.gd", "_resolve_pitch_activate")
+	assert_true(stage_body.size() > 0 and activate_body.size() > 0, "both seats were found (non-vacuity)")
+	for line in stage_body:
+		assert_false(line.contains("_pitch_effects") or line.contains("_apply_card_effect"),
+			"STAGING reads no effect (AC 6): %s" % line.strip_edges())
+	var reads := 0
+	for line in activate_body:
+		if line.contains("_pitch_effects.get("):
+			reads += 1
+	assert_eq(reads, 1, "ACTIVATION reads the pitch-effect map exactly once (AC 6)")
+
+
+## The code lines of one top-level `func name(` in `path`, up to the next top-level `func`.
+func _function_body(path: String, name: String) -> Array[String]:
+	var out: Array[String] = []
+	var inside := false
+	for line in _code_lines(path):
+		if line.begins_with("func ") or line.begins_with("static func "):
+			inside = line.begins_with("func %s(" % name)
+			continue
+		if inside:
+			out.append(line)
+	return out
 
 
 ## DELIBERATELY UPDATED BY STORY 3-5b, two signals -> three (AC 6, Fence Inventory), and RENAMED

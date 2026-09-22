@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="DeckList" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/deck_list.gd" id="1_deck"]
+
+[resource]
+script = ExtResource("1_deck")
+card_ids = Array[StringName]([&"ruin_vanguard", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt", &"frostbite"])
+copies = Array[int]([3, 3, 3, 3, 3, 2, 3])

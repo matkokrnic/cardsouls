@@ -191,6 +191,9 @@ func _poison_record() -> IntentRecorder:
 	# be replayed needs.
 	var pitch_costs: Dictionary[StringName, CardCastCondition] = {}
 	record.capture_inject_pitch_costs(pitch_costs)
+	# Story 6-5a (AC 6): the sixth content channel -- empty is legal.
+	var pitch_effects: Dictionary[StringName, CardEffect] = {}
+	record.capture_inject_pitch_effects(pitch_effects)
 	record.capture_set_camera_basis(0, Basis(Vector3.UP, deg_to_rad(90.0)))
 	record.capture_push_contact([0, -1], [1, -1], 0, Vector2(-1, 0), MatchState.CONTACT_STRIKE)
 	for _tick in 4:

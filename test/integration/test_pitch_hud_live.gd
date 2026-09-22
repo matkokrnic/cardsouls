@@ -144,6 +144,9 @@ func _build_record(src: IntentRecorder) -> IntentRecorder:
 	short_cost.orb_costs[Enums.CardColor.RED] = 1
 	var pitch_costs: Dictionary[StringName, CardCastCondition] = {_x: ready_cost, _y: short_cost}
 	out.capture_inject_pitch_costs(pitch_costs)
+	# Story 6-5a (AC 6): the sixth content channel -- no pitch effects, which is legal.
+	var pitch_effects: Dictionary[StringName, CardEffect] = {}
+	out.capture_inject_pitch_effects(pitch_effects)
 	for t in range(1, RECORD_TICKS + 1):
 		var intents: Array[InputIntent] = [InputIntent.new(), InputIntent.new()]
 		if t == STAGE_TICK:

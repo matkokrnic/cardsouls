@@ -284,7 +284,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# name, and the remaining time is an integer TICK count.
 		# Story 6-1c (AC 2/AC 4): the LANDING WINDOW's remaining ticks, in sorted position between
 		# `hero` and `lock_target`. A plain integer TICK count, like every sibling's time value.
-		"deck_size", "defense", "discard_size", "hand_size", "hero", "landing", "lock_target",
+		# Story 6-5a (AC 10): `last_resolved_card` -- `[id, mode]`, the id a String VALUE -- in sorted
+		# position between `landing` and `lock_target`. A PUBLIC card identity (the `pitch` key's staged
+		# card precedent), never a StringName and never a key.
+		"deck_size", "defense", "discard_size", "hand_size", "hero", "landing",
+		"last_resolved_card", "lock_target",
 		"mana", "orbs",
 		"pending_draw", "pending_draw_owed",
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
@@ -296,6 +300,9 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# Counts and indices only, exactly like every sibling: a colour is an enum ORDINAL and never
 		# a name, and the remaining time is an integer TICK count.
 		"telegraph",
+		# Story 6-5a (AC 8): `timed_rules` -- the timed-rule seat, `[remaining_ticks, a, b]` per rule
+		# slot -- in sorted position between `telegraph` and every `unit_*`. Ticks and magnitudes only.
+		"timed_rules",
 		# Story 4-4 (AC 1/AC 10): two more — `unit_attack_cooldown` and `unit_kind`.
 		"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 		"unit_attack_ticks",
@@ -307,8 +314,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 31,
-		"the per-player snapshot key set is THIRTY-ONE keys as of story 6-1c, which adds ONE: "
+	assert_eq(keys.size(), 33,
+		"the per-player snapshot key set is THIRTY-THREE keys as of story 6-5a, which adds TWO: "
+		+ "`timed_rules`, the timed-rule seat (AC 8), and `last_resolved_card`, the hashed "
+		+ "last-resolved card (AC 10) -- both cross ticks and decide an outcome. It was THIRTY-ONE "
+		+ "as of story 6-1c, which added ONE: "
 		+ "`landing`, the mode (2) landing window's remaining ticks (AC 2/AC 4), hashed because it "
 		+ "crosses ticks and decides when the attack commits and lands. It was THIRTY as of story "
 		+ "5-5, which added ONE: "

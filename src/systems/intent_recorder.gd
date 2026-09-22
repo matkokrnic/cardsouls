@@ -56,8 +56,12 @@ const CHANNEL_COLORS := &"colors"
 ## its position is not load-bearing for totality -- it goes last so the contract stays the one straight
 ## line the live runner produces.
 const CHANNEL_PITCH_COSTS := &"pitch_costs"
+## Story 6-5a (AC 6): the SIXTH content channel, `MatchState.inject_pitch_effects` -- Mode ④'s EFFECT
+## map, resolved at activation. Last, for `CHANNEL_PITCH_COSTS`'s reason: its seam checks nothing
+## against _deck_contents, so it goes at the end of the one straight line the live runner produces.
+const CHANNEL_PITCH_EFFECTS := &"pitch_effects"
 const SOUND_CONTENT_ORDER: Array[StringName] = [CHANNEL_DECK, CHANNEL_COSTS, CHANNEL_EFFECTS,
-		CHANNEL_COLORS, CHANNEL_PITCH_COSTS]
+		CHANNEL_COLORS, CHANNEL_PITCH_COSTS, CHANNEL_PITCH_EFFECTS]
 
 ## The seed channel (AC 3) — captured ONCE, at match start, from the SAME value that reaches
 ## MatchParams. There is deliberately no second, independently-read seed anywhere: MatchState
@@ -99,6 +103,11 @@ var _color_values: Dictionary = {}
 ## "was it captured" cannot be read off emptiness the way `_cost_values.is_empty()` is.
 var _pitch_cost_values: Dictionary = {}
 var _pitch_costs_captured := false
+## Story 6-5a (AC 6): card id -> CardEffect property values for Mode ④'s EFFECT, by value for
+## `_effect_values`'s reason. May legally be EMPTY (the pitch-cost channel's rule), so it carries its own
+## captured flag.
+var _pitch_effect_values: Dictionary = {}
+var _pitch_effects_captured := false
 var _content_order: Array[StringName] = []
 
 ## The per-tick, per-slot camera-basis channel (AC 8, `3-0c/R2`). Keyed by the tick the pushed
@@ -248,6 +257,20 @@ func capture_inject_pitch_costs(costs: Dictionary[StringName, CardCastCondition]
 	_content_order.append(CHANNEL_PITCH_COSTS)
 
 
+## Story 6-5a (AC 6): the PITCH-EFFECT channel -- MatchState.inject_pitch_effects(). Match start, before
+## the first tick, `capture_inject_pitch_costs` directly above followed line for line: by value, no
+## non-empty guard (empty is legal), RECORD-SIDE MANDATORY -- a replay missing it would resolve every
+## recorded activation as a no-op where the live match applied a buff.
+## `RecordFile.FORMAT_VERSION` BUMPS 12 -> 13 for this channel.
+func capture_inject_pitch_effects(effects: Dictionary[StringName, CardEffect]) -> void:
+	var values: Dictionary = {}
+	for id: StringName in effects:
+		values[id] = _resource_values(effects[id])
+	_pitch_effect_values = values
+	_pitch_effects_captured = true
+	_content_order.append(CHANNEL_PITCH_EFFECTS)
+
+
 ## The CAMERA-BASIS channel — MatchState.set_camera_basis(). Per tick, per slot. Today the
 ## pushed basis is always identity in live play, but its value is READ during movement
 ## resolution and reaches HeroState.velocity, which IS hashed — so a replay that does not
@@ -368,6 +391,10 @@ func missing_match_start_channels() -> Array[String]:
 	# to emptiness, because an empty pitch-cost map is a legal capture.
 	if not _pitch_costs_captured:
 		missing.append("pitch costs")
+	# Story 6-5a (AC 6): a v13 record missing the pitch-effect channel is MALFORMED -- keyed to capture,
+	# the pitch-cost clause directly above.
+	if not _pitch_effects_captured:
+		missing.append("pitch effects")
 	return missing
 
 
@@ -489,6 +516,18 @@ func replay_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 	return out
 
 
+## The recorded PITCH effects (story 6-5a, AC 6), each CardEffect rebuilt from values -- so a card whose
+## pitch effect is re-authored in data/ after the recording cannot change what the replay's activations
+## apply, exactly as replay_card_effects() does for Mode ①.
+func replay_pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id: StringName in _pitch_effect_values:
+		var effect := CardEffect.new()
+		_apply_values(effect, _pitch_effect_values[id])
+		out[id] = effect
+	return out
+
+
 func replay_inject_content(ms: MatchState) -> bool:
 	if _content_order != SOUND_CONTENT_ORDER:
 		return false
@@ -504,6 +543,8 @@ func replay_inject_content(ms: MatchState) -> bool:
 				ms.inject_card_colors(replay_card_colors())
 			CHANNEL_PITCH_COSTS:
 				ms.inject_pitch_costs(replay_pitch_costs())
+			CHANNEL_PITCH_EFFECTS:
+				ms.inject_pitch_effects(replay_pitch_effects())
 	return true
 
 

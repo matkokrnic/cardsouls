@@ -254,6 +254,61 @@ var defense_window: TimingWindow
 ## reasoning verbatim, for the same hash reason.
 var defense_color: int = NO_TELEGRAPH_COLOR
 
+## Story 6-5a (AC 8, OQ1): THE TIMED-RULE SEAT -- one rule shape for every per-player timed card effect,
+## generalising the one-`TimingWindow`-per-rule precedent (`defense_window` above) into a FIXED ARRAY of
+## rule slots indexed by `RULE_*`. Each slot is ONE window plus TWO magnitudes (`a`, `b`, meaning per
+## kind below), so a rule is exactly one fact: whether it is running, how long it has left, and the
+## numbers it applies -- all three hashed together under ONE snapshot key (`timed_rules`).
+##
+## A DURATION RULE AND AN ARMED TRIGGER ARE THE SAME SHAPE. For a buff the window is the buff; for a
+## trigger (Bloodhound Step, Frostbite) the window is how long it stays armed, and CONSUMING it is
+## cancelling it. That is what makes R6's "exactly one stop point per timed effect" structural: every
+## rule ends through `cancel_rule(kind)` (or by its window expiring), and a future undo (6-5f) cancels
+## through the same call.
+##
+## RE-APPLYING A RUNNING RULE REFRESHES IT (operator ruling N10): `start_rule` restarts the window at the
+## full duration and overwrites the magnitudes -- it never stacks. Round end and the debug reset clear
+## every rule (`clear_rules`).
+##
+## TICKS, NEVER SECONDS (A1): advanced at `MatchState.advance()` step 2 beside every other window,
+## skipped on round-over ticks exactly as they are.
+##
+## THE KINDS, and what `a` / `b` hold for each:
+##   RULE_BLOODLUST          buff on the CASTER: a = damage-dealt multiplier, b = damage-taken multiplier.
+##   RULE_VAMPIRIC_AURA      buff on the CASTER: a = lifesteal fraction of hero damage actually removed.
+##   RULE_BLOODHOUND_ARMED   trigger on the CASTER, consumed by its next roll that actually starts:
+##                           a = roll distance multiplier, b = roll i-frame multiplier.
+##   RULE_ROLL_BOOST         the boosted ROLL itself, started when the trigger above is consumed and
+##                           running exactly as long as that roll: a = roll distance multiplier.
+##   RULE_FROSTBITE_ARMED    trigger on the CASTER, consumed by its next confirmed hero melee hit on
+##                           the enemy hero: a = slow speed multiplier, b = slow duration in TICKS.
+##   RULE_FROSTBITE_SLOW     the slow, on the struck TARGET: a = movement speed multiplier.
+const RULE_BLOODLUST := 0
+const RULE_VAMPIRIC_AURA := 1
+const RULE_BLOODHOUND_ARMED := 2
+const RULE_ROLL_BOOST := 3
+const RULE_FROSTBITE_ARMED := 4
+const RULE_FROSTBITE_SLOW := 5
+const RULE_COUNT := 6
+
+var rule_windows: Array[TimingWindow] = []
+var rule_a: Array[float] = []
+var rule_b: Array[float] = []
+
+## Story 6-5a (AC 10): THE LAST RESOLVED CARD -- which card this player last actually RESOLVED, and in
+## which mode (`Enums.ModeKind.BASIC` or `Enums.ModeKind.PITCH`, the activation). Written at exactly the
+## two APPLY seats that can carry a Deck 1 effect (`_resolve_basic_cast`, `_resolve_pitch_activate`);
+## read by nothing in 6-5a -- it is 6-5f's Counterspell's target.
+##
+## PUBLIC, SO HASHED, on the `pitch_state.gd` staged-card precedent: a resolved card has already left
+## the hand and been seen, so its identity is public exactly as a staged one is. The id is held and
+## hashed as a String VALUE, never a key and never a StringName (the StringName-sort hazard,
+## `pitch_state.gd:112-122`); the mode as its int ordinal. Resting value: `""` and `NO_RESOLVED_MODE`.
+var last_resolved_card_id: String = ""
+var last_resolved_card_mode: int = NO_RESOLVED_MODE
+
+const NO_RESOLVED_MODE := -1
+
 ## Story 5-2 (AC 21): the resting value of `charge_color`, and it is a THIRD thing rather than a
 ## fourth colour — `Enums.CardColor` gets no `NONE` member, exactly as `TargetingService` answers
 ## "nothing" with a sentinel rather than by widening the address space. Readers test the NAME.
@@ -288,6 +343,68 @@ func _init(queue: SignalQueue) -> void:
 	charge_window = TimingWindow.new()
 	landing_window = TimingWindow.new()
 	defense_window = TimingWindow.new()
+	for _kind in RULE_COUNT:
+		rule_windows.append(TimingWindow.new())
+		rule_a.append(0.0)
+		rule_b.append(0.0)
+
+
+## Story 6-5a (AC 8): START (or REFRESH, N10) one timed rule. A duration of zero ticks leaves it stopped,
+## the `TimingWindow.start(0)` contract, so a zero-authored window applies nothing.
+##
+## 6-5a REVIEW N3: a non-positive duration CANCELS the slot rather than writing live magnitudes onto a
+## stopped window. Through the dev pass the two assignments below ran unconditionally, which left
+## `rule_a`/`rule_b` holding real numbers on a window `start(0)` had left stopped. That was unobservable
+## -- every reader gates on `is_rule_active` and `_rules_snapshot` masks a stopped slot to
+## `[0, 0.0, 0.0]` -- so the snapshot comment's "a stale magnitude is unrepresentable" was true of the
+## HASH but not of the STATE. It becomes observable for 6-5f's undo, which cancels through this seat.
+## Routing through `cancel_rule` makes the claim true of the state too, and keeps ONE stop point (R6).
+func start_rule(kind: int, duration_ticks: int, a: float, b: float) -> void:
+	if duration_ticks <= 0:
+		cancel_rule(kind)
+		return
+	rule_windows[kind].start(duration_ticks)
+	rule_a[kind] = a
+	rule_b[kind] = b
+
+
+## Story 6-5a (AC 8, R6): THE ONE STOP POINT for a rule of any kind -- expiry aside, nothing else ends
+## one. Consuming an armed trigger is cancelling it; a future undo cancels through here too.
+func cancel_rule(kind: int) -> void:
+	rule_windows[kind].start(0)
+	rule_a[kind] = 0.0
+	rule_b[kind] = 0.0
+
+
+func is_rule_active(kind: int) -> bool:
+	return rule_windows[kind].is_running
+
+
+## Story 6-5a (N10): round end and the debug reset clear every running rule and armed trigger.
+func clear_rules() -> void:
+	for kind in RULE_COUNT:
+		cancel_rule(kind)
+
+
+## Advanced at `MatchState.advance()` step 2, beside every other D4 window.
+func tick_rules() -> void:
+	for window: TimingWindow in rule_windows:
+		window.tick()
+
+
+## Story 6-5a (AC 10): the one writer of the last-resolved-card record.
+func record_resolved_card(card_id: StringName, mode: int) -> void:
+	last_resolved_card_id = String(card_id)
+	last_resolved_card_mode = mode
+
+
+## Story 6-5a (REVIEW B1, operator ruling): the last-resolved-card record is CLEARED by round end and by
+## the debug reset, exactly as `clear_rules()` beside it -- the NINTH named reset exception. Without this
+## the record was round-crossing hashed state that nothing cleared and no test pinned, so a reset match
+## and a fresh match sat at different resting snapshots at the same point. Back to the resting pair.
+func clear_resolved_card() -> void:
+	last_resolved_card_id = ""
+	last_resolved_card_mode = NO_RESOLVED_MODE
 
 
 ## Story 3-6 (AC 2): QUEUE one card-observation payload (D5). Called from MatchState at the seats
@@ -635,4 +752,30 @@ func to_snapshot() -> Dictionary:
 		# ONE GOLDEN CAUSE RIDES ON THIS KEY: its mere PRESENCE (the `5-2`/`5-5` shape). The golden
 		# fixture never casts mode (2), so its VALUE is the resting 0 on every hashed tick.
 		"landing": landing_window.remaining_ticks(),
+		# Story 6-5a (AC 8): the TIMED-RULE SEAT, ONE key for all six rule slots, as
+		# `[remaining_ticks, a, b]` per slot in `RULE_*` order. The `defense` fusion applied per slot: a
+		# rule is one fact in three halves, gated on its window's `is_running` so a stopped rule reads
+		# `[0, 0.0, 0.0]` whatever it last held -- a stale magnitude is unrepresentable in the hash. It
+		# is a key at all for the `pending_draw` reason: every rule CROSSES TICKS AND DECIDES AN OUTCOME
+		# (a multiplier, a heal, a roll's reach, a slow). Remaining ticks alone is determinism-complete:
+		# the magnitudes ride beside it and nothing reads the elapsed count.
+		#
+		# ONE GOLDEN CAUSE RIDES ON THIS KEY in the golden fixture: its mere PRESENCE (the golden never
+		# casts a buff, so every slot hashes at rest).
+		"timed_rules": _rules_snapshot(),
+		# Story 6-5a (AC 10): the LAST RESOLVED CARD, `[id, mode]` -- the `defense`-key two-element shape.
+		# The id is a String VALUE (never a StringName, never a key); the mode an int ordinal. Resting
+		# `["", -1]`. It is a key because it CROSSES TICKS and 6-5f's Counterspell will decide an outcome
+		# from it. TWO GOLDEN CAUSES RIDE ON IT: its PRESENCE, and its VALUE moving from the golden
+		# fixture's t22 basic cast onward.
+		"last_resolved_card": [last_resolved_card_id, last_resolved_card_mode],
 	}
+
+
+func _rules_snapshot() -> Array:
+	var out: Array = []
+	for kind in RULE_COUNT:
+		var window := rule_windows[kind]
+		out.append([window.remaining_ticks(), rule_a[kind], rule_b[kind]] if window.is_running \
+				else [0, 0.0, 0.0])
+	return out

@@ -1,5 +1,8 @@
 extends SceneTree
 
+## Story 6-5a (AC 13): the summon-bearing test deck this file is re-pointed at.
+const LiveSummonDeck := preload("res://test/live_summon_deck.gd")
+
 ## Story 4-3a (AC 10, `4-3a/R18`): TWO UNITS DRIVEN AT THE SAME ACQUIRED TARGET SIMULTANEOUSLY --
 ## measured to MOVE, to CONVERGE on that target, and to do it without JITTER, WEDGING or
 ## PASS-THROUGH.
@@ -93,7 +96,11 @@ var _detail := ""
 
 func _initialize() -> void:
 	var scene: PackedScene = load("res://src/main/main.tscn")
-	root.add_child(scene.instantiate())
+	# REWRITTEN BY STORY 6-5a (AC 13): re-pointed at the summon-bearing TEST deck through the runner's
+	# deck-list seat -- on Deck 1 this test's fixed seed deals no summon (measured). See live_summon_deck.gd.
+	var main := scene.instantiate()
+	main.deck_list_override = LiveSummonDeck.all_summons()
+	root.add_child(main)
 
 
 func _physics_process(_delta: float) -> bool:

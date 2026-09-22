@@ -460,3 +460,17 @@ func test_feature_flags_tres_opens_the_pitch_zone_layer() -> void:
 		return
 	assert_true((flags as FeatureFlags).pitch_zone,
 		"data/feature_flags.tres must ship pitch_zone = true -- its staging mechanism landed in 6-2")
+
+
+## Story 6-5a (AC 16): THE SPELL LAYER SHIPS OPEN, asserted against the AUTHORED resource -- the pitch
+## zone pin directly above verbatim. The flag defaults OFF in `feature_flags.gd` (the per-layer pattern);
+## the `.tres` is where the story ships the layer, and a `.tres` that lost the line would close every
+## Deck 1 buff with every test still green, because the tests inject their own FeatureFlags.
+func test_feature_flags_tres_opens_the_spell_layer() -> void:
+	assert_false(FeatureFlags.new().spells, "the spell layer defaults OFF in code (the per-layer pattern)")
+	var flags: Variant = load("res://data/feature_flags.tres")
+	assert_true(flags is FeatureFlags, "feature_flags.tres loads as FeatureFlags")
+	if not (flags is FeatureFlags):
+		return
+	assert_true((flags as FeatureFlags).spells,
+		"data/feature_flags.tres must ship spells = true -- the Deck 1 buffs landed in 6-5a")

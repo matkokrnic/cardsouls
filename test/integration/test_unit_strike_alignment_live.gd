@@ -1,5 +1,8 @@
 extends SceneTree
 
+## Story 6-5a (AC 13): the summon-bearing test deck this file is re-pointed at.
+const LiveSummonDeck := preload("res://test/live_summon_deck.gd")
+
 ## Story 4-3d (AC 1): THE VISIBLE STRIKE LANDS WHEN THE DAMAGE DOES.
 ##
 ## THE ASSERTION IS AN EFFECT, NOT AN IDENTIFIER. It reads the minion AnimationPlayer's actual
@@ -80,7 +83,11 @@ var _detail := ""
 
 
 func _initialize() -> void:
-	root.add_child((load("res://src/main/main.tscn") as PackedScene).instantiate())
+	# REWRITTEN BY STORY 6-5a (AC 13): re-pointed at the summon-bearing TEST deck through the runner's
+	# deck-list seat -- on Deck 1 this test's fixed seed deals no summon (measured). See live_summon_deck.gd.
+	var main := (load("res://src/main/main.tscn") as PackedScene).instantiate()
+	main.deck_list_override = LiveSummonDeck.all_summons()
+	root.add_child(main)
 
 
 func _physics_process(_delta: float) -> bool:

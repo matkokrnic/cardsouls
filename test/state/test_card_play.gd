@@ -61,13 +61,16 @@ func test_basic_cast_spends_discards_and_refills_in_one_tick() -> void:
 func test_basic_cast_queues_the_resolution_signal() -> void:
 	var ms := _make_match()
 	var seen: Array = []
-	ms.card_cast_resolved.connect(func(slot: int, id: StringName) -> void: seen.append([slot, id]))
+	# Story 6-5a (AC 7): the signal carries the resolved MODE as its third argument.
+	ms.card_cast_resolved.connect(func(slot: int, id: StringName, mode: int) -> void:
+			seen.append([slot, id, mode]))
 	var expected: StringName = ms.p1.hand.to_array()[0]
 	var intents: Array[InputIntent] = [_cast_intent(0), InputIntent.new()]
 	ms.advance(intents)
 	assert_eq(seen.size(), 0, "queued, not fired mid-advance (D5)")
 	ms.drain_signals()
-	assert_eq(seen, [[0, expected]], "fires once on drain, carrying the casting slot and the card")
+	assert_eq(seen, [[0, expected, Enums.ModeKind.BASIC]],
+		"fires once on drain, carrying the casting slot, the card and the BASIC mode (story 6-5a, AC 7)")
 
 
 ## The conservation property the third container has to satisfy: nothing is invented and nothing
@@ -221,7 +224,7 @@ func test_cast_on_a_frozen_tick_is_dropped_silently() -> void:
 	ms.p1.hero.action_rejected.connect(
 		func(action: StringName, reason: StringName) -> void: signals.append([action, reason]))
 	ms.card_cast_resolved.connect(
-		func(slot: int, id: StringName) -> void: signals.append([slot, id]))
+		func(slot: int, id: StringName, _mode: int) -> void: signals.append([slot, id]))
 	_advance(ms, _cast_intent(0), InputIntent.new())
 	var after := ms.to_snapshot()
 	after.erase("tick")

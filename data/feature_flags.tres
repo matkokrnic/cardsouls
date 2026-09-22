@@ -9,3 +9,4 @@ orbs = true
 pitch_zone = true
 minions = true
 totems = true
+spells = true

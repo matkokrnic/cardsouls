@@ -207,7 +207,15 @@ extends RefCounted
 ## the loader checks. That is the silently-wrong replay the exact-match refusal at `:365-368` exists
 ## to make impossible, so v11 is rejected HARD rather than migrated: an unloadable record is a
 ## correct answer, a divergent one is not.
-const FORMAT_VERSION := 12
+##
+## STORY 6-5a BUMPS 12 -> 13 (AC 6), for TWO causes named separately. (1) A NEW REQUIRED KEY: the sixth
+## content channel, `pitch_effects` -- a v12 file carries no pitch effects, so every activation it
+## recorded would replay as a no-op. (2) CHANGED RESOLUTION SEMANTICS: buff ids now APPLY, so a v12
+## recording whose card effects happened to carry one of those ids would replay a buff the recorded match
+## never applied. Either alone is the silently-wrong replay the exact-match refusal exists to prevent.
+## Not the `card_cast_resolved` arity (a signal is not recorded) and not the new hashed state (a record
+## carries no hash). v12 is refused HARD, no migration.
+const FORMAT_VERSION := 13
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -269,6 +277,9 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	# the version bump -- a v8 file lacks this key, and is refused by the version check long before this
 	# map is consulted, exactly as `colors` was at v7.
 	"pitch_costs": TYPE_DICTIONARY,
+	# Story 6-5a (AC 6): the SIXTH content channel, required from FORMAT_VERSION 13 onward -- a v12 file
+	# lacks this key and is refused by the version check first, exactly as `pitch_costs` was at v9.
+	"pitch_effects": TYPE_DICTIONARY,
 }
 
 ## Story 5-1a (AC 4): the POSITIONAL type signature of one `lock_pushes` entry, in the order
@@ -567,6 +578,12 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var recorded_pitch_costs := record.replay_pitch_costs()
 	for id: StringName in recorded_pitch_costs:
 		pitch_costs[id] = _resource_values(recorded_pitch_costs[id])
+	# Story 6-5a (AC 6): the pitch-effect map, serialised exactly as the Mode ① effects above are. An
+	# EMPTY map is written as an empty dictionary, the pitch-cost rule: the key is always present.
+	var pitch_effects: Dictionary = {}
+	var recorded_pitch_effects := record.replay_pitch_effects()
+	for id: StringName in recorded_pitch_effects:
+		pitch_effects[id] = _resource_values(recorded_pitch_effects[id])
 	var intents: Array = []
 	var camera_pushes: Dictionary = {}
 	var contacts: Dictionary = {}
@@ -598,6 +615,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"effects": effects,
 		"colors": colors,
 		"pitch_costs": pitch_costs,
+		"pitch_effects": pitch_effects,
 		"tick_count": record.tick_count(),
 		"intents": intents,
 		"camera_pushes": camera_pushes,
@@ -736,6 +754,10 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 				# Story 6-2: the same by-value rebuild as the Mode ① costs -- `_card_costs` builds fresh
 				# CardCastConditions, `orb_costs` assigned onto its typed dictionary by `_rebuilt`.
 				record.capture_inject_pitch_costs(_card_costs(data["pitch_costs"]))
+			IntentRecorder.CHANNEL_PITCH_EFFECTS:
+				# Story 6-5a (AC 6): the same by-value rebuild as the Mode ① effects -- `_card_effects`
+				# builds fresh `CardEffect.new()`s and repopulates every flat export generically (AC 2).
+				record.capture_inject_pitch_effects(_card_effects(data["pitch_effects"]))
 	var intents: Array = data["intents"]
 	var camera_pushes: Dictionary = data["camera_pushes"]
 	var contacts: Dictionary = data["contacts"]

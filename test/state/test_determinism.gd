@@ -1040,7 +1040,32 @@ extends TestCase
 ##     fixture snapshot (a scratch probe, no source edit) the hash is `71a7b45f…` EXACTLY -- the
 ##     pre-story golden reproduced with every other 6-6a change in place.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "d437432f7823379c8992276f4061ca16161b156fe2a8a7eb732d9b9750262d56"
+## ---------------------------------------------------------------------------------------------
+## RE-BASELINED BY STORY 6-5a (spell framework and buffs), d437432f -> 59e9a42c, ONE re-baseline,
+## THREE named causes, each MEASURED on its own by a scratch probe that erased or rest-valued keys on
+## the FINISHED fixture snapshot (no source edit -- the 6-6a method). Snapshot key-path set 206 -> 210
+## (two new per-player keys x two players; neither is hero-nested). `RecordFile.FORMAT_VERSION`
+## measured 12 before and 13 after (the pitch-effect channel) -- a record concern with no path into
+## the hash, so not a golden cause.
+##
+##   CAUSE 1, PRESENCE: `PlayerState.to_snapshot()` gains `"timed_rules"` (AC 8), the timed-rule seat.
+##     The fixture casts no buff, so all six rule slots hash AT REST (`[0, 0.0, 0.0]`) on both players
+##     -- the `5-5` `defense` shape. Measured: d437432f -> a7985a17 with only this key added.
+##   CAUSE 2, PRESENCE: `"last_resolved_card"` (AC 10), at its resting value `["", -1]`. Measured:
+##     a7985a17 -> 113d8834 with the key present on both players at rest.
+##   CAUSE 3, VALUE: the t22 Mode ① cast is a RESOLUTION, so P1's record carries
+##     `["golden_card_10", 0]` (BASIC) at the hash tick; P2 cast nothing and stays at rest. Measured:
+##     113d8834 -> 59e9a42c, the full snapshot.
+##
+##   ISOLATED BOTH DIRECTIONS: with both new keys erased from the finished fixture snapshot the hash is
+##   `d437432f...` EXACTLY -- the pre-story golden reproduced with every other 6-5a change in place (the
+##   funnel at rest, the new step-2 tick, the pitch-effect seam, the shared apply seat).
+##
+##   NOT A CAUSE, MEASURED: the damage funnel is bit-identical at rest (no Bloodlust in the fixture, so
+##   neither multiply branch runs); the summon path moved into `_apply_card_effect` unchanged; the
+##   fixture injects no pitch-effect map (the seam is optional state-side).
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "59e9a42cc5145a31ddfde279eb1f06cf990f836015b260f0986cd704ad86b1bd"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

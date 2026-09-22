@@ -71,6 +71,9 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# time: this pin and test_card_observation.gd's were BOTH red before this edit, and the story
 	# that adds the key is the story that moves both.
 	"landing",
+	# Story 6-5a (AC 10): the THIRTY-SECOND key -- `last_resolved_card`, `[id, mode]` with the id a String
+	# VALUE, in sorted position between `landing` and `lock_target`. Same mechanism, eighth time.
+	"last_resolved_card",
 	# Story 4-6 (AC 2/AC 4): the lock-on target as a `[slot, index]` pair, in sorted position.
 	"lock_target",
 	"mana", "orbs",
@@ -84,6 +87,9 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# `unit_*` block. Same mechanism, fifth time: this pin and test_card_observation.gd's were BOTH
 	# red before this edit, and the story that adds the key is the story that moves both.
 	"telegraph",
+	# Story 6-5a (AC 8): the THIRTY-THIRD key -- `timed_rules`, the timed-rule seat, in sorted position
+	# between `telegraph` and the `unit_*` block.
+	"timed_rules",
 	# Story 4-4 (AC 1/AC 10): `unit_attack_cooldown` (the firing-cadence countdown) and `unit_kind`
 	# (the per-record kind INDEX — never the StringName) join the set. Sorted position, not appended.
 	"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
@@ -368,7 +374,7 @@ func test_the_player_snapshot_key_set_is_exactly_the_expected_set() -> void:
 	assert_eq(keys, EXPECTED_PLAYER_SNAPSHOT_KEYS,
 		"PlayerState.to_snapshot() is exactly this key set (3-5b added two; 4-1 added unit_count; "
 		+ "4-2 added unit_targets; 4-3a added unit_hp; 4-3b added the six unit attack-rhythm keys; "
-		+ "4-6 added lock_target)")
+		+ "4-6 added lock_target; 6-5a added timed_rules and last_resolved_card)")
 	assert_false(keys.has("vulnerable_window"),
 		"the vulnerable window is NOT a snapshot key — nothing reads it, so nothing can desync on it")
 
@@ -399,10 +405,18 @@ func test_the_pending_draw_keys_carry_a_window_and_slot_indices_only() -> void:
 		"the debt names WHICH slot it is owed to — the whole of AC 4 in one key")
 	for owed in after["pending_draw_owed"]:
 		assert_true(owed is int, "every element is a plain int INDEX, never a StringName id")
-	var text := str(after)
+	# REWRITTEN BY STORY 6-5a (AC 10): the scan now EXCLUDES `last_resolved_card`, the one sanctioned
+	# identity in the per-player snapshot -- a resolved card is PUBLIC and hashed as a String value by
+	# ruling. What this test guards is unchanged: no identity rides in through the PENDING-DRAW keys.
+	var scanned := after.duplicate(true)
+	var resolved: Array = scanned["last_resolved_card"]
+	scanned.erase("last_resolved_card")
+	var text := str(scanned)
 	for id in _deck_contents():
 		assert_false(text.contains(str(id)),
 			"no card IDENTITY enters the snapshot through the new keys (%s)" % id)
+	assert_eq(typeof(resolved[0]), TYPE_STRING,
+		"...and the one identity that IS hashed is the last-resolved card, as a String VALUE (6-5a)")
 
 
 # --- AC 5 / AC 6: exhaustion, the lazy reshuffle, and the vulnerable window -------------------

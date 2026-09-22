@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="CardData" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://src/state/resources/card_data.gd" id="1_card"]
+[ext_resource type="Script" path="res://src/state/resources/card_cast_condition.gd" id="2_cast"]
+[ext_resource type="Resource" path="res://data/effects/grave_ward.tres" id="3_basic"]
+[ext_resource type="Resource" path="res://data/effects/raise_dead.tres" id="4_pitch"]
+
+[sub_resource type="Resource" id="Resource_cast"]
+script = ExtResource("2_cast")
+mana_cost = 2.0
+
+[sub_resource type="Resource" id="Resource_pitch"]
+script = ExtResource("2_cast")
+mana_cost = 6.0
+orb_costs = Dictionary[int, int]({
+0: 2
+})
+
+[resource]
+script = ExtResource("1_card")
+id = &"grave_ward"
+color = 2
+basic_effect = ExtResource("3_basic")
+pitch_effect = ExtResource("4_pitch")
+cast_condition = SubResource("Resource_cast")
+pitch_condition = SubResource("Resource_pitch")
+max_copies = 3

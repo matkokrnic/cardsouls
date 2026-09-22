@@ -50,6 +50,12 @@ const PRE_6_3A_PATH := "user://test_6_3a_pre_card_activate.rec"
 const PRE_6_7_PATH := "user://test_6_7_pre_run_gait.rec"
 ## Story 6-9 (AC 11): the v11-refusal test writes its own file, for the same no-racing reason.
 const PRE_6_9_PATH := "user://test_6_9_pre_click_to_commit.rec"
+## Story 6-5a (AC 6): the v12-refusal test writes its own file, for the same no-racing reason.
+const PRE_6_5A_PATH := "user://test_6_5a_pre_pitch_effects.rec"
+## Story 6-5a (AC 2/AC 6): the pitch-effect fixture's non-default flat numbers, round-tripped by value.
+const PITCH_EFFECT_SECONDS := 9.5
+const PITCH_EFFECT_MULTIPLIER := 2.5
+const PITCH_EFFECT_VISUAL := &"file_visual"
 
 ## Story 4-4: the in-test `unit_kinds` list the recorded config carries, and the nested values the
 ## round trip is measured on. Deliberately THREE LEVELS DEEP (kind -> attack -> projectile),
@@ -175,8 +181,12 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 12,
-		"FORMAT_VERSION is 12 as of story 6-9 (AC 11) -- a SILENT-DIVERGENCE bump on the `6-1` "
+	assert_eq(RecordFile.FORMAT_VERSION, 13,
+		"FORMAT_VERSION is 13 as of story 6-5a (AC 6) -- a NEW REQUIRED CONTENT CHANNEL, the sixth, "
+		+ "`pitch_effects`, which no v12 record carries, PLUS changed resolution semantics (buff ids "
+		+ "now APPLY), so a v12 recording would replay every activation as a no-op (pinned by "
+		+ "test_a_v12_record_without_pitch_effects_is_refused_with_a_reason). "
+		+ "It was 12 as of story 6-9 (AC 11) -- a SILENT-DIVERGENCE bump on the `6-1` "
 		+ "reasoning, and the SHAPE forced nothing again: mode ② became CLICK-TO-COMMIT, the "
 		+ "`card_cast` held key and the release arm that read it are both gone, and a held key "
 		+ "nobody writes needs no serialization edit. What a round trip inside one build cannot "
@@ -301,6 +311,16 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 		"...their mana price")
 	assert_eq(loaded.replay_pitch_costs()[DECK_IDS[0]].orb_costs, {Enums.CardColor.BLUE: 2},
 		"...and their ORB price, rebuilt into the typed dictionary rather than dropped")
+	# Story 6-5a (AC 1-2/AC 6): the SIXTH content channel, and AC 2's round-trip claim made through the
+	# FILE: a CardEffect's new FLAT exports survive save + load as values, rebuilt by the generic
+	# `_card_effects` path with no `_fresh_nested` row.
+	assert_eq(loaded.replay_pitch_effects().keys(), record.replay_pitch_effects().keys(),
+		"the pitch-effect map's ids survived")
+	var pitch_effect: CardEffect = loaded.replay_pitch_effects()[DECK_IDS[0]]
+	assert_eq(pitch_effect.effect_id, &"bloodlust", "...its effect id")
+	assert_eq(pitch_effect.duration_seconds, PITCH_EFFECT_SECONDS, "...its flat duration")
+	assert_eq(pitch_effect.damage_dealt_multiplier, PITCH_EFFECT_MULTIPLIER, "...its flat multiplier")
+	assert_eq(pitch_effect.visual_id, PITCH_EFFECT_VISUAL, "...and its presentation-only visual id")
 	# Story 4-1 (`4-1/R1`): the THIRD content channel, on the cost map's own footing -- "carries
 	# EVERY channel" is this test's name, so a channel added to the writer is added here.
 	assert_eq(loaded.replay_card_effects().keys(), record.replay_card_effects().keys(),
@@ -616,9 +636,45 @@ func test_a_v11_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_9_PATH)
 
 
+## Story 6-5a (AC 6): A v12 RECORD IS REFUSED WITH A REASON, NO SHIM -- the v8 refusal's STRIPPED-BODY
+## shape (`test_a_v8_record_without_pitch_costs_is_refused_with_a_reason`), because this bump, like 6-2's,
+## adds a required key: the body is rewritten to what a v12 build actually wrote -- no `pitch_effects`
+## key, no pitch-effect channel in the content order -- and relabelled v12.
+##
+## WHY REFUSED RATHER THAN MIGRATED: a v12 record has no pitch effects, so every activation it recorded
+## would replay as a no-op where this build applies the card's pitch effect -- and a v12 recording whose
+## effects carried a now-live buff id would apply a buff the recorded match never applied. Loaded without
+## complaint either way; an unloadable record is a correct answer, a divergent one is not.
+func test_a_v12_record_without_pitch_effects_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5A_PATH), "", "the record was written")
+	_rewrite_as_pre_6_5a(PRE_6_5A_PATH)
+	var refused := RecordFile.load_record(PRE_6_5A_PATH)
+	assert_null(refused["record"],
+		"a v12 record is REFUSED -- it carries no pitch effects, so its activations would replay as no-ops")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("12"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is the VERSION: the same stripped body relabelled at the current version is refused for
+	# its MISSING KEY instead, naming `pitch_effects` -- a v13 file cannot omit the channel either.
+	_rewrite_format_version(PRE_6_5A_PATH, RecordFile.FORMAT_VERSION)
+	var truncated := RecordFile.load_record(PRE_6_5A_PATH)
+	assert_null(truncated["record"], "a current-version body without pitch_effects is refused too")
+	assert_true(truncated["error"].contains("pitch_effects"),
+		"...and that refusal names the missing key: %s" % truncated["error"])
+	# ...and the intact record at the current version loads, so neither refusal was file damage.
+	assert_eq(RecordFile.save_record(record, PRE_6_5A_PATH), "", "rewritten intact")
+	assert_not_null(RecordFile.load_record(PRE_6_5A_PATH)["record"],
+		"the intact record at the CURRENT version loads")
+	_remove(PRE_6_5A_PATH)
+
+
 ## Story 6-9 (AC 11): THE v12 ROUND TRIP INSIDE THIS BUILD, the other half of the bump's
 ## measurement. A record saved and loaded at the LIVE version returns the same intents it was given
 ## -- so the refusal above is the version alone, and the bump broke nothing it did not mean to.
+## Story 6-5a: the live version is now 13; the name keeps 6-9's `v12` so the pin stays greppable, and
+## what it measures -- a round trip at whatever the live version is -- is unchanged.
 func test_a_v12_record_round_trips_inside_this_build() -> void:
 	var driven := _match_start()
 	var record: IntentRecorder = driven["record"]
@@ -938,9 +994,9 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 12,
+	assert_eq(RecordFile.FORMAT_VERSION, 13,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 12 (5-2's colours channel, 6-1's mode ② hold semantics, "
+		+ "version has since moved to 13 (last: 6-5a's pitch-effect channel; before it 5-2's colours channel, 6-1's mode ② hold semantics, "
 		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, 6-7's silent-divergence "
 		+ "bump for `run`/`walk_speed`, then 6-9's silent-divergence bump for click-to-commit, "
 		+ "which RETIRED 6-1's hold semantics), which is a different "
@@ -950,8 +1006,9 @@ func test_the_contents_validation_bumped_no_version_and_widened_no_required_key(
 		assert_false(RecordFile.REQUIRED_KEYS.has(field),
 			("`5-1a/R12`: `%s` is a PER-INTENT field inside each `intents` element, never a "
 			+ "top-level key — REQUIRED_KEYS is not widened by this story") % field)
-	assert_eq(RecordFile.REQUIRED_KEYS.size(), 14,
-		"FOURTEEN top-level required keys: story 6-2 added `pitch_costs`, the fifth content channel, "
+	assert_eq(RecordFile.REQUIRED_KEYS.size(), 15,
+		"FIFTEEN top-level required keys: story 6-5a added `pitch_effects`, the sixth content channel "
+		+ "(it was FOURTEEN before 6-5a); story 6-2 added `pitch_costs`, the fifth content channel, "
 		+ "and story 5-2 added `colors`, the fourth -- both those stories' bumps and not this one's. "
 		+ "It was THIRTEEN before 6-2, TWELVE before 5-2 and TWELVE "
 		+ "before 5-1a too (`5-1a/R12` counted them at the "
@@ -1161,6 +1218,11 @@ func _match_start() -> Dictionary:
 	var pitch_costs := _pitch_costs()
 	record.capture_inject_pitch_costs(pitch_costs)
 	ms.inject_pitch_costs(pitch_costs)
+	# Story 6-5a (AC 6): the SIXTH content channel, captured and injected LAST -- a partial map carrying
+	# non-default flat numbers, so the file round trip of CardEffect's new exports is exercised (AC 2).
+	var pitch_effects := _pitch_effects()
+	record.capture_inject_pitch_effects(pitch_effects)
+	ms.inject_pitch_effects(pitch_effects)
 	ms.drain_signals()
 	return {"record": record, "state": ms}
 
@@ -1414,6 +1476,20 @@ func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 	return out
 
 
+## Story 6-5a (AC 6): one card's pitch EFFECT, non-default flat numbers included. The driven run never
+## ACTIVATES it (the staged card is still waiting at the final tick), so it rides the record as content
+## and cannot move any hash this file compares.
+func _pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	var e := CardEffect.new()
+	e.effect_id = &"bloodlust"
+	e.duration_seconds = PITCH_EFFECT_SECONDS
+	e.damage_dealt_multiplier = PITCH_EFFECT_MULTIPLIER
+	e.visual_id = PITCH_EFFECT_VISUAL
+	out[DECK_IDS[0]] = e
+	return out
+
+
 func _costs() -> Dictionary[StringName, CardCastCondition]:
 	var out: Dictionary[StringName, CardCastCondition] = {}
 	for id in DECK_IDS:
@@ -1536,6 +1612,22 @@ func _rewrite_as_pre_6_2(path: String) -> void:
 	data.erase("pitch_costs")
 	var order: Array = data["content_order"]
 	order.erase(IntentRecorder.CHANNEL_PITCH_COSTS)
+	var writer := FileAccess.open(path, FileAccess.WRITE)
+	writer.store_var(data)
+	writer.close()
+
+
+## Story 6-5a (AC 6): turn a saved record into what a v12 build wrote -- version 12, NO `pitch_effects`
+## key, and no pitch-effect channel in the content order. Everything else exactly as written.
+func _rewrite_as_pre_6_5a(path: String) -> void:
+	var reader := FileAccess.open(path, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	data["format_version"] = 12
+	assert_true(data.has("pitch_effects"), "the record carried `pitch_effects` before it was stripped")
+	data.erase("pitch_effects")
+	var order: Array = data["content_order"]
+	order.erase(IntentRecorder.CHANNEL_PITCH_EFFECTS)
 	var writer := FileAccess.open(path, FileAccess.WRITE)
 	writer.store_var(data)
 	writer.close()

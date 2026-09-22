@@ -55,14 +55,15 @@ func _physics_process(_delta: float) -> bool:
 
 		# NON-VACUOUS: P1's cast resolves P1's cue only, never P2's -- a slot mismatch would be
 		# a cross-wired seam (the exact class of bug the `if cast_slot == slot` guard prevents).
-		_state.card_cast_resolved.emit(0, &"test_card")
+		# Story 6-5a (AC 7): the signal's third argument is the resolved mode.
+		_state.card_cast_resolved.emit(0, &"test_card", Enums.ModeKind.BASIC)
 		if not cue_p1.playing:
 			failures.append("P1 cast_cast_resolved(slot=0) did not play P1's CueCastSuccess")
 		if cue_p2.playing:
 			failures.append("P1's card_cast_resolved(slot=0) incorrectly played P2's CueCastSuccess")
 		cue_p1.stop()
 
-		_state.card_cast_resolved.emit(1, &"test_card")
+		_state.card_cast_resolved.emit(1, &"test_card", Enums.ModeKind.BASIC)
 		if not cue_p2.playing:
 			failures.append("P2 card_cast_resolved(slot=1) did not play P2's CueCastSuccess")
 		cue_p2.stop()

@@ -154,6 +154,53 @@ const REASON_MINIONS_FLAG_CLOSED := &"minions_flag_closed"
 ## card discarded, replacement owed) and no totem reaches the board.
 const REASON_TOTEMS_FLAG_CLOSED := &"totems_flag_closed"
 
+## Story 6-5a (AC 4, AC 15): THE FIRST WHOLE-ID FAMILY THAT IS NOT A SUMMON. Deck 1's effect ids carry
+## no `summon_`/`spell_` prefix -- they are matched here as WHOLE ids, one table row each, which is what
+## AC 4 means by dispatching "on the WHOLE `effect_id`, not a prefix". Ruin Vanguard is the exception by
+## design: `summon_ruin_vanguard` takes the unchanged `summon_*` path above (an unmapped summon is a
+## minion), because it is a summon rather than a new effect family.
+##
+## THE FOUR BUFF OUTCOMES. Each names what `MatchState` must APPLY (D6: this file computes, the ordered
+## dispatch applies -- the `OUTCOME_SUMMON` discipline, unchanged). None of them mutates anything here.
+const OUTCOME_BLOODLUST := &"bloodlust"
+const OUTCOME_VAMPIRIC_AURA := &"vampiric_aura"
+const OUTCOME_BLOODHOUND_STEP := &"bloodhound_step"
+const OUTCOME_FROSTBITE := &"frostbite"
+
+## The authored effect id -> buff outcome table. A `Dictionary` only ever `get()`-ed by one known key --
+## never iterated, never sorted, never hashed -- the `SUMMON_KINDS` posture verbatim.
+const BUFF_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"bloodlust": OUTCOME_BLOODLUST,
+	&"vampiric_aura": OUTCOME_VAMPIRIC_AURA,
+	&"bloodhound_step": OUTCOME_BLOODHOUND_STEP,
+	&"frostbite": OUTCOME_FROSTBITE,
+}
+
+## Story 6-5a (AC 15): the NINE Deck 1 effects that are authored but not yet built resolve as ONE named
+## no-op -- `REASON_SPELL_NOT_YET_RESOLVED`'s shape and reasoning: a SUCCESSFUL cast (mana/orbs spent,
+## card discarded, replacement owed, no `reject_action`), NOT YET rather than NOTHING. The card that
+## was cast stays distinguishable through its own id; the owning story is machine-readable below.
+const REASON_DECK1_NOT_YET_RESOLVED := &"deck1_not_yet_resolved"
+
+## Each deferred Deck 1 effect id -> the board key of the story that owns building it (AC 15,
+## `6-5a/R19`). A constant rather than a comment because a comment is not machine-checkable; a unit test
+## asserts all nine rows. Only ever `get()`-ed, never iterated.
+const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
+	&"culling": &"6-5b-corpses-and-own-minions",
+	&"grave_ward": &"6-5b-corpses-and-own-minions",
+	&"raise_dead": &"6-5b-corpses-and-own-minions",
+	&"drain": &"6-5b-corpses-and-own-minions",
+	&"rocksling": &"6-5d-hero-and-corpse-projectiles",
+	&"boom": &"6-5e-boulder-injection",
+	&"honed_bolt": &"6-5c-hero-cast-honed-bolt",
+	&"counterspell": &"6-5f-counterspell",
+	&"corpse_bomb": &"6-5d-hero-and-corpse-projectiles",
+}
+
+## Story 6-5a (AC 16): the SPELL layer's closed-gate reason, the `REASON_TOTEMS_FLAG_CLOSED` twin. The
+## four buffs gate on `FeatureFlags.spells`; off, the cast still resolves and the buff does not apply.
+const REASON_SPELLS_FLAG_CLOSED := &"spells_flag_closed"
+
 
 ## What this cast's effect does, as one of the four named outcomes above. `effect` is the injected
 ## per-card CardEffect for the id just cast — null when no entry was injected for it; `flags` is
@@ -178,9 +225,23 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 		if _is_totem(effect.effect_id):
 			return OUTCOME_SUMMON if _totems_open(flags) else REASON_TOTEMS_FLAG_CLOSED
 		return OUTCOME_SUMMON if _minions_open(flags) else REASON_MINIONS_FLAG_CLOSED
+	# Story 6-5a (AC 4): the WHOLE-ID matches, AFTER the summon prefix (a summon id is never a table
+	# row) and BEFORE the `spell_*` prefix. The id is recognised first and the flag read only after, the
+	# ordering argument this docstring already makes for the summon branch.
+	var buff: StringName = BUFF_OUTCOMES.get(effect.effect_id, &"")
+	if buff != &"":
+		return buff if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	if owner_story_for(effect.effect_id) != &"":
+		return REASON_DECK1_NOT_YET_RESOLVED
 	if id.begins_with(PREFIX_SPELL):
 		return REASON_SPELL_NOT_YET_RESOLVED
 	return REASON_UNKNOWN_EFFECT_PREFIX
+
+
+## Story 6-5a (AC 15): the board key of the story that owns a deferred Deck 1 effect id, or `&""` when
+## the id is not one of the nine.
+static func owner_story_for(effect_id: StringName) -> StringName:
+	return DEFERRED_EFFECT_OWNERS.get(effect_id, &"")
 
 
 ## Story 4-4 (AC 1): the UNIT KIND NAME this cast puts on the board — the second, finer question the
@@ -223,3 +284,8 @@ static func _minions_open(flags: FeatureFlags) -> bool:
 ## Story 4-4: the TOTEM twin, in the same direction and for the same reason.
 static func _totems_open(flags: FeatureFlags) -> bool:
 	return flags != null and flags.totems
+
+
+## Story 6-5a (AC 16): the SPELL twin, in the same direction and for the same reason.
+static func _spells_open(flags: FeatureFlags) -> bool:
+	return flags != null and flags.spells

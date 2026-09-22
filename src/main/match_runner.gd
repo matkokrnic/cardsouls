@@ -336,9 +336,18 @@ func _ready() -> void:
 		Invariant.check(_replay_record.replay_inject_content(_match_state),
 			"recorded content order is unsound — the cast-cost totality check would be vacuous")
 	else:
-		var deck_contents := _derive_deck_contents(balance_config.deck_size)
-		_recorder.capture_inject_deck(deck_contents)
+		# Story 6-5a (AC 11): the composition now comes from an AUTHORED DECK LIST (`DeckList`), not a
+		# walk of the whole library. `deck_size` stays authored and is pinned equal to the list's copy
+		# sum by `test_card_authoring.gd` (`6-5a/R9`); it is no longer what decides the composition.
+		var deck_contents := _derive_deck_contents(_active_deck_list())
+		# 6-5a REVIEW N7: INJECT FIRST, CAPTURE SECOND -- the one place in this block where the two are
+		# in that order, and deliberately. `inject_deck` is where the EMPTY-composition check lives
+		# (`match_state.gd`, AC 10); capturing before it meant a degraded run wrote a replayable-LOOKING
+		# record naming an empty deck and only then complained. The record now exists only for a
+		# composition the state layer accepted. The CAPTURE ORDER of the channels is untouched -- deck is
+		# still the first channel captured -- so `SOUND_CONTENT_ORDER` and the replay are unaffected.
 		_match_state.inject_deck(deck_contents)
+		_recorder.capture_inject_deck(deck_contents)
 		# Story 3-5a (AC 4): cast-cost injection, the same shape and the same seat as the deck
 		# injection directly above. ORDER MATTERS and is not stylistic — the seam validates that
 		# the map is TOTAL over the injected composition, so the composition must already be in.
@@ -374,6 +383,11 @@ func _ready() -> void:
 		var pitch_costs := _derive_pitch_costs()
 		_recorder.capture_inject_pitch_costs(pitch_costs)
 		_match_state.inject_pitch_costs(pitch_costs)
+		# Story 6-5a (AC 6): PITCH EFFECTS, the SIXTH content channel, injected LAST -- the pitch-cost
+		# pair directly above followed verbatim, in the order `SOUND_CONTENT_ORDER` pins.
+		var pitch_effects := _derive_pitch_effects()
+		_recorder.capture_inject_pitch_effects(pitch_effects)
+		_match_state.inject_pitch_effects(pitch_effects)
 	# Story 1-7 (AC 4.3): relay MatchState's round_ended onto the global EventBus — the
 	# one genuinely ownerless event. The relay lives in the RUNNER because state never
 	# touches an autoload; the source signal is queued (D5), so the bus emission happens
@@ -562,7 +576,9 @@ func _ready() -> void:
 		# the operator has ruled that it STANDS. It is recorded as a candidate for the architecture
 		# amendment queue rather than quietly filed under an existing precedent, because a third and
 		# fourth of these would be a de-facto ninth seam family nobody voted for.
-		_match_state.card_cast_resolved.connect(func(cast_slot: int, _card_id: StringName) -> void:
+		# Story 6-5a (AC 7): the signal carries a third argument, the resolved MODE; this cue ignores it.
+		_match_state.card_cast_resolved.connect(func(cast_slot: int, _card_id: StringName,
+				_mode: int) -> void:
 			if cast_slot == slot:
 				cues.on_card_cast_resolved())
 		# Story 3-0a: the rig animation controller shares the action-state seam -- the five
@@ -596,30 +612,84 @@ func _ready() -> void:
 					_match_state.hit_landed_was_blocked()))
 
 
-## Story 3-3 (AC 4): PROVISIONAL FIXTURE deck composition — walk CardDatabase's explicitly
-## SORTED ids, take up to each card's `max_copies`, stop when deck_size is reached. Sorted-id
-## order makes the result deterministic by construction: it can never depend on filesystem
-## enumeration order, and adding a card changes the composition only in the way the data says.
-## `max_copies` gains its FIRST consumer here.
+## Story 6-5a (AC 11): the AUTHORED deck both players draw from until a second deck exists -- Deck 1.
+const DECK_LIST_PATH := "res://data/decks/deck_1.tres"
+
+## Story 6-5a (AC 13): THE DECK-LIST SEAT a live test uses instead of fixed-seed luck. Set BEFORE the
+## runner enters the tree (its `_ready` derives the composition), and read nowhere else; null -- every
+## shipped path -- means `DECK_LIST_PATH`. Both players still receive ONE injected composition.
+var deck_list_override: DeckList = null
+
+
+## 6-5a REVIEW N7: the shipped list is ONE `.tres` behind one `load()`, and a failed load or a type
+## mismatch answers `null` -- which `_derive_deck_contents` used to turn into an empty composition, in
+## silence. Before this story the composition came from the whole `CardDatabase`, so no single file could
+## do that. The seam is LOUD now: `Invariant.check` names the path, and the empty composition it would
+## otherwise produce can no longer reach the recorder (see the capture order at the injection seat).
+func _active_deck_list() -> DeckList:
+	if deck_list_override != null:
+		return deck_list_override
+	var loaded := load(DECK_LIST_PATH) as DeckList
+	Invariant.check(loaded != null,
+		"the authored deck list failed to load as a DeckList (%s) -- a missing file, a failed export "
+				% DECK_LIST_PATH + "remap, or a type mismatch; the match has no composition")
+	return loaded
+
+
+## Story 6-5a (AC 11): the deck COMPOSITION, expanded from an authored `DeckList` IN LIST ORDER -- entry
+## by entry, each id repeated its `copies` times. This REPLACES story 3-3's provisional walk of the whole
+## library in sorted-id order up to each card's `max_copies`: the nine fixture cards stay authored in
+## data/cards/ and are simply not listed (R1). List order is what makes the result deterministic --
+## the pre-shuffle order feeds the seeded shuffle, which is why the list is ordered and never a
+## Dictionary. A card the library does not hold is SKIPPED rather than injected, so a mistyped id can
+## never reach a hand; an empty result is caught loudly at the injection seam (3-3 AC 10), not here.
 ##
-## THIS IS NOT THE DECKBUILDING SEAT. Real deck selection is E4/E5 or later; this exists so the
-## card system has a deck to draw from at all, and it lives in the RUNNER because it is the one
-## place allowed to read CardDatabase (AC 2) — src/state/ may not so much as name it (AC 8).
+## THIS IS STILL NOT THE DECKBUILDING SEAT, and it lives in the RUNNER because it is the one place
+## allowed to read CardDatabase (3-3 AC 2) -- src/state/ may not so much as name it (3-3 AC 8).
+## 6-5a REVIEW N6: THE EXPANSION IS NOW LOUD AT EVERY WAY IT CAN DEGRADE. Each of the three silent
+## shrinks below produced a deck SHORTER than the authored `deck_size` with no runtime complaint, and
+## `deck_size` is read by nothing at runtime -- it is pinned only against the list's COPY SUM, never
+## against the expanded result, so nothing downstream would have noticed:
+##   * a MISALIGNED list -- `mini()` dropped the tail of the longer array;
+##   * an id the LIBRARY does not hold -- `continue`d past;
+##   * a ZERO or NEGATIVE `copies` entry -- `for _copy in <= 0` iterates zero times.
+## The shipped list is guarded at authoring time by `test_card_authoring.gd`, but the
+## `deck_list_override` seat bypasses that guard entirely, so the hole is reachable. The checks are
+## seated HERE, where every list arrives. The skip and the `mini()` STAY beneath them: `Invariant.check`
+## is `push_error` + `assert` and the assert is stripped in an exported build, so the loop must still be
+## safe to run after a violated check -- and the totality check on the result is the backstop that
+## cannot be walked past silently in a dev build.
 ##
-## The library can be SMALLER than deck_size, in which case the walk simply stops when it runs
-## out of copies; the shipped nine cards carry 24 authorable copies against a deck_size of 20.
-## The genuinely broken case — an empty card set, e.g. a directory that degraded to empty under
-## export remap — is caught loudly at the injection seam (AC 10), not swallowed here.
-func _derive_deck_contents(deck_size: int) -> Array[StringName]:
+## NO `max_copies` CHECK HERE, deliberately (operator ruling): `test/live_summon_deck.gd` ships twenty
+## copies of a `max_copies = 3` card through the override seat ON PURPOSE. The copy cap is an AUTHORING
+## rule, audited where authored decks live; this seam only requires a composition that is what the list
+## says it is.
+func _derive_deck_contents(deck_list: DeckList) -> Array[StringName]:
 	var out: Array[StringName] = []
-	for id: StringName in CardDatabase.sorted_ids():
-		var card := CardDatabase.get_card(id) as CardData
-		if card == null:
+	Invariant.check(deck_list != null, "no deck list to expand -- the match would start with no deck")
+	if deck_list == null:
+		return out
+	Invariant.check(deck_list.card_ids.size() == deck_list.copies.size(),
+		"deck list arrays are index-aligned and must agree in length: %d ids vs %d copy counts"
+				% [deck_list.card_ids.size(), deck_list.copies.size()])
+	var expected := 0
+	for index in mini(deck_list.card_ids.size(), deck_list.copies.size()):
+		var id: StringName = deck_list.card_ids[index]
+		var copies: int = deck_list.copies[index]
+		Invariant.check(CardDatabase.has_card(id),
+			"deck list names '%s', which the card library does not hold" % id)
+		Invariant.check(copies > 0,
+			"deck list entry '%s' asks for %d copies -- a deck entry contributes at least one" % [id, copies])
+		# Counted BEFORE the skip, so the totality check below is a real backstop: a skipped id makes
+		# the expansion short of the sum, and that is exactly what it is there to catch.
+		expected += maxi(copies, 0)
+		if not CardDatabase.has_card(id):
 			continue
-		for _copy in card.max_copies:
-			if out.size() >= deck_size:
-				return out
+		for _copy in copies:
 			out.append(id)
+	Invariant.check(out.size() == expected,
+		"the expanded composition is %d cards, not the %d the list's copy counts sum to"
+				% [out.size(), expected])
 	return out
 
 
@@ -707,6 +777,19 @@ func _derive_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 		if card == null or card.pitch_condition == null:
 			continue
 		out[id] = card.pitch_condition
+	return out
+
+
+## Story 6-5a (AC 6): the injected PITCH-EFFECT map -- `_derive_card_effects()` followed verbatim over
+## `CardData.pitch_effect`, the WHOLE library walked by `CardDatabase.sorted_ids()`. A card with no pitch
+## effect authored is SKIPPED, and nothing downstream demands totality (`_derive_pitch_costs`'s rule).
+func _derive_pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null or card.pitch_effect == null:
+			continue
+		out[id] = card.pitch_effect
 	return out
 
 

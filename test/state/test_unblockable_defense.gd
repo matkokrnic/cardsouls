@@ -355,7 +355,7 @@ func test_the_cast_discards_the_card_and_owes_a_replacement() -> void:
 		func(_ids: Array[StringName], _d: int, _x: int) -> void: announcements.append(true))
 	var resolved: Array = []
 	ms.card_cast_resolved.connect(
-		func(s: int, id: StringName) -> void: resolved.append([s, id]))
+		func(s: int, id: StringName, mode: int) -> void: resolved.append([s, id, mode]))
 	_advance(ms, InputIntent.new(), _defense_intent(slot))
 	assert_false(ms.p2.hand.occupied_ids().has(played_expected), "the card LEFT the hand")
 	assert_eq(ms.p2.discard.to_array(), [played_expected] as Array[StringName],
@@ -364,7 +364,8 @@ func test_the_cast_discards_the_card_and_owes_a_replacement() -> void:
 		"a replacement is OWED, to the slot the cast vacated")
 	assert_true(ms.p2.pending_draw.is_running, "...and its window is in flight")
 	assert_eq(announcements.size(), 1, "notify_cards_changed() fired exactly once")
-	assert_eq(resolved, [[1, played_expected]], "card_cast_resolved queued for the casting slot")
+	assert_eq(resolved, [[1, played_expected, Enums.ModeKind.DEFENSE]],
+		"card_cast_resolved queued for the casting slot, carrying the DEFENSE mode (story 6-5a, AC 7)")
 
 
 ## AC 7's load-bearing word is UNCONDITIONAL: the card is gone whether the defense ever answers
@@ -2601,3 +2602,49 @@ func _advance(ms: MatchState, p1: InputIntent, p2: InputIntent) -> void:
 	var intents: Array[InputIntent] = [p1, p2]
 	ms.advance(intents)
 	ms.drain_signals()
+
+
+# --- Story 6-5a (AC 9, R3/R4): THE DAMAGE FUNNEL AT THE TWO UNBLOCKABLE SEATS ---------------------------
+##
+## The funnel's melee and unit seats are proven in test_spell_framework.gd; these two seats live here
+## because the landing fixtures do. Bloodlust is set on the timed-rule seat DIRECTLY (its cast path is
+## proven separately), so each test isolates the SEAT: remove the funnel call from it and the doubled
+## number goes back to the base one.
+
+## The LANDING PACKAGE seat: a Bloodlusted CASTER deals 2x, a Bloodlusted VICTIM takes 2x, and both
+## compound. Vampiric Aura on the caster heals half of what the landing actually removed.
+func test_the_landing_package_seat_runs_through_the_damage_funnel() -> void:
+	var caster_buffed := _kd_match()
+	caster_buffed.p1.start_rule(PlayerState.RULE_BLOODLUST, 10000, 2.0, 2.0)
+	_land(caster_buffed, 0, Enums.CardColor.RED)
+	assert_eq(caster_buffed.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE * 2.0,
+		"a Bloodlusted caster's landing deals 2x (the dealt multiplier)")
+	var victim_buffed := _kd_match()
+	victim_buffed.p2.start_rule(PlayerState.RULE_BLOODLUST, 10000, 2.0, 3.0)
+	_land(victim_buffed, 0, Enums.CardColor.RED)
+	assert_eq(victim_buffed.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE * 3.0,
+		"a Bloodlusted victim takes its TAKEN multiplier (3.0 here, distinct from the dealt 2.0)")
+	var aura := _kd_match()
+	aura.p1.start_rule(PlayerState.RULE_VAMPIRIC_AURA, 10000, 0.5, 0.0)
+	aura.p1.hero.take_damage(30.0)
+	aura.drain_signals()
+	_land(aura, 0, Enums.CardColor.RED)
+	assert_eq(aura.p1.hero.get_hp(), MAX_HP - 30.0 + UNBLOCKABLE_DAMAGE * 0.5,
+		"Vampiric Aura heals the caster 50% of the landing's removed damage (R4: unblockable counts)")
+
+
+## The DODGED-UNBLOCKABLE seat, reachable only at a retuned positive dodge multiplier: the funnel runs
+## AFTER the dodge multiply, the block seat's ordering, so a Bloodlusted caster doubles the surviving
+## magnitude and the `hit_landed` it emits carries that doubled number.
+func test_the_dodged_unblockable_seat_runs_through_the_damage_funnel() -> void:
+	var config := _config()
+	config.dodged_unblockable_damage_multiplier = 0.5
+	var ms := _make_match_with(config)
+	ms.p1.start_rule(PlayerState.RULE_BLOODLUST, 10000, 2.0, 2.0)
+	var hits := _collect_hits(ms)
+	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE * 0.5 * 2.0,
+		"a Bloodlusted caster's DODGED landing deals 2x the surviving magnitude")
+	assert_eq(hits.size(), 1, "...one hit_landed")
+	if hits.size() == 1:
+		assert_eq(float(hits[0][2]), UNBLOCKABLE_DAMAGE * 0.5 * 2.0, "...carrying the funnelled number")

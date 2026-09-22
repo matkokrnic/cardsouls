@@ -171,6 +171,8 @@ func _fixture_record(move_scale: float) -> IntentRecorder:
 	record.capture_inject_card_colors(_colors())     # story 5-2: the fourth
 	var no_pitch_costs: Dictionary[StringName, CardCastCondition] = {}
 	record.capture_inject_pitch_costs(no_pitch_costs)  # story 6-2: the fifth (empty is legal, AC 2)
+	var no_pitch_effects: Dictionary[StringName, CardEffect] = {}
+	record.capture_inject_pitch_effects(no_pitch_effects)  # story 6-5a: the sixth (empty is legal)
 	for t in range(1, TICKS + 1):
 		if t == RELOAD_TICK:
 			record.capture_apply_balance(_config(11.0))

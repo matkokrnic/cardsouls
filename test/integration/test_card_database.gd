@@ -23,13 +23,19 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://test/integration/test_card_database.gd
 ## (read ${PIPESTATUS[0]} / set -o pipefail so grep can't mask the exit code.)
 
-## The nine authored ids (data/cards/), listed as LITERALS on purpose: re-deriving them by
+## The authored ids (data/cards/), listed as LITERALS on purpose: re-deriving them by
 ## scanning the same directory the loader scans would make the test agree with the loader
 ## about a set both got wrong.
+##
+## REWRITTEN BY STORY 6-5a (AC 13): nine -> SIXTEEN, the whole library -- Deck 1's seven cards plus the
+## nine 3-2 fixtures, which stay authored (and loaded) but are dormant, not in the deck list (R1).
 const EXPECTED_IDS: Array[StringName] = [
 	&"ember_lash", &"imp_summoner", &"hellforge_totem",
 	&"frost_dart", &"storm_kite", &"tidal_wardstone",
 	&"bramble_snare", &"thornback_guardian", &"verdant_wardstone",
+	# Story 6-5a: Deck 1.
+	&"ruin_vanguard", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step",
+	&"honed_bolt", &"frostbite",
 ]
 
 func _physics_process(_delta: float) -> bool:
