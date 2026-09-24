@@ -4,7 +4,7 @@ baseline_commit: e7842821ad1fb56a76a758e74f7b3e684cc57a36
 
 # Story 6.5b: Corpses and Own-Minion Spells
 
-Status: ready-for-dev
+Status: review
 
 <!-- Tier A. Split from 6-5-spell-resolution by operator ruling (2026-09-22) into six sub-stories
 (6-5a..6-5f); this is the second. Depends on 6-5a (done). Golden PREDICTED to move (corpse lifetime
@@ -394,6 +394,20 @@ to this smoke unchanged because two pads means two killable, human-driven slots)
     Step, Frostbite) and every still-deferred Deck 1 effect (Rocksling, Boom, Honed Bolt,
     Counterspell, Corpse Bomb) still cast cleanly with no crash, no assert, no visible regression.
 
+### Live Smoke results (2026-09-25, operator, two pads [3,3])
+
+- Corpse lingers the authored 20 s then disappears: PASS. Totems vanish at once on death (6-5b/R10 consequence): observed.
+- Drain: refused with no own minion (nothing spent); with several minions the FACED one dies; heal never exceeds max HP: PASS.
+- Grave Ward: corpses really are extended; refused with no corpse: PASS. The extended-corpse TINT is NOT VISIBLE at all: AC 24's visual half FAILS at smoke (state-side mark works). DEFERRED to the Tier B presentation story (hand/HUD redesign + visual dressing for card effects). Suspected cause, for that story: the runner tints the node named `Mesh`, which the rigged minion scene may not have.
+- Raise Dead: corpses rise; with no corpse the activation is refused, the card stays staged until it fizzles, orbs are not spent: PASS.
+- Culling: kills own minions, +2 mana each up to the max of 10, refused with no minion: PASS. Totem exclusion not observable live (Deck 1 has no totems) - machine-proven only.
+- The opponent's corpses are never raised: PASS.
+- Vampiric Aura / Bloodlust never apply to Culling/Drain: PASS.
+- Hand prices (AC 23): rendered, but legibility is INSUFFICIENT - the price text is swamped by the card colour. Geometry passes; the legibility judgement FAILS at smoke (PROC/R8). DEFERRED to the same presentation story.
+- R-D6: a hero dies and the round ends normally: PASS (R-D6 spent).
+- FPS stable with many corpses: PASS.
+- PRE-EXISTING INTERMITTENT FLAKE (not a smoke item): `ERROR: 1 resources still in use at exit` after `RESULT: PASS` in `test/integration/test_unit_combat_live.gd` (0 of 10 isolated runs; 2 of 4 full-suite integration runs on the 6-5b tree), not attributable to 6-5b per the evidence in the decision-log close-out block; `run_all.sh` reports it as a failure; owner: E6 close-out tooling debt.
+
 ## Tasks / Subtasks
 
 **Existing tests this story breaks (must be repaired as part of the task that removes their cause):**
@@ -546,11 +560,378 @@ to this smoke unchanged because two pads means two killable, human-driven slots)
 
 ### Agent Model Used
 
+Dev pass: Claude Opus 5. Review: Claude Opus 5. Review fix pass: Claude Sonnet 5.
+Main session only, no subagents, no parallel sessions. Nothing committed or staged by the dev pass.
+
 ### Debug Log References
+
+Suite outputs, all written OUTSIDE the repo:
+
+| File | What it holds |
+|---|---|
+| `C:\dev\_65b-suite-baseline-state.txt` | before-baseline state harness (written before the first edit) |
+| `C:\dev\_65b-suite-baseline-integration.txt` | before-baseline integration runs |
+| `C:\dev\_65b-suite-final-state.txt` | final state harness |
+| `C:\dev\_65b-suite-final-integration.txt` | final integration runs |
+| `C:\dev\_65b-golden-iso-nokeys.txt` | the golden ISOLATION run (three new snapshot keys removed, everything else in place) |
+| `C:\dev\_65b-mut-M*.txt` | one file per mutation proof |
+| `C:\dev\_65b-mutants\*.pre` + `*.sha` | every mutant's pre-mutation copy and SHA256 |
+| `C:\dev\_65b-backups\*.bak` | pre-edit copies taken before each byte-level replace |
+
+**Suite cadence (`PROC/R1` disclosure).** The default two FULL suite runs were the before-baseline and
+the final. Beyond those, the STATE HARNESS ALONE was run repeatedly and is reported rather than
+absorbed: 7 development runs while the implementation landed (parse/signature errors, then the pin
+updates), 1 golden isolation run, and 11 mutation-proof runs. No extra full suite (state + integration)
+run was taken. The state harness carries no per-file filter, which is why a mutation proof runs it whole.
+
+**Process finding worth recording.** A PARSE ERROR in a test file makes `test/run_state_tests.gd` HANG
+rather than fail fast: the loader returns null, `:29` calls `.new()` on it, and the SceneTree never
+quits. It cost two 600 s timeouts before the cause was visible in the partial output file. Not a
+story defect and not fixed here; worth a tooling story.
 
 ### Completion Notes List
 
+**Status of the eight tasks.** The story's Tasks/Subtasks section is an authored NUMBERED LIST with no
+checkboxes, so there is nothing to tick; completion is recorded per task here instead.
+
+1. **Corpse-in-state (AC 1-5)** — done. `test/state/test_corpses.gd` (new, 14 tests): the corpse fact's
+   shape, its creation through the death seat, the per-tick countdown and removal at zero, the
+   debug-reset-only clear, and the totem/hero exclusions. The positionlessness of `6-5b/R1` is asserted
+   by a CODE-LINE source scan (`Vector3` / `global_position`), not by reading a field that does not
+   exist.
+2. **Death-seat unification and the kill/damage split (AC 6, 7, 25)** — done. The seat is CREATED on
+   `UnitBoard` as `kill_at(index, corpse_ticks)` beside `apply_damage_at`, which now ROUTES a lethal hit
+   through it — so there is exactly one expression of "hp reaches zero" and it is the one that writes
+   the corpse. Three callers, pinned by a source scan. AC 6 is asserted as an EQUALITY of the three
+   causes' hashed corpse state rather than as three separate "leaves a corpse" claims. AC 25's
+   actor-free moved to the runner's state read.
+3. **Culling (AC 8-10)** — done, `test/state/test_own_minion_spells.gd` (new, 19 tests).
+4. **Grave Ward / Raise Dead (AC 11-17, 24)** — done, same file.
+5. **Drain (AC 18-22)** — done, same file, plus `test/integration/test_drain_selection.gd` (new) for the
+   angle rule itself.
+6. **Presentation (AC 23, 26)** — done. Both prices render; `test_hud_viewports.gd` gained a
+   price-band GEOMETRY assertion; `FORMAT_VERSION` 13 -> 14 with a v13 hard-refusal test.
+7. **Test repairs** — every row of the broken-test table applied; see the table below.
+8. **Live-test budget check** — done, MEASURED. See "Live-test budgets" below.
+
+**AC 23's open question, settled by the operator's ruling and recorded descriptively (no new label).**
+The hand-row price map is DERIVED LOAD-ONCE on the `card_colors` precedent: id ->
+`[mode-1 mana, mode-1 orbs, mode-4 mana, mode-4 orbs]`, read from the authored `CardData.cast_condition`
+/ `pitch_condition` by `MatchRunner._derive_card_prices()` and handed to the HUD through the EXISTING
+cards-changed wrapper (no eleventh `connect_*` seam, so the pinned observation-seam family stays at
+TEN). Prices are static authored data: they never enter game state, never enter the record, and are NOT
+a `FORMAT_VERSION` cause. That is why AC 23 cost this story no snapshot key and no capture channel.
+
+**Where the story's own predictions measured FALSE, reported rather than rewritten to fit:**
+
+1. **Golden Prediction cause 1's CONTENT claim.** It predicted the corpse container enters the snapshot
+   EMPTY, "contents `[]`". FALSE. `6-5b/R17` put corpse data at the dead unit's OWN BOARD INDEX rather
+   than in a separate container, so the three keys are PARALLEL ARRAYS over every record (the `unit_hp`
+   shape) and the golden fixture's one summoned unit gives each ONE resting entry. `[]` would have been
+   right only for the container shape the gate ruled out. Measured and now pinned by
+   `test_determinism.gd::test_the_golden_fixture_reaches_the_hash_tick_with_one_resting_corpse_entry`.
+2. **Golden Prediction cause 2 (the refusal path) was predicted to MOVE the golden under `SC/R6`. It
+   did not.** It moved the UNIT SUITE and not the golden, and the reason is specific rather than a
+   loophole: the golden fixture's one cast is a `summon_*`, which has no board precondition, so
+   `_board_refusal_reason` returns `&""` and no gate is ever taken on the recorded path. `SC/R6` is
+   about a change that makes a pressed action refusable IN THE RECORDED SEQUENCE; this fixture never
+   presses one of the four cards. Measured by the isolation run, not argued.
+3. **Golden Prediction causes 3, 4 and 5 were all measured NON-MOVERS** — see the re-baseline block in
+   `test_determinism.gd`, which names each with its reason.
+4. **The `6-5b/R6` "nearest to you" discrepancy** is unchanged from the story: the facing rule ships and
+   `deck-1-spec.md` is NOT amended for Drain.
+
+**Deviations from the story, each named:**
+
+- **A hero cannot hit its own minion**, so AC 6's "combat-hit death" of an OWN minion is dealt by the
+  OPPOSING hero in every fixture here. `MatchState.push_contact` refuses a fact whose attacker and
+  target slots match ("self-contact fact is malformed in 1v1"). The story assumed a same-side combat
+  kill was drivable; it is not, and the opposing hero is also the only way it happens in play.
+- **Drain's absent/stale-fact DEGRADE is a dev-pass choice the story did not name.** When the pushed
+  index is not a living own minion (a headless fixture that never pushed, a minion that died inside the
+  same tick, a malformed push), `_apply_drain` falls back to the LOWEST living own minion rather than
+  refusing a cast the pre-spend gate already allowed. It is position-free, so it cannot reintroduce a
+  spatial read, and AC 22's first sentence holds either way. Pinned in both directions.
+- **A kind that leaves no corpse is now freed on the DEATH TICK.** `6-5b/R10` gives totems no corpse, so
+  `has_corpse_at` is false the instant a totem dies and the runner frees its actor at once; through 4-3d
+  a dead totem lingered the full 10 s like a minion. No AC states this and nothing reads a totem linger,
+  but it is the one visible consequence of R10 and is named here rather than left to a smoke surprise.
+- **`UnitBoard.apply_damage_at` gained a REQUIRED third parameter** rather than a defaulted one, which
+  moved 17 existing test call sites (each now passes `0`, i.e. "no corpse", which is what those tests
+  mean). Required over defaulted on the guard-mechanism-over-guard-pattern rule: a defaulted corpse
+  argument is exactly how a production caller silently kills without leaving a corpse.
+- **`_gather_drain_target` was split** into a scene-reading candidate build plus a PURE
+  `_select_drain_target`, so AC 22's tie-break matrix can be driven with no scene — the
+  `_compute_spawn_positions` / `test_unit_spawn_purity.gd` precedent.
+- **Two guards were found VACUOUS by their own mutation proofs and fixed.** Both are in the table below
+  (M3 and M4). Neither was a production defect; both were tests that could not see the thing they were
+  written to protect.
+
+**One production-shape correction made during the pass:** the first draft used
+`_corpse_ticks_for(...) > 0` as the "is this a minion" test, which conflated two independent facts — with
+`corpse_lifetime_seconds` authored 0.0 (a legal degenerate value the audit permits in tests) every
+minion would have read as a non-minion and Culling would have killed NOTHING while still spending its
+orb. Split into `_is_own_minion()` (authored content) and `_corpse_ticks_for()` (a tunable).
+
+**Mode ④ reads the pitch-effect map ONCE**, into a local shared by the gate and the apply, because
+`test_deck_and_hand.gd` pins that activation consumes it exactly once (6-5a AC 6) — that pin went RED on
+the first draft and is the reason the local exists.
+
+### Golden
+
+| | Value |
+|---|---|
+| Before | `59e9a42cc5145a31ddfde279eb1f06cf990f836015b260f0986cd704ad86b1bd` |
+| After | `962514b1e40f95d4ebda3265bc85e48a6321209b6e064b2a43332964644136b9` |
+| Re-baselines | ONE |
+| Per-player snapshot key set | 33 -> 36 |
+| `RecordFile.FORMAT_VERSION` | 13 -> 14 |
+
+**The single cause, isolated BOTH directions (MEASURED).** With exactly the three new snapshot keys
+erased from `PlayerState.to_snapshot()` and every other 6-5b change still in place — the death seat, the
+step-2 corpse countdown, the four resolver outcomes and their apply seats, both pre-spend refusal gates,
+Drain's pushed intake, the authored effect numbers, the `FORMAT_VERSION` bump — the hash is
+`59e9a42c...` EXACTLY, the pre-story golden reproduced (`C:\dev\_65b-golden-iso-nokeys.txt`, in which
+`test_state_matches_golden` passes and the only two failures are the two key-set pins). The full
+accounting, including each predicted non-cause, is written at the `GOLDEN` constant in
+`test/state/test_determinism.gd`.
+
+### Mutation proofs
+
+Every proof: one mutation at a time, foreground, the target file copied OUTSIDE the repo with its
+SHA256 first and RESTORED BY COPYING BACK with the SHA re-verified (never `git checkout`). Provenance
+for every row is MEASURED — each was run and its output kept.
+
+| # | Mutation | Target | Expected guard | Result |
+|---|---|---|---|---|
+| M1 | `tick_corpses()` stops decrementing | `unit_board.gd` | the countdown and both Grave Ward tests | **RED** (3 tests) — MEASURED |
+| M2 | `kill_at`'s already-dead early return removed | `unit_board.gd` | death-seat idempotence | **RED** — MEASURED |
+| M3 | the three corpse `clear()` lines dropped | `unit_board.gd` | reset clears corpses | **GREEN — VACUOUS**, see below |
+| M3b | same mutation, after the guard was strengthened | `unit_board.gd` | corpse arrays stay index-aligned | **RED** — MEASURED |
+| M4 | `_corpse_ticks_for` stops excluding non-minions | `match_state.gd` | a totem leaves no corpse | **GREEN — VACUOUS**, see below |
+| M4b | same mutation, after the fixture was fixed | `match_state.gd` | a totem leaves no corpse | **RED** — MEASURED |
+| M5 | `extend_corpse_at` uses `=` instead of `+=` | `unit_board.gd` | AC 12 additive stacking | **RED** (2 tests) — MEASURED |
+| M6 | Culling's `kill_cap` break removed | `match_state.gd` | AC 8 cap in board-index order | **RED** — MEASURED |
+| M7 | the MODE ① pre-spend gate removed | `match_state.gd` | AC 13 / AC 21 refusals | **RED** (2 tests) — MEASURED |
+| M8 | the MODE ④ pre-spend gate removed | `match_state.gd` | AC 9 / AC 15 refusals | **RED** (2 tests) — MEASURED |
+| M9 | Culling routed through `apply_damage_at` + lifesteal | `match_state.gd` | AC 7 funnel bypass | **RED** (2 tests, incl. the three-caller scan) — MEASURED |
+| M10 | the distance tie-break removed | `match_runner.gd` | AC 22 equal-angle case | **RED** — MEASURED |
+| M11 | the angle comparison made non-strict | `match_runner.gd` | AC 22 lower-index case | **RED** (3 assertions) — MEASURED |
+| M12 | `drain_pushes` renamed in `REQUIRED_KEYS` | `record_file.gd` | AC 26 v13 refusal | **RED** (21 tests, incl. the v13 test) — MEASURED |
+| M13 | authored `kill_cap` 99 -> 7 | `culling.tres` | the four-effects authoring pin | **RED** — MEASURED |
+| M14 | authored `corpse_lifetime_seconds` -> 0.0 | `balance_config.tres` | the balance audit | **RED** — MEASURED |
+| M15 | price band's bottom inset -13 -> -4 | `hud_root.gd` | AC 23 geometry | **RED** (all 4 panels) — MEASURED |
+
+**15 mutations, 17 runs, every guard RED after repair. TWO were found VACUOUS and fixed:**
+
+- **M3.** Dropping the three corpse `clear()` lines left the whole file GREEN, because `clear()` empties
+  `_hp` too — so `has_corpse_at` reads false for a MISSING RECORD whether or not the corpse arrays were
+  cleared. The guard could not see the thing it was written to protect. What an unsynced clear actually
+  breaks is INDEX ALIGNMENT (the next summon appends to thirteen arrays of which three are already
+  longer), so the assertion now reads the snapshot's own LENGTHS after a reset plus a fresh summon.
+  RED at M3b with the exact stale-length symptom.
+- **M4.** Letting totems leave corpses left `test_a_totem_leaves_no_corpse` GREEN, because the fixture
+  killed the totem FIRST and asserted at the end — and this fixture's corpse lifetime is deliberately
+  short (8 ticks) while driving the second kill through the real contact path costs more ticks than
+  that. The totem's corpse had simply AGED OUT before the assertion read it. Each corpse is now
+  asserted on the tick its own kill landed. RED at M4b.
+
+### Broken-test table: every row applied
+
+| Row | Applied |
+|---|---|
+| `test_spell_framework.gd` deferred dict + count | Dict and count 9 -> 5; test RENAMED to `test_the_five_deferred_effects_name_their_owning_story` (count-in-the-name discipline, old name recorded in place). Its `sf_culling` fixture carried the now-live `culling` id and REFUSED; repointed at `rocksling` (6-5d's) so the two tests that need a still-deferred effect keep testing that. |
+| `test_card_authoring.gd` N11 coverage vanishing | New `test_the_four_own_minion_effects_carry_their_spec_numbers` pins all five authored numbers AND re-asserts that each of the four authors nothing it does not use. Two rows (`kill_cap` 99, `raise_hp_percent` 100.0) are authored at values EQUAL to their ruled script defaults, so deleting the `.tres` line leaves them green; that is stated in the test and they are mutation-proven by CHANGING the value instead (M13). |
+| `test_unit_corpse_linger_live.gd` | Re-pointed at the authored state-owned lifetime: `corpse._linger_ticks` -> `_lifetime_ticks - corpse.corpse_ticks_remaining()`, `UnitActor.LINGER_TICKS` -> `_lifetime_ticks` read off the live `BalanceTicks`. The file still reasons in ELAPSED ticks, so every assertion keeps its exact shape — only the READ moved. |
+| `test_unit_corpse_walkthrough_live.gd` | Budget confirmed, MEASURED: PASSES under the 1200-tick lifetime with `MAX_FRAMES := 2000` unchanged. |
+| `test_unit_combat_live.gd` | `is_lingering()` kept; the stale 600-tick narrative corrected in three comments. |
+| `perf_20_units_live.gd:361`, `test_lock_on.gd:312` | `perf_20_units_live.gd`'s "600" narrative corrected. `test_lock_on.gd:312` was re-read and needed NO edit: it says the corpse "lingers on the board for several ticks", which is still true and names no number. |
+
+### Live-test budgets (task 8, MEASURED)
+
+- `test_unit_corpse_linger_live.gd`: PASSES under the 1200-tick lifetime. Measured
+  `max_alive=1199 freed_at=1200`, i.e. exactly the authored lifetime; `ticking_frames=1161`;
+  `MAX_FRAMES := 3000` still bounds the run with room, and `PAUSE_AT_TICK := 120` still lands early in
+  the linger (pause probe fired at `entry_tick=121`).
+- `test_unit_corpse_walkthrough_live.gd`: PASSES with `MAX_FRAMES := 2000` unchanged.
+
+### Suite
+
+| | Before (baseline) | After (final) |
+|---|---|---|
+| State harness | 980 tests, 0 failed, 9183 assertions, PASS | **1017 tests, 0 failed, 10087 assertions, PASS** |
+| Integration | 67 files, 67 PASS | **68 files, 68 PASS** |
+
+The integration file count moves 67 -> 68 because this story ADDS `test_drain_selection.gd`. (The
+handoff into this session recorded the baseline as 67 and that is CORRECT; an earlier note in this pass
+saying "68 files" at baseline was my own miscount of a grep listing and is withdrawn — `ls` and the
+baseline output file both say 67.)
+
+### Not covered by an automated test, named rather than implied
+
+- **Raise Dead's ACTUAL placement** (AC 14's "at the corpse's own location"). State records WHICH corpse
+  a record was raised from and that is pinned; the runner's read of that corpse actor's
+  `global_position` is exercised by no automated test, because it needs a live scene with spawned
+  corpses. It is smoke items 4 and 8.
+- **AC 24's tint as a VISIBLE mark.** The per-corpse latch and the runner's tint call are wired and the
+  mark's state is pinned; whether the colour reads as "warded" is smoke item 1.
+- **AC 23's legibility.** Geometry only, per `PROC/R8`; smoke item 12.
+
+### New scripts have no `.uid` siblings yet
+
+`test/state/test_corpses.gd`, `test/state/test_own_minion_spells.gd` and
+`test/integration/test_drain_selection.gd` have no `.gd.uid` files, unlike every committed test script
+in this repo (the convention is that `.gd.uid` is tracked). Generating them needs an editor import pass,
+which this dev pass deliberately did NOT run: no new `class_name` ships, so no class-cache rebuild was
+required, and an unnecessary editor session risks exactly the `project.godot` / `main.tscn` collateral
+the binding procedure guards against. **Operator decision before the commit chain.** Verified now:
+`git diff -- project.godot src/main/main.tscn` is EMPTY.
+
 ### File List
+
+**Production (17):**
+
+- `src/state/unit_board.gd` — three corpse arrays, the CREATED death seat `kill_at`, `apply_damage_at`
+  routing through it, the corpse accessors/mutators, `tick_corpses`, three snapshot payloads,
+  `NO_RAISE_SOURCE`, `add()`'s third defaulted argument, `clear()` extended.
+- `src/state/match_state.gd` — step-2 `tick_corpses`, `_corpse_ticks_for`, `_is_own_minion`, the four
+  apply seats (`_apply_culling` / `_apply_grave_ward` / `_apply_raise_dead` / `_apply_drain`),
+  `_drain_target_index`, the `push_drain_target` intake and `_drain_targets` latch, both pre-spend
+  refusal gates, `REASON_NO_OWN_MINION` / `REASON_NO_OWN_CORPSE`, `_board_refusal_reason`,
+  `_apply_card_effect`'s slot parameter, the reset's drain clear.
+- `src/state/economy/card_effect_resolver.gd` — four rows out of `DEFERRED_EFFECT_OWNERS` (9 -> 5), the
+  four `OUTCOME_*` constants and `OWN_MINION_OUTCOMES`, `OWN_MINION_REQUIREMENTS` and
+  `board_requirement_for`.
+- `src/state/player_state.gd` — three new snapshot keys.
+- `src/state/resources/card_effect.gd` — `mana_per_kill`, `kill_cap`, `heal_amount`,
+  `raise_hp_percent`; `duration_seconds`' third reading documented.
+- `src/state/resources/balance_config.gd` — `corpse_lifetime_seconds`.
+- `src/state/timing/balance_ticks.gd` — `corpse_lifetime_ticks`.
+- `src/actors/minions/unit_actor.gd` — `LINGER_TICKS`, `_linger_ticks` and `advance_corpse_linger()`
+  DELETED; `_is_corpse`, `on_corpse_state()`, `corpse_ticks_remaining()`, `EXTENDED_CORPSE_TINT`.
+  (`is_extended_corpse()` was added by the dev pass and DELETED again by the review fix pass — see
+  "Review findings and fixes", F3.)
+- `src/main/match_runner.gd` — the drain gather/tap/push, `_select_drain_target` (pure) and
+  `_gather_drain_target`, the replay drain drain, `_free_dead_unit_actors` rewritten onto state reads
+  plus the tint call, `_raised_spot` and the spawn placement, `_derive_card_prices`, the HUD push.
+- `src/systems/intent_recorder.gd` — the `capture_push_drain_target` channel, `drain_pushes_at`,
+  `replay_push_drain_targets`.
+- `src/systems/record_file.gd` — `FORMAT_VERSION` 13 -> 14, `drain_pushes` required key, serialise and
+  rebuild.
+- `src/ui/hud/hud_root.gd` — the price labels, `_set_price_text` / `_mode_price_text` / `_mana_text`,
+  `MODE_1_LABEL` / `MODE_4_LABEL` / `ORB_INITIALS`, `on_cards_changed`'s sixth parameter, the caption
+  inset.
+- `data/effects/culling.tres`, `data/effects/grave_ward.tres`, `data/effects/raise_dead.tres`,
+  `data/effects/drain.tres` — the authored numbers.
+- `data/balance/balance_config.tres` — `corpse_lifetime_seconds = 20.0`.
+
+**Tests — new (3):**
+
+- `test/state/test_corpses.gd`
+- `test/state/test_own_minion_spells.gd`
+- `test/integration/test_drain_selection.gd`
+
+**Tests — modified (17):**
+
+- `test/state/test_determinism.gd` — the golden re-baseline and its accounting, plus the measured
+  corpse-content assertion.
+- `test/state/test_card_authoring.gd` — the own-minion bucket, the counts, the four-effects pin.
+- `test/state/test_card_observation.gd`, `test/state/test_draw_delay_and_reshuffle.gd` — the key set and
+  its count.
+- `test/state/test_replay_identity.gd` — the three board members HASHED, `_drain_targets`
+  UNHASHED_CROSS_TICK.
+- `test/state/test_intent_recorder.gd` — the intake surface.
+- `test/state/test_live_reload.gd` — 13 -> 14 channels, test renamed.
+- `test/state/test_record_file.gd` — version and required-key counts, the v13 refusal test and its
+  rewrite helper.
+- `test/state/test_spell_framework.gd` — the deferred table 9 -> 5, test renamed, fixture repointed.
+- `test/state/test_targeting_service.gd` — 17 -> 18 bound guards.
+- `test/state/test_balance_authoring.gd`, `test/state/test_balance_config.gd`,
+  `test/state/test_data_resources.gd` — the authored corpse lifetime.
+- `test/state/test_contact_resolution.gd`, `test/state/test_totem_accelerators.gd`,
+  `test/state/test_unit_attack_rhythm.gd`, `test/state/test_unit_damage_and_death.gd` —
+  `apply_damage_at`'s third argument (17 call sites).
+- `test/integration/test_hud_viewports.gd` — the price-band geometry assertion.
+- `test/integration/test_unit_corpse_linger_live.gd` — re-pointed at the authored lifetime.
+- `test/integration/test_unit_combat_live.gd`, `test/perf/perf_20_units_live.gd` — comment hygiene.
+
+**Docs:** none. `deck-1-spec.md`'s two amendments were already applied by the authoring/gate passes.
+
+### Review findings and fixes
+
+Review report: `C:\dev\_65b-review.md` (PASS WITH FINDINGS: 0 BLOCKING, 1 MAJOR, 9 MINOR). Fix pass
+run main session only, no subagents, nothing committed or staged.
+
+- **MAJOR-1** (board-refusal gate ignored `FeatureFlags.spells`, refusing a cast the closed layer
+  would have let resolve as a no-op) — **FIXED.** `_board_refusal_reason` now opens with
+  `CardEffectResolver.outcome(effect, flags) == REASON_SPELLS_FLAG_CLOSED` — the SAME reading
+  `_apply_card_effect` already uses, not a second flag check — and returns `&""` (no refusal) before
+  `board_requirement_for` is even consulted. Two new tests
+  (`test_a_closed_spell_layer_with_an_empty_board_casts_and_applies_nothing_mode_1` and
+  `..._activates_and_applies_nothing_mode_4`, `test/state/test_own_minion_spells.gd`) cover the
+  flags-OFF x empty-own-board cell of the matrix the dev pass's existing closed-layer test left
+  untested, on both modes, asserting no rejection, the spend, and that nothing was
+  killed/extended/raised/healed. Mutation-proven — see the row below.
+- **MINOR-2** (Drain's same-tick fallback can sacrifice a different minion than the one faced) —
+  **ACCEPTED, no code change** (operator ruling recorded here at the review fix pass). If the faced
+  minion dies in step 4 of the same `advance()` in which Drain resolves at step 6, the lowest living
+  own minion is sacrificed instead of the pushed one — a one-tick window, deterministic and identical
+  on replay (the record carries the push, so a replay reaches the same fallback). Already pinned in
+  both directions by `test_drain_sacrifices_the_pushed_target` and
+  `test_an_unusable_pushed_target_falls_back_to_the_lowest_living_own_minion`.
+- **MINOR-3** (`UnitActor.is_extended_corpse()` had zero callers; the actor-side AC 24 latch was
+  untested) — **FIXED**, by deletion (dead code). The runner-side tint application
+  (`MatchRunner`'s `_tint_mesh_recursive` call) is unchanged; whether the tint reads at a glance at
+  the table stays smoke item 1, exactly as the dev pass left it.
+- **MINOR-4** (Dev Agent Record's "Agent Model Used" named the wrong model and the retired trailer
+  constant) — **FIXED.** Now reads "Dev pass: Claude Opus 5. Review: Claude Opus 5. Review fix pass:
+  Claude Sonnet 5." No trailer name is written into the story body. `docs/project-context.md:151` and
+  `CLAUDE.md`'s Commit conventions section both still read the retired "Opus 4.8" constant — left
+  UNCHANGED per the operator's explicit instruction; this is pre-existing E6 close-out docs debt,
+  already recorded at `decision-log.md:9982` ("repo wins; align CLAUDE.md").
+- **MINOR-5** (three new test scripts ship without `.gd.uid` siblings) — **DEFERRED** to the E6
+  close-out chain. No editor pass run this pass either, on the same reasoning as the dev pass (avoid
+  `project.godot` / `main.tscn` collateral).
+- **MINOR-6** (a docstring was orphaned onto the wrong function in `test_record_file.gd`) —
+  **FIXED.** The 6-5a docstring now sits directly above `_rewrite_as_pre_6_5a`; the 6-5b docstring
+  sits alone above `_rewrite_as_pre_6_5b`.
+- **MINOR-7** (stale "Culling a deferred no-op" comment in `test_spell_framework.gd`, after the
+  `ID_CULLING` -> `ID_DEFERRED` repoint to Rocksling) — **FIXED.** Comment now names Rocksling and the
+  repoint.
+- **MINOR-8** (intermittent `ERROR: 1 resources still in use at exit`, observed by the review inside
+  `test_unit_combat_live.gd`'s slot in the full-suite sequence) — **NOT REPRODUCED.** This pass's final
+  integration run (`C:\dev\_65b-fix-suite-integration.txt`, all 68 files) carries no `^ERROR:` line
+  anywhere. Not attributable to 6-5b either way on this evidence; no code change made, per the
+  operator's no-speculative-fix instruction.
+- **MINOR-9** (pre-existing orphan `test/state/test_unblockable_hold.gd.uid`) — **NOT CHANGED.**
+  Pre-existing, predates `3d53b70`, not this story's.
+- **MINOR-10** (`best_cosine` can drift downward across a long chain of same-angle replacements in
+  `_select_drain_target`) — **NOT CHANGED.** Not reachable in practice per the review's own
+  assessment (needs 3+ minions at successively-slightly-worse angles and successively-smaller
+  distances inside a 1e-4-scale epsilon); the review itself recommends no fix.
+
+**Mutation proof, MAJOR-1/F1** (state harness only, per the operator's instruction). Backed up
+`src/state/match_state.gd` outside the repo with its SHA256 before mutating; restored by copying the
+backup back and re-verifying the SHA (never `git checkout`).
+
+| Step | Result |
+|---|---|
+| Fix applied, full state suite | `1019 tests, 0 failed` — PASS |
+| Closed-layer check REMOVED (mutant) | `1019 tests, 2 failed` — the two new tests
+  (`test_a_closed_spell_layer_with_an_empty_board_casts_and_applies_nothing_mode_1`,
+  `..._activates_and_applies_nothing_mode_4`) go RED; nothing else moves — FAIL |
+| Restored from backup, SHA re-verified | `9319f021...` matches the pre-mutation fixed file; full
+  state suite `1019 tests, 0 failed` — PASS |
+
+**Final suite (ONE run, two foreground calls, read by opening the files):**
+
+- State harness — `C:\dev\_65b-fix-suite-state.txt`: `=== 1019 tests, 0 failed, 10091 assertions ===`
+  / `RESULT: PASS`. (10091 vs. the review's 10087 baseline plus the two new tests' own assertions,
+  minus 6 fewer iterations of `test_corpses.gd`'s per-code-line source scan over `unit_actor.gd` now
+  that F3's deletion shortened that file by two code lines — not a regression, a consequence of a
+  smaller scanned file.)
+- Integration — `C:\dev\_65b-fix-suite-integration.txt`: 68 files run, **68 x `RESULT: PASS`**, and
+  `^ERROR:` does not occur anywhere in the file (MINOR-8 not reproduced this run).
 
 ## Change Log
 
@@ -561,3 +942,26 @@ to this smoke unchanged because two pads means two killable, human-driven slots)
   operator/design choice outside the rulings recorded in `decision-log.md` session "6-5b scope +
   readiness gate (2026-09-23)" (`6-5b/R1`-`6-5b/R17`); AC 23's price-channel shape (M2) is left open
   for the operator (see Open Questions). No second gate round run. Status -> `ready-for-dev`.
+- 2026-09-23: DEV PASS complete (main session, no subagents, nothing committed or staged). All 26 ACs
+  implemented; AC 23's open price channel settled by the operator's DERIVED LOAD-ONCE ruling, recorded
+  descriptively in the Dev Agent Record with no new label. Suite 980/0 -> **1017/0** state (9183 ->
+  10087 assertions) and 67/67 -> **68/68** integration. Golden RE-BASELINED ONCE,
+  `59e9a42c...` -> `962514b1...`, ONE measured cause (the three new board snapshot keys), isolated both
+  directions; the other four predicted causes measured NON-MOVERS, and cause 1's "contents `[]`" and
+  cause 2's `SC/R6` golden move both measured FALSE and are reported as falsified. Per-player key set
+  33 -> 36; `RecordFile.FORMAT_VERSION` 13 -> 14 with a v13 hard-refusal test. 15 mutations / 17 runs,
+  every guard RED after repair, TWO found vacuous and fixed (M3 the reset clear, M4 the totem corpse).
+  Budget interval 00:26:10 -> 02:21:57 (115.8 min). Status -> `review`; the board stays
+  `ready-for-dev` per `CFG/R2`.
+- 2026-09-23: REVIEW FIX PASS complete (main session, Claude Sonnet 5, no subagents, nothing
+  committed or staged). Review report `C:\dev\_65b-review.md` (0 BLOCKING, 1 MAJOR, 9 MINOR): MAJOR-1
+  fixed (board-refusal gate now reads the closed-spell-layer flag through the resolver's own
+  `outcome()`, exactly as `_apply_card_effect` does) and mutation-proven; MINOR-3/6/7 fixed;
+  MINOR-4 fixed (Dev Agent Record model line corrected, no trailer name added, CLAUDE.md /
+  project-context.md left as pre-existing E6 debt per instruction); MINOR-2 accepted with no code
+  change (operator ruling recorded); MINOR-5/9/10 not changed (deferred to close-out / pre-existing /
+  not reachable in practice); MINOR-8 not reproduced on this pass's integration run. Suite
+  1017/0 -> **1019/0** state (10087 -> 10091 assertions, net of two new tests and F3's shorter
+  source-scan target) and **68/68** integration, no `^ERROR:` line. Status stays `review`; the board
+  stays `ready-for-dev`.
+- 2026-09-25: live smoke recorded (operator, two pads [3,3]); story promoted to done. AC 24 visible tint and AC 23 price legibility FAIL at smoke and are DEFERRED to the Tier B presentation story.
