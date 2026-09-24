@@ -585,6 +585,35 @@ func test_authored_minion_combat_values_are_positive() -> void:
 			assert_true(attack.damage >= 0.0, "%s attack damage is non-negative" % kind.kind_name)
 
 
+## ---- Corpse lifetime (story 6-5b, AC 2, `6-5b/R2`) -------------------------------------
+##
+## AUDITED > 0 for the failure the `>= 0.0` reflection loop in test_data_resources.gd structurally
+## cannot see, which is the same failure `unblockable_chargeup_seconds` and
+## `draw_replacement_delay_seconds` carry their own bespoke bounds against: `field in config` and
+## `>= 0.0` BOTH pass on the 0.0 script default, and a zero authored lifetime makes every death leave
+## a corpse that is already expired. Grave Ward would extend nothing, Raise Dead would raise nothing,
+## the Culling -> Raise Dead loop this story exists for would be unreachable, and the whole feature
+## would ship invisible in the build with the full suite green.
+##
+## THE UPPER BOUND IS AUDITED TOO, on `minion_retarget_interval_seconds`' precedent rather than as a
+## taste judgement: the corpse's actor is a solid-until-disabled grey box the runner keeps in the tree
+## for the whole lifetime, so an absurd authored value is a population leak with a playable-looking
+## number in front of it. 120 s is deliberately loose -- six times the authored 20 s -- because this
+## bound exists to catch a misplaced decimal point, not to hold the tuning.
+func test_authored_corpse_lifetime_is_positive_and_bounded() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	assert_true(config.corpse_lifetime_seconds > 0.0,
+		"corpse_lifetime_seconds must be authored > 0 (a zero ships every corpse already expired: "
+		+ "Grave Ward extends nothing, Raise Dead raises nothing, and the Culling -> Raise Dead loop "
+		+ "is unreachable, all with the suite green)")
+	assert_true(config.corpse_lifetime_seconds <= 120.0,
+		"corpse_lifetime_seconds must be authored <= 120 s -- a corpse holds a real actor in the tree "
+		+ "for its whole lifetime, so a misplaced decimal point is a population leak")
+
+
 ## ---- Minion attack rhythm (story 4-3b, AC 1/AC 13) -------------------------------------
 ##
 ## THREE DURATIONS AUDITED > 0, for the failure the `>= 0.0` reflection loop cannot see: a

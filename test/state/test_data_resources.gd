@@ -184,6 +184,14 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# stem-matched `pitch_countdown_push_interval_ticks` on BalanceTicks; half (a) demands this entry.
 	# A bespoke authored `> 0` bound lives in test_balance_authoring.gd.
 	"pitch_countdown_push_interval_seconds",
+	# Story 6-5b (AC 2, `6-5b/R2`): the CORPSE LIFETIME -- the authored successor to
+	# `UnitActor.LINGER_TICKS = 600`. Its `_seconds` suffix makes half (b) below demand the
+	# stem-matched `corpse_lifetime_ticks` on `BalanceTicks`; half (a) demands this entry, and half (a)
+	# is exactly what went RED when the field landed -- the guard working, as it did for the 5-2 four
+	# and the 5-4 two above. A bespoke authored `> 0` bound lives in test_balance_authoring.gd for
+	# `unblockable_chargeup_seconds`' reason: `field in config` and `>= 0.0` BOTH pass on the 0.0
+	# script default, which would ship every corpse already expired and the whole story invisible.
+	"corpse_lifetime_seconds",
 ]
 
 

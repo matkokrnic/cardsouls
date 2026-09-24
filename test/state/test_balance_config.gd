@@ -61,6 +61,10 @@ func test_conversion_covers_every_seconds_field() -> void:
 		# CLAMPED to at least one tick — it is a modulo divisor on the tick ladder, the
 		# `minion_retarget_interval_seconds` shape rather than the plain-duration shape.
 		"mana_accelerator_interval_seconds": 0.25,
+		# Story 6-5b (AC 2): the CORPSE LIFETIME converts through the same PLAIN boundary every
+		# duration above uses -- not the clamped modulo-divisor kind, because it is a countdown and
+		# never a divisor.
+		"corpse_lifetime_seconds": 20.0,
 	}))
 	assert_eq(t.stamina_regen_delay_ticks, 48)
 	assert_eq(t.attack_windup_ticks, 15)
@@ -73,6 +77,9 @@ func test_conversion_covers_every_seconds_field() -> void:
 	assert_eq(t.deflect_stun_ticks, 15,
 		"the melee-deflect stun converts like any duration through the same boundary (story 5-6)")
 	assert_eq(t.mana_accelerator_interval_ticks, 15)
+	assert_eq(t.corpse_lifetime_ticks, 1200,
+		"the corpse lifetime converts like any duration through the same boundary (story 6-5b) -- "
+		+ "20 s at the 60 Hz pin is 1200 ticks, twice the 600 the retired actor constant hardcoded")
 
 
 ## Story 4-4 (AC 11): the PER-KIND half of the conversion, pinned HERE as ARITHMETIC — the same job

@@ -554,7 +554,7 @@ func test_a_live_minion_under_a_dead_owner_hero_still_lands_its_hit() -> void:
 func test_a_dead_minions_fact_is_dropped_even_under_a_living_owner() -> void:
 	var ms := _match_4_3b()
 	_p1_unit_into_active(ms, [1, -1])
-	ms.p1.units.apply_damage_at(0, 9.0)
+	ms.p1.units.apply_damage_at(0, 9.0, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: the minion is dead")
 	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.DEAD, "...and its owner is not")
 	var hp_before := ms.p2.hero.get_hp()

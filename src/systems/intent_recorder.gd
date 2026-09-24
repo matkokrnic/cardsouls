@@ -132,6 +132,24 @@ var _camera_pushes: Dictionary[int, Array] = {}
 ## here it is not a future risk: facing is target-derived from this story onward.
 var _lock_pushes: Dictionary[int, Array] = {}
 
+## Story 6-5b (AC 18/AC 26, `6-5b/R6`): the per-tick, per-slot DRAIN-TARGET channel -- the SEVENTH
+## capture channel, and a sibling of `_lock_pushes` above in every respect: same keying (the tick the
+## pushed value will be READ on), same push-order entry shape [[slot, int], ...], same classification
+## (a runner-resolved spatial answer, not state).
+##
+## IT IS ITS OWN CHANNEL RATHER THAN A ROW ON AN EXISTING ONE for `_lock_pushes`' stated reason:
+## `push_drain_target` is a distinct seam with a distinct payload, and the recorder's standing
+## discipline is that a channel mirrors a seam one-for-one, so the tap cannot record a
+## differently-shaped fact from the one pushed.
+##
+## IT MUST BE RECORDED, and the argument is `_lock_pushes`' own one step further. The index is chosen
+## from ACTOR POSITIONS and a hero FACING -- positions come from `move_and_slide()` and may drift
+## between a recording and its replay -- and what it decides is WHICH MINION DIES. A replay that
+## re-derived it live would sacrifice a different minion than the recorded match did, diverge the
+## hashed `unit_hp` / `unit_corpse_ticks` keys on that tick, and every Raise Dead afterwards would
+## raise a different board.
+var _drain_pushes: Dictionary[int, Array] = {}
+
 ## The contact-fact channel (AC 9), keyed by tick index exactly like the bases above, with the
 ## four-field fact stored in push order: [[attacker, target, attack_index, dir], ...].
 var _contacts: Dictionary[int, Array] = {}
@@ -299,6 +317,22 @@ func capture_set_lock_direction(slot: int, direction: Vector2) -> void:
 	_lock_pushes[tick].append([slot, direction])
 
 
+## The DRAIN-TARGET channel (story 6-5b, AC 18) -- MatchState.push_drain_target(). Per tick, per slot,
+## mirroring `capture_set_lock_direction` directly above line for line: the two are the same kind of
+## fact (a runner answer derived from positions this layer may not read) and are captured the same way.
+##
+## `RecordFile.FORMAT_VERSION` BUMPS 13 -> 14 for this channel (AC 26). A v13 record has no drain
+## channel at all, so every Drain it recorded would replay through `_apply_drain`'s no-fact DEGRADE --
+## the board's lowest living minion rather than the one the player was actually facing. That is a
+## replay which loads without complaint and sacrifices the wrong minion, which is exactly the silent
+## divergence the exact-match refusal exists to prevent. v13 is refused HARD, no migration.
+func capture_push_drain_target(slot: int, index: int) -> void:
+	var tick := _tick + 1
+	if not _drain_pushes.has(tick):
+		_drain_pushes[tick] = []
+	_drain_pushes[tick].append([slot, index])
+
+
 ## The CONTACT-FACT channel — MatchState.push_contact(). The seam's fact verbatim, mirroring its
 ## signature exactly so the tap can never record a differently-shaped fact from the one pushed.
 ##
@@ -438,6 +472,11 @@ func lock_pushes_at(tick: int) -> Array:
 	return (_lock_pushes[tick] as Array).duplicate() if _lock_pushes.has(tick) else []
 
 
+## Story 6-5b (AC 18): the replay-side read of the drain channel, `lock_pushes_at`'s twin.
+func drain_pushes_at(tick: int) -> Array:
+	return (_drain_pushes[tick] as Array).duplicate() if _drain_pushes.has(tick) else []
+
+
 # ---------------------------------------------------------------- replay side
 
 func replay_seed() -> int:
@@ -568,6 +607,13 @@ func replay_push_camera_bases(ms: MatchState, tick: int) -> void:
 func replay_push_lock_directions(ms: MatchState, tick: int) -> void:
 	for push: Array in lock_pushes_at(tick):
 		ms.set_lock_direction(int(push[0]), push[1] as Vector2)
+
+
+## Re-push the recorded per-slot DRAIN TARGETS for `tick`, in recorded push order (story 6-5b, AC 18).
+## `replay_push_lock_directions` directly above, for an int payload instead of a Vector2.
+func replay_push_drain_targets(ms: MatchState, tick: int) -> void:
+	for push: Array in drain_pushes_at(tick):
+		ms.push_drain_target(int(push[0]), int(push[1]))
 
 
 ## Drain the recorded contact facts for `tick` into push_contact, in recorded push order (AC 9).

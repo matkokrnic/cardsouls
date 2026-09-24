@@ -424,6 +424,17 @@ func _ready() -> void:
 	# wrapper lambda below -- a plain Dictionary carries no reference-cycle risk the way a
 	# PlayerState capture did (4-B1 code review, see the lambda's own comment).
 	var card_colors_by_id := _derive_card_colors()
+	# Story 6-5b (AC 23, operator ruling on this story's one open question): the HAND-ROW PRICE MAP,
+	# DERIVED LOAD-ONCE on the `card_colors_by_id` precedent one line up -- built here so it is
+	# available under BOTH replay and live play, held as a local and captured by the cards_changed
+	# wrapper below (a plain Dictionary carries no reference-cycle risk, that lambda's own comment).
+	#
+	# PRICES ARE STATIC AUTHORED DATA. They never enter game state, never enter the record and are NOT
+	# a `FORMAT_VERSION` cause: `CardData.cast_condition` / `pitch_condition` are content no tick
+	# mutates, so there is no live/replay divergence to protect against and nothing for a capture
+	# channel to carry. That is the whole reason AC 23 costs this story no state -- unlike the injected
+	# `_card_costs` map, which state DOES consume and which therefore IS recorded.
+	var card_prices_by_id := _derive_card_prices()
 	for slot: int in 2:
 		var hud := HudRoot.new()
 		# Story 3-6 (AC 4): the authored vulnerable-window duration, handed over BEFORE add_child
@@ -464,7 +475,7 @@ func _ready() -> void:
 			# (this wrapper adds no member to the family test_architecture_invariants.gd pins). Reused, not
 			# re-derived: the local built once above this loop, read inline here (CONSTRAINT C).
 			hud.on_cards_changed(hand_ids, deck_count, discard_count,
-					player.pending_draw_owed.duplicate(), card_colors_by_id)
+					player.pending_draw_owed.duplicate(), card_colors_by_id, card_prices_by_id)
 			# Story 6-D1 (debug): the same hand + colour map the HUD tint reads, forwarded to the
 			# controller as plain ints (-1 = empty slot). No state handle crosses; base is a no-op.
 			var hand_colors: Array[int] = []
@@ -762,6 +773,40 @@ func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 		if card == null:
 			continue
 		out[id] = card.color
+	return out
+
+
+## Story 6-5b (AC 23, operator ruling): the HAND-ROW PRICE MAP -- `_derive_card_colors()` followed
+## verbatim, over BOTH cost resources instead of `CardData.color`, and for the same reason: the runner
+## is the ONE place allowed to read `CardDatabase` (`src/ui/` never does, `6-0` AC 3).
+##
+## ONE ROW PER CARD: `[mode-1 mana, mode-1 orbs, mode-4 mana, mode-4 orbs]`, read straight off
+## `cast_condition` and `pitch_condition` -- the two resources AC 23 names. The orb halves are handed
+## over AS AUTHORED (`Dictionary[Enums.CardColor, int]`); the HUD sorts them by colour ordinal before
+## rendering, because this project's standing rule is that a `orb_costs` iteration order is never a
+## contract (`card_cast_condition.gd`).
+##
+## A MISSING CONDITION CONTRIBUTES A ZERO PRICE, NOT A SKIPPED CARD, and the asymmetry with
+## `_derive_pitch_costs` (which SKIPS a card with no authored pitch condition) is deliberate. That map
+## feeds the STATE seam, where a missing entry is a meaningful refusal (`REASON_NO_PITCH_COST`); this
+## one feeds a LABEL, where a card present in the hand with half its row missing would render half a
+## price and read as a bug. A card with no pitch condition honestly costs nothing to stage.
+##
+## IT ENTERS NO CAPTURE CHANNEL AND NO SNAPSHOT (see the call site): static authored content, read
+## once at load, rendered. `_derive_card_colors`' HUD-wrapper twin, not its injection twin.
+func _derive_card_prices() -> Dictionary:
+	var out: Dictionary = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null:
+			continue
+		var cast_mana := card.cast_condition.mana_cost if card.cast_condition != null else 0.0
+		var cast_orbs: Dictionary = card.cast_condition.orb_costs \
+				if card.cast_condition != null else {}
+		var pitch_mana := card.pitch_condition.mana_cost if card.pitch_condition != null else 0.0
+		var pitch_orbs: Dictionary = card.pitch_condition.orb_costs \
+				if card.pitch_condition != null else {}
+		out[id] = [cast_mana, cast_orbs, pitch_mana, pitch_orbs]
 	return out
 
 
@@ -1427,11 +1472,45 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 			batch_size)
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
 	for spot: Vector3 in spots:
-		var unit := _unit_scene_for(player, actors.size()).instantiate() as UnitActor
+		var index := actors.size()
+		var unit := _unit_scene_for(player, index).instantiate() as UnitActor
 		add_child(unit)
-		unit.global_position = spot
-		_apply_totem_tint(unit, player, actors.size())
+		# Story 6-5b (AC 14, `6-5b/R8`): A RAISED MINION LANDS ON ITS CORPSE, not on the hero-relative
+		# rear-arc spot Ruin Vanguard's summons use. The record says WHICH corpse it came from (a board
+		# INDEX -- `6-5b/R1` keeps position out of state entirely), and the position is read HERE, off
+		# that corpse's own ACTOR, which is the only thing that has ever known where it lies.
+		#
+		# THE READ IS SAFE BECAUSE OF THIS FUNCTION'S SEAT, and that ordering is AC 14's last clause:
+		# the spawn poll (3c) runs BEFORE `_free_dead_unit_actors` (3c-bis), so the corpse whose
+		# position this reads is still in the tree on the very tick state consumed it. Reversing those
+		# two call sites would place every raised minion at the fallback spot instead.
+		#
+		# IT FALLS BACK TO THE BATCH SPOT rather than to the origin when the corpse's actor is already
+		# gone -- a hole from an earlier free, or a record raised in a fixture that never spawned
+		# actors. A raised minion standing behind its summoner is wrong-but-playable; one standing at
+		# world zero is a bug that looks like a feature.
+		unit.global_position = _raised_spot(slot, player, index, spot)
+		_apply_totem_tint(unit, player, index)
 		actors.append(unit)
+
+
+## Story 6-5b (AC 14): where the record at `index` actually stands -- the position of the corpse it was
+## raised from, or `fallback` (its ordinary batch spot) for every record nobody raised.
+##
+## ITS OWN FUNCTION so the spawn loop reads as one line and the fallback ladder is stated once. Every
+## rung answers the same question ("do I have a real position to copy") and the last one is honest
+## about not having it.
+func _raised_spot(slot: int, player: PlayerState, index: int, fallback: Vector3) -> Vector3:
+	var source := player.units.raised_from_at(index)
+	if source == UnitBoard.NO_RAISE_SOURCE:
+		return fallback
+	var actors: Array = _unit_actors[slot]
+	if source < 0 or source >= actors.size():
+		return fallback
+	var corpse: Node = actors[source]
+	if not is_instance_valid(corpse):
+		return fallback
+	return (corpse as Node3D).global_position
 
 
 ## Story 4-4 (AC 3): which actor scene the board record at `index` should be instantiated from,
@@ -1667,13 +1746,47 @@ func _spot_is_clear(spot: Vector2, occupied: Array[Vector3], placed: Array[Vecto
 ## freed at the end of that. Everything above still holds; the hole still appears at the same
 ## index, it just appears 600 ticks later.
 ##
-## THE TIMER IS NOT HERE. It lives on the ACTOR (`UnitActor._linger_ticks`), which is the ruling
-## (AC 3) and not a convenience: a runner-local parallel array keyed by index would survive the
-## debug reset that clears `_unit_actors`, and would need its own reset-relay wiring that a field
-## living on the freed node does not.
+## THE TIMER IS NOT HERE. `4-3d` (AC 3) ruled that it lived on the ACTOR
+## (`UnitActor._linger_ticks`), because a runner-local parallel array keyed by index would survive
+## the debug reset that clears `_unit_actors`.
 ##
-## THIS SEAT IS INSIDE THE RUNNER'S `ticking` GATE, which is the whole reason the linger honours
-## `3-0b`'s deterministic step/pause: a corpse held under the debug pause does not age.
+## STORY 6-5b (AC 2/AC 25) SUPERSEDES THAT RULING: THE TIMER IS STATE'S. `6-5b/R1` makes the corpse a
+## piece of GAME STATE -- Grave Ward extends its lifetime and Raise Dead consumes it, so a countdown
+## living on a presentation node could not be reached by either, and two countdowns would be two
+## answers to "is this corpse still here". `UnitActor.LINGER_TICKS` and `_linger_ticks` are DELETED,
+## not kept alongside (the `attack_move_speed_multiplier` half-migration precedent).
+##
+## 4-3d's ORIGINAL OBJECTION IS ANSWERED RATHER THAN OVERRULED: the state-side countdown lives at the
+## dead unit's own BOARD INDEX (`6-5b/R17`), and the debug reset clears the board and the corpses in
+## the same `UnitBoard.clear()` call -- so there is no parallel structure to leak and no reset-relay
+## wiring to remember. The thing 4-3d could not put on the board was a timer nobody owned; this one is
+## owned by the record it belongs to.
+##
+## WHAT THIS FUNCTION DOES NOW IS READ AND REACT (AC 25), in three steps per dead index:
+##   1. FIRST OBSERVATION of death: `begin_corpse_linger()` (idempotent) disables collision, deferred
+##      out of this physics callback exactly as before.
+##   2. EVERY tick including the first: hand the actor state's remaining lifetime and extended mark.
+##      The actor counts NOTHING (AC 2) -- it reacts to the value it is handed, which is what drives
+##      the Grave Ward tint (AC 24).
+##   3. FREE ON THE TRANSITION out of corpse-hood, by EITHER route (AC 25): the lifetime reached zero,
+##      or Raise Dead consumed the corpse this very tick. One test (`has_corpse_at`) covers both,
+##      which is what makes "the actor is freed exactly when the corpse leaves state" one condition
+##      rather than two that could disagree.
+##
+## THE ORDERING AGAINST RAISE DEAD IS LOAD-BEARING AND LIVES AT THE CALL SITE (AC 14): the spawn poll
+## runs BEFORE this function, so a minion raised this tick reads its corpse's actor position while
+## that actor is still in the tree, and only then is the corpse freed here.
+##
+## A KIND THAT LEAVES NO CORPSE IS FREED ON THE DEATH TICK, and that is a REPORTED behaviour change
+## rather than an oversight: `6-5b/R10` gives totems no corpse, so `has_corpse_at` is false the instant
+## a totem dies and step 3 fires immediately. Through 4-3d a dead totem lingered the full 10 s like a
+## minion. Nothing in the story asks for a totem linger and nothing reads one; it is named here
+## because it is the one visible consequence of R10 that no AC states.
+##
+## THIS SEAT IS STILL INSIDE THE RUNNER'S `ticking` GATE, and it still matters, for a different half of
+## the same reason: the AGEING now happens inside `advance()` (which the pause does not call at all),
+## and the FREEING happens here (which the pause does not reach). A corpse held under the debug pause
+## neither ages nor disappears.
 func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
 	var actors: Array = _unit_actors[slot]
 	for index: int in actors.size():
@@ -1683,14 +1796,20 @@ func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
 		if not is_instance_valid(unit):
 			continue
 		var corpse := unit as UnitActor
-		# THE FIRST OBSERVATION OF DEATH, tick N: start the count and disable collision (the
-		# disable defers itself out of this physics callback -- see `begin_corpse_linger`). The
-		# corpse is NOT aged on this tick, so `_linger_ticks` reads exactly "ticks since death".
 		if not corpse.is_lingering():
 			corpse.begin_corpse_linger()
-			continue
-		# Every tick after: age it. Freed on tick N+600, still in the tree at N+599.
-		if corpse.advance_corpse_linger():
+		# Story 6-5b (AC 24): the GRAVE WARD MARK. The actor owns the per-corpse latch (so the mark is
+		# recorded once and freed with the node), and the tint is applied HERE with the project's ONE
+		# mesh-tint mechanism -- `_tint_mesh_recursive`, the same walk `_apply_totem_tint` uses, which
+		# duplicates each `MeshInstance3D`'s material so one corpse's tint cannot bleed into another's
+		# shared resource. A scene with no `Mesh` child (nothing to tint) simply records the mark.
+		var newly_extended := corpse.on_corpse_state(player.units.corpse_ticks_at(index),
+				player.units.is_corpse_extended_at(index))
+		if newly_extended:
+			var corpse_mesh := corpse.get_node_or_null("Mesh")
+			if corpse_mesh != null:
+				_tint_mesh_recursive(corpse_mesh, UnitActor.EXTENDED_CORPSE_TINT)
+		if not player.units.has_corpse_at(index):
 			corpse.queue_free()
 			actors[index] = null
 
@@ -2623,6 +2742,116 @@ func _lock_direction(slot: int) -> Vector2:
 	return planar.normalized()
 
 
+## Story 6-5b (AC 18/AC 22, `6-5b/R6`): WHICH of slot `slot`'s own living minions its hero is FACING
+## most directly -- the board index Drain will sacrifice, or `MatchState.NO_DRAIN_TARGET` for none.
+##
+## THE SELECTION LIVES HERE AND CANNOT LIVE IN STATE. It needs the hero's world position and every
+## minion actor's world position, and `src/state/` owns no position and may not query the scene
+## (D3(b)/A2, `4-3/R2`). The runner computes and pushes; state receives the already-resolved answer
+## through `push_drain_target` and never recomputes it (`_apply_drain`). `_lock_direction` directly
+## below is the same shape of computation -- two actor positions in, one plain fact out.
+##
+## THE RULE, AND ITS TIE-BREAKS IN ORDER (AC 18): smallest ANGLE between the hero's facing and the
+## hero-to-minion direction wins; equal angle, smaller DISTANCE wins; equal angle and distance, LOWER
+## BOARD INDEX wins. The angle comparison is done on the COSINE (the dot product of two unit vectors),
+## which is monotonically DECREASING in the angle -- so "smallest angle" is "largest cosine", and no
+## `acos` is called: it would spend a transcendental per minion per tick to order values the dot
+## product already orders, and it loses precision near zero angle exactly where the tie-break matters.
+##
+## THE INDEX TIE-BREAK IS THE LOOP ORDER, not a comparison: the walk is ascending and a candidate must
+## be STRICTLY better to replace the incumbent, so the lowest index survives an exact tie in both
+## keys. That is also why both comparisons carry an epsilon -- with exact float equality, two minions
+## the operator placed symmetrically would be ordered by the last bit of a square root.
+##
+## TOTEMS ARE EXCLUDED HERE TOO, and the state side re-validates it: `_apply_drain`'s
+## `_is_own_minion` check means a totem index pushed by a stale or wrong gather cannot be sacrificed,
+## so this filter decides the CHOICE while state decides the LEGALITY. Two layers agreeing, with the
+## authoritative one last.
+##
+## `facing` IS WORLD-SPACE PLANAR (`R1`, locked), so it is compared directly against a world-space
+## planar direction with no basis in between. A zero facing or a co-located minion has no direction
+## and contributes nothing -- the `push_contact` / `_lock_direction` zero-direction rule verbatim.
+const DRAIN_ANGLE_EPSILON := 0.0001
+const DRAIN_DISTANCE_EPSILON := 0.0001
+
+func _gather_drain_target(slot: int, player: PlayerState) -> int:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	if not is_instance_valid(hero):
+		return MatchState.NO_DRAIN_TARGET
+	var facing := player.hero.facing
+	if facing.is_zero_approx():
+		return MatchState.NO_DRAIN_TARGET
+	var balance := _match_state.balance
+	if balance == null:
+		return MatchState.NO_DRAIN_TARGET
+	var minion_kind := balance.kind_index_of(CardEffectResolver.KIND_MINION)
+	var actors: Array = _unit_actors[slot]
+	# THE CANDIDATE LIST IS BUILT HERE AND THE CHOICE IS MADE BELOW, and the split is what makes the
+	# rule testable at all: everything in this loop touches the scene tree and the board, and nothing
+	# in `_select_drain_target` touches either.
+	var candidates: Array = []
+	for index: int in actors.size():
+		if not player.units.is_alive_at(index):
+			continue
+		if player.units.kind_index_at(index) != minion_kind:
+			continue
+		var unit: Node = actors[index]
+		if not is_instance_valid(unit):
+			continue
+		var spot: Vector3 = (unit as Node3D).global_position
+		candidates.append([index, Vector2(spot.x, spot.z)])
+	var origin := hero.global_position
+	return _select_drain_target(facing, Vector2(origin.x, origin.z), candidates)
+
+
+## Story 6-5b (AC 18/AC 22, `6-5b/R6`): THE ANGLE RULE ITSELF -- which of `candidates` a hero at
+## `hero_xz` facing `facing` is looking at most directly. `candidates` is `[[board_index, xz], ...]`,
+## ASCENDING BY INDEX, as `_gather_drain_target` above builds it.
+##
+## A PURE FUNCTION OF ITS ARGUMENTS, and that is a REQUIREMENT rather than a happy accident, for
+## `_compute_spawn_positions`' stated reason: it reads no scene tree, holds no node reference, touches
+## no board and mutates no runner field. That is what lets AC 22's tie-break matrix be driven directly
+## against hand-placed positions on a bare runner instance, with no scene and no frame
+## (test/integration/test_drain_selection.gd, the `test_unit_spawn_purity.gd` precedent).
+##
+## THE RULE, AND ITS TIE-BREAKS IN ORDER (AC 18): smallest ANGLE between the hero's facing and the
+## hero-to-minion direction wins; equal angle, smaller DISTANCE wins; equal angle and distance, LOWER
+## BOARD INDEX wins.
+##
+## THE COMPARISON IS ON THE COSINE -- the dot product of two unit vectors -- which is monotonically
+## DECREASING in the angle, so "smallest angle" is "largest cosine". No `acos` is called: it would
+## spend a transcendental per minion per tick to order values the dot product already orders, and it
+## loses precision near zero angle exactly where the tie-break matters.
+##
+## THE INDEX TIE-BREAK IS THE LOOP ORDER, not a comparison: the walk is ascending and a candidate must
+## be STRICTLY better to replace the incumbent, so the lowest index survives an exact tie in both keys.
+## That is also why both comparisons carry an epsilon -- with exact float equality, two minions the
+## operator placed symmetrically would be ordered by the last bit of a square root.
+func _select_drain_target(facing: Vector2, hero_xz: Vector2, candidates: Array) -> int:
+	if facing.is_zero_approx():
+		return MatchState.NO_DRAIN_TARGET
+	var heading := facing.normalized()
+	var best := MatchState.NO_DRAIN_TARGET
+	var best_cosine := -2.0     # below every real cosine, so the first candidate always takes
+	var best_distance := 0.0
+	for candidate: Array in candidates:
+		var to_minion: Vector2 = (candidate[1] as Vector2) - hero_xz
+		var distance := to_minion.length()
+		# A CO-LOCATED MINION HAS NO DIRECTION and contributes nothing -- the `push_contact` /
+		# `_lock_direction` zero-direction rule verbatim, rather than an arbitrary heading.
+		if distance <= 0.0:
+			continue
+		var cosine := heading.dot(to_minion / distance)
+		var better_angle := cosine > best_cosine + DRAIN_ANGLE_EPSILON
+		var same_angle_closer := cosine > best_cosine - DRAIN_ANGLE_EPSILON \
+				and distance < best_distance - DRAIN_DISTANCE_EPSILON
+		if best == MatchState.NO_DRAIN_TARGET or better_angle or same_angle_closer:
+			best = int(candidate[0])
+			best_cosine = cosine
+			best_distance = distance
+	return best
+
+
 ## Story 6-8 (AC 7-AC 10/AC 12): the step-1c RIG seat for one slot -- the ONE place the runner
 ## decides what turns a camera this tick, so the two rig write paths can never both fire.
 ##
@@ -2916,6 +3145,12 @@ func _physics_process(delta: float) -> void:
 			# re-derived it from the live scene would diverge on the hashed `HeroState.facing` the
 			# first time a hero stood a hair off where it stood before.
 			_replay_record.replay_push_lock_directions(_match_state, _replay_tick)
+			# Story 6-5b (AC 18): the DRAIN-TARGET channel drains here, beside the lock directions and
+			# for the identical reason -- it is chosen from actor POSITIONS and a hero FACING, and
+			# positions come from move_and_slide() and may drift between a recording and its replay. A
+			# replay that re-derived it from the live scene would sacrifice a DIFFERENT minion than the
+			# recorded match did, and diverge the hashed board from that tick onward.
+			_replay_record.replay_push_drain_targets(_match_state, _replay_tick)
 			_replay_record.replay_push_contacts(_match_state, _replay_tick)
 		else:
 			# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
@@ -2941,6 +3176,18 @@ func _physics_process(delta: float) -> void:
 			_match_state.set_lock_direction(0, lock_dirs[0])
 			_recorder.capture_set_lock_direction(1, lock_dirs[1])
 			_match_state.set_lock_direction(1, lock_dirs[1])
+			# Story 6-5b (AC 18, `6-5b/R6`): the DRAIN TARGET, gathered, tapped and pushed in this same
+			# step-2 seat and the same per-slot order as the lock direction directly above -- the
+			# confirmed mechanism for a position-derived fact entering state, never a scene read from
+			# inside `src/state/`. Pushed EVERY ticking frame rather than only on a cast tick, for the
+			# basis's own reason: a seat that fires conditionally on a press is a seat the record can be
+			# missing a row for, and the one consumer (`_apply_drain`) reads the latch only when a Drain
+			# actually resolves.
+			for drain_slot: int in 2:
+				var drain_target := _gather_drain_target(drain_slot,
+						_match_state.p1 if drain_slot == 0 else _match_state.p2)
+				_recorder.capture_push_drain_target(drain_slot, drain_target)
+				_match_state.push_drain_target(drain_slot, drain_target)
 			# Story 5-2 (AC 17, `5-2/R6`): the CHARGE-REACH fact, gathered and tapped in this
 			# same step-2 seat and BEFORE advance() -- which is the whole of AC 17's ordering
 			# requirement: state never pulls from the runner mid-advance(), so the fact the

@@ -192,7 +192,7 @@ func test_the_faucet_closes_when_the_accelerator_dies() -> void:
 	var while_alive := ms.p1.mana.get_current()
 	assert_true(while_alive > 0.5 * ACCELERATOR_INTERVAL_TICKS,
 		"sanity: the accelerator paid while it was alive")
-	ms.p1.units.apply_damage_at(0, 12.0)
+	ms.p1.units.apply_damage_at(0, 12.0, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: the totem is dead")
 	var before := ms.p1.mana.get_current()
 	_advance(ms, ACCELERATOR_INTERVAL_TICKS * 2)
@@ -267,7 +267,7 @@ func test_the_owners_regen_returns_to_normal_when_the_accelerator_dies() -> void
 	ms.p1.units.add(12.0, KIND_STAMINA)
 	_advance(ms, 5)
 	var accelerated := ms.p1.stamina.get_current()
-	ms.p1.units.apply_damage_at(0, 12.0)
+	ms.p1.units.apply_damage_at(0, 12.0, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: the totem is dead")
 	_advance(ms, 5)
 	assert_eq(ms.p1.stamina.get_current(), accelerated + 1.0 * 5.0,
@@ -324,7 +324,7 @@ func test_has_live_kind_answers_both_directions_and_degrades_on_an_unknown_name(
 		"...on its OWNER's board only")
 	assert_false(ms.has_live_kind(ms.p1, CardEffectResolver.KIND_STAMINA_ACCELERATOR),
 		"...and it is not mistaken for a DIFFERENT kind")
-	ms.p1.units.apply_damage_at(0, 12.0)
+	ms.p1.units.apply_damage_at(0, 12.0, 0)
 	assert_false(ms.has_live_kind(ms.p1, CardEffectResolver.KIND_MANA_ACCELERATOR),
 		"a dead totem is not live — liveness is the board's own predicate, never a re-derived hp>0")
 	assert_false(ms.has_live_kind(ms.p1, &"no_such_kind"),
@@ -352,7 +352,7 @@ func test_live_kind_count_counts_per_owner_and_per_kind_and_degrades_on_an_unkno
 		+ "own count is its own")
 	assert_eq(ms.live_kind_count(ms.p2, CardEffectResolver.KIND_MANA_ACCELERATOR), 1,
 		"AC 2: PER-OWNER — the opponent counts only their OWN board, never the owner's two")
-	ms.p1.units.apply_damage_at(0, 12.0)
+	ms.p1.units.apply_damage_at(0, 12.0, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: one of the two is dead")
 	assert_eq(ms.live_kind_count(ms.p1, CardEffectResolver.KIND_MANA_ACCELERATOR), 1,
 		"a dead totem leaves the count — and the count drops to ONE, not to zero: liveness is the "
@@ -430,7 +430,7 @@ func test_killing_one_of_two_mana_accelerators_returns_the_payout_to_the_n1_amou
 	ms.p1.units.add(12.0, KIND_MANA)
 	assert_eq(_accelerator_payout_on_next_boundary(ms), 2.0 * ACCELERATOR_MANA,
 		"sanity: both are alive and paying")
-	ms.p1.units.apply_damage_at(0, 12.0)
+	ms.p1.units.apply_damage_at(0, 12.0, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: one of the two is dead")
 	assert_eq(_accelerator_payout_on_next_boundary(ms), ACCELERATOR_MANA,
 		"AC 12: the payout returns to the N=1 amount — NOT to zero, and not stuck at the N=2 amount "
@@ -496,7 +496,7 @@ func test_killing_one_of_two_stamina_accelerators_returns_the_factor_to_its_n1_v
 	_advance(ms, 5)
 	assert_eq(ms.p1.stamina.get_current() - before, 1.0 * _stamina_factor(2) * 5.0,
 		"sanity: both are alive and the factor is the N=2 one")
-	ms.p1.units.apply_damage_at(0, 12.0)
+	ms.p1.units.apply_damage_at(0, 12.0, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: one of the two is dead")
 	var after_death := ms.p1.stamina.get_current()
 	_advance(ms, 5)

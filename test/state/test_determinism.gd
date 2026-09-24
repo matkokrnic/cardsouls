@@ -1065,7 +1065,50 @@ extends TestCase
 ##   neither multiply branch runs); the summon path moved into `_apply_card_effect` unchanged; the
 ##   fixture injects no pitch-effect map (the seam is optional state-side).
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "59e9a42cc5145a31ddfde279eb1f06cf990f836015b260f0986cd704ad86b1bd"
+## STORY 6-5b RE-BASELINE: `59e9a42c...` -> `962514b1...`, ONE MEASURED CAUSE, FIVE PREDICTED.
+##
+##   THE CAUSE (cause 1 of the story's Golden Prediction): THREE NEW SNAPSHOT KEYS, all on the board
+##   (`6-5b/R17`) -- `unit_corpse_ticks`, `unit_corpse_extended` and `unit_raised_from`. Their mere
+##   PRESENCE at resting values, the 3-5a `discard_size` / 4-1 `unit_count` shape. The per-player key
+##   set moves THIRTY-THREE -> THIRTY-SIX (pinned by test_card_observation.gd).
+##
+##   ISOLATED BOTH DIRECTIONS: with exactly those three keys erased from `PlayerState.to_snapshot()`
+##   and EVERY OTHER 6-5b change still in place -- the death seat, the corpse countdown at step 2, the
+##   four new resolver outcomes and their apply seats, both pre-spend refusal gates, Drain's pushed
+##   intake, the authored effect numbers, the FORMAT_VERSION bump -- the hash is `59e9a42c...` EXACTLY,
+##   the pre-story golden reproduced. So the three keys are the whole of the move, and the other four
+##   predicted causes are MEASURED NON-MOVERS rather than assumed ones.
+##
+##   THE PREDICTION'S OWN CONTENT CLAIM MEASURED FALSE, and is corrected rather than quietly dropped.
+##   Cause 1 predicted "the corpse container enters the snapshot EMPTY -- measure key count `+N` and
+##   contents `[]`". The EMPTY half is wrong: `6-5b/R17` closed the story's Open Question 1 on putting
+##   corpse data at the DEAD UNIT'S OWN BOARD INDEX rather than in a separate container, so the three
+##   keys are PARALLEL ARRAYS over every record (the `unit_hp` shape) and the fixture's ONE summoned
+##   unit gives each of them ONE resting entry. `[]` would have been right only for the container shape
+##   the gate ruled out. Measured and pinned by
+##   `test_the_golden_fixture_reaches_the_hash_tick_with_one_resting_corpse_entry` below.
+##
+##   NOT CAUSES, EACH MEASURED BY THE ISOLATION RUN ABOVE:
+##     * cause 2, THE REFUSAL PATH (AC 9/13/15/21, `6-5b/R14`). Predicted to move the golden under the
+##       standing `SC/R6` boundary ("a change that adds a new refusable outcome to an existing seat
+##       moves BOTH the golden and the unit suite"). It moved the UNIT SUITE and NOT the golden, and
+##       the reason is specific rather than a loophole: the golden fixture's one cast is a `summon_*`,
+##       which has no board precondition, so `_board_refusal_reason` returns `&""` and no gate is ever
+##       taken on the recorded path. `SC/R6` is not contradicted -- it describes a change that makes a
+##       pressed action refusable IN THE RECORDED SEQUENCE, and this fixture never presses one of the
+##       four cards.
+##     * cause 3, DRAIN'S INTAKE. `_drain_targets` is a runner-pushed fact classified
+##       UNHASHED_CROSS_TICK (test_replay_identity.gd, argument (c), the `_lock_directions` family), so
+##       it reaches no snapshot by construction. It needed a CAPTURE CHANNEL, which it has, not a key.
+##     * cause 4, THE FOUR AUTHORED EFFECT NUMBERS plus Culling's `kill_cap`. The golden fixture builds
+##       its own effects in-test (`_golden_config` / the fixture's effect map) and never loads
+##       `data/effects/`, so authoring those five numbers is outside the golden's path entirely -- the
+##       `BC/R3` isolation the story doubted, holding here for the EFFECT injection set as well.
+##     * cause 5, `RecordFile.FORMAT_VERSION` 13 -> 14. A record carries INPUTS and CONTENT, never a
+##       hash and never a snapshot, so a version bump cannot move this value. It IS a real change (AC
+##       26) with its own refusal test; it is simply not a golden cause.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "962514b1e40f95d4ebda3265bc85e48a6321209b6e064b2a43332964644136b9"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1508,6 +1551,49 @@ func test_same_seed_and_intents_hash_identically() -> void:
 
 func test_state_matches_golden() -> void:
 	assert_eq(_run(), GOLDEN, "state hash drifted from golden — determinism or snapshot shape changed")
+
+
+## Story 6-5b: THE MEASURED CONTENT OF THIS STORY'S ONE GOLDEN CAUSE, pinned as an assertion on the
+## `4-3b`/`5-5` precedent below rather than left as a claim in the accounting block.
+##
+## THE STORY'S OWN PREDICTION SAID `[]` AND THAT MEASURED FALSE, which is why this assertion exists in
+## this exact shape. The Golden Prediction's cause 1 read: "the determinism fixture's summoned unit
+## never dies, so the corpse container enters the snapshot EMPTY -- measure key count `+N` and contents
+## `[]`". The first half holds (the unit never dies, so no corpse is ever created); the second does
+## not, because `6-5b/R17` put the corpse data at the DEAD UNIT'S OWN BOARD INDEX rather than in a
+## separate container. The three keys are therefore PARALLEL ARRAYS over every record, exactly like
+## `unit_hp` -- so the fixture's ONE summoned unit gives each of them ONE entry, at its RESTING value.
+## `[]` would only have been right for the container shape the gate ruled out.
+##
+## WHAT THE CAUSE ACTUALLY IS, then: the three keys' mere PRESENCE at resting values (the 3-5a
+## `discard_size` / 4-1 `unit_count` shape), and nothing behavioural. This asserts that -- so a future
+## story that lets this fixture KILL its unit moves the golden for a reason this accounting calls
+## impossible, and fails HERE first, naming it.
+func test_the_golden_fixture_reaches_the_hash_tick_with_one_resting_corpse_entry() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	for slot: String in ["p1", "p2"]:
+		var player: PlayerState = ms.p1 if slot == "p1" else ms.p2
+		var snapshot := player.to_snapshot()
+		var records: int = int(snapshot["unit_count"])
+		var resting_ticks: Array = []
+		var resting_marks: Array = []
+		var resting_sources: Array = []
+		for _record in records:
+			resting_ticks.append(0)
+			resting_marks.append(false)
+			resting_sources.append(UnitBoard.NO_RAISE_SOURCE)
+		assert_eq(snapshot["unit_corpse_ticks"], resting_ticks,
+			("%s: every corpse countdown is at REST -- one entry per record (NOT `[]`: `6-5b/R17` put "
+			+ "the corpse at the dead unit's own board index, so these are parallel arrays over the "
+			+ "records exactly like `unit_hp`), and no unit in this fixture ever dies") % slot)
+		assert_eq(snapshot["unit_corpse_extended"], resting_marks,
+			"%s: and no corpse is Grave-Ward-extended, because there is no corpse" % slot)
+		assert_eq(snapshot["unit_raised_from"], resting_sources,
+			"%s: and nothing was raised, so every record's raise source is the resting sentinel" % slot)
+	assert_eq(int(ms.p1.to_snapshot()["unit_count"]), 1,
+		"NON-VACUITY: P1's board really does hold the t22 summon, so the three assertions above are "
+		+ "made against a ONE-ENTRY array rather than passing trivially on an empty one")
 
 
 ## Guards the recorded sequence itself: the golden only guards transition determinism if

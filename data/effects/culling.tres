@@ -5,3 +5,5 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"culling"
+mana_per_kill = 2.0
+kill_cap = 99

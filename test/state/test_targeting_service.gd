@@ -361,8 +361,21 @@ func test_every_board_bound_guard_is_wired_to_that_predicate() -> void:
 		assert_true(line.contains("has_index("),
 			"every bound guard consults the public predicate rather than re-deriving the bound: %s"
 					% line.strip_edges())
-	assert_eq(checks, 17,
-		"SEVENTEEN bound guards ship as of story 4-4 — fifteen through 4-3b plus this story's two "
+	assert_eq(checks, 18,
+		"EIGHTEEN bound guards ship as of story 6-5b, which adds ONE: `kill_at`, the DEATH SEAT "
+		+ "(AC 3, `6-5b/R13`). Its guard is the STRICT kind (`hp_at`'s, not `is_alive_at`'s) because "
+		+ "every caller has already established the index -- the step-4 contact path through "
+		+ "`apply_damage_at`, and Culling/Drain through a `living_indices()` walk -- so an "
+		+ "out-of-range kill is the caller's own loop being wrong. 6-5b's SEVEN OTHER new members "
+		+ "carry NO Invariant.check and are deliberately absent, each for a reason this file already "
+		+ "records for a sibling: `has_corpse_at`, `corpse_ticks_at`, `is_corpse_extended_at` and "
+		+ "`raised_from_at` are LENIENT reads on the `is_alive_at` precedent (a runner poll may ask "
+		+ "about an index, and 'no such record' and 'no corpse there' are the same correct answer); "
+		+ "`extend_corpse_at` and `consume_corpse_at` gate on `has_corpse_at` instead, so a "
+		+ "non-corpse is a no-op rather than a trip (which is what keeps Grave Ward's 'a corpse "
+		+ "created later is untouched' true by construction); and `tick_corpses` iterates the array "
+		+ "itself and has no index to bound, exactly as `tick_attack_timers` does. Original 4-4 text "
+		+ "follows: SEVENTEEN bound guards ship as of story 4-4 — fifteen through 4-3b plus this story's two "
 		+ "per-record accessors (kind_index_at, attack_cooldown_at). `is_attack_ready_at` carries "
 		+ "NO Invariant.check and is deliberately absent for `is_hitbox_active_at`'s reason "
 		+ "verbatim: it is a lenient PREDICATE, so an index the board has not caught up to reads "

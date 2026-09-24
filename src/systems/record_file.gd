@@ -215,7 +215,21 @@ extends RefCounted
 ## never applied. Either alone is the silently-wrong replay the exact-match refusal exists to prevent.
 ## Not the `card_cast_resolved` arity (a signal is not recorded) and not the new hashed state (a record
 ## carries no hash). v12 is refused HARD, no migration.
-const FORMAT_VERSION := 13
+##
+## STORY 6-5b BUMPS 13 -> 14 (AC 26), for ONE MEASURED CAUSE: a NEW REQUIRED KEY, `drain_pushes` --
+## the seventh capture channel, carrying the board index Drain's facing rule selected on each tick.
+## A v13 file carries no drain channel at all, so every Drain it recorded would replay through
+## `MatchState._apply_drain`'s no-fact degrade and sacrifice the board's LOWEST living minion instead
+## of the one the player was facing -- a different minion dead, a different `unit_hp` /
+## `unit_corpse_ticks` hash on that tick, and a different board for every later Raise Dead. Loaded
+## without complaint, silently wrong: the exact case this constant exists to prevent.
+##
+## THE CORPSE STATE IS NOT A SECOND CAUSE, and that is measured rather than waved past: a record
+## carries INPUTS and CONTENT, never a hash and never a snapshot, so three new hashed board keys force
+## nothing here. Neither does the effect authoring -- the four newly-authored numbers ride the EXISTING
+## `effects` / `pitch_effects` channels as flat exports (`_card_effects` rebuilds every script property
+## generically), so no row shape and no key set moves for them. v13 is refused HARD, no migration.
+const FORMAT_VERSION := 14
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -265,6 +279,10 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	# onward. Its arrival IS half the version bump -- a v5 file lacks this key, and is refused by
 	# the version check long before this map is consulted, exactly as `effects` was at v2.
 	"lock_pushes": TYPE_DICTIONARY,
+	# Story 6-5b (AC 18/AC 26): the per-tick DRAIN-TARGET channel, required from FORMAT_VERSION 14
+	# onward. Its arrival IS the version bump -- a v13 file lacks this key and is refused by the version
+	# check long before this map is consulted, exactly as `lock_pushes` was at v6.
+	"drain_pushes": TYPE_DICTIONARY,
 	# Story 4-1 (`4-1/R1`): the third content channel, required from FORMAT_VERSION 2 onward. Its
 	# arrival IS the version bump -- a v1 file lacks this key, and is refused by the version check
 	# long before this map is consulted.
@@ -588,6 +606,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var camera_pushes: Dictionary = {}
 	var contacts: Dictionary = {}
 	var lock_pushes: Dictionary = {}
+	var drain_pushes: Dictionary = {}
 	for tick in range(1, record.tick_count() + 1):
 		var pair: Array = []
 		for intent: InputIntent in record.intents_at(tick):
@@ -604,6 +623,11 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		var locks := record.lock_pushes_at(tick)
 		if not locks.is_empty():
 			lock_pushes[tick] = locks
+		# Story 6-5b (AC 18): the drain channel rides the same loop, the same sparse
+		# only-if-non-empty rule and the same tick keying as its `lock_pushes` sibling.
+		var drains := record.drain_pushes_at(tick)
+		if not drains.is_empty():
+			drain_pushes[tick] = drains
 	return {
 		"format_version": FORMAT_VERSION,
 		"seed": record.replay_seed(),
@@ -621,6 +645,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"camera_pushes": camera_pushes,
 		"contacts": contacts,
 		"lock_pushes": lock_pushes,
+		"drain_pushes": drain_pushes,
 	}
 
 
@@ -762,6 +787,7 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 	var camera_pushes: Dictionary = data["camera_pushes"]
 	var contacts: Dictionary = data["contacts"]
 	var lock_pushes: Dictionary = data["lock_pushes"]
+	var drain_pushes: Dictionary = data["drain_pushes"]
 	for tick in range(1, int(data["tick_count"]) + 1):
 		for push: Array in camera_pushes.get(tick, []):
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
@@ -770,6 +796,10 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 		# advances, live and on rebuild alike.
 		for push: Array in lock_pushes.get(tick, []):
 			record.capture_set_lock_direction(int(push[0]), push[1] as Vector2)
+		# Story 6-5b (AC 18): the drain channel is re-captured in the SAME per-tick seat and the same
+		# order relative to `capture_advance` as its two pushed-fact siblings above.
+		for push: Array in drain_pushes.get(tick, []):
+			record.capture_push_drain_target(int(push[0]), int(push[1]))
 		for fact: Array in contacts.get(tick, []):
 			# Story 4-3a / 4-3b: the SEVEN-element row (attacker slot, attacker index, target slot,
 			# target index, attack index, dir, kind) rebuilt into the recorder's pair-shaped seam.

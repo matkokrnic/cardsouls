@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Story 4-3d (AC 2, AC 3, AC 5): A KILLED MINION'S ACTOR LINGERS AS A CORPSE FOR TEN SECONDS,
+## Story 4-3d (AC 2, AC 3, AC 5): A KILLED MINION'S ACTOR LINGERS AS A CORPSE FOR ITS AUTHORED LIFETIME,
 ## the linger is TICK-COUNTED so the debug pause freezes it, and the `death` clip plays once and
 ## HOLDS its final pose for the rest of that span.
 ##
@@ -35,10 +35,10 @@ extends SceneTree
 ##
 ## NAMED MUTATIONS, re-derived against the shipped seat:
 ##   AC 2/3 retention -- revert `MatchRunner._free_dead_unit_actors` to free on the tick death is
-##     observed. The corpse is gone hundreds of ticks before 599 and `_max_alive_linger` never
+##     observed. The corpse is gone hundreds of ticks before the authored lifetime and `_max_alive_linger` never
 ##     reaches it.
-##   AC 3 pause -- drive `UnitActor.advance_corpse_linger()` off a wall-clock delta instead of the
-##     tick count (or move the runner's call outside its `ticking` gate). The counter advances
+##   AC 3 pause -- advance the corpse countdown off a wall-clock delta instead of one tick per
+##     `advance()` (or move the runner's corpse poll outside its `ticking` gate). The counter advances
 ##     across the paused span and `_counter_moved_while_paused` fires.
 ##   AC 5 hold -- re-enable `loop` on the `death` clip in tools/build_zombie_anims.gd's CLIPS map
 ##     and rebuild the library. The pose keeps changing after the clip's end and `_pose_held` is
@@ -102,6 +102,9 @@ var _hole_at_same_index := false
 var _frames_since_death := 0
 var _paused_frames := 0
 var _first_seen_tick := 0
+## Story 6-5b (AC 2): the AUTHORED corpse lifetime in ticks, read once off the live `BalanceTicks`.
+## Zero until the first corpse frame; zero is also what makes the lazy read below a one-shot.
+var _lifetime_ticks := 0
 
 ## AC 3 pause evidence.
 var _pause_phase := 0
@@ -241,12 +244,27 @@ func _watch_corpse() -> void:
 		return
 	if not corpse.is_lingering():
 		return
-	var tick: int = corpse._linger_ticks
+	# STORY 6-5b (AC 2) RE-POINTS THIS FILE AT THE AUTHORED, STATE-OWNED LIFETIME. `corpse._linger_ticks`
+	# STOOD HERE and is DELETED with the actor-owned countdown (`6-5b/R1`/`6-5b/R2`): the corpse's clock
+	# is `UnitBoard._corpse_ticks` now, advanced inside `advance()` step 2, and the actor is HANDED its
+	# remaining value by the runner each tick.
+	#
+	# THE FILE STILL REASONS IN ELAPSED TICKS, deliberately, and every assertion below keeps its exact
+	# shape: `tick` is still "ticks since death", derived as the authored lifetime minus what the actor
+	# was last told remains. Rewriting the file around a countdown would have changed what each
+	# assertion measures as well as where it reads it, and only the READ moved.
+	#
+	# THE LIFETIME IS READ FROM THE LIVE `BalanceTicks`, never from a literal: 4-3d's `600` was a
+	# hardcoded actor constant and this story's whole point is that the number is authored now. Read
+	# once, lazily -- the corpse cannot exist before `apply_balance` has run.
+	if _lifetime_ticks == 0:
+		_lifetime_ticks = _runner._match_state.balance_ticks.corpse_lifetime_ticks
+	var tick: int = _lifetime_ticks - corpse.corpse_ticks_remaining()
 	if not _linger_started:
 		_linger_started = true
 		# The counter is ALREADY RUNNING when this watcher first sees it: the kill lands mid-swing
 		# and `_done_swinging` is only set when that swing's key is released, a few frames later.
-		# The span this file counts is therefore `first_seen -> LINGER_TICKS`, not `0 -> 600`.
+		# The span this file counts is therefore `first_seen -> the authored lifetime`, not `0 -> it`.
 		_first_seen_tick = tick
 	_max_alive_linger = maxi(_max_alive_linger, tick)
 	# THE INDEPENDENT TICK COUNT. `_max_alive_linger` reads the corpse's OWN counter, so it cannot
@@ -308,18 +326,18 @@ func _watch_corpse() -> void:
 
 
 func _report() -> bool:
-	var retained := _max_alive_linger == UnitActor.LINGER_TICKS - 1 \
-			and _freed_at_linger == UnitActor.LINGER_TICKS
+	var retained := _max_alive_linger == _lifetime_ticks - 1 \
+			and _freed_at_linger == _lifetime_ticks
 	if not retained:
 		_detail += " retention(max_alive=%d freed_at=%d expected %d/%d);" \
 				% [_max_alive_linger, _freed_at_linger,
-					UnitActor.LINGER_TICKS - 1, UnitActor.LINGER_TICKS]
+					_lifetime_ticks - 1, _lifetime_ticks]
 	if not _hole_at_same_index:
 		_detail += " no_hole_at_index_0;"
 	# The corpse's own counter and an outside count of ticking frames must agree, to within the
 	# two-frame lag the pause edge costs at each end of the paused span.
 	var ticking_frames := _frames_since_death - _paused_frames
-	var expected_ticks := UnitActor.LINGER_TICKS - _first_seen_tick
+	var expected_ticks := _lifetime_ticks - _first_seen_tick
 	var tick_counted := absi(ticking_frames - expected_ticks) <= TICK_COUNT_TOLERANCE
 	if not tick_counted:
 		_detail += (" linger_is_not_tick_counted(the corpse counted %d ticks from first sight to "

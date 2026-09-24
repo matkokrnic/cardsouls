@@ -358,8 +358,11 @@ func _print_diag(elapsed: int) -> void:
 
 ## LIVENESS IS PART OF THE READING, and leaving it out is how this print was misread once already.
 ## The loop used to walk actor slots 0..4 filtered only on `is_instance_valid`, which are the OLDEST
-## board indices and therefore the ones most likely to be DEAD: a corpse stays a valid actor for 600
-## ticks after death (`match_runner._free_dead_unit_actors`), its collision is disabled the tick it
+## board indices and therefore the ones most likely to be DEAD: a corpse stays a valid actor for its
+## whole AUTHORED lifetime after death (`BalanceConfig.corpse_lifetime_seconds`, 20 s as authored --
+## story 6-5b moved that number out of the actor and into balance, replacing a hardcoded 600 ticks;
+## the runner frees the actor when STATE says the corpse is gone,
+## `match_runner._free_dead_unit_actors`), its collision is disabled the tick it
 ## dies, and `_approach_unit_actors` skips dead indices so its velocity is never driven and stays
 ## exactly 0.0. A pile of corpses therefore prints as bodies 0.1-0.2 m apart at v0.0 -- which is
 ## indistinguishable from the AC 11 flicker evidence unless the print says which it is. Living units

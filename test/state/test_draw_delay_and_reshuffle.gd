@@ -94,7 +94,13 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# (the per-record kind INDEX — never the StringName) join the set. Sorted position, not appended.
 	"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 	"unit_attack_ticks",
-	"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_swing_dedupe", "unit_targets",
+	# Story 6-5b (AC 1/AC 14, `6-5b/R17`): the per-record corpse COUNTDOWN, the per-corpse Grave Ward
+	# MARK and the RAISE SOURCE join the set, in sorted position rather than appended. The full
+	# reasoning (why three keys and not one fused one, and why a raise SOURCE is an index and never a
+	# position) lives with the count assertion in test_card_observation.gd -- cited, not duplicated.
+	"unit_corpse_extended", "unit_corpse_ticks",
+	"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_raised_from",
+	"unit_swing_dedupe", "unit_targets",
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the

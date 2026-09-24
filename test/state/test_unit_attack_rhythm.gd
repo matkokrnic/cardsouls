@@ -423,7 +423,7 @@ func test_a_swing_whose_target_dies_mid_windup_runs_to_completion_and_lands_noth
 	_probe(ms, 0, [1, 0])
 	_advance(ms)
 	assert_eq(_phase(ms), UnitBoard.AttackPhase.WINDUP, "the swing is committed")
-	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP)   # the target dies mid-windup
+	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP, 0)   # the target dies mid-windup
 	assert_false(ms.p2.units.is_alive_at(0), "sanity: it is dead before the window opens")
 	for _t in UNIT_WINDUP:
 		_advance(ms)
@@ -719,7 +719,7 @@ func test_a_unit_killed_during_its_own_active_window_has_its_dedupe_record_disca
 	# Bring P1 unit 0 to exactly one hit from death, then land the killing blow through a REAL
 	# contact resolution from P2's unit -- never a direct apply_damage_at -- so `_resolve_unit_contact`,
 	# the seat this fix lives in, is the code path that actually kills it.
-	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE)
+	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE, 0)
 	assert_true(ms.p1.units.is_alive_at(0), "sanity: still alive, one hit from death")
 	ms.push_contact([1, 0], [0, 0], ms.p2.units.attack_count_at(0), PROBE_DIR,
 			MatchState.CONTACT_STRIKE)

@@ -350,8 +350,8 @@ func test_death_leaves_a_hole_at_a_stable_index_and_shifts_nothing() -> void:
 	_summon_p2(ms, 3)
 	# Give the three units DISTINGUISHABLE health, so a shift is visible as a value moving between
 	# indices rather than having to be inferred from the length alone.
-	ms.p2.units.apply_damage_at(1, 1.0)   # 8.0
-	ms.p2.units.apply_damage_at(2, 2.0)   # 7.0
+	ms.p2.units.apply_damage_at(1, 1.0, 0)   # 8.0
+	ms.p2.units.apply_damage_at(2, 2.0, 0)   # 7.0
 	for _swing in 3:
 		_swing_to_active(ms)
 		ms.push_contact([0, -1], [1, 0], ms.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
@@ -380,7 +380,7 @@ func test_a_summon_following_a_death_lands_at_a_new_index_never_in_the_hole() ->
 	_advance_with(ms, _cast_intent(0))
 	assert_eq(ms.p1.units.size(), 1, "sanity: one unit, at index 0")
 	# Kill it outright, at the board seam — how it died is not what this test is about.
-	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP)
+	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: index 0 is now a hole")
 	_advance_with(ms, _cast_intent(1))
 	assert_eq(ms.p1.units.size(), 2,
@@ -436,7 +436,7 @@ func test_the_step_7_seat_never_acquires_a_dead_unit() -> void:
 	ms.p1.units.add(UNIT_MAX_HP, 0)          # the acquirer
 	_summon_p2(ms, 2)                     # the candidates
 	ms.p2.hero.take_damage(ms.p2.hero.get_max_hp())   # hero dead, so units are the only candidates
-	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP)       # ...and candidate 0 is a hole
+	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP, 0)       # ...and candidate 0 is a hole
 	assert_false(ms.p2.units.is_alive_at(0), "sanity: P2's index 0 is dead")
 	assert_true(ms.p2.units.is_alive_at(1), "sanity: P2's index 1 is alive")
 	# Run a full retarget interval so a boundary tick is certainly crossed.
@@ -452,7 +452,7 @@ func test_the_step_7_seat_never_acquires_a_dead_unit() -> void:
 func test_a_dead_unit_is_not_addressable_by_a_later_swing() -> void:
 	var ms := _make_match()
 	_summon_p2(ms, 1)
-	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP)
+	ms.p2.units.apply_damage_at(0, UNIT_MAX_HP, 0)
 	assert_eq(ms.p2.units.hp_at(0), 0.0, "sanity: dead")
 	_swing_to_active(ms)
 	var swing := ms.p1.hero.attack_index
@@ -507,7 +507,7 @@ func test_the_round_over_freeze_precedes_the_contact_step_so_no_unit_dies_during
 	# --- frozen half ---
 	var frozen := _make_match()
 	_summon_p2(frozen, 1)
-	frozen.p2.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE)  # one hit from death
+	frozen.p2.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE, 0)  # one hit from death
 	_swing_to_active(frozen)
 	var swing := frozen.p1.hero.attack_index
 	# End the round: P2's hero dies, and step 8 sets the freeze.
@@ -524,7 +524,7 @@ func test_the_round_over_freeze_precedes_the_contact_step_so_no_unit_dies_during
 	# --- the unfrozen pair ---
 	var live := _make_match()
 	_summon_p2(live, 1)
-	live.p2.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE)
+	live.p2.units.apply_damage_at(0, UNIT_MAX_HP - UNIT_DAMAGE, 0)
 	_swing_to_active(live)
 	live.push_contact([0, -1], [1, 0], live.p1.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
 	_advance(live)
@@ -664,7 +664,7 @@ func test_a_unit_killed_between_gather_and_resolution_lands_nothing() -> void:
 	ms.push_contact([0, 0], [1, 0], ms.p1.units.attack_count_at(0), Vector2.DOWN,
 			MatchState.CONTACT_STRIKE)
 	# The kill lands BETWEEN gather and resolution -- the F1 window the drop exists for.
-	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP)
+	ms.p1.units.apply_damage_at(0, UNIT_MAX_HP, 0)
 	assert_false(ms.p1.units.is_alive_at(0), "sanity: the ATTACKER is dead before step 4 runs")
 	_advance(ms)
 	assert_eq(ms.p2.units.hp_at(0), before,

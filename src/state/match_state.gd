@@ -246,6 +246,35 @@ var _camera_bases: Array[Basis] = [Basis.IDENTITY, Basis.IDENTITY]
 ## rule verbatim.
 var _lock_directions: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 
+## Story 6-5b (AC 18, `6-5b/R6`): PER-SLOT DRAIN TARGET -- the board index of the own living minion
+## this slot's hero is FACING most directly, gathered by the runner and pushed here every tick.
+##
+## THE `_lock_directions` CATEGORY EXACTLY, and the ruling says so by name: the selection is "computed
+## by the runner from actor positions (hero + every living minion actor of that board) and pushed into
+## state as a fact, on the `push_contact` precedent". `src/state/` holds no world coordinates and may
+## not query the scene (D3(b)/A2), so the angle cannot be computed here -- and, unlike a direction,
+## the ANSWER is an INDEX, so what crosses inward is already a board address rather than geometry.
+##
+## IT IS AN INDEX AND NOT A DIRECTION FOR A MEASURED REASON: if state received a facing VECTOR it
+## would still need every minion's position to pick a minion with it, which is exactly the read this
+## layer cannot make. Pushing the resolved answer is what keeps the whole selection off the state
+## side and ON the replay tap -- "not recomputed inside `advance()` from anything position-shaped",
+## the ruling's own clause.
+##
+## EXCLUDED from `to_snapshot()` and CAPTURED BY ITS OWN RECORD CHANNEL (`capture_push_drain_target`),
+## the `_camera_bases` / `_lock_directions` classification verbatim -- the same one argument now
+## covering three pushed arrays, never a new unhashed cross-tick exemption.
+##
+## `NO_DRAIN_TARGET` IS "NO FACT" and is the resting value: every headless fixture that never drives a
+## push sits here, and `_drain_target_index` degrades to the board's own lowest living minion rather
+## than refusing a cast the gate already allowed. See `_apply_drain`.
+var _drain_targets: Array[int] = [NO_DRAIN_TARGET, NO_DRAIN_TARGET]
+
+## The resting value of `_drain_targets`: no minion pushed this tick. `-1` rather than a second
+## sentinel, because a board index is never negative (`UnitBoard.has_index`) -- so it collides with
+## nothing and needs no separate "was anything pushed" flag.
+const NO_DRAIN_TARGET := -1
+
 ## Story 1-5 (B7): queued contact facts, drained deterministically in advance() step 4.
 ## Input-like PUSHED facts, same category as InputIntent and the camera basis: plain
 ## recordable data (three ints per fact — X5 replay records them alongside intents; the
@@ -659,6 +688,18 @@ func advance(intents: Array[InputIntent]) -> void:
 	p2.units.tick_attack_timers()
 	p1.unit_dedupe.tick()
 	p2.unit_dedupe.tick()
+	# Story 6-5b (AC 4): the CORPSE COUNTDOWNS advance HERE, beside every other D4 timer and in the
+	# same breath as the board's attack rhythm -- one integer tick per advance(), never a float
+	# accumulator and never a `Time`/`OS`/`Engine` read from this layer (A1/D3(b)). Seated after step
+	# 1b, so a corpse does NOT age during the round-over freeze: the `4-1/R5` posture that the board
+	# persists through round-over rather than blinking out, now true of corpses for free.
+	#
+	# THE ACTOR NO LONGER COUNTS ANYTHING (AC 2). `UnitActor.LINGER_TICKS` / `_linger_ticks` are gone;
+	# this is the ONE clock a corpse has, and the runner hands the actor its remaining value to react
+	# to. `MatchRunner` calls this from nothing -- it is inside `advance()`, so the 3-0b debug pause
+	# freezes it exactly as it froze the actor-owned linger, by not advancing at all.
+	p1.units.tick_corpses()
+	p2.units.tick_corpses()
 	# 3. Resolve actions       per slot P1 -> P2: action transitions FIRST (a press on
 	#    tick N takes effect on tick N), then intended velocity from move_dir. Transitions
 	#    never write velocity — both halves of the 1-3 coupling deferral now live in
@@ -1179,6 +1220,28 @@ func set_camera_basis(slot: int, camera_basis: Basis) -> void:
 ## spawned): facing is left at its last value rather than snapped to a garbage heading.
 func set_lock_direction(slot: int, direction: Vector2) -> void:
 	_lock_directions[slot] = direction
+
+
+## Runner step-2 push (story 6-5b, AC 18, `6-5b/R6`). The BOARD INDEX of the own living minion this
+## slot's hero is facing most directly -- smallest angle between hero facing and the hero-to-minion
+## direction, ties broken by smaller distance then lower index -- resolved by the runner from the
+## actor positions it already owns. slot: 0 = P1, 1 = P2; the array index asserts on anything else.
+##
+## STATE NEVER QUERIES THE SCENE (D3(b)/A2), and it never re-runs the selection either. This is the
+## `set_lock_direction` seam family's fourth member and its shape verbatim: a pushed per-tick fact,
+## captured by its own record channel, consumed inside `advance()` by exactly one seat
+## (`_apply_drain`).
+##
+## NOT NAMED `drain_*` (story Dev Notes, a real hazard rather than a style note):
+## `test_intent_recorder.gd` pins `EXEMPT_CARRIES_NO_DATA_INWARD := "drain_signals"` by EXACT STRING
+## against this class's public surface, and a sibling called `drain_target(...)` would leave a reader
+## unable to tell an exemption from an intake by name. `push_*` is also the truthful prefix: this
+## carries data INWARD and has a capture channel, which `drain_signals` does not.
+##
+## `NO_DRAIN_TARGET` IS A LEGAL PUSH, not an error: the runner sends it on a tick where the caster has
+## no living minion in front of it, which is the honest answer and the resting value.
+func push_drain_target(slot: int, index: int) -> void:
+	_drain_targets[slot] = index
 
 
 ## Emit all queued signals. Called by the runner AFTER advance() returns (D5).
@@ -2358,9 +2421,14 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# Story 6-5a (AC 9): the UNIT damage seat, through the same funnel as the hero seats -- a minion on
 	# either side is Bloodlust's, a totem never is (R3). Vampiric Aura heals off a hero's hit on a unit
 	# too (R4: all damage the caster's hero deals), measured as the hp the unit actually lost.
+	# Story 6-5b (AC 3/AC 6, `6-5b/R13`): the corpse lifetime is read INLINE here (CONSTRAINT C) and
+	# handed down, so a lethal hit routes through `UnitBoard.kill_at` inside `apply_damage_at` and
+	# leaves a corpse -- the FIRST of the death seat's exactly three callers. A combat-hit death is
+	# therefore indistinguishable in its aftermath from a Culling kill or a Drain sacrifice (AC 6),
+	# because all three write the corpse through the same function with the same argument.
 	var unit_hp_before := target.units.hp_at(index)
 	target.units.apply_damage_at(index, _funnel_damage(attacker, attacker_index, target, index,
-			_damage_against_unit(attacker, attacker_index)))
+			_damage_against_unit(attacker, attacker_index)), _corpse_ticks_for(target, index))
 	_apply_lifesteal(attacker, attacker_index, unit_hp_before - target.units.hp_at(index))
 	# Story 4-4 (AC 16 second sentence / AC 18): a projectile that lands on a UNIT is consumed here,
 	# the hero ladder's common consumption line applied to the short ladder. AC 16's second sentence
@@ -2510,6 +2578,51 @@ func _apply_lifesteal(attacker: PlayerState, attacker_index: int, removed: float
 	var before := attacker.hero.get_hp()
 	attacker.hero.heal(removed * attacker.rule_a[PlayerState.RULE_VAMPIRIC_AURA])
 	return attacker.hero.get_hp() - before
+
+
+## Story 6-5b (AC 1/AC 2, `6-5b/R2`/`6-5b/R10`): THE CORPSE LIFETIME one death at `index` should seed,
+## in ticks -- and the ONE place the TOTEM/HERO EXCLUSION is expressed.
+##
+## IT IS A ZERO FOR ANYTHING THAT LEAVES NO CORPSE, rather than a branch at each of the death seat's
+## three callers. `UnitBoard` is a pure container and holds no policy about kinds (see `kill_at`), so
+## the decision has to be made here, where `balance` is -- and making it a VALUE rather than a
+## conditional call is what keeps all three callers identical and AC 6 true by construction.
+##
+## THE TOTEM TEST IS THE SAME `kind_index_at` LOOKUP `live_kind_count` ALREADY USES (AC 1's own
+## requirement), against the resolver's `KIND_MINION` name and never a second literal. A record whose
+## kind an X3 reload has since removed reads `NO_KIND_INDEX` and leaves no corpse -- the
+## graceful-degradation direction every authored-data miss in this file takes.
+##
+## HEROES NEED NO CLAUSE HERE AT ALL (`6-5b/R10`'s other half): a hero is not a `UnitBoard` record, so
+## no hero death can reach the death seat. That exclusion is structural, not a check.
+##
+## `balance` / `balance_ticks` ARE READ INLINE AND MAY BE NULL: a pre-injection `MatchState` (every
+## fixture that never calls `apply_balance`) answers 0, which leaves no corpse rather than crashing --
+## the `_resolve_actions` pre-injection guard family's own direction.
+func _corpse_ticks_for(player: PlayerState, index: int) -> int:
+	if balance_ticks == null or not _is_own_minion(player, index):
+		return 0
+	return balance_ticks.corpse_lifetime_ticks
+
+
+## Story 6-5b (AC 1/AC 8/AC 10/AC 18): is the record at `index` on `player`'s board a MINION -- the
+## one predicate behind "leaves a corpse", "Culling kills it" and "Drain may sacrifice it".
+##
+## SEPARATE FROM `_corpse_ticks_for` ABOVE, AND THE SEPARATION IS LOAD-BEARING rather than tidy. The
+## first draft of this pass used `_corpse_ticks_for(...) > 0` as the minion test, which silently
+## conflated two independent facts: with `corpse_lifetime_seconds` authored 0.0 -- a legal degenerate
+## value the balance audit permits in tests -- every minion would have read as a non-minion and
+## Culling would have killed NOTHING while still spending its orb. "Which kinds are minions" is
+## authored content; "how long their corpses last" is a tunable. One predicate each.
+##
+## THE `kind_index_at` LOOKUP IS `live_kind_count`'s (AC 1's own requirement), against the resolver's
+## `KIND_MINION` constant and never a second StringName literal. `NO_KIND_INDEX` can never match a
+## record's stored index (the cast seat refuses to add one), so an unauthored or reload-orphaned kind
+## answers false -- the graceful-degradation direction.
+func _is_own_minion(player: PlayerState, index: int) -> bool:
+	if balance == null or not player.units.has_index(index):
+		return false
+	return player.units.kind_index_at(index) == balance.kind_index_of(CardEffectResolver.KIND_MINION)
 
 
 ## Story 6-5a (R5): the armed Frostbite trigger is CONSUMED by this confirmed hero melee hit and the slow
@@ -3116,6 +3229,22 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	if reason != CastEvaluator.ALLOWED:
 		player.hero.reject_action(&"card_cast", reason)
 		return
+	# Story 6-5b (AC 13/AC 21, `6-5b/R14`): THE BOARD-AWARE PRE-SPEND GATE, seated HERE -- immediately
+	# beside the insufficient-mana refusal directly above and BEFORE the spend on the next line, which
+	# is the ruling's own wording. Nothing below this point can be reached without a target, and
+	# nothing above it has mutated anything, so a refusal leaves the mana, the hand and the board
+	# exactly as they were (AC 13's "nothing is spent").
+	#
+	# IT SUPERSEDES, FOR THESE FOUR EFFECTS ONLY, `4-1/R3`/`4-1/R10`'s "NOTHING BELOW THIS LINE IS
+	# CONDITIONAL ON THE VERDICT" and 6-5a AC 5 with it -- `6-5b/R14` says so explicitly. That rule
+	# was about the RESOLVER's verdict, which is computed after the cast has already happened; this is
+	# a PRECONDITION consulted before it happens, which is why it can be a player-facing refusal at
+	# all. The unconditional rule stands unweakened for every other effect: the comment below this
+	# function's spend sequence is untouched and still true of every id with no board requirement.
+	var gate := _board_refusal_reason(player, _card_effects.get(id))
+	if gate != &"":
+		player.hero.reject_action(&"card_cast", gate)
+		return
 	Invariant.check(player.mana.spend(condition.mana_cost),
 		"an ALLOWED cast must be affordable — CastEvaluator and ManaPool disagree")
 	var played := player.hand.remove_at(hand_slot)
@@ -3148,7 +3277,7 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# STORY 6-5a (AC 4/AC 5): the APPLY half now lives in `_apply_card_effect`, SHARED with pitch
 	# activation so the whole-id dispatch has exactly one apply seat. The summon branch moved there
 	# verbatim; its behaviour is unchanged.
-	_apply_card_effect(player, _card_effects.get(played))
+	_apply_card_effect(player, _card_effects.get(played), slot)
 	# Story 6-5a (AC 10): the hashed last-resolved-card record, written at the resolution seat.
 	player.record_resolved_card(played, Enums.ModeKind.BASIC)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
@@ -3187,7 +3316,12 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 ## EVERY BUFF IS STARTED ON THE CASTER'S TIMED-RULE SEAT, with its authored seconds converted to ticks
 ## here, once, at the application (A1). Re-applying a running buff REFRESHES it (N10, `start_rule`).
 ## `balance` is non-null on both paths by construction: a card only resolves after the step-6 deal ran.
-func _apply_card_effect(player: PlayerState, effect: CardEffect) -> void:
+##
+## STORY 6-5b: IT TAKES THE CASTER'S SLOT, because DRAIN's target arrives as a per-slot runner-pushed
+## fact (`6-5b/R6`) and this is the seat that consumes it. Every other arm ignores it; the parameter
+## is threaded rather than re-derived from `player == p1` because both existing call sites already
+## hold the slot and a second derivation would be a second thing to get wrong.
+func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int) -> void:
 	match CardEffectResolver.outcome(effect, flags):
 		CardEffectResolver.OUTCOME_SUMMON:
 			# Story 4-4 (AC 1/AC 6): the kind index and THAT KIND'S authored maximum are both read
@@ -3221,6 +3355,145 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect) -> void:
 					TimingWindow.seconds_to_ticks(effect.duration_seconds),
 					effect.slow_speed_multiplier,
 					float(TimingWindow.seconds_to_ticks(effect.slow_duration_seconds)))
+		# Story 6-5b: the four OWN-MINION / CORPSE arms. Each is ONE call to a named helper below
+		# rather than inline arithmetic, for the reason the buff arms are one `start_rule` call each:
+		# this `match` says WHAT resolves and the helper says HOW, so the apply seat stays a readable
+		# list of outcomes as the family grows.
+		CardEffectResolver.OUTCOME_CULLING:
+			_apply_culling(player, effect)
+		CardEffectResolver.OUTCOME_GRAVE_WARD:
+			_apply_grave_ward(player, effect)
+		CardEffectResolver.OUTCOME_RAISE_DEAD:
+			_apply_raise_dead(player, effect)
+		CardEffectResolver.OUTCOME_DRAIN:
+			_apply_drain(player, effect, slot)
+
+
+## Story 6-5b (AC 8, `6-5b/R5`/`6-5b/R15`): CULLING -- kill up to `kill_cap` of the caster's OWN LIVING
+## MINIONS and grant `mana_per_kill` for exactly the ones killed.
+##
+## THE SECOND OF THE DEATH SEAT'S THREE CALLERS, and it KILLS WITHOUT DAMAGING (`6-5b/R4`, AC 7):
+## `UnitBoard.kill_at` is reached directly, so `_funnel_damage` and `_apply_lifesteal` are not on this
+## path at all. Bloodlust cannot double a Culling kill and Vampiric Aura cannot heal off one, because
+## there is no damage number anywhere in this function for either to read.
+##
+## BOARD-INDEX ORDER, OLDEST FIRST (AC 8): `living_indices()` is ascending by construction, so a cap
+## below the living count kills the oldest `kill_cap` minions. TOTEMS ARE EXCLUDED by the same
+## `kind_index_at` lookup AC 1 uses at the death seat -- reached here through `_corpse_ticks_for`'s
+## own minion test rather than a second copy of it, which is what makes AC 10's "totems untouched"
+## and AC 1's "totems leave no corpse" one decision instead of two that could disagree.
+##
+## THE OPPONENT IS UNREACHABLE, not filtered (AC 10): `player` is the caster, and a `UnitBoard` belongs
+## to exactly one player. There is no code here that could address the other board.
+##
+## MANA IS GRANTED PER KILL THE SEAT ACTUALLY MADE, counted off `kill_at`'s own return value rather
+## than re-derived from liveness afterwards, and it goes through `ManaPool.add` -- so the EXISTING pool
+## clamp loses the surplus of an over-cap Culling (`6-5b/R5`) with no second ceiling here.
+func _apply_culling(player: PlayerState, effect: CardEffect) -> void:
+	var killed := 0
+	for index: int in player.units.living_indices():
+		if killed >= effect.kill_cap:
+			break
+		if not _is_own_minion(player, index):
+			continue   # a TOTEM (or a reload-orphaned kind): never Culling's target (AC 10)
+		if player.units.kill_at(index, _corpse_ticks_for(player, index)):
+			killed += 1
+	if killed > 0:
+		player.mana.add(effect.mana_per_kill * float(killed))
+
+
+## Story 6-5b (AC 11/AC 12, `6-5b/R7`): GRAVE WARD -- add this effect's authored extension to the
+## remaining lifetime of every corpse the caster owns AT THIS INSTANT.
+##
+## NOTHING IS STORED ON `PlayerState` (the ruling's own clause): no `RULE_*` slot, no `RULE_COUNT`
+## bump. The seat was ruled out on two independent contradictions, both recorded in the story: the
+## rule seat REFRESHES by construction (`start_rule` cancels then starts) and so cannot express AC
+## 12's additive stacking, and `clear_rules()` fires at round end while a corpse must survive it.
+##
+## "AT THIS INSTANT" IS THE WHOLE OF AC 11's SECOND SENTENCE and it costs nothing: the loop walks
+## `corpse_indices()` as it is NOW, so a corpse created on a later tick was never in this list and is
+## untouched by this cast. There is no stored "wards are active" state for a later death to consult.
+##
+## THE SECONDS ARE CONVERTED TO TICKS HERE, ONCE, at the application (A1) -- the buff arms' own
+## discipline applied to a per-corpse countdown instead of a rule window.
+func _apply_grave_ward(player: PlayerState, effect: CardEffect) -> void:
+	var extension := TimingWindow.seconds_to_ticks(effect.duration_seconds)
+	for index: int in player.units.corpse_indices():
+		player.units.extend_corpse_at(index, extension)
+
+
+## Story 6-5b (AC 14/AC 16/AC 17, `6-5b/R8`): RAISE DEAD -- every one of the caster's OWN corpses
+## becomes a live minion, and each is CONSUMED by the raise.
+##
+## A NEW RECORD AT A NEW INDEX, NEVER A REVIVAL OF THE HOLE (`4-1/R9`, unchanged since 4-3a): the
+## raised minion enters through `UnitBoard.add`, which only ever appends. That ruling is what makes
+## AC 14's "no hole is ever reused" true by construction rather than by a check here.
+##
+## THE CORPSE LIST IS TAKEN BEFORE THE FIRST APPEND, and the ordering is load-bearing: `add()` grows
+## the same arrays `corpse_indices()` walks, and a fresh record carries no corpse, so re-reading the
+## list mid-loop would be reading a list that is growing underneath it. Taken once, it is also what
+## fixes the raised records' ORDER to ascending corpse order.
+##
+## IT ENTERS AT THE CORPSE'S OWN KIND's MAXIMUM, scaled by the authored percentage. The kind comes
+## from the DEAD RECORD rather than from a `KIND_MINION` literal, which is both more honest and
+## narrower: only minions leave corpses (`_corpse_ticks_for`), so the two agree today, and if a later
+## story gives a second kind a corpse, a raise reproduces THAT kind instead of silently minion-ising
+## it. An unresolvable kind (an X3 reload shortened `unit_kinds`) raises NOTHING and the corpse is
+## still consumed -- the graceful-degradation direction, and the corpse is genuinely spent either way.
+##
+## AC 17 NEEDS NO CODE: the raised record is an ordinary board record, so its next death goes through
+## the same death seat and leaves a fresh corpse like any other.
+func _apply_raise_dead(player: PlayerState, effect: CardEffect) -> void:
+	for index: int in player.units.corpse_indices():
+		var kind := balance.kind_at(player.units.kind_index_at(index))
+		player.units.consume_corpse_at(index)
+		if kind == null:
+			continue
+		player.units.add(kind.max_hp * effect.raise_hp_percent / 100.0,
+				player.units.kind_index_at(index), index)
+
+
+## Story 6-5b (AC 18-20, `6-5b/R6`): DRAIN -- sacrifice exactly ONE of the caster's own living minions
+## and heal the caster's hero.
+##
+## THE THIRD OF THE DEATH SEAT'S THREE CALLERS, and it KILLS WITHOUT DAMAGING for `_apply_culling`'s
+## reason verbatim (`6-5b/R4`, AC 7): `kill_at` directly, no damage number anywhere, so neither
+## Bloodlust nor Vampiric Aura has anything to read.
+##
+## THE TARGET IS THE RUNNER'S PUSHED FACT AND IS NEVER RECOMPUTED HERE (AC 18). The facing-angle
+## selection needs actor POSITIONS, which `src/state/` may not read (D3(b)/A2), so the runner computes
+## it and pushes it through `push_drain_target` -- the `push_contact` / `set_lock_direction` precedent,
+## which is what puts it on the replay tap and makes a replay reproduce the exact same sacrifice.
+##
+## AN ABSENT OR STALE FACT FALLS BACK TO THE LOWEST LIVING OWN MINION, and this is a DEGRADE, not a
+## second selection rule. Three ways to get here: a headless fixture that never pushed (every unit
+## test), a pushed index whose minion has since died inside this same tick, and a malformed push. In
+## all three the pre-spend gate has already established that a living own minion EXISTS, so refusing
+## now would spend the mana for nothing; the lowest index is the board's own canonical first candidate
+## (`living_indices()` ascending, `4-2/R3`'s index order) and it is position-free, so it cannot
+## reintroduce a spatial read. AC 22's first sentence is satisfied by it either way: with exactly one
+## own living minion, the fallback and the fact name the same record.
+func _apply_drain(player: PlayerState, effect: CardEffect, slot: int) -> void:
+	var index := _drain_target_index(player, slot)
+	if index < 0:
+		return
+	if player.units.kill_at(index, _corpse_ticks_for(player, index)):
+		# AC 20: clamped at the caster's own maximum by `HeroState.heal`, which never overheals -- the
+		# same seat and the same clamp `_apply_lifesteal` relies on, reused rather than re-derived.
+		player.hero.heal(effect.heal_amount)
+
+
+## The board index Drain sacrifices: the runner's pushed facing choice when it still names a living
+## own MINION, otherwise the lowest living own minion (see `_apply_drain`). `-1` when the caster has
+## none at all -- a state the pre-spend gate (AC 21) normally prevents this seat from ever seeing.
+func _drain_target_index(player: PlayerState, slot: int) -> int:
+	var pushed := _drain_targets[slot]
+	if pushed >= 0 and player.units.is_alive_at(pushed) and _is_own_minion(player, pushed):
+		return pushed
+	for index: int in player.units.living_indices():
+		if _is_own_minion(player, index):
+			return index
+	return -1
 
 
 ## Story 5-2 (AC 2, `5-2/R11`): the S6 GATE's reason -- named, and named HERE rather than on
@@ -3285,6 +3558,61 @@ const REASON_NO_PITCH_COST := &"no_pitch_cost"
 ## overwrite of the card already there. A state-side OCCUPANCY conflict the evaluator never sees, so it
 ## lives here beside `REASON_UNBLOCKABLE_COMMITTED` / `REASON_STUNNED` and not on `CastEvaluator`.
 const REASON_PITCH_ZONE_OCCUPIED := &"pitch_zone_occupied"
+
+## Story 6-5b (AC 9/AC 21, `6-5b/R14`): CULLING or DRAIN pressed with no own living minion. A
+## state-side BOARD fact the evaluator never sees, so it lives here beside its `REASON_STUNNED` /
+## `REASON_PITCH_ZONE_OCCUPIED` siblings and not on `CastEvaluator` -- that class answers "can this
+## player AFFORD this", and having something to kill is not a price.
+const REASON_NO_OWN_MINION := &"no_own_minion"
+
+## Story 6-5b (AC 13/AC 15, `6-5b/R14`): GRAVE WARD or RAISE DEAD pressed with no own corpse. Its OWN
+## token rather than a reuse of the one above, on `REASON_EMPTY_PITCH_ZONE`'s stated reasoning: an
+## empty board and a board with living minions but no corpses are different player-visible facts, and
+## a player who just watched Culling fill the field with corpses needs to hear which one it was.
+const REASON_NO_OWN_CORPSE := &"no_own_corpse"
+
+
+## Story 6-5b (AC 9/AC 13/AC 15/AC 21, `6-5b/R14`): the BOARD PRECONDITION `effect` cannot resolve
+## without, as a refusal reason, or `&""` for "may proceed".
+##
+## ONE FUNCTION, TWO GATES (mode ① at `_resolve_basic_cast`, mode ④ at `_resolve_pitch_activate`), and
+## that is what makes `6-5b/R9`'s "identically whether the card is being cast or pitch-activated" true
+## by construction instead of by two conditions kept in agreement. It is also why Culling (Vanguard's
+## PITCH) and Raise Dead (Grave Ward's PITCH) get the same refusal test their normal-mode siblings do,
+## which is the clause of that ruling most easily lost.
+##
+## WHICH EFFECTS HAVE A PRECONDITION IS THE RESOLVER'S ANSWER, not a literal id list here -- see
+## `CardEffectResolver.board_requirement_for`. This function turns that requirement into a reading of
+## THIS player's board and nothing else.
+##
+## THE EMPTY-MEANS-ALLOWED CONVENTION IS `CastEvaluator`'s, borrowed as a shape exactly as
+## `_unblockable_refusal_reason` borrows it; `CastEvaluator.refusal_reason` is not called and cannot
+## be reached from here.
+##
+## NO `Invariant.check` ON THIS PATH (`5-1a/R7`, the standing rule for player-reachable refusals):
+## `Invariant.check` is `push_error` + `assert`, and `assert` is stripped in an exported build -- so a
+## guard written that way would log in the editor and let the cast through in the shipped game.
+##
+## Review fix (6-5b review, MAJOR-1): A CLOSED spell layer is not a refusal -- the cast resolves and
+## applies nothing, exactly like the 6-5a buffs with the layer closed. `board_requirement_for` itself
+## reads no flags (by design, see its own docstring), so the closed-layer reading is taken here, through
+## the SAME call `_apply_card_effect` uses to decide whether to apply anything (`CardEffectResolver.outcome`)
+## -- never a second flag check with its own semantics that could drift from the resolver's.
+func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringName:
+	if CardEffectResolver.outcome(effect, flags) == CardEffectResolver.REASON_SPELLS_FLAG_CLOSED:
+		return &""
+	match CardEffectResolver.board_requirement_for(effect):
+		CardEffectResolver.NEEDS_OWN_LIVING_MINION:
+			for index: int in player.units.living_indices():
+				if _is_own_minion(player, index):
+					return &""
+			return REASON_NO_OWN_MINION
+		CardEffectResolver.NEEDS_OWN_CORPSE:
+			# AC 13/AC 15 read "no own corpse AT ALL", which is exactly `corpse_indices()` being empty
+			# -- the same list Grave Ward extends and Raise Dead consumes, so the gate and the apply can
+			# never disagree about whether there was anything to act on.
+			return &"" if not player.units.corpse_indices().is_empty() else REASON_NO_OWN_CORPSE
+	return &""
 
 
 ## Story 6-2 (AC 3-8a/AC 12): mode ④ resolution -- STAGING. The card leaves the hand into its owner's
@@ -3412,6 +3740,30 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	if not pitch.is_ready(slot, player.orbs, flags):
 		player.hero.reject_action(&"card_cast", REASON_PITCH_NOT_READY)
 		return
+	# Story 6-5b (AC 9/AC 15, `6-5b/R14`): THE MODE ④ HALF OF THE BOARD-AWARE GATE, fired BEFORE THE
+	# ORB SPEND on the next lines -- which is the ruling's own clause, and the reason it sits here
+	# rather than beside the mode ① gate's mana spend: orbs are what mode ④ pays at activation.
+	#
+	# WHAT A REFUSAL LEAVES BEHIND is the whole of AC 9/AC 15 and every part of it is a consequence of
+	# this seat, not of code below it:
+	#   * the ORBS are not spent -- the spend is below this return;
+	#   * the card STAYS STAGED and stays READY -- `pitch.clear(slot)` is below this return, and READY
+	#     is derived live from the pool (`PitchState.is_ready`), which this path has not touched;
+	#   * its COUNTDOWN KEEPS RUNNING toward the normal fizzle -- the countdown is `pitch.tick()`'s at
+	#     step 2 and nothing here stops it, so the card fizzles on its own schedule if no target ever
+	#     appears, and the player may press again on any tick before that;
+	#   * the STAGING MANA STAYS SPENT (`match_state.gd`'s standing no-refund rule at the fizzle exit,
+	#     `6-5b/R14` citing it): it was paid at staging for a chance, and this refusal is not the
+	#     chance expiring.
+	# READ ONCE INTO A LOCAL and used at BOTH the gate and the apply below. Reading the map twice would
+	# be harmless today and is refused anyway: `test_deck_and_hand.gd` pins that ACTIVATION consumes the
+	# pitch-effect map EXACTLY ONCE (6-5a AC 6), and that pin exists so the seat cannot quietly become two
+	# lookups that a later change could let disagree.
+	var pitch_effect: CardEffect = _pitch_effects.get(pitch.staged_card_id(slot))
+	var gate := _board_refusal_reason(player, pitch_effect)
+	if gate != &"":
+		player.hero.reject_action(&"card_cast", gate)
+		return
 	var orb_costs := pitch.staged_orb_costs(slot)
 	for color: Enums.CardColor in CastEvaluator.sorted_orb_colors(orb_costs):
 		player.orbs.add(color, -int(orb_costs[color]))
@@ -3424,7 +3776,7 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	# card has left the zone, through the same apply seat a Mode ① cast uses, off the card's PITCH effect
 	# (the sixth injected map). Staging (`_resolve_pitch_stage`) stays cost-only and reads no effect. The
 	# header's "No per-card effect resolves here" is SUPERSEDED by this line.
-	_apply_card_effect(player, _pitch_effects.get(card_id))
+	_apply_card_effect(player, pitch_effect, slot)
 	# Story 6-5a (AC 10): the second APPLY seat of the last-resolved-card record.
 	player.record_resolved_card(card_id, Enums.ModeKind.PITCH)
 	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
@@ -5257,6 +5609,12 @@ func _reset_player(player: PlayerState) -> void:
 	# about; clearing this one is what keeps a bearing locked before the round ended from carrying a
 	# direction into the next round's first press.
 	_counter_travel_dirs[reset_slot] = Vector2.ZERO
+	# Story 6-5b (AC 18): this slot's pushed DRAIN TARGET, cleared beside the three stores above and
+	# on their classification -- a runner-pushed fact, not one of the named per-player hashed-state
+	# exceptions. It clears because a board index pushed before the reset names a record
+	# `units.clear()` below is about to delete, and a stale index surviving into the next round would
+	# be a Drain aimed at a minion that no longer exists.
+	_drain_targets[reset_slot] = NO_DRAIN_TARGET
 	# STORY 6-2 (AC 14d): THE SIXTH NAMED EXCEPTION -- this player's PITCH ZONE, emptied with its
 	# countdown stopped. Without it the step-6 deal this same reset re-arms would lay the FULL composition
 	# back down while the staged card's id still sat in the zone -- one card in two places -- and a

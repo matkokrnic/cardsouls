@@ -51,9 +51,16 @@ const ID_BLOODLUST := &"sf_bloodlust"
 const ID_AURA := &"sf_aura"
 const ID_HOUND := &"sf_hound"
 const ID_FROST := &"sf_frost"
-const ID_CULLING := &"sf_culling"
+## Story 6-5b: WAS `ID_CULLING := &"sf_culling"`, carrying the `culling` effect id. That id is no
+## longer deferred -- 6-5b builds Culling, so it left `DEFERRED_EFFECT_OWNERS` and now resolves to a
+## real outcome that REFUSES with no own living minion (`6-5b/R14`). The two tests here that need a
+## STILL-DEFERRED effect (the no-op cast, and the last-resolved-card record on a no-op) are repointed
+## at `rocksling`, which 6-5d owns -- so each keeps testing what it was written to test rather than
+## being rewritten around Culling's new behaviour. Culling's own behaviour is tested in
+## test_own_minion_spells.gd.
+const ID_DEFERRED := &"sf_deferred"
 ## Two copies of the Bloodlust card, so the REFRESH test can recast while the first is still running.
-const DECK: Array[StringName] = [ID_BLOODLUST, ID_BLOODLUST, ID_AURA, ID_HOUND, ID_FROST, ID_CULLING]
+const DECK: Array[StringName] = [ID_BLOODLUST, ID_BLOODLUST, ID_AURA, ID_HOUND, ID_FROST, ID_DEFERRED]
 
 
 # ------------------------------------------------------------------------ resolver (AC 4, 15, 16)
@@ -93,21 +100,27 @@ func test_a_closed_spell_layer_closes_the_buffs_and_not_ruin_vanguard() -> void:
 		CardEffectResolver.REASON_SPELLS_FLAG_CLOSED, "no flags injected reads CLOSED")
 
 
-## AC 15 (`6-5a/R19`): ALL NINE deferred effects map to their owning story, and each resolves as the
-## named no-op. The table holds exactly these nine rows.
-func test_the_nine_deferred_effects_name_their_owning_story() -> void:
+## AC 15 (`6-5a/R19`): every deferred effect maps to its owning story, and each resolves as the named
+## no-op. The table holds exactly these rows and no more.
+##
+## STORY 6-5b: NINE -> FIVE, and the four that left are the four this story BUILT. That is the deferred
+## table's mechanism working exactly as designed -- a row names the story that owns building the
+## effect, and the story that builds it retires the row. The four are asserted the other way round in
+## `test_own_minion_spells.gd`: `owner_story_for` answers `&""` for each of them now, and each resolves
+## to a real outcome rather than the no-op. RENAMED from
+## `test_the_nine_deferred_effects_name_their_owning_story` for the count-in-the-name discipline this
+## repo applies to every pin (the `test_the_recorder_still_ships_exactly_N_capture_channels`
+## precedent); the old name is recorded here verbatim so the pin stays greppable.
+func test_the_five_deferred_effects_name_their_owning_story() -> void:
 	var owners := {
-		&"culling": &"6-5b-corpses-and-own-minions",
-		&"grave_ward": &"6-5b-corpses-and-own-minions",
-		&"raise_dead": &"6-5b-corpses-and-own-minions",
-		&"drain": &"6-5b-corpses-and-own-minions",
 		&"rocksling": &"6-5d-hero-and-corpse-projectiles",
 		&"boom": &"6-5e-boulder-injection",
 		&"honed_bolt": &"6-5c-hero-cast-honed-bolt",
 		&"counterspell": &"6-5f-counterspell",
 		&"corpse_bomb": &"6-5d-hero-and-corpse-projectiles",
 	}
-	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 9, "exactly nine deferred rows")
+	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 5,
+		"exactly FIVE deferred rows -- NINE before 6-5b, which retired the four naming itself")
 	for id: StringName in owners:
 		assert_eq(CardEffectResolver.owner_story_for(id), owners[id], "%s is owned by %s" % [id, owners[id]])
 		assert_eq(CardEffectResolver.outcome(_effect(id), _flags()),
@@ -146,7 +159,7 @@ func test_a_closed_spell_layer_casts_the_card_and_applies_nothing() -> void:
 ## AC 15: a deferred Deck 1 effect is a SUCCESSFUL cast that applies nothing (`4-1/R3`/`4-1/R10`).
 func test_a_deferred_effect_is_a_successful_cast_that_applies_nothing() -> void:
 	var ms := _make_match()
-	_assert_successful_no_op_cast(ms, ID_CULLING, "deferred Culling")
+	_assert_successful_no_op_cast(ms, ID_DEFERRED, "deferred Rocksling")
 	assert_eq(ms.p1.units.size(), 0, "...and puts nothing on the board")
 
 
@@ -277,8 +290,8 @@ func test_the_last_resolved_card_is_recorded_at_the_basic_seat() -> void:
 	var record: Array = ms.p1.to_snapshot()["last_resolved_card"]
 	assert_eq(record, [String(ID_HOUND), Enums.ModeKind.BASIC], "a Mode ① cast records [id, BASIC]")
 	assert_eq(typeof(record[0]), TYPE_STRING, "...the id a String VALUE, never a StringName")
-	_cast(ms, ID_CULLING)
-	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], [String(ID_CULLING), Enums.ModeKind.BASIC],
+	_cast(ms, ID_DEFERRED)
+	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], [String(ID_DEFERRED), Enums.ModeKind.BASIC],
 		"...and a no-op cast is still a resolution, so it overwrites the record")
 	assert_eq(ms.p2.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE],
 		"the other player's record is untouched")
@@ -809,10 +822,11 @@ func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 	return _costs()
 
 
-## Each fixture card's Mode ① effect: the buff its id names (Culling a deferred no-op).
+## Each fixture card's Mode ① effect: the buff its id names (Rocksling a deferred no-op, repointed
+## from Culling by 6-5b).
 func _basic_effects() -> Dictionary[StringName, CardEffect]:
 	var ids := {ID_BLOODLUST: &"bloodlust", ID_AURA: &"vampiric_aura", ID_HOUND: &"bloodhound_step",
-			ID_FROST: &"frostbite", ID_CULLING: &"culling"}
+			ID_FROST: &"frostbite", ID_DEFERRED: &"rocksling"}
 	var out: Dictionary[StringName, CardEffect] = {}
 	for id in DECK:
 		out[id] = _authored(ids[id])

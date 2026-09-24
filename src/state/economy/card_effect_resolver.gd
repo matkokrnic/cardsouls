@@ -185,11 +185,13 @@ const REASON_DECK1_NOT_YET_RESOLVED := &"deck1_not_yet_resolved"
 ## Each deferred Deck 1 effect id -> the board key of the story that owns building it (AC 15,
 ## `6-5a/R19`). A constant rather than a comment because a comment is not machine-checkable; a unit test
 ## asserts all nine rows. Only ever `get()`-ed, never iterated.
+##
+## STORY 6-5b: FOUR ROWS LEAVE, NINE -> FIVE. `culling`, `grave_ward`, `raise_dead` and `drain` named
+## THIS story as their owner and this story builds them, so they become real outcomes below rather
+## than staying rows here. The table is the mechanism working as designed -- a deferred effect's row
+## is retired by the story the row names, and the count assertion in `test_spell_framework.gd` moves
+## with it deliberately.
 const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
-	&"culling": &"6-5b-corpses-and-own-minions",
-	&"grave_ward": &"6-5b-corpses-and-own-minions",
-	&"raise_dead": &"6-5b-corpses-and-own-minions",
-	&"drain": &"6-5b-corpses-and-own-minions",
 	&"rocksling": &"6-5d-hero-and-corpse-projectiles",
 	&"boom": &"6-5e-boulder-injection",
 	&"honed_bolt": &"6-5c-hero-cast-honed-bolt",
@@ -200,6 +202,70 @@ const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
 ## Story 6-5a (AC 16): the SPELL layer's closed-gate reason, the `REASON_TOTEMS_FLAG_CLOSED` twin. The
 ## four buffs gate on `FeatureFlags.spells`; off, the cast still resolves and the buff does not apply.
 const REASON_SPELLS_FLAG_CLOSED := &"spells_flag_closed"
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5b: THE FOUR OWN-MINION / CORPSE OUTCOMES -- the four rows that just left
+## `DEFERRED_EFFECT_OWNERS`. `BUFF_OUTCOMES`' posture verbatim: whole-id rows in a `Dictionary` only
+## ever `get()`-ed by one known key, never iterated, never sorted, never hashed.
+## ------------------------------------------------------------------------------------------
+## THEY GET THEIR OWN TABLE RATHER THAN FOUR MORE `BUFF_OUTCOMES` ROWS, and the reason is that table's
+## own NAME: none of these four is a buff. Not one of them starts a timed rule (`6-5b/R7` keeps Grave
+## Ward off `PlayerState`'s rule seat entirely), and three of them mutate the BOARD -- which is the
+## `OUTCOME_SUMMON` family, not the buff family. One table per family keeps the apply seat's `match`
+## readable as "what kind of thing is this".
+##
+## ALL FOUR GATE ON `FeatureFlags.spells`, exactly as the four buffs do and through the same
+## `_spells_open` reading: a layer that cannot be verified open stays shut. Degrading gracefully means
+## what it means everywhere else here -- the cast still RESOLVES (mana/orbs spent, card discarded,
+## replacement owed) and nothing is killed, extended, raised or healed.
+const OUTCOME_CULLING := &"culling"
+const OUTCOME_GRAVE_WARD := &"grave_ward"
+const OUTCOME_RAISE_DEAD := &"raise_dead"
+const OUTCOME_DRAIN := &"drain"
+
+const OWN_MINION_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"culling": OUTCOME_CULLING,
+	&"grave_ward": OUTCOME_GRAVE_WARD,
+	&"raise_dead": OUTCOME_RAISE_DEAD,
+	&"drain": OUTCOME_DRAIN,
+}
+
+
+## Story 6-5b (AC 9/AC 13/AC 15/AC 21, `6-5b/R14`): does this effect REFUSE when the caster has
+## nothing to act on -- and if so, which board fact does it need?
+##
+## IT IS ANSWERED HERE, ON THE RESOLVER, AND THAT IS DELIBERATE. The pre-spend gates live in
+## `MatchState` (they have to -- they read a board and they call `reject_action`), but WHICH cards
+## have a precondition at all is a property of the EFFECT, and this file is "THE one place
+## `CardEffect.effect_id` strings are matched against gameplay meaning". A literal id list at the two
+## gate sites would be that vocabulary spelled a third and fourth time.
+##
+## STILL COMPUTES, STILL DOES NOT APPLY (D6): it returns one of the two requirement names below, or
+## `&""` for every effect with no board precondition. It touches no board and reads no flags -- a
+## CLOSED spell layer is not a refusal (the cast resolves and applies nothing), so the flag has no
+## business in this answer.
+const NEEDS_NOTHING := &""
+
+## `culling` / `drain`: at least one of the caster's own LIVING minions must exist.
+const NEEDS_OWN_LIVING_MINION := &"own_living_minion"
+
+## `grave_ward` / `raise_dead`: at least one of the caster's own CORPSES must exist.
+const NEEDS_OWN_CORPSE := &"own_corpse"
+
+const OWN_MINION_REQUIREMENTS: Dictionary[StringName, StringName] = {
+	&"culling": NEEDS_OWN_LIVING_MINION,
+	&"drain": NEEDS_OWN_LIVING_MINION,
+	&"grave_ward": NEEDS_OWN_CORPSE,
+	&"raise_dead": NEEDS_OWN_CORPSE,
+}
+
+
+## The board fact `effect` cannot resolve without, or `NEEDS_NOTHING`. A null effect needs nothing:
+## a cast with no injected entry resolves as `REASON_NO_EFFECT_ENTRY` and has no precondition to fail.
+static func board_requirement_for(effect: CardEffect) -> StringName:
+	if effect == null:
+		return NEEDS_NOTHING
+	return OWN_MINION_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 
 
 ## What this cast's effect does, as one of the four named outcomes above. `effect` is the injected
@@ -231,6 +297,13 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	var buff: StringName = BUFF_OUTCOMES.get(effect.effect_id, &"")
 	if buff != &"":
 		return buff if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 6-5b: the four OWN-MINION / CORPSE outcomes, in the buff lookup's own seat and order --
+	# after the summon prefix, before the deferred table (their four rows just left it) and before the
+	# `spell_*` prefix. The id is recognised first and the flag read only after, this docstring's
+	# standing ordering argument.
+	var own_minion: StringName = OWN_MINION_OUTCOMES.get(effect.effect_id, &"")
+	if own_minion != &"":
+		return own_minion if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
 	if owner_story_for(effect.effect_id) != &"":
 		return REASON_DECK1_NOT_YET_RESOLVED
 	if id.begins_with(PREFIX_SPELL):

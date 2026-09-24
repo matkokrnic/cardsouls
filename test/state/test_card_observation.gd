@@ -306,7 +306,19 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# Story 4-4 (AC 1/AC 10): two more — `unit_attack_cooldown` and `unit_kind`.
 		"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 		"unit_attack_ticks",
-		"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_swing_dedupe", "unit_targets",
+		# Story 6-5b (AC 1/AC 14, `6-5b/R17`): THREE more board keys, in sorted position -- which is
+		# between `unit_attack_ticks` and `unit_count` for the two corpse keys ("co" < "ou"), and
+		# between `unit_kind` and `unit_swing_dedupe` for the raise source.
+		#
+		# THE CLAIM THIS PIN GUARDS IS STILL UNCHANGED, which is what makes the extension legitimate
+		# rather than an erosion: a tick countdown, a bool and a board INDEX are counts, values and
+		# indices -- the `unit_hp` / `unit_targets` class exactly. No identity, no StringName, no object
+		# and NO POSITION joins the hash. `unit_raised_from` is the one that could look like an
+		# exception and is not: it is the board INDEX of the corpse a minion was raised from, never the
+		# corpse's location, which stays actor-owned (`6-5b/R1`) and is read by the runner alone.
+		"unit_corpse_extended", "unit_corpse_ticks",
+		"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_raised_from",
+		"unit_swing_dedupe", "unit_targets",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "
@@ -314,8 +326,18 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 33,
-		"the per-player snapshot key set is THIRTY-THREE keys as of story 6-5a, which adds TWO: "
+	assert_eq(keys.size(), 36,
+		"the per-player snapshot key set is THIRTY-SIX keys as of story 6-5b, which adds THREE, all on "
+		+ "the board (AC 1/AC 14, `6-5b/R17`): `unit_corpse_ticks`, the per-record corpse countdown; "
+		+ "`unit_corpse_extended`, the per-corpse Grave Ward mark; and `unit_raised_from`, the board "
+		+ "index of the corpse a record was raised from. Each crosses ticks and decides an outcome -- "
+		+ "whether a corpse can still be extended or raised, what it renders as until it is removed, "
+		+ "and where a raised minion is placed -- and none can be recomputed inside the tick that "
+		+ "reads it, because the death that made the corpse is ticks in the past. THREE keys rather "
+		+ "than one fused key is a deliberate choice, not a default: `unit_targets` fuses because a "
+		+ "target is ONE fact in two ints that must never drift apart, whereas these three move "
+		+ "independently every tick, and fusing them would hide which one moved when the golden moves. "
+		+ "It was THIRTY-THREE as of story 6-5a, which adds TWO: "
 		+ "`timed_rules`, the timed-rule seat (AC 8), and `last_resolved_card`, the hashed "
 		+ "last-resolved card (AC 10) -- both cross ticks and decide an outcome. It was THIRTY-ONE "
 		+ "as of story 6-1c, which added ONE: "

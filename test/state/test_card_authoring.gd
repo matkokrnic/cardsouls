@@ -294,6 +294,10 @@ func test_the_deck_list_is_exactly_deck_1() -> void:
 func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() -> void:
 	var summons := 0
 	var buffs := 0
+	## Story 6-5b: the FOUR own-minion / corpse effects, counted in their own bucket -- they were four
+	## of 6-5a's nine deferred no-ops and their rows LEFT `DEFERRED_EFFECT_OWNERS` when this story gave
+	## them real outcomes, so counting them as deferred would now be counting them twice wrong.
+	var own_minion := 0
 	var deferred := 0
 	var offenders: Array[String] = []
 	for card in _deck_cards():
@@ -306,6 +310,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 				summons += 1
 			elif CardEffectResolver.BUFF_OUTCOMES.has(id):
 				buffs += 1
+			# Story 6-5b: read off the resolver's own new table, for the derived-not-transcribed reason
+			# the buff arm directly above is read off `BUFF_OUTCOMES`.
+			elif CardEffectResolver.OWN_MINION_OUTCOMES.has(id):
+				own_minion += 1
 			elif CardEffectResolver.owner_story_for(id) != &"":
 				deferred += 1
 			else:
@@ -317,7 +325,13 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 				% ", ".join(offenders))
 	assert_eq(summons, 1, "ONE Deck 1 effect summons (Ruin Vanguard)")
 	assert_eq(buffs, 4, "FOUR are buffs (Bloodlust, Vampiric Aura, Bloodhound Step, Frostbite)")
-	assert_eq(deferred, 9, "...and NINE are named no-ops owned by a later 6-5 story")
+	assert_eq(own_minion, 4,
+		"Story 6-5b: FOUR are the own-minion / corpse effects it builds -- Culling, Grave Ward, "
+		+ "Raise Dead and Drain, which resolve through OWN_MINION_OUTCOMES rather than as no-ops")
+	assert_eq(deferred, 5,
+		"...and FIVE are named no-ops owned by a later 6-5 story. NINE before 6-5b, which retired "
+		+ "exactly the four rows naming itself -- the deferred table's mechanism working as designed, "
+		+ "and the reason this count is asserted separately from the buckets above it")
 	for card in _fixture_cards():
 		var id := String(card.basic_effect.effect_id)
 		assert_true(id.begins_with(CardEffectResolver.PREFIX_SUMMON)
@@ -422,6 +436,57 @@ func test_the_five_implemented_effects_carry_their_spec_numbers_and_the_rest_car
 				continue
 			assert_eq(effect.get(name), neutral.get(name),
 				"'%s' authors no %s (N11: numbers arrive with its own story)" % [id, name])
+
+
+## Story 6-5b: THE FOUR OWN-MINION / CORPSE EFFECTS' NUMBERS, exactly as `deck-1-spec.md` authors them.
+##
+## THIS TEST EXISTS BECAUSE COVERAGE WOULD OTHERWISE HAVE VANISHED SILENTLY, and the story's own
+## broken-test table named it in advance. The N11 loop in the test directly above iterates
+## `DEFERRED_EFFECT_OWNERS.keys()` and asserts each deferred effect authors NO number; when culling,
+## grave_ward, raise_dead and drain left that table, they left that loop too -- so their `.tres` files
+## would have been unasserted in either direction, and a number silently reverting to its default
+## would have failed nothing.
+##
+## THE NUMBERS ARE PINNED AGAINST THE SPEC, not against the code that reads them: 2 mana per kill, a
+## 20 s Grave Ward extension, 100 % max HP on a raise, 10 HP of Drain heal, and Culling's `kill_cap` of
+## 99 (`6-5b/R15`).
+##
+## TWO OF THE FIVE CANNOT BE PROVEN BY DELETING THEIR `.tres` LINE, and that is stated rather than
+## left for a reviewer to discover: `kill_cap` (99) and `raise_hp_percent` (100.0) are authored at
+## values that EQUAL their ruled script defaults, so removing the line leaves the assertion green.
+## They are mutation-proven by CHANGING the authored value instead -- which is the honest proof for a
+## pin whose job is "the authored number is still the spec's number". The other three default to 0.0
+## and fail on deletion.
+func test_the_four_own_minion_effects_carry_their_spec_numbers() -> void:
+	var culling := _effect(&"culling")
+	assert_eq(culling.mana_per_kill, 2.0, "Culling grants 2 mana per minion killed")
+	assert_eq(culling.kill_cap, 99,
+		"...up to a kill_cap of 99 (`6-5b/R15`, the spec's 'effectively no cap')")
+	var grave_ward := _effect(&"grave_ward")
+	assert_eq(grave_ward.duration_seconds, 20.0,
+		"Grave Ward adds 20 s to each of the caster's corpses (`6-5b/R7` -- an ADDITIVE per-corpse "
+		+ "extension, not the per-player timed rule deck-1-spec.md originally worded)")
+	var raise_dead := _effect(&"raise_dead")
+	assert_eq(raise_dead.raise_hp_percent, 100.0, "Raise Dead raises at 100% of max HP")
+	var drain := _effect(&"drain")
+	assert_eq(drain.heal_amount, 10.0, "Drain heals the caster 10 HP")
+	# ...and each of the four still authors NOTHING it does not use, which is the half of N11 that
+	# survives their leaving the deferred table. Checked against a neutral CardEffect field by field,
+	# skipping only the fields the assertions above have just pinned.
+	var neutral := CardEffect.new()
+	var authored := {
+		&"culling": ["mana_per_kill", "kill_cap"],
+		&"grave_ward": ["duration_seconds"],
+		&"raise_dead": ["raise_hp_percent"],
+		&"drain": ["heal_amount"],
+	}
+	for id: StringName in authored:
+		var effect := _effect(id)
+		for name in _script_property_names(neutral):
+			if name == "effect_id" or (authored[id] as Array).has(name):
+				continue
+			assert_eq(effect.get(name), neutral.get(name),
+				"'%s' authors no %s -- an effect uses the numbers it needs and no others" % [id, name])
 
 
 ## Story 6-5a (AC 2): EVERY EFFECT NUMBER IS A FLAT EXPORT ON CardEffect ITSELF -- no field holds an

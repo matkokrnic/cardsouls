@@ -221,6 +221,21 @@ extends Resource
 ## unit that can be hit forever and never dies — the invulnerable box `4-3a` existed to replace.
 @export var hero_damage_to_unit: float = 0.0
 
+## Story 6-5b (AC 2, `6-5b/R2`): HOW LONG A CORPSE LASTS, in seconds. Default authored 20 s.
+##
+## IT REPLACES AN ACTOR CONSTANT, and that is the whole of the ruling: `UnitActor.LINGER_TICKS = 600`
+## was a hardcoded 10 s on a presentation node, which `4-3d`'s own Non-Goals stated as deliberate
+## ("a lifecycle mechanism, not a tuning pass"). 6-5b makes the corpse a piece of GAME STATE -- Grave
+## Ward extends it, Raise Dead consumes it -- so its length is a gameplay number, and a gameplay
+## number lives in balance (the project-context NEVER-hardcode rule).
+##
+## A PLAIN WINDOW DURATION, so `BalanceTicks` converts it with the unclamped `seconds_to_ticks`
+## (round, >= 1 tick for any non-zero value) rather than the modulo-divisor clamp: it is a countdown,
+## never a divisor. An authored 0.0 derives 0 ticks, which means every death leaves a corpse that is
+## already expired -- i.e. no corpse at all. Defined rather than crashing, and the authoring audit is
+## what keeps it out of the shipped `.tres`.
+@export var corpse_lifetime_seconds: float = 0.0
+
 @export_group("Totems")
 ## Story 4-4 (AC 20, `4-4/R13`): the Mana Accelerator totem's per-firing MANA AMOUNT — the field
 ## `data/economy/mana_accelerator.tres` names as its amount's home.

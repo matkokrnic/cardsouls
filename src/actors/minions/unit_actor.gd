@@ -104,42 +104,108 @@ extends CharacterBody3D
 @onready var animation: UnitAnimationController = get_node_or_null("AnimationController")
 
 
-## Story 4-3d (AC 3): the CORPSE LINGER, in TICKS. 10 s at the 60 Hz `project.godot` pin
-## (`common/physics_ticks_per_second=60`), which is the only clock this project counts in.
+## ------------------------------------------------------------------------------------------
+## STORY 6-5b (AC 2, `6-5b/R1`/`6-5b/R2`): THE CORPSE TIMER IS GONE FROM THIS FILE.
+## ------------------------------------------------------------------------------------------
+## `const LINGER_TICKS := 600` and `var _linger_ticks := -1` STOOD HERE and are DELETED, not kept
+## alongside -- the `attack_move_speed_multiplier` half-migration precedent: two countdowns for one
+## corpse would be two sources of truth, and the first thing they would need is a rule for what
+## happens when they disagree.
 ##
-## NOT AUTHORED AND NOT A `BalanceConfig` FIELD, by the story's own Non-Goals: this is a
-## lifecycle mechanism, not a tuning pass -- the same posture `4-3c` took for the idle/walk
-## epsilon directly above.
-const LINGER_TICKS := 600
-
-## Ticks elapsed since this actor was first observed dead. `-1` means "not a corpse", which is
-## also what makes `begin_corpse_linger()` idempotent -- the runner observes death on EVERY tick
-## after it happens, not once.
+## 4-3d's OWN RULING PUT THEM HERE and 6-5b supersedes it, because the corpse became GAME STATE: Grave
+## Ward EXTENDS its lifetime and Raise Dead CONSUMES it, and neither can reach a field on a
+## presentation node. The authoritative countdown is now `UnitBoard._corpse_ticks`, converted from the
+## authored `BalanceConfig.corpse_lifetime_seconds` (default 20 s, replacing the hardcoded 10 s).
 ##
-## THE TIMER LIVES HERE, ON THE ACTOR, AND THAT IS THE RULING (AC 3), not a convenience. Two
-## measured reasons. A runner-local parallel array would survive the debug reset that clears
-## `_unit_actors` -- leaking stale entries, or needing its own reset-relay wiring that a
-## per-actor field does not, because the field is freed WITH the node it lives on. And counting
-## TICKS rather than wall-clock seconds is what makes the linger honour `3-0b`'s deterministic
-## step/pause: the runner only calls `advance_corpse_linger()` from inside its `ticking` gate, so
-## a corpse held under the debug pause does not age out mid-inspection.
-var _linger_ticks := -1
+## WHAT REMAINS HERE IS PURE REACTION, which is the HARD RULE on state/visual separation working as
+## intended: this node is HANDED its remaining lifetime and its extended mark by the runner and drives
+## its own visual/collision lifecycle from those values alone. It never re-derives them, never counts
+## and never decides when it dies -- `MatchRunner._free_dead_unit_actors` frees it when STATE says the
+## corpse is gone (AC 25).
+
+## True once this actor has been told it is a corpse. Read by the runner to tell the FIRST observation
+## of death from every later one, which is what keeps `begin_corpse_linger()` idempotent.
+##
+## A PLAIN BOOL NOW, WHERE IT USED TO BE `_linger_ticks >= 0`. The predicate is unchanged for every
+## caller (`test_unit_combat_live.gd` reads it); what changed is that it no longer doubles as the read
+## of a countdown this file does not own.
+var _is_corpse := false
+
+## The remaining corpse lifetime in ticks, AS STATE LAST REPORTED IT (AC 2). WRITE-ONLY from this
+## node's perspective: it is assigned by `on_corpse_state()` and read by nothing here and nothing in
+## `src/state/`. It exists so the value is inspectable from an integration test without reaching into
+## the board, and so a future clip/fade can react to "nearly gone" without inventing a second clock.
+##
+## NEVER DECREMENTED HERE. A `-= 1` on this line would resurrect exactly the second countdown AC 2
+## deletes, and it would drift the moment Grave Ward extended the real one.
+var _corpse_ticks_remaining := 0
+
+## True once state has reported this corpse as Grave-Ward-extended. LATCHED rather than mirrored,
+## because the tint is applied once and `6-5b/R7` scopes the mark to the corpse's whole remaining life
+## -- and because re-applying a material override every tick for 20 s is work with no effect.
+##
+## THE LATCH LIVES ON THE ACTOR AND THE TINT IS APPLIED BY THE RUNNER, and the split is deliberate:
+## the runner already owns this project's ONE mesh-tint mechanism (`_tint_mesh_recursive`, which
+## duplicates each `MeshInstance3D`'s material so one unit's tint cannot bleed into another's shared
+## resource), and a second copy of that walk in this file is exactly the drift the totem tint's own
+## comment warns about. What belongs HERE is the per-corpse memory of whether it has happened yet,
+## because that memory is freed with the node it describes.
+var _extended_tint_applied := false
 
 
-## True once this actor has been told it is a corpse. Read by the runner to tell the FIRST
-## observation of death from every later one.
 func is_lingering() -> bool:
-	return _linger_ticks >= 0
+	return _is_corpse
+
+
+## Story 6-5b (AC 2/AC 24): the actor's ONE read of state-owned corpse data, pushed by
+## `MatchRunner._free_dead_unit_actors` on every tick this actor is observed dead.
+##
+## IT RECEIVES VALUES, NEVER A HANDLE. No `UnitBoard`, no `PlayerState` and no `MatchState` reference
+## crosses into this node -- two plain scalars, the `UnitAnimationController.on_unit_tick` push shape
+## verbatim, so the state/visual dependency still points one way only.
+##
+## IT RECORDS THE MARK BUT DOES NOT DRAW IT (see `_extended_tint_applied`): it returns whether THIS
+## call is the rising edge, and the runner does the tinting with the mechanism it already owns.
+##
+## THE MARK IS AC 24 and it is never removed once set. `6-5b/R7`: it lasts "until that corpse is
+## removed (expired or raised), not for a fixed window" -- and removal frees this whole node, so there
+## is no un-tint path to write and no state in which a tinted actor outlives the corpse it marks.
+func on_corpse_state(remaining_ticks: int, extended: bool) -> bool:
+	_corpse_ticks_remaining = remaining_ticks
+	if not extended or _extended_tint_applied:
+		return false
+	_extended_tint_applied = true
+	return true
+
+
+## Story 6-5b (AC 2): the remaining lifetime this actor was last handed. Read by the integration
+## tests, which is the whole reason it is exposed -- a test asserting the corpse lifecycle should read
+## what the ACTOR was told, so a runner that stopped pushing fails the test rather than passing it by
+## reading the board directly.
+func corpse_ticks_remaining() -> int:
+	return _corpse_ticks_remaining
+
+
+## The extended-corpse tint, on the 6-5a GREY-PLACEHOLDER buff-visual posture (no operator-authored
+## clip, no VFX, no new scene). A cold blue-white, chosen only to be unmistakable against the grey box
+## a plain corpse is -- not a design decision about what warding looks like. Whether it READS at a
+## glance is the operator smoke's call (`PROC/R8`), not this file's.
+##
+## DECLARED HERE, APPLIED BY THE RUNNER, so the colour and the per-corpse latch that gates it sit
+## together and the runner's tint call names a constant rather than a literal.
+const EXTENDED_CORPSE_TINT := Color(0.55, 0.75, 1.0)
 
 
 ## Story 4-3d (AC 2/3/4): begin the linger. Called by `MatchRunner._free_dead_unit_actors` on the
 ## tick a live actor is first observed dead, and a no-op on every tick after that.
 ##
 ## The collision disable is DEFERRED, and that half is AC 4's -- see `disable_all_collision()`.
+## STORY 6-5b (AC 2): it no longer SEEDS a countdown -- there is none here to seed. It marks this actor
+## a corpse and disables its collision, and that is all it ever did besides the timer.
 func begin_corpse_linger() -> void:
-	if _linger_ticks >= 0:
+	if _is_corpse:
 		return
-	_linger_ticks = 0
+	_is_corpse = true
 	# Story 4-3d (AC 4): OUT OF THE PHYSICS CALLBACK. The only caller reaches this from inside
 	# `MatchRunner._physics_process`, so the write is deferred to the end of the frame.
 	#
@@ -161,14 +227,11 @@ func begin_corpse_linger() -> void:
 	disable_all_collision.call_deferred()
 
 
-## Story 4-3d (AC 3): advance the linger by one tick and report whether it has expired. Called by
-## the runner from a seat inside its `ticking` gate, so paused ticks do not age a corpse.
-##
-## NO `_physics_process` HERE (INVARIANT F1 -- the runner owns the only one). A timer that ticked
-## itself would be a second one, and would also age through the debug pause.
-func advance_corpse_linger() -> bool:
-	_linger_ticks += 1
-	return _linger_ticks >= LINGER_TICKS
+## Story 6-5b (AC 2): `advance_corpse_linger()` STOOD HERE and is DELETED with the countdown it
+## advanced. Nothing replaces it: the corpse's clock is `UnitBoard._corpse_ticks`, advanced inside
+## `MatchState.advance()` step 2 like every other D4 timer, and this node is handed the result through
+## `on_corpse_state()` above. The F1 property the deleted function's own comment defended is
+## unchanged and now stronger -- there is no timer on this node at all to tick itself.
 
 
 ## Story 4-3d (AC 4): make the corpse INERT to physics -- ALL THREE collision nodes, not a subset,

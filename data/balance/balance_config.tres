@@ -114,6 +114,7 @@ reshuffle_vulnerable_window_seconds = 1.5
 minion_retarget_interval_seconds = 0.2
 unit_kinds = Array[Resource]([SubResource("Resource_kind_minion"), SubResource("Resource_kind_combat_totem"), SubResource("Resource_kind_mana_accelerator"), SubResource("Resource_kind_stamina_accelerator")])
 hero_damage_to_unit = 3.0
+corpse_lifetime_seconds = 20.0
 mana_accelerator_mana = 0.5
 mana_accelerator_interval_seconds = 1.0
 stamina_accelerator_regen_step = 0.5

@@ -22,7 +22,7 @@ extends SceneTree
 ##   AC 11 the dead unit's ACTOR reaches the corpse lifecycle -- CORRECTED BY STORY 4-3d, which
 ##         inverted the timing: the actor is no longer freed on the death tick, it LINGERS, so
 ##         what this file asserts is that the corpse is still at its own index and has been TOLD
-##         it died. The 600-tick expiry and the hole that follows belong to
+##         it died. The corpse's AUTHORED expiry and the hole that follows belong to
 ##         test_unit_corpse_linger_live.gd. Pair: the friendly unit's actor is still in the tree
 ##         and NOT lingering, so neither half is "the whole scene was torn down".
 ##
@@ -310,14 +310,16 @@ func _report() -> bool:
 	# kind of reason. This read "the actor is gone and its array slot is a HOLE" three frames
 	# after the kill, which was correct when it was written because `_free_dead_unit_actors` freed
 	# a dead unit's actor on the tick death was observed. 4-3d changed that seat: the corpse now
-	# LINGERS for 600 ticks and is freed at the end of it. Asserting it is gone at +3 frames now
-	# asserts the DEFECT.
+	# LINGERS for its AUTHORED lifetime and is freed at the end of it, so asserting it is gone at +3
+	# frames now asserts the DEFECT. (Story 6-5b moved that lifetime out of the actor and into
+	# authored balance, `BalanceConfig.corpse_lifetime_seconds` -- which changes the NUMBER and not
+	# this instrument's reasoning: the corpse is still in the tree three frames after the kill.)
 	#
 	# WHAT THIS FILE STILL OWNS is that the kill reached the actor layer at all: the corpse must
 	# be a LINGERING corpse -- still in the tree, still at its own index, and TOLD IT DIED (its
-	# linger has begun) -- rather than an untouched live actor. The 600-tick expiry and the hole
+	# linger has begun) -- rather than an untouched live actor. The authored expiry and the hole
 	# that follows it belong to test_unit_corpse_linger_live.gd, which counts them; duplicating
-	# that here would make this file wait 10 seconds for a claim it is not about.
+	# that here would make this file wait out the whole authored lifetime for a claim it is not about.
 	var corpse := _unit_actor(1, 0)
 	_enemy_corpse_lingering = corpse != null and corpse.is_lingering()
 	if corpse == null:

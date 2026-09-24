@@ -127,6 +127,21 @@ const UNHASHED_CROSS_TICK: Array[String] = [
 	# decides BLUE's counter travel, which is exactly the class of consequence `_charge_contact_dirs`
 	# already has (it decides the landing arc). MEMBERS STAYS AT FOUR.
 	"match_state._counter_travel_dirs",
+	# Story 6-5b (AC 18, `6-5b/R6`): A FIFTH ARRAY ON ARGUMENT (c), still NOT A FIFTH ARGUMENT -- the
+	# `6-6b` `_counter_travel_dirs` precedent applied unchanged, and the `_lock_directions` precedent
+	# it descends from. `_drain_targets` holds the runner's per-tick answer to "which own minion is
+	# this hero facing most directly": chosen from actor positions and a hero facing that `src/state/`
+	# may not read, never produced by the tick, and captured by its OWN channel
+	# (`capture_push_drain_target`) exactly as a lock direction is by `capture_set_lock_direction`. A
+	# replay restores it by replaying those pushes.
+	#
+	# IT IS AN INDEX WHERE ITS FOUR SIBLINGS ARE DIRECTIONS, and that does not change the argument --
+	# it strengthens it. The pushed value is already the RESOLVED answer rather than the geometry the
+	# answer was computed from, so even less spatial data crosses inward than for a direction. What
+	# makes it belong here rather than in HASHED is the same thing that puts `_camera_bases` here: it
+	# is not state the tick produces, it is a fact the tick is HANDED, and its record channel is what a
+	# replay reproduces it from. MEMBERS THEREFORE STAYS AT FOUR.
+	"match_state._drain_targets",
 	# Story 6-2 review fix (H1): a FOURTH argument, not a member of any of the first three. Card
 	# identity is PUBLIC by GDD design (AC 14b) and hashes; the staged card's ORB PRICE is card
 	# `.tres` CONTENT, and `3-2`'s close-out ruled card content permanently out of the hashed run so
@@ -246,6 +261,22 @@ const HASHED: Array[String] = [
 	# `_in_reach` classification applied to a second countdown. They reach the hash through
 	# `PlayerState.to_snapshot()`'s `unit_kind` and `unit_attack_cooldown` keys.
 	"unit_board._kind_index", "unit_board._attack_cooldown",
+	# Story 6-5b (AC 1/AC 14, `6-5b/R17`): the THREE new board members, ALL HASHED -- so
+	# UNHASHED_CROSS_TICK_MEMBERS stays at 4 and this story adds no fifth exclusion to argue about.
+	# Each passes `4-3a/R17`'s test on its own: `_corpse_ticks` decides whether a corpse can still be
+	# extended or raised, and is the carrier between the death that made it and the Raise Dead that
+	# consumes it -- events that may be a thousand ticks apart; `_corpse_extended` decides what that
+	# corpse renders as for the rest of its life and CANNOT be recomputed from anything else on the
+	# record (remaining-exceeds-the-authored-default is true for one tick and false ever after);
+	# `_raised_from` decides where the raised minion is placed and names a death already gone.
+	#
+	# NONE OF THE THREE IS A POSITION, which is the classification a reader might expect to have to
+	# argue here and does not: the corpse's LOCATION never enters state at all (`6-5b/R1`), so
+	# `_raised_from` is a board INDEX the runner resolves against its own actors -- the `unit_targets`
+	# class exactly, `4-2/R2`'s counts-and-indices rule. All three reach the hash through
+	# `PlayerState.to_snapshot()`'s `unit_corpse_ticks`, `unit_corpse_extended` and `unit_raised_from`
+	# keys, so no exemption is needed for any of them.
+	"unit_board._corpse_ticks", "unit_board._corpse_extended", "unit_board._raised_from",
 	# Story 4-4 (AC 14-19): the PROJECTILE BOARD and all eight of its members, ALL HASHED — so
 	# UNHASHED_CROSS_TICK_MEMBERS still stays at THREE and this story adds no fourth exclusion to
 	# argue about either. Each passes `4-3a/R17`'s test on its own: the target decides where homing

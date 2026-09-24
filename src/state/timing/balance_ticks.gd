@@ -68,6 +68,15 @@ var unit_kind_ticks: Array[UnitKindTicks] = []
 ## `minion_retarget_interval_ticks`'s clamp above rather than the plain conversion — an authored 0
 ## means "every tick" instead of a divide-by-zero on the tick ladder.
 var mana_accelerator_interval_ticks: int
+## Story 6-5b (AC 2, `6-5b/R2`): how long a corpse lasts, in TICKS -- the successor to
+## `UnitActor.LINGER_TICKS = 600`. Derived ONCE here like every sibling and read INLINE at the death
+## seat's three callers (CONSTRAINT C), never cached on a record and never on an actor.
+##
+## A PLAIN CONVERSION, not one of the clamped modulo divisors above: it is a COUNTDOWN, so
+## `seconds_to_ticks` already clamps any non-zero authored value to a minimum of 1 tick. An authored
+## 0.0 derives 0 ticks and every death then leaves no corpse at all -- defined rather than crashing;
+## the authoring audit keeps it out of the shipped `.tres`.
+var corpse_lifetime_ticks: int
 var attack_windup_ticks: int
 var attack_active_ticks: int
 var attack_recovery_ticks: int
@@ -219,6 +228,9 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.unit_kind_ticks = []
 	for kind in config.unit_kinds:
 		t.unit_kind_ticks.append(_kind_ticks(kind))
+	# Story 6-5b (AC 2): the corpse lifetime, a PLAIN conversion on the `deflect_stun_ticks` idiom --
+	# a countdown, clamped to >= 1 tick for any non-zero authored value, never the divisor clamp.
+	t.corpse_lifetime_ticks = TimingWindow.seconds_to_ticks(config.corpse_lifetime_seconds)
 	t.attack_windup_ticks = TimingWindow.seconds_to_ticks(config.attack_windup_seconds)
 	t.attack_active_ticks = TimingWindow.seconds_to_ticks(config.attack_active_seconds)
 	t.attack_recovery_ticks = TimingWindow.seconds_to_ticks(config.attack_recovery_seconds)

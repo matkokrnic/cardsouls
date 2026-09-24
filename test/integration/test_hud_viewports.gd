@@ -160,7 +160,61 @@ func _check_hand_rows(hud: Node) -> bool:
 	if not (differ and back_is_heavier):
 		print("hand-row styling wrong: differ=%s back_is_heavier=%s own_bg=%s back_bg=%s own_border=%d back_border=%d" % [
 			differ, back_is_heavier, own_style.bg_color, back_style.bg_color, own_border, back_border])
-	return differ and back_is_heavier
+	return differ and back_is_heavier and _check_price_geometry(own)
+
+
+## Story 6-5b (AC 23): THE PRICE BLOCK'S GEOMETRY -- every own card panel carries a `CardPrice` label,
+## and it occupies its own band without overlapping the id caption above it or the colour swatch below.
+##
+## GEOMETRY ONLY, AND THAT IS `PROC/R8` RATHER THAN A CHOICE: "machine checks assert GEOMETRY only;
+## never assert on-screen text fit from character counts -- any AC hinging on on-screen legibility goes
+## to operator smoke at first render". So this asserts the RECTS ARE DISJOINT and the band is tall
+## enough to hold two lines at all; whether both prices READ at a glance in a half-width viewport is
+## smoke item 12.
+##
+## THE OVERLAP CHECK IS THE POINT. `hud_root.gd` computes three stacked bands in an 84x92 panel, and the
+## 6-0 story's own comment got that arithmetic WRONG BY 5px once and said so -- the swatch was claimed
+## to sit below a caption it actually overlapped. A comment cannot catch that twice; this can.
+##
+## READ OFF THE LIVE TREE, never off the constants: the assertion is about where the controls ACTUALLY
+## end up after anchors and offsets resolve, which is exactly what a constant comparison would miss.
+func _check_price_geometry(row: Node) -> bool:
+	var ok := true
+	for card: Node in row.get_children():
+		var caption := card.get_node_or_null("CardName") as Control
+		var price := card.get_node_or_null("CardPrice") as Control
+		var swatch := card.get_node_or_null("ColorSwatch") as Control
+		if price == null:
+			print("%s carries no CardPrice label -- AC 23's both-prices block is missing" % card.name)
+			ok = false
+			continue
+		if caption == null or swatch == null:
+			print("%s is missing the caption or swatch the price band sits between" % card.name)
+			ok = false
+			continue
+		var caption_rect := caption.get_rect()
+		var price_rect := price.get_rect()
+		var swatch_rect := swatch.get_rect()
+		# The price band must be BELOW the caption and ABOVE the swatch, touching neither.
+		if price_rect.position.y < caption_rect.end.y:
+			print("%s: the price band (top %.1f) overlaps the id caption (bottom %.1f)"
+					% [card.name, price_rect.position.y, caption_rect.end.y])
+			ok = false
+		if price_rect.end.y > swatch_rect.position.y:
+			print("%s: the price band (bottom %.1f) overlaps the colour swatch (top %.1f)"
+					% [card.name, price_rect.end.y, swatch_rect.position.y])
+			ok = false
+		# ...and it must be tall enough for the TWO LINES AC 23 requires. Two lines at the authored
+		# font size 9 need at least 18px; the authored band is 22.
+		if price_rect.size.y < 18.0:
+			print("%s: the price band is %.1f px tall -- too short for two price lines"
+					% [card.name, price_rect.size.y])
+			ok = false
+		# The band must also sit INSIDE the panel, horizontally and vertically.
+		if price_rect.position.x < 0.0 or price_rect.end.x > card.get_rect().size.x:
+			print("%s: the price band escapes the panel horizontally" % card.name)
+			ok = false
+	return ok
 
 
 ## Returns the shared StyleBoxFlat applied to a row's four card panels, or null if the row does

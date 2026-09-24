@@ -5,3 +5,4 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"drain"
+heal_amount = 10.0

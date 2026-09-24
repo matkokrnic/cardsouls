@@ -44,6 +44,13 @@ extends Resource
 ## Story 6-5a (AC 8): the effect's ONE window, in seconds. For a BUFF (Bloodlust, Vampiric Aura) it
 ## is how long the buff lasts; for an ARMED TRIGGER (Bloodhound Step, Frostbite) it is how long the
 ## trigger waits for the action that consumes it. 0 = no window.
+##
+## STORY 6-5b (`6-5b/R7`) GIVES IT A THIRD READING, AND DELIBERATELY DOES NOT ADD A FIELD FOR IT:
+## for GRAVE WARD it is the EXTENSION added to the remaining lifetime of each corpse the caster owns
+## at the moment of resolution. Still one duration in seconds converted to ticks once at the
+## application (A1); what differs is only whose clock it is added to -- a rule window for the five
+## 6-5a effects, a per-corpse countdown here. A `grave_ward_seconds` sibling would be a second
+## spelling of "this effect's one duration" with nothing to distinguish it.
 @export var duration_seconds: float = 0.0
 
 ## Story 6-5a (R3): Bloodlust's two halves -- the multiplier on damage the buffed side DEALS and the
@@ -64,6 +71,32 @@ extends Resource
 ## hero (0.5 = 50 % speed) and how long the slow lasts, in seconds.
 @export var slow_speed_multiplier: float = 1.0
 @export var slow_duration_seconds: float = 0.0
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5b: THE OWN-MINION / CORPSE EFFECTS' NUMBERS. Four more FLAT exports, on the header's
+## own discipline (AC 2): no subclass, no nested resource, so `RecordFile._card_effects` keeps
+## round-tripping every one of them generically and `_fresh_nested` needs no new row.
+## ------------------------------------------------------------------------------------------
+
+## CULLING (`6-5b/R5`): the mana granted PER OWN MINION KILLED. Clamped by the pool's own maximum at
+## the point of use, so an over-cap Culling loses the surplus rather than raising the ceiling.
+@export var mana_per_kill: float = 0.0
+
+## CULLING (`6-5b/R15`, gate B5): the MAXIMUM NUMBER of the caster's own living minions one Culling
+## kills -- and pays mana for. DEFAULT 99, which is the ruling's own number ("effectively no cap")
+## rather than a neutral zero, because a zero default would make an unauthored Culling kill nothing
+## and read as a broken card instead of an uncapped one. Above the cap it kills in BOARD-INDEX order,
+## oldest first (AC 8).
+@export var kill_cap: int = 99
+
+## DRAIN (`6-5b/R6`): the HP the caster's hero heals when the sacrifice resolves, clamped at its own
+## maximum (never overhealing, AC 20).
+@export var heal_amount: float = 0.0
+
+## RAISE DEAD (`6-5b/R8`): the PERCENTAGE of the raised minion's own kind maximum HP it enters at.
+## DEFAULT 100.0 for `kill_cap`'s reason -- the spec's own `T[100]%` is the identity value, and a
+## neutral 0.0 would raise a minion that is dead on arrival.
+@export var raise_hp_percent: float = 100.0
 
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation

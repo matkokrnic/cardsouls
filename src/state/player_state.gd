@@ -669,6 +669,28 @@ func to_snapshot() -> Dictionary:
 		# Record.
 		"unit_kind": units.kind_index_snapshot(),
 		"unit_attack_cooldown": units.attack_cooldown_snapshot(),
+		# Story 6-5b (AC 1/AC 14, `6-5b/R17`): THREE new board keys -- the per-record CORPSE COUNTDOWN,
+		# the per-corpse GRAVE WARD MARK, and the RAISE SOURCE. One array -> one key apiece, on the
+		# `unit_kind` / `unit_attack_cooldown` pair's own stated reason: three independent facts, and
+		# fusing any of them would hide which moved.
+		#
+		# EVERY ONE CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`): the countdown decides whether a
+		# corpse can still be extended or raised, the mark decides what it renders as until it is
+		# removed, and the source decides where a raised minion is placed. None is recomputable inside
+		# the tick that reads it -- the death that created the corpse is ticks in the past.
+		#
+		# STILL COUNTS, VALUES AND INDICES, NEVER IDENTITIES, AND STILL NO POSITION. A raise source is a
+		# board INDEX (the `unit_targets` class, `4-2/R2`); the corpse's LOCATION is actor-owned and
+		# never enters state (`6-5b/R1`), so `4-3/R2` is untouched -- this is the one place a reader
+		# might expect a `Vector3` and there is deliberately none.
+		#
+		# THE GOLDEN CAUSE THAT RIDES ON ALL THREE IS THEIR MERE PRESENCE, measured rather than
+		# assumed: the determinism fixture's t22 summon never dies (`test_determinism.gd`), so the
+		# countdown and the mark hash at their resting 0 / false and the source at its resting -1 on
+		# every hashed tick. There is no behavioural cause to measure separately for them.
+		"unit_corpse_ticks": units.corpse_ticks_snapshot(),
+		"unit_corpse_extended": units.corpse_extended_snapshot(),
+		"unit_raised_from": units.raised_from_snapshot(),
 		# Story 4-4 (AC 14-19): the PROJECTILE BOARD joins the hash — SEVEN keys, on the split
 		# `UnitBoard` already established (the target FUSES its two ints because a target is one fact
 		# in two halves; the rest are independent facts that fusing would hide).

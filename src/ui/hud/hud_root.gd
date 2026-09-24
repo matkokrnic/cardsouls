@@ -143,6 +143,27 @@ var _own_card_swatches: Array[Panel] = []
 ## `_make_card_armed_style`'s docstring warns against.
 var _own_card_swatch_styles: Array[StyleBoxFlat] = []
 
+## Story 6-5b (AC 23, `6-5b/R11`): the four PRICE captions, one per own-row panel, index-aligned with
+## `_own_card_labels`. A SEPARATE Label rather than more lines appended to the id caption, for the
+## swatch's own stated reason one field up applied to text: the id caption is rewritten wholesale by
+## `_render_hand_row` on four different branches (real card, in-flight, ghost, blank), and folding the
+## price into it would mean every branch had to remember to re-append it. A sibling label written from
+## one place cannot fall out of step.
+var _own_card_prices: Array[Label] = []
+
+## Story 6-5b (AC 23): the id -> price row map the runner derives ONCE at load and hands in through
+## the existing cards-changed wrapper -- `_last_card_colors`' shape and lifetime verbatim.
+##
+## THE PRICES ARE STATIC AUTHORED DATA AND NEVER ENTER GAME STATE (operator ruling, this story's one
+## open question): they are read off `CardData.cast_condition` / `pitch_condition`, which no tick
+## mutates, so there is nothing for the record or `FORMAT_VERSION` to carry and nothing for the hash to
+## see. That is the `card_colors` precedent exactly, and it is why AC 23 costs this story no state, no
+## capture channel and no snapshot key.
+##
+## One entry per id: `[mode-1 mana, mode-1 orbs, mode-4 mana, mode-4 orbs]`, the orbs as their own
+## `Dictionary[Enums.CardColor, int]` exactly as authored.
+var _last_card_prices: Dictionary = {}
+
 ## Story 4-6a (AC 13/AC 14): the locked-target dot. One per root, therefore one per SubViewport,
 ## therefore per-slot by construction -- see _build_lock_marker.
 var _lock_marker: Panel
@@ -152,6 +173,18 @@ var _lock_marker: Panel
 ## (""). Cheapest legible treatment at half-width: a caption swap on the existing
 ## `_own_card_labels` machinery, no new StyleBox and no border/style change.
 const IN_FLIGHT_CAPTION := "..."
+
+## Story 6-5b (AC 23): the two MODE MARKERS the price block prefixes each line with. AC 23's format
+## requirement is exactly that the two numbers be "visibly distinguishable as belonging to mode 1 vs.
+## mode 4", and these are what carry that -- the GDD's own mode numbers, so the label a player reads
+## matches the mode they press. Presentation-local strings, never read by state.
+const MODE_1_LABEL := "1:"
+const MODE_4_LABEL := "4:"
+
+## Story 6-5b (AC 23): the one-letter orb tags, index-aligned with `Enums.CardColor` (RED, BLUE, GREEN)
+## exactly as `ORB_COLORS` above is -- so a price's orb tag and the orb counter's hue come from two
+## lists that cannot drift, because both are positional reads of the same enum.
+const ORB_INITIALS: Array[String] = ["R", "B", "G"]
 
 ## Story 4-6a (AC 13): the locked-target marker's pixel footprint. Square, because the dot is drawn
 ## as a fully-rounded Panel. Small on purpose -- it marks an enemy at half-width without occluding
@@ -294,12 +327,18 @@ func on_orbs_changed(red: int, blue: int, green: int) -> void:
 ##
 ## Story 6-3b (AC 6): the payload is REMEMBERED and the row rendered through `_render_hand_row`, the one
 ## path `on_pitch_changed` shares, so a staged card's ghost survives this call rewriting every slot.
+## Story 6-5b (AC 23): `card_prices` is the SAME id -> price-row map the runner derives once at load
+## and hands in beside `card_colors`, riding this existing wrapper rather than an eleventh `connect_*`
+## seam -- `card_colors`' own arrangement verbatim, and for its reason: this root never reads
+## `CardDatabase` itself. Defaulted to an empty Dictionary so every pre-existing 3-, 4- and 5-arg test
+## call site keeps exercising its branch unchanged (a slot with no price entry renders no price).
 func on_cards_changed(
 		hand_ids: Array, deck_count: int, _discard_count: int, pending_draw_owed: Array = [],
-		card_colors: Dictionary = {}) -> void:
+		card_colors: Dictionary = {}, card_prices: Dictionary = {}) -> void:
 	_last_hand_ids = hand_ids.duplicate()
 	_last_pending_draw_owed = pending_draw_owed.duplicate()
 	_last_card_colors = card_colors
+	_last_card_prices = card_prices
 	_render_hand_row()
 	_deck_label.text = "DECK %d" % deck_count
 
@@ -327,6 +366,19 @@ func on_pitch_changed(slot: int, card_id: StringName, hand_slot: int, ready: boo
 ## memory. Four looks, in precedence order: a real card (full opacity, tinted); the in-flight `"..."`;
 ## the GHOST of the own staged card -- only for a slot EMPTY in the hand payload, NOT owed, and equal
 ## to the own staged hand slot; otherwise blank (the permanent hole and the ordinary empty slot).
+##
+## Story 6-5b (AC 23): the PRICE BLOCK is written on the SAME four branches and from the same one
+## place, which is the whole reason it is a sibling Label rather than extra lines on the id caption
+## (see `_own_card_prices`). Two of the four looks carry a price and two do not, and each follows the
+## caption's own precedent exactly:
+##   * a REAL CARD shows both prices at full opacity;
+##   * the GHOST shows both prices DIMMED through the same `GHOST_MODULATE` its caption and swatch use
+##     -- the staged card IS still shown in this row, so AC 23's "every card shown in a player's own
+##     hand row" covers it;
+##   * the IN-FLIGHT slot holds no card id to price, exactly as it holds no colour to tint;
+##   * a BLANK slot has nothing to price.
+## A card whose id the derived map does not carry renders NO price rather than a guessed one -- the
+## `_set_swatch_color(i, null)` posture verbatim.
 func _render_hand_row() -> void:
 	for i in _own_card_labels.size():
 		var label := _own_card_labels[i]
@@ -338,18 +390,73 @@ func _render_hand_row() -> void:
 			# untinted states (EMPTY, permanent hole, in-flight) all fall out of this branch never
 			# running for them -- none of the three has a card id to look colour up by.
 			_set_swatch_color(i, _last_card_colors.get(id, null))
+			_set_price_text(i, id, Color.WHITE)
 		elif _last_pending_draw_owed.has(i):
 			label.text = IN_FLIGHT_CAPTION
 			label.modulate = Color.WHITE
 			_set_swatch_color(i, null)
+			_set_price_text(i, Hand.EMPTY, Color.WHITE)
 		elif _own_staged_card != PitchState.NO_CARD and i == _own_staged_hand_slot:
 			label.text = str(_own_staged_card)
 			label.modulate = GHOST_MODULATE
 			_set_swatch_color(i, _last_card_colors.get(_own_staged_card, null), GHOST_MODULATE)
+			_set_price_text(i, _own_staged_card, GHOST_MODULATE)
 		else:
 			label.text = ""
 			label.modulate = Color.WHITE
 			_set_swatch_color(i, null)
+			_set_price_text(i, Hand.EMPTY, Color.WHITE)
+
+
+## Story 6-5b (AC 23): the single write seat for one slot's price block -- `_set_swatch_color`'s twin,
+## and deliberately its shape: one function, called on every branch of `_render_hand_row`, so a slot
+## can never keep a previous card's price the way it could if only the card branch wrote here.
+##
+## `Hand.EMPTY` (or an id the derived map does not carry) CLEARS the block rather than hiding the
+## label: the Label keeps its rect either way, so clearing the text is what keeps the four panels
+## geometrically identical whatever they hold -- which is the property `test_hud_viewports.gd` asserts
+## and `PROC/R8` leaves legibility out of.
+func _set_price_text(index: int, id: StringName, tint: Color) -> void:
+	if index >= _own_card_prices.size():
+		return
+	var price_label := _own_card_prices[index]
+	price_label.modulate = tint
+	var row: Variant = _last_card_prices.get(id, null) if id != Hand.EMPTY else null
+	if row == null:
+		price_label.text = ""
+		return
+	var entry: Array = row as Array
+	price_label.text = "%s\n%s" % [
+		_mode_price_text(MODE_1_LABEL, entry[0], entry[1] as Dictionary),
+		_mode_price_text(MODE_4_LABEL, entry[2], entry[3] as Dictionary),
+	]
+
+
+## Story 6-5b (AC 23): ONE mode's price line -- its mode marker, its mana and its orb price.
+##
+## THE MODE MARKER IS WHAT AC 23 ACTUALLY REQUIRES of the format: "both numbers (and any orb
+## icon/count) must be visibly distinguishable as belonging to mode 1 vs. mode 4". A bare pair of
+## numbers would not be, so each line names its mode. Everything else about the layout is an
+## implementation choice the AC leaves open, and whether it READS at a glance is the smoke's call.
+func _mode_price_text(marker: String, mana: Variant, orb_costs: Dictionary) -> String:
+	var out := "%s%s" % [marker, _mana_text(float(mana))]
+	# SORTED BY COLOUR ORDINAL, never by Dictionary iteration order: the authored `orb_costs` is a
+	# `Dictionary[Enums.CardColor, int]`, and this project's standing rule is that its iteration order
+	# is never a contract (`card_cast_condition.gd`). Two identical hands must render identically.
+	var colors: Array = orb_costs.keys()
+	colors.sort()
+	for color: Variant in colors:
+		var count := int(orb_costs[color])
+		if count > 0:
+			out += " %d%s" % [count, ORB_INITIALS[int(color)]]
+	return out
+
+
+## An authored mana cost as text. WHOLE NUMBERS LOSE THEIR DECIMAL, because every authored Deck 1
+## price is an integer and "3" in a 74px-wide band is worth two characters against "3.0". A retuned
+## fractional price still renders, to one place.
+func _mana_text(mana: float) -> String:
+	return str(int(round(mana))) if is_equal_approx(mana, round(mana)) else "%.1f" % mana
 
 
 ## Story 6-3b (AC 4): one zone's three facts. An empty zone (`NO_CARD`) renders blank: no caption, an
@@ -627,8 +734,49 @@ func _build_hand_row() -> void:
 		# the colour swatch below it. See the swatch's own comment for the arithmetic -- the short
 		# version is that the old -4.0 left no room at all: the swatch needs a band, and the armed
 		# style's 5px inward border owns the bottom 5px, so the caption had to give some back.
-		caption.offset_bottom = -13.0
+		# Story 6-5b (AC 23): -35.0, was -13.0. The caption's bottom inset is PULLED UP AGAIN to open a
+		# band for the two-line price block below it, exactly as 6-0 pulled it up from -4.0 to open the
+		# swatch's band. The id is still the panel's dominant element and still word-wraps and
+		# ellipsises inside its own rect.
+		caption.offset_bottom = -35.0
 		card.add_child(caption)
+		# Story 6-5b (AC 23, `6-5b/R11`): THE PRICE BLOCK -- both modes' prices, on two lines, in the
+		# band the caption just gave back. A sibling of `caption` and of `swatch`, never a child of
+		# either (see `_own_card_prices`).
+		#
+		# THE REAL RECTS, in the panel's own 84x92 space, computed rather than asserted -- the same
+		# arithmetic 6-0's own comment got wrong by 5px once, so it is stated in full:
+		#   caption   y in [4, 57]   (PRESET_FULL_RECT, offset_top 4 / offset_bottom -35)
+		#   price     y in [58, 79]  (anchored to the bottom, offset_top -34 / offset_bottom -13)
+		#   swatch    y in [80, 86]  (anchored to the bottom, offset_top -12 / offset_bottom -6)
+		#   armed border, bottom band  y in [87, 92]  (set_border_width_all(5), grows INWARD)
+		# One pixel of clearance above and below: the price block touches neither the caption's text
+		# rect nor the swatch. Horizontally it takes the caption's own 5px insets, which clear the armed
+		# border's side bands ([0,5] and [79,84]) the same way the swatch's 6px insets do.
+		#
+		# 22px FOR TWO LINES AT FONT SIZE 9 IS TIGHT BY CONSTRUCTION, and that is the honest state of
+		# it: `PROC/R8` puts on-screen legibility at the operator's smoke (item 12) and machine checks
+		# assert GEOMETRY only. `clip_text` means an over-long price TRUNCATES inside its own rect
+		# rather than overflowing into the neighbouring card.
+		var price := Label.new()
+		price.name = "CardPrice"
+		price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		price.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		price.autowrap_mode = TextServer.AUTOWRAP_OFF
+		price.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		price.clip_text = true
+		price.add_theme_font_size_override("font_size", 9)
+		price.add_theme_color_override("font_color", Color(0.24, 0.20, 0.16))
+		price.anchor_left = 0.0
+		price.anchor_right = 1.0
+		price.anchor_top = 1.0
+		price.anchor_bottom = 1.0
+		price.offset_left = 5.0
+		price.offset_right = -5.0
+		price.offset_top = -34.0
+		price.offset_bottom = -13.0
+		price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(price)
 		# Story 6-0 (AC 1/AC 5): the colour swatch -- a thin bar along the panel's bottom edge.
 		# A sibling of `caption`, not a child of it and not a mutation of `card_style` -- see the
 		# swatch fields' own doc comment for why it must stay outside the swapped stylebox. Hidden
@@ -669,6 +817,7 @@ func _build_hand_row() -> void:
 		_own_card_panels.append(card)
 		_own_card_labels.append(caption)
 		_own_card_swatches.append(swatch)
+		_own_card_prices.append(price)
 		_own_card_swatch_styles.append(swatch_style)
 	_card_base_style = card_style
 	_card_armed_style = _make_card_armed_style()

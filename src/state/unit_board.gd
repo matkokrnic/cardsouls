@@ -225,6 +225,68 @@ var _kind_index: Array[int] = []
 ## (a new all-zero snapshot key), which is a named shape cause in the Dev Agent Record.
 var _attack_cooldown: Array[int] = []
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5b (AC 1-5, `6-5b/R17`): THE CORPSE, as THREE more parallel arrays on the DEAD UNIT'S OWN
+## BOARD INDEX. Ruling `6-5b/R17` closed the story's Open Question 1 on exactly this shape: "corpse
+## data lives on `UnitBoard`, at the dead unit's own board index (no separate container); a consumed
+## or expired corpse is marked there."
+## ------------------------------------------------------------------------------------------
+## A SEPARATE CONTAINER WAS THE REJECTED OPTION, and the reason is this file's own hole discipline. A
+## corpse IS a dead record -- `hp <= 0` at a stable index that is never removed and never reused
+## (`4-1/R9`) -- so a sibling container keyed by board index would be a second structure holding one
+## fact, and the first thing it would need is a rule for what happens when the two disagree about
+## whether index 3 is a corpse. Here they cannot disagree: `has_corpse_at` reads BOTH halves.
+##
+## STILL PLAIN SCALARS, STILL INDEX-ALIGNED, so the header's "no nested typed array, no Dictionary, no
+## StringName" reasoning covers all three unchanged.
+##
+## AND STILL POSITIONLESS (`6-5b/R1`, F1). A corpse in state knows WHOSE board it is on (by which
+## `UnitBoard` holds it), WHICH now-dead index it is tied to (its own position in these arrays) and
+## HOW LONG IT HAS LEFT. Where it lies is read off the ACTOR by the runner, exactly as every other
+## position in this project is -- Raise Dead's placement included (AC 14).
+
+## Ticks of corpse left at each index. ZERO MEANS NO CORPSE, on the `_attack_cooldown` precedent that
+## a countdown at rest is simply zero -- and it is why there is no `_is_corpse: Array[bool]` beside
+## it: two fields expressing one fact is exactly how a corpse ends up simultaneously present and
+## gone, which is this file's own standing warning (see `_hp`).
+##
+## SEEDED ONLY AT THE DEATH SEAT (`kill_at`) and counted down one per `advance()` by `tick_corpses()`
+## (A1 -- integer ticks, never a float accumulator, never an `Engine`/`OS`/`Time` read). It reaches
+## zero exactly once and stays there: the record is never revived, because a raise APPENDS a new
+## record rather than reusing the hole.
+var _corpse_ticks: Array[int] = []
+
+## AC 24: whether GRAVE WARD has ever extended the corpse at this index -- the per-corpse "was
+## extended" mark, which `6-5b/R7` requires to last until that corpse is REMOVED (expired or raised)
+## rather than for a window of its own.
+##
+## IT CANNOT BE DERIVED, and that is measured rather than assumed. "Remaining exceeds the authored
+## default" is true only immediately after the extension and false a second later, so the mark would
+## flicker off while the corpse it marks is still standing there tinted.
+##
+## A SEPARATE FIELD FROM `_corpse_ticks` BECAUSE IT IS A SEPARATE FACT -- how long is left, and
+## whether a card touched it. `unit_targets`' FUSION precedent does not apply: a target is one fact in
+## two ints that must never drift apart, whereas these two move independently every tick.
+var _corpse_extended: Array[bool] = []
+
+## AC 14: the board index of the CORPSE this record was raised from, or `NO_RAISE_SOURCE` for every
+## record that entered by an ordinary summon.
+##
+## IT EXISTS FOR ONE CONSUMER AND ONE FRAME. Raise Dead places the new minion at the corpse's own
+## location, which is ACTOR-owned (`6-5b/R1`) -- so the state layer cannot place it and must instead
+## say WHICH corpse's actor the runner should read. The runner's spawn poll reads this on the tick the
+## record appears, before `_free_dead_unit_actors` frees that corpse (AC 25), which is the ordering
+## AC 14's last clause pins.
+##
+## PERMANENT ON THE RECORD rather than cleared after the read, on this file's own append-only
+## posture: "this record was raised from the corpse at index N" stays true for the record's whole
+## life, and a field cleared one frame later would be a second thing to get the timing of right.
+var _raised_from: Array[int] = []
+
+## The resting value of `_raised_from` -- a record nobody raised. `-1`, which is not a valid board
+## index by `has_index`, so it collides with no real source.
+const NO_RAISE_SOURCE := -1
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
 ## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
@@ -250,7 +312,12 @@ var _attack_cooldown: Array[int] = []
 ## int down. AC 2's "no second hp/damage/death mechanism is authored" is satisfied by this signature
 ## and nothing else: a totem enters through THIS function, at ITS kind's authored maximum, and dies
 ## through `apply_damage_at`'s clamp exactly as a minion does.
-func add(max_hp: float, kind_index: int) -> void:
+##
+## STORY 6-5b (AC 14): it takes a THIRD, DEFAULTED argument -- the board index of the corpse this
+## record was RAISED from, or `NO_RAISE_SOURCE` for every ordinary summon. Defaulted rather than
+## required so the summon seat and every existing fixture are untouched, and so the only caller that
+## passes it is the one that actually raised something.
+func add(max_hp: float, kind_index: int, raised_from: int = NO_RAISE_SOURCE) -> void:
 	var pair := TargetingService.no_target()
 	_target_slots.append(pair[0])
 	_target_indices.append(pair[1])
@@ -272,6 +339,14 @@ func add(max_hp: float, kind_index: int) -> void:
 	# freshly summoned totem has fired nothing, so nothing is holding it back from its first shot.
 	_kind_index.append(kind_index)
 	_attack_cooldown.append(0)
+	# Story 6-5b (AC 1): a LIVING record is not a corpse and carries no corpse countdown -- the honest
+	# empty value every field above enters at, applied to the two corpse fields. A minion raised from a
+	# corpse is no exception: it enters ALIVE with its own empty corpse state, which is what makes AC 17
+	# (a raised minion that dies again leaves a fresh corpse) fall out of the death seat rather than
+	# needing a path of its own.
+	_corpse_ticks.append(0)
+	_corpse_extended.append(false)
+	_raised_from.append(raised_from)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -302,6 +377,17 @@ func clear() -> void:
 	# others would be a record with a kind but no liveness.
 	_kind_index.clear()
 	_attack_cooldown.clear()
+	# Story 6-5b (AC 5): the three CORPSE arrays are cleared with their ten siblings, for the header's
+	# own reason applied to thirteen arrays -- one collection expressed as thirteen, and an index
+	# present in one but not the others would be a corpse belonging to a record that no longer exists.
+	#
+	# THIS LINE IS THE WHOLE OF AC 5. `MatchState._reset_player` (the DEBUG RESET) is this function's
+	# one caller and `MatchState._end_round` is deliberately untouched, so corpses clear at exactly the
+	# point units already clear today and persist through the round-over freeze -- `4-1/R5`'s standing
+	# rule, inherited rather than restated as a second rule about corpses.
+	_corpse_ticks.clear()
+	_corpse_extended.clear()
+	_raised_from.clear()
 
 
 func size() -> int:
@@ -406,10 +492,161 @@ func is_alive_at(index: int) -> bool:
 ## `test_architecture_invariants.gd` has pinned it ever since, today as
 ## `test_runner_observation_seams_are_exactly_ten` (nine since 5-4 AC 15, ten since 6-3b AC 1). Stale
 ## citation, one word.)
-func apply_damage_at(index: int, amount: float) -> void:
+## STORY 6-5b (AC 3, `6-5b/R13`): IT TAKES THE CORPSE LIFETIME AND ROUTES A LETHAL HIT THROUGH THE
+## DEATH SEAT below. The clamp is no longer written here, and that is the point of AC 3's "beside
+## `apply_damage_at`, so the hp clamp and the corpse write cannot diverge": there is now exactly ONE
+## expression of "this unit's hp reaches zero", and it is the one that also writes the corpse.
+##
+## `corpse_ticks` IS READ INLINE BY THE CALLER (CONSTRAINT C) and handed down, exactly as `max_hp` and
+## `kind_index` are at `add()`: reading balance here would make a pure container depend on config. It
+## is also where the TOTEM EXCLUSION lands (AC 1 / `6-5b/R10`) -- the caller resolves the record's
+## kind and hands down ZERO for anything that leaves no corpse, so this container holds no policy
+## about which kinds get one.
+##
+## A NON-LETHAL HIT IS UNCHANGED, bit for bit: the subtraction below is the same arithmetic 4-3a
+## shipped, and nothing about a surviving unit's hp moves.
+func apply_damage_at(index: int, amount: float, corpse_ticks: int) -> void:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
-	_hp[index] = maxf(0.0, _hp[index] - amount)
+	if _hp[index] - amount <= 0.0:
+		kill_at(index, corpse_ticks)
+		return
+	_hp[index] = _hp[index] - amount
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5b (AC 3, `6-5b/R13`): THE DEATH SEAT. It is CREATED here, and the ruling says so in as
+## many words -- none existed: "the hp clamp inside `apply_damage_at` IS the death
+## (`match_state.gd:2350-2352`); death today is a derived predicate, `is_alive_at`, not an event."
+## ------------------------------------------------------------------------------------------
+## EXACTLY THREE CALLERS (AC 3), and no cause-specific corpse-creation code exists anywhere else:
+##   1. `apply_damage_at` directly above, on behalf of the STEP-4 CONTACT PATH -- the only route by
+##      which damage can be lethal. The contact path reaches death THROUGH the damage it applies, so
+##      its caller is the damage seat rather than a second call beside it; a `if now dead then kill`
+##      at the contact seat would be exactly the divergence AC 3 forbids, because the clamp would
+##      already have happened and the corpse write would be a separate decision.
+##   2. `MatchState`'s CULLING apply seat.
+##   3. `MatchState`'s DRAIN apply seat.
+## Both of the latter KILL WITHOUT DAMAGING (`6-5b/R4`): they reach this function directly and never
+## pass through `apply_damage_at`, so `_funnel_damage`'s Bloodlust multipliers and
+## `_apply_lifesteal`'s Vampiric Aura heal are structurally unreachable from them (AC 7) -- not
+## skipped by a flag, but by not being on the path at all.
+##
+## IDEMPOTENT FOR AN ALREADY-DEAD UNIT (AC 3), and it reports which it was. A second hit on a corpse
+## finds `hp <= 0`, returns `false` and writes NOTHING -- so it cannot restart a countdown a Grave
+## Ward has already extended, cannot clear the extended mark, and cannot create a second corpse. That
+## is the property that lets `apply_damage_at` call it unconditionally on any lethal-looking amount.
+##
+## RETURNS WHETHER THIS CALL IS THE DEATH, so a caller that has to pay for exactly the kills it made
+## (Culling's mana per minion killed, AC 8) counts the seat's own answer rather than re-deriving
+## liveness after the fact.
+func kill_at(index: int, corpse_ticks: int) -> bool:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	if _hp[index] <= 0.0:
+		return false
+	_hp[index] = 0.0
+	# AC 1: the corpse is created HERE, in the same statement pair as the hp write, for EVERY minion
+	# death regardless of cause. A zero lifetime (a totem, or an authored 0.0) writes a corpse that is
+	# already expired, which `has_corpse_at` reads as no corpse at all -- the one expression of "this
+	# kind leaves no corpse", decided by the caller and rendered here as a value rather than a branch.
+	_corpse_ticks[index] = maxi(0, corpse_ticks)
+	_corpse_extended[index] = false
+	return true
+
+
+## AC 1/AC 4: is there a corpse at `index` right now? BOTH HALVES ARE READ -- the record is dead AND
+## its countdown has not run out -- which is what makes a corpse impossible to disagree with itself
+## about (see `_corpse_ticks`). An out-of-range index reads FALSE rather than tripping the bound, on
+## `is_alive_at`'s precedent and for its caller's reason: every consumer (the runner's corpse poll,
+## Grave Ward, Raise Dead) treats "no such record" and "no corpse there" as the same correct answer.
+func has_corpse_at(index: int) -> bool:
+	return has_index(index) and _hp[index] <= 0.0 and _corpse_ticks[index] > 0
+
+
+## AC 2: the remaining lifetime the ACTOR reads (through the runner) to drive its own visual and
+## collision lifecycle. Zero for a living record and for an expired or consumed corpse alike.
+## `has_corpse_at`'s leniency, for its reason.
+func corpse_ticks_at(index: int) -> int:
+	return _corpse_ticks[index] if has_index(index) else 0
+
+
+## AC 24: has Grave Ward extended the corpse at `index`? The tint's one source of truth.
+func is_corpse_extended_at(index: int) -> bool:
+	return has_index(index) and _corpse_extended[index]
+
+
+## AC 14: which corpse this record was raised from, or `NO_RAISE_SOURCE`. Bound enforcement follows
+## `corpse_ticks_at`, not `kind_index_at`: the runner's spawn poll reads it for an index it has just
+## appended and an out-of-range answer is "nobody raised this", which is correct for a record that
+## does not exist.
+func raised_from_at(index: int) -> int:
+	return _raised_from[index] if has_index(index) else NO_RAISE_SOURCE
+
+
+## AC 11/AC 12 (`6-5b/R7`): GRAVE WARD -- ADD `ticks` to what this corpse has LEFT, and mark it
+## extended. ADDITIVE AND NOT A REFRESH, which is the ruling's own distinction and the reason this is
+## `+=` rather than `=`: two casts add two extensions' worth of remaining time, so the second cast's
+## result is the value immediately before it plus exactly one extension (AC 12).
+##
+## A NON-CORPSE IS A NO-OP rather than a bound trip, and that is what keeps "a corpse created AFTER
+## the cast is untouched" (AC 11) true by construction: the caller walks the corpses that exist at
+## resolution, and anything that is not one absorbs nothing. The MARK is written only when the
+## extension actually lands, so a living unit never carries it.
+func extend_corpse_at(index: int, ticks: int) -> void:
+	if not has_corpse_at(index):
+		return
+	_corpse_ticks[index] += maxi(0, ticks)
+	_corpse_extended[index] = true
+
+
+## AC 14: RAISE DEAD -- the corpse at `index` is CONSUMED. The countdown goes to zero, which is the
+## same "removed from state" an expiry reaches, so there is ONE way a corpse stops existing and
+## `has_corpse_at` needs no second condition. The extended MARK is cleared with it: `6-5b/R7` scopes
+## the mark to "until that corpse is removed", and this is a removal.
+##
+## THE RECORD ITSELF IS UNTOUCHED AND STAYS A HOLE. Raising does not revive this index -- the raised
+## minion is a NEW record at a NEW index (`4-1/R9`, holes never reused) -- so the dead record remains
+## exactly the dead record it was, minus its corpse.
+func consume_corpse_at(index: int) -> void:
+	if not has_corpse_at(index):
+		return
+	_corpse_ticks[index] = 0
+	_corpse_extended[index] = false
+
+
+## AC 11/AC 14/AC 16: the indices holding a corpse RIGHT NOW, ascending -- the candidate set Grave
+## Ward extends and Raise Dead consumes, and the set whose EMPTINESS is the refusal both cards test
+## (AC 13/AC 15).
+##
+## FRESHLY BUILT AND ASCENDING BY CONSTRUCTION, on `living_indices()`'s precedent exactly: it walks
+## the board in index order, so Raise Dead's new records are appended in corpse order and Grave Ward's
+## extension order cannot depend on anything but the board. No caller receives a handle.
+##
+## IT IS THE REASON AC 16 NEEDS NO CODE OF ITS OWN: this is one player's board, so "never the
+## opponent's corpses" is a property of WHICH `UnitBoard` the caller asked, not of a filter it has to
+## remember to apply.
+func corpse_indices() -> Array[int]:
+	var out: Array[int] = []
+	for i in _corpse_ticks.size():
+		if has_corpse_at(i):
+			out.append(i)
+	return out
+
+
+## AC 4: count every corpse down by one tick, called from `advance()` step 2 beside
+## `tick_attack_timers()` -- the same seat, the same A1 discipline (one integer tick per `advance()`,
+## never a float accumulator), and the same round-over behaviour for free (step 1b returns before
+## step 2, so a frozen tick ages no corpse).
+##
+## CLAMPED AT ZERO for `tick_attack_timers()`'s stated reason: "expired" is a STATE that
+## `has_corpse_at` reads, not a moment a countdown passes through on its way negative. A corpse whose
+## lifetime reaches zero is thereby removed from state -- it can no longer be extended
+## (`extend_corpse_at` no-ops), raised (`corpse_indices()` omits it) or observed as existing.
+func tick_corpses() -> void:
+	for i in _corpse_ticks.size():
+		if _corpse_ticks[i] > 0:
+			_corpse_ticks[i] -= 1
 
 
 ## Story 4-3a (AC 8, `4-3a/R15`): the LIVING board indices, ascending, freshly built each call.
@@ -676,6 +913,32 @@ func kind_index_snapshot() -> Array:
 
 func attack_cooldown_snapshot() -> Array:
 	return _attack_cooldown.duplicate()
+
+
+## Story 6-5b (AC 1/AC 14): THREE new snapshot payloads, on the `unit_hp` side of this file's own
+## precedent (one array -> one key) rather than the `unit_targets` fusion, because a countdown, a mark
+## and a provenance index are three INDEPENDENT facts and fusing any of them would hide which one
+## moved when the golden moves -- the same argument `attack_phase_snapshot`'s block makes for its five.
+##
+## ALL THREE CROSS TICKS AND DECIDE AN OUTCOME, which is `4-3a/R17`'s test for whether a value may sit
+## outside the hash. The countdown decides whether a corpse can still be raised at all; the mark
+## decides what the corpse renders as for the rest of its life and cannot be recomputed from anything
+## else on the record; the raise source decides where the raised minion stands.
+##
+## PLAIN INTS AND BOOLS, so no StringName, no object and NO POSITION reaches the hash -- a raise
+## source is a board INDEX, the counts-and-indices rule (`4-2/R2`) exactly, and the corpse's actual
+## LOCATION stays actor-owned and never enters this file (`6-5b/R1`). The ORDER IS MEANINGFUL and
+## CanonicalHash preserves it: a corpse belonging to the wrong record is a real divergence.
+func corpse_ticks_snapshot() -> Array:
+	return _corpse_ticks.duplicate()
+
+
+func corpse_extended_snapshot() -> Array:
+	return _corpse_extended.duplicate()
+
+
+func raised_from_snapshot() -> Array:
+	return _raised_from.duplicate()
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS

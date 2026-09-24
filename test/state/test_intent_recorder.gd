@@ -123,7 +123,17 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 	# channel, shipping WITH `capture_inject_pitch_effects` -- the `6-2` pitch-cost precedent verbatim,
 	# this pin updated with intent while the channel check below is the falling guard. Sorted position.
 	"inject_pitch_effects",
-	"push_contact", "set_camera_basis",
+	# Story 6-5b (AC 18/AC 26, `6-5b/R6`): `push_drain_target` is MatchState's THIRTEENTH intake and
+	# the SEVENTH capture channel, shipping WITH `capture_push_drain_target` -- the `4-6`
+	# `set_lock_direction` precedent verbatim, this pin updated WITH INTENT while the channel check
+	# below is the falling guard that was RED until the channel existed. Sorted position: `push_c`
+	# precedes `push_d`.
+	#
+	# IT IS DELIBERATELY NOT NAMED `drain_*`: `EXEMPT_CARRIES_NO_DATA_INWARD` above pins
+	# `"drain_signals"` by EXACT STRING against this same surface, so a sibling called `drain_target`
+	# would leave a reader unable to tell the exemption from the intake by name. `push_*` is also the
+	# truthful prefix -- this one genuinely carries data inward.
+	"push_contact", "push_drain_target", "set_camera_basis",
 	# Story 4-6 (AC 2, `4-6/R6`): the SIXTH pushed-fact intake -- the per-tick lock direction, in
 	# sorted position beside the basis it is a sibling of. It arrives WITH its
 	# `capture_set_lock_direction` channel, which is exactly what this scan exists to force.

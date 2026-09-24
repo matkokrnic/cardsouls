@@ -5,3 +5,4 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"raise_dead"
+raise_hp_percent = 100.0

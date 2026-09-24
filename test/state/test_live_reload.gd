@@ -43,7 +43,10 @@ const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reloa
 ## the channel, exactly as 4-1 moved it 8 -> 9 and 4-6 9 -> 10.
 ## Story 6-2 (AC 16): ELEVEN -> TWELVE, the pitch-cost channel, moved by the story that ships it.
 ## Story 6-5a (AC 6): TWELVE -> THIRTEEN, the pitch-effect channel, moved by the story that ships it.
-const SHIPPED_CAPTURE_CHANNELS := 13
+## Story 6-5b (AC 18/AC 26, `6-5b/R6`): THIRTEEN -> FOURTEEN, the DRAIN-TARGET channel, moved by the
+## story that ships it -- and it ships for the only sanctioned reason, because `MatchState` gained a
+## thirteenth INTAKE (`push_drain_target`) that this set is DERIVED from (`3-0c/R2`).
+const SHIPPED_CAPTURE_CHANNELS := 14
 
 
 # ---------------------------------------------------------------- AC 2
@@ -116,7 +119,10 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ## RENAMED BY STORY 6-5a (AC 6) for the same count-in-the-name reason. The old name was
 ## `test_the_recorder_still_ships_exactly_twelve_capture_channels`, recorded verbatim so the pin stays
 ## greppable.
-func test_the_recorder_still_ships_exactly_thirteen_capture_channels() -> void:
+## RENAMED BY STORY 6-5b (AC 18/AC 26) for the same count-in-the-name reason. The old name was
+## `test_the_recorder_still_ships_exactly_thirteen_capture_channels`, recorded verbatim so the pin
+## stays greppable.
+func test_the_recorder_still_ships_exactly_fourteen_capture_channels() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -139,16 +145,23 @@ func test_the_recorder_still_ships_exactly_thirteen_capture_channels() -> void:
 		# Story 6-5a (AC 6): the THIRTEENTH channel -- the per-card PITCH-EFFECT map, the SIXTH content
 		# channel. Sorted position; the FORMAT_VERSION bump 12 -> 13 is what the move is worth.
 		"capture_inject_pitch_effects",
-		"capture_push_contact", "capture_seed", "capture_set_camera_basis",
+		"capture_push_contact",
+		# Story 6-5b (AC 18/AC 26, `6-5b/R6`): the FOURTEENTH channel -- the per-tick DRAIN TARGET, the
+		# `capture_set_lock_direction` sibling (a runner answer derived from actor positions this layer
+		# may not read). Sorted position, ahead of `capture_seed`; the FORMAT_VERSION bump 13 -> 14 is
+		# what the move is worth. The pin moves because the STORY moved it -- this guard doing its job
+		# and naming the cause.
+		"capture_push_drain_target",
+		"capture_seed", "capture_set_camera_basis",
 		# Story 4-6 (AC 2, `4-6/R6`): the TENTH channel -- the per-tick lock direction, the
 		# `capture_set_camera_basis` sibling. The pin moves because the STORY moved it, which is
 		# this guard doing its job and naming the cause.
 		"capture_set_lock_direction",
 	], "the channel set is the EIGHT `3-0c` shipped, plus story 4-1's card-effect channel, story "
-		+ "4-6's lock-direction channel, story 5-2's card-colour channel, story 6-2's pitch-cost channel and "
-		+ "story 6-5a's pitch-effect channel")
+		+ "4-6's lock-direction channel, story 5-2's card-colour channel, story 6-2's pitch-cost channel, "
+		+ "story 6-5a's pitch-effect channel and story 6-5b's drain-target channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"a FOURTEENTH capture channel is a scope violation, and this is where it fails")
+		"a FIFTEENTH capture channel is a scope violation, and this is where it fails")
 
 
 # ---------------------------------------------------------------- AC 9
