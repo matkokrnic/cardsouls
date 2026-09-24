@@ -4,7 +4,7 @@ baseline_commit: e7842821ad1fb56a76a758e74f7b3e684cc57a36
 
 # Story 6.5b: Corpses and Own-Minion Spells
 
-Status: review
+Status: done
 
 <!-- Tier A. Split from 6-5-spell-resolution by operator ruling (2026-09-22) into six sub-stories
 (6-5a..6-5f); this is the second. Depends on 6-5a (done). Golden PREDICTED to move (corpse lifetime
