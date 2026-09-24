@@ -11293,3 +11293,29 @@ separate container); a consumed or expired corpse is marked there.
 major / 8 minor. Every blocking item (B1-B7) and every major/minor item not requiring an
 operator/design choice outside the rulings above were fixed in this same session; no second gate round
 was run (the `6-9`/`6-5a` precedent for a same-session fix-and-clear). Story Status -> `ready-for-dev`.
+
+## Session 2026-09-25 -- 6-5b close-out (2026-09-25)
+
+`6-5b/R18` Review MAJOR-1 fixed: a closed spell layer bypasses the board-refusal gate, read through
+the resolver's own `outcome()`, so the four cards resolve as no-ops like the 6-5a buffs.
+`6-5b/R19` Drain same-tick degrade accepted by operator: if the faced minion dies in step 4 of the same
+advance(), the lowest living own minion is sacrificed; one-tick window, deterministic, identical on replay.
+`6-5b/R20` AC 23 price-label derivation: load-once on the `card_colors` precedent, never in state, the
+record or FORMAT_VERSION (operator ruling carried by the dev pass).
+`6-5b/R21` Live smoke 2026-09-25 PASS on two pads. AC 24's visible tint and AC 23's legibility FAIL at
+smoke and are DEFERRED to the Tier B presentation story (hand/HUD + effect visuals), with the
+state-side extended mark as its input. R-D6 spent.
+`6-5b/R22` Totems now vanish on the death tick (`6-5b/R10` consequence), confirmed live.
+`6-5b/R23` Golden `59e9a42c` -> `962514b1`, one measured cause (three new board snapshot keys); key
+set 33 -> 36; FORMAT_VERSION 13 -> 14; suite 1019/0/10091 + 68/68.
+`6-5b/R24` Intermittent `ERROR: 1 resources still in use at exit` in test_unit_combat_live.gd (0 of 10
+isolated runs, 2 of 4 full-suite integration runs), not attributable to 6-5b per: identical 6-5b code
+gave clean and leaking full-suite runs (fix/final clean, review/close-out leaked); the file's 6-5b
+diff is comments only; the 6-5b price derivation only reads already-loaded resources; the test
+never reaches the Grave Ward tint. No --verbose output could be obtained (no isolated run leaked).
+run_all.sh reports it as a failure; owner: E6 close-out tooling debt.
+`6-5b/R25` E6 close-out docs debt added: CLAUDE.md and docs/project-context.md still name the retired
+"Opus 4.8" trailer; the repo constant is the one on recent commits.
+LAYER-COMPLETION: Blind Hunter, Edge Case Hunter, Acceptance Auditor = COMPLETE (manual in main session); Targeted checks T1-T13 = COMPLETE
+Budget interval: first before-baseline suite file (_65b-suite-baseline-state.txt) 2026-09-23 00:26:10 ->
+last suite file of the cycle (_65b-closeout-suite-integration.txt) 2026-09-25 00:22:58, delta 47:56:48.
