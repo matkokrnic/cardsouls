@@ -298,6 +298,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	## of 6-5a's nine deferred no-ops and their rows LEFT `DEFERRED_EFFECT_OWNERS` when this story gave
 	## them real outcomes, so counting them as deferred would now be counting them twice wrong.
 	var own_minion := 0
+	## Story 6-5c: the CAST bucket, its own for `own_minion`'s stated reason -- `honed_bolt` was one of
+	## 6-5a's nine deferred no-ops and its row LEFT `DEFERRED_EFFECT_OWNERS` when this story gave it a
+	## real outcome, so counting it as deferred would be counting it twice wrong.
+	var cast := 0
 	var deferred := 0
 	var offenders: Array[String] = []
 	for card in _deck_cards():
@@ -314,6 +318,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 			# the buff arm directly above is read off `BUFF_OUTCOMES`.
 			elif CardEffectResolver.OWN_MINION_OUTCOMES.has(id):
 				own_minion += 1
+			# Story 6-5c: read off the resolver's own cast table, for the same derived-not-transcribed
+			# reason the two arms above are read off theirs.
+			elif CardEffectResolver.CAST_OUTCOMES.has(id):
+				cast += 1
 			elif CardEffectResolver.owner_story_for(id) != &"":
 				deferred += 1
 			else:
@@ -328,10 +336,15 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	assert_eq(own_minion, 4,
 		"Story 6-5b: FOUR are the own-minion / corpse effects it builds -- Culling, Grave Ward, "
 		+ "Raise Dead and Drain, which resolve through OWN_MINION_OUTCOMES rather than as no-ops")
-	assert_eq(deferred, 5,
-		"...and FIVE are named no-ops owned by a later 6-5 story. NINE before 6-5b, which retired "
-		+ "exactly the four rows naming itself -- the deferred table's mechanism working as designed, "
-		+ "and the reason this count is asserted separately from the buckets above it")
+	assert_eq(cast, 1,
+		"Story 6-5c: ONE is a CAST -- Honed Bolt, the only effect that starts a commitment window "
+		+ "(AC 1). The framework is reusable and names no card; Rocksling, Fireball and Corpse Bomb "
+		+ "join this bucket by adding a `CAST_OUTCOMES` row, with no edit to the window or the strike")
+	assert_eq(deferred, 4,
+		"...and FOUR are named no-ops owned by a later 6-5 story. FIVE before 6-5c and NINE before "
+		+ "6-5b, each of which retired exactly the rows naming itself -- the deferred table's "
+		+ "mechanism working as designed, and the reason this count is asserted separately from the "
+		+ "buckets above it")
 	for card in _fixture_cards():
 		var id := String(card.basic_effect.effect_id)
 		assert_true(id.begins_with(CardEffectResolver.PREFIX_SUMMON)

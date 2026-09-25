@@ -146,6 +146,31 @@ var stun := TimingWindow.new()
 ## (whether a hit lands at all).
 var get_up_iframe := TimingWindow.new()
 
+## Story 6-5c (`6-5c/R16`, AC 27): IS THE RUNNING STUN A BOLT STUN? The discriminator presentation
+## needs to play `dizzy` instead of `stunned`, and the ONLY thing that can tell the two apart: both
+## are authored 0.4 s, so `BalanceTicks.is_knockdown_stun` classifies both ORDINARY and a
+## duration-based test is structurally incapable of separating them (`6-5c/R10` says so by name).
+##
+## "STUN RUNNING AND ROOT ARMED" WAS REJECTED BY THE RULING ITSELF, and the counter-example is real
+## rather than theoretical: a ROOTED hero may still swing (AC 18), be deflected, and enter an
+## ORDINARY stun with its root still running -- which that expression would misread as a bolt stun.
+## So this is "a fact only the bolt's own stun write sets", exactly as R16 requires.
+##
+## IT CANNOT BE FORGOTTEN, because `stun` is no longer started directly anywhere: `start_stun()`
+## below is the ONE writer of the window and it takes the flavour as a required argument, so every
+## present and future stun site has to say which kind it is. That is the guard-mechanism-over-
+## guard-pattern rule (`3-0d/R20`) applied to a field a fifth call site could otherwise leave stale.
+##
+## CLEARED AT THE STUN'S EXIT (`MatchState._resolve_actions`' STUNNED timer arm) as well as by every
+## non-bolt `start_stun`, so the claim is true of the STATE and not merely of the hash -- the 6-5a
+## review's N3 lesson (`PlayerState.start_rule`) applied here.
+##
+## HASHED via `to_snapshot()` below. It crosses ticks, and although it decides no GAMEPLAY outcome
+## today it is read across the `advance()` boundary by the runner, so the `run_locked_out` /
+## `lock_target` direction is taken rather than `vulnerable_window`'s exclusion -- that exclusion
+## rests on NOTHING reading the field, which is not true here. Measured as its own golden cause.
+var stun_is_bolt := false
+
 var _hp: float
 var _max_hp: float
 var _queue: SignalQueue
@@ -445,6 +470,24 @@ func enter_block(deflect_window_ticks: int, open_deflect_window: bool) -> void:
 		deflect.start(0)
 
 
+## Story 6-5c (`6-5c/R16`): THE ONE WRITER OF THE `stun` WINDOW. Every site that starts (or stops)
+## a stun goes through here and MUST say which flavour it is, which is what keeps `stun_is_bolt`
+## from ever going stale -- a fifth stun site cannot be added without answering the question.
+##
+## IT DOES NOT WRITE `action_state`, deliberately. The four existing sites each pair their window
+## write with their own `set_action_state(STUNNED)` plus, in two cases, a chargeup teardown; folding
+## the state write in here would move three authored `STUNNED` entry points out of `match_state.gd`
+## and silently rewrite what `test_action_state.gd`'s positive-count guard is counting. The guard
+## moves 3 -> 4 because a FOURTH site genuinely exists (`6-5c/R11`), not because the mechanism
+## changed underneath it.
+##
+## `start_stun(0, false)` IS THE STOP, the `TimingWindow.start(0)` contract, used by the debug
+## reset's fifth named exception.
+func start_stun(duration_ticks: int, is_bolt: bool) -> void:
+	stun.start(duration_ticks)
+	stun_is_bolt = is_bolt
+
+
 ## One swing: windup starts; successor windows are start(0)-cleared so attack_phase() can
 ## tell "not yet run this swing" (elapsed 0) from "finished" (elapsed > 0). Story 1-5:
 ## every swing also claims the next attack_index and opens its dedupe record.
@@ -540,5 +583,9 @@ func to_snapshot() -> Dictionary:
 		"roll_duration": roll_duration.to_snapshot(),
 		"stun": stun.to_snapshot(),
 		# Story 6-6a (AC 8): the get-up iframes -- a NEW snapshot key, present (at rest) on every hero.
+		# Story 6-5c (`6-5c/R16`): the BOLT-STUN DISCRIMINATOR -- a NEW hero snapshot key, present
+		# (at its resting `false`) on every hero. See the field's own comment for why it is hashed
+		# rather than excluded on the `vulnerable_window` precedent.
+		"stun_is_bolt": stun_is_bolt,
 		"get_up_iframe": get_up_iframe.to_snapshot(),
 	}

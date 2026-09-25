@@ -667,6 +667,19 @@ func advance(intents: Array[InputIntent]) -> void:
 	# no landing path, defended or not, touches it (AC 11).
 	p1.defense_window.tick()
 	p2.defense_window.tick()
+	# Story 6-5c (AC 1/AC 17/AC 23): the CAST and ROOT countdowns advance HERE, beside every other D4
+	# timer and on the identical idiom -- ticked in ONE place, read at the step-6c strike seat and at
+	# the two root-refusal seats, never both. A1 satisfied by construction: one integer tick per
+	# advance(), never a float accumulator and never a seconds value. Seated after step 1b, so a
+	# round-over tick never reaches this line and BOTH countdowns freeze with the round (AC 24) --
+	# which is exactly why `_reset_player` has to clear them, since the freeze stops the clock while
+	# leaving the window armed. Unguarded like their neighbours: a pre-injection MatchState can start
+	# neither, because both are started from the step-6 card seat and the deal returns early while
+	# balance is null.
+	p1.cast_window.tick()
+	p2.cast_window.tick()
+	p1.root_window.tick()
+	p2.root_window.tick()
 	# Story 6-5a (AC 8): the TIMED-RULE SEAT counts down HERE, beside every other D4 window, on the
 	# identical idiom -- ticked in one place, read at the seats that apply each rule. A round-over tick
 	# returns at step 1b and never reaches this line, so a running buff freezes with the round.
@@ -823,6 +836,22 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    knockdown then overwrites the result. Before step 8, so a lethal landing still ends the round on
 	#    its own tick. Fixed P1 -> P2 package order, like every other per-player loop in this function.
 	_apply_landing_packages()
+	# 6c. Story 6-5c (AC 3/AC 5/AC 10/AC 13): THE CAST STRIKE SEAT -- every cast whose countdown
+	#    emptied at this tick's step 2 strikes HERE, and every cast whose caster is stunned or dead is
+	#    cancelled here too. Seated immediately after the landing packages, and both edges are
+	#    load-bearing, exactly as they are for 6b itself:
+	#
+	#    AFTER 6b, so an unanswered unblockable's knockdown landing on a CASTING hero cancels that
+	#    cast on the same tick rather than letting it strike first (`6-5c/R7`: the knockdown is a
+	#    stun, so the cast is lost, card and mana unrefunded). It is also after BOTH seats' step-3
+	#    presses and step-6 card presses, so a cast pressed THIS tick cannot also strike this tick
+	#    unless its authored duration is zero, and a same-tick roll press is already resolved.
+	#
+	#    BEFORE step 8, so a LETHAL bolt ends the round on its own tick through the ordinary
+	#    resolution check (AC 13) rather than one tick late.
+	#
+	#    THE DODGE READING IS STEP 3's LATCH, not a live predicate -- see `_apply_honed_bolt`.
+	_resolve_cast_strikes()
 	# 7. Board update          the SHARED THROTTLED TARGETING TICK (story 4-2, AC 7, `4-2/R15`).
 	#    This line replaces the literal `[E4 minion/totem throttled-tick seam]` comment that
 	#    reserved the seat from E4 planning onward — the seat is now filled by the thing it was
@@ -1288,13 +1317,18 @@ func to_snapshot() -> Dictionary:
 ## objection is answered by the return type: ints keyed by name). to_snapshot() is deliberately
 ## NOT extended, so the replay contract never learns this instrument exists.
 func debug_window_ticks_remaining() -> Array[Dictionary]:
-	return [_running_window_ticks(p1.hero), _running_window_ticks(p2.hero)]
+	return [_running_window_ticks(p1), _running_window_ticks(p2)]
 
 
 ## The per-hero half of debug_window_ticks_remaining(). The TimingWindow objects are read and
 ## discarded INSIDE this function — only ints leave it.
-static func _running_window_ticks(hero: HeroState) -> Dictionary:
+## Story 6-5c (AC 24): IT TAKES THE PLAYER NOW, not the hero, because the two windows this story
+## adds are CARD-LAYER windows and live on `PlayerState` beside `charge_window` /
+## `defense_window`. Only RUNNING windows are listed, which is what keeps the existing exact-payload
+## assertions green: a scenario that neither casts nor roots emits neither key, exactly as before.
+static func _running_window_ticks(player: PlayerState) -> Dictionary:
 	var out: Dictionary = {}
+	var hero := player.hero
 	var windows: Array = [
 		[&"windup", hero.windup],
 		[&"active", hero.active],
@@ -1304,6 +1338,9 @@ static func _running_window_ticks(hero: HeroState) -> Dictionary:
 		[&"iframe", hero.roll_iframe],
 		[&"roll", hero.roll_duration],
 		[&"stun", hero.stun],
+		# Story 6-5c (AC 24): the cast and the root, on the stun window's precedent.
+		[&"cast", player.cast_window],
+		[&"root", player.root_window],
 	]
 	for entry: Array in windows:
 		var window: TimingWindow = entry[1]
@@ -1358,6 +1395,13 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		HeroState.ActionState.STUNNED:
 			if not hero.stun.is_running:
 				hero.set_action_state(HeroState.ActionState.IDLE)
+				# Story 6-5c (`6-5c/R16`): THE BOLT-STUN DISCRIMINATOR IS CLEARED AT THE STUN'S ONE EXIT,
+				# beside the get-up arming below and for the reason the 6-5a review gave PlayerState's
+				# start_rule (N3): every reader already gates on STUNNED, so a stale true would be
+				# invisible in behaviour -- but it would sit in the HASHED state, and dizzy would play
+				# over the NEXT ordinary stun if the flag outlived its window. Cleared here makes the claim
+				# true of the state, not merely of what happens to be observed.
+				hero.stun_is_bolt = false
 				# Story 6-6a review (D1): `_gets_up_this_tick` restates this arming condition for the
 				# step-3 dodge latch, which is taken BEFORE this arm runs. Keep the two in step.
 				if balance_ticks.is_knockdown_stun(hero.stun.duration_ticks()):
@@ -1468,6 +1512,25 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 	# unedited (`6-6a`'s `is_getting_up()` precedent, applied a second time).
 	if player.defense_window.is_running:
 		return
+	# STORY 6-5c (AC 8, `6-5c/R6`/`R18`): THE CAST COMMITMENT LOCK -- the step-3 half, and the THIRD
+	# application of the window-derived busy-lock precedent (the get-up above it, the counter above
+	# that). A hero committed to a cast takes no input: attack, roll and block all drop here.
+	#
+	# IT DROPS SILENTLY, those two locks' own register and for their stated reason: a table row that
+	# refuses has never emitted `action_rejected`, and `STUNNED`'s empty row is the precedent. AC 8
+	# says so in its own words -- the caster's attack/roll/block presses `produce no rejection cue`.
+	# The CARD seat (`_resolve_card_action`, step 6) announces instead, with `REASON_CASTING`.
+	#
+	# SEATED BESIDE ITS TWO SIBLINGS AND BELOW THE TIMER ARMS ABOVE, which is the whole of its scope:
+	# a swing or roll already in progress keeps its own arm, its windows and its phase machine, and
+	# only NEW presses are refused. Its MOVEMENT half is stricter and says so there -- AC 8's `does
+	# not move at all, at any tuning` overrides the counter lock's `finishes on its own contract`.
+	#
+	# BUSY IS `is_casting()`, NOT `cast_window.is_running`, so the STRIKE TICK is inside the lock:
+	# step 3 runs before the step-6c strike, and AC 8 commits the caster `from the press to the
+	# strike`. Window-derived either way -- no new `ActionState` (`6-5c/R18`).
+	if player.is_casting():
+		return
 	# (b) Input-driven edges from the current table row. A press with no entry in the row
 	# is dropped, never buffered (AC 5). Fixed INPUT_PRIORITY order = deterministic
 	# same-tick tiebreak; at most one transition fires per tick.
@@ -1517,6 +1580,22 @@ func _try_transition(player: PlayerState, target: HeroState.ActionState, intent:
 			else:
 				hero.enter_attack(balance_ticks.attack_windup_ticks)
 		HeroState.ActionState.ROLLING:
+			# STORY 6-5c (AC 17, `6-5c/R14`): THE ROOT REFUSES THE ROLL, AND IT REFUSES IT HERE -- FIRST,
+			# ahead of the stamina seat below, which is what makes AC 17's `NO stamina spent` structural
+			# rather than refunded. Nothing above this line has mutated hero state, so a rooted roll press
+			# costs nothing, enters no state and leaves the gait latch alone.
+			#
+			# IT IS SILENT -- no `reject_action`, no reason token, no cue (`6-5c/R14` is explicit: the root
+			# marker on the feet is the explanation). That makes it UNLIKE the capped-chain refusal's
+			# neighbour two arms up only in loudness: both are `return false`, which is the 1-4
+			# FALL-THROUGH, so a lower-priority same-tick press (block) is still considered. AC 17 requires
+			# exactly that fall-through by name.
+			#
+			# ONLY THE ROLL. `root_blocks_run` is the other switch and is read at its own seat in
+			# `_resolve_movement`; the two are independent (AC 17) because they are two reads of two
+			# fields, never one test of `is rooted`.
+			if player.is_root_blocking_roll():
+				return false
 			# A step-3 policy seat of the single deduction MECHANISM (StaminaPool.spend,
 			# D4/story 1-4; R-D1 reconciliation). No longer the ONLY one: the basic attack
 			# gained a cost in the E3-RG/R2 corrective pass and shares this seat's shape
@@ -2068,7 +2147,7 @@ func _resolve_contacts() -> Array[int]:
 				# branch in the ladder. A guard here would be defending against a fact this ladder's own
 				# earlier rungs already make unreachable.
 				if attacker_index == TargetingService.HERO_INDEX:
-					attacker.hero.stun.start(balance_ticks.deflect_stun_ticks)
+					attacker.hero.start_stun(balance_ticks.deflect_stun_ticks, false)
 					attacker.hero.set_action_state(HeroState.ActionState.STUNNED)
 					attacker.stamina.add(-balance.deflect_stamina_penalty)
 				continue
@@ -3124,6 +3203,26 @@ func _resolve_card_action(player: PlayerState, intent: InputIntent, slot: int) -
 	if player.defense_window.is_running:
 		player.hero.reject_action(&"card_cast", REASON_COUNTERING)
 		return
+	# STORY 6-5c (AC 8, `6-5c/R6`/`R15`): THE CAST COMMITMENT LOCK -- the CARD half, one gate ahead
+	# of the mode dispatch exactly as the get-up and counter gates above it are, so ALL FOUR MODES are
+	# refused identically while a cast runs: another basic cast, an unblockable initiation, a PITCH
+	# stage or activation, and -- the clause `6-5c/R15` exists to make unmissable -- the mode (3)
+	# COLOUR COUNTER. A casting hero cannot answer an incoming unblockable.
+	#
+	# THAT IS A CONSEQUENCE TO RECOGNISE, NOT A GAP TO FIX (`6-5c/R15`): the cast is 0.8 s and an
+	# unblockable chargeup 1.0 s, so a bolt started FIRST lands first and its stun breaks the charge,
+	# while a charge started first is visible and the player should not cast into it. Casting into a
+	# live chargeup loses the cast to the knockdown (`6-5c/R7`) with no counterplay for the caster.
+	#
+	# IT ANNOUNCES, unlike the step-3 half, for its two siblings' stated reason: this path refuses by
+	# an explicit gate with a reason token, so the player hears why. The card, the mana and the
+	# stamina are NOT spent on the refusal -- this gate precedes every mutation, so a mashed press
+	# during a cast costs nothing but the refusal.
+	#
+	# BELOW THE DEAD GUARD, deliberately, with its three siblings: a corpse gets no rejection feedback.
+	if player.is_casting():
+		player.hero.reject_action(&"card_cast", REASON_CASTING)
+		return
 	# Story 6-2 (AC 17a): EVERY declared `Enums.ModeKind` now has its own arm below, so the `_` arm is no
 	# longer a guarded stub for an unshipped mode -- it is the total-function default for an int that
 	# is not a ModeKind at all (a corrupt intent), and reaching it is still a programming error, not a
@@ -3277,7 +3376,38 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# STORY 6-5a (AC 4/AC 5): the APPLY half now lives in `_apply_card_effect`, SHARED with pitch
 	# activation so the whole-id dispatch has exactly one apply seat. The summon branch moved there
 	# verbatim; its behaviour is unchanged.
-	_apply_card_effect(player, _card_effects.get(played), slot)
+	# STORY 6-5c (AC 1/AC 2/AC 7): THE CAST FORK -- the one place a press decides between APPLYING NOW
+	# and COMMITTING TO A WINDOW. Everything around it is unchanged: the mana is already spent, the
+	# card is already in the discard, and the three lines below (the resolved-card record,
+	# `card_cast_resolved`, the owed replacement) run for BOTH arms -- which is `6-5c/R17` exactly,
+	# `the record and the signal are written at the PRESS; the strike writes no second record`.
+	#
+	# THE CLASSIFICATION IS THE RESOLVER'S (D6) AND THE FRAMEWORK NAMES NO CARD (AC 1). This seat asks
+	# `does this start a cast`, never `is this Honed Bolt`; `CardEffectResolver.CAST_OUTCOMES` is the
+	# only place the id appears. A closed spells layer answers false, so the card still resolves and
+	# NO cast starts -- AC 6's degrade, bought by the flag living inside `starts_cast()`.
+	#
+	# `cast_seconds` IS READ ONLY ON THIS ARM, which is the whole of AC 2: a buff, a summon and every
+	# still-deferred effect never reach the read, so the live 0.8 default can never retime anything
+	# that is not a cast. Converted to whole ticks HERE, ONCE, at the moment of application (A1) --
+	# never stored as seconds and never accumulated as a float.
+	#
+	# THE OTHER APPLY SEAT (`_resolve_pitch_activate`) IS DELIBERATELY NOT FORKED. No card's PITCH
+	# effect is a cast id today (Honed Bolt's pitch is `counterspell`, still deferred), so a pitch
+	# activation cannot reach a cast outcome; `test_spell_framework.gd` pins that disjointness rather
+	# than this seat guarding for a case the data cannot produce.
+	var cast_effect: CardEffect = _card_effects.get(played)
+	if CardEffectResolver.starts_cast(cast_effect, flags):
+		player.start_cast(played, TimingWindow.seconds_to_ticks(cast_effect.cast_seconds))
+		# Review fix M2 (`6-5c/R4`, `5-2/R17`): the caster cannot block during a cast, so a running block
+		# is dropped on the SAME tick, on mode 3's own pattern (`_resolve_defense_cast`) -- BLOCKING-ONLY.
+		# The step-3 cast lock sits below the `match action_state` dispatch, so without this write a held
+		# block would keep its BLOCKING arm (and its mitigation) for the whole cast. ATTACKING/ROLLING are
+		# left to finish on their own contract, exactly as mode 3 leaves them.
+		if player.hero.action_state == HeroState.ActionState.BLOCKING:
+			player.hero.set_action_state(HeroState.ActionState.IDLE)
+	else:
+		_apply_card_effect(player, cast_effect, slot)
 	# Story 6-5a (AC 10): the hashed last-resolved-card record, written at the resolution seat.
 	player.record_resolved_card(played, Enums.ModeKind.BASIC)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
@@ -3571,6 +3701,25 @@ const REASON_NO_OWN_MINION := &"no_own_minion"
 ## a player who just watched Culling fill the field with corpses needs to hear which one it was.
 const REASON_NO_OWN_CORPSE := &"no_own_corpse"
 
+## Story 6-5c (AC 8, `6-5c/R6`): a card of ANY mode pressed while this player is committed to their
+## own cast. Its OWN token rather than a reuse of `REASON_COUNTERING` or `REASON_GETTING_UP`, on
+## `REASON_NO_OWN_CORPSE`'s stated reasoning: the three are different player-visible facts about WHY
+## the hand is unavailable, and a player who just pressed Honed Bolt needs to hear that it is their
+## own cast and not a counter or a get-up that is refusing the next press.
+const REASON_CASTING := &"casting"
+
+## Story 6-5c (AC 4, Discrepancy 3): a cast effect pressed with no living target on the board. The
+## `REASON_NO_OWN_MINION` / `REASON_NO_OWN_CORPSE` family's third member, at their seat and for
+## their reason -- a state-side BOARD fact `CastEvaluator` never sees, because having something to
+## aim at is not a price.
+##
+## IT HAS NO REACHABLE PLAYER-FACING CASE FOR HONED BOLT TODAY and that is recorded rather than
+## hidden: the bolt's target is always the enemy hero, which is alive on every tick a card can
+## resolve. See `CardEffectResolver.NEEDS_ENEMY_HERO`. It ships now so the pre-spend seat AC 4 names
+## is genuinely total over cast effects, and is proven with a synthetic fixture rather than claimed
+## live-reachable.
+const REASON_NO_TARGET := &"no_target"
+
 
 ## Story 6-5b (AC 9/AC 13/AC 15/AC 21, `6-5b/R14`): the BOARD PRECONDITION `effect` cannot resolve
 ## without, as a refusal reason, or `&""` for "may proceed".
@@ -3612,6 +3761,22 @@ func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringNam
 			# -- the same list Grave Ward extends and Raise Dead consumes, so the gate and the apply can
 			# never disagree about whether there was anything to act on.
 			return &"" if not player.units.corpse_indices().is_empty() else REASON_NO_OWN_CORPSE
+		# Story 6-5c (AC 4, Discrepancy 3): the CAST family's precondition -- A LIVING ENEMY HERO. It
+		# rides THIS seat rather than a second gate of its own, which is the whole point of AC 4's
+		# `the existing pre-spend gate, unchanged`: a cast card is refused by every gate a basic cast
+		# already meets, with nothing spent, because nothing above this line has mutated anything.
+		#
+		# THE OPPONENT IS DERIVED, not threaded. This function's two call sites (mode (1) and mode (4))
+		# both hold a slot, but widening the signature for a requirement with no live case would put a
+		# parameter on the gate that only one of two tables ever reads; `_reset_player` already
+		# derives a slot from `player == p1` the same way.
+		#
+		# UNREACHABLE IN LIVE PLAY TODAY AND SAID SO: a dead hero ends the round, and step 1b returns
+		# before step 6, so no card resolves on a tick whose enemy hero is dead. Proven with a
+		# synthetic fixture, never claimed reachable -- `REASON_UNKNOWN_EFFECT_PREFIX`'s posture.
+		CardEffectResolver.NEEDS_ENEMY_HERO:
+			var opponent := p2 if player == p1 else p1
+			return &"" if opponent.hero.is_alive() else REASON_NO_TARGET
 	return &""
 
 
@@ -4319,13 +4484,200 @@ func _apply_landing_packages() -> void:
 				and balance_ticks.is_knockdown_stun(target.hero.stun.duration_ticks())
 		if target.hero.is_alive() and not already_down:
 			var was_charging := target.hero.action_state == HeroState.ActionState.CHARGING
-			target.hero.stun.start(balance_ticks.knockdown_stun_ticks)
+			target.hero.start_stun(balance_ticks.knockdown_stun_ticks, false)
 			target.hero.set_action_state(HeroState.ActionState.STUNNED)
 			if was_charging:
 				target.charge_window.start(0)
 				target.landing_window.start(0)
 				target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
+
+
+## Story 6-5c (AC 1/AC 3/AC 5/AC 9): THE CAST STRIKE SEAT -- step 6c. Two passes over the two slots,
+## and the split is the point.
+##
+## PASS ONE READS, PASS TWO MUTATES, which is the `_iframe_open_at_step3` / `_counter_color_at_step3`
+## SEAT-SYMMETRY doctrine applied to a third mutual case. With one fused pass, two bolts striking on
+## the SAME tick would resolve asymmetrically: P1's strike would stun P2 and cancel P2's cast before
+## P2's own strike was considered, so P1 would win every simultaneous exchange by virtue of being
+## slot 0. Read first, strike second, and both bolts land and both heroes go down -- the answer
+## `_resolve_color_counter` already gives for mutual counters.
+##
+## TWO LOCALS RATHER THAN AN ARRAY, so the seat allocates nothing on a tick with no cast in flight
+## (the no-per-frame-allocation rule; `_landing_package_pending` solves the same problem with a
+## member array because it must survive from step 3 to step 6b, which these do not).
+##
+## NOTHING IS BUFFERED (AC 9). A press dropped by either commitment lock while the cast ran is gone;
+## this seat replays nothing, and there is no store it could replay from.
+##
+## `balance_ticks` IS NON-NULL ON EVERY PATH THAT DOES ANYTHING HERE, by construction and on
+## `_resolve_basic_cast`'s own stated property: a cast can only be in flight because a card
+## resolved, a card can only resolve from a non-empty hand, and the step-6 deal returns early while
+## balance is null. A pre-injection fixture never gets past the `is_casting()` test.
+func _resolve_cast_strikes() -> void:
+	var p1_strikes := false
+	var p2_strikes := false
+	for slot: int in 2:
+		var player := p1 if slot == 0 else p2
+		if not player.is_casting():
+			continue
+		if _cast_is_interrupted(player):
+			player.clear_cast()
+			continue
+		if player.cast_window.is_running:
+			continue
+		if slot == 0:
+			p1_strikes = true
+		else:
+			p2_strikes = true
+	for slot: int in 2:
+		if not (p1_strikes if slot == 0 else p2_strikes):
+			continue
+		var player := p1 if slot == 0 else p2
+		var effect: CardEffect = _card_effects.get(StringName(player.cast_card_id))
+		# CLEARED BEFORE THE OUTCOME IS APPLIED, so the strike itself can never observe its own caster
+		# as still casting -- the commitment ends AT the strike (AC 8), and an apply arm that stunned
+		# its own caster would otherwise leave a cast in flight with no window.
+		player.clear_cast()
+		# THE OUTCOME IS THE RESOLVER'S (D6), and every outcome with no arm here applies nothing and
+		# has still resolved -- `_apply_card_effect`'s own posture. A missing injected entry lands on
+		# `REASON_NO_EFFECT_ENTRY` and strikes nothing rather than crashing.
+		match CardEffectResolver.outcome(effect, flags):
+			CardEffectResolver.OUTCOME_HONED_BOLT:
+				_apply_honed_bolt(player, effect, slot)
+
+
+## Story 6-5c (AC 5, `6-5c/R3`/`R7`): DOES THIS TICK END `player`'s CAST WITHOUT A STRIKE?
+##
+## ONLY BEING STUNNED INTERRUPTS, WHATEVER INFLICTED IT -- a bolt stun, a deflect stun, or the
+## knockdown of an unanswered unblockable. DAMAGE ALONE NEVER DOES, and that is true here BY ABSENCE
+## rather than by a clause: nothing in this predicate reads hp except the liveness test, so an
+## ordinary melee hit on a casting hero leaves the cast running and it strikes on schedule.
+##
+## DEATH IS READ TWO WAYS ON PURPOSE. `is_alive()` is hp-based and catches the caster killed THIS
+## tick, before step 8 has written `DEAD` -- the `_apply_lifesteal` N8 argument verbatim, and what
+## makes `a caster killed mid-cast never strikes` true on the kill tick itself. `DEAD` catches a
+## corpse from an earlier tick, which the round-over freeze makes unreachable and which is kept
+## anyway because a predicate that depends on the freeze for its totality is a trap.
+##
+## THE CAST IS LOST, NOT REFUNDED (`6-5c/R3`): the caller clears it and nothing anywhere restores
+## the mana or the card. The replacement stays owed, because it was owed at the press.
+func _cast_is_interrupted(player: PlayerState) -> bool:
+	return not player.hero.is_alive() \
+			or player.hero.action_state == HeroState.ActionState.STUNNED \
+			or player.hero.action_state == HeroState.ActionState.DEAD
+
+
+## Story 6-5c (AC 10-16, `6-5c/R1`/`R8`/`R9`/`R12`/`R13`): HONED BOLT LANDS.
+##
+## INSTANT AND UNAIMED (`6-5c/R1`). The target is `the other slot's hero`, computed from the
+## caster's slot and nothing else: no travel, no projectile, no range, direction or line-of-sight
+## test, no reach latch, no contact fact. Minions in between are irrelevant because nothing here
+## consults a board, and LOCK-ON is irrelevant because nothing here reads `lock_target`. It can
+## never hit a minion or a totem -- not filtered, but unreachable: there is no board index in this
+## function to address one with.
+##
+## THE ONE AVOIDANCE IS THE STEP-3 LATCH (AC 11, `6-5c/R8`), AND IT MUST NOT BE
+## `HeroState.is_iframe_open()`. The latch is WIDER -- it carries the `_gets_up_this_tick` term --
+## so a hero on the exit tick of a knockdown, where the plain predicate reads false, dodges here
+## exactly as a rolling one does. It is also captured BEFORE any press of the tick, which is what
+## makes a roll pressed on the strike tick itself dodge on NEITHER seat and a roll from the previous
+## tick dodge on BOTH: the same seat-symmetry the unblockable dodge rung was given at `5-6` AC 7.
+## A DODGED BOLT DOES NOTHING AT ALL -- no damage, no stun, no root, no `hit_landed` -- and the card
+## and mana stay spent, because they were spent an entire cast ago.
+##
+## BLOCK AND DEFLECT NEITHER REDUCE NOR NEGATE (AC 12), BY ABSENCE. The block multiplier and the
+## deflect ladder both live in `_resolve_contacts` and are driven by contact facts; a bolt is not a
+## contact fact and never enters that function, so there is no branch here to suppress and none to
+## forget. Facing is irrelevant for the same reason. The defender pays no stamina and the caster is
+## never stunned by a deflect window.
+##
+## THE DAMAGE GOES THROUGH THE SHARED FUNNEL (AC 13, `6-5c/R13` -- THE STANDING RULE FOR EVERY
+## LATER SPELL): Bloodlust's dealt and taken multipliers both apply and Vampiric Aura heals the
+## caster from the hp ACTUALLY removed, measured before-minus-after exactly as the landing seat
+## measures it. FROSTBITE IS NOT CONSUMED, also by absence: `_consume_frostbite` is reached only
+## from the melee contact ladder, and the bolt is not a melee hit.
+##
+## A LETHAL BOLT WRITES NO STUN AND NO ROOT ONTO A CORPSE (AC 13). The liveness re-test after the
+## damage is what buys that, and it is hp-based for `_apply_lifesteal`'s reason: `DEAD` is not
+## written until step 8. The round then ends through the ordinary step-8 check on this same tick.
+func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int) -> void:
+	var target_slot := 1 - slot
+	var target := p2 if slot == 0 else p1
+	if not target.hero.is_alive():
+		return
+	if _iframe_open_at_step3[target_slot]:
+		return
+	var damage := _funnel_damage(caster, TargetingService.HERO_INDEX, target,
+			TargetingService.HERO_INDEX, effect.damage_amount)
+	var hp_before := target.hero.get_hp()
+	target.hero.take_damage(damage)
+	_apply_lifesteal(caster, TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
+	# THE STUN WRITE PRECEDES THE `hit_landed` PUSH, and the order is load-bearing rather than
+	# stylistic -- it is `_apply_landing_packages`' own order, for the reason
+	# `AnimationController.on_hit_landed` states in its docstring: "a knockdown's own write precedes
+	# its hit on the queue, so an unanswered unblockable on a blocker reads STUNNED here". The queue
+	# drains in push order, so pushing the hit FIRST would let the runner see an IDLE-family target
+	# and play `hit_react` over the pose the very next drained signal replaces -- which AC 27 forbids
+	# by name ("`hit_react` is not played over it"). Written this way the target already reads
+	# STUNNED when the hit is consumed, and the `hit_react` arm is never reached.
+	if target.hero.is_alive():
+		_apply_bolt_landing(target, effect)
+	_queue.push(hit_landed.emit.bind(slot, target_slot, damage, target.hero.get_hp()))
+
+
+## Story 6-5c (AC 14-16, AC 19): THE STUN AND THE ROOT a landed bolt writes onto a LIVING target.
+##
+## THE KNOCKDOWN FLOOR COMES FIRST AND BEATS EVERYTHING (AC 16a, `6-5c/R9`, `R-STUNSTACK`): a bolt
+## on a hero already in a KNOCKDOWN deals its damage and stops -- no stun, no root, and the running
+## knockdown is neither restarted nor extended. Classified by DURATION through the one
+## `BalanceTicks.is_knockdown_stun` classifier the get-up arming and the landing seat already share.
+##
+## THE REPEAT SWITCH IS READ AT THE LANDING (AC 19, `6-5c/R2`), never at the press, so flipping it
+## in `.tres` retunes an in-flight match on the next bolt. Choice B (false) deals damage and stops
+## when the target is already bolt-stunned OR rooted; choice A (the default) falls through and both
+## restart in full. A target in a DEFLECT stun is NEITHER of those, so it takes the restart on either
+## setting -- which is `6-5c/R12` exactly: the stun restarts from zero at the bolt's full length and
+## the root follows.
+##
+## ONE `set_action_state` PER OUTCOME (the `5-6` rule), and this is the FOURTH authored direct
+## `STUNNED` entry point in this file (`6-5c/R11`) -- argued the way `6-6a` and `6-6b` argued the
+## third and fourth: a DIFFERENT SUBJECT (the bolt's target), a DIFFERENT SEAT (step 6c, not step 4's
+## deflect ladder, not step 6b's deferred package, not the attacker's own step 3) and a DIFFERENT
+## CAUSE (a spell, not a melee exchange). It cannot reuse any of the three: each writes a different
+## hero for a different reason with different collateral.
+##
+## IT IS NOT A KNOCKDOWN (AC 15). It opens no get-up iframes and plays no `knockdown` pose, and both
+## follow from the authored `stun_seconds` staying strictly BELOW `knockdown_stun_seconds` -- which
+## the duration classifier would otherwise misread. That is an AUTHORING invariant, enforced against
+## the real `.tres` pair by the audit (AC 21), not a branch here.
+##
+## THE CHARGEUP TEARDOWN IS `_apply_landing_packages`' TRIPLE VERBATIM (AC 14): a bolt stun on a
+## charging hero abandons the chargeup exactly as a knockdown does, and the card and stamina stay
+## spent. A swing needs no teardown -- `is_hitbox_active()` is false the instant the state leaves
+## `ATTACKING`, so the orphaned hitbox stops gathering facts by construction (`5-6` AC 11). A block
+## needs none either: `BLOCKING` simply ends.
+##
+## THE ROOT IS ARMED WITH THE STUN PLUS THE ROOT, one window spanning both, so `root starts when the
+## stun ends` (AC 17) is true by construction -- see `PlayerState.root_window`. Choice A's restart
+## is the same call with the same arithmetic, which is what makes `the root restarts IN FULL` exact.
+func _apply_bolt_landing(target: PlayerState, effect: CardEffect) -> void:
+	if target.hero.action_state == HeroState.ActionState.STUNNED \
+			and balance_ticks.is_knockdown_stun(target.hero.stun.duration_ticks()):
+		return
+	if not effect.repeat_landing_restuns \
+			and (target.hero.stun_is_bolt or target.root_window.is_running):
+		return
+	var stun_ticks := TimingWindow.seconds_to_ticks(effect.stun_seconds)
+	var was_charging := target.hero.action_state == HeroState.ActionState.CHARGING
+	target.hero.start_stun(stun_ticks, true)
+	target.hero.set_action_state(HeroState.ActionState.STUNNED)
+	if was_charging:
+		target.charge_window.start(0)
+		target.landing_window.start(0)
+		target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	target.arm_root(stun_ticks + TimingWindow.seconds_to_ticks(effect.root_seconds),
+			effect.root_blocks_run, effect.root_blocks_roll)
 
 
 ## Story 6-6b (AC 1/AC 3/AC 7/AC 8): CAN THIS HERO ANSWER AN UNBLOCKABLE RIGHT NOW, AND IN WHAT COLOUR?
@@ -4473,7 +4825,7 @@ func _resolve_color_counter(player: PlayerState, slot: int) -> bool:
 	player.charge_window.start(0)
 	player.landing_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
-	player.hero.stun.start(balance_ticks.knockdown_stun_ticks)
+	player.hero.start_stun(balance_ticks.knockdown_stun_ticks, false)
 	player.hero.set_action_state(HeroState.ActionState.STUNNED)
 	return true
 
@@ -4860,7 +5212,32 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 	# (the ATTACKING-commitment precedent: velocity-only, facing tracks input). ROLLING is
 	# unreachable pre-injection too, and the authoring audit guarantees
 	# roll_duration_seconds > 0.
-	if player.hero.action_state == HeroState.ActionState.ROLLING:
+	# STORY 6-5c (AC 8): THE CAST ROOT -- a SIXTH sibling of the five literal-zero branches below, and
+	# the ONLY one seated ABOVE `ROLLING`. `5-2/R5`'s refusal of a tunable `rooted` applied a fifth
+	# time: a LITERAL ZERO, never a `cast_move_speed_multiplier` read from balance, because AC 8's
+	# `the caster does not move at all, AT ANY TUNING` is exactly the property a multiplier would
+	# make retunable. The write HAPPENS rather than being skipped for its siblings' downstream reason:
+	# `HeroActor.drive()` reads this field into `move_and_slide()` every physics frame, so a skipped
+	# write would leave the last live velocity in place and glide the caster through its own cast.
+	#
+	# IT OUTRANKS `ROLLING` AND `ATTACKING`, WHICH IS WHERE IT DIVERGES FROM THE COUNTER LOCK, and
+	# the divergence is the AC rather than an oversight. `6-6b` AC 1 requires a swing or roll in
+	# progress to finish on its own contract, so the counter-busy branch sits low and lets both win;
+	# AC 8 here says the opposite in absolute terms. A card press resolves at STEP 6, after that
+	# tick's step 3, so a hero CAN press attack or roll and then cast on the same tick -- and from the
+	# next tick its body stops, mid-swing or mid-roll. The swing's own WINDOWS are untouched (this
+	# branch writes velocity and nothing else), so the phase machine still runs out honestly; what
+	# stops is the body.
+	#
+	# FACING FALLS THROUGH to the generic lock-direction branch below -- `STUNNED`'s and the get-up's
+	# carve-out repeated verbatim, and AC 8's own words: `facing keeps tracking the lock like every
+	# other rooted state`. The ruling roots ACTION and MOVEMENT, never the visual heading.
+	#
+	# `DEAD` STILL WINS, by the early return at the top of this function -- a corpse mid-cast is
+	# zeroed there and the cast is cleared at step 6c the same tick.
+	if player.is_casting():
+		player.hero.velocity = Vector3.ZERO
+	elif player.hero.action_state == HeroState.ActionState.ROLLING:
 		# Story 6-5a (R2): a BLOODHOUND-boosted roll covers `roll_distance_multiplier` times the distance
 		# in the SAME duration -- the speed is what scales. An unboosted roll takes the original
 		# expression, untouched, so every roll this seat has ever resolved is bit-identical.
@@ -5023,7 +5400,20 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 			# leaves the pool at `is_zero_approx` -- so the latch is live from the emptying tick
 			# itself, one tick earlier than AC 9's original "tick-301" reading (corrected: the
 			# residual now reads zero AND locked-out starting the SAME tick the drain reaches it).
-			var pursuing := _run_pursuit_active(state, intent)
+			# STORY 6-5c (AC 17, `6-5c/R14`): THE ROOT REMOVES RUN by making the PURSUIT clause false,
+			# which is deliberately upstream of all three consequences AC 17 names and is what buys them
+			# together instead of one at a time: `actually_running` goes false (so the gait ladder below
+			# picks `walk_speed` -- `a held run key gives walk pace`), the caller passes that false into
+			# `_regen_stamina` (so the run drain never runs -- `drains no run stamina`), and the latch
+			# SET two lines down is gated on the same `pursuing` (so it `touches no gait latch`).
+			#
+			# FOLDED INTO THE CLAUSE RATHER THAN ADDED AS A SIXTH BRANCH ABOVE, because a rooted hero is
+			# NOT root-rooted in the `5-2/R5` sense -- it walks, blocks, deflects, counters and attacks
+			# (AC 17/AC 18). Only the RUN gait is gone, so the edit belongs in the gait ladder and
+			# nowhere else. `root_blocks_roll` is read at its own seat in `_try_transition`; the two
+			# switches are read independently and never through a shared `is rooted` test (AC 17).
+			var pursuing := _run_pursuit_active(state, intent) \
+					and not player.is_root_blocking_run()
 			var stamina_empty := is_zero_approx(player.stamina.get_current())
 			if pursuing and stamina_empty:
 				player.hero.run_locked_out = true
@@ -5452,6 +5842,16 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 	p2.clear_rules()
 	p1.clear_resolved_card()
 	p2.clear_resolved_card()
+	# Story 6-5c (AC 5/AC 18/AC 24): the cast and the root clear at round end too, following
+	# `clear_rules` / `clear_resolved_card` rather than the seven windows that clear ONLY at the
+	# reset. The ACs point at the timed-rule seat by name in both directions (`wherever the other
+	# per-player timed state is cleared at round end`, AC 18), and the rules are cleared in BOTH
+	# places. An in-flight cast is also exactly the kind of thing that must not outlive the round that
+	# paid for it: a round that has ended holds no bolt still on its way down.
+	p1.clear_cast()
+	p2.clear_cast()
+	p1.clear_root()
+	p2.clear_root()
 	loser.hero.set_action_state(HeroState.ActionState.DEAD)
 	_queue.push(round_ended.emit.bind(loser_index))
 
@@ -5626,7 +6026,7 @@ func _reset_player(player: PlayerState) -> void:
 	_queue_pitch_changed(reset_slot)  # Story 6-3b (AC 1 site (d))
 	# Story 5-6 (AC 13): the stun window, stopped in the same breath as the state clear above — one
 	# fact in two parts, exactly as the chargeup's three and the defense window's two are.
-	hero.stun.start(0)
+	hero.start_stun(0, false)
 	# Story 6-6a (AC 9): THE SEVENTH NAMED EXCEPTION -- the get-up iframes, stopped beside the stun whose
 	# knockdown arms them (see _apply_debug_reset's header for the trace).
 	hero.get_up_iframe.start(0)
@@ -5684,6 +6084,15 @@ func _reset_player(player: PlayerState) -> void:
 	# Story 6-5a (N10): the eighth named exception -- every timed rule and armed trigger, see
 	# `_apply_debug_reset`.
 	player.clear_rules()
+	# Story 6-5c (AC 24): the TENTH and ELEVENTH named exceptions -- the CAST and the ROOT, cleared
+	# beside the timed rules and for their reason, and for the traced reason `5-3`/`5-5`/`5-6`/`6-6a`
+	# each gave their own window: step 1b returns BEFORE step 2's ticks, so once `_round_over` latches
+	# a cast or a root STOPS COUNTING but stays armed. `_end_round` already clears both at the round's
+	# end (review N3), so the freeze never holds a live cast; THIS clear is for the DEBUG RESET, which
+	# can land mid-cast or mid-root. Without it a cast would strike in the fresh round -- a bolt
+	# nobody in that round pressed for -- and a root would take running and rolling away from it.
+	player.clear_cast()
+	player.clear_root()
 	# Story 6-5a (REVIEW B1, operator ruling): the ninth named exception -- the last-resolved-card
 	# record, cleared beside the rules and for the same reason, see `_apply_debug_reset`.
 	player.clear_resolved_card()

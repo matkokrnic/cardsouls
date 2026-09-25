@@ -191,10 +191,14 @@ const REASON_DECK1_NOT_YET_RESOLVED := &"deck1_not_yet_resolved"
 ## than staying rows here. The table is the mechanism working as designed -- a deferred effect's row
 ## is retired by the story the row names, and the count assertion in `test_spell_framework.gd` moves
 ## with it deliberately.
+## STORY 6-5c: ONE MORE ROW LEAVES, FIVE -> FOUR. `honed_bolt` named THIS story as its owner and this
+## story builds it, so it becomes a real outcome below rather than staying a row here -- the same
+## mechanism working as designed that retired 6-5b's four, and the count assertion in
+## `test_spell_framework.gd` moves with it deliberately. `rocksling`, `boom`, `counterspell` and
+## `corpse_bomb` stay deferred and their no-op behaviour is untouched (AC 21).
 const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
 	&"rocksling": &"6-5d-hero-and-corpse-projectiles",
 	&"boom": &"6-5e-boulder-injection",
-	&"honed_bolt": &"6-5c-hero-cast-honed-bolt",
 	&"counterspell": &"6-5f-counterspell",
 	&"corpse_bomb": &"6-5d-hero-and-corpse-projectiles",
 }
@@ -231,6 +235,50 @@ const OWN_MINION_OUTCOMES: Dictionary[StringName, StringName] = {
 }
 
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5c: THE CAST FAMILY -- the first family of effects that does NOT apply at the press.
+## `BUFF_OUTCOMES`' posture verbatim: whole-id rows in a `Dictionary` only ever `get()`-ed by one
+## known key, never iterated, never sorted, never hashed.
+## ------------------------------------------------------------------------------------------
+## ITS OWN TABLE RATHER THAN MORE `BUFF_OUTCOMES` ROWS, on that table's own stated reason and a
+## stronger one: a cast is not a buff, and unlike every other family here the table's MEMBERSHIP is
+## itself gameplay -- `starts_cast()` below reads it to decide whether the press starts a commitment
+## window at all. One table per family, and this family's table answers two questions.
+##
+## THE FRAMEWORK NAMES NO CARD (AC 1). `honed_bolt` appears HERE, in the one file whose whole job is
+## matching `effect_id` strings against gameplay meaning (D6), and NOWHERE in `MatchState`: the cast
+## seat asks `starts_cast()`, the strike seat asks `outcome()`. Rocksling, Fireball and Corpse Bomb
+## adopt the framework by adding a row here plus their own apply arm, with no edit to the window,
+## the commitment locks or the strike seat.
+const OUTCOME_HONED_BOLT := &"honed_bolt"
+
+const CAST_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"honed_bolt": OUTCOME_HONED_BOLT,
+}
+
+
+## Story 6-5c (AC 1/AC 2/AC 6): does pressing this effect's card start a CAST -- a commitment window
+## between the press and the effect -- rather than applying at the press?
+##
+## IT COMPUTES, IT DOES NOT APPLY (D6), and it is the ONE question `MatchState`'s cast seat asks about
+## classification. A false answer means the press behaves exactly as every press behaved before this
+## story: the effect applies at the press through `_apply_card_effect` and nothing is committed.
+##
+## THE FLAG IS READ HERE, AND THAT IS AC 6's WHOLE MECHANISM. With `FeatureFlags.spells` closed the
+## card still RESOLVES -- mana spent, card discarded, replacement owed, `_spells_open`'s standing
+## degrade -- but no cast starts, nothing applies and presentation is never told to show one. Routing
+## the closed layer through this one answer is what makes that degrade structural rather than a
+## second check at the seat. `_spells_open`'s direction is unchanged: a layer that cannot be verified
+## open stays shut.
+##
+## A NULL EFFECT NEVER CASTS, the `REASON_NO_EFFECT_ENTRY` null branch's own honest default: a cast
+## with no injected entry has no duration to commit for.
+static func starts_cast(effect: CardEffect, flags: FeatureFlags) -> bool:
+	if effect == null:
+		return false
+	return CAST_OUTCOMES.has(effect.effect_id) and _spells_open(flags)
+
+
 ## Story 6-5b (AC 9/AC 13/AC 15/AC 21, `6-5b/R14`): does this effect REFUSE when the caster has
 ## nothing to act on -- and if so, which board fact does it need?
 ##
@@ -259,13 +307,36 @@ const OWN_MINION_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"raise_dead": NEEDS_OWN_CORPSE,
 }
 
+## Story 6-5c (AC 4, Discrepancy 3): `honed_bolt`'s target -- A LIVING ENEMY HERO. The requirement is
+## EVALUATED AT THE SAME PRE-SPEND SEAT as the four above (`MatchState._board_refusal_reason`), which
+## is what AC 4 means by "the target requirement is evaluated at the same pre-spend seat".
+##
+## IT HAS NO REACHABLE PLAYER-FACING CASE TODAY, AND THAT IS RECORDED RATHER THAN HIDDEN. The bolt's
+## only target is the enemy hero, which exists and is alive on every tick a card can resolve at all --
+## a dead hero ends the round and `advance()`'s step-1b freeze returns before step 6. So this row is
+## STRUCTURALLY present and proven with a synthetic fixture, never claimed live-reachable, the
+## `REASON_UNKNOWN_EFFECT_PREFIX` posture verbatim. It exists for the later cast effects (6-5d/6-5e)
+## whose target the board genuinely may lack.
+const NEEDS_ENEMY_HERO := &"enemy_hero"
+
+const CAST_REQUIREMENTS: Dictionary[StringName, StringName] = {
+	&"honed_bolt": NEEDS_ENEMY_HERO,
+}
+
 
 ## The board fact `effect` cannot resolve without, or `NEEDS_NOTHING`. A null effect needs nothing:
 ## a cast with no injected entry resolves as `REASON_NO_EFFECT_ENTRY` and has no precondition to fail.
+##
+## Story 6-5c: TWO TABLES, ONE ANSWER. The cast requirements are consulted after the own-minion ones;
+## the two tables share no id, so the order decides nothing today and is fixed only so a future id in
+## both has one defined answer rather than an accidental one.
 static func board_requirement_for(effect: CardEffect) -> StringName:
 	if effect == null:
 		return NEEDS_NOTHING
-	return OWN_MINION_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	var own_minion: StringName = OWN_MINION_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	if own_minion != NEEDS_NOTHING:
+		return own_minion
+	return CAST_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 
 
 ## What this cast's effect does, as one of the four named outcomes above. `effect` is the injected
@@ -304,6 +375,14 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	var own_minion: StringName = OWN_MINION_OUTCOMES.get(effect.effect_id, &"")
 	if own_minion != &"":
 		return own_minion if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 6-5c: the CAST family, in the own-minion lookup's own seat and order -- after the summon
+	# prefix, before the deferred table (`honed_bolt`'s row just left it) and before the `spell_*`
+	# prefix. The id is recognised first and the flag read only after, this docstring's standing
+	# ordering argument. A CLOSED spell layer returns the shared closed reason here exactly as it does
+	# two lines up, which is the half of AC 6 that keeps a flag-closed cast a successful, empty cast.
+	var cast: StringName = CAST_OUTCOMES.get(effect.effect_id, &"")
+	if cast != &"":
+		return cast if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
 	if owner_story_for(effect.effect_id) != &"":
 		return REASON_DECK1_NOT_YET_RESOLVED
 	if id.begins_with(PREFIX_SPELL):

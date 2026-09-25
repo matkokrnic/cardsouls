@@ -5,3 +5,10 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"honed_bolt"
+cast_seconds = 0.8
+damage_amount = 4.0
+stun_seconds = 0.4
+root_seconds = 2.5
+root_blocks_run = true
+root_blocks_roll = true
+repeat_landing_restuns = true

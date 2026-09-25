@@ -254,6 +254,119 @@ var defense_window: TimingWindow
 ## reasoning verbatim, for the same hash reason.
 var defense_color: int = NO_TELEGRAPH_COLOR
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5c: THE CAST WINDOW AND THE IN-FLIGHT CAST'S IDENTITY (AC 1, AC 23).
+## ------------------------------------------------------------------------------------------
+## SEATED HERE RATHER THAN ON `HeroState`, for the IDENTICAL reason `charge_window` and
+## `defense_window` above are: this is a CARD-LAYER duration started by a CAST, not by a
+## `TRANSITION_TABLE` edge, so it belongs beside the other windows a cast starts rather than beside
+## the nine windows the melee table drives.
+##
+## IT OWNS NO `ActionState` (`6-5c/R18`, the third application of the get-up / counter precedent):
+## the commitment is derived from `is_casting()` below at all three lock seats, which is what keeps
+## `test_unblockable_defense.gd::test_the_cast_introduces_no_action_state_of_its_own` green unedited.
+##
+## ADVANCED AT STEP 2 with every other D4 timer and READ at the step-6c strike seat -- the
+## `charge_window` idiom verbatim: ticked in one place, consumed in another, never both.
+var cast_window: TimingWindow
+
+## WHICH CARD IS IN FLIGHT, as a String VALUE -- and the IN-FLIGHT FLAG itself: `""` means no cast.
+##
+## A `String`, NEVER A `StringName` AND NEVER A KEY, on `last_resolved_card_id`'s stated precedent and
+## for its exact measured reason: `Array[StringName].sort()` orders by INTERNAL POINTER on this
+## engine, so a StringName reaching the canonical hash is the failure mode every container key in
+## this file exists to avoid. The strike seat converts back with `StringName()` to look the effect up
+## in the injected map, which a replay reproduces from the record.
+##
+## THE IDENTITY IS ALSO THE FLAG, and that is deliberate rather than thrifty. "A cast is in flight"
+## and "this is the card in flight" are one fact, and a separate bool could disagree with the id --
+## the `telegraph` gate's own argument for deriving rather than storing. It also gives the right
+## answer on the STRIKE TICK itself, where `cast_window` has already stopped at step 2 but the strike
+## has not yet run at step 6c: the caster is still committed for that tick (AC 8's "from the press to
+## the strike"), and `is_casting()` says so while `cast_window.is_running` would not.
+##
+## WHY AN ID AND NOT THE RESOLVED NUMBERS. Storing damage/stun/root at the press would make the
+## framework name what a cast DOES, which is the resolver's job (D6) and would stop a later cast
+## effect (6-5d/6-5e) from adopting the window without new fields here. An id plus a lookup keeps the
+## framework total over every future cast outcome.
+var cast_card_id: String = ""
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5c: THE ROOT (AC 17, AC 18).
+## ------------------------------------------------------------------------------------------
+## ONE WINDOW COVERING THE STUN AND THE ROOT TOGETHER, started at the strike with
+## `stun_ticks + root_ticks` -- the `landing_window` shape verbatim (chargeup PLUS launch in one
+## window, with WHICH phase you are in derived from the other window rather than stored). AC 17's
+## "root starts when the stun ends" is therefore true BY CONSTRUCTION: on the tick the stun expires
+## this window has exactly `root_ticks` left, and during the stun its blocks are redundant because
+## `STUNNED` already hard-roots the body and refuses every press.
+##
+## THE ALTERNATIVE WAS A SECOND ARMING AT THE STUN'S EXIT, rejected because it needs the root's
+## duration and both switches PARKED across the stun -- three more fields carrying a pending root --
+## to express what one window already expresses.
+##
+## THE TWO SWITCHES ARE STORED, NOT RE-READ FROM THE EFFECT, because the effect is gone by then: the
+## cast's identity is cleared at the strike, and a root outlives it by up to `root_seconds`. They are
+## honest `bool`s rather than `rule_a`/`rule_b` floats on the timed-rule seat -- that seat documents
+## its two slots as MAGNITUDES, and a bool punned into a float is a lie about the type the snapshot
+## would then carry.
+var root_window: TimingWindow
+var root_blocks_run: bool = false
+var root_blocks_roll: bool = false
+
+
+## Story 6-5c (AC 8, `6-5c/R18`): IS THIS PLAYER COMMITTED TO A CAST RIGHT NOW? The ONE predicate all
+## three commitment seats read -- the step-3 action lock, the step-6 card lock and the movement root
+## -- so they cannot drift apart. `is_getting_up()`'s shape and role exactly.
+func is_casting() -> bool:
+	return cast_card_id != ""
+
+
+## Story 6-5c (AC 1): ARM a cast. The duration is already in TICKS (converted once at the press, A1).
+func start_cast(card_id: StringName, duration_ticks: int) -> void:
+	cast_card_id = String(card_id)
+	cast_window.start(duration_ticks)
+
+
+## Story 6-5c (AC 5, AC 24): THE ONE STOP POINT for a cast -- the strike, every interrupt, the debug
+## reset and round end all end it through here, `cancel_rule`'s single-stop-point discipline (R6)
+## applied to the cast. Nothing is refunded here and nothing ever will be: the card and the mana were
+## spent at the press (`6-5c/R3`), and a refund would have to live at a seat that knows what was paid.
+func clear_cast() -> void:
+	cast_card_id = ""
+	cast_window.start(0)
+
+
+## Story 6-5c (AC 17, AC 19): ARM (or RESTART, choice A) the root. `duration_ticks` is the stun plus
+## the root, per `root_window`'s own comment. A non-positive duration clears the slot rather than
+## leaving live switches on a stopped window -- `start_rule`'s N3 lesson applied verbatim.
+func arm_root(duration_ticks: int, blocks_run: bool, blocks_roll: bool) -> void:
+	if duration_ticks <= 0:
+		clear_root()
+		return
+	root_window.start(duration_ticks)
+	root_blocks_run = blocks_run
+	root_blocks_roll = blocks_roll
+
+
+## Story 6-5c (AC 18, AC 24): THE ONE STOP POINT for a root -- expiry aside, nothing else ends one.
+func clear_root() -> void:
+	root_window.start(0)
+	root_blocks_run = false
+	root_blocks_roll = false
+
+
+## Story 6-5c (AC 17): the two INDEPENDENT switch reads, each asked at exactly one seat --
+## `MatchState._resolve_movement`'s gait ladder and `_try_transition`'s ROLLING arm. Both are false
+## whenever no root is running, so neither seat needs a second `is_running` test of its own.
+func is_root_blocking_run() -> bool:
+	return root_window.is_running and root_blocks_run
+
+
+func is_root_blocking_roll() -> bool:
+	return root_window.is_running and root_blocks_roll
+
+
 ## Story 6-5a (AC 8, OQ1): THE TIMED-RULE SEAT -- one rule shape for every per-player timed card effect,
 ## generalising the one-`TimingWindow`-per-rule precedent (`defense_window` above) into a FIXED ARRAY of
 ## rule slots indexed by `RULE_*`. Each slot is ONE window plus TWO magnitudes (`a`, `b`, meaning per
@@ -343,6 +456,9 @@ func _init(queue: SignalQueue) -> void:
 	charge_window = TimingWindow.new()
 	landing_window = TimingWindow.new()
 	defense_window = TimingWindow.new()
+	# Story 6-5c: the cast and root windows, built beside their card-layer siblings above.
+	cast_window = TimingWindow.new()
+	root_window = TimingWindow.new()
 	for _kind in RULE_COUNT:
 		rule_windows.append(TimingWindow.new())
 		rule_a.append(0.0)
@@ -774,6 +890,32 @@ func to_snapshot() -> Dictionary:
 		# ONE GOLDEN CAUSE RIDES ON THIS KEY: its mere PRESENCE (the `5-2`/`5-5` shape). The golden
 		# fixture never casts mode (2), so its VALUE is the resting 0 on every hashed tick.
 		"landing": landing_window.remaining_ticks(),
+		# Story 6-5c (AC 1/AC 23): the IN-FLIGHT CAST, as `[card id, remaining ticks]`. The `defense`
+		# FUSION verbatim and for the same reason: a cast is ONE fact in two halves (which card, how
+		# much longer), and splitting it would let the halves drift into two keys that could disagree
+		# about whether a cast is in flight at all. Resting value `["", 0]`.
+		#
+		# THE GATE IS `is_casting()`, NOT `cast_window.is_running`, and the difference is load-bearing
+		# on exactly one tick: the STRIKE tick, where step 2 has already stopped the window and step 6c
+		# has not yet struck. The hero is still committed there, and the snapshot says so.
+		#
+		# IT IS A KEY AT ALL FOR THE `pending_draw` REASON: the cast CROSSES TICKS AND DECIDES AN
+		# OUTCOME (when the strike lands, and therefore whether it lands at all), so it cannot be
+		# recomputed for free inside the tick that reads it -- `4-3a/R17`'s test, passed. Remaining
+		# ticks alone is determinism-complete: the duration is `seconds_to_ticks(effect.cast_seconds)`,
+		# a load-time constant a replay reproduces from the recorded content, so elapsed is recoverable.
+		"cast": [cast_card_id, cast_window.remaining_ticks()] \
+				if is_casting() else ["", 0],
+		# Story 6-5c (AC 17/AC 23): the ROOT, as `[remaining ticks, blocks run, blocks roll]` -- the
+		# `timed_rules` per-slot fusion applied to one root: three halves of one fact, gated on the
+		# window so a stopped root reads `[0, false, false]` whatever the switches last held and a
+		# stale switch is unrepresentable in the hash. Resting `[0, false, false]`.
+		#
+		# EVERY HALF CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`): the countdown decides how much
+		# longer running and rolling are gone, and each switch decides WHICH of the two is. The window
+		# spans the stun plus the root (see `root_window`), so the count is honest through both.
+		"root": [root_window.remaining_ticks(), root_blocks_run, root_blocks_roll] \
+				if root_window.is_running else [0, false, false],
 		# Story 6-5a (AC 8): the TIMED-RULE SEAT, ONE key for all six rule slots, as
 		# `[remaining_ticks, a, b]` per slot in `RULE_*` order. The `defense` fusion applied per slot: a
 		# rule is one fact in three halves, gated on its window's `is_running` so a stopped rule reads

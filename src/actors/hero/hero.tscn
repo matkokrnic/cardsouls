@@ -23,6 +23,7 @@
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_charge_blue.tres" id="21_wcblu"]
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_charge_green.tres" id="22_wcgrn"]
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_cast_success.tres" id="23_wcast"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_cast_warning.tres" id="24_wwarn"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_qp0e8"]
 size = Vector3(1, 2, 1)
@@ -60,6 +61,16 @@ height = 0.6
 [sub_resource type="SphereMesh" id="SphereMesh_tgorb"]
 radius = 0.16
 height = 0.32
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tgwarn"]
+top_radius = 0.0
+bottom_radius = 0.3
+height = 0.5
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tgroot"]
+top_radius = 1.0
+bottom_radius = 1.0
+height = 0.04
 
 [node name="HeroActor" type="CharacterBody3D" unique_id=1317219649]
 script = ExtResource("1_vde01")
@@ -163,6 +174,10 @@ bus = &"CombatCues"
 stream = ExtResource("23_wcast")
 bus = &"CombatCues"
 
+[node name="CueCastWarning" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("24_wwarn")
+bus = &"CombatCues"
+
 [node name="Shapes" type="Node3D" parent="TelegraphController"]
 
 [node name="AttackCone" type="MeshInstance3D" parent="TelegraphController/Shapes"]
@@ -199,6 +214,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.35, 0)
 visible = false
 mesh = SubResource("SphereMesh_tgorb")
 editor_description = "Earn cue (story 5-4, AC 17): a one-shot ABOVE-HEAD flash in the spent card's colour, fired when this hero's own orb count for a colour goes UP (TelegraphController.on_orbs_changed, off the ninth observation seam connect_orbs_changed). SIBLING OF HitFlash, NOT a child of Shapes, and that placement is load-bearing rather than tidy: on_action_state_changed hides every child of Shapes on EVERY transition, and the landing that grants the orb queues set_action_state(IDLE) in the SAME signal drain -- an OrbFlash under Shapes would be switched off in the frame it was lit. The other one-shot cues (DeflectSpark, HitFlash) sit outside Shapes for the same reason. Root +1.35 puts it clear of the box top (+1.0) and of ChargeMarker (+0.5), so an earn reads as a distinct overhead event rather than as part of the charge telegraph. Tinted PER EVENT from the charge TelegraphProfile of the colour earned -- one physical node standing in for three colours, the ChargeMarker precedent, so no fourth colour vocabulary ships."
+
+[node name="CastWarning" type="MeshInstance3D" parent="TelegraphController"]
+transform = Transform3D(1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 1.95, 0)
+visible = false
+mesh = SubResource("CylinderMesh_tgwarn")
+editor_description = "Incoming-cast warning (story 6-5c, AC 26): a held ABOVE-HEAD cone, apex DOWN, shown on the hero being cast AT for the whole of the caster's cast window and hidden at the strike or on an interrupt. Pushed by match_runner._push_cast_presentation onto the TARGET's controller -- the cue is anchored to the target, not the caster, which is what lets a player time the dodge with the caster off-screen. SIBLING OF HitFlash, not a child of Shapes, for OrbFlash's stated reason: on_action_state_changed hides every child of Shapes on EVERY transition, and a target that rolls or blocks during the cast transitions constantly. Root +1.95 puts it clear of the box top (+1.0) and of OrbFlash (+1.35), and the 180-degree X rotation turns the cone's apex down so it points at the hero it is warning. Paired with CueCastWarning (a LOOPING tone, so the sound covers any authored cast_seconds). Pure sub-resource authoring, no assets."
+
+[node name="RootMark" type="MeshInstance3D" parent="TelegraphController"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.99, 0)
+visible = false
+mesh = SubResource("CylinderMesh_tgroot")
+editor_description = "Root marker (story 6-5c, AC 28): a flat ring AT THE FEET, shown while a root is in force on this hero and never otherwise -- it is the whole explanation the player gets for a roll press that does nothing (6-5c/R14 makes that refusal silent by ruling). Pushed LEVEL-TRIGGERED every tick from match_runner._push_cast_presentation's read of the `root` snapshot key, so expiry, the debug reset and death all clear it without needing a falling edge of their own. Root -0.99 sits just BELOW RollDisc (-0.95, height 0.05) so the two never z-fight when a rooted hero's roll telegraph is up; radius 1.0 is wider than the body box so the ring reads from above. Half-transparent BLUE -- Honed Bolt's own colour. Pure sub-resource authoring, no assets."
 
 [node name="AnimationController" type="Node3D" parent="."]
 script = ExtResource("16_anctl")

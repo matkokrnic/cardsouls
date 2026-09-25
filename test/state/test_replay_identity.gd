@@ -308,6 +308,28 @@ const HASHED: Array[String] = [
 	# (whether a hit, or an unblockable, lands at all). It reaches the hash through `HeroState.to_snapshot()`'s
 	# ONE new `get_up_iframe` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"hero_state.get_up_iframe",
+	# Story 6-5c (`6-5c/R16`): the BOLT-STUN DISCRIMINATOR classifies HASHED. It CROSSES TICKS (set by
+	# the bolt's own stun write, cleared at that stun's exit) and, although its only consumer today is
+	# PRESENTATION -- which clip the runner plays -- it is read ACROSS the `advance()` boundary, so
+	# `vulnerable_window`'s unhashed-because-nothing-reads-it argument does not apply to it and the
+	# `run_locked_out` direction is taken instead. It rides `HeroState.to_snapshot()`'s ONE new
+	# `stun_is_bolt` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"hero_state.stun_is_bolt",
+	# Story 6-5c (AC 1/AC 8/AC 23): THE CAST WINDOW AND THE IN-FLIGHT CAST'S IDENTITY classify HASHED
+	# on `charge_window`/`defense_window`'s exact test -- both CROSS TICKS (press to strike) and DECIDE
+	# AN OUTCOME (when the strike lands, and therefore whether it lands at all; and, through
+	# `is_casting()`, whether every press in between is refused). The identity is a plain `String`
+	# VALUE, never a `StringName` -- `last_resolved_card_id`'s measured constraint, because
+	# `Array[StringName].sort()` orders by internal POINTER on this engine. Both ride
+	# `PlayerState.to_snapshot()`'s ONE new fused `cast` key, so neither needs an exemption and
+	# UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"player_state.cast_window", "player_state.cast_card_id",
+	# Story 6-5c (AC 17/AC 18): THE ROOT and its two INDEPENDENT switches classify HASHED on the same
+	# test -- the window CROSSES TICKS (it spans the stun plus the root) and each switch DECIDES AN
+	# OUTCOME (whether RUN, and whether ROLL, is gone while it runs). All three ride the ONE new fused
+	# `root` key, gated on the window so a stopped root cannot hash a stale switch, and
+	# UNHASHED_CROSS_TICK_MEMBERS stays at 4 -- this story argues no fifth exclusion.
+	"player_state.root_window", "player_state.root_blocks_run", "player_state.root_blocks_roll",
 	# Story 6-2 (AC 14b/AC 14c), narrowed by the review fix (H1): the Pitch Zone's card-identity and
 	# hand-slot records classify HASHED beside the fizzle window they share an object with -- they
 	# CROSS TICKS (staging to fizzle) and DECIDE AN OUTCOME (which card fizzles, into which slot the

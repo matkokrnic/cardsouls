@@ -171,6 +171,46 @@ const _WALK_FAMILY := {
 const STUN_FLAVOR_NONE := 0
 const STUN_FLAVOR_ORDINARY := 1
 const STUN_FLAVOR_KNOCKDOWN := 2
+## Story 6-5c (AC 27, `6-5c/R10`/`R16`): THE THIRD FLAVOR -- the bolt stun, which plays `dizzy`.
+##
+## IT EXISTS BECAUSE DURATION CANNOT TELL IT FROM AN ORDINARY STUN. The deflect stun and the bolt
+## stun are BOTH authored 0.4 s, so `BalanceTicks.is_knockdown_stun` classifies both ORDINARY and no
+## timing test could separate them (`6-5c/R10` says so by name). The runner computes this flavor from
+## `HeroState.stun_is_bolt` -- a fact only the bolt's own stun write sets -- through the EXISTING
+## `_stun_flavor_for_slot` read, so no new signal, no new seam and no new `MatchState` intake ships
+## (`6-5c/R16`).
+const STUN_FLAVOR_BOLT := 3
+
+## Story 6-5c (AC 27, Open Question 8): where the `dizzy` sub-range starts, in seconds.
+##
+## MEASURED, NOT GUESSED (`tools/measure_cast_clip_frames.gd`): the clip is 4.2667 s long and the
+## bolt stun is authored 0.4 s. 1.0 s is far enough in to be past the entry settle and leaves 3.27 s
+## of clip, so any plausible retune of `stun_seconds` still fits without clamping. See `_play_dizzy`.
+const DIZZY_CUT_START := 1.0
+
+## Story 6-5c (AC 25): THE `cast` CLIP'S MEASURED NUMBERS -- its own length and the timestamp of the
+## RAISE, the frame at which the sword reaches its peak above the hips and the bolt leaves it.
+## MEASURED, NOT GUESSED, by `tools/measure_cast_clip_frames.gd` (the `measure_*_strike_frames.gd`
+## sword-joint probe): the clip is 2.9667 s and the sword peaks 1.0423 m above the hips at t=1.4092,
+## which is fraction 0.4750 of the clip.
+const CAST_CLIP_SECONDS := 2.9667
+const CAST_RAISE_SECONDS := 1.4092
+
+## Story 6-5c (AC 25): A SUB-RANGE AT NATIVE RATE, NOT A SPEED-UP -- the SAME choice `_play_dizzy`
+## makes one flavor above, made again here from this clip's own measured numbers.
+##
+## THE MEASUREMENT DECIDED IT. Against the authored 0.8 s cast the hold rule would run this clip at
+## 2.9667 / 0.8 = 3.7083x: a sword raise at nearly four times speed is a twitch, and the whole point
+## of AC 25 is that the opponent READS the raise and times a roll against it. Played instead as a
+## 0.8 s window at 1.0x, the raise is real motion. The window is placed so the raise beat sits at the
+## clip's OWN proportion of it (0.4750, `cast_cut_start` below), which puts the launch at 0.38 s into
+## an 0.8 s cast and leaves 0.42 s of sky-to-target fall -- both legible, and both derived from the
+## AUTHORED duration, so a `cast_seconds` retune retimes the whole show with no edit here (AC 25's
+## "no code edit" clause). Every tuning up to the clip's full 2.9667 s fits without clamping.
+##
+## LEGIBILITY ITSELF IS THE OPERATOR'S AT SMOKE (`PROC/R8`): this pins the mechanism and the timing,
+## never how it looks.
+const CAST_RAISE_FRACTION := CAST_RAISE_SECONDS / CAST_CLIP_SECONDS
 
 ## The walk-family members as a const list, so the per-tick rate lookup allocates nothing.
 const _WALK_FAMILY_MEMBERS: Array[StringName] = [
@@ -457,6 +497,18 @@ var _counter_speed := 1.0
 var _counter_running := false
 var _counter_elapsed := 0.0
 
+## Story 6-5c (AC 25): the cast pose currently running and where its sub-range ENDS, in the clip's
+## own native seconds. Presentation-local, never a `HeroState` field -- the cast owns no
+## `ActionState` (`6-5c/R18`), so the body is claimed the same way the counter claims it: through
+## the per-tick locomotion push, which a casting (and therefore IDLE, and therefore rooted) hero
+## receives on every tick of the window.
+##
+## THE CAST AND THE COUNTER CANNOT BOTH BE RUNNING, so the two claims never race: a casting hero is
+## refused every card press including the colour counter (AC 8, `6-5c/R6`/`R15`), and a countering
+## hero's card presses are refused by the counter's own busy lock (`REASON_COUNTERING`).
+var _cast_running := false
+var _cast_cut_end := 0.0
+
 ## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
 ## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
 var _has_prev_facing := false
@@ -661,6 +713,15 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 	# a cut is enforced by checking the playhead each tick, which is exactly the tick rate this
 	# controller already runs at. A countering hero is IDLE (the counter owns no `ActionState`, AC 2),
 	# so this line is reached on every tick of the span.
+	# Story 6-5c (AC 25): THE CAST OWNS THE BODY for its whole window, and it rides THIS per-tick push
+	# for the counter's reason directly below -- `AnimationPlayer` has no "play this sub-range"
+	# primitive, so the END of the cut is enforced by checking the playhead each tick. A casting hero
+	# is IDLE (the cast owns no `ActionState`, `6-5c/R18`) and hard-rooted, so this line is reached on
+	# every tick of the cast and the locomotion choice below would otherwise cut straight back to
+	# `idle` on the tick after the pose started.
+	if _cast_running:
+		_advance_cast()
+		return
 	if _counter_index >= 0:
 		_advance_counter()
 		return
@@ -899,9 +960,103 @@ func _play_stun(stun_flavor: int, stun_seconds: float) -> void:
 			clip = &"knockdown"
 		STUN_FLAVOR_ORDINARY:
 			clip = &"stunned"
+		# Story 6-5c (AC 27): the BOLT stun takes its own pose, so `stunned` stays bit-identical for
+		# the deflect stun it has always meant (the story's Non-Goals say so explicitly).
+		STUN_FLAVOR_BOLT:
+			clip = &"dizzy"
 		_:
 			return
+	# Story 6-5c (Open Question 8, MEASURED and answered here). `dizzy` is 4.2667 s against a 0.4 s
+	# bolt stun, so the ordinary hold rule would run it at 10.67x -- which reads as a blur, not a
+	# stagger. The question was left OPEN to the dev pass with cutting named as the alternative, and
+	# cutting is what this takes: `dizzy` plays a SUB-RANGE at its NATIVE rate instead of the whole
+	# clip sped up. Every other flavor keeps the unchanged hold rule, so `stunned` and `knockdown`
+	# are bit-identical.
+	#
+	# THE OFFSET IS A PRESENTATION CONSTANT, not a measurement baked into the library (the clips are
+	# added raw and uncut, `add_paladin_cast_clips.gd`'s own ruling), so a smoke-time retune is one
+	# line here. The range is clamped to the clip, so a stun longer than the remaining clip falls
+	# back to holding the final frame exactly as the other flavors do.
+	if clip == &"dizzy":
+		_play_dizzy(stun_seconds)
+		return
 	_restart(clip, held_clip_speed(animation_player.get_animation(clip).length, stun_seconds))
+
+
+## Story 6-5c (AC 27, Open Question 8): the bolt stun's pose -- a sub-range of `dizzy` at native
+## rate, seeked to `DIZZY_CUT_START` and left to run for the stun window.
+##
+## NATIVE RATE IS THE POINT. `held_clip_speed` exists to fit a LONGER clip into a SHORTER hold by
+## speeding it up, and at 10.67x that stops being a stagger and becomes a flicker. Seeking into the
+## clip and playing it forward at 1.0 shows 0.4 s of real dizzy motion instead.
+##
+## LEGIBILITY IS THE OPERATOR'S CALL AT SMOKE (`PROC/R8`): this pins the MECHANISM and the timing,
+## never how it looks, and smoke step 16 is where `dizzy` and `stunned` are judged side by side at
+## the same 0.4 s.
+func _play_dizzy(stun_seconds: float) -> void:
+	var length := animation_player.get_animation(&"dizzy").length
+	var start := minf(DIZZY_CUT_START, maxf(0.0, length - stun_seconds))
+	animation_player.play(&"dizzy", -1.0, 1.0)
+	animation_player.seek(start, true)
+
+
+## Story 6-5c (AC 25): WHERE THE `cast` SUB-RANGE STARTS, in the clip's own native seconds, for a
+## cast of `cast_seconds`. A pure function a test can pin directly, `held_clip_speed`'s shape.
+##
+## The window is placed so the measured RAISE sits at the clip's own proportion of it
+## (`CAST_RAISE_FRACTION`), and then clamped into the clip: a cast LONGER than the clip starts at 0
+## and holds the final frame for the remainder (`_play_stun`'s own degrade), and a cast so long that
+## the raise would fall outside the window still gets a start of 0 rather than a negative seek.
+static func cast_cut_start(cast_seconds: float) -> float:
+	var want := CAST_RAISE_SECONDS - CAST_RAISE_FRACTION * cast_seconds
+	return clampf(want, 0.0, maxf(CAST_CLIP_SECONDS - cast_seconds, 0.0))
+
+
+## Story 6-5c (AC 25): HOW FAR INTO THE CAST THE BOLT LEAVES THE SWORD, in seconds -- the distance
+## from the sub-range's start to the measured raise frame. Exposed so the RUNNER, which owns the
+## prop, can schedule the launch without learning the clip's numbers (`counter_release_seconds`'s
+## role for the dagger). Clamped into the window, so a degenerate tuning launches at the press or at
+## the strike rather than outside the cast.
+static func cast_launch_seconds(cast_seconds: float) -> float:
+	return clampf(CAST_RAISE_SECONDS - cast_cut_start(cast_seconds), 0.0, maxf(cast_seconds, 0.0))
+
+
+## Story 6-5c (AC 25): THE CAST POSE STARTS ON THE PRESS -- pushed by the runner on the RISING EDGE
+## of the `cast` snapshot key (`match_runner._push_cast_presentation`), `on_counter_started`'s call
+## site and shape exactly: a plain per-tick read of an EXISTING public fact, no signal, no state
+## handle, no new `connect_*` (`6-5c/R16`).
+##
+## `cast_seconds` is the AUTHORED duration the state layer armed the window with, converted from
+## ticks by the runner (the `_stun_seconds_for_slot` shape), so this controller still reads no
+## balance, no effect and no window handle (CONSTRAINT C).
+func on_cast_started(cast_seconds: float) -> void:
+	var start := cast_cut_start(cast_seconds)
+	_cast_cut_end = minf(start + maxf(cast_seconds, 0.0), CAST_CLIP_SECONDS)
+	_cast_running = true
+	animation_player.play(&"cast", -1.0, 1.0)
+	animation_player.seek(start, true)
+	# The locomotion yield (`_one_shot`) keeps a real transition -- a stun interrupting the cast, or
+	# death -- winning the body outright, exactly as it does for `hit_react`.
+	_one_shot = &"cast"
+
+
+## Story 6-5c (AC 25): pushed on the FALLING edge of the same key -- the strike or an interrupt has
+## ended the cast, so the body goes back to the locomotion push. Without it the last cut frame would
+## be held forever, since a cut END is a pause rather than a finished clip.
+func on_cast_ended() -> void:
+	_cast_running = false
+	_cast_cut_end = 0.0
+	_one_shot = &""
+
+
+## Story 6-5c (AC 25): the per-tick cut enforcement -- past the sub-range's END, PAUSE on that frame
+## and hold it for whatever is left of the cast. `_advance_counter`'s rule with one step instead of a
+## list, and for its reason: the range is placed by `cast_cut_start` to run out exactly at the strike
+## at the authored tuning, so the hold only covers rounding and a tuning longer than the clip.
+func _advance_cast() -> void:
+	if animation_player.current_animation != &"cast" \
+			or animation_player.current_animation_position >= _cast_cut_end:
+		animation_player.pause()
 
 
 ## Story 6-6a (Open Question 2): the playback rate for a clip held over a `hold_seconds` window -- the

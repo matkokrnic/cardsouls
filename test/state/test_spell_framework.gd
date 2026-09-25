@@ -111,16 +111,22 @@ func test_a_closed_spell_layer_closes_the_buffs_and_not_ruin_vanguard() -> void:
 ## `test_the_nine_deferred_effects_name_their_owning_story` for the count-in-the-name discipline this
 ## repo applies to every pin (the `test_the_recorder_still_ships_exactly_N_capture_channels`
 ## precedent); the old name is recorded here verbatim so the pin stays greppable.
-func test_the_five_deferred_effects_name_their_owning_story() -> void:
+## STORY 6-5c: FIVE -> FOUR, and the one that left is the one this story BUILT. The same mechanism
+## 6-5b exercised, one row at a time: `honed_bolt` named 6-5c as its owner, 6-5c builds it, the row
+## retires. Asserted the other way round in `test_hero_cast.gd`: `owner_story_for(&"honed_bolt")`
+## answers `&""` now and it resolves to `OUTCOME_HONED_BOLT`. RENAMED from
+## `test_the_five_deferred_effects_name_their_owning_story` for the count-in-the-name discipline;
+## the old name is recorded here verbatim so the pin stays greppable.
+func test_the_four_deferred_effects_name_their_owning_story() -> void:
 	var owners := {
 		&"rocksling": &"6-5d-hero-and-corpse-projectiles",
 		&"boom": &"6-5e-boulder-injection",
-		&"honed_bolt": &"6-5c-hero-cast-honed-bolt",
 		&"counterspell": &"6-5f-counterspell",
 		&"corpse_bomb": &"6-5d-hero-and-corpse-projectiles",
 	}
-	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 5,
-		"exactly FIVE deferred rows -- NINE before 6-5b, which retired the four naming itself")
+	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 4,
+		"exactly FOUR deferred rows -- FIVE before 6-5c, which retired the one naming itself; "
+		+ "NINE before 6-5b, which retired the four naming itself")
 	for id: StringName in owners:
 		assert_eq(CardEffectResolver.owner_story_for(id), owners[id], "%s is owned by %s" % [id, owners[id]])
 		assert_eq(CardEffectResolver.outcome(_effect(id), _flags()),

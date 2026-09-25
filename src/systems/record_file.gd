@@ -229,7 +229,30 @@ extends RefCounted
 ## nothing here. Neither does the effect authoring -- the four newly-authored numbers ride the EXISTING
 ## `effects` / `pitch_effects` channels as flat exports (`_card_effects` rebuilds every script property
 ## generically), so no row shape and no key set moves for them. v13 is refused HARD, no migration.
-const FORMAT_VERSION := 14
+##
+## STORY 6-5c BUMPS 14 -> 15 (AC 23), for TWO MEASURED CAUSES, and the SECOND is the one that makes
+## a migration unsafe.
+##
+## (1) THE RECORDED PER-EFFECT ROW SHAPE MOVES. `CardEffect` gains SEVEN flat exports, and
+## `_resource_values` captures EVERY script variable off `get_property_list()` regardless of
+## whether it holds its default -- so every row in the `effects` and `pitch_effects` channels
+## gains seven keys. THIS CORRECTS 6-5b's NOTE DIRECTLY ABOVE, which said new flat exports move `no
+## row shape`: that was true of `REQUIRED_KEYS` (the CHANNEL key set, which is again unmoved here)
+## and false of the row inside it. Measured, not inherited.
+##
+## (2) CHANGED RESOLUTION SEMANTICS, the 6-5a cause repeated and the reason v14 is refused rather
+## than migrated. `honed_bolt` has left `DEFERRED_EFFECT_OWNERS` and now CASTS. A v14 file's
+## effect rows carry no `cast_seconds`, `damage_amount`, `stun_seconds` or `root_seconds`, so
+## `_rebuilt` would leave a rebuilt Honed Bolt at its constructor defaults -- and this build would
+## then start a real 0.8 s cast that strikes for `damage_amount` 0.0 and writes no stun and no root,
+## where the recorded match resolved a pure no-op. Different hp, a different hash from that tick on,
+## loaded without complaint. Filling the gap with defaults is exactly the silently-wrong replay the
+## exact-match refusal exists to prevent, so v14 is refused HARD, no migration.
+##
+## THE NEW HASHED STATE IS NOT A THIRD CAUSE, on 6-5b's own measured reasoning: a record carries
+## INPUTS and CONTENT, never a hash and never a snapshot, so the `cast` / `root` / `stun_is_bolt`
+## keys force nothing here. Neither is a new intake -- this story pushes no new runner fact.
+const FORMAT_VERSION := 15
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

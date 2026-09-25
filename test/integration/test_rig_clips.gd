@@ -44,6 +44,13 @@ const EXPECTED_LOOP := {
 	# join is a presentation cut, not a loop.
 	&"counter_jump": false, &"counter_backflip": false, &"counter_slide": false,
 	&"counter_throw": false,
+	# Story 6-5c (AC 29): TWENTY-SEVEN -> TWENTY-NINE. Both hero-cast clips are ONE-SHOTS, and for
+	# `dizzy` that is a DECISION rather than a default: its source is a Mixamo IDLE that would
+	# naturally loop, but `AnimationController._play_stun` HOLDS a stun pose on its final frame for
+	# the stun window (`6-6a` AC 10), which only works on a `LOOP_NONE` clip -- the same reason
+	# `stunned` and `knockdown` above are baked one-shot. A looping `dizzy` would restart mid-stun
+	# instead of holding. `cast` is a single raise played once inside the authored cast window.
+	&"cast": false, &"dizzy": false,
 }
 
 var _failures: Array[String] = []

@@ -98,6 +98,74 @@ extends Resource
 ## neutral 0.0 would raise a minion that is dead on arrival.
 @export var raise_hp_percent: float = 100.0
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5c: THE HERO-CAST / HONED BOLT NUMBERS. Seven more FLAT exports, on the header's own
+## discipline (AC 2, `6-5c/R19`): no subclass, no nested resource, so `RecordFile._card_effects`
+## keeps round-tripping every one of them generically and `_fresh_nested` needs no new row.
+##
+## FOUR NAMES ARE THE SPEC'S, VERBATIM (`6-5c/R19`): `stun_seconds`, `root_seconds`,
+## `root_blocks_run` and `root_blocks_roll` are the names `deck-1-spec.md:35` fixes, used
+## unchanged so the authored card and the spec cannot drift into two vocabularies. THREE ARE NEW
+## and the dev pass records them here, which is the other half of that ruling: `cast_seconds`,
+## `damage_amount`, `repeat_landing_restuns`.
+##
+## `damage_amount` follows `heal_amount` (its exact twin one family up: a flat absolute magnitude
+## this effect applies to a hero). `cast_seconds` follows `slow_duration_seconds`/`duration_seconds`
+## -- a `*_seconds` duration converted to ticks once at the point of use (A1).
+## `repeat_landing_restuns` follows `root_blocks_run` / `root_blocks_roll`, the two spec-fixed
+## booleans it sits beside, rather than the project-wide `is_`/`has_`/`can_` prefix: within ONE
+## effect's vocabulary a third boolean spelled a different way reads as a different KIND of fact,
+## and these three are one kind -- switches on what this effect's outcome does.
+
+## CAST DURATION, in seconds: how long the caster is committed between the press and the strike
+## (AC 1). 0.8 IS A LIVE DEFAULT, NOT A NEUTRAL ONE, and it is the one place this file departs
+## from its own "a field an effect does not use keeps its neutral default" rule -- by ruling
+## (`6-5c/R4`, and Discrepancy 4 of the story). It is SAFE only because it is read ONLY for an
+## effect `CardEffectResolver.starts_cast()` classifies as a cast: every buff, every summon and
+## every still-deferred effect never reaches the read at all, so an unused 0.8 cannot change an
+## outcome (AC 2). Do not add a reader that consults it for a non-cast effect.
+@export var cast_seconds: float = 0.8
+
+## The ABSOLUTE HP this effect's strike removes from its target (AC 13, default authored 4 on
+## `honed_bolt`). Neutral default 0.0: an effect that does not strike removes nothing. Applied
+## through `MatchState._funnel_damage`, so Bloodlust's multipliers and Vampiric Aura's lifesteal
+## both reach it (`6-5c/R13`, the standing rule for every later spell).
+@export var damage_amount: float = 0.0
+
+## THE SPEC'S OWN NAME (`deck-1-spec.md:35`, T[0.4]): how long the struck hero is STUNNED after the
+## damage (AC 14). Neutral default 0.0 -- no stun. It must stay strictly BELOW the authored
+## `knockdown_stun_seconds`, because `BalanceTicks.is_knockdown_stun` tells a knockdown from an
+## ordinary stun BY DURATION and would otherwise misread a bolt stun as a knockdown (AC 15); the
+## authoring audit enforces that against the real `.tres` pair (AC 21).
+@export var stun_seconds: float = 0.0
+
+## THE SPEC'S OWN NAME (T[2.5]): how long the root lasts AFTER the stun ends (AC 17). Neutral
+## default 0.0 -- no root.
+@export var root_seconds: float = 0.0
+
+## THE SPEC'S OWN NAMES (T[true], T[true]): what the root takes away, as two INDEPENDENT switches
+## (AC 17). `root_blocks_run` makes a held run key give walk pace, drain no run stamina and touch
+## no gait latch; `root_blocks_roll` makes a roll press refused silently -- no state change, no
+## stamina, no `action_rejected` (`6-5c/R14`). Walk, block, deflect, the colour counter, attacking
+## and card play are untouched by either (AC 18).
+##
+## DEFAULT TRUE, NOT NEUTRAL-FALSE, and the reason is `kill_cap`'s verbatim: these are the
+## ruling's own numbers, and an unauthored root that took nothing away would read as a broken card
+## rather than a switched-off one. Neither is read at all unless a root is actually armed, so a
+## non-rooting effect is unaffected by the default.
+@export var root_blocks_run: bool = true
+@export var root_blocks_roll: bool = true
+
+## THE REPEAT-LANDING SWITCH (AC 19, `6-5c/R2`). TRUE is choice A, the DEFAULT: a second landing
+## while the target is still bolt-stunned or rooted stuns it again and restarts the root in full.
+## FALSE is choice B: the landing deals its damage and neither stuns nor extends the root. A
+## `.tres` value read AT THE LANDING, never at the press, so flipping it retunes an in-flight match
+## on the next bolt with no code edit.
+##
+## AC 16(a)'s KNOCKDOWN FLOOR TAKES PRECEDENCE OVER BOTH settings: a bolt on a knocked-down hero
+## deals damage only, whatever this says (`R-STUNSTACK`, `6-5c/R9`).
+@export var repeat_landing_restuns: bool = true
+
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation
 ## interprets it"). Empty = no cue named.

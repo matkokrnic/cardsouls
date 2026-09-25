@@ -113,7 +113,13 @@ func test_snapshot_shape_is_untouched_by_the_instrument() -> void:
 			# this pin fails loudly rather than silently, on the same "gains no instrument key"
 			# discipline that pin at :103 already enforces at the top level.
 			"run_locked_out",
-			"stun", "swing_dedupe", "velocity", "windup"],
+			"stun",
+			# Story 6-5c (`6-5c/R16`): the BOLT-STUN DISCRIMINATOR joins the hero snapshot -- STATE,
+			# named here on the two lines above's precedent so this pin fails loudly rather than
+			# silently. It is the only thing that can tell a bolt stun from a deflect stun: both are
+			# authored 0.4 s, so the duration classifier is structurally incapable of separating them.
+			"stun_is_bolt",
+			"swing_dedupe", "velocity", "windup"],
 		"the hero snapshot is unchanged — the countdown is instrumentation, not state")
 
 

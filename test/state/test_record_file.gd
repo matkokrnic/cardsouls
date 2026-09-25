@@ -54,6 +54,8 @@ const PRE_6_9_PATH := "user://test_6_9_pre_click_to_commit.rec"
 const PRE_6_5A_PATH := "user://test_6_5a_pre_pitch_effects.rec"
 ## Story 6-5b (AC 26): the v13 refusal fixture's own path, on its siblings' naming.
 const PRE_6_5B_PATH := "user://test_6_5b_pre_drain_pushes.rec"
+## Story 6-5c (AC 23): the v14 refusal fixture's own path, on its siblings' naming.
+const PRE_6_5C_PATH := "user://test_6_5c_pre_hero_cast.rec"
 ## Story 6-5a (AC 2/AC 6): the pitch-effect fixture's non-default flat numbers, round-tripped by value.
 const PITCH_EFFECT_SECONDS := 9.5
 const PITCH_EFFECT_MULTIPLIER := 2.5
@@ -79,6 +81,11 @@ const CONTACT_TICK := 9      # a fact inside that active window -> a CONFIRMED h
 const RELOAD_TICK := 12      # the live mid-run apply_balance: reload event #1
 const CAST_TICK := 15
 const CAST_SLOT := 1
+## Review fix M1 (6-5c AC 23): the bolt run's numbers. The cast is pressed at CAST_TICK and strikes
+## BOLT_CAST_TICKS later, so a run of CAST_TICK + 3 ends MID-CAST and one of CAST_TICK + BOLT_CAST_TICKS + 3
+## ends after the strike.
+const BOLT_CAST_TICKS := 6
+const BOLT_DAMAGE := 7.5
 ## Story 6-2 (AC 16): a Mode ④ STAGE rides the driven run, so the pitch-cost channel is LOAD-BEARING in
 ## every round trip below rather than a key that is written and never read. Slot 0 on P1 (the cast took
 ## slot 1); the countdown is authored long enough that the card is still STAGED on the final tick, so
@@ -147,6 +154,43 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 	_remove(ROUND_TRIP_PATH)
 
 
+## Review fix M1 / 6-5c AC 23: A RECORD OF A MATCH CONTAINING A BOLT REPLAYS TO THE IDENTICAL FINAL HASH.
+## The strike seat re-derives its effect from a String (`cast_card_id`) through the rebuilt effect map, so a
+## channel that lost or re-keyed the cast fields would strike on another tick, or for another number, and
+## nothing else in the suite would notice. Driven by a REAL `card_commit` press (`_intents(CAST_TICK)`), and
+## measured twice: ENDING MID-CAST (the cast window and `cast_card_id` are in the hashed snapshot) and ENDING
+## AFTER THE STRIKE (the stun, the root and the damage are).
+##
+## NON-VACUITY, asserted before any replay: the live runs really cast (mid-cast: casting with the card id
+## recorded) and really struck (P2 lost exactly BOLT_DAMAGE and carries the bolt stun and the root).
+func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
+	var mid := _record_a_driven_run(CAST_TICK + 3, true)
+	var mid_state: MatchState = mid["state"]
+	assert_true(mid_state.p1.is_casting(), "sanity: the mid-cast run ends with the cast in flight")
+	assert_ne(mid_state.p1.cast_card_id, "", "...with its card id in the hashed snapshot")
+	var mid_hash := CanonicalHash.of(mid_state.to_snapshot())
+	assert_eq(CanonicalHash.of(_replay(mid["record"]).to_snapshot()), mid_hash,
+		"a record ending MID-CAST replays to the identical hash (AC 23)")
+	assert_eq(CanonicalHash.of(_replay(_save_and_load(mid["record"], ROUND_TRIP_PATH)).to_snapshot()),
+		mid_hash, "...and so does its SAVED-AND-RELOADED copy")
+
+	var before := _record_a_driven_run(CAST_TICK + BOLT_CAST_TICKS - 1, true)
+	var after := _record_a_driven_run(CAST_TICK + BOLT_CAST_TICKS + 3, true)
+	var before_state: MatchState = before["state"]
+	var after_state: MatchState = after["state"]
+	assert_true(before_state.p1.is_casting(), "sanity: the strike has not happened one tick early")
+	assert_eq(before_state.p2.hero.get_hp() - after_state.p2.hero.get_hp(), BOLT_DAMAGE,
+		"sanity: the live run's bolt struck for exactly its authored damage")
+	assert_true(after_state.p2.hero.stun_is_bolt, "...leaving the bolt stun")
+	assert_true(after_state.p2.root_window.is_running, "...and the root")
+	var after_hash := CanonicalHash.of(after_state.to_snapshot())
+	assert_eq(CanonicalHash.of(_replay(after["record"]).to_snapshot()), after_hash,
+		"a record ending AFTER THE STRIKE replays to the identical hash (AC 23)")
+	assert_eq(CanonicalHash.of(_replay(_save_and_load(after["record"], ROUND_TRIP_PATH)).to_snapshot()),
+		after_hash, "...and so does its SAVED-AND-RELOADED copy")
+	_remove(ROUND_TRIP_PATH)
+
+
 ## AC 4, the half that makes the hash equality mean something: the rebuilt record is EQUAL TO THE
 ## SOURCE CHANNEL BY CHANNEL, including all EIGHT InputIntent fields per tick per slot. A hash
 ## comparison alone could pass on a record that lost a channel the hashed final tick happens not
@@ -183,8 +227,21 @@ func test_a_saved_and_reloaded_record_replays_to_the_same_canonical_hash() -> vo
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 14,
-		"FORMAT_VERSION is 14 as of story 6-5b (AC 26) -- ONE MEASURED CAUSE: a NEW REQUIRED KEY, "
+	assert_eq(RecordFile.FORMAT_VERSION, 15,
+		"FORMAT_VERSION is 15 as of story 6-5c (AC 23) -- TWO MEASURED CAUSES. (1) THE RECORDED "
+		+ "PER-EFFECT ROW SHAPE MOVES: `CardEffect` gains SEVEN flat exports, and `_resource_values` "
+		+ "captures EVERY script variable off `get_property_list()` whether or not it holds its "
+		+ "default, so every row in the `effects` and `pitch_effects` channels gains seven keys. That "
+		+ "CORRECTS 6-5b's note below, which said new flat exports move `no row shape` -- true of "
+		+ "REQUIRED_KEYS (the CHANNEL key set, again unmoved here) and false of the row inside it. "
+		+ "(2) CHANGED RESOLUTION SEMANTICS, the 6-5a cause repeated and the reason v14 is refused "
+		+ "rather than migrated: `honed_bolt` has left DEFERRED_EFFECT_OWNERS and now CASTS, so a v14 "
+		+ "file's effect rows -- which carry no `cast_seconds`, `damage_amount`, `stun_seconds` or "
+		+ "`root_seconds` -- would rebuild at constructor defaults and replay a real 0.8 s cast "
+		+ "striking for 0.0 damage with no stun and no root, where the recorded match resolved a pure "
+		+ "no-op (pinned by test_a_v14_record_is_refused_with_a_reason). The new hashed state is NOT a "
+		+ "third cause, on 6-5b's own reasoning: a record carries INPUTS and CONTENT, never a hash. "
+		+ "It was 14 as of story 6-5b (AC 26) -- ONE MEASURED CAUSE: a NEW REQUIRED KEY, "
 		+ "`drain_pushes`, the seventh capture channel, carrying the board index Drain's facing rule "
 		+ "selected on each tick. A v13 file has no drain channel at all, so every Drain it recorded "
 		+ "would replay through `MatchState._apply_drain`'s no-fact degrade and sacrifice the board's "
@@ -649,6 +706,67 @@ func test_a_v11_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_9_PATH)
 
 
+## Story 6-5c (AC 23): A v14 RECORD IS REFUSED WITH A REASON, NO SHIM -- and it takes the v11 refusal's
+## PURE-RELABEL shape (`test_a_v11_record_is_refused_with_a_reason`) rather than its v12/v13 siblings'
+## STRIPPED-BODY shape, because this bump adds NO required key. `REQUIRED_KEYS` is unmoved; what moved
+## is the shape of each ROW inside the existing `effects` / `pitch_effects` channels, and the meaning
+## of one id.
+##
+## WHY REFUSED RATHER THAN MIGRATED, and it is the silent-divergence argument in its sharpest form.
+## `honed_bolt` has LEFT `DEFERRED_EFFECT_OWNERS` and now CASTS. A v14 file's effect rows carry none of
+## the seven new flat exports, so `RecordFile._rebuilt` would leave a rebuilt Honed Bolt at its
+## CONSTRUCTOR defaults -- and this build would then start a real 0.8 s commitment window (the live
+## `cast_seconds` default) that strikes for `damage_amount` 0.0 and writes no stun and no root, where
+## the recorded match resolved a pure no-op with the caster free to move throughout. Different
+## movement, different hp, a different hash from that tick on, loaded without complaint because the
+## version is all the loader checks. Filling the gap with defaults is exactly what the exact-match
+## refusal exists to prevent: an unloadable record is a correct answer, a divergent one is not.
+##
+## THE VERSION IS PROVEN TO BE THE CAUSE, not assumed: the same bytes relabelled back to the current
+## version load again, so the refusal was the label and not damage done by rewriting it.
+func test_a_v14_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5C_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_5C_PATH, 14)
+	var refused := RecordFile.load_record(PRE_6_5C_PATH)
+	assert_null(refused["record"],
+		"a v14 record is REFUSED -- its effect rows predate the cast fields, so a Honed Bolt it "
+		+ "recorded as a no-op would replay as a real cast striking for zero")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("14"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_5C_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_5C_PATH)["record"],
+		"restoring the version makes the SAME file load again — the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_5C_PATH)
+
+
+## Story 6-5c (AC 23): THE MEASUREMENT BEHIND CAUSE (1) OF THE BUMP, committed rather than asserted in
+## prose. `RecordFile._resource_values` captures every script variable off `get_property_list()`
+## whether or not it holds its default, so a flat export added to `CardEffect` DOES widen every
+## recorded effect row -- which is what 6-5b's note got wrong and this pin now fixes in place.
+func test_the_recorded_effect_row_carries_every_cast_field() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5C_PATH), "", "the record was written")
+	var reader := FileAccess.open(PRE_6_5C_PATH, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	var effects: Dictionary = data["effects"]
+	assert_true(effects.size() > 0, "the driven run recorded at least one effect row")
+	for id: Variant in effects:
+		var row: Dictionary = effects[id]
+		for field: String in ["cast_seconds", "damage_amount", "stun_seconds", "root_seconds",
+				"root_blocks_run", "root_blocks_roll", "repeat_landing_restuns"]:
+			assert_true(row.has(field),
+				"recorded effect row '%s' carries '%s' -- the seven 6-5c fields ride the EXISTING "
+				% [id, field]
+				+ "`effects` channel, which is why REQUIRED_KEYS is unmoved and the ROW shape is not")
+	_remove(PRE_6_5C_PATH)
+
+
 ## Story 6-5b (AC 26): A v13 RECORD IS REFUSED WITH A REASON, NO SHIM -- the v12 refusal's shape
 ## verbatim (the test directly below), because this bump, like 6-5a's and 6-2's, adds a REQUIRED KEY:
 ## the body is rewritten to what a v13 build actually wrote -- no `drain_pushes` key at all -- and
@@ -1046,9 +1164,10 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 14,
+	assert_eq(RecordFile.FORMAT_VERSION, 15,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 14 (last: 6-5b's drain-target channel; before it 6-5a's pitch-effect channel, 5-2's colours channel, 6-1's mode ② hold semantics, "
+		+ "version has since moved to 15 (last: 6-5c's widened CardEffect row plus honed_bolt's "
+		+ "changed resolution semantics; before it 6-5b's drain-target channel, 6-5a's pitch-effect channel, 5-2's colours channel, 6-1's mode ② hold semantics, "
 		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, 6-7's silent-divergence "
 		+ "bump for `run`/`walk_speed`, then 6-9's silent-divergence bump for click-to-commit, "
 		+ "which RETIRED 6-1's hold semantics), which is a different "
@@ -1241,7 +1360,7 @@ func _loaded(path: String) -> IntentRecorder:
 
 
 ## The RUNNER's role, played by the fixture: capture beside every call, in the live order.
-func _match_start() -> Dictionary:
+func _match_start(bolt: bool = false) -> Dictionary:
 	var record := IntentRecorder.new()
 	var params := MatchParams.new(SEED)
 	record.capture_seed(params.seed_value)
@@ -1249,7 +1368,7 @@ func _match_start() -> Dictionary:
 	var config := _config()
 	record.capture_apply_balance(config)
 	ms.apply_balance(config)
-	var flags := _flags()
+	var flags := _flags(bolt)
 	record.capture_inject_feature_flags(flags)
 	ms.inject_feature_flags(flags)
 	record.capture_inject_deck(DECK_IDS)
@@ -1259,7 +1378,7 @@ func _match_start() -> Dictionary:
 	ms.inject_card_costs(costs)
 	# Story 4-1 (`4-1/R1`, `4-1/R8`): the THIRD content channel, captured and injected LAST -- the
 	# order deck -> costs -> effects the live runner produces and SOUND_CONTENT_ORDER pins.
-	var effects := _effects()
+	var effects := _bolt_effects() if bolt else _effects()
 	record.capture_inject_card_effects(effects)
 	ms.inject_card_effects(effects)
 	# Story 5-2 (`5-2/R1`): the FOURTH content channel, captured and injected LAST -- the order
@@ -1281,11 +1400,11 @@ func _match_start() -> Dictionary:
 	return {"record": record, "state": ms}
 
 
-func _record_a_driven_run() -> Dictionary:
-	var driven := _match_start()
+func _record_a_driven_run(ticks: int = TICKS, bolt: bool = false) -> Dictionary:
+	var driven := _match_start(bolt)
 	var record: IntentRecorder = driven["record"]
 	var ms: MatchState = driven["state"]
-	for t in range(1, TICKS + 1):
+	for t in range(1, ticks + 1):
 		if t == RELOAD_TICK:
 			var retuned := _retuned_config()
 			record.capture_apply_balance(retuned)
@@ -1494,9 +1613,12 @@ func _retuned_config() -> BalanceConfig:
 	return c
 
 
-func _flags() -> FeatureFlags:
+func _flags(spells: bool = false) -> FeatureFlags:
 	var f := FeatureFlags.new()
 	f.melee_mana_generation = true
+	# Review fix M1 (6-5c AC 23): the spells layer ON only for the bolt run, so a Honed Bolt actually
+	# casts. Off, `starts_cast` answers false and the card would resolve as a no-op.
+	f.spells = spells
 	# Story 4-1: the minion layer ON, so this fixture's recorded `summon_` cast actually appends a
 	# unit record. Without it the effects channel would ride the record while changing nothing in
 	# the hash, and every proof that rests on it would be VACUOUS.
@@ -1514,6 +1636,22 @@ func _effects() -> Dictionary[StringName, CardEffect]:
 	for id in DECK_IDS:
 		var e := CardEffect.new()
 		e.effect_id = StringName("summon_%s" % id)
+		out[id] = e
+	return out
+
+
+## Review fix M1: the effect map for the BOLT run -- every id is a Honed Bolt, so whichever hand slot
+## `CAST_SLOT` resolves to (the deal shuffles) casts one. Non-default numbers throughout, so the file's
+## round trip of the seven cast exports is measured by the strike they produce, not merely written.
+func _bolt_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = &"honed_bolt"
+		e.cast_seconds = BOLT_CAST_TICKS / 60.0
+		e.damage_amount = BOLT_DAMAGE
+		e.stun_seconds = 0.4
+		e.root_seconds = 1.5
 		out[id] = e
 	return out
 

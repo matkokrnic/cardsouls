@@ -42,12 +42,29 @@ extends Node3D
 ## $Shapes would be switched off in the same frame it was lit. The one-shot cues (DeflectSpark,
 ## HitFlash) all sit outside $Shapes for exactly this reason; this joins them.
 @onready var _orb_flash: MeshInstance3D = $OrbFlash
+## Story 6-5c (AC 26): the TARGET-SIDE cast warning -- a held marker and a looping sound, both
+## anchored on the hero being cast AT rather than on the caster, which is the whole of AC 26 ("so it
+## can time the roll with the caster off-screen"). SIBLINGS of HitFlash for `OrbFlash`'s stated
+## reason: `on_action_state_changed` hides every child of `$Shapes` on EVERY transition, and a target
+## rolling, blocking or swinging during the cast transitions constantly -- a warning under `$Shapes`
+## would blink out on the first press the target made.
+@onready var _cast_warning: MeshInstance3D = $CastWarning
+@onready var _cue_cast_warning: AudioStreamPlayer = $CueCastWarning
+## Story 6-5c (AC 28): the root marker at the hero's FEET, held for the root and nothing else.
+@onready var _root_mark: MeshInstance3D = $RootMark
 
 ## Story 5-5 (AC 13): the deflect spark's ORIGINAL hue, hoisted to a constant because it is now
 ## applied from TWO places -- `_ready` and, as the fallback for a colour-less parry, the widened
 ## `on_deflect_landed`. The value is `1-10`'s verbatim; hoisting it is what keeps a melee parry's
 ## cue byte-identical to what it renders today rather than approximately so.
 const DEFAULT_SPARK_COLOR := Color(1.0, 0.95, 0.6, 1.0)
+
+## Story 6-5c (AC 26/AC 28): the two new cues' hues. Amber for the incoming-cast alarm (a warning
+## colour no existing cue uses) and the card's own BLUE, half-transparent, for the root ring on the
+## ground. Constants here beside the spark's, not authored `TelegraphProfile`s: a profile exists to
+## let one shape stand in for several colours, and neither of these ever changes colour.
+const CAST_WARNING_COLOR := Color(1.0, 0.65, 0.1, 1.0)
+const ROOT_MARK_COLOR := Color(0.35, 0.6, 1.0, 0.5)
 
 var _profiles: Dictionary[HeroState.ActionState, TelegraphProfile] = {}
 ## Story 5-3 (AC 10): colour (Enums.CardColor int) -> the CHARGING-only profile. Separate from
@@ -101,6 +118,44 @@ func _ready() -> void:
 	# standing in for three colours, so its material is (re)applied at each dispatch from the same
 	# authored TelegraphProfile colour the charge telegraph used. No fourth colour vocabulary ships.
 	_orb_flash.visible = false
+	# Story 6-5c (AC 26/AC 28): both new cues rest HIDDEN and are tinted once here, from this file's
+	# own flat-material helper -- neither stands in for several colours, so neither needs the
+	# per-dispatch re-tint ChargeMarker and OrbFlash take. The warning is the alarm hue (amber), the
+	# root marker the card's own BLUE, so a target can tell "something is coming" from "I am rooted"
+	# at a glance.
+	_cast_warning.material_override = _flat_material(CAST_WARNING_COLOR)
+	_cast_warning.visible = false
+	var root_material := _flat_material(ROOT_MARK_COLOR)
+	root_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_root_mark.material_override = root_material
+	_root_mark.visible = false
+
+
+## Story 6-5c (AC 26): START the target-side cast warning -- pushed by the runner on the rising edge
+## of the CASTER's cast window, onto the TARGET's own controller. Marker AND sound together, because
+## AC 26 requires both and a cue that can be half-wired is a cue that ships half-wired.
+##
+## THE SOUND LOOPS (`tools/gen_cast_warning_audio.gd`) rather than being a one-shot, so it covers the
+## whole cast at any authored `cast_seconds` without this file learning the duration.
+func on_cast_warning_started() -> void:
+	_cast_warning.visible = true
+	_cue_cast_warning.play()
+
+
+## Story 6-5c (AC 26): END it -- on the strike tick or on an interrupt, whichever the state layer
+## reached. Idempotent: the runner pushes the falling edge once, but a stop on a stopped player and a
+## hide on a hidden mesh are both no-ops, so a re-push can never leave the alarm running.
+func on_cast_warning_ended() -> void:
+	_cast_warning.visible = false
+	_cue_cast_warning.stop()
+
+
+## Story 6-5c (AC 28): THE ROOT MARKER at this hero's feet, pushed every tick from the runner's read
+## of the `root` snapshot key. A plain visibility push rather than an edge pair, deliberately: the
+## root's end is an expiry, a reset or a death, and a level-triggered push cannot leave a marker
+## stranded on a hero whose root ended by a path nobody remembered to push a falling edge for.
+func set_root_marker(rooted: bool) -> void:
+	_root_mark.visible = rooted
 
 
 ## Seam callback (connect_hero_action_state_changed): show the entered action's telegraph

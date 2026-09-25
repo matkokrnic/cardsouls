@@ -65,6 +65,13 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# `discard_size`, NOT beside `telegraph`. Same mechanism, sixth time: this pin and
 	# test_card_observation.gd's were BOTH red before this edit, and the story that adds the key is
 	# the story that moves both.
+	# Story 6-5c (AC 1/AC 23): the THIRTY-SEVENTH key -- `cast`, the in-flight cast as
+	# `[card id, remaining_ticks]`, in SORTED position, which is FIRST. Same mechanism, ninth time:
+	# this pin and test_card_observation.gd's were BOTH red before this edit, and the story that adds
+	# the key is the story that moves both. The id is a String VALUE, never a StringName -- the
+	# `last_resolved_card` constraint, and the second (and by that test's own note, last) exemption in
+	# `test_card_effect_resolution.gd`'s counts-only scan.
+	"cast",
 	"deck_size", "defense", "discard_size", "hand_size", "hero",
 	# Story 6-1c (AC 2/AC 4): the THIRTY-FIRST key -- `landing`, the mode (2) landing window's
 	# remaining ticks, in SORTED position between `hero` and `lock_target`. Same mechanism, seventh
@@ -81,6 +88,12 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# Story 4-4 (AC 14-19): the projectile board contributes SEVEN keys, in sorted position.
 	"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
 	"projectile_source", "projectile_targets", "projectile_travelled",
+	# Story 6-5c (AC 17/AC 23): the THIRTY-EIGHTH key -- `root`, as
+	# `[remaining_ticks, blocks_run, blocks_roll]`, in SORTED position between the projectile block
+	# and `stamina`. The `timed_rules` per-slot fusion applied to one root: three halves of one fact,
+	# gated on the window so a stopped root reads `[0, false, false]` and a stale switch is
+	# unrepresentable in the hash.
+	"root",
 	"stamina",
 	# Story 5-2 (AC 21, `5-2/R9`): the TWENTY-NINTH key -- `telegraph`, the active unblockable
 	# chargeup as `[colour, remaining_ticks]`, in sorted position between `stamina` and the

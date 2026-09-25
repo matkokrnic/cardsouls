@@ -186,6 +186,34 @@ var _counter_daggers: Array = [null, null]
 ## exists.
 const DAGGER_THROW_HEIGHT := 1.2
 
+## Story 6-5c (AC 25/AC 26): the cast presentation's runner-local bookkeeping -- whether each slot's
+## `cast` snapshot key was in flight at the END of the previous tick (so a rising and a falling edge
+## can be told apart), how many ticks the cast runs for, how far into it we are, on which tick the
+## bolt leaves the sword, and each slot's in-flight bolt prop or null. Presentation only, exactly as
+## `_counter_armed` and `_counter_daggers` above are: nothing here reaches `to_snapshot()`, and a
+## replay reproduces all of it by reproducing the key it is read from.
+##
+## TICKS, NOT SECONDS, and that is what AC 25's arrival pin rests on: the strike lands N ticks after
+## the press and the bolt is given the same integer N, so "the bolt arrives on the strike tick" is an
+## equality of counts rather than a float comparison that could drift a tick either way.
+##
+## NO RE-CAST CASE (the `R-P2` problem the counter has): a caster cannot press a second cast while
+## casting -- every card press is refused for the whole window (AC 8, `6-5c/R6`) -- so `is_casting()`
+## always falls before it can rise again, and "running on both sides of a restart" is unreachable.
+var _cast_armed: Array[bool] = [false, false]
+var _cast_total_ticks: Array[int] = [0, 0]
+var _cast_elapsed_ticks: Array[int] = [0, 0]
+var _cast_launch_ticks: Array[int] = [0, 0]
+var _bolts: Array = [null, null]
+
+## Story 6-5c (AC 25): how high off the hero root the bolt leaves the raised sword, in metres --
+## `DAGGER_THROW_HEIGHT`'s twin, and MEASURED rather than picked: `tools/measure_cast_clip_frames.gd`
+## puts the sword's peak 1.0423 m above the Hips, the rig's Hips sit ~0.91 m above the model root,
+## and `hero.tscn`'s Mesh node carries a -1.0 grounding offset -- so the raised sword tip is ~0.95 m
+## above the hero ROOT (which is the body CENTRE, not the feet). A presentation constant, never a
+## `BalanceConfig` field: nothing in state knows this prop exists.
+const BOLT_LAUNCH_HEIGHT := 0.95
+
 ## Story 4-3e: WHERE A SUMMONED UNIT STANDS. Actor-owned position (`4-1/R12`), chosen by the
 ## runner and computed FRESH AT CAST TIME from the summoning hero's LIVE position: a spot BEHIND
 ## that hero, on the side away from the opponent (AC 1). This REPLACES the frozen per-slot row
@@ -1150,6 +1178,126 @@ func _free_counter_dagger(slot: int) -> void:
 	_counter_daggers[slot] = null
 
 
+## Story 6-5c (AC 25/AC 26/AC 28): THE CAST PRESENTATION POLL -- the cast pose and its bolt on the
+## CASTER, the warning marker and sound on the TARGET, and the root marker on whoever is rooted.
+## `_push_counter_presentation`'s seat and shape verbatim: a plain read of the `cast` and `root`
+## facts right after `advance()`, no signal, no state handle, no new `connect_*`, so the
+## observation-seam family stays at TEN and `6-5c/R16` is satisfied without a new seam.
+##
+## IT READS, IT NEVER DECIDES (the HARD RULE). Every timing below is derived FROM the state layer's
+## own window: the pose's sub-range, the tick the bolt launches and the tick it lands are all
+## functions of `cast_window`'s tick count, so nothing here can move the strike and a `cast_seconds`
+## retune retimes the whole show with no edit in this file (AC 25).
+##
+## THE EDGES, AND WHY THE FALLING ONE IS THE STRIKE TICK. `is_casting()` is true from the press until
+## step 6c clears it, and step 6c is where the strike happens -- so the tick this poll first reads
+## `false` IS the strike tick (or the interrupt tick, which clears the same field, `6-5c/R3`). The
+## bolt is therefore given exactly `total - launch` ticks of flight and lands in the same push that
+## sees the falling edge, which is what AC 25's headless pin asserts.
+##
+## AN ARRIVED BOLT IS FREED ONE TICK LATE, on purpose: freed in the push that lands it, the landing
+## frame would never be drawn and the bolt would simply vanish a metre up. It is also what lets the
+## AC 25 test observe the arrival at the instant `hit_landed` drains.
+func _push_cast_presentation() -> void:
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+		var casting := player.is_casting()
+		var landed: BoltActor = _bolts[slot]
+		if is_instance_valid(landed) and landed.has_arrived():
+			_free_bolt(slot)
+		if _cast_armed[slot]:
+			_cast_elapsed_ticks[slot] += 1
+			if _cast_elapsed_ticks[slot] == _cast_launch_ticks[slot]:
+				_spawn_bolt(slot, hero, other)
+			elif _cast_elapsed_ticks[slot] > _cast_launch_ticks[slot]:
+				_advance_bolt(slot, other)
+		if casting and not _cast_armed[slot]:
+			# THE WHOLE COUNT IS READ ON THE RISING EDGE, where the window has not yet been ticked
+			# once (step 2 runs before the step-6 press that started it), so `remaining_ticks()` is
+			# the cast's full length -- the same reading `_push_counter_presentation` takes of its own
+			# window on the tick it arms.
+			var total := player.cast_window.remaining_ticks()
+			var cast_seconds := float(total) / TimingWindow.TICK_HZ
+			_cast_armed[slot] = true
+			_cast_total_ticks[slot] = total
+			_cast_elapsed_ticks[slot] = 0
+			_cast_launch_ticks[slot] = clampi(int(round(
+					AnimationController.cast_launch_seconds(cast_seconds) * TimingWindow.TICK_HZ)),
+					0, total)
+			if is_instance_valid(hero):
+				hero.animation_controller.on_cast_started(cast_seconds)
+			if is_instance_valid(other):
+				other.telegraph_controller.on_cast_warning_started()
+			# A launch on the press tick itself (a tuning whose raise lands at offset 0) has no later
+			# tick to be spawned on, so it is spawned here.
+			if _cast_launch_ticks[slot] == 0:
+				_spawn_bolt(slot, hero, other)
+		elif _cast_armed[slot] and not casting:
+			_cast_armed[slot] = false
+			if is_instance_valid(hero):
+				hero.animation_controller.on_cast_ended()
+			if is_instance_valid(other):
+				other.telegraph_controller.on_cast_warning_ended()
+			# AN INTERRUPTED CAST TAKES ITS BOLT WITH IT (AC 5 / `6-5c/R3`: nothing applies). An
+			# ARRIVED bolt is left alone -- that one is a strike, and it is freed next tick above.
+			# Review N2: EXCEPT when the caster reads STUNNED or DEAD -- the readable half of
+			# `_cast_is_interrupted`. An interrupt on the exact strike tick has already ticked the prop
+			# to ARRIVED, but nothing struck, so it must not land visibly.
+			var in_flight: BoltActor = _bolts[slot]
+			var interrupted := player.hero.action_state == HeroState.ActionState.STUNNED \
+					or player.hero.action_state == HeroState.ActionState.DEAD \
+					or not player.hero.is_alive()
+			if is_instance_valid(in_flight) and (interrupted or not in_flight.has_arrived()):
+				_free_bolt(slot)
+		if is_instance_valid(hero):
+			hero.telegraph_controller.set_root_marker(_root_in_force(player))
+
+
+## Story 6-5c (AC 28): IS A ROOT IN FORCE ON THIS PLAYER RIGHT NOW? `root_window` spans the stun AND
+## the root as one window (`player_state.gd`), so "the root is in force" is that window running with
+## the stun already over -- which the STUNNED state itself answers, because the bolt stun is the only
+## thing that can be running inside the first part of that window.
+##
+## A CORPSE SHOWS NOTHING. A hero killed by the bolt (or by anything else while rooted) keeps a
+## running window through the round-over freeze, and a ring under a falling corpse reads as a bug --
+## the `set_lock_marker` round-over fix's own argument, applied to the second world-space marker.
+func _root_in_force(player: PlayerState) -> bool:
+	return player.root_window.is_running \
+			and player.hero.action_state != HeroState.ActionState.STUNNED \
+			and player.hero.action_state != HeroState.ActionState.DEAD
+
+
+## Story 6-5c (AC 25): the bolt's launch -- from the caster's raised sword to the target hero, with
+## exactly the ticks left between this tick and the strike. Read from the two hero ACTORS' own
+## positions, which is where every other presentation-side position in this file comes from
+## (`4-2/R14`: no position ever travels inward).
+func _spawn_bolt(slot: int, hero: HeroActor, other: HeroActor) -> void:
+	if not is_instance_valid(hero) or not is_instance_valid(other):
+		return
+	_free_bolt(slot)
+	var bolt := BoltActor.new()
+	add_child(bolt)
+	_bolts[slot] = bolt
+	bolt.launch(hero.global_position + Vector3(0.0, BOLT_LAUNCH_HEIGHT, 0.0),
+			other.global_position, _cast_total_ticks[slot] - _cast_launch_ticks[slot])
+
+
+func _advance_bolt(slot: int, other: HeroActor) -> void:
+	var bolt: BoltActor = _bolts[slot]
+	if not is_instance_valid(bolt) or not is_instance_valid(other):
+		return
+	bolt.advance(other.global_position)
+
+
+func _free_bolt(slot: int) -> void:
+	var bolt: BoltActor = _bolts[slot]
+	if is_instance_valid(bolt):
+		bolt.queue_free()
+	_bolts[slot] = null
+
+
 ## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
 ## runner-owned plain object — NOT an observation seam and deliberately not a `connect_`
 ## method (AC 13 pins that family at seven then; nine as of 5-4/R4): no signal, no callback, no
@@ -1308,6 +1456,23 @@ func _stun_flavor_for_slot(slot: int) -> int:
 		return AnimationController.STUN_FLAVOR_NONE
 	if ticks.is_knockdown_stun(player.hero.stun.duration_ticks()):
 		return AnimationController.STUN_FLAVOR_KNOCKDOWN
+	# Story 6-5c (AC 27, `6-5c/R16`): THE BOLT FLAVOR, computed HERE from post-`advance()` state on
+	# this function's own established shape -- a plain synchronous read at signal-consumption time,
+	# NO new signal, NO new seam and NO new `MatchState` intake, which is exactly what R16 requires.
+	#
+	# BELOW the knockdown test, deliberately. The two are not mutually exclusive in principle, and
+	# the KNOCKDOWN wins: `R-STUNSTACK`'s one-way escalation means a knockdown landing over a bolt
+	# stun replaces it, and the pose must follow the stun the body is actually in. In practice the
+	# bolt's own write can never be knockdown-length (the authoring audit pins `stun_seconds` below
+	# `knockdown_stun_seconds`, AC 15), so this ordering is belt-and-braces rather than load-bearing
+	# -- but getting it the other way round would make a retune that crossed that line silently play
+	# `dizzy` over a knockdown.
+	#
+	# `stun_is_bolt` IS THE DISCRIMINATOR AND NOTHING ELSE WOULD DO: the deflect stun and the bolt
+	# stun are both authored 0.4 s, so `is_knockdown_stun` classifies both ORDINARY and duration is
+	# structurally incapable of telling them apart (`6-5c/R10`).
+	if player.hero.stun_is_bolt:
+		return AnimationController.STUN_FLAVOR_BOLT
 	return AnimationController.STUN_FLAVOR_ORDINARY
 
 
@@ -3277,6 +3442,11 @@ func _physics_process(delta: float) -> void:
 		#     TEN (AC 14). It owns the dagger prop's whole life as well: spawned on the rising edge of
 		#     a GREEN counter, advanced here, freed on arrival or on the falling edge.
 		_push_counter_presentation()
+		# 3a-quater. Story 6-5c (AC 25/AC 26/AC 28): the CAST presentation poll -- the same seat and
+		#     shape as 3a-ter directly above, reading the `cast` and `root` facts right after
+		#     advance(). It owns the bolt prop's whole life as well: spawned at the measured raise
+		#     beat, advanced here, and landed on the tick the state layer strikes.
+		_push_cast_presentation()
 		# 3c. Story 4-1 (AC 7): SPAWN one grey-box actor per unit record the board has gained. Read
 		#     off the state-owned COUNT right after advance(), the step-3b poll directly above in
 		#     shape and seat: no signal, no state handle held, no new `connect_*` -- so the

@@ -1108,7 +1108,58 @@ extends TestCase
 ##       hash and never a snapshot, so a version bump cannot move this value. It IS a real change (AC
 ##       26) with its own refusal test; it is simply not a golden cause.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "962514b1e40f95d4ebda3265bc85e48a6321209b6e064b2a43332964644136b9"
+## STORY 6-5c RE-BASELINE: `962514b1...` -> `97d52922...`, THREE MEASURED CAUSES, SEVEN PREDICTED.
+##
+##   ALL THREE ARE NEW SNAPSHOT KEYS AT THEIR RESTING VALUES -- the 3-5a `discard_size` /
+##   6-5b corpse-key shape a fourth time. The fixture never casts Honed Bolt (its one cast is a
+##   `summon_*`), so not one of the three has a BEHAVIOURAL cause to measure beside its presence.
+##   Each was isolated by ADDING IT BACK to the erased-key build, one at a time, in this order:
+##
+##     cause 1  `cast`         (per-player, `[card id, remaining_ticks]`, resting `["", 0]`)
+##              962514b1... -> c4f42153b36869d4905e5a322dce8b35352c841175a7ff444fd2f14ed32ce3fa
+##     cause 2  `root`         (per-player, `[remaining, blocks_run, blocks_roll]`, resting
+##              `[0, false, false]`)
+##              c4f42153... -> 8736d846b6fb2432c319028e256945d8cf18b712f72ddc5798b5f0061a6c64ed
+##     cause 3  `stun_is_bolt` (HERO, resting `false`; `6-5c/R16`'s discriminator)
+##              8736d846... -> 97d52922e4e6282b37582e8c3a9c424a02337162881c37a7f6a3394277efdc92
+##
+##   THE PER-PLAYER KEY SET MOVES THIRTY-SIX -> THIRTY-EIGHT (pinned by test_card_observation.gd) and
+##   the HERO key set gains one (pinned by test_debug_window_countdown.gd). The story's Golden
+##   Prediction deliberately refused to say WHICH of the two pins the root would move; MEASURED, it is
+##   the PER-PLAYER one, because the root is a CARD-LAYER duration and sits beside `charge_window` /
+##   `defense_window` on `PlayerState` (see `player_state.gd`'s own seating argument). The
+##   discriminator moved the HERO pin instead, because it belongs to the BODY's stun.
+##
+##   ISOLATED BOTH DIRECTIONS: with exactly those three keys erased and EVERY OTHER 6-5c change still
+##   in place -- the cast window and its identity, the cast fork at the press seat, the three
+##   commitment locks, the step-6c strike seat, the bolt's damage/stun/root, the root's two refusals,
+##   the resolver's cast table, the authored `honed_bolt.tres` numbers and the FORMAT_VERSION bump --
+##   the hash is `962514b1...` EXACTLY, the pre-story golden reproduced. So the three keys are the
+##   whole of the move, and the other four predicted causes are MEASURED NON-MOVERS, not assumed ones.
+##
+##   NOT CAUSES, EACH MEASURED BY THAT SAME ISOLATION RUN:
+##     * cause 3 of the prediction, THE STUN WINDOW'S KEY. Confirmed: `stun` already existed, so the
+##       bolt's new write site adds no key. (The DISCRIMINATOR beside it is a separate, real cause --
+##       cause 3 above -- and the prediction said so.)
+##     * cause 4, THE NEW REFUSABLE OUTCOMES (a card press refused while casting, `6-5c/R6`; a roll
+##       press refused while rooted, `6-5c/R14`). Predicted a NON-cause and MEASURED one, for 6-5b's
+##       identical reason: `SC/R6` describes a change that makes a pressed action refusable IN THE
+##       RECORDED SEQUENCE, and this fixture never casts and is never rooted, so neither refusal is
+##       ever taken on the recorded path. The UNIT SUITE moved regardless, exactly as predicted.
+##     * cause 5, THE AUTHORED `honed_bolt.tres` NUMBERS AND THE SEVEN NEW `CardEffect` DEFAULTS --
+##       including the LIVE 0.8 `cast_seconds` default, which is the one most likely to leak. The
+##       golden builds its effects in-test and never loads `data/effects/`, so `BC/R3`'s isolation
+##       holds for the EFFECT INJECTION SET as well, a second time after 6-5b measured it. Stated
+##       separately from causes 1-2 as the prediction required: the injection set's SHAPE moved
+##       nothing.
+##     * cause 6, `RecordFile.FORMAT_VERSION` 14 -> 15. A record carries INPUTS and CONTENT, never a
+##       hash and never a snapshot, so a version bump cannot move this value. It IS a real change
+##       (AC 23) with its own refusal test; it is simply not a golden cause.
+##     * cause 7, INTAKE. No new runner-pushed fact exists -- the bolt's target is always the enemy
+##       hero, so there is nothing like Drain's pushed selection -- and no new parametered public
+##       `MatchState` method ships, so `test_intent_recorder.gd` stayed green unedited.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "97d52922e4e6282b37582e8c3a9c424a02337162881c37a7f6a3394277efdc92"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

@@ -184,6 +184,36 @@ func _stun_poses() -> void:
 		"a clip longer than its stun is sped up to finish on the exit tick")
 	_check(is_equal_approx(AnimationController.held_clip_speed(0.7, 1.0), 1.0),
 		"a clip shorter than its stun plays native and holds -- never slowed")
+	# STORY 6-5c (AC 27, `6-5c/R10`/`R16`, Open Question 8): THE THIRD FLAVOR. EXTENDED, NOT
+	# WEAKENED -- the two ORDINARY rows above are untouched, including the 0.4 s one whose duration
+	# the bolt stun COLLIDES with. That collision is the whole reason the flavor exists: both stuns
+	# are authored 0.4 s, so `is_knockdown_stun` classifies both ORDINARY and no timing test could
+	# tell them apart. The discriminator is `HeroState.stun_is_bolt`, and this is its consumer.
+	#
+	# IT IS ASSERTED SEPARATELY FROM THE ROW LOOP, deliberately, because it deliberately does NOT
+	# follow `held_clip_speed`: `dizzy` is 4.2667 s against a 0.4 s stun, and the hold rule would run
+	# it at 10.67x. Open Question 8 named cutting as the alternative and the dev pass took it, so
+	# this plays a SUB-RANGE at NATIVE rate. Asserting it through the row loop would have asserted
+	# the wrong rule.
+	_settle_idle()
+	_transition(IDLE, STUNNED, PlayerState.NO_TELEGRAPH_COLOR, AnimationController.STUN_FLAVOR_BOLT, 0.4)
+	_check(_player.current_animation == &"dizzy",
+		"the BOLT flavor plays 'dizzy', not 'stunned' (got '%s')" % _player.current_animation)
+	_check(absf(_player.get_playing_speed() - 1.0) < 0.001,
+		"...at NATIVE rate, never the 10.67x the hold rule would give (got %.3f)"
+		% _player.get_playing_speed())
+	_check(_player.get_animation(&"dizzy").loop_mode == Animation.LOOP_NONE,
+		"...and 'dizzy' is a one-shot, so the pose can be held rather than restarting mid-stun")
+	_check(absf(_player.current_animation_position - AnimationController.DIZZY_CUT_START) < 0.05,
+		"...seeked to the measured cut start %.2f (got %.3f)"
+		% [AnimationController.DIZZY_CUT_START, _player.current_animation_position])
+	# ...and the deflect stun's own pose is BIT-IDENTICAL, which is the story's Non-Goal made
+	# machine-checkable: changing `stunned` or `hit_react` is out of scope.
+	_settle_idle()
+	_transition(IDLE, STUNNED, PlayerState.NO_TELEGRAPH_COLOR, AnimationController.STUN_FLAVOR_ORDINARY, 0.4)
+	_check(_player.current_animation == &"stunned",
+		"a 0.4s ORDINARY stun still plays 'stunned' -- the bolt flavor took its own pose and left "
+		+ "this one untouched (got '%s')" % _player.current_animation)
 
 
 ## AC 5/AC 7/AC 11: the escalation switches the pose; a second knockdown hit never restarts it.

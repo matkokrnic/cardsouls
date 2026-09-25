@@ -170,8 +170,17 @@ func test_stunned_has_exactly_three_authored_non_table_entry_points() -> void:
 		if n > 0:
 			sites.append("%s x%d" % [path, n])
 	sites.sort()
-	assert_eq(sites, ["res://src/state/match_state.gd x3"],
-		"EXACTLY THREE authored inbound edges to STUNNED in all of src/, all in match_state.gd: the "
+	assert_eq(sites, ["res://src/state/match_state.gd x4"],
+		"STORY 6-5c (`6-5c/R11`): THREE -> FOUR. The FOURTH is the HONED BOLT LANDING in "
+		+ "`_apply_bolt_landing`, and it is ARGUED rather than merely added, on the footing 6-6a and "
+		+ "6-6b each used for the third and the counter: a DIFFERENT SUBJECT (the bolt's target -- not "
+		+ "the deflected attacker, not the unanswered victim, not the countered attacker), a DIFFERENT "
+		+ "SEAT (step 6c's cast strike -- not step 4's deflect ladder, not step 6b's deferred package, "
+		+ "not the attacker's own step 3) and a DIFFERENT CAUSE (a spell, not a melee exchange). It "
+		+ "cannot reuse any of the three: each writes a different hero with different collateral. The "
+		+ "TABLE-edge scan above stays UNEDITED and green, because no PRESS maps to a bolt stun. "
+		+ "MUTATION (6-5c dev pass): delete the bolt's write -> this pin reads `x3` and goes RED. "
+		+ "The other three, unchanged: the "
 		+ "COLOUR COUNTER in `_resolve_color_counter` (6-6b AC 4, which MOVED here from the retired "
 		+ "landing rung in `_resolve_charge_landing`), the melee deflect in `_resolve_contacts` "
 		+ "(5-6 AC 9), and the knockdown in `_apply_landing_packages` (6-6a AC 3). "

@@ -366,6 +366,10 @@ func test_the_board_snapshot_key_is_a_plain_count() -> void:
 ## StringName) naming the card just cast, and every OTHER path is scanned exactly as before.
 const LAST_RESOLVED_ID_PATH := "/last_resolved_card[0]"
 
+## Story 6-5c (AC 1): the in-flight cast's card id -- the second exempt String VALUE path. See the
+## exemption's own block in the test below for why it is allowed and why a third would not be.
+const CAST_ID_PATH := "/cast[0]"
+
 
 func test_no_effect_id_or_position_reaches_the_snapshot() -> void:
 	var ms := _make_match()
@@ -378,6 +382,23 @@ func test_no_effect_id_or_position_reaches_the_snapshot() -> void:
 		"sanity: the last-resolved card id reached the snapshot as a String VALUE (6-5a, AC 10)")
 	assert_eq(typeof(snap["last_resolved_card"][0]), TYPE_STRING, "...a String, never a StringName")
 	offenders.erase(exempt)
+	# STORY 6-5c (AC 1/AC 23): THE SECOND -- AND, BY THIS COMMENT, LAST -- EXEMPTION. The in-flight
+	# cast's identity reaches the per-player snapshot for `last_resolved_card`'s measured reason and
+	# under its measured constraint: a plain `String` hashes BY CONTENT through `CanonicalHash`'s
+	# String branch, while a `StringName` would order by INTERNAL POINTER on this engine, which is the
+	# failure mode this whole scan exists to catch. The TYPE assertion directly below is what keeps
+	# the exemption honest -- it fails the moment the id is stored as a StringName instead.
+	#
+	# THE MECHANISM IS NOT WIDENED, only its allow-list, and that is deliberate under `3-0d/R20`: the
+	# scan still visits every value at every depth and still fails on anything it does not recognise.
+	# A THIRD exemption is the signal to replace the mechanism rather than extend the list again --
+	# at that point the right shape is a declared set of id-carrying paths on `PlayerState` itself,
+	# not a third literal here.
+	var cast_exempt := "%s (%s)" % [CAST_ID_PATH, type_string(TYPE_STRING)]
+	assert_true(offenders.has(cast_exempt),
+		"sanity: the in-flight cast's card id reached the snapshot as a String VALUE (6-5c, AC 1)")
+	assert_eq(typeof(snap["cast"][0]), TYPE_STRING, "...a String, never a StringName")
+	offenders.erase(cast_exempt)
 	assert_eq(offenders.size(), 0,
 		"a StringName or an object reached the per-player snapshot (AC 9 counts-only): %s"
 				% ", ".join(offenders))

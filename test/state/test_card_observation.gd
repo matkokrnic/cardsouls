@@ -287,6 +287,10 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# Story 6-5a (AC 10): `last_resolved_card` -- `[id, mode]`, the id a String VALUE -- in sorted
 		# position between `landing` and `lock_target`. A PUBLIC card identity (the `pitch` key's staged
 		# card precedent), never a StringName and never a key.
+		# Story 6-5c (AC 1/AC 23): `cast` -- `[card id, remaining_ticks]`, the id a String VALUE -- in
+		# sorted position, which is FIRST. It is still counts-and-values: a card id that has already
+		# been played and seen is public exactly as `last_resolved_card`'s is.
+		"cast",
 		"deck_size", "defense", "discard_size", "hand_size", "hero", "landing",
 		"last_resolved_card", "lock_target",
 		"mana", "orbs",
@@ -294,6 +298,9 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
 		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
 		"projectile_source", "projectile_targets", "projectile_travelled",
+		# Story 6-5c (AC 17/AC 23): `root` -- `[remaining_ticks, blocks_run, blocks_roll]` -- in
+		# sorted position between the projectile block and `stamina`.
+		"root",
 		"stamina",
 		# Story 5-2 (AC 21, `5-2/R9`): the ACTIVE TELEGRAPH -- `[colour, remaining_ticks]` -- in
 		# sorted position, which is HERE: `telegraph` follows `stamina` and precedes every `unit_*`.
@@ -326,8 +333,17 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 36,
-		"the per-player snapshot key set is THIRTY-SIX keys as of story 6-5b, which adds THREE, all on "
+	assert_eq(keys.size(), 38,
+		"the per-player snapshot key set is THIRTY-EIGHT keys as of story 6-5c, which adds TWO, both "
+		+ "card-layer: `cast`, the in-flight cast as `[card id, remaining_ticks]` (AC 1), and `root`, "
+		+ "as `[remaining_ticks, blocks_run, blocks_roll]` (AC 17). Both cross ticks and decide an "
+		+ "outcome -- when the strike lands and therefore whether it lands at all, and how much longer "
+		+ "running and rolling are gone -- and neither can be recomputed inside the tick that reads "
+		+ "it. TWO keys rather than one fused key because a cast and a root are independent facts "
+		+ "that outlive each other: the cast ends AT the strike, the root begins there. The bolt-stun "
+		+ "discriminator is a THIRD new key but a HERO one, not a per-player one (`6-5c/R16`, pinned "
+		+ "by test_debug_window_countdown.gd). "
+		+ "It was THIRTY-SIX as of story 6-5b, which adds THREE, all on "
 		+ "the board (AC 1/AC 14, `6-5b/R17`): `unit_corpse_ticks`, the per-record corpse countdown; "
 		+ "`unit_corpse_extended`, the per-corpse Grave Ward mark; and `unit_raised_from`, the board "
 		+ "index of the corpse a record was raised from. Each crosses ticks and decides an outcome -- "
