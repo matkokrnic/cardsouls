@@ -4,7 +4,7 @@ baseline_commit: d6d5602d40fddbd24b3e442b78060dcc3c320659
 
 # Story 6.5c: Hero Cast Framework and Honed Bolt
 
-Status: review
+Status: done
 
 <!-- Tier A. Split from 6-5-spell-resolution by operator ruling (2026-09-22) into six sub-stories
 (6-5a..6-5f); this is the third. Depends on 6-5a (done); 6-5b (done) is upstream on the same board.

@@ -129,7 +129,7 @@ development_status:
   6-10-card-mode-toggle: done  # Tier B
   6-5a-spell-framework-and-buffs: done  # Tier A
   6-5b-corpses-and-own-minions: done  # Tier A
-  6-5c-hero-cast-honed-bolt: ready-for-dev  # Tier A
+  6-5c-hero-cast-honed-bolt: done  # Tier A
   6-5d-hero-and-corpse-projectiles: backlog  # Tier A
   6-5e-boulder-injection: backlog  # Tier A
   6-5f-counterspell: backlog  # Tier A
@@ -153,7 +153,7 @@ story_notes:
   6-10-card-mode-toggle: "done 2026-09-22, Tier B close-out complete (pad card mode gains a TOGGLE scheme beside HOLD via GamepadProfile.card_mode_toggle, default HOLD, plus a hand-row LIFT; 6-10/R1-R16; golden d437432f unmoved, suite 936/0/8454 + 67; review APPROVE WITH FINDINGS, N1/N2/N4 fixed in tests; live smoke PASS both schemes; decision-log session 6-10 close-out; HOLD vs TOGGLE judged at the playtest / retune block)."
   6-5a-spell-framework-and-buffs: "done 2026-09-22, Tier A close-out complete (spell framework, whole-id dispatch, timed-rule seat + damage funnel, hashed last-resolved-card record, Deck 1 selection per 6-5a/R1-R38; golden d437432f -> 59e9a42c, three causes measured; FORMAT_VERSION 12 -> 13, v12 refused hard; review 1 blocking / 13 non-blocking, all applied; suite 980/0/9183 + 67/67; live smoke PASS 7/7; decision-log session 6-5a close-out)."
   6-5b-corpses-and-own-minions: "done 2026-09-25, Tier A close-out complete (corpses in state, Grave Ward, Culling, Drain, Raise Dead per 6-5b/R1-R25; golden 59e9a42c -> 962514b1, FORMAT_VERSION 13 -> 14; suite 1019/0/10091 + 68/68; live smoke PASS, AC 23 legibility and AC 24 tint deferred to the Tier B presentation story)."
-  6-5c-hero-cast-honed-bolt: "Tier A. ready-for-dev 2026-09-25 (readiness gate applied, 6-5c/R1-R19); golden PREDICTED to move, FORMAT_VERSION PREDICTED 14 -> 15."
+  6-5c-hero-cast-honed-bolt: "done 2026-09-25, golden 97d52922, FORMAT 15."
   6-5d-hero-and-corpse-projectiles: "Tier A. Split from 6-5-spell-resolution (2026-09-22): hero/corpse projectile sources, Rocksling-without-Boulder, Corpse Bomb, carries M5/M6 (deferred-work.md:302-303). Depends on 6-5b, 6-5c."
   6-5e-boulder-injection: "Tier A. Split from 6-5-spell-resolution (2026-09-22): Boulder foreign-card injection, Boom. Depends on 6-5d."
   6-5f-counterspell: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Split from 6-5-spell-resolution (2026-09-22): Counterspell + undo semantics for 6-5a..6-5e. Depends on all prior 6-5 sub-stories."
