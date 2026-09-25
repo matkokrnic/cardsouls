@@ -11376,3 +11376,32 @@ names `deck-1-spec.md:35` fixes are used verbatim; the dev pass records the thre
 `6-5c` readiness gate (`C:\dev\_65c-gate.md`, report-only): VERDICT NOT READY, 4 blocking (G1-G4 above) /
 4 major / 7 minor. Every item was fixed or ruled in this same session; no second gate round was run (the
 `6-5a`/`6-5b` precedent). Story Status -> `ready-for-dev`.
+
+## Session 2026-09-25 -- 6-5c close-out (2026-09-25)
+
+`6-5c/R20` Review (`C:\dev\_65c-review.md`): PASS WITH FINDINGS, 0 blocking / 3 major / 8 minor.
+LAYER-COMPLETION: Blind Hunter COMPLETE; Edge Case Hunter COMPLETE; Acceptance Auditor COMPLETE;
+targeted checks T1-T12 COMPLETE; Dev Agent Record audit COMPLETE (folded into T11); review-time suite
+NOT RUN (deliberate).
+`6-5c/R21` Starting a cast drops a held block on the same tick (`6-5c/R4` applied, review M2).
+`6-5c/R22` Round end CLEARS the cast and the root. AC 5's "the freeze freezes it" is vacuous, not
+violated (review N3).
+`6-5c/R23` `6-5c/R8` stands on the SAME-TICK ROLL case (step-3 latch vs step-6c live read). At the 6c
+seat the get-up case is covered by the live predicate too (mutation M2).
+`6-5c/R24` FORMAT_VERSION 14 -> 15: `RecordFile._resource_values` writes every script variable, so the 7
+new `CardEffect` exports widen every effect row. This corrects the 6-5b note that flat exports move no
+row shape.
+`6-5c/R25` Golden `962514b1` -> `97d52922`, ONE re-baseline, three causes (cast, root, `stun_is_bolt`).
+Per-player key set 36 -> 38, hero +1.
+`6-5c/R26` Presentation pacing: cast and dizzy play measured SUB-RANGES at native rate (cast raise
+fraction 0.4750, window from authored `cast_seconds`; dizzy from 1.0 s), not the hold rule's 3.71x /
+10.67x.
+`6-5c/R27` N8 accepted: there is no single press->presentation test.
+`6-5c/R28` DEFERRED: presentation polish (bolt, cone, ring, alarm are placeholders) -> Tier B
+presentation story after 6-5f.
+`6-5c/R29` DEFERRED: three pre-existing TAB residues in untouched files (`hud_root.gd`,
+`test_unblockable_defense.gd`, `add_paladin_locomotion.gd`) -> E6 close-out tooling alongside `6-5b/R24`.
+`6-5c/R30` Live smoke 2026-09-25 PASS on two pads, all checks. R-D6 spent. Mutations M1..M28 all killed.
+`6-5c/R31` Budget interval: first before-baseline 13:14:01 -> last suite 16:25:03 (state 1070/0/10556,
+integration 70/70), including the operator pause 14:08:49-14:24:13 and operator gaps between passes. No
+suite run in the close-out chain: the tree is unchanged since that run except the story file.
