@@ -67,3 +67,9 @@ start a per-player timed rule; at resolution it ADDS T[20] s to the remaining li
 the caster owns that exists at that instant, and repeated casts stack additively rather than
 refreshing. A corpse created after resolution is unaffected. (Recorded in
 `docs/implementation-artifacts/6-5b-corpses-and-own-minions.md`'s Discrepancies section.)
+
+## Amendment (2026-09-25, 6-5c/R1)
+
+**Honed Bolt** (section 6): "a near-instant lightning bolt on the locked target" is SUPERSEDED by
+operator ruling `6-5c/R1`. The bolt's target is always the enemy hero, never a minion, regardless of
+lock-on. (Recorded in `docs/implementation-artifacts/6-5c-hero-cast-honed-bolt.md`.)
