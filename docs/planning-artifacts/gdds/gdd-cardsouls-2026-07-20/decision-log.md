@@ -11319,3 +11319,60 @@ run_all.sh reports it as a failure; owner: E6 close-out tooling debt.
 LAYER-COMPLETION: Blind Hunter, Edge Case Hunter, Acceptance Auditor = COMPLETE (manual in main session); Targeted checks T1-T13 = COMPLETE
 Budget interval: first before-baseline suite file (_65b-suite-baseline-state.txt) 2026-09-23 00:26:10 ->
 last suite file of the cycle (_65b-closeout-suite-integration.txt) 2026-09-25 00:22:58, delta 47:56:48.
+
+## Session 2026-09-25 -- 6-5c scope + readiness gate (2026-09-25)
+
+`6-5c/R1` (scope talk) The bolt strikes INSTANTLY at the end of the cast: no travel, no projectile;
+range, direction and minions in between are irrelevant; never a minion, whatever the lock-on. The only
+avoidance is the target's roll i-frames open on the strike tick.
+`6-5c/R2` (scope talk) A second bolt during a root re-stuns and restarts the root (choice A, default). A
+`.tres` switch selects choice B (damage only, no stun, no extension) for later tuning.
+`6-5c/R3` (scope talk) An ordinary hit does NOT interrupt a cast. ANY stun does, and the card and its
+mana are lost (no refund; the replacement is still owed).
+`6-5c/R4` (scope talk) Accepted defaults: cast 0.8 s authored per effect; the caster stands still and
+cannot cancel; the target is always the opposing hero; block and deflect do not help; the stun interrupts
+whatever the target is doing; during the root the target can still attack and play cards; buffs stay instant.
+`6-5c/R5` (scope talk) Presentation in scope: raised-sword cast pose, lightning sword -> sky -> target's
+spot landing on the strike tick, target marker + sound for the whole cast, `dizzy` pose for the bolt
+stun, root marker on the feet. Upper/lower-body layering is OUT (Tier B presentation story after 6-5f).
+`6-5c/R6` (gate R-a) The caster cannot play any card during their own cast, the colour counter included:
+the card-layer busy-lock family of get-up and counter (window-derived, refused with an announced reason).
+`6-5c/R7` (gate R-b) An unanswered unblockable knockdown landing on a casting hero cancels the cast (the
+knockdown is a stun; card and mana lost). Supersedes any text saying an unblockable never interrupts a cast.
+`6-5c/R8` (gate R-c) Get-up i-frames dodge the bolt exactly as roll i-frames do, through the reading the
+unblockable rung uses: the step-3 latch `_iframe_open_at_step3` (roll i-frames + close grace, the get-up
+window and `_gets_up_this_tick`), NOT the bare `HeroState.is_iframe_open()`.
+`6-5c/R9` (gate R-d) A bolt landing on a knocked-down hero deals damage only: no stun, no root (the
+`R-STUNSTACK` floor rule).
+`6-5c/R10` (gate R-e) A bolt stun plays the new `dizzy` clip; the deflect stun keeps `stunned`. The
+mechanism is the dev pass's (a stun-duration test cannot tell them apart: both are 0.4 s); see R16.
+`6-5c/R11` (gate R-f) STUNNED already has three authored direct entries (`match_state.gd`: deflect,
+unblockable knockdown, colour counter); the positive-count guard moves 3 -> 4 (or a shared helper with the
+argument); the table-edge scan stays green and unedited.
+`6-5c/R12` (gate G1) A bolt landing on a hero already in a deflect (ordinary) stun RESTARTS the stun from
+zero at the bolt's full `stun_seconds` and the root follows, as for a bolt on a rooted hero. A knocked-down
+hero stays under R9.
+`6-5c/R13` (gate G2) Melee buffs apply to spell damage: Bloodlust doubles the bolt's damage (and taken, as
+usual), Vampiric Aura heals the caster from it. The bolt goes through `_funnel_damage`. STANDING RULE for
+every later spell.
+`6-5c/R14` (gate G3) A rooted player pressing roll gets NOTHING: no rejection sound, flash or
+`action_rejected`, like the get-up and counter locks. The root marker on the feet is the explanation.
+`6-5c/R15` (gate G4) A casting hero cannot colour-counter an incoming unblockable (R6). The cast is a
+commitment; timing decides (cast 0.8 s vs unblockable chargeup 1.0 s: a bolt started first lands first and
+its stun breaks the charge; a charge started first is visible and the player should not cast).
+`6-5c/R16` (gate OQ6, implementation) Presentation tells a bolt stun from a deflect stun by a THIRD stun
+flavor computed by the runner from post-`advance()` state (the `_stun_flavor_for_slot` precedent), mapped to
+`dizzy` in `_play_stun`. No new signal, no new seam, no new `MatchState` intake. The discriminator must be a
+fact only the bolt's own stun write sets: "stun running AND root armed" alone would also match a rooted
+hero deflect-stunned on its own attack.
+`6-5c/R17` (gate OQ7, implementation) `card_cast_resolved` and the resolved-card record are written at the
+PRESS (the card is spent then); the strike writes no second record.
+`6-5c/R18` (gate OQ12, implementation) The cast lock is window-derived (no new `ActionState`), the third
+application of the get-up / counter precedent; `test_the_cast_introduces_no_action_state_of_its_own` stays
+green unedited.
+`6-5c/R19` (gate OQ10, implementation) New cast/bolt numbers are flat `@export`s on `CardEffect`; the four
+names `deck-1-spec.md:35` fixes are used verbatim; the dev pass records the three new names.
+
+`6-5c` readiness gate (`C:\dev\_65c-gate.md`, report-only): VERDICT NOT READY, 4 blocking (G1-G4 above) /
+4 major / 7 minor. Every item was fixed or ruled in this same session; no second gate round was run (the
+`6-5a`/`6-5b` precedent). Story Status -> `ready-for-dev`.
