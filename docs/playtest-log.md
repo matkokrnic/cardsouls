@@ -517,3 +517,18 @@ Nalazi (nisu regresija, prezentacijski dug):
 - nema nikakvog vizualnog odjeka kad se karta odigra.
 
 1 les doista defaultno stoji 20 s pa nestane, totema nema sada, ai nisu ostajali odma nestanu 2 ako ne minoina karta se odbija naplatiti i girati, ako ih imavise umire onaj kojeg gledam, dobivam hp ali ne prealzi maximum 3 les dobije adekvatno porduljenej ali ne pormjni se vizualno nimalo, ako nema lesa karta odvia biti igrana 4 lrdrv ustaju ako ih ima ak ih nema karta ostaje u pitch zoni dok ne istekne i orbovi se ne trose na pokusaj igranja bez leseva 5 totema nema pa nemogu pradt iako sam uvjeren da ih to nece efektirati culling ubija moje minione i daje +2 mane za svakoga do max 10 i odbija igranje ako nema miniona 7 tudi lesevi se ne dizu 8 ovo je uredu 9 vidljivost je uzanadoljnitkest prekirva boja karte, morat cemo skoro hud neki diajrnirat i uvset, generlno trebat ce i svaki efekt o karata obuc u nesto vizulano jer ovako djeluje kao da se nista ne desava iako mehanike rade 10 nakon smrti runda zavrav noramlno 11 fps stabilan
+
+## 2026-09-25 -- 6-5c hero cast + Honed Bolt, live smoke (dva pada, [3,3])
+
+PASS, sve provjereno:
+- Bacanje: mac gore, munja u nebo pa pada na metu; bacac stoji i nista ne moze (blok, roll, karte, kontra).
+- Upozorenje na meti (stozac + alarm) cijelo bacanje, i kad je bacac izvan kadra.
+- Precizan roll izbjegava munju; blok i deflect ne pomazu.
+- Pogodak: 4 stete, dizzy stun, pa root ~2.5 s (nema trka ni rolla, roll tih); hod, blok, deflect, napad i karte rade.
+- Dizzy (munja) i stunned (deflect) se razlikuju.
+- Obican udarac ne prekida bacanje; stun i neodgovoren unblockable ga prekidaju i munja ne padne; blok se spusti kad bacanje krene.
+- Druga munja u rootu opet stuna i produzuje root; ustajanje poslije knockdowna izbjegava munju.
+- Bloodlust duplira stetu munje, Vampiric Aura lijeci bacaca.
+- Regresija OK, runda normalno zavrsi smrcu heroja (R-D6), fps stabilan.
+
+Vizual (munja, stozac, krug, alarm) je placeholder -> Tier B prezentacijska storyja iza 6-5f.
