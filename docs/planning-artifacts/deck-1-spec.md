@@ -73,3 +73,24 @@ refreshing. A corpse created after resolution is unaffected. (Recorded in
 **Honed Bolt** (section 6): "a near-instant lightning bolt on the locked target" is SUPERSEDED by
 operator ruling `6-5c/R1`. The bolt's target is always the enemy hero, never a minion, regardless of
 lock-on. (Recorded in `docs/implementation-artifacts/6-5c-hero-cast-honed-bolt.md`.)
+
+## Amendment (2026-09-26, operator scope talk for 6-5d)
+
+**Spell targeting** SUPERSEDES the 2026-09-25 amendment above ("target is always the enemy hero"),
+returning the bolt to the spec's original "locked target" wording with these details. Honed Bolt AND
+Fireball target the caster's current lock-on target (opposing hero, minion or totem); a caster who is
+unlocked targets the opposing hero. The target is captured at cast start and the warning cone / alarm sits
+on it. If the target dies before impact, Honed Bolt hits nothing (card and mana lost) and Fireball flies
+straight and expires at its 60 m limit. Honed Bolt on a minion or totem is damage only (4, through the damage
+funnel; no stun, no root); on a hero it is unchanged.
+
+**Fireball** (section 5 amendment of 2026-09-22, refined): it is staged with ALL of the caster's current mana
+X (minimum 3, cap 10 as authored data; max mana is 10 today, so the cap is currently inert; below 3 the
+staging is refused and nothing is spent); X is spent and the damage is locked at staging; damage = 1.5 x X
+(tunable, no rounding). It activates only by 1 red orb, then has a visible cast (the hero cast frame) and
+launches a homing projectile at cast end. Block does not help; deflect negates and consumes it; roll and rise
+i-frames drop the contact and end homing (it then flies straight to 60 m); non-target minions do not absorb
+it; a minion or totem target has no defence. A hit is damage only. Bloodlust and Vampiric Aura apply to it as
+to every spell. Built in `6-5d-fireball-and-spell-targeting`; Rocksling, Boom and Corpse Bomb move to
+`6-5e-rocksling-boom-and-corpse-bomb`. (Recorded in
+`docs/implementation-artifacts/6-5d-fireball-and-spell-targeting.md`.)
