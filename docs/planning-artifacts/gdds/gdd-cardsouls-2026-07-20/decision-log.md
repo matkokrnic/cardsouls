@@ -11405,3 +11405,61 @@ presentation story after 6-5f.
 `6-5c/R31` Budget interval: first before-baseline 13:14:01 -> last suite 16:25:03 (state 1070/0/10556,
 integration 70/70), including the operator pause 14:08:49-14:24:13 and operator gaps between passes. No
 suite run in the close-out chain: the tree is unchanged since that run except the story file.
+
+## Session 2026-09-26 -- 6-5d scope + readiness gate
+
+`6-5d/R1` (operator scope talk) Fireball is staged with ALL of the caster's current mana X: minimum 3, cap
+10 as authored data (inert at max mana 10). Below 3 the staging is refused and nothing is spent.
+`6-5d/R2` (operator scope talk) X is spent AT STAGING and the damage is locked there: 1.5 x X, tunable, no
+rounding. Mana gained or lost afterwards changes nothing.
+`6-5d/R3` (operator scope talk) Fireball activates only by the red orb (1 RED), then a visible cast (the
+6-5c frame) and a launch at cast end. A fizzled Fireball refunds nothing.
+`6-5d/R4` (operator scope talk) Block does not help against Fireball. Only deflect (negates and consumes)
+and roll / rise i-frames (drop the contact, end homing, straight flight to 60 m) avoid it.
+`6-5d/R5` (operator scope talk) Fireball passes through non-target minions: only its captured target can be
+hit. Fireball only (see R11).
+`6-5d/R6` (operator scope talk) Fireball AND Honed Bolt target the caster's lock-on target (opposing hero,
+minion or totem). This supersedes `6-5c/R1` and the 6-5c "always the enemy hero" amendment.
+`6-5d/R7` (operator scope talk) An unlocked caster targets the opposing hero.
+`6-5d/R8` (operator scope talk) Honed Bolt on a minion or totem is 4 damage only (through the funnel): no
+stun, no root. On a hero it is unchanged.
+`6-5d/R9` (operator confirmation, gate) The pitch minimum 3 is INTENDED: Bloodhound Step's pitch mana cost
+moves 4.0 -> 3.0 (Fireball's own minimum; Bloodlust's fixed 4 leaves Deck 1 with Bloodlust).
+`6-5d/R10` (operator confirmation, gate) The visible cast prop (the bolt) travels to the CAPTURED target,
+minion or totem included. A placeholder look is acceptable; a wrong destination is not.
+`6-5d/R11` (Claude, unvetoed) A Combat totem's shot is unchanged: it still hits the first opposing body it
+overlaps, with no Bloodlust, no Aura and the block multiplier intact. Pass-through is Fireball-only.
+`6-5d/R12` (Claude, unvetoed) M6: a reload that same-length-reorders `unit_kinds` while any unit or
+projectile record is live is REFUSED: the running config is kept, no record is re-pointed, and the refusal
+names the reordered kind. Every other reload is unaffected.
+`6-5d/R13` (Claude, unvetoed) A Fireball whose captured target is dead on the strike tick is still placed
+and launched, flies straight on its launch heading, homes on nothing and expires at `travel_budget`. It never
+re-acquires and never falls on the lock's snap-back hero.
+`6-5d/R14` (Claude, operator instruction) Board reshuffle: `6-5d-hero-and-corpse-projectiles` is renamed
+`6-5d-fireball-and-spell-targeting`, `6-5e-boulder-injection` is renamed `6-5e-rocksling-boom-and-corpse-bomb`,
+and M5/M6 move to 6-5d. `DEFERRED_EFFECT_OWNERS` names the new 6-5e key.
+`6-5d/R15` (Claude, unvetoed) The target is captured AT CAST START and is fixed for the cast and the flight
+(a re-lock changes nothing). Dead before impact: Honed Bolt hits nothing (card and mana lost, no refund);
+Fireball flies straight to 60 m. A target that died and snapped back to the hero is not the captured target.
+
+`6-5d` readiness gate (`C:\dev\_65d-gate.md`, report-only): VERDICT NOT READY, 3 blocking / 4 major / 6 minor.
+All fixed or ruled in this session; no second gate round (the `6-5c` precedent, every finding textual).
+`6-5d/R16` (gate B1) The M6 AC (37, now 38) becomes the flat R12 behaviour, with an asserted reason string. Operator Question
+2 deleted.
+`6-5d/R17` (gate B2) The totem AC (35, now 36) carries its own NEW tests (a totem shot under Bloodlust dealt/taken and Aura: full
+authored damage, no heal; a blocking hero still takes the block-mitigated number); "block multiplier" joins
+the bit-identical list. Existing tests never exercised a projectile under a buff, so they proved nothing.
+`6-5d/R18` (gate B3) New AC for the launch-tick dead target (R13), tested in `test_fireball.gd`. Operator
+Question 3 deleted; ACs renumbered (22 inserted).
+`6-5d/R19` (gate M1) The 4.0 -> 3.0 move is stated in AC 3; `pitch_condition` joins AC 1's changed list;
+`DECK_1_PRICES` joins the broken-test table.
+`6-5d/R20` (gate M2) The mandated test-only card under `test/` is dropped (no precedent, no named consumer). If a
+test truly needs a card pairing Bloodlust, it uses the shipped fixture precedent (`data/cards/`, `FIXTURE_IDS`,
+off the deck list). AC 1 narrows to "no Deck 1 card references `bloodlust.tres`".
+`6-5d/R21` (gate M3) AC 28 (presentation) covers the cast prop (R10); the Live Smoke step is adjusted.
+`6-5d/R22` (gate M4) Operator Question 1 deleted (R11); every "unless the operator rules otherwise" is removed
+from the totem and M6 ACs (36, 38); the Operator Questions section is removed.
+`6-5d/R23` (gate minors) All six applied: card-authoring bucket census named (buffs 4 -> 3, cast 1 -> 2); the
+disjointness pin re-cited to `test_hero_cast.gd`; `deferred-work.md` M5/M6 discharge added to Task 11; Task 4/6
+duplication and Open Question 1 split fixed; `record_file.gd` path corrected; a fizzle Live Smoke step added.
+Story Status -> `ready-for-dev` (the operator's decision, given in the fix-and-promote prompt).
