@@ -11509,3 +11509,166 @@ four sessions (gaps between sessions are not work time).
 
 `6-5d/R31` DEFERRED (unchanged from authoring): every new visual (the fireball, its trail, the
 placeholder cone on a unit) is a placeholder owed to the Tier B presentation story after `6-5f`.
+
+## Session 2026-09-28 -- 6-5e scope + readiness gate
+
+Operator ruling set for 6-5e (scope talk), carried into the story as behaviour at authoring; logged here
+by content per the fix-and-promote pass's own hard rule, so every ruling the story cites has a label and
+a decision-log entry.
+
+`6-5e/R1` (operator) Rocksling's cast uses the 6-5c/6-5d cast frame exactly: a stun interrupts (card and
+mana lost, no stones fire); an ordinary hit does not interrupt; the caster stands, cannot act, drops a
+held block at cast start, refuses card presses; round end/debug reset clear an in-flight cast; a caster
+who dies mid-cast never fires.
+`6-5e/R2` (operator) At cast end, Rocksling fires a burst of homing stones launched from the caster's
+feet on 6-5d's hero-projectile source. Stone count is `boulders_per_cast` (authored, default 3); the
+interval between launches is an authored duration (default 0.3 s, converted to ticks once per A1); each
+stone deals 3 damage (authored). One effect id and one damage figure for every stone -- no staged
+variable cost (Mode 1, not a pitch).
+`6-5e/R3` (operator) Targeting is identical to 6-5d's spell-targeting rule: the target is the caster's
+lock-on target captured once at cast START, fixed for the whole burst; unlocked -> opposing hero. Stones
+pass through a non-target body. A stone whose captured target is already dead at its own launch tick
+degrades exactly as a Fireball does (6-5d AC 22): placed, launched straight, homes on nothing, damages
+nothing, expires at travel budget.
+`6-5e/R4` (operator) Defence differs from every prior projectile: a BLOCKING target takes full,
+unmitigated stone damage; a DEFLECT fully cancels the stone (no damage, no `hit_landed`, no Boulder).
+Roll/get-up i-frames strip homing without consuming the stone, exactly as Fireball's rule.
+`6-5e/R5` (operator) A stone landing on a minion or totem deals its 3 damage through the normal funnel
+and does nothing else -- no Boulder is ever placed from a unit hit.
+`6-5e/R6` (operator, wording CORRECTED by `6-5e/R20` below -- that ruling is the shipped wording) Every
+stone that lands on the opposing hero places exactly one Boulder in that player's hand, at a slot chosen
+by the caster's seeded gameplay RNG among eligible slots; the Boulder sits on top of whatever card
+occupied the chosen slot; an empty (mid-draw-delay) slot takes the Boulder directly, the owed
+replacement landing underneath it when it arrives; if no slot is eligible, the stone's landing deals
+damage only.
+`6-5e/R7` (operator) Boulder is a COLOURLESS card with exactly one action: Mode 1 play for 2 mana
+(authored), removing it and uncovering the card beneath with no draw delay. No Mode 2/3/4. Never in any
+deck, never drawn, dealt or discarded. Removed on round end and debug reset, restoring the covered card.
+`6-5e/R8` (operator) Hands stay private, unchanged from `P3`: nothing about Boulder presence, count or
+slot is new public information.
+`6-5e/R9` (operator) On Boom activation, count the Boulders in the OPPOSING hand at the activation
+instant; each deals 6 damage (authored) directly to the opposing hero, instantly, not avoidable by
+roll/block/deflect; every counted Boulder is removed and its underlying card reappears in the same
+resolution.
+`6-5e/R10` (operator) Zero Boulders at Boom's activation instant refuses activation through the existing
+6-5b no-target pattern, before the orb spend; staging mana is not refunded.
+`6-5e/R11` (operator) On Corpse Bomb activation, every LIVING minion the caster owns dies (totems
+excluded); each leaves a normal corpse through the existing 4-3a seat (Grave Ward/Raise Dead reach it
+normally, the Culling-into-Raise-Dead loop is intended, braked only by cost); from each minion's death
+position a homing skull launches at the caster's lock-on target captured at the ACTIVATION instant
+(unlocked -> opposing hero), dealing 5 damage (authored), sharing Rocksling's stone defence exactly. A
+skull never places a Boulder.
+`6-5e/R12` (operator) No living own minions at Corpse Bomb's activation instant refuses activation
+through the same 6-5b no-target pattern; staging mana is not refunded.
+`6-5e/R13` (operator) Bloodlust (dealt/taken) and Vampiric Aura's lifesteal apply to stone damage, Boom's
+per-Boulder damage and skull damage, the same standing spell-damage rule 6-5c/6-5d established. Boom's
+damage reaches the funnel through the same instant-damage seat Drain/Culling use, never through
+`_resolve_contacts`.
+`6-5e/R14` (operator) Every new effect records what `6-5f-counterspell` will need to undo it later: for a
+landed stone that placed a Boulder, which hand slot and what card was underneath; for Corpse Bomb, which
+minions were converted. This story does not implement undo, only ensures the facts exist in hashed,
+cross-tick state.
+`6-5e/R15` (operator) Every number this story introduces is authored `.tres` data, never a `src/`
+literal. The 6-5d reload refusal (`6-5d/R12`) covers stones and skulls with no new reload seat.
+`6-5e/R16` (operator) All new visuals (stone, skull, Boulder face) are placeholders, visually distinct
+from each other and from Fireball; real presentation lands in the Tier B story after `6-5f`.
+
+`6-5e` readiness gate (`C:\dev\_65e-gate.md`, report-only): VERDICT NOT READY, 12 blocking / 6 major / 5
+minor. All fixed or ruled in this session; no second gate round.
+
+`6-5e/R17` (Claude, C1, fixes gate B3) Boom and Corpse Bomb have no cast frame: both resolve entirely on
+the activation tick.
+`6-5e/R18` (Claude, C2, fixes gate B4) Once Rocksling's cast completes, the burst is committed: a stun no
+longer stops it, the caster moves and acts freely, each stone launches from the caster's feet at its own
+scheduled launch tick. Caster death, round end and debug reset cancel any stone not yet launched.
+`6-5e/R19` (Claude, C3, fixes gate B6) Clearing (playing) a Boulder is instant -- no cast frame; without
+2 mana it is refused like any card, through `REASON_INSUFFICIENT_MANA`, nothing spent.
+`6-5e/R20` (Claude, G1, fixes gate B1+B2) Ruling 6's eligible-slot rule is corrected to the party AND the
+predicate: a slot in the STRUCK player's hand is ineligible if it holds a Boulder, OR if it is the
+originating slot (`slot_index == ` the recorded `hand_slot`) of a card of THAT player's currently
+staged in their own pitch zone. Verified against the repo (`src/state/match_state.gd`): staging (Mode 4)
+is the only in-flight case with such a record -- `pitch.staged_hand_slot(slot)`, set at
+`_resolve_pitch_stage` (`:4223-4228`) and read back at activation/expiry (`:4315`, `:4381`). A staged
+card's hand slot is empty in `Hand` (`_resolve_pitch_stage:4223`, `player.hand.remove_at(hand_slot)`) but
+carries NO `pending_draw_owed` entry until activation or expiry, so it is a silent hole distinct from an
+ordinary mid-draw-delay slot; without this fix a Boulder could land in it and then collide with the
+pitch card's own eventual replacement. A Mode 1 cast (`_resolve_basic_cast:3622-3725`) and an unblockable
+commit (`_resolve_unblockable_cast`) BOTH remove the card and append `player.pending_draw_owed` for that
+slot in the SAME tick as the press/commit -- so "in the caster's cast frame" and "charging under the 6-9
+commit" are NOT distinct in-flight states for Boulder eligibility: by the time either is visibly playing,
+the slot is already an ordinary mid-draw-delay hole, which ruling 6's own carve-out already makes
+ELIGIBLE (AC 18). No new record is added for those two cases; only the pitch-zone case needed the fix,
+and only on the STRUCK player's own pitch zone (the original wording named the CASTER's, the wrong
+party).
+`6-5e/R21` (Claude, G2, fixes gate B5) The pending-burst schedule (stones remaining, next launch tick) is
+a new hashed cross-tick fact: added to AC 38, its own named Golden Prediction cause, and the
+`FORMAT_VERSION` argument.
+`6-5e/R22` (Claude, G3, fixes gate B7) Rocksling is the first Mode 1 (basic) effect to fire a hero
+projectile; `inject_pitch_effects` (`src/state/match_state.gd:1161-1178`) builds `_effect_projectiles` /
+`_effect_projectile_delay_ticks` by iterating `_pitch_effects` ONLY, so a basic-effect id resolves a null
+profile today (`projectile_profile_at:2082-2084`). The mirror is widened to cover basic effects too; an
+effect id present in both the basic and pitch effect maps is refused loudly at load. The facts section's
+"one reader for every hero- and totem-sourced shot" claim is corrected: one READER, built from two
+SOURCES once this story widens it.
+`6-5e/R23` (Claude, G4, fixes gate B8) A skull starts at the dying minion's body, not the caster's feet:
+`add_hero_shot` (`src/state/projectile_board.gd:171-186`) writes `_source_index = HERO_INDEX` INSIDE the
+seat (not passed), and the runner's launch-position fallback keys off that fixed index, so the existing
+seat cannot carry a per-minion position. A new explicit seat is added alongside `add_hero_shot` for
+minion-sourced launches; the launch position stays presentation (F1) -- the skull record names the
+minion it came from, the runner resolves the position from that unit's actor (the corpse actor still
+exists at the moment of death) and falls back to the caster's feet only if the actor is gone. The
+existing invariant (`add_hero_shot`'s header: "impossible to create with a kind index by accident") stays
+true and tested for the new seat too. The facts section's "skulls reuse `add_hero_shot` unchanged" claim
+is dropped.
+`6-5e/R24` (Claude, G5, fixes gate B9) Corpse Bomb is the fourth caller of the death seat.
+`test/state/test_corpses.gd:240`
+`test_the_death_seat_has_exactly_three_callers_and_no_rival_corpse_writer()` is a SOURCE SCAN (`kill_at(`
+occurrence count in `unit_board.gd` + `match_state.gd`) that fails by construction once Corpse Bomb ships;
+it is listed in the break table as an intended 3 -> 4 update, replacing the story's wrong-file hedge
+(`test_unit_damage_and_death.gd`).
+`6-5e/R25` (Claude, G6, fixes gate B10) `test/state/test_card_authoring.gd`'s every-card-has-a-priced-
+pitch census (`:392-417`) gets a NAMED exemption for Boulder -- no fake priced pitch. `LIBRARY_COUNT`
+(`:26`) moves 16 -> 17; the effect-file count (`:430`) moves 15 -> 16 (Boulder's `boulder_discard` effect
+gets its own file, per Task 2). `CARD_DATA_FIELDS` (`:83-88`) stays UNCHANGED -- Boulder's deck-exclusion
+marker is NOT a new `CardData` field; it reuses the `FIXTURE_IDS`-style exclusion precedent (a const list
+consulted by deck-building/dealing, `3-2/AC4` era), never a new export.
+`6-5e/R26` (operator ruling, carried verbatim as given at the gate; logged as G7, fixes gate B11)
+Colourless is a NEW `Enums.CardColor` member APPENDED after `GREEN` (existing ordinals RED=0/BLUE=1/
+GREEN=2 unchanged); it is never an orb colour -- orb arrays (`orb_costs`, `ORB_COLORS`, `ORB_INITIALS`)
+stay three long and are never indexed by it, because Boulder authors no orb costs anywhere (no Mode 4,
+`6-5e/R7`). `src/ui/hud/hud_root.gd`'s exhaustive colour readers are named and fixed:
+`ORB_COLORS`/`ORB_INITIALS` (`:87`/`:187`, positional 3-element arrays) are read by ORB-COST colour,
+never by card colour, so they stay safe automatically; `_set_swatch_color` (`:487`,
+`ORB_COLORS[color as int]`) IS read by card colour and DOES receive the new ordinal for Boulder's own
+hand row -- it gets a guard rendering a neutral grey swatch for the colourless ordinal instead of
+indexing out of range. `src/main/match_runner.gd:822` `_derive_card_colors()` maps the WHOLE library
+including Boulder (it is not skipped, matching its own "nothing is skipped here" header) -- so Boulder's
+colour reaches state and the HUD as the real colourless ordinal, not a silent RED default. Colour
+counters (`Enums.CardColor.values()`-driven pitch-orb-count assertions) never match the colourless
+ordinal, since Boulder never authors an orb cost.
+`6-5e/R27` (Claude, G8, fixes gate B12) Boom's precondition is a NEW requirement reading the OPPOSING
+hand's Boulder count: a new `CardEffectResolver.board_requirement_for` arm and a new named refusal reason
+(distinct from `NEEDS_OWN_LIVING_MINION`/`NEEDS_OWN_CORPSE`/`NEEDS_ENEMY_HERO`, per the repo's standing
+"each distinct player-visible fact gets its own token" rule, `src/state/match_state.gd:3993-4004`) -- NOT
+`NEEDS_ENEMY_HERO`, which reads the CAPTURED LOCK target and would silently route Boom through lock-on.
+Pressing a covered card is refused with its own separate named reason, nothing spent, no signal beyond
+the existing refusal channel. Golden Prediction cause 5 is corrected: two new refusal reasons ARE
+predicted (superseding the story's prior "no new refusal reason" claim), and under `SC/R6` a pressed
+action made refusable is a predicted golden mover, measured not assumed.
+`6-5e/R28` (operator, added after the gate; logged as S1) While a player holds one or more Boulders, that
+player's walk and run speed (including walk-in-block) are slowed by `boulder_slow_per_boulder` (authored
+`.tres`, default 0.15) per Boulder held, stacking additively; `0.0` disables the slow entirely. It does
+not touch roll, attack, stamina or any other action; it combines with Frostbite's slow
+MULTIPLICATIVELY. The slow tracks the live Boulder count and updates on the same tick as every add/remove
+path (placing, clearing, Boom detonation, round end, debug reset). The slow is observable to the opponent
+by design -- accepted, not a P3 breach (no hand CONTENT is revealed, only a speed effect). Read first:
+the existing Frostbite slow (`RULE_FROSTBITE_SLOW`, `src/state/player_state.gd:465`/`:471`, applied in
+`src/state/match_state.gd:5994-5998` as a TIMED rule with a duration and one fixed scalar `rule_a` value,
+gated `state != ATTACKING`). The Boulder slow does NOT reuse that seat: `start_rule`'s shape is a decaying
+WINDOW with one fixed multiplier, while the Boulder slow is PERSISTENT state whose multiplier is a
+function of a live, changing COUNT (1, 2 or 3+ Boulders) with no duration at all -- reuse is impossible
+without turning the timed-rule seat into something it is not. It is instead its own multiplier, read
+alongside `RULE_FROSTBITE_SLOW` at the same gait seat and combined by multiplication, gated by the same
+`state != ATTACKING` carve-out. Added to Golden Prediction as its own named cause; whether it needs a NEW
+hashed field or is a pure function of the already-hashed Boulder-covers-card relationship per hand slot
+is for the dev pass to measure and argue (ruling 14's "or is a pure function of hashed facts" allowance).
