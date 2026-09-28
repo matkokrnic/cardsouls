@@ -11463,3 +11463,49 @@ from the totem and M6 ACs (36, 38); the Operator Questions section is removed.
 disjointness pin re-cited to `test_hero_cast.gd`; `deferred-work.md` M5/M6 discharge added to Task 11; Task 4/6
 duplication and Open Question 1 split fixed; `record_file.gd` path corrected; a fizzle Live Smoke step added.
 Story Status -> `ready-for-dev` (the operator's decision, given in the fix-and-promote prompt).
+
+## Session 2026-09-28 -- 6-5d close-out
+
+`6-5d/R24` R17 corrected: `6-5d/R17`'s "target under Bloodlust (taken) -> unmultiplied" was an error --
+Bloodlust doubles damage TAKEN from every source, and always has for a totem shot. The bit-identical
+reading the dev pass implemented is CORRECT: a totem shot gets neither its owner's Bloodlust DEALT
+multiplier nor Vampiric Aura; a Bloodlusted TARGET still takes double. AC 36 text corrected to match.
+
+`6-5d/R25` AC 31's stated reason corrected: `FORMAT_VERSION` 15 -> 16 rests on the effect ROW SHAPE alone
+(`CardEffect` gains eight flat exports, widening every `effects`/`pitch_effects` row) -- a v15 file
+cannot contain a Fireball at all, so AC 31's "defaults would replay a Fireball as a no-op" does not
+apply. v15 is refused hard regardless of the reason.
+
+`6-5d/R26` Live-composition defect found and fixed (Task 9, session 2): a hero-sourced shot launched from
+the hero's body CENTRE flew 0.15 m over a minion's hurtbox and could never touch one. Now launches from
+the caster's feet, read from the authored body box rather than a literal.
+
+`6-5d/R27` Review (`C:\dev\_65d-review.md`): APPROVE WITH FINDINGS, 0 blocking / 1 major / 7 minor.
+LAYER-COMPLETION: Blind Hunter COMPLETE (1 major / 1 minor, no blocking) / Edge Case Hunter COMPLETE (19
+paths, 0 unhandled) / Acceptance Auditor COMPLETE (14/14 targets, 38/38 ACs mapped) / Evidence
+re-derivation COMPLETE (4 digests reproduced) / Triage COMPLETE. MAJOR-1 (the M6 refusal reason surfaced
+with `push_warning`) and MINOR-2 (only ALIVE projectile records were blocking a reorder; a consumed
+record still must) fixed and mutation-proven. MINOR-3 and MINOR-5 fixed. MINOR-4 discharged at Step 0
+(`.uid` files generated before staging). MINOR-6/MINOR-7 recorded in the Dev Agent Record. MINOR-8
+(evidence-file naming) is a note, no action needed -- the File List already names the file correctly.
+
+`6-5d/R28` Smoke finding fixed: the bolt prop played for every cast, Fireball included. Fixed with the
+pure query `MatchState.cast_outcome` (`EXEMPT_PURE_QUERIES`) and a runner gate on `_cast_shows_bolt`;
+live AC 15 check added (no dizzy, no root ring, no stun state after a Fireball landing), with a
+bolt-on-hero non-vacuity twin (a Honed Bolt cast still shows all three).
+
+`6-5d/R29` Smoke result: 14 of 15 items PASS (two pads, 2026-09-28), R-D6 re-invoked and passed (the
+round ended normally on a spell kill). Item 10 (target dies before impact) was not hand-verifiable (the
+caster is locked for the whole 0.8 s cast) and is covered headlessly.
+
+`6-5d/R30` Measured close: golden `97d52922` -> `de3589ff`, three isolated causes (the pitch zone's two
+frozen facts, the `cast` key extended 2 -> 6 elements, the projectile board's two new keys),
+`FORMAT_VERSION` 16, per-player key set 40. Final suite **1128/0/10987** + **71/71**. Mutation proofs:
+8 dev-pass + 2 review-fix + 2 smoke-fix = **12, all KILLED**. Suite-run disclosure (`E5-R/R5`): 21
+state-harness invocations in the dev pass, 1 in the review-fix pass, 2 in the smoke-fix pass, each
+disclosed with its own cause, none absorbed. Budget interval (`E5-R/R3`): first before-baseline
+2026-09-26 23:55:45 -> last smoke-fix suite run 2026-09-28 21:37:43, elapsed **1 day 21h 42m** across
+four sessions (gaps between sessions are not work time).
+
+`6-5d/R31` DEFERRED (unchanged from authoring): every new visual (the fireball, its trail, the
+placeholder cone on a unit) is a placeholder owed to the Tier B presentation story after `6-5f`.
