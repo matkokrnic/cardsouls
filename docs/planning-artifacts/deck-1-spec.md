@@ -94,3 +94,62 @@ it; a minion or totem target has no defence. A hit is damage only. Bloodlust and
 to every spell. Built in `6-5d-fireball-and-spell-targeting`; Rocksling, Boom and Corpse Bomb move to
 `6-5e-rocksling-boom-and-corpse-bomb`. (Recorded in
 `docs/implementation-artifacts/6-5d-fireball-and-spell-targeting.md`.)
+
+## Amendment (2026-09-28, operator ruling set for 6-5e)
+
+**Rocksling** (section 4, NORMAL): the burst is `boulders_per_cast` (T[3]) homing stones, T[0.3] s apart,
+T[3] damage each, fired from the caster's feet on the hero-projectile machinery `6-5d` built, targeting the
+caster's lock-on target at cast start exactly as Fireball and Honed Bolt do (unlocked -> opposing hero;
+non-target minions do not absorb a stone). **Defence is NOT "blockable/deflectable like any 4-4
+projectile" as this file previously said** -- SUPERSEDED: a stone ignores block entirely (a blocking target
+takes full damage, whether or not it faces the shot); only a deflect (blocking, facing, window open, stamina
+paid) cancels a stone outright; roll and get-up i-frames strip its homing without consuming it, exactly as
+Fireball's i-frame rule. Every stone that hits the opposing hero (a full-damage hit) places a Boulder card
+in that player's hand: **the Boulder sits ON TOP of the slot's existing card, not in place of it** --
+SUPERSEDED from this file's previous "Boulder does nothing; it costs T[2] mana to discard; while in hand it
+occupies the slot" wording, which implied an ordinary card in an ordinary slot. The slot is chosen at random
+by the match's seeded gameplay RNG, among slots of the STRUCK player's hand holding no Boulder and not the
+originating hand slot of a card the STRUCK player has currently staged in their OWN pitch zone (`6-5e/R20`
+-- corrected from an earlier "caster's own pitch zone" wording, the wrong party, and from "occupied by a
+staged card", a predicate the repo cannot express since a staged card's hand slot is empty); the covered
+card stays in the slot, unplayable, and reappears the instant its Boulder is
+removed (played, detonated by Boom, or torn down at round end / a debug reset -- the same triggers the
+Boulder paragraph below already covers, made consistent here). If the chosen slot is empty (a draw-delay hole), the Boulder
+occupies it directly and the owed replacement lands underneath it when it arrives. A stone landing on a
+minion or totem deals damage only, no Boulder. **Boom** (PITCH): on activation, every Boulder in the
+opponent's hand AT THAT MOMENT deals T[6] damage each, instantly, to the opponent's hero -- not a
+projectile, not avoidable by roll, block or deflect -- and is removed, uncovering its card. Zero Boulders at
+activation -> the activation is refused (the card stays staged and counts to its own fizzle), per the
+standing 6-5b no-target rule; staged mana is not refunded.
+
+**Corpse Bomb** (section 7, PITCH): **"Every corpse of your minions becomes a homing skull" is SUPERSEDED**
+-- Corpse Bomb does not consume existing corpses; on activation it KILLS every LIVING minion the caster
+currently owns (totems excluded -- they are not minions for this or any other Deck 1 effect), each one
+leaving a NORMAL corpse (standard duration, subject to Grave Ward, consumable by Raise Dead -- the
+Culling/Raise Dead loop this enables is intended, braked only by Corpse Bomb's own cost), and from each
+dying minion's position a homing skull launches at the caster's lock-on target captured at the activation
+instant (unlocked -> opposing hero), dealing T[5] damage each (was T[4] in this file's prior wording --
+SUPERSEDED) with the same defence as a Rocksling stone (block no help, deflect cancels, roll/get-up i-frames
+strip homing, passes through non-target minions). No living own minions at activation -> refused, per the
+6-5b no-target rule; staged mana is not refunded.
+
+**Costs confirmed against the repo, no change:** Boom stages for T[3] mana + T[1] red orb; Corpse Bomb
+stages for T[5] mana + T[1] blue orb activation -- both already authored in `rocksling.tres` /
+`frostbite.tres` and matching this file's own numbers exactly.
+
+**Boulder** (new card, referenced by sections 4 and this amendment): colourless (a new `CardColor` member,
+`6-5e/R26`); its only action is playing it (Mode 1) for T[2] mana, which removes it and makes the card it
+was covering immediately playable in the same slot, no draw delay; no pitch, no Mode 2/3; never enters any
+deck, is never drawn or discarded; removed on round end and debug reset, restoring every covered card.
+(Recorded in `docs/implementation-artifacts/6-5e-rocksling-boom-and-corpse-bomb.md`.)
+
+## Amendment (2026-09-28, operator ruling S1, added after the readiness gate)
+
+**Rocksling's section 4 "No slow" line is SUPERSEDED.** While a player holds one or more Boulders, that
+player's walk and run speed (including walk-in-block) are slowed by `boulder_slow_per_boulder` (authored
+`.tres`, default T[0.15]) per Boulder held, stacking additively; T[0.0] disables the slow entirely. Roll,
+attack and stamina are untouched. It combines with Frostbite's slow MULTIPLICATIVELY. The slow tracks the
+live Boulder count and updates on the same tick as every add/remove path (placing, clearing, Boom
+detonation, round end, debug reset). The slow is observable to the opponent by design -- accepted, not a
+`P3` breach (no hand content is revealed, only a speed effect). (Recorded in
+`docs/implementation-artifacts/6-5e-rocksling-boom-and-corpse-bomb.md`, ruling `6-5e/R28`.)

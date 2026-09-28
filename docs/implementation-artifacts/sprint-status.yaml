@@ -131,7 +131,7 @@ development_status:
   6-5b-corpses-and-own-minions: done  # Tier A
   6-5c-hero-cast-honed-bolt: done  # Tier A
   6-5d-fireball-and-spell-targeting: done  # Tier A
-  6-5e-rocksling-boom-and-corpse-bomb: backlog  # Tier A
+  6-5e-rocksling-boom-and-corpse-bomb: ready-for-dev  # Tier A
   6-5f-counterspell: backlog  # Tier A
 
 story_notes:
@@ -155,7 +155,7 @@ story_notes:
   6-5b-corpses-and-own-minions: "done 2026-09-25, Tier A close-out complete (corpses in state, Grave Ward, Culling, Drain, Raise Dead per 6-5b/R1-R25; golden 59e9a42c -> 962514b1, FORMAT_VERSION 13 -> 14; suite 1019/0/10091 + 68/68; live smoke PASS, AC 23 legibility and AC 24 tint deferred to the Tier B presentation story)."
   6-5c-hero-cast-honed-bolt: "done 2026-09-25, golden 97d52922, FORMAT 15."
   6-5d-fireball-and-spell-targeting: "done 2026-09-28, golden de3589ff, FORMAT 16."
-  6-5e-rocksling-boom-and-corpse-bomb: "Tier A. Full Rocksling (stones + Boulder injection into the opponent's hand) + Boom + Corpse Bomb, all reusing the hero projectile source built in 6-5d. Depends on 6-5d."
+  6-5e-rocksling-boom-and-corpse-bomb: "gate 1 NOT READY (12 blockers) -> fix + S1 Boulder slow; promoted 2026-09-28."
   6-5f-counterspell: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Split from 6-5-spell-resolution (2026-09-22): Counterspell + undo semantics for 6-5a..6-5e. Depends on all prior 6-5 sub-stories."
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
