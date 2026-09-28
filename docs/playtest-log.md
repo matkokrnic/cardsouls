@@ -532,3 +532,13 @@ PASS, sve provjereno:
 - Regresija OK, runda normalno zavrsi smrcu heroja (R-D6), fps stabilan.
 
 Vizual (munja, stozac, krug, alarm) je placeholder -> Tier B prezentacijska storyja iza 6-5f.
+
+## 2026-09-28 -- 6-5d Fireball and spell targeting (two pads)
+
+- Smoke on two pads: 14/15 PASS.
+- Fireball: staging takes all mana (min 3), waits for the red orb, visible cast, then a homing shot. Roll dodges it and it flies on straight; block does not help; deflect negates it. Damage is about 1.5 x the mana spent.
+- Spell targeting: Fireball and Honed Bolt go to the locked target (hero or minion). A bolt on a minion is damage only. Re-locking mid-cast keeps the original target; an unlocked caster hits the enemy hero.
+- An enemy Honed Bolt landing mid-cast stuns the caster and cancels the Fireball; card and mana are lost. A fizzled Fireball refunds nothing. The round ends normally on a spell kill.
+- Item 10 (target dies before impact) could not be tested by hand: the caster is locked for the whole 0.8 s cast. Covered by tests.
+- Found: the Honed Bolt lightning also played before every Fireball. Fixed in the smoke-fix pass; re-checked on pads: gone for Fireball, still there for the bolt.
+- All new visuals (fireball, target cone, lightning, alarm) are placeholders for the presentation story after 6-5f.
