@@ -4,7 +4,7 @@ baseline_commit: 3c2d277fb13c8a171ce0a548f1d99e1907955dd1
 
 # Story 6.5d: Fireball and Spell Targeting
 
-Status: review
+Status: done
 
 <!-- Tier A; fourth of six 6-5 sub-stories. Board keys reshuffled at authoring on operator instruction
 (2026-09-26). Scope = the operator's scope talk of 2026-09-26; rulings are `6-5d/R1..R23` in the
