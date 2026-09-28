@@ -148,7 +148,12 @@ func _physics_process(_delta: float) -> bool:
 
 	if _frames == CAST_FRAME:
 		# THE POKE (see header). The same public arm the press seat calls, with the AUTHORED count.
-		_state.p1.start_cast(&"honed_bolt", _cast_ticks)
+		# Story 6-5d (AC 24/AC 28): plus the MODE and the CAPTURED TARGET the press seat now captures.
+		# BASIC and the OPPOSING HERO -- the address an unlocked or hero-locked caster freezes
+		# (`6-5d/R7`), so the warning marker and the bolt prop go exactly where this test already
+		# asserted they do. The damage is 0.0: a bolt's damage is authored on its effect.
+		_state.p1.start_cast(&"honed_bolt", _cast_ticks, Enums.ModeKind.BASIC,
+				1, TargetingService.HERO_INDEX, 0.0)
 		return false
 
 	if _frames > CAST_FRAME:

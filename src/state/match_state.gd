@@ -560,6 +560,16 @@ var _pitch_costs: Dictionary[StringName, CardCastCondition] = {}
 ## channel (`capture_inject_pitch_effects`).
 var _pitch_effects: Dictionary[StringName, CardEffect] = {}
 
+## Story 6-5d (AC 3, Open Question 4): THE FLIGHT-PROFILE MIRROR, effect id -> `ProjectileProfile`, and
+## its tick twin for the one duration on it. DERIVED, never injected and never a seventh content
+## channel: both are rebuilt wholesale inside `inject_pitch_effects` from the map it just took, so a
+## replay reproduces them from the recorded content with nothing new to record. See that function for
+## why the derivation is legal under CONSTRAINT C and A1.
+##
+## NEVER HASHED, for `_pitch_effects`' own reason: this is authored CONTENT, one derivation removed.
+var _effect_projectiles: Dictionary[StringName, ProjectileProfile] = {}
+var _effect_projectile_delay_ticks: Dictionary[StringName, int] = {}
+
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
 ## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
@@ -892,12 +902,94 @@ func advance(intents: Array[InputIntent]) -> void:
 ## detected from `balance == null` (a DERIVED fact, no new field to keep in sync, and
 ## nothing else writes `balance`); it is passed down rather than re-derived per player so
 ## both players are read from the same decision.
-func apply_balance(config: BalanceConfig) -> void:
+## STORY 6-5d (AC 38, `6-5d/R12`, deferred-work M6): IT NOW RETURNS A REASON -- `""` when the reload was
+## applied, or why it was REFUSED.
+##
+## A RETURN VALUE RATHER THAN A MEMBER, and that choice is a determinism decision rather than a style
+## one. A `last_balance_refusal` member would have been a FIFTH unhashed cross-tick exclusion in
+## `test_replay_identity.gd`, and that pin exists precisely to make a new exclusion expensive to add --
+## correctly, because every one of them is a piece of state a replay has to reproduce some other way. A
+## returned string is not state at all: it exists for the duration of the call.
+##
+## EVERY EXISTING CALLER TOLERATES THE RETURN VALUE UNCHANGED -- GDScript discards an unread one, so
+## every fixture keeps its single-line call. Review fix MAJOR-1 (6-5d): the runner's reload seat DOES
+## read it now, and surfaces a refusal with `push_warning` (matching the neighbouring replay refusal),
+## because a discarded reason left the operator with no signal at all when M6 refused a reload. The
+## other reader is the AC 38 test.
+func apply_balance(config: BalanceConfig) -> String:
 	var first_injection := balance == null
+	# Story 6-5d (AC 38, `6-5d/R12`, Open Question 7): THE REORDER REFUSAL, fired BEFORE anything is
+	# written, so a refused reload keeps the running config unchanged and re-points no record.
+	var refusal := _kind_reorder_refusal(config)
+	if refusal != "":
+		return refusal
 	balance = config
 	balance_ticks = BalanceTicks.from_config(config)
 	_apply_balance_to_player(p1, config, first_injection)
 	_apply_balance_to_player(p2, config, first_injection)
+	return ""
+
+
+## Story 6-5d (AC 38, `6-5d/R12`, M6): IS THIS RELOAD A SAME-LENGTH REORDER OF `unit_kinds` WHILE A
+## RECORD THAT DEPENDS ON KIND INDICES IS LIVE?
+##
+## THE DEFECT M6 NAMES: a unit record and a projectile record both store a KIND INDEX, not a kind
+## (`E4-P/R12`'s whole design -- a kind is config and outlives the instance). That is sound while indices
+## are stable, and a reload that merely REORDERS the authored list silently re-points every live record at
+## a different kind: a minion becomes a totem, a totem's shot reads another kind's damage and profile. No
+## existing guard sees it, because the list's LENGTH is unchanged and every index still resolves.
+##
+## THE ANSWER IS A REFUSAL, NOT A REMAP (`6-5d/R12`). Remapping would mean rewriting live records from
+## inside a config swap -- exactly the coupling CONSTRAINT C exists to prevent -- and would still have to
+## invent an answer for a kind that moved AND changed. Keeping the running config is the honest
+## degradation: the match continues on the authoring it was built with, and the operator is told which
+## kind moved.
+##
+## SCOPED AS NARROWLY AS THE RULING: same LENGTH only (a shortened or appended list is the X3-legal case
+## the existing graceful-degradation paths already handle honestly), and only while a record is LIVE. An
+## empty board reorders freely -- there is nothing to re-point -- which is what keeps every existing
+## reload test and every pre-injection fixture unaffected.
+##
+## "LIVE" MEANS ANY RECORD, NOT MERELY A LIVING ONE -- ON THE UNIT HALF. A CORPSE is a `UnitBoard`
+## record whose kind index still decides what it renders as and whether it can be raised
+## (`unit_corpse_ticks` / `_corpse_ticks_for`), so `size()` is the honest test there: `living_indices()`
+## would let a reorder re-point a corpse.
+##
+## Review fix MINOR-2 (6-5d): THE PROJECTILE HALF READS `living_indices()`, NOT `size()` -- the corpse
+## argument does not reach it. A CONSUMED projectile is genuinely inert: `consume_at` sets it dead,
+## `_advance_projectiles` skips a dead index, the runner gathers no facts from it, and its kind index
+## therefore decides nothing. The board also never reclaims an index (deferred-work M4), so treating a
+## consumed record as "live" would let one totem shot early in a match permanently refuse every
+## same-length reorder for the rest of it, on the strength of a record nothing can re-point-and-harm.
+##
+## COMPARED BY KIND NAME IN ORDER, which is the identity `BalanceConfig.kind_index_of` itself resolves by,
+## so "reordered" here means exactly what a re-pointed index would mean. THE FIRST DIFFERING POSITION IS
+## NAMED in the reason -- the reason string a test asserts (AC 38) -- because a reorder always has one and
+## naming it tells the operator which authoring row moved.
+func _kind_reorder_refusal(config: BalanceConfig) -> String:
+	if balance == null or config == null:
+		return ""
+	if p1.units.size() == 0 and p2.units.size() == 0 \
+			and p1.projectiles.living_indices().is_empty() \
+			and p2.projectiles.living_indices().is_empty():
+		return ""
+	var running := balance.unit_kinds
+	var incoming := config.unit_kinds
+	if running.size() != incoming.size():
+		return ""
+	for i in running.size():
+		var was: UnitKindProfile = running[i]
+		var now: UnitKindProfile = incoming[i]
+		var was_name: StringName = was.kind_name if was != null else &""
+		var now_name: StringName = now.kind_name if now != null else &""
+		if was_name != now_name:
+			return ("balance reload REFUSED: unit_kinds position %d changed from \"%s\" to \"%s\" " \
+					+ "while %d unit and %d projectile records are live -- a same-length reorder " \
+					+ "would re-point every live record's kind index at a different kind") \
+					% [i, was_name, now_name,
+						p1.units.size() + p2.units.size(),
+						p1.projectiles.size() + p2.projectiles.size()]
+	return ""
 
 
 ## Story 1-5 (B3): one-time flag injection at match start. Runner-only, exactly once —
@@ -1041,8 +1133,49 @@ func inject_pitch_costs(costs: Dictionary[StringName, CardCastCondition]) -> voi
 ## directly above followed for everything including its ABSENCE of checks, and for its reason: a card
 ## without a pitch effect is legal content, and an empty map is legal. Injected LAST, after the pitch
 ## costs, so `IntentRecorder.SOUND_CONTENT_ORDER` stays one straight line.
+##
+## STORY 6-5d (AC 3, Open Question 4): THE FLIGHT-PROFILE MIRROR IS BUILT HERE, ONCE. `CardEffect`
+## forbids a nested resource (flat fields round-trip through `RecordFile._card_effects` for free), so a
+## hero-sourced shot's flight numbers are authored FLAT on the effect -- and a flat effect cannot be
+## handed to `_projectile_profile_at`, which every reader of the authored curve goes through and which
+## must stay ONE function (`4-4/R3`: exactly one homing implementation and one acceleration
+## implementation, no branch selecting behaviour by kind).
+##
+## SO THE FLAT FIELDS ARE MIRRORED INTO A REAL `ProjectileProfile` PER EFFECT, at THIS seat, and
+## `_projectile_profile_at` answers from the mirror for a hero shot and from the kind for a unit shot.
+## One reader, two lookups behind it, no per-tick allocation -- which the alternative (building a fresh
+## profile inside `_advance_projectiles`) would have cost on every live shot on every tick, against the
+## project's no-allocations-in-hot-paths rule.
+##
+## IT IS NOT A CONSTRAINT C VIOLATION, and that distinction is worth stating because it looks like one.
+## CONSTRAINT C forbids caching `balance`/`balance_ticks`, which `apply_balance()` SWAPS WHOLESALE on
+## every X3 reload. The pitch effects have NO reload path at all -- this seam is called once at match
+## start and `_pitch_effects` is itself a cached copy already -- so a derived mirror cannot go stale
+## against a live reload, because there is no live reload of this content.
+##
+## THE DELAY IS CONVERTED TO TICKS HERE TOO, once (A1). It is the only `*_seconds` field on this path
+## read EVERY TICK of a flight, so converting at the point of use would be a repeated conversion rather
+## than the single boundary A1 asks for. `BalanceTicks.from_config()` is the boundary for BALANCE
+## durations; for EFFECT durations this project's boundary is "once at the moment of application"
+## (`card_effect.gd`'s header) -- and for a value read per tick, the application moment is injection.
 func inject_pitch_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 	_pitch_effects = effects.duplicate()
+	_effect_projectiles.clear()
+	_effect_projectile_delay_ticks.clear()
+	for id: StringName in _pitch_effects:
+		var effect: CardEffect = _pitch_effects[id]
+		if effect == null:
+			continue
+		var profile := ProjectileProfile.new()
+		profile.launch_speed = effect.launch_speed
+		profile.homing_turn_rate_degrees_per_second = effect.homing_turn_rate_degrees_per_second
+		profile.acceleration_delay_seconds = effect.acceleration_delay_seconds
+		profile.acceleration_per_second_squared = effect.acceleration_per_second_squared
+		profile.max_speed = effect.max_speed
+		profile.travel_budget = effect.travel_budget
+		_effect_projectiles[effect.effect_id] = profile
+		_effect_projectile_delay_ticks[effect.effect_id] = \
+				TimingWindow.seconds_to_ticks(effect.acceleration_delay_seconds)
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -1823,10 +1956,27 @@ func _advance_projectiles(player: PlayerState) -> void:
 	for index in board.size():
 		if not board.is_alive_at(index):
 			continue
-		var profile := _projectile_profile_at(board, index)
+		var profile := projectile_profile_at(board, index)
 		if profile == null:
 			board.consume_at(index)
 			continue
+		# Story 6-5d (AC 21, `6-5d/R15`, Open Question 6): THE DEAD-TARGET HOMING END, decided HERE -- in
+		# the state layer, inside the ordered dispatch -- so a replay reproduces it. The runner must not
+		# decide it: `_drive_projectiles` already stops steering when it finds no target position, but that
+		# is a PRESENTATION consequence of a missing actor and leaves `_homing` true in the hash, so two
+		# runs could agree on the board and disagree on whether homing had ended.
+		#
+		# HERO-SOURCED ONLY (AC 36). A totem's shot keeps `4-4/R5`'s asymmetry exactly: a target that
+		# merely leaves the flight path, and a target that DIES, both leave its homing running, because
+		# absence of a hit is not an event. Fireball is the one shot for which a dead target IS an event,
+		# by ruling.
+		#
+		# `end_homing_at` IS IDEMPOTENT AND HAS NO INVERSE, so a shot whose target died stays straight for
+		# the rest of its flight with no re-acquisition path -- AC 21's "does not re-acquire a new target"
+		# is that absence, not a check. The shot is NOT consumed: it flies on to its 60 m budget.
+		if board.is_hero_sourced_at(index) and board.is_homing_at(index) \
+				and not _address_is_alive(board.target_slot_at(index), board.target_index_at(index)):
+			board.end_homing_at(index)
 		# One tick's distance at this tick's derived speed, read at the flight clock's PRE-INCREMENT
 		# value — `advance_at` below is what moves the clock on. `TimingWindow.TICK_HZ` is the
 		# project's single clock (the runner `check_invariant`s it against `physics_ticks_per_second`
@@ -1892,7 +2042,7 @@ func _step_distance_at_flight_ticks(board: ProjectileBoard, index: int, ticks: i
 ## happens to read. Both public seams above name their tick through this one function, which is what
 ## H2's fix rests on: there is no path left that infers the tick instead of stating it.
 func _speed_at_flight_ticks(board: ProjectileBoard, index: int, ticks: int) -> float:
-	var profile := _projectile_profile_at(board, index)
+	var profile := projectile_profile_at(board, index)
 	if profile == null:
 		return 0.0
 	var delay := _projectile_acceleration_delay_ticks_at(board, index)
@@ -1903,11 +2053,37 @@ func _speed_at_flight_ticks(board: ProjectileBoard, index: int, ticks: int) -> f
 			profile.launch_speed + profile.acceleration_per_second_squared * accelerating_seconds)
 
 
-## This shot's authored projectile profile, resolved through the KIND INDEX its record stores. Null
-## for a kind an X3 reload has removed, or one whose attack record authors no projectile — the
-## second is unreachable in shipped play (only a projectile attack launches one) and is answered
-## honestly rather than asserted, on this file's standing total-function posture.
-func _projectile_profile_at(board: ProjectileBoard, index: int) -> ProjectileProfile:
+## This shot's authored projectile profile. Null for a kind an X3 reload has removed, or one whose attack
+## record authors no projectile — the second is unreachable in shipped play (only a projectile attack
+## launches one) and is answered honestly rather than asserted, on this file's standing total-function
+## posture.
+##
+## STORY 6-5d (AC 3, Open Question 4): TWO LOOKUPS, STILL ONE READER. A HERO-SOURCED shot resolves
+## through the EFFECT ID its record stores, against the mirror built once at `inject_pitch_effects`; a
+## UNIT-fired shot resolves through the KIND INDEX, unchanged. That is why the flight numbers are
+## authored on `CardEffect` with `ProjectileProfile`'s own field names -- so this function can hand both
+## kinds of shot to the SAME curve arithmetic, and `4-4/R3`'s "exactly one homing implementation and one
+## acceleration implementation, no branch selecting behaviour by kind" survives a second source of
+## authoring.
+##
+## A HERO SHOT WHOSE EFFECT IS NOT IN THE MIRROR IS NULL, hence CONSUMED by the caller -- the same
+## graceful degradation an X3-removed kind gets, and for the same reason: a shot that can neither move
+## nor expire would hang in the air forever.
+##
+## STORY 6-5d: PUBLIC, AND THE RUNNER TWIN IS DELETED. `_projectile_profile` in `match_runner.gd` was a
+## second copy of the kind-index lookup, and a second copy could not have learned the effect path without
+## being told twice. This function's own sibling `projectile_speed_at` already declared the state layer
+## "the ONE expression of the authored curve, so nothing outside it may keep a duplicated copy that a
+## retune could desynchronise"; publishing this is that sentence finally made true. A PURE QUERY on the
+## `projectile_step_distance_at` footing -- it touches no board and mutates nothing -- so it joins
+## `EXEMPT_PURE_QUERIES` in test_intent_recorder.gd and needs no capture channel: a replay that
+## reproduces the board and the injected content reproduces this answer, and nothing reaches MatchState
+## through it.
+func projectile_profile_at(board: ProjectileBoard, index: int) -> ProjectileProfile:
+	if board.is_hero_sourced_at(index):
+		return _effect_projectiles.get(StringName(board.effect_id_at(index)))
+	if balance == null:
+		return null
 	var kind := balance.kind_at(board.kind_index_at(index))
 	if kind == null:
 		return null
@@ -1915,10 +2091,17 @@ func _projectile_profile_at(board: ProjectileBoard, index: int) -> ProjectilePro
 	return attack.projectile if attack != null else null
 
 
-## The acceleration delay in TICKS, read off the derived tick record rather than re-converted here —
-## A1's single seconds-to-ticks boundary is `BalanceTicks.from_config()` and nothing else may
+## The acceleration delay in TICKS, read off a DERIVED TICK RECORD rather than re-converted here —
+## A1's single seconds-to-ticks boundary for BALANCE is `BalanceTicks.from_config()` and nothing else may
 ## convert. Zero for an unresolvable kind, which only ever pairs with a null profile above.
+##
+## STORY 6-5d: A HERO-SOURCED SHOT READS ITS OWN DERIVED RECORD, `_effect_projectile_delay_ticks`, built
+## at `inject_pitch_effects` -- the same discipline one conversion boundary over: converted ONCE, at
+## injection, never per tick. Zero for an effect absent from the mirror, which only ever pairs with a
+## null profile above.
 func _projectile_acceleration_delay_ticks_at(board: ProjectileBoard, index: int) -> int:
+	if board.is_hero_sourced_at(index):
+		return _effect_projectile_delay_ticks.get(StringName(board.effect_id_at(index)), 0)
 	var kind_ticks := balance_ticks.kind_ticks_at(board.kind_index_at(index))
 	if kind_ticks == null:
 		return 0
@@ -2011,6 +2194,35 @@ func _resolve_contacts() -> Array[int]:
 		# begins the tick AFTER reach is observed.
 		if int(fact["kind"]) == CONTACT_REACH_PROBE:
 			continue
+		# Story 6-5d (AC 20, `6-5d/R5`, Open Question 3): THE TARGET-ONLY RUNG -- A FIREBALL PASSES THROUGH
+		# ANY BODY THAT IS NOT ITS CAPTURED TARGET.
+		#
+		# SEATED HERE, ABOVE EVERY OTHER DROP AND ABOVE THE UNIT BRANCH, because AC 20 asks for all three
+		# of "no damage, is not consumed and has no i-frame effect" -- and the i-frame rung below would
+		# otherwise end the homing of a shot merely passing a rolling bystander. A drop this early has no
+		# consequence at all, which is exactly the AC.
+		#
+		# IT IS A STATE RUNG, NOT A GATHER FILTER, and that was the mechanism question. The runner keeps
+		# pushing a fact for every opposing hurtbox the shot overlaps (`_gather_projectile_facts`,
+		# untouched), so there is no second place the pass-through rule could disagree with itself, nothing
+		# new crosses the intake, and a replay feeding the recorded facts reaches the identical decision.
+		# A gather-side filter would have put a gameplay rule in the runner (the state/visual HARD RULE)
+		# and made it invisible to a headless test.
+		#
+		# HERO-SOURCED ONLY, WHICH IS AC 36 (`6-5d/R11`): a totem's shot has an empty effect id, fails
+		# `is_hero_sourced_at` and never reaches the comparison, so it still lands on the first opposing
+		# body it touches. Pass-through is Fireball-only, by this one predicate.
+		#
+		# `_mark_reach_from_fact` ABOVE IS UNAFFECTED, deliberately: it is scoped inside the helper to the
+		# UNIT's own acquired target and a projectile attacker index never matches one, so a passed-through
+		# body cannot confirm anyone's reach.
+		if is_projectile_index(attacker_index):
+			var shot_index := projectile_index_of(attacker_index)
+			if attacker.projectiles.is_hero_sourced_at(shot_index) \
+					and (attacker.projectiles.target_slot_at(shot_index) != int(fact["target"]) \
+						or attacker.projectiles.target_index_at(shot_index) \
+							!= int(fact["target_index"])):
+				continue
 		# Story 4-3a (AC 3/AC 2, `4-3a/R20`): THE UNIT-TARGET BRANCH. A target address whose index
 		# is >= 0 addresses a BOARD UNIT, and a unit shares only the rungs it actually HAS.
 		# Expressed as a branch inside this ladder rather than a helper beside it (`4-3a/R20`
@@ -2151,8 +2363,29 @@ func _resolve_contacts() -> Array[int]:
 					attacker.hero.set_action_state(HeroState.ActionState.STUNNED)
 					attacker.stamina.add(-balance.deflect_stamina_penalty)
 				continue
-			damage *= balance.block_damage_multiplier
-			blocked = true
+			# Story 6-5d (AC 16, `6-5d/R4`): BLOCK DOES NOT HELP AGAINST A FIREBALL. A BLOCKING target
+			# facing a hero-sourced shot takes the FULL damage and the hit is not recorded as blocked --
+			# only a DEFLECT (the branch directly above, untouched) avoids it, and roll/rise i-frames (the
+			# rung above that, untouched).
+			#
+			# THE EXEMPTION IS THIS RUNG ONLY, and everything it does NOT change is why it is seated inside
+			# the existing branch rather than as an early `continue`: the facing test, the deflect window,
+			# the defender's stamina spend and the deflect consumption all still run for a Fireball exactly
+			# as for any other attacker. A shot that arrives on a blocking, facing target with the deflect
+			# window OPEN and the stamina to pay is still negated and consumed.
+			#
+			# `blocked` STAYS FALSE, not merely the multiplier skipped, and that is the honest record:
+			# `hit_landed_was_blocked()` feeds the presentation drain, and reporting a full-damage hit as
+			# blocked would tell the player their block did something.
+			#
+			# A TOTEM'S SHOT KEEPS THE MULTIPLIER (AC 36's list names it explicitly, and `6-5d/R17` is why
+			# it earned its own new test: no shipped test exercised a projectile under a buff or a block, so
+			# `existing tests pass unchanged` would have proved nothing here).
+			if not (is_projectile_index(attacker_index) \
+					and attacker.projectiles.is_hero_sourced_at(
+						projectile_index_of(attacker_index))):
+				damage *= balance.block_damage_multiplier
+				blocked = true
 		# Story 6-5a (AC 9): THE DAMAGE FUNNEL, seated AFTER the block multiplier.
 		#
 		# 6-5a REVIEW N1: the dev pass said "and never reordered with it", which is a claim no test can
@@ -2591,7 +2824,17 @@ func _damage_against_unit(attacker: PlayerState, attacker_index: int) -> float:
 ## record) and a kind that authors no attack. The graceful-degradation direction every authored-data
 ## miss in this project takes: a record written under an authored list that no longer describes it
 ## stops hurting anything rather than dealing an invented number.
+## STORY 6-5d (AC 14): A HERO-SOURCED SHOT CARRIES ITS OWN DAMAGE, per shot, and reads no kind at all.
+## Its number is not authored -- it is `damage_per_mana x the mana the player happened to spend at
+## staging` -- so there is no config to resolve it through, which is precisely why `ProjectileBoard._damage`
+## is the one stored authored-looking value on that board (see its comment). A TOTEM's shot is untouched:
+## it still reads its firing kind's attack record live, so AC 36's bit-identical damage holds by this
+## dispatch rather than by a value that happens to agree.
 func _attacker_attack_damage(attacker: PlayerState, attacker_index: int) -> float:
+	if is_projectile_index(attacker_index):
+		var shot_index := projectile_index_of(attacker_index)
+		if attacker.projectiles.is_hero_sourced_at(shot_index):
+			return attacker.projectiles.damage_at(shot_index)
 	var kind_index := attacker.projectiles.kind_index_at(projectile_index_of(attacker_index)) \
 			if is_projectile_index(attacker_index) \
 			else attacker.units.kind_index_at(attacker_index)
@@ -2626,12 +2869,33 @@ func _funnel_damage(attacker: PlayerState, attacker_index: int, target: PlayerSt
 ## Whether `index` on `player`'s side is a body Bloodlust covers: the hero, or a MINION on the board.
 ## The minion test reads the record's kind index against the authored minion kind's index -- the
 ## resolver's `KIND_MINION` name, never a second literal.
+## STORY 6-5d (AC 14, Discrepancy 5): A HERO-SOURCED SHOT IS THE HERO'S OWN BODY FOR BLOODLUST. The
+## previous line read `if is_projectile_index(index): return false`, justified as "never a projectile,
+## which today only a totem fires" -- and 6-5d is the story that makes that parenthesis false. The
+## standing rule (`6-5c/R13`) is that Bloodlust and Vampiric Aura reach EVERY spell, and a Fireball is a
+## spell the caster threw; the exclusion was about a TOTEM's shot, not about projectiles as such.
+##
+## A TOTEM'S SHOT IS STILL EXCLUDED (AC 36, `6-5d/R11`), now by the narrower test it always meant:
+## hero-sourced or not, rather than projectile or not.
 func _is_bloodlust_body(player: PlayerState, index: int) -> bool:
 	if index == TargetingService.HERO_INDEX:
 		return true
 	if is_projectile_index(index):
-		return false
+		return _is_hero_sourced_shot(player, index)
 	return player.units.kind_index_at(index) == balance.kind_index_of(CardEffectResolver.KIND_MINION)
+
+
+## Story 6-5d (AC 14/AC 36): IS THIS ATTACKER ADDRESS A SHOT THE HERO THREW? The one predicate the funnel
+## and the lifesteal gate share, so "a Fireball counts as the caster's own damage, a totem's shot does
+## not" is ONE decision rather than two that could drift -- which matters more than usual here, because
+## AC 36 exists precisely because the two shipped exclusions this replaces were written separately and a
+## careless fix would have removed both for both shot kinds.
+##
+## FALSE FOR A NON-PROJECTILE ADDRESS, so it is safe to ask of any attacker index.
+func _is_hero_sourced_shot(player: PlayerState, index: int) -> bool:
+	if not is_projectile_index(index):
+		return false
+	return player.projectiles.is_hero_sourced_at(projectile_index_of(index))
 
 
 ## Story 6-5a (R4, N10): VAMPIRIC AURA -- the caster's HERO heals `lifesteal_fraction` of the damage it
@@ -2649,8 +2913,17 @@ func _is_bloodlust_body(player: PlayerState, index: int) -> bool:
 ## heal here would put it back above zero BEFORE step 8 reads liveness, reviving the attacker and
 ## flipping the round's outcome. Switching this gate to `action_state != DEAD` introduces that revive.
 ## Pinned by `test_spell_framework.gd::test_vampiric_aura_never_revives_its_caster_on_a_mutual_kill`.
+## STORY 6-5d (AC 14, Discrepancy 5): A HERO-SOURCED SHOT HEALS ITS CASTER. The gate was
+## `attacker_index != HERO_INDEX`, whose docstring said "minion, totem and projectile damage never heal"
+## -- true while a totem was the only thing that could fire one. `6-5c/R13`'s standing rule is that
+## Vampiric Aura reaches every spell, and a Fireball's hp removal IS the caster's hero's damage, so the
+## gate widens to "the hero itself, or a shot the hero threw". A TOTEM's shot still heals nobody (AC 36).
+##
+## THE N8 LIVENESS ARGUMENT BELOW IS UNTOUCHED and now matters on one more path: a Fireball landing on the
+## tick its caster dies must not revive the caster before step 8 reads liveness.
 func _apply_lifesteal(attacker: PlayerState, attacker_index: int, removed: float) -> float:
-	if attacker_index != TargetingService.HERO_INDEX \
+	if (attacker_index != TargetingService.HERO_INDEX \
+				and not _is_hero_sourced_shot(attacker, attacker_index)) \
 			or not attacker.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA) \
 			or removed <= 0.0 or not attacker.hero.is_alive():
 		return 0.0
@@ -3392,13 +3665,35 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# that is not a cast. Converted to whole ticks HERE, ONCE, at the moment of application (A1) --
 	# never stored as seconds and never accumulated as a float.
 	#
-	# THE OTHER APPLY SEAT (`_resolve_pitch_activate`) IS DELIBERATELY NOT FORKED. No card's PITCH
-	# effect is a cast id today (Honed Bolt's pitch is `counterspell`, still deferred), so a pitch
-	# activation cannot reach a cast outcome; `test_spell_framework.gd` pins that disjointness rather
-	# than this seat guarding for a case the data cannot produce.
+	# THE OTHER APPLY SEAT (`_resolve_pitch_activate`) IS NOW FORKED TOO, AND STORY 6-5d IS WHY.
+	#
+	# WHAT THIS COMMENT USED TO SAY IS NO LONGER TRUE AND IS REWRITTEN RATHER THAN LEFT TO LIE (6-5d's
+	# "What this story supersedes", item 3). It read: "THE OTHER APPLY SEAT (`_resolve_pitch_activate`)
+	# IS DELIBERATELY NOT FORKED. No card's PITCH effect is a cast id today (Honed Bolt's pitch is
+	# `counterspell`, still deferred), so a pitch activation cannot reach a cast outcome;
+	# `test_spell_framework.gd` pins that disjointness rather than this seat guarding for a case the data
+	# cannot produce." FIREBALL IS THAT CASE: it is Bloodhound Step's PITCH effect and a `CAST_OUTCOMES`
+	# row, so the activation seat carries the same fork, seated and argued there.
+	#
+	# THE CITATION WAS ALSO WRONG AND IS CORRECTED (`6-5d/R23`): the disjointness pin was never in
+	# `test_spell_framework.gd` -- it is `test_hero_cast.gd::test_no_authored_pitch_effect_is_a_cast_id`,
+	# which scans `data/cards/`. That test is DELIBERATELY REVERSED for `fireball` by this story: the
+	# property it pinned is exactly the property 6-5d ships the negation of.
+	#
+	# THE TWO SEATS SHARE NO CODE AND THAT IS DELIBERATE. They differ in which map the effect came from,
+	# which mode the cast carries, and whether a frozen damage rides along; a shared helper would take
+	# three parameters to express those differences and hide the one thing a reader needs to see at each
+	# seat -- that the surrounding spend/record/replacement sequence is untouched.
+	#
+	# STORY 6-5d (AC 24): THE TARGET IS CAPTURED HERE, at the press, for a BASIC cast exactly as for a
+	# pitch one -- `6-5d/R6` applies to Honed Bolt too, which is the supersession of `6-5c/R1`'s
+	# slot-arithmetic target. The DAMAGE is 0.0: Honed Bolt's is authored on the effect and read at its
+	# landing, and only a staged variable cost has a frozen number to carry.
 	var cast_effect: CardEffect = _card_effects.get(played)
 	if CardEffectResolver.starts_cast(cast_effect, flags):
-		player.start_cast(played, TimingWindow.seconds_to_ticks(cast_effect.cast_seconds))
+		var cast_address := _captured_target_address(player)
+		player.start_cast(played, TimingWindow.seconds_to_ticks(cast_effect.cast_seconds),
+				Enums.ModeKind.BASIC, cast_address[0], cast_address[1], 0.0)
 		# Review fix M2 (`6-5c/R4`, `5-2/R17`): the caster cannot block during a cast, so a running block
 		# is dropped on the SAME tick, on mode 3's own pattern (`_resolve_defense_cast`) -- BLOCKING-ONLY.
 		# The step-3 cast lock sits below the `match action_state` dispatch, so without this write a held
@@ -3774,10 +4069,64 @@ func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringNam
 		# UNREACHABLE IN LIVE PLAY TODAY AND SAID SO: a dead hero ends the round, and step 1b returns
 		# before step 6, so no card resolves on a tick whose enemy hero is dead. Proven with a
 		# synthetic fixture, never claimed reachable -- `REASON_UNKNOWN_EFFECT_PREFIX`'s posture.
+		# STORY 6-5d (AC 27) WIDENS THIS ARM FROM `the opposing hero` TO `the CAPTURED target`, which is
+		# the address the cast would actually freeze on this tick (AC 24): the caster's lock-on target
+		# while locked, the opposing hero while not. The constant keeps its name because AC 27 cites it
+		# by name and because the RESTING lock IS the opposing hero -- a caster unlocked or locked on the
+		# hero gets the identical pre-6-5d answer, so this adds cases rather than changing one.
+		#
+		# IT IS STILL UNREACHABLE IN LIVE PLAY (AC 27 says so) and is still proven with a synthetic
+		# fixture: a locked unit's death snaps the lock back to a live hero (`_reset_lock`), and a dead
+		# hero ends the round before step 6. What it buys is that a card whose target CANNOT exist is
+		# refused before any spend, for both cast ids, through the one seat that already did it for one.
 		CardEffectResolver.NEEDS_ENEMY_HERO:
-			var opponent := p2 if player == p1 else p1
-			return &"" if opponent.hero.is_alive() else REASON_NO_TARGET
+			var address := _captured_target_address(player)
+			return &"" if _address_is_alive(address[0], address[1]) else REASON_NO_TARGET
 	return &""
+
+
+## Story 6-5d (AC 24, `6-5d/R6`/`R7`): THE TARGET A CAST STARTED BY `player` ON THIS TICK WOULD FREEZE,
+## as the `[slot, index]` pair (`4-2/R2`'s convention).
+##
+## A LOCKED CASTER TARGETS ITS LOCK; AN UNLOCKED ONE TARGETS THE OPPOSING HERO (`6-5d/R7`). Those are
+## the ruling's two clauses and this function is both of them, in one place, so the pre-spend gate
+## (`_board_refusal_reason`), the bolt, the Fireball and the presentation cannot each derive the rule
+## slightly differently. It supersedes the slot arithmetic `_apply_honed_bolt` and
+## `_push_cast_presentation` used (`var target_slot := 1 - slot`).
+##
+## A PURE DERIVATION, READ ONLY AT A PRESS. Nothing stores its result except `start_cast`, which is what
+## makes `6-5d/R15`'s freeze true: after the press the CAPTURED copy is read and this is never consulted
+## again for that cast, so a re-lock or an unlock changes nothing.
+##
+## THE OPPOSING SLOT IS DERIVED FROM `player == p1`, the `_reset_player` / `_board_refusal_reason`
+## precedent, rather than threaded: every caller already holds a slot, but so did the gate above, and
+## one derivation beats two parameters that must agree.
+func _captured_target_address(player: PlayerState) -> Array[int]:
+	if player.is_locked():
+		return [player.lock_target_slot, player.lock_target_index]
+	return [1 if player == p1 else 0, TargetingService.HERO_INDEX]
+
+
+## Story 6-5d (AC 21/AC 22/AC 26/AC 27): IS THE BODY AT THIS `[slot, index]` ADDRESS ALIVE?
+##
+## ONE READER FOR THE THREE PLACES A CAPTURED TARGET'S LIVENESS DECIDES SOMETHING -- the pre-spend gate,
+## the bolt's landing (AC 26: a dead captured target is hit by nothing) and the Fireball's homing end
+## (AC 21). Writing the hero/unit branch three times is how those three would drift apart.
+##
+## AN UNADDRESSABLE SLOT IS NOT ALIVE, which covers `TargetingService.NO_TARGET_SLOT` and
+## `PlayerState.UNLOCKED_SLOT` by falling through rather than by naming either: a cast can only capture
+## one of those if `_captured_target_address` returned an unlocked caster's own derived hero address,
+## which is a real slot -- so this branch is defence in depth, answered honestly.
+##
+## `UnitBoard.is_alive_at` IS LENIENT, so a stale or out-of-range unit index reads not-alive, which is
+## the correct answer for every caller here: a target that is not there cannot be hit.
+func _address_is_alive(slot: int, index: int) -> bool:
+	if slot != 0 and slot != 1:
+		return false
+	var side := p1 if slot == 0 else p2
+	if index == TargetingService.HERO_INDEX:
+		return side.hero.is_alive()
+	return side.units.is_alive_at(index)
 
 
 ## Story 6-2 (AC 3-8a/AC 12): mode ④ resolution -- STAGING. The card leaves the hand into its owner's
@@ -3840,14 +4189,44 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 	if reason != CastEvaluator.ALLOWED:
 		player.hero.reject_action(&"card_cast", reason)
 		return
-	Invariant.check(player.mana.spend(condition.mana_cost),
+	# Story 6-5d (AC 5/AC 6/AC 7, `6-5d/R1`/`R2`, Open Question 1): THE VARIABLE COST.
+	#
+	# THE REFUSAL IS THE EXISTING ONE AND THERE IS NO NEW TOKEN (AC 6). `pitch_condition.mana_cost` is
+	# Fireball's MINIMUM (authored 3.0), so a caster below it is already refused by
+	# `flag_and_mana_refusal_reason` directly above, through `REASON_INSUFFICIENT_MANA`, with nothing
+	# spent, nothing staged, no orb change and no replacement owed -- every clause of AC 6 is a
+	# consequence of that seat being above this line, not of code here.
+	#
+	# THE PITCH EFFECT IS READ HERE, AND THAT IS THE ONE PIN THIS STORY HAD TO ARGUE (Open Question 1).
+	# `test_deck_and_hand.gd` pins that ACTIVATION consumes `_pitch_effects` exactly once; that pin is
+	# about the activation seat, and this is staging -- a DIFFERENT seat, reading the map ONCE itself.
+	# The alternative was a variable-cost flag on `CardCastCondition`, which would shape the SHARED cost
+	# schema for one card's benefit; the story asked for the option that leaves it unshaped.
+	#
+	# THE CLASSIFICATION IS THE RESOLVER'S (D6) AND NO CARD IS NAMED HERE: this seat asks
+	# `spends_variable_mana`, never `is this Fireball`.
+	var pitch_effect: CardEffect = _pitch_effects.get(id)
+	var mana_spent := condition.mana_cost
+	var locked_damage := 0.0
+	if CardEffectResolver.spends_variable_mana(pitch_effect):
+		# AC 5: min(current, cap). At the authored cap 10 and `max_mana` 10 the cap is INERT and the
+		# whole pool goes -- the field exists so a later pool raise does not silently raise the ceiling.
+		# The pool is read ONCE into the figure that is both spent and remembered, so "the pool is left
+		# at X - spent" and "the staged card remembers the spent amount" cannot disagree.
+		mana_spent = minf(player.mana.get_current(), pitch_effect.mana_cap)
+		# AC 7 / Open Question 5: THE PRODUCT IS FROZEN, not the factors. NO ROUNDING -- 3 mana is 4.5,
+		# 7.3 is 10.95 -- and a `damage_per_mana` retune between here and the activation is deliberately
+		# NOT seen, which is the boundary this pass was asked to pick. See `PitchState._locked_damage`.
+		locked_damage = pitch_effect.damage_per_mana * mana_spent
+	Invariant.check(player.mana.spend(mana_spent),
 		"an ALLOWED staging must be affordable — CastEvaluator and ManaPool disagree")
 	var staged := player.hand.remove_at(hand_slot)
 	# `balance` / `balance_ticks` are non-null below the empty-slot guard, `_resolve_basic_cast`'s
 	# reason: a hand is non-empty only once the step-6 deal ran, and the deal needs balance.
 	if balance.pitch_stage_clears_orbs:
 		player.orbs.reset_all()
-	pitch.stage(slot, staged, hand_slot, condition.orb_costs, balance_ticks.pitch_stage_timer_ticks)
+	pitch.stage(slot, staged, hand_slot, condition.orb_costs, balance_ticks.pitch_stage_timer_ticks,
+			mana_spent, locked_damage)
 	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (a))
 	player.notify_cards_changed()
 
@@ -3934,6 +4313,9 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 		player.orbs.add(color, -int(orb_costs[color]))
 	var card_id := pitch.staged_card_id(slot)
 	var hand_slot := pitch.staged_hand_slot(slot)
+	# Story 6-5d (AC 10/AC 13): READ BEFORE `pitch.clear(slot)` WIPES THEM. The frozen damage is the
+	# staged record's, and the record is gone two lines down -- this is the last tick it exists.
+	var locked_damage := pitch.staged_locked_damage(slot)
 	player.discard.add(card_id)
 	pitch.clear(slot)
 	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (b))
@@ -3941,7 +4323,38 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	# card has left the zone, through the same apply seat a Mode ① cast uses, off the card's PITCH effect
 	# (the sixth injected map). Staging (`_resolve_pitch_stage`) stays cost-only and reads no effect. The
 	# header's "No per-card effect resolves here" is SUPERSEDED by this line.
-	_apply_card_effect(player, pitch_effect, slot)
+	#
+	# STORY 6-5d (AC 10/AC 11/AC 12/AC 13): THE MODE ④ CAST FORK -- `_resolve_basic_cast`'s fork, seated
+	# here for the first PITCH effect that is a cast id. `6-5c` deliberately left this seat unforked and
+	# said why ("No card's PITCH effect is a cast id today"); Fireball is that card, so the fork lands,
+	# and the `6-5c` comment saying otherwise is rewritten at its own seat rather than left to lie.
+	#
+	# EVERYTHING AROUND THE FORK IS UNCHANGED, which is AC 10 exactly: the orbs are already spent, the
+	# card is already in the discard, the zone is already clear, and the three lines below (the
+	# resolved-card record, the owed replacement, `card_cast_resolved`) run for BOTH arms -- the
+	# `6-5c/R17` "record and signal at the PRESS" precedent applied to the activation press.
+	#
+	# THE CLASSIFICATION IS THE RESOLVER'S (D6) AND NO CARD IS NAMED HERE, `_resolve_basic_cast`'s own
+	# property: this seat asks `starts_cast`, never `is this Fireball`. A closed spells layer answers
+	# false, so the activation still resolves and NO cast starts (AC 13's last sentence -- the resolver's
+	# existing degrade, unchanged and not re-implemented here).
+	#
+	# THE MODE IS `PITCH`, AND THAT ARGUMENT IS AC 12. Without it the strike seat would look `card_id` up
+	# in `_card_effects` and resolve Bloodhound Step's BASIC effect -- arming a roll buff instead of
+	# throwing a Fireball. See `PlayerState.cast_effect_mode`.
+	if CardEffectResolver.starts_cast(pitch_effect, flags):
+		var address := _captured_target_address(player)
+		player.start_cast(card_id, TimingWindow.seconds_to_ticks(pitch_effect.cast_seconds),
+				Enums.ModeKind.PITCH, address[0], address[1], locked_damage)
+		# AC 11: starting the cast drops a held block on the same tick -- `_resolve_basic_cast`'s review
+		# fix M2 (`6-5c/R4`, `5-2/R17`), verbatim and for its reason: the step-3 cast lock sits below the
+		# `match action_state` dispatch, so without this write a held block would keep its BLOCKING arm
+		# and its mitigation for the whole cast. BLOCKING-ONLY; ATTACKING/ROLLING finish on their own
+		# contract.
+		if player.hero.action_state == HeroState.ActionState.BLOCKING:
+			player.hero.set_action_state(HeroState.ActionState.IDLE)
+	else:
+		_apply_card_effect(player, pitch_effect, slot)
 	# Story 6-5a (AC 10): the second APPLY seat of the last-resolved-card record.
 	player.record_resolved_card(card_id, Enums.ModeKind.PITCH)
 	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
@@ -4534,17 +4947,74 @@ func _resolve_cast_strikes() -> void:
 		if not (p1_strikes if slot == 0 else p2_strikes):
 			continue
 		var player := p1 if slot == 0 else p2
-		var effect: CardEffect = _card_effects.get(StringName(player.cast_card_id))
+		# STORY 6-5d (AC 12): THE MAP IS CHOSEN BY THE CAST'S OWN MODE, not fixed to `_card_effects`.
+		# One card id names TWO effects -- Bloodhound Step's basic effect is the roll buff and its pitch
+		# effect is Fireball -- so a seat hard-wired to the basic map would resolve a Fireball cast as a
+		# roll buff. `cast_effect_mode` was captured at the press for exactly this read; AC 12 in both
+		# directions (a Fireball never arms a roll buff, a BASIC Bloodhound Step still does and starts no
+		# cast) is this dispatch and the fork at each press seat.
+		var effect: CardEffect = _cast_effect_of(player)
 		# CLEARED BEFORE THE OUTCOME IS APPLIED, so the strike itself can never observe its own caster
 		# as still casting -- the commitment ends AT the strike (AC 8), and an apply arm that stunned
 		# its own caster would otherwise leave a cast in flight with no window.
+		#
+		# STORY 6-5d: THE CARRIED FACTS ARE READ BEFORE THIS CLEAR, INTO LOCALS, because `clear_cast()`
+		# resets all four (`PlayerState.clear_cast`) -- and both apply arms below need the captured
+		# target, while the Fireball arm needs the frozen damage.
+		var target_slot := player.cast_target_slot
+		var target_index := player.cast_target_index
+		var cast_damage := player.cast_damage
 		player.clear_cast()
 		# THE OUTCOME IS THE RESOLVER'S (D6), and every outcome with no arm here applies nothing and
 		# has still resolved -- `_apply_card_effect`'s own posture. A missing injected entry lands on
 		# `REASON_NO_EFFECT_ENTRY` and strikes nothing rather than crashing.
 		match CardEffectResolver.outcome(effect, flags):
 			CardEffectResolver.OUTCOME_HONED_BOLT:
-				_apply_honed_bolt(player, effect, slot)
+				_apply_honed_bolt(player, effect, slot, target_slot, target_index)
+			CardEffectResolver.OUTCOME_FIREBALL:
+				_apply_fireball(player, effect, target_slot, target_index, cast_damage)
+
+
+## Story 6-5d (AC 12): THE EFFECT A CAST IN FLIGHT WILL STRIKE, looked up in the map its MODE names.
+##
+## ONE READER for the two maps, so the strike seat has no `if` and a third cast mode (there is no such
+## thing today) would land here rather than inside the ladder. `cast_card_id` is a `String` and converts
+## back with `StringName()` -- the shape `6-5c` already documented at that member.
+##
+## AN UNRECOGNISED MODE RESOLVES NO EFFECT, the `REASON_NO_EFFECT_ENTRY` honest-default posture: a null
+## return reaches `CardEffectResolver.outcome` and strikes nothing rather than guessing a map. Unreachable
+## today -- `NO_CAST_EFFECT_MODE` cannot coexist with `is_casting()`, because `start_cast` writes both -- and
+## answered rather than asserted for this file's standing total-function reason.
+func _cast_effect_of(player: PlayerState) -> CardEffect:
+	var id := StringName(player.cast_card_id)
+	match player.cast_effect_mode:
+		Enums.ModeKind.BASIC:
+			return _card_effects.get(id)
+		Enums.ModeKind.PITCH:
+			return _pitch_effects.get(id)
+	return null
+
+
+## Smoke fix (6-5d, operator finding 2026-09-28): WHICH OUTCOME A CAST IN FLIGHT WILL STRIKE.
+##
+## THE CLASSIFICATION IS THE RESOLVER'S (D6). This is a thin PURE QUERY over the same two reads
+## `_resolve_cast_strikes` already makes at the strike (`_cast_effect_of`, `CardEffectResolver.outcome`),
+## exposed so presentation can tell a Honed Bolt cast from a Fireball cast in flight WITHOUT naming a
+## card id or the resolver's own vocabulary in `match_runner.gd` -- the defect this exists to fix was
+## exactly a presentation seat that could not ask this question and so played the bolt prop for every
+## cast, Fireball included.
+##
+## TOUCHES NO BOARD AND MUTATES NOTHING -- the `projectile_profile_at` / `has_live_kind` footing -- so
+## it joins `EXEMPT_PURE_QUERIES` in `test_intent_recorder.gd` and needs no capture channel: a replay
+## that reproduces the injected content and the cast's own captured mode reproduces this answer.
+##
+## `&""` WHEN NOT CASTING, so a caller need not guard with `is_casting()` first -- `outcome()`'s own
+## null-effect default (`REASON_NO_EFFECT_ENTRY`) is for an effect that failed to resolve, not for "no
+## cast is running", so this function answers that one step earlier rather than reusing that reason.
+func cast_outcome(player: PlayerState) -> StringName:
+	if not player.is_casting():
+		return &""
+	return CardEffectResolver.outcome(_cast_effect_of(player), flags)
 
 
 ## Story 6-5c (AC 5, `6-5c/R3`/`R7`): DOES THIS TICK END `player`'s CAST WITHOUT A STRIKE?
@@ -4570,12 +5040,34 @@ func _cast_is_interrupted(player: PlayerState) -> bool:
 
 ## Story 6-5c (AC 10-16, `6-5c/R1`/`R8`/`R9`/`R12`/`R13`): HONED BOLT LANDS.
 ##
-## INSTANT AND UNAIMED (`6-5c/R1`). The target is `the other slot's hero`, computed from the
-## caster's slot and nothing else: no travel, no projectile, no range, direction or line-of-sight
-## test, no reach latch, no contact fact. Minions in between are irrelevant because nothing here
-## consults a board, and LOCK-ON is irrelevant because nothing here reads `lock_target`. It can
-## never hit a minion or a totem -- not filtered, but unreachable: there is no board index in this
-## function to address one with.
+## STORY 6-5d (AC 24-26, `6-5d/R6`/`R8`/`R15`): INSTANT AND AIMED. THE PREVIOUS PARAGRAPH IS SUPERSEDED
+## AND IS REWRITTEN RATHER THAN LEFT TO LIE (6-5d's "What this story supersedes", item 3). It read:
+## "INSTANT AND UNAIMED (`6-5c/R1`). The target is `the other slot's hero`, computed from the caster's
+## slot and nothing else ... LOCK-ON is irrelevant because nothing here reads `lock_target`. It can never
+## hit a minion or a totem -- not filtered, but unreachable: there is no board index in this function to
+## address one with." Every clause of that is now false by ruling.
+##
+## THE TARGET IS THE ADDRESS CAPTURED AT CAST START, handed in. It is the caster's lock-on target -- the
+## opposing hero, a minion or a totem -- or the opposing hero for an unlocked caster (`6-5d/R7`). STILL
+## INSTANT: no travel, no projectile, no range, direction or line-of-sight test, no reach latch and no
+## contact fact, so minions standing in between are still irrelevant. What changed is WHICH body it
+## resolves against, not how it gets there.
+##
+## IT IS THE CAPTURED COPY, NEVER THE LIVE LOCK (`6-5d/R15`), and AC 26's second sentence is exactly that
+## distinction: a minion that died mid-cast snapped the LIVE lock back to the opposing hero, and this
+## function never reads the live lock -- so the bolt hits NOTHING rather than falling on the hero the
+## snap-back chose. The card and the mana stay spent, as they have since `6-5c/R3`.
+##
+## A UNIT TARGET TAKES DAMAGE ONLY (AC 25, `6-5d/R8`): the funnel's unit seat, so Bloodlust and Vampiric
+## Aura both reach it and a lethal hit leaves a corpse through the same death seat as every other combat
+## kill -- and NO stun, NO root and NO dodge test, because a unit structurally has none of the three.
+## That is the `_resolve_unit_contact` short-ladder argument applied to a spell: what it skips, it skips
+## because a unit lacks it.
+##
+## THE HERO ARM BELOW IS UNTOUCHED CODE PATH-FOR-PATH (AC 25's second half), which is what keeps every
+## 6-5c hero-target test green unedited: the step-3 latch dodge, the damage, the stun, the root, the
+## knockdown floor, the repeat-landing switch and block/deflect irrelevance are the same lines in the
+## same order, now reached through an address instead of `1 - slot`.
 ##
 ## THE ONE AVOIDANCE IS THE STEP-3 LATCH (AC 11, `6-5c/R8`), AND IT MUST NOT BE
 ## `HeroState.is_iframe_open()`. The latch is WIDER -- it carries the `_gets_up_this_tick` term --
@@ -4601,10 +5093,36 @@ func _cast_is_interrupted(player: PlayerState) -> bool:
 ## A LETHAL BOLT WRITES NO STUN AND NO ROOT ONTO A CORPSE (AC 13). The liveness re-test after the
 ## damage is what buys that, and it is hp-based for `_apply_lifesteal`'s reason: `DEAD` is not
 ## written until step 8. The round then ends through the ordinary step-8 check on this same tick.
-func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int) -> void:
-	var target_slot := 1 - slot
-	var target := p2 if slot == 0 else p1
-	if not target.hero.is_alive():
+func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
+		target_slot: int, target_index: int) -> void:
+	# Story 6-5d (AC 26): A DEAD (or absent) CAPTURED TARGET IS HIT BY NOTHING -- no damage, no
+	# `hit_landed`, no stun -- and the card and mana are never refunded. One test through
+	# `_address_is_alive` covers the dead hero, the dead minion and the stale index alike, replacing the
+	# hero-only `target.hero.is_alive()` guard this line used to be.
+	if not _address_is_alive(target_slot, target_index):
+		return
+	var target := p1 if target_slot == 0 else p2
+	# Story 6-5d (AC 25, `6-5d/R8`): THE UNIT ARM -- damage only, through the funnel's UNIT seat, with the
+	# corpse lifetime read inline and handed down exactly as `_resolve_unit_contact` does, so a lethal
+	# bolt leaves a corpse through the one death seat every other kill uses. No stun, no root, no dodge
+	# test: a unit has no `ActionState`, no roll window and no i-frames to test.
+	if target_index != TargetingService.HERO_INDEX:
+		var unit_damage := _funnel_damage(caster, TargetingService.HERO_INDEX, target, target_index,
+				effect.damage_amount)
+		var unit_hp_before := target.units.hp_at(target_index)
+		target.units.apply_damage_at(target_index, unit_damage,
+				_corpse_ticks_for(target, target_index))
+		_apply_lifesteal(caster, TargetingService.HERO_INDEX,
+				unit_hp_before - target.units.hp_at(target_index))
+		# `_resolve_unit_contact`'s own review-fix F2 rung, for its reason verbatim: a unit that dies
+		# here can never close its own swing-dedupe record through `_advance_unit_attacks` again.
+		if not target.units.is_alive_at(target_index):
+			target.unit_dedupe.discard(target_index)
+		# NO `hit_landed` FOR A UNIT TARGET, and that is `4-3a/R12`'s standing suppression rather than an
+		# omission: the signal's payload carries the TARGET HERO's hp and its one shipped consumer
+		# (`telegraph_controller.gd`) flashes and stings that hero, so announcing a minion's wound as a
+		# hit on the hero behind it would be a lie about the match. `_resolve_unit_contact` emits none for
+		# the same reason, and this arm is that ladder's spell twin.
 		return
 	if _iframe_open_at_step3[target_slot]:
 		return
@@ -4624,6 +5142,39 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int) -> vo
 	if target.hero.is_alive():
 		_apply_bolt_landing(target, effect)
 	_queue.push(hit_landed.emit.bind(slot, target_slot, damage, target.hero.get_hp()))
+
+
+## Story 6-5d (AC 13/AC 22, `6-5d/R13`): FIREBALL LEAVES THE CASTER -- the cast strike's other arm, and
+## the SECOND seat in the project that puts a projectile on a board (`_advance_unit_attacks` is the
+## first).
+##
+## IT PLACES A RECORD AND NOTHING ELSE. No damage, no contact, no signal: a Fireball is the first spell
+## whose strike starts a FLIGHT rather than resolving an outcome, so everything that happens to it after
+## this line happens through the 4-4 projectile machinery -- the acceleration clock, the odometer, the
+## homing, the contact rungs, the i-frame drop and the deflect consumption -- which is the whole of the
+## "reuse" this story promised, and none of it is re-implemented here.
+##
+## THE TARGET IS THE CAPTURED ADDRESS AND IT IS NOT RE-DERIVED (AC 13/AC 24). `ProjectileBoard` fixes a
+## target at launch and never re-acquires (its `_target_slots` comment), so the freeze `6-5d/R15` asks
+## for is the board's own standing contract rather than a new rule.
+##
+## A DEAD CAPTURED TARGET IS STILL LAUNCHED AT (AC 22, `6-5d/R13`), and that is a POSITIVE decision
+## rather than a missing guard -- there is deliberately no liveness test in this function. The shot is
+## placed and flies straight on its launch heading (the runner's `_spawn_missing_projectile_actors` finds
+## no target position for a dead body and simply does not aim it), homes on nothing (the dead-target rung
+## in `_advance_projectiles` ends its homing), damages nothing (its captured target is the only body it
+## may hit, AC 20) and expires at `travel_budget`. It NEVER re-acquires and never falls on the lock's
+## snap-back hero, both of which are true by the absence of any code here that could.
+##
+## THE DAMAGE ARRIVES FROZEN, from the staging two presses ago (AC 7). This seat does not multiply, round
+## or clamp it -- Bloodlust and the block exemption are the CONTACT ladder's business, and the funnel is
+## where AC 14 happens.
+##
+## THE SPELLS-FLAG DEGRADE NEEDS NO CLAUSE HERE: `starts_cast()` answered false at the press, so a closed
+## layer never arms a cast and this function is never reached.
+func _apply_fireball(caster: PlayerState, effect: CardEffect, target_slot: int,
+		target_index: int, damage: float) -> void:
+	caster.projectiles.add_hero_shot(target_slot, target_index, effect.effect_id, damage)
 
 
 ## Story 6-5c (AC 14-16, AC 19): THE STUN AND THE ROOT a landed bolt writes onto a LIVING target.

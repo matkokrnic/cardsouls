@@ -94,8 +94,20 @@ const EXEMPT_PURE_QUERIES: Array[String] = [
 	"unit_attack_phase_multiplier",
 	"projectile_speed_at",
 	"projectile_step_distance_at",
+	# Story 6-5d (AC 33, Open Question 4): `projectile_profile_at` -- the THIRD projectile pure query,
+	# on its two siblings' footing verbatim and for their exact reason: it touches no board, mutates
+	# nothing, and nothing reaches MatchState through it. It became PUBLIC in this story because the
+	# runner-side duplicate of the same lookup was DELETED, and a shot authored by a `CardEffect` rather
+	# than by a unit kind could only be resolved in one place without teaching two places the same
+	# lookup. A replay that reproduces the board and the injected content reproduces this answer.
+	"projectile_profile_at",
 	"has_live_kind",
 	"live_kind_count",
+	# Smoke fix (6-5d, operator finding 2026-09-28): `cast_outcome` -- which outcome a cast in flight
+	# will strike, on `projectile_profile_at`'s exact footing: it touches no board, mutates nothing,
+	# and nothing reaches MatchState through it. Presentation needed this to stop spawning the bolt
+	# prop for a Fireball cast without naming a card id or the resolver's vocabulary in the runner.
+	"cast_outcome",
 ]
 
 ## AC 1: the intake surface VERIFIED BY CONTENT at this story's pass. Pinned by exact set

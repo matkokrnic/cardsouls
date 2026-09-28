@@ -411,9 +411,28 @@ func test_the_pitch_effect_is_consumed_only_at_its_sanctioned_seats() -> void:
 	var stage_body := _function_body("res://src/state/match_state.gd", "_resolve_pitch_stage")
 	var activate_body := _function_body("res://src/state/match_state.gd", "_resolve_pitch_activate")
 	assert_true(stage_body.size() > 0 and activate_body.size() > 0, "both seats were found (non-vacuity)")
+	# STORY 6-5d (AC 5, Open Question 1) MOVES THIS HALF OF THE PIN, DELIBERATELY. It used to read
+	# `STAGING reads no effect` -- 6-5a's AC 6, true while every pitch price was FIXED. Fireball's price
+	# is `min(pool, mana_cap)`, and `mana_cap` is authored on the EFFECT, so staging must consult it to
+	# know what to charge. The alternative the story weighed was a variable-cost field on the SHARED
+	# `CardCastCondition` schema, rejected because it shapes every card's cost record for one card.
+	#
+	# WHAT THE PIN NOW SAYS IS STRICTLY STRONGER THAN "STAGING READS NOTHING" WOULD BE IF IT WERE KEPT AS
+	# A COMMENT: staging reads the map EXACTLY ONCE, and staging still APPLIES NOTHING. The second half is
+	# the load-bearing one -- 6-5a's real subject was that a staged card's EFFECT does not resolve until
+	# activation, and that is what `_apply_card_effect` being absent here asserts. A cost READ is not a
+	# resolution.
+	var stage_reads := 0
 	for line in stage_body:
-		assert_false(line.contains("_pitch_effects") or line.contains("_apply_card_effect"),
-			"STAGING reads no effect (AC 6): %s" % line.strip_edges())
+		if line.contains("_pitch_effects.get("):
+			stage_reads += 1
+		assert_false(line.contains("_apply_card_effect"),
+			"STAGING applies no effect -- a staged card resolves only at activation (6-5a AC 6, "
+			+ "unweakened by 6-5d): %s" % line.strip_edges())
+	assert_eq(stage_reads, 1,
+		"Story 6-5d (AC 5): STAGING reads the pitch-effect map EXACTLY ONCE -- it needs `mana_cap` and "
+		+ "`damage_per_mana` to price a variable-cost staging and to freeze its damage. Two reads could "
+		+ "disagree about what was charged, which is this counter's whole point at both seats")
 	var reads := 0
 	for line in activate_body:
 		if line.contains("_pitch_effects.get("):

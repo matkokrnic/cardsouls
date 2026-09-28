@@ -117,16 +117,27 @@ func test_a_closed_spell_layer_closes_the_buffs_and_not_ruin_vanguard() -> void:
 ## answers `&""` now and it resolves to `OUTCOME_HONED_BOLT`. RENAMED from
 ## `test_the_five_deferred_effects_name_their_owning_story` for the count-in-the-name discipline;
 ## the old name is recorded here verbatim so the pin stays greppable.
+## STORY 6-5d: THE COUNT DOES NOT MOVE AND THREE OWNERS DO (AC 35, `6-5d/R14`). No row leaves -- 6-5d
+## builds `fireball`, which was never a row here, because Bloodhound Step's pitch was the `bloodlust`
+## BUFF until this story. What moved is the BOARD: `6-5d-hero-and-corpse-projectiles` was renamed
+## `6-5d-fireball-and-spell-targeting` and `6-5e-boulder-injection` was renamed
+## `6-5e-rocksling-boom-and-corpse-bomb`, so all three rows named stories that no longer exist. All three
+## now name the 6-5e key -- the story that actually builds them.
 func test_the_four_deferred_effects_name_their_owning_story() -> void:
 	var owners := {
-		&"rocksling": &"6-5d-hero-and-corpse-projectiles",
-		&"boom": &"6-5e-boulder-injection",
+		&"rocksling": &"6-5e-rocksling-boom-and-corpse-bomb",
+		&"boom": &"6-5e-rocksling-boom-and-corpse-bomb",
 		&"counterspell": &"6-5f-counterspell",
-		&"corpse_bomb": &"6-5d-hero-and-corpse-projectiles",
+		&"corpse_bomb": &"6-5e-rocksling-boom-and-corpse-bomb",
 	}
 	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 4,
 		"exactly FOUR deferred rows -- FIVE before 6-5c, which retired the one naming itself; "
-		+ "NINE before 6-5b, which retired the four naming itself")
+		+ "NINE before 6-5b, which retired the four naming itself. 6-5d retired NONE: it built "
+		+ "`fireball`, which was never deferred (it is a NEW effect, not a re-pointed row)")
+	# Story 6-5d (AC 35): `fireball` is NOT a deferred row -- the negative half of the rename, asserted so
+	# a future pass cannot add one and quietly turn a shipped cast back into a no-op.
+	assert_eq(CardEffectResolver.owner_story_for(&"fireball"), &"",
+		"fireball is BUILT by 6-5d and has no deferred-owner row")
 	for id: StringName in owners:
 		assert_eq(CardEffectResolver.owner_story_for(id), owners[id], "%s is owned by %s" % [id, owners[id]])
 		assert_eq(CardEffectResolver.outcome(_effect(id), _flags()),

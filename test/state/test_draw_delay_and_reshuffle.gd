@@ -86,7 +86,21 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"mana", "orbs",
 	"pending_draw", "pending_draw_owed",
 	# Story 4-4 (AC 14-19): the projectile board contributes SEVEN keys, in sorted position.
-	"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
+	# Story 6-5d (AC 30, Golden Prediction cause 4): NINE. The projectile board gains
+	# `projectile_damage` (the per-shot LOCKED damage of a hero-sourced shot) and `projectile_effect`
+	# (the effect id its flight is authored by), taking THE PER-PLAYER SET FROM 38 TO 40 -- the key-set
+	# move this story predicted and MEASURED. Both sit in SORTED position: `damage` and `effect` precede
+	# `flight_ticks`.
+	#
+	# WHY TWO KEYS AND NOT ONE: two Fireballs of the SAME effect id carry DIFFERENT damage (the damage
+	# is the mana the player happened to have at staging), so they are independent facts and fusing them
+	# would hide which moved -- `projectile_board.gd`'s own stated split-versus-fuse rule.
+	#
+	# THE `cast` KEY DID NOT MOVE THIS SET, deliberately: the four facts a cast now carries EXTEND that
+	# one key from two elements to six rather than adding four keys, so the story's cause 2 and this
+	# key-set move stay two separately measurable causes instead of one event with two symptoms.
+	"projectile_alive", "projectile_damage", "projectile_effect", "projectile_flight_ticks",
+	"projectile_homing", "projectile_kind",
 	"projectile_source", "projectile_targets", "projectile_travelled",
 	# Story 6-5c (AC 17/AC 23): the THIRTY-EIGHTH key -- `root`, as
 	# `[remaining_ticks, blocks_run, blocks_roll]`, in SORTED position between the projectile block

@@ -252,7 +252,32 @@ extends RefCounted
 ## THE NEW HASHED STATE IS NOT A THIRD CAUSE, on 6-5b's own measured reasoning: a record carries
 ## INPUTS and CONTENT, never a hash and never a snapshot, so the `cast` / `root` / `stun_is_bolt`
 ## keys force nothing here. Neither is a new intake -- this story pushes no new runner fact.
-const FORMAT_VERSION := 15
+##
+## STORY 6-5d BUMPS 15 -> 16 (AC 31), FOR ONE MEASURED CAUSE, AND THE STORY'S OWN STATED CAUSE IS
+## CORRECTED RATHER THAN REPEATED.
+##
+## (1) THE RECORDED PER-EFFECT ROW SHAPE MOVES, which is 6-5c's cause (1) recurring for the same
+## mechanism: `CardEffect` gains EIGHT flat exports (`mana_cap`, `damage_per_mana` and the five
+## `ProjectileProfile` mirror fields), and `_resource_values` captures EVERY script variable off
+## `get_property_list()` regardless of whether it holds its default -- so every row in the `effects` and
+## `pitch_effects` channels gains eight keys. `REQUIRED_KEYS` (the CHANNEL key set) is again unmoved.
+## MEASURED, not inherited: pinned by `test_record_file.gd`'s row-shape assertion, which reads the new
+## field names out of an actually-saved record rather than asserting the count.
+##
+## (2) AC 31'S STATED REASON DOES NOT APPLY, AND SAYING SO IS THE HONEST RECORD. The AC reads "recorded
+## content gains fields whose defaults would replay a Fireball as a no-op". A v15 file CANNOT CONTAIN A
+## FIREBALL -- the effect did not exist and no card referenced it -- so there is no recorded Fireball for
+## a default to misresolve. Nor does the PAIRING SWAP create one: a record carries its own injected
+## content, so a v15 file replays Bloodhound Step's pitch as the `bloodlust` BUFF it was recorded with,
+## self-consistently, and the new build's variable-cost staging reads `mana_cap` 0.0 off that rebuilt
+## buff and takes the unchanged fixed-price path. The bump rests on cause (1) alone, which is sufficient
+## on its own and is the same cause that carried 14 -> 15.
+##
+## v15 IS REFUSED HARD, NO MIGRATION AND NO SHIM, for the reason the exact-match refusal exists: filling
+## eight absent keys with constructor defaults is precisely the silently-wrong replay this constant
+## prevents, and a shim would have to guess which absent field meant "not authored" and which meant "the
+## authoring predates the field".
+const FORMAT_VERSION := 16
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

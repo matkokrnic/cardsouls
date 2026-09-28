@@ -166,6 +166,53 @@ extends Resource
 ## deals damage only, whatever this says (`R-STUNSTACK`, `6-5c/R9`).
 @export var repeat_landing_restuns: bool = true
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5d: FIREBALL'S NUMBERS -- the VARIABLE COST, the per-mana damage, and the flight profile
+## of a HERO-SOURCED projectile. Eight more FLAT exports, on the header's own discipline (AC 3): no
+## subclass, no nested resource, so `RecordFile._card_effects` keeps round-tripping every one of them
+## generically and `_fresh_nested` needs no new row.
+##
+## EVERY ONE OF THEM IS NEUTRAL-ZERO BY DEFAULT, which is AC 4 and a deliberate departure from
+## `cast_seconds`/`kill_cap`/`raise_hp_percent`'s live defaults one family up. Those three are read
+## only for an effect already classified as the family that uses them; these eight are read on paths
+## an unrelated effect CAN reach -- `mana_cap` in particular is what `CardEffectResolver`
+## `spends_variable_mana()` reads at EVERY staging of EVERY pitch card -- so a live default here
+## would silently make some other card variable-cost. Zero means "not variable-cost", "no damage per
+## mana" and "no flight", and an unused number cannot change an outcome.
+##
+## THE FLIGHT FIVE MIRROR `ProjectileProfile` FIELD FOR FIELD, deliberately and by the same names. A
+## `ProjectileProfile` is a nested Resource this schema forbids, so the numbers are flattened here and
+## mirrored back into ONE `ProjectileProfile` once, at `MatchState.inject_pitch_effects` -- which is
+## what keeps `_projectile_profile_at` a SINGLE reader for both shot kinds instead of two curves that
+## could drift apart (`4-4/R3`: exactly one homing implementation and one acceleration implementation).
+## Sharing the names is what makes that mirror a transcription a reader can check by eye.
+
+## THE VARIABLE COST (`6-5d/R1`, AC 5). The CEILING on how much mana one staging spends: a staging
+## spends `min(current mana, mana_cap)`. It is ALSO THE DISCRIMINATOR -- `> 0.0` is what makes an
+## effect variable-cost at all (`CardEffectResolver.spends_variable_mana`), which is why its default
+## must be zero. The authored 10.0 equals `max_mana` today, so the cap is INERT and the whole pool is
+## always spent; the field exists so a later pool raise does not silently raise Fireball's ceiling.
+## The MINIMUM (3) is not here -- it is the card's `pitch_condition.mana_cost`, the existing field.
+@export var mana_cap: float = 0.0
+
+## THE DAMAGE PER MANA SPENT (`6-5d/R2`, AC 7). The landed damage is this times the mana the staging
+## actually spent, with NO ROUNDING, and the PRODUCT is frozen into the staged record at staging -- so
+## a retune of this number between staging and activation is deliberately NOT seen by a card already
+## in the zone (Open Question 5). Neutral default 0.0: an effect with no per-mana damage has none.
+@export var damage_per_mana: float = 0.0
+
+## THE FLIGHT PROFILE, mirroring `ProjectileProfile` field for field (see the block comment above).
+## The authored values start from the Combat totem's shot profile, which is what makes AC 3's "the
+## totem-shot feel" an authoring fact rather than a shared resource. Every default is neutral zero:
+## a zero launch speed with zero acceleration is a shot that never leaves the caster, which is the
+## honest degenerate meaning for an effect that authors no flight at all.
+@export var launch_speed: float = 0.0
+@export var homing_turn_rate_degrees_per_second: float = 0.0
+@export var acceleration_delay_seconds: float = 0.0
+@export var acceleration_per_second_squared: float = 0.0
+@export var max_speed: float = 0.0
+@export var travel_budget: float = 0.0
+
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation
 ## interprets it"). Empty = no cue named.

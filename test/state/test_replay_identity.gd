@@ -290,6 +290,18 @@ const HASHED: Array[String] = [
 	"projectile_board._kind_index", "projectile_board._source_index",
 	"projectile_board._alive", "projectile_board._homing",
 	"projectile_board._flight_ticks", "projectile_board._travelled",
+	# Story 6-5d (AC 30): the HERO-SOURCED shot's two members classify HASHED with their eight
+	# index-aligned siblings, for the same `4-3a/R17` test and not a weaker one. `_effect_ids` CROSSES
+	# TICKS and DECIDES AN OUTCOME (every authored number governing the flight, and whether the
+	# target-only / no-block / Bloodlust-inclusive rules apply at all); `_damage` decides what the shot
+	# hits for and is the one value on this board a replay cannot re-derive from config, because the
+	# staging that computed it is ticks in the past. Both reach the hash through
+	# `PlayerState.to_snapshot()`'s new `projectile_effect` / `projectile_damage` keys, so no exemption is
+	# needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	#
+	# THE ID IS A `String` VALUE, never a StringName and never a key -- `player_state.cast_card_id`'s own
+	# measured reason, carried to a second container.
+	"projectile_board._effect_ids", "projectile_board._damage",
 	"player_state.unit_dedupe", "unit_swing_dedupe._records",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
@@ -324,6 +336,18 @@ const HASHED: Array[String] = [
 	# `PlayerState.to_snapshot()`'s ONE new fused `cast` key, so neither needs an exemption and
 	# UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"player_state.cast_window", "player_state.cast_card_id",
+	# Story 6-5d (AC 30): the FOUR facts a cast now CARRIES classify HASHED with the two above, on their
+	# exact test. `cast_effect_mode` DECIDES AN OUTCOME in the strongest sense this pin knows -- it
+	# decides WHICH EFFECT the strike resolves, so a replay that lost it would arm a roll buff where the
+	# recorded match threw a Fireball (AC 12). The captured target decides where the strike lands and is
+	# deliberately NOT derivable from the live `lock_target`, which may have moved or snapped back since
+	# (`6-5d/R15`). The locked damage decides what it hits for and cannot be recomputed at all: the mana
+	# pool it was measured against was emptied at staging.
+	#
+	# ALL FOUR RIDE THE ONE EXTENDED `cast` KEY, so no exemption is needed and
+	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"player_state.cast_effect_mode", "player_state.cast_target_slot",
+	"player_state.cast_target_index", "player_state.cast_damage",
 	# Story 6-5c (AC 17/AC 18): THE ROOT and its two INDEPENDENT switches classify HASHED on the same
 	# test -- the window CROSSES TICKS (it spans the stun plus the root) and each switch DECIDES AN
 	# OUTCOME (whether RUN, and whether ROLL, is gone while it runs). All three ride the ONE new fused
@@ -339,6 +363,15 @@ const HASHED: Array[String] = [
 	# UNHASHED_CROSS_TICK below.
 	"pitch_state._card_ids", "pitch_state._hand_slots",
 	"pitch_state._fizzle",
+	# Story 6-5d (AC 30): the variable cost's two frozen facts classify HASHED, NOT beside their
+	# `_orb_costs` neighbour in exclusion (d). The distinction is the one `3-2`'s close-out actually drew:
+	# `_orb_costs` is excluded because it is card `.tres` CONTENT, and repricing a card must never
+	# re-baseline the golden. Neither of these is content -- both are the OUTCOME of a player action
+	# against a live pool (what was paid, and the product frozen from it), the same class of fact as
+	# `mana` itself. Both CROSS TICKS (frozen from staging until `clear()`) and DECIDE AN OUTCOME (what
+	# the Fireball hits for), and both ride the pitch zone snapshot's new `mana_spent` / `locked_damage`
+	# keys -- so UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR rather than becoming five.
+	"pitch_state._mana_spent", "pitch_state._locked_damage",
 	"mana_pool._current", "mana_pool._maximum",
 	"orb_pool._red", "orb_pool._blue", "orb_pool._green",
 	"stamina_pool._current", "stamina_pool._maximum", "stamina_pool._regen_delay",
@@ -412,6 +445,14 @@ const INJECTED: Array[String] = [
 	# verbatim -- changed only through `inject_pitch_effects`, which IS a capture channel
 	# (`capture_inject_pitch_effects`). UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"match_state._pitch_effects",
+	# Story 6-5d (AC 3, Open Question 4): the FLIGHT-PROFILE MIRROR and its tick twin, classified
+	# INJECTED for `_pitch_effects`' reasons and one more that makes the case stronger rather than weaker:
+	# they are not merely changed only through `inject_pitch_effects`, they are REBUILT WHOLESALE inside
+	# it, from the map that call just took. So restoring the injection restores them exactly, the way
+	# restoring `balance` restores `balance_ticks` -- this block's own stated precedent for a derived
+	# member. Nothing else in the project writes either one, and no tick produces either.
+	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"match_state._effect_projectiles", "match_state._effect_projectile_delay_ticks",
 	# Story 5-4 (AC 8/AC 10/AC 12): the ORB POOL's per-colour MAXIMUM, and it lands in THIS bucket
 	# rather than beside `mana_pool._maximum` in HASHED -- the one asymmetry between the two pools,
 	# named here because this file is where it becomes checkable.
@@ -698,6 +739,331 @@ func test_container_order_is_reproduced_although_the_hash_never_saw_it() -> void
 		"...and P2's, which the ONE-SEAT shuffle ordering makes a different permutation")
 	assert_ne(live.p1.deck.to_array(), live.p2.deck.to_array(),
 		"sanity: the two piles really are different permutations of one composition")
+
+
+# ---------------------------------------------------------------- story 6-5d, AC 32
+
+## Story 6-5d (AC 32): A SECOND DRIVEN RUN -- THE SPELL RUN -- replayed to a bit-identical hash.
+##
+## A SIBLING FIXTURE RATHER THAN AN EXTENSION OF THE ONE ABOVE, and the reason is the same one that gave
+## that fixture its own existence (this file's header): the driven run above is the pin for ACs 1-11 and
+## every one of its channel-drop proofs is calibrated to what it does. Bolting a two-cast spell
+## choreography onto it would re-time every constant in it and put two unrelated stories' proofs in one
+## sequence. This run drives ONLY what AC 32 names and leaves that one alone.
+##
+## WHAT IT DRIVES, all of it through RECORDED CHANNELS and nothing poked into state -- which is the whole
+## difficulty of writing this fixture and the reason it earns a place here. The state-side pokes
+## `test_fireball.gd` uses freely (`mana.add`, `orbs.add`, `units.add`, a written `lock_target_slot`) are
+## all unavailable: a replay never performs them, so any one of them would diverge the hash for a reason
+## that has nothing to do with the spells. Every fact below therefore arrives the way the runner would
+## deliver it:
+##   * MANA comes from a MELEE HIT on each side -- an attack press, then a contact fact pushed inside the
+##     active window, exactly as the fixture above earns its own mana.
+##   * THE MINION comes from a real CAST: P2 presses a card whose basic effect is a `summon_`.
+##   * THE LOCK comes from `retarget_slot`/`retarget_index` on the intent (`_resolve_lock`), the channel
+##     the Golden Prediction's "intake: none" clause named as already sufficient for AC 24.
+##   * THE ORB REQUIREMENT IS AUTHORED AWAY rather than choreographed: this fixture's pitch condition
+##     costs NO orb. Orbs are banked only by landing an unblockable (`_grant_landing_orbs`), which is an
+##     entire chargeup choreography, and the orb GATE is AC 10's and is pinned in `test_fireball.gd`.
+##     What AC 32 asks for is the replay round trip of a Fireball, not a second proof of the gate.
+##   * THE LANDING comes from a contact fact pushed at the projectile's own attacker address, the fact
+##     `_gather_projectile_facts` would gather -- so the record carries the landing rather than the
+##     replay re-deriving it.
+##
+## THE LOCK IS MOVED MID-CAST, TWICE, ON PURPOSE (`6-5d/R15`): each cast starts with the lock on the
+## MINION and the lock is then moved to the HERO while the cast runs. So the CAPTURED copy and the LIVE
+## lock disagree at both strikes, and the non-vacuity test below asserts that disagreement directly --
+## which is what makes this fixture kill a strike seat that read the live lock instead of the captured
+## one, a mutation a replay-identity assertion alone could never see (both runs would read it alike).
+const SPELL_SEED := 6565
+const SPELL_TICKS := 44
+const SPELL_ATTACK_TICK := 5     # both heroes swing; the windows are `_config()`'s
+const SPELL_CONTACT_TICK := 9    # a fact inside both active windows -> mana on both sides
+const SPELL_SUMMON_TICK := 12    # P2's basic cast: the minion this story's spells aim at
+const SPELL_LOCK_MINION_TICK := 14
+const SPELL_BOLT_TICK := 16      # P1's BASIC cast -> a Honed Bolt cast on the locked minion
+const SPELL_RELOCK_HERO_TICK := 18   # mid-cast: the live lock leaves the captured target behind
+const SPELL_RELOCK_MINION_TICK := 24
+const SPELL_STAGE_TICK := 26     # the PITCH press: the variable mana cost, the locked damage
+const SPELL_ACTIVATE_TICK := 28  # the orb-less activation -> the Fireball cast starts
+const SPELL_RELOCK_HERO_AGAIN_TICK := 36
+const SPELL_LAND_TICK := 38      # the Fireball's contact fact, on the CAPTURED minion
+const SPELL_CAST_TICKS := 6
+
+## THREE CARDS AND A HAND THAT HOLDS ALL THREE, so the press seats need no knowledge of the deal: the
+## deck is dealt out entirely and each id is findable by name. Opaque ids, the `DECK_IDS` discipline --
+## `data/cards/` is unreachable from the state harness and no card library contains these.
+const SPELL_SUMMON_CARD := &"spell_run_summon"
+const SPELL_BOLT_CARD := &"spell_run_bolt"
+const SPELL_SPARE_CARD := &"spell_run_spare"
+const SPELL_DECK: Array[StringName] = [SPELL_SUMMON_CARD, SPELL_BOLT_CARD, SPELL_SPARE_CARD]
+const SPELL_MANA_COST := 2.0
+const SPELL_PITCH_MANA_COST := 3.0
+## The Fireball shape: a cap BELOW the mana P1 will hold at staging, so the `min(X, cap)` branch is the
+## one exercised and the locked damage is a number no other fact in the run could produce.
+const SPELL_MANA_CAP := 8.0
+const SPELL_DAMAGE_PER_MANA := 1.5
+const SPELL_BOLT_DAMAGE := 4.0
+const SPELL_UNIT_HP := 9.0
+
+
+## AC 32, the primary: a recorded match containing a Fireball (staged, activated, flown and LANDED) and
+## a targeted Honed Bolt on a minion replays FROM THE RECORD ALONE to a bit-identical hash.
+func test_a_recorded_fireball_and_targeted_bolt_replay_to_the_identical_hash() -> void:
+	var recorded := _record_a_spell_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	assert_eq(record.tick_count(), SPELL_TICKS, "the record carries every tick that ran")
+	var replayed := _replay(record)
+	assert_eq(CanonicalHash.of(replayed.to_snapshot()), CanonicalHash.of(live.to_snapshot()),
+		"AC 32: a replay of the spell run, driven from the record ALONE, is bit-identical")
+	# The falsifying half, on the channel this fixture leans on hardest: without the contact facts
+	# neither hero earns mana, nothing is cast and nothing lands.
+	assert_ne(CanonicalHash.of(_replay(record, "contacts").to_snapshot()),
+		CanonicalHash.of(live.to_snapshot()),
+		"...and with the contact channel dropped it DIVERGES, so the landing rides the record")
+
+
+## AC 32's other half: the run must actually DO the four things, or a bit-identical replay would be
+## proving something about a sequence of refusals. Each clause is pinned on the recorded run's own
+## final state.
+func test_the_spell_run_stages_activates_flies_and_lands_a_fireball_at_a_locked_minion() -> void:
+	var recorded := _record_a_spell_run()
+	var live: MatchState = recorded["state"]
+	# THE MINION EXISTED AND WAS BOLTED. Its HP is read at the end, so the bolt's damage is asserted
+	# against a body the Fireball then killed -- the corpse is what proves both landings.
+	assert_eq(live.p2.units.size(), 1, "P2's basic cast summoned the minion the spells aim at")
+	assert_false(live.p2.units.is_alive_at(0),
+		"the Fireball's landing killed the bolted minion, so both spells reached the same body")
+	# THE FIREBALL: staged, activated, launched, flown and consumed by its landing.
+	assert_eq(live.p1.projectiles.size(), 1, "exactly one Fireball was launched")
+	assert_true(live.p1.projectiles.is_hero_sourced_at(0),
+		"...by the cast strike, hero-sourced (AC 13)")
+	assert_almost_eq(live.p1.projectiles.damage_at(0), SPELL_MANA_CAP * SPELL_DAMAGE_PER_MANA, 0.0001,
+		"...carrying the damage the STAGING froze: the capped spend times damage_per_mana (AC 7)")
+	assert_false(live.p1.projectiles.is_alive_at(0),
+		"...and it was CONSUMED by the landing rather than still being in the air (AC 32's 'landing')")
+	assert_false(live.pitch.is_staged(0), "the zone is empty: the staged card was ACTIVATED, not fizzled")
+	# BOTH P1 PRESSES SPENT, read off the pool rather than off the discard: this fixture's draw pile is
+	# empty by the second press, so a resolved card is RESHUFFLED back out of the discard and a discard
+	# count would be 0 for a run that did everything. The pool cannot be reshuffled: 12 earned, 2 for the
+	# bolt's basic cast and the CAPPED 8 for the staging, which is also the `min(X, cap)` branch's proof.
+	assert_almost_eq(live.p1.mana.get_current(),
+		MELEE_HIT_MANA - SPELL_MANA_COST - SPELL_MANA_CAP, 0.0001,
+		"the bolt press spent its mana cost and the staging spent the CAP, not the whole pool (AC 5)")
+	# THE BOLT, measured as it struck (see `_record_a_spell_run`): AC 32's "a targeted Honed Bolt on a
+	# minion", and it landed on the CAPTURED minion while the live lock had already left it.
+	assert_almost_eq(float(recorded["hp_after_bolt"]), SPELL_UNIT_HP - SPELL_BOLT_DAMAGE, 0.0001,
+		"the bolt landed on the captured MINION for its authored damage (AC 25's unit arm)")
+	assert_eq(recorded["lock_at_bolt_strike"], [1, TargetingService.HERO_INDEX],
+		"...while the LIVE lock had already moved to the hero, so a strike reading the live lock "
+		+ "would have hit the hero instead (`6-5d/R15`)")
+	# THE CAPTURED COPY, NOT THE LIVE LOCK (`6-5d/R15`) -- and the two genuinely disagree here, which is
+	# what makes the claim falsifiable at all.
+	assert_eq(live.p1.projectiles.target_index_at(0), 0,
+		"the shot is addressed at the captured MINION (AC 24)")
+	assert_eq(live.p1.lock_target_index, TargetingService.HERO_INDEX,
+		"...while the LIVE lock ended on the hero -- a strike that read the live lock would have "
+		+ "aimed somewhere else, so this fixture can tell the two apart")
+
+
+## The spell run itself. Plays the RUNNER's role exactly as `_record_a_driven_run` does -- capturing on
+## every channel beside the call it taps -- and reads the live hand to choose its card slots, which is
+## sound for a replay BECAUSE the chosen slot travels in the recorded intent: the replay presses the slot
+## that was pressed, it never re-chooses.
+func _record_a_spell_run() -> Dictionary:
+	var record := IntentRecorder.new()
+	var params := MatchParams.new(SPELL_SEED)
+	record.capture_seed(params.seed_value)
+	var ms := MatchState.new(params)
+	var config := _spell_config()
+	record.capture_apply_balance(config)
+	ms.apply_balance(config)
+	var flags := _spell_flags()
+	record.capture_inject_feature_flags(flags)
+	ms.inject_feature_flags(flags)
+	# The six content channels, in `SOUND_CONTENT_ORDER`.
+	record.capture_inject_deck(SPELL_DECK)
+	ms.inject_deck(SPELL_DECK)
+	var costs := _spell_costs()
+	record.capture_inject_card_costs(costs)
+	ms.inject_card_costs(costs)
+	var effects := _spell_effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
+	var colors := _spell_colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
+	var pitch_costs := _spell_pitch_costs()
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
+	var pitch_effects := _spell_pitch_effects()
+	record.capture_inject_pitch_effects(pitch_effects)
+	ms.inject_pitch_effects(pitch_effects)
+	var hp_after_bolt := -1.0
+	var lock_at_bolt_strike: Array[int] = []
+	for t in range(1, SPELL_TICKS + 1):
+		if t == SPELL_CONTACT_TICK:
+			# One fact each way, inside both active windows: mana for both sides, captured and pushed
+			# with IDENTICAL arguments so the replay pushes the same fact rather than a rebuilt one.
+			for fact: Array in [[[0, -1], [1, -1], Vector2(-1.0, 0.0)],
+					[[1, -1], [0, -1], Vector2(1.0, 0.0)]]:
+				var attacker: Array[int] = [int(fact[0][0]), int(fact[0][1])]
+				var target: Array[int] = [int(fact[1][0]), int(fact[1][1])]
+				record.capture_push_contact(attacker, target, 0, fact[2] as Vector2,
+						MatchState.CONTACT_STRIKE)
+				ms.push_contact(attacker, target, 0, fact[2] as Vector2, MatchState.CONTACT_STRIKE)
+		if t == SPELL_LAND_TICK and ms.p1.projectiles.size() > 0:
+			# The Fireball's own contact, at its projectile attacker address and on the address the
+			# RECORD says it is aimed at -- `test_fireball.gd::_push_shot_contact`, through the recorder.
+			var attacker: Array[int] = [0, MatchState.projectile_attacker_index(0)]
+			var target: Array[int] = [ms.p1.projectiles.target_slot_at(0),
+					ms.p1.projectiles.target_index_at(0)]
+			var flight := ms.p1.projectiles.flight_ticks_at(0)
+			record.capture_push_contact(attacker, target, flight, Vector2(-1.0, 0.0),
+					MatchState.CONTACT_STRIKE)
+			ms.push_contact(attacker, target, flight, Vector2(-1.0, 0.0), MatchState.CONTACT_STRIKE)
+		var intents := _spell_intents(ms, t)
+		record.capture_advance(intents)
+		ms.advance(intents)
+		ms.drain_signals()
+		# THE BOLT'S STRIKE TICK, READ AS IT PASSES. The Fireball kills the same minion twelve ticks
+		# later, so the bolt's own damage is invisible in the final state -- and AC 32 asks for the bolt
+		# as well as the Fireball. Exactly two facts are taken here and nowhere else: the HP the bolt
+		# left behind, and where the LIVE lock had already moved to by the time it struck.
+		if t == SPELL_BOLT_TICK + SPELL_CAST_TICKS:
+			hp_after_bolt = ms.p2.units.hp_at(0)
+			lock_at_bolt_strike = [ms.p1.lock_target_slot, ms.p1.lock_target_index]
+	return {"state": ms, "record": record, "hp_after_bolt": hp_after_bolt,
+		"lock_at_bolt_strike": lock_at_bolt_strike}
+
+
+## One tick's intents. The card slots are found by NAME in the live hand (see `_record_a_spell_run`);
+## a missing card leaves `card_slot` at its no-press default, so a fixture whose deal changed fails on
+## the non-vacuity assertions rather than pressing the wrong card silently.
+func _spell_intents(ms: MatchState, t: int) -> Array[InputIntent]:
+	var i1 := InputIntent.new()
+	var i2 := InputIntent.new()
+	if t == SPELL_ATTACK_TICK:
+		i1.pressed[&"attack"] = true
+		i1.held[&"attack"] = true
+		i2.pressed[&"attack"] = true
+		i2.held[&"attack"] = true
+	if t == SPELL_SUMMON_TICK:
+		_press_card(i2, ms.p2.hand.to_array().find(SPELL_SUMMON_CARD), Enums.ModeKind.BASIC)
+	if t == SPELL_LOCK_MINION_TICK or t == SPELL_RELOCK_MINION_TICK:
+		i1.retarget_slot = 1
+		i1.retarget_index = 0
+	if t == SPELL_RELOCK_HERO_TICK or t == SPELL_RELOCK_HERO_AGAIN_TICK:
+		i1.retarget_slot = 1
+		i1.retarget_index = TargetingService.HERO_INDEX
+	if t == SPELL_BOLT_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(SPELL_BOLT_CARD), Enums.ModeKind.BASIC)
+	if t == SPELL_STAGE_TICK:
+		# ANY occupied slot: every id in this fixture carries the SAME pitch effect, so the pitch press
+		# needs no identity -- the deliberate twin of `test_fireball.gd`'s uniform pitch map.
+		_press_card(i1, _first_occupied_slot(ms.p1.hand), Enums.ModeKind.PITCH)
+	if t == SPELL_ACTIVATE_TICK:
+		i1.card_mode = Enums.ModeKind.PITCH
+		i1.card_commit = true
+		i1.card_activate = true
+	var out: Array[InputIntent] = [i1, i2]
+	return out
+
+
+func _press_card(intent: InputIntent, slot: int, mode: Enums.ModeKind) -> void:
+	if slot < 0:
+		return
+	intent.card_slot = slot
+	intent.card_mode = mode
+	intent.card_commit = true
+
+
+func _first_occupied_slot(hand: Hand) -> int:
+	for i in hand.size():
+		if not hand.is_slot_empty(i):
+			return i
+	return -1
+
+
+## `_flags()` with the SPELLS layer opened, which is what `CardEffectResolver.outcome` reads before it
+## will return either cast outcome. Its own function rather than an edit to `_flags()`: the run above
+## carries no spell content and must stay exactly the fixture its channel-drop proofs are calibrated on.
+func _spell_flags() -> FeatureFlags:
+	var f := _flags()
+	f.spells = true
+	return f
+
+
+## `_config()` with the three values this run needs moved: a three-card deck dealt out entirely, so
+## every id is in hand, and a fizzle countdown that outlasts the two ticks between the stage and the
+## activation. Everything else -- the attack windows the contact tick is keyed to, the minion kind the
+## summon resolves, `melee_hit_mana` -- is deliberately the SAME fixture the run above is calibrated on.
+func _spell_config() -> BalanceConfig:
+	var c := _config()
+	c.deck_size = SPELL_DECK.size()
+	c.hand_size = SPELL_DECK.size()
+	c.unit_kinds = UnitKindFixture.minion_only(SPELL_UNIT_HP, 3.0, 0, 0, 0, 2.0)
+	return c
+
+
+func _spell_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in SPELL_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = SPELL_MANA_COST
+		out[id] = c
+	return out
+
+
+## NO ORB PRICE -- see the section header for why that is authored away rather than choreographed.
+func _spell_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in SPELL_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = SPELL_PITCH_MANA_COST
+		out[id] = c
+	return out
+
+
+func _spell_colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id in SPELL_DECK:
+		out[id] = Enums.CardColor.RED
+	return out
+
+
+## The BASIC effects: one summon, one Honed Bolt, and a spare that resolves a summon too. Named by the
+## shapes the resolver recognises -- the `summon_` prefix and the whole-id `honed_bolt` row.
+func _spell_effects() -> Dictionary[StringName, CardEffect]:
+	var summon := CardEffect.new()
+	summon.effect_id = &"summon_spell_run_minion"
+	var bolt := CardEffect.new()
+	bolt.effect_id = &"honed_bolt"
+	bolt.cast_seconds = float(SPELL_CAST_TICKS) / TimingWindow.TICK_HZ
+	bolt.damage_amount = SPELL_BOLT_DAMAGE
+	var out: Dictionary[StringName, CardEffect] = {}
+	out[SPELL_SUMMON_CARD] = summon
+	out[SPELL_BOLT_CARD] = bolt
+	out[SPELL_SPARE_CARD] = summon
+	return out
+
+
+## The PITCH effect: ONE Fireball, on every id, so the pitch press needs no card identity.
+func _spell_pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var fireball := CardEffect.new()
+	fireball.effect_id = &"fireball"
+	fireball.cast_seconds = float(SPELL_CAST_TICKS) / TimingWindow.TICK_HZ
+	fireball.mana_cap = SPELL_MANA_CAP
+	fireball.damage_per_mana = SPELL_DAMAGE_PER_MANA
+	fireball.launch_speed = 8.0
+	fireball.homing_turn_rate_degrees_per_second = 120.0
+	fireball.max_speed = 8.0
+	fireball.travel_budget = 60.0
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in SPELL_DECK:
+		out[id] = fireball
+	return out
 
 
 # ---------------------------------------------------------------- the driven run

@@ -46,7 +46,11 @@ const DECK_1_PRICES: Dictionary = {
 	&"grave_ward": [Enums.CardColor.GREEN, 2.0, 6.0, {Enums.CardColor.RED: 2}],
 	&"drain": [Enums.CardColor.GREEN, 2.0, 5.0, {Enums.CardColor.GREEN: 1, Enums.CardColor.RED: 1}],
 	&"rocksling": [Enums.CardColor.RED, 4.0, 3.0, {Enums.CardColor.RED: 1}],
-	&"bloodhound_step": [Enums.CardColor.RED, 2.0, 4.0, {Enums.CardColor.RED: 1}],
+	# Story 6-5d (AC 3, `6-5d/R9`/`R19`): the Mode ④ mana moves 4.0 -> 3.0. The 4 was BLOODLUST's fixed
+	# price and it left Deck 1 with Bloodlust; 3 is FIREBALL's own MINIMUM -- the floor below which the
+	# staging is refused, not a price, since a Fireball spends `min(pool, mana_cap)`. The orb price,
+	# colour and Mode ① price are unchanged.
+	&"bloodhound_step": [Enums.CardColor.RED, 2.0, 3.0, {Enums.CardColor.RED: 1}],
 	&"honed_bolt": [Enums.CardColor.BLUE, 4.0, 4.0, {Enums.CardColor.BLUE: 1}],
 	&"frostbite": [Enums.CardColor.BLUE, 4.0, 5.0, {Enums.CardColor.BLUE: 1}],
 }
@@ -57,7 +61,11 @@ const DECK_1_EFFECTS: Dictionary = {
 	&"grave_ward": [&"grave_ward", &"raise_dead"],
 	&"drain": [&"drain", &"vampiric_aura"],
 	&"rocksling": [&"rocksling", &"boom"],
-	&"bloodhound_step": [&"bloodhound_step", &"bloodlust"],
+	# Story 6-5d (AC 1): THE PAIRING SWAP. Bloodhound Step's PITCH effect is FIREBALL -- the Deck 1
+	# pairing `deck-1-spec.md`'s 2026-09-22 amendment already specified. Bloodlust survives as an effect
+	# FILE (destined for deck 2) and its field-for-field pin below is untouched (AC 2); what changed is
+	# only that no Deck 1 card references it any more.
+	&"bloodhound_step": [&"bloodhound_step", &"fireball"],
 	&"honed_bolt": [&"honed_bolt", &"counterspell"],
 	&"frostbite": [&"frostbite", &"corpse_bomb"],
 }
@@ -332,14 +340,23 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 		"every Deck 1 effect id is one the resolver recognises by whole id or summon prefix: %s"
 				% ", ".join(offenders))
 	assert_eq(summons, 1, "ONE Deck 1 effect summons (Ruin Vanguard)")
-	assert_eq(buffs, 4, "FOUR are buffs (Bloodlust, Vampiric Aura, Bloodhound Step, Frostbite)")
+	# Story 6-5d (AC 1, `6-5d/R23`): FOUR -> THREE. Bloodlust was the fourth and has left Deck 1; the
+	# census moves with the pairing swap, which is what makes this a measured bucket rather than a
+	# transcribed number.
+	assert_eq(buffs, 3,
+		"Story 6-5d: THREE are buffs -- Vampiric Aura, Bloodhound Step, Frostbite. Bloodlust was the "
+		+ "fourth until 6-5d swapped Bloodhound Step's pitch to Fireball; its effect FILE is unchanged "
+		+ "and still pinned below, it is simply no longer referenced by a Deck 1 card")
 	assert_eq(own_minion, 4,
 		"Story 6-5b: FOUR are the own-minion / corpse effects it builds -- Culling, Grave Ward, "
 		+ "Raise Dead and Drain, which resolve through OWN_MINION_OUTCOMES rather than as no-ops")
-	assert_eq(cast, 1,
-		"Story 6-5c: ONE is a CAST -- Honed Bolt, the only effect that starts a commitment window "
-		+ "(AC 1). The framework is reusable and names no card; Rocksling, Fireball and Corpse Bomb "
-		+ "join this bucket by adding a `CAST_OUTCOMES` row, with no edit to the window or the strike")
+	# Story 6-5d (AC 1, `6-5d/R23`): ONE -> TWO. FIREBALL joined the cast bucket exactly as 6-5c's own
+	# message predicted it would -- "by adding a `CAST_OUTCOMES` row, with no edit to the window or the
+	# strike" -- and it is the FIRST cast id that is a card's PITCH effect rather than its basic one.
+	assert_eq(cast, 2,
+		"Story 6-5d: TWO are CASTS -- Honed Bolt and Fireball. 6-5c shipped one and predicted this "
+		+ "bucket would grow by a `CAST_OUTCOMES` row alone, which is what 6-5d did; Rocksling and "
+		+ "Corpse Bomb are still deferred and join it the same way")
 	assert_eq(deferred, 4,
 		"...and FOUR are named no-ops owned by a later 6-5 story. FIVE before 6-5c and NINE before "
 		+ "6-5b, each of which retired exactly the rows naming itself -- the deferred table's "
@@ -406,7 +423,13 @@ func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 ## sub-resource.
 func test_every_deck_1_effect_is_a_shared_file_under_data_effects() -> void:
 	var files := _effect_files()
-	assert_eq(files.size(), 14, "data/effects/ holds the fourteen Deck 1 effects")
+	# Story 6-5d (AC 1/AC 2): FOURTEEN -> FIFTEEN. `fireball.tres` arrives and `bloodlust.tres` STAYS --
+	# that is the whole shape of AC 2, and why this count grows by one rather than holding: Bloodlust is
+	# still an authored, loading, field-for-field-unchanged effect file (pinned below), it is simply no
+	# longer paired with a Deck 1 card. The directory holds effect FILES, not deck pairings.
+	assert_eq(files.size(), 15,
+		"data/effects/ holds fifteen effect files: the fourteen Deck 1 effects plus bloodlust.tres, "
+		+ "which 6-5d unpaired from Deck 1 without deleting (AC 2 -- it is destined for deck 2)")
 	for file_name in files:
 		var effect := load(EFFECTS_DIR + file_name) as CardEffect
 		assert_not_null(effect, "%s loads as a CardEffect" % file_name)
@@ -618,6 +641,69 @@ func _effect(id: StringName) -> CardEffect:
 
 func _authored_deck_size() -> int:
 	return (load(BALANCE_PATH) as BalanceConfig).deck_size
+
+
+## STORY 6-5d (AC 3): NO NUMBER IN `src/` IS A LITERAL FOR ANY OF FIREBALL'S AUTHORED VALUES.
+##
+## A SOURCE SCAN, because this is exactly the property a later pass breaks by reaching for a convenient
+## constant at a seat: the cap, the per-mana damage and the whole flight profile must be read from the
+## `.tres` INLINE at the point of use (CONSTRAINT C), never copied into the state layer. Scoped to
+## `src/state/`, which is where every reader of these numbers lives.
+##
+## COMMENTS ARE STRIPPED before matching (`_code_lines`' job), so the doc blocks that legitimately QUOTE
+## the authored values -- `card_effect.gd`'s field docs, `projectile_board.gd`'s header -- are not
+## offenders. A number in a comment is documentation; a number in an expression is a copy.
+##
+## TWO VALUES ARE DELIBERATELY NOT BANNED, recorded rather than silently omitted:
+##   * `60.0` -- `TimingWindow.TICK_HZ` is 60, so the travel budget's value collides with the project's
+##     clock and banning it would fail on tick arithmetic that has nothing to do with a projectile.
+##   * `0.4` -- the acceleration delay collides with `honed_bolt`'s authored `stun_seconds`, and more
+##     importantly with ordinary multipliers; too weak a discriminator to be evidence.
+## The remaining five are specific enough that a match is a real finding.
+func test_no_fireball_number_is_a_literal_in_the_state_layer() -> void:
+	var banned := ["1.5", "10.0", "8.0", "120.0", "12.0", "20.0"]
+	var scanned := 0
+	var offenders: Array[String] = []
+	for path in _gd_files_under("res://src/state/"):
+		scanned += 1
+		var n := 0
+		for line in _code_lines(path):
+			n += 1
+			for literal in banned:
+				# A boundary on each side, so `120.0` does not match inside `1120.05` and `10.0` does not
+				# match inside `110.0`.
+				var re := RegEx.create_from_string(
+					"(^|[^0-9.])" + literal.replace(".", "\\.") + "([^0-9]|$)")
+				if re.search(line) != null:
+					offenders.append("%s:%d [%s] %s" % [path, n, literal, line.strip_edges()])
+	assert_true(scanned > 0, "src/state/ scan found no .gd files (guard would be vacuous)")
+	# NON-VACUITY: the pattern must match what it bans, or a regex typo would disarm this silently.
+	var probe := RegEx.create_from_string("(^|[^0-9.])1\\.5([^0-9]|$)")
+	assert_true(probe.search("var x := 1.5") != null,
+		"the pattern must match what it bans -- a regex typo must not quietly empty this guard")
+	assert_false(probe.search("var x := 11.53") != null, "...and must not match a longer number")
+	assert_eq(offenders.size(), 0,
+		"Story 6-5d (AC 3): a Fireball number appears as a LITERAL in the state layer -- every one of "
+		+ "them must be read from the authored `.tres` inline at the point of use: %s"
+				% ", ".join(offenders))
+
+
+## The code lines of `path` with comments and blank lines removed, so a number QUOTED in a doc block is
+## never mistaken for a number used in an expression.
+func _code_lines(path: String) -> Array[String]:
+	var out: Array[String] = []
+	for raw in FileAccess.get_file_as_string(path).split("\n"):
+		var line := String(raw)
+		var stripped := line.strip_edges()
+		if stripped.begins_with("#"):
+			continue
+		var hash_at := line.find("#")
+		if hash_at >= 0:
+			line = line.substr(0, hash_at)
+		if line.strip_edges() == "":
+			continue
+		out.append(line)
+	return out
 
 
 func _gd_files_under(root: String) -> Array[String]:

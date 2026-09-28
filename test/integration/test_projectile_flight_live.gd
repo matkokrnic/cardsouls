@@ -54,6 +54,32 @@ var _detail := ""
 ## non-homing shot would miss.
 var _bearings: Array[float] = []
 
+## STORY 6-5d (AC 37, deferred-work M5): THE DIRECTION-AWARE MEASUREMENT, and the reason the bearing
+## spread above is not enough on its own.
+##
+## THE DEFECT M5 NAMES: `_shot_steered` is `|max bearing - min bearing| > 0.03`, which asks only whether
+## the heading CHANGED. A `steer_toward` whose turn were SIGN-INVERTED -- turning away from the target
+## instead of toward it -- would produce a spread at least as large, so the assertion passes on a shot
+## that homes backwards. The spread proves motion, not aim.
+##
+## WHAT THIS ADDS: the AIM ERROR, the absolute angle between the shot's heading and the vector from the
+## shot TO ITS TARGET, sampled every tick of the flight. A homing shot's aim error SHRINKS; an inverted
+## one's GROWS toward pi. Asserted as `smaller at the end than at the start` plus `the last third
+## averages better than the first third`, which is AC 37's "monotonic non-increasing or smaller at the
+## last sample than the first" -- the weaker of the two readings deliberately, because the target is
+## nudged LATERALLY every few ticks and each nudge legitimately bumps the error up for a tick or two.
+## Strict per-sample monotonicity would fail on the very fixture motion that makes the test meaningful.
+##
+## MUTATION-PROVEN against a sign-inverted `steer_toward` (the story's own named adversary). The proof and
+## its restore-from-copy are recorded in the story's Dev Agent Record.
+var _aim_errors: Array[float] = []
+var _aim_improved := false
+
+## How much worse than its OPENING sample the final aim error may be, in radians (about 0.6 degrees). Not
+## zero, because the shot is nudged laterally on the very last sampled ticks and a finite turn rate needs
+## a tick or two to answer -- and not loose, because an inverted steer misses by radians, not milliradians.
+const AIM_TOLERANCE := 0.01
+
 ## The tick the totem is put on the board. Late enough that the runner has finished `_ready()` and
 ## the first physics frames have settled.
 const PLACE_FRAME := 4
@@ -162,6 +188,16 @@ func _physics_process(_delta: float) -> bool:
 			# hit" is what makes this test fail on a shot that flies straight into a target that
 			# happened to walk into the line.
 			_bearings.append(shot.heading.signed_angle_to(Vector3.FORWARD, Vector3.UP))
+			# Story 6-5d (AC 37, M5): the AIM ERROR toward the shot's ACTUAL target -- planar, because the
+			# heading is planar and a height difference is not an aiming error. Sampled before this tick's
+			# nudge, so each sample is measured against the target the shot was steering at.
+			var target := _p2_hero()
+			if target != null:
+				var to_target := Vector3(target.global_position.x - shot.global_position.x, 0.0,
+						target.global_position.z - shot.global_position.z)
+				if not to_target.is_zero_approx():
+					_aim_errors.append(absf(shot.heading.signed_angle_to(
+							to_target.normalized(), Vector3.UP)))
 			if _frames % 6 == 0:
 				var hero := _p2_hero()
 				hero.global_position += Vector3(0.0, 0.0, 1.2)
@@ -186,16 +222,46 @@ func _finish() -> bool:
 			hi = maxf(hi, b)
 		_shot_steered = absf(hi - lo) > 0.03
 		_detail += " bearing_spread=%.4f rad over %d samples" % [absf(hi - lo), _bearings.size()]
+	# Story 6-5d (AC 37, M5): THE DIRECTION-AWARE HALF. See `_aim_errors` for why the spread above cannot
+	# stand alone. A sign-inverted `steer_toward` fails BOTH clauses: its aim error ends larger than it
+	# started and its last third averages worse than its first.
+	if _aim_errors.size() >= 6:
+		var first := _aim_errors[0]
+		var last: float = _aim_errors[_aim_errors.size() - 1]
+		var third := _aim_errors.size() / 3
+		var early := 0.0
+		var late := 0.0
+		for i in third:
+			early += _aim_errors[i]
+			late += _aim_errors[_aim_errors.size() - 1 - i]
+		early /= float(third)
+		late /= float(third)
+		# MEASURED, AND IT CORRECTED THE OBVIOUS FORM OF THIS ASSERTION. The first draft read
+		# `last < first`, which CANNOT hold on this fixture: the shot is LAUNCHED straight at its target
+		# (`_spawn_missing_projectile_actors` aims it), so the first sample is 0.0000 and no later sample
+		# can be smaller. AC 37 offers two readings and this is the other one -- the error DOES NOT GROW
+		# (`last <= first + tolerance`) and the flight demonstrably CLOSES on the target (the last third
+		# averages strictly better than the first, which the lateral nudges make a real difference:
+		# measured 0.0000 against 0.1364).
+		#
+		# A SIGN-INVERTED `steer_toward` FAILS BOTH CLAUSES DECISIVELY, which is the point: it turns away
+		# from every nudge instead of back onto the target, so its error climbs toward pi and its late
+		# mean is far worse than its early one.
+		_aim_improved = late < early and last <= first + AIM_TOLERANCE
+		_detail += " aim_first=%.4f aim_last=%.4f aim_early_mean=%.4f aim_late_mean=%.4f" \
+				% [first, last, early, late]
+	else:
+		_detail += " aim_samples=%d (too few)" % _aim_errors.size()
 	var travelled := _shot_first_position.distance_to(_shot_last_position)
 	_detail += " travelled=%.3f" % travelled
 	var ok := _totem_has_no_hitbox and _totem_has_body_and_hurtbox and _totem_never_moved \
 			and _held_fire_out_of_range and _fired_in_range and _shot_seen and _shot_moved \
-			and _shot_steered
+			and _shot_steered and _aim_improved
 	print("projectile_flight_live: no_hitbox=%s body_and_hurtbox=%s totem_static=%s "
 			% [_totem_has_no_hitbox, _totem_has_body_and_hurtbox, _totem_never_moved]
-			+ "held_fire_out_of_range=%s fired_in_range=%s shot_seen=%s shot_moved=%s steered=%s%s"
-			% [_held_fire_out_of_range, _fired_in_range, _shot_seen, _shot_moved, _shot_steered,
-				_detail])
+			+ "held_fire_out_of_range=%s fired_in_range=%s shot_seen=%s shot_moved=%s steered=%s "
+			% [_held_fire_out_of_range, _fired_in_range, _shot_seen, _shot_moved, _shot_steered]
+			+ "aim_improved=%s%s" % [_aim_improved, _detail])
 	print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 	quit(0 if ok else 1)
 	return false

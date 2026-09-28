@@ -206,6 +206,31 @@ var _cast_elapsed_ticks: Array[int] = [0, 0]
 var _cast_launch_ticks: Array[int] = [0, 0]
 var _bolts: Array = [null, null]
 
+## Story 6-5d (AC 28, `6-5d/R10`): THE CAPTURED TARGET, CACHED ON THE RISING EDGE, and the cone prop for
+## a unit target.
+##
+## IT IS CACHED FOR THE SAME REASON `_cast_total_ticks` IS. The address lives on `PlayerState` only while
+## the cast does -- `clear_cast()` resets it -- and this poll still has work to do on the FALLING edge
+## (ending the warning, freeing the prop), which is the tick the state has already cleared it. Reading
+## the live member there would find the resting address and end the warning on the wrong body.
+##
+## A COPY OF A STATE FACT, NEVER A SECOND SOURCE OF IT: it is written only on the rising edge, from
+## `cast_target_slot` / `cast_target_index`, which the state layer froze at the press. Presentation reads
+## values, never internals -- the standing discipline for this whole poll.
+var _cast_target_slots: Array[int] = [-1, -1]
+var _cast_target_indices: Array[int] = [-1, -1]
+var _target_cones: Array = [null, null]
+
+## Smoke fix (6-5d, operator finding 2026-09-28): THE BOLT PROP EXISTS ONLY FOR A HONED BOLT CAST.
+## Cached on the rising edge, the `_cast_target_slots` footing exactly: `MatchState.cast_outcome`
+## resolves through the resolver (D6), never a card id named here, and the answer is frozen for the
+## same reason the captured target is -- the cast's own mode is gone from `PlayerState` after the
+## strike clears it, and this poll still has bolt bookkeeping to do on ticks after that (the arrived
+## check above, the falling-edge free). Before this fix EVERY cast spawned and flew a lightning bolt
+## regardless of outcome, so a Fireball activation showed the bolt prop landing (harmlessly -- state
+## never read it) alongside the actual Fireball.
+var _cast_shows_bolt: Array[bool] = [false, false]
+
 ## Story 6-5c (AC 25): how high off the hero root the bolt leaves the raised sword, in metres --
 ## `DAGGER_THROW_HEIGHT`'s twin, and MEASURED rather than picked: `tools/measure_cast_clip_frames.gd`
 ## puts the sword's peak 1.0423 m above the Hips, the rig's Hips sit ~0.91 m above the model root,
@@ -1209,10 +1234,14 @@ func _push_cast_presentation() -> void:
 			_free_bolt(slot)
 		if _cast_armed[slot]:
 			_cast_elapsed_ticks[slot] += 1
-			if _cast_elapsed_ticks[slot] == _cast_launch_ticks[slot]:
-				_spawn_bolt(slot, hero, other)
-			elif _cast_elapsed_ticks[slot] > _cast_launch_ticks[slot]:
-				_advance_bolt(slot, other)
+			if _cast_shows_bolt[slot]:
+				if _cast_elapsed_ticks[slot] == _cast_launch_ticks[slot]:
+					_spawn_bolt(slot, hero)
+				elif _cast_elapsed_ticks[slot] > _cast_launch_ticks[slot]:
+					_advance_bolt(slot)
+			# Story 6-5d (AC 28): the cone follows its marked unit every tick, so a walking minion takes
+			# its mark with it -- `BoltActor`'s own live-target reasoning applied to a marker.
+			_hover_target_cone(slot)
 		if casting and not _cast_armed[slot]:
 			# THE WHOLE COUNT IS READ ON THE RISING EDGE, where the window has not yet been ticked
 			# once (step 2 runs before the step-6 press that started it), so `remaining_ticks()` is
@@ -1226,16 +1255,35 @@ func _push_cast_presentation() -> void:
 			_cast_launch_ticks[slot] = clampi(int(round(
 					AnimationController.cast_launch_seconds(cast_seconds) * TimingWindow.TICK_HZ)),
 					0, total)
+			# Story 6-5d (AC 28, `6-5d/R10`): THE CAPTURED TARGET IS READ HERE, on the rising edge, and
+			# cached -- see `_cast_target_slots`. This is what replaces the slot arithmetic the whole of
+			# this poll used to assume (`other` = the opposing hero, for both the warning and the prop).
+			_cast_target_slots[slot] = player.cast_target_slot
+			_cast_target_indices[slot] = player.cast_target_index
+			# Smoke fix (6-5d): THE OUTCOME CLASSIFICATION IS THE RESOLVER'S (D6), read through the one
+			# pure query -- see `_cast_shows_bolt`. Cached here, on the same rising edge as the target,
+			# for the same reason: the cast's mode is gone from `PlayerState` once the strike clears it.
+			_cast_shows_bolt[slot] = _match_state.cast_outcome(player) == CardEffectResolver.OUTCOME_HONED_BOLT
 			if is_instance_valid(hero):
 				hero.animation_controller.on_cast_started(cast_seconds)
-			if is_instance_valid(other):
-				other.telegraph_controller.on_cast_warning_started()
+			# THE WARNING GOES ON THE CAPTURED TARGET, AND ON NOTHING ELSE (AC 28: "the marker never
+			# appears on a non-target"). A HERO target gets today's marker and alarm, unchanged -- which
+			# is every cast by an unlocked caster or one locked on the hero, i.e. the whole of the
+			# pre-6-5d behaviour. A MINION OR TOTEM target gets the placeholder cone instead, and the
+			# hero's marker is deliberately NOT armed: a cast aimed at a minion must not alarm the hero
+			# behind it.
+			if _cast_target_indices[slot] == TargetingService.HERO_INDEX:
+				if is_instance_valid(other):
+					other.telegraph_controller.on_cast_warning_started()
+			else:
+				_spawn_target_cone(slot)
 			# A launch on the press tick itself (a tuning whose raise lands at offset 0) has no later
 			# tick to be spawned on, so it is spawned here.
-			if _cast_launch_ticks[slot] == 0:
-				_spawn_bolt(slot, hero, other)
+			if _cast_shows_bolt[slot] and _cast_launch_ticks[slot] == 0:
+				_spawn_bolt(slot, hero)
 		elif _cast_armed[slot] and not casting:
 			_cast_armed[slot] = false
+			_free_target_cone(slot)
 			if is_instance_valid(hero):
 				hero.animation_controller.on_cast_ended()
 			if is_instance_valid(other):
@@ -1269,26 +1317,74 @@ func _root_in_force(player: PlayerState) -> bool:
 			and player.hero.action_state != HeroState.ActionState.DEAD
 
 
-## Story 6-5c (AC 25): the bolt's launch -- from the caster's raised sword to the target hero, with
-## exactly the ticks left between this tick and the strike. Read from the two hero ACTORS' own
-## positions, which is where every other presentation-side position in this file comes from
-## (`4-2/R14`: no position ever travels inward).
-func _spawn_bolt(slot: int, hero: HeroActor, other: HeroActor) -> void:
-	if not is_instance_valid(hero) or not is_instance_valid(other):
+## Story 6-5c (AC 25): the bolt's launch -- from the caster's raised sword to the target, with exactly
+## the ticks left between this tick and the strike. Read from the ACTORS' own positions, which is where
+## every other presentation-side position in this file comes from (`4-2/R14`: no position ever travels
+## inward).
+##
+## STORY 6-5d (AC 28, `6-5d/R10`): IT FLIES TO THE CAPTURED TARGET, MINION OR TOTEM INCLUDED. The `other`
+## parameter is gone: the destination is resolved from the cached captured address through
+## `_target_world_position`, the SAME helper the projectile actors already aim with, so the prop and a
+## Fireball cannot disagree about where a cast is pointed. `6-5d/R10` accepts a placeholder look and not a
+## wrong destination, which is why this is the one presentation change the story treats as load-bearing.
+##
+## NO TARGET POSITION MEANS NO PROP. A captured target whose actor is gone (a minion killed during the
+## cast) resolves to null here, and a prop is simply not spawned -- which matches the state layer exactly:
+## that bolt hits nothing (AC 26) and that Fireball flies straight past (AC 21/AC 22).
+func _spawn_bolt(slot: int, hero: HeroActor) -> void:
+	if not is_instance_valid(hero):
+		return
+	var target: Variant = _cast_target_position(slot)
+	if not (target is Vector3):
 		return
 	_free_bolt(slot)
 	var bolt := BoltActor.new()
 	add_child(bolt)
 	_bolts[slot] = bolt
 	bolt.launch(hero.global_position + Vector3(0.0, BOLT_LAUNCH_HEIGHT, 0.0),
-			other.global_position, _cast_total_ticks[slot] - _cast_launch_ticks[slot])
+			target as Vector3, _cast_total_ticks[slot] - _cast_launch_ticks[slot])
 
 
-func _advance_bolt(slot: int, other: HeroActor) -> void:
+func _advance_bolt(slot: int) -> void:
 	var bolt: BoltActor = _bolts[slot]
-	if not is_instance_valid(bolt) or not is_instance_valid(other):
+	if not is_instance_valid(bolt):
 		return
-	bolt.advance(other.global_position)
+	var target: Variant = _cast_target_position(slot)
+	if not (target is Vector3):
+		return
+	bolt.advance(target as Vector3)
+
+
+## Story 6-5d (AC 28): where slot `slot`'s in-flight cast is pointed, or null when that body has no
+## actor. The cached captured address resolved through the runner's ONE address-to-position helper.
+func _cast_target_position(slot: int) -> Variant:
+	return _target_world_position(_cast_target_slots[slot], _cast_target_indices[slot])
+
+
+## Story 6-5d (AC 28): the placeholder cone for a cast aimed at a MINION OR TOTEM. See
+## `TargetConeActor` for why a unit target gets a prop rather than the hero's telegraph marker.
+func _spawn_target_cone(slot: int) -> void:
+	_free_target_cone(slot)
+	var cone := TargetConeActor.new()
+	add_child(cone)
+	_target_cones[slot] = cone
+	_hover_target_cone(slot)
+
+
+func _hover_target_cone(slot: int) -> void:
+	var cone: TargetConeActor = _target_cones[slot]
+	if not is_instance_valid(cone):
+		return
+	var target: Variant = _cast_target_position(slot)
+	if target is Vector3:
+		cone.hover_over(target as Vector3)
+
+
+func _free_target_cone(slot: int) -> void:
+	var cone: TargetConeActor = _target_cones[slot]
+	if is_instance_valid(cone):
+		cone.queue_free()
+	_target_cones[slot] = null
 
 
 func _free_bolt(slot: int) -> void:
@@ -1370,7 +1466,13 @@ func trigger_live_balance_reload() -> void:
 	var config := BalanceConfigService.get_config()
 	Invariant.check(config != null, "authored balance config missing at live reload")
 	_recorder.capture_apply_balance(config)
-	_match_state.apply_balance(config)
+	# Review fix MAJOR-1 (6-5d): the refusal reason is SURFACED here, not discarded -- the neighbouring
+	# replay refusal three lines above already does this, and a refused reload with nothing read here
+	# is observably silent to the operator (no log line, no HUD), which is the failure class M6 was
+	# filed against. Guarded by a source scan, `test_trigger_live_balance_reload_reads_apply_balances_return_value`.
+	var refusal := _match_state.apply_balance(config)
+	if refusal != "":
+		push_warning(refusal)
 
 
 ## Story 4-B1 (AC 2/AC 3, `4-B1/R1`): the DebugInstrumentPanel's READ ACCESSOR for both players'
@@ -2604,6 +2706,24 @@ func _spawn_missing_projectile_actors(slot: int, player: PlayerState) -> void:
 
 ## Where a shot fired by the unit at `source_index` on slot `slot` first appears. See
 ## `_spawn_missing_projectile_actors` for why the owner hero is the fallback.
+##
+## STORY 6-5d: THE HERO BRANCH LAUNCHES FROM THE CASTER'S FEET, AND THAT IS A DEFECT FIX RATHER THAN A
+## PREFERENCE -- found by `test/integration/test_fireball_live.gd`, which is the runtime-composition
+## blind spot `3-0b/R34` names: state and runner each correct, wired to each other wrongly.
+##
+## THE TWO ROOT CONVENTIONS DISAGREE. A unit's root is its FEET (`unit_actor.tscn`: "the runner spawns
+## units at y 0"); a hero's root is its body CENTRE (`hero.tscn`: the 1x2x1 body box spans root y
+## [-1,+1]). `projectile_actor.tscn` offsets its Hitbox +0.7 in y "to fly at roughly chest height on
+## both a hero and a totem" -- i.e. calibrated against the FEET convention. Launched from a hero's ROOT
+## the sphere therefore sat a whole metre high, spanning y 1.35..2.05, and a minion's hurtbox spans
+## 0..1.2: MEASURED, a Fireball flew 0.15 m OVER a minion's head and could never overlap one at all.
+## Nothing headless could see it -- a pass-through and a landing are both synthetic facts at the seam --
+## and AC 19's "the shot always lands on a minion or totem" was live-unreachable.
+##
+## READ FROM THE AUTHORED BODY BOX, never a literal 1.0: a hero mesh or box resize retunes this with it,
+## and the number that matters is the one the scene actually declares. The fallback for a unit-fired shot
+## whose source is already freed lands on the same expression, which is the better answer there too --
+## that shot was a unit's, at unit height.
 func _projectile_launch_position(slot: int, source_index: int) -> Vector3:
 	var actors: Array = _unit_actors[slot]
 	if source_index >= 0 and source_index < actors.size():
@@ -2611,7 +2731,22 @@ func _projectile_launch_position(slot: int, source_index: int) -> Vector3:
 		if is_instance_valid(source):
 			return (source as Node3D).global_position
 	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
-	return hero.global_position
+	var position := hero.global_position
+	return Vector3(position.x, _hero_ground_y(hero), position.z)
+
+
+## Story 6-5d: the y of `hero`'s FEET -- its root lowered by half the authored body box, which is the
+## height convention a unit actor's root already sits at. A hero with no such box (impossible on
+## `hero.tscn`, answered rather than asserted for the runner's standing total-function posture) keeps
+## its root height.
+func _hero_ground_y(hero: HeroActor) -> float:
+	var collision := hero.get_node_or_null("Collision") as CollisionShape3D
+	if collision == null:
+		return hero.global_position.y
+	var box := collision.shape as BoxShape3D
+	if box == null:
+		return hero.global_position.y
+	return hero.global_position.y - box.size.y * 0.5
 
 
 ## Story 4-4 (AC 15/AC 16/AC 19): steer and move slot `slot`'s live projectiles — the DRIVE-phase
@@ -2653,7 +2788,11 @@ func _drive_projectiles(slot: int, player: PlayerState) -> void:
 			var target_position: Variant = _target_world_position(
 				board.target_slot_at(index), board.target_index_at(index))
 			if target_position is Vector3:
-				var profile := _projectile_profile(board, index)
+				# Story 6-5d (Open Question 4): asked of the STATE LAYER, which is now the only place the
+				# authored curve is resolved. The runner-side twin this line used to call could only ever
+				# resolve a shot through a unit KIND INDEX, so a hero-sourced Fireball (authored on a
+				# `CardEffect`, not on a kind) would have steered at a null profile -- i.e. not at all.
+				var profile := _match_state.projectile_profile_at(board, index)
 				if profile != null:
 					shot.steer_toward(target_position as Vector3,
 							profile.homing_turn_rate_degrees_per_second)
@@ -2732,18 +2871,14 @@ func _free_dead_projectile_actors(slot: int, player: PlayerState) -> void:
 		actors[index] = null
 
 
-## This shot's authored projectile profile, resolved through the KIND INDEX its record stores — the
-## runner-side twin of `MatchState._projectile_profile_at`, reading the same replay-aware config
-## handle (CONSTRAINT C / `4-3/R11`).
-func _projectile_profile(board: ProjectileBoard, index: int) -> ProjectileProfile:
-	var balance := _match_state.balance
-	if balance == null:
-		return null
-	var kind := balance.kind_at(board.kind_index_at(index))
-	if kind == null:
-		return null
-	var attack := kind.attack_at(0)
-	return attack.projectile if attack != null else null
+## STORY 6-5d (Open Question 4) DELETED `_projectile_profile`, the runner-side twin of
+## `MatchState._projectile_profile_at`, and the deletion is the point rather than a tidy-up. The twin
+## resolved a shot's profile through its unit KIND INDEX -- the only source a shot had before this story
+## -- so it could not have learned the hero-sourced EFFECT path without being taught the same lookup
+## twice, which is exactly the duplicated copy `projectile_speed_at`'s docstring already forbade ("the
+## state layer's ONE expression of the authored curve, so nothing outside it may keep a duplicated copy
+## that a retune could desynchronise"). `_drive_projectiles` now asks
+## `MatchState.projectile_profile_at`, which is public for this reason and exempt as a pure query.
 
 
 ## Story 4-4 (AC 6/AC 9): the attack record governing the unit at `index` on `player`'s board, or

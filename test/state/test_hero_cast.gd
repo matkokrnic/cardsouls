@@ -328,17 +328,44 @@ func test_a_held_block_does_not_survive_the_start_of_a_cast() -> void:
 
 ## AC 10 / `6-5c/R1`: the bolt hits the ENEMY HERO, and lock-on and a board full of minions are both
 ## irrelevant. Asserted by locking P1 onto its own minion and putting minions on both boards.
-func test_the_bolt_hits_the_enemy_hero_whatever_the_lock_and_the_board() -> void:
+## STORY 6-5d (AC 24/AC 25, `6-5d/R6`) REPLACES THIS TEST'S SUBJECT. It was
+## `test_the_bolt_hits_the_enemy_hero_whatever_the_lock_and_the_board` (recorded verbatim so the old pin
+## stays greppable), and it asserted `6-5c/R1`'s unaimed bolt: a lock was set and the bolt hit the enemy
+## hero anyway, never a minion on either board. `6-5d/R6` SUPERSEDES that ruling -- the bolt targets the
+## caster's lock-on target -- so the property is inverted here, at the same seat, with the same fixture
+## shape.
+##
+## WHAT SURVIVES UNCHANGED IS THE CASTER'S OWN SIDE: a bolt still cannot touch the caster's own minion,
+## and now for a structural reason rather than an arithmetic one -- a lock only ever addresses the
+## opposing side, so no captured address can name the caster's board.
+func test_the_bolt_hits_the_locked_target_and_the_opposing_hero_when_unlocked() -> void:
 	var ms := _make_match()
 	ms.p1.units.add(MAX_HP, 0)
 	ms.p2.units.add(MAX_HP, 0)
-	ms.p1.lock_target_slot = 0
+	# LOCKED ON THE ENEMY MINION: the bolt lands on the MINION, for 4 damage through the funnel, and the
+	# enemy HERO is untouched (AC 25's unit arm).
+	ms.p1.lock_target_slot = 1
 	ms.p1.lock_target_index = 0
 	_advance(ms, _cast_intent(ms, ID_BOLT), InputIntent.new())
 	_idle(ms, CAST_TICKS)
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP - BOLT_DAMAGE, "the bolt hit the ENEMY HERO (AC 10)")
-	assert_eq(ms.p1.units.hp_snapshot(), [MAX_HP], "...never the caster's own minion")
-	assert_eq(ms.p2.units.hp_snapshot(), [MAX_HP], "...and never a minion on the target's board")
+	assert_eq(ms.p2.units.hp_snapshot(), [MAX_HP - BOLT_DAMAGE],
+		"the bolt hit the LOCKED MINION for its authored damage (AC 25, `6-5d/R8`)")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "...and the enemy hero was untouched")
+	assert_eq(ms.p1.units.hp_snapshot(), [MAX_HP], "...and never the caster's own minion")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+		"...and a unit-targeted bolt stuns nobody (AC 25: no stun, no root)")
+	# UNLOCKED (6-8): the target is the OPPOSING HERO (`6-5d/R7`) -- the pre-6-5d outcome, reached by the
+	# other clause of the same rule.
+	var ms2 := _make_match()
+	ms2.p2.units.add(MAX_HP, 0)
+	ms2.p1.lock_target_slot = PlayerState.UNLOCKED_SLOT
+	ms2.p1.lock_target_index = TargetingService.HERO_INDEX
+	_advance(ms2, _cast_intent(ms2, ID_BOLT), InputIntent.new())
+	_idle(ms2, CAST_TICKS)
+	assert_eq(ms2.p2.hero.get_hp(), MAX_HP - BOLT_DAMAGE,
+		"an UNLOCKED caster's bolt hit the opposing HERO (AC 24, `6-5d/R7`)")
+	assert_eq(ms2.p2.units.hp_snapshot(), [MAX_HP],
+		"...and passed no damage to the minion standing on that board")
 
 
 ## Review fix M3: THE STEP-6C TWO-PASS SPLIT IS SLOT-SYMMETRIC. Every other test casts from P1, which
@@ -872,6 +899,23 @@ func test_the_authored_honed_bolt_carries_its_spec_numbers() -> void:
 	assert_true(bolt.cast_seconds > 0.0, "...and a CAST effect's duration is strictly positive")
 
 
+## STORY 6-5d (AC 3): THE FIREBALL AUTHORING AUDIT, seated beside the bolt's for its reason verbatim --
+## the numbers are asserted against the SPEC and the ruling, never against the code that reads them.
+func test_the_authored_fireball_carries_its_ruled_numbers() -> void:
+	var fb := _authored_effect(&"fireball")
+	assert_eq(fb.damage_per_mana, 1.5, "Fireball deals 1.5 damage per mana spent (`6-5d/R2`)")
+	assert_eq(fb.mana_cap, 10.0, "...capped at 10 mana per staging (`6-5d/R1`)")
+	assert_true(fb.cast_seconds > 0.0, "...after a cast of strictly positive length (AC 11)")
+	# THE FLIGHT PROFILE STARTS FROM THE TOTEM SHOT'S (AC 3), which is what makes "the totem-shot feel"
+	# an authoring fact rather than a shared resource.
+	assert_eq(fb.launch_speed, 8.0, "...launching at the totem shot's 8 m/s (AC 3)")
+	assert_eq(fb.homing_turn_rate_degrees_per_second, 120.0, "...homing at 120 deg/s (AC 3)")
+	assert_eq(fb.acceleration_delay_seconds, 0.4, "...accelerating after 0.4 s (AC 3)")
+	assert_eq(fb.acceleration_per_second_squared, 12.0, "...at 12 m/s^2 (AC 3)")
+	assert_eq(fb.max_speed, 20.0, "...to a ceiling of 20 m/s (AC 3)")
+	assert_eq(fb.travel_budget, 60.0, "...and expiring at 60 m (AC 3/AC 23)")
+
+
 ## AC 15 / AC 21: THE AUTHORING INVARIANT THE DURATION CLASSIFIER DEPENDS ON. `stun_seconds` must
 ## stay strictly BELOW the authored `knockdown_stun_seconds`, or `is_knockdown_stun` would read a
 ## bolt stun as a knockdown -- opening get-up i-frames and playing the `knockdown` pose. This is the
@@ -915,14 +959,26 @@ func test_the_cast_framework_names_no_card_in_match_state() -> void:
 			"`match_state.gd` names no card id -- '%s' belongs to the resolver alone (AC 1, D6)" % id)
 
 
-## The disjointness `_resolve_basic_cast`'s own comment relies on instead of a guard: no card's PITCH
-## effect is a cast id, so a pitch ACTIVATION can never reach a cast outcome through the unforked
-## apply seat. Asserted against the authored library, so the day a pitch effect becomes castable this
-## fails rather than silently applying nothing.
-func test_no_authored_pitch_effect_is_a_cast_id() -> void:
+## STORY 6-5d: THIS PIN IS DELIBERATELY REVERSED, AND THE REVERSAL IS THE STORY.
+##
+## It was `test_no_authored_pitch_effect_is_a_cast_id` (recorded verbatim so the old pin stays greppable),
+## and it asserted the disjointness `_resolve_basic_cast`'s comment relied on INSTEAD of a guard: no card's
+## PITCH effect was a cast id, so a pitch ACTIVATION could never reach a cast outcome through an unforked
+## apply seat. FIREBALL IS EXACTLY THAT CASE -- Bloodhound Step's pitch effect and a `CAST_OUTCOMES` row --
+## so the property this pinned is the property 6-5d ships the negation of.
+##
+## WHAT REPLACES IT IS NOT NOTHING, and that matters: the old pin's real job was making the unforked seat
+## SAFE, so its successor has to assert what makes the FORKED seat safe instead. Two halves:
+##   (1) the authored library is CHECKED and the castable pitch effects are exactly the expected set, so a
+##       tenth card quietly making its pitch castable is still a failure here rather than a surprise; and
+##   (2) `_resolve_pitch_activate` REALLY FORKS -- it asks `starts_cast` -- so a castable pitch effect
+##       cannot reach `_apply_card_effect` and apply nothing, which is the silent failure the old pin
+##       existed to prevent.
+func test_the_authored_castable_pitch_effects_are_exactly_the_forked_set() -> void:
 	var dir := DirAccess.open("res://data/cards")
 	assert_not_null(dir, "the authored card library is readable")
 	var checked := 0
+	var castable: Array[String] = []
 	for file_name: String in dir.get_files():
 		if not file_name.ends_with(".tres"):
 			continue
@@ -930,11 +986,27 @@ func test_no_authored_pitch_effect_is_a_cast_id() -> void:
 		if card == null or card.pitch_effect == null:
 			continue
 		checked += 1
-		assert_false(CardEffectResolver.CAST_OUTCOMES.has(card.pitch_effect.effect_id),
-			"'%s' pitch effect '%s' is not a cast id -- the pitch apply seat is deliberately "
-			% [file_name, card.pitch_effect.effect_id]
-			+ "unforked, and this pin is what makes that safe rather than lucky")
+		if CardEffectResolver.CAST_OUTCOMES.has(card.pitch_effect.effect_id):
+			castable.append("%s/%s" % [card.id, card.pitch_effect.effect_id])
 	assert_true(checked > 0, "at least one authored pitch effect was checked")
+	castable.sort()
+	assert_eq(castable, ["bloodhound_step/fireball"],
+		"Story 6-5d (AC 1/AC 10): EXACTLY ONE authored pitch effect is a cast id -- Bloodhound Step's "
+		+ "Fireball, the first PITCH effect in the project that starts a commitment window. A second "
+		+ "one is not forbidden, but it must be added here deliberately, because the pitch apply seat's "
+		+ "fork is what makes it resolve at all")
+	# (2) THE FORK ITSELF, by source scan, for the reason the old pin was a source-adjacent property too:
+	# a castable pitch effect reaching the unforked `_apply_card_effect` would apply NOTHING and spend the
+	# orbs -- silently, with every other test still green.
+	var source := FileAccess.get_file_as_string("res://src/state/match_state.gd")
+	assert_ne(source, "", "match_state.gd was read")
+	var activate := source.find("func _resolve_pitch_activate")
+	var next_func := source.find("\nfunc ", activate + 1)
+	assert_true(activate >= 0 and next_func > activate, "the activation seat was found (non-vacuity)")
+	var body := source.substr(activate, next_func - activate)
+	assert_true(body.contains("CardEffectResolver.starts_cast("),
+		"Story 6-5d (AC 10): `_resolve_pitch_activate` FORKS on `starts_cast` -- without it a castable "
+		+ "pitch effect would spend its orbs and apply nothing")
 
 
 # --- helpers ---------------------------------------------------------------------------------

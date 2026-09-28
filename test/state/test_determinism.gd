@@ -1158,8 +1158,61 @@ extends TestCase
 ##     * cause 7, INTAKE. No new runner-pushed fact exists -- the bolt's target is always the enemy
 ##       hero, so there is nothing like Drain's pushed selection -- and no new parametered public
 ##       `MatchState` method ships, so `test_intent_recorder.gd` stayed green unedited.
+##
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "97d52922e4e6282b37582e8c3a9c424a02337162881c37a7f6a3394277efdc92"
+## STORY 6-5d (AC 30, Golden Prediction): ONE RE-BASELINE, 97d52922... -> de3589ff..., FOR THREE
+## SNAPSHOT-SHAPE CAUSES, EACH MEASURED IN ISOLATION AND NONE OF THEM BEHAVIOURAL.
+## ---------------------------------------------------------------------------------------------
+##   ISOLATION, BOTH DIRECTIONS, RUN FIRST (the 6-5a/6-5b/6-5c method verbatim): with exactly the new
+##   keys erased from `to_snapshot()` and EVERY OTHER 6-5d change still in place -- the variable-cost
+##   staging, the pitch cast fork, the mode-aware strike lookup, the targeted bolt, `_apply_fireball`,
+##   the target-only contact rung, the block exemption, the funnel/lifesteal widening, the per-shot
+##   damage, the dead-target homing end, the M6 reload refusal, the authored `fireball.tres`, the
+##   pairing swap and the FORMAT_VERSION bump -- the hash is `97d52922...` EXACTLY, the pre-story
+##   golden reproduced. So the three key groups are the WHOLE of the move, and every other predicted
+##   cause is a MEASURED non-mover rather than an assumed one.
+##
+##   THEN EACH GROUP ALONE, from that same erased base:
+##     cause 1  the PITCH ZONE's two frozen facts (`mana_spent`, `locked_damage`, per zone, resting
+##              0.0 -- and the fixture's t22 staging makes `mana_spent` a LIVE 3.0 at hash time, not
+##              merely a shape change)
+##              97d52922... -> ea53044adf20d7e9185b62056fddd8044da54e7050cb5fe2bb613de58990c4e7
+##     cause 2  the `cast` KEY EXTENDED two elements -> six (mode, captured target slot, captured
+##              target index, locked damage), resting
+##              `["", 0, -1, -1, -1, 0.0]`
+##              97d52922... -> 057f9da61517536372c8636baacaa39b3b195c401f2869d9440f91bb234851ca
+##     cause 3  the PROJECTILE BOARD's two new keys (`projectile_effect`, `projectile_damage`, both
+##              empty arrays at rest -- the fixture launches no shot)
+##              97d52922... -> 892fe0257fb79a8f0d05833216632174827d8d2fb702d60c16cabd2b7d662f95
+##   All three together are this constant. Each moves the hash ON ITS OWN, which is what makes them
+##   three causes rather than one event reported three times.
+##
+##   THE PER-PLAYER KEY SET MOVES THIRTY-EIGHT -> FORTY, and cause 2 is deliberately NOT part of that
+##   move: the four facts a cast carries EXTEND one existing key instead of adding four, so the shape
+##   cause and the key-set cause stayed separately measurable. The story's prediction allowed either
+##   shape and asked the dev pass to record which; this is the record.
+##
+##   NOT CAUSES, EACH MEASURED BY THE ISOLATION RUN ABOVE:
+##     * prediction cause 5, THE NEW REFUSABLE OUTCOMES. Predicted a NON-cause and MEASURED one. No new
+##       refusal token ships at all: the below-minimum staging reuses `REASON_INSUFFICIENT_MANA` and the
+##       cast lock reuses `REASON_CASTING`. `SC/R6`'s boundary is about a pressed action made refusable
+##       IN THE RECORDED SEQUENCE, and this fixture's t22 staging is affordable on both sides.
+##     * prediction cause 6, THE AUTHORED `fireball.tres` NUMBERS, THE PAIRING SWAP AND THE EIGHT NEW
+##       `CardEffect` DEFAULTS. `BC/R3`'s isolation holds for the EFFECT INJECTION SET a third time:
+##       the golden builds its effects in-test and never loads `data/effects/`, so neither the new
+##       fields' presence nor the swap reaches this hash. Measured apart from causes 1-3 as the
+##       prediction required -- the injection set's SHAPE moved nothing.
+##     * prediction cause 7, THE HONED BOLT TARGET CAPTURE. Predicted unmoved and MEASURED unmoved:
+##       the resting lock IS the opposing hero (`_reset_lock`), so a captured address of `[1, -1]` is
+##       arithmetically the `1 - slot` it replaces, and the fixture never locks a unit.
+##     * prediction cause 8, `RecordFile.FORMAT_VERSION` 15 -> 16. A record carries INPUTS and CONTENT,
+##       never a hash and never a snapshot. A real change (AC 31) with its own refusal test; not a
+##       golden cause.
+##     * prediction cause 9, INTAKE. No new runner-pushed fact and no new parametered public
+##       `MatchState` intake: `projectile_profile_at` became public as a PURE QUERY and is exempt, and
+##       `apply_balance`'s new return value is not an intake widening.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "de3589ffa5012ed8ba368ae3f51e52e992ca1bd0f36ad430d509b43646eaf289"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

@@ -281,7 +281,11 @@ func test_the_card_fizzles_to_the_discard_at_the_deadline_and_owes_its_replaceme
 		"the staging mana is not refunded")
 	assert_eq(ms.to_snapshot()["pitch"]["p1"],
 		{"card_id": "", "hand_slot": PitchState.NO_HAND_SLOT,
-			"fizzle": {"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false}},
+			"fizzle": {"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false},
+			# Story 6-5d (AC 30): the variable cost's two frozen facts, at their EMPTY-ZONE resting 0.0.
+			# `PitchState.clear()` zeroes both with the record, so a fizzled or activated zone can never
+			# carry a stale price or a stale frozen damage into the hash.
+			"mana_spent": 0.0, "locked_damage": 0.0},
 		"the hashed zone is back to the empty record")
 	for _t in DELAY_TICKS - 1:
 		_tick(ms)
@@ -485,7 +489,11 @@ func test_activation_spends_only_the_priced_orbs_and_resolves_the_card() -> void
 	assert_false(ms.pitch.is_staged(0), "the zone is empty")
 	assert_eq(ms.to_snapshot()["pitch"]["p1"],
 		{"card_id": "", "hand_slot": PitchState.NO_HAND_SLOT,
-			"fizzle": {"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false}},
+			"fizzle": {"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false},
+			# Story 6-5d (AC 30): the variable cost's two frozen facts, at their EMPTY-ZONE resting 0.0.
+			# `PitchState.clear()` zeroes both with the record, so a fizzled or activated zone can never
+			# carry a stale price or a stale frozen damage into the hash.
+			"mana_spent": 0.0, "locked_damage": 0.0},
 		"...back to the empty hashed record, the one a fizzle leaves")
 	assert_eq(ms.p1.discard.to_array(), [id] as Array[StringName], "the card went to the discard")
 	assert_eq(ms.p1.pending_draw_owed, [STAGE_SLOT] as Array[int], "the vacated slot is owed NOW")

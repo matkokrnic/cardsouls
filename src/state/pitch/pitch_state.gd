@@ -47,12 +47,39 @@ var _hand_slots: Array[int] = [NO_HAND_SLOT, NO_HAND_SLOT]
 var _orb_costs: Array[Dictionary] = [{}, {}]
 var _fizzle: Array[TimingWindow] = [TimingWindow.new(), TimingWindow.new()]
 
+## Story 6-5d (AC 5/AC 7/AC 30, `6-5d/R1`/`R2`, Open Question 5): THE VARIABLE COST'S TWO FROZEN
+## FACTS, per slot.
+##
+## `_mana_spent` IS RECORDED FOR EVERY STAGING, VARIABLE OR FIXED, and that uniformity is deliberate
+## rather than incidental: it means "what this staging actually paid", which is a true and useful fact
+## about a fixed-price card too, and it leaves the staging seat with no is-this-variable branch to get
+## wrong. `_locked_damage` is 0.0 for every card that authors no `damage_per_mana`, which is every
+## pitch card but Fireball today.
+##
+## THEY ARE TWO FACTS, NOT ONE EXPRESSED TWICE, and Open Question 5 is exactly why. `_mana_spent` is
+## HOW MUCH THE PLAYER PAID (AC 5's "the staged card remembers the spent amount") -- a player-facing
+## quantity. `_locked_damage` is the FROZEN PRODUCT `damage_per_mana x mana spent` (AC 7). At staging
+## the second is derivable from the first, and after an authored `damage_per_mana` retune it is NOT:
+## freezing the product is what makes "mana gained or lost after staging cannot change a staged card's
+## damage" survive a retune too, which is the boundary the dev pass was asked to pick and pin.
+##
+## BOTH ARE HASHED (`to_snapshot` below), unlike `_orb_costs`. The `3-2` close-out excluded card
+## `.tres` CONTENT from the hashed run so repricing a card cannot re-baseline the golden -- and
+## neither of these is content: they are the outcome of a PLAYER ACTION against a live pool, the same
+## class of fact as `mana` itself. They cross ticks and decide an outcome (what the Fireball hits
+## for), so `4-3a/R17`'s test puts them in the hash.
+var _mana_spent: Array[float] = [0.0, 0.0]
+var _locked_damage: Array[float] = [0.0, 0.0]
+
 
 ## Put `card_id`, staged from `hand_slot`, into `slot`'s zone and start its countdown. The caller
 ## (MatchState._resolve_pitch_stage) has already refused an occupied zone, so an overwrite here is a
 ## programming error and says so.
+## Story 6-5d (AC 5/AC 7): `mana_spent` and `locked_damage` arrive as ARGUMENTS the caller has already
+## computed, on `UnitBoard.add(max_hp)`'s discipline verbatim: this is a pure container and never reads
+## an effect, a `BalanceConfig` or a pool. A fixed-cost staging passes 0.0 for both.
 func stage(slot: int, card_id: StringName, hand_slot: int, orb_costs: Dictionary,
-		duration_ticks: int) -> void:
+		duration_ticks: int, mana_spent: float, locked_damage: float) -> void:
 	Invariant.check(not is_staged(slot),
 		"pitch zone %d already holds %s -- the already-staged refusal was bypassed" % [slot, _card_ids[slot]])
 	Invariant.check(card_id != NO_CARD, "cannot stage the empty card id into pitch zone %d" % slot)
@@ -60,6 +87,8 @@ func stage(slot: int, card_id: StringName, hand_slot: int, orb_costs: Dictionary
 	_hand_slots[slot] = hand_slot
 	_orb_costs[slot] = orb_costs.duplicate()
 	_fizzle[slot].start(duration_ticks)
+	_mana_spent[slot] = mana_spent
+	_locked_damage[slot] = locked_damage
 
 
 ## Empty `slot`'s zone and stop its countdown. Used by the fizzle exit, by activation (story 6-3a) and
@@ -69,6 +98,11 @@ func clear(slot: int) -> void:
 	_hand_slots[slot] = NO_HAND_SLOT
 	_orb_costs[slot] = {}
 	_fizzle[slot].start(0)
+	# Story 6-5d: cleared WITH the record, so an empty zone can never carry a stale price or a stale
+	# frozen damage into the hash -- the `telegraph` gate's guarantee bought by a clear instead of a
+	# gate, because this snapshot has no "is a card staged" conditional to hang one on.
+	_mana_spent[slot] = 0.0
+	_locked_damage[slot] = 0.0
 
 
 ## One tick off both countdowns, P1 then P2. A stopped window ignores the tick (TimingWindow.tick).
@@ -109,6 +143,18 @@ func staged_orb_costs(slot: int) -> Dictionary:
 	return _orb_costs[slot].duplicate()
 
 
+## Story 6-5d (AC 5): the mana this staging actually spent -- the fixed price for a fixed-cost card,
+## `min(pool, mana_cap)` for a variable one. 0.0 for an empty zone.
+func staged_mana_spent(slot: int) -> float:
+	return _mana_spent[slot]
+
+
+## Story 6-5d (AC 7): the damage frozen at staging -- `damage_per_mana x mana spent`, no rounding.
+## 0.0 for a card authoring no `damage_per_mana`, and for an empty zone.
+func staged_locked_damage(slot: int) -> float:
+	return _locked_damage[slot]
+
+
 ## Both zones, slot-keyed like MatchState's own `p1` / `p2`. The card id rides as a String VALUE --
 ## never a key, the StringName-sort hazard this layer avoids everywhere. The orb price is NOT a
 ## member here (see the class doc's `3-2` note) -- a consumer that needs it derives it from the
@@ -122,4 +168,8 @@ func _zone_snapshot(slot: int) -> Dictionary:
 		"card_id": String(_card_ids[slot]),
 		"hand_slot": _hand_slots[slot],
 		"fizzle": _fizzle[slot].to_snapshot(),
+		# Story 6-5d (AC 30): the variable cost's two frozen facts -- see the members for why they are
+		# two keys and why they are hashed at all. Plain floats, the `unit_hp` class; resting 0.0.
+		"mana_spent": _mana_spent[slot],
+		"locked_damage": _locked_damage[slot],
 	}

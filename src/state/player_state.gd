@@ -292,6 +292,55 @@ var cast_window: TimingWindow
 var cast_card_id: String = ""
 
 ## ------------------------------------------------------------------------------------------
+## STORY 6-5d (AC 12/AC 13/AC 24/AC 30): WHAT ELSE THE CAST CARRIES -- the MODE it strikes in, the
+## TARGET captured at cast start, and the DAMAGE locked before it.
+## ------------------------------------------------------------------------------------------
+## `cast_card_id` ALONE CANNOT ANSWER MODE, and that is the gap 6-5d had to close. The strike seat
+## looks the effect up by card id, and Bloodhound Step's BASIC effect (the roll buff) and its PITCH
+## effect (Fireball) are two different effects under ONE id -- so a pitch cast and a basic cast of the
+## same card were indistinguishable. `cast_effect_mode` is the discriminator: an `Enums.ModeKind` ordinal, and
+## `NO_CAST_EFFECT_MODE` while nothing is in flight. AC 12 ("a Bloodhound Step Fireball never arms a roll
+## buff") is this member and nothing else.
+##
+## AN ORDINAL RATHER THAN THE EFFECT ID ITSELF, deliberately. Storing the effect id would put a second
+## identity in flight that could disagree with `cast_card_id`, and it would still not say WHICH MAP the
+## replay must look it up in -- the mode says both, and it is the same vocabulary
+## `record_resolved_card` already snapshots one key away.
+##
+## SPELLED `cast_effect_mode`, NOT `cast_mode`, AND THAT IS AN INVARIANT RATHER THAN A PREFERENCE.
+## `cast_mode` is a RESERVED CONTROLLER-SCHEME TOKEN -- the input binding that arms the cast modifier --
+## banned outside `src/controllers/` by `test_architecture_invariants.gd::CARD_SCHEME_BANNED_TOKENS`
+## (story 3-5a AC 1: "swapping the scheme touches one folder"). The first spelling of this member tripped
+## that guard, which is the guard working: this is a WHICH-EFFECT discriminator, an entirely different
+## fact from the press that produced it, and the name now says so.
+const NO_CAST_EFFECT_MODE := -1
+var cast_effect_mode: int = NO_CAST_EFFECT_MODE
+
+## Story 6-5d (AC 24, `6-5d/R6`/`R7`/`R15`): THE CAPTURED TARGET, as the `[slot, index]` pair
+## `lock_target` and `unit_targets` already use (`4-2/R2`'s convention). Captured ONCE at cast start
+## and FIXED for the whole cast and the flight: a re-lock or an unlock after the press changes nothing,
+## which is true BY CONSTRUCTION here because nothing but `start_cast` ever writes these.
+##
+## IT IS NOT `lock_target`, AND THAT DISTINCTION IS THE WHOLE OF `6-5d/R15`. `lock_target` is LIVE and
+## snaps back to the opposing hero when a locked unit dies; this is a FROZEN COPY, so a bolt whose
+## minion died mid-cast hits NOTHING rather than falling on the snap-back hero. Two members precisely
+## because the two facts must be able to disagree.
+##
+## RESTING `[NO_TARGET_SLOT, HERO_INDEX]` -- `lock_target`'s own resting pair, so the resting snapshot
+## carries the same neutral address the lock does rather than a second spelling of "nothing".
+var cast_target_slot: int = TargetingService.NO_TARGET_SLOT
+var cast_target_index: int = TargetingService.HERO_INDEX
+
+## Story 6-5d (AC 7/AC 13/AC 14): THE DAMAGE THE STRIKE WILL DEAL, carried from the STAGING that froze
+## it, through the cast, to the projectile record. Zero for every cast whose damage is authored on the
+## effect instead (Honed Bolt reads `effect.damage_amount` at its landing and never reads this).
+##
+## IT RIDES THE CAST RATHER THAN BEING RE-READ, because by the strike tick the staged record is GONE:
+## `pitch.clear(slot)` ran at the activation press, ticks earlier. This is the same reason
+## `root_blocks_run`/`root_blocks_roll` are stored rather than re-read from the effect one family up.
+var cast_damage: float = 0.0
+
+## ------------------------------------------------------------------------------------------
 ## STORY 6-5c: THE ROOT (AC 17, AC 18).
 ## ------------------------------------------------------------------------------------------
 ## ONE WINDOW COVERING THE STUN AND THE ROOT TOGETHER, started at the strike with
@@ -323,9 +372,19 @@ func is_casting() -> bool:
 
 
 ## Story 6-5c (AC 1): ARM a cast. The duration is already in TICKS (converted once at the press, A1).
-func start_cast(card_id: StringName, duration_ticks: int) -> void:
+##
+## STORY 6-5d (AC 12/AC 13/AC 24): FOUR MORE ARGUMENTS, and every one of them is CAPTURED HERE because
+## here is the press -- the mode this cast strikes in, the target address it froze, and the damage the
+## staging locked. Widened rather than split into a second `start_pitch_cast`, so there stays exactly
+## ONE place a cast begins and the four facts cannot be armed without it.
+func start_cast(card_id: StringName, duration_ticks: int, mode: int,
+		target_slot: int, target_index: int, damage: float) -> void:
 	cast_card_id = String(card_id)
 	cast_window.start(duration_ticks)
+	cast_effect_mode = mode
+	cast_target_slot = target_slot
+	cast_target_index = target_index
+	cast_damage = damage
 
 
 ## Story 6-5c (AC 5, AC 24): THE ONE STOP POINT for a cast -- the strike, every interrupt, the debug
@@ -335,6 +394,14 @@ func start_cast(card_id: StringName, duration_ticks: int) -> void:
 func clear_cast() -> void:
 	cast_card_id = ""
 	cast_window.start(0)
+	# Story 6-5d: the four carried facts are cleared WITH the identity, at the one stop point, so a
+	# finished cast can never leave a stale mode, target or damage behind for the next one to inherit --
+	# `PitchState.clear`'s own reasoning, and what lets the snapshot key below be honest without a
+	# second gate per element.
+	cast_effect_mode = NO_CAST_EFFECT_MODE
+	cast_target_slot = TargetingService.NO_TARGET_SLOT
+	cast_target_index = TargetingService.HERO_INDEX
+	cast_damage = 0.0
 
 
 ## Story 6-5c (AC 17, AC 19): ARM (or RESTART, choice A) the root. `duration_ticks` is the stun plus
@@ -829,6 +896,19 @@ func to_snapshot() -> Dictionary:
 		"projectile_homing": projectiles.homing_snapshot(),
 		"projectile_flight_ticks": projectiles.flight_ticks_snapshot(),
 		"projectile_travelled": projectiles.travelled_snapshot(),
+		# Story 6-5d (AC 30): TWO new projectile keys -- the EFFECT ID authoring a hero-sourced shot's
+		# flight and its per-shot LOCKED DAMAGE. See `projectile_board.gd`'s `effect_id_snapshot` for why
+		# they are two keys and not one, and `_effect_ids` for why the id rides as a `String`.
+		#
+		# BOTH CROSS TICKS AND DECIDE AN OUTCOME (`4-3a/R17`): the effect id decides every authored number
+		# governing the shot AND whether the target-only, no-block, Bloodlust-inclusive rules apply to it
+		# at all; the damage decides what it hits for and is not derivable from any config a replay could
+		# re-read, because the staging that computed it is ticks in the past.
+		#
+		# THESE TWO ARE THE PER-PLAYER KEY-SET MOVE this story predicted (Golden Prediction cause 4):
+		# 38 -> 40. The `cast` extension is a separate cause and moves no key (see that key).
+		"projectile_effect": projectiles.effect_id_snapshot(),
+		"projectile_damage": projectiles.damage_snapshot(),
 		# Story 5-2 (AC 21/AC 22, `5-2/R9`): the ONE new key this story adds -- the ACTIVE
 		# TELEGRAPH, as `[colour, remaining_ticks]`. The `lock_target` FUSION verbatim and for the
 		# same reason: a telegraph is ONE fact in two halves (what colour, how much longer), and
@@ -904,8 +984,34 @@ func to_snapshot() -> Dictionary:
 		# recomputed for free inside the tick that reads it -- `4-3a/R17`'s test, passed. Remaining
 		# ticks alone is determinism-complete: the duration is `seconds_to_ticks(effect.cast_seconds)`,
 		# a load-time constant a replay reproduces from the recorded content, so elapsed is recoverable.
-		"cast": [cast_card_id, cast_window.remaining_ticks()] \
-				if is_casting() else ["", 0],
+		# STORY 6-5d (AC 30) EXTENDS THIS KEY TO SIX ELEMENTS RATHER THAN ADDING FOUR KEYS, and the
+		# choice is the `defense`/`root`/`telegraph` fusion argument taken at face value: all six are
+		# halves of ONE fact -- the cast in flight -- and splitting them would let them drift into keys
+		# that could disagree about whether a cast is in flight at all. `root` is the standing precedent
+		# for a THREE-element fusion of a countdown plus its carried switches; this is that shape with
+		# three more carried facts.
+		#
+		# IT IS ALSO WHY THE PER-PLAYER KEY SET DOES NOT MOVE ON THIS CAUSE. The story's Golden
+		# Prediction cause 2 allowed either shape and asked the dev pass to record which: extending the
+		# key moves the hash (a six-element array is not a two-element one) and leaves
+		# `EXPECTED_PLAYER_SNAPSHOT_KEYS` at its count, so cause 2 and the key-set move are cleanly
+		# separated causes rather than one event with two symptoms.
+		#
+		# ORDER: card id, remaining ticks, mode, target slot, target index, locked damage. Resting
+		# `["", 0, NO_CAST_EFFECT_MODE, NO_TARGET_SLOT, HERO_INDEX, 0.0]` -- each element's own resting value,
+		# never a second spelling of "nothing". Still a String VALUE and plain ints and floats: no
+		# StringName reaches the hash (`Array[StringName].sort()` orders by internal POINTER here).
+		#
+		# EVERY NEW ELEMENT CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`): the mode decides WHICH
+		# effect the strike resolves (AC 12), the target address decides where the bolt lands and where
+		# the Fireball is aimed (AC 24), and the damage decides what it hits for (AC 7). None is
+		# recomputable inside the tick that reads it -- the staging that froze the damage and the lock
+		# reading that froze the target are both ticks in the past, and the lock itself may have moved.
+		"cast": [cast_card_id, cast_window.remaining_ticks(), cast_effect_mode,
+					cast_target_slot, cast_target_index, cast_damage] \
+				if is_casting() \
+				else ["", 0, NO_CAST_EFFECT_MODE, TargetingService.NO_TARGET_SLOT,
+					TargetingService.HERO_INDEX, 0.0],
 		# Story 6-5c (AC 17/AC 23): the ROOT, as `[remaining ticks, blocks run, blocks roll]` -- the
 		# `timed_rules` per-slot fusion applied to one root: three halves of one fact, gated on the
 		# window so a stopped root reads `[0, false, false]` whatever the switches last held and a

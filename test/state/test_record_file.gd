@@ -227,8 +227,24 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 15,
-		"FORMAT_VERSION is 15 as of story 6-5c (AC 23) -- TWO MEASURED CAUSES. (1) THE RECORDED "
+	assert_eq(RecordFile.FORMAT_VERSION, 16,
+		"FORMAT_VERSION is 16 as of story 6-5d (AC 31) -- ONE MEASURED CAUSE, and the story's own stated "
+		+ "reason is CORRECTED rather than repeated. THE CAUSE: the recorded PER-EFFECT ROW SHAPE moves "
+		+ "again, for 6-5c's mechanism exactly -- `CardEffect` gains EIGHT more flat exports (`mana_cap`, "
+		+ "`damage_per_mana` and the five `ProjectileProfile` mirror fields), and `_resource_values` "
+		+ "captures every script variable, so every row in the `effects`/`pitch_effects` channels gains "
+		+ "eight keys while REQUIRED_KEYS is again unmoved. Measured by "
+		+ "test_the_recorded_effect_row_carries_every_cast_field, which reads the new names out of an "
+		+ "actually-saved record. WHAT AC 31 CLAIMED AND WHY IT DOES NOT APPLY: the AC reads `recorded "
+		+ "content gains fields whose defaults would replay a Fireball as a no-op`, but a v15 file CANNOT "
+		+ "CONTAIN a Fireball -- the effect did not exist and no card referenced it -- and the pairing "
+		+ "swap creates no misresolution either, because a record carries its own injected content (a v15 "
+		+ "file replays Bloodhound Step's pitch as the `bloodlust` BUFF it was recorded with, and this "
+		+ "build reads `mana_cap` 0.0 off that rebuilt buff and takes the unchanged fixed-price staging "
+		+ "path). The row-shape cause is sufficient alone and is the same one that carried 14 -> 15; v15 "
+		+ "is refused HARD (pinned by test_a_v15_record_is_refused_with_a_reason), no shim, because "
+		+ "filling eight absent keys with constructor defaults is exactly the silently-wrong replay this "
+		+ "constant exists to prevent. It was 15 as of story 6-5c (AC 23) -- TWO MEASURED CAUSES. (1) THE RECORDED "
 		+ "PER-EFFECT ROW SHAPE MOVES: `CardEffect` gains SEVEN flat exports, and `_resource_values` "
 		+ "captures EVERY script variable off `get_property_list()` whether or not it holds its "
 		+ "default, so every row in the `effects` and `pitch_effects` channels gains seven keys. That "
@@ -744,6 +760,37 @@ func test_a_v14_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_5C_PATH)
 
 
+## Story 6-5d (AC 31): A v15 RECORD IS REFUSED WITH A REASON, NO SHIM -- the v14 refusal's shape verbatim
+## and for the same mechanism: its effect rows predate EIGHT flat exports, so `_rebuilt` would leave every
+## rebuilt effect at constructor defaults for `mana_cap`, `damage_per_mana` and the whole flight profile.
+##
+## WHAT THAT WOULD SILENTLY DO, stated precisely rather than borrowed from AC 31 (whose own reason does not
+## apply -- a v15 file cannot contain a Fireball at all): any effect the recorded content DID pair as a
+## pitch effect would rebuild with `mana_cap` 0.0 and `travel_budget` 0.0. For a v15 file that is
+## harmless-looking, which is the trap: the loader checks nothing but the version, so the day a v15 file
+## is replayed against a build whose authoring HAS moved, the absent keys are indistinguishable from
+## authored zeros. Filling a gap with defaults is exactly the silently-wrong replay the exact-match
+## refusal exists to prevent, so v15 is refused HARD.
+func test_a_v15_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5C_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_5C_PATH, 15)
+	var refused := RecordFile.load_record(PRE_6_5C_PATH)
+	assert_null(refused["record"],
+		"a v15 record is REFUSED -- its effect rows predate the eight 6-5d fields, so every rebuilt "
+		+ "effect would carry constructor defaults for its cost cap and its whole flight profile")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("15"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_5C_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_5C_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_5C_PATH)
+
+
 ## Story 6-5c (AC 23): THE MEASUREMENT BEHIND CAUSE (1) OF THE BUMP, committed rather than asserted in
 ## prose. `RecordFile._resource_values` captures every script variable off `get_property_list()`
 ## whether or not it holds its default, so a flat export added to `CardEffect` DOES widen every
@@ -759,9 +806,16 @@ func test_the_recorded_effect_row_carries_every_cast_field() -> void:
 	for id: Variant in effects:
 		var row: Dictionary = effects[id]
 		for field: String in ["cast_seconds", "damage_amount", "stun_seconds", "root_seconds",
-				"root_blocks_run", "root_blocks_roll", "repeat_landing_restuns"]:
+				"root_blocks_run", "root_blocks_roll", "repeat_landing_restuns",
+				# Story 6-5d (AC 31): the EIGHT new fields, and this loop IS the measurement the
+				# FORMAT_VERSION 15 -> 16 bump rests on. They ride the same EXISTING channel, so
+				# REQUIRED_KEYS is again unmoved while the ROW inside it gains eight keys -- which is
+				# precisely why a v15 file cannot be filled in with defaults and is refused instead.
+				"mana_cap", "damage_per_mana", "launch_speed",
+				"homing_turn_rate_degrees_per_second", "acceleration_delay_seconds",
+				"acceleration_per_second_squared", "max_speed", "travel_budget"]:
 			assert_true(row.has(field),
-				"recorded effect row '%s' carries '%s' -- the seven 6-5c fields ride the EXISTING "
+				"recorded effect row '%s' carries '%s' -- the 6-5c and 6-5d fields ride the EXISTING "
 				% [id, field]
 				+ "`effects` channel, which is why REQUIRED_KEYS is unmoved and the ROW shape is not")
 	_remove(PRE_6_5C_PATH)
@@ -1164,9 +1218,10 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 15,
+	assert_eq(RecordFile.FORMAT_VERSION, 16,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 15 (last: 6-5c's widened CardEffect row plus honed_bolt's "
+		+ "version has since moved to 16 (last: 6-5d's widened CardEffect row -- eight more flat "
+		+ "exports; before it 6-5c's widened CardEffect row plus honed_bolt's "
 		+ "changed resolution semantics; before it 6-5b's drain-target channel, 6-5a's pitch-effect channel, 5-2's colours channel, 6-1's mode ② hold semantics, "
 		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, 6-7's silent-divergence "
 		+ "bump for `run`/`walk_speed`, then 6-9's silent-divergence bump for click-to-commit, "

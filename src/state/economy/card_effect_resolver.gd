@@ -196,11 +196,18 @@ const REASON_DECK1_NOT_YET_RESOLVED := &"deck1_not_yet_resolved"
 ## mechanism working as designed that retired 6-5b's four, and the count assertion in
 ## `test_spell_framework.gd` moves with it deliberately. `rocksling`, `boom`, `counterspell` and
 ## `corpse_bomb` stay deferred and their no-op behaviour is untouched (AC 21).
+## STORY 6-5d: NO ROW LEAVES AND NO ROW ARRIVES -- but THREE ROWS ARE RE-POINTED (AC 35, `6-5d/R14`).
+## The board reshuffle renamed `6-5d-hero-and-corpse-projectiles` to
+## `6-5d-fireball-and-spell-targeting` and `6-5e-boulder-injection` to
+## `6-5e-rocksling-boom-and-corpse-bomb`, and the three rows that named the OLD keys named stories that
+## no longer exist. All three move to the 6-5e key, which is the story that actually builds them --
+## `fireball` is what 6-5d builds, and it was never a row here (Bloodhound Step's pitch was
+## `bloodlust`, a buff, until this story). The pin in `test_spell_framework.gd` moves with them.
 const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
-	&"rocksling": &"6-5d-hero-and-corpse-projectiles",
-	&"boom": &"6-5e-boulder-injection",
+	&"rocksling": &"6-5e-rocksling-boom-and-corpse-bomb",
+	&"boom": &"6-5e-rocksling-boom-and-corpse-bomb",
 	&"counterspell": &"6-5f-counterspell",
-	&"corpse_bomb": &"6-5d-hero-and-corpse-projectiles",
+	&"corpse_bomb": &"6-5e-rocksling-boom-and-corpse-bomb",
 }
 
 ## Story 6-5a (AC 16): the SPELL layer's closed-gate reason, the `REASON_TOTEMS_FLAG_CLOSED` twin. The
@@ -252,9 +259,41 @@ const OWN_MINION_OUTCOMES: Dictionary[StringName, StringName] = {
 ## the commitment locks or the strike seat.
 const OUTCOME_HONED_BOLT := &"honed_bolt"
 
+## STORY 6-5d (AC 10-13): THE SECOND MEMBER OF THE CAST FAMILY, and the FIRST cast id that is a card's
+## PITCH effect rather than its BASIC one. `6-5c`'s note that "Rocksling, Fireball and Corpse Bomb adopt
+## the framework by adding a row here plus their own apply arm, with no edit to the window, the
+## commitment locks or the strike seat" is discharged exactly as written: this row plus
+## `MatchState._apply_fireball`, and the window, the three commitment locks and the strike ladder are
+## untouched. What DID have to change is which MAP the strike seat looks the effect up in -- see
+## `PlayerState.cast_effect_mode`.
+const OUTCOME_FIREBALL := &"fireball"
+
 const CAST_OUTCOMES: Dictionary[StringName, StringName] = {
 	&"honed_bolt": OUTCOME_HONED_BOLT,
+	&"fireball": OUTCOME_FIREBALL,
 }
+
+
+## Story 6-5d (AC 5, `6-5d/R1`, Open Question 1): DOES STAGING THIS EFFECT'S CARD SPEND THE WHOLE POOL
+## (capped) RATHER THAN ITS FIXED PITCH PRICE?
+##
+## IT COMPUTES, IT DOES NOT APPLY (D6), and it is the ONE question `MatchState._resolve_pitch_stage`
+## asks about cost classification -- the `starts_cast()` shape verbatim, one seat up the same card's
+## life.
+##
+## THE AUTHORED NUMBER ANSWERS IT, NOT AN ID TABLE. Every other family in this file dispatches on the
+## `effect_id` string because "what does this effect DO" is not derivable from a magnitude; this
+## question IS a magnitude -- `mana_cap` is the ceiling on a variable spend, and a card with no ceiling
+## has no variable spend to cap. So there is no `fireball` row to keep in agreement with
+## `card_effect.gd`'s default, and a second variable-cost card needs no edit here. The cost of that
+## choice is that the field's default MUST stay neutral zero, which `card_effect.gd` records in as many
+## words at the field.
+##
+## A NULL EFFECT IS FIXED-COST, the `starts_cast` null branch's own honest default: an effect with no
+## injected entry authors no cap, so the existing fixed-price path is what a staging with no effect
+## entry gets -- which is every pitch staging in every fixture that injects costs but no pitch effects.
+static func spends_variable_mana(effect: CardEffect) -> bool:
+	return effect != null and effect.mana_cap > 0.0
 
 
 ## Story 6-5c (AC 1/AC 2/AC 6): does pressing this effect's card start a CAST -- a commitment window
@@ -317,10 +356,21 @@ const OWN_MINION_REQUIREMENTS: Dictionary[StringName, StringName] = {
 ## STRUCTURALLY present and proven with a synthetic fixture, never claimed live-reachable, the
 ## `REASON_UNKNOWN_EFFECT_PREFIX` posture verbatim. It exists for the later cast effects (6-5d/6-5e)
 ## whose target the board genuinely may lack.
+## STORY 6-5d (AC 27) WIDENS WHAT THIS ROW MEANS WITHOUT RENAMING IT. The requirement is now A LIVING
+## CAPTURED TARGET -- the caster's lock-on target, which is the opposing hero, a minion or a totem
+## (`6-5d/R6`/`R7`) -- and `MatchState._board_refusal_reason` is where that widened reading lives. The
+## NAME is kept because AC 27 cites it by name as the thing that "keeps working", and because the
+## RESTING lock IS the enemy hero: an unlocked caster and a caster locked on the hero both get exactly
+## the pre-6-5d answer, so the widening adds cases rather than changing any existing one.
+##
+## STILL NO PLAYER-REACHABLE CASE (AC 27 says so): a locked unit's death snaps the lock back to a live
+## hero, and a dead hero ends the round before step 6. Proven with a synthetic fixture, never claimed
+## live-reachable -- the `REASON_UNKNOWN_EFFECT_PREFIX` posture, unchanged.
 const NEEDS_ENEMY_HERO := &"enemy_hero"
 
 const CAST_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"honed_bolt": NEEDS_ENEMY_HERO,
+	&"fireball": NEEDS_ENEMY_HERO,
 }
 
 

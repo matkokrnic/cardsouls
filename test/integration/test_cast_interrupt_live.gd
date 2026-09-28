@@ -70,7 +70,12 @@ func _physics_process(_delta: float) -> bool:
 		_p2_hero().global_position = Vector3(GAP, 1.0, 0.0)
 		return false
 	if _frames == CAST_FRAME:
-		_state.p1.start_cast(&"honed_bolt", _cast_ticks)
+		# Story 6-5d (AC 24/AC 28): `start_cast` now also captures the MODE and the TARGET. The poke passes
+		# BASIC (Honed Bolt is a Mode 1 cast) and the OPPOSING HERO -- which is what an unlocked or
+		# hero-locked caster captures (`6-5d/R7`), i.e. exactly the target this test always assumed. The
+		# damage is 0.0: a bolt's damage is authored on its effect, not frozen at a staging.
+		_state.p1.start_cast(&"honed_bolt", _cast_ticks, Enums.ModeKind.BASIC,
+				1, TargetingService.HERO_INDEX, 0.0)
 		return false
 	if _frames > CAST_FRAME:
 		_sample()

@@ -296,7 +296,14 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		"mana", "orbs",
 		"pending_draw", "pending_draw_owed",
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
-		"projectile_alive", "projectile_flight_ticks", "projectile_homing", "projectile_kind",
+		# Story 6-5d (AC 30): NINE. `projectile_damage` and `projectile_effect` are the hero-sourced
+		# shot's per-shot damage and its authoring effect id -- see the twin pin in
+		# `test_draw_delay_and_reshuffle.gd` for why they are two keys, and why the `cast` key's
+		# extension is a separate cause that moves no key. This copy moves for the SAME reason and is
+		# updated here deliberately: the observation channel still adds nothing, which is what this test
+		# actually asserts.
+		"projectile_alive", "projectile_damage", "projectile_effect", "projectile_flight_ticks",
+		"projectile_homing", "projectile_kind",
 		"projectile_source", "projectile_targets", "projectile_travelled",
 		# Story 6-5c (AC 17/AC 23): `root` -- `[remaining_ticks, blocks_run, blocks_roll]` -- in
 		# sorted position between the projectile block and `stamina`.
@@ -333,8 +340,20 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 38,
-		"the per-player snapshot key set is THIRTY-EIGHT keys as of story 6-5c, which adds TWO, both "
+	assert_eq(keys.size(), 40,
+		"the per-player snapshot key set is FORTY keys as of story 6-5d, which adds TWO, both on the "
+		+ "projectile board (AC 30): `projectile_effect`, the effect id a HERO-SOURCED shot's flight is "
+		+ "authored by, and `projectile_damage`, that shot's per-shot LOCKED damage. Both cross ticks "
+		+ "and decide an outcome -- the id decides every authored number governing the flight AND "
+		+ "whether the target-only / no-block / Bloodlust-inclusive rules apply at all, and the damage "
+		+ "decides what it hits for and is the ONE value on that board a replay cannot re-derive from "
+		+ "config, because the staging that computed it emptied the pool it was measured against. TWO "
+		+ "keys rather than one fused key on the board's own split rule: two Fireballs of the SAME "
+		+ "effect id carry DIFFERENT damage, so they are independent facts and fusing them would hide "
+		+ "which moved. 6-5d's OTHER new cross-tick facts -- the cast's mode, its captured target and "
+		+ "its locked damage -- deliberately EXTEND the existing `cast` key from two elements to six "
+		+ "rather than adding four keys, which is why this count moves by exactly two and the golden's "
+		+ "`cast` cause stays separately measurable. It was THIRTY-EIGHT as of story 6-5c, which adds TWO, both "
 		+ "card-layer: `cast`, the in-flight cast as `[card id, remaining_ticks]` (AC 1), and `root`, "
 		+ "as `[remaining_ticks, blocks_run, blocks_roll]` (AC 17). Both cross ticks and decide an "
 		+ "outcome -- when the strike lands and therefore whether it lands at all, and how much longer "
