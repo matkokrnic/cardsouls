@@ -118,6 +118,7 @@ corpse_lifetime_seconds = 20.0
 mana_accelerator_mana = 0.5
 mana_accelerator_interval_seconds = 1.0
 stamina_accelerator_regen_step = 0.5
+boulder_slow_per_boulder = 0.15
 block_damage_multiplier = 0.3
 deflect_window_seconds = 0.15
 block_facing_arc_degrees = 180.0

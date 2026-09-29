@@ -570,6 +570,12 @@ var _pitch_effects: Dictionary[StringName, CardEffect] = {}
 var _effect_projectiles: Dictionary[StringName, ProjectileProfile] = {}
 var _effect_projectile_delay_ticks: Dictionary[StringName, int] = {}
 
+## Story 6-5e (AC 16): EFFECT ID -> the `CardEffect` itself, for both effect maps at once. Built in the same
+## pass as the two mirrors above, at `inject_pitch_effects`, and read by `_shot_effect_of` -- see there for
+## why an effect-keyed handle is needed at all when both source maps are keyed by CARD id. Derived content
+## with no reload path, so `inject_pitch_effects`' own CONSTRAINT C argument covers it verbatim.
+var _effects_by_effect_id: Dictionary[StringName, CardEffect] = {}
+
 
 ## Story 3-1 (AC 1/AC 3): construction takes ONE match-scoped params object and nothing
 ## else. The five positional floats are gone — max_hp, move_speed, max_stamina and max_mana
@@ -690,6 +696,15 @@ func advance(intents: Array[InputIntent]) -> void:
 	p2.cast_window.tick()
 	p1.root_window.tick()
 	p2.root_window.tick()
+	# Story 6-5e (AC 8/AC 11a): the ROCKSLING BURST INTERVAL counts down HERE, beside the cast window whose
+	# strike armed it and on the identical idiom -- ticked in ONE place, read at the step-6d burst seat,
+	# never both. A1 satisfied by construction: one integer tick per advance(), never a float accumulator.
+	# Seated after step 1b, so a round-over tick never reaches this line and the interval freezes with the
+	# round -- which is why `_end_round` clears the burst outright (AC 11a: round end cancels every stone
+	# not yet launched), rather than relying on a frozen clock. Unguarded like its neighbours: a
+	# pre-injection MatchState can start no burst, because the only seat that starts one is a cast strike.
+	p1.burst_window.tick()
+	p2.burst_window.tick()
 	# Story 6-5a (AC 8): the TIMED-RULE SEAT counts down HERE, beside every other D4 window, on the
 	# identical idiom -- ticked in one place, read at the seats that apply each rule. A round-over tick
 	# returns at step 1b and never reaches this line, so a running buff freezes with the round.
@@ -862,6 +877,21 @@ func advance(intents: Array[InputIntent]) -> void:
 	#
 	#    THE DODGE READING IS STEP 3's LATCH, not a live predicate -- see `_apply_honed_bolt`.
 	_resolve_cast_strikes()
+	# 6d. Story 6-5e (AC 8/AC 11a, `6-5e/R18`/C2): THE BURST SEAT -- every Rocksling stone still owed by a
+	#    cast that has already struck launches HERE, and a burst whose caster has died is cancelled here
+	#    too. Seated immediately after the cast strike, and both edges are load-bearing:
+	#
+	#    AFTER 6c, so the strike that ARMS a burst does not also launch its second stone on the same tick:
+	#    `_apply_rocksling` starts the interval window, and at any non-zero authored interval this seat
+	#    then finds it running and launches nothing. At a ZERO authored interval it deliberately DOES
+	#    launch, one stone per tick from here on, which is that field's stated degenerate meaning.
+	#
+	#    BEFORE step 7 and step 8, so a stone placed this tick is on the board when the resolution check
+	#    runs, exactly as a summon from step 6 is.
+	#
+	#    FIXED P1 -> P2, like every other per-player loop in this function.
+	_advance_bursts(p1)
+	_advance_bursts(p2)
 	# 7. Board update          the SHARED THROTTLED TARGETING TICK (story 4-2, AC 7, `4-2/R15`).
 	#    This line replaces the literal `[E4 minion/totem throttled-tick seam]` comment that
 	#    reserved the seat from E4 planning onward — the seat is now filled by the thing it was
@@ -1073,6 +1103,31 @@ func inject_card_costs(costs: Dictionary[StringName, CardCastCondition]) -> void
 ## honest default. What is MANDATORY is RECORD-side: IntentRecorder.missing_match_start_channels()
 ## treats a missing effects channel as malformed for a v2 record, and the live runner always
 ## injects. Optional-at-the-seam, required-in-the-record: two different obligations on one channel.
+## STORY 6-5e (AC 16): THE BOULDER CARD'S ID IS DERIVED HERE, and deriving it is what keeps a CARD id out
+## of `src/state/` entirely.
+##
+## THE STATE LAYER NEEDS THE ID because a placed Boulder has to be nameable: the cover layer holds an id,
+## the Mode ① press looks its cost up in `_card_costs` and its effect up in `_card_effects`, and the HUD
+## payload carries it. But `src/state/` may not name `CardDatabase`, `CARDS_DIR` or `data/cards` (3-3 AC 8),
+## and a `&"boulder"` literal here would be the first CARD id ever written into this layer -- the resolver's
+## whole-id tables name EFFECT ids, which is a different vocabulary with a different owner.
+##
+## SO IT IS FOUND BY ITS EFFECT, not by its name: the Boulder card is the card whose BASIC effect is the one
+## `CardEffectResolver.BOULDER_OUTCOMES` recognises. That keeps the only literal in this layer an effect id,
+## in the one file whose job is matching those (D6), and it needs no seventh injection channel -- which
+## would have been a new public intake, a new recorder capture channel and a `FORMAT_VERSION` argument of
+## its own for a single constant.
+##
+## NO AUTHORED BOULDER IS LEGAL, and the degrade is honest: `&""` means no Boulder exists, so a landed stone
+## deals its damage and plants nothing (AC 19's shape, reached from a different absence). Every fixture that
+## injects an in-test effect map without a Boulder entry -- which is every fixture in the suite before this
+## story -- therefore keeps behaving exactly as it did, and the golden fixture's hash cannot move on this.
+##
+## TWO CARDS AUTHORING IT IS REFUSED, because the pick would then depend on map insertion order and two
+## Boulders would be two cards the game treats as one.
+var _boulder_card_id: StringName = &""
+
+
 func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 	Invariant.check(not effects.is_empty(),
 		"injected card effects must be non-empty (empty card set or a failed export remap?)")
@@ -1080,6 +1135,14 @@ func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 		Invariant.check(effects.has(id),
 			"injected deck id %s has no card effect entry — inject_card_effects must be total over the composition" % id)
 	_card_effects = effects.duplicate()
+	_boulder_card_id = &""
+	for id: StringName in _card_effects:
+		if not CardEffectResolver.clears_cover(_card_effects[id]):
+			continue
+		Invariant.check(_boulder_card_id == &"",
+			("two cards ('%s' and '%s') author the cover-clearing effect -- the Boulder must be exactly "
+				+ "one card, or which one a stone plants depends on map order") % [_boulder_card_id, id])
+		_boulder_card_id = id
 
 
 ## Story 5-2 (AC 4, `5-2/R1`): the CARD-COLOUR injection seam -- `inject_card_costs` and
@@ -1158,24 +1221,149 @@ func inject_pitch_costs(costs: Dictionary[StringName, CardCastCondition]) -> voi
 ## than the single boundary A1 asks for. `BalanceTicks.from_config()` is the boundary for BALANCE
 ## durations; for EFFECT durations this project's boundary is "once at the moment of application"
 ## (`card_effect.gd`'s header) -- and for a value read per tick, the application moment is injection.
+## STORY 6-5e (AC 1a, `6-5e/R22`/G3 -- CORRECTED AT THE GATE): THE MIRROR NOW COVERS BOTH EFFECT MAPS.
+##
+## THE DEFECT IT CLOSES, TRACED RATHER THAN ASSUMED. Until this story the mirror was built by iterating
+## `_pitch_effects` ALONE, because the only hero-sourced shot was Fireball and `fireball` is a card's PITCH
+## effect. Rocksling's `rocksling` is a BASIC (Mode ①) effect and lives in `_card_effects`, so a Rocksling
+## stone would have resolved a NULL profile at `projectile_profile_at` -- no launch speed, no homing, no
+## budget -- and `_advance_projectiles` would have CONSUMED it on its first tick. The gate found this by
+## reading the two maps; nothing in the suite would have failed, because no fixture fired a Mode ① shot.
+##
+## ONE READER, TWO SOURCES (AC 1a). `projectile_profile_at` and `_projectile_acceleration_delay_ticks_at`
+## are untouched and still consult the SAME two dictionaries -- what changed is only what goes into them,
+## which is the whole point of `4-4/R3`'s one-curve rule surviving a second and now a third source of
+## authoring.
+##
+## THE COLLISION IS REFUSED LOUDLY AT LOAD (AC 1a). An id present in BOTH maps would have one profile
+## silently overwrite the other depending on injection order, and the two effects sharing that id would
+## then fly by whichever numbers won. `Invariant.check` at the seam is the shape every other injection
+## check here uses. It is checked against `_card_effects`, which is injected FIRST (the runner's fixed
+## content order, pinned by `IntentRecorder.SOUND_CONTENT_ORDER`), so by the time this runs both maps are
+## known -- which is also why the whole mirror is rebuilt here rather than half of it at each seam.
 func inject_pitch_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 	_pitch_effects = effects.duplicate()
+	_rebuild_projectile_mirror()
+
+
+## The mirror, rebuilt from BOTH maps. Called from `inject_pitch_effects` -- the LAST content channel -- and
+## nowhere else, so it runs exactly once per match with both sources in hand.
+##
+## BASIC EFFECTS GO IN FIRST AND PITCH EFFECTS SECOND, and the order is only so the collision check below
+## can name which map it found the duplicate in; no id may be in both, so nothing overwrites anything.
+##
+## THE DELAY IS CONVERTED HERE TOO, once (A1) -- `inject_pitch_effects`' own argument, unchanged: it is the
+## only `*_seconds` field on this path read EVERY TICK of a flight, so injection is its application moment.
+func _rebuild_projectile_mirror() -> void:
+	# 6-5e REVIEW FIX (minor 14): THE ORDERING THIS SEAT DEPENDS ON, MADE STRUCTURAL RATHER THAN ASSUMED.
+	# The mirror is built HERE and nowhere else, from both maps, and `inject_card_effects` does not rebuild
+	# it -- so injecting PITCH effects BEFORE basic ones would build it from an EMPTY `_card_effects` and
+	# leave every Mode (1) effect without a flight profile. That is precisely the silent defect AC 1a
+	# exists to prevent, relocated into an ordering assumption: a Rocksling stone with a null profile is
+	# consumed on its first tick, and nothing anywhere fails.
+	#
+	# IT REFUSES THE ORDER, NOT MERELY AN EMPTY MAP, and the distinction is what keeps it free of false
+	# positives: an empty basic map is LEGAL content on its own (an empty composition injects none), and
+	# `inject_card_effects`' totality check means a REAL composition always leaves a populated map behind
+	# it. So the only shape refused is the genuinely inverted one -- a real composition, pitch effects
+	# already in hand, and no basic effects yet.
+	#
+	# UNREACHABLE ON THE SHIPPED PATHS (the live runner produces `SOUND_CONTENT_ORDER` and
+	# `replay_inject_content()` refuses any other order), which makes this fragility rather than a bug --
+	# and the reason it is a guard here rather than a test: an `Invariant.check` cannot be exercised from
+	# the harness (it is `push_error` + `assert`), so what a test could prove about it is nothing.
+	Invariant.check(_deck_contents.is_empty() or _pitch_effects.is_empty() \
+			or not _card_effects.is_empty(),
+			"inject_pitch_effects ran BEFORE inject_card_effects: the flight-profile mirror would be "
+			+ "built from an empty basic-effect map, leaving every Mode (1) effect without a profile "
+			+ "(AC 1a). Inject content in SOUND_CONTENT_ORDER: deck, costs, effects, colours, pitch "
+			+ "costs, pitch effects.")
 	_effect_projectiles.clear()
 	_effect_projectile_delay_ticks.clear()
+	_effects_by_effect_id.clear()
+	var basic_by_effect_id: Dictionary[StringName, CardEffect] = {}
+	for id: StringName in _card_effects:
+		var basic_effect: CardEffect = _card_effects[id]
+		if basic_effect != null:
+			basic_by_effect_id[basic_effect.effect_id] = basic_effect
+		_mirror_one_effect(basic_effect)
 	for id: StringName in _pitch_effects:
-		var effect: CardEffect = _pitch_effects[id]
-		if effect == null:
-			continue
-		var profile := ProjectileProfile.new()
-		profile.launch_speed = effect.launch_speed
-		profile.homing_turn_rate_degrees_per_second = effect.homing_turn_rate_degrees_per_second
-		profile.acceleration_delay_seconds = effect.acceleration_delay_seconds
-		profile.acceleration_per_second_squared = effect.acceleration_per_second_squared
-		profile.max_speed = effect.max_speed
-		profile.travel_budget = effect.travel_budget
-		_effect_projectiles[effect.effect_id] = profile
-		_effect_projectile_delay_ticks[effect.effect_id] = \
-				TimingWindow.seconds_to_ticks(effect.acceleration_delay_seconds)
+		var pitch_effect: CardEffect = _pitch_effects[id]
+		if pitch_effect != null:
+			# THE COLLISION CHECK -- NARROWED BY MEASUREMENT, and the narrowing is the finding rather than
+			# a concession. AC 1a asks for a loud refusal when "an effect id is present in BOTH the basic
+			# and pitch effect maps", and the first run of this check FAILED SEVENTEEN EXISTING TESTS: the
+			# same `CardEffect` OBJECT legitimately sits in both maps, because one effect can be reachable
+			# in two modes (a fixture injecting `culling` and `drain` as both, and nothing in the shipped
+			# data forbids two cards sharing one authored effect resource across modes).
+			#
+			# THE AMBIGUITY THE CHECK EXISTS FOR IS NOT ID SHARING, IT IS TWO DIFFERENT SETS OF NUMBERS
+			# UNDER ONE ID. The same object mirrors identical values twice, so the second write is a no-op
+			# and `projectile_profile_at` answers the same thing either way. Two DISTINCT objects under one
+			# id are the real hazard: whichever is mirrored last silently decides the flight of both, and
+			# nothing would fail. That is what is refused, and it is strictly the case AC 1a's own stated
+			# harm describes ("one flight profile would silently overwrite the other").
+			var clash: CardEffect = basic_by_effect_id.get(pitch_effect.effect_id)
+			Invariant.check(clash == null or _mirrored_values_agree(clash, pitch_effect),
+				("effect id '%s' is reached from BOTH effect maps carrying DIFFERENT mirrored values -- "
+					+ "whichever is mirrored last would silently decide the flight profile and the "
+					+ "burst count of both") % pitch_effect.effect_id)
+		_mirror_one_effect(pitch_effect)
+
+
+## Story 6-5e (AC 1a): DO TWO ENTRIES UNDER ONE EFFECT ID MIRROR THE SAME THING?
+##
+## NARROWED TWICE, BY MEASUREMENT, AND BOTH NARROWINGS ARE THE FINDING RATHER THAN A CONCESSION. AC 1a asks
+## for a loud refusal when "an effect id is present in BOTH the basic and pitch effect maps". Run 1 of that
+## literal reading failed 17 tests: one `CardEffect` legitimately sits in both maps, because an effect can be
+## reachable in two modes. Run 2, narrowed to OBJECT IDENTITY, failed as widely: fixtures build a fresh
+## `CardEffect.new()` per map for the same id, which is a different object carrying the same numbers.
+##
+## WHAT IS ACTUALLY AMBIGUOUS IS NEITHER OF THOSE -- IT IS TWO DIFFERENT SETS OF MIRRORED VALUES UNDER ONE
+## ID. The mirror is keyed by effect id, so the entry written last decides the flight of every shot carrying
+## that id; if both entries mirror the SAME values, the second write is a no-op and no reader can tell which
+## won. That is precisely the harm AC 1a's own wording names ("one flight profile would silently overwrite
+## the other") and nothing wider. The exhaustive-compare form is also what keeps it non-vacuous: a genuinely
+## divergent pair fails, which is mutation-provable, where an id-presence check could only ever be proven
+## against a shape the repo forbids elsewhere.
+##
+## THE COMPARED SET IS EXACTLY WHAT THE TWO MIRRORS CARRY -- the six flight fields, plus `boulders_per_cast`,
+## which `_effects_by_effect_id` serves to the contact ladder. `damage_amount` is deliberately NOT here: it
+## is read off the cast's OWN mode-resolved effect at the strike (`_cast_effect_of`), never through an
+## effect-id lookup, so two entries disagreeing on it cannot produce an ambiguous read. If a later story
+## routes another field through an effect-id lookup, it belongs in this comparison in the same edit.
+## STATIC, so the AC 1a test can ask the shipped predicate directly rather than reimplementing it: an
+## `Invariant.check` is `push_error` + `assert` and the assert is stripped in an exported build, so the
+## honest thing to pin is the DISCRIMINATOR, not the crash.
+static func _mirrored_values_agree(a: CardEffect, b: CardEffect) -> bool:
+	return is_equal_approx(a.launch_speed, b.launch_speed) \
+			and is_equal_approx(a.homing_turn_rate_degrees_per_second,
+				b.homing_turn_rate_degrees_per_second) \
+			and is_equal_approx(a.acceleration_delay_seconds, b.acceleration_delay_seconds) \
+			and is_equal_approx(a.acceleration_per_second_squared, b.acceleration_per_second_squared) \
+			and is_equal_approx(a.max_speed, b.max_speed) \
+			and is_equal_approx(a.travel_budget, b.travel_budget) \
+			and a.boulders_per_cast == b.boulders_per_cast
+
+
+## One effect's flat flight fields mirrored into a real `ProjectileProfile`. A null effect contributes
+## nothing, the seat's own pre-6-5e leniency (a card without an effect is legal content).
+func _mirror_one_effect(effect: CardEffect) -> void:
+	if effect == null:
+		return
+	var profile := ProjectileProfile.new()
+	profile.launch_speed = effect.launch_speed
+	profile.homing_turn_rate_degrees_per_second = effect.homing_turn_rate_degrees_per_second
+	profile.acceleration_delay_seconds = effect.acceleration_delay_seconds
+	profile.acceleration_per_second_squared = effect.acceleration_per_second_squared
+	profile.max_speed = effect.max_speed
+	profile.travel_budget = effect.travel_budget
+	_effect_projectiles[effect.effect_id] = profile
+	_effect_projectile_delay_ticks[effect.effect_id] = \
+			TimingWindow.seconds_to_ticks(effect.acceleration_delay_seconds)
+	# Story 6-5e: the EFFECT-ID-keyed handle a live shot resolves through -- see `_shot_effect_of` for the
+	# trap this exists to close (both effect maps are keyed by CARD id).
+	_effects_by_effect_id[effect.effect_id] = effect
 
 
 ## Story 1-5 (B7): the contact intake seam — 1-7's real runner-gathered facts MUST enter
@@ -2079,6 +2267,33 @@ func _speed_at_flight_ticks(board: ProjectileBoard, index: int, ticks: int) -> f
 ## `EXEMPT_PURE_QUERIES` in test_intent_recorder.gd and needs no capture channel: a replay that
 ## reproduces the board and the injected content reproduces this answer, and nothing reaches MatchState
 ## through it.
+## Story 6-5e (AC 16): THE `CardEffect` A LIVE SHOT WAS AUTHORED BY, or null.
+##
+## THE SAME TWO-MAP LOOKUP `projectile_profile_at` MAKES, one level up: a hero-sourced record stores its
+## effect id, and the id may be a card's BASIC effect (Rocksling) or its PITCH effect (Fireball, Corpse
+## Bomb). The record does not carry which map it came from and deliberately does not need to -- the mirror
+## and this reader both answer from the union, and the load-time collision refusal
+## (`_rebuild_projectile_mirror`) is what makes "the union" unambiguous.
+##
+## A UNIT-FIRED SHOT IS NULL, and so is an id absent from both maps: the caller's `!= null` test is the
+## whole guard, the `REASON_NO_EFFECT_ENTRY` honest-default posture.
+##
+## `attacker_index` IS THE CONTACT FACT's ATTACKER INDEX (the projectile partition), decoded here so the
+## one caller on the contact ladder does not repeat the decode.
+##
+## IT READS `_effects_by_effect_id`, NOT `_card_effects`, AND THE DISTINCTION IS A REAL TRAP: both effect
+## maps are keyed by CARD id, while a projectile record stores an EFFECT id. Several cards happen to share
+## one spelling for both (`rocksling` the card authors `rocksling` the effect), which would have made a
+## `_card_effects.get(effect_id)` lookup work for exactly those cards and silently return null for the
+## rest -- Fireball among them, since `bloodhound_step` authors `fireball`. The effect-keyed mirror is built
+## in the same pass as the flight profiles, so the two cannot disagree about what an id resolves to.
+func _shot_effect_of(attacker: PlayerState, attacker_index: int) -> CardEffect:
+	var shot_index := projectile_index_of(attacker_index)
+	if not attacker.projectiles.is_hero_sourced_at(shot_index):
+		return null
+	return _effects_by_effect_id.get(StringName(attacker.projectiles.effect_id_at(shot_index)))
+
+
 func projectile_profile_at(board: ProjectileBoard, index: int) -> ProjectileProfile:
 	if board.is_hero_sourced_at(index):
 		return _effect_projectiles.get(StringName(board.effect_id_at(index)))
@@ -2410,6 +2625,28 @@ func _resolve_contacts() -> Array[int]:
 		# hero ladder, and projectile / unit attackers fail the hero-index gate.
 		if attacker_index == TargetingService.HERO_INDEX:
 			_consume_frostbite(attacker, target)
+		# Story 6-5e (AC 16/AC 19, ruling 6): THE BOULDER PLANT -- a landed Rocksling stone puts a Boulder
+		# in the STRUCK HERO's hand.
+		#
+		# SEATED HERE, AFTER THE DAMAGE, ON THE HERO LADDER, and every clause of ruling 6's defence reading
+		# is a consequence of that position rather than of code:
+		#   * a BLOCKING target still gets one (AC 16's "whether or not the hero was blocking") -- 6-5d's
+		#     block exemption above leaves a hero-sourced shot's damage unmitigated and reaches this line;
+		#   * a DEFLECT plants nothing (AC 13) -- that branch `continue`d far above;
+		#   * an I-FRAME DROP plants nothing (AC 14) -- that rung `continue`d above too, and did not consume
+		#     the shot, so a later landing by the same stone still plants one;
+		#   * a UNIT or TOTEM target never gets one (AC 15/AC 32) -- the unit branch `continue`d before the
+		#     hero ladder began, so there is no code here that could reach a board index.
+		#
+		# THE DISCRIMINATOR IS THE SHOT'S OWN AUTHORED COUNT, not a card id and not a second flag: a
+		# hero-sourced record resolves its effect through the injected map, and `boulders_per_cast > 0` is
+		# what makes it a Boulder-planting stone. Fireball and Corpse Bomb's skulls both author zero, so
+		# neither plants one -- AC 32's "a skull never places a Boulder" and 6-5d's Fireball behaviour are
+		# both true by that number rather than by an exclusion list.
+		if is_projectile_index(attacker_index):
+			var landed_effect: CardEffect = _shot_effect_of(attacker, attacker_index)
+			if landed_effect != null and landed_effect.boulders_per_cast > 0:
+				_place_boulder(target, int(fact["target"]))
 		# Story 4-3b (AC 8, `4-3b/R5`): `hit_landed` IS emitted when a UNIT damages a HERO — the hero
 		# is really hurt, so the telegraph flash and sting on that hero are correct. A DELIBERATE
 		# ASYMMETRY against `4-3a/R12`'s suppression for unit TARGETS, recorded here so a later gate
@@ -3585,7 +3822,17 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	elif player.hero.action_state == HeroState.ActionState.STUNNED:
 		player.hero.reject_action(&"card_cast", REASON_STUNNED)
 		return
-	if player.hand.is_slot_empty(hand_slot):
+	# STORY 6-5e (AC 16-19/AC 21): THE EMPTY-SLOT GUARD READS THE VISIBLE LAYER, not the card layer, and the
+	# difference is exactly AC 18's case: a Boulder planted on a slot that was mid-draw-delay covers an EMPTY
+	# card slot, and the card-layer reading would refuse the Mode ① press that plays it -- leaving that
+	# Boulder unremovable until round end. `visible_id_at` folds both layers into one read, so "this slot
+	# shows something the player can press" is one question with one answer.
+	#
+	# `Hand.is_slot_empty` STILL REPORTS AN OUT-OF-RANGE SLOT AS EMPTY and `visible_id_at` still returns the
+	# marker for one, so 4-0's AC 3 "TWO paths to ONE reason" property is unchanged: a hole and an
+	# out-of-range index are still the same refusal, and the cost map still cannot be reached with the
+	# marker (the ordering note directly below, intact).
+	if player.hand.visible_id_at(hand_slot) == Hand.EMPTY:
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
 		return
 	# Story 4-0 (AC 7, second part): the ORDERING BELOW IS PINNED, not incidental. The hole is
@@ -3594,7 +3841,10 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# That is what makes "a hole is never rendered as an affordable card" true on the STATE side
 	# by construction rather than by a lookup that happens to miss. Do not move the cost lookup
 	# above the guard, and do not add a path that reaches it with an unvalidated slot.
-	var id: StringName = player.hand.to_array()[hand_slot]
+	# STORY 6-5e: the VISIBLE id, so a covered slot prices, gates and resolves as the BOULDER -- 2 mana
+	# authored, `CastEvaluator.REASON_INSUFFICIENT_MANA` when it cannot be paid (AC 21a), and nothing spent
+	# on the refusal because every guard here precedes the spend.
+	var id: StringName = player.hand.visible_id_at(hand_slot)
 	var condition: CardCastCondition = _card_costs.get(id)
 	var reason := CastEvaluator.refusal_reason(condition, player.mana.get_current(),
 			player.orbs, flags)
@@ -3619,8 +3869,23 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 		return
 	Invariant.check(player.mana.spend(condition.mana_cost),
 		"an ALLOWED cast must be affordable — CastEvaluator and ManaPool disagree")
-	var played := player.hand.remove_at(hand_slot)
-	player.discard.add(played)
+	# STORY 6-5e (AC 21/AC 22, ruling 7): THE COVER FORK -- the one place a Mode ① press decides whether it
+	# is playing the CARD in a slot or lifting the BOULDER off it.
+	#
+	# THE CLASSIFICATION IS THE RESOLVER'S (D6) AND NO CARD IS NAMED HERE: this seat asks `clears_cover`,
+	# never `is this a Boulder` -- `_resolve_basic_cast`'s own standing property, third question asked of it
+	# (`starts_cast`, `spends_variable_mana` one seat over, and now this).
+	#
+	# THREE THINGS DO NOT HAPPEN ON THE COVER ARM, and each is an AC rather than an omission:
+	#   * the CARD IS NOT REMOVED (AC 21: "the underlying card was never removed from the hand"), so it is
+	#     immediately playable again in that same slot, unmoved -- the uncover is `_apply_card_effect`'s arm;
+	#   * NOTHING REACHES THE DISCARD (AC 22: a Boulder is never discarded, never drawn, never dealt);
+	#   * NO REPLACEMENT IS OWED (AC 21, the `pending_draw_owed` append below is guarded) -- there is
+	#     nothing to replace, so no draw delay is engaged and the slot is not a hole at any point.
+	var clears_cover := CardEffectResolver.clears_cover(_card_effects.get(id))
+	var played := id if clears_cover else player.hand.remove_at(hand_slot)
+	if not clears_cover:
+		player.discard.add(played)
 	# Story 4-1 (AC 1/AC 4/AC 5/AC 6): CardEffect's FIRST CONSUMER, seated here because `played`
 	# is the id the effect map is keyed by and this is the moment the cast has actually happened.
 	# The evaluator COMPUTES and this line APPLIES (D6): CardEffectResolver returns one of four
@@ -3702,7 +3967,7 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 		if player.hero.action_state == HeroState.ActionState.BLOCKING:
 			player.hero.set_action_state(HeroState.ActionState.IDLE)
 	else:
-		_apply_card_effect(player, cast_effect, slot)
+		_apply_card_effect(player, cast_effect, slot, hand_slot)
 	# Story 6-5a (AC 10): the hashed last-resolved-card record, written at the resolution seat.
 	player.record_resolved_card(played, Enums.ModeKind.BASIC)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
@@ -3722,8 +3987,10 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# above, appended to the FIFO so the replacement lands back in it rather than at the end of the
 	# hand. Two casts against two different slots each owe their own slot, and neither delivery can
 	# ever land in the other's.
-	player.pending_draw_owed.append(hand_slot)
-	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
+	# STORY 6-5e (AC 21): the owed replacement is SKIPPED on the cover arm -- see the fork above.
+	if not clears_cover:
+		player.pending_draw_owed.append(hand_slot)
+		player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	# Story 3-6 (AC 2): the SECOND announcement seat. The hand is one short here and stays so
 	# until the delivery announces again — which is a true statement about the match and exactly
 	# what the HUD should render while a draw is in flight, not a gap to paper over.
@@ -3746,7 +4013,13 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 ## fact (`6-5b/R6`) and this is the seat that consumes it. Every other arm ignores it; the parameter
 ## is threaded rather than re-derived from `player == p1` because both existing call sites already
 ## hold the slot and a second derivation would be a second thing to get wrong.
-func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int) -> void:
+## STORY 6-5e (AC 21/AC 28a): IT TAKES THE HAND SLOT TOO, because `OUTCOME_BOULDER_CLEAR` is the first
+## outcome whose application is a change to ONE NAMED HAND SLOT. Threaded rather than re-derived, for
+## `slot`'s own stated reason: both call sites already hold it (the Mode ① press holds the pressed slot, the
+## activation holds the staged card's originating slot), and a second derivation would be a second thing to
+## get wrong. Every other arm ignores it.
+func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
+		hand_slot: int) -> void:
 	match CardEffectResolver.outcome(effect, flags):
 		CardEffectResolver.OUTCOME_SUMMON:
 			# Story 4-4 (AC 1/AC 6): the kind index and THAT KIND'S authored maximum are both read
@@ -3792,6 +4065,19 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int) -> v
 			_apply_raise_dead(player, effect)
 		CardEffectResolver.OUTCOME_DRAIN:
 			_apply_drain(player, effect, slot)
+		# Story 6-5e: the three new arms, each ONE call to a named helper on the 6-5b family's own stated
+		# discipline -- this `match` says WHAT resolves and the helper says HOW.
+		#
+		# CORPSE BOMB AND BOOM BOTH RESOLVE ENTIRELY HERE, on the activation tick, with NO cast frame
+		# (`6-5e/R17`/C1): neither is a `CAST_OUTCOMES` row, so `starts_cast()` answers false at the
+		# activation press and the pitch seat takes its `_apply_card_effect` arm rather than its cast fork.
+		# That is the whole of C1 -- no code here suppresses a cast, because none is ever started.
+		CardEffectResolver.OUTCOME_CORPSE_BOMB:
+			_apply_corpse_bomb(player, effect)
+		CardEffectResolver.OUTCOME_BOOM:
+			_apply_boom(player, effect, slot)
+		CardEffectResolver.OUTCOME_BOULDER_CLEAR:
+			_apply_boulder_clear(player, hand_slot)
 
 
 ## Story 6-5b (AC 8, `6-5b/R5`/`6-5b/R15`): CULLING -- kill up to `kill_cap` of the caster's OWN LIVING
@@ -3921,6 +4207,170 @@ func _drain_target_index(player: PlayerState, slot: int) -> int:
 	return -1
 
 
+## Story 6-5e (AC 29-32, ruling 11): CORPSE BOMB -- every LIVING minion the caster owns dies, leaves a
+## normal corpse, and throws one homing skull from where it fell.
+##
+## `_apply_culling` IS THE SHAPE, and every difference is named. It walks `living_indices()` (ascending by
+## construction, so the conversion record and the skull order are deterministic), skips anything that is not
+## an own MINION through the same `_is_own_minion` test -- which is what makes AC 29's "totems owned by the
+## caster are unaffected" one decision with `6-5b/R5`'s rather than a second copy of it -- and reaches
+## `UnitBoard.kill_at` DIRECTLY, so this is the FOURTH caller of the death seat (`6-5e/R24`/G5, the intended
+## `test_corpses.gd:240` 3 -> 4 move).
+##
+## IT KILLS WITHOUT DAMAGING, `_apply_culling`'s own `6-5b/R4` posture: there is no damage number anywhere
+## in the conversion, so Bloodlust cannot double a Corpse Bomb kill and Vampiric Aura cannot heal off one.
+## The SKULL's damage is a separate event at a later tick and does reach both (AC 34).
+##
+## NO CAP, unlike Culling: ruling 11 says EVERY living own minion, and `kill_cap` is Culling's own field.
+##
+## THE CORPSE IS THE ORDINARY ONE (AC 30). `_corpse_ticks_for` is the same lifetime read every other death
+## uses, so Grave Ward extends a Corpse Bomb corpse and Raise Dead consumes it with no bespoke variant --
+## and the Culling-into-Raise-Dead loop this opens is INTENDED (ruling 11), braked only by the activation's
+## own 5 mana + 1 blue orb.
+##
+## ONE SKULL PER CONVERTED MINION, FROM ITS OWN POSITION (AC 31), through the new minion-sourced seat: the
+## record names the board index it left, and the runner resolves the position from that unit's actor with a
+## caster's-feet fallback. The position never enters this layer (F1/`4-3/R2`).
+##
+## EVERY SKULL SHARES ONE CAPTURED ADDRESS, read ONCE before the loop (AC 31): the caster's lock target at
+## the ACTIVATION instant, or the opposing hero unlocked -- `_captured_target_address`, the same one
+## derivation the cast presses use, so Corpse Bomb cannot derive the targeting rule slightly differently.
+## Read before the loop rather than per minion so a kill inside the loop cannot move it.
+##
+## THE DEDUPE DISCARD IS `_resolve_unit_contact`'s REVIEW-FIX F2 RUNG, for its reason verbatim: a unit that
+## dies here can never close its own swing-dedupe record through `_advance_unit_attacks` again.
+##
+## THE CONVERSION RECORD IS WRITTEN ONCE, AFTER THE LOOP (ruling 14, AC 38/AC 40), and only if something
+## was actually converted -- an activation that converted nothing leaves no record to mislead `6-5f`, and
+## the board gate (AC 33) makes that case unreachable anyway.
+func _apply_corpse_bomb(player: PlayerState, effect: CardEffect) -> void:
+	var address := _captured_target_address(player)
+	var converted: Array[int] = []
+	for index: int in player.units.living_indices():
+		if not _is_own_minion(player, index):
+			continue   # a TOTEM (or a reload-orphaned kind): never Corpse Bomb's target (AC 29)
+		if not player.units.kill_at(index, _corpse_ticks_for(player, index)):
+			continue
+		converted.append(index)
+		player.unit_dedupe.discard(index)
+		player.projectiles.add_minion_shot(address[0], address[1], effect.effect_id,
+				effect.damage_amount, index)
+	if not converted.is_empty():
+		player.record_corpse_bomb(_tick, converted)
+
+
+## Story 6-5e (AC 25-27, ruling 9): BOOM -- every Boulder in the OPPOSING hand detonates at once.
+##
+## IT IS NOT A PROJECTILE AND NOT A CONTACT (AC 26), and that is ruling 9 read literally: "no projectile is
+## created, and this damage is not avoidable by roll, block or deflect". None of those seats is CONSULTED,
+## which is stronger than each being skipped -- there is no contact fact in this function for the ladder to
+## judge, so there is nothing to forget. It is the INSTANT-damage shape `_apply_honed_bolt`'s hero arm and
+## `_apply_drain`'s heal already use.
+##
+## IT STILL GOES THROUGH THE FUNNEL (AC 34, ruling 13): Bloodlust's dealt multiplier on the caster and taken
+## multiplier on the struck hero both apply, and Vampiric Aura heals the caster from the hp ACTUALLY
+## removed, measured before-minus-after exactly as every other damage seat measures it. That is the standing
+## spell-damage rule, extended here to a non-projectile seat for the first time.
+##
+## THE COUNT IS TAKEN AT THE ACTIVATION INSTANT (AC 25), not at staging: `covered_indices()` is read here,
+## inside the activation, so a Boulder planted or played between staging and activation is counted or not
+## exactly as it stands now. The zero case never reaches this function -- the board gate refuses it before
+## the orb spend (AC 28).
+##
+## ONE DAMAGE APPLICATION PER BOULDER, NOT ONE TOTAL. The funnel and the lifesteal are per hit, so three
+## Boulders under Bloodlust are three multiplied hits rather than one multiplied sum -- which matters the
+## moment the target's hp runs out mid-resolution, and keeps `hit_landed`'s hp payload honest for each.
+##
+## EVERY COUNTED BOULDER IS REMOVED IN THE SAME RESOLUTION AND ITS CARD UNCOVERED (AC 27), through the same
+## `uncover_at` the Mode ① play uses -- so "exactly as if that Boulder had been played" (ruling 9) is one
+## mechanism rather than two that could disagree. The indices are walked from a list taken BEFORE the first
+## removal, which is what makes removing while iterating safe here.
+##
+## A LETHAL BOOM ENDS THE ROUND on its own tick through the ordinary step-8 check, `_apply_honed_bolt`'s
+## property: the damage lands at step 6 and the check runs at step 8 of the same `advance()`.
+##
+## `hit_landed` IS ANNOUNCED PER BOULDER, on `_apply_honed_bolt`'s own reasoning: the target hero is really
+## hurt, so the flash and sting on that hero are correct, and the payload's hp is read after each hit.
+func _apply_boom(caster: PlayerState, effect: CardEffect, slot: int) -> void:
+	var target_slot := 1 - slot
+	var target := p1 if target_slot == 0 else p2
+	for hand_slot: int in target.hand.covered_indices():
+		target.hand.uncover_at(hand_slot)
+		var damage := _funnel_damage(caster, TargetingService.HERO_INDEX, target,
+				TargetingService.HERO_INDEX, effect.damage_amount)
+		var hp_before := target.hero.get_hp()
+		target.hero.take_damage(damage)
+		_apply_lifesteal(caster, TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
+		_queue.push(hit_landed.emit.bind(slot, target_slot, damage, target.hero.get_hp()))
+	target.notify_cards_changed()
+
+
+## Story 6-5e (AC 21/AC 21a/AC 27, ruling 7): A BOULDER IS LIFTED OFF ITS SLOT.
+##
+## THE ONE UNCOVER MECHANISM, reached from the Mode ① play (through the resolver's `OUTCOME_BOULDER_CLEAR`
+## arm) and from Boom (directly, per Boulder), so "the card beneath becomes available in that same slot
+## IMMEDIATELY" cannot mean two different things at the two seats.
+##
+## NO DRAW DELAY AND NO REPLACEMENT OWED (AC 21), and both are true BY ABSENCE rather than by a branch:
+## nothing here touches `pending_draw_owed` or `pending_draw`, because the underlying card never left the
+## hand -- it only stopped being visible. `Hand.uncover_at` does not name `_cards` at all.
+func _apply_boulder_clear(player: PlayerState, hand_slot: int) -> void:
+	player.hand.uncover_at(hand_slot)
+
+
+## Story 6-5e (AC 16/AC 18/AC 19, ruling 6, `6-5e/R20`/G1): PLANT ONE BOULDER in the STRUCK player's hand.
+##
+## THE SLOT IS DRAWN FROM THE MATCH'S ONE SEEDED GAMEPLAY RNG (AC 16, M1), which makes this the SECOND
+## consumer of `_rng` in the project -- `_shuffle_deck` has been the only one through every prior story. The
+## consequence is measured rather than assumed and is its own Golden Prediction cause (5a): every placement
+## advances `_rng`, `rng_state` moves with it, and every LATER `_reshuffle_discard_into_deck` therefore
+## produces a deck order the pre-story code would not have.
+##
+## THE ELIGIBLE SET IS BUILT FIRST AND PICKED FROM SECOND, never rejection-sampled: a retry loop would
+## consume a variable number of RNG draws and make the stream's position depend on the board, which is
+## exactly the class of thing a replay must reproduce and the hardest to keep honest. One draw, always.
+##
+## IT IS CHOSEN AT THE MOMENT THE STONE LANDS, not at cast start (ruling 6), which is a property of this
+## being called from the contact ladder.
+##
+## ELIGIBILITY IS TWO CLAUSES AND THE SECOND IS THE GATE'S CORRECTION (`6-5e/R20`, blockers B1/B2):
+##   (a) the slot carries NO Boulder already -- `Hand.is_covered`;
+##   (b) the slot is not the ORIGINATING slot of a card the STRUCK PLAYER has staged in their OWN pitch
+##       zone -- `pitch.staged_hand_slot(struck slot)`, an index comparison.
+## Clause (b) names the STRUCK player, not the caster (B1: the original wording named the wrong party), and
+## it is an INDEX comparison rather than "occupied by a staged card" (B2: a staged card's `Hand` slot is
+## EMPTY, so the occupancy reading was repo-impossible). A card mid-CAST-FRAME or mid-CHARGING is NOT a
+## third clause: both `_resolve_basic_cast` and `_resolve_unblockable_cast` append `pending_draw_owed` in the
+## same tick as the press, so those slots are ordinary mid-draw-delay holes -- which clause (b) leaves
+## eligible and ruling 6/AC 18 explicitly wants eligible.
+##
+## AN EMPTY SLOT IS ELIGIBLE AND IS COVERED DIRECTLY (AC 18): neither clause reads the card layer, so a
+## mid-draw-delay hole is picked like any other slot and its owed replacement later lands UNDERNEATH the
+## Boulder through the untouched `fill_at`.
+##
+## NO ELIGIBLE SLOT IS A SUCCESSFUL HIT WITH NOWHERE TO PLANT (AC 19): it returns, the damage already
+## landed at the caller, and there is no refusal cue and no other consequence. NO RNG IS DRAWN in that case
+## -- the draw is below the empty check -- so an unplantable hit cannot move the stream and desynchronise a
+## replay against a run where the same hit had somewhere to go.
+##
+## NO AUTHORED BOULDER IS THE SAME OUTCOME, reached one step earlier (see `_boulder_card_id`).
+func _place_boulder(struck: PlayerState, struck_slot: int) -> void:
+	if _boulder_card_id == &"":
+		return
+	var staged_slot := pitch.staged_hand_slot(struck_slot) if pitch.is_staged(struck_slot) else -1
+	var eligible: Array[int] = []
+	for hand_slot in struck.hand.size():
+		if struck.hand.is_covered(hand_slot):
+			continue
+		if hand_slot == staged_slot:
+			continue
+		eligible.append(hand_slot)
+	if eligible.is_empty():
+		return
+	struck.hand.cover_at(eligible[_rng.randi_range(0, eligible.size() - 1)], _boulder_card_id)
+	struck.notify_cards_changed()
+
+
 ## Story 5-2 (AC 2, `5-2/R11`): the S6 GATE's reason -- named, and named HERE rather than on
 ## `CastEvaluator`, because `CastEvaluator` is not consulted on this path at all (AC 5, `5-2/R2`)
 ## and a `REASON_*` constant living on an evaluator that never returns it would be a lie about where
@@ -4015,6 +4465,53 @@ const REASON_CASTING := &"casting"
 ## live-reachable.
 const REASON_NO_TARGET := &"no_target"
 
+## Story 6-5e (AC 17/AC 17a, `6-5e/R27`/G8 -- CORRECTED AT THE GATE, blocker B12): A PRESS ON A COVERED
+## SLOT, in any mode but ①.
+##
+## ITS OWN TOKEN, distinct from every existing refusal and from `REASON_NO_OPPOSING_BOULDER` directly below
+## (AC 17a says both), on the `REASON_PITCH_ZONE_OCCUPIED` convention: "a Boulder is in the way" is a
+## different player-visible fact from an empty slot, an unaffordable card or an unpriced pitch, and the
+## player needs to know which. Reusing `REASON_EMPTY_SLOT` would have been the tempting shortcut and it
+## would be a lie -- the slot is not empty, it is blocked.
+##
+## MODE ① IS DELIBERATELY NOT REFUSED, and that is ruling 7 rather than an exception: the Boulder's ONE legal
+## action is to be played, and Mode ① is how it is played. `_resolve_basic_cast` reads the VISIBLE id, so a
+## Mode ① press on a covered slot addresses the Boulder and the card beneath stays unreachable -- which is
+## AC 17's "every mode of it refused" satisfied for the covered CARD by construction (nothing can address
+## it) rather than by four guards.
+##
+## WHAT AC 20 MEANS BY "the existing no-such-action family" IS THEREFORE THIS TOKEN for modes ②/③/④, and the
+## reconciliation is recorded rather than papered over: a Boulder is ALWAYS in the cover layer (it is the
+## only thing that ever enters it), so there is no reachable state in which a Boulder sits in a slot as an
+## ordinary card and could be refused by `REASON_NO_PITCH_COST` or a colour-derived refusal instead. One
+## reachable refusal, one token; the behaviour AC 20 specifies -- refused, nothing spent, the ordinary
+## `action_rejected` channel, no new signal -- is identical either way.
+const REASON_COVERED_SLOT := &"covered_slot"
+
+## Story 6-5e (AC 28, `6-5e/R27`/G8): BOOM ACTIVATED WITH NO BOULDER IN THE OPPOSING HAND.
+##
+## THE `REASON_NO_OWN_MINION` / `REASON_NO_OWN_CORPSE` CONVENTION, third member: a board-gate refusal fired
+## BEFORE the orb spend, naming the board fact that was missing. Explicitly NOT `REASON_NO_TARGET`, which
+## reads the CAPTURED LOCK TARGET -- see `CardEffectResolver.NEEDS_OPPOSING_BOULDER` for why reusing it
+## would have routed Boom through lock-on.
+const REASON_NO_OPPOSING_BOULDER := &"no_opposing_boulder"
+
+
+## Story 6-5e (AC 17a): REFUSE this press if the slot is covered, and say whether it did.
+##
+## ONE HELPER FOR THE THREE NON-① SEATS rather than the guard written out three times, on `_attacker_is_dead`'s
+## own precedent (`4-3a/R24`: a check that appears a third time gets a shared seat, not a third copy). The
+## three must never disagree about what covered means, and a fourth mode does not exist to add a fourth copy
+## to.
+##
+## SEATED ABOVE EACH SEAT'S EMPTY-SLOT GUARD, so a Boulder on a mid-draw-delay hole refuses as COVERED
+## rather than as EMPTY -- one fact, one token, whatever is or is not underneath.
+func _covered_slot_refused(player: PlayerState, hand_slot: int) -> bool:
+	if not player.hand.is_covered(hand_slot):
+		return false
+	player.hero.reject_action(&"card_cast", REASON_COVERED_SLOT)
+	return true
+
 
 ## Story 6-5b (AC 9/AC 13/AC 15/AC 21, `6-5b/R14`): the BOARD PRECONDITION `effect` cannot resolve
 ## without, as a refusal reason, or `&""` for "may proceed".
@@ -4082,6 +4579,23 @@ func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringNam
 		CardEffectResolver.NEEDS_ENEMY_HERO:
 			var address := _captured_target_address(player)
 			return &"" if _address_is_alive(address[0], address[1]) else REASON_NO_TARGET
+		# Story 6-5e (AC 28, `6-5e/R27`/G8): THE FOURTH ARM -- at least one Boulder in the OPPOSING hand.
+		#
+		# IT READS THE OTHER PLAYER'S HAND, which no arm above it does: the two own-minion arms read this
+		# player's board and `NEEDS_ENEMY_HERO` reads the captured LOCK target. Reusing that one would have
+		# silently routed Boom through lock-on (a Boom pressed while locked on a minion would refuse for
+		# the wrong reason), which is exactly what the gate ruled against.
+		#
+		# THE OPPONENT IS DERIVED FROM `player == p1`, this function's own standing precedent for the arm
+		# above (`_reset_player` / the `NEEDS_ENEMY_HERO` note: one derivation beats a parameter only one of
+		# four tables would read).
+		#
+		# `cover_count()` IS THE SAME READ `_apply_boom` WALKS (`covered_indices()` is its twin over the
+		# same array), so the gate and the apply can never disagree about whether there was anything to
+		# detonate -- the `NEEDS_OWN_CORPSE` arm's own stated property.
+		CardEffectResolver.NEEDS_OPPOSING_BOULDER:
+			var opponent := p2 if player == p1 else p1
+			return &"" if opponent.hand.cover_count() > 0 else REASON_NO_OPPOSING_BOULDER
 	return &""
 
 
@@ -4172,6 +4686,10 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 		return
 	elif player.hero.action_state == HeroState.ActionState.STUNNED:
 		player.hero.reject_action(&"card_cast", REASON_STUNNED)
+		return
+	# Story 6-5e (AC 17/AC 17a): the COVERED-SLOT refusal, above the empty-slot guard -- see
+	# `_covered_slot_refused` for why one helper serves all three non-① seats and why it sits here.
+	if _covered_slot_refused(player, hand_slot):
 		return
 	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
@@ -4354,7 +4872,10 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 		if player.hero.action_state == HeroState.ActionState.BLOCKING:
 			player.hero.set_action_state(HeroState.ActionState.IDLE)
 	else:
-		_apply_card_effect(player, pitch_effect, slot)
+		# STORY 6-5e: `hand_slot` here is the STAGED card's ORIGINATING slot, which is the only hand slot
+		# this seat knows. No pitch effect takes the cover arm (Boulder has no Mode ④ at all, ruling 7), so
+		# it is passed for totality rather than because an arm reads it.
+		_apply_card_effect(player, pitch_effect, slot, hand_slot)
 	# Story 6-5a (AC 10): the second APPLY seat of the last-resolved-card record.
 	player.record_resolved_card(card_id, Enums.ModeKind.PITCH)
 	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
@@ -4494,6 +5015,10 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	if refusal != &"":
 		player.hero.reject_action(&"card_cast", refusal)
 		return
+	# Story 6-5e (AC 17/AC 17a): the COVERED-SLOT refusal, above the empty-slot guard -- see
+	# `_covered_slot_refused` for why one helper serves all three non-① seats and why it sits here.
+	if _covered_slot_refused(player, hand_slot):
+		return
 	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
 		return
@@ -4616,6 +5141,10 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 		return
 	if player.hero.action_state == HeroState.ActionState.STUNNED:
 		player.hero.reject_action(&"card_cast", REASON_STUNNED)
+		return
+	# Story 6-5e (AC 17/AC 17a): the COVERED-SLOT refusal, above the empty-slot guard -- see
+	# `_covered_slot_refused` for why one helper serves all three non-① seats and why it sits here.
+	if _covered_slot_refused(player, hand_slot):
 		return
 	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
@@ -4973,6 +5502,11 @@ func _resolve_cast_strikes() -> void:
 				_apply_honed_bolt(player, effect, slot, target_slot, target_index)
 			CardEffectResolver.OUTCOME_FIREBALL:
 				_apply_fireball(player, effect, target_slot, target_index, cast_damage)
+			# Story 6-5e (AC 8): the THIRD arm. It takes no `cast_damage` -- Rocksling is a fixed-price
+			# Mode ① cast with nothing frozen at staging, so its per-stone figure is the authored
+			# `damage_amount` read at this seat (see `_apply_rocksling`).
+			CardEffectResolver.OUTCOME_ROCKSLING:
+				_apply_rocksling(player, effect, target_slot, target_index)
 
 
 ## Story 6-5d (AC 12): THE EFFECT A CAST IN FLIGHT WILL STRIKE, looked up in the map its MODE names.
@@ -5175,6 +5709,94 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 func _apply_fireball(caster: PlayerState, effect: CardEffect, target_slot: int,
 		target_index: int, damage: float) -> void:
 	caster.projectiles.add_hero_shot(target_slot, target_index, effect.effect_id, damage)
+
+
+## Story 6-5e (AC 8/AC 9/AC 11a, rulings 2/3/6a): ROCKSLING STRIKES -- the cast strike's third arm, and the
+## FIRST resolution in the project that places MORE THAN ONE projectile from one press.
+##
+## THE FIRST STONE LEAVES NOW, THE REST ARE OWED. Ruling 2's "one after another, an authored interval apart"
+## is expressed as one launch here plus a schedule, rather than as a loop that would have to place every
+## stone on the strike tick and then hold them back somehow. The schedule IS the remaining stones: there is
+## no such thing here as a placed-but-not-launched record, which is what keeps `ProjectileBoard`'s "a record
+## exists means a shot is in the air" contract intact.
+##
+## `_apply_fireball`'s POSTURE VERBATIM FOR THE SHOT ITSELF: it places records and nothing else. No damage,
+## no contact, no signal -- everything that happens to a stone afterwards happens through the 4-4
+## projectile machinery and the contact ladder, and none of it is re-implemented here.
+##
+## THE TARGET IS THE CAPTURED ADDRESS, handed in, and it is copied ONTO THE BURST so every later stone uses
+## the same one (AC 9). A DEAD captured target is still launched at, on `_apply_fireball`'s own positive
+## decision (AC 10 is that decision one tick later): there is deliberately no liveness test in this
+## function or in the burst seat.
+##
+## THE DAMAGE IS THE AUTHORED `damage_amount`, not a frozen staged product: Rocksling is a Mode ① cast with
+## a fixed price, so there is no variable spend to freeze (ruling 2's own "unlike Fireball, no staged
+## variable cost is involved"). It is read ONCE here and carried, so every stone in one burst deals the same
+## figure even if the number is retuned mid-flight -- `cast_damage`'s freeze, one seat later.
+##
+## A ZERO OR NEGATIVE `boulders_per_cast` FIRES NOTHING AT ALL, answered rather than asserted on this file's
+## standing total-function posture: an effect authored with no stones is an effect that throws no stones,
+## which is the same honest degenerate reading `launch_speed = 0.0` has.
+func _apply_rocksling(caster: PlayerState, effect: CardEffect, target_slot: int,
+		target_index: int) -> void:
+	if effect.boulders_per_cast <= 0:
+		return
+	_launch_stone(caster, effect.effect_id, target_slot, target_index, effect.damage_amount)
+	# A1: the interval is converted to ticks HERE, once, at the moment the burst is scheduled -- never
+	# re-read per tick and never accumulated as a float.
+	caster.start_burst(effect.effect_id, effect.boulders_per_cast - 1,
+			TimingWindow.seconds_to_ticks(effect.boulder_interval_seconds),
+			target_slot, target_index, effect.damage_amount)
+
+
+## ONE STONE ONTO THE BOARD. A named helper rather than the `add_hero_shot` call written at both the strike
+## and the burst seat, because the two must never disagree about what a stone IS -- and because a stone and
+## a Fireball are the same KIND of record (`add_hero_shot`, hero-sourced, `HERO_INDEX` source so it leaves
+## the caster's feet at every launch, ruling 6a's "each stone still launches from the caster's feet at its
+## own scheduled tick").
+func _launch_stone(caster: PlayerState, effect_id: StringName, target_slot: int,
+		target_index: int, damage: float) -> void:
+	caster.projectiles.add_hero_shot(target_slot, target_index, effect_id, damage)
+
+
+## Story 6-5e (AC 11a, `6-5e/R18`/C2): THE BURST SEAT -- launch this player's next owed stone if its
+## interval has elapsed, and cancel the whole burst if the caster is dead.
+##
+## ONCE THE CAST COMPLETES THE BURST IS COMMITTED, and every clause of ruling 6a is a property of what this
+## function does NOT read. It does not read `action_state`, so a STUN between stones stops nothing and the
+## caster moves and acts freely (AC 11a). It does not read the lock, so a re-lock or an unlock changes
+## nothing already scheduled (AC 9). It does not read the captured target's LIVENESS, so a target that died
+## since the strike is still launched at (AC 10) -- the stone flies straight from the hero, homes on nothing
+## (the dead-target rung in `_advance_projectiles` ends its homing), damages nothing (its captured target is
+## the only body it may hit, the target-only rung) and expires at its budget.
+##
+## DEATH IS THE ONE CANCELLATION IT OWNS. `is_alive()` is hp-based, not `DEAD`, for `_cast_is_interrupted`'s
+## stated reason: it catches the caster killed THIS tick, before step 8 has written `DEAD`, so "a dead
+## caster fires no further stone" is true on the kill tick itself. ROUND END and the DEBUG RESET are the
+## other two (AC 11a) and they are seated where every other per-player teardown is -- `_end_round` and
+## `_reset_player` -- rather than as two more branches here, so a burst cannot outlive the round that paid
+## for it and cannot cross a reset.
+##
+## ONE STONE PER TICK, NEVER A CATCH-UP LOOP: the window is restarted at the full interval after each
+## launch, so a burst takes exactly `(count - 1) * interval` ticks whatever else happened in between.
+func _advance_bursts(player: PlayerState) -> void:
+	if not player.has_pending_burst():
+		return
+	if not player.hero.is_alive():
+		player.clear_burst()
+		return
+	if player.burst_window.is_running:
+		return
+	_launch_stone(player, StringName(player.burst_effect_id), player.burst_target_slot,
+			player.burst_target_index, player.burst_damage)
+	# Read into a local BEFORE the restart, so the last stone's launch and the record's teardown cannot
+	# disagree about whether anything is still owed.
+	var still_owed := player.burst_remaining - 1
+	if still_owed <= 0:
+		player.clear_burst()
+		return
+	player.burst_remaining = still_owed
+	player.burst_window.start(player.burst_window.duration_ticks())
 
 
 ## Story 6-5c (AC 14-16, AC 19): THE STUN AND THE ROOT a landed bolt writes onto a LIVING target.
@@ -5996,6 +6618,37 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 			if player.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW) \
 					and state != HeroState.ActionState.ATTACKING:
 				speed *= player.rule_a[PlayerState.RULE_FROSTBITE_SLOW]
+			# Story 6-5e (S1, `6-5e/R28`, AC 37a): THE BOULDER SLOW -- `boulder_slow_per_boulder` per held
+			# Boulder, stacking ADDITIVELY, scaling the gait just chosen.
+			#
+			# IT DOES NOT REUSE `RULE_FROSTBITE_SLOW`, and the ruling says why rather than leaving it to
+			# taste: that seat is a TIMED rule -- one fixed scalar over a decaying duration window started by
+			# `start_rule` -- while this slow has NO DURATION AT ALL and its multiplier is a function of a
+			# LIVE, CHANGING COUNT (1, 2, 3+ Boulders). There is nothing to start and nothing to expire, so
+			# there is no window to put it in; a rule slot would need its magnitude rewritten on every plant
+			# and every clear, and a missed rewrite would be a stale multiplier the hash could not catch.
+			#
+			# READ FROM THE COVER LAYER LIVE, which is what makes AC 37a's "updates on the SAME tick as every
+			# add/remove path" true BY CONSTRUCTION rather than by five write sites: placing, playing, Boom's
+			# detonation, round end and the debug reset each change `hand.cover_count()`, and this line reads
+			# it on the very next tick's movement with nothing to keep in sync.
+			#
+			# THE SAME `state != ATTACKING` CARVE-OUT, deliberately shared with the line above and for 6-5a
+			# REVIEW N4's reason verbatim: the three named gaits (walk, run, block-walk) are the three scaled
+			# gaits at any tuning, and an ATTACKING hero falling through to `walk_speed` is a FOURTH gait no
+			# ruling names. Latent at shipped tuning only because the attack phase multipliers are authored
+			# 0.0.
+			#
+			# MULTIPLICATIVE AGAINST FROSTBITE, which is `6-5e/R28` exactly: this is a separate `*=` on the
+			# line after, so the two combine by multiplication with no combining rule written anywhere.
+			#
+			# `0.0` DISABLES IT ENTIRELY (AC 37a) -- the product is `1.0 - 0.0 * n`, i.e. 1.0 -- and it is
+			# CLAMPED AT ZERO so a high authored value with many Boulders slows to a standstill rather than
+			# walking the hero BACKWARDS, which an unclamped negative multiplier would do.
+			if balance.boulder_slow_per_boulder > 0.0 \
+					and state != HeroState.ActionState.ATTACKING:
+				speed *= maxf(0.0, 1.0 - balance.boulder_slow_per_boulder \
+						* float(player.hand.cover_count()))
 		# Story 3-0b (AC6): the attack LUNGE, ADDED to the input-driven velocity rather than
 		# replacing it — the phase multiplier keeps scaling what the player steers, and the
 		# lunge is the separate committed push the swing itself carries. At the authored
@@ -6403,6 +7056,24 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 	p2.clear_cast()
 	p1.clear_root()
 	p2.clear_root()
+	# Story 6-5e (AC 11a/AC 23, rulings 6a/7): THE BURST, EVERY BOULDER AND THE CORPSE-BOMB RECORD clear at
+	# round end too, following `clear_cast` / `clear_root` / `clear_resolved_card` -- all four are
+	# round-crossing hashed state, and a round that has ended holds none of them.
+	#
+	# THE BURST IS RULING 6a's THIRD CANCELLATION: round end cancels every stone not yet launched, and it has
+	# to be an explicit clear rather than a frozen clock, because step 1b freezes the interval window while
+	# leaving the schedule armed -- the same trap `5-3`/`5-5`/`5-6`/`6-6a` each traced for their own window.
+	#
+	# EVERY BOULDER IS REMOVED, with every covered card restored to normal playable status in its own slot,
+	# unmoved (AC 23) -- `Hand.clear_covers` touches only the cover layer, so "unmoved" is true by what it
+	# does not name. It clears here AND at the debug reset (`_reset_player`), which is the `timed_rules` /
+	# `last_resolved_card` shape rather than the seven reset-only exceptions.
+	p1.clear_burst()
+	p2.clear_burst()
+	p1.hand.clear_covers()
+	p2.hand.clear_covers()
+	p1.clear_corpse_bomb()
+	p2.clear_corpse_bomb()
 	loser.hero.set_action_state(HeroState.ActionState.DEAD)
 	_queue.push(round_ended.emit.bind(loser_index))
 
@@ -6647,3 +7318,17 @@ func _reset_player(player: PlayerState) -> void:
 	# Story 6-5a (REVIEW B1, operator ruling): the ninth named exception -- the last-resolved-card
 	# record, cleared beside the rules and for the same reason, see `_apply_debug_reset`.
 	player.clear_resolved_card()
+	# Story 6-5e (AC 11a/AC 23, rulings 6a/7): the TWELFTH, THIRTEENTH and FOURTEENTH named exceptions --
+	# the PENDING BURST, every BOULDER, and the CORPSE-BOMB CONVERSION RECORD, cleared beside the cast and
+	# the root and for their traced reason: step 1b returns BEFORE step 2's ticks, so once `_round_over`
+	# latches a burst's interval STOPS COUNTING but stays armed, and a reset can land mid-burst. Without
+	# this a Rocksling from the previous round would keep throwing stones into the fresh one.
+	#
+	# `_end_round` ALREADY CLEARS ALL THREE (see there), so the freeze never holds a live burst or a stale
+	# Boulder; THESE clears are for the DEBUG RESET, which can land at any tick. The Boulder clear is also
+	# belt-and-braces against the redeal: `Hand.clear(width)` at the deal empties the cover layer in the
+	# same breath as the card layer, so a reset lays down an uncovered hand either way -- and this line is
+	# what makes that true for a reset that lands before any deck has been injected.
+	player.clear_burst()
+	player.hand.clear_covers()
+	player.clear_corpse_bomb()

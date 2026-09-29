@@ -364,6 +364,143 @@ var root_blocks_run: bool = false
 var root_blocks_roll: bool = false
 
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e (AC 8/AC 11a, `6-5e/R18`/C2, `6-5e/R21`/G2): THE PENDING BURST.
+## ------------------------------------------------------------------------------------------
+## A Rocksling cast fires `boulders_per_cast` stones, one after another, an authored interval apart
+## (ruling 2). The FIRST leaves at the strike; the rest are still owed, and what owes them is THIS record.
+##
+## IT IS SEPARATE FROM THE CAST, AND THAT SEPARATION IS RULING 6a/C2 ITSELF. The cast is CLEARED at the
+## strike (`_resolve_cast_strikes` clears it before applying the outcome, so the strike can never observe
+## its own caster as still casting), and from that instant the caster is FREE -- it moves and acts, a stun
+## does not stop the remaining stones, and there is no lock and no root. Storing the burst on `cast_*`
+## would have made "committed to a cast" and "still owed stones" the same fact, which is exactly the fact
+## ruling 6a splits in two.
+##
+## IT IS HASHED CROSS-TICK STATE (`6-5e/R21`/G2, AC 38, Golden Prediction cause 1a) on `4-3a/R17`'s test,
+## passed plainly: it CROSSES TICKS AND DECIDES OUTCOMES -- how many more shots exist, when each appears,
+## what each one hits and for how much -- and none of it is recomputable inside the tick that reads it. The
+## cast that armed it is gone.
+##
+## SIX MEMBERS, ONE SNAPSHOT KEY, on the `cast` key's own fusion precedent and for its reason: a burst is
+## ONE fact in six halves, and six keys would let them drift into a schedule that disagrees with itself
+## about whether a burst is pending at all.
+
+## The effect the burst's remaining stones are authored by -- the flight profile, and the discriminator
+## that makes each stone plant a Boulder. A `String`, NEVER a `StringName`, on `cast_card_id`'s stated and
+## measured reason: this member reaches the canonical hash and `Array[StringName].sort()` orders by
+## internal POINTER on this engine. `""` MEANS NO BURST IS PENDING and is the single discriminator
+## (`has_pending_burst()`), the `cast_card_id` posture verbatim -- no sibling count could disagree with it.
+var burst_effect_id: String = ""
+
+## How many stones are STILL OWED, never how many the cast fired. Decremented as each leaves; reaching
+## zero clears the whole record through the one stop point.
+var burst_remaining: int = 0
+
+## The interval clock. `TimingWindow`, ticked at step 2 beside every other D4 window, read by the step-6d
+## burst seat -- the `cast_window` idiom verbatim (A1: integer ticks, one per `advance()`, never a float
+## accumulator).
+var burst_window: TimingWindow
+
+## The address every stone in this burst is aimed at -- CAPTURED ONCE at the cast's press and copied off
+## the cast at the strike (AC 9). A re-lock or an unlock changes nothing already scheduled, which is true
+## by this being a copy rather than a live read.
+var burst_target_slot: int = TargetingService.NO_TARGET_SLOT
+var burst_target_index: int = TargetingService.HERO_INDEX
+
+## The per-stone damage, copied off the effect at the strike so every stone in one burst deals the same
+## figure even if `damage_amount` is retuned mid-flight -- `cast_damage`'s freeze, one seat later.
+var burst_damage: float = 0.0
+
+
+## IS A BURST STILL OWED? The ONE predicate the burst seat and both teardown paths read, so they cannot
+## drift apart. `is_casting()`'s shape and role exactly.
+func has_pending_burst() -> bool:
+	return burst_effect_id != ""
+
+
+## Story 6-5e (AC 8): ARM the burst. `interval_ticks` is already TICKS (converted once at the strike, A1)
+## and `remaining` is what is owed AFTER the strike's own first stone has left.
+##
+## A NON-POSITIVE REMAINING CLEARS THE RECORD rather than leaving a live effect id on an empty schedule --
+## `start_rule`'s N3 lesson and `start_root`'s application of it, verbatim. A one-stone Rocksling therefore
+## leaves no burst pending at all, which is what keeps the resting snapshot honest for `boulders_per_cast
+## = 1`.
+func start_burst(effect_id: StringName, remaining: int, interval_ticks: int,
+		target_slot: int, target_index: int, damage: float) -> void:
+	if remaining <= 0:
+		clear_burst()
+		return
+	burst_effect_id = String(effect_id)
+	burst_remaining = remaining
+	burst_window.start(interval_ticks)
+	burst_target_slot = target_slot
+	burst_target_index = target_index
+	burst_damage = damage
+
+
+## THE ONE STOP POINT for a burst (AC 11a) -- the last stone leaving, the caster's death, round end and the
+## debug reset all end it through here, `clear_cast`'s single-stop-point discipline applied to the burst.
+## Nothing is refunded and nothing ever will be: the card and the mana were spent a whole cast ago.
+func clear_burst() -> void:
+	burst_effect_id = ""
+	burst_remaining = 0
+	burst_window.start(0)
+	burst_target_slot = TargetingService.NO_TARGET_SLOT
+	burst_target_index = TargetingService.HERO_INDEX
+	burst_damage = 0.0
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e (ruling 14, AC 38/AC 40): CORPSE BOMB'S PER-ACTIVATION CONVERSION RECORD.
+## ------------------------------------------------------------------------------------------
+## `6-5f`'s Counterspell will need to know WHICH of this player's minions one Corpse Bomb activation turned
+## into corpses and skulls (ruling 14). This story implements NO undo and decides NO Counterspell
+## semantics; it only makes sure the fact is present in hashed state and readable back (AC 40).
+##
+## IT IS NOT A PURE FUNCTION OF THE CORPSE CONTAINER, MEASURED RATHER THAN ASSUMED (AC 38's allowance,
+## declined with a reason). `UnitBoard`'s corpse fields are the remaining lifetime, the Grave-Ward
+## extension flag and the raised-from index; a Corpse Bomb corpse is created through the SAME death seat
+## every other kill uses (AC 30) and enters with the SAME full lifetime, so a corpse made by Corpse Bomb
+## and one made by a melee kill on the same tick are bit-identical in that container. There is nothing
+## there to derive the partition from, so the record is stored -- Golden Prediction cause 2, a real cause.
+##
+## ONE ACTIVATION'S WORTH, NOT A LOG. `last_resolved_card`'s scope exactly: the LAST one, overwritten by
+## the next, cleared at round end and at the debug reset. A growing per-match log would be unbounded
+## hashed state, and `6-5f` answers the card that just resolved -- which is the same tick this was written.
+const NO_CORPSE_BOMB_TICK := -1
+
+## The `_tick` the activation landed on, or `NO_CORPSE_BOMB_TICK`. The DISCRIMINATOR, `cast_card_id`'s
+## posture: an empty index list with a live tick is a Corpse Bomb that converted nothing, which is
+## unreachable (the board gate refuses a zero-minion activation, AC 33) and still representable honestly.
+var corpse_bomb_tick: int = NO_CORPSE_BOMB_TICK
+
+## The board indices this activation converted, ASCENDING (the seat walks `living_indices()`, which is
+## ascending by construction). Plain ints -- the counts-and-indices rule, no identity and no position.
+## ITS ORDER IS MEANINGFUL and `CanonicalHash` preserves it.
+var corpse_bomb_indices: Array[int] = []
+
+
+## Story 6-5e (AC 38/AC 40): RECORD one Corpse Bomb activation. The OWNER is implicit -- this is that
+## player's own `PlayerState` and a `UnitBoard` belongs to exactly one player, so an owner field would be
+## a third spelling of which object this is (`_apply_culling`'s "the opponent is unreachable, not
+## filtered" argument).
+##
+## The array is COPIED IN, never aliased, on `4-0`'s own review patch: `pending_draw_owed`'s snapshot
+## aliased the live array and had to be fixed, and the lesson applies at the write seat too.
+func record_corpse_bomb(tick: int, indices: Array[int]) -> void:
+	corpse_bomb_tick = tick
+	corpse_bomb_indices = indices.duplicate()
+
+
+## THE ONE STOP POINT, `clear_cast`'s discipline: round end and the debug reset both clear it, for
+## `clear_resolved_card`'s reason verbatim (REVIEW B1, `6-5a`) -- it is round-crossing hashed state, and a
+## round that has ended holds no activation `6-5f` could answer.
+func clear_corpse_bomb() -> void:
+	corpse_bomb_tick = NO_CORPSE_BOMB_TICK
+	corpse_bomb_indices.clear()
+
+
 ## Story 6-5c (AC 8, `6-5c/R18`): IS THIS PLAYER COMMITTED TO A CAST RIGHT NOW? The ONE predicate all
 ## three commitment seats read -- the step-3 action lock, the step-6 card lock and the movement root
 ## -- so they cannot drift apart. `is_getting_up()`'s shape and role exactly.
@@ -526,6 +663,8 @@ func _init(queue: SignalQueue) -> void:
 	# Story 6-5c: the cast and root windows, built beside their card-layer siblings above.
 	cast_window = TimingWindow.new()
 	root_window = TimingWindow.new()
+	# Story 6-5e: the burst interval clock, built beside the cast window whose strike arms it.
+	burst_window = TimingWindow.new()
 	for _kind in RULE_COUNT:
 		rule_windows.append(TimingWindow.new())
 		rule_a.append(0.0)
@@ -600,8 +739,18 @@ func clear_resolved_card() -> void:
 ## they were when the mutation completed. Two announcements in one tick (a cast whose replacement
 ## delivers on the same tick, the zero-delay degrade) therefore drain in order and the LAST one is
 ## the final state — never one stale payload overwriting a fresh one.
+## STORY 6-5e (AC 24/AC 24a): THE PAYLOAD CARRIES THE VISIBLE LAYER, `hand.visible_array()` -- a Boulder
+## on top of whatever card its slot holds, the card layer everywhere else. The channel, its arity, its
+## types and its seats are UNCHANGED, which is AC 24 exactly: "the only channel is
+## `PlayerState.cards_changed(hand_ids, ...)`, per-player, rendered only in the owning viewport's own hand
+## row". No second payload element and no second seam ships, so nothing about a Boulder's presence, count
+## or slot reaches any surface that did not already carry this player's own hand contents (`P3`, unbroken).
+##
+## THE HUD THEREFORE NEEDS NO NEW BRANCH ORDERING TO GET AC 24a RIGHT: `_render_hand_row`'s first branch
+## renders whatever id a slot shows and its `pending_draw_owed` branch is an `elif`, so a covered slot
+## shows the Boulder and takes precedence over the in-flight caption for free. See `Hand.visible_array`.
 func notify_cards_changed() -> void:
-	_queue.push(cards_changed.emit.bind(hand.to_array(), deck.size(), discard.size()))
+	_queue.push(cards_changed.emit.bind(hand.visible_array(), deck.size(), discard.size()))
 
 
 ## Story 6-1d (AC 4): THE CONTACT WINDOW -- is this player's mode ② attack committed, i.e. may a
@@ -627,6 +776,58 @@ func notify_cards_changed() -> void:
 ## expression, not of a caller remembering to check a phase.
 func is_contact_window_open() -> bool:
 	return landing_window.is_running and charge_window.remaining_ticks() <= 1
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e: THE DECLARED SET OF ID-CARRYING SNAPSHOT PATHS -- a MECHANISM REPLACEMENT, not a widened
+## allow-list, and it is the one `test_card_effect_resolution.gd` asked for BY NAME in advance.
+## ------------------------------------------------------------------------------------------
+## That file's counts-only scan walks every value at every depth of this snapshot and fails on any
+## `String` / `StringName` / object, because a StringName reaching `CanonicalHash` orders by internal
+## POINTER on this engine. Two paths were exempted by literal, and its own note fixed the trigger:
+##
+##   "A THIRD exemption is the signal to replace the mechanism rather than extend the list again -- at
+##    that point the right shape is a declared set of id-carrying paths on `PlayerState` itself, not a
+##    third literal here."
+##
+## THIS STORY IS THAT THIRD (the `burst` key carries the effect id its remaining stones are authored by),
+## so the shape it named is built here rather than the list extended a third time -- `3-0d/R20` applied as
+## instructed: a guard evaded (or outgrown) twice gets its mechanism replaced, never its pattern widened
+## again.
+##
+## DECLARING IT HERE IS WHAT MAKES IT A MECHANISM. The allow-list now lives beside the snapshot it
+## describes, so a future key that carries an id declares itself in the same file and the same edit -- and
+## a key that carries one WITHOUT declaring it still fails the scan, unchanged. The scan is not weakened:
+## it still visits every value at every depth, and it still asserts each declared path is a plain `String`
+## and not a `StringName`.
+##
+## EVERY MEMBER IS A CARD OR EFFECT ID HELD AS A `String` VALUE, hashed BY CONTENT through
+## `CanonicalHash`'s String branch. Card identity in the hash is ruled safe on the `pitch_state._card_ids`
+## precedent (a resolved, staged or in-flight card is public information).
+## A PATH ENDING IN `[]` IS A FAMILY: every element of the array at that path, however many there are.
+## Needed because `projectile_effect` is one id PER LIVE SHOT, so its paths are `/projectile_effect[0]`,
+## `[1]`, ... and no fixed list could name them. The reader (`test_card_effect_resolution.gd`) checks every
+## PRESENT element of a family is a plain `String`, and does not require the family to be non-empty -- an
+## empty board is the resting case. A SCALAR path is still required to be present, unchanged, which is what
+## keeps a stale scalar declaration from rotting into a blanket permission.
+const SNAPSHOT_ID_PATHS: Array[String] = [
+	# Story 6-5a (AC 10): the last resolved card's id.
+	"/last_resolved_card[0]",
+	# Story 6-5c (AC 1/AC 23): the in-flight cast's card id.
+	"/cast[0]",
+	# Story 6-5e (AC 11a): the pending burst's EFFECT id -- the first member that is an effect id rather
+	# than a card id, which is exactly why the literal list had run out of room. Same type, same branch,
+	# same public-information argument: the effect a visible burst of stones is authored by.
+	"/burst[0]",
+	# Story 6-5d (AC 30), DECLARED AT THE 6-5e REVIEW FIX (MAJOR 1): the per-shot EFFECT id on the
+	# projectile board. It has carried a `String` id since 6-5d and was never declared here -- not because
+	# anyone argued it should not be, but because the scan that would have caught it was reading a fixture
+	# with no live projectile in it. Making the scan non-vacuous (MAJOR 1) is what surfaced it, which is the
+	# mechanism working: an id-carrying key must declare itself, and this one now does.
+	#
+	# THE FIRST FAMILY MEMBER, and the reason the `[]` convention above exists at all.
+	"/projectile_effect[]",
+]
 
 
 func to_snapshot() -> Dictionary:
@@ -681,6 +882,29 @@ func to_snapshot() -> Dictionary:
 		# why cause 3 of this story's re-baseline is a non-mover (measured, not assumed: the
 		# golden hashes at t24 with a cast at t22 against an 11-tick delay, so a hole is LIVE at
 		# hash time and the width binding would read 9 where this reads 8).
+		# Story 6-5e (AC 16-19/AC 38, Golden Prediction cause 1): THE PER-SLOT COVER MASK -- which of this
+		# player's hand slots a Boulder currently sits on. A plain `Array[bool]`, width-long, in the
+		# hand's own slot order, which `CanonicalHash` has an explicit branch for and whose ORDER IS
+		# MEANINGFUL (a Boulder on the wrong slot is a real divergence).
+		#
+		# IT IS A KEY AT ALL FOR THE `pending_draw` REASON: a cover CROSSES TICKS AND DECIDES OUTCOMES --
+		# which slots the next stone may choose (AC 16), which presses are refused (AC 17a), what Boom
+		# detonates (AC 25), and how slow its holder walks (AC 37a) -- and none of that is recomputable
+		# inside the tick that reads it.
+		#
+		# WHAT IS UNDERNEATH IS NOT HERE AND THAT IS ARGUED, NOT OMITTED -- see `Hand.covers_snapshot`:
+		# the covered card never leaves `Hand._cards`, so "what id is underneath" is the hand's own
+		# contents, already the THIRD member of `test_replay_identity.gd`'s unhashed-cross-tick exclusion
+		# set. Hashing it here would move an existing excluded fact into the hash and poison it with a
+		# StringName rather than add a fact.
+		#
+		# THE LIVE BOULDER COUNT IS NOT A SECOND KEY (Golden Prediction cause 5c, argued as a NON-cause):
+		# the Boulder slow reads `hand.cover_count()`, which is a pure fold over exactly this array, so a
+		# `boulder_count` sibling would be a derived duplicate that could disagree with it.
+		#
+		# RESTING VALUE: all-false, width-long -- `[]` before the first deal (the width arrives at
+		# `Hand.clear`), `[false, false, false, false]` after it at the shipped `hand_size`.
+		"hand_covered": hand.covers_snapshot(),
 		"hand_size": hand.occupied_count(),
 		# Story 3-5a (AC 6): the ONE new snapshot key this story adds — the discard COUNT, on
 		# the deck_size/hand_size precedent exactly. No ids, no per-card structure, no pile
@@ -1012,6 +1236,49 @@ func to_snapshot() -> Dictionary:
 				if is_casting() \
 				else ["", 0, NO_CAST_EFFECT_MODE, TargetingService.NO_TARGET_SLOT,
 					TargetingService.HERO_INDEX, 0.0],
+		# Story 6-5e (AC 11a/AC 38, `6-5e/R21`/G2, Golden Prediction cause 1a): THE PENDING BURST, as
+		# `[effect id, stones remaining, remaining ticks, target slot, target index, per-stone damage]`.
+		# The `cast` key's SIX-ELEMENT FUSION verbatim and for its reason: a burst is ONE fact in six
+		# halves, and six keys would let them drift into a schedule that disagrees with itself about
+		# whether a burst is pending at all. Resting
+		# `["", 0, 0, NO_TARGET_SLOT, HERO_INDEX, 0.0]` -- each element's own resting value.
+		#
+		# THE GATE IS `has_pending_burst()`, NOT `burst_window.is_running`, and the difference is
+		# load-bearing on exactly one tick for the `cast` key's reason: the LAUNCH tick, where step 2 has
+		# already stopped the interval window and step 6d has not yet launched. A stone is still owed
+		# there, and the snapshot says so. It is also the ONLY honest gate at a zero authored interval,
+		# where the window is never running at all.
+		#
+		# IT IS A KEY AT ALL FOR THE `cast` REASON, ONE SEAT LATER: every half CROSSES TICKS AND DECIDES
+		# AN OUTCOME -- the count decides how many shots still exist, the clock decides when each
+		# appears, the address decides what each may hit (AC 9's freeze), the damage decides for how
+		# much -- and NONE of it is recomputable inside the tick that reads it, because the cast that
+		# armed it was cleared at the strike. Remaining ticks alone is determinism-complete on the
+		# `cast` argument: the interval is `seconds_to_ticks(effect.boulder_interval_seconds)`, a
+		# load-time constant a replay reproduces from the recorded content.
+		#
+		# IT IS WHAT RULING 6a/C2 IS DECIDED FROM, which is the plainest statement of why it is hashed:
+		# the mid-burst stun case reads it and does nothing, and the caster-death, round-end and
+		# debug-reset cases each read it and clear it (AC 11a).
+		"burst": [burst_effect_id, burst_remaining, burst_window.remaining_ticks(),
+					burst_target_slot, burst_target_index, burst_damage] \
+				if has_pending_burst() \
+				else ["", 0, 0, TargetingService.NO_TARGET_SLOT,
+					TargetingService.HERO_INDEX, 0.0],
+		# Story 6-5e (ruling 14, AC 38/AC 40, Golden Prediction cause 2): CORPSE BOMB'S LAST
+		# CONVERSION, as `[activation tick, [converted board indices]]` -- the OWNER implicit in whose
+		# snapshot this is (`record_corpse_bomb`'s own argument). Resting `[NO_CORPSE_BOMB_TICK, []]`.
+		#
+		# FUSED, on the `cast`/`burst` argument: the tick and the list are halves of one activation, and
+		# an index list with no tick would not say WHEN, which is one of the three facts ruling 14 names.
+		#
+		# A REAL CAUSE, NOT A PURE FUNCTION -- see `corpse_bomb_tick` for the measurement: a Corpse Bomb
+		# corpse and a melee-kill corpse made on the same tick are bit-identical in `UnitBoard`, so there
+		# is nothing in the corpse container to derive this partition from.
+		#
+		# THE LIST IS COPIED, never aliased -- `pending_draw_owed`'s own 4-0 review patch, which found
+		# exactly this bug at exactly this kind of key.
+		"corpse_bomb": [corpse_bomb_tick, corpse_bomb_indices.duplicate()],
 		# Story 6-5c (AC 17/AC 23): the ROOT, as `[remaining ticks, blocks run, blocks roll]` -- the
 		# `timed_rules` per-slot fusion applied to one root: three halves of one fact, gated on the
 		# window so a stopped root reads `[0, false, false]` whatever the switches last held and a

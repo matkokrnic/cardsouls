@@ -123,17 +123,25 @@ func test_a_closed_spell_layer_closes_the_buffs_and_not_ruin_vanguard() -> void:
 ## `6-5d-fireball-and-spell-targeting` and `6-5e-boulder-injection` was renamed
 ## `6-5e-rocksling-boom-and-corpse-bomb`, so all three rows named stories that no longer exist. All three
 ## now name the 6-5e key -- the story that actually builds them.
-func test_the_four_deferred_effects_name_their_owning_story() -> void:
+func test_the_one_deferred_effect_names_its_owning_story() -> void:
 	var owners := {
-		&"rocksling": &"6-5e-rocksling-boom-and-corpse-bomb",
-		&"boom": &"6-5e-rocksling-boom-and-corpse-bomb",
 		&"counterspell": &"6-5f-counterspell",
-		&"corpse_bomb": &"6-5e-rocksling-boom-and-corpse-bomb",
 	}
-	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 4,
-		"exactly FOUR deferred rows -- FIVE before 6-5c, which retired the one naming itself; "
-		+ "NINE before 6-5b, which retired the four naming itself. 6-5d retired NONE: it built "
-		+ "`fireball`, which was never deferred (it is a NEW effect, not a re-pointed row)")
+	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 1,
+		"exactly ONE deferred row -- FOUR before 6-5e, which retired the three naming itself "
+		+ "(`rocksling`, `boom`, `corpse_bomb`); FIVE before 6-5c, which retired the one naming "
+		+ "itself; NINE before 6-5b, which retired the four naming itself. 6-5d retired NONE: it "
+		+ "built `fireball`, which was never deferred (it is a NEW effect, not a re-pointed row). "
+		+ "`counterspell` is the last, owned by 6-5f, which closes out E6")
+	# Story 6-5e (AC 43): the NEGATIVE half of the three retirements, asserted so a future pass cannot
+	# re-add a row and quietly turn a shipped effect back into a no-op -- `fireball`'s own guard below,
+	# applied to the three ids this story built.
+	for built: StringName in [&"rocksling", &"boom", &"corpse_bomb"]:
+		assert_eq(CardEffectResolver.owner_story_for(built), &"",
+			"%s is BUILT by 6-5e and has no deferred-owner row" % built)
+		assert_ne(CardEffectResolver.outcome(_effect(built), _flags()),
+			CardEffectResolver.REASON_DECK1_NOT_YET_RESOLVED,
+			"...and resolves to a real outcome rather than the named no-op" % [])
 	# Story 6-5d (AC 35): `fireball` is NOT a deferred row -- the negative half of the rename, asserted so
 	# a future pass cannot add one and quietly turn a shipped cast back into a no-op.
 	assert_eq(CardEffectResolver.owner_story_for(&"fireball"), &"",

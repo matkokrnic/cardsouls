@@ -277,7 +277,19 @@ extends RefCounted
 ## eight absent keys with constructor defaults is precisely the silently-wrong replay this constant
 ## prevents, and a shim would have to guess which absent field meant "not authored" and which meant "the
 ## authoring predates the field".
-const FORMAT_VERSION := 16
+## Story 6-5e (AC 39): 16 -> 17, WITH THE HARD REFUSAL OF A v16 FILE UNCHANGED.
+##
+## WHAT CHANGES IN THE RECORDED SHAPE: `_resource_values` captures every script property off
+## `get_property_list()`, so the two new `CardEffect` exports (`boulders_per_cast`,
+## `boulder_interval_seconds`) and the new `BalanceConfig` export (`boulder_slow_per_boulder`) all ride the
+## `effects` / `pitch_effects` / `balance` channels for free -- which is exactly the problem. A v16 file
+## CARRIES NONE OF THEM, so a replay of it would rebuild `rocksling` with `boulders_per_cast = 0` and replay
+## every Rocksling cast as a cast that fires NOTHING: no stones, no Boulders, and therefore no Boom worth
+## activating and a silently different final hash. That is a silent divergence, which is what this constant
+## exists to refuse loudly -- the `6-5a` 12 -> 13 and `6-5b` 13 -> 14 argument verbatim, third time.
+##
+## NO SHIM, on this file's standing posture: older records are refused with a reason, never migrated.
+const FORMAT_VERSION := 17
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

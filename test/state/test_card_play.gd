@@ -304,13 +304,21 @@ func test_the_empty_slot_guard_precedes_the_cost_lookup() -> void:
 	var n := 0
 	for line in _code_lines("res://src/state/match_state.gd"):
 		n += 1
-		if guard_line < 0 and line.contains("player.hand.is_slot_empty(hand_slot)"):
+		# STORY 6-5e (AC 18/AC 21): the guard's EXPRESSION changed and the pinned substring moves with it.
+		# `_resolve_basic_cast` now reads the VISIBLE layer -- `visible_id_at(hand_slot) == Hand.EMPTY` --
+		# because a Boulder planted on a mid-draw-delay hole covers an EMPTY card slot, and the card-layer
+		# reading would have refused the Mode ① press that plays it, leaving that Boulder unremovable until
+		# round end. THE PROPERTY THIS TEST PINS IS UNCHANGED and is the reason the substring moved rather
+		# than the test being deleted: the refusal still folds the WIDTH bound and the hole into ONE reason
+		# (`visible_id_at` returns the marker for an out-of-range index exactly as `is_slot_empty` reports
+		# one empty), and it must still precede the cost lookup so no marker reaches the cost map.
+		if guard_line < 0 and line.contains("player.hand.visible_id_at(hand_slot) == Hand.EMPTY"):
 			guard_line = n
 		if lookup_line < 0 and line.contains("_card_costs.get(id)"):
 			lookup_line = n
 	assert_true(guard_line > 0,
-		"_resolve_basic_cast must refuse an empty slot via Hand.is_slot_empty — the single test "
-		+ "that folds the WIDTH bound and the hole into ONE reason (AC 3)")
+		"_resolve_basic_cast must refuse a slot showing nothing via Hand.visible_id_at — the single "
+		+ "test that folds the WIDTH bound and the hole into ONE reason (AC 3), now over both layers")
 	assert_true(lookup_line > 0, "...and must still look the cost up (guard would be vacuous)")
 	assert_true(guard_line < lookup_line,
 		"the empty-slot guard must come BEFORE the cost lookup (%d vs %d): a hole must never "

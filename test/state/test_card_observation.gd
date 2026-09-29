@@ -290,8 +290,14 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# Story 6-5c (AC 1/AC 23): `cast` -- `[card id, remaining_ticks]`, the id a String VALUE -- in
 		# sorted position, which is FIRST. It is still counts-and-values: a card id that has already
 		# been played and seen is public exactly as `last_resolved_card`'s is.
-		"cast",
-		"deck_size", "defense", "discard_size", "hand_size", "hero", "landing",
+		# Story 6-5e (AC 38): THREE new keys, taking the set from FORTY to FORTY-THREE. `burst` (the
+		# pending Rocksling schedule, `6-5e/R21`/G2), `corpse_bomb` (the per-activation conversion
+		# record, ruling 14) and `hand_covered` (the per-slot Boulder cover mask, ruling 6) -- each in
+		# SORTED position. Same mechanism, TENTH time: this pin and
+		# test_draw_delay_and_reshuffle.gd's were BOTH red before this edit, and the story that adds
+		# the keys is the story that moves both.
+		"burst", "cast", "corpse_bomb",
+		"deck_size", "defense", "discard_size", "hand_covered", "hand_size", "hero", "landing",
 		"last_resolved_card", "lock_target",
 		"mana", "orbs",
 		"pending_draw", "pending_draw_owed",
@@ -340,8 +346,14 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 40,
-		"the per-player snapshot key set is FORTY keys as of story 6-5d, which adds TWO, both on the "
+	assert_eq(keys.size(), 43,
+		"the per-player snapshot key set is FORTY-THREE keys as of story 6-5e, which adds THREE: "
+		+ "`burst` (the pending Rocksling schedule -- it outlives the cast that armed it, so nothing "
+		+ "in the tick that reads it could recompute it), `corpse_bomb` (which of the caster's minions "
+		+ "one activation converted, measured NOT derivable from the corpse container) and "
+		+ "`hand_covered` (which hand slots a Boulder sits on -- it decides the next stone's eligible "
+		+ "slots, which presses are refused, what Boom detonates and how slow its holder walks). It "
+		+ "was FORTY as of story 6-5d, which adds TWO, both on the "
 		+ "projectile board (AC 30): `projectile_effect`, the effect id a HERO-SOURCED shot's flight is "
 		+ "authored by, and `projectile_damage`, that shot's per-shot LOCKED damage. Both cross ticks "
 		+ "and decide an outcome -- the id decides every authored number governing the flight AND "

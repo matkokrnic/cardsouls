@@ -237,7 +237,12 @@ func test_a_hero_death_leaves_no_corpse() -> void:
 ## else. A SOURCE SCAN, because the claim is about the shape of the code rather than about one run:
 ## a fourth caller, or a corpse written outside the seat, passes every behavioural test in this file
 ## while being exactly the divergence AC 3 forbids.
-func test_the_death_seat_has_exactly_three_callers_and_no_rival_corpse_writer() -> void:
+## STORY 6-5e (AC 30, `6-5e/R24`/G5): THREE -> FOUR, AND THE NAME MOVES WITH THE COUNT. Corpse Bomb is the
+## FOURTH caller: it kills every living own minion through this same seat (ruling 11's "leaves a NORMAL
+## corpse ... through the exact same corpse-creation seat every other minion death already uses"), so the
+## 3 -> 4 update is the intended consequence of the AC rather than a guard going slack. What the scan still
+## forbids is unchanged: a corpse written ANYWHERE but the seat.
+func test_the_death_seat_has_exactly_four_callers_and_no_rival_corpse_writer() -> void:
 	var board := FileAccess.get_file_as_string("res://src/state/unit_board.gd")
 	var state := FileAccess.get_file_as_string("res://src/state/match_state.gd")
 	assert_true(board.length() > 0 and state.length() > 0, "both sources were read")
@@ -245,10 +250,11 @@ func test_the_death_seat_has_exactly_three_callers_and_no_rival_corpse_writer() 
 	assert_eq(_occurrences(board, "kill_at("), 2,
 		"`UnitBoard` names `kill_at(` TWICE -- its own declaration, plus the ONE call from "
 		+ "`apply_damage_at` on behalf of the step-4 contact path (AC 3's first caller)")
-	# TWO callers inside MatchState: Culling and Drain.
-	assert_eq(_occurrences(state, "units.kill_at("), 2,
-		"`MatchState` calls the death seat exactly TWICE -- the Culling apply seat and the Drain "
-		+ "apply seat (AC 3's second and third callers). A THIRD call here is a fourth caller.")
+	# THREE callers inside MatchState: Culling, Drain and (story 6-5e) Corpse Bomb.
+	assert_eq(_occurrences(state, "units.kill_at("), 3,
+		"`MatchState` calls the death seat exactly THREE times -- the Culling apply seat, the Drain "
+		+ "apply seat, and 6-5e's Corpse Bomb apply seat (AC 3's second, third and fourth callers). "
+		+ "A FOURTH call here is a fifth caller and needs its own AC.")
 	# ...and nothing else writes a corpse. `_corpse_ticks` is assigned only inside the board, and only
 	# by the seat, the extension and the consume -- never from MatchState, an actor or the runner.
 	for path: String in ["res://src/state/match_state.gd", "res://src/main/match_runner.gd",

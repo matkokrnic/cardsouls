@@ -4,5 +4,4 @@
 
 [resource]
 script = ExtResource("1_effect")
-effect_id = &"boom"
-damage_amount = 6.0
+effect_id = &"boulder_discard"

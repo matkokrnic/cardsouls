@@ -90,6 +90,16 @@ const ORB_COLORS: Array[Color] = [
 	Color(0.35, 0.90, 0.45),
 ]
 
+## Story 6-5e (AC 4a/AC 24a, `6-5e/R26`/G7): the COLOURLESS hue -- Boulder's hand-row swatch. A NEUTRAL GREY
+## and deliberately NOT a fourth `ORB_COLORS` entry: that array is the ORB palette, read by the orb counters
+## and the price tags, and a colourless card is never an orb colour. A fourth entry there would make every
+## orb reader three-and-a-bit long for a card that authors no orb cost anywhere.
+##
+## IT IS ALSO THE STONE/SKULL/BOULDER PLACEHOLDER'S OWN DISTINCTNESS ARGUMENT (AC 37) on the HUD side: grey
+## is the one hue none of the three card colours occupies, so a Boulder in a hand row is distinguishable
+## from every other card at a glance without a new asset.
+const COLORLESS_SWATCH := Color(0.62, 0.62, 0.66)
+
 ## Story 3-6 (AC 4): the authored vulnerable-window duration in SECONDS, handed over by the runner
 ## at construction (the `gamepad_profile` static-handoff precedent), before add_child.
 ## PRESENTATION-LOCAL AND FOR THE FLAG ONLY: it seeds the one-shot timer that turns the flag back
@@ -426,9 +436,23 @@ func _set_price_text(index: int, id: StringName, tint: Color) -> void:
 		price_label.text = ""
 		return
 	var entry: Array = row as Array
+	# Story 6-5e (AC 4a): A CARD WITH NO MODE ④ SHOWS THE MODE ① LINE ONLY. Boulder authors no
+	# `pitch_condition` at all (ruling 7 gives it no pitch effect), so `_derive_card_prices` maps its pitch
+	# mana to 0.0 -- and rendering that as a "④0" line would advertise a staging the card refuses. The
+	# absent Mode ④ is shown by ABSENCE, which is the honest reading and the `_set_swatch_color(i, null)`
+	# posture (a fact the data does not carry is not guessed at).
+	#
+	# ZERO IS THE DISCRIMINATOR AND THAT IS SAFE HERE rather than a punned sentinel: a zero-mana pitch with
+	# a real orb price is still a Mode ④, so the orb half is checked too -- only a card with NEITHER is
+	# treated as having no Mode ④. `test_card_authoring.gd`'s per-card census guarantees every Deck 1 card
+	# authors a positive orb price, so no shipped Mode ④ card can fall into this branch.
+	var mode_4 := _mode_price_text(MODE_4_LABEL, entry[2], entry[3] as Dictionary)
+	if is_zero_approx(float(entry[2])) and (entry[3] as Dictionary).is_empty():
+		price_label.text = _mode_price_text(MODE_1_LABEL, entry[0], entry[1] as Dictionary)
+		return
 	price_label.text = "%s\n%s" % [
 		_mode_price_text(MODE_1_LABEL, entry[0], entry[1] as Dictionary),
-		_mode_price_text(MODE_4_LABEL, entry[2], entry[3] as Dictionary),
+		mode_4,
 	]
 
 
@@ -487,7 +511,19 @@ func _set_swatch_color(index: int, color: Variant, tint_modulate := Color.WHITE)
 	if color == null:
 		swatch.visible = false
 		return
-	_own_card_swatch_styles[index].bg_color = ORB_COLORS[color as int]
+	# Story 6-5e (AC 4a, `6-5e/R26`/G7): THE COLOURLESS GUARD. `ORB_COLORS` is an ORB palette and stays
+	# THREE long (a colourless card never authors an orb cost, so nothing else here needs a fourth entry),
+	# but this one expression indexes it by a CARD's colour ordinal -- so Boulder's new `COLORLESS` ordinal
+	# would read PAST THE END. It renders NEUTRAL GREY instead, which is a positive design answer rather than
+	# a bounds patch: a colourless card has a swatch (it is a real card in the row) and that swatch must not
+	# be a positional accident of the orb palette.
+	#
+	# WITHOUT THIS THE GATE'S OWN FINDING BITES: an "unread colour field" plan would have shipped Boulder as
+	# a silent RED swatch, because `_derive_card_colors()` maps the whole library including Boulder.
+	if int(color) == Enums.CardColor.COLORLESS:
+		_own_card_swatch_styles[index].bg_color = COLORLESS_SWATCH
+	else:
+		_own_card_swatch_styles[index].bg_color = ORB_COLORS[color as int]
 	swatch.visible = true
 
 

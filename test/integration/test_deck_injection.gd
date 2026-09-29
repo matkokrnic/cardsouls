@@ -43,9 +43,15 @@ extends SceneTree
 
 ## The authored ids in ASCENDING order — what sorted_ids() must return. REWRITTEN BY STORY 6-5a
 ## (AC 13): nine -> sixteen, the whole library (Deck 1's seven plus the nine dormant fixtures, R1).
+## STORY 6-5e (AC 4/AC 22): SIXTEEN -> SEVENTEEN. `boulder` sorts between `bloodhound_step` and
+## `bramble_snare`. It is in the LIBRARY (and therefore in every derived map the runner injects, which is
+## what makes a planted Boulder priceable and clearable at all) and in NO DECK -- the composition comes from
+## the authored `DeckList`, so the exclusion is by construction rather than by a list this test would have
+## to keep in agreement. `test_the_deck_list_is_exactly_deck_1` and this file's own composition check are
+## what prove it never reaches a deck.
 const EXPECTED_SORTED_IDS: Array[StringName] = [
-	&"bloodhound_step", &"bramble_snare", &"drain", &"ember_lash", &"frost_dart", &"frostbite",
-	&"grave_ward", &"hellforge_totem", &"honed_bolt", &"imp_summoner", &"rocksling",
+	&"bloodhound_step", &"boulder", &"bramble_snare", &"drain", &"ember_lash", &"frost_dart",
+	&"frostbite", &"grave_ward", &"hellforge_totem", &"honed_bolt", &"imp_summoner", &"rocksling",
 	&"ruin_vanguard", &"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"verdant_wardstone",
 ]
 

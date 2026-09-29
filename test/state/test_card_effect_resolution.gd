@@ -18,6 +18,10 @@ const HAND_SIZE := 4
 const CARD_COST := 3.0
 const START_MANA := 30.0
 
+## MAJOR 1's fixture (6-5e review fix): the one effect that produces BOTH gated snapshot branches.
+const ROCKSLING_ID := &"rocksling"
+const ROCKSLING_CAST_TICKS := 6
+
 
 # --- AC 1 / AC 4: a summon puts ONE record on the board --------------------------------------
 
@@ -364,44 +368,114 @@ func test_the_board_snapshot_key_is_a_plain_count() -> void:
 ## card is PUBLIC, the `pitch` key's staged-card precedent; never a StringName, never a key). The
 ## exemption is asserted rather than assumed: the path must actually carry a TYPE_STRING (not a
 ## StringName) naming the card just cast, and every OTHER path is scanned exactly as before.
-const LAST_RESOLVED_ID_PATH := "/last_resolved_card[0]"
-
-## Story 6-5c (AC 1): the in-flight cast's card id -- the second exempt String VALUE path. See the
-## exemption's own block in the test below for why it is allowed and why a third would not be.
-const CAST_ID_PATH := "/cast[0]"
+## STORY 6-5e: THE TWO LITERALS ARE GONE AND THE MECHANISM IS REPLACED, exactly as the block below said it
+## would have to be at the third exemption. The allow-list is now `PlayerState.SNAPSHOT_ID_PATHS`, declared
+## beside the snapshot it describes; this file reads it rather than repeating it, so a key that carries an
+## id must declare itself in the same file and the same edit as the key. `3-0d/R20` as instructed: the
+## mechanism is replaced, not the pattern widened a third time.
+##
+## THE SCAN IS NOT WEAKENED BY THE MOVE, and the three assertions below are what keep that true:
+##   1. every declared path must ACTUALLY be present as a String offender -- a stale declaration for a path
+##      that no longer carries an id fails, so the list cannot rot into a blanket permission;
+##   2. every declared path must be a plain `String` and never a `StringName` -- the failure mode the whole
+##      scan exists to catch, asserted per path rather than per literal;
+##   3. after erasing exactly those, ZERO offenders may remain -- unchanged.
+## The scan itself still visits every value at every depth.
+##
+## REVIEW FIX (6-5e review, MAJOR 1): THE SCAN NOW RUNS OVER THREE SNAPSHOTS, NOT ONE, AND THAT IS WHAT
+## MAKES PROPERTY 2 REAL FOR THE GATED KEYS. Two of the three declared paths sit under a CONDITIONAL:
+## `"cast": [...] if is_casting() else ["", ...]` and `"burst": [...] if has_pending_burst() else ["", ...]`
+## (`player_state.gd`). The original fixture -- one Mode ① summon cast, no cast frame and no burst -- only
+## ever reached the ELSE branches, so the per-path type assertion was inspecting a hard-coded `""` literal
+## that is a plain `String` BY CONSTRUCTION and cannot be wrong. MEASURED, not reasoned: with
+## `"burst": [StringName(burst_effect_id), ...]` on the LIVE branch this test stayed GREEN (22 tests, 0
+## failed), while the same mutation on the RESTING literal failed all three assertions.
+##
+## So the scan is driven over the RESTING snapshot, a MID-CAST one and a MID-BURST one, and the live
+## `cast_card_id` / `burst_effect_id` VALUES are what the declared-path assertions now read. The fixture's
+## own non-vacuity is asserted per snapshot (`is_casting()`, `has_pending_burst()`), because a scan of
+## three snapshots that were all secretly resting would be the same vacuity one layer up.
 
 
 func test_no_effect_id_or_position_reaches_the_snapshot() -> void:
 	var ms := _make_match()
 	_advance(ms, _cast_intent(1), InputIntent.new())
-	var snap: Dictionary = ms.p1.to_snapshot()
+	_assert_declared_id_paths_hold(ms.p1.to_snapshot(), "after a Mode (1) summon (no cast, no burst)")
+
+
+## MAJOR 1's fix: the SAME scan over a snapshot taken while a cast is in flight and again while a burst
+## is still owed, so `/cast[0]` and `/burst[0]` are checked against the values that actually reach
+## `CanonicalHash` rather than against their resting literals.
+func test_no_effect_id_reaches_the_snapshot_mid_cast_or_mid_burst() -> void:
+	var ms := _make_match(_rocksling_effects(), _spell_flags())
+	var pressed: StringName = ms.p1.hand.to_array()[1]
+	_advance(ms, _cast_intent(1), InputIntent.new())
+	assert_true(ms.p1.is_casting(),
+		"fixture: a cast really is in flight, so `/cast[0]` carries a live id and not the `\"\"` literal")
+	var mid_cast: Dictionary = ms.p1.to_snapshot()
+	assert_eq(mid_cast["cast"][0], String(pressed),
+		"fixture: ...and it is the CARD id that was pressed (the cast key holds the card, not the effect)")
+	_assert_declared_id_paths_hold(mid_cast, "mid-cast")
+	for _t in ROCKSLING_CAST_TICKS:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	assert_true(ms.p1.has_pending_burst(),
+		"fixture: stones are still owed, so `/burst[0]` carries a live effect id")
+	var mid_burst: Dictionary = ms.p1.to_snapshot()
+	assert_eq(mid_burst["burst"][0], String(ROCKSLING_ID),
+		"fixture: ...and it is the effect the burst is authored by")
+	var families := _assert_declared_id_paths_hold(mid_burst, "mid-burst")
+	# THE FAMILY'S OWN NON-VACUITY: a `[]` path is not required to be present (an empty board is the
+	# resting case), so the one snapshot that CAN carry shots asserts that it does -- otherwise
+	# `/projectile_effect[]` would be a declaration nothing ever checked.
+	assert_true(int(families["/projectile_effect[]"]) >= 1,
+		"fixture: the strike launched a stone, so `/projectile_effect[]` really was scanned mid-burst")
+
+
+## The three properties of the declared-path mechanism, run over ONE snapshot. Extracted so the same
+## assertions cover the resting, mid-cast and mid-burst readings without three copies to keep in agreement.
+## Returns how many elements each `[]` FAMILY matched, so a caller can assert a family was non-empty where
+## its fixture guarantees one.
+func _assert_declared_id_paths_hold(snap: Dictionary, label: String) -> Dictionary:
 	var offenders: Array[String] = []
 	_scan_snapshot(snap, "", offenders)
-	var exempt := "%s (%s)" % [LAST_RESOLVED_ID_PATH, type_string(TYPE_STRING)]
-	assert_true(offenders.has(exempt),
-		"sanity: the last-resolved card id reached the snapshot as a String VALUE (6-5a, AC 10)")
-	assert_eq(typeof(snap["last_resolved_card"][0]), TYPE_STRING, "...a String, never a StringName")
-	offenders.erase(exempt)
-	# STORY 6-5c (AC 1/AC 23): THE SECOND -- AND, BY THIS COMMENT, LAST -- EXEMPTION. The in-flight
-	# cast's identity reaches the per-player snapshot for `last_resolved_card`'s measured reason and
-	# under its measured constraint: a plain `String` hashes BY CONTENT through `CanonicalHash`'s
-	# String branch, while a `StringName` would order by INTERNAL POINTER on this engine, which is the
-	# failure mode this whole scan exists to catch. The TYPE assertion directly below is what keeps
-	# the exemption honest -- it fails the moment the id is stored as a StringName instead.
-	#
-	# THE MECHANISM IS NOT WIDENED, only its allow-list, and that is deliberate under `3-0d/R20`: the
-	# scan still visits every value at every depth and still fails on anything it does not recognise.
-	# A THIRD exemption is the signal to replace the mechanism rather than extend the list again --
-	# at that point the right shape is a declared set of id-carrying paths on `PlayerState` itself,
-	# not a third literal here.
-	var cast_exempt := "%s (%s)" % [CAST_ID_PATH, type_string(TYPE_STRING)]
-	assert_true(offenders.has(cast_exempt),
-		"sanity: the in-flight cast's card id reached the snapshot as a String VALUE (6-5c, AC 1)")
-	assert_eq(typeof(snap["cast"][0]), TYPE_STRING, "...a String, never a StringName")
-	offenders.erase(cast_exempt)
+	var string_suffix := " (%s)" % type_string(TYPE_STRING)
+	var families: Dictionary = {}
+	# STORY 6-5e: ONE LOOP OVER THE DECLARED SET, replacing the two hand-written exemption blocks.
+	for path: String in PlayerState.SNAPSHOT_ID_PATHS:
+		if path.ends_with("[]"):
+			# A FAMILY (see `PlayerState.SNAPSHOT_ID_PATHS`): erase every PRESENT element that is a plain
+			# String. An element that is a StringName does not match the suffix, so it survives into the
+			# zero assertion below -- which is exactly property 2, applied per element.
+			var prefix := path.trim_suffix("[]") + "["
+			var kept: Array[String] = []
+			var matched := 0
+			for offender: String in offenders:
+				if offender.begins_with(prefix) and offender.ends_with(string_suffix):
+					matched += 1
+				else:
+					kept.append(offender)
+			offenders = kept
+			families[path] = matched
+			continue
+		var exempt := "%s%s" % [path, string_suffix]
+		assert_true(offenders.has(exempt),
+			("declared id path %s must actually carry a String id (%s) -- a stale declaration would be "
+				+ "a blanket permission") % [path, label])
+		offenders.erase(exempt)
+	# The TYPE half, per declared path, asserted against the live snapshot rather than inferred from the
+	# scan: a `StringName` would have been reported at the same path with a different type string, so the
+	# erase above would have missed it and the zero assertion below would catch it -- and this makes the
+	# reason explicit rather than relying on that.
+	assert_eq(typeof(snap["last_resolved_card"][0]), TYPE_STRING,
+		"the last-resolved card id is a String, never a StringName (6-5a, AC 10) [%s]" % label)
+	assert_eq(typeof(snap["cast"][0]), TYPE_STRING,
+		"the in-flight cast's card id is a String, never a StringName (6-5c, AC 1) [%s]" % label)
+	assert_eq(typeof(snap["burst"][0]), TYPE_STRING,
+		"the pending burst's effect id is a String, never a StringName (6-5e, AC 11a) [%s]" % label)
 	assert_eq(offenders.size(), 0,
-		"a StringName or an object reached the per-player snapshot (AC 9 counts-only): %s"
-				% ", ".join(offenders))
+		"a StringName or an object reached the per-player snapshot (AC 9 counts-only) [%s]: %s"
+				% [label, ", ".join(offenders)])
+	return families
 
 
 # --- helpers ---------------------------------------------------------------------------------
@@ -462,6 +536,37 @@ func _effects_all(prefix: StringName) -> Dictionary[StringName, CardEffect]:
 
 func _summon_effects() -> Dictionary[StringName, CardEffect]:
 	return _effects_all(&"summon_")
+
+
+## MAJOR 1's fixture: every id carries ROCKSLING, the one shipped effect that takes a cast frame AND leaves
+## a pending burst behind it -- so one press reaches both gated snapshot branches in turn. The flight fields
+## are authored because the burst seat reads them; no pitch effects are injected here, so the mirror stays
+## empty and each stone dies on its first tick, which is irrelevant to what this fixture measures (the
+## SCHEDULE, which lives on PlayerState, not on the board).
+func _rocksling_effects() -> Dictionary[StringName, CardEffect]:
+	var rocksling := CardEffect.new()
+	rocksling.effect_id = ROCKSLING_ID
+	rocksling.cast_seconds = float(ROCKSLING_CAST_TICKS) / TimingWindow.TICK_HZ
+	rocksling.damage_amount = 3.0
+	rocksling.boulders_per_cast = 3
+	rocksling.boulder_interval_seconds = 4.0 / TimingWindow.TICK_HZ
+	rocksling.launch_speed = 8.0
+	rocksling.homing_turn_rate_degrees_per_second = 120.0
+	rocksling.max_speed = 8.0
+	rocksling.travel_budget = 60.0
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in _deck_contents():
+		out[id] = rocksling
+	return out
+
+
+## `_flags()` with the SPELLS layer opened -- `CardEffectResolver.outcome` reads it before it will return
+## `OUTCOME_ROCKSLING` at all. Its own function rather than an edit to `_flags()`, so every other fixture in
+## this file stays exactly the shape its assertions are calibrated on.
+func _spell_flags() -> FeatureFlags:
+	var f := _flags()
+	f.spells = true
+	return f
 
 
 func _all_spell_effects() -> Dictionary[StringName, CardEffect]:

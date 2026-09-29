@@ -227,8 +227,20 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 16,
-		"FORMAT_VERSION is 16 as of story 6-5d (AC 31) -- ONE MEASURED CAUSE, and the story's own stated "
+	assert_eq(RecordFile.FORMAT_VERSION, 17,
+		"FORMAT_VERSION is 17 as of story 6-5e (AC 39) -- ONE MEASURED CAUSE, and unlike 6-5d's the "
+		+ "story's own stated reason HOLDS AS WRITTEN. THE CAUSE: the recorded PER-EFFECT ROW SHAPE moves "
+		+ "again, 6-5c's and 6-5d's mechanism a third time -- `CardEffect` gains TWO more flat exports "
+		+ "(`boulders_per_cast`, `boulder_interval_seconds`) and `BalanceConfig` gains one "
+		+ "(`boulder_slow_per_boulder`), and `_resource_values` captures every script variable, so every "
+		+ "row in the `effects`/`pitch_effects` channels gains two keys and the `balance` channel gains "
+		+ "one, while REQUIRED_KEYS is again unmoved. AND THE AC's OWN SILENT-DIVERGENCE ARGUMENT APPLIES "
+		+ "HERE where it did not at 6-5d: a v16 file CAN contain a Rocksling (the card and its effect "
+		+ "both existed and were referenced), and replaying one with `boulders_per_cast` defaulted to 0 "
+		+ "would fire NO STONES -- so no Boulder is planted, no Boom has anything to detonate, and the "
+		+ "final hash differs with nothing failing. That is precisely the silently-wrong replay this "
+		+ "constant exists to refuse. v16 is refused HARD, no shim. It was 16 as of story 6-5d (AC 31) "
+		+ "-- ONE MEASURED CAUSE, and the story's own stated "
 		+ "reason is CORRECTED rather than repeated. THE CAUSE: the recorded PER-EFFECT ROW SHAPE moves "
 		+ "again, for 6-5c's mechanism exactly -- `CardEffect` gains EIGHT more flat exports (`mana_cap`, "
 		+ "`damage_per_mana` and the five `ProjectileProfile` mirror fields), and `_resource_values` "
@@ -791,6 +803,59 @@ func test_a_v15_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_5C_PATH)
 
 
+## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): A v16 RECORD IS REFUSED WITH A REASON, NO SHIM.
+## The four prior bumps (6-2, 6-3a, 6-7, 6-9) and the three 6-5 ones each added their own per-bump fixture;
+## this story bumped 16 -> 17 and added none, so the positive half of its argument was carried by the
+## version-parametric family alone. The pattern is restored here, on the v14/v15 shape verbatim.
+##
+## WHAT A v16 FILE WOULD SILENTLY DO, which is this bump's own stated reason and the sharpest form the
+## argument has taken yet: a v16 file CAN contain a Rocksling -- `rocksling` was authored content before
+## this story, sitting in `DEFERRED_EFFECT_OWNERS` as a no-op. Its effect rows carry neither
+## `boulders_per_cast` nor `boulder_interval_seconds`, so `_rebuilt` would leave a rebuilt Rocksling at
+## `boulders_per_cast = 0` -- and THIS build's `_apply_rocksling` fires NOTHING at a zero count. So a
+## recorded match whose Rocksling threw three stones, planted Boulders and fed a Boom would replay as a
+## cast that fires no stone at all: no Boulders, nothing for Boom to detonate, a different hash from that
+## tick on, loaded without complaint because the version is all the loader checks. Unlike 6-5d's, this
+## story's stated reason DOES hold, and it is measured here.
+func test_a_v16_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5C_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_5C_PATH, 16)
+	var refused := RecordFile.load_record(PRE_6_5C_PATH)
+	assert_null(refused["record"],
+		"a v16 record is REFUSED -- its effect rows predate `boulders_per_cast`, so a Rocksling it "
+		+ "recorded as a three-stone burst would replay as a cast that fires nothing")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("16"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_5C_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_5C_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_5C_PATH)
+
+
+## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): THE MEASUREMENT BEHIND THE BUMP, on the 6-5c
+## row-shape pin's shape verbatim -- the two new `CardEffect` exports really do widen every recorded effect
+## row, read out of an actually-saved file rather than asserted as a count.
+func test_the_recorded_effect_row_carries_the_boulder_fields() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5C_PATH), "", "the record was written")
+	var reader := FileAccess.open(PRE_6_5C_PATH, FileAccess.READ)
+	var data: Dictionary = reader.get_var()
+	reader.close()
+	var effects: Dictionary = data["effects"]
+	assert_true(effects.size() > 0, "sanity: the file carries effect rows at all")
+	for id: Variant in effects:
+		var row: Dictionary = effects[id]
+		for field in ["boulders_per_cast", "boulder_interval_seconds"]:
+			assert_true(row.has(field),
+				"every saved effect row carries `%s` -- which is why a v16 file cannot be migrated" % field)
+	_remove(PRE_6_5C_PATH)
+
+
 ## Story 6-5c (AC 23): THE MEASUREMENT BEHIND CAUSE (1) OF THE BUMP, committed rather than asserted in
 ## prose. `RecordFile._resource_values` captures every script variable off `get_property_list()`
 ## whether or not it holds its default, so a flat export added to `CardEffect` DOES widen every
@@ -1218,9 +1283,11 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 16,
+	assert_eq(RecordFile.FORMAT_VERSION, 17,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 16 (last: 6-5d's widened CardEffect row -- eight more flat "
+		+ "version has since moved to 17 (last: 6-5e's widened CardEffect and BalanceConfig rows -- "
+		+ "two more flat effect exports plus `boulder_slow_per_boulder`, with a v16 Rocksling replay "
+		+ "firing no stones as the silent divergence; before it 6-5d's widened CardEffect row -- eight more flat "
 		+ "exports; before it 6-5c's widened CardEffect row plus honed_bolt's "
 		+ "changed resolution semantics; before it 6-5b's drain-target channel, 6-5a's pitch-effect channel, 5-2's colours channel, 6-1's mode ② hold semantics, "
 		+ "6-2's pitch-cost channel, 6-3a's `card_activate` intent field, 6-7's silent-divergence "

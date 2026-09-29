@@ -36,6 +36,13 @@ const EXPECTED_IDS: Array[StringName] = [
 	# Story 6-5a: Deck 1.
 	&"ruin_vanguard", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step",
 	&"honed_bolt", &"frostbite",
+	# Story 6-5e (AC 4/AC 22): SIXTEEN -> SEVENTEEN. Boulder is authored under `data/cards/` like any other
+	# card and so it loads here like any other card -- which is not incidental, it is REQUIRED: the runner
+	# derives the cost, effect and colour maps from the WHOLE library, and `MatchState._boulder_card_id` is
+	# found by scanning the injected effect map. A Boulder absent from this library would be a Boulder the
+	# shipped game can neither plant nor clear. It is excluded from DECKS by the authored `DeckList`, not
+	# from the library.
+	&"boulder",
 ]
 
 func _physics_process(_delta: float) -> bool:

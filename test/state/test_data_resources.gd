@@ -96,6 +96,10 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# this hand-maintained list drops that entry and adds this one — the list is audited in BOTH
 	# directions, so a stale entry fails reflection half (a) exactly as a missing one fails half (b).
 	"stamina_accelerator_regen_step",
+	# Story 6-5e (S1, `6-5e/R28`, AC 37a): the Boulder slow's per-Boulder fraction, hand-maintained same
+	# as every sibling. It is a MOVEMENT tuning scalar (not tick-domain, never on `BalanceTicks`), so the
+	# reflective completeness check below is what keeps it audited rather than shipped unseen.
+	"boulder_slow_per_boulder",
 	"block_damage_multiplier", "deflect_window_seconds", "block_facing_arc_degrees",
 	"roll_iframe_seconds", "roll_duration_seconds", "roll_distance",
 	# Story 5-6 (AC 1/AC 3): `stun_seconds` RENAMED and split in two, one duration per tier of the

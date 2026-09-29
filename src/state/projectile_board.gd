@@ -187,6 +187,51 @@ func add_hero_shot(target_slot: int, target_index: int, effect_id: StringName,
 	_damage.append(damage)
 
 
+## Story 6-5e (AC 3a, `6-5e/R23`/G4): THE THIRD WAY A PROJECTILE ENTERS THE BOARD -- a shot a HERO'S
+## SPELL fired FROM A MINION'S POSITION. Corpse Bomb's skulls, placed by `MatchState._apply_corpse_bomb`
+## and nowhere else.
+##
+## IT EXISTS BECAUSE `add_hero_shot` WRITES `HERO_INDEX` INSIDE THE SEAT, BY DESIGN. That seat's own
+## docstring says why -- "`_source_index` must land on the runner's existing owner-hero fallback in
+## `_projectile_launch_position` so the shot leaves the caster" -- so every shot through it launches from
+## the CASTER's feet. AC 31 requires each skull to leave ITS OWN dying minion's position, and a corpse
+## carries no position in state (`test_corpses.gd`: "owner, dead index, remaining lifetime, no position").
+## Widening `add_hero_shot` with a source argument would have destroyed the one property it was named
+## apart for -- that a hero shot is "impossible to create with a kind index by accident" survives, but
+## "impossible to create launching from somewhere other than the caster" would not -- so this is a THIRD
+## NAMED SEAT on that seat's own reasoning, not a fourth argument.
+##
+## THE LAUNCH POSITION STAYS PRESENTATION (F1), AND THE RUNNER NEEDS NO EDIT. What this seat stores is
+## the dying minion's BOARD INDEX, and `MatchRunner._projectile_launch_position` already resolves a
+## non-negative source index through that slot's unit actors and already falls back to the owner hero's
+## feet when the actor is gone -- which is AC 3a's "the corpse actor still exists at the moment of death,
+## falling back to the caster's feet only if the actor is gone", satisfied by the shipped expression
+## rather than by a new branch.
+##
+## IT IS STILL HERO-SOURCED in every other sense, and that is what makes AC 32 free: the effect id is
+## non-empty, so `is_hero_sourced_at` is true, so the skull inherits the target-only pass-through rung,
+## the block exemption, the deflect consumption, the i-frame homing end, the per-shot damage and the
+## Bloodlust/Vampiric Aura reach WITHOUT one line of new contact code. `NO_KIND_INDEX` is written here
+## exactly as it is in `add_hero_shot`, so a skull can no more resolve a unit kind than a Fireball can.
+func add_minion_shot(target_slot: int, target_index: int, effect_id: StringName,
+		damage: float, source_index: int) -> void:
+	Invariant.check(effect_id != &"",
+		"a minion-sourced spell projectile needs an effect id -- the empty id means unit-fired")
+	Invariant.check(source_index >= 0,
+		"a minion-sourced shot names the board index it left (got %d) -- the hero seat is add_hero_shot"
+				% source_index)
+	_target_slots.append(target_slot)
+	_target_indices.append(target_index)
+	_kind_index.append(BalanceConfig.NO_KIND_INDEX)
+	_source_index.append(source_index)
+	_alive.append(true)
+	_homing.append(true)
+	_flight_ticks.append(0)
+	_travelled.append(0.0)
+	_effect_ids.append(String(effect_id))
+	_damage.append(damage)
+
+
 ## Emptied by the DEBUG RESET ONLY, never by round end — `UnitBoard.clear()`'s contract (`4-1/R5`)
 ## applied to the second board, so the two are cleared together by one caller and cannot drift into
 ## a state where units are gone but their shots are still flying.

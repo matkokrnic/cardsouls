@@ -38,6 +38,40 @@ const EMPTY := &""
 
 var _cards: Array[StringName] = []
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e (AC 16-19, Open Question 1): THE COVER LAYER -- a SECOND, ORDERED LAYER PER SLOT.
+## ------------------------------------------------------------------------------------------
+## A Rocksling stone that lands on a hero plants a BOULDER on top of one of that hero's slots
+## (ruling 6): the card already there STAYS in place, becomes unplayable, and reappears -- in the
+## SAME slot, unmoved -- the instant the Boulder is removed (ruling 7). `Hand` as 4-0 shipped it has
+## no concept of two things in one slot, and the dev pass owned the shape (the story's own Open
+## Question 1, which fixes the BEHAVIOUR and leaves the data shape here).
+##
+## A PARALLEL ARRAY, NOT A WRAPPER VALUE TYPE AND NOT A SIBLING CONTAINER, and each rejection has a
+## reason:
+##   * a WRAPPER per slot (replacing the bare `StringName`) would change the type of `_cards`, and
+##     `_cards` is what `to_array()` hands to the `cards_changed` payload, what `occupied_ids()`
+##     permutes against the injected composition in 3-5b's four-term conservation proof, and what
+##     every one of the nine 4-0 consumers reads. The cover is ADDITIVE state; re-typing the card
+##     layer to express it would make every existing reader pay for it.
+##   * a SIBLING per-player container keyed by slot index would put "which slot is covered" one
+##     object away from "what is in that slot", and the two must be cleared, resized and dealt
+##     TOGETHER -- `Hand.clear(width)` is the one seat that knows the width, and a sibling would
+##     need the width told to it a second time.
+## What is left is a parallel array cleared, resized and filled in the same breath as `_cards`, which
+## is `UnitBoard`'s own "one collection expressed as N arrays" discipline applied to two.
+##
+## THE UNDERLYING CARD NEVER LEAVES ITS SLOT, and that is what keeps `fill_at`'s and `remove_at`'s
+## invariants meaningful for it (the story's Dev Notes requirement): covering is not a hand mutation.
+## `fill_at` therefore still writes a delayed replacement into a COVERED but card-empty slot with no
+## special case (AC 18: the owed refill lands UNDERNEATH the Boulder), because it reads and writes
+## `_cards` alone.
+##
+## `EMPTY` IS THE UNCOVERED MARKER, the card layer's own constant reused rather than a second
+## sentinel: "nothing here" is one fact and a Boulder id is a card id, so the two layers share a
+## vocabulary and a slot can never be half-covered.
+var _covers: Array[StringName] = []
+
 
 ## Emptied at the deal seat before each fill — the debug reset restores the full composition
 ## rather than returning cards from anywhere, because there is nowhere to return them TO (no
@@ -52,11 +86,18 @@ var _cards: Array[StringName] = []
 ##
 ## A width of 0 is legitimate and is the never-dealt state; a NEGATIVE width is a programming
 ## error and says so.
+## STORY 6-5e: THE COVER LAYER IS CLEARED AND RESIZED IN THE SAME BREATH, so the two arrays are one
+## collection expressed as two and a width they disagree on is unrepresentable. A deal therefore lays
+## down an UNCOVERED hand, which is what makes the debug reset's Boulder teardown (AC 23) true through
+## this seat as well as through `clear_covers()`.
 func clear(width: int) -> void:
 	Invariant.check(width >= 0, "hand width %d is negative" % width)
 	_cards.clear()
 	_cards.resize(width)
 	_cards.fill(EMPTY)
+	_covers.clear()
+	_covers.resize(width)
+	_covers.fill(EMPTY)
 
 
 ## Story 4-0 (AC 2, `4-0/R1`): SIZE MEANS WIDTH. The two readings the old `size()` conflated —
@@ -161,6 +202,11 @@ func remove_at(index: int) -> StringName:
 ## Writing over an OCCUPIED slot would silently destroy a card, so it is refused rather than
 ## permitted: every shipped caller writes into a hole it is owed, and one that does not has a
 ## bug that must not degrade into a lost card.
+## STORY 6-5e (AC 18): UNCHANGED, AND THAT IS THE POINT. A slot covered by a Boulder whose card layer
+## is empty is filled here with no special case -- the owed replacement lands UNDERNEATH the Boulder
+## rather than being blocked or redirected -- because this function reads and writes the CARD layer
+## alone and the cover is not a card. The occupied-slot refusal still guards the card it was written
+## for.
 func fill_at(index: int, id: StringName) -> void:
 	Invariant.check(index >= 0 and index < _cards.size(),
 		"hand slot %d out of range (hand is %d wide)" % [index, _cards.size()])
@@ -168,3 +214,133 @@ func fill_at(index: int, id: StringName) -> void:
 	Invariant.check(_cards[index] == EMPTY,
 		"hand slot %d already holds %s — a fill would destroy a card" % [index, _cards[index]])
 	_cards[index] = id
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e: THE COVER LAYER'S OWN SURFACE.
+## ------------------------------------------------------------------------------------------
+
+## Is this slot covered? LENIENT ON THE INDEX, on `is_slot_empty`'s own precedent and for its reason:
+## the callers include the four mode-dispatch refusal gates, which judge a slot index that arrived on an
+## intent, and "there is no such slot" must not trip a guard. An out-of-range slot is not covered.
+func is_covered(index: int) -> bool:
+	if index < 0 or index >= _covers.size():
+		return false
+	return _covers[index] != EMPTY
+
+
+## PLANT a cover on one named slot (AC 16/AC 18). The card layer is not read and not written.
+##
+## THE OCCUPANCY OF THE CARD LAYER IS IRRELEVANT HERE, deliberately: ruling 6 covers a card and an
+## EMPTY mid-draw-delay hole through the SAME placement, so a guard on the card would refuse half the
+## ruling. What IS refused is DOUBLE-COVERING, which is the cover layer's own `fill_at`: a second
+## Boulder on one slot would lose the first and make `cover_count()` disagree with what is on the board.
+## The eligible-slot pick excludes covered slots already (AC 16), so reaching this is a bypassed caller.
+func cover_at(index: int, id: StringName) -> void:
+	Invariant.check(index >= 0 and index < _covers.size(),
+		"hand slot %d out of range (hand is %d wide)" % [index, _covers.size()])
+	Invariant.check(id != EMPTY, "cannot cover hand slot %d with the empty marker" % index)
+	Invariant.check(_covers[index] == EMPTY,
+		"hand slot %d is already covered by %s — the eligible-slot pick excludes covered slots"
+				% [index, _covers[index]])
+	_covers[index] = id
+
+
+## LIFT the cover off one named slot and return the id that was on it (AC 21/AC 27). The card beneath
+## is UNTOUCHED and is therefore immediately playable again, in the same slot, unmoved -- AC 21's "the
+## underlying card was never removed from the hand" is this function not naming `_cards`.
+##
+## `remove_at`'s INVARIANT SHAPE, for its reason: every shipped caller has already established that
+## the slot is covered (the Mode ① fork asks `is_covered`, Boom walks `covered_indices()`), so an
+## uncovered index arriving here means the guard above it was bypassed.
+func uncover_at(index: int) -> StringName:
+	Invariant.check(is_covered(index),
+		"hand slot %d carries no cover (hand is %d wide, %d covered) — the caller's guard was bypassed"
+				% [index, _covers.size(), cover_count()])
+	var id: StringName = _covers[index]
+	_covers[index] = EMPTY
+	return id
+
+
+## THE VISIBLE LAYER at one slot: the cover if there is one, otherwise the card, otherwise `EMPTY`.
+##
+## THE ORDER IS THE WHOLE MECHANIC (ruling 6: the Boulder "sits ON TOP"), expressed once here so the
+## Mode ① dispatch, the HUD payload and any later reader cannot each pick their own layering. LENIENT
+## ON THE INDEX, `is_slot_empty`'s reason again.
+func visible_id_at(index: int) -> StringName:
+	if index < 0 or index >= _cards.size():
+		return EMPTY
+	if _covers[index] != EMPTY:
+		return _covers[index]
+	return _cards[index]
+
+
+## `to_array()`'s VISIBLE twin -- the width view with every cover on top of its slot, freshly built.
+##
+## THIS IS WHAT `cards_changed` CARRIES (AC 24/AC 24a), and choosing it over a second payload element is
+## the reason the HUD needs no new observation seam for the covered-slot look: `_render_hand_row`'s
+## existing first branch renders whatever id a slot shows, so it renders the Boulder, never the card
+## beneath it, and it does so IN PRECEDENCE over the `pending_draw_owed` branch for free -- a covered
+## slot shows a non-EMPTY id and the owed branch is an `elif`. AC 24a's precedence is therefore a
+## property of this ordering rather than of a branch someone has to keep in the right place.
+##
+## `to_array()` IS UNCHANGED and still returns the CARD layer, because that is what the four-term
+## conservation proofs and `occupied_ids()` are about. Two readings, two methods -- the `size()` /
+## `occupied_count()` split of story 4-0, applied to a second axis.
+func visible_array() -> Array[StringName]:
+	var out: Array[StringName] = []
+	out.resize(_cards.size())
+	for i in _cards.size():
+		out[i] = visible_id_at(i)
+	return out
+
+
+## HOW MANY COVERS ARE LIVE (S1, `6-5e/R28`): the Boulder slow's one input, and Boom's count of what it
+## would detonate. A pure fold over the cover layer, never a stored counter -- a second member could
+## disagree with the array, which is `PitchState`'s no-ready-flag argument verbatim.
+func cover_count() -> int:
+	var n := 0
+	for id in _covers:
+		if id != EMPTY:
+			n += 1
+	return n
+
+
+## THE COVERED SLOT INDICES, ASCENDING BY CONSTRUCTION -- `ProjectileBoard.living_indices()`'s shape and
+## its reason: Boom detonates every one of them in one resolution (AC 27) and needs a deterministic
+## order at the source rather than from a sort it would have to trust.
+func covered_indices() -> Array[int]:
+	var out: Array[int] = []
+	for i in _covers.size():
+		if _covers[i] != EMPTY:
+			out.append(i)
+	return out
+
+
+## THE HASHED PER-SLOT COVER MASK (AC 38, Golden Prediction cause 1). A plain `Array[bool]` -- a type
+## `CanonicalHash` has an explicit branch for -- and never the ids: every cover is the one Boulder card,
+## so the id would be a constant repeated per slot, and a `StringName` reaching the hash is the failure
+## mode every card-container key in `player_state.gd` exists to avoid.
+##
+## WHAT IS UNDERNEATH IS NOT HERE, AND THAT IS ARGUED RATHER THAN OMITTED (AC 38's "or is a pure
+## function of hashed facts"). The covered card never leaves `_cards`, so "what id is underneath" is
+## exactly `to_array()[slot]` -- the hand's own contents, which ride the THIRD member of
+## `test_replay_identity.gd`'s unhashed-cross-tick exclusion set (the card containers' contents and
+## order, sound because seed plus injected composition plus the recorded intent stream reproduce them).
+## Hashing it here would not add a fact; it would move an existing excluded fact into the hash and
+## poison it with a StringName.
+func covers_snapshot() -> Array:
+	var out: Array = []
+	out.resize(_covers.size())
+	for i in _covers.size():
+		out[i] = _covers[i] != EMPTY
+	return out
+
+
+## TEAR DOWN every cover, leaving the card layer and the width untouched (AC 23). The round-end and
+## debug-reset seat: every covered card returns to normal playable status in its own slot, unmoved,
+## which is this function not naming `_cards`.
+##
+## A NO-OP ON AN UNCOVERED HAND, so the two callers need no `cover_count()` guard first.
+func clear_covers() -> void:
+	_covers.fill(EMPTY)

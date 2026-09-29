@@ -203,11 +203,13 @@ const REASON_DECK1_NOT_YET_RESOLVED := &"deck1_not_yet_resolved"
 ## no longer exist. All three move to the 6-5e key, which is the story that actually builds them --
 ## `fireball` is what 6-5d builds, and it was never a row here (Bloodhound Step's pitch was
 ## `bloodlust`, a buff, until this story). The pin in `test_spell_framework.gd` moves with them.
+## STORY 6-5e: THREE ROWS LEAVE, FOUR -> ONE (AC 43). `rocksling`, `boom` and `corpse_bomb` all named
+## THIS story as their owner and this story builds all three, so each becomes a real outcome below rather
+## than staying a row here -- the same mechanism working as designed that retired 6-5b's four and 6-5c's
+## one, and the count assertion in `test_spell_framework.gd` moves with it deliberately. ONLY
+## `counterspell` REMAINS DEFERRED, owned by `6-5f`, which is the last of the six 6-5 sub-stories.
 const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
-	&"rocksling": &"6-5e-rocksling-boom-and-corpse-bomb",
-	&"boom": &"6-5e-rocksling-boom-and-corpse-bomb",
 	&"counterspell": &"6-5f-counterspell",
-	&"corpse_bomb": &"6-5e-rocksling-boom-and-corpse-bomb",
 }
 
 ## Story 6-5a (AC 16): the SPELL layer's closed-gate reason, the `REASON_TOTEMS_FLAG_CLOSED` twin. The
@@ -234,12 +236,78 @@ const OUTCOME_GRAVE_WARD := &"grave_ward"
 const OUTCOME_RAISE_DEAD := &"raise_dead"
 const OUTCOME_DRAIN := &"drain"
 
+## STORY 6-5e (AC 29-33): CORPSE BOMB JOINS THIS FAMILY rather than starting a sixth table, and the
+## family's own name is the argument: it kills every one of the caster's OWN LIVING MINIONS and leaves a
+## normal corpse for each (ruling 11), which is Culling's shape with a skull attached. It shares the
+## family's `FeatureFlags.spells` gate and -- the half that matters -- the family's
+## `NEEDS_OWN_LIVING_MINION` precondition, unchanged and not re-spelled (AC 33).
+const OUTCOME_CORPSE_BOMB := &"corpse_bomb"
+
 const OWN_MINION_OUTCOMES: Dictionary[StringName, StringName] = {
 	&"culling": OUTCOME_CULLING,
 	&"grave_ward": OUTCOME_GRAVE_WARD,
 	&"raise_dead": OUTCOME_RAISE_DEAD,
 	&"drain": OUTCOME_DRAIN,
+	&"corpse_bomb": OUTCOME_CORPSE_BOMB,
 }
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e (AC 25-28): THE OPPOSING-HAND FAMILY -- the first effect that reads the OTHER player's hand.
+## `BUFF_OUTCOMES`' posture verbatim: whole-id rows in a `Dictionary` only ever `get()`-ed by one known
+## key, never iterated, never sorted, never hashed.
+## ------------------------------------------------------------------------------------------
+## ITS OWN TABLE RATHER THAN A ROW IN THE FAMILY ABOVE, on that family's own stated reason ("one table per
+## family keeps the apply seat's `match` readable as 'what kind of thing is this'") and a sharper one:
+## every other table here describes an effect acting on the CASTER's own side -- its buffs, its board, its
+## corpses, its cast. Boom acts on the OPPONENT's hand, which is a different question asked of a different
+## party, and it is the ONLY effect in the game that asks it. `6-5f`'s Counterspell is the candidate
+## second row; nothing is written here for it.
+##
+## ONE ROW IS THE HONEST SIZE OF A FAMILY WITH ONE MEMBER. `CAST_OUTCOMES` shipped at 6-5c with one row
+## and grew to two at 6-5d, which is the precedent for starting a family at its first member rather than
+## folding it into a table whose name would then be a lie.
+const OUTCOME_BOOM := &"boom"
+
+const OPPOSING_HAND_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"boom": OUTCOME_BOOM,
+}
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e (AC 20-21a, AC 28a): THE COVER-CLEARING FAMILY -- Boulder's one legal action.
+## ------------------------------------------------------------------------------------------
+## Playing a Boulder (Mode ①, 2 mana authored) LIFTS IT OFF the slot it covers and hands the card beneath
+## back, immediately playable, in that same slot (ruling 7). It is the FIRST basic effect whose resolution
+## is not "apply something to a board or a pool" but "undo a piece of hand state", which is why it is its
+## own family rather than a row in any table above.
+##
+## THE MEMBERSHIP IS ITSELF GAMEPLAY, exactly as `CAST_OUTCOMES`' is: `clears_cover()` below reads this
+## table to tell `MatchState`'s Mode ① dispatch that THIS press takes the cover rather than the card --
+## so the card is not removed, nothing reaches the discard (AC 22: a Boulder is never discarded) and no
+## replacement is owed (AC 21: there is nothing to replace). One table, two questions, the
+## `CAST_OUTCOMES` shape.
+const OUTCOME_BOULDER_CLEAR := &"boulder_clear"
+
+const BOULDER_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"boulder_discard": OUTCOME_BOULDER_CLEAR,
+}
+
+
+## Story 6-5e (AC 21/AC 21a, AC 28a): DOES PRESSING THIS EFFECT'S CARD LIFT A COVER instead of playing the
+## card in the slot?
+##
+## IT COMPUTES, IT DOES NOT APPLY (D6), and it is the ONE question `MatchState._resolve_basic_cast` asks
+## about this family -- the `starts_cast()` / `spends_variable_mana()` shape verbatim, one classification
+## per press, so no card is named at the seat.
+##
+## NO FLAG IS READ, unlike `starts_cast`. A Boulder is not a spell the player chose to cast: it was put in
+## their hand by the opponent, and `FeatureFlags.spells` closing must not leave it unremovable. The layer
+## that produced it is the one that is switched off; the cleanup stays available.
+##
+## A NULL EFFECT CLEARS NOTHING, the `starts_cast` null branch's own honest default.
+static func clears_cover(effect: CardEffect) -> bool:
+	return effect != null and BOULDER_OUTCOMES.has(effect.effect_id)
 
 
 ## ------------------------------------------------------------------------------------------
@@ -268,9 +336,25 @@ const OUTCOME_HONED_BOLT := &"honed_bolt"
 ## `PlayerState.cast_effect_mode`.
 const OUTCOME_FIREBALL := &"fireball"
 
+## STORY 6-5e (AC 7-11a): THE THIRD MEMBER OF THE CAST FAMILY, and the FIRST cast whose strike places
+## MORE THAN ONE projectile. `6-5c`'s note that "Rocksling, Fireball and Corpse Bomb adopt the framework by
+## adding a row here plus their own apply arm, with no edit to the window, the commitment locks or the
+## strike seat" is discharged for the second of the three exactly as written: this row plus
+## `MatchState._apply_rocksling`, and the window, the three commitment locks and the strike ladder are
+## untouched. Corpse Bomb, the third name in that note, turned out NOT to be a cast at all -- `6-5e/R17`
+## rules it resolves entirely on its activation tick -- so it is an own-minion outcome instead, and the
+## note's prediction is corrected rather than forced.
+##
+## IT IS A BASIC (Mode ①) CAST, unlike Fireball: `rocksling` is `rocksling.tres`'s `basic_effect`, so the
+## strike seat resolves it through `_card_effects` on the `Enums.ModeKind.BASIC` arm of `_cast_effect_of`.
+## That is what makes it the first Mode ① effect ever to fire a hero projectile, and the reason
+## `inject_pitch_effects`' flight-profile mirror had to be widened to cover the basic map too (AC 1a).
+const OUTCOME_ROCKSLING := &"rocksling"
+
 const CAST_OUTCOMES: Dictionary[StringName, StringName] = {
 	&"honed_bolt": OUTCOME_HONED_BOLT,
 	&"fireball": OUTCOME_FIREBALL,
+	&"rocksling": OUTCOME_ROCKSLING,
 }
 
 
@@ -339,11 +423,35 @@ const NEEDS_OWN_LIVING_MINION := &"own_living_minion"
 ## `grave_ward` / `raise_dead`: at least one of the caster's own CORPSES must exist.
 const NEEDS_OWN_CORPSE := &"own_corpse"
 
+## Story 6-5e (AC 33): `corpse_bomb` joins the family's FIRST requirement unchanged -- "at least one of
+## the caster's own LIVING minions" is literally what it needs, and reusing the row rather than naming a
+## `needs_own_minion_to_bomb` twin is what makes AC 33's "the same 6-5b no-target path" true of the token
+## as well as of the seat.
 const OWN_MINION_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"culling": NEEDS_OWN_LIVING_MINION,
 	&"drain": NEEDS_OWN_LIVING_MINION,
 	&"grave_ward": NEEDS_OWN_CORPSE,
 	&"raise_dead": NEEDS_OWN_CORPSE,
+	&"corpse_bomb": NEEDS_OWN_LIVING_MINION,
+}
+
+
+## Story 6-5e (AC 28, `6-5e/R27`/G8 -- CORRECTED AT THE GATE, blocker B12): BOOM's precondition -- AT
+## LEAST ONE BOULDER IN THE OPPOSING PLAYER'S HAND at the activation instant.
+##
+## IT IS A NEW ARM AND EXPLICITLY NOT A REUSE OF `NEEDS_ENEMY_HERO`, which is the gate's own ruling. The
+## three existing requirements each read either THIS player's board (`NEEDS_OWN_LIVING_MINION`,
+## `NEEDS_OWN_CORPSE`) or the caster's CAPTURED LOCK TARGET (`NEEDS_ENEMY_HERO`); none of them can express
+## "the opposing hand's Boulder count", and reusing the lock-target arm would silently route Boom through
+## lock-on -- a Boom pressed while locked on a minion would then refuse for the wrong reason.
+##
+## UNLIKE EVERY OTHER REQUIREMENT HERE IT IS REACHABLE IN LIVE PLAY, and that is worth saying because the
+## two cast requirements are documented as structurally unreachable: a player can stage Boom before any
+## Rocksling stone has landed and press it with the opposing hand clean, which is smoke item 6.
+const NEEDS_OPPOSING_BOULDER := &"opposing_boulder"
+
+const OPPOSING_HAND_REQUIREMENTS: Dictionary[StringName, StringName] = {
+	&"boom": NEEDS_OPPOSING_BOULDER,
 }
 
 ## Story 6-5c (AC 4, Discrepancy 3): `honed_bolt`'s target -- A LIVING ENEMY HERO. The requirement is
@@ -368,9 +476,19 @@ const OWN_MINION_REQUIREMENTS: Dictionary[StringName, StringName] = {
 ## live-reachable -- the `REASON_UNKNOWN_EFFECT_PREFIX` posture, unchanged.
 const NEEDS_ENEMY_HERO := &"enemy_hero"
 
+## STORY 6-5e: `rocksling` TAKES THE ROW TOO, on its two siblings' reasoning and with their posture: a
+## cast whose captured target cannot exist is refused before any spend, and it stays STRUCTURALLY
+## unreachable in live play (a locked unit's death snaps the lock back to a live hero, and a dead hero ends
+## the round before step 6), proven with a synthetic fixture and never claimed reachable.
+##
+## IT DOES NOT CONTRADICT RULING 3's DEAD-TARGET CLAUSE, and the distinction is the TICK. This row is read
+## at the PRESS; ruling 3/AC 10 is about a target that dies BETWEEN the strike and a later stone's own
+## launch, which is a different tick, a different seat (`_advance_bursts`) and a positive decision to
+## launch anyway. Nothing here can refuse a burst already committed.
 const CAST_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"honed_bolt": NEEDS_ENEMY_HERO,
 	&"fireball": NEEDS_ENEMY_HERO,
+	&"rocksling": NEEDS_ENEMY_HERO,
 }
 
 
@@ -380,13 +498,18 @@ const CAST_REQUIREMENTS: Dictionary[StringName, StringName] = {
 ## Story 6-5c: TWO TABLES, ONE ANSWER. The cast requirements are consulted after the own-minion ones;
 ## the two tables share no id, so the order decides nothing today and is fixed only so a future id in
 ## both has one defined answer rather than an accidental one.
+## Story 6-5e: THREE TABLES, STILL ONE ANSWER, on the identical reasoning -- the three share no id, so the
+## order still decides nothing, and it is still fixed so a future id in two of them has one defined answer.
 static func board_requirement_for(effect: CardEffect) -> StringName:
 	if effect == null:
 		return NEEDS_NOTHING
 	var own_minion: StringName = OWN_MINION_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 	if own_minion != NEEDS_NOTHING:
 		return own_minion
-	return CAST_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	var cast_requirement: StringName = CAST_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	if cast_requirement != NEEDS_NOTHING:
+		return cast_requirement
+	return OPPOSING_HAND_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 
 
 ## What this cast's effect does, as one of the four named outcomes above. `effect` is the injected
@@ -433,6 +556,22 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	var cast: StringName = CAST_OUTCOMES.get(effect.effect_id, &"")
 	if cast != &"":
 		return cast if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 6-5e (AC 25-28): the OPPOSING-HAND family, in the cast lookup's own seat and order -- after
+	# the summon prefix, before the deferred table (`boom`'s row just left it) and before the `spell_*`
+	# prefix. The id is recognised first and the flag read only after, this docstring's standing
+	# ordering argument.
+	var opposing_hand: StringName = OPPOSING_HAND_OUTCOMES.get(effect.effect_id, &"")
+	if opposing_hand != &"":
+		return opposing_hand if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 6-5e (AC 20/AC 28a): BOULDER'S OWN ACTION, in the same seat and order -- with ONE DELIBERATE
+	# DIFFERENCE from every family above it: IT DOES NOT GATE ON `FeatureFlags.spells`. `clears_cover()`
+	# records the reason at its own seat -- a Boulder is not a spell the holder chose to cast, and a
+	# closed spell layer must not leave one stuck in a hand forever. Nothing can PLANT a Boulder while
+	# the layer is closed (Rocksling never starts a cast), so the asymmetry can only ever help a player
+	# clear what a previously-open layer left behind.
+	var boulder: StringName = BOULDER_OUTCOMES.get(effect.effect_id, &"")
+	if boulder != &"":
+		return boulder
 	if owner_story_for(effect.effect_id) != &"":
 		return REASON_DECK1_NOT_YET_RESOLVED
 	if id.begins_with(PREFIX_SPELL):

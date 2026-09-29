@@ -23,7 +23,23 @@ const BALANCE_PATH := "res://data/balance/balance_config.tres"
 ## REWRITTEN BY STORY 6-5a (AC 13): was `EXPECTED_COUNT := 9` (the sealed nine-card set). The content
 ## assertions below describe DECK 1's seven; the whole library is sixteen.
 const EXPECTED_COUNT := 7
-const LIBRARY_COUNT := 16
+## STORY 6-5e (AC 6a, `6-5e/R25`/G6): 16 -> 17. `boulder.tres` arrives -- a COLOURLESS card that is in no
+## deck, is never drawn, dealt or discarded, and can only ever enter a hand as the consequence of a landed
+## Rocksling stone (ruling 7). It is authored data under `data/cards/` like any other card, which is why it
+## is counted here at all rather than living somewhere special.
+const LIBRARY_COUNT := 17
+
+## Story 6-5e (AC 6a, `6-5e/R25`/G6): THE BOULDER, NAMED AS AN EXEMPTION rather than given a fake priced
+## pitch condition. Ruling 7 gives it NO Mode ④ at all -- no pitch effect, no pitch cost, no orb price --
+## so the two library-wide censuses below (`test_basic_mode_only_pitch_and_orbs_left_unauthored`'s
+## every-card-authors-a-priced-pitch loop, and the dormant-fixture prefix loop) each skip exactly this id
+## and nothing else.
+##
+## A NAMED EXEMPTION, NOT A WIDENED PREDICATE, and the difference is what `6-5e/R25` ruled: authoring
+## `pitch_condition` with an empty `orb_costs` to satisfy the census would have made the card lie about
+## having a Mode ④, and loosening the census to "or no pitch cost at all" would have stopped catching the
+## regression it exists for (a Deck 1 card's orb price silently emptying). One id, listed, greppable.
+const NO_PITCH_MODE_IDS: Array[StringName] = [&"boulder"]
 
 ## Story 6-5a (R1): the nine 3-2 fixture cards -- still authored, never in Deck 1.
 const FIXTURE_IDS: Array[StringName] = [
@@ -93,7 +109,8 @@ const CARD_DATA_FIELDS: Array[String] = [
 func test_deck_1_seven_cards_load_as_card_data() -> void:
 	var cards := _load_cards()
 	assert_eq(cards.size(), LIBRARY_COUNT,
-		"data/cards/ holds sixteen authored cards: Deck 1's seven plus the nine dormant fixtures")
+		"data/cards/ holds seventeen authored cards: Deck 1's seven, the nine dormant fixtures, and "
+		+ "6-5e's Boulder -- which belongs to no deck at all")
 	for card in cards:
 		assert_true(card is CardData, "every card .tres casts to CardData")
 	var deck := _deck_cards()
@@ -167,7 +184,7 @@ func test_every_id_is_non_empty_and_unique() -> void:
 			dupes.append(String(card.id))
 		seen[card.id] = true
 	assert_eq(dupes.size(), 0, "card ids are unique across the set: %s" % ", ".join(dupes))
-	assert_eq(seen.size(), LIBRARY_COUNT, "sixteen distinct ids")
+	assert_eq(seen.size(), LIBRARY_COUNT, "seventeen distinct ids")
 
 
 ## REWRITTEN BY STORY 6-5a (AC 13): was three cards per colour across the nine fixtures. Deck 1 is
@@ -310,6 +327,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	## 6-5a's nine deferred no-ops and its row LEFT `DEFERRED_EFFECT_OWNERS` when this story gave it a
 	## real outcome, so counting it as deferred would be counting it twice wrong.
 	var cast := 0
+	## Story 6-5e: the OPPOSING-HAND bucket, its own for `cast`'s stated reason -- `boom` was one of 6-5a's
+	## nine deferred no-ops and its row LEFT `DEFERRED_EFFECT_OWNERS` when this story gave it a real
+	## outcome, so counting it as deferred would be counting it twice wrong.
+	var opposing_hand := 0
 	var deferred := 0
 	var offenders: Array[String] = []
 	for card in _deck_cards():
@@ -330,6 +351,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 			# reason the two arms above are read off theirs.
 			elif CardEffectResolver.CAST_OUTCOMES.has(id):
 				cast += 1
+			# Story 6-5e: read off the resolver's own opposing-hand table, for the derived-not-transcribed
+			# reason all three arms above are read off theirs.
+			elif CardEffectResolver.OPPOSING_HAND_OUTCOMES.has(id):
+				opposing_hand += 1
 			elif CardEffectResolver.owner_story_for(id) != &"":
 				deferred += 1
 			else:
@@ -347,22 +372,43 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 		"Story 6-5d: THREE are buffs -- Vampiric Aura, Bloodhound Step, Frostbite. Bloodlust was the "
 		+ "fourth until 6-5d swapped Bloodhound Step's pitch to Fireball; its effect FILE is unchanged "
 		+ "and still pinned below, it is simply no longer referenced by a Deck 1 card")
-	assert_eq(own_minion, 4,
-		"Story 6-5b: FOUR are the own-minion / corpse effects it builds -- Culling, Grave Ward, "
-		+ "Raise Dead and Drain, which resolve through OWN_MINION_OUTCOMES rather than as no-ops")
+	# Story 6-5e (AC 29-33): FOUR -> FIVE. CORPSE BOMB joins this bucket rather than the cast bucket the
+	# 6-5d message predicted for it -- `6-5e/R17` gives it no cast frame, so it resolves on its activation
+	# tick like Culling and shares the family's `NEEDS_OWN_LIVING_MINION` precondition unchanged.
+	assert_eq(own_minion, 5,
+		"Story 6-5e: FIVE are the own-minion / corpse effects -- 6-5b's Culling, Grave Ward, Raise Dead "
+		+ "and Drain, plus Corpse Bomb, which kills every living own minion and leaves each a normal "
+		+ "corpse through the same death seat (AC 30)")
 	# Story 6-5d (AC 1, `6-5d/R23`): ONE -> TWO. FIREBALL joined the cast bucket exactly as 6-5c's own
 	# message predicted it would -- "by adding a `CAST_OUTCOMES` row, with no edit to the window or the
 	# strike" -- and it is the FIRST cast id that is a card's PITCH effect rather than its basic one.
-	assert_eq(cast, 2,
-		"Story 6-5d: TWO are CASTS -- Honed Bolt and Fireball. 6-5c shipped one and predicted this "
-		+ "bucket would grow by a `CAST_OUTCOMES` row alone, which is what 6-5d did; Rocksling and "
-		+ "Corpse Bomb are still deferred and join it the same way")
-	assert_eq(deferred, 4,
-		"...and FOUR are named no-ops owned by a later 6-5 story. FIVE before 6-5c and NINE before "
-		+ "6-5b, each of which retired exactly the rows naming itself -- the deferred table's "
+	# Story 6-5e (AC 7-11a): TWO -> THREE. ROCKSLING joined the cast bucket exactly as 6-5c's and 6-5d's
+	# own messages predicted it would -- "by adding a `CAST_OUTCOMES` row alone". CORPSE BOMB did NOT: the
+	# prediction named it as a third cast, and `6-5e/R17` ruled it resolves entirely on its activation tick
+	# with no cast frame at all, so it is an OWN-MINION outcome instead. The measured bucket is what
+	# corrected the prediction, which is the point of counting rather than transcribing.
+	assert_eq(cast, 3,
+		"Story 6-5e: THREE are CASTS -- Honed Bolt, Fireball and Rocksling. Corpse Bomb was predicted "
+		+ "as the fourth and is NOT one: `6-5e/R17` gives it no cast frame, so it resolves as an "
+		+ "own-minion outcome on its activation tick")
+	assert_eq(opposing_hand, 1,
+		"Story 6-5e: ONE reads the OPPOSING hand -- Boom, the only effect in the game that does, which "
+		+ "is why it gets its own resolver table and its own board-gate requirement (`6-5e/R27`)")
+	assert_eq(deferred, 1,
+		"...and exactly ONE is still a named no-op owned by a later story: `counterspell`, owned by "
+		+ "6-5f, the last of the six 6-5 sub-stories. FOUR before this story, FIVE before 6-5c and NINE "
+		+ "before 6-5b, each of which retired exactly the rows naming itself -- the deferred table's "
 		+ "mechanism working as designed, and the reason this count is asserted separately from the "
 		+ "buckets above it")
 	for card in _fixture_cards():
+		# Story 6-5e (AC 6a): BOULDER IS EXEMPT FROM THE PREFIX RULE, named rather than accommodated. Its
+		# `boulder_discard` is a WHOLE-ID resolver row (`BOULDER_OUTCOMES`), which is the same vocabulary
+		# every Deck 1 effect uses -- the summon_/spell_ prefixes are the DORMANT FIXTURES' convention, and
+		# Boulder is not a dormant fixture: it is live content that simply belongs to no deck.
+		if NO_PITCH_MODE_IDS.has(card.id):
+			assert_true(CardEffectResolver.BOULDER_OUTCOMES.has(card.basic_effect.effect_id),
+				"'%s' is exempt from the prefix rule because the resolver knows it by WHOLE id" % card.id)
+			continue
 		var id := String(card.basic_effect.effect_id)
 		assert_true(id.begins_with(CardEffectResolver.PREFIX_SUMMON)
 				or id.begins_with(CardEffectResolver.PREFIX_SPELL),
@@ -402,6 +448,16 @@ func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 				"dormant fixture '%s' still leaves pitch_effect unauthored" % card.id)
 		assert_eq(card.cast_condition.orb_costs.size(), 0,
 			"card '%s' pays no orbs for Mode ① — orbs are pitch-only (GDD §D)" % card.id)
+		# Story 6-5e (AC 6a, `6-5e/R25`/G6): THE NAMED EXEMPTION. Boulder has NO Mode ④ at all (ruling 7),
+		# so it authors no pitch cost and no orb price -- and it says so HERE, by id, rather than authoring
+		# a fake priced pitch condition to satisfy a census. The two assertions below are what it is exempt
+		# from; everything above (a real basic effect, a non-empty id, no Mode ① orb cost) still applies to
+		# it unchanged, which is what keeps the exemption narrow.
+		if NO_PITCH_MODE_IDS.has(card.id):
+			assert_null(card.pitch_condition,
+				("'%s' authors NO pitch cost at all -- ruling 7 gives it no Mode 4, and a placeholder "
+					+ "price would be the card lying about having one") % card.id)
+			continue
 		assert_not_null(card.pitch_condition,
 			"card '%s' authors a pitch COST (story 6-2, AC 1a)" % card.id)
 		if card.pitch_condition != null:
@@ -427,9 +483,12 @@ func test_every_deck_1_effect_is_a_shared_file_under_data_effects() -> void:
 	# that is the whole shape of AC 2, and why this count grows by one rather than holding: Bloodlust is
 	# still an authored, loading, field-for-field-unchanged effect file (pinned below), it is simply no
 	# longer paired with a Deck 1 card. The directory holds effect FILES, not deck pairings.
-	assert_eq(files.size(), 15,
-		"data/effects/ holds fifteen effect files: the fourteen Deck 1 effects plus bloodlust.tres, "
-		+ "which 6-5d unpaired from Deck 1 without deleting (AC 2 -- it is destined for deck 2)")
+	# Story 6-5e (AC 6a): FIFTEEN -> SIXTEEN. `boulder_discard.tres` arrives -- Boulder's own basic effect,
+	# the sixteenth file. It is not a Deck 1 effect and never will be (Boulder is in no deck), which is the
+	# same "the directory holds effect FILES, not deck pairings" reading `bloodlust.tres` already rests on.
+	assert_eq(files.size(), 16,
+		"data/effects/ holds sixteen effect files: the fourteen Deck 1 effects, bloodlust.tres (6-5d "
+		+ "unpaired it from Deck 1 without deleting, AC 2), and 6-5e's boulder_discard.tres")
 	for file_name in files:
 		var effect := load(EFFECTS_DIR + file_name) as CardEffect
 		assert_not_null(effect, "%s loads as a CardEffect" % file_name)

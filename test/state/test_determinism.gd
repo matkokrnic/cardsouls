@@ -1212,7 +1212,59 @@ extends TestCase
 ##       `MatchState` intake: `projectile_profile_at` became public as a PURE QUERY and is exempt, and
 ##       `apply_balance`'s new return value is not an intake widening.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "de3589ffa5012ed8ba368ae3f51e52e992ca1bd0f36ad430d509b43646eaf289"
+## =============================================================================================
+## STORY 6-5e RE-BASELINES ONCE: `de3589ff...` -> `98eaee53...`. THREE CAUSES, each the mere PRESENCE of a
+## new per-player snapshot key at its RESTING value, each isolated and measured IN BOTH DIRECTIONS by
+## erasing it from `PlayerState.to_snapshot()` with every other change in place.
+##
+## THE DECISIVE MEASUREMENT IS THE FIRST ONE: with ALL THREE keys erased and nothing else reverted, the hash
+## returned to `de3589ff...` EXACTLY. That is what makes every other change in this story a MEASURED
+## non-mover rather than an assumed one -- and it covers, in one run, the whole of the story's own predicted
+## non-cause list plus several the prediction did not raise:
+##   * cause 3, A BURST OF SEVERAL HERO-SOURCED RECORDS FROM ONE CAST. Predicted a non-cause of the
+##     snapshot SHAPE and measured one: the per-record fields are 6-5d's, and this fixture fires no
+##     Rocksling, so its RESTING content is unmoved too.
+##   * cause 5, THE TWO NEW REFUSAL REASONS (`REASON_COVERED_SLOT`, `REASON_NO_OPPOSING_BOULDER`).
+##     Predicted CAUSES under `SC/R6` and MEASURED non-causes: that boundary is about a pressed action made
+##     refusable IN THE RECORDED SEQUENCE, and this fixture presses neither a covered slot (it never plants
+##     a Boulder) nor a Boom activation. The prediction was right to demand the measurement and wrong about
+##     its outcome, which is recorded here rather than quietly dropped.
+##   * cause 5a, `_rng`'s SECOND CONSUMER. Predicted a cause and MEASURED a non-cause FOR THIS FIXTURE:
+##     `_place_boulder` is the only new draw and it is reached only by a landed Rocksling stone, which this
+##     sequence never fires -- so `rng_state` is untouched and no later reshuffle order moves. The mechanism
+##     is real and is proven by its own test; it simply is not on this fixture's path.
+##   * cause 5b, `hand_size` SEMANTICS (M2). Measured unmoved: the key binds to the CARD layer, and this
+##     fixture covers nothing.
+##   * cause 5c, THE BOULDER SLOW (S1). Measured a non-cause twice over: it needs no hashed field of its
+##     own (it is a pure fold over `hand_covered`, argued at that key), and the fixture holds no Boulder.
+##   * cause 6, THE AUTHORED `.tres` NUMBERS. `BC/R3`'s isolation holds a fourth time: the golden builds
+##     its effects in-test and never loads `data/effects/`, so the two new `CardEffect` fields' presence and
+##     the new `BalanceConfig` field reach nothing here.
+##   * NOT PREDICTED AND ALSO MEASURED UNMOVED: the widened flight-profile mirror (AC 1a), the new
+##     `add_minion_shot` seat, the `Hand` cover layer itself, the `visible_id_at` guard swap in
+##     `_resolve_basic_cast`, and `cards_changed` carrying the visible layer. Each is live code on this
+##     fixture's path or adjacent to it, and none of them moves the hash.
+##   * `RecordFile.FORMAT_VERSION` 16 -> 17 is a real change with its own refusal test (AC 39) and is not a
+##     golden cause: a record carries INPUTS and CONTENT, never a hash.
+##   * INTAKE: none. No new runner-pushed fact and no new public `MatchState` intake.
+##
+## THE THREE CAUSES, EACH MEASURED ALONE (every other new key erased):
+##   1.  `hand_covered` ALONE -> `5545f4f973c8ad434f244887b1398a8c909085665a5d8bf346e0bea986f47b49`.
+##       The per-slot Boulder cover mask. At rest it is `[false, false, false, false]` -- a NEW key whose
+##       resting value changes the snapshot dictionary's SHAPE on every tick of every match (the `5-2`
+##       `defense` shape, not the `5-4` `orbs` one).
+##   1a. `burst` ALONE -> `1da2773cdd9f0bfa930192ab976769cc868ae870c5992da6622f43dda44e37ea`.
+##       The pending Rocksling schedule (`6-5e/R21`/G2). At rest `["", 0, 0, -1, -1, 0.0]`.
+##   2.  `corpse_bomb` ALONE -> `427bbe6fbcbdeef045b7a9f4ba86aa41efd2f941ed27d6f2cb8d38210233dcec`.
+##       Corpse Bomb's per-activation conversion record (ruling 14). At rest `[-1, []]`. Stored rather than
+##       derived, and the reason is measured rather than asserted: a Corpse Bomb corpse and a melee-kill
+##       corpse made on the same tick are bit-identical in `UnitBoard`, so the corpse container carries
+##       nothing to derive the partition from.
+##
+## ALL FOUR HASHES ARE DISTINCT -- from the baseline, from each other and from the final value -- which is
+## what makes the three keys three independent causes rather than one event with three symptoms.
+## =============================================================================================
+const GOLDEN := "98eaee53c065b1c22e5602f5d8c436ea6619c9852752b7f1debaa4695c14a9ff"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

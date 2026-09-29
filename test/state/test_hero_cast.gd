@@ -940,7 +940,11 @@ func test_honed_bolt_left_the_deferred_table_and_the_others_did_not() -> void:
 		"`honed_bolt` has left DEFERRED_EFFECT_OWNERS (AC 21)")
 	assert_eq(CardEffectResolver.outcome(_effect(&"honed_bolt"), _flags()),
 		CardEffectResolver.OUTCOME_HONED_BOLT, "...and resolves to a real outcome")
-	for id: StringName in [&"rocksling", &"boom", &"counterspell", &"corpse_bomb"]:
+	# STORY 6-5e (AC 43): THREE OF THE FOUR HAVE NOW LEFT TOO -- `rocksling`, `boom` and `corpse_bomb` are
+	# what 6-5e builds, so this list narrows to the ONE row that is still deferred. The narrowing is the
+	# deferred table's mechanism working as designed (a row is retired by the story it names), and the
+	# positive half of it is asserted in `test_spell_framework.gd`, which owns the table's census.
+	for id: StringName in [&"counterspell"]:
 		assert_ne(CardEffectResolver.owner_story_for(id), &"", "%s stays deferred (AC 21)" % id)
 		assert_eq(CardEffectResolver.outcome(_effect(id), _flags()),
 			CardEffectResolver.REASON_DECK1_NOT_YET_RESOLVED,

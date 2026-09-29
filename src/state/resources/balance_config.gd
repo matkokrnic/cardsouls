@@ -299,6 +299,22 @@ extends Resource
 ## first totem moves no balance. Two totems give `2.0`, three `2.5` — never `1.5^2 = 2.25`.
 @export var stamina_accelerator_regen_step: float = 0.0
 
+## Story 6-5e (S1, `6-5e/R28`, AC 37a): THE BOULDER SLOW -- the fraction of walk/run/block-walk speed one
+## held Boulder takes away, stacking ADDITIVELY per Boulder. Authored 0.15; `0.0` DISABLES the slow
+## entirely, which is the ruling's own switch rather than a neutral default that happens to be inert.
+##
+## IT LIVES ON `BalanceConfig`, NOT ON `CardEffect`, and the reason is whose property it is: the slow is a
+## property of HOLDING Boulders, not of the effect that planted them -- a hero carrying two Boulders from
+## two different Rockslings is slowed by the count, and there is no single effect to read it off. It is
+## also a movement tuning number, which is what this resource is for.
+##
+## SCALAR, NOT TICK-DOMAIN -- never on `BalanceTicks` (the `block_facing_arc_degrees` classification): it is
+## a multiplier per unit count, with no duration anywhere. See `MatchState._resolve_movement` for why it
+## cannot ride `RULE_FROSTBITE_SLOW`'s timed seat.
+##
+## READ INLINE AT THE POINT OF USE (CONSTRAINT C), never cached, exactly as every other member here is.
+@export var boulder_slow_per_boulder: float = 0.0
+
 @export_group("Defense")
 @export var block_damage_multiplier: float = 0.0
 @export var deflect_window_seconds: float = 0.0

@@ -11,9 +11,44 @@ extends SceneTree
 
 const TEST_DIR := "res://test/state/"
 
+## Story 6-5e: AN OPTIONAL SUBSTRING FILTER, passed after `--`:
+##   godot --headless --path . --script res://test/run_state_tests.gd -- rocksling
+##
+## IT EXISTS FOR THE MUTATION DISCIPLINE, and it is tooling in service of a standing process rule rather
+## than a convenience. project-context requires that "mutation proofs run ONLY the affected test file, never
+## the full suite" -- and until this argument existed there was no way to run one file, so every mutation
+## proof had to either run the whole suite (breaking that rule, and the suite-cadence disclosure with it) or
+## be taken on trust.
+##
+## A BARE INVOCATION IS UNCHANGED: with no argument every file runs, in the same order, with the same
+## counters. The filter is a substring of the FILE NAME, never of a test name, so it can only ever narrow to
+## whole files -- narrowing to individual tests would let a mutation proof miss a sibling it broke.
+func _filter() -> String:
+	var args := OS.get_cmdline_user_args()
+	return args[0] if args.size() > 0 else ""
+
 
 func _initialize() -> void:
 	var files := _list_test_files()
+	var filter := _filter()
+	if filter != "":
+		var narrowed: Array[String] = []
+		for path in files:
+			if path.get_file().contains(filter):
+				narrowed.append(path)
+		files = narrowed
+		print("=== FILTERED to '%s': %d file(s) -- NOT a full suite run ===" % [filter, files.size()])
+		# 6-5e REVIEW FIX (minor 3): A FILTER THAT MATCHES NOTHING IS A FAILURE, NOT A PASS. This argument
+		# exists for the mutation discipline, and a typo'd filter used to print `0 tests, 0 failed`,
+		# `RESULT: PASS` and exit 0 -- which against a LIVE MUTANT reads as "the mutant survived" when in
+		# fact nothing ran at all. That is a false green in the one tool whose entire purpose is mutation-
+		# proof integrity, so an empty narrowing refuses loudly and exits nonzero instead.
+		if files.is_empty():
+			push_error("INVARIANT VIOLATED: the filter '%s' matched NO test file -- refusing to report a "
+					% filter + "PASS for a suite that never ran (check the spelling)")
+			print("RESULT: FAIL (filter '%s' matched no file)" % filter)
+			quit(1)
+			return
 	var total := 0
 	var failed := 0
 	var asserts := 0

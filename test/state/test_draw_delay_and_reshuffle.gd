@@ -71,8 +71,22 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# the key is the story that moves both. The id is a String VALUE, never a StringName -- the
 	# `last_resolved_card` constraint, and the second (and by that test's own note, last) exemption in
 	# `test_card_effect_resolution.gd`'s counts-only scan.
-	"cast",
-	"deck_size", "defense", "discard_size", "hand_size", "hero",
+	# Story 6-5e (AC 38): THREE new keys, FORTY -> FORTY-THREE, each in SORTED position.
+	#   `burst`        -- the pending Rocksling schedule as `[effect id, remaining, ticks, slot, index,
+	#                     damage]` (`6-5e/R21`/G2, Golden Prediction cause 1a). The `cast` key's
+	#                     six-element fusion; it is a key at all because the schedule OUTLIVES the cast
+	#                     that armed it (ruling 6a) and decides how many shots still exist.
+	#   `corpse_bomb`  -- `[activation tick, [converted indices]]`, the fact `6-5f`'s Counterspell will
+	#                     need (ruling 14, AC 40). Measured NOT derivable from the corpse container: a
+	#                     Corpse Bomb corpse and a melee-kill corpse made on the same tick are
+	#                     bit-identical there.
+	#   `hand_covered` -- the per-slot Boulder cover mask, a plain `Array[bool]` (ruling 6, cause 1). The
+	#                     covered card's IDENTITY is deliberately NOT here: it never leaves `Hand._cards`,
+	#                     so it is the hand's own contents, already an unhashed-cross-tick exclusion.
+	# Same mechanism, TENTH time: this pin and test_card_observation.gd's were BOTH red before this edit,
+	# and the story that adds the keys is the story that moves both.
+	"burst", "cast", "corpse_bomb",
+	"deck_size", "defense", "discard_size", "hand_covered", "hand_size", "hero",
 	# Story 6-1c (AC 2/AC 4): the THIRTY-FIRST key -- `landing`, the mode (2) landing window's
 	# remaining ticks, in SORTED position between `hero` and `lock_target`. Same mechanism, seventh
 	# time: this pin and test_card_observation.gd's were BOTH red before this edit, and the story

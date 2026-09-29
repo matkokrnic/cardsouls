@@ -105,6 +105,14 @@ const LOCK_DIRS: Array[Vector2] = [Vector2(0.6, 0.8), Vector2(-0.8, 0.6)]
 const UNHASHED_CROSS_TICK: Array[String] = [
 	"player_state.vulnerable_window",
 	"deck._cards", "hand._cards", "discard_pile._cards",
+	# Story 6-5e (AC 38): `hand._covers` is the ONE container member this story adds and it classifies
+	# HASHED, NOT as part of exclusion (b) beside `hand._cards` one line up -- the asymmetry is the whole
+	# point of the cause-1 argument. The CARD layer's contents are excluded because they are derivable from
+	# seed plus injected composition plus the replayed intents; the COVER layer is not derivable that way
+	# at all in the (b) sense -- it is produced by the tick, from a seeded pick at a landing -- so it is
+	# hashed directly, through `PlayerState.to_snapshot()`'s `hand_covered` key. Listed HERE only as a
+	# pointer to where it is classified; it is a member of `HASHED`.
+	# (see HASHED: "hand._covers")
 	"match_state._camera_bases", "match_state._lock_directions",
 	# Story 5-2 (AC 17, `5-2/R6`): TWO MORE ARRAYS ON ARGUMENT (c), NOT A FOURTH ARGUMENT -- the
 	# 4-6 `_lock_directions` precedent applied unchanged. Both hold the runner's per-tick
@@ -163,6 +171,12 @@ const HASHED: Array[String] = [
 	"match_state._tick", "match_state._round_over",
 	"player_state.hero", "player_state.stamina", "player_state.mana", "player_state.orbs",
 	"player_state.deck", "player_state.hand", "player_state.discard",
+	# Story 6-5e (AC 38, Golden Prediction cause 1): the COVER LAYER classifies HASHED -- see the note
+	# beside `hand._cards` in UNHASHED_CROSS_TICK for why it does NOT share its sibling's exclusion. It
+	# CROSSES TICKS and DECIDES OUTCOMES (which slots the next stone may pick, which presses are refused,
+	# what Boom detonates, how slow its holder walks) and reaches the hash through the ONE `hand_covered`
+	# key. MEMBERS STAYS AT FOUR.
+	"hand._covers",
 	"player_state.pending_draw", "player_state.pending_draw_owed",
 	# Story 4-6 (AC 2/AC 3): the LOCK-ON TARGET's two halves classify HASHED, for `4-3a/R17`'s test
 	# rather than a weaker one -- they CROSS TICKS (the lock changes only on a click, a flick or the
@@ -207,6 +221,19 @@ const HASHED: Array[String] = [
 	# the `pitch_state._card_ids` precedent (a resolved card is public), held as a String VALUE. Both
 	# ride the ONE `last_resolved_card` key: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"player_state.last_resolved_card_id", "player_state.last_resolved_card_mode",
+	# Story 6-5e (AC 11a/AC 38, `6-5e/R21`/G2): the PENDING BURST's six members classify HASHED, on
+	# `charge_window`'s exact test rather than a weaker one -- they CROSS TICKS (the schedule outlives the
+	# cast that armed it, by ruling 6a) and DECIDE OUTCOMES (how many stones still exist, when each
+	# appears, what each may hit, for how much). All six ride `PlayerState.to_snapshot()`'s ONE `burst`
+	# key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"player_state.burst_effect_id", "player_state.burst_remaining", "player_state.burst_window",
+	"player_state.burst_target_slot", "player_state.burst_target_index",
+	"player_state.burst_damage",
+	# Story 6-5e (ruling 14, AC 38/AC 40): CORPSE BOMB's conversion record, both halves, on
+	# `last_resolved_card`'s exact footing -- round-crossing state `6-5f`'s Counterspell decides an
+	# outcome from, riding ONE `corpse_bomb` key. Plain ints only, so not even the id argument is needed.
+	# MEMBERS STAYS AT FOUR.
+	"player_state.corpse_bomb_tick", "player_state.corpse_bomb_indices",
 	# Story 4-1 (AC 4 / AC 9): the board, and it classifies HASHED rather than as a fourth
 	# unhashed cross-tick exclusion — unlike its three container siblings above, whose CONTENTS
 	# are excluded, a UnitBoard has no contents to exclude. It holds a count, the count IS the
@@ -453,6 +480,13 @@ const INJECTED: Array[String] = [
 	# member. Nothing else in the project writes either one, and no tick produces either.
 	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
 	"match_state._effect_projectiles", "match_state._effect_projectile_delay_ticks",
+	# Story 6-5e (AC 1a/AC 16): TWO MORE DERIVED-FROM-INJECTED-CONTENT MEMBERS, on the pair directly
+	# above's argument verbatim and rebuilt in the same pass. `_effects_by_effect_id` is the effect-keyed
+	# handle a live shot resolves through, and `_boulder_card_id` is the card whose basic effect clears a
+	# cover -- both are pure functions of `_card_effects` and `_pitch_effects`, both are rebuilt WHOLESALE
+	# inside an injection seam with a capture channel, and neither is ever written by a tick. A replay that
+	# reproduces the injected content reproduces both exactly. UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"match_state._effects_by_effect_id", "match_state._boulder_card_id",
 	# Story 5-4 (AC 8/AC 10/AC 12): the ORB POOL's per-colour MAXIMUM, and it lands in THIS bucket
 	# rather than beside `mana_pool._maximum` in HASHED -- the one asymmetry between the two pools,
 	# named here because this file is where it becomes checkable.
@@ -1063,6 +1097,425 @@ func _spell_pitch_effects() -> Dictionary[StringName, CardEffect]:
 	var out: Dictionary[StringName, CardEffect] = {}
 	for id in SPELL_DECK:
 		out[id] = fireball
+	return out
+
+
+# ---------------------------------------------------------------- story 6-5e, AC 41
+
+## Story 6-5e (AC 41), BUILT AT THE REVIEW FIX (BLOCKER 1): A THIRD DRIVEN RUN -- THE BOULDER RUN --
+## recorded, SAVED TO A `user://` FILE AT FORMAT_VERSION 17, LOADED BACK, and replayed FROM THE LOADED
+## RECORD ALONE to a bit-identical hash.
+##
+## IT GOES THROUGH THE REAL RECORD PATH, and that is the difference from its two siblings above, which
+## replay an in-memory `IntentRecorder`. `RecordFile` is where the version lives and where every channel
+## is serialised and rebuilt, so a fixture that never touches disk cannot tell a v17 file from a recorder
+## that happens to be in the right shape. This story's own `FORMAT_VERSION` 16 -> 17 argument rests on a
+## v16 file replaying a Rocksling as a cast that fires nothing -- the POSITIVE half of that argument (a v17
+## file replaying one correctly) is measured here and nowhere else.
+##
+## WHY THIS RUN EXISTS AT ALL, rather than the member classification the story shipped with. Three facts
+## make it load-bearing beyond the usual:
+##   1. THREE new hashed keys landed (`hand_covered`, `burst`, `corpse_bomb`), key set 40 -> 43.
+##   2. `_rng` GAINED ITS SECOND CONSUMER IN THE PROJECT'S HISTORY (`_place_boulder`). A Boulder placement
+##      shifts the seeded stream and therefore every LATER `_reshuffle_discard_into_deck`. The golden
+##      fixture lands no stone, so the dev pass measured that a golden NON-cause -- which is true and says
+##      nothing about replay. This run plants TWO Boulders and reshuffles across them, so the stream's
+##      position is exercised on both sides of the draw.
+##   3. The burst SCHEDULE outlives the cast that armed it, so a replay carries cross-tick state no earlier
+##      fixture produced.
+##
+## WHAT IT DRIVES, all through RECORDED CHANNELS and nothing poked into state -- the `_record_a_spell_run`
+## discipline, which is what makes the fixture hard and what makes it worth having:
+##   * MANA comes from a MELEE HIT on each side (an attack press plus a pushed contact inside the active
+##     window), never `mana.add`.
+##   * THE BOULDERS come from real Rocksling stones landing on the opposing hero, each through a pushed
+##     contact fact at the projectile's own attacker address -- so the SEEDED SLOT PICK runs inside the
+##     recorded run and has to be reproduced by the replay from the seed alone.
+##   * THE MINIONS come from real Mode (1) summon casts by P1.
+##   * THE ORB REQUIREMENT IS AUTHORED AWAY rather than choreographed, exactly as the spell run authors it
+##     away: banking an orb is a whole unblockable choreography, and the orb GATE is not what AC 41 asks for.
+##
+## THE SEQUENCE, in order, and every step is asserted to have actually HAPPENED by the non-vacuity test
+## below -- a replay that matched on a run where the stones missed would prove nothing:
+##   t12 P1 casts Rocksling -> t18 strike, stone 0 away, stone 1 owed
+##   t19 stone 0 lands on P2's hero -> BOULDER 1 planted in a seeded slot
+##   t20 P2 presses Mode (1) on that covered slot -> BOULDER 1 cleared, the card beneath restored
+##   t22 stone 1 launches (one authored interval later) -> t23 it lands -> BOULDER 2 planted
+##   t26 P1 stages Boom -> t28 activates it -> BOULDER 2 detonates
+##   t31/t33 P1 summons two minions -> t36 stages Corpse Bomb -> t38 activates it -> BOTH convert, two
+##   skulls launch and are still in flight on the hashed final tick.
+const BOULDER_RECORD_PATH := "user://test_6_5e_boulder_run.rec"
+const BOULDER_SEED := 7777
+const BOULDER_TICKS := 44
+const BOULDER_ATTACK_TICK := 5       # both heroes swing; the windows are `_config()`'s
+const BOULDER_CONTACT_TICK := 9      # a fact inside both active windows -> mana on both sides
+const BOULDER_CAST_TICK := 12        # P1's Mode (1) Rocksling press
+const BOULDER_CAST_TICKS := 6
+const BOULDER_INTERVAL_TICKS := 4
+const BOULDER_STONES := 2
+const BOULDER_LAND_ONE_TICK := 19    # one tick after the strike at t18
+const BOULDER_CLEAR_TICK := 20       # P2's Mode (1) press on the covered slot
+const BOULDER_LAND_TWO_TICK := 23    # stone 1 launched at t22
+const BOOM_STAGE_TICK := 26
+const BOOM_ACTIVATE_TICK := 28
+const SUMMON_ONE_TICK := 31
+const SUMMON_TWO_TICK := 33
+const CORPSE_BOMB_STAGE_TICK := 36
+const CORPSE_BOMB_ACTIVATE_TICK := 38
+
+## TWO CARD IDS AND A BOULDER, all opaque -- the `DECK_IDS` discipline, so `data/cards/` can never reach
+## this fixture. The ROCK card carries Rocksling in Mode (1) and Boom in Mode (4); the SUMMON card carries a
+## `summon_` in Mode (1) and Corpse Bomb in Mode (4). The composition is dealt out ENTIRELY (deck_size ==
+## hand_size), so every id is in hand and the press seats need no knowledge of the deal.
+const BOULDER_ROCK_CARD := &"boulder_run_rock"
+const BOULDER_SUMMON_CARD := &"boulder_run_summon"
+## The Boulder CARD's id is opaque too, and it never enters the composition: `MatchState._boulder_card_id`
+## is DERIVED by finding the card whose basic effect the resolver's cover table names, so what makes this
+## entry load-bearing is its EFFECT id (`boulder_discard`), not its own spelling.
+const BOULDER_PLANT_CARD := &"boulder_run_boulder"
+const BOULDER_DECK: Array[StringName] = [
+	BOULDER_ROCK_CARD, BOULDER_ROCK_CARD,
+	BOULDER_SUMMON_CARD, BOULDER_SUMMON_CARD, BOULDER_SUMMON_CARD, BOULDER_SUMMON_CARD,
+]
+const BOULDER_MANA_COST := 2.0
+const BOULDER_PITCH_MANA_COST := 3.0
+const BOULDER_MELEE_MANA := 40.0
+const BOULDER_STONE_DAMAGE := 3.0
+const BOOM_DAMAGE := 6.0
+const SKULL_DAMAGE := 5.0
+const BOULDER_SLOW_PER_BOULDER := 0.15
+
+
+## AC 41, the primary: a recorded match carrying a Rocksling burst that plants a Boulder, a Mode (1) clear,
+## a second Boulder, a Boom that detonates it and a Corpse Bomb that converts two minions, SAVED and
+## RELOADED, replays from that file alone to the identical final hash.
+func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> void:
+	var recorded := _record_a_boulder_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	var live_hash := CanonicalHash.of(live.to_snapshot())
+	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
+	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
+	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 17,
+		"...at FORMAT_VERSION 17, read out of the FILE rather than off the constant (AC 39)")
+	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
+	assert_not_null(result["record"],
+		"...and it loads back: %s" % str(result["error"]))
+	var loaded: IntentRecorder = result["record"]
+	assert_eq(CanonicalHash.of(_replay(loaded).to_snapshot()), live_hash,
+		"AC 41: a replay driven from the SAVED AND RELOADED record alone is bit-identical")
+	# The falsifying half, on the three channels this run leans on hardest. Without the contacts neither
+	# hero earns mana and no stone ever lands; without the effects there is no Rocksling to cast; without
+	# the intents nothing is pressed at all.
+	for channel in ["contacts", "effects", "intents"]:
+		assert_ne(CanonicalHash.of(_replay(loaded, channel).to_snapshot()), live_hash,
+			"dropping the %s channel must DIVERGE this replay too" % channel)
+	_remove_record(BOULDER_RECORD_PATH)
+
+
+## AC 41's other half, and the one the review asked for BY NAME: the recorded run must actually DO each of
+## the five things, or a bit-identical replay would be proving something about a sequence of refusals.
+## Every clause is measured on the LIVE run as it passed, not inferred from the final state.
+func test_the_boulder_run_plants_clears_replants_detonates_and_converts() -> void:
+	var recorded := _record_a_boulder_run()
+	var live: MatchState = recorded["state"]
+	# (a) THE BURST LAUNCHED AT LEAST TWO STONES, each a hero-sourced record at the authored damage.
+	assert_eq(int(recorded["stones_launched"]), BOULDER_STONES,
+		"the Rocksling burst launched every authored stone (AC 8)")
+	assert_true(int(recorded["stones_launched"]) >= 2,
+		"...and AC 41's 'at least two stones' is met by the burst rather than by two casts")
+	assert_true(bool(recorded["stones_hero_sourced"]),
+		"...each one hero-sourced, so the cover placement rung is the one that ran")
+	# (b) THE FIRST STONE LANDED ON THE OPPOSING HERO AND PLANTED A BOULDER.
+	assert_almost_eq(float(recorded["stone_one_damage"]), BOULDER_STONE_DAMAGE, 0.0001,
+		"stone 0 LANDED on P2's hero for the authored per-stone damage (AC 16)")
+	assert_eq(int(recorded["covers_after_first_landing"]), 1,
+		"...and planted exactly one Boulder in P2's hand (AC 16)")
+	assert_true(int(recorded["rng_draws_moved"]) > 0,
+		"...through the SEEDED pick, so `_rng`'s second consumer really ran inside the recorded run (M1)")
+	# (c) THE MODE (1) PRESS CLEARED IT, with the card beneath restored in its own slot.
+	assert_eq(int(recorded["covers_after_clear"]), 0, "the Mode (1) press cleared that Boulder (AC 21)")
+	assert_eq(recorded["card_beneath_before_clear"], recorded["card_beneath_after_clear"],
+		"...and the card beneath came back in its OWN slot, unmoved (AC 21)")
+	# (d) A SECOND BOULDER WAS PLANTED AND BOOM DETONATED IT.
+	assert_eq(int(recorded["covers_after_second_landing"]), 1, "stone 1 planted a second Boulder (AC 16)")
+	assert_almost_eq(float(recorded["boom_damage"]), BOOM_DAMAGE, 0.0001,
+		"Boom dealt its authored per-Boulder damage to the opposing hero (AC 26)")
+	assert_eq(int(recorded["covers_after_boom"]), 0, "...and removed the Boulder it counted (AC 27)")
+	# (e) CORPSE BOMB CONVERTED AT LEAST TWO MINIONS, and its record is readable on the hashed final state.
+	var conversion: Array = live.p1.to_snapshot()["corpse_bomb"]
+	assert_eq(conversion[1], [0, 1] as Array[int],
+		"the Corpse Bomb activation converted BOTH of P1's minions and recorded which (AC 40)")
+	assert_eq(int(conversion[0]), CORPSE_BOMB_ACTIVATE_TICK,
+		"...on the activation tick, which is inside the replayed hash (AC 38)")
+	assert_eq(live.p1.units.corpse_indices(), [0, 1] as Array[int],
+		"...each leaving a normal corpse through the shared death seat (AC 30)")
+	assert_eq(live.p1.projectiles.size(), BOULDER_STONES + 2,
+		"...and one skull per converted minion joined the two stones on the board (AC 31)")
+	assert_true(live.p1.projectiles.is_alive_at(BOULDER_STONES),
+		"...with the skulls still IN FLIGHT on the hashed final tick, so their state is replayed")
+	# THE HASHED KEYS THIS STORY ADDED ARE ALL NON-RESTING SOMEWHERE IN THE RUN, which is what makes the
+	# replay assertion above a test of them rather than a test of three resting literals.
+	assert_true(int(recorded["max_covers_seen"]) > 0, "`hand_covered` left its resting all-false state")
+	assert_true(int(recorded["max_burst_remaining"]) > 0, "`burst` left its resting empty state")
+	assert_ne(int(conversion[0]), PlayerState.NO_CORPSE_BOMB_TICK, "`corpse_bomb` left its resting state")
+
+
+## The boulder run itself. Plays the RUNNER's role exactly as its two siblings do -- capturing on every
+## channel beside the call it taps -- and reads the live hand (and the live COVER layer) to choose its card
+## slots, which is sound for a replay BECAUSE the chosen slot travels in the recorded intent: the replay
+## presses the slot that was pressed, it never re-chooses.
+func _record_a_boulder_run() -> Dictionary:
+	var record := IntentRecorder.new()
+	var params := MatchParams.new(BOULDER_SEED)
+	record.capture_seed(params.seed_value)
+	var ms := MatchState.new(params)
+	var config := _boulder_config()
+	record.capture_apply_balance(config)
+	ms.apply_balance(config)
+	var flags := _boulder_flags()
+	record.capture_inject_feature_flags(flags)
+	ms.inject_feature_flags(flags)
+	# The six content channels, in `SOUND_CONTENT_ORDER`.
+	record.capture_inject_deck(BOULDER_DECK)
+	ms.inject_deck(BOULDER_DECK)
+	var costs := _boulder_costs()
+	record.capture_inject_card_costs(costs)
+	ms.inject_card_costs(costs)
+	var effects := _boulder_basic_effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
+	var colors := _boulder_colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
+	var pitch_costs := _boulder_pitch_costs()
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
+	var pitch_effects := _boulder_pitch_effects()
+	record.capture_inject_pitch_effects(pitch_effects)
+	ms.inject_pitch_effects(pitch_effects)
+	var seen := {
+		"stones_launched": 0, "stones_hero_sourced": true, "stone_one_damage": 0.0,
+		"covers_after_first_landing": 0, "covers_after_clear": -1, "covers_after_second_landing": 0,
+		"card_beneath_before_clear": &"", "card_beneath_after_clear": &"",
+		"boom_damage": 0.0, "covers_after_boom": -1,
+		"max_covers_seen": 0, "max_burst_remaining": 0, "rng_draws_moved": 0,
+	}
+	var rng_state_before := ms._rng.state
+	for t in range(1, BOULDER_TICKS + 1):
+		if t == BOULDER_CONTACT_TICK:
+			# One fact each way, inside both active windows: mana for both sides, captured and pushed with
+			# IDENTICAL arguments so the replay pushes the same fact rather than a rebuilt one.
+			for fact: Array in [[[0, -1], [1, -1], Vector2(-1.0, 0.0)],
+					[[1, -1], [0, -1], Vector2(1.0, 0.0)]]:
+				var attacker: Array[int] = [int(fact[0][0]), int(fact[0][1])]
+				var target: Array[int] = [int(fact[1][0]), int(fact[1][1])]
+				record.capture_push_contact(attacker, target, 0, fact[2] as Vector2,
+						MatchState.CONTACT_STRIKE)
+				ms.push_contact(attacker, target, 0, fact[2] as Vector2, MatchState.CONTACT_STRIKE)
+		if t == BOULDER_LAND_ONE_TICK:
+			_push_stone_contact(ms, record, 0)
+		if t == BOULDER_LAND_TWO_TICK:
+			_push_stone_contact(ms, record, 1)
+		# THE TWO TRANSIENT READS, taken IMMEDIATELY BEFORE the tick that destroys what they name: the card
+		# under the Boulder (the Mode (1) press uncovers it) and P2's hp (the Boom press removes some).
+		var hp_before_tick := ms.p2.hero.get_hp()
+		if t == BOULDER_CLEAR_TICK and not ms.p2.hand.covered_indices().is_empty():
+			var slot: int = ms.p2.hand.covered_indices()[0]
+			seen["card_beneath_before_clear"] = ms.p2.hand.to_array()[slot]
+		var intents := _boulder_intents(ms, t)
+		record.capture_advance(intents)
+		ms.advance(intents)
+		ms.drain_signals()
+		seen["max_covers_seen"] = maxi(int(seen["max_covers_seen"]), ms.p2.hand.cover_count())
+		seen["max_burst_remaining"] = maxi(int(seen["max_burst_remaining"]), ms.p1.burst_remaining)
+		if t == BOULDER_LAND_ONE_TICK:
+			seen["stone_one_damage"] = hp_before_tick - ms.p2.hero.get_hp()
+			seen["covers_after_first_landing"] = ms.p2.hand.cover_count()
+			seen["rng_draws_moved"] = 1 if ms._rng.state != rng_state_before else 0
+		if t == BOULDER_CLEAR_TICK:
+			seen["covers_after_clear"] = ms.p2.hand.cover_count()
+			seen["card_beneath_after_clear"] = ms.p2.hand.to_array()[_slot_of(ms.p2.hand,
+					seen["card_beneath_before_clear"] as StringName)]
+		if t == BOULDER_LAND_TWO_TICK:
+			seen["covers_after_second_landing"] = ms.p2.hand.cover_count()
+		if t == BOOM_ACTIVATE_TICK:
+			seen["boom_damage"] = hp_before_tick - ms.p2.hero.get_hp()
+			seen["covers_after_boom"] = ms.p2.hand.cover_count()
+		if t == BOULDER_LAND_TWO_TICK:
+			seen["stones_launched"] = ms.p1.projectiles.size()
+			for shot in ms.p1.projectiles.size():
+				if not ms.p1.projectiles.is_hero_sourced_at(shot):
+					seen["stones_hero_sourced"] = false
+	var out := {"state": ms, "record": record}
+	out.merge(seen)
+	return out
+
+
+## One tick's intents for the boulder run. Card slots are found by NAME in the live hand (the spell run's
+## own rule); a missing card leaves `card_slot` at its no-press default, so a fixture whose deal changed
+## fails on the non-vacuity assertions rather than pressing the wrong card silently.
+func _boulder_intents(ms: MatchState, t: int) -> Array[InputIntent]:
+	var i1 := InputIntent.new()
+	var i2 := InputIntent.new()
+	if t == BOULDER_ATTACK_TICK:
+		i1.pressed[&"attack"] = true
+		i1.held[&"attack"] = true
+		i2.pressed[&"attack"] = true
+		i2.held[&"attack"] = true
+	if t == BOULDER_CAST_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(BOULDER_ROCK_CARD), Enums.ModeKind.BASIC)
+	if t == BOULDER_CLEAR_TICK:
+		# THE COVERED SLOT, read LIVE because the seeded pick chose it -- and sound for a replay because the
+		# slot travels in the recorded intent rather than being re-chosen on the way back.
+		var covered := ms.p2.hand.covered_indices()
+		_press_card(i2, covered[0] if not covered.is_empty() else -1, Enums.ModeKind.BASIC)
+	if t == BOOM_STAGE_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(BOULDER_ROCK_CARD), Enums.ModeKind.PITCH)
+	if t == SUMMON_ONE_TICK or t == SUMMON_TWO_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(BOULDER_SUMMON_CARD), Enums.ModeKind.BASIC)
+	if t == CORPSE_BOMB_STAGE_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(BOULDER_SUMMON_CARD), Enums.ModeKind.PITCH)
+	if t == BOOM_ACTIVATE_TICK or t == CORPSE_BOMB_ACTIVATE_TICK:
+		i1.card_mode = Enums.ModeKind.PITCH
+		i1.card_commit = true
+		i1.card_activate = true
+	var out: Array[InputIntent] = [i1, i2]
+	return out
+
+
+## The stone's own contact, at its projectile attacker address and on the address the BOARD says it is
+## aimed at -- `test_rocksling_and_boulder.gd::_push_shot_contact`, routed through the recorder so the
+## landing rides the record instead of being re-derived by the replay.
+func _push_stone_contact(ms: MatchState, record: IntentRecorder, shot: int) -> void:
+	if ms.p1.projectiles.size() <= shot:
+		return
+	var attacker: Array[int] = [0, MatchState.projectile_attacker_index(shot)]
+	var target: Array[int] = [ms.p1.projectiles.target_slot_at(shot),
+			ms.p1.projectiles.target_index_at(shot)]
+	var flight := ms.p1.projectiles.flight_ticks_at(shot)
+	var dir := ms.p2.hero.facing
+	record.capture_push_contact(attacker, target, flight, dir, MatchState.CONTACT_STRIKE)
+	ms.push_contact(attacker, target, flight, dir, MatchState.CONTACT_STRIKE)
+
+
+func _slot_of(hand: Hand, id: StringName) -> int:
+	var found := hand.to_array().find(id)
+	return found if found >= 0 else 0
+
+
+## The `format_version` an actual SAVED FILE carries, read out of the file rather than off the constant --
+## which is the only reading that makes "saved at FORMAT_VERSION 17" a measurement.
+func _saved_format_version(path: String) -> int:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return -1
+	var raw: Variant = f.get_var()
+	f.close()
+	if typeof(raw) != TYPE_DICTIONARY:
+		return -1
+	return int((raw as Dictionary).get("format_version", -1))
+
+
+func _remove_record(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## `_config()` with what the boulder run needs moved, and nothing else: the composition dealt out entirely
+## (so every id is in hand), enough melee mana for P1's five presses, and the S1 Boulder slow authored
+## non-zero so that knob rides the balance channel and reaches P2's hashed velocity while it holds one.
+func _boulder_config() -> BalanceConfig:
+	var c := _config()
+	c.deck_size = BOULDER_DECK.size()
+	c.hand_size = BOULDER_DECK.size()
+	c.melee_hit_mana = BOULDER_MELEE_MANA
+	c.boulder_slow_per_boulder = BOULDER_SLOW_PER_BOULDER
+	c.corpse_lifetime_seconds = 10.0
+	return c
+
+
+func _boulder_flags() -> FeatureFlags:
+	var f := _flags()
+	f.spells = true
+	return f
+
+
+## Priced for Mode (1). THE BOULDER CARD IS PRICED TOO and is not in the composition: a Mode (1) press on a
+## covered slot prices through `_card_costs` at the BOULDER's own id, so without this entry the clear at
+## t20 would refuse and step (c) of the sequence would silently not happen.
+func _boulder_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in BOULDER_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = BOULDER_MANA_COST
+		out[id] = c
+	var boulder := CardCastCondition.new()
+	boulder.mana_cost = BOULDER_MANA_COST
+	out[BOULDER_PLANT_CARD] = boulder
+	return out
+
+
+## NO ORB PRICE -- authored away for `_spell_pitch_costs`' reason verbatim.
+func _boulder_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in BOULDER_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = BOULDER_PITCH_MANA_COST
+		out[id] = c
+	return out
+
+
+func _boulder_colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id in BOULDER_DECK:
+		out[id] = Enums.CardColor.RED
+	out[BOULDER_PLANT_CARD] = Enums.CardColor.COLORLESS
+	return out
+
+
+## The BASIC effects: Rocksling on the ROCK card, a `summon_` on the SUMMON card, and the BOULDER card's own
+## `boulder_discard` -- which is what `MatchState._boulder_card_id`'s derivation finds and what the Mode (1)
+## clear at t20 resolves through.
+func _boulder_basic_effects() -> Dictionary[StringName, CardEffect]:
+	var rocksling := CardEffect.new()
+	rocksling.effect_id = &"rocksling"
+	rocksling.cast_seconds = float(BOULDER_CAST_TICKS) / TimingWindow.TICK_HZ
+	rocksling.damage_amount = BOULDER_STONE_DAMAGE
+	rocksling.boulders_per_cast = BOULDER_STONES
+	rocksling.boulder_interval_seconds = float(BOULDER_INTERVAL_TICKS) / TimingWindow.TICK_HZ
+	rocksling.launch_speed = 8.0
+	rocksling.homing_turn_rate_degrees_per_second = 120.0
+	rocksling.max_speed = 8.0
+	rocksling.travel_budget = 60.0
+	var summon := CardEffect.new()
+	summon.effect_id = &"summon_boulder_run_minion"
+	var boulder := CardEffect.new()
+	boulder.effect_id = &"boulder_discard"
+	var out: Dictionary[StringName, CardEffect] = {}
+	out[BOULDER_ROCK_CARD] = rocksling
+	out[BOULDER_SUMMON_CARD] = summon
+	out[BOULDER_PLANT_CARD] = boulder
+	return out
+
+
+## The PITCH effects: Boom on the ROCK card, Corpse Bomb on the SUMMON card. Two DIFFERENT pitch effects in
+## one map, unlike the spell run's uniform one, which is why each stage press names its card by id.
+func _boulder_pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var boom := CardEffect.new()
+	boom.effect_id = &"boom"
+	boom.damage_amount = BOOM_DAMAGE
+	var corpse_bomb := CardEffect.new()
+	corpse_bomb.effect_id = &"corpse_bomb"
+	corpse_bomb.damage_amount = SKULL_DAMAGE
+	corpse_bomb.launch_speed = 8.0
+	corpse_bomb.homing_turn_rate_degrees_per_second = 120.0
+	corpse_bomb.max_speed = 8.0
+	corpse_bomb.travel_budget = 60.0
+	var out: Dictionary[StringName, CardEffect] = {}
+	out[BOULDER_ROCK_CARD] = boom
+	out[BOULDER_SUMMON_CARD] = corpse_bomb
 	return out
 
 

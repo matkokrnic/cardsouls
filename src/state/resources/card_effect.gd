@@ -213,6 +213,46 @@ extends Resource
 @export var max_speed: float = 0.0
 @export var travel_budget: float = 0.0
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5e: ROCKSLING'S BURST -- the FIFTH such family (6-5a's five buff/trigger fields, 6-5b's four
+## corpse/own-minion fields, 6-5c's seven cast fields, 6-5d's eight variable-cost/flight fields). TWO
+## more FLAT exports, on the header's own discipline (AC 5): no subclass, no nested resource, so
+## `RecordFile._card_effects` keeps round-tripping both generically and `_fresh_nested` needs no new row.
+##
+## BOTH ARE NEUTRAL-ZERO BY DEFAULT, which is AC 5 and follows 6-5d's eight rather than `cast_seconds`'
+## live 0.8: `boulders_per_cast` is read on the projectile CONTACT ladder, a path an unrelated effect's
+## shot reaches on every landing, so a live default here would silently make Fireball plant Boulders.
+## Zero means "this effect fires no burst and plants no Boulder", and an unused number cannot change an
+## outcome.
+##
+## ONLY TWO FIELDS, AND THE DAMAGE IS DELIBERATELY NOT A THIRD. The per-stone, per-skull and per-Boulder
+## magnitudes AC 1/AC 2/AC 3 ask for are all authored on the EXISTING `damage_amount` -- "the ABSOLUTE HP
+## this effect's strike removes from its target" is already exactly what each of the three is, and three
+## new fields would be three spellings of one number. This is `duration_seconds`' own third-reading
+## precedent (`6-5b/R7`: "a `grave_ward_seconds` sibling would be a second spelling of this effect's one
+## duration with nothing to distinguish it"), applied to a magnitude instead of a window. Authored 3.0 on
+## `rocksling`, 6.0 on `boom`, 5.0 on `corpse_bomb`.
+
+## HOW MANY STONES ONE ROCKSLING CAST FIRES (AC 1, `boulders_per_cast` -- the ruling's own name,
+## ruling 2). Authored 3.
+##
+## IT IS ALSO THE BOULDER-PLANTING DISCRIMINATOR, and that is why it is one field and not two. `> 0` is
+## what makes a landed hero-sourced shot plant a Boulder (AC 16) -- the `mana_cap` posture verbatim
+## (`spends_variable_mana` reads a magnitude rather than an id table), for the same reason: "does this
+## shot plant a Boulder" is not a separate fact from "does this effect throw Boulder-planting stones",
+## and a `plants_boulder` bool could disagree with this count. Fireball and Corpse Bomb both author zero,
+## so neither plants one (ruling 6 is Rocksling-only, AC 32's last sentence).
+@export var boulders_per_cast: int = 0
+
+## THE GAP BETWEEN CONSECUTIVE STONE LAUNCHES, in seconds (AC 1, ruling 2). Authored 0.3. Converted to
+## ticks ONCE, at the moment the burst is scheduled (A1) -- `MatchState._apply_rocksling` -- and carried
+## as ticks from there, never re-read per tick and never accumulated as a float.
+##
+## ZERO IS A LEGITIMATE VALUE AND MEANS "ALL ON THE SAME TICK": `TimingWindow.start(0)` leaves the window
+## not running, so the burst seat launches the next stone on the very next pass -- the same zero-delay
+## degrade `draw_replacement_delay_seconds` already has, reached from a different debt.
+@export var boulder_interval_seconds: float = 0.0
+
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation
 ## interprets it"). Empty = no cue named.
