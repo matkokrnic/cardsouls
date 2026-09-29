@@ -11847,3 +11847,54 @@ Story renumbered: 38 ACs -> 30 (contiguous), 745 lines -> 679 lines. `6-5f-count
 `backlog -> ready-for-dev`; `6-5g-counterspell-timed-and-in-flight` added `backlog`, board-ordered
 immediately after it, now last on the board and E6's R-SPELL forcing point. `deck-1-spec.md` gains a
 dated paragraph recording the 6-5f/6-5g split, the interim refusal, and the Bloodlust removal.
+
+## Session 2026-09-29 -- 6-5f close-out
+
+`6-5f/R44` m1 ruling: the `_restore_boulders` clause-(b) skip is correct by construction -- the
+counterer's own pitch zone (width 1) is unconditionally emptied by the very activation that restores, so
+no staged card can occupy a freed slot at restore time; re-open if the pitch zone ever widens past 1.
+
+Open Question 1 RESOLVED: one per-player "reversal" undo packet, overwritten in lockstep with
+`last_resolved_card` at the same write seat, before the six apply arms run; hashed as one fused
+`reversal` key. `REVERSAL_NONE` is the entire no-target rule -- no card-id list anywhere. Boulders
+re-covered from `MatchState._boulder_card_id` (the single authored source `_place_boulder` plants from),
+never from the packet, which holds only hand slots.
+
+Four implementation choices (`C:\dev\_65f-dev.md`): Boulder restoration keyed off `_boulder_card_id`,
+not a per-effect id; a countered summon vanishes via `kill_at(index, 0)` + `consume_corpse_at`, no new
+board mutator (moved `test_corpses.gd`'s death-seat caller count 4 -> 6, predicted); a restored minion
+enters as a NEW record via `add(...)` with `raised_from`, hp = `hp_at_death_at` (deliberately not
+`raise_hp_percent`, `6-5f/R29`); `record_resolved_card`'s write moved above the cast fork -- measured
+BEHAVIOUR-NEUTRAL (nothing in `src/` read `last_resolved_card` before this story wrote it).
+
+Golden: causes MEASURED both directions -- resolution tick (`b9ffa1da...` alone), reversal packet
+(`a5c321f1...` alone), `unit_hp_at_death` (`f3c4e4d6...` alone); erasing all three with every other
+change live returns the hash to `98eaee53...` EXACTLY, confirming the `not clears_cover` gate, the new
+refusable outcomes, and `counter_window_seconds` as NON-causes, measured not assumed. `98eaee53` ->
+`941958c5`, one re-baseline. `FORMAT_VERSION` 17 -> 18 (v17 hard-refused). Per-player keys 43 -> 45.
+Death-seat caller count 4 -> 6. `RAW_MATCH_STATE_CONNECTS` gains `counterspell_resolved`:inline -- the
+SECOND inline direct-connect (amendment-queue item from `5-3/R4` reinforced: a third instance opens the
+seam-family question, to be resolved before 6-5g).
+
+`6-5f/R45` Review (`C:\dev\_65f-review.md`): APPROVE WITH FINDINGS. LAYER-COMPLETION:
+blind-hunter=COMPLETE(2 findings) | edge-case-hunter=COMPLETE(0 surviving findings) |
+acceptance-auditor=COMPLETE(2 findings) | targeted-checks-T1-T16=COMPLETE(16/16 answered, 0 UNMEASURED) |
+independent-measurement=COMPLETE(T1 both directions CONFIRMED, T2 mutation-3 KILLED, tree restored and
+checksum-verified) | triage=COMPLETE | report=COMPLETE | verdict=APPROVE_WITH_FINDINGS(blocking=0,
+major=1, minor=5). M1 (AC 29's missing v17 fixture), m2 (duplicate FORMAT_VERSION cause), m3 (two Dev
+Agent Record evidence slips) FIXED; m4 (AC 13 pinned for one of seven 6-5g cards) -> 6-5g; m5 (`_replay`
+silently drops nothing for an unknown channel name) -> E6 close-out tooling.
+
+Full suite runs: dev pass 4 (two disclosed extras -- an operator-authorised mid run after a 16-launch
+background diagnostic batch was killed by the harness for low memory, rule going forward: ONE foreground
+engine launch per call; a re-run after a sorted-order slip in two key pins), review-fix 1, chain
+close-out confirmation 1. Budget (`E5-R/R3`): 2026-09-29T13:59:54+02:00 -> 19:21:26+02:00 = 5h21m32s
+(dev pass alone, to `_65f-suite-after.txt`'s 17:52:04 close, 3h52m10s).
+
+Process notes: Python 3.12.3 is present in this machine's Bash (CC) environment though not in
+PowerShell. Operator's post-smoke counter-on-counter candidate (Counterspell targeting a Counterspell,
+state restored as if never played) is raised for 6-5g scope talk, not yet adopted -- would supersede
+`6-5f/R8` if it is.
+
+E6 close-out debt list unchanged (`6-5b/R24` flake, TAB residue, stale trailer in
+`CLAUDE.md`/`project-context.md`) plus m5 above.
