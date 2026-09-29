@@ -11899,3 +11899,77 @@ state restored as if never played) is raised for 6-5g scope talk, not yet adopte
 
 E6 close-out debt list unchanged (`6-5b/R24` flake, TAB residue, stale trailer in
 `CLAUDE.md`/`project-context.md`) plus m5 above.
+
+## Session 2026-09-29 -- 6-5g scope + readiness gate
+
+Readiness gate (`C:\dev\_65g-gate.md`): NOT READY, 2 blockers (B1/B2) / 3 major (M1/M2/M3) / 7 minor. Fixed
+below by a docs-only fix pass; no code, no test, no suite run. Rulings logged as `6-5g/R1`-`R20`.
+
+`6-5g/R1` Seven cards become counterable (Vampiric Aura, Bloodhound Step, Frostbite, Honed Bolt, Rocksling,
+Fireball, Corpse Bomb); the 6-5f interim refusal (`6-5f/R37`, AC 13) is removed. The interim rule was
+EMERGENT -- `REVERSAL_NONE` is the whole no-target rule, no code arm exists -- so removal deletes exactly
+three textual artifacts: 6-5f AC 13's text, `test/state/test_counterspell.gd`'s
+`test_a_6_5g_card_is_refused_through_the_same_no_target_path`, and 6-5f Live Smoke point 6. Closes gate B1.
+`6-5g/R2` Timed buffs: the running rule ends immediately; what it already gave stays (HP healed, rolls
+taken).
+`6-5g/R3` A resolution with nothing left to undo (buff expired, whiffed card: bolt dodged, ball deflected,
+all stones missed with no Boulder present, cast interrupted by stun) is NO TARGET: refused before the orb,
+silently, card stays staged, Counterspell waits for the next card. Both Vampiric Aura and Bloodhound Step
+wording in the story is aligned to this -- the 6-5f "already expired" rule extended.
+`6-5g/R4` Frostbite: whichever phase runs ends -- `RULE_FROSTBITE_ARMED` on the caster is disarmed, or
+`RULE_FROSTBITE_SLOW` on the struck player ends; cross-player read, `REVERSAL_BOOM` victim-derivation
+precedent. Closes M3.
+`6-5g/R5` Bloodhound (measured at authoring): the boost is copied into `RULE_ROLL_BOOST` at roll entry and
+`RULE_BLOODHOUND_ARMED` is cancelled in the same branch; a counter mid-roll leaves the running roll
+untouched, identical to natural window expiry mid-roll. No new behaviour.
+`6-5g/R6` Cast cards (Honed Bolt, Fireball, Rocksling) are the target from cast START: `record_resolved_card`
+is written before the cast fork (basic seat gated on `not clears_cover`; pitch seat likewise precedes
+`start_cast`); the window is measured from that tick; the packet is a living record updated as the card
+progresses. Closes m2 wording.
+`6-5g/R7` Counter during a cast reaches the seat equivalent to `_resolve_cast_strikes`' `clear_cast` outcome
+from Counterspell's resolution (never a literal `_cast_is_interrupted` call); caster free the same tick,
+never STUNNED; entry-point census stays 4; no damage, no projectile; the caster's card and mana stay lost.
+New test: interrupt does not put the caster into STUNNED.
+`6-5g/R8` Landed damage refunded by HP actually removed (per stone / per skull); Honed Bolt stun and root
+end immediately.
+`6-5g/R9` In-flight shots (Fireball ball, Rocksling stones, Corpse Bomb skulls) vanish via
+`ProjectileBoard.consume_at` on the living index; unfired Rocksling stones cancelled via `clear_burst` -- a
+new call site beside the schedule's own exhaustion clears in `_advance_bursts` and the two teardown seats
+(`_end_round`, `_reset_player`). Closes M2.
+`6-5g/R10` Rocksling Boulders planted by the countered cast and still covering the holder's hand are removed
+(covered card back, their slow contribution ends); mana already paid to clear a Boulder is not refunded.
+Distinguishing this cast's stones/Boulders from another copy's is a dev-pass implementation choice.
+`6-5g/R11` A minion killed by a countered Honed Bolt / Fireball is restored from its corpse with pre-death
+HP through the 6-5f Culling/Drain restore path (no new `kill_at` caller; `test_corpses.gd` pin stays 6); no
+corpse -> no restore. A totem killed stays dead; a surviving totem gets its HP back. AC 22 asserts the
+minion case (reachable via `_resolve_cast_strikes`' non-hero branch). Closes m3.
+`6-5g/R12` Corpse Bomb: skulls vanish, landed damage refunded, converted minions restored from their
+corpses with pre-death HP; corpse gone -> not restored.
+`6-5g/R13` `_reversal_has_anything_left` gets ONE new arm per new reversal kind, each naming what survives
+for that card (a running rule; a cast still in its window; a living projectile index; an unfired burst; a
+still-covering Boulder slot; a restorable corpse). The `REVERSAL_NONE` clause of `_counter_target_is_live`
+is unchanged. Without the arms the per-kind match falls through to `return false` and all seven cards stay
+refused. This is a new AC and a Task sub-bullet. Closes B2; corrects the story's "no gate-side change".
+`6-5g/R14` Golden: FORMAT 18 -> 19 predicted; v18 records hard-refused with a reason (6-5f review M1 test
+shape); Task 3 names the predicted per-player key-set N and the new key names as its first output, before
+any code; replay AC = real record on disk, bit-identical. Closes m4.
+`6-5g/R15` No new `MatchState` direct-connect signal; the count stays two (`counterspell_resolved` reused);
+the seam-family question is not forced by 6-5g. Closes m6.
+`6-5g/R16` Visuals placeholder; presentation goes to the Tier B presentation story after 6-5g.
+`6-5g/R17` Counter-on-counter (Counterspell as a target of Counterspell, redo from the packet) is deferred
+to its own story after the playtest block; `6-5f/R8` stands until then; recorded in `deck-1-spec.md`. Closes
+m1.
+`6-5g/R18` Story delivered whole -- the gate ruled it deliverable-but-marginal and proposed Rocksling ->
+6-5h; the operator's browser ruling is NO CUT; a dev pass that stops on capacity continues in a fresh
+session from the Dev Agent Record.
+`6-5g/R19` 6-5f review finding m4 (seven-card parametric interim-refusal loop) is discharged by deleting
+the interim rule, not by implementing the loop. Closes m5.
+`6-5g/R20` Break table carries a MUST-MOVE / MUST-NOT-MOVE column; `test_replay_identity.gd`'s hashed-member
+census (six named reversal columns) is MUST-MOVE for any widened packet, `test_card_effect_resolution.gd`'s
+`SNAPSHOT_ID_PATHS` scan is added. Closes M1, m7.
+
+Story fix pass: gate B1/B2/M1-M3/m1-m7 fixes applied by AC/Task text and citation to `6-5g/R1`-`R20` (B2
+adds one new AC for the `_reversal_has_anything_left` per-kind arms, `6-5g/R13`); status moves `authored ->
+ready-for-dev`. `deck-1-spec.md` gains one sentence on the 29.9. amendment recording the counter-on-counter
+deferral (`6-5g/R17`). `sprint-status.yaml`'s `6-5g-counterspell-timed-and-in-flight` entry moves `backlog ->
+ready-for-dev`.
