@@ -11780,3 +11780,70 @@ interval (`E5-R/R3`): first before-baseline run (2026-09-28 23:12:29) -> last su
 cycle (2026-09-29 12:43:38), elapsed **13h 31m** across four sessions (dev, review, review-fix,
 close-out; gaps between sessions are not work time). Live smoke: 14/14 PASS, two pads `[3, 3]`, R-D6
 re-invoked and passed (operator, 2026-09-29).
+
+## Session 2026-09-29 -- 6-5f scope + readiness gate
+
+Readiness gate (`C:\dev\_65f-gate.md`): NOT READY, 2 blockers (B1/B2) / 3 major (M1/M2/M3) / 6 minor. Fixed
+below and by the operator's same-day scope talk, logged as `6-5f/R1`-`R43`.
+
+Scope-talk rulings, carried verbatim into the story file's own "Operator rulings" section:
+`6-5f/R1` Counterspell is Honed Bolt's pitch, resolves instantly, no cast frame, same class as Boom/Corpse Bomb.
+`6-5f/R2` Retroactive, not a ward; reaches back once at activation.
+`6-5f/R3` Target = opponent's last_resolved_card record (id+mode) at activation; a refused card never targets.
+`6-5f/R4` counter_window_seconds .tres field (default 0 = no limit), converted to ticks at apply (A1); measured from resolution tick to activation tick.
+`6-5f/R5` A countered card stops being a target; resolving Counterspell clears its target's reversal record.
+`6-5f/R6` Resolving any card overwrites last_resolved_card (shield-by-cheap-card, intentional, unchanged).
+`6-5f/R7` Boulder clear is NOT a played card for Counterspell purposes: never a target, does not overwrite/shield; requires gating _resolve_basic_cast's record_resolved_card write on not clears_cover.
+`6-5f/R8` Counterspell is never a valid target of itself; ordinary overwrite rule (R6) handles it after it resolves, no special-case code.
+`6-5f/R9` Countered player gets nothing back; only the countered card's own effects reverse.
+`6-5f/R10` Activation refused before orb spend via existing board-gate; staging mana not refunded.
+`6-5f/R11` "No target" enumerated: no card resolved yet, last card is Counterspell itself, older than nonzero window, everything it did already expired/gone.
+`6-5f/R12` INSTANT effects reversed by amount ACTUALLY APPLIED, never nominal.
+`6-5f/R13` TIMED buffs end now, already-yielded stays, routes through cancel_rule. [6-5g scope]
+`6-5f/R14` Clamps: HP floor 1, mana floor 0, HP refund ceiling at caster's max.
+`6-5f/R15` Reverse what is left, not what was nominal; a part already gone is skipped silently, not refused.
+`6-5f/R16` Vanguard: summon vanishes with no corpse either way.
+`6-5f/R17` Culling: killed minions rise from corpse restored to pre-death shape; mana taken back.
+`6-5f/R18` Grave Ward: extension removed from every corpse touched; corpse at <=0 remaining disappears now.
+`6-5f/R19` Raise Dead: raised minions vanish no corpse; original corpses return with remaining lifetime except one naturally expired.
+`6-5f/R20` Drain: sacrificed minion rises from corpse; healed hp taken back.
+`6-5f/R21` Vampiric Aura: ends now, already-healed hp stays. [6-5g scope]
+`6-5f/R22` Rocksling: cast-in-progress interrupted+freed; unfired stones cancelled; in-flight vanishes; landed damage refunded; still-covering Boulders removed. [6-5g scope]
+`6-5f/R23` Boom: damage refunded; detonated Boulders return to same slots.
+`6-5f/R24` Bloodhound Step: ends now. [6-5g scope]
+`6-5f/R25` Fireball: in-flight vanishes; landed damage refunded; staged mana not refunded. [6-5g scope]
+`6-5f/R26` Honed Bolt: cast-in-progress interrupted+freed (third trigger); landed damage refunded; running stun/root ends now. [6-5g scope]
+`6-5f/R27` Frostbite: unconsumed trigger removed; consumed slow ends now. [6-5g scope]
+`6-5f/R28` Corpse Bomb: in-flight skulls vanish; landed damage refunded; converted minions restore per general rule. [6-5g scope]
+`6-5f/R29` Restored-minion general rule: rises at pre-death hp, corpse consumed, corpse-gone -> not restored.
+`6-5f/R30` Cast-interrupt/burst-cancel is a third trigger beside the existing ones at _cast_is_interrupted/_advance_bursts. [6-5g scope]
+
+Browser decisions (closing gate B1/B2's four wrongly-open OQs):
+`6-5f/R31` Resolution tick recorded at both apply seats alongside last_resolved_card_id/_mode, hashed as the THIRD member of the last_resolved_card snapshot array (key count unchanged), cleared by clear_resolved_card() at both teardown seats; own isolable golden cause. Closes B1.
+`6-5f/R32` A restored minion's pre-death hp is a NEW hashed field, own golden cause.
+`6-5f/R33` A test asserts the interrupted caster does not enter STUNNED; now lands in 6-5g; 6-5f's break table carries only the STUNNED entry-point census, regression-only.
+`6-5f/R34` Live smoke runs at the authored default window 0; counter_window_seconds > 0 is unit-test-only.
+`6-5f/R35` No refusal cue of any kind, beyond the existing refusal channel.
+
+The cut (triggered by the gate's size verdict):
+`6-5f/R36` 6-5f keeps the framework + six instant cards (Vanguard, Culling, Grave Ward, Raise Dead, Drain, Boom); new story 6-5g-counterspell-timed-and-in-flight (Tier A, backlog, last on the board) takes the seven others (Vampiric Aura, Bloodhound Step, Frostbite, Honed Bolt, Rocksling, Fireball, Corpse Bomb) plus cancel_rule/_cast_is_interrupted/_advance_bursts/in-flight/landed-refund/Rocksling-Boulder-removal, the not-stunned test, and their smoke points.
+`6-5f/R37` INTERIM RULE in 6-5f, removed by 6-5g: a Counterspell targeting a resolution one of the seven 6-5g cards produced is refused as "no target" through the existing refusal path, no new refusal reason; an AC of 6-5f with a test and a smoke point.
+`6-5f/R38` Bloodlust removed from every timed-buff list in the story and deck-1-spec -- unreachable in Deck 1 (Fireball replaced it as Bloodhound Step's pitch, 2026-09-22 amendment); its reversal is covered by construction, not by a test case.
+
+Gate blocker/major resolutions:
+`6-5f/R39` B1 (no stored resolution tick) resolved by `6-5f/R31` -- the tick is now a hashed AC (story AC 5) and its own golden cause.
+`6-5f/R40` B2 (four decided rulings left as Open Questions) resolved by `6-5f/R32`-`R35` replacing OQ 2/3/4/5; only OQ 1 (the reversal record's shape) remains open, as the prompt confirmed.
+`6-5f/R41` M1 (break table wrongly pinned the Boulder-clear behaviour change to test_card_play.gd) resolved: the row now names the real pins, test_spell_framework.gd:311, test_hero_cast.gd:135, test_fireball.gd:196.
+`6-5f/R42` M2 (break table missed the STUNNED entry-point census) resolved: test_action_state.gd added, regression-only.
+`6-5f/R43` M3 ("amount actually applied" stated once, dropped at most seats) resolved: story AC 14 now names its only three live 6-5f seats -- Boom's damage refund, Drain's heal claw-back, Culling's mana claw-back -- each bound to its own recorded post-application delta, never `_funnel_damage`'s pre-application return.
+
+Minors m1 (AC 3/AC 7 mis-citation), m2 (additive-record clause uncited), m5 (_reset_player line cite), m6
+(stale break-table hedge) applied directly in the story's renumbered ACs and break table; not given their
+own R-labels (gate-text fixes, not scope rulings). m3 (Bloodlust) is `6-5f/R38` above. m4
+(RULE_ROLL_BOOST, Bloodhound Step) is moot for 6-5f -- Bloodhound Step is cut to 6-5g entirely; carried
+there, not fixed here.
+
+Story renumbered: 38 ACs -> 30 (contiguous), 745 lines -> 679 lines. `6-5f-counterspell` promoted
+`backlog -> ready-for-dev`; `6-5g-counterspell-timed-and-in-flight` added `backlog`, board-ordered
+immediately after it, now last on the board and E6's R-SPELL forcing point. `deck-1-spec.md` gains a
+dated paragraph recording the 6-5f/6-5g split, the interim refusal, and the Bloodlust removal.
