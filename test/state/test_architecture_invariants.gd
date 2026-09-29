@@ -363,9 +363,21 @@ func test_runner_observation_seams_are_exactly_ten() -> void:  # 2-6/R7, amended
 ##
 ## STATED LIMITATION: only the literal `_match_state.` receiver is seen. An aliased receiver
 ## (`var ms := _match_state`) evades it -- the same class of limit the declaration guard above has.
+## STORY 6-5f (AC 26): `counterspell_resolved:inline` joins the list -- the SECOND inline direct-connect,
+## and it is added here DELIBERATELY rather than routed through a `connect_*` seam to avoid moving this pin.
+## `match_runner`'s own note at the `card_cast_resolved` site is what this records: that connection shape is
+## sound (read-only, per-slot guarded, dependency direction visuals -> state) and the operator ruled it
+## STANDS, with the explicit warning that "a third and fourth of these would be a de-facto seam family
+## nobody voted for". THIS IS THE SECOND. The warning is now one step from due; the story that adds a THIRD
+## should open the seam-family question rather than extend this list again (`3-0d/R20`'s "a guard outgrown
+## twice gets its mechanism replaced" applied to a pin instead of a guard).
+##
+## `test_runner_observation_seams_are_exactly_ten` is deliberately UNMOVED by this story: a plain connect is
+## not a `connect_*` wrapper, which is exactly the distinction these two pins exist to keep separate.
 const RAW_MATCH_STATE_CONNECTS: Array[String] = [
-	"card_cast_resolved:inline", "deflect_landed:wrapper", "hit_landed:wrapper",
-	"pitch_changed:wrapper", "reshuffle_vulnerable_window_opened:relay", "round_ended:relay",
+	"card_cast_resolved:inline", "counterspell_resolved:inline", "deflect_landed:wrapper",
+	"hit_landed:wrapper", "pitch_changed:wrapper",
+	"reshuffle_vulnerable_window_opened:relay", "round_ended:relay",
 	"round_started:relay",
 ]
 

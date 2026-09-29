@@ -645,6 +645,24 @@ func _ready() -> void:
 				_mode: int) -> void:
 			if cast_slot == slot:
 				cues.on_card_cast_resolved())
+		# Story 6-5f (AC 26, `6-5f/R35`): the COUNTERSPELL placeholder cue, on BOTH heroes. The SECOND
+		# connection of the shape named two comments up, wired the same way and for the same reason -- a
+		# PLAIN `connect` to a `MatchState` signal, read-only, per-slot guarded, dependency direction
+		# unchanged. `test_runner_observation_seams_are_exactly_ten` is untouched: no eleventh
+		# `connect_*` wrapper ships.
+		#
+		# THE CANDIDATE-FOR-THE-AMENDMENT-QUEUE NOTE ABOVE IS HEREBY THE SECOND OF THE "third and fourth
+		# would be a de-facto seam family nobody voted for" it warns about. Recorded, not quietly filed:
+		# this story does not open the seam-family question, and the next such connection should.
+		#
+		# BOTH SLOTS FIRE, WHICH IS AC 26's "on both heroes", and the guard is an `or` rather than an
+		# equality: the cue is one sign on the caster and one on the countered player, so a hero whose slot
+		# is EITHER payload member plays it. A Counterspell cannot name the same slot twice (the victim is
+		# `1 - slot` by construction), so no hero can double-fire it.
+		_match_state.counterspell_resolved.connect(func(caster_slot: int,
+				countered_slot: int) -> void:
+			if caster_slot == slot or countered_slot == slot:
+				cues.on_counterspell_resolved())
 		# Story 3-0a: the rig animation controller shares the action-state seam -- the five
 		# ActionState-driven clips (idle/attack/block/roll/death), now six with CHARGING (5-3).
 		# The locomotion clips are NOT wired here: HeroActor.drive() pushes them per-tick from

@@ -287,6 +287,38 @@ var _raised_from: Array[int] = []
 ## index by `has_index`, so it collides with no real source.
 const NO_RAISE_SOURCE := -1
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5f (AC 23, `6-5f/R32`): THE FOURTH CORPSE ARRAY -- the hp this record held IMMEDIATELY BEFORE
+## its death. The operator ruled it "a NEW hashed field, its own golden cause", and this is where
+## `6-5b/R17` already put corpse data: on `UnitBoard`, at the dead unit's own board index.
+## ------------------------------------------------------------------------------------------
+## IT CANNOT BE DERIVED, and the reason is `kill_at`'s own arithmetic: the death seat writes `_hp[index] =
+## 0.0`, so the value it overwrote exists nowhere afterwards. `4-3a`'s clamp comment says so from the other
+## side ("two units killed by differently-sized hits hash the same"), which is exactly the information this
+## array preserves and the snapshot deliberately used to drop.
+##
+## WHY IT IS NEEDED AT ALL: a Counterspell reversal puts a killed minion back "at the hp it had immediately
+## before death" (`6-5f/R29`), which is DELIBERATELY NOT Raise Dead's number. `_apply_raise_dead` enters a
+## minion at `kind.max_hp * raise_hp_percent / 100.0` because it revives a corpse from scratch; a reversal
+## undoes a kill it just watched happen and must put back exactly what was there. Two different numbers, so
+## the narrower one needs its own fact.
+##
+## WRITTEN AT THE DEATH SEAT, FOR EVERY DEATH, WHATEVER THE CAUSE -- not only for the two 6-5f reverses
+## today. A contact kill, a Culling, a Drain and a Corpse Bomb all pass through `kill_at`, and a per-cause
+## write would be four places that could disagree about what "immediately before" means. It is also what
+## lets `6-5g`'s Corpse Bomb reversal reuse the general restore rule (AC 23) with no new field.
+##
+## ZERO FOR A LIVING RECORD, on `_corpse_ticks`' own precedent that a resting value is simply zero -- and
+## it is why there is no `_died: Array[bool]` beside it: liveness is already `_hp > 0.0` and a second
+## expression of "this record has died" is this file's standing warning (see `_hp`).
+##
+## IT OUTLIVES THE CORPSE, deliberately, unlike `_corpse_ticks`. `consume_corpse_at` and expiry both
+## remove the corpse and neither clears this, on `_raised_from`'s own append-only posture: "this record
+## died holding 4 hp" stays true for the record's whole life, and a field cleared when the corpse went
+## would be a second thing to get the timing of right. Nothing reads it for a record with no corpse --
+## the restore rule requires the corpse (AC 23's "a corpse already gone means the minion is NOT restored").
+var _hp_at_death: Array[float] = []
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
 ## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
@@ -347,6 +379,11 @@ func add(max_hp: float, kind_index: int, raised_from: int = NO_RAISE_SOURCE) -> 
 	_corpse_ticks.append(0)
 	_corpse_extended.append(false)
 	_raised_from.append(raised_from)
+	# Story 6-5f (AC 23): a living record has not died, so it holds the resting zero -- the honest empty
+	# value every field above enters at, applied to the fourth corpse field. A minion RESTORED by a
+	# Counterspell reversal is no exception: it enters ALIVE through this same function at its recorded
+	# pre-death hp, with its OWN empty death record, so a second death writes a fresh one.
+	_hp_at_death.append(0.0)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -388,6 +425,10 @@ func clear() -> void:
 	_corpse_ticks.clear()
 	_corpse_extended.clear()
 	_raised_from.clear()
+	# Story 6-5f (AC 23): cleared with its thirteen siblings, for the header's own reason applied to
+	# fourteen arrays -- one collection expressed as fourteen, and an index present in one but not the
+	# others would be a death record belonging to a record that no longer exists.
+	_hp_at_death.clear()
 
 
 func size() -> int:
@@ -545,6 +586,13 @@ func kill_at(index: int, corpse_ticks: int) -> bool:
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
 	if _hp[index] <= 0.0:
 		return false
+	# Story 6-5f (AC 23, `6-5f/R32`): the pre-death hp is captured HERE, in the same statement pair as the
+	# hp write and the corpse write, and BEFORE the zero -- the only tick on which the value still exists.
+	# Its placement inside this function rather than at the three callers is what AC 23's "a NEW hashed
+	# fact" means structurally: one death seat, one capture, so no cause can record a different notion of
+	# "immediately before". The idempotent early return above it is what keeps a second hit on a corpse
+	# from overwriting the real number with a zero.
+	_hp_at_death[index] = _hp[index]
 	_hp[index] = 0.0
 	# AC 1: the corpse is created HERE, in the same statement pair as the hp write, for EVERY minion
 	# death regardless of cause. A zero lifetime (a totem, or an authored 0.0) writes a corpse that is
@@ -598,6 +646,42 @@ func extend_corpse_at(index: int, ticks: int) -> void:
 		return
 	_corpse_ticks[index] += maxi(0, ticks)
 	_corpse_extended[index] = true
+
+
+## Story 6-5f (AC 23, `6-5f/R29`/`R32`): the hp this record held immediately before it died, or `0.0` for a
+## record that is still alive. `corpse_ticks_at`'s bound leniency and for its reason: the one consumer is
+## the reversal restore, which has already established through `has_corpse_at` that there IS a corpse at
+## this index, and "no such record" and "never died" lead to the same correct answer -- restore nothing.
+func hp_at_death_at(index: int) -> float:
+	return _hp_at_death[index] if has_index(index) else 0.0
+
+
+## Story 6-5f (AC 19/AC 20): PUT A CORPSE BACK at `index` with an explicit remaining lifetime and extended
+## mark -- the one seat a Counterspell reversal uses to undo a change to a corpse's COUNTDOWN.
+##
+## TWO REVERSALS, ONE SEAT, and that is why it takes the lifetime rather than a delta. Grave Ward's reversal
+## subtracts the extension it added (AC 19) and Raise Dead's returns a consumed corpse with the remaining
+## time it would have had by now (AC 20); both compute a target remaining and both need the mark restored
+## to what it was before the cast. A `shrink_corpse_at(index, ticks)` would express the first and not the
+## second, and `extend_corpse_at(index, -ticks)` cannot express either -- it clamps its argument at zero and
+## sets the mark unconditionally, which is correct for the card it serves and wrong for undoing it.
+##
+## A NON-ZERO LIFETIME ON A LIVING RECORD IS REFUSED, not clamped: a corpse belongs to a dead record by
+## definition (`has_corpse_at` reads both halves), and a living unit that also had a countdown would be the
+## exact "simultaneously present and gone" state this file's header warns about. The guard is the liveness
+## test rather than `has_corpse_at`, because Raise Dead's reversal restores a corpse that is currently GONE
+## -- that is the whole point of it.
+##
+## A NON-POSITIVE LIFETIME CLEARS THE MARK WITH IT, unconditionally, which is `consume_corpse_at`'s own
+## rule (`6-5b/R7` scopes the mark to "until that corpse is removed") reached from a different direction:
+## reaching zero here IS a removal, so AC 19's "any corpse whose remaining time is then <= 0 disappears on
+## this same tick" and AC 20's "EXCEPT one that would already have naturally expired" are both this clamp
+## rather than a branch at either caller.
+func restore_corpse_at(index: int, ticks: int, extended: bool) -> void:
+	if not has_index(index) or _hp[index] > 0.0:
+		return
+	_corpse_ticks[index] = maxi(0, ticks)
+	_corpse_extended[index] = extended and ticks > 0
 
 
 ## AC 14: RAISE DEAD -- the corpse at `index` is CONSUMED. The countdown goes to zero, which is the
@@ -939,6 +1023,21 @@ func corpse_extended_snapshot() -> Array:
 
 func raised_from_snapshot() -> Array:
 	return _raised_from.duplicate()
+
+
+## Story 6-5f (AC 23/AC 28, `6-5f/R32`): the FOURTH corpse payload, on this file's own `unit_hp` side of
+## the precedent (one array -> one key), because "what this record died holding" is an INDEPENDENT fact from
+## its countdown, its mark and its provenance -- fusing it would hide which one moved when the golden moves.
+##
+## IT CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`): it decides the hp a restored minion enters at, and
+## it cannot be recomputed from anything else on the record -- `kill_at` overwrote the only other copy with
+## zero, ticks ago. It is the operator's own named golden cause (`6-5f/R32`).
+##
+## PLAIN FLOATS, the `unit_hp` payload's own type and branch, so no StringName and no object reaches the
+## hash. The ORDER IS MEANINGFUL and CanonicalHash preserves it: a death record belonging to the wrong unit
+## is a real divergence.
+func hp_at_death_snapshot() -> Array:
+	return _hp_at_death.duplicate()
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS

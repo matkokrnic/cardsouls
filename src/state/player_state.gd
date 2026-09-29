@@ -626,6 +626,30 @@ var last_resolved_card_mode: int = NO_RESOLVED_MODE
 
 const NO_RESOLVED_MODE := -1
 
+## Story 6-5f (AC 5, `6-5f/R31`): WHEN that card resolved -- the `MatchState._tick` the apply seat ran on,
+## written by `record_resolved_card` beside the id and the mode and cleared by `clear_resolved_card` with
+## them. The operator closed gate blocker B1 on exactly this shape: it rides the EXISTING
+## `last_resolved_card` snapshot key as its THIRD member, so the per-player KEY COUNT does not move on this
+## cause -- only the array's own arity (the `cast` key's 2 -> 6 extension, `6-5d`, is the standing precedent
+## for widening a fused key rather than adding one).
+##
+## IT IS COUNTERSPELL'S WINDOW CLOCK AND NOTHING ELSE READS IT. `counter_window_seconds` is a MAXIMUM AGE
+## (`6-5f/R4`), so the gate needs the resolution's own tick to subtract from the activation's; there is no
+## `TimingWindow` for it because there is nothing running -- a window that counts down would have to be
+## started per resolution and cancelled per overwrite, which is two mechanisms for one subtraction.
+##
+## A TICK NUMBER, NOT A COUNTDOWN, is therefore the deliberate shape, and it is the ONE place this project
+## hashes an absolute tick rather than a remaining count -- `corpse_bomb_tick` is the precedent that made
+## it acceptable (`6-5e` ruling 14), for the same reason: the fact is WHEN something happened, and a
+## countdown would be a derived view of it that needs a clock of its own to stay true.
+##
+## RESTING `NO_RESOLVED_TICK`, which is `corpse_bomb_tick`'s own `-1` posture: not a valid tick, so it
+## collides with no real resolution, and `last_resolved_card_id == ""` is the predicate readers actually
+## test (see `has_resolved_card`).
+var last_resolved_card_tick: int = NO_RESOLVED_TICK
+
+const NO_RESOLVED_TICK := -1
+
 ## Story 5-2 (AC 21): the resting value of `charge_color`, and it is a THIRD thing rather than a
 ## fourth colour — `Enums.CardColor` gets no `NONE` member, exactly as `TargetingService` answers
 ## "nothing" with a sentinel rather than by widening the address space. Readers test the NAME.
@@ -714,19 +738,160 @@ func tick_rules() -> void:
 		window.tick()
 
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5f (AC 2/AC 28, OPEN QUESTION 1 RESOLVED): THE REVERSAL RECORD -- "what did this resolution
+## actually do, in enough detail to undo it".
+## ------------------------------------------------------------------------------------------
+## THE SHAPE CHOSEN, AND WHY (the story left this mechanism-open and asked the dev pass to argue it):
+## ONE PER-PLAYER PACKET, OVERWRITTEN IN LOCKSTEP WITH `last_resolved_card`, rather than a family of
+## per-effect-id parallel fields. That is the story's own "deliberate leaning" tried first and found
+## correct, and the argument it makes is the decisive one: `6-5f/R6` ("resolving ANY card overwrites the
+## target") and `6-5f/R5` ("countering CLEARS the target") are then ONE overwrite semantic expressed at one
+## seat, not two mechanisms that could drift into disagreeing about what the current target is. The
+## alternative would have needed seven fields' worth of clearing rules kept in agreement with the id field
+## that decides which of them is live, and the failure mode is silent: a stale Boom packet beside a fresh
+## Culling id reverses the wrong resolution.
+##
+## `record_resolved_card` IS THEREFORE ALSO THE CLEAR, and the two apply seats CALL IT BEFORE THE EFFECT
+## APPLIES (see `MatchState._resolve_basic_cast` / `_resolve_pitch_activate`, where the call moved above the
+## cast fork for exactly this reason). The apply arms then fill the packet they know is empty. One write
+## site, one overwrite, no ordering to remember at seven arms.
+##
+## IT IS ADDITIVE TO `hand_covered`, `burst` AND `corpse_bomb` AND REDEFINES NONE OF THEM (AC 2). Boom's
+## reversal records WHICH SLOTS ITS OWN RESOLUTION UNCOVERED, which the per-slot cover mask structurally
+## cannot answer ("is slot N covered now" is not "did THIS Boom uncover slot N"); the mask, the burst
+## schedule and the conversion record are all read unchanged and written by nobody here.
+##
+## NO CARD ID AND NO EFFECT ID IS IN IT, deliberately, which is why `SNAPSHOT_ID_PATHS` gains no member:
+## the KIND below is a small int enum, and Boom's restored Boulders are re-covered from
+## `MatchState._boulder_card_id` -- the same single authored source `_place_boulder` plants from -- rather
+## than from a `String` per slot that would be a second copy of one constant riding the hash.
+##
+## THE KINDS. `REVERSAL_NONE` is the resting value AND the whole of the no-target rule: a resolution this
+## story cannot undo -- Counterspell itself (AC 9), any of the seven cards deferred to `6-5g` (AC 13's
+## interim rule), a `spell_*` fixture no-op, a totem summon, a flag-closed cast -- leaves the packet at
+## NONE and is refused by the ONE gate, with no per-case list anywhere. That is what makes AC 9's "no
+## special-case code" and AC 13's "no new refusal reason" true by construction rather than by two branches.
+const REVERSAL_NONE := 0
+const REVERSAL_VANGUARD := 1
+const REVERSAL_CULLING := 2
+const REVERSAL_GRAVE_WARD := 3
+const REVERSAL_RAISE_DEAD := 4
+const REVERSAL_DRAIN := 5
+const REVERSAL_BOOM := 6
+
+var reversal_kind: int = REVERSAL_NONE
+
+## THE PER-ELEMENT COLUMNS. FIVE PARALLEL ARRAYS, index-aligned, in the order the resolution touched
+## things -- `UnitBoard`'s own parallel-array shape and `rule_a`/`rule_b`'s own GENERIC-COLUMN-WITH-A-
+## PER-KIND-MEANING-TABLE convention (see `start_rule`), applied to a record instead of a rule. Generic
+## columns beat seven differently-shaped arrays for the reason that seat already banked: every column is a
+## plain int, float or bool, so nothing here can lose an element type, order a StringName by pointer, or
+## depend on a Dictionary's iteration order.
+##
+## WHAT EACH COLUMN HOLDS, PER KIND (the `RULE_*` table's shape):
+##   REVERSAL_VANGUARD     `indices` = [the summoned record's board index]. Nothing else.
+##   REVERSAL_CULLING      `indices` = the board indices it killed, ascending.
+##                         `amount`  = the mana it ACTUALLY added (post-clamp delta, AC 14).
+##   REVERSAL_GRAVE_WARD   `indices` = the corpse indices it touched, ascending.
+##                         `a`       = the ticks it added to each.
+##                         `flags`   = whether THIS cast newly set that corpse's extended mark.
+##   REVERSAL_RAISE_DEAD   `indices` = the corpse indices it CONSUMED, ascending.
+##                         `a`       = each of those corpses' remaining ticks AT consumption.
+##                         `b`       = the board index of the record raised from it, or `NO_RAISED_RECORD`.
+##                         `flags`   = each of those corpses' extended mark at consumption.
+##   REVERSAL_DRAIN        `indices` = [the board index it sacrificed].
+##                         `amount`  = the hp it ACTUALLY healed (post-clamp delta, AC 14).
+##   REVERSAL_BOOM         `indices` = the victim's hand slots it uncovered, ascending.
+##                         `amount`  = the hp it ACTUALLY removed, summed over its hits (AC 14).
+##
+## `amount` IS THE ONE-SHOT SCALAR AND IS A SUM WHERE THE EFFECT HIT MORE THAN ONCE. Boom applies damage
+## per Boulder and the refund is one heal of the total, which is the honest reversal: the clamp AC 15 binds
+## is the caster's own max hp at the refund, not per hit. It is measured as the pool's own before-minus-after
+## delta at every one of the three seats, NEVER as `_funnel_damage`'s pre-application return (AC 14).
+var reversal_indices: Array[int] = []
+var reversal_a: Array[int] = []
+var reversal_b: Array[int] = []
+var reversal_flags: Array[bool] = []
+var reversal_amount: float = 0.0
+
+## The resting value of `reversal_b` -- a consumed corpse that raised nothing (an unresolvable kind; see
+## `MatchState._apply_raise_dead`). `-1`, `UnitBoard.NO_RAISE_SOURCE`'s own posture: not a valid board index,
+## so it collides with no real record.
+const NO_RAISED_RECORD := -1
+
+
 ## Story 6-5a (AC 10): the one writer of the last-resolved-card record.
-func record_resolved_card(card_id: StringName, mode: int) -> void:
+## STORY 6-5f (AC 5/AC 28): it takes the RESOLUTION TICK (`6-5f/R31`) and it CLEARS THE REVERSAL PACKET --
+## the single overwrite semantic argued at `reversal_kind`. Callers invoke it BEFORE the effect applies, so
+## the arms below fill an empty packet.
+func record_resolved_card(card_id: StringName, mode: int, tick: int) -> void:
 	last_resolved_card_id = String(card_id)
 	last_resolved_card_mode = mode
+	last_resolved_card_tick = tick
+	clear_reversal()
+
+
+## Story 6-5f (AC 4/AC 11): has this player resolved a card at all? The predicate the target gate reads
+## rather than re-testing the id against `""` at the seat -- `UnitBoard.has_index`'s discipline (one
+## expression of a bound, wired to by every guard) applied to a record.
+func has_resolved_card() -> bool:
+	return last_resolved_card_id != ""
+
+
+## Story 6-5f (AC 2): RECORD what the resolution just did. ONE writer for every arm, so a packet can never
+## be half-written: the arm hands whole columns and the kind in one call, and the arity agreement between
+## the columns is this function's own guard rather than six arms' discipline.
+##
+## THE COLUMNS ARE COPIED, never aliased -- `record_corpse_bomb`'s own 4-0 review patch, which found exactly
+## this bug at exactly this kind of key. The apply arms build local lists and would otherwise keep mutating
+## the packet's own arrays after the fact.
+func record_reversal(kind: int, indices: Array[int], a: Array[int], b: Array[int],
+		flags: Array[bool], amount: float) -> void:
+	Invariant.check(kind != REVERSAL_NONE,
+		"a reversal record must name a real kind -- REVERSAL_NONE is the CLEARED state, not a record")
+	Invariant.check((a.is_empty() or a.size() == indices.size()) \
+				and (b.is_empty() or b.size() == indices.size()) \
+				and (flags.is_empty() or flags.size() == indices.size()),
+		"reversal columns must be empty or index-aligned with %d indices (a=%d b=%d flags=%d)" \
+				% [indices.size(), a.size(), b.size(), flags.size()])
+	reversal_kind = kind
+	reversal_indices = indices.duplicate()
+	reversal_a = a.duplicate()
+	reversal_b = b.duplicate()
+	reversal_flags = flags.duplicate()
+	reversal_amount = amount
+
+
+## Story 6-5f (AC 10/AC 28, `6-5f/R5`): THE ONE STOP POINT for a reversal record -- `cancel_rule`'s own
+## discipline applied to the packet. Reached from THREE places and nowhere else: `record_resolved_card`
+## above (a new resolution overwrites the old target), `clear_resolved_card` below (both per-round teardown
+## seats), and `MatchState._apply_counterspell` the instant it finishes reversing (which is the whole of
+## AC 10 -- a countered card stops being a target, so a second copy reads NONE and is refused).
+func clear_reversal() -> void:
+	reversal_kind = REVERSAL_NONE
+	reversal_indices.clear()
+	reversal_a.clear()
+	reversal_b.clear()
+	reversal_flags.clear()
+	reversal_amount = 0.0
 
 
 ## Story 6-5a (REVIEW B1, operator ruling): the last-resolved-card record is CLEARED by round end and by
 ## the debug reset, exactly as `clear_rules()` beside it -- the NINTH named reset exception. Without this
 ## the record was round-crossing hashed state that nothing cleared and no test pinned, so a reset match
 ## and a fresh match sat at different resting snapshots at the same point. Back to the resting pair.
+## STORY 6-5f (AC 5/AC 28): the TICK and the REVERSAL PACKET clear here too, with the id and the mode and on
+## the same tick -- which is how AC 28's "cleared at both existing teardown seats" is satisfied with NO new
+## teardown line at either seat. The packet's whole meaning is "what the card named by this record did", so
+## a record that is gone cannot leave one behind; folding the clear in here rather than adding
+## `clear_reversal()` beside the twelve other clears is the same single-overwrite argument `reversal_kind`
+## makes for the write side.
 func clear_resolved_card() -> void:
 	last_resolved_card_id = ""
 	last_resolved_card_mode = NO_RESOLVED_MODE
+	last_resolved_card_tick = NO_RESOLVED_TICK
+	clear_reversal()
 
 
 ## Story 3-6 (AC 2): QUEUE one card-observation payload (D5). Called from MatchState at the seats
@@ -1098,6 +1263,22 @@ func to_snapshot() -> Dictionary:
 		"unit_corpse_ticks": units.corpse_ticks_snapshot(),
 		"unit_corpse_extended": units.corpse_extended_snapshot(),
 		"unit_raised_from": units.raised_from_snapshot(),
+		# Story 6-5f (AC 23/AC 28, `6-5f/R32`): the FOURTH corpse key -- the hp each record held
+		# IMMEDIATELY BEFORE it died. It sits HERE, beside the three corpse keys it belongs with, because
+		# this literal is grouped BY STORY and not alphabetically (`unit_count` is 120 lines up); the
+		# SORTED position the two key-set pins carry is between `unit_hp` and `unit_in_reach`. One array ->
+		# one key, on the three keys above's own stated reason: an independent fact, and fusing it into
+		# `unit_hp` would hide which of the two moved.
+		#
+		# IT CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`), and it is the sharpest example of the rule
+		# in the file: `kill_at` overwrites the living hp with zero, so a reversal that must put a minion
+		# back at what it held "immediately before death" (`6-5f/R29`) has NO other source for the number.
+		# See `UnitBoard._hp_at_death` for why it is not derivable and why it deliberately outlives the
+		# corpse.
+		#
+		# THE OPERATOR NAMED IT A GOLDEN CAUSE IN ADVANCE (`6-5f/R32`, Golden Prediction cause 2's second
+		# half) -- measured separately from the reversal record, not folded into it.
+		"unit_hp_at_death": units.hp_at_death_snapshot(),
 		# Story 4-4 (AC 14-19): the PROJECTILE BOARD joins the hash — SEVEN keys, on the split
 		# `UnitBoard` already established (the target FUSES its two ints because a target is one fact
 		# in two halves; the rest are independent facts that fusing would hide).
@@ -1305,7 +1486,44 @@ func to_snapshot() -> Dictionary:
 		# `["", -1]`. It is a key because it CROSSES TICKS and 6-5f's Counterspell will decide an outcome
 		# from it. TWO GOLDEN CAUSES RIDE ON IT: its PRESENCE, and its VALUE moving from the golden
 		# fixture's t22 basic cast onward.
-		"last_resolved_card": [last_resolved_card_id, last_resolved_card_mode],
+		# STORY 6-5f (AC 5, `6-5f/R31`, Golden Prediction cause 1): A THIRD MEMBER -- the RESOLUTION TICK.
+		# The key count does NOT move on this cause and the array's arity does, which is the `cast` key's
+		# 2 -> 6 extension precedent (`6-5d`) applied a second time and for its reason: the tick is a half
+		# of the SAME fact ("which card resolved, in which mode, when"), and a `last_resolved_tick` key
+		# beside this one could drift into naming a tick for a card this key no longer holds.
+		#
+		# IT CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`): with a nonzero `counter_window_seconds` it
+		# decides whether the card is counterable at all (AC 7), and it is not recomputable inside the tick
+		# that reads it -- the resolution is by definition in the past. Resting `["", -1, -1]`, each
+		# element's own resting value.
+		"last_resolved_card": [last_resolved_card_id, last_resolved_card_mode,
+					last_resolved_card_tick],
+		# Story 6-5f (AC 2/AC 28, Open Question 1, Golden Prediction cause 2): THE REVERSAL RECORD, as
+		# `[kind, indices, a, b, flags, amount]`. The `burst` key's SIX-ELEMENT FUSION verbatim and for its
+		# reason: a reversal record is ONE fact in six columns, and six keys would let them drift into a
+		# packet that disagrees with itself about which resolution it describes.
+		#
+		# MASKED TO RESTING WHEN THE KIND IS `REVERSAL_NONE`, which is the `timed_rules` / `root` /
+		# `defense` gating discipline: a stale column is then unrepresentable in the hash, not merely
+		# unread. `clear_reversal()` already empties every column, so the mask is belt-and-braces against
+		# a future arm that sets a column without a kind -- and it is what makes the RESTING-EMPTY case
+		# (Golden Prediction cause 2's own sub-cause) hash identically to a cleared one.
+		#
+		# EVERY COLUMN CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`), and the packet is the sharpest
+		# case in the file: it is written at one resolution and read, if ever, at a LATER activation by the
+		# other player, so none of it is recomputable inside the tick that reads it -- the board has moved
+		# on, corpses have aged and slots have been covered since. See `reversal_kind` for the per-kind
+		# meaning of each column.
+		#
+		# COUNTS, VALUES AND INDICES ONLY -- no card id, no effect id, no position. `reversal_indices` holds
+		# board indices or hand slots (the `unit_targets` / `corpse_bomb` class, `4-2/R2`), so
+		# `SNAPSHOT_ID_PATHS` gains no member and `test_card_effect_resolution.gd`'s counts-only scan needs
+		# no exemption. That is deliberate: see `reversal_kind` for why Boom's Boulder ids are read back
+		# from `MatchState._boulder_card_id` instead of riding here.
+		"reversal": [reversal_kind, reversal_indices.duplicate(), reversal_a.duplicate(),
+					reversal_b.duplicate(), reversal_flags.duplicate(), reversal_amount] \
+				if reversal_kind != REVERSAL_NONE \
+				else [REVERSAL_NONE, [], [], [], [], 0.0],
 	}
 
 

@@ -24,6 +24,7 @@
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/sting_charge_green.tres" id="22_wcgrn"]
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_cast_success.tres" id="23_wcast"]
 [ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_cast_warning.tres" id="24_wwarn"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/cue_counterspell.tres" id="25_wcntr"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_qp0e8"]
 size = Vector3(1, 2, 1)
@@ -71,6 +72,10 @@ height = 0.5
 top_radius = 1.0
 bottom_radius = 1.0
 height = 0.04
+
+[sub_resource type="TorusMesh" id="TorusMesh_tgcntr"]
+inner_radius = 0.16
+outer_radius = 0.3
 
 [node name="HeroActor" type="CharacterBody3D" unique_id=1317219649]
 script = ExtResource("1_vde01")
@@ -178,6 +183,10 @@ bus = &"CombatCues"
 stream = ExtResource("24_wwarn")
 bus = &"CombatCues"
 
+[node name="CueCounter" type="AudioStreamPlayer" parent="TelegraphController"]
+stream = ExtResource("25_wcntr")
+bus = &"CombatCues"
+
 [node name="Shapes" type="Node3D" parent="TelegraphController"]
 
 [node name="AttackCone" type="MeshInstance3D" parent="TelegraphController/Shapes"]
@@ -231,3 +240,9 @@ editor_description = "Root marker (story 6-5c, AC 28): a flat ring AT THE FEET, 
 script = ExtResource("16_anctl")
 animation_player_path = NodePath("../Mesh/Paladin/AnimationPlayer")
 editor_description = "Rig presentation layer (story 3-0a, widened by 5-0a): READ-ONLY per-hero consumer of the action-state seam (connect_hero_action_state_changed), wired by the runner at match start like TelegraphController. Selects one of the paladin's NINE skinned clips: IDLE/ATTACKING/BLOCKING/ROLLING/DEAD from the seam, and the five locomotion clips (idle/run/strafe_left/strafe_right/backpedal) PUSHED from HeroActor.drive()'s per-tick velocity AND facing while IDLE (gate ruling 3-0a/R2, widened by 5-0a AC 2 from speed-only to direction-aware after 4-6 pinned facing to the locked target). Direction is resolved by dot product, never by an angle - no second atan2. Never a state handle, never a mutator. NO _physics_process (F1)."
+
+[node name="CounterSign" type="MeshInstance3D" parent="TelegraphController"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+visible = false
+mesh = SubResource("TorusMesh_tgcntr")
+editor_description = "Counterspell placeholder (story 6-5f, AC 26): a one-shot ABOVE-HEAD RING, shown on BOTH heroes for 0.5 s when a Counterspell reverses a real target, and never on a refusal (MatchState emits counterspell_resolved only from _apply_counterspell, after the pre-spend board gate has passed). Wired by match_runner with a plain connect to that signal onto TelegraphController.on_counterspell_resolved - the card_cast_resolved precedent, so no eleventh connect_ seam ships. SIBLING OF HitFlash, not a child of Shapes, for OrbFlash stated reason: on_action_state_changed hides every child of Shapes on EVERY transition, and both heroes are free to move, block and swing while a Counterspell resolves. Root +2.35 puts it clear of CastWarning (+1.95), OrbFlash (+1.35) and the box top (+1.0), so all three can be up at once and stay readable. A TORUS is the only ring silhouette in the cue set (RootMark is a flat ground disc), and VIOLET is a hue no other cue uses - the two axes smoke item 8 checks distinctness on. Paired with CueCounter (a RISING two-note one-shot, the only cue that changes pitch within one hit). Pure sub-resource authoring, no art assets."

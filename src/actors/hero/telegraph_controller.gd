@@ -52,6 +52,13 @@ extends Node3D
 @onready var _cue_cast_warning: AudioStreamPlayer = $CueCastWarning
 ## Story 6-5c (AC 28): the root marker at the hero's FEET, held for the root and nothing else.
 @onready var _root_mark: MeshInstance3D = $RootMark
+## Story 6-5f (AC 26): the COUNTERSPELL placeholder -- a sign and a sound stub, played on BOTH heroes when a
+## Counterspell reverses a real target. A SIBLING of HitFlash for `OrbFlash`'s stated reason (see there):
+## `on_action_state_changed` hides every child of `$Shapes` on EVERY transition, and a Counterspell resolves
+## while both heroes are free to move, block and swing -- a sign under `$Shapes` would blink out on the first
+## press either of them made.
+@onready var _counter_sign: MeshInstance3D = $CounterSign
+@onready var _cue_counter: AudioStreamPlayer = $CueCounter
 
 ## Story 5-5 (AC 13): the deflect spark's ORIGINAL hue, hoisted to a constant because it is now
 ## applied from TWO places -- `_ready` and, as the fallback for a colour-less parry, the widened
@@ -66,6 +73,20 @@ const DEFAULT_SPARK_COLOR := Color(1.0, 0.95, 0.6, 1.0)
 const CAST_WARNING_COLOR := Color(1.0, 0.65, 0.1, 1.0)
 const ROOT_MARK_COLOR := Color(0.35, 0.6, 1.0, 0.5)
 
+## Story 6-5f (AC 26): the Counterspell sign's hue -- VIOLET, a colour no existing cue uses. A constant here
+## beside the other two rather than an authored `TelegraphProfile`, on `CAST_WARNING_COLOR`'s own stated
+## reason: a profile exists to let one shape stand in for several colours, and this sign never changes colour.
+##
+## VISUALLY DISTINCT FROM EVERY OTHER 6-5 PLACEHOLDER (AC 26/smoke 8) on both axes a viewer can use: a hue no
+## other cue occupies (amber is the cast warning, blue the root ring, red the hit flash, the spark is pale
+## gold, the orb flash takes the three card colours), and the only cue that appears on BOTH heroes at once.
+const COUNTER_SIGN_COLOR := Color(0.72, 0.35, 1.0, 1.0)
+
+## Story 6-5f (AC 26): how long the Counterspell sign is held, in seconds. The `OrbFlash` one-shot idiom's own
+## 0.25 s, doubled -- a reversal is a rarer and heavier event than earning an orb, and the operator has to be
+## able to see it on the hero they are NOT looking at (smoke 8 asks for exactly that).
+const COUNTER_SIGN_HOLD := 0.5
+
 var _profiles: Dictionary[HeroState.ActionState, TelegraphProfile] = {}
 ## Story 5-3 (AC 10): colour (Enums.CardColor int) -> the CHARGING-only profile. Separate from
 ## `_profiles` because the ActionState -> profile map is 1:1; CHARGING is 1:3, keyed by a value
@@ -77,6 +98,7 @@ var _stings: Dictionary[StringName, AudioStreamPlayer] = {}
 var _spark_tween: Tween
 var _flash_tween: Tween
 var _orb_flash_tween: Tween
+var _counter_sign_tween: Tween
 ## Story 5-4 (AC 16/AC 17): the LAST orb triple this controller was told about, indexed by
 ## `Enums.CardColor`. EMPTY means "the priming emission has not arrived yet" -- see
 ## on_orbs_changed for why that distinction is the whole of AC 16.
@@ -129,6 +151,11 @@ func _ready() -> void:
 	root_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_root_mark.material_override = root_material
 	_root_mark.visible = false
+	# Story 6-5f (AC 26): the Counterspell sign rests HIDDEN and is tinted once here, from this file's own
+	# flat-material helper -- it never stands in for several colours, so it takes the CastWarning/RootMark
+	# one-shot tint rather than ChargeMarker's and OrbFlash's per-dispatch re-tint.
+	_counter_sign.material_override = _flat_material(COUNTER_SIGN_COLOR)
+	_counter_sign.visible = false
 
 
 ## Story 6-5c (AC 26): START the target-side cast warning -- pushed by the runner on the rising edge
@@ -206,6 +233,35 @@ func on_action_state_changed(_previous: HeroState.ActionState, current: HeroStat
 ## one-shot cue at CAST RESOLUTION, distinct from the ongoing CHARGING sting above.
 func on_card_cast_resolved() -> void:
 	_cue_cast_success.play()
+
+
+## Seam callback (story 6-5f AC 26, `6-5f/R35`): a Counterspell has REVERSED A REAL TARGET. Connected by
+## `match_runner` with a plain `connect` to `MatchState.counterspell_resolved`, on
+## `on_card_cast_resolved`'s own precedent directly above and adding no `connect_*` seam.
+##
+## SIGN AND SOUND TOGETHER, on `on_cast_warning_started`'s stated rule: AC 26 requires both, and a cue that
+## can be half-wired is a cue that ships half-wired.
+##
+## THE `OrbFlash` ONE-SHOT IDIOM VERBATIM (show, kill any running tween, hold, hide) rather than the
+## `ChargeMarker` toggle-on-state-entry idiom: a reversal is an EVENT, not an ongoing state, and nothing will
+## later transition to switch the sign off. A WORLD-SPACE cue on the hero's own actor, so both split-screen
+## viewports show it -- which is what makes "on both heroes" observable to one operator (smoke 8).
+##
+## NO SLOT GUARD HERE. The runner's closure already decided this hero is one of the two the reversal named,
+## exactly as `on_card_cast_resolved`'s does and unlike the bound-slot handlers below, which receive
+## match-wide payloads and filter themselves.
+##
+## IT NEVER FIRES ON A REFUSAL, and that is `MatchState`'s property, not this file's: a no-target activation
+## is refused at the pre-spend board gate and the signal is emitted only from `_apply_counterspell`. There is
+## deliberately no "was it refused" argument for this function to test.
+func on_counterspell_resolved() -> void:
+	_cue_counter.play()
+	_counter_sign.visible = true
+	if _counter_sign_tween != null:
+		_counter_sign_tween.kill()
+	_counter_sign_tween = create_tween()
+	_counter_sign_tween.tween_interval(COUNTER_SIGN_HOLD)
+	_counter_sign_tween.tween_callback(func() -> void: _counter_sign.visible = false)
 
 
 ## Seam callback (connect_orbs_changed, story 5-4 AC 17) -- the NINTH seam's cue consumer, bound to

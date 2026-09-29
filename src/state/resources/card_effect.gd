@@ -253,6 +253,36 @@ extends Resource
 ## degrade `draw_replacement_delay_seconds` already has, reached from a different debt.
 @export var boulder_interval_seconds: float = 0.0
 
+## ------------------------------------------------------------------------------------------
+## STORY 6-5f: COUNTERSPELL'S ONE NUMBER -- the SIXTH such family (6-5a's five buff/trigger fields,
+## 6-5b's four corpse/own-minion fields, 6-5c's seven cast fields, 6-5d's eight variable-cost/flight
+## fields, 6-5e's two burst fields). ONE more FLAT export, on the header's own discipline (AC 1/AC 3): no
+## subclass, no nested resource, so `RecordFile._card_effects` keeps round-tripping it generically and
+## `_fresh_nested` needs no new row.
+## ------------------------------------------------------------------------------------------
+## NEUTRAL-ZERO BY DEFAULT, and here the neutral value carries a MEANING rather than merely being inert:
+## zero is `no limit`, which is the authored default (`6-5f/R4`). That is AC 3 -- the field's default
+## leaves every other authored effect's behaviour bit-identical, because the only reader is Counterspell's
+## own pre-spend target gate and an effect that never reaches that gate is unaffected whatever it holds.
+
+## HOW OLD THE TARGET RESOLUTION MAY BE and still be counterable, in seconds (`6-5f/R4`, AC 1/AC 6/AC 7).
+## Measured FROM the tick the target card RESOLVED (`PlayerState.last_resolved_card_tick`) to
+## Counterspell's own activation tick, and converted to ticks ONCE, at the moment the effect is applied
+## (A1) -- never stored as seconds past that point and never accumulated as a float.
+##
+## ZERO MEANS NO LIMIT, NOT `an instantly-stale target`, and the direction is deliberate: the authored
+## value is 0.0 (`6-5f/R34` runs live smoke at it), so the shipped card counters any card the opponent has
+## resolved this round however long ago. A window is therefore something a retune ADDS, and a `.tres` edit
+## alone adds it -- no code change, and no test change either, since the unit suite builds its own
+## in-test `CardEffect` literals (`BC/R3`).
+##
+## IT IS NOT A `duration_seconds` THIRD READING, unlike Grave Ward's (`6-5b/R7`). That field is "this
+## effect's ONE window" -- how long something this effect STARTED lasts. This is a MAXIMUM AGE of
+## something another player did, read at a gate before this effect applies anything at all, and
+## `counterspell.tres` authors no duration of its own for it to collide with. Two different questions, so
+## two fields rather than one field with a fourth meaning.
+@export var counter_window_seconds: float = 0.0
+
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation
 ## interprets it"). Empty = no cue named.

@@ -242,7 +242,16 @@ func test_a_hero_death_leaves_no_corpse() -> void:
 ## corpse ... through the exact same corpse-creation seat every other minion death already uses"), so the
 ## 3 -> 4 update is the intended consequence of the AC rather than a guard going slack. What the scan still
 ## forbids is unchanged: a corpse written ANYWHERE but the seat.
-func test_the_death_seat_has_exactly_four_callers_and_no_rival_corpse_writer() -> void:
+## STORY 6-5f (AC 17/AC 20): FOUR -> SIX, AND THE NAME MOVES WITH THE COUNT AGAIN. The two new callers are
+## both inside Counterspell's reversal and both REUSE the seat rather than writing a corpse of their own,
+## which is exactly the outcome the 6-5f story table predicted ("if a reversal-restore path reaches a NEW
+## caller of the corpse-creation seats rather than reusing an existing one, the caller count moves again"):
+##   5. `_reverse_summon` -- a countered summon VANISHES, expressed as `kill_at(index, 0)`, i.e. "dead, and
+##      this kind leaves no corpse", the seat's own documented zero-lifetime meaning.
+##   6. `_reverse_raise_dead` -- each raised minion vanishes the same way.
+## Neither is a new corpse-creation mechanism; both are the seat used with a zero lifetime, which is why
+## the rival-writer half of this guard below is UNMOVED and still the thing that actually matters.
+func test_the_death_seat_has_exactly_six_callers_and_no_rival_corpse_writer() -> void:
 	var board := FileAccess.get_file_as_string("res://src/state/unit_board.gd")
 	var state := FileAccess.get_file_as_string("res://src/state/match_state.gd")
 	assert_true(board.length() > 0 and state.length() > 0, "both sources were read")
@@ -250,11 +259,20 @@ func test_the_death_seat_has_exactly_four_callers_and_no_rival_corpse_writer() -
 	assert_eq(_occurrences(board, "kill_at("), 2,
 		"`UnitBoard` names `kill_at(` TWICE -- its own declaration, plus the ONE call from "
 		+ "`apply_damage_at` on behalf of the step-4 contact path (AC 3's first caller)")
-	# THREE callers inside MatchState: Culling, Drain and (story 6-5e) Corpse Bomb.
-	assert_eq(_occurrences(state, "units.kill_at("), 3,
-		"`MatchState` calls the death seat exactly THREE times -- the Culling apply seat, the Drain "
-		+ "apply seat, and 6-5e's Corpse Bomb apply seat (AC 3's second, third and fourth callers). "
-		+ "A FOURTH call here is a fifth caller and needs its own AC.")
+	# FIVE callers inside MatchState: Culling, Drain, (6-5e) Corpse Bomb, and (6-5f) the two reversal
+	# vanish paths, which reuse the seat with a ZERO lifetime rather than writing a corpse of their own.
+	assert_eq(_occurrences(state, "units.kill_at("), 5,
+		"`MatchState` calls the death seat exactly FIVE times -- the Culling apply seat, the Drain "
+		+ "apply seat, 6-5e's Corpse Bomb apply seat, and 6-5f's two Counterspell vanish paths "
+		+ "(`_reverse_summon` and `_reverse_raise_dead`, each `kill_at(index, 0)`: dead, no corpse). "
+		+ "A SIXTH call here is a seventh caller and needs its own AC.")
+	# Story 6-5f (AC 17/AC 20): the vanish paths pass a ZERO lifetime and NOTHING ELSE does. That is what
+	# keeps "no cause gets its own corpse number" true while two callers deliberately ask for no corpse --
+	# a zero here is the seat's own documented "this kind leaves no corpse" value, not a second mechanism.
+	assert_eq(_occurrences(state, "units.kill_at(index, 0)")
+			+ _occurrences(state, "units.kill_at(raised, 0)"), 2,
+		"exactly TWO of the five pass a zero corpse lifetime -- the two reversal vanish paths. Every "
+		+ "other caller passes `_corpse_ticks_for(...)`, the one authored lifetime read.")
 	# ...and nothing else writes a corpse. `_corpse_ticks` is assigned only inside the board, and only
 	# by the seat, the extension and the consume -- never from MatchState, an actor or the runner.
 	for path: String in ["res://src/state/match_state.gd", "res://src/main/match_runner.gd",

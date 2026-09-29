@@ -221,6 +221,29 @@ const HASHED: Array[String] = [
 	# the `pitch_state._card_ids` precedent (a resolved card is public), held as a String VALUE. Both
 	# ride the ONE `last_resolved_card` key: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"player_state.last_resolved_card_id", "player_state.last_resolved_card_mode",
+	# Story 6-5f (AC 5, `6-5f/R31`): the RESOLUTION TICK classifies HASHED beside the two halves it was
+	# added to -- it CROSSES TICKS by definition (it names a tick already past) and DECIDES AN OUTCOME
+	# (whether the card is still inside `counter_window_seconds`, and how much lifetime a Raise Dead's
+	# returning corpse has left). It rides the SAME `last_resolved_card` key as its third member, so no
+	# exemption is needed and UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"player_state.last_resolved_card_tick",
+	# Story 6-5f (AC 2/AC 28, Open Question 1): the REVERSAL RECORD's six members classify HASHED, on
+	# `burst`'s exact test and for a sharper version of it -- the packet is written at ONE player's
+	# resolution and read, if ever, at a LATER activation by the OTHER player, so every column CROSSES
+	# TICKS and DECIDES AN OUTCOME (whether there is a target at all, which minions rise and at what hp,
+	# which corpses shorten, which hand slots re-cover, how much hp and mana come back). A replay whose
+	# packets differed would diverge the moment a Counterspell resolved.
+	#
+	# NONE OF THEM IS AN IDENTITY OR A POSITION, which is the classification a reader might expect to have
+	# to argue and does not: `reversal_indices` holds board indices and hand SLOTS (the `unit_targets` /
+	# `corpse_bomb` class, `4-2/R2`'s counts-and-indices rule), and Boom's Boulder ids are deliberately NOT
+	# carried -- they are read back from `MatchState._boulder_card_id` at the restore. So no `StringName`
+	# and no `String` reaches the hash from this packet and `SNAPSHOT_ID_PATHS` gains no member.
+	#
+	# All six ride `PlayerState.to_snapshot()`'s ONE `reversal` key, so no exemption is needed and
+	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"player_state.reversal_kind", "player_state.reversal_indices", "player_state.reversal_a",
+	"player_state.reversal_b", "player_state.reversal_flags", "player_state.reversal_amount",
 	# Story 6-5e (AC 11a/AC 38, `6-5e/R21`/G2): the PENDING BURST's six members classify HASHED, on
 	# `charge_window`'s exact test rather than a weaker one -- they CROSS TICKS (the schedule outlives the
 	# cast that armed it, by ruling 6a) and DECIDE OUTCOMES (how many stones still exist, when each
@@ -304,6 +327,15 @@ const HASHED: Array[String] = [
 	# `PlayerState.to_snapshot()`'s `unit_corpse_ticks`, `unit_corpse_extended` and `unit_raised_from`
 	# keys, so no exemption is needed for any of them.
 	"unit_board._corpse_ticks", "unit_board._corpse_extended", "unit_board._raised_from",
+	# Story 6-5f (AC 23/AC 28, `6-5f/R32`): the PRE-DEATH HP classifies HASHED, on its three corpse
+	# siblings' exact test and with the strongest case of any of them for NOT being recomputable: the death
+	# seat overwrites the living hp with `0.0`, so a replay whose records carried a different pre-death hp
+	# would diverge the moment a Counterspell restored one -- and there is nothing left on the record to
+	# derive the right number from. It reaches the hash through `PlayerState.to_snapshot()`'s
+	# `unit_hp_at_death` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	#
+	# A PLAIN FLOAT PER RECORD, `_hp`'s own type and class: no position, no identity, no StringName.
+	"unit_board._hp_at_death",
 	# Story 4-4 (AC 14-19): the PROJECTILE BOARD and all eight of its members, ALL HASHED — so
 	# UNHASHED_CROSS_TICK_MEMBERS still stays at THREE and this story adds no fourth exclusion to
 	# argue about either. Each passes `4-3a/R17`'s test on its own: the target decides where homing
@@ -1197,8 +1229,8 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 17,
-		"...at FORMAT_VERSION 17, read out of the FILE rather than off the constant (AC 39)")
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 18,
+		"...at FORMAT_VERSION 18, read out of the FILE rather than off the constant (6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
 		"...and it loads back: %s" % str(result["error"]))
@@ -1829,4 +1861,331 @@ func _colors() -> Dictionary[StringName, Enums.CardColor]:
 	var out: Dictionary[StringName, Enums.CardColor] = {}
 	for i in DECK_IDS.size():
 		out[DECK_IDS[i]] = Enums.CardColor.RED if i % 2 == 0 else Enums.CardColor.BLUE
+	return out
+
+
+# ---------------------------------------------------------------- 6-5f: the Counterspell run (AC 30)
+
+## Story 6-5f (AC 30): THE SECOND FULL-CONTENT RECORDED RUN, and it exists because AC 30 names two
+## reversals BY CARD -- "a Counterspell that reverses a Boom (HP and Boulders restored) AND a Counterspell
+## that reverses a Culling (minions and mana restored)".
+##
+## IT IS A SEPARATE RUN RATHER THAN AN EXTENSION OF THE BOULDER RUN, deliberately: 6-5e's run is that
+## story's own AC 41 evidence, and threading two Counterspells through it would move its hash, its damage
+## readings and its five sequence assertions -- making one story's proof depend on the next story's content.
+## Two runs, two records, two files, neither able to break the other.
+##
+## WHO IS WHO: **P1 is the aggressor and P2 counters.** P1 throws the Rocksling that plants Boulders in P2's
+## hand, Booms them, summons two minions and Cullings them; P2 counters the Boom and then the Culling. That
+## puts both reversals on the side that SUFFERED them, which is the live shape.
+const COUNTER_RECORD_PATH := "user://test_6_5f_counterspell_run.rec"
+const COUNTER_SEED := 8181
+const COUNTER_TICKS := 52
+const COUNTER_ATTACK_TICK := 5        # both heroes swing
+const COUNTER_CONTACT_TICK := 9       # a fact each way -> melee mana on both sides
+const COUNTER_CAST_TICK := 12         # P1's Mode (1) Rocksling press
+const COUNTER_CAST_TICKS := 6
+const COUNTER_INTERVAL_TICKS := 4
+const COUNTER_STONES := 2
+const COUNTER_LAND_ONE_TICK := 19     # one tick after the strike at t18
+const COUNTER_LAND_TWO_TICK := 23     # stone 1 launched at t22
+const COUNTER_BOOM_STAGE_TICK := 26
+const COUNTER_BOOM_ACTIVATE_TICK := 28
+const COUNTER_BOOM_COUNTER_STAGE_TICK := 31
+const COUNTER_BOOM_COUNTER_TICK := 33
+const COUNTER_SUMMON_ONE_TICK := 36
+const COUNTER_SUMMON_TWO_TICK := 38
+const COUNTER_CULLING_STAGE_TICK := 41
+const COUNTER_CULLING_ACTIVATE_TICK := 43
+const COUNTER_CULL_COUNTER_STAGE_TICK := 46
+const COUNTER_CULL_COUNTER_TICK := 48
+
+## THREE CARD IDS AND A BOULDER, all opaque -- `BOULDER_DECK`'s discipline, so `data/cards/` can never
+## reach this fixture either. ROCK carries Rocksling in Mode (1) and Boom in Mode (4); SUMMON carries a
+## `summon_` in Mode (1) and Culling in Mode (4); COUNTER carries Counterspell in BOTH modes (its Mode (1)
+## press is never made -- one effect is simpler than an unused filler whose behaviour would need arguing).
+const COUNTER_ROCK_CARD := &"counter_run_rock"
+const COUNTER_SUMMON_CARD := &"counter_run_summon"
+const COUNTER_COUNTER_CARD := &"counter_run_counter"
+const COUNTER_PLANT_CARD := &"counter_run_boulder"
+## SEVEN, and every count is load-bearing: TWO ROCKs (one spent on the Rocksling cast, one on the Boom
+## activation), THREE SUMMONs (two spent summoning, one on the Culling activation) and TWO COUNTERs (one
+## per reversal). The composition is dealt out ENTIRELY (deck_size == hand_size), so every id is in hand
+## and no press depends on a replacement arriving.
+const COUNTER_DECK: Array[StringName] = [
+	COUNTER_ROCK_CARD, COUNTER_ROCK_CARD,
+	COUNTER_SUMMON_CARD, COUNTER_SUMMON_CARD, COUNTER_SUMMON_CARD,
+	COUNTER_COUNTER_CARD, COUNTER_COUNTER_CARD,
+]
+const COUNTER_CULLING_MANA_PER_KILL := 4.0
+
+
+## AC 30, the primary: a recorded match carrying a Counterspell that reverses a Boom and a Counterspell
+## that reverses a Culling, SAVED and RELOADED, replays from that file alone to the identical final hash.
+func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() -> void:
+	var recorded := _record_a_counterspell_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	var live_hash := CanonicalHash.of(live.to_snapshot())
+	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
+	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 18,
+		"...at FORMAT_VERSION 18, read out of the FILE rather than off the constant (AC 29)")
+	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
+	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
+	var loaded: IntentRecorder = result["record"]
+	assert_eq(CanonicalHash.of(_replay(loaded).to_snapshot()), live_hash,
+		"AC 30: a replay driven from the SAVED AND RELOADED record alone is bit-identical")
+	# The falsifying half, on the three channels this run leans on hardest. Without the contacts neither
+	# hero earns mana and no stone ever lands; without the PITCH channels nothing can be staged, so the
+	# Boom, the Culling and both Counterspells all fail to happen; without the intents nothing is pressed.
+	#
+	# `pitch_costs` IS THE CHANNEL NAME AND IT WITHHOLDS BOTH PITCH CHANNELS -- see `_replay`'s `elif`
+	# chain, which stops before `inject_pitch_costs` AND `inject_pitch_effects`. There is deliberately no
+	# `pitch_effects` name: `_replay` silently drops NOTHING for an unrecognised drop, so naming a channel
+	# that does not exist would make this loop assert that a full replay diverges from itself -- which is
+	# exactly how it failed on its first run here, and why the name is stated rather than guessed.
+	for channel in ["contacts", "pitch_costs", "intents"]:
+		assert_ne(CanonicalHash.of(_replay(loaded, channel).to_snapshot()), live_hash,
+			"dropping the %s channel must DIVERGE this replay too" % channel)
+	_remove_record(COUNTER_RECORD_PATH)
+
+
+## AC 30's other half, on the boulder run's own standard: the recorded run must actually DO both reversals,
+## or a bit-identical replay would be proving something about a sequence of refusals. Every clause is
+## measured on the LIVE run as it passed, not inferred from the final state.
+func test_the_counterspell_run_really_reverses_a_boom_and_a_culling() -> void:
+	var seen: Dictionary = _record_a_counterspell_run()["seen"]
+	# (a) THE BOOM LANDED: Boulders were planted and it detonated them for real damage.
+	assert_true(int(seen["covers_before_boom"]) > 0,
+		"the Rocksling really planted at least one Boulder in P2's hand (got %s)"
+				% seen["covers_before_boom"])
+	assert_eq(int(seen["covers_after_boom"]), 0, "...and the Boom detonated every one of them")
+	assert_true(float(seen["boom_damage"]) > 0.0,
+		"...for real damage (got %s)" % seen["boom_damage"])
+	# (b) THE FIRST COUNTERSPELL REVERSED IT: hp back, Boulders back in the same slots.
+	assert_eq(int(seen["covers_after_boom_counter"]), int(seen["covers_before_boom"]),
+		"the Counterspell returned every detonated Boulder to P2's hand (AC 22/AC 30)")
+	assert_eq(seen["boom_slots"], seen["restored_slots"],
+		"...to the SAME slots they occupied before the Boom")
+	assert_true(float(seen["boom_refund"]) > 0.0,
+		"...and refunded the hp it removed (got %s)" % seen["boom_refund"])
+	# (c) THE CULLING LANDED: two minions killed, mana granted.
+	assert_eq(int(seen["minions_before_culling"]), 2, "P1 really had two living minions to cull")
+	assert_eq(int(seen["minions_after_culling"]), 0, "...and the Culling killed both")
+	assert_true(float(seen["culling_mana"]) > 0.0,
+		"...granting mana for them (got %s)" % seen["culling_mana"])
+	# (d) THE SECOND COUNTERSPELL REVERSED IT: minions restored, mana clawed back.
+	assert_eq(int(seen["minions_after_counter"]), 2,
+		"the second Counterspell raised both culled minions from their own corpses (AC 18/AC 30)")
+	assert_true(float(seen["culling_claw_back"]) > 0.0,
+		"...and took the granted mana back (got %s)" % seen["culling_claw_back"])
+	# (e) NON-VACUITY on the cue seam: both reversals really reached `_apply_counterspell`.
+	assert_eq(seen["cues"], [[1, 0], [1, 0]],
+		"exactly TWO real reversals fired the cue, both by P2 against P1 (AC 26)")
+
+
+## The fixture plays the RUNNER's role -- capturing on every channel beside the call it taps, exactly as
+## `_record_a_boulder_run` does. Returns the recorded run's final state, its record and the live readings.
+func _record_a_counterspell_run() -> Dictionary:
+	var record := IntentRecorder.new()
+	var params := MatchParams.new(COUNTER_SEED)
+	record.capture_seed(params.seed_value)
+	var ms := MatchState.new(params)
+	var config := _counter_config()
+	record.capture_apply_balance(config)
+	ms.apply_balance(config)
+	var flags := _boulder_flags()
+	record.capture_inject_feature_flags(flags)
+	ms.inject_feature_flags(flags)
+	record.capture_inject_deck(COUNTER_DECK)
+	ms.inject_deck(COUNTER_DECK)
+	var costs := _counter_costs()
+	record.capture_inject_card_costs(costs)
+	ms.inject_card_costs(costs)
+	var effects := _counter_basic_effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
+	var colors := _counter_colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
+	var pitch_costs := _counter_pitch_costs()
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
+	var pitch_effects := _counter_pitch_effects()
+	record.capture_inject_pitch_effects(pitch_effects)
+	ms.inject_pitch_effects(pitch_effects)
+	var cues: Array = []
+	ms.counterspell_resolved.connect(
+		func(caster: int, countered: int) -> void: cues.append([caster, countered]))
+	var seen := {
+		"covers_before_boom": 0, "covers_after_boom": -1, "boom_damage": 0.0,
+		"boom_slots": [] as Array[int], "restored_slots": [] as Array[int],
+		"covers_after_boom_counter": -1, "boom_refund": 0.0,
+		"minions_before_culling": 0, "minions_after_culling": -1, "culling_mana": 0.0,
+		"minions_after_counter": -1, "culling_claw_back": 0.0, "cues": cues,
+	}
+	for t in range(1, COUNTER_TICKS + 1):
+		if t == COUNTER_CONTACT_TICK:
+			for fact: Array in [[[0, -1], [1, -1], Vector2(-1.0, 0.0)],
+					[[1, -1], [0, -1], Vector2(1.0, 0.0)]]:
+				var attacker: Array[int] = [int(fact[0][0]), int(fact[0][1])]
+				var target: Array[int] = [int(fact[1][0]), int(fact[1][1])]
+				record.capture_push_contact(attacker, target, 0, fact[2] as Vector2,
+						MatchState.CONTACT_STRIKE)
+				ms.push_contact(attacker, target, 0, fact[2] as Vector2, MatchState.CONTACT_STRIKE)
+		if t == COUNTER_LAND_ONE_TICK:
+			_push_stone_contact(ms, record, 0)
+		if t == COUNTER_LAND_TWO_TICK:
+			_push_stone_contact(ms, record, 1)
+		# THE TRANSIENT READS, each taken IMMEDIATELY BEFORE the tick that destroys what it names.
+		var hp_before_tick := ms.p2.hero.get_hp()
+		var mana_before_tick := ms.p1.mana.get_current()
+		if t == COUNTER_BOOM_ACTIVATE_TICK:
+			seen["covers_before_boom"] = ms.p2.hand.cover_count()
+			seen["boom_slots"] = ms.p2.hand.covered_indices()
+		if t == COUNTER_CULLING_ACTIVATE_TICK:
+			seen["minions_before_culling"] = ms.p1.units.living_indices().size()
+		var intents := _counter_intents(ms, t)
+		record.capture_advance(intents)
+		ms.advance(intents)
+		ms.drain_signals()
+		if t == COUNTER_BOOM_ACTIVATE_TICK:
+			seen["boom_damage"] = hp_before_tick - ms.p2.hero.get_hp()
+			seen["covers_after_boom"] = ms.p2.hand.cover_count()
+		if t == COUNTER_BOOM_COUNTER_TICK:
+			seen["boom_refund"] = ms.p2.hero.get_hp() - hp_before_tick
+			seen["covers_after_boom_counter"] = ms.p2.hand.cover_count()
+			seen["restored_slots"] = ms.p2.hand.covered_indices()
+		if t == COUNTER_CULLING_ACTIVATE_TICK:
+			seen["minions_after_culling"] = ms.p1.units.living_indices().size()
+			seen["culling_mana"] = ms.p1.mana.get_current() - mana_before_tick
+		if t == COUNTER_CULL_COUNTER_TICK:
+			seen["minions_after_counter"] = ms.p1.units.living_indices().size()
+			seen["culling_claw_back"] = mana_before_tick - ms.p1.mana.get_current()
+	return {"state": ms, "record": record, "seen": seen}
+
+
+func _counter_intents(ms: MatchState, t: int) -> Array[InputIntent]:
+	var i1 := InputIntent.new()
+	var i2 := InputIntent.new()
+	if t == COUNTER_ATTACK_TICK:
+		i1.pressed[&"attack"] = true
+		i1.held[&"attack"] = true
+		i2.pressed[&"attack"] = true
+		i2.held[&"attack"] = true
+	if t == COUNTER_CAST_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(COUNTER_ROCK_CARD), Enums.ModeKind.BASIC)
+	if t == COUNTER_BOOM_STAGE_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(COUNTER_ROCK_CARD), Enums.ModeKind.PITCH)
+	if t == COUNTER_SUMMON_ONE_TICK or t == COUNTER_SUMMON_TWO_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(COUNTER_SUMMON_CARD), Enums.ModeKind.BASIC)
+	if t == COUNTER_CULLING_STAGE_TICK:
+		_press_card(i1, ms.p1.hand.to_array().find(COUNTER_SUMMON_CARD), Enums.ModeKind.PITCH)
+	if t == COUNTER_BOOM_ACTIVATE_TICK or t == COUNTER_CULLING_ACTIVATE_TICK:
+		i1.card_mode = Enums.ModeKind.PITCH
+		i1.card_commit = true
+		i1.card_activate = true
+	# P2's two stages read an UNCOVERED Counterspell slot, live. A restored Boulder can sit on top of a
+	# Counterspell card (the seeded plant picks any eligible slot), and a Mode (4) press on a covered slot
+	# is refused by `REASON_COVERED_SLOT` -- so the slot is chosen from the VISIBLE layer rather than the
+	# card layer. Sound for a replay because the chosen slot travels in the recorded intent rather than
+	# being re-picked on the way back, exactly as the boulder run's own clear press does.
+	if t == COUNTER_BOOM_COUNTER_STAGE_TICK or t == COUNTER_CULL_COUNTER_STAGE_TICK:
+		_press_card(i2, _uncovered_slot_of(ms.p2.hand, COUNTER_COUNTER_CARD), Enums.ModeKind.PITCH)
+	if t == COUNTER_BOOM_COUNTER_TICK or t == COUNTER_CULL_COUNTER_TICK:
+		i2.card_mode = Enums.ModeKind.PITCH
+		i2.card_commit = true
+		i2.card_activate = true
+	var out: Array[InputIntent] = [i1, i2]
+	return out
+
+
+## The first slot holding `id` in the CARD layer that nothing is covering -- see `_counter_intents`.
+func _uncovered_slot_of(hand: Hand, id: StringName) -> int:
+	var cards := hand.to_array()
+	for index in cards.size():
+		if cards[index] == id and not hand.is_covered(index):
+			return index
+	return -1
+
+
+func _counter_config() -> BalanceConfig:
+	var c := _config()
+	c.deck_size = COUNTER_DECK.size()
+	c.hand_size = COUNTER_DECK.size()
+	c.melee_hit_mana = BOULDER_MELEE_MANA
+	c.boulder_slow_per_boulder = BOULDER_SLOW_PER_BOULDER
+	c.corpse_lifetime_seconds = 10.0
+	return c
+
+
+func _counter_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in COUNTER_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = BOULDER_MANA_COST
+		out[id] = c
+	var boulder := CardCastCondition.new()
+	boulder.mana_cost = BOULDER_MANA_COST
+	out[COUNTER_PLANT_CARD] = boulder
+	return out
+
+
+func _counter_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in COUNTER_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = BOULDER_PITCH_MANA_COST
+		out[id] = c
+	return out
+
+
+func _counter_colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id in COUNTER_DECK:
+		out[id] = Enums.CardColor.RED
+	out[COUNTER_PLANT_CARD] = Enums.CardColor.COLORLESS
+	return out
+
+
+func _counter_basic_effects() -> Dictionary[StringName, CardEffect]:
+	var rocksling := CardEffect.new()
+	rocksling.effect_id = &"rocksling"
+	rocksling.cast_seconds = float(COUNTER_CAST_TICKS) / TimingWindow.TICK_HZ
+	rocksling.damage_amount = BOULDER_STONE_DAMAGE
+	rocksling.boulders_per_cast = COUNTER_STONES
+	rocksling.boulder_interval_seconds = float(COUNTER_INTERVAL_TICKS) / TimingWindow.TICK_HZ
+	rocksling.launch_speed = 8.0
+	rocksling.homing_turn_rate_degrees_per_second = 120.0
+	rocksling.max_speed = 8.0
+	rocksling.travel_budget = 60.0
+	var summon := CardEffect.new()
+	summon.effect_id = &"summon_counter_run_minion"
+	var counterspell := CardEffect.new()
+	counterspell.effect_id = &"counterspell"
+	var boulder := CardEffect.new()
+	boulder.effect_id = &"boulder_discard"
+	var out: Dictionary[StringName, CardEffect] = {}
+	out[COUNTER_ROCK_CARD] = rocksling
+	out[COUNTER_SUMMON_CARD] = summon
+	out[COUNTER_COUNTER_CARD] = counterspell
+	out[COUNTER_PLANT_CARD] = boulder
+	return out
+
+
+func _counter_pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var boom := CardEffect.new()
+	boom.effect_id = &"boom"
+	boom.damage_amount = BOOM_DAMAGE
+	var culling := CardEffect.new()
+	culling.effect_id = &"culling"
+	culling.mana_per_kill = COUNTER_CULLING_MANA_PER_KILL
+	culling.kill_cap = 99
+	var counterspell := CardEffect.new()
+	counterspell.effect_id = &"counterspell"
+	var out: Dictionary[StringName, CardEffect] = {}
+	out[COUNTER_ROCK_CARD] = boom
+	out[COUNTER_SUMMON_CARD] = culling
+	out[COUNTER_COUNTER_CARD] = counterspell
 	return out

@@ -227,14 +227,18 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 17,
-		"FORMAT_VERSION is 17 as of story 6-5e (AC 39) -- ONE MEASURED CAUSE, and unlike 6-5d's the "
-		+ "story's own stated reason HOLDS AS WRITTEN. THE CAUSE: the recorded PER-EFFECT ROW SHAPE moves "
-		+ "again, 6-5c's and 6-5d's mechanism a third time -- `CardEffect` gains TWO more flat exports "
-		+ "(`boulders_per_cast`, `boulder_interval_seconds`) and `BalanceConfig` gains one "
-		+ "(`boulder_slow_per_boulder`), and `_resource_values` captures every script variable, so every "
-		+ "row in the `effects`/`pitch_effects` channels gains two keys and the `balance` channel gains "
-		+ "one, while REQUIRED_KEYS is again unmoved. AND THE AC's OWN SILENT-DIVERGENCE ARGUMENT APPLIES "
+	assert_eq(RecordFile.FORMAT_VERSION, 18,
+		"FORMAT_VERSION is 18 as of story 6-5f (AC 29) -- ONE MEASURED CAUSE, and the FIRST bump in this "
+		+ "file caused by a BEHAVIOUR change rather than by a widened recorded shape. THE CAUSE, in two "
+		+ "halves, both silent: (a) `counterspell` was a DEFERRED NO-OP through v17, so a v17 record in "
+		+ "which a player activated Honed Bolt's pitch spent the orbs and did nothing, while replaying "
+		+ "that same intent stream against this build REVERSES a card -- different hp, board, hand and "
+		+ "final hash, with nothing in the file to warn anyone; and (b) a Mode (1) press on a Boulder no "
+		+ "longer writes `last_resolved_card` (AC 8, `6-5f/R7`), so a v17 sequence containing a Boulder "
+		+ "clear replays with a different Counterspell target than it was recorded with. The new "
+		+ "`counter_window_seconds` export is NOT the cause and that is measured, not assumed: its default "
+		+ "0.0 IS the authored value, so a v17 row rebuilt without it gets the identical window. v17 is "
+		+ "refused HARD, no shim. It was 17 as of story 6-5e (AC 39). AND THE AC's OWN SILENT-DIVERGENCE ARGUMENT APPLIES "
 		+ "HERE where it did not at 6-5d: a v16 file CAN contain a Rocksling (the card and its effect "
 		+ "both existed and were referenced), and replaying one with `boulders_per_cast` defaulted to 0 "
 		+ "would fire NO STONES -- so no Boulder is planted, no Boom has anything to detonate, and the "
@@ -837,6 +841,40 @@ func test_a_v16_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_5C_PATH)
 
 
+## Story 6-5f (AC 29), ADDED AT THE REVIEW FIX (M1): A v17 RECORD IS REFUSED WITH A REASON, NO SHIM.
+## The pattern 6-5e's own review restored (minor 12, the v16 fixture above) was dropped again this
+## story: the per-bump refusal family stopped at v16, though AC 29 predicts the bump 17 -> 18 "WITH A
+## HARD refusal of a v17 file". Restored here, on the v14/v15/v16 shape verbatim.
+##
+## WHAT A v17 FILE WOULD SILENTLY DO, this bump's own stated cause, in two silent halves: (a)
+## `counterspell` was a DEFERRED NO-OP through v17, so a v17 record in which a player activated Honed
+## Bolt's pitch spent the orbs and did nothing, while replaying that same intent stream against this
+## build REVERSES a card -- different hp, board, hand and final hash, with nothing in the file to warn
+## anyone; and (b) a Mode (1) press on a Boulder no longer writes `last_resolved_card` (AC 8, `6-5f/R7`),
+## so a v17 sequence containing a Boulder clear replays with a different Counterspell target than it was
+## recorded with. Measured, not assumed by this fixture: the same replayed bytes reverse a card under
+## this build with nothing in the file to say so.
+func test_a_v17_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5C_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_5C_PATH, 17)
+	var refused := RecordFile.load_record(PRE_6_5C_PATH)
+	assert_null(refused["record"],
+		"a v17 record is REFUSED -- counterspell was a deferred no-op through v17, so a recorded "
+		+ "Honed Bolt pitch activation that spent orbs and did nothing would replay as a REVERSAL "
+		+ "under this build, with nothing in the file to warn anyone")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("17"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_5C_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_5C_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_5C_PATH)
+
+
 ## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): THE MEASUREMENT BEHIND THE BUMP, on the 6-5c
 ## row-shape pin's shape verbatim -- the two new `CardEffect` exports really do widen every recorded effect
 ## row, read out of an actually-saved file rather than asserted as a count.
@@ -1283,9 +1321,12 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 17,
+	assert_eq(RecordFile.FORMAT_VERSION, 18,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 17 (last: 6-5e's widened CardEffect and BalanceConfig rows -- "
+		+ "version has since moved to 18 (last: 6-5f's Counterspell, which stopped being a deferred "
+		+ "no-op and started reversing the opponent's last resolved card, plus the Boulder clear no "
+		+ "longer writing `last_resolved_card` -- a BEHAVIOUR bump, the first in this file's history "
+		+ "with no widened recorded shape behind it; before it 6-5e's widened CardEffect and BalanceConfig rows -- "
 		+ "two more flat effect exports plus `boulder_slow_per_boulder`, with a v16 Rocksling replay "
 		+ "firing no stones as the silent divergence; before it 6-5d's widened CardEffect row -- eight more flat "
 		+ "exports; before it 6-5c's widened CardEffect row plus honed_bolt's "

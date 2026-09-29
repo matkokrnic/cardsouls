@@ -313,6 +313,12 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		"projectile_source", "projectile_targets", "projectile_travelled",
 		# Story 6-5c (AC 17/AC 23): `root` -- `[remaining_ticks, blocks_run, blocks_roll]` -- in
 		# sorted position between the projectile block and `stamina`.
+		# Story 6-5f (AC 2/AC 28): `reversal` -- the per-resolution undo packet,
+		# `[kind, indices, a, b, flags, amount]` -- in sorted position between the projectile block and
+		# `root`. See the twin pin in `test_draw_delay_and_reshuffle.gd`. This copy moves for the SAME
+		# reason and is updated here deliberately: the observation channel still adds nothing, which is
+		# what this test actually asserts.
+		"reversal",
 		"root",
 		"stamina",
 		# Story 5-2 (AC 21, `5-2/R9`): the ACTIVE TELEGRAPH -- `[colour, remaining_ticks]` -- in
@@ -337,7 +343,13 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# exception and is not: it is the board INDEX of the corpse a minion was raised from, never the
 		# corpse's location, which stays actor-owned (`6-5b/R1`) and is read by the runner alone.
 		"unit_corpse_extended", "unit_corpse_ticks",
-		"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_raised_from",
+		# Story 6-5f (AC 23, `6-5f/R32`): a FOURTH board key -- `unit_hp_at_death` -- in sorted position
+		# between `unit_hp` and `unit_in_reach`.
+		#
+		# THE CLAIM THIS PIN GUARDS IS STILL UNCHANGED, which is what makes this extension legitimate too:
+		# a per-record float is the `unit_hp` class exactly -- a value, not an identity, not a position and
+		# not a StringName. It is literally the same NUMBER `unit_hp` carried one tick before the death.
+		"unit_count", "unit_hp", "unit_hp_at_death", "unit_in_reach", "unit_kind", "unit_raised_from",
 		"unit_swing_dedupe", "unit_targets",
 	]
 	assert_eq(keys, expected,
@@ -346,8 +358,18 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 43,
-		"the per-player snapshot key set is FORTY-THREE keys as of story 6-5e, which adds THREE: "
+	assert_eq(keys.size(), 45,
+		"the per-player snapshot key set is FORTY-FIVE keys as of story 6-5f, which adds TWO: "
+		+ "`reversal` (the per-resolution undo packet -- what the last resolved card ACTUALLY did, in "
+		+ "enough detail to undo it; written at one player's resolution and read, if ever, at a LATER "
+		+ "activation by the other, so nothing in the tick that reads it could recompute it) and "
+		+ "`unit_hp_at_death` (the hp each record held immediately before dying -- the death seat "
+		+ "overwrites the living hp with zero, so a reversal that must restore a minion at what it held "
+		+ "`immediately before death` has no other source for the number). The resolution tick "
+		+ "(`6-5f/R31`) is deliberately NOT a third: it EXTENDS `last_resolved_card` from two elements to "
+		+ "three rather than adding a key, which is why this count moves by exactly two and the golden's "
+		+ "tick cause stays separately measurable -- `cast`'s own 6-5d precedent. It was "
+		+ "FORTY-THREE as of story 6-5e, which adds THREE: "
 		+ "`burst` (the pending Rocksling schedule -- it outlives the cast that armed it, so nothing "
 		+ "in the tick that reads it could recompute it), `corpse_bomb` (which of the caster's minions "
 		+ "one activation converted, measured NOT derivable from the corpse container) and "

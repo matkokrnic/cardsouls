@@ -288,8 +288,25 @@ extends RefCounted
 ## activating and a silently different final hash. That is a silent divergence, which is what this constant
 ## exists to refuse loudly -- the `6-5a` 12 -> 13 and `6-5b` 13 -> 14 argument verbatim, third time.
 ##
+## Story 6-5f (AC 29): 17 -> 18, WITH THE HARD REFUSAL OF A v17 FILE UNCHANGED.
+##
+## WHAT CHANGES IN THE RECORDED SHAPE, and the new `CardEffect` export is NOT the reason. `_resource_values`
+## captures every script property, so `counter_window_seconds` rides the `effects` / `pitch_effects` channels
+## for free -- and its default is 0.0 ("no limit"), which is also the authored value, so a v17 file rebuilt
+## without it would get the identical window. That half of the usual argument does not apply here.
+##
+## THE DIVERGENCE IS BEHAVIOURAL, IN TWO PLACES, AND BOTH ARE SILENT. (1) `counterspell` was a DEFERRED NO-OP
+## through v17: a recorded match in which a player activated Honed Bolt's pitch spent the orbs and did
+## nothing, and replaying that same intent stream against this code REVERSES a card -- different hp, different
+## board, different hand, different final hash, with nothing in the file to warn anyone. (2) A Mode ① press on
+## a Boulder used to overwrite `last_resolved_card` and no longer does (AC 8, `6-5f/R7`), so a v17 record whose
+## sequence contains a Boulder clear replays with a different Counterspell target from the one it was recorded
+## with. Either is exactly the class of silent divergence this constant exists to refuse loudly -- the
+## `6-5a` 12 -> 13, `6-5b` 13 -> 14 and `6-5e` 16 -> 17 argument, fourth time, and the first time the cause is
+## a behaviour change rather than a missing authored field.
+##
 ## NO SHIM, on this file's standing posture: older records are refused with a reason, never migrated.
-const FORMAT_VERSION := 17
+const FORMAT_VERSION := 18
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

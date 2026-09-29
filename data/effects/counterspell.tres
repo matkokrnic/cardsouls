@@ -5,3 +5,4 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"counterspell"
+counter_window_seconds = 0.0

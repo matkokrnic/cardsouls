@@ -1264,7 +1264,47 @@ extends TestCase
 ## ALL FOUR HASHES ARE DISTINCT -- from the baseline, from each other and from the final value -- which is
 ## what makes the three keys three independent causes rather than one event with three symptoms.
 ## =============================================================================================
-const GOLDEN := "98eaee53c065b1c22e5602f5d8c436ea6619c9852752b7f1debaa4695c14a9ff"
+## ---------------------------------------------------------------------------------------------
+## STORY 6-5f RE-BASELINE (Counterspell): `98eaee53...` -> `941958c5...`, ONE re-baseline, THREE
+## MEASURED CAUSES out of EIGHT PREDICTED. Per-player snapshot key set 43 -> 45. `FORMAT_VERSION`
+## measured 17 before and 18 after (AC 29) -- a record concern with no path into the hash, so not a
+## golden cause, the standing reading since 6-5a.
+##
+## Each cause was measured by ERASING its key (or its array member) from `PlayerState.to_snapshot()`
+## with EVERY other change in place, restoring the file from an out-of-repo copy between measurements
+## and verifying SHA256 both ways (`3-0d`'s mutation-restore discipline; never `git checkout --`).
+##
+##   CAUSE 1, SHAPE+VALUE: `"last_resolved_card"` gains a THIRD member, the RESOLUTION TICK (AC 5,
+##     `6-5f/R31`). The per-player KEY COUNT does NOT move on this cause -- the array's arity does,
+##     which is `cast`'s own 2 -> 6 extension precedent (6-5d). P1's t22 Mode ① cast is a resolution,
+##     so P1 carries a real tick at the hash tick and P2 stays at the resting `-1`.
+##     Measured ALONE (reversal and `unit_hp_at_death` erased): `b9ffa1da...`.
+##   CAUSE 2, PRESENCE+VALUE: `"reversal"` (AC 2, Open Question 1), the per-resolution undo packet.
+##     Measured ALONE (tick member and `unit_hp_at_death` erased): `a5c321f1...`.
+##   CAUSE 3, PRESENCE: `"unit_hp_at_death"` (AC 23, `6-5f/R32`), one float per record. The fixture's
+##     t22 summon never dies, so every entry hashes at its resting `0.0` -- the `unit_corpse_ticks`
+##     shape verbatim. Measured ALONE (tick member and reversal erased): `f3c4e4d6...`.
+##
+##   FOUR DISTINCT HASHES, so the three causes are INDEPENDENT and none masks another.
+##
+##   ISOLATED BOTH DIRECTIONS: with all three erased from `PlayerState.to_snapshot()` the hash is
+##   `98eaee53...` EXACTLY -- the pre-story golden reproduced with every other 6-5f change in place
+##   (the moved-and-gated resolved-card write, the six apply-arm recorders, the new board gate, the
+##   whole reversal path, `restore_corpse_at`, the new `CardEffect` export).
+##
+##   NOT CAUSES, MEASURED RATHER THAN ASSUMED -- and all three were PREDICTED as movers or possible
+##   movers, so the reverse measurement above is what settles them:
+##     * `_resolve_basic_cast`'s `record_resolved_card` write gated on `not clears_cover` (AC 8,
+##       predicted cause 3): a BEHAVIOUR change, live during the reverse measurement, which still
+##       returned to `98eaee53` -- the fixture's recorded sequence contains no Boulder clear.
+##     * Counterspell's new no-target board-gate refusal and the AC 13 interim refusal (predicted
+##       cause 5, the standing `SC/R6` boundary): the fixture never stages or activates Counterspell,
+##       so no pressed action in the recorded sequence became refusable.
+##     * `counter_window_seconds`'s authored value and its injection SHAPE (predicted cause 6,
+##       `BC/R3`): the golden builds its effects in-test and never loads `data/effects/`.
+##     * No RNG cause (AC 24): Counterspell's resolution consumes none, and the fixture never runs it.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "941958c52605abbcd1edf972e002543601325e5a9f98dfce569628c12f75871f"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1750,6 +1790,47 @@ func test_the_golden_fixture_reaches_the_hash_tick_with_one_resting_corpse_entry
 	assert_eq(int(ms.p1.to_snapshot()["unit_count"]), 1,
 		"NON-VACUITY: P1's board really does hold the t22 summon, so the three assertions above are "
 		+ "made against a ONE-ENTRY array rather than passing trivially on an empty one")
+
+
+## Story 6-5f: THE MEASURED CONTENT OF THIS STORY'S THREE GOLDEN CAUSES, pinned as assertions on the
+## `6-5b` precedent directly above rather than left as claims in the accounting block -- so a later story
+## that changes WHAT the fixture carries at the hash tick fails here by name instead of only moving the
+## hash and being re-baselined past.
+##
+## THE RESTING/VALUED SPLIT IS THE POINT. P1 resolved a card at t22 and P2 resolved nothing, so the two
+## players exercise BOTH sides of every new fact in one fixture: a written record and a resting one.
+func test_the_golden_fixture_carries_the_measured_content_of_this_storys_three_causes() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	var p1 := ms.p1.to_snapshot()
+	var p2 := ms.p2.to_snapshot()
+	# CAUSE 1 (AC 5, `6-5f/R31`): the resolution tick, the THIRD member -- and the key is still THREE
+	# elements, never four, which is the half that keeps the key count unmoved on this cause.
+	var record: Array = p1["last_resolved_card"]
+	assert_eq(record.size(), 3,
+		"P1's `last_resolved_card` is `[id, mode, tick]` -- THREE members, the key count unmoved (AC 5)")
+	assert_true(int(record[2]) > 0,
+		"...and the tick is a REAL tick, because the t22 Mode ① cast really resolved (got %s)" % record[2])
+	assert_eq(p2["last_resolved_card"],
+		["", PlayerState.NO_RESOLVED_MODE, PlayerState.NO_RESOLVED_TICK],
+		"P2 resolved nothing, so all three members sit at their own resting values")
+	# CAUSE 2 (AC 2): the reversal packet. The t22 cast is a SUMMON, so P1 carries a real Vanguard-class
+	# record naming the board index it appended; P2 carries the masked resting packet.
+	assert_eq(p1["reversal"],
+		[PlayerState.REVERSAL_VANGUARD, [0] as Array[int], [] as Array[int], [] as Array[int],
+			[] as Array[bool], 0.0],
+		"P1's reversal packet records the t22 SUMMON at board index 0 -- the fixture exercises a "
+		+ "WRITTEN packet, not only the resting one (AC 2/AC 17)")
+	assert_eq(p2["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0],
+		"P2 resolved nothing, so its packet is the masked resting value -- the RESTING-EMPTY sub-case "
+		+ "of Golden Prediction cause 2, measured here rather than argued")
+	# CAUSE 3 (AC 23, `6-5f/R32`): one float per record, all resting, because nothing in this fixture
+	# ever dies -- the `unit_corpse_ticks` shape verbatim, asserted against a ONE-ENTRY array for P1.
+	assert_eq(p1["unit_hp_at_death"], [0.0],
+		"P1's single record never died, so its pre-death hp is the resting 0.0 -- one entry per record, "
+		+ "NOT `[]` (it is a parallel array over the board exactly like `unit_hp`)")
+	assert_eq(p2["unit_hp_at_death"], [],
+		"P2 has no records at all, so the array is genuinely empty -- the other side of the same shape")
 
 
 ## Guards the recorded sequence itself: the golden only guards transition determinism if

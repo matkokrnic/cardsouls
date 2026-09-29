@@ -208,9 +208,19 @@ const REASON_DECK1_NOT_YET_RESOLVED := &"deck1_not_yet_resolved"
 ## than staying a row here -- the same mechanism working as designed that retired 6-5b's four and 6-5c's
 ## one, and the count assertion in `test_spell_framework.gd` moves with it deliberately. ONLY
 ## `counterspell` REMAINS DEFERRED, owned by `6-5f`, which is the last of the six 6-5 sub-stories.
-const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
-	&"counterspell": &"6-5f-counterspell",
-}
+## STORY 6-5f: THE LAST ROW LEAVES, ONE -> ZERO (AC 27). `counterspell` named THIS story as its owner and
+## this story builds it, so it becomes a real outcome below rather than staying a row here -- the same
+## mechanism working as designed that retired 6-5b's four, 6-5c's one and 6-5e's three, for the FOURTH and
+## final time, and the count assertion in `test_spell_framework.gd` moves 1 -> 0 with it deliberately.
+##
+## THE TABLE IS NOW EMPTY AND STAYS, rather than being deleted along with its last row. It is the
+## MECHANISM, not the data: `owner_story_for()` is read by `outcome()` on every unrecognised id, and an
+## empty table answers "this id is owned by nobody" exactly as correctly as a full one. Deleting it would
+## delete the seat the NEXT deferred effect (Deck 2's, whenever it arrives) declares itself at, and the
+## story that needed it would have to rebuild both the table and the `REASON_DECK1_NOT_YET_RESOLVED` arm
+## from this file's history. An empty table with its pin at zero is the honest resting state of a
+## mechanism with nothing deferred.
+const DEFERRED_EFFECT_OWNERS: Dictionary[StringName, StringName] = {}
 
 ## Story 6-5a (AC 16): the SPELL layer's closed-gate reason, the `REASON_TOTEMS_FLAG_CLOSED` twin. The
 ## four buffs gate on `FeatureFlags.spells`; off, the cast still resolves and the buff does not apply.
@@ -261,8 +271,13 @@ const OWN_MINION_OUTCOMES: Dictionary[StringName, StringName] = {
 ## family keeps the apply seat's `match` readable as 'what kind of thing is this'") and a sharper one:
 ## every other table here describes an effect acting on the CASTER's own side -- its buffs, its board, its
 ## corpses, its cast. Boom acts on the OPPONENT's hand, which is a different question asked of a different
-## party, and it is the ONLY effect in the game that asks it. `6-5f`'s Counterspell is the candidate
-## second row; nothing is written here for it.
+## party, and it is the ONLY effect in the game that asks it.
+##
+## STORY 6-5f CORRECTS THIS BLOCK'S LAST SENTENCE rather than leaving it to lie. It read: "`6-5f`'s
+## Counterspell is the candidate second row; nothing is written here for it." Counterspell did NOT become
+## that row -- it reads the opposing player's LAST RESOLVED CARD, never their hand, so this table stays at
+## one member and `COUNTERSPELL_OUTCOMES` below is its own family. The candidacy is resolved, negatively,
+## and the reasoning is at that table.
 ##
 ## ONE ROW IS THE HONEST SIZE OF A FAMILY WITH ONE MEMBER. `CAST_OUTCOMES` shipped at 6-5c with one row
 ## and grew to two at 6-5d, which is the precedent for starting a family at its first member rather than
@@ -271,6 +286,29 @@ const OUTCOME_BOOM := &"boom"
 
 const OPPOSING_HAND_OUTCOMES: Dictionary[StringName, StringName] = {
 	&"boom": OUTCOME_BOOM,
+}
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5f (AC 4-23): THE RETROACTIVE FAMILY -- the first and only effect that acts on something that
+## ALREADY HAPPENED. `BUFF_OUTCOMES`' posture verbatim: whole-id rows in a `Dictionary` only ever
+## `get()`-ed by one known key, never iterated, never sorted, never hashed.
+## ------------------------------------------------------------------------------------------
+## ITS OWN TABLE, AND THE FILE ALREADY ARGUED WHY IT IS NOT THE ROW ABOVE. `OPPOSING_HAND_OUTCOMES`' own
+## header names Counterspell as "the candidate second row; nothing is written here for it" -- a candidate,
+## not a decision, and the decision goes the other way on that table's own naming rule ("one table per
+## family keeps the apply seat's `match` readable as 'what kind of thing is this'", plus `CAST_OUTCOMES`'
+## precedent of "starting a family at its first member rather than folding it into a table whose name would
+## then be a lie"). Counterspell does not read the opposing HAND at all: it reads the opposing player's
+## LAST RESOLVED CARD and the record of what that resolution actually did. Filing it under the hand would
+## make the hand table's name false for half its rows, which is precisely the failure that rule forbids.
+##
+## THE CANDIDATE NOTE AT `OPPOSING_HAND_OUTCOMES` IS CORRECTED AT ITS OWN SEAT rather than left to lie
+## (the `_resolve_pitch_activate` / `6-5d` precedent for a superseded comment).
+const OUTCOME_COUNTERSPELL := &"counterspell"
+
+const COUNTERSPELL_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"counterspell": OUTCOME_COUNTERSPELL,
 }
 
 
@@ -454,6 +492,31 @@ const OPPOSING_HAND_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"boom": NEEDS_OPPOSING_BOULDER,
 }
 
+## Story 6-5f (AC 11-13, `6-5f/R10`/`R11`/`R37`): COUNTERSPELL's precondition -- A REVERSIBLE TARGET: the
+## opposing player must have resolved a card this round whose effects this story knows how to undo, still
+## inside the authored window, with something actually left to undo.
+##
+## A FIFTH ARM AND EXPLICITLY NOT A REUSE OF `NEEDS_OPPOSING_BOULDER`, on that constant's own reasoning one
+## family up: the four existing requirements read this player's board, the caster's captured lock target, or
+## the opposing HAND, and none of them can express "the opposing player's last resolved card is one of the
+## six this story reverses". Reusing the Boulder arm would refuse a Counterspell for the wrong reason
+## whenever the opponent happened to hold no Boulder.
+##
+## IT IS THE MOST REACHABLE REQUIREMENT IN THIS FILE, and that is worth saying because the two cast
+## requirements are documented as structurally unreachable and Boom's as merely reachable: the OPENING tick
+## of every round satisfies it for nobody (neither player has resolved anything), so the no-target refusal
+## is the DEFAULT state of the match rather than an edge case -- smoke item 4.
+##
+## ONE REASON COVERS EVERY NO-TARGET CLAUSE, which is `6-5f/R37`/AC 13 exactly ("no new refusal reason").
+## `6-5f/R11`'s four clauses and the interim rule for the seven `6-5g` cards are five ways for the same
+## player-visible fact to be true -- there is nothing to counter -- and naming them apart would tell the
+## player about this story's internal split between the six it built and the seven it deferred.
+const NEEDS_COUNTER_TARGET := &"counter_target"
+
+const COUNTERSPELL_REQUIREMENTS: Dictionary[StringName, StringName] = {
+	&"counterspell": NEEDS_COUNTER_TARGET,
+}
+
 ## Story 6-5c (AC 4, Discrepancy 3): `honed_bolt`'s target -- A LIVING ENEMY HERO. The requirement is
 ## EVALUATED AT THE SAME PRE-SPEND SEAT as the four above (`MatchState._board_refusal_reason`), which
 ## is what AC 4 means by "the target requirement is evaluated at the same pre-spend seat".
@@ -500,6 +563,8 @@ const CAST_REQUIREMENTS: Dictionary[StringName, StringName] = {
 ## both has one defined answer rather than an accidental one.
 ## Story 6-5e: THREE TABLES, STILL ONE ANSWER, on the identical reasoning -- the three share no id, so the
 ## order still decides nothing, and it is still fixed so a future id in two of them has one defined answer.
+## Story 6-5f: FOUR TABLES, STILL ONE ANSWER, on the identical reasoning -- all four share no id, so the
+## order still decides nothing, and it is still fixed so a future id in two of them has one defined answer.
 static func board_requirement_for(effect: CardEffect) -> StringName:
 	if effect == null:
 		return NEEDS_NOTHING
@@ -509,7 +574,10 @@ static func board_requirement_for(effect: CardEffect) -> StringName:
 	var cast_requirement: StringName = CAST_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 	if cast_requirement != NEEDS_NOTHING:
 		return cast_requirement
-	return OPPOSING_HAND_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	var opposing_hand: StringName = OPPOSING_HAND_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	if opposing_hand != NEEDS_NOTHING:
+		return opposing_hand
+	return COUNTERSPELL_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 
 
 ## What this cast's effect does, as one of the four named outcomes above. `effect` is the injected
@@ -563,6 +631,13 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	var opposing_hand: StringName = OPPOSING_HAND_OUTCOMES.get(effect.effect_id, &"")
 	if opposing_hand != &"":
 		return opposing_hand if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 6-5f (AC 4-23/AC 27): the RETROACTIVE family, in the opposing-hand lookup's own seat and order
+	# -- after the summon prefix, before the deferred table (`counterspell`'s row just left it, taking the
+	# table to EMPTY) and before the `spell_*` prefix. The id is recognised first and the flag read only
+	# after, this docstring's standing ordering argument.
+	var retroactive: StringName = COUNTERSPELL_OUTCOMES.get(effect.effect_id, &"")
+	if retroactive != &"":
+		return retroactive if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
 	# Story 6-5e (AC 20/AC 28a): BOULDER'S OWN ACTION, in the same seat and order -- with ONE DELIBERATE
 	# DIFFERENCE from every family above it: IT DOES NOT GATE ON `FeatureFlags.spells`. `clears_cover()`
 	# records the reason at its own seat -- a Boulder is not a spell the holder chose to cast, and a

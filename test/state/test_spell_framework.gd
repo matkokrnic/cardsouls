@@ -123,16 +123,35 @@ func test_a_closed_spell_layer_closes_the_buffs_and_not_ruin_vanguard() -> void:
 ## `6-5d-fireball-and-spell-targeting` and `6-5e-boulder-injection` was renamed
 ## `6-5e-rocksling-boom-and-corpse-bomb`, so all three rows named stories that no longer exist. All three
 ## now name the 6-5e key -- the story that actually builds them.
-func test_the_one_deferred_effect_names_its_owning_story() -> void:
-	var owners := {
-		&"counterspell": &"6-5f-counterspell",
-	}
-	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 1,
-		"exactly ONE deferred row -- FOUR before 6-5e, which retired the three naming itself "
+## STORY 6-5f (AC 27): ONE -> ZERO, AND THE MECHANISM STAYS. `counterspell` named 6-5f as its owner, 6-5f
+## builds it, the last row retires -- the fourth and final turn of the mechanism that retired 6-5b's four,
+## 6-5c's one and 6-5e's three. RENAMED from `test_the_one_deferred_effect_names_its_owning_story` for the
+## count-in-the-name discipline; the old name is recorded here verbatim so the pin stays greppable.
+##
+## AN EMPTY TABLE IS ASSERTED, NOT A DELETED ONE, and that is the half worth pinning: the table is the
+## SEAT a future deferred effect declares itself at, and `owner_story_for()` answers "owned by nobody" off
+## an empty table exactly as correctly as off a full one. A pass that deleted the constant would pass a
+## test that only checked the count, so both the emptiness and the mechanism's behaviour are asserted.
+func test_the_deferred_effect_table_is_empty_and_still_answers() -> void:
+	var owners := {}
+	assert_eq(CardEffectResolver.DEFERRED_EFFECT_OWNERS.size(), 0,
+		"NO deferred rows remain -- ONE before 6-5f, which retired the one naming itself "
+		+ "(`counterspell`); FOUR before 6-5e, which retired the three naming itself "
 		+ "(`rocksling`, `boom`, `corpse_bomb`); FIVE before 6-5c, which retired the one naming "
 		+ "itself; NINE before 6-5b, which retired the four naming itself. 6-5d retired NONE: it "
 		+ "built `fireball`, which was never deferred (it is a NEW effect, not a re-pointed row). "
-		+ "`counterspell` is the last, owned by 6-5f, which closes out E6")
+		+ "Every Deck 1 effect is now built")
+	# Story 6-5f (AC 27): the MECHANISM still answers on an empty table -- the half a count assertion alone
+	# would not catch if a pass deleted the constant and the lookup with it.
+	assert_eq(CardEffectResolver.owner_story_for(&"counterspell"), &"",
+		"counterspell is BUILT by 6-5f and has no deferred-owner row")
+	assert_eq(CardEffectResolver.owner_story_for(&"a_future_deck_2_effect"), &"",
+		"...and an unknown id still answers `owned by nobody` rather than crashing on an empty table")
+	assert_ne(CardEffectResolver.outcome(_effect(&"counterspell"), _flags()),
+		CardEffectResolver.REASON_DECK1_NOT_YET_RESOLVED,
+		"...and counterspell resolves to a real outcome rather than the named no-op")
+	assert_eq(CardEffectResolver.outcome(_effect(&"counterspell"), _flags()),
+		CardEffectResolver.OUTCOME_COUNTERSPELL, "...specifically OUTCOME_COUNTERSPELL")
 	# Story 6-5e (AC 43): the NEGATIVE half of the three retirements, asserted so a future pass cannot
 	# re-add a row and quietly turn a shipped effect back into a no-op -- `fireball`'s own guard below,
 	# applied to the three ids this story built.
@@ -226,10 +245,10 @@ func test_round_end_and_the_debug_reset_clear_every_rule() -> void:
 	for player: PlayerState in [reset.p1, reset.p2]:
 		for kind in PlayerState.RULE_COUNT:
 			player.start_rule(kind, LONG, 1.5, 1.5)
-		player.record_resolved_card(ID_BLOODLUST, Enums.ModeKind.BASIC)
+		player.record_resolved_card(ID_BLOODLUST, Enums.ModeKind.BASIC, 0)
 	for player: PlayerState in [reset.p1, reset.p2]:
 		assert_eq(player.to_snapshot()["last_resolved_card"],
-			[String(ID_BLOODLUST), Enums.ModeKind.BASIC],
+			[String(ID_BLOODLUST), Enums.ModeKind.BASIC, 0],
 			"sanity: both seats carry a resolved-card record going into the reset")
 	var press := InputIntent.new()
 	press.debug_reset = true
@@ -237,20 +256,20 @@ func test_round_end_and_the_debug_reset_clear_every_rule() -> void:
 	for player: PlayerState in [reset.p1, reset.p2]:
 		for kind in PlayerState.RULE_COUNT:
 			assert_false(player.is_rule_active(kind), "the debug reset cleared rule %d" % kind)
-		assert_eq(player.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE],
+		assert_eq(player.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE, PlayerState.NO_RESOLVED_TICK],
 			"...and the last-resolved-card record, back to its resting pair (B1)")
 	var ended := _make_match()
 	ended.p1.start_rule(PlayerState.RULE_BLOODLUST, LONG, 2.0, 2.0)
 	ended.p2.start_rule(PlayerState.RULE_FROSTBITE_SLOW, LONG, 0.5, 0.0)
-	ended.p1.record_resolved_card(ID_AURA, Enums.ModeKind.PITCH)
-	ended.p2.record_resolved_card(ID_FROST, Enums.ModeKind.BASIC)
+	ended.p1.record_resolved_card(ID_AURA, Enums.ModeKind.PITCH, 0)
+	ended.p2.record_resolved_card(ID_FROST, Enums.ModeKind.BASIC, 0)
 	ended.p2.hero.take_damage(MAX_HP)
 	_idle(ended, 1)
 	assert_eq(ended.p2.hero.action_state, HeroState.ActionState.DEAD, "sanity: the round ended")
 	assert_false(ended.p1.is_rule_active(PlayerState.RULE_BLOODLUST), "round end cleared the winner's buff")
 	assert_false(ended.p2.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW), "...and the loser's slow")
 	for player: PlayerState in [ended.p1, ended.p2]:
-		assert_eq(player.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE],
+		assert_eq(player.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE, PlayerState.NO_RESOLVED_TICK],
 			"...and round end clears the last-resolved-card record at BOTH seats too (B1)")
 
 
@@ -282,14 +301,14 @@ func test_the_pitch_effect_resolves_at_activation_never_at_staging() -> void:
 	_advance(ms, _stage_intent(_slot_of(ms.p1, ID_AURA)), InputIntent.new())
 	assert_true(ms.pitch.is_staged(0), "sanity: the Aura card is staged")
 	assert_false(ms.p1.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA), "STAGING applies no effect")
-	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE],
+	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE, PlayerState.NO_RESOLVED_TICK],
 		"...and records nothing: a staged card has not resolved")
 	assert_eq(resolved, [], "...and announces no resolution")
 	_advance(ms, _activate_intent(), InputIntent.new())
 	_assert_rule(ms.p1, PlayerState.RULE_VAMPIRIC_AURA, _ticks(AURA_SECONDS), AURA_FRACTION, 0.0,
 		"ACTIVATION applies the card's PITCH effect")
 	assert_eq(resolved, [[0, ID_AURA, Enums.ModeKind.PITCH]], "...announced as a PITCH resolution (AC 7)")
-	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], [String(ID_AURA), Enums.ModeKind.PITCH],
+	assert_eq(ms.p1.to_snapshot()["last_resolved_card"].slice(0, 2), [String(ID_AURA), Enums.ModeKind.PITCH],
 		"...and recorded as one (AC 10)")
 
 
@@ -310,15 +329,15 @@ func test_activation_reads_the_pitch_map_not_the_basic_one() -> void:
 ## and it is overwritten by each later resolution.
 func test_the_last_resolved_card_is_recorded_at_the_basic_seat() -> void:
 	var ms := _make_match()
-	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE], "rests empty")
+	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE, PlayerState.NO_RESOLVED_TICK], "rests empty")
 	_cast(ms, ID_HOUND)
 	var record: Array = ms.p1.to_snapshot()["last_resolved_card"]
-	assert_eq(record, [String(ID_HOUND), Enums.ModeKind.BASIC], "a Mode ① cast records [id, BASIC]")
+	assert_eq(record.slice(0, 2), [String(ID_HOUND), Enums.ModeKind.BASIC], "a Mode ① cast records [id, BASIC]")
 	assert_eq(typeof(record[0]), TYPE_STRING, "...the id a String VALUE, never a StringName")
 	_cast(ms, ID_DEFERRED)
-	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], [String(ID_DEFERRED), Enums.ModeKind.BASIC],
+	assert_eq(ms.p1.to_snapshot()["last_resolved_card"].slice(0, 2), [String(ID_DEFERRED), Enums.ModeKind.BASIC],
 		"...and a no-op cast is still a resolution, so it overwrites the record")
-	assert_eq(ms.p2.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE],
+	assert_eq(ms.p2.to_snapshot()["last_resolved_card"], ["", PlayerState.NO_RESOLVED_MODE, PlayerState.NO_RESOLVED_TICK],
 		"the other player's record is untouched")
 
 

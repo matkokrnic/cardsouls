@@ -331,6 +331,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	## nine deferred no-ops and its row LEFT `DEFERRED_EFFECT_OWNERS` when this story gave it a real
 	## outcome, so counting it as deferred would be counting it twice wrong.
 	var opposing_hand := 0
+	## Story 6-5f: the RETROACTIVE bucket, its own for `opposing_hand`'s stated reason -- `counterspell` was
+	## the last of 6-5a's nine deferred no-ops and its row LEFT `DEFERRED_EFFECT_OWNERS` when this story gave
+	## it a real outcome, so counting it as deferred would be counting it twice wrong.
+	var retroactive := 0
 	var deferred := 0
 	var offenders: Array[String] = []
 	for card in _deck_cards():
@@ -355,6 +359,10 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 			# reason all three arms above are read off theirs.
 			elif CardEffectResolver.OPPOSING_HAND_OUTCOMES.has(id):
 				opposing_hand += 1
+			# Story 6-5f: read off the resolver's own retroactive table, for the derived-not-transcribed
+			# reason all four arms above are read off theirs.
+			elif CardEffectResolver.COUNTERSPELL_OUTCOMES.has(id):
+				retroactive += 1
 			elif CardEffectResolver.owner_story_for(id) != &"":
 				deferred += 1
 			else:
@@ -394,12 +402,20 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	assert_eq(opposing_hand, 1,
 		"Story 6-5e: ONE reads the OPPOSING hand -- Boom, the only effect in the game that does, which "
 		+ "is why it gets its own resolver table and its own board-gate requirement (`6-5e/R27`)")
-	assert_eq(deferred, 1,
-		"...and exactly ONE is still a named no-op owned by a later story: `counterspell`, owned by "
-		+ "6-5f, the last of the six 6-5 sub-stories. FOUR before this story, FIVE before 6-5c and NINE "
-		+ "before 6-5b, each of which retired exactly the rows naming itself -- the deferred table's "
-		+ "mechanism working as designed, and the reason this count is asserted separately from the "
-		+ "buckets above it")
+	# Story 6-5f (AC 4-23): the FIFTH family bucket -- ONE effect is RETROACTIVE. It is deliberately not a
+	# row in the opposing-hand bucket above: Counterspell reads the opposing player's last resolved card and
+	# the record of what it did, never their hand, so filing it there would make that bucket's name false
+	# for half its members (the resolver argues the same at `COUNTERSPELL_OUTCOMES`).
+	assert_eq(retroactive, 1,
+		"Story 6-5f: ONE is RETROACTIVE -- Counterspell, the only effect in the game that acts on a "
+		+ "resolution that has already happened, which is why it gets its own resolver table and its own "
+		+ "board-gate requirement (`6-5f/R10`)")
+	assert_eq(deferred, 0,
+		"...and NOTHING is still a named no-op owned by a later story. ONE before this story "
+		+ "(`counterspell`, which 6-5f builds), FOUR before 6-5e, FIVE before 6-5c and NINE before "
+		+ "6-5b, each of which retired exactly the rows naming itself -- the deferred table's "
+		+ "mechanism working as designed, now run to completion, and the reason this count is asserted "
+		+ "separately from the buckets above it")
 	for card in _fixture_cards():
 		# Story 6-5e (AC 6a): BOULDER IS EXEMPT FROM THE PREFIX RULE, named rather than accommodated. Its
 		# `boulder_discard` is a WHOLE-ID resolver row (`BOULDER_OUTCOMES`), which is the same vocabulary

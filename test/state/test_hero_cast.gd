@@ -944,11 +944,16 @@ func test_honed_bolt_left_the_deferred_table_and_the_others_did_not() -> void:
 	# what 6-5e builds, so this list narrows to the ONE row that is still deferred. The narrowing is the
 	# deferred table's mechanism working as designed (a row is retired by the story it names), and the
 	# positive half of it is asserted in `test_spell_framework.gd`, which owns the table's census.
-	for id: StringName in [&"counterspell"]:
-		assert_ne(CardEffectResolver.owner_story_for(id), &"", "%s stays deferred (AC 21)" % id)
-		assert_eq(CardEffectResolver.outcome(_effect(id), _flags()),
-			CardEffectResolver.REASON_DECK1_NOT_YET_RESOLVED,
-			"...and its no-op behaviour is unchanged")
+	#
+	# STORY 6-5f (AC 27): THE LIST IS NOW EMPTY and the loop is deleted rather than left iterating nothing.
+	# `counterspell` is what 6-5f builds, so no row is still deferred and there is no id for the negative
+	# half to name -- a `for id in []` would be a guard that cannot fail, which is worse than no guard
+	# because it reads as one. The table's own emptiness is asserted where the census lives
+	# (`test_spell_framework.gd::test_the_deferred_effect_table_is_empty_and_still_answers`), and the
+	# POSITIVE half for `honed_bolt` directly above is unchanged and still does this test's own job.
+	assert_true(CardEffectResolver.DEFERRED_EFFECT_OWNERS.is_empty(),
+		"no Deck 1 effect is deferred any more -- 6-5f built the last one (AC 27); the census and the "
+		+ "empty table's own behaviour are pinned in test_spell_framework.gd")
 
 
 ## AC 1: THE FRAMEWORK NAMES NO CARD. `MatchState` never mentions `honed_bolt`; the id lives only in

@@ -121,6 +121,14 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# and `stamina`. The `timed_rules` per-slot fusion applied to one root: three halves of one fact,
 	# gated on the window so a stopped root reads `[0, false, false]` and a stale switch is
 	# unrepresentable in the hash.
+	# Story 6-5f (AC 2/AC 28, Open Question 1): the FORTY-FOURTH key -- `reversal`, the per-resolution
+	# undo packet as `[kind, indices, a, b, flags, amount]`, in SORTED position, which is between the
+	# projectile block and `root`. The `burst` key's six-element fusion: one fact in six columns, and six
+	# keys would let them drift into a packet that disagrees with itself about which resolution it
+	# describes. Masked to resting when the kind is NONE, so a stale column is unrepresentable in the hash.
+	# Same mechanism, ELEVENTH time: this pin and test_card_observation.gd's were BOTH red before this
+	# edit, and the story that adds the key is the story that moves both.
+	"reversal",
 	"root",
 	"stamina",
 	# Story 5-2 (AC 21, `5-2/R9`): the TWENTY-NINTH key -- `telegraph`, the active unblockable
@@ -140,7 +148,12 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# reasoning (why three keys and not one fused one, and why a raise SOURCE is an index and never a
 	# position) lives with the count assertion in test_card_observation.gd -- cited, not duplicated.
 	"unit_corpse_extended", "unit_corpse_ticks",
-	"unit_count", "unit_hp", "unit_in_reach", "unit_kind", "unit_raised_from",
+	# Story 6-5f (AC 23/AC 28, `6-5f/R32`): the FORTY-FIFTH key -- `unit_hp_at_death`, the hp each record
+	# held immediately before it died, in SORTED position between `unit_hp` and `unit_in_reach`. One array
+	# -> one key, its three corpse siblings' rule. The full reasoning (why it cannot be derived -- the
+	# death seat overwrote the only other copy with zero) lives with the count assertion in
+	# test_card_observation.gd and at `UnitBoard._hp_at_death` -- cited, not duplicated.
+	"unit_count", "unit_hp", "unit_hp_at_death", "unit_in_reach", "unit_kind", "unit_raised_from",
 	"unit_swing_dedupe", "unit_targets",
 ]
 
