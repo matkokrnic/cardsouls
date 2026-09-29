@@ -4,7 +4,7 @@ baseline_commit: ff203d5b43f02eee0f155fc76781aade7cb57506
 
 # Story 6.5f: Counterspell
 
-Status: ready-for-dev
+Status: done
 
 <!-- Tier A. Originally authored as the last of six 6-5 sub-stories and E6's close-out story; the
 2026-09-29 readiness gate (`C:\dev\_65f-gate.md`, NOT READY -- 2 blockers / 3 major / 6 minor) found the
@@ -486,50 +486,63 @@ is spent on use and re-invoked per story against a killable human-driven slot: d
 **Target: report actual PASS/FAIL counts on two pads, flip config `[3, 3]`, R-D6 result -- not run by this
 create pass.**
 
+**Results (operator smoke, 2026-09-29, two gamepads, flip config `[3, 3]`): 9/9 PASS.**
+
+1. Counter a Boom -- PASS. HP and detonated Boulder(s) restored, Boulder(s) back in the same slots.
+2. Counter a Vanguard -- PASS. Summoned minion un-summoned, no corpse.
+3. Counter a Culling -- PASS. Killed minions restored; mana clawed back.
+4. Refusal with no target -- PASS. Activation refused silently, orb kept, countdown running.
+5. Second copy vs an already-countered card -- PASS. Second activation refused as no-target.
+6. Interim refusal on a Honed Bolt (6-5g card) -- PASS. Refused as no-target, no new refusal cue.
+7. R-D6 re-invocation -- PASS. Round ended normally after a Counterspell; no leftover reversal-record
+   state carried into the next round. R-D6 re-invoked and spent again.
+8. Placeholder cue -- PASS. Cue shown on both heroes on real reversals only; no cue on either refusal case.
+9. Regression -- PASS. Every other 6-5a..6-5e behaviour unaffected; no crash, no assert.
+
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Baseline (before any edit).** Save outside the repo: suite counts, golden, FORMAT_VERSION,
+- [x] **Task 1: Baseline (before any edit).** Save outside the repo: suite counts, golden, FORMAT_VERSION,
   per-player key count (43), hand/pitch/burst/corpse_bomb snapshot shapes, `git rev-parse HEAD`. (AC 28-30)
-- [ ] **Task 2: Data.** Author `counter_window_seconds` (default `0.0`) on `data/effects/counterspell.tres`.
+- [x] **Task 2: Data.** Author `counter_window_seconds` (default `0.0`) on `data/effects/counterspell.tres`.
   Add Counterspell's outcome row to `CardEffectResolver` (a new `OUTCOME_COUNTERSPELL`, on the
   Boom/Corpse-Bomb "no cast frame" precedent, `6-5e/R17`/C1) and remove its row from
   `DEFERRED_EFFECT_OWNERS`, which then goes EMPTY. (AC 1, 27)
-- [ ] **Task 3: `last_resolved_card` fix (AC 8).** Gate `_resolve_basic_cast`'s
+- [x] **Task 3: `last_resolved_card` fix (AC 8).** Gate `_resolve_basic_cast`'s
   `record_resolved_card(played, Enums.ModeKind.BASIC)` write on `not clears_cover`, mirroring the existing
   `if not clears_cover:` gate two lines below it; confirm `_resolve_pitch_activate` needs no equivalent gate
   (no pitch effect takes the cover arm, per 6-5e ruling 7). (AC 8)
-- [ ] **Task 4: Target resolution.** Read the opponent's `last_resolved_card_id`/`_mode`/tick at Counterspell
+- [x] **Task 4: Target resolution.** Read the opponent's `last_resolved_card_id`/`_mode`/tick at Counterspell
   activation; add the resolution tick to the `last_resolved_card` array (AC 5); apply
   `counter_window_seconds` as a maximum-age test; treat Counterspell-as-target and an
   exhausted/reversed/nonexistent target as "no target"; wire the no-target case (including the AC 13
   interim case) into the existing pre-spend board-gate seat with its own named refusal reason. Resolve Open
   Question 1 (the reversal record's shape) here. (AC 4-13)
-- [ ] **Task 5: Per-effect reversal (six kept cards only).** Implement the per-card reversal table
+- [x] **Task 5: Per-effect reversal (six kept cards only).** Implement the per-card reversal table
   (`6-5f/R16`-`R20`, `R23`, `R29` / AC 17-23): instant-effect amount-actually-applied claw-back with the
   three clamps (AC 14-15); the general minion-restore rule shared by Culling/Drain (AC 23); Grave Ward's
   extension removal with the now-expired-disappears-immediately clause (AC 19); Raise Dead's
   corpse-return-with-remaining-lifetime rule (AC 20); Boom's damage refund + same-slot Boulder restoration
   (AC 22); Vanguard's no-corpse vanish (AC 17). No `_cast_is_interrupted`/`_advance_bursts` code is touched
   by this task -- that is 6-5g's.
-- [ ] **Task 6: Interim refusal.** Wire the AC 13 interim rule: if the opponent's `last_resolved_card` names
+- [x] **Task 6: Interim refusal.** Wire the AC 13 interim rule: if the opponent's `last_resolved_card` names
   a resolution one of the seven 6-5g cards produced, refuse as "no target" through the same path Task 4
   built, no new refusal reason. (AC 13, `6-5f/R37`)
-- [ ] **Task 7: Reversal-record teardown.** Whatever new hashed reversal record Task 4 introduces is cleared
+- [x] **Task 7: Reversal-record teardown.** Whatever new hashed reversal record Task 4 introduces is cleared
   at BOTH existing per-round teardown seats (`_end_round`, `_reset_player`), alongside `clear_resolved_card`/
   `clear_burst`/`hand.clear_covers`/`clear_corpse_bomb`, AND is cleared per-resolution the instant
   Counterspell reverses that resolution. (AC 28)
-- [ ] **Task 8: Presentation minimum.** Placeholder sign-and-sound cue on both heroes on a real Counterspell
+- [x] **Task 8: Presentation minimum.** Placeholder sign-and-sound cue on both heroes on a real Counterspell
   resolution, visually/audibly distinct from every other 6-5 placeholder; no cue on either refusal case. (AC
   26)
-- [ ] **Task 9: Tests.** New: `test_counterspell.gd` or equivalent covering AC 4-23; the placeholder cue
+- [x] **Task 9: Tests.** New: `test_counterspell.gd` or equivalent covering AC 4-23; the placeholder cue
   test; the `last_resolved_card`/Boulder-clear fix test (AC 8); replay identity (AC 30) on the real record
   path; the authoring audit extension (AC 2); `test_spell_framework.gd`'s `DEFERRED_EFFECT_OWNERS` pin moving
   to empty (AC 27). Update the table below with actual filenames used. Mutation proofs restore from a copy
   outside the repo, SHA256-verified first.
-- [ ] **Task 10: Golden.** Isolate causes 1-5 (and any the dev pass finds) by erasing new keys/fields with
+- [x] **Task 10: Golden.** Isolate causes 1-5 (and any the dev pass finds) by erasing new keys/fields with
   every other change in place; confirm non-causes; record the actual re-baseline count; `FORMAT_VERSION` 18
   predicted, confirm or correct.
-- [ ] **Task 11: Close.** Second full suite run, invariants green, `git diff --stat`, Dev Agent Record. The
+- [x] **Task 11: Close.** Second full suite run, invariants green, `git diff --stat`, Dev Agent Record. The
   decision-log close-out (session name: this story's own) and the board promotion to `done` are the
   operator's gate, after live smoke.
 
@@ -608,6 +621,13 @@ outcomes.
   `unit_board.gd` (`kill_at`, `corpse_indices`, `extend_corpse_at`, `consume_corpse_at`, the death seat's
   caller count). 6-5f does NOT need to open `_cast_is_interrupted` or `_advance_bursts` -- those are 6-5g's.
 - **Suite:** `bash test/run_all.sh` with `GODOT=/c/Godot/godot.exe` via the Bash tool (WSL is broken).
+- **Close-out (2026-09-29), after live smoke.** Deferred work: m4 (the seven-card parametric interim-refusal
+  loop, currently proven only via the Honed Bolt smoke case) moves to `6-5g-counterspell-timed-and-in-flight`
+  alongside the seven timed/in-flight reversals themselves; m5 (`_replay` silently drops nothing for an
+  unknown channel name -- an observed gap, not a regression) moves to E6 close-out tooling. Operator
+  candidate raised post-smoke, not yet scoped: Counterspell targeting a Counterspell, with the state
+  restored as if the countered Counterspell had never been played -- a `6-5g` scope talk, and would
+  supersede `6-5f/R8` if adopted. Decision-log close-out and board promotion follow this entry.
 
 ### Project Structure Notes
 
@@ -660,20 +680,117 @@ outcomes.
 
 ### Agent Model Used
 
-_To be filled by the dev pass._
+Claude Opus 5
 
 ### Debug Log References
 
-_To be filled by the dev pass._
+- `C:\dev\_65f-dev.md` — the full dev record: baseline, the golden cause-isolation table, the mutation
+  table, deviations, disagreements and the actual test-table outcomes. Written as the pass ran.
+- `C:\dev\_65f-suite-before.txt` — before-baseline (opened 2026-09-29T13:59:54+02:00).
+- `C:\dev\_65f-suite-mid.txt` — the DISCLOSED extra run that produced the complete broken-pin list.
+- `C:\dev\_65f-suite-after.txt` — final (closed 2026-09-29T17:52:04+02:00).
+- Restore copies kept outside the repo for every mutated file: `_65f-player_state.gd.bak`,
+  `_65f-match_state.gd.bak`, `_65f-unit_board.gd.bak`, checksums in `_65f-mutation-checksums.txt`.
 
 ### Completion Notes List
 
-_To be filled by the dev pass._
+**Open Question 1 RESOLVED — the reversal record's shape.** ONE per-player "undo packet", overwritten in
+lockstep with `last_resolved_card`: the story's own "deliberate leaning", tried first and found correct.
+`record_resolved_card()` now takes the resolution tick AND clears the packet, and both apply seats call it
+BEFORE the effect applies, so the six arms fill a packet they know is empty. `6-5f/R6` (resolving
+overwrites) and `6-5f/R5` (countering clears) are then ONE overwrite semantic at ONE seat. The packet is
+`reversal_kind` plus five index-aligned generic columns and one scalar, hashed as one fused `reversal` key
+— `rule_a`/`rule_b`'s existing generic-column-with-a-per-kind-meaning-table convention, applied to a
+record. REJECTED: a family of per-effect-id parallel fields (seven clearing rules to keep in agreement with
+the id that selects them, failing silently). Additive to `hand_covered`/`burst`/`corpse_bomb`; redefines
+none (AC 2).
+
+**`REVERSAL_NONE` is the entire no-target rule.** Counterspell-as-target (AC 9), an already-countered card
+(AC 10), the seven 6-5g cards (AC 13's interim rule), `spell_*` no-ops, flag-closed casts and
+unauthored-kind summons all leave the packet at NONE and are refused by the one gate. No card-id list
+exists anywhere in the implementation, which is what makes AC 9's "no special-case code" and AC 13's "no
+new refusal reason" structural rather than incidental.
+
+**Determinism.** Golden re-baselined ONCE, `98eaee53…` → `941958c5…`. THREE measured causes of the eight
+predicted: the resolution tick (`b9ffa1da…` alone), the reversal packet (`a5c321f1…` alone) and
+`unit_hp_at_death` (`f3c4e4d6…` alone) — four distinct hashes, so the causes are independent. **Isolated
+both directions: with all three erased from `to_snapshot()` and every other change live, the hash returned
+to `98eaee53…` EXACTLY**, which is what proves predicted causes 3 (the `not clears_cover` gate), 5 (the new
+refusable outcomes) and 6 (`counter_window_seconds`) are NON-causes — measured, not assumed. Key set 43 →
+45; the tick moved neither pin, as predicted. `FORMAT_VERSION` 17 → 18 with v17 hard-refused — prediction
+correct, and the first bump in that file's history caused by a BEHAVIOUR change rather than a widened
+recorded shape.
+
+**Mutation proofs: 6 applied, 6 killed, 0 green** — the AC 8 record gate, the AC 10 packet clear, the
+pre-death hp capture, the AC 15 hp floor-1 clamp, the AC 12 nothing-left clause and the AC 7 window
+boundary. Each restored from an out-of-repo copy and SHA256-verified; each proof ran only the affected
+file. A seventh mutation was mis-aimed (it hit the discard gate, not the record gate), produced no
+failures, and is reported in the dev record rather than counted.
+
+**Suite.** State 1187/0 → **1217/0** (+30 tests, +153 assertions); integration 72/72 PASS both ways.
+FOUR full suite runs, two more than the default — both extras disclosed with their cause in the dev
+record (one operator-authorised to recover the broken-pin list after a harness memory-kill, one my own
+error: I placed `"reversal"` out of sorted position in the two key-set pins and had to fix and re-run).
+
+**Not done here, by design:** the live smoke (operator, two pads, flip config `[3,3]`, R-D6 re-invoked),
+the decision-log close-out and the board promotion. Nothing was committed, staged or pushed.
+
+**Review fix (2026-09-29), against `C:\dev\_65f-review.md` (APPROVE WITH FINDINGS 0/1/5).** M1 applied:
+added `test_a_v17_record_is_refused_with_a_reason` to `test_record_file.gd`, restoring the per-bump v17
+refusal fixture AC 29 asks for (the pattern 6-5e's own review restored and this story dropped again). m1
+(the `_restore_boulders` clause-(b) skip) was written, then REVERTED: proven by a throwaway probe that the
+scenario is structurally unreachable -- `_restore_boulders` only ever runs synchronously inside the
+counterer's own Counterspell activation, and their own pitch-zone slot is unconditionally cleared
+immediately before, so the holder can never have another card staged in that same zone at restore time.
+Operator ruling, for the close-out chain to log in the decision-log: the restore ignores placement clause
+(b) by construction, for that reason; re-open if the pitch zone ever widens past 1. m2 applied: deleted a
+misattributed cause tail from the FORMAT_VERSION 18 assertion message (two "THE CAUSE"s for one bump). m3
+applied: corrected the `test_hero_cast.gd` test-outcome row (it moved for AC 27, not for the predicted
+reason) and the moved-but-unpredicted tally (2 -> 3); corrected "All three mutated files" -> "both" (the
+third `.bak` is the golden-isolation copy, not a mutation backup). m4/m5 left for 6-5g and E6 close-out
+respectively, per the review's own placement. Full state suite: 1218/0 (+1, the new v17 fixture);
+integration 68/68; golden held, no re-baseline (no net production change). Nothing committed, staged or
+pushed.
 
 ### File List
 
-_To be filled by the dev pass._
+New:
+- `test/state/test_counterspell.gd`
+- `tools/gen_counterspell_audio.gd`
+- `assets/audio/cue_counterspell.tres` (generated by the tool above)
+
+Modified — source:
+- `src/state/resources/card_effect.gd`
+- `src/state/economy/card_effect_resolver.gd`
+- `src/state/unit_board.gd`
+- `src/state/player_state.gd`
+- `src/state/match_state.gd`
+- `src/systems/record_file.gd`
+- `src/main/match_runner.gd`
+- `src/actors/hero/telegraph_controller.gd`
+- `src/actors/hero/hero.tscn`
+
+Modified — data:
+- `data/effects/counterspell.tres`
+
+Modified — tests:
+- `test/state/test_architecture_invariants.gd`
+- `test/state/test_card_authoring.gd`
+- `test/state/test_card_observation.gd`
+- `test/state/test_corpses.gd`
+- `test/state/test_determinism.gd`
+- `test/state/test_draw_delay_and_reshuffle.gd`
+- `test/state/test_hero_cast.gd`
+- `test/state/test_record_file.gd`
+- `test/state/test_replay_identity.gd`
+- `test/state/test_spell_framework.gd`
+
+`project.godot` is UNTOUCHED (no new `class_name`, so no editor scan was needed and the new `.gd` files
+carry no `.uid` — the chain's job).
 
 ### Change Log
 
-_To be filled by the dev pass._
+| Date | Change |
+|---|---|
+| 2026-09-29 | Dev pass. Counterspell framework + six instant reversals (Vanguard, Culling, Grave Ward, Raise Dead, Drain, Boom). Open Question 1 resolved as a per-player undo packet in lockstep with `last_resolved_card`. New `CardEffect.counter_window_seconds`; new resolver family `COUNTERSPELL_OUTCOMES`/`COUNTERSPELL_REQUIREMENTS`; `DEFERRED_EFFECT_OWNERS` emptied (mechanism retained). New hashed facts: the resolution tick (third member of `last_resolved_card`), the `reversal` packet, `unit_hp_at_death`. `_resolve_basic_cast`'s resolved-card write moved above the fork and gated on `not clears_cover` (AC 8). Placeholder cue on both heroes via a new `counterspell_resolved` signal. `FORMAT_VERSION` 17 → 18; golden `98eaee53…` → `941958c5…`; per-player keys 43 → 45. Status → review. |
+| 2026-09-29 | Review fix. Added the v17 hard-refusal fixture (M1, AC 29). Fixed the FORMAT_VERSION 18 assertion message's duplicate cause (m2) and two Dev Agent Record evidence slips (m3). Wrote and then reverted the `_restore_boulders` clause-(b) skip (m1) after proving it structurally unreachable; recorded as an operator ruling for the decision-log. m4/m5 deferred per the review. No production change nets out; nothing committed. |
