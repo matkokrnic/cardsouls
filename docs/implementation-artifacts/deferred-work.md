@@ -508,3 +508,14 @@ Owners in decision-log session "6-6b-color-counters close-out (Tier A)".
 - **Dagger impact alignment** (the "hit" is the knockdown moment; align it to the dagger's arrival) -> polish.
 - **"Countering an unblockable may not reward enough"** (levers: the attacker's knockdown length, a
   defender reward such as orb/mana) -> retune block, judged at the friends playtest.
+
+## Deferred from: close-out of 6-5e-rocksling-boom-and-corpse-bomb (2026-09-29)
+
+- **The two-Boulders `Invariant.check` in `inject_card_effects` is untested** (review-fix minor 4). It
+  cannot be exercised from the headless harness: `Invariant.check` is `push_error` + `assert`, and the
+  assert HALTS the harness rather than failing an assertion. Making it testable needs a new `MatchState`
+  predicate (the same shape the neighbouring AC 1a collision check used, `_mirrored_values_agree`) -- a
+  new public surface, i.e. a SHAPE decision for the operator, not a HOW.
+- **AC 24a's cosmetic half** -- the "Boulder's own row cycles no mode" mode-cycle suppression on a Boulder
+  slot -> Tier B presentation story after `6-5f`. Behaviourally equivalent today: a covered slot can still
+  be toggled and is then refused at the commit with `REASON_COVERED_SLOT` through the ordinary channel.

@@ -4,7 +4,7 @@ baseline_commit: 101035536cad640cbf403346b6d5eb89dbf9add1
 
 # Story 6.5e: Rocksling, Boom and Corpse Bomb
 
-Status: ready-for-dev
+Status: done
 
 <!-- Tier A; fifth of six 6-5 sub-stories, depends on 6-5d-fireball-and-spell-targeting (done). Scope is
 the operator's ruling set of 2026-09-28, carried verbatim as behaviour below. This pass writes the story
@@ -701,25 +701,27 @@ restated verbatim as `6-5b`, `6-5c` and `6-5d` did:
     second and third Boulder slows further; playing/losing Boulders speeds the holder back up on the same
     instant; a Boulder held together with an active Frostbite slow is visibly slower than either alone.
 
+**Result: 14/14 PASS on two pads, flip config `[3, 3]`, R-D6 passed (operator, 2026-09-29).**
+
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Baseline (before any edit).** Save outside the repo: suite counts, golden,
+- [x] **Task 1: Baseline (before any edit).** Save outside the repo: suite counts, golden,
   `FORMAT_VERSION`, per-player key count (40), hand snapshot shape, pitch snapshot shape,
   `git rev-parse HEAD`. (AC 38-41)
-- [ ] **Task 2: Data.** Author `boulders_per_cast`, the stone interval, per-stone/skull/Boom damage fields
+- [x] **Task 2: Data.** Author `boulders_per_cast`, the stone interval, per-stone/skull/Boom damage fields
   and the flight-profile mirror on `rocksling.tres` / `boom.tres` / `corpse_bomb.tres`; author the new
   colourless Boulder `CardData` (the new `CardColor` member) + its `boulder_discard`-style basic effect
   (2 mana) + its resolver outcome row (M4); exclude Boulder from every deck-composition/deal path via the
   `FIXTURE_IDS`-style const list, no new `CardData` field; author `boulder_slow_per_boulder` (S1, default
   0.15) in `balance_config.tres`. (AC 1-6a, 20-22, 28a, 37a)
-- [ ] **Task 3: Boulder mechanism.** Design and implement the per-slot "Boulder covers a card" data shape
+- [x] **Task 3: Boulder mechanism.** Design and implement the per-slot "Boulder covers a card" data shape
   on `Hand` (or a sibling container) -- fill/remove/uncover, the covered-card-unplayable rule (incl. its
   own new refusal reason, AC 17a), the RNG-seeded eligible-slot pick restricted to uncovered slots that are
   not the struck player's own staged pitch-zone slot (AC 16, `6-5e/R20`), the mid-draw-delay case (Boulder
   occupies the hole, the owed refill lands underneath it), round-end and debug-reset teardown; measure and
   record `hand_size`/`occupied_count()` semantics (M2) and the `_rng` second-consumer consequence on
   `rng_state` and later reshuffle order (M1). Resolve Open Question 1. (AC 16-19, 21-24, 37b)
-- [ ] **Task 4: Rocksling burst + mirror widening + skull launch seat.** Widen `inject_pitch_effects()`'s
+- [x] **Task 4: Rocksling burst + mirror widening + skull launch seat.** Widen `inject_pitch_effects()`'s
   mirror to cover basic (Mode 1) effects, with the id-collision load refusal (AC 1a, `6-5e/R22`/G3); add the
   new minion-sourced launch seat alongside `add_hero_shot` for skulls (AC 3a, `6-5e/R23`/G4, with the
   minion-actor-then-caster-feet fallback); multiple `ProjectileBoard` records from one cast strike/
@@ -727,35 +729,36 @@ restated verbatim as `6-5b`, `6-5c` and `6-5d` did:
   damage; the launch-tick-dead-target degrade reused from Fireball; the pending-burst schedule as hashed
   cross-tick state (AC 11a, `6-5e/R21`/G2) with its cancellation on caster death/round end/debug reset
   (`6-5e/R18`, C2). Remove `rocksling`/`boom`/`corpse_bomb` from `DEFERRED_EFFECT_OWNERS`. (AC 7-11a, 43)
-- [ ] **Task 5: Stone/skull defence rung.** The new "block does not help" contact rule (a per-effect switch
+- [x] **Task 5: Stone/skull defence rung.** The new "block does not help" contact rule (a per-effect switch
   or an implied property -- mechanism choice, recorded); the on-hero-hit Boulder-placement side effect
   wired to the existing contact resolution seat; the on-unit-hit damage-only path; deflect-cancels and
   i-frame-drops reused from Fireball's existing rungs. (AC 12-15)
-- [ ] **Task 6: Boom.** No cast frame (`6-5e/R17`, C1); a new board-gate requirement + refusal reason
+- [x] **Task 6: Boom.** No cast frame (`6-5e/R17`, C1); a new board-gate requirement + refusal reason
   reading the OPPOSING hand's Boulder count, NOT `NEEDS_ENEMY_HERO` (AC 28, `6-5e/R27`/G8); activation
   counts opposing Boulders at that instant, applies per-Boulder instant damage through the Bloodlust/
   Vampiric Aura funnel (the non-projectile instant-damage seat Drain/Culling already use), removes each
   counted Boulder and uncovers its card. (AC 25-28, 34)
-- [ ] **Task 7: Corpse Bomb.** No cast frame (`6-5e/R17`, C1); activation kills every living own minion
+- [x] **Task 7: Corpse Bomb.** No cast frame (`6-5e/R17`, C1); activation kills every living own minion
   (totems excluded), routes each through the existing corpse-creation seat, launches one skull per
   converted minion at the captured activation-instant target via the new minion-sourced seat (Task 4);
   zero-minion refusal on the 6-5b no-target pattern (`NEEDS_OWN_LIVING_MINION`, unchanged). (AC 29-33, 34)
-- [ ] **Task 7a: Boulder slow (S1).** `boulder_slow_per_boulder` read alongside `RULE_FROSTBITE_SLOW` at
+- [x] **Task 7a: Boulder slow (S1).** `boulder_slow_per_boulder` read alongside `RULE_FROSTBITE_SLOW` at
   the gait seat (`match_state.gd:5994-5998`), combined by multiplication, updated on every Boulder
   add/remove path (placing, clearing, Boom detonation, round end, debug reset); NOT built on `start_rule`
   (no reuse, `6-5e/R28`/S1's own Dev Notes argument). (AC 37a)
-- [ ] **Task 7b: HUD covered/Boulder rendering (M3).** `_render_hand_row()`'s new covered-slot branch,
+- [ ] **Task 7b: HUD covered/Boulder rendering (M3).** (rendering, precedence, grey swatch and Mode-1-only price delivered; the "cycles no mode" suppression at the 6-9/6-10 seats NOT built -- see Dev Agent Record) `_render_hand_row()`'s new covered-slot branch,
   precedence over the owed-refill branch, Boulder's own grey-swatch/Mode-1-only price row, and the
   click-to-commit/mode-toggle refusal on a covered slot. (AC 24a)
-- [ ] **Task 8: Counterspell facts (ruling 14).** Ensure the Boulder-slot/covered-card fact, the
+- [x] **Task 8: Counterspell facts (ruling 14).** Ensure the Boulder-slot/covered-card fact, the
   pending-burst schedule and a per-activation Corpse Bomb conversion record (owner, dead indices,
   activation tick, or its pure-function argument, M6) are present in hashed state, readable by a test,
   ahead of `6-5f`. (AC 38, 40)
-- [ ] **Task 9: M6 coverage.** Confirm the existing 6-5d reload refusal still covers a live stone and a live
+- [x] **Task 9: M6 coverage.** Confirm the existing 6-5d reload refusal still covers a live stone and a live
   skull record; add a test if the existing one does not already generalize. (AC 36)
-- [ ] **Task 10: Presentation minimum.** Three new placeholders (stone, skull, Boulder card face), each
+- [x] **Task 10: Presentation minimum.** Three new placeholders (stone, skull, Boulder card face), each
   visually distinct; poll-shaped, no new observation seam beyond what Fireball already established. (AC 37)
-- [ ] **Task 11: Tests.** New: `test_rocksling.gd` or equivalent (AC 7-19), `test_boulder.gd` or equivalent
+- [x] **Task 11: Tests.** (AC 41's replay-identity fixture BUILT at the review-fix pass -- see the Dev
+  Agent Record's "Review-fix pass" section) New: `test_rocksling.gd` or equivalent (AC 7-19), `test_boulder.gd` or equivalent
   (AC 20-24), `test_boom.gd` (AC 25-28a), `test_corpse_bomb.gd` (AC 29-33), the shared-buff assertions (AC
   34) extended into whichever of the above fits, the M6-generalization test (AC 36), the Boulder-slow tests
   (AC 37a, S1), replay identity (AC 41), the authoring audit extension (AC 6, 6a), `test_corpses.gd`'s
@@ -763,10 +766,10 @@ restated verbatim as `6-5b`, `6-5c` and `6-5d` did:
   `test_replay_surface_pins.gd`/`test_architecture_invariants.gd`/`test_card_effect_resolution.gd` (M1-M5).
   Update the table below with actual filenames used. Mutation proofs restore from a copy outside the repo,
   SHA256-verified first.
-- [ ] **Task 12: Golden.** Isolate causes 1, 1a, 2, 3, 5, 5a, 5b, 5c (and any the dev pass finds) by erasing
+- [x] **Task 12: Golden.** Isolate causes 1, 1a, 2, 3, 5, 5a, 5b, 5c (and any the dev pass finds) by erasing
   new keys/fields with every other change in place; confirm non-causes; record the actual re-baseline
   count; `FORMAT_VERSION` 17 predicted, confirm or correct.
-- [ ] **Task 13: Close.** Second full suite run, invariants green, `git diff --stat`, Dev Agent Record. The
+- [x] **Task 13: Close.** Second full suite run, invariants green, `git diff --stat`, Dev Agent Record. The
   deck-1-spec amendment (below) is written at authoring, in THIS pass, as required. The decision-log
   close-out and the board promotion to `done` are the operator's gate, after a separate readiness-gate
   pass promotes this story to `ready-for-dev`.
@@ -888,8 +891,245 @@ outcomes.
 
 ### Agent Model Used
 
+Claude Opus 5 (1M context), dev pass 2026-09-28/29. Full detail, every hash and the mutation table:
+`C:\dev\_65e-dev.md`. NOTHING COMMITTED -- the tree carries the whole pass uncommitted.
+
 ### Debug Log References
+
+- Suite before: `C:\dev\_65e-suite-before-state.txt` (23:12:29), `-integ.txt` (23:18:16).
+- Suite after: `C:\dev\_65e-suite-after-state.txt` (00:37:00), `-integ.txt` (00:42:07).
+- Mid-pass surveys 1-6 (`_65e-survey*-state.txt` / `-integ.txt`), each disclosed with its reason in the
+  dev record's own suite-cadence table.
+- Out-of-repo mutation/isolation backups: `_65e-backup-player_state.gd` (SHA256 `81567ca4...cd3d`),
+  `_65e-backup-match_state.gd` (`6f2bd511...5fec`), `_65e-backup-hand.gd` (`fc374c1e...0b9f`). Every target
+  restored from its copy and SHA256-verified; `git checkout --` never used.
 
 ### Completion Notes List
 
+**SUITE: 1128/0/10987 + 71/71 -> 1175/0/11245 + 72/72, all green.** `project.godot` and
+`src/main/main.tscn` byte-identical. No new `class_name`, so the editor class-cache scan is moot and was
+not run.
+
+**GOLDEN: ONE re-baseline, `de3589ff...` -> `98eaee53...`, THREE causes.** The decisive measurement is
+that with all three new keys erased and nothing else reverted the hash returned to `de3589ff...` EXACTLY,
+which makes every other change in this story a measured non-mover. Each cause alone: `hand_covered`
+`5545f4f9...`, `burst` `1da2773c...`, `corpse_bomb` `427bbe6f...`. All five hashes distinct.
+**Two predicted causes measured NON-causes** -- cause 5 (the new refusal reasons: the golden sequence
+presses neither a covered slot nor a Boom) and cause 5a (`_rng`'s second consumer: only a landed Rocksling
+stone reaches the new draw, and the fixture fires none). Per-player key set **40 -> 43**.
+**`FORMAT_VERSION` 16 -> 17 CONFIRMED**, and unlike 6-5d its stated reason also holds: a v16 file CAN
+contain a Rocksling, and replaying one with `boulders_per_cast` defaulted to 0 fires no stones.
+
+**MUTATIONS: 8 targets, 10 filtered runs, all KILLED -- one GREEN first and recorded both ways.** M5 (the
+burst's dead-caster cancellation) initially passed because the burst was being cleared by ROUND END, not by
+the branch under test: `_end_round` runs at step 8, after step 6d, so the only reachable case is a launch
+falling due on the KILL TICK itself. The test was strengthened to arrange exactly that
+(`test_caster_death_cancels_a_stone_due_on_the_kill_tick`) and the same mutant then died.
+
+**TOOLING (recorded, not silent):** `test/run_state_tests.gd` gains an optional `--<substring>` file
+filter. project-context requires mutation proofs to run only the affected file, and until this existed
+there was no way to do that -- every past proof had to run the whole suite or be trusted. A bare
+invocation is unchanged.
+
+**AC 1a's collision invariant was NARROWED TWICE BY MEASUREMENT.** The AC's literal reading (id present in
+both maps) failed 17 existing tests -- one effect legitimately sits in both maps. Object identity failed as
+widely -- fixtures build a fresh object per map. What ships refuses two entries whose MIRRORED VALUES
+disagree (the six flight fields plus `boulders_per_cast`), which is exactly the harm the AC's own wording
+names and is mutation-provable (M7) where an id-presence check was not.
+
+**THE OPERATOR'S TWO LIVE PROOFS, both PASS** (`test_boulder_and_skull_live.gd`, new):
+(a) the runner derives its cost/effect/colour maps from the WHOLE LIBRARY (`CardDatabase.sorted_ids()`),
+which is the only reason a deck-less card is in them; on the real authored content `_boulder_card_id`
+resolves to `boulder`, a real cast plants a Boulder, and a real Mode ① press clears it for exactly 2 mana
+with the covered card restored, nothing owed, nothing discarded. (b) a skull's spawned actor sits **0.267 m
+from its converted minion and 16.733 m from the caster**, with the source-gone fallback at the caster's
+feet -- and NO runner edit was needed, because `_projectile_launch_position` already resolved a
+non-negative source index.
+
+**MECHANISM DECISIONS (HOW, taken and recorded):**
+1. The cover is a PARALLEL ARRAY on `Hand`; the underlying card never leaves `_cards`, so `fill_at` (AC 18)
+   and 3-5b's four-term conservation are untouched. Open Question 1 resolved.
+2. `hand_size` binds to the CARD layer (M2's measured answer): a covered card still counts, a Boulder never
+   does. Decisive reason -- any other answer breaks the conservation identity.
+3. The covered card's IDENTITY is NOT a new hashed fact: it is `hand.to_array()[slot]`, already the third
+   member of the unhashed-cross-tick exclusion set. Only the per-slot cover MASK is hashed.
+4. The Boulder CARD ID is DERIVED (the card whose basic effect the resolver's cover table names), so no
+   card-id literal and no seventh injection channel enter `src/state/`.
+5. Damage reuses the existing `damage_amount` for stones, skulls and Boom rather than three new fields --
+   `6-5b/R7`'s "a second spelling of this effect's one magnitude" precedent.
+6. AC 17a vs AC 20 reconciled: ONE new token `REASON_COVERED_SLOT` for modes ②/③/④ on a covered slot; Mode
+   ① addresses the Boulder (ruling 7). A Boulder is ALWAYS in the cover layer, so no other refusal is
+   reachable for it. Behaviour identical under either reading.
+7. AC 4's const deck-exclusion list NOT added: the composition comes from an authored `DeckList`, so
+   Boulder is excluded BY CONSTRUCTION (guard mechanism over guard pattern, `3-0d/R20`). Negative tests
+   replace the list. `CARD_DATA_FIELDS` unchanged per `6-5e/R25`.
+8. Block-no-mitigation, deflect-cancels, i-frames-strip-homing and non-target pass-through all come FREE
+   from 6-5d's existing `is_hero_sourced_at` rungs. Task 5's mechanism question answered "a property
+   already implied by an existing field": no new rung, no per-effect flag.
+9. `test_card_effect_resolution.gd`'s id-exemption MECHANISM WAS REPLACED, as that file itself instructed
+   in advance ("a THIRD exemption is the signal to replace the mechanism ... a declared set of id-carrying
+   paths on `PlayerState` itself"). `PlayerState.SNAPSHOT_ID_PATHS` now declares them and the test loops it.
+
+**STORY WRINKLES accepted from the operator, not edited in the AC text:** the break-table row naming
+`test_unit_damage_and_death.gd` is a stale hedge superseded by the `test_corpses.gd:240` caller-count row
+(`6-5e/R24`) -- treated as superseded, and that pin moved 3 -> 4 callers with its name. Slot eligibility per
+`6-5e/R20` implemented exactly as ruled (the STRUCK player's own staged slot; cast-frame and charging slots
+are ordinary holes and ARE eligible).
+
+**TWO FINDINGS WORTH NAMING.** (1) A FALSE GREEN in my own first block test: it asserted full unmitigated
+stone damage on a hero that never blocked at all -- the exact trap `test_fireball.gd::_land` documents.
+Fixed with both halves plus a fixture assertion that the target really was BLOCKING. (2) An effect-id /
+card-id keying trap caught before it shipped: `_shot_effect_of` read `_card_effects` (keyed by CARD id) with
+an EFFECT id, which would have worked for the cards that share one spelling and returned null for the rest,
+Fireball included. Fixed with `_effects_by_effect_id`.
+
+**NOT COMPLETED -- three items, named with what remains (Tasks 7b and 11 left UNCHECKED):**
+1. **AC 41** -- `FORMAT_VERSION` 17 is pinned and green, and `test_replay_identity.gd`'s member
+   classification is updated and green. NOT built: a recorded-match fixture firing a Rocksling burst that
+   plants a Boulder, a Boom that detonates one and a Corpse Bomb that converts a minion, replaying to the
+   identical hash and record. Remaining: one fixture on that file's existing `_spell_pitch_effects()` shape
+   plus its drop-channel non-vacuity half.
+   **CLOSED AT THE REVIEW-FIX PASS** -- see that section below.
+   **ACCURACY CORRECTION (review T14/minor 12):** this item originally read "the new content's round-trip
+   ARE pinned", which OVERSTATED what `test_record_file.gd` gained. That file's diff moved only the two
+   `FORMAT_VERSION` assertions, 16 -> 17; no content round-trip case for a Boulder placement or a Corpse
+   Bomb conversion existed at the time the claim was written. Corrected here rather than quietly dropped.
+2. **AC 24a's cosmetic half** -- the rendering, precedence, grey swatch and Mode-1-only price line are
+   delivered and green. NOT built: the "Boulder's own row cycles no mode" suppression at the 6-9/6-10 seats.
+   A covered slot can still be toggled to mode ②/③/④ and is then REFUSED at the commit with
+   `REASON_COVERED_SLOT` through the ordinary channel -- behaviourally equivalent; presentation-only residue.
+   STILL CARRIED after the review-fix pass.
+3. ~~**The deck-1-spec amendment**~~ -- **STRUCK AT THE REVIEW-FIX PASS (review T14/minor 11): IT WAS
+   ALREADY DELIVERED,** in the baseline commit `84d0c7e`, as +59 lines on
+   `docs/planning-artifacts/deck-1-spec.md` ("Amendment (2026-09-28, operator ruling set for 6-5e)",
+   carrying the superseded block/deflect wording, the sits-ON-TOP correction, the `6-5e/R20` eligibility
+   fix and the S1 Boulder-slow amendment). The dev pass was right that IT did not touch the file, and
+   wrong to list that beside two genuine gaps -- which overstated the outstanding work by one item. NOT an
+   open item.
+
+**LIVE SMOKE NOT RUN** -- operator's, two pads, flip `[3, 3]`, R-D6 re-invoked (13 items in the story).
+
+### Review-fix pass (2026-09-29, Claude Opus 5 (1M context))
+
+Contract: `C:\dev\_65e-review.md` (CHANGES REQUESTED -- 1 blocker, 1 major, 14 minor) plus the story and
+`6-5e/R1..R28`. Full detail, every hash and the mutation table: `C:\dev\_65e-fix.md`. NOTHING COMMITTED;
+Status stays `review`; the board is untouched. NO subagents, no forks, no parallel sessions.
+
+**SUITE: 1175/0/11245 + 72/72 -> 1187/0/11344 + 72/72, all green.** (`C:\dev\_65e-suite-fix-state.txt`
+08:50, `-integ.txt` 08:56; the before-baseline is the dev pass's own final run, since the tree had not
+changed since.) **GOLDEN UNMOVED at `98eaee53c065b1c22e5602f5d8c436ea6619c9852752b7f1debaa4695c14a9ff`**
+and `FORMAT_VERSION` still 17 -- this pass is tests plus two guards, and moved neither. `git status
+--porcelain` is the same 35 entries: no file was added or removed.
+
+**BLOCKER 1 (AC 41) -- CLOSED, and it passed on the first run rather than exposing a determinism defect.**
+`test_replay_identity.gd` gains a THIRD driven run, the BOULDER RUN, and it goes through the REAL RECORD
+PATH the review asked for: `IntentRecorder` -> `RecordFile.save_record` to `user://` -> `load_record` ->
+replay from the LOADED record. The sequence, all of it through recorded channels with nothing poked into
+state: mana from a melee hit each way; P1 casts Rocksling at t12; the strike at t18 launches stone 0 and
+owes stone 1; stone 0 lands on P2's hero at t19 and plants BOULDER 1 through the seeded pick; P2 clears it
+with a Mode ① press at t20; stone 1 launches at t22 and lands at t23, planting BOULDER 2; P1 stages Boom at
+t26 and activates it at t28, detonating it; P1 summons two minions at t31/t33, stages Corpse Bomb at t36
+and activates it at t38, converting BOTH and launching two skulls that are still in flight on the hashed
+final tick.
+
+- **The replay from the reloaded file is BIT-IDENTICAL.** `_saved_format_version()` reads `17` out of the
+  FILE rather than off the constant, which is the only reading that makes "saved at FORMAT_VERSION 17" a
+  measurement. **NO DIVERGENCE WAS FOUND**, so `_rng`'s new second consumer and the three new hashed keys
+  all replay correctly and no production fix was needed -- reported as a measurement, not as an absence.
+- **NON-VACUITY is its own test** (`test_the_boulder_run_plants_clears_replants_detonates_and_converts`),
+  asserting each step on the LIVE run as it passed: two stones launched and hero-sourced, stone 0's
+  authored damage landed, one cover after the first landing, `_rng` moved on it, zero after the clear with
+  the card beneath back in its own slot, one after the second landing, Boom's authored damage dealt and the
+  cover removed, `corpse_bomb` naming `[0, 1]` at tick 38, two corpses, four projectiles, skulls alive.
+  Plus the file's standing drop-channel half: `contacts`, `effects` and `intents` each diverge the replay.
+- **MUTATION-PROVEN.** `_place_boulder`'s `cover_at` line deleted -> the non-vacuity test fails on **11
+  assertions** and the whole downstream chain collapses (no Boulder -> Boom refused -> the zone still holds
+  Boom -> Corpse Bomb never stages -> no conversion). The fixture is load-bearing end to end.
+
+**MAJOR 1 (AC 38's id-path guard) -- CLOSED, and closing it found a REAL UNDECLARED ID PATH.**
+`test_card_effect_resolution.gd`'s scan now runs over THREE snapshots -- resting, MID-CAST and MID-BURST --
+through one extracted `_assert_declared_id_paths_hold()`, driven by a new Rocksling fixture in that file
+(the one shipped effect that produces both gated branches from one press). The review's MUT-A
+(`"burst": [StringName(burst_effect_id), ...]` on the LIVE branch) now FAILS on three assertions where it
+was GREEN before; the resting-only test stays green, which is the vacuity, recorded in both states.
+
+- **THE FINDING:** making the scan non-vacuous immediately surfaced `/projectile_effect[N]` -- a `String`
+  effect id per live shot that has reached the snapshot since 6-5d and was never declared, because the
+  fixture that would have caught it had no live projectile in it. It is now declared, which needed a small
+  extension to the mechanism rather than a literal exemption: a path ending `[]` is a FAMILY (every element
+  of a variable-length array), documented on `SNAPSHOT_ID_PATHS` itself. Scalar paths still must be PRESENT
+  (a stale declaration cannot rot into a blanket permission); a family need not be, because an empty board
+  is the resting case -- so the mid-burst test asserts the family was non-empty there.
+
+**MINORS: 12 CLOSED, 2 LISTED.** Closed: 2 (a source-scan making `_shot_effect_of`'s field obligation
+structural -- both sides scanned, mutation-proven by adding a `damage_amount` read at the call site),
+3 (an empty filter narrowing now refuses loudly and exits 1 instead of printing `RESULT: PASS`),
+5 (both halves, each mutation-proven: the `state != ATTACKING` carve-out and the `maxf(0.0, ...)` clamp --
+the clamp mutant walks at 1.0 where the clamp gives 0.0, so it was not a free assertion), 6 (the caster
+MOVES and SWINGS mid-burst and every stone still launches -- the positive half of AC 11a),
+7 (`unit_dedupe.discard` on conversion), 8 (a lethal Boom ends the round on its own tick),
+9 (AC 13's "the caster is not stunned by the deflect"), 10 (AC 12's non-facing blocking case),
+11 and 12 (both record-accuracy items, corrected in the block above; 12 also gained the missing per-bump
+v16 refusal fixture AND a row-shape pin for the two new `CardEffect` fields), 13 (the missing `%s`
+format argument), 14 (the mirror's ordering assumption made structural).
+
+- **MINOR 14 SHIPPED NARROWER THAN THE REVIEW PROPOSED, deliberately.** A bare
+  `Invariant.check(not _card_effects.is_empty(), ...)` would fire on a fixture legitimately injecting an
+  empty basic map, and an `Invariant.check` is `push_error` + `assert`, so a false positive HALTS the
+  headless harness rather than failing one test. What ships refuses the ORDER instead: a real composition,
+  pitch effects already in hand, and no basic effects yet. Measured safe -- the full suite is green with
+  zero `INVARIANT VIOLATED`.
+
+**LISTED, NOT CLOSED -- two items, each with its reason:**
+1. **Minor 4 (the two-Boulders `Invariant.check` in `inject_card_effects` is untested).** It cannot be
+   tested from here: `Invariant.check` is `push_error` + `assert`, and the assert HALTS the headless
+   harness, so a fixture that tripped it would abort the suite rather than fail an assertion. The
+   neighbouring AC 1a collision check is testable only because its discriminator was extracted as a static
+   predicate (`_mirrored_values_agree`); doing the same for this one means adding a new testable predicate
+   to `MatchState` -- a shape decision, not a HOW, so it is listed for the operator rather than invented.
+2. **AC 24a's cosmetic half** (the "Boulder's own row cycles no mode" suppression at the 6-9/6-10 seats),
+   unchanged from the dev pass and out of this pass's scope: behaviourally equivalent today, since the
+   commit refuses through `REASON_COVERED_SLOT` on the ordinary channel.
+
+**LIVE SMOKE STILL NOT RUN** -- operator's, two pads, flip `[3, 3]`, R-D6 re-invoked, 13 items, unchanged
+as a Tier A requirement by this pass.
+
 ### File List
+- `data/cards/boulder.tres`
+- `data/effects/boulder_discard.tres`
+- `test/state/test_rocksling_and_boulder.gd` (47 tests; ONE file rather than Task 11's four, because all
+  four need the same ~200-line fixture and four copies would be four things to keep in agreement)
+- `test/integration/test_boulder_and_skull_live.gd` (the operator's two live proofs)
+
+MODIFIED (production):
+- `src/state/enums.gd`, `src/state/hand.gd`, `src/state/player_state.gd`, `src/state/match_state.gd`,
+  `src/state/projectile_board.gd`, `src/state/economy/card_effect_resolver.gd`,
+  `src/state/resources/card_effect.gd`, `src/state/resources/balance_config.gd`,
+  `src/systems/record_file.gd`, `src/ui/hud/hud_root.gd`
+- `data/effects/rocksling.tres`, `data/effects/boom.tres`, `data/effects/corpse_bomb.tres`,
+  `data/balance/balance_config.tres`
+
+MODIFIED (tests / tooling):
+- `test/run_state_tests.gd` (the `--` file filter)
+- `test/state/`: `test_determinism.gd`, `test_card_authoring.gd`, `test_card_effect_resolution.gd`,
+  `test_card_observation.gd`, `test_card_play.gd`, `test_corpses.gd`, `test_data_resources.gd`,
+  `test_draw_delay_and_reshuffle.gd`, `test_hero_cast.gd`, `test_record_file.gd`,
+  `test_replay_identity.gd`, `test_spell_framework.gd`
+- `test/integration/`: `test_card_database.gd`, `test_deck_injection.gd`
+
+MODIFIED (board):
+- `docs/implementation-artifacts/sprint-status.yaml` (in-progress during the pass; restored to
+  `ready-for-dev` by the project's `on_complete` per CFG/R2)
+
+### Change Log
+
+- 2026-09-29 -- review-fix pass: AC 41's replay-identity fixture built on the REAL record path (save at
+  FORMAT_VERSION 17, reload, replay -- bit-identical, no divergence found); the declared-id-path scan made
+  non-vacuous over mid-cast and mid-burst snapshots, which surfaced and closed an undeclared
+  `/projectile_effect[]` path; 12 of 14 minors closed, 2 listed. Suite 1175/0/11245 + 72 ->
+  1187/0/11344 + 72. Golden UNMOVED (`98eaee53...`), `FORMAT_VERSION` unmoved (17). Nothing committed.
+- 2026-09-29 -- dev pass: Rocksling's committed burst, the Boulder cover layer, Boom, Corpse Bomb and the
+  S1 Boulder slow. Golden re-baselined ONCE (`de3589ff...` -> `98eaee53...`, three measured causes, every
+  non-cause measured); key set 40 -> 43; `FORMAT_VERSION` 16 -> 17. Suite 1128/0/10987 + 71 ->
+  1175/0/11245 + 72. Eight mutation targets, all killed (one green first, strengthened, recorded both
+  ways). Three items carried, named above. Status -> review.
