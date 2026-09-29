@@ -542,3 +542,21 @@ Vizual (munja, stozac, krug, alarm) je placeholder -> Tier B prezentacijska stor
 - Item 10 (target dies before impact) could not be tested by hand: the caster is locked for the whole 0.8 s cast. Covered by tests.
 - Found: the Honed Bolt lightning also played before every Fireball. Fixed in the smoke-fix pass; re-checked on pads: gone for Fireball, still there for the bolt.
 - All new visuals (fireball, target cone, lightning, alarm) are placeholders for the presentation story after 6-5f.
+
+## 2026-09-29 -- 6-5e Rocksling, Boom, Corpse Bomb (smoke, dva pada [3,3])
+
+Rezultat: 14/14 PASS, R-D6 prošao (runda normalno završi i nova krene).
+
+- Rocksling: animacija bacanja, pa 3 kamena jedan za drugim iz nogu, homing radi.
+- Pogodak na heroja: 3 štete + sivi Boulder na nasumičnom slotu; protivnik ga ne vidi.
+- Blok ne pomaže (puna šteta + Boulder), deflect poništi kamen, roll skida homing.
+- Nakon bacanja rafal ide dalje dok se bacač slobodno kreće i napada.
+- Boulder usporava hod i trk, svaki sljedeći jače; čišćenje odmah vraća brzinu. S Frostbiteom još sporije.
+- Čišćenje: mod 1 za 2 mane, karta ispod se odmah vrati u isti slot; bez mane i u ostalim modovima odbijeno.
+- Boom: trenutno 6 po Boulderu, bez animacije; bez Bouldera aktivacija odbijena, karta ostaje u zoni.
+- Corpse Bomb: minioni odmah umiru i ostaju leševi, lubanja iz svakog tijela; Raise Dead ih diže. Bez miniona odbijeno.
+- Lock-on na miniona: kamenje radi samo štetu, bez Bouldera.
+- Debug reset usred rafala: preostalo kamenje otkazano, Boulderi nestaju, karte na mjestu.
+- Placeholderi (kamen, lubanja, Boulder) međusobno prepoznatljivi, fps stabilan.
+
+Otvoreno za Tier B prezentaciju iza 6-5f: svi vizuali su placeholderi; na Boulder karti se modovi i dalje vrte (pritisak se ispravno odbije).
