@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-25
+# last_updated: 2026-09-29
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -132,7 +132,8 @@ development_status:
   6-5c-hero-cast-honed-bolt: done  # Tier A
   6-5d-fireball-and-spell-targeting: done  # Tier A
   6-5e-rocksling-boom-and-corpse-bomb: done  # Tier A
-  6-5f-counterspell: backlog  # Tier A
+  6-5f-counterspell: ready-for-dev  # Tier A
+  6-5g-counterspell-timed-and-in-flight: backlog  # Tier A
 
 story_notes:
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
@@ -156,7 +157,8 @@ story_notes:
   6-5c-hero-cast-honed-bolt: "done 2026-09-25, golden 97d52922, FORMAT 15."
   6-5d-fireball-and-spell-targeting: "done 2026-09-28, golden de3589ff, FORMAT 16."
   6-5e-rocksling-boom-and-corpse-bomb: "done 2026-09-29, golden 98eaee53, FORMAT 17."
-  6-5f-counterspell: "Tier A, the E6 CLOSE-OUT story and LAST on the board — R-SPELL's forcing point, with the playtest block after it. Split from 6-5-spell-resolution (2026-09-22): Counterspell + undo semantics for 6-5a..6-5e. Depends on all prior 6-5 sub-stories."
+  6-5f-counterspell: "promoted 2026-09-29 after gate + fix; scope = framework + six instant cards, seven moved to 6-5g."
+  6-5g-counterspell-timed-and-in-flight: "added 2026-09-29 at 6-5f's readiness-gate fix pass (THE CUT). Takes the seven timed/in-flight reversals cut from 6-5f: Vampiric Aura, Bloodhound Step, Rocksling, Fireball, Honed Bolt, Frostbite, Corpse Bomb. Removes 6-5f's interim no-target refusal for these seven cards. Now LAST on the board, closes E6's R-SPELL forcing point."
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
   5-5-unblockable-defense: "done 2026-09-06, Tier A close-out complete (mode 3 dispatch/window/negation/reset per 5-5/R1-R10, golden dc2c9ffa -> d9725092/30-key set (defense), smoke PASS 10/10, decision-log session 5-5 close-out)."

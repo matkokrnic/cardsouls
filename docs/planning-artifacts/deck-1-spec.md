@@ -153,3 +153,70 @@ live Boulder count and updates on the same tick as every add/remove path (placin
 detonation, round end, debug reset). The slow is observable to the opponent by design -- accepted, not a
 `P3` breach (no hand content is revealed, only a speed effect). (Recorded in
 `docs/implementation-artifacts/6-5e-rocksling-boom-and-corpse-bomb.md`, ruling `6-5e/R28`.)
+
+## Amendment (2026-09-29, operator scope talk for 6-5f)
+
+**Counterspell** (section 6, PITCH) -- **this file's own "Exact undo semantics are decided in its own
+story" is now resolved; the wording it referred to is SUPERSEDED by the detail below.** Counterspell
+resolves instantly on activation, no cast frame, exactly like Boom and Corpse Bomb. It is RETROACTIVE, not
+a ward: it reaches back and reverses the OPPONENT's `last_resolved_card` -- their last normal (mode 1) cast
+or pitch (mode 4) activation -- as recorded at the instant it resolved. A `.tres` field,
+`counter_window_seconds` (default T[0.0] = no limit), bounds how old that resolution may be; older than the
+window (when nonzero) counts as no target. A refused card was never resolved and is never a target. Playing
+(clearing) a Boulder is explicitly NOT a played card for this purpose: it is never itself a target, and it
+does NOT overwrite or shield whatever card was last resolved before it -- the one behaviour change this
+story makes to the existing (unconditional) `last_resolved_card` write. Resolving any other card, normal or
+pitch, DOES overwrite the record (a cheap card played right after a big one "shields" it -- intentional).
+Once countered, a resolution cannot be countered again by a second copy. Counterspell is never a target of
+itself (no counter-on-counter, no redo).
+
+With no target (the opponent has resolved nothing yet this round, their last card is Counterspell itself,
+it is outside a nonzero window, or everything it did has already fully expired/gone), activation is refused
+before the orb spend on the standing no-target board-gate pattern (6-5b/6-5e precedent): the card stays
+staged, its countdown continues, and the staging mana already spent is not refunded. The countered player
+gets nothing back -- their card, mana and orb stay spent; only what the countered card itself produced is
+reversed.
+
+Two reversal classes. INSTANT effects (damage, heal, mana gain, summon, corpse changes, Boulder placement/
+detonation) are reversed by the amount ACTUALLY APPLIED, never the nominal number (a heal or mana grant
+that hit its clamp is clawed back only by the clamped amount). TIMED buffs (Vampiric Aura,
+Bloodhound Step, Frostbite) END NOW; whatever they already yielded stays (healed hp stays, rolls already
+taken keep their bonus). Clamps: HP claw-back floors at 1 (a counter never kills); mana claw-back floors at
+0; HP refund ceilings at max hp. A partial product still present (one Boulder of a burst still uncleared
+while others are already gone) is reversed only for the part still present.
+
+Per-card reversal: **Vanguard** -- the summon vanishes with no corpse, alive or dead. **Culling** -- its
+kills rise again from their corpses at their pre-death hp; the mana granted is clawed back. **Grave Ward**
+-- its extension is removed from every corpse it touched; one left at <=0 remaining time disappears now.
+**Raise Dead** -- the raised minions vanish with no corpse; their original corpses return with their
+remaining lifetime, except one that would already have naturally expired, which does not return. **Drain**
+-- the sacrifice rises from its corpse; the healed hp is clawed back. **Vampiric Aura** -- ends now, healed
+hp stays. **Rocksling** -- a cast in progress is interrupted, the caster freed immediately; stones not yet
+launched are cancelled, an in-flight stone vanishes, landed-stone damage is refunded, and Boulders it
+placed that are still covering a slot are removed (one already cleared/detonated/torn down is left alone).
+**Boom** -- the damage it dealt is refunded; the Boulders it detonated return to the SAME slots, as if never
+played (the operator's explicit choice over "stays destroyed"). **Bloodhound Step** -- ends now. **Fireball**
+-- in flight it vanishes; if it hit, the damage is refunded; its staged mana is never refunded. **Honed
+Bolt** -- a cast in progress is interrupted, the caster freed immediately; if it already struck, the damage
+actually applied is refunded and any running stun/root ends immediately. **Frostbite** -- an unconsumed
+trigger is removed; a consumed one's slow ends now. **Corpse Bomb** -- skulls in flight vanish, landed-skull
+damage is refunded, converted minions rise from their corpses at their pre-death hp (the same general
+restore rule Culling and Drain use).
+
+Presentation is a placeholder sign-and-sound cue on both heroes on a real reversal, the same standard as
+every other 6-5-family placeholder; no new art. (Recorded in
+`docs/implementation-artifacts/6-5f-counterspell.md`.)
+
+## Amendment (2026-09-29, 6-5f readiness gate fix -- delivery split)
+
+The Counterspell amendment above ships in two stories, split at the same readiness gate that promoted
+6-5f. **`6-5f-counterspell`** delivers the framework (target selection, window, refusal, the reversal
+record, teardown, golden/FORMAT, replay, the placeholder cue) plus the reversal of six INSTANT cards:
+Vanguard, Culling, Grave Ward, Raise Dead, Drain, Boom. **`6-5g-counterspell-timed-and-in-flight`**
+delivers the reversal of the seven TIMED/in-flight cards: Vampiric Aura, Bloodhound Step, Rocksling,
+Fireball, Honed Bolt, Frostbite, Corpse Bomb. Until 6-5g ships, a Counterspell targeting a resolution any
+of those seven cards produced is refused as "no target" through the existing refusal path (the interim
+rule; no new refusal reason). Section 5's "Bloodlust" naming in this file's own TIMED-buff lists is
+removed: Bloodlust is unreachable in Deck 1 (Fireball replaced it as Bloodhound Step's pitch, the
+2026-09-22 amendment above), so it was never a live reversal case. (Recorded in
+`docs/implementation-artifacts/6-5f-counterspell.md`, rulings `6-5f/R36`-`R38`.)
