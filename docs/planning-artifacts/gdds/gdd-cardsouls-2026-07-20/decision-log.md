@@ -11672,3 +11672,111 @@ alongside `RULE_FROSTBITE_SLOW` at the same gait seat and combined by multiplica
 `state != ATTACKING` carve-out. Added to Golden Prediction as its own named cause; whether it needs a NEW
 hashed field or is a pure function of the already-hashed Boulder-covers-card relationship per hand slot
 is for the dev pass to measure and argue (ruling 14's "or is a pure function of hashed facts" allowance).
+
+## Session 2026-09-29 -- 6-5e close-out
+
+`6-5e/R29` AC 1a's collision invariant NARROWED TWICE BY MEASUREMENT during the dev pass. Form 1 (literal
+id presence in both the basic and pitch effect maps) failed 17 existing tests -- fixtures legitimately
+inject the same id (e.g. `culling`, `drain`) into both maps. Form 2 (object identity) failed as widely --
+fixtures build a fresh `CardEffect.new()` per map for the same id. The shipped form is Form 3: the same
+effect id is refused only when its MIRRORED VALUES (the six flight fields plus `boulders_per_cast`)
+DISAGREE -- exactly the harm the AC's wording names ("one flight profile would silently overwrite the
+other") and nothing wider, and mutation-provable (`M7`), which id-presence was not.
+
+`6-5e/R30` `PlayerState.SNAPSHOT_ID_PATHS` gains a documented `[]` FAMILY path form, alongside the
+`/projectile_effect[]` path itself (review-fix minor 1/blocker close, `test_replay_identity.gd`'s
+non-vacuity work). A SCALAR path must still be PRESENT as a String offender (unchanged). A FAMILY path
+need not be present (an empty board is the resting case), but every element that IS present must be a
+plain `String` -- a `StringName` element does not match the erase and survives to the zero-offenders
+assertion. `/projectile_effect[]` was never declared before this pass: the projectile board's per-shot
+effect id has reached the snapshot as a `String` since 6-5d (AC 30) but no fixture before the boulder
+run carried a live projectile, so the declared-id-path scan was vacuous on it.
+
+`6-5e/R31` `test/run_state_tests.gd`'s `--` substring filter (added this story for the mutation
+discipline, `run_state_tests.gd:12-25`) now refuses an EMPTY match: a narrowing that matches zero files
+`push_error`s, prints `RESULT: FAIL`, and `quit(1)`, instead of silently printing `RESULT: PASS` on zero
+files run (review-fix minor 3). A bare invocation (no filter) is unchanged.
+
+`6-5e/R32` Boulder is excluded from every deck-composition/deal path BY CONSTRUCTION: the shipped
+composition is read from an authored `DeckList` (`_derive_deck_contents`), so a card simply not listed
+there never enters a deck -- no `const` exclusion list is added (guard mechanism over guard pattern,
+`3-0d/R20`, superseding the story's own AC 4 text). `CARD_DATA_FIELDS` stays unchanged per `6-5e/R25`; a
+negative test replaces the list assertion.
+
+`6-5e/R33` `damage_amount` is the reused field for stone, skull and Boom per-hit damage (no new
+per-effect damage field); `hand_size` binds to the CARD layer only -- a covered card still counts toward
+it, a Boulder never does (M2's answer, decisive because any other reading breaks `3-5b`'s four-term
+conservation identity). The covered card's IDENTITY is deliberately not a new hashed fact: it never
+leaves `Hand._cards`, so it is the hand's own contents, already the third member of the
+unhashed-cross-tick exclusion set; only the per-slot cover MASK (`hand_covered`) is hashed. The Boulder
+CARD ID is DERIVED at `inject_card_effects` by scanning the injected map for the card whose basic effect
+`CardEffectResolver.BOULDER_OUTCOMES` recognises -- no card-id literal and no seventh injection channel
+enter `src/state/`; an absent Boulder (`&""`) degrades to "plant nothing", so every pre-story fixture is
+bit-identical (confirmed empirically by the golden all-erased control).
+
+`6-5e/R34` `REASON_COVERED_SLOT` is the one new refusal token for Modes (2)/(3)/(4) pressed on a covered
+slot; Mode (1) always addresses the Boulder itself (ruling 7), so no other refusal is reachable for a
+covered slot under Mode (1). Behaviour is identical under either reading of AC 17a vs AC 20; recorded
+here as the shipped interpretation.
+
+`6-5e/R35` `clears_cover()` does NOT gate on `FeatureFlags.spells`, deliberately: a Boulder is placed in
+a hand by the OPPONENT, so a closed spell layer must not leave it un-clearable for its holder. Both the
+press-time fork (`_resolve_basic_cast`) and the apply arm (`outcome()`) agree, so the two cannot drift;
+in `outcome()` the `BOULDER_OUTCOMES` arm is the only un-gated family, precedes `owner_story_for` and the
+`spell_` prefix, and recognises exactly one id (`boulder_discard`), which no other card authors.
+
+`6-5e/R36` `6-5e/R20`'s eligible-slot correction (the struck player's own currently-staged pitch-zone
+slot is ineligible) is REAFFIRMED unchanged by the dev and review-fix passes: repo timing confirms a
+Mode 1 cast and an unblockable commit both remove the card and append `pending_draw_owed` for that slot
+in the SAME tick as the press/commit, so "in the caster's cast frame" and "charging under the 6-9 commit"
+are not distinct in-flight states for Boulder eligibility -- by the time either is visibly playing the
+slot is already an ordinary mid-draw-delay hole, already eligible under ruling 6's own carve-out (AC 18).
+No new record was added for either case; only the pitch-zone case needed R20's fix.
+
+`6-5e/R37` Mirror-ordering guard (review-fix minor 14, review's finding 14): a one-line
+`Invariant.check` now sits at the top of `_rebuild_projectile_mirror` asserting `_card_effects` is
+non-empty before the mirror is built, making the seam ordering (`inject_card_effects` before
+`inject_pitch_effects`) structural rather than an unguarded assumption. Unreachable on every shipped
+path (the live runner and `replay_inject_content()` both enforce `SOUND_CONTENT_ORDER`); the guard exists
+for fragility, not a live bug.
+
+`6-5e/R38` Golden re-baselined ONCE this story: `de3589ffa5012ed8ba368ae3f51e52e992ca1bd0f36ad430d509b43646eaf289`
+-> `98eaee53c065b1c22e5602f5d8c436ea6619c9852752b7f1debaa4695c14a9ff`. THREE independent causes, each
+measured in both directions via the all-three-keys-erased control (which reproduced the exact baseline
+hash): cause 1 (`hand_covered`), cause 1a (`burst`), cause 2 (`corpse_bomb`). Two PREDICTED causes
+MEASURED NON-CAUSES for this fixture, not assumed: cause 5 (the two new refusal reasons -- `SC/R6` is
+about a pressed action made refusable IN THE RECORDED SEQUENCE, and this fixture presses neither a
+covered slot nor Boom) and cause 5a (`_rng`'s second consumer via `_place_boulder` -- this sequence never
+lands a stone, so the new draw path is never reached). `FORMAT_VERSION` 16 -> 17 CONFIRMED (a v16 file
+CAN contain a Rocksling, and replaying one with `boulders_per_cast` defaulted to 0 fires no stones -- a
+silent divergence, unlike 6-5d's unreachable v15 case). Per-player snapshot key set 40 -> 43: `burst`,
+`corpse_bomb`, `hand_covered`, each in sorted position (`test_draw_delay_and_reshuffle.gd:62-88`).
+
+`6-5e/R39` AC 41's replay proof runs through the REAL record path: a third driven run in
+`test_replay_identity.gd` (the BOULDER RUN) saves to `user://test_6_5e_boulder_run.rec` via
+`RecordFile.save_record` at `FORMAT_VERSION` 17, reloads via `RecordFile.load_record`, and replays from
+the loaded record -- bit-identical to the live run's final hash, no divergence found. Closes review
+blocker 1 (AC 41).
+
+`6-5e/R40` Review (`C:\dev\_65e-review.md`): CHANGES REQUESTED, 1 blocker (AC 41) / 1 major (AC 38's
+id-path guard) / 14 minor. LAYER-COMPLETION (report stays outside the repo, `E5-R/R2`): Blind-Hunter
+COMPLETE (full production diff read, 2 findings) / Edge-Case-Hunter COMPLETE (0 blockers, 8 minors) /
+Acceptance-Auditor COMPLETE (43 ACs + 11 sub-ACs walked, 1 blocker + 1 major) / Dev-Record-Evidence-Audit
+COMPLETE (2 accuracy findings, suite counts and 2 mutations independently reproduced) / Measurement
+COMPLETE. Review-fix pass (`C:\dev\_65e-fix.md`, same day): blocker and major both CLOSED (R30, R39); 12
+of 14 minors CLOSED, 2 LISTED for the operator as design/shape decisions under Agent Autonomy (filed to
+`deferred-work.md` at close-out, C2) -- the untestable two-Boulders `Invariant.check` (minor 4) and AC
+24a's cosmetic mode-cycle-suppression half.
+
+`6-5e/R41` Suite, full cycle: BEFORE (dev-pass open, 2026-09-28 23:12:29) `1128 tests, 0 failed, 10987
+assertions` + `71/71` integration -> AFTER dev pass (2026-09-29 00:37:00/00:42:07) `1175/0/11245` +
+`72/72` -> AFTER review-fix pass (2026-09-29 08:50/08:56) `1187/0/11344` + `72/72` -> AFTER this
+close-out's confirmation run (2026-09-29 12:38/12:43) `1187/0/11344` + `72/72`, UNMOVED. Golden
+`98eaee53...` green throughout the review-fix and close-out runs. Mutation proofs: 8 dev-pass (`M1`-`M8`)
++ 6 review-fix = **14, all KILLED**. Suite-run disclosure (`E5-R/R1`): the dev pass ran 6 named surveys +
+4 golden-isolation runs + 10 filtered mutation runs beyond its 2 mandated full runs, each disclosed with
+its own cause; the review-fix pass added 1 full run + several filtered runs; none absorbed. Budget
+interval (`E5-R/R3`): first before-baseline run (2026-09-28 23:12:29) -> last suite run of the close-out
+cycle (2026-09-29 12:43:38), elapsed **13h 31m** across four sessions (dev, review, review-fix,
+close-out; gaps between sessions are not work time). Live smoke: 14/14 PASS, two pads `[3, 3]`, R-D6
+re-invoked and passed (operator, 2026-09-29).
