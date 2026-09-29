@@ -220,3 +220,20 @@ rule; no new refusal reason). Section 5's "Bloodlust" naming in this file's own 
 removed: Bloodlust is unreachable in Deck 1 (Fireball replaced it as Bloodhound Step's pitch, the
 2026-09-22 amendment above), so it was never a live reversal case. (Recorded in
 `docs/implementation-artifacts/6-5f-counterspell.md`, rulings `6-5f/R36`-`R38`.)
+
+## Amendment (2026-09-29, `6-5g-counterspell-timed-and-in-flight` authored)
+
+`6-5g-counterspell-timed-and-in-flight` (Tier A, backlog, last on the board) is authored, scoped to deliver
+exactly the seven-card reversal the amendment above deferred: **Vampiric Aura, Bloodhound Step, Frostbite,
+Honed Bolt, Rocksling, Fireball, Corpse Bomb are now counterable**, on the same reversal rule the amendment
+above already describes for them (timed buffs end now with whatever they already yielded staying; a cast
+in progress is interrupted at the caster's existing cast-interrupt seat with no stun and nothing refunded;
+an in-flight shot vanishes; a landed strike's damage is refunded by the amount actually removed; Rocksling's
+still-covering Boulders are removed; Corpse Bomb's converted minions are restored through the same
+pre-death-hp rule Culling and Drain use). Until this story ships, `6-5f`'s interim no-target refusal for
+these seven cards (the previous amendment's own wording, above) stays in effect; the interim rule and its
+test and smoke point are deleted by `6-5g`'s own dev pass, not by this authoring pass. No code, no suite
+run, nothing committed by the authoring pass. Counter-on-counter (Counterspell as a valid target of a
+second Counterspell) is explicitly deferred to its own story after the playtest/retune block; `6-5f/R8`
+("Counterspell is never a valid target of itself") stands until then. (Recorded in
+`docs/implementation-artifacts/6-5g-counterspell-timed-and-in-flight.md`, ruling `6-5g/R17`.)
