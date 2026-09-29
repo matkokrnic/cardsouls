@@ -11850,7 +11850,8 @@ dated paragraph recording the 6-5f/6-5g split, the interim refusal, and the Bloo
 
 ## Session 2026-09-29 -- 6-5f close-out
 
-`6-5f/R44` m1 ruling: the `_restore_boulders` clause-(b) skip is correct by construction -- the
+`6-5f/R44` m1 ruling: `_restore_boulders` carries NO clause-(b) skip, by construction (a skip was
+written during the review fix and reverted as dead code) -- the
 counterer's own pitch zone (width 1) is unconditionally emptied by the very activation that restores, so
 no staged card can occupy a freed slot at restore time; re-open if the pitch zone ever widens past 1.
 
