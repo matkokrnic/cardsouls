@@ -560,3 +560,21 @@ Rezultat: 14/14 PASS, R-D6 prošao (runda normalno završi i nova krene).
 - Placeholderi (kamen, lubanja, Boulder) međusobno prepoznatljivi, fps stabilan.
 
 Otvoreno za Tier B prezentaciju iza 6-5f: svi vizuali su placeholderi; na Boulder karti se modovi i dalje vrte (pritisak se ispravno odbije).
+
+## 2026-09-29 — 6-5f Counterspell (okvir + šest trenutnih karata), smoke na dva pada
+
+Flip [3,3], P1 igra karte, P2 kontrira. Sve točke prošle:
+- Vanguard poništen: minion nestao bez leša.
+- Culling poništen: oba miniona natrag živa s HP-om od prije smrti, P1 mana pala za dobiveno.
+- Rocksling + Boom pa Counterspell: HP vraćen, Boulderi natrag na iste slotove.
+- Drain poništen: minion natrag, P1 HP dolje.
+- Counterspell bez mete: odbijen tiho, karta ostala u zoni i dalje odbrojava, orb netaknut.
+- Druga kopija na već poništenu kartu: odbijena.
+- Honed Bolt kao meta (jedna od sedam 6-5g karata): odbijen — privremeno pravilo do 6-5g.
+- Cue (znak + zvuk) na oba heroja pri svakom stvarnom poništenju, nikad pri odbijanju.
+- Runda normalno završila ubojstvom poslije Counterspella (R-D6 prošao), fps stabilan.
+
+Dojam / za kasnije:
+- Rez 6-5f/6-5g nisam registrirao dok nisam vidio točku 7 — sedam karata s trajanjem/letom (Aura, Bloodhound, Frostbite, Honed Bolt, Rocksling, Fireball, Corpse Bomb) čeka 6-5g.
+- Htio bih da i Counterspell može biti meta Counterspella: stanje se vrati kao da prvi Counterspell nije odigran. Kandidat za 6-5g scope talk, ne sad.
+- Vizuali i dalje placeholder → Tier B prezentacijska story iza 6-5g.
