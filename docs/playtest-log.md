@@ -578,3 +578,25 @@ Dojam / za kasnije:
 - Rez 6-5f/6-5g nisam registrirao dok nisam vidio točku 7 — sedam karata s trajanjem/letom (Aura, Bloodhound, Frostbite, Honed Bolt, Rocksling, Fireball, Corpse Bomb) čeka 6-5g.
 - Htio bih da i Counterspell može biti meta Counterspella: stanje se vrati kao da prvi Counterspell nije odigran. Kandidat za 6-5g scope talk, ne sad.
 - Vizuali i dalje placeholder → Tier B prezentacijska story iza 6-5g.
+
+## 2026-09-30 — 6-5g Counterspell na timed / in-flight karte (smoke)
+
+Dva pada, flip [3,3]. 13/13 PASS. Kontra = Honed Bolt u pitch zoni + 4 mane + plavi orb, kao i na 6-5f.
+
+- Vampiric Aura: kontra ugasi auru, HP koji je već vraćen ostaje. OK.
+- Bloodhound: kontra prije rolla → roll običan. OK.
+- Frostbite armed: kontra odmah → sljedeći udarac ne usporava. OK.
+- Frostbite slow: kontra dok sam usporen → usporenje odmah prestane. OK.
+- Munja usred bacanja: prekinuta, protivnik odmah slobodan (nije ošamućen), karta i mana mu propale. OK.
+- Munja sletjela: kontra u rootu → HP natrag, root odmah prestane. OK.
+- Fireball u letu: kugla nestane, bez štete. OK.
+- Rocksling: kamen u letu nestane, treći se ne ispali, Boulder nestane iz ruke (karta ispod se vrati, usporenje ode), HP za pogodak vraćen. OK.
+- Corpse Bomb: kontrirao sam prekasno — leš je već istekao (20 s). HP od lubanje vraćen, minion se NIJE digao. Po presudi (leš nestao = nema vraćanja), nije bug. Isti restore put provjeren na sljedećoj točki.
+- Minion ubijen munjom: kontra → digne se iz leša s HP-om od prije smrti. OK.
+- Whiff: izbjegnem munju rollom, pokušam kontrirati → tiho odbijeno, karta ostane, orb ostane, sljedeća karta se može kontrirati. OK.
+- Istekao buff: Bloodhound istekne, pokušam kontrirati → tiho odbijeno, karta ostane. OK.
+- R-D6: runda normalno završila killom. fps stabilan. Cue na oba heroja pri svakoj pravoj kontri, nikad pri odbijanju.
+
+Napomene za playtest:
+- Rok leša (20 s) efektivno ograničava vraćanje miniona, a prozor za kontru je neograničen — vidjeti na playtestu treba li to uskladiti (knob u .tres).
+- Sve kontre i dalje bez vizuala osim placeholder cuea — ide u prezentacijsku story.
