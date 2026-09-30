@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-09-29
+# last_updated: 2026-09-30
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-09-29
+last_updated: 2026-09-30
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -133,7 +133,7 @@ development_status:
   6-5d-fireball-and-spell-targeting: done  # Tier A
   6-5e-rocksling-boom-and-corpse-bomb: done  # Tier A
   6-5f-counterspell: done  # Tier A
-  6-5g-counterspell-timed-and-in-flight: ready-for-dev  # Tier A
+  6-5g-counterspell-timed-and-in-flight: done  # Tier A
 
 story_notes:
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
@@ -158,7 +158,7 @@ story_notes:
   6-5d-fireball-and-spell-targeting: "done 2026-09-28, golden de3589ff, FORMAT 16."
   6-5e-rocksling-boom-and-corpse-bomb: "done 2026-09-29, golden 98eaee53, FORMAT 17."
   6-5f-counterspell: "done 2026-09-29; framework + six instant reversals (Vanguard, Culling, Grave Ward, Raise Dead, Drain, Boom); seven timed/in-flight cards in 6-5g."
-  6-5g-counterspell-timed-and-in-flight: "promoted 2026-09-29 after readiness gate (2 blockers / 3 major / 7 minor, all textual, closed in fix pass; rulings 6-5g/R1..R20)"
+  6-5g-counterspell-timed-and-in-flight: "done 2026-09-30: seven timed/in-flight reversals live; interim refusal gone; golden unmoved; FORMAT 19; smoke 13/13 (rulings 6-5g/R1..R28)"
   5-7-pad-modes-2-3: "done 2026-09-07, Tier B close-out complete (B/X dedicated fields per 5-7/R1-R8, Y no-op by construction, both temporary keyboard confirms deleted, live smoke six core items PASS + two-pad exchange not run, decision-log session 5-7 close-out)."
   5-6-three-tier-ladder: "done 2026-09-07, Tier A close-out complete (colour stun/dodge rung/deflect punish per 5-6/R1-R10, golden d9725092 -> d5bcb7e6, smoke PASS 8/8, decision-log session 5-6 close-out)."
   5-5-unblockable-defense: "done 2026-09-06, Tier A close-out complete (mode 3 dispatch/window/negation/reset per 5-5/R1-R10, golden dc2c9ffa -> d9725092/30-key set (defense), smoke PASS 10/10, decision-log session 5-5 close-out)."
