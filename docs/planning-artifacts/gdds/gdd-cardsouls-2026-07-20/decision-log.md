@@ -11973,3 +11973,56 @@ adds one new AC for the `_reversal_has_anything_left` per-kind arms, `6-5g/R13`)
 ready-for-dev`. `deck-1-spec.md` gains one sentence on the 29.9. amendment recording the counter-on-counter
 deferral (`6-5g/R17`). `sprint-status.yaml`'s `6-5g-counterspell-timed-and-in-flight` entry moves `backlog ->
 ready-for-dev`.
+
+## Session 2026-09-30 -- 6-5g close-out
+
+`6-5g/R21` The `flags` column carries a per-part "this resolution killed it" fact (index-aligned, false by
+default; `_note_reversal_damage` sets it at the hit); a dead unit is restored only when flagged AND its
+corpse survives; the four part-list kinds are excluded from the blanket `reversal_amount != 0.0` admission
+and their own arm decides per part. Closes review B1 (fabricated resurrection, measured) and M1 (no-op
+counter admitted). Mutation-proven.
+`6-5g/R22` Frostbite: `_consume_frostbite` notes `PART_SLOW` into the attacker's packet; the slow on the
+struck player is cancelled/admitted only when the packet holds that part, so a counter on a second armed
+Frostbite leaves the first resolution's slow running. Closes m2.
+`6-5g/R23` Bloodhound AC 7's mid-roll equality holds by construction (armed trigger already cancelled at
+roll entry); test docstring restated, assertions unchanged. Closes m1.
+`6-5g/R24` 6-5f AC 13 and 6-5f Live Smoke point 6 are SUPERSEDED by 6-5g (`E5-R/R7`: closed, pushed story
+files are not edited); the dev pass's edit to 6-5f's file was reverted in the review-fix pass; the
+interim-rule test is deleted; AC 2 wording aligned in C2.
+`6-5g/R25` AC 14's stun half: implemented, structurally unobservable in a two-player match (the bolt's
+target is the only possible counterer and a bolt-stunned hero's activation is refused `REASON_STUNNED`;
+card actions resolve before strikes within a tick); root half proven; mutation M8 GREEN accepted and
+disclosed.
+`6-5g/R26` Golden `941958c5` UNMOVED, zero re-baselines -- the first 6-5 sub-story without a golden move;
+measured by probe (no 6-5g kind is ever written in the golden run: every golden effect id is `summon_*`,
+Counterspell never staged). FORMAT 18 -> 19 is a behaviour-only bump (a v18 record can hold a Counterspell
+activation that was refused and now activates). Per-player key set stays 45; STUNNED census 4; death-seat
+caller pin 6.
+`6-5g/R27` Corpse lifetime (20 s) bounds every corpse restore including Corpse Bomb's, observed on the live
+smoke (point 9); a knob for the playtest block, not a defect.
+`6-5g/R28` Open Question 1 resolved: a tagged PART LIST in the five existing columns (indices = address,
+`a` = PART tag, `b` = slot, `flags` = per-part fact, `amount` = hp actually removed summed); phase derived
+from hashed facts, not stored; copy discrimination = the recorded projectile index (never reused) plus
+`PART_BURST` noted at the strike; two live Rocksling copies and two live Frostbites now tested.
+`UnitBoard.restore_hp_at` is new; `_place_boulder` returns its planted slot; `_apply_corpse_bomb` takes the
+caster's slot.
+
+Review (`C:\dev\_65g-review.md`): LAYER-COMPLETION preconditions=PASS, context-load=done,
+blind-hunter=done, edge-case-hunter=done, acceptance-auditor=done, targeted-T1..T15=done,
+mutation-proofs=2/2 done+restored, verification-run=done; final=CHANGES-REQUESTED (1 blocker / 1 major / 5
+minor). Review-fix pass closed all: B1 and M1 by the shared `6-5g/R21` mechanism, m1-m5 by `6-5g/R22`-`R24`
+and two wording/rename fixes. Suite moved `1218/0/11503` -> `1242/0/11678` (dev pass) -> `1247/0/11713`
+(review-fix pass), integration 72/72 both passes. Mutation table totals: dev pass 8 applied (6 killed, 2
+GREEN disclosed, 1 mis-aimed and reported rather than counted); review 1 independent mutation (R-M1,
+killed); review-fix 1 mutation (B1's own, killed).
+
+Budget (`E5-R/R3`): START 2026-09-29T23:56:35+02:00 -> END 2026-09-30T13:54:05+02:00 (wall clock, includes
+the overnight gap; reported, not blocking).
+
+E6 retro heap items: the review-fix pass (Sonnet 5) backgrounded the suite with polling/wakeups and once
+wrapped a `timeout 300` around a foreground engine launch despite the foreground clause -- the third
+instance of this polling class after the `8.9.` mechanism; a CC `/loop` wakeup outlived the pass and kept
+firing after it finished.
+
+E6 close-out debt list carried unchanged: `6-5b/R24` flake, TAB residue, stale trailer note, `_replay`
+unknown-channel drop (m5), direct-connect count stays two.
