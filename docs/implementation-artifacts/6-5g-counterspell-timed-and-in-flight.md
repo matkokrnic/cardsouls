@@ -1,10 +1,10 @@
 ---
-baseline_commit: a4d541811329f000428f576dd1a512b3483bb3ff
+baseline_commit: bca08ac52366b7689e0463894b3ce53af4ef3c06
 ---
 
 # Story 6.5g: Counterspell -- Timed and In-Flight
 
-Status: ready-for-dev
+Status: done
 
 <!-- Tier A. The seventh and last of the 6-5 sub-stories, closing E6's R-SPELL forcing point in
 `6-5f-counterspell`'s place (that story's own close-out record). `6-5f` shipped the Counterspell
@@ -163,9 +163,11 @@ Counterspell is never a target of itself (`6-5f/R8`); Boulder clear does not wri
    is unchanged and still exercised by `6-5f`'s own tests, none of which this story edits except where named
    below.
 2. The `6-5f/R37` interim rule (AC 13 of `6-5f`) is REMOVED. It is EMERGENT, not a code arm (`6-5g/R1`):
-   removal deletes exactly three textual artifacts -- `6-5f` AC 13's own text, the test
-   `test_a_6_5g_card_is_refused_through_the_same_no_target_path`, and `6-5f`'s Live Smoke point 6 -- and
-   nothing in `src/`. A Counterspell targeting a resolution of any of the seven cards now reaches the SAME
+   removal deletes ONE textual artifact directly -- the test
+   `test_a_6_5g_card_is_refused_through_the_same_no_target_path` -- and nothing in `src/`. `6-5f` AC 13's own
+   text and `6-5f`'s Live Smoke point 6 are SUPERSEDED BY RECORD (this story and its close-out ruling,
+   `6-5g/R24`), not by an edit to `6-5f`'s own file: a closed, pushed story file is not edited by a later
+   story (`E5-R/R7`). A Counterspell targeting a resolution of any of the seven cards now reaches the SAME
    no-target gate every `6-5f` card already reaches, with no card-id list anywhere; admitting the seven cards
    through that gate is AC 31's own requirement, not a consequence of this deletion.
 3. The reversal packet's shape (`reversal_kind`, `reversal_indices`, `reversal_a`, `reversal_b`,
@@ -316,6 +318,18 @@ Counterspell is never a target of itself (`6-5f/R8`); Boulder clear does not wri
 loop, proven for only one of seven) is discharged by AC 2's deletion of the interim rule, not by
 implementing the loop -- there is no loop left to prove once the rule it drove is gone (`6-5g/R19`).
 
+**Deferred at close-out:**
+
+- **AC 14's stun half.** Implemented, but structurally unobservable in a two-player match (review T9
+  confirmed; mutation M8 GREEN, disclosed and accepted): the bolt's target is the only player who could
+  counter it, and a bolt-stunned hero's own Counterspell is refused at both presses (`REASON_STUNNED`), so no
+  reachable state has a bolt stun running when a counter resolves. The root half IS proven.
+- **All visuals stay placeholder.** Real art, VFX or audio for any of the seven reversals this story adds is
+  owed to a Tier B presentation story after 6-5g, covering all fourteen Deck 1 effects in one pass.
+- **Corpse lifetime (20 s).** Bounds every corpse restore this story adds, including Corpse Bomb's -- a
+  playtest knob, not a defect (`6-5g/R27`, observed live at Live Smoke point 9).
+- **Counter-on-counter** stays deferred (`6-5g/R17`, above).
+
 ## Non-Goals
 
 - Any redo mechanism or counter-on-counter (see Deferred, above).
@@ -413,15 +427,47 @@ editor-collateral procedure (`6-1c/R4`), restated verbatim as `6-5b`..`6-5f` eac
 **Target: report actual PASS/FAIL counts on two pads, flip config `[3, 3]`, R-D6 result -- not run by this
 create pass.**
 
+### Live Smoke Results (operator, 2026-09-30, two gamepads, flip `[3, 3]`)
+
+**13/13 PASS.** R-D6 re-invoked and passed (a round ended by a kill; no leftover reversal-record, burst or
+in-flight-projectile state carried into the next round). fps stable throughout. The placeholder cue fired on
+both heroes on every real counter and never on a refusal.
+
+1. Vampiric Aura -- countered mid-window: the rule stopped, hp already healed stayed healed. PASS.
+2. Bloodhound Step -- countered while armed: the next roll came out plain (unboosted). PASS.
+3. Frostbite armed -- countered before it landed a hit: disarmed, no slow applied. PASS.
+4. Frostbite running slow -- countered after landing: the slow ended, movement speed returned to normal
+   immediately. PASS.
+5. Honed Bolt mid-cast -- countered while casting: caster freed immediately, not stunned, card and mana lost.
+   PASS.
+6. Honed Bolt landed -- countered after it struck: hp refunded, the running stun/root ended immediately. PASS.
+7. Fireball in flight -- countered while travelling: vanished before it would have landed. PASS.
+8. Rocksling mid-burst -- countered with one stone landed and stones still owed: the in-flight stone vanished,
+   the third stone never fired, the planted Boulder was lifted (card back, its slow contribution gone), the
+   landed stone's hit was refunded. PASS.
+9. Corpse Bomb, countered AFTER the 20 s corpse lifetime had already run out on the converted minion: the
+   skull's damage was refunded, the converted minion was NOT restored -- exactly `6-5g/R12`'s rule (corpse
+   gone, no restore). The live corpse-restore path itself was proven on a separate point: a minion killed by a
+   bolt rose again from its own corpse at its pre-death hp. Both halves of AC 20/22 observed live. PASS.
+10. Whiffed cast refusal -- activation against a dodged/deflected/fully-missed cast was refused silently: card
+    stayed staged, orb kept, next card still counterable. PASS.
+11. Expired timed-buff refusal -- activation against an already-expired buff was refused silently. PASS.
+12. R-D6 re-invocation -- see above. PASS.
+13. Regression -- every `6-5f` behaviour (the six instant reversals, the placeholder cue, ordinary
+    un-countered resolution of all thirteen Deck-1-spell-family cards) unaffected; no crash, no assert. PASS.
+
+**Corpse lifetime (20 s) is a playtest knob, not a defect** (`6-5g/R27`): it bounds every corpse restore this
+story adds, including Corpse Bomb's, exactly as it already bounded `6-5f`'s restores.
+
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Baseline (before any edit).** Save outside the repo: suite counts, golden, FORMAT_VERSION,
+- [x] **Task 1: Baseline (before any edit).** Save outside the repo: suite counts, golden, FORMAT_VERSION,
   per-player key count (45), the reversal-packet snapshot shape, `git rev-parse HEAD`. (AC 26-28)
-- [ ] **Task 2: Delete the interim rule.** Remove `6-5f/R37`'s refusal arm, its test
+- [x] **Task 2: Delete the interim rule.** Remove `6-5f/R37`'s refusal arm, its test
   (`test_a_6_5g_card_is_refused_through_the_same_no_target_path`) and its smoke point. Confirm the gate
   (`_counter_target_is_live`) needs no other change to admit the seven cards once they write a real
   `reversal_kind`. (AC 2)
-- [ ] **Task 3: Reversal-record shape for the seven cards (Open Question 1 for this story -- the dev pass's
+- [x] **Task 3: Reversal-record shape for the seven cards (Open Question 1 for this story -- the dev pass's
   own mechanism decision, on the same "behaviour fixed, mechanism open" discipline `6-5f`'s own Open
   Question 1 used).** FIRST OUTPUT, before any code: name the predicted per-player snapshot key-set N and
   the new key name(s), if any (`6-5g/R14`; see Golden Prediction cause 3). Then extend `REVERSAL_*` with the
@@ -430,13 +476,13 @@ create pass.**
   cast-in-progress / struck / in-flight / whiffed for the same kind across ticks. Must be ADDITIVE to
   `hand_covered`, `burst`, `corpse_bomb` and the packet's own six existing kinds -- never a redefinition of
   any of them.
-  - [ ] **Sub-bullet: `_reversal_has_anything_left` gets ONE new arm per new kind** (AC 31, `6-5g/R13`), each
+  - [x] **Sub-bullet: `_reversal_has_anything_left` gets ONE new arm per new kind** (AC 31, `6-5g/R13`), each
     naming what survives for that card: a running rule (Class 1); a cast still in its window (Class 2,
     pre-strike); a living projectile index (Class 2/3, in-flight); an unfired burst (Rocksling); a
     still-covering Boulder slot (Rocksling); a restorable corpse (Honed Bolt/Fireball/Corpse Bomb minion
     kills). Without these arms the per-kind `match` falls through to `return false` and all seven cards stay
     refused even after Task 2 deletes the interim rule.
-- [ ] **Task 4: Class 1 (timed buffs).** Vampiric Aura (`cancel_rule(RULE_VAMPIRIC_AURA)`), Bloodhound Step
+- [x] **Task 4: Class 1 (timed buffs).** Vampiric Aura (`cancel_rule(RULE_VAMPIRIC_AURA)`), Bloodhound Step
   (`cancel_rule(RULE_BLOODHOUND_ARMED)` if still armed; no-op if a roll already consumed it, per the measured
   finding), Frostbite (`cancel_rule` on whichever of `RULE_FROSTBITE_ARMED` (on the CASTER) or
   `RULE_FROSTBITE_SLOW` (on the STRUCK target) is running -- a cross-player read, `REVERSAL_BOOM`'s
@@ -444,30 +490,30 @@ create pass.**
   `6-5g/R4`). Each writes its own reversal record at the SAME seat `_apply_card_effect`'s existing `start_rule` calls
   already sit at (`6-5f`'s own "wiring the undo packet at the same write site as `record_resolved_card`"
   leaning, applied here to `start_rule` instead). (AC 4-8)
-- [ ] **Task 5: Class 2 (cast cards).** Honed Bolt and Fireball's cast-interrupt arm (reach `clear_cast()`'s
+- [x] **Task 5: Class 2 (cast cards).** Honed Bolt and Fireball's cast-interrupt arm (reach `clear_cast()`'s
   outcome from Counterspell's own resolution, never `_cast_is_interrupted`); Honed Bolt's and Fireball's
   landed-hp-refund arm (measure the actually-removed delta, `6-5f`'s AC 14 discipline); Honed Bolt's
   stun/root end-now clause; Fireball's in-flight vanish (`consume_at`); Rocksling's full set (cast-interrupt,
   `clear_burst()` for unfired stones, in-flight vanish per stone, landed-damage refund summed per stone,
   same-cast Boulder removal via the existing uncover seat, no mana refund for Boulders already cleared).
   (AC 9-18)
-- [ ] **Task 6: Class 3 (Corpse Bomb).** In-flight skull vanish (`consume_at`, minion-sourced); landed-skull
+- [x] **Task 6: Class 3 (Corpse Bomb).** In-flight skull vanish (`consume_at`, minion-sourced); landed-skull
   damage refund summed; converted-minion restore through `6-5f`'s existing general restore rule (no new
   `kill_at`/death-seat caller). (AC 19-20)
-- [ ] **Task 7: Cross-class clamps and restore.** HP-refund ceiling at max hp reused at every new refund seat;
+- [x] **Task 7: Cross-class clamps and restore.** HP-refund ceiling at max hp reused at every new refund seat;
   a minion-vs-totem restore split matching `6-5f`'s own rule (AC 22).
-- [ ] **Task 8: Teardown.** Whatever new hashed state Task 3-6 introduce is cleared at the SAME two existing
+- [x] **Task 8: Teardown.** Whatever new hashed state Task 3-6 introduce is cleared at the SAME two existing
   per-round teardown seats (`_end_round`, `_reset_player`) `6-5f`'s reversal packet already clears at, plus
   per-resolution the instant a Counterspell reverses it -- no new seat.
-- [ ] **Task 9: Tests.** Extend `test_counterspell.gd` with the seven cards' reversal cases (AC 4-20), the
+- [x] **Task 9: Tests.** Extend `test_counterspell.gd` with the seven cards' reversal cases (AC 4-20), the
   clamp case (AC 21), the minion/totem restore split (AC 22), the not-STUNNED test (AC 12), the deleted
   interim-rule test's removal, and replay identity (AC 28) on the real record path. Update every file in the
   table below with actual outcomes. Mutation proofs restore from a copy outside the repo, SHA256-verified
   first.
-- [ ] **Task 10: Golden.** Isolate causes 1-5 (and any the dev pass finds) by erasing new keys/fields with
+- [x] **Task 10: Golden.** Isolate causes 1-5 (and any the dev pass finds) by erasing new keys/fields with
   every other change in place; confirm non-causes; record the actual re-baseline count; `FORMAT_VERSION` 19
   predicted, confirm or correct.
-- [ ] **Task 11: Close.** Second full suite run, invariants green, `git diff --stat`, Dev Agent Record. The
+- [x] **Task 11: Close.** Second full suite run, invariants green, `git diff --stat`, Dev Agent Record. The
   decision-log close-out (a new session, `6-5g/R1..`) and the board promotion to `done` are the operator's
   gate, after live smoke.
 
@@ -603,19 +649,232 @@ story's readiness gate found missing.
 
 ### Agent Model Used
 
-_To be filled by the dev pass._
+Claude Opus 5 (1M context)
 
 ### Debug Log References
 
-_To be filled by the dev pass._
+- `C:\dev\_65g-dev.md` -- the full dev record: baseline, Task 3's first output, the mechanism argument, the
+  golden cause table, the mutation table, the break-table outcomes and every deviation. Written as the pass
+  ran.
+- `C:\dev\_65g-suite-before.txt` -- before-baseline (opened 2026-09-29T23:56:35+02:00).
+- `C:\dev\_65g-suite-after.txt` -- after (closed 2026-09-30T00:41:37+02:00). TWO full runs, the default; no
+  extra run was needed.
+- Restore copies kept OUTSIDE the repo for every mutated file: `_65g-match_state.gd.bak`,
+  `_65g-player_state.gd.bak`, `_65g-unit_board.gd.bak`; SHA256s in `_65g-mutation-checksums.txt`, verified
+  again after the last restore (all three back to their pre-mutation hashes).
 
 ### Completion Notes List
 
-_To be filled by the dev pass._
+**Open Question 1 RESOLVED -- the reversal record's shape for the seven new kinds: A TAGGED PART LIST IN THE
+FIVE EXISTING COLUMNS. NO new column, NO new `PlayerState` field, NO new snapshot key.** The story's own
+"deliberate leaning" (reuse the five generic columns before adding a hashed field), tried first and found
+sufficient. The columns are read ELEMENT-WISE as a list of PARTS rather than column-wise: `indices[i]` is the
+part's address (a projectile index, a unit board index, a hand slot, or `-1`), `a[i]` is the PART TAG
+(`PART_PROJECTILE`/`PART_DAMAGE`/`PART_CONVERTED`/`PART_BOULDER`/`PART_BURST`/`PART_STUN`), `b[i]` is the slot
+the address belongs to, `flags` is left EMPTY for every new kind, and `amount` is the hp actually removed,
+summed -- `REVERSAL_BOOM`'s own convention extended. ONE scalar `amount` suffices because every damaging kind
+here damages exactly ONE address (the captured target: the bolt resolves against it, the ball flies at it,
+every stone copies it onto the burst, every skull shares it), so hero-versus-unit is a READ of the single
+`PART_DAMAGE` element rather than a second scalar.
+
+**The Class 2 "which phase" question needed NO hashed field -- Golden Prediction cause 2 measured as a
+non-existent cause.** Still casting = `is_casting()` (a cast cannot start without the packet being written at
+that same press, and the step-3 cast lock makes a second resolution mid-cast unreachable); in flight = a
+`PART_PROJECTILE` whose index is still `projectiles.is_alive_at`; landed = `amount != 0.0` or a `PART_DAMAGE`
+unit address with a corpse; unfired = a `PART_BURST` plus `has_pending_burst()`; whiffed = none of those, so
+the standing gate refuses (AC 18). A stored phase would have been a second copy of facts already hashed.
+
+**Copy discrimination (`6-5g/R10`) is the RECORDED PROJECTILE INDEX**, which `ProjectileBoard` never reuses
+(`4-3a/R9`: both add seats append unconditionally). Every living-record update is additionally gated on the
+packet still naming the writer's own kind, so an orphaned shot from an earlier resolution charges nothing to
+the packet that replaced it (own test, mutation-proven). `PART_BURST` is noted at the STRIKE rather than at
+the press for the same reason, which is what keeps a counter against a SECOND Rocksling still casting from
+cancelling the FIRST cast's pending stones.
+
+**GOLDEN: NOT MOVED. ZERO re-baselines -- `941958c5...` before and after, and it is a MEASURED non-cause
+rather than an absence of news.** All five predicted movers are non-causes, and the measurement is a probe
+rather than an argument: an `Invariant.check(kind <= REVERSAL_BOOM)` was temporarily added to
+`PlayerState.record_reversal` and the suites re-run -- it fired **74 times in `test_counterspell.gd`** (so the
+probe is live and the new kinds really are written) and **ZERO times in `test_determinism.gd`**, i.e. the
+golden's recorded sequence never writes a 6-5g kind. The reason is the fixture's own: `_golden_effects()`
+authors EVERY id as `summon_<id>`, so none of the seven cards exists in it, and the fixture never stages
+Counterspell (`test_determinism.gd`'s own 6-5f cause-5 note already recorded that). Probe removed; the file's
+SHA256 verified back. Cause by cause: (1) the widened packet shape -- non-cause, no new kind is ever written
+there; (2) a living-record field -- non-cause, none exists; (3) the two key-set pins -- UNMOVED at **45**, no
+new key name, so the CONDITIONAL break-table row did not move; (4) the interim rule's removal -- non-cause,
+the golden never stages Counterspell, so no pressed action became refusable (`SC/R6`'s boundary untouched);
+(5) `FORMAT_VERSION` -- a record-file concern, never a hash cause. Non-causes 6 (no new `.tres` value; none
+is introduced) and 7 (no intake channel) confirmed as predicted.
+
+**`FORMAT_VERSION` 18 -> 19 with a v18 record HARD-REFUSED (AC 27), and the prediction was right for a
+CORRECTED reason.** The recorded SHAPE does not move at all this story (no new `CardEffect` export, no
+`BalanceConfig` field, no channel), so the bump rests entirely on the BEHAVIOUR change: a v18 record can
+contain a Counterspell activation that was refused as no-target and did nothing, and the same intent stream
+replayed here ACTIVATES. `test_a_v18_record_is_refused_with_a_reason` ships in the SAME pass as the bump
+(`6-5f`'s review finding M1 discharged by not repeating it).
+
+**AC 12 / AC 25: both censuses held, re-measured rather than assumed.** `test_action_state.gd`'s STUNNED
+entry-point census is still **4** and `test_corpses.gd`'s death-seat caller pin is still **6** -- no
+`set_action_state(STUNNED)` and no `kill_at` call appears anywhere on this story's paths; every restore goes
+through `hp_at_death_at` / `restore_corpse_at` / `consume_corpse_at` via ONE shared helper
+(`_restore_killed_minion_at`, extracted from `_restore_killed_minions` so the Corpse Bomb, bolt and Fireball
+restores address a single index on either player's board without a parallel implementation).
+
+**Bloodhound's measured finding CONFIRMED at this pass (`6-5g/R5`), and proven as an EQUALITY rather than
+asserted:** the mid-roll test runs two identical fixtures and ends one window by Counterspell and the other by
+natural expiry, then compares `RULE_ROLL_BOOST`'s liveness, the roll's velocity and its remaining i-frames.
+All three agree. The reversal arm deliberately never names `RULE_ROLL_BOOST`.
+
+**Mutations: 8 applied, 6 KILLED, 2 GREEN (both disclosed with their reason), 1 further attempt mis-aimed and
+reported rather than counted.** Full table in `C:\dev\_65g-dev.md`. The two GREENs are honest findings, not
+gaps: (a) `restore_hp_at`'s own liveness guard is unreachable defence-in-depth, because the calling arm
+already branches on `is_alive_at` -- kept on `_restore_boulders`' own "defence in depth, not a reachable
+case" precedent; (b) `PART_STUN`'s `start_stun(0, false)` is STRUCTURALLY unobservable in a two-player match:
+the bolt's target is the only player who could counter it, and a bolt-STUNNED hero's Counterspell is refused
+at both presses (`REASON_STUNNED`), so no reachable state has a bolt stun running when a counter resolves.
+AC 14's ROOT half IS proven (the root outlives the stun, 25 ticks against 14); the stun half is implemented
+and reported unprovable here rather than claimed. **This is the one AC clause this pass could not prove and
+it is a deviation the operator should read.**
+
+**AC 14's stun exit uses the stun's ONE exit seat.** The counter stops the stun WINDOW on its own tick and the
+`STUNNED` action state leaves at step 3 of the next tick -- the same arm every naturally expired stun exits
+through -- rather than a second `set_action_state` write here that would duplicate that arm's discriminator
+and get-up reasoning (and would have put a state write next to the census AC 12 protects).
+
+**Break-table outcomes (the table itself was NOT edited -- see the deviation below).** MUST-MOVE and moved:
+`test_counterspell.gd` (+22 tests: the seven cards, the four cast phases, the clamp, the minion/totem split,
+the not-STUNNED assertion, the deleted interim-rule test), `test_record_file.gd` (FORMAT 19 + the v18
+fixture + a second stale version pin at `:1362`), `test_replay_identity.gd` (a THIRD full-content recorded
+run for AC 28 + three FORMAT pins). MUST-MOVE and did NOT move, measured: `test_spell_framework.gd`,
+`test_hero_cast.gd`, `test_fireball.gd`, `test_rocksling_and_boulder.gd` -- all four green UNEDITED, because
+every new write is additive and no card's ordinary behaviour changed (the not-STUNNED assertion landed in
+`test_counterspell.gd`, the dev pass's stated choice); `test_determinism.gd` -- no re-baseline, so the row's
+predicted move did not happen. MUST-NOT-MOVE and did not move: `test_action_state.gd`, `test_corpses.gd`,
+`test_spell_targeting.gd`, `test_own_minion_spells.gd`, `test_pitch_staging.gd`, `test_pitch_changed.gd`,
+`test_intent_recorder.gd`, `test_architecture_invariants.gd`. CONDITIONAL and did NOT move:
+`test_draw_delay_and_reshuffle.gd` / `test_card_observation.gd` (key set stays 45),
+`test_card_effect_resolution.gd` (no new `String`/`StringName` column). `test_replay_identity.gd`'s
+HASHED-MEMBER CENSUS also did NOT move: the packet gained no seventh column and `PlayerState` gained no
+field, which is exactly the condition `6-5g/R20` attached to it.
+
+**AC 2's three textual artifacts are all removed:** the test is deleted (a stated marker stands where it was),
+`6-5f` AC 13's text is struck with the retirement recorded in place (the AC NUMBER is kept so a shipped
+story's numbering stays stable), and `6-5f`'s Live Smoke point 6 is marked RETIRED -- do not re-run. `6-5f`'s
+smoke RESULT line for point 6 is kept as a historical reading with a note, because it records what the
+operator actually observed on 2026-09-29.
+
+**Suite.** State **1218/0/11503 -> 1242/0/11678** (+24 tests, +175 assertions); integration **72/72 PASS**
+both ways. TWO full runs, the default; every other run was a targeted single-file filter.
+
+**Deviations, reported not silent.**
+1. **AC 14's stun half is not provable in a two-player match** (see the mutation note above). Implemented,
+   mutation-GREEN, disclosed.
+2. **The break table was not edited.** Task 9 says to update it with actual outcomes, but the skill's
+   `<critical>` limits story-file edits to the frontmatter `baseline_commit`, the Tasks checkboxes, the Dev
+   Agent Record, the File List, the Change Log and the Status. The outcomes are recorded above and in
+   `C:\dev\_65g-dev.md` instead; the table's own text is untouched.
+3. **The board was never written to `in-progress`.** `sprint-status.yaml`'s STATUS DEFINITIONS are locked to
+   `backlog -> ready-for-dev -> done` (project-context, and the skill's own `on_complete` restores
+   `ready-for-dev`), so the skill's step-4 write would have invented a fourth status. The board entry stayed
+   `ready-for-dev  # Tier A` throughout and carries a `story_notes` line instead.
+4. **Golden Prediction causes 1-4 are corrected from "predicted to move" to MEASURED NON-CAUSES** and the
+   re-baseline count is ZERO -- the first 6-5 sub-story whose golden did not move.
+5. **`UnitBoard` gains one mutator, `restore_hp_at`** (AC 22's "a surviving totem gets its hp back"), and
+   `_place_boulder` now RETURNS the slot it planted on. Both are implementation choices inside files `6-5f`
+   already touched; neither is a new file, a new folder or a new cross-layer seam. `_apply_corpse_bomb` takes
+   the caster's slot (threaded, `_apply_drain`'s precedent).
+6. **Not done here, by design:** the live smoke (operator, two pads, flip config `[3,3]`, R-D6 re-invoked),
+   the decision-log close-out and the board promotion. Nothing was committed, staged or pushed;
+   `project.godot` is untouched and no new `class_name` ships, so no editor scan was run and the new-file
+   `.uid` question does not arise (no new file).
+
+### Review fix (2026-09-30, Claude Sonnet 5, commit nothing)
+
+Closes `C:\dev\_65g-review.md`'s 1 blocker / 1 major / 5 minor. Full record: `C:\dev\_65g-dev.md` (appended).
+
+- **B1 + M1, one mechanism (`6-5g/R21`).** `flags` (`Array[bool]`) is now genuinely used: `reversal_note_part`
+  takes a `flag` parameter and appends it alongside every part, index-aligned; `_note_reversal_damage` sets
+  the `PART_DAMAGE` element's flag `true` only when THIS resolution's own hit is what left the struck unit
+  dead (measured right at the hit, before any other cause could kill it). `_reverse_recorded_parts`'
+  `PART_DAMAGE` arm restores a dead unit only when `reversal_flags[i]` is true AND its corpse survives --
+  never on "dead" alone. `_reversal_has_anything_left` no longer admits the four part-list kinds
+  (`REVERSAL_HONED_BOLT`/`_FIREBALL`/`_ROCKSLING`/`_CORPSE_BOMB`) on the blanket `reversal_amount != 0.0`
+  clause; their own arm decides per part, splitting the old combined `PART_DAMAGE, PART_CONVERTED` case into
+  its own flag-gated `PART_DAMAGE` read (hero/alive-unit on the amount, dead-unit on the flag) and an
+  unconditional `PART_CONVERTED` read (a Corpse Bomb conversion is always this resolution's own kill).
+  `record_reversal`'s invariant already permitted both an empty and an index-aligned `flags` column, so no
+  change was needed there. Three new tests: a minion that survived a stone and was later killed by an
+  unrelated cause is not restored and its corpse is untouched (MUTATION-PROVEN: removing the flag check in
+  the `PART_DAMAGE` else-branch let it go RED, restored from an outside-the-repo copy with SHA256 verified,
+  green again); a bolt kill whose corpse has since expired is refused before the orb, silently, card staged;
+  the flag is visible in the snapshot's `reversal` key (index 4).
+- **m2 Frostbite (`6-5g/R22`).** A new part tag, `PlayerState.PART_SLOW` (no address, `b` = the struck slot),
+  is noted by `_consume_frostbite` into the attacker's own packet, through `reversal_note_part`'s existing
+  kind-agreement guard (a stale attacker packet writes nothing). The reversal and gate arms for
+  `REVERSAL_FROSTBITE` now cancel `RULE_FROSTBITE_SLOW` only when the packet holds that part, so a victim who
+  resolved Frostbite twice keeps the FIRST resolution's running slow when a counter disarms the SECOND, still
+  ARMED resolution. New test proves exactly that sequence.
+- **m3 Rocksling copies (`6-5g/R10`).** A second `ID_SLING` copy added to the fixture deck; new test: the
+  victim casts Rocksling #1 (one stone lands and plants a Boulder, one is in flight, one still owed), casts
+  Rocksling #2 and is countered mid-cast of #2 -- #2's cast is interrupted, and #1's pending burst, in-flight
+  stone and planted Boulder are all untouched (the fresh packet #2 opens at its own press holds none of #1's
+  parts).
+- **m1 Bloodhound docstring (`6-5g/R23`).** Restated, in the test's own docstring and its assert message, that
+  the mid-roll equality holds BY CONSTRUCTION (the armed trigger is already cancelled at roll entry, so there
+  is no window left to expire mid-roll) rather than by a measured comparison, and that the `expired` fixture
+  is an untouched comparison arm, not a natural expiry actually happening. Assertions unchanged.
+  Deliberately NOT logged as a decision-log ruling of its own (`6-5g/R23` used above only to keep this
+  section's numbering scheme; it is a wording fix, not a rule).
+- **m5 (`test_a_v18_record_is_refused_with_a_reason`).** Given its own path constant, `PRE_6_5G_PATH`, instead
+  of reusing `PRE_6_5C_PATH`.
+- **m4 / policy (E5-R/R7).** `docs/implementation-artifacts/6-5f-counterspell.md` REVERTED to HEAD
+  (`git checkout --`, confirmed by `git diff --stat` first that no other file was touched by the command) --
+  a closed, pushed story file is not edited by a later story's dev or review-fix pass. The supersession of
+  6-5f AC 13 and its Live Smoke point 6 by this story's own AC 2 is recorded here and is owed to the
+  decision-log at this story's close-out, not to 6-5f's file. AC 2's wording ("interim-rule removal deletes
+  exactly three textual artifacts") is therefore understood as satisfied by RECORD (this section, and the
+  close-out ruling to come), not by an edited 6-5f doc; AC 2's own text is left as authored and is to be
+  aligned with this reading at close-out.
+- **Suite (MEASURED).** Fix-state run: **1247 tests, 0 failed, 11713 assertions**, PASS
+  (`C:\dev\_65g-suite-fix-state.txt`); integration **72/72 PASS** (`C:\dev\_65g-suite-fix-integ.txt`). +5 tests
+  over the dev pass's 1242 (the three B1/M1 tests, m2's, m3's). Golden re-measured, independently, through a
+  filtered `test_determinism.gd` run: `test_state_matches_golden` green, UNMOVED (`941958c5...`) -- predicted,
+  since the flag write happens only inside kinds the golden fixture never writes (it stages no Counterspell
+  and authors every id as `summon_<id>`, `6-5g/R1`'s own non-cause reasoning, unchanged by this fix). FORMAT
+  stays 19; per-player snapshot key set stays 45 (no new column, no new key). STUNNED census 4 and the
+  death-seat caller pin 6 both re-confirmed unmoved by the fix-state run.
+- **Mutation (MEASURED).** 1 applied for this pass (B1's own, above): the `PART_DAMAGE` else-branch's flag
+  check removed -> KILLED by the redesigned test (a Rocksling fixture, not Honed Bolt: a lone `PART_DAMAGE`
+  packet is refused entirely at the gate once its own flag is false, so the mutated line in
+  `_reverse_recorded_parts` is unreachable from that fixture -- Rocksling's still-pending burst is a genuinely
+  surviving SECOND part that keeps the gate open and actually exercises the reversal arm). Restored from
+  `C:\dev\_65g-fix-match_state.gd.bak`, SHA256 verified back to the pre-mutation hash both before and after.
+- **Git.** Commit nothing, no push; `docs/implementation-artifacts/6-5f-counterspell.md`'s revert is the only
+  change to a file outside the original nine, and it is a revert, not an edit -- `git status --short` after
+  this pass shows the SAME NINE files the dev pass left, nothing staged, nothing untracked.
 
 ### File List
 
-_To be filled by the dev pass._
+Modified -- source:
+- `src/state/match_state.gd`
+- `src/state/player_state.gd`
+- `src/state/unit_board.gd`
+- `src/systems/record_file.gd`
+
+Modified -- tests:
+- `test/state/test_counterspell.gd`
+- `test/state/test_record_file.gd`
+- `test/state/test_replay_identity.gd`
+
+Modified -- docs:
+- `docs/implementation-artifacts/6-5g-counterspell-timed-and-in-flight.md` (this file: frontmatter, Tasks,
+  Dev Agent Record, Status)
+- `docs/implementation-artifacts/sprint-status.yaml`
+
+REVIEW FIX: `docs/implementation-artifacts/6-5f-counterspell.md` is NO LONGER in this list -- reverted to
+HEAD (m4 / E5-R/R7), a closed, pushed story file is not edited here.
+
+No new file. `project.godot` UNTOUCHED.
 
 ### Change Log
 
@@ -623,3 +882,6 @@ _To be filled by the dev pass._
 |---|---|
 | 2026-09-29 | Story authored (`gds-create-story`), scoped from `6-5f-counterspell`'s cut and the 2026-09-29 browser scope talk. No code, no suite run. |
 | 2026-09-29 | Readiness gate fix pass: 2 blockers / 3 major / 7 minor findings (`C:\dev\_65g-gate.md`), all textual, closed by `6-5g/R1`-`R20` (decision-log). AC count 30 -> 31 (new AC 31, `_reversal_has_anything_left` per-kind arms). Status `authored -> ready-for-dev`. No code, no suite run. |
+| 2026-09-30 | Dev pass. Seven new `REVERSAL_*` kinds; Open Question 1 resolved as a TAGGED PART LIST inside the five existing generic columns (no new column, no new field, no new snapshot key, key set stays 45). Class 1 buff reversals via `cancel_rule`; Class 2 living record opened at the cast press and grown by the strike, the burst, the contact ladder and the Boulder plant; cast interrupt via `clear_cast()` from Counterspell's own arm (never `_cast_is_interrupted`, caster never STUNNED); in-flight vanish via `ProjectileBoard.consume_at`; unfired stones via `clear_burst()` (sixth call site, fourth seat); Boulder lift via the existing uncover seat; Corpse Bomb restore + bolt/Fireball minion restore through ONE extracted `_restore_killed_minion_at`. New `UnitBoard.restore_hp_at`; `_place_boulder` returns its planted slot. `_reversal_has_anything_left` gains one arm per new kind (AC 31). `FORMAT_VERSION` 18 -> 19 with a v18 hard refusal. GOLDEN UNMOVED (`941958c5...`), ZERO re-baselines, all five predicted movers measured as non-causes by a live probe. Suite 1218 -> 1242 state (0 failed), integration 72/72. Status -> review. Nothing committed. |
+| 2026-09-30 | Review-fix pass (Claude Sonnet 5, commit nothing). Closed B1 (fabricated resurrection of a unit the countered spell never killed) and M1 (the four part-list kinds admitted a pure no-op past the gate) with one mechanism -- the `flags` column now carries a per-part "this resolution killed it" fact. Closed m2 (Frostbite's cross-resolution slow cancel), m3 (Rocksling copy discrimination, untested), m1 (Bloodhound docstring overclaim), m5 (v18 fixture's borrowed path constant). Reverted 6-5f's doc file to HEAD (m4/E5-R/R7). +5 tests (1242 -> 1247 state, 0 failed); integration 72/72. Golden re-confirmed UNMOVED. One mutation proof (B1), KILLED, restored and SHA256-verified. Nothing committed. |
+| 2026-09-30 | Close-out. C1 committed the code and tests (`d6aec96`). Status -> done. AC 2's wording aligned: the interim rule's removal is one code-side deletion (the test) plus a RECORD supersession of `6-5f` AC 13 and its Live Smoke point 6 (`6-5g/R24`) -- `6-5f`'s own file stays untouched (`E5-R/R7`). Live Smoke Results added: operator, two gamepads, flip `[3,3]`, 13/13 PASS, R-D6 re-invoked and passed. Deferred section gains AC 14's stun half (structurally unobservable, mutation M8 GREEN accepted), the Tier B presentation story for all fourteen Deck 1 effects' visuals, and the 20 s corpse lifetime as a playtest knob (`6-5g/R27`). |
