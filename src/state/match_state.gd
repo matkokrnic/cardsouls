@@ -2637,6 +2637,14 @@ func _resolve_contacts() -> Array[int]:
 		var hp_before := target.hero.get_hp()
 		target.hero.take_damage(damage)
 		_apply_lifesteal(attacker, attacker_index, hp_before - target.hero.get_hp())
+		# STORY 6-5g (AC 15/AC 17/AC 19): a landed SPELL SHOT joins its own resolution's living record, as the
+		# hp ACTUALLY removed from this hero -- the same before-minus-after delta the lifesteal above reads.
+		# `_reversal_kind_of_shot` answers "whose shot was this, and is that packet still the live one", so a
+		# melee or totem attacker (no recorded part) and an orphaned shot (packet overwritten) both add nothing.
+		if is_projectile_index(attacker_index):
+			_note_reversal_damage(attacker,
+					_reversal_kind_of_shot(attacker, projectile_index_of(attacker_index)),
+					int(fact["target"]), TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
 		# Story 6-5a (R5): FROSTBITE'S TRIGGER SEAT -- a CONFIRMED hero melee hit on the enemy hero,
 		# BLOCKED INCLUDED (blocked is confirmed, `1-8`). The deflect path `continue`d above and the
 		# i-frame drop earlier, so neither reaches this line; unit targets branched off before the
@@ -2664,7 +2672,15 @@ func _resolve_contacts() -> Array[int]:
 		if is_projectile_index(attacker_index):
 			var landed_effect: CardEffect = _shot_effect_of(attacker, attacker_index)
 			if landed_effect != null and landed_effect.boulders_per_cast > 0:
-				_place_boulder(target, int(fact["target"]))
+				# STORY 6-5g (AC 17): the PLANTED SLOT joins the living record, so a countered Rocksling lifts
+				# exactly the Boulders THIS cast planted and leaves another copy's alone. The seat returns the
+				# slot it drew rather than the caller re-deriving it from the cover mask, which cannot say WHO
+				# planted what -- `REVERSAL_BOOM`'s own reason for recording slots instead of reading the mask.
+				var planted := _place_boulder(target, int(fact["target"]))
+				if planted >= 0:
+					attacker.reversal_note_part(
+							_reversal_kind_of_shot(attacker, projectile_index_of(attacker_index)),
+							PlayerState.PART_BOULDER, planted, int(fact["target"]))
 		# Story 4-3b (AC 8, `4-3b/R5`): `hit_landed` IS emitted when a UNIT damages a HERO — the hero
 		# is really hurt, so the telegraph flash and sting on that hero are correct. A DELIBERATE
 		# ASYMMETRY against `4-3a/R12`'s suppression for unit TARGETS, recorded here so a later gate
@@ -2997,6 +3013,13 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	target.units.apply_damage_at(index, _funnel_damage(attacker, attacker_index, target, index,
 			_damage_against_unit(attacker, attacker_index)), _corpse_ticks_for(target, index))
 	_apply_lifesteal(attacker, attacker_index, unit_hp_before - target.units.hp_at(index))
+	# STORY 6-5g (AC 15/AC 19/AC 22): a landed SPELL SHOT on a UNIT joins its own resolution's living record,
+	# the hero ladder's line applied to the short ladder and measured the same way. The reversal then either
+	# restores a killed minion from its corpse or hands a survivor its hp back -- one part, both outcomes.
+	if is_projectile_index(attacker_index):
+		_note_reversal_damage(attacker,
+				_reversal_kind_of_shot(attacker, projectile_index_of(attacker_index)),
+				int(fact["target"]), index, unit_hp_before - target.units.hp_at(index))
 	# Story 4-4 (AC 16 second sentence / AC 18): a projectile that lands on a UNIT is consumed here,
 	# the hero ladder's common consumption line applied to the short ladder. AC 16's second sentence
 	# is satisfied BY ABSENCE rather than by code: this ladder has no i-frame, block or deflect rung
@@ -3256,6 +3279,14 @@ func _consume_frostbite(attacker: PlayerState, target: PlayerState) -> void:
 			int(attacker.rule_b[PlayerState.RULE_FROSTBITE_ARMED]),
 			attacker.rule_a[PlayerState.RULE_FROSTBITE_ARMED], 0.0)
 	attacker.cancel_rule(PlayerState.RULE_FROSTBITE_ARMED)
+	# STORY 6-5g REVIEW FIX (m2, `6-5g/R22`): note the CONSUMED PHASE into the attacker's own packet -- no
+	# address, `b` = the STRUCK slot -- gated by `reversal_note_part` on the packet still naming
+	# REVERSAL_FROSTBITE (an attacker who has since resolved something else records nothing here). This is
+	# what lets a counter tell "the slow THIS resolution's hit started" from a slow a DIFFERENT resolution
+	# placed on the same rule slot.
+	var target_slot := 0 if target == p1 else 1
+	attacker.reversal_note_part(PlayerState.REVERSAL_FROSTBITE, PlayerState.PART_SLOW,
+			PlayerState.NO_REVERSAL_ADDRESS, target_slot)
 
 
 ## Story 4-6 (AC 9/AC 10/AC 11): the step-1c LOCK seat for one player. INGEST then VALIDATE.
@@ -4000,6 +4031,9 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 		var cast_address := _captured_target_address(player)
 		player.start_cast(played, TimingWindow.seconds_to_ticks(cast_effect.cast_seconds),
 				Enums.ModeKind.BASIC, cast_address[0], cast_address[1], 0.0)
+		# STORY 6-5g (AC 9/AC 10): the Class 2 reversal record opens HERE, in the packet the
+		# `record_resolved_card` above just cleared. See `_record_cast_reversal`.
+		_record_cast_reversal(player, cast_effect)
 		# Review fix M2 (`6-5c/R4`, `5-2/R17`): the caster cannot block during a cast, so a running block
 		# is dropped on the SAME tick, on mode 3's own pattern (`_resolve_defense_cast`) -- BLOCKING-ONLY.
 		# The step-3 cast lock sits below the `match action_state` dispatch, so without this write a held
@@ -4100,10 +4134,16 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 			player.start_rule(PlayerState.RULE_VAMPIRIC_AURA,
 					TimingWindow.seconds_to_ticks(effect.duration_seconds),
 					effect.lifesteal_fraction, 0.0)
+			# STORY 6-5g (AC 4, `6-5g/R2`): THE TIMED-BUFF RECORD, and it is EMPTY OF PARTS on purpose. The
+			# kind alone says which rule slot to cancel, and `6-5g/R2` says nothing else is undone: hp a
+			# Vampiric Aura already healed STAYS healed, so there is no amount to claw back and no index to
+			# walk. Written at the same seat as the `start_rule` it undoes -- the story's own leaning.
+			_record_buff_reversal(player, PlayerState.REVERSAL_VAMPIRIC_AURA)
 		CardEffectResolver.OUTCOME_BLOODHOUND_STEP:
 			player.start_rule(PlayerState.RULE_BLOODHOUND_ARMED,
 					TimingWindow.seconds_to_ticks(effect.duration_seconds),
 					effect.roll_distance_multiplier, effect.roll_iframe_multiplier)
+			_record_buff_reversal(player, PlayerState.REVERSAL_BLOODHOUND)
 		CardEffectResolver.OUTCOME_FROSTBITE:
 			# The slow's own duration rides the trigger as TICKS (`b`), converted here once, so the
 			# consuming hit starts the slow without re-reading the effect.
@@ -4111,6 +4151,7 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 					TimingWindow.seconds_to_ticks(effect.duration_seconds),
 					effect.slow_speed_multiplier,
 					float(TimingWindow.seconds_to_ticks(effect.slow_duration_seconds)))
+			_record_buff_reversal(player, PlayerState.REVERSAL_FROSTBITE)
 		# Story 6-5b: the four OWN-MINION / CORPSE arms. Each is ONE call to a named helper below
 		# rather than inline arithmetic, for the reason the buff arms are one `start_rule` call each:
 		# this `match` says WHAT resolves and the helper says HOW, so the apply seat stays a readable
@@ -4131,7 +4172,7 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 		# activation press and the pitch seat takes its `_apply_card_effect` arm rather than its cast fork.
 		# That is the whole of C1 -- no code here suppresses a cast, because none is ever started.
 		CardEffectResolver.OUTCOME_CORPSE_BOMB:
-			_apply_corpse_bomb(player, effect)
+			_apply_corpse_bomb(player, effect, slot)
 		CardEffectResolver.OUTCOME_BOOM:
 			_apply_boom(player, effect, slot)
 		CardEffectResolver.OUTCOME_BOULDER_CLEAR:
@@ -4378,9 +4419,14 @@ func _drain_target_index(player: PlayerState, slot: int) -> int:
 ## THE CONVERSION RECORD IS WRITTEN ONCE, AFTER THE LOOP (ruling 14, AC 38/AC 40), and only if something
 ## was actually converted -- an activation that converted nothing leaves no record to mislead `6-5f`, and
 ## the board gate (AC 33) makes that case unreachable anyway.
-func _apply_corpse_bomb(player: PlayerState, effect: CardEffect) -> void:
+## STORY 6-5g (AC 19/AC 20): IT TAKES THE CASTER'S SLOT, for `_apply_drain`'s own threading reason (the call
+## site already holds it and a second derivation from `player == p1` would be a second thing to get wrong).
+## The reversal record's parts name the caster's OWN board and projectile board, so the slot is recorded with
+## each part rather than re-derived at the reversal.
+func _apply_corpse_bomb(player: PlayerState, effect: CardEffect, slot: int) -> void:
 	var address := _captured_target_address(player)
 	var converted: Array[int] = []
+	var skulls: Array[int] = []
 	for index: int in player.units.living_indices():
 		if not _is_own_minion(player, index):
 			continue   # a TOTEM (or a reload-orphaned kind): never Corpse Bomb's target (AC 29)
@@ -4390,8 +4436,32 @@ func _apply_corpse_bomb(player: PlayerState, effect: CardEffect) -> void:
 		player.unit_dedupe.discard(index)
 		player.projectiles.add_minion_shot(address[0], address[1], effect.effect_id,
 				effect.damage_amount, index)
+		skulls.append(player.projectiles.size() - 1)
 	if not converted.is_empty():
 		player.record_corpse_bomb(_tick, converted)
+		# STORY 6-5g (AC 19/AC 20, `6-5g/R12`): THE CORPSE BOMB RECORD. Two part kinds, appended after the
+		# loop in the order the loop touched things: one `PART_CONVERTED` per minion turned into a skull (each
+		# restorable from its OWN corpse at its pre-death hp, through `6-5f`'s general restore rule) and one
+		# `PART_PROJECTILE` per skull in the air (vanishing through `consume_at`, `6-5g/R9`).
+		#
+		# IT IS NOT DERIVED FROM THE `corpse_bomb` RECORD beside it, deliberately: that record answers "which
+		# minions did the last Corpse Bomb convert" for its own reasons and has its own lifetime, while the
+		# packet answers "what does the undo have to touch" and is cleared the instant a Counterspell spends
+		# it. One walker reads every kind's parts; a special case reading a sibling record would be the only
+		# arm that does not.
+		var parts: Array[int] = []
+		var tags: Array[int] = []
+		var slots: Array[int] = []
+		for index: int in converted:
+			parts.append(index)
+			tags.append(PlayerState.PART_CONVERTED)
+			slots.append(slot)
+		for shot: int in skulls:
+			parts.append(shot)
+			tags.append(PlayerState.PART_PROJECTILE)
+			slots.append(slot)
+		player.record_reversal(PlayerState.REVERSAL_CORPSE_BOMB, parts, tags, slots,
+				[] as Array[bool], 0.0)
 
 
 ## Story 6-5e (AC 25-27, ruling 9): BOOM -- every Boulder in the OPPOSING hand detonates at once.
@@ -4465,6 +4535,87 @@ func _apply_boom(caster: PlayerState, effect: CardEffect, slot: int) -> void:
 	target.notify_cards_changed()
 
 
+## Story 6-5g (AC 4-8, `6-5g/R2`): ONE TIMED BUFF'S REVERSAL RECORD -- the kind and nothing else.
+##
+## A NAMED HELPER FOR THREE ONE-LINE ARMS, because the four empty typed columns are the noise and the KIND is
+## the content: written out three times, the arms would read as three different records. The columns are
+## empty for the reason `6-5g/R2` gives (a timed buff's undo is "stop the rule", which the kind already says),
+## and `flags` is empty rather than padded so nothing rides the hash that no reader consults.
+func _record_buff_reversal(player: PlayerState, kind: int) -> void:
+	player.record_reversal(kind, [] as Array[int], [] as Array[int], [] as Array[int],
+			[] as Array[bool], 0.0)
+
+
+## Story 6-5g (AC 9/AC 10, `6-5g/R6`): THE CLASS 2 RECORD, OPENED AT THE CAST PRESS.
+##
+## THE TARGET IS NAMED AT CAST START AND NOTHING NEW PLUMBS IT (AC 9): `record_resolved_card` already runs
+## above the cast fork at both press seats (`6-5f`'s own move, for its own reason), so the id, the mode and
+## the resolution tick -- and therefore the window -- are already this press's. What this adds is the KIND,
+## written into the packet that call just cleared, so a Counterspell landing MID-CAST reads a real kind at the
+## gate instead of `REVERSAL_NONE` and the cast is interruptible (AC 11).
+##
+## NO PARTS YET. A cast that has not struck has produced nothing, which is exactly what the empty part list
+## says -- and it is why an interrupted-by-stun cast is refused as no-target (AC 18): the packet stays
+## kind-only, `is_casting()` goes false at the interrupt, and `_reversal_has_anything_left` finds nothing.
+##
+## THE THREE KINDS ARE LOOKED UP THROUGH THE RESOLVER (D6), never by card id, on `_resolve_cast_strikes`' own
+## discipline: a card that is not one of the three cast spells records nothing here.
+func _record_cast_reversal(player: PlayerState, effect: CardEffect) -> void:
+	match CardEffectResolver.outcome(effect, flags):
+		CardEffectResolver.OUTCOME_HONED_BOLT:
+			_record_buff_reversal(player, PlayerState.REVERSAL_HONED_BOLT)
+		CardEffectResolver.OUTCOME_FIREBALL:
+			_record_buff_reversal(player, PlayerState.REVERSAL_FIREBALL)
+		CardEffectResolver.OUTCOME_ROCKSLING:
+			_record_buff_reversal(player, PlayerState.REVERSAL_ROCKSLING)
+
+
+## Story 6-5g (AC 10/AC 14-17/AC 19): THE LIVING RECORD'S DAMAGE SEAT -- `removed` hp landed on
+## `[target_slot, target_index]`, charged to `attacker`'s packet if the packet still names this resolution.
+##
+## ONE HELPER FOR THE TWO CONTACT LADDERS AND THE BOLT, so "the hp ACTUALLY removed" cannot mean three things
+## (AC 14 names the measurement: the pool's own before-minus-after delta, never `_funnel_damage`'s
+## pre-application return -- every caller measures it that way and hands the delta here).
+##
+## THE `PART_DAMAGE` ELEMENT IS APPENDED ONCE and the sum accumulates after it, which is what makes a
+## multi-stone Rocksling ONE refund of a summed total (AC 17) rather than a part per stone.
+##
+## `kind` IS THE CALLER'S BELIEF, checked inside the packet's own mutators: a stone still in the air when its
+## caster resolves another card charges nothing to the new resolution.
+##
+## STORY 6-5g REVIEW FIX (B1/M1, `6-5g/R21`): THE `PART_DAMAGE` ELEMENT NOW CARRIES ITS OWN KILL FACT --
+## `true` when `target_index` is a unit address and THIS hit is what left it dead, measured right here,
+## before any other cause could have killed it (the hero arm never needs the flag; a hero is never restored
+## from a corpse). The flag is what lets the reversal restore only a unit THIS resolution killed rather than
+## any unit that merely happens to be dead when the counter resolves (a unit this hit only wounded, later
+## killed by something else, must NOT come back -- the blocker this fix closes).
+func _note_reversal_damage(attacker: PlayerState, kind: int, target_slot: int, target_index: int,
+		removed: float) -> void:
+	if removed <= 0.0:
+		return
+	if not attacker.reversal_has_part(kind, PlayerState.PART_DAMAGE, target_index):
+		var target_owner := p1 if target_slot == 0 else p2
+		var killed_it := target_index != TargetingService.HERO_INDEX \
+				and not target_owner.units.is_alive_at(target_index)
+		attacker.reversal_note_part(kind, PlayerState.PART_DAMAGE, target_index, target_slot, killed_it)
+	attacker.reversal_add_amount(kind, removed)
+
+
+## Which of the three PROJECTILE-throwing kinds, if any, threw the shot at `shot_index` -- or
+## `REVERSAL_NONE` when this player's packet does not own that shot at all (a later resolution overwrote it,
+## or the shot came from a different resolution of the same card, `6-5g/R10`).
+##
+## THE MEMBERSHIP TEST IS THE RECORDED INDEX, not the effect id: `ProjectileBoard` never reuses an index
+## (`4-3a/R9`, both add seats append unconditionally), so a second copy's stones can never be mistaken for
+## this packet's -- which is the discrimination `6-5g/R10` left to this pass.
+func _reversal_kind_of_shot(attacker: PlayerState, shot_index: int) -> int:
+	for kind: int in [PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING,
+			PlayerState.REVERSAL_CORPSE_BOMB]:
+		if attacker.reversal_has_part(kind, PlayerState.PART_PROJECTILE, shot_index):
+			return kind
+	return PlayerState.REVERSAL_NONE
+
+
 ## Story 6-5f (AC 4-23, `6-5f/R1`/`R2`/`R5`/`R9`/`R12`/`R14`/`R15`): COUNTERSPELL -- reach back and undo what
 ## the opponent's last resolved card ACTUALLY DID.
 ##
@@ -4519,6 +4670,45 @@ func _apply_counterspell(player: PlayerState, slot: int) -> void:
 			# statement and `hp_changed` never announces a lethal value.
 			victim.hero.take_damage(minf(victim.reversal_amount,
 					maxf(0.0, victim.hero.get_hp() - 1.0)))
+		# STORY 6-5g (AC 4-8, `6-5g/R2`/`R4`/`R5`): THE THREE TIMED BUFFS -- the running rule ENDS, and what it
+		# already gave STAYS. Each arm is `cancel_rule`, the ONE stop point (`PlayerState.cancel_rule`), so
+		# "ends immediately with no residual" is that seat's own property rather than three re-derivations.
+		#
+		# NOTHING IS CLAWED BACK, which is `6-5g/R2` and is true BY ABSENCE here: no hp, no roll and no slow
+		# already delivered is named in any of the three arms.
+		PlayerState.REVERSAL_VAMPIRIC_AURA:
+			victim.cancel_rule(PlayerState.RULE_VAMPIRIC_AURA)
+		PlayerState.REVERSAL_BLOODHOUND:
+			# AC 7, AND THE MID-ROLL CASE IS THIS ONE LINE (`6-5g/R5`, re-measured at this pass): a roll
+			# already under way copied the boost into `RULE_ROLL_BOOST` at entry and cancelled
+			# `RULE_BLOODHOUND_ARMED` in the same branch, so cancelling the armed trigger here is a no-op for
+			# it and the roll finishes at its committed distance and i-frames -- identical to a natural window
+			# expiry mid-roll. `RULE_ROLL_BOOST` is deliberately NOT named: touching it would invent a
+			# behaviour neither the card nor the counter has.
+			victim.cancel_rule(PlayerState.RULE_BLOODHOUND_ARMED)
+		PlayerState.REVERSAL_FROSTBITE:
+			# AC 5/AC 6 (`6-5g/R4`): WHICHEVER PHASE IS RUNNING ENDS. The ARMED trigger is cancelled
+			# unconditionally (`cancel_rule` on a stopped slot writes the resting values it already holds).
+			#
+			# STORY 6-5g REVIEW FIX (m2, `6-5g/R22`): THE SLOW HALF IS NOW GATED ON THIS RESOLUTION'S OWN
+			# `PART_SLOW`, written by `_consume_frostbite` only while the packet still names this resolution.
+			# With one rule slot per player, a victim who resolved Frostbite TWICE has the running slow placed
+			# by whichever resolution's hit consumed the trigger -- unconditionally cancelling it here would let
+			# a counter aimed at a SECOND, still-armed resolution end a slow the FIRST resolution placed.
+			#
+			# THE SLOW LIVES ON THE OTHER PLAYER, which is the cross-player read `6-5g/R4` names, derived from
+			# `victim == p1` on `REVERSAL_BOOM`'s own precedent below -- with two players, the hero the
+			# victim's Frostbite slowed is the Counterspell caster.
+			victim.cancel_rule(PlayerState.RULE_FROSTBITE_ARMED)
+			if victim.reversal_has_part(PlayerState.REVERSAL_FROSTBITE, PlayerState.PART_SLOW):
+				var frost_target := p2 if victim == p1 else p1
+				frost_target.cancel_rule(PlayerState.RULE_FROSTBITE_SLOW)
+		# STORY 6-5g (AC 9-20, `6-5g/R7`-`R12`): THE THREE CAST CARDS AND CORPSE BOMB, ONE ARM, because every
+		# one of those reversals is a WALK OF THE PACKET'S PARTS -- they differ only in which parts they can
+		# ever hold, and a per-card arm would be four copies of one walk.
+		PlayerState.REVERSAL_HONED_BOLT, PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING, \
+		PlayerState.REVERSAL_CORPSE_BOMB:
+			_reverse_recorded_parts(victim)
 		PlayerState.REVERSAL_BOOM:
 			# THE REFUND AND THE BOULDERS BOTH GO TO `player`, not to `victim`, and that is Boom's own
 			# asymmetry: the packet lives on the Boom CASTER while its effects landed on the caster's
@@ -4583,16 +4773,112 @@ func _reverse_summon(victim: PlayerState) -> void:
 ## THE KIND COMES FROM THE DEAD RECORD, `_apply_raise_dead`'s own argument: an unresolvable kind (an X3 reload
 ## shortened `unit_kinds`) restores NOTHING and the corpse is still consumed, the graceful-degradation
 ## direction every authored-data miss in this file takes.
+## STORY 6-5g (AC 20/AC 22): SPLIT INTO A PER-INDEX HELPER, with this function kept as the packet-walking
+## caller `6-5f`'s two arms already are. Every clause above is the helper's now and none of it moved: 6-5g's
+## own three restore cases (a Corpse Bomb conversion, a minion killed by a countered bolt, one killed by a
+## countered Fireball or stone) name ONE index on a board that may be the OTHER player's, which the walk
+## over `victim.reversal_indices` cannot express -- and writing a second restore for them is exactly what
+## this function's "one implementation, two callers" note forbids.
 func _restore_killed_minions(victim: PlayerState) -> void:
 	for index: int in victim.reversal_indices:
-		if not victim.units.has_corpse_at(index):
-			continue
-		var kind_index := victim.units.kind_index_at(index)
-		var hp := victim.units.hp_at_death_at(index)
-		victim.units.consume_corpse_at(index)
-		if balance.kind_at(kind_index) == null:
-			continue
-		victim.units.add(hp, kind_index, index)
+		_restore_killed_minion_at(victim, index)
+
+
+## ONE minion restored from its own corpse, on `owner`'s board. See `_restore_killed_minions` above for the
+## whole of the rule; this is that rule's body, addressed.
+func _restore_killed_minion_at(owner: PlayerState, index: int) -> void:
+	if not owner.units.has_corpse_at(index):
+		return
+	var kind_index := owner.units.kind_index_at(index)
+	var hp := owner.units.hp_at_death_at(index)
+	owner.units.consume_corpse_at(index)
+	if balance.kind_at(kind_index) == null:
+		return
+	owner.units.add(hp, kind_index, index)
+
+
+## Story 6-5g (AC 10-22, `6-5g/R7`-`R12`): THE CLASS 2 / CLASS 3 REVERSAL -- undo the RECORDED PARTS of
+## `victim`'s cast card or Corpse Bomb, and whatever is already gone is skipped silently (`6-5f/R15`).
+##
+## THE CAST INTERRUPT COMES FIRST AND IT IS `clear_cast()` (AC 11, `6-5g/R7`): the SAME call
+## `_resolve_cast_strikes`' interrupt arm makes, reached from here directly. `_cast_is_interrupted` is NOT
+## consulted and could not help -- it answers "is this caster dead or stunned", and a countered caster is
+## neither (see its own docstring and this story's Dev Notes). THE CASTER IS NOT STUNNED: no
+## `set_action_state` appears in this function or anything it calls, which is what keeps the STUNNED
+## entry-point census at four (AC 12). The cast's card and mana stay lost (AC 13), true by absence: no
+## discard, no pool and no pitch zone is named here.
+##
+## `is_casting()` IS "THIS RESOLUTION'S CAST" (AC 10), not merely "a cast": the packet was written at the very
+## press that started the cast, and the step-3 cast lock makes a second resolution mid-cast unreachable -- so a
+## packet of one of the three cast kinds with a cast running can only be describing that cast.
+##
+## THEN THE PARTS, IN RECORDED ORDER, each `if` being `6-5f/R15` rather than a failure path:
+##   * `PART_PROJECTILE` -- a shot still in the air VANISHES through the existing `consume_at` seat (AC 16,
+##     `6-5g/R9`), the same call the contact ladder makes when a shot lands. One already consumed is skipped.
+##   * `PART_BURST` -- every stone not yet launched is cancelled through `clear_burst()` (AC 17): the SIXTH
+##     call site and the FOURTH distinct seat, `6-5f/R30`'s prediction realised.
+##   * `PART_BOULDER` -- a Boulder THIS cast planted and still covering a slot is lifted through the ONE
+##     uncover mechanism the Mode (1) play and Boom both use, so the card beneath is playable again and the
+##     per-Boulder slow drops by the removed count with no second mechanism (AC 17). Mana already paid to
+##     clear a Boulder is NOT refunded: no pool is named here.
+##   * `PART_STUN` -- the bolt's stun and root END NOW (AC 14). The window is stopped through
+##     `start_stun(0, false)`, that seat's own documented STOP, and the root through `clear_root()`; the
+##     STUNNED action state then exits at the stun's ONE exit seat (step 3) exactly as a naturally expired
+##     stun does, rather than through a second state write here that would duplicate that arm's own
+##     discriminator and get-up reasoning.
+##   * `PART_DAMAGE` -- the hp this resolution ACTUALLY removed goes back to the body it was taken from
+##     (AC 14/AC 15/AC 17/AC 19), summed once and clamped once. A HERO refund is `HeroState.heal`'s clamp at
+##     max hp, reused (AC 21 -- never an overheal). A UNIT that SURVIVED gets its hp back through
+##     `restore_hp_at`; one that DIED comes back from its own corpse at its pre-death hp through the SAME
+##     general restore rule Culling, Drain and Corpse Bomb use (AC 22), and a totem -- which leaves no corpse
+##     -- therefore stays dead with no clause here saying so.
+##     STORY 6-5g REVIEW FIX (B1, `6-5g/R21`): the dead-unit restore is gated on `reversal_flags[i]` --
+##     THIS resolution's own kill fact -- alongside the corpse. A unit that SURVIVED the hit and was later
+##     killed by something else is dead but unflagged, and is left alone: its corpse belongs to whatever
+##     killed it, not to this reversal.
+##   * `PART_CONVERTED` -- every minion Corpse Bomb turned into a skull rises from its own corpse at its
+##     pre-death hp (AC 20), through that same restore. A corpse already expired or consumed is not restored.
+##
+## NO RNG, NO NEW DEATH-SEAT CALLER (AC 24/AC 25): `_rng` is not named here or in anything called, and every
+## restore path goes through `hp_at_death_at` / `restore_corpse_at` / `consume_corpse_at` -- `kill_at` appears
+## nowhere on it.
+func _reverse_recorded_parts(victim: PlayerState) -> void:
+	if victim.is_casting() and victim.reversal_kind != PlayerState.REVERSAL_CORPSE_BOMB:
+		victim.clear_cast()
+	var uncovered_holder: PlayerState = null
+	for i in victim.reversal_indices.size():
+		var address: int = victim.reversal_indices[i]
+		var slot: int = victim.reversal_b[i]
+		var owner := p1 if slot == 0 else p2
+		match victim.reversal_a[i]:
+			PlayerState.PART_PROJECTILE:
+				if victim.projectiles.is_alive_at(address):
+					victim.projectiles.consume_at(address)
+			PlayerState.PART_BURST:
+				victim.clear_burst()
+			PlayerState.PART_BOULDER:
+				if owner.hand.is_covered(address):
+					owner.hand.uncover_at(address)
+					uncovered_holder = owner
+			PlayerState.PART_STUN:
+				owner.hero.start_stun(0, false)
+				owner.clear_root()
+			PlayerState.PART_DAMAGE:
+				if address == TargetingService.HERO_INDEX:
+					owner.hero.heal(victim.reversal_amount)
+				elif owner.units.is_alive_at(address):
+					owner.units.restore_hp_at(address, victim.reversal_amount)
+				elif victim.reversal_flags[i] and owner.units.has_corpse_at(address):
+					_restore_killed_minion_at(owner, address)
+			PlayerState.PART_CONVERTED:
+				_restore_killed_minion_at(owner, address)
+	# The hand announcement fires ONCE, after the walk -- `_restore_boulders`' own shape, and for its reason:
+	# the cover layer rides `cards_changed`'s visible-array payload, so a lifted Boulder reaches the HUD
+	# through the existing channel with no new seam.
+	# Every Boulder one resolution planted sits in the SAME hand (the struck player's), so one holder is the
+	# whole of it -- and `null` when nothing was lifted means no announcement at all.
+	if uncovered_holder != null:
+		uncovered_holder.notify_cards_changed()
 
 
 ## Story 6-5f (AC 19, `6-5f/R18`): GRAVE WARD's extension comes back OUT of every corpse it touched, and a
@@ -4732,9 +5018,13 @@ func _apply_boulder_clear(player: PlayerState, hand_slot: int) -> void:
 ## replay against a run where the same hit had somewhere to go.
 ##
 ## NO AUTHORED BOULDER IS THE SAME OUTCOME, reached one step earlier (see `_boulder_card_id`).
-func _place_boulder(struck: PlayerState, struck_slot: int) -> void:
+## STORY 6-5g (AC 17): IT RETURNS THE SLOT IT PLANTED ON, or `-1` for every case that plants nothing (no
+## authored Boulder, no eligible slot). The caller records it on the stone's own reversal record, and a
+## returned index is the only honest way to learn it: the choice is one RNG draw inside this function, and
+## re-deriving it from the cover mask afterwards could not tell this cast's Boulder from an older one's.
+func _place_boulder(struck: PlayerState, struck_slot: int) -> int:
 	if _boulder_card_id == &"":
-		return
+		return -1
 	var staged_slot := pitch.staged_hand_slot(struck_slot) if pitch.is_staged(struck_slot) else -1
 	var eligible: Array[int] = []
 	for hand_slot in struck.hand.size():
@@ -4744,9 +5034,11 @@ func _place_boulder(struck: PlayerState, struck_slot: int) -> void:
 			continue
 		eligible.append(hand_slot)
 	if eligible.is_empty():
-		return
-	struck.hand.cover_at(eligible[_rng.randi_range(0, eligible.size() - 1)], _boulder_card_id)
+		return -1
+	var planted: int = eligible[_rng.randi_range(0, eligible.size() - 1)]
+	struck.hand.cover_at(planted, _boulder_card_id)
 	struck.notify_cards_changed()
+	return planted
 
 
 ## Story 5-2 (AC 2, `5-2/R11`): the S6 GATE's reason -- named, and named HERE rather than on
@@ -5017,10 +5309,12 @@ func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringNam
 ##   (1) `has_resolved_card()` -- nothing has resolved this round (the round's own opening state, smoke 4).
 ##   (2) `reversal_kind != REVERSAL_NONE` -- the resolution left nothing this story knows how to undo. This
 ##       ONE test is Counterspell-as-target (AC 9, `6-5f/R8`), an already-countered card (AC 10,
-##       `6-5f/R5` -- `_apply_counterspell` clears the packet), the seven `6-5g` cards (AC 13's interim rule,
-##       `6-5f/R37`), and every `spell_*` no-op, flag-closed cast and unauthored-kind summon besides. No list
-##       of card ids appears anywhere, which is what makes AC 9's "no special-case code" and AC 13's "no new
-##       refusal reason" structural.
+##       `6-5f/R5` -- `_apply_counterspell` clears the packet), and every `spell_*` no-op, flag-closed cast
+##       and unauthored-kind summon besides. No list of card ids appears anywhere, which is what makes AC 9's
+##       "no special-case code" and AC 13's "no new refusal reason" structural.
+##       STORY 6-5g (AC 2, `6-5g/R1`): the seven TIMED/in-flight cards are NO LONGER among them. This clause
+##       is unchanged -- they now WRITE a kind (`PlayerState.REVERSAL_VAMPIRIC_AURA` onward), which is the
+##       whole of their admission; the interim rule never was a branch here.
 ##   (3) `_reversal_has_anything_left` -- everything the card did has already expired or is gone (AC 12,
 ##       `6-5f/R11`'s fourth clause).
 ##   (4) the WINDOW (AC 6/AC 7, `6-5f/R4`): with the authored 0.0 every resolved card is a valid target
@@ -5059,14 +5353,25 @@ func _counter_target_is_live(victim: PlayerState, effect: CardEffect) -> bool:
 ## Writing it the other way round -- refusing whenever any part had expired -- is the single most likely
 ## misreading of R15, so it is stated here rather than left to the reader of six `or`s.
 ##
-## `reversal_amount != 0.0` COUNTS AS A SURVIVING PART on the three arms that carry one (Culling's mana,
-## Drain's heal, Boom's damage), because a claw-back or refund is always available: the pool or the hero is
-## still there. Its own CLAMP may then make the claw-back a no-op (a hero already at 1 hp), and that is
-## deliberately NOT modelled here -- AC 15's clamps are about what a reversal DOES, not about whether a card
-## is counterable, and a gate that consulted them would refuse a Boom whose Boulder restoration is the part
-## the player actually wanted back.
+## `reversal_amount != 0.0` COUNTS AS A SURVIVING PART on the three `6-5f` arms that carry one (Culling's
+## mana, Drain's heal, Boom's damage), because a claw-back or refund is always available: the pool or the
+## hero is still there. Its own CLAMP may then make the claw-back a no-op (a hero already at 1 hp), and that
+## is deliberately NOT modelled here -- AC 15's clamps are about what a reversal DOES, not about whether a
+## card is counterable, and a gate that consulted them would refuse a Boom whose Boulder restoration is the
+## part the player actually wanted back.
+##
+## STORY 6-5g REVIEW FIX (M1, `6-5g/R21`): THE FOUR PART-LIST KINDS DO NOT GET THIS BLANKET ADMISSION. Unlike
+## a mana pool or a hero, the body a `PART_DAMAGE` hp sum came off may be GONE by the time Counterspell
+## resolves (the unit died, its corpse expired) -- `reversal_amount != 0.0` alone cannot tell "a survivor's
+## refund is waiting" from "a no-op: the body it would refund is gone and no corpse survives it either". Their
+## own arm below decides, part by part, exactly as the blanket clause's own reasoning would if it could see
+## the body.
 func _reversal_has_anything_left(victim: PlayerState) -> bool:
-	if victim.reversal_amount != 0.0:
+	var is_part_list_kind := victim.reversal_kind == PlayerState.REVERSAL_HONED_BOLT \
+			or victim.reversal_kind == PlayerState.REVERSAL_FIREBALL \
+			or victim.reversal_kind == PlayerState.REVERSAL_ROCKSLING \
+			or victim.reversal_kind == PlayerState.REVERSAL_CORPSE_BOMB
+	if victim.reversal_amount != 0.0 and not is_part_list_kind:
 		return true
 	match victim.reversal_kind:
 		PlayerState.REVERSAL_VANGUARD:
@@ -5107,6 +5412,81 @@ func _reversal_has_anything_left(victim: PlayerState) -> bool:
 			for hand_slot: int in victim.reversal_indices:
 				if not boom_victim.hand.is_covered(hand_slot):
 					return true
+		# STORY 6-5g (AC 31, `6-5g/R13`): ONE NEW ARM PER NEW KIND, each naming what SURVIVES for that card.
+		# Without these the per-kind `match` falls through to the `return false` below and all seven cards stay
+		# refused however the packet is written -- which is why AC 31 exists as its own criterion rather than
+		# as a consequence of the interim rule's deletion (AC 2).
+		#
+		# A TIMED BUFF SURVIVES EXACTLY WHILE ITS RULE RUNS (AC 8): a window that has already run out leaves
+		# nothing to end, and the standing gate refuses it with no new reason.
+		PlayerState.REVERSAL_VAMPIRIC_AURA:
+			return victim.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA)
+		PlayerState.REVERSAL_BLOODHOUND:
+			# The ARMED trigger only. A roll already under way is running on `RULE_ROLL_BOOST`, which this
+			# counter does not and must not touch (`6-5g/R5`), so it is not something left to undo.
+			return victim.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED)
+		PlayerState.REVERSAL_FROSTBITE:
+			# EITHER PHASE (AC 5/AC 6): the trigger on the caster, or the slow on the hero it struck -- the
+			# same cross-player derivation the reversal arm makes (`6-5g/R4`).
+			#
+			# STORY 6-5g REVIEW FIX (m2, `6-5g/R22`): THE SLOW HALF IS NOW GATED ON THIS RESOLUTION'S OWN
+			# `PART_SLOW`, not on the target's rule slot alone -- a victim who resolved Frostbite twice has,
+			# at most, ONE running slow (one rule slot), placed by whichever resolution's hit consumed the
+			# trigger; only THAT resolution's packet may claim it as something left to undo.
+			var frost_target := p2 if victim == p1 else p1
+			return victim.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED) \
+					or (victim.reversal_has_part(PlayerState.REVERSAL_FROSTBITE, PlayerState.PART_SLOW) \
+						and frost_target.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW))
+		# THE FOUR PART-LIST KINDS SHARE ONE ARM, over the same part vocabulary the reversal walks. The hp sum
+		# is tested INSIDE the `PART_DAMAGE` case below now (`6-5g/R21`), not by the blanket clause at the top
+		# of this function -- these four kinds are deliberately excluded from it (see `is_part_list_kind`).
+		PlayerState.REVERSAL_HONED_BOLT, PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING, \
+		PlayerState.REVERSAL_CORPSE_BOMB:
+			# A CAST STILL IN ITS WINDOW IS THE FIRST SURVIVING PART (AC 11): countering it interrupts it, which
+			# is the whole point of admitting a cast in progress at all.
+			if victim.is_casting() and victim.reversal_kind != PlayerState.REVERSAL_CORPSE_BOMB:
+				return true
+			for i in victim.reversal_indices.size():
+				var address: int = victim.reversal_indices[i]
+				var owner := p1 if victim.reversal_b[i] == 0 else p2
+				match victim.reversal_a[i]:
+					PlayerState.PART_PROJECTILE:
+						# A LIVING PROJECTILE INDEX -- a shot still in the air can still be made to vanish.
+						if victim.projectiles.is_alive_at(address):
+							return true
+					PlayerState.PART_BURST:
+						# AN UNFIRED BURST -- stones still owed can still be cancelled.
+						if victim.has_pending_burst():
+							return true
+					PlayerState.PART_BOULDER:
+						# A STILL-COVERING BOULDER SLOT. One already cleared, detonated or otherwise gone is
+						# left alone by the reversal (AC 17), so it is not a surviving part here either.
+						if owner.hand.is_covered(address):
+							return true
+					PlayerState.PART_STUN:
+						if owner.hero.stun.is_running or owner.root_window.is_running:
+							return true
+					PlayerState.PART_DAMAGE:
+						# STORY 6-5g REVIEW FIX (B1/M1, `6-5g/R21`): THIS KIND'S OWN `PART_DAMAGE` READ, now that
+						# the blanket `reversal_amount` clause no longer admits it. A HERO refund is always
+						# available while the sum is positive (the hero is always there); a SURVIVING unit's
+						# refund likewise; a DEAD unit is restorable only while its own corpse survives AND this
+						# resolution's own kill flag says the corpse is this resolution's to claim -- a unit that
+						# merely survived the hit and was killed by something else later is neither.
+						if address == TargetingService.HERO_INDEX:
+							if victim.reversal_amount > 0.0:
+								return true
+						elif owner.units.is_alive_at(address):
+							if victim.reversal_amount > 0.0:
+								return true
+						elif victim.reversal_flags[i] and owner.units.has_corpse_at(address):
+							return true
+					PlayerState.PART_CONVERTED:
+						# A RESTORABLE CORPSE (AC 20/`6-5f/R29`): a Corpse Bomb conversion IS this resolution's
+						# own kill, unconditionally -- no flag needed, unlike `PART_DAMAGE` above.
+						if not owner.units.is_alive_at(address) \
+								and owner.units.has_corpse_at(address):
+							return true
 	return false
 
 
@@ -5403,6 +5783,10 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 		var address := _captured_target_address(player)
 		player.start_cast(card_id, TimingWindow.seconds_to_ticks(pitch_effect.cast_seconds),
 				Enums.ModeKind.PITCH, address[0], address[1], locked_damage)
+		# STORY 6-5g (AC 9/AC 10): the Class 2 reversal record opens at the ACTIVATION press too -- the same
+		# helper at the same position relative to `start_cast`, so a Fireball pitched and a Honed Bolt cast
+		# become counterable by one mechanism. See `_record_cast_reversal`.
+		_record_cast_reversal(player, pitch_effect)
 		# AC 11: starting the cast drops a held block on the same tick -- `_resolve_basic_cast`'s review
 		# fix M2 (`6-5c/R4`, `5-2/R17`), verbatim and for its reason: the step-3 cast lock sits below the
 		# `match action_state` dispatch, so without this write a held block would keep its BLOCKING arm
@@ -6185,6 +6569,12 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 				_corpse_ticks_for(target, target_index))
 		_apply_lifesteal(caster, TargetingService.HERO_INDEX,
 				unit_hp_before - target.units.hp_at(target_index))
+		# STORY 6-5g (AC 14/AC 22): the bolt's UNIT hit joins the living record -- the hp ACTUALLY removed
+		# (before-minus-after, the same delta the lifesteal above reads) against this unit's address. A unit
+		# that DIED is reversed through the general restore rule and one that SURVIVED gets its hp back, and
+		# both are decided at the reversal from this one part (see `_reverse_honed_bolt`).
+		_note_reversal_damage(caster, PlayerState.REVERSAL_HONED_BOLT, target_slot, target_index,
+				unit_hp_before - target.units.hp_at(target_index))
 		# `_resolve_unit_contact`'s own review-fix F2 rung, for its reason verbatim: a unit that dies
 		# here can never close its own swing-dedupe record through `_advance_unit_attacks` again.
 		if not target.units.is_alive_at(target_index):
@@ -6202,6 +6592,9 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 	var hp_before := target.hero.get_hp()
 	target.hero.take_damage(damage)
 	_apply_lifesteal(caster, TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
+	# STORY 6-5g (AC 14): the bolt's HERO hit joins the living record, as the hp ACTUALLY removed.
+	_note_reversal_damage(caster, PlayerState.REVERSAL_HONED_BOLT, target_slot,
+			TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
 	# THE STUN WRITE PRECEDES THE `hit_landed` PUSH, and the order is load-bearing rather than
 	# stylistic -- it is `_apply_landing_packages`' own order, for the reason
 	# `AnimationController.on_hit_landed` states in its docstring: "a knockdown's own write precedes
@@ -6212,6 +6605,13 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 	# STUNNED when the hit is consumed, and the `hit_react` arm is never reached.
 	if target.hero.is_alive():
 		_apply_bolt_landing(target, effect)
+		# STORY 6-5g (AC 14): the STUN/ROOT part. Recorded only when the landing seat could actually write
+		# one -- it returns early on a knockdown floor and on the repeat-landing switch -- so a counter does
+		# not "end" a stun this bolt never placed. The part carries no address: the stun and the root are the
+		# target HERO's, and `b` names its slot.
+		if target.hero.stun_is_bolt or target.root_window.is_running:
+			caster.reversal_note_part(PlayerState.REVERSAL_HONED_BOLT, PlayerState.PART_STUN,
+					PlayerState.NO_REVERSAL_ADDRESS, target_slot)
 	_queue.push(hit_landed.emit.bind(slot, target_slot, damage, target.hero.get_hp()))
 
 
@@ -6246,6 +6646,11 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 func _apply_fireball(caster: PlayerState, effect: CardEffect, target_slot: int,
 		target_index: int, damage: float) -> void:
 	caster.projectiles.add_hero_shot(target_slot, target_index, effect.effect_id, damage)
+	# STORY 6-5g (AC 10/AC 16): the shot joins the living record by its BOARD INDEX -- `size() - 1`, read
+	# after the append for `REVERSAL_VANGUARD`'s reason verbatim (the index of the record that now exists).
+	# A countered Fireball still in the air is that index consumed (`6-5g/R9`).
+	caster.reversal_note_part(PlayerState.REVERSAL_FIREBALL, PlayerState.PART_PROJECTILE,
+			caster.projectiles.size() - 1)
 
 
 ## Story 6-5e (AC 8/AC 9/AC 11a, rulings 2/3/6a): ROCKSLING STRIKES -- the cast strike's third arm, and the
@@ -6284,6 +6689,11 @@ func _apply_rocksling(caster: PlayerState, effect: CardEffect, target_slot: int,
 	caster.start_burst(effect.effect_id, effect.boulders_per_cast - 1,
 			TimingWindow.seconds_to_ticks(effect.boulder_interval_seconds),
 			target_slot, target_index, effect.damage_amount)
+	# STORY 6-5g (AC 17, `6-5g/R10`): the SCHEDULE joins the living record -- one part, no address. It is
+	# noted HERE, at the strike, rather than at the press, and that is what stops a counter against a SECOND
+	# Rocksling still CASTING from cancelling the FIRST cast's pending stones: the second packet holds no
+	# burst part until its own strike, and by then `start_burst`'s own reset has replaced the first schedule.
+	caster.reversal_note_part(PlayerState.REVERSAL_ROCKSLING, PlayerState.PART_BURST)
 
 
 ## ONE STONE ONTO THE BOARD. A named helper rather than the `add_hero_shot` call written at both the strike
@@ -6294,6 +6704,12 @@ func _apply_rocksling(caster: PlayerState, effect: CardEffect, target_slot: int,
 func _launch_stone(caster: PlayerState, effect_id: StringName, target_slot: int,
 		target_index: int, damage: float) -> void:
 	caster.projectiles.add_hero_shot(target_slot, target_index, effect_id, damage)
+	# STORY 6-5g (AC 10/AC 16/AC 17): every stone joins the living record as it leaves, whether it is the
+	# strike's own first stone or one the burst seat launches ticks later. The guard inside
+	# `reversal_note_part` is what makes the LATE launches safe: a burst outliving its own packet (its caster
+	# resolved another card meanwhile) records nothing into the new resolution's record.
+	caster.reversal_note_part(PlayerState.REVERSAL_ROCKSLING, PlayerState.PART_PROJECTILE,
+			caster.projectiles.size() - 1)
 
 
 ## Story 6-5e (AC 11a, `6-5e/R18`/C2): THE BURST SEAT -- launch this player's next owed stone if its

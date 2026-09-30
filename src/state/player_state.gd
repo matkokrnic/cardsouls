@@ -768,10 +768,21 @@ func tick_rules() -> void:
 ## than from a `String` per slot that would be a second copy of one constant riding the hash.
 ##
 ## THE KINDS. `REVERSAL_NONE` is the resting value AND the whole of the no-target rule: a resolution this
-## story cannot undo -- Counterspell itself (AC 9), any of the seven cards deferred to `6-5g` (AC 13's
-## interim rule), a `spell_*` fixture no-op, a totem summon, a flag-closed cast -- leaves the packet at
-## NONE and is refused by the ONE gate, with no per-case list anywhere. That is what makes AC 9's "no
-## special-case code" and AC 13's "no new refusal reason" true by construction rather than by two branches.
+## story cannot undo -- Counterspell itself (AC 9), a `spell_*` fixture no-op, a totem summon, a flag-closed
+## cast -- leaves the packet at NONE and is refused by the ONE gate, with no per-case list anywhere. That is
+## what makes AC 9's "no special-case code" and AC 13's "no new refusal reason" true by construction rather
+## than by two branches.
+##
+## STORY 6-5g (AC 2, `6-5g/R1`): `6-5f`'s AC 13 INTERIM RULE IS GONE FROM THIS LIST, and its removal cost no
+## code: the seven TIMED/in-flight cards were refused only because nothing wrote them a kind, and the kinds
+## below now do. Nothing else about this paragraph changed -- which is what "the interim rule was EMERGENT,
+## not a code arm" meant.
+##
+## STORY 6-5g (AC 3, `6-5g/R1`): SEVEN MORE KINDS, AND THE SIX ABOVE ARE NOT REDEFINED. The three TIMED
+## buffs, the three CAST cards and Corpse Bomb become counterable, which retires `6-5f`'s interim rule
+## (`6-5f/R37`) -- a rule that was never a code arm: these seven were refused only because nothing wrote
+## them a kind, so WRITING them one is the whole admission (plus one `_reversal_has_anything_left` arm
+## each, AC 31 / `6-5g/R13`).
 const REVERSAL_NONE := 0
 const REVERSAL_VANGUARD := 1
 const REVERSAL_CULLING := 2
@@ -779,6 +790,67 @@ const REVERSAL_GRAVE_WARD := 3
 const REVERSAL_RAISE_DEAD := 4
 const REVERSAL_DRAIN := 5
 const REVERSAL_BOOM := 6
+const REVERSAL_VAMPIRIC_AURA := 7
+const REVERSAL_BLOODHOUND := 8
+const REVERSAL_FROSTBITE := 9
+const REVERSAL_HONED_BOLT := 10
+const REVERSAL_FIREBALL := 11
+const REVERSAL_ROCKSLING := 12
+const REVERSAL_CORPSE_BOMB := 13
+
+## ------------------------------------------------------------------------------------------
+## STORY 6-5g (AC 3/AC 10/AC 26, OPEN QUESTION 1 RESOLVED): THE SEVEN NEW KINDS' OWN READING OF THE FIVE
+## GENERIC COLUMNS -- A TAGGED PART LIST, AND NO NEW COLUMN, NO NEW FIELD, NO NEW KEY.
+## ------------------------------------------------------------------------------------------
+## THE SHAPE CHOSEN, AND WHY. The story left this mechanism-open with a stated leaning (reuse the five
+## columns before adding a hashed field) and that leaning is what shipped. The three `6-5g` classes need,
+## between them, a heterogeneous set of things to undo -- a shot still in the air, an hp sum, a killed
+## minion, a converted minion, a planted Boulder, an unfired burst, a stun -- so the columns are read
+## ELEMENT-WISE as a list of PARTS rather than column-wise as one homogeneous list:
+##   `indices[i]` = the part's ADDRESS: a projectile board index, a unit board index, a hand slot, or
+##                  `NO_REVERSAL_ADDRESS` for a part that addresses nothing.
+##   `a[i]`       = the PART TAG, one of the `PART_*` constants below.
+##   `b[i]`       = the SLOT (0/1) the address belongs to, or `NO_REVERSAL_SLOT`.
+##   `flags[i]`   = STORY 6-5g REVIEW FIX (B1/M1, `6-5g/R21`): index-aligned with every part, `false` unless
+##                  the part's own writer has a fact to carry -- today that is exactly two writers:
+##                  `_note_reversal_damage`'s `PART_DAMAGE` element (`true` when THIS resolution's own hit
+##                  killed the struck unit, so a corpse restore only ever answers for a kill this resolution
+##                  caused) and `_consume_frostbite`'s `PART_SLOW` element (present at all only when the
+##                  slow it started is still the one this resolution's own packet may claim). `record_reversal`
+##                  still permits an EMPTY column (the six `6-5f` kinds, and Corpse Bomb's `PART_CONVERTED`/
+##                  `PART_PROJECTILE` parts, which never need it), so a caller with nothing to say pads
+##                  nothing onto the hash.
+##   `amount`     = the hp this resolution ACTUALLY removed, summed over its hits -- `REVERSAL_BOOM`'s own
+##                  convention, unchanged and extended to four more kinds.
+##
+## ONE SCALAR `amount` IS ENOUGH BECAUSE EVERY DAMAGING KIND HERE DAMAGES EXACTLY ONE ADDRESS: Honed Bolt
+## resolves against the single captured address, Fireball launches one shot at it, every Rocksling stone
+## copies the SAME captured address onto the burst (`6-5e` AC 9) and every Corpse Bomb skull shares one
+## address read once before the loop (`6-5e` AC 31). Which body it was is the `PART_DAMAGE` element, so
+## hero-versus-unit is a READ of the record rather than a second scalar.
+##
+## NO PHASE FIELD, deliberately (the story's Golden Prediction cause 2, measured as a NON-cause): "still
+## casting / struck / in flight / whiffed" is DERIVED at the gate and at the reversal from facts already
+## hashed -- `is_casting()`, `projectiles.is_alive_at`, `has_pending_burst()`, `amount` and the corpse
+## container. A stored phase would be a second copy of those facts, free to disagree with them.
+##
+## THE SIX `6-5f` KINDS ARE UNTOUCHED (AC 3): every one of them still reads the columns exactly as the
+## table above `reversal_indices` says, and no `6-5f` arm consults a tag.
+const PART_PROJECTILE := 0    ## a shot this resolution put in the air; address = projectile board index
+const PART_DAMAGE := 1        ## the one body it damaged; address = HERO_INDEX or a unit board index
+const PART_CONVERTED := 2     ## a minion this resolution turned into a skull; address = unit board index
+const PART_BOULDER := 3       ## a Boulder this resolution planted; address = the covered hand slot
+const PART_BURST := 4         ## this resolution armed a stone schedule; no address
+const PART_STUN := 5          ## this resolution stunned and rooted a hero; no address, `b` = its slot
+## STORY 6-5g REVIEW FIX (m2, `6-5g/R22`): this resolution's Frostbite CONSUMED its own armed trigger and
+## started the slow -- no address, `b` = the STRUCK slot. Lets the reversal arm cancel only the slow ITS OWN
+## resolution placed, rather than whichever slow happens to be running on the other player's one rule slot.
+const PART_SLOW := 6
+
+## The resting values of a part that addresses nothing / belongs to no slot. `-1`, `NO_RAISED_RECORD`'s own
+## posture: not a valid index and not a valid slot, so neither collides with a real one.
+const NO_REVERSAL_ADDRESS := -1
+const NO_REVERSAL_SLOT := -1
 
 var reversal_kind: int = REVERSAL_NONE
 
@@ -861,6 +933,56 @@ func record_reversal(kind: int, indices: Array[int], a: Array[int], b: Array[int
 	reversal_b = b.duplicate()
 	reversal_flags = flags.duplicate()
 	reversal_amount = amount
+
+
+## Story 6-5g (AC 10, `6-5g/R6`): THE LIVING RECORD'S TWO MUTATORS -- append one PART, and add to the hp
+## sum. A Class 2 card's packet is written at the CAST PRESS and then GROWS as the cast progresses (a shot
+## leaves, a stone lands, a Boulder is planted), which `record_reversal` above cannot express: it takes whole
+## columns and would have the four producing seats rebuild the packet they are extending.
+##
+## BOTH REFUSE TO WRITE A PACKET THAT IS NOT THE EXPECTED KIND, and that guard is the whole of why an older
+## resolution's own products can never write into a newer resolution's packet: a Fireball still in the air
+## when its caster resolves another card finds `reversal_kind` changed and records nothing. The caller passes
+## the kind it believes it is extending, so the check lives here once instead of at four seats.
+##
+## `NO_REVERSAL_SLOT` / `NO_REVERSAL_ADDRESS` ARE THE DEFAULTS, so a part that addresses nothing (a burst,
+## a stun) is appended without the caller spelling two placeholders.
+## `REVERSAL_NONE` IS NEVER AN EXTENSIBLE PACKET, in all three: the resting state is not a record (the same
+## thing `record_reversal`'s first Invariant says), so a caller that has no kind -- a landed shot nobody's
+## packet owns -- writes nothing rather than growing the empty packet into a nonsense one.
+##
+## STORY 6-5g REVIEW FIX (B1/M1, `6-5g/R21`): `flags` IS NOW INDEX-ALIGNED TOO, `false` by default -- every
+## part carries its own flag alongside its address/tag/slot, so a caller with a real fact to carry (a
+## `PART_DAMAGE` element this resolution's own hit killed) has an already-aligned column to write it into,
+## and a caller with nothing to say leaves it `false` for free.
+func reversal_note_part(kind: int, tag: int, address: int = NO_REVERSAL_ADDRESS,
+		slot: int = NO_REVERSAL_SLOT, flag: bool = false) -> void:
+	if kind == REVERSAL_NONE or reversal_kind != kind:
+		return
+	reversal_indices.append(address)
+	reversal_a.append(tag)
+	reversal_b.append(slot)
+	reversal_flags.append(flag)
+
+
+## The hp sum's own adder. Separate from `reversal_note_part` because the two are independent facts about one
+## part: a landed stone adds to the sum WITHOUT adding a part (its `PART_DAMAGE` element is appended once, by
+## the first hit that lands), and a launched stone adds a part without adding to the sum.
+func reversal_add_amount(kind: int, removed: float) -> void:
+	if kind == REVERSAL_NONE or reversal_kind != kind:
+		return
+	reversal_amount += removed
+
+
+## Is there already a part with this tag at this address? The `PART_DAMAGE` element's own guard (append once,
+## accumulate the sum afterwards) and the in-flight walk's membership test ("is this shot one of MINE").
+func reversal_has_part(kind: int, tag: int, address: int = NO_REVERSAL_ADDRESS) -> bool:
+	if kind == REVERSAL_NONE or reversal_kind != kind:
+		return false
+	for i in reversal_indices.size():
+		if reversal_a[i] == tag and reversal_indices[i] == address:
+			return true
+	return false
 
 
 ## Story 6-5f (AC 10/AC 28, `6-5f/R5`): THE ONE STOP POINT for a reversal record -- `cancel_rule`'s own

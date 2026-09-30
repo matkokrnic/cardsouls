@@ -55,11 +55,56 @@ const ID_WARD := &"cs_ward"
 const ID_RAISE := &"cs_raise"
 const ID_DRAIN := &"cs_drain"
 const ID_BOOM := &"cs_boom"
-const ID_BOLT := &"cs_bolt"               # a 6-5g card, for AC 13's interim rule
+const ID_BOLT := &"cs_bolt"
 const BOULDER_CARD := &"cs_boulder"       # in the EFFECT MAP only, never in the deck
 
+## Story 6-5g: the SEVEN newly counterable cards, each with its own opaque id (`ID_BOLT` above was already
+## here as `6-5f`'s interim-rule fixture and becomes this story's Honed Bolt).
+const ID_AURA := &"cs_aura"
+const ID_HOUND := &"cs_hound"
+const ID_FROST := &"cs_frost"
+const ID_FIRE := &"cs_fire"
+const ID_SLING := &"cs_sling"
+const ID_BOMB := &"cs_bomb"
+## REVIEW FIX (m2/m3, `6-5g/R22`): a SECOND live copy of Frostbite and of Rocksling, each its own opaque id --
+## the two cards the review found under-driven for copy discrimination (`6-5g/R10`), each now exercised with
+## a real second cast rather than argued from the mechanism alone.
+const ID_FROST_B := &"cs_frost_b"
+const ID_SLING_B := &"cs_sling_b"
+
 const DECK: Array[StringName] = [ID_COUNTER, ID_COUNTER_B, ID_VANGUARD, ID_CULLING, ID_WARD,
-		ID_RAISE, ID_DRAIN, ID_BOOM, ID_BOLT]
+		ID_RAISE, ID_DRAIN, ID_BOOM, ID_BOLT, ID_AURA, ID_HOUND, ID_FROST, ID_FIRE, ID_SLING, ID_BOMB,
+		ID_FROST_B, ID_SLING_B]
+
+## Story 6-5g's in-test numbers. Every one is distinct from every other and from `6-5f`'s above, so a value
+## read off the wrong field lands on a number no assertion expects.
+const AURA_TICKS := 40
+const AURA_LIFESTEAL := 0.5
+const HOUND_TICKS := 40
+const HOUND_DISTANCE_MULT := 3.0
+const HOUND_IFRAME_MULT := 2.0
+const FROST_TICKS := 40
+const FROST_SLOW := 0.5
+const FROST_SLOW_TICKS := 25
+const BOLT_CAST_TICKS := 8
+const BOLT_DAMAGE := 7.0
+const BOLT_STUN_TICKS := 14
+const BOLT_ROOT_TICKS := 11
+const FIRE_CAST_TICKS := 6
+const FIRE_MANA_CAP := 4.0
+const FIRE_DAMAGE_PER_MANA := 3.0         # 4 mana x 3 == 12.0 locked damage
+const FIRE_DAMAGE := FIRE_MANA_CAP * FIRE_DAMAGE_PER_MANA
+const SLING_CAST_TICKS := 4
+const SLING_DAMAGE := 5.0
+const SLING_STONES := 3
+const SLING_INTERVAL_TICKS := 20
+const BOMB_DAMAGE := 8.0
+const LAUNCH_SPEED := 8.0
+const TRAVEL_BUDGET := 2.0                # ~15 ticks of flight: long enough to counter, short enough to whiff
+const ROLL_TICKS := 18
+const ROLL_IFRAME_TICKS := 12
+const ROLL_DISTANCE := 3.0
+const ROLL_COST := 5.0
 
 const CAST_MANA := 2.0
 const ORB_PRICE := 1
@@ -230,24 +275,11 @@ func test_a_second_copy_cannot_counter_an_already_countered_card() -> void:
 		"...so the SECOND copy reads no-target and is refused (AC 10)")
 
 
-## AC 13 (`6-5f/R37`), THE INTERIM RULE: a Counterspell against a resolution one of the seven cards
-## deferred to `6-5g` produced is refused through the SAME path and the SAME reason. Proven with a
-## resolved Honed Bolt, which the AC names.
-##
-## IT IS REFUSED BY CONSTRUCTION, NOT BY A LIST: `honed_bolt` has no reversal arm, so its resolution
-## leaves the packet at `REVERSAL_NONE` and the ordinary gate refuses it. A test that passed only because
-## an id list happened to contain `honed_bolt` would be testing a different mechanism.
-func test_a_6_5g_card_is_refused_through_the_same_no_target_path() -> void:
-	var ms := _make_match()
-	_victim_casts(ms, ID_BOLT)
-	assert_eq((ms.p2.to_snapshot()["last_resolved_card"] as Array)[0], String(ID_BOLT),
-		"sanity: the Honed Bolt really resolved and was recorded")
-	assert_eq(ms.p2.to_snapshot()["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0],
-		"...and left NO reversal packet, because 6-5f builds no arm for it (AC 13)")
-	var rejections := _rejections(ms.p1)
-	_counter(ms)
-	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
-		"refused as no-target through the same path and the same reason -- no new refusal reason (AC 13)")
+## STORY 6-5g (AC 2, `6-5g/R1`): `test_a_6_5g_card_is_refused_through_the_same_no_target_path` STOOD HERE
+## and is DELETED, which is one of the exactly three textual artifacts the interim rule consisted of (the
+## others are `6-5f` AC 13's own text and `6-5f`'s Live Smoke point 6). It asserted that a resolved Honed
+## Bolt leaves `REVERSAL_NONE` and is refused; a Honed Bolt now writes `REVERSAL_HONED_BOLT` and is
+## counterable in every phase, which this file's own Class 2 cases below prove in its place.
 
 
 ## AC 12 (`6-5f/R11`'s fourth clause): "everything the last card did has already expired or is gone" is
@@ -631,6 +663,734 @@ func test_every_victim_card_still_resolves_normally_when_no_counterspell_is_play
 	assert_eq(drain.p2.hero.get_hp(), hp_before + DRAIN_HEAL, "Drain still sacrifices and heals")
 
 
+# ================================================================== STORY 6-5g
+#
+# THE SEVEN TIMED / IN-FLIGHT CARDS. Same standpoint as everything above: **P2 resolves the card, P1
+# counters it.** The Class 2 cards are driven as Mode (1) presses except Fireball, whose damage is LOCKED AT
+# STAGING (`6-5d` AC 7) and is therefore zero on a Mode (1) press -- so Fireball is driven through its real
+# Mode (4) staging, which is also its shipped shape.
+
+# ------------------------------------------------------------------ AC 4-8: Class 1, the timed buffs
+
+## AC 4 (`6-5g/R2`): countering a Vampiric Aura ENDS the rule, and the hp it already healed STAYS healed.
+## Both halves, because a reversal that also clawed the healing back would pass a rule-only test.
+func test_countering_a_vampiric_aura_ends_the_rule_and_leaves_the_healing_done() -> void:
+	var ms := _make_match()
+	ms.p2.hero.take_damage(40.0)
+	_victim_casts(ms, ID_AURA)
+	assert_true(ms.p2.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA), "sanity: the aura is running")
+	var before_heal := ms.p2.hero.get_hp()
+	_victim_hits_counterer(ms)
+	var healed := ms.p2.hero.get_hp() - before_heal
+	assert_true(healed > 0.0, "sanity: the aura healed off a real hit (%f)" % healed)
+	var hp_at_counter := ms.p2.hero.get_hp()
+	_counter(ms)
+	assert_false(ms.p2.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA),
+		"the running rule ends immediately (AC 4)")
+	assert_eq(ms.p2.hero.get_hp(), hp_at_counter,
+		"...and the hp it already healed STAYS healed -- nothing is clawed back for a timed buff (AC 4)")
+	var before_second := ms.p2.hero.get_hp()
+	_victim_hits_counterer(ms)
+	assert_eq(ms.p2.hero.get_hp(), before_second,
+		"...and no FURTHER hit heals, which is what 'the rule ended' means behaviourally")
+
+
+## AC 5 (`6-5g/R4`): countering a Frostbite whose trigger is still ARMED disarms it -- the caster's next
+## confirmed hero melee hit applies no slow. Proven through the real trigger seat, not by reading the rule.
+func test_countering_an_armed_frostbite_disarms_the_trigger() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_FROST)
+	assert_true(ms.p2.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED), "sanity: the trigger is armed")
+	_counter(ms)
+	assert_false(ms.p2.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED),
+		"the armed trigger is disarmed (AC 5)")
+	_victim_hits_counterer(ms)
+	assert_false(ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+		"...so the next confirmed hero melee hit applies NO slow (AC 5)")
+
+
+## AC 6 (`6-5g/R4`): countering a Frostbite whose trigger has already been CONSUMED ends the running slow --
+## on the OTHER player, which is the cross-player read the ruling names.
+func test_countering_a_consumed_frostbite_ends_the_running_slow_on_the_struck_hero() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_FROST)
+	_victim_hits_counterer(ms)
+	assert_true(ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+		"sanity: the hit consumed the trigger and started the slow on P1")
+	assert_false(ms.p2.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED), "sanity: the trigger is spent")
+	_counter(ms)
+	assert_false(ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+		"the running slow ends immediately, on the STRUCK player's own rule slot (AC 6)")
+	assert_eq(ms.p1.rule_a[PlayerState.RULE_FROSTBITE_SLOW], 0.0,
+		"...through `cancel_rule`, the one stop point -- so the magnitude is gone too, not merely gated")
+
+
+## REVIEW FIX m2 (`6-5g/R22`): the victim resolves Frostbite TWICE. The FIRST resolution's hit consumes its
+## own trigger and starts the running slow; the SECOND resolution is countered while still ARMED. The
+## counter disarms the second, and the slow the FIRST resolution placed keeps running -- the cross-resolution
+## over-reach the review found (an unconditional cancel would end it regardless of which resolution placed
+## it, since the two share one rule slot).
+func test_countering_a_second_armed_frostbite_disarms_it_and_leaves_the_first_slow_running() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_FROST)
+	_victim_hits_counterer(ms)
+	assert_true(ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+		"sanity: the FIRST resolution's hit consumed its trigger and started the slow on P1")
+	assert_false(ms.p2.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED), "sanity: its own trigger is spent")
+	_victim_casts(ms, ID_FROST_B)
+	assert_true(ms.p2.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED),
+		"sanity: the SECOND resolution re-arms the trigger")
+	assert_true(ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+		"sanity: re-casting did not touch the FIRST resolution's already-running slow")
+	_counter(ms)
+	assert_false(ms.p2.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED),
+		"the SECOND (still-armed) resolution's trigger is disarmed (AC 5)")
+	assert_true(ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+		"...and the FIRST resolution's slow is LEFT RUNNING -- it is not this counter's to end (m2)")
+
+
+## AC 7 (`6-5g/R5`): BOTH halves of the Bloodhound case in one test, because the second is only meaningful
+## beside the first.
+##   (a) countered while ARMED, before any roll -> the next roll is UNBOOSTED;
+##   (b) countered MID-ROLL -> the roll is untouched.
+##
+## REVIEW FIX m1 (`6-5g/R23`): (b)'s equality holds BY CONSTRUCTION, not by comparison -- mid-roll there is no
+## armed window left TO expire (`RULE_BLOODHOUND_ARMED` is already cancelled at roll ENTRY, before either
+## fixture's own idle or counter runs), so nothing here measures "a counter equals a natural expiry". The
+## `expired` fixture is an UNTOUCHED comparison arm (two idle ticks against a 40-tick window, with the armed
+## trigger already gone before the idle even starts), not a natural expiry actually happening. What the
+## three-way comparison (boost liveness, velocity, remaining i-frames) DOES prove is the AC's real claim: that
+## Counterspell's own arm -- which deliberately never names `RULE_ROLL_BOOST` -- changes nothing a roll
+## already under way would not also finish unchanged on its own.
+func test_countering_a_bloodhound_step_disarms_it_and_leaves_a_running_roll_alone() -> void:
+	var plain_speed := ROLL_DISTANCE / (float(ROLL_TICKS) / TimingWindow.TICK_HZ)
+	# (a) countered while armed: the next roll is an ordinary roll.
+	var armed := _make_match()
+	_victim_casts(armed, ID_HOUND)
+	assert_true(armed.p2.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED), "sanity: armed")
+	_counter(armed)
+	assert_false(armed.p2.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED),
+		"the armed trigger is cancelled (AC 7)")
+	_advance(armed, InputIntent.new(), _roll_intent())
+	assert_almost_eq(armed.p2.hero.velocity.length(), plain_speed, 0.0001,
+		"...so the next roll is UNBOOSTED (AC 7)")
+	assert_eq(armed.p2.hero.roll_iframe.duration_ticks(), ROLL_IFRAME_TICKS,
+		"...with ordinary i-frames, not the multiplied count")
+	# (b) countered mid-roll, against the SAME fixture left to expire naturally instead.
+	var countered := _make_match()
+	var expired := _make_match()
+	for ms: MatchState in [countered, expired]:
+		_victim_casts(ms, ID_HOUND)
+		_advance(ms, InputIntent.new(), _roll_intent())
+		assert_almost_eq(ms.p2.hero.velocity.length(), plain_speed * HOUND_DISTANCE_MULT, 0.0001,
+			"sanity: the roll entered BOOSTED")
+		assert_false(ms.p2.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED),
+			"sanity: roll entry already cancelled the armed trigger (`6-5g/R5`, re-measured)")
+		assert_true(ms.p2.is_rule_active(PlayerState.RULE_ROLL_BOOST), "sanity: the boost is latched")
+	_counter(countered)
+	_idle(expired, 2)   # the same two ticks the stage-and-activate pair costs
+	assert_eq(countered.p2.is_rule_active(PlayerState.RULE_ROLL_BOOST),
+		expired.p2.is_rule_active(PlayerState.RULE_ROLL_BOOST),
+		"a counter mid-roll leaves the latched boost exactly as the untouched comparison arm does -- BY "
+		+ "CONSTRUCTION, since neither arm has an armed window left to touch (AC 7, m1)")
+	assert_almost_eq(countered.p2.hero.velocity.length(), expired.p2.hero.velocity.length(), 0.0001,
+		"...the roll's velocity is identical in both")
+	assert_eq(countered.p2.hero.roll_iframe.remaining_ticks(),
+		expired.p2.hero.roll_iframe.remaining_ticks(),
+		"...and so are its remaining i-frames: the counter did nothing to the running roll")
+
+
+## AC 8 (`6-5g/R3`): a timed buff whose window has ALREADY run out counts as no target and is refused
+## through the standing gate -- AC 31's arms in the negative direction. Proven for the Aura (its window
+## elapsed) and for Frostbite's armed-then-expired trigger, the two cases AC 8 names.
+func test_a_timed_buff_whose_window_has_already_run_out_is_refused() -> void:
+	for id: StringName in [ID_AURA, ID_FROST]:
+		var ms := _make_match()
+		_victim_casts(ms, id)
+		_idle(ms, AURA_TICKS + 1)
+		var rejections := _rejections(ms.p1)
+		_counter(ms)
+		assert_eq(rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+			"%s with its window already elapsed is NO TARGET, refused through the standing gate with no "
+			% id + "new reason (AC 8)")
+
+
+# ------------------------------------------------------------------ AC 9-13: Class 2, cast and interrupt
+
+## AC 9 (`6-5g/R6`): the target is named at CAST START and the window is measured from THAT tick, not from
+## the strike. Proven by a window shorter than the cast: a counter fired two ticks AFTER the bolt struck is
+## inside the window measured from the strike and outside it measured from the press -- and it is refused.
+func test_the_class_2_window_is_measured_from_cast_start_and_not_from_the_strike() -> void:
+	var window := 4
+	var ms := _make_match(_windowed_effects(window))
+	# The bolt is aimed at a MINION, not at P1's hero, and that is fixture necessity rather than colour: a
+	# bolt that stunned P1 would leave P1 unable to press Counterspell at all (`REASON_STUNNED` at both
+	# presses), so the refusal under test could not be told from a stun refusal.
+	ms.p1.units.add(MINION_HP, MINION_KIND)
+	ms.p2.lock_target_slot = 0
+	ms.p2.lock_target_index = 0
+	_victim_casts(ms, ID_BOLT)
+	assert_eq((ms.p2.to_snapshot()["last_resolved_card"] as Array)[0], String(ID_BOLT),
+		"the record names the bolt at the PRESS, before the cast frame (AC 9)")
+	assert_eq(int((ms.p2.to_snapshot()["reversal"] as Array)[0]), PlayerState.REVERSAL_HONED_BOLT,
+		"...and the packet already names its kind, which is what makes a mid-cast counter possible (AC 10)")
+	_idle(ms, BOLT_CAST_TICKS)
+	assert_false(ms.p2.is_casting(), "sanity: the cast has struck")
+	assert_true(ms.p1.units.hp_at(0) < MINION_HP, "sanity: the bolt landed on the minion")
+	var rejections := _rejections(ms.p1)
+	_counter(ms)
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+		"the age is measured from the CAST START, so a %d-tick window is already past (AC 9)" % window)
+
+
+## AC 11/AC 12/AC 13 (`6-5g/R7`): countering a cast in progress ends it immediately, the caster is free to
+## act that same tick, no damage lands and no projectile is ever created -- and the caster is NOT stunned,
+## which is the test AC 12 asks for by name.
+func test_countering_a_cast_in_progress_interrupts_it_with_no_strike_and_no_stun() -> void:
+	var ms := _make_match()
+	var mana_before := ms.p2.mana.get_current()
+	_victim_casts(ms, ID_BOLT)
+	assert_true(ms.p2.is_casting(), "sanity: the cast is running")
+	var discard_before := ms.p2.discard.size()
+	_counter(ms)
+	assert_false(ms.p2.is_casting(), "the cast ends immediately (AC 11)")
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.IDLE,
+		"the interrupted caster is FREE the same tick and is NOT sent to STUNNED (AC 11/AC 12)")
+	assert_false(ms.p2.hero.stun.is_running, "...with no stun window either")
+	assert_eq(ms.p1.hero.get_hp(), MAX_HP, "...no damage landed (AC 11)")
+	assert_eq(ms.p2.projectiles.size(), 0, "...and no projectile was ever created (AC 11)")
+	assert_eq(ms.p2.discard.size(), discard_before,
+		"the caster's CARD stays lost -- it is not returned to hand or deck (AC 13)")
+	assert_eq(ms.p2.mana.get_current(), mana_before - CAST_MANA,
+		"...and its mana stays spent (AC 13, `6-5c/R3` read from the counter's side)")
+	# The caster really can act: a press on the very next tick resolves.
+	_idle(ms, BOLT_CAST_TICKS + 2)
+	assert_eq(ms.p1.hero.get_hp(), MAX_HP,
+		"...and the cast that was interrupted never strikes later either")
+
+
+## AC 18 (`6-5g/R3`): a Class 2 card that whiffed entirely leaves nothing to reverse. Both of the AC's
+## shapes: a cast interrupted by a STUN before it struck, and a Fireball that expired at its travel budget
+## without ever landing.
+func test_a_whiffed_class_2_card_is_refused_as_no_target() -> void:
+	var stunned := _make_match()
+	_victim_casts(stunned, ID_BOLT)
+	stunned.p2.hero.start_stun(4, false)
+	stunned.p2.hero.set_action_state(HeroState.ActionState.STUNNED)
+	_idle(stunned, 1)
+	assert_false(stunned.p2.is_casting(), "sanity: the stun interrupted the cast before it struck")
+	var stun_rejections := _rejections(stunned.p1)
+	_counter(stunned)
+	assert_eq(stun_rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+		"a cast interrupted by a stun produced nothing: refused as no-target (AC 18)")
+	var expired := _make_match()
+	_victim_activates(expired, ID_FIRE)
+	_idle(expired, FIRE_CAST_TICKS)
+	assert_eq(expired.p2.projectiles.size(), 1, "sanity: the ball was launched")
+	var ceiling := 0
+	while expired.p2.projectiles.is_alive_at(0) and ceiling < 200:
+		_idle(expired, 1)
+		ceiling += 1
+	assert_false(expired.p2.projectiles.is_alive_at(0),
+		"sanity: the ball expired at its travel budget without landing")
+	var flight_rejections := _rejections(expired.p1)
+	_counter(expired)
+	assert_eq(flight_rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+		"a ball that expired in the air took nothing and left nothing: refused (AC 18)")
+
+
+## AC 10: the packet is a LIVING RECORD -- what a counter DOES depends on how far the cast has progressed.
+## One card (Fireball), all four states, each proven by its own observable consequence.
+func test_the_class_2_packet_is_a_living_record_across_all_four_cast_states() -> void:
+	# (1) STILL CASTING: the cast is interrupted and no ball is ever created.
+	var casting := _make_match()
+	_victim_activates(casting, ID_FIRE)
+	assert_true(casting.p2.is_casting(), "sanity: mid-cast")
+	_counter(casting)
+	assert_false(casting.p2.is_casting(), "still casting -> the cast is interrupted (AC 10)")
+	assert_eq(casting.p2.projectiles.size(), 0, "...and no ball exists")
+	# (2) IN FLIGHT: the ball vanishes.
+	var flying := _make_match()
+	_victim_activates(flying, ID_FIRE)
+	_idle(flying, FIRE_CAST_TICKS)
+	assert_true(flying.p2.projectiles.is_alive_at(0), "sanity: the ball is in the air")
+	_counter(flying)
+	assert_false(flying.p2.projectiles.is_alive_at(0), "in flight -> the ball vanishes (AC 10/AC 16)")
+	assert_eq(flying.p1.hero.get_hp(), MAX_HP, "...and nothing further happens on its account")
+	# (3) LANDED: the hp it actually removed comes back.
+	var landed := _make_match()
+	_victim_activates(landed, ID_FIRE)
+	_idle(landed, FIRE_CAST_TICKS)
+	_victim_shot_lands(landed, 0)
+	assert_almost_eq(landed.p1.hero.get_hp(), MAX_HP - FIRE_DAMAGE, 0.0001,
+		"sanity: the ball landed for its locked damage")
+	_counter(landed)
+	assert_almost_eq(landed.p1.hero.get_hp(), MAX_HP, 0.0001,
+		"landed -> the hp ACTUALLY removed is refunded (AC 10/AC 15)")
+	# (4) NOTHING LEFT: covered by `test_a_whiffed_class_2_card_is_refused_as_no_target` above, which is the
+	# same fourth state read as a refusal -- the only observable a state with nothing left HAS.
+
+
+# ------------------------------------------------------------------ AC 14-17: the landed and in-flight arms
+
+## AC 14 (`6-5g/R8`): countering a LANDED Honed Bolt refunds the hp it actually removed and ends the ROOT it
+## placed.
+##
+## THE STUN HALF OF AC 14 IS NOT ASSERTED HERE, AND THE REASON IS STRUCTURAL RATHER THAN AN OMISSION: with
+## two players, the bolt's target is the ONLY player who could counter it, and a bolt-STUNNED hero's
+## Counterspell is refused at both presses (`REASON_STUNNED`) -- so no reachable state has a bolt stun
+## running at the moment a counter resolves. The arm still stops the stun window (it is the same statement
+## that clears `stun_is_bolt`, and a later story with a third party or a shorter refusal makes it
+## observable); the dev pass reports that line as a deliberately unobservable mutation rather than claiming
+## a proof it cannot have. The ROOT outlives the stun (14 + 11 ticks against 14), which is what makes the
+## other half of the clause provable at all.
+func test_countering_a_landed_honed_bolt_refunds_the_hp_and_ends_the_root() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_BOLT)
+	_idle(ms, BOLT_CAST_TICKS)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - BOLT_DAMAGE, 0.0001, "sanity: the bolt landed")
+	assert_true(ms.p1.hero.stun.is_running, "sanity: it stunned")
+	assert_true(ms.p1.root_window.is_running, "sanity: and rooted")
+	_idle(ms, BOLT_STUN_TICKS)   # the stun runs out; the root has not
+	assert_false(ms.p1.hero.stun.is_running, "sanity: the stun expired naturally")
+	assert_true(ms.p1.root_window.is_running, "sanity: the root is still running")
+	_counter(ms)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP, 0.0001,
+		"the hp ACTUALLY removed is refunded (AC 14)")
+	assert_false(ms.p1.root_window.is_running, "the root the strike placed ends immediately (AC 14)")
+	assert_false(ms.p1.is_root_blocking_roll(),
+		"...so the rooted hero may act again that same tick")
+
+
+## AC 21: the hp refund is clamped at max hp and NEVER overheals -- the case a refund landing on a hero
+## healed since would otherwise break. `HeroState.heal`'s own clamp, reused rather than re-derived.
+func test_a_landed_bolt_refund_never_overheals_past_max() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_BOLT)
+	_idle(ms, BOLT_CAST_TICKS)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - BOLT_DAMAGE, 0.0001, "sanity: the bolt landed")
+	ms.p1.hero.heal(BOLT_DAMAGE)   # healed back to full in between, so the refund has nowhere to go
+	_counter(ms)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP, 0.0001,
+		"a refund on a hero already at max hp stops at max -- no overheal (AC 21)")
+
+
+## AC 17 (`6-5g/R9`/`R10`): ROCKSLING's whole set, in one resolution that has all four parts live at the
+## moment of the counter -- one stone landed (and its Boulder planted), one stone in the air, one stone
+## still owed. Every clause of AC 17 is asserted separately.
+func test_countering_a_rocksling_refunds_landed_vanishes_flying_cancels_owed_and_lifts_its_boulder() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_SLING)
+	_idle(ms, SLING_CAST_TICKS)
+	assert_eq(ms.p2.projectiles.size(), 1, "sanity: the first stone left at the strike")
+	_victim_shot_lands(ms, 0)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - SLING_DAMAGE, 0.0001, "sanity: it landed")
+	assert_eq(ms.p1.hand.cover_count(), 1, "sanity: and planted one Boulder in P1's hand")
+	var covered_slot: int = ms.p1.hand.covered_indices()[0]
+	_idle(ms, SLING_INTERVAL_TICKS)
+	assert_eq(ms.p2.projectiles.size(), 2, "sanity: the second stone launched")
+	assert_true(ms.p2.projectiles.is_alive_at(1), "sanity: and is in the air")
+	assert_true(ms.p2.has_pending_burst(), "sanity: with the third still owed")
+	_counter(ms)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP, 0.0001,
+		"the landed stone's damage is refunded, summed and clamped once (AC 17)")
+	assert_false(ms.p2.projectiles.is_alive_at(1), "the stone in the air vanishes (AC 16/AC 17)")
+	assert_false(ms.p2.has_pending_burst(), "the unfired stone is cancelled (AC 17)")
+	assert_eq(ms.p1.hand.cover_count(), 0,
+		"the Boulder THIS cast planted is removed and its card is playable again (AC 17)")
+	assert_false(ms.p1.hand.is_covered(covered_slot), "...from the very slot it covered")
+	_idle(ms, SLING_INTERVAL_TICKS + 2)
+	assert_eq(ms.p2.projectiles.size(), 2,
+		"...and no further stone launches after the cancellation")
+
+
+## AC 17's SUM: two landed stones refund ONE heal of the total, not two separate refunds -- the `amount`
+## column's own convention (`REVERSAL_BOOM`'s, extended). Proven by the arithmetic: the hero is back to
+## exactly full after two stones' worth of damage.
+func test_two_landed_stones_refund_their_summed_total_once() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_SLING)
+	_idle(ms, SLING_CAST_TICKS)
+	_victim_shot_lands(ms, 0)
+	_idle(ms, SLING_INTERVAL_TICKS)
+	_victim_shot_lands(ms, 1)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - 2.0 * SLING_DAMAGE, 0.0001,
+		"sanity: two stones landed")
+	assert_almost_eq(float((ms.p2.to_snapshot()["reversal"] as Array)[5]), 2.0 * SLING_DAMAGE, 0.0001,
+		"the packet carries the SUMMED hp actually removed (AC 17)")
+	_counter(ms)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP, 0.0001,
+		"...and the refund is one heal of that total (AC 17/AC 21)")
+
+
+## AC 17's LAST CLAUSE: a Boulder from this cast that is ALREADY GONE is left alone, and the mana paid to
+## clear it is NOT refunded (`6-5f/R15` applied to the cover layer). Both halves.
+func test_a_boulder_already_cleared_is_left_alone_and_its_clearing_mana_is_not_refunded() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_SLING)
+	_idle(ms, SLING_CAST_TICKS)
+	_victim_shot_lands(ms, 0)
+	var covered_slot: int = ms.p1.hand.covered_indices()[0]
+	# P1 plays the Boulder off the slot: its own separate spend, at its own price.
+	var mana_before := ms.p1.mana.get_current()
+	_advance(ms, _cast_intent(covered_slot), InputIntent.new())
+	assert_false(ms.p1.hand.is_covered(covered_slot), "sanity: the Boulder was cleared by playing it")
+	assert_eq(ms.p1.mana.get_current(), mana_before - CAST_MANA, "sanity: clearing it cost mana")
+	var mana_at_counter := ms.p1.mana.get_current()
+	_counter(ms)
+	assert_eq(ms.p1.mana.get_current(), mana_at_counter - CAST_MANA,
+		"the mana paid to clear a Boulder is NOT refunded by the reversal: P1 is down exactly the "
+		+ "Counterspell's own staging cost and nothing came back (AC 17)")
+	assert_false(ms.p1.hand.is_covered(covered_slot),
+		"...and the cleared Boulder is not re-planted either -- reverse what is LEFT (AC 17)")
+
+
+## REVIEW FIX m3 (`6-5g/R10`): TWO LIVE ROCKSLING COPIES, exercised rather than argued by reading. The
+## victim casts Rocksling #1 (one stone lands and plants a Boulder, one is in flight, one still owed), then
+## casts Rocksling #2 and is countered MID-CAST of #2. #2's cast is interrupted; #1's own products -- its
+## pending burst, its in-flight stone and its planted Boulder -- are all untouched, because the fresh packet
+## #2 opened at its own press holds no parts of #1's at all (`_reversal_kind_of_shot`'s recorded-index
+## discrimination is the same mechanism; this is the Rocksling-specific half m3 found untested).
+func test_countering_a_second_rocksling_mid_cast_leaves_the_first_casts_products_untouched() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_SLING)
+	_idle(ms, SLING_CAST_TICKS)
+	assert_eq(ms.p2.projectiles.size(), 1, "sanity: the first stone left at the strike")
+	_victim_shot_lands(ms, 0)
+	assert_eq(ms.p1.hand.cover_count(), 1, "sanity: and planted one Boulder in P1's hand")
+	var covered_slot: int = ms.p1.hand.covered_indices()[0]
+	_idle(ms, SLING_INTERVAL_TICKS)
+	assert_eq(ms.p2.projectiles.size(), 2, "sanity: the second stone launched")
+	assert_true(ms.p2.projectiles.is_alive_at(1), "sanity: and is in the air")
+	assert_true(ms.p2.has_pending_burst(), "sanity: with the third still owed")
+	_victim_casts(ms, ID_SLING_B)
+	assert_true(ms.p2.is_casting(), "sanity: the SECOND copy's cast is running")
+	assert_eq(int((ms.p2.to_snapshot()["reversal"] as Array)[0]), PlayerState.REVERSAL_ROCKSLING,
+		"sanity: the packet now describes the SECOND cast, opened fresh at its own press")
+	_counter(ms)
+	assert_false(ms.p2.is_casting(), "the SECOND cast is interrupted (AC 11, m3)")
+	assert_true(ms.p2.has_pending_burst(),
+		"...the FIRST cast's pending burst is untouched: the fresh packet holds no PART_BURST of its own (m3)")
+	assert_true(ms.p2.projectiles.is_alive_at(1),
+		"...the FIRST cast's in-flight stone is untouched (m3)")
+	assert_true(ms.p1.hand.is_covered(covered_slot),
+		"...and the Boulder the FIRST cast planted stays covering (m3)")
+
+
+# ------------------------------------------------------------------ AC 19-20: Class 3, Corpse Bomb
+
+## AC 19/AC 20 (`6-5g/R12`): countering a Corpse Bomb vanishes the skulls still in flight, refunds what a
+## landed skull actually removed, and raises every converted minion from its own corpse at its PRE-DEATH hp.
+func test_countering_a_corpse_bomb_vanishes_skulls_refunds_landed_and_raises_the_minions() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(MINION_HP, MINION_KIND)
+	ms.p2.units.add(MINION_HP, MINION_KIND)
+	ms.p2.units.apply_damage_at(1, 4.0, CORPSE_TICKS)   # so its pre-death hp is DISTINCT from the maximum
+	var wounded_hp := ms.p2.units.hp_at(1)
+	_victim_casts(ms, ID_BOMB)
+	assert_false(ms.p2.units.is_alive_at(0), "sanity: both minions were converted")
+	assert_false(ms.p2.units.is_alive_at(1), "sanity: including the wounded one")
+	assert_eq(ms.p2.projectiles.size(), 2, "sanity: two skulls in the air")
+	_victim_shot_lands(ms, 0)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - BOMB_DAMAGE, 0.0001, "sanity: one skull landed")
+	assert_true(ms.p2.projectiles.is_alive_at(1), "sanity: the other is still flying")
+	_counter(ms)
+	assert_false(ms.p2.projectiles.is_alive_at(1), "the skull still in flight vanishes (AC 19)")
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP, 0.0001,
+		"the landed skull's damage is refunded (AC 19)")
+	assert_almost_eq(ms.p2.units.hp_at(2), MINION_HP, 0.0001,
+		"the first converted minion rises again at its pre-death hp (AC 20)")
+	assert_almost_eq(ms.p2.units.hp_at(3), wounded_hp, 0.0001,
+		"...and the WOUNDED one at ITS pre-death hp, not at the kind's maximum (AC 20)")
+	assert_false(ms.p2.units.has_corpse_at(0), "...each restore consumed its own corpse (AC 20)")
+	assert_false(ms.p2.units.has_corpse_at(1), "...both of them")
+
+
+## AC 20's EXCEPTION (`6-5g/R11`/`6-5f/R29`): a converted minion whose corpse has already expired is NOT
+## restored, while a sibling whose corpse survives is -- the partial reversal, not a refusal.
+func test_a_converted_minion_whose_corpse_expired_is_not_restored_but_its_sibling_is() -> void:
+	var ms := _make_match()
+	ms.p2.units.add(MINION_HP, MINION_KIND)
+	ms.p2.units.add(MINION_HP, MINION_KIND)
+	_victim_casts(ms, ID_BOMB)
+	# One corpse is taken away under the reversal's feet; the other is left to survive.
+	ms.p2.units.consume_corpse_at(0)
+	assert_false(ms.p2.units.has_corpse_at(0), "sanity: the first corpse is gone")
+	assert_true(ms.p2.units.has_corpse_at(1), "sanity: the second is not")
+	var size_before := ms.p2.units.size()
+	_counter(ms)
+	assert_eq(ms.p2.units.size(), size_before + 1,
+		"exactly ONE minion came back: the one whose corpse survived (AC 20)")
+	assert_almost_eq(ms.p2.units.hp_at(size_before), MINION_HP, 0.0001,
+		"...at its pre-death hp")
+
+
+# ------------------------------------------------------------------ AC 22: the minion / totem split
+
+## AC 22 (`6-5g/R11`): a MINION killed by a countered Honed Bolt comes back from its own corpse at its
+## pre-death hp, through the SAME general restore rule AC 20 uses -- reached through the bolt's own non-hero
+## branch, which is what makes the case real rather than hypothetical.
+func test_a_minion_killed_by_a_countered_bolt_comes_back_from_its_corpse() -> void:
+	var ms := _make_match()
+	ms.p1.units.add(MINION_HP, MINION_KIND)
+	ms.p1.units.apply_damage_at(0, MINION_HP - BOLT_DAMAGE, CORPSE_TICKS)   # one bolt is now lethal
+	var pre_death := ms.p1.units.hp_at(0)
+	ms.p2.lock_target_slot = 0
+	ms.p2.lock_target_index = 0
+	_victim_casts(ms, ID_BOLT)
+	_idle(ms, BOLT_CAST_TICKS)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: the bolt killed the minion")
+	assert_true(ms.p1.units.has_corpse_at(0), "sanity: and it left a corpse")
+	_counter(ms)
+	assert_eq(ms.p1.units.size(), 2, "the killed minion is restored as a new record (AC 22)")
+	assert_almost_eq(ms.p1.units.hp_at(1), pre_death, 0.0001,
+		"...at its PRE-DEATH hp, through the same general restore rule (AC 22)")
+	assert_false(ms.p1.units.has_corpse_at(0), "...consuming its own corpse")
+
+
+## AC 22's other two clauses: a TOTEM killed by a countered spell stays dead (it leaves no corpse), while a
+## SURVIVING totem that was merely damaged gets its hp back through the ordinary hp-refund path.
+func test_a_killed_totem_stays_dead_and_a_damaged_surviving_totem_gets_its_hp_back() -> void:
+	var totem_kind := 1
+	# (a) KILLED: no corpse, so nothing to restore -- and the reversal says so by doing nothing.
+	var killed := _make_match()
+	killed.p1.units.add(BOLT_DAMAGE, totem_kind)   # exactly lethal to one bolt
+	killed.p2.lock_target_slot = 0
+	killed.p2.lock_target_index = 0
+	_victim_casts(killed, ID_BOLT)
+	_idle(killed, BOLT_CAST_TICKS)
+	assert_false(killed.p1.units.is_alive_at(0), "sanity: the totem died")
+	assert_false(killed.p1.units.has_corpse_at(0), "sanity: a totem leaves NO corpse (6-5b's own rule)")
+	_counter(killed)
+	assert_eq(killed.p1.units.size(), 1, "a killed totem stays dead: no record was added (AC 22)")
+	assert_false(killed.p1.units.is_alive_at(0), "...and the dead one is still dead")
+	# (b) SURVIVED: the hp actually removed comes back on the unit itself.
+	var hurt := _make_match()
+	hurt.p1.units.add(MINION_HP * 3.0, totem_kind)
+	hurt.p2.lock_target_slot = 0
+	hurt.p2.lock_target_index = 0
+	_victim_casts(hurt, ID_BOLT)
+	_idle(hurt, BOLT_CAST_TICKS)
+	assert_almost_eq(hurt.p1.units.hp_at(0), MINION_HP * 3.0 - BOLT_DAMAGE, 0.0001,
+		"sanity: the bolt wounded the totem without killing it")
+	_counter(hurt)
+	assert_almost_eq(hurt.p1.units.hp_at(0), MINION_HP * 3.0, 0.0001,
+		"a surviving damaged unit gets its hp back through the ordinary refund path (AC 22)")
+	assert_eq(hurt.p1.units.size(), 1, "...on the SAME record -- no restore, no new record (AC 22)")
+
+
+# ------------------------------------------------------------------ REVIEW FIX B1/M1: the kill flag
+
+## REVIEW FIX B1 (`6-5g/R21`): the review's own probe scenario, as a real test -- and MUTATION-EXERCISED. A
+## minion that SURVIVED the first Rocksling stone and was later killed by an UNRELATED cause is NOT restored,
+## and the corpse that OTHER cause wrote is left completely untouched -- the fabricated-resurrection blocker
+## this fix closes.
+##
+## ROCKSLING, NOT HONED BOLT, IS THE FIXTURE, deliberately: a lone `PART_DAMAGE` (the bolt's own shape) is
+## the packet's ONLY part, so the gate's own per-kind arm already refuses the whole counter once that one
+## part's flag is false and the unit is dead -- the mutated line in `_reverse_recorded_parts` is then
+## UNREACHABLE, and the mutation this fix's own proof requires would survive for the wrong reason. Rocksling's
+## still-pending burst is a SECOND, genuinely surviving part (`PART_BURST`), so the gate admits the counter on
+## its own merits and the reversal actually walks the flagged, unflagged-in-truth `PART_DAMAGE` element.
+func test_a_minion_that_survived_a_stone_and_died_to_something_else_is_not_restored() -> void:
+	var ms := _make_match()
+	ms.p1.units.add(MINION_HP, MINION_KIND)
+	ms.p2.lock_target_slot = 0
+	ms.p2.lock_target_index = 0
+	_victim_casts(ms, ID_SLING)
+	_idle(ms, SLING_CAST_TICKS)
+	assert_eq(ms.p2.projectiles.size(), 1, "sanity: the first stone left at the strike")
+	_victim_shot_lands(ms, 0)
+	assert_true(ms.p1.units.is_alive_at(0),
+		"sanity: the stone wounded but did NOT kill (MINION_HP > SLING_DAMAGE)")
+	assert_almost_eq(ms.p1.units.hp_at(0), MINION_HP - SLING_DAMAGE, 0.0001)
+	assert_true(ms.p2.has_pending_burst(),
+		"sanity: the burst is still owed -- a SECOND surviving part keeps the counter admitted")
+	# A DIFFERENT, unrelated cause finishes the minion off.
+	ms.p1.units.apply_damage_at(0, MINION_HP - SLING_DAMAGE, CORPSE_TICKS)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: the minion is dead now, but not by the stone")
+	assert_true(ms.p1.units.has_corpse_at(0), "sanity: and left a corpse -- the OTHER cause's own")
+	var corpse_hp_before := ms.p1.units.hp_at_death_at(0)
+	var size_before := ms.p1.units.size()
+	var rejections := _rejections(ms.p1)
+	_counter(ms)
+	assert_eq(rejections, [], "sanity: the counter was ADMITTED -- the pending burst is a real target (B1)")
+	assert_eq(ms.p1.units.size(), size_before,
+		"no minion is restored: the stone did not kill this one, so its corpse is not the counter's to claim "
+		+ "(B1)")
+	assert_true(ms.p1.units.has_corpse_at(0), "...the corpse the OTHER cause wrote is left completely alone")
+	assert_almost_eq(ms.p1.units.hp_at_death_at(0), corpse_hp_before, 0.0001,
+		"...at the SAME pre-death hp it already held -- untouched, not overwritten")
+
+
+## REVIEW FIX M1 (`6-5g/R21`): a minion the bolt itself KILLED, whose corpse has since EXPIRED, leaves
+## nothing to reverse -- refused BEFORE the orb spend, silently, exactly as AC 12/AC 18 require. Before this
+## fix the blanket `reversal_amount != 0.0` clause admitted this case as a pure no-op: orb spent, card gone,
+## nothing undone.
+func test_a_bolt_kill_whose_corpse_has_expired_is_refused_before_the_orb() -> void:
+	var ms := _make_match()
+	ms.p1.units.add(MINION_HP, MINION_KIND)
+	ms.p1.units.apply_damage_at(0, MINION_HP - BOLT_DAMAGE, CORPSE_TICKS)   # one bolt is now lethal
+	ms.p2.lock_target_slot = 0
+	ms.p2.lock_target_index = 0
+	_victim_casts(ms, ID_BOLT)
+	_idle(ms, BOLT_CAST_TICKS)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: the bolt killed the minion")
+	assert_true(ms.p1.units.has_corpse_at(0), "sanity: leaving a corpse")
+	_idle(ms, CORPSE_TICKS + 1)
+	assert_false(ms.p1.units.has_corpse_at(0), "sanity: the corpse has since expired")
+	_stage(ms, ID_COUNTER)
+	var orbs_before := ms.p1.orbs.get_count(Enums.CardColor.GREEN)
+	var rejections := _rejections(ms.p1)
+	_activate(ms)
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+		"a bolt kill whose corpse has expired leaves nothing to reverse: refused as no-target (M1)")
+	assert_eq(ms.p1.orbs.get_count(Enums.CardColor.GREEN), orbs_before, "...the orb is NOT spent")
+	assert_true(ms.pitch.is_staged(0), "...the card STAYS staged")
+
+
+## REVIEW FIX B1 (`6-5g/R21`): the flag is VISIBLE in the snapshot's `reversal` key -- the fifth element
+## (`flags`), hashed -- proven directly rather than only through its behavioural consequence above.
+func test_the_kill_flag_is_visible_in_the_snapshot() -> void:
+	var ms := _make_match()
+	ms.p1.units.add(MINION_HP, MINION_KIND)
+	ms.p1.units.apply_damage_at(0, MINION_HP - BOLT_DAMAGE, CORPSE_TICKS)   # one bolt is now lethal
+	ms.p2.lock_target_slot = 0
+	ms.p2.lock_target_index = 0
+	_victim_casts(ms, ID_BOLT)
+	_idle(ms, BOLT_CAST_TICKS)
+	assert_false(ms.p1.units.is_alive_at(0), "sanity: the bolt killed the minion")
+	var flags: Array = (ms.p2.to_snapshot()["reversal"] as Array)[4]
+	assert_eq(flags, [true] as Array[bool],
+		"the PART_DAMAGE element's flag is TRUE: this resolution's own hit killed the struck unit")
+
+
+# ------------------------------------------------------------------ AC 31: the per-kind gate arms
+
+## AC 31 (`6-5g/R13`): `_reversal_has_anything_left` gains ONE ARM PER NEW KIND, and this is the arms'
+## non-vacuity proof in the NEGATIVE direction for every one of the seven: with the kind written but
+## nothing of it surviving, each is refused -- which is also what proves the packet's kind alone never
+## admits a card. The three buffs' expired windows are AC 8's case; the four part-list kinds' empty cases
+## are here.
+##
+## WHY ONE TEST FOR FOUR KINDS: the four share one arm over one part vocabulary (see
+## `_reverse_recorded_parts`), so four separate tests would be four copies of one assertion.
+func test_every_new_kind_with_nothing_left_is_refused_through_the_standing_gate() -> void:
+	# HONED BOLT: cast interrupted, nothing landed (also AC 18's first shape, asserted there).
+	# FIREBALL: the ball expired in the air (AC 18's second shape, asserted there).
+	# ROCKSLING: every stone expired in the air with no Boulder planted and nothing landed.
+	var sling := _make_match()
+	_victim_casts(sling, ID_SLING)
+	_idle(sling, SLING_CAST_TICKS)
+	var ceiling := 0
+	while (sling.p2.has_pending_burst() or _any_shot_alive(sling.p2)) and ceiling < 400:
+		_idle(sling, 1)
+		ceiling += 1
+	assert_false(sling.p2.has_pending_burst(), "sanity: the whole burst fired")
+	assert_false(_any_shot_alive(sling.p2), "sanity: and every stone expired in the air")
+	assert_eq(sling.p1.hand.cover_count(), 0, "sanity: no Boulder was ever planted")
+	var sling_rejections := _rejections(sling.p1)
+	_counter(sling)
+	assert_eq(sling_rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+		"a Rocksling whose every stone missed with no Boulder planted is refused (AC 18/AC 31)")
+	# CORPSE BOMB: every skull expired in the air and every corpse is gone.
+	var bomb := _make_match()
+	bomb.p2.units.add(MINION_HP, MINION_KIND)
+	_victim_casts(bomb, ID_BOMB)
+	bomb.p2.units.consume_corpse_at(0)
+	var bomb_ceiling := 0
+	while _any_shot_alive(bomb.p2) and bomb_ceiling < 400:
+		_idle(bomb, 1)
+		bomb_ceiling += 1
+	assert_false(_any_shot_alive(bomb.p2), "sanity: the skull expired in the air")
+	var bomb_rejections := _rejections(bomb.p1)
+	_counter(bomb)
+	assert_eq(bomb_rejections, [[&"card_cast", MatchState.REASON_NO_COUNTER_TARGET]],
+		"a Corpse Bomb whose skull missed and whose corpse is gone is refused (AC 31)")
+
+
+## AC 10/AC 23 (`6-5g/R10`): a SECOND copy's resolution takes over the packet, and the FIRST copy's shot --
+## still in the air -- can no longer charge anything to it. The identity is the recorded PROJECTILE INDEX,
+## which `ProjectileBoard` never reuses; without that, the older shot's landing would refund hp against the
+## newer resolution's record.
+func test_an_orphaned_shot_from_an_earlier_resolution_charges_nothing_to_the_new_packet() -> void:
+	var ms := _make_match()
+	_victim_activates(ms, ID_FIRE)
+	_idle(ms, FIRE_CAST_TICKS)
+	assert_true(ms.p2.projectiles.is_alive_at(0), "sanity: copy one's ball is in the air")
+	# A SECOND resolution overwrites the packet -- a Vampiric Aura, so the new kind is unmistakable.
+	_victim_casts(ms, ID_AURA)
+	assert_eq(int((ms.p2.to_snapshot()["reversal"] as Array)[0]), PlayerState.REVERSAL_VAMPIRIC_AURA,
+		"sanity: the packet now describes the Aura")
+	_victim_shot_lands(ms, 0)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - FIRE_DAMAGE, 0.0001, "sanity: the old ball landed")
+	assert_almost_eq(float((ms.p2.to_snapshot()["reversal"] as Array)[5]), 0.0, 0.0001,
+		"the orphaned shot charged NOTHING to the Aura's packet (`6-5g/R10`)")
+	_counter(ms)
+	assert_almost_eq(ms.p1.hero.get_hp(), MAX_HP - FIRE_DAMAGE, 0.0001,
+		"...so countering the Aura refunds no hp: it reverses the Aura and nothing else")
+	assert_false(ms.p2.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA), "...and it did end the Aura")
+
+
+## AC 23's regression half for this story's own seven: every one of them, played with NO Counterspell
+## anywhere, still resolves exactly as its own story shipped it. A guard against the six new recorders and
+## the two new press-seat writes having changed any card's ordinary behaviour.
+func test_the_seven_new_cards_still_resolve_normally_when_no_counterspell_is_played() -> void:
+	var aura := _make_match()
+	_victim_casts(aura, ID_AURA)
+	assert_true(aura.p2.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA), "Vampiric Aura still arms")
+	var hound := _make_match()
+	_victim_casts(hound, ID_HOUND)
+	_advance(hound, InputIntent.new(), _roll_intent())
+	assert_almost_eq(hound.p2.hero.velocity.length(),
+		ROLL_DISTANCE / (float(ROLL_TICKS) / TimingWindow.TICK_HZ) * HOUND_DISTANCE_MULT, 0.0001,
+		"Bloodhound Step still boosts a roll")
+	var frost := _make_match()
+	_victim_casts(frost, ID_FROST)
+	_victim_hits_counterer(frost)
+	assert_true(frost.p1.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW), "Frostbite still slows")
+	var bolt := _make_match()
+	_victim_casts(bolt, ID_BOLT)
+	_idle(bolt, BOLT_CAST_TICKS)
+	assert_almost_eq(bolt.p1.hero.get_hp(), MAX_HP - BOLT_DAMAGE, 0.0001, "Honed Bolt still strikes")
+	assert_true(bolt.p1.hero.stun.is_running, "...and still stuns")
+	var fire := _make_match()
+	_victim_activates(fire, ID_FIRE)
+	_idle(fire, FIRE_CAST_TICKS)
+	assert_eq(fire.p2.projectiles.size(), 1, "Fireball still launches one shot")
+	assert_almost_eq(fire.p2.projectiles.damage_at(0), FIRE_DAMAGE, 0.0001,
+		"...at its damage locked at staging")
+	var sling := _make_match()
+	_victim_casts(sling, ID_SLING)
+	_idle(sling, SLING_CAST_TICKS)
+	assert_eq(sling.p2.projectiles.size(), 1, "Rocksling still throws its first stone at the strike")
+	assert_true(sling.p2.has_pending_burst(), "...and still schedules the rest")
+	var bomb := _make_match()
+	bomb.p2.units.add(MINION_HP, MINION_KIND)
+	_victim_casts(bomb, ID_BOMB)
+	assert_false(bomb.p2.units.is_alive_at(0), "Corpse Bomb still converts its own minion")
+	assert_eq(bomb.p2.projectiles.size(), 1, "...and still throws its skull")
+
+
+## AC 24: no reversal arm this story adds consumes RNG. The 6-5f test of the same name covers the six
+## instant kinds; this covers the seven new ones at the arm with the strongest claim to draw -- Rocksling's,
+## which walks a Boulder slot and cancels a burst (the Boulder PLANT does draw, at its own seat; the
+## REMOVAL must not).
+func test_no_new_reversal_arm_consumes_rng() -> void:
+	var ms := _make_match()
+	_victim_casts(ms, ID_SLING)
+	_idle(ms, SLING_CAST_TICKS)
+	_victim_shot_lands(ms, 0)
+	var state_before: int = ms.to_snapshot()["rng_state"]
+	_counter(ms)
+	assert_eq(ms.to_snapshot()["rng_state"], state_before,
+		"the reversal drew no random number: the stream is where it was (AC 24)")
+
+
+func _any_shot_alive(player: PlayerState) -> bool:
+	return not player.projectiles.living_indices().is_empty()
+
+
 # ------------------------------------------------------------------ fixture
 
 func _make_match(effects: Dictionary[StringName, CardEffect] = {}) -> MatchState:
@@ -732,12 +1492,23 @@ func _config() -> BalanceConfig:
 	c.hero_damage_to_unit = 3.0
 	c.minion_retarget_interval_seconds = 1000.0
 	c.corpse_lifetime_seconds = CORPSE_SECONDS
+	# Story 6-5g: the ROLL (Bloodhound Step's own consumer, AC 7) and the melee windows Frostbite's trigger
+	# rides (AC 5/AC 6). `stamina_regen_per_second` 0 so a roll's cost cannot be refunded by regen mid-test.
+	c.roll_stamina_cost = ROLL_COST
+	c.roll_duration_seconds = float(ROLL_TICKS) / TimingWindow.TICK_HZ
+	c.roll_iframe_seconds = float(ROLL_IFRAME_TICKS) / TimingWindow.TICK_HZ
+	c.roll_distance = ROLL_DISTANCE
+	c.stamina_regen_per_second = 0.0
 	# Long enough that no staged card fizzles inside any test here -- the AC 11 refusal test needs the
 	# countdown RUNNING rather than closed, which is a different fact from being long.
 	c.pitch_stage_timer_seconds = 30.0
 	c.max_orbs_per_color = 99
+	# Story 6-5g (AC 22): a TOTEM kind joins the fixture, because the minion-versus-totem restore SPLIT is an
+	# AC and a fixture with one kind cannot express it. Index 0 stays the minion, so every `6-5f` test's
+	# `MINION_KIND` is untouched.
 	c.unit_kinds = [UnitKindFixture.melee(CardEffectResolver.KIND_MINION, MINION_HP, MINION_DAMAGE,
-			2, 3, 4, 2.0)] as Array[UnitKindProfile]
+			2, 3, 4, 2.0),
+			UnitKindFixture.inert(CardEffectResolver.KIND_COMBAT_TOTEM, MINION_HP)] as Array[UnitKindProfile]
 	return c
 
 
@@ -778,6 +1549,11 @@ func _effects() -> Dictionary[StringName, CardEffect]:
 		ID_COUNTER: &"counterspell", ID_COUNTER_B: &"counterspell",
 		ID_VANGUARD: &"summon_ruin_vanguard", ID_CULLING: &"culling", ID_WARD: &"grave_ward",
 		ID_RAISE: &"raise_dead", ID_DRAIN: &"drain", ID_BOOM: &"boom", ID_BOLT: &"honed_bolt",
+		ID_AURA: &"vampiric_aura", ID_HOUND: &"bloodhound_step", ID_FROST: &"frostbite",
+		ID_FIRE: &"fireball", ID_SLING: &"rocksling", ID_BOMB: &"corpse_bomb",
+		# REVIEW FIX (m2/m3): the second copies resolve through the SAME effect id as their first, exactly
+		# as `ID_COUNTER_B` already does for Counterspell -- two cards, one effect, real copy discrimination.
+		ID_FROST_B: &"frostbite", ID_SLING_B: &"rocksling",
 	}
 	var out: Dictionary[StringName, CardEffect] = {}
 	for id: StringName in ids:
@@ -795,6 +1571,46 @@ func _effects() -> Dictionary[StringName, CardEffect]:
 				e.heal_amount = DRAIN_HEAL
 			&"boom":
 				e.damage_amount = BOOM_DAMAGE
+			# Story 6-5g: the seven. The three buffs need their windows; the three cast cards need a cast
+			# frame; the three projectile throwers need a FLIGHT PROFILE (`launch_speed`/`travel_budget`),
+			# without which `_advance_projectiles` finds a zero budget and consumes every shot on its first
+			# tick -- which would make "in flight" untestable.
+			&"vampiric_aura":
+				e.duration_seconds = _seconds(AURA_TICKS)
+				e.lifesteal_fraction = AURA_LIFESTEAL
+			&"bloodhound_step":
+				e.duration_seconds = _seconds(HOUND_TICKS)
+				e.roll_distance_multiplier = HOUND_DISTANCE_MULT
+				e.roll_iframe_multiplier = HOUND_IFRAME_MULT
+			&"frostbite":
+				e.duration_seconds = _seconds(FROST_TICKS)
+				e.slow_speed_multiplier = FROST_SLOW
+				e.slow_duration_seconds = _seconds(FROST_SLOW_TICKS)
+			&"honed_bolt":
+				e.cast_seconds = _seconds(BOLT_CAST_TICKS)
+				e.damage_amount = BOLT_DAMAGE
+				e.stun_seconds = _seconds(BOLT_STUN_TICKS)
+				e.root_seconds = _seconds(BOLT_ROOT_TICKS)
+			&"fireball":
+				e.cast_seconds = _seconds(FIRE_CAST_TICKS)
+				e.mana_cap = FIRE_MANA_CAP
+				e.damage_per_mana = FIRE_DAMAGE_PER_MANA
+				e.launch_speed = LAUNCH_SPEED
+				e.max_speed = LAUNCH_SPEED
+				e.travel_budget = TRAVEL_BUDGET
+			&"rocksling":
+				e.cast_seconds = _seconds(SLING_CAST_TICKS)
+				e.damage_amount = SLING_DAMAGE
+				e.boulders_per_cast = SLING_STONES
+				e.boulder_interval_seconds = _seconds(SLING_INTERVAL_TICKS)
+				e.launch_speed = LAUNCH_SPEED
+				e.max_speed = LAUNCH_SPEED
+				e.travel_budget = TRAVEL_BUDGET
+			&"corpse_bomb":
+				e.damage_amount = BOMB_DAMAGE
+				e.launch_speed = LAUNCH_SPEED
+				e.max_speed = LAUNCH_SPEED
+				e.travel_budget = TRAVEL_BUDGET
 		out[id] = e
 	var boulder := CardEffect.new()
 	boulder.effect_id = &"boulder_discard"
@@ -840,6 +1656,48 @@ func _rejections(player: PlayerState) -> Array:
 	player.hero.action_rejected.connect(
 		func(action: StringName, reason: StringName) -> void: out.append([action, reason]))
 	return out
+
+
+func _seconds(ticks: int) -> float:
+	return float(ticks) / TimingWindow.TICK_HZ
+
+
+## Story 6-5g: P2 (THE VICTIM) lands one CONFIRMED HERO MELEE HIT on P1 -- Frostbite's own trigger seat
+## (AC 5/AC 6). `test_spell_framework.gd`'s `_p1_hits_p2` with the slots swapped, and for its reason: a
+## synthetic contact fact needs a real swing behind it, because `_register_attacker_hit` consults the
+## attacker's live dedupe record.
+func _victim_hits_counterer(ms: MatchState) -> void:
+	_advance(ms, InputIntent.new(), _press(&"attack"))
+	for _t in 2:
+		_advance(ms, InputIntent.new(), InputIntent.new())
+	ms.push_contact([1, TargetingService.HERO_INDEX], [0, TargetingService.HERO_INDEX],
+			ms.p2.hero.attack_index, Vector2.DOWN, MatchState.CONTACT_STRIKE)
+	_advance(ms, InputIntent.new(), InputIntent.new())
+
+
+## Story 6-5g: one of P2's SHOTS lands on the address it was thrown at. `test_fireball.gd`'s
+## `_push_shot_contact` with the attacker on slot 1.
+func _victim_shot_lands(ms: MatchState, shot: int) -> void:
+	var board := ms.p2.projectiles
+	var address: Array[int] = [board.target_slot_at(shot), board.target_index_at(shot)]
+	var attacker: Array[int] = [1, MatchState.projectile_attacker_index(shot)]
+	var target_side: PlayerState = ms.p1 if address[0] == 0 else ms.p2
+	ms.push_contact(attacker, address, board.flight_ticks_at(shot), target_side.hero.facing,
+			MatchState.CONTACT_STRIKE)
+	_advance(ms, InputIntent.new(), InputIntent.new())
+
+
+func _press(action: StringName) -> InputIntent:
+	var i := InputIntent.new()
+	i.pressed[action] = true
+	i.held[action] = true
+	return i
+
+
+func _roll_intent() -> InputIntent:
+	var i := _press(&"roll")
+	i.move_dir = Vector2(1.0, 0.0)
+	return i
 
 
 func _idle(ms: MatchState, n: int) -> void:

@@ -56,6 +56,10 @@ const PRE_6_5A_PATH := "user://test_6_5a_pre_pitch_effects.rec"
 const PRE_6_5B_PATH := "user://test_6_5b_pre_drain_pushes.rec"
 ## Story 6-5c (AC 23): the v14 refusal fixture's own path, on its siblings' naming.
 const PRE_6_5C_PATH := "user://test_6_5c_pre_hero_cast.rec"
+## Story 6-5g (AC 27, REVIEW FIX m5): the v18 refusal fixture's own path, on its siblings' naming -- this
+## story's own dev pass had reused `PRE_6_5C_PATH` (harmless, since each test removes its file before the
+## next runs, but the wrong name for what it wrote); its own constant now describes its own fixture.
+const PRE_6_5G_PATH := "user://test_6_5g_pre_v18_counterspell.rec"
 ## Story 6-5a (AC 2/AC 6): the pitch-effect fixture's non-default flat numbers, round-tripped by value.
 const PITCH_EFFECT_SECONDS := 9.5
 const PITCH_EFFECT_MULTIPLIER := 2.5
@@ -227,8 +231,17 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 18,
-		"FORMAT_VERSION is 18 as of story 6-5f (AC 29) -- ONE MEASURED CAUSE, and the FIRST bump in this "
+	assert_eq(RecordFile.FORMAT_VERSION, 19,
+		"FORMAT_VERSION is 19 as of story 6-5g (AC 27) -- ONE MEASURED CAUSE, again a BEHAVIOUR change and "
+		+ "NOT a widened recorded shape (this story adds no `CardEffect` export, no `BalanceConfig` field "
+		+ "and no intake channel, so every recorded channel's shape is bit-identical to v18's). THE CAUSE: "
+		+ "through v18 a Counterspell against a resolution of any of the SEVEN timed/in-flight cards was "
+		+ "REFUSED as no-target (`6-5f/R37`'s interim rule) and left the card staged with its orbs unspent; "
+		+ "the SAME recorded intent stream replayed against this build ACTIVATES -- orbs spent, a running "
+		+ "buff ended or a cast interrupted or hp refunded, different final hash, nothing in the file to "
+		+ "warn anyone. v18 is refused HARD, no shim. THE GOLDEN IS NOT A REASON and did not move for this "
+		+ "story (measured): a record carries INPUTS and CONTENT, never a hash. It was 18 as of story 6-5f "
+		+ "(AC 29) -- ONE MEASURED CAUSE, and the FIRST bump in this "
 		+ "file caused by a BEHAVIOUR change rather than by a widened recorded shape. THE CAUSE, in two "
 		+ "halves, both silent: (a) `counterspell` was a DEFERRED NO-OP through v17, so a v17 record in "
 		+ "which a player activated Honed Bolt's pitch spent the orbs and did nothing, while replaying "
@@ -875,6 +888,35 @@ func test_a_v17_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_6_5C_PATH)
 
 
+## Story 6-5g (AC 27): A v18 RECORD IS REFUSED WITH A REASON, NO SHIM -- the per-bump fixture, kept this
+## time rather than restored at a review (`6-5f`'s own M1 finding, discharged by writing it in the same pass
+## as the bump).
+##
+## WHAT A v18 FILE WOULD SILENTLY DO: through v18 a Counterspell aimed at a resolution of one of the seven
+## timed/in-flight cards was refused as no-target and changed nothing at all, so a v18 record can contain an
+## activation that spent no orbs and did nothing. Replayed against this build the same press ACTIVATES --
+## the orbs go, the card leaves the zone, and a buff ends or a cast is interrupted or hp comes back. The
+## final hash differs and nothing in the file says why, which is what the exact-match refusal is for.
+func test_a_v18_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_6_5G_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_6_5G_PATH, 18)
+	var refused := RecordFile.load_record(PRE_6_5G_PATH)
+	assert_null(refused["record"],
+		"a v18 record is REFUSED -- the seven timed/in-flight cards were uncounterable through v18, so a "
+		+ "recorded Counterspell that did nothing would replay as a real REVERSAL under this build")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("18"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_6_5G_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_6_5G_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_6_5G_PATH)
+
+
 ## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): THE MEASUREMENT BEHIND THE BUMP, on the 6-5c
 ## row-shape pin's shape verbatim -- the two new `CardEffect` exports really do widen every recorded effect
 ## row, read out of an actually-saved file rather than asserted as a count.
@@ -1321,9 +1363,11 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 18,
+	assert_eq(RecordFile.FORMAT_VERSION, 19,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 18 (last: 6-5f's Counterspell, which stopped being a deferred "
+		+ "version has since moved to 19 (last: 6-5g, which made the seven timed/in-flight cards "
+		+ "counterable and retired 6-5f's interim refusal -- a BEHAVIOUR bump with no widened recorded "
+		+ "shape at all, the second such in a row; before it 6-5f's Counterspell, which stopped being a deferred "
 		+ "no-op and started reversing the opponent's last resolved card, plus the Boulder clear no "
 		+ "longer writing `last_resolved_card` -- a BEHAVIOUR bump, the first in this file's history "
 		+ "with no widened recorded shape behind it; before it 6-5e's widened CardEffect and BalanceConfig rows -- "

@@ -1229,8 +1229,9 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 18,
-		"...at FORMAT_VERSION 18, read out of the FILE rather than off the constant (6-5f AC 29; 17 as of 6-5e AC 39)")
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 19,
+		"...at FORMAT_VERSION 19, read out of the FILE rather than off the constant (6-5g AC 27; 18 as of "
+		+ "6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
 		"...and it loads back: %s" % str(result["error"]))
@@ -1929,8 +1930,8 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 18,
-		"...at FORMAT_VERSION 18, read out of the FILE rather than off the constant (AC 29)")
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 19,
+		"...at FORMAT_VERSION 19, read out of the FILE rather than off the constant (6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
 	var loaded: IntentRecorder = result["record"]
@@ -2188,4 +2189,341 @@ func _counter_pitch_effects() -> Dictionary[StringName, CardEffect]:
 	out[COUNTER_ROCK_CARD] = boom
 	out[COUNTER_SUMMON_CARD] = culling
 	out[COUNTER_COUNTER_CARD] = counterspell
+	return out
+
+
+# ------------------------------------------------- 6-5g: the timed / in-flight run (AC 28)
+
+## Story 6-5g (AC 28): THE THIRD FULL-CONTENT RECORDED RUN, and it exists because AC 28 names the SEVEN new
+## reversal kinds and asks for each of them at least once in ONE recorded match -- "a timed buff ended
+## mid-window, a cast interrupted, a landed strike refunded, an in-flight shot vanished, and Corpse Bomb's
+## restore".
+##
+## A THIRD RUN RATHER THAN AN EXTENSION OF THE COUNTERSPELL RUN, on that run's own stated reason verbatim:
+## 6-5f's run is that story's AC 30 evidence, and threading seven more resolutions through it would move its
+## hash and every one of its sequence assertions, making one story's proof depend on the next story's content.
+##
+## WHO IS WHO: **P1 resolves all seven and P2 counters every one of them.** Seven Counterspell copies, one
+## per reversal, each staged two ticks after its target resolved and activated two ticks after that -- which
+## is what puts each counter at a DIFFERENT phase of its target: the bolt is countered mid-CAST, the Fireball
+## while its ball is IN FLIGHT, the Rocksling after a stone has LANDED with another in the air, and Corpse
+## Bomb while its skull flies and its converted minion's corpse is fresh.
+const TIMED_RECORD_PATH := "user://test_6_5g_timed_run.rec"
+const TIMED_SEED := 9191
+const TIMED_TICKS := 64
+const TIMED_AURA_TICK := 3
+const TIMED_HOUND_TICK := 9
+const TIMED_FROST_TICK := 15
+const TIMED_BOLT_TICK := 21          # cast 10 ticks: countered at t25, MID-CAST
+const TIMED_FIRE_TICK := 27          # cast 6 ticks: strikes t33, countered at t37 with the ball IN FLIGHT
+const TIMED_SLING_TICK := 41         # cast 4 ticks: strikes t45, stone lands t47, countered t51
+const TIMED_STONE_LAND_TICK := 47
+const TIMED_SUMMON_TICK := 53
+const TIMED_BOMB_TICK := 55          # instant: skull in the air, corpse fresh, countered t59
+const TIMED_BOLT_CAST_TICKS := 10
+const TIMED_FIRE_CAST_TICKS := 6
+const TIMED_SLING_CAST_TICKS := 4
+const TIMED_SLING_INTERVAL_TICKS := 4
+const TIMED_SLING_STONES := 2
+const TIMED_BUFF_TICKS := 240        # long enough that no buff expires on its own inside the run
+const TIMED_STONE_DAMAGE := 5.0
+const TIMED_BOLT_DAMAGE := 6.0
+const TIMED_BOMB_DAMAGE := 4.0
+const TIMED_MANA_COST := 1.0
+const TIMED_PITCH_MANA_COST := 1.0
+const TIMED_MANA_PER_SECOND := 60.0  # one mana per tick: no press in this run can be refused for mana
+
+const TIMED_AURA_CARD := &"timed_run_aura"
+const TIMED_HOUND_CARD := &"timed_run_hound"
+const TIMED_FROST_CARD := &"timed_run_frost"
+const TIMED_BOLT_CARD := &"timed_run_bolt"
+const TIMED_FIRE_CARD := &"timed_run_fire"
+const TIMED_SLING_CARD := &"timed_run_sling"
+const TIMED_BOMB_CARD := &"timed_run_bomb"
+const TIMED_SUMMON_CARD := &"timed_run_summon"
+const TIMED_COUNTER_CARD := &"timed_run_counter"
+const TIMED_PLANT_CARD := &"timed_run_boulder"
+
+## EIGHT ONE-OFFS AND SEVEN COUNTERS, dealt out ENTIRELY (deck_size == hand_size), so every press reads a
+## slot that is already in hand and none depends on a replacement arriving.
+const TIMED_DECK: Array[StringName] = [
+	TIMED_AURA_CARD, TIMED_HOUND_CARD, TIMED_FROST_CARD, TIMED_BOLT_CARD, TIMED_FIRE_CARD,
+	TIMED_SLING_CARD, TIMED_BOMB_CARD, TIMED_SUMMON_CARD,
+	TIMED_COUNTER_CARD, TIMED_COUNTER_CARD, TIMED_COUNTER_CARD, TIMED_COUNTER_CARD,
+	TIMED_COUNTER_CARD, TIMED_COUNTER_CARD, TIMED_COUNTER_CARD,
+]
+
+## P2's SEVEN counters as explicit `[stage tick, activate tick]` pairs, one per new kind in resolution
+## order, rather than an offset derived from each target's press.
+##
+## THE SCHEDULE IS LOAD-BEARING AND WAS CORRECTED BY MEASUREMENT: every counter must RESOLVE BEFORE P1's
+## NEXT PRESS, because a resolution overwrites the packet (`6-5f/R6`) and a counter fired after the next
+## press would reverse THAT card instead -- which is exactly what the first run of this fixture did (the
+## Fireball's counter landed after the Rocksling press and interrupted the Rocksling's cast, leaving six
+## cues instead of seven and no stone ever landing). Each pair below is therefore placed between its own
+## target's resolution and the next press, with the Fireball's and the Rocksling's late enough that their
+## casts have already struck.
+const TIMED_COUNTER_PRESSES := [[5, 7], [11, 13], [17, 19], [23, 25], [35, 37], [49, 51], [57, 59]]
+const TIMED_AURA_COUNTER := 7
+const TIMED_HOUND_COUNTER := 13
+const TIMED_FROST_COUNTER := 19
+const TIMED_BOLT_COUNTER := 25
+const TIMED_FIRE_COUNTER := 37
+const TIMED_SLING_COUNTER := 51
+const TIMED_BOMB_COUNTER := 59
+
+
+## AC 28, the primary: a recorded match in which a Counterspell reverses EACH of the seven new kinds, saved
+## and reloaded, replays from that file alone to the identical final hash.
+func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_hash() -> void:
+	var recorded := _record_a_timed_run()
+	var live: MatchState = recorded["state"]
+	var record: IntentRecorder = recorded["record"]
+	var live_hash := CanonicalHash.of(live.to_snapshot())
+	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
+	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 19,
+		"...at FORMAT_VERSION 19, read out of the FILE rather than off the constant (AC 27)")
+	var result := RecordFile.load_record(TIMED_RECORD_PATH)
+	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
+	var loaded: IntentRecorder = result["record"]
+	assert_eq(CanonicalHash.of(_replay(loaded).to_snapshot()), live_hash,
+		"AC 28: a replay driven from the SAVED AND RELOADED record alone is bit-identical")
+	for channel in ["contacts", "pitch_costs", "intents"]:
+		assert_ne(CanonicalHash.of(_replay(loaded, channel).to_snapshot()), live_hash,
+			"dropping the %s channel must DIVERGE this replay too" % channel)
+	_remove_record(TIMED_RECORD_PATH)
+
+
+## AC 28's other half, on the two earlier runs' own standard: the recorded run must actually PERFORM all
+## seven reversals, or a bit-identical replay would be proving something about a sequence of refusals. Every
+## clause is measured on the LIVE run as it passed.
+func test_the_timed_run_really_reverses_all_seven_new_kinds() -> void:
+	var seen: Dictionary = _record_a_timed_run()["seen"]
+	assert_eq((seen["cues"] as Array).size(), 7,
+		"SEVEN real reversals fired the cue -- one per new kind, none refused (got %s)"
+				% str(seen["cues"]))
+	for cue: Variant in seen["cues"]:
+		assert_eq(cue, [1, 0], "...every one of them by P2 against P1")
+	assert_false(bool(seen["aura_after"]), "(1) the timed buff's rule was ended mid-window (AC 4)")
+	assert_false(bool(seen["hound_after"]), "(2) the armed roll trigger was cancelled (AC 7)")
+	assert_false(bool(seen["frost_after"]), "(3) the armed Frostbite trigger was cancelled (AC 5)")
+	assert_true(bool(seen["bolt_casting_before"]), "sanity: the bolt was still casting at its counter")
+	assert_false(bool(seen["bolt_casting_after"]), "(4) the cast in progress was interrupted (AC 11)")
+	assert_true(bool(seen["fire_alive_before"]), "sanity: the ball was in the air at its counter")
+	assert_false(bool(seen["fire_alive_after"]), "(5) the in-flight shot vanished (AC 16)")
+	assert_true(float(seen["stone_damage"]) > 0.0,
+		"sanity: a stone really landed for damage (got %s)" % seen["stone_damage"])
+	assert_almost_eq(float(seen["sling_refund"]), float(seen["stone_damage"]), 0.0001,
+		"(6) the landed stone's damage was refunded, exactly what it removed (AC 17)")
+	assert_eq(int(seen["bomb_minions_before"]), 0, "sanity: Corpse Bomb had converted the minion")
+	assert_eq(int(seen["bomb_minions_after"]), 1,
+		"(7) the converted minion rose again from its own corpse (AC 20)")
+
+
+## The fixture plays the RUNNER's role, capturing on every channel beside the call it taps -- the two
+## earlier runs' shape verbatim.
+func _record_a_timed_run() -> Dictionary:
+	var record := IntentRecorder.new()
+	var params := MatchParams.new(TIMED_SEED)
+	record.capture_seed(params.seed_value)
+	var ms := MatchState.new(params)
+	var config := _timed_config()
+	record.capture_apply_balance(config)
+	ms.apply_balance(config)
+	var flags := _boulder_flags()
+	record.capture_inject_feature_flags(flags)
+	ms.inject_feature_flags(flags)
+	record.capture_inject_deck(TIMED_DECK)
+	ms.inject_deck(TIMED_DECK)
+	var costs := _timed_costs()
+	record.capture_inject_card_costs(costs)
+	ms.inject_card_costs(costs)
+	var effects := _timed_basic_effects()
+	record.capture_inject_card_effects(effects)
+	ms.inject_card_effects(effects)
+	var colors := _timed_colors()
+	record.capture_inject_card_colors(colors)
+	ms.inject_card_colors(colors)
+	var pitch_costs := _timed_pitch_costs()
+	record.capture_inject_pitch_costs(pitch_costs)
+	ms.inject_pitch_costs(pitch_costs)
+	var pitch_effects := _timed_pitch_effects()
+	record.capture_inject_pitch_effects(pitch_effects)
+	ms.inject_pitch_effects(pitch_effects)
+	var cues: Array = []
+	ms.counterspell_resolved.connect(
+		func(caster: int, countered: int) -> void: cues.append([caster, countered]))
+	var seen := {
+		"cues": cues, "aura_after": true, "hound_after": true, "frost_after": true,
+		"bolt_casting_before": false, "bolt_casting_after": true,
+		"fire_alive_before": false, "fire_alive_after": true,
+		"stone_damage": 0.0, "sling_refund": 0.0,
+		"bomb_minions_before": -1, "bomb_minions_after": -1,
+	}
+	for t in range(1, TIMED_TICKS + 1):
+		if t == TIMED_STONE_LAND_TICK:
+			_push_stone_contact(ms, record, 1)   # shot 0 is the Fireball; the first stone is index 1
+		# THE TRANSIENT READS, each taken IMMEDIATELY BEFORE the tick that destroys what it names.
+		var hp_before_tick := ms.p2.hero.get_hp()
+		if t == TIMED_BOLT_COUNTER:
+			seen["bolt_casting_before"] = ms.p1.is_casting()
+		if t == TIMED_FIRE_COUNTER:
+			seen["fire_alive_before"] = ms.p1.projectiles.is_alive_at(0)
+		if t == TIMED_BOMB_COUNTER:
+			seen["bomb_minions_before"] = ms.p1.units.living_indices().size()
+		var intents := _timed_intents(ms, t)
+		record.capture_advance(intents)
+		ms.advance(intents)
+		ms.drain_signals()
+		if t == TIMED_STONE_LAND_TICK:
+			seen["stone_damage"] = hp_before_tick - ms.p2.hero.get_hp()
+		if t == TIMED_AURA_COUNTER:
+			seen["aura_after"] = ms.p1.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA)
+		if t == TIMED_HOUND_COUNTER:
+			seen["hound_after"] = ms.p1.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED)
+		if t == TIMED_FROST_COUNTER:
+			seen["frost_after"] = ms.p1.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED)
+		if t == TIMED_BOLT_COUNTER:
+			seen["bolt_casting_after"] = ms.p1.is_casting()
+		if t == TIMED_FIRE_COUNTER:
+			seen["fire_alive_after"] = ms.p1.projectiles.is_alive_at(0)
+		if t == TIMED_SLING_COUNTER:
+			seen["sling_refund"] = ms.p2.hero.get_hp() - hp_before_tick
+		if t == TIMED_BOMB_COUNTER:
+			seen["bomb_minions_after"] = ms.p1.units.living_indices().size()
+	return {"state": ms, "record": record, "seen": seen}
+
+
+func _timed_intents(ms: MatchState, t: int) -> Array[InputIntent]:
+	var i1 := InputIntent.new()
+	var i2 := InputIntent.new()
+	var basic := {
+		TIMED_AURA_TICK: TIMED_AURA_CARD, TIMED_HOUND_TICK: TIMED_HOUND_CARD,
+		TIMED_FROST_TICK: TIMED_FROST_CARD, TIMED_BOLT_TICK: TIMED_BOLT_CARD,
+		TIMED_FIRE_TICK: TIMED_FIRE_CARD, TIMED_SLING_TICK: TIMED_SLING_CARD,
+		TIMED_SUMMON_TICK: TIMED_SUMMON_CARD, TIMED_BOMB_TICK: TIMED_BOMB_CARD,
+	}
+	if basic.has(t):
+		_press_card(i1, _uncovered_slot_of(ms.p1.hand, basic[t]), Enums.ModeKind.BASIC)
+	for pair: Variant in TIMED_COUNTER_PRESSES:
+		# P2's stage reads an UNCOVERED Counterspell slot, live -- `_counter_intents`' own reason: a
+		# Boulder the Rocksling plants can land on a Counterspell card, and a Mode (4) press on a covered
+		# slot is refused. The chosen slot travels in the recorded intent, so the replay is sound.
+		if t == int((pair as Array)[0]):
+			_press_card(i2, _uncovered_slot_of(ms.p2.hand, TIMED_COUNTER_CARD), Enums.ModeKind.PITCH)
+		if t == int((pair as Array)[1]):
+			i2.card_mode = Enums.ModeKind.PITCH
+			i2.card_commit = true
+			i2.card_activate = true
+	var out: Array[InputIntent] = [i1, i2]
+	return out
+
+
+func _timed_config() -> BalanceConfig:
+	var c := _config()
+	c.deck_size = TIMED_DECK.size()
+	c.hand_size = TIMED_DECK.size()
+	c.mana_regen_per_second = TIMED_MANA_PER_SECOND
+	c.corpse_lifetime_seconds = 10.0
+	return c
+
+
+func _timed_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in TIMED_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = TIMED_MANA_COST
+		out[id] = c
+	var boulder := CardCastCondition.new()
+	boulder.mana_cost = TIMED_MANA_COST
+	out[TIMED_PLANT_CARD] = boulder
+	return out
+
+
+func _timed_pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+	var out: Dictionary[StringName, CardCastCondition] = {}
+	for id in TIMED_DECK:
+		var c := CardCastCondition.new()
+		c.mana_cost = TIMED_PITCH_MANA_COST
+		out[id] = c
+	return out
+
+
+func _timed_colors() -> Dictionary[StringName, Enums.CardColor]:
+	var out: Dictionary[StringName, Enums.CardColor] = {}
+	for id in TIMED_DECK:
+		out[id] = Enums.CardColor.RED
+	out[TIMED_PLANT_CARD] = Enums.CardColor.COLORLESS
+	return out
+
+
+## The seven cards' BASIC effects plus the summon that gives Corpse Bomb something to convert, and the
+## Boulder the Rocksling plants. Counterspell rides both maps, `_counter_basic_effects`' own shape.
+func _timed_basic_effects() -> Dictionary[StringName, CardEffect]:
+	var aura := CardEffect.new()
+	aura.effect_id = &"vampiric_aura"
+	aura.duration_seconds = float(TIMED_BUFF_TICKS) / TimingWindow.TICK_HZ
+	aura.lifesteal_fraction = 0.5
+	var hound := CardEffect.new()
+	hound.effect_id = &"bloodhound_step"
+	hound.duration_seconds = float(TIMED_BUFF_TICKS) / TimingWindow.TICK_HZ
+	hound.roll_distance_multiplier = 2.0
+	hound.roll_iframe_multiplier = 2.0
+	var frost := CardEffect.new()
+	frost.effect_id = &"frostbite"
+	frost.duration_seconds = float(TIMED_BUFF_TICKS) / TimingWindow.TICK_HZ
+	frost.slow_speed_multiplier = 0.5
+	frost.slow_duration_seconds = float(TIMED_BUFF_TICKS) / TimingWindow.TICK_HZ
+	var bolt := CardEffect.new()
+	bolt.effect_id = &"honed_bolt"
+	bolt.cast_seconds = float(TIMED_BOLT_CAST_TICKS) / TimingWindow.TICK_HZ
+	bolt.damage_amount = TIMED_BOLT_DAMAGE
+	var fire := CardEffect.new()
+	fire.effect_id = &"fireball"
+	fire.cast_seconds = float(TIMED_FIRE_CAST_TICKS) / TimingWindow.TICK_HZ
+	fire.launch_speed = 8.0
+	fire.max_speed = 8.0
+	fire.travel_budget = 60.0
+	var sling := CardEffect.new()
+	sling.effect_id = &"rocksling"
+	sling.cast_seconds = float(TIMED_SLING_CAST_TICKS) / TimingWindow.TICK_HZ
+	sling.damage_amount = TIMED_STONE_DAMAGE
+	sling.boulders_per_cast = TIMED_SLING_STONES
+	sling.boulder_interval_seconds = float(TIMED_SLING_INTERVAL_TICKS) / TimingWindow.TICK_HZ
+	sling.launch_speed = 8.0
+	sling.max_speed = 8.0
+	sling.travel_budget = 60.0
+	var bomb := CardEffect.new()
+	bomb.effect_id = &"corpse_bomb"
+	bomb.damage_amount = TIMED_BOMB_DAMAGE
+	bomb.launch_speed = 8.0
+	bomb.max_speed = 8.0
+	bomb.travel_budget = 60.0
+	var summon := CardEffect.new()
+	summon.effect_id = &"summon_timed_run_minion"
+	var counterspell := CardEffect.new()
+	counterspell.effect_id = &"counterspell"
+	var boulder := CardEffect.new()
+	boulder.effect_id = &"boulder_discard"
+	var out: Dictionary[StringName, CardEffect] = {}
+	out[TIMED_AURA_CARD] = aura
+	out[TIMED_HOUND_CARD] = hound
+	out[TIMED_FROST_CARD] = frost
+	out[TIMED_BOLT_CARD] = bolt
+	out[TIMED_FIRE_CARD] = fire
+	out[TIMED_SLING_CARD] = sling
+	out[TIMED_BOMB_CARD] = bomb
+	out[TIMED_SUMMON_CARD] = summon
+	out[TIMED_COUNTER_CARD] = counterspell
+	out[TIMED_PLANT_CARD] = boulder
+	return out
+
+
+## Only Counterspell needs a PITCH effect here: every one of P1's eight presses is Mode (1), and P2's only
+## Mode (4) card is the counter itself. The other ids carry their own BASIC effect OBJECT, which is legal
+## content and mirrors identical values by construction (`MatchState._mirrored_values_agree`).
+func _timed_pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var out := _timed_basic_effects()
+	out.erase(TIMED_PLANT_CARD)
 	return out

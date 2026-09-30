@@ -656,6 +656,27 @@ func hp_at_death_at(index: int) -> float:
 	return _hp_at_death[index] if has_index(index) else 0.0
 
 
+## Story 6-5g (AC 22): PUT HP BACK on a LIVING record -- the seat a Counterspell reversal uses to refund what
+## a countered spell took off a unit that SURVIVED it (a damaged totem, a wounded minion).
+##
+## A NAMED RESTORE RATHER THAN `apply_damage_at(index, -amount, _)`, which would work arithmetically and is
+## the wrong shape: it would make a negative damage an idiom of the DAMAGE seat, whose docstring promises a
+## clamp at zero and a corpse write, and its `corpse_ticks` argument would be meaningless on every call. This
+## is `restore_corpse_at`'s own pairing, one level down: the undo of a change gets its own name.
+##
+## A DEAD RECORD IS REFUSED, not revived: a unit the spell KILLED comes back through the general restore rule
+## (`MatchState._restore_killed_minions`, at its pre-death hp, consuming its own corpse), and a resurrection
+## hidden inside an hp adder is exactly the divergence `4-1/R9` forbids.
+##
+## NO CEILING IS NEEDED AND NONE IS WRITTEN. The only caller refunds the hp its own recorded hit ACTUALLY
+## removed, so the result cannot exceed what the record held before that hit -- and this container stores no
+## maximum to clamp against (`add()` takes the kind's maximum as the starting hp and keeps no copy).
+func restore_hp_at(index: int, amount: float) -> void:
+	if not is_alive_at(index) or amount <= 0.0:
+		return
+	_hp[index] = _hp[index] + amount
+
+
 ## Story 6-5f (AC 19/AC 20): PUT A CORPSE BACK at `index` with an explicit remaining lifetime and extended
 ## mark -- the one seat a Counterspell reversal uses to undo a change to a corpse's COUNTDOWN.
 ##

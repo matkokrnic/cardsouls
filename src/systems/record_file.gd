@@ -305,8 +305,29 @@ extends RefCounted
 ## `6-5a` 12 -> 13, `6-5b` 13 -> 14 and `6-5e` 16 -> 17 argument, fourth time, and the first time the cause is
 ## a behaviour change rather than a missing authored field.
 ##
+## Story 6-5g (AC 27): 18 -> 19, WITH THE HARD REFUSAL OF A v18 FILE UNCHANGED.
+##
+## THE CAUSE IS BEHAVIOURAL AGAIN, AND IT IS THE SAME CLASS AS 17 -> 18's FIRST HALF: through v18 a
+## Counterspell against a resolution of any of the SEVEN timed/in-flight cards (Vampiric Aura, Bloodhound
+## Step, Frostbite, Honed Bolt, Fireball, Rocksling, Corpse Bomb) was REFUSED as no-target -- the `6-5f/R37`
+## interim rule -- and that refusal left the card staged, the orbs unspent and the match otherwise untouched.
+## The SAME recorded intent stream replayed against this build ACTIVATES: the orbs go, the card leaves the
+## zone, a running buff ends or a cast is interrupted or hp is refunded, and the final hash differs. Nothing
+## in a v18 file warns anyone, which is precisely the silent divergence this constant exists to refuse
+## loudly -- the `6-5a` 12 -> 13, `6-5b` 13 -> 14, `6-5e` 16 -> 17 and `6-5f` 17 -> 18 argument, fifth time.
+##
+## NO NEW RECORDED SHAPE IS PART OF IT, and saying so is the honest record: this story adds no `CardEffect`
+## export, no `BalanceConfig` field and no intake channel, so the `effects` / `pitch_effects` / `balance`
+## channels are bit-identical in shape to v18's. The bump rests on the behaviour change alone, which is
+## sufficient on its own.
+##
+## NOR IS THE GOLDEN A REASON. The golden hash did NOT move for this story (MEASURED -- the golden fixture
+## authors every effect id as a `summon_*` and never stages Counterspell, so no new reversal kind is ever
+## written in its recorded sequence), and a record carries INPUTS and CONTENT, never a hash: the two are
+## independent, exactly as `6-5c`'s NON-MOVER note says from the other direction.
+##
 ## NO SHIM, on this file's standing posture: older records are refused with a reason, never migrated.
-const FORMAT_VERSION := 18
+const FORMAT_VERSION := 19
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
