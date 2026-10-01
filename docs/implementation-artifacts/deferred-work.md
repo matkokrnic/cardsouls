@@ -545,6 +545,12 @@ story file, with no `deferred-work.md` home, across the 23 E6 close-out sessions
 - **6-5g counter-on-counter** (`6-5g/R17`, `decision-log.md:11959-11961`; `deck-1-spec.md:236-239`)
   -- its own story, after the friends playtest. No board key yet (operator ruling, `E6-C/R11`).
 - **Deck builder** -- after the friends playtest. No board key yet (operator ruling, `E6-C/R11`).
+- **`5-1a/R14` exported-build `Invariant.check`, plus its `5-1a/R15` `camera_pushes` twin** -- owner
+  `7-7-tuning-pass`, forcing point the FIRST EXPORTED BUILD for the friends playtest (`E6-R/R16`
+  item 4, Claude ruling, operator veto open). `Invariant.check` is non-load-bearing EVERYWHERE in an
+  exported build, not just the one seat `5-1a` fixed; recorded with no owner by `E5-R/R8` item 6 and
+  again by `E6-P/R11`, so this closes a two-epic orphan -- a fence does not discharge a queue, a
+  forcing point does (`E5-R/R1`).
 
 The misplaced `### 6-8` subsection above (filed inside the `## E4 review residue` block) is a
 findability defect, not moved here (`E5-R/R7` precedent against touching closed-record placement).
