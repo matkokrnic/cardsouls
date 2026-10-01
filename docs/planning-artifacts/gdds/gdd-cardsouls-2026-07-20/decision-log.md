@@ -12026,3 +12026,83 @@ firing after it finished.
 
 E6 close-out debt list carried unchanged: `6-5b/R24` flake, TAB residue, stale trailer note, `_replay`
 unknown-channel drop (m5), direct-connect count stays two.
+
+## Session 2026-10-01 -- E6 close-out (2026-10-01)
+
+`E6-C/R1` Epic-6 promoted to `done`: 23/23 keys read `done` on the board, machine-checked against the
+23 `6-*.md` story files (none missing either direction). The one disagreement found, `6-7-locomotion-gaits.md:7`
+reading `review` against the board's `done`, is corrected in the board commit of this close-out (C6).
+`E6-C/R2` The direct-connect exception (`5-3/R4`, `E5-C/R2`) becomes an enumerated list of exactly TWO:
+`card_cast_resolved` (`match_runner.gd:644`) and `counterspell_resolved` (`match_runner.gd:662`), both
+under the same four conditions. `counterspell_resolved`'s two-slot guard (`caster_slot == slot or
+countered_slot == slot`) is sanctioned as text, not merely tolerated in practice -- the victim is
+`1 - slot` by construction, so double-fire is impossible. A further instance is allowed ONLY if the
+same story adds it to both `game-architecture.md`'s list and the RAW allow-list in
+`test_architecture_invariants.gd` -- never silent. This is a Claude ruling; operator veto stays open,
+and it supersedes the "third instance is the operator's call" clause of `E5-C/R2` only to the extent
+that clause named a single-instance exception -- a third instance is still the operator's call against
+this list.
+`E6-C/R3` Architecture ledger: A6, A7 and A8 existed only in `game-architecture.md`'s frontmatter
+`amendments` list, never in the prose `### Post-Completion Amendments` ledger (which stopped at A5).
+Backfilled from that frontmatter and the log sessions they cite (`E4-P/R3`; `4-5/R1`; `5-4/R4` +
+`5-3/R4`). Added A9 for this flush, including an amendment that landed without a queue entry: the
+6-3b seam-registry edit moving the observation-seam count NINE -> TEN (`connect_pitch_changed`,
+`E6-P/R8`(2)) was committed in the 6-3b close-out but never ledgered until now. Version 1.7 -> 1.8.
+`E6-C/R4` Trailer constant aligned to the `6-1c/R7` value (`Claude Sonnet 5 <noreply@anthropic.com>`)
+in `CLAUDE.md` and `docs/project-context.md`. This is the THIRD recording of this debt -- after
+`6-1d/R17` and `6-5b/R25`, both of which disclosed it and neither of which fixed it -- and the last.
+`E6-C/R5` "TAB residue" (`6-5c/R29`) closed as NOT REPRODUCIBLE: zero hits in the three named files
+(`src/ui/hud/hud_root.gd`, `test/state/test_unblockable_defense.gd`,
+`tools/add_paladin_locomotion.gd`) under all four patterns tested (mid-line tab, trailing tab,
+space-then-tab, space-after-tab). Either the residue meant something other than literal tab
+characters, or it was already repaired before this close-out; not invented a fix for either case.
+`E6-C/R6` Tooling debt owned by this close-out is handed to a named story rather than fixed here
+(this chain is docs-only, no engine launches): `7-T1-tooling-debt` takes the m5 `_replay`
+unknown-channel-drop coverage gap (`colors` is falsifier-uncovered), the `6-5b/R24` "resources still
+in use at exit" flake (three tests, not one, predating 6-5b by 18 days), and the stale
+"UNRESOLVED in the queue" comment at `match_runner.gd:2460` (resolved by `E5-C/R2`; a comment-only
+`src/` edit, SKIPPED by this close-out and left for `7-T1`).
+`E6-C/R7` Smoke-claim corrections, recorded here only, never as story edits (`E5-R/R7`):
+(a) the operator's own correction -- `6-5g` live-smoke point 13 ("Regression -- every `6-5f`
+behaviour...") was reported "smoke 13/13" but was not explicitly tested; (b) `6-2/R15`'s "LIVE SMOKE:
+PASS, no findings, REGRESSION-ONLY" and `6-1d`'s "regressions clean, fps stable" are whole-smoke
+regression claims with no enumerated items, the same shape as (a); (c) `6-6b`, `6-D1` and `6-9` were
+reported as full PASS from a SINGLE-OPERATOR smoke, which cannot exercise the two-human half --
+`6-7` disclosed its own single-operator deviation explicitly, these three did not; (d) `6-5b`'s "live
+smoke PASS, AC 23 legibility and AC 24 tint deferred" headlines PASS where AC 23 and AC 24 both
+FAILED at smoke -- the deferral was honest, the headline was not.
+`E6-C/R8` Findability: thirteen of the 23 close-out session headings carry the numeral only
+(`6-1`, `6-1b`, `6-1c`, `6-1d`, `6-9`, `6-10`, `6-5a`..`6-5g`), not the full board key, so a key-name
+grep of headings misses them -- a pointer table lives in the report for this close-out, the
+`E5-C/R4` precedent. `6-7` R13..R20 and `6-7b` R2..R9 are cited in `story_notes` and the story files
+rather than appearing as labelled log entries here; not relabelled (`E5-R/R7`).
+`E6-C/R9` Deferred-work E6 residue consolidated in `deferred-work.md`'s new "E6 residue (close-out
+2026-10-01)" section: the four deferrals living only in log prose or a story file (6-5g AC 14 stun
+half, 6-5g/R27 corpse lifetime -- now also on the playtest checklist, 6-5g/R17 counter-on-counter,
+the deck builder), plus the presentation debt consolidated under `7-1`/`7-2`/`7-6` and the tooling
+debt under `7-T1`.
+`E6-C/R10` Numbers of record, corrected in the board commit's `story_notes`: golden `941958c5`
+since `6-5f` (the board last recorded `98eaee53`, at `6-5e` -- the golden moved at `6-5f` and the
+board never recorded the new value); FORMAT_VERSION 19; per-player snapshot key set 45; suite
+1247/0/11713 + integration 72/72, as last recorded at the `6-5g` close-out (not re-measured here --
+this chain runs no engine).
+`E6-C/R11` Post-E6 plan, operator rulings 2026-09-30/2026-10-01: a new `epic-7`,
+"Presentation, Polish & Playtest Prep", in order -- `7-T1-tooling-debt`, `7-1-effect-presentation`,
+`7-2-animation-polish`, `7-3-minion-rework`, `7-4-pitch-speeds`, `7-5-deck-2`,
+`7-6-hud-and-card-presentation`, `7-7-tuning-pass`, then the friends playtest. The former E7
+(Scripted Bot) and E8 (Equipment) are renumbered E8 and E9. Counter-on-counter (`6-5g/R17`) and the
+deck builder wait until after the friends playtest. The E6 retrospective and the friends playtest
+itself get NO board keys (precedent: retrospectives have never carried one).
+`E6-C/R12` `project-context.md` gains "ONE foreground engine launch per tool call; never batch
+launches" (first stated at the 6-5f close-out, unlabelled until now) and the fact that Python 3.12
+is available in Claude Code's bash but not in the operator's PowerShell, next to the `PROC/R3` Edit
+fallback. The suite-as-two-foreground-calls-with-an-explicit-timeout rule and the Edit-fallback's
+own open ends carry NO ratified ruling and go to the E6 retrospective, not here.
+`E6-C/R13` `gdd.md` and `epics.md` reconciled (C2 of this chain): the E6 section now lists its 23
+delivered keys in board order (dropping the stale "ELEVEN"); the hold/feint touchstone and pillar
+prose are restated for click-to-commit (`6-9`), keeping the bluff intent (P3) intact; the direct-connect
+and seam-count figures read two and ten; the new `epic-7` section is added and the old E7/E8 are
+renumbered E8/E9 everywhere grepped (epics.md, gdd.md, game-architecture.md).
+`E6-C/R14` Next: the E6 retrospective (`gds-retrospective`, report-only) and `7-T1`, while the
+operator gathers `7-1` assets; then the `7-1` scope talk. This close-out chain does not push --
+that is the operator's call, confirmed from the log in chat.
