@@ -12105,3 +12105,239 @@ renumbered E8/E9 everywhere grepped (epics.md, gdd.md, game-architecture.md).
 `E6-C/R14` Next: the E6 retrospective (`gds-retrospective`, report-only) and `7-T1`, while the
 operator gathers `7-1` assets; then the `7-1` scope talk. This close-out chain does not push --
 that is the operator's call, confirmed from the log in chat.
+
+## Session 2026-10-02 -- E6 retrospective
+
+Ran against `gds-retrospective`, MANUAL and REPORT-ONLY, no subagents (`5-7/R8` / `E5-R/R6`), no
+suite run and no engine launch. Report at `docs/implementation-artifacts/epic-6-retro-2026-10-02.md`
+(committed this chain, 723 lines; the out-of-repo draft was `C:\dev\_e6-retro.md`). Deviations from
+the skill, reported not skipped: party mode and every `WAIT for {user_name}` dialog step dropped;
+step 11 skipped (no board key -- `E6-C/R11`, the E3/E4/E5 precedent); `on_complete` resolved by the
+resolver, which runs only under `python` and returned empty. The draft overran its ~300-line budget
+at 653 lines; reported, not absorbed. Report-only-then-ratify is now SIX FOR SIX (E3, E4, E5, E6
+planning, E6 close-out, this pass). Sixteen proposals: thirteen ratified as proposed, two ratified
+amended, one amended into a retirement.
+
+`E6-R/R1` (ratified) `E5-R/R2` PART (2) IS DELETED, NOT ENFORCED. Measured: part (1)'s durable
+review artifact went from 2 of 12 in E5 to **20 of 23** in E6, its one undisclosed miss being `6-6a`
+(`6-7`'s miss WAS disclosed, `:10511-10512`); its twin obligation, the close-out-log layer-state
+line, went **10 of 23**, first appearing at `6-7b` on 2026-09-16 and never once enforced on the
+thirteen that skipped it (`6-0`, `6-1`, `6-1b`, `6-1c`, `6-1d`, `6-2`, `6-3a`, `6-3b`, `6-7`, `6-8`,
+`6-6a`, `6-D1`, `6-5a`). The obligation folds into part (1): the close-out entry CITES THE REPORT'S
+PATH instead of restating its layer states. Generalisation ratified with it, and it is the lesson of
+the whole epic: **enforcement by artifact holds, enforcement by discipline decays** -- the three E6
+obligations that decayed (layer line 13/23 skipped, budget line 8/23 skipped, review artifact 2 of 3
+misses undisclosed) are exactly the three whose only check was the author remembering them, and the
+one that held is the one whose absence is greppable as a missing FILE.
+
+`E6-R/R2` (ratified AMENDED) `E5-R/R3`'S INTERVAL STAYS THE FULL STORY CYCLE, AND GAPS OVER 2 h ARE
+SUBTRACTED AND NAMED. The report proposed splitting the number into a dev-pass machine figure and a
+wall figure; **the operator did not take the split.** The interval remains first before-baseline run
+to last suite run of the whole story, review fixes included (`E5-R/R3` stands), but every gap longer
+than two hours between two consecutive recorded runs is SUBTRACTED and NAMED in the close-out entry.
+There is NO dev-pass-only figure: that shape is exactly what hid `5-0d`'s ~74 minutes behind a
+reported 17m43s. Measured basis: 15 of 23 E6 close-outs carry a budget line, **six of the fifteen
+span overnight idle** (`6-6b` ~18h45m, `6-9` 12h50m22s, `6-5b` 47h56m48s, `6-5d` 1d21h42m, `6-5e`
+13h31m, `6-5g` 13h57m30s; `6-10` 6h57m17s borderline), and four entries disown the "machine-time"
+reading in their own words ("not machine time", "gaps between sessions are not work time", "includes
+the overnight gap"). Also measured: the obligation is Tier B only, and **the two Tier B stories that
+owed a line did not file one** (`6-1b`, `6-D1`) while twelve Tier A stories filed one voluntarily --
+`E5-R/R3` fixed the venue and broke the quantity.
+
+`E6-R/R3` (ratified) THE GATE CAP GETS A ROUND COUNTER IN THE GATE ARTIFACT'S HEADING, NOT A WIDER
+RULE. `E4-R/R4` both FIRED and was IGNORED inside one epic, and only one of the two is on record:
+`6-7` honoured it explicitly (`6-7/R21`, "A NARROW RE-CHECK REPLACES A THIRD READINESS GATE") after
+two NOT READY rounds, while **`6-6a` ran FOUR gate rounds** -- rounds 3 and 4 both gate-and-fix
+residual passes, each Change Log row ending "Status remains `authored`; not promoted" -- with no
+ruling anywhere acknowledging the overrun. E5's maximum was two (`E5-R/R4`), so the conclusion "a
+rule that shaped an epic without firing is working" no longer holds. The cap is not widened: every
+gate artifact's heading states its ROUND NUMBER (`_6-6a-gate.md` already does, "(round 1)"), and a
+third round requires a named ruling. Visibility at round 2, not a new gate.
+
+`E6-R/R4` (ratified) THE SUITE RUNS AS TWO FOREGROUND CALLS WITH AN EXPLICIT TIMEOUT. Proven at
+`6-7b` and recorded there verbatim as a retro input -- "suite run as separate foreground calls with
+an explicit timeout finished without backgrounding across dev, review, fix and chain passes"
+(`:10602-10604`), 2026-09-16. It then carried NO ratified ruling for two weeks (`E6-C/R12` says so
+in its own words) and the `6-5g` regression landed inside that gap. A mechanism proven and unruled
+is a mechanism that comes back.
+
+`E6-R/R5` (ratified) THE POLLING/BACKGROUNDING CLASS GETS ITS MECHANISM REMOVED, NOT A THIRD
+WARNING. No `run_in_background`, no `ScheduleWakeup`, and no `timeout` wrapper around an engine
+launch, in any dev, review, docs or close-out pass. `6-5g` was named in the log as the THIRD instance
+of the class (`:12022-12025`, including a `/loop` wakeup that outlived the pass and kept firing), and
+**the first two exist nowhere in the repo as their own record** -- greps of the whole E6 log range
+and of `6-1-hold-to-charge.md` / `6-1b-chargeup-presentation.md` for `filler`, `watcher` and
+`run_in_background` return nothing; only a bare pointer to "the `8.9.` mechanism" survives. That is
+the third epic running with the same hole (`E5-R/R6` recorded it for the subagent write class, E4 for
+its sixth incident). This is the `3-0d/R20` move applied to process, as `E5-R/R6` applied it: a guard
+evaded twice gets its mechanism replaced, and removing a capability costs the operator nothing to
+police.
+
+`E6-R/R6` (ratified AMENDED) THE WHOLE EDIT CHAIN IS RULED, NOT ONLY THE PROHIBITION. Wider than
+proposed: **Edit tool FIRST; on the FIRST failed match, a python byte-replace (invoking `python`,
+never `python3`) OR a line-index splice; NEVER reconstruct a file with PowerShell `-join`.** The
+report proposed barring `-join` and leaving the splice unruled; the operator overturned that -- the
+`6-5c` practice that worked is PROMOTED, and only the mechanism that broke three files is barred.
+Measured basis: `project-context.md:139` carried only `PROC/R3`'s python byte-replace, naming neither
+the splice nor any `-join` prohibition, and `E6-C/R12` stated outright that the Edit-fallback's open
+ends carried no ratified ruling. Recorded alongside: the one `6-5c`-era residue that DID reach a
+ruling, "TAB residue", was closed by `E6-C/R5` as NOT REPRODUCIBLE -- the piece that got ruled on was
+about nothing, the piece that broke three files got nothing.
+
+`E6-R/R7` (ratified) NO AGENT-AUTHORED TEXT EVER ENTERS `docs/playtest-log.md`, AND A COMMIT MAY NOT
+CLAIM OPERATOR AUTHORSHIP FOR CONTENT IT WROTE. `2-6/R11` is already locked ("no agent writes into
+it"; no AC may have an agent produce an entry), as are `2-4/R12` and `2-5/R8`, and the file's own
+Croatian header says it. Measured: **22 commits touched the file in E6 and 16 carry a
+`Co-Authored-By: Claude` trailer**; the correct discipline (the operator commits his own entry)
+appears only from `6-5b` onward, 2026-09-23. Three of the thirteen E6 entries carry zero
+Croatian-language markers -- `6-7` (`:400`), `6-8` (`:438`), `6-5d` (`:536`) -- against 5 to 55 for
+every other entry. **The sharp one is `6-8`**: an English, agent-shaped markdown results table added
+by `4b644d4`, a Claude-trailered commit whose own message asserts "`docs/playtest-log.md` as-is,
+operator's own live smoke entry". `6-7`'s entry (`3bfb24e`, +30 lines) has the same shape. Going
+forward the operator's entry is committed unread and unformatted, or the commit does not touch that
+file. Separately measured and NOT a violation: `823dce3` committed the operator's raw unedited
+Croatian `6-1c` notes, which is the correct behaviour. Coverage, recorded: only 13 of 23 E6 stories
+have a playtest-log entry at all.
+
+`E6-R/R8` (ratified) A GOLDEN RE-BASELINE NEEDS A REVERSE PROBE, AND THE PROBE'S OWN SIDE-EFFECTS ARE
+REPORTED. Measured: E6 moved the golden TEN times, each with a single named cause -- `6-1c`
+`d5bcb7e6`->`9679fa80`, `6-2`->`9ed4c903`, `6-7`->`71a7b45f`, `6-6a`->`d437432f`, `6-5a`->`59e9a42c`,
+`6-5b`->`962514b1`, `6-5c`->`97d52922`, `6-5d`->`de3589ff`, `6-5e`->`98eaee53`, `6-5f`->`941958c5` --
+and the non-movers were proven in both directions too. The method is named at `6-7` ("a temporary
+removal-and-restore experiment; removing the key reproduces the pre-story hash", `:10492-10495`), at
+`6-2` ("a reverse mutation reproducing the prior hash exactly") and at `6-5e` ("the all-three-keys-
+erased control"). **It is written down nowhere**: no bullet in `project-context.md`, zero hits for
+"both directions" or "re-baseline" in `game-architecture.md`, and only the tier clause in
+`CLAUDE.md`. The strongest measurement discipline in the project existed purely as transmitted
+practice. `6-7` is named as the model because it reported the probe's own side-effect -- the field's
+snapshot-key pin fails during the removal run -- instead of hiding it.
+
+`E6-R/R9` (ratified) A SMOKE HEADLINE MAY NOT SUMMARISE A MIXED RESULT, AND A REGRESSION CLAIM
+WITHOUT ENUMERATED ITEMS IS NOT A CLAIM. `E6-C/R7`'s four corrections share three mechanisms: a PASS
+headline over failed ACs (`6-5b` headlined PASS where AC 23 and AC 24 both FAILED), a whole-smoke
+regression claim with no items (`6-2/R15`, `6-1d`, and the operator's own `6-5g` point-13
+correction), and a solo smoke reported as full PASS without naming the deviation (`6-6b`, `6-D1`,
+`6-9` -- where `6-7` disclosed its own single-operator deviation explicitly). All four were found by
+reading content at the close-out; no check catches any of them. Going forward smoke verdicts are PER
+ITEM, deviations are named, and the headline matches the WORST item. Recorded: `sprint-status.yaml`
+still carries the uncorrected `6-5b` headline, correctly so under `E5-R/R7` -- which makes the board
+the misleading surface and is why `E6-R/R13` exists.
+
+`E6-R/R10` (ratified) A RULING LABEL CITED OUTSIDE THE LOG IS ANCHORED IN THE LOG, OR THE CITATION
+NAMES ITS REAL VENUE; LABELS ARE GREPPED BEFORE THE DOCS COMMIT. Measured by script over every
+E6 ruling-label citation in `docs/`: of **192 distinct E6 labels cited outside the log, 11 appear
+nowhere in the log at all** -- `6-7/R3`, `R6`, `R10`, `R11`, `R12`, `R13`, `R14`, `R15`, `R17` and
+`6-7b/R3`, `R4`. `E6-C/R8` disclosed this class but UNDERSTATED ITS EXTENT: it named "`6-7` R13..R20
+and `6-7b` R2..R9", and `6-7/R3`, `R6`, `R10`, `R11`, `R12` are also unanchored. These are
+unanchored, not fabricated -- they were ratified in browser review and are cited in `story_notes` and
+story files -- but a reader grepping the log for `6-7/R10` finds nothing, which is one step milder
+than the same failure mode as a fabricated label. The `6-5c` Rn form
+(`6-5c-hero-cast-honed-bolt.md:154`) is a false positive, prose idiom for "cited by label".
+
+`E6-R/R11` (ratified) A PLANNING PASS MAY NOT SHIP A STORY IT HAS PRICED AS UNMEASURED WITHOUT A
+SPLIT POINT NAMED IN ADVANCE. Measured scope: `E6-P/R2` ruled "THE E6 STORY LIST IS ELEVEN STORIES";
+**23 shipped**. The +12 attributes in full: the `6-5` split 1 -> 7 keys (+6, six by operator ruling at
+the `6-5` scope talk plus `6-5g` opened mid-chain by `6-5f/R36`); `6-1c` and `6-1d` inserted (+2,
+`6-1d` by `6-1c/R10` off a smoke-found geometry gap); the `6-6` split (+1, no labelled split ruling
+exists in the log); three unplanned keys `6-9`, `6-10`, `6-D1` (+3, none with a labelled origin
+ruling); and the `6-3` merge-then-re-split (net 0, one wasted authoring round whose merge premise the
+gate DISPROVED by measurement with 14 blocking findings). **8 of the 12 extras came from the two
+areas planning had itself flagged**, and `E6-P/R9` had named the largest one in its own words: "what
+authoring nine cards' worth of Mode-(4) content actually costs. This is the largest unpriced piece of
+E6." The prediction was correct and the plan shipped anyway.
+
+`E6-R/R12` (ratified, recorded) THE BMAD SKILLS' LITERAL `python3` COMMAND FAILS IN THIS BASH.
+`gds-retrospective`'s step-1 resolver command invokes `python3`, which returns "Python was not found"
+(the Windows Store app-execution alias); it succeeds under `python`. `E6-C/R12` recorded Python's
+absence from the operator's PowerShell and not this. Recorded so the next skill invocation does not
+read the failure as a missing resolver, and carried into `E6-R/R6`'s fallback chain.
+
+`E6-R/R13` (ratified) NUMBERS OF RECORD LIVE IN ONE PLACE, AND THE CLOSE-OUT MACHINE-CHECKS THE BOARD
+AGAINST THE LOG. `E6-C/R10` corrected the `6-5f` golden miss by hand and missed the adjacent one, and
+`E6-C/R1` caught a story file reading `Status: review` against a `done` board only at epic close --
+two weeks after the promotion. Going forward the close-out DIFFS every golden, `FORMAT_VERSION` and
+status figure in `story_notes` against its own close-out session, mechanically, not by eye.
+
+`E6-R/R14` (ratified) `project-context.md`'S `Last Updated` MOVES ON EVERY EDIT TO THAT FILE. It read
+`2026-09-07` -- the E5 close-out date -- after commit `3eae0e2` added two rules at the E6 close-out
+and moved `rule_count` 73 -> 74. The E5 close-out moved the field by name; the E6 close-out did not.
+`PROC/R5`'s existing obligation restated once, and discharged in this chain's `docs(config)` commit.
+
+`E6-R/R15` (AMENDED into a RETIREMENT) THE GATE BASE-RATE TALLY IS NOT RE-ESTABLISHED ANYWHERE AND
+GETS NO OWNER. The `6-3` readiness-gate split ruling measured that "the gate's own base-rate tally
+has been stale since `4-0`, which it still reads as `23/23`" and named "the E6 retro" as the venue to
+re-establish it (`:10196-10197`). The report declared it UNMEASURED rather than guessing and proposed
+a named owner; **the operator retired it instead.** It drives no decision, and the gate cap plus
+`E6-R/R3`'s round counter carry the actual control. `7-T1-tooling-debt` gets nothing from it. The
+`6-3` instruction is DISCHARGED BY RETIREMENT, not by measurement -- recorded so it is not read
+forward as outstanding. This is the meta-rule (`:7937-7941`) doing its job: the cheapest disposition
+of a measurement that would change nothing is not to take it.
+
+`E6-R/R16` (recorded, not ruled, PLUS one Claude ruling) WHAT E7 INHERITS -- the `E3-R/R5` /
+`E4-R/R8` / `E5-R/R8` template. Full text in the retrospective, section (c). Recorded because parts
+exist nowhere else:
+1. `7-T1-tooling-debt` owns three items by `E6-C/R6`: the m5 `_replay` unknown-channel COVERAGE gap
+   (`colors` falsifier-uncovered -- the failure mode is LOUD, not vacuous), the `6-5b/R24` flake
+   (three tests, six occurrences measured 2026-09-17 to 2026-09-29, and `run_all.sh` FAILS the suite
+   on it), and the stale `match_runner.gd:2460` comment.
+2. `E6-C/R11`'s `epic-7` order stands; former E7/E8 renumbered E8/E9.
+3. Three PROVISIONAL design rulings are owed to the friends playtest and have no other judge:
+   `E6-P/R4` free-overlap pitch zones, `E6-P/R5` the 20 s pitch timer, and `6-10`'s HOLD-vs-TOGGLE
+   default.
+4. **CLAUDE RULING, closing a two-epic orphan: `5-1a/R14` (exported-build `Invariant.check`) and its
+   `5-1a/R15` `camera_pushes` twin get an OWNER -- `7-7-tuning-pass` -- with the forcing point the
+   FIRST EXPORTED BUILD for the friends playtest.** `E5-R/R8` item 6 and `E6-P/R11` both recorded it
+   as having no owner; a fence does not discharge a queue and a forcing point does (`E5-R/R1`), so it
+   gets one. Operator veto stays open on the owner. `deferred-work.md`'s E6 residue carries it.
+5. `E6-C/R9`'s deferrals stand: `6-5g` AC 14's structurally unobservable STUN half, `6-5g/R27` corpse
+   lifetime, `6-5g/R17` counter-on-counter and the deck builder.
+6. Only 13 of 23 E6 stories have a playtest-log entry, so the playtest block inherits a thinner feel
+   record than the smoke count suggests; and `E6-C/R7` means the epic's PASS record is weaker than
+   its headlines -- `6-5b` AC 23/AC 24 actually FAILED, and `6-6b`/`6-D1`/`6-9` were never exercised
+   two-human.
+
+### Four corrections, RECORDED here and in the retrospective, never repaired in place (`E5-R/R7`)
+
+1. **`sprint-status.yaml:170` credits `6-6a` with "no re-baseline" for a re-baseline that landed
+   inside `6-6a`.** The board note reads "golden `d437432f` MEASURED UNMOVED both directions, no
+   re-baseline"; this log's own `6-6a` entry reads "the one prior re-baseline (`71a7b45f...` ->
+   `d437432f...`) landed at the dev pass, sole cause the resting `get_up_iframe` snapshot key set
+   (206 key paths)" (`:10730-10732`). `E6-C/R10` corrected the adjacent `6-5f` golden miss and did
+   not look here. Eleventh numbers-of-record error of the epic; the board is NOT edited.
+2. **`4b644d4`'s commit message claims operator authorship for content whose shape is
+   agent-authored.** "`docs/playtest-log.md` as-is, operator's own live smoke entry", over the
+   English markdown results table at `playtest-log.md:438-457`. The same class `PROC/R2`'s Dev Agent
+   Record evidence audit exists to catch; found by content, by no check. The commit is NOT amended
+   and the file is NOT touched.
+3. **`E6-C/R8` understated the unanchored-label extent** -- see `E6-R/R10`. The ruling is NOT edited.
+4. **The `6-6a` four-round gate overrun was silent** -- see `E6-R/R3`. No story file is touched.
+
+### Seven overturned prompt premises, not four
+
+Recorded because the count itself is the finding. The E6 close-out's own S0 section
+(`C:\dev\_e6-closeout.md:21-46`, "CORRECTIONS TO THIS PROMPT, MEASURED") carries **SEVEN** measured
+corrections, where this retrospective's prompt hypothesised four. The four hypothesised all hold
+exactly: m5's failure mode is LOUD not vacuous; the `6-5b/R24` flake is THREE tests not one; the two
+`gdd.md` places alleged stale DO NOT EXIST in `gdd.md` at all (the wording lives only in a closed log
+session, `6-5c/R4`, which `E5-R/R7` forbids editing); and Boulder slow plus Counterspell
+retroactivity were ALREADY amended in `deck-1-spec.md`. Three more the prompt did not anticipate: the
+A6/A7/A8 prose-ledger gap, which was itself promoted into the ratified `E6-C/R3`; "eleven stories"
+against 23 board keys; and the session's attribution reminder naming `Claude Opus 5 (1M context)`
+against the repo constant `Claude Sonnet 5` (`6-1c/R7`). A prompt pass that measures its own premises
+has now corrected them at every venue it has run.
+
+### Close-out
+
+Docs-only pass, four commits, none pushed, no suite run, no engine launch, no subagents.
+`docs(retro)` (the retrospective artifact, 723 lines); this entry (`docs(decision-log)`, a PURE
+APPEND -- no existing entry edited, per `E5-R/R7`); `docs(config)` (`project-context.md`: five
+existing bullets amended for `E6-R/R1`, `R2`, `R3`, `R4`+`R5` and `R6`, five new bullets for `R7`,
+`R8`, `R9`, `R10` and `R13`, `rule_count` and `Last Updated` moved per `R14`); `docs(deferred-work)`
+(one owner line for `E6-R/R16` item 4). `sprint-status.yaml` is NOT touched -- no retrospective key
+exists and `E6-C/R11` says none is created. No story file is touched, per `E5-R/R7`.
+`docs/playtest-log.md` is NOT touched, per `E6-R/R7`. `CLAUDE.md` is NOT touched -- no tier policy
+changed here. No code, no golden, no test. `E6-R/R10`'s own obligation was honoured on this chain:
+every `E6-R/` label written here is defined in this entry.
+
+Next steps: `7-T1-tooling-debt`, while the operator gathers `7-1` assets; then the `7-1` scope talk
+(`E6-C/R14`). The operator reviews the log and pushes.
