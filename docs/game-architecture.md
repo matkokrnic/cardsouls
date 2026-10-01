@@ -3,10 +3,10 @@ title: 'Game Architecture'
 project: 'CardSouls'
 date: '2026-07-21'
 author: 'Matko'
-version: '1.7'
+version: '1.8'
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 status: 'complete'
-amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED', 'A7 (2026-09-01): E4 close-out amendment flush — pooling seam measured, not built. Six stale pooling references corrected to describe what shipped (TargetingService + PlayerState board + src/actors/minions|projectiles/ + data/minions/, all live) and that the object-pool seam was DISCHARGED BY MEASUREMENT, not code (4-5/R1): Project Context technical drivers, D9 decision-table row, Asset-loading line, D9 section, Directory Tree pool/ entry, Entity-creation pattern row', 'A8 (2026-09-07): E5 close-out amendment queue flush — observation-seam family EIGHT -> NINE (connect_orbs_changed, 5-4/R4) and the fourteen stale seam-count sites it left behind corrected; MatchState-signal direct-connect (card_cast_resolved, 5-3/R4) documented as a named exception per Option A']
+amendments: ['A1 (2026-07-21): TimingWindow counts integer ticks', 'A2 (2026-07-21): D3 invariant widened to full state-layer determinism', 'A3 (2026-07-22): dropped vestigial actors/dummy/ — dummy is a NullController slot, not a type', 'A4 (2026-07-30): E2 close-out amendment queue flush — seam registry, facing contract, null_controller.gd, A3 slot-default fix, gamepad exception, round_started, ladder step 1b freeze', 'A5 (2026-08-06): E3 close-out amendment queue flush — assets/ tree + import-hook pattern, DebugInputReader, economy evaluator reconciliation, CardData/CardEffect schema, Deck/Hand tree + RNG-ban naming, Novel Pattern 6 (ModeKind/Invariant.check), X5 replay-fork mechanism + intent-tap seat, ui/debug SAVE-only', 'A6 (2026-08-07): E4-P/R3 D9 correction — D9 and the project-structure tree described PlayerState as already reserving a units/board collection when player_state.gd carries no such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark src/systems/pool/, src/actors/minions|totems|projectiles/, and data/minions/ PLANNED', 'A7 (2026-09-01): E4 close-out amendment flush — pooling seam measured, not built. Six stale pooling references corrected to describe what shipped (TargetingService + PlayerState board + src/actors/minions|projectiles/ + data/minions/, all live) and that the object-pool seam was DISCHARGED BY MEASUREMENT, not code (4-5/R1): Project Context technical drivers, D9 decision-table row, Asset-loading line, D9 section, Directory Tree pool/ entry, Entity-creation pattern row', 'A8 (2026-09-07): E5 close-out amendment queue flush — observation-seam family EIGHT -> NINE (connect_orbs_changed, 5-4/R4) and the fourteen stale seam-count sites it left behind corrected; MatchState-signal direct-connect (card_cast_resolved, 5-3/R4) documented as a named exception per Option A', 'A9 (2026-10-01): E6 close-out amendment flush — direct-connect exception becomes an enumerated list of two (card_cast_resolved, counterspell_resolved), two-slot guard form sanctioned, further-instance rule tied to the RAW allow-list; A6-A8 prose backfilled into the Post-Completion Amendments ledger; unledgered 6-3b seam-registry NINE -> TEN edit (connect_pitch_changed) recorded']
 engine: 'Godot 4.6.3'
 platform: 'Windows desktop (local split-screen, no networking)'
 
@@ -370,7 +370,7 @@ the OPEN event rather than reading state (3-6/R3).
 
 **Observation seam registry (2-4/2-6/3-6/5-4/6-3b amendment).** Consumers reach state through
 runner connect seams (`match_runner.gd`), never a state handle. There are now **ten**, plus the
-EventBus signals above and one named direct-connect exception (below):
+EventBus signals above and a named, enumerated direct-connect exception list (below):
 
 - **Four combat seams:** `connect_hero_action_state_changed`, `connect_hit_landed`,
   `connect_hero_action_rejected`, `connect_deflect_landed`.
@@ -393,17 +393,26 @@ EventBus signals above and one named direct-connect exception (below):
   public; orb counts are not). The countdown is pushed on an authored throttle
   (`pitch_countdown_push_interval_seconds`), never per tick.
 
-- **Direct connect, NAMED EXCEPTION (5-3/R4).** A presentation consumer may subscribe straight to
-  a `MatchState` signal, with no runner seam and no bus relay, when all four hold: read-only, the
-  handler is per-slot guarded, no state handle is retained, and the fact is a *one-shot cue* with
-  no priming semantics (nothing to emit on connect). The sole instance is
-  `card_cast_resolved` -> `HeroCues.on_card_cast_resolved` (`match_runner.gd:501`). Priming
-  consumers (a value a HUD must show before the first change) may NOT use this form — they get a
-  seam, which is why `connect_orbs_changed` was built rather than a second direct connect
-  (`5-4/R4`). A third instance is a design change and the operator's call. Since 6-3b the raw
+- **Direct connect, NAMED ENUMERATED EXCEPTION LIST (5-3/R4, E6-C/R2).** A presentation consumer
+  may subscribe straight to a `MatchState` signal, with no runner seam and no bus relay, when all
+  four hold: read-only, the handler is per-slot guarded, no state handle is retained, and the fact
+  is a *one-shot cue* with no priming semantics (nothing to emit on connect). There are now **two**
+  instances:
+  1. `card_cast_resolved` -> `TelegraphController.on_card_cast_resolved` (`match_runner.gd:644`,
+     5-3 AC 13).
+  2. `counterspell_resolved` -> `TelegraphController.on_counterspell_resolved`
+     (`match_runner.gd:662`, 6-5f AC 26). Its per-slot guard takes the two-slot form
+     `caster_slot == slot or countered_slot == slot` — sanctioned text, not tolerated practice: the
+     victim is `1 - slot` by construction, so the `or` cannot double-fire.
+  Priming consumers (a value a HUD must show before the first change) may NOT use this form — they
+  get a seam, which is why `connect_orbs_changed` was built rather than a second direct connect
+  (`5-4/R4`). A further instance is allowed only under the same four conditions, AND only if the
+  same story adds it to this list and to the RAW allow-list in
+  `test/state/test_architecture_invariants.gd`. Never silent — a third instance remains the
+  operator's call against this list (`E5-C/R2`, reaffirmed `E6-C/R2`). Since 6-3b the raw
   `_match_state.<signal>.connect(` sites under `src/main/` are machine-pinned by shape
-  (`test_raw_match_state_connects_are_pinned_by_shape`): wrapper bodies, EventBus relays, and this one
-  inline consumer.
+  (`test_raw_match_state_connects_are_pinned_by_shape`): wrapper bodies, EventBus relays, and these
+  two inline consumers.
 
 Invariants unchanged: signal payloads only, never a state handle; signals are queued during
 `advance()` and drained afterwards.
@@ -1216,6 +1225,34 @@ strengthens an existing determinism guarantee rather than adding scope.
   preparatory story at the head of Epic 4, `4-0-hand-slot-stability`, on the `3-0a..3-0d` precedent of
   a dedicated pre-epic substrate story. No story file is authored and the board is not touched by this
   amendment pass; the ruling is recorded here only.
+- **A6 (v1.5, 2026-08-07) — `E4-P/R3` D9 correction.** D9 and the project-structure tree described
+  `PlayerState` as already reserving a `units`/board collection when `player_state.gd` carried no
+  such reference; corrected to name the owning story per seam (4-1/4-2/4-4/4-5) and mark
+  `src/systems/pool/`, `src/actors/minions|totems|projectiles/`, and `data/minions/` PLANNED, not
+  shipped. Lands as a docs commit riding the 4-0a pass, not a board story (`E4-P/R3`).
+- **A7 (v1.6, 2026-09-01) — E4 close-out amendment flush.** The pooling seam was MEASURED, not
+  built: `4-5/R1` exercised twenty concurrent units (minions and totems, both players) and held 60
+  FPS without the pool existing as code. Six stale pooling references corrected to describe what
+  shipped instead (`TargetingService` + `PlayerState` board + `src/actors/minions|projectiles/` +
+  `data/minions/`, all live) and that the object-pool seam was DISCHARGED BY MEASUREMENT, not code
+  (`4-5/R1`): Project Context technical drivers, the D9 decision-table row, the Asset-loading line,
+  the D9 section, the Directory Tree `pool/` entry, and the Entity-creation pattern row.
+- **A8 (v1.7, 2026-09-07) — E5 close-out amendment queue flush.** The observation-seam family moves
+  EIGHT -> NINE (`connect_orbs_changed`, `5-4/R4`), and the fourteen stale seam-count sites this left
+  behind are corrected. The `MatchState`-signal direct-connect (`card_cast_resolved`, `5-3/R4`) is
+  documented as a named exception per Option A (`E5-C/R2`): the direct-connect form stands rather
+  than being converted to a seam, because it already satisfies the four named conditions and a
+  priming consumer gets a seam instead (`connect_orbs_changed`, `5-4/R4`) — a third instance left
+  for the operator's call.
+- **A9 (v1.8, 2026-10-01) — E6 close-out amendment flush.** The direct-connect exception becomes an
+  enumerated list of two (`counterspell_resolved` -> `TelegraphController.on_counterspell_resolved`,
+  `match_runner.gd:662`, 6-5f AC 26, joins `card_cast_resolved`), with its two-slot guard form
+  sanctioned as text, and a rule that a further instance needs same-story entries in both this list
+  and the RAW allow-list in `test_architecture_invariants.gd` (`E6-C/R2`). This also backfills A6,
+  A7 and A8 above, which existed only in the frontmatter `amendments` list and not in this prose
+  ledger, and ledgers an amendment that landed without a queue entry: the 6-3b seam-registry edit
+  moving the observation-seam count NINE -> TEN (`connect_pitch_changed`, `E6-P/R8`(2)) was made in
+  the 6-3b close-out commit but never recorded here until now (`E6-C/R3`).
 
 ---
 
