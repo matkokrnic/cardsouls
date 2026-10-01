@@ -179,7 +179,7 @@ This section merges the card-game and fighting genre conventions as **co-primary
 | ④ | Pitch Effect | Powerful effect on the card, activated from the Pitch Zone | Mana (higher) + orbs (per card); only the priced orbs are spent, surplus remains (`6-3-split/R-SPEND`) | Yes (or fizzles) |
 
 > **⚑ CORE DESIGN PILLAR — color-as-defense (confirmed, intended, core).** Because Mode ③ requires a card *of the incoming attack's color in hand*, a player's **4-card hand composition is their real-time defensive toolkit.** No Red card in hand ⇒ cannot *color-counter* a Red unblockable this instant (though it can still be dodged — see the three-tier ladder below). Consequences, all intended:
-> - Hand management is a defensive skill, not just offensive economy; an attacker can **bait** — commit a color the opponent likely can't answer (every press now lands, click-to-commit, `6-9`), burning their colored cards before a commit that matters.
+> - Hand management is a defensive skill, not just offensive economy; an attacker can **bait** — commit a color the opponent likely can't answer (every press now commits, click-to-commit, `6-9`), burning their colored cards before a commit that matters.
 > - **It is occasional, not routine.** With a roughly color-balanced deck, the chance of holding ≥1 card of a given color in a 4-card hand is ~80%. Being caught off-color happens sometimes — enough to give the attacker a reason to *bluff* rather than a guaranteed win.
 > - **Deck color ratio becomes a defensive decision.** A mono-color deck is strong on offense but helpless against two-thirds of unblockables. That is P1 (dual mastery) arriving for free — a deckbuild choice with direct real-time combat consequences.
 

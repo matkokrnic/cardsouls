@@ -12038,10 +12038,9 @@ under the same four conditions. `counterspell_resolved`'s two-slot guard (`caste
 countered_slot == slot`) is sanctioned as text, not merely tolerated in practice -- the victim is
 `1 - slot` by construction, so double-fire is impossible. A further instance is allowed ONLY if the
 same story adds it to both `game-architecture.md`'s list and the RAW allow-list in
-`test_architecture_invariants.gd` -- never silent. This is a Claude ruling; operator veto stays open,
-and it supersedes the "third instance is the operator's call" clause of `E5-C/R2` only to the extent
-that clause named a single-instance exception -- a third instance is still the operator's call against
-this list.
+`test_architecture_invariants.gd` -- never silent. This IS the gate, and it SUPERSEDES the "third
+instance is the operator's call" clause of `E5-C/R2` outright. This is a Claude ruling; operator veto
+stays open on the rule itself.
 `E6-C/R3` Architecture ledger: A6, A7 and A8 existed only in `game-architecture.md`'s frontmatter
 `amendments` list, never in the prose `### Post-Completion Amendments` ledger (which stopped at A5).
 Backfilled from that frontmatter and the log sessions they cite (`E4-P/R3`; `4-5/R1`; `5-4/R4` +

@@ -261,10 +261,10 @@ and tier may be raised, never lowered.
     living minion it targets into a bomb.
 22. `6-5f-counterspell` (**Tier A**) — Counterspell reaches back and undoes the opponent's last
     resolved card, reversing what it did rather than merely stopping it.
-23. `6-5g-counterspell-timed-and-in-flight` (**Tier A**) — Counterspell reaches back and undoes ANY
-    of the opponent's last resolved cards, including the seven that resolve over time or through a
-    projectile in flight. LAST E6 story by ruling (`R-SPELL`'s forcing point is the close-out); the
-    playtest block runs after it.
+23. `6-5g-counterspell-timed-and-in-flight` (**Tier A**) — Counterspell still targets only the
+    opponent's LAST resolved card; this extends that reach to the seven cards that resolve over time
+    or through a projectile in flight (previously only the six instant ones were reachable). LAST E6
+    story by ruling (`R-SPELL`'s forcing point is the close-out); the playtest block runs after it.
 
 - Pitch Zone ownership is **per-player**, both zones visible to both players, staging independent
   (simultaneous pitches legal) — `E6-P`, PROVISIONAL, judged at the post-E6 playtest. This replaces

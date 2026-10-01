@@ -481,8 +481,9 @@ playtest sees working spells rather than named no-ops. The window is now open (E
   must cost more stamina than initiating an unblockable, or it escapes too easily; (iii) the GREEN
   travel profile needs its clip knob authored first, then should cover ~2/3 of its travel by the apex.
 - **`6-5g` corpse lifetime (`corpse_lifetime_seconds`, 20 s) as a playtest knob** (`6-5g/R27`,
-  `6-5g-counterspell-timed-and-in-flight.md:887`) -- it caps how long a Counterspell-restored corpse
-  survives for a counter window; judge the feel, then price it.
+  `6-5g-counterspell-timed-and-in-flight.md:887`) -- a minion killed by the countered card is
+  restored only while its corpse still lies; the counter window itself is unlimited, so the 20 s
+  corpse lifetime effectively caps minion restore. Judge the feel, then price it.
 - The operator's own feel notes already recorded in `docs/playtest-log.md` -- read them there, not
   copied here.
 
@@ -534,7 +535,7 @@ Owners in decision-log session "6-6b-color-counters close-out (Tier A)".
 Owner: E6 close-out session, `E6-C/R9` (decision-log.md). Items below lived only in log prose or a
 story file, with no `deferred-work.md` home, across the 23 E6 close-out sessions.
 
-- **6-5g AC 14 stun half** (`6-5g/R-AC14`, `6-5g-counterspell-timed-and-in-flight.md:323,735,739,770`)
+- **6-5g AC 14 stun half** (`6-5g/R25`, `6-5g-counterspell-timed-and-in-flight.md:323,735,739,770`)
   -- implemented, ROOT half proven, but the STUN half is structurally unobservable in a two-player
   match (mutation M8 GREEN accepted at close-out). Owner: none yet -- needs a test scenario with a
   third live unit; nearest candidate is `7-T1-tooling-debt` if it is picked up as a harness gap

@@ -408,8 +408,7 @@ EventBus signals above and a named, enumerated direct-connect exception list (be
   get a seam, which is why `connect_orbs_changed` was built rather than a second direct connect
   (`5-4/R4`). A further instance is allowed only under the same four conditions, AND only if the
   same story adds it to this list and to the RAW allow-list in
-  `test/state/test_architecture_invariants.gd`. Never silent — a third instance remains the
-  operator's call against this list (`E5-C/R2`, reaffirmed `E6-C/R2`). Since 6-3b the raw
+  `test/state/test_architecture_invariants.gd`. Never silent. Since 6-3b the raw
   `_match_state.<signal>.connect(` sites under `src/main/` are machine-pinned by shape
   (`test_raw_match_state_connects_are_pinned_by_shape`): wrapper bodies, EventBus relays, and these
   two inline consumers.
