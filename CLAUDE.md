@@ -29,7 +29,7 @@ These fail the suite if violated — the guard is the test, not review.
 - Keep `project.godot` edits intentional (autoloads / Input Map / main scene); review the diff.
 - Commit messages are pure ASCII, written via `git commit -F <tempfile outside the repo>`.
 - The shell is PowerShell 5.1 — no `&&` chaining.
-- Trailer `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` on every commit.
+- Trailer `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` on every commit (`6-1c/R7`).
 
 ## Story tiers
 

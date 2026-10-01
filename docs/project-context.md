@@ -4,7 +4,7 @@ user_name: 'Matko'
 date: '2026-07-20'
 sections_completed: ['technology_stack', 'engine_specific', 'performance', 'code_organization', 'testing', 'platform_build', 'critical_gotchas']
 status: 'complete'
-rule_count: 73
+rule_count: 74
 optimized_for_llm: true
 aligned_with: 'game-architecture.md v1.1 (F1, D3/A2, A1, D5, advance-no-delta); folders + testing updated to observed E0 code (2026-07-21)'
 ---
@@ -136,7 +136,8 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Adversarial review:** a pass must state what counts as FAILURE before it starts, not after (3-0d close-out, 2026-08-06).
 - **Suite cadence (a DISCLOSURE rule, not a cap):** the full suite runs TWICE per pass by default — once at open, once at close; mutation proofs run ONLY the affected test file, never the full suite. A further run is legitimate WITH A STATED REASON, and every run beyond the second is ALWAYS REPORTED, never absorbed (`PROC/R1`, reclassified `E5-R/R5` — three epics of bends were all disclosed with their cause).
 - **Review shape:** two parallel adversarial layers; the Acceptance Auditor's checks run INLINE in the main session as a mandatory checklist, including the Dev Agent Record evidence audit — a falsified record claim is annotated in place. Every review records a greppable `LAYER-COMPLETION:` line naming each declared layer with its terminal state; a report without it is REJECTED in the browser and re-run (`PROC/R2`, amended `E4-R/R2` — which also retires the `PROC/R6` stall counter that definition fed). The report is WRITTEN WITH THE WRITE TOOL to `C:\dev\_<story>-review.md` so the artifact survives its session, and the story's close-out log session carries ONE line naming each declared layer with its terminal state (`E5-R/R2` — ten of twelve E5 review reports existed nowhere afterwards, and one story cited a review file that never existed).
-- **Edit fallback:** on the FIRST failed Edit match against a file carrying em-dashes or tabs, switch to a python byte-replace — no Edit retries (`PROC/R3`).
+- **Edit fallback:** on the FIRST failed Edit match against a file carrying em-dashes or tabs, switch to a python byte-replace — no Edit retries (`PROC/R3`). Python 3.12 is available in Claude Code's bash but not in the operator's PowerShell (6-5f close-out).
+- **One foreground engine launch per tool call; never batch launches** (first stated in the 6-5f close-out; labelled here at the E6 close-out, `E6-C/R12`).
 - **Machine-time budget (Tier B only):** ~1 h for a story of `4-B1`'s size (dev pass + code review). The OPERATOR sets the budget at the scope conversation — a story never states its own. Instrument: the timestamps of the two suite-output files (before-baseline and final, both written outside the repo), recorded in the close-out entry as start / end / delta. The interval is the FULL STORY CYCLE — the first before-baseline run to the LAST suite run of the whole story, review fixes included, never the dev pass alone — recorded in the close-out LOG entry, not the story file; an overrun is REPORTED, never blocking (`E5-R/R3` — every E5 delta stopped at the dev pass, and `5-0d` read "well inside" at 17m43s while the full cycle was ~74 min). On crossing, report the remaining work — never push through silently (`PROC/R7`, amended `E4-R/R3`, amended `E5-R/R3`).
 - **Gate-round cap:** after a story's SECOND readiness gate returning NOT READY, the third round is a scope conversation with the operator, not another gate-and-fix pass. The create pass writes BEHAVIOUR and ACCEPTANCE, not mechanism — except where a ruling already put the mechanism in (`E4-R/R4`).
 - **Promotion needs a close-out:** a story is not promoted to `done` on the board until a decision-log close-out session names it; the promotion prompt greps for that session before flipping the status (`E4-R/R7`).
@@ -148,7 +149,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 - **Input:** define named actions in the Input Map (Project Settings) and read via `Input.is_action_*` **only inside `src/controllers/`** (D3) — never hardcode raw keycodes, and never touch `Input` from state or actors. The two local profiles (P1/P2) are **one** `KeyboardController` taking a `"p1"`/`"p2"` prefix, so split-screen/hot-seat is a config, not a second class.
 - **Do not commit generated/local files:** `.godot/`, `/export/`, `export_presets.cfg`, `.claude/settings.local.json` are git-ignored — keep it that way.
 - **Keep `project.godot` edits intentional:** autoload registration and Input Map live here; review diffs before committing.
-- **Commit trailer:** `Co-Authored-By: Claude Opus 4.8` is a repo-wide constant on every commit, regardless of which model actually did the work — never the real model name.
+- **Commit trailer:** `Co-Authored-By: Claude Sonnet 5` is a repo-wide constant on every commit, regardless of which model actually did the work — never the real model name (`6-1c/R7`).
 
 ### Critical Don't-Miss Rules (anti-patterns & gotchas)
 
