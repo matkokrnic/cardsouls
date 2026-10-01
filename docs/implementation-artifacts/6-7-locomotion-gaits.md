@@ -4,7 +4,7 @@ baseline_commit: df28167ce95eedea1a92c8fb5480f045914c6c5c
 
 # Story 6.7: Locomotion Gaits
 
-Status: review
+Status: done
 
 > **Scope note.** Board order item 7 of eleven (decision-log Session 2026-09-08, `E6-P/R2`). Tier
 > A by the golden clause AND by content (`E6-P/R3`): "today's build has ONE `move_speed`
