@@ -196,7 +196,7 @@ Netcode is excluded (#2) — no decision below is justified by "network-readines
 **Quick confirmations:** Persistence = none (no meta-progression; only `FeatureFlags` + balance `.tres`).
 Networking = excluded. Asset loading = preload `.tres` at startup + scene-based (no streaming, no pooling — the E4
 object-pool seam was discharged by measurement, not code, `4-5/R1`).
-UI = Godot `Control`, signal-driven, one HUD root per viewport. AI = a Controller implementation (E7),
+UI = Godot `Control`, signal-driven, one HUD root per viewport. AI = a Controller implementation (E8),
 not a subsystem; bluffing AI deferred.
 
 ---
@@ -628,7 +628,7 @@ res://
 │   │       ├── telegraph_profile.gd  # D7 standalone; used from E1 (melee incl.)
 │   │       ├── balance_config.gd     # class_name BalanceConfig
 │   │       ├── feature_flags.gd      # class_name FeatureFlags
-│   │       └── minion_priority.gd (E4) · equipment_data.gd (E8)
+│   │       └── minion_priority.gd (E4) · equipment_data.gd (E9)
 │   ├── systems/                      # autoloads & cross-cutting — own instances, NO gameplay logic
 │   │   ├── event_bus.gd              # D5 fixed set: match_started/round_started/round_ended
 │   │   ├── feature_flags_service.gd  # autoload: loads FeatureFlags .tres ONCE; exposes flags
@@ -642,7 +642,7 @@ res://
 │   ├── controllers/  ⚠️              # D3: the ONLY path where Input.* may appear
 │   │   ├── controller.gd             # interface: sample() -> InputIntent
 │   │   ├── keyboard_controller.gd (E0) · gamepad_controller.gd (E2) · null_controller.gd
-│   │   ├── scripted_controller.gd    # E7 bot (gets an injected READ-ONLY state view) — reserved
+│   │   ├── scripted_controller.gd    # E8 bot (gets an injected READ-ONLY state view) — reserved
 │   │   ├── replay_controller.gd      # X5: emits InputIntent from a recorded stream (indistinguishable
 │   │   │                             #     from hardware to the runner)
 │   │   └── debug_input_reader.gd     # (3-0b) NOT a Controller: no sample(), no InputIntent. Reads
@@ -662,7 +662,7 @@ res://
 │   └── main/  ⚠️                     # root scene + Match Runner (the single _physics_process, D2)
 │       └── match_runner.gd            # OWNS the MatchState instance; sample→advance→drain; wires refs
 ├── data/                             # authored .tres INSTANCES
-│   ├── cards/ · economy/ · minions/(4-1, PLANNED) · equipment/(E8) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
+│   ├── cards/ · economy/ · minions/(4-1, PLANNED) · equipment/(E9) · balance/ · telegraphs/   # telegraphs incl. melee (E1)
 │   │                                 #   economy/: ResourceGenerationRule .tres, sorted-scan loaded (D6)
 │   └── feature_flags.tres
 ├── assets/                           # art (⚠️ see below) · audio (feeds CombatCues bus, .wav + .import)
@@ -699,7 +699,7 @@ The **Match Runner** (`src/main/match_runner.gd`) creates and **owns** the singl
 instance, advances it (D2), and drains its signal queue (D5). References are wired **explicitly** at
 match start:
 - HUD / presentation ← **signal subscriptions** (or an injected read-only view); never a mutating handle.
-- Scripted controller (E7) ← an injected **read-only state view**; it produces intents, never writes.
+- Scripted controller (E8) ← an injected **read-only state view**; it produces intents, never writes.
 
 **No `MatchState` autoload.** A globally-exposed mutable state singleton would let arbitrary code
 write state directly, bypassing the D2 ordered dispatch and D5 — the exact failure mode the seam
@@ -856,7 +856,7 @@ func sample() -> InputIntent:
   grep-checkable under `src/controllers/`).
 - `ReplayController` overrides `sample()` to return recorded intents; the runner cannot distinguish it
   from hardware (X5).
-- `ScriptedController` (E7) receives an injected **read-only state view** at construction to make
+- `ScriptedController` (E8) receives an injected **read-only state view** at construction to make
   decisions — it never mutates state.
 
 ### Novel Pattern 4 — TimingWindow (D4, the fairness core)

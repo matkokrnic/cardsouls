@@ -97,7 +97,7 @@ Concrete obligations this creates (binding on Art, Audio, and UI):
 
 The canonical ten-second image of a match going right. Any mechanic that does not appear here, or that competes with this moment for the player's attention, needs justification.
 
-> I stage a card in the Pitch Zone. My opponent sees its cost and the shared timer running down — and whether it's already READY to fire, but not how close I am if it isn't (`6-3-split/R-INFO`). He knows the only way I bank orbs at all is by landing an unblockable. So he has to choose: press me aggressively and deny me space, or back off and let the timer expire. I commit to a chargeup — red telegraph. He has half a second to decide whether that's the real cash-in or a feint. If he reads the color, I lose the card and the tempo. If he misses, the orb is mine and the pitch goes through — and all of this while my stamina is draining from the two rolls I had to spend just to get in range.
+> I stage a card in the Pitch Zone. My opponent sees its cost and the shared timer running down — and whether it's already READY to fire, but not how close I am if it isn't (`6-3-split/R-INFO`). He knows the only way I bank orbs at all is by landing an unblockable. So he has to choose: press me aggressively and deny me space, or back off and let the timer expire. My press commits the attack — there's no feint to pull back, only a red telegraph he has the chargeup window to read. If he reads the color, I lose the card and the tempo. If he misses, the orb is mine and the pitch goes through — and all of this while my stamina is draining from the two rolls I had to spend just to get in range.
 
 ### Core Gameplay Loop
 
@@ -107,7 +107,7 @@ CardSouls runs a single continuous real-time loop — no turns. It is structured
 Close distance and win melee exchanges: ordinary hits deal chip damage **and** generate mana. Spend mana to play cards (minions / totems / spells) that build board pressure and economy. Bank **orbs** by landing unblockable attacks. The player is assembling both a threat and the resources to deliver it. *Serves P2 (aggression is economy) and P1 (both layers stay live).*
 
 **② BLUFF — the public commitment** *(at the actor's tempo).*
-Stage a card in the **Pitch Zone**; its cost and countdown timer become public. The player may be an orb short — and the only way to close the gap is landing an unblockable — so they commit a chargeup: **real cash-in or feint?** The opponent must read the color or eat the consequence. *Serves P3 (visible threat, uncertain delivery).*
+Stage a card in the **Pitch Zone**; its cost and countdown timer become public. The player may be an orb short — and the only way to close the gap is landing an unblockable — so they commit a chargeup that cannot be feinted or pulled back: **the press is the commitment, only the color is in question.** The opponent must read the color or eat the consequence. *Serves P3 (visible threat, uncertain delivery).*
 
 **③ PAYOFF — delivered through soulsborne execution** *(the reactor's ≤~0.5s read).*
 The color-read exchange resolves. Land it → orb + fixed damage, the pitch goes through, a big swing lands. Get read → stunned ~1s, card and tempo lost. The payoff is *always* felt through a combat execution moment, never a menu confirmation. *Serves the vision and P1.*
@@ -179,7 +179,7 @@ This section merges the card-game and fighting genre conventions as **co-primary
 | ④ | Pitch Effect | Powerful effect on the card, activated from the Pitch Zone | Mana (higher) + orbs (per card); only the priced orbs are spent, surplus remains (`6-3-split/R-SPEND`) | Yes (or fizzles) |
 
 > **⚑ CORE DESIGN PILLAR — color-as-defense (confirmed, intended, core).** Because Mode ③ requires a card *of the incoming attack's color in hand*, a player's **4-card hand composition is their real-time defensive toolkit.** No Red card in hand ⇒ cannot *color-counter* a Red unblockable this instant (though it can still be dodged — see the three-tier ladder below). Consequences, all intended:
-> - Hand management is a defensive skill, not just offensive economy; an attacker can **bait** — throw or feint a color the opponent likely can't answer, burning their colored cards before the real commit.
+> - Hand management is a defensive skill, not just offensive economy; an attacker can **bait** — commit a color the opponent likely can't answer (every press now lands, click-to-commit, `6-9`), burning their colored cards before a commit that matters.
 > - **It is occasional, not routine.** With a roughly color-balanced deck, the chance of holding ≥1 card of a given color in a 4-card hand is ~80%. Being caught off-color happens sometimes — enough to give the attacker a reason to *bluff* rather than a guaranteed win.
 > - **Deck color ratio becomes a defensive decision.** A mono-color deck is strong on offense but helpless against two-thirds of unblockables. That is P1 (dual mastery) arriving for free — a deckbuild choice with direct real-time combat consequences.
 
@@ -281,7 +281,7 @@ Each player equips **4 pieces** (Head / Chest / Arms / Legs) in the pre-match lo
 
 Passive types are **data-defined** (`.tres`); examples (TDD §11.3): combat-timing (e.g. faster Red chargeup), threshold-based (e.g. damage reduction while 5+ friendly totems live), cooldown-immunity (e.g. one stun negated every 45 s), resource modifiers (e.g. +1 starting orb, higher mana regen), stat adjustments (e.g. larger stamina pool). Values are balance-critical — data, never hardcoded.
 
-**Demo scope:** placeholder stats only, **no on-hero visual representation** (deferred, TDD §15); behind `FeatureFlag: equipment` (off → none equipped). This is the one system deliberately kept as a thin, late layer (E8) — it modifies the hero without touching the core loop.
+**Demo scope:** placeholder stats only, **no on-hero visual representation** (deferred, TDD §15); behind `FeatureFlag: equipment` (off → none equipped). This is the one system deliberately kept as a thin, late layer (E9) — it modifies the hero without touching the core loop.
 
 ### Conventions explicitly N/A or deferred for the demo
 
@@ -412,11 +412,12 @@ One-screen summary; full breakdown (goals, stories, exit criteria, dependencies,
 | **E3** | Card system + mana economy | CardData `.tres`, deck 20 / hand 4, draw/reshuffle, mode-select UX, Basic mode, mana (passive + melee-hit). | melee-mana-gen |
 | **E4** | Minions & totems | Autonomous minion AI (data-defined priorities), pooling, throttled targeting, 3 totem subtypes. | minions, totems |
 | **E5** | Unblockable RPS + orbs | Chargeup + telegraph (Mode ②), color defense (Mode ③), three-tier ladder, stun, per-color dmg, orbs, color-as-defense. | unblockable, orbs |
-| **E6** | Pitch Zone | Stage / timer / cost, activate / cancel / fizzle, priced-orb spend (`6-3-split/R-SPEND`, not an all-orb reset), affordability read, Pitch effects (Mode ④), per-player zones with independent staging. Also E6 (`E6-P`): card-hand tint, hold-to-charge, the two-gait locomotion system, camera freedom, spell resolution. **← vision complete; touchstone playable; go/no-go playtests begin.** | pitch-zone |
-| **E7** | Scripted bot | AI controller impl (circle / interval attack / occasional roll / fixed unblockable). Solo iteration. | — |
-| **E8** | Equipment | 4 slots, data-defined passives, pre-match select (placeholder stats). | equipment |
+| **E6** | Pitch Zone | Stage / timer / cost, activate / cancel / fizzle, priced-orb spend (`6-3-split/R-SPEND`, not an all-orb reset), affordability read, Pitch effects (Mode ④), per-player zones with independent staging. Shipped: click-to-commit (supersedes hold-to-charge), pitch staging/activation/HUD, Deck 1 spells including Counterspell, the two-gait locomotion system, camera freedom, the card-mode toggle. **← vision complete; touchstone playable; go/no-go playtests begin.** | pitch-zone |
+| **E7** | Presentation, Polish & Playtest Prep | Deck 1 effect visuals/sounds, animation polish, minion rework, pitch speeds (instant/sorcery), Deck 2, HUD/card presentation, a tuning pass, tooling debt — in order, toward the friends playtest. | — |
+| **E8** | Scripted bot | AI controller impl (circle / interval attack / occasional roll / fixed unblockable). Solo iteration. | — |
+| **E9** | Equipment | 4 slots, data-defined passives, pre-match select (placeholder stats). | equipment |
 
-**Sequence:** E0 → E1 → **E2 (split-screen early, as a HUD/legibility constraint)** → E3 → E4 → E5 → **E6 (loop whole)** → E7 → E8.
+**Sequence:** E0 → E1 → **E2 (split-screen early, as a HUD/legibility constraint)** → E3 → E4 → E5 → **E6 (loop whole)** → E7 → E8 → E9.
 
 **Deferred to their own epics if the demo validates:** Bluffing AI, online netcode, Best-of-3 + sideboard, equipment visuals, multiple arenas.
 

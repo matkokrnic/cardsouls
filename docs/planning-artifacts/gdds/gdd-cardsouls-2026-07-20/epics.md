@@ -194,24 +194,28 @@ defines no further E4 commitments beyond what is already in Goal/Key stories/Exi
 
 **Goal.** Close the buildup→bluff→payoff loop; make the Design Touchstone playable.
 
-**Key stories.** ELEVEN, keyed and tiered at the E6 planning pass (decision-log Session 2026-09-08,
-`E6-P/R2`); briefly merged to TEN at the `6-3-pitch-hud-and-activation` create pass (2026-09-14,
-board items 5/6 combined), then split back to ELEVEN the same day at that story's readiness gate
-(`6-3-split/R-SPLIT`) after the gate found the merge's forcing premise disproved. Keys are creation
-order; the list below is **board order**
-(the `4-3a`..`4-3e` precedent — the numeral is historical, not the board's). Tier per `E4-P/R9`;
-every Tier B is contingent on a measured before/after showing golden and snapshot key set unmoved,
+**Key stories.** TWENTY-THREE, all `done` (E6 close-out, 2026-10-01, `E6-C/R1`). Keyed and tiered at
+the E6 planning pass (decision-log Session 2026-09-08, `E6-P/R2`) with three stories (`6-3`, `6-6`,
+`6-5`) later split at their own readiness gates or scope talks — the numeral is historical, not the
+board's (the `4-3a`..`4-3e` precedent). The list below is **board order**. Tier per `E4-P/R9`; every
+Tier B discharged subject to a measured before/after showing golden and snapshot key set unmoved,
 and tier may be raised, never lowered.
 
 1. `6-0-card-hand-tint` (**Tier B**) — the four own-hand card faces carry their card's colour; the
    face-down opponent row is untouched. FIRST E6 story by ruling (`E5-C/R5`).
 2. `6-1-hold-to-charge` (**Tier A**) — mode ② is held through the chargeup instead of press-edge; an
    early release needs a `CHARGING` teardown `src/state/` does not have (`5-7/R6`, `E5-C/R6`).
+   SUPERSEDED in play terms by `6-9` below; the state shape it added stands.
 3. `6-1b-chargeup-presentation` (**Tier B**) — the chargeup animation: crouch/leap, short mid-air
    hover, auto-aim toward a target in radius (`E5-C/R9`).
-4. `6-2-pitch-staging` (**Tier A**) — `PitchState` gains content: stage from hand, the fizzle
+4. `6-1c-unblockable-tracking-and-reach` (**Tier A**) — tracked blade position and lock-on reach for
+   mode ② in place of a fixed hitbox.
+5. `6-1d-honest-hit-geometry` (**Tier A**) — the unblockable landing check measures real contact
+   (tracked blade position against the defending model), closing the visible gap `6-1c`'s live
+   smoke showed.
+6. `6-2-pitch-staging` (**Tier A**) — `PitchState` gains content: stage from hand, the fizzle
    `TimingWindow`, the fizzle exit, staged card still counts toward the hand of 4.
-5. `6-3a-pitch-activation` (**Tier A**) — Y wired as the fourth card mode: staging, activation, both
+7. `6-3a-pitch-activation` (**Tier A**) — Y wired as the fourth card mode: staging, activation, both
    refusals (occupied-zone stage refusal, not-ready activation refusal), activation's consequence
    (`6-3-split/R-SPEND`: only the priced orbs are spent, surplus remains), the intent shape, the
    Y-guard retirement, the golden. Live smoke runs on surfaces that already ship (orb counters,
@@ -219,25 +223,48 @@ and tier may be raised, never lowered.
    work. Split from the merged `6-3-pitch-hud-and-activation` at that story's readiness gate
    (2026-09-14, `6-3-split/R-SPLIT`), after the gate disproved the merge's premise that activation
    could not be smoke-tested without a HUD.
-6. `6-3b-pitch-hud` (**Tier A**) — the tenth observation seam, both pitch zones (own + opponent), the
-   hand ghost, the cross-slot guard, retiring the `2-6` placeholder and its shared A/B switch, and
-   the anchor A/B verdict. Driven live by `6-3a`'s Y, so it needs no scaffolding either. Same split,
-   same ruling as `6-3a` above.
-7. `6-7-locomotion-gaits` (**Tier A**) — the two-gait system ruled at planning: walk is new, slower,
+8. `6-3b-pitch-hud` (**Tier A**) — the tenth observation seam (`connect_pitch_changed`), both pitch
+   zones (own + opponent), the hand ghost, the cross-slot guard, retiring the `2-6` placeholder and
+   its shared A/B switch, and the anchor A/B verdict. Driven live by `6-3a`'s Y, so it needs no
+   scaffolding either. Same split, same ruling as `6-3a` above.
+9. `6-7-locomotion-gaits` (**Tier A**) — the two-gait system ruled at planning: walk is new, slower,
    free and the default; run is the current speed, held, draining the same stamina bar. Walk speed
    and drain-per-second are authored here.
-8. `6-7b-locomotion-presentation` (**Tier B**) — walk and turn-in-place animations, the presentation
-   half of `6-7`.
-9. `6-8-camera-freedom` (**Tier A**, raised at the 2026-09-16 scope talk) — lock-on cycling reaches ALL live targets
-   including those behind the hero (full 360, not a front arc), and the camera can be unlocked and
-   manually rotated when not locked on.
-10. `6-6-defense-presentation` — SPLIT 2026-09-17 (`6-3-split/R-SPLIT` precedent, scope talk
-    2026-09-17) into `6-6a-defense-reactions` (**Tier A**, DONE 2026-09-19 — hurt/knockdown/stun-pose/
-    block-impact reactions) and `6-6b-color-counters` (**Tier A**, backlog — three color counters per
-    attack type). Defence animation and sound synced to the incoming attack (`E5-C/R9`).
-11. `6-5-spell-resolution` (**Tier A**) — the E6 CLOSE-OUT story: the three `spell_*` fixture cards
-    stop taking the named no-op path. LAST by ruling — `R-SPELL`'s forcing point is the close-out,
-    and the playtest block runs after it.
+10. `6-7b-locomotion-presentation` (**Tier B**) — walk and turn-in-place animations, the presentation
+    half of `6-7`.
+11. `6-8-camera-freedom` (**Tier A**, raised at the 2026-09-16 scope talk) — lock-on cycling reaches ALL live targets
+    including those behind the hero (full 360, not a front arc), and the camera can be unlocked and
+    manually rotated when not locked on.
+12. `6-6a-defense-reactions` (**Tier A**) — hurt/knockdown/stun-pose/block-impact reactions, defence
+    animation and sound synced to the incoming attack (`E5-C/R9`). First half of `6-6-defense-presentation`,
+    SPLIT 2026-09-17 (`6-3-split/R-SPLIT` precedent, scope talk 2026-09-17).
+13. `6-6b-color-counters` (**Tier A**) — three color counters per attack type. Second half of the
+    `6-6` split.
+14. `6-D1-solo-smoke-keys` (**Tier B**) — three P1 keyboard keys that cast an unblockable of a chosen
+    colour and hold it through the chargeup, so a solo operator can smoke color counters.
+15. `6-9-click-to-commit` (**Tier A**) — mode ② becomes click-and-commit, superseding `6-1`'s
+    hold-to-charge: an accepted press locks in the cash-in; no held feint window.
+16. `6-10-card-mode-toggle` (**Tier B**) — card mode switchable from "hold L3" to "click L3 on, click
+    L3 off" by one authored line, so a pad player can judge which feels better without a code edit.
+17. `6-5a-spell-framework-and-buffs` (**Tier A**) — a named, data-driven card-effect framework plus
+    five working Deck 1 effects (Ruin Vanguard, Bloodlust, Vampiric Aura, Bloodhound Step,
+    Frostbite) with Deck 1 as both players' deck. First of the `6-5` spell-resolution split.
+18. `6-5b-corpses-and-own-minions` (**Tier A**) — Grave Ward, Culling, Drain and Raise Dead working
+    end-to-end; a corpse becomes real game state, not a purely visual linger.
+19. `6-5c-hero-cast-honed-bolt` (**Tier A**) — offensive spells gain a visible cast windup the
+    opponent can react to, with Honed Bolt the first card to use it: a bolt that stuns, then roots.
+20. `6-5d-fireball-and-spell-targeting` (**Tier A**) — Bloodhound Step's pitch is Fireball, a
+    spend-everything homing projectile after a visible cast; offensive spells target the caster's
+    lock-on.
+21. `6-5e-rocksling-boom-and-corpse-bomb` (**Tier A**) — Rocksling plants Boulder cards face-up in
+    the opponent's hand; Boom detonates every Boulder sitting there; Corpse Bomb turns every own
+    living minion it targets into a bomb.
+22. `6-5f-counterspell` (**Tier A**) — Counterspell reaches back and undoes the opponent's last
+    resolved card, reversing what it did rather than merely stopping it.
+23. `6-5g-counterspell-timed-and-in-flight` (**Tier A**) — Counterspell reaches back and undoes ANY
+    of the opponent's last resolved cards, including the seven that resolve over time or through a
+    projectile in flight. LAST E6 story by ruling (`R-SPELL`'s forcing point is the close-out); the
+    playtest block runs after it.
 
 - Pitch Zone ownership is **per-player**, both zones visible to both players, staging independent
   (simultaneous pitches legal) — `E6-P`, PROVISIONAL, judged at the post-E6 playtest. This replaces
@@ -278,28 +305,63 @@ and tier may be raised, never lowered.
   (`GamepadProfile` has no Y field; `GamepadController` reads Y on no line) and mode PITCH already
   has a live dispatch arm for STAGING (`match_state.gd`, since `6-2`) but activation itself has no
   dispatch at all yet — both must be revisited deliberately, not discovered.
-- **`6-5` (close-out) carries `R-SPELL` plus two deferred E4 review findings** given it as owner at
-  E5 planning: M5 (the live homing test cannot tell steering-toward from steering-away) and M6
-  (reordering `unit_kinds` at an X3 reload silently re-points every live record) —
-  `deferred-work.md:232-233`. Three fixture cards carry `spell_*` ids today
-  (`data/cards/{ember_lash,frost_dart,bramble_snare}.tres:9`).
+- **`6-5` (split into `6-5a`..`6-5g`) carried `R-SPELL` plus two deferred E4 review findings** given
+  it as owner at E5 planning: M5 (the live homing test cannot tell steering-toward from
+  steering-away) and M6 (reordering `unit_kinds` at an X3 reload silently re-points every live
+  record) — BOTH CLOSED, annotated in place at `deferred-work.md:302-303` (M5 by 6-5d AC 37,
+  `6-5d/R14`; M6 by 6-5d AC 38, `6-5d/R12`). Three fixture cards carried `spell_*` ids
+  (`data/cards/{ember_lash,frost_dart,bramble_snare}.tres:9`) before the split's effects replaced them.
 - **`6-7b` has an ASSET PREREQUISITE:** the Mixamo walk clips for the paladin must physically be in
   the repo BEFORE that story's create pass. Operator-owned manual step, recorded here because E3
   learned it the hard way.
-- `6-1b` and `6-6` are expected to discharge the "chargeup unreadable" and "defense feel reads as
-  the defender did nothing" retune entries in passing (`deferred-work.md`, E5 residue). The rule
-  that retune stays out of E6 bars slotting a retune ENTRY as a story; it does not forbid fixing one
-  an E6 story lands on anyway.
-- `6-7` SUPERSEDES the `5-3/R6(d)` retune entry (locomotion speed / walk-as-default /
+- `6-1b` and `6-6` (`6-6a`/`6-6b`) DISCHARGED the "chargeup unreadable" and "defense feel reads as
+  the defender did nothing" retune entries in passing (`deferred-work.md`, E5 residue) — now facts,
+  not expectations.
+- `6-7` SUPERSEDED the `5-3/R6(d)` retune entry (locomotion speed / walk-as-default /
   sprint-costs-stamina) — same ground, now ruled rather than deferred.
-- `6-3b-pitch-hud` may NOT reach for a second `MatchState` direct-connect: `E5-C/R2` documents that
-  exception at exactly one instance (`src/main/match_runner.gd:501`) and a third is the operator's
-  call. The observation-seam family (nine members since `connect_orbs_changed`, `E5-C/R3`) is the
-  route.
+- The direct-connect exception is now an enumerated list of **TWO** instances
+  (`card_cast_resolved` at `match_runner.gd:644`, `counterspell_resolved` at `match_runner.gd:662`,
+  `E6-C/R2`); a further instance needs same-story entries in both `game-architecture.md` and the
+  RAW allow-list in `test_architecture_invariants.gd`. The observation-seam family is now **TEN**
+  members since `connect_pitch_changed` (`6-3b`, `E6-P/R8`(2)).
 
 ---
 
-## E7 — Scripted Bot
+## E7 — Presentation, Polish & Playtest Prep
+
+**Goal.** Give E6's mechanics the presentation they are missing, work off the tooling and
+smoke-claim debt E6 left behind, and reach the friends playtest. Operator rulings 2026-09-30 /
+2026-10-01 (`E6-C/R11`); order below is the operator's stated order.
+
+**Key stories.**
+1. `7-T1-tooling-debt` (**Tier B**) — the m5 replay-drop coverage gap and the `6-5b/R24` flake,
+   alongside the operator's asset gathering.
+2. `7-1-effect-presentation` (**Tier B**) — Deck 1 effect visuals and sounds; absorbs the Grave Ward
+   tint fix, the eleven effects with no bespoke visual, and the placeholder bolt/fireball/stones/
+   skulls/Boulder art.
+3. `7-2-animation-polish` (**Tier B**, raised to **A** if authored timing windows move) — upper/lower
+   body split, hit-reaction sliding.
+4. `7-3-minion-rework` (**Tier A**) — operator asset search first.
+5. `7-4-pitch-speeds` (**Tier A**) — per-card instant/sorcery field; instant pays from banked orbs,
+   sorcery needs orbs earned between pitch and fizzle; plus +1 mana for a defended unblockable.
+6. `7-5-deck-2` (**Tier A**) — design pending.
+7. `7-6-hud-and-card-presentation` (**Tier B**) — cost legibility, hand icons, per-effect cast
+   feedback, new HUD.
+8. `7-7-tuning-pass` (**Tier B**, raised to **A** if a seat is added or an action becomes
+   refusable) — the retune block, carrying the `6-1d/R16` reach/homing, dodge-cost, and GREEN
+   travel-profile inputs.
+
+**Deferred until after the friends playtest:** counter-on-counter (`6-5g/R17`), the deck builder.
+
+**Exit criteria.** The friends playtest is run with the presentation and tuning debt named above
+discharged or explicitly carried into it.
+
+**Note.** The E6 retrospective and the friends playtest itself get no board keys (precedent:
+retrospectives have never been board keys).
+
+---
+
+## E8 — Scripted Bot
 
 **Goal.** Solo iteration without a second human.
 
@@ -313,7 +375,7 @@ and tier may be raised, never lowered.
 
 ---
 
-## E8 — Equipment
+## E9 — Equipment
 
 **Goal.** The equipment passive layer, toggleable.
 
