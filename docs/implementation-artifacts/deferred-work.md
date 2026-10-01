@@ -454,9 +454,10 @@ do not assume it generalizes to other authored values without checking the speci
 ## Playtest block after E5+E6 -- checklist
 
 Per operator ruling `R-SPELL` (2026-09-01, decision-log E4 close-out session), the melee retune +
-playtest block deferred on 2026-08-30 runs AFTER the E6 close-out story that gives spell resolution
-its own forcing point, so the playtest sees working spells rather than named no-ops. When that
-window opens, this checklist is the block's scope:
+playtest block deferred on 2026-08-30 runs AFTER the spell-resolution close-out that gives spell
+resolution its own forcing point -- that story split into `6-5a`..`6-5g`, all done -- so the
+playtest sees working spells rather than named no-ops. The window is now open (E6 close-out,
+2026-10-01). This checklist is the block's scope:
 
 - Every **(b)**-tagged finding above (4-5 D8; 4-6 M1, M2, M5, L5, L6, L10; 4-6a M2, M3).
 - ~~Arena has no edge~~ -- REMOVED from this checklist: E5 planning slotted it as `5-0d-arena-edge`
@@ -471,9 +472,17 @@ window opens, this checklist is the block's scope:
   E6 and given this block as their first named owner. See `## E5 residue` above.
 - **Knockdown lie (2.5 s) and get-up (2.0333 s) durations both read slightly too long** -- shorten
   both, ratio preserved (6-6a live smoke, 2026-09-19; full entry and its couplings above).
-- See also `## E5 residue` above for the E5 retune entries this block should also pick up — noting
-  that two of them (`chargeup unreadable`, `defense feel`) are expected to be discharged inside E6
-  by `6-1b` and `6-6`, and `5-3/R6(d)` is superseded outright by `E6-P/R3`.
+- See also `## E5 residue` above for the E5 retune entries this block should also pick up —
+  `chargeup unreadable` and `defense feel reads as the defender did nothing` are now DISCHARGED
+  facts, by `6-1b` and `6-6a`/`6-6b` respectively, and `5-3/R6(d)` is SUPERSEDED outright, by `6-7`
+  (`E6-P/R3`).
+- The three `6-1d/R16` retune inputs (decision-log.md:9967-9973), not previously on this checklist:
+  (i) homing range and unblockable reach are tuned TOGETHER, not independently; (ii) dodge-after-commit
+  must cost more stamina than initiating an unblockable, or it escapes too easily; (iii) the GREEN
+  travel profile needs its clip knob authored first, then should cover ~2/3 of its travel by the apex.
+- **`6-5g` corpse lifetime (`corpse_lifetime_seconds`, 20 s) as a playtest knob** (`6-5g/R27`,
+  `6-5g-counterspell-timed-and-in-flight.md:887`) -- it caps how long a Counterspell-restored corpse
+  survives for a counter window; judge the feel, then price it.
 - The operator's own feel notes already recorded in `docs/playtest-log.md` -- read them there, not
   copied here.
 
@@ -519,3 +528,48 @@ Owners in decision-log session "6-6b-color-counters close-out (Tier A)".
 - **AC 24a's cosmetic half** -- the "Boulder's own row cycles no mode" mode-cycle suppression on a Boulder
   slot -> Tier B presentation story after `6-5f`. Behaviourally equivalent today: a covered slot can still
   be toggled and is then refused at the commit with `REASON_COVERED_SLOT` through the ordinary channel.
+
+## E6 residue (close-out 2026-10-01)
+
+Owner: E6 close-out session, `E6-C/R9` (decision-log.md). Items below lived only in log prose or a
+story file, with no `deferred-work.md` home, across the 23 E6 close-out sessions.
+
+- **6-5g AC 14 stun half** (`6-5g/R-AC14`, `6-5g-counterspell-timed-and-in-flight.md:323,735,739,770`)
+  -- implemented, ROOT half proven, but the STUN half is structurally unobservable in a two-player
+  match (mutation M8 GREEN accepted at close-out). Owner: none yet -- needs a test scenario with a
+  third live unit; nearest candidate is `7-T1-tooling-debt` if it is picked up as a harness gap
+  rather than a playtest question.
+- **6-5g corpse lifetime as a playtest knob** (`6-5g/R27`, `:887`) -- see the Playtest checklist
+  above, now carried there.
+- **6-5g counter-on-counter** (`6-5g/R17`, `decision-log.md:11959-11961`; `deck-1-spec.md:236-239`)
+  -- its own story, after the friends playtest. No board key yet (operator ruling, `E6-C/R11`).
+- **Deck builder** -- after the friends playtest. No board key yet (operator ruling, `E6-C/R11`).
+
+The misplaced `### 6-8` subsection above (filed inside the `## E4 review residue` block) is a
+findability defect, not moved here (`E5-R/R7` precedent against touching closed-record placement).
+
+### Presentation debt, consolidated
+
+Every item below was owned only by "the Tier B presentation story after 6-5f/6-5g" -- no board key,
+no file. Now split and keyed (`E6-C/R11`):
+
+- **`7-1-effect-presentation`** -- Grave Ward tint not visible (`6-5b-corpses-and-own-minions.md:401`);
+  11 of 14 Deck 1 effects show only the generic cast-success cue; placeholder
+  bolt/fireball/stones/skulls art (`bolt_actor.gd`, `projectile_actor.gd`); dizzy/root legibility
+  (shipped in scope, read quality unmeasured); Boulder mode-cycle cosmetic suppression (above).
+- **`7-2-animation-polish`** -- upper/lower body split (`6-5c/R5`, "OUT, Tier B presentation story
+  after `6-5f`"); hit-reaction sliding while walking.
+- **`7-6-hud-and-card-presentation`** -- cost legibility (`6-5b` AC 23, failed at smoke); hand shown
+  as text, no icons; no per-effect cast feedback (generic cue only); a new HUD (the shipped HUD is
+  the 2-4 one, extended in place through `6-10`).
+
+### Tooling, to `7-T1-tooling-debt`
+
+- **m5 -- `_replay`'s unknown-channel drop is unfalsified for `colors`** (`6-5f/R45`,
+  `test/state/test_replay_identity.gd:1618-1659`). Needs a `KNOWN_DROPS` guard, `colors` and
+  `pitch_effects` drop branches, and a derived-coverage test against `IntentRecorder`'s surface.
+- **`6-5b/R24` flake** -- "resources still in use at exit", three tests
+  (`test_unit_combat_live.gd`, `test_charge_telegraph_dispatch_live.gd`, `test_card_mode_lift.gd`),
+  six occurrences since 2026-09-05; FAILED-vs-warning split is the harness's, not the engine's.
+- **Stale comment at `src/main/match_runner.gd:2460`** -- fixed comment-only in the C4 commit of
+  this close-out; recorded here as the debt's origin for findability.
