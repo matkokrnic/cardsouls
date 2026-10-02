@@ -2456,10 +2456,11 @@ func connect_cards_changed(slot: int, callback: Callable) -> void:
 ## something finally consumes it.
 ##
 ## THE ALTERNATIVE SHAPE IS EXPLICITLY REFUSED: no `MatchState.orb_granted` signal is built and no
-## second direct presentation-to-MatchState connect is added. `5-3` left one such direct connect
-## (card_cast_resolved -> TelegraphController) standing but UNRESOLVED in the architecture amendment
-## queue (`5-3/R4`), and settling that question by accident with a second instance is precisely what
-## that entry exists to prevent. This is a seam, counted as one.
+## second direct presentation-to-MatchState connect is added. `E5-C/R2` and `E6-C/R2` resolved the
+## direct-connect question: the exception is an enumerated list of exactly two members,
+## `card_cast_resolved` and `counterspell_resolved` (`E6-C/R2`), and a third is allowed only if the
+## same story adds it to both `game-architecture.md`'s list and the RAW allow-list in
+## `test_architecture_invariants.gd`. This is a seam, counted as one.
 ##
 ## BOTH new consumers ride THIS channel: the HUD's own-slot orb counters (AC 18-20) and the
 ## TelegraphController earn cue (AC 17), which derives "a colour went up" by diffing successive

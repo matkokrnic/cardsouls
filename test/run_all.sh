@@ -22,16 +22,34 @@ fi
 
 echo ""
 echo "### integration tests ###"
+# 7-T1 (AC 5-7, `6-5b/R24`): PASSIVE leak capture. The three files that have leaked "resources still
+# in use at exit" (full-suite runs only, never in isolation) run with -v, so Godot's verbose leak detail
+# is in their output, and ANY file whose output carries that message has its FULL output printed. This
+# only adds output: the pass/fail test below is unchanged, and the message still fails the suite.
+VERBOSE_FILES="test/integration/test_unit_combat_live.gd test/integration/test_charge_telegraph_dispatch_live.gd test/integration/test_card_mode_lift.gd"
 shopt -s nullglob
 found=0
 for t in test/integration/test_*.gd; do
   found=1
   echo "--- $t ---"
-  t_out="$("$GODOT" --headless --path . --script "res://$t" 2>&1)"
+  extra=""
+  for v in $VERBOSE_FILES; do
+    if [ "$t" == "$v" ]; then extra="-v"; fi
+  done
+  t_out="$("$GODOT" --headless $extra --path . --script "res://$t" 2>&1)"
   t_exit=$?
-  echo "$t_out" | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"
+  if [ -n "$extra" ]; then
+    echo "$t_out" | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:|resources still in use|ObjectDB|leaked"
+  else
+    echo "$t_out" | grep -E "RESULT:|SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"
+  fi
   if [ "$t_exit" -ne 0 ] || echo "$t_out" | grep -qE "SCRIPT ERROR|Parse Error|INVARIANT VIOLATED|^ERROR:"; then
     echo ">>> FAILED: $t"; fail=1
+  fi
+  if echo "$t_out" | grep -q "resources still in use at exit"; then
+    echo "=== FULL OUTPUT for $t (leak message present) ==="
+    echo "$t_out"
+    echo "=== END FULL OUTPUT for $t ==="
   fi
 done
 [ "$found" -eq 0 ] && echo "(no integration tests found)"

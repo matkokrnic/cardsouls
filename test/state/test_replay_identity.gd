@@ -28,6 +28,11 @@ const RESET_TICK := 3        # intent-carried debug reset: re-lays and re-shuffl
 const ATTACK_TICK := 5       # windup 5-7, active 8-11 at this fixture's authored windows
 const CONTACT_TICK := 9      # a fact inside that active window -> a CONFIRMED hit
 const RELOAD_TICK := 14      # mid-run apply_balance: reload event #1
+## Story 7-T1 (AC 2/AC 3): P1's mode (2) commit, clear of the melee swing's windup/active/recovery
+## window (ATTACK_TICK 5 + 3 + 4 + 5 = 17) so `_unblockable_refusal_reason` reads IDLE, and clear of
+## CAST_TICK/STAGE_TICK's own slots so the three card actions never contend for one hand slot.
+const UNBLOCKABLE_TICK := 18
+const UNBLOCKABLE_SLOT := 2
 const CAST_TICK := 20
 const CAST_SLOT := 1
 ## Story 6-2 (AC 16): a Mode ④ STAGE on P1, two ticks after the cast, so the pitch-cost channel's drop
@@ -37,13 +42,25 @@ const STAGE_TICK := 22
 const STAGE_SLOT := 0
 const PITCH_MANA_COST := 3.0
 const PITCH_TIMER_TICKS := 30
+## Story 7-T1 (AC 2/AC 3): the pitch-effects fixture's variable-mana numbers. The cap sits below
+## the fixture's remaining mana at STAGE_TICK so `min(current, cap)` actually clamps to the cap
+## rather than coinciding with it by accident, and `damage_per_mana` is non-zero so the locked
+## product is non-zero too -- both load-bearing for the drop to diverge (dropped: locked_damage
+## == 0.0 always).
+const PITCH_EFFECT_MANA_CAP := 4.0
+const PITCH_EFFECT_DAMAGE_PER_MANA := 2.0
 
 ## The composition, built IN-TEST with OPAQUE ids — data/cards/ is unreachable from the state
 ## harness and these ids are nothing the card library contains, so card content can never reach
 ## this fixture (the _golden_deck discipline).
+## Story 7-T1: SEVEN ids, not six -- the UNBLOCKABLE_TICK commit this story adds draws an
+## immediate replacement (`draw_replacement_delay_seconds` is unauthored, 0.0) exactly as
+## CAST_TICK's own cast already does, and the deck needs MORE THAN ONE card left over after BOTH
+## draws for `test_container_order_is_reproduced_although_the_hash_never_saw_it`'s own
+## `deck.size() > 1` sanity check to hold (six ids would leave exactly one).
 const DECK_IDS: Array[StringName] = [
 	&"replay_card_0", &"replay_card_1", &"replay_card_2",
-	&"replay_card_3", &"replay_card_4", &"replay_card_5",
+	&"replay_card_3", &"replay_card_4", &"replay_card_5", &"replay_card_6",
 ]
 const HAND_SIZE := 3
 const CAST_MANA_COST := 5.0
@@ -595,8 +612,9 @@ func test_the_recorded_run_exercises_every_channel() -> void:
 		"the fact was CONFIRMED: P2 took damage, so the contact channel is load-bearing here")
 	assert_true(live.p1.mana.get_current() > 0.0,
 		"the flags channel is load-bearing: melee mana was generated, which the flag gates")
-	assert_eq(live.p1.discard.size(), 1,
-		"the cast LANDED, so the cost-map channel is load-bearing (an unpriced card is refused)")
+	assert_eq(live.p1.discard.size(), 2,
+		"the UNBLOCKABLE_TICK commit (story 7-T1) and the CAST_TICK cast BOTH landed and both "
+		+ "discard, so the cost-map channel is load-bearing (an unpriced card is refused)")
 	assert_true(live.pitch.is_staged(0),
 		"the t22 STAGE landed and is still waiting, so the pitch-cost channel is load-bearing (story 6-2)")
 	assert_eq(live.to_snapshot()["pitch"]["p1"]["card_id"], String(live.pitch.staged_card_id(0)),
@@ -635,10 +653,63 @@ func test_dropping_any_single_channel_diverges_the_replay() -> void:
 	# driven run STAGES a card at STAGE_TICK (stated, not assumed): without the channel that stage refuses
 	# with `no_pitch_cost`, so the replay ends with P1's zone empty and P1's mana unspent against the live
 	# run's staged card. A run that never staged would leave this drop invisible.
-	for channel in ["seed", "balance", "flags", "deck", "costs", "effects", "pitch_costs", "reload",
-			"bases", "contacts", "intents"]:
+	# Story 7-T1 (AC 3) adds "colors" and "pitch_effects". "colors" diverges because the driven run
+	# COMMITS a mode (2) unblockable at UNBLOCKABLE_TICK (stated, not assumed): without the channel
+	# `charge_color` falls back to `NO_TELEGRAPH_COLOR` instead of the card's authored colour.
+	# "pitch_effects" diverges because the t22 STAGE reads it at `_resolve_pitch_stage`: without the
+	# channel the staged card's `locked_damage` falls back to 0.0 instead of the variable-mana product.
+	# Review fix R-b: the loop IS `KNOWN_DROPS`, not a second literal list beside it, so membership
+	# there is never a claim this test did not prove. No member is excluded -- every one, "lock" and
+	# "balance_from_disk" included, diverges on this same driven run (their own tests below also
+	# name WHERE).
+	for channel in KNOWN_DROPS:
 		assert_ne(CanonicalHash.of(_replay(record, channel).to_snapshot()), live_hash,
 			"dropping the %s channel must DIVERGE the replay" % channel)
+
+
+## `7-T1` AC 4 (`6-5f/R45`, `E6-C/R6`): every channel the record can inject into a replay sits on
+## EXACTLY ONE of `KNOWN_DROPS` (AC 1 -- a working drop branch, proven falling above) or
+## `NOT_COVERED` (one line per entry stating why no drop branch exists). The surface is DERIVED
+## from `IntentRecorder.SOUND_CONTENT_ORDER` -- the content channels -- union the channel of every
+## `capture_*`/`replay_*` method the recorder's script ACTUALLY declares, read by reflection
+## (`get_script_method_list`), NOT a second hand-maintained channel list that can drift from either.
+## `RECORDER_METHOD_CHANNELS` only NAMES each method's channel; it cannot hide one, because a
+## reflected `capture_*`/`replay_*` method with no entry there fails this test, and so does an
+## entry naming a method the recorder no longer declares.
+##
+## Mutation proofs (each restored from a copy taken outside the repo, SHA-256-verified): (a) the
+## `colors` drop branch removed from `_replay` and `colors` left on neither `KNOWN_DROPS` nor
+## `NOT_COVERED` -- this test fails; (b) the `capture_push_drain_target` entry removed from
+## `RECORDER_METHOD_CHANNELS`, standing in for a new recorder method nobody mapped -- this test fails.
+func test_every_replay_channel_is_known_or_not_covered() -> void:
+	var declared: Array[String] = []
+	for method: Dictionary in (IntentRecorder as Script).get_script_method_list():
+		var method_name := String(method["name"])
+		if method_name.begins_with("capture_") or method_name.begins_with("replay_"):
+			if not declared.has(method_name):
+				declared.append(method_name)
+	assert_true(declared.size() >= 20,
+		"sanity: reflection actually found the recorder's capture_/replay_ surface (got %d)" % declared.size())
+	var surface: Array[String] = []
+	for channel: StringName in IntentRecorder.SOUND_CONTENT_ORDER:
+		surface.append(String(channel))
+	for method_name in declared:
+		assert_true(RECORDER_METHOD_CHANNELS.has(method_name),
+			("IntentRecorder.%s is a capture_/replay_ method with NO entry in RECORDER_METHOD_CHANNELS "
+				+ "-- name its channel there, then put that channel on KNOWN_DROPS or NOT_COVERED") % method_name)
+		var channel: String = RECORDER_METHOD_CHANNELS.get(method_name, "")
+		if channel != "" and channel != RECORDER_CONTENT and not surface.has(channel):
+			surface.append(channel)
+	for method_name: String in RECORDER_METHOD_CHANNELS:
+		assert_true(declared.has(method_name),
+			"RECORDER_METHOD_CHANNELS names IntentRecorder.%s, which the recorder no longer declares"
+				% method_name)
+	for channel in surface:
+		var known := KNOWN_DROPS.has(channel)
+		var not_covered := NOT_COVERED.has(channel)
+		assert_true(known != not_covered,
+			("channel '%s' must be on EXACTLY ONE of KNOWN_DROPS or NOT_COVERED -- found "
+				+ "known=%s, not_covered=%s") % [channel, known, not_covered])
 
 
 # ---------------------------------------------------------------- AC 4
@@ -1586,8 +1657,11 @@ func _record_a_driven_run() -> Dictionary:
 	var pitch_costs := _pitch_costs()
 	record.capture_inject_pitch_costs(pitch_costs)
 	ms.inject_pitch_costs(pitch_costs)
-	# Story 6-5a (AC 6): the SIXTH content channel, captured and injected LAST (empty is legal).
-	var pitch_effects: Dictionary[StringName, CardEffect] = {}
+	# Story 6-5a (AC 6); Story 7-T1 (AC 3): the SIXTH content channel, captured and injected LAST.
+	# Non-empty (a variable-mana pitch effect for every deck id) so the t22 STAGE's `mana_spent` /
+	# `locked_damage` -- read from this map AT STAGING, `_resolve_pitch_stage` -- gives dropping
+	# this channel somewhere to diverge on; an empty map would make the drop a no-op.
+	var pitch_effects := _pitch_effects()
 	record.capture_inject_pitch_effects(pitch_effects)
 	ms.inject_pitch_effects(pitch_effects)
 	for t in range(1, TICKS + 1):
@@ -1613,9 +1687,70 @@ func _record_a_driven_run() -> Dictionary:
 	return {"state": ms, "record": record}
 
 
+## `7-T1` (AC 1, `6-5f/R45`, `E6-C/R6`): the WHITELIST of `drop` values `_replay` has a WORKING
+## branch for below -- one that actually withholds that channel. `_replay` refuses any other
+## value LOUDLY (including a channel that sits on the NOT-COVERED list instead, AC 4) rather than
+## falling through and silently replaying every channel, which is how `colors` and
+## `pitch_effects` went unfalsified before this story.
+const KNOWN_DROPS: Array[String] = [
+	"seed", "balance", "balance_from_disk", "flags",
+	"deck", "costs", "effects", "colors", "pitch_costs", "pitch_effects",
+	"reload", "bases", "lock", "contacts", "intents",
+]
+
+## AC 4 (`6-5f/R45`), review fix R-a: the channel each `IntentRecorder` capture_/replay_ method
+## carries. NOT the surface itself -- `test_every_replay_channel_is_known_or_not_covered` reflects the
+## methods off the recorder's script and fails on any it finds unmapped here, so a new recorder
+## channel cannot be left out of the coverage check by forgetting this table. `RECORDER_CONTENT`
+## marks `replay_inject_content`, whose channels are `SOUND_CONTENT_ORDER` (already on the surface).
+## `replay_apply_reloads_before` is "reload": `_replay` withholds that per-tick reapplication as its
+## own drop, distinct from "balance" (reload event #0 at match start).
+const RECORDER_CONTENT := "<SOUND_CONTENT_ORDER>"
+const RECORDER_METHOD_CHANNELS := {
+	"capture_seed": "seed",
+	"capture_apply_balance": "balance",
+	"capture_inject_feature_flags": "flags",
+	"capture_inject_deck": "deck",
+	"capture_inject_card_costs": "costs",
+	"capture_inject_card_effects": "effects",
+	"capture_inject_card_colors": "colors",
+	"capture_inject_pitch_costs": "pitch_costs",
+	"capture_inject_pitch_effects": "pitch_effects",
+	"capture_set_camera_basis": "bases",
+	"capture_set_lock_direction": "lock",
+	"capture_push_drain_target": "drain_target",
+	"capture_push_contact": "contacts",
+	"capture_advance": "intents",
+	"replay_seed": "seed",
+	"replay_balance_config": "balance",
+	"replay_feature_flags": "flags",
+	"replay_deck_contents": "deck",
+	"replay_card_costs": "costs",
+	"replay_card_effects": "effects",
+	"replay_card_colors": "colors",
+	"replay_pitch_costs": "pitch_costs",
+	"replay_pitch_effects": "pitch_effects",
+	"replay_inject_content": RECORDER_CONTENT,
+	"replay_apply_reloads_before": "reload",
+	"replay_push_camera_bases": "bases",
+	"replay_push_lock_directions": "lock",
+	"replay_push_drain_targets": "drain_target",
+	"replay_push_contacts": "contacts",
+	"replay_intent": "intents",
+}
+
+## AC 4 (`6-5f/R45`): the channel surface's OTHER list -- one line per entry stating why `_replay`
+## has no drop branch for it. A channel on neither this nor `KNOWN_DROPS`, or on both, fails
+## `test_every_replay_channel_is_known_or_not_covered` below.
+const NOT_COVERED := {
+	"drain_target": "_replay never calls replay_push_drain_targets at all",
+}
+
 ## The SECOND, independent MatchState — driven ONLY by the record. `drop` names one channel to
 ## withhold, which is how every capture AC is proven falling at once.
 func _replay(record: IntentRecorder, drop := "") -> MatchState:
+	assert_true(drop == "" or KNOWN_DROPS.has(drop),
+		"'%s' is not a recognized _replay drop -- not in KNOWN_DROPS (AC 1)" % drop)
 	var seed_value := 0 if drop == "seed" else record.replay_seed()
 	var ms := MatchState.new(MatchParams.new(seed_value))
 	if drop == "balance_from_disk":
@@ -1631,12 +1766,24 @@ func _replay(record: IntentRecorder, drop := "") -> MatchState:
 		# divergence below can only be the effects channel.
 		ms.inject_deck(record.replay_deck_contents())
 		ms.inject_card_costs(record.replay_card_costs())
+	elif drop == "colors":
+		# Story 7-T1 (AC 2): every content channel but the colours, in the sound order.
+		ms.inject_deck(record.replay_deck_contents())
+		ms.inject_card_costs(record.replay_card_costs())
+		ms.inject_card_effects(record.replay_card_effects())
 	elif drop == "pitch_costs":
 		# Story 6-2: every content channel but the pitch costs, in the sound order.
 		ms.inject_deck(record.replay_deck_contents())
 		ms.inject_card_costs(record.replay_card_costs())
 		ms.inject_card_effects(record.replay_card_effects())
 		ms.inject_card_colors(record.replay_card_colors())
+	elif drop == "pitch_effects":
+		# Story 7-T1 (AC 2): every content channel but the pitch effects, in the sound order.
+		ms.inject_deck(record.replay_deck_contents())
+		ms.inject_card_costs(record.replay_card_costs())
+		ms.inject_card_effects(record.replay_card_effects())
+		ms.inject_card_colors(record.replay_card_colors())
+		ms.inject_pitch_costs(record.replay_pitch_costs())
 	elif drop != "deck":
 		assert_true(record.replay_inject_content(ms),
 			"the recorded content order replays (deck, then costs, then effects)")
@@ -1674,6 +1821,10 @@ func _intents(t: int) -> Array[InputIntent]:
 	if t == ATTACK_TICK:
 		i1.pressed[&"attack"] = true
 		i1.held[&"attack"] = true
+	if t == UNBLOCKABLE_TICK:
+		i1.card_slot = UNBLOCKABLE_SLOT
+		i1.card_mode = Enums.ModeKind.UNBLOCKABLE
+		i1.card_commit = true
 	if t == STAGE_TICK:
 		i1.card_slot = STAGE_SLOT
 		i1.card_mode = Enums.ModeKind.PITCH
@@ -1759,6 +1910,11 @@ func _flags() -> FeatureFlags:
 	f.minions = true
 	# Story 6-2: the pitch layer ON, so the t22 stage stages and the pitch-cost channel is load-bearing.
 	f.pitch_zone = true
+	# Story 7-T1 (AC 2/AC 3): the unblockable layer ON, so the t18 mode (2) commit at UNBLOCKABLE_TICK
+	# reads `_card_colors` into `charge_color` -- the one seat the colours channel's drop reaches the
+	# hash through (`match_state.gd`: "the colour that DOES reach the hash is the one COPIED onto
+	# PlayerState.charge_color at a cast").
+	f.unblockable = true
 	return f
 
 
@@ -1786,6 +1942,22 @@ func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 		c.mana_cost = PITCH_MANA_COST
 		c.orb_costs[Enums.CardColor.GREEN] = 2
 		out[id] = c
+	return out
+
+
+## Story 7-T1 (AC 2/AC 3): the SIXTH content channel's fixture half -- a variable-mana effect
+## (`mana_cap > 0.0`, `CardEffectResolver.spends_variable_mana`) for every id, so the t22 STAGE
+## reads it at `_resolve_pitch_stage` and locks a NON-ZERO `locked_damage` into the pitch snapshot.
+## Dropping the channel degrades to the fixed-cost path (`mana_spent == condition.mana_cost`,
+## `locked_damage == 0.0`), which is exactly the divergence this channel needs to be falsifiable.
+func _pitch_effects() -> Dictionary[StringName, CardEffect]:
+	var out: Dictionary[StringName, CardEffect] = {}
+	for id in DECK_IDS:
+		var e := CardEffect.new()
+		e.effect_id = StringName("pitch_%s" % id)
+		e.mana_cap = PITCH_EFFECT_MANA_CAP
+		e.damage_per_mana = PITCH_EFFECT_DAMAGE_PER_MANA
+		out[id] = e
 	return out
 
 
