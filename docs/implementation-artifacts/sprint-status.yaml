@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-10-01
+# last_updated: 2026-10-02
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -138,7 +138,7 @@ development_status:
   # E7 — Presentation, Polish & Playtest Prep (operator rulings 2026-09-30/2026-10-01,
   # E6-C/R11; order below is the operator's stated order)
   epic-7: backlog
-  7-T1-tooling-debt: backlog  # Tier B
+  7-T1-tooling-debt: ready-for-dev  # Tier B
   7-1-effect-presentation: backlog  # Tier B
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
@@ -148,7 +148,7 @@ development_status:
   7-7-tuning-pass: backlog  # Tier B (A if a seat is added or an action becomes refusable)
 
 story_notes:
-  7-T1-tooling-debt: "backlog -- the m5 _replay unknown-channel drop coverage gap and the 6-5b/R24 'resources still in use at exit' flake; runs alongside the operator's 7-1 asset gathering (E6-C/R11)."
+  7-T1-tooling-debt: "ready-for-dev -- promoted 2026-10-02 after operator review (F1-F5 fixes applied). Scope: the m5 _replay unknown-channel drop coverage gap (KNOWN_DROPS vs NOT-COVERED split), the 6-5b/R24 'resources still in use at exit' flake, and the stale match_runner.gd:2460 comment; runs alongside the operator's 7-1 asset gathering (E6-C/R11)."
   7-1-effect-presentation: "backlog -- Deck 1 effect visuals and sounds; absorbs the Grave Ward tint fix, the eleven effects with no bespoke visual, and the placeholder bolt/fireball/stones/skulls/Boulder art (E6-C/R11, deferred-work.md E6 residue)."
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."

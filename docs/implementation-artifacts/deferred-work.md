@@ -581,3 +581,5 @@ no file. Now split and keyed (`E6-C/R11`):
 - **Stale comment at `src/main/match_runner.gd:2460`** -- still calls the 5-3 direct connect
   "standing but UNRESOLVED in the architecture amendment queue"; resolved by `E5-C/R2` (comment-only
   fix, SKIPPED by this close-out: it is a `src/` edit and this chain is docs-only).
+- **`_replay` never replays push drain targets** (`replay_push_drain_targets` unused) -- found
+  authoring `7-T1`; owner unassigned, E7 close-out assigns.
