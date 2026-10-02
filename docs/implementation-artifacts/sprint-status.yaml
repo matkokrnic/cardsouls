@@ -139,7 +139,7 @@ development_status:
   # E6-C/R11; order below is the operator's stated order)
   epic-7: backlog
   7-T1-tooling-debt: done  # Tier B
-  7-1-effect-presentation: backlog  # Tier B
+  7-1-effect-presentation: ready-for-dev  # Tier B
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
   7-4-pitch-speeds: backlog  # Tier A
@@ -149,7 +149,7 @@ development_status:
 
 story_notes:
   7-T1-tooling-debt: "closed out 2026-10-02 (decision-log session 7-T1 close-out, 7-T1/R1..R6); AC 5-7 close UNMET at the pre-named cut point, flake carried forward in deferred-work.md."
-  7-1-effect-presentation: "backlog -- Deck 1 effect visuals and sounds; absorbs the Grave Ward tint fix, the eleven effects with no bespoke visual, and the placeholder bolt/fireball/stones/skulls/Boulder art (E6-C/R11, deferred-work.md E6 residue)."
+  7-1-effect-presentation: "ready-for-dev 2026-10-02 -- 35 ACs, operator review rulings 7-1/R1..R9 applied, promoted by operator (CFG/R4); Deck 1 effect visuals and sounds."
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
   7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; plus +1 mana for a defended unblockable (E6-C/R11)."

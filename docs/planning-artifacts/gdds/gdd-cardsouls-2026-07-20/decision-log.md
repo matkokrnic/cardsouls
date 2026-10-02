@@ -12368,3 +12368,28 @@ Next steps: `7-T1-tooling-debt`, while the operator gathers `7-1` assets; then t
    `1248 tests, 0 failed, 11835 assertions`; integration 72 files, 72 `RESULT: PASS`;
    `ALL TESTS PASSED`, exit 0; no "resources still in use at exit".
    LAYER-COMPLETION: Blind Hunter=COMPLETED (sequential, in-session, diff-only reading) | Edge Case Hunter=COMPLETED (sequential, in-session, diff + project read) | Acceptance Auditor=COMPLETED (sequential, in-session, inline checklist incl. Dev Agent Record evidence audit)
+
+## Session 2026-10-02 -- 7-1 operator review rulings
+
+`7-1/R1` (OQ 1) Colour follows the card colour, no exceptions: Drain's thread and the Vampiric Aura
+are green. Colour carries gameplay meaning (orbs, colour counters); a red look on a green card reads red.
+`7-1/R2` (OQ 2) No state-side fact. A shot's ending is read on its last tick: `deflect_landed` for the
+target -> deflect; HP loss on the target -> impact; `counterspell_resolved` against the owner -> vanish;
+budget spent -> fizzle. Same-tick endings on one target pair by count; a deflected shot state keeps alive
+flies on with no scatter. Misreads only a state fact could fix go to a later Tier A story.
+`7-1/R3` (OQ 3) The runner keeps its own previous-tick copy of the reversal record for the "returned"
+flash. Presentation-only; `src/state/` untouched.
+`7-1/R4` (OQ 4) An effect with its own resolution sound does not also play the generic cast-success
+sound; the generic sound stays the fallback. Smoke may reverse this.
+`7-1/R5` (OQ 5) `bolt_strike` and `frost_hit` are synthesized (the soul/heal route). The five weak
+matches ship as picked; other Sonniss parts or Freesound only for slots smoke rejects.
+`7-1/R6` (OQ 6) A new presentation-only Resource class and folder are allowed (an existing presentation
+home if one fits); never under `data/effects` or any path `src/state/` loads. The Dev Agent Record names it.
+`7-1/R7` (OQ 7) Boulder cosmetics in the hand HUD belong to `7-6`; `7-1` covers only the in-world leg crust.
+`7-1/R8` (OQ 8) Automatic decimation first; if it fails, the dev pass stops and reports and the operator
+decimates in Blender.
+`7-1/R9` (review finding) Every projectile kind (totem shot, Fireball, Rocksling stone, Corpse Bomb
+skull) keeps its hit shape, offset (radius 0.35 at +0.7 y) and collision layers/masks identical to
+`e93dbee`, pinned per kind by AC 35. Fireball's solid core grows with X between the authored minimum and
+maximum and stays inside the hit sphere at maximum X; trail, sparks and light may extend beyond it.
+Promotion: `7-1-effect-presentation` `authored` -> `ready-for-dev`, operator-authorized (`CFG/R4`).
