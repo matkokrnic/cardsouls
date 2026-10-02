@@ -12341,3 +12341,30 @@ every `E6-R/` label written here is defined in this entry.
 
 Next steps: `7-T1-tooling-debt`, while the operator gathers `7-1` assets; then the `7-1` scope talk
 (`E6-C/R14`). The operator reviews the log and pushes.
+
+## 7-T1 close-out (2026-10-02)
+
+1. **`7-T1/R1`** (Claude): story review fixes F1-F5 before promotion. `KNOWN_DROPS` = drop values
+   with a working branch; `NOT_COVERED` = a separate reasoned list; AC 4's surface covers every
+   channel the record can inject; AC 7 evidence = an identified resource with a deterministic
+   reproduction, or engine proof.
+2. **`7-T1/R2`** (Claude): the flake cut point was named in advance -- a before-baseline plus at
+   most two targeted attempts, captured with `-v`. Hit: 0/4 full-suite runs leaked (historical
+   2/4). AC 5-7 close UNMET.
+3. **`7-T1/R3`** (Claude ruling, not operator): `run_all.sh` runs the three named files with `-v`
+   and prints full output when "resources still in use at exit" appears; pass/fail logic stays
+   byte-identical.
+4. **`7-T1/R4`**: review fixes applied -- R-a's AC 4 surface is derived by reflection over
+   `IntentRecorder`'s `capture_*`/`replay_*` methods plus `SOUND_CONTENT_ORDER` (an unmapped
+   method or a stale map entry fails); R-b's divergence loop iterates `KNOWN_DROPS` directly.
+   Mutation proofs (a)(b)(c) per the review report.
+5. **`7-T1/R5`**: evidential notes -- the dev pass's before-baseline was taken via `git stash`
+   AFTER editing; its mutation proof was not the AC 4 form (re-run at review); the review's
+   closing run was one call to `run_all.sh`, not the two-call split (disclosed: only `run_all.sh`
+   exercises R3).
+6. **`7-T1/R6`**: numbers of record -- golden `941958c52605abbcd1edf972e002543601325e5a9f98dfce569628c12f75871f`
+   and `FORMAT_VERSION` 19 unmoved; suite `1248/0/11835` + 72/72; budget start
+   2026-10-02T13:32:46Z, end 2026-10-02T14:11:51Z, delta 39m05s. Closing run: state harness
+   `1248 tests, 0 failed, 11835 assertions`; integration 72 files, 72 `RESULT: PASS`;
+   `ALL TESTS PASSED`, exit 0; no "resources still in use at exit".
+   LAYER-COMPLETION: Blind Hunter=COMPLETED (sequential, in-session, diff-only reading) | Edge Case Hunter=COMPLETED (sequential, in-session, diff + project read) | Acceptance Auditor=COMPLETED (sequential, in-session, inline checklist incl. Dev Agent Record evidence audit)

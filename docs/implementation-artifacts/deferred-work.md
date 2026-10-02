@@ -578,6 +578,8 @@ no file. Now split and keyed (`E6-C/R11`):
 - **`6-5b/R24` flake** -- "resources still in use at exit", three tests
   (`test_unit_combat_live.gd`, `test_charge_telegraph_dispatch_live.gd`, `test_card_mode_lift.gd`),
   six occurrences since 2026-09-05; FAILED-vs-warning split is the harness's, not the engine's.
+- **`6-5b/R24` flake still open after 7-T1**: 0/4 full-suite runs with `-v` (2026-10-02); `run_all.sh`
+  now captures details on the next occurrence; owner unassigned, E7 close-out assigns.
 - **Stale comment at `src/main/match_runner.gd:2460`** -- still calls the 5-3 direct connect
   "standing but UNRESOLVED in the architecture amendment queue"; resolved by `E5-C/R2` (comment-only
   fix, SKIPPED by this close-out: it is a `src/` edit and this chain is docs-only).

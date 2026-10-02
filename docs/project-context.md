@@ -193,5 +193,3 @@ Last Updated: 2026-10-02
 
 <!-- `Last Updated` and `rule_count` move on EVERY edit to this file (`PROC/R5`, restated
 `E6-R/R14`: both stood stale at the E6 close-out, which added two rules and moved neither). -->
-`rule_count` 74 -> 79: FIVE new bullets this pass (`E6-R/R8`, `R9`, `R7`, `R10`, `R13`). The five
-amendments (`E6-R/R1`, `R2`, `R3`, `R4`+`R5`, `R6`) added no bullet and so add no count.
