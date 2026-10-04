@@ -4,7 +4,7 @@ baseline_commit: e93dbeeb2a8203105d32dd3f678fa95eafe8e824
 
 # Story 7-1: Effect Presentation
 
-Status: ready-for-dev
+Status: done
 
 > **Scope note.** Second `epic-7` story (`E6-C/R11` board order), **Tier B** (`E4-P/R9`): presentation,
 > data and tooling only. `src/state/` stays byte-identical and the golden and the per-player snapshot
