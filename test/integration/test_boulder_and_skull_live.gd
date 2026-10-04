@@ -400,6 +400,12 @@ func _finish() -> bool:
 			_minion_position.x, _hero_position.x, _skull_position.x, _fallback_position.x,
 			from_minion, from_hero, fallback_gap]
 	print("boulder_and_skull_live: %s" % _detail)
+	# Story 7-1 (AC 33, named edit): this file's skulls and summon now play effect sounds, and one still playing at
+	# quit leaves its playback held by the mixer -- "resources still in use at exit". Stop them and give the mixer
+	# a beat first, `test_cast_success_cue_live.gd`'s own stop-then-wait (`EffectPresenter.stop_all_sounds`).
+	if _runner != null and _runner._effects != null:
+		_runner._effects.stop_all_sounds()
+	OS.delay_msec(100)
 	if _failures.is_empty():
 		print("RESULT: PASS")
 		quit(0)

@@ -30,12 +30,13 @@ const SKY_HEIGHT := 9.0
 ## read and roll away from -- is the longer and more legible leg.
 const RISE_FRACTION := 0.4
 
-## Placeholder-aesthetic model, the `FacingMarker` doctrine in `hero.tscn` ("Pure sub-resource
-## authoring, no assets"): an unshaded, emissive shaft. BLUE because Honed Bolt is a BLUE card; the
-## hue is presentation's own and nothing in state names a colour for it.
-const SHAFT_LENGTH := 1.4
-const SHAFT_RADIUS := 0.12
-const SHAFT_COLOR := Color(0.55, 0.8, 1.0, 1.0)
+## Story 7-1 (AC 18) RETIRES THE PLACEHOLDER SHAFT (`6-5c`'s unshaded blue cylinder). What flies now is the
+## bolt's CHARGE -- a crackling blue mote that rises off the sword into the sky and drops onto the target, on the
+## unchanged tick-counted two-leg flight below -- and the STRIKE itself is `EffectPresenter.show_lightning`'s
+## branching lightning and flash, spawned by the runner on the strike tick. Timing is untouched: this prop still
+## arrives on the state's strike tick (`test_cast_presentation_live.gd`).
+const MOTE_SIZE := 0.7
+const MOTE_COLOR := Color(0.6, 0.85, 1.0, 1.0)
 
 var _from := Vector3.ZERO
 var _total_ticks := 0
@@ -45,17 +46,8 @@ var _arrived := false
 
 
 func _ready() -> void:
-	var mesh := MeshInstance3D.new()
-	var shaft := CylinderMesh.new()
-	shaft.top_radius = SHAFT_RADIUS
-	shaft.bottom_radius = SHAFT_RADIUS
-	shaft.height = SHAFT_LENGTH
-	mesh.mesh = shaft
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = SHAFT_COLOR
-	mesh.material_override = material
-	add_child(mesh)
+	add_child(EffectFx.quad(EffectFx.TEX_GLOW, MOTE_COLOR, MOTE_SIZE, true))
+	add_child(EffectFx.particles(EffectFx.TEX_SPARK, MOTE_COLOR, 10, 0.25, 0.45, 1.0, 180.0, 0.0, false, false))
 
 
 ## Start the flight at `from`, bound for `target`, arriving after exactly `total_ticks` advances.

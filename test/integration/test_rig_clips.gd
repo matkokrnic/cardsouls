@@ -51,6 +51,15 @@ const EXPECTED_LOOP := {
 	# `stunned` and `knockdown` above are baked one-shot. A looping `dizzy` would restart mid-stun
 	# instead of holding. `cast` is a single raise played once inside the authored cast window.
 	&"cast": false, &"dizzy": false,
+	# Story 7-1 (AC 26): TWENTY-NINE -> THIRTY-TWO, a NAMED DEVIATION of that story. The three spell-cast clips
+	# (`tools/add_paladin_spell_clips.gd`) are ONE-SHOTS: each is played once inside the authored cast window,
+	# its playhead seek-driven by `AnimationController.spell_cast_pose`, and the throw's follow-through plays out
+	# once after the release. A looping clip would wrap the playhead instead of holding a pose.
+	&"cast_fireball": false, &"cast_rocksling_lift": false, &"cast_rocksling_throw": false,
+	# 7-1 polish round (operator smoke, 2026-10-04): THIRTY-TWO -> THIRTY-FOUR, a NAMED DEVIATION of that round. The
+	# two gesture clips (`cast_buff` for Vampiric Aura / Frostbite, `cast_counterspell`) are ONE-SHOTS: each plays
+	# once on an instant resolution (`AnimationController.play_gesture`) and yields to locomotion when it ends.
+	&"cast_buff": false, &"cast_counterspell": false,
 }
 
 var _failures: Array[String] = []

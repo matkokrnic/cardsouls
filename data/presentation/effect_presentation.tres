@@ -1,0 +1,373 @@
+[gd_resource type="Resource" script_class="EffectPresentationSet" load_steps=40 format=3]
+
+[ext_resource type="Script" path="res://src/actors/effects/effect_presentation_set.gd" id="1_set"]
+[ext_resource type="Script" path="res://src/actors/effects/effect_presentation_row.gd" id="2_row"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_summon.wav" id="s_summon"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_cull.wav" id="s_cull"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_soul.tres" id="s_soul"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_ward.wav" id="s_ward"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_raise.wav" id="s_raise"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_drain.wav" id="s_drain"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_aura.wav" id="s_aura"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_heal.tres" id="s_heal"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_rock_throw.wav" id="s_rock_throw"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_rock_hit.wav" id="s_rock_hit"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_boom.wav" id="s_boom"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_hound.wav" id="s_hound"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_fire_launch.wav" id="s_fire_launch"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_fire_loop.wav" id="s_fire_loop"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_fire_hit.wav" id="s_fire_hit"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_bolt_charge.wav" id="s_bolt_charge"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_bolt_strike.tres" id="s_bolt_strike"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_counter.wav" id="s_counter"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_frost_arm.wav" id="s_frost_arm"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_frost_hit.tres" id="s_frost_hit"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_skull_launch.wav" id="s_skull_launch"]
+
+[sub_resource type="Resource" id="Row_vanguard"]
+script = ExtResource("2_row")
+row_id = &"vanguard"
+effect_ids = PackedStringArray("summon_ruin_vanguard")
+card_color = 2
+size = 1.6
+duration = 1.2
+count = 24
+silences_generic_cue = true
+sounds = {
+&"summon": ExtResource("s_summon")
+}
+volume_db = {
+&"summon": 0.0
+}
+
+[sub_resource type="Resource" id="Row_culling"]
+script = ExtResource("2_row")
+row_id = &"culling"
+effect_ids = PackedStringArray("culling")
+card_color = 2
+size = 0.9
+duration = 0.6
+count = 16
+intensity = 3.0
+silences_generic_cue = true
+sounds = {
+&"cull": ExtResource("s_cull"),
+&"soul": ExtResource("s_soul")
+}
+volume_db = {
+&"cull": 0.0,
+&"soul": -6.0
+}
+extra = {
+&"soul_flight": 0.35,
+&"soul_size": 0.35,
+&"flash": 0.25
+}
+
+[sub_resource type="Resource" id="Row_grave_ward"]
+script = ExtResource("2_row")
+row_id = &"grave_ward"
+effect_ids = PackedStringArray("grave_ward")
+card_color = 2
+size = 0.9
+duration = 0.5
+count = 3
+intensity = 1.5
+silences_generic_cue = true
+sounds = {
+&"ward": ExtResource("s_ward")
+}
+volume_db = {
+&"ward": -3.0
+}
+extra = {
+&"orbit_radius": 0.7,
+&"orbit_height": 1.4,
+&"orbit_seconds": 2.5,
+&"overlay_alpha": 0.3,
+&"ghost_size": 1.1
+}
+
+[sub_resource type="Resource" id="Row_raise_dead"]
+script = ExtResource("2_row")
+row_id = &"raise_dead"
+effect_ids = PackedStringArray("raise_dead")
+card_color = 2
+size = 0.8
+duration = 1.2
+count = 16
+silences_generic_cue = true
+sounds = {
+&"raise": ExtResource("s_raise")
+}
+volume_db = {
+&"raise": 0.0
+}
+extra = {
+&"height": 3.0,
+&"strike_height": 8.0,
+&"strike_branches": 4.0,
+&"strike_width": 0.16,
+&"strike_seconds": 0.3,
+&"strike_energy": 6.0,
+&"strike_lead": 0.1
+}
+
+[sub_resource type="Resource" id="Row_drain"]
+script = ExtResource("2_row")
+row_id = &"drain"
+effect_ids = PackedStringArray("drain")
+card_color = 2
+size = 0.1
+duration = 0.4
+count = 18
+silences_generic_cue = true
+sounds = {
+&"drain": ExtResource("s_drain")
+}
+volume_db = {
+&"drain": 0.0
+}
+extra = {
+&"flash": 0.25
+}
+
+[sub_resource type="Resource" id="Row_vampiric_aura"]
+script = ExtResource("2_row")
+row_id = &"vampiric_aura"
+effect_ids = PackedStringArray("vampiric_aura")
+card_color = 2
+size = 1.0
+duration = 0.5
+count = 24
+intensity = 2.5
+silences_generic_cue = true
+sounds = {
+&"aura": ExtResource("s_aura"),
+&"heal": ExtResource("s_heal")
+}
+volume_db = {
+&"aura": 0.0,
+&"heal": -6.0
+}
+extra = {
+&"droplet_count": 10.0,
+&"droplet_flight": 0.35,
+&"droplet_size": 0.35,
+&"body_motes": 40.0,
+&"mote_size": 0.3
+}
+
+[sub_resource type="Resource" id="Row_rocksling"]
+script = ExtResource("2_row")
+row_id = &"rocksling"
+effect_ids = PackedStringArray("rocksling")
+card_color = 0
+size = 0.45
+duration = 0.6
+count = 14
+sounds = {
+&"rock_throw": ExtResource("s_rock_throw"),
+&"rock_hit": ExtResource("s_rock_hit")
+}
+volume_db = {
+&"rock_throw": -4.0,
+&"rock_hit": 0.0
+}
+pitch = {
+&"rock_throw": 1.35
+}
+extra = {
+&"spin_seconds": 0.6
+}
+
+[sub_resource type="Resource" id="Row_boulder_slow"]
+script = ExtResource("2_row")
+row_id = &"boulder_slow"
+effect_ids = PackedStringArray()
+card_color = 3
+size = 0.2
+duration = 0.0
+count = 3
+extra = {
+&"max_boulders": 4.0,
+&"leg_radius": 0.08
+}
+
+[sub_resource type="Resource" id="Row_boom"]
+script = ExtResource("2_row")
+row_id = &"boom"
+effect_ids = PackedStringArray("boom")
+card_color = 0
+size = 1.4
+duration = 0.7
+count = 20
+spacing = 0.18
+intensity = 2.0
+silences_generic_cue = true
+sounds = {
+&"boom": ExtResource("s_boom")
+}
+volume_db = {
+&"boom": 0.0
+}
+
+[sub_resource type="Resource" id="Row_bloodhound_step"]
+script = ExtResource("2_row")
+row_id = &"bloodhound_step"
+effect_ids = PackedStringArray("bloodhound_step")
+card_color = 0
+size = 0.7
+duration = 0.6
+count = 28
+silences_generic_cue = true
+sounds = {
+&"hound": ExtResource("s_hound")
+}
+volume_db = {
+&"hound": -2.0
+}
+
+[sub_resource type="Resource" id="Row_fireball"]
+script = ExtResource("2_row")
+row_id = &"fireball"
+effect_ids = PackedStringArray("fireball")
+card_color = 0
+size = 2.6
+duration = 0.6
+count = 48
+intensity = 3.0
+sounds = {
+&"fire_launch": ExtResource("s_fire_launch"),
+&"fire_loop": ExtResource("s_fire_loop"),
+&"fire_hit": ExtResource("s_fire_hit")
+}
+volume_db = {
+&"fire_launch": -2.0,
+&"fire_loop": -8.0,
+&"fire_hit": 0.0
+}
+extra = {
+&"core_min_radius": 0.16,
+&"core_max_radius": 0.32,
+&"light_energy": 1.5,
+&"light_range": 2.5,
+&"envelope_min_radius": 0.32,
+&"envelope_max_radius": 0.65,
+&"trail_seconds": 0.45,
+&"trail_amount": 48.0,
+&"shockwave_size": 4.0
+}
+
+[sub_resource type="Resource" id="Row_honed_bolt"]
+script = ExtResource("2_row")
+row_id = &"honed_bolt"
+effect_ids = PackedStringArray("honed_bolt")
+card_color = 1
+size = 12.0
+duration = 0.35
+count = 5
+intensity = 8.0
+silences_generic_cue = true
+sounds = {
+&"bolt_charge": ExtResource("s_bolt_charge"),
+&"bolt_strike": ExtResource("s_bolt_strike")
+}
+volume_db = {
+&"bolt_charge": -6.0,
+&"bolt_strike": 0.0
+}
+extra = {
+&"width": 0.18
+}
+
+[sub_resource type="Resource" id="Row_counterspell"]
+script = ExtResource("2_row")
+row_id = &"counterspell"
+effect_ids = PackedStringArray("counterspell")
+card_color = 1
+size = 2.4
+duration = 0.9
+count = 8
+silences_generic_cue = true
+sounds = {
+&"counter": ExtResource("s_counter")
+}
+volume_db = {
+&"counter": 0.0
+}
+extra = {
+&"flash": 0.35,
+&"burst_size": 1.8,
+&"burst_seconds": 0.25,
+&"settle_seconds": 0.2,
+&"light_energy": 3.0,
+&"fill_alpha": 0.35
+}
+
+[sub_resource type="Resource" id="Row_frostbite"]
+script = ExtResource("2_row")
+row_id = &"frostbite"
+effect_ids = PackedStringArray("frostbite")
+card_color = 1
+size = 0.5
+duration = 0.5
+count = 16
+intensity = 2.0
+silences_generic_cue = true
+sounds = {
+&"frost_arm": ExtResource("s_frost_arm"),
+&"frost_hit": ExtResource("s_frost_hit")
+}
+volume_db = {
+&"frost_arm": 0.0,
+&"frost_hit": 0.0
+}
+extra = {
+&"ice_lighten": 0.55,
+&"weapon_radius": 0.45
+}
+
+[sub_resource type="Resource" id="Row_corpse_bomb"]
+script = ExtResource("2_row")
+row_id = &"corpse_bomb"
+effect_ids = PackedStringArray("corpse_bomb")
+card_color = 1
+size = 0.7
+duration = 0.6
+count = 20
+silences_generic_cue = true
+sounds = {
+&"skull_launch": ExtResource("s_skull_launch"),
+&"skull_hit": ExtResource("s_summon")
+}
+volume_db = {
+&"skull_launch": -4.0,
+&"skull_hit": 0.0
+}
+pitch = {
+&"skull_hit": 0.7
+}
+extra = {
+&"envelope_scale": 0.75,
+&"trail_seconds": 0.4,
+&"trail_amount": 40.0
+}
+
+[sub_resource type="Resource" id="Row_stun_root"]
+script = ExtResource("2_row")
+row_id = &"stun_root"
+effect_ids = PackedStringArray()
+card_color = 1
+size = 0.6
+duration = 0.0
+count = 12
+intensity = 2.5
+extra = {
+&"spark_size": 0.55,
+&"spark_count": 24.0
+}
+
+[resource]
+script = ExtResource("1_set")
+rows = Array[ExtResource("2_row")]([SubResource("Row_vanguard"), SubResource("Row_culling"), SubResource("Row_grave_ward"), SubResource("Row_raise_dead"), SubResource("Row_drain"), SubResource("Row_vampiric_aura"), SubResource("Row_rocksling"), SubResource("Row_boulder_slow"), SubResource("Row_boom"), SubResource("Row_bloodhound_step"), SubResource("Row_fireball"), SubResource("Row_honed_bolt"), SubResource("Row_counterspell"), SubResource("Row_frostbite"), SubResource("Row_corpse_bomb"), SubResource("Row_stun_root")])

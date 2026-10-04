@@ -16,3 +16,9 @@
 # Mark them binary so Git never attempts EOL normalization or line-diffing on them.
 *.fbx    binary
 *.png    binary
+# Story 7-1 (effect presentation): the processed effect assets -- the skull mesh, the rock textures and
+# the trimmed sound clips. `.ogg` is listed with them so a later re-encode cannot slip in as text.
+*.glb    binary
+*.jpg    binary
+*.wav    binary
+*.ogg    binary

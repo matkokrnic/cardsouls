@@ -212,6 +212,57 @@ const CAST_RAISE_SECONDS := 1.4092
 ## never how it looks.
 const CAST_RAISE_FRACTION := CAST_RAISE_SECONDS / CAST_CLIP_SECONDS
 
+## Story 7-1 (AC 23/AC 24): THE SPELL CAST CLIPS' MEASURED NUMBERS -- `tools/measure_spell_clip_frames.gd`, whose
+## criterion was stated before it was read: RELEASE = the peak FORWARD reach of the two hands' midpoint
+## relative to the Hips; the lift's beat = the PEAK HEIGHT of that midpoint (the rock held up).
+##   `cast_fireball`        1.0333 s, release at t=0.8353 (fraction 0.8083, reach 0.2040 m)
+##   `cast_rocksling_lift`  2.1667 s, peak height at t=1.4264 (fraction 0.6583, 0.9380 m)
+##   `cast_rocksling_throw` 2.7000 s, release at t=1.3275 (fraction 0.4917, reach 0.8149 m) -- after the
+##                          backswing (reach -0.40 m at t~0.92) and the fast forward swing
+## Hips planar travel, measured at assembly (`tools/add_paladin_spell_clips.gd`, AC 25): peak 0.0515 / 0.1894 /
+## 0.1537 m, net 0.0 -- all inside the `3-0b/R27` 0.25 m ceiling, so no clip is pinned.
+const FIREBALL_RELEASE_SECONDS := 0.8353
+const ROCKSLING_LIFT_PEAK_SECONDS := 1.4264
+const ROCKSLING_THROW_RELEASE_SECONDS := 1.3275
+
+## Story 7-1 (AC 24): how much of a Rocksling cast window the THROW takes, the rest being the LIFT. A feel knob
+## (the `_CHARGE_HOLD_KNOBS` posture): 0.55 of the authored 0.8 s puts the throw's start at t=0.8875, on the
+## backswing's deepest point, so the whole forward swing plays before the release.
+const ROCKSLING_THROW_SHARE := 0.55
+
+## 7-1 POLISH ROUND (operator smoke, 2026-10-04): THE TWO GESTURE CLIPS' MEASURED BEATS --
+## `tools/measure_spell_clip_frames.gd`, criteria stated in its header before reading:
+##   `cast_buff`          2.3667 s, the hands' midpoint at its peak height above the Hips at t=0.3550 (0.6252 m)
+##   `cast_counterspell`  1.0000 s, the sword at its peak height above the Hips at t=0.4333 (0.8666 m) -- the
+##                        swing's highest point, where the rune circle bursts from
+## Hips planar travel, measured at assembly (`tools/add_paladin_spell_clips.gd`): peak 0.1059 / 0.0750 m, net 0.0.
+const BUFF_PEAK_SECONDS := 0.3550
+const COUNTERSPELL_PEAK_SECONDS := 0.4333
+
+## How long after the resolution tick the Counterspell swing's peak lands: the clip's LEAD-IN IS CUT to this, the
+## `cast_cut_start` precedent (start inside the clip rather than delay the effect). 0.15 s = the operator's ceiling.
+const COUNTERSPELL_LEAD_SECONDS := 0.15
+
+## The gesture clips (Vampiric Aura / Frostbite -> `cast_buff`; Counterspell -> `cast_counterspell`) -> where each
+## starts in its own clip. Both RESOLVE INSTANTLY (no cast window roots the hero), so a gesture plays only on a
+## hero standing still and is cut by any movement or action (`play_gesture`, `on_locomotion`) -- it never slides.
+const _GESTURE_START := {
+	&"cast_buff": 0.0,
+	&"cast_counterspell": COUNTERSPELL_PEAK_SECONDS - COUNTERSPELL_LEAD_SECONDS,
+}
+const _GESTURE_BEAT := {
+	&"cast_buff": BUFF_PEAK_SECONDS,
+	&"cast_counterspell": COUNTERSPELL_PEAK_SECONDS,
+}
+
+## Which gesture each instantly-resolving effect plays, keyed by the resolver's own outcome vocabulary (the
+## `spell_cast_pose` precedent). Every other outcome plays none.
+const _GESTURE_FOR_OUTCOME := {
+	CardEffectResolver.OUTCOME_VAMPIRIC_AURA: &"cast_buff",
+	CardEffectResolver.OUTCOME_FROSTBITE: &"cast_buff",
+	CardEffectResolver.OUTCOME_COUNTERSPELL: &"cast_counterspell",
+}
+
 ## The walk-family members as a const list, so the per-tick rate lookup allocates nothing.
 const _WALK_FAMILY_MEMBERS: Array[StringName] = [
 	&"walk", &"walk_strafe_left", &"walk_strafe_right", &"walk_backpedal",
@@ -509,6 +560,19 @@ var _counter_elapsed := 0.0
 var _cast_running := false
 var _cast_cut_end := 0.0
 
+## Story 7-1 (AC 23): the spell outcome whose clip this cast plays (`&""` = Honed Bolt's `cast`, today's path),
+## and the authored cast length the runner handed over. The playhead is SEEK-DRIVEN from the runner's per-tick
+## elapsed push (`on_cast_progress`), the `6-1b` charge precedent, so the release frame is a function of the
+## state's own window and lands on the launch tick at any `cast_seconds`.
+var _spell_outcome: StringName = &""
+var _spell_cast_seconds := 0.0
+
+## 7-1 polish round: the gesture one-shot playing right now (`&""` = none), and the planar speed of the last
+## locomotion push -- the "standing still at that moment" read, presentation-local.
+var _gesture: StringName = &""
+var _last_planar_speed := 0.0
+var _last_turn := 0
+
 ## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
 ## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
 var _has_prev_facing := false
@@ -566,6 +630,7 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 		stun_seconds: float = 0.0, get_up_armed: bool = false) -> void:
 	_state = current
 	_one_shot = &""
+	_gesture = &""
 	# Story 6-6b (AC 10): a real transition takes the body from a counter clip in flight, the
 	# `_one_shot` line directly above's own rule -- a knockdown or a death must not wait for a cut.
 	#
@@ -705,6 +770,9 @@ func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _targe
 ## never turns in place by construction (Non-Goal).
 func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_speed: float) -> void:
 	var turn := _track_facing(facing)
+	var planar_speed := Vector2(velocity.x, velocity.z).length()
+	_last_planar_speed = planar_speed
+	_last_turn = turn
 	if _state != HeroState.ActionState.IDLE:
 		return
 	# Story 6-6b (AC 10): THE COUNTER OWNS THE BODY for its whole busy span, and it rides THIS per-tick
@@ -727,11 +795,15 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 		return
 	# Story 6-6a (AC 2): THE LOCOMOTION YIELD. A `hit_react`/`get_up` still playing keeps the body; the
 	# idempotent `_play()` below would otherwise crossfade it away on the very next tick.
+	# 7-1 polish round: a GESTURE yields like the others, except that any movement -- a step or a turn -- cuts it
+	# at once, so a full-body gesture never slides under a moving hero (the upper-body split is `7-2`'s).
 	if _one_shot != &"":
-		if animation_player.current_animation == _one_shot and animation_player.is_playing():
+		var moving := planar_speed > RUN_SPEED_EPS or turn != 0
+		if animation_player.current_animation == _one_shot and animation_player.is_playing() \
+				and not (_one_shot == _gesture and moving):
 			return
 		_one_shot = &""
-	var planar_speed := Vector2(velocity.x, velocity.z).length()
+		_gesture = &""
 	if planar_speed <= RUN_SPEED_EPS and turn != 0:
 		# Negative cross = facing rotating toward local +X, this file's "right" (header).
 		_play(&"turn_right" if turn < 0 else &"turn_left", _turn_playback_rate())
@@ -1029,7 +1101,19 @@ static func cast_launch_seconds(cast_seconds: float) -> float:
 ## `cast_seconds` is the AUTHORED duration the state layer armed the window with, converted from
 ## ticks by the runner (the `_stun_seconds_for_slot` shape), so this controller still reads no
 ## balance, no effect and no window handle (CONSTRAINT C).
-func on_cast_started(cast_seconds: float) -> void:
+##
+## STORY 7-1 (AC 23): `outcome` is the cast's resolver outcome, read by the runner on the same rising edge. A
+## Fireball or Rocksling cast plays its OWN clip(s) through `spell_cast_pose`; every other outcome -- Honed Bolt
+## -- plays `cast` exactly as before (the default keeps every older caller on that path).
+func on_cast_started(cast_seconds: float, outcome: StringName = &"") -> void:
+	if not spell_cast_pose(outcome, 0.0, cast_seconds).is_empty():
+		_spell_outcome = outcome
+		_spell_cast_seconds = maxf(cast_seconds, 0.0)
+		_cast_running = true
+		_one_shot = &"cast"
+		on_cast_progress(0.0)
+		return
+	_spell_outcome = &""
 	var start := cast_cut_start(cast_seconds)
 	_cast_cut_end = minf(start + maxf(cast_seconds, 0.0), CAST_CLIP_SECONDS)
 	_cast_running = true
@@ -1043,17 +1127,121 @@ func on_cast_started(cast_seconds: float) -> void:
 ## Story 6-5c (AC 25): pushed on the FALLING edge of the same key -- the strike or an interrupt has
 ## ended the cast, so the body goes back to the locomotion push. Without it the last cut frame would
 ## be held forever, since a cut END is a pause rather than a finished clip.
-func on_cast_ended() -> void:
+##
+## STORY 7-1 (AC 23): a SPELL cast that STRUCK (`follow_through`) lets its clip play on from the release at native
+## rate as a yielding one-shot, so the throw's follow-through is seen instead of cutting to `idle` on the launch
+## tick. An interrupted spell cast does not: the stun or death transition owns the body.
+func on_cast_ended(follow_through: bool = false) -> void:
+	var spell_clip: StringName = animation_player.current_animation if _spell_outcome != &"" else &""
 	_cast_running = false
 	_cast_cut_end = 0.0
 	_one_shot = &""
+	_spell_outcome = &""
+	if follow_through and spell_clip != &"":
+		var at := animation_player.current_animation_position
+		animation_player.play(spell_clip, -1.0, 1.0)
+		animation_player.seek(at, true)
+		_one_shot = spell_clip
+
+
+## Story 7-1 (AC 23/AC 24): pushed every tick of a cast by the runner -- seconds since the press, from the state
+## window's own tick count (`_push_cast_presentation`), so nothing here counts time. Seeks the spell clip to its
+## pose with the playhead PINNED (speed 0), the `on_charge_progress` mechanism. A no-op for Honed Bolt's `cast`,
+## which keeps its native-rate sub-range.
+func on_cast_progress(elapsed_seconds: float) -> void:
+	if not _cast_running or _spell_outcome == &"" or _state != HeroState.ActionState.IDLE:
+		return
+	var pose := spell_cast_pose(_spell_outcome, elapsed_seconds, _spell_cast_seconds)
+	if pose.is_empty():
+		return
+	var clip: StringName = pose[0]
+	if animation_player.current_animation != clip:
+		_restart(clip, 0.0)
+	animation_player.seek(float(pose[1]), true)
+
+
+## Story 7-1 (AC 23/AC 24): WHICH CLIP AND WHERE IN IT, `elapsed` seconds into a cast of `cast_seconds` -- a pure
+## function, so the release-on-launch-tick claim is pinned headless at any authored duration.
+##
+## THE RELEASE FRAME LANDS ON `elapsed == cast_seconds` -- the strike tick, where state launches the shot (`6-5c`:
+## the cast's falling edge is the strike). Every clip plays at NATIVE rate (a sped-up throw is a twitch, the
+## `cast_cut_start` reasoning); a cast longer than the clip's lead-in HOLDS the clip's first pose for the excess
+## rather than slowing it (`held_clip_speed`'s "never slower than native").
+##   FIREBALL: `cast_fireball` from `release - cast_seconds` to the release.
+##   ROCKSLING (option A): the LIFT for the first `1 - ROCKSLING_THROW_SHARE` of the window, ending on the lift's
+##     peak; then the THROW for the rest, ending on its release -- stone 1 leaves on it. Stones 2 and 3 fly with
+##     no swing (`7-2`).
+## Any other outcome answers `[]`: not a spell clip.
+static func spell_cast_pose(outcome: StringName, elapsed: float, cast_seconds: float) -> Array:
+	var cast := maxf(cast_seconds, 0.0)
+	var t := clampf(elapsed, 0.0, cast)
+	match outcome:
+		CardEffectResolver.OUTCOME_FIREBALL:
+			return [&"cast_fireball", _lead_in_pose(t, cast, FIREBALL_RELEASE_SECONDS)]
+		CardEffectResolver.OUTCOME_ROCKSLING:
+			var throw_part := minf(cast * ROCKSLING_THROW_SHARE, ROCKSLING_THROW_RELEASE_SECONDS)
+			var lift_part := cast - throw_part
+			if t < lift_part:
+				return [&"cast_rocksling_lift", _lead_in_pose(t, lift_part, ROCKSLING_LIFT_PEAK_SECONDS)]
+			return [&"cast_rocksling_throw",
+					_lead_in_pose(t - lift_part, throw_part, ROCKSLING_THROW_RELEASE_SECONDS)]
+	return []
+
+
+## Native-rate playhead for a clip whose beat at `beat` must land at `span` seconds into a sub-window: the clip
+## runs from `beat - span` to `beat`, and a span longer than `beat` holds frame 0 for the excess first.
+static func _lead_in_pose(t: float, span: float, beat: float) -> float:
+	var hold := maxf(span - beat, 0.0)
+	return clampf(beat - span + t, 0.0, beat) if t >= hold else 0.0
+
+
+## 7-1 polish round: the gesture clip `outcome` plays on resolution, or `&""`.
+static func gesture_clip(outcome: StringName) -> StringName:
+	return _GESTURE_FOR_OUTCOME.get(outcome, &"")
+
+
+## 7-1 polish round: WHERE A GESTURE CLIP STARTS, in its own native seconds (`-1.0` = not a gesture clip). Pure,
+## so the test pins the clip choice and the beat timing headless.
+static func gesture_start(clip: StringName) -> float:
+	return float(_GESTURE_START.get(clip, -1.0))
+
+
+## 7-1 polish round: how many seconds after the gesture starts -- i.e. after the resolution tick -- its measured beat
+## lands (`-1.0` = not a gesture clip). Counterspell's is its lead-in cut, `COUNTERSPELL_LEAD_SECONDS`.
+static func gesture_beat_delay(clip: StringName) -> float:
+	if not _GESTURE_START.has(clip):
+		return -1.0
+	return float(_GESTURE_BEAT[clip]) - float(_GESTURE_START[clip])
+
+
+## 7-1 polish round: PLAY A GESTURE on an instant resolution -- Vampiric Aura or Frostbite (`cast_buff`), a real
+## Counterspell (`cast_counterspell`). NEITHER CARD HAS A CAST WINDOW, so nothing roots the hero: the gesture plays
+## only when the hero is IDLE and STANDING STILL at that moment (the last locomotion push: no planar speed, no
+## turn) and owes nothing to a cast or counter in progress; then it yields to any movement or action
+## (`on_locomotion`, `on_action_state_changed`). Answers whether it played.
+func play_gesture(clip: StringName) -> bool:
+	var start := gesture_start(clip)
+	if start < 0.0 or animation_player == null or not animation_player.has_animation(clip):
+		return false
+	if _state != HeroState.ActionState.IDLE or _cast_running or _counter_running \
+			or _last_planar_speed > RUN_SPEED_EPS or _last_turn != 0:
+		return false
+	animation_player.play(clip, -1.0, 1.0)
+	animation_player.seek(start, true)
+	_one_shot = clip
+	_gesture = clip
+	return true
 
 
 ## Story 6-5c (AC 25): the per-tick cut enforcement -- past the sub-range's END, PAUSE on that frame
 ## and hold it for whatever is left of the cast. `_advance_counter`'s rule with one step instead of a
 ## list, and for its reason: the range is placed by `cast_cut_start` to run out exactly at the strike
 ## at the authored tuning, so the hold only covers rounding and a tuning longer than the clip.
+##
+## Story 7-1: a SPELL cast's playhead is the runner's push (`on_cast_progress`), so there is nothing to enforce.
 func _advance_cast() -> void:
+	if _spell_outcome != &"":
+		return
 	if animation_player.current_animation != &"cast" \
 			or animation_player.current_animation_position >= _cast_cut_end:
 		animation_player.pause()

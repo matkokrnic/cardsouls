@@ -122,6 +122,13 @@ func _physics_process(_delta: float) -> bool:
 		print("hole_vs_in_flight_live: cast_landed=%s in_flight_rendered=%s piles_emptied=%s debt_outstanding=%s hole_after_degrade=%s%s" % [
 			_cast_landed, _in_flight_rendered, _piles_emptied, _debt_was_outstanding,
 			_hole_rendered_after_degrade, _detail])
+		# Story 7-1 (AC 33, named edit): the card this file casts now throws Rocksling stones whose `rock_throw`
+		# can still be playing here, and a sound playing at quit leaves its playback held by the mixer --
+		# "resources still in use at exit". Stop them and give the mixer a beat first, the
+		# `test_cast_success_cue_live.gd` stop-then-wait (`EffectPresenter.stop_all_sounds`).
+		if _runner != null and _runner._effects != null:
+			_runner._effects.stop_all_sounds()
+		OS.delay_msec(100)
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
 	return false

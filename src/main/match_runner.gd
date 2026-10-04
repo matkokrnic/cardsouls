@@ -231,6 +231,59 @@ var _target_cones: Array = [null, null]
 ## never read it) alongside the actual Fireball.
 var _cast_shows_bolt: Array[bool] = [false, false]
 
+## Story 7-1 (AC 23): the cast's resolver outcome, cached on the rising edge beside `_cast_shows_bolt` and for its
+## reason -- the clip choice (Fireball / Rocksling / Honed Bolt's `cast`) is made once, on the press.
+var _cast_outcomes: Array[StringName] = [&"", &""]
+
+## Story 7-1 (AC 6-22): THE EFFECT PRESENTER -- every Deck 1 effect's look and sound. A runner-owned
+## presentation node, handed plain values and scene nodes by the polls and the two sanctioned direct connects
+## below; it holds no state handle (AC 5) and nothing it does reaches `advance()` (AC 4).
+var _effects: EffectPresenter
+
+## Story 7-1 (AC 30, `7-1/R4`): `"<card id>:<mode>"` -> the `CardEffect.effect_id` that resolution ran, derived
+## load-once from `CardDatabase` (the `card_colors_by_id` HUD precedent: static authored content, read on both
+## the live and the replay path, never injected and never recorded). It is how a `card_cast_resolved` payload
+## finds its knob row and whether its own sound silences the generic cue.
+var _effect_id_by_card_mode: Dictionary = {}
+
+## Story 7-1 (AC 19, `7-1/R3`): A RUNNER-LOCAL COPY OF EACH PLAYER'S REVERSAL RECORD AS IT STOOD AT THE END OF
+## THE PREVIOUS TICK. `_apply_counterspell` clears the countered packet before `counterspell_resolved` is queued,
+## so the returned-item set is unreadable at the signal; this copy is what the "returned flashes blue" look reads.
+## Copied only when the packet changed (an element-wise compare, no per-tick allocation). Presentation only: it
+## never reaches `to_snapshot()` and a replay reproduces it by reproducing the packet.
+var _prev_reversal_kind: Array[int] = [PlayerState.REVERSAL_NONE, PlayerState.REVERSAL_NONE]
+var _prev_reversal_indices: Array = [[], []]
+var _prev_reversal_a: Array = [[], []]
+var _prev_reversal_b: Array = [[], []]
+## 7-1 polish (smoke bug 1): each player's `last_resolved_card_tick` as it stood at the end of the previous tick.
+## A resolution WROTE the reversal packet only if it went through `record_resolved_card` this tick, which moves
+## that tick; an unblockable or defence resolution emits `card_cast_resolved` WITHOUT it, leaving the previous
+## card's packet live -- so `_present_cast_resolved` shows a packet-driven look only when the tick moved.
+var _prev_resolved_tick: Array[int] = [PlayerState.NO_RESOLVED_TICK, PlayerState.NO_RESOLVED_TICK]
+
+## Story 7-1 (AC 16, `7-1/R2`): the hero-spell shots this tick's `advance()` ended, read BEFORE the drain
+## (position, target, effect id, budget spent) and given their ending look AFTER it, once the drain has said
+## how many deflects and hits each hero took and whether a Counterspell hit the owner. Paired by count.
+var _ended_shots: Array = []
+var _shot_hits: Array[int] = [0, 0]
+var _shot_deflects: Array[int] = [0, 0]
+var _shot_vanish: Array[bool] = [false, false]
+
+## Story 7-1 review fix (F1): a record spawned with a RAISE SOURCE is either Raise Dead's minion or a minion a
+## Counterspell RESTORED -- state re-adds a restored kill as a new record carrying its old index as
+## `raised_from` (`_restore_killed_minion_at`), the very marker Raise Dead writes. The two cannot be told apart at
+## the spawn poll (before the drain), so the spawn is NOTED here as `[slot, board index]` and given its look
+## after the drain (`_resolve_raised_spawns`), the `7-1/R2` note-then-resolve shape. `_restored_sources` holds the
+## `[slot, index]` minion addresses this tick's Counterspell returned, read from the `7-1/R3` previous-tick copy.
+var _raised_spawns: Array = []
+var _restored_sources: Array = []
+
+## Story 7-1 (AC 11): each hero's hp at the end of the last poll, so a lifesteal HEAL (hp rising while Vampiric
+## Aura runs) can be seen without a new seam; and whether a Drain resolved this tick (its heal is Drain's, not
+## the aura's).
+var _prev_hp: Array[float] = [0.0, 0.0]
+var _drained_this_tick: Array[bool] = [false, false]
+
 ## Story 6-5c (AC 25): how high off the hero root the bolt leaves the raised sword, in metres --
 ## `DAGGER_THROW_HEIGHT`'s twin, and MEASURED rather than picked: `tools/measure_cast_clip_frames.gd`
 ## puts the sword's peak 1.0423 m above the Hips, the rig's Hips sit ~0.91 m above the model root,
@@ -641,10 +694,14 @@ func _ready() -> void:
 		# amendment queue rather than quietly filed under an existing precedent, because a third and
 		# fourth of these would be a de-facto ninth seam family nobody voted for.
 		# Story 6-5a (AC 7): the signal carries a third argument, the resolved MODE; this cue ignores it.
-		_match_state.card_cast_resolved.connect(func(cast_slot: int, _card_id: StringName,
-				_mode: int) -> void:
+		# Story 7-1 (AC 6-22/AC 30, `7-1/R4`): the SAME site, its body widened -- no new connect. The resolution
+		# is handed to the effect presenter first, and the generic success cue stays the FALLBACK: it plays only
+		# when the resolved effect has no own resolution sound.
+		_match_state.card_cast_resolved.connect(func(cast_slot: int, card_id: StringName,
+				mode: int) -> void:
 			if cast_slot == slot:
-				cues.on_card_cast_resolved())
+				if not _present_cast_resolved(cast_slot, card_id, mode):
+					cues.on_card_cast_resolved())
 		# Story 6-5f (AC 26, `6-5f/R35`): the COUNTERSPELL placeholder cue, on BOTH heroes. The SECOND
 		# connection of the shape named two comments up, wired the same way and for the same reason -- a
 		# PLAIN `connect` to a `MatchState` signal, read-only, per-slot guarded, dependency direction
@@ -659,10 +716,14 @@ func _ready() -> void:
 		# equality: the cue is one sign on the caster and one on the countered player, so a hero whose slot
 		# is EITHER payload member plays it. A Counterspell cannot name the same slot twice (the victim is
 		# `1 - slot` by construction), so no hero can double-fire it.
+		#
+		# Story 7-1 (AC 19): the SAME site, its body re-pointed -- no new connect. The violet placeholder is retired;
+		# the blue rune circle on BOTH heroes, the returned-item flash and the `counter` sound are the effect
+		# presenter's, fired ONCE per reversal (the caster's iteration of this two-slot loop).
 		_match_state.counterspell_resolved.connect(func(caster_slot: int,
 				countered_slot: int) -> void:
-			if caster_slot == slot or countered_slot == slot:
-				cues.on_counterspell_resolved())
+			if caster_slot == slot:
+				_present_counterspell(caster_slot, countered_slot))
 		# Story 3-0a: the rig animation controller shares the action-state seam -- the five
 		# ActionState-driven clips (idle/attack/block/roll/death), now six with CHARGING (5-3).
 		# The locomotion clips are NOT wired here: HeroActor.drive() pushes them per-tick from
@@ -692,6 +753,45 @@ func _ready() -> void:
 			anim.on_hit_landed(attacker_slot, target_slot, damage, target_hp, slot,
 					_stun_flavor_for_slot(slot), _stun_seconds_for_slot(slot),
 					_match_state.hit_landed_was_blocked()))
+	_setup_effect_presenter()
+
+
+## Story 7-1 (AC 6-22, AC 27, AC 29): build the effect presenter and hand it its two inputs -- the AUTHORED knob
+## set (`7-1/R6`'s presentation-only home) and the existing colour vocabulary, the three charge
+## `TelegraphProfile`s the hero's telegraph controller already exports (AC 27: no second colour table).
+##
+## TWO MORE CONSUMERS OF EXISTING SEAMS, NO NEW SEAM (AC 3): `connect_hit_landed` / `connect_deflect_landed` are
+## seam CALLS, the `anim.on_hit_landed` precedent above -- the family of `connect_*` declarations stays at ten and
+## no raw `_match_state.<signal>.connect(` site is added. They count, per hero, the hits and deflects a tick's
+## drain announced, which is all `7-1/R2`'s shot-ending read needs.
+func _setup_effect_presenter() -> void:
+	_effects = EffectPresenter.new()
+	_effects.name = "EffectPresenter"
+	add_child(_effects)
+	var cues: TelegraphController = _p1_hero.telegraph_controller
+	_effects.setup(load(EffectPresentationSet.AUTHORED_PATH) as EffectPresentationSet, {
+		Enums.CardColor.RED: cues.charge_red_profile,
+		Enums.CardColor.BLUE: cues.charge_blue_profile,
+		Enums.CardColor.GREEN: cues.charge_green_profile,
+	})
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null:
+			continue
+		for pair: Array in [[Enums.ModeKind.BASIC, card.basic_effect, card.cast_condition],
+				[Enums.ModeKind.PITCH, card.pitch_effect, card.pitch_condition]]:
+			var effect := pair[1] as CardEffect
+			if effect == null:
+				continue
+			_effect_id_by_card_mode["%s:%d" % [id, pair[0]]] = effect.effect_id
+			# The X-scaled shot (Fireball, AC 16/AC 17): its growth range is authored data -- damage per mana,
+			# the card's staging price as the minimum X, and the mana cap.
+			if effect.damage_per_mana > 0.0:
+				var condition := pair[2] as CardCastCondition
+				_effects.set_fireball_range(effect.damage_per_mana,
+						condition.mana_cost if condition != null else 0.0, effect.mana_cap)
+	connect_hit_landed(_on_effect_hit_landed)
+	connect_deflect_landed(_on_effect_deflect_landed)
 
 
 ## Story 6-5a (AC 11): the AUTHORED deck both players draw from until a second deck exists -- Deck 1.
@@ -1252,6 +1352,11 @@ func _push_cast_presentation() -> void:
 			_free_bolt(slot)
 		if _cast_armed[slot]:
 			_cast_elapsed_ticks[slot] += 1
+			# Story 7-1 (AC 23/AC 24): the spell clip's pose, from the window's own elapsed ticks -- on the strike
+			# tick this is `cast_seconds`, which `AnimationController.spell_cast_pose` puts on the release frame.
+			if is_instance_valid(hero):
+				hero.animation_controller.on_cast_progress(
+						float(_cast_elapsed_ticks[slot]) / TimingWindow.TICK_HZ)
 			if _cast_shows_bolt[slot]:
 				if _cast_elapsed_ticks[slot] == _cast_launch_ticks[slot]:
 					_spawn_bolt(slot, hero)
@@ -1281,9 +1386,15 @@ func _push_cast_presentation() -> void:
 			# Smoke fix (6-5d): THE OUTCOME CLASSIFICATION IS THE RESOLVER'S (D6), read through the one
 			# pure query -- see `_cast_shows_bolt`. Cached here, on the same rising edge as the target,
 			# for the same reason: the cast's mode is gone from `PlayerState` once the strike clears it.
-			_cast_shows_bolt[slot] = _match_state.cast_outcome(player) == CardEffectResolver.OUTCOME_HONED_BOLT
+			# Story 7-1 (AC 23): the same one read now also chooses the CAST CLIP -- Fireball and Rocksling get
+			# their own, Honed Bolt keeps `cast`.
+			_cast_outcomes[slot] = _match_state.cast_outcome(player)
+			_cast_shows_bolt[slot] = _cast_outcomes[slot] == CardEffectResolver.OUTCOME_HONED_BOLT
 			if is_instance_valid(hero):
-				hero.animation_controller.on_cast_started(cast_seconds)
+				hero.animation_controller.on_cast_started(cast_seconds, _cast_outcomes[slot])
+			# Story 7-1 (AC 18): `bolt_charge` runs on the caster for the cast.
+			if _cast_shows_bolt[slot] and _effects != null:
+				_effects.start_bolt_charge(slot)
 			# THE WARNING GOES ON THE CAPTURED TARGET, AND ON NOTHING ELSE (AC 28: "the marker never
 			# appears on a non-target"). A HERO target gets today's marker and alarm, unchanged -- which
 			# is every cast by an unlocked caster or one locked on the hero, i.e. the whole of the
@@ -1302,19 +1413,27 @@ func _push_cast_presentation() -> void:
 		elif _cast_armed[slot] and not casting:
 			_cast_armed[slot] = false
 			_free_target_cone(slot)
+			# Review N2's readable interrupt, hoisted so the clip and the lightning both read it (Story 7-1): a
+			# struck spell cast plays its follow-through, an interrupted one does not.
+			var interrupted := player.hero.action_state == HeroState.ActionState.STUNNED \
+					or player.hero.action_state == HeroState.ActionState.DEAD \
+					or not player.hero.is_alive()
 			if is_instance_valid(hero):
-				hero.animation_controller.on_cast_ended()
+				hero.animation_controller.on_cast_ended(not interrupted)
 			if is_instance_valid(other):
 				other.telegraph_controller.on_cast_warning_ended()
+			if _effects != null:
+				_effects.stop_bolt_charge(slot)
 			# AN INTERRUPTED CAST TAKES ITS BOLT WITH IT (AC 5 / `6-5c/R3`: nothing applies). An
 			# ARRIVED bolt is left alone -- that one is a strike, and it is freed next tick above.
 			# Review N2: EXCEPT when the caster reads STUNNED or DEAD -- the readable half of
 			# `_cast_is_interrupted`. An interrupt on the exact strike tick has already ticked the prop
 			# to ARRIVED, but nothing struck, so it must not land visibly.
 			var in_flight: BoltActor = _bolts[slot]
-			var interrupted := player.hero.action_state == HeroState.ActionState.STUNNED \
-					or player.hero.action_state == HeroState.ActionState.DEAD \
-					or not player.hero.is_alive()
+			# Story 7-1 (AC 18): THE STRIKE IS SEEN ON THE STRIKE TICK -- branching lightning and a flash where the
+			# bolt landed, on this falling edge, only for a bolt that arrived and was not interrupted.
+			if _effects != null and is_instance_valid(in_flight) and in_flight.has_arrived() and not interrupted:
+				_effects.show_lightning(in_flight.global_position)
 			if is_instance_valid(in_flight) and (interrupted or not in_flight.has_arrived()):
 				_free_bolt(slot)
 		if is_instance_valid(hero):
@@ -1410,6 +1529,243 @@ func _free_bolt(slot: int) -> void:
 	if is_instance_valid(bolt):
 		bolt.queue_free()
 	_bolts[slot] = null
+
+
+## Story 7-1 (AC 7/AC 10/AC 14/AC 30, `7-1/R4`): A CARD RESOLVED -- hand its look to the presenter, and answer
+## whether the effect's OWN sound silences the generic cast-success cue (the caller plays that cue otherwise).
+##
+## WHAT IT DID IS READ FROM THE STATE'S OWN RECORD, never from a card name: the caster's reversal packet was
+## written by this very resolution inside `advance()` (`record_resolved_card` clears it at the press), so its KIND
+## says what happened and its indices say to whom -- Culling's killed minions, Drain's sacrifice, Boom's count.
+## Read at drain time, before anything else can rewrite it. The effect id only selects the knob row.
+func _present_cast_resolved(slot: int, card_id: StringName, mode: int) -> bool:
+	if _effects == null:
+		return false
+	var effect_id: StringName = _effect_id_by_card_mode.get("%s:%d" % [card_id, mode], &"")
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	var opponent: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	# 7-1 polish (smoke bug 1): THE PACKET IS THIS RESOLUTION'S ONLY IF THIS RESOLUTION WROTE IT. A mode-2/mode-3
+	# resolution skips `record_resolved_card`, so the packet still holds the last BASIC/PITCH card's -- reading it
+	# replayed that card's look (Drain, Boom) on every unblockable initiation.
+	var kind := player.reversal_kind if player.last_resolved_card_tick != _prev_resolved_tick[slot] \
+			else PlayerState.REVERSAL_NONE
+	match kind:
+		PlayerState.REVERSAL_CULLING:
+			var sources: Array[Vector3] = []
+			var culled: Array[Node3D] = []
+			for index: int in player.reversal_indices:
+				var source: Variant = _target_world_position(slot, index)
+				if source is Vector3:
+					sources.append(source as Vector3)
+					culled.append(_actor_at(slot, index))
+			_effects.show_culling(sources, culled, hero)
+		PlayerState.REVERSAL_DRAIN:
+			if not player.reversal_indices.is_empty():
+				var source: Variant = _target_world_position(slot, player.reversal_indices[0])
+				if source is Vector3:
+					_effects.show_drain(source as Vector3, hero)
+			_drained_this_tick[slot] = true
+		PlayerState.REVERSAL_BOOM:
+			_effects.show_boom(opponent, player.reversal_indices.size())
+		PlayerState.REVERSAL_VAMPIRIC_AURA:
+			# 7-1 polish round: the buff gesture. Both buffs resolve instantly, so it plays only on a hero standing
+			# still (`AnimationController.play_gesture`).
+			if is_instance_valid(hero):
+				hero.animation_controller.play_gesture(
+						AnimationController.gesture_clip(CardEffectResolver.OUTCOME_VAMPIRIC_AURA))
+		PlayerState.REVERSAL_FROSTBITE:
+			if is_instance_valid(hero):
+				hero.animation_controller.play_gesture(
+						AnimationController.gesture_clip(CardEffectResolver.OUTCOME_FROSTBITE))
+	_effects.play_resolution_sound(effect_id)
+	return _effects.silences_generic_cue(effect_id)
+
+
+## Story 7-1 (AC 19, `7-1/R3`): A REAL REVERSAL -- the blue rune circle on both heroes, and a blue flash on
+## whatever it RETURNED, read from the runner's previous-tick copy of the countered player's packet (the live one
+## is already cleared). Kills restored (Culling, Drain, a cast's killing damage, Corpse Bomb's conversions) flash
+## the restored minion; refunded hero hp (Boom; a cast's damage on a hero) flashes that hero. A kind that returns
+## nothing (a timed buff, a summon) shows the circles alone.
+func _present_counterspell(caster_slot: int, countered_slot: int) -> void:
+	_shot_vanish[countered_slot] = true
+	if _effects == null:
+		return
+	var returned: Array = []
+	var indices: Array = _prev_reversal_indices[countered_slot]
+	var tags: Array = _prev_reversal_a[countered_slot]
+	var slots: Array = _prev_reversal_b[countered_slot]
+	match _prev_reversal_kind[countered_slot]:
+		PlayerState.REVERSAL_CULLING, PlayerState.REVERSAL_DRAIN, PlayerState.REVERSAL_RAISE_DEAD:
+			for index: Variant in indices:
+				returned.append(_actor_at(countered_slot, int(index)))
+				_restored_sources.append([countered_slot, int(index)])
+		PlayerState.REVERSAL_BOOM:
+			returned.append(_p1_hero if caster_slot == 0 else _p2_hero)
+		PlayerState.REVERSAL_HONED_BOLT, PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING, \
+		PlayerState.REVERSAL_CORPSE_BOMB:
+			for i: int in indices.size():
+				if i >= tags.size() or i >= slots.size():
+					break
+				var tag := int(tags[i])
+				if tag == PlayerState.PART_DAMAGE or tag == PlayerState.PART_CONVERTED:
+					returned.append(_actor_at(int(slots[i]), int(indices[i])))
+					if int(indices[i]) != TargetingService.HERO_INDEX:
+						_restored_sources.append([int(slots[i]), int(indices[i])])
+	# A KILLED minion's old actor is already gone (its corpse was consumed by the restore and freed before this
+	# drain), so `_actor_at` answers null for it and the flash lands on its NEW record instead -- see
+	# `_resolve_raised_spawns`, which reads `_restored_sources`.
+	# 7-1 polish round: the caster swings `cast_counterspell` (lead-in cut so the peak lands
+	# `COUNTERSPELL_LEAD_SECONDS` after this tick) and its rune circle bursts from the sword at that peak; a hero
+	# not standing still plays no gesture, and its circle bursts from the ground at the same beat.
+	var caster: HeroActor = _p1_hero if caster_slot == 0 else _p2_hero
+	var countered: HeroActor = _p1_hero if countered_slot == 0 else _p2_hero
+	var gesture := AnimationController.gesture_clip(CardEffectResolver.OUTCOME_COUNTERSPELL)
+	var swung := is_instance_valid(caster) and caster.animation_controller.play_gesture(gesture)
+	_effects.show_counterspell(caster, countered, returned, swung, AnimationController.gesture_beat_delay(gesture))
+
+
+## The actor at `[slot, index]` (`index == HERO_INDEX` is that slot's hero), or null.
+func _actor_at(slot: int, index: int) -> Node3D:
+	if slot != 0 and slot != 1:
+		return null
+	if index == TargetingService.HERO_INDEX:
+		return _p1_hero if slot == 0 else _p2_hero
+	var actors: Array = _unit_actors[slot]
+	if index < 0 or index >= actors.size() or not is_instance_valid(actors[index]):
+		return null
+	return actors[index] as Node3D
+
+
+## Story 7-1 (AC 16, `7-1/R2`): the two seam consumers that count, per hero, what this tick's drain announced.
+func _on_effect_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _target_hp: float) -> void:
+	if target_slot == 0 or target_slot == 1:
+		_shot_hits[target_slot] += 1
+
+
+func _on_effect_deflect_landed(_attacker_slot: int, target_slot: int, _defense_color: int) -> void:
+	if target_slot == 0 or target_slot == 1:
+		_shot_deflects[target_slot] += 1
+
+
+## Story 7-1 (AC 16, `7-1/R2`): GIVE EVERY HERO-SPELL SHOT THAT ENDED THIS TICK ITS ENDING LOOK, after the drain.
+## The read is `7-1/R2`'s, in its own order: a deflect announced for the shot's hero target -> SCATTER; hp lost by
+## that target -> IMPACT; a Counterspell against the shot's owner -> VANISH; the travel budget spent -> FIZZLE;
+## anything else that ended it (a minion or totem target, which announces no hit) -> IMPACT. Several shots ending
+## on one target in one tick are PAIRED BY COUNT; which shot gets which look is arbitrary, and a misread only a
+## state fact could fix belongs to a later Tier A story (`7-1/R2`).
+func _resolve_ended_shots() -> void:
+	if _effects != null:
+		for shot: Array in _ended_shots:
+			var owner := int(shot[0])
+			var target_slot := int(shot[3])
+			var on_hero := int(shot[4]) == TargetingService.HERO_INDEX and (target_slot == 0 or target_slot == 1)
+			var how := EffectPresenter.End.IMPACT
+			if on_hero and _shot_deflects[target_slot] > 0:
+				_shot_deflects[target_slot] -= 1
+				how = EffectPresenter.End.SCATTER
+			elif on_hero and _shot_hits[target_slot] > 0:
+				_shot_hits[target_slot] -= 1
+			elif _shot_vanish[owner]:
+				how = EffectPresenter.End.VANISH
+			elif bool(shot[5]):
+				how = EffectPresenter.End.FIZZLE
+			_effects.end_projectile(shot[2] as Vector3, StringName(shot[1]), how)
+	_ended_shots.clear()
+	for slot: int in 2:
+		_shot_hits[slot] = 0
+		_shot_deflects[slot] = 0
+		_shot_vanish[slot] = false
+
+
+## Story 7-1 (AC 16): did this shot end by spending its whole travel budget? `travelled_at` against the authored
+## profile's `travel_budget` (`ProjectileBoard.advance_at`'s own expiry rule, read, never re-decided).
+func _shot_expired(board: ProjectileBoard, index: int) -> bool:
+	var profile := _match_state.projectile_profile_at(board, index)
+	return profile != null and profile.travel_budget > 0.0 \
+			and board.travelled_at(index) >= profile.travel_budget - 0.001
+
+
+## Story 7-1 (AC 11/13/15/20/22/28/32): THE PER-HERO PERSISTENT LOOKS, LEVEL-TRIGGERED every frame from public
+## reads -- the `_root_in_force` / `set_root_marker` shape. Every look is OFF on a corpse and through the whole
+## round-over freeze (DEAD and the freeze are set together by `_end_round`), so nothing lingers past its state.
+## Also the lifesteal heal: hp rising while Vampiric Aura runs, and not Drain's own heal, shows droplets.
+func _push_effect_presentation() -> void:
+	if _effects == null:
+		return
+	var freeze := _match_state.p1.hero.action_state == HeroState.ActionState.DEAD \
+			or _match_state.p2.hero.action_state == HeroState.ActionState.DEAD
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		var on := not freeze and is_instance_valid(hero)
+		var aura := on and player.is_rule_active(PlayerState.RULE_VAMPIRIC_AURA)
+		_effects.update_hero(slot, hero, aura,
+				on and player.is_rule_active(PlayerState.RULE_BLOODHOUND_ARMED),
+				on and player.is_rule_active(PlayerState.RULE_ROLL_BOOST)
+						and player.hero.action_state == HeroState.ActionState.ROLLING,
+				on and player.is_rule_active(PlayerState.RULE_FROSTBITE_ARMED),
+				on and player.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+				player.hand.cover_count() if on else 0,
+				on and _stun_flavor_for_slot(slot) == AnimationController.STUN_FLAVOR_BOLT,
+				on and _root_in_force(player))
+		var hp := player.hero.get_hp()
+		if aura and hp > _prev_hp[slot] + 0.0001 and not _drained_this_tick[slot]:
+			_effects.heal_droplets(hero)
+		_prev_hp[slot] = hp
+		_drained_this_tick[slot] = false
+
+
+## Story 7-1 (AC 19, `7-1/R3`): refresh the previous-tick copy of each reversal packet, at the END of the frame --
+## so during the NEXT frame's drain it still holds what the packet was before that tick's `advance()`.
+func _copy_reversal_records() -> void:
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		_prev_resolved_tick[slot] = player.last_resolved_card_tick
+		if player.reversal_kind == _prev_reversal_kind[slot] \
+				and player.reversal_indices == _prev_reversal_indices[slot] \
+				and player.reversal_a == _prev_reversal_a[slot] \
+				and player.reversal_b == _prev_reversal_b[slot]:
+			continue
+		_prev_reversal_kind[slot] = player.reversal_kind
+		(_prev_reversal_indices[slot] as Array).assign(player.reversal_indices)
+		(_prev_reversal_a[slot] as Array).assign(player.reversal_a)
+		(_prev_reversal_b[slot] as Array).assign(player.reversal_b)
+
+
+## Story 7-1 (AC 6/AC 9): a minion actor just spawned -- a Vanguard summon emerges from a green crack at once. A
+## record with a RAISE SOURCE is only NOTED (review fix F1): Raise Dead's minion and a Counterspell-restored one
+## carry the same marker, and which it was is known only after the drain (`_resolve_raised_spawns`). Read from the
+## record (`raised_from_at`, the `_raised_spot` read), and only for the melee scene: a totem (no `Hitbox`) is not a
+## Deck 1 summon and gets neither.
+func _present_unit_spawn(unit: UnitActor, player: PlayerState, slot: int, index: int) -> void:
+	if _effects == null or unit.hitbox == null:
+		return
+	if player.units.raised_from_at(index) == UnitBoard.NO_RAISE_SOURCE:
+		_effects.show_vanguard(unit.global_position)
+	else:
+		_raised_spawns.append([slot, index])
+
+
+## Story 7-1 review fix (F1, AC 9/AC 19): GIVE EACH RAISED-FROM SPAWN OF THIS TICK ITS LOOK, after the drain. A
+## spawn whose `[slot, raised_from]` is a minion this tick's Counterspell returned is a RESTORE: no pillar, and the
+## blue "returned" flash on its NEW actor (a restore gets the flash only, no emerge look). Anything else is Raise
+## Dead: the pillar. Both lists are emptied every frame.
+func _resolve_raised_spawns() -> void:
+	if _effects != null:
+		for spawn: Array in _raised_spawns:
+			var slot := int(spawn[0])
+			var index := int(spawn[1])
+			var actor := _actor_at(slot, index)
+			if actor == null:
+				continue
+			var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+			if _restored_sources.has([slot, player.units.raised_from_at(index)]):
+				_effects.flash_returned(actor)
+			else:
+				_effects.show_raise(actor.global_position)
+	_raised_spawns.clear()
+	_restored_sources.clear()
 
 
 ## Story 3-0c (X5): the record this runner has captured so far. READ-ONLY ACCESS to a
@@ -1681,6 +2037,9 @@ func _force_card_mode_off_all() -> void:
 ## because src/state/ never touches an autoload.
 func _relay_round_ended(loser_index: int) -> void:
 	EventBus.round_ended.emit(loser_index)
+	# Story 7-1 (AC 32): nothing transient lingers into the round-over freeze.
+	if _effects != null:
+		_effects.clear_transient()
 	# Story 6-10 (AC 9b): the round ending drops card mode on both pads, on this EXISTING relay.
 	_force_card_mode_off_all()
 
@@ -1698,6 +2057,19 @@ func _relay_round_started() -> void:
 	# observation seam ship for it, which is what AC 8 asks for. `_end_round` is untouched, so the
 	# board survives the round-over freeze and only a reset clears it.
 	_free_unit_actors()
+	# Story 7-1 (AC 32): the debug reset takes every effect look and sound with it, and the presentation
+	# bookkeeping that would otherwise read the cleared match.
+	if _effects != null:
+		_effects.clear_all()
+	_ended_shots.clear()
+	_raised_spawns.clear()
+	_restored_sources.clear()
+	for slot: int in 2:
+		_prev_reversal_kind[slot] = PlayerState.REVERSAL_NONE
+		_prev_resolved_tick[slot] = PlayerState.NO_RESOLVED_TICK
+		(_prev_reversal_indices[slot] as Array).clear()
+		(_prev_reversal_a[slot] as Array).clear()
+		(_prev_reversal_b[slot] as Array).clear()
 	# Review fix pass (4-3b, F3a): the REACH-PROBE cadence counter is RUNNER-LOCAL (state has no
 	# seat for it), so the debug reset -- a src/state/ event -- cannot clear it directly; this is
 	# the one relay `round_started` fires only FROM a debug reset (`match_state.gd:1215`), so it is
@@ -1776,6 +2148,7 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 		# world zero is a bug that looks like a feature.
 		unit.global_position = _raised_spot(slot, player, index, spot)
 		_apply_totem_tint(unit, player, index)
+		_present_unit_spawn(unit, player, slot, index)
 		actors.append(unit)
 
 
@@ -2083,17 +2456,14 @@ func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
 		var corpse := unit as UnitActor
 		if not corpse.is_lingering():
 			corpse.begin_corpse_linger()
-		# Story 6-5b (AC 24): the GRAVE WARD MARK. The actor owns the per-corpse latch (so the mark is
-		# recorded once and freed with the node), and the tint is applied HERE with the project's ONE
-		# mesh-tint mechanism -- `_tint_mesh_recursive`, the same walk `_apply_totem_tint` uses, which
-		# duplicates each `MeshInstance3D`'s material so one corpse's tint cannot bleed into another's
-		# shared resource. A scene with no `Mesh` child (nothing to tint) simply records the mark.
-		var newly_extended := corpse.on_corpse_state(player.units.corpse_ticks_at(index),
-				player.units.is_corpse_extended_at(index))
-		if newly_extended:
-			var corpse_mesh := corpse.get_node_or_null("Mesh")
-			if corpse_mesh != null:
-				_tint_mesh_recursive(corpse_mesh, UnitActor.EXTENDED_CORPSE_TINT)
+		# Story 6-5b (AC 2): the actor is handed state's remaining lifetime and mark, every tick.
+		corpse.on_corpse_state(player.units.corpse_ticks_at(index), player.units.is_corpse_extended_at(index))
+		# Story 7-1 (AC 8) SUPERSEDES 6-5b's AC 24 tint, which tinted a child named `Mesh` the shipped rigged
+		# minion does not have -- so nothing showed (`6-5b` smoke). The GRAVE WARD LOOK (green glow on the body,
+		# ghosts circling above) is LEVEL-TRIGGERED from the board's own mark every tick, so a Counterspell that
+		# removes the extension removes the glow, and the corpse leaving state frees it with the actor below.
+		if _effects != null:
+			_effects.set_grave_ward(corpse, player.units.is_corpse_extended_at(index))
 		if not player.units.has_corpse_at(index):
 			corpse.queue_free()
 			actors[index] = null
@@ -2720,6 +3090,16 @@ func _spawn_missing_projectile_actors(slot: int, player: PlayerState) -> void:
 			board.target_slot_at(index), board.target_index_at(index))
 		if target_position is Vector3:
 			shot.launch_toward((target_position as Vector3) - shot.global_position)
+		# Story 7-1 (AC 12/AC 16/AC 21): the shot's LOOK by its effect id -- Fireball's core, a Rocksling stone, a
+		# Corpse Bomb skull (whose minion glows as it leaves). The scene and its `Hitbox` are unchanged (AC 35); a
+		# totem shot has no effect id and keeps `5-0c`'s look.
+		if _effects != null:
+			var effect_id := StringName(board.effect_id_at(index))
+			_effects.dress_projectile(shot, effect_id, board.damage_at(index))
+			# A spell shot that names a BOARD INDEX as its source left a minion (Corpse Bomb's skull); a hero's
+			# own shot carries `HERO_INDEX` there (`add_hero_shot`), and a totem shot has no effect id.
+			if effect_id != &"" and board.source_index_at(index) >= 0:
+				_effects.skull_source_glow(_actor_at(slot, board.source_index_at(index)))
 		actors.append(shot)
 
 
@@ -2886,6 +3266,15 @@ func _free_dead_projectile_actors(slot: int, player: PlayerState) -> void:
 		var node: Node = actors[index]
 		if not is_instance_valid(node):
 			continue
+		# Story 7-1 (AC 16, `7-1/R2`): a hero-spell shot's END is noted here, while its actor and record still
+		# say where it was, at whom it flew and whether it ran out of budget; its look is chosen after the drain.
+		var effect_id := player.projectiles.effect_id_at(index)
+		if _effects != null and effect_id != "":
+			var shape := node.get_node_or_null("Hitbox/HitboxShape") as Node3D
+			_ended_shots.append([slot, effect_id,
+					shape.global_position if shape != null else (node as Node3D).global_position,
+					player.projectiles.target_slot_at(index), player.projectiles.target_index_at(index),
+					_shot_expired(player.projectiles, index)])
 		node.queue_free()
 		actors[index] = null
 
@@ -3736,3 +4125,11 @@ func _physics_process(delta: float) -> void:
 	_huds[1].set_lock_marker(null if round_over else _lock_target_screen_position(1, _p2_view_cam))
 	# 5. Drain queued signals AFTER advance returns (D5).
 	_match_state.drain_signals()
+	# 6. Story 7-1: the effect presentation reads that need the drain -- the shot endings (paired against the
+	#    hits, deflects and Counterspells it announced, `7-1/R2`), the per-hero persistent looks and lifesteal
+	#    droplets, and the end-of-tick copy of the reversal packets (`7-1/R3`). Plain reads, no new seam.
+	#    Review fix F1: the raised-from spawns first, while this tick's Counterspell sources are still held.
+	_resolve_raised_spawns()
+	_resolve_ended_shots()
+	_push_effect_presentation()
+	_copy_reversal_records()

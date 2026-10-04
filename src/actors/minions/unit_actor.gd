@@ -186,14 +186,11 @@ func corpse_ticks_remaining() -> int:
 	return _corpse_ticks_remaining
 
 
-## The extended-corpse tint, on the 6-5a GREY-PLACEHOLDER buff-visual posture (no operator-authored
-## clip, no VFX, no new scene). A cold blue-white, chosen only to be unmistakable against the grey box
-## a plain corpse is -- not a design decision about what warding looks like. Whether it READS at a
-## glance is the operator smoke's call (`PROC/R8`), not this file's.
-##
-## DECLARED HERE, APPLIED BY THE RUNNER, so the colour and the per-corpse latch that gates it sit
-## together and the runner's tint call names a constant rather than a literal.
-const EXTENDED_CORPSE_TINT := Color(0.55, 0.75, 1.0)
+## Story 7-1 (AC 8) DELETED `EXTENDED_CORPSE_TINT` (6-5b's cold blue-white placeholder), whose runner-side tint
+## looked for a child named `Mesh` the shipped rigged minion does not have, so nothing showed at the `6-5b`
+## smoke. The Grave Ward look -- a green glow on the body and ghosts circling above -- is
+## `EffectPresenter.set_grave_ward`'s, level-triggered by the runner from the board's own mark every tick. The
+## latch above still records the mark for this actor's own life; it no longer gates any drawing.
 
 
 ## Story 4-3d (AC 2/3/4): begin the linger. Called by `MatchRunner._free_dead_unit_actors` on the

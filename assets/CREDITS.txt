@@ -1,0 +1,27 @@
+CardSouls -- third-party asset credits (story 7-1, effect presentation)
+
+Only PROCESSED results of these sources are in the repo (tools/ingest_effect_assets.py,
+tools/convert_rock_to_glb.gd); the raw files stay outside it.
+
+ROCK -- assets/models/rock/ (rock.glb: the mesh converted from the source FBX, materials stripped;
+  textures resized 4096 -> 1024)
+  "Rock Game Asset" by Agustin Honnun, Sketchfab (free download).
+  Treated as CC-BY: credit to Agustin Honnun.
+
+SKULL -- assets/models/skull/skull.glb (decimated 213,812 -> 3,000 triangles)
+  "Hornman Skull", Sketchfab (free download).
+  Treated as CC-BY: credit to the "Hornman Skull" author on Sketchfab.
+
+PARTICLE TEXTURES -- assets/vfx/*.png (11 of the pack's 193, resized 512 -> 256)
+  "Particle Pack (1.1)" by Kenney Vleugels (Kenney.nl).
+  License: Creative Commons Zero, CC0 -- http://creativecommons.org/publicdomain/zero/1.0/
+  "You may use these assets in personal and commercial projects. Credit (Kenney or www.kenney.nl) would be
+  nice but is not mandatory."
+
+SOUND EFFECTS -- assets/audio/effects/sfx_*.wav (trimmed first variants)
+  The #GameAudioGDC Bundle (Sonniss), files by 344 Audio. License: royalty-free; "Use them personally or
+  commercially without attribution." Credit given anyway: Sonniss / 344 Audio.
+  sfx_soul, sfx_heal, sfx_bolt_strike, sfx_frost_hit (.tres) are synthesized in-repo (tools/gen_effect_audio.gd).
+
+CAST ANIMATIONS -- assets/characters/paladin/cast_fireball.fbx, cast_rocksling_lift.fbx, cast_rocksling_throw.fbx
+  Mixamo (Adobe), on the existing paladin rig -- the same source as the rig's other clips.
