@@ -600,3 +600,27 @@ Dva pada, flip [3,3]. 13/13 PASS. Kontra = Honed Bolt u pitch zoni + 4 mane + pl
 Napomene za playtest:
 - Rok leša (20 s) efektivno ograničava vraćanje miniona, a prozor za kontru je neograničen — vidjeti na playtestu treba li to uskladiti (knob u .tres).
 - Sve kontre i dalje bez vizuala osim placeholder cuea — ide u prezentacijsku story.
+
+
+## 2026-10-04 — 7-1 live smoke (Matko, dva pada, flip [3,3])
+
+Prvi smoke:
+- Vanguard: izgleda i zvuči dobro, među boljima.
+- Culling: vizualno ok, moglo bi biti naglašenije; šašav zvuk. Drain mi je bolji, a slična je stvar.
+- Grave Ward: leš zasvijetli zeleno, iznad lebde mali duhovi — mogli bi biti veći; par puta glow i duhovi nisu bili poravnati s lešom.
+- Raise Dead: okej, moglo bi biti efektnije, npr. zelena munja na leš prije nego se digne.
+- Vampiric Aura: vidljivo, ali moglo bi više; nije intuitivno što se događa; zvuk bezveze.
+- Rocksling: uz Honed Bolt najbolji efekt, i zvuk i vizual. Prvi kamen na zamahu, druga dva bez — točno. Krhotine kul, ali kamenje na meti nije poravnato s modelom, lebdi oko njega.
+- Boom: dobar. BUG: Drain/Boom efekt se ponovo izvrti na iniciranju unblockablea, bez promjene u igri.
+- Bloodhound Step: užasan zvuk, efekt okej.
+- Fireball: ima svoju animaciju; s najviše mane kugla barem duplo premalena; eksplozija može biti impozantnija.
+- Honed Bolt: vizualno super.
+- Counterspell: runski krug nisam ni primijetio, samo plavo bljeskanje — mora biti istaknutije.
+- Frostbite: među najslabijima, plave zvjezdice iz oružja jedva se vide.
+- Corpse Bomb: lubanja se jedva vidi, neka bude 2-3x veća; Fireball i lubanje bi trebali flare iza sebe.
+- Stun/root: root izgleda kao plava haljina, ali je čitljiv; stun od bolta kratko traje i jedva se vidi; prijelaz poze riga neugodan.
+- Općenito: zadovoljan, imao sam niža očekivanja. Zvukove ću kasnije sam ručno podesiti. HUD hitno fali.
+
+Polish round: bug Drain/Boom i nevidljivi runski krug popravljeni, veličine i vidljivost pojačane, nove geste za Auru/Frostbite i Counterspell (zamah mačem, krug iz vrha zamaha).
+
+Re-smoke: sve dovoljno dobro.

@@ -365,18 +365,18 @@ recorder (`intent_recorder.gd:227`); if the dev pass wants to author `CardEffect
 
 ## Tasks / Subtasks
 
-- [ ] Before-measurement: suite, golden, 45-key set, `git diff --stat -- src/state/` (AC 1, 2)
-- [ ] Ingest: process the staged assets per the ingest rule; record skull triangle count, texture
+- [x] Before-measurement: suite, golden, 45-key set, `git diff --stat -- src/state/` (AC 1, 2)
+- [x] Ingest: process the staged assets per the ingest rule; record skull triangle count, texture
       sizes, the Kenney files kept, per-sound-slot file and measured onset (AC 30, 31)
-- [ ] Add the three cast clips to `paladin_anims.res` on the `add_paladin_cast_clips.gd` route;
+- [x] Add the three cast clips to `paladin_anims.res` on the `add_paladin_cast_clips.gd` route;
       measure Hips travel and release frames; extend `test_rig_clips.gd` (AC 23-26)
-- [ ] Wire the cast clip choice and release timing for Fireball/Rocksling; keep Honed Bolt (AC 18, 23, 24)
-- [ ] Build each Scope row against its trigger-map hook (AC 6-22)
-- [ ] Knob set per row + its test (AC 29); colour from the existing vocabulary (AC 27)
-- [ ] Fireball size test against the scene's `Hitbox` (AC 17)
-- [ ] Teardown on every exit path (AC 32)
-- [ ] After-measurement + full suite (AC 1, 2, 33); record suite-output timestamps
-- [ ] Live Smoke handed to the operator (AC 34)
+- [x] Wire the cast clip choice and release timing for Fireball/Rocksling; keep Honed Bolt (AC 18, 23, 24)
+- [x] Build each Scope row against its trigger-map hook (AC 6-22)
+- [x] Knob set per row + its test (AC 29); colour from the existing vocabulary (AC 27)
+- [x] Fireball size test against the scene's `Hitbox` (AC 17)
+- [x] Teardown on every exit path (AC 32)
+- [x] After-measurement + full suite (AC 1, 2, 33); record suite-output timestamps
+- [x] Live Smoke handed to the operator (AC 34) -- handed over, NOT run (the operator's; section below left unfilled)
 
 ## Live Smoke
 
@@ -396,6 +396,25 @@ per item, headline = worst item (`E6-R/R9`).
     (minion count recorded, frame time recorded).
 20. **Regression, enumerated:** melee, block, deflect, roll, a mode-2 unblockable, a mode-3 defence,
     a pitch activation, the Honed Bolt timing and the totem projectile look are unchanged.
+
+## Live Smoke Result
+
+First smoke (2026-10-04, operator, two drops, flip [3,3]): Vanguard and Honed Bolt read best;
+Rocksling close behind (first-stone-only swing confirmed, stone on the target floats off-model);
+Culling, Vampiric Aura, Bloodhound Step and Frostbite read weak (small/unclear look or a bad
+sound); Grave Ward's glow/ghosts occasionally unaligned with the corpse; Fireball's ball too
+small at max mana, explosion undersized; the Counterspell rune circle was not seen at all, only
+the blue flash; the Corpse Bomb skull barely visible; root reads as a dress but legible, stun
+brief and hard to see, cast-pose transition into stun rough. Bug found: the Drain/Boom effect
+replays on an unrelated unblockable's initiation with no game-state change. Operator verdict:
+satisfied, expectations exceeded; sounds deferred to a later manual pass; HUD's absence called
+out as urgent.
+
+Polish round: the Drain/Boom replay bug and the invisible rune circle fixed; sizes and
+visibility raised on the weak items; new standing-still-only gestures added for Aura/Frostbite
+and Counterspell (sword swing, circle bursting from the swing's peak).
+
+Re-smoke (operator): good enough.
 
 ## Dev Notes
 
@@ -511,15 +530,361 @@ hand-kept list.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (1M context), `claude-opus-5-5[1m]`, via `gds-dev-story`, 2026-10-02. Single session, no subagents.
+
 ### Debug Log References
+
+- **Before-baseline** `C:\dev\_7-1-before.txt` (state half 17:12:48, integration half 17:13:17 -> 17:18:33):
+  state harness 1248 tests / 11835 assertions / 0 failed; `test_state_matches_golden` ok (golden
+  `941958c5...871f`); `test_the_player_snapshot_key_set_is_exactly_the_expected_set` ok (45 keys);
+  72/72 integration files PASS; `git diff --stat -- src/state/` empty. Ran as two foreground calls (the two
+  halves of `test/run_all.sh`, line-copied into scratchpad scripts so each half is one call).
+- **Run 2 (first final)** `C:\dev\_7-1-final-run2-failed.txt` (17:50:14 -> 17:56:26): state 1248 / 0 failed /
+  11834 assertions, golden + key set ok; integration 75/76 -- `test_hole_vs_in_flight_live.gd` FAILED on
+  "1 resources still in use at exit". Re-run ALONE with `-v`: deterministic, `sfx_rock_throw.wav` still playing at
+  quit (this story's Rocksling stones) -- the D4 mechanism, NOT the `6-5b/R24` flake (the three `-v` files of
+  `run_all.sh` were clean). Fixed with the same named stop-then-wait edit (D4).
+- **Run 3 (final, EXTRA RUN -- reason: run 2 failed as above and the fix had to be proven)**
+  `C:\dev\_7-1-final.txt` (state 17:58:33 -> 17:59:10, integration 17:59:15 -> 18:04:46): state **1248 tests /
+  0 failed / 11834 assertions**; `test_state_matches_golden` ok (golden `941958c5...871f` unmoved);
+  `test_the_player_snapshot_key_set_is_exactly_the_expected_set` ok (45 keys unmoved); integration **76/76
+  PASS** (72 + the 4 new files); `git diff --stat -- src/state/ project.godot` empty.
+- **Assertion count 11835 -> 11834, attributed term by term** (no test failed; the golden and key-set tests pass):
+  -3 `test_corpses.gd:96` (three asserts per CODE line of `unit_actor.gd`; `EXTENDED_CORPSE_TINT`'s one code line
+  is deleted, D6); +1 `test_data_resources.test_every_data_tres_loads` (the new
+  `data/presentation/effect_presentation.tres`); +1 `test_hero_cast._scan_stun_writers` (one `assert_not_null`
+  per directory under `res://src`; the new `src/actors/effects/`).
+- **Engine launches outside the two suite runs** (all single-file, each its own call): two headless
+  `--editor --quit` import scans (assets; then the class cache for the new `class_name`s) -- `project.godot`
+  SHA `9c3089bc...95e2` identical after each, nothing to restore; `tools/gen_effect_audio.gd`;
+  `tools/add_paladin_spell_clips.gd`; `tools/measure_spell_clip_frames.gd`; dev runs of the four new test
+  files and of `test_cast_success_cue_live`, `test_rig_clips`, `test_fireball_live`,
+  `test_cast_presentation_live`, `test_boulder_and_skull_live` (twice: leak, then fixed), `test_cast_interrupt_live`;
+  one `-v` run each of `test_effect_projectile_looks` and `test_boulder_and_skull_live` to name a leak; six
+  mutation proofs (below; corrected from "five" at review, P2); after run 2, `test_hole_vs_in_flight_live.gd` alone with `-v` (name the leak), then
+  alone after the fix.
+- **Import-scan noise, not an error of this story's code:** the rock FBX references its four 4K source PNGs by
+  path; the import logs "Can't open file ... Rock_MAT_*.png" and skips them. The presenter applies the 1024 px
+  textures itself (`_rock_material`), so the missing embedded paths are inert.
 
 ### Completion Notes List
 
+**Routes and homes.**
+- Knob home (AC 29, `7-1/R6`): NEW presentation-only classes `EffectPresentationRow` / `EffectPresentationSet`
+  under the NEW folder `src/actors/effects/`, authored file under the NEW folder `data/presentation/`
+  (`effect_presentation.tres`). Not under `data/effects/`; no `src/state/` file names either (asserted by
+  `test_effect_presentation_knobs.gd`). `EffectPresentationSet.ROW_SOUND_SLOTS` is the single row list the
+  presenter and the test both read (`7-T1/R4`).
+- One runner-owned presenter node `EffectPresenter` (`src/actors/effects/effect_presenter.gd`) builds every look
+  and plays every effect sound; `EffectFx` holds the shared particle/quad/lightning builders;
+  `fireball_core.gdshader` is the core's moving-noise surface. Plain values and actor nodes in, no state handle
+  (AC 5).
+- Hooks, all existing (AC 3): the two sanctioned inline connects keep their sites -- `card_cast_resolved`'s body
+  now calls `_present_cast_resolved` (dispatch by the caster's own `reversal_kind`, never a card name; the effect
+  id only picks the knob row) and the generic cue plays only when that returns false (`7-1/R4`);
+  `counterspell_resolved`'s body calls `_present_counterspell` once (caster iteration). Two new CONSUMERS of
+  existing seams (`connect_hit_landed` / `connect_deflect_landed` calls) count per-hero hits/deflects for
+  `7-1/R2`. Everything else is a runner poll: spawn hooks (`_present_unit_spawn` from
+  `_spawn_missing_unit_actors`; `dress_projectile` from `_spawn_missing_projectile_actors`), shot endings noted in
+  `_free_dead_projectile_actors` and resolved after the drain (`_resolve_ended_shots`), the Grave Ward glow
+  level-triggered in `_free_dead_unit_actors`, the per-hero looks level-triggered in `_push_effect_presentation`
+  (after the drain), and the `7-1/R3` previous-tick reversal copy in `_copy_reversal_records` (copied only when
+  the packet changed). `test_runner_observation_seams_are_exactly_ten` and
+  `test_raw_match_state_connects_are_pinned_by_shape` are unedited.
+- Colour (AC 27): every row's `card_color` selects one of the three charge `TelegraphProfile`s the runner hands
+  over (`_setup_effect_presenter`); Drain and Vampiric Aura are green (`7-1/R1`). Boulder (COLORLESS) draws in
+  the rock material.
+
+**Ingest (AC 30/31)** -- `tools/ingest_effect_assets.py` (committed; reads the staged dirs, writes processed
+results only). pip packages: Pillow, numpy, scipy (already present), **trimesh 5.1.0 (present),
+fast-simplification 0.2.0 (installed this pass)**.
+- Skull: **213,812 -> 3,000 triangles** (fast-simplification, automatic, first try -- `7-1/R8` stop not
+  triggered), centred, longest extent 1.0 m -> `assets/models/skull/skull.glb` (54,772 B).
+- Rock: mesh shipped as `rock.glb` (19,964 B, material-less, converted from the staged 43,356 B FBX by
+  `tools/convert_rock_to_glb.gd` at review fix P5 -- the dev pass shipped the FBX itself); base colour and
+  roughness **1024x1024 JPEG q90**, normal **1024x1024 PNG**; metallic dropped (constant 0 in the material), AO
+  jpeg not used.
+- Kenney kept (11 of 193, 512 -> 256 px): circle_02, circle_05, dirt_02, flame_04, magic_02, scorch_02,
+  smoke_04, spark_02, star_06, trace_04, twirl_02. Smoke-particles pack: none used. (`spark_05` was shipped
+  unused by the dev pass and deleted at review fix P4.)
+- Total processed assets added, MEASURED (corrected at review, P3; the dev pass said "4.3 MB"): 4,687,056 B as
+  the dev pass left them; **4,626,047 B (4.41 MiB)** after the review fixes -- rock, skull, 11 vfx PNGs, 17 trimmed
+  `.wav` and 4 synthesized `.tres`, excluding `.import` sidecars and CREDITS. Plus the three cast FBXs, 1,453,968 B.
+  Credits: `assets/CREDITS.txt`.
+- `.gitattributes`: `*.glb`, `*.jpg`, `*.wav`, `*.ogg` binary.
+
+**Sound slots** -- first picks shipped as picked (`7-1/R5`); trim = first variant to the first >= 0.25 s run
+below -40 dB of peak, leading silence removed, 2 ms in / 30 ms out fades, mono 16-bit 44.1 kHz. Measured onset =
+seconds into the source file:
+
+| slot | file (part 1) | onset | length |
+|---|---|---|---|
+| summon | FGHTImpt_4 x Punch, Body 02 | 0.161 | 0.297 |
+| cull | WOODImpt_... Vampire's Prison | 2.272 | 2.000 |
+| ward | AMBDsgn_Evil Spell Ambience | 0.119 | 2.500 |
+| raise | DSGNBass_Rattling Downer 3 | 0.091 | 2.500 |
+| drain | WINDDsgn_Wind, Rush, Whoosh, Long x5 01 (reversed) | 0.022 | 1.026 |
+| aura | DSGNBass_Bass Drop & Downer Slow 10 | 0.000 | 2.500 |
+| rock_throw | same Wind file, forward, pitch 1.35 | 0.025 | 1.000 |
+| rock_hit | WEAPBlnt_Spear And Stick Impact, Wooden MKH 2 | 0.020 | 0.205 |
+| boom | DSGNBass_Bass Drop & Downer Fast 16 | 0.042 | 1.500 |
+| hound | ANMLDog_Dog Barks, Multiple, Indoors, Perspective,_02 | 0.258 | 0.564 |
+| fire_launch | AEROJet_Blast Off Clean | 0.085 | 1.200 |
+| fire_loop | FIRECrkl_... Witch's Cauldron (looped at runtime) | 0.173 | 3.000 |
+| fire_hit | DSGNBass_Bass Drop & Downer Fast 12 | 0.002 | 1.500 |
+| bolt_charge | AMBSubn_Electricity Hum, Lightbulb, Coil Pickup 01 | 0.012 | 2.000 |
+| counter | DSGNBass_Tone Downer (Reverb) (reversed) | 0.923 | 1.500 |
+| frost_arm | MAGMisc_Magic Christmas Bells 2 | 0.341 | 0.149 |
+| skull_launch | AEROJet_Unidentified Encounter | 0.000 | 1.500 |
+| skull_hit | = summon file, pitch 0.7 | -- | -- |
+
+Synthesized (`tools/gen_effect_audio.gd`, seeded, onset 0.000): **soul** (0.45 s rising glide), **heal**
+(0.30 s chime), **bolt_strike** (1.10 s noise snap + rumble), **frost_hit** (0.50 s shard cluster).
+
+**Cast clips (AC 23-26)** -- `tools/add_paladin_spell_clips.gd` (the `add_paladin_cast_clips.gd` route: loads the
+library, asserts the 29, adds 3, saves; refuses over the Hips ceiling). Hips planar travel, measured: cast_fireball
+net 0.0000 / peak 0.0515 m; cast_rocksling_lift net 0.0000 / peak 0.1894 m; cast_rocksling_throw net 0.0000 / peak
+0.1537 m -- all inside 0.25 m, nothing pinned. Release frames (`tools/measure_spell_clip_frames.gd`, criterion
+stated in its header before reading: peak forward reach of the hands' midpoint relative to the Hips):
+- **cast_fireball** 1.0333 s, release **t=0.8353** (0.8083).
+- **cast_rocksling_lift** 2.1667 s, peak height **t=1.4264** (0.6583) -- the lift's end beat.
+- **cast_rocksling_throw** 2.7000 s, release **t=1.3275** (0.4917), after the backswing (reach -0.40 m at ~0.92 s).
+How it lands on the launch tick: the runner pushes `elapsed = elapsed_ticks / 60` every cast tick
+(`on_cast_progress`); `AnimationController.spell_cast_pose` maps it so the release sits exactly on
+`elapsed == cast_seconds`, which is the strike tick where state launches the shot (the cast's falling edge). At
+the authored 0.8 s: Fireball plays 0.0353 -> 0.8353 at native rate; Rocksling plays the lift 1.0664 -> 1.4264
+(0.36 s) then the throw 0.8875 -> 1.3275 (0.44 s, `ROCKSLING_THROW_SHARE` 0.55); stone 1 leaves on the throw's
+release, stones 2-3 fly with no swing (option A). A longer cast holds the first pose for the excess (never
+slower than native). A struck spell cast plays the follow-through from the release; an interrupted one does not.
+Honed Bolt keeps `cast` exactly as before (pinned by `test_spell_cast_clips.gd`).
+
+**Fireball size (AC 17)**: core radius = lerp(`core_min_radius` 0.16, `core_max_radius` 0.32) over X from the
+staging price (3) to `mana_cap` (10), centred on `Hitbox/HitboxShape` (read from the shot, so concentric by
+construction); hit sphere 0.35. Trail, sparks and ground light extend beyond (`7-1/R9`).
+
+**Tests added** (all under `test/integration/`): `test_effect_presentation_knobs.gd` (AC 29/27/30, R6 home),
+`test_effect_projectile_looks.gd` (AC 17 + AC 35 for all four kinds), `test_spell_cast_clips.gd` (AC 23/24,
+real `hero.tscn`), `test_effect_presentation_live.gd` (AC 8 on the shipped minion scene incl. removal; Vanguard
+summon sound; aura on/off with its rule; root shackles; frozen legs + `frost_hit`; a Fireball record dressed and
+ending as IMPACT with `fire_hit`; a Corpse Bomb skull dressed, `skull_launch`, and its minion glowing).
+
+**Mutation proofs** (each: out-of-repo copy + SHA, mutate, run ONLY the affected file, restore by copy, SHA
+match confirmed):
+1. `data/presentation/effect_presentation.tres` minus the `boom` row -> `test_effect_presentation_knobs` FAIL
+   ("Scope row 'boom' has no authored knob set", "15 vs 16").
+2. same file, `core_max_radius` 0.32 -> 0.40 -> `test_effect_projectile_looks` FAIL ("core radius 0.4000 must
+   stay inside the hit sphere 0.3500").
+3. `match_runner.gd` `set_grave_ward(corpse, <mark>)` -> `false` -> `test_effect_presentation_live` FAIL (both
+   AC 8 checks).
+4. `animation_controller.gd` `_lead_in_pose` playhead `t` -> `t * 0.98` -> `test_spell_cast_clips` FAIL (release
+   missed at every duration).
+5. `projectile_actor.tscn` hit radius 0.35 -> 0.40 -> `test_effect_projectile_looks` FAIL (AC 35 radius, every kind).
+6. `match_runner.gd` skull-glow gate back to `not is_hero_sourced_at(index)` -> `test_effect_presentation_live`
+   FAIL ("the minion the skull left glows (AC 21)").
+
+**Deviations -- named, for the operator.**
+- **D1 (AC 26, named by the story):** `test_rig_clips.gd` `EXPECTED_LOOP` 29 -> 32 (three one-shots).
+- **D2 (AC 7):** "the soul arrives no later than the mana gain shows on the HUD" is not satisfiable with a visible
+  flight: Culling's mana is granted inside `advance()` and the HUD bar updates in the SAME tick's drain, the tick
+  the souls launch. Built as a short authored flight (`soul_flight` 0.35 s). Making the HUD wait would change a
+  player-facing HUD read and is not taken; the operator rules.
+- **D3 (AC 29):** every row's primary knobs (size, duration, count, spacing, intensity, per-slot volume and pitch,
+  plus row-specific `extra` keys) are authored; SECONDARY particle-tuning literals inside `effect_presenter.gd`
+  (burst speeds, spreads, sub-burst sizes and lifetimes, hero-anchor heights) and three feel constants
+  (`ROCKSLING_THROW_SHARE`, `CAST_WARNING_PULSE_SCALE/SECONDS`) remain code constants, the `_CHARGE_HOLD_KNOBS`
+  precedent. If the polish round must touch those without code, they move to `extra` keys -- operator call.
+- **D4 (AC 33):** `test_boulder_and_skull_live.gd` EDITED (named): before `quit()` it calls
+  `EffectPresenter.stop_all_sounds()` and waits 100 ms. Reason, measured with `-v`: its skulls and summon now play
+  effect sounds, and a sound still playing at quit leaves its `AudioStreamPlaybackWAV` held by the mixer ->
+  "2 resources still in use at exit" (sfx_summon, sfx_skull_launch). That is NOT the `6-5b/R24` flake: it is
+  deterministic and caused by this story's sounds. The remedy is `test_cast_success_cue_live.gd`'s own
+  stop-then-wait; an `_exit_tree` stop was tried first and measured NOT to work (the stop lands after the main
+  loop's last per-frame audio cleanup). The other existing presentation tests (`test_cast_presentation_live`,
+  `test_cast_success_cue_live`, `test_fireball_live`, `test_cast_interrupt_live`) pass unedited.
+  **Second file, same edit, same reason:** `test_hole_vs_in_flight_live.gd` (found by run 2: `sfx_rock_throw.wav`
+  playing at quit; reproduced alone with `-v`; clean after the edit, alone and in run 3).
+  RISK FOR REVIEW: any future live test that quits within a sound's length of an effect leaks the same way until
+  it calls `stop_all_sounds()` first; a harness-level remedy is out of this story's scope.
+- **D5 (AC 19):** the violet `CounterSign` / `CueCounter` nodes and `TelegraphController.on_counterspell_resolved`
+  are DELETED. The dev pass left `assets/audio/cue_counterspell.tres` and `tools/gen_counterspell_audio.gd` in
+  place, unreferenced; by operator ruling both were DELETED at the review fix round (with the tool's `.uid`), and
+  the precedent comment in `tools/gen_effect_audio.gd` now names the retired generator by story.
+- **D6 (AC 8 / 6-5b):** `UnitActor.EXTENDED_CORPSE_TINT` and the runner's `Mesh`-child tint are deleted
+  (superseded); `UnitActor.on_corpse_state` and its latch stay.
+- **Fixed during the pass (recorded, not a deviation):** the Corpse Bomb source glow was first gated on
+  `not is_hero_sourced_at(index)`, which is false for EVERY spell shot (it tests the effect id), so the glow never
+  fired; re-gated on `source_index_at(index) >= 0` (a skull names its minion's board index, a hero shot names
+  `HERO_INDEX`). Found by reading `projectile_board.gd`; a check was then ADDED to
+  `test_effect_presentation_live.gd` (a skull fired from the test's corpse is dressed, plays `skull_launch`, and
+  its minion glows) and proven by mutation 6 below.
+- **Vanguard** shows on every non-raised MELEE minion spawn (the trigger map's `NO_RAISE_SOURCE` read), totems
+  excluded by scene; Deck 1's only summon is Ruin Vanguard.
+
+### Review fix round (2026-10-03, same session as the review; report `C:\dev\_7-1-review.md`)
+
+Before-baseline: the review's own suite run (`C:\dev\_7-1-review-suite.txt`, 15:44:18 -> 15:50:24: state 1248 / 0
+failed / 11834, golden + 45-key set ok, integration 76/76); the tree was unchanged between it and the fixes.
+
+- **F1 (blocks smoke, AC 9/AC 19).** A Counterspell restores a killed minion as a NEW record carrying its old
+  index as `raised_from` (`MatchState._restore_killed_minion_at`), Raise Dead's own marker -- so restores got the
+  green pillar, and the blue flash looked up the old index, whose actor was already freed. Now the spawn poll
+  only NOTES a raised-from spawn (`_raised_spawns`) and `_resolve_raised_spawns` gives it its look after the drain:
+  a spawn whose `[slot, raised_from]` is in `_restored_sources` -- the minion addresses this tick's Counterspell
+  returned, read from the `7-1/R3` previous-tick copy -- is a RESTORE (no pillar, `EffectPresenter.flash_returned`
+  on the NEW actor, no emerge look); anything else is Raise Dead (the pillar). Implementation note: the address
+  set covers the restores on the Counterspell CASTER's board too (a countered cast's PART_DAMAGE/PART_CONVERTED kill
+  of the caster's own minion), which "named that slot as countered" alone would have missed.
+  Checks added to `test_effect_presentation_live.gd` on P2's board: a raised record with no Counterspell gets the
+  pillar; a Counterspell restore of a Culled minion gets no pillar and its new actor flashes, and `counter` plays.
+  **Mutation 7:** the restore test in `_resolve_raised_spawns` forced false (backup + SHA `1903BD43...3DEA`,
+  python byte-replace, restore by copy, SHA re-matched) -> FAIL on both "a Counterspell-restored minion gets NO
+  Raise Dead pillar" and "the restored minion's NEW actor flashes blue". The first attempt counted pillars by
+  node name and missed the mutation (the engine renames a second same-named sibling); the count is by mesh type.
+  The new P2 minions first leaked `res://assets/audio/cue_hit.wav` at quit (named with `-v`: a hero `CueHit`
+  from them swinging at P1's hero, the P18 mechanism); the test kills them once their checks are done, clean x2.
+- **P1:** the four new test `.uid` sidecars generated by ONE `--headless --editor --quit` scan (which also
+  imported `rock.glb` and wrote `tools/convert_rock_to_glb.gd.uid`). `project.godot` SHA identical before/after;
+  `git diff -- project.godot` empty, nothing to restore.
+- **P2/P3:** this record corrected in place (six mutation proofs; the measured asset totals above).
+- **P4:** `assets/vfx/spark_05.png` (+ `.import`) and the unused `EffectFx.TEX_BOLT` deleted; `KENNEY_PICKS` in
+  `tools/ingest_effect_assets.py` drops it so a re-ingest cannot bring it back.
+- **P5:** `tools/convert_rock_to_glb.gd` (NEW) loads the staged FBX at runtime (`FBXDocument`), strips every
+  material and writes `assets/models/rock/rock.glb` (19,964 B; glTF JSON: 1 mesh, 2 nodes, no image, texture or
+  material). `rock.fbx` (+ `.import`) deleted, `EffectPresenter.ROCK_SCENE` re-pointed, `assets/CREDITS.txt`
+  updated, and `ingest_effect_assets.py` no longer copies the FBX. Fresh import of `rock.glb` in an isolated
+  scratch project: **0** ERROR/WARNING lines (the FBX logged 8 + 4).
+- **P6:** the Boulder crust caches its piece list at build (`_set_crust` walks it, no `get_children()` per tick);
+  the Grave Ward lookup uses a const NodePath. `spell_cast_pose` left as it is (caching it costs clarity).
+- **P7:** Boom's sequence tween is tracked (`_track`) and killed by `clear_transient` (so also `clear_all`).
+- **P13:** on the falling edge Bloodhound's mist and roll trail stop emitting and are freed after their particle
+  lifetime.
+- **P15:** a Rocksling stone ending as SCATTER throws its debris without `rock_hit`.
+- **D5/P17:** see D5 above.
+- **Not fixed, by operator ruling:** P8 (the Grave Ward glow stays through the round-over freeze -- the state it
+  shows still holds); P9-P12, P14, P16, P18, P19 wait for smoke or the close-out.
+- **Final suite** `C:\dev\_7-1-fix-suite.txt` (state 16:02:30 -> 16:02:56, integration 16:02:59 -> 16:10:18): state
+  **1248 tests / 0 failed / 11834 assertions**; `test_state_matches_golden` ok (golden unmoved);
+  `test_the_player_snapshot_key_set_is_exactly_the_expected_set` ok (45 keys); seam and raw-connect pins ok;
+  integration **76/76 PASS**, no "resources still in use" line. `git diff --stat -- src/state/ project.godot` empty.
+- **Engine launches this round** (each its own call): the conversion tool; the one import scan; the live test x7
+  (post-F1 fail before the scan -- `rock.glb` not yet imported; pass; mutation x2 incl. one debug print, removed;
+  restored pass with the `cue_hit` leak; `-v` to name it twice; clean x2); a scratch-project import of `rock.glb`;
+  the two suite halves.
+
+### Polish round after live smoke (2026-10-04, operator findings; same model, single session, no subagents)
+
+Before-baseline: `C:\dev\_7-1-fix-suite.txt` (nothing but the operator's smoke flip changed since -- measured by mtime;
+the flip, one `slot_controller_kinds` line in `src/main/main.tscn`, was removed first). No sound work (operator's).
+
+- **Bug 1 (Drain/Boom looks replayed).** Cause: `_resolve_unblockable_cast` / `_resolve_defense_cast` emit
+  `card_cast_resolved` WITHOUT `record_resolved_card`, so the previous BASIC/PITCH card's reversal packet is still live
+  and `_present_cast_resolved` re-read it. Fix (runner): `_prev_resolved_tick`, each player's `last_resolved_card_tick`
+  copied at the end of every frame; a packet-driven look (Culling, Drain, Boom, now also the buff gesture) fires only
+  when that tick moved, i.e. on the resolution that wrote the packet. Live check + mutation M1.
+- **Counterspell rune circle.** Measured cause: it WAS built and placed (hero child, 0.04 m above the feet), but as one
+  ADDITIVE quad of `magic_02.png` (mean alpha 0.048, opaque only on a ~1 px octagon line = ~1 cm at 2.4 m) in the card's
+  dark blue on the light ground -- invisible. Now a layered circle (glow fill + two opaque-blended rings in the card
+  blue + the rune pattern brightened) with a blue light. The caster plays `cast_counterspell`; at the swing's peak the
+  circle bursts (ring, sparks, flash) from the live `mixamorig_Sword_joint` position and settles to the feet; the
+  countered hero's circle shows at once. A caster not standing still plays no gesture and bursts from the ground at
+  the same beat.
+- **Clips (32 -> 34, named deviation D7):** `cast_buff.fbx` sha256 `3ee3c844...91ac`, `cast_counterspell.fbx`
+  `cf0483c5...e1c6`, both distinct from every paladin FBX. `tools/add_paladin_spell_clips.gd` now asserts 32 and adds
+  these two; Hips planar travel: cast_buff net 0.0000 / peak 0.1059 m, cast_counterspell net 0.0000 / peak 0.0750 m
+  (ceiling 0.25). Beats (`tools/measure_spell_clip_frames.gd`, criteria written into its header before the run):
+  **cast_buff** 2.3667 s, hands' midpoint peak height t=**0.3550** (0.6252 m above the Hips); **cast_counterspell**
+  1.0000 s, sword peak height t=**0.4333** (0.8666 m). The three 7-1 clips re-measured identical. Counterspell lead-in
+  CUT to 0.15 s: the clip starts at 0.2833, the peak lands 0.15 s after the resolution tick.
+- **Buff gesture.** Vampiric Aura and Frostbite have no `cast_seconds` -- both resolve INSTANTLY, no window roots the
+  hero. `AnimationController.play_gesture` plays `cast_buff` from its start (peak 0.355 s after resolution) only when
+  the hero is IDLE, not casting/countering, and standing still at the last locomotion push (no planar speed, no turn);
+  any movement or turn (`on_locomotion`) or action (`on_action_state_changed`) cuts it. Counterspell's gesture follows
+  the same rule. Effect -> clip map: `AnimationController.gesture_clip(outcome)`; timing: `gesture_start`,
+  `gesture_beat_delay`.
+- **Looks (knobs in `effect_presentation.tres`):** Fireball -- flame envelope + glow around the unchanged solid core,
+  radius 0.32 -> 0.65 over X (`envelope_min/max_radius`; ~2x the old 0.32 ball at max), a world-space flare trail
+  (`trail_*`), impact flame size 1.4 -> 2.6 with a hot flash, sparks and a ground shockwave (`shockwave_size`). Core
+  knobs and AC 17/35 unchanged. Corpse Bomb -- skull size 0.4 -> 0.7 = the hit sphere's diameter (capped at it in code),
+  blue flame envelope (`envelope_scale`) and the flare trail. Frostbite -- ice-white glints through a 0.45 m sphere
+  around the sword joint, frost mist, glow and light. Grave Ward -- `ghost_size` 0.6 -> 1.1 (plus a glow core per
+  ghost); the look follows the corpse's `mixamorig_Hips` (position-only `RemoteTransform3D` off an external-skeleton
+  `BoneAttachment3D`), the ground glow is now a downward `Decal` from the hips. Boulder crust -- pieces ride the shin
+  then thigh bones (`leg_radius`). Raise Dead -- Honed Bolt's strike (shared `_strike`) in green on the corpse, pillar
+  `strike_lead` 0.1 s later. Culling -- each culled minion takes Drain's full-body flash (`flash` 0.25) plus a light
+  (`intensity` 3.0) and a glow burst. Vampiric Aura -- body-hugging motes (`body_motes`, `mote_size`), a ground ring,
+  light 1.2 -> 2.5; droplets 6 -> 10, size 0.18 -> 0.35, with a soak burst on arrival. Stun -- sparks 12 -> 24, size
+  0.3 -> 0.55, lightened, a light, prewarmed so they are full on the first frame; still level-triggered (freed the
+  tick the stun ends). New shared builders in `EffectFx`: `emit_sphere`, `emit_box`, `prewarm`, `shrink_over_life`,
+  `bone_follower`.
+- **Tests:** `test_effect_presentation_live.gd` -- bug 1 (a Drain, then an unblockable resolution: no replay), the
+  countered rune at once, the caster's `cast_counterspell`, the burst from the raised sword (y > 1.2 m), the circle
+  settling at the feet, the Grave Ward anchor on the corpse's hips (planar < 0.05 m), six crust pieces on leg bones at
+  unit scale, on the legs; the Raise Dead pillar check moved after the strike's lead (frame 8 -> 22, now "exactly one
+  pillar"). `test_spell_cast_clips.gd` -- gesture selection per outcome, start/beat timing, play-when-still, cut on
+  movement. `test_effect_projectile_looks.gd` -- envelope + flare trail on Fireball/skull, skull = hit diameter and
+  never past it. `test_rig_clips.gd` 32 -> 34 (D7).
+- **Mutations** (out-of-repo copy + SHA, python byte-replace, one file run, restore by copy, SHA re-matched):
+  **M1** runner `kind` guard removed (always the live packet) -> `test_effect_presentation_live` FAIL "an unblockable
+  initiation after a Drain does NOT replay the Drain look (bug 1; 1 -> 2)"; restored `c5675fa2...b472`. **M2**
+  `animation_controller.gd` Frostbite -> `cast_counterspell` and `COUNTERSPELL_LEAD_SECONDS` 0.15 -> 0.30 ->
+  `test_spell_cast_clips` FAIL on both ("frostbite plays gesture 'cast_buff' (got 'cast_counterspell')", "the
+  counterspell peak lands no later than 0.15 s ... (0.3000)"); restored `c32dffbf...3c1e`.
+- **D7 (named):** `test_rig_clips.gd` `EXPECTED_LOOP` 32 -> 34 (two one-shots).
+- **Engine launches this round** (each its own call): one `--headless --editor --quit` import scan (the two FBXs;
+  `project.godot` blob `deee5496...55ec` before and after, `git diff` empty, nothing to restore); the add tool; the
+  measure tool; live test x2 (pass; M1), clips test x2 (pass; M2), rig clips x1, projectile looks x1; the two suite
+  halves. The library was backed up out of repo before the add tool wrote it.
+- **Suite** `C:\dev\_7-1-polish-suite.txt` (state 13:15:54 -> 13:16:33, integration 13:16:39 -> 13:22:10): state
+  **1248 tests / 0 failed / 11834 assertions** (= baseline); `test_state_matches_golden` ok (golden unmoved);
+  `test_the_player_snapshot_key_set_is_exactly_the_expected_set` ok (45 keys); seam + raw-connect pins ok;
+  integration **76/76 PASS**, no "resources still in use" line. `git diff --stat -- src/state/ project.godot` empty.
+- **Not done / for smoke:** sizes and visibility are headless-unverifiable -- the operator judges them; the Fireball's
+  "about twice" is the authored envelope ratio (0.65 / 0.32), not a measured screen size. Secondary particle literals
+  stay code constants (D3).
+
 ### File List
+
+New:
+- `src/actors/effects/effect_presenter.gd`, `effect_fx.gd`, `effect_presentation_row.gd`,
+  `effect_presentation_set.gd`, `fireball_core.gdshader` (+ the `.uid` sidecars Godot generates)
+- `data/presentation/effect_presentation.tres`
+- `assets/CREDITS.txt`
+- `assets/models/rock/rock.glb`, `rock_basecolor.jpg`, `rock_roughness.jpg`, `rock_normal.png` (+ `.import`)
+- `assets/models/skull/skull.glb` (+ `.import`)
+- `assets/vfx/` 11 PNGs (+ `.import`)
+- `assets/audio/effects/sfx_*.wav` x17 (+ `.import`), `sfx_soul.tres`, `sfx_heal.tres`, `sfx_bolt_strike.tres`,
+  `sfx_frost_hit.tres`
+- `assets/characters/paladin/cast_fireball.fbx`, `cast_rocksling_lift.fbx`, `cast_rocksling_throw.fbx` (+ `.import`)
+- `assets/characters/paladin/cast_buff.fbx`, `cast_counterspell.fbx` (+ `.import`) -- polish round
+- `tools/ingest_effect_assets.py`, `tools/gen_effect_audio.gd`, `tools/add_paladin_spell_clips.gd`,
+  `tools/measure_spell_clip_frames.gd`, `tools/convert_rock_to_glb.gd` (review fix P5) (+ `.uid`)
+- `test/integration/test_effect_presentation_knobs.gd`, `test_effect_projectile_looks.gd`,
+  `test_spell_cast_clips.gd`, `test_effect_presentation_live.gd` (+ `.uid`)
+
+Modified:
+- `src/main/match_runner.gd`
+- `src/actors/hero/animation_controller.gd`, `src/actors/hero/telegraph_controller.gd`, `src/actors/hero/hero.tscn`
+- `src/actors/props/bolt_actor.gd`
+- `src/actors/minions/unit_actor.gd`
+- `assets/characters/paladin/paladin_anims.res`
+- `test/integration/test_rig_clips.gd`, `test/integration/test_boulder_and_skull_live.gd`,
+  `test/integration/test_hole_vs_in_flight_live.gd`
+- `.gitattributes`
+- `docs/implementation-artifacts/7-1-effect-presentation.md`, `docs/implementation-artifacts/sprint-status.yaml`
+
+Deleted (review fix round):
+- `assets/audio/cue_counterspell.tres`, `tools/gen_counterspell_audio.gd` (+ `.uid`) -- D5, operator ruling
+- never committed, so absent from the diff: `assets/models/rock/rock.fbx` (+ `.import`, P5),
+  `assets/vfx/spark_05.png` (+ `.import`, P4)
+
+NOT changed: anything under `src/state/`, `project.godot`, `docs/playtest-log.md`.
 
 ## Change Log
 
 | date | change |
 |---|---|
+| 2026-10-04 | Polish round after live smoke (operator findings 1-14; no sound work): bug 1 fixed (packet-driven looks fire only on the resolution that wrote the packet); Counterspell rune circle rebuilt (was an invisible additive low-alpha quad) and burst from the sword at the `cast_counterspell` peak; clips 32 -> 34 (`cast_buff`, `cast_counterspell`, D7), beats measured, Counterspell lead-in cut to 0.15 s; buff/counterspell gestures play only standing still and are cut by movement; Fireball/skull envelopes and flare trails, bigger impact, skull = hit diameter, frosted weapon, Grave Ward on the hips + bigger ghosts, crust on the leg bones, Raise Dead green strike, Culling flash, Aura/droplets, stun sparks. Mutations M1-M2. Suite 1248/0/11834, golden and 45-key set unmoved, integration 76/76. Status unchanged (`review`). Nothing committed. |
+| 2026-10-03 | Review (`gds-code-review`, report `C:\dev\_7-1-review.md`: 1 BLOCKS-SMOKE, 19 POLISH) and fix round, same session: F1 (Counterspell restores no longer show Raise Dead's pillar; the blue flash lands on the restored minion's new actor; mutation 7), P1-P7, P13, P15, D5/P17 applied; P8 kept by ruling; P9-P12, P14, P16, P18, P19 deferred to smoke/close-out. Suite 1248/0/11834, golden and 45-key set unmoved, integration 76/76. Status unchanged (`review`). Nothing committed. |
+| 2026-10-02 | Dev pass (`gds-dev-story`, Opus 5.5): all 16 Scope rows built on the trigger-map hooks via a runner-owned `EffectPresenter`; presentation-only knob set (`src/actors/effects/` + `data/presentation/`, `7-1/R6`); three cast clips added (29 -> 32), release frames measured and pinned to the launch tick; assets ingested (skull 3,000 tris, textures 1024, 12 Kenney, 17 trimmed + 4 synthesized sounds); 4 new tests, 6 mutation proofs; `src/state/`, golden, 45-key set and `project.godot` unmoved; deviations D1-D6 recorded. Status -> `review` (story file only). Nothing committed. |
 | 2026-10-02 | Operator review: rulings `7-1/R1`-`R9` applied in place (Drain/Aura green, shot-ending reads, returned-flash copy, generic-cue fallback, two synthesized slots, knob home, Boulder HUD to 7-6, decimation fallback, AC 35 hit-shape pin); promoted `authored` -> `ready-for-dev` (`CFG/R4`, operator-authorized). |
 | 2026-10-02 | Authored by `gds-create-story` against `e93dbee`: scope from the operator's 2026-10-01 browser session; trigger map, Fireball radius, Boulder read path, asset numbers, sound first-picks and clip library measured. Status `authored`; not promoted. |
