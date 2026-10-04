@@ -12393,3 +12393,31 @@ skull) keeps its hit shape, offset (radius 0.35 at +0.7 y) and collision layers/
 `e93dbee`, pinned per kind by AC 35. Fireball's solid core grows with X between the authored minimum and
 maximum and stays inside the hit sphere at maximum X; trail, sparks and light may extend beyond it.
 Promotion: `7-1-effect-presentation` `authored` -> `ready-for-dev`, operator-authorized (`CFG/R4`).
+
+## 2026-10-04 -- 7-1 close-out
+
+`7-1/R10` D2 accepted: Culling souls arrive after the HUD mana; the HUD shows state truth.
+`7-1/R11` D3 accepted: secondary particle constants stay in code; polish may touch them.
+`7-1/R12` D4 accepted: stop-then-wait in two existing tests; future live tests ending during an
+effect sound need the same.
+`7-1/R13` D5: the Counterspell stub sound and its generator were deleted.
+`7-1/R14` P8: the Grave Ward glow stays through the round-over freeze (the state it shows still
+holds).
+`7-1/R15` F1 fix: a raised-from spawn whose address this tick's Counterspell returned is a
+restore (flash, no pillar). The address set covers the caster's own board too.
+`7-1/R16` Smoke bug 1 fixed: packet-driven looks fire only on the resolution that wrote the
+packet.
+`7-1/R17` Solid projectile visuals (Fireball core, Corpse Bomb skull) stay within the hit sphere;
+flame envelopes and trails may exceed it. A Fireball whose hit grows with X is an operator
+gameplay question, not presentation.
+`7-1/R18` Gesture clips `cast_buff` and `cast_counterspell`: play only when the hero is standing
+still; movement cuts them; the Counterspell lead-in is cut to 0.15 s. The upper-body split is
+`7-2`'s.
+`7-1/R19` Sounds: the operator tunes them by hand later. This supersedes "CC picks, the operator
+judges at smoke".
+
+Budget: start 2026-10-02 17:12:48, end 2026-10-04 13:22:10. Gross 44h09m22s. Gaps over 2h:
+2026-10-02 18:04:46 -> 2026-10-03 15:44:18 (21h39m32s, overnight); 2026-10-03 16:10:18 ->
+2026-10-04 13:15:54 (21h05m36s, overnight). Gaps total 42h45m08s. Net 1h24m14s.
+
+LAYER-COMPLETION: Blind Hunter: complete (in-session, sequential, not context-isolated); Edge Case Hunter: complete; Acceptance Auditor: complete (AC 1-35 + operator checks 1-8); Triage: complete; Present: report-only (story file not edited, no fixes applied)

@@ -585,3 +585,26 @@ no file. Now split and keyed (`E6-C/R11`):
   fix, SKIPPED by this close-out: it is a `src/` edit and this chain is docs-only).
 - **`_replay` never replays push drain targets** (`replay_push_drain_targets` unused) -- found
   authoring `7-T1`; owner unassigned, E7 close-out assigns.
+
+### 7-1 smoke and review residue (close-out 2026-10-04)
+
+- **P9** lifesteal droplet heuristic false-fires on Counterspell HP refunds -- needs a state fact
+  (Tier A). Owner: E7 close-out.
+- **P10** shot-ending pairing counts a melee and a minion hit on the same tick together -- needs a
+  state fact (Tier A). Owner: E7 close-out.
+- **P11** concurrent identical one-shots have no limiter. Owner: operator's sound pass.
+- **P12** Corpse Bomb first-use hitch -- watch. Owner: E7 close-out.
+- **P14** Frostbite refresh is silent. Owner: E7 close-out.
+- **P16** replay reads today's `CardDatabase` for effect rows, not the authored-at-cast row.
+  Owner: E7 close-out.
+- **P19** Rocksling lift-to-throw hard cut. Owner: `7-2`.
+- Smoke leftovers: Culling, Vampiric Aura and Bloodhound sounds (owner: operator's sound pass);
+  root shackles read like a dress (owner: E7 close-out); stun pose transition, foot sliding
+  during casts, and cast speed (owner: `7-2`).
+- `assets/CREDITS.txt` lacks the skull author's name (CC-BY). Owner: E7 close-out.
+- New folders `src/actors/effects/`, `data/presentation/`, `assets/models/`, `assets/vfx/`,
+  `assets/audio/effects/` are not yet in `game-architecture.md`'s directory tree. Owner: E7
+  close-out.
+- **P18**: update the existing `6-5b/R24` flake entry with the evidence -- a hero cue
+  (`cue_hit.wav`) was named still playing at quit in a live test; `stop_all_sounds` covers only
+  presenter sounds. Hypothesis, not a fix. Owner: E7 close-out.
