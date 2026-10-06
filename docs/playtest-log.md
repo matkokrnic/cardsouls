@@ -624,3 +624,15 @@ Prvi smoke:
 Polish round: bug Drain/Boom i nevidljivi runski krug popravljeni, veličine i vidljivost pojačane, nove geste za Auru/Frostbite i Counterspell (zamah mačem, krug iz vrha zamaha).
 
 Re-smoke: sve dovoljno dobro.
+
+## 2026-10-05/06 -- 7-6 HUD i karte (pet smokeova, dva pada)
+
+Smoke 1 (5.10.): Boulder, pitch zona s artom i traka povijesti odlicni od prve. Karte premale: artove ne pamtim i ne razlikujem brzo, kruzice za pitch tesko brojim, cijene nisu dovoljno istaknute. Podizanje za "mogu platiti" me zbunjivalo jer sam navikao da armiranje dize karte; armiranje je bilo preneuocljivo (glavna zamjerka). Bljesak nisam primijetio. Orbovi oko heroja ruzni i zbunjujuci. Honed Bolt treba biti grom, ne strela. Udarac, blok, deflect, roll, unblockable, obrana bojom i pitch rade; runda zavrsi na kill, fps stabilan.
+
+Smoke 2 (6.10.): velicina karata odlicna, art osjetno prepoznatljiviji. Svijetle polovice karata super, ali boja karte pati kad su tamne. Armiranje pogodeno, bljesak sad primjetan. Ruka odlicna, ali pitch zone i trake na krivom mjestu; traka povijesti mi je bila bolja prije. Orbovi puno bolji, malo preveliki. Kamera predaleko, lik treba biti duplo veci. Debug panel nasred ekrana smeta.
+
+Smoke 3 (6.10.): fullscreen radi. Kruzici (puni/supiji) napokon citljivi. Luk s trakama ispod srednjih karata super. Kamera pogodena, orbovi dobre velicine, F3 za panel odlican, slot reel odlican, fps stabilan. Jos: deblji okvir, pitch zone velicine karte s jednakim razmakom, Boulder se ne armira dok nije odigran, trake malo tanje i brojevi necitljivi. Rijetko mi se cini da lik fizicki udari u orbove (kratki trzaj), nije strasno.
+
+Smoke 4 (6.10.): okvir, pitch zone, orbovi koji obilaze lik i armiranje Bouldera sve odlicno. Tanje trake super, ali tamna plocica pod brojem ruzna; maknuta (P19).
+
+Smoke 5 (6.10.): F3 sad pali/gasi cijeli debug sloj (panel, inspektori, brojaci orbova, telegrafi). Honed Bolt se s blizom kamerom puno citljivije izbjegava, boje unblockablea razlikujem po animaciji, deflect se vidi po stunu napadaca. Kad su s telegrafima nestali i njihovi zvukovi osjecao sam se kao slijepac; zvukovi vraceni (P22), F3 skriva samo simbole, sad je bolje. Neka ostane privremeno; kasnije trebaju suptilniji, uklopljeniji vizualni znakovi i zvukovi.
