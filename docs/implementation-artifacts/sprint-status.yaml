@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-10-05
+last_updated: 2026-10-06
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -144,7 +144,7 @@ development_status:
   7-3-minion-rework: backlog  # Tier A
   7-4-pitch-speeds: backlog  # Tier A
   7-5-deck-2: backlog  # Tier A
-  7-6-hud-and-card-presentation: ready-for-dev  # Tier B
+  7-6-hud-and-card-presentation: done  # Tier B
   7-7-tuning-pass: backlog  # Tier B (A if a seat is added or an action becomes refusable)
 
 story_notes:
@@ -154,7 +154,7 @@ story_notes:
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
   7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; plus +1 mana for a defended unblockable (E6-C/R11)."
   7-5-deck-2: "backlog -- design pending, needs its own scope talk before promotion (E6-C/R11)."
-  7-6-hud-and-card-presentation: "ready-for-dev 2026-10-05 -- operator rulings R1-R9 plus D1-D4 (history strip relays card_cast_resolved/counterspell_resolved onto two new EventBus signals, reshuffle-relay shape verbatim); cleared for a dev pass."
+  7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
   7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11)."
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
   6-1-hold-to-charge: "done 2026-09-09, Tier A close-out complete (hold-through-chargeup + paid feint per 6-1/R1-R15, golden and 30-key set unmoved, suite 735/0/5430 + 56 integration, smoke 6/7 PASS (item 5 machine-pinned, named finding for 6-1b), decision-log session 6-1 close-out)."
