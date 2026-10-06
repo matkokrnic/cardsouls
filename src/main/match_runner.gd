@@ -132,6 +132,12 @@ var _instrument_panel: DebugInstrumentPanel
 ## the DebugInstrumentPanel member directly above is the same pattern.
 var _huds: Array[HudRoot] = []
 
+## Story 7-6 (operator rulings P20-P22, 2026-10-06): THE DEBUG LAYER, the one thing F3 toggles -- the instrument
+## panel, both StateInspectors, both HUDs' orb counters and every telegraph SHAPE (both heroes' TelegraphControllers
+## and the cast-target cone; P22 keeps every telegraph sound on). Hidden by default. Presentation only: nothing here reaches `advance()`.
+var _debug_layer_visible := false
+var _inspectors: Array[StateInspector] = []
+
 ## Story 4-1 (AC 7): the grey-box unit scene and the actors spawned from it, per slot. The SCENE
 ## REFERENCE LIVES HERE AND ONLY HERE -- src/state/ never holds one (UnitBoard is a pure
 ## RefCounted count), which is the HeroActor precedent: state decides that a unit EXISTS, the
@@ -509,6 +515,12 @@ func _ready() -> void:
 	# signal; the bus is the runner's to reach.
 	_match_state.reshuffle_vulnerable_window_opened.connect(
 			_relay_reshuffle_vulnerable_window_opened)
+	# Story 7-6 (D1): the two public cast-resolution relays, the same shape as the three above -- one line each,
+	# no new per-slot connect_ seam (the family stays ten) and no new inline consumer. Both HudRoots subscribe to
+	# the bus below. `_effect_id_by_card_mode` is filled by `_setup_effect_presenter` at the end of `_ready`,
+	# before the first tick can queue a resolution.
+	_match_state.card_cast_resolved.connect(_relay_card_cast_resolved)
+	_match_state.counterspell_resolved.connect(_relay_counterspell_resolved)
 	# Story 2-4 (2-4/R3): the throwaway 1-3c debug overlay is RETIRED here — E2 replaces it
 	# with the real HUD. One HudRoot per viewport, constructed in code and added under each
 	# SubViewport (the overlay's code-construction pattern, reparented per-viewport instead of
@@ -541,8 +553,18 @@ func _ready() -> void:
 	# channel to carry. That is the whole reason AC 23 costs this story no state -- unlike the injected
 	# `_card_costs` map, which state DOES consume and which therefore IS recorded.
 	var card_prices_by_id := _derive_card_prices()
+	# Story 7-6 (R2, D2): the card -> [normal effect, pitch effect] pairing and the effect icon table, both
+	# load-once static content on the `card_prices_by_id` precedent -- the HUD keys its art by EFFECT id.
+	var card_effect_ids := _derive_card_effect_ids()
+	var effect_icons := load(EffectIconSet.AUTHORED_PATH) as EffectIconSet
 	for slot: int in 2:
 		var hud := HudRoot.new()
+		hud.set_effect_art(card_effect_ids, effect_icons)
+		# Story 7-6 POLISH 2 (P13): the slot reel spins through THIS player's own deck -- the authored composition
+		# (both slots play the active deck list today), never the draw order or the next card.
+		hud.set_reel_cards(_active_deck_list().card_ids)
+		# Story 7-6 (R6): the play-history strip rides this half's OUTER edge -- P1's half is the left one.
+		hud.history_on_left = slot == 0
 		# Story 3-6 (AC 4): the authored vulnerable-window duration, handed over BEFORE add_child
 		# on the `gamepad_profile` static-handoff precedent. The HUD renders the reshuffle
 		# flag from the ownerless EventBus event plus this number and NOTHING else — it never reads
@@ -580,8 +602,11 @@ func _ready() -> void:
 			# Story 6-0 (AC 2): card_colors_by_id rides this SAME wrapper -- no new connect_* seam
 			# (this wrapper adds no member to the family test_architecture_invariants.gd pins). Reused, not
 			# re-derived: the local built once above this loop, read inline here (CONSTRAINT C).
+			# Story 7-6 (R4): plus the CARD layer beneath any Boulder cover (`hand_ids` is the visible layer),
+			# read inline here exactly like `pending_draw_owed` -- this player's own hand, a fresh copy.
 			hud.on_cards_changed(hand_ids, deck_count, discard_count,
-					player.pending_draw_owed.duplicate(), card_colors_by_id, card_prices_by_id)
+					player.pending_draw_owed.duplicate(), card_colors_by_id, card_prices_by_id,
+					player.hand.to_array())
 			# Story 6-D1 (debug): the same hand + colour map the HUD tint reads, forwarded to the
 			# controller as plain ints (-1 = empty slot). No state handle crosses; base is a no-op.
 			var hand_colors: Array[int] = []
@@ -603,12 +628,17 @@ func _ready() -> void:
 		# Story 2-6 (AC 1): the label's single CLEAR seat — a debug reset hides it on BOTH
 		# viewports. No-argument and slot-independent (the reset is ownerless), so no .bind(slot).
 		EventBus.round_started.connect(hud.on_round_started)
+		# Story 7-6 (D1, R6): the play-history strip. BOTH roots subscribe to the two public bus relays, each
+		# binding its OWN slot to tell its entries from the opponent's -- the reshuffle wiring above, verbatim.
+		EventBus.card_effect_resolved.connect(hud.on_card_effect_resolved.bind(slot))
+		EventBus.card_effect_countered.connect(hud.on_card_effect_countered.bind(slot))
 	# Story 2-6 (AC 2): per-player debug StateInspector, one per SubViewport (the HudRoot
 	# per-viewport pattern). READ-ONLY: wired to FIVE of the existing observation seams (no eighth),
 	# each bound to its own slot; the three economy seams prime on connect so its bars render at once.
 	for slot: int in 2:
 		var inspector := StateInspector.new()
 		hud_viewports[slot].add_child(inspector)
+		_inspectors.append(inspector)
 		connect_hero_action_state_changed(slot, inspector.on_action_state_changed)
 		connect_hero_action_rejected(slot, inspector.on_action_rejected)
 		connect_hero_hp_changed(slot, inspector.on_hp_changed)
@@ -635,6 +665,10 @@ func _ready() -> void:
 	# push, so the panel calls it only from its own toggle handler.
 	panel.reveal_opponent_hand = debug_hand_contents
 	add_child(panel)
+	# Story 7-6 POLISH (operator ruling P12, 2026-10-06; discharges 4-B1's "DebugInstrumentPanel ergonomics"
+	# deferral): the panel is HIDDEN by default and toggled by F3 (`debug_toggle_instruments`, step 0 below). While
+	# hidden the HUD may use its space; shown, it may overlay the HUD. P20/P21 widened F3 to the whole debug layer:
+	# the default is applied once, after the heroes are wired (`set_debug_layer_visible`, below).
 	# Story 3-5a (AC 10): kept for the per-tick selection-indicator push in _physics_process.
 	_huds = huds
 	# Story 3-0b (AC 2): kept for the per-tick countdown push in _physics_process step 3b.
@@ -675,6 +709,15 @@ func _ready() -> void:
 		# (AC 16), because wiring order x controller state is runtime COMPOSITION that no
 		# state-level test reaches (`3-0b/R34`).
 		connect_orbs_changed(slot, cues.on_orbs_changed)
+		# Story 7-6 (R7, AC 27/AC 28): the WORLD ORBS -- a halo child of this hero in the shared World3D, so both
+		# halves see it by construction. The ninth seam's third consumer, bound to this hero's OWN slot like the
+		# earn cue directly above; no cross-slot read and no new seam. Its hues are this hero's own charge
+		# telegraph colours (the 7-1 "no second colour table" rule).
+		var halo := OrbHalo.new()
+		halo.setup([cues.charge_red_profile.color, cues.charge_blue_profile.color,
+				cues.charge_green_profile.color] as Array[Color])
+		actor.add_child(halo)
+		connect_orbs_changed(slot, halo.on_orbs_changed)
 		EventBus.round_ended.connect(cues.on_round_ended.bind(slot))
 		# Story 5-3 (AC 13): S5's success-cue half. card_cast_resolved is an EXISTING state-owned
 		# signal (both _resolve_basic_cast's and _resolve_unblockable_cast's success paths already
@@ -754,6 +797,26 @@ func _ready() -> void:
 					_stun_flavor_for_slot(slot), _stun_seconds_for_slot(slot),
 					_match_state.hit_landed_was_blocked()))
 	_setup_effect_presenter()
+	# Story 7-6 (P20/P21): the debug layer starts hidden.
+	set_debug_layer_visible(false)
+
+
+## Story 7-6 (operator rulings P20/P21, 2026-10-06): show or hide the WHOLE debug layer -- the one seat the F3 edge
+## (step 0) calls. Everything it touches keeps updating while hidden, so showing it mid-match shows live values.
+## Not touched: the deck indicator, the lock marker, every telegraph sound (P22), the world orbs and every 7-1 effect.
+func set_debug_layer_visible(shown: bool) -> void:
+	_debug_layer_visible = shown
+	_instrument_panel.visible = shown
+	for inspector: StateInspector in _inspectors:
+		inspector.visible = shown
+	for hud: HudRoot in _huds:
+		hud.set_debug_layer_visible(shown)
+	for hero: HeroActor in [_p1_hero, _p2_hero]:
+		if is_instance_valid(hero):
+			hero.telegraph_controller.set_cues_shown(shown)
+	for cone: Variant in _target_cones:
+		if is_instance_valid(cone):
+			(cone as Node3D).visible = shown
 
 
 ## Story 7-1 (AC 6-22, AC 27, AC 29): build the effect presenter and hand it its two inputs -- the AUTHORED knob
@@ -978,6 +1041,22 @@ func _derive_card_prices() -> Dictionary:
 		var pitch_orbs: Dictionary = card.pitch_condition.orb_costs \
 				if card.pitch_condition != null else {}
 		out[id] = [cast_mana, cast_orbs, pitch_mana, pitch_orbs]
+	return out
+
+
+## Story 7-6 (R2, D2, AC 11): the HUD's CARD -> EFFECT PAIRING -- `_derive_card_prices()` followed verbatim
+## over `basic_effect` / `pitch_effect`, for its reason: the runner is the one place allowed to read
+## `CardDatabase`. One row per card: `[normal effect id, pitch effect id]`, `&""` for an absent half. The HUD
+## keys art by the EFFECT id, so a re-paired effect brings its art along. Static authored content, never
+## injected and never recorded.
+func _derive_card_effect_ids() -> Dictionary:
+	var out: Dictionary = {}
+	for id: StringName in CardDatabase.sorted_ids():
+		var card := CardDatabase.get_card(id) as CardData
+		if card == null:
+			continue
+		out[id] = [card.basic_effect.effect_id if card.basic_effect != null else &"",
+				card.pitch_effect.effect_id if card.pitch_effect != null else &""]
 	return out
 
 
@@ -1503,6 +1582,7 @@ func _cast_target_position(slot: int) -> Variant:
 func _spawn_target_cone(slot: int) -> void:
 	_free_target_cone(slot)
 	var cone := TargetConeActor.new()
+	cone.visible = _debug_layer_visible  # Story 7-6 (P21): a spell target warning is a debug-layer cue
 	add_child(cone)
 	_target_cones[slot] = cone
 	_hover_target_cone(slot)
@@ -2750,6 +2830,37 @@ func _relay_reshuffle_vulnerable_window_opened(slot: int) -> void:
 	EventBus.reshuffle_vulnerable_window_opened.emit(slot)
 
 
+## Story 7-6 (D1, AC 23/AC 25/AC 26): MatchState.card_cast_resolved -> EventBus.card_effect_resolved. The three
+## relays above, fourth time, and for their reason: state never touches an autoload, and a played effect is a
+## PUBLIC match-wide fact (R6) both viewports' history strips read -- so it rides the ownerless bus rather than a
+## per-slot seam read cross-slot. The relay is also the strip's ADMISSION RULE: only a NORMAL (mode 1) or PITCH
+## (mode 4) resolution is relayed, and what crosses is the EFFECT that ran (the `_effect_id_by_card_mode`
+## load-once map 7-1 already derives), never the card id or any hand content (AC 25). A pair the map does not
+## carry relays nothing rather than a guessed effect.
+##
+## 7-6 review fix (operator ruling F1, 2026-10-05): A BOULDER CLEAR IS NOT RELAYED. It is not a played card
+## (`6-5f/R7`: the state never writes it to the resolved-card record, so it is never Counterspell's target), and
+## the test is the state's OWN classification -- `CardEffectResolver.BOULDER_OUTCOMES`, the table
+## `clears_cover()` reads -- so the strip and the record can never disagree about what was played. With that, a
+## counter striking the countered player's newest entry always strikes the card that was reversed.
+func _relay_card_cast_resolved(slot: int, card_id: StringName, mode: int) -> void:
+	if mode != Enums.ModeKind.BASIC and mode != Enums.ModeKind.PITCH:
+		return
+	var effect_id: StringName = _effect_id_by_card_mode.get("%s:%d" % [card_id, mode], &"")
+	if effect_id == &"":
+		return
+	if CardEffectResolver.BOULDER_OUTCOMES.has(effect_id):
+		return
+	EventBus.card_effect_resolved.emit(slot, effect_id, mode == Enums.ModeKind.PITCH)
+
+
+## Story 7-6 (D1, AC 23/AC 26): MatchState.counterspell_resolved -> EventBus.card_effect_countered, the fifth
+## relay. Only the COUNTERED player crosses: the strip strikes that player's newest entry, and the caster's
+## Counterspell arrives on its own through `_relay_card_cast_resolved`.
+func _relay_counterspell_resolved(_caster_slot: int, countered_slot: int) -> void:
+	EventBus.card_effect_countered.emit(countered_slot)
+
+
 ## Read-only subscription seam (story 2-4, AC 1/2 — 2-4/R1 amendment to the locked seam
 ## family, FOUR -> SEVEN): per-slot wrap of the HeroState-owned hp_changed, mirroring
 ## connect_hero_action_state_changed including the slot guard. Payload: (current, maximum).
@@ -3776,6 +3887,10 @@ func _physics_process(delta: float) -> void:
 	#    a held key neither re-toggles the pause nor auto-fires steps: one tick per press.
 	if _debug_input.pause_pressed():
 		_paused = not _paused
+	# 7-6 POLISH (P12): the instrument panel's show/hide edge, read the same way and for the same reason.
+	# P20/P21: the same edge toggles the whole debug layer.
+	if _debug_input.instruments_toggle_pressed():
+		set_debug_layer_visible(not _debug_layer_visible)
 	var ticking := not _paused or _debug_input.step_pressed()
 	# 1. Sample controllers -> InputIntent per player (the ONLY place Input is read — D3).
 	#    Sampled every frame, paused or not: sampling is not one of the three things AC 1

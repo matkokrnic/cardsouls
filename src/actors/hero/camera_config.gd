@@ -11,6 +11,12 @@ extends Resource
 @export var height: float = 0.0          # metres above the hero pivot
 @export var pitch_degrees: float = 0.0   # downward camera tilt; must never tilt movement
 
+## Story 7-6 POLISH (operator ruling P11, 2026-10-06): THE ONE FRAMING KNOB -- scales `distance` and `height`
+## together (the pitch is unchanged), so the hero's on-screen size moves with a single authored number: 0.5
+## brings the camera to half the distance, the hero about twice as large. Defaults to 1.0, so a config that
+## does not author it frames exactly as before.
+@export var framing_scale: float = 1.0
+
 ## Story 4-6a (AC 10): how fast the lock-on YAW chases its target bearing -- the fraction of the
 ## remaining angle the rig closes each TICK. 1.0 is the 4-6 behaviour verbatim (snap, no
 ## smoothing); smaller is lazier. The smoke verdict this answers was "flick radi ali cini mi se da

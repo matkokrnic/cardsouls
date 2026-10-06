@@ -22,6 +22,8 @@ extends RefCounted
 
 const PAUSE_ACTION := &"debug_pause"
 const STEP_ACTION := &"debug_step"
+## Story 7-6 POLISH (operator ruling P12, 2026-10-06): F3 shows / hides the DebugInstrumentPanel (hidden by default).
+const TOGGLE_INSTRUMENTS_ACTION := &"debug_toggle_instruments"
 
 
 ## Edge, not level: one toggle per physical press, so holding the key cannot flip pause every
@@ -34,3 +36,8 @@ func pause_pressed() -> bool:
 ## advances exactly one tick, not one per frame.
 func step_pressed() -> bool:
 	return Input.is_action_just_pressed(STEP_ACTION)
+
+
+## 7-6 POLISH (P12): the instrument panel's show/hide edge -- presentation only, never an intent.
+func instruments_toggle_pressed() -> bool:
+	return Input.is_action_just_pressed(TOGGLE_INSTRUMENTS_ACTION)

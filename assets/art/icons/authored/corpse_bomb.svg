@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<!-- Corpse Bomb: a skull with a lit fuse, hand-authored for CardSouls story 7-6 (D4). No third-party source. -->
+<path fill="#fff" fill-rule="evenodd" d="M96 290 A140 140 0 1 1 376 290 L376 352 L326 384 L326 470 L146 470 L146 384 L96 352 Z
+M150 280 A42 42 0 1 0 234 280 A42 42 0 1 0 150 280 Z
+M238 280 A42 42 0 1 0 322 280 A42 42 0 1 0 238 280 Z
+M236 330 L256 368 L216 368 Z
+M180 410 L200 410 L200 462 L180 462 Z
+M226 410 L246 410 L246 462 L226 462 Z
+M272 410 L292 410 L292 462 L272 462 Z"/>
+<path fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" d="M330 176 Q360 110 420 104"/>
+<path fill="#fff" d="M436 46 L450 84 L490 78 L460 104 L486 136 L446 128 L432 166 L420 128 L380 136 L408 104 L380 76 L420 84 Z"/>
+</svg>

@@ -53,6 +53,15 @@ func _physics_process(_delta: float) -> bool:
 		if cue_p1.playing or cue_p2.playing:
 			failures.append("baseline: a cast-success cue is already playing before any emit")
 
+		# Story 7-6 (operator ruling P22, 2026-10-06, superseding P21's sound half): with the debug layer HIDDEN (the
+		# default) the telegraph shapes are hidden but every telegraph sound still plays -- the cast cue included.
+		if _hero.telegraph_controller.visible:
+			failures.append("P22 non-vacuity: the debug layer is not hidden by default")
+		_state.card_cast_resolved.emit(0, &"test_card", Enums.ModeKind.BASIC)
+		if not cue_p1.playing:
+			failures.append("P22: the cast-success cue did not play with the debug layer hidden")
+		cue_p1.stop()
+
 		# NON-VACUOUS: P1's cast resolves P1's cue only, never P2's -- a slot mismatch would be
 		# a cross-wired seam (the exact class of bug the `if cast_slot == slot` guard prevents).
 		# Story 6-5a (AC 7): the signal's third argument is the resolved mode.

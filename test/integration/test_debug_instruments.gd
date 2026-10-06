@@ -16,8 +16,8 @@ extends SceneTree
 ##     empty, and nothing here checks it any more.
 ##   [Story 6-3b AC 4/AC 7 pitch zones] The 2-6 placement switch and the dead-centre panel it moved
 ##     are RETIRED; each HudRoot instead carries both real pitch zones at FIXED anchors -- its own
-##     zone left of the vitals bars (offsets -286/-196/-186/-108) and the opponent's mirrored right
-##     of them (186/-196/286/-108), both anchored bottom-centre -- and neither viewport has the old
+##     zone left of the hand and the opponent's right of it (7-6 POLISH 2 P9: bottom-centre anchored at
+##     -368/-142/-292/-24 and 292/-142/368/-24) -- and neither viewport has the old
 ##     panel. The PANEL LAYOUT check below covers both zones: neither may rise into InstrumentBox.
 ##   [Story 4-B1 AC 2/AC 3 reveal toggle] Unpressed by default and having produced NOTHING (never
 ##     reveals in the shipped default configuration, `4-B1/R2`); pressing it reads BOTH players'
@@ -34,6 +34,10 @@ extends SceneTree
 ##     StateInspector in EITHER viewport (screen-mapped through the SubViewportContainer origins).
 ##     This machine-checks that the panel occludes neither HUD nor gameplay, so S1/S2 cannot
 ##     regress. Proven to BITE by temporarily moving the box back over the HUD (dev record).
+##   [7-6 P20/P21 THE DEBUG LAYER] F3 is the one debug-layer toggle: by default the panel, BOTH
+##     StateInspectors, BOTH HUDs' OrbCounters and BOTH heroes' TelegraphControllers (the telegraph cues)
+##     are hidden and both DeckIndicators visible; the first F3 shows all of them together, a second F3
+##     hides them again. The deck indicators stay visible throughout.
 ##   [AC 1 round_started relay, END TO END THROUGH advance()] The round-over label is driven
 ##     visible (SET seat, story 1-7's round_ended path — scaffolding only), then CLEARED by
 ##     pressing the real p1_debug_reset input: the runner samples it, advance() runs
@@ -48,6 +52,7 @@ extends SceneTree
 const RESET_FRAME := 6
 const ROLL_FRAME := 14
 const REVEAL_FRAME := 5  # after the deal (step 6 of the first advance()), before RESET_FRAME
+const REHIDE_FRAME := 10  # P20: the second F3 press, after the reveal and reset checks, before ROLL_FRAME
 
 var _frames := 0
 var _p1_state: Label
@@ -62,6 +67,12 @@ var _inspectors_exist := false
 var _primed_ok := false
 var _pitch_zones_ok := false
 var _panel_layout_ok := false
+var _panel_hidden_by_default := false
+var _panel_shown_by_toggle := false
+## Story 7-6 (P20/P21): the debug layer's three readings -- default, after one F3, after a second F3.
+var _layer_default := ""
+var _layer_shown := ""
+var _layer_rehidden := ""
 var _label_set_ok := false
 var _label_cleared_via_advance := false
 var _p1_saw_rolling := false
@@ -111,6 +122,24 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == 1:
 		root.size = Vector2i(1152, 648)  # shipped resolution; the HUD anchors resolve to real pixels
 		_run_static_checks()
+		# 7-6 POLISH (operator ruling P12): the panel ships HIDDEN; this test drives it, so it SHOWS it through the
+		# real F3 path (DebugInputReader -> runner step 0), proving the toggle as it goes.
+		var panel := root.get_node("Main/DebugInstrumentPanel") as Control
+		_panel_hidden_by_default = not panel.visible
+		_layer_default = _debug_layer_reading(false)
+	if _frames == 2:
+		Input.action_press(&"debug_toggle_instruments")
+	if _frames == 3:
+		Input.action_release(&"debug_toggle_instruments")
+	if _frames == 4:
+		_panel_shown_by_toggle = (root.get_node("Main/DebugInstrumentPanel") as Control).visible
+		_layer_shown = _debug_layer_reading(true)
+	if _frames == REHIDE_FRAME:
+		Input.action_press(&"debug_toggle_instruments")
+	if _frames == REHIDE_FRAME + 1:
+		Input.action_release(&"debug_toggle_instruments")
+	if _frames == REHIDE_FRAME + 2:
+		_layer_rehidden = _debug_layer_reading(false)
 	if _frames == 3:
 		# Layout has settled at 1152x648 — check the panel occupies an empty, on-screen region.
 		_panel_layout_ok = _check_panel_layout()
@@ -136,7 +165,9 @@ func _physics_process(_delta: float) -> bool:
 	if _frames >= ROLL_FRAME + 20:
 		Input.action_release(&"p1_move_up")
 		var ok := (_inspectors_exist and _primed_ok and _pitch_zones_ok
-			and _panel_layout_ok and _label_set_ok and _label_cleared_via_advance
+			and _panel_layout_ok and _panel_hidden_by_default and _panel_shown_by_toggle
+			and _layer_default == "ok" and _layer_shown == "ok" and _layer_rehidden == "ok"
+			and _label_set_ok and _label_cleared_via_advance
 			and _p1_saw_rolling and _p2_state_stayed_blank and _reveal_default_off
 			and _reveal_shows_real_hands and _reveal_clears_on_untoggle)
 		print("instruments: inspectors=%s primed=%s pitch_zones=%s panel_layout=%s label_set=%s label_cleared_via_advance=%s (bus_round_started=%d) p1_rolling=%s p2_blank=%s reveal_default_off=%s reveal_shows_hands=%s reveal_clears=%s" % [
@@ -144,9 +175,30 @@ func _physics_process(_delta: float) -> bool:
 			_label_set_ok, _label_cleared_via_advance, _bus_round_started_count,
 			_p1_saw_rolling, _p2_state_stayed_blank, _reveal_default_off,
 			_reveal_shows_real_hands, _reveal_clears_on_untoggle])
+		print("panel: hidden_by_default=%s shown_by_F3=%s" % [_panel_hidden_by_default, _panel_shown_by_toggle])
+		print("debug layer (P20/P21): default=%s F3=%s F3_again=%s" % [_layer_default, _layer_shown, _layer_rehidden])
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
 	return false
+
+
+## Story 7-6 (P20/P21): "ok" when every debug-layer member reads `want` and both deck indicators are visible;
+## otherwise the names of the members that disagree.
+func _debug_layer_reading(want: bool) -> String:
+	var wrong: Array[String] = []
+	var members := ["Main/DebugInstrumentPanel",
+			"Main/P1View/P1Viewport/StateInspector", "Main/P2View/P2Viewport/StateInspector",
+			"Main/P1View/P1Viewport/HudRoot/OrbCounters", "Main/P2View/P2Viewport/HudRoot/OrbCounters",
+			"Main/P1Hero/TelegraphController", "Main/P2Hero/TelegraphController"]
+	for path: String in members:
+		var node := root.get_node_or_null(path)
+		if node == null or node.visible != want:
+			wrong.append(path)
+	for path: String in ["Main/P1View/P1Viewport/HudRoot/DeckIndicator", "Main/P2View/P2Viewport/HudRoot/DeckIndicator"]:
+		var deck := root.get_node_or_null(path)
+		if deck == null or not deck.visible:
+			wrong.append(path + " (must stay visible)")
+	return "ok" if wrong.is_empty() else ", ".join(wrong)
 
 
 func _run_static_checks() -> void:
@@ -175,10 +227,12 @@ func _run_static_checks() -> void:
 	# retired dead-centre panel gone from both (get_node_or_null finds hidden nodes too, so this is a
 	# deletion assertion, not a visibility one). No switch exists to flip any more.
 	_pitch_zones_ok = true
+	# 7-6 POLISH 3 (operator ruling P15): card-sized zones midway between the hand and the half's edge -- anchored at
+	# 0.25 (own) / 0.75 (opponent) of the width, bottom-aligned with the outer cards.
 	for hud: Node in [p1_hud, p2_hud]:
 		_pitch_zones_ok = (_pitch_zones_ok and hud.get_node_or_null("PitchZone") == null
-			and _zone_at(hud, "OwnPitch", [-286.0, -196.0, -186.0, -108.0])
-			and _zone_at(hud, "OpponentPitch", [186.0, -196.0, 286.0, -108.0]))
+			and _zone_at(hud, "OwnPitch", 0.25, [-198.0, -182.0, -70.0, -24.0])
+			and _zone_at(hud, "OpponentPitch", 0.75, [70.0, -182.0, 198.0, -24.0]))
 
 	# AC 1 relay scaffolding: SET the label visible via the round_ended path (not the link under
 	# test), and connect a counter to EventBus.round_started so the CLEAR below is confirmed to
@@ -271,7 +325,8 @@ func _p2_hud_captions() -> Array:
 
 
 ## Live-smoke S1/S2 guard: the panel's InstrumentBox lies fully inside the window and overlaps
-## no HudRoot child and no StateInspector in either viewport. HUD rects are viewport-local, mapped
+## no StateInspector in either viewport. 7-6 POLISH (operator ruling P12, a NAMED change): the panel is hidden by
+## default and, when shown, MAY overlay the HUD -- so HudRoot children are no longer part of this guard. HUD rects are viewport-local, mapped
 ## to screen by adding each SubViewportContainer's origin; the panel is a root-viewport child, so
 ## its global rect is already screen space.
 func _check_panel_layout() -> bool:
@@ -283,6 +338,8 @@ func _check_panel_layout() -> bool:
 		print("PANEL LAYOUT: box %s not inside window %s" % [panel_rect, win])
 		return false
 	for entry in _hud_screen_rects():
+		if not String(entry[0]).ends_with("StateInspector"):
+			continue
 		if panel_rect.intersects(entry[1]):
 			print("PANEL LAYOUT: box %s intersects %s %s" % [panel_rect, entry[0], entry[1]])
 			return false
@@ -309,14 +366,14 @@ func _hud_screen_rects() -> Array:
 	return out
 
 
-## Story 6-3b (AC 4): `name` under `hud` is a Control anchored bottom-centre (0.5, 0.5, 1, 1) at exactly
-## `offsets` = [left, top, right, bottom].
-func _zone_at(hud: Node, zone_name: String, offsets: Array) -> bool:
+## Story 6-3b (AC 4): `name` under `hud` is a Control anchored at horizontal `edge` (7-6 POLISH: 0 = left, 1 = right;
+## it was bottom-centre 0.5) and the bottom edge, at exactly `offsets` = [left, top, right, bottom].
+func _zone_at(hud: Node, zone_name: String, edge: float, offsets: Array) -> bool:
 	var zone := hud.get_node_or_null(zone_name) as Control
 	if zone == null:
 		print("PITCH ZONES: %s missing under %s" % [zone_name, hud.get_path()])
 		return false
-	var ok := (is_equal_approx(zone.anchor_left, 0.5) and is_equal_approx(zone.anchor_right, 0.5)
+	var ok := (is_equal_approx(zone.anchor_left, edge) and is_equal_approx(zone.anchor_right, edge)
 		and is_equal_approx(zone.anchor_top, 1.0) and is_equal_approx(zone.anchor_bottom, 1.0)
 		and is_equal_approx(zone.offset_left, offsets[0]) and is_equal_approx(zone.offset_top, offsets[1])
 		and is_equal_approx(zone.offset_right, offsets[2])

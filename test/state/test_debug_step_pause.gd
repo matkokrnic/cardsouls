@@ -19,12 +19,16 @@ extends TestCase
 
 const PAUSE := &"debug_pause"
 const STEP := &"debug_step"
+## Story 7-6 POLISH (operator ruling P12): the instrument panel's show/hide key joins the debug set (a NAMED change:
+## the distinct-key count below moves 2 -> 3).
+const TOGGLE := &"debug_toggle_instruments"
 
 
 func test_debug_pause_and_step_actions_exist_and_are_match_global() -> void:
 	assert_true(InputMap.has_action(PAUSE), "project.godot defines debug_pause")
 	assert_true(InputMap.has_action(STEP), "project.godot defines debug_step")
-	for action: StringName in [PAUSE, STEP]:
+	assert_true(InputMap.has_action(TOGGLE), "project.godot defines debug_toggle_instruments (P12)")
+	for action: StringName in [PAUSE, STEP, TOGGLE]:
 		assert_false(String(action).begins_with("p1_"), "%s is match-global, not per-slot" % action)
 		assert_false(String(action).begins_with("p2_"), "%s is match-global, not per-slot" % action)
 		assert_false(InputMap.action_get_events(action).is_empty(), "%s has a key bound" % action)
@@ -35,14 +39,14 @@ func test_debug_keys_collide_with_no_other_project_binding() -> void:
 	# keys with gameplay actions already (p2_move_* are the arrow keys, which are also ui_*), so
 	# a scan including them would assert a rule this project does not hold.
 	var debug_keys: Dictionary = {}
-	for action: StringName in [PAUSE, STEP]:
+	for action: StringName in [PAUSE, STEP, TOGGLE]:
 		for event: InputEvent in InputMap.action_get_events(action):
 			if event is InputEventKey:
 				debug_keys[(event as InputEventKey).physical_keycode] = action
-	assert_eq(debug_keys.size(), 2, "one distinct key each for pause and step")
+	assert_eq(debug_keys.size(), 3, "one distinct key each for pause, step and the instrument toggle")
 	var collisions: Array[String] = []
 	for action: StringName in InputMap.get_actions():
-		if action == PAUSE or action == STEP or String(action).begins_with("ui_"):
+		if action == PAUSE or action == STEP or action == TOGGLE or String(action).begins_with("ui_"):
 			continue
 		for event: InputEvent in InputMap.action_get_events(action):
 			if event is InputEventKey and debug_keys.has((event as InputEventKey).physical_keycode):

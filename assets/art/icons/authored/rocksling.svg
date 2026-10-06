@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<!-- Rocksling: a loaded sling, hand-authored for CardSouls story 7-6 (D4). No third-party source. -->
+<g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+<path stroke-width="34" d="M74 458 L214 222"/>
+<path stroke-width="34" d="M74 458 L404 300"/>
+<path stroke-width="46" d="M206 226 Q240 350 414 296"/>
+<path stroke-width="18" d="M402 92 Q456 104 478 154"/>
+<path stroke-width="18" d="M358 50 Q438 46 490 98"/>
+</g>
+<path fill="#fff" fill-rule="evenodd" d="M312 104 C376 98 432 146 430 210 C428 268 380 304 322 300 C262 296 214 250 218 190 C222 140 262 108 312 104 Z M300 150 L346 170 L330 214 L282 196 Z"/>
+<circle cx="88" cy="444" r="40" fill="#fff"/>
+</svg>

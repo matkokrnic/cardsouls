@@ -91,6 +91,19 @@ var _cast_warning_tween: Tween
 ## `Enums.CardColor`. EMPTY means "the priming emission has not arrived yet" -- see
 ## on_orbs_changed for why that distinction is the whole of AC 16.
 var _orb_counts: Array[int] = []
+## Story 7-6 (operator rulings P21/P22, 2026-10-06): THE TELEGRAPH SHAPES ARE DEBUG-LAYER CUES, shown with F3.
+## While false every shape on this node is hidden (this node's own visibility -- each child keeps tracking its state,
+## so F3 mid-cue shows the live cue). P22 superseded P21's sound half: EVERY telegraph sound plays whatever this
+## says, exactly as before P21. True by default so a bare hero scene keeps its shapes; the runner applies the
+## debug layer's default (hidden) at wiring.
+var cues_shown := true
+
+
+## Story 7-6 (P21/P22): the runner's F3 push -- shapes only. No sound is started or stopped here, so every sound
+## (the looping cast alarm included) starts and ends on its own events whatever the layer does.
+func set_cues_shown(shown: bool) -> void:
+	cues_shown = shown
+	visible = shown
 
 
 func _ready() -> void:

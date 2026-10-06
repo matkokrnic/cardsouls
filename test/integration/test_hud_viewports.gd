@@ -43,6 +43,7 @@ var _primed_ok := false
 var _rows_ok := false
 var _p1_dropped := false
 var _p2_stayed_full := true
+var _layout_ok := false
 
 
 func _initialize() -> void:
@@ -54,6 +55,9 @@ func _initialize() -> void:
 func _physics_process(_delta: float) -> bool:
 	_frames += 1
 	if _frames == 1:
+		# 7-6 POLISH 2: the SHIPPED resolution -- the game starts fullscreen at 1920x1080 (stretch mode `disabled`,
+		# so each half's HUD is 960x1080 native pixels) and the layout check reads those real pixels.
+		root.size = Vector2i(1920, 1080)
 		# _ready has run (main loop started): both HUD roots and their primed bars exist.
 		var p1_hud := root.get_node_or_null("Main/P1View/P1Viewport/HudRoot")
 		var p2_hud := root.get_node_or_null("Main/P2View/P2Viewport/HudRoot")
@@ -87,6 +91,9 @@ func _physics_process(_delta: float) -> bool:
 		# Story 2-5 (AC 7): both hand rows present per viewport, own front-styled, opponent
 		# back-styled, and the two stylings genuinely different — on BOTH huds.
 		_rows_ok = _check_hand_rows(p1_hud) and _check_hand_rows(p2_hud)
+	if _frames == 3:
+		# 7-6 POLISH (P1, review fix F6 extended): the re-derived half-screen layout, once anchors have settled.
+		_layout_ok = _check_layout("P1View", "P1Viewport") and _check_layout("P2View", "P2Viewport")
 	if _frames == ROLL_FRAME:
 		Input.action_press(&"p1_move_up")  # a move dir so the roll has a direction
 		Input.action_press(&"p1_roll")     # spends stamina on SLOT 0 only
@@ -102,10 +109,10 @@ func _physics_process(_delta: float) -> bool:
 		if _p2_stam.value != _p2_stam.max_value:
 			_p2_stayed_full = false
 	if _frames >= ROLL_FRAME + 20:
-		var ok: bool = (_both_huds_exist and _primed_ok and _rows_ok
+		var ok: bool = (_both_huds_exist and _primed_ok and _rows_ok and _layout_ok
 			and _p1_dropped and _p2_stayed_full)
-		print("hud: both_exist=%s primed_ok=%s rows_ok=%s p1_dropped=%s p2_stayed_full=%s (p1_stam=%.1f/%.1f p2_stam=%.1f/%.1f)" % [
-			_both_huds_exist, _primed_ok, _rows_ok, _p1_dropped, _p2_stayed_full,
+		print("hud: both_exist=%s primed_ok=%s rows_ok=%s layout_ok=%s p1_dropped=%s p2_stayed_full=%s (p1_stam=%.1f/%.1f p2_stam=%.1f/%.1f)" % [
+			_both_huds_exist, _primed_ok, _rows_ok, _layout_ok, _p1_dropped, _p2_stayed_full,
 			_p1_stam.value, _p1_stam.max_value, _p2_stam.value, _p2_stam.max_value])
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
@@ -160,60 +167,47 @@ func _check_hand_rows(hud: Node) -> bool:
 	if not (differ and back_is_heavier):
 		print("hand-row styling wrong: differ=%s back_is_heavier=%s own_bg=%s back_bg=%s own_border=%d back_border=%d" % [
 			differ, back_is_heavier, own_style.bg_color, back_style.bg_color, own_border, back_border])
-	return differ and back_is_heavier and _check_price_geometry(own)
+	# Story 7-6: the 6-5b `_check_price_geometry` that stood here is RETIRED with the two-line price block it
+	# measured (R1 replaced it with the two-half card face). The face's geometry -- equal halves, divider,
+	# reserved slot, costs clear of the colour -- is asserted by test_card_face.gd (AC 5/7/8/10).
+	# 7-6 review fix (operator ruling F6): the two checks that retirement LOST come back here, on the live tree.
+	return differ and back_is_heavier and _check_face_geometry(own)
 
 
-## Story 6-5b (AC 23): THE PRICE BLOCK'S GEOMETRY -- every own card panel carries a `CardPrice` label,
-## and it occupies its own band without overlapping the id caption above it or the colour swatch below.
-##
-## GEOMETRY ONLY, AND THAT IS `PROC/R8` RATHER THAN A CHOICE: "machine checks assert GEOMETRY only;
-## never assert on-screen text fit from character counts -- any AC hinging on on-screen legibility goes
-## to operator smoke at first render". So this asserts the RECTS ARE DISJOINT and the band is tall
-## enough to hold two lines at all; whether both prices READ at a glance in a half-width viewport is
-## smoke item 12.
-##
-## THE OVERLAP CHECK IS THE POINT. `hud_root.gd` computes three stacked bands in an 84x92 panel, and the
-## 6-0 story's own comment got that arithmetic WRONG BY 5px once and said so -- the swatch was claimed
-## to sit below a caption it actually overlapped. A comment cannot catch that twice; this can.
-##
-## READ OFF THE LIVE TREE, never off the constants: the assertion is about where the controls ACTUALLY
-## end up after anchors and offsets resolve, which is exactly what a constant comparison would miss.
-func _check_price_geometry(row: Node) -> bool:
+## 7-6 review fix (F6) -- what the retired `_check_price_geometry` guarded, re-stated for the two-half face and
+## READ OFF THE LIVE SPLIT-VIEWPORT TREE (its own reason, verbatim: where the controls actually end up after
+## anchors and offsets resolve). Every card panel: each `Cost` rect lies INSIDE the panel, and no cost rect
+## overlaps the pitch half's `Pips` row or the `KeywordSlot`. Geometry only (`PROC/R8`).
+func _check_face_geometry(row: Node) -> bool:
 	var ok := true
 	for card: Node in row.get_children():
-		var caption := card.get_node_or_null("CardName") as Control
-		var price := card.get_node_or_null("CardPrice") as Control
-		var swatch := card.get_node_or_null("ColorSwatch") as Control
-		if price == null:
-			print("%s carries no CardPrice label -- AC 23's both-prices block is missing" % card.name)
+		var panel := card as Control
+		var origin := panel.get_global_rect().position
+		var panel_rect := Rect2(Vector2.ZERO, panel.size)
+		var pips := panel.get_node_or_null("PitchHalf/Pips") as Control
+		var keyword := panel.get_node_or_null("KeywordSlot") as Control
+		var costs: Array[Control] = []
+		for path in ["NormalHalf/Cost", "PitchHalf/Cost"]:
+			var c := panel.get_node_or_null(path) as Control
+			if c != null:
+				costs.append(c)
+		if pips == null or keyword == null or costs.size() != 2:
+			print("%s is missing a Cost, the Pips row or the KeywordSlot" % card.name)
 			ok = false
 			continue
-		if caption == null or swatch == null:
-			print("%s is missing the caption or swatch the price band sits between" % card.name)
-			ok = false
-			continue
-		var caption_rect := caption.get_rect()
-		var price_rect := price.get_rect()
-		var swatch_rect := swatch.get_rect()
-		# The price band must be BELOW the caption and ABOVE the swatch, touching neither.
-		if price_rect.position.y < caption_rect.end.y:
-			print("%s: the price band (top %.1f) overlaps the id caption (bottom %.1f)"
-					% [card.name, price_rect.position.y, caption_rect.end.y])
-			ok = false
-		if price_rect.end.y > swatch_rect.position.y:
-			print("%s: the price band (bottom %.1f) overlaps the colour swatch (top %.1f)"
-					% [card.name, price_rect.end.y, swatch_rect.position.y])
-			ok = false
-		# ...and it must be tall enough for the TWO LINES AC 23 requires. Two lines at the authored
-		# font size 9 need at least 18px; the authored band is 22.
-		if price_rect.size.y < 18.0:
-			print("%s: the price band is %.1f px tall -- too short for two price lines"
-					% [card.name, price_rect.size.y])
-			ok = false
-		# The band must also sit INSIDE the panel, horizontally and vertically.
-		if price_rect.position.x < 0.0 or price_rect.end.x > card.get_rect().size.x:
-			print("%s: the price band escapes the panel horizontally" % card.name)
-			ok = false
+		var pip_rect := Rect2(pips.get_global_rect().position - origin, pips.size)
+		var key_rect := Rect2(keyword.get_global_rect().position - origin, keyword.size)
+		for cost: Control in costs:
+			var r := Rect2(cost.get_global_rect().position - origin, cost.size)
+			if not panel_rect.encloses(r):
+				print("%s: %s %s escapes the panel %s" % [card.name, cost.get_path(), r, panel_rect])
+				ok = false
+			if r.intersects(pip_rect):
+				print("%s: %s %s overlaps the pip row %s" % [card.name, cost.get_path(), r, pip_rect])
+				ok = false
+			if r.intersects(key_rect):
+				print("%s: %s %s overlaps the keyword slot %s" % [card.name, cost.get_path(), r, key_rect])
+				ok = false
 	return ok
 
 
@@ -234,3 +228,80 @@ func _row_card_style(row: Node) -> StyleBoxFlat:
 		if style == null:
 			return null
 	return style
+
+
+## 7-6 POLISH 2 (operator ruling P9; review fix F6 extended to whatever moved): THE HALF-SCREEN LAYOUT at the shipped
+## 960x1080 half, read off the live tree. Every laid-out HUD element -- EACH CARD of the arc at its highest reach
+## (its rest rect, middle pair raised, plus the armed lift and the armed frame's outset all round), the vitals under
+## the middle pair, both pitch zones beside the hand, the history strip, the deck indicator, the orb counters and the
+## round-over label -- lies fully inside the viewport and overlaps none of the others nor that viewport's
+## StateInspector. The arc itself is checked: the middle pair rests higher than the outer cards, the vitals sit
+## below the middle pair and reach below the outer cards' bottom edge, and each zone keeps a gap from the hand.
+## The debug InstrumentBox is NOT checked: hidden by default and allowed to overlay the HUD (P12). Geometry only
+## (`PROC/R8`).
+func _check_layout(view_name: String, vp_name: String) -> bool:
+	var ok := true
+	var hud := root.get_node("Main/%s/%s/HudRoot" % [view_name, vp_name]) as Control
+	var inspector := root.get_node("Main/%s/%s/StateInspector" % [view_name, vp_name]) as Control
+	var vp_rect := Rect2(Vector2.ZERO, hud.size)
+	var rects: Array = []
+	for name in ["Vitals", "OwnPitch", "OpponentPitch", "HistoryStrip", "DeckIndicator", "OrbCounters",
+			"RoundOverLabel"]:
+		var c := hud.get_node_or_null(name) as Control
+		if c == null:
+			print("LAYOUT %s: %s missing" % [view_name, name])
+			ok = false
+			continue
+		rects.append([name, c.get_global_rect()])
+	var cards: Array[Rect2] = []
+	for i in 4:
+		var card := hud.get_node("HandStrip/Card%d" % i) as Control
+		var r := card.get_global_rect()
+		cards.append(r)
+		# P14: the armed frame is the card's own (inside it); only its glow reaches outside.
+		var glow := float(HudRoot.ARMED_GLOW_PX)
+		var reach := HudRoot.CARD_MODE_ARMED_LIFT_PX + glow
+		rects.append(["Card%d" % i, Rect2(r.position - Vector2(glow, reach),
+				r.size + Vector2(2.0 * glow, reach + glow))])
+	var vitals := (hud.get_node("Vitals") as Control).get_global_rect()
+	if not (cards[1].position.y < cards[0].position.y and cards[2].position.y < cards[3].position.y):
+		print("LAYOUT %s: the hand is not an arc %s" % [view_name, cards])
+		ok = false
+	if not (vitals.position.y >= cards[1].end.y and vitals.end.y > cards[0].end.y
+			and vitals.position.x >= cards[1].position.x - 0.5 and vitals.end.x <= cards[2].end.x + 0.5):
+		print("LAYOUT %s: the vitals %s are not beneath the middle pair %s %s" % [view_name, vitals, cards[1], cards[2]])
+		ok = false
+	for zone_name in ["OwnPitch", "OpponentPitch"]:
+		var z := (hud.get_node(zone_name) as Control).get_global_rect()
+		var gap := minf(absf(z.end.x - cards[0].position.x), absf(z.position.x - cards[3].end.x))
+		if gap < 12.0:
+			print("LAYOUT %s: %s sits %.1f px from the hand -- it would read as a card" % [view_name, zone_name, gap])
+			ok = false
+		# 7-6 POLISH 3 (operator ruling P15): CARD-SIZED, bottom-aligned with the outer cards, and the zone-to-hand gap
+		# EQUALS the zone-to-edge gap.
+		if not z.size.is_equal_approx(cards[0].size) or not is_equal_approx(z.end.y, cards[0].end.y):
+			print("LAYOUT %s: %s %s is not card-sized and bottom-aligned with %s" % [view_name, zone_name, z, cards[0]])
+			ok = false
+		var to_edge := z.position.x - vp_rect.position.x if z.end.x <= cards[0].position.x else vp_rect.end.x - z.end.x
+		var to_hand := cards[0].position.x - z.end.x if z.end.x <= cards[0].position.x else z.position.x - cards[3].end.x
+		if absf(to_edge - to_hand) > 1.0:
+			print("LAYOUT %s: %s gaps unequal -- %.1f to the edge, %.1f to the hand" % [view_name, zone_name, to_edge, to_hand])
+			ok = false
+	for c in inspector.get_children():
+		if c is Control:
+			rects.append(["StateInspector", (c as Control).get_global_rect()])
+	for e: Array in rects:
+		if e[0] != "StateInspector" and not vp_rect.encloses(e[1]):
+			print("LAYOUT %s: %s %s leaves the viewport %s" % [view_name, e[0], e[1], vp_rect])
+			ok = false
+	for a in rects.size():
+		for b in range(a + 1, rects.size()):
+			# The ONE exempt pair: the debug StateInspector (y 60) and the deck indicator (bottom y 62) have shared a
+			# 2 px band since 2-6; neither moved in 7-6. Disclosed here rather than silently excluded.
+			if [rects[a][0], rects[b][0]] in [["DeckIndicator", "StateInspector"], ["StateInspector", "DeckIndicator"]]:
+				continue
+			if (rects[a][1] as Rect2).intersects(rects[b][1]):
+				print("LAYOUT %s: %s %s overlaps %s %s" % [view_name, rects[a][0], rects[a][1], rects[b][0],
+						rects[b][1]])
+				ok = false
+	return ok

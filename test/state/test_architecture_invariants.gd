@@ -374,8 +374,14 @@ func test_runner_observation_seams_are_exactly_ten() -> void:  # 2-6/R7, amended
 ##
 ## `test_runner_observation_seams_are_exactly_ten` is deliberately UNMOVED by this story: a plain connect is
 ## not a `connect_*` wrapper, which is exactly the distinction these two pins exist to keep separate.
+##
+## STORY 7-6 (D1, AC 3/AC 26): `card_cast_resolved:relay` and `counterspell_resolved:relay` join the list -- two
+## new RELAY sites, the sanctioned runner-relay shape (`_relay_card_cast_resolved`/`_relay_counterspell_resolved`
+## onto two new ownerless EventBus signals the play-history strip reads), NOT a third or fourth `:inline`
+## consumer. The `:inline` count stays two; the seam family stays ten.
 const RAW_MATCH_STATE_CONNECTS: Array[String] = [
-	"card_cast_resolved:inline", "counterspell_resolved:inline", "deflect_landed:wrapper",
+	"card_cast_resolved:inline", "card_cast_resolved:relay",
+	"counterspell_resolved:inline", "counterspell_resolved:relay", "deflect_landed:wrapper",
 	"hit_landed:wrapper", "pitch_changed:wrapper",
 	"reshuffle_vulnerable_window_opened:relay", "round_ended:relay",
 	"round_started:relay",

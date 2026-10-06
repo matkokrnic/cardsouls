@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="EffectIconSet" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/hud/effect_icon_set.gd" id="1_icons"]
+
+[resource]
+script = ExtResource("1_icons")
+slot_reel_enabled = true
+icon_paths = Dictionary[StringName, String]({
+&"bloodhound_step": "res://assets/art/icons/game_icons/bloodhound_step.svg",
+&"boom": "res://assets/art/icons/game_icons/boom.svg",
+&"boulder_discard": "res://assets/art/icons/game_icons/boulder_discard.svg",
+&"corpse_bomb": "res://assets/art/icons/authored/corpse_bomb.svg",
+&"counterspell": "res://assets/art/icons/game_icons/counterspell.svg",
+&"culling": "res://assets/art/icons/game_icons/culling.svg",
+&"drain": "res://assets/art/icons/game_icons/drain.svg",
+&"fireball": "res://assets/art/icons/game_icons/fireball.svg",
+&"frostbite": "res://assets/art/icons/game_icons/frostbite.svg",
+&"grave_ward": "res://assets/art/icons/game_icons/grave_ward.svg",
+&"honed_bolt": "res://assets/art/icons/authored/honed_bolt.svg",
+&"raise_dead": "res://assets/art/icons/game_icons/raise_dead.svg",
+&"rocksling": "res://assets/art/icons/authored/rocksling.svg",
+&"summon_ruin_vanguard": "res://assets/art/icons/game_icons/summon_ruin_vanguard.svg",
+&"vampiric_aura": "res://assets/art/icons/game_icons/vampiric_aura.svg"
+})

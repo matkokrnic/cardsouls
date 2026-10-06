@@ -183,6 +183,10 @@ var _landed := false
 var _cast2_ticks := 0
 var _cone_ticks := 0
 var _cone_off_target_ticks := 0
+## Story 7-6 (operator ruling P21): the cone is a debug-layer cue. Ticks it was hidden with the layer shown, and the
+## one mid-cast F3-off probe (the cone must hide, then show again).
+var _cone_hidden_ticks := 0
+var _cone_probe := ""
 var _cast2_hero_marker_ticks := 0
 var _cast2_hero_alarm_ticks := 0
 var _cast2_min_separation := 1000.0
@@ -221,6 +225,8 @@ func _physics_process(_delta: float) -> bool:
 		_state = _runner._match_state if _runner != null else null
 		if _runner == null or _state == null:
 			return _fail("missing: runner=%s state=%s" % [_runner, _state])
+		# Story 7-6 (operator rulings P21/P22): the cast-target cone this file asserts is a debug-layer shape -- show it (F3).
+		_runner.set_debug_layer_visible(true)
 		return false
 
 	if _frames == 2:
@@ -486,6 +492,13 @@ func _sample_cast2() -> void:
 		var cone := _cone(0)
 		if cone != null and minion != null:
 			_cone_ticks += 1
+			if not cone.visible:
+				_cone_hidden_ticks += 1
+			if _cone_probe == "":
+				_runner.set_debug_layer_visible(false)
+				var hidden_off := not cone.visible
+				_runner.set_debug_layer_visible(true)
+				_cone_probe = "ok" if hidden_off and cone.visible else "hidden_off=%s shown_on=%s" % [hidden_off, cone.visible]
 			var want := minion.global_position + Vector3(0.0, TargetConeActor.HOVER_HEIGHT, 0.0)
 			if cone.global_position.distance_to(want) > CONE_TOLERANCE:
 				_cone_off_target_ticks += 1
@@ -698,6 +711,8 @@ func _finish() -> bool:
 			% _cast2_min_separation + "a hero-addressed marker could not be told apart")
 	_check(_cone_ticks == _cast2_ticks,
 		"AC 28: the placeholder cone was up for %d of %d cast-2 ticks" % [_cone_ticks, _cast2_ticks])
+	_check(_cone_hidden_ticks == 0, "P21: the cone was hidden on %d ticks with the debug layer shown" % _cone_hidden_ticks)
+	_check(_cone_probe == "ok", "P21: F3 off/on mid-cast did not hide/show the cone (%s)" % _cone_probe)
 	_check(_cone_off_target_ticks == 0,
 		"AC 28: the cone sat off the MARKED BODY on %d ticks" % _cone_off_target_ticks)
 	_check(_cast2_hero_marker_ticks == 0,

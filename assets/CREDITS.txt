@@ -25,3 +25,28 @@ SOUND EFFECTS -- assets/audio/effects/sfx_*.wav (trimmed first variants)
 
 CAST ANIMATIONS -- assets/characters/paladin/cast_fireball.fbx, cast_rocksling_lift.fbx, cast_rocksling_throw.fbx
   Mixamo (Adobe), on the existing paladin rig -- the same source as the rig's other clips.
+
+EFFECT ICONS (story 7-6) -- assets/art/icons/game_icons/*.svg (placeholder hand/history art, one per effect)
+  From the game-icons.net project (https://game-icons.net), downloaded as white-on-transparent SVG and renamed
+  to the effect id they illustrate; otherwise unmodified.
+  License: Creative Commons Attribution 3.0 Unported, CC BY 3.0 -- https://creativecommons.org/licenses/by/3.0/
+  One line per shipped icon: <file> -- "<icon name>" by <author>, game-icons.net, CC BY 3.0
+  summon_ruin_vanguard.svg -- "Visored helm" by Lorc, game-icons.net, CC BY 3.0
+  culling.svg -- "Scythe" by Lorc, game-icons.net, CC BY 3.0
+  grave_ward.svg -- "Tombstone" by Lorc, game-icons.net, CC BY 3.0
+  raise_dead.svg -- "Raise zombie" by Skoll, game-icons.net, CC BY 3.0
+  drain.svg -- "Bleeding heart" by Lorc, game-icons.net, CC BY 3.0
+  vampiric_aura.svg -- "Vampire Dracula" by Delapouite, game-icons.net, CC BY 3.0
+  rocksling.svg -- "Sling" by Delapouite, game-icons.net, CC BY 3.0
+  boom.svg -- "Mine explosion" by Lorc, game-icons.net, CC BY 3.0
+  bloodhound_step.svg -- "Sprint" by Lorc, game-icons.net, CC BY 3.0
+  fireball.svg -- "Fireball" by Lorc, game-icons.net, CC BY 3.0
+  honed_bolt.svg -- "Energy arrow" by Lorc, game-icons.net, CC BY 3.0
+  counterspell.svg -- "Magic swirl" by Lorc, game-icons.net, CC BY 3.0
+  frostbite.svg -- "Snowflake 2" by Lorc, game-icons.net, CC BY 3.0
+  corpse_bomb.svg -- "Skull bolt" by Lorc, game-icons.net, CC BY 3.0
+  boulder_discard.svg -- "Rock" by Lorc, game-icons.net, CC BY 3.0
+  The game shows HAND-AUTHORED icons for rocksling, honed_bolt and corpse_bomb instead
+  (assets/art/icons/authored/*.svg -- drawn in-repo for this project, no third-party source, no credit
+  needed); the three game-icons.net files above stay in the repo as one-line swaps in
+  data/presentation/effect_icons.tres.

@@ -6,9 +6,15 @@ extends SceneTree
 ## (step 1b) and HudRoot's response -- the composition a unit test on `set_card_mode` cannot reach.
 ##
 ## DIRECTIONAL both ways: P2's mode on lifts P2's own row and leaves P1's viewport unchanged, and the
-## reverse. The ARMED card rises further than its neighbours. The 6-0 tint swatches are compared before
-## and after (visibility, colour, modulate) and the lift touches no `modulate`. The runner is PAUSED for
-## the assertions, proving the push sits outside the `ticking` gate.
+## reverse. The ARMED card rises clearly higher and carries the strong frame. The 6-0 tint swatches are compared
+## before and after (visibility, colour, modulate). The runner is PAUSED for the assertions, proving the push sits
+## outside the `ticking` gate.
+##
+## STORY 7-6 history: R3 had moved card mode / arming to a frame highlight; 7-6 POLISH (operator ruling P3,
+## 2026-10-05) moved them BACK TO A LIFT, much more visible than before 7-6 (row `CARD_MODE_ROW_LIFT_PX`, armed
+## `CARD_MODE_ARMED_LIFT_PX`, was 4 and 6), plus the armed card's `ARMED_FRAME_PX` frame. Each card lifts by its
+## own `position.y` (the strip itself never moves). The pushes, the directionality, the paused-runner proof, "no
+## lone lift with mode off" and the forced-off half below are the 6-10 behaviour unchanged (AC 19's regression).
 ##
 ## The FORCED-OFF routes (AC 9a-c) are pinned here too, through the same fakes: each fake COUNTS the runner's
 ## `force_card_mode_off()` pushes. Knockdown is driven by writing the paused runner's hero directly (a test
@@ -70,6 +76,23 @@ func _card_y(hud: HudRoot, i: int) -> float:
 	return (_strip(hud).get_child(i) as Control).position.y
 
 
+## Every card's lift in one row (0 = at rest), measured from its ARC rest height (7-6 POLISH 2, P9: the middle pair
+## rests raised, so a raw `position.y` is no longer the lift).
+func _lifts(hud: HudRoot) -> Array:
+	var out: Array = []
+	for i in 4:
+		out.append(hud.card_lift(i))
+	return out
+
+
+## The four highlight widths of one row (0 = none).
+func _rings(hud: HudRoot) -> Array:
+	var out: Array = []
+	for i in 4:
+		out.append(hud.highlight_width(i))
+	return out
+
+
 func _physics_process(_delta: float) -> bool:
 	_frames += 1
 	if _frames == 1:
@@ -80,7 +103,15 @@ func _physics_process(_delta: float) -> bool:
 		_p2 = FakeCtl.new()
 		_main._p1_controller = _p1
 		_main._p2_controller = _p2
+	if _frames == SETTLE - 1:
+		# 7-6 POLISH 3 (P14): paused AFTER the deal (the first advance), so every slot holds a card whose own frame
+		# arming turns gold -- an empty slot has no frame to turn. The push still runs paused (outside the gate).
 		_main._paused = true  # the push must work while paused (outside the ticking gate)
+	var none := [0, 0, 0, 0]
+	var rest := [0.0, 0.0, 0.0, 0.0]
+	var row := HudRoot.CARD_MODE_ROW_LIFT_PX
+	var high := HudRoot.CARD_MODE_ARMED_LIFT_PX
+	var armed := HudRoot.ARMED_FRAME_PX
 	if _frames == SETTLE:
 		_rest_top = _strip(_p1_hud).offset_top
 		_rest_bottom = _strip(_p1_hud).offset_bottom
@@ -88,52 +119,57 @@ func _physics_process(_delta: float) -> bool:
 		_p1_tint_before = _tint(_p1_hud)
 		if not is_equal_approx(_strip(_p2_hud).offset_top, _rest_top):
 			_fail("the two rows rest differently")
+		if _lifts(_p1_hud) != rest or _lifts(_p2_hud) != rest or _rings(_p1_hud) != none or _rings(_p2_hud) != none:
+			_fail("a card is lifted or framed with mode off and nothing armed: %s %s %s %s" % [_lifts(_p1_hud),
+					_lifts(_p2_hud), _rings(_p1_hud), _rings(_p2_hud)])
 		_p2.mode_on = true
 	if _frames == SETTLE + 2:
-		# P2 mode on, nothing armed: P2's row lifted by exactly the knob, size unchanged, P1 untouched.
-		var lifted := _rest_top - _strip(_p2_hud).offset_top
-		if not is_equal_approx(lifted, HudRoot.CARD_MODE_ROW_LIFT_PX) or lifted <= 0.0:
-			_fail("P2 row lift %s != knob %s" % [lifted, HudRoot.CARD_MODE_ROW_LIFT_PX])
-		if not is_equal_approx(_strip(_p2_hud).offset_bottom, _rest_bottom - HudRoot.CARD_MODE_ROW_LIFT_PX):
-			_fail("P2 row moved by different amounts top and bottom (a resize)")
-		if not is_equal_approx(_strip(_p1_hud).offset_top, _rest_top):
-			_fail("P1's viewport changed when only P2's mode was on")
-		for i in 4:
-			if not is_equal_approx(_card_y(_p2_hud, i), 0.0):
-				_fail("a card lifted with nothing armed (%d)" % i)
+		# P2 mode on, nothing armed: every P2 card lifts by the row lift, no frame, P1 untouched.
+		if _lifts(_p2_hud) != [row, row, row, row] or _rings(_p2_hud) != none:
+			_fail("P2 mode-on lifts %s rings %s, want all %s and none" % [_lifts(_p2_hud), _rings(_p2_hud), row])
+		if _lifts(_p1_hud) != rest or _rings(_p1_hud) != none:
+			_fail("P1's viewport changed when only P2's mode was on: %s %s" % [_lifts(_p1_hud), _rings(_p1_hud)])
+		if not is_equal_approx(_strip(_p2_hud).offset_top, _rest_top) \
+				or not is_equal_approx(_strip(_p2_hud).offset_bottom, _rest_bottom):
+			_fail("card mode moved P2's STRIP (each card lifts by its own position, the strip stays)")
 		_p2.armed = 2
 	if _frames == SETTLE + 4:
-		# Armed stronger: only slot 2 rises further, on top of the row lift.
-		for i in 4:
-			var want := -HudRoot.CARD_MODE_ARMED_LIFT_PX if i == 2 else 0.0
-			if not is_equal_approx(_card_y(_p2_hud, i), want):
-				_fail("armed lift: card %d y=%s want %s" % [i, _card_y(_p2_hud, i), want])
-		if _tint(_p2_hud) != _tint_before:
+		# Armed: slot 2 rises clearly higher with the frame, the rest keep the row lift.
+		if _lifts(_p2_hud) != [row, row, high, row] or _rings(_p2_hud) != [0, 0, armed, 0]:
+			_fail("armed lifts %s rings %s, want [%s, %s, %s, %s] / [0, 0, %d, 0]" % [_lifts(_p2_hud), _rings(_p2_hud),
+					row, row, high, row, armed])
+		# 7-6 POLISH 3 (operator ruling P14, a NAMED change): arming turns the armed card's OWN frame gold, so the 6-0
+		# tint is compared on every slot EXCEPT the armed one -- which must show gold instead.
+		var tint_now := _tint(_p2_hud)
+		var tint_was := _tint_before.duplicate()
+		var armed_tint: Array = tint_now[2]
+		tint_now.remove_at(2)
+		tint_was.remove_at(2)
+		if (_p2_hud.get_node("HandStrip/Card2/ColorSwatch").get_theme_stylebox("panel") as StyleBoxFlat).border_color 				!= HudRoot.ARMED_FRAME_COLOR or not bool(armed_tint[0]):
+			_fail("P14: the armed card's own frame did not turn gold")
+		if tint_now != tint_was:
 			_fail("the 6-0 tint (swatch visibility/colour/modulate) changed while lifted and armed")
-		if _tint(_p1_hud) != _p1_tint_before or not is_equal_approx(_strip(_p1_hud).offset_top, _rest_top):
+		if _tint(_p1_hud) != _p1_tint_before or _rings(_p1_hud) != none or _lifts(_p1_hud) != rest:
 			_fail("P1 changed")
 		_p2.mode_on = false
 		_p2.armed = -1
 	if _frames == SETTLE + 6:
-		if not is_equal_approx(_strip(_p2_hud).offset_top, _rest_top) \
-				or not is_equal_approx(_card_y(_p2_hud, 2), 0.0):
-			_fail("P2 row did not return to rest when mode went off")
+		if _lifts(_p2_hud) != rest or _rings(_p2_hud) != none:
+			_fail("P2 row did not return to rest when mode went off: %s %s" % [_lifts(_p2_hud), _rings(_p2_hud)])
 		# The reverse direction: P1's mode on lifts P1 only.
 		_p1.mode_on = true
 		_p1.armed = 1
 	if _frames == SETTLE + 8:
-		if not is_equal_approx(_rest_top - _strip(_p1_hud).offset_top, HudRoot.CARD_MODE_ROW_LIFT_PX):
-			_fail("P1 row not lifted by the knob")
-		if not is_equal_approx(_card_y(_p1_hud, 1), -HudRoot.CARD_MODE_ARMED_LIFT_PX):
-			_fail("P1 armed card not lifted further")
-		if not is_equal_approx(_strip(_p2_hud).offset_top, _rest_top) \
-				or not is_equal_approx(_card_y(_p2_hud, 1), 0.0):
+		if _lifts(_p1_hud) != [row, high, row, row] or _rings(_p1_hud) != [0, armed, 0, 0]:
+			_fail("P1 lifts %s rings %s" % [_lifts(_p1_hud), _rings(_p1_hud)])
+		if _lifts(_p2_hud) != rest or _rings(_p2_hud) != none:
 			_fail("P2's viewport changed when only P1's mode was on")
-		# mode off but a slot still armed (keyboard hold shape): no lone card lift
+		# mode off but a slot still armed (keyboard hold shape): the armed frame alone, no lone lift
 		_p1.mode_on = false
 	if _frames == SETTLE + 10:
-		if not is_equal_approx(_card_y(_p1_hud, 1), 0.0):
-			_fail("a card lifted alone with mode off")
+		if _lifts(_p1_hud) != rest or _rings(_p1_hud) != [0, armed, 0, 0]:
+			_fail("mode off with slot 1 armed: lifts %s rings %s, want rest and [0, %d, 0, 0]" % [_lifts(_p1_hud),
+					_rings(_p1_hud), armed])
 	var k := SETTLE + 12
 	if _frames == k:
 		# ordinary stun on P1 (one tick short of the knockdown threshold)
@@ -181,8 +217,8 @@ func _physics_process(_delta: float) -> bool:
 	if _frames >= k + 18 and (not _any_cue_playing() or _frames >= k + 900):
 		if _any_cue_playing():
 			_fail("a cue was still playing at the wait bound (%d frames); quitting now would leak a resource" % 900)
-		print("lift: knobs row=%s armed=%s ok=%s" % [HudRoot.CARD_MODE_ROW_LIFT_PX,
-			HudRoot.CARD_MODE_ARMED_LIFT_PX, _ok])
+		print("lift: knobs row=%s armed=%s frame=%s ok=%s" % [HudRoot.CARD_MODE_ROW_LIFT_PX,
+			HudRoot.CARD_MODE_ARMED_LIFT_PX, HudRoot.ARMED_FRAME_PX, _ok])
 		print("RESULT: %s" % ("PASS" if _ok else "FAIL"))
 		quit(0 if _ok else 1)
 	return false

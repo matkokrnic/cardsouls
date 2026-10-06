@@ -21,7 +21,7 @@ extends SceneTree
 ## instantly" half of the scheme), and the OPPONENT viewport is never indicated by P1's press —
 ## the 2-4/R7 no-opponent-read discipline extended to the indicator.
 ##
-## Styling is read STRUCTURALLY off the panels' "panel" stylebox override (border width), never
+## Styling is read STRUCTURALLY through `HudRoot.highlight_width` (7-6 P14: the card's own frame turned gold), never
 ## against hardcoded colours, so a later palette change does not break the guard.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_card_selection_indicator.gd
@@ -127,14 +127,12 @@ func _distinct_border_count(hud: Node) -> int:
 	return seen.size()
 
 
+## Story 7-6 (AC 17) / 7-6 POLISH 3 (P14): the armed tell is the card's OWN frame turned gold -- read through
+## `HudRoot.highlight_width` (0 = not armed, the frame width = armed). The directional logic above is unchanged.
 func _panel_borders(hud: Node) -> Array[int]:
 	var out: Array[int] = []
-	var strip := hud.get_node_or_null("HandStrip")
-	if strip == null:
+	if hud.get_node_or_null("HandStrip") == null:
 		return out
-	for child in strip.get_children():
-		var style := (child as Control).get_theme_stylebox("panel") as StyleBoxFlat
-		if style == null:
-			return [] as Array[int]
-		out.append(style.get_border_width(SIDE_TOP))
+	for i in 4:
+		out.append((hud as HudRoot).highlight_width(i))
 	return out

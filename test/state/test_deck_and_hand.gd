@@ -462,14 +462,21 @@ func _function_body(path: String, name: String) -> Array[String]:
 ## vulnerable-window event was already ruled to be an ownerless bus event on the
 ## round_started/round_ended precedent (E3-RG/R3), and 3-5b is the story that ruling named. The
 ## story naming this test is the record that the change was intended rather than drifted into.
-func test_event_bus_still_carries_exactly_the_three_declared_signals() -> void:
+##
+## DELIBERATELY UPDATED BY STORY 7-6, three signals -> five (D1, AC 26), and RENAMED with it from
+## `test_event_bus_still_carries_exactly_the_three_declared_signals`, the old name recorded here verbatim on
+## the 3-5b precedent above. The two new signals are the public cast-resolution relays the play-history strip
+## reads (`card_effect_resolved`, `card_effect_countered`) -- ruled by D1 (2026-10-05) as bus events on the
+## reshuffle precedent, not a per-slot seam read cross-slot.
+func test_event_bus_still_carries_exactly_the_five_declared_signals() -> void:
 	var bus: GDScript = load("res://src/systems/event_bus.gd")
 	var names: Array[String] = []
 	for s in bus.get_script_signal_list():
 		names.append(String(s.name))
 	names.sort()
-	assert_eq(names, ["reshuffle_vulnerable_window_opened", "round_ended", "round_started"],
-		"EventBus carries exactly the three declared signals (3-5b AC 6 added the third)")
+	assert_eq(names, ["card_effect_countered", "card_effect_resolved", "reshuffle_vulnerable_window_opened",
+			"round_ended", "round_started"],
+		"EventBus carries exactly the five declared signals (3-5b AC 6 added the third, 7-6 D1 the fourth and fifth)")
 
 
 ## NARROWED BY STORY 3-5a, the owner this fence names — and it is now story 3-5a's OWN AC 12
@@ -562,6 +569,10 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	# Story 6-8: P2 `Numpad 5` lock, `Numpad 4`/`Numpad 6` camera left/right, `Numpad 1`/`Numpad 3`
 	# cycle left/right.
 	"p2_lock", "p2_camera_left", "p2_camera_right", "p2_cycle_left", "p2_cycle_right",
+	# Story 7-6 polish round 2 (operator ruling P12, 2026-10-06): `debug_toggle_instruments` (F3) JOINS the list --
+	# this story ships its consumer (`DebugInputReader.instruments_toggle_pressed`, read by the runner's step 0), on
+	# the same `3-0c/R11` discipline.
+	"debug_toggle_instruments",
 ]
 
 

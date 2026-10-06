@@ -69,10 +69,11 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == 5:
 		_framed_p1 = _is_framed(_p1_rig, _p1, _p2, "P1")
 		_framed_p2 = _is_framed(_p2_rig, _p2, _p1, "P2")
-		# The authored framing, on the CHILD, untouched by the root's new per-tick yaw.
+		# The authored framing, on the CHILD, untouched by the root's new per-tick yaw. 7-6 POLISH 2 (operator ruling
+		# P11, a NAMED change): the distance and height are scaled by the one `framing_scale` knob.
 		_framing_intact = _config != null \
-				and is_equal_approx(_p1_cam.position.z, _config.distance) \
-				and is_equal_approx(_p1_cam.position.y, _config.height) \
+				and is_equal_approx(_p1_cam.position.z, _config.distance * _config.framing_scale) \
+				and is_equal_approx(_p1_cam.position.y, _config.height * _config.framing_scale) \
 				and is_equal_approx(_p1_cam.rotation_degrees.x, _config.pitch_degrees)
 		_pitch_only = is_zero_approx(_p1_cam.rotation.y) and is_zero_approx(_p1_cam.rotation.z)
 		if not _framing_intact:

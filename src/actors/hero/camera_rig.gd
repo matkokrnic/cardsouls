@@ -68,7 +68,8 @@ func apply_config(config: CameraConfig) -> void:
 	if config == null:
 		push_warning("CameraRig: no camera config at %s — using neutral framing" % CONFIG_PATH)
 		return
-	_camera.position = Vector3(0.0, config.height, config.distance)
+	# 7-6 POLISH (P11): `framing_scale` is the one knob over the distance and height together.
+	_camera.position = Vector3(0.0, config.height, config.distance) * config.framing_scale
 	_camera.rotation_degrees = Vector3(config.pitch_degrees, 0.0, 0.0)
 	# Story 4-6a (AC 10): the yaw-chase rate rides in on the SAME authored resource and the SAME
 	# load-once path as the framing above. Clamped rather than trusted: this multiplies an angle

@@ -71,8 +71,10 @@ func _physics_process(_delta: float) -> bool:
 		var cam: Camera3D = _p1_rig.get_node("Camera3D")
 		_smoke_ok = (
 			config != null
-			and is_equal_approx(cam.position.z, config.distance)
-			and is_equal_approx(cam.position.y, config.height)
+			# 7-6 POLISH (P11, a NAMED change): the framing is scaled by the one `framing_scale` knob.
+			and is_equal_approx(cam.position.z, config.distance * config.framing_scale)
+			and is_equal_approx(cam.position.y, config.height * config.framing_scale)
+			and config.framing_scale > 0.0
 			and is_equal_approx(cam.rotation_degrees.x, config.pitch_degrees)
 		)
 		Input.action_press(&"p1_move_up")  # fixed forward intent, slot 0
