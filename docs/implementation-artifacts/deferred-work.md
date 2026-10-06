@@ -209,6 +209,10 @@
   entirely. OWNER: the next story that touches `src/ui/debug/debug_instrument_panel.gd`. Not urgent
   -- the machine check in `test_debug_instruments.gd` keeps the box provably clear of both HUDs and
   both StateInspectors at 1152x648, so this is ergonomics, not occlusion.
+  **DISCHARGED by `7-6-hud-and-card-presentation` (polish round 2, operator ruling P12, 2026-10-06):** the panel
+  is HIDDEN by default and toggled by F3 (`debug_toggle_instruments`, read through `DebugInputReader`). While it
+  is hidden the HUD may use its space; when shown it may overlay the HUD. `test_debug_instruments.gd` shows it
+  through F3 and now guards only the window and the StateInspectors.
 
 ## Deferred from: code review of 6-6a-defense-reactions (2026-09-17)
 
@@ -526,9 +530,10 @@ Owners in decision-log session "6-6b-color-counters close-out (Tier A)".
   assert HALTS the harness rather than failing an assertion. Making it testable needs a new `MatchState`
   predicate (the same shape the neighbouring AC 1a collision check used, `_mirrored_values_agree`) -- a
   new public surface, i.e. a SHAPE decision for the operator, not a HOW.
-- **AC 24a's cosmetic half** -- the "Boulder's own row cycles no mode" mode-cycle suppression on a Boulder
-  slot -> Tier B presentation story after `6-5f`. Behaviourally equivalent today: a covered slot can still
-  be toggled and is then refused at the commit with `REASON_COVERED_SLOT` through the ordinary channel.
+- ~~**AC 24a's cosmetic half** -- the "Boulder's own row cycles no mode" mode-cycle suppression on a Boulder
+  slot~~ -- DISCHARGED by `7-6-hud-and-card-presentation` (AC 21, dev pass 2026-10-05): a Boulder-covered
+  slot shows neither the armed nor the card-mode frame highlight (`HudRoot._apply_highlights`, pinned by
+  `test/integration/test_card_face.gd`); the `REASON_COVERED_SLOT` refusal at commit is unchanged.
 
 ## E6 residue (close-out 2026-10-01)
 
@@ -608,3 +613,39 @@ no file. Now split and keyed (`E6-C/R11`):
 - **P18**: update the existing `6-5b/R24` flake entry with the evidence -- a hero cue
   (`cue_hit.wav`) was named still playing at quit in a live test; `stop_all_sounds` covers only
   presenter sounds. Hypothesis, not a fix. Owner: E7 close-out.
+
+## Deferred from: code review of 7-6-hud-and-card-presentation (2026-10-05)
+
+Review artifact `C:\dev\_76-review.md`; fix pass in the same session.
+
+- **N6** Card highlight rings are tight: an armed ring (5 px outset) and a neighbour's mode ring (3 px) fill the
+  8 px card gap exactly, and an armed lifted card's ring reaches 1 px into the vitals column. Owner: 7-6 live
+  smoke item 2 (operator judgement), then E7 close-out.
+- **N8** A Boulder-covered slot shows no ARMED ring either, not only no mode ring (`HudRoot._apply_highlights`);
+  whether arming a Boulder slot should show selection feedback is a smoke judgement. Owner: 7-6 live smoke.
+  **DISCHARGED by operator ruling P17 (7-6 polish round 3, 2026-10-06):** a Boulder-covered slot arms exactly like
+  any other card -- lifted, with its frame gold, while armed.
+- **N11** `HudRoot._effect_color` colours a history entry by the FIRST card (sorted id) carrying the effect --
+  exact for Deck 1 (each effect on one card), alphabetical accident once a deck shares an effect across colours.
+  Owner: `7-5-deck-2`.
+
+## 7-6 close-out (2026-10-06)
+
+- **HUD scaling on smaller screens.** The HUD is native pixels (stretch disabled) and laid out for 960x1080 per half.
+  Owner: before any build goes to other machines.
+- **Telegraph shapes and tones are placeholders.** Replace the placeholder telegraph shapes and tones with subtler
+  cues integrated into the animations and effects. Owner: the manual sound pass and `7-2` animations. Until then
+  the shapes sit under F3 and the tones stay on (`7-6/P22`).
+
+### 7-6 architecture-amendment candidates (E7 close-out flush)
+
+For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NOT edited by 7-6.
+
+- **D1 relays:** two new `EventBus` signals (`card_effect_resolved`, `card_effect_countered`) and two new `:relay`
+  raw `_match_state.<signal>.connect` sites, pinned in `test_architecture_invariants.gd` (`:inline` count stays 2,
+  seam family stays ten).
+- **First `_process` under `src/`:** `OrbHalo` (`src/actors/hero/orb_halo.gd`); the F1 pin is `_physics_process`
+  only, and the HUD still has neither.
+- **`project.godot`:** the fullscreen start (`window/size/mode=3`) and the F3 `debug_toggle_instruments` action.
+- **Debug layer seat:** `MatchRunner.set_debug_layer_visible`, called by the F3 edge.
+- **HUD in native pixels:** stretch disabled, the layout is per-half pixel geometry.

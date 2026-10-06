@@ -12421,3 +12421,68 @@ Budget: start 2026-10-02 17:12:48, end 2026-10-04 13:22:10. Gross 44h09m22s. Gap
 2026-10-04 13:15:54 (21h05m36s, overnight). Gaps total 42h45m08s. Net 1h24m14s.
 
 LAYER-COMPLETION: Blind Hunter: complete (in-session, sequential, not context-isolated); Edge Case Hunter: complete; Acceptance Auditor: complete (AC 1-35 + operator checks 1-8); Triage: complete; Present: report-only (story file not edited, no fixes applied)
+
+## 2026-10-06 -- 7-6 close-out (Tier B)
+
+Operator rulings of 2026-10-05, carried as given:
+`7-6/R1` Card face: no words; two equal halves (normal top, pitch bottom with orb pips), empty keyword slot top-right, colour never covers a cost, Boulder grey.
+`7-6/R2` Art belongs to the effect, not the card; 15 game-icons.net placeholders credited in `assets/CREDITS.txt`.
+`7-6/R3` Affordability: the card lifts on its mana cost, the pitch cost brightens on its own, a pip is lit per held orb; card mode and the armed card become a frame highlight.
+`7-6/R4` Boulder shows its own art and clear cost over the faintly visible covered card; the mode-cycle tell is gone.
+`7-6/R5` The slot of the card just played flashes.
+`7-6/R6` History strip: the last ~5 resolved effects of both players, newest on top, opponent pops in and looks distinct, a countered entry is crossed out.
+`7-6/R7` World orbs float around each hero, one per orb in its colour, visible to both players; orb counts are now deliberately PUBLIC, superseding the `6-3` reasoning that hid them.
+`7-6/R8` HP never displays 0 while the hero is alive (display rounds up).
+`7-6/R9` No rule change: golden and `FORMAT_VERSION` unmoved, no new state field.
+
+Follow-up decisions of 2026-10-05:
+`7-6/D1` The history strip is fed by two new ownerless `EventBus` signals relayed off `card_cast_resolved` and `counterspell_resolved`; no new `connect_*` seam, two new `:relay` raw connects.
+`7-6/D2` How an icon attaches to an effect is the dev pass's choice (effect-keyed `EffectIconSet`, `data/presentation/effect_icons.tres`).
+`7-6/D3` Stays one story, the dev pass may span two sessions.
+`7-6/D4` Rocksling, Honed Bolt and Corpse Bomb get hand-authored SVGs; the game-icons.net versions stay as one-line data swaps.
+
+Code-review fix rulings (2026-10-05):
+`7-6/F1` Boulder clears never enter the strip, so a counter always strikes the reversed card.
+`7-6/F2` A pitch activation flashes the slot its card was staged from; a fizzle never flashes.
+`7-6/F3` Pip n of colour c is lit iff at least n orbs of c are held.
+`7-6/F4` The pitch zone shows the staged card's pitch-effect art, not the card id.
+`7-6/F5` The mana number is the floor, sharing `AFFORD_EPSILON` with the lift; HP keeps its R8 ceiling.
+`7-6/F6` Card-face geometry is checked on the live split-viewport tree (cost inside its panel, disjoint from pips and keyword slot).
+`7-6/F7` The halo is pinned for a decrease, a mid-round debug reset and a round restart.
+
+Polish rulings from the live smokes (2026-10-05/06):
+`7-6/P1` Cards 92x118 -> 128x158, solid cost badges, 13 px pips; vitals, pitch zones and history strip to the outer column (superseded in part by P9).
+`7-6/P2` Affordability is brightness per half: dimmed and desaturated versus full colour with a glowing rim.
+`7-6/P3` Card mode lifts the row 6 px, the armed card 24 px with a 4 px gold frame (superseded by P9, P14).
+`7-6/P4` The flash is 1.0 alpha with a glow, held 0.12 s, 0.7 s in total.
+`7-6/P5` Orbs are soft drifting wisps that follow with inertia, the first `_process` under `src/`.
+`7-6/P6` Honed Bolt's icon is a lightning bolt.
+`7-6/P7` Pips are always in full colour: held filled, missing a 3 px hollow ring.
+`7-6/P8` A permanent card-colour frame (superseded by P14).
+`7-6/P9` The hand is an arc (middle pair raised 48 px, vitals beneath, pitch zones beside, history strip back), laid out for 960x1080 per half; the HUD is native pixels (stretch disabled).
+`7-6/P10` Wisps 0.85 -> 0.5 m.
+`7-6/P11` `CameraConfig.framing_scale` 1.0 -> 0.5; lock-on framing holds.
+`7-6/P12` The debug panel is hidden by default and toggled by F3.
+`7-6/P13` The slot reel, behind the `EffectIconSet.slot_reel_enabled` knob.
+`7-6/P14` One 6 px card-colour frame, gold with a 4 px glow when armed; the separate Highlight node is gone.
+`7-6/P15` Pitch zones are card-sized (128x158) at anchors 0.25/0.75, bottom-aligned with the outer cards.
+`7-6/P16` Wisps are pushed out to a 0.42 m body radius every frame; the collision pin is unchanged.
+`7-6/P17` A covered slot arms like any card.
+`7-6/P18` Bars 18 -> 15 px with the number on a dark plate (plate superseded by P19).
+`7-6/P19` Each vitals number has no background, sits inside its bar at the right end, white bold with a 6 px dark outline.
+`7-6/P20` F3 is the one debug-layer toggle: panel, both StateInspectors and both orb counters; hidden by default.
+`7-6/P21` Every telegraph SHAPE and the cast-target cone move into the F3 debug layer (hidden by default); its sound half is superseded by P22.
+`7-6/P22` Every telegraph SOUND stays always on, layer shown or not; F3 hides only the shapes; the refusal sound is unchanged.
+
+Also recorded:
+`7-6/N1` Orb counts are public (R7 above); the `6-3` reasoning that hid them is superseded.
+`7-6/N2` P21 and P22 together: telegraph shapes sit under F3, telegraph tones stay on, until subtler cues exist (deferred-work).
+`7-6/N3` The `4-B1` "DebugInstrumentPanel ergonomics" deferral is discharged by P12, and the review's N8 (Boulder slot arming) by P17.
+`7-6/N4` Architecture-amendment candidates for the E7 close-out flush are queued in `deferred-work.md` ("7-6 architecture-amendment candidates"): D1's two EventBus signals and two `:relay` connects, the first `_process` under `src/` (OrbHalo), the fullscreen start and F3 action in `project.godot`, the debug layer seat `MatchRunner.set_debug_layer_visible`, HUD in native pixels. `game-architecture.md` untouched.
+`7-6/N5` Process bends disclosed: the integration half crossed the tool timeout once and the harness backgrounded it (no second run); the "46m39s dev pass" figure is not a budget figure (`E6-R/R2`).
+
+Numbers of record: golden `941958c52605abbcd1edf972e002543601325e5a9f98dfce569628c12f75871f` unmoved, `FORMAT_VERSION` 19 unmoved, per-player key set unmoved, `src/state/` untouched. Final suite (`C:\dev\_76-suite-final-state.txt`, `C:\dev\_76-suite-final-integ.txt`): state 1248/0/11839, integration 78/78, both exit 0.
+
+Budget: Tier B, no cap. Start 2026-10-05 15:43:27 (dev before-baseline), end 2026-10-06 21:17:35 (end of the final integration run). Gross 29h34m08s. Disclosed extra suite runs (Change Log): polish 2 state harness twice more after a pin failure, polish 3 integration run 1 failed (`test_card_tint_live`) and was re-run, the review-fix pass run, and one final run per later polish round.
+
+LAYER-COMPLETION: blind-hunter=COMPLETE (inline, sequential); edge-case-hunter=COMPLETE (inline, sequential, incl. out-of-repo probe); acceptance-auditor=COMPLETE (inline, incl. Dev Agent Record evidence audit); t1-performance-timing=COMPLETE (9 timed launches, 3 baseline pairs)
