@@ -638,6 +638,28 @@ func test_the_bolt_stun_interrupts_a_swing_a_block_and_a_chargeup() -> void:
 	assert_eq(charging.p2.charge_color, PlayerState.NO_TELEGRAPH_COLOR, "...and its colour")
 
 
+## Story 7-8 review fix: the bolt stun is the FIFTH way a `CHARGING` attack ends, and the abandoned attack's
+## hit-once memory (`PlayerState.charge_contact`, `7-8/R15`) rests with it -- the knockdown abandonment's
+## rule (OQ1). The victim here is mid-FLIGHT (chargeup closed, landing window running) with its own hit
+## already landed; without the clear the hashed key reads HIT on a hero that is no longer attacking.
+func test_the_bolt_stun_rests_an_abandoned_attacks_hit_once_memory() -> void:
+	var ms := _make_match()
+	_advance(ms, _cast_intent(ms, ID_BOLT), InputIntent.new())
+	_idle(ms, CAST_TICKS - 1)
+	ms.p2.hero.set_action_state(HeroState.ActionState.CHARGING)
+	ms.p2.charge_window.start(0)
+	ms.p2.landing_window.start(LONG)
+	ms.p2.charge_color = Enums.CardColor.RED
+	ms.p2.charge_contact = PlayerState.CHARGE_CONTACT_HIT
+	_idle(ms, 1)
+	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED,
+		"sanity: the bolt stun abandoned the in-flight attack")
+	assert_eq(ms.p2.charge_contact, PlayerState.CHARGE_CONTACT_NONE,
+		"...and its hit-once memory rests with it, as at the knockdown abandonment (7-8 OQ1)")
+	assert_eq(int(ms.to_snapshot()["p2"]["charge_contact"]), 0,
+		"...so the hashed key reads its rest value on a hero that is no longer attacking")
+
+
 ## AC 15: the bolt stun is NOT a knockdown -- it opens no get-up i-frames and is classified
 ## ORDINARY by the duration classifier, which only holds because the authored `stun_seconds` stays
 ## strictly below the authored knockdown (enforced by the authoring audit below).

@@ -249,8 +249,9 @@ var landing_window: TimingWindow
 ##
 ## A HASHED PER-PLAYER KEY (`7-8/R15`), classified `HASHED` in `test_replay_identity.gd`: it is state
 ## the tick PRODUCES and it crosses ticks deciding an outcome (`4-3a/R17`'s test). Rest value
-## `CHARGE_CONTACT_NONE` (0). Cleared at the cast seat, at the landing exit, when a knockdown abandons
-## the attack, and in `_reset_player` -- every way a `CHARGING` attack starts or ends -- so it reads 0
+## `CHARGE_CONTACT_NONE` (0). Cleared at the cast seat, at the landing exit, when a knockdown or a bolt
+## stun abandons the attack, and in `_reset_player` -- every way a `CHARGING` attack starts or ends (the
+## colour counter's teardown needs no clear: it is judged only while the key is at rest) -- so it reads 0
 ## whenever no attack is in flight.
 const CHARGE_CONTACT_NONE := 0
 const CHARGE_CONTACT_TOUCHED := 1

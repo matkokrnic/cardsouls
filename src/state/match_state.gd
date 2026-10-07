@@ -6626,6 +6626,9 @@ func _apply_bolt_landing(target: PlayerState, effect: CardEffect) -> void:
 		target.charge_window.start(0)
 		target.landing_window.start(0)
 		target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+		# Story 7-8 review fix: the abandoned attack's hit-once memory rests with it, the knockdown
+		# abandonment's rule (OQ1) -- the bolt is the fifth way a `CHARGING` attack ends.
+		target.charge_contact = PlayerState.CHARGE_CONTACT_NONE
 	target.arm_root(stun_ticks + TimingWindow.seconds_to_ticks(effect.root_seconds),
 			effect.root_blocks_run, effect.root_blocks_roll)
 
