@@ -4,7 +4,7 @@ baseline_commit: 73907e9aa526291e103bf24a14ac266a2150e3a3
 
 # Story 7.8: Unblockable honest contact
 
-Status: ready-for-dev
+Status: review
 
 Tier **A** (touches `src/state/`: the landing seat, the dodge rule and the CHARGING arm). Authored 2026-10-07 against
 HEAD == origin/main == `73907e9`, tree clean, suite 1248 tests / 0 failed / 11839 assertions + integration green
@@ -330,15 +330,15 @@ Per the CLAUDE.md autonomy rule these are the operator's to confirm because they
 
 ## Tasks
 
-- [ ] T1 (AC 1-6, 10) Resolve the unblockable on the first counted touch tick in the one existing seat; spend once via the
+- [x] T1 (AC 1-6, 10) Resolve the unblockable on the first counted touch tick in the one existing seat; spend once via the
   new hashed key; retire the arc (exports, `.tres`, `unblockable_arc_degrees_for`, `_is_in_charge_arc`, the seat gate,
   `_charge_contact_dirs` and its classification entry); keep the flight (OQ1, OQ2, OQ4).
-- [ ] T2 (AC 7-9) Replace the landing-tick dodge rule with the touch-tick rule, latch as this tick's fact; retire the
+- [x] T2 (AC 7-9) Replace the landing-tick dodge rule with the touch-tick rule, latch as this tick's fact; retire the
   multiplier (OQ5, OQ6).
-- [ ] T3 (AC 11-12) Hero hit shape: measure first, then the bone-following hit shape; re-pin `test_vertical_alignment.gd`,
+- [x] T3 (AC 11-12) Hero hit shape: measure first, then the bone-following hit shape; re-pin `test_vertical_alignment.gd`,
   `test_honest_hit_geometry_live.gd`; live proof in idle and mid-roll (OQ3).
-- [ ] T4 (AC 13-16) Re-tempo charge-up, GREEN crouch lead and blends as authored knobs; measure before and after (OQ7).
-- [ ] T5 (AC 17-18) Run every file in M6 first, list each moved test, replace with its new behaviour test, mutation-prove the
+- [x] T4 (AC 13-16) Re-tempo charge-up, GREEN crouch lead and blends as authored knobs; measure before and after (OQ7).
+- [x] T5 (AC 17-18) Run every file in M6 first, list each moved test, replace with its new behaviour test, mutation-prove the
   new guards, measure the golden in both directions (key removed reproduces `941958c5...`), re-baseline once, commit proofs
   under `test/`. FORMAT_VERSION 19 -> 20: new header paragraph in `record_file.gd`, both pins in `test_record_file.gd`
   (`:234`, `:1366`), and a v19 refusal fixture on the `test_a_v18_record_is_refused_with_a_reason` (`:900`) precedent.
@@ -362,10 +362,249 @@ Per the CLAUDE.md autonomy rule these are the operator's to confirm because they
 ## Dev Agent Record
 
 ### Agent Model Used
-Sonnet 5.5 (story authoring only)
+Sonnet 5.5 (story authoring only); dev pass: Opus 5.5 (2026-10-07).
+
+### Debug Log
+
+**T0 before-baseline** (before the first edit, no stash): state 1248 tests / 0 failed / 11839 assertions, RESULT PASS;
+integration 78 files, all PASS (`C:\dev\_78-suite-before-state.txt`, `C:\dev\_78-suite-before-int.txt`).
+
+**T3a MEASURED FIRST (D2, R9)** -- recorded here before any hit-shape dimension was chosen. Tool:
+`tools/measure_torso_envelope.gd` (headless, CPU-skinned vertices: per bind FK bone pose x Skin bind pose, weight-blended;
+9835 vertices; a vertex is TRUNK when its dominant bone is Hips/Spine/Spine1/Spine2/Neck/Head; legs and arms reported
+apart). Model frame: feet y 0, +z facing; skeleton->model transform measured identity. 25 phases per clip. Raw output
+`C:\dev\_78-torso.txt`.
+
+Absolute trunk extents (model frame, union over the clip), width = x span, depth = z span:
+
+| clip | trunk x | trunk y | trunk z | per-phase width / depth range |
+|---|---|---|---|---|
+| idle | [-0.249, 0.174] | [0.735, 1.570] | [-0.186, 0.270] | 0.414-0.419 / 0.444-0.450 |
+| block | [-0.251, 0.171] | [0.608, 1.426] | [-0.179, 0.329] | 0.414-0.419 / 0.500-0.504 |
+| attack | [-0.276, 0.479] | [0.567, 1.564] | [-0.190, 0.892] | 0.390-0.641 / 0.422-0.650 |
+| roll | [-0.646, 0.199] | [-0.130, 1.650] | [-0.496, 0.751] | 0.393-0.805 / 0.386-0.865 |
+| jump_attack | [-0.461, 0.235] | [0.443, 2.649] | [-0.510, 0.657] | 0.390-0.636 / 0.371-0.800 |
+
+So the standing torso is ~0.42 wide x ~0.45-0.50 deep (half-width ~0.21-0.25, half-depth ~0.22-0.33 around its own
+centre), against the 1 x 1 footprint of the old box.
+
+Relative to each candidate tracking bone (the shape follows a bone by POSITION only): trunk RADIAL max = largest planar
+distance of a trunk vertex from the bone; trunk y and feet y relative to the bone:
+
+| bone | idle | block | attack | roll | jump_attack | trunk y rel (all clips) | feet y rel (idle) |
+|---|---|---|---|---|---|---|---|
+| Hips | 0.268 | 0.338 | 0.592 | 0.758 | 0.660 | [-0.533, 0.763] | -0.817 |
+| Spine | 0.262 | 0.329 | 0.547 | 0.658 | 0.619 | [-0.458, 0.657] | -0.923 |
+| Spine1 | 0.247 | 0.297 | 0.458 | 0.541 | 0.535 | [-0.372, 0.535] | -1.044 |
+| Spine2 | 0.237 | 0.277 | 0.422 | 0.489 | 0.412 | [-0.483, 0.443] | -1.183 |
+
+Roll excursion: the Hips joint stays at the root planar origin (|x|,|z| <= 0.002) for the whole clip while the TRUNK
+leaves it: trunk centroid at t=0.250 is (-0.421, 0.061, -0.213) (lying on the ground, beside and behind the root),
+t=0.271 (-0.353, 0.253, -0.300); Spine2 there sits at (-0.278, 0.009, -0.140) / (-0.233, 0.143, -0.281), i.e. it travels
+WITH the trunk while the hips do not. Trunk y drops to [-0.130, 0.309] at t=0.250. jump_attack carries its jump in the
+clip: Hips y rises 0.81 -> 1.955 (t=1.222), trunk y up to 2.649.
+
+**T4 AC 14 bound, FIXED BEFORE MEASURING:** GREEN must cover **>= 0.60** of its launch travel (the
+`_charge_launch_velocity` front-loaded shares, summed over the launch ticks whose mapped playhead has not yet passed
+the clip apex) before the mapped apex time. 0.60 sits below the ~2/3 target so the knob keeps tuning room.
+Measured value recorded in the T4 knob table below.
+
+**T3b hit shape CHOSEN FROM THE NUMBERS ABOVE:** a `CylinderShape3D` (`CylinderShape3D_hurt`), radius **0.30**, height
+**1.65**, its centre `HURTBOX_DROP` = **0.375** below `mixamorig_Spine2`, moved by POSITION every tick
+(`HeroActor._track_trunk_bone`, the `_track_weapon_bone` precedent). Why: Spine2 has the smallest radial trunk excursion in
+block / attack / roll / jump_attack and travels with the trunk through the roll; a cylinder is yaw-invariant, so the
+`Hurtbox` node is never rotated and there is no second rotation source (1-7b). 0.30 covers the standing trunk (radial max
+0.237 idle, 0.277 block); the top (+0.45) covers the head (max +0.443 above Spine2 in any clip) and the bottom (-1.20) the
+feet (-1.183 in idle). ACCEPTED, measured residue: in attack / roll / jump_attack the trunk's outer edge reaches 0.41-0.49
+from Spine2, so up to ~0.19 m of extreme-pose trunk surface lies outside the cylinder; the body `Collision` keeps
+`BoxShape3D_qp0e8` (AC 12). Live AC 11 proof (`test_hero_hit_shape_live.gd`): 10 idle + 5-7 mid-roll real frames, the shape
+within 0.01 m of the trunk bone (body-relative, against the pose it was computed from -- mid-roll the trunk moves ~0.2 m per
+rendered frame, so a same-frame comparison measures the standing `_track_weapon_bone` sub-frame lag, not the tracking), a
+probe on the torso overlaps the hurtbox, and a probe inside the old box (proved by overlapping the body box) 0.64 m off the
+trunk axis does not.
+
+**T1/T2 state (OQ1/OQ2/OQ4/OQ5/OQ6):** the ONE seat is `_resolve_charge_contact` (renamed from `_resolve_charge_landing`),
+called from the CHARGING arm on every committed tick whose fact is `INSIDE` until the hit-once key reads HIT; it writes no
+action state. The landing exit (`landing_window` stopped) writes the one `IDLE` and rests the key. New hashed per-player key
+`charge_contact` (`PlayerState.charge_contact`, small int: 0 NONE / 1 TOUCHED / 2 HIT), rest 0, cleared at the cast seat,
+the landing exit, the knockdown abandonment (victim side, `_apply_landing_packages`) and `_reset_player`. A dropped touch
+(`_iframe_open_at_step3` open, the predicate UNEDITED, `_gets_up_this_tick` UNEDITED) writes TOUCHED and returns; a counted
+touch writes HIT, owes the 6b package and grants the orb at the seat. `push_contact`'s charge-reach arm is now
+`_charge_reach[slot] = kind if window open else REACH_UNKNOWN` (this tick's fact, R10). Counter (R13, AC 10): judged while
+`charge_contact == NONE`, and on non-commit ticks not on a tick whose fact is `INSIDE` (commit tick: counter beats a
+same-tick touch, as before). Arc retired: three exports + `.tres` lines, `unblockable_arc_degrees_for`, `_is_in_charge_arc`,
+the seat conjunct, `_charge_contact_dirs` + its replay-identity entry (UNHASHED members stay 4). Multiplier retired: export,
+`.tres` line, the dodged branch. Implementation additions: the CHARGING arm also requires `not charge_window.is_running`
+before offering a touch (defence in depth; `push_contact` already writes INSIDE only inside the window); the key is also
+cleared at the knockdown abandonment so it rests at 0 whenever no attack flies (OQ1 named three clears; a fourth keeps the
+rest value honest). AC 18 regression: counters, melee, block, deflect, roll and the ladder unchanged apart from AC 11 --
+all 6-6a/6-6b files green unchanged.
+
+**Golden (R15, both directions MEASURED):** with the new key present the hash is `1b1478ac310f...0e98` (two separate runs,
+identical); with the key erased from `PlayerState.to_snapshot()` and every other 7-8 change in place, `941958c5...` is
+reproduced exactly (the old literal passed). Restore by copy-back from `scratchpad/bak_player_state.gd`, SHA256
+`ce9711c4...f954` before and after. ONE re-baseline: `941958c5...` -> `1b1478ac...`. No other movement. Key set 45 -> 46.
+
+**FORMAT_VERSION** 19 -> 20 (R12): header paragraph in `record_file.gd`, both `test_record_file.gd` pins, new
+`test_a_v19_record_is_refused_with_a_reason` on the v18 precedent. Moved tests were reversed BEFORE the bump (the golden
+re-baseline ran with the version still at 19).
+
+**T4 knob table (every feel number authored or moved; all presentation constants or `.tres`, AC 16):**
+
+| knob | where | before | after |
+|---|---|---|---|
+| `unblockable_swing_at_commit` | `balance_config.tres` | false | **true** |
+| RED `hold_start` / `hold_end` / `hold_fraction` | `_CHARGE_HOLD_KNOBS` | 0.30 / 0.45 / 0.15 | **0.15** / 0.45 / 0.15 |
+| BLUE `hold_start` / `hold_end` / `hold_fraction` | `_CHARGE_HOLD_KNOBS` | 0.40 / 0.55 / 0.17 | **0.18** / 0.55 / 0.17 |
+| GREEN `hold_start` / `hold_end` / `hold_fraction` | `_CHARGE_HOLD_KNOBS` | 0.40 / 0.55 / 0.5744 (apex) | **0.18** / 0.55 / **0.3559** (crouch) |
+| GREEN `crouch_lead` (new) | `_CHARGE_HOLD_KNOBS` | -- | **0.42** |
+| `JUMP_ATTACK_CROUCH_SECONDS` (clip fact) | `animation_controller.gd` | -- | 0.7667 (measured, hips min 0.5605) |
+| `JUMP_ATTACK_APEX_SECONDS` (clip fact) | `animation_controller.gd` | -- | 1.2375 (6-1b measurement; 120 Hz hips scan peaks 1.2333) |
+| `CHARGE_ENTRY_BLEND_SECONDS` (new) | `animation_controller.gd` | instant cut | 0.15 |
+| `CHARGE_EXIT_BLEND_SECONDS` (new) | `animation_controller.gd` | instant cut | 0.2 |
+| `CylinderShape3D_hurt` radius / height | `hero.tscn` | (box 1 x 2 x 1) | 0.30 / 1.65 |
+| `HURTBOX_DROP` | `hero.gd` | -- | 0.375 |
+
+Measured before/after: AC 14 GREEN launch travel before the mapped apex (authored C=60, L=27): **0.6914** with the new knobs
+(bound 0.60 fixed beforehand); **0.0727** with the pre-7-8 GREEN knobs under the ON remap (M6, measured); under the
+shipped pre-7-8 state (knob OFF, commit progress 0.69 > hold_end 0.55, playhead already past the apex at the commit) it is
+0 -- DERIVED from the mapping, not run. AC 13: on the commit tick the shipped mapping puts each blade at
+or before its held pose (RED 0.127 s, BLUE 0.154 s, GREEN 0.767 s); with the knob OFF (M7) at 0.584 / 0.521 / 1.115 s, i.e.
+the sweep 6-1c measured as ~64 / 49 / 31 % spent by the commit.
+
+**Mutation table (provenance MEASURED; each file copied to `scratchpad/mut_bak/` first, restored by copy-back, SHA256
+verified both ways -- every restore printed MATCH; only the affected test file run, never the suite):**
+
+| # | mutation | file(s) | run | result |
+|---|---|---|---|---|
+| M1 | hit-once key: drop `charge_contact != HIT` from the CHARGING arm | match_state.gd | `-- honest_contact` | RED: `test_an_unblockable_hits_at_most_once` (10 `hit_landed`, hp 0.0, 9 orbs), `..._first_closed_tick_hits` |
+| M2 | i-frame drop: delete the `_iframe_open_at_step3` early return | match_state.gd | `-- honest_contact` | RED: 4 tests incl. `..._first_closed_tick_hits`, `..._iframe_touch_then_clear_is_a_miss` |
+| M3 | latch absorbing again (6-1d `INSIDE` kept within the window) | match_state.gd | `-- honest_contact` | RED: `test_an_iframe_touch_then_clear_is_a_miss` (both slots hit 90.0, 1 `hit_landed`, 2 orbs) |
+| M4 | counter span not closed by a dropped touch (no TOUCHED write) | match_state.gd | `-- honest_contact` | RED: `test_a_dropped_touch_closes_the_counter_span` (attacker STUNNED by a counter after the touch) + 2 key tests |
+| M5 | hit shape reverted to the body box (scene) and tracking off (actor) | hero.tscn, hero.gd | `test_hero_hit_shape_live.gd` | RED: 51 failures, incl. "a probe inside the old 1x2x1 box but 0.64 m off the trunk axis overlaps the hurtbox (AC 11)" |
+| M6 | GREEN knobs back to pre-7-8 (apex hold, no crouch lead) | animation_controller.gd | `-- charge_playhead` | RED: AC 14 travel 0.0727 < 0.60; held pose 1.2374 s after the crouch |
+| M7 | `unblockable_swing_at_commit = false` | balance_config.tres | `-- balance_authoring` | RED: AC 13, all three colours past their held pose on the commit tick |
+
+**Moved tests (each named with the AC that replaces it):**
+- `test_unblockable_tracking_and_reach.gd`: RETIRED `test_a_defender_who_leaves_the_frozen_line_after_the_commit_is_missed`,
+  `test_each_colour_judges_its_own_arc_against_the_committed_direction`,
+  `test_a_narrow_arc_judges_the_bearing_at_contact_so_a_strafe_after_the_touch_is_hit`,
+  `test_a_narrow_arc_judges_the_bearing_at_contact_so_drifting_in_after_the_touch_is_missed`,
+  `test_an_in_arc_touch_on_the_commit_tick_survives_later_out_of_arc_touches`, `test_any_in_arc_touch_during_the_flight_is_a_hit`,
+  `test_a_flight_touched_only_out_of_arc_still_misses` -> NEW `test_a_counted_touch_hits_whatever_the_attackers_facing` (AC 6,
+  R8); RENAMED `test_the_arc_never_widens_an_outside_kind` -> `test_an_outside_fact_on_every_tick_never_lands` (AC 5);
+  `test_launch_progress_is_below_one_until_the_landing_tick_and_one_exactly_on_it` touches on the landing tick only, "no damage
+  before the landing" -> "no touch, no damage" (AC 1); `test_a_hero_killed_mid_launch_takes_the_round_over_freeze` and
+  `test_a_forced_dead_hero_mid_launch_takes_the_dead_carve_out` touch nothing at the commit / death tick (AC 1: a commit touch
+  now hits there); RENAMED `test_the_debug_reset_clears_the_contact_verdict_and_its_bearing` ->
+  `test_the_debug_reset_clears_the_contact_fact` (R8 bearing retired); comment/message only:
+  `test_a_defender_who_enters_the_frozen_line_after_the_commit_is_hit`,
+  `test_a_defender_touched_on_one_launch_tick_is_hit_even_after_it_clears_the_blade`,
+  `test_a_one_tick_chargeup_does_not_inherit_the_previous_attacks_verdict` (R10).
+- `test_unblockable_defense.gd`: RENAMED `test_an_open_iframe_dodges_the_landing_silently_at_the_shipped_multiplier` ->
+  `test_a_touch_during_open_iframes_does_nothing_at_all` (AC 7); RETIRED `test_a_retuned_dodge_multiplier_emits_at_the_surviving_magnitude`
+  and `test_the_dodged_unblockable_seat_runs_through_the_damage_funnel` (AC 9, R11);
+  `test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend` asserts the abandoned key rests instead of the
+  retired bearing (OQ1); comment only `test_a_counter_outranks_an_open_iframe`, `test_a_dodge_stuns_nobody`.
+- `test_balance_authoring.gd`: arc bound removed from `test_authored_unblockable_values_are_positive` (R8); RETIRED
+  `test_authored_dodge_multiplier_is_bounded_above` (R11); REPLACED `test_the_swing_at_commit_knob_is_authored_off` ->
+  `test_the_shipped_mapping_starts_each_sweep_at_or_after_the_commit` (AC 13).
+- `test_data_resources.gd`: `E1_BALANCE_FIELDS` loses the three arc fields and the multiplier (R8, R11).
+- `test_replay_identity.gd`: `_charge_contact_dirs` leaves the UNHASHED list, `player_state.charge_contact` joins HASHED (R15);
+  FORMAT_VERSION pins 19 -> 20 in `test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash`,
+  `..._counterspell_run_...`, `..._timed_and_in_flight_run_...` (R12; NOT in the story's M6 list -- see dev-pass deviation DP2).
+- `test_card_observation.gd` `test_the_observation_channel_adds_no_snapshot_key` and `test_draw_delay_and_reshuffle.gd`
+  `EXPECTED_PLAYER_SNAPSHOT_KEYS`: 45 -> 46, `charge_contact` (R15; the second file is the first's twin pin, not in M6).
+- `test_determinism.gd` `test_state_matches_golden`: GOLDEN re-baselined (R15); comment-only edits.
+- `test_record_file.gd`: `test_the_format_version_and_the_widened_contact_row_move_together`,
+  `test_the_contents_validation_bumped_no_version_and_widened_no_required_key` pin 20; NEW `test_a_v19_record_is_refused_with_a_reason` (AC 17).
+- `test_charge_playhead_mapping.gd`: `_playhead` reads `charge_playhead_for` (GREEN knee); NEW
+  `test_with_swing_at_commit_the_sweep_starts_at_or_after_the_commit` (AC 13), `test_green_covers_most_of_its_launch_travel_before_the_apex`
+  (AC 14), `test_greens_held_pose_is_grounded_before_take_off` (AC 14), `test_the_two_cross_faded_charge_edges_blend` (AC 15).
+- Integration: `test_vertical_alignment.gd` pin (6) second half superseded ("mirrors the body box" -> never shares the body's
+  shape; `_span` reads a cylinder), first half kept as AC 12's proof; `test_honest_hit_geometry_live.gd` -- frozen placement
+  re-derived (defender's hit-shape centre on the blade, AC 11), `charge` layout re-derived (defender parked on the blade with
+  body pass-through: the re-tempo holds BLUE's pull-back away from an adjacent defender, AC 13), `flee` threshold 3 -> 2 (exact
+  minimum under the one-tick lag; RED's swipe now reaches the body late), `BODY` comment re-derived (body collision, AC 12),
+  NEW live AC 1 check in `touch` (damage already in on the first INSIDE tick, mid-flight); `test_unblockable_reach_live.gd` --
+  arc read removed (R8), `_expected_playhead` composes the remap (AC 13); `test_charge_playhead_live.gd` -- expected playhead via
+  `charge_playhead_for` (AC 14).
+- NOT moved, as predicted: `test_unblockable_initiation.gd` (incl. `:544/562` CHARGING telegraph), `test_click_to_commit.gd`,
+  `test_orbs_economy.gd`, `test_hero_cast.gd`, `test_action_state.gd`, `test_pitch_*`, and every other integration file in M6
+  (`test_arena_edge_live.gd` unchanged and green with `BoxShape3D_qp0e8` on the body).
+
+**New files:** `test/state/test_unblockable_honest_contact.gd` (9 tests: AC 1/4, AC 3, AC 7, AC 8 both halves, AC 9, AC 10
+both halves, the key, R16), `test/integration/test_hero_hit_shape_live.gd` (AC 11/12 live), `tools/measure_torso_envelope.gd`
+(the T3a instrument). Headless editor scan generated the three `.uid` files; `project.godot` SHA256 `0d0d3ccf...0c68` identical
+before and after; no other collateral. `git diff -- project.godot` empty.
+
+**Suite runs (three; the third NAMED):** run 1 before-baseline 1248 / 0 / 11839 + 78 integration PASS. Run 2 (the final run as
+planned): state 1254 / 3 failed -- three FORMAT_VERSION pins in `test_replay_identity.gd` not listed in M6 -- integration 79/79
+PASS (`C:\dev\_78-suite-run2-state.txt` / `-int.txt`). Run 3, EXTRA, reason: run 2's state half red on those three pins, fixed
+(test-only edit): **1254 / 0 / 12462**, integration **79 / 79 PASS** (`C:\dev\_78-suite-after-state.txt` / `-int.txt`).
+Budget interval: before-state file 2026-10-07 23:29:17 -> after-int file 2026-10-08 00:25:23 (56 min between the recorded
+suite files; no gap > 2 h).
+
+### Dev-pass deviations
+
+- **DP1** The skill's step-4 board write (`in-progress`) and step-9 write (`review`) were not made: board statuses are locked to
+  backlog / ready-for-dev / done (CFG/R2) and `on_complete` restores `ready-for-dev` anyway; the net board effect is identical.
+- **DP2** Three FORMAT_VERSION pins in `test_replay_identity.gd` and the snapshot-key twin pin in
+  `test_draw_delay_and_reshuffle.gd` were not in the story's M6 list; found by the suite and moved. The replay pins cost a third
+  full run (named above).
+- **DP3** A scratch measurement of `jump_attack`'s crouch frame ran from the scratchpad (not committed); its numbers are in the
+  knob table.
+- **DP4** T6 (Live Smoke + close-out rulings into the decision-log) is the operator's: left unchecked, Live Smoke boxes untouched.
 
 ### Completion Notes List
+
+- T1-T5 implemented and green; T6 is the operator's Live Smoke and close-out.
+- AC 1-10, 12, 17, 18 machine-proven headless (and AC 1/AC 11 live); AC 11 live in idle and mid-roll; AC 13 [M], AC 14 [M],
+  AC 15 (optional structural half) proven; AC 13/14/15 [S] and Live Smoke items 1-9 await the operator; AC 16 is the knob
+  table above.
+- Golden `941958c5...` -> `1b1478ac...` for exactly one cause, measured both directions. FORMAT_VERSION 20.
+
 ### File List
+
+Modified:
+- `data/balance/balance_config.tres`
+- `src/actors/hero/animation_controller.gd`
+- `src/actors/hero/hero.gd`
+- `src/actors/hero/hero.tscn`
+- `src/main/match_runner.gd` (comments only)
+- `src/state/hero_state.gd` (comments only)
+- `src/state/match_state.gd`
+- `src/state/player_state.gd`
+- `src/state/resources/balance_config.gd`
+- `src/systems/record_file.gd`
+- `test/integration/test_charge_playhead_live.gd`
+- `test/integration/test_honest_hit_geometry_live.gd`
+- `test/integration/test_unblockable_reach_live.gd`
+- `test/integration/test_vertical_alignment.gd`
+- `test/state/test_balance_authoring.gd`
+- `test/state/test_card_observation.gd`
+- `test/state/test_charge_playhead_mapping.gd`
+- `test/state/test_data_resources.gd`
+- `test/state/test_determinism.gd`
+- `test/state/test_draw_delay_and_reshuffle.gd`
+- `test/state/test_record_file.gd`
+- `test/state/test_replay_identity.gd`
+- `test/state/test_unblockable_defense.gd`
+- `test/state/test_unblockable_tracking_and_reach.gd`
+- `docs/implementation-artifacts/7-8-unblockable-honest-contact.md`
+- `docs/implementation-artifacts/sprint-status.yaml`
+
+Added:
+- `test/state/test_unblockable_honest_contact.gd` (+ `.uid`)
+- `test/integration/test_hero_hit_shape_live.gd` (+ `.uid`)
+- `tools/measure_torso_envelope.gd` (+ `.uid`)
+
+### Change Log
+
+- 2026-10-08 Dev pass (Opus 5.5): unblockable resolves on the first counted touch (hashed `charge_contact` key, per-tick
+  contact fact, touch-tick dodge, counter span to the first touch); colour arc and dodged-damage multiplier retired; hero hit
+  shape is a trunk-following cylinder, body keeps its box; Genichiro re-tempo (swing-at-commit ON, GREEN crouch lead, two
+  blended edges); golden `941958c5` -> `1b1478ac`; FORMAT_VERSION 19 -> 20. Status -> review.
 
 ## DEVIATIONS
 
