@@ -18,6 +18,13 @@ extends CharacterBody3D
 ## and is overwritten on the first drive() call — see that node's editor_description.
 @onready var hitbox_shape: CollisionShape3D = $Hitbox/HitboxShape
 
+## Story 7-8 (AC 11, `7-8/R9`): the HERO HIT SHAPE -- the `Hurtbox` area and its own shape, MOVED every
+## tick onto the paladin's trunk bone by `_track_trunk_bone()`. Every hit consumer (melee, the unblockable
+## blade, minion swings, projectiles) reads this area, so the volume a hit has to reach is the visible
+## trunk rather than the 1 x 2 x 1 body box, which stays the BODY collision only (AC 12).
+@onready var hurtbox: Area3D = $Hurtbox
+@onready var hurtbox_shape: CollisionShape3D = $Hurtbox/HurtboxShape
+
 ## Story 5-0a (AC 3): the paladin's skeleton, read ONLY to locate the sword bone. A presentation
 ## node reading a presentation node; no state is written from it and it is never handed to the
 ## state layer.
@@ -45,6 +52,21 @@ const SWORD_BONE := &"mixamorig_Sword_joint"
 ## Resolved once in _ready. -1 means the rig changed under us; _track_weapon_bone() then leaves
 ## the shape where the scene authored it rather than moving it somewhere wrong.
 var _sword_bone: int = -1
+
+## Story 7-8 (AC 11, `7-8/R9`): the TRUNK bone the hit shape follows. `mixamorig_Spine2` (the chest) was
+## chosen from the measured skinned-vertex envelope (`tools/measure_torso_envelope.gd`): of the four trunk
+## candidates it has the smallest radial trunk excursion in block, attack, roll and jump_attack, and it
+## travels WITH the trunk through the roll's sideways excursion while the hips joint stays put.
+const TRUNK_BONE := &"mixamorig_Spine2"
+
+## Story 7-8 (AC 11/AC 16): how far BELOW the trunk bone the hit shape's centre sits -- a presentation
+## constant, measured with the shape's dimensions in `hero.tscn` (`CylinderShape3D_hurt`). The shape spans
+## 0.45 above the bone (the head top, measured at most 0.443 above Spine2 in any clip) to 1.20 below it
+## (the feet, 1.18 below in idle), so its 1.65 height is centred 0.375 below the bone.
+const HURTBOX_DROP := 0.375
+
+## Resolved once in _ready, `_sword_bone`'s shape. -1 leaves the hit shape where the scene authored it.
+var _trunk_bone: int = -1
 
 
 ## Story 6-6b POST-SMOKE (R-S1): PASS THROUGH ANOTHER HERO'S BODY, or stop doing so. Set for the
@@ -79,6 +101,10 @@ func _ready() -> void:
 	if _sword_bone < 0:
 		push_error("HeroActor: rig has no bone '%s' — the melee hitbox " % SWORD_BONE
 			+ "cannot follow the weapon and stays at its authored offset")
+	_trunk_bone = skeleton.find_bone(TRUNK_BONE)
+	if _trunk_bone < 0:
+		push_error("HeroActor: rig has no bone '%s' — the hit shape " % TRUNK_BONE
+			+ "cannot follow the trunk and stays at its authored offset")
 
 
 ## `walk_speed`/`run_speed` (story 6-7b, AC 4): the AUTHORED gait pair, read inline off the applied
@@ -102,6 +128,9 @@ func drive(hero_state: HeroState, _delta: float, walk_speed: float, run_speed: f
 	# Mesh (1-7b contract). Sequenced after the yaw assignment because it reads the Hitbox's
 	# global transform, which that assignment has just settled.
 	_track_weapon_bone()
+	# Story 7-8 (AC 11): the HIT SHAPE follows the trunk the same way, POSITION ONLY. The `Hurtbox` node is
+	# never rotated and its cylinder is yaw-invariant, so `yaw` above stays the single rotation source.
+	_track_trunk_bone()
 	# Story 3-0a (3-0a/R2), WIDENED BY 5-0a (AC 2): PUSH the per-tick locomotion payload to the
 	# rig's animation controller on this same call. 3-0a pushed a scalar SPEED, which can only
 	# split `run` from `idle`; since 4-6 pinned facing to the locked target, a hero strafing or
@@ -141,6 +170,18 @@ func _track_weapon_bone() -> void:
 		return
 	var bone_world: Vector3 = skeleton.global_transform * _bone_pose_global(_sword_bone).origin
 	hitbox_shape.position = hitbox.to_local(bone_world)
+
+
+## Story 7-8 (AC 11, `7-8/R9`): moves the hero HIT SHAPE onto the trunk bone's live animated position,
+## the `_track_weapon_bone` precedent verbatim -- forward kinematics (never the cached global pose), the
+## shape's ORIGIN only, expressed in the `Hurtbox` node's own frame, with the same sub-frame lag stated
+## there. The shape is a CYLINDER, so it needs no rotation to fit a hero facing any way: nothing about the
+## hero's rotation is derived or written here (1-7b single-yaw-source contract).
+func _track_trunk_bone() -> void:
+	if _trunk_bone < 0:
+		return
+	var bone_world: Vector3 = skeleton.global_transform * _bone_pose_global(_trunk_bone).origin
+	hurtbox_shape.position = hurtbox.to_local(bone_world) + Vector3(0.0, -HURTBOX_DROP, 0.0)
 
 
 ## Composes bone-local poses up the parent chain, skeleton-relative. get_bone_pose() is the

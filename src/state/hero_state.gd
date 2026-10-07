@@ -43,7 +43,7 @@ enum ActionState { IDLE, ATTACKING, BLOCKING, ROLLING, STUNNED, CHARGING, DEAD }
 ## that story's record; test_action_state.gd pins the count at three now.
 ## OPEN decision (a) (attacker consequence on deflect, decision-log Session 2026-07-22) is RESOLVED
 ## by `E5-P/R1`, and `5-6` is the resolution: `STUNNED` is entered by exactly TWO direct
-## `MatchState.set_action_state` calls — the colour-counter negation inside `_resolve_charge_landing`
+## `MatchState.set_action_state` calls — the colour-counter negation (5-6's seat, `_resolve_color_counter` since 6-6b)
 ## and the melee-deflect branch inside `_resolve_contacts` — which is the DEAD-entry precedent
 ## exactly (a non-table path). The table itself is untouched, and the inbound-edge enumeration test
 ## in test_action_state.gd still guards it, joined there by a POSITIVE enumeration pinning the two
@@ -119,7 +119,7 @@ var run_locked_out := false
 ## step-4 resolution with a +1 grace tick (R-N2); roll_iframe/roll_duration at ROLLING
 ## entry (1-9).
 ## stun is owned and advanced here; story 5-6 (AC 5/AC 9) gives it its FIRST two start() sites —
-## `MatchState._resolve_charge_landing`'s colour-counter negation and `_resolve_contacts`' melee
+## `MatchState._resolve_color_counter`'s colour counter (5-6's landing-seat negation) and `_resolve_contacts`' melee
 ## deflect, both against the ATTACKER. Its exit is the step-3 timer arm (natural expiry only, no
 ## early-stop path anywhere) plus the debug reset's fifth named exception. See TRANSITION TABLE.
 ## Durations are always injected by MatchState from balance_ticks at start() time

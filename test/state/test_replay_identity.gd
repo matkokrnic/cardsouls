@@ -139,11 +139,8 @@ const UNHASHED_CROSS_TICK: Array[String] = [
 	# replay restores them by replaying those pushes exactly as it restores a lock direction.
 	# MEMBERS therefore STAYS AT THREE.
 	"match_state._charge_reach", "match_state._charge_reach_dirs",
-	# Story 6-1d review fix (`6-1d/R8`): A THIRD ARRAY ON ARGUMENT (c), still NOT A FOURTH ARGUMENT --
-	# the 5-2 pair's precedent applied unchanged. `_charge_contact_dirs` holds the direction carried by
-	# the push that latched `INSIDE`: a copy of a pushed fact, never produced by the tick, captured by
-	# `capture_push_contact` and restored on replay by replaying those pushes. MEMBERS STAYS AT THREE.
-	"match_state._charge_contact_dirs",
+	# Story 6-1d review fix (`6-1d/R8`) added `_charge_contact_dirs` here (a copy of the pushed bearing
+	# that latched `INSIDE`); story 7-8 RETIRED it with the arc it fed (`7-8/R8`). MEMBERS STAYS AT FOUR.
 	# Story 6-6b (AC 9): A FOURTH ARRAY ON ARGUMENT (c), still NOT A FIFTH ARGUMENT -- the `6-1d`
 	# `_charge_contact_dirs` precedent applied unchanged, one story later. `_counter_travel_dirs` holds a
 	# COPY of `_charge_reach_dirs` taken at a mode-3 press: a runner-pushed spatial fact, never produced
@@ -227,6 +224,12 @@ const HASHED: Array[String] = [
 	# and on which tick it lands). It reaches the hash through `PlayerState.to_snapshot()`'s ONE new
 	# `landing` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
 	"player_state.landing_window",
+	# Story 7-8 (`7-8/R15`, OQ1): the HIT-ONCE MEMORY of a mode (2) attack -- a small int (none / a touch
+	# closed the counter span / the hit landed). Produced by the tick at the contact seat and crossing
+	# ticks deciding an outcome (whether a later touch may still hit, whether the counter may still
+	# answer), so it is HASHED through its own per-player `charge_contact` key, never a fifth UNHASHED
+	# argument. UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"player_state.charge_contact",
 	# Story 6-5a (AC 8): the TIMED-RULE SEAT's three index-aligned arrays classify HASHED, on
 	# `defense_window`'s exact test -- every rule CROSSES TICKS (a buff's duration, an armed trigger's
 	# window) and DECIDES AN OUTCOME (a damage multiplier, a heal, a roll's reach, a slow). All three
@@ -1300,9 +1303,9 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 19,
-		"...at FORMAT_VERSION 19, read out of the FILE rather than off the constant (6-5g AC 27; 18 as of "
-		+ "6-5f AC 29; 17 as of 6-5e AC 39)")
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 20,
+		"...at FORMAT_VERSION 20, read out of the FILE rather than off the constant (7-8/R12; 19 as of "
+		+ "6-5g AC 27; 18 as of 6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
 		"...and it loads back: %s" % str(result["error"]))
@@ -2102,8 +2105,9 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 19,
-		"...at FORMAT_VERSION 19, read out of the FILE rather than off the constant (6-5g AC 27)")
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 20,
+		"...at FORMAT_VERSION 20, read out of the FILE rather than off the constant (7-8/R12; 19 as of "
+		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
 	var loaded: IntentRecorder = result["record"]
@@ -2454,8 +2458,9 @@ func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 19,
-		"...at FORMAT_VERSION 19, read out of the FILE rather than off the constant (AC 27)")
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 20,
+		"...at FORMAT_VERSION 20, read out of the FILE rather than off the constant (7-8/R12; 19 as of "
+		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(TIMED_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
 	var loaded: IntentRecorder = result["record"]

@@ -31,6 +31,10 @@ size = Vector3(1, 2, 1)
 [sub_resource type="BoxShape3D" id="BoxShape3D_hitbx"]
 size = Vector3(1, 1, 1)
 
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_hurt"]
+height = 1.65
+radius = 0.3
+
 [sub_resource type="PrismMesh" id="PrismMesh_fmark"]
 size = Vector3(0.4, 0.3, 0.25)
 
@@ -110,10 +114,11 @@ shape = SubResource("BoxShape3D_hitbx")
 collision_layer = 2
 collision_mask = 0
 monitoring = false
-editor_description = "Hurtbox (story 1-7). LAYER/MASK CONVENTION: layer 2 'hurtbox' (bit value 2), mask 0 - it is DETECTED by hitboxes and detects nothing (monitoring off). NO gameplay logic and it NEVER applies damage; it exists purely to be reported as an overlap fact. Mirrors the body collision box."
+editor_description = "Hurtbox (story 1-7). LAYER/MASK CONVENTION: layer 2 'hurtbox' (bit value 2), mask 0 - it is DETECTED by hitboxes and detects nothing (monitoring off). NO gameplay logic and it NEVER applies damage; it exists purely to be reported as an overlap fact. STORY 7-8 (AC 11/AC 12, 7-8/R9): this is the hero's HIT SHAPE and it no longer mirrors the body collision box. Its child shape is its OWN sub-resource (CylinderShape3D_hurt), sized from the measured skinned-vertex trunk envelope (tools/measure_torso_envelope.gd): radius 0.30 covers the standing trunk (measured radial max 0.24 idle / 0.28 block around the chest bone), height 1.65 spans the head top to the feet. HeroActor._track_trunk_bone() moves the shape's ORIGIN onto the paladin's mixamorig_Spine2 joint every tick, HURTBOX_DROP below it, the _track_weapon_bone precedent; this node is never rotated and the cylinder is yaw-invariant, so there is no second rotation source (1-7b). The body Collision keeps BoxShape3D_qp0e8. The shape's AUTHORED transform below is the chest joint's idle-pose position in root space less the drop; the first drive() call overwrites it."
 
 [node name="HurtboxShape" type="CollisionShape3D" parent="Hurtbox"]
-shape = SubResource("BoxShape3D_qp0e8")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.039, -0.203, 0.044)
+shape = SubResource("CylinderShape3D_hurt")
 
 [node name="CameraRig" type="Node3D" parent="." unique_id=1274550193]
 script = ExtResource("2_camrg")

@@ -6,7 +6,7 @@ extends SceneTree
 ## THE DEFECT THIS PINS. Pass 3 fixed the LATERAL half of AC4 (the roll clip's Hips XZ
 ## excursion, pinned by test_clip_timing.gd) and the disc still did not read as under the
 ## character, because the VERTICAL half was never addressed: hero.tscn's root is the body
-## CENTRE (Collision/HurtboxShape span root y [-1,+1], main.tscn spawns both heroes at
+## CENTRE (Collision spans root y [-1,+1], main.tscn spawns both heroes at
 ## y 1.0, so the box floor rests exactly on the ground's top surface at y 0), but the
 ## paladin FBX has its origin at the model's FEET and 3-0a instanced it with no transform.
 ## The model therefore sat a full 1.0 above the box floor — a body-height of daylight, with
@@ -64,6 +64,10 @@ func _span(path: String, base: Node3D) -> Vector2:
 	if node is CollisionShape3D and (node as CollisionShape3D).shape is BoxShape3D:
 		var sz: Vector3 = ((node as CollisionShape3D).shape as BoxShape3D).size
 		return Vector2(y - sz.y * 0.5, y + sz.y * 0.5)
+	# Story 7-8: the hero hit shape is a CYLINDER (yaw-invariant, `7-8/R9`).
+	if node is CollisionShape3D and (node as CollisionShape3D).shape is CylinderShape3D:
+		var h: float = ((node as CollisionShape3D).shape as CylinderShape3D).height
+		return Vector2(y - h * 0.5, y + h * 0.5)
 	_failures.append("node carries no measurable mesh/box shape: %s" % path)
 	return Vector2.ZERO
 
@@ -154,13 +158,19 @@ func _initialize() -> void:
 		"HitFlash spans [%.4f, %.4f] and does not enclose the model [%.4f, %.4f]"
 			% [flash.x, flash.y, model.x, model.y])
 
-	# --- (6) Detection volumes UNMOVED (AC13 is not this pass's to touch). ---
-	# hurtbox geometry is out of scope for story 3-0b under all circumstances.
+	# --- (6) The BODY box is UNMOVED (3-0b; since story 7-8 also AC 12's structural proof). ---
 	_check(absf(box.x - (-1.0)) <= EXACT_EPS and absf(box.y - 1.0) <= EXACT_EPS,
 		"body box span [%.4f, %.4f] moved off the authored [-1, +1]" % [box.x, box.y])
-	_check(absf(hurt.x - box.x) <= EXACT_EPS and absf(hurt.y - box.y) <= EXACT_EPS,
-		"HurtboxShape [%.4f, %.4f] no longer mirrors the body box [%.4f, %.4f]"
-			% [hurt.x, hurt.y, box.x, box.y])
+	# STORY 7-8 SUPERSEDES THIS PIN'S SECOND HALF ("HurtboxShape mirrors the body box", 1-7's convention,
+	# 3-0b pin (6)): the hit shape is now its OWN sub-resource that follows the trunk (AC 11), and the body
+	# keeps its box (AC 12). What is pinned instead: the two never share a shape again. (The hit shape's
+	# placement is live -- it follows a bone -- so its geometry is proved in test_hero_hit_shape_live.gd.)
+	var collision := _hero.get_node_or_null(^"Collision") as CollisionShape3D
+	var hurt_node := _hero.get_node_or_null(^"Hurtbox/HurtboxShape") as CollisionShape3D
+	_check(collision != null and hurt_node != null and collision.shape != hurt_node.shape,
+		"the hit shape SHARES the body collision's shape resource again -- AC 12 keeps them separate")
+	_check(hurt.y > hurt.x, "sanity: the hit shape has a measurable vertical span [%.4f, %.4f]"
+		% [hurt.x, hurt.y])
 
 	print("model y=[%.4f, %.4f] height=%.4f | box y=[%.4f, %.4f] | ground top=%.4f"
 		% [model.x, model.y, model.y - model.x, box.x, box.y, ground_top])

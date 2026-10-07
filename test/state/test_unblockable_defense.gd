@@ -502,7 +502,7 @@ func test_a_counter_knocks_the_attacker_down_and_only_the_attacker() -> void:
 
 
 ## AC 4 (the `5-6` one-write-per-outcome rule): the countered attacker goes `CHARGING -> STUNNED`
-## DIRECTLY, with no phantom `IDLE` in between. A shape that let `_resolve_charge_landing`'s trailing
+## DIRECTLY, with no phantom `IDLE` in between. A shape that let the landing exit's trailing
 ## `IDLE` still run and then wrote `STUNNED` would satisfy every STATE assertion above; the queued
 ## TRANSITION LOG is what actually pins it.
 func test_each_outcome_takes_exactly_one_action_state_write() -> void:
@@ -1065,7 +1065,7 @@ func test_blue_travels_nowhere_when_nothing_was_charging_at_the_press() -> void:
 ## THAT SIBLING ARMS ITS PRESS IN A MATCH WHERE NO CHARGEUP EVER RAN, so it proves only that the
 ## RESTING value of `_charge_reach_dirs` produces no travel. But that store is written on EVERY push
 ## (`push_contact`, `:1036`) and CLEARED NOWHERE -- `push_contact`'s clearing arm clears only
-## `_charge_reach` and `_charge_contact_dirs` (the M11 measurement), the cast seat clears those two,
+## `_charge_reach` and (until story 7-8) the contact bearing (the M11 measurement), the cast seat clears those,
 ## and `_reset_player` clears those two plus `_counter_travel_dirs`. So after the FIRST chargeup of a
 ## match the store keeps that chargeup's last bearing for the rest of the process, across a round
 ## boundary and across a debug reset.
@@ -1103,7 +1103,7 @@ func test_blue_travels_nowhere_when_the_only_chargeup_already_ended() -> void:
 ## THE FIRST DRAFT asserted the travel survived the attacker's teardown, reasoning that the counter
 ## tears the attacker down and `push_contact`'s clearing arm then zeroes the bearing. MUTATION PROVED
 ## IT VACUOUS (this pass, M11): `_charge_reach_dirs` is written on EVERY push, unconditionally, ahead
-## of the contact-window check -- only `_charge_reach` and `_charge_contact_dirs` are cleared there.
+## of the contact-window check -- only `_charge_reach` (and, until story 7-8, the contact bearing) is cleared there.
 ## So the live store held the same value as the lock and a live read passed.
 ##
 ## WHAT ACTUALLY FALSIFIES IT is a bearing that MOVES: the attacker circling the defender pushes a
@@ -1208,48 +1208,35 @@ func test_ordinary_facing_resumes_on_the_first_tick_after_the_counter_window_exp
 		"...and ordinary target-derived facing is back on that very tick (R-S3)")
 
 
-# --- Story 5-6 (AC 7 / AC 8): the DODGE RUNG, the ladder's middle tier -------------------------
+# --- Story 5-6 (AC 7 / AC 8), RE-SEATED by story 7-8: the DODGE is judged on the TOUCH tick ------
 ##
-## Ladder order, per Ruling 1: (a) colour match [tested above] -> if false, (b) is the DEFENDER's
-## roll iframe open -> if true, damage is scaled by `dodged_unblockable_damage_multiplier` and NO orb
-## is granted -> if false, (c) the unchanged full-damage + orb path.
+## Since story 7-8 (`7-8/R2`, `7-8/R10`) the dodge is no ladder rung read at the landing: a touch counts
+## only on a tick the defender's i-frames are CLOSED (the unedited `_iframe_open_at_step3` predicate), a
+## touch while they are open does nothing at all, and the dodged-damage multiplier is retired
+## (`7-8/R11`). In THIS fixture no launch span is authored, so the commit tick IS the landing tick and
+## the one touch the attack ever gets falls on it -- which is why the 5-6 tests below still read the
+## same, re-pinned against the touch-tick rule. The flight cases (a dropped touch followed by a counted
+## one, AC 8) live in `test_unblockable_honest_contact.gd`.
 
-## AC 7 at the SHIPPED authoring (`dodged_unblockable_damage_multiplier = 0.0`, Ruling 1b): a clean
-## dodge is SILENT. No damage, no `hit_landed` at all (not a zero-magnitude emit), and no orb —
-## the same full suppression the colour-match tier gets.
-func test_an_open_iframe_dodges_the_landing_silently_at_the_shipped_multiplier() -> void:
+## Story 7-8 AC 7 (renamed from `test_an_open_iframe_dodges_the_landing_silently_at_the_shipped_
+## multiplier`, which pinned 5-6's multiplier at its shipped 0.0): a touch while the defender's roll
+## i-frames are open is SILENT. No damage, no `hit_landed` at all, no `deflect_landed`, and no orb.
+func test_a_touch_during_open_iframes_does_nothing_at_all() -> void:
 	var ms := _make_match()
 	var hits := _collect_hits(ms)
 	var deflects := _collect_deflects(ms)
 	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "a DODGED unblockable deals nothing at the shipped 0.0")
+	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "a touch inside open i-frames deals nothing")
 	assert_eq(hits, [], "...and emits NO `hit_landed` at all — full suppression, not a zero-magnitude "
 		+ "emit a consumer would render as a hit for no damage")
 	assert_eq(deflects, [], "...and no `deflect_landed` either: a dodge is not a colour answer")
 	assert_eq(ms.p1.orbs.get_count(Enums.CardColor.RED), 0,
-		"...and pays NO ORB (Ruling 1b) — `_grant_landing_orbs` is never called on this branch")
-
-
-## AC 7's OTHER half, and the reason the rung is a multiply rather than a hardcoded "None": retuned
-## POSITIVE, the same lines emit at the surviving magnitude with no code change. The orb suppression
-## is INDEPENDENT of the damage and stays in force at any multiplier.
-func test_a_retuned_dodge_multiplier_emits_at_the_surviving_magnitude() -> void:
-	var config := _config()
-	config.dodged_unblockable_damage_multiplier = 0.5
-	var ms := _make_match_with(config)
-	var hits := _collect_hits(ms)
-	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE * 0.5,
-		"a retuned dodge takes HALF the full landing's damage — the multiply is real")
-	assert_eq(hits.size(), 1, "...and `hit_landed` DOES emit once, at the surviving magnitude...")
-	assert_eq(float(hits[0][2]), UNBLOCKABLE_DAMAGE * 0.5, "...carrying that magnitude, not the full one")
-	assert_eq(ms.p1.orbs.get_count(Enums.CardColor.RED), 0,
-		"...and STILL no orb: the orb suppression is Ruling 1b's, independent of the damage value")
+		"...and pays NO ORB (Ruling 1b) -- the touch is dropped before the grant")
 
 
 ## Story 6-6b (AC 3/AC 5): THE COUNTER OUTRANKS THE DODGE RUNG, and it now does so by SEAT rather
 ## than by ladder position -- the counter is judged in the attacker's CHARGING arm and returns before
-## `_resolve_charge_landing` runs at all, so the dodge rung is never reached.
+## `_resolve_charge_contact` runs at all, so the dodge is never reached.
 ##
 ## EITHER OUTCOME LEAVES THE DEFENDER UNHURT, so HP proves nothing and the discriminator is the
 ## ATTACKER: only the counter knocks it down (the dodge rung stuns nobody, `5-6` Ruling 1b, untouched
@@ -1283,15 +1270,15 @@ func test_a_counter_outranks_an_open_iframe() -> void:
 		"...and the counter does NOT consume the window: nothing does, any more (AC 5)")
 
 
-## AC 7's negative: NO STUN OF ANY KIND on the dodge branch. Ruling 1b names an attacker consequence
-## for the COLOUR counter and none for a dodge; adding one by analogy is the failure this pins.
+## AC 7's negative: NO STUN OF ANY KIND on a dodge. Ruling 1b names an attacker consequence for the
+## COLOUR counter and none for a dodge; adding one by analogy is the failure this pins.
 func test_a_dodge_stuns_nobody() -> void:
 	var ms := _make_match()
 	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
 	assert_false(ms.p1.hero.stun.is_running, "a dodged attacker is NOT stunned (AC 7, negative)...")
 	assert_ne(ms.p1.hero.action_state, HeroState.ActionState.STUNNED, "...on either half")
 	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
-		"...it takes the ordinary trailing IDLE exit, exactly like a miss or a full landing")
+		"...it takes the ordinary landing exit to IDLE, exactly like a miss or a hit")
 	assert_false(ms.p2.hero.stun.is_running, "and neither is the DEFENDER")
 
 
@@ -1838,7 +1825,7 @@ func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() ->
 		assert_eq(ms.p2.hero.action_state, HeroState.ActionState.CHARGING,
 			"precondition: the victim is mid-chargeup on the landing tick")
 		ms._charge_reach[1] = MatchState.CONTACT_CHARGE_REACH_INSIDE
-		ms._charge_contact_dirs[1] = Vector2(0.6, 0.8)
+		ms.p2.charge_contact = PlayerState.CHARGE_CONTACT_TOUCHED
 	_land(ms, 0, Enums.CardColor.RED, victim_at, before)
 	assert_eq(ms.p2.hero.action_state, HeroState.ActionState.STUNNED, "CHARGING -> knocked down")
 	assert_false(ms.p2.charge_window.is_running, "the chargeup window is cleared...")
@@ -1846,8 +1833,8 @@ func test_knockdown_from_charging_abandons_the_chargeup_and_keeps_the_spend() ->
 	assert_eq(ms.p2.charge_color, PlayerState.NO_TELEGRAPH_COLOR, "...and the colour, as one fact")
 	assert_eq(ms._charge_reach[1], MatchState.CONTACT_CHARGE_REACH_INSIDE,
 		"`_charge_reach` is NOT part of the teardown -- cleared with the verdict, never on its own")
-	assert_eq(ms._charge_contact_dirs[1], Vector2(0.6, 0.8),
-		"...and neither is `_charge_contact_dirs` (6-6a review: AC 5 names both)")
+	assert_eq(ms.p2.charge_contact, PlayerState.CHARGE_CONTACT_NONE,
+		"...while the abandoned attack's hit-once memory rests with it (story 7-8, OQ1)")
 	assert_eq(ms.p2.stamina.get_current(), MAX_STAMINA - UNBLOCKABLE_COST, "the stamina stays spent")
 	assert_eq(ms.p2.discard.size(), 1, "...and the card stays in the discard")
 	for _t in CHARGEUP_TICKS:
@@ -2313,10 +2300,8 @@ func _config() -> BalanceConfig:
 	c.counter_travel_distance_red = COUNTER_TRAVEL_RED
 	c.counter_travel_distance_blue = COUNTER_TRAVEL_BLUE
 	c.counter_travel_forward_fraction_red = COUNTER_FORWARD_FRACTION_RED
-	# Story 5-6: the ladder's own numbers. `dodged_unblockable_damage_multiplier` is left at the
-	# resource's 0.0 default DELIBERATELY -- that is the SHIPPED authored value (Ruling 1b), so the
-	# dodge tests below assert the shipped behaviour rather than a fixture-only one, and the
-	# retune-positive path gets its own test that authors the value locally.
+	# Story 5-6: the ladder's own numbers. (The dodged-damage multiplier 5-6 left at its 0.0 default
+	# here retired at story 7-8, `7-8/R11`.)
 	c.deflect_stun_seconds = float(DEFLECT_STUN_TICKS) / TimingWindow.TICK_HZ
 	c.deflect_stamina_penalty = DEFLECT_PENALTY
 	return c
@@ -2632,19 +2617,3 @@ func test_the_landing_package_seat_runs_through_the_damage_funnel() -> void:
 	assert_eq(aura.p1.hero.get_hp(), MAX_HP - 30.0 + UNBLOCKABLE_DAMAGE * 0.5,
 		"Vampiric Aura heals the caster 50% of the landing's removed damage (R4: unblockable counts)")
 
-
-## The DODGED-UNBLOCKABLE seat, reachable only at a retuned positive dodge multiplier: the funnel runs
-## AFTER the dodge multiply, the block seat's ordering, so a Bloodlusted caster doubles the surviving
-## magnitude and the `hit_landed` it emits carries that doubled number.
-func test_the_dodged_unblockable_seat_runs_through_the_damage_funnel() -> void:
-	var config := _config()
-	config.dodged_unblockable_damage_multiplier = 0.5
-	var ms := _make_match_with(config)
-	ms.p1.start_rule(PlayerState.RULE_BLOODLUST, 10000, 2.0, 2.0)
-	var hits := _collect_hits(ms)
-	_run_chargeup_dodging(ms, 0, Enums.CardColor.RED, 1)
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE * 0.5 * 2.0,
-		"a Bloodlusted caster's DODGED landing deals 2x the surviving magnitude")
-	assert_eq(hits.size(), 1, "...one hit_landed")
-	if hits.size() == 1:
-		assert_eq(float(hits[0][2]), UNBLOCKABLE_DAMAGE * 0.5 * 2.0, "...carrying the funnelled number")

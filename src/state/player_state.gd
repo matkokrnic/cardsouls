@@ -232,6 +232,31 @@ var charge_color: int = NO_TELEGRAPH_COLOR
 ## cast starts, riding the per-player key set.
 var landing_window: TimingWindow
 
+## Story 7-8 (AC 3/AC 7/AC 10, OQ1/OQ4, `7-8/R15`): THE HIT-ONCE MEMORY of this player's mode (2)
+## attack. Since 7-8 the attack resolves on the FIRST COUNTED TOUCH of its flight (`7-8/R1`) rather
+## than once at the landing, so something has to remember, across the remaining flight ticks, that it
+## already did -- and, separately, that a touch has happened at all, which closes the colour counter's
+## judged span (`7-8/R13`) even when the touch was dropped by the defender's i-frames (`7-8/R2`).
+## Those are two facts, so the key carries three values rather than a bool:
+##   `CHARGE_CONTACT_NONE`    -- no touch yet this attack: the counter may still answer, a touch counts.
+##   `CHARGE_CONTACT_TOUCHED` -- a touch was dropped by i-frames: the counter span is CLOSED, but the
+##                              attack is NOT spent, so a later counted touch still hits (AC 7/AC 8).
+##   `CHARGE_CONTACT_HIT`     -- the hit landed: nothing more is credited this attack (AC 3).
+##
+## NOT DERIVABLE FROM EXISTING STATE, which is why it is a field at all (OQ1): the two windows bound the
+## flight and the commit tick, so any "spent" encoding in them would stop the travel, and the
+## per-tick charge-reach fact is a runner-pushed value the next push overwrites.
+##
+## A HASHED PER-PLAYER KEY (`7-8/R15`), classified `HASHED` in `test_replay_identity.gd`: it is state
+## the tick PRODUCES and it crosses ticks deciding an outcome (`4-3a/R17`'s test). Rest value
+## `CHARGE_CONTACT_NONE` (0). Cleared at the cast seat, at the landing exit, when a knockdown abandons
+## the attack, and in `_reset_player` -- every way a `CHARGING` attack starts or ends -- so it reads 0
+## whenever no attack is in flight.
+const CHARGE_CONTACT_NONE := 0
+const CHARGE_CONTACT_TOUCHED := 1
+const CHARGE_CONTACT_HIT := 2
+var charge_contact: int = CHARGE_CONTACT_NONE
+
 ## Story 5-5 (AC 2): THE MODE ③ DEFENSE WINDOW — the reaction window a defense cast opens, and the
 ## COLOUR it can answer.
 ##
@@ -1497,6 +1522,11 @@ func to_snapshot() -> Dictionary:
 		# ONE GOLDEN CAUSE RIDES ON THIS KEY: its mere PRESENCE (the `5-2`/`5-5` shape). The golden
 		# fixture never casts mode (2), so its VALUE is the resting 0 on every hashed tick.
 		"landing": landing_window.remaining_ticks(),
+		# Story 7-8 (`7-8/R15`): the ONE new key this story adds -- the hit-once memory (see
+		# `charge_contact`). Ungated, on `landing`'s argument: every path that ends an attack clears it,
+		# so its own value is the truth at rest (0). ONE GOLDEN CAUSE RIDES ON IT: its mere PRESENCE
+		# (the `5-2`/`6-1c` shape); the golden fixture never casts mode (2).
+		"charge_contact": charge_contact,
 		# Story 6-5c (AC 1/AC 23): the IN-FLIGHT CAST, as `[card id, remaining ticks]`. The `defense`
 		# FUSION verbatim and for the same reason: a cast is ONE fact in two halves (which card, how
 		# much longer), and splitting it would let the halves drift into two keys that could disagree

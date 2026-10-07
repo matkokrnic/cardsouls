@@ -59,7 +59,7 @@ signal pitch_changed(slot: int, card_id: StringName, hand_slot: int, ready: bool
 ## STORY 5-5 (AC 13) WIDENS THE PAYLOAD WITH A THIRD ARGUMENT, `defense_color`, and does NOT build a
 ## tenth observation channel. This signal is now shared by THREE conceptually distinct mechanisms
 ## under one name that literally says "deflect": melee block-timing parry, a unit's melee swing
-## parried, and a card-cast colour-matched negation of an unblockable (`_resolve_charge_landing`,
+## parried, and a card-cast colour-matched negation of an unblockable (`_resolve_charge_contact`,
 ## the SECOND emit site). A new, more precisely named signal was REFUSED because the observation
 ## seam family is frozen (`5-4/AC 15`, pinned in test_architecture_invariants.gd) and the payload
 ## shape is otherwise identical -- a NAMED trade-off, not a free lunch. If a later story
@@ -311,9 +311,12 @@ var _contact_queue: Array[Dictionary] = []
 ## where the two rules are written. WHAT: `INSIDE` is no longer "the enemy centre is within the
 ## authored per-colour radius" but "the tracked blade actually OVERLAPPED the defender's body, and
 ## did so within that radius" -- honest geometry, with the authored number surviving only as an
-## upper bound that can REMOVE a hit. HOW LONG: it is the verdict of the WHOLE committed flight
-## rather than of the landing tick alone -- cleared on every pre-commit push and absorbing on
-## `INSIDE` once the contact window is open. `REACH_UNKNOWN` keeps its `5-2` meaning exactly: a
+## upper bound that can REMOVE a hit. HOW LONG: STORY 7-8 (`7-8/R10`) makes it THIS TICK'S FACT
+## again -- every push inside the contact window overwrites it, and every push outside clears it. The
+## 6-1d absorbing `INSIDE` existed only because resolution waited for the landing; resolution now
+## happens on the touch tick itself, and what must outlive the tick (the hit-once memory and the
+## closed counter span) lives in `PlayerState.charge_contact`, which the tick produces and the hash
+## sees. `REACH_UNKNOWN` keeps its `5-2` meaning exactly: a
 ## third value that is not `OUTSIDE`, so "no measurement was ever taken" is never mistaken for "a
 ## measurement said no".
 ##
@@ -335,18 +338,6 @@ var _contact_queue: Array[Dictionary] = []
 var _charge_reach: Array[int] = [REACH_UNKNOWN, REACH_UNKNOWN]
 var _charge_reach_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 
-## Story 6-1d review fix (`6-1d/R8`): THE CONTACT BEARING -- for each slot, the planar TARGET -> ATTACKER
-## direction carried by the push that LATCHED `INSIDE` into `_charge_reach`, written in the SAME arm and
-## only there. `_charge_reach_dirs` above keeps being written on EVERY push, because the CHARGING facing
-## track (auto-aim during the chargeup) reads it; this store is what the landing's ARC reads, so the
-## verdict and the bearing it is judged against are one measurement again.
-##
-## CLEARED WITH THE VERDICT, never on its own: in `push_contact`'s clearing arm, at the CAST SEAT and in
-## `_reset_player` (`6-1d/R9`). EXCLUDED FROM to_snapshot() for `_charge_reach`'s reason verbatim -- it is
-## a runner-pushed fact restored on replay by replaying the pushes (`test_replay_identity.gd` exclusion
-## (c)).
-var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
-
 ## Story 6-6b (AC 9): THE LOCKED COUNTER BEARING, per DEFENDER slot -- the planar defender-to-attacker
 ## bearing captured at the PRESS, which `_resolve_movement`'s counter-busy branch reads on every tick
 ## of the busy span for BOTH of the two things a counter needs to point at the attacker:
@@ -356,7 +347,7 @@ var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ##     the dagger flew another, RED jumping past the attacker's shoulder. One bearing feeds both, so
 ##     the body cannot point one way while the counter travels another.
 ##
-## IT IS A COPY OF A PUSHED FACT, WHICH IS ITS WHOLE CLASSIFICATION -- `_charge_contact_dirs` directly
+## IT IS A COPY OF A PUSHED FACT, WHICH IS ITS WHOLE CLASSIFICATION -- `_charge_reach_dirs` directly
 ## above in every respect the argument turns on. The value copied is `_charge_reach_dirs[attacker_slot]`,
 ## the hero-to-hero bearing the runner pushes on EVERY chargeup tick (`push_contact`, `:969`). It ALREADY
 ## runs defender-to-attacker -- every contact fact's `dir` runs TARGET -> ATTACKER (the `1-8` convention)
@@ -374,13 +365,13 @@ var _charge_contact_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ## THE ZERO-FACT FALLBACK IS AN EXPLICIT GATE AT THE PRESS (AC 9), and the REVIEW's finding H1 is why
 ## it cannot be the resting value alone: `_charge_reach_dirs` is written on EVERY push and CLEARED
 ## NOWHERE -- not by `push_contact`'s clearing arm (which clears only `_charge_reach` and
-## `_charge_contact_dirs`, the M11 measurement), not at the cast seat, and not in `_reset_player`.
+## the 6-1d contact bearing, the M11 measurement), not at the cast seat, and not in `_reset_player`.
 ## Its `Vector2.ZERO` rest (`:284`) therefore holds only until the FIRST chargeup of the process, after
 ## which the store keeps the last bearing that chargeup pushed, across rounds and across a debug reset.
 ## So the press gates on the other hero ACTUALLY BEING `CHARGING` -- "no live chargeup" in the AC's own
 ## words -- and copies `Vector2.ZERO` otherwise. A counter that answers nothing goes nowhere.
 ##
-## EXCLUDED FROM to_snapshot() on `_charge_reach` / `_charge_reach_dirs` / `_charge_contact_dirs`'
+## EXCLUDED FROM to_snapshot() on `_charge_reach` / `_charge_reach_dirs`'
 ## classification VERBATIM (`test_replay_identity.gd` exclusion (c)): a runner-pushed spatial fact,
 ## never produced by the tick, captured by `capture_push_contact` and restored on a replay by replaying
 ## those pushes -- the press that copies it falls on the same tick with the same pushes behind it, so
@@ -394,7 +385,7 @@ var _counter_travel_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 ##
 ## IT EXISTS BECAUSE THE PREDICATE ALONE IS NOT SYMMETRIC ACROSS THE TWO SEATS, which is a measured
 ## fact about this function's own ordering rather than a hypothetical. Step 3 runs
-## `_resolve_actions(p1)` fully — timer exits INCLUDING `_resolve_charge_landing`, then p1's
+## `_resolve_actions(p1)` fully — timer exits INCLUDING `_resolve_charge_contact`, then p1's
 ## input-driven edges — before `_resolve_actions(p2)` runs at all. So a charge landing on SLOT 0
 ## resolves BEFORE the defender's (p2's) same-tick roll press is read, while a charge landing on
 ## SLOT 1 resolves AFTER the defender's (p1's) same-tick roll press has already opened its iframe.
@@ -456,7 +447,7 @@ const NO_COUNTER_COLOR := PlayerState.NO_TELEGRAPH_COLOR
 ## slot -- true when that slot's unblockable landed UNANSWERED this tick (the ladder's third tier), and
 ## its package is owed to the opposing hero.
 ##
-## WHY THE PACKAGE CANNOT APPLY AT THE LANDING. `_resolve_charge_landing` runs inside the CASTER's step-3
+## WHY THE PACKAGE CANNOT APPLY AT THE LANDING. `_resolve_charge_contact` runs inside the CASTER's step-3
 ## seat, and step 3 is p1 actions -> p1 movement -> p2 actions -> p2 movement. A knockdown written there
 ## would land on p2 BEFORE p2's own same-tick presses were read, but on p1 AFTER p1's -- the first
 ## CROSS-PLAYER write in step 3, and exactly the seat-dependence `_iframe_open_at_step3` above exists to
@@ -1482,71 +1473,24 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 	# describes THAT hero's relation to the enemy hero, and only that hero's chargeup reads it.
 	if is_charge_reach_kind(kind):
 		_charge_reach_dirs[attacker_slot] = target_to_attacker
-		# STORY 6-1d (AC 4/AC 5/AC 6): THE LATCH STOPS BEING "THE LAST ANSWER" AND BECOMES "THE
-		# FLIGHT'S VERDICT", and both halves of that are written here rather than at the landing.
+		# STORY 7-8 (`7-8/R10`): THE LATCH IS THIS TICK'S FACT. 6-1d made `INSIDE` absorbing for the
+		# whole flight because the single resolution waited for the landing; 7-8 resolves on the touch
+		# tick itself (`7-8/R1`), so an absorbing latch would now be WRONG -- a touch dropped by i-frames
+		# would be re-read as a touch on every later tick and hit after the i-frames close with no blade
+		# anywhere near (AC 8). What has to outlive the tick -- "already hit" and "a touch closed the
+		# counter span" -- is state the tick PRODUCES and lives, hashed, in `PlayerState.charge_contact`.
 		#
-		# OUTSIDE THE CONTACT WINDOW THE LATCH IS CLEARED, not written (AC 4). The runner keeps
-		# pushing every chargeup tick because the FACING TRACK needs the direction above, but a
-		# chargeup touch must credit nothing -- damage is the LANDING's verdict alone, and the
-		# chargeup window runs before the launch has even started (`6-9`: the press commits the
-		# attack, but the commit is what STARTS the flight, not what lands it).
-		# `register_swing_hit`'s dictionary record is not adopted here at all, and this
-		# store cannot grow: it is a fixed TWO-element `Array[int]`, one slot per hero, for the life
-		# of the match.
+		# OUTSIDE THE CONTACT WINDOW THE LATCH IS CLEARED, not written (6-1d AC 4, unchanged). The runner
+		# keeps pushing every chargeup tick because the FACING TRACK needs the direction above, but a
+		# chargeup touch must credit nothing: the chargeup runs before the launch has started. The cast
+		# seat and `_reset_player` clear it too (`6-1d/R9`), so a one-tick chargeup with no pre-commit push
+		# still starts its flight from `REACH_UNKNOWN`.
 		#
-		# THE REAPING BETWEEN ATTACKS IS OWNED, NOT EMERGENT (`6-1d/R9`). The dev pass relied on this
-		# clearing arm alone to reset the verdict before each commit, which silently required at least
-		# one pre-commit push -- a one-tick chargeup has none, and a stale absorbing `INSIDE` from the
-		# previous attack then credited a flight in which nothing was measured. The verdict and its
-		# bearing are now cleared at the CAST SEAT (`_resolve_unblockable_cast`) and in
-		# `_reset_player`; this arm still clears too, and that is what keeps chargeup touches out.
-		#
-		# INSIDE THE WINDOW `INSIDE` IS ABSORBING (AC 6's supersession of `6-1c` AC 3). Contact is
-		# evaluated on every committed tick, and a defender touched on ANY of them is hit even if it
-		# has cleared the blade by the landing tick. The surviving half is structural: a defender
-		# clear on EVERY evaluated tick never writes `INSIDE`, so it still misses.
-		#
-		# EXACTLY ONE RESOLUTION PER SWING (AC 5) IS A CONSEQUENCE OF THE TYPE, not of a counter: N
-		# ticks of contact collapse into ONE latched int, and `_resolve_charge_landing` still fires
-		# exactly once, on the tick `landing_window` closes. There is no second landing check to
-		# dedupe against. In 1v1 the melee `[attack_index, target]` key degenerates to the attacker
-		# slot alone -- mode ② has exactly one possible target (the enemy hero, minions are neither
-		# targets nor obstacles) and a chargeup never calls `_start_swing`, so `attack_index` does
-		# not move across a chargeup and would key nothing.
+		# INSIDE THE WINDOW EVERY PUSH OVERWRITES, `INSIDE` and `OUTSIDE` alike. The one tick the runner
+		# pushes nothing for a charging hero inside the window -- the two heroes co-located, a zero planar
+		# direction -- re-reads the previous tick's fact (OQ5, accepted).
 		var charging: PlayerState = p1 if attacker_slot == 0 else p2
-		# THE BEARING IS LATCHED IN THE ARM THAT LATCHES `INSIDE`, and only there (`6-1d/R8`). The
-		# landing's arc is judged against the direction of the push that recorded the contact, not
-		# against the last push's. An `OUTSIDE` after an `INSIDE` writes neither half.
-		#
-		# AN IN-ARC CONTACT IS ABSORBING (`6-1d/R13`). Neither "first contact" nor "last contact" is
-		# the rule: if ANY contact tick of the committed flight had a bearing inside the colour's arc,
-		# the landing is a HIT. So an `INSIDE` push re-latches both halves UNLESS the verdict is
-		# already `INSIDE` and the bearing already latched passes `_is_in_charge_arc` -- a later
-		# out-of-arc touch never overwrites an earlier in-arc one, while an out-of-arc latch is still
-		# replaced by any later touch. The arc still only REMOVES a hit: a flight whose contacts were
-		# ALL out of arc latches an out-of-arc bearing and misses at the landing.
-		#
-		# THE ARC IS ONLY EVER ASKED OF THE BEARING ALREADY LATCHED, NEVER OF THE PUSH BEING LATCHED,
-		# and that ordering is what keeps the COMMIT TICK correct. The commit tick's push is the first
-		# inside the contact window, and it arrives BEFORE that tick's `advance()` -- before the step-2
-		# `charge_window.tick()` closes the chargeup, i.e. before the tick that freezes the facing for
-		# the flight has run. Nothing is latched on it (the cast seat, and the clearing arm on any
-		# pre-commit push, left `REACH_UNKNOWN`, `6-1d/R9`), so it simply latches and no arc is
-		# evaluated against a facing the rule has not yet seen frozen. (Measured: step 2 stops the
-		# chargeup before `_resolve_movement`, so the commit tick's own push does not re-aim the
-		# facing either -- but the rule does not depend on that detail.) Every later push in the
-		# window arrives after the freeze (`6-1c`), so "does the latched bearing already pass" is asked
-		# against exactly the facing the landing's `_is_in_charge_arc` will read.
-		if not charging.is_contact_window_open():
-			_charge_reach[attacker_slot] = REACH_UNKNOWN
-			_charge_contact_dirs[attacker_slot] = Vector2.ZERO
-		elif kind == CONTACT_CHARGE_REACH_INSIDE:
-			if not (_charge_reach[attacker_slot] == CONTACT_CHARGE_REACH_INSIDE
-					and _is_in_charge_arc(charging, attacker_slot)):
-				_charge_reach[attacker_slot] = kind
-				_charge_contact_dirs[attacker_slot] = target_to_attacker
-		elif _charge_reach[attacker_slot] != CONTACT_CHARGE_REACH_INSIDE:
-			_charge_reach[attacker_slot] = kind
+		_charge_reach[attacker_slot] = kind if charging.is_contact_window_open() else REACH_UNKNOWN
 		return
 	_contact_queue.append({
 		"attacker": attacker_slot,
@@ -1774,7 +1718,7 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		#
 		# THE TELEGRAPH FACT RESTS AGAIN AT THE LANDING (AC 5) WITHOUT ANY CLEAR BEING WRITTEN HERE.
 		# `PlayerState.to_snapshot`'s `telegraph` is DERIVED under an `action_state == CHARGING`
-		# gate, and `_resolve_charge_landing` writes `IDLE` / `STUNNED` synchronously, so the gate
+		# gate, and the landing exit below (or the counter) writes `IDLE` / `STUNNED` synchronously, so the gate
 		# hides the colour by construction. The three explicit three-part teardowns that remain --
 		# the knockdown abandonment, the colour-counter teardown and `_reset_player` -- are all
 		# non-input edges; the one that hung off the release edge left with the `elif`.
@@ -1794,21 +1738,36 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		# subject is THIS attack: the commit tick and every launch tick before the first honest
 		# contact are exactly the ticks this arm runs with the chargeup window closed.
 		#
-		# BEFORE THE LANDING, AND THE ORDER IS THE AC. `_resolve_charge_landing` is this arm's first
-		# branch, so a counter and a landing that fall on the same tick -- which is every tick when a
+		# BEFORE THE CONTACT, AND THE ORDER IS THE AC. The counter is this arm's first branch, ahead
+		# of `_resolve_charge_contact`, so a counter and a touch that fall on the same tick -- which is every tick when a
 		# colour authors no launch span at all -- resolve as a COUNTER. The counter tears the attack
 		# down and writes `STUNNED`, so returning here is what keeps "exactly one `set_action_state`
 		# per outcome" (the `5-6` rule) true: the landing's trailing `IDLE` is never reached.
 		#
-		# IT IS NOT GATED ON THE LANDING WINDOW, deliberately: the judged span runs from the commit
-		# THROUGH the landing tick (on which `landing_window` has already stopped), and the
-		# `_resolve_color_counter` gate below reads the chargeup's close instead -- the one fact that
-		# says "committed".
+		# IT IS NOT GATED ON THE LANDING WINDOW, deliberately: the judged span runs from the commit up
+		# to the attack's FIRST TOUCH (`7-8/R13`), which may fall on the landing tick (on which
+		# `landing_window` has already stopped), and the `_resolve_color_counter` gate below reads the
+		# chargeup's close instead -- the one fact that says "committed".
+		#
+		# STORY 7-8 (`7-8/R1`, OQ2): THE HIT LANDS ON THE TOUCH, NOT AT THE LANDING. Every tick of the
+		# flight whose pushed fact is `INSIDE` is offered to the ONE resolution seat,
+		# `_resolve_charge_contact`, until the hit-once memory (`PlayerState.charge_contact`) says the
+		# hit already landed; the seat writes NO action state, so the attacker finishes its flight in
+		# `CHARGING` and the landing exit below ends it -- hit or miss -- with the ONE `IDLE` write (the
+		# `5-6` one-write-per-outcome rule: the hit outcome has no attacker-state write of its own).
+		# Contact before the landing exit on the landing tick, so the last flight tick still counts. The
+		# committed gate (`charge_window` stopped, the counter's own) is defence in depth: `push_contact`
+		# already writes `INSIDE` only inside the contact window.
 		HeroState.ActionState.CHARGING:
 			if _resolve_color_counter(player, slot):
 				return
+			if not player.charge_window.is_running \
+					and _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE \
+					and player.charge_contact != PlayerState.CHARGE_CONTACT_HIT:
+				_resolve_charge_contact(player, slot)
 			if not player.landing_window.is_running:
-				_resolve_charge_landing(player, slot)
+				player.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+				player.hero.set_action_state(HeroState.ActionState.IDLE)
 	# STORY 6-6a POST-SMOKE RULING `6-6a/R7`: THE GET-UP IS A LOCKED ACTION. The live
 	# smoke found the hero able to act the instant `get_up` starts -- attack, roll, card, block all
 	# available while the AC 8 iframes still ran -- which reads as "teleport to your feet" and, with the
@@ -3381,35 +3340,6 @@ func _reset_lock(player: PlayerState, opposing_slot: int) -> void:
 func _is_facing(hero: HeroState, target_to_attacker: Vector2) -> bool:
 	return absf(hero.facing.angle_to(target_to_attacker)) \
 			<= deg_to_rad(balance.block_facing_arc_degrees * 0.5)
-
-
-## Story 6-1c (AC 5, `6-1c/R3`): THE ARC HALF OF HONEST REACH -- pure state policy over the
-## runner-reported direction fact, the 1-8 `_is_facing` shape directly above adopted UNCHANGED for
-## mode (2). The runner computes the radius KIND and the planar TARGET -> ATTACKER direction from
-## positions only and never reads `facing`; the ANGLE is judged here, against the attacker's frozen
-## committed direction (the facing the commit freeze holds), using the colour's authored arc.
-##
-## THE SIGN: the fact runs target -> attacker (the 1-8 convention) and the attack points attacker ->
-## target, so the defender's bearing is the fact's NEGATION -- the same negation the auto-aim applies.
-##
-## 360 AND ABOVE IS RADIAL and answers true without a comparison, so the GREEN jump needs no special
-## case and an unauthored arc (the 360 default) is the pre-6-1c circle exactly. The direction read is
-## `_charge_contact_dirs[slot]`, latched by `push_contact` in the SAME arm that latches the `INSIDE`
-## kind, so the two halves of the gate always describe the same measurement.
-##
-## THAT SENTENCE WAS FALSE FOR ONE COMMIT, and the history is recorded so it is not re-broken. Through
-## 6-1c both halves were overwritten on every push and so both described the last tick. Story 6-1d's
-## dev pass (`e7afe21`) made the verdict ABSORBING across the flight but left this reading the
-## every-push `_charge_reach_dirs`, so a verdict from one tick was judged against a bearing from
-## another. The 6-1d review fix (`6-1d/R8`) restored it with the latched bearing, and `6-1d/R13` made an
-## in-arc latch absorbing (`push_contact` asks this function of the latched bearing). The arc is still a
-## conjunct that can only REMOVE a hit the geometry admitted: it reads nothing unless the kind is
-## already `INSIDE`, and it can never turn an `OUTSIDE` into a hit.
-func _is_in_charge_arc(player: PlayerState, slot: int) -> bool:
-	var arc := balance.unblockable_arc_degrees_for(player.charge_color)
-	if arc >= 360.0:
-		return true
-	return absf(player.hero.facing.angle_to(-_charge_contact_dirs[slot])) <= deg_to_rad(arc * 0.5)
 
 
 ## Step-5 mana generation (story 3-4, AC 1/AC 2) — the D6 EVALUATOR seat. The direct
@@ -5983,11 +5913,12 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	# landing (see `PlayerState.landing_window`).
 	player.landing_window.start(balance_ticks.unblockable_chargeup_ticks
 			+ balance_ticks.unblockable_launch_ticks_for(player.charge_color))
-	# Story 6-1d review fix (`6-1d/R9`): THE CONTACT VERDICT AND ITS BEARING START EVERY ATTACK FROM
-	# "NOTHING MEASURED", cleared HERE beside the windows that bound the flight. Owned rather than left
-	# to the pre-commit pushes, which a one-tick chargeup never gets -- see `push_contact`.
+	# Story 6-1d review fix (`6-1d/R9`): THE CONTACT FACT STARTS EVERY ATTACK FROM "NOTHING MEASURED",
+	# cleared HERE beside the windows that bound the flight. Owned rather than left to the pre-commit
+	# pushes, which a one-tick chargeup never gets -- see `push_contact`. Story 7-8 (OQ1): the hit-once
+	# memory starts every attack at rest in the same breath.
 	_charge_reach[slot] = REACH_UNKNOWN
-	_charge_contact_dirs[slot] = Vector2.ZERO
+	player.charge_contact = PlayerState.CHARGE_CONTACT_NONE
 	player.hero.set_action_state(HeroState.ActionState.CHARGING)
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
@@ -6142,162 +6073,52 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	_queue.push(card_cast_resolved.emit.bind(slot, played, Enums.ModeKind.DEFENSE))
 
 
-## Story 5-2 (AC 15-20): THE LANDING, resolved at step 3(a) on the tick the chargeup window expires.
-## Reached ONLY from the `CHARGING` arm of `_resolve_actions`, which a DEAD hero cannot enter.
+## Story 7-8 (`7-8/R1`, OQ2): THE CONTACT SEAT -- the ONE place an unblockable resolves, reached from
+## the `CHARGING` arm of `_resolve_actions` on every flight tick whose pushed fact is `INSIDE`, until the
+## hit lands. Renamed from 5-2's `_resolve_charge_landing`: it used to run once, on the tick the landing
+## window closed, which is why a touch early in the flight knocked the defender down far away. It now
+## runs on the touch tick, and the landing exit in the arm ends the attack separately.
 ##
-## THE REACH CHECK IS READ, NOT COMPUTED. `_charge_reach[slot]` is the runner's every-tick answer
-## (AC 17) and this layer never sees a distance, a position or the authored per-colour reach --
-## `4-3/R2`'s position ownership intact, `F1` untouched. `REACH_UNKNOWN` lands NOTHING and is NOT
-## the same value as OUTSIDE: absence means no measurement was taken, which is a different fact from
-## a measurement that said "too far", and the distinction is what keeps a missing push from silently
-## deciding a hit.
+## THE TOUCH IS READ, NOT COMPUTED. `_charge_reach[slot]` is the runner's per-tick fact (`7-8/R10`):
+## the tracked blade overlapped the defender's hit shape, within the colour's authored reach bound
+## (6-1d AC 2, `7-8/R14`). This layer never sees a distance or a position (`4-3/R2`). There is NO
+## ARC (`7-8/R8`): a counted touch hits whatever the attacker's facing.
 ##
-## THE CARD AND THE STAMINA STAY SPENT ON EVERY OUTCOME (AC 19). Nothing below is conditional on the
-## hit: AC 6 already ran at the cast, an entire chargeup ago, and mode (2) is fully committal
-## (Ruling 4). A miss is a miss -- no damage, no orb, no HP change on either side. THE ORB HALF IS
-## NO LONGER A FORWARD REFERENCE: story 5-4 landed the grant inside the landed branch below
-## (`_grant_landing_orbs`), so "no orb on a miss" is now a property of where that call sits rather
-## than a promise about a story that had not shipped.
+## AN ENEMY THAT DIED FIRST IS NOT HIT (5-2 AC 16), the defense-in-depth gate kept verbatim.
 ##
-## AN ENEMY THAT DIED FIRST IS NOT HIT (AC 16). Like its step-3/4/5/6 siblings this branch is
-## unreachable in natural play -- DEAD and `_round_over` are set together, and step 1b returns
-## before step 2 -- and is written anyway, in exactly that defense-in-depth family, proven
-## non-vacuous by the same forced-DEAD idiom (`set_action_state(DEAD)` with `_round_over` left
-## FALSE).
+## THE DODGE RULE (`7-8/R2`, `7-8/R10`, AC 7-9). A touch on a tick the defender's i-frames are OPEN --
+## roll, get-up, and the `1-9/R2` grace tick, all read through the UNEDITED `_iframe_open_at_step3`
+## predicate, once per tick for seat symmetry -- does nothing at all: no damage, no knockdown, no orb, no
+## signal, and the i-frame window is neither consumed nor shortened (read-only, `5-6` AC 8). The attack
+## is NOT spent by it. It does CLOSE the colour counter's span (`7-8/R13`), which is the one thing the
+## `TOUCHED` value records. A later counted touch -- the blade still touching once the i-frames close --
+## hits in full on its own tick (AC 8). The dodged-damage multiplier and its silent emit path are
+## retired (`7-8/R11`): a dodged touch has no tunable cost.
 ##
-## NO BLOCK, NO DEFLECT, NO BLOCK ARC. The attack is UNBLOCKABLE by name: `block_damage_multiplier`,
-## `is_deflect_window_open()` and `_is_facing` are all deliberately absent from this function.
+## A COUNTED TOUCH SPENDS THE ATTACK: `HIT` is written, the attacker's orb grant applies HERE (it is the
+## caster's payout), and the victim's damage + knockdown + `hit_landed` are owed to `_apply_landing_packages`
+## at step 6b of this same tick (see `_landing_package_pending` for why a write at this seat would be
+## seat-dependent) -- the 6-6a package unchanged in contents, floors and order (AC 4).
 ##
-## STORY 6-1c (AC 5) ADDS AN ARC, AND IT IS THE ATTACKER'S, NOT THE DEFENDER'S. `_is_facing` asks
-## whether the DEFENDER faces its attacker (a block); `_is_in_charge_arc` asks whether the defender
-## lies inside the ATTACKER's per-colour threat shape, around the attacker's frozen committed
-## direction. It joins the reach KIND in the one entry gate below and answers nothing a block does.
+## NO ACTION-STATE WRITE, deliberately (OQ2): the attacker finishes its flight in `CHARGING` and the
+## arm's landing exit writes the one `IDLE`, hit or miss.
 ##
-## STORY 6-6b RETIRES THE DEFENSE RUNG THIS PARAGRAPH USED TO DESCRIBE. `5-5` seated the
-## colour-matched answer HERE, inside the landed branch below; `5-6` hung the attacker's stun off it.
-## Both are gone (6-6b AC 5): the colour answer is judged in the ATTACKER's own CHARGING arm, at the
-## COMMIT and on every pre-contact launch tick, and a counter RETURNS from that arm before this
-## function is called at all. So this function no longer reads or writes `defense_window` /
-## `defense_color` on any path, and every landing that reaches it was, by construction, not countered.
-## What is unchanged: it still consults NEITHER the block multiplier, NOR the deflect window, NOR the
-## facing arc, and the tiers below it are `5-6`'s, minus the colour rung (Non-Goals).
-##
-## NO MANA. `_generate_mana` awards per entry in the list `_resolve_contacts` returns, and a landing
-## resolved here never enters that list -- the `4-3b/R4` gate applied to a second non-swing source,
-## by the same mechanism (staying out of the list) rather than by a second check inside the faucet.
-##
-## `hit_landed` IS EMITTED, on the shipped payload unchanged: the enemy hero really is hurt, so the
-## telegraph flash and sting on that hero are correct -- `4-3b/R5`'s reasoning for the unit-attacker
-## case, which turns on the TARGET being a damaged hero rather than on who swung.
+## NO BLOCK, NO DEFLECT, NO MANA: unchanged from 5-2/5-6 -- the attack is unblockable by name, and a
+## resolution here never enters `_resolve_contacts`' list, so `_generate_mana` awards nothing for it.
 ##
 ## `balance` IS NON-NULL HERE by construction: a chargeup can only have been started by a cast that
 ## already read `balance.unblockable_stamina_cost`.
-func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
+func _resolve_charge_contact(player: PlayerState, slot: int) -> void:
 	var opposing_slot := 1 - slot
 	var target := p2 if slot == 0 else p1
-	# STORY 6-1c (AC 5/AC 6): THE ONE REACH GATE GROWS ONE CONJUNCT, AND STAYS ONE GATE. The runner's
-	# KIND still answers the per-colour RADIUS; `_is_in_charge_arc` answers the per-colour ARC against
-	# the frozen committed direction. Both sit in this single condition, ahead of the ladder, so an
-	# attack outside either reaches NONE of the rungs below -- no second landing check exists, and no
-	# rung is reachable around this one.
-	#
-	# STORY 6-1d (AC 1/AC 4/AC 5/AC 6): THIS LINE IS UNEDITED, and that is the claim. Contact became
-	# honest geometry sampled on every committed tick, but it arrives through the SAME latch, gates
-	# the SAME single ladder, and fires exactly once on the tick `landing_window` closes. The whole
-	# change lives in what `push_contact` writes into `_charge_reach[slot]` and when -- see there.
-	# The arc conjunct is still state policy over the runner's direction fact and can still only
-	# REMOVE a hit the geometry admitted; it never widens one. Since `6-1d/R8` it reads the bearing
-	# latched WITH the `INSIDE` verdict, so both conjuncts judge the same tick's measurement.
-	if _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE and _is_in_charge_arc(player, slot) \
-			and target.hero.is_alive():
-		# STORY 6-6b (AC 5): THE LANDING-TICK NEGATION RUNG IS RETIRED, AND ITS ABSENCE IS THE AC.
-		# `5-5` seated the colour answer HERE, on the landing tick, against a window armed up to 1.5 s
-		# earlier; `5-6` hung the attacker's `color_counter_stun_ticks` off it. Both are gone. The colour
-		# answer is now judged in the ATTACKER's own CHARGING arm, at the COMMIT and on every pre-contact
-		# launch tick (`_resolve_color_counter`), and it KNOCKS THE ATTACKER DOWN rather than stunning it.
-		#
-		# SO AN ELIGIBLE WINDOW ON THE LANDING TICK WITH FIRST CONTACT ALREADY REGISTERED DOES NOT NEGATE,
-		# and that is structural rather than a new check: a counter returns from the CHARGING arm before
-		# this function is ever called, so any landing that reaches this line was not countered.
-		#
-		# `defense_window` / `defense_color` ARE NO LONGER READ OR WRITTEN HERE AT ALL. Nothing consumes
-		# the window any more -- it ends by expiry or by the debug reset and by nothing else -- which is
-		# what makes `5-5` AC 11's wrong-colour survival true BY CONSTRUCTION instead of by a branch
-		# placement a mutation could move (AC 5: the mutation proof moves to the observable half).
-		#
-		# WHAT IS BYTE-UNTOUCHED IN BEHAVIOUR (AC 5): the dodge rung directly below and the
-		# unanswered-package tier under it. The dodge rung becomes the ladder's FIRST sub-rung instead of
-		# its middle one, which changes its SEAT and nothing it does -- it is still the universal,
-		# card-less fallback, and it still stuns nobody.
-		# STORY 5-6 (AC 7): THE DODGE RUNG — the ladder's MIDDLE tier, and entirely new logic rather
-		# than a pre-existing behaviour surfaced. This function's own header enumerates what it does
-		# NOT consult (no block, no deflect, no arc) and, measured, it never consulted the defender's
-		# iframe either: the generic step-4 contact ladder's `1-9/R1` iframe drop
-		# (`_resolve_contacts`) is a STRUCTURALLY SEPARATE function and none of it applies here.
-		#
-		# THE PREDICATE IS READ FROM THE STEP-3 LATCH, NOT LIVE (AC 7's correction) — see
-		# `_iframe_open_at_step3` for why a live read would make the dodge seat-dependent. It is the
-		# defender's slot that is indexed, i.e. `opposing_slot`.
-		#
-		# READ-ONLY (AC 8): `roll_iframe` is neither consumed nor cleared here, and
-		# `_roll_iframe_closed_this_tick` is untouched — the SAME "read the predicate, drop the
-		# outcome" idiom the generic ladder uses. Dodging an unblockable neither ends the iframe
-		# window early nor extends it; it runs its own course exactly as `1-9/R3` already requires for
-		# every other contact.
-		#
-		# NO STUN ON THIS BRANCH, deliberately and not by oversight: Ruling 1b names an attacker
-		# consequence for the COLOUR counter (above) and none for a dodge. Do not add one by analogy.
-		#
-		# NO ORB GRANT EITHER WAY (Ruling 1b): `_grant_landing_orbs` is simply not called on this
-		# branch, the same "stay out of the list" mechanism the mana gate uses rather than a second
-		# check inside the grant.
-		if _iframe_open_at_step3[opposing_slot]:
-			# THE MULTIPLY-AND-EMIT-AT-SURVIVING-MAGNITUDE PRECEDENT (`block_damage_multiplier`,
-			# `:1447-1456`): the full damage is computed exactly as the Ruling 1c path below computes
-			# it and then scaled. At the authored `dodged_unblockable_damage_multiplier = 0.0` the
-			# effective damage is EXACTLY zero, so the guard below suppresses the emit entirely and a
-			# clean dodge is SILENT — the same full suppression the colour-match tier gets, not a
-			# zero-magnitude `hit_landed` a consumer would render as a hit for no damage. Retune the
-			# multiplier positive and the same lines emit at the surviving magnitude, with no code
-			# change: that is what makes this a genuine rung rather than a hardcoded "None".
-			var dodged := balance.unblockable_damage_percent_of_max_hp / 100.0 \
-					* target.hero.get_max_hp() * balance.dodged_unblockable_damage_multiplier
-			# Story 6-5a (AC 9): the funnel is SEATED after the dodge multiplier, the block seat's
-			# seating. Like there the ORDER is unobservable -- both are scalar factors, so the product
-			# is the same either way (6-5a REVIEW N1); what the seating buys is that `_apply_lifesteal`
-			# below measures the hp a POST-dodge number actually removed. A zero stays zero through any
-			# order, so a clean dodge stays silent under Bloodlust too.
-			dodged = _funnel_damage(player, TargetingService.HERO_INDEX, target,
-					TargetingService.HERO_INDEX, dodged)
-			if dodged > 0.0:
-				var dodged_hp_before := target.hero.get_hp()
-				target.hero.take_damage(dodged)
-				_apply_lifesteal(player, TargetingService.HERO_INDEX,
-						dodged_hp_before - target.hero.get_hp())
-				_queue.push(hit_landed.emit.bind(slot, opposing_slot, dodged, target.hero.get_hp()))
-		else:
-			# AC 18: the `attack_damage_percent_of_max_hp` expression verbatim, against the TARGET's
-			# own maximum, under the name that says which attack it belongs to. One value for all
-			# three colours in this story (Ruling 2). Story 5-6 (Ruling 1c): the ladder's THIRD tier
-			# — the UNANSWERED landing — reached only when neither the colour counter nor the dodge
-			# answered it, and UNTOUCHED by this story beyond becoming an `else`.
-			#
-			# STORY 6-6a (AC 3/AC 6/R-PRESS): THE DAMAGE, THE KNOCKDOWN AND `hit_landed` ARE NO LONGER
-			# APPLIED HERE -- they are one LANDING PACKAGE, owed to the victim and applied after step 6 by
-			# `_apply_landing_packages` (see `_landing_package_pending` for why a write at this seat would
-			# be seat-dependent). The orb grant STAYS: it is the CASTER's payout for a landing this ladder
-			# has already decided, not something that happens to the victim.
-			_landing_package_pending[slot] = true
-			_grant_landing_orbs(player)
-	# AC 20: the exit is UNCONDITIONAL on hit or miss, and it is the last thing that happens so the
-	# damage above is applied while the hero is still, conceptually, mid-attack. The telegraph key
-	# stops being reported the moment this line runs, because `PlayerState.to_snapshot()` derives it
-	# from `CHARGING` rather than from a flag something has to remember to clear.
-	#
-	# STORY 5-6 (AC 5): it now covers THREE of the four outcomes rather than all four — the negation
-	# returns above with its own single `STUNNED` write. Miss, dodge and full damage all still end
-	# here, exactly once each.
-	player.hero.set_action_state(HeroState.ActionState.IDLE)
+	if not target.hero.is_alive():
+		return
+	if _iframe_open_at_step3[opposing_slot]:
+		player.charge_contact = PlayerState.CHARGE_CONTACT_TOUCHED
+		return
+	player.charge_contact = PlayerState.CHARGE_CONTACT_HIT
+	_landing_package_pending[slot] = true
+	_grant_landing_orbs(player)
 
 
 ## Story 6-6a (AC 3/AC 5/AC 6/AC 7/AC 12): THE LANDING PACKAGE, applied at step 6b -- see
@@ -6324,8 +6145,8 @@ func _resolve_charge_landing(player: PlayerState, slot: int) -> void:
 ## A CHARGING VICTIM ABANDONS ITS CHARGEUP (AC 5): `charge_window`, `landing_window` and `charge_color`
 ## are cleared with the state write as ONE fact -- the same three lines the colour-counter teardown and
 ## `_reset_player` write (`6-1`'s release arm wrote them too; `6-9` deleted that arm). The
-## card and the stamina stay spent. `_charge_reach`/`_charge_contact_dirs` are NOT cleared, for `6-1d/R9`'s
-## reason ("cleared with the verdict, never on its own"), exactly as the counter teardown leaves them.
+## card and the stamina stay spent. `_charge_reach` is NOT cleared, for `6-1d/R9`'s
+## reason ("cleared with the verdict, never on its own"), exactly as the counter teardown leaves it.
 ##
 ## `balance` and `balance_ticks` are non-null: a package is only ever owed by a landing, which needs both.
 func _apply_landing_packages() -> void:
@@ -6353,6 +6174,9 @@ func _apply_landing_packages() -> void:
 				target.charge_window.start(0)
 				target.landing_window.start(0)
 				target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+				# Story 7-8 (OQ1): an abandoned attack's hit-once memory rests with it -- the victim may
+				# have landed its own hit, or had one dropped, earlier in its flight.
+				target.charge_contact = PlayerState.CHARGE_CONTACT_NONE
 		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
 
 
@@ -6867,9 +6691,8 @@ func _counter_color_of(player: PlayerState) -> int:
 ## and any `INSIDE` present at that judgement is NECESSARILY this tick's own push -- the cast seat
 ## cleared the latch (`6-1d/R9`), `push_contact` writes a verdict only inside the contact window and
 ## CLEARS outside it, and `is_contact_window_open()` first reads true on the commit tick itself
-## (`player_state.gd:327-328`). On every LATER judged tick the live latch read stands, because a latch
-## there means a contact has registered, whichever tick wrote it. Zero new state, `push_contact`
-## unedited.
+## (`player_state.gd:327-328`). On every LATER judged tick this tick's `INSIDE` closes the span, and a
+## touch on an earlier tick is remembered by `PlayerState.charge_contact` (story 7-8, `7-8/R13`).
 ##
 ## THE DEGENERATE CASE IS NAMED, NOT GUARDED: with a 0-tick chargeup the cast seat starts a window
 ## that never runs, the CHARGING arm first runs on the NEXT tick with `landing_window` already one
@@ -6884,8 +6707,8 @@ func _is_commit_tick(player: PlayerState) -> bool:
 ## Story 6-6b (AC 3/AC 4/AC 8): THE COLOUR COUNTER, judged and resolved at the ATTACKER's own step-3
 ## CHARGING seat. Returns true when the counter LANDED, which the caller reads as "this arm is done".
 ##
-## THE JUDGED SPAN IS THE COMMIT THROUGH THE LANDING TICK, expressed as "the chargeup window has
-## stopped". That is the one fact that says LAUNCHED (`6-1c`: chargeup running = pre-launch, stopped =
+## THE JUDGED SPAN IS THE COMMIT UP TO THE FIRST TOUCH (`7-8/R13`; through the landing tick when nothing
+## touches), expressed as "the chargeup window has stopped" plus the first-touch gate below. That is the one fact that says LAUNCHED (`6-1c`: chargeup running = pre-launch, stopped =
 ## committed to the flight), and it stays true on the landing tick, which is what AC 5's "a counter on
 ## the landing tick with no contact ever registered lands rather than the attack whiffing" requires.
 ## During the chargeup this returns false at the first line, so a counter pressed against a chargeup
@@ -6928,12 +6751,13 @@ func _is_commit_tick(player: PlayerState) -> bool:
 ## down. `_resolve_movement` follows immediately and its STUNNED branch roots the attacker.
 ##
 ## EXACTLY ONE `set_action_state` PER OUTCOME (the `5-6` rule): `CHARGING -> STUNNED` directly, with no
-## `IDLE` in between, because the caller returns before `_resolve_charge_landing`'s trailing `IDLE`.
+## `IDLE` in between, because the caller returns before the landing exit's trailing `IDLE`.
 ##
-## `_charge_reach` / `_charge_contact_dirs` ARE DELIBERATELY NOT CLEARED, `6-1d/R9`'s "cleared with the
+## `_charge_reach` IS DELIBERATELY NOT CLEARED, `6-1d/R9`'s "cleared with the
 ## verdict, never on its own" applied exactly as the knockdown teardown applies it: with
 ## `landing_window` stopped, `is_contact_window_open()` is false and the very next push takes the
-## clearing arm, and the next cast seat resets both anyway.
+## clearing arm, and the next cast seat resets it anyway. `charge_contact` is necessarily at rest here:
+## a counter is only judged before the attack's first touch.
 ##
 ## `balance_ticks` IS NON-NULL HERE by construction: a hero can only be CHARGING because a cast read it.
 func _resolve_color_counter(player: PlayerState, slot: int) -> bool:
@@ -6944,6 +6768,13 @@ func _resolve_color_counter(player: PlayerState, slot: int) -> bool:
 	if answered == NO_COUNTER_COLOR or player.charge_color == PlayerState.NO_TELEGRAPH_COLOR:
 		return false
 	if answered != player.charge_color:
+		return false
+	# Story 7-8 (`7-8/R13`, AC 10): THE SPAN ENDS AT THE FIRST TOUCH, counted or i-frame-dropped. A touch
+	# on an EARLIER tick is remembered by the hit-once key (the per-tick fact no longer is, `7-8/R10`); a
+	# touch on THIS tick is this tick's `INSIDE`, and on every tick but the commit it closes the span here
+	# too, before the contact seat runs. On the commit tick a counter beats a same-tick touch, as 6-6b
+	# ruled.
+	if player.charge_contact != PlayerState.CHARGE_CONTACT_NONE:
 		return false
 	if not _is_commit_tick(player) and _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE:
 		return false
@@ -8134,7 +7965,7 @@ func _reset_player(player: PlayerState) -> void:
 	# step-2 `charge_window.tick()` (`:388-389`), so once `_round_over` latches a chargeup STOPS
 	# COUNTING but stays armed; and this function forced IDLE only from DEAD, so a hero that was
 	# CHARGING when the other one died came out of the reset still CHARGING with a live window. That
-	# window then ticks down inside the NEXT round and `_resolve_charge_landing` applies the PREVIOUS
+	# window then ticks down inside the NEXT round and `_resolve_charge_contact` applies the PREVIOUS
 	# round's chargeup -- a hit nobody in the new round pressed for.
 	#
 	# THE THREE FIELDS ARE CLEARED TOGETHER because they are ONE FACT in three parts (the state, the
@@ -8173,12 +8004,14 @@ func _reset_player(player: PlayerState) -> void:
 	# chargeup clear above closes for the chargeup half.
 	player.landing_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
-	# Story 6-1d review fix (`6-1d/R9`): the contact verdict and its bearing are part of the same fact
-	# and are cleared with it, so a flight frozen by the round-over freeze credits nothing next round.
+	# Story 6-1d review fix (`6-1d/R9`): the contact fact is part of the same fact and is cleared with
+	# it, so a flight frozen by the round-over freeze credits nothing next round. Story 7-8 (OQ1): the
+	# hit-once memory too -- a lethal mid-flight hit leaves its attacker frozen in `CHARGING` with the
+	# memory set (`7-8/R16`), and this is where that attack ends.
 	var reset_slot := 0 if player == p1 else 1
 	_charge_reach[reset_slot] = REACH_UNKNOWN
-	_charge_contact_dirs[reset_slot] = Vector2.ZERO
-	# Story 6-6b (AC 15): BLUE's locked counter-travel bearing is cleared beside the two stores above,
+	player.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+	# Story 6-6b (AC 15): BLUE's locked counter-travel bearing is cleared beside the store above,
 	# on their classification and NOT as an eighth named reset exception -- none of the three is one.
 	# They are runner-pushed spatial facts, not the per-player hashed state the seven exceptions are
 	# about; clearing this one is what keeps a bearing locked before the round ended from carrying a

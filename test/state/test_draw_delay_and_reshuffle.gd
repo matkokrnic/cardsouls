@@ -85,7 +85,10 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	#                     so it is the hand's own contents, already an unhashed-cross-tick exclusion.
 	# Same mechanism, TENTH time: this pin and test_card_observation.gd's were BOTH red before this edit,
 	# and the story that adds the keys is the story that moves both.
-	"burst", "cast", "corpse_bomb",
+	# Story 7-8 (`7-8/R15`): the FORTY-SIXTH key -- `charge_contact`, the mode (2) hit-once memory, in
+	# SORTED position between `cast` and `corpse_bomb`. Same mechanism, ELEVENTH time: this pin and
+	# test_card_observation.gd's were BOTH red before this edit.
+	"burst", "cast", "charge_contact", "corpse_bomb",
 	"deck_size", "defense", "discard_size", "hand_covered", "hand_size", "hero",
 	# Story 6-1c (AC 2/AC 4): the THIRTY-FIRST key -- `landing`, the mode (2) landing window's
 	# remaining ticks, in SORTED position between `hero` and `lock_target`. Same mechanism, seventh

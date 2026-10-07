@@ -20,12 +20,10 @@ const _CLIPS := {
 }
 
 
+## Story 7-8: through `charge_playhead_for`, the one place a colour's knobs (GREEN's crouch-lead knee
+## included) are applied -- the call the controller itself seeks with.
 func _playhead(clip: String, progress: float) -> float:
-	var entry: Dictionary = _CLIPS[clip]
-	var strike_frame: float = entry["strike_frame"]
-	var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[entry["color"]]
-	return AnimationController.charge_playhead_seconds(
-		progress, strike_frame, knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"])
+	return AnimationController.charge_playhead_for(int(_CLIPS[clip]["color"]), progress)
 
 
 func test_progress_zero_maps_to_the_clip_start_for_every_charge_clip() -> void:
@@ -128,3 +126,98 @@ func test_a_degenerate_span_passes_the_progress_through() -> void:
 		for p: float in [0.0, 0.3, 0.75, 1.0]:
 			assert_eq(AnimationController.charge_commit_anchored_progress(p, bad[0], bad[1]), p,
 				"commit fraction %.2f / hold_end %.2f: progress %.2f passes through" % [bad[0], bad[1], p])
+
+
+# --- Story 7-8 (AC 13/AC 14/AC 15): the Genichiro re-tempo -------------------------------------------
+
+const CONFIG_PATH := "res://data/balance/balance_config.tres"
+## AC 14's bound, FIXED BEFORE THE KNOBS WERE MEASURED (recorded in the story's Dev Agent Record): GREEN
+## covers at least this share of its launch travel before the mapped apex. Below the ~2/3 target
+## (`7-8/R5`) so the knob keeps tuning room.
+const GREEN_TRAVEL_BEFORE_APEX_MIN := 0.60
+
+
+## AC 13 [M]: WITH THE SWING-AT-COMMIT REMAP, THE DANGEROUS SWEEP STARTS AT OR AFTER THE COMMIT. For every
+## colour and a spread of commit fractions: on every progress at or before the commit the mapped playhead
+## is at most the held pose (wind-up and hold only -- nothing has swung yet), and after it the playhead
+## climbs past the held pose to the strike frame. Pure mapping, no authored value read.
+func test_with_swing_at_commit_the_sweep_starts_at_or_after_the_commit() -> void:
+	for clip: String in _CLIPS:
+		var color: int = _CLIPS[clip]["color"]
+		var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[color]
+		var hold_playhead: float = float(_CLIPS[clip]["strike_frame"]) * float(knobs["hold_fraction"])
+		var hold_end := AnimationController.charge_hold_end_for(color)
+		for commit_fraction: float in [0.5, 0.69, 0.77, 0.9]:
+			var steps := 60
+			var after_commit_max := 0.0
+			for i in steps + 1:
+				var p := float(i) / float(steps)
+				var playhead := AnimationController.charge_playhead_for(color,
+					AnimationController.charge_commit_anchored_progress(p, commit_fraction, hold_end))
+				if p <= commit_fraction:
+					assert_true(playhead <= hold_playhead + 0.0001,
+						"%s, commit %.2f: at progress %.3f (before the commit) the playhead %.4f is past "
+							% [clip, commit_fraction, p, playhead]
+							+ "the held pose %.4f -- the sweep started before the commit (AC 13)" % hold_playhead)
+				else:
+					after_commit_max = maxf(after_commit_max, playhead)
+			assert_true(after_commit_max > hold_playhead,
+				"%s, commit %.2f: the sweep never left the held pose after the commit" % [clip, commit_fraction])
+
+
+## AC 14 [M]: GREEN RISES THROUGH MOST OF ITS TRAVEL. Over the SHIPPED spans and knobs (the authored
+## chargeup and GREEN launch, composed exactly as `match_runner._push_charge_progress` composes them,
+## remap included when the authored knob is on), the launch travel delivered on the ticks whose mapped
+## playhead has not yet passed the clip's apex is at least `GREEN_TRAVEL_BEFORE_APEX_MIN` of the total.
+## The per-tick shares are `MatchState._charge_launch_velocity`'s ramp, transcribed (the
+## `test_unblockable_tracking_and_reach.gd` `_launch_velocity` precedent): share(i) = 2 - (2i + 1) / L.
+##
+## Reads the authored spans because the claim is about the SHIPPED GREEN profile; it pins a BOUND, never
+## a knob value, so a retune inside the bound needs no suite edit (BC/R3, `7-8/R7`).
+func test_green_covers_most_of_its_launch_travel_before_the_apex() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads")
+	if config == null:
+		return
+	var ticks := BalanceTicks.from_config(config)
+	var c := ticks.unblockable_chargeup_ticks
+	var l := ticks.unblockable_launch_ticks_for(Enums.CardColor.GREEN)
+	assert_true(c > 0 and l > 1, "sanity: an authored chargeup and a multi-tick GREEN launch (%d, %d)" % [c, l])
+	var hold_end := AnimationController.charge_hold_end_for(Enums.CardColor.GREEN)
+	var before_apex := 0.0
+	var total := 0.0
+	for i in l:
+		var share := 2.0 - float(2 * i + 1) / float(l)
+		total += share
+		# Launch index i is pushed with L - i ticks left on the landing window (index 0 is the commit).
+		var progress := AnimationController.charge_attack_progress(l - i, c, l)
+		if config.unblockable_swing_at_commit:
+			progress = AnimationController.charge_commit_anchored_progress(progress,
+					float(c) / float(c + l), hold_end)
+		var playhead := AnimationController.charge_playhead_for(Enums.CardColor.GREEN, progress)
+		if playhead <= AnimationController.JUMP_ATTACK_APEX_SECONDS + 0.0001:
+			before_apex += share
+	var fraction := before_apex / total
+	print("  GREEN launch travel before the mapped apex: %.4f (bound %.2f, C=%d L=%d)"
+		% [fraction, GREEN_TRAVEL_BEFORE_APEX_MIN, c, l])
+	assert_true(fraction >= GREEN_TRAVEL_BEFORE_APEX_MIN,
+		"GREEN covers only %.3f of its launch travel before the apex, bound %.2f (AC 14, `7-8/R5`)"
+			% [fraction, GREEN_TRAVEL_BEFORE_APEX_MIN])
+
+
+## AC 14, the crouch half's structural pre-condition: GREEN's HELD pose is BEFORE take-off (at or before
+## the measured crouch), never airborne -- the 6-1b hold sat on the apex. A direction, not a value.
+func test_greens_held_pose_is_grounded_before_take_off() -> void:
+	var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[Enums.CardColor.GREEN]
+	var held := AnimationController.JUMP_ATTACK_STRIKE_FRAME_SECONDS * float(knobs["hold_fraction"])
+	assert_true(held <= AnimationController.JUMP_ATTACK_CROUCH_SECONDS + 0.01,
+		"GREEN holds at %.4f s, after the measured crouch %.4f s -- it would hold mid-air (`7-8/R5`)"
+			% [held, AnimationController.JUMP_ATTACK_CROUCH_SECONDS])
+
+
+## AC 15 (the optional structural half): the two cross-faded edges blend for MORE THAN 0 s.
+func test_the_two_cross_faded_charge_edges_blend() -> void:
+	assert_true(AnimationController.CHARGE_ENTRY_BLEND_SECONDS > 0.0,
+		"the charge-up's entry edge must cross-fade (`7-8/R6`)")
+	assert_true(AnimationController.CHARGE_EXIT_BLEND_SECONDS > 0.0,
+		"the attack's recovery edge must cross-fade (`7-8/R6`)")

@@ -788,7 +788,7 @@ extends TestCase
 ## WHY THE FIXTURE REACHES THIS STORY AT ALL, and it is not something the story added: `CONTACTS[5]`
 ## has been P1's swing landing on a front-facing, deflect-window-open P2 since 1-8, and it DEFLECTS by
 ## design. P1 is the attacker and a HERO, so AC 9's `HERO_INDEX` gate fires on coverage that was
-## already there. `_resolve_charge_landing` is NEVER reached (the fixture's one recorded cast is
+## already there. `_resolve_charge_contact` (5-2's landing seat, renamed at 7-8) is NEVER reached (the fixture's one recorded cast is
 ## `ModeKind.BASIC`), so AC 5 / AC 7 / AC 8 contribute nothing here BY CONSTRUCTION -- proven below,
 ## not assumed -- and are covered by test_unblockable_defense.gd instead.
 ##
@@ -902,7 +902,7 @@ extends TestCase
 ##     key held OFF `PlayerState.to_snapshot()` and EVERYTHING ELSE this story ships left in place --
 ##     the DEFENSE dispatch arm and `_resolve_defense_cast` with its flag gate, CHARGING refusal,
 ##     empty-slot guard and fifth stamina seat; the two new `defense_window.tick()` lines at step 2;
-##     the landing intercept inside `_resolve_charge_landing`; the `_reset_player` fourth exception;
+##     the landing intercept inside `_resolve_charge_contact`; the `_reset_player` fourth exception;
 ##     the widened `deflect_landed` signal and its second emit site; and the two new BalanceConfig
 ##     fields with their `BalanceTicks` conversion -- this file hashed dc2c9ffa EXACTLY: the
 ##     pre-story golden, unchanged. Measured at the dev pass by deleting those three lines, running
@@ -1304,7 +1304,18 @@ extends TestCase
 ##       `BC/R3`): the golden builds its effects in-test and never loads `data/effects/`.
 ##     * No RNG cause (AC 24): Counterspell's resolution consumes none, and the fixture never runs it.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "941958c52605abbcd1edf972e002543601325e5a9f98dfce569628c12f75871f"
+## STORY 7-8 RE-BASELINE (unblockable honest contact): `941958c5...` -> `1b1478ac...`, ONE re-baseline,
+## ONE MEASURED CAUSE, exactly the one predicted (`7-8/R15`): the new per-player `charge_contact` key
+## (the hit-once memory), key set 45 -> 46. The fixture never casts mode (2), so the key hashes at its
+## resting 0 on every tick and its PRESENCE alone is the cause. `FORMAT_VERSION` 19 -> 20 is a record
+## concern with no path into the hash.
+##
+##   ISOLATED BOTH DIRECTIONS (measured, restored from an out-of-repo copy with SHA256 verified both
+##   ways): (a) with the key erased from `PlayerState.to_snapshot()` and every other 7-8 change in place
+##   -- the per-tick contact fact, the touch-tick seat, the retired arc and dodge multiplier -- the hash
+##   is `941958c5...` EXACTLY; (b) with it restored, `1b1478ac...` on two separate runs.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "1b1478ac310fd163411f8ea71900fbb5524766dd80874227a3fd740848890e98"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1604,9 +1615,9 @@ func _golden_config() -> BalanceConfig:
 	# would suppress t5-t7 and land on a different final value — this line is what makes that
 	# distinction a golden-level fact rather than a unit-test-only one.
 	c.deflect_stamina_penalty = 18.0
-	# `dodged_unblockable_damage_multiplier` is deliberately NOT authored here, for
+	# The dodged-damage multiplier (retired at story 7-8, `7-8/R11`) was deliberately NOT authored here, for
 	# `reshuffle_vulnerable_window_seconds`'s stated reason: this fixture's ONE recorded cast is
-	# `ModeKind.BASIC` (`_play_sequence`), never `UNBLOCKABLE`, so `_resolve_charge_landing` is never
+	# `ModeKind.BASIC` (`_play_sequence`), never `UNBLOCKABLE`, so `_resolve_charge_contact` is never
 	# reached and the value cannot decide anything. Authoring it for a path this sequence does not
 	# take would be coverage of nothing. (Its companion `color_counter_stun_seconds` was named here
 	# on the same footing until 6-6b post-smoke retired the field, R-S6.) AC 5 / AC 7 / AC 8

@@ -155,17 +155,13 @@ func test_authored_unblockable_values_are_positive() -> void:
 		+ "and there is no telegraph window at all)")
 	# Story 6-1c (AC 5): the one reach became three, and the bound goes with each -- a zero radius in
 	# ANY colour makes that colour's attack unable to land, the same defect for one third of the deck.
-	# The ARC joins the class for the same reason: 0 degrees admits no direction, so the colour could
-	# never land, and above 360 is not an angle. These are BOUNDS, not pins: any authored value inside
-	# them passes, so tuning the feel knobs never needs this file.
+	# (The per-colour ARC bound that stood beside it retired with the arc at story 7-8, `7-8/R8`.)
+	# These are BOUNDS, not pins: any authored value inside them passes, so tuning the feel knobs never
+	# needs this file.
 	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
 		assert_true(config.unblockable_reach_for(color) > 0.0,
 			"the colour-%d unblockable reach must be authored > 0 (a zero reach can never be "
 			% color + "satisfied — that colour's attack could never land)")
-		var arc := config.unblockable_arc_degrees_for(color)
-		assert_true(arc > 0.0 and arc <= 360.0,
-			"the colour-%d unblockable arc must be authored in (0, 360] degrees, got %.1f"
-			% [color, arc])
 	assert_true(config.unblockable_damage_percent_of_max_hp > 0.0,
 		"unblockable_damage_percent_of_max_hp must be authored > 0 (a landed hit that takes "
 		+ "nothing off is a miss wearing a hit's clothes)")
@@ -316,27 +312,6 @@ func test_authored_stun_values_are_positive_and_correctly_ordered() -> void:
 	# opens, so the timer exit would arm nothing and the get-up could be timed into after all.
 	assert_true(config.get_up_iframe_seconds > 0.0,
 		"get_up_iframe_seconds must be authored > 0 (a 0-tick window arms nothing on the get-up)")
-
-
-## Story 5-6 (AC 4): the dodge rung's damage multiplier, and it takes a NARROWER bound than
-## `block_damage_multiplier`'s strict open interval on purpose.
-##
-## THE `>= 0.0` HALF IS NOT RE-ASSERTED HERE -- it is ALREADY covered by test_data_resources.gd's
-## `E1_BALANCE_FIELDS` non-negative loop, which AC 3 puts this field into. Citing the existing guard
-## rather than asserting the same bound in two files.
-##
-## THE UPPER BOUND IS `<= 1.0`, NOT `< 1.0`: at exactly 1.0 a dodge stops reducing anything relative
-## to Ruling 1c's full hit, which is the boundary rather than a defect, and Ruling 1b's ratified
-## authored value is 0.0 -- so unlike `block_damage_multiplier` (where 0.0 would be a free total
-## negation obsoleting deflect) the audit must PASS at zero on day one.
-func test_authored_dodge_multiplier_is_bounded_above() -> void:
-	var config := load(CONFIG_PATH) as BalanceConfig
-	assert_not_null(config, "authored balance config loads as BalanceConfig")
-	if config == null:
-		return
-	assert_true(config.dodged_unblockable_damage_multiplier <= 1.0,
-		"dodged_unblockable_damage_multiplier must be authored <= 1.0 (above it a 'dodge' would hurt "
-		+ "MORE than taking the hit undefended, inverting the ladder's middle rung)")
 
 
 ## Story 5-3's `test_the_charge_clip_speeds_still_describe_the_authored_chargeup` RETIRED here
@@ -1021,24 +996,35 @@ func _kind(config: BalanceConfig, kind_name: StringName) -> UnitKindProfile:
 	return config.kind_at(config.kind_index_of(kind_name))
 
 
-## Story 6-1d (AC 8, `6-1d/R6`): THE SWING-AT-COMMIT KNOB SHIPS OFF, in BOTH places that can decide
-## it -- the script default and the authored `.tres`. This is not a bound like the audits above; it
-## is the claim AC 8 actually makes, that the knob is BUILT and INERT, with the ON verdict left to
-## the operator at Live Smoke rather than taken here.
-##
-## Both halves matter. The script default is what an in-test `BalanceConfig.new()` gets, so the whole
-## unit suite runs against the OFF mapping; the authored value is what SHIPS. A pass on one and a
-## fail on the other is exactly the drift this asserts against.
-func test_the_swing_at_commit_knob_is_authored_off() -> void:
+## Story 6-1d (AC 8) shipped the swing-at-commit knob OFF and pinned it so; STORY 7-8 SUPERSEDES THE
+## AUTHORED HALF (AC 13, `7-8/R4`): the shipped mapping must start every colour's sweep at or after the
+## commit. What is pinned is that PROPERTY of the shipped spans and knobs, never the bool: on the commit
+## tick -- the first launch tick, pushed with L ticks left -- the runner's composed progress maps each
+## colour's playhead to no further than its held pose. The script-default half is unchanged: every
+## in-test `BalanceConfig.new()` still inherits OFF, so the unit suite keeps running the linear mapping
+## unless a test opts in. Renamed from `test_the_swing_at_commit_knob_is_authored_off`.
+func test_the_shipped_mapping_starts_each_sweep_at_or_after_the_commit() -> void:
 	assert_false(BalanceConfig.new().unblockable_swing_at_commit,
 		"the script default must be OFF -- it is what every in-test config inherits")
 	var config := load(CONFIG_PATH) as BalanceConfig
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
-	assert_false(config.unblockable_swing_at_commit,
-		"unblockable_swing_at_commit ships OFF (AC 8: built and inert; the ON verdict is Live "
-		+ "Smoke item 6's, not this story's)")
+	var ticks := BalanceTicks.from_config(config)
+	var c := ticks.unblockable_chargeup_ticks
+	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
+		var l := ticks.unblockable_launch_ticks_for(color)
+		var progress := AnimationController.charge_attack_progress(l, c, l)
+		if config.unblockable_swing_at_commit:
+			progress = AnimationController.charge_commit_anchored_progress(progress,
+					float(c) / float(c + l), AnimationController.charge_hold_end_for(color))
+		var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[color]
+		var held: float = AnimationController._CHARGE_STRIKE_FRAME_SECONDS[color] \
+				* float(knobs["hold_fraction"])
+		var at_commit := AnimationController.charge_playhead_for(color, progress)
+		assert_true(at_commit <= held + 0.0001,
+			"colour %d: the shipped mapping has the blade at %.4f s on the commit tick, past the held "
+				% [color, at_commit] + "pose %.4f s -- the sweep starts before the commit (AC 13)" % held)
 
 
 ## Story 6-2 (AC 9): the Pitch Zone countdown is authored > 0, the `unblockable_chargeup_seconds`

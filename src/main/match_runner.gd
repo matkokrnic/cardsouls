@@ -1108,9 +1108,8 @@ func _derive_pitch_effects() -> Dictionary[StringName, CardEffect]:
 ## `unblockable_reach` circle became `unblockable_reach_for(charge_color)` -- the charging player's
 ## own colour selects the swipe's, the thrust's or the jump's radius -- and what crosses inward is
 ## unchanged: the INSIDE/OUTSIDE kind and the planar direction, both from positions only. The
-## per-colour ARC is NOT judged here: it is state policy against the attacker's frozen committed
-## direction (`MatchState._is_in_charge_arc`), exactly the 1-8/R-B3 split `_gather_contact_facts`
-## states below -- this function still never reads `HeroState.facing`.
+## per-colour ARC 6-1c judged in state retired with story 7-8 (`7-8/R8`), and this function still
+## never reads `HeroState.facing` -- the 1-8/R-B3 split `_gather_contact_facts` states below.
 ##
 ## PUSHED THROUGH THE LAUNCH TOO: the hero stays `CHARGING` from the cast to the landing (the launch
 ## is a phase of it, not a state), so the fact the landing reads is measured on the landing tick
@@ -1240,7 +1239,7 @@ func _blade_overlaps_body(attacker: HeroActor, defender: HeroActor) -> bool:
 ## chargeup closes, and the progress now runs over the whole attack off the LANDING window
 ## (`AnimationController.charge_attack_progress`): the strike swing plays during the launch and
 ## progress 1.0 falls on the landing tick. The `6-1b/R6` guarantee carries over UNCHANGED because it
-## is keyed to the SAME edge -- `_resolve_charge_landing` writes `IDLE`/`STUNNED` synchronously on the
+## is keyed to the SAME edge -- the landing exit writes `IDLE`/`STUNNED` synchronously on the
 ## tick the landing window closes, so this poll already reads a non-`CHARGING` state there and
 ## pushes nothing stale; the knockdown abandonment, the counter teardown and the reset stop the
 ## landing window in the same breath as they leave `CHARGING` (`6-9` retired the fourth, the

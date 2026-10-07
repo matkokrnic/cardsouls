@@ -6,7 +6,7 @@ extends SceneTree
 ## Everything here runs through the REAL runner: `_push_charge_reach_facts` running melee's own
 ## `get_overlapping_areas()` query against the defender's real `Hurtbox` shape, `HeroActor.drive()`
 ## reparking the `HitboxShape` on the paladin's sword joint every tick (5-0a), `advance()` carrying
-## the launch, and `_resolve_charge_landing` resolving once. A headless fixture cannot reach any of
+## the launch, and `_resolve_charge_contact` resolving on the touch (story 7-8). A headless fixture cannot reach any of
 ## that -- it pushes the KIND by hand, which is precisely the thing under test here.
 ##
 ## FOUR CASES PER COLOUR, each a full chargeup -> commit -> launch -> landing:
@@ -58,9 +58,11 @@ class BareController extends Controller:
 
 
 const CONFIG_PATH := "res://data/balance/balance_config.tres"
-## One body width. The hero `Collision`/`HurtboxShape` box is 1 x 2 x 1 (hero.tscn), so two heroes
-## standing this far apart are just touching -- the layout where a blade swung between them must
-## connect, and the closest an honest one ever gets.
+## One body width. The hero BODY `Collision` box is 1 x 2 x 1 (hero.tscn), so two heroes standing this
+## far apart are just touching -- the closest the two bodies can get, and the layout where a blade swung
+## between them must connect. Story 7-8 re-derived it: the HIT shape is no longer that box (it is the
+## trunk-following cylinder, AC 11), but the body collision keeps it (AC 12), so this is still the
+## closest stance -- and the `touch` cases below still connect at it, measured.
 const BODY := 1.0
 ## Where the defender is parked when it must be nowhere near the blade: clear of the launch, clear
 ## of the body, and clear of the authored radius too, so no case can leak into another.
@@ -94,6 +96,8 @@ var _hp_before := 0.0
 var _cast_pos := Vector3.ZERO
 var _saw_overlap := false
 var _fled := false
+## Story 7-8 (AC 1): whether the touch-tick check below has run for this case.
+var _touch_tick_judged := false
 var _contact_ticks := 0
 var _y := 0.0
 var _holder: BareController
@@ -194,6 +198,7 @@ func _physics_process(_delta: float) -> bool:
 		_cast_pos = _p1_actor.position
 		_saw_overlap = false
 		_fled = false
+		_touch_tick_judged = false
 		_contact_ticks = 0
 		_frozen_frame = -1
 		_frozen_inside = false
@@ -214,6 +219,28 @@ func _physics_process(_delta: float) -> bool:
 			_step_frozen(label, player)
 			return false
 		if player.hero.action_state == HeroState.ActionState.CHARGING:
+			# STORY 7-8 (AC 1, `7-8/R1`): THE HIT LANDS ON THE TOUCH TICK, LIVE. The first time this callback
+			# sees the runner's fact read INSIDE, the advance that processed it has already run its contact
+			# seat and its step-6b package: the damage is in, while the attacker is still mid-flight.
+			if kind == "touch" and not _touch_tick_judged \
+					and _state._charge_reach[0] == MatchState.CONTACT_CHARGE_REACH_INSIDE:
+				_touch_tick_judged = true
+				_check(_state.p2.hero.get_hp() < _hp_before - HP_EPS,
+					"%s: the runner reported the touch and no damage landed on that tick (AC 1)" % label)
+				_check(player.landing_window.is_running,
+					"%s: sanity -- the touch tick fell inside the flight, before the landing" % label)
+			if kind == "charge" and not _fled:
+				# STORY 7-8 RE-DERIVED THIS LAYOUT (AC 13, `7-8/R4`): the re-tempo holds each colour's
+				# anticipation pose for the whole chargeup and starts the sweep at the commit, so parked one
+				# body width away the BLUE thrust's held pull-back never reaches the narrow trunk hit shape
+				# during the chargeup (the very thing AC 13's smoke half asks for) and the case had nothing
+				# to refuse. The defender is therefore parked ON the blade every chargeup frame -- its own
+				# hit shape's centre on the tracked blade's centre, read live -- with the two bodies told to
+				# pass through each other so the depenetration does not push it off again.
+				_p2_actor.set_body_pass_through(_p1_actor, true)
+				var blade: Vector3 = _p1_actor.hitbox_shape.global_position
+				_p2_actor.global_position = blade \
+						- (_p2_actor.hurtbox_shape.global_position - _p2_actor.global_position)
 			if _blade_overlaps():
 				_saw_overlap = true
 				# Counted INDEPENDENTLY of the runner's latch, by asking the physics server the same
@@ -227,11 +254,17 @@ func _physics_process(_delta: float) -> bool:
 				_check(_saw_overlap, "%s: the defender never actually overlapped the blade during "
 					% label + "the chargeup -- the case would pass vacuously")
 				_p2_actor.position = _cast_pos + Vector3(travel + reach + CLEAR, 0.0, 0.0)
+				_p2_actor.set_body_pass_through(_p1_actor, false)
 			if kind == "flee" and not _fled and not player.charge_window.is_running \
 					and _state._charge_reach[0] == MatchState.CONTACT_CHARGE_REACH_INSIDE \
-					and player.landing_window.remaining_ticks() >= 3:
+					and player.landing_window.remaining_ticks() >= 2:
 				# Touched at an evaluated tick, with evaluated ticks still to run: clear away, so
-				# the LAST tick the check runs on reports nothing at all.
+				# the LAST tick the check runs on reports nothing at all. STORY 7-8 RE-DERIVED THE
+				# THRESHOLD (3 -> 2): the swing-at-commit re-tempo brings RED's swipe onto the body late in
+				# its launch, and 2 is the exact minimum -- the teleport lands after this frame's physics
+				# step, so the NEXT push still reads the pre-teleport overlap (the standing one-tick lag)
+				# and the one after reads clear while the landing window still runs. The assertion below
+				# is unchanged.
 				_fled = true
 				_p2_actor.position = _cast_pos + Vector3(travel + reach + CLEAR, 0.0, 0.0)
 			return false
@@ -242,6 +275,7 @@ func _physics_process(_delta: float) -> bool:
 				* _state.p2.hero.get_max_hp()
 		match kind:
 			"touch":
+				_check(_touch_tick_judged, "%s: the touch-tick check never ran (AC 1 untested)" % label)
 				_check(hit, "%s: the launch brought the blade onto the body and nothing landed "
 					% label + "(AC 1) -- latched kind %d, %d contact tick(s)"
 						% [latched, _contact_ticks])
@@ -292,17 +326,17 @@ func _step_frozen(label: String, player: PlayerState) -> void:
 		if player.charge_window.is_running or player.hero.action_state != HeroState.ActionState.CHARGING:
 			return
 		# Committed, launch running, parked clear so far: force the round over and put the defender
-		# on the blade -- its body centre just beyond the tracked blade shape, along the line from the
-		# attacker's centre, so the hurtbox box contains the blade wherever this colour's pose left it.
+		# on the blade. STORY 7-8 RE-DERIVED THIS PLACEMENT for the trunk-following hit shape (AC 11): it
+		# used to park the body centre `BODY * 0.4` beyond the blade, which put the old 1 x 2 x 1 hurtbox
+		# box around the blade wherever the pose left it; the narrow cylinder cannot reach a blade the
+		# GREEN leap holds above head height that way. So the defender is moved -- in all three axes --
+		# until its OWN hit shape's centre sits on the tracked blade's centre, read live off both actors.
 		_check(_state._charge_reach[0] != MatchState.CONTACT_CHARGE_REACH_INSIDE,
 			"%s: sanity -- the parked defender was already latched INSIDE before the freeze" % label)
 		_state._end_round(_state.p2, 1)
 		var blade: Vector3 = _p1_actor.hitbox_shape.global_position
-		var out := Vector3(blade.x - _p1_actor.global_position.x, 0.0,
-				blade.z - _p1_actor.global_position.z)
-		out = out.normalized() if not out.is_zero_approx() else Vector3(1.0, 0.0, 0.0)
-		_p2_actor.global_position = Vector3(blade.x, _p2_actor.global_position.y, blade.z) \
-				+ out * (BODY * 0.4)
+		var hurt_offset: Vector3 = _p2_actor.hurtbox_shape.global_position - _p2_actor.global_position
+		_p2_actor.global_position = blade - hurt_offset
 		# `6-1d/R14` (review2 LOW-B): the overlap check above only proves the blade shape touches
 		# the body -- it says nothing about the runner's OTHER conjunct, the reach pre-filter. A
 		# retune that shrinks reach below this placement would make the overlap-vacuity check pass

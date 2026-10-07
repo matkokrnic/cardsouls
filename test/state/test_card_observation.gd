@@ -296,7 +296,9 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# SORTED position. Same mechanism, TENTH time: this pin and
 		# test_draw_delay_and_reshuffle.gd's were BOTH red before this edit, and the story that adds
 		# the keys is the story that moves both.
-		"burst", "cast", "corpse_bomb",
+		# Story 7-8 (`7-8/R15`): `charge_contact`, the mode (2) hit-once memory -- a small int -- in
+		# sorted position between `cast` and `corpse_bomb`. Same mechanism, ELEVENTH time.
+		"burst", "cast", "charge_contact", "corpse_bomb",
 		"deck_size", "defense", "discard_size", "hand_covered", "hand_size", "hero", "landing",
 		"last_resolved_card", "lock_target",
 		"mana", "orbs",
@@ -358,8 +360,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 45,
-		"the per-player snapshot key set is FORTY-FIVE keys as of story 6-5f, which adds TWO: "
+	assert_eq(keys.size(), 46,
+		"the per-player snapshot key set is FORTY-SIX keys as of story 7-8, which adds ONE: "
+		+ "`charge_contact` (the mode (2) hit-once memory -- a touch closed the counter span, or the "
+		+ "hit landed; produced at the contact seat and read on later flight ticks, so nothing in the "
+		+ "tick that reads it could recompute it). It was FORTY-FIVE as of story 6-5f, which adds TWO: "
 		+ "`reversal` (the per-resolution undo packet -- what the last resolved card ACTUALLY did, in "
 		+ "enough detail to undo it; written at one player's resolution and read, if ever, at a LATER "
 		+ "activation by the other, so nothing in the tick that reads it could recompute it) and "

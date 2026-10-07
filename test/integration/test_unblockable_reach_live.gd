@@ -6,8 +6,8 @@ extends SceneTree
 ## `_push_charge_progress` driving the real AnimationPlayer across the launch.
 ##
 ## THE LAYOUT IS DERIVED FROM THE AUTHORED `.tres`, NEVER PINNED (the `test_contact_pipeline.gd`
-## precedent): every distance below is computed from the live per-colour reach / launch distance /
-## arc, so a feel retune reschedules this test instead of breaking it -- operator tuning never needs a
+## precedent): every distance below is computed from the live per-colour reach / launch distance
+## (the arc retired at story 7-8, `7-8/R8`), so a feel retune reschedules this test instead of breaking it -- operator tuning never needs a
 ## suite edit (the story's Live Smoke note).
 ##
 ## STORY 6-1d REWRITES WHAT THE THREE CASES ASSERT, AND THAT REWRITE IS THE STORY. Through `6-1c` a
@@ -28,7 +28,8 @@ extends SceneTree
 ##   side -- the defender starts dead ahead (tracked through the chargeup, AC 1) and is teleported,
 ##           the instant the chargeup closes, to 90 degrees off the frozen line beside where the launch
 ##           ends, well inside the radius. Inside the radius, nowhere near the blade: a MISS for every
-##           colour now, including GREEN, whose radial arc used to make this one land.
+##           colour now, including GREEN, whose radial arc used to make this one land (and since story
+##           7-8 there is no arc at all: only geometry decides).
 ##
 ## ON EVERY CHARGING FRAME (AC 9/AC 11): the charge clip's playhead is strictly BELOW the colour's
 ## measured strike frame, never moves backwards, and keeps MOVING through the launch (no frozen pose
@@ -129,7 +130,6 @@ func _physics_process(_delta: float) -> bool:
 	var label := "colour %d %s" % [color, kind]
 	var travel := _config.unblockable_launch_distance_for(color)
 	var reach := _config.unblockable_reach_for(color)
-	var arc := _config.unblockable_arc_degrees_for(color)
 	var player := _state.p1
 
 	if _phase == "setup":
@@ -216,15 +216,11 @@ func _physics_process(_delta: float) -> bool:
 						% [label, latched])
 			"side":
 				# STORY 6-1d: a sidestep after the commit leaves the blade's path, so it misses on
-				# GEOMETRY for every colour. The ARC is no longer what carries this case -- it is
-				# still a state-side conjunct, and its own per-colour behaviour is pinned headless
-				# (test_unblockable_tracking_and_reach.gd, AC 5) where the kind can be driven
-				# directly.
+				# GEOMETRY for every colour. Since story 7-8 (`7-8/R8`) there is no arc left at all.
 				_check(latched == MatchState.CONTACT_CHARGE_REACH_OUTSIDE,
 					"%s: the runner latched kind %d, want OUTSIDE -- a sidestepped defender is not "
-						% [label, latched] + "touched by the blade whatever the arc says")
-				_check(not hit, "%s: a sidestep after the commit must WHIFF (arc %.0f)"
-					% [label, arc])
+						% [label, latched] + "touched by the blade")
+				_check(not hit, "%s: a sidestep after the commit must WHIFF" % label)
 		_phase = "after"
 		_phase_frame = _frames
 		return false
@@ -243,12 +239,15 @@ func _physics_process(_delta: float) -> bool:
 ## The playhead the runner's progress push must produce with `landing_remaining` ticks left, through
 ## the SAME two pure statics the runner and the controller call -- read off the authored spans.
 func _expected_playhead(color: int, landing_remaining: int) -> float:
-	var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[color]
-	var progress := AnimationController.charge_attack_progress(landing_remaining,
-			_ticks.unblockable_chargeup_ticks, _ticks.unblockable_launch_ticks_for(color))
-	return AnimationController.charge_playhead_seconds(progress,
-			AnimationController._CHARGE_STRIKE_FRAME_SECONDS[color],
-			knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"])
+	var c := _ticks.unblockable_chargeup_ticks
+	var l := _ticks.unblockable_launch_ticks_for(color)
+	var progress := AnimationController.charge_attack_progress(landing_remaining, c, l)
+	# Story 7-8: the authored swing-at-commit knob ships ON (AC 13), so the runner composes the remap;
+	# this mirrors `_push_charge_progress` exactly, whichever way the knob is authored.
+	if _config.unblockable_swing_at_commit:
+		progress = AnimationController.charge_commit_anchored_progress(progress,
+				float(c) / float(c + l), AnimationController.charge_hold_end_for(color))
+	return AnimationController.charge_playhead_for(color, progress)
 
 
 ## The `test_charge_telegraph_dispatch_live.gd` teardown, for its measured reason: every CHARGING

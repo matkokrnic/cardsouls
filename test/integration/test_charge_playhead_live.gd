@@ -58,9 +58,9 @@ func _drive_session(color: int, clip: StringName, strike_frame: float, total_tic
 		window.tick()
 		var progress := 1.0 - float(window.remaining_ticks()) / float(total_ticks)
 		_hero.animation_controller.on_charge_progress(color, progress)
-		var knobs: Dictionary = AnimationController._CHARGE_HOLD_KNOBS[color]
-		var want := AnimationController.charge_playhead_seconds(
-			progress, strike_frame, knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"])
+		# Story 7-8: through `charge_playhead_for`, the call the controller seeks with (GREEN's
+		# crouch-lead knee included).
+		var want := AnimationController.charge_playhead_for(color, progress)
 		_check(absf(_player.current_animation_position - want) < EPS,
 			"%s: tick with progress %.4f expected playhead %.4f, got %.4f"
 				% [clip, progress, want, _player.current_animation_position])

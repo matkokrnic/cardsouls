@@ -117,13 +117,11 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# bound in test_balance_authoring.gd; the get-up iframes carry their own `> 0` bound there.
 	"knockdown_stun_seconds", "get_up_iframe_seconds",
 	# Story 5-6 (AC 2/AC 3): the deflected ATTACKER's stamina penalty (distinct from the DEFENDER's
-	# `deflect_stamina_cost` above) and the dodge rung's damage multiplier. Neither carries the
-	# `_seconds` suffix, so half (b) leaves them alone -- a penalty and a multiplier are not
-	# durations. `deflect_stamina_penalty` carries a bespoke `> 0.0` bound in test_balance_authoring.gd
-	# (a zero silently disarms `E5-P/R1`); `dodged_unblockable_damage_multiplier` carries only a
-	# bespoke `<= 1.0` upper bound there, because 0.0 IS its ratified authored value and the `>= 0.0`
-	# half is exactly what the non-negative loop below already asserts -- cited rather than duplicated.
-	"deflect_stamina_penalty", "dodged_unblockable_damage_multiplier",
+	# `deflect_stamina_cost` above). It carries no `_seconds` suffix, so half (b) leaves it alone -- a
+	# penalty is not a duration. It carries a bespoke `> 0.0` bound in test_balance_authoring.gd (a zero
+	# silently disarms `E5-P/R1`). The dodge rung's multiplier that 5-6 listed beside it retired at story
+	# 7-8 (`7-8/R11`).
+	"deflect_stamina_penalty",
 	# Story 5-2 (AC 6/AC 10/AC 17/AC 18): the FOUR unblockable-initiation tunables. Listed here
 	# because reflection half (a) below fails otherwise -- which is the guard working: a new
 	# BalanceConfig tunable that nothing audits ships unaudited. Only ONE of the four carries the
@@ -135,13 +133,12 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# 0.0 script default, which would ship the whole story invisible in the build.
 	"unblockable_stamina_cost", "unblockable_chargeup_seconds",
 	"unblockable_damage_percent_of_max_hp",
-	# Story 6-1c (AC 4/AC 5): `unblockable_reach` REMOVED and replaced by FOUR per-colour triplets --
-	# reach, arc, launch distance, launch span. The three spans carry the `_seconds` suffix, so half
-	# (b) below independently demands their stem-matched `unblockable_launch_ticks_*` twins on
-	# `BalanceTicks`. Non-negativity is all this loop asks of them; the positive/arc bounds are
-	# test_balance_authoring.gd's.
+	# Story 6-1c (AC 4/AC 5): `unblockable_reach` REMOVED and replaced by per-colour triplets -- reach,
+	# launch distance, launch span (the arc triplet retired at story 7-8, `7-8/R8`). The three spans
+	# carry the `_seconds` suffix, so half (b) below independently demands their stem-matched
+	# `unblockable_launch_ticks_*` twins on `BalanceTicks`. Non-negativity is all this loop asks of
+	# them; the positive bounds are test_balance_authoring.gd's.
 	"unblockable_reach_red", "unblockable_reach_blue", "unblockable_reach_green",
-	"unblockable_arc_degrees_red", "unblockable_arc_degrees_blue", "unblockable_arc_degrees_green",
 	"unblockable_launch_distance_red", "unblockable_launch_distance_blue",
 	"unblockable_launch_distance_green",
 	"unblockable_launch_seconds_red", "unblockable_launch_seconds_blue",

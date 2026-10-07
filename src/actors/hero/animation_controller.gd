@@ -317,6 +317,12 @@ const _CHARGE_CLIP := {
 const SWIPE_STRIKE_FRAME_SECONDS := 0.8450
 const THRUST_STRIKE_FRAME_SECONDS := 0.9067
 const JUMP_ATTACK_STRIKE_FRAME_SECONDS := 2.1542
+## Story 7-8 (AC 14, `7-8/R5`): two more MEASURED frames of `jump_attack`, the clip facts GREEN's crouch
+## lead is authored against (`tools/measure_torso_envelope.gd` and a 120 Hz hips scan, this pass): the
+## CROUCH -- the lowest hips before take-off, 0.5605 at t=0.7667 -- and the airborne APEX, hips 1.96 at
+## t~1.235 (6-1b measured the sword's reach peak there at 1.2375, the value kept).
+const JUMP_ATTACK_CROUCH_SECONDS := 0.7667
+const JUMP_ATTACK_APEX_SECONDS := 1.2375
 
 const _CHARGE_STRIKE_FRAME_SECONDS := {
 	Enums.CardColor.RED: SWIPE_STRIKE_FRAME_SECONDS,
@@ -416,11 +422,38 @@ static func counter_release_seconds(color: int, busy_seconds: float) -> float:
 	return busy_seconds * COUNTER_DAGGER_RELEASE_FRACTION
 
 
+## STORY 7-8 (`7-8/R4`/`R5`/`R7`, AC 13/AC 14): THE GENICHIRO RE-TEMPO, authored here as knob VALUES on
+## the same mechanism, with `unblockable_swing_at_commit` shipped ON (`balance_config.tres`): the
+## chargeup fills `[0, hold_end]` and the launch fills `[hold_end, 1]`, so each colour winds up QUICKLY
+## (the first third of the chargeup), HOLDS its anticipation pose for the remaining two thirds, and only
+## then sweeps -- fast, across the launch, starting at the commit (AC 13).
+##   RED/BLUE: `hold_start` moves EARLIER (0.30 -> 0.15, 0.40 -> 0.18), so the wind-up is a third of the
+##             chargeup and the held pose two thirds; the held POSE itself is unchanged.
+##   GREEN:    the held pose moves off the airborne apex onto the measured CROUCH
+##             (`JUMP_ATTACK_CROUCH_SECONDS` / strike frame = 0.3559), so GREEN visibly crouches before
+##             take-off (`7-8/R5`), and a NEW per-colour entry, `crouch_lead`, bends the launch half: the
+##             playhead rises from the crouch to the APEX over the first `crouch_lead` of the launch and
+##             falls from the apex to the strike frame over the rest. The launch TRAVEL is front-loaded
+##             (6-1d AC 7), so the later the apex lands in the launch, the more of the travel happens
+##             on the way up; 0.42 puts ~69 % of it before the apex at the shipped spans (`7-8/R5`: about two thirds; the
+##             bound is pinned in test_charge_playhead_mapping.gd). Absent for RED/BLUE: their close
+##             stays the straight hold -> strike lerp.
+## Values before 7-8: RED 0.30/0.45/0.15, BLUE 0.40/0.55/0.17, GREEN 0.40/0.55/0.5744 (held ON the apex).
 const _CHARGE_HOLD_KNOBS := {
-	Enums.CardColor.RED: {"hold_start": 0.3, "hold_end": 0.45, "hold_fraction": 0.15},
-	Enums.CardColor.BLUE: {"hold_start": 0.40, "hold_end": 0.55, "hold_fraction": 0.17},
-	Enums.CardColor.GREEN: {"hold_start": 0.40, "hold_end": 0.55, "hold_fraction": 0.5744},
+	Enums.CardColor.RED: {"hold_start": 0.15, "hold_end": 0.45, "hold_fraction": 0.15},
+	Enums.CardColor.BLUE: {"hold_start": 0.18, "hold_end": 0.55, "hold_fraction": 0.17},
+	Enums.CardColor.GREEN: {"hold_start": 0.18, "hold_end": 0.55, "hold_fraction": 0.3559,
+			"crouch_lead": 0.42},
 }
+
+## Story 7-8 (AC 15, `7-8/R6`): THE TWO CROSS-FADED EDGES of an unblockable, as presentation knobs --
+## entering the charge clip from whatever the hero was playing (the charge-up's start), and leaving it
+## for `idle` at the landing (the recovery). Both used `_restart`'s instant cut (3-0a/R5), which is the
+## pop `7-8/R6` names; these two edges ONLY now blend, every other evented transition keeps the cut.
+## The victim's knockdown entry is 7-2's, and a counter or knockdown ending the charge (`STUNNED`) stays
+## instant -- it is an interruption, not a recovery.
+const CHARGE_ENTRY_BLEND_SECONDS := 0.15
+const CHARGE_EXIT_BLEND_SECONDS := 0.2
 
 
 ## THE RE-TEMPO MAPPING (AC 1/AC 2/AC 11): window PROGRESS (0..1, computed runner-side per
@@ -432,9 +465,15 @@ const _CHARGE_HOLD_KNOBS := {
 ## close from the held pose to the strike frame. `hold_start_progress`/`hold_end_progress`/
 ## `hold_playhead_fraction` are the per-clip knobs from `_CHARGE_HOLD_KNOBS` -- passed explicitly
 ## so the function stays pure and testable per clip without reading the dictionary itself.
+##
+## Story 7-8 (AC 14): an optional KNEE in the fast close -- the playhead reaches `knee_playhead_seconds`
+## at `knee_close_fraction` of the close (hold_end -> 1) and the strike frame at its end, two straight
+## pieces instead of one. GREEN's crouch lead is the one user; with no knee (the defaults) the close is
+## the single lerp it always was, so RED and BLUE map exactly as before for the same knob values.
 static func charge_playhead_seconds(progress: float, strike_frame_seconds: float,
 		hold_start_progress: float, hold_end_progress: float,
-		hold_playhead_fraction: float) -> float:
+		hold_playhead_fraction: float, knee_close_fraction: float = -1.0,
+		knee_playhead_seconds: float = -1.0) -> float:
 	var p := clampf(progress, 0.0, 1.0)
 	var hold_playhead := strike_frame_seconds * hold_playhead_fraction
 	if p <= hold_start_progress:
@@ -442,7 +481,32 @@ static func charge_playhead_seconds(progress: float, strike_frame_seconds: float
 	if p <= hold_end_progress:
 		return hold_playhead
 	var span := 1.0 - hold_end_progress
-	return lerpf(hold_playhead, strike_frame_seconds, (p - hold_end_progress) / span)
+	var c := (p - hold_end_progress) / span
+	if knee_close_fraction > 0.0 and knee_close_fraction < 1.0 \
+			and knee_playhead_seconds > hold_playhead and knee_playhead_seconds < strike_frame_seconds:
+		if c <= knee_close_fraction:
+			return lerpf(hold_playhead, knee_playhead_seconds, c / knee_close_fraction)
+		return lerpf(knee_playhead_seconds, strike_frame_seconds,
+				(c - knee_close_fraction) / (1.0 - knee_close_fraction))
+	return lerpf(hold_playhead, strike_frame_seconds, c)
+
+
+## Story 7-8: THE ONE PLACE A COLOUR'S KNOBS ARE APPLIED -- `charge_playhead_seconds` with this colour's
+## strike frame, hold triple and (GREEN only) crouch-lead knee read from the tables above. The controller
+## seeks with it and the tests compare against it, so a knob added to the table cannot be applied in one
+## and forgotten in the other. -1.0 for a colour with no clip.
+static func charge_playhead_for(color: int, progress: float) -> float:
+	var strike_frame: float = _CHARGE_STRIKE_FRAME_SECONDS.get(color, 0.0)
+	var knobs: Dictionary = _CHARGE_HOLD_KNOBS.get(color, {})
+	if strike_frame <= 0.0 or knobs.is_empty():
+		return -1.0
+	var knee := -1.0
+	var knee_playhead := -1.0
+	if knobs.has("crouch_lead"):
+		knee = float(knobs["crouch_lead"])
+		knee_playhead = JUMP_ATTACK_APEX_SECONDS
+	return charge_playhead_seconds(progress, strike_frame, knobs["hold_start"], knobs["hold_end"],
+			knobs["hold_fraction"], knee, knee_playhead)
 
 ## Story 6-1c (AC 11, `6-1c/R2`/`R6`): THE LAUNCH PROGRESS CHANNEL -- the progress fed to
 ## `charge_playhead_seconds` above, composed over the WHOLE ATTACK rather than the chargeup alone.
@@ -453,7 +517,7 @@ static func charge_playhead_seconds(progress: float, strike_frame_seconds: float
 ## STRIKE FRAME -- at the commit and then hold it for the whole launch: the frozen strike-pose glide
 ## AC 11 forbids, with the blade arriving before the damage. So the progress runs over the chargeup
 ## PLUS the colour's launch span, off the ONE window that spans both (`PlayerState.landing_window`,
-## which closes on exactly the tick `_resolve_charge_landing` fires):
+## which closes on exactly the landing tick, where the arm's landing exit fires):
 ##   * the chargeup maps to [0, C / (C + L)] of the playhead curve and the launch maps to
 ##     [C / (C + L), 1.0], but this is NOT a clean wind-up/strike-swing partition: the swing itself
 ##     begins at the `hold_end` knob (a fraction of the WHOLE curve, unchanged by this story), which
@@ -670,11 +734,17 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 			# Story 6-1b: speed 0.0 PINS the playhead -- on_charge_progress below is now the ONLY
 			# thing that ever moves it, never AnimationPlayer's own idle-process advance. _restart
 			# still seeks to 0.0 so a fresh CHARGING entry always starts from the clip's rest pose.
-			_restart(charge_clip, 0.0)
+			# Story 7-8 (AC 15): this edge CROSS-FADES from the outgoing clip (`7-8/R6`).
+			_restart(charge_clip, 0.0, CHARGE_ENTRY_BLEND_SECONDS)
 		return
 	var clip: StringName = _CLIP.get(current, &"")
 	if clip != &"":
-		_restart(clip)
+		# Story 7-8 (AC 15): the attack's RECOVERY -- the landing exit `CHARGING -> IDLE` -- cross-fades
+		# out of the strike pose; every other evented transition keeps the instant cut (3-0a/R5).
+		var blend := CHARGE_EXIT_BLEND_SECONDS \
+				if previous == HeroState.ActionState.CHARGING and current == HeroState.ActionState.IDLE \
+				else -1.0
+		_restart(clip, 1.0, blend)
 
 
 ## Story 6-1b (AC 1/AC 4, finding 5): pushed every tick the hero is CHARGING -- a NEW call site
@@ -695,14 +765,10 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 func on_charge_progress(charge_color: int, progress: float) -> void:
 	if _state != HeroState.ActionState.CHARGING:
 		return
-	var strike_frame: float = _CHARGE_STRIKE_FRAME_SECONDS.get(charge_color, 0.0)
-	if strike_frame <= 0.0:
+	var playhead := charge_playhead_for(charge_color, progress)
+	if playhead < 0.0:
 		return
-	var knobs: Dictionary = _CHARGE_HOLD_KNOBS.get(charge_color, {})
-	if knobs.is_empty():
-		return
-	animation_player.seek(charge_playhead_seconds(progress, strike_frame,
-		knobs["hold_start"], knobs["hold_end"], knobs["hold_fraction"]), true)
+	animation_player.seek(playhead, true)
 
 
 ## Story 6-6a (AC 1/AC 2/AC 5/AC 12): the SECOND consumer of the existing `hit_landed` seam, gated on
@@ -1255,13 +1321,14 @@ static func held_clip_speed(clip_seconds: float, hold_seconds: float) -> float:
 	return clip_seconds / hold_seconds
 
 
-## Unconditional restart for the evented transition path. NO custom_blend here on purpose: the
+## Unconditional restart for the evented transition path. NO custom_blend by default, on purpose: the
 ## 3-0a/R5 policy is that a transition wins immediately, and 5-0a's crossfade is scoped to the
-## locomotion clips only (AC 2). The seek() is LOAD-BEARING and not belt-and-braces:
+## locomotion clips only (AC 2). Story 7-8 (AC 15) passes `blend` for exactly two edges -- into and out of
+## the charge clip -- and nothing else does. The seek() is LOAD-BEARING and not belt-and-braces:
 ## AnimationPlayer.play(name) is a no-op on playback position when `name` is already the
 ## current, still-playing animation (measured on Godot 4.6.3 — play, advance to 0.30, play
 ## again, position is still 0.30). Dropping the seek would silently reinstate the chained-swing
 ## defect for every chain pressed before the previous clip ends.
-func _restart(clip: StringName, speed: float = 1.0) -> void:
-	animation_player.play(clip, -1.0, speed)
+func _restart(clip: StringName, speed: float = 1.0, blend: float = -1.0) -> void:
+	animation_player.play(clip, blend, speed)
 	animation_player.seek(0.0, true)

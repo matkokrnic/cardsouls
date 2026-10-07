@@ -396,24 +396,12 @@ extends Resource
 ##
 ## A TRIPLET, NOT A PROFILE RESOURCE, and Fact 8 is why: these ARE the per-colour numbers `5-2`'s
 ## Ruling 2 deferred to "the later story", and three flat fields per knob read and tune directly in
-## the authored file and the inspector. One colour's attack is one row across the four triplets
-## below (reach, arc, launch distance, launch span): RED the wide swipe, BLUE the narrow long
+## the authored file and the inspector. One colour's attack is one row across the three triplets
+## below (reach, launch distance, launch span; story 7-8 retired the arc, `7-8/R8`): RED the wide swipe, BLUE the narrow long
 ## thrust, GREEN the radial jump. FEEL KNOBS -- no test pins their authored values.
 @export var unblockable_reach_red: float = 0.0
 @export var unblockable_reach_blue: float = 0.0
 @export var unblockable_reach_green: float = 0.0
-## Story 6-1c (AC 5, `6-1c/R3`): each colour's hit ARC, in degrees, centred on the attack's FROZEN
-## committed direction (AC 2). STATE policy, judged at the landing seat against the runner's planar
-## direction fact -- the 1-8 `block_facing_arc_degrees` shape. 360 is radial: every direction inside
-## the radius is hit.
-##
-## DEFAULT 360.0, NOT 0.0, and deliberately against the zero-default house rule: 360 is exactly the
-## pre-6-1c behaviour (Fact 3 -- one circle, no angle), so an unauthored arc -- every in-test
-## `BalanceConfig.new()` fixture -- degrades to what shipped rather than to an attack that can
-## never land. The authoring audit bounds each to (0, 360].
-@export var unblockable_arc_degrees_red: float = 360.0
-@export var unblockable_arc_degrees_blue: float = 360.0
-@export var unblockable_arc_degrees_green: float = 360.0
 ## Story 6-1c (AC 4): how far the LAUNCH carries the attacker along its frozen direction -- a FIXED
 ## authored displacement, never adaptive to where the defender is. Applied by the STATE layer as a
 ## velocity over the launch span below (`MatchState._charge_launch_velocity`, the `3-0b`
@@ -443,35 +431,15 @@ extends Resource
 ## feintable to begin with -- the press commits it).
 ##
 ## PRESENTATION ONLY, and that is why it is a plain bool with no tick-domain twin: it re-times a
-## playhead and touches no window, no damage, no reach and no state. It is judged ON vs OFF at Live
-## Smoke, not decided here (AC 8 claims only that it exists, defaults OFF, and that OFF reproduces
-## today's mapping exactly).
+## playhead and touches no window, no damage, no reach and no state. The script default stays OFF (what
+## every in-test config inherits); STORY 7-8 (AC 13, `7-8/R4`) SHIPS IT ON in `balance_config.tres` --
+## the Genichiro rhythm: the whole chargeup is wind-up and held anticipation, and the sweep starts at
+## the commit and plays across the launch.
 @export var unblockable_swing_at_commit: bool = false
 ## What a landed unblockable takes off the enemy hero, as a percentage of that hero's own maximum —
 ## the `attack_damage_percent_of_max_hp` convention verbatim, so the two hero-versus-hero damage
 ## numbers are read the same way and can be compared at a glance in the authored file.
 @export var unblockable_damage_percent_of_max_hp: float = 0.0
-## Story 5-6 (AC 2, Ruling 1b): what a landed unblockable deals when the defender's ROLL IFRAME was
-## open at the landing — the middle rung of the three-tier ladder, expressed as a MULTIPLIER on the
-## full damage directly above rather than as a second damage value, so a retune of the full number
-## carries the dodged one with it and the two can never drift into disagreeing about what a dodge is
-## worth.
-##
-## AUTHORED 0.0, which is Ruling 1b's ratified starting point and NOT a placeholder: a clean dodge
-## takes nothing. The multiply-and-emit-on-surviving-magnitude shape is the `block_damage_multiplier`
-## precedent, and it is written that way so a future non-zero retune needs no code change — at 0.0
-## the effective damage is exactly zero and the landing is SILENT (no `hit_landed`), which is a
-## stronger statement than a zero-magnitude emit.
-##
-## THE GDD TABLE'S DAMAGE CELL READS "None" TODAY (`gdd.md:240`) and the shipped 0.0 keeps that claim
-## true, so NO `docs(gdd)` amendment is owed now. A future non-zero retune of this field owes one at
-## that time.
-##
-## BOUNDED `<= 1.0` in test_balance_authoring.gd, NOT in `block_damage_multiplier`'s strict-open
-## interval: 0.0 is the authored value here, so the audit must pass at it on day one, and 1.0 is the
-## boundary at which a dodge stops reducing anything relative to Ruling 1c's full hit. The `>= 0.0`
-## half is already covered by test_data_resources.gd's `E1_BALANCE_FIELDS` non-negative loop.
-@export var dodged_unblockable_damage_multiplier: float = 0.0
 ## Story 5-4 (AC 3): what ONE landed unblockable pays its attacker, in orbs of the spent card's own
 ## colour. Per-EVENT amount, NOT tick-domain -- never on BalanceTicks. Named into the
 ## `unblockable_*` family because the EVENT is an unblockable landing; the CONTAINER's bound is a
@@ -637,15 +605,13 @@ extends Resource
 @export var pitch_stage_clears_orbs: bool = false
 
 
-## Story 6-1c: the per-colour lookups over the four unblockable triplets above -- the ONE place a
+## Story 6-1c: the per-colour lookups over the unblockable triplets above -- the ONE place a
 ## `charge_color` int selects a field, so the runner and the state layer can never disagree about
 ## which colour owns which number. Read INLINE at point of use off the live config (CONSTRAINT C).
 ##
 ## A colour with no authored shape (`PlayerState.NO_TELEGRAPH_COLOR`, the degraded-cast sentinel
-## `inject_card_colors`' totality check keeps out of live play) reads a ZERO reach, distance and span
-## and a RADIAL arc: no radius admits it in the runner, so a colourless chargeup never lands live,
-## while the arc half stays the pre-6-1c "no angle" so a headless fixture pushing the kind by hand
-## resolves exactly as it always has. Never a substitute colour -- the `kind_at` refusal rule.
+## `inject_card_colors`' totality check keeps out of live play) reads a ZERO reach, distance and span:
+## no radius admits it in the runner, so a colourless chargeup never lands live. Never a substitute colour -- the `kind_at` refusal rule.
 func unblockable_reach_for(color: int) -> float:
 	return _unblockable_by_color(color, unblockable_reach_red, unblockable_reach_blue,
 		unblockable_reach_green, 0.0)
@@ -658,11 +624,6 @@ func unblockable_reach_for(color: int) -> float:
 func counter_travel_distance_for(color: int) -> float:
 	return _unblockable_by_color(color, counter_travel_distance_red, counter_travel_distance_blue,
 		0.0, 0.0)
-
-
-func unblockable_arc_degrees_for(color: int) -> float:
-	return _unblockable_by_color(color, unblockable_arc_degrees_red, unblockable_arc_degrees_blue,
-		unblockable_arc_degrees_green, 360.0)
 
 
 func unblockable_launch_distance_for(color: int) -> float:

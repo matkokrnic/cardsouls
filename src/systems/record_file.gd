@@ -327,7 +327,28 @@ extends RefCounted
 ## independent, exactly as `6-5c`'s NON-MOVER note says from the other direction.
 ##
 ## NO SHIM, on this file's standing posture: older records are refused with a reason, never migrated.
-const FORMAT_VERSION := 19
+##
+## Story 7-8 (`7-8/R12`): 19 -> 20, WITH THE HARD REFUSAL OF A v19 FILE, NO SHIM.
+##
+## THE CAUSE IS BEHAVIOURAL FIRST, the `6-5f`/`6-5g` class a third time. The charge-reach facts are recorded
+## (`capture_push_contact`) and replayed verbatim, so the whole divergence is state policy -- and 7-8 changed
+## that policy: an unblockable now resolves on the FIRST COUNTED TOUCH of its flight, a touch inside the
+## defender's i-frames is dropped rather than remembered, and no colour arc gates a touch. The same recorded
+## v19 stream therefore replays to a different outcome in four ways (measured at the story's authoring, its
+## M7): (1) a touch on a launch tick with the i-frames closed, then i-frames open at the landing -- v19 a
+## silent dodge, v20 a hit on the touch tick with damage, knockdown and orb; (2) a touch only while the
+## i-frames were open, then clear -- v19 a hit at the landing (the absorbing latch), v20 a miss; (3) a touch
+## only outside the colour arc -- v19 a miss, v20 a hit; (4) when both hit, the damage and knockdown move from
+## the landing tick to the touch tick, so every later hash differs.
+##
+## AND A SHAPE CAUSE BESIDE IT: the per-colour arc triplet and `dodged_unblockable_damage_multiplier` retire
+## from `BalanceConfig`, so the `balance` channel row (every script var, `_resource_values`) loses four keys,
+## and a v19 file's retired keys would be silently dropped by `_rebuilt`'s `res.set`. Either cause alone is
+## sufficient; both are silent, which is exactly what this constant exists to refuse loudly.
+##
+## NOR IS THE GOLDEN A REASON: it moved for 7-8 for one unrelated cause (the new `charge_contact` snapshot
+## key), and a record carries INPUTS and CONTENT, never a hash.
+const FORMAT_VERSION := 20
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
