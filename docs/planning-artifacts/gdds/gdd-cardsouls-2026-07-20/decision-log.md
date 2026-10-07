@@ -12486,3 +12486,39 @@ Numbers of record: golden `941958c52605abbcd1edf972e002543601325e5a9f98dfce56962
 Budget: Tier B, no cap. Start 2026-10-05 15:43:27 (dev before-baseline), end 2026-10-06 21:17:35 (end of the final integration run). Gross 29h34m08s. Disclosed extra suite runs (Change Log): polish 2 state harness twice more after a pin failure, polish 3 integration run 1 failed (`test_card_tint_live`) and was re-run, the review-fix pass run, and one final run per later polish round.
 
 LAYER-COMPLETION: blind-hunter=COMPLETE (inline, sequential); edge-case-hunter=COMPLETE (inline, sequential, incl. out-of-repo probe); acceptance-auditor=COMPLETE (inline, incl. Dev Agent Record evidence audit); t1-performance-timing=COMPLETE (9 timed launches, 3 baseline pairs)
+
+## 2026-10-07 -- 7-8 readiness gate (round 1)
+
+Gate verdict NOT READY, five blockers (B1-B5), report `C:\dev\_78-gate.md`. Story `7-8-unblockable-honest-contact` (Tier A) fixed docs-only in one pass; awaits re-gate. Preconditions held: HEAD == origin/main == `73907e9`, no godot process.
+
+Operator rulings of 7.10.2026, already in the story, logged in substance:
+`7-8/R1` Hit at the moment of touch, not at the landing; damage, knockdown and the attacker's orb grant on that tick; at most one hit per unblockable; the attacker then finishes its motion harmlessly.
+`7-8/R2` A touch while the defender's roll i-frames are open does not count; a blade still touching after they close counts on that tick; no touch in the whole attack = miss.
+`7-8/R3` Damage only when the models really connect: the hero's hit shape matches the visible model for EVERY hit on a hero (melee included); melee grazing the air beside a hero stops landing.
+`7-8/R4` Genichiro rhythm from EXISTING clips only: held anticipation, the sweep plays only once the attack moves; the blade never visibly passes through the defender during the charge-up.
+`7-8/R5` GREEN crouches before take-off; about 2/3 of its travel happens on the way up to the apex.
+`7-8/R6` No visible pops between charge-up, attack and recovery.
+`7-8/R7` All feel numbers are knobs in `.tres` or presentation tables; tests pin only bounds and directions.
+
+Gate rulings:
+`7-8/R8` (S1, B2) The colour arc no longer gates a counted touch: arc exports, `.tres` values, `unblockable_arc_degrees_for`, `_is_in_charge_arc` and its seat gate retire; `_charge_contact_dirs` retires with its classification entry (`UNHASHED_CROSS_TICK_MEMBERS` stays 4). A counted touch hits whatever the attacker's facing.
+`7-8/R9` (S2, B4) Body collision stays exactly 1x2x1; the hero HIT shape is a separate shape following a trunk bone each tick (5-0a `_track_weapon_bone` precedent), sized from the dev pass's first skinned-vertex measurement; all four hit consumers move to it; proved live against `hero.tscn` in idle AND mid-roll; the test_vertical_alignment "HurtboxShape mirrors the body box" pin is superseded.
+`7-8/R10` (S3, N3) A touch counts only if the `_iframe_open_at_step3` predicate is closed on that tick (roll, get-up, the 1-9/R2 grace tick); the predicate is NOT edited (Honed Bolt reads it); the INSIDE latch becomes this tick's fact; the co-location no-push case re-reads the previous tick's fact and is accepted.
+`7-8/R11` (S4, N1) `dodged_unblockable_damage_multiplier` retires (field, `.tres`, the dodged-magnitude branch, its tests); the keep-at-0 alternative is closed.
+`7-8/R12` (S5, B1) FORMAT_VERSION 19 -> 20, hard refusal of v19, no shim; causes: INSIDE-then-i-frames, i-frames-then-clear, out-of-arc, and the damage tick moving to the touch, plus the `balance` row shape change. The "replay is as-of-build" class does not exist and is struck.
+`7-8/R13` (S6, N2) Colour counter judged from the commit tick up to the FIRST touch, counted or i-frame-dropped (any touch closes the span, as today); a commit-tick counter beats a same-tick touch; never judged after. 7-9 reworks counter timing as a whole.
+`7-8/R14` (B3) The reach pre-filter stays as an upper bound (6-1d AC 2 unchanged); AC 1 says "within the colour's authored reach bound"; a real blade touch sits far inside every authored reach.
+`7-8/R15` (B5) The hit-once memory is ONE NEW HASHED per-player snapshot key (small int, rest 0; a dropped touch closes the counter span without spending the attack), classified `HASHED` in `test_replay_identity.gd`. The golden MOVES for exactly that cause (key set 45 -> 46), one re-baseline, measured both directions (key removed reproduces `941958c5...`). Deriving it from the windows, reusing `_charge_reach`, or riding `telegraph` (a presentation-consumed fact) are rejected.
+
+Gate disposition:
+- B1 closed by R12 (M7, Golden Prediction, OQ8 rewritten; T5 gains the `record_file.gd` header paragraph, both pins, a v19 refusal fixture; `test_record_file.gd` in M6).
+- B2 closed by R8 (new AC 6; retirement list in T1/M6; M8 adds 6-1c AC 5 and the arc half of AC 3, and 6-1d AC 3's arc clause; OQ2 rewritten).
+- B3 closed by R14 (AC 1 reworded).
+- B4 closed by R9 (AC 11 rewritten provably; dev pass measures first; OQ3 rewritten).
+- B5 closed by R15 (Golden Prediction and OQ1 rewritten).
+- N1 applied via R11. N2 via R13 (new AC 10; the report's edge is ruled: any touch closes the span). N3 via R10 and OQ5.
+- N4 applied (AC 1 carries "that tick"; one-seat shape in OQ2). N5 applied (OQ9, Live Smoke item 9).
+- N6 applied (M6 live list, `_span` note, `test_arena_edge_live.gd` note). N7 applied (M6 presentation tests).
+- N8 applied (M8 additions; closed story files untouched, E5-R/R7). N9 applied (ACs 13-16 labelled machine/smoke; AC 16 restated).
+- N10 applied (Live Smoke flip procedure, R-D6 spent at close-out). N11 applied in part: trailer line replaced by the repo constant and D5 dropped; story Status stays `authored` by the fix-pass order (the board key stays `backlog`).
+- Story is 379 lines against the 340 budget; overrun disclosed (D5), not blocking.
