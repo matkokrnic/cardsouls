@@ -618,3 +618,41 @@ Added:
 - **D4** The skill's step 4 web research was skipped: the story touches no external library.
 - **D5** Gate round 1 fix pass: story length 379 lines against the 340-line budget; the overrun is the completed retirement lists (M6, OQ6)
   and the 18 ACs. Disclosed, not trimmed. Status stays `authored` and the board key stays `backlog` by the fix-pass order.
+
+## Code Review Record
+
+2026-10-08, Opus 5.5, gds-code-review run sequentially in one session (blind/adversarial, edge-case hunter and
+acceptance auditor all COMPLETE, no failed layers). Scope `f8ad80b..2a3a60f`. Full report: `C:\dev\_78-review.md`.
+**Verdict: APPROVE WITH FINDINGS.** No HIGH. Status stays `review`; board untouched.
+
+**Fixed (`ed4b8ba` story 7-8: review fixes):**
+- **F1 MED**: `_apply_bolt_landing` tore down a CHARGING target without resting `charge_contact`. This was a fifth
+  CHARGING exit that OQ1's clears missed, so the hashed key read TOUCHED/HIT on a hero that was no longer attacking.
+  The effect was hash-only, because the cast seat clears the key before any reader. Fixed with one line beside the
+  teardown; the field doc now names the bolt. New
+  `test_hero_cast.gd::test_the_bolt_stun_rests_an_abandoned_attacks_hit_once_memory` was RED before the fix and under
+  the mutation; restored by copy-back with SHA-256 verified. Suite: state **1255 / 0 / 12466**, integration **79/79**.
+  Golden unmoved at `1b1478ac...`.
+
+**Re-derived (measured, not taken from the record):**
+- Golden in both directions: key removed gives `941958c5...`; key restored gives `1b1478ac...`.
+- M1 and M3 match the record exactly. M5 is RED with 48 `FAILED` lines vs the recorded 51; the number of mid-roll
+  frames judged depends on frame timing.
+- Commit-tick gate: step 2 stops `charge_window` before step 3, so commit-tick touches ARE offered. A mutation that
+  drops them turned 41 tests RED, including the zero-launch fixtures.
+- Both charge cross-fades work in-engine; the trailing `seek` does not cancel the blend.
+
+**Report only / for the operator:**
+- **F2 LOW**: the AC 15 test checks the constants only. Also, the debug reset's CHARGING->IDLE cross-fades too, which
+  makes a third blended edge. QUESTION: accept, or restrict the blend to the landing exit?
+- **F3 LOW**: the AC 10 span tests run on slot 0 only.
+- **F4 LOW**: `test_honest_hit_geometry_live.gd` has a stale header for `charge`/`flee`. Under R1, `flee` now
+  duplicates `touch`. No assertion was weakened.
+- **F5 LOW**: the live "on the torso" probe sits on the bone axis.
+- **F6 LOW, report only (R9 dimensions)**: residue outside r 0.30:
+  - attack: chest front up to 0.032 m, back/side up to 0.12 m (clip t 0.33-0.63);
+  - roll: up to 0.198 m, but 15 of the 18 residue ticks are inside the i-frames; after they close, at most 0.08 m for
+    2-3 ticks;
+  - GREEN post-apex: chest front up to 0.11 m.
+  Options with their idle overshoot cost are in the report.
+- **F7 deferred, pre-existing**: the `match_state.gd:1714` "FOUR EXITS" comment omits the bolt exit.
