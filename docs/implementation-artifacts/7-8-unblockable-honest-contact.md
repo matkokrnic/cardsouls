@@ -4,7 +4,7 @@ baseline_commit: 73907e9aa526291e103bf24a14ac266a2150e3a3
 
 # Story 7.8: Unblockable honest contact
 
-Status: authored
+Status: ready-for-dev
 
 Tier **A** (touches `src/state/`: the landing seat, the dodge rule and the CHARGING arm). Authored 2026-10-07 against
 HEAD == origin/main == `73907e9`, tree clean, suite 1248 tests / 0 failed / 11839 assertions + integration green

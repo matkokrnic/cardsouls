@@ -1,5 +1,5 @@
 # generated: 2026-07-22
-# last_updated: 2026-10-04
+# last_updated: 2026-10-07
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -140,7 +140,7 @@ development_status:
   epic-7: backlog
   7-T1-tooling-debt: done  # Tier B
   7-1-effect-presentation: done  # Tier B
-  7-8-unblockable-honest-contact: backlog  # Tier A
+  7-8-unblockable-honest-contact: ready-for-dev  # Tier A
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
   7-4-pitch-speeds: backlog  # Tier A
@@ -151,7 +151,7 @@ development_status:
 story_notes:
   7-T1-tooling-debt: "closed out 2026-10-02 (decision-log session 7-T1 close-out, 7-T1/R1..R6); AC 5-7 close UNMET at the pre-named cut point, flake carried forward in deferred-work.md."
   7-1-effect-presentation: "done 2026-10-04, Tier B close-out complete (review fixes + polish round after live smoke, decision-log session 7-1 close-out, 7-1/R10-R19)."
-  7-8-unblockable-honest-contact: "authored 2026-10-07; gate round 1 NOT READY, fixed (rulings 7-8/R1-R15); awaiting re-gate."
+  7-8-unblockable-honest-contact: "promoted to ready-for-dev 2026-10-07 after gate rounds 1-2 + browser round 3 (rulings 7-8/R1-R16)"
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
   7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; plus +1 mana for a defended unblockable (E6-C/R11)."
