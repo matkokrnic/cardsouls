@@ -53,6 +53,8 @@ Gate rulings (round 1):
   every authored reach, so the bound never refuses one in play.
 - **7-8/R15** (B5) The hit-once memory (AC 3, R13) is ONE NEW HASHED per-player snapshot key, classified `HASHED` in
   `test_replay_identity.gd`. The golden moves for exactly that cause.
+- **7-8/R16** (round 2, C10) A lethal hit mid-flight leaves the attacker CHARGING, held mid-motion by the round-over freeze
+  until `_reset_player`; accepted. Live Smoke item 9 is its check; any fix belongs to 7-2 polish, not this story.
 
 ## Acceptance Criteria
 
@@ -66,7 +68,7 @@ Behaviour and acceptance only (E4-R/R4). Mechanism choices are in Open Questions
 2. A defender who is visibly far from the blade is never knocked down. No hit is credited to a touch that ended before
    the attack started moving (charge-up touches still credit nothing, as today).
 3. An unblockable hits at most once. After the hit the attacker completes its motion with no second damage, knockdown,
-   orb grant or `hit_landed`, and returns to idle exactly as today at the end of the attack.
+   orb grant or `hit_landed`, and returns to idle exactly as today at the end of the attack, except after a lethal hit, where the round-over freeze holds it mid-motion until reset (OQ9, R16).
 4. The existing outcomes are unchanged in size: authored damage, the victim-knockdown package and the one-orb grant
    (`unblockable_orb_grant`) are applied once, in the existing order, and a lethal hit still writes no knockdown.
 5. An attack that never touches is a miss, as today: card and stamina stay spent, no damage, no orb.
@@ -77,7 +79,7 @@ Behaviour and acceptance only (E4-R/R4). Mechanism choices are in Open Questions
    tick all count as open). A touch while they are open does nothing: no damage, no knockdown, no orb, no signal, and the
    i-frame window is neither consumed nor shortened. The attack is NOT spent by that touch.
 8. If the blade is still touching on the first tick after the i-frames close, the hit lands on that tick, in full. An
-   earlier open-frame touch is not remembered: i-frames open on a touch and then closed with no touch on that tick is a miss.
+   earlier open-frame touch is not remembered: i-frames open on a touch and then closed with no touch on that tick is a miss unless a later counted touch follows (AC 1, AC 7).
 9. The dodge rule is identical on both seats (seat symmetry), a roll that fully clears the blade path is a miss, and a
    dodged touch has no tunable cost (the dodged-damage multiplier no longer exists).
 
@@ -95,7 +97,7 @@ Behaviour and acceptance only (E4-R/R4). Mechanism choices are in Open Questions
 12. Heroes still collide with each other and the arena exactly as today: the body collision keeps its 1x2x1 box
     (`BoxShape3D_qp0e8`) and is not the hit shape.
 
-**Presentation (R4, R5, R6, R7)** (`[M]` machine-provable, `[S]` smoke-only)
+**Presentation (R4, R5, R6, R7)** (`[M]` machine-provable, `[S]` smoke-only, `[R]` review against the File List)
 13. `[M]` The blade's dangerous sweep starts at or after the commit (pure mapping, `test_charge_playhead_mapping`
     precedent). `[S]` Each colour holds a readable anticipation pose, and the blade does not visibly pass through the
     defender during the charge-up.
@@ -104,7 +106,7 @@ Behaviour and acceptance only (E4-R/R4). Mechanism choices are in Open Questions
     before take-off.
 15. `[S]` No visible pop at charge-up to attack, attack to hit, or attack to recovery, for all three colours (a structural
     test that the two cross-faded edges blend for more than 0 s is optional). The victim's knockdown entry edge is 7-2's.
-16. Every feel number added or moved (hold timings, blends, crouch lead, hit-shape dimensions) is a `.tres` field or a
+16. `[R]` Every feel number added or moved (hold timings, blends, crouch lead, hit-shape dimensions) is a `.tres` field or a
     presentation-table constant.
 
 **Records (R12)**
@@ -227,12 +229,11 @@ the landing window closes; the single-resolution-at-landing language); `6-1c` AC
 state policy" clause; `6-1d` AC 4's "through the tick `landing_window` closes" (the span now ends at the first touch) and
 `6-1d` AC 6 itself ("touched at ANY evaluated tick before dodging away" is no longer guaranteed a hit: an i-frame touch then
 a clear is a miss); `6-1d` AC 5 and `6-1d/R8` + `6-1d/R13` (latch semantics: the bearing is latched with the verdict and an in-arc contact
-is absorbing, both of which exist only because resolution waits for the landing); `6-1d/R9`'s "verdict cleared at the
-cast seat" only if the latch is retired (OQ1); `3-0a/R5` ("a transition wins immediately, no blend") for the two edges OQ7
+is absorbing, both of which exist only because resolution waits for the landing); `6-1d/R9` holds (the latch stays as a per-tick fact, R10); `3-0a/R5` ("a transition wins immediately, no blend") for the two edges OQ7
 cross-fades; the `1-7` hurtbox convention "Mirrors the body collision box" (`hero.tscn:113` editor_description); `3-0b`'s pin
 (6) second half, `test_vertical_alignment.gd:161-163` (the `:159-160` body-box half STAYS and is AC 12's proof); `5-6` AC 7/AC 8 (the dodge rung reading the step-3 latch ON THE LANDING TICK, and
 its silent multiplier path, `dodged_unblockable_damage_multiplier`); `5-6` Ruling 1b's "dodge = reduced damage" as a
-live rung; `6-6b` AC 3's "judged through the landing tick" and AC 5's "counter on the landing tick with no contact lands"
+live rung; `6-6b` AC 3's "judged through the landing tick"
 (the judged span now ends at the first touch, R13); `6-6a` AC 3/R-PRESS wording "owed after the landing" (the package is owed
 after the touch). Held unchanged: `6-6a` victim package contents, floors and order; `6-6b` colour match rules.
 
@@ -278,7 +279,7 @@ profile numbers) are not retuned here; 7-8 only supplies the mechanism they will
 
 Per the CLAUDE.md autonomy rule these are the operator's to confirm because they shape the codebase or behaviour at the edges.
 1. **Where is "already hit" kept? (R15, closed.)** One new HASHED per-player snapshot key (small int, rest value 0, key name
-   the dev pass's; two non-rest values, see OQ4), set on the first touch, cleared at the cast seat, at `_reset_player` and at the landing exit; it gates
+   the dev pass's; two non-rest values, see OQ4), set on the first touch (a dropped touch then a counted touch moves the key from "touched" to "hit landed"), cleared at the cast seat, at `_reset_player` and at the landing exit; it gates
    AC 3 and R13's span. Classified `HASHED` in `test_replay_identity.gd`, NOT a fifth UNHASHED argument. Derivation from
    existing state is rejected: `landing_window.start(0)` ends the flight, and `_charge_launch_velocity` (`:7901-7914`) and
    `_is_commit_tick` (`:6879-6881`) both derive from the two windows' durations and remaining ticks, so any "spent" encoding
@@ -317,14 +318,15 @@ Per the CLAUDE.md autonomy rule these are the operator's to confirm because they
    branch collapses to nothing), `test_unblockable_defense.gd:1220` (renamed to the touch-tick rule), `:1236` (retuned-multiplier
    test, retired), `:2316` (comment), `:2639` (funnel test, retired), `test_balance_authoring.gd:337-338`,
    `test_data_resources.gd:123-126`, `test_determinism.gd:1607` (comment only).
-7. **Charge-up rhythm.** Recommend measuring first (AC 11): tune `_CHARGE_HOLD_KNOBS` and `unblockable_swing_at_commit` ON
+7. **Charge-up rhythm.** Recommend measuring first (AC 13): tune `_CHARGE_HOLD_KNOBS` and `unblockable_swing_at_commit` ON
    for RED/BLUE; GREEN needs a clip-side crouch lead (M5, 6-1d/R15), expressed as a new per-colour entry in the same table
    (feel numbers in data/presentation tables per R7). Cross-fade at the charge to attack and attack to recovery edges
    replaces the unblended `_restart` for those two edges only (R6), authored as a knob.
 8. **Record compatibility. (R12, closed.)** FORMAT_VERSION 19 -> 20, hard refusal of v19, no shim; causes in M7.
-9. **Lethal mid-flight hit.** Today the landing writes IDLE before step 8 writes DEAD; under R1 the attacker is still CHARGING
-   when the round-over freeze starts: frozen mid-leap, `telegraph` still reported, until `_reset_player`. Recommend: accept it
-   (Live Smoke item 9). Flag if you want the attack torn down on a lethal hit.
+9. **Lethal mid-flight hit. (R16, closed.)** Today the landing writes IDLE before step 8 writes DEAD; under R1 a lethal hit
+   mid-flight leaves the attacker CHARGING, held mid-motion by the round-over freeze (`telegraph` still reported) until
+   `_reset_player`. Accepted. Live Smoke item 9 is its check; if it looks wrong on the smoke, the fix belongs to 7-2 polish,
+   not this story.
 
 ## Tasks
 

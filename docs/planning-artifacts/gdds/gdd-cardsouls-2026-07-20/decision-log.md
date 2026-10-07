@@ -12522,3 +12522,10 @@ Gate disposition:
 - N8 applied (M8 additions; closed story files untouched, E5-R/R7). N9 applied (ACs 13-16 labelled machine/smoke; AC 16 restated).
 - N10 applied (Live Smoke flip procedure, R-D6 spent at close-out). N11 applied in part: trailer line replaced by the repo constant and D5 dropped; story Status stays `authored` by the fix-pass order (the board key stays `backlog`).
 - Story is 379 lines against the 340 budget; overrun disclosed (D5), not blocking.
+
+## 2026-10-07 -- 7-8 re-gate (round 2)
+
+Re-gate verdict REOPENED on C8 and C10 (text-only), report `C:\dev\_78-regate.md`; closed by the operator in browser round 3. Story fixed docs-only.
+- RO C8: two pointers fixed (OQ7 "(AC 11)" -> "(AC 13)"; M8 "only if the latch is retired" -> "6-1d/R9 holds (the latch stays as a per-tick fact, R10)").
+- RO C10 closed by `7-8/R16`: a lethal hit mid-flight leaves the attacker CHARGING, held mid-motion by the round-over freeze until `_reset_player`; accepted; Live Smoke item 9 is its check; any fix belongs to 7-2 polish, not 7-8. AC 3 carries the exception.
+- Notes applied: AC 8 and OQ1 wording, AC 16 tagged `[R]`, `6-6b` AC 5 removed from the M8 supersession list (with no touch R13's span still runs to the landing).
