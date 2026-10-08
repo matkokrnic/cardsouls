@@ -140,7 +140,9 @@ development_status:
   epic-7: backlog
   7-T1-tooling-debt: done  # Tier B
   7-1-effect-presentation: done  # Tier B
-  7-8-unblockable-honest-contact: ready-for-dev  # Tier A
+  7-8-unblockable-honest-contact: done  # Tier A
+  7-9-unblockable-tempo: backlog  # Tier A
+  7-10-unblockable-presentation: backlog  # Tier B
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
   7-4-pitch-speeds: backlog  # Tier A
@@ -151,10 +153,12 @@ development_status:
 story_notes:
   7-T1-tooling-debt: "closed out 2026-10-02 (decision-log session 7-T1 close-out, 7-T1/R1..R6); AC 5-7 close UNMET at the pre-named cut point, flake carried forward in deferred-work.md."
   7-1-effect-presentation: "done 2026-10-04, Tier B close-out complete (review fixes + polish round after live smoke, decision-log session 7-1 close-out, 7-1/R10-R19)."
-  7-8-unblockable-honest-contact: "dev pass complete 2026-10-08, story-file Status is `review` (story-file-only), awaiting code review and the operator's commit chain."
+  7-8-unblockable-honest-contact: "done 2026-10-08; close-out 7-8/R17-R20."
+  7-9-unblockable-tempo: "backlog -- knockdown immunity A, mana 1, damage 6, post-commit steering, Sekiro counter window, slower movement, counter reward, empty-defense cost; scope talk first (7-8/R20)."
+  7-10-unblockable-presentation: "backlog -- eye-blink telegraph, counter presentation polish; after 7-9 (7-8/R20)."
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
-  7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; plus +1 mana for a defended unblockable (E6-C/R11)."
+  7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; the +1 mana for a defended unblockable moved to 7-9 (7-8/R20)."
   7-5-deck-2: "backlog -- design pending, needs its own scope talk before promotion (E6-C/R11)."
   7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
   7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11)."
