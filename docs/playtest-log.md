@@ -649,3 +649,15 @@ Smoke 5 (6.10.): F3 sad pali/gasi cijeli debug sloj (panel, inspektori, brojaci 
   - kako sprijeciti besplatno mijenjanje ruke igranjem obrana u prazno
   - crvena kontra: cudan brz skok, ne vidi se sto se dogodilo, fali tezine i dramaticnosti (referenca: Sekiro kontra unblockablea)
   - zelena kontra: baceni noz nema tezinu kad pogodi i slabo se vidi
+
+## 2026-10-08 -- 7-9 unblockable tempo (solo smoke [0,3])
+
+P1 na tipkovnici kasta (X/V/B), ja branim na padu. Svih 13 stavki PASS.
+- Unblockable kosta 1 manu; bez mane je cast odbijen. Povrata nema.
+- Obrana bojom bez napada je odbijena i nista se ne trosi.
+- Kontra: prerano = karta potrosena i pojedem udarac. Pravi trenutak radi u sve tri boje i daje +1 manu. Radi i pritisak u letu (zeleni).
+- Roll kroz udarac spasava i napad me poslije ne prati.
+- Skretanje: rani korak ili roll prati i pogodi, kasni korak izbliza izbjegne.
+- Imunitet 1.5 s nakon ustajanja radi, i za kontriranog napadaca; melee u tom razdoblju pogada.
+- Trk sporiji (4.6), hod i roll isti.
+- Regresija OK, fps stabilan. R-D6: heroj pogine, runda normalno zavrsi.
