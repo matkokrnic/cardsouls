@@ -4,12 +4,13 @@ baseline_commit: 73907e9aa526291e103bf24a14ac266a2150e3a3
 
 # Story 7.8: Unblockable honest contact
 
-Status: review
+Status: done
 
 Tier **A** (touches `src/state/`: the landing seat, the dodge rule and the CHARGING arm). Authored 2026-10-07 against
 HEAD == origin/main == `73907e9`, tree clean, suite 1248 tests / 0 failed / 11839 assertions + integration green
 (measured this session). Operator rulings of 7.10.2026 are `7-8/R1..R7`; the readiness gate (round 1, NOT READY, B1-B5)
-added `7-8/R8..R15`. All fifteen are in the decision-log, session "7-8 readiness gate (round 1)".
+added `7-8/R8..R15`, and the re-gate (round 2) added `7-8/R16`. All sixteen are in the decision-log, sessions "7-8
+readiness gate (round 1)" and "7-8 re-gate (round 2)"; the close-out rulings `R17..R20` are in session "7-8 close-out".
 
 ## Story
 
@@ -266,6 +267,14 @@ revert is allowed); inspect `git diff project.godot` for collateral.
 8. fps stable.
 9. A lethal hit mid-flight: the attacker freezes mid-leap at round over (OQ9), no crash, `_reset_player` restores it; the
    attacker's ChargeMarker stays lit from the hit to the landing (Shapes hide only on transitions).
+
+### Live Smoke Results
+
+Operator, 2026-10-08, solo on flip `[0, 3]` (R-D6 spent, `7-8/R17`). Items **1-8 PASS**. The operator's words: "not the
+most thorough pass, everything seen far better than expected". Items **9-10 were not specifically observed**; no missed
+visible touch was reported on the pass. The operator's observations for later work (escaping too easy, movement and
+melee tempo, orb crowding, eye-blink telegraph, hand cycling via empty defenses, counter presentation) are in
+`docs/playtest-log.md` (entry "2026-10-08 -- 7-8 unblockable honest contact") and routed by `7-8/R20`.
 
 ## Non-Goals
 
@@ -605,6 +614,9 @@ Added:
   contact fact, touch-tick dodge, counter span to the first touch); colour arc and dodged-damage multiplier retired; hero hit
   shape is a trunk-following cylinder, body keeps its box; Genichiro re-tempo (swing-at-commit ON, GREEN crouch lead, two
   blended edges); golden `941958c5` -> `1b1478ac`; FORMAT_VERSION 19 -> 20. Status -> review.
+- 2026-10-08 Code review (Opus 5.5): F1 fixed in `ed4b8ba`; record appended in `0a93491`.
+- 2026-10-08 Review LOW touch-ups (`60b3d0d`: F3, F4, F5, F7) and live smoke PASS (items 1-8; 9-10 not observed). Status ->
+  done; close-out rulings `7-8/R17..R20`.
 
 ## DEVIATIONS
 

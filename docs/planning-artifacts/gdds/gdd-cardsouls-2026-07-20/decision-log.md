@@ -12529,3 +12529,12 @@ Re-gate verdict REOPENED on C8 and C10 (text-only), report `C:\dev\_78-regate.md
 - RO C8: two pointers fixed (OQ7 "(AC 11)" -> "(AC 13)"; M8 "only if the latch is retired" -> "6-1d/R9 holds (the latch stays as a per-tick fact, R10)").
 - RO C10 closed by `7-8/R16`: a lethal hit mid-flight leaves the attacker CHARGING, held mid-motion by the round-over freeze until `_reset_player`; accepted; Live Smoke item 9 is its check; any fix belongs to 7-2 polish, not 7-8. AC 3 carries the exception.
 - Notes applied: AC 8 and OQ1 wording, AC 16 tagged `[R]`, `6-6b` AC 5 removed from the M8 supersession list (with no touch R13's span still runs to the landing).
+
+## 2026-10-08 -- 7-8 close-out
+
+Story `7-8-unblockable-honest-contact` (Tier A) closed. Review record `C:\dev\_78-review.md`; C1 `60b3d0d` carries the review LOW touch-ups (suite state 1255 / 0 / 12475, integration 79/79, golden `1b1478ac...` unmoved).
+`7-8/R17` Live smoke PASS (operator, solo [0,3], items 1-8; items 9-10 not specifically observed, no missed visible touch reported); R-D6 SPENT.
+`7-8/R18` Review dispositions: F1 fixed in `ed4b8ba`; F2 the debug reset's CHARGING->IDLE blend accepted as a third blended edge (debug path); F3/F4/F5/F7 applied in C1 (`60b3d0d`); F6 hit-shape radius 0.30 kept (no missed visible touch seen on the smoke), the radius is a 7-7 tuning input if one appears.
+`7-8/R19` Supersessions (the story's M8 list, in substance): `6-1c` AC 5 and the arc half of AC 3; `6-1d` AC 3 clause, AC 4 span, AC 6, R8, R13; the `1-7` hurtbox convention; the `3-0b` pin (6) second half; `5-6` AC 7/AC 8; `3-0a/R5` for the two charge edges.
+`7-8/R20` Smoke findings routed: escaping too easy -> judged again after 7-9 (post-commit steering + slower movement), range/homing numbers 7-7; slower movement -> 7-9; slower melee attacks + wider deflect window -> 7-7; orb crowding (orbs push each other) -> 7-2 (drop orb-orb avoidance, orbs pass through each other); eye-blink telegraph and counter presentation (RED counter weight/drama per Sekiro, GREEN dagger visibility and impact) -> new story 7-10 (Tier B) after 7-9; hand cycling via empty defenses -> 7-9 scope.
+Budget interval: dev before-baseline 2026-10-07 23:29:17 -> C1 suite file (integration) 2026-10-08 11:48:11.

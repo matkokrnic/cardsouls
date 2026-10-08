@@ -636,3 +636,16 @@ Smoke 3 (6.10.): fullscreen radi. Kruzici (puni/supiji) napokon citljivi. Luk s 
 Smoke 4 (6.10.): okvir, pitch zone, orbovi koji obilaze lik i armiranje Bouldera sve odlicno. Tanje trake super, ali tamna plocica pod brojem ruzna; maknuta (P19).
 
 Smoke 5 (6.10.): F3 sad pali/gasi cijeli debug sloj (panel, inspektori, brojaci orbova, telegrafi). Honed Bolt se s blizom kamerom puno citljivije izbjegava, boje unblockablea razlikujem po animaciji, deflect se vidi po stunu napadaca. Kad su s telegrafima nestali i njihovi zvukovi osjecao sam se kao slijepac; zvukovi vraceni (P22), F3 skriva samo simbole, sad je bolje. Neka ostane privremeno; kasnije trebaju suptilniji, uklopljeniji vizualni znakovi i zvukovi.
+
+## 2026-10-08 -- 7-8 unblockable honest contact (solo smoke, flip [0,3])
+
+- Prosao sve tocke cekliste, ne najtemeljitije, ali sve sto sam vidio je puno bolje nego sto sam ocekivao.
+- Rusenje tocno na dodir, roll kroz ostricu, okrznuti zrak ne pogada, ritam punjenja (Genichiro), zeleni skok, prijelazi, regresija i fps: u redu.
+- Opazanja za dalje:
+  - mozda je prelako pobjeci napadu (doseg/homing?)
+  - usporiti opcenito brzinu kretanja i napada
+  - orbovi kad ih je puno i dalje smetaju, kao da se guraju medusobno kad ih lik odgurne; htio bih da budu duhovi bez ikakvog otpora
+  - telegraf: oci napadaca ubrzano trepcu u boji unblockablea (kao bomba) i jako bljesnu kad krene napad
+  - kako sprijeciti besplatno mijenjanje ruke igranjem obrana u prazno
+  - crvena kontra: cudan brz skok, ne vidi se sto se dogodilo, fali tezine i dramaticnosti (referenca: Sekiro kontra unblockablea)
+  - zelena kontra: baceni noz nema tezinu kad pogodi i slabo se vidi
