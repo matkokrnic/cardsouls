@@ -12569,3 +12569,16 @@ Gate disposition (story sections):
 - F1 (blocker) closed by R10: AC 8, AC 9, OQ3, Dev Notes.
 - F2 D7 + M15 + AC 4b; F3 AC 4 / AC 4b split; F4 R16 + AC 14 + T1 + Dev Notes; F5 M14 + D7 + Golden Prediction + AC 13; F6 D7; F7 R4, AC 6, AC 7, OQ1, M9.
 - F8 M5; F9 AC 1 + Dev Notes; F10 AC 11 + M8 + OQ4; F11 AC 4 + Dev Notes; F12 AC 5; F13 AC 8 + OQ3; F14 M14 + T6; F15 M13; F16 Live Smoke (items 6, 10, R-D6, inspector readout, mana budget, sound, foot-slide).
+
+## 2026-10-08 -- 7-9 close-out
+
+Story `7-9-unblockable-tempo` (Tier A) closed. Review record `C:\dev\_7-9-review.md`; verdict PASS WITH FIXES (1 blocking finding, fixed in the review). Code commit C1 `6311a31`, dev record `668aaf7`, playtest-log `796f2ac`.
+Live smoke 1-13 PASS (operator, solo [0,3]); R-D6 SPENT. Golden `1b1478ac...` -> `9d5d4fad...` (one cause: the hero snapshot key `unblockable_immunity`); `RecordFile.FORMAT_VERSION` 21. Suite 1289 tests / 0 failed / 13187 assertions, integration 79/79.
+`7-9/R19` Steering ends at the attack's first touch, counted or dropped (R3 over AC 4's "to the landing"; ruled at review).
+`7-9/R20` AC 9 amended to the R10 capture seat: interruptions after step 6 (knockdown 6b, bolt stun 6c, death 8) close the defence span from the next tick (one tick, imperceptible).
+`7-9/R21` The counter reward is the `.tres` knob `counter_mana_reward` (1.0 TEMP), accepted over R14's literal (DV1).
+`7-9/R22` The AC 4b live thresholds are tied to the authored GREEN numbers; any 7-7 retune of GREEN rate, launch span, launch distance or reach re-measures `test_unblockable_reach_live.gd` or makes it self-rescheduling.
+`7-9/R23` DV3 (two 6-6b tests retired as superseded by R4/R5) accepted.
+Budget interval: dev before-baseline 2026-10-08 15:44:23 (`_7-9-suite-before-state.txt`) -> review suite file (integration) 2026-10-08 17:07:08.
+
+LAYER-COMPLETION: blind-hunter=completed, edge-case-hunter=completed, acceptance-auditor=completed
