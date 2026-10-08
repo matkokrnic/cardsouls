@@ -12538,3 +12538,34 @@ Story `7-8-unblockable-honest-contact` (Tier A) closed. Review record `C:\dev\_7
 `7-8/R19` Supersessions (the story's M8 list, in substance): `6-1c` AC 5 and the arc half of AC 3; `6-1d` AC 3 clause, AC 4 span, AC 6, R8, R13; the `1-7` hurtbox convention; the `3-0b` pin (6) second half; `5-6` AC 7/AC 8; `3-0a/R5` for the two charge edges.
 `7-8/R20` Smoke findings routed: escaping too easy -> judged again after 7-9 (post-commit steering + slower movement), range/homing numbers 7-7; slower movement -> 7-9; slower melee attacks + wider deflect window -> 7-7; orb crowding (orbs push each other) -> 7-2 (drop orb-orb avoidance, orbs pass through each other); eye-blink telegraph and counter presentation (RED counter weight/drama per Sekiro, GREEN dagger visibility and impact) -> new story 7-10 (Tier B) after 7-9; hand cycling via empty defenses -> 7-9 scope.
 Budget interval: dev before-baseline 2026-10-07 23:29:17 -> C1 suite file (integration) 2026-10-08 11:48:11.
+
+## 2026-10-08 -- 7-9 readiness gate + fixes
+
+Gate verdict NOT READY: 1 blocker / 6 major / 9 minor, all docs-only, report `C:\dev\_7-9-gate.md`. Story `7-9-unblockable-tempo` (Tier A) fixed docs-only in one pass and promoted to ready-for-dev (operator-authorised). Preconditions held: HEAD == origin/main == `0a04558`, no godot process.
+
+Operator rulings of 7.-8.10.2026, in the story, logged in substance:
+`7-9/R1` After a knockdown and the get-up iframes, a hero is immune to unblockables for 1.5 s (TEMP): no damage, no knockdown; melee and every other source hit normally; the cast is never refused for it and nothing is refunded.
+`7-9/R2` An unblockable costs 1 mana on top of its stamina, charged at the click; not enough mana = refused, nothing spent; no refund on a counter, miss or immune pass-through; damage 9 -> 6 (TEMP).
+`7-9/R3` After the commit the attack keeps turning toward the defender until contact, travel and facing both, at a capped per-colour rate (GREEN most, BLUE least); reach and distance unchanged.
+`7-9/R4` (amended by R8) A colour counter succeeds only if pressed in a window that opens W before the commit (W = 0.25 s TEMP, per colour) and stays open to the first touch or the flight's end; too early or wrong colour: card spent, hit lands.
+`7-9/R5` A colour defence may be played only from the opponent's unblockable click until it resolves; outside that it is refused and nothing is spent.
+`7-9/R6` A successful colour counter gives the defender +1 mana; a roll-through, miss or R1 immunity gives nothing.
+`7-9/R7` (amended, OQ8) Hero run speed 5.5 -> 4.6 (TEMP); walk 2.2 unchanged; heroes only.
+
+Gate rulings of 8.10.2026:
+`7-9/R8` (OQ1 overridden) The counter window is anchored at the commit, not the end of the launch, because then it is the same at every distance (a close GREEN no longer shrinks it to ~0.05 s) and the 7-10 launch flash lands on it.
+`7-9/R9` (OQ2) Busy-running stays the counter capture's precondition, a press-age test (press tick >= commit tick - W) is added, and the audit pins busy > W per colour; busy is not lengthened, because the counter lands on the first qualifying committed tick, so busy only has to outlive W.
+`7-9/R10` (OQ3 + F1) The R5 span (opponent CHARGING, hit-once memory not HIT) is read from a capture taken after step 3 and before either seat's step-6 card action, so a press on the hit or landing tick is refused and the click tick is refused for both seats; one new refusal token.
+`7-9/R11` (OQ4) R1 immunity follows ANY knockdown, including the attacker knocked down by a counter, because one classifier (`is_knockdown_stun`) opens every get-up.
+`7-9/R12` (OQ5) Steering rates GREEN 240, RED 150, BLUE 90 deg/s (TEMP), as placeholders for 7-7 to tune.
+`7-9/R13` (OQ6) Mana is tested before the stamina spend and `REASON_INSUFFICIENT_MANA` is reused, so a refusal leaves both pools untouched.
+`7-9/R14` (OQ7) The reward is `mana.add(1.0)` at the counter landing, credited to the defender, clamped at max with no signal when full, because `ManaPool.add` already clamps.
+`7-9/R15` (OQ9) The busy lock after a too-early press is unchanged, because the card, 10 stamina and the lock are the intended price of a bad read.
+`7-9/R16` (F4) Zero-degrades of the new knobs: mana cost 0 = free, turn rate 0 = no turning, W 0 = the window opens at the commit, immunity 0 = none, so in-test configs keep today's behaviour except the counter window.
+`7-9/R17` (F2-F16) Every proposed fix in the gate report is accepted as written (F15 recorded as Measured Fact M13), because each closes a named gap in D7, the ACs or the smoke.
+`7-9/R18` (F16(d)) The Live Smoke re-invokes R-D6, because P2 is a killable human slot and `7-8/R17` spent it.
+
+Gate disposition (story sections):
+- F1 (blocker) closed by R10: AC 8, AC 9, OQ3, Dev Notes.
+- F2 D7 + M15 + AC 4b; F3 AC 4 / AC 4b split; F4 R16 + AC 14 + T1 + Dev Notes; F5 M14 + D7 + Golden Prediction + AC 13; F6 D7; F7 R4, AC 6, AC 7, OQ1, M9.
+- F8 M5; F9 AC 1 + Dev Notes; F10 AC 11 + M8 + OQ4; F11 AC 4 + Dev Notes; F12 AC 5; F13 AC 8 + OQ3; F14 M14 + T6; F15 M13; F16 Live Smoke (items 6, 10, R-D6, inspector readout, mana budget, sound, foot-slide).
