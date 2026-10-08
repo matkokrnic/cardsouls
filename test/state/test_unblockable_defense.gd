@@ -319,7 +319,10 @@ func test_the_cast_spends_the_authored_defense_stamina_cost() -> void:
 	_cast_defense(ms, Enums.CardColor.RED)
 	assert_eq(ms.p2.stamina.get_current(), MAX_STAMINA - DEFENSE_COST,
 		"the FIFTH stamina seat spent its own bespoke cost — never the unblockable's")
-	assert_eq(ms.p1.stamina.get_current(), MAX_STAMINA, "the OPPOSING pool is untouched")
+	# Story 7-9 (AC 8): the opposing pool paid for the attack the defence answers (`_cast_defense` arms
+	# one) and for nothing else -- the defence spent none of it.
+	assert_eq(ms.p1.stamina.get_current(), MAX_STAMINA - UNBLOCKABLE_COST,
+		"the OPPOSING pool paid only for its own chargeup -- the defence touched none of it")
 
 
 ## AC 6: the `1-4` FALLTHROUGH shape, never deflect's degrade — an unaffordable commit refuses and
@@ -348,6 +351,9 @@ func test_an_unaffordable_defense_refuses_and_spends_nothing() -> void:
 ## ordering mirrored exactly.
 func test_the_cast_discards_the_card_and_owes_a_replacement() -> void:
 	var ms := _make_match()
+	# Story 7-9 (AC 8): an attack to answer, armed BEFORE the observers below connect, so P1's own cast
+	# does not reach `card_cast_resolved`.
+	_arm_opposing_chargeup(ms, Enums.CardColor.RED)
 	var slot := _slot_of_color(ms.p2, Enums.CardColor.RED)
 	var played_expected: StringName = ms.p2.hand.to_array()[slot]
 	var announcements: Array = []
@@ -400,6 +406,9 @@ func test_the_defense_colour_is_the_cast_cards_own_colour() -> void:
 func test_a_missing_colour_entry_degrades_to_the_sentinel() -> void:
 	var ms := _make_match(true, false)
 	var discard_before := ms.p2.discard.size()
+	# Story 7-9 (AC 8): an attack to answer first. P1's chargeup is itself colourless in this fixture (no
+	# map injected), which is still a live `CHARGING` attack and so still opens the R5 span.
+	_arm_opposing_chargeup(ms, Enums.CardColor.RED)
 	_advance(ms, InputIntent.new(), _defense_intent(0))
 	assert_eq(ms.p2.discard.size(), discard_before + 1, "the cast still resolved")
 	assert_eq(ms.p2.defense_color, PlayerState.NO_TELEGRAPH_COLOR,
@@ -435,6 +444,13 @@ func test_a_missing_colour_entry_degrades_to_the_sentinel() -> void:
 ## `1 <= press_lead <= busy - 1`: a lead of 0 is the press ON the judged tick (too late, structurally),
 ## and a lead at or past the colour's busy span means the counter RAN OUT before the attack committed.
 ## Nothing in between is refused any more.
+##
+## STORY 7-9 SUPERSEDES R-S6 (`7-9/R4`/`R8`, D7): the window is anchored at the COMMIT and opens only the
+## colour's authored LEAD before it, and a press with no attack in flight is refused (`7-9/R5`). This
+## fixture authors the lead AT each busy span (`_config`), so the busy end stays the binding edge and the
+## tests below keep pinning what they were written for; the lead's own front edge and the busy span as its
+## precondition live in `test_unblockable_tempo.gd`. Every press `_counter_run` makes here falls inside the
+## chargeup, so it is inside the R5 span.
 ##
 ## THE KNOCKDOWN NEEDS `_kd_match()`, not `_make_match()`: `_config()` deliberately leaves
 ## `knockdown_stun_seconds` unauthored (the `5-5`/`6-6a` "leave the older fixture unedited"
@@ -544,76 +560,41 @@ func test_an_attacker_adjacent_at_the_commit_is_still_countered() -> void:
 	assert_eq(ms.p2.hero.get_hp(), MAX_HP, "...so no damage lands")
 
 
-## AC 5, POST-SMOKE (R-S6): TOO EARLY, AND WHAT "TOO EARLY" NOW MEANS. It is no longer "the press
-## was inside the window but past its eligibility head" -- there is no head. It is "THE COUNTER RAN
-## OUT": the busy span ended before the attacker committed, so at the judged tick the defender holds
-## no window at all and the attack takes the `5-6` ladder untouched. The card and the stamina are
-## spent regardless, which is what makes a mistimed counter cost something.
-func test_a_counter_that_ran_out_before_the_commit_counters_nothing() -> void:
-	var ms := _kd_match()
-	var hits := _collect_hits(ms)
-	var deflects := _collect_deflects(ms)
-	_counter_run(ms, 0, Enums.CardColor.RED, Enums.CardColor.RED, COUNTER_BUSY_TICKS_RED + 4)
-	assert_false(ms.p2.defense_window.is_running,
-		"the busy span ran out BEFORE the attack committed -- which is the whole of `too early` now")
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
-		"...so the attack lands in FULL (AC 5)")
-	assert_eq(hits.size(), 1, "...hit_landed fires as usual")
-	assert_eq(deflects, [], "...and NO deflect is reported: nothing answered")
-	assert_eq(ms.p1.orbs.get_count(Enums.CardColor.RED), ORB_GRANT, "...and the orb is granted")
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.IDLE,
-		"...and the attacker is NOT knocked down")
-	assert_eq(ms.p2.discard.size(), 1, "the defender's card is spent regardless (AC 5)...")
-	assert_eq(ms.p2.stamina.get_current(), MAX_STAMINA - DEFENSE_COST, "...and so is its stamina")
-
-
-## AC 8, POST-SMOKE (R-S6): THE BOUNDARY IS THE WINDOW'S OWN END, EXACT IN TICKS AND IDENTICAL ON
-## BOTH SLOTS. The LAST RUNNING TICK of the busy span is the last COUNTERING tick; the very next tick
-## -- the first on which the window has emptied at step 2 -- counters nothing. Four cases, one test --
-## `test_the_dodge_boundary_is_identical_on_both_slots`' own shape, which is what makes a seat-
-## dependent implementation fall on exactly one of the four rather than pass everywhere.
-##
-## THIS IS THE TEST THE OLD ELIGIBILITY BOUNDARY TEST BECAME (rewritten, never deleted). It used to
-## pin `press_lead == COUNTER_ELIGIBILITY_TICKS` against `+ 1`; the leads moved to the span's own edge
-## and the CLAIM moved with them, because the edge is now the only edge there is.
-func test_the_whole_busy_span_counters_and_its_end_is_exact_on_both_slots() -> void:
-	for caster_slot: int in 2:
-		var last := _kd_match()
-		var last_caster: PlayerState = last.p1 if caster_slot == 0 else last.p2
-		var last_defender: PlayerState = last.p2 if caster_slot == 0 else last.p1
-		_counter_run(last, caster_slot, Enums.CardColor.RED, Enums.CardColor.RED,
-			COUNTER_BUSY_TICKS_RED - 1)
-		assert_true(last_defender.defense_window.is_running,
-			("caster slot %d: precondition -- at the judged tick the busy span is on its LAST "
-			+ "running tick") % caster_slot)
-		assert_eq(last_caster.hero.action_state, HeroState.ActionState.STUNNED,
-			("caster slot %d: a press %d ticks before the judged tick -- the LAST tick the counter "
-			+ "is still running -- COUNTERS, which is R-S6's whole claim: the head is gone and the "
-			+ "span answers to its own end") % [caster_slot, COUNTER_BUSY_TICKS_RED - 1])
-		var first := _kd_match()
-		var first_caster: PlayerState = first.p1 if caster_slot == 0 else first.p2
-		var first_defender: PlayerState = first.p2 if caster_slot == 0 else first.p1
-		_counter_run(first, caster_slot, Enums.CardColor.RED, Enums.CardColor.RED,
-			COUNTER_BUSY_TICKS_RED)
-		assert_false(first_defender.defense_window.is_running,
-			("caster slot %d: one tick later the span has emptied at step 2") % caster_slot)
-		assert_ne(first_caster.hero.action_state, HeroState.ActionState.STUNNED,
-			("caster slot %d: ...and that first expired tick counters NOTHING") % caster_slot)
-		assert_eq(first_defender.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
-			"caster slot %d: ...so the attack lands in full" % caster_slot)
+## STORY 7-9 RETIRED TWO TESTS HERE, and they are named so the trail is not lost:
+## `test_a_counter_that_ran_out_before_the_commit_counters_nothing` and
+## `test_the_whole_busy_span_counters_and_its_end_is_exact_on_both_slots`. Both pinned `6-6b/R-S6` --
+## "the whole busy span is the counter window" -- and both did it with a press made BEFORE the attacker
+## cast (leads of 22 and 17-18 against this fixture's 6-tick chargeup). `7-9` supersedes the claim itself
+## (`7-9/R4`/`R8`: the window is anchored at the commit and opens only the colour's lead before it; D7) AND
+## makes the press unreachable (`7-9/R5`: a defence with no attack in flight is refused, nothing spent), so
+## neither could be re-pointed without testing something else under the old name. What replaces them, in
+## `test_unblockable_tempo.gd`: the lead's front edge exact in ticks on both slots per colour
+## (`test_the_window_opens_the_lead_before_the_commit`, whose too-early half is the "card and stamina spent,
+## the hit lands in full" claim of the first test), and the busy span as the judgement's surviving
+## precondition (`test_the_busy_span_stays_the_precondition`, the second test's "ends exactly at the
+## window's last running tick" claim under the new rule).
 
 
 ## AC 8: A PRESS ON THE VERY TICK OF THE COMMIT IS TOO LATE, on both slots, and it is STRUCTURAL
 ## rather than a boundary to defend: card presses resolve at step 6 and the judgement runs at step 3,
 ## so the window the judgement reads was not yet open. `press_lead == 0` is that press.
+##
+## STORY 7-9 (AC 8, `7-9/R10`): IN THIS FIXTURE THAT TICK IS ALSO THE HIT AND LANDING TICK (no launch span),
+## so the press is now REFUSED outright -- the post-step-3 capture already sees the hit and the landing --
+## instead of resolving too late. The claim "a press on the judged tick never counters" is unchanged and
+## now stronger: the defender keeps the card and the stamina too.
 func test_a_press_on_the_judged_tick_itself_is_too_late_on_both_slots() -> void:
 	for caster_slot: int in 2:
 		var ms := _kd_match()
 		var caster: PlayerState = ms.p1 if caster_slot == 0 else ms.p2
 		var defender: PlayerState = ms.p2 if caster_slot == 0 else ms.p1
+		var rejections := _collect_rejections(defender)
 		_counter_run(ms, caster_slot, Enums.CardColor.RED, Enums.CardColor.RED, 0)
-		assert_true(defender.defense_window.is_running,
-			"caster slot %d: the press DID resolve, at step 6 of the judged tick" % caster_slot)
+		assert_false(defender.defense_window.is_running,
+			"caster slot %d: the press on the hit/landing tick is REFUSED (7-9 AC 8)" % caster_slot)
+		assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOTHING_TO_ANSWER]],
+			"caster slot %d: ...with the new token, nothing spent" % caster_slot)
+		assert_eq(defender.discard.size(), 0, "caster slot %d: ...the card stays in hand" % caster_slot)
 		assert_ne(caster.hero.action_state, HeroState.ActionState.STUNNED,
 			("caster slot %d: ...but it was too late -- step 3 had already judged a window that was "
 			+ "not yet open") % caster_slot)
@@ -1049,14 +1030,22 @@ func test_reds_counter_travels_out_and_back_to_exactly_where_it_started() -> voi
 ## attacker charging at the press, `_charge_reach_dirs` rests at `Vector2.ZERO`, so BLUE travels
 ## NOWHERE. A counter that answers nothing also goes nowhere.
 func test_blue_travels_nowhere_when_nothing_was_charging_at_the_press() -> void:
+	# STORY 7-9 (AC 8, `7-9/R5`, D7): THE FALLBACK IS NOW UNREACHABLE BY A PRESS. With nothing charging the
+	# press itself is REFUSED (`nothing_to_answer`, nothing spent), so no window opens and the zero-travel
+	# branch in `_resolve_defense_cast` is never reached from input; it stays as defence in depth. What this
+	# test now pins is the observable that replaced it: refused, unarmed, and not moving.
 	var ms := _kd_match()
-	_cast_defense(ms, Enums.CardColor.BLUE)
+	var rejections := _collect_rejections(ms.p2)
+	_advance(ms, InputIntent.new(), _defense_intent(_slot_of_color(ms.p2, Enums.CardColor.BLUE)))
 	assert_eq(ms._charge_reach_dirs[0], Vector2.ZERO,
 		"precondition: no chargeup ever ran, so the bearing rests at zero")
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOTHING_TO_ANSWER]],
+		"with nothing charging, the BLUE press is refused (7-9 AC 8)")
+	assert_false(ms.p2.defense_window.is_running, "...no counter window opens")
 	for _t in 3:
 		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p2.hero.velocity, Vector3.ZERO,
-			"BLUE's slide plays ON THE SPOT when it answered nothing (AC 9's zero-travel fallback)")
+			"...and BLUE travels nowhere: there is no counter to carry it")
 
 
 ## Story 6-6b REVIEW (finding H1): AC 9's ZERO-TRAVEL FALLBACK against the state a REAL match reaches,
@@ -1089,12 +1078,18 @@ func test_blue_travels_nowhere_when_the_only_chargeup_already_ended() -> void:
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"...and the pushed bearing is STALE, not cleared -- nothing anywhere clears this store, "
 		+ "which is exactly why the fallback cannot be the resting value alone")
-	_cast_defense(ms, Enums.CardColor.BLUE)
+	# STORY 7-9 (AC 8/AC 9, D7): the press after the attack's landing is now REFUSED -- the span ended at
+	# the landing -- so the stale bearing can never be locked from input at all. Pinned as such.
+	var rejections := _collect_rejections(ms.p2)
+	_advance(ms, InputIntent.new(), _defense_intent(_slot_of_color(ms.p2, Enums.CardColor.BLUE)))
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOTHING_TO_ANSWER]],
+		"a press after the only chargeup landed is refused (7-9 AC 9: the landing ends the span)")
+	assert_false(ms.p2.defense_window.is_running, "...no counter window opens")
 	for t in 3:
 		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p2.hero.velocity, Vector3.ZERO,
-			("tick %d: with no attacker CHARGING at the press, BLUE travels NOWHERE (AC 9's "
-			+ "zero-travel fallback) -- a stale bearing must not carry the defender") % t)
+			("tick %d: with no attacker CHARGING at the press, BLUE travels NOWHERE -- a stale bearing "
+			+ "must not carry the defender, and since 7-9 there is no counter to carry it") % t)
 
 
 ## AC 9: THE BEARING IS LOCKED AT THE PRESS AND NEVER RE-READ, and this test is a MEASURED
@@ -1177,13 +1172,18 @@ func test_the_counter_leaves_facing_alone_when_nothing_was_charging_at_the_press
 	_run_chargeup_to_its_landing(ms, 0)
 	assert_eq(ms._charge_reach_dirs[0], FACT_DIR,
 		"...and the pushed bearing is STALE, not cleared -- the trap this test exists for")
-	_cast_defense(ms, Enums.CardColor.GREEN)
+	# STORY 7-9 (AC 8/AC 9, D7): the press is now REFUSED (the landing ended the span), so no counter
+	# window opens and the facing lock never engages -- the R-S3 fallback is unreachable from input.
+	var rejections := _collect_rejections(ms.p2)
+	_advance(ms, InputIntent.new(), _defense_intent(_slot_of_color(ms.p2, Enums.CardColor.GREEN)))
+	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOTHING_TO_ANSWER]],
+		"a press with nothing charging is refused (7-9 AC 8)")
 	ms.p2.hero.facing = MOVED_DIR
 	for t in 3:
 		_advance(ms, InputIntent.new(), InputIntent.new())
 		assert_eq(ms.p2.hero.facing, MOVED_DIR,
-			("tick %d: with nothing charging at the press, the counter turns the defender NOWHERE "
-			+ "-- facing is left at its last value (R-S3's fallback)") % t)
+			("tick %d: with nothing charging at the press, the defender is turned NOWHERE -- facing is "
+			+ "left at its last value") % t)
 
 
 ## R-S3's other edge: the lock is the BUSY SPAN's, and ordinary target-derived steering is back on
@@ -1899,7 +1899,8 @@ func test_simultaneous_landings_knock_both_heroes_down() -> void:
 
 ## AC 6 (R-PRESS): a press on the knockdown tick ALWAYS resolves first -- the action taken, its cost
 ## spent -- and the knockdown then overwrites the result. Asserted on BOTH seats, for a step-3 press
-## (attack) and a step-6 card press (defense), because those are the two seats a naive write gets wrong.
+## (attack) and a step-6 card press (a basic cast since 7-9 -- see the card half), because those are the
+## two seats a naive write gets wrong.
 func test_a_press_on_the_knockdown_tick_resolves_first_on_both_slots() -> void:
 	for victim_slot: int in 2:
 		var caster_slot := 1 - victim_slot
@@ -1916,16 +1917,18 @@ func test_a_press_on_the_knockdown_tick_resolves_first_on_both_slots() -> void:
 				[int(HeroState.ActionState.IDLE), int(HeroState.ActionState.ATTACKING)],
 				[int(HeroState.ActionState.ATTACKING), int(HeroState.ActionState.STUNNED)]],
 			"victim slot %d: ...and the knockdown then overwrote it" % victim_slot)
+		# STORY 7-9 (AC 8): the step-6 card press is now a mode (1) BASIC cast. It used to be a DEFENSE
+		# press, and the knockdown tick is the attack's HIT tick -- on which `7-9/R10` refuses a defence
+		# outright (pinned in `test_unblockable_tempo.gd`). The R-PRESS claim is about the SEAT (a step-6
+		# card press resolves before the step-6b knockdown), so any card mode that resolves proves it.
 		var card := _kd_match()
 		var caster_of_card: PlayerState = card.p1 if victim_slot == 0 else card.p2
 		var card_slot := _slot_of_color(caster_of_card, Enums.CardColor.GREEN)
+		var played: StringName = caster_of_card.hand.to_array()[card_slot]
 		_land(card, caster_slot, Enums.CardColor.RED, func(t: int) -> InputIntent:
-			return _defense_intent(card_slot) if t == CHARGEUP_TICKS - 1 else InputIntent.new())
-		assert_true(caster_of_card.defense_window.is_running,
-			"victim slot %d: the card cast on the knockdown tick RESOLVED" % victim_slot)
-		assert_eq(caster_of_card.stamina.get_current(), MAX_STAMINA - DEFENSE_COST,
-			"victim slot %d: ...its stamina spent" % victim_slot)
-		assert_eq(caster_of_card.discard.size(), 1, "victim slot %d: ...its card spent" % victim_slot)
+			return _basic_intent(card_slot) if t == CHARGEUP_TICKS - 1 else InputIntent.new())
+		assert_eq(caster_of_card.discard.to_array(), [played] as Array[StringName],
+			"victim slot %d: the card cast on the knockdown tick RESOLVED -- its card spent" % victim_slot)
 		assert_eq(caster_of_card.hero.action_state, HeroState.ActionState.STUNNED,
 			"victim slot %d: ...and the knockdown still landed on top" % victim_slot)
 
@@ -2300,6 +2303,14 @@ func _config() -> BalanceConfig:
 	c.counter_travel_distance_red = COUNTER_TRAVEL_RED
 	c.counter_travel_distance_blue = COUNTER_TRAVEL_BLUE
 	c.counter_travel_forward_fraction_red = COUNTER_FORWARD_FRACTION_RED
+	# Story 7-9 (AC 6, `7-9/R16`): the counter LEAD, authored AT each colour's busy span. A press can be at
+	# most `busy - 1` ticks old while its window still runs, so with lead == busy the lead never binds and
+	# the busy span stays the edge every timing claim in this file is about. Unauthored, the lead is 0 and
+	# every pre-commit press here would be too early (the `7-9` gate's named expected mover). The lead's
+	# own front edge is pinned in `test_unblockable_tempo.gd`.
+	c.counter_lead_seconds_red = float(COUNTER_BUSY_TICKS_RED) / TimingWindow.TICK_HZ
+	c.counter_lead_seconds_blue = float(COUNTER_BUSY_TICKS_BLUE) / TimingWindow.TICK_HZ
+	c.counter_lead_seconds_green = float(COUNTER_BUSY_TICKS_GREEN) / TimingWindow.TICK_HZ
 	# Story 5-6: the ladder's own numbers. (The dodged-damage multiplier 5-6 left at its 0.0 default
 	# here retired at story 7-8, `7-8/R11`.)
 	c.deflect_stun_seconds = float(DEFLECT_STUN_TICKS) / TimingWindow.TICK_HZ
@@ -2432,10 +2443,32 @@ func _press(action: StringName) -> InputIntent:
 ## attacker is genuinely mid-chargeup" had to hold the confirm out through here. No input ends a
 ## chargeup any more, so a bare P1 intent IS "still charging" and the distinction it drew no longer
 ## exists. `held` stays: it carries `&"block"` for the two cast-drops-block fixtures.
+##
+## Story 7-9 (AC 8, `7-9/R5`): A DEFENCE NOW NEEDS AN ATTACK TO ANSWER, so this helper first ARMS one
+## (`_arm_opposing_chargeup`) unless P1 is already charging -- the press is then legal, and every test
+## below that is about the WINDOW, the CARD or the STAMINA keeps testing exactly that. The armed attack is
+## in a DIFFERENT colour from the defence, so it is never countered and the window answers nothing unless
+## the test arranged otherwise; no reach is pushed for it, so it whiffs at its landing.
 func _cast_defense(ms: MatchState, color: int, held: Array = []) -> void:
+	_arm_opposing_chargeup(ms, color, held)
 	var slot := _slot_of_color(ms.p2, color)
 	assert_true(slot >= 0, "fixture: the hand holds a card of colour %d" % color)
 	_advance(ms, InputIntent.new(), _defense_intent(slot, held))
+
+
+## Story 7-9 (AC 8): P1 casts an unblockable in the colour AFTER `defense_color` (so a defence in that
+## colour never counters it), unless P1 is already charging. P2 keeps holding `held` on that tick, so a
+## held block survives it. A closed layer refuses the cast, which the flag tests rely on: their defence is
+## then refused on the flag first, exactly as before.
+func _arm_opposing_chargeup(ms: MatchState, defense_color: int, held: Array = []) -> void:
+	if ms.p1.hero.action_state == HeroState.ActionState.CHARGING:
+		return
+	var color: int = COLORS[(COLORS.find(defense_color) + 1) % COLORS.size()] \
+			if COLORS.has(defense_color) else Enums.CardColor.RED
+	var p2_hold := InputIntent.new()
+	for k: StringName in held:
+		p2_hold.held[k] = true
+	_advance(ms, _unblockable_intent(_slot_of_color(ms.p1, color)), p2_hold)
 
 
 ## Story 6-9: A CHARGEUP RUN OUT TO ITS LANDING, with NO reach pushed during the flight, so it

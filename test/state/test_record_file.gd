@@ -58,6 +58,9 @@ const PRE_6_5B_PATH := "user://test_6_5b_pre_drain_pushes.rec"
 const PRE_6_5C_PATH := "user://test_6_5c_pre_hero_cast.rec"
 ## Story 7-8 (`7-8/R12`): the v19 refusal fixture's own path, on its siblings' naming.
 const PRE_7_8_PATH := "user://test_7_8_pre_v19_honest_contact.rec"
+## Story 7-9 (AC 13): the v20 refusal fixture's own path, on its siblings' naming.
+## No "20" in the path, so `error.contains("20")` below can only be answered by the version in the message.
+const PRE_7_9_PATH := "user://test_7_9_pre_tempo.rec"
 ## Story 6-5g (AC 27, REVIEW FIX m5): the v18 refusal fixture's own path, on its siblings' naming -- this
 ## story's own dev pass had reused `PRE_6_5C_PATH` (harmless, since each test removes its file before the
 ## next runs, but the wrong name for what it wrote); its own constant now describes its own fixture.
@@ -233,8 +236,13 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 20,
-		"FORMAT_VERSION is 20 as of story 7-8 (`7-8/R12`) -- a BEHAVIOUR change (an unblockable resolves on "
+	assert_eq(RecordFile.FORMAT_VERSION, 21,
+		"FORMAT_VERSION is 21 as of story 7-9 (AC 13) -- a BEHAVIOUR change (an unblockable click spends "
+		+ "mana and is refused without it; a colour defence with no attack in flight is refused with nothing "
+		+ "spent; a counter press older than the colour's lead no longer counters; a committed attack steers; "
+		+ "an unblockable touching a hero inside the post-get-up immunity is dropped) plus a SHAPE change "
+		+ "(nine new `BalanceConfig` fields widen the `balance` row). v20 is refused HARD, no shim. "
+		+ "It was 20 as of story 7-8 (`7-8/R12`) -- a BEHAVIOUR change (an unblockable resolves on "
 		+ "the first counted touch, an i-frame touch is dropped rather than remembered, no colour arc gates "
 		+ "a touch: the same recorded charge-reach facts replay to a different outcome) plus a SHAPE change "
 		+ "(the arc triplet and the dodged-damage multiplier retire from the `balance` row). v19 is refused "
@@ -950,6 +958,34 @@ func test_a_v19_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_7_8_PATH)
 
 
+## Story 7-9 (AC 13): A v20 RECORD IS REFUSED WITH A REASON, NO SHIM -- the per-bump fixture, on the
+## `test_a_v19_record_is_refused_with_a_reason` precedent directly above.
+##
+## WHAT A v20 FILE WOULD SILENTLY DO: its recorded intents and pushes replay verbatim under five changed
+## rules -- a click that v20 committed free is refused for want of mana, a defence v20 spent the card on
+## is refused, a counter v20 landed from an early press now misses, a committed attack v20 flew straight
+## now steers, a touch v20 landed on a just-risen hero is now dropped -- and its `balance` row lacks the
+## nine new keys, which `_rebuilt` would leave at zero. Nothing in the file says why.
+func test_a_v20_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_7_9_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_7_9_PATH, 20)
+	var refused := RecordFile.load_record(PRE_7_9_PATH)
+	assert_null(refused["record"],
+		"a v20 record is REFUSED -- its intents would replay under 7-9's price, legality, window, steering "
+		+ "and immunity rules and resolve a different outcome")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("20"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_7_9_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_7_9_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_7_9_PATH)
+
+
 ## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): THE MEASUREMENT BEHIND THE BUMP, on the 6-5c
 ## row-shape pin's shape verbatim -- the two new `CardEffect` exports really do widen every recorded effect
 ## row, read out of an actually-saved file rather than asserted as a count.
@@ -1396,9 +1432,12 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 20,
+	assert_eq(RecordFile.FORMAT_VERSION, 21,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 20 (last: 7-8, which resolves an unblockable on the first counted "
+		+ "version has since moved to 21 (last: 7-9, which priced the unblockable in mana, refused a "
+		+ "defence with nothing to answer, anchored the counter window at the commit, steered the launch "
+		+ "and added the post-get-up immunity, widening the balance row by nine fields; before it 7-8, "
+		+ "which resolves an unblockable on the first counted "
 		+ "touch and retired the arc triplet and the dodged-damage multiplier from the balance row; "
 		+ "before it 6-5g, which made the seven timed/in-flight cards "
 		+ "counterable and retired 6-5f's interim refusal -- a BEHAVIOUR bump with no widened recorded "

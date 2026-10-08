@@ -348,7 +348,25 @@ extends RefCounted
 ##
 ## NOR IS THE GOLDEN A REASON: it moved for 7-8 for one unrelated cause (the new `charge_contact` snapshot
 ## key), and a record carries INPUTS and CONTENT, never a hash.
-const FORMAT_VERSION := 20
+##
+## Story 7-9 (AC 13): 20 -> 21, WITH THE HARD REFUSAL OF A v20 FILE, NO SHIM.
+##
+## THE CAUSE IS BEHAVIOURAL FIRST, the `7-8` class again: the recorded intent stream and pushes replay
+## verbatim, and 7-9 changes what they resolve to in five ways -- (1) an unblockable click now spends MANA
+## and is REFUSED without it; (2) a colour defence pressed with no opposing unblockable in flight is REFUSED
+## with nothing spent, where v20 spent the card and the stamina and locked the hero busy; (3) a counter press
+## older than the colour's lead before the commit no longer counters; (4) a committed attack now STEERS
+## toward the pushed bearing, so its facing and travel differ; (5) an unblockable touching a hero inside the
+## new post-get-up immunity is dropped where v20 hit. A v20 stream replayed here therefore diverges silently.
+##
+## AND A SHAPE CAUSE BESIDE IT: `BalanceConfig` gains nine fields (the mana cost, three turn rates, the
+## immunity, three counter leads, the counter reward), so the `balance` channel row (every script var,
+## `_resource_values`) gains nine keys a v20 file does not carry, and `_rebuilt` would leave them at their
+## zero defaults. Either cause alone is sufficient; both are silent, which is what this constant refuses.
+##
+## NOR IS THE GOLDEN A REASON: it moves for 7-9 for one unrelated cause (the new `unblockable_immunity`
+## hero snapshot key), and a record carries INPUTS and CONTENT, never a hash.
+const FORMAT_VERSION := 21
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

@@ -119,7 +119,12 @@ func test_snapshot_shape_is_untouched_by_the_instrument() -> void:
 			# silently. It is the only thing that can tell a bolt stun from a deflect stun: both are
 			# authored 0.4 s, so the duration classifier is structurally incapable of separating them.
 			"stun_is_bolt",
-			"swing_dedupe", "velocity", "windup"],
+			"swing_dedupe",
+			# Story 7-9 (AC 11, AC 13): the KNOCKDOWN BREATHER joins the hero snapshot -- STATE, the Golden
+			# Prediction's one named cause, named here on the lines above's precedent so this pin fails
+			# loudly rather than silently.
+			"unblockable_immunity",
+			"velocity", "windup"],
 		"the hero snapshot is unchanged — the countdown is instrumentation, not state")
 
 

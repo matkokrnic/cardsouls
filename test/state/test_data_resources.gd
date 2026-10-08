@@ -193,6 +193,16 @@ const E1_BALANCE_FIELDS: Array[String] = [
 	# `unblockable_chargeup_seconds`' reason: `field in config` and `>= 0.0` BOTH pass on the 0.0
 	# script default, which would ship every corpse already expired and the whole story invisible.
 	"corpse_lifetime_seconds",
+	# Story 7-9 (AC 14): the story's nine new knobs. Half (a) demands every entry. Only the immunity carries
+	# the `_seconds` suffix, so half (b) demands its stem-matched `unblockable_immunity_ticks`; the three
+	# counter leads take the `counter_busy_seconds_*` naming shape (the suffix is the COLOUR) and their tick
+	# twins are bespoke-audited; the mana cost, the reward and the three turn rates are not durations. The
+	# bespoke bounds (the AC 14 audit) live in test_balance_authoring.gd.
+	"unblockable_mana_cost", "unblockable_immunity_seconds",
+	"unblockable_turn_rate_degrees_per_second_red", "unblockable_turn_rate_degrees_per_second_blue",
+	"unblockable_turn_rate_degrees_per_second_green",
+	"counter_lead_seconds_red", "counter_lead_seconds_blue", "counter_lead_seconds_green",
+	"counter_mana_reward",
 ]
 
 

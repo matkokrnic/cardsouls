@@ -911,6 +911,14 @@ func _config(with_launch: bool) -> BalanceConfig:
 	c.counter_busy_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	# Story 7-9 (AC 6, `7-9/R16`): the counter LEAD, authored AT the busy span so the busy span stays the
+	# binding edge here and this file's counter claims (the commit-tick ordering, not the window's front
+	# edge) keep testing what they were written to test. Unauthored, the lead is 0 and every pre-commit
+	# window -- this file injects one a tick before the commit -- is too early. The lead's own edge is pinned
+	# in `test_unblockable_tempo.gd`.
+	c.counter_lead_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_lead_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_lead_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.roll_distance = 3.0
 	c.deflect_window_seconds = 0.1
 	c.draw_replacement_delay_seconds = float(DRAW_DELAY_TICKS) / TimingWindow.TICK_HZ

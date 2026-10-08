@@ -146,6 +146,22 @@ var stun := TimingWindow.new()
 ## (whether a hit lands at all).
 var get_up_iframe := TimingWindow.new()
 
+## Story 7-9 (AC 11, `7-9/R1`/`R11`, OQ4): THE KNOCKDOWN BREATHER -- the tenth D4 window. While it runs an
+## UNBLOCKABLE touching this hero does nothing (no damage, no knockdown, no attacker orb) and is not spent;
+## every other source hits normally. Started by `MatchState` at STEP 2 on the tick `get_up_iframe` closes
+## (`get_up_iframe_closed_this_tick()`), so it follows ANY knockdown, and chains off the get-up: no get-up
+## window, no close tick, no immunity. Ticks here with its siblings, has no early-stop path in normal play,
+## and is stopped by the debug reset (the eighth named exception).
+##
+## NOT REGISTERED IN `is_iframe_open()`, deliberately: that predicate is read by the step-4 melee drop and
+## by Honed Bolt (M7, `7-8/R10`), and this window must cover unblockables ONLY. `MatchState`'s contact seat
+## reads it on its own branch.
+##
+## HASHED through `to_snapshot()`'s `unblockable_immunity` key: it crosses ticks and decides an outcome
+## (whether an unblockable lands at all). It cannot be derived from existing state -- nothing else spans
+## past the get-up close (M8) -- so its presence moves the golden (the `7-8/R15` precedent).
+var unblockable_immunity := TimingWindow.new()
+
 ## Story 6-5c (`6-5c/R16`, AC 27): IS THE RUNNING STUN A BOLT STUN? The discriminator presentation
 ## needs to play `dizzy` instead of `stunned`, and the ONLY thing that can tell the two apart: both
 ## are authored 0.4 s, so `BalanceTicks.is_knockdown_stun` classifies both ORDINARY and a
@@ -327,6 +343,13 @@ func is_iframe_open() -> bool:
 ## input normally.
 func is_getting_up() -> bool:
 	return get_up_iframe.is_running
+
+
+## Story 7-9 (AC 11): did THIS tick's step-2 advance close the get-up iframes? A read of the existing
+## one-tick marker (`_get_up_iframe_closed_this_tick`, still never snapshotted), exposed so `MatchState`
+## can arm the knockdown breather at step 2 without this class learning the balance it is armed from.
+func get_up_iframe_closed_this_tick() -> bool:
+	return _get_up_iframe_closed_this_tick
 
 
 ## Story 1-5 (B7b): dedupe acceptance + registration, called by MatchState's step-4
@@ -535,6 +558,9 @@ func tick_timers() -> void:
 	get_up_iframe.tick()
 	# Story 6-6a (AC 8): recomputed EVERY tick, the `_roll_iframe_closed_this_tick` line's exact shape.
 	_get_up_iframe_closed_this_tick = get_up_iframe_was_running and not get_up_iframe.is_running
+	# Story 7-9 (AC 11): ticked BEFORE `MatchState` re-arms it on a close tick, so a freshly armed window
+	# runs its full length from the close tick on.
+	unblockable_immunity.tick()
 	for index in _swing_dedupe.keys():
 		var grace := int(_swing_dedupe[index]["grace"])
 		if grace > 0:
@@ -588,4 +614,7 @@ func to_snapshot() -> Dictionary:
 		# rather than excluded on the `vulnerable_window` precedent.
 		"stun_is_bolt": stun_is_bolt,
 		"get_up_iframe": get_up_iframe.to_snapshot(),
+		# Story 7-9 (AC 11, AC 13): the knockdown breather -- a NEW hero snapshot key, present (at rest) on
+		# every hero, the `get_up_iframe` key's precedent. The Golden Prediction's one named cause.
+		"unblockable_immunity": unblockable_immunity.to_snapshot(),
 	}

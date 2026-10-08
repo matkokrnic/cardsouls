@@ -338,6 +338,19 @@ var _contact_queue: Array[Dictionary] = []
 var _charge_reach: Array[int] = [REACH_UNKNOWN, REACH_UNKNOWN]
 var _charge_reach_dirs: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO]
 
+## Story 7-9 (AC 4, gate finding F11): WAS A CHARGE-REACH BEARING PUSHED FOR THIS SLOT THIS TICK? Set by
+## `push_contact` beside `_charge_reach_dirs`, and cleared inside the SAME `advance()` right after step 3's
+## movement seats -- so the steering seat can tell "the bearing is this tick's" from "the store still holds
+## an older one". `_charge_reach_dirs` alone cannot say so: it is written on every push and cleared
+## nowhere (the co-located tick, `match_runner.gd:1157`, pushes nothing and leaves the last value), and a
+## capped turn toward a STALE bearing would keep turning on a tick AC 4 says keeps the facing.
+##
+## PER-TICK, `_contact_queue`'s classification verbatim: filled by the pushes that precede an `advance()`,
+## emptied inside it, so no tick can observe a previous tick's value. A round-over tick returns at step 1b
+## without clearing it, but the runner pushes nothing during the freeze (`_push_charge_reach_facts`), and the
+## debug reset clears it. A replay restores it by replaying the recorded pushes.
+var _charge_reach_pushed: Array[bool] = [false, false]
+
 ## Story 6-6b (AC 9): THE LOCKED COUNTER BEARING, per DEFENDER slot -- the planar defender-to-attacker
 ## bearing captured at the PRESS, which `_resolve_movement`'s counter-busy branch reads on every tick
 ## of the busy span for BOTH of the two things a counter needs to point at the attacker:
@@ -436,6 +449,32 @@ var _iframe_open_at_step3: Array[bool] = [false, false]
 ## it is EXCLUDED from to_snapshot() with no determinism or replay hole. A round-over tick returns at
 ## step 1b and neither writes nor reads it.
 var _counter_color_at_step3: Array[int] = [NO_COUNTER_COLOR, NO_COUNTER_COLOR]
+
+## Story 7-9 (AC 6, `7-9/R9`): HOW MANY TICKS AGO THIS HERO PRESSED ITS COLOUR DEFENCE, as of the start of
+## step 3 -- the running `defense_window`'s elapsed count (duration minus remaining, both snapshotted at the
+## press, so no new key). Captured beside `_counter_color_at_step3` on its seat and for its reason: the
+## counter judgement reads EVERY defender fact from the capture, never live. Meaningful only while that
+## colour capture is a real colour (the window running); 0 otherwise and never read then.
+##
+## PER-TICK, NEVER CROSS-TICK: `_counter_color_at_step3`'s classification verbatim.
+var _counter_press_age_at_step3: Array[int] = [0, 0]
+
+## Story 7-9 (AC 8/AC 9, `7-9/R5`/`R10`): MAY THIS HERO PLAY A COLOUR DEFENCE THIS TICK? Per slot, true
+## while the OPPOSING hero's unblockable is between its click and its resolution: the opponent is
+## `CHARGING` and its hit-once memory is not `HIT` -- existing hashed state, no new key.
+##
+## CAPTURED AFTER STEP 3 AND BEFORE EITHER SEAT'S STEP-6 CARD ACTION (`7-9/R10`, gate finding F1), and both
+## edges are the ruling. AFTER step 3, so it sees THIS tick's hit (`_resolve_charge_contact`), landing exit
+## and counter teardown: a press on the hit or landing tick is refused. BEFORE step 6, so a click resolved
+## at step 6 of this tick is NOT yet visible to either seat: a press on the opponent's click tick is refused
+## for BOTH seats alike, where a live read would let P2 answer P1's same-tick click and not the reverse.
+## An interruption that lands LATER in the tick (the step-6b knockdown package, the step-6c bolt stun, the
+## step-8 death) ends the span from the next tick's capture -- a same-tick press resolves first, the
+## R-PRESS order every step-6 press already follows.
+##
+## PER-TICK, NEVER CROSS-TICK: written once per tick that reaches step 6 and read only by that tick's
+## `_resolve_defense_cast` -- `_counter_color_at_step3`'s classification verbatim.
+var _defense_answerable_at_step6: Array[bool] = [false, false]
 
 ## The resting value of `_counter_color_at_step3` -- "this hero can counter nothing this tick". It is
 ## `PlayerState.NO_TELEGRAPH_COLOR`'s own value under a name that says what the ABSENCE means here,
@@ -660,6 +699,16 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    pre-injection MatchState never started a delay window)
 	p1.hero.tick_timers()
 	p2.hero.tick_timers()
+	# Story 7-9 (AC 11, `7-9/R11`, OQ4): THE KNOCKDOWN BREATHER is armed HERE, at step 2, on the tick the
+	# get-up iframes close -- never in one seat's step-3 arm, so both heroes' windows stand before either
+	# seat reads them (the contact seat reads it live, and nothing in step 3 writes it). The close tick is
+	# the get-up window's own one-tick marker, recomputed by the `tick_timers()` call just above; the
+	# immunity is started after this tick's tick, so it runs from the close tick for its whole authored
+	# length. ANY knockdown reaches here, because the get-up window opens on any knockdown's timer exit
+	# (the victim of a hit, or an attacker a counter dropped). With no get-up window authored there is no
+	# close tick and so no immunity. Guarded for the pre-injection fixture, whose heroes never get up.
+	_arm_unblockable_immunity(p1.hero)
+	_arm_unblockable_immunity(p2.hero)
 	p1.stamina.tick_timers()
 	p2.stamina.tick_timers()
 	# Story 3-5b (AC 3/AC 8): the pending-draw window and its vulnerable-window sibling advance
@@ -765,10 +814,17 @@ func advance(intents: Array[InputIntent]) -> void:
 	# spent) and BEFORE either seat's `_resolve_actions` has resolved anything.
 	_counter_color_at_step3[0] = _counter_color_of(p1)
 	_counter_color_at_step3[1] = _counter_color_of(p2)
+	# Story 7-9 (AC 6): the press age, captured in the same breath -- see `_counter_press_age_at_step3`.
+	_counter_press_age_at_step3[0] = p1.defense_window.duration_ticks() - p1.defense_window.remaining_ticks()
+	_counter_press_age_at_step3[1] = p2.defense_window.duration_ticks() - p2.defense_window.remaining_ticks()
 	_resolve_actions(p1, p1_intent, 0)
 	var p1_actually_running := _resolve_movement(p1, p1_intent, 0)
 	_resolve_actions(p2, p2_intent, 1)
 	var p2_actually_running := _resolve_movement(p2, p2_intent, 1)
+	# Story 7-9 (AC 4): the steering seat (inside `_resolve_movement`) has read this tick's push flags;
+	# they are emptied here so the next tick starts from "nothing pushed" -- see `_charge_reach_pushed`.
+	_charge_reach_pushed[0] = false
+	_charge_reach_pushed[1] = false
 	# 3b. Story 4-3b (AC 1/AC 13): the UNIT attack rhythm's phase progression — the step-3 FAMILY's
 	#    third member, seated after both heroes for the same fixed P1 -> P2 determinism every other
 	#    per-player loop in this function follows. It is AI-driven, not input-driven: no
@@ -831,6 +887,11 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    matching the E2-CO/R3 precedent already applied to move_dir/attack/block/roll. Fixed
 	#    P1 -> P2 order, like every other per-player loop in this function.
 	_deal_pending_decks()
+	#    Story 7-9 (AC 8/AC 9, `7-9/R10`): the DEFENCE-LEGALITY capture, taken HERE -- after step 3 has
+	#    resolved this tick's hit, landing and counter, and before either seat's card action. See
+	#    `_defense_answerable_at_step6`.
+	_defense_answerable_at_step6[0] = _opposing_unblockable_in_flight(p2)
+	_defense_answerable_at_step6[1] = _opposing_unblockable_in_flight(p1)
 	_resolve_card_action(p1, p1_intent, 0)
 	_resolve_card_action(p2, p2_intent, 1)
 	#    Story 6-2 (AC 11/AC 14e): the PITCH FIZZLE EXIT, seated AFTER the card dispatch and BEFORE the
@@ -1473,6 +1534,8 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 	# describes THAT hero's relation to the enemy hero, and only that hero's chargeup reads it.
 	if is_charge_reach_kind(kind):
 		_charge_reach_dirs[attacker_slot] = target_to_attacker
+		# Story 7-9 (AC 4): this tick HAS a bearing for the steering seat -- see `_charge_reach_pushed`.
+		_charge_reach_pushed[attacker_slot] = true
 		# STORY 7-8 (`7-8/R10`): THE LATCH IS THIS TICK'S FACT. 6-1d made `INSIDE` absorbing for the
 		# whole flight because the single resolution waited for the landing; 7-8 resolves on the touch
 		# tick itself (`7-8/R1`), so an absorbing latch would now be WRONG -- a touch dropped by i-frames
@@ -5112,6 +5175,14 @@ const REASON_NO_OPPOSING_BOULDER := &"no_opposing_boulder"
 ## own six-versus-seven split to the player.
 const REASON_NO_COUNTER_TARGET := &"no_counter_target"
 
+## Story 7-9 (AC 8, `7-9/R5`/`R10`, OQ3): a COLOUR DEFENCE pressed while no opposing unblockable is between
+## its click and its resolution. The ONE new refusal token of the story. Its own token rather than a reuse:
+## `REASON_NO_TARGET` reads the captured lock target and `REASON_NO_COUNTER_TARGET` is Counterspell's, and
+## a player whose defence card stayed in hand needs to hear that there was nothing to answer. A state-side
+## fact the evaluator never sees, so it lives here beside its siblings. Raised by `_resolve_defense_cast`
+## only, before every mutation: nothing is spent.
+const REASON_NOTHING_TO_ANSWER := &"nothing_to_answer"
+
 
 ## Story 6-5e (AC 17a): REFUSE this press if the slot is covered, and say whether it did.
 ##
@@ -5879,10 +5950,23 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	# mutated state, so a refused cast leaves the hand, the discard and the debt untouched.
 	# `&"insufficient_stamina"` is the shipped vocabulary verbatim -- the same reason the roll and
 	# attack seats queue, because it is the same fact about the same pool.
+	#
+	# STORY 7-9 (AC 1, `7-9/R2`/`R13`): THE MANA PRICE, and it SUPERSEDES the header's "NO MANA" clause
+	# (`5-2/R2`, D7). The order is TEST MANA -> SPEND STAMINA -> SPEND MANA, so a refusal for either pool
+	# leaves BOTH untouched, and a hero short of both hears `insufficient_mana` (the first question asked).
+	# The test is `spend`'s own comparison (`amount > current`, M13), so the spend below cannot fail after
+	# it passed; `CastEvaluator.refusal_reason` is still NOT called -- only its reason constant is borrowed,
+	# the `REASON_FLAG_CLOSED` borrow two guards up. A zero cost passes the test and spends nothing
+	# (`ManaPool.add` no-ops an unchanged value), which is the `7-9/R16` "0 = free" degrade.
+	if balance.unblockable_mana_cost > player.mana.get_current():
+		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_INSUFFICIENT_MANA)
+		return
 	if not player.stamina.spend(balance.unblockable_stamina_cost,
 			balance_ticks.stamina_regen_delay_ticks):
 		player.hero.reject_action(&"card_cast", &"insufficient_stamina")
 		return
+	var mana_spent := player.mana.spend(balance.unblockable_mana_cost)
+	Invariant.check(mana_spent, "the unblockable mana spend cannot fail after its own affordability test")
 	# AC 6: the card leaves the hand and enters the discard, the replacement is owed on the VACATED
 	# slot, and the observation channel announces -- `_resolve_basic_cast`'s ordering mirrored
 	# exactly, all inside this one tick.
@@ -6002,6 +6086,16 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	if player.hand.is_slot_empty(hand_slot):
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_EMPTY_SLOT)
 		return
+	# STORY 7-9 (AC 8, `7-9/R5`/`R10`): A COLOUR DEFENCE NEEDS AN ATTACK TO ANSWER. Outside the opponent's
+	# click-to-resolution span the press is refused and NOTHING is spent -- the card stays, no stamina, no
+	# busy lock -- which SUPERSEDES `5-5` AC 4 ("castable at any time except CHARGING") and AC 7 ("the card
+	# leaves the hand on EVERY commit"), D7. Placed after the empty-slot guard and BEFORE the stamina spend
+	# (OQ3), so it precedes every mutation; the `CHARGING` gate above still answers first for a presser
+	# charging its own attack. Read from the post-step-3 capture, never live -- see
+	# `_defense_answerable_at_step6` for why both edges of that seat are load-bearing.
+	if not _defense_answerable_at_step6[slot]:
+		player.hero.reject_action(&"card_cast", REASON_NOTHING_TO_ANSWER)
+		return
 	if not player.stamina.spend(balance.defense_stamina_cost,
 			balance_ticks.stamina_regen_delay_ticks):
 		player.hero.reject_action(&"card_cast", &"insufficient_stamina")
@@ -6115,6 +6209,15 @@ func _resolve_charge_contact(player: PlayerState, slot: int) -> void:
 	if not target.hero.is_alive():
 		return
 	if _iframe_open_at_step3[opposing_slot]:
+		player.charge_contact = PlayerState.CHARGE_CONTACT_TOUCHED
+		return
+	# STORY 7-9 (AC 11, `7-9/R1`/`R11`, OQ4): THE KNOCKDOWN BREATHER drops the touch exactly as an i-frame
+	# does -- `TOUCHED` (the attack is not spent, the counter span closes), no damage, no knockdown, no orb
+	# grant -- and only an UNBLOCKABLE touch: melee and spells never come through this seat. A SEPARATE
+	# branch, never folded into `_iframe_open_at_step3`, because Honed Bolt reads that predicate (M7,
+	# `7-8/R10`). Read live, which is seat-symmetric here: the window is written only at step 2 and by the
+	# step-1 reset, so both seats see the value that stood before step 3 began.
+	if target.hero.unblockable_immunity.is_running:
 		player.charge_contact = PlayerState.CHARGE_CONTACT_TOUCHED
 		return
 	player.charge_contact = PlayerState.CHARGE_CONTACT_HIT
@@ -6680,6 +6783,17 @@ func _counter_color_of(player: PlayerState) -> int:
 	return player.defense_color
 
 
+## Story 7-9 (AC 8/AC 9, `7-9/R10`): is `attacker`'s unblockable between its click and its resolution?
+## `CHARGING` and the hit-once memory not `HIT`, both existing hashed facts -- no new key. Every way the
+## attack ends leaves one of the two false: the landing exit, the counter, a knockdown, a bolt stun and the
+## reset all write a state other than `CHARGING`, death writes `DEAD`, and a counted hit writes `HIT`. A
+## touch DROPPED by i-frames or by the R1 immunity writes `TOUCHED`, which keeps the span open (AC 9): the
+## attack is still flying. Read only by the step-6 capture (`_defense_answerable_at_step6`).
+func _opposing_unblockable_in_flight(attacker: PlayerState) -> bool:
+	return attacker.hero.action_state == HeroState.ActionState.CHARGING \
+			and attacker.charge_contact != PlayerState.CHARGE_CONTACT_HIT
+
+
 ## Story 6-6b (AC 3, the ruled commit-tick ordering): is THIS the tick this attack committed on -- the
 ## first tick its chargeup window reads closed?
 ##
@@ -6749,9 +6863,10 @@ func _is_commit_tick(player: PlayerState) -> bool:
 ## step 3, not step 6b's deferred package), and NO DAMAGE. It is NOT the `6-6a` seat and cannot reuse
 ## it: `_apply_landing_packages` writes the VICTIM and applies damage unconditionally.
 ##
-## NO CROSS-PLAYER WRITE HAPPENS HERE, which is why `_landing_package_pending`'s prohibition does not
-## bite: the only hero written is `player`, this seat's own. The DEFENDER is only READ -- and read
-## from the capture. The `already_down` floor rule does not apply either: a CHARGING attacker is not
+## NO CROSS-PLAYER HERO WRITE HAPPENS HERE, which is why `_landing_package_pending`'s prohibition does
+## not bite: the only hero written is `player`, this seat's own. The DEFENDER's hero is only READ -- and
+## read from the capture. Story 7-9 (AC 10) adds ONE write to the defender's MANA POOL (the reward), which
+## no step-3 seat reads, so it cannot make an outcome seat-dependent (see the reward line). The `already_down` floor rule does not apply either: a CHARGING attacker is not
 ## down. `_resolve_movement` follows immediately and its STUNNED branch roots the attacker.
 ##
 ## EXACTLY ONE `set_action_state` PER OUTCOME (the `5-6` rule): `CHARGING -> STUNNED` directly, with no
@@ -6782,12 +6897,34 @@ func _resolve_color_counter(player: PlayerState, slot: int) -> bool:
 		return false
 	if not _is_commit_tick(player) and _charge_reach[slot] == CONTACT_CHARGE_REACH_INSIDE:
 		return false
+	# STORY 7-9 (AC 6, `7-9/R4`/`R8`/`R9`): THE COUNTER WINDOW IS ANCHORED AT THE COMMIT. "Busy still
+	# running" (the colour capture above) stays the precondition; on top of it the press must be no older
+	# than the colour's lead BEFORE the commit: press tick >= commit tick - lead. Both sides are counted
+	# back from THIS tick off snapshotted durations -- the press age from the capture, the ticks since the
+	# commit from this attack's own two windows (`_is_commit_tick`'s arithmetic) -- so a mid-flight reload
+	# moves neither; the LEAD is a threshold read inline (CONSTRAINT C), so a reload does move it (accepted).
+	# A press made before the commit is therefore judged ON the commit tick; a later one on the next tick.
+	# Too early: the counter is simply not judged, so the card stays spent and the hit lands undefended --
+	# the `6-6b` "too early = ran out" register, now with a front edge. SUPERSEDES `6-6b/R-S6`'s "the whole
+	# busy span is the counter window" (D7).
+	var since_commit := player.landing_window.duration_ticks() - player.landing_window.remaining_ticks() \
+			- player.charge_window.duration_ticks()
+	if _counter_press_age_at_step3[defender_slot] - since_commit \
+			> balance_ticks.counter_lead_ticks_for(player.charge_color):
+		return false
 	_queue.push(deflect_landed.emit.bind(slot, defender_slot, answered))
 	player.charge_window.start(0)
 	player.landing_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
 	player.hero.start_stun(balance_ticks.knockdown_stun_ticks, false)
 	player.hero.set_action_state(HeroState.ActionState.STUNNED)
+	# STORY 7-9 (AC 10, `7-9/R6`/`R14`): THE REWARD -- the defender of a successful counter gains the
+	# authored mana, clamped at the maximum (`ManaPool.add`; nothing, and no signal, when full, M13). The
+	# defender is this seat's opposing slot, the hero the capture judged. A WRITE TO THE OTHER PLAYER, but a
+	# pool add that no step-3 seat reads -- the counter judgement reads the capture, and mana is next read
+	# by the step-5 regen and the step-6 casts -- so seat order cannot change any outcome.
+	var defender := p2 if slot == 0 else p1
+	defender.mana.add(balance.counter_mana_reward)
 	return true
 
 
@@ -6811,6 +6948,14 @@ func _gets_up_this_tick(hero: HeroState) -> bool:
 	return hero.action_state == HeroState.ActionState.STUNNED and not hero.stun.is_running \
 			and balance_ticks != null and balance_ticks.get_up_iframe_ticks > 0 \
 			and balance_ticks.is_knockdown_stun(hero.stun.duration_ticks())
+
+
+## Story 7-9 (AC 11): the step-2 arming of the knockdown breather -- see its call site. Starts the hero's
+## `unblockable_immunity` window on the tick its get-up iframes closed, at the authored length read inline
+## (CONSTRAINT C). A zero length starts a window that never runs: no immunity (`7-9/R16`).
+func _arm_unblockable_immunity(hero: HeroState) -> void:
+	if balance_ticks != null and hero.get_up_iframe_closed_this_tick():
+		hero.unblockable_immunity.start(balance_ticks.unblockable_immunity_ticks)
 
 
 ## Story 5-4 (AC 1/AC 4-7): THE PAYOUT HALF of the RGB read exchange -- a landed unblockable credits
@@ -7229,6 +7374,9 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 		if player.charge_window.is_running:
 			player.hero.velocity = Vector3.ZERO
 		else:
+			# STORY 7-9 (AC 4, `7-9/R3`): THE STEERING TURNS THE FACING FIRST, so the launch velocity
+			# below -- which reads `facing` -- travels along the steered heading: travel and facing agree.
+			_steer_charge_facing(player, slot)
 			player.hero.velocity = _charge_launch_velocity(player)
 	elif player.hero.action_state == HeroState.ActionState.STUNNED:
 		# Story 5-6 (AC 14): HARD-ROOTED, as a THIRD sibling of the two branches above rather than a
@@ -7686,6 +7834,57 @@ func _attack_lunge_velocity(hero: HeroState) -> Vector3:
 	return Vector3(dir.x, 0.0, dir.y) * (balance.attack_lunge_distance / span)
 
 
+## Story 7-9 (AC 4, `7-9/R3`/`R12`, gate finding F11): THE STEERING AFTER LAUNCH. On every flight tick the
+## attacker's facing turns toward this tick's pushed hero-to-hero bearing by AT MOST the colour's authored
+## per-tick angle, and the launch velocity read right after it travels along the result. SUPERSEDES the
+## `6-1c` AC 2 commit freeze of facing and the direction halves of `6-1c` AC 4 / `6-1d` AC 7 (D7): the
+## attack now follows the defender after the commit, but only as fast as its colour allows -- an early
+## sidestep is followed, a late one up close beats the cap.
+##
+## WHAT IT READS, all of it existing: the pushed bearing (`_charge_reach_dirs`, the same TARGET -> ATTACKER
+## fact the chargeup aim negates) and whether it was pushed THIS tick (`_charge_reach_pushed`). No new key:
+## the steered heading IS `facing`, already hashed.
+##
+## THE EDGES, each named rather than left to the maths:
+##   * AFTER THE FIRST TOUCH (`7-9/R3`, ruled at the code review): facing is kept -- see the body.
+##   * NO PUSH THIS TICK (the co-located heroes, `match_runner.gd:1157`): facing is kept, not turned toward
+##     the stale bearing the store still holds.
+##   * A RATE OF 0 (unauthored, `7-9/R16`): nothing turns -- the pre-7-9 frozen line, which is what keeps
+##     every in-test config that never authors it bit-identical.
+##   * A BEARING EXACTLY BEHIND: `angle_to` is `atan2(cross, dot)`, and with `cross` a signed zero its
+##     answer is +PI or -PI by the zero's sign -- a coin flip on float noise. It is pinned to +PI, so the
+##     attack always turns the same way (`Vector2.rotated`'s positive sense), never by chance.
+##   * WITHIN ONE STEP: facing is set to the bearing exactly, so a defender standing still is tracked with
+##     no residue and no oscillation.
+## The ramp, the path length and the reach are untouched (AC 5): this rotates a unit heading, and the
+## launch's per-tick speed is unchanged, so the sum of its per-tick travel is still the authored distance.
+func _steer_charge_facing(player: PlayerState, slot: int) -> void:
+	if balance_ticks == null or not _charge_reach_pushed[slot]:
+		return
+	# 7-9 REVIEW (`7-9/R3`, operator ruling at the code review): THE STEERING ENDS AT THE FIRST TOUCH --
+	# counted, i-frame-dropped or immunity-dropped. R3 turns the attack toward the defender "until contact",
+	# and a roll whose iframes cover the contact SAVES: once the blade has touched, the flight finishes on
+	# the heading it had. Read off the hit-once memory (`charge_contact`, hashed), which this seat's own
+	# step-3 contact seat wrote earlier in the SAME `_resolve_actions` call, so the touch tick itself already
+	# keeps its heading. Overrides AC 4's "to the landing" wording (the chain amends it).
+	if player.charge_contact != PlayerState.CHARGE_CONTACT_NONE:
+		return
+	var step := balance_ticks.unblockable_turn_radians_per_tick_for(player.charge_color)
+	if step <= 0.0:
+		return
+	var bearing := -_charge_reach_dirs[slot]
+	var facing := player.hero.facing
+	if bearing.is_zero_approx() or facing.is_zero_approx():
+		return
+	var cross := facing.cross(bearing)
+	var dot := facing.dot(bearing)
+	var angle := PI if cross == 0.0 and dot < 0.0 else atan2(cross, dot)
+	if absf(angle) <= step:
+		player.hero.facing = bearing.normalized()
+	else:
+		player.hero.facing = facing.rotated(signf(angle) * step)
+
+
 ## Story 6-1c (AC 4): THE LAUNCH as a STATE-SIDE velocity term -- `_attack_lunge_velocity`'s shape
 ## directly above, for mode (2): the colour's authored DISPLACEMENT over its authored SPAN, along the
 ## hero's facing. Never root motion and never adaptive: nothing here reads where the defender is, so
@@ -7694,6 +7893,13 @@ func _attack_lunge_velocity(hero: HeroState) -> Vector3:
 ## FACING IS THE COMMITTED DIRECTION HERE, not a live one, and that is a property of the caller: this
 ## runs only once the chargeup window has closed, and from that tick `_resolve_movement` stops writing
 ## `facing` (the commit freeze). Reading it LIVE is therefore reading the frozen value.
+##
+## STORY 7-9 (AC 4, `7-9/R3`): THE FREEZE IS LIFTED BY THE STEERING, which the caller runs immediately
+## before this on every flight tick (`_steer_charge_facing`): facing is now the STEERED heading, and this
+## function still reads it live, so the travel follows it. "Nothing here reads where the defender is" stays
+## true of THIS function (the bearing is read by the steering seat, not here); the distance, the ramp and
+## the span below are untouched (AC 5). With every turn rate unauthored the heading never moves and the
+## frozen-line paragraph above is exactly what still happens.
 ##
 ## STORY 6-1d (AC 7) REWRITES THE SPEED, IN TWO NAMED PARTS. The DIRECTION, the fixed-not-adaptive
 ## rule, the frozen-facing property and the total distance travelled are all untouched.
@@ -8014,6 +8220,8 @@ func _reset_player(player: PlayerState) -> void:
 	# memory set (`7-8/R16`), and this is where that attack ends.
 	var reset_slot := 0 if player == p1 else 1
 	_charge_reach[reset_slot] = REACH_UNKNOWN
+	# Story 7-9 (AC 4): the steering seat's push flag, cleared with the fact it describes.
+	_charge_reach_pushed[reset_slot] = false
 	player.charge_contact = PlayerState.CHARGE_CONTACT_NONE
 	# Story 6-6b (AC 15): BLUE's locked counter-travel bearing is cleared beside the store above,
 	# on their classification and NOT as an eighth named reset exception -- none of the three is one.
@@ -8042,6 +8250,10 @@ func _reset_player(player: PlayerState) -> void:
 	# Story 6-6a (AC 9): THE SEVENTH NAMED EXCEPTION -- the get-up iframes, stopped beside the stun whose
 	# knockdown arms them (see _apply_debug_reset's header for the trace).
 	hero.get_up_iframe.start(0)
+	# Story 7-9 (AC 11, `7-9/R11`): THE EIGHTH NAMED EXCEPTION -- the unblockable-immunity window the get-up
+	# close arms, stopped beside the get-up window it chains off and for its traced reason: step 1b returns
+	# before step 2's `tick_timers()`, so a window frozen by the round-over would carry into the next round.
+	hero.unblockable_immunity.start(0)
 	# STORY 5-5 (AC 12): THE FOURTH NAMED EXCEPTION to the reset's "NOTHING else / in-flight windows
 	# untouched" contract -- the mode ③ DEFENSE WINDOW and its colour, cleared here immediately
 	# beside the chargeup on the identical `start(0)` / `= NO_TELEGRAPH_COLOR` shape, and for the

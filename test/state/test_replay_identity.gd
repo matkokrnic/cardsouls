@@ -406,6 +406,12 @@ const HASHED: Array[String] = [
 	# `run_locked_out` direction is taken instead. It rides `HeroState.to_snapshot()`'s ONE new
 	# `stun_is_bolt` key, so no exemption is needed and UNHASHED_CROSS_TICK_MEMBERS stays at 4.
 	"hero_state.stun_is_bolt",
+	# Story 7-9 (AC 11, AC 13): THE KNOCKDOWN BREATHER classifies HASHED, on `get_up_iframe`'s exact test
+	# above -- it CROSSES TICKS (armed at the get-up close, runs its authored span) and DECIDES AN OUTCOME
+	# (whether an unblockable lands at all). It reaches the hash through `HeroState.to_snapshot()`'s ONE new
+	# `unblockable_immunity` key -- the Golden Prediction's named cause -- so no exemption is needed and
+	# UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"hero_state.unblockable_immunity",
 	# Story 6-5c (AC 1/AC 8/AC 23): THE CAST WINDOW AND THE IN-FLIGHT CAST'S IDENTITY classify HASHED
 	# on `charge_window`/`defense_window`'s exact test -- both CROSS TICKS (press to strike) and DECIDE
 	# AN OUTCOME (when the strike lands, and therefore whether it lands at all; and, through
@@ -485,6 +491,16 @@ const PER_TICK: Array[String] = [
 	# across an `advance()` boundary. A round-over tick returns at step 1b and neither writes nor reads
 	# it, and the next tick that does reach step 3 overwrites it before any read.
 	"match_state._counter_color_at_step3",
+	# Story 7-9 (AC 6/AC 8/AC 4): THREE MORE PER-TICK MEMBERS, each on an existing member's exact test.
+	# `_counter_press_age_at_step3` is `_counter_color_at_step3`'s twin -- written at the top of step 3 in
+	# the same breath, read only by that tick's counter judgement. `_defense_answerable_at_step6` is written
+	# once per tick just before the step-6 card dispatch and read only by that tick's `_resolve_defense_cast`.
+	# `_charge_reach_pushed` is `_contact_queue`'s shape -- filled by the pushes that precede an `advance()`,
+	# emptied inside it right after step 3's movement seats -- so no tick observes a previous tick's value.
+	# None is cross-tick state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"match_state._counter_press_age_at_step3",
+	"match_state._defense_answerable_at_step6",
+	"match_state._charge_reach_pushed",
 	# Story 6-6a review (D2): the "this `hit_landed` was blocked" fact, raised and lowered around ONE queued
 	# emission inside the drain -- false at every point a tick or a snapshot can observe. Not cross-tick
 	# state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
@@ -1303,8 +1319,8 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 20,
-		"...at FORMAT_VERSION 20, read out of the FILE rather than off the constant (7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 21,
+		"...at FORMAT_VERSION 21, read out of the FILE rather than off the constant (7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27; 18 as of 6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
@@ -2105,8 +2121,8 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 20,
-		"...at FORMAT_VERSION 20, read out of the FILE rather than off the constant (7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 21,
+		"...at FORMAT_VERSION 21, read out of the FILE rather than off the constant (7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
@@ -2458,8 +2474,8 @@ func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 20,
-		"...at FORMAT_VERSION 20, read out of the FILE rather than off the constant (7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 21,
+		"...at FORMAT_VERSION 21, read out of the FILE rather than off the constant (7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(TIMED_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))

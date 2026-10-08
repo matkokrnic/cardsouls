@@ -489,6 +489,13 @@ func _config() -> BalanceConfig:
 	c.counter_busy_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.counter_busy_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	# Story 7-9 (AC 6, `7-9/R16`): the counter LEAD, authored AT the busy span so the busy span stays the
+	# binding edge and the counter-exit test below still proves the EXIT, not the window's front edge.
+	# Unauthored (0), its press a whole chargeup before the commit would be too early -- the gate's named
+	# expected mover (`:206-212`). The lead's own edge is pinned in `test_unblockable_tempo.gd`.
+	c.counter_lead_seconds_red = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_lead_seconds_blue = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
+	c.counter_lead_seconds_green = float(COUNTER_BUSY_TICKS) / TimingWindow.TICK_HZ
 	c.draw_replacement_delay_seconds = float(DRAW_DELAY_TICKS) / TimingWindow.TICK_HZ
 	c.unblockable_stamina_cost = UNBLOCKABLE_COST
 	c.unblockable_chargeup_seconds = float(CHARGEUP_TICKS) / TimingWindow.TICK_HZ

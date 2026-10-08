@@ -1315,7 +1315,25 @@ extends TestCase
 ##   -- the per-tick contact fact, the touch-tick seat, the retired arc and dodge multiplier -- the hash
 ##   is `941958c5...` EXACTLY; (b) with it restored, `1b1478ac...` on two separate runs.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "1b1478ac310fd163411f8ea71900fbb5524766dd80874227a3fd740848890e98"
+## STORY 7-9 RE-BASELINE (unblockable tempo): `1b1478ac...` -> `9d5d4fad...`, ONE re-baseline, ONE
+## MEASURED CAUSE, exactly the one predicted: the new HERO snapshot key `unblockable_immunity` (the
+## knockdown breather, AC 11). The fixture never knocks a hero down, so the key hashes at rest on every
+## tick and its PRESENCE alone is the cause (pinned: `test_the_fixture_reaches_the_hash_tick_with_no_
+## unblockable_immunity_armed`). The per-player key set stays 46 -- the key is seated on the hero.
+## `FORMAT_VERSION` 20 -> 21 is a record concern with no path into the hash.
+##
+##   ISOLATED BOTH DIRECTIONS (measured, restored from an out-of-repo copy with SHA256 verified both
+##   ways): (a) with the key erased from `HeroState.to_snapshot()` and every other 7-9 change in place --
+##   the mana seat and its refusal, the defence-legality capture and refusal, the counter lead and the
+##   reward, the steering seat, the immunity window's arming and its contact-seat branch -- the hash is
+##   `1b1478ac...` EXACTLY; (b) with it restored, `9d5d4fad...` on two separate runs.
+##
+##   NOT CAUSES, MEASURED BY (a) RATHER THAN ASSUMED: the unauthored mana cost (the fixture never casts
+##   mode 2), the R5 refusal (the fixture never presses DEFENSE, so no recorded action became refusable,
+##   the `SC/R6` boundary), the steering / reward / lead (nothing charges, nothing counters), the authored
+##   damage 6 and run 4.6 (`BC/R3`: `_golden_config` authors its own), and no RNG draw anywhere.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "9d5d4fadce063bcd8832243513eaa732c442a146e37c1390ae7419db1638e86f"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -2505,6 +2523,20 @@ func test_the_fixture_reaches_the_hash_tick_with_no_get_up_iframe_armed() -> voi
 		assert_eq(player.hero.to_snapshot()["get_up_iframe"],
 			{"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false},
 			"the fixture never knocks a hero down, so the `get_up_iframe` key hashes at its RESTING value")
+
+
+## Story 7-9 (AC 13): THE MEASURED CLAIM BEHIND THIS STORY'S RE-BASELINE, PINNED on the get-up pin
+## directly above's shape -- no hero in the fixture is ever knocked down, so the get-up iframes never close
+## and the knockdown breather is never STARTED (a start on the get-up close would record a non-zero
+## duration). The new `unblockable_immunity` key therefore hashes at rest, which is why this story's ONE
+## golden cause is the key's PRESENCE.
+func test_the_fixture_reaches_the_hash_tick_with_no_unblockable_immunity_armed() -> void:
+	var ms := _make_match()
+	_play_sequence(ms)
+	for player: PlayerState in [ms.p1, ms.p2]:
+		assert_eq(player.hero.to_snapshot()["unblockable_immunity"],
+			{"duration_ticks": 0, "elapsed_ticks": 0, "is_running": false},
+			"the fixture never knocks a hero down, so the `unblockable_immunity` key hashes at its RESTING value")
 
 
 func test_the_fixtures_unit_reaches_the_hash_tick_idle_with_no_dedupe_record() -> void:

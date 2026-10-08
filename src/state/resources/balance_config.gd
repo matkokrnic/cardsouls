@@ -369,6 +369,16 @@ extends Resource
 ## measured length of the `get_up` clip (2.0333 s at the 6-6a dev pass); live smoke judges the felt
 ## window.
 @export var get_up_iframe_seconds: float = 0.0
+## Story 7-9 (AC 11, `7-9/R1`/`R11`): THE KNOCKDOWN BREATHER -- how long, from the close of the get-up
+## iframes above, a hero is IMMUNE TO UNBLOCKABLES. An unblockable touching the hero inside it does
+## nothing (no damage, no knockdown, no orb grant) and is not spent; melee, spells and every other source
+## hit normally. Follows ANY knockdown (`7-9/R11`): the victim of a hit, or an attacker a counter dropped.
+##
+## IT CHAINS OFF THE GET-UP CLOSE, so with no get-up window authored there is no close tick and no
+## immunity -- the get-up field above is this one's precondition, not a sibling. Crosses into the tick
+## domain at the ONE boundary (`BalanceTicks.unblockable_immunity_ticks`); its `_seconds` suffix makes the
+## reflective probe demand that twin. Zero default (`7-9/R16`): 0 = no immunity. TEMP 1.5 s (7-7 tunes).
+@export var unblockable_immunity_seconds: float = 0.0
 
 ## Story 5-2 (AC 6/AC 10/AC 17/AC 18): mode ② — the unblockable INITIATION. Four numbers, and
 ## every one of them is global rather than per-card or per-colour, which is the GDD's own shape
@@ -382,6 +392,12 @@ extends Resource
 ## roll, attack and deflect. Passed to `StaminaPool.spend` with `stamina_regen_delay_ticks` exactly
 ## as the other three are, so the spend restarts the regen delay identically.
 @export var unblockable_stamina_cost: float = 0.0
+## Story 7-9 (AC 1/AC 2, `7-9/R2`/`R13`): what initiating mode (2) costs in MANA, charged at the click on
+## top of the stamina above. Tested BEFORE the stamina spend and spent after it, so a refusal for either
+## pool leaves both untouched; short of both, the reason is `insufficient_mana`. Never refunded -- a
+## countered, missed, dodged or immunity-dropped attack keeps it spent. A cost, not a duration: no tick
+## twin. Zero default (`7-9/R16`): 0 = free, the pre-7-9 shape. TEMP 1.0 (7-7 tunes).
+@export var unblockable_mana_cost: float = 0.0
 ## How long the hero is rooted in `CHARGING` before the attack lands. Crosses into the tick domain
 ## at the ONE boundary (`BalanceTicks.unblockable_chargeup_ticks`, the D3 precedent) and is never
 ## compared against a raw float inside `advance()`.
@@ -417,6 +433,16 @@ extends Resource
 @export var unblockable_launch_seconds_red: float = 0.0
 @export var unblockable_launch_seconds_blue: float = 0.0
 @export var unblockable_launch_seconds_green: float = 0.0
+## Story 7-9 (AC 4, `7-9/R3`/`R12`): THE STEERING AFTER LAUNCH, PER COLOUR -- how fast, in degrees per
+## second, the committed attack keeps turning toward the defender on every flight tick, travel and facing
+## both (the launch velocity reads the steered facing). GREEN turns most, BLUE least -- and that order
+## comes from these three numbers, never from the code. A RATE, not a duration: it crosses into the tick
+## domain once at load as a per-tick ANGLE (`BalanceTicks.unblockable_turn_radians_per_tick_for`, A1),
+## and its name ends in the colour, not `_seconds`, so the reflective probe leaves it alone. Zero default
+## (`7-9/R16`): 0 = no turning, the pre-7-9 frozen line. TEMP GREEN 240 / RED 150 / BLUE 90 (7-7 tunes).
+@export var unblockable_turn_rate_degrees_per_second_red: float = 0.0
+@export var unblockable_turn_rate_degrees_per_second_blue: float = 0.0
+@export var unblockable_turn_rate_degrees_per_second_green: float = 0.0
 ## Story 6-1d (AC 8, `6-1d/R6`): THE SWING-AT-COMMIT KNOB -- the option `6-1c`'s code review
 ## (`6-1c/D1`, ruled `6-1c/R8`) offered forward to this story, BUILT here and left OFF.
 ##
@@ -508,6 +534,27 @@ extends Resource
 @export var counter_busy_seconds_red: float = 0.0
 @export var counter_busy_seconds_blue: float = 0.0
 @export var counter_busy_seconds_green: float = 0.0
+## Story 7-9 (AC 6, `7-9/R4`/`R8`/`R9`): THE COUNTER WINDOW'S LEAD, PER COLOUR -- how long BEFORE the
+## commit a matching colour defence may be pressed and still counter. The window is anchored at the commit
+## (`7-9/R8`): it opens this long before it and stays open to the attack's first touch (or the flight's
+## end). A press older than that is TOO EARLY: card spent, the hit lands. The busy span above stays the
+## capture's precondition (`7-9/R9`), so the audit pins busy > lead per colour, and lead < chargeup.
+##
+## A THRESHOLD, NOT A RUNNING WINDOW: read inline at the judgement (CONSTRAINT C), so a mid-flight reload
+## moves the judgement (accepted, gate notes). Named on the `counter_busy_seconds_*` shape (the suffix is
+## the COLOUR), so the reflective probe leaves it alone and its tick twins are bespoke-audited. Zero
+## default (`7-9/R16`): 0 = the window opens AT the commit. TEMP 0.25 s every colour (7-7 tunes).
+@export var counter_lead_seconds_red: float = 0.0
+@export var counter_lead_seconds_blue: float = 0.0
+@export var counter_lead_seconds_green: float = 0.0
+## Story 7-9 (AC 10, `7-9/R6`/`R14`): what a SUCCESSFUL colour counter pays its defender, in mana, at the
+## counter landing -- clamped at the pool's maximum, so nothing when full. Nothing else pays it: a roll
+## through, a miss and an immunity pass-through give nothing. A per-EVENT amount, not tick-domain.
+##
+## A KNOB RATHER THAN THE LITERAL `7-9/R14` writes (`mana.add(1.0)`), because AC 14 puts every new number
+## in this file and project-context forbids a hardcoded economy value; the authored 1.0 IS R14's number.
+## Zero default: 0 = no reward. TEMP 1.0 (7-7 tunes).
+@export var counter_mana_reward: float = 0.0
 ## Story 6-6b (AC 9): HOW FAR A COUNTER CARRIES THE DEFENDER, in metres, spread over the colour's own
 ## busy span above -- the `1-9` `roll_distance` / `roll_duration_seconds` precedent exactly, including
 ## that the SPEED is derived at the movement seat as distance over duration and read inline there

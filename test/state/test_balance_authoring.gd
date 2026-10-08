@@ -264,6 +264,43 @@ func test_authored_counter_values_are_positive_and_correctly_ordered() -> void:
 			+ "one tick -- a zero span opens no window, so that colour can never counter") % color)
 
 
+## Story 7-9 (AC 14): THE TEMPO KNOBS' AUTHORING AUDIT, on the real `.tres`. BOUNDS AND DIRECTIONS ONLY --
+## the numbers are TEMP feel knobs 7-7 tunes, so nothing here pins a value (`BC/R3`). The three relations
+## AC 14 names, each asserted in TICKS because ticks are what the state layer runs:
+##   * the counter LEAD < the CHARGEUP, per colour: a lead at or past the chargeup would open the window
+##     before the click itself, which the R5 legality span forbids anyway -- the knob would be lying;
+##   * the counter BUSY span > the LEAD, per colour (`7-9/R9`): busy is the judgement's precondition, so a
+##     press made exactly the lead before the commit must still be running at the commit, or the front
+##     edge of the window is unreachable and the lead silently shrinks to the busy span;
+##   * every TURN RATE > 0 (`7-9/R3`): a zero rate is the pre-7-9 frozen line, legal in-test (`7-9/R16`)
+##     but a shipped story with no steering.
+## Plus the defect-by-construction `> 0` class for the other three, for the `unblockable_orb_grant` reason:
+## a zero mana cost ships R2 free, a zero immunity ships R1 absent, a zero reward ships R6 absent -- and the
+## `>= 0` loop in test_data_resources.gd passes on every one of those zero defaults.
+func test_authored_tempo_values_are_bounded() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var ticks := BalanceTicks.from_config(config)
+	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
+		assert_true(ticks.counter_lead_ticks_for(color) < ticks.unblockable_chargeup_ticks,
+			"colour %d: the counter lead (%d ticks) must be SHORTER than the chargeup (%d) -- AC 14"
+				% [color, ticks.counter_lead_ticks_for(color), ticks.unblockable_chargeup_ticks])
+		assert_true(ticks.counter_busy_ticks_for(color) > ticks.counter_lead_ticks_for(color),
+			"colour %d: the counter busy span (%d ticks) must be LONGER than the lead (%d) -- `7-9/R9`"
+				% [color, ticks.counter_busy_ticks_for(color), ticks.counter_lead_ticks_for(color)])
+		assert_true(ticks.unblockable_turn_radians_per_tick_for(color) > 0.0,
+			"colour %d: the steering turn rate must be authored > 0 (a zero rate ships no steering)" % color)
+	assert_true(config.unblockable_mana_cost > 0.0,
+		"unblockable_mana_cost must be authored > 0 (a zero cost ships `7-9/R2`'s price as free)")
+	assert_true(ticks.unblockable_immunity_ticks > 0,
+		"unblockable_immunity_seconds must survive the seconds->ticks boundary as >= 1 tick (a zero "
+		+ "ships the knockdown breather absent)")
+	assert_true(config.counter_mana_reward > 0.0,
+		"counter_mana_reward must be authored > 0 (a zero reward ships `7-9/R6` absent)")
+
+
 ## Story 5-6 (AC 4): THE TWO STUN DURATIONS, on the function directly above's template exactly --
 ## positivity in the defect-by-construction class, PLUS the directional bound the ratified ruling
 ## states rather than merely implies.

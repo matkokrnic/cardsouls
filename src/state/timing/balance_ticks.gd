@@ -97,6 +97,10 @@ var deflect_stun_ticks: int
 var knockdown_stun_ticks: int
 ## Story 6-6a (AC 8): the get-up iframe window in TICKS, on the `roll_iframe_ticks` precedent.
 var get_up_iframe_ticks: int
+## Story 7-9 (AC 11, `7-9/R11`): the unblockable-immunity window in TICKS, on the `get_up_iframe_ticks`
+## precedent directly above -- derived ONCE here, read INLINE at the one seat that starts the window (the
+## step-2 get-up close, CONSTRAINT C). A PLAIN conversion: 0.0 derives 0 ticks and no immunity (`7-9/R16`).
+var unblockable_immunity_ticks: int
 ## Story 5-2 (AC 10): the mode ② chargeup, in TICKS. The `draw_replacement_delay_ticks` precedent
 ## exactly — derived ONCE here, read INLINE at the one seat that starts the window (CONSTRAINT C),
 ## and the authored `*_seconds` float never reaches `advance()`. A chargeup measured against a raw
@@ -118,6 +122,22 @@ var unblockable_chargeup_ticks: int
 var counter_busy_ticks_red: int
 var counter_busy_ticks_blue: int
 var counter_busy_ticks_green: int
+## Story 7-9 (AC 6, `7-9/R8`/`R9`): each colour's COUNTER LEAD in TICKS -- how many ticks before the
+## commit a matching press may fall and still counter. Three stem-matched twins of the authored
+## `counter_lead_seconds_*`, read through `counter_lead_ticks_for` below. PLAIN conversions, but these are
+## THRESHOLDS, not window durations: nothing is started with them, the judgement compares a press age
+## against them inline (CONSTRAINT C). An authored 0.0 derives 0: the window opens AT the commit (`7-9/R16`).
+var counter_lead_ticks_red: int
+var counter_lead_ticks_blue: int
+var counter_lead_ticks_green: int
+## Story 7-9 (AC 4, `7-9/R12`): each colour's STEERING RATE as a per-tick ANGLE in radians -- the authored
+## degrees-per-second divided by TICK_HZ, derived once per load on the `stamina_regen_per_tick` precedent
+## (A1: advance() takes no delta, so a rate is never multiplied by one). Read through
+## `unblockable_turn_radians_per_tick_for` below, inline at the steering seat (CONSTRAINT C). An authored
+## 0.0 derives 0.0: the attack turns nothing (`7-9/R16`).
+var unblockable_turn_radians_per_tick_red: float
+var unblockable_turn_radians_per_tick_blue: float
+var unblockable_turn_radians_per_tick_green: float
 ## Story 6-1c (AC 2/AC 4/AC 11): each colour's LAUNCH SPAN in TICKS -- the chargeup line above's
 ## precedent verbatim, derived ONCE here and read INLINE at the one seat that starts the landing
 ## window (the cast, CONSTRAINT C). Three stem-matched twins, one per authored
@@ -172,6 +192,33 @@ func counter_busy_ticks_for(color: int) -> int:
 		Enums.CardColor.GREEN:
 			return counter_busy_ticks_green
 	return 0
+
+
+## Story 7-9 (AC 6): the colour lookup over the three lead twins above -- `counter_busy_ticks_for`'s shape
+## verbatim. The sentinel answers ZERO; a degraded colour can never counter anything anyway (the judgement
+## excludes it on both sides).
+func counter_lead_ticks_for(color: int) -> int:
+	match color:
+		Enums.CardColor.RED:
+			return counter_lead_ticks_red
+		Enums.CardColor.BLUE:
+			return counter_lead_ticks_blue
+		Enums.CardColor.GREEN:
+			return counter_lead_ticks_green
+	return 0
+
+
+## Story 7-9 (AC 4): the colour lookup over the three per-tick steering angles above. The sentinel answers
+## ZERO, so a colourless attack turns nothing -- never a substitute colour.
+func unblockable_turn_radians_per_tick_for(color: int) -> float:
+	match color:
+		Enums.CardColor.RED:
+			return unblockable_turn_radians_per_tick_red
+		Enums.CardColor.BLUE:
+			return unblockable_turn_radians_per_tick_blue
+		Enums.CardColor.GREEN:
+			return unblockable_turn_radians_per_tick_green
+	return 0.0
 
 
 ## Story 6-6a (AC 7/AC 8/AC 11): THE STUN-FLAVOR CLASSIFIER -- is a stun window of this duration a
@@ -249,6 +296,8 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	# stun lines' exact shape -- window durations, clamped to >= 1 tick for any non-zero authored value.
 	t.knockdown_stun_ticks = TimingWindow.seconds_to_ticks(config.knockdown_stun_seconds)
 	t.get_up_iframe_ticks = TimingWindow.seconds_to_ticks(config.get_up_iframe_seconds)
+	# Story 7-9 (AC 11): the immunity window, a PLAIN conversion on the get-up line's exact shape.
+	t.unblockable_immunity_ticks = TimingWindow.seconds_to_ticks(config.unblockable_immunity_seconds)
 	# Story 5-2 (AC 10): a PLAIN conversion, deliberately NOT one of the two clamped modulo
 	# divisors above — the chargeup is a WINDOW DURATION, and `seconds_to_ticks` already clamps any
 	# non-zero authored duration to a minimum of 1 tick. An authored 0.0 therefore derives 0 ticks,
@@ -266,6 +315,18 @@ static func from_config(config: BalanceConfig) -> BalanceTicks:
 	t.counter_busy_ticks_red = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_red)
 	t.counter_busy_ticks_blue = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_blue)
 	t.counter_busy_ticks_green = TimingWindow.seconds_to_ticks(config.counter_busy_seconds_green)
+	# Story 7-9 (AC 6): the three counter leads, PLAIN conversions -- thresholds compared inline at the
+	# judgement, never started as windows. 0.0 derives 0: the window opens at the commit.
+	t.counter_lead_ticks_red = TimingWindow.seconds_to_ticks(config.counter_lead_seconds_red)
+	t.counter_lead_ticks_blue = TimingWindow.seconds_to_ticks(config.counter_lead_seconds_blue)
+	t.counter_lead_ticks_green = TimingWindow.seconds_to_ticks(config.counter_lead_seconds_green)
+	# Story 7-9 (AC 4): the three steering rates as per-tick angles, derived ONCE here (A1).
+	t.unblockable_turn_radians_per_tick_red = deg_to_rad(
+			config.unblockable_turn_rate_degrees_per_second_red) / TimingWindow.TICK_HZ
+	t.unblockable_turn_radians_per_tick_blue = deg_to_rad(
+			config.unblockable_turn_rate_degrees_per_second_blue) / TimingWindow.TICK_HZ
+	t.unblockable_turn_radians_per_tick_green = deg_to_rad(
+			config.unblockable_turn_rate_degrees_per_second_green) / TimingWindow.TICK_HZ
 	# Story 6-1c (AC 4/AC 11): the three launch spans, PLAIN conversions on the chargeup's exact shape
 	# -- window durations, clamped to a minimum of 1 tick for any non-zero authored value. An authored
 	# 0.0 derives 0 ticks, and the landing window then closes WITH the chargeup: no launch at all, the
