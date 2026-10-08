@@ -649,3 +649,7 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 - **`project.godot`:** the fullscreen start (`window/size/mode=3`) and the F3 `debug_toggle_instruments` action.
 - **Debug layer seat:** `MatchRunner.set_debug_layer_visible`, called by the F3 edge.
 - **HUD in native pixels:** stretch disabled, the layout is per-half pixel geometry.
+
+## Deferred from: code review of 7-9-unblockable-tempo (2026-10-08)
+
+- Mana affordability is a raw float compare (`ManaPool.spend` and the 7-9 unblockable price at `match_state.gd:5961`, M13): mana earned by passive regen (0.25/s summed per tick) can sit a hair below 1.0 while the inspector rounds it to 1, which delays the first affordable click by about a tick. Pre-existing semantics; worth an epsilon or integer mana if smoke notices it.

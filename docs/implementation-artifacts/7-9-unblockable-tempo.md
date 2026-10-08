@@ -4,7 +4,7 @@ baseline_commit: 0a04558eca15c4e39e473cfb82b5e80bdb562c7a
 
 # Story 7.9: Unblockable tempo
 
-Status: ready-for-dev
+Status: review
 
 Tier **A** (touches `src/state/`: the cast seats, the counter judgement, the contact seat, the facing/launch movement, a new
 hashed window). Authored 2026-10-08 against HEAD == origin/main == `0a04558`, tree clean, no godot process (verified this
@@ -68,7 +68,8 @@ Behaviour and acceptance only; mechanism is in Open Questions (E4-R/R4). `[M]` =
    untouched. Short of both mana and stamina, the reason is `insufficient_mana`.
 2. **[M] No refund.** Mana is never returned on a counter, a miss, an i-frame dodge or an R1-immune pass-through.
 3. **[M] Damage.** A landed unblockable removes the authored amount, 6 (TEMP), of a 100-hp hero; the value is a `.tres` knob.
-4. **[M] Steering, state.** On every flight tick from the commit to the landing the attacker's facing turns toward the pushed
+4. **[M] Steering, state.** On every flight tick from the commit to the attack's first touch (counted, i-frame- or
+   immunity-dropped), or to the landing if nothing touches, the attacker's facing turns toward the pushed
    hero-to-hero bearing by at most the colour's authored rate (per tick), and the launch travel follows that facing. A tick with
    no pushed bearing keeps the facing. A bearing exactly behind turns in one fixed direction. GREEN > RED > BLUE comes from the
    config, not the code; a rate of 0 turns nothing.
@@ -88,8 +89,8 @@ Behaviour and acceptance only; mechanism is in Open Questions (E4-R/R4). `[M]` =
    locked busy. A press on the very tick of the opponent's click is refused for BOTH seats alike. A press on the tick the attack
    hits or lands is refused. A presser who is CHARGING their own unblockable is refused with `unblockable_committed`, as today.
 9. **[M] End of the span.** The span ends on a counted hit, on the landing or a miss, and on any interruption (counter, knockdown,
-   bolt stun, death, reset), each from that tick on. An i-frame- or immunity-dropped touch does NOT end it (the attack is still
-   flying).
+   bolt stun, death, reset). Interruptions landing after step 6 (knockdown 6b, bolt stun 6c, death 8) close the span from the
+   next tick (the R10 capture seat). An i-frame- or immunity-dropped touch does NOT end it (the attack is still flying).
 10. **[M] Reward.** A successful colour counter gives its defender +1 mana (clamped at max, nothing if full). Nothing else does.
 11. **[M] Immunity.** After ANY knockdown (the victim of a hit, or the attacker knocked down by a counter), from the close of the
     getting-up iframes for 1.5 s (TEMP, `.tres`), an unblockable touching that hero does nothing: no damage, no knockdown, no
@@ -176,7 +177,7 @@ unless the dev pass seats it per player (then 47, and the pin tells). One re-bas
 key and reproduce `1b1478ac...`, restore and get one stable new literal on two runs; report the probe's own side effects.
 Measured NON-causes (to be re-measured, not assumed): the mana cost field (`_golden_config` leaves it unauthored, the fixture
 never casts mode 2); the R5 refusal (the SC/R6 boundary: the fixture never presses DEFENSE, so no recorded action becomes
-refusable); steering, reward and the new window never run (nothing charges); damage 6 and run 5.0 are authored `.tres` values
+refusable); steering, reward and the new window never run (nothing charges); damage 6 and run 4.6 are authored `.tres` values
 (`BC/R3`); no RNG draw. `RecordFile.FORMAT_VERSION` 20 -> 21, hard refusal of v20, no shim: causes are the behaviour changes a
 v20 record would replay wrongly (mana spend and refusal, defence refusal, counter timing, steering, immunity) and the `balance`
 row shape change (new fields). The golden does not read the version. If the dev pass finds a SECOND mover, STOP and report.
@@ -256,14 +257,25 @@ All ruled 8.10.2026 (R8..R16). Kept as the mechanism record; the ruling wins whe
 
 ## Tasks
 
-- [ ] T1 Authoring (AC 3, 4, 6, 12, 14): new `.tres` fields and their tick twins, the R16 zero-degrades, the AC 14 audit bounds.
-- [ ] T2 Price and refusal (AC 1, 2, 8, 9): mana seat on the unblockable cast, the R5 gate and its post-step-3 capture (R10).
-- [ ] T3 Counter window and reward (AC 6, 7, 10).
-- [ ] T4 Steering (AC 4, 5) and run speed (AC 12).
-- [ ] T5 Immunity window (AC 11) and its snapshot, classification and reset.
-- [ ] T6 Replay and golden (AC 13): `FORMAT_VERSION` 21, v20 refusal fixture, re-baseline with reverse probe, at-rest pin, census entries (M14).
-- [ ] T7 Tests: sweep the suites that pin today's rules (list in D7), mutation-prove the new guards from out-of-repo copies.
-- [ ] T8 Live smoke with the operator (AC 15).
+- [x] T1 Authoring (AC 3, 4, 6, 12, 14): new `.tres` fields and their tick twins, the R16 zero-degrades, the AC 14 audit bounds.
+- [x] T2 Price and refusal (AC 1, 2, 8, 9): mana seat on the unblockable cast, the R5 gate and its post-step-3 capture (R10).
+- [x] T3 Counter window and reward (AC 6, 7, 10).
+- [x] T4 Steering (AC 4, 5) and run speed (AC 12).
+- [x] T5 Immunity window (AC 11) and its snapshot, classification and reset.
+- [x] T6 Replay and golden (AC 13): `FORMAT_VERSION` 21, v20 refusal fixture, re-baseline with reverse probe, at-rest pin, census entries (M14).
+- [x] T7 Tests: sweep the suites that pin today's rules (list in D7), mutation-prove the new guards from out-of-repo copies.
+- [x] T8 Live smoke with the operator (AC 15): smoke 1-13 PASS, 2026-10-08.
+
+### Review Findings
+
+Code review 2026-10-08 (Opus 5.5, gds-code-review, three layers run sequentially in one session; report
+`C:\dev\_7-9-review.md`).
+
+- [x] [Review][Decision] RESOLVED `7-9/R20`: AC 9 amended to the R10 seat. AC 9 vs R10 seat: 6b/6c interruptions close the span one tick late. A knockdown (6b) or bolt stun (6c) of the charging attacker lands after the post-step-3 capture, so a defence pressed on that tick is accepted and spent. AC 9 says "from that tick on"; `7-9/R10` locks the seat. The chain amends AC 9 to R10's seat, or the operator rules otherwise.
+- [x] [Review][Decision] RESOLVED `7-9/R21`: accepted. DV1: the reward is the `.tres` knob `counter_mana_reward` (authored 1.0), not R14's literal `mana.add(1.0)`. The operator accepts or rejects it.
+- [x] [Review][Patch] RESOLVED `7-9/R19`. R3: steering ran to the landing; ruled to end at the first touch (counted or dropped) [src/state/match_state.gd:7870] -- fixed in review, test `test_a_touch_dropped_by_iframes_ends_the_steering`, mutation-proven
+- [x] [Review][Patch] RESOLVED `7-9/R22`: tied to the authored GREEN numbers; a 7-7 retune re-measures the file or makes it self-rescheduling. AC 4b live thresholds are tuned to the authored GREEN numbers (`STEP` 1.5, shares 0.22 / 0.46, cap window flight ticks 12-13 of 27). A 7-7 retune of GREEN's turn rate, launch span/distance or reach fails `test_unblockable_reach_live.gd`, so BC/R3's "a tuning change needs no test edit" does not hold for it. 7-7 must re-measure the file or make it self-rescheduling [test/integration/test_unblockable_reach_live.gd:90]
+- [x] [Review][Defer] Mana affordability is a raw float compare (M13): mana earned by passive regen can read "1" while sitting a hair below 1.0 [src/state/match_state.gd:5961] -- deferred, pre-existing
 
 ## Dev Notes
 
@@ -295,11 +307,186 @@ Gate additions (8.10.2026, `C:\dev\_7-9-gate.md`):
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`claude-opus-5-5`), gds-dev-story, 2026-10-08. One session, no subagents, nothing committed.
+
 ### Debug Log
+
+**Preconditions (all verified before the first edit):** HEAD `42bdc3d`, origin/main `0a04558`, tree clean, no godot
+process; `git diff 0a04558 42bdc3d -- sprint-status.yaml` moves only the 7-9 key line and the 7-9 story_note line.
+Customization resolved with `python` (on_complete present, applied at the end). `baseline_commit` preserved as written (`0a04558`).
+
+**Suite runs (one foreground call each, output outside the repo, counters read by opening the file):**
+
+| Run | File | Result |
+|---|---|---|
+| before, state | `C:\dev\_7-9-suite-before-state.txt` (15:44:23) | 1255 tests, 0 failed, 12475 assertions, PASS |
+| before, integration | `C:\dev\_7-9-suite-before-integration.txt` (15:52:11) | 79 files, 79 PASS, ALL TESTS PASSED |
+| EXTRA 1, state (discovery) | `C:\dev\_7-9-suite-discovery-state.txt` (16:14:59) | 1287 / 5 failed (golden + 4 movers, all fixed) |
+| final1, state | `C:\dev\_7-9-suite-final1-state.txt` (16:43:30) | 1287 tests, 0 failed, 13113 assertions, PASS |
+| final, integration | `C:\dev\_7-9-suite-final-integration.txt` (16:49:29) | 79 files, 79 PASS, ALL TESTS PASSED |
+| EXTRA 2, state (final) | `C:\dev\_7-9-suite-final-state.txt` (16:51:19) | **1288 tests, 0 failed, 13119 assertions, PASS** |
+
+Full-suite run count: state half 4 (default 2 + 2 extra), integration half 2 (default). EXTRA 1 reason: discover every
+mover outside D7's list before the golden step, which needs all non-golden tests green first (the alternative was ~10
+filtered runs that still could not see an unlisted mover). EXTRA 2 reason: an AC 9 test (interruption ends of the span)
+was added after final1, so final1 no longer described the final tree; nothing under `src/` or `test/integration/` changed
+after the integration final. Beside the full runs: targeted single-file dev runs (state filter: tempo x5, unblockable x2,
+click_to_commit x1, replay_identity x1, test_determinism x3 = golden probe (a) + (b) twice; integration single files:
+reach_live x3, honest_hit_geometry x1, counter_reactions x1, charge_playhead x1, defense_reactions x1), 26 mutation runs
+(table below), and 4 throwaway probe launches from the scratchpad (never in the repo): two steering-geometry sweeps and two
+signed-zero measurements.
+
+**Golden:** `1b1478ac310fd163411f8ea71900fbb5524766dd80874227a3fd740848890e98` -> `9d5d4fadce063bcd8832243513eaa732c442a146e37c1390ae7419db1638e86f`,
+ONE re-baseline, ONE cause, exactly the predicted one: the hero snapshot key `unblockable_immunity`. Reverse probe:
+(a) key erased from `HeroState.to_snapshot()` with every other 7-9 change live -> `test_state_matches_golden` passes against
+`1b1478ac...` EXACTLY; (b) key restored (copy-back from `C:\dev\_7-9-mut\hero_state.gd.bak`, SHA256 `203ee5ed...` both
+ways) -> `9d5d4fad...` on two separate runs (23/23 each). Probe side effect, measured: during (a) the new at-rest pin
+raised `SCRIPT ERROR: Invalid access ... 'unblockable_immunity'` (the harness printed `[ok]`, the function aborted before its
+assert; `run_all.sh`'s grep would fail the suite on that line). `test_debug_window_countdown`'s key list was not run during
+the probe. No second mover: (a) reproduces the old hash with the mana seat, R5 refusal, lead, reward, steering and immunity
+arming all live.
+
+**FORMAT_VERSION:** 20 -> 21, hard refusal of v20, no shim; new fixture `test_a_v20_record_is_refused_with_a_reason` (its
+path deliberately carries no "20", so the `contains("20")` check can only be answered by the message).
+
+**Key-set pins moved:** hero snapshot key list (`test_debug_window_countdown.gd`) +1 `unblockable_immunity`. Per-player key
+set stays **46** (`test_card_observation.gd` unmoved, as predicted: the key is on the hero). Top-level key set unmoved.
+Replay census (`test_replay_identity.gd`): HASHED +`hero_state.unblockable_immunity`; PER_TICK +`_counter_press_age_at_step3`,
++`_defense_answerable_at_step6`, +`_charge_reach_pushed`; `UNHASHED_CROSS_TICK_MEMBERS` stays 4. Three saved-file version
+pins (`_saved_format_version(...) == 20`) moved to 21.
 
 ### Completion Notes List
 
+**What was built (production):**
+- `BalanceConfig`: nine knobs -- `unblockable_mana_cost`, `unblockable_immunity_seconds`, `unblockable_turn_rate_degrees_per_second_{red,blue,green}`,
+  `counter_lead_seconds_{red,blue,green}`, `counter_mana_reward`; all default 0 (R16 degrades). `BalanceTicks`: `unblockable_immunity_ticks`,
+  `counter_lead_ticks_*` + `counter_lead_ticks_for`, `unblockable_turn_radians_per_tick_*` + `unblockable_turn_radians_per_tick_for` (A1).
+- `.tres` (TEMP): mana cost 1.0, immunity 1.5 s, turn rates RED 150 / BLUE 90 / GREEN 240, leads 0.25 x3, reward 1.0, damage 9.0 -> 6.0,
+  run 5.5 -> 4.6. Walk, roll and every non-hero speed unchanged (diff is those lines only).
+- AC 1/2: `_resolve_unblockable_cast` tests mana (`cost > current`, `spend`'s own compare) before the stamina spend, spends it after;
+  `REASON_INSUFFICIENT_MANA` reused; `Invariant.check` on the spend. No refund path exists anywhere.
+- AC 8/9 (R5/R10): `_defense_answerable_at_step6` captured after step 3 and before step 6's card actions from
+  `_opposing_unblockable_in_flight` (CHARGING and hit-once memory not HIT, existing hashed state); `_resolve_defense_cast`
+  refuses with the one new token `REASON_NOTHING_TO_ANSWER` after the empty-slot guard, before the stamina spend.
+- AC 6/7 (R4/R8/R9): `_counter_press_age_at_step3` captured beside `_counter_color_at_step3`; `_resolve_color_counter` adds
+  `press_age - ticks_since_commit <= lead(colour)` on top of the unchanged busy precondition and first-touch gate.
+- AC 10 (R6/R14): `defender.mana.add(balance.counter_mana_reward)` at the counter landing.
+- AC 4/5 (R3/R12): `_steer_charge_facing` runs on every flight tick before `_charge_launch_velocity`; `_charge_reach_pushed`
+  (set by `push_contact`, cleared after step 3's movement seats) tells a pushed bearing from a stale one; exactly-behind pinned
+  to +PI; within one step it snaps to the bearing. Ramp, distance and reach untouched.
+- AC 11 (R1/R11): `HeroState.unblockable_immunity` (hashed, key `unblockable_immunity`), ticked in `tick_timers`, armed at step 2
+  by `_arm_unblockable_immunity` on `get_up_iframe_closed_this_tick()`; `_resolve_charge_contact` drops a touch inside it as
+  `TOUCHED` on its own branch (not folded into `_iframe_open_at_step3`); `_reset_player` stops it (eighth named exception).
+- AC 13: `RecordFile.FORMAT_VERSION` 21 with the cause paragraph.
+
+**Tests:** new `test/state/test_unblockable_tempo.gd` (32 tests). Re-pointed: `test_unblockable_defense.gd`
+(`_cast_defense` arms an opposing chargeup first; in-test lead == busy; 3 "nothing charging" tests now pin the refusal; the
+judged-tick press now pins the refusal; the R-PRESS card half uses a BASIC cast; 2 R-S6 tests retired, see DV3),
+`test_unblockable_tracking_and_reach.gd` and `test_click_to_commit.gd` (in-test lead == busy), `test_unblockable_reach_live.gd`
+(AC 4b, see DV4), plus the pins above and the AC 14 audit `test_authored_tempo_values_are_bounded`.
+
+**AC verification:** AC 1, 2, 4, 5, 6, 7, 8, 9, 10, 11 -- `test_unblockable_tempo.gd` (and mutation table). AC 3 -- `.tres` diff
+(6.0) plus `test_honest_hit_geometry_live.gd`'s `touch` cases asserting exactly one authored-percent instalment against the live
+`.tres` at 100 max hp (PASS). AC 4b -- `test_unblockable_reach_live.gd`. AC 12 -- `.tres` diff (move_speed only). AC 13 -- golden,
+version, v20 fixture, at-rest pin, census, F1/D3(a)/D3(b) (`test_architecture_invariants.gd` green in both finals). AC 14 -- audit
++ R16 zero-degrade tests (mana 0 free, turn 0 none, lead 0 at the commit, immunity 0 / no get-up none). **AC 15 [S] NOT DONE**
+(T8, DV2). AC 16 -- the supersessions are listed in D7 (unchanged); logging them is the close-out's job, not this pass's.
+
+**Mutation table** (backups in `C:\dev\_7-9-mut\`, restored by copy, never git; SHA256 after restore: `match_state.gd`
+`bce27176...`, `hero_state.gd` `203ee5ed...`, `balance_config.tres` `e3ea3d6d...`, `record_file.gd` `e1251da0...` -- each equal
+to its backup on every row):
+
+| # | AC | Mutation | Run | Failing test(s) | Restore |
+|---|---|---|---|---|---|
+| M1 | 1 | delete the mana affordability refusal | tempo | `short_of_mana...`, `short_of_both...` | ok |
+| M2 | 8 | delete the R5 refusal | tempo | `nothing_to_answer...`, `click_tick...`, `hit_tick_or_landing...` | ok |
+| M3 | 8/R10 | read the opponent LIVE at the press instead of the capture | tempo | `click_tick...` (slot 0 only: the seat asymmetry) | ok |
+| M4 | 6 | delete the lead comparison | tempo | `window_opens_the_lead...`, `zero_lead...` | ok |
+| M5 | 10 | delete the reward | tempo | `successful_counter_pays...` | ok |
+| M6 | 4 | delete the steering call | tempo | 5 steering / path-length tests | ok |
+| M6b | 4b | delete the steering call | reach_live | `early`, `late_far`, `late_close_uncapped` | ok |
+| M6c | 4b | remove the cap (`step := PI`) | reach_live | `early_rigid`, `late_far_rigid`, `late_close` | ok |
+| M7 | 4 | drop the push-flag guard | tempo | `no_pushed_bearing...` | ok |
+| M8 | 4 | bare `atan2` (no fixed sign) | tempo | `exactly_behind...` pairs A and D, both slots | ok |
+| M9 | 11 | delete the contact-seat breather branch | tempo | `breather_drops...`, `countered_attacker...` | ok |
+| M10 | 11 | delete the step-2 arming | tempo | 5 breather tests | ok |
+| M11 | 11 | delete the reset clear | tempo | `reset_clears_the_breather...` | ok |
+| M12 | 9 | drop the HIT conjunct of the span | tempo | `hit_tick_or_landing...`, `span_ends...` | ok |
+| M13 | 13 | arm the breather every tick at the authored length | determinism | **SURVIVED** -- equivalent: `_golden_config` authors no immunity, so `start(0)` == rest | ok |
+| M13b | 13 | arm `start(7)` every tick | determinism | `state_matches_golden`, `no_unblockable_immunity_armed` | ok |
+| M14 | 14 | `.tres`: lead RED 1.0, lead BLUE 0.8, turn GREEN 0, mana 0, immunity 0, reward 0 | balance_authoring | all seven bound assertions, each its own message | ok |
+| M15 | 13 | `FORMAT_VERSION := 20` | record_file | `v20_record_is_refused...` + 2 version pins | ok |
+| M16 | 11 | fold the breather into `is_iframe_open()` | tempo | `melee_hits_normally...` + 3 | ok |
+| M17 | 4 | steer AFTER the velocity | tempo | `facing_turns...travel_follows_it` | ok |
+| M18 | 9/R10 | capture moved BEFORE step 3 | tempo | `hit_tick_or_landing...`, `counter...knockdown...`, `span_ends...` | ok |
+
+Two of my own tests were caught vacuous by these proofs and fixed (re-proven above): **M8** survived twice -- a facing and a
+bearing that are each other's plain negation always cross to +0, and GDScript constant-folds a source `-0.0` to +0.0, so the
+pairs now build their negative zeros at runtime and assert the cross sign as fixture. **M6c** first left `late_close` green --
+its whiff was geometric, not the cap's; a second probe found GREEN's cap-attributable window (flight ticks 12-13 of 27 for a
+1.5 m step), the share moved there, and a `late_close_uncapped` control (must HIT) now makes the whiff the cap's.
+
+**DEVIATIONS (mine, against the story; the story's own DEVIATIONS section is unedited):**
+- **DV1 Reward knob.** R14 writes the literal `mana.add(1.0)`; AC 14 puts every new number in the `.tres` and project-context
+  forbids hardcoded economy values. Shipped as `counter_mana_reward` (authored 1.0, R14's number; 0 = no reward). A fifth knob
+  beside R16's four; flagged for review.
+- **DV2 T8 / AC 15 not done; Status `review` anyway.** The pass's hard rule forbids touching `main.tscn` (no smoke flip). The
+  skill would HALT on an incomplete task at step 9; the operator's rules win and the story Status is set to `review` as
+  instructed. The live smoke (twelve items, R-D6 re-invoked per R18) is owed before close-out.
+- **DV3 Two retired tests** in `test_unblockable_defense.gd` (`..._ran_out_before_the_commit...`, `..._whole_busy_span_counters...`):
+  both pinned `6-6b/R-S6` with a press made BEFORE the cast, which 7-9 makes unreachable (R5) and whose claim it supersedes
+  (R4/R8). Replacements in the tempo file (lead edge; `test_the_busy_span_stays_the_precondition`). Comment left in place.
+- **DV4 AC 4b pinned on GREEN only,** with rate-0 and unbounded-rate controls; RED/BLUE show the same shape at their caps
+  (measured) and the per-colour order is proven headless off the config. The `side` case (`must WHIFF for every colour`) is
+  retired as the M15 flip R3 supersedes. The thresholds are measured against the authored rates: a 7-7 retune of GREEN's turn
+  rate or launch may move the window and fail this file loudly (the far/close distances are asserted) -- unlike the file's
+  other cases, these are not self-rescheduling.
+- **DV5 D7's expected movers that did NOT move (confirmed by running):** `test_action_state`, `test_card_observation` (46, as the
+  Golden Prediction says), `test_unblockable_honest_contact`, `test_counter_reactions_live`, `test_charge_playhead_live`,
+  `test_defense_reactions_live` (all poke state directly), `test_honest_hit_geometry_live` (confirmed). Movers outside D7: none.
+
+**Readings and flags for the review (no ruling taken; the contract was followed):**
+- **AC 9 vs R10 seat.** R10 locks the capture after step 3 and before step 6, so interruptions that land LATER in the tick
+  (6b knockdown, 6c bolt stun, step-8 death) close the span from the NEXT tick's capture; a same-tick press resolves first (the
+  R-PRESS order). Pinned by `test_the_span_ends_on_a_counter_at_once_and_on_a_knockdown_from_the_next_tick`. In practice the
+  presser is itself charging (6b) or casting (6c) on such a tick and is refused by those gates first.
+- **R3 "until contact" vs AC 4 "to the landing".** Implemented per AC 4 (and R12/OQ5 "each flight tick"): steering continues after
+  a dropped touch, so a rolling defender is still followed through its i-frames. Smoke item 7 ("a roll whose iframes cover the
+  contact saves") is where this will be felt.
+- **Golden Prediction typo.** It says "damage 6 and run 5.0"; R7/AC 12 say 4.6, which is what is authored.
+- **Small API additions beyond the named ones:** public `HeroState.get_up_iframe_closed_this_tick()` (the step-2 arming R11 names
+  needs to read the private marker from `MatchState`), two `BalanceTicks` lookups on the existing `*_for` pattern, and two
+  per-tick `MatchState` members beyond the story's capture (`_counter_press_age_at_step3`, `_charge_reach_pushed`). No new hashed
+  key besides the predicted one; no new folder; no new `class_name` (so no editor scan was needed; `project.godot` untouched).
+- **git status at halt:** 18 modified + 1 untracked (`test/state/test_unblockable_tempo.gd`); nothing staged, nothing committed.
+
 ### File List
+
+- `src/state/match_state.gd` (modified)
+- `src/state/hero_state.gd` (modified)
+- `src/state/resources/balance_config.gd` (modified)
+- `src/state/timing/balance_ticks.gd` (modified)
+- `src/systems/record_file.gd` (modified)
+- `data/balance/balance_config.tres` (modified)
+- `test/state/test_unblockable_tempo.gd` (new)
+- `test/state/test_unblockable_defense.gd` (modified)
+- `test/state/test_unblockable_tracking_and_reach.gd` (modified)
+- `test/state/test_click_to_commit.gd` (modified)
+- `test/state/test_balance_authoring.gd` (modified)
+- `test/state/test_data_resources.gd` (modified)
+- `test/state/test_debug_window_countdown.gd` (modified)
+- `test/state/test_determinism.gd` (modified)
+- `test/state/test_record_file.gd` (modified)
+- `test/state/test_replay_identity.gd` (modified)
+- `test/integration/test_unblockable_reach_live.gd` (modified)
+- `docs/implementation-artifacts/7-9-unblockable-tempo.md` (this record; Status, task boxes)
+- `docs/implementation-artifacts/sprint-status.yaml` (board: in-progress during the pass, then restored per on_complete)
+
+### Change Log
+
+- 2026-10-08 -- Dev pass (Opus 5.5): mana price, defence legality (R5/R10), commit-anchored counter window with per-colour lead,
+  counter mana reward, post-launch steering, post-get-up unblockable immunity, damage 6 / run 4.6, FORMAT_VERSION 21, golden
+  `1b1478ac` -> `9d5d4fad` (one cause). T1-T7 done; T8 live smoke not run in this pass (DV2). Uncommitted.
 
 ## DEVIATIONS
 
