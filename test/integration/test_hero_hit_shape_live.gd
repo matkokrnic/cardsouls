@@ -13,6 +13,10 @@ extends SceneTree
 ##     body-relative (the body itself moves between the two). Mid-roll the trunk travels ~0.2 m per
 ##     frame, which is why a same-frame comparison would measure the lag rather than the tracking;
 ##   * ON THE TORSO -- a small probe at the trunk bone overlaps the hero's `Hurtbox` area;
+##   * ON THE CHEST SURFACE (idle only) -- a probe CHEST_SURFACE ahead of the trunk bone along the facing
+##     overlaps too. The bone probe above sits on the cylinder's own axis, so it passes for any shape that
+##     tracks the bone; this one sits at the idle chest front (measured idle radial max 0.237 m) and fails
+##     when the radius shrinks below it (story 7-8 review F5);
 ##   * INSIDE THE OLD BOX, OFF THE TRUNK -- a probe placed inside the old 1 x 2 x 1 box (proved by its
 ##     overlapping the body `Collision`, which keeps that box, AC 12) but well clear of the trunk does NOT
 ##     overlap the `Hurtbox` area. That is the whole of AC 11's geometric claim: grazing the air beside the
@@ -25,7 +29,8 @@ extends SceneTree
 ## it cannot pass on a frame where the roll has not yet moved the trunk.
 ##
 ## MUTATION: point `Hurtbox/HurtboxShape` back at the body box (`BoxShape3D_qp0e8`) and this goes RED --
-## the off-trunk probe inside the old box overlaps it.
+## the off-trunk probe inside the old box overlaps it. Shrink the cylinder radius to 0.15 and the idle
+## chest-surface probe goes RED (the axis probe still passes).
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_hero_hit_shape_live.gd
 
@@ -49,6 +54,9 @@ const BOX_INSET := 0.05
 ## The off-trunk probe must clear the hit shape's radius by at least this much, planar -- the bound that
 ## keeps one tick of sub-frame lag from deciding the result.
 const CLEAR_MARGIN := 0.12
+## How far in front of the trunk bone (along the facing) the idle chest-surface probe sits: inside the
+## measured idle radial max (0.237 m) and well inside the cylinder radius, so it is the chest front.
+const CHEST_SURFACE := 0.22
 ## TRACKING tolerance, body-relative against the pose the shape was computed from: float slack only.
 const TRACK_EPS := 0.01
 ## The roll clip's mid-window, as a fraction of its length.
@@ -108,7 +116,7 @@ func _physics_process(_delta: float) -> bool:
 	if _phase == "idle":
 		if _frames < IDLE_SETTLE:
 			return false
-		_judge("idle frame %d" % _frames, judged_offset)
+		_judge("idle frame %d" % _frames, judged_offset, true)
 		_idle_checked += 1
 		if _idle_checked >= IDLE_CHECKS:
 			_phase = "roll"
@@ -128,15 +136,16 @@ func _physics_process(_delta: float) -> bool:
 		if excursion.length() < MIN_EXCURSION:
 			return false
 		_judge("mid-roll frame %d (playhead %.2f, trunk %.2f m off the root)"
-			% [_frames, f, excursion.length()], judged_offset)
+			% [_frames, f, excursion.length()], judged_offset, false)
 		_roll_checked += 1
 		return false
 	return false
 
 
-## One frame's three claims. `offset` is the trunk bone's body-relative position the shape was computed
-## from (the previous callback's read).
-func _judge(label: String, offset: Vector3) -> void:
+## One frame's claims. `offset` is the trunk bone's body-relative position the shape was computed
+## from (the previous callback's read). `idle` adds the chest-surface probe (the roll pose has no
+## measured surface to probe).
+func _judge(label: String, offset: Vector3, idle: bool) -> void:
 	var shape := _hero.hurtbox_shape
 	var cyl := shape.shape as CylinderShape3D
 	# Not a cylinder: recorded, and the probes still run -- so a hit shape reverted to the body box is
@@ -153,6 +162,13 @@ func _judge(label: String, offset: Vector3) -> void:
 	var torso := centre + Vector3(0.0, HeroActor.HURTBOX_DROP, 0.0)
 	_check(_overlaps_hurtbox(torso), "%s: a probe ON the torso (%v) does not overlap the hurtbox"
 		% [label, torso])
+	if idle:
+		# ON THE CHEST SURFACE: the facing is the mesh's +z (the single yaw source, `hero.gd` drive()).
+		var forward := _hero.mesh.global_transform.basis.z
+		forward.y = 0.0
+		var chest := torso + forward.normalized() * CHEST_SURFACE
+		_check(_overlaps_hurtbox(chest), "%s: a probe on the idle chest surface (%v, %.2f m ahead of the "
+			% [label, chest, CHEST_SURFACE] + "trunk bone) does not overlap the hurtbox (radius %.2f)" % radius)
 	# INSIDE THE OLD BOX, OFF THE TRUNK: the old box's corner column farthest from the shape's axis, at
 	# the shape's own height clamped into the box.
 	var root_pos := _hero.global_position

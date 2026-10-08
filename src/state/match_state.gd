@@ -1711,10 +1711,11 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 		# while the chargeup window still ran, the paid feint -- IS DELETED, and with it the only
 		# intent read this seat ever had. There is nothing to hold and nothing to cancel.
 		#
-		# THE FOUR EXITS FROM `CHARGING` ARE ALL NON-INPUT, which is what makes "a press commits"
+		# THE FIVE EXITS FROM `CHARGING` ARE ALL NON-INPUT, which is what makes "a press commits"
 		# structural rather than asserted: the landing below, the colour counter judging it (`6-6b`,
-		# the branch above), a knockdown abandoning it (`6-6a/R1`, `:3776-3778`) and death / the
-		# debug reset (`_reset_player`). No branch here tests a key, so no key can add a fifth.
+		# the branch above), a knockdown abandoning it (`6-6a/R1`, `:3776-3778`), a Honed Bolt's stun
+		# abandoning it (`6-5c` AC 14, `_apply_bolt_landing`) and death / the debug reset
+		# (`_reset_player`). No branch here tests a key, so no key can add a sixth.
 		#
 		# THE TELEGRAPH FACT RESTS AGAIN AT THE LANDING (AC 5) WITHOUT ANY CLEAR BEING WRITTEN HERE.
 		# `PlayerState.to_snapshot`'s `telegraph` is DERIVED under an `action_state == CHARGING`

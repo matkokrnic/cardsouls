@@ -214,40 +214,47 @@ func test_the_touch_tick_dodge_is_identical_on_both_seats() -> void:
 ## MUTATION (span): make the dropped touch leave `charge_contact` at NONE and this goes RED -- the counter
 ## lands after the attack's first touch.
 func test_a_dropped_touch_closes_the_counter_span() -> void:
-	for touched: bool in [true, false]:
-		var ms := _make_match(Enums.CardColor.BLUE)
-		_roll_into_the_commit(ms, 0)
-		var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE if touched \
-				else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
-		_push(ms, 0, kind)
-		_advance(ms, InputIntent.new(), InputIntent.new())
-		assert_eq(ms.p2.hero.get_hp(), MAX_HP, "sanity: nothing landed at the commit")
-		# A matching counter armed now, judged on the next tick with no touch on it.
-		ms.p2.defense_window.start(COUNTER_BUSY_TICKS)
-		ms.p2.defense_color = Enums.CardColor.BLUE
-		_push(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
-		_advance(ms, InputIntent.new(), InputIntent.new())
-		if touched:
-			assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
-				"after a DROPPED touch the counter is never judged again for this attack (AC 10)")
-		else:
-			assert_eq(ms.p1.hero.action_state, HeroState.ActionState.STUNNED,
-				"control: with no touch yet the same window counters and knocks the attacker down")
+	for slot: int in 2:
+		for touched: bool in [true, false]:
+			var ms := _make_match(Enums.CardColor.BLUE)
+			var attacker: PlayerState = ms.p1 if slot == 0 else ms.p2
+			var defender: PlayerState = ms.p2 if slot == 0 else ms.p1
+			_roll_into_the_commit(ms, slot)
+			var kind := MatchState.CONTACT_CHARGE_REACH_INSIDE if touched \
+					else MatchState.CONTACT_CHARGE_REACH_OUTSIDE
+			_push(ms, slot, kind)
+			_advance(ms, InputIntent.new(), InputIntent.new())
+			assert_eq(defender.hero.get_hp(), MAX_HP, "slot %d: sanity: nothing landed at the commit" % slot)
+			# A matching counter armed now, judged on the next tick with no touch on it.
+			defender.defense_window.start(COUNTER_BUSY_TICKS)
+			defender.defense_color = Enums.CardColor.BLUE
+			_push(ms, slot, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
+			_advance(ms, InputIntent.new(), InputIntent.new())
+			if touched:
+				assert_eq(attacker.hero.action_state, HeroState.ActionState.CHARGING,
+					"slot %d: after a DROPPED touch the counter is never judged again for this attack (AC 10)" % slot)
+			else:
+				assert_eq(attacker.hero.action_state, HeroState.ActionState.STUNNED,
+					"slot %d: control: with no touch yet the same window counters and knocks the attacker down" % slot)
 
 
 ## AC 10, the counted half: after the hit lands the counter is never judged again for that attack.
 func test_no_counter_after_the_hit_landed() -> void:
-	var ms := _make_match(Enums.CardColor.RED)
-	_cast_and_charge_kind(ms, 0, MatchState.CONTACT_CHARGE_REACH_INSIDE)
-	assert_eq(ms.p2.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE, "sanity: the commit-tick touch hit")
-	ms.p2.defense_window.start(COUNTER_BUSY_TICKS)
-	ms.p2.defense_color = Enums.CardColor.RED
-	ms.p2.hero.stun.start(0)
-	ms.p2.hero.set_action_state(HeroState.ActionState.IDLE)
-	_push(ms, 0, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
-	_advance(ms, InputIntent.new(), InputIntent.new())
-	assert_eq(ms.p1.hero.action_state, HeroState.ActionState.CHARGING,
-		"a matching window after the hit answers nothing -- the span closed at the first touch")
+	for slot: int in 2:
+		var ms := _make_match(Enums.CardColor.RED)
+		var attacker: PlayerState = ms.p1 if slot == 0 else ms.p2
+		var defender: PlayerState = ms.p2 if slot == 0 else ms.p1
+		_cast_and_charge_kind(ms, slot, MatchState.CONTACT_CHARGE_REACH_INSIDE)
+		assert_eq(defender.hero.get_hp(), MAX_HP - UNBLOCKABLE_DAMAGE,
+			"slot %d: sanity: the commit-tick touch hit" % slot)
+		defender.defense_window.start(COUNTER_BUSY_TICKS)
+		defender.defense_color = Enums.CardColor.RED
+		defender.hero.stun.start(0)
+		defender.hero.set_action_state(HeroState.ActionState.IDLE)
+		_push(ms, slot, MatchState.CONTACT_CHARGE_REACH_OUTSIDE)
+		_advance(ms, InputIntent.new(), InputIntent.new())
+		assert_eq(attacker.hero.action_state, HeroState.ActionState.CHARGING,
+			"slot %d: a matching window after the hit answers nothing -- the span closed at the first touch" % slot)
 
 
 # --- `7-8/R15`: the hashed hit-once key ------------------------------------------------------------

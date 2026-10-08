@@ -9,7 +9,14 @@ extends SceneTree
 ## the launch, and `_resolve_charge_contact` resolving on the touch (story 7-8). A headless fixture cannot reach any of
 ## that -- it pushes the KIND by hand, which is precisely the thing under test here.
 ##
-## FOUR CASES PER COLOUR, each a full chargeup -> commit -> launch -> landing:
+## FOUR CASES PER COLOUR, each a full chargeup -> commit -> launch -> landing.
+##
+## THE `flee` CASE IS RETIRED (story 7-8 review, F4). It touched the defender during the launch, teleported
+## it clear, and asserted a HIT (6-1d AC 6: touched at any evaluated tick is not a guaranteed miss). Under
+## `7-8/R1` the hit lands on the touch tick itself, so by the time the flee trigger could fire the damage was
+## already in and the case proved exactly what `touch` proves. What it was written to discriminate -- an
+## absorbing latch -- no longer exists, and the contract that replaced it (a touch then clear while i-frames
+## are open is a MISS, AC 8) is proved headless in `test_unblockable_honest_contact.gd`. The cases:
 ##   touch  -- the defender stands where the launch brings the blade onto its body. HIT, latched
 ##             INSIDE, and EXACTLY ONE damage instalment however many ticks reported contact (AC 1,
 ##             AC 5).
@@ -18,15 +25,11 @@ extends SceneTree
 ##             only ever REMOVE a hit (AC 2, proved by a test rather than by a `.tres` diff). The
 ##             authored resource on disk is never touched -- the clamp is a `duplicate()` applied to
 ##             the live state for one case and dropped again.
-##   charge -- the defender is pressed against the attacker for the FEINTABLE chargeup (the blade is
-##             already visibly in motion there) and leaves well before the commit. MISS: the contact
-##             window opens AT the commit and never earlier (AC 4). The case asserts that a real
-##             overlap WAS observed during the chargeup, so it cannot pass vacuously.
-##   flee   -- the defender is touched during the launch and then teleports clear, with launch ticks
-##             still to run, so the LAST evaluated tick is clean. HIT (AC 6, the deliberate
-##             supersession of `6-1c` AC 3: touched at any evaluated tick is no longer a guaranteed
-##             miss). The teleport is triggered off an OBSERVED contact rather than a tick count, so
-##             the case fails loudly instead of passing vacuously if contact never happened.
+##   charge -- the defender is parked ON the tracked blade every chargeup frame (its own hit shape's centre
+##             on the blade's centre, bodies passing through each other) and leaves well before the
+##             commit. MISS: the contact window opens AT the commit and never earlier (AC 4). The case
+##             asserts that a real overlap WAS observed during the chargeup, so it cannot pass
+##             vacuously.
 ##   frozen -- `6-1d/R9`: the defender is parked clear, the attacker commits, and the round is then
 ##             forced over mid-launch with the defender moved onto the blade. The round-over freeze
 ##             holds the contact window open while the rig keeps its pose, and the runner must push
@@ -88,7 +91,7 @@ var _clamped: BalanceConfig
 var _ticks: BalanceTicks
 var _failures: Array[String] = []
 
-var _cases: Array = []   # [colour, kind] with kind in {"touch", "clamp", "charge", "flee"}
+var _cases: Array = []   # [colour, kind] with kind in {"touch", "clamp", "charge", "frozen"}
 var _case_index := 0
 var _phase := "setup"
 var _phase_frame := 0
@@ -117,7 +120,7 @@ func _initialize() -> void:
 	_clamped.unblockable_reach_blue = CLAMPED_REACH
 	_clamped.unblockable_reach_green = CLAMPED_REACH
 	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
-		for kind in ["touch", "clamp", "charge", "flee", "frozen"]:
+		for kind in ["touch", "clamp", "charge", "frozen"]:
 			_cases.append([color, kind])
 
 
@@ -255,18 +258,6 @@ func _physics_process(_delta: float) -> bool:
 					% label + "the chargeup -- the case would pass vacuously")
 				_p2_actor.position = _cast_pos + Vector3(travel + reach + CLEAR, 0.0, 0.0)
 				_p2_actor.set_body_pass_through(_p1_actor, false)
-			if kind == "flee" and not _fled and not player.charge_window.is_running \
-					and _state._charge_reach[0] == MatchState.CONTACT_CHARGE_REACH_INSIDE \
-					and player.landing_window.remaining_ticks() >= 2:
-				# Touched at an evaluated tick, with evaluated ticks still to run: clear away, so
-				# the LAST tick the check runs on reports nothing at all. STORY 7-8 RE-DERIVED THE
-				# THRESHOLD (3 -> 2): the swing-at-commit re-tempo brings RED's swipe onto the body late in
-				# its launch, and 2 is the exact minimum -- the teleport lands after this frame's physics
-				# step, so the NEXT push still reads the pre-teleport overlap (the standing one-tick lag)
-				# and the one after reads clear while the landing window still runs. The assertion below
-				# is unchanged.
-				_fled = true
-				_p2_actor.position = _cast_pos + Vector3(travel + reach + CLEAR, 0.0, 0.0)
 			return false
 		# First frame after the landing.
 		var hit := _state.p2.hero.get_hp() < _hp_before - HP_EPS
@@ -301,13 +292,6 @@ func _physics_process(_delta: float) -> bool:
 				_check(_fled, "%s: never reached the pre-commit teleport" % label)
 				_check(not hit, "%s: contact during the FEINTABLE chargeup credited damage -- the "
 					% label + "contact window must open AT the commit and never earlier (AC 4)")
-			"flee":
-				_check(_fled, "%s: never observed a contact tick with launch ticks left to flee "
-					% label + "-- the case cannot judge AC 6")
-				if _fled:
-					_check(hit, "%s: the defender was touched at an evaluated tick and cleared the "
-						% label + "blade before the landing -- that is a HIT since 6-1d (AC 6 "
-						+ "supersedes 6-1c AC 3), latched kind %d" % latched)
 		_phase = "after"
 		_phase_frame = _frames
 		return false
