@@ -4,7 +4,7 @@ baseline_commit: b91152e716978caba9351564ce952d4144d42799
 
 # Story 7.10: Unblockable presentation
 
-Status: ready-for-dev
+Status: review
 
 Tier **B** (HUD/presentation only). Authored 2026-10-08 against HEAD == origin/main == `b91152e`, tree clean. Scope is the
 operator's brief of 8.10.2026 (`7-8/R20` routes the eye-blink telegraph and the counter polish here; `6-6b` deferred
@@ -150,20 +150,20 @@ Verified by reading HEAD `b91152e` this session (path:line, then what it says). 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 (AC 1, 4, 7; M2)** Measure the head: attach point and visor offset on `mixamorig_Head`, helmet occlusion, in a
+- [x] **Task 1 (AC 1, 4, 7; M2)** Measure the head: attach point and visor offset on `mixamorig_Head`, helmet occlusion, in a
   throwaway-free way (extend the `tools/measure_torso_envelope.gd` precedent as a committed tool/test). Decide the glow route
   (quad/OmniLight vs `Environment`, Open Question 3). Record the numbers in the dev record.
-- [ ] **Task 2 (AC 1-7)** Eyes: a presentation node on the head bone, a pure static `eyes_blink_interval(progress)` and a
+- [x] **Task 2 (AC 1-7)** Eyes: a presentation node on the head bone, a pure static `eyes_blink_interval(progress)` and a
   flash/lit/off driver fed from `_push_charge_progress`'s existing inputs; tick and sting audio; named knobs in one place.
-  - [ ] Clear on every exit listed in AC 3 (the reset and round-end paths included).
-  - [ ] Test: monotonic interval, flash tick == commit tick, off on first touch / cancel (against a stubbed state).
-- [ ] **Task 3 (AC 8, 9; OQ 1, 2)** RED: re-cut the table, mesh arc to head height, per-colour rate pinned by direction only.
-- [ ] **Task 4 (AC 10, 11, 13, 14)** One shared "contact moment" presentation: hitstop on a rig (hold + offset + catch-up),
+  - [x] Clear on every exit listed in AC 3 (the reset and round-end paths included).
+  - [x] Test: monotonic interval, flash tick == commit tick, off on first touch / cancel (against a stubbed state).
+- [x] **Task 3 (AC 8, 9; OQ 1, 2)** RED: re-cut the table, mesh arc to head height, per-colour rate pinned by direction only.
+- [x] **Task 4 (AC 10, 11, 13, 14)** One shared "contact moment" presentation: hitstop on a rig (hold + offset + catch-up),
   camera shake on a camera node, hold-then-blend of the victim's pose to the impact tick, impact burst/flash/thud. RED's
   impact tick is the forward-leg end, GREEN's is the dagger's arrival.
-- [ ] **Task 5 (AC 12, 14)** GREEN: dagger trail and size knob; launch/arrival timed so impact lands within the hold bound.
-- [ ] **Task 6 (AC 15)** Immunity shimmer on the hero, silver, fade by remaining fraction, both viewports.
-- [ ] **Task 7 (AC 16-18)** Before/after: golden, snapshot key sets (46 player, 21 hero, 6 top-level), `FORMAT_VERSION` 21,
+- [x] **Task 5 (AC 12, 14)** GREEN: dagger trail and size knob; launch/arrival timed so impact lands within the hold bound.
+- [x] **Task 6 (AC 15)** Immunity shimmer on the hero, silver, fade by remaining fraction, both viewports.
+- [x] **Task 7 (AC 16-18)** Before/after: golden, snapshot key sets (46 player, 21 hero, 6 top-level), `FORMAT_VERSION` 21,
   `src/state/` diff empty. Suite and integration run once at the end; Live Smoke ritual.
 
 ## Dev Notes
@@ -251,14 +251,167 @@ observation seam family stays at ten; the shell is PowerShell 5.1 or Git Bash wi
 
 ### Agent Model Used
 
+Claude (dev pass 2026-10-08, single session, no subagents). Commits carry the repo-constant trailer (`6-1c/R7`).
+
 ### Debug Log References
+
+- Suite before: `C:\dev\_710-suite-before.txt` (22:53:50) -- 1289 tests / 0 failed / 13187 assertions; 79/79 integration PASS.
+- Suite after: `C:\dev\_710-suite-after.txt` (23:20:18) -- 1289 / 0 / 13187; 81/81 integration PASS (79 + the 2 new files).
+- Head measurement: `C:\dev\_710-head-measure.txt` (`tools/measure_head_visor.gd`, final run).
+- Full record: `C:\dev\_710-dev.md`.
 
 ### Completion Notes List
 
+**Operator rulings on the Open Questions (from the dev prompt, recorded here per operator ruling):**
+
+- **OQ1 -- per operator ruling:** distance-aware RED landing rescales the BODY. `HeroActor.drive()` applies
+  `hero_state.velocity * counter_travel_scale` (`src/actors/hero/hero.gd`); the runner locks
+  `k = min(1, gap_at_press / counter_travel_distance_red)` at the counter's rising edge from the actor-side planar gap
+  and sets it every running tick while the defender is IDLE (both legs, same k, net zero). No state edit. F1/D3 do
+  not forbid it (the actor still has no `_physics_process` and reads no input), so the **body route was taken**, not
+  the mesh-only fallback. BLUE untouched. A press with gap > 4.0 m keeps k = 1 and lands short (smoke watch).
+- **OQ2 -- per operator ruling:** busy stays 1.0 s. `counter_jump` has no crouch to trim (feet off the ground by
+  t=0.067), so its cut keeps 0..0.7667 (the settle after the landing trimmed); `counter_backflip`'s crouch (0..0.68)
+  and recovery (1.5..2.1667) are trimmed: 0.68..1.5. Achieved **RED rate 1.587x** (was 2.733x; the TEMP 1.6x target is
+  met). `counter_travel_forward_fraction_red` 0.305 -> **0.49** in `data/balance/balance_config.tres` so the
+  jump/backflip join (0.483 s) meets the forward-leg end (elapsed tick 29 = 0.483 s); its only guard is the (0, 1)
+  bound in `test_balance_authoring.gd`, so no test/state edit. **GREEN rate unchanged at 1.360x** (cut untouched).
+- **OQ3 -- per operator ruling:** no WorldEnvironment/Environment. The eyes are unshaded additive billboard quads (a core
+  and a halo each); the flash is a scale burst plus a brief OmniLight3D.
+- **OQ4 -- per operator ruling:** the hitstop holds the mesh at the root's position and eases it back over
+  `HITSTOP_CATCHUP_SECONDS` (0.12 s); smoke watch, nothing further.
+
+**Task 1 (measured).** `tools/measure_head_visor.gd`, CPU-skinned in the idle rest frame: skeleton unscaled (metres);
+`mixamorig_Head` at model (-0.083, 1.379, 0.081), `HeadTop_End` at y 1.554 (feet at 0). The head geometry (2732
+vertices whose dominant bind is Head/HeadTop_End) spans -0.092..+0.183 m along the head's up axis; its front surface
+along head-forward is 0.107..**0.1395** m across all bands, sideways about +-0.09 m. The eyes sit at forward **0.155**
+(0.0155 in front of every head vertex at their height, so the helmet cannot occlude them from a camera in front -- the
+opponent's), up 0.075, +-0.035 sideways, in the head-bone frame via `EffectFx.bone_follower`. Finding: the FBX mesh
+names do not describe their geometry (the helmet is in the meshes named `..._Sword`/`..._Shield`; the 85-vertex mesh
+named `..._Helmet` is bound to `Shield_joint`). Glow route: quads + OmniLight (OQ3). Clip tables from the same tool:
+`counter_jump` feet leave by 0.067, apex hips 1.531 at 0.40, land 0.733-0.767; `counter_backflip` crouch to hips 0.598
+at 0.333, take-off ~0.70, feet peak 1.764 at 1.033, land 1.333, recovery to 1.9+.
+
+**Task 2 (eyes).** `UnblockableEyes` (`src/actors/hero/unblockable_eyes.gd`) on the head bone, built in
+`HeroActor._ready`, NOT under `TelegraphController` (the F3 debug layer). The runner poll `_push_unblockable_markers`
+(after `_push_charge_progress`) drives it per tick: lit = CHARGING and `charge_contact == NONE`; progress =
+`1 - remaining/duration` of `charge_window`; FLASH when `charge_window.is_running` goes false while lit. Round over
+suppresses at step 4d off the existing `round_over` read; the debug reset clears via `HeroActor.clear_presentation()`
+from `_relay_round_started`. Colour from the hero's own charge `TelegraphProfile`s. ChargeMarker, the charge clips and
+the stings are untouched (AC 6); whether the orb is now redundant is a smoke call.
+
+**Tasks 3/4/5 (counter contact).** Runner-local bookkeeping beside `_counter_armed`: `_begin_counter_contact` (press:
+arm the victim hold if the other hero is CHARGING; RED: lock k, the arc height = attacker `HeadTop_End` world y minus
+the defender's feet, clamped to 2.2 m, and the contact tick), `_drive_counter_contact` (each running tick: k; lift =
+height x `counter_lift_fraction()`, read off the PLAYHEAD; on the contact tick with a held victim: hitstop on both
+rigs, impact burst/flash/light at the head, thud, shake on both follower cameras), `_drive_victim_hold` (release at
+impact + hitstop, or at `VICTIM_HOLD_MAX_SECONDS`), `_end_counter_contact` (falling edge/re-cast: back to rest, release
+or disarm), `_green_dagger_impact` (dagger arrival: hitstop on the attacker, sparks, thud). The victim hold lives in
+`AnimationController`: the STUNNED transition is held (its clip remembered) and cross-faded in by
+`release_victim_hold` through `_play_stun(..., blend)`; the state is STUNNED from the fire tick exactly as before.
+Hitstop = `AnimationPlayer.speed_scale` 0 (`set_frozen`) + the mesh offset in `HeroActor`, counted in `drive()`
+calls. The shake is positional on `_p1_view_cam`/`_p2_view_cam` after step 4b's copy; the rigs and their bases are
+never written (camera-basis and root-rotation guards green and unedited). Dagger: world-space trail, flight
+`min(span, 0.22 s)`, aimed at the trunk bone.
+
+**Task 6 (immunity).** `ImmunityShimmer` (`src/actors/hero/immunity_shimmer.gd`): silver star particles in a body box,
+alpha = 0.7 x the remaining fraction of `unblockable_immunity`, level-triggered from the same poll.
+
+**Task 7 (before/after).** Golden pin `9d5d4fad...` (`test_determinism.gd:1336`): `test_state_matches_golden` [ok]
+before and after. `FORMAT_VERSION` 21 (`src/systems/record_file.gd:369`) unchanged; its tests [ok] in both runs. Key
+sets: 46 player (`test_draw_delay_and_reshuffle.gd` pin), 21 hero -- **recounted mechanically** with comments stripped
+from `test_debug_window_countdown.gd:107-127`: 21 names, 21 unique -- and 6 top-level, all pinned and [ok] in both
+runs. Both directions: the sorted list of 1289 state-harness result lines is identical before vs after (0 lines only
+before, 0 only after). `git diff -- src/state test/state` is empty. No new `connect_*` (the family test is [ok]); the
+F1/D3 invariant tests are [ok]. **The Live Smoke is the operator's** (post-dev, the 7-9 precedent) and has not been run.
+
+**Mutation table (measured; each ran only the affected file and was restored by copy-back with a SHA-256 match, never
+`git checkout`).**
+
+| # | File | Mutation | Test | Result |
+|---|---|---|---|---|
+| M1 | hero.gd | drop `* counter_travel_scale` | live | FAIL: body x1.000, want x0.625 |
+| M2 | animation_controller.gd | victim hold disabled (`if false and ...`) | live | FAIL: knockdown at elapsed 3 < contact 29; no freeze; no shake; GREEN knockdown before impact |
+| M3 | match_runner.gd | eyes gate ignores `charge_contact` | live | FAIL: eyes not OUT on first touch |
+| M4 | unblockable_eyes.gd | flash on `progress >= 0.95` | live | FAIL: flash not on the commit tick |
+| M5 | unblockable_eyes.gd | blink lerp inverted | knobs + live | FAIL: interval grows; blinks slow down (gap 6 -> 13) |
+| M6 | match_runner.gd | shimmer always pushed 0.0 | live | FAIL: not shown, fraction 0 vs 0.967 |
+| M7 | immunity_shimmer.gd | silver = RED (0.95, 0.1, 0.1) | knobs | FAIL: distance 0.000 |
+| M8 | animation_controller.gd | `set_frozen` never freezes | live | FAIL: rigs never freeze |
+| M9 | match_runner.gd | shake also rotates P1's follower | live | FAIL: shake not positional |
+| M10 | match_runner.gd | dagger flight cap 99 s | live | FAIL: arrived at +30 > 15 frames |
+| M11 | dagger_actor.gd | trail freed | live | FAIL: no trail |
+| M12 | animation_controller.gd | backflip cut to 2.65 | knobs | FAIL: RED rate 2.7367 >= 2.733 |
+
+**Knob list (every new number; tune at smoke with no suite run -- the tests pin bounds and directions only):**
+
+- `src/actors/hero/unblockable_eyes.gd` -- placement `EYE_FORWARD_M` :38 (0.155), `EYE_HEIGHT_M` :39 (0.075),
+  `EYE_HALF_SEPARATION_M` :40 (0.035); size `EYE_CORE_SIZE` :42 (0.07), `EYE_HALO_SIZE` :43 (0.22); brightness
+  `EYE_BRIGHTNESS` :45 (1.6), `EYE_HALO_ALPHA` :46 (0.55), `EYE_BLINK_DIM` :49 (0.15); blink `BLINK_INTERVAL_SLOW` :52
+  (0.45 s), `BLINK_INTERVAL_FAST` :53 (0.07 s), `BLINK_CURVE` :54 (1.6), `BLINK_ON_FRACTION` :56 (0.5); flash
+  `FLASH_SECONDS` :58 (0.2), `FLASH_SCALE` :59 (3.0), `FLASH_LIGHT_ENERGY` :60 (6.0), `FLASH_LIGHT_RANGE` :61 (3.0);
+  sound `TICK_VOLUME_DB` :63 (-8), `STING_VOLUME_DB` :64 (0). Measured, not knobs: `HEAD_FORWARD/UP/SIDE` :31-33.
+- `src/actors/effects/unblockable_presentation.gd` -- `RED_LAND_HEIGHT_MAX` :26 (2.2 m); `RED_HITSTOP_SECONDS` :31
+  (0.1), `GREEN_HITSTOP_SECONDS` :32 (0.08), `HITSTOP_CATCHUP_SECONDS` :35 (0.12, OQ4), `VICTIM_HOLD_MAX_SECONDS` :39
+  (0.6), `KNOCKDOWN_BLEND_SECONDS` :41 (0.15); `DAGGER_FLIGHT_SECONDS` :46 (0.22); impact `IMPACT_SPARK_AMOUNT_RED` :50
+  (48), `IMPACT_SPARK_AMOUNT_GREEN` :51 (28), `IMPACT_SPARK_SIZE` :52 (0.16), `IMPACT_SPARK_SPEED` :53 (5.5),
+  `IMPACT_SPARK_LIFETIME` :54 (0.35), `IMPACT_FLASH_SIZE_RED` :55 (1.4), `IMPACT_FLASH_SIZE_GREEN` :56 (0.7),
+  `IMPACT_FLASH_SECONDS` :57 (0.15), `IMPACT_LIGHT_ENERGY` :58 (8), `IMPACT_LIGHT_RANGE` :59 (4); sound
+  `RED_THUD_VOLUME_DB` :63 (2), `GREEN_HIT_VOLUME_DB` :64 (0); shake `SHAKE_SECONDS` :69 (0.2), `SHAKE_AMPLITUDE` :70
+  (0.07 m), `SHAKE_FREQUENCY_HZ` :71 (27). Structural: `HERO_FEET_Y` :23 (-1.0, the Mesh grounding offset).
+- `src/actors/hero/immunity_shimmer.gd` -- `SHIMMER_COLOR` :18, `SHIMMER_ALPHA` :20 (0.7), `SHIMMER_AMOUNT` :23 (28),
+  `SHIMMER_SIZE` :24 (0.1), `SHIMMER_LIFETIME` :25 (0.6), `SHIMMER_EXTENTS` :26, `SHIMMER_RISE_SPEED` :28 (0.25).
+- `src/actors/props/dagger_actor.gd` -- `TRAIL_COLOR` :39, `TRAIL_AMOUNT` :40 (40), `TRAIL_SIZE` :41 (0.22),
+  `TRAIL_LIFETIME` :42 (0.25); the dagger's size stays `MODEL_SCALE` :33 (2.5).
+- `src/actors/hero/animation_controller.gd` -- the RED cut and lift at :404-407 (`counter_jump` 0..0.7667, lift
+  Vector4(0, 0, 0.7333, 1); `counter_backflip` 0.68..1.5, lift Vector4(0.70, 1, 1.3333, 0)).
+- `src/actors/hero/hero.gd` -- `HEAD_TOP_FALLBACK_Y` :76 (0.55, used only by a rig without `HeadTop_End`).
+- `data/balance/balance_config.tres` -- `counter_travel_forward_fraction_red` :161 (0.49; moves with the jump cut).
+
+**Placeholder sounds (byte copies; swap by hand):** `assets/audio/effects/sfx_eye_tick.wav` <- `assets/audio/sting_attack.wav`
+(each blink); `sfx_eye_flash.wav` <- `effects/sfx_counter.wav` (the commit flash); `sfx_counter_kick_thud.wav` <-
+`effects/sfx_boom.wav` (RED head contact); `sfx_dagger_hit.wav` <- `effects/sfx_rock_hit.wav` (GREEN dagger hit).
+Nothing was taken from `C:\dev\_sonniss\part1` (its candidates are 4-40 MB multi-hit takes that would need trimming).
+
+**Deviations and notes.**
+
+1. Task 1 took THREE headless launches, not one: launch 2 switched the head filter to a mesh-name one after misreading
+   launch 1's per-mesh counts; that filter was wrong (the FBX names are scrambled) and shipped in the feat commit.
+   Launch 3 verified the corrected bind filter, committed separately as `fix(7-10)`. The eye numbers come from launches
+   1 and 3, which agree.
+2. One tool call ran TWO engine launches back to back (the two new test files, re-run after a post-suite comment edit
+   and naming the fallback constant) -- against the one-launch-per-call rule. Both PASS.
+3. The commit chain gained a code-side commit (`fix(7-10)`, the tool only) beyond the planned promote -> assets ->
+   feat -> docs.
+4. Presentation now moves contact geometry: the RED lift and the hitstop's mesh hold carry the bone-tracked hit shapes
+   with the picture (M6 accepted this for the hitstop; the lift extends it to the arc), and the scaled velocity moves
+   the defender's root. All of it is actor-side; replay reads recorded facts, so determinism is unaffected. Flagged
+   for smoke and review.
+5. The victim hold is armed on any counter press against a CHARGING hero; a non-counter stun inside that span (rare) is
+   held too, bounded by `VICTIM_HOLD_MAX_SECONDS`.
+6. The skill's transient board writes (in-progress, then review) were not made; the on_complete end state (board
+   `ready-for-dev`, story file `review`) was written directly.
+
 ### File List
+
+- `src/actors/hero/unblockable_eyes.gd` (+ `.uid`) -- new
+- `src/actors/hero/immunity_shimmer.gd` (+ `.uid`) -- new
+- `src/actors/effects/unblockable_presentation.gd` (+ `.uid`) -- new
+- `src/actors/hero/hero.gd` -- modified
+- `src/actors/hero/animation_controller.gd` -- modified
+- `src/actors/props/dagger_actor.gd` -- modified
+- `src/main/match_runner.gd` -- modified
+- `data/balance/balance_config.tres` -- modified (`counter_travel_forward_fraction_red`)
+- `tools/measure_head_visor.gd` (+ `.uid`) -- new
+- `test/integration/test_unblockable_presentation_knobs.gd` (+ `.uid`) -- new
+- `test/integration/test_unblockable_presentation_live.gd` (+ `.uid`) -- new
+- `assets/audio/effects/sfx_eye_tick.wav`, `sfx_eye_flash.wav`, `sfx_counter_kick_thud.wav`, `sfx_dagger_hit.wav`
+  (+ `.import` each) -- new
+- `docs/implementation-artifacts/7-10-unblockable-presentation.md`, `docs/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-10-08 | promoted 2026-10-08 after operator review; Open Questions 1-4 resolved in the dev prompt, recorded in the Dev Agent Record |
+| 2026-10-08 | dev pass: eyes, RED/GREEN contact moment, victim hold, immunity shimmer, RED re-cut (1.587x); Status -> review |
