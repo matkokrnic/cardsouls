@@ -190,13 +190,20 @@ var _counter_daggers: Array = [null, null]
 ## reason -- presentation bookkeeping that never reaches `to_snapshot()` or the recorder, reproduced by a replay
 ## because every input is a state fact or an actor position read after `advance()`. Indexed by the COUNTERING
 ## slot unless named otherwise:
-##   `_red_travel_scale` / `_red_land_height` -- RED's landing factor and arc height, LOCKED AT THE PRESS from
-##       the actor-side gap and the attacker's head (Open Question 1 ruling);
+##   `_counter_landed` -- the state said this counter LANDED (`deflect_landed` carrying a colour). Review fix
+##       (operator ruling): the arc, the body scale, the victim hold and the contact moment are for a landed
+##       counter ONLY; until then -- and for good on a failed one -- the counter is 6-6b's (full travel, no arc);
+##   `_red_travel_scale` / `_red_back_scale` / `_red_land_height` -- RED's forward- and back-leg body factors
+##       and arc height, LOCKED AT THE LANDING from the actor-side gap left and the attacker's head (OQ1);
+##   `_red_lift_floor` -- the arc fraction at the first landed tick, so the arc rises from the ground (-1 unset);
 ##   `_red_contact_tick` -- the window-elapsed tick of RED's head contact (`red_contact_elapsed_ticks`);
 ##   `_counter_impacted` -- this counter's impact has been shown;
 ##   `_victim_hold_ticks` -- indexed by the VICTIM's slot: ticks its pose has been held;
 ##   `_shake_elapsed` / `_shake_total` -- indexed by the CAMERA's slot: the running shake, -1 when none.
+var _counter_landed: Array[bool] = [false, false]
 var _red_travel_scale: Array[float] = [1.0, 1.0]
+var _red_back_scale: Array[float] = [1.0, 1.0]
+var _red_lift_floor: Array[float] = [-1.0, -1.0]
 var _red_land_height: Array[float] = [0.0, 0.0]
 var _red_contact_tick: Array[int] = [-1, -1]
 var _counter_impacted: Array[bool] = [false, false]
@@ -815,6 +822,9 @@ func _ready() -> void:
 					_stun_flavor_for_slot(slot), _stun_seconds_for_slot(slot),
 					_match_state.hit_landed_was_blocked()))
 	_setup_effect_presenter()
+	# Story 7-10 review fix (T1): the counter's contact moment waits for the state's LANDED fact -- a consumer of the
+	# existing `deflect_landed` seam (a seam CALL, the `_setup_effect_presenter` precedent; the family stays at ten).
+	connect_deflect_landed(_on_counter_deflect_landed)
 	# Story 7-6 (P20/P21): the debug layer starts hidden.
 	set_debug_layer_visible(false)
 
@@ -1469,36 +1479,69 @@ func _advance_counter_dagger(slot: int) -> void:
 		_free_counter_dagger(slot)
 
 
-## Story 7-10 (S2/S3): THE COUNTER'S PRESS, for the contact moment. Arms the victim hold on the other hero when it
-## is CHARGING (the only hero a counter can land on), and for RED locks the landing factor and arc height from
-## the actor-side gap and the attacker's head at this tick (Open Question 1 ruling). Plain reads of actor
-## positions and authored config (CONSTRAINT C, inline), never a state write.
+## Story 7-10 (S2/S3): THE COUNTER'S PRESS, for the contact moment. Resets this slot's bookkeeping and, for RED,
+## derives the head-contact tick from the window's own duration -- and NOTHING ELSE. Review fix (T1, operator
+## ruling): the press does not know whether the counter will land (a press too early, or the wrong colour, is
+## judged and REFUSED on a later tick), so the arc, the body scale and the victim hold wait for the state's own
+## landed fact (`_on_counter_deflect_landed`); a counter that never lands stays 6-6b's counter throughout.
 func _begin_counter_contact(slot: int, color: int, duration_ticks: int) -> void:
-	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
-	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
-	var other_player: PlayerState = _match_state.p2 if slot == 0 else _match_state.p1
+	_counter_landed[slot] = false
 	_counter_impacted[slot] = false
 	_red_travel_scale[slot] = 1.0
+	_red_back_scale[slot] = 1.0
+	_red_lift_floor[slot] = -1.0
 	_red_land_height[slot] = 0.0
 	_red_contact_tick[slot] = -1
-	if not is_instance_valid(hero) or not is_instance_valid(other):
-		return
-	if other_player.hero.action_state == HeroState.ActionState.CHARGING:
-		other.animation_controller.arm_victim_hold()
-		_victim_hold_ticks[1 - slot] = 0
 	if color != Enums.CardColor.RED or _match_state.balance == null:
 		return
-	var gap := Vector2(other.global_position.x - hero.global_position.x,
-			other.global_position.z - hero.global_position.z).length()
-	_red_travel_scale[slot] = UnblockablePresentation.red_travel_scale(gap,
-			_match_state.balance.counter_travel_distance_for(Enums.CardColor.RED))
-	_red_land_height[slot] = UnblockablePresentation.red_land_height(other.head_top_world().y,
-			hero.global_position.y)
 	_red_contact_tick[slot] = UnblockablePresentation.red_contact_elapsed_ticks(duration_ticks,
 			_match_state.balance.counter_travel_forward_fraction_red)
 
 
+## Story 7-10 review fix (T1/T2): THE COUNTER LANDED -- the state's own fact, `deflect_landed` carrying the answered
+## colour (`MatchState._resolve_color_counter`; the melee/unit parry carries `NO_TELEGRAPH_COLOR` and is ignored).
+## A consumer of the EXISTING seam, the `_on_effect_deflect_landed` precedent: no new `connect_*`.
+##
+## SAME-TICK ORDER: the landing queues `deflect_landed` BEFORE the attacker's `CHARGING -> STUNNED` write, and both
+## drain in that order on the fire tick, so the victim hold armed here catches exactly this counter's knockdown --
+## never a stun from another source (a bolt, a minion, a totem) during a failed counter's span (T2).
+##
+## RED'S BODY AND ARC are locked here, after the fire tick's own drive: the defender has already made `done` of
+## the forward leg at 6-6b's full travel, so the factor for what is LEFT of the leg lands the body on the
+## attacker (rooted from this tick, STUNNED), and the back leg returns the whole forward distance -- net zero.
+func _on_counter_deflect_landed(attacker_slot: int, defender_slot: int, defense_color: int) -> void:
+	if defense_color == PlayerState.NO_TELEGRAPH_COLOR:
+		return
+	if (attacker_slot != 0 and attacker_slot != 1) or defender_slot != 1 - attacker_slot:
+		return
+	var defender: PlayerState = _match_state.p1 if defender_slot == 0 else _match_state.p2
+	var hero: HeroActor = _p1_hero if defender_slot == 0 else _p2_hero
+	var other: HeroActor = _p1_hero if attacker_slot == 0 else _p2_hero
+	if not defender.defense_window.is_running or not is_instance_valid(hero) or not is_instance_valid(other):
+		return
+	_counter_landed[defender_slot] = true
+	other.animation_controller.arm_victim_hold()
+	_victim_hold_ticks[attacker_slot] = 0
+	if defense_color != Enums.CardColor.RED or _match_state.balance == null or _red_contact_tick[defender_slot] < 1:
+		return
+	var distance := _match_state.balance.counter_travel_distance_for(Enums.CardColor.RED)
+	if distance <= 0.0:
+		return
+	var forward := _red_contact_tick[defender_slot]
+	var elapsed := defender.defense_window.duration_ticks() - defender.defense_window.remaining_ticks()
+	var done := distance * float(mini(elapsed, forward)) / float(forward)
+	var left := distance - done
+	var gap := Vector2(other.global_position.x - hero.global_position.x,
+			other.global_position.z - hero.global_position.z).length()
+	_red_travel_scale[defender_slot] = 1.0 if left <= 0.0 \
+			else UnblockablePresentation.red_travel_scale(gap, left)
+	_red_back_scale[defender_slot] = (done + left * _red_travel_scale[defender_slot]) / distance
+	_red_land_height[defender_slot] = UnblockablePresentation.red_land_height(other.head_top_world().y,
+			hero.global_position.y)
+
+
 ## Story 7-10: one running tick of a counter's contact moment. `elapsed` is the window's elapsed tick count.
+## Review fix (T1): a counter the state has not (yet) landed gets none of it -- 6-6b's travel, no arc, no impact.
 func _drive_counter_contact(slot: int, color: int, elapsed: int) -> void:
 	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
 	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
@@ -1506,12 +1549,26 @@ func _drive_counter_contact(slot: int, color: int, elapsed: int) -> void:
 	if not is_instance_valid(hero) or not is_instance_valid(other):
 		return
 	if color == Enums.CardColor.RED:
-		# The factor applies to the counter's own travel only: a hero the counter has lost the body to (a stun, a
-		# swing) moves at its own velocity, unscaled.
-		hero.counter_travel_scale = _red_travel_scale[slot] \
-				if player.hero.action_state == HeroState.ActionState.IDLE else 1.0
-		hero.counter_lift = _red_land_height[slot] * hero.animation_controller.counter_lift_fraction()
-		if elapsed == _red_contact_tick[slot] and not _counter_impacted[slot] \
+		if not _counter_landed[slot]:
+			hero.counter_travel_scale = 1.0
+			hero.counter_lift = 0.0
+		else:
+			# The factor applies to the counter's own travel only: a hero the counter has lost the body to (a stun,
+			# a swing) moves at its own velocity, unscaled. Forward vs back leg on the state's own boundary
+			# (`elapsed <= forward_ticks` is outbound).
+			var leg_scale := _red_travel_scale[slot] if elapsed <= _red_contact_tick[slot] else _red_back_scale[slot]
+			hero.counter_travel_scale = leg_scale \
+					if player.hero.action_state == HeroState.ActionState.IDLE else 1.0
+			# The arc rises FROM THE GROUND at the landing: what is left of the jump's rise is re-spread over 0..1,
+			# so a counter judged mid-jump does not pop the body up. From the head contact on, the plain fraction.
+			var fraction := hero.animation_controller.counter_lift_fraction()
+			if _red_lift_floor[slot] < 0.0:
+				_red_lift_floor[slot] = fraction
+			var floor_at := _red_lift_floor[slot]
+			if elapsed < _red_contact_tick[slot] and floor_at < 0.999:
+				fraction = clampf((fraction - floor_at) / (1.0 - floor_at), 0.0, 1.0)
+			hero.counter_lift = _red_land_height[slot] * fraction
+		if _counter_landed[slot] and elapsed == _red_contact_tick[slot] and not _counter_impacted[slot] \
 				and other.animation_controller.is_holding_victim():
 			_counter_impacted[slot] = true
 			hero.begin_hitstop(UnblockablePresentation.RED_HITSTOP_SECONDS)
@@ -1521,6 +1578,11 @@ func _drive_counter_contact(slot: int, color: int, elapsed: int) -> void:
 					UnblockablePresentation.RED_THUD_VOLUME_DB)
 			_start_shake(0)
 			_start_shake(1)
+	elif color == Enums.CardColor.GREEN and _counter_landed[slot] and not _counter_impacted[slot] \
+			and not is_instance_valid(_counter_daggers[slot]):
+		# Review fix: a press made up to the full lead before the commit lands AFTER the fast dagger has arrived;
+		# its impact is then shown on the first tick the state has landed it, at the attacker's trunk.
+		_green_dagger_impact(slot, other.trunk_world())
 	_drive_victim_hold(slot)
 
 
@@ -1554,7 +1616,10 @@ func _end_counter_contact(slot: int) -> void:
 					float(_victim_hold_ticks[1 - slot]) / TimingWindow.TICK_HZ)
 		else:
 			other.animation_controller.disarm_victim_hold()
+	_counter_landed[slot] = false
 	_red_travel_scale[slot] = 1.0
+	_red_back_scale[slot] = 1.0
+	_red_lift_floor[slot] = -1.0
 	_red_land_height[slot] = 0.0
 	_red_contact_tick[slot] = -1
 
@@ -2349,6 +2414,7 @@ func _relay_round_started() -> void:
 		if is_instance_valid(hero):
 			hero.clear_presentation()
 			hero.animation_controller.disarm_victim_hold()
+		_counter_landed[slot] = false
 		_counter_impacted[slot] = false
 		_victim_hold_ticks[slot] = 0
 		_shake_elapsed[slot] = -1

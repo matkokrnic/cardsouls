@@ -81,10 +81,10 @@ var eyes: UnblockableEyes
 var immunity_shimmer: ImmunityShimmer
 
 ## Story 7-10 (Open Question 1, operator ruling): THE DISTANCE-AWARE RED LANDING -- the factor `drive()` scales
-## the state's velocity by while a RED counter's travel runs, set by the runner every tick (1.0 otherwise). The
-## runner locks it at the press from the actor-side gap, and the same factor serves both legs so the net stays
-## zero. The state's velocity itself is untouched: this is what the BODY does with it, the `set_body_pass_through`
-## footing (`4-3/R2`: no position crosses into state).
+## the state's velocity by while a LANDED RED counter's travel runs, set by the runner every tick (1.0 otherwise,
+## and for a counter the state has not landed). The runner locks a forward- and a back-leg factor at the landing
+## from the actor-side gap, so the net stays zero. The state's velocity itself is untouched: this is what the
+## BODY does with it, the `set_body_pass_through` footing (`4-3/R2`: no position crosses into state).
 var counter_travel_scale := 1.0
 
 ## Story 7-10 (AC 9): how far the mesh is lifted, metres, this tick -- RED's landing arc, so the feet reach the

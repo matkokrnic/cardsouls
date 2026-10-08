@@ -36,6 +36,8 @@ const CHECK_DELAY := 3
 const BUDGET_FRAMES := 600
 const QUIT_DEFER_FRAMES := 30   ## `4-3b/R29`: never quit on the frame of the last read
 const COUNTER_GAP := 2.5
+## The most the RED counter clip ALONE raises the trunk-tracked hurtbox: M4's 0.64 m hips lift plus a margin.
+const CLIP_OWN_HURTBOX_RISE := 0.9
 
 var _frames := 0
 var _runner: Node
@@ -62,6 +64,19 @@ var _scale_checked := false
 var _rest_keys: Array = []
 var _dagger_trail := false
 var _dagger_arrival_frame := -1
+var _red_start := Vector3.ZERO
+var _red_max_reach := 0.0
+var _late_landed := false
+var _late_froze := false
+var _fail_start := Vector3.ZERO
+var _fail_rest_hurt_y := 0.0
+var _fail_max_lift := 0.0
+var _fail_max_hurt_rise := 0.0
+var _fail_max_reach := 0.0
+var _fail_scaled := false
+var _fail_held := false
+var _fail_froze := false
+var _fail_shook := false
 
 
 func _initialize() -> void:
@@ -122,6 +137,14 @@ func _arm_counter(color: int) -> void:
 func _knock_down_p1() -> void:
 	_state._landing_package_pending[1] = true
 	_state._apply_landing_packages()
+
+
+## A LANDED colour counter, in the order `MatchState._resolve_color_counter` queues it: `deflect_landed` carrying
+## the answered colour first, then the attacker's knockdown. Review fix (T1): the contact moment is keyed to that
+## fact, so a poke that skipped it would be a FAILED counter.
+func _land_counter(color: int) -> void:
+	_state._queue.push(_state.deflect_landed.emit.bind(0, 1, color))
+	_knock_down_p1()
 
 
 ## The snapshot's key set, top level and one level down -- what AC 16/AC 17 say presentation never moves.
@@ -245,6 +268,29 @@ func _physics_process(_delta: float) -> bool:
 			elif since == CHECK_DELAY * 5:
 				if _p1.eyes.phase != UnblockableEyes.Phase.OFF:
 					_fail("eyes: a cancel (leaving CHARGING) leaves them out")
+				# Review fix (T5): a one-tick chargeup commits at once, so the eyes are LIT for the recast below.
+				_state.p1.charge_color = Enums.CardColor.RED
+				_state.p1.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+				_state.p1.charge_window.start(1)
+				_state.p1.landing_window.start(100000)
+				_state.p1.hero.set_action_state(HeroState.ActionState.CHARGING)
+				_next("eyes_recast")
+		"eyes_recast":
+			if since == CHECK_DELAY:
+				if _p1.eyes.phase != UnblockableEyes.Phase.LIT:
+					_fail("eyes recast setup: a committed attack is LIT")
+				# A RECAST WITHOUT LEAVING CHARGING (a cast on the landing tick of a missed attack): a new colour and
+				# a fresh chargeup.
+				_state.p1.charge_color = Enums.CardColor.GREEN
+				_state.p1.charge_window.start(100000)
+				_state.p1.landing_window.start(100000)
+			elif since == CHECK_DELAY * 2:
+				if _p1.eyes.phase != UnblockableEyes.Phase.BLINK:
+					_fail("eyes: a recast while lit restarts the blink (T5)")
+				if _p1.eyes._color != _p1.telegraph_controller.charge_green_profile.color:
+					_fail("eyes: a recast while lit takes the new colour (T5)")
+				_end_cast()
+			elif since == CHECK_DELAY * 3:
 				_state.p2.hero.unblockable_immunity.start(90)
 				_next("shimmer")
 		"shimmer":
@@ -270,12 +316,13 @@ func _physics_process(_delta: float) -> bool:
 			elif since == CHECK_DELAY:
 				_poke_cast(Enums.CardColor.RED, true)
 			elif since == CHECK_DELAY * 2:
+				_red_start = _p2.global_position
 				_arm_counter(Enums.CardColor.RED)
 				_counter_start_frame = _frames
 				_next("red_knock")
 		"red_knock":
 			if since == 2:
-				_knock_down_p1()
+				_land_counter(Enums.CardColor.RED)
 				_next("red_watch")
 		"red_watch":
 			_watch_red()
@@ -297,10 +344,43 @@ func _physics_process(_delta: float) -> bool:
 			if dagger != null and is_instance_valid(dagger):
 				_dagger_trail = (dagger as Node3D).get_node_or_null("Trail") is GPUParticles3D
 			if since == 2:
-				_knock_down_p1()
+				_land_counter(Enums.CardColor.GREEN)
 				_next("green_watch")
 		"green_watch":
 			_watch_green()
+		"late_settle":
+			if _settled():
+				_next("late_setup")
+			elif since > BUDGET_FRAMES:
+				_fail_and_stop("late setup: the GREEN phase never settled")
+		"late_setup":
+			if since == CHECK_DELAY:
+				_poke_cast(Enums.CardColor.GREEN, true)
+			elif since == CHECK_DELAY * 2:
+				_arm_counter(Enums.CardColor.GREEN)
+				_late_landed = false
+				_late_froze = false
+				_knockdown_frame = -1
+				_next("late_watch")
+		"late_watch":
+			_watch_late_green()
+		"fail_settle":
+			if _settled():
+				_next("fail_setup")
+			elif since > BUDGET_FRAMES:
+				_fail_and_stop("fail setup: the late GREEN phase never settled")
+		"fail_setup":
+			if since == 1:
+				_p1.global_position = _p2.global_position + Vector3(COUNTER_GAP, 0.0, 0.0)
+			elif since == CHECK_DELAY:
+				_poke_cast(Enums.CardColor.RED, true)
+			elif since == CHECK_DELAY * 2:
+				_fail_start = _p2.global_position
+				_fail_rest_hurt_y = _p2.hurtbox_shape.global_position.y - _p2.global_position.y
+				_arm_counter(Enums.CardColor.RED)
+				_next("fail_watch")
+		"fail_watch":
+			_watch_failed_red()
 	return false
 
 
@@ -309,17 +389,18 @@ func _watch_red() -> void:
 	var window := _state.p2.defense_window
 	var elapsed := window.duration_ticks() - window.remaining_ticks()
 	var contact: int = _runner._red_contact_tick[1]
-	# OQ1: the body's velocity is the state's scaled by gap / travel, on a moving outbound tick.
-	if not _scale_checked and window.is_running and elapsed >= 2 and elapsed < contact \
+	# OQ1 (review fix T1/T4): once LANDED, the body's velocity is the state's scaled below 1 on a moving outbound
+	# tick; over the span the forward leg ends ON the attacker (the reach is the press gap, not 6-6b's 4.0) and the
+	# back leg returns it to where it pressed (net zero under the scale).
+	if window.is_running:
+		_red_max_reach = maxf(_red_max_reach, Vector2(_p2.global_position.x - _red_start.x,
+				_p2.global_position.z - _red_start.z).length())
+	if not _scale_checked and window.is_running and elapsed >= 4 and elapsed < contact \
 			and _state.p2.hero.velocity.length() > 0.1:
 		_scale_checked = true
-		var want := UnblockablePresentation.red_travel_scale(COUNTER_GAP,
-				_state.balance.counter_travel_distance_for(Enums.CardColor.RED))
 		var got := _p2.velocity.length() / _state.p2.hero.velocity.length()
-		if absf(got - want) > 0.05:
-			_fail("red: the body travels at the state's velocity x gap/travel (got x%.3f, want x%.3f)" % [got, want])
-		if want >= 1.0:
-			_fail("red setup: the press gap must be inside the travel for the scale to show")
+		if got >= 0.99 or got <= 0.0:
+			_fail("red: a landed counter's body travels at the state's velocity scaled into (0, 1) (got x%.3f)" % got)
 	_saw_lift = maxf(_saw_lift, _p2.counter_lift)
 	if _p1.animation_controller.animation_player.speed_scale == 0.0 \
 			and _p2.animation_controller.animation_player.speed_scale == 0.0:
@@ -347,6 +428,12 @@ func _watch_red() -> void:
 	if not window.is_running and since > CHECK_DELAY:
 		if not _scale_checked:
 			_fail("red: no moving outbound tick was observed")
+		var back := Vector2(_p2.global_position.x - _red_start.x, _p2.global_position.z - _red_start.z).length()
+		print("  landed RED: max reach %.3f m (gap %.3f), end %.3f m from the press" % [_red_max_reach, COUNTER_GAP, back])
+		if absf(_red_max_reach - COUNTER_GAP) > 0.25:
+			_fail("red: the forward leg ends on the attacker (reach %.3f m, gap %.3f m)" % [_red_max_reach, COUNTER_GAP])
+		if back > 0.1:
+			_fail("red: the back leg returns the body to the press (net %.3f m)" % back)
 		if _saw_lift < 0.5:
 			_fail("red: the mesh lifts toward the attacker's head (max %.3f m)" % _saw_lift)
 		if _saw_lift > UnblockablePresentation.RED_LAND_HEIGHT_MAX + 0.001:
@@ -390,4 +477,78 @@ func _watch_green() -> void:
 					% [bound, _dagger_arrival_frame - _counter_start_frame])
 		if _knockdown_frame < 0:
 			_fail("green: the attacker's knockdown plays after the impact (AC 14)")
+		_next("late_settle")
+
+
+## Review fix (T1): a GREEN counter the state lands only AFTER the fast dagger has already arrived (a press up to
+## the full lead before the commit) still shows its impact -- a hitstop on the attacker -- and then the knockdown.
+func _watch_late_green() -> void:
+	var since := _frames - _phase_frame
+	var dagger: Node = _runner._counter_daggers[1]
+	if not _late_landed and since >= 2 and (dagger == null or not is_instance_valid(dagger)):
+		_late_landed = true
+		_land_counter(Enums.CardColor.GREEN)
+	if _late_landed and _p1.animation_controller.animation_player.speed_scale == 0.0:
+		_late_froze = true
+	if _clip(_p1) == &"knockdown" and _knockdown_frame < 0:
+		_knockdown_frame = _frames
+	if since > 90:
+		if not _late_landed:
+			_fail("late green setup: the dagger never arrived")
+		if not _late_froze:
+			_fail("late green: a counter landed after the dagger arrived still shows the impact's hitstop")
+		if _knockdown_frame < 0:
+			_fail("late green: ...and the attacker's knockdown plays")
+		_next("fail_settle")
+
+
+## Review fix (T1/T2): A FAILED RED COUNTER -- pressed against a charging attacker but never landed (no
+## `deflect_landed`, the 7-9 "too early: card spent, eat the hit" case) -- plays 6-6b's counter and nothing of
+## the contact moment: no landing arc (so the bone-tracked HURTBOX is not lifted out of the unblockable's way),
+## the full authored travel (no body scale), no hitstop, no shake. And a stun from ANOTHER source during that span
+## (here a bolt-like stun at elapsed 5) is not held as a counter victim and plays at once (T2).
+func _watch_failed_red() -> void:
+	var window := _state.p2.defense_window
+	var elapsed := window.duration_ticks() - window.remaining_ticks()
+	if window.is_running and elapsed == 5 and _state.p1.hero.action_state == HeroState.ActionState.CHARGING:
+		_state.p1.charge_window.start(0)
+		_state.p1.landing_window.start(0)
+		_state.p1.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+		_state.p1.hero.start_stun(30, false)
+		_state.p1.hero.set_action_state(HeroState.ActionState.STUNNED)
+	_fail_max_lift = maxf(_fail_max_lift, _p2.counter_lift)
+	_fail_max_hurt_rise = maxf(_fail_max_hurt_rise,
+			_p2.hurtbox_shape.global_position.y - _p2.global_position.y - _fail_rest_hurt_y)
+	var reach := Vector2(_p2.global_position.x - _fail_start.x, _p2.global_position.z - _fail_start.z).length()
+	_fail_max_reach = maxf(_fail_max_reach, reach)
+	if not is_equal_approx(_p2.counter_travel_scale, 1.0):
+		_fail_scaled = true
+	if _p1.animation_controller.is_holding_victim():
+		_fail_held = true
+	if _p1.animation_controller.animation_player.speed_scale == 0.0 \
+			or _p2.animation_controller.animation_player.speed_scale == 0.0:
+		_fail_froze = true
+	if _runner._shake_elapsed[0] >= 0 or _runner._shake_elapsed[1] >= 0:
+		_fail_shook = true
+	if not window.is_running and _frames - _phase_frame > CHECK_DELAY:
+		print("  failed RED: max lift %.3f m, hurtbox rise %.3f m, max reach %.3f m"
+				% [_fail_max_lift, _fail_max_hurt_rise, _fail_max_reach])
+		if _fail_max_lift > 0.0001:
+			_fail("failed red: no landing arc on a counter that did not land (lift %.3f m)" % _fail_max_lift)
+		# The clip's OWN hips excursion (M4: counter_jump lifts the Hips 0.64 m) carries the trunk-tracked hurtbox in
+		# 6-6b too and is allowed; anything above it is a presentation lift.
+		if _fail_max_hurt_rise > CLIP_OWN_HURTBOX_RISE:
+			_fail("failed red: the hurtbox is not lifted out of the unblockable's way (rose %.3f m)"
+					% _fail_max_hurt_rise)
+		if _fail_scaled:
+			_fail("failed red: no body travel scale on a counter that did not land")
+		var travel := _state.balance.counter_travel_distance_for(Enums.CardColor.RED)
+		if absf(_fail_max_reach - travel) > 0.25:
+			_fail("failed red: the body makes 6-6b's full authored travel (reached %.3f m, travel %.3f m)"
+					% [_fail_max_reach, travel])
+		if _fail_held:
+			_fail("failed red: a stun from another source is not held as a counter victim (T2)")
+		if _fail_froze or _fail_shook:
+			_fail("failed red: no hitstop and no shake without a landed counter (froze %s, shook %s)"
+					% [_fail_froze, _fail_shook])
 		_done_frame = _frames

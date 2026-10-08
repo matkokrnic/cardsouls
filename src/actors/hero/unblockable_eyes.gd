@@ -80,6 +80,7 @@ var flash_count := 0
 var blink_count := 0
 var _suppressed := false
 var _color := Color.WHITE
+var _color_id := -1
 var _blink_clock := 0.0
 var _flash_ticks_left := 0
 var _cores: Array[MeshInstance3D] = []
@@ -141,7 +142,11 @@ func drive(lit: bool, color: int, chargeup_running: bool, progress: float) -> Ev
 		_go_dark()
 		return Event.OUT
 	var event := Event.NONE
-	if phase == Phase.OFF:
+	# Review fix (T5): a RECAST without leaving CHARGING -- a fresh chargeup running while already LIT (one cast's
+	# chargeup only ever runs before its commit), or a different colour -- lights them again from the top.
+	if phase == Phase.OFF or color != _color_id or (phase == Phase.LIT and chargeup_running):
+		_color_id = color
+		_flash_ticks_left = 0
 		_color = colors.get(color, Color.WHITE)
 		_blink_clock = 0.0
 		phase = Phase.BLINK if chargeup_running else Phase.LIT
@@ -182,6 +187,7 @@ func clear() -> void:
 
 func _go_dark() -> void:
 	phase = Phase.OFF
+	_color_id = -1
 	_flash_ticks_left = 0
 	_blink_clock = 0.0
 	_show(0.0, 1.0, false)

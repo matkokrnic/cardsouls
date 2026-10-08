@@ -15,9 +15,11 @@ extends RefCounted
 ## shake are advanced from the runner's one tick loop (F1).
 
 ## ------------------------------------------------------------------------------------------------- RED landing
-## Open Question 1 (operator ruling): the DEFENDER'S BODY lands on the attacker. The applied velocity of a RED
-## counter is scaled by `red_travel_scale` (gap at the press over the authored RED travel), both legs by the same
-## factor so the net stays zero. A press farther than the travel lands short (smoke watch, not fixed here).
+## Open Question 1 (operator ruling): the DEFENDER'S BODY lands on the attacker. The applied velocity of a LANDED
+## RED counter is scaled from the landing on (review fix T1: never before, and never for a counter that did not
+## land): the rest of the forward leg by `red_travel_scale` (the gap left over the travel left), the back leg by
+## the whole forward distance over the authored travel, so the net stays zero. A press farther than the travel
+## lands short (smoke watch, not fixed here).
 
 ## The hero root is the body centre (`hero.tscn` Mesh grounding offset): the feet are this far below it.
 const HERO_FEET_Y := -1.0
