@@ -12,11 +12,16 @@ extends SceneTree
 ##   * HEAD-BONE space -- `mixamorig_Head`'s own frame, which is the frame a `BoneAttachment3D` on that
 ##     bone gives its children. The eye quads' local offsets are read straight off this.
 ##
-## THE VISOR is the front surface of the head set (the helmet plus body vertices near the head joint, see
-## `_initialize`): for each height band in head space, the
-## largest extent along the head's FORWARD axis (the head-space axis that maps to model +z). A point placed
-## a margin beyond that surface is in front of every helmet vertex at that height, so the depth test can
-## never hide it from a camera in front of the hero -- the opponent's view.
+## THE VISOR is the front surface of the HEAD SET -- every skinned vertex whose dominant bind is `mixamorig_Head` or
+## `mixamorig_HeadTop_End`: for each height band in head space, the largest extent along the head's FORWARD axis
+## (the head-space axis that maps to model +z). A point placed a margin beyond that surface is in front of every
+## head vertex at that height, so the depth test can never hide it from a camera in front of the hero -- the
+## opponent's view.
+##
+## THE FBX'S MESH NAMES DO NOT MATCH THEIR GEOMETRY (measured, 7-10 dev pass): the head-dominant vertices -- the
+## helmet -- live in the meshes named `..._Sword` (1800) and `..._Shield` (932), while the 85-vertex mesh named
+## `..._Helmet` is bound to `mixamorig_Shield_joint`. The head set is therefore chosen by BIND, never by mesh name;
+## the per-mesh counts and the `..._Helmet` mesh's binds are printed so the mismatch stays on record.
 ##
 ## Invoke headlessly:
 ##   godot --headless --path . --script res://tools/measure_head_visor.gd
@@ -25,8 +30,7 @@ const MODEL_PATH := "res://assets/characters/paladin/paladin.fbx"
 const LIBRARY_PATH := "res://assets/characters/paladin/paladin_anims.res"
 const HEAD := "mixamorig_Head"
 const HEAD_TOP := "mixamorig_HeadTop_End"
-## A body vertex counts as HEAD when it is within this many metres of the head joint (and not below it).
-const HEAD_RADIUS := 0.28
+const HEAD_BONES: Array[String] = ["mixamorig_Head", "mixamorig_HeadTop_End"]
 const POSE_CLIPS: Array[StringName] = [&"idle", &"swipe", &"thrust", &"jump_attack"]
 const POSE_PHASES := 8
 const COUNTER_CLIPS: Array[StringName] = [&"counter_jump", &"counter_backflip"]
@@ -135,31 +139,25 @@ func _initialize() -> void:
 	var up := (model_to_head.basis * Vector3(0, 1, 0)).normalized()
 	var side := up.cross(fwd).normalized()
 	print("head-space forward %s up %s side %s" % [fwd, up, side])
-	# THE HEAD SET, chosen by GEOMETRY and not by the dominant bind (a first launch of this tool tagged
-	# by the dominant bone's name and got shield and sword vertices, never the helmet -- the binds do not
-	# name bones the way that filter assumed): every vertex of the `Helmet` mesh, plus every vertex of any
-	# other mesh that sits within HEAD_RADIUS of the head joint and above it. The dominant-bone names of
-	# the helmet's vertices are printed so the bind layout is on record.
+	# THE HEAD SET, chosen by the dominant BIND (see the header: the mesh names do not describe the geometry).
 	var lo := INF
 	var hi := -INF
 	var head_pts: Array[Vector3] = []
 	var per_mesh := {}
-	var helmet_bones := {}
+	var helmet_named_bones := {}
 	for vv in verts:
-		var p_skel := _skin(vv, pose)
-		var p_head: Vector3 = head_inv * p_skel
 		var mesh_name: String = vv[6]
-		var is_helmet := mesh_name.contains("Helmet")
-		if is_helmet:
-			helmet_bones[vv[3]] = int(helmet_bones.get(vv[3], 0)) + 1
-		elif p_head.length() > HEAD_RADIUS or p_head.dot(up) < -0.05:
+		if mesh_name.contains("Helmet"):
+			helmet_named_bones[vv[3]] = int(helmet_named_bones.get(vv[3], 0)) + 1
+		if not (vv[3] in HEAD_BONES):
 			continue
+		var p_head: Vector3 = head_inv * _skin(vv, pose)
 		head_pts.append(p_head)
 		var u := p_head.dot(up)
 		lo = minf(lo, u)
 		hi = maxf(hi, u)
 		per_mesh[mesh_name] = int(per_mesh.get(mesh_name, 0)) + 1
-	print("helmet dominant bones %s" % helmet_bones)
+	print("mesh named Helmet: dominant bones %s" % helmet_named_bones)
 	print("head-set vertices %d by mesh %s; up-range [%.4f, %.4f]" % [head_pts.size(), per_mesh, lo, hi])
 	for band in BANDS:
 		var b_lo := lo + (hi - lo) * float(band) / BANDS
