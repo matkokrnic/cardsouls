@@ -142,7 +142,7 @@ development_status:
   7-1-effect-presentation: done  # Tier B
   7-8-unblockable-honest-contact: done  # Tier A
   7-9-unblockable-tempo: done  # Tier A
-  7-10-unblockable-presentation: backlog  # Tier B
+  7-10-unblockable-presentation: ready-for-dev  # Tier B
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
   7-4-pitch-speeds: backlog  # Tier A
@@ -155,7 +155,7 @@ story_notes:
   7-1-effect-presentation: "done 2026-10-04, Tier B close-out complete (review fixes + polish round after live smoke, decision-log session 7-1 close-out, 7-1/R10-R19)."
   7-8-unblockable-honest-contact: "done 2026-10-08; close-out 7-8/R17-R20."
   7-9-unblockable-tempo: "done 2026-10-08; close-out 7-9/R19-R23 (review PASS WITH FIXES, smoke 1-13 PASS, golden 9d5d4fad, FORMAT_VERSION 21)."
-  7-10-unblockable-presentation: "backlog -- eye-blink telegraph, counter presentation polish; after 7-9 (7-8/R20)."
+  7-10-unblockable-presentation: "ready-for-dev 2026-10-08 -- promoted after operator review; OQ1-4 ruled in the dev prompt (OQ1 actor-side body rescale, Tier B)."
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
   7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; the +1 mana for a defended unblockable moved to 7-9 (7-8/R20)."
