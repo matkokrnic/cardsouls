@@ -4,7 +4,7 @@ baseline_commit: 0a04558eca15c4e39e473cfb82b5e80bdb562c7a
 
 # Story 7.9: Unblockable tempo
 
-Status: review
+Status: done
 
 Tier **A** (touches `src/state/`: the cast seats, the counter judgement, the contact seat, the facing/launch movement, a new
 hashed window). Authored 2026-10-08 against HEAD == origin/main == `0a04558`, tree clean, no godot process (verified this

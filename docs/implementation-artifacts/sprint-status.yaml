@@ -141,7 +141,7 @@ development_status:
   7-T1-tooling-debt: done  # Tier B
   7-1-effect-presentation: done  # Tier B
   7-8-unblockable-honest-contact: done  # Tier A
-  7-9-unblockable-tempo: ready-for-dev  # Tier A
+  7-9-unblockable-tempo: done  # Tier A
   7-10-unblockable-presentation: backlog  # Tier B
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
@@ -154,14 +154,14 @@ story_notes:
   7-T1-tooling-debt: "closed out 2026-10-02 (decision-log session 7-T1 close-out, 7-T1/R1..R6); AC 5-7 close UNMET at the pre-named cut point, flake carried forward in deferred-work.md."
   7-1-effect-presentation: "done 2026-10-04, Tier B close-out complete (review fixes + polish round after live smoke, decision-log session 7-1 close-out, 7-1/R10-R19)."
   7-8-unblockable-honest-contact: "done 2026-10-08; close-out 7-8/R17-R20."
-  7-9-unblockable-tempo: "ready-for-dev 2026-10-08 -- readiness gate NOT READY (1 blocker / 6 major / 9 minor, all docs-only), fixed and promoted; rulings 7-9/R1..R18 (decision-log session 7-9 readiness gate + fixes)."
+  7-9-unblockable-tempo: "done 2026-10-08; close-out 7-9/R19-R23 (review PASS WITH FIXES, smoke 1-13 PASS, golden 9d5d4fad, FORMAT_VERSION 21)."
   7-10-unblockable-presentation: "backlog -- eye-blink telegraph, counter presentation polish; after 7-9 (7-8/R20)."
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
   7-4-pitch-speeds: "backlog -- per-card instant/sorcery field; instant pays from banked orbs, sorcery needs orbs earned between pitch and fizzle; the +1 mana for a defended unblockable moved to 7-9 (7-8/R20)."
   7-5-deck-2: "backlog -- design pending, needs its own scope talk before promotion (E6-C/R11)."
   7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
-  7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11)."
+  7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11); re-measure the AC 4b live steering test when GREEN numbers change (7-9/R22)."
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
   6-1-hold-to-charge: "done 2026-09-09, Tier A close-out complete (hold-through-chargeup + paid feint per 6-1/R1-R15, golden and 30-key set unmoved, suite 735/0/5430 + 56 integration, smoke 6/7 PASS (item 5 machine-pinned, named finding for 6-1b), decision-log session 6-1 close-out)."
   6-1b-chargeup-presentation: "done 2026-09-09, Tier B close-out complete (progress-driven playhead per-clip, strike-frame impact criterion, per-clip hold knobs per 6-1b/R1-R9; src/state/ byte-identical, golden and 30-key set unmoved; suite 737/0/5553 + 57 integration; round-2 smoke items 1-7 PASS / 8 fps stable; decision-log session 6-1b close-out)."
