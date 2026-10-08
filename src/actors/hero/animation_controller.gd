@@ -379,10 +379,32 @@ const _CHARGE_STRIKE_FRAME_SECONDS := {
 ##         clip) and then retracts at the clip's own peak speed -- that peak IS the RELEASE, and it
 ##         confirms the operator's ~36 % starting point by measurement. The cut runs from there to
 ##         0.7333 of the clip (1.3444 s), the operator's ~74 %.
+##
+## STORY 7-10 (AC 8, Open Question 2 ruling) RE-CUTS RED, from the clip tables `tools/measure_head_visor.gd` prints
+## (hips height and lowest foot per 1/30 s). `counter_jump` has NO crouch to trim -- the feet leave the ground by
+## t=0.067 -- and LANDS at t~0.767 (feet 0.001), its last 0.067 s a settle. `counter_backflip` is a 0.67 s crouch
+## (hips 0.88 -> 0.60 -> 0.93), take-off at ~0.70, airborne to the landing at t=1.333, then a 0.57 s recovery.
+## The old pair (0..0.8333 + 0..1.90 = 2.7333 s) played at 2.733x. The new cut:
+##   jump      0.0000 -> 0.7667  the whole jump to the landing ON THE HEAD (settle trimmed);
+##   backflip  0.6800 -> 1.5000  rising from the crouch to just after the landing (crouch and recovery trimmed).
+## Total 1.5867 s over RED's 1.0 s busy span = 1.587x. THE JOIN: at one shared rate the jump ends at
+## 0.7667 / 1.587 = 0.483 s, and the state's forward leg ends at elapsed tick round(0.49 * 59) = 29 = 0.483 s,
+## which is why `counter_travel_forward_fraction_red` moved 0.305 -> 0.49 in the `.tres` with this cut (its only
+## guard is the (0, 1) bound, so no test or state edit). The backflip's landing then falls at
+## 0.483 + (1.333 - 0.68) / 1.587 + RED's hitstop = ~0.99 s, inside the span.
+##
+## STORY 7-10 (AC 9): a step may carry a `lift` -- Vector4(t_from, lift_from, t_to, lift_to): the LANDING ARC's
+## fraction of the head height, smoothstepped from `lift_from` to `lift_to` as the playhead runs from `t_from` to
+## `t_to` (clamped outside). It is read off the PLAYHEAD, never the span's clock, so a hitstop's frozen clip holds
+## the arc too. RED's jump rises to the head as its feet come down (1.0 at the landing, t=0.7333 the last frame
+## with the feet off the ground); its backflip leaves the head at take-off (0.70) and comes down to the ground at
+## its own landing (1.333).
 const _COUNTER_PRESENTATION := {
 	Enums.CardColor.RED: [
-		{"clip": &"counter_jump", "from": 0.0, "to": 0.8333},
-		{"clip": &"counter_backflip", "from": 0.0, "to": 1.9000},
+		{"clip": &"counter_jump", "from": 0.0, "to": 0.7667,
+				"lift": Vector4(0.0, 0.0, 0.7333, 1.0)},
+		{"clip": &"counter_backflip", "from": 0.68, "to": 1.5,
+				"lift": Vector4(0.70, 1.0, 1.3333, 0.0)},
 	],
 	Enums.CardColor.BLUE: [
 		{"clip": &"counter_slide", "from": 0.3533, "to": 1.7667},
@@ -612,6 +634,16 @@ var _counter_speed := 1.0
 var _counter_running := false
 var _counter_elapsed := 0.0
 
+## Story 7-10 (AC 11/AC 14): THE VICTIM'S HELD POSE. Armed by the runner on a counter's press against this hero;
+## the STUNNED transition that the counter's fire tick writes then does NOT start its clip -- the current pose
+## (the charge clip, pinned by its own seek) is held, and the stun clip is remembered -- until the runner releases
+## it at the impact (or at `VICTIM_HOLD_MAX_SECONDS`), when it cross-fades in. Presentation only: the state has
+## been STUNNED, hard-rooted, since the fire tick.
+var _victim_hold_armed := false
+var _victim_holding := false
+var _victim_flavor := STUN_FLAVOR_NONE
+var _victim_stun_seconds := 0.0
+
 ## Story 6-5c (AC 25): the cast pose currently running and where its sub-range ENDS, in the clip's
 ## own native seconds. Presentation-local, never a `HeroState` field -- the cast owns no
 ## `ActionState` (`6-5c/R18`), so the body is claimed the same way the counter claims it: through
@@ -706,8 +738,17 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 	# already passed, so the rest of the span played no counter at all.
 	_counter_index = -1
 	if current == HeroState.ActionState.STUNNED:
+		# Story 7-10 (AC 11/AC 14): a counter's victim holds its pose until the impact; the stun clip waits.
+		if _victim_hold_armed or _victim_holding:
+			_victim_holding = true
+			_victim_flavor = stun_flavor
+			_victim_stun_seconds = stun_seconds
+			return
 		_play_stun(stun_flavor, stun_seconds)
 		return
+	# Any other transition ends a victim hold outright (a death, a reset): the new state owns the body.
+	_victim_hold_armed = false
+	_victim_holding = false
 	if current == HeroState.ActionState.IDLE:
 		if previous == HeroState.ActionState.STUNNED and get_up_armed:
 			# The get-up is the TAIL of a knockdown, which ruling (c) already let win outright, so it
@@ -810,6 +851,12 @@ func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _targe
 			if blocked:
 				_restart(&"block_impact")
 		HeroState.ActionState.STUNNED:
+			# Story 7-10: while a victim's pose is held, an escalation only updates the remembered clip.
+			if _victim_holding:
+				if stun_flavor == STUN_FLAVOR_KNOCKDOWN:
+					_victim_flavor = stun_flavor
+					_victim_stun_seconds = stun_seconds
+				return
 			if stun_flavor == STUN_FLAVOR_KNOCKDOWN \
 					and animation_player.assigned_animation != &"knockdown":
 				_play_stun(stun_flavor, stun_seconds)
@@ -939,6 +986,64 @@ func on_counter_ended() -> void:
 	_counter_index = -1
 	_counter_elapsed = 0.0
 	_one_shot = &""
+
+
+## Story 7-10 (AC 9): the LANDING ARC'S FRACTION for the step playing right now, 0..1 of the head height -- the
+## step's `lift` read off the live playhead (`counter_lift_at`). 0 when no counter clip is playing or the step
+## carries no lift, so a counter interrupted by a transition drops the arc with it.
+func counter_lift_fraction() -> float:
+	if not _counter_running or _counter_index < 0 or _counter_index >= _counter_steps.size():
+		return 0.0
+	var step: Dictionary = _counter_steps[_counter_index]
+	if animation_player.assigned_animation != step["clip"]:
+		return 0.0
+	return counter_lift_at(step, animation_player.current_animation_position)
+
+
+## Story 7-10 (AC 9): a step's lift at clip time `playhead` -- pure, so the arc's shape is pinned headless.
+static func counter_lift_at(step: Dictionary, playhead: float) -> float:
+	if not step.has("lift"):
+		return 0.0
+	var lift: Vector4 = step["lift"]
+	if lift.z <= lift.x:
+		return lift.w if playhead >= lift.z else lift.y
+	return lerpf(lift.y, lift.w, smoothstep(lift.x, lift.z, playhead))
+
+
+## Story 7-10 (AC 10/AC 13): THE HITSTOP'S RIG HALF -- the whole player frozen in place (`speed_scale` 0) and
+## thawed again. The one place `speed_scale` is written: every clip choice keeps using play()'s own custom speed,
+## so the freeze multiplies over whatever is playing and lifting it restores that clip's own rate untouched.
+func set_frozen(frozen: bool) -> void:
+	if animation_player != null:
+		animation_player.speed_scale = 0.0 if frozen else 1.0
+
+
+## Story 7-10 (AC 11/AC 14): arm the victim hold on a counter's PRESS against this hero. The STUNNED transition
+## of the counter's fire tick will then hold the pose instead of starting its clip.
+func arm_victim_hold() -> void:
+	_victim_hold_armed = true
+
+
+## Story 7-10: the counter's span ended without this hero being stunned by it -- forget the arm.
+func disarm_victim_hold() -> void:
+	_victim_hold_armed = false
+
+
+## Story 7-10: true while a STUNNED pose is being held for an impact that has not landed yet.
+func is_holding_victim() -> bool:
+	return _victim_holding
+
+
+## Story 7-10 (AC 11/AC 14): THE IMPACT LANDED -- the remembered stun clip cross-fades in over `blend` seconds,
+## sized to what is LEFT of the stun after `held_seconds` of hold. A no-op when nothing is held, or when the hero
+## is no longer STUNNED (the transition that ended it already owns the body).
+func release_victim_hold(blend: float, held_seconds: float) -> void:
+	var holding := _victim_holding
+	_victim_hold_armed = false
+	_victim_holding = false
+	if not holding or _state != HeroState.ActionState.STUNNED:
+		return
+	_play_stun(_victim_flavor, maxf(_victim_stun_seconds - held_seconds, 0.0), blend)
 
 
 ## POST-REVIEW FIX PASS (R-P1/P3 (b)): START or RESUME the sequence at the span's ELAPSED point. The
@@ -1091,7 +1196,7 @@ func _play(clip: StringName, speed: float = 1.0) -> void:
 ## just enough to finish on the exit tick (so a 0.4 s deflect still shows the whole 0.7 s reaction rather
 ## than being cut mid-motion); a clip SHORTER than the stun plays at its native rate and holds its last
 ## frame for the remainder. Never slowed below native -- a stretched fall reads as slow motion.
-func _play_stun(stun_flavor: int, stun_seconds: float) -> void:
+func _play_stun(stun_flavor: int, stun_seconds: float, blend: float = -1.0) -> void:
 	var clip: StringName
 	match stun_flavor:
 		STUN_FLAVOR_KNOCKDOWN:
@@ -1118,7 +1223,7 @@ func _play_stun(stun_flavor: int, stun_seconds: float) -> void:
 	if clip == &"dizzy":
 		_play_dizzy(stun_seconds)
 		return
-	_restart(clip, held_clip_speed(animation_player.get_animation(clip).length, stun_seconds))
+	_restart(clip, held_clip_speed(animation_player.get_animation(clip).length, stun_seconds), blend)
 
 
 ## Story 6-5c (AC 27, Open Question 8): the bolt stun's pose -- a sub-range of `dizzy` at native
@@ -1324,7 +1429,8 @@ static func held_clip_speed(clip_seconds: float, hold_seconds: float) -> float:
 ## Unconditional restart for the evented transition path. NO custom_blend by default, on purpose: the
 ## 3-0a/R5 policy is that a transition wins immediately, and 5-0a's crossfade is scoped to the
 ## locomotion clips only (AC 2). Story 7-8 (AC 15) passes `blend` for exactly two edges -- into and out of
-## the charge clip -- and nothing else does. The seek() is LOAD-BEARING and not belt-and-braces:
+## the charge clip -- and story 7-10 (AC 11/AC 14) for a third, a counter victim's knockdown entering at its
+## impact (`release_victim_hold`); nothing else does. The seek() is LOAD-BEARING and not belt-and-braces:
 ## AnimationPlayer.play(name) is a no-op on playback position when `name` is already the
 ## current, still-playing animation (measured on Godot 4.6.3 — play, advance to 0.30, play
 ## again, position is still 0.30). Dropping the seek would silently reinstate the chained-swing

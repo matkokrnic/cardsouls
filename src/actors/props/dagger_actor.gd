@@ -32,6 +32,15 @@ const MODEL := preload("res://assets/props/dagger/dagger.fbx")
 ## ORIGIN is unchanged (the runner's throwing-hand height), which R-S5 keeps as it was.
 const MODEL_SCALE := 2.5
 
+## Story 7-10 (AC 12): THE TRAIL -- a world-space particle stream left behind the flying dagger, tapering as it
+## goes (`EffectFx.shrink_over_life`), so the throw reads as a streak across the gap. Feel knobs: the trail's
+## colour (a pale green, GREEN's family lightened so it reads on any background), particle count, size (metres)
+## and life (seconds).
+const TRAIL_COLOR := Color(0.75, 1.0, 0.75)
+const TRAIL_AMOUNT := 40
+const TRAIL_SIZE := 0.22
+const TRAIL_LIFETIME := 0.25
+
 ## Metres per second along the straight line to the target, set at launch from the distance and the
 ## time left in the busy span, so the dagger ARRIVES with the counter rather than at a fixed speed.
 var _speed := 0.0
@@ -43,6 +52,10 @@ func _ready() -> void:
 	var model := MODEL.instantiate()
 	model.scale = Vector3.ONE * MODEL_SCALE
 	add_child(model)
+	var trail := EffectFx.shrink_over_life(EffectFx.particles(EffectFx.TEX_WISP, TRAIL_COLOR, TRAIL_AMOUNT,
+			TRAIL_LIFETIME, TRAIL_SIZE, 0.0, 0.0, 0.0, false, false))
+	trail.name = "Trail"
+	add_child(trail)
 
 
 ## Aim this dagger at `target` and cross the gap in `seconds`. A non-positive time or a zero gap

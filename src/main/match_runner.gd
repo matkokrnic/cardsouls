@@ -186,6 +186,24 @@ var _counter_color: Array[int] = [PlayerState.NO_TELEGRAPH_COLOR, PlayerState.NO
 var _counter_remaining: Array[int] = [0, 0]
 var _counter_daggers: Array = [null, null]
 
+## Story 7-10 (S2/S3, AC 8-14): the counter's CONTACT MOMENT, runner-local beside `_counter_armed` and for its
+## reason -- presentation bookkeeping that never reaches `to_snapshot()` or the recorder, reproduced by a replay
+## because every input is a state fact or an actor position read after `advance()`. Indexed by the COUNTERING
+## slot unless named otherwise:
+##   `_red_travel_scale` / `_red_land_height` -- RED's landing factor and arc height, LOCKED AT THE PRESS from
+##       the actor-side gap and the attacker's head (Open Question 1 ruling);
+##   `_red_contact_tick` -- the window-elapsed tick of RED's head contact (`red_contact_elapsed_ticks`);
+##   `_counter_impacted` -- this counter's impact has been shown;
+##   `_victim_hold_ticks` -- indexed by the VICTIM's slot: ticks its pose has been held;
+##   `_shake_elapsed` / `_shake_total` -- indexed by the CAMERA's slot: the running shake, -1 when none.
+var _red_travel_scale: Array[float] = [1.0, 1.0]
+var _red_land_height: Array[float] = [0.0, 0.0]
+var _red_contact_tick: Array[int] = [-1, -1]
+var _counter_impacted: Array[bool] = [false, false]
+var _victim_hold_ticks: Array[int] = [0, 0]
+var _shake_elapsed: Array[int] = [-1, -1]
+var _shake_total: Array[int] = [0, 0]
+
 ## Story 6-6b (AC 11): how high off the hero root the thrown dagger flies, in metres -- roughly chest
 ## height on this rig, so it reads as thrown rather than slid along the floor. A presentation constant
 ## beside `LOCK_MARK_TOTEM_LIFT`, never a `BalanceConfig` field: nothing in state knows this prop
@@ -1274,6 +1292,53 @@ func _push_charge_progress() -> void:
 		hero.animation_controller.on_charge_progress(player.charge_color, progress)
 
 
+## Story 7-10 (S1, AC 1-4; S4, AC 15): THE ATTACKER'S EYES AND THE IMMUNITY MARKER, polled per tick.
+##
+## THE EYES' GATE IS THE WHOLE OF AC 3, read off existing public facts: lit while the hero is CHARGING and nothing
+## has touched yet (`charge_contact == CHARGE_CONTACT_NONE`, the hit-once memory), so the first touch -- counted
+## or dropped -- a cancel, a knockdown, a bolt stun, a death and a debug reset all put them out by leaving
+## `CHARGING` or by the touch; round end is the runner's own `round_over` suppression (step 4d). The FLASH is
+## `charge_window.is_running` going false while lit -- the commit tick `_is_commit_tick` names, on which the 7-9
+## counter window is anchored (AC 4). Progress is the chargeup's own (`1 - remaining / duration` of the
+## `charge_window`), so the blink accelerando re-fits any `unblockable_chargeup_seconds` (AC 2).
+##
+## THE SHIMMER is `unblockable_immunity`'s remaining fraction, 0 when it is not running (AC 15) -- level-
+## triggered, so expiry, death and reset end it with no falling edge to remember.
+##
+## THE SHAKES' CLOCKS advance here, once per ticking frame, and the offset is applied at step 4b.
+func _push_unblockable_markers() -> void:
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		if is_instance_valid(hero):
+			var lit := player.hero.action_state == HeroState.ActionState.CHARGING \
+					and player.charge_contact == PlayerState.CHARGE_CONTACT_NONE
+			var window := player.charge_window
+			var progress := 1.0
+			if window.duration_ticks() > 0:
+				progress = 1.0 - float(window.remaining_ticks()) / float(window.duration_ticks())
+			hero.eyes.drive(lit, player.charge_color, window.is_running, progress)
+			var immunity := player.hero.unblockable_immunity
+			var fraction := 0.0
+			if immunity.is_running and immunity.duration_ticks() > 0:
+				fraction = float(immunity.remaining_ticks()) / float(immunity.duration_ticks())
+			hero.immunity_shimmer.set_fraction(fraction)
+		if _shake_elapsed[slot] >= 0:
+			_shake_elapsed[slot] += 1
+			if _shake_elapsed[slot] >= _shake_total[slot]:
+				_shake_elapsed[slot] = -1
+
+
+## Story 7-10 (AC 10): the shake's offset for `slot`'s viewport camera this frame, in world space along the
+## camera's own right and up -- POSITIONAL ONLY, applied to the SubViewport follower after it copies the rig
+## camera, so the rig (whose LOCAL basis is the pushed movement basis) and the camera's rotation are untouched.
+func _shake_world_offset(slot: int, camera: Camera3D) -> Vector3:
+	if _shake_elapsed[slot] < 0:
+		return Vector3.ZERO
+	var o := UnblockablePresentation.shake_offset(_shake_elapsed[slot], _shake_total[slot])
+	return camera.global_transform.basis.x * o.x + camera.global_transform.basis.y * o.y
+
+
 ## Story 6-6b (AC 10/AC 11/AC 14): THE COUNTER PRESENTATION POLL -- the same seat and shape as
 ## `_push_charge_progress` directly above: a POLL right after `advance()`, plain values only, no
 ## signal, no state handle held, no new `connect_*`, so the observation-seam family STAYS AT TEN.
@@ -1323,6 +1388,7 @@ func _push_counter_presentation() -> void:
 				hero.animation_controller.on_counter_ended()
 			_set_counter_pass_through(slot, false)
 			_free_counter_dagger(slot)
+			_end_counter_contact(slot)
 			_counter_armed[slot] = false
 		if running and not _counter_armed[slot]:
 			var busy_seconds := float(
@@ -1330,7 +1396,12 @@ func _push_counter_presentation() -> void:
 			if is_instance_valid(hero):
 				hero.animation_controller.on_counter_started(color, busy_seconds)
 			_set_counter_pass_through(slot, color == Enums.CardColor.RED)
+			_begin_counter_contact(slot, color, window.duration_ticks())
 			_spawn_counter_dagger(slot, color, busy_seconds)
+		# Story 7-10 (AC 9-11, OQ1): RED's landing factor and arc ride every running tick, and the head contact
+		# fires on its elapsed tick; the victim's held pose is released once its impact has played out.
+		if running:
+			_drive_counter_contact(slot, color, window.duration_ticks() - remaining)
 		# R-P1/P3: and every running tick pushes HOW FAR INTO THE SPAN it is, which is what lets a
 		# counter interrupted by a swing, a roll or the cast's own block drop rejoin its sequence at
 		# the right frame instead of dying on the transition. `duration_ticks()` survives the window's
@@ -1380,8 +1451,11 @@ func _spawn_counter_dagger(slot: int, color: int, busy_seconds: float) -> void:
 	add_child(dagger)
 	_counter_daggers[slot] = dagger
 	var lift := Vector3(0.0, DAGGER_THROW_HEIGHT, 0.0)
-	var flight := busy_seconds - AnimationController.counter_release_seconds(color, busy_seconds)
-	dagger.launch(thrower.global_position + lift, target.global_position + lift, flight)
+	# Story 7-10 (AC 12): a FAST flight, capped at `DAGGER_FLIGHT_SECONDS` (or what is left of the span, if that
+	# is shorter), aimed at the attacker's TRUNK bone rather than a fixed height off its root, so it visibly hits.
+	var flight := minf(busy_seconds - AnimationController.counter_release_seconds(color, busy_seconds),
+			UnblockablePresentation.DAGGER_FLIGHT_SECONDS)
+	dagger.launch(thrower.global_position + lift, target.trunk_world(), flight)
 
 
 func _advance_counter_dagger(slot: int) -> void:
@@ -1389,7 +1463,132 @@ func _advance_counter_dagger(slot: int) -> void:
 	if not is_instance_valid(dagger):
 		return
 	if dagger.advance(1.0 / TimingWindow.TICK_HZ):
+		# Story 7-10 (AC 13/AC 14): GREEN's impact IS the dagger's arrival -- shown only on a victim whose
+		# pose is being held, i.e. a counter that landed.
+		_green_dagger_impact(slot, dagger.global_position)
 		_free_counter_dagger(slot)
+
+
+## Story 7-10 (S2/S3): THE COUNTER'S PRESS, for the contact moment. Arms the victim hold on the other hero when it
+## is CHARGING (the only hero a counter can land on), and for RED locks the landing factor and arc height from
+## the actor-side gap and the attacker's head at this tick (Open Question 1 ruling). Plain reads of actor
+## positions and authored config (CONSTRAINT C, inline), never a state write.
+func _begin_counter_contact(slot: int, color: int, duration_ticks: int) -> void:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	var other_player: PlayerState = _match_state.p2 if slot == 0 else _match_state.p1
+	_counter_impacted[slot] = false
+	_red_travel_scale[slot] = 1.0
+	_red_land_height[slot] = 0.0
+	_red_contact_tick[slot] = -1
+	if not is_instance_valid(hero) or not is_instance_valid(other):
+		return
+	if other_player.hero.action_state == HeroState.ActionState.CHARGING:
+		other.animation_controller.arm_victim_hold()
+		_victim_hold_ticks[1 - slot] = 0
+	if color != Enums.CardColor.RED or _match_state.balance == null:
+		return
+	var gap := Vector2(other.global_position.x - hero.global_position.x,
+			other.global_position.z - hero.global_position.z).length()
+	_red_travel_scale[slot] = UnblockablePresentation.red_travel_scale(gap,
+			_match_state.balance.counter_travel_distance_for(Enums.CardColor.RED))
+	_red_land_height[slot] = UnblockablePresentation.red_land_height(other.head_top_world().y,
+			hero.global_position.y)
+	_red_contact_tick[slot] = UnblockablePresentation.red_contact_elapsed_ticks(duration_ticks,
+			_match_state.balance.counter_travel_forward_fraction_red)
+
+
+## Story 7-10: one running tick of a counter's contact moment. `elapsed` is the window's elapsed tick count.
+func _drive_counter_contact(slot: int, color: int, elapsed: int) -> void:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	if not is_instance_valid(hero) or not is_instance_valid(other):
+		return
+	if color == Enums.CardColor.RED:
+		# The factor applies to the counter's own travel only: a hero the counter has lost the body to (a stun, a
+		# swing) moves at its own velocity, unscaled.
+		hero.counter_travel_scale = _red_travel_scale[slot] \
+				if player.hero.action_state == HeroState.ActionState.IDLE else 1.0
+		hero.counter_lift = _red_land_height[slot] * hero.animation_controller.counter_lift_fraction()
+		if elapsed == _red_contact_tick[slot] and not _counter_impacted[slot] \
+				and other.animation_controller.is_holding_victim():
+			_counter_impacted[slot] = true
+			hero.begin_hitstop(UnblockablePresentation.RED_HITSTOP_SECONDS)
+			other.begin_hitstop(UnblockablePresentation.RED_HITSTOP_SECONDS)
+			UnblockablePresentation.spawn_impact(self, other.head_top_world(), _charge_color_of(color), true)
+			UnblockablePresentation.play_sound(self, UnblockablePresentation.RED_THUD_SOUND,
+					UnblockablePresentation.RED_THUD_VOLUME_DB)
+			_start_shake(0)
+			_start_shake(1)
+	_drive_victim_hold(slot)
+
+
+## Story 7-10 (AC 11/AC 14): the victim of `slot`'s counter holds its pose from the fire tick until the impact has
+## played out (its hitstop over), or until `VICTIM_HOLD_MAX_SECONDS`, whichever comes first -- then its knockdown
+## cross-fades in. Never before the impact: the bound is at least the longest fire-to-impact gap.
+func _drive_victim_hold(slot: int) -> void:
+	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	if not is_instance_valid(other) or not other.animation_controller.is_holding_victim():
+		return
+	var victim := 1 - slot
+	_victim_hold_ticks[victim] += 1
+	var impact_done := _counter_impacted[slot] and not other.is_in_hitstop()
+	if impact_done or _victim_hold_ticks[victim] \
+			>= UnblockablePresentation.ticks(UnblockablePresentation.VICTIM_HOLD_MAX_SECONDS):
+		other.animation_controller.release_victim_hold(UnblockablePresentation.KNOCKDOWN_BLEND_SECONDS,
+				float(_victim_hold_ticks[victim]) / TimingWindow.TICK_HZ)
+
+
+## Story 7-10: the counter's span is over (or re-cast) -- the body's travel factor and arc go back to rest, and a
+## victim hold still pending is released (its impact can no longer come) or disarmed (it never fired).
+func _end_counter_contact(slot: int) -> void:
+	var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	if is_instance_valid(hero):
+		hero.counter_travel_scale = 1.0
+		hero.counter_lift = 0.0
+	if is_instance_valid(other):
+		if other.animation_controller.is_holding_victim():
+			other.animation_controller.release_victim_hold(UnblockablePresentation.KNOCKDOWN_BLEND_SECONDS,
+					float(_victim_hold_ticks[1 - slot]) / TimingWindow.TICK_HZ)
+		else:
+			other.animation_controller.disarm_victim_hold()
+	_red_travel_scale[slot] = 1.0
+	_red_land_height[slot] = 0.0
+	_red_contact_tick[slot] = -1
+
+
+## Story 7-10 (AC 13): GREEN's dagger hit -- sparks where it arrived, a hitstop on the attacker, a thud.
+func _green_dagger_impact(slot: int, at: Vector3) -> void:
+	var other: HeroActor = _p2_hero if slot == 0 else _p1_hero
+	if _counter_impacted[slot] or not is_instance_valid(other) \
+			or not other.animation_controller.is_holding_victim():
+		return
+	_counter_impacted[slot] = true
+	other.begin_hitstop(UnblockablePresentation.GREEN_HITSTOP_SECONDS)
+	UnblockablePresentation.spawn_impact(self, at, _charge_color_of(Enums.CardColor.GREEN), false)
+	UnblockablePresentation.play_sound(self, UnblockablePresentation.GREEN_HIT_SOUND,
+			UnblockablePresentation.GREEN_HIT_VOLUME_DB)
+
+
+## Story 7-10: the authored charge colour for `color`, off the hero's telegraph profiles (no fourth vocabulary).
+func _charge_color_of(color: int) -> Color:
+	var cues: TelegraphController = _p1_hero.telegraph_controller
+	match color:
+		Enums.CardColor.RED:
+			return cues.charge_red_profile.color
+		Enums.CardColor.BLUE:
+			return cues.charge_blue_profile.color
+		Enums.CardColor.GREEN:
+			return cues.charge_green_profile.color
+	return Color.WHITE
+
+
+## Story 7-10 (AC 10): start a camera shake on `slot`'s viewport camera.
+func _start_shake(slot: int) -> void:
+	_shake_total[slot] = UnblockablePresentation.ticks(UnblockablePresentation.SHAKE_SECONDS)
+	_shake_elapsed[slot] = 0
 
 
 func _free_counter_dagger(slot: int) -> void:
@@ -2143,6 +2342,16 @@ func _relay_round_started() -> void:
 	_ended_shots.clear()
 	_raised_spawns.clear()
 	_restored_sources.clear()
+	# Story 7-10: the unblockable presentation goes back to rest -- eyes, shimmer, hitstop, lift, travel factor,
+	# victim hold and the shakes (the `_free_counter_dagger` discipline on every end path).
+	for slot: int in 2:
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		if is_instance_valid(hero):
+			hero.clear_presentation()
+			hero.animation_controller.disarm_victim_hold()
+		_counter_impacted[slot] = false
+		_victim_hold_ticks[slot] = 0
+		_shake_elapsed[slot] = -1
 	for slot: int in 2:
 		_prev_reversal_kind[slot] = PlayerState.REVERSAL_NONE
 		_prev_resolved_tick[slot] = PlayerState.NO_RESOLVED_TICK
@@ -4093,6 +4302,10 @@ func _physics_process(delta: float) -> void:
 		# 3a-bis. Story 6-1b: the charge-progress poll, same seat and shape as 3b directly above --
 		#     a POLL right after advance(), no signal, no state handle, no new `connect_*` (AC 7).
 		_push_charge_progress()
+		# 3a-bis'. Story 7-10 (S1/S4): the unblockable EYES and the IMMUNITY shimmer, and the camera shakes'
+		#     clocks -- the same seat and shape as 3a-bis directly above: plain reads after advance(), no signal,
+		#     no state handle, no new `connect_*`.
+		_push_unblockable_markers()
 		# 3a-ter. Story 6-6b (AC 10/AC 11): the COUNTER presentation poll, the same seat and shape
 		#     as 3a-bis directly above -- a read of the `defense` snapshot key right after advance(),
 		#     no signal, no state handle, no new `connect_*`, so the observation-seam family stays at
@@ -4206,6 +4419,9 @@ func _physics_process(delta: float) -> void:
 	#     and its default projection matches the rig camera's (both plain Camera3D defaults).
 	_p1_view_cam.global_transform = _p1_rig_cam.global_transform
 	_p2_view_cam.global_transform = _p2_rig_cam.global_transform
+	# Story 7-10 (AC 10): the counter's camera shake, on the FOLLOWERS only (never the rig -- DECISION A).
+	_p1_view_cam.global_position += _shake_world_offset(0, _p1_view_cam)
+	_p2_view_cam.global_position += _shake_world_offset(1, _p2_view_cam)
 	# 4d. Story 4-6a (AC 13/AC 14): push each slot's LOCKED-TARGET MARKER position into that slot's
 	#     own HUD -- a screen point, or null when the target is not visible in that viewport and the
 	#     marker must hide. Same runner-polls-then-pushes-plain-values shape as the 3-5a card
@@ -4237,6 +4453,10 @@ func _physics_process(delta: float) -> void:
 	var round_over: bool = bool(_match_state.to_snapshot().get("round_over", false))
 	_huds[0].set_lock_marker(null if round_over else _lock_target_screen_position(0, _p1_view_cam))
 	_huds[1].set_lock_marker(null if round_over else _lock_target_screen_position(1, _p2_view_cam))
+	# Story 7-10 (AC 3): round end puts the unblockable eyes out, off the same `round_over` read -- a hero frozen
+	# mid-charge by the round-over freeze shows no lit eyes.
+	_p1_hero.eyes.set_suppressed(round_over)
+	_p2_hero.eyes.set_suppressed(round_over)
 	# 5. Drain queued signals AFTER advance returns (D5).
 	_match_state.drain_signals()
 	# 6. Story 7-1: the effect presentation reads that need the drain -- the shot endings (paired against the

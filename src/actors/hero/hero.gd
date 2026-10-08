@@ -68,6 +68,40 @@ const HURTBOX_DROP := 0.375
 ## Resolved once in _ready, `_sword_bone`'s shape. -1 leaves the hit shape where the scene authored it.
 var _trunk_bone: int = -1
 
+## Story 7-10 (AC 9): the head's top joint, read for RED's landing height (the attacker's head) at the press.
+const HEAD_TOP_BONE := &"mixamorig_HeadTop_End"
+var _head_top_bone: int = -1
+## The head top above the root when the rig has no such bone: the measured idle HeadTop_End (1.554 above the
+## feet, `tools/measure_head_visor.gd`) less the Mesh's 1.0 grounding offset, rounded.
+const HEAD_TOP_FALLBACK_Y := 0.55
+
+## Story 7-10 (S1/S4): the two presentation children the runner pushes per tick -- the unblockable EYES on the
+## head bone and the post-knockdown IMMUNITY shimmer on the body. Built in `_ready`, no collision, no signal.
+var eyes: UnblockableEyes
+var immunity_shimmer: ImmunityShimmer
+
+## Story 7-10 (Open Question 1, operator ruling): THE DISTANCE-AWARE RED LANDING -- the factor `drive()` scales
+## the state's velocity by while a RED counter's travel runs, set by the runner every tick (1.0 otherwise). The
+## runner locks it at the press from the actor-side gap, and the same factor serves both legs so the net stays
+## zero. The state's velocity itself is untouched: this is what the BODY does with it, the `set_body_pass_through`
+## footing (`4-3/R2`: no position crosses into state).
+var counter_travel_scale := 1.0
+
+## Story 7-10 (AC 9): how far the mesh is lifted, metres, this tick -- RED's landing arc, so the feet reach the
+## attacker's head at contact. Set by the runner every tick; 0 at rest.
+var counter_lift := 0.0
+
+## Story 7-10 (AC 10/AC 13, M6): the presentation HITSTOP -- the rig's AnimationPlayer frozen and the mesh held
+## where it stood while the root keeps moving, then eased back onto the root (`HITSTOP_CATCHUP_SECONDS`, Open
+## Question 4). Counted in `drive()` calls, i.e. in the runner's ticks (F1); never read by state.
+var _mesh_base := Vector3.ZERO
+var _hitstop_ticks_left := 0
+var _hitstop_anchor := Vector3.ZERO
+var _hitstop_offset := Vector3.ZERO
+var _catchup_ticks_left := 0
+var _catchup_total := 0
+var _catchup_from := Vector3.ZERO
+
 
 ## Story 6-6b POST-SMOKE (R-S1): PASS THROUGH ANOTHER HERO'S BODY, or stop doing so. Set for the
 ## length of RED's counter and cleared at its end, both by the runner off the same edge that starts
@@ -105,13 +139,31 @@ func _ready() -> void:
 	if _trunk_bone < 0:
 		push_error("HeroActor: rig has no bone '%s' — the hit shape " % TRUNK_BONE
 			+ "cannot follow the trunk and stays at its authored offset")
+	_head_top_bone = skeleton.find_bone(HEAD_TOP_BONE)
+	_mesh_base = mesh.position
+	# Story 7-10: the eyes follow the head bone; a rig without one degrades to the root, where they stay dark
+	# unless lit (`EffectFx.bone_follower`'s own degrade).
+	eyes = UnblockableEyes.new()
+	eyes.name = "UnblockableEyes"
+	eyes.colors = {
+		Enums.CardColor.RED: telegraph_controller.charge_red_profile.color,
+		Enums.CardColor.BLUE: telegraph_controller.charge_blue_profile.color,
+		Enums.CardColor.GREEN: telegraph_controller.charge_green_profile.color,
+	}
+	var head := EffectFx.bone_follower(self, self, UnblockableEyes.HEAD_BONE)
+	(head if head != null else self as Node).add_child(eyes)
+	immunity_shimmer = ImmunityShimmer.new()
+	immunity_shimmer.name = "ImmunityShimmer"
+	add_child(immunity_shimmer)
 
 
 ## `walk_speed`/`run_speed` (story 6-7b, AC 4): the AUTHORED gait pair, read inline off the applied
 ## config by the runner every tick and forwarded untouched to the animation controller -- plain
 ## floats, never a config reference (CONSTRAINT C). drive() itself does not use them.
 func drive(hero_state: HeroState, _delta: float, walk_speed: float, run_speed: float) -> void:
-	velocity = hero_state.velocity  # world velocity decided by advance(); never the raw intent
+	# World velocity decided by advance(); never the raw intent. Story 7-10 (OQ1): scaled by the RED counter's
+	# landing factor, which is 1.0 at every other time.
+	velocity = hero_state.velocity * counter_travel_scale
 	# Story 1-7 (N6) / 1-7b: facing tracks state by rotating CHILD nodes — the hero ROOT
 	# never rotates (DECISION A: the camera rig is a child of the root, so a root rotation
 	# would fold into the pushed camera basis). Facing (x, y) maps to world (x, 0, y); yaw
@@ -144,6 +196,75 @@ func drive(hero_state: HeroState, _delta: float, walk_speed: float, run_speed: f
 	# Still the same call and cadence; the turn-in-place check rides it too, and reads facing only.
 	animation_controller.on_locomotion(velocity, hero_state.facing, walk_speed, run_speed)
 	move_and_slide()
+	# Story 7-10: the mesh's presentation offsets, after the move so the hitstop hold measures this tick's root.
+	_advance_hitstop()
+	mesh.position = _mesh_base + Vector3(0.0, counter_lift, 0.0) + _hitstop_offset
+
+
+## Story 7-10 (AC 10/AC 13): start a presentation hitstop of `seconds` -- the rig freezes and the mesh is held at
+## the root's current position. A hitstop already running restarts from here.
+func begin_hitstop(seconds: float) -> void:
+	var t := UnblockablePresentation.ticks(seconds)
+	if t <= 0:
+		return
+	_hitstop_ticks_left = t
+	_hitstop_anchor = global_position - _hitstop_offset
+	_catchup_ticks_left = 0
+	animation_controller.set_frozen(true)
+
+
+func is_in_hitstop() -> bool:
+	return _hitstop_ticks_left > 0
+
+
+## One tick of the hitstop: hold the mesh at the anchor while frozen, then ease the offset to zero.
+func _advance_hitstop() -> void:
+	if _hitstop_ticks_left > 0:
+		_hitstop_offset = _hitstop_anchor - global_position
+		_hitstop_ticks_left -= 1
+		if _hitstop_ticks_left == 0:
+			animation_controller.set_frozen(false)
+			_catchup_total = UnblockablePresentation.ticks(UnblockablePresentation.HITSTOP_CATCHUP_SECONDS)
+			_catchup_ticks_left = _catchup_total
+			_catchup_from = _hitstop_offset
+			if _catchup_total <= 0:
+				_hitstop_offset = Vector3.ZERO
+		return
+	if _catchup_ticks_left > 0:
+		_catchup_ticks_left -= 1
+		_hitstop_offset = _catchup_from * (float(_catchup_ticks_left) / float(_catchup_total))
+		return
+	_hitstop_offset = Vector3.ZERO
+
+
+## Story 7-10: every end path (debug reset, round start): the hitstop, its hold, the lift, the travel factor,
+## the eyes and the shimmer all go back to rest, the `_free_counter_dagger` discipline.
+func clear_presentation() -> void:
+	if _hitstop_ticks_left > 0:
+		animation_controller.set_frozen(false)
+	_hitstop_ticks_left = 0
+	_catchup_ticks_left = 0
+	_hitstop_offset = Vector3.ZERO
+	counter_lift = 0.0
+	counter_travel_scale = 1.0
+	mesh.position = _mesh_base
+	eyes.clear()
+	immunity_shimmer.set_fraction(0.0)
+
+
+## Story 7-10 (AC 9): the head top's world position, by forward kinematics (the `_track_weapon_bone` read).
+## The root plus the authored head height when the rig has no such bone.
+func head_top_world() -> Vector3:
+	if _head_top_bone < 0:
+		return global_position + Vector3(0.0, HEAD_TOP_FALLBACK_Y, 0.0)
+	return skeleton.global_transform * _bone_pose_global(_head_top_bone).origin
+
+
+## Story 7-10 (AC 12): the trunk bone's world position -- where GREEN's dagger is aimed.
+func trunk_world() -> Vector3:
+	if _trunk_bone < 0:
+		return global_position
+	return skeleton.global_transform * _bone_pose_global(_trunk_bone).origin
 
 
 ## Moves the melee shape onto the sword bone's live animated position (AC 3). Before 5-0a the
