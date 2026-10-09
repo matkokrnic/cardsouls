@@ -80,8 +80,17 @@ var _probe: OrbHalo
 var _offsets_a: Array = []
 var _gap_a := 0.0
 var _gap_min := 0.0
-var _min_body_gap := INF
 var _gap_max := 0.0
+## Story 7-2 (AC 13): the wisp the hero steps onto.
+var _ghost: Node3D
+
+## Story 7-2 (AC 13): 7-6/P16's retired body radius -- the distance its push-out put a wisp at, which a ghost is not
+## put at. A literal on purpose: the constant left `OrbHalo` with the push-out.
+const P16_BODY_RADIUS := 0.42
+## Story 7-2 (AC 14): two wisps whose centres are closer than half a glow read as one blob.
+const OVERLAP_DISTANCE := OrbHalo.GLOW_SIZE * 0.5
+## The no-merge probe's fixed step (seconds) -- the halo's own functions, stepped deterministically.
+const MERGE_STEP := 1.0 / 30.0
 
 
 func _start_wisp_probe() -> void:
@@ -93,6 +102,73 @@ func _start_wisp_probe() -> void:
 	_probe.setup([Color.RED, Color.BLUE, Color.GREEN] as Array[Color])
 	_probe_anchor.add_child(_probe)
 	_probe.on_orbs_changed(2, 1, 0)
+	# Story 7-2 (AC 15): a newly shown wisp appears AT its own target (the halo clock is still at 0 here).
+	var k := 0
+	for w: Node3D in _probe.visible_wisps():
+		var want := _probe_anchor.global_position + OrbHalo.wisp_offset(k, 0.0)
+		if w.global_position.distance_to(want) > 0.001:
+			_fail("7-2 AC 15: wisp %d appeared at %s, not at its target %s" % [k, w.global_position, want])
+		k += 1
+
+
+## Story 7-2 (AC 14): NO TWO WISPS SETTLE INTO ONE. The halo's own path and follow functions, stepped at a fixed step
+## for the most wisps a hero can hold (three colours x the authored cap), around a still hero, for twice the longest
+## time any pair takes to cycle round each other (the slowest relative drift). Brief overlap is allowed; a pair that
+## stays within `OVERLAP_DISTANCE` for the WHOLE probe has settled into one blob and fails. The longest continuous
+## overlap is printed -- the operator judges "brief" at the smoke, never this test.
+func _check_no_merge() -> void:
+	var balance: BalanceConfig = load("res://data/balance/balance_config.tres")
+	var n := 3 * balance.max_orbs_per_color
+	if n < 2:
+		_fail("7-2 AC 14 fixture: fewer than two wisps to compare (vacuous)")
+		return
+	var slowest := 0.0
+	for i in n:
+		for j in range(i + 1, n):
+			var rel := absf(OrbHalo.drift_speed(i) - OrbHalo.drift_speed(j))
+			if rel < 0.0001:
+				_fail("7-2 AC 14: wisps %d and %d drift at the same speed -- they would never part" % [i, j])
+				return
+			slowest = maxf(slowest, TAU / rel)
+	var steps := int(ceil(2.0 * slowest / MERGE_STEP))
+	var pos: Array[Vector3] = []
+	for k in n:
+		pos.append(OrbHalo.wisp_offset(k, 0.0))
+	var apart: Array[bool] = []
+	var run: Array[int] = []
+	var longest: Array[int] = []
+	apart.resize(n * n)
+	run.resize(n * n)
+	longest.resize(n * n)
+	apart.fill(false)
+	run.fill(0)
+	longest.fill(0)
+	for s in steps:
+		var t := float(s + 1) * MERGE_STEP
+		for k in n:
+			pos[k] = OrbHalo.follow(pos[k], OrbHalo.wisp_offset(k, t), OrbHalo.follow_rate(k), MERGE_STEP)
+		for i in n:
+			for j in range(i + 1, n):
+				var cell := i * n + j
+				if pos[i].distance_to(pos[j]) < OVERLAP_DISTANCE:
+					run[cell] += 1
+					longest[cell] = maxi(longest[cell], run[cell])
+				else:
+					run[cell] = 0
+					apart[cell] = true
+	var worst := 0
+	var worst_pair := ""
+	for i in n:
+		for j in range(i + 1, n):
+			var cell := i * n + j
+			if not apart[cell]:
+				_fail("7-2 AC 14: wisps %d and %d stayed within %.2f m for the whole %.0f s probe -- merged"
+						% [i, j, OVERLAP_DISTANCE, steps * MERGE_STEP])
+			if longest[cell] > worst:
+				worst = longest[cell]
+				worst_pair = "%d/%d" % [i, j]
+	print("wisps: no-merge probe %d wisps, %.0f s; longest continuous overlap < %.2f m: %.2f s (pair %s)"
+			% [n, steps * MERGE_STEP, OVERLAP_DISTANCE, worst * MERGE_STEP, worst_pair])
 
 
 ## 7-6 POLISH 2 (operator ruling P10): a wisp has NO COLLISION OF ANY KIND -- no CollisionObject3D (Area3D or physics
@@ -149,11 +225,6 @@ func _next(phase: int) -> void:
 
 func _run_halo_phases() -> void:
 	var since := _frames - _phase_frame
-	# 7-6 POLISH 3 (operator ruling P16): through the whole probe -- drift AND the 4 m catch-up -- no wisp is ever
-	# inside its hero's body radius; they go AROUND the body, not through it.
-	if _phase == 7 or _phase == 8 or (_phase == 9 and since >= 1):
-		for w: Node3D in _probe.visible_wisps():
-			_min_body_gap = minf(_min_body_gap, _flat_distance(w))
 	var p1: PlayerState = _main._match_state.p1
 	var p2: PlayerState = _main._match_state.p2
 	match _phase:
@@ -246,25 +317,25 @@ func _run_halo_phases() -> void:
 					if _flat_distance(w) > reach:
 						caught = false
 				if caught:
-					print("wisps: caught up %d frames after a 4 m jump; closest to the body axis %.3f m" % [since,
-							_min_body_gap])
-					# The forcing case: the hero steps ONTO a wisp (its flat position), so that wisp starts inside the
-					# body and must be carried out, not left inside.
-					var w0: Node3D = _probe.visible_wisps()[0]
-					_probe_anchor.global_position = Vector3(w0.global_position.x, _probe_anchor.global_position.y,
-							w0.global_position.z)
+					print("wisps: caught up %d frames after a 4 m jump" % since)
+					# STORY 7-2 (AC 13) GHOST PIN, replacing 7-6/P16's: the hero steps ONTO a wisp (its flat position).
+					# Under P16 that wisp was pushed straight back out to the body radius; a ghost is not -- it only
+					# eases toward its own target, so one frame later it is still well inside where P16 would have put it.
+					_ghost = _probe.visible_wisps()[0]
+					_probe_anchor.global_position = Vector3(_ghost.global_position.x, _probe_anchor.global_position.y,
+							_ghost.global_position.z)
 					_next(9)
 					return
-					_next(DONE)
 				elif since > 600:
 					_fail("P5: the wisps never caught up with their hero")
 					_next(DONE)
 		9:
-			if since == 30:
-				print("wisps: closest to the body axis %.3f m (body radius %.2f m)" % [_min_body_gap, OrbHalo.BODY_RADIUS])
-				if _min_body_gap < OrbHalo.BODY_RADIUS - 0.001:
-					_fail("P16: a wisp passed through its hero's body (%.3f m < %.2f m)" % [_min_body_gap,
-							OrbHalo.BODY_RADIUS])
+			if since == 1:
+				var inside := _flat_distance(_ghost)
+				print("wisps: one frame after the hero stepped onto a wisp it is %.3f m from the body axis" % inside)
+				if inside >= P16_BODY_RADIUS - 0.001:
+					_fail("7-2 AC 13: a wisp was pushed out of its hero's body (%.3f m) -- orbs must be ghosts" % inside)
+				_check_no_merge()
 				_next(DONE)
 
 

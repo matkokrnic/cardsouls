@@ -1935,6 +1935,11 @@ func _present_cast_resolved(slot: int, card_id: StringName, mode: int) -> bool:
 	# replayed that card's look (Drain, Boom) on every unblockable initiation.
 	var kind := player.reversal_kind if player.last_resolved_card_tick != _prev_resolved_tick[slot] \
 			else PlayerState.REVERSAL_NONE
+	# Story 7-2 (AC 9): THE GESTURE, read off the same kind -- every instant effect with no clip of its own plays
+	# `cast_buff` (Vampiric Aura and Frostbite as before). The controller drops it during a whole-body action.
+	var gesture := AnimationController.gesture_for_reversal(kind)
+	if gesture != &"" and is_instance_valid(hero):
+		hero.animation_controller.play_gesture(gesture)
 	match kind:
 		PlayerState.REVERSAL_CULLING:
 			var sources: Array[Vector3] = []
@@ -1953,16 +1958,6 @@ func _present_cast_resolved(slot: int, card_id: StringName, mode: int) -> bool:
 			_drained_this_tick[slot] = true
 		PlayerState.REVERSAL_BOOM:
 			_effects.show_boom(opponent, player.reversal_indices.size())
-		PlayerState.REVERSAL_VAMPIRIC_AURA:
-			# 7-1 polish round: the buff gesture. Both buffs resolve instantly, so it plays only on a hero standing
-			# still (`AnimationController.play_gesture`).
-			if is_instance_valid(hero):
-				hero.animation_controller.play_gesture(
-						AnimationController.gesture_clip(CardEffectResolver.OUTCOME_VAMPIRIC_AURA))
-		PlayerState.REVERSAL_FROSTBITE:
-			if is_instance_valid(hero):
-				hero.animation_controller.play_gesture(
-						AnimationController.gesture_clip(CardEffectResolver.OUTCOME_FROSTBITE))
 	_effects.play_resolution_sound(effect_id)
 	return _effects.silences_generic_cue(effect_id)
 

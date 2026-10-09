@@ -18,7 +18,11 @@ extends SceneTree
 ## and Frostbite -> `cast_buff`, Counterspell -> `cast_counterspell`, the cast spells none); where each starts and
 ## when its measured beat lands -- Counterspell's peak no later than 0.15 s after the resolution tick, by cutting
 ## the lead-in, inside the clip; the buff from its start, beat at the measured peak. On the real rig: a hero
-## standing still plays the gesture from its start; a moving hero plays none; and movement cuts one in progress.
+## standing still plays the gesture from its start.
+##
+## STORY 7-2 (AC 4) REPLACED THE 7-1 INTERIM HALF of that last pin ("a moving hero plays none; movement cuts one in
+## progress"): a moving hero now plays the gesture on the upper body with its legs walking, and movement no longer
+## cuts it. The split itself is pinned in test_upper_lower_split.gd; here, only the gesture's own survival.
 ##
 ## Run: godot --headless --path . --script res://test/integration/test_spell_cast_clips.gd
 
@@ -144,7 +148,7 @@ func _check_gesture_timing(library: AnimationLibrary) -> void:
 	_check(AnimationController.gesture_start(&"cast") < 0.0, "`cast` is not a gesture clip")
 
 
-## On the real rig: plays only standing still, from its start; movement cuts it (polish 4: never slide).
+## On the real rig: plays from its start; since 7-2 (AC 4) movement keeps it on the upper body instead of cutting it.
 func _check_gestures_on_rig(anim: AnimationController, player: AnimationPlayer) -> void:
 	var still := Vector3.ZERO
 	var facing := Vector2(0.0, 1.0)
@@ -158,9 +162,10 @@ func _check_gestures_on_rig(anim: AnimationController, player: AnimationPlayer) 
 	anim.on_locomotion(still, facing, 1.82, 5.0)
 	_check(player.current_animation == &"cast_counterspell", "a still hero keeps the gesture")
 	anim.on_locomotion(Vector3(2.0, 0.0, 0.0), facing, 1.82, 5.0)
-	_check(player.current_animation != &"cast_counterspell", "movement cuts the gesture (never slides)")
-	_check(not anim.play_gesture(&"cast_buff"), "a moving hero plays no buff gesture")
-	_check(player.current_animation != &"cast_buff", "...and the clip does not start")
+	_check(player.current_animation == &"cast_counterspell",
+		"7-2 AC 4: movement no longer cuts the gesture -- it stays on the upper body (got %s)" % player.current_animation)
+	_check(anim.play_gesture(&"cast_buff"), "7-2 AC 4: a moving hero plays the buff gesture")
+	_check(player.current_animation == &"cast_buff", "...and the clip starts (got %s)" % player.current_animation)
 	anim.on_locomotion(still, facing, 1.82, 5.0)
 	_check(anim.play_gesture(&"cast_buff"), "a hero standing still again plays the buff gesture")
 	_check(player.current_animation == &"cast_buff" and player.current_animation_position < 0.001,

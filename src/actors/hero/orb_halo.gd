@@ -36,13 +36,12 @@ const FOLLOW_RATE_MAX := 3.6
 ## 7-6 POLISH 2 (operator ruling P10): smaller (0.85/0.26 -> 0.5/0.16) for the closer P11 camera. NO COLLISION OF ANY
 ## KIND: a wisp is a Node3D holding two MeshInstance3D quads -- no CollisionObject3D, Area3D, body or shape, pinned
 ## by test_history_and_orbs_live.gd.
+## STORY 7-2 (AC 13, operator instruction 2026-10-09, SUPERSEDES 7-6/P16): THE WISPS ARE GHOSTS. P16's body push-out
+## (`BODY_RADIUS` / `_outside_body`, which bent a wisp's path around its own hero) is GONE: a wisp passes through its
+## own hero exactly as it passes through everything else, and nothing moves a wisp but its own drift and follow.
 const GLOW_SIZE := 0.5
 const CORE_SIZE := 0.16
 ## A slow brightness breath, so a still wisp still reads as alive.
-## 7-6 POLISH 3 (operator ruling P16): the hero's BODY RADIUS (horizontal, metres). No wisp is ever inside it: each
-## frame a wisp that drift or catch-up would carry inside is pushed back out radially, so it slides AROUND the body
-## instead of through it. Presentation only -- still no collision of any kind (the P10 pin).
-const BODY_RADIUS := 0.42
 const PULSE_SPEED := 2.3
 const PULSE_DEPTH := 0.25
 
@@ -110,7 +109,7 @@ func _layout() -> void:
 			if shown:
 				wisp.set_meta(&"order", k)
 				if not wisp.visible:
-					wisp.global_position = _outside_body(_target(k))
+					wisp.global_position = _target(k)
 				k += 1
 			wisp.visible = shown
 
@@ -127,32 +126,41 @@ func _process(delta: float) -> void:
 			if not wisp.visible:
 				continue
 			var k := int(wisp.get_meta(&"order", 0))
-			var rate := lerpf(FOLLOW_RATE_MIN, FOLLOW_RATE_MAX, fmod(k * _PHI * 3.0, 1.0))
-			wisp.global_position = _outside_body(wisp.global_position.lerp(_target(k), 1.0 - exp(-rate * delta)))
+			wisp.global_position = follow(wisp.global_position, _target(k), follow_rate(k), delta)
 			var pulse := 1.0 - PULSE_DEPTH * (0.5 + 0.5 * sin(_time * PULSE_SPEED + k * 1.7))
 			(wisp.get_child(0) as GeometryInstance3D).transparency = 1.0 - pulse
 
 
-## P16: `point` pushed out to `BODY_RADIUS` from the hero's vertical axis when it is inside it (height kept), so a
-## wisp's path bends around the body. A point exactly on the axis leaves along +X.
-func _outside_body(point: Vector3) -> Vector3:
-	var centre := global_position
-	var flat := Vector2(point.x - centre.x, point.z - centre.z)
-	if flat.length() >= BODY_RADIUS:
-		return point
-	var dir := flat.normalized() if flat.length() > 0.0001 else Vector2.RIGHT
-	return Vector3(centre.x + dir.x * BODY_RADIUS, point.y, centre.z + dir.y * BODY_RADIUS)
-
-
-## Wisp `k`'s drifting target in world space: its own angle advancing at its own speed, a wobbling radius and a
-## bobbing height, all around the hero's CURRENT position. Deterministic from `k` and the halo's own clock.
+## Wisp `k`'s drifting target in world space: its own path (`wisp_offset`) around the hero's CURRENT position.
 func _target(k: int) -> Vector3:
+	return global_position + wisp_offset(k, _time)
+
+
+## Story 7-2 (AC 14/AC 15): wisp `k`'s PATH relative to its hero at halo time `time` -- its own angle advancing at its
+## own speed, a wobbling radius and a bobbing height. 7-6's formula unchanged, made static and pure so the no-merge
+## probe drives the very function the halo draws with. Deterministic from `k` and the clock alone.
+static func wisp_offset(k: int, time: float) -> Vector3:
 	var f := fmod((k + 1) * _PHI, 1.0)
-	var speed := lerpf(DRIFT_SPEED_MIN, DRIFT_SPEED_MAX, f)
-	var angle := TAU * f + _time * speed
-	var radius := ORBIT_RADIUS + RADIUS_WOBBLE * sin(_time * (0.7 + f) + k * 2.1)
-	var height := ORBIT_HEIGHT + HEIGHT_BOB * sin(_time * (1.1 + 0.6 * f) + k * 1.3)
-	return global_position + Vector3(cos(angle) * radius, height, sin(angle) * radius)
+	var angle := TAU * f + time * drift_speed(k)
+	var radius := ORBIT_RADIUS + RADIUS_WOBBLE * sin(time * (0.7 + f) + k * 2.1)
+	var height := ORBIT_HEIGHT + HEIGHT_BOB * sin(time * (1.1 + 0.6 * f) + k * 1.3)
+	return Vector3(cos(angle) * radius, height, sin(angle) * radius)
+
+
+## Wisp `k`'s own angular drift, rad/s (7-6's band, unchanged) -- what sets how long any two wisps take to cycle.
+static func drift_speed(k: int) -> float:
+	return lerpf(DRIFT_SPEED_MIN, DRIFT_SPEED_MAX, fmod((k + 1) * _PHI, 1.0))
+
+
+## Wisp `k`'s own follow rate, per second (7-6's band, unchanged).
+static func follow_rate(k: int) -> float:
+	return lerpf(FOLLOW_RATE_MIN, FOLLOW_RATE_MAX, fmod(k * _PHI * 3.0, 1.0))
+
+
+## One frame of the inertial follow: `position` eased toward `target` at `rate` over `delta` (an exponential approach).
+## NOTHING ELSE moves a wisp -- no push-out, no separation (AC 13).
+static func follow(position: Vector3, target: Vector3, rate: float, delta: float) -> Vector3:
+	return position.lerp(target, 1.0 - exp(-rate * delta))
 
 
 ## One wisp: a `top_level` Node3D (so the hero does not carry it rigidly) holding a soft glow and a small bright

@@ -244,8 +244,8 @@ const COUNTERSPELL_PEAK_SECONDS := 0.4333
 const COUNTERSPELL_LEAD_SECONDS := 0.15
 
 ## The gesture clips (Vampiric Aura / Frostbite -> `cast_buff`; Counterspell -> `cast_counterspell`) -> where each
-## starts in its own clip. Both RESOLVE INSTANTLY (no cast window roots the hero), so a gesture plays only on a
-## hero standing still and is cut by any movement or action (`play_gesture`, `on_locomotion`) -- it never slides.
+## starts in its own clip. Both RESOLVE INSTANTLY (no cast window roots the hero); since 7-2 a moving hero plays the
+## gesture on the upper body with its legs walking (`play_gesture`, `on_locomotion`) -- it never slides.
 const _GESTURE_START := {
 	&"cast_buff": 0.0,
 	&"cast_counterspell": COUNTERSPELL_PEAK_SECONDS - COUNTERSPELL_LEAD_SECONDS,
@@ -262,6 +262,30 @@ const _GESTURE_FOR_OUTCOME := {
 	CardEffectResolver.OUTCOME_FROSTBITE: &"cast_buff",
 	CardEffectResolver.OUTCOME_COUNTERSPELL: &"cast_counterspell",
 }
+
+## Story 7-2 (AC 9, M4): THE GESTURE A RESOLUTION PLAYS, keyed by the REVERSAL KIND the runner already reads off the
+## caster's packet (`match_runner._present_cast_resolved`) -- the one fact that says which effect just resolved.
+## Every kind with no clip of its own plays `cast_buff`; Vampiric Aura and Frostbite keep the `cast_buff` they
+## already played. The three cast spells have their own clips (no entry), Counterspell has its own path, and
+## Bloodlust and Boulder discard write no kind (Non-goals), so they play nothing.
+const _GESTURE_FOR_REVERSAL := {
+	PlayerState.REVERSAL_VANGUARD: &"cast_buff",
+	PlayerState.REVERSAL_CULLING: &"cast_buff",
+	PlayerState.REVERSAL_GRAVE_WARD: &"cast_buff",
+	PlayerState.REVERSAL_RAISE_DEAD: &"cast_buff",
+	PlayerState.REVERSAL_DRAIN: &"cast_buff",
+	PlayerState.REVERSAL_BOOM: &"cast_buff",
+	PlayerState.REVERSAL_VAMPIRIC_AURA: &"cast_buff",
+	PlayerState.REVERSAL_BLOODHOUND: &"cast_buff",
+	PlayerState.REVERSAL_FROSTBITE: &"cast_buff",
+	PlayerState.REVERSAL_CORPSE_BOMB: &"cast_buff",
+}
+
+## Story 7-2 (AC 1-3): the clips the legs can play on the `LegLayer` -- the locomotion set `_locomotion_clip` picks.
+const _LEG_CLIPS: Array[StringName] = [
+	&"idle", &"run", &"strafe_left", &"strafe_right", &"backpedal",
+	&"walk", &"walk_strafe_left", &"walk_strafe_right", &"walk_backpedal",
+]
 
 ## The walk-family members as a const list, so the per-tick rate lookup allocates nothing.
 const _WALK_FAMILY_MEMBERS: Array[StringName] = [
@@ -473,9 +497,30 @@ const _CHARGE_HOLD_KNOBS := {
 ## for `idle` at the landing (the recovery). Both used `_restart`'s instant cut (3-0a/R5), which is the
 ## pop `7-8/R6` names; these two edges ONLY now blend, every other evented transition keeps the cut.
 ## The victim's knockdown entry is 7-2's, and a counter or knockdown ending the charge (`STUNNED`) stays
-## instant -- it is an interruption, not a recovery.
+## instant -- it is an interruption, not a recovery. (Story 7-2, AC 11: every stun ENTRY now takes the short
+## `STUN_ENTRY_BLEND_SECONDS` below, this one included.)
 const CHARGE_ENTRY_BLEND_SECONDS := 0.15
 const CHARGE_EXIT_BLEND_SECONDS := 0.2
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-2: EVERY NEW PRESENTATION KNOB, IN ONE PLACE (starting values, judged at the live smoke; no test pins a
+## value, only the mechanism each one feeds).
+## ------------------------------------------------------------------------------------------
+## THE UPPER/LOWER SPLIT (AC 1-8). While the hero translates under an upper-body action, the `LegLayer` modifier
+## (`leg_layer.gd`) plays the locomotion clip on `mixamorig_Hips` and both legs and the player keeps the action on the
+## `mixamorig_Spine` subtree. This is how fast the legs fade onto / off that layer when the hero STARTS or STOPS
+## moving under an action, and how long a split that ENDS (flinch or gesture done, block released) hands the legs
+## back -- AC 8's ceiling is today's locomotion blend, so it starts AT that blend.
+const SPLIT_BLEND_SECONDS := LOCOMOTION_BLEND_SECONDS
+## THE STUN EDGES (AC 11). Entering `stunned`/`knockdown`/`dizzy` was an instant cut, and so was leaving an ordinary
+## stun for `idle`. The ENTRY blend is short so the hit still reads at once (5 frames at 60 Hz); the EXIT matches the
+## charge recovery's (`CHARGE_EXIT_BLEND_SECONDS`). A counter victim's held pose keeps 7-10's own blend.
+const STUN_ENTRY_BLEND_SECONDS := 0.08
+const STUN_EXIT_BLEND_SECONDS := 0.2
+## P19 (AC 10): the Rocksling LIFT -> THROW junction cross-fades over this long instead of cutting. The throw's
+## playhead is untouched (still seek-pinned by `spell_cast_pose`), so the release still lands on the strike tick; at
+## the authored 0.8 s cast the throw part is 0.44 s, so the fade is over well before the release.
+const ROCKSLING_JUNCTION_BLEND_SECONDS := 0.12
 
 
 ## THE RE-TEMPO MAPPING (AC 1/AC 2/AC 11): window PROGRESS (0..1, computed runner-side per
@@ -669,6 +714,19 @@ var _gesture: StringName = &""
 var _last_planar_speed := 0.0
 var _last_turn := 0
 
+## Story 7-2: the last locomotion push in full, so a split that starts on an EVENT (a hit, a gesture, the block) can
+## pick the legs' clip on that same call instead of waiting a tick for the next push.
+var _last_velocity := Vector3.ZERO
+var _last_facing := Vector2(0.0, 1.0)
+var _last_walk_speed := 0.0
+var _last_run_speed := 0.0
+
+## Story 7-2 (AC 1-8): the lower-body layer (`LegLayer`, a child of the paladin's skeleton made in `_ready`), and
+## whether the clip the player holds right now is an UPPER-BODY action -- `hit_react`, a gesture or a spell
+## follow-through -- which the legs may leave to walk. BLOCKING is upper by its state alone.
+var _legs: LegLayer
+var _upper := false
+
 ## Story 6-7b (AC 6): the turn detector's memory -- presentation-local, never a HeroState field.
 ## `_prev_facing` advances on EVERY push, IDLE or not (AC 6(b)).
 var _has_prev_facing := false
@@ -694,6 +752,13 @@ func _ready() -> void:
 	animation_player = get_node(animation_player_path)
 	# Start on the resting pose so a hero that never moves still animates.
 	_play(&"idle")
+	# Story 7-2 (Task 1.1): the lower-body layer rides the paladin's own skeleton, after the player in its pose chain.
+	var rig := animation_player.get_node_or_null(animation_player.root_node)
+	var skeleton := rig.get_node_or_null("Skeleton3D") as Skeleton3D if rig != null else null
+	if skeleton != null:
+		_legs = LegLayer.new()
+		_legs.name = "LegLayer"
+		skeleton.add_child(_legs)
 
 
 ## Seam callback (connect_hero_action_state_changed): the entered state selects its clip.
@@ -727,6 +792,11 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 	_state = current
 	_one_shot = &""
 	_gesture = &""
+	# Story 7-2 (AC 8): a transition ends whatever upper-body action was playing. Every state but BLOCKING and IDLE
+	# is a WHOLE-BODY action (AC 7), so the legs leave the layer at once: no leftover split on the next frame.
+	_upper = false
+	if current != HeroState.ActionState.BLOCKING and current != HeroState.ActionState.IDLE:
+		_drop_legs()
 	# Story 6-6b (AC 10): a real transition takes the body from a counter clip in flight, the
 	# `_one_shot` line directly above's own rule -- a knockdown or a death must not wait for a cut.
 	#
@@ -755,6 +825,7 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 			# keeps the body ahead of a resume. With the authored numbers this cannot even be reached:
 			# the knockdown stun (2.5 s) outlasts the longest busy span (RED, 1.5 s), so the falling
 			# edge has ended the counter before this line runs.
+			_drop_legs()
 			_restart(&"get_up")
 			_one_shot = &"get_up"
 			return
@@ -767,8 +838,15 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 		if previous == HeroState.ActionState.BLOCKING:
 			# `3-0b/R24`'s pre-cleared shape: EXIT only, and only to IDLE. Entry and block -> attack/roll
 			# never reach this line (they are not IDLE entries), so they keep the instant cut.
-			_play(&"idle")
+			# Story 7-2 (AC 1/AC 8): a block released while WALKING hands the legs' clip back to the whole body
+			# on the same blend, at the legs' own phase; standing, this is today's blend to `idle`.
+			if not _hand_back_legs():
+				_play(&"idle")
 			return
+	if current == HeroState.ActionState.BLOCKING:
+		# Story 7-2 (AC 1): block ENTRY stays the instant cut (`3-0b/R23`); a hero walking into it keeps walking,
+		# because the legs move onto the layer at the walk's own phase before the body cuts to `block`.
+		_begin_split()
 	if current == HeroState.ActionState.CHARGING:
 		var charge_clip: StringName = _CHARGE_CLIP.get(charge_color, &"")
 		if charge_clip != &"":
@@ -785,6 +863,9 @@ func on_action_state_changed(previous: HeroState.ActionState, current: HeroState
 		var blend := CHARGE_EXIT_BLEND_SECONDS \
 				if previous == HeroState.ActionState.CHARGING and current == HeroState.ActionState.IDLE \
 				else -1.0
+		# Story 7-2 (AC 11): leaving a stun for `idle` blends too (a knockdown's armed exit is `get_up`, above).
+		if previous == HeroState.ActionState.STUNNED and current == HeroState.ActionState.IDLE:
+			blend = STUN_EXIT_BLEND_SECONDS
 		_restart(clip, 1.0, blend)
 
 
@@ -845,10 +926,16 @@ func on_hit_landed(_attacker_slot: int, target_slot: int, _damage: float, _targe
 			# jumped RED straight to its backflip.
 			if _counter_running:
 				return
+			# Story 7-2 (AC 3): a hero hit while walking or running keeps the legs going under the flinch -- they move
+			# onto the layer at the stride's own phase before the body restarts into `hit_react`. Standing: as today.
+			_begin_split()
 			_restart(&"hit_react")
 			_one_shot = &"hit_react"
+			_upper = true
 		HeroState.ActionState.BLOCKING:
 			if blocked:
+				# Story 7-2 (AC 2): the legs are already on the layer if the blocker is walking; this keeps them there.
+				_begin_split()
 				_restart(&"block_impact")
 		HeroState.ActionState.STUNNED:
 			# Story 7-10: while a victim's pose is held, an escalation only updates the remembered clip.
@@ -886,6 +973,16 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 	var planar_speed := Vector2(velocity.x, velocity.z).length()
 	_last_planar_speed = planar_speed
 	_last_turn = turn
+	_last_velocity = velocity
+	_last_facing = facing
+	_last_walk_speed = walk_speed
+	_last_run_speed = run_speed
+	var moving := planar_speed > RUN_SPEED_EPS
+	# Story 7-2 (AC 1/AC 2): BLOCKING keeps its pose on the upper body; the legs walk on the layer while it moves
+	# (block forces walk pace, so this is the walk family) and leave it when it stands.
+	if _state == HeroState.ActionState.BLOCKING:
+		_drive_legs(moving)
+		return
 	if _state != HeroState.ActionState.IDLE:
 		return
 	# Story 6-6b (AC 10): THE COUNTER OWNS THE BODY for its whole busy span, and it rides THIS per-tick
@@ -908,21 +1005,83 @@ func on_locomotion(velocity: Vector3, facing: Vector2, walk_speed: float, run_sp
 		return
 	# Story 6-6a (AC 2): THE LOCOMOTION YIELD. A `hit_react`/`get_up` still playing keeps the body; the
 	# idempotent `_play()` below would otherwise crossfade it away on the very next tick.
-	# 7-1 polish round: a GESTURE yields like the others, except that any movement -- a step or a turn -- cuts it
-	# at once, so a full-body gesture never slides under a moving hero (the upper-body split is `7-2`'s).
+	# Story 7-2 (AC 3/AC 4/AC 6): an UPPER-BODY one-shot -- `hit_react`, a gesture, a spell follow-through -- is no
+	# longer cut by movement (7-1's interim): it keeps the upper body and the legs walk under it on the layer, so
+	# nothing slides. `get_up` stays whole body.
 	if _one_shot != &"":
-		var moving := planar_speed > RUN_SPEED_EPS or turn != 0
-		if animation_player.current_animation == _one_shot and animation_player.is_playing() \
-				and not (_one_shot == _gesture and moving):
+		if animation_player.current_animation == _one_shot and animation_player.is_playing():
+			if _upper:
+				_drive_legs(moving)
 			return
 		_one_shot = &""
 		_gesture = &""
+		_upper = false
 	if planar_speed <= RUN_SPEED_EPS and turn != 0:
+		_fade_legs_out()
 		# Negative cross = facing rotating toward local +X, this file's "right" (header).
 		_play(&"turn_right" if turn < 0 else &"turn_left", _turn_playback_rate())
 		return
 	var clip := _locomotion_clip(velocity, facing, walk_speed, run_speed)
+	# Story 7-2 (AC 8): a split that just ended gives the legs' clip back to the whole body at the legs' phase.
+	_hand_back_legs()
 	_play(clip, _playback_speed(clip, planar_speed))
+
+
+## Story 7-2 (AC 1-6): the legs under an upper-body action. Moving: the locomotion clip the hero would play right now
+## goes onto the layer, at its locomotion rate, cross-fading between clips like the player does, and the layer ramps
+## on over `SPLIT_BLEND_SECONDS`. Standing: the layer ramps off and the action is whole body again, exactly as today.
+func _drive_legs(moving: bool) -> void:
+	if _legs == null:
+		return
+	if not moving:
+		_fade_legs_out()
+		return
+	var clip := _locomotion_clip(_last_velocity, _last_facing, _last_walk_speed, _last_run_speed)
+	_legs.play(clip, animation_player.get_animation(clip), _playback_speed(clip, _last_planar_speed),
+			LOCOMOTION_BLEND_SECONDS)
+	_legs.fade_to(1.0, SPLIT_BLEND_SECONDS)
+
+
+## Story 7-2 (AC 1-4): a split that starts on an EVENT, called just BEFORE the body cuts to the action. A hero that is
+## moving has its legs put on the layer AT ONCE, on the locomotion clip it is playing and at that clip's playhead, so
+## the stride carries on through the cut. A hero standing still is left whole body.
+func _begin_split() -> void:
+	if _legs == null or _last_planar_speed <= RUN_SPEED_EPS:
+		return
+	var clip := _locomotion_clip(_last_velocity, _last_facing, _last_walk_speed, _last_run_speed)
+	var start := animation_player.current_animation_position \
+			if animation_player.current_animation == clip else 0.0
+	_legs.play(clip, animation_player.get_animation(clip), _playback_speed(clip, _last_planar_speed), 0.0, start)
+	_legs.fade_to(1.0, 0.0)
+
+
+## Story 7-2 (AC 8): THE SPLIT ENDS. If the legs are on the layer with a locomotion clip, the whole body takes that
+## clip over on the locomotion blend, seeked to the legs' own playhead, and the layer ramps off on the same blend -- so
+## the stride never jumps and the upper body eases back into the walk. Answers whether it handed anything back.
+func _hand_back_legs() -> bool:
+	if _legs == null or _legs.target_weight() <= 0.0 or not _LEG_CLIPS.has(_legs.clip_name()):
+		return false
+	var clip := _legs.clip_name()
+	animation_player.play(clip, LOCOMOTION_BLEND_SECONDS, _legs.playback_rate())
+	animation_player.seek(_legs.playhead(), true)
+	_legs.fade_to(0.0, SPLIT_BLEND_SECONDS)
+	return true
+
+
+func _fade_legs_out() -> void:
+	if _legs != null:
+		_legs.fade_to(0.0, SPLIT_BLEND_SECONDS)
+
+
+## A whole-body action owns the legs from this frame (AC 7/AC 8).
+func _drop_legs() -> void:
+	if _legs != null:
+		_legs.fade_to(0.0, 0.0)
+
+
+## Story 7-2: the legs' layer, for the tests that pin the split (null when the rig has no skeleton).
+func leg_layer() -> LegLayer:
+	return _legs
 
 
 ## Story 6-6b (AC 10): THE COUNTER STARTS ON THE PRESS, not on the resolution -- pushed by the runner
@@ -1016,6 +1175,9 @@ static func counter_lift_at(step: Dictionary, playhead: float) -> float:
 func set_frozen(frozen: bool) -> void:
 	if animation_player != null:
 		animation_player.speed_scale = 0.0 if frozen else 1.0
+	# Story 7-2: the hitstop freezes BOTH layers -- the legs' playhead, cross-fade and weight ramp stop with the body.
+	if _legs != null:
+		_legs.frozen = frozen
 
 
 ## Story 7-10 (AC 11/AC 14): arm the victim hold on a counter's PRESS against this hero. The STUNNED transition
@@ -1062,6 +1224,9 @@ func _resume_counter() -> bool:
 		var to := float(step["to"])
 		if consumed < to - from or i == _counter_steps.size() - 1:
 			_counter_index = i
+			# Story 7-2 (AC 7): a colour counter is whole body.
+			_drop_legs()
+			_upper = false
 			_restart(step["clip"], _counter_speed)
 			animation_player.seek(minf(from + consumed, to), true)
 			_one_shot = step["clip"]
@@ -1220,8 +1385,12 @@ func _play_stun(stun_flavor: int, stun_seconds: float, blend: float = -1.0) -> v
 	# added raw and uncut, `add_paladin_cast_clips.gd`'s own ruling), so a smoke-time retune is one
 	# line here. The range is clamped to the clip, so a stun longer than the remaining clip falls
 	# back to holding the final frame exactly as the other flavors do.
+	# Story 7-2 (AC 11): the entry blends instead of cutting, unless the caller sized its own blend (7-10's victim
+	# release). The clip, its rate and its hold are unchanged -- only how it comes in.
+	if blend < 0.0:
+		blend = STUN_ENTRY_BLEND_SECONDS
 	if clip == &"dizzy":
-		_play_dizzy(stun_seconds)
+		_play_dizzy(stun_seconds, blend)
 		return
 	_restart(clip, held_clip_speed(animation_player.get_animation(clip).length, stun_seconds), blend)
 
@@ -1236,10 +1405,10 @@ func _play_stun(stun_flavor: int, stun_seconds: float, blend: float = -1.0) -> v
 ## LEGIBILITY IS THE OPERATOR'S CALL AT SMOKE (`PROC/R8`): this pins the MECHANISM and the timing,
 ## never how it looks, and smoke step 16 is where `dizzy` and `stunned` are judged side by side at
 ## the same 0.4 s.
-func _play_dizzy(stun_seconds: float) -> void:
+func _play_dizzy(stun_seconds: float, blend: float = -1.0) -> void:
 	var length := animation_player.get_animation(&"dizzy").length
 	var start := minf(DIZZY_CUT_START, maxf(0.0, length - stun_seconds))
-	animation_player.play(&"dizzy", -1.0, 1.0)
+	animation_player.play(&"dizzy", blend, 1.0)
 	animation_player.seek(start, true)
 
 
@@ -1277,6 +1446,9 @@ static func cast_launch_seconds(cast_seconds: float) -> float:
 ## Fireball or Rocksling cast plays its OWN clip(s) through `spell_cast_pose`; every other outcome -- Honed Bolt
 ## -- plays `cast` exactly as before (the default keeps every older caller on that path).
 func on_cast_started(cast_seconds: float, outcome: StringName = &"") -> void:
+	# Story 7-2 (AC 7/AC 12): every cast is whole body -- the caster is rooted for the window.
+	_drop_legs()
+	_upper = false
 	if not spell_cast_pose(outcome, 0.0, cast_seconds).is_empty():
 		_spell_outcome = outcome
 		_spell_cast_seconds = maxf(cast_seconds, 0.0)
@@ -1313,6 +1485,9 @@ func on_cast_ended(follow_through: bool = false) -> void:
 		animation_player.play(spell_clip, -1.0, 1.0)
 		animation_player.seek(at, true)
 		_one_shot = spell_clip
+		# Story 7-2 (AC 6/AC 12): the follow-through is an UPPER-BODY one-shot -- a hero that walks off after the
+		# strike walks on the layer instead of sliding in the throw pose; standing, it plays whole body as before.
+		_upper = true
 
 
 ## Story 7-1 (AC 23/AC 24): pushed every tick of a cast by the runner -- seconds since the press, from the state
@@ -1327,7 +1502,11 @@ func on_cast_progress(elapsed_seconds: float) -> void:
 		return
 	var clip: StringName = pose[0]
 	if animation_player.current_animation != clip:
-		_restart(clip, 0.0)
+		# Story 7-2 (AC 10, P19): the LIFT -> THROW junction cross-fades instead of cutting. Only the weight of the
+		# outgoing pose changes; the throw's playhead is still the seek below, so the release stays on the strike.
+		var junction := animation_player.current_animation == &"cast_rocksling_lift" \
+				and clip == &"cast_rocksling_throw"
+		_restart(clip, 0.0, ROCKSLING_JUNCTION_BLEND_SECONDS if junction else -1.0)
 	animation_player.seek(float(pose[1]), true)
 
 
@@ -1341,7 +1520,7 @@ func on_cast_progress(elapsed_seconds: float) -> void:
 ##   FIREBALL: `cast_fireball` from `release - cast_seconds` to the release.
 ##   ROCKSLING (option A): the LIFT for the first `1 - ROCKSLING_THROW_SHARE` of the window, ending on the lift's
 ##     peak; then the THROW for the rest, ending on its release -- stone 1 leaves on it. Stones 2 and 3 fly with
-##     no swing (`7-2`).
+##     no swing (story 7-2 tried one; the operator's live smoke removed it) while the throw follows through.
 ## Any other outcome answers `[]`: not a spell clip.
 static func spell_cast_pose(outcome: StringName, elapsed: float, cast_seconds: float) -> Array:
 	var cast := maxf(cast_seconds, 0.0)
@@ -1386,22 +1565,34 @@ static func gesture_beat_delay(clip: StringName) -> float:
 
 
 ## 7-1 polish round: PLAY A GESTURE on an instant resolution -- Vampiric Aura or Frostbite (`cast_buff`), a real
-## Counterspell (`cast_counterspell`). NEITHER CARD HAS A CAST WINDOW, so nothing roots the hero: the gesture plays
-## only when the hero is IDLE and STANDING STILL at that moment (the last locomotion push: no planar speed, no
-## turn) and owes nothing to a cast or counter in progress; then it yields to any movement or action
-## (`on_locomotion`, `on_action_state_changed`). Answers whether it played.
+## Counterspell (`cast_counterspell`), and since 7-2 every effect `gesture_for_reversal` names. NO SUCH CARD HAS A
+## CAST WINDOW, so nothing roots the hero.
+##
+## STORY 7-2 (AC 4/AC 8) REPLACES 7-1's "standing still only" interim: a hero that is MOVING plays the gesture on the
+## upper body while the legs keep walking (`_begin_split`, `on_locomotion`); standing, it is whole body as before.
+## What still refuses it is a WHOLE-BODY action in progress -- any state but IDLE, a cast, a colour counter: the
+## gesture is DROPPED, never queued, and the action wins. Answers whether it played.
 func play_gesture(clip: StringName) -> bool:
 	var start := gesture_start(clip)
 	if start < 0.0 or animation_player == null or not animation_player.has_animation(clip):
 		return false
-	if _state != HeroState.ActionState.IDLE or _cast_running or _counter_running \
-			or _last_planar_speed > RUN_SPEED_EPS or _last_turn != 0:
+	if _state != HeroState.ActionState.IDLE or _cast_running or _counter_running:
 		return false
+	# Review fix F1: the knockdown get-up plays in IDLE but is a WHOLE-BODY action (AC 7) -- the gesture is dropped.
+	if _one_shot == &"get_up" and animation_player.current_animation == &"get_up" and animation_player.is_playing():
+		return false
+	_begin_split()
 	animation_player.play(clip, -1.0, 1.0)
 	animation_player.seek(start, true)
 	_one_shot = clip
 	_gesture = clip
+	_upper = true
 	return true
+
+
+## Story 7-2 (AC 9): the gesture a resolution with this reversal kind plays (`_GESTURE_FOR_REVERSAL`), or `&""`.
+static func gesture_for_reversal(kind: int) -> StringName:
+	return _GESTURE_FOR_REVERSAL.get(kind, &"")
 
 
 ## Story 6-5c (AC 25): the per-tick cut enforcement -- past the sub-range's END, PAUSE on that frame
@@ -1430,7 +1621,8 @@ static func held_clip_speed(clip_seconds: float, hold_seconds: float) -> float:
 ## 3-0a/R5 policy is that a transition wins immediately, and 5-0a's crossfade is scoped to the
 ## locomotion clips only (AC 2). Story 7-8 (AC 15) passes `blend` for exactly two edges -- into and out of
 ## the charge clip -- and story 7-10 (AC 11/AC 14) for a third, a counter victim's knockdown entering at its
-## impact (`release_victim_hold`); nothing else does. The seek() is LOAD-BEARING and not belt-and-braces:
+## impact (`release_victim_hold`). Story 7-2 adds the stun edges (AC 11) and the Rocksling lift -> throw junction
+## (AC 10, P19); nothing else does. The seek() is LOAD-BEARING and not belt-and-braces:
 ## AnimationPlayer.play(name) is a no-op on playback position when `name` is already the
 ## current, still-playing animation (measured on Godot 4.6.3 — play, advance to 0.30, play
 ## again, position is still 0.30). Dropping the seek would silently reinstate the chained-swing
