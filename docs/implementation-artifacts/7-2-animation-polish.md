@@ -4,7 +4,7 @@ baseline_commit: 4e451ee881cb90df7db8d09697bf7dca8e00076f
 
 # Story 7.2: Animation polish (upper/lower body split, hit-reaction sliding, orbs as ghosts)
 
-Status: ready-for-dev
+Status: review
 
 Tier **B**, presentation only. Authored 2026-10-09 against HEAD == origin/main == `4e451ee`, tree clean; promoted the same day
 after the browser review (Change Log). Golden predicted
@@ -45,6 +45,12 @@ anyone and never turn into one blob.
    the dev pass reports it and does not change this rule. Block ENTRY
    remains an instant cut of the block pose (`3-0b/R23`: the deflect window opens on the entry tick); block EXIT still blends as
    `3-0b/R24` set it. A block pressed while standing looks as today.
+
+   **Amended (operator live smoke 2026-10-09).** In every split (block, block_impact, hit_react, gestures, spell
+   follow-through) the upper body keeps the facing it has in its own action clip, in the character's own frame,
+   whatever the legs' clip does to the Hips: under lock-on the chest and shield point at the opponent while walking
+   forward, backward and strafing left and right, and through a direction change; without lock-on they face the
+   hero's own facing, as today. The walk may still add its bob and small sway.
 2. A `block_impact` (the blocked-hit reaction) and the deflect read on the upper body while the hero moves, legs keep walking.
 3. A `hit_react` taken while walking or running plays on the upper body, legs keep the locomotion clip, and the hero no longer
    appears to slide (item 4). Standing still: today's full-body `hit_react`, unchanged.
@@ -56,6 +62,11 @@ anyone and never turn into one blob.
    interval (`boulder_interval_seconds` in `data/effects/rocksling.tres`), and fits inside that interval; nothing is stretched.
    If no usable swing fits in the interval, the dev pass reports it. If the hero enters an AC 7 action during the burst, the
    remaining swings are dropped and the stones fly anyway. Stone 1 keeps the existing cast throw.
+
+   **Amended (operator live smoke 2026-10-09).** Stones 2 and 3 fly WITHOUT a swing, as before 7-2: the re-played
+   swings looked worse than none and are removed. Stone 1's lift -> throw keeps the AC 10 cross-fade, and after the
+   strike the throw follows through at native rate (on the upper body while the hero moves, AC 6); no later stone
+   re-seeks or restarts it.
 6. The follow-through of a struck Rocksling/Fireball cast (`animation_controller.gd:1305-1315`) plays on the upper body when the
    hero walks off during it, so a hero that moves after the strike does not slide in the throw pose.
 7. These stay WHOLE BODY with no split: attack (with lunge), roll, CHARGING (chargeup and launch), colour counters including the
@@ -105,15 +116,15 @@ anyone and never turn into one blob.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 (AC 1-4, 6-8): layer the rig. Re-measure each candidate clip's upper half first (M3); decide per clip whole vs split.
-  - [ ] 1.1 Pick the layering mechanism (M1 shows none exists); keep it hero-local and presentation-only.
-  - [ ] 1.2 Route block / block_impact / hit_react / gestures / follow-through to the upper layer when `_last_planar_speed` > `RUN_SPEED_EPS`.
-  - [ ] 1.3 Keep block entry an instant cut and block exit on the existing blend.
-  - [ ] 1.4 Hips to the legs, upper layer = `mixamorig_Spine` subtree; drop a gesture that resolves during a whole-body action.
-- [ ] Task 2 (AC 5, 9): Rocksling stones 2/3 swing (release on spawn, from the authored interval); `cast_buff` for the effects with a reversal kind (M4).
-- [ ] Task 3 (AC 10-12): P19 junction, stun in/out blends with a named entry-length knob, cast follow-through.
-- [ ] Task 4 (AC 13-15): orbs: remove `_outside_body`, replace the P16 pin, add the no-merge probe.
-- [ ] Task 5 (AC 16-18): before/after golden + key set + `src/state/` diff; amendment-queue entry; tests committed under `test/`.
+- [x] Task 1 (AC 1-4, 6-8): layer the rig. Re-measure each candidate clip's upper half first (M3); decide per clip whole vs split.
+  - [x] 1.1 Pick the layering mechanism (M1 shows none exists); keep it hero-local and presentation-only.
+  - [x] 1.2 Route block / block_impact / hit_react / gestures / follow-through to the upper layer when `_last_planar_speed` > `RUN_SPEED_EPS`.
+  - [x] 1.3 Keep block entry an instant cut and block exit on the existing blend.
+  - [x] 1.4 Hips to the legs, upper layer = `mixamorig_Spine` subtree; drop a gesture that resolves during a whole-body action.
+- [x] Task 2 (AC 5, 9): Rocksling stones 2/3 swing (release on spawn, from the authored interval); `cast_buff` for the effects with a reversal kind (M4).
+- [x] Task 3 (AC 10-12): P19 junction, stun in/out blends with a named entry-length knob, cast follow-through.
+- [x] Task 4 (AC 13-15): orbs: remove `_outside_body`, replace the P16 pin, add the no-merge probe.
+- [x] Task 5 (AC 16-18): before/after golden + key set + `src/state/` diff; amendment-queue entry; tests committed under `test/`.
 
 ## Dev Notes
 
@@ -274,13 +285,161 @@ up in three tries is reported as needing [3,3].
 |---|---|
 | 2026-10-09 | Authored (Status `authored`), M1-M7 measured against `4e451ee`. |
 | 2026-10-09 | Browser review rulings applied and promoted to `ready-for-dev`: orbs pass through their own hero (supersedes 7-6/P16); cast speed and the Bloodlust/Boulder-discard gestures moved to Non-goals (old AC 13 and Open Questions 1-2 removed, ACs renumbered to 18); Hips goes to the legs; gestures during whole-body actions are dropped; Rocksling swings release on the stone spawn; stun-entry blend length is a named knob; Live Smoke made concrete with the controller flip. |
+| 2026-10-09 | Dev pass (Tier B held): `LegLayer` lower-body modifier + split routing, Rocksling stone swings off the state's burst window, `cast_buff` for every reversal kind, P19 cross-fade, stun entry/exit blends, orb push-out removed. Golden/key set/FORMAT_VERSION unmoved, `src/state/` diff empty. Status `review`; Live Smoke not run. |
+| 2026-10-09 | Operator live smoke (solo [0,3]): block-walk split, block release, hit while walking/running, blocked hit while walking, gestures while running, Fireball follow-through, stun edges, orbs as ghosts and fps passed; two findings fixed in the same session -- torso facing (Spine yaw compensation in `LegLayer`; AC 1 amended) and the Rocksling stone 2/3 swings removed (AC 5 amended). The operator's chat checklist numbers are not this story's Live Smoke numbering; see Live Smoke Results. Golden unmoved; Status stays `review`. |
+| 2026-10-09 | Review fixes (`_7-2-review.md`, operator dispositions): F1 gesture dropped during the `get_up` one-shot, F2 contact-pose pin committed (GREEN on the real code: the layer does not reach the contact facts), F4 steep-chest guard in the facing compensation. F3/F5/F6/F7 accepted, no change. Golden unmoved; Status stays `review`. |
+
+## Live Smoke Results
+
+Recorded by content (the operator's chat checklist numbering is not this section's table). Solo [0,3]. 2026-10-09; the operator's
+own entry is in `docs/playtest-log.md`.
+
+**First round.** PASSED: block-walk split, block release, hit while walking and running, blocked hit while walking, gestures while
+running, Fireball follow-through, stun edges (in and out), orbs as ghosts, fps. FAILED: torso facing (under lock-on the shield
+pointed about 45 deg to the left while walking; the torso turned with the legs). The Rocksling stone 2 and 3 swings looked worse
+than no swing at all.
+
+**Re-smoke after the fix pass.** PASSED: torso facing under lock-on in all four directions and through direction changes; stones
+2 and 3 without a swing; lift -> throw; the roll mid-flinch. Operator: "sve je kako treba biti".
+
+## Review Findings
+
+`C:\dev\_7-2-review.md`, verdict **APPROVE WITH FINDINGS**. F1 (gesture not dropped during `get_up`), F2 (contact-pose pin) and
+F4 (steep-chest guard) were fixed in the review-fix pass. F3 (facing pin skips the influence ramp), F5 (debug reset mid-split
+unpinned), F6 (AC 14 worst overlap 14.73 s) and F7 (smoke coverage by playtest-log prose) were accepted without change.
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, gds-dev-story. No subagents.
+
 ### Debug Log References
+
+| Run | File (outside the repo) | Result |
+|---|---|---|
+| before, state | `C:\dev\_7-2-suite-before-state.txt` (mtime 18:13:50) | 1317 tests, 0 failed, 13350 assertions |
+| before, integration | `C:\dev\_7-2-suite-before-int.txt` (mtime 18:20:09) | 82/82 PASS |
+| after, state | `C:\dev\_7-2-suite-after-state.txt` (mtime 18:46:09) | 1317 tests, 0 failed, 13350 assertions |
+| after, integration | `C:\dev\_7-2-suite-after-int.txt` (mtime 18:52:27) | 84/84 PASS (82 + 2 new files) |
+
+Two full runs, no extra; `test_unblockable_reach_live` passed both times. Golden probe (scratch script calling
+`test_determinism.gd`'s own `_make_match`/`_play_sequence`): `C:\dev\_7-2-probe-before.txt` and `_7-2-probe-after.txt`
+are byte-identical: `43449bd9e513e900...`, top keys 6, per-player keys 46, 258 key paths, `FORMAT_VERSION` 22.
+`git diff --stat src/state/` empty; `git diff -- project.godot` empty after both headless editor scans
+(`--headless --editor --quit`, for `class_name LegLayer` and the two new test files' `.uid`). Scratch engine probes:
+`probe_m3.gd` (M3 measurement), `probe_engine.gd` x2 (pinned-blend and `SkeletonModifier3D` behaviour). Targeted
+single-file runs during development: test_hero_reaction_clips, test_spell_cast_clips (x2), test_unblockable_presentation_live,
+test_defense_reactions_live, test_cast_presentation_live, test_upper_lower_split (x4), test_history_and_orbs_live,
+test_animation_polish_live (x2), plus the mutation runs below.
 
 ### Completion Notes List
 
+**M3 / Open Question 1, measured FIRST** (criteria fixed before reading: usable iff Hips planar peak <= 0.25 m, drop
+<= 0.15 m, swing <= 25 deg): `block` 0.0055 / 0.0001 / 0.37, `block_impact` 0.0440 / 0.0000 / 10.92, `hit_react` 0.0606 /
+0.0050 / 13.08 -- all USABLE, so **no clip stayed whole-body**. For the record the throw clip measures 0.1537 / 0.0866 /
+29.53 over its whole length; it is upper-body by AC 5/AC 6, not by this test.
+
+**Mechanism (Task 1.1).** `LegLayer` (`src/actors/hero/leg_layer.gd`), a `SkeletonModifier3D` the controller adds to
+the paladin's `Skeleton3D` in `_ready`. The one `AnimationPlayer` keeps playing the action whole-body exactly as before;
+the modifier overwrites `mixamorig_Hips` + both UpLeg chains (every Hips descendant not under `mixamorig_Spine`) with a
+locomotion clip sampled at its own playhead, weighted by the skeleton's own `influence`. Measured on 4.6.3: a modifier's
+output is restored after the frame, so `HeroActor`'s sword/trunk followers (contact facts) never see it. Split starts on
+an event snap the legs on at the stride's own phase; a split that ends hands the legs' clip back to the body at that
+phase on the locomotion blend; whole-body states drop the layer on the same call; hitstop freezes it.
+
+**Rocksling (AC 5, ruling 2 applied).** The runner pushes `on_burst_progress(owed, ticks_to_stone)` every tick from
+`burst_remaining` / `burst_window.remaining_ticks()`. Spawn ticks (owed drops; stone 1 = the strike) show the release
+frame; ticks between show `stone_swing_playhead = 1.3275 - ticks/60`, pinned (speed 0). Swing used: one authored
+interval (18 ticks = 0.3 s) back from the release, first drawn frame 1.0442 (17 ticks), i.e. starting ~0.12 s past the
+backswing's deepest point (~0.92), unstretched. After the last stone the throw follows through at native rate. Any
+transition, hit, gesture or cast drops the remaining swings. Smoke item: the upper body snaps from the release pose back
+to 1.0442 between stones (inherent to re-playing the swing; no blend added).
+
+**AC 14 (orbs).** Paths unchanged (AC 15). The pin is AC 14's wording: across 2x the slowest pair's relative cycle
+(608 s, 15 wisps = 3 x authored cap, the halo's own static path/follow functions at 1/30 s) every pair parts at least
+once. MEASURED for the smoke: longest continuous overlap < 0.25 m is **14.73 s (pair 1/6)** -- whether that is "brief" is
+the operator's call at smoke item 13.
+
+**Knobs (one block, `animation_controller.gd` "STORY 7-2: EVERY NEW PRESENTATION KNOB"):** `SPLIT_BLEND_SECONDS` =
+`LOCOMOTION_BLEND_SECONDS` (0.25); `STUN_ENTRY_BLEND_SECONDS` 0.08; `STUN_EXIT_BLEND_SECONDS` 0.2;
+`ROCKSLING_JUNCTION_BLEND_SECONDS` 0.12. The stone swing has no knob (authored interval).
+
+**Replaced pins (named):** `test_spell_cast_clips.gd` 7-1 interim "movement cuts the gesture" / "a moving hero plays no
+buff gesture" / "...the clip does not start" -> the AC 4 behaviour; `test_history_and_orbs_live.gd` P16 body-radius pin
+-> the AC 13 ghost pin (+ AC 14 probe, + AC 15 appear-at-target check).
+
+**Mutations** (each file backed up outside the repo, run against the one test file, restored by copy-back, SHA-256
+matched every time): M1 Spine on the legs' layer, M2 `_begin_split` no-op, M3 `_drop_legs` no-op, M4 7-1 moving refusal
+(both test files), M5 swing playhead pinned to release, M6 P19 hard cut, M7 stun entry cut, M8 hitstop doesn't freeze
+legs, M9 layer writes no rotations, M10 Grave Ward unmapped, M11 runner gesture call removed, M12 runner burst push
+removed, M13 P16 push-out re-added, M14 wisps 1/6 share a path, M15 stun exit cut, M16 no hand-back, M17 new wisp off its
+target, M18 swing legs not forced, M20 legs stay on standing, M21 split while standing, M22 BLOCKING ignores the push (run
+twice: before and after the AC 2 pin was strengthened), M23 gesture during a roll, M24 follow-through not upper, M25 7-1
+movement cut re-added (both files), M26 legs never thaw -- **all KILLED**.
+
+**AC 17:** no `connect_*` added, no `_physics_process`, no `Input.*` (suite invariants green). **AC 18 -- ARCH AMENDMENT
+QUEUE entry text for the E7 close-out** (not written to `game-architecture.md` or the decision log here): "7-2: layered
+rig presentation -- a per-hero `SkeletonModifier3D` (`LegLayer`) overrides Hips + legs with a locomotion clip under an
+upper-body action; the one `AnimationPlayer` stays the action source; modifier output is render-only (restored after the
+frame), so contact facts never read it. Refused at `6-6a`; adopted here."
+
+**Deviations:** (1) The board was not written `in-progress`/`review` (its STATUS DEFINITIONS lock
+backlog/ready-for-dev/done and on_complete restores it anyway); only on_complete's story_notes/last_updated were applied.
+(2) `orb_halo.gd` was edited by a python byte-replace without a prior Edit miss (one multi-hunk replace), and the new test
+file `test_upper_lower_split.gd` got one python multi-hunk replace -- both outside the "Edit first" rule. (3) The prompt's
+"Open Question 3" is this story's Open Question 1 (renumbered at the browser review); there is no Task 6 -- the Live
+Smoke is a section and nothing was ticked for it. (4) The runner's Vampiric Aura / Frostbite arms were folded into the
+one `gesture_for_reversal` call (same clip as before). (5) On the Rocksling strike tick the release frame is now HELD
+(pinned) for that tick when the swings arm, instead of starting the follow-through at once.
+
+**FIX PASS (operator live smoke 2026-10-09; supersedes the Rocksling paragraph above and its M5/M12/M18 rows).**
+- **F1 torso facing.** `LegLayer` reads the action's own Hips and Spine rotations before it writes the legs, then
+  re-sets the Spine (root of the upper body) to `upper_facing_spine(...)`: a pure yaw about skeleton +Y, in the
+  skeleton frame, so the Spine's forward yaw under the legs' Hips equals what the action's Hips gave it; the walk's
+  pitch/roll (bob, sway) still pass through. Applies to every split, since it lives in the layer. Pinned on the
+  rendered pose (inside `skeleton_updated`, 40 frames per case): chest (Hips*Spine*Spine1*Spine2) forward yaw vs the
+  block clip standing still (its own tracks), tolerance 5.0 deg. Worst error BEFORE -> AFTER: walk 69.36 -> 1.02,
+  walk_backpedal 77.78 -> 1.12, walk_strafe_left 7.72 -> 2.12, walk_strafe_right 15.31 -> 0.99, walk -> strafe_right
+  change 67.16 -> 1.03.
+- **F2 Rocksling.** Removed `on_burst_progress`, `stone_swing_playhead`, `_seek_swing`, `_burst_owed`, `_swing_running`
+  (and every reset of it), `_drive_legs`' `forced` parameter, the knob-block note, and the runner's per-tick burst push.
+  Stone 1's P19 cross-fade and the native-rate follow-through (upper body when moving) are unchanged. The swing pins are
+  replaced: `test_upper_lower_split.gd` `_rocksling_follow_through` (release, native rate, legs on while running) and
+  `test_animation_polish_live.gd` Part B (from the strike, through both later spawn ticks, the throw keeps playing and
+  its playhead never goes back).
+- **Mutations** (one test file each, copy-back restore, SHA-256 matched): F1M compensation removed -> KILLED (all five
+  facing cases, 7.7-77.8 deg); F2M runner seeks the throw to the release on a later stone's spawn tick -> KILLED
+  ("playhead jumped BACK on stone 2's tick 1.6335 -> 1.3414").
+- **Runs.** Single files: test_upper_lower_split x2 (before / after compensation), test_animation_polish_live,
+  test_spell_cast_clips, plus the two mutation runs. ONE full suite: `C:\dev\_7-2-fix-suite-state.txt` (21:40:44)
+  1317 tests, 0 failed, 13350 assertions; `C:\dev\_7-2-fix-suite-int.txt` (21:46:56) 84/84 PASS. Golden probe
+  `C:\dev\_7-2-probe-fix.txt` byte-identical to before (`43449bd9...`, 258 key paths, FORMAT_VERSION 22).
+  `src/state/` and `project.godot` diffs empty; no editor scan needed (no new class or file).
+
+**REVIEW-FIX PASS (2026-10-09, operator dispositions of `C:\dev\_7-2-review.md`).** No subagents, nothing committed.
+- **F1.** `AnimationController.play_gesture` refuses while `_one_shot == get_up` and that clip is playing (get-up is whole body, AC 7/8; the gesture is dropped, never queued). Pin `test_upper_lower_split.gd::_get_up_gesture`: a moving hero in a knockdown get-up keeps `get_up`, no layer target/weight. Mutation (guard replaced by `if false:`) -> RED, 5 failures; restored.
+- **F2.** Pin `test_upper_lower_split.gd::_contact_poses_untouched`, run from the physics tick after rendered frames with the walk-under-block split on and the F1 compensation active: sword, trunk (Spine2), Hips and Spine as `HeroActor._bone_pose_global` (the `drive()` follower FK) equal the AnimationPlayer's own pose composed from the clip tracks. **GREEN on the real code** (so the layer does not reach the contact facts; no Tier A matter). Mutation (the layer re-applies its output on `physics_frame` and `frame_post_draw`, i.e. persists past the frame) -> RED on all four bones (0.22-0.49 m, 1.07 rad); restored.
+- **F4.** `LegLayer.upper_facing_spine` returns the action's own Spine when either chest's `|forward.y|` > `STEEP_FORWARD_Y` (0.9). Pin `_steep_facing`: an 80 deg pitch keeps the Spine, a 20 deg one is still compensated. Mutation (guard replaced by `if false:`) -> RED, 1 failure; restored. A first attempt, `if false and A or B`, left B live (operator precedence) and stayed PASS; it was discarded as a flawed mutation, not as evidence.
+- Backups outside the repo, restored by copy-back, SHA-256 matched: `animation_controller.gd` `ff18126a...`, `leg_layer.gd` `c2db0e43...`.
+- Runs: `test_upper_lower_split` (PASS, facing worst 1.02-2.12 deg), `test_spell_cast_clips` (PASS), three mutation runs; then ONE full suite: `C:\dev\_7-2-revfix-suite-state.txt` (22:22:32) 1317 tests, 0 failed, 13350 assertions; `C:\dev\_7-2-revfix-suite-int.txt` (22:28:56) 84 pass / 0 fail. `test_state_matches_golden` ok, GOLDEN `43449bd9...` unchanged. `git diff --stat src/state/` empty; `project.godot` and `main.tscn` no diff.
+
 ### File List
+
+- `src/actors/hero/leg_layer.gd` (new)
+- `src/actors/hero/leg_layer.gd.uid` (new, editor scan)
+- `src/actors/hero/animation_controller.gd`
+- `src/actors/hero/orb_halo.gd`
+- `src/main/match_runner.gd`
+- `test/integration/test_upper_lower_split.gd` (new)
+- `test/integration/test_upper_lower_split.gd.uid` (new, editor scan)
+- `test/integration/test_animation_polish_live.gd` (new)
+- `test/integration/test_animation_polish_live.gd.uid` (new, editor scan)
+- `test/integration/test_spell_cast_clips.gd`
+- `test/integration/test_history_and_orbs_live.gd`
+- `docs/implementation-artifacts/7-2-animation-polish.md`
+- `docs/implementation-artifacts/sprint-status.yaml` (story_notes / last_updated only)
+
+Fix pass (2026-10-09) touched only files already listed: `leg_layer.gd`, `animation_controller.gd`, `match_runner.gd`
+(the burst push removed again), `test_upper_lower_split.gd`, `test_animation_polish_live.gd`, this story file.
+Review-fix pass (2026-10-09) touched only files already listed: `leg_layer.gd`, `animation_controller.gd`, `test_upper_lower_split.gd`, this story file.

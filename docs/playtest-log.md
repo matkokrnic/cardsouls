@@ -690,3 +690,11 @@ Bilješke:
 
 Kružići u zoni bili su presitni i preko arta. Nakon tri kruga sad su ispod tajmera, poravnati lijevo, 24 px, s debljim obojenim prstenom i bez obruba (provjereno).
 Žuti pješčani sat slabije se vidi na kartama s velikim artom. Nije strašno, na malom setu se brzo zapamti, ide u art fazu.
+
+## 2026-10-09 — 7-2 animacijski polish (solo smoke [0,3])
+
+Gornji i donji dio tijela su sad odvojeni. Blok u hodu, udarac u hodu i trku, udarac u štit u hodu i geste karata u trku: noge hodaju, nema klizanja, nema trzaja kad pustim blok. Ulaz i izlaz iz stuna su glatki, a udarac se i dalje odmah vidi. Orbovi su sad duhovi i nikoga ne guraju. Fireball je kao prije, samo noge u dovršetku zamaha hodaju. fps stabilan.
+
+Prvi krug: torzo se okretao s nogama. Pod lockom je štit kod hoda ravno na protivnika gledao ~45° ulijevo, a kod strafea i promjene smjera torzo se čudno vrtio. Zamah za 2. i 3. kamen Rockslinga izgledao je gore nego bez njega, pa je maknut.
+
+Drugi krug: torzo pod lockom uvijek gleda protivnika, u svim smjerovima i kroz promjenu smjera. Kamenovi 2 i 3 lete bez zamaha. Sve je kako treba biti.
