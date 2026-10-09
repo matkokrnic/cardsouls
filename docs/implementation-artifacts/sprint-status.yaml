@@ -143,7 +143,7 @@ development_status:
   7-8-unblockable-honest-contact: done  # Tier A
   7-9-unblockable-tempo: done  # Tier A
   7-10-unblockable-presentation: done  # Tier B
-  7-2-animation-polish: ready-for-dev  # Tier B (A if authored timing windows move)
+  7-2-animation-polish: done  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
   7-4-pitch-speeds: done  # Tier A
   7-5-deck-2: backlog  # Tier A
@@ -156,7 +156,7 @@ story_notes:
   7-8-unblockable-honest-contact: "done 2026-10-08; close-out 7-8/R17-R20."
   7-9-unblockable-tempo: "done 2026-10-08; close-out 7-9/R19-R23 (review PASS WITH FIXES, smoke 1-13 PASS, golden 9d5d4fad, FORMAT_VERSION 21)."
   7-10-unblockable-presentation: "done 2026-10-09; close-out 7-10/R1-R14 (review APPROVE AFTER FIX, smoke 1-6 PASS, golden 9d5d4fad, FORMAT_VERSION 21)."
-  7-2-animation-polish: "ready-for-dev 2026-10-09 -- browser review rulings applied (orbs ghost, cast speed to 7-7, no Bloodlust/Boulder gesture); Tier B, A if a timing window or src/state/ file must change."
+  7-2-animation-polish: "done 2026-10-09; close-out 7-2/R1-R11 (review APPROVE WITH FINDINGS, live smoke passed after torso-facing and Rocksling-swing fixes, golden 43449bd9 unmoved, FORMAT_VERSION 22)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
   7-4-pitch-speeds: "done 2026-10-09; close-out 7-4/R21-R29 (review CHANGES REQUESTED 0/1/5 fixed, smoke 10/10 PASS after three socket rounds, golden 43449bd9, FORMAT_VERSION 22)."
   7-5-deck-2: "backlog -- design pending, needs its own scope talk before promotion (E6-C/R11)."

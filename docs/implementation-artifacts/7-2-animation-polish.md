@@ -4,7 +4,7 @@ baseline_commit: 4e451ee881cb90df7db8d09697bf7dca8e00076f
 
 # Story 7.2: Animation polish (upper/lower body split, hit-reaction sliding, orbs as ghosts)
 
-Status: review
+Status: done
 
 Tier **B**, presentation only. Authored 2026-10-09 against HEAD == origin/main == `4e451ee`, tree clean; promoted the same day
 after the browser review (Change Log). Golden predicted
