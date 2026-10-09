@@ -237,3 +237,22 @@ run, nothing committed by the authoring pass. Counter-on-counter (Counterspell a
 second Counterspell) is explicitly deferred to its own story after the playtest/retune block; `6-5f/R8`
 ("Counterspell is never a valid target of itself") stands until then. (Recorded in
 `docs/implementation-artifacts/6-5g-counterspell-timed-and-in-flight.md`, ruling `6-5g/R17`.)
+
+## Amendment (2026-10-09, operator scope talk for 7-4)
+
+**Pitch speed.** Every card's pitch side carries a speed, authored per card as data: **instant** or **sorcery**
+(a card that authors none is instant). An instant is READY as soon as the bank holds its priced orbs, as the
+pitch flow above has always said. A sorcery ignores orbs already banked when it is staged: it becomes READY only
+once orbs of the required colour(s), earned while the card sits in the pitch zone, cover its orb price.
+Activation spends the priced orbs from the bank; when every fresh orb was actually banked, the orbs banked before
+staging and any fresh surplus remain (bank red 3, price red 1, one red earned: bank 4, activation, bank 3). A fresh
+orb that arrives into a full colour (cap 5) still counts: bank red 5, price red 1, one red earned at the cap: bank 5,
+READY, activation, bank 4. The fizzle timer, the card prices and everything else about the zone are unchanged for both speeds; any
+sorcery discount is 7-7 tuning.
+
+Deck 1 assignment, by pitch effect (the speed is authored on the card holding that pitch effect):
+**instant** = Counterspell (Honed Bolt), Culling (Ruin Vanguard), Vampiric Aura (Drain);
+**sorcery** = Fireball (Bloodhound Step), Raise Dead (Grave Ward), Corpse Bomb (Frostbite), Boom (Rocksling).
+Only sorcery cards carry a marker (an hourglass) on the card face, in hand and in the pitch zone; a sorcery in the
+zone shows its required orbs as sockets that fill only with orbs earned after staging, visible to both players.
+(Recorded in `docs/implementation-artifacts/7-4-pitch-speeds.md` and decision-log `7-4/R1..R20`.)
