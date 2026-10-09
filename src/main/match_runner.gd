@@ -12,12 +12,11 @@ extends Node3D
 # apply_balance() their single injection path, so a runner constant could only be a second value
 # to disagree with the authored one.
 #
-# _SEED survives as the RUNNER-SIDE SOURCE for MatchParams and nothing else (E3-RG/R9): the seed
-# is match-scoped, injected once at construction, and never re-applied by apply_balance() — it
-# does NOT belong in the hot-reloadable BalanceConfig, where a reload would re-seed the RNG
-# mid-match and blow a determinism hole. It stays a constant here until a story needs a per-match
-# seed source (a menu, a replay file).
-const _SEED := 12345
+# The seed is match-scoped, injected once at construction, and never re-applied by apply_balance()
+# (E3-RG/R9) — it does NOT belong in the hot-reloadable BalanceConfig, where a reload would re-seed the
+# RNG mid-match and blow a determinism hole. Story 7-4 (AC 16-19, `7-4/R13`/`R15`) RETIRED the `_SEED`
+# constant that used to live here: the runner now resolves a per-launch seed (`_resolve_seed`), with the
+# load-once `data/seed_pin.tres` knob and the `seed_override` test seat as the ways to fix it.
 
 ## Story 1-6 (AC 2): THE single per-slot controller-kind config point. Slot 0 = P1, slot
 ## 1 = P2. Swapping a slot's kind here is the ONLY edit dummy -> PvP -> bot needs — E2 (2-3)
@@ -408,11 +407,13 @@ func _ready() -> void:
 	_p2_controller = ReplayController.new(_replay_record, 1) if replaying \
 			else _make_controller(slot_controller_kinds[1], 1)
 	# Story 3-0c (AC 3): ONE seed value, read once and used twice — the record's when replaying,
-	# the runner constant otherwise. Never a second, independently-read seed: what is captured is
-	# literally what reaches MatchParams.
-	var seed_value := _replay_record.replay_seed() if replaying else _SEED
+	# the resolved launch seed otherwise (story 7-4, `_resolve_seed`). Never a second,
+	# independently-read seed: what is captured is literally what reaches MatchParams, so a game dealt
+	# from a random draw replays identically.
+	var seed_value := _replay_record.replay_seed() if replaying else _resolve_seed()
 	if not replaying:
 		_recorder.capture_seed(seed_value)
+	_seed_in_use = seed_value
 	_match_state = MatchState.new(MatchParams.new(seed_value))
 	# DEBT A retirement (story 1-3b): inject the authored balance ONCE at match start,
 	# before the first tick — advance() reads balance_ticks, so without this call live-play
@@ -689,6 +690,9 @@ func _ready() -> void:
 	# seam, same Callable-handoff shape as the two directly above -- a read accessor, not a
 	# push, so the panel calls it only from its own toggle handler.
 	panel.reveal_opponent_hand = debug_hand_contents
+	# Story 7-4 (AC 18): the seed this match was dealt from -- a one-time fact, handed over before add_child
+	# on the `gamepad_profile` precedent and rendered by the panel, so it shows and hides with the F3 layer.
+	panel.seed_value = _seed_in_use
 	add_child(panel)
 	# Story 7-6 POLISH (operator ruling P12, 2026-10-06; discharges 4-B1's "DebugInstrumentPanel ergonomics"
 	# deferral): the panel is HIDDEN by default and toggled by F3 (`debug_toggle_instruments`, step 0 below). While
@@ -893,6 +897,38 @@ const DECK_LIST_PATH := "res://data/decks/deck_1.tres"
 ## shipped path -- means `DECK_LIST_PATH`. Both players still receive ONE injected composition.
 var deck_list_override: DeckList = null
 
+## Story 7-4 (AC 19, `7-4/R15`): THE SEED SEAT a headless test uses to fix the deal -- the
+## `deck_list_override` precedent directly above: set BEFORE the runner enters the tree, read once in
+## `_ready` (through `_resolve_seed`) and nowhere else. 0 = unset. Every live test that depends on the
+## dealt hand sets it to 12345, the seed the runner shipped as a constant before this story.
+var seed_override: int = 0
+
+## Story 7-4 (AC 17): the load-once pin knob's path. See `SeedPin`.
+const SEED_PIN_PATH := "res://data/seed_pin.tres"
+
+## Story 7-4 (AC 18): the seed this match was dealt from (whichever source won), for the F3 label. Written
+## once in `_ready`. Tests read the seed where it is recorded, `_recorder.replay_seed()` (AC 16).
+var _seed_in_use := 0
+
+
+## Story 7-4 (AC 16-19, `7-4/R13`/`R15`): the LAUNCH SEED when not replaying (the replay record's seed
+## outranks all of this at the one call site). Precedence: `seed_override` > the `data/seed_pin.tres` pin >
+## a fresh random draw. THE DRAW LIVES HERE, outside `src/state/`, on a local generator that is used once
+## and dropped -- the gameplay RNG is still only `MatchState`'s, seeded from the value returned. A draw of 0
+## is redrawn, so a seed shown on the F3 layer can always be copied into the pin (where 0 means unset).
+func _resolve_seed() -> int:
+	if seed_override != 0:
+		return seed_override
+	var pin := load(SEED_PIN_PATH) as SeedPin
+	if pin != null and pin.pinned_seed != 0:
+		return pin.pinned_seed
+	var draw := RandomNumberGenerator.new()
+	draw.randomize()
+	var value := 0
+	while value == 0:
+		value = draw.randi()
+	return value
+
 
 ## 6-5a REVIEW N7: the shipped list is ONE `.tres` behind one `load()`, and a failed load or a type
 ## mismatch answers `null` -- which `_derive_deck_contents` used to turn into an empty composition, in
@@ -1042,8 +1078,12 @@ func _derive_card_colors() -> Dictionary[StringName, Enums.CardColor]:
 ## verbatim, over BOTH cost resources instead of `CardData.color`, and for the same reason: the runner
 ## is the ONE place allowed to read `CardDatabase` (`src/ui/` never does, `6-0` AC 3).
 ##
-## ONE ROW PER CARD: `[mode-1 mana, mode-1 orbs, mode-4 mana, mode-4 orbs]`, read straight off
-## `cast_condition` and `pitch_condition` -- the two resources AC 23 names. The orb halves are handed
+## ONE ROW PER CARD: `[mode-1 mana, mode-1 orbs, mode-4 mana, mode-4 orbs, pitch speed]`, read straight off
+## `cast_condition` and `pitch_condition` -- the two resources AC 23 names. Story 7-4 (AC 14, `7-4/R12`)
+## appended the FIFTH element, the pitch side's `Enums.PitchSpeed` as an int (instant for a card with no pitch
+## condition): the HUD's hourglass and hollow sorcery pips read it here, for the whole library -- so the
+## opponent's zone card gets its marker from the same derive. A reader treats a missing fifth element as
+## instant, so a four-element fixture row still renders. The orb halves are handed
 ## over AS AUTHORED (`Dictionary[Enums.CardColor, int]`); the HUD sorts them by colour ordinal before
 ## rendering, because this project's standing rule is that a `orb_costs` iteration order is never a
 ## contract (`card_cast_condition.gd`).
@@ -1068,7 +1108,9 @@ func _derive_card_prices() -> Dictionary:
 		var pitch_mana := card.pitch_condition.mana_cost if card.pitch_condition != null else 0.0
 		var pitch_orbs: Dictionary = card.pitch_condition.orb_costs \
 				if card.pitch_condition != null else {}
-		out[id] = [cast_mana, cast_orbs, pitch_mana, pitch_orbs]
+		var pitch_speed := int(card.pitch_condition.pitch_speed) if card.pitch_condition != null \
+				else int(Enums.PitchSpeed.INSTANT)
+		out[id] = [cast_mana, cast_orbs, pitch_mana, pitch_orbs, pitch_speed]
 	return out
 
 
@@ -2360,7 +2402,8 @@ func connect_deflect_landed(callback: Callable) -> void:
 ## MatchState direct-connect). Match-level wrap of the MatchState-owned pitch_changed, mirroring
 ## connect_hit_landed exactly: the OWNER slot rides the payload, so there is no slot argument, and a
 ## consumer that needs "is this zone mine" binds its own slot at wiring. Payload: (slot, card_id,
-## hand_slot, ready, remaining_ticks, duration_ticks).
+## hand_slot, ready, remaining_ticks, duration_ticks, fresh_orbs) -- story 7-4 (AC 15) WIDENED the payload
+## with a sorcery's sockets rather than adding a seam, so the family stays at ten.
 ##
 ## DOES NOT PRIME, the hit_landed family's rule: both zones are empty when consumers wire in _ready(),
 ## before the first advance(), so the empty render is the consumer's construction default.

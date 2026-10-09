@@ -39,16 +39,19 @@ signal hit_landed(attacker_slot: int, target_slot: int, damage: float, target_hp
 ## HOMED HERE, NOT ON `PitchState`: READY needs the zone, the owner's `OrbPool` and the injected
 ## `flags` together, and only MatchState holds all three. `PitchState` stays a signal-free container.
 ##
-## NO ORB COST, NO SHORTFALL AND NO PER-COLOUR ORB NUMBER RIDES THE PAYLOAD (operator ruling
-## 2026-09-15): a zone shows the card, the countdown and READY, so no number exists here that could
-## reveal a player's exact orb count to the other (`6-3-split/R-INFO`, satisfied by construction).
+## STORY 7-4 (AC 13/AC 15, `7-4/R20`) SUPERSEDES `6-3-split/R-INFO`'s "no per-colour orb number rides the
+## payload" (operator ruling 2026-09-15). `7-6/R7` already made orb counts deliberately PUBLIC (world orbs
+## around each hero), so the reasoning that kept numbers off this payload no longer holds. The payload
+## gains ONE argument, `fresh_orbs` -- a SORCERY's sockets: `Enums.CardColor` -> orbs earned since staging,
+## CAPPED AT THE PRICE, priced colours only; `{}` for an instant and for an empty zone. Both HUDs receive
+## it (the seam is match-level), so both players see the same sockets. Still no orb cost and no bank count.
 ##
 ## QUEUED from ONE helper (`_queue_pitch_changed`) at exactly six seats: stage, activate, expiry, debug
 ## reset, an orb grant inside a staged window, and the authored step-6 countdown throttle. Every
-## emission READS the live zone and pool; nothing hashed is added (FORMAT_VERSION and the snapshot key
-## set are untouched, AC 9).
+## emission READS the live zone and pool; the payload itself adds nothing hashed (7-4's hashed fresh
+## count lives on `PitchState`, not here).
 signal pitch_changed(slot: int, card_id: StringName, hand_slot: int, ready: bool,
-		remaining_ticks: int, duration_ticks: int)
+		remaining_ticks: int, duration_ticks: int, fresh_orbs: Dictionary)
 
 ## Story 1-8 (R-D4): MatchState-owned two-player event (the hit_landed precedent — a
 ## deflect has an attacker AND a target). Queued in step 4 when a contact resolves as a
@@ -5708,7 +5711,7 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	if not pitch.is_staged(slot):
 		player.hero.reject_action(&"card_cast", REASON_EMPTY_PITCH_ZONE)
 		return
-	if not pitch.is_ready(slot, player.orbs, flags):
+	if not pitch.is_ready(slot, player.orbs, flags, _staged_is_sorcery(slot)):
 		player.hero.reject_action(&"card_cast", REASON_PITCH_NOT_READY)
 		return
 	# Story 6-5b (AC 9/AC 15, `6-5b/R14`): THE MODE ④ HALF OF THE BOARD-AWARE GATE, fired BEFORE THE
@@ -7005,6 +7008,14 @@ func _grant_landing_orbs(player: PlayerState) -> void:
 		# late. Only a staged zone -- an empty one has no READY to flip.
 		var grant_slot := 0 if player == p1 else 1
 		if pitch.is_staged(grant_slot):
+			# Story 7-4 (AC 6/AC 10, `7-4/R2`/`R11`): THE FRESH-ORB CREDIT, at the only orb faucet. A staged
+			# SORCERY counts the whole GRANT toward its price -- not what the bank kept, so an orb earned
+			# into a full colour still counts while `OrbPool.add` clamps. Every colour is counted; READY
+			# walks only the priced ones, so an unpriced colour never covers anything. An orb granted on
+			# the staging tick never gets here for that card: step 3 resolves the hit before step 6
+			# stages it, so the card was not yet in the zone.
+			if _staged_is_sorcery(grant_slot):
+				pitch.credit_fresh_orbs(grant_slot, player.charge_color, grant)
 			_queue_pitch_changed(grant_slot)
 
 
@@ -7017,8 +7028,29 @@ func _queue_pitch_changed(slot: int) -> void:
 	var owner: PlayerState = p1 if slot == 0 else p2
 	var fizzle: Dictionary = pitch.to_snapshot()["p1" if slot == 0 else "p2"]["fizzle"]
 	var duration := int(fizzle["duration_ticks"])
+	var sorcery := _staged_is_sorcery(slot)
+	# Story 7-4 (AC 13): the sockets -- per priced colour, the orbs earned since staging capped at the
+	# price. `{}` for an instant or an empty zone, so an instant carries no new visual.
+	var sockets: Dictionary = {}
+	if sorcery:
+		var orb_costs := pitch.staged_orb_costs(slot)
+		var fresh := pitch.fresh_orbs(slot)
+		for color: Enums.CardColor in CastEvaluator.sorted_orb_colors(orb_costs):
+			sockets[color] = mini(int(fresh.get(color, 0)), int(orb_costs[color]))
 	_queue.push(pitch_changed.emit.bind(slot, pitch.staged_card_id(slot), pitch.staged_hand_slot(slot),
-			pitch.is_ready(slot, owner.orbs, flags), duration - int(fizzle["elapsed_ticks"]), duration))
+			pitch.is_ready(slot, owner.orbs, flags, sorcery), duration - int(fizzle["elapsed_ticks"]), duration,
+			sockets))
+
+
+## Story 7-4 (AC 1/AC 3, `7-4/R14`): is the card in `slot`'s zone a SORCERY? READ AT EVERY CALL off the
+## injected pitch-cost map by the zone's hashed `card_id`, never cached on the zone -- so speed stays
+## content (unhashed, recorded by value at injection) and the unhashed cross-tick member count does not
+## grow. An empty zone, or a card the map does not hold, reads instant.
+func _staged_is_sorcery(slot: int) -> bool:
+	if not pitch.is_staged(slot):
+		return false
+	var condition: CardCastCondition = _pitch_costs.get(pitch.staged_card_id(slot))
+	return condition != null and condition.pitch_speed == Enums.PitchSpeed.SORCERY
 
 
 ## Step-6 delivery of ONE owed replacement (story 3-5b, AC 3/AC 5/AC 7/AC 10). Seated after the

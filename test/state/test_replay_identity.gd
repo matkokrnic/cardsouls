@@ -457,6 +457,12 @@ const HASHED: Array[String] = [
 	# the Fireball hits for), and both ride the pitch zone snapshot's new `mana_spent` / `locked_damage`
 	# keys -- so UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR rather than becoming five.
 	"pitch_state._mana_spent", "pitch_state._locked_damage",
+	# Story 7-4 (AC 8/AC 11): the SORCERY's fresh-orb count classifies HASHED, on `_mana_spent`'s footing: not
+	# content but the outcome of play (orbs earned while the card waits), it CROSSES TICKS (staging to
+	# `clear()`) and DECIDES AN OUTCOME (the tick the card becomes READY). It rides the zone snapshot's new
+	# `fresh_orbs` key. The card's SPEED is content and is read off the injected `_pitch_costs` at every call,
+	# never cached on the zone -- so UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"pitch_state._fresh_orbs",
 	"mana_pool._current", "mana_pool._maximum",
 	"orb_pool._red", "orb_pool._blue", "orb_pool._green",
 	"stamina_pool._current", "stamina_pool._maximum", "stamina_pool._regen_delay",
@@ -1319,8 +1325,8 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 21,
-		"...at FORMAT_VERSION 21, read out of the FILE rather than off the constant (7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 22,
+		"...at FORMAT_VERSION 22, read out of the FILE rather than off the constant (7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27; 18 as of 6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
@@ -2121,8 +2127,8 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 21,
-		"...at FORMAT_VERSION 21, read out of the FILE rather than off the constant (7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 22,
+		"...at FORMAT_VERSION 22, read out of the FILE rather than off the constant (7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
@@ -2474,8 +2480,8 @@ func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 21,
-		"...at FORMAT_VERSION 21, read out of the FILE rather than off the constant (7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 22,
+		"...at FORMAT_VERSION 22, read out of the FILE rather than off the constant (7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(TIMED_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))

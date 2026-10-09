@@ -36,6 +36,9 @@ const FACT_DIR := Vector2(0.0, 1.0)
 ## The payloads drained by the most recent `_advance`, each [slot, card_id, hand_slot, ready,
 ## remaining_ticks, duration_ticks].
 var _drained: Array = []
+## Story 7-4 (AC 13/AC 15): the payload's seventh argument, `fresh_orbs` (a sorcery's sockets), index-aligned
+## with `_drained` -- kept apart so every 6-6b assertion above reads the same six values it always did.
+var _drained_sockets: Array = []
 
 
 # --- (a) STAGE -----------------------------------------------------------------------------------
@@ -218,6 +221,59 @@ func test_an_orb_grant_with_no_staged_zone_emits_nothing() -> void:
 	assert_true(landed, "the unblockable landed and paid orbs (non-vacuity)")
 
 
+# --- Story 7-4: THE SOCKETS (AC 13/AC 15) ---------------------------------------------------------
+
+func test_an_instant_carries_no_sockets() -> void:
+	var ms := _make_match()
+	ms.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	ms.drain_signals()
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	assert_eq(_drained.size(), 1, "sanity: one staging payload")
+	assert_eq(_drained_sockets, [{}], "an instant's payload carries NO sockets -- it needs no new visual")
+
+
+func test_a_sorcery_stages_with_empty_sockets_even_when_the_bank_holds_its_price() -> void:
+	var ms := _make_match(START_MANA, INTERVAL_TICKS, Enums.PitchSpeed.SORCERY)
+	ms.p1.orbs.add(PITCH_COLOR, PITCH_ORBS)
+	ms.drain_signals()
+	var id: StringName = ms.p1.hand.to_array()[STAGE_SLOT]
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	assert_eq(_drained, [[0, id, STAGE_SLOT, false, TIMER_TICKS, TIMER_TICKS]],
+		"a SORCERY staged against a bank that already holds its price is NOT READY")
+	assert_eq(_drained_sockets, [{PITCH_COLOR: 0}],
+		"...and its one socket is EMPTY: banked orbs never fill a socket")
+
+
+func test_a_sorcery_socket_fills_and_ready_flips_on_the_landing_tick_capped_at_the_price() -> void:
+	var ms := _make_match(START_MANA, 1000, Enums.PitchSpeed.SORCERY)
+	var id: StringName = ms.p1.hand.to_array()[STAGE_SLOT]
+	_advance(ms, _stage_intent(STAGE_SLOT), InputIntent.new())
+	_advance(ms, _unblockable_intent(CAST_SLOT), InputIntent.new())
+	var landed := false
+	for _t in CHARGEUP_TICKS:
+		_push_reach(ms)
+		_advance(ms, InputIntent.new(), InputIntent.new())
+		if ms.p1.orbs.get_count(PITCH_COLOR) > 0:
+			landed = true
+			var fizzle: Dictionary = ms.to_snapshot()["pitch"]["p1"]["fizzle"]
+			var remaining := int(fizzle["duration_ticks"]) - int(fizzle["elapsed_ticks"])
+			assert_eq(_drained, [[0, id, STAGE_SLOT, true, remaining, TIMER_TICKS]],
+				"the landing tick emits READY for the sorcery -- an EARNED orb counts")
+			assert_eq(_drained_sockets, [{PITCH_COLOR: PITCH_ORBS}],
+				"...and its socket count is the grant (%d) CAPPED at the price (%d)" % [ORB_GRANT, PITCH_ORBS])
+			break
+	assert_true(landed, "the unblockable landed and paid orbs (non-vacuity)")
+
+
+func test_both_huds_get_the_same_sockets_because_the_payload_is_match_level() -> void:
+	var ms := _make_match(START_MANA, INTERVAL_TICKS, Enums.PitchSpeed.SORCERY)
+	_advance(ms, InputIntent.new(), _stage_intent(1))
+	assert_eq(_drained.size(), 1, "one payload for P2's staging")
+	assert_eq(int(_drained[0][0]), 1, "...owned by slot 1")
+	assert_eq(_drained_sockets, [{PITCH_COLOR: 0}],
+		"...carrying P2's sockets on the ONE match-level signal both HUDs subscribe to")
+
+
 # --- helpers -------------------------------------------------------------------------------------
 
 func _assert_not_boundary(ms: MatchState, occasion: String) -> void:
@@ -247,12 +303,13 @@ func _costs() -> Dictionary[StringName, CardCastCondition]:
 	return out
 
 
-func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
+func _pitch_costs(speed := Enums.PitchSpeed.INSTANT) -> Dictionary[StringName, CardCastCondition]:
 	var out: Dictionary[StringName, CardCastCondition] = {}
 	for id in _deck_contents():
 		var c := CardCastCondition.new()
 		c.mana_cost = PITCH_MANA
 		c.orb_costs[PITCH_COLOR] = PITCH_ORBS
+		c.pitch_speed = speed
 		out[id] = c
 	return out
 
@@ -297,23 +354,26 @@ func _config(interval_ticks: int) -> BalanceConfig:
 
 ## A match with a dealt hand, mana on the board, and a listener on `pitch_changed` that fills
 ## `_drained` (cleared by every `_advance`).
-func _make_match(mana := START_MANA, interval_ticks := INTERVAL_TICKS) -> MatchState:
+func _make_match(mana := START_MANA, interval_ticks := INTERVAL_TICKS,
+		speed := Enums.PitchSpeed.INSTANT) -> MatchState:
 	var ms := MatchState.new(MatchParams.new(SEED))
 	ms.apply_balance(_config(interval_ticks))
 	ms.inject_feature_flags(_flags())
 	ms.inject_deck(_deck_contents())
 	ms.inject_card_costs(_costs())
 	ms.inject_card_colors(_colors())
-	ms.inject_pitch_costs(_pitch_costs())
+	ms.inject_pitch_costs(_pitch_costs(speed))
 	ms.pitch_changed.connect(
 		func(slot: int, card_id: StringName, hand_slot: int, ready: bool, remaining: int,
-				duration: int) -> void:
-			_drained.append([slot, card_id, hand_slot, ready, remaining, duration]))
+				duration: int, fresh_orbs: Dictionary) -> void:
+			_drained.append([slot, card_id, hand_slot, ready, remaining, duration])
+			_drained_sockets.append(fresh_orbs))
 	_tick(ms)
 	ms.p1.mana.add(mana)
 	ms.p2.mana.add(mana)
 	ms.drain_signals()
 	_drained = []
+	_drained_sockets = []
 	return ms
 
 
@@ -353,6 +413,7 @@ func _tick(ms: MatchState) -> void:
 
 func _advance(ms: MatchState, p1: InputIntent, p2: InputIntent) -> void:
 	_drained = []
+	_drained_sockets = []
 	var intents: Array[InputIntent] = [p1, p2]
 	ms.advance(intents)
 	ms.drain_signals()

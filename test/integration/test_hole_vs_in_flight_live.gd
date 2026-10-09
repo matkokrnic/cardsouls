@@ -56,7 +56,11 @@ var _detail := ""
 
 func _initialize() -> void:
 	var scene: PackedScene = load("res://src/main/main.tscn")
-	root.add_child(scene.instantiate())
+	var runner := scene.instantiate()
+	# Story 7-4 (`7-4/R15`): this test reads or acts on the DEALT hand, so it fixes the deal at the seed the
+	# runner shipped as a constant before 7-4 -- set BEFORE the runner enters the tree.
+	runner.seed_override = 12345
+	root.add_child(runner)
 
 
 func _physics_process(_delta: float) -> bool:

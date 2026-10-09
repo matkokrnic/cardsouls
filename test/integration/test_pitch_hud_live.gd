@@ -68,7 +68,8 @@ func _begin(record: IntentRecorder) -> void:
 	_payloads = []
 	_runner.connect_pitch_changed(
 		func(slot: int, card_id: StringName, hand_slot: int, ready: bool, remaining: int,
-				duration: int) -> void:
+				duration: int, _fresh_orbs: Dictionary) -> void:
+			# Story 7-4 (AC 15): the seventh argument (a sorcery's sockets) is not this test's subject.
 			_payloads.append([slot, card_id, hand_slot, ready, remaining, duration]))
 	_phase_start = _frames
 

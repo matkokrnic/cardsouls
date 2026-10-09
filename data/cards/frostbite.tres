@@ -15,6 +15,7 @@ mana_cost = 5.0
 orb_costs = Dictionary[int, int]({
 1: 1
 })
+pitch_speed = 1
 
 [resource]
 script = ExtResource("1_card")

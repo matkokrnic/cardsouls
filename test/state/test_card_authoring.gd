@@ -243,6 +243,51 @@ func test_each_deck_1_card_is_priced_at_its_authored_mode_1_and_mode_4_prices() 
 			"card '%s' Mode ④ costs its Deck 1 orbs" % card.id)
 
 
+## Story 7-4 (AC 2, ruling 7): THE DECK 1 PITCH SPEEDS, pinned by card. Ruling 7 names the pitch EFFECTS; the
+## speed is authored on the card holding each (C2): Culling, Vampiric Aura and Counterspell are instant;
+## Raise Dead, Boom, Fireball and Corpse Bomb are sorcery. Iterates the literal, so a shrunk list fails.
+const DECK_1_PITCH_SPEEDS := {
+	&"ruin_vanguard": Enums.PitchSpeed.INSTANT,  # Culling
+	&"drain": Enums.PitchSpeed.INSTANT,  # Vampiric Aura
+	&"honed_bolt": Enums.PitchSpeed.INSTANT,  # Counterspell
+	&"grave_ward": Enums.PitchSpeed.SORCERY,  # Raise Dead
+	&"rocksling": Enums.PitchSpeed.SORCERY,  # Boom
+	&"bloodhound_step": Enums.PitchSpeed.SORCERY,  # Fireball
+	&"frostbite": Enums.PitchSpeed.SORCERY,  # Corpse Bomb
+}
+
+
+func test_each_deck_1_card_authors_its_ruled_pitch_speed() -> void:
+	assert_eq(DECK_1_PITCH_SPEEDS.size(), DECK_1_IDS.size(), "the speed table covers every Deck 1 card")
+	for id: StringName in DECK_1_IDS:
+		var card := _card_for(id)
+		if card == null or card.pitch_condition == null:
+			assert_true(false, "Deck 1 card '%s' loads with a pitch condition" % id)
+			continue
+		assert_true(DECK_1_PITCH_SPEEDS.has(id), "card '%s' has a ruled speed" % id)
+		assert_eq(card.pitch_condition.pitch_speed, DECK_1_PITCH_SPEEDS.get(id, -1),
+			"card '%s' pitch speed is its ruled speed (ruling 7)" % id)
+
+
+## Story 7-4 (AC 1/AC 2): EVERY CARD OUTSIDE DECK 1 READS INSTANT -- the fixtures and totems author no speed, and
+## an unauthored speed is the enum's zero value. Also pins that zero value itself: a fresh condition is instant.
+func test_every_card_outside_deck_1_reads_instant_and_unauthored_is_instant() -> void:
+	assert_eq(CardCastCondition.new().pitch_speed, Enums.PitchSpeed.INSTANT,
+		"a condition that authors no speed reads INSTANT")
+	var outside := 0
+	for card in _load_cards():
+		if DECK_1_IDS.has(card.id):
+			continue
+		outside += 1
+		if card.pitch_condition != null:
+			assert_eq(card.pitch_condition.pitch_speed, Enums.PitchSpeed.INSTANT,
+				"card '%s' (outside Deck 1) reads instant" % card.id)
+		if card.cast_condition != null:
+			assert_eq(card.cast_condition.pitch_speed, Enums.PitchSpeed.INSTANT,
+				"card '%s' authors nothing on its Mode ① condition" % card.id)
+	assert_true(outside > 0, "the library holds cards outside Deck 1 (non-vacuity)")
+
+
 ## REWRITTEN BY STORY 6-5a (AC 13): was a local `DECK_SIZE := 20` against the nine cards' summed
 ## `max_copies`. It now reads the LIVE authored `BalanceConfig.deck_size`, so it cannot silently drift
 ## from balance again, and the deck it proves constructible is Deck 1's list.

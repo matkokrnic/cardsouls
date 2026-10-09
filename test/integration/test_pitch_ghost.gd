@@ -32,7 +32,11 @@ var _failures: Array[String] = []
 
 
 func _initialize() -> void:
-	root.add_child(load("res://src/main/main.tscn").instantiate())
+	var runner: Node = load("res://src/main/main.tscn").instantiate()
+	# Story 7-4 (`7-4/R15`): this test reads or acts on the DEALT hand, so it fixes the deal at the seed the
+	# runner shipped as a constant before 7-4 -- set BEFORE the runner enters the tree.
+	runner.seed_override = 12345
+	root.add_child(runner)
 
 
 func _check(cond: bool, label: String) -> void:
@@ -82,7 +86,7 @@ func _run() -> void:
 	var full: Array = live[STAGED]
 	_hud.on_cards_changed(holed, 7, 0, [STAGED], colors)
 	var in_flight: Array = _row()[STAGED]
-	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, {}, MY_SLOT)
 	_hud.on_cards_changed(holed, 7, 0, [], colors)
 	var blank: Array = _row()[STAGED]
 	_check(full[0] == String(x) and is_equal_approx(full[1], 1.0),
@@ -96,11 +100,11 @@ func _run() -> void:
 		_check(ghost.slice(0, 2) != other.slice(0, 2), "(i) the ghost %s differs from %s" % [ghost, other])
 
 	# (ii) an opponent payload naming THIS row's empty slot does not ghost it.
-	_hud.on_pitch_changed(OPP_SLOT, y, STAGED, true, 600, 1200, MY_SLOT)
+	_hud.on_pitch_changed(OPP_SLOT, y, STAGED, true, 600, 1200, {}, MY_SLOT)
 	_check(_row()[STAGED][0] == "", "(ii) an opponent payload never ghosts this row: %s" % str(_row()))
 	_check(_zone_card("OpponentPitch") == String(y) and _zone_card("OwnPitch") == "",
 		"(ii) it drives the OPPONENT zone only")
-	_hud.on_pitch_changed(OPP_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, MY_SLOT)
+	_hud.on_pitch_changed(OPP_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, {}, MY_SLOT)
 
 	# (iii) the ghost survives a later rewrite of all four slots (a DIFFERENT slot's refill).
 	_stage(holed, [], x, colors)
@@ -114,24 +118,24 @@ func _run() -> void:
 
 	# (iv) order independence -- staging tick, then activation tick.
 	var resting := func() -> void:
-		_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, MY_SLOT)
+		_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, {}, MY_SLOT)
 		_hud.on_cards_changed(ids, 7, 0, [], colors)
 	resting.call()
 	_hud.on_cards_changed(holed, 7, 0, [], colors)
-	_hud.on_pitch_changed(MY_SLOT, x, STAGED, false, 1200, 1200, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, x, STAGED, false, 1200, 1200, {}, MY_SLOT)
 	var stage_cards_first := _row()
 	resting.call()
-	_hud.on_pitch_changed(MY_SLOT, x, STAGED, false, 1200, 1200, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, x, STAGED, false, 1200, 1200, {}, MY_SLOT)
 	_hud.on_cards_changed(holed, 7, 0, [], colors)
 	var stage_pitch_first := _row()
 	_check(stage_cards_first == stage_pitch_first and stage_cards_first[STAGED][0] == String(x),
 		"(iv) staging tick renders the same row in either order: %s vs %s"
 				% [stage_cards_first, stage_pitch_first])
 	_hud.on_cards_changed(holed, 7, 1, [STAGED], colors)
-	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, {}, MY_SLOT)
 	var act_cards_first := _row()
 	_stage(holed, [], x, colors)
-	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, {}, MY_SLOT)
 	_hud.on_cards_changed(holed, 7, 1, [STAGED], colors)
 	var act_pitch_first := _row()
 	_check(act_cards_first == act_pitch_first and act_cards_first[STAGED][0] == HudRoot.IN_FLIGHT_CAPTION,
@@ -140,7 +144,7 @@ func _run() -> void:
 
 	# (v) a debug reset's own NO_CARD payload clears the ghost (before the redeal lands).
 	_stage(holed, [], x, colors)
-	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 0, {}, MY_SLOT)
 	_check(_row()[STAGED][0] == "" and _zone_card("OwnPitch") == "",
 		"(v) an own NO_CARD payload clears the ghost and the own zone: %s" % str(_row()))
 
@@ -151,7 +155,7 @@ func _run() -> void:
 ## Put this root in the "own card `card` staged from STAGED" state from a known hand payload.
 func _stage(hand: Array, owed: Array, card: StringName, card_colors: Dictionary) -> void:
 	_hud.on_cards_changed(hand, 7, 0, owed, card_colors)
-	_hud.on_pitch_changed(MY_SLOT, card, STAGED, false, 1200, 1200, MY_SLOT)
+	_hud.on_pitch_changed(MY_SLOT, card, STAGED, false, 1200, 1200, {}, MY_SLOT)
 
 
 ## A colour map total over `hand`'s real card ids, the shape `on_cards_changed`'s `card_colors`

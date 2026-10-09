@@ -83,6 +83,11 @@ var reload_balance: Callable = Callable()
 ## exactly_eight` stays untouched, `4-B1/R1`).
 var reveal_opponent_hand: Callable = Callable()
 
+## Story 7-4 (AC 18): the seed this match was dealt from, set by the runner BEFORE add_child (the
+## `gamepad_profile` handoff) and rendered once by `_ready` -- a one-time fact, so no push method and no
+## per-tick write. Shown and hidden with the panel, which is the F3 debug layer.
+var seed_value: int = 0
+
 ## Story 3-0b (AC 2): the two per-slot countdown value Labels, index 0 = P1, 1 = P2. Written
 ## ONLY by set_window_countdown below, from the runner's polled plain-integer payload.
 var _countdown_values: Array[Label] = []
@@ -159,6 +164,20 @@ func _ready() -> void:
 	title.text = "-- DEBUG INSTRUMENTS --"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
+	# Story 7-4 (AC 18): the seed, right-aligned ON the title line -- a CHILD of the title Label, which is not
+	# a container, so nothing re-lays it out and the box gains no row (zero vertical slack in the band, see
+	# above) and no column width (the measured 658 px minimum). Read-only text, never a control.
+	var seed_label := Label.new()
+	seed_label.name = "SeedLabel"
+	seed_label.text = "seed %d" % seed_value
+	seed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	seed_label.anchor_left = 1.0
+	seed_label.anchor_right = 1.0
+	seed_label.anchor_bottom = 1.0
+	seed_label.offset_left = -200.0
+	seed_label.offset_right = 0.0
+	seed_label.clip_text = true
+	title.add_child(seed_label)
 	var row := HBoxContainer.new()
 	row.name = "InstrumentColumns"
 	row.add_theme_constant_override("separation", 12)

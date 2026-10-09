@@ -15,7 +15,8 @@ extends RefCounted
 ## stored seed for a later call to re-apply — the "never re-seeded" rule is structural rather
 ## than conventional.
 
-## The gameplay RNG seed (F2). The runner's _SEED feeds this; headless tests pass their own.
+## The gameplay RNG seed (F2). The runner's resolved launch seed feeds this (story 7-4: replay record >
+## `seed_override` > `data/seed_pin.tres` > a random draw); headless tests pass their own.
 var seed_value: int
 
 

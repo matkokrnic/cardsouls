@@ -1333,7 +1333,26 @@ extends TestCase
 ##   the `SC/R6` boundary), the steering / reward / lead (nothing charges, nothing counters), the authored
 ##   damage 6 and run 4.6 (`BC/R3`: `_golden_config` authors its own), and no RNG draw anywhere.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "9d5d4fadce063bcd8832243513eaa732c442a146e37c1390ae7419db1638e86f"
+## STORY 7-4 RE-BASELINE (pitch speeds): `9d5d4fad...` -> `43449bd9...`, ONE re-baseline, ONE MEASURED
+## CAUSE, exactly the one predicted: the new `fresh_orbs` sub-dictionary under EACH pitch zone of the
+## existing top-level `"pitch"` key (`{"red", "blue", "green"}`, plain ints) -- 8 new nested key paths, 4 per
+## zone. The fixture never stages a pitch card, so both zones hash the resting zeros on every tick and the
+## keys' PRESENCE alone is the cause. Neither pinned key set moves: the top-level set (`"pitch"` existed) and
+## the per-player set (the keys are not on a player). `FORMAT_VERSION` 21 -> 22 is a record concern with no
+## path into the hash.
+##
+##   ISOLATED BOTH DIRECTIONS (measured, restored from an out-of-repo copy with SHA256 verified both ways):
+##   (a) with the `fresh_orbs` block erased from `PitchState._zone_snapshot` and every other 7-4 change in
+##   place -- the speed field, the fresh-orb member and its credit at the faucet, the sorcery READY rule, the
+##   widened `pitch_changed` payload, the runner's launch seed -- the hash is `9d5d4fad...` EXACTLY; (b) with it
+##   restored, `43449bd9...`.
+##
+##   NOT CAUSES, MEASURED BY (a) RATHER THAN ASSUMED: the speed (content, never hashed, and the fixture's
+##   in-test pitch costs author none, so every card reads instant), the sorcery READY rule and the credit (the
+##   fixture never stages), and the launch seed (the golden builds `MatchParams.new(SEED)` itself and never
+##   boots the runner).
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "43449bd9e513e90066cfabac77a93f0d7dfced60025f00e5e6b467002a0ca814"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

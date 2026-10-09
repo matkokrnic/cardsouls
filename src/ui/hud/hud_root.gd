@@ -185,6 +185,30 @@ const AFFORD_GLOW_PX := 4
 ## circle, a MISSING one a hollow ring `PIP_RING_PX` thick. Count-fill (F3) unchanged.
 const PIP_RING_PX := 3
 
+## Story 7-4 (AC 12/AC 13, placeholder look): the SORCERY marker and the zone's sockets. The hourglass sits in the
+## top-left corner of the hand card's pitch-half art and of the zone; the sockets are rings in a centred row,
+## filling as orbs are earned after staging.
+const HOURGLASS_SIZE := Vector2(10.0, 14.0)
+const HOURGLASS_COLOR := Color(1.0, 0.78, 0.30)
+const HAND_HOURGLASS_POS := Vector2(7.0, 7.0)
+const ZONE_HOURGLASS_POS := Vector2(6.0, 6.0)
+## 7-4 SMOKE FIX, ROUND 2 (operator smoke, 2026-10-09). The first look put hand-pip-sized rings inside the art square
+## above the countdown bar, which read small, crowded and on top of the art. Round 1 grew the zone instead, and the
+## operator rejected that: the zone keeps its card-sized P15 geometry.
+## The sockets now sit in the band BELOW the countdown bar (zone y 126-158). The row's left edge is flush with the bar's
+## left edge, read off the built bar's `offset_left`, with no centring.
+## ROUND 3 (operator, 2026-10-09): round 2's white outline is REMOVED. An EMPTY socket's coloured ring is
+## `ZONE_SOCKET_RING_PX` thick, zone-only, so the hand pips' `PIP_RING_PX` is unchanged. A filled socket stays filled.
+## READY shares that band and is neither moved nor resized. When the READY label's rect and the socket row overlap,
+## the row hides while READY shows (READY means every socket is filled).
+## Fill, colour order and visibility are otherwise unchanged.
+const ZONE_SOCKET_SIZE := 24.0
+const ZONE_SOCKET_RING_PX := 6
+const ZONE_SOCKET_GAP := 4.0
+## The band below the bar: the bar ends at zone y 126 and the card-sized zone at 158, so the 24 px row is centred in it.
+const ZONE_SOCKET_BAND_TOP := 126.0
+const ZONE_SOCKET_BAND_BOTTOM := 158.0
+
 ## 7-6 POLISH (operator ruling P3, supersedes R3's "mode/armed as a frame highlight"): ARMING IS A LIFT AGAIN. Card
 ## mode on lifts the whole row by `CARD_MODE_ROW_LIFT_PX`; the armed card rises to `CARD_MODE_ARMED_LIFT_PX` (the
 ## pre-7-6 knobs were 4 and 6) and carries a strong bright `ARMED_FRAME_PX` frame drawn OUTSIDE the card. As before
@@ -296,6 +320,8 @@ var _own_card_art_backs: Array = []
 var _own_card_art_back_styles: Array = []
 var _own_card_costs: Array = []
 var _own_card_pips: Array = []
+## Story 7-4 (AC 12): each slot's pitch-half hourglass, index-aligned with `_own_card_panels`.
+var _own_card_hourglasses: Array[Control] = []
 ## 7-6 POLISH (P2): each half's glowing affordability rim, [normal, pitch] per slot.
 var _own_card_rims: Array = []
 var _own_card_flashes: Array[Panel] = []
@@ -525,11 +551,14 @@ func on_cards_changed(
 ## Seam callback (connect_pitch_changed, the runner's TENTH seam — story 6-3b, AC 1/AC 3/AC 4/AC 6),
 ## `my_slot` BOUND at wiring. MATCH-LEVEL: this root receives BOTH players' zones; ONLY an own payload touches
 ## the ghost memory. Not primed: both zones start empty.
+## Story 7-4 (AC 13): `fresh_orbs` -- a sorcery's sockets, `Enums.CardColor` -> orbs earned since staging
+## capped at the price (`{}` for an instant or an empty zone) -- renders in whichever zone the payload is for,
+## so both players see the same sockets.
 func on_pitch_changed(slot: int, card_id: StringName, hand_slot: int, ready: bool,
-		remaining_ticks: int, duration_ticks: int, my_slot: int) -> void:
+		remaining_ticks: int, duration_ticks: int, fresh_orbs: Dictionary, my_slot: int) -> void:
 	var own := slot == my_slot
 	_render_pitch_zone(_own_pitch if own else _opponent_pitch, card_id, ready, remaining_ticks,
-			duration_ticks)
+			duration_ticks, fresh_orbs)
 	if own:
 		# Review fix F2: remember the slot a CLEARING zone's card was staged from, for THIS drain only -- an
 		# activation's resolution arrives in the same drain; a fizzle's never does, so the memory is dropped by a
@@ -645,6 +674,9 @@ func _paint_face(index: int, id: StringName, tint: Color, with_costs := true) ->
 			cost_label.text = ""
 		else:
 			cost_label.text = _mana_text(float((row as Array)[h * 2]))
+	# Story 7-4 (AC 12): the hourglass marks a SORCERY's pitch half wherever that half is drawn with its costs
+	# (a real card or the ghost), never on the faint card beneath a Boulder.
+	_own_card_hourglasses[index].visible = row != null and has_pitch and with_costs and _is_sorcery(id)
 	# The pitch pips: one per required orb, sorted by colour ordinal (an `orb_costs` iteration order is never a
 	# contract, `card_cast_condition.gd`), so two identical hands render identically.
 	var pip_colors: Array[int] = []
@@ -745,10 +777,13 @@ func _apply_affordability() -> void:
 		var cover := _own_card_covers[i]
 		var cover_row: Variant = _last_card_prices.get(_slot_play_ids[i], null) if _slot_covered[i] else null
 		cover.modulate = Color.WHITE if cover_row == null 				or float((cover_row as Array)[0]) <= _mana + AFFORD_EPSILON else UNAFFORDABLE_MODULATE
+		# Story 7-4 (AC 14, `7-4/R12`): a SORCERY's pips are never lit from the bank -- banked orbs do not count
+		# toward it, so they stay hollow rings whatever the bank holds. An instant's fill by count is unchanged.
+		var sorcery := _is_sorcery(_slot_face_ids[i])
 		for pip: Panel in _own_card_pips[i]:
 			var c := int(pip.get_meta(&"orb_color", -1))
 			var rank := int(pip.get_meta(&"orb_rank", 1))
-			var held := c >= 0 and c < _orbs.size() and _orbs[c] >= rank
+			var held := not sorcery and c >= 0 and c < _orbs.size() and _orbs[c] >= rank
 			# P7: full colour always; held = a filled circle, missing = a hollow ring.
 			(pip.get_theme_stylebox("panel") as StyleBoxFlat).draw_center = held
 
@@ -869,7 +904,7 @@ func _mana_text(mana: float) -> String:
 ## empty bar, no READY. The bar is the countdown as `remaining / duration`; it moves only when a payload
 ## arrives (on the authored throttle, AC 5), never per frame.
 func _render_pitch_zone(zone: Panel, card_id: StringName, ready: bool, remaining_ticks: int,
-		duration_ticks: int) -> void:
+		duration_ticks: int, fresh_orbs: Dictionary = {}) -> void:
 	var staged := card_id != PitchState.NO_CARD
 	var caption: Label = zone.get_node("Card")
 	var art: TextureRect = zone.get_node("Art")
@@ -883,6 +918,68 @@ func _render_pitch_zone(zone: Panel, card_id: StringName, ready: bool, remaining
 	bar.max_value = maxi(1, duration_ticks)
 	bar.value = remaining_ticks if staged else 0
 	ready_label.visible = staged and ready
+	# Story 7-4 (AC 12/AC 13): a SORCERY carries the hourglass and one socket per required orb, sorted by colour
+	# ordinal; the n-th socket of a colour is filled iff at least n orbs of that colour were EARNED since staging
+	# (the payload's count -- never the bank, so a socket is empty at staging whatever the bank holds). Speed is
+	# read through the static price derive, the hand pips' source, so both zones mark the same card the same way.
+	var sorcery := staged and _is_sorcery(card_id)
+	(zone.get_node("Hourglass") as Control).visible = sorcery
+	var socket_colors: Array[int] = []
+	var row: Variant = _last_card_prices.get(card_id, null) if sorcery else null
+	if row != null and (row as Array).size() > 3:
+		var orb_costs: Dictionary = (row as Array)[3]
+		var colors: Array = orb_costs.keys()
+		colors.sort()
+		for c: Variant in colors:
+			for _n in int(orb_costs[c]):
+				socket_colors.append(int(c))
+	var seen_of_color: Dictionary = {}
+	var sockets_row := zone.get_node("Sockets") as Control
+	# 7-4 SMOKE FIX, ROUND 2: READY and the socket row share the band below the bar. Where their rects overlap, the row
+	# hides while READY shows -- READY means every socket is filled, so nothing is lost.
+	var hide_for_ready := ready_label.visible and ready_label.get_rect().intersects(sockets_row.get_rect())
+	for socket: Panel in sockets_row.get_children():
+		var s := socket.get_index()
+		if s < socket_colors.size() and socket_colors[s] >= 0 and socket_colors[s] < ORB_COLORS.size():
+			var c := socket_colors[s]
+			seen_of_color[c] = int(seen_of_color.get(c, 0)) + 1
+			var style := socket.get_theme_stylebox("panel") as StyleBoxFlat
+			style.bg_color = ORB_COLORS[c]
+			style.border_color = ORB_COLORS[c]
+			style.draw_center = int(fresh_orbs.get(c, 0)) >= int(seen_of_color[c])
+			socket.visible = not hide_for_ready
+		else:
+			socket.visible = false
+
+
+## Story 7-4 (AC 12/AC 14, `7-4/R12`): is `id` a SORCERY? Read off the static price row's fifth element (the
+## runner's `_derive_card_prices`); a row without one -- an older four-element fixture -- reads instant, as does
+## an unknown id.
+func _is_sorcery(id: StringName) -> bool:
+	var row: Variant = _last_card_prices.get(id, null)
+	if row == null or (row as Array).size() < 5:
+		return false
+	return int((row as Array)[4]) == Enums.PitchSpeed.SORCERY
+
+
+## Story 7-4 (AC 12): the PLACEHOLDER hourglass marker -- two amber triangles meeting at a waist, drawn with
+## `Polygon2D`s inside a small Control (no font glyph to depend on). Built hidden; a sorcery shows it.
+func _make_hourglass(node_name: String, at: Vector2) -> Control:
+	var glass := Control.new()
+	glass.name = node_name
+	glass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glass.position = at
+	glass.size = HOURGLASS_SIZE
+	var w := HOURGLASS_SIZE.x
+	var h := HOURGLASS_SIZE.y
+	for points: PackedVector2Array in [PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w * 0.5, h * 0.5)]),
+			PackedVector2Array([Vector2(w * 0.5, h * 0.5), Vector2(w, h), Vector2(0, h)])]:
+		var tri := Polygon2D.new()
+		tri.polygon = points
+		tri.color = HOURGLASS_COLOR
+		glass.add_child(tri)
+	glass.visible = false
+	return glass
 
 
 ## Story 6-0 (AC 1): the single write seat for the colour frame. `color` is an `Enums.CardColor` or `null`
@@ -1209,6 +1306,32 @@ func _build_pitch_zone(node_name: String, anchor_x: float, offsets: Array) -> Pa
 	ready_label.offset_bottom = 154.0
 	ready_label.visible = false
 	zone.add_child(ready_label)
+	# Story 7-4 (AC 12/AC 13): the sorcery marker and the socket row, both hidden until a sorcery is staged.
+	zone.add_child(_make_hourglass("Hourglass", ZONE_HOURGLASS_POS))
+	var sockets := Control.new()
+	sockets.name = "Sockets"
+	sockets.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 7-4 SMOKE FIX, ROUNDS 2-3: the row sits in the band below the countdown bar, its left edge flush with the bar's,
+	# vertically centred in the band. Each socket is one coloured ring (the `Socket%d` Panel whose stylebox
+	# `_render_pitch_zone` fills), `ZONE_SOCKET_RING_PX` thick while empty.
+	var row_width := MAX_PIPS * ZONE_SOCKET_SIZE + (MAX_PIPS - 1) * ZONE_SOCKET_GAP
+	sockets.position = Vector2(bar.offset_left,
+			ZONE_SOCKET_BAND_TOP + (ZONE_SOCKET_BAND_BOTTOM - ZONE_SOCKET_BAND_TOP - ZONE_SOCKET_SIZE) * 0.5)
+	sockets.size = Vector2(row_width, ZONE_SOCKET_SIZE)
+	zone.add_child(sockets)
+	for s in MAX_PIPS:
+		var socket := Panel.new()
+		socket.name = "Socket%d" % s
+		socket.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		socket.size = Vector2(ZONE_SOCKET_SIZE, ZONE_SOCKET_SIZE)
+		socket.position = Vector2(s * (ZONE_SOCKET_SIZE + ZONE_SOCKET_GAP), 0.0)
+		var style := StyleBoxFlat.new()
+		style.set_corner_radius_all(int(ZONE_SOCKET_SIZE * 0.5))
+		style.set_border_width_all(ZONE_SOCKET_RING_PX)
+		style.draw_center = false
+		socket.add_theme_stylebox_override("panel", style)
+		socket.visible = false
+		sockets.add_child(socket)
 	return zone
 
 
@@ -1320,6 +1443,10 @@ func _build_card(strip: Control, i: int) -> void:
 		half.add_child(rim)
 		rims.append(rim)
 		if h == 1:
+			# Story 7-4 (AC 12): the sorcery marker on the pitch half, over the art's top-left corner.
+			var glass := _make_hourglass("Hourglass", HAND_HOURGLASS_POS)
+			half.add_child(glass)
+			_own_card_hourglasses.append(glass)
 			var pip_row := Control.new()
 			pip_row.name = "Pips"
 			pip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE

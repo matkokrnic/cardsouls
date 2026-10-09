@@ -285,7 +285,9 @@ func test_the_card_fizzles_to_the_discard_at_the_deadline_and_owes_its_replaceme
 			# Story 6-5d (AC 30): the variable cost's two frozen facts, at their EMPTY-ZONE resting 0.0.
 			# `PitchState.clear()` zeroes both with the record, so a fizzled or activated zone can never
 			# carry a stale price or a stale frozen damage into the hash.
-			"mana_spent": 0.0, "locked_damage": 0.0},
+			"mana_spent": 0.0, "locked_damage": 0.0,
+			# Story 7-4 (AC 8): the fresh-orb count, all three colours at their resting zero.
+			"fresh_orbs": {"red": 0, "blue": 0, "green": 0}},
 		"the hashed zone is back to the empty record")
 	for _t in DELAY_TICKS - 1:
 		_tick(ms)
@@ -493,7 +495,9 @@ func test_activation_spends_only_the_priced_orbs_and_resolves_the_card() -> void
 			# Story 6-5d (AC 30): the variable cost's two frozen facts, at their EMPTY-ZONE resting 0.0.
 			# `PitchState.clear()` zeroes both with the record, so a fizzled or activated zone can never
 			# carry a stale price or a stale frozen damage into the hash.
-			"mana_spent": 0.0, "locked_damage": 0.0},
+			"mana_spent": 0.0, "locked_damage": 0.0,
+			# Story 7-4 (AC 8): the fresh-orb count, all three colours at their resting zero.
+			"fresh_orbs": {"red": 0, "blue": 0, "green": 0}},
 		"...back to the empty hashed record, the one a fizzle leaves")
 	assert_eq(ms.p1.discard.to_array(), [id] as Array[StringName], "the card went to the discard")
 	assert_eq(ms.p1.pending_draw_owed, [STAGE_SLOT] as Array[int], "the vacated slot is owed NOW")
@@ -679,7 +683,9 @@ func test_activation_reads_the_price_through_the_shared_seats_and_never_the_expi
 	assert_true(activate.length() > 0, "the scan must find _resolve_pitch_activate's body")
 	assert_true(activate.contains("pitch.staged_orb_costs(slot)"), "the spend reads staged_orb_costs()")
 	assert_true(activate.contains("CastEvaluator.sorted_orb_colors("), "...in sorted_orb_colors() order")
-	assert_true(activate.contains("pitch.is_ready(slot, player.orbs, flags)"), "READY is the gate")
+	# Story 7-4 (`7-4/R14`): the gate gained the staged card's speed, read off the injected map at the call.
+	assert_true(activate.contains("pitch.is_ready(slot, player.orbs, flags, _staged_is_sorcery(slot))"),
+		"READY is the gate")
 	assert_false(activate.contains("is_expired"), "no expiry guard (6-3a-gate/R-EXPIRY)")
 	assert_false(activate.contains("Invariant.check"), "no Invariant.check on the spend (Fact 6)")
 	var ready := _function_body("res://src/state/pitch/pitch_state.gd", "func is_ready(")
@@ -689,6 +695,11 @@ func test_activation_reads_the_price_through_the_shared_seats_and_never_the_expi
 			"static func orb_costs_affordable(")
 	assert_true(affordable.contains("sorted_orb_colors("), "the READ loop consumes the same ordering seat")
 	assert_false(affordable.contains(".sort()"), "...and keeps no second sort of its own")
+	# Story 7-4 (AC 6): the sorcery's fresh-orb loop is the third consumer of the same ordering seat.
+	var covered := _function_body("res://src/state/economy/cast_evaluator.gd",
+			"static func orb_costs_covered_by(")
+	assert_true(covered.contains("sorted_orb_colors("), "the FRESH-ORB loop consumes the same ordering seat")
+	assert_false(covered.contains(".sort()"), "...and keeps no second sort of its own either")
 	assert_eq(CastEvaluator.sorted_orb_colors({Enums.CardColor.GREEN: 1, Enums.CardColor.RED: 2}),
 		[Enums.CardColor.RED, Enums.CardColor.GREEN], "sorted_orb_colors orders by the enum's int value")
 

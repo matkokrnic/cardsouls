@@ -178,7 +178,11 @@ func _initialize() -> void:
 		elif arg.begins_with("diag="):
 			_diag_every = maxi(0, int(arg.substr(5)))
 	var scene: PackedScene = load("res://src/main/main.tscn")
-	root.add_child(scene.instantiate())
+	var runner := scene.instantiate()
+	# Story 7-4 (`7-4/R15`): this test reads or acts on the DEALT hand, so it fixes the deal at the seed the
+	# runner shipped as a constant before 7-4 -- set BEFORE the runner enters the tree.
+	runner.seed_override = 12345
+	root.add_child(runner)
 	# AC 3: the RESOLUTION is FORCED here rather than inherited from whatever size the window
 	# manager happened to give the run. Two runs of this harness on the same machine reported
 	# 1920x1111 and 1152x648 and therefore two different GPU loads; a measurement the story has to

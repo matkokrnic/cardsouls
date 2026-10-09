@@ -71,6 +71,18 @@ var _fizzle: Array[TimingWindow] = [TimingWindow.new(), TimingWindow.new()]
 var _mana_spent: Array[float] = [0.0, 0.0]
 var _locked_damage: Array[float] = [0.0, 0.0]
 
+## Story 7-4 (AC 6/AC 8/AC 10, `7-4/R2`/`R11`): THE FRESH ORBS, per slot -- `Enums.CardColor` -> count of
+## orbs EARNED while a SORCERY sits in this zone. Credited only through `credit_fresh_orbs` (whose one
+## caller is `MatchState._grant_landing_orbs`, the only orb faucet), and only for a staged sorcery; an
+## instant's count stays empty. It counts the GRANT, not what the bank kept: an orb earned into a colour
+## already at its cap still counts here while the pool clamps (`7-4/R11`).
+##
+## HASHED (`to_snapshot`), unlike the card's speed: it is not content but the outcome of play across
+## ticks, and it decides when the card can resolve -- `_mana_spent`'s class of fact. It STARTS EMPTY at
+## every `stage()` and empties in `clear()`, the zone's one exit seat, so an empty zone never carries one.
+## READY stays DERIVED: there is still no latch, only this count and the live pool.
+var _fresh_orbs: Array[Dictionary] = [{}, {}]
+
 
 ## Put `card_id`, staged from `hand_slot`, into `slot`'s zone and start its countdown. The caller
 ## (MatchState._resolve_pitch_stage) has already refused an occupied zone, so an overwrite here is a
@@ -89,6 +101,9 @@ func stage(slot: int, card_id: StringName, hand_slot: int, orb_costs: Dictionary
 	_fizzle[slot].start(duration_ticks)
 	_mana_spent[slot] = mana_spent
 	_locked_damage[slot] = locked_damage
+	# Story 7-4 (AC 8): every staging starts with nothing earned -- an orb banked before (or on) this
+	# tick never counts toward a sorcery.
+	_fresh_orbs[slot] = {}
 
 
 ## Empty `slot`'s zone and stop its countdown. Used by the fizzle exit, by activation (story 6-3a) and
@@ -103,6 +118,23 @@ func clear(slot: int) -> void:
 	# gate, because this snapshot has no "is a card staged" conditional to hang one on.
 	_mana_spent[slot] = 0.0
 	_locked_damage[slot] = 0.0
+	# Story 7-4 (AC 8): the fresh count leaves with the card, at all three exits (activation, fizzle,
+	# debug reset) because all three come through here.
+	_fresh_orbs[slot] = {}
+
+
+## Story 7-4 (AC 6/AC 10): `amount` orbs of `color` were EARNED into `slot`'s owner's bank while a sorcery
+## sits in the zone. The caller decides that it is a staged sorcery (it holds the injected speed); this
+## container only counts. Counts the full `amount` whatever the pool kept (`7-4/R11`).
+func credit_fresh_orbs(slot: int, color: Enums.CardColor, amount: int) -> void:
+	Invariant.check(is_staged(slot), "fresh orbs credited to the empty pitch zone %d" % slot)
+	_fresh_orbs[slot][color] = int(_fresh_orbs[slot].get(color, 0)) + amount
+
+
+## Story 7-4 (AC 13): the orbs earned since staging, per colour, BY VALUE. Empty for an empty zone and
+## for an instant.
+func fresh_orbs(slot: int) -> Dictionary:
+	return _fresh_orbs[slot].duplicate()
 
 
 ## One tick off both countdowns, P1 then P2. A stopped window ignores the tick (TimingWindow.tick).
@@ -131,8 +163,20 @@ func staged_hand_slot(slot: int) -> int:
 ## AC 10: READY, DERIVED LIVE. A staged card whose orb price `orbs` satisfies right now -- with an
 ## empty price, or the `orbs` layer off, reading satisfied (the `CastEvaluator` graceful-degrade rule).
 ## An empty zone is never ready. Reads, never writes: nothing here consumes or signals.
-func is_ready(slot: int, orbs: OrbPool, flags: FeatureFlags) -> bool:
-	return is_staged(slot) and CastEvaluator.orb_costs_affordable(staged_orb_costs(slot), orbs, flags)
+##
+## Story 7-4 (AC 4-6/AC 9, `7-4/R14`): `sorcery` is the staged card's speed, READ by the caller off the
+## injected pitch-cost map at every call and never cached here. An instant asks the bank alone (the rule
+## above, byte for byte). A sorcery ALSO needs its price covered by the orbs earned since staging --
+## AND still by the bank, which only matters after a hot reload lowers the orb cap and clamps the pool.
+## The same degrade rule applies to both halves, so an empty price or the orbs layer off reads READY for
+## either speed.
+func is_ready(slot: int, orbs: OrbPool, flags: FeatureFlags, sorcery: bool = false) -> bool:
+	if not is_staged(slot):
+		return false
+	var orb_costs := staged_orb_costs(slot)
+	if not CastEvaluator.orb_costs_affordable(orb_costs, orbs, flags):
+		return false
+	return not sorcery or CastEvaluator.orb_costs_covered_by(orb_costs, _fresh_orbs[slot], flags)
 
 
 ## Story 6-3a (AC 7/AC 11): the staged card's orb price, BY VALUE -- the ONE read seat for it. `is_ready()`
@@ -172,4 +216,12 @@ func _zone_snapshot(slot: int) -> Dictionary:
 		# two keys and why they are hashed at all. Plain floats, the `unit_hp` class; resting 0.0.
 		"mana_spent": _mana_spent[slot],
 		"locked_damage": _locked_damage[slot],
+		# Story 7-4 (AC 8/AC 11): the orbs earned since staging, ALL THREE orb colours always present with
+		# ASCII keys (the `OrbPool.to_snapshot` shape), so the key set never depends on what was earned.
+		# Resting zeros for an empty zone and for an instant.
+		"fresh_orbs": {
+			"red": int(_fresh_orbs[slot].get(Enums.CardColor.RED, 0)),
+			"blue": int(_fresh_orbs[slot].get(Enums.CardColor.BLUE, 0)),
+			"green": int(_fresh_orbs[slot].get(Enums.CardColor.GREEN, 0)),
+		},
 	}

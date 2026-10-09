@@ -135,6 +135,24 @@ static func orb_costs_affordable(orb_costs: Dictionary, orbs: OrbPool,
 	return true
 
 
+## Story 7-4 (AC 6/AC 9, `7-4/R14`): `orb_costs_affordable` directly above, over a bare per-colour COUNT
+## dictionary (`Enums.CardColor` -> int) instead of an `OrbPool` -- the question a SORCERY asks of the
+## orbs earned since it was staged (`PitchState._fresh_orbs`). Same degrade rule (an empty price, or the
+## orbs layer off, reads covered) and the same `sorted_orb_colors` walk, so the iteration order still
+## lives in one place. A colour the price does not name is never visited, so it can never count; a
+## colour missing from `counts` reads 0.
+static func orb_costs_covered_by(orb_costs: Dictionary, counts: Dictionary,
+		flags: FeatureFlags) -> bool:
+	if orb_costs.is_empty():
+		return true
+	if flags == null or not flags.orbs:
+		return true
+	for color: Enums.CardColor in sorted_orb_colors(orb_costs):
+		if int(counts.get(color, 0)) < int(orb_costs[color]):
+			return false
+	return true
+
+
 ## Story 6-3a (AC 7): the ORDERING half of the loop directly above, extracted -- the ONE place the
 ## sort-the-colour-keys decision lives (plain `Enums.CardColor` ints, never StringNames; see
 ## `_orbs_affordable`'s note). TWO consumers, not one shared loop: the READ loop above, and the WRITE

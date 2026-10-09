@@ -201,6 +201,7 @@ func _run() -> void:
 	_check_highlights()
 	_check_history()
 	_check_pitch_zone_art()
+	_check_pitch_speeds()
 	_check_hp_display()
 	_check_icon_files_and_credits()
 	# LAST: its fizzle half leaves the zone-clear memory for `_check_stale_fizzle` on the next frame, and no own
@@ -542,8 +543,8 @@ func _check_play_flash() -> void:
 	# then ACTIVATE (zone clear, then the owed-slot hand payload, then the own pitch resolution off the bus).
 	var flash2 := _card(2).get_node("PlayFlash") as Control
 	_hand([&"card_a", &"card_b", Hand.EMPTY, &"card_d"])
-	_hud.on_pitch_changed(0, &"card_c", 2, false, 100, 100, 0)
-	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, 0)
+	_hud.on_pitch_changed(0, &"card_c", 2, false, 100, 100, {}, 0)
+	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, {}, 0)
 	_hand([&"card_a", &"card_b", Hand.EMPTY, &"card_d"], [], [2])
 	_hud.on_card_effect_resolved(0, &"vampiric_aura", true, 0)
 	_check(flash2.visible and flash2.modulate.a > 0.0, "F2: a pitch activation did not flash the slot it was staged from")
@@ -552,8 +553,8 @@ func _check_play_flash() -> void:
 	_reset_flashes()
 	# F2: a FIZZLE -- the same zone clear and owed slot, but no resolution -- never flashes.
 	_hand([&"card_a", &"card_b", Hand.EMPTY, &"card_d"])
-	_hud.on_pitch_changed(0, &"card_c", 2, false, 100, 100, 0)
-	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, 0)
+	_hud.on_pitch_changed(0, &"card_c", 2, false, 100, 100, {}, 0)
+	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, {}, 0)
 	_hand([&"card_a", &"card_b", Hand.EMPTY, &"card_d"], [], [2])
 	_check(not flash2.visible, "F2: a fizzle flashed its slot")
 	_hand([&"card_a", &"card_b", &"card_c", &"card_d"])
@@ -629,8 +630,8 @@ func _check_history() -> void:
 ## Review fix (operator ruling F4): the pitch zone shows the staged card's PITCH effect art and no words -- own and
 ## opponent zone alike; an empty zone shows none.
 func _check_pitch_zone_art() -> void:
-	_hud.on_pitch_changed(0, &"card_a", 0, false, 100, 100, 0)   # own: card_a's pitch half is boom
-	_hud.on_pitch_changed(1, &"card_b", 1, false, 100, 100, 0)   # opponent: card_b's pitch half is rocksling
+	_hud.on_pitch_changed(0, &"card_a", 0, false, 100, 100, {}, 0)   # own: card_a's pitch half is boom
+	_hud.on_pitch_changed(1, &"card_b", 1, false, 100, 100, {}, 0)   # opponent: card_b's pitch half is rocksling
 	for z: Array in [["OwnPitch", &"boom"], ["OpponentPitch", &"rocksling"]]:
 		var zone := _hud.get_node(z[0]) as Control
 		var art := zone.get_node_or_null("Art") as TextureRect
@@ -639,9 +640,94 @@ func _check_pitch_zone_art() -> void:
 		for label: Label in zone.find_children("*", "Label", true, false):
 			_check(not label.is_visible_in_tree() or label.text == "" or label.name == "Ready",
 					"F4: %s renders words: %s \"%s\"" % [z[0], label.name, label.text])
-	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, 0)
-	_hud.on_pitch_changed(1, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, 0)
+	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, {}, 0)
+	_hud.on_pitch_changed(1, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, {}, 0)
 	_check((_hud.get_node("OwnPitch/Art") as TextureRect).texture == null, "F4: an empty zone still shows art")
+
+
+## Story 7-4 (AC 12-14): the SORCERY look. The price rows gain their fifth element (speed) for this check only --
+## card_d (two RED) becomes a sorcery; every other card keeps a four-element row, which must read INSTANT. In
+## hand: the hourglass marks only the sorcery's pitch half, and its pips stay HOLLOW even with the bank full of
+## red, while the instant card_a's red pip still lights. In the zone: the hourglass plus one socket per required
+## orb, filled only by the payload's EARNED count, in the own and the opponent zone alike; an instant shows neither.
+func _check_pitch_speeds() -> void:
+	var sorcery_prices := _prices.duplicate()
+	sorcery_prices[&"card_d"] = (_prices[&"card_d"] as Array) + [int(Enums.PitchSpeed.SORCERY)]
+	sorcery_prices[&"card_a"] = (_prices[&"card_a"] as Array) + [int(Enums.PitchSpeed.INSTANT)]
+	_hud.on_cards_changed([&"card_a", &"card_b", &"card_c", &"card_d"], 20, 0, [], _colors, sorcery_prices,
+			[&"card_a", &"card_b", &"card_c", &"card_d"])
+	for i in 4:
+		var glass := _half(i, 1).get_node_or_null("Hourglass") as Control
+		_check(glass != null and glass.visible == (i == 3),
+				"AC 12: slot %d hourglass visible=%s, want %s" % [i, glass.visible if glass != null else null, i == 3])
+	_hud.on_orbs_changed(2, 0, 0)
+	_check(_pip_lit(3) == [false, false], "AC 14: a SORCERY's pips light from the bank: %s" % [_pip_lit(3)])
+	_check(_pip_lit(0) == [true], "AC 14: an INSTANT's pip does not light from the bank: %s" % [_pip_lit(0)])
+	_hud.on_orbs_changed(0, 0, 0)
+	# The zones: own card_d with nothing earned, opponent card_d with one earned, then an instant.
+	_hud.on_pitch_changed(0, &"card_d", 3, false, 100, 100, {RED: 0}, 0)
+	_hud.on_pitch_changed(1, &"card_d", 3, false, 100, 100, {RED: 1}, 0)
+	for z: Array in [["OwnPitch", [false, false]], ["OpponentPitch", [true, false]]]:
+		var zone := _hud.get_node(z[0]) as Control
+		_check((zone.get_node("Hourglass") as Control).visible, "AC 12: %s shows no hourglass for a sorcery" % z[0])
+		var filled: Array = []
+		for socket: Node in zone.get_node("Sockets").get_children():
+			if (socket as Control).visible:
+				filled.append(((socket as Control).get_theme_stylebox("panel") as StyleBoxFlat).draw_center)
+		_check(filled == z[1], "AC 13: %s sockets %s, want %s" % [z[0], filled, z[1]])
+		_check_socket_geometry(zone, z[0])
+	# 7-4 SMOKE FIX, ROUND 2: a READY sorcery. READY shares the band with the sockets, so they never overlap a visible
+	# READY label; where the rects meet, the row hides while READY shows.
+	_hud.on_pitch_changed(0, &"card_d", 3, true, 100, 100, {RED: 2}, 0)
+	var ready_zone := _hud.get_node("OwnPitch") as Control
+	_check((ready_zone.get_node("Ready") as Control).visible, "SMOKE FIX: a READY sorcery shows READY")
+	_check_socket_geometry(ready_zone, "OwnPitch (READY)")
+	_hud.on_pitch_changed(0, &"card_a", 0, true, 100, 100, {}, 0)
+	var own := _hud.get_node("OwnPitch") as Control
+	var any_socket := false
+	for socket: Node in own.get_node("Sockets").get_children():
+		any_socket = any_socket or (socket as Control).visible
+	_check(not (own.get_node("Hourglass") as Control).visible and not any_socket,
+			"AC 12/13: an INSTANT in the zone shows an hourglass or sockets")
+	_hud.on_pitch_changed(0, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, {}, 0)
+	_hud.on_pitch_changed(1, PitchState.NO_CARD, PitchState.NO_HAND_SLOT, false, 0, 100, {}, 0)
+	_check(not (own.get_node("Hourglass") as Control).visible, "AC 12: an EMPTY zone shows an hourglass")
+	_hand([&"card_a", &"card_b", &"card_c", &"card_d"])
+
+
+## 7-4 SMOKE FIX, ROUNDS 2-3 (operator smoke). Checks for every SHOWN socket:
+## - it lies below the countdown bar, off the art square, inside the zone;
+## - it is larger than a hand pip;
+## - it never overlaps a visible READY label;
+## - while EMPTY, its ring is `HudRoot.ZONE_SOCKET_RING_PX` thick, thicker than the hand's `PIP_RING_PX` (round 3).
+## For the row: its left edge equals the bar's left edge (no centring). Geometry and style only (`PROC/R8`).
+func _check_socket_geometry(zone: Control, label: String) -> void:
+	var zone_rect := zone.get_global_rect()
+	var bar_rect := (zone.get_node("Countdown") as Control).get_global_rect()
+	var ready := zone.get_node("Ready") as Control
+	var art_rect := (zone.get_node("Art") as Control).get_global_rect()
+	var row := zone.get_node("Sockets") as Control
+	_check(is_equal_approx(row.get_global_rect().position.x, bar_rect.position.x),
+			"SMOKE FIX: %s socket row starts at x %.1f, the bar at %.1f" % [label, row.get_global_rect().position.x,
+					bar_rect.position.x])
+	for socket: Node in row.get_children():
+		var sc := socket as Control
+		if not sc.is_visible_in_tree():
+			continue
+		var r := sc.get_global_rect()
+		var style := sc.get_theme_stylebox("panel") as StyleBoxFlat
+		if not style.draw_center:
+			_check(style.border_width_left == HudRoot.ZONE_SOCKET_RING_PX
+					and HudRoot.ZONE_SOCKET_RING_PX > HudRoot.PIP_RING_PX,
+					"SMOKE FIX: %s empty %s ring is %d px, want ZONE_SOCKET_RING_PX %d (> PIP_RING_PX %d)"
+							% [label, sc.name, style.border_width_left, HudRoot.ZONE_SOCKET_RING_PX, HudRoot.PIP_RING_PX])
+		_check(r.position.y >= bar_rect.end.y, "SMOKE FIX: %s %s %s is not below the bar %s" % [label, sc.name, r, bar_rect])
+		_check(not r.intersects(art_rect), "SMOKE FIX: %s %s overlaps the art %s" % [label, sc.name, art_rect])
+		_check(zone_rect.encloses(r), "SMOKE FIX: %s %s %s leaves the zone %s" % [label, sc.name, r, zone_rect])
+		_check(r.size.x > HudRoot.PIP_SIZE and r.size.y > HudRoot.PIP_SIZE,
+				"SMOKE FIX: %s %s %s is not larger than a hand pip (%.0f)" % [label, sc.name, r.size, HudRoot.PIP_SIZE])
+		_check(not (ready.is_visible_in_tree() and r.intersects(ready.get_global_rect())),
+				"SMOKE FIX: %s %s overlaps the visible READY label" % [label, sc.name])
 
 
 ## AC 30 / AC 31: a living hero never reads 0 (ceiling); a dead one reads 0.

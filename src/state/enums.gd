@@ -43,3 +43,13 @@ enum CardColor { RED, BLUE, GREEN, COLORLESS }
 ## it is the zero value an unset intent field carries, which is why InputIntent.card_mode can
 ## default to it without naming a "none" member the state layer would then have to reject.
 enum ModeKind { BASIC, UNBLOCKABLE, DEFENSE, PITCH }
+
+## Story 7-4 (AC 1, `7-4/R14`): a card's PITCH SPEED -- how a staged card in the Pitch Zone counts orbs.
+## `INSTANT` is READY as soon as the bank holds its orb price (the 6-2/6-3a rule, unchanged); `SORCERY`
+## counts only orbs EARNED while it sits in the zone (`PitchState._fresh_orbs`). Authored per card on the
+## pitch `CardCastCondition.pitch_speed`.
+##
+## INSTANT IS DELIBERATELY FIRST, so it is the zero value an unauthored field carries: a card that
+## authors no speed reads instant (AC 1) with no default-handling code anywhere, the `ModeKind.BASIC`
+## precedent directly above.
+enum PitchSpeed { INSTANT, SORCERY }

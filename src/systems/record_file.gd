@@ -366,7 +366,22 @@ extends RefCounted
 ##
 ## NOR IS THE GOLDEN A REASON: it moves for 7-9 for one unrelated cause (the new `unblockable_immunity`
 ## hero snapshot key), and a record carries INPUTS and CONTENT, never a hash.
-const FORMAT_VERSION := 21
+##
+## Story 7-4 (`7-4/R19`): 21 -> 22, WITH THE HARD REFUSAL OF A v21 FILE, NO SHIM.
+##
+## THE CAUSE IS BEHAVIOURAL FIRST, the `7-8`/`7-9` class again: a staged SORCERY now counts only orbs earned
+## after staging, so a v21 stream that staged Bloodhound Step, Grave Ward, Rocksling or Frostbite against an
+## already-banked price and activated it -- READY in v21 -- is now refused as not ready, and every later tick
+## diverges silently.
+##
+## AND A SHAPE CAUSE BESIDE IT: `CardCastCondition` gains `pitch_speed`, so every row of the `card_costs` and
+## `pitch_costs` channels (every script var, `_resource_values`) gains a key a v21 file does not carry, and
+## `_rebuilt` would leave it at INSTANT -- replaying the four sorceries as instants. No new channel;
+## `SOUND_CONTENT_ORDER` is untouched. Either cause alone is sufficient; both are silent.
+##
+## NOR IS THE GOLDEN A REASON: it moves for 7-4 for one unrelated cause (the new `fresh_orbs` keys under the
+## hashed `"pitch"` zone snapshot), and a record carries INPUTS and CONTENT, never a hash.
+const FORMAT_VERSION := 22
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

@@ -81,8 +81,10 @@ const PARKING_LOT := Vector3(40.0, 0.0, 40.0)
 
 ## Pinned-to-composition was the defect, found when deck_size 20 -> 24 at the 4-4 live smoke: a
 ## fixed seed no longer guarantees a summoning card lands in the frame-3 hand. Reshuffle through
-## the same debug-reset input path a player uses instead of pinning the deal; the RNG advances
-## deterministically each reshuffle, so the retry sequence is identical on every run.
+## the same debug-reset input path a player uses instead of pinning the deal. Since story 7-4 the runner
+## draws a NEW seed every launch, so this file fixes it with `seed_override = 12345` (`7-4/R15`); from that
+## fixed seed the RNG advances deterministically each reshuffle, so the retry sequence is identical on
+## every run.
 const RESHUFFLE_MAX_ATTEMPTS := 12
 const RESHUFFLE_SETTLE_TICKS := 10
 
@@ -123,7 +125,11 @@ var _detail := ""
 
 
 func _initialize() -> void:
-	root.add_child((load("res://src/main/main.tscn") as PackedScene).instantiate())
+	var runner: Node = (load("res://src/main/main.tscn") as PackedScene).instantiate()
+	# Story 7-4 (`7-4/R15`): this test reads or acts on the DEALT hand, so it fixes the deal at the seed the
+	# runner shipped as a constant before 7-4 -- set BEFORE the runner enters the tree.
+	runner.seed_override = 12345
+	root.add_child(runner)
 
 
 func _physics_process(_delta: float) -> bool:

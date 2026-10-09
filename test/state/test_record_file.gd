@@ -61,6 +61,9 @@ const PRE_7_8_PATH := "user://test_7_8_pre_v19_honest_contact.rec"
 ## Story 7-9 (AC 13): the v20 refusal fixture's own path, on its siblings' naming.
 ## No "20" in the path, so `error.contains("20")` below can only be answered by the version in the message.
 const PRE_7_9_PATH := "user://test_7_9_pre_tempo.rec"
+## Story 7-4 (`7-4/R19`): the v21 refusal fixture's own path, on its siblings' naming.
+## No "21" in the path, so `error.contains("21")` below can only be answered by the version in the message.
+const PRE_7_4_PATH := "user://test_7_4_pre_pitch_speeds.rec"
 ## Story 6-5g (AC 27, REVIEW FIX m5): the v18 refusal fixture's own path, on its siblings' naming -- this
 ## story's own dev pass had reused `PRE_6_5C_PATH` (harmless, since each test removes its file before the
 ## next runs, but the wrong name for what it wrote); its own constant now describes its own fixture.
@@ -236,8 +239,12 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 21,
-		"FORMAT_VERSION is 21 as of story 7-9 (AC 13) -- a BEHAVIOUR change (an unblockable click spends "
+	assert_eq(RecordFile.FORMAT_VERSION, 22,
+		"FORMAT_VERSION is 22 as of story 7-4 (`7-4/R19`) -- a BEHAVIOUR change (a staged SORCERY counts only "
+		+ "orbs earned after staging, so an activation v21 resolved off banked orbs is refused as not ready) "
+		+ "plus a SHAPE change (`CardCastCondition.pitch_speed` widens the `card_costs` and `pitch_costs` rows). "
+		+ "v21 is refused HARD, no shim. "
+		+ "It was 21 as of story 7-9 (AC 13) -- a BEHAVIOUR change (an unblockable click spends "
 		+ "mana and is refused without it; a colour defence with no attack in flight is refused with nothing "
 		+ "spent; a counter press older than the colour's lead no longer counters; a committed attack steers; "
 		+ "an unblockable touching a hero inside the post-get-up immunity is dropped) plus a SHAPE change "
@@ -440,6 +447,12 @@ func test_the_round_trip_carries_every_channel_verbatim() -> void:
 		"...their mana price")
 	assert_eq(loaded.replay_pitch_costs()[DECK_IDS[0]].orb_costs, {Enums.CardColor.BLUE: 2},
 		"...and their ORB price, rebuilt into the typed dictionary rather than dropped")
+	# Story 7-4 (`7-4/R19`): the SHAPE half of the bump -- the speed rides the pitch-cost row and survives
+	# save + load as a value; the default row reads INSTANT and the fixture's one sorcery reads SORCERY.
+	assert_eq(loaded.replay_pitch_costs()[DECK_IDS[0]].pitch_speed, Enums.PitchSpeed.INSTANT,
+		"...an instant row's speed")
+	assert_eq(loaded.replay_pitch_costs()[DECK_IDS[DECK_IDS.size() - 1]].pitch_speed,
+		Enums.PitchSpeed.SORCERY, "...and a SORCERY row's speed, not dropped back to the default")
 	# Story 6-5a (AC 1-2/AC 6): the SIXTH content channel, and AC 2's round-trip claim made through the
 	# FILE: a CardEffect's new FLAT exports survive save + load as values, rebuilt by the generic
 	# `_card_effects` path with no `_fresh_nested` row.
@@ -986,6 +999,32 @@ func test_a_v20_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_7_9_PATH)
 
 
+## Story 7-4 (`7-4/R19`): A v21 RECORD IS REFUSED WITH A REASON, NO SHIM -- the per-bump fixture, on the
+## `test_a_v20_record_is_refused_with_a_reason` precedent directly above.
+##
+## WHAT A v21 FILE WOULD SILENTLY DO: its recorded intents replay verbatim under the sorcery rule -- a Deck 1
+## sorcery v21 activated off orbs banked before staging is now refused as not ready -- and its `card_costs` /
+## `pitch_costs` rows lack `pitch_speed`, which `_rebuilt` would leave at INSTANT. Nothing in the file says why.
+func test_a_v21_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_7_4_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_7_4_PATH, 21)
+	var refused := RecordFile.load_record(PRE_7_4_PATH)
+	assert_null(refused["record"],
+		"a v21 record is REFUSED -- its sorcery activations would replay under 7-4's fresh-orb rule and "
+		+ "resolve a different outcome")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("21"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_7_4_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_7_4_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_7_4_PATH)
+
+
 ## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): THE MEASUREMENT BEHIND THE BUMP, on the 6-5c
 ## row-shape pin's shape verbatim -- the two new `CardEffect` exports really do widen every recorded effect
 ## row, read out of an actually-saved file rather than asserted as a count.
@@ -1432,9 +1471,11 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 21,
+	assert_eq(RecordFile.FORMAT_VERSION, 22,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 21 (last: 7-9, which priced the unblockable in mana, refused a "
+		+ "version has since moved to 22 (last: 7-4, which made four Deck 1 cards sorceries that count only "
+		+ "orbs earned after staging and widened the card and pitch cost rows by `pitch_speed`; before it 7-9, "
+		+ "which priced the unblockable in mana, refused a "
 		+ "defence with nothing to answer, anchored the counter window at the commit, steered the launch "
 		+ "and added the post-get-up immunity, widening the balance row by nine fields; before it 7-8, "
 		+ "which resolves an unblockable on the first counted "
@@ -1946,6 +1987,9 @@ func _pitch_costs() -> Dictionary[StringName, CardCastCondition]:
 		c.mana_cost = PITCH_MANA_COST
 		c.orb_costs[Enums.CardColor.BLUE] = 2
 		out[id] = c
+	# Story 7-4 (`7-4/R19`): ONE row carries a NON-DEFAULT speed, so the file round trip of the new
+	# `pitch_speed` field is exercised (an all-instant fixture would pass with the field dropped).
+	out[DECK_IDS[DECK_IDS.size() - 1]].pitch_speed = Enums.PitchSpeed.SORCERY
 	return out
 
 

@@ -38,3 +38,13 @@ extends Resource
 ## same reading as ResourceGenerationRule.required_flag — a flag name that cannot be verified
 ## open reads as CLOSED, the graceful-degradation direction.
 @export var required_flag: StringName = &""
+
+## Story 7-4 (AC 1, `7-4/R14`): the PITCH SPEED, meaningful ONLY on a card's `pitch_condition`. The
+## Mode ① `cast_condition` shares this schema and the field means nothing there: no reader looks at it
+## off a basic condition. Unauthored reads `INSTANT` (the enum's zero value), so a card's speed is one
+## edit to its own `.tres` and never a source edit.
+##
+## CONTENT, NEVER HASHED (ruling 8): it reaches the state layer through the existing `pitch_costs`
+## injection (recorded by value) and is READ at read time off `MatchState._pitch_costs[card_id]`,
+## never copied into the zone -- the staged card's hashed `card_id` is what selects it.
+@export var pitch_speed: Enums.PitchSpeed = Enums.PitchSpeed.INSTANT
