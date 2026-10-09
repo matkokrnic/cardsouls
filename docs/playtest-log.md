@@ -674,3 +674,19 @@ P1 na tipkovnici kasta (X/V/B), ja branim na padu. Svih 13 stavki PASS.
 - Regresija i fps OK.
 - Za kasnije: zvuk otkucaja je loš, zvuči kao balončići; bljesak iz očiju bi mogao biti efektniji -- nije nužno sad.
 - Sve u svemu super.
+
+2026-10-09 — 7-4 brzine pitcha. Solo smoke [0,3], ja na padu kao P2, P1 na tipkovnici je meta. Svih 10 točaka PASS:
+
+Pješčani sat imaju samo sorcery karte (Bloodhound Step, Grave Ward, Frostbite, Rocksling).
+Drain (Vampiric Aura) kao instant odmah je READY iz banke.
+Fireball kao sorcery ignorira crveni orb iz banke: prazni kružići u ruci i u zoni.
+Kriva boja ne puni kružić. Crveni unblockable ga puni, karta postaje READY, a aktivacija troši točno jedan crveni.
+Protivnik vidi isti sat i kružiće.
+Istek nakon 20 s gubi kartu.
+F3 pokazuje seed. Novo pokretanje daje drugi seed i drugu ruku, a zaključan seed ponavlja ruku.
+Runda normalno završi, fps je stabilan.
+
+Bilješke:
+
+Kružići u zoni bili su presitni i preko arta. Nakon tri kruga sad su ispod tajmera, poravnati lijevo, 24 px, s debljim obojenim prstenom i bez obruba (provjereno).
+Žuti pješčani sat slabije se vidi na kartama s velikim artom. Nije strašno, na malom setu se brzo zapamti, ide u art fazu.

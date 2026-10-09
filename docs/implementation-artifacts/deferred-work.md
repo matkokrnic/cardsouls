@@ -661,3 +661,13 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 - The RED jump/rebound tempo feels slightly slow (RED rate 1.587x, `counter_busy_seconds_red` 1.0 s, `counter_travel_forward_fraction_red` 0.49). Owner: 7-7.
 - The dagger trail is cut off on arrival (review F7: it is a child of the dagger and is freed with it, rather than fading). Owner: polish.
 - New files missing from the `game-architecture.md` tree: `src/actors/hero/unblockable_eyes.gd`, `src/actors/hero/immunity_shimmer.gd`, `src/actors/effects/unblockable_presentation.gd`, `tools/measure_head_visor.gd`. Owner: E7 close-out docs debt.
+
+## Deferred from: 7-4 close-out (2026-10-09)
+
+- Authoring test: every card's summed orb price must be <= `HudRoot.MAX_PIPS` (review MINOR-5). Owner: 7-7 or the next card-authoring story.
+- Hourglass marker contrast on cards with large art is weak (operator smoke note). Owner: art phase.
+- `test_unblockable_reach_live`: PRE-EXISTING intermittent failure (GREEN `late_close`; 1/8 at 690d5f0, 2/5 at HEAD with seed pinned 12345), likely the frame-counted defender teleport against the state tick at the 12-13 edge. Harden the test (sidestep on a state-tick count) with 7-7, which re-measures this test per 7-9/R22; add it to `run_all.sh` VERBOSE_FILES at the E7 close-out.
+- `epics.md` 7-4 text still names "+1 mana for a defended unblockable" (delivered by 7-9/R6, not 7-4). Owner: E7 close-out.
+- Commit trailer drift: `CLAUDE.md:32` says Claude Sonnet 5, recent commits carry Claude Sonnet 5.5. Owner: E7 close-out decides.
+- The keyboard controller has no pitch path (pad only). Owner: E7 close-out decides whether parity is owed.
+- Raise Dead's two-orb price as a sorcery (the 7-4 scope ruling on OQ5). Owner: 7-7 tuning input.
