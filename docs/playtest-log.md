@@ -661,3 +661,16 @@ P1 na tipkovnici kasta (X/V/B), ja branim na padu. Svih 13 stavki PASS.
 - Imunitet 1.5 s nakon ustajanja radi, i za kontriranog napadaca; melee u tom razdoblju pogada.
 - Trk sporiji (4.6), hod i roll isti.
 - Regresija OK, fps stabilan. R-D6: heroj pogine, runda normalno zavrsi.
+
+## 2026-10-09 -- 7-10 unblockable presentation (solo smoke [0,3], P1 kasta s X/V/B, ja na padu)
+
+- Oči napadača: svijetle u boji unblockablea, trepću sve brže, bljesnu na polasku, gase se na dodiru -- radi za sve tri boje.
+- Kontra na očekivani bljesak prolazi pouzdano.
+- Crvena kontra: skok na glavu pa odskok sad imaju smisleniji ritam; zamrzavanje, bljesak, udarac i trzaj kamere rade. Tempo mi se čini malo spor -- sitnica za kasnije.
+- Neuspjela crvena: nema skoka na glavu, pojedem udarac.
+- Zelena kontra: nož se vidi s tragom, pogodak se osjeti, napadač pada na pogotku.
+- Imunitet nakon ustajanja: srebrni sjaj se vidi i blijedi, unblockable prolazi kroz mene.
+- Kugle iznad glave nema već neko vrijeme (maknuta ranije), nije tema.
+- Regresija i fps OK.
+- Za kasnije: zvuk otkucaja je loš, zvuči kao balončići; bljesak iz očiju bi mogao biti efektniji -- nije nužno sad.
+- Sve u svemu super.

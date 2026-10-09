@@ -4,7 +4,7 @@ baseline_commit: b91152e716978caba9351564ce952d4144d42799
 
 # Story 7.10: Unblockable presentation
 
-Status: review
+Status: done
 
 Tier **B** (HUD/presentation only). Authored 2026-10-08 against HEAD == origin/main == `b91152e`, tree clean. Scope is the
 operator's brief of 8.10.2026 (`7-8/R20` routes the eye-blink telegraph and the counter polish here; `6-6b` deferred
@@ -41,6 +41,13 @@ a named knob; tests pin bounds and directions only.
    `C:\dev\_sonniss\part1`. File choices are listed in Dev Notes so the operator can swap them by hand.
 6. **[S]** The ChargeMarker orb, the per-colour charge clip and the existing stings are untouched. Whether the orb is now
    redundant is judged at smoke and recorded; it is not removed here.
+   *(Close-out note: the smoke call is moot. The operator reports the ChargeMarker orb has not been visible in play for some
+   time. Cause: `7-6/P21` moved every telegraph shape into the F3 debug layer. `ChargeMarker` is a child of
+   `TelegraphController/Shapes` (`src/actors/hero/hero.tscn:203`), and `TelegraphController.set_cues_shown(false)` hides the
+   whole node (`src/actors/hero/telegraph_controller.gd:104-106`, `visible = shown`), which the runner applies to both heroes
+   (`src/main/match_runner.gd:844`) with the layer hidden by default. The dispatch still sets `charge_shape.visible = true`
+   (`telegraph_controller.gd:218`), but under a hidden parent it never draws. It shows only with F3. Nothing in 7-10 changed
+   it.)*
 7. **[S]** Readable from the opponent's camera at a typical fight distance (4 to 6 m). Eye size, brightness, blink interval
    range and flash length are named knobs.
 
@@ -74,8 +81,7 @@ a named knob; tests pin bounds and directions only.
 
 16. **[M]** Golden, `FORMAT_VERSION` 21 and the snapshot key sets are byte-unmoved (Golden Prediction); `test/state/` and
     `src/state/` are not edited; the F1 / D3(a) / D3(b) invariants hold; no new `connect_*` (the family stays at ten).
-17. **[M]** Presentation state (hold timers, shake, hitstop, eye blink) is never read by anything in `src/state/` and never
-    reaches `to_snapshot()` or the recorder; a replay of a recorded match produces the same presentation inputs.
+17. **[M]** Presentation state (hold timers, shake, hitstop, eye blink, landing arc, travel factor) is never read by anything in `src/state/` and never reaches `to_snapshot()`; it reaches the recorder only indirectly, as the geometry of a contact fact gathered from bone-tracked shapes during a LANDED counter's arc, hitstop or victim hold, which the recorder captures as gathered, so a replay of a recorded match feeds the same contacts and produces the same presentation inputs. *(Amended at close-out per review T3; the original sentence said "never reaches ... the recorder".)*
 18. **[M]** New nodes have no `_physics_process` (F1), no collision shape, no signal into state. Hitstop and shake are
     advanced from the runner's single tick loop.
 19. **[S]** Live Smoke below passes.
@@ -233,6 +239,23 @@ verdicts in the story's dev record, not in `docs/playtest-log.md` (close-out own
    passes through; the marker is gone afterwards.
 6. Regression (melee, spells, roll, normal knockdown) and frame rate stable in both viewports.
 7. BLUE travel, only if touched.
+
+### Live Smoke Results
+
+Operator, solo `[0,3]`, 2026-10-09 (P1 casts with X/V/B, operator defends on the pad). Every item PASS (full entry in
+`docs/playtest-log.md`, 2026-10-09). Item 7 was not exercised: BLUE is untouched.
+
+1. PASS. Eyes light in the unblockable's colour, blink faster, flash at the launch, go out on the touch; all three colours.
+2. PASS. A press on the anticipated flash counters reliably.
+3. PASS. RED: freeze, flash, hit and camera shake work; the jump and rebound have a better rhythm. A FAILED RED has no
+   jump onto the head and the operator eats the hit (review F1 as fixed).
+4. PASS. GREEN: the dagger shows with a trail, the hit is felt, the attacker falls on the hit.
+5. PASS. The silver immunity shimmer is visible and fades; an unblockable passes through.
+6. PASS. Regression and frame rate OK.
+
+Operator notes (none blocking): RED tempo feels slightly slow; the eye tick sound reads like bubbles; the eye flash could be
+more striking; the orb above the head has not been visible for some time (moved out earlier, not this story's topic, see
+the AC 6 note). Overall: "super".
 
 ## Project Context Rules
 
@@ -415,3 +438,5 @@ Nothing was taken from `C:\dev\_sonniss\part1` (its candidates are 4-40 MB multi
 |---|---|
 | 2026-10-08 | promoted 2026-10-08 after operator review; Open Questions 1-4 resolved in the dev prompt, recorded in the Dev Agent Record |
 | 2026-10-08 | dev pass: eyes, RED/GREEN contact moment, victim hold, immunity shimmer, RED re-cut (1.587x); Status -> review |
+| 2026-10-08 | code review round 1 (`0e43bed`): F1 HIGH + F2 MED + F3/F4 LOW fixed; verdict APPROVE AFTER FIX |
+| 2026-10-09 | close-out: Live Smoke 1-6 PASS, 7 not exercised (operator); AC 17 amended, AC 6 orb note; Status -> done |
