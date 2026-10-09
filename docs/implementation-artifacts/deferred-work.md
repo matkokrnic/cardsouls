@@ -270,6 +270,7 @@ NOT deferred and is not listed here. See `6-6a-defense-reactions.md`, Post-Smoke
   pattern for the hero rig. This SUPERSEDES the narrower 6-6a review deferral of the same
   observation ("A hero moving during `get_up`/`hit_react` slides in the one-shot pose", recorded
   above) -- same fact, now with the smoke's confirmation and a named fix shape.
+  **DONE in 7-2** (the `LegLayer` upper/lower split; `7-2/R1`).
 
 ## E4 review residue (recorded at E4 close-out, 2026-09-01)
 
@@ -570,7 +571,7 @@ no file. Now split and keyed (`E6-C/R11`):
   bolt/fireball/stones/skulls art (`bolt_actor.gd`, `projectile_actor.gd`); dizzy/root legibility
   (shipped in scope, read quality unmeasured); Boulder mode-cycle cosmetic suppression (above).
 - **`7-2-animation-polish`** -- upper/lower body split (`6-5c/R5`, "OUT, Tier B presentation story
-  after `6-5f`"); hit-reaction sliding while walking.
+  after `6-5f`"); hit-reaction sliding while walking. **DONE in 7-2** (both).
 - **`7-6-hud-and-card-presentation`** -- cost legibility (`6-5b` AC 23, failed at smoke); hand shown
   as text, no icons; no per-effect cast feedback (generic cue only); a new HUD (the shipped HUD is
   the 2-4 one, extended in place through `6-10`).
@@ -602,10 +603,10 @@ no file. Now split and keyed (`E6-C/R11`):
 - **P14** Frostbite refresh is silent. Owner: E7 close-out.
 - **P16** replay reads today's `CardDatabase` for effect rows, not the authored-at-cast row.
   Owner: E7 close-out.
-- **P19** Rocksling lift-to-throw hard cut. Owner: `7-2`.
+- **P19** Rocksling lift-to-throw hard cut. Owner: `7-2`. **DONE in 7-2** (lift -> throw cross-fade).
 - Smoke leftovers: Culling, Vampiric Aura and Bloodhound sounds (owner: operator's sound pass);
-  root shackles read like a dress (owner: E7 close-out); stun pose transition, foot sliding
-  during casts, and cast speed (owner: `7-2`).
+  root shackles read like a dress (owner: E7 close-out); stun pose transition and foot sliding
+  during casts (**DONE in 7-2**); cast speed (owner: `7-7`, `7-2/R5`).
 - `assets/CREDITS.txt` lacks the skull author's name (CC-BY). Owner: E7 close-out.
 - New folders `src/actors/effects/`, `data/presentation/`, `assets/models/`, `assets/vfx/`,
   `assets/audio/effects/` are not yet in `game-architecture.md`'s directory tree. Owner: E7
@@ -634,7 +635,7 @@ Review artifact `C:\dev\_76-review.md`; fix pass in the same session.
 - **HUD scaling on smaller screens.** The HUD is native pixels (stretch disabled) and laid out for 960x1080 per half.
   Owner: before any build goes to other machines.
 - **Telegraph shapes and tones are placeholders.** Replace the placeholder telegraph shapes and tones with subtler
-  cues integrated into the animations and effects. Owner: the manual sound pass and `7-2` animations. Until then
+  cues integrated into the animations and effects. Owner: the art phase (moved from `7-2`, which did not take it). Until then
   the shapes sit under F3 and the tones stay on (`7-6/P22`).
 
 ### 7-6 architecture-amendment candidates (E7 close-out flush)
@@ -671,3 +672,12 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 - Commit trailer drift: `CLAUDE.md:32` says Claude Sonnet 5, recent commits carry Claude Sonnet 5.5. Owner: E7 close-out decides.
 - The keyboard controller has no pitch path (pad only). Owner: E7 close-out decides whether parity is owed.
 - Raise Dead's two-orb price as a sorcery (the 7-4 scope ruling on OQ5). Owner: 7-7 tuning input.
+
+## Deferred from: 7-2 close-out (2026-10-09)
+
+- **Bloodlust and Boulder-discard get no card gesture.** Neither writes a reversal kind, so a gesture needs a new state
+  fact (Tier A). Owner: E7 close-out assigns.
+- **Open question: replace the two Rocksling clips (lift, throw) with a single clip.** The lift -> throw junction is
+  cross-faded (P19) and stones 2/3 fly without a swing (`7-2/R8`); a single authored clip would remove the seam.
+  Owner: art phase.
+- **Done in 7-2:** P19, stun pose transition, foot sliding during casts, hit-reaction sliding, upper/lower split.
