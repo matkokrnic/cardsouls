@@ -145,7 +145,7 @@ development_status:
   7-10-unblockable-presentation: done  # Tier B
   7-2-animation-polish: backlog  # Tier B (A if authored timing windows move)
   7-3-minion-rework: backlog  # Tier A
-  7-4-pitch-speeds: ready-for-dev  # Tier A
+  7-4-pitch-speeds: done  # Tier A
   7-5-deck-2: backlog  # Tier A
   7-6-hud-and-card-presentation: done  # Tier B
   7-7-tuning-pass: backlog  # Tier B (A if a seat is added or an action becomes refusable)
@@ -158,7 +158,7 @@ story_notes:
   7-10-unblockable-presentation: "done 2026-10-09; close-out 7-10/R1-R14 (review APPROVE AFTER FIX, smoke 1-6 PASS, golden 9d5d4fad, FORMAT_VERSION 21)."
   7-2-animation-polish: "backlog -- upper/lower body split and hit-reaction sliding; Tier A if the timing half moves authored windows (E6-C/R11)."
   7-3-minion-rework: "backlog -- operator asset search runs first (E6-C/R11)."
-  7-4-pitch-speeds: "ready-for-dev 2026-10-09, Tier A; readiness gate NOT READY 2/4/14 (all textual, fixed without re-gate); per-card pitch speeds (instant/sorcery) + per-launch shuffle seed, 7-4/R1-R20 (the +1 mana for a defended unblockable was delivered by 7-9/R6, not here)."
+  7-4-pitch-speeds: "done 2026-10-09; close-out 7-4/R21-R29 (review CHANGES REQUESTED 0/1/5 fixed, smoke 10/10 PASS after three socket rounds, golden 43449bd9, FORMAT_VERSION 22)."
   7-5-deck-2: "backlog -- design pending, needs its own scope talk before promotion (E6-C/R11)."
   7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
   7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11); re-measure the AC 4b live steering test when GREEN numbers change (7-9/R22)."

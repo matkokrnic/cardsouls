@@ -4,7 +4,7 @@ baseline_commit: da157e6419982342e91e4c22b5c8fe462bc2f103
 
 # Story 7.4: Pitch speeds (instant and sorcery) and a per-launch shuffle seed
 
-Status: review
+Status: done
 
 Tier **A** (touches `src/state/`: a new per-zone hashed fact and a changed READY rule). Authored 2026-10-09 against
 HEAD == origin/main == `da157e6`, tree clean. Scope is the operator's ruling set of 2026-10-09 (below, all accepted); the
