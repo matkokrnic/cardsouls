@@ -653,3 +653,11 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 ## Deferred from: code review of 7-9-unblockable-tempo (2026-10-08)
 
 - Mana affordability is a raw float compare (`ManaPool.spend` and the 7-9 unblockable price at `match_state.gd:5961`, M13): mana earned by passive regen (0.25/s summed per tick) can sit a hair below 1.0 while the inspector rounds it to 1, which delays the first affordable click by about a tick. Pre-existing semantics; worth an epsilon or integer mana if smoke notices it.
+
+## Deferred from: 7-10 close-out (2026-10-09)
+
+- Eye tick sound reads like bubbles (`assets/audio/effects/sfx_eye_tick.wav` is a byte copy of `sting_attack.wav`). Owner: the operator's manual sound pass.
+- The eye flash could be more striking (`FLASH_SCALE`, `FLASH_LIGHT_ENERGY` in `src/actors/hero/unblockable_eyes.gd`). Owner: polish, in the real-art phase.
+- The RED jump/rebound tempo feels slightly slow (RED rate 1.587x, `counter_busy_seconds_red` 1.0 s, `counter_travel_forward_fraction_red` 0.49). Owner: 7-7.
+- The dagger trail is cut off on arrival (review F7: it is a child of the dagger and is freed with it, rather than fading). Owner: polish.
+- New files missing from the `game-architecture.md` tree: `src/actors/hero/unblockable_eyes.gd`, `src/actors/hero/immunity_shimmer.gd`, `src/actors/effects/unblockable_presentation.gd`, `tools/measure_head_visor.gd`. Owner: E7 close-out docs debt.

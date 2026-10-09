@@ -12582,3 +12582,33 @@ Live smoke 1-13 PASS (operator, solo [0,3]); R-D6 SPENT. Golden `1b1478ac...` ->
 Budget interval: dev before-baseline 2026-10-08 15:44:23 (`_7-9-suite-before-state.txt`) -> review suite file (integration) 2026-10-08 17:07:08.
 
 LAYER-COMPLETION: blind-hunter=completed, edge-case-hunter=completed, acceptance-auditor=completed
+
+## 2026-10-09 -- 7-10 close-out
+
+Story `7-10-unblockable-presentation` (Tier B) closed. Review record `C:\dev\_710-review.md` (round 1, APPROVE AFTER FIX); commits `732499c` feature, `e3a18ce` tool fix, `0e43bed` review fix, `d1a3427` dev record, `1f0967e` close-out record. Live smoke items 1-6 PASS (operator, solo [0,3], 2026-10-09), item 7 not exercised (BLUE untouched). Golden `9d5d4fad...`, `FORMAT_VERSION` 21 and the 46/21/6 key sets unmoved; `src/state/` and `test/state/` not edited. Suite 1289 tests / 0 failed / 13187 assertions, integration 81/81.
+
+Scope (operator, 2026-10-08):
+`7-10/R1` The attacker's eyes replace the planned weapon glint.
+`7-10/R2` The eyes show only while an unblockable is active: lit at the click, blinking faster with chargeup progress, one flash on the commit tick, lit through the flight, out on first touch and on every exit.
+`7-10/R3` The post-get-up immunity marker is included: a silver shimmer, never an unblockable colour.
+
+Open-question rulings (operator, 2026-10-08):
+`7-10/R4` (OQ1) RED travel is rescaled on the BODY by the actor (`HeroActor` scales the state's velocity); BLUE is unchanged; a press farther than 4.0 m lands short.
+`7-10/R5` (OQ2) RED busy stays 1.0 s; the RED cut is re-done to 1.587x (was 2.733x).
+`7-10/R6` (OQ2) `counter_travel_forward_fraction_red` 0.305 -> 0.49 in `balance_config.tres`. A state-read value changed in a Tier B story, allowed because the golden fixture never counters (review T4: `_golden_config` never authors it and never loads the `.tres`, BC/R3).
+`7-10/R7` (OQ3) No WorldEnvironment or glow: the eyes are unshaded additive quads plus a brief OmniLight on the flash. Global glow is an art-pass decision.
+`7-10/R8` (OQ4) The hitstop mesh hold eases back; the smoke showed no teleport.
+
+Review fix `0e43bed`:
+`7-10/R9` (F1 HIGH, F2 MED) The arc, body scale, victim hold and contact moment apply only to a counter the state landed (`deflect_landed` carrying a colour, the existing seam; the `connect_*` family stays at ten). A failed counter is 6-6b's, not a dodge.
+`7-10/R10` (F3, F4 LOW) A recast while the eyes are lit restarts them; a GREEN counter landed after the dagger has arrived still shows its impact.
+`7-10/R11` (F5, Claude's ruling) One RED cut serves landed and failed counters. A failed counter rises only by the clip's own hips lift, as in 6-6b, for longer; smoke item 3 passed.
+`7-10/R12` (F6, F7) Recorded as notes, not fixed: a counter on the commit tick hides the flash (AC 3); the dagger trail cuts at arrival (to `deferred-work.md`).
+
+Close-out amendments:
+`7-10/R13` AC 17 is amended in the story (C1): presentation state never reaches `to_snapshot()`; it reaches the recorder only as the geometry of a contact gathered during a LANDED counter, which replay feeds identically (review T3).
+`7-10/R14` AC 6: the ChargeMarker orb has not been visible in play since 7-6/P21 put the telegraph shapes under the F3 debug layer (`telegraph_controller.gd:104-106`, `hero.tscn:203`); "is the orb redundant" is moot.
+
+Budget interval (E5-R/R3): first before-baseline 2026-10-08 22:53:50 (`_710-suite-before.txt`) -> last suite run 2026-10-08 23:52:09 (`_710-review-suite.txt`), 58 min 19 s.
+
+LAYER-COMPLETION: Blind Hunter=COMPLETE (inline, sequential, diff-only pass) | Edge Case Hunter=COMPLETE (inline, sequential, project read access, targets T1-T6) | Acceptance Auditor=COMPLETE (inline, ACs 1-19 + Dev Agent Record evidence audit + T7)
