@@ -256,3 +256,33 @@ Deck 1 assignment, by pitch effect (the speed is authored on the card holding th
 Only sorcery cards carry a marker (an hourglass) on the card face, in hand and in the pitch zone; a sorcery in the
 zone shows its required orbs as sockets that fill only with orbs earned after staging, visible to both players.
 (Recorded in `docs/implementation-artifacts/7-4-pitch-speeds.md` and decision-log `7-4/R1..R20`.)
+
+## Amendment (10.10.2026, operator scope talk for 7-3)
+
+**The green card (section 1) is rewritten.** The card is now **Hellhound / Culling**, a new card file `hellhound`
+replacing `ruin_vanguard` in Deck 1 (3 copies, same slot and colour census). Where section 1 reads "NORMAL Ruin
+Vanguard -- Summon one basic melee minion", read:
+
+NORMAL Hellhound -- T[3] mana (Vanguard's price; whether two hounds for that price is the right trade is a 7-7
+tuning flag, no change now). Summon TWO Hellhounds (the count is authored on the effect). A hound dies to exactly
+three unbuffed basic hero melee hits.
+PITCH Culling -- unchanged (T[3] mana + T[1] green orb, instant). Culling now also kills hounds, since a hound is a minion.
+
+**Hellhound behaviour.** Two attacks, a bite at close range and a leap from mid range during which the hound travels
+forward; both blockable and deflectable like the old minion strike. Damage to a hound interrupts its current attack and
+plays a hit reaction; a deflect of its attack does too, a block does not. After a reaction it backs off and circles
+before re-engaging. Between attacks it backs off, circles its target while facing it, and barks; direction and
+durations are drawn from the match seed, so a replay is identical; the two hounds of one cast act independently. Move
+speed is above the old minion's and below the hero's run. P1 hounds are purple, P2 hounds red. A Raise Dead
+revival plays the hound's death in reverse as a get-up during which it cannot attack but can be damaged (and does not
+flinch); a Counterspell-restored hound gets up the same way.
+
+**Membership.** A hound counts as a minion for corpses, Culling, Drain, Corpse Bomb, Raise Dead and Bloodlust.
+Vampiric Aura is unchanged (it heals off damage the hero deals, never off a minion's hits). A hound's corpse lifetime is
+the existing one.
+
+**Shelved, not deleted.** The skeletonzombie minion, the Vanguard effect and the `ruin_vanguard` card stay authored and
+loadable as a dormant fixture (the totem fixture cards' treatment); they are in no deck. The two halves of the green
+card recombine by editing data only.
+
+(Recorded in `docs/implementation-artifacts/7-3-minion-rework.md` and decision-log `7-3/R1..R24`, `7-3/D1..D5`.)
