@@ -286,3 +286,24 @@ loadable as a dormant fixture (the totem fixture cards' treatment); they are in 
 card recombine by editing data only.
 
 (Recorded in `docs/implementation-artifacts/7-3-minion-rework.md` and decision-log `7-3/R1..R24`, `7-3/D1..D5`.)
+
+## Amendment (2026-10-11, story 7-5a)
+
+**Structure.** Deck 1 is 8 unique cards, 4 at x3 + 4 at x2 = 20 (it was 7 cards, 6 x3 + 1 x2; the "Seven unique cards"
+and "6 uniques x 3 copies + 1 unique x 2 copies" wording above is SUPERSEDED).
+
+**New 8th card: Vanguard / Lifechain** -- green, x2, pitch speed instant.
+- NORMAL Vanguard: the existing Vanguard summon (the sleeping zombie fixture) returns as-is. A shield knight will
+  replace it later in its own story; timing is open.
+- PITCH Lifechain -- T[3] mana + T[1] green orb. For T[10] s, each damage instance you take is split equally
+  among you and your living minions (totems are not minions); a minion's share beyond its remaining HP goes to you. Stoneskin resolves first and absorbs the whole instance.
+  Overlapping Lifechains do not deepen the split; coverage lasts until the latest window ends. With no minions you take
+  the damage normally.
+
+**Copies (TEMP data).** x3: Hellhound / Culling, Grave Ward / Raise Dead, Drain / Vampiric Aura, Rocksling / Boom.
+x2: Honed Bolt / Counterspell, Bloodhound Step / Fireball, Frostbite / Corpse Bomb, Vanguard / Lifechain.
+
+**Shared with Deck 2.** Honed Bolt / Counterspell, Bloodhound Step / Fireball and Rocksling / Boom are also in Deck 2
+(`deck-2-spec.md`). Existing pairings stay as players have seen them.
+
+(Recorded in `docs/implementation-artifacts/7-5a-deck-2-core.md`.)
