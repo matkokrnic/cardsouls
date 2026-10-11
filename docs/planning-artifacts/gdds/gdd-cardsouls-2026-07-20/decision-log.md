@@ -12760,3 +12760,51 @@ Review dispositions (operator, 2026-10-11):
 
 Budget interval (E5-R/R3): first before-baseline suite output 2026-10-10 13:26:34 (`_73-suite-before-state.txt`) -> last suite run 2026-10-11 09:28:10 (`_73-chain-state.txt`), delta 1201 min 36 s (20 h 01 min 36 s); the window spans an overnight idle gap, so it is wall clock, not working time.
 LAYER-COMPLETION: Blind Hunter: covered manually; Edge Case Hunter: covered manually; Acceptance Auditor: covered manually
+
+## 2026-10-11 -- 7-5 design, 7-5a gate and rulings
+
+Session "7-5 design, 7-5a gate and rulings": the operator's Deck 2 design session (2026-10-11), the readiness gate of story `7-5a-deck-2-core` (`C:\dev\_75a-gate.md`, outside the repo: NOT READY, 5 BLOCKER / 12 MAJOR / 10 MINOR) and the rulings that close it. Labels `7-5a/R1..R32`; each line cites the AC (story `docs/implementation-artifacts/7-5a-deck-2-core.md`) it lands on. Docs-only; no suite run. HEAD == origin/main == `80b9540` throughout.
+
+Operator, design session:
+`7-5a/R1` Deck 2 identity: unblockables and orbs matter, mana cheating, voltron duelist (Deck 1 goes wide, Deck 2 goes tall). Structure for BOTH decks: 4 x3 + 4 x2 = 20. Lands: AC 1, AC 2.
+`7-5a/R2` Deck 2 shares Honed Bolt / Counterspell, Bloodhound Step / Fireball and Rocksling / Boom with Deck 1; existing pairings never change. Lands: AC 3.
+`7-5a/R3` New pairs: Setup / Execute, Healer / Stoneskin, Bloodmagic / Enrage, Manablossom / Elemental Fury, Manapulation / Wrath of God; colours, pitch speeds and copy counts per `deck-2-spec.md`. Hooks: held orbs scale Enrage, Manablossom, Elemental Fury and Wrath of God; Healer fires on your unblockable. Lands: AC 2, AC 4, AC 31, AC 34.
+`7-5a/R4` Deck 1 gains Vanguard / Lifechain. Vanguard is a future shield knight (its own story, timing open). Healer is a walking humanoid character, not a totem (7-5b). Lands: AC 1, AC 5, Scope.
+`7-5a/R5` 7-5 splits: `7-5a-deck-2-core` (this story) and `7-5b-deck-2-bodies` (Healer, Elemental Fury, Wrath of God; NOT authored, own scope talk). Lands: Scope, AC 13, AC 57.
+
+Operator, gate rulings:
+`7-5a/R6` (G1) Setup is spent at the ACCEPTED unblockable press; a press refused for mana, stamina or state spends nothing. Double orbs only if that attack lands. Several Setups stack as charges. Lands: AC 16, AC 17, AC 18.
+`7-5a/R7` (G2) Execute is consumed only by a weapon hit that would damage the opposing hero. A blocked hit does not consume it and is not tripled but deals its reduced damage. Deflect and roll do not consume it; a hit absorbed by Stoneskin does. Execute grants NO orbs. Several stack as charges, one x3 per hit, never multiplied together. Lands: AC 20, AC 21, AC 22, AC 23.
+`7-5a/R8` (G3) Lifechain: while its window runs, damage the hero takes is split equally among the hero and the hero's living minions (totems excluded). A minion's share beyond its remaining HP goes to the hero. Stoneskin resolves first and absorbs the whole instance. Lands: AC 40, AC 41.
+`7-5a/R9` (G4) Nothing in the deck is refused for being active. Enrages stack (+2 each, independent windows). Stoneskins stack as charges. Overlapping Lifechains do not deepen the split; coverage lasts until the latest window ends. Lands: AC 16, AC 20, AC 24, AC 32, AC 39.
+`7-5a/R10` (G5) Manablossoms stack additively; the raw sum is stored and clamped to 0 at read. Setup doubles a landed unblockable's orbs: 1 becomes 2. Lands: AC 18, AC 35.
+`7-5a/R11` (G6, gate B5) A Counterspell removes exactly what that one cast added: one charge if the caster still holds one of that kind (otherwise no target), that cast's own Enrage or Lifechain window, that cast's own Manablossom amount on the cards it touched that are still in hand. Lands: AC 43, AC 44, AC 45, AC 46, AC 48.
+`7-5a/R12` (G7, gate M5) Block reduces the Enrage bonus too: (base + 2 x active Enrages) x block multiplier, pinned with numbers (one Enrage blocked: (3 + 2) x 0.3 = 1.5, NOT 3 x 0.3 + 2). Lands: AC 33.
+`7-5a/R13` (G8, gate M6) A Counterspell on a card that hit a Lifechained hero refunds only the hero's share; minion shares and minion deaths stay. Lands: AC 42.
+`7-5a/R14` (G9, gate M8) Manablossom lowers Fireball's staging minimum (3 becomes 2); Fireball damage stays per mana actually spent. A card under a Boulder takes the discount and shows it when uncovered. Boulder clearing and the unblockable's mana are never discounted. Lands: AC 34, AC 35, AC 36, AC 37.
+
+Claude rulings (vetoable at the browser):
+`7-5a/R15` (C1) Vanguard / Lifechain is a NEW card id reusing the Vanguard summon effect by id; `ruin_vanguard` and its tests stay untouched. The 7-3 pin at `test_card_authoring.gd:523-525` is REVERSED (exactly the new card has Vanguard as its normal half; `ruin_vanguard` is in neither deck) and the summon census at `:436` goes from one to two. Lands: AC 5.
+`7-5a/R16` (C2, gate M2) `FORMAT_VERSION` 23 -> 24; v23 records are refused with a named reason, no shim. Every pin the gate listed in M2 is named in the AC. Lands: AC 10.
+`7-5a/R17` (C3, OQ-3) Bloodmagic with HP equal to its price is refused (price + 1 is allowed). HP paid is not damage: no Stoneskin, Lifechain, Bloodlust, lifesteal. Lands: AC 28, AC 29.
+`7-5a/R18` (C4, OQ-4) Enrage counts the orbs held at activation BEFORE paying the activation orb. Lands: AC 31.
+`7-5a/R19` (C5, OQ-11) A Manapulation pitch is a successful staging into your own zone this round. Refused stagings and Boulder clears do not count; countering the staged card does not remove the count; the round-boundary wording is "cleared wherever per-player buffs clear (`_end_round`, `_reset_player`)". Lands: AC 38, AC 54.
+`7-5a/R20` (C6) Damage order: (base + 2 x Enrages) x block x Execute x Bloodlust. The first non-commuting step in the funnel (`match_state.gd:3020-3027`) therefore lands with numbered tests. Lands: AC 33.
+`7-5a/R21` (C7) `gdd.md:147` (unblockable cost "stamina only") is stale: the config charges 1 mana (`balance_config.tres:230`). E7 close-out docs debt, not this story. Lands: Dev Notes X1.
+`7-5a/R22` (C8, gate B1) Enrage needs its own variable-length hashed stacking store; the timed-rule seat (six fixed slots, refresh only, N10, `player_state.gd:612-635`) stays as is for every other rule. Setup's "this attack carries Setup" is a hashed per-attack fact cleared on every attack-ending path (`charge_contact` precedent, `player_state.gd:250-255`). Lands: AC 19, AC 32.
+`7-5a/R23` (C9, gate T10) Size: ONE story, no cut. The dev pass builds in two ORDERED parts, each ending in its own golden measurement: Part A decks, per-seat selection, temporary refusal list, format bump; Part B the eight halves, markers and reversals. One review. The gate's cut recommendation is declined. Lands: Scope, Tasks, AC 56.
+`7-5a/R24` (C10, gate M1) Smoke rewritten: the keyboard seat has no pitch path, so it plays Deck 2 NORMAL halves only and the pad seat counters; pitch-half reversals are machine-only in solo [0,3]; three launches with the setting edited between them (pad Deck 2 / keyboard Deck 1; then pad Deck 1 / keyboard Deck 2); R-D6 kept. Lands: AC 49, Live Smoke.
+`7-5a/R25` (C11, gate M12, m8) Stacked buffs read as a COUNT (Setup, Execute, Stoneskin, Enrage); Lifechain shows while covered. Deck 2 joins the icon audit (it reads both lists; count pin moves); a "placeholder" icon still needs a game-icons.net file with its credit in `assets/CREDITS.txt`. Lands: AC 50, AC 52.
+
+Claude defaults taken at the gate (vetoable; the gate named the gap and gave no ruling):
+`7-5a/R26` (gate T1) Setting precedence: replay record, test override, setting, default. A missing file means both seats Deck 1; a value naming an unknown deck refuses to start the match with a named error. Loud over silent. Lands: AC 9.
+`7-5a/R27` (gate T5) A Stoneskin "instance" is one hit event on the hero: a melee hit, an unblockable, a projectile hit, a Rocksling stone, one Boulder's Boom. Lands: AC 24.
+`7-5a/R28` (gate M6) Vampiric Aura heals off the hero's hp delta only, so under Lifechain it sees the hero's share. Overflow to the hero is not redistributed. Lands: AC 41.
+`7-5a/R29` (gate T4, M9) The temporary refusal is a NEW refusable outcome at two seats (Mode 1 pre-spend gate, staging ladder); the behaviour is stated, the mechanism is the dev pass's, with three bounds: replay-stable, no new record channel, removed by 7-5b in one edit. The refused halves get no resolver-known id (a `summon_healer` id would summon a zombie through the prefix path, `card_effect_resolver.gd:602-605`). Lands: AC 13, AC 14.
+`7-5a/R30` (gate T3) A Setup already spent on an attack in flight is gone: a Counterspell on it has no target and the in-flight doubling stays. Lands: AC 44.
+`7-5a/R31` (gate T7) The deferred MAX_PIPS authoring test (`deferred-work.md:668`) is adopted here; all new orb prices are 1. Lands: AC 6.
+`7-5a/R32` (gate T1) "Shuffled independently" is wrong for this repo: both piles shuffle from the one seeded generator in fixed order, no second RNG (`match_state.gd:4043-4045`); a machine check pins that two seats on one list deal as before; the one-list forms stay valid so about 75 call sites do not move. Lands: AC 7, AC 8.
+
+Gate disposition: B1 -> R9, R22 (AC 16, 20, 24, 32; smoke 2-3 rewritten); B2 -> R7 (AC 20-23); B3 -> R8 (AC 39-41); B4 -> R15 (AC 5); B5 -> R11 (AC 43-48); M1 -> R24; M2 -> R16 (AC 10); M3 -> R32 (AC 7-9, 12); M4 -> hashed-fact list and AC 54; M5 -> R12, R20 (AC 33); M6 -> R13, R28 (AC 41, 42); M7 -> R6, R22 (AC 17-19); M8 -> R14 (AC 34-37); M9 -> R29 (AC 13-15); M10 -> Dev Notes "Tests that move"; M11 -> AC 18, 22, 23, 25, 41; M12 -> R25 (AC 50). m1 -> AC renumbered; m2 -> doc contradictions renamed X1-X3; m3, m4 -> R19 (AC 38); m5, m6, m7 -> R17, R18, R10 (AC 28, 31, 35, 18); m8 -> R25 (AC 52); m9 -> Dev Notes (golden fixture injects its own deck); m10 -> `sprint-status.yaml` note. Open questions OQ-1..OQ-12: all closed (OQ-1 R7; OQ-2 R6; OQ-3 R17; OQ-4 R18; OQ-5 R9; OQ-6 R14; OQ-7 R10; OQ-8 R8; OQ-9, OQ-10 R7; OQ-11 R19; OQ-12 R16). Not applied: none.
+
+Budget: docs-only pass, no suite run, no editor, no subagents.
