@@ -364,6 +364,39 @@ static func _kind_ticks(kind: UnitKindProfile) -> UnitKindTicks:
 	var out := UnitKindTicks.new()
 	if kind == null:
 		return out
+	# Story 7-3 (AC 7/AC 12/AC 16): the kind's own durations, converted HERE so the boundary stays
+	# single. Each max is floored at its min: the pair bounds a seeded `randi_range`, and an inverted
+	# authoring must degrade to a fixed duration rather than to a range read backwards.
+	out.reaction_ticks = TimingWindow.seconds_to_ticks(kind.reaction_seconds)
+	out.get_up_ticks = TimingWindow.seconds_to_ticks(kind.get_up_seconds)
+	out.back_off_min_ticks = TimingWindow.seconds_to_ticks(kind.back_off_min_seconds)
+	out.back_off_max_ticks = maxi(out.back_off_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.back_off_max_seconds))
+	out.circle_min_ticks = TimingWindow.seconds_to_ticks(kind.circle_min_seconds)
+	out.circle_max_ticks = maxi(out.circle_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.circle_max_seconds))
+	out.stalk_min_ticks = TimingWindow.seconds_to_ticks(kind.stalk_min_seconds)
+	out.stalk_max_ticks = maxi(out.stalk_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.stalk_max_seconds))
+	out.feint_min_ticks = TimingWindow.seconds_to_ticks(kind.feint_min_seconds)
+	out.feint_max_ticks = maxi(out.feint_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.feint_max_seconds))
+	out.feint_retreat_ticks = TimingWindow.seconds_to_ticks(kind.feint_retreat_seconds)
+	out.circle_flip_remaining_ticks = TimingWindow.seconds_to_ticks(kind.circle_flip_remaining_seconds)
+	out.run_on_min_ticks = TimingWindow.seconds_to_ticks(kind.run_on_min_seconds)
+	out.run_on_max_ticks = maxi(out.run_on_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.run_on_max_seconds))
+	out.reposition_min_ticks = TimingWindow.seconds_to_ticks(kind.reposition_min_seconds)
+	out.reposition_max_ticks = maxi(out.reposition_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.reposition_max_seconds))
+	out.retreat_min_ticks = TimingWindow.seconds_to_ticks(kind.retreat_min_seconds)
+	out.retreat_max_ticks = maxi(out.retreat_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.retreat_max_seconds))
+	out.orbit_min_ticks = TimingWindow.seconds_to_ticks(kind.orbit_min_seconds)
+	out.orbit_max_ticks = maxi(out.orbit_min_ticks,
+			TimingWindow.seconds_to_ticks(kind.orbit_max_seconds))
+	out.circle_wobble_ticks = TimingWindow.seconds_to_ticks(kind.circle_wobble_seconds)
+	out.bark_interval_ticks = TimingWindow.seconds_to_ticks(kind.bark_interval_seconds)
 	for attack in kind.attacks:
 		var a := UnitAttackTicks.new()
 		if attack != null:

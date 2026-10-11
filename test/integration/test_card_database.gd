@@ -43,6 +43,9 @@ const EXPECTED_IDS: Array[StringName] = [
 	# shipped game can neither plant nor clear. It is excluded from DECKS by the authored `DeckList`, not
 	# from the library.
 	&"boulder",
+	# Story 7-3 (AC 2, `7-3/R9`): SEVENTEEN -> EIGHTEEN. `hellhound` is Deck 1's green card now;
+	# `ruin_vanguard` above STAYS in the library, shelved (`7-3/R1`).
+	&"hellhound",
 ]
 
 func _physics_process(_delta: float) -> bool:

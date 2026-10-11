@@ -19,6 +19,7 @@ icon_paths = Dictionary[StringName, String]({
 &"honed_bolt": "res://assets/art/icons/authored/honed_bolt.svg",
 &"raise_dead": "res://assets/art/icons/game_icons/raise_dead.svg",
 &"rocksling": "res://assets/art/icons/authored/rocksling.svg",
+&"summon_hellhound": "res://assets/art/icons/game_icons/summon_hellhound.svg",
 &"summon_ruin_vanguard": "res://assets/art/icons/game_icons/summon_ruin_vanguard.svg",
 &"vampiric_aura": "res://assets/art/icons/game_icons/vampiric_aura.svg"
 })

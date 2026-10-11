@@ -196,9 +196,25 @@ func drive(hero_state: HeroState, _delta: float, walk_speed: float, run_speed: f
 	# Still the same call and cadence; the turn-in-place check rides it too, and reads facing only.
 	animation_controller.on_locomotion(velocity, hero_state.facing, walk_speed, run_speed)
 	move_and_slide()
+	_stay_on_floor()
 	# Story 7-10: the mesh's presentation offsets, after the move so the hitstop hold measures this tick's root.
 	_advance_hitstop()
 	mesh.position = _mesh_base + Vector3(0.0, counter_lift, 0.0) + _hitstop_offset
+
+
+## Story 7-3 review fix (F1): THE HERO'S FEET STAY ON THE ARENA FLOOR. The arena is flat and the hero is driven
+## with a zero-y velocity and no gravity, so if the physics server ever moves the root up (depenetrating out of
+## an overlap along the shallowest axis, which for a short body is straight up) nothing would bring it back for the
+## rest of the match. After the move the root goes back to the rest height: the body box's half height above the
+## floor (y 0), read from the authored box, never a literal. Presentation-side and stateless; no gravity is added.
+func _stay_on_floor() -> void:
+	var body := get_node_or_null("Collision") as CollisionShape3D
+	var box := (body.shape if body != null else null) as BoxShape3D
+	if box == null:
+		return
+	var rest_y := box.size.y * 0.5 - body.position.y
+	if not is_equal_approx(global_position.y, rest_y):
+		global_position.y = rest_y
 
 
 ## Story 7-10 (AC 10/AC 13): start a presentation hitstop of `seconds` -- the rig freezes and the mesh is held at

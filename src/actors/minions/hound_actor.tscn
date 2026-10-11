@@ -1,0 +1,68 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/actors/minions/unit_actor.gd" id="1_unitactor"]
+[ext_resource type="PackedScene" path="res://assets/characters/hellhound/Meshes/SK_Hellhound.fbx" id="2_hhmodel"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/hellhound/hellhound_anims.res" id="3_hhanims"]
+[ext_resource type="Script" path="res://src/actors/minions/hound_animation_controller.gd" id="4_hhanctl"]
+[ext_resource type="Material" path="res://assets/characters/hellhound/hellhound_p1.tres" id="5_skinp1"]
+[ext_resource type="Material" path="res://assets/characters/hellhound/hellhound_p2.tres" id="6_skinp2"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_houndbody"]
+height = 2.0
+radius = 0.27
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_houndhurt"]
+size = Vector3(0.58, 0.78, 1.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_houndhitbx"]
+size = Vector3(0.74, 1.0, 1.16)
+
+[node name="HoundActor" type="CharacterBody3D"]
+script = ExtResource("1_unitactor")
+owner_skins = Array[Material]([ExtResource("5_skinp1"), ExtResource("6_skinp2")])
+skin_mesh_path = NodePath("Hellhound/Skeleton3D/HellHound")
+editor_description = "Story 7-3 (ACs 14, 17). The Hellhound's actor: unit_actor.tscn's node set (Collision, Hurtbox, Hitbox, model, AnimationController) on the SAME script, so every runner seat that drives a unit drives this one unchanged. Chosen by MatchRunner._unit_scene_for from its per-kind table (7-3/D5). ROOT AT THE FEET, like unit_actor.tscn. owner_skins holds the purple (P1) and red (P2) materials (7-3/R7); the runner calls apply_owner_skin(slot) at spawn. It carries NO `Mesh/Totem` child, which is what keeps the runner's totem test false for it."
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("CylinderShape3D_houndbody")
+editor_description = "The BODY shape, on default layer 1 like every unit. A CYLINDER (feel pass), not the box it was: this root yaws every tick to face its target, and a box turning in place against a neighbour is pushed out of it by the physics server -- measured, a hound sliding 28 ticks with no velocity while its rig stood idle. A cylinder is the same shape at every yaw. Radius 0.27 m, the scaled half-width of the old box; narrower than the 0.52 m visible body on purpose. Provisional with the model scale. HEIGHT 2.0 m, THE HERO'S BODY BOX (7-3 review fix, F1): a body shorter than that is one a hero's box can be depenetrated UP onto (the shallowest way out of an overlap), and the hero has no gravity to come back down. At 2 m the shallowest way out is always sideways. The body is a collision volume only: the hurtbox, hitbox, scale and model are unchanged, and nothing reads this height."
+
+[node name="Hurtbox" type="Area3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+monitoring = false
+editor_description = "Unit hurtbox, the unit_actor.tscn convention verbatim: layer 2, mask 0, monitoring off. It is DETECTED and detects nothing; the runner's gather pass is its only consumer."
+
+[node name="HurtboxShape" type="CollisionShape3D" parent="Hurtbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.39, 0)
+shape = SubResource("BoxShape3D_houndhurt")
+editor_description = "Covers the VISIBLE body, nose to rump (1.4 long, 0.78 high at the 0.33 scale), not the narrow body cylinder: a hit that visibly lands on the hound's flank has to count. Its own sub-resource for that reason, where unit_actor.tscn shares one."
+
+[node name="Hitbox" type="Area3D" parent="."]
+collision_layer = 4
+collision_mask = 2
+monitorable = false
+editor_description = "Unit hitbox, the unit_actor.tscn convention verbatim: layer 3 (bit 4), mask layer 2, monitorable off. ONE box serves both attacks (7-3/R5): the bite reaches from where the hound stands, and the leap carries this same box forward while its ACTIVE window is open. Queried by the runner only while state flags the window open."
+
+[node name="HitboxShape" type="CollisionShape3D" parent="Hitbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -0.83)
+shape = SubResource("BoxShape3D_houndhitbx")
+editor_description = "Forward along local -Z (this scene's forward, as on unit_actor.tscn). Spans 0.25 to 1.41 ahead of the root at the 0.33 scale: the authored bite range is 1.4, never past the box's front edge (6-1d honest geometry, pinned by test_hound_rig_clips.gd), and the hound halts 1.1 from its target."
+
+[node name="Hellhound" parent="." instance=ExtResource("2_hhmodel")]
+transform = Transform3D(-0.33, 0, 0, 0, 0.33, 0, 0, 0, -0.33, 0, 0, 0)
+editor_description = "The skinned Hellhound (story 7-3, AC 17). SCALE 0.33 AND A PI YAW, no translation. MEASURED (tools/measure_hellhound_rig.gd): the model is 2.92 units tall and 4.60 long at import scale and faces +Z with its origin at its feet. 0.33 (the operator's 'a bit smaller' at the live smoke; it was 0.4) gives a 1.52 m long hound with its ears at 0.97 m and its back at about 0.60 m -- still PROVISIONAL. The yaw turns its +Z to this scene's -Z forward."
+
+[node name="AnimationPlayer" parent="Hellhound" index="1"]
+libraries = {
+&"": ExtResource("3_hhanims")
+}
+editor_description = "The MODEL'S OWN AnimationPlayer, with its library REPLACED by the twelve-clip one tools/build_hellhound_anims.gd builds. The import leaves 21 takes on this player (22 in the file, minus T_Pose, stripped by strip_t_pose.gd); the hound uses ten of them under its own names and loop flags. Its root_node is the model root, so the library's Skeleton3D:<bone> tracks resolve unchanged. Pinned by test/integration/test_hound_rig_clips.gd."
+
+[node name="AnimationController" type="Node" parent="."]
+script = ExtResource("4_hhanctl")
+animation_player_path = NodePath("../Hellhound/AnimationPlayer")
+editor_description = "HoundAnimationController: the hound's READ-ONLY clip selector, pushed by MatchRunner._aim_unit_actors like the zombie's. No _physics_process (F1), no state handle."
+
+[editable path="Hellhound"]

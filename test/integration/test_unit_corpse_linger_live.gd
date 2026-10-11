@@ -1,5 +1,10 @@
 extends SceneTree
 
+## Story 7-3 (`7-3/R1`): this file measures the ZOMBIE, which left Deck 1 when the green card became the
+## Hellhound (two hounds per cast). It is re-pointed at the summon-bearing test deck, which stays on the
+## shelved Ruin Vanguard -- the 6-5a re-pointing its sibling live tests already carry.
+const LiveSummonDeck := preload("res://test/live_summon_deck.gd")
+
 ## Story 4-3d (AC 2, AC 3, AC 5): A KILLED MINION'S ACTOR LINGERS AS A CORPSE FOR ITS AUTHORED LIFETIME,
 ## the linger is TICK-COUNTED so the debug pause freezes it, and the `death` clip plays once and
 ## HOLDS its final pose for the rest of that span.
@@ -133,6 +138,8 @@ func _initialize() -> void:
 	# Story 7-4 (`7-4/R15`): this test reads or acts on the DEALT hand, so it fixes the deal at the seed the
 	# runner shipped as a constant before 7-4 -- set BEFORE the runner enters the tree.
 	runner.seed_override = 12345
+	# Story 7-3: one Ruin Vanguard cast is ONE zombie, whatever Deck 1 lists (see the const above).
+	runner.deck_list_override = LiveSummonDeck.all_summons()
 	root.add_child(runner)
 
 

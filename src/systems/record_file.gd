@@ -381,7 +381,44 @@ extends RefCounted
 ##
 ## NOR IS THE GOLDEN A REASON: it moves for 7-4 for one unrelated cause (the new `fresh_orbs` keys under the
 ## hashed `"pitch"` zone snapshot), and a record carries INPUTS and CONTENT, never a hash.
-const FORMAT_VERSION := 22
+##
+## Story 7-3 (`7-3/R23`): 22 -> 23, WITH THE HARD REFUSAL OF A v22 FILE, NO SHIM.
+##
+## NOT "a recording replays hounds as zombies": a record carries effects and balance BY VALUE, so a v22 file
+## replaying its own `summon_ruin_vanguard` as the zombie it recorded would be a correct replay.
+##
+## THE BEHAVIOUR CAUSE COMES THROUGH A DEFAULT. Minion membership is now the authored
+## `UnitKindProfile.is_minion`, which a v22 `minion` kind row does not carry; `_rebuilt` would leave it false,
+## and that record's zombies would then leave no corpse and be immune to Culling, Drain, Corpse Bomb, Raise
+## Dead and Bloodlust. The same default direction retires the kind-level phase move-multiplier triplet: a v22
+## row carries it under keys this build no longer reads.
+##
+## AND A SHAPE CAUSE BESIDE IT: `CardEffect` gains `summon_count` and `summon_kind` (the `card_effects` and
+## `pitch_effects` rows), `UnitKindProfile` gains fifty-nine fields and loses three, `UnitAttackProfile` gains
+## eight (the `balance` row, through the nested capture). The fifty-nine, all in the same story and under this one
+## bump: fourteen at the dev pass, `leap_chance` at the pre-smoke fix, twenty-four at the post-smoke feel pass,
+## four at feel pass 3 (`orbit_weight`, `orbit_min_seconds`, `orbit_max_seconds`, `orbit_approach_share`)
+## and sixteen at feel pass 2 (`back_off_weight`, `press_weight`, `run_on_weight`, `run_on_min_seconds`,
+## `run_on_max_seconds`, `reposition_weight`, `reposition_min_seconds`, `reposition_max_seconds`,
+## `retreat_weight`, `retreat_min_seconds`, `retreat_max_seconds`, `retreat_leap_chance`,
+## `run_on_move_speed_multiplier`, `reposition_move_speed_multiplier`, `retreat_move_speed_multiplier`,
+## `retreat_distance`); the attack record's eight are the three phase multipliers, feel pass 2's
+## `lead_max_distance`, `travel_min_distance`, `travel_max_distance`, `travel_overshoot` and feel pass 3's
+## `travel_overshoot_fraction`. The twenty-four of the
+## first feel pass:
+## (`circle_weight`, `stalk_weight`, `feint_weight`, `re_engage_weight`, `stalk_min_seconds`, `stalk_max_seconds`,
+## `feint_min_seconds`, `feint_max_seconds`, `feint_retreat_seconds`, `circle_flip_chance`,
+## `circle_flip_remaining_seconds`, `temperament_weight_spread`, `temperament_speed_spread`,
+## `temperament_radius_spread`, `temperament_wobble_spread`, `circle_wobble_amplitude`, `circle_wobble_seconds`,
+## `circle_speed_variation`, `feint_move_speed_multiplier`, `feint_closest_distance`, `separation_distance`,
+## `separation_strength`, `turn_rate_degrees_per_second`, `bark_chance`). No v23 file exists outside the story's
+## own uncommitted tree, so none of the later three needed a bump of its own. No new channel, no new nested class
+## (`_fresh_nested` is untouched), and the contact row is unmoved: the second reach probe is a new VALUE of
+## its existing `kind` element. Either cause alone is sufficient; both are silent.
+##
+## NOR IS THE GOLDEN A REASON: it moves for 7-3 for one unrelated cause (five new per-unit snapshot keys),
+## and a record carries INPUTS and CONTENT, never a hash.
+const FORMAT_VERSION := 23
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance

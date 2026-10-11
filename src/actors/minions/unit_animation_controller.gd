@@ -174,6 +174,36 @@ func on_unit_tick(alive: bool, phase: int, speed: float) -> void:
 	_select(&"walk" if speed > WALK_SPEED_EPS else &"idle")
 
 
+## Story 7-3 (ACs 7, 12, 16, 18): the SECOND per-tick push from the same runner seat, made just before
+## `on_unit_tick` for every rig -- the unit's between-attack behaviour as plain ints off its board
+## record. THIS CONTROLLER IGNORES IT: the zombie authors no such behaviour and selects exactly as it
+## always has. `HoundAnimationController` overrides it. It is a second argument list for the existing
+## polled path, not an observation seam (no signal, no callback, no state handle).
+func on_unit_behavior(_behavior_phase: int, _behavior_ticks: int, _circle_dir: int, _attack_choice: int,
+		_attack_ticks: int, _bark_interval_ticks: int, _bark_chance: float = 0.0) -> void:
+	pass
+
+
+## Story 7-3, feel pass: the THIRD per-tick push from the same seat, also ahead of `on_unit_tick` --
+## the planar velocity the body actually had this tick in its own frame (forward, then to its right),
+## and the kind's presentation row (null for a kind with none), from which a rig reads its own knobs:
+## the crossfade time, the bounds of the locomotion playback rate, the stalk's playback rate, the
+## heading sectors. IGNORED HERE, like the push above: the zombie has one walk clip, no blend and no
+## stalk, and no row.
+func on_unit_motion(_forward_speed: float, _side_speed: float, _knobs: EffectPresentationRow) -> void:
+	pass
+
+
+## Story 7-3 (AC 18): has this rig a bark due? Never, here.
+func take_bark() -> bool:
+	return false
+
+
+## Story 7-3, feel pass 2: the voices this rig has due (`HoundAnimationController.take_voices`). None, here.
+func take_voices() -> Array[StringName]:
+	return []
+
+
 ## Switch only on an actual change of SELECTION -- see `_selected` for why the comparison is
 ## against that and not against the AnimationPlayer's current animation. Without this the
 ## polled push would restart the chosen clip from frame 0 on every single tick and nothing

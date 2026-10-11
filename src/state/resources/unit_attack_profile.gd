@@ -95,3 +95,55 @@ extends Resource
 ## THE SHIPPED COMBAT TOTEM IS THE ONLY AUTHORED USER. Minions author `null` here and keep the
 ## melee hitbox path they have had since 4-3b, unchanged.
 @export var projectile: ProjectileProfile = null
+
+## Story 7-3 (AC 9, `7-3/R21`): this ATTACK's three phase move-speed multipliers -- the successors to
+## the kind-level `attack_windup/active/recovery_move_speed_multiplier` triplet, which this story
+## removes from `UnitKindProfile` (removed, not duplicated).
+##
+## PER ATTACK BECAUSE TWO ATTACKS OF ONE KIND NOW DIFFER IN EXACTLY THIS: the hound's bite is rooted
+## (0.0 in all three, the `4-3c1` swing root) and its leap travels. Each scales the kind's own
+## `move_speed` while the unit is in that phase of THIS attack; the runner reads them through
+## `MatchState.unit_attack_phase_multiplier`, which is told which attack the swing is.
+##
+## AUTHORED 0.0 = FULL ROOT, a DESIGN value, so the audit bound is non-negative rather than > 0. The
+## shipped minion's record carries the three 0.0 its kind carried, bit for bit.
+@export var windup_move_speed_multiplier: float = 0.0
+@export var active_move_speed_multiplier: float = 0.0
+@export var recovery_move_speed_multiplier: float = 0.0
+
+## Story 7-3, feel pass 2: THE LEAD. A unit beginning this attack aims at where its target WILL BE
+## when the strike lands -- the target's planar velocity times the time to the middle of this attack's
+## ACTIVE window -- and never further ahead of the target than this many metres (so a dodge roll's
+## velocity does not throw the aim across the arena). 0.0 aims at where the target is: the zombie,
+## every totem and every fixture.
+##
+## ACTOR-SIDE: the runner leads the direction it reports in the reach probe, which is the heading
+## state locks at windup start (`4-3b` AC 12). `advance()` never reads this field, and the lock rule
+## is untouched.
+@export var lead_max_distance: float = 0.0
+
+## Story 7-3, feel pass 2: THE SWING'S OWN TRAVEL, by DISTANCE. During its ACTIVE window the body
+## moves along its locked heading by the distance to the point it aimed at plus `travel_overshoot`,
+## clamped to [`travel_min_distance`, `travel_max_distance`] and spread evenly over the window. The
+## bite's lunge authors a NEGATIVE overshoot (it stops that far short of the point, where its hitbox
+## covers it) and a short band; the leap authors a positive one, so it lands past its target. A
+## positive overshoot also lets the body pass the target it leaps at: it goes over it rather than
+## stopping against it.
+##
+## ALL THREE AT 0.0 IS NO TRAVEL OF THIS KIND, and the phase multipliers above then say whether the
+## swing moves at all. An attack authors one or the other: with `travel_max_distance` positive its
+## `active_move_speed_multiplier` is not read (the authoring audit keeps it 0.0).
+##
+## ACTOR-SIDE (`7-3/R21`'s shape: authored per attack, spent by the runner). Position is actor-owned
+## and the distance is fixed by the runner when the windup begins; `advance()` never reads these,
+## except that `travel_overshoot > 0` is what offers the unit its RUN ON when the swing ends.
+@export var travel_min_distance: float = 0.0
+@export var travel_max_distance: float = 0.0
+@export var travel_overshoot: float = 0.0
+
+## Story 7-3, feel pass 3: THE OVERSHOOT AS A FRACTION OF THE DISTANCE to the aimed point, with
+## `travel_overshoot` above as its FLOOR: the swing overshoots by whichever is larger. A leap begun far
+## out then lands further past its target than one begun close, and the target sits at about the same
+## fraction of the flight either way (`1 / (1 + fraction)`), until the floor or the band takes over.
+## 0.0 is the fixed overshoot alone -- the bite, and every fixture. ACTOR-SIDE, like the three above.
+@export var travel_overshoot_fraction: float = 0.0

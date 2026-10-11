@@ -675,10 +675,27 @@ static func owner_story_for(effect_id: StringName) -> StringName:
 ## caller reaches this only after `outcome()` returned `OUTCOME_SUMMON`. It still answers total
 ## rather than crashing — `KIND_MINION` — because a total function's honest default is this file's
 ## standing posture (the `REASON_NO_EFFECT_ENTRY` null branch, `CastEvaluator.refusal_reason`).
+##
+## STORY 7-3 (AC 4, `7-3/R16`): AN AUTHORED `summon_kind` ANSWERS FIRST. An effect that names its kind
+## summons that kind; an empty name -- the default, and every effect authored before this story --
+## takes the table-then-minion rule above unchanged. `SUMMON_KINDS` gains no row for a new kind, which
+## is what keeps `_is_totem()` (and so the `flags.totems` / `flags.minions` gate) a statement about
+## totems only.
 static func kind_for(effect: CardEffect) -> StringName:
 	if effect == null:
 		return KIND_MINION
+	if effect.summon_kind != &"":
+		return effect.summon_kind
 	return SUMMON_KINDS.get(effect.effect_id, KIND_MINION)
+
+
+## Story 7-3 (AC 4, `7-3/R16`): HOW MANY RECORDS this summon cast puts on the board -- the authored
+## `summon_count`, floored at zero. A null effect answers 1, `kind_for`'s own total-function posture
+## (the one caller reaches this only after `outcome()` returned `OUTCOME_SUMMON`).
+static func summon_count_for(effect: CardEffect) -> int:
+	if effect == null:
+		return 1
+	return maxi(0, effect.summon_count)
 
 
 ## Whether this `summon_*` id belongs to the TOTEM layer. DERIVED FROM `SUMMON_KINDS` rather than

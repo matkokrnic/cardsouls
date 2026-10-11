@@ -144,8 +144,13 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"timed_rules",
 	# Story 4-4 (AC 1/AC 10): `unit_attack_cooldown` (the firing-cadence countdown) and `unit_kind`
 	# (the per-record kind INDEX — never the StringName) join the set. Sorted position, not appended.
+	# Story 7-3: `unit_attack_choice` (which attack entry a swing is), in sorted position.
+	"unit_attack_choice",
 	"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 	"unit_attack_ticks",
+	# Story 7-3: the between-attack behaviour -- phase, countdown and drawn circle direction -- in
+	# sorted position. Plain ints per record, the `unit_attack_phase` class exactly.
+	"unit_behavior_phase", "unit_behavior_ticks", "unit_circle_dir",
 	# Story 6-5b (AC 1/AC 14, `6-5b/R17`): the per-record corpse COUNTDOWN, the per-corpse Grave Ward
 	# MARK and the RAISE SOURCE join the set, in sorted position rather than appended. The full
 	# reasoning (why three keys and not one fused one, and why a raise SOURCE is an index and never a
@@ -157,6 +162,8 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# death seat overwrote the only other copy with zero) lives with the count assertion in
 	# test_card_observation.gd and at `UnitBoard._hp_at_death` -- cited, not duplicated.
 	"unit_count", "unit_hp", "unit_hp_at_death", "unit_in_reach", "unit_kind", "unit_raised_from",
+	# Story 7-3: `unit_reach_second` (the second reach band's freshness, `unit_in_reach`'s twin).
+	"unit_reach_second",
 	"unit_swing_dedupe", "unit_targets",
 ]
 

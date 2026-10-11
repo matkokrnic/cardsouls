@@ -652,10 +652,18 @@ func test_authored_minion_attack_rhythm_is_playable() -> void:
 	# authoring an EMPTY attack list is the honest shape for the two accelerator totems (AC 3: "the
 	# accelerators never attack"), so it is skipped rather than failed — but a kind that DOES author
 	# an attack must author a playable one, for the three reasons stated in this test's header.
-	for kind: UnitKindProfile in config.unit_kinds:
-		var attack := kind.attack_at(0)
-		if attack == null:
-			continue
+	#
+	# Story 7-3 (AC 9/AC 11): EVERY AUTHORED ATTACK ENTRY, not only entry 0 -- a kind may author two
+	# now (the hound's bite and leap), and an unaudited second entry is exactly the invisible-in-the-
+	# build failure this test exists for. A null entry is skipped, as an empty list always was.
+	var audited: Array = []
+	for owner: UnitKindProfile in config.unit_kinds:
+		for entry: UnitAttackProfile in owner.attacks:
+			if entry != null:
+				audited.append([owner, entry])
+	for pair: Array in audited:
+		var kind: UnitKindProfile = pair[0]
+		var attack: UnitAttackProfile = pair[1]
 		assert_true(attack.windup_seconds > 0.0,
 			("%s windup_seconds must be authored > 0 (a zero derives 0 ticks and the phase "
 			+ "completes on the tick it starts — no readable windup at all)") % kind.kind_name)
@@ -747,13 +755,27 @@ func test_authored_minion_attack_move_speed_multipliers_are_non_negative() -> vo
 	assert_not_null(config, "authored balance config loads as BalanceConfig")
 	if config == null:
 		return
+	#
+	# STORY 7-3 (`7-3/R21`): PER ATTACK NOW -- the triplet moved from the kind to each attack record --
+	# and audited for every authored entry of every kind.
 	for kind: UnitKindProfile in config.unit_kinds:
-		for field in [&"attack_windup_move_speed_multiplier",
-				&"attack_active_move_speed_multiplier",
-				&"attack_recovery_move_speed_multiplier"]:
-			assert_true(float(kind.get(field)) >= 0.0,
-				"%s.%s must be non-negative (0.0 = full root is the authored design)"
-						% [kind.kind_name, field])
+		for attack: UnitAttackProfile in kind.attacks:
+			if attack == null:
+				continue
+			for field in [&"windup_move_speed_multiplier", &"active_move_speed_multiplier",
+					&"recovery_move_speed_multiplier"]:
+				assert_true(float(attack.get(field)) >= 0.0,
+					"%s.%s must be non-negative (0.0 = full root is the authored design)"
+							% [kind.kind_name, field])
+	# AC 1 / `7-3/R21`: THE ZOMBIE'S THREE VALUES ARE PRESERVED BIT FOR BIT by the move -- 0.0 in all
+	# three phases, so its swing is still fully rooted (`4-3c1`).
+	var zombie := _kind(config, &"minion")
+	if zombie != null and zombie.attack_at(0) != null:
+		assert_eq([zombie.attack_at(0).windup_move_speed_multiplier,
+				zombie.attack_at(0).active_move_speed_multiplier,
+				zombie.attack_at(0).recovery_move_speed_multiplier], [0.0, 0.0, 0.0],
+			"the zombie's swing stays fully rooted: its three phase multipliers are 0.0, as they were "
+			+ "on the kind before `7-3/R21` moved them to the attack")
 
 
 ## ---- The shipped KIND SET (story 4-4, AC 1) ---------------------------------------------
@@ -777,7 +799,9 @@ func test_authored_unit_kinds_cover_every_summon_kind_in_a_pinned_order() -> voi
 	for kind: UnitKindProfile in config.unit_kinds:
 		assert_not_null(kind, "no authored kind slot may be null — indices must stay stable")
 		names.append(kind.kind_name)
-	assert_eq(names, [&"minion", &"combat_totem", &"mana_accelerator", &"stamina_accelerator"],
+	# Story 7-3: `hellhound` is APPENDED (index 4). Appending renames no existing record's kind.
+	assert_eq(names, [&"minion", &"combat_totem", &"mana_accelerator", &"stamina_accelerator",
+			&"hellhound"],
 		"the authored kind list and ITS ORDER are the contract a record's stored kind INDEX means; "
 		+ "reordering renames every existing record's kind")
 	# Every kind the resolver can name must exist, plus the unmapped default it falls back to.
@@ -788,6 +812,486 @@ func test_authored_unit_kinds_cover_every_summon_kind_in_a_pinned_order() -> voi
 					% kind_name)
 	assert_true(config.kind_index_of(CardEffectResolver.KIND_MINION) != BalanceConfig.NO_KIND_INDEX,
 		"the unmapped-summon default kind must be authored, or every minion card is inert")
+
+
+## ---- Minion membership (story 7-3, AC 5, `7-3/D4`) ----------------------------------------
+##
+## "MINION" IS AN AUTHORED FACT, AND THIS IS WHERE THE SHIPPED VALUES ARE PINNED: true for the zombie
+## and the hound, false for all three totems. A flipped value is silent in play -- a hound that is not
+## a minion leaves no corpse and is immune to Culling; a totem that is one leaves a corpse and dies to
+## it -- and `field in config` passes on either.
+func test_authored_minion_membership_is_the_zombie_and_the_hound_only() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var members: Array[StringName] = []
+	for kind: UnitKindProfile in config.unit_kinds:
+		if kind.is_minion:
+			members.append(kind.kind_name)
+	assert_eq(members, [&"minion", &"hellhound"],
+		"exactly the zombie and the hound author `is_minion` (totems are excluded from the corpse "
+		+ "rule, Culling, Drain, Corpse Bomb, Raise Dead and Bloodlust)")
+
+
+## ---- The shelved ZOMBIE is unchanged (story 7-3, AC 1/AC 7/AC 8, `7-3/R1`/`R19`) -------------
+##
+## Every new rule is gated on data the `minion` kind authors OFF. This pins the "off": no reaction to
+## damage or deflect, no get-up lockout, no between-attack behaviour (so no seeded draw), one attack.
+func test_the_authored_zombie_kind_authors_every_hound_rule_off() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var zombie := _kind(config, &"minion")
+	assert_not_null(zombie, "the shelved `minion` kind is still authored (`7-3/R1`)")
+	if zombie == null:
+		return
+	assert_false(zombie.react_on_damage, "a zombie damaged mid-swing still finishes its swing")
+	assert_false(zombie.react_on_deflect, "deflecting a zombie still does not interrupt it (`4-3b/R7`)")
+	assert_eq(zombie.get_up_seconds, 0.0, "a raised zombie is attack-ready, as before")
+	assert_false(zombie.has_between_attack_behaviour(),
+		"the zombie neither backs off nor circles -- and so draws nothing from the match RNG")
+	assert_eq(zombie.attacks.size(), 1, "the zombie keeps its one attack")
+	assert_eq([zombie.move_speed, zombie.stop_distance, zombie.max_hp], [3.0, 1.5, 9.0],
+		"the zombie's authored body values are unchanged by story 7-3")
+	# Feel pass: every number the post-smoke pass added is authored OFF on the zombie -- no option
+	# weights, no temperament, no wobble, no feint, no separation, no turn rate (it snaps), no bark.
+	for field: StringName in FEEL_PASS_FIELDS + FEEL_PASS_TWO_FIELDS:
+		assert_eq(float(zombie.get(field)), 0.0,
+			"the zombie authors `%s` off (0.0): the feel pass is the hound's alone" % field)
+	# Feel pass 2: the zombie's one attack leads nothing and travels nowhere.
+	for field: StringName in FEEL_PASS_TWO_ATTACK_FIELDS:
+		assert_eq(float(zombie.attack_at(0).get(field)), 0.0,
+			"the zombie's attack authors `%s` off (0.0)" % field)
+
+
+## The twenty-four `UnitKindProfile` fields the story 7-3 feel pass added, named once for the audits
+## below. `test_data_resources.gd`'s reflection guard lists them independently.
+const FEEL_PASS_FIELDS: Array[StringName] = [
+	&"circle_weight", &"stalk_weight", &"feint_weight", &"re_engage_weight",
+	&"stalk_min_seconds", &"stalk_max_seconds", &"feint_min_seconds", &"feint_max_seconds",
+	&"feint_retreat_seconds", &"circle_flip_chance", &"circle_flip_remaining_seconds",
+	&"temperament_weight_spread", &"temperament_speed_spread", &"temperament_radius_spread",
+	&"temperament_wobble_spread", &"circle_wobble_amplitude", &"circle_wobble_seconds",
+	&"circle_speed_variation", &"feint_move_speed_multiplier", &"feint_closest_distance",
+	&"separation_distance", &"separation_strength", &"turn_rate_degrees_per_second", &"bark_chance",
+]
+
+## The sixteen `UnitKindProfile` fields and the four `UnitAttackProfile` fields feel pass 2 added.
+const FEEL_PASS_TWO_FIELDS: Array[StringName] = [
+	&"back_off_weight", &"press_weight", &"run_on_weight", &"run_on_min_seconds", &"run_on_max_seconds",
+	&"reposition_weight", &"reposition_min_seconds", &"reposition_max_seconds",
+	&"retreat_weight", &"retreat_min_seconds", &"retreat_max_seconds", &"retreat_leap_chance",
+	&"run_on_move_speed_multiplier", &"reposition_move_speed_multiplier",
+	&"retreat_move_speed_multiplier", &"retreat_distance",
+	# Feel pass 3: the long orbit.
+	&"orbit_weight", &"orbit_min_seconds", &"orbit_max_seconds", &"orbit_approach_share",
+]
+const FEEL_PASS_TWO_ATTACK_FIELDS: Array[StringName] = [
+	&"lead_max_distance", &"travel_min_distance", &"travel_max_distance", &"travel_overshoot",
+	# Feel pass 3: the overshoot as a share of the distance.
+	&"travel_overshoot_fraction",
+]
+
+
+## ---- The HELLHOUND's feel-pass-2 numbers (story 7-3, the operator's re-smoke) -----------------
+##
+## EVERY NEW NUMBER IS BOUNDED (AC 11). The values are provisional; each band is the condition under
+## which the rule the number serves still holds.
+func test_the_authored_hellhound_feel_pass_two_numbers_are_inside_their_bands() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var hound := _kind(config, &"hellhound")
+	assert_not_null(hound, "the authored config must carry a `hellhound` kind")
+	if hound == null or hound.attacks.size() != 2:
+		return
+	var bite := hound.attack_at(0)
+	var leap := hound.attack_at(1)
+	var fastest := hound.move_speed * (1.0 + hound.temperament_speed_spread)
+	# THE LEAD. Each attack leads a WALKING hero in full, a RUNNING hero short (running stays a partial
+	# escape) and a ROLLING hero shorter still (the roll does not throw the aim across the arena).
+	var roll_speed := config.roll_distance / config.roll_duration_seconds
+	for attack: UnitAttackProfile in [bite, leap]:
+		var to_strike := attack.windup_seconds + 0.5 * attack.active_seconds
+		assert_true(attack.lead_max_distance >= config.walk_speed * to_strike,
+			"the lead cap %.2f m covers a walking hero's %.2f m in the %.3f s to the strike"
+					% [attack.lead_max_distance, config.walk_speed * to_strike, to_strike])
+		assert_true(attack.lead_max_distance < config.move_speed * to_strike,
+			"the lead cap %.2f m falls short of a running hero's %.2f m: running stays a partial escape"
+					% [attack.lead_max_distance, config.move_speed * to_strike])
+		assert_true(attack.lead_max_distance < roll_speed * to_strike,
+			"the lead cap %.2f m falls short of a rolling hero's %.2f m" % [attack.lead_max_distance, roll_speed * to_strike])
+		# One source for the swing's travel: an attack that authors a travel band authors no ACTIVE
+		# multiplier beside it.
+		assert_true(attack.travel_max_distance > 0.0 and attack.active_move_speed_multiplier == 0.0,
+			"each hound attack travels by its travel band, and authors no active multiplier beside it")
+		assert_true(attack.travel_min_distance > 0.0 and attack.travel_max_distance >= attack.travel_min_distance,
+			"the travel band is ordered and positive: [%.2f, %.2f]" % [attack.travel_min_distance, attack.travel_max_distance])
+	# THE BITE'S LUNGE: a short step. It stops SHORT of the point it aimed at (a negative overshoot: it
+	# never passes its target, so it is never followed by a run-on), it always moves a little, and its
+	# longest is shorter than the hound's own stop distance -- far enough to catch a hero walking away
+	# from the edge of the bite band, not a hero running away from it.
+	assert_true(bite.travel_overshoot < 0.0, "the bite stops short of the point it aimed at (overshoot %.2f)" % bite.travel_overshoot)
+	assert_true(bite.travel_min_distance >= 0.2 and bite.travel_max_distance < hound.stop_distance,
+		"the lunge is a real step (at least %.2f m) and at most %.2f m, shorter than the stop distance (%.2f m)"
+				% [bite.travel_min_distance, bite.travel_max_distance, hound.stop_distance])
+	var bite_strike := bite.windup_seconds + 0.5 * bite.active_seconds
+	assert_true(bite.travel_max_distance >= bite.range + config.walk_speed * bite_strike + bite.travel_overshoot - 0.6,
+		"the longest lunge (%.2f m) brings a hero walking away from the edge of the bite band back inside the bite"
+				% bite.travel_max_distance)
+	assert_true(bite.travel_max_distance < bite.range + config.move_speed * bite_strike + bite.travel_overshoot - 0.6,
+		"the longest lunge (%.2f m) does not catch a hero RUNNING away from the edge of the bite band"
+				% bite.travel_max_distance)
+	# THE LEAP: it overshoots, by enough to land clear of a hero's body and no more than the leap band;
+	# its shortest travel still carries it past a target it started beside; its longest reaches a target
+	# at the edge of the band; and it is a leap, not a teleport.
+	assert_true(leap.travel_overshoot >= 0.8 and leap.travel_overshoot <= 2.5,
+		"the leap lands %.2f m past its target: between 0.8 (clear of the body) and 2.5 m" % leap.travel_overshoot)
+	assert_true(leap.travel_min_distance >= leap.travel_overshoot,
+		"a leap begun close still carries the hound past its target (min %.2f, overshoot %.2f)"
+				% [leap.travel_min_distance, leap.travel_overshoot])
+	assert_true(leap.travel_max_distance >= leap.range,
+		"the longest leap (%.2f m) reaches a target at the edge of the leap band (%.2f m)"
+				% [leap.travel_max_distance, leap.range])
+	# FEEL PASS 3: THE LEAP'S OVERSHOOT IS A SHARE OF THE DISTANCE, so a standing target sits at
+	# `1 / (1 + share)` of the flight wherever in the band the leap began: 0.72 to 0.82 (the operator's
+	# "three quarters to four fifths"), also at the band's far edge where the longest travel cuts the
+	# flight short. The fixed overshoot is its floor (the scene-side audit holds it clear of a hero's
+	# body). The bite, which stops short, authors no share.
+	var standing := 1.0 / (1.0 + leap.travel_overshoot_fraction)
+	assert_true(leap.travel_overshoot_fraction > 0.0 and standing >= 0.72 and standing <= 0.82,
+		"a standing target sits at %.3f of the leap's flight (share %.2f): want 0.72 to 0.82" % [standing, leap.travel_overshoot_fraction])
+	var far_edge := leap.range / minf(leap.range * (1.0 + leap.travel_overshoot_fraction), leap.travel_max_distance)
+	assert_true(far_edge >= 0.72 and far_edge <= 0.82,
+		"from the far edge of the leap band a standing target sits at %.3f of the flight: want 0.72 to 0.82" % far_edge)
+	assert_eq(bite.travel_overshoot_fraction, 0.0, "the bite authors no overshoot share: it stops short of its target")
+	# THE LEAP IS THE RARER ATTACK (feel pass 3: about one re-engage in four once the bands and the
+	# close-band rule have had their say), and a retreat still favours it.
+	assert_true(hound.leap_chance >= 0.25 and hound.leap_chance <= 0.45,
+		"a hound re-engages with the leap less often than with the bite (leap_chance %.3f in [0.25, 0.45])" % hound.leap_chance)
+	# THE ORBIT: rare, and long -- several circles' worth, and short enough that a hound is not out of
+	# the fight for more than a few seconds.
+	var option_total := 0.0
+	for weight: float in hound.between_attack_weights():
+		option_total += weight
+	assert_true(hound.orbit_weight > 0.0 and hound.orbit_weight <= 0.1 * option_total,
+		"the orbit is rare: at most a tenth of what a hound does after a back-off (%.2f of %.2f)" % [hound.orbit_weight, option_total])
+	assert_true(hound.orbit_min_seconds >= 2.0 * hound.circle_max_seconds
+			and hound.orbit_max_seconds >= hound.orbit_min_seconds and hound.orbit_max_seconds <= 8.0,
+		"an orbit lasts %.1f to %.1f s: at least two of the longest circle (%.1f s) and at most 8 s"
+				% [hound.orbit_min_seconds, hound.orbit_max_seconds, hound.circle_max_seconds])
+	# It is STRAFED: at most 0.4 of its speed goes toward (or away from) its ring, which keeps the
+	# body's motion within 24 degrees of sideways -- inside the rig's strafe sector with its hold
+	# margin to spare (measured at 0.5: a hound that came in walking backwards kept that clip for half
+	# of its orbit).
+	assert_true(hound.orbit_approach_share > 0.0 and hound.orbit_approach_share <= 0.4,
+		"an orbiting hound spends %.2f of its speed getting onto its ring: more than 0 and at most 0.4" % hound.orbit_approach_share)
+	assert_true(leap.travel_max_distance / leap.active_seconds <= 20.0,
+		"the fastest leap flies at %.1f m/s: at most 20" % (leap.travel_max_distance / leap.active_seconds))
+	# AFTER AN ATTACK: all three come up, and a hound backs off at least as often as it presses.
+	for weight: float in hound.after_attack_weights():
+		assert_true(weight > 0.0, "each of back off / press / run on has a weight: %s" % [hound.after_attack_weights()])
+	assert_true(hound.press_weight <= hound.back_off_weight,
+		"a hound backs off at least as often as it presses (%.2f against %.2f)" % [hound.back_off_weight, hound.press_weight])
+	assert_true(hound.run_on_min_seconds > 0.0 and hound.run_on_max_seconds >= hound.run_on_min_seconds
+			and hound.run_on_max_seconds <= 1.5,
+		"the run-on is a short, ordered, positive range (%.2f to %.2f s)" % [hound.run_on_min_seconds, hound.run_on_max_seconds])
+	assert_true(hound.run_on_move_speed_multiplier > 0.5 and hound.run_on_move_speed_multiplier <= 1.0,
+		"it runs on at a run, never over its own pace (%.2f)" % hound.run_on_move_speed_multiplier)
+	# REPOSITION: at full pace, from a quarter of a lap to a full one at the authored radius.
+	assert_true(hound.reposition_move_speed_multiplier > 0.5 and hound.reposition_move_speed_multiplier <= 1.0,
+		"the reposition is a run, never over the hound's own pace (%.2f)" % hound.reposition_move_speed_multiplier)
+	var lap_seconds := TAU * hound.circle_radius / (hound.move_speed * hound.reposition_move_speed_multiplier)
+	assert_true(hound.reposition_min_seconds / lap_seconds >= 0.2 and hound.reposition_min_seconds / lap_seconds <= 0.3,
+		"the shortest reposition is about a quarter lap (%.2f of one)" % (hound.reposition_min_seconds / lap_seconds))
+	assert_true(hound.reposition_max_seconds / lap_seconds >= 0.75 and hound.reposition_max_seconds / lap_seconds <= 1.05,
+		"the longest reposition is about a full lap (%.2f of one)" % (hound.reposition_max_seconds / lap_seconds))
+	# RETREAT: a trot (faster than the circle, slower than the run) to somewhere far -- beyond the leap
+	# band, 5 to 9 m out -- and a return that favours the leap.
+	assert_true(hound.retreat_move_speed_multiplier > hound.circle_move_speed_multiplier
+			and hound.retreat_move_speed_multiplier < 1.0,
+		"the retreat is a trot: faster than the circle (%.2f), slower than the run (multiplier %.2f)"
+				% [hound.circle_move_speed_multiplier, hound.retreat_move_speed_multiplier])
+	assert_true(hound.retreat_min_seconds > 0.0 and hound.retreat_max_seconds >= hound.retreat_min_seconds,
+		"the retreat's duration range is ordered and positive")
+	var nearest := hound.circle_radius + hound.move_speed * hound.retreat_move_speed_multiplier * hound.retreat_min_seconds
+	assert_true(nearest >= 5.0 and nearest > leap.range,
+		"the shortest retreat ends about %.2f m out: at least 5 m and beyond the leap band (%.2f m)" % [nearest, leap.range])
+	assert_true(hound.retreat_distance >= nearest and hound.retreat_distance <= 9.0,
+		"a retreating hound stops %.2f m out: no nearer than its shortest retreat (%.2f) and at most 9 m"
+				% [hound.retreat_distance, nearest])
+	assert_true(hound.retreat_leap_chance > hound.leap_chance and hound.retreat_leap_chance <= 1.0,
+		"a hound back from a retreat favours the leap (%.2f over %.2f)" % [hound.retreat_leap_chance, hound.leap_chance])
+	assert_true(fastest * hound.retreat_move_speed_multiplier < config.move_speed,
+		"no hound's retreat outruns a running hero")
+	# THE RETUNE (B3): the circle is not what a hound mostly does, and it is short; less standing.
+	var weights := hound.between_attack_weights()
+	var total := 0.0
+	for weight: float in weights:
+		total += weight
+	assert_true(hound.reposition_weight > 0.0 and hound.retreat_weight > 0.0,
+		"the reposition and the retreat can both be drawn: %s" % [weights])
+	assert_true(hound.circle_weight <= 0.25 * total,
+		"the circle is at most a quarter of what a hound does after a back-off (%.2f of %.2f)" % [hound.circle_weight, total])
+	assert_true(hound.circle_max_seconds <= 1.5, "a circle lasts at most 1.5 s (%.2f)" % hound.circle_max_seconds)
+	assert_true(hound.stalk_weight <= 0.15 * total and hound.stalk_max_seconds <= 1.0,
+		"a hound seldom stands and watches, and not for long (weight %.2f of %.2f, up to %.2f s)"
+				% [hound.stalk_weight, total, hound.stalk_max_seconds])
+	assert_true(hound.back_off_max_seconds <= 0.8, "a back-off lasts at most 0.8 s (%.2f)" % hound.back_off_max_seconds)
+	# The tick-domain twins are ordered (the draws' inclusive bounds).
+	var ticks := BalanceTicks.from_config(config).kind_ticks_at(config.kind_index_of(&"hellhound"))
+	assert_true(ticks.run_on_max_ticks >= ticks.run_on_min_ticks and ticks.run_on_min_ticks > 0
+			and ticks.reposition_max_ticks >= ticks.reposition_min_ticks and ticks.reposition_min_ticks > 0
+			and ticks.retreat_max_ticks >= ticks.retreat_min_ticks and ticks.retreat_min_ticks > 0,
+		"the derived run-on, reposition and retreat draw bounds are ordered and at least one tick")
+
+
+
+## ---- The HELLHOUND's feel-pass numbers (story 7-3, post-smoke) ------------------------------
+##
+## EVERY NEW NUMBER IS BOUNDED (AC 11). The values are provisional; each band is the condition under
+## which the rule the number serves still holds -- above all that a hound's widest and narrowest
+## circle stay between its two reach bands, and that its fastest pace stays under a running hero.
+func test_the_authored_hellhound_feel_numbers_are_inside_their_bands() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var hound := _kind(config, &"hellhound")
+	var zombie := _kind(config, &"minion")
+	assert_not_null(hound, "the authored config must carry a `hellhound` kind")
+	if hound == null or zombie == null or hound.attacks.size() != 2:
+		return
+	var bite := hound.attack_at(0)
+	var leap := hound.attack_at(1)
+	# What it does after a back-off: real variety, and every option it can draw has a duration.
+	var weights := hound.between_attack_weights()
+	var positive := 0
+	for weight: float in weights:
+		assert_true(weight >= 0.0, "an option weight is negative: %s" % [weights])
+		if weight > 0.0:
+			positive += 1
+	assert_true(positive >= 3,
+		"the hound draws among at least three things to do after a back-off (%d have a weight): %s"
+				% [positive, weights])
+	assert_true(hound.stalk_weight <= 0.0 or (hound.stalk_max_seconds > 0.0
+			and hound.stalk_max_seconds >= hound.stalk_min_seconds and hound.stalk_min_seconds >= 0.0),
+		"a stalk that can be drawn has an ordered, positive duration range")
+	assert_true(hound.feint_weight <= 0.0 or (hound.feint_max_seconds > 0.0
+			and hound.feint_max_seconds >= hound.feint_min_seconds and hound.feint_min_seconds >= 0.0
+			and hound.feint_retreat_seconds > 0.0),
+		"a feint that can be drawn has an ordered, positive dart range and a positive retreat")
+	assert_true(hound.circle_flip_chance >= 0.0 and hound.circle_flip_chance <= 1.0,
+		"circle_flip_chance is a probability in [0, 1]")
+	assert_true(hound.circle_flip_chance <= 0.0 or (hound.circle_flip_remaining_seconds > 0.0
+			and hound.circle_flip_remaining_seconds < hound.circle_min_seconds),
+		"a circle reverses MID-circle: %.2f s left must be positive and under the shortest circle %.2f s"
+				% [hound.circle_flip_remaining_seconds, hound.circle_min_seconds])
+	# Temperament: each spread is a fraction, and the fastest and slowest hound stay in the ruled band.
+	for field: StringName in [&"temperament_weight_spread", &"temperament_speed_spread",
+			&"temperament_radius_spread", &"temperament_wobble_spread"]:
+		assert_true(float(hound.get(field)) > 0.0 and float(hound.get(field)) < 1.0,
+			"%s must be a fraction in (0, 1): hounds differ, and no factor reaches zero" % field)
+	var fastest := hound.move_speed * (1.0 + hound.temperament_speed_spread)
+	var slowest := hound.move_speed * (1.0 - hound.temperament_speed_spread)
+	assert_true(fastest < config.move_speed and slowest > zombie.move_speed,
+		"every hound's own pace (%.2f to %.2f) stays strictly between the zombie's %.2f and the hero's run %.2f"
+				% [slowest, fastest, zombie.move_speed, config.move_speed])
+	# The circle that is not a circle: bounded so the reach bands still work.
+	assert_true(hound.circle_wobble_amplitude > 0.0 and hound.circle_wobble_amplitude <= 0.5
+			and hound.circle_wobble_seconds > 0.0,
+		"the circle's radius breathes by a fraction in (0, 0.5] over a positive period")
+	assert_true(hound.circle_speed_variation > 0.0 and hound.circle_speed_variation < 1.0,
+		"the circle's speed varies by a fraction in (0, 1): it never stops or reverses")
+	var breath := hound.circle_wobble_amplitude * (1.0 + hound.temperament_wobble_spread)
+	var widest := hound.circle_radius * (1.0 + hound.temperament_radius_spread) * (1.0 + breath)
+	var narrowest := hound.circle_radius * (1.0 - hound.temperament_radius_spread) * (1.0 - breath)
+	assert_true(widest <= leap.range,
+		"the widest circle any hound walks (%.2f m) must stay inside the leap band (%.2f m)"
+				% [widest, leap.range])
+	assert_true(narrowest >= bite.range,
+		"the narrowest circle any hound walks (%.2f m) must stay outside the bite band (%.2f m)"
+				% [narrowest, bite.range])
+	# The circle is slower than the run it is watched against (the live smoke: "too fast while orbiting").
+	assert_true(hound.circle_move_speed_multiplier <= 0.5 and hound.back_off_move_speed_multiplier <= 0.5,
+		"the hound circles and backs off at no more than half its run (%.2f, %.2f)"
+				% [hound.circle_move_speed_multiplier, hound.back_off_move_speed_multiplier])
+	# The feint: a real dart that stops short of biting distance and inside the circle.
+	assert_true(hound.feint_move_speed_multiplier > 0.0
+			and fastest * hound.feint_move_speed_multiplier < config.move_speed,
+		"the feint darts, and no hound's dart (%.2f) outruns a running hero (%.2f)"
+				% [fastest * hound.feint_move_speed_multiplier, config.move_speed])
+	assert_true(hound.feint_closest_distance > bite.range and hound.feint_closest_distance < narrowest,
+		"the feint stops at %.2f m: outside the bite band (%.2f) and inside the narrowest circle (%.2f)"
+				% [hound.feint_closest_distance, bite.range, narrowest])
+	# Separation and turning.
+	assert_true(hound.separation_distance > 0.0 and hound.separation_distance < narrowest,
+		"hounds steer apart below a positive distance (%.2f) smaller than their circle" % hound.separation_distance)
+	# No shoving: the drift away from a neighbour is at most half the hound's pace. (At 0.8 a hound
+	# backing off beside its sibling was carried at 2.8 m/s, faster than its backward walk can be played.)
+	assert_true(hound.separation_strength > 0.0 and hound.separation_strength <= 0.5,
+		"the steering adds at most half the hound's own pace (strength %.2f)" % hound.separation_strength)
+	assert_true(hound.turn_rate_degrees_per_second >= 180.0 and hound.turn_rate_degrees_per_second <= 1440.0,
+		"the hound turns at an authored rate between half a turn and four turns a second (%.0f)"
+				% hound.turn_rate_degrees_per_second)
+	# The bark: rarely.
+	assert_true(hound.bark_interval_seconds >= 6.0,
+		"a hound barks at most once in six seconds (%.2f)" % hound.bark_interval_seconds)
+	assert_true(hound.bark_chance > 0.0 and hound.bark_chance <= 0.5,
+		"a hound barks on at most half of its back-offs (%.2f)" % hound.bark_chance)
+	# The tick-domain twins are ordered (the draws' inclusive bounds) and the reversal is mid-circle.
+	var ticks := BalanceTicks.from_config(config).kind_ticks_at(config.kind_index_of(&"hellhound"))
+	assert_true(ticks.stalk_max_ticks >= ticks.stalk_min_ticks and ticks.feint_max_ticks >= ticks.feint_min_ticks,
+		"the derived stalk and feint draw bounds are ordered")
+	assert_true(ticks.circle_flip_remaining_ticks < ticks.circle_min_ticks,
+		"a reversing circle reverses before it ends, in ticks too")
+
+
+## ---- The HELLHOUND (story 7-3, ACs 6, 7-9, 11-13, 16, 18) -----------------------------------
+##
+## EVERY NUMBER THE HOUND USES IS BOUNDED HERE (AC 11). The values themselves are PROVISIONAL (tuned at
+## the live smoke); what is pinned is the band each must stay inside for the rule it serves to hold.
+func test_the_authored_hellhound_kind_is_inside_its_ruled_bands() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var hound := _kind(config, &"hellhound")
+	var zombie := _kind(config, &"minion")
+	assert_not_null(hound, "the authored config must carry a `hellhound` kind")
+	if hound == null or zombie == null:
+		return
+	# AC 13 (`7-3/D2`/`R22`): strictly between the zombie's speed and the hero's run, BOTH READ from
+	# the authored config so a retune of either cannot silently unpin the rule.
+	assert_true(hound.move_speed > zombie.move_speed and hound.move_speed < config.move_speed,
+		"hound move_speed %.2f must lie strictly between the zombie's %.2f and the hero's run %.2f"
+				% [hound.move_speed, zombie.move_speed, config.move_speed])
+	assert_eq(hound.priority_name, zombie.priority_name,
+		"AC 13 (`7-3/D1`): hounds acquire targets by the zombie's own rule")
+	# AC 6 (`7-3/R3`): exactly three unbuffed basic hero melee hits.
+	assert_eq(ceili(hound.max_hp / config.hero_damage_to_unit), 3,
+		"a hound must die to exactly THREE hero hits: max_hp %.2f / hero_damage_to_unit %.2f"
+				% [hound.max_hp, config.hero_damage_to_unit])
+	# AC 7/AC 8 (`7-3/R19`): both reaction flags, and a reaction that actually lasts.
+	assert_true(hound.react_on_damage and hound.react_on_deflect,
+		"the hound reacts to damage and to a deflect of its own attack")
+	assert_true(hound.reaction_seconds > 0.0,
+		"reaction_seconds must be authored > 0 (a zero reaction is a flinch nobody can see)")
+	# AC 16 (`7-3/R17`): a real get-up lockout.
+	assert_true(hound.get_up_seconds > 0.0,
+		"get_up_seconds must be authored > 0 (a zero lockout lets a rising hound bite on its feet)")
+	# AC 12 (`7-3/R20`): the two drawn durations are real, ordered ranges; the chance is a probability.
+	assert_true(hound.has_between_attack_behaviour(), "the hound backs off and circles")
+	assert_true(hound.back_off_min_seconds >= 0.0
+			and hound.back_off_max_seconds >= hound.back_off_min_seconds,
+		"back-off duration range must be ordered and non-negative")
+	assert_true(hound.back_off_max_seconds > 0.0, "the hound must be able to hold a back-off")
+	assert_true(hound.circle_min_seconds >= 0.0
+			and hound.circle_max_seconds >= hound.circle_min_seconds,
+		"circle duration range must be ordered and non-negative")
+	assert_true(hound.circle_max_seconds > 0.0, "the hound must be able to hold a circle")
+	assert_true(hound.back_off_max_seconds > hound.back_off_min_seconds
+			or hound.circle_max_seconds > hound.circle_min_seconds,
+		"at least one drawn duration must be a real RANGE, or the hound is a metronome")
+	assert_true(hound.circle_clockwise_chance >= 0.0 and hound.circle_clockwise_chance <= 1.0,
+		"circle_clockwise_chance is a probability in [0, 1]")
+	assert_true(hound.leap_chance >= 0.0 and hound.leap_chance <= 1.0,
+		"leap_chance is a probability in [0, 1] (0.0 and 1.0 are allowed)")
+	assert_true(hound.back_off_move_speed_multiplier > 0.0
+			and hound.circle_move_speed_multiplier > 0.0,
+		"the hound must actually move while it backs off and circles")
+	assert_true(hound.circle_radius > hound.stop_distance,
+		"the circle (%.2f) must be wider than the stop distance (%.2f), or circling is standing still"
+				% [hound.circle_radius, hound.stop_distance])
+	assert_true(hound.bark_interval_seconds > 0.0, "AC 18: the hound barks at an authored cadence")
+	# AC 9 (`7-3/R5`/`R20`/`R21`): two attacks, two distinct reach bands, a rooted bite and a leap
+	# that travels.
+	assert_eq(hound.attacks.size(), 2, "the hound authors a bite (entry 0) and a leap (entry 1)")
+	if hound.attacks.size() != 2:
+		return
+	var bite := hound.attack_at(0)
+	var leap := hound.attack_at(1)
+	assert_true(leap.range > bite.range,
+		"the leap band (%.2f) must reach farther than the bite band (%.2f)" % [leap.range, bite.range])
+	assert_null(bite.projectile, "the bite is a melee attack")
+	assert_null(leap.projectile, "the leap is a melee attack")
+	assert_eq([bite.windup_move_speed_multiplier, bite.active_move_speed_multiplier,
+			bite.recovery_move_speed_multiplier], [0.0, 0.0, 0.0],
+		"the bite authors no phase multiplier (`4-3c1`): what it moves is its own short lunge (feel pass 2)")
+	assert_true(leap.active_move_speed_multiplier > 0.0 or leap.travel_max_distance > 0.0,
+		"the leap must travel during its active phase (`7-3/R21`): by a multiplier or by a travel band")
+	assert_true(bite.damage > 0.0 and leap.damage > 0.0, "both attacks deal damage")
+	# The tick-domain twins exist and are ordered (the draw's inclusive bounds).
+	var ticks := BalanceTicks.from_config(config).kind_ticks_at(config.kind_index_of(&"hellhound"))
+	assert_true(ticks.reaction_ticks > 0 and ticks.get_up_ticks > 0,
+		"the reaction and the get-up convert to at least one tick each")
+	assert_true(ticks.back_off_max_ticks >= ticks.back_off_min_ticks
+			and ticks.circle_max_ticks >= ticks.circle_min_ticks,
+		"the derived draw bounds are ordered")
+
+
+## Every kind's behaviour fields are at least WELL-FORMED, whatever kind authors them (AC 11).
+func test_every_authored_kind_keeps_its_behaviour_fields_well_formed() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	for kind: UnitKindProfile in config.unit_kinds:
+		for field in [&"reaction_seconds", &"get_up_seconds", &"back_off_min_seconds",
+				&"back_off_max_seconds", &"circle_min_seconds", &"circle_max_seconds",
+				&"back_off_move_speed_multiplier", &"circle_move_speed_multiplier", &"circle_radius",
+				&"bark_interval_seconds"]:
+			assert_true(float(kind.get(field)) >= 0.0,
+				"%s.%s must be non-negative" % [kind.kind_name, field])
+		assert_true(kind.circle_clockwise_chance >= 0.0 and kind.circle_clockwise_chance <= 1.0,
+			"%s.circle_clockwise_chance is a probability" % kind.kind_name)
+		assert_true(kind.leap_chance >= 0.0 and kind.leap_chance <= 1.0,
+			"%s.leap_chance is a probability" % kind.kind_name)
+		# Feel pass: the twenty-four new fields are non-negative on every kind, the two that are
+		# probabilities are probabilities, the spreads stay below one and the new ranges are ordered.
+		for field: StringName in FEEL_PASS_FIELDS:
+			assert_true(float(kind.get(field)) >= 0.0,
+				"%s.%s must be non-negative" % [kind.kind_name, field])
+		assert_true(kind.circle_flip_chance <= 1.0 and kind.bark_chance <= 1.0,
+			"%s authors its flip and bark chances as probabilities" % kind.kind_name)
+		for field: StringName in [&"temperament_weight_spread", &"temperament_speed_spread",
+				&"temperament_radius_spread", &"temperament_wobble_spread"]:
+			assert_true(float(kind.get(field)) < 1.0,
+				"%s.%s must stay below 1.0 (a factor of zero or less is not a temperament)"
+						% [kind.kind_name, field])
+		assert_true(kind.stalk_max_seconds >= kind.stalk_min_seconds
+				and kind.feint_max_seconds >= kind.feint_min_seconds,
+			"%s authors ordered stalk and feint ranges" % kind.kind_name)
+		# Feel pass 2: the sixteen new kind fields and the four new attack fields are non-negative on
+		# every kind, the new chance is a probability, the new ranges are ordered, and an attack that
+		# authors a travel band authors no active multiplier beside it (one source for its travel).
+		for field: StringName in FEEL_PASS_TWO_FIELDS:
+			assert_true(float(kind.get(field)) >= 0.0,
+				"%s.%s must be non-negative" % [kind.kind_name, field])
+		assert_true(kind.retreat_leap_chance <= 1.0, "%s.retreat_leap_chance is a probability" % kind.kind_name)
+		assert_true(kind.run_on_max_seconds >= kind.run_on_min_seconds
+				and kind.reposition_max_seconds >= kind.reposition_min_seconds
+				and kind.retreat_max_seconds >= kind.retreat_min_seconds
+				and kind.orbit_max_seconds >= kind.orbit_min_seconds,
+			"%s authors ordered run-on, reposition, retreat and orbit ranges" % kind.kind_name)
+		for attack: UnitAttackProfile in kind.attacks:
+			# (`travel_overshoot` may be negative: a swing that stops short of the point it aimed at.)
+			for field: StringName in [&"lead_max_distance", &"travel_min_distance", &"travel_max_distance",
+					&"travel_overshoot_fraction"]:
+				assert_true(float(attack.get(field)) >= 0.0,
+					"%s: an attack's `%s` must be non-negative" % [kind.kind_name, field])
+			assert_true(attack.travel_max_distance >= attack.travel_min_distance,
+				"%s: an attack's travel band is ordered" % kind.kind_name)
+			assert_true(attack.travel_max_distance <= 0.0 or attack.active_move_speed_multiplier == 0.0,
+				"%s: an attack with a travel band authors no active move multiplier" % kind.kind_name)
+			assert_true(attack.travel_overshoot == 0.0 or attack.travel_max_distance > 0.0,
+				"%s: an overshoot needs a travel band to add to" % kind.kind_name)
+		assert_true(kind.back_off_max_seconds >= kind.back_off_min_seconds
+				and kind.circle_max_seconds >= kind.circle_min_seconds,
+			"%s authors ordered duration ranges" % kind.kind_name)
 
 
 ## ---- The three TOTEM kinds (story 4-4, AC 5/AC 8/AC 10, `4-4/R1`/`4-4/R9`/`4-4/R12`) ------

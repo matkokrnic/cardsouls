@@ -888,7 +888,8 @@ var reversal_kind: int = REVERSAL_NONE
 ## depend on a Dictionary's iteration order.
 ##
 ## WHAT EACH COLUMN HOLDS, PER KIND (the `RULE_*` table's shape):
-##   REVERSAL_VANGUARD     `indices` = [the summoned record's board index]. Nothing else.
+##   REVERSAL_VANGUARD     `indices` = the board indices of every record the cast summoned, ascending
+##                         (one for a single summon, N for a batch -- story 7-3). Nothing else.
 ##   REVERSAL_CULLING      `indices` = the board indices it killed, ascending.
 ##                         `amount`  = the mana it ACTUALLY added (post-clamp delta, AC 14).
 ##   REVERSAL_GRAVE_WARD   `indices` = the corpse indices it touched, ascending.
@@ -1427,6 +1428,20 @@ func to_snapshot() -> Dictionary:
 		# THE OPERATOR NAMED IT A GOLDEN CAUSE IN ADVANCE (`6-5f/R32`, Golden Prediction cause 2's second
 		# half) -- measured separately from the reversal record, not folded into it.
 		"unit_hp_at_death": units.hp_at_death_snapshot(),
+		# Story 7-3 (ACs 7-9, 12, 16): FIVE keys, one per new `UnitBoard` array -- which attack a swing
+		# is, the second reach band's freshness, the between-attack behaviour phase and its countdown,
+		# and the drawn circle direction. Each crosses ticks and decides an outcome (`4-3a/R17`): the
+		# choice decides the swing's durations and damage, the band decides whether the mid-range attack
+		# may begin, the phase and countdown decide when the unit may attack again, and the direction
+		# decides where the runner walks it. Plain ints in board-index order.
+		#
+		# THIS STORY'S ONE GOLDEN CAUSE IS THEIR PRESENCE (shape): on the golden fixture every value is
+		# the resting one, because its one unit is a kind that authors none of this.
+		"unit_attack_choice": units.attack_choice_snapshot(),
+		"unit_reach_second": units.reach_second_snapshot(),
+		"unit_behavior_phase": units.behavior_phase_snapshot(),
+		"unit_behavior_ticks": units.behavior_ticks_snapshot(),
+		"unit_circle_dir": units.circle_dir_snapshot(),
 		# Story 4-4 (AC 14-19): the PROJECTILE BOARD joins the hash — SEVEN keys, on the split
 		# `UnitBoard` already established (the target FUSES its two ints because a target is one fact
 		# in two halves; the rest are independent facts that fusing would hide).

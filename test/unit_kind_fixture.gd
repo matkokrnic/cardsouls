@@ -44,6 +44,41 @@ static func melee(kind_name: StringName, max_hp: float, damage: float, windup_ti
 	kind.stop_distance = stop_distance
 	kind.priority_name = priority_name
 	kind.attacks = [attack]
+	# Story 7-3 (AC 5): minion membership is an AUTHORED FACT now. The builder sets it for the one
+	# name that used to BE the membership test, so every fixture written against the name rule means
+	# what it meant; a test that wants a non-minion melee kind (or a second minion kind) sets
+	# `is_minion` itself, or uses `hound()` below.
+	kind.is_minion = kind_name == &"minion"
+	return kind
+
+
+## Story 7-3: a HOUND-shaped kind -- a minion with a close attack (entry 0, rooted) and a mid-range
+## attack (entry 1), both reaction flags on, and the between-attack behaviour authored. Every VALUE is
+## the caller's (`BC/R3`); what this shares is the shape. Durations are ticks, divided here, the
+## builder's own convention. `leap_reach` must exceed `bite_reach` for the two bands to differ.
+static func hound(kind_name: StringName, max_hp: float, bite_damage: float, leap_damage: float,
+		windup_ticks: int, active_ticks: int, recovery_ticks: int, bite_reach: float,
+		leap_reach: float, reaction_ticks: int, get_up_ticks: int, back_off_min_ticks: int,
+		back_off_max_ticks: int, circle_min_ticks: int, circle_max_ticks: int) -> UnitKindProfile:
+	var kind := melee(kind_name, max_hp, bite_damage, windup_ticks, active_ticks, recovery_ticks,
+			bite_reach)
+	var leap := UnitAttackProfile.new()
+	leap.windup_seconds = float(windup_ticks) / TimingWindow.TICK_HZ
+	leap.active_seconds = float(active_ticks) / TimingWindow.TICK_HZ
+	leap.recovery_seconds = float(recovery_ticks) / TimingWindow.TICK_HZ
+	leap.range = leap_reach
+	leap.damage = leap_damage
+	leap.active_move_speed_multiplier = 2.0
+	kind.attacks = [kind.attacks[0], leap]
+	kind.is_minion = true
+	kind.react_on_damage = true
+	kind.react_on_deflect = true
+	kind.reaction_seconds = float(reaction_ticks) / TimingWindow.TICK_HZ
+	kind.get_up_seconds = float(get_up_ticks) / TimingWindow.TICK_HZ
+	kind.back_off_min_seconds = float(back_off_min_ticks) / TimingWindow.TICK_HZ
+	kind.back_off_max_seconds = float(back_off_max_ticks) / TimingWindow.TICK_HZ
+	kind.circle_min_seconds = float(circle_min_ticks) / TimingWindow.TICK_HZ
+	kind.circle_max_seconds = float(circle_max_ticks) / TimingWindow.TICK_HZ
 	return kind
 
 

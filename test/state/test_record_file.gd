@@ -64,6 +64,9 @@ const PRE_7_9_PATH := "user://test_7_9_pre_tempo.rec"
 ## Story 7-4 (`7-4/R19`): the v21 refusal fixture's own path, on its siblings' naming.
 ## No "21" in the path, so `error.contains("21")` below can only be answered by the version in the message.
 const PRE_7_4_PATH := "user://test_7_4_pre_pitch_speeds.rec"
+## Story 7-3 (`7-3/R23`): the v22 refusal fixture and the row-shape measurement write their own file.
+const PRE_7_3_PATH := "user://test_7_3_pre_minion_fact.rec"
+const KIND_ACTIVE_MULTIPLIER := 0.25
 ## Story 6-5g (AC 27, REVIEW FIX m5): the v18 refusal fixture's own path, on its siblings' naming -- this
 ## story's own dev pass had reused `PRE_6_5C_PATH` (harmless, since each test removes its file before the
 ## next runs, but the wrong name for what it wrote); its own constant now describes its own fixture.
@@ -239,8 +242,13 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 22,
-		"FORMAT_VERSION is 22 as of story 7-4 (`7-4/R19`) -- a BEHAVIOUR change (a staged SORCERY counts only "
+	assert_eq(RecordFile.FORMAT_VERSION, 23,
+		"FORMAT_VERSION is 23 as of story 7-3 (`7-3/R23`) -- a BEHAVIOUR change through a default (minion "
+		+ "membership is the authored `UnitKindProfile.is_minion`, which a v22 kind row lacks, so its zombies "
+		+ "would rebuild as non-minions: no corpse, immune to Culling) plus a SHAPE change (`CardEffect` gains "
+		+ "`summon_count`/`summon_kind`; the kind and attack profiles gain the hound fields and the phase "
+		+ "move-multiplier triplet moves from the kind to the attack). v22 is refused HARD, no shim. "
+		+ "It was 22 as of story 7-4 (`7-4/R19`) -- a BEHAVIOUR change (a staged SORCERY counts only "
 		+ "orbs earned after staging, so an activation v21 resolved off banked orbs is refused as not ready) "
 		+ "plus a SHAPE change (`CardCastCondition.pitch_speed` widens the `card_costs` and `pitch_costs` rows). "
 		+ "v21 is refused HARD, no shim. "
@@ -1025,6 +1033,52 @@ func test_a_v21_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_7_4_PATH)
 
 
+## Story 7-3 (`7-3/R23`): A v22 RECORD IS REFUSED WITH A REASON, NO SHIM -- the per-bump fixture, on the
+## `test_a_v21_record_is_refused_with_a_reason` precedent directly above.
+##
+## WHAT A v22 FILE WOULD SILENTLY DO: its `minion` kind row carries no `is_minion`, which `_rebuilt` would
+## leave false -- so the zombies it recorded would leave no corpse and be immune to Culling -- and its kind
+## rows carry the phase move-multiplier triplet under keys this build no longer reads.
+func test_a_v22_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_7_3_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_7_3_PATH, 22)
+	var refused := RecordFile.load_record(PRE_7_3_PATH)
+	assert_null(refused["record"],
+		"a v22 record is REFUSED -- its minion kind would rebuild with no membership fact")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("22"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_7_3_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_7_3_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_7_3_PATH)
+
+
+## Story 7-3 (`7-3/R23`): THE MEASUREMENT BEHIND THE BUMP -- the membership fact and the per-attack
+## multiplier triplet really do ride the saved `balance` row and come back by value, read out of an
+## actually-saved file. The nested capture needs no new `_fresh_nested` tag (no new resource class).
+func test_the_recorded_balance_row_carries_the_minion_fact_and_the_attack_multipliers() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_7_3_PATH), "", "the record was written")
+	var loaded: IntentRecorder = RecordFile.load_record(PRE_7_3_PATH)["record"]
+	assert_not_null(loaded, "the record loads")
+	if loaded != null:
+		var back_kind := loaded.replay_balance_config(0).kind_at(0)
+		assert_not_null(back_kind, "the rebuilt config still holds its kind")
+		if back_kind != null:
+			assert_true(back_kind.is_minion,
+				"`is_minion` survives save + load by value (authored TRUE in `_ranged_kind`, and the "
+				+ "field's default is false, so a lost key would read false here)")
+			assert_eq(back_kind.attack_at(0).active_move_speed_multiplier, KIND_ACTIVE_MULTIPLIER,
+				"the per-attack multiplier survives save + load by value (authored non-zero; the "
+				+ "default is 0.0)")
+	_remove(PRE_7_3_PATH)
+
+
 ## Story 6-5e (AC 39), ADDED AT THE REVIEW FIX (minor 12): THE MEASUREMENT BEHIND THE BUMP, on the 6-5c
 ## row-shape pin's shape verbatim -- the two new `CardEffect` exports really do widen every recorded effect
 ## row, read out of an actually-saved file rather than asserted as a count.
@@ -1471,9 +1525,10 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 22,
+	assert_eq(RecordFile.FORMAT_VERSION, 23,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 22 (last: 7-4, which made four Deck 1 cards sorceries that count only "
+		+ "version has since moved to 23 (last: 7-3, which made minion membership an authored kind fact and "
+		+ "widened the effect, kind and attack rows for the Hellhound; before it 7-4, which made four Deck 1 cards sorceries that count only "
 		+ "orbs earned after staging and widened the card and pitch cost rows by `pitch_speed`; before it 7-9, "
 		+ "which priced the unblockable in mana, refused a "
 		+ "defence with nothing to answer, anchored the counter window at the commit, steered the launch "
@@ -1914,7 +1969,11 @@ func _ranged_kind() -> UnitKindProfile:
 	attack.range = KIND_RANGE
 	attack.damage = KIND_DAMAGE
 	attack.projectile = projectile
+	# Story 7-3 (`7-3/R23`): a NON-DEFAULT per-attack multiplier and a TRUE membership fact, so the
+	# row-shape test can tell a value that survived from a default that was rebuilt.
+	attack.active_move_speed_multiplier = KIND_ACTIVE_MULTIPLIER
 	var kind := UnitKindProfile.new()
+	kind.is_minion = true
 	kind.kind_name = KIND_NAME
 	kind.max_hp = KIND_MAX_HP
 	kind.move_speed = 3.0

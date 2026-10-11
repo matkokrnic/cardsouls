@@ -162,6 +162,14 @@ const CONTACT_REACH_PROBE := 1
 const CONTACT_CHARGE_REACH_INSIDE := 2
 const CONTACT_CHARGE_REACH_OUTSIDE := 3
 
+## Story 7-3 (AC 9, `7-3/R20`): the SECOND REACH PROBE -- "this unit's acquired target is within the
+## reach of its SECOND attack record". `CONTACT_REACH_PROBE`'s twin in every respect but which band it
+## confirms: dropped at the top of the step-4 ladder, no damage, no dedupe, no mana, no signal.
+##
+## A NEW VALUE ON THE EXISTING `kind` ELEMENT, the charge-reach pair's own argument: no row shape
+## moves, no capture channel is added, and it is tapped and replayed like every other fact.
+const CONTACT_REACH_PROBE_SECOND := 4
+
 ## Story 5-2 (AC 17): the resting value of the per-slot charge-reach latch -- NO FACT HAS BEEN
 ## PUSHED. Deliberately a THIRD value rather than a default of "outside": a headless MatchState with
 ## no runner, and the tick a chargeup BEGINS (the runner gathers before advance(), so the entry tick
@@ -1515,8 +1523,8 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		("contact attacker index must be >= -1 (a unit or the hero) or <= %d (a projectile), got %d")
 				% [PROJECTILE_INDEX_BASE, attacker_index])
 	Invariant.check(kind == CONTACT_STRIKE or kind == CONTACT_REACH_PROBE
-			or is_charge_reach_kind(kind),
-		"contact kind must be CONTACT_STRIKE, CONTACT_REACH_PROBE or a CHARGE-REACH kind, got %d"
+			or kind == CONTACT_REACH_PROBE_SECOND or is_charge_reach_kind(kind),
+		"contact kind must be CONTACT_STRIKE, a REACH PROBE or a CHARGE-REACH kind, got %d"
 				% kind)
 	Invariant.check(target.size() == 2,
 		"contact target must be a [slot, index] pair, got %d element(s)" % target.size())
@@ -2067,15 +2075,25 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 		var kind_ticks := balance_ticks.kind_ticks_at(kind_index)
 		if kind_ticks == null:
 			continue
-		var attack_ticks := kind_ticks.attack_at(0)
+		var kind := balance.kind_at(kind_index) if balance != null else null
+		# Story 7-3 (AC 7/AC 12/AC 16): THE BEHAVIOUR LADDER runs first, so a hit reaction, a back-off,
+		# a circle or a get-up that ended at this tick's step 2 has already handed the unit on before
+		# the windup gate below asks whether it is engaging. Every seeded draw a unit makes happens in
+		# here or at the recovery exit below: step 3b, P1 then P2, board-index order.
+		if kind != null:
+			_advance_unit_behavior(board, index, kind, kind_ticks, 0 if player == p1 else 1)
+		# Story 7-3 (AC 9): THE SWING IN PROGRESS IS THE ONE THE RECORD CHOSE at its windup start, so
+		# its phase lengths come from THAT attack entry. A one-attack kind's choice is 0 for life, which
+		# is the `attack_at(0)` every reader took before this story.
+		var choice := board.attack_choice_at(index)
+		var attack_ticks := kind_ticks.attack_at(choice)
 		if attack_ticks == null:
 			continue
 		# Story 4-4 (AC 14): the AUTHORED record beside its derived tick record. Both are read
 		# INLINE at the point of use (CONSTRAINT C) and through the SAME index, which is what keeps
 		# `UnitKindTicks`'s index-alignment contract a single fact rather than two lookups that could
 		# disagree. Null here means the same thing null means above — this kind does not attack.
-		var kind := balance.kind_at(kind_index) if balance != null else null
-		var attack := kind.attack_at(0) if kind != null else null
+		var attack := kind.attack_at(choice) if kind != null else null
 		if attack == null:
 			continue
 		if board.attack_phase_at(index) != UnitBoard.AttackPhase.IDLE \
@@ -2117,6 +2135,17 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 					player.unit_dedupe.close(index)
 				UnitBoard.AttackPhase.RECOVERY:
 					board.set_phase_at(index, UnitBoard.AttackPhase.IDLE, 0)
+					# Story 7-3 (AC 12, `7-3/R6`): BETWEEN ATTACKS A HOUND BACKS OFF. Entered on the
+					# tick the swing ends, so the windup gate below finds the unit not engaging and
+					# the back-to-back cycle a zombie keeps does not start. A kind authoring no such
+					# behaviour draws nothing and stays ENGAGING.
+					#
+					# FEEL PASS 2: NOT ALWAYS. The unit draws what it does now -- back off, PRESS (it
+					# stays engaging with a freshly drawn attack, and the windup gate below may start
+					# it on this very tick) or RUN ON.
+					if kind.has_between_attack_behaviour():
+						_decide_after_unit_attack(board, index, kind, kind_ticks,
+								0 if player == p1 else 1, attack)
 		# Story 4-4 (AC 10/AC 13): THE CADENCE GATE joins the two conditions that were already here,
 		# as a third AND rather than as a branch — a unit may begin its next attack only once its
 		# firing cooldown has expired. `is_attack_ready_at` is the board's own public predicate and
@@ -2142,15 +2171,333 @@ func _advance_unit_attacks(player: PlayerState) -> void:
 		#
 		# THE SHIPPED MINION IS UNMOVED BY THE NEW CONDITION: it authors a 0.0 cadence, so its
 		# cooldown is 0 on the tick recovery ends and the third AND is already true.
+		#
+		# STORY 7-3 (AC 9/AC 16, `7-3/R17`/`R20`): TWO MORE CONDITIONS, BOTH RESTING TRUE FOR A ZOMBIE.
+		# The unit must be ENGAGING (`is_engaging_at`: not backing off, circling, reacting or getting
+		# up -- the get-up attack lockout is this AND and nothing else), and WHICH attack begins is
+		# decided by the two reach bands: the CLOSE band (entry 0) wins when it is confirmed, else the
+		# second band starts entry 1 if the kind authors one. A one-attack kind can only ever answer 0
+		# or "none", which is the `is_in_reach_at` test this gate has always made.
 		if board.attack_phase_at(index) == UnitBoard.AttackPhase.IDLE \
-				and board.is_in_reach_at(index) \
-				and board.is_attack_ready_at(index):
-			# CONSUMES the flag (inside `begin_windup_at`), which is its ONLY clearing path — there
-			# is no negative probe and absence of overlap is not a fact (AC 13's consequence (ii)).
-			# The locked direction needs no write here: it already holds the latest known heading to
-			# the acquired target, refreshed by the step-4 seat only while IDLE, and from this
-			# moment nothing writes it again until the swing ends. THAT FREEZE IS THE LOCK (AC 12).
-			board.begin_windup_at(index, attack_ticks.windup_ticks, attack_ticks.cadence_ticks)
+				and board.is_attack_ready_at(index) \
+				and board.is_engaging_at(index):
+			var next_choice := _next_unit_attack_choice(board, index, kind)
+			var next_ticks := kind_ticks.attack_at(next_choice)
+			if next_ticks != null:
+				# CONSUMES the flag (inside `begin_windup_at`), which is its ONLY clearing path — there
+				# is no negative probe and absence of overlap is not a fact (AC 13's consequence (ii)).
+				# The locked direction needs no write here: it already holds the latest known heading
+				# to the acquired target, refreshed by the step-4 seat only while IDLE, and from this
+				# moment nothing writes it again until the swing ends. THAT FREEZE IS THE LOCK (AC 12).
+				board.begin_windup_at(index, next_ticks.windup_ticks, next_ticks.cadence_ticks,
+						next_choice)
+
+
+## Story 7-3 (AC 9, `7-3/R20`): WHICH ATTACK ENTRY MAY BEGIN NOW, or `-1` for none. Decided by the two
+## reach bands and nothing else -- no draw, no distance (position is actor-owned): the close band
+## (entry 0) when it is confirmed, otherwise entry 1 when the kind authors one and the second band is
+## confirmed. `-1` resolves to a null tick record at the caller, so "none" needs no branch there.
+##
+## THE DRAWN INTENT NARROWS IT (story 7-3, pre-smoke fix). A unit that left its circle having drawn the
+## BITE (`ENGAGE_BITE`) does not look at the second band at all: it keeps closing until the close band
+## is confirmed. One that drew the LEAP, and one that has drawn nothing (a fresh summon, a unit just
+## up, every zombie), take the bands as they come -- the rule above, unchanged.
+func _next_unit_attack_choice(board: UnitBoard, index: int, kind: UnitKindProfile) -> int:
+	if board.is_in_reach_at(index):
+		return 0
+	if UnitBoard.is_bite_intent(board.behavior_phase_at(index)):
+		return -1
+	if kind.attack_at(1) != null and board.is_in_second_reach_at(index):
+		return 1
+	return -1
+
+
+## Story 7-3 (AC 7/AC 12/AC 16): one unit's BETWEEN-ATTACK BEHAVIOUR, advanced by one tick -- the
+## step-3b seat's behaviour half. It reads the countdown step 2 just advanced and moves the phase
+## when it has reached zero, `_advance_unit_attacks`' own window-advance shape:
+##   REACT    -> BACK_OFF (`7-3/R11`: a hound backs off after a hit reaction; one draw), or ENGAGE
+##               for a kind that authors no between-attack behaviour (no draw).
+##   BACK_OFF -> one of CIRCLE / CIRCLE_TURN, STALK, FEINT_IN, REPOSITION, RETREAT, or the re-engage
+##               at once (four draws: `_decide_after_unit_back_off`).
+##   CIRCLE_TURN -> CIRCLE, direction reversed, when the authored remainder is left (no draw; the
+##               countdown carries on).
+##   FEINT_IN -> FEINT_OUT for the authored retreat (no draw).
+##   CIRCLE, STALK, FEINT_OUT -> ENGAGE_LEAP or ENGAGE_BITE (one draw: the attack it re-engages with).
+##   GET_UP   -> ENGAGE (`7-3/R17`: the lockout ends; no draw).
+##   RUN_ON   -> the same four-draw decision a back-off ends in (feel pass 2).
+##   REPOSITION -> the re-engage draw; RETREAT -> the re-engage draw on the kind's own
+##               `retreat_leap_chance` (one draw each).
+## ENGAGE is left only by the recovery exit and by `_begin_unit_reaction`, never from here.
+##
+## EVERY TRANSITION IS A TICK TIMER (`7-3/R20`): nothing here asks where the unit is or whether it
+## "arrived". The runner moves the body according to the phase this writes; it decides none of it.
+##
+## `slot` IS THE OWNER SLOT OF `board`, which with `index` is the unit's address -- what its
+## temperament is derived from (`UnitTemperament`).
+func _advance_unit_behavior(board: UnitBoard, index: int, kind: UnitKindProfile,
+		kind_ticks: UnitKindTicks, slot: int) -> void:
+	var phase := board.behavior_phase_at(index)
+	if (phase == UnitBoard.BehaviorPhase.CIRCLE_TURN or phase == UnitBoard.BehaviorPhase.ORBIT_TURN) \
+			and board.behavior_ticks_at(index) > 0 \
+			and board.behavior_ticks_at(index) <= kind_ticks.circle_flip_remaining_ticks:
+		board.turn_circle_at(index)
+		return
+	if UnitBoard.is_engage_phase(phase) or board.behavior_ticks_at(index) > 0:
+		return
+	match phase:
+		UnitBoard.BehaviorPhase.REACT:
+			if kind.has_between_attack_behaviour():
+				_enter_unit_back_off(board, index, kind_ticks)
+			else:
+				board.set_behavior_at(index, UnitBoard.BehaviorPhase.ENGAGE, 0)
+		UnitBoard.BehaviorPhase.BACK_OFF, UnitBoard.BehaviorPhase.RUN_ON:
+			_decide_after_unit_back_off(board, index, kind, kind_ticks, slot)
+		UnitBoard.BehaviorPhase.FEINT_IN:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.FEINT_OUT, kind_ticks.feint_retreat_ticks)
+		UnitBoard.BehaviorPhase.CIRCLE, UnitBoard.BehaviorPhase.CIRCLE_TURN, \
+				UnitBoard.BehaviorPhase.STALK, UnitBoard.BehaviorPhase.FEINT_OUT, \
+				UnitBoard.BehaviorPhase.REPOSITION, UnitBoard.BehaviorPhase.ORBIT, \
+				UnitBoard.BehaviorPhase.ORBIT_TURN:
+			_re_engage_unit(board, index, kind, slot, kind.leap_chance)
+		UnitBoard.BehaviorPhase.RETREAT:
+			_re_engage_unit(board, index, kind, slot, kind.retreat_leap_chance)
+		_:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.ENGAGE, 0)
+
+
+## Story 7-3 (pre-smoke fix): RE-ENGAGE -- ONE draw, the attack the unit comes back in with: the leap
+## with the kind's authored `leap_chance`, else the bite. The intent is stored as the engaging phase
+## itself (`ENGAGE_LEAP` / `ENGAGE_BITE`) and read by `_next_unit_attack_choice`. Exactly one
+## `randf()` per re-engage whatever the chance is (0.0 and 1.0 still draw), so the stream's position
+## does not depend on the authoring. Only a unit that backed off gets here, and only a kind with
+## between-attack behaviour backs off: a zombie draws nothing.
+##
+## FEEL PASS: THE CHANCE IS THE UNIT'S OWN. Its temperament scales the LEAP's weight against the
+## bite's (`chance * f` against `1 - chance`), so 0.0 stays never and 1.0 stays always for every unit.
+##
+## FEEL PASS 2: THE CALLER NAMES THE CHANCE (`leap_chance`: the kind's own, or its `retreat_leap_chance`
+## for a unit coming back from a retreat) AND THE CHAIN LINK (`press_level`: 0 after a back-off, 1 and
+## 2 for a pressed attack), which picks among the engaging phases of that one intent.
+func _re_engage_unit(board: UnitBoard, index: int, kind: UnitKindProfile, slot: int,
+		leap_chance: float, press_level: int = 0) -> void:
+	var leap_weight := leap_chance * UnitTemperament.factor(slot, index,
+			UnitTemperament.CHANNEL_LEAP, kind.temperament_weight_spread)
+	var bite_weight := 1.0 - leap_chance
+	var roll := _rng.randf()
+	board.set_behavior_at(index, UnitBoard.drawn_engage_phase(
+			roll * (leap_weight + bite_weight) < leap_weight, press_level), 0)
+
+
+## Feel pass 2: the three things a unit may do when an attack ends, in the order of
+## `UnitKindProfile.after_attack_weights()`.
+const AFTER_BACK_OFF := 0
+const AFTER_PRESS := 1
+const AFTER_RUN_ON := 2
+
+
+## Story 7-3, feel pass 2: AN ATTACK HAS ENDED (its recovery exit) AND THE UNIT DECIDES WHAT NOW --
+## TWO draws, always two and always in this order, whatever is chosen and whatever the weights are:
+##   1. WHICH of back off / press / run on, against the kind's three weights, each scaled by this
+##      unit's temperament;
+##   2. its DURATION, inclusive of the chosen option's authored bounds (0 for the press).
+## PRESS then makes the re-engage draw on this same tick, as its own decision (the immediate
+## re-engage's shape), one link further along its chain.
+##
+## TWO OPTIONS ARE NOT ALWAYS ON OFFER, and an option not on offer has no weight on this draw: a unit
+## already on its chain's last link does not press again, and only a swing that carried the unit past
+## its target (`attack.travel_overshoot`) may run on. NO WEIGHT AT ALL IS "BACK OFF", the rule that
+## stood before this pass.
+func _decide_after_unit_attack(board: UnitBoard, index: int, kind: UnitKindProfile,
+		kind_ticks: UnitKindTicks, slot: int, attack: UnitAttackProfile) -> void:
+	var level := UnitBoard.press_level(board.behavior_phase_at(index))
+	var weights := kind.after_attack_weights()
+	if level >= UnitBoard.PRESS_LEVEL_MAX:
+		weights[AFTER_PRESS] = 0.0
+	if attack == null or attack.travel_overshoot <= 0.0:
+		weights[AFTER_RUN_ON] = 0.0
+	var channels: Array[int] = [UnitTemperament.CHANNEL_BACK_OFF, UnitTemperament.CHANNEL_PRESS,
+			UnitTemperament.CHANNEL_RUN_ON]
+	var option := _weighted_option(weights, channels, kind, slot, index, _rng.randf())
+	var low := kind_ticks.back_off_min_ticks
+	var high := kind_ticks.back_off_max_ticks
+	match option:
+		AFTER_PRESS:
+			low = 0
+			high = 0
+		AFTER_RUN_ON:
+			low = kind_ticks.run_on_min_ticks
+			high = kind_ticks.run_on_max_ticks
+	var ticks := _drawn_ticks(low, high)
+	match option:
+		AFTER_PRESS:
+			_re_engage_unit(board, index, kind, slot, kind.leap_chance, level + 1)
+		AFTER_RUN_ON:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.RUN_ON, ticks)
+		_:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.BACK_OFF, ticks)
+
+
+## ONE `randf()`, mapped onto the inclusive tick range [`low`, `high`] -- deliberately not
+## `randi_range(low, high)`, which draws NOTHING when its two bounds are equal (a press's 0..0, any
+## fixed duration) and would leave the stream's position depending on which option was chosen.
+func _drawn_ticks(low: int, high: int) -> int:
+	return low + mini(int(_rng.randf() * float(high - low + 1)), high - low)
+
+
+## Feel pass: the things a unit may do when its back-off ends, in the order of
+## `UnitKindProfile.between_attack_weights()`. Feel pass 2 added the last two.
+const OPTION_CIRCLE := 0
+const OPTION_STALK := 1
+const OPTION_FEINT := 2
+const OPTION_RE_ENGAGE := 3
+const OPTION_REPOSITION := 4
+const OPTION_RETREAT := 5
+## Feel pass 3: the long ORBIT. Decided exactly as a circle is (its duration from draw 2, inside its
+## own bounds; its direction from draw 3; whether it reverses once from draw 4) and entered as `ORBIT`
+## or `ORBIT_TURN`, the circle's two phases under their own names.
+const OPTION_ORBIT := 6
+
+
+## Story 7-3, feel pass: THE BACK-OFF ENDS AND THE UNIT DECIDES WHAT TO DO NEXT -- FOUR draws, always
+## four and always in this order, whatever is chosen and whatever the weights are:
+##   1. WHICH option, against the kind's four weights, each scaled by this unit's temperament;
+##   2. its DURATION, inclusive of the chosen option's authored bounds (0 for the re-engage);
+##   3. the circle DIRECTION, against the authored clockwise chance;
+##   4. whether the circle REVERSES once, against the authored flip chance.
+## Draws 3 and 4 are made and discarded by an option that does not circle: the stream's position
+## after the decision must not depend on what was decided (the Boulder's rule).
+##
+## THE IMMEDIATE RE-ENGAGE then makes the re-engage draw on this same tick, as its own decision.
+##
+## FEEL PASS 2: TWO MORE OPTIONS, STILL FOUR DRAWS. REPOSITION takes its duration from draw 2 and
+## its direction from draw 3 (the circle's own); RETREAT takes its duration from draw 2. A unit whose
+## RUN ON has ended decides here too: it has already put the distance between itself and its target.
+func _decide_after_unit_back_off(board: UnitBoard, index: int, kind: UnitKindProfile,
+		kind_ticks: UnitKindTicks, slot: int) -> void:
+	var option := _between_attack_option(kind, slot, index, _rng.randf())
+	var low := kind_ticks.circle_min_ticks
+	var high := kind_ticks.circle_max_ticks
+	match option:
+		OPTION_STALK:
+			low = kind_ticks.stalk_min_ticks
+			high = kind_ticks.stalk_max_ticks
+		OPTION_FEINT:
+			low = kind_ticks.feint_min_ticks
+			high = kind_ticks.feint_max_ticks
+		OPTION_RE_ENGAGE:
+			low = 0
+			high = 0
+		OPTION_REPOSITION:
+			low = kind_ticks.reposition_min_ticks
+			high = kind_ticks.reposition_max_ticks
+		OPTION_RETREAT:
+			low = kind_ticks.retreat_min_ticks
+			high = kind_ticks.retreat_max_ticks
+		OPTION_ORBIT:
+			low = kind_ticks.orbit_min_ticks
+			high = kind_ticks.orbit_max_ticks
+	var ticks := _drawn_ticks(low, high)
+	var clockwise := _rng.randf() < kind.circle_clockwise_chance
+	var reverses := _rng.randf() < kind.circle_flip_chance
+	var direction := UnitBoard.CIRCLE_CLOCKWISE if clockwise else UnitBoard.CIRCLE_COUNTER_CLOCKWISE
+	match option:
+		OPTION_STALK:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.STALK, ticks)
+		OPTION_FEINT:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.FEINT_IN, ticks)
+		OPTION_RE_ENGAGE:
+			_re_engage_unit(board, index, kind, slot, kind.leap_chance)
+		OPTION_REPOSITION:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.REPOSITION, ticks)
+			board.set_circle_dir_at(index, direction)
+		OPTION_RETREAT:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.RETREAT, ticks)
+		OPTION_ORBIT:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.ORBIT_TURN if reverses
+					else UnitBoard.BehaviorPhase.ORBIT, ticks)
+			board.set_circle_dir_at(index, direction)
+		_:
+			board.set_behavior_at(index, UnitBoard.BehaviorPhase.CIRCLE_TURN if reverses
+					else UnitBoard.BehaviorPhase.CIRCLE, ticks)
+			board.set_circle_dir_at(index, direction)
+
+
+## Which option `roll` (in [0, 1)) lands on for the unit at (`slot`, `index`) when its back-off ends.
+## NO WEIGHT AT ALL IS "ALWAYS CIRCLE", the rule that stood before the feel pass.
+func _between_attack_option(kind: UnitKindProfile, slot: int, index: int, roll: float) -> int:
+	var channels: Array[int] = [UnitTemperament.CHANNEL_CIRCLE, UnitTemperament.CHANNEL_STALK,
+			UnitTemperament.CHANNEL_FEINT, UnitTemperament.CHANNEL_RE_ENGAGE,
+			UnitTemperament.CHANNEL_REPOSITION, UnitTemperament.CHANNEL_RETREAT,
+			UnitTemperament.CHANNEL_ORBIT]
+	return _weighted_option(kind.between_attack_weights(), channels, kind, slot, index, roll)
+
+
+## Which entry of `weights` `roll` (in [0, 1)) lands on for the unit at (`slot`, `index`). Each weight
+## is scaled by the unit's temperament on its own channel (`channels`, index-aligned); the roll walks
+## the scaled weights in order. A negative weight counts as none, and no weight at all is entry 0.
+func _weighted_option(weights: Array[float], channels: Array[int], kind: UnitKindProfile, slot: int,
+		index: int, roll: float) -> int:
+	var total := 0.0
+	for option in weights.size():
+		weights[option] = maxf(0.0, weights[option]) * UnitTemperament.factor(slot, index,
+				channels[option], kind.temperament_weight_spread)
+		total += weights[option]
+	if total <= 0.0:
+		return 0
+	var mark := roll * total
+	for option in weights.size():
+		if mark < weights[option]:
+			return option
+		mark -= weights[option]
+	return 0
+
+
+## Story 7-3 (AC 12, `7-3/R20`): ENTER BACK-OFF -- ONE draw, the duration, inclusive of both authored
+## bounds. THE THIRD `_rng` CONSUMER after the deck shuffle and the Boulder placement, on the
+## Boulder's own rule: a fixed number of draws per decision, never a retry loop, so the stream's
+## position after the decision does not depend on what was drawn. Every draw moves `rng_state` and
+## therefore every later reshuffle and Boulder placement.
+##
+## FEEL PASS 2: THE HIT REACTION'S EXIT ONLY. An attack's end decides among three
+## (`_decide_after_unit_attack`). And the draw is `_drawn_ticks`' one `randf()`, where it was a
+## `randi_range` -- which draws nothing on equal bounds, so a kind authoring a FIXED back-off made no
+## draw at all here.
+func _enter_unit_back_off(board: UnitBoard, index: int, kind_ticks: UnitKindTicks) -> void:
+	board.set_behavior_at(index, UnitBoard.BehaviorPhase.BACK_OFF,
+			_drawn_ticks(kind_ticks.back_off_min_ticks, kind_ticks.back_off_max_ticks))
+
+
+## Story 7-3 (AC 7/AC 8, `7-3/R4`/`R12`/`R18`): THE HIT REACTION BEGINS. Whatever swing the unit is in
+## STOPS: the phase goes IDLE (so `is_hitbox_active_at` is false and the runner gathers nothing after
+## this `advance()`), the open swing-dedupe record is DISCARDED (so no fact gathered a frame earlier
+## registers on the grace tick), and the unit REACTS for its kind's authored duration.
+##
+## CALLED AFTER THIS TICK'S CONTACTS HAVE ALL RESOLVED (`_resolve_contacts`' tail) or from step 6c
+## (Honed Bolt), never from inside the step-4 ladder -- that deferral IS the seat-symmetric TRADE of
+## `7-3/R18`: a strike the unit already had in this tick's queue lands whichever slot it belongs to.
+##
+## NOTHING HAPPENS TO A DEAD UNIT (it plays Death, not Hit) OR TO ONE GETTING UP (`7-3/R17`).
+func _begin_unit_reaction(player: PlayerState, index: int) -> void:
+	var board := player.units
+	if not board.is_alive_at(index):
+		return
+	if board.behavior_phase_at(index) == UnitBoard.BehaviorPhase.GET_UP:
+		return
+	var kind_ticks := balance_ticks.kind_ticks_at(board.kind_index_at(index)) \
+			if balance_ticks != null else null
+	if kind_ticks == null:
+		return
+	board.set_phase_at(index, UnitBoard.AttackPhase.IDLE, 0)
+	player.unit_dedupe.discard(index)
+	board.set_behavior_at(index, UnitBoard.BehaviorPhase.REACT, kind_ticks.reaction_ticks)
+
+
+## The kind profile governing the unit at `index`, or null (no config, a stale index, a kind an X3
+## reload removed). Story 7-3's two reaction flags and the get-up duration are read through it.
+func _unit_kind_at(player: PlayerState, index: int) -> UnitKindProfile:
+	if balance == null or not player.units.has_index(index):
+		return null
+	return balance.kind_at(player.units.kind_index_at(index))
 
 
 ## Story 4-4 (AC 15/AC 19): advance every LIVE projectile on one player's board by one tick — the
@@ -2434,6 +2781,16 @@ func _resolve_contacts() -> Array[int]:
 	if balance == null:
 		_contact_queue.clear()
 		return confirmed
+	# Story 7-3 (AC 7/AC 8, `7-3/R18`): THE UNITS THAT MUST REACT TO THIS TICK'S CONTACTS, as flat
+	# `slot, index` pairs, COLLECTED during the ladder and APPLIED after it (the loop at the tail).
+	# A LOCAL, not a member: it lives for this one call and crosses no tick.
+	#
+	# THE DEFERRAL IS THE TRADE. Facts resolve attacker-slot ascending, so applying a reaction inside
+	# the ladder would let a P1 hero's hit discard a P2 hound's dedupe record BEFORE that hound's own
+	# strike (same tick, later in the order) registered -- while the mirrored P2 hero would always be
+	# bitten first. Collected and applied afterwards, every strike already in this tick's queue lands
+	# on both seats, and only then does the swing stop.
+	var reactions: Array[int] = []
 	for position in _canonical_contact_order():
 		var fact: Dictionary = _contact_queue[position]
 		var attacker_index := int(fact["attacker_index"])
@@ -2451,7 +2808,9 @@ func _resolve_contacts() -> Array[int]:
 		# `_resolve_unit_contact`. Its ONLY effect is the flag set directly above, which permits a
 		# windup to start. The F1 one-tick lag applies to a probe exactly as to a strike, so a windup
 		# begins the tick AFTER reach is observed.
-		if int(fact["kind"]) == CONTACT_REACH_PROBE:
+		# Story 7-3 (AC 9): the SECOND probe drops on the same rung, having marked its own band above.
+		if int(fact["kind"]) == CONTACT_REACH_PROBE \
+				or int(fact["kind"]) == CONTACT_REACH_PROBE_SECOND:
 			continue
 		# Story 6-5d (AC 20, `6-5d/R5`, Open Question 3): THE TARGET-ONLY RUNG -- A FIREBALL PASSES THROUGH
 		# ANY BODY THAT IS NOT ITS CAPTURED TARGET.
@@ -2491,7 +2850,7 @@ func _resolve_contacts() -> Array[int]:
 		# deflect and block are all properties of a HERO target: a unit has no roll, no defense
 		# window, no action state and no facing.
 		if int(fact["target_index"]) != TargetingService.HERO_INDEX:
-			_resolve_unit_contact(fact, attacker, target)
+			_resolve_unit_contact(fact, attacker, target, reactions)
 			continue
 		if target.hero.action_state == HeroState.ActionState.DEAD:
 			continue
@@ -2621,6 +2980,17 @@ func _resolve_contacts() -> Array[int]:
 					attacker.hero.start_stun(balance_ticks.deflect_stun_ticks, false)
 					attacker.hero.set_action_state(HeroState.ActionState.STUNNED)
 					attacker.stamina.add(-balance.deflect_stamina_penalty)
+				# STORY 7-3 (AC 8, `7-3/R12`/`R19`): A DEFLECTED UNIT ATTACK MAKES ITS UNIT REACT, for a
+				# kind that authors `react_on_deflect`. `4-3b/R7` ("deflecting a minion does NOT stun
+				# it") is re-opened for such a kind ONLY: the zombie authors false and is untouched.
+				# A unit has no `ActionState`, so this is not a stun -- it is the same hit reaction
+				# damage starts, queued for the tail of this ladder (`7-3/R18`). A projectile attacker
+				# is not a unit and never reacts; a BLOCK (the branch below) queues nothing.
+				elif not is_projectile_index(attacker_index):
+					var deflected_kind := _unit_kind_at(attacker, attacker_index)
+					if deflected_kind != null and deflected_kind.react_on_deflect:
+						reactions.append(int(fact["attacker"]))
+						reactions.append(attacker_index)
 				continue
 			# Story 6-5d (AC 16, `6-5d/R4`): BLOCK DOES NOT HELP AGAINST A FIREBALL. A BLOCKING target
 			# facing a hero-sourced shot takes the FULL damage and the hit is not recorded as blocked --
@@ -2736,6 +3106,12 @@ func _resolve_contacts() -> Array[int]:
 		# everything the hit owed. Order matters only for readability here — nothing between reads
 		# the projectile's liveness — but the sequence "resolve, then end" is the honest one.
 		_consume_projectile_attacker(attacker, attacker_index)
+	# Story 7-3 (`7-3/R18`): every contact of this tick has resolved; NOW the queued reactions begin,
+	# in the order they were queued (the canonical contact order). A unit queued twice reacts once --
+	# the second call re-seeds the same duration -- and one that died later in the ladder does not
+	# react at all (`_begin_unit_reaction`'s own liveness test).
+	for pair in range(0, reactions.size(), 2):
+		_begin_unit_reaction(p1 if reactions[pair] == 0 else p2, reactions[pair + 1])
 	_contact_queue.clear()
 	return confirmed
 
@@ -2866,7 +3242,14 @@ func _mark_reach_from_fact(attacker: PlayerState, attacker_index: int, fact: Dic
 		return
 	if attacker.units.target_index_at(attacker_index) != int(fact["target_index"]):
 		return
-	attacker.units.mark_in_reach_at(attacker_index, _reach_freshness_ticks())
+	# Story 7-3 (AC 9, `7-3/R20`): WHICH BAND THE FACT CONFIRMS. A second probe marks the second band
+	# only; a first probe or a landed strike marks the first, as it always has. Both refresh the
+	# direction below on the same phase rule, so a unit confirmed only at mid range still knows where
+	# its target is when its second attack locks.
+	if int(fact["kind"]) == CONTACT_REACH_PROBE_SECOND:
+		attacker.units.mark_second_reach_at(attacker_index, _reach_freshness_ticks())
+	else:
+		attacker.units.mark_in_reach_at(attacker_index, _reach_freshness_ticks())
 	var phase := attacker.units.attack_phase_at(attacker_index)
 	if phase != UnitBoard.AttackPhase.WINDUP and phase != UnitBoard.AttackPhase.ACTIVE:
 		attacker.units.set_attack_dir_at(attacker_index, -(fact["dir"] as Vector2))
@@ -2998,7 +3381,13 @@ func _register_attacker_hit(attacker: PlayerState, attacker_index: int, attack_i
 ##     `melee_hit_mana` per entry in the list this function returns, so a unit-target confirmation
 ##     staying OUT of that list is what makes killing minions generate no mana. There is no second
 ##     gate inside `_generate_mana` to keep in agreement with this one.
-func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: PlayerState) -> void:
+##
+## STORY 7-3 (AC 7, `7-3/R4`/`D3`/`R18`): IT TAKES THE TICK'S REACTION LIST and appends this unit's
+## address when the hit removed hp, the unit SURVIVED it and its kind authors `react_on_damage`. It
+## appends and nothing more -- the reaction itself begins at the tail of `_resolve_contacts`, after
+## every fact of the tick has resolved (see the list's own comment there).
+func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: PlayerState,
+		reactions: Array[int]) -> void:
 	var index := int(fact["target_index"])
 	if not target.units.is_alive_at(index):
 		return
@@ -3064,6 +3453,12 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# a record, or one already closed and erased normally. See `UnitSwingDedupe.discard`.
 	if not target.units.is_alive_at(index):
 		target.unit_dedupe.discard(index)
+	elif unit_hp_before - target.units.hp_at(index) > 0.0:
+		# Story 7-3 (AC 7): damaged and alive -- a kind that reacts to damage is queued to react.
+		var hit_kind := _unit_kind_at(target, index)
+		if hit_kind != null and hit_kind.react_on_damage:
+			reactions.append(int(fact["target"]))
+			reactions.append(index)
 
 
 ## Story 4-4 (AC 6/AC 9): what ONE confirmed hit against a unit takes off it, DISPATCHED ON ATTACKER
@@ -3145,7 +3540,11 @@ func _attacker_attack_damage(attacker: PlayerState, attacker_index: int) -> floa
 	var kind := balance.kind_at(kind_index)
 	if kind == null:
 		return 0.0
-	var attack := kind.attack_at(0)
+	# Story 7-3 (AC 9): A UNIT'S HIT DEALS THE DAMAGE OF THE ATTACK IT IS SWINGING -- the entry the
+	# record chose at windup start. A projectile still reads its firing kind's entry 0 (the only
+	# authored projectile attack, and a shot outlives the swing that fired it).
+	var attack := kind.attack_at(0 if is_projectile_index(attacker_index)
+			else attacker.units.attack_choice_at(attacker_index))
 	return attack.damage if attack != null else 0.0
 
 
@@ -3186,7 +3585,8 @@ func _is_bloodlust_body(player: PlayerState, index: int) -> bool:
 		return true
 	if is_projectile_index(index):
 		return _is_hero_sourced_shot(player, index)
-	return player.units.kind_index_at(index) == balance.kind_index_of(CardEffectResolver.KIND_MINION)
+	# Story 7-3 (AC 5, `7-3/D4`): the kind's authored `is_minion`, no longer the `KIND_MINION` name.
+	return _is_minion_kind(player.units.kind_index_at(index))
 
 
 ## Story 6-5d (AC 14/AC 36): IS THIS ATTACKER ADDRESS A SHOT THE HERO THREW? The one predicate the funnel
@@ -3275,10 +3675,28 @@ func _corpse_ticks_for(player: PlayerState, index: int) -> int:
 ## `KIND_MINION` constant and never a second StringName literal. `NO_KIND_INDEX` can never match a
 ## record's stored index (the cast seat refuses to add one), so an unauthored or reload-orphaned kind
 ## answers false -- the graceful-degradation direction.
+##
+## STORY 7-3 (AC 5, `7-3/D4`): "MINION" IS AN AUTHORED FACT ON THE KIND NOW, read through
+## `_is_minion_kind` below; the `KIND_MINION` name comparison this function and `_is_bloodlust_body`
+## each carried is gone, so a second minion kind (the Hellhound) is covered by every rule that keys
+## on this predicate with no edit here.
 func _is_own_minion(player: PlayerState, index: int) -> bool:
 	if balance == null or not player.units.has_index(index):
 		return false
-	return player.units.kind_index_at(index) == balance.kind_index_of(CardEffectResolver.KIND_MINION)
+	return _is_minion_kind(player.units.kind_index_at(index))
+
+
+## Story 7-3 (AC 5, `7-3/D4`): IS THE KIND AT `kind_index` A MINION -- `UnitKindProfile.is_minion`, read
+## inline off the live config (CONSTRAINT C). THE ONE EXPRESSION of minion membership: the corpse
+## rule, Culling, Drain, Corpse Bomb, the pre-spend gate and Bloodlust reach it through the two
+## predicates above. (The runner's Drain-target gather reads the same authored field off the same
+## config handle; it cannot call a private seat and a public one would widen the intake-surface scan.)
+## A null config or an unresolvable kind answers false, the totem exclusion's direction.
+func _is_minion_kind(kind_index: int) -> bool:
+	if balance == null:
+		return false
+	var kind := balance.kind_at(kind_index)
+	return kind != null and kind.is_minion
 
 
 ## Story 6-5a (R5): the armed Frostbite trigger is CONSUMED by this confirmed hero melee hit and the slow
@@ -4102,12 +4520,21 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 			# MINION (`BalanceConfig.kind_index_of`'s own "never a fallback to another kind" contract).
 			# A cast that resolves to an unauthored kind is a SUCCESSFUL cast that happens to put nothing
 			# on the board, exactly as a `spell_*` no-op is — and it takes no `reject_action`.
-			if kind != null:
-				player.units.add(kind.max_hp, kind_index)
+			# STORY 7-3 (AC 4, `7-3/R16`): ONE CAST, N RECORDS. The authored count is read once and every
+			# record is appended here, in one pass, so the batch occupies consecutive board indices and the
+			# reversal packet below names all of them. A zero count puts nothing on the board and records
+			# nothing, the unauthored kind's own outcome. NO RNG IS DRAWN HERE for any kind.
+			var summon_count := CardEffectResolver.summon_count_for(effect)
+			if kind != null and summon_count > 0:
+				var summoned: Array[int] = []
+				for _i in summon_count:
+					player.units.add(kind.max_hp, kind_index)
+					summoned.append(player.units.size() - 1)
 				# STORY 6-5f (AC 17, `6-5f/R16`): VANGUARD'S REVERSAL RECORD -- the board index the summon
 				# just appended, which is `size() - 1` because `add()` only ever appends (`4-1/R9`, holes
 				# never reused). Read after the call rather than before, so it is the index of the record
-				# that now exists rather than the index one would exist at.
+				# that now exists rather than the index one would exist at. (Story 7-3: one index per
+				# summoned record; `_reverse_summon` and the pre-check already walk the whole array.)
 				#
 				# IT COVERS EVERY SUMMON, NOT ONLY RUIN VANGUARD, and that is the honest scope of AC 17: the
 				# arm is `OUTCOME_SUMMON` and the resolver's summon path is shared by minions and totems
@@ -4120,8 +4547,7 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 				# a cast that put nothing on the board has nothing to undo, so the packet stays at
 				# `REVERSAL_NONE` and the gate refuses a Counterspell against it (`6-5f/R11`'s fourth
 				# clause, reached by construction rather than by a check).
-				player.record_reversal(PlayerState.REVERSAL_VANGUARD,
-						[player.units.size() - 1] as Array[int],
+				player.record_reversal(PlayerState.REVERSAL_VANGUARD, summoned,
 						[] as Array[int], [] as Array[int], [] as Array[bool], 0.0)
 		CardEffectResolver.OUTCOME_BLOODLUST:
 			player.start_rule(PlayerState.RULE_BLOODLUST,
@@ -4321,8 +4747,10 @@ func _apply_raise_dead(player: PlayerState, effect: CardEffect) -> void:
 		if kind == null:
 			raised.append(PlayerState.NO_RAISED_RECORD)
 			continue
+		# Story 7-3 (AC 16, `7-3/R17`): the raised record enters under its kind's GET-UP lockout.
 		player.units.add(kind.max_hp * effect.raise_hp_percent / 100.0,
-				player.units.kind_index_at(index), index)
+				player.units.kind_index_at(index), index,
+				_get_up_ticks_for(player.units.kind_index_at(index)))
 		raised.append(player.units.size() - 1)
 	if not consumed.is_empty():
 		player.record_reversal(PlayerState.REVERSAL_RAISE_DEAD, consumed, remaining,
@@ -4791,7 +5219,18 @@ func _restore_killed_minion_at(owner: PlayerState, index: int) -> void:
 	owner.units.consume_corpse_at(index)
 	if balance.kind_at(kind_index) == null:
 		return
-	owner.units.add(hp, kind_index, index)
+	# Story 7-3 (AC 16, `7-3/R17`): ONE RULE for every record that rises from a corpse -- the restored
+	# record enters under the same get-up lockout a Raise Dead gives it.
+	owner.units.add(hp, kind_index, index, _get_up_ticks_for(kind_index))
+
+
+## Story 7-3 (AC 16, `7-3/R17`): the GET-UP lockout a record of this kind enters under when it rises
+## from a corpse, in ticks -- read inline off the derived config by the two seats that add such a
+## record (Raise Dead, the Counterspell restore) and handed down to `UnitBoard.add`. Zero for a kind
+## that authors none and for an unresolvable kind.
+func _get_up_ticks_for(kind_index: int) -> int:
+	var kind_ticks := balance_ticks.kind_ticks_at(kind_index) if balance_ticks != null else null
+	return kind_ticks.get_up_ticks if kind_ticks != null else 0
 
 
 ## Story 6-5g (AC 10-22, `6-5g/R7`-`R12`): THE CLASS 2 / CLASS 3 REVERSAL -- undo the RECORDED PARTS of
@@ -6510,6 +6949,13 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 		# here can never close its own swing-dedupe record through `_advance_unit_attacks` again.
 		if not target.units.is_alive_at(target_index):
 			target.unit_dedupe.discard(target_index)
+		elif unit_hp_before - target.units.hp_at(target_index) > 0.0:
+			# Story 7-3 (AC 7, `7-3/D3`/`R18`): the bolt is the SECOND damage seat, so a surviving unit
+			# whose kind reacts to damage reacts here too. IMMEDIATELY, not queued: this is step 6c,
+			# after step 4 resolved every contact of the tick, so there is no fact left to trade with.
+			var bolt_kind := _unit_kind_at(target, target_index)
+			if bolt_kind != null and bolt_kind.react_on_damage:
+				_begin_unit_reaction(target, target_index)
 		# NO `hit_landed` FOR A UNIT TARGET, and that is `4-3a/R12`'s standing suppression rather than an
 		# omission: the signal's payload carries the TARGET HERO's hp and its one shipped consumer
 		# (`telegraph_controller.gd`) flashes and stings that hero, so announcing a minion's wound as a
@@ -7807,17 +8253,24 @@ func _attack_phase_multiplier(phase: StringName) -> float:
 ## them at full speed reads as "the multipliers stopped applying" — the smaller and more legible
 ## degradation. It joins the IDLE branch below rather than getting its own, because both answers are
 ## the same number for the same reason: no authored multiplier governs this tick.
-func unit_attack_phase_multiplier(phase: int, kind_index: int) -> float:
+##
+## STORY 7-3 (AC 9, `7-3/R21`): IT TAKES THE ATTACK ENTRY TOO. The triplet moved from the kind to each
+## attack record, so the seat has to be told WHICH attack the swing is; the runner passes
+## `player.units.attack_choice_at(index)`. DEFAULTED TO 0, which is the only entry a one-attack kind
+## has. A kind with no such attack entry joins the unresolvable-kind answer below (1.0): no authored
+## multiplier governs the tick.
+func unit_attack_phase_multiplier(phase: int, kind_index: int, attack_index: int = 0) -> float:
 	var kind := balance.kind_at(kind_index)
-	if kind == null:
+	var attack := kind.attack_at(attack_index) if kind != null else null
+	if attack == null:
 		return 1.0
 	match phase:
 		UnitBoard.AttackPhase.WINDUP:
-			return kind.attack_windup_move_speed_multiplier
+			return attack.windup_move_speed_multiplier
 		UnitBoard.AttackPhase.ACTIVE:
-			return kind.attack_active_move_speed_multiplier
+			return attack.active_move_speed_multiplier
 		UnitBoard.AttackPhase.RECOVERY:
-			return kind.attack_recovery_move_speed_multiplier
+			return attack.recovery_move_speed_multiplier
 		_:
 			# IDLE and any phase added later: full, unmodified speed. NOT a field lookup.
 			return 1.0

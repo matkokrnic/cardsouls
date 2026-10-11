@@ -319,6 +319,90 @@ const NO_RAISE_SOURCE := -1
 ## the restore rule requires the corpse (AC 23's "a corpse already gone means the minion is NOT restored").
 var _hp_at_death: Array[float] = []
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-3 (ACs 7-9, 12, 16): FIVE MORE PARALLEL ARRAYS -- which attack a swing is, the second
+## reach band, and the BETWEEN-ATTACK BEHAVIOUR (back-off, circle, hit reaction, get-up).
+## ------------------------------------------------------------------------------------------
+## STILL PLAIN INTS, STILL INDEX-ALIGNED, so the header's "no nested typed array, no Dictionary, no
+## StringName" reasoning covers all five unchanged. ALL FIVE ARE HASHED (`4-3a/R17`: each crosses
+## ticks and decides an outcome), one snapshot key per array on the `unit_hp` precedent.
+##
+## A KIND THAT AUTHORS NONE OF THIS (the zombie, every totem) HOLDS THE RESTING VALUE IN ALL FIVE FOR
+## ITS WHOLE LIFE: attack 0, no second-band confirmation, ENGAGE, zero ticks, no circle direction.
+
+## Which entry of the kind's `attacks` list the CURRENT (or last) swing is -- written at windup
+## start, read by the phase ladder for that attack's durations, by the damage seat for its damage and
+## by the runner (through `MatchState.unit_attack_phase_multiplier`) for its move multipliers.
+var _attack_choice: Array[int] = []
+
+## The SECOND reach band's freshness countdown: `_in_reach_ticks`' twin for attack entry 1, seeded by
+## a `CONTACT_REACH_PROBE_SECOND` fact, aged on the same clock and consumed at the same windup start.
+var _reach_second_ticks: Array[int] = []
+
+## What the unit is doing BETWEEN attacks. ENGAGE is the resting phase and the only one in which a
+## windup may begin; the other four each run for `_behavior_ticks` and are left only by the step-3b
+## seat reading that countdown at zero. A STORED int, for `AttackPhase`'s own reason.
+##
+## DELIBERATELY NOT MORE `AttackPhase` VALUES: that enum has four seats that mishandle an added
+## value (the multiplier's default arm, `_advance_unit_attacks`' ladder, the runner's aim lock and
+## the animation controller's `attack` clip), and a reacting or circling unit is not swinging.
+##
+## THE TWO LAST VALUES ARE ENGAGING WITH A DRAWN INTENT (story 7-3, pre-smoke fix). A unit that leaves
+## CIRCLE draws which attack it re-engages with: `ENGAGE_BITE` ignores the second reach band and runs
+## in until the close band starts the bite; `ENGAGE_LEAP` leaps from the second band, or bites if the
+## close band is confirmed first. Plain `ENGAGE` -- a fresh summon, a unit that has just got up, every
+## zombie for life -- has drawn nothing and follows the two bands as they come. All three are
+## "engaging" (`is_engaging_at`) and all three hold a zero countdown. THE INTENT LIVES IN THIS FIELD,
+## which is already hashed, rather than in a sixth array: it is appended to the enum, so the five
+## values a snapshot could hold before are the same ints they were.
+##
+## FOUR MORE VALUES, APPENDED THE SAME WAY (story 7-3, feel pass) -- still no sixth array. When its
+## back-off ends a unit draws one of four options: CIRCLE (as before), STALK (stand and watch), a
+## feint (FEINT_IN, the dart toward the target, then FEINT_OUT, the retreat) or an immediate re-engage.
+## CIRCLE_TURN is a circle that will REVERSE once: it runs on the circle's own countdown and becomes
+## plain CIRCLE, direction negated, when the kind's authored remainder is left (`turn_circle_at`).
+## Each of the four holds a countdown and none is engaging.
+##
+## SEVEN MORE, APPENDED THE SAME WAY (story 7-3, feel pass 2) -- still no sixth array, and the eleven
+## values a snapshot could hold before are the same ints they were.
+##   RUN_ON      after a swing that carried the unit past its target (the leap), it keeps running the
+##               way it landed for a drawn time. A countdown; not engaging.
+##   REPOSITION  drawn when a back-off ends: a run round the target for a drawn time, in a drawn
+##               direction (`_circle_dir`), then the re-engage draw. A countdown; not engaging.
+##   RETREAT     drawn when a back-off ends: it goes away from the target for a drawn time, then
+##               re-engages on its own (leap-favouring) chance. A countdown; not engaging.
+##   PRESS_BITE, PRESS_LEAP, PRESS_AGAIN_BITE, PRESS_AGAIN_LEAP
+##               ENGAGING with a drawn intent, exactly as `ENGAGE_BITE` / `ENGAGE_LEAP` are, reached by
+##               PRESSING: attacking again with no back-off. WHICH LINK OF THE CHAIN the unit is on
+##               lives in the value itself (`press_level`: 0 for the plain three, 1, then 2), so a
+##               chain is at most three attacks and needs no counter beside the phase.
+##
+## TWO MORE, APPENDED THE SAME WAY (story 7-3, feel pass 3): ORBIT, a long circle the unit strafes for
+## several seconds, and ORBIT_TURN, an orbit that will reverse once -- `CIRCLE` and `CIRCLE_TURN`'s
+## twins (a countdown, a direction in `_circle_dir`, the same reversal through `turn_circle_at`), kept
+## apart from them so the body can be moved differently and the circle left exactly as it was.
+enum BehaviorPhase { ENGAGE, BACK_OFF, CIRCLE, REACT, GET_UP, ENGAGE_BITE, ENGAGE_LEAP,
+		STALK, FEINT_IN, FEINT_OUT, CIRCLE_TURN,
+		RUN_ON, REPOSITION, RETREAT, PRESS_BITE, PRESS_LEAP, PRESS_AGAIN_BITE, PRESS_AGAIN_LEAP,
+		ORBIT, ORBIT_TURN }
+
+## The last link a press chain has: a unit engaging at this level does not press again.
+const PRESS_LEVEL_MAX := 2
+
+var _behavior_phase: Array[int] = []
+
+## Ticks remaining in the current behaviour phase, counted down one per `advance()`. Zero in ENGAGE.
+var _behavior_ticks: Array[int] = []
+
+## The drawn circle direction: `CIRCLE_CLOCKWISE`, `CIRCLE_COUNTER_CLOCKWISE`, or `CIRCLE_NONE` for a
+## record that has never circled. Written at CIRCLE entry and left standing afterwards, on
+## `_raised_from`'s append-only posture; nothing reads it outside the CIRCLE phase.
+var _circle_dir: Array[int] = []
+
+const CIRCLE_NONE := 0
+const CIRCLE_CLOCKWISE := 1
+const CIRCLE_COUNTER_CLOCKWISE := -1
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
 ## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
@@ -349,7 +433,13 @@ var _hp_at_death: Array[float] = []
 ## record was RAISED from, or `NO_RAISE_SOURCE` for every ordinary summon. Defaulted rather than
 ## required so the summon seat and every existing fixture are untouched, and so the only caller that
 ## passes it is the one that actually raised something.
-func add(max_hp: float, kind_index: int, raised_from: int = NO_RAISE_SOURCE) -> void:
+##
+## STORY 7-3 (AC 16, `7-3/R17`): it takes a FOURTH, DEFAULTED argument -- the GET-UP lockout this
+## record enters under, in ticks. The two seats that add a record risen from a corpse (Raise Dead,
+## the Counterspell restore) read it inline off the record's kind and hand it down; zero, the default
+## and every ordinary summon's value, enters ENGAGE.
+func add(max_hp: float, kind_index: int, raised_from: int = NO_RAISE_SOURCE,
+		get_up_ticks: int = 0) -> void:
 	var pair := TargetingService.no_target()
 	_target_slots.append(pair[0])
 	_target_indices.append(pair[1])
@@ -384,6 +474,13 @@ func add(max_hp: float, kind_index: int, raised_from: int = NO_RAISE_SOURCE) -> 
 	# Counterspell reversal is no exception: it enters ALIVE through this same function at its recorded
 	# pre-death hp, with its OWN empty death record, so a second death writes a fresh one.
 	_hp_at_death.append(0.0)
+	# Story 7-3: the five behaviour fields enter at rest, except that a record risen from a corpse
+	# under a positive lockout enters GETTING UP.
+	_attack_choice.append(0)
+	_reach_second_ticks.append(0)
+	_behavior_phase.append(BehaviorPhase.GET_UP if get_up_ticks > 0 else BehaviorPhase.ENGAGE)
+	_behavior_ticks.append(maxi(0, get_up_ticks))
+	_circle_dir.append(CIRCLE_NONE)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -429,6 +526,12 @@ func clear() -> void:
 	# fourteen arrays -- one collection expressed as fourteen, and an index present in one but not the
 	# others would be a death record belonging to a record that no longer exists.
 	_hp_at_death.clear()
+	# Story 7-3: cleared with their fourteen siblings, for the header's own reason.
+	_attack_choice.clear()
+	_reach_second_ticks.clear()
+	_behavior_phase.clear()
+	_behavior_ticks.clear()
+	_circle_dir.clear()
 
 
 func size() -> int:
@@ -890,6 +993,124 @@ func mark_in_reach_at(index: int, fresh_ticks: int) -> void:
 	_in_reach_ticks[index] = fresh_ticks
 
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-3: the behaviour accessors and mutators. Bound enforcement follows `hp_at` throughout.
+## ------------------------------------------------------------------------------------------
+
+func attack_choice_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _attack_choice[index]
+
+
+func is_in_second_reach_at(index: int) -> bool:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _reach_second_ticks[index] > 0
+
+
+## `mark_in_reach_at`'s twin for the second band: a RE-SEED, set-only, never cleared from outside.
+func mark_second_reach_at(index: int, fresh_ticks: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_reach_second_ticks[index] = fresh_ticks
+
+
+func behavior_phase_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _behavior_phase[index]
+
+
+func behavior_ticks_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _behavior_ticks[index]
+
+
+func circle_dir_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _circle_dir[index]
+
+
+## THE PUBLIC PREDICATE THE WINDUP GATE IS WIRED TO, `is_attack_ready_at`'s sibling: may this unit
+## begin an attack as far as its behaviour is concerned. False while it backs off, circles, reacts or
+## gets up -- which is the whole of the get-up attack lockout (`7-3/R17`).
+func is_engaging_at(index: int) -> bool:
+	return has_index(index) and is_engage_phase(_behavior_phase[index])
+
+
+## Is `phase` one of the engaging values (no intent, bite drawn, leap drawn, and the four pressed
+## forms of the last two)? The ONE expression of that set; `set_behavior_at` and `MatchState` read it
+## rather than list the values.
+static func is_engage_phase(phase: int) -> bool:
+	return phase == BehaviorPhase.ENGAGE or phase == BehaviorPhase.ENGAGE_BITE \
+			or phase == BehaviorPhase.ENGAGE_LEAP or press_level(phase) > 0
+
+
+## Feel pass 2: which link of a press chain an engaging `phase` is: 0 for an engagement that follows
+## a back-off (or none), 1 for the first pressed attack, 2 (`PRESS_LEVEL_MAX`) for the second. 0 for
+## every phase that is not engaging.
+static func press_level(phase: int) -> int:
+	match phase:
+		BehaviorPhase.PRESS_BITE, BehaviorPhase.PRESS_LEAP:
+			return 1
+		BehaviorPhase.PRESS_AGAIN_BITE, BehaviorPhase.PRESS_AGAIN_LEAP:
+			return 2
+	return 0
+
+
+## Feel pass 2: has `phase` drawn the BITE (at any link of a chain)? Such a unit ignores its second
+## reach band and closes until the first is confirmed.
+static func is_bite_intent(phase: int) -> bool:
+	return phase == BehaviorPhase.ENGAGE_BITE or phase == BehaviorPhase.PRESS_BITE \
+			or phase == BehaviorPhase.PRESS_AGAIN_BITE
+
+
+## Feel pass 2: the engaging phase of a unit that drew the leap (`leaps`) or the bite, at chain link
+## `level` (clamped to the chain's last). The inverse of `press_level` and `is_bite_intent`.
+static func drawn_engage_phase(leaps: bool, level: int) -> BehaviorPhase:
+	match clampi(level, 0, PRESS_LEVEL_MAX):
+		1:
+			return BehaviorPhase.PRESS_LEAP if leaps else BehaviorPhase.PRESS_BITE
+		2:
+			return BehaviorPhase.PRESS_AGAIN_LEAP if leaps else BehaviorPhase.PRESS_AGAIN_BITE
+	return BehaviorPhase.ENGAGE_LEAP if leaps else BehaviorPhase.ENGAGE_BITE
+
+
+## Enter `phase` for `ticks` ticks -- `set_phase_at`'s shape for the behaviour ladder. Entering
+## ENGAGE zeroes the countdown, for `set_phase_at`'s own reason.
+func set_behavior_at(index: int, phase: BehaviorPhase, ticks: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_behavior_phase[index] = phase
+	_behavior_ticks[index] = 0 if is_engage_phase(phase) else maxi(0, ticks)
+
+
+func set_circle_dir_at(index: int, dir: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_circle_dir[index] = dir
+
+
+## Feel pass: a reversing circle REVERSES. `CIRCLE_TURN` becomes `CIRCLE` with the direction negated
+## and the countdown LEFT AS IT IS -- the one phase change that keeps its ticks, because it is the
+## same circle carrying on. Any other phase is left alone.
+func turn_circle_at(index: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	# Feel pass 3: an orbit that will reverse does so the same way, and stays an orbit.
+	if _behavior_phase[index] == BehaviorPhase.ORBIT_TURN:
+		_behavior_phase[index] = BehaviorPhase.ORBIT
+		_circle_dir[index] = -_circle_dir[index]
+		return
+	if _behavior_phase[index] != BehaviorPhase.CIRCLE_TURN:
+		return
+	_behavior_phase[index] = BehaviorPhase.CIRCLE
+	_circle_dir[index] = -_circle_dir[index]
+
+
 ## The LATEST KNOWN direction to the acquired target, refreshed while the unit is IDLE (AC 12). The
 ## IDLE test lives at the call site rather than in here, because this class is a container and the
 ## phase it would have to consult is policy: `MatchState` decides when a direction may still move,
@@ -913,10 +1134,17 @@ func set_attack_dir_at(index: int, dir: Vector2) -> void:
 ## that consumes the reach flag and advances the counter — is what makes the cadence measured from
 ## windup start rather than from the swing's end (see `_attack_cooldown`'s own comment). The shipped
 ## minion authors a zero cadence and is therefore unaffected.
-func begin_windup_at(index: int, windup_ticks: int, cadence_ticks: int) -> int:
+##
+## STORY 7-3 (AC 9): it takes the ATTACK ENTRY this swing is (`attack_choice`, defaulted to 0 so a
+## one-attack kind and every existing fixture are untouched) and CONSUMES BOTH reach bands: a swing
+## begun on either confirmation spends both, so the next windup needs a fresh probe.
+func begin_windup_at(index: int, windup_ticks: int, cadence_ticks: int,
+		attack_choice: int = 0) -> int:
 	Invariant.check(has_index(index),
 		"unit board index %d is out of range (board holds %d units)" % [index, size()])
 	_in_reach_ticks[index] = 0
+	_reach_second_ticks[index] = 0
+	_attack_choice[index] = attack_choice
 	_attack_phase[index] = AttackPhase.WINDUP
 	_attack_ticks[index] = windup_ticks
 	_attack_count[index] += 1
@@ -964,6 +1192,15 @@ func tick_attack_timers() -> void:
 			continue
 		if _attack_ticks[i] > 0:
 			_attack_ticks[i] -= 1
+	# Story 7-3: the second reach band ages on the first band's clock, and the behaviour countdown
+	# runs beside the cadence cooldown -- unconditionally, both clamped at zero for their siblings'
+	# reason ("reached zero" is a state the step-3b seat reads, not a moment).
+	for i in _reach_second_ticks.size():
+		if _reach_second_ticks[i] > 0:
+			_reach_second_ticks[i] -= 1
+	for i in _behavior_ticks.size():
+		if _behavior_ticks[i] > 0:
+			_behavior_ticks[i] -= 1
 
 
 ## AC 16's snapshot payloads — FIVE separate keys, one per array, on the `unit_hp` precedent
@@ -1059,6 +1296,27 @@ func raised_from_snapshot() -> Array:
 ## is a real divergence.
 func hp_at_death_snapshot() -> Array:
 	return _hp_at_death.duplicate()
+
+
+## Story 7-3: the five behaviour payloads, one array -> one key, plain ints in board-index order.
+func attack_choice_snapshot() -> Array:
+	return _attack_choice.duplicate()
+
+
+func reach_second_snapshot() -> Array:
+	return _reach_second_ticks.duplicate()
+
+
+func behavior_phase_snapshot() -> Array:
+	return _behavior_phase.duplicate()
+
+
+func behavior_ticks_snapshot() -> Array:
+	return _behavior_ticks.duplicate()
+
+
+func circle_dir_snapshot() -> Array:
+	return _circle_dir.duplicate()
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS

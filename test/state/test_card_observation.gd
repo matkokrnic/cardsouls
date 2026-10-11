@@ -332,8 +332,13 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# slot -- in sorted position between `telegraph` and every `unit_*`. Ticks and magnitudes only.
 		"timed_rules",
 		# Story 4-4 (AC 1/AC 10): two more — `unit_attack_cooldown` and `unit_kind`.
+		# Story 7-3: `unit_attack_choice` (which attack entry a swing is), in sorted position.
+		"unit_attack_choice",
 		"unit_attack_cooldown", "unit_attack_count", "unit_attack_dir", "unit_attack_phase",
 		"unit_attack_ticks",
+		# Story 7-3: the between-attack behaviour -- phase, countdown and drawn circle direction -- in
+		# sorted position. Plain ints per record, the `unit_attack_phase` class exactly.
+		"unit_behavior_phase", "unit_behavior_ticks", "unit_circle_dir",
 		# Story 6-5b (AC 1/AC 14, `6-5b/R17`): THREE more board keys, in sorted position -- which is
 		# between `unit_attack_ticks` and `unit_count` for the two corpse keys ("co" < "ou"), and
 		# between `unit_kind` and `unit_swing_dedupe` for the raise source.
@@ -352,6 +357,8 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# a per-record float is the `unit_hp` class exactly -- a value, not an identity, not a position and
 		# not a StringName. It is literally the same NUMBER `unit_hp` carried one tick before the death.
 		"unit_count", "unit_hp", "unit_hp_at_death", "unit_in_reach", "unit_kind", "unit_raised_from",
+		# Story 7-3: `unit_reach_second` (the second reach band's freshness, `unit_in_reach`'s twin).
+		"unit_reach_second",
 		"unit_swing_dedupe", "unit_targets",
 	]
 	assert_eq(keys, expected,
@@ -360,8 +367,12 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 46,
-		"the per-player snapshot key set is FORTY-SIX keys as of story 7-8, which adds ONE: "
+	assert_eq(keys.size(), 51,
+		"the per-player snapshot key set is FIFTY-ONE keys as of story 7-3, which adds FIVE, one per new "
+		+ "`UnitBoard` array: `unit_attack_choice`, `unit_reach_second`, `unit_behavior_phase`, "
+		+ "`unit_behavior_ticks` and `unit_circle_dir` (which attack a swing is, the second reach band, "
+		+ "and the between-attack behaviour -- each crosses ticks and decides an outcome, `4-3a/R17`). "
+		+ "It was FORTY-SIX as of story 7-8, which adds ONE: "
 		+ "`charge_contact` (the mode (2) hit-once memory -- a touch closed the counter span, or the "
 		+ "hit landed; produced at the contact seat and read on later flight ticks, so nothing in the "
 		+ "tick that reads it could recompute it). It was FORTY-FIVE as of story 6-5f, which adds TWO: "

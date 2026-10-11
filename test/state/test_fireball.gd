@@ -986,6 +986,9 @@ func _kind(kind_name: StringName, damage: float) -> UnitKindProfile:
 	k.move_speed = 1.0
 	k.stop_distance = 1.0
 	k.priority_name = &"nearest"
+	# Story 7-3 (AC 5): minion membership is an authored fact; this builder sets it for the one
+	# name that used to BE the membership test, so the fixtures below mean what they meant.
+	k.is_minion = kind_name == CardEffectResolver.KIND_MINION
 	var attack := UnitAttackProfile.new()
 	attack.damage = damage
 	attack.windup_seconds = 0.1

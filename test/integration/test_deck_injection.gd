@@ -51,7 +51,10 @@ extends SceneTree
 ## what prove it never reaches a deck.
 const EXPECTED_SORTED_IDS: Array[StringName] = [
 	&"bloodhound_step", &"boulder", &"bramble_snare", &"drain", &"ember_lash", &"frost_dart",
-	&"frostbite", &"grave_ward", &"hellforge_totem", &"honed_bolt", &"imp_summoner", &"rocksling",
+	# Story 7-3 (AC 2): SEVENTEEN -> EIGHTEEN. `hellhound` sorts between `hellforge_totem` and
+	# `honed_bolt`; the shelved `ruin_vanguard` stays in the library.
+	&"frostbite", &"grave_ward", &"hellforge_totem", &"hellhound", &"honed_bolt", &"imp_summoner",
+	&"rocksling",
 	&"ruin_vanguard", &"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"verdant_wardstone",
 ]
 
@@ -59,7 +62,8 @@ const EXPECTED_SORTED_IDS: Array[StringName] = [
 ## the same don't-re-derive-from-the-thing-under-test reason as the list above. The injected
 ## composition must be exactly these, each repeated its copies, in this order.
 const DECK_1_IDS: Array[StringName] = [
-	&"ruin_vanguard", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
+	# Story 7-3 (AC 2, `7-3/R9`): `hellhound` in the place of `ruin_vanguard`, same copies.
+	&"hellhound", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
 	&"frostbite",
 ]
 const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 3, 2, 3]
@@ -205,8 +209,13 @@ func _check_pitch_effects(runner: Node, state: MatchState, db: Node) -> bool:
 		var card := db.get_card(id) as CardData
 		if card != null and card.pitch_effect != null:
 			expected.append(id)
-	if _sorted_strings(expected) != _sorted_strings(DECK_1_IDS):
-		_notes.append("library pitch effects %s != Deck 1's seven" % [expected])
+	# Story 7-3 (AC 1, `7-3/R1`): Deck 1's seven PLUS the shelved `ruin_vanguard`, which left the deck
+	# with its file unchanged and so still authors Culling as its pitch half.
+	var authoring_pitch: Array[StringName] = DECK_1_IDS.duplicate()
+	authoring_pitch.append(&"ruin_vanguard")
+	if _sorted_strings(expected) != _sorted_strings(authoring_pitch):
+		_notes.append("library pitch effects %s != Deck 1's seven plus the shelved Ruin Vanguard"
+				% [expected])
 		return false
 	var injected := _sorted_strings(state._pitch_effects.keys())
 	if injected != _sorted_strings(expected):

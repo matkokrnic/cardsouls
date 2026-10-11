@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BalanceConfig" load_steps=12 format=3]
+[gd_resource type="Resource" script_class="BalanceConfig" load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://src/state/resources/balance_config.gd" id="1_balcfg"]
 [ext_resource type="Script" path="res://src/state/resources/unit_kind_profile.gd" id="2_kind"]
@@ -13,6 +13,9 @@ recovery_seconds = 0.8
 range = 1.8
 damage = 3.0
 cadence_seconds = 0.0
+windup_move_speed_multiplier = 0.0
+active_move_speed_multiplier = 0.0
+recovery_move_speed_multiplier = 0.0
 
 [sub_resource type="Resource" id="Resource_combat_projectile"]
 script = ExtResource("4_projectile")
@@ -32,6 +35,9 @@ range = 8.0
 damage = 3.0
 cadence_seconds = 2.0
 projectile = SubResource("Resource_combat_projectile")
+windup_move_speed_multiplier = 0.0
+active_move_speed_multiplier = 0.0
+recovery_move_speed_multiplier = 0.0
 
 [sub_resource type="Resource" id="Resource_kind_minion"]
 script = ExtResource("2_kind")
@@ -40,9 +46,7 @@ move_speed = 3.0
 stop_distance = 1.5
 max_hp = 9.0
 priority_name = &"standard"
-attack_windup_move_speed_multiplier = 0.0
-attack_active_move_speed_multiplier = 0.0
-attack_recovery_move_speed_multiplier = 0.0
+is_minion = true
 attacks = Array[Resource]([SubResource("Resource_minion_attack")])
 
 [sub_resource type="Resource" id="Resource_kind_combat_totem"]
@@ -52,9 +56,6 @@ move_speed = 0.0
 stop_distance = 1.5
 max_hp = 12.0
 priority_name = &"hero_preferring"
-attack_windup_move_speed_multiplier = 0.0
-attack_active_move_speed_multiplier = 0.0
-attack_recovery_move_speed_multiplier = 0.0
 attacks = Array[Resource]([SubResource("Resource_combat_attack")])
 
 [sub_resource type="Resource" id="Resource_kind_mana_accelerator"]
@@ -64,9 +65,6 @@ move_speed = 0.0
 stop_distance = 1.5
 max_hp = 12.0
 priority_name = &"standard"
-attack_windup_move_speed_multiplier = 0.0
-attack_active_move_speed_multiplier = 0.0
-attack_recovery_move_speed_multiplier = 0.0
 attacks = Array[Resource]([])
 
 [sub_resource type="Resource" id="Resource_kind_stamina_accelerator"]
@@ -76,10 +74,108 @@ move_speed = 0.0
 stop_distance = 1.5
 max_hp = 12.0
 priority_name = &"standard"
-attack_windup_move_speed_multiplier = 0.0
-attack_active_move_speed_multiplier = 0.0
-attack_recovery_move_speed_multiplier = 0.0
 attacks = Array[Resource]([])
+
+[sub_resource type="Resource" id="Resource_hellhound_bite"]
+script = ExtResource("3_attack")
+windup_seconds = 0.35
+active_seconds = 0.15
+recovery_seconds = 0.45
+range = 1.4
+damage = 2.0
+cadence_seconds = 0.0
+windup_move_speed_multiplier = 0.0
+active_move_speed_multiplier = 0.0
+recovery_move_speed_multiplier = 0.0
+lead_max_distance = 1.0
+travel_min_distance = 0.3
+travel_max_distance = 1.0
+travel_overshoot = -0.8
+
+[sub_resource type="Resource" id="Resource_hellhound_leap"]
+script = ExtResource("3_attack")
+windup_seconds = 0.45
+active_seconds = 0.3
+recovery_seconds = 0.5
+range = 4.5
+damage = 3.0
+cadence_seconds = 0.0
+windup_move_speed_multiplier = 0.0
+active_move_speed_multiplier = 0.0
+recovery_move_speed_multiplier = 0.0
+lead_max_distance = 1.8
+travel_min_distance = 1.0
+travel_max_distance = 5.5
+travel_overshoot = 0.85
+travel_overshoot_fraction = 0.28
+
+[sub_resource type="Resource" id="Resource_kind_hellhound"]
+script = ExtResource("2_kind")
+kind_name = &"hellhound"
+move_speed = 4.0
+stop_distance = 1.1
+max_hp = 9.0
+priority_name = &"standard"
+is_minion = true
+react_on_damage = true
+react_on_deflect = true
+reaction_seconds = 0.5
+get_up_seconds = 1.2
+back_off_min_seconds = 0.3
+back_off_max_seconds = 0.7
+circle_min_seconds = 0.6
+circle_max_seconds = 1.4
+circle_clockwise_chance = 0.5
+leap_chance = 0.375
+circle_weight = 0.15
+stalk_weight = 0.1
+feint_weight = 0.15
+re_engage_weight = 0.25
+stalk_min_seconds = 0.4
+stalk_max_seconds = 1.0
+feint_min_seconds = 0.25
+feint_max_seconds = 0.5
+feint_retreat_seconds = 0.5
+circle_flip_chance = 0.35
+circle_flip_remaining_seconds = 0.4
+temperament_weight_spread = 0.4
+temperament_speed_spread = 0.12
+temperament_radius_spread = 0.15
+temperament_wobble_spread = 0.4
+back_off_weight = 0.5
+press_weight = 0.3
+run_on_weight = 0.25
+run_on_min_seconds = 0.3
+run_on_max_seconds = 0.7
+reposition_weight = 0.2
+reposition_min_seconds = 1.25
+reposition_max_seconds = 5.0
+retreat_weight = 0.15
+retreat_min_seconds = 0.9
+retreat_max_seconds = 2.0
+retreat_leap_chance = 0.65
+orbit_weight = 0.08
+orbit_min_seconds = 3.0
+orbit_max_seconds = 6.0
+orbit_approach_share = 0.3
+run_on_move_speed_multiplier = 1.0
+reposition_move_speed_multiplier = 1.0
+retreat_move_speed_multiplier = 0.6
+retreat_distance = 8.0
+back_off_move_speed_multiplier = 0.35
+circle_move_speed_multiplier = 0.35
+circle_radius = 3.2
+circle_wobble_amplitude = 0.12
+circle_wobble_seconds = 1.5
+circle_speed_variation = 0.25
+feint_move_speed_multiplier = 1.0
+feint_closest_distance = 2.0
+separation_distance = 1.2
+separation_strength = 0.35
+turn_rate_degrees_per_second = 480.0
+bark_interval_seconds = 6.0
+bark_chance = 0.3
+attacks = Array[Resource]([SubResource("Resource_hellhound_bite"), SubResource("Resource_hellhound_leap")])
 
 [resource]
 script = ExtResource("1_balcfg")
@@ -112,7 +208,7 @@ hand_size = 4
 draw_replacement_delay_seconds = 1.0
 reshuffle_vulnerable_window_seconds = 1.5
 minion_retarget_interval_seconds = 0.2
-unit_kinds = Array[Resource]([SubResource("Resource_kind_minion"), SubResource("Resource_kind_combat_totem"), SubResource("Resource_kind_mana_accelerator"), SubResource("Resource_kind_stamina_accelerator")])
+unit_kinds = Array[Resource]([SubResource("Resource_kind_minion"), SubResource("Resource_kind_combat_totem"), SubResource("Resource_kind_mana_accelerator"), SubResource("Resource_kind_stamina_accelerator"), SubResource("Resource_kind_hellhound")])
 hero_damage_to_unit = 3.0
 corpse_lifetime_seconds = 20.0
 mana_accelerator_mana = 0.5

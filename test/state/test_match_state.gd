@@ -358,13 +358,22 @@ func test_round_started_pushed_once_per_debug_reset() -> void:
 func test_unit_attack_phase_multiplier_selects_the_right_field() -> void:
 	var config := BalanceConfig.new()
 	var slow := UnitKindFixture.melee(&"minion", 9.0, 3.0, 0, 0, 0, 2.0)
-	slow.attack_windup_move_speed_multiplier = 0.25
-	slow.attack_active_move_speed_multiplier = 0.5
-	slow.attack_recovery_move_speed_multiplier = 0.75
+	# STORY 7-3 (`7-3/R21`): THE THREE FIELDS ARE PER ATTACK NOW and the seat also takes the ATTACK
+	# ENTRY, so the first kind authors a SECOND attack with its own three values and the test asserts
+	# each (kind, entry) pair reads its own. Three distinct values name the FIELD, two kinds name the
+	# KIND, and two entries name the ATTACK.
+	slow.attack_at(0).windup_move_speed_multiplier = 0.25
+	slow.attack_at(0).active_move_speed_multiplier = 0.5
+	slow.attack_at(0).recovery_move_speed_multiplier = 0.75
+	var second := UnitAttackProfile.new()
+	second.windup_move_speed_multiplier = 1.25
+	second.active_move_speed_multiplier = 2.5
+	second.recovery_move_speed_multiplier = 1.75
+	slow.attacks = [slow.attack_at(0), second]
 	var fast := UnitKindFixture.melee(&"combat_totem", 9.0, 3.0, 0, 0, 0, 8.0)
-	fast.attack_windup_move_speed_multiplier = 0.1
-	fast.attack_active_move_speed_multiplier = 0.2
-	fast.attack_recovery_move_speed_multiplier = 0.3
+	fast.attack_at(0).windup_move_speed_multiplier = 0.1
+	fast.attack_at(0).active_move_speed_multiplier = 0.2
+	fast.attack_at(0).recovery_move_speed_multiplier = 0.3
 	config.unit_kinds = [slow, fast]
 	var ms := MatchState.new(MatchParams.new(1))
 	ms.apply_balance(config)
@@ -384,6 +393,19 @@ func test_unit_attack_phase_multiplier_selects_the_right_field() -> void:
 		"a second kind reads ITS OWN active multiplier")
 	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.RECOVERY, 1), 0.3,
 		"a second kind reads ITS OWN recovery multiplier")
+	# Story 7-3 (`7-3/R21`): the SECOND attack entry reads ITS OWN three, and entry 0 is the default.
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP, 0, 1), 1.25,
+		"a second attack entry reads ITS OWN windup multiplier, not entry 0's")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE, 0, 1), 2.5,
+		"a second attack entry reads ITS OWN active multiplier (the leap travels)")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.RECOVERY, 0, 1), 1.75,
+		"a second attack entry reads ITS OWN recovery multiplier")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE, 0, 0), 0.5,
+		"entry 0 named explicitly is the default's answer")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.IDLE, 0, 1), 1.0,
+		"IDLE is the identity for every attack entry")
+	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.ACTIVE, 1, 1), 1.0,
+		"an attack entry the kind does not author runs at full speed, never rooted")
 	# An unresolvable kind index yields FULL speed rather than a root — the graceful-degradation
 	# direction the seat documents (a shortened `unit_kinds` under a live record must not freeze it).
 	assert_eq(ms.unit_attack_phase_multiplier(UnitBoard.AttackPhase.WINDUP,

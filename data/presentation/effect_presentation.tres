@@ -1,8 +1,21 @@
-[gd_resource type="Resource" script_class="EffectPresentationSet" load_steps=40 format=3]
+[gd_resource type="Resource" script_class="EffectPresentationSet" load_steps=54 format=3]
 
 [ext_resource type="Script" path="res://src/actors/effects/effect_presentation_set.gd" id="1_set"]
 [ext_resource type="Script" path="res://src/actors/effects/effect_presentation_row.gd" id="2_row"]
 [ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_summon.wav" id="s_summon"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_growl_1.wav" id="s_hh_growl_1"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_growl_2.wav" id="s_hh_growl_2"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_growl_3.wav" id="s_hh_growl_3"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_bark_1.wav" id="s_hh_bark_1"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_bark_2.wav" id="s_hh_bark_2"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_bark_3.wav" id="s_hh_bark_3"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_bite_1.wav" id="s_hh_bite_1"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_bite_2.wav" id="s_hh_bite_2"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_bite_3.wav" id="s_hh_bite_3"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_leap_1.wav" id="s_hh_leap_1"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_leap_2.wav" id="s_hh_leap_2"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_death_1.wav" id="s_hh_death_1"]
+[ext_resource type="AudioStream" path="res://assets/audio/effects/hellhound/hound_death_2.wav" id="s_hh_death_2"]
 [ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_cull.wav" id="s_cull"]
 [ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_soul.tres" id="s_soul"]
 [ext_resource type="AudioStream" path="res://assets/audio/effects/sfx_ward.wav" id="s_ward"]
@@ -38,6 +51,56 @@ sounds = {
 }
 volume_db = {
 &"summon": 0.0
+}
+
+[sub_resource type="Resource" id="Row_hellhound"]
+script = ExtResource("2_row")
+row_id = &"hellhound"
+effect_ids = PackedStringArray("summon_hellhound")
+card_color = 2
+size = 2.2
+duration = 1.2
+count = 32
+silences_generic_cue = true
+sounds = {
+&"summon": ExtResource("s_summon"),
+&"growl_1": ExtResource("s_hh_growl_1"),
+&"growl_2": ExtResource("s_hh_growl_2"),
+&"growl_3": ExtResource("s_hh_growl_3"),
+&"bark_1": ExtResource("s_hh_bark_1"),
+&"bark_2": ExtResource("s_hh_bark_2"),
+&"bark_3": ExtResource("s_hh_bark_3"),
+&"bite_1": ExtResource("s_hh_bite_1"),
+&"bite_2": ExtResource("s_hh_bite_2"),
+&"bite_3": ExtResource("s_hh_bite_3"),
+&"leap_1": ExtResource("s_hh_leap_1"),
+&"leap_2": ExtResource("s_hh_leap_2"),
+&"death_1": ExtResource("s_hh_death_1"),
+&"death_2": ExtResource("s_hh_death_2")
+}
+volume_db = {
+&"summon": 0.0,
+&"growl": -20.0,
+&"bark": -12.0,
+&"bite": -8.0,
+&"leap": -10.0,
+&"yelp": -10.0,
+&"death": -8.0
+}
+extra = {
+&"voice_distance": 30.0,
+&"voice_cap": 2.0,
+&"voice_pitch_spread": 0.12,
+&"voice_pitch_variation": 0.05,
+&"growl_interval_seconds": 4.0,
+&"growl_chance": 0.5,
+&"blend_seconds": 0.15,
+&"spawn_flank_distance": 1.1,
+&"stalk_rate": 0.5,
+&"locomotion_rate_min": 0.5,
+&"locomotion_rate_max": 3.0,
+&"heading_forward_degrees": 50.0,
+&"heading_hold_degrees": 12.0
 }
 
 [sub_resource type="Resource" id="Row_culling"]
@@ -370,4 +433,4 @@ extra = {
 
 [resource]
 script = ExtResource("1_set")
-rows = Array[ExtResource("2_row")]([SubResource("Row_vanguard"), SubResource("Row_culling"), SubResource("Row_grave_ward"), SubResource("Row_raise_dead"), SubResource("Row_drain"), SubResource("Row_vampiric_aura"), SubResource("Row_rocksling"), SubResource("Row_boulder_slow"), SubResource("Row_boom"), SubResource("Row_bloodhound_step"), SubResource("Row_fireball"), SubResource("Row_honed_bolt"), SubResource("Row_counterspell"), SubResource("Row_frostbite"), SubResource("Row_corpse_bomb"), SubResource("Row_stun_root")])
+rows = Array[ExtResource("2_row")]([SubResource("Row_vanguard"), SubResource("Row_hellhound"), SubResource("Row_culling"), SubResource("Row_grave_ward"), SubResource("Row_raise_dead"), SubResource("Row_drain"), SubResource("Row_vampiric_aura"), SubResource("Row_rocksling"), SubResource("Row_boulder_slow"), SubResource("Row_boom"), SubResource("Row_bloodhound_step"), SubResource("Row_fireball"), SubResource("Row_honed_bolt"), SubResource("Row_counterspell"), SubResource("Row_frostbite"), SubResource("Row_corpse_bomb"), SubResource("Row_stun_root")])

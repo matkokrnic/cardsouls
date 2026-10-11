@@ -295,13 +295,43 @@ func test_balance_config_field_lists_are_complete_by_reflection() -> void:
 ## line in `BalanceTicks._kind_ticks` and (b) fails.
 const UNIT_KIND_FIELDS: Array[String] = [
 	"move_speed", "stop_distance", "max_hp",
-	"attack_windup_move_speed_multiplier", "attack_active_move_speed_multiplier",
-	"attack_recovery_move_speed_multiplier",
+	# Story 7-3: the kind-level phase multiplier triplet LEFT this schema (`7-3/R21`, now on the
+	# attack record below), and the hound's ten tunables joined it. `is_minion` and the two reaction
+	# flags are bools and are skipped by the float/int filter, like `kind_name`.
+	"reaction_seconds", "get_up_seconds", "back_off_min_seconds", "back_off_max_seconds",
+	"circle_min_seconds", "circle_max_seconds", "circle_clockwise_chance", "leap_chance",
+	"back_off_move_speed_multiplier", "circle_move_speed_multiplier", "circle_radius",
+	"bark_interval_seconds",
+	# Story 7-3, feel pass: the twenty-four the post-smoke pass added (what a hound does after its
+	# back-off, its temperament spreads, and the actor-side motion and bark numbers).
+	"circle_weight", "stalk_weight", "feint_weight", "re_engage_weight",
+	"stalk_min_seconds", "stalk_max_seconds", "feint_min_seconds", "feint_max_seconds",
+	"feint_retreat_seconds", "circle_flip_chance", "circle_flip_remaining_seconds",
+	"temperament_weight_spread", "temperament_speed_spread", "temperament_radius_spread",
+	"temperament_wobble_spread", "circle_wobble_amplitude", "circle_wobble_seconds",
+	"circle_speed_variation", "feint_move_speed_multiplier", "feint_closest_distance",
+	"separation_distance", "separation_strength", "turn_rate_degrees_per_second", "bark_chance",
+	# Story 7-3, feel pass 2: the sixteen the second pass added (what a hound does when an attack
+	# ends, the reposition and the retreat, and their actor-side motion numbers).
+	"back_off_weight", "press_weight", "run_on_weight", "run_on_min_seconds", "run_on_max_seconds",
+	"reposition_weight", "reposition_min_seconds", "reposition_max_seconds",
+	"retreat_weight", "retreat_min_seconds", "retreat_max_seconds", "retreat_leap_chance",
+	"run_on_move_speed_multiplier", "reposition_move_speed_multiplier",
+	"retreat_move_speed_multiplier", "retreat_distance",
+	# Story 7-3, feel pass 3: the long orbit.
+	"orbit_weight", "orbit_min_seconds", "orbit_max_seconds", "orbit_approach_share",
 ]
 
 const UNIT_ATTACK_FIELDS: Array[String] = [
 	"windup_seconds", "active_seconds", "recovery_seconds", "cadence_seconds",
 	"range", "damage",
+	# Story 7-3 (`7-3/R21`): the three phase move-speed multipliers, per ATTACK now.
+	"windup_move_speed_multiplier", "active_move_speed_multiplier",
+	"recovery_move_speed_multiplier",
+	# Story 7-3, feel pass 2: the lead and the swing's own travel band.
+	"lead_max_distance", "travel_min_distance", "travel_max_distance", "travel_overshoot",
+	# Story 7-3, feel pass 3: the overshoot as a share of the distance.
+	"travel_overshoot_fraction",
 ]
 
 const PROJECTILE_FIELDS: Array[String] = [
@@ -374,6 +404,36 @@ func test_per_kind_durations_are_converted_by_from_config() -> void:
 	assert_eq(unasserted.size(), 0,
 		"per-kind *_seconds field with no arithmetic assertion above — add its derived twin to the "
 		+ "pairs list or it converts unaudited: %s" % ", ".join(unasserted))
+
+
+## Story 7-3 (AC 11/AC 16): half (b) for the KIND'S OWN durations, which `UnitKindProfile` did not
+## have before this story (reaction, get-up, the back-off and circle draw bounds, the bark interval).
+## Found BY REFLECTION and read back through the stem rewrite `<stem>_seconds` -> `<stem>_ticks` on
+## `UnitKindTicks`, so a `*_seconds` added to the kind later is covered the day it is added and one
+## `BalanceTicks._kind_ticks` forgets reads 0 (or is missing outright), not 30.
+func test_kind_level_durations_are_converted_by_from_config() -> void:
+	var kind := UnitKindProfile.new()
+	kind.kind_name = &"probe"
+	var durations := _declared_seconds(kind)
+	assert_true(durations.size() >= 7,
+		"reflection found %d *_seconds on UnitKindProfile, want the seven story 7-3 added"
+				% durations.size())
+	for name in durations:
+		kind.set(name, 0.5)
+	var config := BalanceConfig.new()
+	config.unit_kinds = [kind]
+	var derived := BalanceTicks.from_config(config).kind_ticks_at(0)
+	assert_not_null(derived, "from_config() derived a tick record set for the authored kind")
+	if derived == null:
+		return
+	var underived: Array[String] = []
+	for name in durations:
+		var twin := String(name).trim_suffix("_seconds") + "_ticks"
+		if not (twin in derived) or int(derived.get(twin)) != 30:
+			underived.append(String(name))
+	assert_eq(underived.size(), 0,
+		"kind-level *_seconds field with no derived `*_ticks` twin on UnitKindTicks — it would read 0 "
+		+ "ticks in the tick ladder: %s" % ", ".join(underived))
 
 
 func _assert_declared_fields_listed(probe: Resource, listed: Array[String], label: String) -> void:

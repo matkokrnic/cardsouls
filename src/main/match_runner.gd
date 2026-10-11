@@ -149,6 +149,33 @@ const UNIT_SCENE := preload("res://src/actors/minions/unit_actor.tscn")
 ## means in practice.
 const TOTEM_SCENE := preload("res://src/actors/minions/totem_actor.tscn")
 
+## Story 7-3 (AC 17): the HELLHOUND scene -- `unit_actor.tscn`'s node set on the same script, with the
+## Hellhound model, its own collision sizes, the two owner skins and `HoundAnimationController`.
+const HOUND_SCENE := preload("res://src/actors/minions/hound_actor.tscn")
+
+## Story 7-3 (`7-3/D5`, AC 15): THE PER-KIND PRESENTATION TABLES, keyed by kind NAME on
+## `_TOTEM_TINT_BY_KIND`'s precedent and held here, in presentation code. A kind in none of them falls
+## back to the rule that stood before this story (scene by attack shape, lift by `Hitbox`, the Vanguard
+## look per unit), so the zombie and the three totems read no row here and are untouched.
+##
+## `_UNIT_SCENE_BY_KIND`: the actor scene.
+## `_LOCK_MARK_LIFT_BY_KIND`: how far above the actor's root (its FEET) the lock mark sits. The hound's
+##   is MEASURED (`tools/measure_hellhound_rig.gd`): its spine stands 1.809 model units up in `idle`,
+##   and `hound_actor.tscn` mounts the model at scale 0.33 (0.4 before the feel pass) -- 0.60 m, the
+##   middle of its back. The zombie's 1.53 is a standing man's chest and would float a body length
+##   above a hound.
+## `_UNIT_ROW_BY_KIND`: the `EffectPresentationSet` row that carries the kind's spawn look and its
+##   voice. A kind with a row here shows that look ONCE PER CAST (see `_present_batch_spawn`).
+const _UNIT_SCENE_BY_KIND := {
+	&"hellhound": HOUND_SCENE,
+}
+const _LOCK_MARK_LIFT_BY_KIND := {
+	&"hellhound": 0.6,
+}
+const _UNIT_ROW_BY_KIND := {
+	&"hellhound": &"hellhound",
+}
+
 ## Story 4-4 (AC 14): the PROJECTILE scene — a plain `Node3D` carrying one `Hitbox` on the existing
 ## layer 3 / mask 2 convention, and no body collision.
 const PROJECTILE_SCENE := preload("res://src/actors/projectiles/projectile_actor.tscn")
@@ -2118,13 +2145,50 @@ func _copy_reversal_records() -> void:
 ## carry the same marker, and which it was is known only after the drain (`_resolve_raised_spawns`). Read from the
 ## record (`raised_from_at`, the `_raised_spot` read), and only for the melee scene: a totem (no `Hitbox`) is not a
 ## Deck 1 summon and gets neither.
+##
+## STORY 7-3 (AC 15): A KIND WITH A PRESENTATION ROW OF ITS OWN (`_UNIT_ROW_BY_KIND`) GETS NO LOOK HERE. This
+## function runs once per ACTOR, and "has a Hitbox" stood for "is a Vanguard minion" -- so one Hellhound cast would
+## have shown the Vanguard crack and played the `vanguard` sound twice. Its look is `_present_batch_spawn`'s, once
+## per cast. A RAISED record of such a kind is still noted: the pillar and the "returned" flash are per unit.
 func _present_unit_spawn(unit: UnitActor, player: PlayerState, slot: int, index: int) -> void:
 	if _effects == null or unit.hitbox == null:
 		return
-	if player.units.raised_from_at(index) == UnitBoard.NO_RAISE_SOURCE:
-		_effects.show_vanguard(unit.global_position)
-	else:
+	if player.units.raised_from_at(index) != UnitBoard.NO_RAISE_SOURCE:
 		_raised_spawns.append([slot, index])
+	elif not _UNIT_ROW_BY_KIND.has(_unit_kind_name(player, index)):
+		_effects.show_vanguard(unit.global_position)
+
+
+## Story 7-3 (AC 15): ONE SPAWN LOOK AND ONE SOUND PER CAST for a kind with its own presentation row. The batch
+## `_spawn_missing_unit_actors` just grew by is one tick's summons for one slot -- one cast -- so each row is shown
+## ONCE, at the midpoint of the batch members it belongs to (two hounds: between them). Raised members are skipped;
+## theirs is `_resolve_raised_spawns`'. Runs at a spawn, never per frame.
+func _present_batch_spawn(slot: int, player: PlayerState, first_index: int, count: int) -> void:
+	if _effects == null:
+		return
+	var actors: Array = _unit_actors[slot]
+	var shown: Array[StringName] = []
+	for index: int in range(first_index, first_index + count):
+		var row_id := _batch_row_at(player, index)
+		if row_id == &"" or shown.has(row_id):
+			continue
+		shown.append(row_id)
+		var sum := Vector3.ZERO
+		var members := 0
+		for other: int in range(index, first_index + count):
+			if _batch_row_at(player, other) == row_id and is_instance_valid(actors[other]):
+				sum += (actors[other] as Node3D).global_position
+				members += 1
+		if members > 0:
+			_effects.show_summon(row_id, sum / float(members))
+
+
+## The presentation row a freshly SUMMONED (not raised) record at `index` is shown with, or `&""`.
+func _batch_row_at(player: PlayerState, index: int) -> StringName:
+	if not player.units.has_index(index) \
+			or player.units.raised_from_at(index) != UnitBoard.NO_RAISE_SOURCE:
+		return &""
+	return _UNIT_ROW_BY_KIND.get(_unit_kind_name(player, index), &"")
 
 
 ## Story 7-1 review fix (F1, AC 9/AC 19): GIVE EACH RAISED-FROM SPAWN OF THIS TICK ITS LOOK, after the drain. A
@@ -2517,9 +2581,16 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 	# THE BATCH INDEX IS THE BOARD INDEX. `actors.size()` before each append is the record this
 	# actor belongs to, which is what lets the scene be chosen per-record; the array stays
 	# index-aligned with the board exactly as it has since 4-1.
-	var spots := _compute_spawn_positions(occupied, hero_position, opponent_position, slot,
-			batch_size)
 	var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+	var first_index := actors.size()
+	# Story 7-3, feel pass: a kind whose presentation row authors a FLANK distance spawns to the
+	# summoner's behind-left and behind-right (the two hounds of a cast), one distance per batch
+	# member in board order. Zero is the rule that stood before, for every other kind.
+	var flanks: Array[float] = []
+	for member: int in batch_size:
+		flanks.append(_spawn_flank_distance(player, first_index + member))
+	var spots := _compute_spawn_positions(occupied, hero_position, opponent_position, slot,
+			batch_size, flanks)
 	for spot: Vector3 in spots:
 		var index := actors.size()
 		var unit := _unit_scene_for(player, index).instantiate() as UnitActor
@@ -2539,9 +2610,18 @@ func _spawn_missing_unit_actors(slot: int, count: int) -> void:
 		# actors. A raised minion standing behind its summoner is wrong-but-playable; one standing at
 		# world zero is a bug that looks like a feature.
 		unit.global_position = _raised_spot(slot, player, index, spot)
+		# Story 7-3 (AC 16): a record that enters GETTING UP lies the way its corpse lay. The get-up is the
+		# Death clip in reverse, and a body that turned to a new heading as it began would not be the corpse
+		# standing back up. Only such a record is turned here; every other spawn keeps its heading rule.
+		if player.units.behavior_phase_at(index) == UnitBoard.BehaviorPhase.GET_UP:
+			unit.global_rotation.y = _raised_heading(slot, player, index, unit.global_rotation.y)
+		# Story 7-3 (AC 14, `7-3/R7`): the OWNER's colour, by the slot whose board this record is on. A
+		# scene authoring no owner skins (the zombie, the totems) is left as it is.
+		unit.apply_owner_skin(slot)
 		_apply_totem_tint(unit, player, index)
 		_present_unit_spawn(unit, player, slot, index)
 		actors.append(unit)
+	_present_batch_spawn(slot, player, first_index, actors.size() - first_index)
 
 
 ## Story 6-5b (AC 14): where the record at `index` actually stands -- the position of the corpse it was
@@ -2563,6 +2643,19 @@ func _raised_spot(slot: int, player: PlayerState, index: int, fallback: Vector3)
 	return (corpse as Node3D).global_position
 
 
+## Story 7-3 (AC 16): the yaw of the corpse the record at `index` rose from, or `fallback` -- `_raised_spot`'s
+## ladder for a heading instead of a position, read off the same actor at the same seat.
+func _raised_heading(slot: int, player: PlayerState, index: int, fallback: float) -> float:
+	var source := player.units.raised_from_at(index)
+	var actors: Array = _unit_actors[slot]
+	if source < 0 or source >= actors.size():
+		return fallback
+	var corpse: Node = actors[source]
+	if not is_instance_valid(corpse):
+		return fallback
+	return (corpse as Node3D).global_rotation.y
+
+
 ## Story 4-4 (AC 3): which actor scene the board record at `index` should be instantiated from,
 ## decided from AUTHORED DATA and never from a kind NAME.
 ##
@@ -2581,10 +2674,61 @@ func _unit_scene_for(player: PlayerState, index: int) -> PackedScene:
 	var kind := balance.kind_at(player.units.kind_index_at(index))
 	if kind == null:
 		return UNIT_SCENE
+	# Story 7-3 (`7-3/D5`): a kind with a scene of its own gets it; every other kind keeps the
+	# attack-shape rule below.
+	if _UNIT_SCENE_BY_KIND.has(kind.kind_name):
+		return _UNIT_SCENE_BY_KIND[kind.kind_name]
 	var attack := kind.attack_at(0)
 	if attack == null or attack.projectile != null:
 		return TOTEM_SCENE
 	return UNIT_SCENE
+
+
+## Story 7-3 (`7-3/D5`): the kind NAME of the record at `index`, or `&""` when it does not resolve (no
+## config, a stale index, a kind an X3 reload removed) -- the key the per-kind presentation tables
+## are read by. An unresolved name is in none of them, which is the fallback.
+func _unit_kind_name(player: PlayerState, index: int) -> StringName:
+	var balance := _match_state.balance
+	if balance == null or not player.units.has_index(index):
+		return &""
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	return kind.kind_name if kind != null else &""
+
+
+## Story 7-3, feel pass: one knob of the presentation row of the record at `index`'s kind, or
+## `fallback` for a kind with no row (and with no presenter at all). Read inline, never cached.
+func _unit_row_knob(player: PlayerState, index: int, knob: StringName, fallback: float) -> float:
+	var row := _unit_row(player, index)
+	return row.knob(knob, fallback) if row != null else fallback
+
+
+## The presentation row of the record at `index`'s kind (`_UNIT_ROW_BY_KIND`), or null: a kind with no
+## row, an unresolved kind, no presenter. Presentation data only; read inline, never cached.
+func _unit_row(player: PlayerState, index: int) -> EffectPresentationRow:
+	if _effects == null:
+		return null
+	return _effects.row(_UNIT_ROW_BY_KIND.get(_unit_kind_name(player, index), &""))
+
+
+## Story 7-3, feel pass: how far to the summoner's side the record at `index` prefers to spawn (its
+## row's `spawn_flank_distance`), or 0.0 -- no flank -- for a kind that authors none and for a record
+## risen from a corpse, which stands where its corpse lay.
+func _spawn_flank_distance(player: PlayerState, index: int) -> float:
+	if not player.units.has_index(index) \
+			or player.units.raised_from_at(index) != UnitBoard.NO_RAISE_SOURCE:
+		return 0.0
+	return maxf(0.0, _unit_row_knob(player, index, &"spawn_flank_distance", 0.0))
+
+
+## Story 7-3 (AC 18): the bark cadence of the record at `index`'s kind, in ticks -- the authored
+## `bark_interval_seconds` through the one conversion (`BalanceTicks`), read inline (CONSTRAINT C).
+## Zero for a kind that authors none, and for a kind that does not resolve: no bark.
+func _bark_interval_ticks(player: PlayerState, index: int) -> int:
+	var ticks := _match_state.balance_ticks
+	if ticks == null:
+		return 0
+	var kind_ticks := ticks.kind_ticks_at(player.units.kind_index_at(index))
+	return kind_ticks.bark_interval_ticks if kind_ticks != null else 0
 
 
 ## Story 5-0c (AC 2/AC 3): per-kind totem tint, NAMED CONSTANTS in presentation code rather than a
@@ -2689,26 +2833,46 @@ func _tint_mesh_recursive(node: Node, color: Color) -> void:
 ## play (one `units.add()` per resolved cast, one `card_commit` per player per tick, and two
 ## same-tick casts are different slots spawned through separate calls); the loop is written for N
 ## because multi-summon cards are planned, and correctness for N > 1 is carried by review.
+##
+## STORY 7-3, FEEL PASS: THE FLANK SPOTS. `flank_distances` (one per batch member; empty, or 0.0 for a
+## member, is the rule above unchanged) gives a member a PREFERRED spot before the walk: the base spot
+## moved that far to the summoner's LEFT for the first flanked member and to its RIGHT for the second
+## -- "one each side, behind the summoner". A preferred spot that is not clear is simply not taken:
+## the member falls through to the ring walk above, as does a third flanked member. Still a pure
+## function of its arguments, and still in the rear half-space (the flank moves a spot along the
+## lateral axis only).
 func _compute_spawn_positions(occupied: Array[Vector3], hero_position: Vector3,
-		opponent_position: Vector3, slot: int, batch_size: int) -> Array[Vector3]:
+		opponent_position: Vector3, slot: int, batch_size: int,
+		flank_distances: Array[float] = []) -> Array[Vector3]:
 	var placed: Array[Vector3] = []
 	if batch_size <= 0:
 		return placed
 	var away := _rear_direction(hero_position, opponent_position, slot)
+	# The summoner's LEFT as it faces its opponent (it faces `-away`).
 	var lateral := Vector2(-away.y, away.x)
 	var base := Vector2(hero_position.x, hero_position.z) + away * SPAWN_BEHIND_DISTANCE
 	# roundi, not int/truncation: the ratio is integral for today's constants, but truncating a
 	# float division would silently narrow the rear arc if a future retune landed just under an
 	# integer (e.g. 2.999999999999998 truncating to 2 instead of rounding to 3).
 	var arc_steps := roundi(SPAWN_ARC_HALF_WIDTH_RADIANS / SPAWN_ARC_STEP_RADIANS)
-	for _member: int in batch_size:
+	var flanked := 0
+	for member: int in batch_size:
+		var flank := flank_distances[member] if member < flank_distances.size() else 0.0
 		var ring := 0
 		while true:
 			var radius := SPAWN_RING_STEP * float(ring)
 			var candidates := 1 if ring == 0 else 2 * arc_steps + 1
 			var accepted := Vector2.ZERO
 			var found := false
+			if ring == 0 and flank > 0.0 and flanked < 2:
+				var preferred := base + lateral * (flank if flanked == 0 else -flank)
+				flanked += 1
+				if _spot_is_clear(preferred, occupied, placed):
+					accepted = preferred
+					found = true
 			for index: int in candidates:
+				if found:
+					break
 				var candidate := _ring_candidate(base, away, lateral, radius, index)
 				if _spot_is_clear(candidate, occupied, placed):
 					accepted = candidate
@@ -2916,8 +3080,31 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		# and an actor with none has nothing that could be left frozen on a stale clip.
 		var rig: UnitAnimationController = (unit as UnitActor).animation
 		if rig != null:
+			# Story 7-3 (ACs 7, 12, 16, 18): the unit's BETWEEN-ATTACK BEHAVIOUR rides the same push, one
+			# call ahead of it -- five plain ints off this record and the kind's bark interval. The
+			# zombie's controller ignores the call; the hound's stores it for the `on_unit_tick` below,
+			# which is still where every clip is selected. Polled, like the phase: no observation seam.
+			rig.on_unit_behavior(player.units.behavior_phase_at(index),
+					player.units.behavior_ticks_at(index), player.units.circle_dir_at(index),
+					player.units.attack_choice_at(index), player.units.attack_ticks_at(index),
+					_bark_interval_ticks(player, index), _bark_chance(player, index))
+			# Story 7-3, feel pass: THE MOTION THE BODY ACTUALLY MADE since the last tick, in its own
+			# frame (how fast forward, how fast to its right), and the kind's PRESENTATION ROW, which
+			# carries its authored blend, playback and heading knobs (null for a kind with no row). The
+			# hound picks its locomotion clip and its playback rate from these; the zombie's controller
+			# ignores the call. Measured off the actor's position, so a body that is blocked or pushed
+			# is animated as what it is doing.
+			var motion := (unit as UnitActor).take_motion(1.0 / float(TimingWindow.TICK_HZ))
+			rig.on_unit_motion(motion.y, motion.x, _unit_row(player, index))
 			rig.on_unit_tick(player.units.is_alive_at(index),
 					player.units.attack_phase_at(index), (unit as UnitActor).velocity.length())
+			# Story 7-3 (AC 18): a bark that came due on this push is played AT THE UNIT, from its kind's
+			# presentation row. Sound only -- nothing reads it back.
+			#
+			# FEEL PASS 2: EVERY VOICE the rig has due (growl, bark, bite snap, leap snarl, yelp, death),
+			# each in THIS hound's own voice. See `_play_unit_voice`.
+			for voice: StringName in rig.take_voices():
+				_play_unit_voice(slot, player, index, unit as Node3D, voice)
 		# Story 4-3c (AC 4, `4-3c/R4`): THE AIM LIVENESS GATE, which this seat had none of. Today
 		# it is invisible for the reason above (the corpse's actor is already freed), but the seat
 		# is wrong on its own: `attack_phase_at` below is FROZEN for a dead unit -- nothing resets
@@ -2943,6 +3130,11 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		# `UNIT_SCENE`, which also never carries it, so this never throws and never over-reaches.
 		if unit.get_node_or_null("Mesh/Totem") != null:
 			continue
+		# Story 7-3 (AC 16): A UNIT GETTING UP KEEPS THE HEADING ITS CORPSE HAD (set at spawn). It is
+		# rooted and playing its death backwards; turning to face a target mid-rise would spin a body
+		# that is still on the ground. No kind but the hound authors a get-up.
+		if player.units.behavior_phase_at(index) == UnitBoard.BehaviorPhase.GET_UP:
+			continue
 		# Story 4-3b (AC 12): A UNIT THAT IS SWINGING IS AIMED FROM ITS LOCKED DIRECTION, not at its
 		# live target. The direction locks at windup start and must NOT be recomputed -- that is the
 		# whole point of the lock -- and the unit's Hitbox is a CHILD of the root this yaw turns, so
@@ -2954,8 +3146,31 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		# the acquired target pair below already has. A unit that has never had a fact against its
 		# target carries a zero heading, and `aim_along` KEEPS the current rotation for it rather
 		# than snapping to an arbitrary one (its own no-direction precedent).
-		if player.units.attack_phase_at(index) != UnitBoard.AttackPhase.IDLE:
-			(unit as UnitActor).aim_along(player.units.attack_dir_at(index))
+		#
+		# FEEL PASS 2: A KIND THAT AUTHORS A TURN RATE TURNS ONTO THE LOCKED HEADING DURING ITS WINDUP,
+		# at that rate, instead of snapping to it on the windup's first tick -- a hound that landed
+		# past its target and presses its attack would otherwise flip round in one frame. THE LOCK IS
+		# UNTOUCHED: the heading is state's and frozen, and from the first ACTIVE tick (when the hitbox
+		# opens) the body is on it exactly. A kind authoring no rate (the zombie) snaps as it always has.
+		#
+		# AND IN ITS RECOVERY SUCH A KIND KEEPS THE HEADING IT STRUCK ALONG. State's direction is frozen
+		# across WINDUP and ACTIVE only (`_mark_reach_from_fact`): in RECOVERY it is already being
+		# refreshed for the NEXT swing, so a body snapped onto it would flip round the instant a leap
+		# landed past its target. It lands, recovers facing the way it leapt, and turns afterwards.
+		var turn_step := deg_to_rad(_unit_turn_rate(player, index)) / float(TimingWindow.TICK_HZ)
+		var attack_phase := player.units.attack_phase_at(index)
+		if attack_phase != UnitBoard.AttackPhase.IDLE:
+			_fix_swing_travel(player, index, unit as UnitActor)
+			if turn_step <= 0.0 or attack_phase == UnitBoard.AttackPhase.ACTIVE:
+				(unit as UnitActor).aim_along(player.units.attack_dir_at(index))
+			elif attack_phase == UnitBoard.AttackPhase.WINDUP:
+				(unit as UnitActor).turn_along(player.units.attack_dir_at(index), turn_step)
+			continue
+		# Story 7-3, feel pass 2: THREE PHASES IN WHICH THE BODY DOES NOT LOOK AT ITS TARGET. Running on
+		# after a leap it keeps the heading it landed on. Repositioning and retreating it faces the way
+		# it is going (`_travel_heading`: a dog running an arc, or away, does not run sideways or
+		# backwards), and looks at its target again once it has got where it was going.
+		if player.units.behavior_phase_at(index) == UnitBoard.BehaviorPhase.RUN_ON:
 			continue
 		var target_slot := player.units.target_slot_at(index)
 		if target_slot == TargetingService.NO_TARGET_SLOT:
@@ -2963,7 +3178,225 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		var target_index := player.units.target_index_at(index)
 		var target_position: Variant = _target_world_position(target_slot, target_index)
 		if target_position is Vector3:
-			(unit as UnitActor).aim_at(target_position)
+			var heading := _travel_heading(slot, player, index, unit as UnitActor, target_position)
+			# Story 7-3, feel pass: a kind that authors a TURN RATE turns toward its target at that
+			# rate instead of snapping to it. A kind authoring none (the zombie) snaps as it always has.
+			if not heading.is_zero_approx():
+				if turn_step > 0.0:
+					(unit as UnitActor).turn_along(heading, turn_step)
+				else:
+					(unit as UnitActor).aim_along(heading)
+			elif turn_step > 0.0:
+				(unit as UnitActor).turn_toward(target_position, turn_step)
+			else:
+				(unit as UnitActor).aim_at(target_position)
+
+
+## Story 7-3, feel pass 2: a retreating unit this close (m) to its authored retreat distance has
+## arrived, and turns back to its target. Not tuning: the line between "still going" and "there".
+const RETREAT_ARRIVED := 0.1
+
+
+## Story 7-3, feel pass 2: THE WAY THE UNIT AT `index` IS GOING while it REPOSITIONS (along its arc
+## round `target_position`, the drawn way round) or RETREATS (straight away from it, until it stands
+## its kind's authored retreat distance out) -- the planar heading its body turns to and travels
+## along. ZERO in every other phase, and for a retreat that has arrived: the body looks at its target.
+##
+## ONE FUNCTION, TWO READERS: the aim seat turns the body onto it, and the drive seat lets the body
+## travel only as far as it already faces it (`UnitActor.alignment_with`), so a hound turns and then
+## goes rather than sliding sideways or backwards at a run.
+func _travel_heading(slot: int, player: PlayerState, index: int, unit: UnitActor,
+		target_position: Vector3) -> Vector2:
+	var behavior := player.units.behavior_phase_at(index)
+	if behavior != UnitBoard.BehaviorPhase.REPOSITION and behavior != UnitBoard.BehaviorPhase.RETREAT:
+		return Vector2.ZERO
+	var balance := _match_state.balance
+	var kind := balance.kind_at(player.units.kind_index_at(index)) if balance != null else null
+	if kind == null:
+		return Vector2.ZERO
+	if behavior == UnitBoard.BehaviorPhase.REPOSITION:
+		# The move `UnitActor.circle()` is about to make at the unit's full reposition pace: along
+		# the arc once it is on its radius, and partly outward (or inward) while it spirals onto it.
+		return unit.circle_move(target_position, _reposition_speed(kind, slot, index),
+				_circle_radius(kind, slot, index, 0, 0), player.units.circle_dir_at(index),
+				1.0 / float(TimingWindow.TICK_HZ)).normalized()
+	var from := Vector2(unit.global_position.x - target_position.x, unit.global_position.z - target_position.z)
+	if from.is_zero_approx() or from.length() >= kind.retreat_distance - RETREAT_ARRIVED:
+		return Vector2.ZERO
+	return from.normalized()
+
+
+## Story 7-3, feel pass 2: how much of its pace `unit` runs at toward `target_position`, by how far
+## it already faces it (`UnitActor.alignment_with`): 1.0 facing it, 0.0 square to it or turned away.
+## EXACTLY 1.0 FOR A KIND THAT AUTHORS NO TURN RATE (the zombie snaps to its target and is always
+## facing it; its speed is the number it always was).
+func _facing_scale(kind: UnitKindProfile, unit: UnitActor, target_position: Vector3) -> float:
+	if kind.turn_rate_degrees_per_second <= 0.0:
+		return 1.0
+	return unit.alignment_with(Vector2(target_position.x - unit.global_position.x,
+			target_position.z - unit.global_position.z))
+
+
+## The pace the unit at (`slot`, `index`) repositions at when it faces the way it is going: its own
+## pace (the kind's speed, scaled by its temperament) times the kind's authored reposition multiplier.
+func _reposition_speed(kind: UnitKindProfile, slot: int, index: int) -> float:
+	return kind.move_speed * UnitTemperament.factor(slot, index, UnitTemperament.CHANNEL_SPEED,
+			kind.temperament_speed_spread) * kind.reposition_move_speed_multiplier
+
+
+## Story 7-3, feel pass 2: FIX HOW FAR THE SWING THE UNIT AT `index` HAS JUST BEGUN WILL TRAVEL, once
+## per swing (keyed by the unit's own swing counter) and on the first tick the runner sees it. For an
+## attack that authors a travel band: the planar distance from the body to the point its aim was led
+## to, plus the authored overshoot, clamped to the authored [min, max]. Zero for any other attack.
+##
+## THE DISTANCE IS ACTOR-OWNED, LIKE THE POSITION IT IS MEASURED FROM (`4-1/R12`): it is handed to the
+## actor and spent by the drive phase over the swing's ACTIVE window. State owns the HEADING (locked at
+## windup start) and the WINDOW; nothing here is written into state and nothing is drawn.
+func _fix_swing_travel(player: PlayerState, index: int, unit: UnitActor) -> void:
+	var swing := player.units.attack_count_at(index)
+	if unit.swing_travel_is_for(swing):
+		return
+	var balance := _match_state.balance
+	var kind := balance.kind_at(player.units.kind_index_at(index)) if balance != null else null
+	var attack := kind.attack_at(player.units.attack_choice_at(index)) if kind != null else null
+	if attack == null or attack.travel_max_distance <= 0.0:
+		unit.set_swing_travel(swing, 0.0)
+		return
+	var reach := 0.0
+	var target_slot := player.units.target_slot_at(index)
+	if target_slot != TargetingService.NO_TARGET_SLOT:
+		var target_index := player.units.target_index_at(index)
+		var target_position: Variant = _target_world_position(target_slot, target_index)
+		if target_position is Vector3:
+			var led := _led_target_position(target_slot, target_index, target_position as Vector3, attack)
+			reach = Vector2(led.x - unit.global_position.x, led.z - unit.global_position.z).length()
+	# Feel pass 3: an attack that authors an overshoot FRACTION overshoots by that share of the
+	# distance, and never by less than its fixed overshoot (the floor that lands it clear of a body).
+	var overshoot := attack.travel_overshoot
+	if attack.travel_overshoot_fraction > 0.0:
+		overshoot = maxf(overshoot, reach * attack.travel_overshoot_fraction)
+	unit.set_swing_travel(swing, clampf(reach + overshoot,
+			minf(attack.travel_min_distance, attack.travel_max_distance), attack.travel_max_distance))
+
+
+## Story 7-3, feel pass 2: how many unit voices this runner has played. Presentation bookkeeping: it
+## picks the next play's variant and its small pitch offset, so no two plays in a row sound the same.
+var _voice_plays := 0
+
+
+## Story 7-3, feel pass 2: PLAY `voice` AT THE UNIT at (`slot`, `index`), IN ITS OWN VOICE. Sound only:
+## nothing reads it back, nothing is drawn from the match RNG and no state is written.
+##   PITCH    the unit's own, fixed for its life by its temperament (`UnitTemperament.CHANNEL_VOICE`,
+##            inside the row's `voice_pitch_spread`), times a small offset that changes with every play
+##            (inside the row's `voice_pitch_variation`).
+##   VARIANT  the next one round, offset by the unit's board index so two siblings do not step in time.
+##   THE CAP  every voice counts toward the row's `voice_cap` except the ones the vocabulary exempts
+##            (the bite's snap and the yelp are tied to a hit and must not be swallowed).
+## Both sequences are fixed functions of a counter, so a replay sounds as the match did.
+func _play_unit_voice(slot: int, player: PlayerState, index: int, unit: Node3D, voice: StringName) -> void:
+	if _effects == null:
+		return
+	var row_id: StringName = _UNIT_ROW_BY_KIND.get(_unit_kind_name(player, index), &"")
+	var row := _effects.row(row_id)
+	if row == null:
+		return
+	_voice_plays += 1
+	var pitch := UnitTemperament.factor(slot, index, UnitTemperament.CHANNEL_VOICE,
+			row.knob(&"voice_pitch_spread", 0.0)) \
+			* UnitTemperament.factor(index, _voice_plays, UnitTemperament.CHANNEL_VOICE,
+					row.knob(&"voice_pitch_variation", 0.0))
+	_effects.play_voice_at(row_id, voice, unit, _voice_plays + index, pitch,
+			not EffectPresentationSet.UNCAPPED_VOICES.has(voice))
+
+
+## Story 7-3, feel pass: the authored turn rate of the record at `index`'s kind, in degrees per second;
+## 0.0 (snap) for a kind that authors none or does not resolve. Read inline (CONSTRAINT C).
+func _unit_turn_rate(player: PlayerState, index: int) -> float:
+	var balance := _match_state.balance
+	if balance == null:
+		return 0.0
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	return kind.turn_rate_degrees_per_second if kind != null else 0.0
+
+
+## Story 7-3, feel pass: the authored bark chance of the record at `index`'s kind (0.0: never).
+func _bark_chance(player: PlayerState, index: int) -> float:
+	var balance := _match_state.balance
+	if balance == null:
+		return 0.0
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	return kind.bark_chance if kind != null else 0.0
+
+
+## Story 7-3, feel pass: THE CIRCLE IS NOT A CIRCLE. The radius the unit at (`slot`, `index`) steers
+## for with `ticks_left` of its circle remaining: the kind's authored radius, scaled by the unit's
+## temperament, BREATHING by the authored amplitude over the authored period (`breathing` false gives
+## the unit's own resting radius, which is where its back-off holds). The clock is the circle's own
+## state countdown and the starting point of the cycle is the unit's, so no two circles trace one
+## path. Every factor is bounded by authored data, and the authoring audit keeps the widest and the
+## narrowest radius inside the two reach bands. `wobble_ticks` is the kind's authored period through
+## the one conversion (`UnitKindTicks.circle_wobble_ticks`); 0 is the plain circle.
+func _circle_radius(kind: UnitKindProfile, slot: int, index: int, ticks_left: int,
+		wobble_ticks: int) -> float:
+	var radius := kind.circle_radius * UnitTemperament.factor(slot, index,
+			UnitTemperament.CHANNEL_RADIUS, kind.temperament_radius_spread)
+	if wobble_ticks <= 0:
+		return radius
+	var amplitude := kind.circle_wobble_amplitude * UnitTemperament.factor(slot, index,
+			UnitTemperament.CHANNEL_WOBBLE, kind.temperament_wobble_spread)
+	return radius * (1.0 + amplitude * sin(_circle_wobble_angle(slot, index, ticks_left, wobble_ticks)))
+
+
+## The circle's SPEED at the same moment: `pace` times the kind's circle multiplier, varying by the
+## authored fraction a quarter-cycle out of step with the radius.
+func _circle_speed(kind: UnitKindProfile, slot: int, index: int, ticks_left: int, wobble_ticks: int,
+		pace: float) -> float:
+	var speed := pace * kind.circle_move_speed_multiplier
+	if wobble_ticks <= 0:
+		return speed
+	return speed * (1.0 + kind.circle_speed_variation
+			* cos(_circle_wobble_angle(slot, index, ticks_left, wobble_ticks)))
+
+
+## Where in its wobble cycle the unit is, in radians: the circle's countdown over the authored period,
+## offset by the unit's own starting point.
+func _circle_wobble_angle(slot: int, index: int, ticks_left: int, wobble_ticks: int) -> float:
+	return TAU * (float(ticks_left) / float(wobble_ticks)
+			+ UnitTemperament.unit_value(slot, index, UnitTemperament.CHANNEL_WOBBLE_PHASE))
+
+
+## The wobble period of the record at `index`'s kind, in ticks (0: the kind authors none).
+func _circle_wobble_ticks(player: PlayerState, index: int) -> int:
+	var ticks := _match_state.balance_ticks
+	if ticks == null:
+		return 0
+	var kind_ticks := ticks.kind_ticks_at(player.units.kind_index_at(index))
+	return kind_ticks.circle_wobble_ticks if kind_ticks != null else 0
+
+
+## Story 7-3, feel pass: the SEPARATION PUSH on the unit at (`slot`, `index`) -- the sum, over every
+## other live unit actor of either slot closer than `distance`, of the direction away from it,
+## weighted 0 at `distance` and 1 when touching. Planar. Positions only: nothing is written anywhere.
+func _separation_push(slot: int, index: int, unit: UnitActor, distance: float) -> Vector2:
+	var push := Vector2.ZERO
+	if distance <= 0.0:
+		return push
+	for other_slot: int in 2:
+		var player: PlayerState = _match_state.p1 if other_slot == 0 else _match_state.p2
+		var actors: Array = _unit_actors[other_slot]
+		for other_index: int in actors.size():
+			if other_slot == slot and other_index == index:
+				continue
+			var other: Node = actors[other_index]
+			if not is_instance_valid(other) or not player.units.is_alive_at(other_index):
+				continue
+			var from := Vector2(unit.global_position.x - (other as Node3D).global_position.x,
+					unit.global_position.z - (other as Node3D).global_position.z)
+			var apart := from.length()
+			if apart >= distance or apart <= 0.0:
+				continue
+			push += from / apart * (1.0 - apart / distance)
+	return push
 
 
 ## Story 4-3 (AC 1/AC 3, `4-3/R8`): walk slot `slot`'s spawned boxes toward whatever their records
@@ -3004,6 +3437,11 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
 			continue
+		# Story 7-3, feel pass 2: A SWING THAT OVERSHOOTS PASSES OTHER BODIES WHILE IT TRAVELS (the leap
+		# goes over its target and lands beyond it), and only then. Decided here, ahead of every skip
+		# path below, so a unit whose target vanished mid-leap still stops passing when the window shuts.
+		_set_unit_passing(unit as UnitActor, _swing_overshoots(balance, player, index),
+				player.units.target_slot_at(index), player.units.target_index_at(index))
 		var target_slot := player.units.target_slot_at(index)
 		if target_slot == TargetingService.NO_TARGET_SLOT:
 			# Story 4-3c (AC 4, `4-3c/R5`, path list corrected `4-3c/R12`, AMENDED `4-3c1/R3`):
@@ -3076,10 +3514,120 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 				# would leave the unit gliding on its last speed forever.
 				(unit as UnitActor).velocity = Vector3.ZERO
 				continue
+			# Story 7-3 (`7-3/R21`): the multipliers are per ATTACK, so the seat is told which entry
+			# this swing is.
+			var attack_phase := player.units.attack_phase_at(index)
 			var phase_multiplier := _match_state.unit_attack_phase_multiplier(
-					player.units.attack_phase_at(index), kind_index)
+					attack_phase, kind_index,
+					player.units.attack_choice_at(index))
+			# Story 7-3 (AC 9, `7-3/R21`): A SWING THAT TRAVELS GOES ALONG ITS LOCKED DIRECTION, not at the
+			# live target -- the leap. The direction is the one state froze at windup start
+			# (`attack_dir_at`, the heading `_aim_unit_actors` already faces the unit along), so a target
+			# that steps aside is leapt past. This re-opens `4-3c/R19`'s swing commitment for an attack
+			# that AUTHORS a travel multiplier and for nothing else: the zombie's swing and the hound's
+			# bite author 0.0 in every phase, never satisfy this test, and are rooted by the
+			# `approach()` call below exactly as before.
+			#
+			# FEEL PASS 2: AN ATTACK THAT AUTHORS A TRAVEL BAND TRAVELS BY DISTANCE, during its ACTIVE
+			# window only: the distance `_fix_swing_travel` handed the actor when the windup began,
+			# spread evenly over the window's own ticks (state's, read inline). The bite's short lunge
+			# and the leap that lands past its target are this one branch with different authoring. In
+			# its windup and its recovery such an attack is rooted by the `approach()` below, like any
+			# swing that authors no phase multiplier.
+			var swing_attack := kind.attack_at(player.units.attack_choice_at(index))
+			if attack_phase == UnitBoard.AttackPhase.ACTIVE and swing_attack != null \
+					and swing_attack.travel_max_distance > 0.0:
+				(unit as UnitActor).travel(player.units.attack_dir_at(index),
+						(unit as UnitActor).swing_travel(player.units.attack_count_at(index))
+								/ _unit_active_seconds(kind_index, player.units.attack_choice_at(index),
+										swing_attack))
+				continue
+			if attack_phase != UnitBoard.AttackPhase.IDLE and phase_multiplier > 0.0:
+				(unit as UnitActor).travel(player.units.attack_dir_at(index),
+						kind.move_speed * phase_multiplier)
+				continue
+			# Story 7-3 (AC 12, AC 7, AC 16): THE BODY FOLLOWS THE BEHAVIOUR PHASE STATE DECIDED. Which
+			# phase, for how long and which way round are state facts drawn from the match seed
+			# (`7-3/R20`); how fast, how far out and how wide are the kind's authored numbers, read
+			# inline (CONSTRAINT C). Nothing here ends a phase. A kind that authors no such behaviour
+			# is always ENGAGING and falls through to the `approach()` it has always had.
+			#
+			# FEEL PASS: THE PACE IS THE UNIT'S OWN. Its temperament (a fixed function of its address,
+			# `UnitTemperament`) scales the kind's move speed inside the authored spread, so two hounds
+			# never run, back off or circle at one speed. A kind authoring no spread has factor 1.0
+			# exactly and moves as it always did. The leap above is NOT scaled: its travel is the
+			# authored distance the reach band was tuned against.
+			var pace := kind.move_speed * UnitTemperament.factor(slot, index,
+					UnitTemperament.CHANNEL_SPEED, kind.temperament_speed_spread)
+			# SEPARATION, for a kind that authors a distance: the push away from every other unit that
+			# stands too close, handed to the actor for the one move it makes below. A rooted unit
+			# makes none and is never shoved.
+			if kind.separation_distance > 0.0:
+				(unit as UnitActor).set_separation(
+						_separation_push(slot, index, unit as UnitActor, kind.separation_distance),
+						pace * kind.separation_strength, 1.0 if index % 2 == 0 else -1.0)
+			if attack_phase == UnitBoard.AttackPhase.IDLE:
+				match player.units.behavior_phase_at(index):
+					UnitBoard.BehaviorPhase.BACK_OFF, UnitBoard.BehaviorPhase.FEINT_OUT:
+						(unit as UnitActor).back_away(target_position,
+								pace * kind.back_off_move_speed_multiplier,
+								_circle_radius(kind, slot, index, 0, 0))
+						continue
+					UnitBoard.BehaviorPhase.CIRCLE, UnitBoard.BehaviorPhase.CIRCLE_TURN:
+						var ticks_left := player.units.behavior_ticks_at(index)
+						(unit as UnitActor).circle(target_position,
+								_circle_speed(kind, slot, index, ticks_left, _circle_wobble_ticks(player, index), pace),
+								_circle_radius(kind, slot, index, ticks_left, _circle_wobble_ticks(player, index)),
+								player.units.circle_dir_at(index), delta)
+						continue
+					UnitBoard.BehaviorPhase.ORBIT, UnitBoard.BehaviorPhase.ORBIT_TURN:
+						# Feel pass 3: the long orbit -- the circle's own speed and breathing radius,
+						# moved as a strafe (`UnitActor.orbit`).
+						var orbit_left := player.units.behavior_ticks_at(index)
+						(unit as UnitActor).orbit(target_position,
+								_circle_speed(kind, slot, index, orbit_left, _circle_wobble_ticks(player, index), pace),
+								_circle_radius(kind, slot, index, orbit_left, _circle_wobble_ticks(player, index)),
+								player.units.circle_dir_at(index), kind.orbit_approach_share, delta)
+						continue
+					UnitBoard.BehaviorPhase.FEINT_IN:
+						# The dart: straight at the target, and no closer than the authored distance.
+						(unit as UnitActor).approach(target_position,
+								pace * kind.feint_move_speed_multiplier * _facing_scale(kind, unit as UnitActor, target_position),
+								kind.feint_closest_distance, delta)
+						continue
+					UnitBoard.BehaviorPhase.STALK, UnitBoard.BehaviorPhase.REACT, \
+							UnitBoard.BehaviorPhase.GET_UP:
+						# Rooted: watching, flinching, or rising from its corpse. Stopped, not driven.
+						(unit as UnitActor).velocity = Vector3.ZERO
+						continue
+					UnitBoard.BehaviorPhase.RUN_ON:
+						# Feel pass 2: it keeps running the way it landed (the aim seat leaves that
+						# heading alone), for as long as state says.
+						(unit as UnitActor).run_ahead(pace * kind.run_on_move_speed_multiplier)
+						continue
+					UnitBoard.BehaviorPhase.REPOSITION:
+						# Feel pass 2: a run round the target on its own resting radius, the drawn way
+						# round. How much of a lap that is, is how long state lets it run. It goes
+						# only as fast as it already faces the way it is going: it turns, then runs.
+						(unit as UnitActor).circle(target_position,
+								_reposition_speed(kind, slot, index) * (unit as UnitActor).alignment_with(
+										_travel_heading(slot, player, index, unit as UnitActor, target_position)),
+								_circle_radius(kind, slot, index, 0, 0),
+								player.units.circle_dir_at(index), delta)
+						continue
+					UnitBoard.BehaviorPhase.RETREAT:
+						# Feel pass 2: away from the target, and no further than the authored distance;
+						# it turns its back first, then trots.
+						(unit as UnitActor).back_away(target_position,
+								pace * kind.retreat_move_speed_multiplier * (unit as UnitActor).alignment_with(
+										_travel_heading(slot, player, index, unit as UnitActor, target_position)),
+								kind.retreat_distance)
+						continue
+			# Feel pass 2: a kind that TURNS at a rate runs in only as fast as it already faces its
+			# target. A hound that landed past its target, or ran on from it, turns round and then
+			# comes back; it does not sprint backwards while its body is still turning.
 			(unit as UnitActor).approach(target_position,
-					kind.move_speed * phase_multiplier,
+					pace * phase_multiplier * _facing_scale(kind, unit as UnitActor, target_position),
 					kind.stop_distance, delta)
 		else:
 			# The SECOND of the two SKIP paths (`4-3c/R12`, amended `4-3c1/R3` -- the swing-commitment
@@ -3093,6 +3641,49 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 			# its position for that frame (`4-3/R15`) is unchanged; what changes is that it now
 			# also holds its STILLNESS.
 			(unit as UnitActor).velocity = Vector3.ZERO
+
+
+## Story 7-3, feel pass 2: is the unit at `index` in the ACTIVE window of an attack that authors a
+## travel band AND an overshoot -- a swing that carries it past its target?
+func _swing_overshoots(balance: BalanceConfig, player: PlayerState, index: int) -> bool:
+	if player.units.attack_phase_at(index) != UnitBoard.AttackPhase.ACTIVE:
+		return false
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	var attack := kind.attack_at(player.units.attack_choice_at(index)) if kind != null else null
+	return attack != null and attack.travel_max_distance > 0.0 and attack.travel_overshoot > 0.0
+
+
+## Story 7-3, feel pass 2: start or stop `unit` PASSING THE TARGET IT LEAPS AT -- the one body its
+## swing is aimed to land beyond. A passing unit and that body do not collide (each is made an
+## exception of the other, so neither is stopped or shoved); everything else still stops it: its
+## sibling, the other hero, the arena's walls. Bodies only: its hitbox is an `Area3D` and still
+## overlaps whatever it flies through, which is how the leap lands its hit. A no-op when nothing
+## changes, so the every-tick call costs one comparison.
+func _set_unit_passing(unit: UnitActor, passing: bool, target_slot: int = TargetingService.NO_TARGET_SLOT,
+		target_index: int = 0) -> void:
+	if unit.is_passing() == passing:
+		return
+	if not passing:
+		unit.stop_passing()
+		return
+	var others: Array[PhysicsBody3D] = []
+	if target_slot != TargetingService.NO_TARGET_SLOT:
+		var target := _actor_at(target_slot, target_index)
+		if target is PhysicsBody3D and target != unit:
+			others.append(target as PhysicsBody3D)
+	unit.start_passing(others)
+
+
+## Story 7-3, feel pass 2: how long the ACTIVE window of attack entry `choice` of kind `kind_index` is,
+## in seconds, as state counts it (its tick count; the authored seconds when no tick record resolves).
+## Never zero: the caller divides a distance by it.
+func _unit_active_seconds(kind_index: int, choice: int, attack: UnitAttackProfile) -> float:
+	var ticks := _match_state.balance_ticks
+	var kind_ticks := ticks.kind_ticks_at(kind_index) if ticks != null else null
+	var attack_ticks := kind_ticks.attack_at(choice) if kind_ticks != null else null
+	if attack_ticks != null and attack_ticks.active_ticks > 0:
+		return float(attack_ticks.active_ticks) / float(TimingWindow.TICK_HZ)
+	return maxf(attack.active_seconds, 1.0 / float(TimingWindow.TICK_HZ))
 
 
 ## The `[slot, index]` pair resolved to a world position, and this is the ONLY place that translation
@@ -3430,9 +4021,22 @@ func _gather_unit_facts(attacker_slot: int, player: PlayerState) -> void:
 		# A KIND WITH NO ATTACK NEVER PROBES, so the two accelerator totems produce no facts at all
 		# (AC 3: they never attack). That is an authoring fact, not a kind-name branch.
 		var attack := _unit_attack_profile(balance, player, index)
-		if probing and attack != null:
+		# Story 7-3, feel pass 2: A KIND THAT LEADS ITS AIM PROBES ON EVERY TICK IT COULD BEGIN A
+		# WINDUP, throttle or not. The direction the probe carries is the heading state locks at windup
+		# start, and a direction up to a whole throttle interval old is a lead aimed at where a walking
+		# target was going a fifth of a second ago. A kind authoring no lead (the zombie, every totem)
+		# keeps the throttle alone and produces exactly the facts it produced before.
+		var second_attack := _unit_second_attack_profile(balance, player, index)
+		if attack != null and (probing or _wants_fresh_aim(player, index, attack, second_attack)):
 			_push_reach_probe(attacker_slot, player, index, unit_actor, attacker_address,
-					attack_index, attack.range)
+					attack_index, attack, MatchState.CONTACT_REACH_PROBE)
+			# Story 7-3 (AC 9, `7-3/R20`): THE SECOND REACH PROBE, on the same throttle and the same
+			# intake, measured against the kind's SECOND attack record. A kind authoring one attack
+			# has no second record and pushes nothing, so the zombie and the Combat totem produce
+			# exactly the facts they produced before.
+			if second_attack != null:
+				_push_reach_probe(attacker_slot, player, index, unit_actor, attacker_address,
+						attack_index, second_attack, MatchState.CONTACT_REACH_PROBE_SECOND)
 		if not player.units.is_hitbox_active_at(index):
 			continue
 		# Story 4-4 (AC 3/AC 14): THE MELEE PASS IS SKIPPED FOR A KIND THAT FIRES A PROJECTILE, and
@@ -3524,6 +4128,28 @@ func _spawn_missing_projectile_actors(slot: int, player: PlayerState) -> void:
 			if effect_id != &"" and board.source_index_at(index) >= 0:
 				_effects.skull_source_glow(_actor_at(slot, board.source_index_at(index)))
 		actors.append(shot)
+
+
+## Story 7-3, feel pass 2 (defect E; the path predates the story): THE ACTOR ARRAY IS RECONCILED WITH
+## THE BOARD before either poll below reads it. The board shrinks on exactly one path -- the debug
+## reset, which empties it INSIDE `advance()` -- while the actors are freed off the `round_started`
+## relay, which runs at the signal drain, the LAST step of the frame. In between, the free poll walked
+## its index-aligned array and asked the board for the effect id of records it no longer held: the
+## violated invariant the operator saw when a round was reset with a shot in the air.
+##
+## AN ARRAY LONGER THAN ITS BOARD CAN ONLY MEAN THAT RESET, so every actor of the slot goes, exactly
+## as `_free_unit_actors` will free them again (to no effect) at the drain. Not only the surplus: after
+## a clear no index names the record it named before. The spawn poll then builds actors for whatever
+## the same advance() put on the fresh board. No ending is noted for a shot the reset removed -- the
+## relay clears `_ended_shots` regardless.
+func _reconcile_projectile_actors(slot: int, player: PlayerState) -> void:
+	var actors: Array = _projectile_actors[slot]
+	if actors.size() <= player.projectiles.size():
+		return
+	for shot: Node in actors:
+		if is_instance_valid(shot):
+			shot.queue_free()
+	actors.clear()
 
 
 ## Where a shot fired by the unit at `source_index` on slot `slot` first appears. See
@@ -3734,6 +4360,16 @@ func _unit_attack_profile(balance: BalanceConfig, player: PlayerState,
 	return kind.attack_at(0)
 
 
+## Story 7-3 (AC 9): the unit's SECOND attack record (the mid-range one), or NULL when its kind
+## authors fewer than two -- `_unit_attack_profile`'s shape and its null-on-every-miss answer.
+func _unit_second_attack_profile(balance: BalanceConfig, player: PlayerState,
+		index: int) -> UnitAttackProfile:
+	var kind := balance.kind_at(player.units.kind_index_at(index))
+	if kind == null:
+		return null
+	return kind.attack_at(1)
+
+
 ## Story 4-3b (AC 13, `4-3b/R17a`/`R17b`): THE THROTTLED REACH PROBE. One kind-marked fact per unit
 ## whose ACQUIRED TARGET is within the authored reach, on the SAME cadence the minion retargeting
 ## already uses, off the SAME authored field -- `minion_retarget_interval_ticks`, 12 ticks at the
@@ -3771,8 +4407,18 @@ func _unit_attack_profile(balance: BalanceConfig, player: PlayerState,
 ## THE INTERVAL AND THE REACH ARE READ INLINE (CONSTRAINT C) off the config the runner already
 ## applied -- never `BalanceConfigService`, never cached on this node or on an actor, which during a
 ## replay would measure reach at the AUTHORED value instead of the RECORDED one.
+##
+## STORY 7-3 (AC 9, `7-3/R20`): IT TAKES THE PROBE KIND, because there are two bands now and the fact
+## must say which one it confirms (`CONTACT_REACH_PROBE` or `CONTACT_REACH_PROBE_SECOND`). Everything
+## above holds for both: same throttle, same intake, same tap.
+##
+## STORY 7-3, FEEL PASS 2: IT TAKES THE ATTACK RECORD, not its range alone, because the record also
+## says how far the DIRECTION may lead the target (`lead_max_distance`). REACH IS STILL MEASURED TO
+## WHERE THE TARGET IS; only the direction is led, and a record authoring no lead reports the
+## direction this function always reported, bit for bit.
 func _push_reach_probe(attacker_slot: int, player: PlayerState, index: int, unit: UnitActor,
-		attacker_address: Array[int], attack_index: int, reach: float) -> void:
+		attacker_address: Array[int], attack_index: int, attack: UnitAttackProfile,
+		probe_kind: int) -> void:
 	var target_slot := player.units.target_slot_at(index)
 	if target_slot == TargetingService.NO_TARGET_SLOT:
 		return
@@ -3788,19 +4434,78 @@ func _push_reach_probe(attacker_slot: int, player: PlayerState, index: int, unit
 	# "has it arrived" and "is it in reach" are one geometry compared against two authored
 	# numbers rather than two geometries that could disagree. The authoring audit requires
 	# reach >= stop distance for exactly that reason.
-	if dir.length() > reach:
+	if dir.length() > attack.range:
 		return
 	if dir.is_zero_approx():
 		return  # degenerate co-location has no direction -- the seam rejects a zero fact
+	if attack.lead_max_distance > 0.0:
+		# THE LEAD: the direction is to where the target will be when this attack's strike lands.
+		# A led point the unit happens to stand on has no direction; the unled one is kept.
+		var led := _led_target_position(target_slot, target_index, target_position as Vector3, attack)
+		var led_dir := Vector2(unit.global_position.x - led.x, unit.global_position.z - led.z)
+		if not led_dir.is_zero_approx():
+			dir = led_dir
 	# The probe carries the unit's CURRENT attack counter. It keys nothing (a probe never
 	# registers a dedupe hit), but the fact's shape is the seam's and every field is filled
 	# honestly rather than with a placeholder a later reader could mistake for a real swing.
 	var target_address: Array[int] = [target_slot, target_index]
 	var fact_dir := dir.normalized()
 	_recorder.capture_push_contact(attacker_address, target_address, attack_index, fact_dir,
-			MatchState.CONTACT_REACH_PROBE)
+			probe_kind)
 	_match_state.push_contact(attacker_address, target_address, attack_index, fact_dir,
-			MatchState.CONTACT_REACH_PROBE)
+			probe_kind)
+
+
+## Story 7-3, feel pass 2: how many ticks before a behaviour phase ends a leading unit starts probing
+## on every tick. The windup that may follow the phase's end locks the direction of the LAST probe.
+const FRESH_AIM_TICKS := 2
+
+
+## Story 7-3, feel pass 2: MAY THE UNIT AT `index` BEGIN A WINDUP WITHIN A TICK OR TWO, and does
+## either of its attacks lead its aim? Then its probes are pushed on this tick whatever the throttle
+## says. True while it is engaging and not already committed to a swing (so through its approach and
+## its recovery, for a press), and over the last ticks of a phase that ends in a re-engage.
+func _wants_fresh_aim(player: PlayerState, index: int, attack: UnitAttackProfile,
+		second_attack: UnitAttackProfile) -> bool:
+	if attack.lead_max_distance <= 0.0 \
+			and (second_attack == null or second_attack.lead_max_distance <= 0.0):
+		return false
+	var phase := player.units.attack_phase_at(index)
+	if phase == UnitBoard.AttackPhase.WINDUP or phase == UnitBoard.AttackPhase.ACTIVE:
+		return false
+	return player.units.is_engaging_at(index) or player.units.behavior_ticks_at(index) <= FRESH_AIM_TICKS
+
+
+## Story 7-3, feel pass 2: WHERE THE TARGET AT `[target_slot, target_index]` WILL BE WHEN `attack`'S
+## STRIKE LANDS, if it keeps moving as it moves now: its position plus its planar velocity times the
+## time to the middle of the attack's ACTIVE window, the lead capped at the attack's authored
+## `lead_max_distance`. Every number is read inline off the record (CONSTRAINT C). A target that
+## stands still, and an attack that authors no lead, give `target_position` itself.
+func _led_target_position(target_slot: int, target_index: int, target_position: Vector3,
+		attack: UnitAttackProfile) -> Vector3:
+	if attack.lead_max_distance <= 0.0:
+		return target_position
+	var lead := _target_planar_velocity(target_slot, target_index) \
+			* (attack.windup_seconds + 0.5 * attack.active_seconds)
+	if lead.length() > attack.lead_max_distance:
+		lead = lead.normalized() * attack.lead_max_distance
+	return target_position + Vector3(lead.x, 0.0, lead.y)
+
+
+## The planar velocity of the actor at `[target_slot, target_index]` as its last move left it, or
+## zero when there is no such actor -- `_target_world_position`'s lookup, for the velocity.
+func _target_planar_velocity(target_slot: int, target_index: int) -> Vector2:
+	var node: Node = null
+	if target_index == TargetingService.HERO_INDEX:
+		node = _p1_hero if target_slot == 0 else _p2_hero
+	else:
+		var actors: Array = _unit_actors[target_slot]
+		if target_index >= 0 and target_index < actors.size():
+			node = actors[target_index]
+	if not is_instance_valid(node) or not (node is CharacterBody3D):
+		return Vector2.ZERO
+	var velocity := (node as CharacterBody3D).velocity
+	return Vector2(velocity.x, velocity.z)
 
 
 ## Story 4-3a (AC 4): the overlapping area's owning actor resolved to a `[slot, index]` TARGET
@@ -3915,7 +4620,6 @@ func _gather_drain_target(slot: int, player: PlayerState) -> int:
 	var balance := _match_state.balance
 	if balance == null:
 		return MatchState.NO_DRAIN_TARGET
-	var minion_kind := balance.kind_index_of(CardEffectResolver.KIND_MINION)
 	var actors: Array = _unit_actors[slot]
 	# THE CANDIDATE LIST IS BUILT HERE AND THE CHOICE IS MADE BELOW, and the split is what makes the
 	# rule testable at all: everything in this loop touches the scene tree and the board, and nothing
@@ -3924,7 +4628,10 @@ func _gather_drain_target(slot: int, player: PlayerState) -> int:
 	for index: int in actors.size():
 		if not player.units.is_alive_at(index):
 			continue
-		if player.units.kind_index_at(index) != minion_kind:
+		# Story 7-3 (AC 5, `7-3/D4`): a Drain candidate is any living own MINION -- the kind's authored
+		# `is_minion`, the same field `MatchState._is_own_minion` reads, no longer the `minion` name.
+		var candidate_kind := balance.kind_at(player.units.kind_index_at(index))
+		if candidate_kind == null or not candidate_kind.is_minion:
 			continue
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
@@ -4171,6 +4878,11 @@ func _lock_mark_world_position(target_slot: int, target_index: int) -> Variant:
 	var lift := LOCK_MARK_TOTEM_LIFT
 	if unit is UnitActor and (unit as UnitActor).hitbox != null:
 		lift = LOCK_MARK_UNIT_LIFT
+	# Story 7-3 (AC 15, `7-3/D5`): a kind with a measured lift of its own wears it; the two constants
+	# above stay the fallback for every other kind.
+	var kind_name := _unit_kind_name(_match_state.p1 if target_slot == 0 else _match_state.p2, target_index)
+	if _LOCK_MARK_LIFT_BY_KIND.has(kind_name):
+		lift = float(_LOCK_MARK_LIFT_BY_KIND[kind_name])
 	return (world as Vector3) + Vector3.UP * lift
 
 
@@ -4455,6 +5167,11 @@ func _physics_process(delta: float) -> void:
 		#     hero's hurtbox — must still get an actor before that actor is freed, or the array
 		#     would fall out of index-alignment with the board and every later shot would be driven
 		#     as the wrong record.
+		#
+		#     RECONCILE FIRST (story 7-3, feel pass 2, an outside-scope fix): a board the debug reset
+		#     emptied inside the advance() above no longer holds the records these actors stand for.
+		_reconcile_projectile_actors(0, _match_state.p1)
+		_reconcile_projectile_actors(1, _match_state.p2)
 		_spawn_missing_projectile_actors(0, _match_state.p1)
 		_spawn_missing_projectile_actors(1, _match_state.p2)
 		_free_dead_projectile_actors(0, _match_state.p1)

@@ -99,6 +99,27 @@ extends Resource
 @export var raise_hp_percent: float = 100.0
 
 ## ------------------------------------------------------------------------------------------
+## STORY 7-3 (AC 4, `7-3/R16`): THE SUMMON SHAPE -- how many records one `summon_*` cast puts on the
+## board, and of which kind. Two more FLAT exports, on the header's own discipline.
+## ------------------------------------------------------------------------------------------
+## BOTH DEFAULTS ARE LOAD-BEARING, `kill_cap`'s reason verbatim: count 1 and the empty kind keep every
+## summon effect authored before this story (Ruin Vanguard, the three fixture summon cards, the golden's
+## synthesized `summon_<id>` effects) summoning exactly what it summons today.
+##
+## `summon_count` IS READ THROUGH `CardEffectResolver.summon_count_for`, which floors it at zero: a
+## zero or negative count is a successful cast that puts nothing on the board and records no reversal.
+@export var summon_count: int = 1
+
+## The `UnitKindProfile.kind_name` this effect summons. EMPTY MEANS THE EXISTING RULE: a `SUMMON_KINDS`
+## row if the id has one, else the minion kind (`CardEffectResolver.kind_for`). A new summon kind is
+## therefore a data edit and never a `SUMMON_KINDS` row -- that table is also the totem test, so a row
+## would gate the cast on `FeatureFlags.totems`.
+##
+## A NAME `BalanceConfig` DOES NOT AUTHOR PUTS NOTHING ON THE BOARD (`kind_index_of`'s standing
+## contract), never a fallback to another kind.
+@export var summon_kind: StringName = &""
+
+## ------------------------------------------------------------------------------------------
 ## STORY 6-5c: THE HERO-CAST / HONED BOLT NUMBERS. Seven more FLAT exports, on the header's own
 ## discipline (AC 2, `6-5c/R19`): no subclass, no nested resource, so `RecordFile._card_effects`
 ## keeps round-tripping every one of them generically and `_fresh_nested` needs no new row.

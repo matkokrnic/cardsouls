@@ -330,6 +330,309 @@ func approach(target_position: Vector3, speed: float, stop_distance: float, _del
 	var distance := sqrt(to_x * to_x + to_z * to_z)
 	if distance <= stop_distance or distance <= 0.0:
 		velocity = Vector3.ZERO
+		_separation_push = Vector2.ZERO
 		return
-	velocity = Vector3(to_x / distance * speed, 0.0, to_z / distance * speed)
+	velocity = _steered(Vector3(to_x / distance * speed, 0.0, to_z / distance * speed))
 	move_and_slide()
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-3, FEEL PASS: SEPARATION, A TURN RATE AND THE MOTION ACTUALLY MADE. Same posture as
+## everything above: told the answer, planar, no decision, no state handle, no balance copy.
+## ------------------------------------------------------------------------------------------
+
+## The steering the runner handed this unit for its NEXT move, and nothing after it: the summed
+## away-from-neighbour push (each neighbour weighted 0 at the kind's separation distance, 1 when
+## touching), the most speed it may add, and which way round this unit goes when a neighbour is
+## dead ahead.
+var _separation_push := Vector2.ZERO
+var _separation_speed := 0.0
+var _separation_side := 1.0
+
+## Where this unit stood when `take_motion()` last asked, and whether it has asked yet.
+var _motion_from := Vector3.ZERO
+var _motion_sampled := false
+
+
+## Hand this unit its separation steering for the next `approach()` / `back_away()` / `circle()`.
+## The runner computes `push` from where the other units stand; the unit only bends its own move by
+## it. A rooted unit and a leaping one (`travel()`) ignore it and drop it: nothing is ever shoved,
+## and steering handed for one tick never bends a later one.
+func set_separation(push: Vector2, max_speed: float, side: float) -> void:
+	_separation_push = push
+	_separation_speed = max_speed
+	_separation_side = side
+
+
+## `wanted` bent by the pending separation steering, which is spent. The part of `wanted` that heads
+## INTO the neighbours is taken out and turned sideways, so a unit whose way is blocked goes round
+## instead of pressing on (two bodies pressing is the "stuck" the live smoke saw); on top of that it
+## drifts away from them. Never faster than `wanted` plus the authored extra.
+func _steered(wanted: Vector3) -> Vector3:
+	var push := _separation_push
+	_separation_push = Vector2.ZERO
+	# A unit that is not moving is not steered: a hound rooted in its bite (driven at speed zero)
+	# stays exactly where it stands, whoever is beside it.
+	if push.is_zero_approx() or wanted.is_zero_approx():
+		return wanted
+	var away := push.normalized()
+	var weight := minf(push.length(), 1.0)
+	var planar := Vector2(wanted.x, wanted.z)
+	var into := -planar.dot(away)
+	if into > 0.0:
+		var cross := planar.x * away.y - planar.y * away.x
+		var side := _separation_side if absf(cross) < 0.1 * planar.length() else signf(cross)
+		planar += away * into * weight
+		planar += Vector2(away.y, -away.x) * side * into * weight
+	planar += away * _separation_speed * weight
+	var limit := Vector2(wanted.x, wanted.z).length() + _separation_speed
+	if planar.length() > limit:
+		planar = planar.normalized() * limit
+	return Vector3(planar.x, 0.0, planar.y)
+
+
+## Yaw toward `target_position` by at most `max_step` radians -- `aim_at()` with a turn rate. The
+## runner passes the kind's authored rate times the tick; `aim_at()`'s no-planar-direction answer.
+func turn_toward(target_position: Vector3, max_step: float) -> void:
+	var planar := Vector2(target_position.x - global_position.x,
+			target_position.z - global_position.z)
+	if planar.is_zero_approx():
+		return
+	var wanted := atan2(planar.x, planar.y) + PI
+	global_rotation.y += clampf(angle_difference(global_rotation.y, wanted), -maxf(0.0, max_step),
+			maxf(0.0, max_step))
+
+
+## Feel pass 2: `turn_toward()` for an ALREADY-DECIDED planar heading -- `aim_along()` with a turn
+## rate. A zero heading keeps the current rotation, `aim_along()`'s own answer.
+func turn_along(planar_dir: Vector2, max_step: float) -> void:
+	if planar_dir.is_zero_approx():
+		return
+	var wanted := atan2(planar_dir.x, planar_dir.y) + PI
+	global_rotation.y += clampf(angle_difference(global_rotation.y, wanted), -maxf(0.0, max_step),
+			maxf(0.0, max_step))
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-3, FEEL PASS 2: THE SWING'S TRAVEL AND PASSING. Told the answer, as everything here is.
+## ------------------------------------------------------------------------------------------
+
+## How far the swing numbered `_swing_travel_swing` (the unit's own swing counter, as state counts
+## it) travels during its ACTIVE window. Handed over by the runner when the swing begins and spent by
+## its drive phase; -1 until a first swing has been seen.
+var _swing_travel_swing := -1
+var _swing_travel_distance := 0.0
+
+## The bodies this unit is passing (see `start_passing()`); empty when it passes none.
+var _passed: Array[PhysicsBody3D] = []
+var _is_passing := false
+
+
+func set_swing_travel(swing: int, distance: float) -> void:
+	_swing_travel_swing = swing
+	_swing_travel_distance = maxf(0.0, distance)
+
+
+func swing_travel_is_for(swing: int) -> bool:
+	return _swing_travel_swing == swing
+
+
+## The travel fixed for swing `swing`, or 0.0 when what this unit holds is some other swing's.
+func swing_travel(swing: int) -> float:
+	return _swing_travel_distance if _swing_travel_swing == swing else 0.0
+
+
+func is_passing() -> bool:
+	return _is_passing
+
+
+## Stop colliding with `bodies`, and they with this unit, until `stop_passing()`: it goes through them
+## and they are neither stopped nor shoved by it. BODIES ONLY -- this unit's hitbox and hurtbox are
+## areas and overlap what they always overlapped. Nothing else is excepted, so a wall still stops it.
+func start_passing(bodies: Array[PhysicsBody3D]) -> void:
+	stop_passing()
+	_is_passing = true
+	for body: PhysicsBody3D in bodies:
+		if not is_instance_valid(body) or body == self:
+			continue
+		add_collision_exception_with(body)
+		body.add_collision_exception_with(self)
+		_passed.append(body)
+
+
+func stop_passing() -> void:
+	for body: PhysicsBody3D in _passed:
+		if is_instance_valid(body):
+			remove_collision_exception_with(body)
+			body.remove_collision_exception_with(self)
+	_passed.clear()
+	_is_passing = false
+
+
+## How far this body already FACES the planar heading `planar_dir`: 1.0 facing it, 0.0 square to it or
+## turned away (the cosine between its own -Z and the heading, never below zero). The runner scales a
+## reposition's or a retreat's speed by it, so the body turns and then goes. A zero heading is 1.0:
+## nothing to face, nothing held back.
+func alignment_with(planar_dir: Vector2) -> float:
+	if planar_dir.is_zero_approx():
+		return 1.0
+	var forward := -global_transform.basis.z
+	var facing := Vector2(forward.x, forward.z)
+	if facing.is_zero_approx():
+		return 1.0
+	return clampf(facing.normalized().dot(planar_dir.normalized()), 0.0, 1.0)
+
+
+## Run straight AHEAD (this body's own -Z) at `speed`: the run-on after a leap. `travel()`'s shape,
+## along the heading the body already has, and steered round its neighbours like any ordinary move.
+func run_ahead(speed: float) -> void:
+	if speed <= 0.0:
+		velocity = Vector3.ZERO
+		_separation_push = Vector2.ZERO
+		return
+	var forward := -global_transform.basis.z
+	var planar := Vector2(forward.x, forward.z)
+	if planar.is_zero_approx():
+		velocity = Vector3.ZERO
+		_separation_push = Vector2.ZERO
+		return
+	planar = planar.normalized() * speed
+	velocity = _steered(Vector3(planar.x, 0.0, planar.y))
+	move_and_slide()
+
+
+## The planar velocity this unit ACTUALLY had since the last call, in its OWN frame: x is to its
+## right, y is forward (its -Z). Measured from where it stood then and where it stands now, not read
+## off `velocity` -- a body the physics server moves has no velocity to read, and a blocked one has
+## one it is not making. Zero on the first call. Called once per tick by the runner, for the rig.
+func take_motion(delta: float) -> Vector2:
+	var here := global_position
+	if not _motion_sampled or delta <= 0.0:
+		_motion_sampled = true
+		_motion_from = here
+		return Vector2.ZERO
+	var moved := (here - _motion_from) / delta
+	_motion_from = here
+	var right := global_transform.basis.x
+	var forward := -global_transform.basis.z
+	return Vector2(moved.x * right.x + moved.z * right.z, moved.x * forward.x + moved.z * forward.z)
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-3 (ACs 9, 12, 14): THREE MORE MOVES AND THE OWNER SKIN. Every one is `approach()`'s shape:
+## told the answer, PLANAR, no decision, no state handle, no balance copy.
+## ------------------------------------------------------------------------------------------
+## WHICH move a unit makes on a tick is the RUNNER's read of the unit's board record (its attack
+## phase and its behaviour phase); how long it keeps making it is a STATE tick timer (`7-3/R20`).
+## Nothing below ends a phase, reports an arrival or asks where anything else is.
+
+## Story 7-3 (AC 9, `7-3/R21`): move along an ALREADY-LOCKED planar heading at `speed` -- the leap.
+## The heading is the one state froze at windup start, so this does NOT home: a target that steps
+## aside is leapt past. `aim_along()`'s twin with a translation, and it keeps that method's
+## zero-heading answer: no direction means no move.
+func travel(planar_dir: Vector2, speed: float) -> void:
+	# A leap is never steered, and the steering handed for this tick is not kept for a later move.
+	_separation_push = Vector2.ZERO
+	if planar_dir.is_zero_approx() or speed <= 0.0:
+		velocity = Vector3.ZERO
+		return
+	var heading := planar_dir.normalized()
+	velocity = Vector3(heading.x * speed, 0.0, heading.y * speed)
+	move_and_slide()
+
+
+## Story 7-3 (AC 12): step straight AWAY from `target_position` at `speed`, until `hold_distance`
+## separates the two; then hold still. The distance is where the motion stops being useful, not a
+## transition -- the back-off ends when its state timer says so, wherever the unit stands.
+func back_away(target_position: Vector3, speed: float, hold_distance: float) -> void:
+	var from_x := global_position.x - target_position.x
+	var from_z := global_position.z - target_position.z
+	var distance := sqrt(from_x * from_x + from_z * from_z)
+	if distance >= hold_distance or distance <= 0.0 or speed <= 0.0:
+		velocity = Vector3.ZERO
+		_separation_push = Vector2.ZERO
+		return
+	velocity = _steered(Vector3(from_x / distance * speed, 0.0, from_z / distance * speed))
+	move_and_slide()
+
+
+## Story 7-3 (AC 12): CIRCLE `target_position` at `radius`, at `speed`, in `direction`
+## (`UnitBoard.CIRCLE_CLOCKWISE` is clockwise seen from above; anything else is the other way).
+## Each tick it steers at the point one step further round the circle, so a unit that starts inside
+## or outside the radius spirals onto it and never needs to "arrive" first.
+func circle(target_position: Vector3, speed: float, radius: float, direction: int, delta: float) -> void:
+	var move := circle_move(target_position, speed, radius, direction, delta)
+	if move.is_zero_approx():
+		velocity = Vector3.ZERO
+		_separation_push = Vector2.ZERO
+		return
+	velocity = _steered(Vector3(move.x, 0.0, move.y))
+	move_and_slide()
+
+
+## The planar velocity `circle()` gives this body for the same arguments, before any steering: toward
+## the point one step further round the circle, never faster than `speed`. Zero when there is no such
+## move. Exposed (feel pass 2) so the runner can turn a repositioning body the way it is about to go,
+## which while it spirals onto its radius is not the tangent.
+func circle_move(target_position: Vector3, speed: float, radius: float, direction: int, delta: float) -> Vector2:
+	var from_x := global_position.x - target_position.x
+	var from_z := global_position.z - target_position.z
+	var distance := sqrt(from_x * from_x + from_z * from_z)
+	if distance <= 0.0 or speed <= 0.0 or radius <= 0.0 or delta <= 0.0:
+		return Vector2.ZERO
+	var step := speed * delta / radius
+	if direction != UnitBoard.CIRCLE_CLOCKWISE:
+		step = -step
+	var cos_step := cos(step)
+	var sin_step := sin(step)
+	var next_x := target_position.x + (from_x * cos_step - from_z * sin_step) / distance * radius
+	var next_z := target_position.z + (from_x * sin_step + from_z * cos_step) / distance * radius
+	var move := Vector2(next_x - global_position.x, next_z - global_position.z) / delta
+	if move.length() > speed:
+		move = move.normalized() * speed
+	return move
+
+
+## Story 7-3, feel pass 3: ORBIT `target_position` -- `circle()`'s arguments and its way round, moved
+## as a STRAFE. The body goes ROUND at `speed`, and only up to `approach_share` of that speed goes into
+## getting onto (or staying on) `radius`; the rest is along the tangent. So a unit that begins its
+## orbit inside or outside the ring spirals onto it sideways instead of walking straight out to it.
+func orbit(target_position: Vector3, speed: float, radius: float, direction: int, approach_share: float,
+		delta: float) -> void:
+	var from := Vector2(global_position.x - target_position.x, global_position.z - target_position.z)
+	var distance := from.length()
+	if distance <= 0.0 or speed <= 0.0 or radius <= 0.0 or delta <= 0.0:
+		velocity = Vector3.ZERO
+		_separation_push = Vector2.ZERO
+		return
+	var out := from / distance
+	# The tangent of `circle()`'s own rotation, the same way round.
+	var tangent := Vector2(-out.y, out.x)
+	if direction != UnitBoard.CIRCLE_CLOCKWISE:
+		tangent = -tangent
+	var limit := speed * clampf(approach_share, 0.0, 1.0)
+	var radial := clampf((radius - distance) / delta, -limit, limit)
+	var move := out * radial + tangent * sqrt(maxf(speed * speed - radial * radial, 0.0))
+	velocity = _steered(Vector3(move.x, 0.0, move.y))
+	move_and_slide()
+
+
+## Story 7-3 (AC 14, `7-3/R7`): the materials this scene shows per OWNER SLOT, index 0 for P1 and 1
+## for P2, and the mesh that wears them. Authored on the scene; EMPTY on `unit_actor.tscn` and
+## `totem_actor.tscn`, which have no owner colour and are left exactly as they were.
+@export var owner_skins: Array[Material] = []
+@export var skin_mesh_path: NodePath
+
+
+## Story 7-3 (AC 14): wear the skin of the slot that OWNS this unit's record. Called once by the
+## runner at spawn. The colour follows the record's owner and nothing else: a corpse keeps it
+## because it is the same actor, and a raised unit gets it again because it is spawned for the same
+## slot. Returns whether a skin was applied.
+func apply_owner_skin(slot: int) -> bool:
+	if slot < 0 or slot >= owner_skins.size() or owner_skins[slot] == null:
+		return false
+	var mesh := get_node_or_null(skin_mesh_path) as MeshInstance3D
+	if mesh == null:
+		return false
+	mesh.material_override = owner_skins[slot]
+	return true

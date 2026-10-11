@@ -54,7 +54,80 @@ func _initialize() -> void:
 		_check(knob_set.rows.size() == EffectPresentationSet.ROW_SOUND_SLOTS.size(),
 			"the authored set has exactly one row per Scope row (%d vs %d)"
 					% [knob_set.rows.size(), EffectPresentationSet.ROW_SOUND_SLOTS.size()])
-	_check(rows_checked == 16, "the Scope table has sixteen rows, walked %d" % rows_checked)
+	# Story 7-3 (AC 15): sixteen -> seventeen, the `hellhound` row (its spawn sound and its bark).
+	_check(rows_checked == 17, "the Scope table has seventeen rows, walked %d" % rows_checked)
+	# Story 7-3, feel pass: THE HELLHOUND ROW'S NEW KNOBS ARE AUTHORED AND BOUNDED (the presentation
+	# half of the authoring audit; the kind's own numbers are bounded in test_balance_authoring.gd).
+	# Each band is the condition under which the knob still does its job.
+	var hound := knob_set.row(&"hellhound") if knob_set != null else null
+	if hound != null:
+		for knob: StringName in [&"blend_seconds", &"spawn_flank_distance", &"stalk_rate",
+				&"locomotion_rate_min", &"locomotion_rate_max", &"heading_forward_degrees",
+				&"heading_hold_degrees"]:
+			_check(hound.extra.has(knob), "row 'hellhound': knob '%s' is not authored" % knob)
+		var blend := hound.knob(&"blend_seconds", -1.0)
+		_check(blend > 0.0 and blend <= 0.3,
+				"row 'hellhound': blend_seconds %.3f must be in (0, 0.3] -- a crossfade, and shorter than a bite's windup" % blend)
+		var flank := hound.knob(&"spawn_flank_distance", -1.0)
+		_check(flank >= 0.5 and flank <= 2.5,
+				"row 'hellhound': spawn_flank_distance %.2f must be in [0.5, 2.5] -- two spots a spawn clearance apart, beside the summoner" % flank)
+		var stalk := hound.knob(&"stalk_rate", -1.0)
+		_check(stalk > 0.0 and stalk < 1.0, "row 'hellhound': stalk_rate %.2f must slow the idle (0 < rate < 1)" % stalk)
+		var rate_min := hound.knob(&"locomotion_rate_min", -1.0)
+		var rate_max := hound.knob(&"locomotion_rate_max", -1.0)
+		_check(rate_min > 0.0 and rate_min <= 1.0 and rate_max >= 1.0 and rate_max <= 4.0,
+				"row 'hellhound': the locomotion rate bounds %.2f..%.2f must bracket 1.0 inside (0, 4]" % [rate_min, rate_max])
+		var sector := hound.knob(&"heading_forward_degrees", -1.0)
+		var hold := hound.knob(&"heading_hold_degrees", -1.0)
+		_check(sector >= 30.0 and sector <= 60.0 and hold >= 0.0 and hold <= 20.0 and sector + hold < 90.0 - hold,
+				"row 'hellhound': heading sectors %.0f deg held %.0f deg -- forward and backward must be 30 to 60 wide, held by at most 20, and leave the two sides room"
+						% [sector, hold])
+		_check(float(hound.volume_db.get(&"bark", 0.0)) <= -12.0,
+				"row 'hellhound': the bark plays at %.1f dB, want -12 or quieter (the live smoke)"
+						% float(hound.volume_db.get(&"bark", 0.0)))
+		# Feel pass 2: THE HOUND'S VOICES. Every voice has an authored volume inside its band, every
+		# voice but the yelp has two or three variants (and the yelp none: no file was supplied), every
+		# variant slot belongs to a voice, and the six voice knobs are authored and bounded.
+		var voices: Array = EffectPresentationSet.ROW_VOICES.get(&"hellhound", [])
+		_check(voices == [&"growl", &"bark", &"bite", &"leap", &"yelp", &"death"],
+				"row 'hellhound': the voice list is %s" % [voices])
+		var bands := {&"growl": [-30.0, -16.0], &"bark": [-24.0, -12.0], &"bite": [-16.0, -4.0],
+				&"leap": [-18.0, -6.0], &"yelp": [-18.0, -6.0], &"death": [-16.0, -4.0]}
+		var variant_slots := 0
+		for voice: StringName in voices:
+			_check(hound.volume_db.has(voice), "row 'hellhound': voice '%s' has no authored volume" % voice)
+			var db := float(hound.volume_db.get(voice, 99.0))
+			_check(db >= float(bands[voice][0]) and db <= float(bands[voice][1]),
+					"row 'hellhound': voice '%s' plays at %.1f dB, outside its band %s" % [voice, db, bands[voice]])
+			var variants := 0
+			for slot: StringName in EffectPresentationSet.ROW_SOUND_SLOTS[&"hellhound"]:
+				if String(slot).begins_with("%s_" % voice):
+					variants += 1
+					var stream := hound.sounds.get(slot) as AudioStream
+					_check(stream != null and stream.resource_path.begins_with("res://assets/audio/effects/hellhound/"),
+							"row 'hellhound': variant '%s' is not a file under assets/audio/effects/hellhound/" % slot)
+			variant_slots += variants
+			if voice == &"yelp":
+				_check(variants == 0, "row 'hellhound': the yelp has %d variants; no file was supplied for it" % variants)
+			else:
+				_check(variants >= 2 and variants <= 3, "row 'hellhound': voice '%s' has %d variants, want 2 or 3" % [voice, variants])
+		_check(variant_slots + 1 == (EffectPresentationSet.ROW_SOUND_SLOTS[&"hellhound"] as Array).size(),
+				"row 'hellhound': a sound slot is neither the summon nor a variant of a voice")
+		_check(float(hound.volume_db.get(&"growl", 0.0)) < float(hound.volume_db.get(&"bark", 0.0))
+				and float(hound.volume_db.get(&"bark", 0.0)) < float(hound.volume_db.get(&"bite", 0.0)),
+				"row 'hellhound': the growl is quieter than the bark, and the bark than the bite's snap")
+		for bound: Array in [[&"voice_distance", 10.0, 60.0], [&"voice_cap", 1.0, 2.0],
+				[&"voice_pitch_spread", 0.02, 0.25], [&"voice_pitch_variation", 0.0, 0.1],
+				[&"growl_interval_seconds", 2.0, 20.0], [&"growl_chance", 0.05, 0.75]]:
+			_check(hound.extra.has(bound[0]), "row 'hellhound': knob '%s' is not authored" % bound[0])
+			var value := hound.knob(bound[0], -1.0)
+			_check(value >= float(bound[1]) and value <= float(bound[2]),
+					"row 'hellhound': %s %.3f is outside [%.2f, %.2f]" % [bound[0], value, bound[1], bound[2]])
+		_check(hound.knob(&"voice_cap", 0.0) == floorf(hound.knob(&"voice_cap", 0.0)), "row 'hellhound': voice_cap is a whole number")
+		_check(EffectPresentationSet.UNCAPPED_VOICES == ([&"bite", &"yelp"] as Array[StringName]),
+				"the voices the cap leaves alone are %s, want the bite's snap and the yelp" % [EffectPresentationSet.UNCAPPED_VOICES])
+		_check(not ResourceLoader.exists("res://assets/audio/effects/sfx_hound_bark.tres"),
+				"the synthesized placeholder bark is still in the tree")
 	for path: String in _gd_files("res://src/state/"):
 		var text := FileAccess.get_file_as_string(path)
 		for token: String in ["EffectPresentation", "EffectPresenter", "data/presentation"]:

@@ -356,6 +356,17 @@ const HASHED: Array[String] = [
 	#
 	# A PLAIN FLOAT PER RECORD, `_hp`'s own type and class: no position, no identity, no StringName.
 	"unit_board._hp_at_death",
+	# Story 7-3 (ACs 7-9, 12, 16): the FIVE new board members, ALL HASHED, so
+	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR. Each passes `4-3a/R17`'s test: `_attack_choice`
+	# decides the durations and damage of the swing in progress; `_reach_second_ticks` is the
+	# cross-tick carrier between a second-band probe and the windup it permits (`_in_reach_ticks`'
+	# own classification); `_behavior_phase` and `_behavior_ticks` decide when the unit may attack
+	# again and when the next seeded draw happens; `_circle_dir` is a DRAWN value that nothing else
+	# on the record could reproduce. They reach the hash through `PlayerState.to_snapshot()`'s
+	# `unit_attack_choice`, `unit_reach_second`, `unit_behavior_phase`, `unit_behavior_ticks` and
+	# `unit_circle_dir` keys. Plain ints, no position: where a circling unit stands is actor-owned.
+	"unit_board._attack_choice", "unit_board._reach_second_ticks", "unit_board._behavior_phase",
+	"unit_board._behavior_ticks", "unit_board._circle_dir",
 	# Story 4-4 (AC 14-19): the PROJECTILE BOARD and all eight of its members, ALL HASHED — so
 	# UNHASHED_CROSS_TICK_MEMBERS still stays at THREE and this story adds no fourth exclusion to
 	# argue about either. Each passes `4-3a/R17`'s test on its own: the target decides where homing
@@ -599,6 +610,11 @@ const NOT_RUNTIME_STATE: Array[String] = [
 	# be seen by the member scan either way: `_declared_members` matches `^var`, and a `static var`
 	# does not start there.
 	"targeting_service",
+	# Story 7-3, feel pass: fully static and with no member at all -- a pure integer function of a
+	# unit's address (owner slot, board index) and a channel. The address IS hashed state (the board a
+	# record is on and its index), so a unit's temperament is the same in a match and in its replay
+	# with nothing stored for it. UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"unit_temperament",
 ]
 
 
@@ -1325,8 +1341,8 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 22,
-		"...at FORMAT_VERSION 22, read out of the FILE rather than off the constant (7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 23,
+		"...at FORMAT_VERSION 23, read out of the FILE rather than off the constant (7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27; 18 as of 6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
@@ -2127,8 +2143,8 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 22,
-		"...at FORMAT_VERSION 22, read out of the FILE rather than off the constant (7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 23,
+		"...at FORMAT_VERSION 23, read out of the FILE rather than off the constant (7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
@@ -2480,8 +2496,8 @@ func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 22,
-		"...at FORMAT_VERSION 22, read out of the FILE rather than off the constant (7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 23,
+		"...at FORMAT_VERSION 23, read out of the FILE rather than off the constant (7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(TIMED_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))

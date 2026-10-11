@@ -361,8 +361,15 @@ func test_every_board_bound_guard_is_wired_to_that_predicate() -> void:
 		assert_true(line.contains("has_index("),
 			"every bound guard consults the public predicate rather than re-deriving the bound: %s"
 					% line.strip_edges())
-	assert_eq(checks, 18,
-		"EIGHTEEN bound guards ship as of story 6-5b, which adds ONE: `kill_at`, the DEATH SEAT "
+	assert_eq(checks, 27,
+		"TWENTY-SEVEN bound guards ship as of story 7-3, which adds NINE -- the behaviour accessors and "
+		+ "mutators (attack_choice_at, is_in_second_reach_at, mark_second_reach_at, behavior_phase_at, "
+		+ "behavior_ticks_at, circle_dir_at, set_behavior_at, set_circle_dir_at, and the feel pass's "
+		+ "turn_circle_at), each the STRICT kind "
+		+ "because every caller iterates `size()`. `is_engaging_at` carries NO Invariant.check and is "
+		+ "deliberately absent, a lenient predicate for `is_attack_ready_at`'s reason verbatim. "
+		+ "Original 6-5b text follows: "
+		+ "EIGHTEEN bound guards ship as of story 6-5b, which adds ONE: `kill_at`, the DEATH SEAT "
 		+ "(AC 3, `6-5b/R13`). Its guard is the STRICT kind (`hp_at`'s, not `is_alive_at`'s) because "
 		+ "every caller has already established the index -- the step-4 contact path through "
 		+ "`apply_damage_at`, and Culling/Drain through a `living_indices()` walk -- so an "

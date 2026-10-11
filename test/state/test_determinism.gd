@@ -1352,7 +1352,27 @@ extends TestCase
 ##   fixture never stages), and the launch seed (the golden builds `MatchParams.new(SEED)` itself and never
 ##   boots the runner).
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "43449bd9e513e90066cfabac77a93f0d7dfced60025f00e5e6b467002a0ca814"
+## STORY 7-3 (the Hellhound): RE-BASELINED ONCE, `43449bd9...` -> `3823edbd...`, ONE CAUSE, SHAPE.
+##
+## THE CAUSE: FIVE new per-player snapshot keys, one per new `UnitBoard` array -- `unit_attack_choice`,
+## `unit_reach_second`, `unit_behavior_phase`, `unit_behavior_ticks`, `unit_circle_dir`. Their PRESENCE
+## is the whole cause: the fixture's one unit is a `minion`, which authors no second attack, no reaction
+## flag and no between-attack behaviour, so all five hold their resting value on every tick. The
+## per-player key set goes 46 -> 51 (ten new key paths, five per player); the top-level set is unmoved.
+##
+##   ISOLATED BOTH DIRECTIONS (measured 2026-10-10, this file run alone):
+##   (a) with EVERY other 7-3 change in place and the five keys absent from `PlayerState.to_snapshot` --
+##   the summon count and kind, the membership fact, the per-attack multiplier triplet, the attack
+##   choice, the second reach band, the reaction and get-up seats, the behaviour step and its draws --
+##   the hash is `43449bd9...` EXACTLY; (b) with the keys added, `3823edbd...`.
+##
+##   NOT CAUSES, MEASURED BY (a) RATHER THAN ASSUMED: the summon batch (the fixture's synthesized
+##   `summon_<id>` effects keep the default count 1 and empty kind), the membership fact and every other
+##   authored field (content, never hashed), and the behaviour step's seeded draws (gated on
+##   `UnitKindProfile.has_between_attack_behaviour()`, false for the fixture's kind, so `rng_state` does
+##   not move -- pinned from the other side by test_hellhound.gd, where a hound's draws DO move it).
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "3823edbd0db7ef4fe0d8096dd84fcef610e805179d2b86c8cf35d4a9ff638b6a"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.

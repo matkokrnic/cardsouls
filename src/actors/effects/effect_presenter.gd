@@ -58,6 +58,11 @@ const HERO_HEAD_Y := 1.15
 ## legs carry the Boulder crust; the Hips anchor a corpse's Grave Ward look (Mixamo names, both rigs).
 const SWORD_BONE := &"mixamorig_Sword_joint"
 const HIPS_BONE := &"mixamorig_Hips"
+## Story 7-3, feel pass: the bone a CORPSE's Grave Ward look follows, per rig, first match wins. The zombie's
+## is the Mixamo hips; the Hellhound's rig names it `Pelvis`. Before this list a hound corpse found no hips
+## and wore the look on its ROOT, half a metre off the body (measured: the pelvis of a dead hound lies 0.48 m
+## from its root).
+const CORPSE_ANCHOR_BONES: Array[StringName] = [HIPS_BONE, &"Pelvis"]
 ## Shins first, then thighs: the crust climbs the legs as the Boulder count rises.
 const LEG_BONES: Array[StringName] = [
 	&"mixamorig_LeftLeg", &"mixamorig_RightLeg", &"mixamorig_LeftUpLeg", &"mixamorig_RightUpLeg",
@@ -168,6 +173,106 @@ func play_sound(row_id: StringName, slot: StringName, parent: Node = null,
 	return player
 
 
+## Story 7-3 (AC 18): play one row slot AT A NODE -- a positional one-shot parented to `at`, so it is heard from
+## where that node stands and is freed with it. The hound's bark. Same slot rule and the same bus as `play_sound`;
+## the row's `extra` may author `<slot>_distance`, the distance at which the sound has faded to nothing.
+func play_sound_at(row_id: StringName, slot: StringName, at: Node3D) -> AudioStreamPlayer3D:
+	var r := row(row_id)
+	if r == null or not is_instance_valid(at) \
+			or not (EffectPresentationSet.ROW_SOUND_SLOTS.get(row_id, []) as Array).has(slot):
+		return null
+	var stream: Variant = r.sounds.get(slot)
+	if not (stream is AudioStream):
+		return null
+	var player := AudioStreamPlayer3D.new()
+	player.stream = stream
+	player.bus = &"CombatCues"
+	player.volume_db = float(r.volume_db.get(slot, 0.0))
+	player.pitch_scale = float(r.pitch.get(slot, 1.0))
+	player.max_distance = float(r.extra.get(StringName("%s_distance" % slot), 0.0))
+	at.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+	if _players.size() > 32:
+		var live: Array = []
+		for p: Variant in _players:
+			if is_instance_valid(p):
+				live.append(p)
+		_players = live
+	_players.append(player)
+	played.append(StringName("%s/%s" % [row_id, slot]))
+	if played.size() > PLAYED_CAP:
+		played.pop_front()
+	return player
+
+
+## Story 7-3, feel pass 2: the live positional players of VOICES that count toward their row's cap.
+var _capped_voices: Array[AudioStreamPlayer3D] = []
+
+
+## Story 7-3, feel pass 2: play one VARIANT of a row's VOICE at a node -- `play_sound_at`'s positional
+## one-shot, for a sound a creature makes many times. A voice (`EffectPresentationSet.ROW_VOICES`) is a
+## family of row slots `<voice>_1`, `<voice>_2`, ...; `variant` picks one of those that have a stream
+## (any integer: it wraps), and `pitch` is the playback pitch the caller worked out for this creature
+## and this play. Its volume is the row's `volume_db[<voice>]`, its fade distance the row's
+## `voice_distance` knob.
+##
+## A VOICE WITH NO VARIANT PLAYS NOTHING (the hound's hurt yelp, for which no file exists yet), and so
+## does a `capped` voice while the row's `voice_cap` such voices are already sounding -- across every
+## creature of that row, whoever owns it.
+func play_voice_at(row_id: StringName, voice: StringName, at: Node3D, variant: int, pitch: float,
+		capped: bool) -> AudioStreamPlayer3D:
+	var r := row(row_id)
+	if r == null or not is_instance_valid(at) \
+			or not (EffectPresentationSet.ROW_VOICES.get(row_id, []) as Array).has(voice):
+		return null
+	var variants := voice_variants(row_id, voice)
+	if variants.is_empty():
+		return null
+	if capped:
+		var sounding: Array[AudioStreamPlayer3D] = []
+		for live: AudioStreamPlayer3D in _capped_voices:
+			if is_instance_valid(live) and live.playing:
+				sounding.append(live)
+		_capped_voices = sounding
+		if _capped_voices.size() >= int(r.knob(&"voice_cap", 1.0)):
+			return null
+	var player := AudioStreamPlayer3D.new()
+	player.stream = r.sounds.get(variants[posmod(variant, variants.size())])
+	player.bus = &"CombatCues"
+	player.volume_db = float(r.volume_db.get(voice, 0.0))
+	player.pitch_scale = maxf(0.01, pitch)
+	player.max_distance = r.knob(&"voice_distance", 0.0)
+	at.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+	if capped:
+		_capped_voices.append(player)
+	if _players.size() > 32:
+		var live_players: Array = []
+		for p: Variant in _players:
+			if is_instance_valid(p):
+				live_players.append(p)
+		_players = live_players
+	_players.append(player)
+	played.append(StringName("%s/%s" % [row_id, voice]))
+	if played.size() > PLAYED_CAP:
+		played.pop_front()
+	return player
+
+
+## The slots of `row_id` that are variants of `voice` and have a stream, in variant order.
+func voice_variants(row_id: StringName, voice: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	var r := row(row_id)
+	if r == null:
+		return out
+	for slot: StringName in EffectPresentationSet.ROW_SOUND_SLOTS.get(row_id, []):
+		if String(slot).begins_with("%s_" % voice) and r.sounds.get(slot) is AudioStream:
+			out.append(slot)
+	return out
+
+
 ## `7-1/R4`: the generic cast-success cue is the FALLBACK -- silenced for an effect whose row says it has its
 ## own resolution sound, kept for every effect no row claims.
 func silences_generic_cue(effect_id: StringName) -> bool:
@@ -188,7 +293,14 @@ func play_resolution_sound(effect_id: StringName) -> void:
 ## VANGUARD (AC 6): a green crack in the ground where the minion emerges, dust and sparks. `size` = crack
 ## width (m), `count` = particles per burst, `duration` = how long the crack stays.
 func show_vanguard(position: Vector3) -> void:
-	var r := row(&"vanguard")
+	show_summon(&"vanguard", position)
+
+
+## Story 7-3 (AC 15): THE SUMMON LOOK OF ANY ROW THAT HAS A `summon` SOUND SLOT -- the Vanguard's green crack,
+## dust and sparks, drawn from `row_id`'s own knobs and colour and playing that row's own sound. The Hellhound
+## row uses it, once per cast (`MatchRunner._present_batch_spawn`).
+func show_summon(row_id: StringName, position: Vector3) -> void:
+	var r := row(row_id)
 	if r == null:
 		return
 	var color := color_of(r)
@@ -201,7 +313,7 @@ func show_vanguard(position: Vector3) -> void:
 			r.count, r.duration, r.size * 0.6, 2.0, 60.0, 1.5, false)
 	EffectFx.burst(self, position + Vector3(0.0, 0.2, 0.0), EffectFx.TEX_STAR, color, r.count, r.duration * 0.6,
 			0.18, 4.0, 45.0, 6.0)
-	play_sound(&"vanguard", &"summon")
+	play_sound(row_id, &"summon")
 
 
 ## RAISE DEAD (AC 9): a green pillar rises from the consumed corpse's spot; the raised minion (already standing
@@ -747,7 +859,11 @@ func set_grave_ward(corpse: Node3D, extended: bool) -> void:
 	var anchor := Node3D.new()
 	anchor.name = &"HipsAnchor"
 	glow.add_child(anchor)
-	var hips := EffectFx.bone_follower(corpse, glow, HIPS_BONE)
+	var hips: BoneAttachment3D = null
+	for bone: StringName in CORPSE_ANCHOR_BONES:
+		hips = EffectFx.bone_follower(corpse, glow, bone)
+		if hips != null:
+			break
 	if hips != null:
 		var follow := RemoteTransform3D.new()
 		follow.update_rotation = false
@@ -1043,6 +1159,10 @@ func _track(tween: Tween) -> void:
 func stop_all_sounds() -> void:
 	for p: Variant in _players:
 		if not is_instance_valid(p):
+			continue
+		# Story 7-3 (AC 18): a positional one-shot (`play_sound_at`) is never looped; it is only stopped.
+		if p is AudioStreamPlayer3D:
+			(p as AudioStreamPlayer3D).stop()
 			continue
 		var player := p as AudioStreamPlayer
 		if player.finished.is_connected(player.play):

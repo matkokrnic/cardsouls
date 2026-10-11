@@ -27,7 +27,9 @@ const EXPECTED_COUNT := 7
 ## deck, is never drawn, dealt or discarded, and can only ever enter a hand as the consequence of a landed
 ## Rocksling stone (ruling 7). It is authored data under `data/cards/` like any other card, which is why it
 ## is counted here at all rather than living somewhere special.
-const LIBRARY_COUNT := 17
+## STORY 7-3 (AC 2, `7-3/R9`): 17 -> 18. `hellhound.tres` arrives and `ruin_vanguard.tres` STAYS (shelved,
+## `7-3/R1`): the new card takes its place in Deck 1 and the old one becomes the tenth dormant fixture.
+const LIBRARY_COUNT := 18
 
 ## Story 6-5e (AC 6a, `6-5e/R25`/G6): THE BOULDER, NAMED AS AN EXEMPTION rather than given a fake priced
 ## pitch condition. Ruling 7 gives it NO Mode ④ at all -- no pitch effect, no pitch cost, no orb price --
@@ -45,12 +47,23 @@ const NO_PITCH_MODE_IDS: Array[StringName] = [&"boulder"]
 const FIXTURE_IDS: Array[StringName] = [
 	&"bramble_snare", &"ember_lash", &"frost_dart", &"hellforge_totem", &"imp_summoner",
 	&"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"verdant_wardstone",
+	# Story 7-3 (AC 1/AC 2, `7-3/R1`): the TENTH -- Ruin Vanguard, shelved out of Deck 1 with its file,
+	# its effect and its zombie kind all still authored and loading.
+	&"ruin_vanguard",
 ]
+
+## Story 7-3 (AC 1/AC 3, `7-3/R1`): THE SHELVED DECK 1 CARD KEEPS BOTH HALVES. The nine 3-2 fixtures
+## never authored a pitch effect; Ruin Vanguard left Deck 1 with its file UNCHANGED, Culling included,
+## which is also what AC 3's recombination test builds on. A NAMED EXEMPTION from the
+## dormant-fixtures-author-no-pitch-effect census, on `NO_PITCH_MODE_IDS`' own reasoning: one id,
+## listed, greppable -- never a widened predicate.
+const SHELVED_WITH_PITCH_IDS: Array[StringName] = [&"ruin_vanguard"]
 
 ## Story 6-5a (AC 14): DECK 1, the full 20-card multiset, in list order. Six uniques x 3 plus one x 2
 ## (`deck-1-spec.md:12`); the 2-copy card is Honed Bolt by operator ruling (6-5a dev pass, N12).
 const DECK_1_IDS: Array[StringName] = [
-	&"ruin_vanguard", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
+	# Story 7-3 (AC 2, `7-3/R9`): `hellhound` in the place of `ruin_vanguard`, same copy count.
+	&"hellhound", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
 	&"frostbite",
 ]
 const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 3, 2, 3]
@@ -58,7 +71,8 @@ const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 3, 2, 3]
 ## Story 6-5a (AC 13/AC 15): each Deck 1 card's colour, Mode ① price and Mode ④ price, per
 ## `deck-1-spec.md` §1-7 and the operator's amendments. id -> [colour, basic mana, pitch mana, orb price].
 const DECK_1_PRICES: Dictionary = {
-	&"ruin_vanguard": [Enums.CardColor.GREEN, 3.0, 3.0, {Enums.CardColor.GREEN: 1}],
+	# Story 7-3 (AC 2, `7-3/R9`/`R14`): the green card's prices are Vanguard's, unchanged.
+	&"hellhound": [Enums.CardColor.GREEN, 3.0, 3.0, {Enums.CardColor.GREEN: 1}],
 	&"grave_ward": [Enums.CardColor.GREEN, 2.0, 6.0, {Enums.CardColor.RED: 2}],
 	&"drain": [Enums.CardColor.GREEN, 2.0, 5.0, {Enums.CardColor.GREEN: 1, Enums.CardColor.RED: 1}],
 	&"rocksling": [Enums.CardColor.RED, 4.0, 3.0, {Enums.CardColor.RED: 1}],
@@ -73,7 +87,8 @@ const DECK_1_PRICES: Dictionary = {
 
 ## Story 6-5a (AC 15): each Deck 1 card's two effect ids, [normal, pitch].
 const DECK_1_EFFECTS: Dictionary = {
-	&"ruin_vanguard": [&"summon_ruin_vanguard", &"culling"],
+	# Story 7-3 (AC 2, `7-3/R2`): normal half Hellhound, pitch half still Culling.
+	&"hellhound": [&"summon_hellhound", &"culling"],
 	&"grave_ward": [&"grave_ward", &"raise_dead"],
 	&"drain": [&"drain", &"vampiric_aura"],
 	&"rocksling": [&"rocksling", &"boom"],
@@ -109,8 +124,9 @@ const CARD_DATA_FIELDS: Array[String] = [
 func test_deck_1_seven_cards_load_as_card_data() -> void:
 	var cards := _load_cards()
 	assert_eq(cards.size(), LIBRARY_COUNT,
-		"data/cards/ holds seventeen authored cards: Deck 1's seven, the nine dormant fixtures, and "
-		+ "6-5e's Boulder -- which belongs to no deck at all")
+		"data/cards/ holds eighteen authored cards: Deck 1's seven, the ten dormant fixtures (the nine "
+		+ "3-2 cards plus the shelved Ruin Vanguard, story 7-3), and 6-5e's Boulder -- which belongs to "
+		+ "no deck at all")
 	for card in cards:
 		assert_true(card is CardData, "every card .tres casts to CardData")
 	var deck := _deck_cards()
@@ -184,7 +200,7 @@ func test_every_id_is_non_empty_and_unique() -> void:
 			dupes.append(String(card.id))
 		seen[card.id] = true
 	assert_eq(dupes.size(), 0, "card ids are unique across the set: %s" % ", ".join(dupes))
-	assert_eq(seen.size(), LIBRARY_COUNT, "seventeen distinct ids")
+	assert_eq(seen.size(), LIBRARY_COUNT, "eighteen distinct ids")
 
 
 ## REWRITTEN BY STORY 6-5a (AC 13): was three cards per colour across the nine fixtures. Deck 1 is
@@ -247,7 +263,7 @@ func test_each_deck_1_card_is_priced_at_its_authored_mode_1_and_mode_4_prices() 
 ## speed is authored on the card holding each (C2): Culling, Vampiric Aura and Counterspell are instant;
 ## Raise Dead, Boom, Fireball and Corpse Bomb are sorcery. Iterates the literal, so a shrunk list fails.
 const DECK_1_PITCH_SPEEDS := {
-	&"ruin_vanguard": Enums.PitchSpeed.INSTANT,  # Culling
+	&"hellhound": Enums.PitchSpeed.INSTANT,  # Culling (story 7-3: the green card is `hellhound` now)
 	&"drain": Enums.PitchSpeed.INSTANT,  # Vampiric Aura
 	&"honed_bolt": Enums.PitchSpeed.INSTANT,  # Counterspell
 	&"grave_ward": Enums.PitchSpeed.SORCERY,  # Raise Dead
@@ -476,6 +492,39 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 			"dormant fixture '%s' still carries a summon_/spell_ prefix (%s)" % [card.id, id])
 
 
+## Story 7-3 (AC 1/AC 2/AC 4, `7-3/R1`/`R16`): THE TWO SUMMON EFFECTS, FIELD BY FIELD. The Hellhound
+## effect authors count 2 and the hound kind and NOTHING ELSE; the shelved Vanguard effect authors
+## nothing at all beyond its id (count 1, empty kind -- the defaults that keep it summoning one zombie).
+## And no Deck 1 card has Vanguard as its normal half.
+func test_the_hellhound_effect_authors_two_hounds_and_vanguard_is_unchanged() -> void:
+	var neutral := CardEffect.new()
+	assert_eq(neutral.summon_count, 1, "an effect that authors no count summons ONE (`7-3/R16`)")
+	assert_eq(neutral.summon_kind, &"", "an effect that authors no kind takes the existing rule")
+	var hound := _effect(&"summon_hellhound")
+	assert_not_null(hound, "data/effects/summon_hellhound.tres loads")
+	if hound != null:
+		assert_eq(hound.summon_count, 2, "one Hellhound cast summons TWO hounds (`7-3/R3`)")
+		assert_eq(hound.summon_kind, &"hellhound", "...of the hound kind")
+		for name in _script_property_names(neutral):
+			if name in ["effect_id", "summon_count", "summon_kind"]:
+				continue
+			assert_eq(hound.get(name), neutral.get(name), "summon_hellhound authors no %s" % name)
+		var balance := load(BALANCE_PATH) as BalanceConfig
+		assert_true(balance.kind_index_of(hound.summon_kind) != BalanceConfig.NO_KIND_INDEX,
+			"the kind the Hellhound effect names IS authored in balance_config.tres -- an unauthored "
+			+ "name would resolve the cast and put nothing on the board")
+		assert_false(CardEffectResolver.SUMMON_KINDS.has(hound.effect_id),
+			"`SUMMON_KINDS` gained NO row for it (`7-3/R16`): that table is also the totem test")
+	var vanguard := _effect(&"summon_ruin_vanguard")
+	assert_not_null(vanguard, "the shelved Vanguard effect still loads (`7-3/R1`)")
+	if vanguard != null:
+		assert_eq([vanguard.summon_count, vanguard.summon_kind], [1, &""],
+			"...and still summons ONE unit of the default (zombie) kind")
+	for card in _deck_cards():
+		assert_ne(card.basic_effect.effect_id, &"summon_ruin_vanguard",
+			"no Deck 1 card has Vanguard as its normal half (AC 1): '%s'" % card.id)
+
+
 ## Story 6-5a (AC 15): each Deck 1 card references the RIGHT two effects, by id.
 ##
 ## NON-VACUOUS ON A SHRUNK LIST (6-5a REVIEW N11): the `DECK_1_IDS` literal, not `_deck_cards()`, for
@@ -504,6 +553,10 @@ func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 		if DECK_1_IDS.has(card.id):
 			assert_not_null(card.pitch_effect,
 				"Deck 1 card '%s' authors its pitch effect (story 6-5a)" % card.id)
+		elif SHELVED_WITH_PITCH_IDS.has(card.id):
+			# Story 7-3 (AC 1, `7-3/R1`): shelved, not stripped -- the file is unchanged.
+			assert_not_null(card.pitch_effect,
+				"shelved card '%s' keeps the pitch effect it left Deck 1 with" % card.id)
 		else:
 			assert_null(card.pitch_effect,
 				"dormant fixture '%s' still leaves pitch_effect unauthored" % card.id)
@@ -547,9 +600,12 @@ func test_every_deck_1_effect_is_a_shared_file_under_data_effects() -> void:
 	# Story 6-5e (AC 6a): FIFTEEN -> SIXTEEN. `boulder_discard.tres` arrives -- Boulder's own basic effect,
 	# the sixteenth file. It is not a Deck 1 effect and never will be (Boulder is in no deck), which is the
 	# same "the directory holds effect FILES, not deck pairings" reading `bloodlust.tres` already rests on.
-	assert_eq(files.size(), 16,
-		"data/effects/ holds sixteen effect files: the fourteen Deck 1 effects, bloodlust.tres (6-5d "
-		+ "unpaired it from Deck 1 without deleting, AC 2), and 6-5e's boulder_discard.tres")
+	# Story 7-3 (AC 2): SIXTEEN -> SEVENTEEN. `summon_hellhound.tres` arrives and
+	# `summon_ruin_vanguard.tres` STAYS (shelved, `7-3/R1`) -- `bloodlust.tres`' own precedent.
+	assert_eq(files.size(), 17,
+		"data/effects/ holds seventeen effect files: the fourteen Deck 1 effects, bloodlust.tres (6-5d "
+		+ "unpaired it from Deck 1 without deleting, AC 2), 6-5e's boulder_discard.tres, and the shelved "
+		+ "summon_ruin_vanguard.tres (story 7-3)")
 	for file_name in files:
 		var effect := load(EFFECTS_DIR + file_name) as CardEffect
 		assert_not_null(effect, "%s loads as a CardEffect" % file_name)
