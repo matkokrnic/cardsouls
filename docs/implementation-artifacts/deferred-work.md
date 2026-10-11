@@ -681,3 +681,129 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
   cross-faded (P19) and stones 2/3 fly without a swing (`7-2/R8`); a single authored clip would remove the seam.
   Owner: art phase.
 - **Done in 7-2:** P19, stun pose transition, foot sliding during casts, hit-reaction sliding, upper/lower split.
+
+## Deferred from: 7-3 dev pass (2026-10-10)
+
+- **PRE-EXISTING: a same-tick KILL of a unit is seat-asymmetric.** When a hero's hit kills an enemy unit on the tick
+  that unit's own strike is in the contact queue, a P2 unit killed by the P1 hero drops its strike at the
+  dead-attacker rung, while a P1 unit killed by the P2 hero has already struck (canonical order: attacker slot
+  ascending, `match_state.gd` `_resolve_contacts`). This is the unit rule since `4-3b` and holds for the zombie as
+  well as the hound. `7-3/R18` made the same-tick outcome a symmetric TRADE for a hound that is DAMAGED and
+  survives; it does not cover the kill. Ruled out of scope for 7-3 (operator, session 2). Owner: E7 close-out.
+- **FIXED in the 7-3 pre-smoke fix (2026-10-10), kept for the record.** A hound leaving its circle now draws its
+  next attack (leap with the authored `leap_chance`, 0.5; else it runs in and bites). Re-measured, same probe:
+  8 leaps, 7 bites, 35 damage. The finding as first written:
+  **Against a hero that stands still a hound only ever LEAPS.** Measured live, two hounds, 25 s, the provisional
+  numbers: 14 leaps, 0 bites, every leap from exactly the circle radius (3.2 m), 42 damage. The attack choice is
+  by band (`7-3` dev deviation 8: the close band wins, else the leap), the hound re-engages from its circle at
+  3.2 m, and that is inside the leap band (4.5 m) and outside the bite band (1.7 m). A bite needs the target within
+  1.7 m when the hound re-engages, i.e. a hero that walks into it. Data-only options: a circle radius inside the
+  bite band; a leap band the circle radius sits outside of. A rule option (state): a cadence or a draw on the
+  leap. Owner: the operator at the 7-3 smoke (step 5), then 7-7.
+- **The two hounds of one cast re-engage within a few ticks of each other** against a standing hero (measured leap
+  starts: 282/284, 487/508, 661/677, 832/849, 1053/1055). Each draws its own durations (`7-3/R13`), but both cycles
+  have the same bounds and both start from one spawn tick. Wider back-off / circle bounds separate them. Owner: 7-7.
+- **FIXED in the 7-3 feel pass (2026-10-10), kept for the record:** `tools/build_hellhound_anims.gd` now holds the
+  `leap` clip's pelvis on the line it starts from (forward travel 2.221 -> 0.000 model units; crouch and jump
+  height kept), pinned by `test_hound_rig_clips.gd`. The finding as first written:
+  **The leap clip carries its own forward excursion.** `Attack01` throws the pelvis 2.2 model units (0.89 m at the
+  shipped 0.4 scale) forward and brings it back, in place, on top of the 3.0 m the body travels; during recovery the
+  mesh slides back toward the root (the `3-0b` Hips-excursion artefact). Owner: the operator at the 7-3 smoke.
+- **The hound's size is provisional**: after the 7-3 feel pass ("a bit smaller") model scale 0.33 (1.52 m long,
+  back at 0.60 m, ears at 0.97 m), body CYLINDER radius 0.27 x height 0.66, hurtbox 0.58 x 0.78 x 1.4, hitbox
+  0.74 x 1.0 x 1.16 reaching 0.25 to 1.41 m ahead, bite band 1.4, stop distance 1.1. (At the first smoke: scale
+  0.4, body box 0.6 x 0.8 x 0.9, hurtbox 0.7 x 0.95 x 1.7, hitbox 0.9 x 1.2 x 1.4.) Owner: the operator at the next
+  7-3 smoke.
+- **FIXED in the 7-3 feel pass (2026-10-10), kept for the record** (the smoke's "Grave Ward does not work on hound
+  corpses"; the state extension was never broken): the look now follows the first of `CORPSE_ANCHOR_BONES` the rig
+  has (`mixamorig_Hips`, then `Pelvis`), pinned by `test_hound_corpse_ward_live.gd`. As first written:
+  **The Grave Ward look sits on a hound corpse's ROOT, not on its body**: `EffectPresenter.HIPS_BONE` names the
+  Mixamo hips, the hound's is `Pelvis`, and the look takes its documented no-hips fallback.
+- **The Grave Ward ghosts circle 1.4 m above a hound corpse's pelvis** (the `grave_ward` row's `orbit_height`, tuned
+  for a man-sized zombie; a dead hound lies about 0.3 m high). Not changed in the feel pass: one row serves both
+  kinds. Owner: the operator at the next 7-3 smoke, then polish.
+- **CLOSED by the 7-3 feel pass's bark rule, kept for the record:** a hound now barks only as it ENTERS a back-off
+  (a state transition), so a frozen round produces no new bark. As first written:
+  **A hound keeps barking through the round-over freeze**: behaviour timers freeze there (story 7-3 Dev Notes,
+  gate m8) while the runner keeps driving bodies and rigs, and the bark interval is counted on the rig.
+- **`assets/CREDITS.txt` names no source or licence for the Hellhound pack** (the dev pass does not know them).
+  Owner: the operator, before the assets commit.
+- **`SK_Hellhound.fbx` references `Textures/T_HellHound_Rd_D.tga` relative to `Meshes/`**, which does not exist, so
+  every import of it prints two `ERROR:` lines and a warning (import log only; the scene imports and the skins are
+  the scene's own materials). Owner: art phase (re-export, or move the textures).
+- New files missing from the `game-architecture.md` tree: `src/actors/minions/hound_actor.tscn`,
+  `src/actors/minions/hound_animation_controller.gd`, `assets/characters/hellhound/`, `tools/build_hellhound_anims.gd`,
+  `tools/measure_hellhound_rig.gd`, `tools/gen_hound_bark_audio.gd`, `test/perf/second_probe_cost.gd`. Owner: E7
+  close-out docs debt. Added by the 7-3 feel pass: `src/state/unit_temperament.gd`.
+
+### Added by the 7-3 post-smoke feel pass (2026-10-10)
+
+- **The stalk plays `idle` slowed, not a low stance.** The pack's other standing take, `Idle01`, was measured
+  (`tools/measure_hellhound_rig.gd`, table 6): its head is at the ground for most of the take (mean height 1.10
+  model units against 2.02 in `idle`) and swings a full unit to each side -- a hound sniffing, not one watching.
+  A crouched "watching" pose would be new animation. Owner: art phase.
+- **The pack has no backward run.** A hound backs away at a walk (`walk_backwards`, natural ground speed 0.57 m/s
+  at the 0.33 mount); the back-off speed was cut to 0.35 of the run so the clip can keep up (rate about 2.4).
+  Owner: art phase / 7-7 tuning.
+- **The run's natural ground speed (10.61 model units/s) is the rougher of the two measurements**: in the gallop
+  each paw touches the ground for one to three frames. Owner: the operator at the next 7-3 smoke (do the paws
+  slide when a hound runs in?).
+- **CLOSED by 7-3 feel pass 2 (2026-10-10), kept for the record:** a leap begun close to its target ended against
+  the target's body. The leap now travels the distance to the point it aimed at plus an authored overshoot, inside
+  an authored band, and passes its target's body while it travels: it lands beyond it.
+- **CLOSED by 7-3 feel pass 2, kept for the record:** a hound that had to turn round as it set off ran sideways for
+  a few ticks. A hound now runs in only as fast as it already faces its target (it turns, then goes).
+- **The crossfade is not applied to the get-up** (a raised hound is a new actor with no pose worth blending
+  from), and no test pins that choice. Owner: polish.
+
+### Added by 7-3 feel pass 2 (2026-10-10)
+
+- **CLOSED by 7-3 feel pass 3 (2026-10-10), kept for the record:** `tools/build_hellhound_anims.gd` now gives
+  `walk_backwards` the forward walk's neck and head rotations (flag `STRAIGHTEN_BACKWARD_HEAD`); the built clip's
+  head is -8 to +3 degrees off the body. What it looks like is the operator's to judge. The finding as filed:
+  **`walk_backwards` turns the hound's head over its shoulder** (the operator's "going backwards the head always
+  turns 90 degrees"). MEASURED (`tools/measure_hellhound_rig.gd`, table 7): through the whole take the head faces
+  107 to 119 degrees off the body's own axis and the neck 68 to 76, while the body faces forward. The clip CHOICE
+  is right: a hound backing off plays `walk_backwards` on 392 of 504 ticks and a feint's retreat on 100 of 120
+  (`test_hound_feel_live.gd` prints the counts); the rest are a hound that landed past its target going away
+  forwards, or turning. The pack's strafe takes do the same by design (body turned 90 degrees under the root,
+  head turned about 70 back). Not changed. Owner: art phase.
+- **No hurt-yelp sound.** No file was supplied; the `yelp` voice has no variant slot and plays nothing. Add
+  `yelp_1..3` to `EffectPresentationSet.ROW_SOUND_SLOTS` and the row when a source exists. Owner: the operator.
+- **The Mixkit licence text could not be fetched during the pass** (the licence page shows only a link). The
+  three sources were accepted on `sources.txt`'s licence name and the licence's known terms (commercial use in
+  games allowed, no attribution, no redistribution of the files as stand-alone sound effects). Owner: the
+  operator, to confirm; relevant if the repository is ever public.
+- **The hound voice files are built by a script outside the repo** (`C:\dev\_73-feel2-sfx\build.py`, which needs
+  an MP3 decoder the project does not carry). The segments, pitches and levels are in that script and in
+  `_73-dev-feel2.md`. Owner: whoever next replaces a source.
+- **The leap's snarl uses the voice cap for 1.4 to 1.5 s a time**, so growls and barks are often swallowed while
+  both hounds leap (seen: 1 growl and 6 barks against 41 snarls in 150 game seconds). Owner: the operator at the next smoke
+  (shorter snarl files, or the snarl exempt from the cap).
+- **Two hounds leaping at once can close 0.1 m inside their two body radii for a tick or two** (each is moved
+  against where the physics server last saw the other; seen once, both leaping through the hero from opposite
+  sides). `test_hound_feel_live.gd` bounds it at 0.15 m. Owner: polish.
+- **At the authored numbers a walking hero is hit by nearly every attack** (measured 83 to 100% over four runs of
+  the acceptance test; the bar is 60%). Running is the partial escape (53 to 80%). The knobs are each attack's
+  `lead_max_distance` and the bite's travel band. Owner: the operator at the next smoke / 7-7.
+- **`test_hound_pressure_live.gd`'s run-pattern rate moves with wall-clock timing** (72.2% and 80.0% seen for the
+  same tree): a running hero's hurt shape follows its animated rig, which the engine advances on idle frames.
+  The other three patterns repeated exactly. The test runs its clock three times as fast as the wall's to fit
+  the suite's time budget, which makes the idle steps coarser. Owner: 7-T tooling.
+- **The full integration run takes 540 s** against the 600 s the closing-run rule allows. Owner: 7-T tooling.
+- **`MatchRunner._free_dead_unit_actors` has the projectile poll's shape** (it walks its actor array against a
+  board the debug reset may have emptied). It is lenient today (every read it makes is bound-checked), so it
+  logs nothing; it was not changed by the projectile fix. Owner: whoever next touches the unit poll.
+
+## Deferred from: 7-3 close-out (2026-10-11)
+
+- **Fresh-aim probes bypass the probe throttle (review F2, ruling `7-3/R39`).** A leading kind (the hound) probes on
+  every tick it could begin a windup, up to two facts per hound per tick, against the throttle of one probing tick
+  in `minion_retarget_interval_ticks`. Measured at the every-tick rate with twenty engaging hounds
+  (`test/perf/second_probe_cost.gd`): 467 to 500 usec per tick, 23 to 25 usec per hound, about 3% of the frame,
+  against 0.107% at the throttled rate. Not measured: the extra bytes the recorded contact stream carries (up to two
+  rows per engaging hound per tick). Owner: 7-7, to decide whether the cost stays or the fresh-aim rule is throttled.
+- **Note (review F6): `_reconcile_projectile_actors` frees only when the actor array is LONGER than the board**
+  (`match_runner.gd`, near the projectile poll). A reset followed by as many new shots in the same `advance()` as there
+  were actors would slip through. Not reachable today (the reset also empties the units that fire). No action; the
+  comment's "an array longer than its board can only mean that reset" holds in one direction only.
