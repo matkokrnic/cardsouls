@@ -22,6 +22,29 @@ SOUND EFFECTS -- assets/audio/effects/sfx_*.wav (trimmed first variants)
   The #GameAudioGDC Bundle (Sonniss), files by 344 Audio. License: royalty-free; "Use them personally or
   commercially without attribution." Credit given anyway: Sonniss / 344 Audio.
   sfx_soul, sfx_heal, sfx_bolt_strike, sfx_frost_hit (.tres) are synthesized in-repo (tools/gen_effect_audio.gd).
+  The Hellhound's synthesized PLACEHOLDER bark (sfx_hound_bark.tres) is no longer in the repo; its tool
+  (tools/gen_hound_bark_audio.gd) is kept.
+
+HELLHOUND VOICE -- assets/audio/effects/hellhound/hound_*.wav (story 7-3, feel pass 2)
+  Thirteen files cut from three Mixkit sound effects (https://mixkit.co/free-sound-effects/), each a trimmed
+  segment, pitched (most of them down), lightly soft-clipped, faded, peak-normalised, mono 16-bit 44.1 kHz.
+  License of all three sources: Mixkit Sound Effects Free License (free for commercial and non-commercial
+  projects, video games included; no attribution required; the files may not be redistributed as stand-alone
+  sound effects). Credit given anyway: Mixkit.
+  One line per source: <output files> -- <source file>, Mixkit item
+    hound_growl_1.wav, hound_growl_2.wav, hound_growl_3.wav
+        -- mixkit-hellhound-monster-growl-dog-wolf-creature-3014.wav, item 3014
+    hound_bark_1.wav, hound_bark_2.wav, hound_bark_3.wav, hound_death_1.wav, hound_death_2.wav
+        -- mixkit-werewolf-roar-1730.mp3, item 1730
+    hound_bite_1.wav, hound_bite_2.wav, hound_bite_3.wav, hound_leap_1.wav, hound_leap_2.wav
+        -- mixkit-wolf-attack-1773.mp3, item 1773
+  No hurt-yelp source was supplied: the hound's yelp plays nothing.
+
+HELLHOUND -- assets/characters/hellhound/ (story 7-3: SK_Hellhound.fbx, the purple and red diffuse skins, the
+  normal and emission maps; the pack's cyan skin is not in the repo)
+  "Stylized Fantasy Hell Hound" by N-Hance Studio, purchased on Fab
+  (https://www.fab.com/listings/78e7cb78-8e47-4900-b3ac-dffa4c004862).
+  License: Fab Standard License.
 
 CAST ANIMATIONS -- assets/characters/paladin/cast_fireball.fbx, cast_rocksling_lift.fbx, cast_rocksling_throw.fbx
   Mixamo (Adobe), on the existing paladin rig -- the same source as the rig's other clips.
@@ -32,6 +55,10 @@ EFFECT ICONS (story 7-6) -- assets/art/icons/game_icons/*.svg (placeholder hand/
   License: Creative Commons Attribution 3.0 Unported, CC BY 3.0 -- https://creativecommons.org/licenses/by/3.0/
   One line per shipped icon: <file> -- "<icon name>" by <author>, game-icons.net, CC BY 3.0
   summon_ruin_vanguard.svg -- "Visored helm" by Lorc, game-icons.net, CC BY 3.0
+  summon_hellhound.svg -- "Wolf head" by Lorc, game-icons.net, CC BY 3.0
+    (story 7-3 review fix: a wolf head with bared fangs, downloaded white-on-transparent from
+    https://game-icons.net/icons/ffffff/transparent/1x1/lorc/wolf-head.svg, otherwise unmodified; replaces the
+    provisional copy of the Visored helm)
   culling.svg -- "Scythe" by Lorc, game-icons.net, CC BY 3.0
   grave_ward.svg -- "Tombstone" by Lorc, game-icons.net, CC BY 3.0
   raise_dead.svg -- "Raise zombie" by Skoll, game-icons.net, CC BY 3.0
