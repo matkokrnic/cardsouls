@@ -698,3 +698,11 @@ Gornji i donji dio tijela su sad odvojeni. Blok u hodu, udarac u hodu i trku, ud
 Prvi krug: torzo se okretao s nogama. Pod lockom je štit kod hoda ravno na protivnika gledao ~45° ulijevo, a kod strafea i promjene smjera torzo se čudno vrtio. Zamah za 2. i 3. kamen Rockslinga izgledao je gore nego bez njega, pa je maknut.
 
 Drugi krug: torzo pod lockom uvijek gleda protivnika, u svim smjerovima i kroz promjenu smjera. Kamenovi 2 i 3 lete bez zamaha. Sve je kako treba biti.
+
+## 2026-10-10 — 7-3 Hellhound (solo smoke [0,3], četiri kruga)
+
+- Krug 1 (dev pass): mehanika radi — 2 psa po castu, umiru od 3 udarca, trzaj prekida napad, P1 ljubičasti / P2 crveni, Raise Dead ih diže, Culling/Drain/Corpse Bomb/counter rade, lock-on na dobrom mjestu. Ne valja: Grave Ward na mrtvom psu, kretanje umjetno (savršeni krugovi, psi se lijepe, jedan se zamrzne i klizi), grubi prijelazi animacija, strafe dok ide naprijed, kruže prebrzo za animaciju, malo preveliki, lavež užasno naporan.
+- Krug 2 (feel pass): pojava lijevo/desno-iza i Grave Ward sad rade, kretanje mnogo bolje. Ne valja: prelako ih je izbjeći samim hodanjem; ponašanje i dalje šablonsko (napad, odmak, kratko kruženje); u hodu unatrag glava okrenuta ~90°. Skinuo zvukove s Mixkita (hellhound growl, werewolf roar, wolf attack). Usput greška INVARIANT "projectile board index out of range" nakon smrti heroja i reseta — stari bug, ne od 7-3, popravljen.
+- Krug 3 (feel pass 2): sve je top, daleko najbolje ponašanje pasa do sad (ciljaju kamo idem, nizovi napada, lukovi oko mene, odlaze pa skaču natrag, zvukovi). Sitne dorade: skok rjeđi, da me ne preleti daleko kad stojim, rijetka duga orbita, hod unatrag bez okrenute glave.
+- Krug 4 (feel pass 3): izgleda i osjeća se super, ostaje ovako.
+- Ostaje za kasnije: cviljenje kad ga udariš nema zvuka; režanje se rijetko čuje (skok zauzme mjesto za glasove); veličina i brojke su privremene do 7-7.
