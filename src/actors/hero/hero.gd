@@ -79,6 +79,9 @@ const HEAD_TOP_FALLBACK_Y := 0.55
 ## head bone and the post-knockdown IMMUNITY shimmer on the body. Built in `_ready`, no collision, no signal.
 var eyes: UnblockableEyes
 var immunity_shimmer: ImmunityShimmer
+## Story 7-5a (AC 50): the placeholder buff line over the hero, the third such child -- pushed by the runner
+## per tick, built in `_ready`, no collision, no signal.
+var buff_markers: BuffMarkers
 
 ## Story 7-10 (Open Question 1, operator ruling): THE DISTANCE-AWARE RED LANDING -- the factor `drive()` scales
 ## the state's velocity by while a LANDED RED counter's travel runs, set by the runner every tick (1.0 otherwise,
@@ -155,6 +158,9 @@ func _ready() -> void:
 	immunity_shimmer = ImmunityShimmer.new()
 	immunity_shimmer.name = "ImmunityShimmer"
 	add_child(immunity_shimmer)
+	buff_markers = BuffMarkers.new()
+	buff_markers.name = "BuffMarkers"
+	add_child(buff_markers)
 
 
 ## `walk_speed`/`run_speed` (story 6-7b, AC 4): the AUTHORED gait pair, read inline off the applied
@@ -266,6 +272,7 @@ func clear_presentation() -> void:
 	mesh.position = _mesh_base
 	eyes.clear()
 	immunity_shimmer.set_fraction(0.0)
+	buff_markers.clear()
 
 
 ## Story 7-10 (AC 9): the head top's world position, by forward kinematics (the `_track_weapon_bone` read).

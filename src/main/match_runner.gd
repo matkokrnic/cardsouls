@@ -429,6 +429,18 @@ func _ready() -> void:
 	# mid-session assignment INERT BY CONSTRUCTION rather than merely forbidden by a scan.
 	_replay_record = replay_record
 	var replaying := _replay_record != null
+	# Story 7-5a (AC 9, `7-5a/R26`): EACH SEAT'S DECK IS RESOLVED FIRST, before anything is built, so a
+	# setting that names an unknown deck refuses the whole match rather than a half-wired one. A replay
+	# never reads the setting: its two compositions come from the record (AC 11).
+	var seat_decks: Dictionary = {}
+	if not replaying:
+		seat_decks = _resolve_seat_decks()
+		if seat_decks["error"] != "":
+			_start_refusal = seat_decks["error"]
+			push_warning("MATCH NOT STARTED: %s" % _start_refusal)
+			_show_start_refusal(_start_refusal)
+			set_physics_process(false)
+			return
 	_p1_controller = ReplayController.new(_replay_record, 0) if replaying \
 			else _make_controller(slot_controller_kinds[0], 0)
 	_p2_controller = ReplayController.new(_replay_record, 1) if replaying \
@@ -500,19 +512,32 @@ func _ready() -> void:
 	if replaying:
 		Invariant.check(_replay_record.replay_inject_content(_match_state),
 			"recorded content order is unsound — the cast-cost totality check would be vacuous")
+		# Story 7-5a (AC 8/AC 12): presentation reads the RECORDED assignment -- each seat's reel from its
+		# recorded composition, the F3 names from the record's label.
+		_seat_deck_names = _replay_record.replay_deck_names()
+		for seat: int in 2:
+			_seat_reel_ids[seat] = unique_ids(_replay_record.replay_seat_deck_contents(seat))
 	else:
 		# Story 6-5a (AC 11): the composition now comes from an AUTHORED DECK LIST (`DeckList`), not a
 		# walk of the whole library. `deck_size` stays authored and is pinned equal to the list's copy
 		# sum by `test_card_authoring.gd` (`6-5a/R9`); it is no longer what decides the composition.
-		var deck_contents := _derive_deck_contents(_active_deck_list())
+		# Story 7-5a (AC 7/AC 8): ONE COMPOSITION PER SEAT, each expanded from that seat's own list (the
+		# same list twice when one deck serves both). `seat_decks` was resolved at the top of `_ready`.
+		var seat_lists: Array = seat_decks["lists"]
+		var p1_deck_contents := _derive_deck_contents(seat_lists[0] as DeckList)
+		var p2_deck_contents := _derive_deck_contents(seat_lists[1] as DeckList)
+		_seat_deck_names = seat_decks["names"]
+		for seat: int in 2:
+			var seat_list := seat_lists[seat] as DeckList
+			_seat_reel_ids[seat] = seat_list.card_ids.duplicate() if seat_list != null else []
 		# 6-5a REVIEW N7: INJECT FIRST, CAPTURE SECOND -- the one place in this block where the two are
 		# in that order, and deliberately. `inject_deck` is where the EMPTY-composition check lives
 		# (`match_state.gd`, AC 10); capturing before it meant a degraded run wrote a replayable-LOOKING
 		# record naming an empty deck and only then complained. The record now exists only for a
 		# composition the state layer accepted. The CAPTURE ORDER of the channels is untouched -- deck is
 		# still the first channel captured -- so `SOUND_CONTENT_ORDER` and the replay are unaffected.
-		_match_state.inject_deck(deck_contents)
-		_recorder.capture_inject_deck(deck_contents)
+		_match_state.inject_seat_decks(p1_deck_contents, p2_deck_contents)
+		_recorder.capture_inject_seat_decks(p1_deck_contents, p2_deck_contents, _seat_deck_names)
 		# Story 3-5a (AC 4): cast-cost injection, the same shape and the same seat as the deck
 		# injection directly above. ORDER MATTERS and is not stylistic — the seam validates that
 		# the map is TOTAL over the injected composition, so the composition must already be in.
@@ -613,9 +638,9 @@ func _ready() -> void:
 	for slot: int in 2:
 		var hud := HudRoot.new()
 		hud.set_effect_art(card_effect_ids, effect_icons)
-		# Story 7-6 POLISH 2 (P13): the slot reel spins through THIS player's own deck -- the authored composition
-		# (both slots play the active deck list today), never the draw order or the next card.
-		hud.set_reel_cards(_active_deck_list().card_ids)
+		# Story 7-6 POLISH 2 (P13): the slot reel spins through THIS player's own deck -- the authored composition,
+		# never the draw order or the next card. Story 7-5a (AC 8): each seat's OWN list.
+		hud.set_reel_cards(_seat_reel_ids[slot])
 		# Story 7-6 (R6): the play-history strip rides this half's OUTER edge -- P1's half is the left one.
 		hud.history_on_left = slot == 0
 		# Story 3-6 (AC 4): the authored vulnerable-window duration, handed over BEFORE add_child
@@ -657,9 +682,12 @@ func _ready() -> void:
 			# re-derived: the local built once above this loop, read inline here (CONSTRAINT C).
 			# Story 7-6 (R4): plus the CARD layer beneath any Boulder cover (`hand_ids` is the visible layer),
 			# read inline here exactly like `pending_draw_owed` -- this player's own hand, a fresh copy.
+			# Story 7-5a (AC 37): plus this player's own per-slot Manablossom DISCOUNT, read inline here like
+			# the two reads beside it (a fresh copy, already clamped) -- so the hand shows discounted costs
+			# with no new seam and no change to the signal's payload.
 			hud.on_cards_changed(hand_ids, deck_count, discard_count,
 					player.pending_draw_owed.duplicate(), card_colors_by_id, card_prices_by_id,
-					player.hand.to_array())
+					player.hand.to_array(), player.hand.discounts())
 			# Story 6-D1 (debug): the same hand + colour map the HUD tint reads, forwarded to the
 			# controller as plain ints (-1 = empty slot). No state handle crosses; base is a no-op.
 			var hand_colors: Array[int] = []
@@ -720,6 +748,8 @@ func _ready() -> void:
 	# Story 7-4 (AC 18): the seed this match was dealt from -- a one-time fact, handed over before add_child
 	# on the `gamepad_profile` precedent and rendered by the panel, so it shows and hides with the F3 layer.
 	panel.seed_value = _seed_in_use
+	# Story 7-5a (AC 12): the deck each seat is on, the seed's own one-time handoff.
+	panel.deck_names = _seat_deck_names
 	add_child(panel)
 	# Story 7-6 POLISH (operator ruling P12, 2026-10-06; discharges 4-B1's "DebugInstrumentPanel ergonomics"
 	# deferral): the panel is HIDDEN by default and toggled by F3 (`debug_toggle_instruments`, step 0 below). While
@@ -916,13 +946,56 @@ func _setup_effect_presenter() -> void:
 	connect_deflect_landed(_on_effect_deflect_landed)
 
 
-## Story 6-5a (AC 11): the AUTHORED deck both players draw from until a second deck exists -- Deck 1.
-const DECK_LIST_PATH := "res://data/decks/deck_1.tres"
+## Story 6-5a (AC 11) / story 7-5a (AC 9): where authored deck lists live, and the DEFAULT deck -- what
+## each seat plays when the setting file is missing. A deck NAME is a file stem under this folder.
+const DECKS_DIR := "res://data/decks/"
+const DEFAULT_DECK_NAME := &"deck_1"
+
+## Story 7-5a (AC 9, `7-5a/R26`): the load-once per-seat deck setting's path. See `DeckSelect`. A `var`
+## so a headless test can point the SETTING tier at a file of its own without touching the shipped one;
+## set BEFORE the runner enters the tree and read once, in `_resolve_seat_decks`.
+const DECK_SELECT_PATH := "res://data/deck_select.tres"
+var deck_select_path: String = DECK_SELECT_PATH
 
 ## Story 6-5a (AC 13): THE DECK-LIST SEAT a live test uses instead of fixed-seed luck. Set BEFORE the
 ## runner enters the tree (its `_ready` derives the composition), and read nowhere else; null -- every
-## shipped path -- means `DECK_LIST_PATH`. Both players still receive ONE injected composition.
+## shipped path -- means the setting decides. ONE list for BOTH seats, exactly as before story 7-5a (AC 8).
 var deck_list_override: DeckList = null
+
+## Story 7-5a (AC 8): THE PER-SEAT FORM of the seat above, additive -- `[P1's list, P2's list]`, or empty
+## (every shipped path). Read once in `_resolve_seat_decks`; the one-list `deck_list_override` outranks it,
+## so a test that sets both gets the form it has always had.
+var seat_deck_list_overrides: Array[DeckList] = []
+
+## Story 7-5a (AC 12): the deck NAME each seat is on, for the F3 text, and each seat's reel ids for its
+## HUD. Written once in `_ready`: the setting's names when it decided, `override` for a test list, and the
+## RECORDED names and compositions under replay.
+var _seat_deck_names: Array[String] = ["", ""]
+var _seat_reel_ids: Array[Array] = [[], []]
+
+## Story 7-5a (AC 9, `7-5a/R26`): WHY THE MATCH DID NOT START, or `""`. A setting that names a deck which
+## does not exist refuses the match loudly rather than dealing Deck 1 in silence: no `MatchState` is built
+## and the tick loop is switched off. Read through `start_refusal()`.
+var _start_refusal := ""
+
+
+## Story 7-5a (AC 9): the reason this runner refused to start its match, or `""` when it started.
+func start_refusal() -> String:
+	return _start_refusal
+
+
+## Review F2b: a start refusal is shown ON SCREEN as well as warned, because the game is launched without a
+## console. One plain Label on its own CanvasLayer -- the only thing the refused runner ever builds.
+func _show_start_refusal(reason: String) -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "StartRefusalLayer"
+	var label := Label.new()
+	label.name = "StartRefusalLabel"
+	label.text = "MATCH NOT STARTED\n\n%s" % reason
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 24)
+	layer.add_child(label)
+	add_child(layer)
 
 ## Story 7-4 (AC 19, `7-4/R15`): THE SEED SEAT a headless test uses to fix the deal -- the
 ## `deck_list_override` precedent directly above: set BEFORE the runner enters the tree, read once in
@@ -962,14 +1035,82 @@ func _resolve_seed() -> int:
 ## silence. Before this story the composition came from the whole `CardDatabase`, so no single file could
 ## do that. The seam is LOUD now: `Invariant.check` names the path, and the empty composition it would
 ## otherwise produce can no longer reach the recorder (see the capture order at the injection seat).
-func _active_deck_list() -> DeckList:
+##
+## STORY 7-5a (AC 7-9, `7-5a/R26`): EACH SEAT RESOLVES ITS OWN LIST. Returns `{"lists": [DeckList, DeckList],
+## "names": [String, String], "error": String}`; a non-empty error means the match must not start.
+## PRECEDENCE below the replay record (which never reaches this function): the one-list test override,
+## then the per-seat test override, then the setting file, then the default (both seats `DEFAULT_DECK_NAME`).
+func _resolve_seat_decks() -> Dictionary:
 	if deck_list_override != null:
-		return deck_list_override
-	var loaded := load(DECK_LIST_PATH) as DeckList
-	Invariant.check(loaded != null,
-		"the authored deck list failed to load as a DeckList (%s) -- a missing file, a failed export "
-				% DECK_LIST_PATH + "remap, or a type mismatch; the match has no composition")
-	return loaded
+		return {"lists": [deck_list_override, deck_list_override],
+				"names": ["override", "override"] as Array[String], "error": ""}
+	if seat_deck_list_overrides.size() == 2 and seat_deck_list_overrides[0] != null \
+			and seat_deck_list_overrides[1] != null:
+		return {"lists": [seat_deck_list_overrides[0], seat_deck_list_overrides[1]],
+				"names": ["override", "override"] as Array[String], "error": ""}
+	var setting_problem := setting_error(deck_select_path)
+	if setting_problem != "":
+		return {"lists": [null, null], "names": ["", ""] as Array[String], "error": setting_problem}
+	var names := seat_deck_names_from(load(deck_select_path) as DeckSelect \
+			if ResourceLoader.exists(deck_select_path) else null)
+	var error := unknown_deck_error(names)
+	if error != "":
+		return {"lists": [null, null], "names": names, "error": error}
+	return {"lists": [load(deck_path_for(names[0])) as DeckList, load(deck_path_for(names[1])) as DeckList],
+			"names": names, "error": ""}
+
+
+## Story 7-5a (AC 9): the deck name each seat plays, read off a `DeckSelect` -- or the default for both
+## seats when there is no setting at all (a missing file) or it does not carry two entries. STATIC AND
+## PURE, so the precedence's last two tiers are checkable without a scene.
+## Review F2 (`7-5a/R26`, loud over silent): a setting file that EXISTS but is not a `DeckSelect`, or whose
+## `seat_decks` does not carry exactly two names, refuses the match with a named error. A MISSING file is not
+## an error here -- it means the default. Returns "" when the setting is absent or sound.
+static func setting_error(setting_path: String) -> String:
+	if not ResourceLoader.exists(setting_path):
+		return ""
+	var loaded: Variant = load(setting_path)
+	if not (loaded is DeckSelect):
+		return ("deck setting %s exists but is not a DeckSelect resource -- the match does not start; "
+				+ "fix or delete it (a missing file means both seats Deck 1)") % setting_path
+	var count := (loaded as DeckSelect).seat_decks.size()
+	if count != 2:
+		return ("deck setting %s names %d decks, not one per seat (2) -- the match does not start; "
+				+ "fix data/deck_select.tres") % [setting_path, count]
+	return ""
+
+
+static func seat_deck_names_from(setting: DeckSelect) -> Array[String]:
+	if setting == null or setting.seat_decks.size() != 2:
+		return [String(DEFAULT_DECK_NAME), String(DEFAULT_DECK_NAME)]
+	return [String(setting.seat_decks[0]), String(setting.seat_decks[1])]
+
+
+## Story 7-5a (AC 9): where the deck called `deck_name` lives.
+static func deck_path_for(deck_name: String) -> String:
+	return DECKS_DIR + deck_name + ".tres"
+
+
+## Story 7-5a (AC 9, `7-5a/R26`): `""` when every named deck exists and loads as a `DeckList`, otherwise the
+## NAMED ERROR the match refuses to start with -- which seat, which name, which path. An EMPTY name is an
+## unknown deck too: the default belongs to a missing FILE, never to a blank entry in a present one.
+static func unknown_deck_error(names: Array[String]) -> String:
+	for seat in names.size():
+		var path := deck_path_for(names[seat])
+		if names[seat] == "" or not ResourceLoader.exists(path) or not (load(path) is DeckList):
+			return ("deck setting names an unknown deck for seat %d: '%s' (no DeckList at %s) -- the match "
+					+ "does not start; fix data/deck_select.tres") % [seat + 1, names[seat], path]
+	return ""
+
+
+## Story 7-5a (AC 8): the UNIQUE ids of a composition, in first-seen order -- what a HUD reel spins through
+## when the list itself is not in hand (a replay carries the expanded ids, never a `DeckList`).
+static func unique_ids(contents: Array) -> Array:
+	var out: Array = []
+	for id: Variant in contents:
+		if not out.has(id):
+			out.append(id)
+	return out
 
 
 ## Story 6-5a (AC 11): the deck COMPOSITION, expanded from an authored `DeckList` IN LIST ORDER -- entry
@@ -1402,6 +1543,11 @@ func _push_unblockable_markers() -> void:
 			if immunity.is_running and immunity.duration_ticks() > 0:
 				fraction = float(immunity.remaining_ticks()) / float(immunity.duration_ticks())
 			hero.immunity_shimmer.set_fraction(fraction)
+			# Story 7-5a (AC 50/AC 51): the placeholder BUFF LINE, in the same seat and shape -- five plain
+			# values read right after `advance()` (charge counts, running Enrage windows, Lifechain cover),
+			# level-triggered, no signal, no state handle and no new `connect_*`.
+			hero.buff_markers.show_counts(player.setup_charges, player.execute_charges,
+					player.stoneskin_charges, player.active_enrage_count(), player.is_lifechain_covered())
 		if _shake_elapsed[slot] >= 0:
 			_shake_elapsed[slot] += 1
 			if _shake_elapsed[slot] >= _shake_total[slot]:

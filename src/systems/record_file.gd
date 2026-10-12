@@ -418,7 +418,15 @@ extends RefCounted
 ##
 ## NOR IS THE GOLDEN A REASON: it moves for 7-3 for one unrelated cause (five new per-unit snapshot keys),
 ## and a record carries INPUTS and CONTENT, never a hash.
-const FORMAT_VERSION := 23
+##
+## STORY 7-5a (AC 10/AC 11, `7-5a/R16`): 23 -> 24. THE DECK CHANNEL IS PER SEAT. Each seat now plays its own
+## deck list, so the `deck` key carries TWO compositions (`[seat 1 ids, seat 2 ids]`) where a v23 file
+## carries one flat id list for both, and a new `deck_names` key carries the deck name each seat was
+## assigned (a label for the F3 text; a replay deals from the ids). A v23 file's flat list cannot say which
+## seat got which deck, so it is REFUSED WITH A REASON by the version check -- no shim, the `4-1/R1` rule.
+## A SHAPE CAUSE RIDES BESIDE IT: `CardEffect` gains nine flat fields (the `card_effects` and
+## `pitch_effects` rows). No new channel (`SOUND_CONTENT_ORDER` is unmoved), no new nested class.
+const FORMAT_VERSION := 24
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -458,7 +466,10 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	"reload_events": TYPE_ARRAY,
 	"flags": TYPE_DICTIONARY,
 	"content_order": TYPE_ARRAY,
+	# Story 7-5a (AC 10): from FORMAT_VERSION 24 this holds TWO compositions, `[seat 1 ids, seat 2 ids]`
+	# (its inner shape is checked by `_deck_refusal`), and `deck_names` holds the two seats' deck names.
 	"deck": TYPE_ARRAY,
+	"deck_names": TYPE_ARRAY,
 	"costs": TYPE_DICTIONARY,
 	"tick_count": TYPE_INT,
 	"intents": TYPE_ARRAY,
@@ -633,10 +644,30 @@ static func load_record(path: String) -> Dictionary:
 ## `camera_pushes` carries the identical unguarded dereference (`int(push[0])`, `push[1] as Basis`)
 ## and is deliberately left open here, recorded as its own close-out line.
 static func _contents_refusal(data: Dictionary) -> String:
+	# Story 7-5a (AC 10): the per-seat deck shape, checked before the rebuild dereferences it.
+	var decks := _deck_refusal(data["deck"], data["deck_names"])
+	if decks != "":
+		return decks
 	var locks := _lock_pushes_refusal(data["lock_pushes"])
 	if locks != "":
 		return locks
 	return _intents_refusal(data["intents"])
+
+
+## Story 7-5a (AC 10): "" if `deck` is the two per-seat compositions and `deck_names` the two labels the
+## rebuild reads, or the REASON it is not. The `_lock_pushes_refusal` discipline applied to the deck
+## channel: a matching version with the wrong inner shape is refused by name rather than dying inside
+## `_from_dictionary`, which has no refusal channel.
+static func _deck_refusal(decks: Array, names: Array) -> String:
+	if decks.size() != 2:
+		return "its deck channel holds %d compositions, not one per seat (2)" % decks.size()
+	for seat in 2:
+		if typeof(decks[seat]) != TYPE_ARRAY:
+			return "its deck channel holds %s for seat %d, not that seat's Array of card ids" % [
+					type_string(typeof(decks[seat])), seat + 1]
+	if names.size() != 2:
+		return "its deck_names label holds %d names, not one per seat (2)" % names.size()
+	return ""
 
 
 ## Story 5-1a (AC 4, finding L7): every PRESENT `lock_pushes` entry is the `[slot, direction]` pair
@@ -823,7 +854,8 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"reload_events": reload_events,
 		"flags": _resource_values(record.replay_feature_flags()),
 		"content_order": record.content_order(),
-		"deck": record.replay_deck_contents(),
+		"deck": [record.replay_seat_deck_contents(0), record.replay_seat_deck_contents(1)],
+		"deck_names": record.replay_deck_names(),
 		"costs": costs,
 		"effects": effects,
 		"colors": colors,
@@ -957,7 +989,12 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 	for channel: StringName in data["content_order"]:
 		match channel:
 			IntentRecorder.CHANNEL_DECK:
-				record.capture_inject_deck(_deck_ids(data["deck"]))
+				var seat_decks: Array = data["deck"]
+				var deck_names: Array[String] = []
+				for deck_name: Variant in (data["deck_names"] as Array):
+					deck_names.append(str(deck_name))
+				record.capture_inject_seat_decks(_deck_ids(seat_decks[0]), _deck_ids(seat_decks[1]),
+						deck_names)
 			IntentRecorder.CHANNEL_COSTS:
 				record.capture_inject_card_costs(_card_costs(data["costs"]))
 			IntentRecorder.CHANNEL_EFFECTS:

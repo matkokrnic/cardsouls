@@ -765,6 +765,206 @@ func tick_rules() -> void:
 
 
 ## ------------------------------------------------------------------------------------------
+## STORY 7-5a (AC 16-42, AC 54): THE DUELIST'S STATE -- charges, stacking windows and the per-round staging
+## count. Seven hashed per-player facts (the eighth, the per-slot Manablossom discount, lives on `Hand`).
+## ------------------------------------------------------------------------------------------
+## NONE OF IT IS ON THE TIMED-RULE SEAT ABOVE, and that is `7-5a/R22`: that seat is six fixed slots that
+## REFRESH (N10), and everything here STACKS -- two Setups are two charges, two Enrages are two windows
+## running side by side. The rule seat is unchanged for every rule it already holds.
+##
+## EVERY MEMBER IS CLEARED AT BOTH TEARDOWN SEATS (`_end_round` and `_reset_player`), through
+## `clear_duelist_state()` and `clear_charge_setup()` -- AC 54, the `6-5a` B1 lesson: round-crossing hashed
+## state with no clear is a reset match and a fresh match at different resting snapshots.
+
+## AC 38: successful stagings into THIS player's own pitch zone this round. Manapulation reads it.
+var stagings_this_round: int = 0
+
+## AC 16-18: SETUP CHARGES, and the orb multiplier a spent charge carries onto its attack (the authored
+## `orb_grant_multiplier` of the Setup that added the charge). ONE magnitude for the stack: every charge
+## comes from the same effect, and a later Setup with a retuned number overwrites it. Zero while no charge
+## is held, so a stale magnitude never sits beside an empty stack.
+var setup_charges: int = 0
+var setup_orb_multiplier: float = 0.0
+
+## AC 17-19 (`7-5a/R6`/`R22`): "THIS UNBLOCKABLE CARRIES SETUP" -- the per-attack fact, held AS the orb
+## multiplier it carries (0.0 = not carrying), written at the ACCEPTED press that spent the charge. The
+## press and the landing are ticks apart and the charge is already gone by then, which is why the attack
+## has to remember it. `charge_contact`'s seat and lifetime exactly: cleared on every path that ends an
+## attack -- landed, the landing exit, countered, abandoned by a knockdown or a bolt stun, round end, reset.
+var charge_setup_multiplier: float = 0.0
+
+## AC 20-23: EXECUTE CHARGES and their damage multiplier (the authored `damage_dealt_multiplier`), on the
+## Setup pair's own shape. One charge is spent per consuming weapon hit and applies its multiplier ONCE.
+var execute_charges: int = 0
+var execute_multiplier: float = 0.0
+
+## AC 24-26: STONESKIN CHARGES. Each makes the next damage instance this hero takes deal zero. No magnitude.
+var stoneskin_charges: int = 0
+
+## AC 30-33 (`7-5a/R9`/`R22`): THE ENRAGE WINDOWS -- a variable-length list, one entry per Enrage cast this
+## round: its remaining ticks and the flat damage bonus it adds while running. Two parallel arrays
+## (`UnitBoard`'s shape), appended to and NEVER compacted within a round, so an entry's INDEX is its
+## identity -- which is what lets a Counterspell end exactly the window its target cast opened (AC 45). An
+## expired or countered entry stays in place at zero ticks and zero bonus; both teardown seats empty the list.
+var enrage_ticks: Array[int] = []
+var enrage_bonus: Array[float] = []
+
+## AC 39-42 (`7-5a/R8`/`R9`): THE LIFECHAIN WINDOWS -- the Enrage list's shape without a magnitude. The hero
+## is COVERED while ANY entry is running; several never deepen the split, they only extend how long cover
+## lasts (until the latest one ends).
+var lifechain_ticks: Array[int] = []
+
+
+## AC 16: one more Setup charge, carrying `multiplier`.
+func add_setup_charge(multiplier: float) -> void:
+	setup_charges += 1
+	setup_orb_multiplier = multiplier
+
+
+## AC 17: SPEND one Setup charge and return the multiplier it carries; 0.0 when none is held. The magnitude
+## rests at zero once the last charge is gone.
+func spend_setup_charge() -> float:
+	if setup_charges <= 0:
+		return 0.0
+	var multiplier := setup_orb_multiplier
+	setup_charges -= 1
+	if setup_charges == 0:
+		setup_orb_multiplier = 0.0
+	return multiplier
+
+
+## AC 20: one more Execute charge, carrying `multiplier`.
+func add_execute_charge(multiplier: float) -> void:
+	execute_charges += 1
+	execute_multiplier = multiplier
+
+
+## AC 21: SPEND one Execute charge and return its multiplier; 0.0 when none is held.
+func spend_execute_charge() -> float:
+	if execute_charges <= 0:
+		return 0.0
+	var multiplier := execute_multiplier
+	execute_charges -= 1
+	if execute_charges == 0:
+		execute_multiplier = 0.0
+	return multiplier
+
+
+## AC 24: one more Stoneskin charge.
+func add_stoneskin_charge() -> void:
+	stoneskin_charges += 1
+
+
+## AC 24: SPEND one Stoneskin charge. True when one was held.
+func spend_stoneskin_charge() -> bool:
+	if stoneskin_charges <= 0:
+		return false
+	stoneskin_charges -= 1
+	return true
+
+
+## AC 30-32: OPEN one Enrage window and return its INDEX in the list. A non-positive duration still takes
+## an index (so the caller's record names a real entry) and is simply not running.
+func open_enrage(duration_ticks: int, bonus: float) -> int:
+	enrage_ticks.append(maxi(0, duration_ticks))
+	enrage_bonus.append(bonus if duration_ticks > 0 else 0.0)
+	return enrage_ticks.size() - 1
+
+
+## AC 30/AC 32: the flat bonus every RUNNING Enrage adds, summed -- two Enrages are +2 each.
+func enrage_damage_bonus() -> float:
+	var total := 0.0
+	for index in enrage_ticks.size():
+		if enrage_ticks[index] > 0:
+			total += enrage_bonus[index]
+	return total
+
+
+## How many Enrage windows are running right now (the marker's count, AC 50).
+func active_enrage_count() -> int:
+	var count := 0
+	for ticks: int in enrage_ticks:
+		if ticks > 0:
+			count += 1
+	return count
+
+
+func is_enrage_running_at(index: int) -> bool:
+	return index >= 0 and index < enrage_ticks.size() and enrage_ticks[index] > 0
+
+
+## AC 45: END one Enrage window by its index -- the ONE stop point besides natural expiry.
+func end_enrage_at(index: int) -> void:
+	if index < 0 or index >= enrage_ticks.size():
+		return
+	enrage_ticks[index] = 0
+	enrage_bonus[index] = 0.0
+
+
+## AC 39: OPEN one Lifechain window and return its index.
+func open_lifechain(duration_ticks: int) -> int:
+	lifechain_ticks.append(maxi(0, duration_ticks))
+	return lifechain_ticks.size() - 1
+
+
+## AC 39/AC 40: is this hero covered by Lifechain -- is ANY window running?
+func is_lifechain_covered() -> bool:
+	for ticks: int in lifechain_ticks:
+		if ticks > 0:
+			return true
+	return false
+
+
+func is_lifechain_running_at(index: int) -> bool:
+	return index >= 0 and index < lifechain_ticks.size() and lifechain_ticks[index] > 0
+
+
+## AC 45: END one Lifechain window by its index; the others run on.
+func end_lifechain_at(index: int) -> void:
+	if index >= 0 and index < lifechain_ticks.size():
+		lifechain_ticks[index] = 0
+
+
+## Advanced at `MatchState.advance()` step 2, beside every other D4 window (A1: one integer tick per
+## advance, never a float accumulator). An entry that reaches zero keeps its place and rests its bonus.
+func tick_stacking_windows() -> void:
+	for index in enrage_ticks.size():
+		if enrage_ticks[index] > 0:
+			enrage_ticks[index] -= 1
+			if enrage_ticks[index] == 0:
+				enrage_bonus[index] = 0.0
+	for index in lifechain_ticks.size():
+		if lifechain_ticks[index] > 0:
+			lifechain_ticks[index] -= 1
+
+
+## THE ONE STOP POINT for the per-attack Setup carry (AC 19), `clear_cast`'s discipline.
+func clear_charge_setup() -> void:
+	charge_setup_multiplier = 0.0
+
+
+## AC 54: THE TEARDOWN for everything above but the per-attack carry (which ends with its attack and has
+## its own stop point). Called at round end and at the debug reset, and nowhere else.
+func clear_duelist_state() -> void:
+	stagings_this_round = 0
+	setup_charges = 0
+	setup_orb_multiplier = 0.0
+	execute_charges = 0
+	execute_multiplier = 0.0
+	stoneskin_charges = 0
+	enrage_ticks.clear()
+	enrage_bonus.clear()
+	lifechain_ticks.clear()
+
+
+func _enrage_snapshot() -> Array:
+	var out: Array = []
+	for index in enrage_ticks.size():
+		out.append([enrage_ticks[index], enrage_bonus[index]])
+	return out
+
+
+## ------------------------------------------------------------------------------------------
 ## STORY 6-5f (AC 2/AC 28, OPEN QUESTION 1 RESOLVED): THE REVERSAL RECORD -- "what did this resolution
 ## actually do, in enough detail to undo it".
 ## ------------------------------------------------------------------------------------------
@@ -823,6 +1023,24 @@ const REVERSAL_HONED_BOLT := 10
 const REVERSAL_FIREBALL := 11
 const REVERSAL_ROCKSLING := 12
 const REVERSAL_CORPSE_BOMB := 13
+## STORY 7-5a (AC 43-48, `7-5a/R11`): EIGHT MORE KINDS, one per implemented Deck 2 half plus Lifechain, and
+## the fourteen above are not redefined. Each removes exactly what that one cast added:
+##   REVERSAL_SETUP / EXECUTE / STONESKIN   no columns -- one charge of that kind, if the caster still holds one.
+##   REVERSAL_ENRAGE / LIFECHAIN            `indices` = [the window's index in its list] -- that cast's own window.
+##   REVERSAL_BLOODMAGIC                    `amount`   = the mana it ACTUALLY added (post-clamp delta),
+##                                          `amount_b` = the HP it ACTUALLY took.
+##   REVERSAL_MANABLOSSOM                   `indices` = the hand slots it discounted whose card is STILL in hand
+##                                          (a slot is dropped when its card leaves), `amount` = the per-card
+##                                          discount it gave.
+##   REVERSAL_MANAPULATION                  `amount`   = the mana it ACTUALLY added (post-clamp delta).
+const REVERSAL_SETUP := 14
+const REVERSAL_EXECUTE := 15
+const REVERSAL_STONESKIN := 16
+const REVERSAL_ENRAGE := 17
+const REVERSAL_LIFECHAIN := 18
+const REVERSAL_BLOODMAGIC := 19
+const REVERSAL_MANABLOSSOM := 20
+const REVERSAL_MANAPULATION := 21
 
 ## ------------------------------------------------------------------------------------------
 ## STORY 6-5g (AC 3/AC 10/AC 26, OPEN QUESTION 1 RESOLVED): THE SEVEN NEW KINDS' OWN READING OF THE FIVE
@@ -913,6 +1131,12 @@ var reversal_a: Array[int] = []
 var reversal_b: Array[int] = []
 var reversal_flags: Array[bool] = []
 var reversal_amount: float = 0.0
+## STORY 7-5a (AC 47): A SECOND ONE-SHOT SCALAR, and the first resolution that needs one. Bloodmagic moves
+## TWO pools in opposite directions -- HP down, mana up -- and a counter has to put back both by the amount
+## each actually moved; the four int/bool columns cannot hold a float and one `amount` cannot hold two.
+## Zero for every other kind, so it is inert wherever it is not written. It rides the `reversal` snapshot
+## key as a SEVENTH element (the `cast` key's 2 -> 6 widening precedent: the key count does not move).
+var reversal_amount_b: float = 0.0
 
 ## The resting value of `reversal_b` -- a consumed corpse that raised nothing (an unresolvable kind; see
 ## `MatchState._apply_raise_dead`). `-1`, `UnitBoard.NO_RAISE_SOURCE`'s own posture: not a valid board index,
@@ -946,7 +1170,7 @@ func has_resolved_card() -> bool:
 ## this bug at exactly this kind of key. The apply arms build local lists and would otherwise keep mutating
 ## the packet's own arrays after the fact.
 func record_reversal(kind: int, indices: Array[int], a: Array[int], b: Array[int],
-		flags: Array[bool], amount: float) -> void:
+		flags: Array[bool], amount: float, amount_b: float = 0.0) -> void:
 	Invariant.check(kind != REVERSAL_NONE,
 		"a reversal record must name a real kind -- REVERSAL_NONE is the CLEARED state, not a record")
 	Invariant.check((a.is_empty() or a.size() == indices.size()) \
@@ -960,6 +1184,23 @@ func record_reversal(kind: int, indices: Array[int], a: Array[int], b: Array[int
 	reversal_b = b.duplicate()
 	reversal_flags = flags.duplicate()
 	reversal_amount = amount
+	reversal_amount_b = amount_b
+
+
+## Story 7-5a (AC 46, `7-5a/R11`): THE CARD IN HAND SLOT `hand_slot` HAS LEFT THE HAND -- drop it from a
+## Manablossom record, so a Counterspell takes the discount back out of the cards STILL in hand and never
+## out of whatever is drawn into that slot next. A no-op for every other kind (their `indices` are board
+## indices or list indices, never hand slots) and for a slot the record does not name.
+##
+## Called at the three seats where a card leaves the hand WITHOUT a new resolution overwriting the packet
+## (staging, the unblockable press, the defence press). The Mode 1 press needs no call: it writes a new
+## resolved-card record, which clears the packet outright.
+func reversal_drop_hand_slot(hand_slot: int) -> void:
+	if reversal_kind != REVERSAL_MANABLOSSOM:
+		return
+	var at := reversal_indices.find(hand_slot)
+	if at >= 0:
+		reversal_indices.remove_at(at)
 
 
 ## Story 6-5g (AC 10, `6-5g/R6`): THE LIVING RECORD'S TWO MUTATORS -- append one PART, and add to the hp
@@ -1024,6 +1265,7 @@ func clear_reversal() -> void:
 	reversal_b.clear()
 	reversal_flags.clear()
 	reversal_amount = 0.0
+	reversal_amount_b = 0.0
 
 
 ## Story 6-5a (REVIEW B1, operator ruling): the last-resolved-card record is CLEARED by round end and by
@@ -1688,10 +1930,38 @@ func to_snapshot() -> Dictionary:
 		# `SNAPSHOT_ID_PATHS` gains no member and `test_card_effect_resolution.gd`'s counts-only scan needs
 		# no exemption. That is deliberate: see `reversal_kind` for why Boom's Boulder ids are read back
 		# from `MatchState._boulder_card_id` instead of riding here.
+		# STORY 7-5a (AC 47): A SEVENTH ELEMENT, `amount_b` -- see `reversal_amount_b`. The key count does not
+		# move on this cause; the array's arity does. Resting `0.0`.
 		"reversal": [reversal_kind, reversal_indices.duplicate(), reversal_a.duplicate(),
-					reversal_b.duplicate(), reversal_flags.duplicate(), reversal_amount] \
+					reversal_b.duplicate(), reversal_flags.duplicate(), reversal_amount,
+					reversal_amount_b] \
 				if reversal_kind != REVERSAL_NONE \
-				else [REVERSAL_NONE, [], [], [], [], 0.0],
+				else [REVERSAL_NONE, [], [], [], [], 0.0, 0.0],
+		# STORY 7-5a (AC 54, Golden Prediction Part B): EIGHT NEW KEYS, one per new hashed per-player fact.
+		# Each CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`) and none is recomputable inside the tick
+		# that reads it -- the cast that added a charge or opened a window is ticks in the past:
+		#   `stagings`       decides what Manapulation grants (AC 38).
+		#   `setup`          `[charges, orb multiplier]` -- decides whether the next unblockable press is free.
+		#   `charge_setup`   the per-attack carry (AC 19) -- decides the landing's orb grant.
+		#   `execute`        `[charges, damage multiplier]` -- decides the next clean weapon hit's damage.
+		#   `stoneskin`      charges -- decides whether the next damage instance deals zero.
+		#   `enrage`         `[[remaining ticks, bonus], ...]` -- decides every weapon hit's damage. Variable
+		#                    length; ORDER IS MEANINGFUL (an index is a window's identity, AC 45).
+		#   `lifechain`      `[remaining ticks, ...]` -- decides whether damage is split.
+		#   `hand_discount`  the RAW per-slot Manablossom sums (`Hand.discounts_snapshot`) -- decide prices.
+		# COUNTS, VALUES AND INDICES ONLY: ints and floats, no card id, no effect id, no position, so
+		# `SNAPSHOT_ID_PATHS` gains no member.
+		#
+		# THE ONE GOLDEN CAUSE THAT RIDES ON ALL EIGHT IS THEIR PRESENCE (shape): the golden fixture casts none
+		# of the eight halves, so every value is the resting one on every hashed tick.
+		"stagings": stagings_this_round,
+		"setup": [setup_charges, setup_orb_multiplier],
+		"charge_setup": charge_setup_multiplier,
+		"execute": [execute_charges, execute_multiplier],
+		"stoneskin": stoneskin_charges,
+		"enrage": _enrage_snapshot(),
+		"lifechain": lifechain_ticks.duplicate(),
+		"hand_discount": hand.discounts_snapshot(),
 	}
 
 

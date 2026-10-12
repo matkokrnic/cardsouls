@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="DeckSelect" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/main/deck_select.gd" id="1_select"]
+
+[resource]
+script = ExtResource("1_select")
+seat_decks = Array[StringName]([&"deck_1", &"deck_1"])

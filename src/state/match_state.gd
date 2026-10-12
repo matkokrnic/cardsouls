@@ -546,6 +546,12 @@ var _hit_landed_blocked := false
 ## contents of data/cards/, which change without a trace.
 var _deck_contents: Array[StringName] = []
 
+## Story 7-5a (AC 7/AC 8): THE SECOND SEAT'S COMPOSITION. `_deck_contents` above is seat 1's (P1) since
+## this story; this is P2's. The ONE-LIST form (`inject_deck`) writes the same ids to both, so every
+## fixture and every recording made with one list deals exactly as it did. Injected CONTENT like its
+## sibling -- EXCLUDED from to_snapshot(), changed only through the injection seam, and recorded.
+var _deck_contents_p2: Array[StringName] = []
+
 ## Story 3-3 (AC 7/AC 9): the one-shot latch that arms the step-6 deal. Set by the injection
 ## seam (match start) and re-set by _apply_debug_reset(); cleared when the seat actually runs.
 ## EXCLUDED from to_snapshot(): it is consumed inside the same advance() that armed it whenever
@@ -554,10 +560,10 @@ var _deck_contents: Array[StringName] = []
 var _deck_deal_pending := false
 
 ## Story 3-5a (AC 4): the injected per-card CAST COSTS, id -> CardCastCondition. ONE MATCH-WIDE
-## MAP, not a per-player pair: 3-3 locked that both players receive the same injected
-## composition through one seam, so a per-player cost map would be two copies of one fact.
-## Asymmetric decks (and with them asymmetric costs) arrive with real deckbuilding in E4/E5+;
-## until then this shape is an INHERITED CONSEQUENCE, not a defect.
+## MAP, not a per-player pair. Story 7-5a (AC 8) gave each seat its own composition and KEPT this map
+## match-wide: a card costs the same whoever holds it, the map covers the whole library, and its
+## totality check walks BOTH compositions -- so a per-player cost map would still be two copies of
+## one fact.
 ##
 ## EXCLUDED FROM to_snapshot(), by the _deck_contents / _deck_deal_pending precedent: this is
 ## injected CONTENT, not evolving state, and it never changes after match start. That exclusion
@@ -779,6 +785,11 @@ func advance(intents: Array[InputIntent]) -> void:
 	# returns at step 1b and never reaches this line, so a running buff freezes with the round.
 	p1.tick_rules()
 	p2.tick_rules()
+	# Story 7-5a (AC 30-32, AC 39): the ENRAGE and LIFECHAIN windows count down HERE, beside the timed-rule
+	# seat and on its idiom -- ticked in one place, read at the damage seats. A round-over tick returned at
+	# step 1b, so a running window freezes with the round; `_end_round` clears the lists outright (AC 54).
+	p1.tick_stacking_windows()
+	p2.tick_stacking_windows()
 	# Story 6-2 (AC 9/AC 14e): both Pitch Zone FIZZLE countdowns advance HERE, beside every other D4
 	# timer, and the step-6 expiry seat reads the result -- the `pending_draw` idiom verbatim (ticked at
 	# step 2, consumed later in the same tick). Seated after step 1b, so a round-over tick never reaches
@@ -1125,9 +1136,28 @@ func inject_feature_flags(value: FeatureFlags) -> void:
 ## the DETECTOR the ownerless export-packaging remap risk flag gained instead of an owner: a
 ## data/cards/ that degrades to empty under export remap becomes a LOUD failure at match start
 ## rather than a silently empty deck nobody notices.
+## STORY 7-5a (AC 8): THE ONE-LIST FORM STAYS, and it is now a thin wrapper -- one composition for both
+## seats is `inject_seat_decks` with the same list twice, so every existing caller deals as before.
+##
+## THE EMPTY CHECK STAYS ON THIS FORM TOO (3-3 AC 10), stated here rather than only inherited from the
+## per-seat form below: `test_deck_and_hand.gd` pins this seam's own guard by scanning this function, and
+## a one-list caller should be told about ITS empty list, not about "both seats".
 func inject_deck(contents: Array[StringName]) -> void:
 	Invariant.check(not contents.is_empty(), "injected deck content must be non-empty (empty card set or a failed export remap?)")
-	_deck_contents = contents.duplicate()
+	inject_seat_decks(contents, contents)
+
+
+## Story 7-5a (AC 7/AC 8): THE PER-SEAT FORM of the deck seam -- P1's composition and P2's, in one call.
+## `inject_deck`'s contract verbatim otherwise: runner-only, once at match start, content only, no reload
+## path, and it consumes no RNG (the shuffle and the fill happen at the step-6 deal seat).
+##
+## BOTH COMPOSITIONS MUST BE NON-EMPTY (AC 10 of 3-3, per seat): one seat with no deck is the same
+## degraded match an empty single deck was.
+func inject_seat_decks(p1_contents: Array[StringName], p2_contents: Array[StringName]) -> void:
+	Invariant.check(not p1_contents.is_empty() and not p2_contents.is_empty(),
+		"injected deck content must be non-empty for both seats (empty card set or a failed export remap?)")
+	_deck_contents = p1_contents.duplicate()
+	_deck_contents_p2 = p2_contents.duplicate()
 	_deck_deal_pending = true
 
 
@@ -1154,7 +1184,7 @@ func inject_deck(contents: Array[StringName]) -> void:
 func inject_card_costs(costs: Dictionary[StringName, CardCastCondition]) -> void:
 	Invariant.check(not costs.is_empty(),
 		"injected cast costs must be non-empty (empty card set or a failed export remap?)")
-	for id in _deck_contents:
+	for id in _deck_contents + _deck_contents_p2:
 		Invariant.check(costs.has(id),
 			"injected deck id %s has no cast cost entry — inject_card_costs must be total over the composition" % id)
 	_card_costs = costs.duplicate()
@@ -1212,7 +1242,7 @@ var _boulder_card_id: StringName = &""
 func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 	Invariant.check(not effects.is_empty(),
 		"injected card effects must be non-empty (empty card set or a failed export remap?)")
-	for id in _deck_contents:
+	for id in _deck_contents + _deck_contents_p2:
 		Invariant.check(effects.has(id),
 			"injected deck id %s has no card effect entry — inject_card_effects must be total over the composition" % id)
 	_card_effects = effects.duplicate()
@@ -1247,7 +1277,7 @@ func inject_card_effects(effects: Dictionary[StringName, CardEffect]) -> void:
 func inject_card_colors(colors: Dictionary[StringName, Enums.CardColor]) -> void:
 	Invariant.check(not colors.is_empty(),
 		"injected card colours must be non-empty (empty card set or a failed export remap?)")
-	for id in _deck_contents:
+	for id in _deck_contents + _deck_contents_p2:
 		Invariant.check(colors.has(id),
 			"injected deck id %s has no card colour entry - inject_card_colors must be total over the composition" % id)
 	_card_colors = colors.duplicate()
@@ -1842,6 +1872,10 @@ func _resolve_actions(player: PlayerState, intent: InputIntent, slot: int) -> vo
 				_resolve_charge_contact(player, slot)
 			if not player.landing_window.is_running:
 				player.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+				# Story 7-5a (AC 18/AC 19): the attack is over. A Setup it carried and never cashed -- it
+				# missed, or every touch was dropped by i-frames or the post-get-up immunity -- is spent
+				# and gone, and the per-attack fact rests with the hit-once memory beside it.
+				player.clear_charge_setup()
 				player.hero.set_action_state(HeroState.ActionState.IDLE)
 	# STORY 6-6a POST-SMOKE RULING `6-6a/R7`: THE GET-UP IS A LOCKED ACTION. The live
 	# smoke found the hero able to act the instant `get_up` starts -- attack, roll, card, block all
@@ -2914,6 +2948,12 @@ func _resolve_contacts() -> Array[int]:
 		# totem's shot would deal the HERO's own swing percentage — a number belonging to a different
 		# attacker entirely — and the totem's authored damage would decide nothing.
 		var damage := _damage_against_hero(attacker, attacker_index, target)
+		# STORY 7-5a (AC 30/AC 33, `7-5a/R12`/`R20`): ENRAGE IS ADDED FIRST, to the BASE, before the block
+		# multiplier -- so a block reduces the bonus too: (base + bonus) x block, never base x block + bonus.
+		# A WEAPON hit only: the hero's own swing (`attacker_index == HERO_INDEX`). A minion's hit, a totem's
+		# shot and every spell projectile reach this ladder too and are not weapon hits.
+		if attacker_index == TargetingService.HERO_INDEX:
+			damage = _with_enrage(attacker, damage)
 		var blocked := false
 		if target.hero.action_state == HeroState.ActionState.BLOCKING \
 				and _is_facing(target.hero, fact["dir"]):
@@ -3029,9 +3069,25 @@ func _resolve_contacts() -> Array[int]:
 		# ever resolved is bit-identical. The hp read around `take_damage` is what makes Vampiric Aura
 		# heal the damage ACTUALLY removed (N10): after block and every multiplier, capped by what the
 		# target had left.
+		#
+		# STORY 7-5a (AC 21-23, AC 33, `7-5a/R7`/`R20`): THE FIRST NON-COMMUTING STEP LANDS HERE, AND THE ORDER
+		# IS NOW REAL: (base + Enrage) x block x Execute x Bloodlust. N1's note above stops being true of the
+		# whole seat -- Enrage is an ADD, so where it sits relative to the block multiplier changes the
+		# number -- and `test_deck_2_damage.gd` pins the order with numbers, in the same breath, as N1 asked.
+		#
+		# EXECUTE is consumed by a CLEAN weapon hit on the opposing hero and by nothing else: a hit that is
+		# not the hero's own swing does not reach this line's condition, a hit on a unit branched off the
+		# ladder long ago, a deflected or i-frame-dropped hit `continue`d above, and a BLOCKED hit keeps the
+		# charge and deals its reduced damage untripled. It is consumed BEFORE Stoneskin is asked, so a hit
+		# Stoneskin then absorbs still spends it (AC 22/AC 25).
+		if attacker_index == TargetingService.HERO_INDEX and not blocked:
+			damage = _with_execute(attacker, damage)
 		damage = _funnel_damage(attacker, attacker_index, target, TargetingService.HERO_INDEX, damage)
 		var hp_before := target.hero.get_hp()
-		target.hero.take_damage(damage)
+		# STORY 7-5a (AC 24/AC 40/AC 41): the hero TAKES THE INSTANCE through the one seat that asks Stoneskin
+		# and then Lifechain. `damage` becomes what the HERO was actually dealt -- zero if absorbed, its share
+		# if split -- so the lifesteal, the reversal record and `hit_landed` below all read the hero's part.
+		damage = _deal_hero_damage(target, damage)
 		_apply_lifesteal(attacker, attacker_index, hp_before - target.hero.get_hp())
 		# STORY 6-5g (AC 15/AC 17/AC 19): a landed SPELL SHOT joins its own resolution's living record, as the
 		# hp ACTUALLY removed from this hero -- the same before-minus-after delta the lifesteal above reads.
@@ -3425,8 +3481,14 @@ func _resolve_unit_contact(fact: Dictionary, attacker: PlayerState, target: Play
 	# therefore indistinguishable in its aftermath from a Culling kill or a Drain sacrifice (AC 6),
 	# because all three write the corpse through the same function with the same argument.
 	var unit_hp_before := target.units.hp_at(index)
+	# Story 7-5a (AC 30): ENRAGE ADDS TO A WEAPON HIT ON A UNIT TOO -- the hero's own swing, before the
+	# funnel. EXECUTE DOES NOT REACH THIS LADDER AT ALL (AC 21): a hit on a unit never consumes a charge and
+	# is never tripled, which is true by there being no Execute line here.
+	var unit_damage := _damage_against_unit(attacker, attacker_index)
+	if attacker_index == TargetingService.HERO_INDEX:
+		unit_damage = _with_enrage(attacker, unit_damage)
 	target.units.apply_damage_at(index, _funnel_damage(attacker, attacker_index, target, index,
-			_damage_against_unit(attacker, attacker_index)), _corpse_ticks_for(target, index))
+			unit_damage), _corpse_ticks_for(target, index))
 	_apply_lifesteal(attacker, attacker_index, unit_hp_before - target.units.hp_at(index))
 	# STORY 6-5g (AC 15/AC 19/AC 22): a landed SPELL SHOT on a UNIT joins its own resolution's living record,
 	# the hero ladder's line applied to the short ladder and measured the same way. The reversal then either
@@ -3567,6 +3629,92 @@ func _funnel_damage(attacker: PlayerState, attacker_index: int, target: PlayerSt
 	if target.is_rule_active(PlayerState.RULE_BLOODLUST) and _is_bloodlust_body(target, target_index):
 		damage *= target.rule_b[PlayerState.RULE_BLOODLUST]
 	return damage
+
+
+## Story 7-5a (AC 30/AC 32/AC 33): `damage` plus the flat bonus of every Enrage window `attacker` has
+## running -- +2 each at the shipped number, summed. The caller is a WEAPON-hit seat (the hero's melee swing
+## on a hero or a unit, and the unblockable landing) and adds this to the BASE, before any multiplier.
+##
+## BIT-IDENTICAL AT REST, by construction rather than by `x + 0.0`: with no window running the same float
+## comes back, `_funnel_damage`'s own posture.
+func _with_enrage(attacker: PlayerState, damage: float) -> float:
+	var bonus := attacker.enrage_damage_bonus()
+	return damage + bonus if bonus > 0.0 else damage
+
+
+## Story 7-5a (AC 21-23, `7-5a/R7`): `damage` tripled by ONE Execute charge, which is spent -- or `damage`
+## untouched when `attacker` holds none. One charge per hit and one multiply per hit: two charges are two
+## separate tripled hits, never x9 on one (AC 23).
+##
+## "A WEAPON HIT THAT WOULD DAMAGE THE OPPOSING HERO" is the caller's side of the rule (it calls this only
+## for a clean melee hit on a hero and for an unblockable landing) plus the `damage > 0.0` test here: a hit
+## that deals nothing spends nothing. EXECUTE GRANTS NO ORBS, which is true by this function naming no pool.
+func _with_execute(attacker: PlayerState, damage: float) -> float:
+	if attacker.execute_charges <= 0 or damage <= 0.0:
+		return damage
+	return damage * attacker.spend_execute_charge()
+
+
+## Story 7-5a (AC 24/AC 25, AC 40/AC 41, `7-5a/R8`/`R27`/`R28`): THE HERO TAKES ONE DAMAGE INSTANCE -- the
+## ONE seat every hero damage seat applies its final number through (the contact ladder, the unblockable
+## landing package, Honed Bolt, and each Boulder of a Boom). Returns what the HERO was dealt.
+##
+## STONESKIN RESOLVES FIRST AND ABSORBS THE WHOLE INSTANCE (`7-5a/R8`): one charge, the instance deals zero,
+## nothing is split and no minion is touched. Only an instance that would actually deal damage spends a
+## charge -- a zero-damage hit is not "the next damage instance".
+##
+## THEN LIFECHAIN SPLITS IT (AC 40): while any Lifechain window runs, the instance is divided equally among
+## the hero and the hero's LIVING MINIONS, counted now. A minion's share beyond its remaining hp comes back
+## to the hero and is not redistributed (`7-5a/R28`). With no living minion the hero takes it all.
+##
+## THE CALLERS MEASURE THE HERO'S HP BEFORE AND AFTER, as they always have, so Vampiric Aura heals off the
+## hero's share and a reversal record refunds the hero's share only (AC 41/AC 42).
+##
+## WHAT THIS SEAT DOES NOT TOUCH is every OTHER consequence of the hit -- a knockdown, a stun, a planted
+## Boulder, the attacker's orbs, `hit_landed` -- which is the whole of "only the damage is absorbed".
+##
+## BIT-IDENTICAL AT REST: with no charge and no window it is `take_damage(damage)` with the same float.
+## HP PAID BY BLOODMAGIC AND A COUNTERSPELL'S CLAW-BACK NEVER COME THROUGH HERE: neither is damage.
+func _deal_hero_damage(target: PlayerState, damage: float) -> float:
+	if damage > 0.0 and target.spend_stoneskin_charge():
+		return 0.0
+	var hero_share := damage
+	if damage > 0.0 and target.is_lifechain_covered():
+		hero_share = _split_with_minions(target, damage)
+	target.hero.take_damage(hero_share)
+	return hero_share
+
+
+## Story 7-5a (AC 40, `7-5a/R8`/`R28`): split `damage` equally among `target`'s hero and its living minions;
+## apply each minion's share and return the hero's.
+##
+## A MINION TAKES AT MOST WHAT IT HAS LEFT, and the rest of its share returns to the hero. A minion its
+## share kills dies through the ONE death seat (`apply_damage_at` with the corpse lifetime handed down,
+## `_resolve_unit_contact`'s own shape), so it leaves a normal corpse, and its swing-dedupe record is
+## discarded for that function's F2 reason.
+##
+## TOTEMS ARE EXCLUDED by the same `_is_own_minion` predicate Culling and Drain use. BOARD-INDEX ORDER
+## (`living_indices()` is ascending), which decides nothing: every minion gets the same share.
+##
+## A REDIRECTED SHARE IS NOT A HIT ON THE MINION (dev-pass choice, recorded in Dev Notes): no reaction is
+## queued for a kind that reacts to damage, no reversal part is recorded for it (AC 42: minion shares stay),
+## and Bloodlust's taken-multiplier is not applied a second time -- the funnel already ran, for the hero.
+func _split_with_minions(target: PlayerState, damage: float) -> float:
+	var minions: Array[int] = []
+	for index: int in target.units.living_indices():
+		if _is_own_minion(target, index):
+			minions.append(index)
+	if minions.is_empty():
+		return damage
+	var share := damage / float(minions.size() + 1)
+	var hero_share := share
+	for index: int in minions:
+		var taken := minf(share, target.units.hp_at(index))
+		target.units.apply_damage_at(index, taken, _corpse_ticks_for(target, index))
+		hero_share += share - taken
+		if not target.units.is_alive_at(index):
+			target.unit_dedupe.discard(index)
+	return hero_share
 
 
 ## Whether `index` on `player`'s side is a body Bloodlust covers: the hero, or a MINION on the board.
@@ -4040,9 +4188,11 @@ func live_kind_count(player: PlayerState, kind_name: StringName) -> int:
 ## reset, whose own comment calls it an operator affordance and not a gameplay path), so "round
 ## start" for the fill means exactly those two occasions and nothing else.
 ##
-## Player order is fixed P1 -> P2 for determinism, and both piles are laid down from the SAME
-## injected composition and shuffled against the SAME generator in turn — which is how the two
-## players get different orders out of one seed without a second RNG ever existing.
+## Player order is fixed P1 -> P2 for determinism, and both piles are shuffled against the SAME
+## generator in turn — which is how the two players get different orders out of one seed without a
+## second RNG ever existing. Story 7-5a (AC 7): each pile is laid down from ITS OWN SEAT's injected
+## composition; with one list injected for both seats the two are the same ids and the deal is
+## bit-identical to the one-composition deal it replaces.
 ##
 ## `balance == null` joins the pre-injection guard family (step 3's _resolve_actions, step 5's
 ## regen, step 4's twin): hand_size has no value to read yet. The latch is deliberately NOT
@@ -4052,8 +4202,8 @@ func _deal_pending_decks() -> void:
 	if not _deck_deal_pending or balance == null:
 		return
 	_deck_deal_pending = false
-	_deal_player(p1)
-	_deal_player(p2)
+	_deal_player(p1, _deck_contents)
+	_deal_player(p2, _deck_contents_p2)
 
 
 ## The per-player half: full composition down, shuffle, hand emptied, then fill from the TOP.
@@ -4069,8 +4219,8 @@ func _deal_pending_decks() -> void:
 ## The is_empty() stop is a FLOOR here too, but it is no longer the LAST word: story 3-5b gives
 ## the pile a way back (the lazy reshuffle at delivery time), and the authoring audit still keeps
 ## hand_size <= deck_size so this initial fill never reaches the floor.
-func _deal_player(player: PlayerState) -> void:
-	player.deck.set_contents(_deck_contents)
+func _deal_player(player: PlayerState, contents: Array[StringName]) -> void:
+	player.deck.set_contents(contents)
 	_shuffle_deck(player.deck)
 	# Story 4-0 (AC 1, `4-0/R2`): the WIDTH is established HERE, at the deal seat, and nowhere
 	# else. `balance.hand_size` is read INLINE at the moment of use (CONSTRAINT C) and handed in;
@@ -4309,9 +4459,23 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	# authored, `CastEvaluator.REASON_INSUFFICIENT_MANA` when it cannot be paid (AC 21a), and nothing spent
 	# on the refusal because every guard here precedes the spend.
 	var id: StringName = player.hand.visible_id_at(hand_slot)
+	# STORY 7-5a (AC 13/AC 15, `7-5a/R29`): THE TEMPORARY REFUSAL -- a normal half `7-5b` builds is refused
+	# HERE, ahead of the price, so the player hears "not available yet" whatever their mana. Nothing above
+	# this line has mutated anything and everything that spends, records or discards is below it: the card
+	# stays in hand, no mana or stamina moves, and `last_resolved_card` is not written, so a refused card is
+	# never a Counterspell target (AC 15) by position rather than by a check.
+	if CardEffectResolver.is_unavailable(_card_effects.get(id)):
+		player.hero.reject_action(&"card_cast", REASON_NOT_AVAILABLE_YET)
+		return
 	var condition: CardCastCondition = _card_costs.get(id)
+	# STORY 7-5a (AC 34/AC 35): THE MANABLOSSOM DISCOUNT on the card in this slot, read ONCE here and used
+	# by the affordability test and the spend below, so they cannot disagree. A COVERED slot plays the
+	# BOULDER, which is never discounted (`7-5a/R14`): the discount stays on the card underneath and applies
+	# again once the cover is lifted. A refused press leaves it where it is -- nothing here writes it.
+	var mana_discount := 0.0 if player.hand.is_covered(hand_slot) \
+			else player.hand.discount_at(hand_slot)
 	var reason := CastEvaluator.refusal_reason(condition, player.mana.get_current(),
-			player.orbs, flags)
+			player.orbs, flags, mana_discount)
 	if reason != CastEvaluator.ALLOWED:
 		player.hero.reject_action(&"card_cast", reason)
 		return
@@ -4331,7 +4495,10 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	if gate != &"":
 		player.hero.reject_action(&"card_cast", gate)
 		return
-	Invariant.check(player.mana.spend(condition.mana_cost),
+	# Story 7-5a (AC 34): the orbs the caster holds AT THE PRESS, all colours -- Manablossom's larger
+	# discount is decided by it (AC 34). Mode 1 pays no orbs, so "before the spend" and "now" are one number.
+	var orbs_held := _total_orbs(player)
+	Invariant.check(player.mana.spend(CastEvaluator.discounted_mana_cost(condition, mana_discount)),
 		"an ALLOWED cast must be affordable — CastEvaluator and ManaPool disagree")
 	# STORY 6-5e (AC 21/AC 22, ruling 7): THE COVER FORK -- the one place a Mode ① press decides whether it
 	# is playing the CARD in a slot or lifting the BOULDER off it.
@@ -4457,7 +4624,7 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 		if player.hero.action_state == HeroState.ActionState.BLOCKING:
 			player.hero.set_action_state(HeroState.ActionState.IDLE)
 	else:
-		_apply_card_effect(player, cast_effect, slot, hand_slot)
+		_apply_card_effect(player, cast_effect, slot, hand_slot, orbs_held)
 	# Story 3-5b (AC 3): the replacement is now OWED, not drawn. 3-5a's instant refill lived
 	# exactly here; it is REPLACED, not kept behind a flag. The debt is incremented and the window
 	# started, and the delivery happens at the end of this same step 6 — immediately if the
@@ -4506,9 +4673,48 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 ## `slot`'s own stated reason: both call sites already hold it (the Mode ① press holds the pressed slot, the
 ## activation holds the staged card's originating slot), and a second derivation would be a second thing to
 ## get wrong. Every other arm ignores it.
+## STORY 7-5a (AC 31/AC 34): IT TAKES THE ORBS THE CASTER HELD AT THE PRESS, all colours, counted BEFORE an
+## activation paid its own orb (`7-5a/R18`). Two arms read it -- Enrage's window length and Manablossom's
+## larger discount -- and it is threaded for `slot`'s and `hand_slot`'s reason: by the time this function
+## runs a pitch activation has already spent, so the number cannot be re-derived here.
 func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
-		hand_slot: int) -> void:
+		hand_slot: int, orbs_held: int) -> void:
 	match CardEffectResolver.outcome(effect, flags):
+		# Story 7-5a (AC 16/AC 20/AC 24): THE THREE CHARGES. Each adds ONE charge to the caster's stack and
+		# records a kind-only reversal -- the timed buffs' own record shape (`_record_buff_reversal`),
+		# because "undo" is "take one charge of that kind back" and the kind already says which.
+		CardEffectResolver.OUTCOME_SETUP:
+			player.add_setup_charge(effect.orb_grant_multiplier)
+			_record_buff_reversal(player, PlayerState.REVERSAL_SETUP)
+		CardEffectResolver.OUTCOME_EXECUTE:
+			player.add_execute_charge(effect.damage_dealt_multiplier)
+			_record_buff_reversal(player, PlayerState.REVERSAL_EXECUTE)
+		CardEffectResolver.OUTCOME_STONESKIN:
+			player.add_stoneskin_charge()
+			_record_buff_reversal(player, PlayerState.REVERSAL_STONESKIN)
+		# Story 7-5a (AC 30-32/AC 39): THE TWO STACKING WINDOWS. Each opens ITS OWN window and records that
+		# window's index, so a Counterspell ends exactly this cast's window (AC 45). Seconds become ticks
+		# HERE, once, at the application (A1).
+		CardEffectResolver.OUTCOME_ENRAGE:
+			# AC 31 (`7-5a/R18`): base plus the per-orb extension times the orbs held before the activation orb.
+			var enrage_index := player.open_enrage(TimingWindow.seconds_to_ticks(
+					effect.duration_seconds + effect.duration_per_orb_seconds * float(orbs_held)),
+					effect.bonus_damage)
+			player.record_reversal(PlayerState.REVERSAL_ENRAGE, [enrage_index] as Array[int],
+					[] as Array[int], [] as Array[int], [] as Array[bool], 0.0)
+		CardEffectResolver.OUTCOME_LIFECHAIN:
+			var lifechain_index := player.open_lifechain(
+					TimingWindow.seconds_to_ticks(effect.duration_seconds))
+			player.record_reversal(PlayerState.REVERSAL_LIFECHAIN, [lifechain_index] as Array[int],
+					[] as Array[int], [] as Array[int], [] as Array[bool], 0.0)
+		# Story 7-5a (AC 27-29, AC 34-38): THE THREE ECONOMY EFFECTS, one named helper each on the 6-5b
+		# family's own discipline -- this `match` says WHAT resolves and the helper says HOW.
+		CardEffectResolver.OUTCOME_BLOODMAGIC:
+			_apply_bloodmagic(player, effect)
+		CardEffectResolver.OUTCOME_MANABLOSSOM:
+			_apply_manablossom(player, effect, orbs_held)
+		CardEffectResolver.OUTCOME_MANAPULATION:
+			_apply_manapulation(player, effect)
 		CardEffectResolver.OUTCOME_SUMMON:
 			# Story 4-4 (AC 1/AC 6): the kind index and THAT KIND'S authored maximum are both read
 			# INLINE here (CONSTRAINT C) and handed DOWN to the board, which is what keeps `UnitBoard` a
@@ -4609,6 +4815,72 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 		# here suppresses a cast, because none is ever started.
 		CardEffectResolver.OUTCOME_COUNTERSPELL:
 			_apply_counterspell(player, slot)
+
+
+## Story 7-5a: every orb `player` holds, ALL COLOURS -- the count Enrage and Manablossom scale on (AC 31,
+## AC 34). One reader for the two press seats, so "orbs held" cannot mean two things.
+func _total_orbs(player: PlayerState) -> int:
+	return player.orbs.get_count(Enums.CardColor.RED) + player.orbs.get_count(Enums.CardColor.BLUE) \
+			+ player.orbs.get_count(Enums.CardColor.GREEN)
+
+
+## Story 7-5a (AC 27-29, `7-5a/R17`): BLOODMAGIC -- pay the authored HP, gain the authored mana.
+##
+## THE HP IS A PRICE, NOT DAMAGE. It is taken straight off the hero: no funnel, no Stoneskin, no Lifechain,
+## no Bloodlust, no lifesteal, no `hit_landed` -- true BY ABSENCE, because none of those seats is on this
+## path. It cannot kill: the pre-spend gate (`NEEDS_HP_ABOVE_COST`) refused the cast unless HP was strictly
+## above the price.
+##
+## BOTH AMOUNTS ARE RECORDED AS THE POOLS' OWN BEFORE-MINUS-AFTER DELTAS (AC 47, `_apply_culling`'s rule): a
+## cast at 8 of 10 mana gains 2, and a counter claws back 2.
+func _apply_bloodmagic(player: PlayerState, effect: CardEffect) -> void:
+	var hp_before := player.hero.get_hp()
+	var mana_before := player.mana.get_current()
+	player.hero.take_damage(effect.hp_cost)
+	player.mana.add(effect.mana_gain)
+	player.record_reversal(PlayerState.REVERSAL_BLOODMAGIC, [] as Array[int], [] as Array[int],
+			[] as Array[int], [] as Array[bool], player.mana.get_current() - mana_before,
+			hp_before - player.hero.get_hp())
+
+
+## Story 7-5a (AC 34/AC 35, `7-5a/R10`/`R14`): MANABLOSSOM -- every card in the caster's hand RIGHT NOW costs
+## less mana, by the authored amount, or by the larger authored amount when the caster holds at least
+## `orb_threshold` orbs.
+##
+## "IN HAND RIGHT NOW" is the occupied CARD slots as this resolves: the Manablossom card itself has already
+## left, a hole awaiting its draw is not a card, and a card UNDER A BOULDER is one (it keeps the discount
+## and shows it when uncovered). A card drawn later was never in this loop and is not discounted.
+##
+## THE RECORD names the slots it touched and the per-card amount; a slot is dropped from it when its card
+## leaves the hand (`PlayerState.reversal_drop_hand_slot`). A cast that discounted nothing records nothing,
+## so a Counterspell against it has no target (AC 46).
+func _apply_manablossom(player: PlayerState, effect: CardEffect, orbs_held: int) -> void:
+	var amount := effect.mana_discount
+	if effect.orb_threshold > 0 and orbs_held >= effect.orb_threshold:
+		amount = effect.mana_discount_at_threshold
+	if amount <= 0.0:
+		return
+	var touched: Array[int] = []
+	for hand_slot in player.hand.size():
+		if player.hand.is_slot_empty(hand_slot):
+			continue
+		player.hand.add_discount_at(hand_slot, amount)
+		touched.append(hand_slot)
+	if not touched.is_empty():
+		player.record_reversal(PlayerState.REVERSAL_MANABLOSSOM, touched, [] as Array[int],
+				[] as Array[int], [] as Array[bool], amount)
+
+
+## Story 7-5a (AC 38, `7-5a/R19`): MANAPULATION -- gain the authored mana per successful staging into the
+## caster's own pitch zone this round. Zero stagings grants zero. The grant is recorded as the pool's own
+## delta (AC 47); a cast that added nothing records nothing, so there is nothing to counter.
+func _apply_manapulation(player: PlayerState, effect: CardEffect) -> void:
+	var mana_before := player.mana.get_current()
+	player.mana.add(effect.mana_per_staging * float(player.stagings_this_round))
+	var gained := player.mana.get_current() - mana_before
+	if gained > 0.0:
+		player.record_reversal(PlayerState.REVERSAL_MANAPULATION, [] as Array[int], [] as Array[int],
+				[] as Array[int], [] as Array[bool], gained)
 
 
 ## Story 6-5b (AC 8, `6-5b/R5`/`6-5b/R15`): CULLING -- kill up to `kill_cap` of the caster's OWN LIVING
@@ -4949,7 +5221,9 @@ func _apply_boom(caster: PlayerState, effect: CardEffect, slot: int) -> void:
 		var damage := _funnel_damage(caster, TargetingService.HERO_INDEX, target,
 				TargetingService.HERO_INDEX, effect.damage_amount)
 		var hp_before := target.hero.get_hp()
-		target.hero.take_damage(damage)
+		# Story 7-5a (AC 24, `7-5a/R27`): ONE BOULDER'S BOOM IS ONE DAMAGE INSTANCE -- so each Boulder asks
+		# Stoneskin (and Lifechain) separately, and one charge absorbs one Boulder's worth.
+		damage = _deal_hero_damage(target, damage)
 		var removed := hp_before - target.hero.get_hp()
 		removed_total += removed
 		_apply_lifesteal(caster, TargetingService.HERO_INDEX, removed)
@@ -5144,6 +5418,44 @@ func _apply_counterspell(player: PlayerState, slot: int) -> void:
 			# sum), and a hero healed since cannot be pushed over its maximum.
 			player.hero.heal(victim.reversal_amount)
 			_restore_boulders(player, victim.reversal_indices)
+		# STORY 7-5a (AC 43-47, `7-5a/R11`/`R30`): THE EIGHT NEW HALVES. A Counterspell removes exactly what
+		# that ONE cast added, by the existing two-layer rule: PENDING and TIMED products are removed and what
+		# they already did stays; INSTANT products are reversed by the amount actually applied.
+		#
+		# THE THREE CHARGES (AC 44): one charge of that kind comes off the caster's stack. The gate already
+		# refused the case where none is left (a charge consumed, absorbed, or spent on an attack in flight
+		# is gone -- `7-5a/R30`), so each arm here finds one to take. `spend_*` IS the removal: it is the
+		# stack's one decrement, and taking a charge back and using one are the same change to the count.
+		# An attack ALREADY carrying Setup keeps it -- `charge_setup_multiplier` is not named here.
+		PlayerState.REVERSAL_SETUP:
+			victim.spend_setup_charge()
+		PlayerState.REVERSAL_EXECUTE:
+			victim.spend_execute_charge()
+		PlayerState.REVERSAL_STONESKIN:
+			victim.spend_stoneskin_charge()
+		# THE TWO WINDOWS (AC 45): that cast's OWN window ends, by the index it recorded. Every other window
+		# runs on, so a second Enrage keeps its +2 and Lifechain cover lasts until the latest one left.
+		# Damage already dealt keeps its bonus and damage already redirected stays redirected -- by absence.
+		PlayerState.REVERSAL_ENRAGE:
+			victim.end_enrage_at(victim.reversal_indices[0])
+		PlayerState.REVERSAL_LIFECHAIN:
+			victim.end_lifechain_at(victim.reversal_indices[0])
+		# BLOODMAGIC (AC 47): the HP it took comes back (`HeroState.heal`'s clamp at max, reused) and the
+		# mana it gave is clawed back (`ManaPool.add`'s floor at 0, reused) -- both by the RECORDED deltas.
+		PlayerState.REVERSAL_BLOODMAGIC:
+			victim.hero.heal(victim.reversal_amount_b)
+			victim.mana.add(-victim.reversal_amount)
+		# MANABLOSSOM (AC 46): that cast's own amount comes back out of the cards it touched that are STILL
+		# IN HAND -- the record dropped every slot whose card left since. Cards already played keep what
+		# they saved, by absence. The raw sum is what moves (`7-5a/R10`), so a second Manablossom's share on
+		# the same card is untouched. The hand is announced: the prices the HUD shows just changed.
+		PlayerState.REVERSAL_MANABLOSSOM:
+			for hand_slot: int in victim.reversal_indices:
+				victim.hand.add_discount_at(hand_slot, -victim.reversal_amount)
+			victim.notify_cards_changed()
+		# MANAPULATION (AC 47): the mana it actually gave is clawed back, floor 0.
+		PlayerState.REVERSAL_MANAPULATION:
+			victim.mana.add(-victim.reversal_amount)
 	# `6-5f/R5` / AC 10, and the LAST statement for the reason stated in the docstring.
 	victim.clear_reversal()
 	# Story 6-5f (AC 26, `6-5f/R35`): the placeholder cue, queued ONLY on a real reversal. A refusal never
@@ -5625,6 +5937,18 @@ const REASON_NO_COUNTER_TARGET := &"no_counter_target"
 ## only, before every mutation: nothing is spent.
 const REASON_NOTHING_TO_ANSWER := &"nothing_to_answer"
 
+## Story 7-5a (AC 13, `7-5a/R29`): A CARD HALF A LATER STORY BUILDS -- refused before any spend at the two
+## seats that could otherwise pay for it (the Mode 1 pre-spend ladder and the staging ladder). The token is
+## the resolver's own, borrowed so the refusal and the never-reached outcome are one spelling. Which halves
+## are refused is `CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS`, the one table `7-5b` empties.
+const REASON_NOT_AVAILABLE_YET := CardEffectResolver.REASON_NOT_AVAILABLE_YET
+
+## Story 7-5a (AC 28, `7-5a/R17`): BLOODMAGIC PRESSED WITH HP AT OR BELOW ITS HP PRICE. The
+## `REASON_NO_OWN_MINION` family's convention -- a board-gate refusal fired before any spend, naming the
+## fact that was missing -- and its own token rather than `insufficient_mana`: the pool that is short is
+## the hero's HP, and a player whose card stayed in hand needs to hear which.
+const REASON_INSUFFICIENT_HP := &"insufficient_hp"
+
 
 ## Story 6-5e (AC 17a): REFUSE this press if the slot is covered, and say whether it did.
 ##
@@ -5743,6 +6067,12 @@ func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringNam
 			var counter_victim := p2 if player == p1 else p1
 			return &"" if _counter_target_is_live(counter_victim, effect) \
 					else REASON_NO_COUNTER_TARGET
+		# Story 7-5a (AC 28, `7-5a/R17`): THE SIXTH ARM -- the caster's own HP strictly above the effect's
+		# HP price. HP EQUAL to the price is refused (paying it would leave the hero at zero, and a price
+		# never kills); price + 1 is allowed. The first arm that reads the caster's own HERO, and the second
+		# (after the counter window) whose answer depends on the effect's own authored number.
+		CardEffectResolver.NEEDS_HP_ABOVE_COST:
+			return &"" if player.hero.get_hp() > effect.hp_cost else REASON_INSUFFICIENT_HP
 	return &""
 
 
@@ -5815,9 +6145,38 @@ func _reversal_has_anything_left(victim: PlayerState) -> bool:
 			or victim.reversal_kind == PlayerState.REVERSAL_FIREBALL \
 			or victim.reversal_kind == PlayerState.REVERSAL_ROCKSLING \
 			or victim.reversal_kind == PlayerState.REVERSAL_CORPSE_BOMB
-	if victim.reversal_amount != 0.0 and not is_part_list_kind:
+	# STORY 7-5a (AC 48): THE BLANKET `amount` ADMISSION IS NARROWED TO THE KINDS IT WAS WRITTEN FOR. It is
+	# right for a pool or a hero that is always there (Culling, Drain, Boom, and now Bloodmagic and
+	# Manapulation, which answer through their own arms below for the same reason). It is WRONG for
+	# Manablossom, whose `amount` is a per-card discount that is only something left while a touched card is
+	# still in hand -- so that kind is excluded here beside the four part-list kinds and decided below.
+	if victim.reversal_amount != 0.0 and not is_part_list_kind \
+			and victim.reversal_kind != PlayerState.REVERSAL_MANABLOSSOM:
 		return true
 	match victim.reversal_kind:
+		# STORY 7-5a (AC 44/AC 48, `7-5a/R11`/`R30`): A CHARGE IS LEFT WHILE THE CASTER STILL HOLDS ONE OF
+		# THAT KIND. Consumed, absorbed, or spent on an attack already in flight: gone, and no target.
+		PlayerState.REVERSAL_SETUP:
+			return victim.setup_charges > 0
+		PlayerState.REVERSAL_EXECUTE:
+			return victim.execute_charges > 0
+		PlayerState.REVERSAL_STONESKIN:
+			return victim.stoneskin_charges > 0
+		# AC 45/AC 48: A WINDOW IS LEFT WHILE THAT CAST'S OWN WINDOW STILL RUNS. Expired: no target, even
+		# if another window of the same kind is running -- that one belongs to another cast.
+		PlayerState.REVERSAL_ENRAGE:
+			return not victim.reversal_indices.is_empty() \
+					and victim.is_enrage_running_at(victim.reversal_indices[0])
+		PlayerState.REVERSAL_LIFECHAIN:
+			return not victim.reversal_indices.is_empty() \
+					and victim.is_lifechain_running_at(victim.reversal_indices[0])
+		# AC 46/AC 48: MANABLOSSOM IS LEFT WHILE ANY CARD IT TOUCHED IS STILL IN HAND.
+		PlayerState.REVERSAL_MANABLOSSOM:
+			return not victim.reversal_indices.is_empty()
+		# AC 47: BLOODMAGIC's HP is always there to refund (its mana half was admitted above when it gave
+		# any; a cast at full mana still took HP, and that alone is something to put back).
+		PlayerState.REVERSAL_BLOODMAGIC:
+			return victim.reversal_amount_b > 0.0
 		PlayerState.REVERSAL_VANGUARD:
 			# AC 12's first proven case: a summoned Vanguard that is DEAD with its corpse already expired
 			# has nothing left -- there is no minion to remove and no corpse to clear.
@@ -6049,12 +6408,25 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 		player.hero.reject_action(&"card_cast", REASON_PITCH_ZONE_OCCUPIED)
 		return
 	var id: StringName = player.hand.to_array()[hand_slot]
+	# STORY 7-5a (AC 13, `7-5a/R29`): THE TEMPORARY REFUSAL, AT STAGING -- a pitch half `7-5b` builds never
+	# enters the zone. Seated above the cost lookup and the mana test, so the card stays in hand, no mana is
+	# lost and nothing is staged; the same question the Mode 1 seat asks, of the PITCH effect map. The map
+	# is read ONCE, here, into the local the variable-cost classification below also uses.
+	var pitch_effect: CardEffect = _pitch_effects.get(id)
+	if CardEffectResolver.is_unavailable(pitch_effect):
+		player.hero.reject_action(&"card_cast", REASON_NOT_AVAILABLE_YET)
+		return
 	var condition: CardCastCondition = _pitch_costs.get(id)
 	if condition == null:
 		player.hero.reject_action(&"card_cast", REASON_NO_PITCH_COST)
 		return
+	# STORY 7-5a (AC 34-36, `7-5a/R14`): THE MANABLOSSOM DISCOUNT ON THE STAGING PRICE. `is_covered` was
+	# refused above, so this slot's card is the one being staged and its discount is the one that applies.
+	# For a variable-cost card the price is a MINIMUM, so the discount LOWERS THE MINIMUM (Fireball 3
+	# becomes 2) and the spend below is unchanged: the whole pool up to the cap, damage per mana spent.
+	var mana_discount := player.hand.discount_at(hand_slot)
 	var reason := CastEvaluator.flag_and_mana_refusal_reason(condition,
-			player.mana.get_current(), flags)
+			player.mana.get_current(), flags, mana_discount)
 	if reason != CastEvaluator.ALLOWED:
 		player.hero.reject_action(&"card_cast", reason)
 		return
@@ -6073,9 +6445,9 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 	# schema for one card's benefit; the story asked for the option that leaves it unshaped.
 	#
 	# THE CLASSIFICATION IS THE RESOLVER'S (D6) AND NO CARD IS NAMED HERE: this seat asks
-	# `spends_variable_mana`, never `is this Fireball`.
-	var pitch_effect: CardEffect = _pitch_effects.get(id)
-	var mana_spent := condition.mana_cost
+	# `spends_variable_mana`, never `is this Fireball`. (Story 7-5a: the read itself moved up to the
+	# temporary-refusal gate, which asks the same map a question first.)
+	var mana_spent := CastEvaluator.discounted_mana_cost(condition, mana_discount)
 	var locked_damage := 0.0
 	if CardEffectResolver.spends_variable_mana(pitch_effect):
 		# AC 5: min(current, cap). At the authored cap 10 and `max_mana` 10 the cap is INERT and the
@@ -6090,12 +6462,18 @@ func _resolve_pitch_stage(player: PlayerState, hand_slot: int, slot: int) -> voi
 	Invariant.check(player.mana.spend(mana_spent),
 		"an ALLOWED staging must be affordable — CastEvaluator and ManaPool disagree")
 	var staged := player.hand.remove_at(hand_slot)
+	# Story 7-5a (AC 46): the card has left the hand, so a Manablossom record stops naming its slot.
+	player.reversal_drop_hand_slot(hand_slot)
 	# `balance` / `balance_ticks` are non-null below the empty-slot guard, `_resolve_basic_cast`'s
 	# reason: a hand is non-empty only once the step-6 deal ran, and the deal needs balance.
 	if balance.pitch_stage_clears_orbs:
 		player.orbs.reset_all()
 	pitch.stage(slot, staged, hand_slot, condition.orb_costs, balance_ticks.pitch_stage_timer_ticks,
 			mana_spent, locked_damage)
+	# Story 7-5a (AC 38, `7-5a/R19`): ONE MORE SUCCESSFUL STAGING INTO THIS PLAYER'S OWN ZONE THIS ROUND --
+	# counted HERE, the one line every staging that actually happened reaches and no refusal does. What
+	# becomes of the card afterwards (activation, fizzle, a counter) never takes it back.
+	player.stagings_this_round += 1
 	_queue_pitch_changed(slot)  # Story 6-3b (AC 1 site (a))
 	player.notify_cards_changed()
 
@@ -6177,6 +6555,9 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	if gate != &"":
 		player.hero.reject_action(&"card_cast", gate)
 		return
+	# Story 7-5a (AC 31, `7-5a/R18`): THE ORBS HELD AT ACTIVATION, all colours, counted BEFORE the activation
+	# orb is paid on the next lines -- Enrage's window length reads this number, not what is left after.
+	var orbs_held := _total_orbs(player)
 	var orb_costs := pitch.staged_orb_costs(slot)
 	for color: Enums.CardColor in CastEvaluator.sorted_orb_colors(orb_costs):
 		player.orbs.add(color, -int(orb_costs[color]))
@@ -6242,7 +6623,7 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 		# STORY 6-5e: `hand_slot` here is the STAGED card's ORIGINATING slot, which is the only hand slot
 		# this seat knows. No pitch effect takes the cover arm (Boulder has no Mode ④ at all, ruling 7), so
 		# it is passed for totality rather than because an arm reads it.
-		_apply_card_effect(player, pitch_effect, slot, hand_slot)
+		_apply_card_effect(player, pitch_effect, slot, hand_slot, orbs_held)
 	# `balance_ticks` is non-null here by construction: a card is staged only after the step-6 deal ran.
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
@@ -6400,19 +6781,36 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	# it passed; `CastEvaluator.refusal_reason` is still NOT called -- only its reason constant is borrowed,
 	# the `REASON_FLAG_CLOSED` borrow two guards up. A zero cost passes the test and spends nothing
 	# (`ManaPool.add` no-ops an unchanged value), which is the `7-9/R16` "0 = free" degrade.
-	if balance.unblockable_mana_cost > player.mana.get_current():
+	#
+	# STORY 7-5a (AC 17, `7-5a/R6`): A HELD SETUP CHARGE MAKES THIS PRESS COST NO MANA. The mana TEST is
+	# skipped when a charge is held, so a hero with no mana at all may still press; the stamina price and
+	# every refusal above this line are untouched. THE CHARGE IS SPENT ONLY ON AN ACCEPTED PRESS -- below the
+	# last refusal, in the same breath as the spend it replaces -- so a press refused for state, an empty or
+	# covered slot, mana (with no charge) or stamina spends nothing and keeps it. ONE charge per press.
+	# The Manablossom discount never applies here: this is a balance price, not a card's (`7-5a/R14`).
+	var setup_held := player.setup_charges > 0
+	if not setup_held and balance.unblockable_mana_cost > player.mana.get_current():
 		player.hero.reject_action(&"card_cast", CastEvaluator.REASON_INSUFFICIENT_MANA)
 		return
 	if not player.stamina.spend(balance.unblockable_stamina_cost,
 			balance_ticks.stamina_regen_delay_ticks):
 		player.hero.reject_action(&"card_cast", &"insufficient_stamina")
 		return
-	var mana_spent := player.mana.spend(balance.unblockable_mana_cost)
-	Invariant.check(mana_spent, "the unblockable mana spend cannot fail after its own affordability test")
+	if setup_held:
+		# AC 17/AC 19: the attack CARRIES Setup from this press -- the multiplier rides the per-attack fact,
+		# because the charge is gone now and the landing is ticks away.
+		player.charge_setup_multiplier = player.spend_setup_charge()
+	else:
+		# Every attack starts from "carries nothing", the `charge_contact` clear below's own rule.
+		player.clear_charge_setup()
+		var mana_spent := player.mana.spend(balance.unblockable_mana_cost)
+		Invariant.check(mana_spent, "the unblockable mana spend cannot fail after its own affordability test")
 	# AC 6: the card leaves the hand and enters the discard, the replacement is owed on the VACATED
 	# slot, and the observation channel announces -- `_resolve_basic_cast`'s ordering mirrored
 	# exactly, all inside this one tick.
 	var played := player.hand.remove_at(hand_slot)
+	# Story 7-5a (AC 46): the card has left the hand, so a Manablossom record stops naming its slot.
+	player.reversal_drop_hand_slot(hand_slot)
 	player.discard.add(played)
 	# AC 21 / Ruling 2: COLOUR SELECTS THE TELEGRAPH, NOT THE DAMAGE. The colour is COPIED off the
 	# injected map into a plain int here and the map itself is never hashed; damage is one authored
@@ -6547,6 +6945,8 @@ func _resolve_defense_cast(player: PlayerState, hand_slot: int, slot: int) -> vo
 	# `card_cast_resolved` queued. `_resolve_unblockable_cast`'s ordering mirrored exactly, all
 	# inside this one tick and all UNCONDITIONAL on what happens later at any landing.
 	var played := player.hand.remove_at(hand_slot)
+	# Story 7-5a (AC 46): the card has left the hand, so a Manablossom record stops naming its slot.
+	player.reversal_drop_hand_slot(hand_slot)
 	player.discard.add(played)
 	# AC 8: the colour is read from the SAME `_card_colors` injected map mode ② already reads, and
 	# copied into a plain int. A MISSING ENTRY DEGRADES TO "NO COLOUR" rather than to an invented
@@ -6665,6 +7065,10 @@ func _resolve_charge_contact(player: PlayerState, slot: int) -> void:
 	player.charge_contact = PlayerState.CHARGE_CONTACT_HIT
 	_landing_package_pending[slot] = true
 	_grant_landing_orbs(player)
+	# Story 7-5a (AC 18/AC 19): the attack LANDED and its Setup carry has paid out (or had nothing to
+	# multiply). Cleared HERE, so a second counted touch of the same flight -- which `CHARGE_CONTACT_HIT`
+	# already makes impossible -- could not double again, and the hashed fact rests the tick it is used.
+	player.clear_charge_setup()
 
 
 ## Story 6-6a (AC 3/AC 5/AC 6/AC 7/AC 12): THE LANDING PACKAGE, applied at step 6b -- see
@@ -6705,10 +7109,18 @@ func _apply_landing_packages() -> void:
 		var damage := balance.unblockable_damage_percent_of_max_hp / 100.0 * target.hero.get_max_hp()
 		# Story 6-5a (AC 9): the landing seat's funnel; the caster (`slot`'s player) is the attacker.
 		var caster := p1 if slot == 0 else p2
+		# STORY 7-5a (AC 21/AC 30/AC 33): AN UNBLOCKABLE IS A WEAPON HIT, so it takes the melee ladder's order
+		# with the block step absent (nothing blocks it): (base + Enrage) x Execute x Bloodlust. An Execute
+		# charge is consumed here, by the landing -- including one Stoneskin then absorbs (AC 25).
+		damage = _with_enrage(caster, damage)
+		damage = _with_execute(caster, damage)
 		damage = _funnel_damage(caster, TargetingService.HERO_INDEX, target,
 				TargetingService.HERO_INDEX, damage)
 		var landing_hp_before := target.hero.get_hp()
-		target.hero.take_damage(damage)
+		# STORY 7-5a (AC 24/AC 25/AC 40): Stoneskin, then Lifechain. ONLY THE DAMAGE is absorbed or split:
+		# the knockdown below is gated on liveness alone, the attacker's orbs were granted at the touch, and
+		# `hit_landed` is still pushed -- an absorbed unblockable still knocks its victim down.
+		damage = _deal_hero_damage(target, damage)
 		_apply_lifesteal(caster, TargetingService.HERO_INDEX, landing_hp_before - target.hero.get_hp())
 		var already_down := target.hero.action_state == HeroState.ActionState.STUNNED \
 				and balance_ticks.is_knockdown_stun(target.hero.stun.duration_ticks())
@@ -6723,6 +7135,8 @@ func _apply_landing_packages() -> void:
 				# Story 7-8 (OQ1): an abandoned attack's hit-once memory rests with it -- the victim may
 				# have landed its own hit, or had one dropped, earlier in its flight.
 				target.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+				# Story 7-5a (AC 19): ...and so does a Setup the abandoned attack carried (interrupted).
+				target.clear_charge_setup()
 		_queue.push(hit_landed.emit.bind(slot, opposing_slot, damage, target.hero.get_hp()))
 
 
@@ -6967,7 +7381,10 @@ func _apply_honed_bolt(caster: PlayerState, effect: CardEffect, slot: int,
 	var damage := _funnel_damage(caster, TargetingService.HERO_INDEX, target,
 			TargetingService.HERO_INDEX, effect.damage_amount)
 	var hp_before := target.hero.get_hp()
-	target.hero.take_damage(damage)
+	# Story 7-5a (AC 24/AC 40): a spell is a damage INSTANCE like any other -- Stoneskin absorbs it and
+	# Lifechain splits it. It is NOT a weapon hit, so neither Enrage nor Execute is asked here. The stun
+	# and the root below are the bolt's other on-land effects and are untouched by an absorbed hit.
+	damage = _deal_hero_damage(target, damage)
 	_apply_lifesteal(caster, TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
 	# STORY 6-5g (AC 14): the bolt's HERO hit joins the living record, as the hp ACTUALLY removed.
 	_note_reversal_damage(caster, PlayerState.REVERSAL_HONED_BOLT, target_slot,
@@ -7182,6 +7599,8 @@ func _apply_bolt_landing(target: PlayerState, effect: CardEffect) -> void:
 		# Story 7-8 review fix: the abandoned attack's hit-once memory rests with it, the knockdown
 		# abandonment's rule (OQ1) -- the bolt is the fifth way a `CHARGING` attack ends.
 		target.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+		# Story 7-5a (AC 19): ...and a Setup the abandoned attack carried rests with it (interrupted).
+		target.clear_charge_setup()
 	target.arm_root(stun_ticks + TimingWindow.seconds_to_ticks(effect.root_seconds),
 			effect.root_blocks_run, effect.root_blocks_roll)
 
@@ -7365,6 +7784,10 @@ func _resolve_color_counter(player: PlayerState, slot: int) -> bool:
 	player.charge_window.start(0)
 	player.landing_window.start(0)
 	player.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	# Story 7-5a (AC 18/AC 19): a COUNTERED attack never lands -- its Setup charge stays spent and the
+	# per-attack carry rests here (defended). `charge_contact` needs no clear at this seat (it is at rest
+	# whenever a counter is judged); the carry does, because it is set at the press.
+	player.clear_charge_setup()
 	player.hero.start_stun(balance_ticks.knockdown_stun_ticks, false)
 	player.hero.set_action_state(HeroState.ActionState.STUNNED)
 	# STORY 7-9 (AC 10, `7-9/R6`/`R14`): THE REWARD -- the defender of a successful counter gains the
@@ -7443,6 +7866,13 @@ func _grant_landing_orbs(player: PlayerState) -> void:
 	var grant := roundi(EconomyEvaluator.amount_for(EconomyEvaluator.authored_rules(),
 			EconomyEvaluator.SOURCE_UNBLOCKABLE_LANDING, EconomyEvaluator.ORBS,
 			balance, balance_ticks, flags))
+	# STORY 7-5a (AC 18, `7-5a/R6`/`R10`): AN ATTACK THAT CARRIES SETUP GRANTS THE MULTIPLE -- the authored
+	# `orb_grant_multiplier`, 2.0 shipped, so 1 becomes 2. Applied to the GRANT, so a closed orbs layer still
+	# pays nothing (zero times anything), the bank cap still clamps inside `OrbPool.add`, and a staged
+	# sorcery's fresh-orb credit below counts what the landing actually granted. Reached only from the
+	# LANDED branch, which is the whole of "if it does not land no extra orb is granted".
+	if player.charge_setup_multiplier > 0.0:
+		grant = roundi(float(grant) * player.charge_setup_multiplier)
 	# AC 7: a zero grant calls neither `add` nor emits `orbs_changed`, so a closed-flag landing
 	# produces no observable orb event AT ALL. Distinct from `OrbPool.add`'s own internal
 	# no-op-on-no-change short circuit (AC 8) -- that one is about a clamp that changed nothing,
@@ -8553,6 +8983,17 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 	p2.hand.clear_covers()
 	p1.clear_corpse_bomb()
 	p2.clear_corpse_bomb()
+	# Story 7-5a (AC 26/AC 38/AC 54): EVERY DUELIST FACT CLEARS AT ROUND END TOO -- the staging count, the
+	# three charge stacks, the Enrage and Lifechain windows, the per-attack Setup carry and every Manablossom
+	# discount -- following `clear_rules` / `clear_resolved_card` rather than the reset-only exceptions, and
+	# for B1's reason: each is round-crossing hashed state, and a round that has ended holds none of them.
+	# The window lists have to be an explicit clear rather than a frozen clock, the burst's own trap: step
+	# 1b freezes the countdown while leaving the entry armed. (Their reversal data rides the packet, which
+	# `clear_resolved_card` above already emptied.)
+	for ended: PlayerState in [p1, p2]:
+		ended.clear_duelist_state()
+		ended.clear_charge_setup()
+		ended.hand.clear_discounts()
 	loser.hero.set_action_state(HeroState.ActionState.DEAD)
 	_queue.push(round_ended.emit.bind(loser_index))
 
@@ -8819,3 +9260,13 @@ func _reset_player(player: PlayerState) -> void:
 	player.clear_burst()
 	player.hand.clear_covers()
 	player.clear_corpse_bomb()
+	# Story 7-5a (AC 26/AC 38/AC 54): the FIFTEENTH named exception, one teardown for the story's eight
+	# hashed facts -- the staging count, the Setup / Execute / Stoneskin stacks, the Enrage and Lifechain
+	# windows, the per-attack Setup carry and the Manablossom discounts. `_end_round` clears all of them
+	# already (see there); THESE clears are for the DEBUG RESET, which can land on any tick -- mid-window,
+	# with charges banked, or with an unblockable carrying Setup in flight. Without them a reset match and a
+	# fresh match would sit at different resting snapshots (the `6-5a` B1 defect), and last round's Enrage
+	# would add damage in the next.
+	player.clear_duelist_state()
+	player.clear_charge_setup()
+	player.hand.clear_discounts()

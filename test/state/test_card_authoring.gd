@@ -22,14 +22,19 @@ const BALANCE_PATH := "res://data/balance/balance_config.tres"
 
 ## REWRITTEN BY STORY 6-5a (AC 13): was `EXPECTED_COUNT := 9` (the sealed nine-card set). The content
 ## assertions below describe DECK 1's seven; the whole library is sixteen.
-const EXPECTED_COUNT := 7
+## STORY 7-5a (AC 1): 7 -> 8. Deck 1 gains its eighth card, Vanguard / Lifechain.
+const EXPECTED_COUNT := 8
+const DECK_2_PATH := "res://data/decks/deck_2.tres"
 ## STORY 6-5e (AC 6a, `6-5e/R25`/G6): 16 -> 17. `boulder.tres` arrives -- a COLOURLESS card that is in no
 ## deck, is never drawn, dealt or discarded, and can only ever enter a hand as the consequence of a landed
 ## Rocksling stone (ruling 7). It is authored data under `data/cards/` like any other card, which is why it
 ## is counted here at all rather than living somewhere special.
 ## STORY 7-3 (AC 2, `7-3/R9`): 17 -> 18. `hellhound.tres` arrives and `ruin_vanguard.tres` STAYS (shelved,
 ## `7-3/R1`): the new card takes its place in Deck 1 and the old one becomes the tenth dormant fixture.
-const LIBRARY_COUNT := 18
+## STORY 7-5a (AC 1/AC 2/AC 5): 18 -> 24. Six new card files: `vanguard.tres` (Deck 1's eighth, a NEW id --
+## `ruin_vanguard.tres` stays shelved and untouched, `7-5a/R15`) and Deck 2's five new cards (`setup`,
+## `healer`, `bloodmagic`, `manablossom`, `manapulation`).
+const LIBRARY_COUNT := 24
 
 ## Story 6-5e (AC 6a, `6-5e/R25`/G6): THE BOULDER, NAMED AS AN EXEMPTION rather than given a fake priced
 ## pitch condition. Ruling 7 gives it NO Mode ④ at all -- no pitch effect, no pitch cost, no orb price --
@@ -64,9 +69,51 @@ const SHELVED_WITH_PITCH_IDS: Array[StringName] = [&"ruin_vanguard"]
 const DECK_1_IDS: Array[StringName] = [
 	# Story 7-3 (AC 2, `7-3/R9`): `hellhound` in the place of `ruin_vanguard`, same copy count.
 	&"hellhound", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
-	&"frostbite",
+	# Story 7-5a (AC 1, `7-5a/R1`/`R4`): the EIGHTH card, and both decks are now 4 x3 + 4 x2 = 20 --
+	# Bloodhound Step and Frostbite drop to two copies.
+	&"frostbite", &"vanguard",
 ]
-const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 3, 2, 3]
+const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 2, 2, 2, 2]
+
+## Story 7-5a (AC 2, `7-5a/R1`-`R3`): DECK 2, the full 20-card multiset, in list order. x3: Honed Bolt,
+## Rocksling, Setup, Healer. x2: Bloodhound Step, Bloodmagic, Manablossom, Manapulation.
+const DECK_2_IDS: Array[StringName] = [
+	&"honed_bolt", &"rocksling", &"setup", &"healer", &"bloodhound_step", &"bloodmagic",
+	&"manablossom", &"manapulation",
+]
+const DECK_2_COPIES: Array[int] = [3, 3, 3, 3, 2, 2, 2, 2]
+
+## Story 7-5a (AC 3): the three cards BOTH decks hold, whole and with one pairing each.
+const SHARED_IDS: Array[StringName] = [&"honed_bolt", &"rocksling", &"bloodhound_step"]
+
+## Story 7-5a (AC 2/AC 4): Deck 2's five NEW cards -- colour, Mode 1 mana, Mode 4 mana, orb price -- per
+## `deck-2-spec.md`. The three shared cards are pinned by `DECK_1_PRICES` and must agree with it (AC 3).
+const DECK_2_NEW_PRICES: Dictionary = {
+	&"setup": [Enums.CardColor.RED, 2.0, 4.0, {Enums.CardColor.RED: 1}],
+	&"healer": [Enums.CardColor.GREEN, 3.0, 2.0, {Enums.CardColor.GREEN: 1}],
+	&"bloodmagic": [Enums.CardColor.GREEN, 0.0, 2.0, {Enums.CardColor.GREEN: 1}],
+	&"manablossom": [Enums.CardColor.BLUE, 1.0, 5.0, {Enums.CardColor.BLUE: 1}],
+	&"manapulation": [Enums.CardColor.BLUE, 1.0, 6.0, {Enums.CardColor.BLUE: 1}],
+}
+
+## Story 7-5a (AC 2): Deck 2's five new cards' two effect ids, [normal, pitch].
+const DECK_2_NEW_EFFECTS: Dictionary = {
+	&"setup": [&"setup", &"execute"],
+	&"healer": [&"healer", &"stoneskin"],
+	&"bloodmagic": [&"bloodmagic", &"enrage"],
+	&"manablossom": [&"manablossom", &"elemental_fury"],
+	&"manapulation": [&"manapulation", &"wrath_of_god"],
+}
+
+## Story 7-5a (AC 4): Deck 2's five new cards' pitch speeds. Execute, Stoneskin and Enrage are instant;
+## Elemental Fury and Wrath of God are sorcery.
+const DECK_2_NEW_PITCH_SPEEDS := {
+	&"setup": Enums.PitchSpeed.INSTANT,  # Execute
+	&"healer": Enums.PitchSpeed.INSTANT,  # Stoneskin
+	&"bloodmagic": Enums.PitchSpeed.INSTANT,  # Enrage
+	&"manablossom": Enums.PitchSpeed.SORCERY,  # Elemental Fury
+	&"manapulation": Enums.PitchSpeed.SORCERY,  # Wrath of God
+}
 
 ## Story 6-5a (AC 13/AC 15): each Deck 1 card's colour, Mode ① price and Mode ④ price, per
 ## `deck-1-spec.md` §1-7 and the operator's amendments. id -> [colour, basic mana, pitch mana, orb price].
@@ -83,6 +130,8 @@ const DECK_1_PRICES: Dictionary = {
 	&"bloodhound_step": [Enums.CardColor.RED, 2.0, 3.0, {Enums.CardColor.RED: 1}],
 	&"honed_bolt": [Enums.CardColor.BLUE, 4.0, 4.0, {Enums.CardColor.BLUE: 1}],
 	&"frostbite": [Enums.CardColor.BLUE, 4.0, 5.0, {Enums.CardColor.BLUE: 1}],
+	# Story 7-5a (AC 4/AC 5): Vanguard / Lifechain -- green, the Vanguard's own 3 mana, Lifechain 3 + 1 green.
+	&"vanguard": [Enums.CardColor.GREEN, 3.0, 3.0, {Enums.CardColor.GREEN: 1}],
 }
 
 ## Story 6-5a (AC 15): each Deck 1 card's two effect ids, [normal, pitch].
@@ -99,6 +148,8 @@ const DECK_1_EFFECTS: Dictionary = {
 	&"bloodhound_step": [&"bloodhound_step", &"fireball"],
 	&"honed_bolt": [&"honed_bolt", &"counterspell"],
 	&"frostbite": [&"frostbite", &"corpse_bomb"],
+	# Story 7-5a (AC 5, `7-5a/R15`): the new card REUSES the shelved Vanguard summon effect by id.
+	&"vanguard": [&"summon_ruin_vanguard", &"lifechain"],
 }
 
 ## GDD §A, "Deck & hand.": max copies per card 2-3, configurable per card in data. Per-CARD data, not a
@@ -121,16 +172,18 @@ const CARD_DATA_FIELDS: Array[String] = [
 
 ## REWRITTEN BY STORY 6-5a (AC 13/AC 14): was `test_nine_cards_load_as_card_data` (exactly nine cards in
 ## the library). Now: the library holds sixteen CardData, and DECK 1's seven are among them.
-func test_deck_1_seven_cards_load_as_card_data() -> void:
+##
+## RENAMED BY STORY 7-5a (AC 1). Old name, recorded verbatim: `test_deck_1_seven_cards_load_as_card_data`.
+func test_deck_1_eight_cards_load_as_card_data() -> void:
 	var cards := _load_cards()
 	assert_eq(cards.size(), LIBRARY_COUNT,
-		"data/cards/ holds eighteen authored cards: Deck 1's seven, the ten dormant fixtures (the nine "
-		+ "3-2 cards plus the shelved Ruin Vanguard, story 7-3), and 6-5e's Boulder -- which belongs to "
-		+ "no deck at all")
+		"data/cards/ holds twenty-four authored cards: Deck 1's eight, Deck 2's five that are not shared "
+		+ "with Deck 1 (story 7-5a), the ten dormant fixtures (the nine 3-2 cards plus the shelved Ruin "
+		+ "Vanguard, story 7-3), and 6-5e's Boulder -- which belongs to no deck at all")
 	for card in cards:
 		assert_true(card is CardData, "every card .tres casts to CardData")
 	var deck := _deck_cards()
-	assert_eq(deck.size(), EXPECTED_COUNT, "all seven Deck 1 cards are authored in data/cards/")
+	assert_eq(deck.size(), EXPECTED_COUNT, "all eight Deck 1 cards are authored in data/cards/")
 
 
 ## Story 6-5a (R1, AC 12/AC 13): THE NINE FIXTURES, MACHINE-CHECKED DORMANT. They still exist, still load
@@ -144,6 +197,9 @@ func test_the_nine_fixture_cards_stay_authored_loadable_and_out_of_deck_1() -> v
 		assert_true(by_id.has(id), "fixture card '%s' is still authored in data/cards/" % id)
 		assert_true(by_id.get(id) is CardData, "...and still loads as CardData")
 		assert_false(list.card_ids.has(id), "...and is NOT in Deck 1's list (R1: dormant)")
+		# Story 7-5a (AC 5, `7-5a/R15`): ...nor in Deck 2's. `ruin_vanguard` in particular is in NEITHER
+		# deck: Deck 1's Vanguard is the new `vanguard` card.
+		assert_false(_deck_2_list().card_ids.has(id), "...and is NOT in Deck 2's list either")
 
 
 func test_card_data_exports_exactly_the_authored_field_set() -> void:
@@ -200,7 +256,7 @@ func test_every_id_is_non_empty_and_unique() -> void:
 			dupes.append(String(card.id))
 		seen[card.id] = true
 	assert_eq(dupes.size(), 0, "card ids are unique across the set: %s" % ", ".join(dupes))
-	assert_eq(seen.size(), LIBRARY_COUNT, "eighteen distinct ids")
+	assert_eq(seen.size(), LIBRARY_COUNT, "twenty-four distinct ids")
 
 
 ## REWRITTEN BY STORY 6-5a (AC 13): was three cards per colour across the nine fixtures. Deck 1 is
@@ -210,7 +266,10 @@ func test_every_id_is_non_empty_and_unique() -> void:
 ## `test_colours_are_card_color_enum_values_three_per_colour`. The rewrite above had already replaced
 ## "three per colour" with GREEN 3 / RED 2 / BLUE 2, so the name asserted the opposite of the body --
 ## the rename-and-record convention this diff uses at `test_no_pitch_effect_consumer_ships`.
-func test_deck_1_colours_are_card_color_values_green_3_red_2_blue_2() -> void:
+##
+## RENAMED AGAIN BY STORY 7-5a (AC 4), on the same convention. Old name, recorded verbatim:
+## `test_deck_1_colours_are_card_color_values_green_3_red_2_blue_2`. Deck 1 is GREEN 4 / RED 2 / BLUE 2.
+func test_deck_1_colours_are_card_color_values_green_4_red_2_blue_2() -> void:
 	var counts := {Enums.CardColor.RED: 0, Enums.CardColor.BLUE: 0, Enums.CardColor.GREEN: 0}
 	for card in _deck_cards():
 		assert_true(counts.has(card.color),
@@ -218,9 +277,42 @@ func test_deck_1_colours_are_card_color_values_green_3_red_2_blue_2() -> void:
 		counts[card.color] = int(counts[card.color]) + 1
 		assert_eq(int(card.color), int(DECK_1_PRICES[card.id][0]),
 			"card '%s' is authored in its Deck 1 colour" % card.id)
-	assert_eq(int(counts[Enums.CardColor.GREEN]), 3, "three GREEN Deck 1 cards")
+	# Story 7-5a (AC 4): 3/2/2 -> 4/2/2. Vanguard / Lifechain is the fourth GREEN card.
+	assert_eq(int(counts[Enums.CardColor.GREEN]), 4, "four GREEN Deck 1 cards")
 	assert_eq(int(counts[Enums.CardColor.RED]), 2, "two RED Deck 1 cards")
 	assert_eq(int(counts[Enums.CardColor.BLUE]), 2, "two BLUE Deck 1 cards")
+
+
+## Story 7-5a (AC 2/AC 3/AC 4): DECK 2's TABLE -- every card's colour, both prices, both effects and its
+## pitch speed, read off the authored files. Iterates the `DECK_2_IDS` LITERAL (N11's non-vacuity rule).
+## THE THREE SHARED CARDS are checked against DECK 1's own tables, which is AC 3 made executable: a shared
+## card has ONE file, so its pairing, costs, colour and speed cannot differ between the decks -- and this
+## fails if a later pass forks a second file for one of them.
+func test_each_deck_2_card_is_authored_at_its_ruled_colour_prices_effects_and_speed() -> void:
+	var colours := {Enums.CardColor.RED: 0, Enums.CardColor.BLUE: 0, Enums.CardColor.GREEN: 0}
+	for id in DECK_2_IDS:
+		var card := _card_for(id)
+		if card == null or card.cast_condition == null or card.pitch_condition == null \
+				or card.basic_effect == null or card.pitch_effect == null:
+			assert_true(false, "Deck 2 card '%s' loads with both conditions and both effects" % id)
+			continue
+		var shared := SHARED_IDS.has(id)
+		assert_eq(shared, DECK_1_IDS.has(id), "'%s' is shared with Deck 1 exactly when AC 3 says so" % id)
+		var prices: Array = DECK_1_PRICES[id] if shared else DECK_2_NEW_PRICES[id]
+		var effects: Array = DECK_1_EFFECTS[id] if shared else DECK_2_NEW_EFFECTS[id]
+		var speed: int = DECK_1_PITCH_SPEEDS[id] if shared else DECK_2_NEW_PITCH_SPEEDS[id]
+		colours[card.color] = int(colours[card.color]) + 1
+		assert_eq(int(card.color), int(prices[0]), "'%s' is authored in its ruled colour" % id)
+		assert_eq(card.cast_condition.mana_cost, float(prices[1]), "'%s' Mode 1 mana" % id)
+		assert_eq(card.pitch_condition.mana_cost, float(prices[2]), "'%s' Mode 4 mana" % id)
+		assert_eq(card.pitch_condition.orb_costs, prices[3], "'%s' Mode 4 orbs" % id)
+		assert_eq(card.basic_effect.effect_id, effects[0], "'%s' normal effect" % id)
+		assert_eq(card.pitch_effect.effect_id, effects[1], "'%s' pitch effect" % id)
+		assert_eq(int(card.pitch_condition.pitch_speed), speed, "'%s' pitch speed" % id)
+	assert_eq([int(colours[Enums.CardColor.RED]), int(colours[Enums.CardColor.BLUE]),
+			int(colours[Enums.CardColor.GREEN])], [3, 3, 2],
+		"Deck 2 is three RED (Rocksling, Bloodhound Step, Setup), three BLUE (Honed Bolt, Manablossom, "
+		+ "Manapulation) and two GREEN (Healer, Bloodmagic)")
 
 
 ## REWRITTEN BY STORY 6-5a (AC 13/AC 15) -- a DELIBERATE DEPARTURE from 3-2's "sealed nine-card decision"
@@ -270,6 +362,7 @@ const DECK_1_PITCH_SPEEDS := {
 	&"rocksling": Enums.PitchSpeed.SORCERY,  # Boom
 	&"bloodhound_step": Enums.PitchSpeed.SORCERY,  # Fireball
 	&"frostbite": Enums.PitchSpeed.SORCERY,  # Corpse Bomb
+	&"vanguard": Enums.PitchSpeed.INSTANT,  # Lifechain (story 7-5a, AC 4)
 }
 
 
@@ -287,21 +380,33 @@ func test_each_deck_1_card_authors_its_ruled_pitch_speed() -> void:
 
 ## Story 7-4 (AC 1/AC 2): EVERY CARD OUTSIDE DECK 1 READS INSTANT -- the fixtures and totems author no speed, and
 ## an unauthored speed is the enum's zero value. Also pins that zero value itself: a fresh condition is instant.
-func test_every_card_outside_deck_1_reads_instant_and_unauthored_is_instant() -> void:
+##
+## STORY 7-5a (AC 4): THE CENSUS MOVES TO "OUTSIDE BOTH DECKS". Deck 2 holds two sorcery cards that are
+## not in Deck 1 (Manablossom / Elemental Fury and Manapulation / Wrath of God), so "outside Deck 1" is
+## no longer the instant set. Deck 2's own speeds are pinned per card by
+## `test_each_deck_2_card_is_authored_at_its_ruled_colour_prices_effects_and_speed`. RENAMED on N12's
+## convention; old name, verbatim: `test_every_card_outside_deck_1_reads_instant_and_unauthored_is_instant`.
+func test_every_card_outside_both_decks_reads_instant_and_unauthored_is_instant() -> void:
 	assert_eq(CardCastCondition.new().pitch_speed, Enums.PitchSpeed.INSTANT,
 		"a condition that authors no speed reads INSTANT")
 	var outside := 0
+	var sorcery_outside_deck_1 := 0
 	for card in _load_cards():
-		if DECK_1_IDS.has(card.id):
+		if not DECK_1_IDS.has(card.id) and card.pitch_condition != null \
+				and card.pitch_condition.pitch_speed == Enums.PitchSpeed.SORCERY:
+			sorcery_outside_deck_1 += 1
+		if DECK_1_IDS.has(card.id) or DECK_2_IDS.has(card.id):
 			continue
 		outside += 1
 		if card.pitch_condition != null:
 			assert_eq(card.pitch_condition.pitch_speed, Enums.PitchSpeed.INSTANT,
-				"card '%s' (outside Deck 1) reads instant" % card.id)
+				"card '%s' (outside both decks) reads instant" % card.id)
 		if card.cast_condition != null:
 			assert_eq(card.cast_condition.pitch_speed, Enums.PitchSpeed.INSTANT,
 				"card '%s' authors nothing on its Mode ① condition" % card.id)
-	assert_true(outside > 0, "the library holds cards outside Deck 1 (non-vacuity)")
+	assert_true(outside > 0, "the library holds cards outside both decks (non-vacuity)")
+	assert_eq(sorcery_outside_deck_1, 2,
+		"exactly TWO sorcery cards live outside Deck 1 -- Deck 2's Manablossom and Manapulation (AC 4)")
 
 
 ## REWRITTEN BY STORY 6-5a (AC 13): was a local `DECK_SIZE := 20` against the nine cards' summed
@@ -329,20 +434,43 @@ func test_the_authored_deck_size_equals_the_deck_list_copy_sum() -> void:
 	assert_eq(sum, 20, "Deck 1 is twenty cards (provisional data)")
 	assert_eq(_authored_deck_size(), sum,
 		"BalanceConfig.deck_size agrees with Deck 1's copy sum -- one number, never two that disagree")
+	# Story 7-5a (AC 2/AC 6): DECK 2 IS THE SAME SIZE, so the one authored `deck_size` describes both.
+	var sum_2 := 0
+	for copies in _deck_2_list().copies:
+		sum_2 += copies
+	assert_eq(sum_2, sum, "Deck 2's copy sum equals Deck 1's (twenty)")
 
 
 ## Story 6-5a (AC 14, OQ4 / `6-5a/R10`): THE DECK LIST'S COMPOSITION -- exactly Deck 1's seven ids AND
 ## their copy counts (the full multiset, not just the set of ids), each entry within its card's
 ## `max_copies`, and the composition it expands to (list order, `copies` each -- the runner's
 ## `_derive_deck_contents`) holding no fixture id.
+##
+## STORY 7-5a (AC 1/AC 2/AC 6): THE SAME AUDIT OVER BOTH LISTS. Each deck is 8 unique cards, four at x3 and
+## four at x2, twenty in all; each entry's copies are within its card's `max_copies`; the two arrays are
+## index-aligned; and every pitch cost is within the bank cap (a price the bank cannot hold could never
+## be paid).
 func test_the_deck_list_is_exactly_deck_1() -> void:
-	var list := _deck_list()
-	assert_eq(list.card_ids, DECK_1_IDS, "Deck 1 lists exactly its seven ids, in order")
-	assert_eq(list.copies, DECK_1_COPIES, "...each with its copy count (six x3, Honed Bolt x2)")
+	_audit_deck_list(_deck_list(), DECK_1_IDS, DECK_1_COPIES, "Deck 1")
+
+
+func test_the_second_deck_list_is_exactly_deck_2() -> void:
+	_audit_deck_list(_deck_2_list(), DECK_2_IDS, DECK_2_COPIES, "Deck 2")
+
+
+func _audit_deck_list(list: DeckList, ids: Array[StringName], copies: Array[int], label: String) -> void:
+	assert_not_null(list, "%s's list loads as a DeckList" % label)
+	if list == null:
+		return
+	assert_eq(list.card_ids, ids, "%s lists exactly its eight ids, in order" % label)
+	assert_eq(list.copies, copies, "...each with its copy count (four x3, four x2)")
 	assert_eq(list.card_ids.size(), list.copies.size(), "the two index-aligned arrays agree in length")
+	assert_eq([list.copies.count(3), list.copies.count(2)], [4, 4],
+		"%s is 4 cards at x3 and 4 at x2 (`7-5a/R1`)" % label)
 	var by_id := {}
 	for card in _load_cards():
 		by_id[card.id] = card
+	var orb_cap := (load(BALANCE_PATH) as BalanceConfig).max_orbs_per_color
 	var expanded: Array[StringName] = []
 	for index in list.card_ids.size():
 		var id: StringName = list.card_ids[index]
@@ -351,6 +479,10 @@ func test_the_deck_list_is_exactly_deck_1() -> void:
 		if card != null:
 			assert_true(list.copies[index] <= card.max_copies,
 				"'%s' lists %d copies, within its max_copies %d" % [id, list.copies[index], card.max_copies])
+			if card.pitch_condition != null:
+				for color: Variant in card.pitch_condition.orb_costs:
+					assert_true(int(card.pitch_condition.orb_costs[color]) <= orb_cap,
+						"'%s' prices its pitch within the bank cap (%d per colour)" % [id, orb_cap])
 		for _copy in list.copies[index]:
 			expanded.append(id)
 	assert_eq(expanded.size(), 20, "the expanded composition is twenty cards")
@@ -396,6 +528,9 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	## the last of 6-5a's nine deferred no-ops and its row LEFT `DEFERRED_EFFECT_OWNERS` when this story gave
 	## it a real outcome, so counting it as deferred would be counting it twice wrong.
 	var retroactive := 0
+	## Story 7-5a: the STACKING-WINDOW bucket -- Lifechain, Deck 1's one member of the three families
+	## this story adds (the charge and economy families are Deck 2's, censused in the test below).
+	var stacking_window := 0
 	var deferred := 0
 	var offenders: Array[String] = []
 	for card in _deck_cards():
@@ -424,6 +559,9 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 			# reason all four arms above are read off theirs.
 			elif CardEffectResolver.COUNTERSPELL_OUTCOMES.has(id):
 				retroactive += 1
+			# Story 7-5a: read off the resolver's own stacking-window table, like every arm above.
+			elif CardEffectResolver.STACKING_WINDOW_OUTCOMES.has(id):
+				stacking_window += 1
 			elif CardEffectResolver.owner_story_for(id) != &"":
 				deferred += 1
 			else:
@@ -433,7 +571,12 @@ func test_every_authored_effect_id_carries_a_prefix_the_resolver_recognises() ->
 	assert_eq(offenders.size(), 0,
 		"every Deck 1 effect id is one the resolver recognises by whole id or summon prefix: %s"
 				% ", ".join(offenders))
-	assert_eq(summons, 1, "ONE Deck 1 effect summons (Ruin Vanguard)")
+	# Story 7-5a (AC 5, `7-5a/R15`): ONE -> TWO. The Hellhound summon, and the Vanguard summon the new
+	# `vanguard` card brings back into Deck 1 by reference.
+	assert_eq(summons, 2, "TWO Deck 1 effects summon (Hellhound, and Vanguard on the new card)")
+	assert_eq(stacking_window, 1,
+		"Story 7-5a: ONE is a STACKING WINDOW -- Lifechain, which opens its own window per cast and never "
+		+ "deepens the split")
 	# Story 6-5d (AC 1, `6-5d/R23`): FOUR -> THREE. Bloodlust was the fourth and has left Deck 1; the
 	# census moves with the pairing swap, which is what makes this a measured bucket rather than a
 	# transcribed number.
@@ -520,9 +663,20 @@ func test_the_hellhound_effect_authors_two_hounds_and_vanguard_is_unchanged() ->
 	if vanguard != null:
 		assert_eq([vanguard.summon_count, vanguard.summon_kind], [1, &""],
 			"...and still summons ONE unit of the default (zombie) kind")
+	# STORY 7-5a (AC 5, `7-5a/R15`): THE 7-3 PIN IS REVERSED. It read "no Deck 1 card has Vanguard as its
+	# normal half"; Deck 1 now has EXACTLY ONE, and it is the NEW card `vanguard` -- never the shelved
+	# `ruin_vanguard`, which is in neither deck (pinned by the dormant-fixture test) and whose file,
+	# Culling pairing included, is untouched.
+	var vanguard_cards: Array[StringName] = []
 	for card in _deck_cards():
-		assert_ne(card.basic_effect.effect_id, &"summon_ruin_vanguard",
-			"no Deck 1 card has Vanguard as its normal half (AC 1): '%s'" % card.id)
+		if card.basic_effect.effect_id == &"summon_ruin_vanguard":
+			vanguard_cards.append(card.id)
+	assert_eq(vanguard_cards, [&"vanguard"] as Array[StringName],
+		"exactly the new `vanguard` card has the Vanguard summon as its normal half (AC 5)")
+	var shelved := _card_for(&"ruin_vanguard")
+	if shelved != null:
+		assert_eq([shelved.basic_effect.effect_id, shelved.pitch_effect.effect_id],
+			[&"summon_ruin_vanguard", &"culling"], "`ruin_vanguard` keeps its Vanguard / Culling pairing")
 
 
 ## Story 6-5a (AC 15): each Deck 1 card references the RIGHT two effects, by id.
@@ -550,9 +704,11 @@ func test_basic_mode_only_pitch_and_orbs_left_unauthored() -> void:
 		assert_not_null(card.basic_effect, "card '%s' authors a basic effect" % card.id)
 		assert_true(card.basic_effect.effect_id != &"",
 			"card '%s' basic effect names a real effect" % card.id)
-		if DECK_1_IDS.has(card.id):
+		# Story 7-5a: Deck 2's cards author both halves too -- "non-deck cards author no pitch effect" is
+		# now a statement about cards outside BOTH decks.
+		if DECK_1_IDS.has(card.id) or DECK_2_IDS.has(card.id):
 			assert_not_null(card.pitch_effect,
-				"Deck 1 card '%s' authors its pitch effect (story 6-5a)" % card.id)
+				"deck card '%s' authors its pitch effect (story 6-5a / 7-5a)" % card.id)
 		elif SHELVED_WITH_PITCH_IDS.has(card.id):
 			# Story 7-3 (AC 1, `7-3/R1`): shelved, not stripped -- the file is unchanged.
 			assert_not_null(card.pitch_effect,
@@ -602,10 +758,13 @@ func test_every_deck_1_effect_is_a_shared_file_under_data_effects() -> void:
 	# same "the directory holds effect FILES, not deck pairings" reading `bloodlust.tres` already rests on.
 	# Story 7-3 (AC 2): SIXTEEN -> SEVENTEEN. `summon_hellhound.tres` arrives and
 	# `summon_ruin_vanguard.tres` STAYS (shelved, `7-3/R1`) -- `bloodlust.tres`' own precedent.
-	assert_eq(files.size(), 17,
-		"data/effects/ holds seventeen effect files: the fourteen Deck 1 effects, bloodlust.tres (6-5d "
-		+ "unpaired it from Deck 1 without deleting, AC 2), 6-5e's boulder_discard.tres, and the shelved "
-		+ "summon_ruin_vanguard.tres (story 7-3)")
+	# Story 7-5a (AC 1/AC 2): SEVENTEEN -> TWENTY-EIGHT. Eleven arrive: `lifechain` (Deck 1), and Deck 2's
+	# ten new halves (`setup`, `execute`, `healer`, `stoneskin`, `bloodmagic`, `enrage`, `manablossom`,
+	# `elemental_fury`, `manapulation`, `wrath_of_god`). `summon_ruin_vanguard.tres` is no longer shelved:
+	# the new `vanguard` card references it.
+	assert_eq(files.size(), 28,
+		"data/effects/ holds twenty-eight effect files: the seventeen before story 7-5a, Lifechain, and "
+		+ "Deck 2's ten new halves")
 	for file_name in files:
 		var effect := load(EFFECTS_DIR + file_name) as CardEffect
 		assert_not_null(effect, "%s loads as a CardEffect" % file_name)
@@ -701,6 +860,88 @@ func test_the_four_own_minion_effects_carry_their_spec_numbers() -> void:
 				"'%s' authors no %s -- an effect uses the numbers it needs and no others" % [id, name])
 
 
+## Story 7-5a (AC 2/AC 14): DECK 2's FIVE NEW CARDS' TEN EFFECTS, BY FAMILY, read off the resolver's own
+## tables (the derived-not-transcribed discipline). Three are CHARGES, one is a STACKING WINDOW, three are
+## ECONOMY effects, and three are UNAVAILABLE until `7-5b` -- and those three carry NO other resolver row
+## and no summon/spell prefix (AC 14: nothing for a skipped refusal to fall through to).
+func test_deck_2_new_effects_fall_into_their_resolver_families() -> void:
+	var charge := 0
+	var stacking_window := 0
+	var economy := 0
+	var unavailable: Array[StringName] = []
+	for id: StringName in DECK_2_NEW_EFFECTS:
+		var card := _card_for(id)
+		if card == null:
+			continue
+		for effect: CardEffect in [card.basic_effect, card.pitch_effect]:
+			var effect_id := effect.effect_id
+			if CardEffectResolver.CHARGE_OUTCOMES.has(effect_id):
+				charge += 1
+			elif CardEffectResolver.STACKING_WINDOW_OUTCOMES.has(effect_id):
+				stacking_window += 1
+			elif CardEffectResolver.ECONOMY_OUTCOMES.has(effect_id):
+				economy += 1
+			elif CardEffectResolver.is_unavailable(effect):
+				unavailable.append(effect_id)
+			else:
+				assert_true(false, "Deck 2 effect '%s' is in no resolver family" % effect_id)
+	assert_eq([charge, stacking_window, economy], [3, 1, 3],
+		"Setup / Execute / Stoneskin are charges, Enrage a stacking window, Bloodmagic / Manablossom / "
+		+ "Manapulation economy effects")
+	unavailable.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	assert_eq(unavailable, [&"elemental_fury", &"healer", &"wrath_of_god"] as Array[StringName],
+		"exactly the three `7-5b` halves are refused for now (AC 13)")
+	assert_eq(CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS.size(), 3, "...and the table holds nothing else")
+	var flags := FeatureFlags.new()
+	flags.spells = true
+	flags.minions = true
+	flags.totems = true
+	for effect_id: StringName in CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS:
+		assert_eq(CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS[effect_id], &"7-5b-deck-2-bodies",
+			"'%s' names the story that builds it" % effect_id)
+		var text := String(effect_id)
+		assert_false(text.begins_with(CardEffectResolver.PREFIX_SUMMON)
+				or text.begins_with(CardEffectResolver.PREFIX_SPELL),
+			"'%s' takes no prefix path (a `summon_healer` would summon a zombie if the refusal were skipped)"
+					% effect_id)
+		assert_eq(CardEffectResolver.outcome(_effect(effect_id), flags),
+			CardEffectResolver.REASON_NOT_AVAILABLE_YET,
+			"'%s' resolves to the named nothing, never to another family's outcome (AC 14)" % effect_id)
+
+
+## Story 7-5a (AC 4): THE NEW EFFECTS' NUMBERS, exactly as `deck-2-spec.md` and the 2026-10-11 amendment in
+## `deck-1-spec.md` author them (all TEMP), and each effect authors NOTHING it does not use -- the
+## own-minion test's two halves, for this story's eleven files.
+func test_the_deck_2_and_lifechain_effects_carry_their_spec_numbers() -> void:
+	var authored := {
+		&"setup": {"orb_grant_multiplier": 2.0},
+		&"execute": {"damage_dealt_multiplier": 3.0},
+		&"stoneskin": {},
+		&"bloodmagic": {"hp_cost": 10.0, "mana_gain": 4.0},
+		&"enrage": {"duration_seconds": 10.0, "bonus_damage": 2.0, "duration_per_orb_seconds": 2.0},
+		&"manablossom": {"mana_discount": 1.0, "orb_threshold": 3, "mana_discount_at_threshold": 2.0},
+		&"manapulation": {"mana_per_staging": 1.0},
+		&"lifechain": {"duration_seconds": 10.0},
+		# The three `7-5b` halves author no number at all (their bodies and numbers are 7-5b's).
+		&"healer": {}, &"elemental_fury": {}, &"wrath_of_god": {},
+	}
+	var neutral := CardEffect.new()
+	for id: StringName in authored:
+		var effect := _effect(id)
+		assert_not_null(effect, "data/effects/%s.tres loads" % id)
+		if effect == null:
+			continue
+		var numbers: Dictionary = authored[id]
+		for name in _script_property_names(neutral):
+			if name == "effect_id":
+				continue
+			if numbers.has(name):
+				assert_eq(effect.get(name), numbers[name], "'%s' authors %s = %s" % [id, name, numbers[name]])
+			else:
+				assert_eq(effect.get(name), neutral.get(name),
+					"'%s' authors no %s -- an effect uses the numbers it needs and no others" % [id, name])
+
+
 ## Story 6-5a (AC 2): EVERY EFFECT NUMBER IS A FLAT EXPORT ON CardEffect ITSELF -- no field holds an
 ## Object (a nested resource would need a `RecordFile._fresh_nested` row or vanish on replay), and the
 ## Deck 1 effects are plain CardEffects, never a subclass.
@@ -767,6 +1008,11 @@ func _load_cards() -> Array[CardData]:
 ## Story 6-5a: the authored Deck 1 list.
 func _deck_list() -> DeckList:
 	return load(DECK_1_PATH) as DeckList
+
+
+## Story 7-5a: the authored Deck 2 list.
+func _deck_2_list() -> DeckList:
+	return load(DECK_2_PATH) as DeckList
 
 
 ## 6-5a REVIEW N11: one Deck 1 card BY ID, looked up in the library rather than filtered out of the

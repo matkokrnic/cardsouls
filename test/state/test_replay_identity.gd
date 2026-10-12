@@ -264,6 +264,24 @@ const HASHED: Array[String] = [
 	# UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
 	"player_state.reversal_kind", "player_state.reversal_indices", "player_state.reversal_a",
 	"player_state.reversal_b", "player_state.reversal_flags", "player_state.reversal_amount",
+	# Story 7-5a (AC 47/AC 54): the packet's SEVENTH member, `amount_b` (Bloodmagic's second scalar), HASHED
+	# with its six siblings through the same ONE `reversal` key.
+	"player_state.reversal_amount_b",
+	# Story 7-5a (AC 54): THE DUELIST'S STATE -- eleven members classify HASHED, on `charge_contact`'s test:
+	# each is produced by the tick, CROSSES TICKS and DECIDES AN OUTCOME (a staging count Manapulation pays
+	# on, a charge that waits for the hit or press that spends it, the per-attack Setup carry, a window
+	# that adds damage or splits it, a per-slot discount that sets a price). They reach the hash through
+	# eight per-player keys: `stagings`, `setup`, `charge_setup`, `execute`, `stoneskin`, `enrage`,
+	# `lifechain`, and `hand_discount` (the `hand._covers` shape: a second per-slot layer on `Hand`,
+	# hashed through its owner's snapshot). UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"player_state.stagings_this_round",
+	"player_state.setup_charges", "player_state.setup_orb_multiplier",
+	"player_state.charge_setup_multiplier",
+	"player_state.execute_charges", "player_state.execute_multiplier",
+	"player_state.stoneskin_charges",
+	"player_state.enrage_ticks", "player_state.enrage_bonus",
+	"player_state.lifechain_ticks",
+	"hand._discounts",
 	# Story 6-5e (AC 11a/AC 38, `6-5e/R21`/G2): the PENDING BURST's six members classify HASHED, on
 	# `charge_window`'s exact test rather than a weaker one -- they CROSS TICKS (the schedule outlives the
 	# cast that armed it, by ruling 6a) and DECIDE OUTCOMES (how many stones still exist, when each
@@ -549,6 +567,10 @@ const INJECTED: Array[String] = [
 	# `inject_card_colors`, which IS a capture channel (`capture_inject_card_colors`).
 	"match_state._deck_contents", "match_state._card_costs", "match_state._card_effects",
 	"match_state._card_colors",
+	# Story 7-5a (AC 7/AC 10): the SECOND SEAT's composition, classified INJECTED for `_deck_contents`'
+	# reasons verbatim -- never produced by the tick, changed only through `inject_seat_decks` (which
+	# `inject_deck` wraps), and that IS a capture channel (`capture_inject_seat_decks`, the `deck` channel).
+	"match_state._deck_contents_p2",
 	# Story 6-2 (AC 14b/AC 16): the injected PITCH-COST map, classified INJECTED for its four neighbours'
 	# reasons verbatim -- never produced by the tick, changed only through `inject_pitch_costs`, which IS
 	# a capture channel (`capture_inject_pitch_costs`). UNHASHED_CROSS_TICK_MEMBERS STAYS AT THREE.
@@ -1341,8 +1363,8 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 23,
-		"...at FORMAT_VERSION 23, read out of the FILE rather than off the constant (7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 24,
+		"...at FORMAT_VERSION 24, read out of the FILE rather than off the constant (7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27; 18 as of 6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
@@ -1752,6 +1774,10 @@ const RECORDER_METHOD_CHANNELS := {
 	"capture_apply_balance": "balance",
 	"capture_inject_feature_flags": "flags",
 	"capture_inject_deck": "deck",
+	# Story 7-5a (AC 8/AC 10): the per-seat form and its two readers ride the SAME `deck` channel.
+	"capture_inject_seat_decks": "deck",
+	"replay_seat_deck_contents": "deck",
+	"replay_deck_names": "deck",
 	"capture_inject_card_costs": "costs",
 	"capture_inject_card_effects": "effects",
 	"capture_inject_card_colors": "colors",
@@ -2143,8 +2169,8 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 23,
-		"...at FORMAT_VERSION 23, read out of the FILE rather than off the constant (7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 24,
+		"...at FORMAT_VERSION 24, read out of the FILE rather than off the constant (7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
@@ -2496,8 +2522,8 @@ func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 23,
-		"...at FORMAT_VERSION 23, read out of the FILE rather than off the constant (7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 24,
+		"...at FORMAT_VERSION 24, read out of the FILE rather than off the constant (7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(TIMED_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))

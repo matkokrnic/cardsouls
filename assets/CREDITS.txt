@@ -73,6 +73,20 @@ EFFECT ICONS (story 7-6) -- assets/art/icons/game_icons/*.svg (placeholder hand/
   frostbite.svg -- "Snowflake 2" by Lorc, game-icons.net, CC BY 3.0
   corpse_bomb.svg -- "Skull bolt" by Lorc, game-icons.net, CC BY 3.0
   boulder_discard.svg -- "Rock" by Lorc, game-icons.net, CC BY 3.0
+  setup.svg -- "On target" by Lorc, game-icons.net, CC BY 3.0
+  execute.svg -- "Guillotine" by Lorc, game-icons.net, CC BY 3.0
+  healer.svg -- "Healing" by Delapouite, game-icons.net, CC BY 3.0
+  stoneskin.svg -- "Stone block" by Lorc, game-icons.net, CC BY 3.0
+  bloodmagic.svg -- "Bleeding wound" by Lorc, game-icons.net, CC BY 3.0
+  enrage.svg -- "Sonic shout" by Lorc, game-icons.net, CC BY 3.0
+  manablossom.svg -- "Lotus flower" by Lorc, game-icons.net, CC BY 3.0
+  elemental_fury.svg -- "Triple yin" by Lorc, game-icons.net, CC BY 3.0
+  manapulation.svg -- "Magic palm" by Lorc, game-icons.net, CC BY 3.0
+  wrath_of_god.svg -- "Sunbeams" by Lorc, game-icons.net, CC BY 3.0
+  lifechain.svg -- "Chained heart" by Lorc, game-icons.net, CC BY 3.0
+    (story 7-5a: the eleven lines above are PLACEHOLDER art for Deck 2's halves and Lifechain, downloaded
+    white-on-transparent from https://game-icons.net/icons/ffffff/transparent/1x1/<author>/<icon>.svg and
+    renamed to the effect id; otherwise unmodified)
   The game shows HAND-AUTHORED icons for rocksling, honed_bolt and corpse_bomb instead
   (assets/art/icons/authored/*.svg -- drawn in-repo for this project, no third-party source, no credit
   needed); the three game-icons.net files above stay in the repo as one-line swaps in

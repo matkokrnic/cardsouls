@@ -49,13 +49,22 @@ extends SceneTree
 ## the authored `DeckList`, so the exclusion is by construction rather than by a list this test would have
 ## to keep in agreement. `test_the_deck_list_is_exactly_deck_1` and this file's own composition check are
 ## what prove it never reaches a deck.
+## STORY 7-5a (AC 1/AC 2/AC 5): EIGHTEEN -> TWENTY-FOUR. `vanguard` (Deck 1's eighth, a new id) and Deck 2's
+## five new cards (`bloodmagic`, `healer`, `manablossom`, `manapulation`, `setup`), each in sorted position.
 const EXPECTED_SORTED_IDS: Array[StringName] = [
-	&"bloodhound_step", &"boulder", &"bramble_snare", &"drain", &"ember_lash", &"frost_dart",
+	&"bloodhound_step", &"bloodmagic", &"boulder", &"bramble_snare", &"drain", &"ember_lash", &"frost_dart",
 	# Story 7-3 (AC 2): SEVENTEEN -> EIGHTEEN. `hellhound` sorts between `hellforge_totem` and
 	# `honed_bolt`; the shelved `ruin_vanguard` stays in the library.
-	&"frostbite", &"grave_ward", &"hellforge_totem", &"hellhound", &"honed_bolt", &"imp_summoner",
-	&"rocksling",
-	&"ruin_vanguard", &"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"verdant_wardstone",
+	&"frostbite", &"grave_ward", &"healer", &"hellforge_totem", &"hellhound", &"honed_bolt", &"imp_summoner",
+	&"manablossom", &"manapulation", &"rocksling",
+	&"ruin_vanguard", &"setup", &"storm_kite", &"thornback_guardian", &"tidal_wardstone", &"vanguard",
+	&"verdant_wardstone",
+]
+
+## Story 7-5a (AC 2): the five Deck 2 cards that are NOT in Deck 1. Each authors a pitch condition and a
+## pitch effect, so they join the two library-wide pitch censuses below.
+const DECK_2_ONLY_IDS: Array[StringName] = [
+	&"setup", &"healer", &"bloodmagic", &"manablossom", &"manapulation",
 ]
 
 ## Story 6-5a (AC 13/AC 14): Deck 1's seven ids and their copies, in LIST order -- LITERAL on purpose,
@@ -64,9 +73,10 @@ const EXPECTED_SORTED_IDS: Array[StringName] = [
 const DECK_1_IDS: Array[StringName] = [
 	# Story 7-3 (AC 2, `7-3/R9`): `hellhound` in the place of `ruin_vanguard`, same copies.
 	&"hellhound", &"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt",
-	&"frostbite",
+	# Story 7-5a (AC 1): the eighth card, and 4 x3 + 4 x2 -- Bloodhound Step and Frostbite drop to two.
+	&"frostbite", &"vanguard",
 ]
-const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 3, 2, 3]
+const DECK_1_COPIES: Array[int] = [3, 3, 3, 3, 2, 2, 2, 2]
 
 var _frames := 0
 var _notes: Array[String] = []
@@ -211,10 +221,12 @@ func _check_pitch_effects(runner: Node, state: MatchState, db: Node) -> bool:
 			expected.append(id)
 	# Story 7-3 (AC 1, `7-3/R1`): Deck 1's seven PLUS the shelved `ruin_vanguard`, which left the deck
 	# with its file unchanged and so still authors Culling as its pitch half.
+	# Story 7-5a (AC 2): PLUS Deck 2's five cards that are not in Deck 1 -- every one authors a pitch half.
 	var authoring_pitch: Array[StringName] = DECK_1_IDS.duplicate()
 	authoring_pitch.append(&"ruin_vanguard")
+	authoring_pitch.append_array(DECK_2_ONLY_IDS)
 	if _sorted_strings(expected) != _sorted_strings(authoring_pitch):
-		_notes.append("library pitch effects %s != Deck 1's seven plus the shelved Ruin Vanguard"
+		_notes.append("library pitch effects %s != Deck 1's eight, the shelved Ruin Vanguard and Deck 2's five"
 				% [expected])
 		return false
 	var injected := _sorted_strings(state._pitch_effects.keys())

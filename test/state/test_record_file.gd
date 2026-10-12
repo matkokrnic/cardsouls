@@ -66,6 +66,9 @@ const PRE_7_9_PATH := "user://test_7_9_pre_tempo.rec"
 const PRE_7_4_PATH := "user://test_7_4_pre_pitch_speeds.rec"
 ## Story 7-3 (`7-3/R23`): the v22 refusal fixture and the row-shape measurement write their own file.
 const PRE_7_3_PATH := "user://test_7_3_pre_minion_fact.rec"
+## Story 7-5a (`7-5a/R16`): the v23 refusal fixture and the per-seat deck round trip write their own file.
+## No "23" or "24" in the path, so `error.contains("23")` can only be answered by the version in the message.
+const PRE_7_5A_PATH := "user://test_seat_decks_pre_per_seat.rec"
 const KIND_ACTIVE_MULTIPLIER := 0.25
 ## Story 6-5g (AC 27, REVIEW FIX m5): the v18 refusal fixture's own path, on its siblings' naming -- this
 ## story's own dev pass had reused `PRE_6_5C_PATH` (harmless, since each test removes its file before the
@@ -242,8 +245,11 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 23,
-		"FORMAT_VERSION is 23 as of story 7-3 (`7-3/R23`) -- a BEHAVIOUR change through a default (minion "
+	assert_eq(RecordFile.FORMAT_VERSION, 24,
+		"FORMAT_VERSION is 24 as of story 7-5a (`7-5a/R16`) -- a SHAPE change: the `deck` channel carries "
+		+ "one composition PER SEAT plus the two seats' deck names, where a v23 file carries one flat list "
+		+ "for both, and `CardEffect` gains nine flat fields. v23 is refused HARD, no shim. "
+		+ "It was 23 as of story 7-3 (`7-3/R23`) -- a BEHAVIOUR change through a default (minion "
 		+ "membership is the authored `UnitKindProfile.is_minion`, which a v22 kind row lacks, so its zombies "
 		+ "would rebuild as non-minions: no corpse, immune to Culling) plus a SHAPE change (`CardEffect` gains "
 		+ "`summon_count`/`summon_kind`; the kind and attack profiles gain the hound fields and the phase "
@@ -1058,6 +1064,99 @@ func test_a_v22_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_7_3_PATH)
 
 
+## Story 7-5a (AC 10, `7-5a/R16`): A v23 RECORD IS REFUSED WITH A REASON, NO SHIM -- the per-bump fixture,
+## on the `test_a_v22_record_is_refused_with_a_reason` precedent directly above.
+##
+## WHAT A v23 FILE WOULD SILENTLY DO: its `deck` key is ONE flat id list, which this build would read as
+## two "seat compositions" that are single card ids -- and it has no `deck_names` key at all.
+func test_a_v23_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_7_5A_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_7_5A_PATH, 23)
+	var refused := RecordFile.load_record(PRE_7_5A_PATH)
+	assert_null(refused["record"],
+		"a v23 record is REFUSED -- its one flat deck list cannot say which seat played which deck")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("23"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	# The refusal is about the VERSION and nothing else: put it back and the same bytes load.
+	_rewrite_format_version(PRE_7_5A_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_7_5A_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_7_5A_PATH)
+
+
+## Story 7-5a (AC 10/AC 11): THE PER-SEAT DECK CHANNEL ROUND-TRIPS, read out of an actually-saved file --
+## two DIFFERENT compositions and the two deck names survive save + load, each on its own seat, and a v24
+## file whose `deck` key holds the OLD flat shape is refused by name rather than dying in the rebuild.
+func test_the_per_seat_deck_channel_survives_save_and_load_and_a_flat_deck_is_refused() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	var p1_deck := record.replay_seat_deck_contents(0)
+	var p2_deck := p1_deck.duplicate()
+	p2_deck.reverse()
+	p2_deck.resize(p2_deck.size() - 1)
+	var names: Array[String] = ["deck_a", "deck_b"]
+	var seated := _with_seat_decks(record, p1_deck, p2_deck, names)
+	assert_eq(RecordFile.save_record(seated, PRE_7_5A_PATH), "", "the record was written")
+	var loaded: IntentRecorder = RecordFile.load_record(PRE_7_5A_PATH)["record"]
+	assert_not_null(loaded, "the per-seat record loads")
+	if loaded != null:
+		assert_eq(loaded.replay_seat_deck_contents(0), p1_deck, "seat 1's composition survived on seat 1")
+		assert_eq(loaded.replay_seat_deck_contents(1), p2_deck, "seat 2's DIFFERENT composition on seat 2")
+		assert_eq(loaded.replay_deck_names(), names, "the two deck names survived, in seat order")
+	var file := FileAccess.open(PRE_7_5A_PATH, FileAccess.READ)
+	var data: Dictionary = file.get_var()
+	file.close()
+	data["deck"] = p1_deck
+	file = FileAccess.open(PRE_7_5A_PATH, FileAccess.WRITE)
+	file.store_var(data)
+	file.close()
+	var refused := RecordFile.load_record(PRE_7_5A_PATH)
+	assert_null(refused["record"], "a v24 file with a FLAT deck list is refused, not half-rebuilt")
+	assert_true(String(refused["error"]).contains("deck channel"),
+		"...naming the deck channel: %s" % refused["error"])
+	# THE COUNT IS ITS OWN GUARD (added at the mutation pass: the flat list above is also caught by the
+	# per-seat type check, so it did not prove this one). ONE well-formed composition -- a record that
+	# forgot a seat -- and THREE are each refused by name, never indexed past their end.
+	for wrong: Array in [[p1_deck], [p1_deck, p2_deck, p1_deck]]:
+		data["deck"] = wrong
+		file = FileAccess.open(PRE_7_5A_PATH, FileAccess.WRITE)
+		file.store_var(data)
+		file.close()
+		var miscounted := RecordFile.load_record(PRE_7_5A_PATH)
+		assert_null(miscounted["record"], "%d compositions are refused" % wrong.size())
+		assert_true(String(miscounted["error"]).contains("not one per seat"),
+			"...for the COUNT (%d): %s" % [wrong.size(), miscounted["error"]])
+	# ...and the two deck NAMES are held to the same count.
+	data["deck"] = [p1_deck, p2_deck]
+	data["deck_names"] = ["only_one"]
+	file = FileAccess.open(PRE_7_5A_PATH, FileAccess.WRITE)
+	file.store_var(data)
+	file.close()
+	var misnamed := RecordFile.load_record(PRE_7_5A_PATH)
+	assert_null(misnamed["record"], "one deck name for two seats is refused")
+	assert_true(String(misnamed["error"]).contains("deck_names"), "...naming the label: %s" % misnamed["error"])
+	_remove(PRE_7_5A_PATH)
+
+
+## A copy of `record`'s match-start content with the deck channel re-captured per seat. Built by a
+## save + rewrite + load so every OTHER channel is exactly what the driven run recorded.
+func _with_seat_decks(record: IntentRecorder, p1_deck: Array[StringName], p2_deck: Array[StringName],
+		names: Array[String]) -> IntentRecorder:
+	assert_eq(RecordFile.save_record(record, PRE_7_5A_PATH), "", "the base record was written")
+	var file := FileAccess.open(PRE_7_5A_PATH, FileAccess.READ)
+	var data: Dictionary = file.get_var()
+	file.close()
+	data["deck"] = [p1_deck, p2_deck]
+	data["deck_names"] = names
+	file = FileAccess.open(PRE_7_5A_PATH, FileAccess.WRITE)
+	file.store_var(data)
+	file.close()
+	return RecordFile.load_record(PRE_7_5A_PATH)["record"]
+
+
 ## Story 7-3 (`7-3/R23`): THE MEASUREMENT BEHIND THE BUMP -- the membership fact and the per-attack
 ## multiplier triplet really do ride the saved `balance` row and come back by value, read out of an
 ## actually-saved file. The nested capture needs no new `_fresh_nested` tag (no new resource class).
@@ -1525,9 +1624,10 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 23,
+	assert_eq(RecordFile.FORMAT_VERSION, 24,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 23 (last: 7-3, which made minion membership an authored kind fact and "
+		+ "version has since moved to 24 (last: 7-5a, which made the deck channel per seat and added the "
+		+ "`deck_names` key; before it 7-3, which made minion membership an authored kind fact and "
 		+ "widened the effect, kind and attack rows for the Hellhound; before it 7-4, which made four Deck 1 cards sorceries that count only "
 		+ "orbs earned after staging and widened the card and pitch cost rows by `pitch_speed`; before it 7-9, "
 		+ "which priced the unblockable in mana, refused a "
@@ -1554,8 +1654,10 @@ func test_the_contents_validation_bumped_no_version_and_widened_no_required_key(
 		assert_false(RecordFile.REQUIRED_KEYS.has(field),
 			("`5-1a/R12`: `%s` is a PER-INTENT field inside each `intents` element, never a "
 			+ "top-level key — REQUIRED_KEYS is not widened by this story") % field)
-	assert_eq(RecordFile.REQUIRED_KEYS.size(), 16,
-		"SIXTEEN top-level required keys: story 6-5b added `drain_pushes`, the seventh capture channel "
+	assert_eq(RecordFile.REQUIRED_KEYS.size(), 17,
+		"SEVENTEEN top-level required keys: story 7-5a added `deck_names`, the two seats' deck labels "
+		+ "beside the now per-seat `deck` key (it was SIXTEEN before 7-5a, and that story's bump 23 -> 24 "
+		+ "is what the key is worth); story 6-5b added `drain_pushes`, the seventh capture channel "
 		+ "and the second per-tick pushed-fact channel after `lock_pushes` (it was FIFTEEN before "
 		+ "6-5b); story 6-5a added `pitch_effects`, the sixth content channel "
 		+ "(it was FOURTEEN before 6-5a); story 6-2 added `pitch_costs`, the fifth content channel, "

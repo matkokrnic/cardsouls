@@ -4,5 +4,5 @@
 
 [resource]
 script = ExtResource("1_deck")
-card_ids = Array[StringName]([&"hellhound",&"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt", &"frostbite"])
-copies = Array[int]([3, 3, 3, 3, 3, 2, 3])
+card_ids = Array[StringName]([&"hellhound",&"grave_ward", &"drain", &"rocksling", &"bloodhound_step", &"honed_bolt", &"frostbite", &"vanguard"])
+copies = Array[int]([3, 3, 3, 3, 2, 2, 2, 2])

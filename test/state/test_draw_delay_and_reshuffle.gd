@@ -88,8 +88,21 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# Story 7-8 (`7-8/R15`): the FORTY-SIXTH key -- `charge_contact`, the mode (2) hit-once memory, in
 	# SORTED position between `cast` and `corpse_bomb`. Same mechanism, ELEVENTH time: this pin and
 	# test_card_observation.gd's were BOTH red before this edit.
-	"burst", "cast", "charge_contact", "corpse_bomb",
-	"deck_size", "defense", "discard_size", "hand_covered", "hand_size", "hero",
+	# Story 7-5a (AC 54/AC 56): EIGHT new keys, FIFTY-ONE -> FIFTY-NINE, each in SORTED position -- one
+	# per new hashed per-player fact (the ninth fact, the per-cast reversal data, rides the existing
+	# `reversal` key as a seventh element and moves no key):
+	#   `charge_setup`  -- the per-attack "this unblockable carries Setup" fact, as its orb multiplier.
+	#   `enrage`        -- the Enrage window list, `[[remaining ticks, bonus], ...]`.
+	#   `execute`       -- `[charges, damage multiplier]`.
+	#   `hand_discount` -- the RAW per-slot Manablossom sums.
+	#   `lifechain`     -- the Lifechain window list, `[remaining ticks, ...]`.
+	#   `setup`         -- `[charges, orb multiplier]`.
+	#   `stagings`      -- successful stagings into this player's own zone this round.
+	#   `stoneskin`     -- charges.
+	# Same mechanism, TWELFTH time: this pin and test_card_observation.gd's were BOTH red before this edit.
+	"burst", "cast", "charge_contact", "charge_setup", "corpse_bomb",
+	"deck_size", "defense", "discard_size", "enrage", "execute", "hand_covered", "hand_discount",
+	"hand_size", "hero",
 	# Story 6-1c (AC 2/AC 4): the THIRTY-FIRST key -- `landing`, the mode (2) landing window's
 	# remaining ticks, in SORTED position between `hero` and `lock_target`. Same mechanism, seventh
 	# time: this pin and test_card_observation.gd's were BOTH red before this edit, and the story
@@ -98,6 +111,7 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# Story 6-5a (AC 10): the THIRTY-SECOND key -- `last_resolved_card`, `[id, mode]` with the id a String
 	# VALUE, in sorted position between `landing` and `lock_target`. Same mechanism, eighth time.
 	"last_resolved_card",
+	"lifechain",   # Story 7-5a: see the block at the head of this list.
 	# Story 4-6 (AC 2/AC 4): the lock-on target as a `[slot, index]` pair, in sorted position.
 	"lock_target",
 	"mana", "orbs",
@@ -133,7 +147,9 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# edit, and the story that adds the key is the story that moves both.
 	"reversal",
 	"root",
+	"setup", "stagings",   # Story 7-5a: see the block at the head of this list.
 	"stamina",
+	"stoneskin",   # Story 7-5a.
 	# Story 5-2 (AC 21, `5-2/R9`): the TWENTY-NINTH key -- `telegraph`, the active unblockable
 	# chargeup as `[colour, remaining_ticks]`, in sorted position between `stamina` and the
 	# `unit_*` block. Same mechanism, fifth time: this pin and test_card_observation.gd's were BOTH

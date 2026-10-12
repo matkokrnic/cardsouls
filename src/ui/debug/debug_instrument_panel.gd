@@ -88,6 +88,20 @@ var reveal_opponent_hand: Callable = Callable()
 ## per-tick write. Shown and hidden with the panel, which is the F3 debug layer.
 var seed_value: int = 0
 
+## Story 7-5a (AC 12): the deck NAME each seat is on (`[P1, P2]`), set by the runner BEFORE add_child on the
+## seed's own handoff and rendered once by `_ready` through `deck_text` -- a one-time fact, shown and hidden
+## with the F3 layer.
+var deck_names: Array[String] = ["", ""]
+
+
+## Story 7-5a (AC 12): THE F3 DECK LINE. A static text builder so the wording is machine-checkable without
+## a scene. A seat with no recorded name (a one-list recording, a hand-built record) reads `?` rather than
+## an empty gap.
+static func deck_text(names: Array[String]) -> String:
+	var p1 := names[0] if names.size() > 0 and names[0] != "" else "?"
+	var p2 := names[1] if names.size() > 1 and names[1] != "" else "?"
+	return "P1 %s | P2 %s" % [p1, p2]
+
 ## Story 3-0b (AC 2): the two per-slot countdown value Labels, index 0 = P1, 1 = P2. Written
 ## ONLY by set_window_countdown below, from the runner's polled plain-integer payload.
 var _countdown_values: Array[Label] = []
@@ -178,6 +192,17 @@ func _ready() -> void:
 	seed_label.offset_right = 0.0
 	seed_label.clip_text = true
 	title.add_child(seed_label)
+	# Story 7-5a (AC 12): the deck each seat is on, LEFT-aligned on the same title line -- the seed label's
+	# mirror, for its reason (a child of the title Label, so the box gains no row and no column width).
+	var deck_label := Label.new()
+	deck_label.name = "DeckLabel"
+	deck_label.text = deck_text(deck_names)
+	deck_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	deck_label.anchor_bottom = 1.0
+	deck_label.offset_left = 0.0
+	deck_label.offset_right = 220.0
+	deck_label.clip_text = true
+	title.add_child(deck_label)
 	var row := HBoxContainer.new()
 	row.name = "InstrumentColumns"
 	row.add_theme_constant_override("separation", 12)

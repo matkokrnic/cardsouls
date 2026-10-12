@@ -313,6 +313,85 @@ const COUNTERSPELL_OUTCOMES: Dictionary[StringName, StringName] = {
 
 
 ## ------------------------------------------------------------------------------------------
+## STORY 7-5a (AC 16-42): DECK 2's EIGHT IMPLEMENTED HALVES AND LIFECHAIN -- three families, one table
+## each, on this file's standing rule ("one table per family keeps the apply seat's `match` readable as
+## 'what kind of thing is this'"). `BUFF_OUTCOMES`' posture verbatim: whole-id rows in a `Dictionary` only
+## ever `get()`-ed by one known key, never iterated, never sorted, never hashed. All three gate on
+## `FeatureFlags.spells` through `_spells_open`, exactly as the buffs do.
+## ------------------------------------------------------------------------------------------
+## THE CHARGE FAMILY (AC 16-26): Setup, Execute and Stoneskin each ADD ONE CHARGE that waits for the event
+## that spends it. None starts a window, which is why they are not `BUFF_OUTCOMES` rows -- that seat
+## REFRESHES (N10) and a charge STACKS (`7-5a/R9`).
+const OUTCOME_SETUP := &"setup"
+const OUTCOME_EXECUTE := &"execute"
+const OUTCOME_STONESKIN := &"stoneskin"
+
+const CHARGE_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"setup": OUTCOME_SETUP,
+	&"execute": OUTCOME_EXECUTE,
+	&"stoneskin": OUTCOME_STONESKIN,
+}
+
+## THE STACKING-WINDOW FAMILY (AC 30-33, AC 39-42): Enrage and Lifechain each open THEIR OWN window per
+## cast. They are not `BUFF_OUTCOMES` rows for the charge family's reason: a second cast must neither
+## refresh nor be refused (`7-5a/R9`, `7-5a/R22`), which the six-slot timed-rule seat cannot express.
+const OUTCOME_ENRAGE := &"enrage"
+const OUTCOME_LIFECHAIN := &"lifechain"
+
+const STACKING_WINDOW_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"enrage": OUTCOME_ENRAGE,
+	&"lifechain": OUTCOME_LIFECHAIN,
+}
+
+## THE ECONOMY FAMILY (AC 27-29, AC 34-38): Bloodmagic, Manablossom and Manapulation resolve ENTIRELY at the
+## press and act on the caster's own pools and hand. Nothing of theirs waits and nothing runs.
+const OUTCOME_BLOODMAGIC := &"bloodmagic"
+const OUTCOME_MANABLOSSOM := &"manablossom"
+const OUTCOME_MANAPULATION := &"manapulation"
+
+const ECONOMY_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"bloodmagic": OUTCOME_BLOODMAGIC,
+	&"manablossom": OUTCOME_MANABLOSSOM,
+	&"manapulation": OUTCOME_MANAPULATION,
+}
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-5a (AC 13-15, `7-5a/R29`): THE TEMPORARY REFUSAL TABLE -- the halves `7-5b` builds.
+## ------------------------------------------------------------------------------------------
+## Each row is an effect id whose card half is REFUSED BEFORE ANY SPEND with `REASON_NOT_AVAILABLE_YET`:
+## at the Mode 1 pre-spend gate for a normal half, at the staging ladder for a pitch half. THE VALUE is the
+## board key of the story that builds it -- `DEFERRED_EFFECT_OWNERS`' shape, with the one difference that
+## matters: a deferred effect was a SUCCESSFUL cast that did nothing, and these are never cast at all.
+##
+## THIS TABLE IS THE WHOLE MECHANISM, AND `7-5b` REMOVES IT IN ONE EDIT: emptying it (or deleting a row)
+## lifts the refusal for that half at both seats, because both ask `is_unavailable()` and neither names an id.
+##
+## IT IS CONTENT-DRIVEN AND REPLAY-STABLE WITH NO RECORD CHANNEL: the effect ids ride the two effect maps
+## the record already carries, and this table is code.
+##
+## THE IDS ARE DELIBERATELY NOT `summon_*` / `spell_*` AND HAVE NO OUTCOME ROW ANYWHERE ELSE (AC 14). If the
+## refusal were ever skipped, `outcome()` answers `REASON_NOT_AVAILABLE_YET` for them -- a cast that applies
+## nothing -- rather than, say, a `summon_healer` id summoning a zombie through the prefix path.
+const UNAVAILABLE_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
+	&"healer": &"7-5b-deck-2-bodies",
+	&"elemental_fury": &"7-5b-deck-2-bodies",
+	&"wrath_of_god": &"7-5b-deck-2-bodies",
+}
+
+## The outcome an unavailable id resolves to if it is ever reached -- and the refusal reason both seats
+## queue, so "not available yet" is one token wherever it surfaces.
+const REASON_NOT_AVAILABLE_YET := &"not_available_yet"
+
+
+## Story 7-5a (AC 13): IS THIS HALF REFUSED UNTIL A LATER STORY BUILDS IT? The ONE question both refusal
+## seats ask. A null effect is available: a card with no effect entry is ordinary content with its own
+## honest default (`REASON_NO_EFFECT_ENTRY`), not a half waiting on a story.
+static func is_unavailable(effect: CardEffect) -> bool:
+	return effect != null and UNAVAILABLE_EFFECT_OWNERS.has(effect.effect_id)
+
+
+## ------------------------------------------------------------------------------------------
 ## STORY 6-5e (AC 20-21a, AC 28a): THE COVER-CLEARING FAMILY -- Boulder's one legal action.
 ## ------------------------------------------------------------------------------------------
 ## Playing a Boulder (Mode ①, 2 mana authored) LIFTS IT OFF the slot it covers and hands the card beneath
@@ -517,6 +596,16 @@ const COUNTERSPELL_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"counterspell": NEEDS_COUNTER_TARGET,
 }
 
+## Story 7-5a (AC 28, `7-5a/R17`): BLOODMAGIC's precondition -- THE CASTER'S OWN HP MUST BE STRICTLY ABOVE
+## THE EFFECT'S `hp_cost`. A SIXTH arm, and the first that reads the caster's own HERO rather than a board,
+## a lock or a hand. HP equal to the price is refused (the payment would leave the hero at zero, and an HP
+## price is not allowed to kill); price + 1 is allowed.
+const NEEDS_HP_ABOVE_COST := &"hp_above_cost"
+
+const HP_COST_REQUIREMENTS: Dictionary[StringName, StringName] = {
+	&"bloodmagic": NEEDS_HP_ABOVE_COST,
+}
+
 ## Story 6-5c (AC 4, Discrepancy 3): `honed_bolt`'s target -- A LIVING ENEMY HERO. The requirement is
 ## EVALUATED AT THE SAME PRE-SPEND SEAT as the four above (`MatchState._board_refusal_reason`), which
 ## is what AC 4 means by "the target requirement is evaluated at the same pre-spend seat".
@@ -577,6 +666,10 @@ static func board_requirement_for(effect: CardEffect) -> StringName:
 	var opposing_hand: StringName = OPPOSING_HAND_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 	if opposing_hand != NEEDS_NOTHING:
 		return opposing_hand
+	# Story 7-5a: FIVE TABLES, STILL ONE ANSWER, on the identical reasoning -- all five share no id.
+	var hp_cost: StringName = HP_COST_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	if hp_cost != NEEDS_NOTHING:
+		return hp_cost
 	return COUNTERSPELL_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 
 
@@ -647,6 +740,22 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	var boulder: StringName = BOULDER_OUTCOMES.get(effect.effect_id, &"")
 	if boulder != &"":
 		return boulder
+	# Story 7-5a (AC 16-42): the three Deck 2 families, in the retroactive lookup's own seat and order --
+	# after the summon prefix and before the `spell_*` prefix. The id is recognised first and the flag read
+	# only after, this docstring's standing ordering argument.
+	var charge: StringName = CHARGE_OUTCOMES.get(effect.effect_id, &"")
+	if charge != &"":
+		return charge if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	var stacking_window: StringName = STACKING_WINDOW_OUTCOMES.get(effect.effect_id, &"")
+	if stacking_window != &"":
+		return stacking_window if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	var economy: StringName = ECONOMY_OUTCOMES.get(effect.effect_id, &"")
+	if economy != &"":
+		return economy if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 7-5a (AC 14): a half `7-5b` builds. Both refusal seats stop it before this is ever asked; if
+	# one were skipped, this answers a named nothing rather than falling through to another family.
+	if is_unavailable(effect):
+		return REASON_NOT_AVAILABLE_YET
 	if owner_story_for(effect.effect_id) != &"":
 		return REASON_DECK1_NOT_YET_RESOLVED
 	if id.begins_with(PREFIX_SPELL):

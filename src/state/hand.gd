@@ -72,6 +72,20 @@ var _cards: Array[StringName] = []
 ## vocabulary and a slot can never be half-covered.
 var _covers: Array[StringName] = []
 
+## Story 7-5a (AC 34/AC 35, `7-5a/R10`/`R14`): THE PER-SLOT MANA DISCOUNT -- how much less mana the card in
+## each slot costs, as the RAW SUM of every Manablossom that touched it. Width-long, in slot order, like
+## the two layers above; a float per slot and nothing else, so no card identity is added to this container.
+##
+## RAW, CLAMPED ONLY AT READ (`7-5a/R10`). A stored value may be larger than the card's price, and after a
+## Counterspell took one Manablossom's share back out it is the honest remainder: clamping at the write
+## would lose the part a later counter has to restore. `discount_at` is the one clamped read.
+##
+## IT BELONGS TO THE CARD, AND LEAVES WITH IT: `remove_at` zeroes the slot, so a card drawn into that slot
+## afterwards starts undiscounted, and there is exactly one way a discount ends early (the card leaving the
+## hand -- played, staged, or spent on an unblockable or a defence). A COVER DOES NOT TOUCH IT: the card
+## under a Boulder keeps its discount and shows it again when uncovered.
+var _discounts: Array[float] = []
+
 
 ## Emptied at the deal seat before each fill — the debug reset restores the full composition
 ## rather than returning cards from anywhere, because there is nowhere to return them TO (no
@@ -98,6 +112,10 @@ func clear(width: int) -> void:
 	_covers.clear()
 	_covers.resize(width)
 	_covers.fill(EMPTY)
+	# Story 7-5a: a fresh deal holds no discount (the debug reset reaches this through the deal).
+	_discounts.clear()
+	_discounts.resize(width)
+	_discounts.fill(0.0)
 
 
 ## Story 4-0 (AC 2, `4-0/R1`): SIZE MEANS WIDTH. The two readings the old `size()` conflated —
@@ -191,6 +209,8 @@ func remove_at(index: int) -> StringName:
 				% [index, _cards.size(), occupied_count()])
 	var id: StringName = _cards[index]
 	_cards[index] = EMPTY
+	# Story 7-5a (AC 35): the discount leaves with the card, at the one seat a card leaves the hand.
+	_discounts[index] = 0.0
 	return id
 
 
@@ -344,3 +364,40 @@ func covers_snapshot() -> Array:
 ## A NO-OP ON AN UNCOVERED HAND, so the two callers need no `cover_count()` guard first.
 func clear_covers() -> void:
 	_covers.fill(EMPTY)
+
+
+## Story 7-5a (AC 34/AC 35): ADD `amount` to the raw discount of the card in slot `index`. A NEGATIVE amount
+## is how a Counterspell takes one cast's share back out. An EMPTY slot (a hole, or out of range) takes
+## nothing: a discount belongs to a card, and there is none there.
+func add_discount_at(index: int, amount: float) -> void:
+	if is_slot_empty(index):
+		return
+	_discounts[index] += amount
+
+
+## THE CLAMPED READ (`7-5a/R10`): how much less mana the card in slot `index` costs right now -- the raw sum
+## floored at zero, and zero for an empty or out-of-range slot.
+func discount_at(index: int) -> float:
+	if is_slot_empty(index):
+		return 0.0
+	return maxf(0.0, _discounts[index])
+
+
+## Every slot's clamped discount, in slot order -- what the HUD shows. A COPY.
+func discounts() -> Array[float]:
+	var out: Array[float] = []
+	for i in _discounts.size():
+		out.append(discount_at(i))
+	return out
+
+
+## The RAW per-slot sums for the snapshot (`hand_discount`). Plain floats in slot order, whose order is
+## meaningful; a copy, never the live array.
+func discounts_snapshot() -> Array:
+	return Array(_discounts.duplicate())
+
+
+## TEAR DOWN every discount, leaving both layers and the width untouched -- the round-end and debug-reset
+## seat, `clear_covers`' twin. A no-op on an undiscounted hand.
+func clear_discounts() -> void:
+	_discounts.fill(0.0)

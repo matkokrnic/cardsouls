@@ -46,7 +46,10 @@ const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reloa
 ## Story 6-5b (AC 18/AC 26, `6-5b/R6`): THIRTEEN -> FOURTEEN, the DRAIN-TARGET channel, moved by the
 ## story that ships it -- and it ships for the only sanctioned reason, because `MatchState` gained a
 ## thirteenth INTAKE (`push_drain_target`) that this set is DERIVED from (`3-0c/R2`).
-const SHIPPED_CAPTURE_CHANNELS := 14
+## Story 7-5a (AC 8/AC 10): FOURTEEN -> FIFTEEN capture METHODS, because `MatchState` gained the per-seat
+## intake `inject_seat_decks` and this set is derived from the intake surface (`3-0c/R2`). It is the
+## per-seat form of the deck channel, so the CHANNEL count stays fourteen.
+const SHIPPED_CAPTURE_CHANNELS := 15
 
 
 # ---------------------------------------------------------------- AC 2
@@ -122,7 +125,12 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ## RENAMED BY STORY 6-5b (AC 18/AC 26) for the same count-in-the-name reason. The old name was
 ## `test_the_recorder_still_ships_exactly_thirteen_capture_channels`, recorded verbatim so the pin
 ## stays greppable.
-func test_the_recorder_still_ships_exactly_fourteen_capture_channels() -> void:
+## RENAMED BY STORY 7-5a (AC 8/AC 10) for the same count-in-the-name reason, and the NOUN moves with the
+## count: `capture_inject_seat_decks` is a FIFTEENTH capture METHOD on the FOURTEEN channels -- the
+## per-seat form of the existing deck channel (`SOUND_CONTENT_ORDER` is unmoved), not a new channel. The
+## old name was `test_the_recorder_still_ships_exactly_fourteen_capture_channels`, recorded verbatim so
+## the pin stays greppable.
+func test_the_recorder_still_ships_exactly_fifteen_capture_methods() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -145,6 +153,10 @@ func test_the_recorder_still_ships_exactly_fourteen_capture_channels() -> void:
 		# Story 6-5a (AC 6): the THIRTEENTH channel -- the per-card PITCH-EFFECT map, the SIXTH content
 		# channel. Sorted position; the FORMAT_VERSION bump 12 -> 13 is what the move is worth.
 		"capture_inject_pitch_effects",
+		# Story 7-5a (AC 8/AC 10): the PER-SEAT FORM of the deck capture -- the SAME deck channel as
+		# `capture_inject_deck`, carrying two compositions and the two deck names. Sorted position; the
+		# FORMAT_VERSION bump 23 -> 24 is what the per-seat shape is worth.
+		"capture_inject_seat_decks",
 		"capture_push_contact",
 		# Story 6-5b (AC 18/AC 26, `6-5b/R6`): the FOURTEENTH channel -- the per-tick DRAIN TARGET, the
 		# `capture_set_lock_direction` sibling (a runner answer derived from actor positions this layer
@@ -161,7 +173,9 @@ func test_the_recorder_still_ships_exactly_fourteen_capture_channels() -> void:
 		+ "4-6's lock-direction channel, story 5-2's card-colour channel, story 6-2's pitch-cost channel, "
 		+ "story 6-5a's pitch-effect channel and story 6-5b's drain-target channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"a FIFTEENTH capture channel is a scope violation, and this is where it fails")
+		"a SIXTEENTH capture method is a scope violation, and this is where it fails")
+	assert_eq(IntentRecorder.SOUND_CONTENT_ORDER.size(), 6,
+		"...and the per-seat deck form added NO content channel (story 7-5a): still six")
 
 
 # ---------------------------------------------------------------- AC 9

@@ -341,6 +341,9 @@ var _own_card_cover_frames: Array[StyleBoxFlat] = []
 ## none), the id whose costs the PLAYER can pay from this slot (`&""` = nothing playable: in flight, ghost, blank;
 ## the Boulder on a covered slot) and whether the slot is covered (AC 21 suppresses its lift and frame).
 var _slot_face_ids: Array[StringName] = [&"", &"", &"", &""]
+## Story 7-5a (AC 37): the mana discount each slot's FACE is currently painted with (0 for every look but a
+## real, uncovered card). Written by `_paint_face`, read by the affordability pass.
+var _slot_discounts: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _slot_play_ids: Array[StringName] = [&"", &"", &"", &""]
 var _slot_covered: Array[bool] = [false, false, false, false]
 ## Each half's base modulate (white, the ghost or the faint under-a-Boulder look) before P2's dimming.
@@ -353,6 +356,11 @@ var _half_hues: Array = [[null, null], [null, null], [null, null], [null, null]]
 ## the existing cards-changed wrapper -- `_last_card_colors`' shape and lifetime verbatim. STATIC AUTHORED
 ## DATA THAT NEVER ENTERS GAME STATE. One entry per id: `[mode-1 mana, mode-1 orbs, mode-4 mana, mode-4 orbs]`.
 var _last_card_prices: Dictionary = {}
+## Story 7-5a (AC 37): the last per-slot mana discount payload (`on_cards_changed`), `[]` until one arrives.
+var _last_discounts: Array = []
+## Story 7-5a (AC 50): the cost number's colour on a DISCOUNTED card -- the placeholder mark. White otherwise.
+const DISCOUNT_COST_COLOR := Color(0.45, 1.0, 0.55)
+const NORMAL_COST_COLOR := Color(1.0, 1.0, 1.0)
 
 ## Story 7-6 (R2, D2): the card -> effect pairing and the effect -> icon table, handed over by the runner
 ## before add_child (`set_effect_art`). `_card_effects[id] = [normal effect id, pitch effect id]`.
@@ -536,14 +544,20 @@ func on_orbs_changed(red: int, blue: int, green: int) -> void:
 ## by the same wrapper, so a covered slot can show its card faintly under the Boulder. A slot is COVERED
 ## when its visible id differs from its card-layer id. Every new parameter is defaulted, so every
 ## pre-existing 3- to 6-arg call site keeps exercising its branch unchanged.
+## Story 7-5a (AC 37/AC 50): `discounts` -- this player's own per-slot Manablossom discount, in mana, already
+## clamped at zero (`Hand.discounts()`), read inline by the same wrapper. A discounted card shows its
+## DISCOUNTED mana on both halves, in the discount tint, and is judged affordable at that price. A slot whose
+## card sits under a Boulder shows no discount: the Boulder's own cost is never discounted.
 func on_cards_changed(
 		hand_ids: Array, deck_count: int, _discard_count: int, pending_draw_owed: Array = [],
-		card_colors: Dictionary = {}, card_prices: Dictionary = {}, under_ids: Array = []) -> void:
+		card_colors: Dictionary = {}, card_prices: Dictionary = {}, under_ids: Array = [],
+		discounts: Array = []) -> void:
 	_last_hand_ids = hand_ids.duplicate()
 	_last_pending_draw_owed = pending_draw_owed.duplicate()
 	_last_card_colors = card_colors
 	_last_card_prices = card_prices
 	_last_under_ids = under_ids.duplicate()
+	_last_discounts = discounts.duplicate()
 	_render_hand_row()
 	_deck_label.text = "DECK %d" % deck_count
 
@@ -597,7 +611,8 @@ func _render_hand_row() -> void:
 			_slot_looks[i] = LOOK_COVERED
 		elif visible_id != Hand.EMPTY:
 			_set_caption(label, str(visible_id), false, Color.WHITE)
-			_paint_face(i, visible_id, Color.WHITE)
+			# Story 7-5a (AC 37/AC 50): a real, uncovered card is the one look that shows a discount.
+			_paint_face(i, visible_id, Color.WHITE, true, _discount_at(i))
 			# 6-0 AC 1: a slot holding a real card id is tinted; the untinted states (EMPTY, permanent hole,
 			# in-flight) never reach this branch -- none of the three has a card id to look colour up by.
 			_set_swatch_color(i, _last_card_colors.get(visible_id, null))
@@ -647,7 +662,12 @@ func _set_caption(label: Label, text: String, shown: bool, tint: Color) -> void:
 ##
 ## `with_costs` false paints the ARTS ONLY -- the card faint beneath a Boulder (R4): its costs and pips would sit
 ## under the Boulder's own slab and cost, so they are not drawn at all (AC 8 holds for the covered slot too).
-func _paint_face(index: int, id: StringName, tint: Color, with_costs := true) -> void:
+##
+## Story 7-5a (AC 37/AC 50): `discount` is the mana BOTH halves of this slot's card cost less (0 for every
+## look but a real, uncovered card). The number drawn is the discounted one, floored at zero, in
+## `DISCOUNT_COST_COLOR`; orb pips are untouched (a discount is mana only).
+func _paint_face(index: int, id: StringName, tint: Color, with_costs := true, discount := 0.0) -> void:
+	_slot_discounts[index] = discount
 	var halves: Array = _own_card_halves[index]
 	var arts: Array = _own_card_arts[index]
 	var costs: Array = _own_card_costs[index]
@@ -673,7 +693,9 @@ func _paint_face(index: int, id: StringName, tint: Color, with_costs := true) ->
 		if row == null or not shown or not with_costs:
 			cost_label.text = ""
 		else:
-			cost_label.text = _mana_text(float((row as Array)[h * 2]))
+			cost_label.text = _mana_text(_discounted(float((row as Array)[h * 2]), discount))
+		cost_label.add_theme_color_override("font_color",
+				DISCOUNT_COST_COLOR if discount > 0.0 else NORMAL_COST_COLOR)
 	# Story 7-4 (AC 12): the hourglass marks a SORCERY's pitch half wherever that half is drawn with its costs
 	# (a real card or the ghost), never on the faint card beneath a Boulder.
 	_own_card_hourglasses[index].visible = row != null and has_pitch and with_costs and _is_sorcery(id)
@@ -703,6 +725,28 @@ func _paint_face(index: int, id: StringName, tint: Color, with_costs := true) ->
 			pip.set_meta(&"orb_color", -1)
 			pip.set_meta(&"orb_rank", 1)
 			pip.visible = false
+
+
+## Story 7-5a (AC 37): slot `index`'s discount from the last payload, 0 when the payload carries none.
+func _discount_at(index: int) -> float:
+	return float(_last_discounts[index]) if index < _last_discounts.size() else 0.0
+
+
+## Story 7-5a (AC 34/AC 37): a mana price under a discount, floored at zero -- the state layer's
+## `CastEvaluator.discounted_mana_cost` rule, restated for a number the HUD only DISPLAYS.
+func _discounted(mana: float, discount: float) -> float:
+	return maxf(0.0, mana - discount) if discount > 0.0 else mana
+
+
+## Story 7-5a (AC 50): the test-facing reads -- the cost TEXT a half shows, and whether slot `index` is
+## marked as discounted (its cost drawn in the discount tint).
+func card_cost_text(index: int, half: int) -> String:
+	return ((_own_card_costs[index] as Array)[half] as Label).text
+
+
+func is_slot_discounted(index: int) -> bool:
+	return _slot_discounts[index] > 0.0 and ((_own_card_costs[index] as Array)[0] as Label) \
+			.get_theme_color("font_color") == DISCOUNT_COST_COLOR
 
 
 ## The art for one effect id, or null for none (an empty art slot).
@@ -770,7 +814,9 @@ func _apply_affordability() -> void:
 				half.modulate = tint
 				_set_art_back(i, h, hue)
 				continue
-			var payable := float((row as Array)[h * 2]) <= _mana + AFFORD_EPSILON
+			# Story 7-5a (AC 37): judged at the price the card would actually cost -- the discounted one.
+			var payable := _discounted(float((row as Array)[h * 2]), _slot_discounts[i]) \
+					<= _mana + AFFORD_EPSILON
 			rim.visible = payable
 			half.modulate = tint if payable else tint * UNAFFORDABLE_MODULATE
 			_set_art_back(i, h, hue, 1.0 if payable else UNAFFORDABLE_SATURATION)

@@ -46,6 +46,9 @@ const EXPECTED_IDS: Array[StringName] = [
 	# Story 7-3 (AC 2, `7-3/R9`): SEVENTEEN -> EIGHTEEN. `hellhound` is Deck 1's green card now;
 	# `ruin_vanguard` above STAYS in the library, shelved (`7-3/R1`).
 	&"hellhound",
+	# Story 7-5a (AC 1/AC 2/AC 5): EIGHTEEN -> TWENTY-FOUR. `vanguard` is Deck 1's eighth card (a NEW id;
+	# `ruin_vanguard` above stays shelved and untouched, `7-5a/R15`), and Deck 2 brings five new cards.
+	&"vanguard", &"setup", &"healer", &"bloodmagic", &"manablossom", &"manapulation",
 ]
 
 func _physics_process(_delta: float) -> bool:

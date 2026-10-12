@@ -7,19 +7,30 @@ script = ExtResource("1_icons")
 slot_reel_enabled = true
 icon_paths = Dictionary[StringName, String]({
 &"bloodhound_step": "res://assets/art/icons/game_icons/bloodhound_step.svg",
+&"bloodmagic": "res://assets/art/icons/game_icons/bloodmagic.svg",
 &"boom": "res://assets/art/icons/game_icons/boom.svg",
 &"boulder_discard": "res://assets/art/icons/game_icons/boulder_discard.svg",
 &"corpse_bomb": "res://assets/art/icons/authored/corpse_bomb.svg",
 &"counterspell": "res://assets/art/icons/game_icons/counterspell.svg",
 &"culling": "res://assets/art/icons/game_icons/culling.svg",
 &"drain": "res://assets/art/icons/game_icons/drain.svg",
+&"elemental_fury": "res://assets/art/icons/game_icons/elemental_fury.svg",
+&"enrage": "res://assets/art/icons/game_icons/enrage.svg",
+&"execute": "res://assets/art/icons/game_icons/execute.svg",
 &"fireball": "res://assets/art/icons/game_icons/fireball.svg",
 &"frostbite": "res://assets/art/icons/game_icons/frostbite.svg",
 &"grave_ward": "res://assets/art/icons/game_icons/grave_ward.svg",
+&"healer": "res://assets/art/icons/game_icons/healer.svg",
 &"honed_bolt": "res://assets/art/icons/authored/honed_bolt.svg",
+&"lifechain": "res://assets/art/icons/game_icons/lifechain.svg",
+&"manablossom": "res://assets/art/icons/game_icons/manablossom.svg",
+&"manapulation": "res://assets/art/icons/game_icons/manapulation.svg",
 &"raise_dead": "res://assets/art/icons/game_icons/raise_dead.svg",
 &"rocksling": "res://assets/art/icons/authored/rocksling.svg",
+&"setup": "res://assets/art/icons/game_icons/setup.svg",
+&"stoneskin": "res://assets/art/icons/game_icons/stoneskin.svg",
 &"summon_hellhound": "res://assets/art/icons/game_icons/summon_hellhound.svg",
 &"summon_ruin_vanguard": "res://assets/art/icons/game_icons/summon_ruin_vanguard.svg",
-&"vampiric_aura": "res://assets/art/icons/game_icons/vampiric_aura.svg"
+&"vampiric_aura": "res://assets/art/icons/game_icons/vampiric_aura.svg",
+&"wrath_of_god": "res://assets/art/icons/game_icons/wrath_of_god.svg"
 })

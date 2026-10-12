@@ -298,9 +298,15 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# the keys is the story that moves both.
 		# Story 7-8 (`7-8/R15`): `charge_contact`, the mode (2) hit-once memory -- a small int -- in
 		# sorted position between `cast` and `corpse_bomb`. Same mechanism, ELEVENTH time.
-		"burst", "cast", "charge_contact", "corpse_bomb",
-		"deck_size", "defense", "discard_size", "hand_covered", "hand_size", "hero", "landing",
-		"last_resolved_card", "lock_target",
+		# Story 7-5a (AC 54/AC 56): EIGHT new keys, each in SORTED position -- `charge_setup`, `enrage`,
+		# `execute`, `hand_discount`, `lifechain`, `setup`, `stagings` and `stoneskin` (the last three sit
+		# around `stamina`, below). See the twin pin in `test_draw_delay_and_reshuffle.gd` for what each
+		# holds. This copy moves for the SAME reason and is updated here deliberately: ints and floats only,
+		# so the observation channel still adds nothing, which is what this test actually asserts.
+		"burst", "cast", "charge_contact", "charge_setup", "corpse_bomb",
+		"deck_size", "defense", "discard_size", "enrage", "execute", "hand_covered", "hand_discount",
+		"hand_size", "hero", "landing",
+		"last_resolved_card", "lifechain", "lock_target",
 		"mana", "orbs",
 		"pending_draw", "pending_draw_owed",
 		# Story 4-4 (AC 14-19): SEVEN more — the projectile board, in sorted position.
@@ -322,7 +328,9 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# what this test actually asserts.
 		"reversal",
 		"root",
+		"setup", "stagings",   # Story 7-5a: see the block at the head of this list.
 		"stamina",
+		"stoneskin",   # Story 7-5a.
 		# Story 5-2 (AC 21, `5-2/R9`): the ACTIVE TELEGRAPH -- `[colour, remaining_ticks]` -- in
 		# sorted position, which is HERE: `telegraph` follows `stamina` and precedes every `unit_*`.
 		# Counts and indices only, exactly like every sibling: a colour is an enum ORDINAL and never
@@ -367,8 +375,12 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 51,
-		"the per-player snapshot key set is FIFTY-ONE keys as of story 7-3, which adds FIVE, one per new "
+	assert_eq(keys.size(), 59,
+		"the per-player snapshot key set is FIFTY-NINE keys as of story 7-5a, which adds EIGHT, one per new "
+		+ "hashed per-player fact: `stagings`, `setup`, `charge_setup`, `execute`, `stoneskin`, `enrage`, "
+		+ "`lifechain` and `hand_discount` (each crosses ticks and decides an outcome, `4-3a/R17`; the ninth "
+		+ "fact rides the existing `reversal` key as a seventh element). "
+		+ "It was FIFTY-ONE as of story 7-3, which adds FIVE, one per new "
 		+ "`UnitBoard` array: `unit_attack_choice`, `unit_reach_second`, `unit_behavior_phase`, "
 		+ "`unit_behavior_ticks` and `unit_circle_dir` (which attack a swing is, the second reach band, "
 		+ "and the between-attack behaviour -- each crosses ticks and decides an outcome, `4-3a/R17`). "

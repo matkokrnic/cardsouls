@@ -267,7 +267,8 @@ func test_a_second_copy_cannot_counter_an_already_countered_card() -> void:
 	_victim_casts(ms, ID_VANGUARD)
 	_counter(ms)
 	assert_false(ms.p2.units.is_alive_at(0), "sanity: the first Counterspell reversed the summon")
-	assert_eq(ms.p2.to_snapshot()["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0],
+	# Story 7-5a (AC 47): the packet's resting value gained a SEVENTH element, `amount_b`.
+	assert_eq(ms.p2.to_snapshot()["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0],
 		"the packet is cleared the instant it is reversed (AC 10, `6-5f/R5`)")
 	var rejections := _rejections(ms.p1)
 	_counter_with(ms, ID_COUNTER_B)
@@ -592,7 +593,8 @@ func test_the_cue_fires_on_a_real_reversal_and_never_on_a_refusal() -> void:
 ## AC 28 (`6-5f/R5`): the reversal packet is cleared at BOTH per-round teardown seats, alongside the
 ## resolved-card record it rides with -- so no reversal state carries into a fresh round (smoke item 7).
 func test_round_end_and_the_debug_reset_both_clear_the_reversal_packet() -> void:
-	var resting := [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0]
+	# Story 7-5a (AC 47): seven elements -- `amount_b` joined the packet.
+	var resting := [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0]
 	# (a) the DEBUG RESET.
 	var reset := _make_match()
 	_victim_casts(reset, ID_VANGUARD)

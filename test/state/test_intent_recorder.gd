@@ -135,6 +135,10 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 	# channel, shipping WITH `capture_inject_pitch_effects` -- the `6-2` pitch-cost precedent verbatim,
 	# this pin updated with intent while the channel check below is the falling guard. Sorted position.
 	"inject_pitch_effects",
+	# Story 7-5a (AC 8): `inject_seat_decks` is the PER-SEAT FORM of `inject_deck` -- the same deck channel,
+	# shipping WITH `capture_inject_seat_decks`. `inject_deck` stays (the one-list form, now a thin wrapper
+	# over this). Sorted position: `inject_p` precedes `inject_s`.
+	"inject_seat_decks",
 	# Story 6-5b (AC 18/AC 26, `6-5b/R6`): `push_drain_target` is MatchState's THIRTEENTH intake and
 	# the SEVENTH capture channel, shipping WITH `capture_push_drain_target` -- the `4-6`
 	# `set_lock_direction` precedent verbatim, this pin updated WITH INTENT while the channel check

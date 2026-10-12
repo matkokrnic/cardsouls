@@ -63,6 +63,12 @@ func _initialize() -> void:
 		record.tick_count(), record.reload_event_count(), record.replay_seed(),
 		record.replay_deck_contents().size(), record.replay_card_costs().size(),
 		record.replay_card_effects().size(), str(record.content_order())])
+	# Story 7-5a (AC 11): each seat's own composition and the deck name it was assigned (`deck=` above is
+	# seat 1's size, kept so the line's shape does not move).
+	var seat_names := record.replay_deck_names()
+	print("seat decks: p1=%d cards (%s)  p2=%d cards (%s)" % [
+		record.replay_seat_deck_contents(0).size(), seat_names[0],
+		record.replay_seat_deck_contents(1).size(), seat_names[1]])
 	print("camera_pushes=%d  contact_facts=%d" % [_camera_pushes(record), _contact_facts(record)])
 	if record.tick_count() == 0:
 		print("MALFORMED: the record carries no ticks — there is nothing to replay")

@@ -755,15 +755,42 @@ func _check_hp_display() -> void:
 
 ## AC 12 / AC 32: every Deck 1 effect plus Boulder's has a game-icons.net file credited in CREDITS.txt with the
 ## licence; the three hand-authored icons are the ones the table points at, and their game-icons versions stay.
+##
+## Story 7-5a (AC 52, `7-5a/R25`): THE AUDIT READS BOTH DECK LISTS, and the count moves 15 -> 27: Deck 1's
+## sixteen effects (Vanguard's summon and Lifechain joined), Boulder's, and Deck 2's ten new halves -- the
+## three `7-5b` halves included, since a refused card is still shown in hand. A "placeholder" icon still has
+## to be a game-icons.net file with its author credit.
+## (AC 6, the deferred MAX_PIPS test, `deferred-work.md` 7-4 close-out: every card's summed orb price fits the
+## pip row.)
 func _check_icon_files_and_credits() -> void:
-	var deck := load("res://data/decks/deck_1.tres") as DeckList
 	var effects: Array[StringName] = [&"boulder_discard"]
-	for id: StringName in deck.card_ids:
-		var card := load("res://data/cards/%s.tres" % id) as CardData
-		for e: CardEffect in [card.basic_effect, card.pitch_effect]:
-			if e != null and not effects.has(e.effect_id):
-				effects.append(e.effect_id)
-	_check(effects.size() == 15, "AC 12: Deck 1 + Boulder name %d effects, want 15" % effects.size())
+	for deck_path: String in ["res://data/decks/deck_1.tres", "res://data/decks/deck_2.tres"]:
+		var deck := load(deck_path) as DeckList
+		_check(deck != null, "AC 52: %s loads" % deck_path)
+		if deck == null:
+			continue
+		for id: StringName in deck.card_ids:
+			var card := load("res://data/cards/%s.tres" % id) as CardData
+			for e: CardEffect in [card.basic_effect, card.pitch_effect]:
+				if e != null and not effects.has(e.effect_id):
+					effects.append(e.effect_id)
+	_check(effects.size() == 27, "AC 52: both decks + Boulder name %d effects, want 27" % effects.size())
+	var cards_dir := DirAccess.open("res://data/cards/")
+	var priced := 0
+	for file_name: String in cards_dir.get_files():
+		if not file_name.ends_with(".tres"):
+			continue
+		var priced_card := load("res://data/cards/" + file_name) as CardData
+		for condition: CardCastCondition in [priced_card.cast_condition, priced_card.pitch_condition]:
+			if condition == null:
+				continue
+			var pips := 0
+			for color: Variant in condition.orb_costs:
+				pips += int(condition.orb_costs[color])
+			priced += 1
+			_check(pips <= HudRoot.MAX_PIPS, "AC 6: %s prices %d orbs, over the %d-pip row"
+					% [file_name, pips, HudRoot.MAX_PIPS])
+	_check(priced > 0, "AC 6: the MAX_PIPS audit visited no cost at all (vacuous)")
 	var credits := FileAccess.get_file_as_string("res://assets/CREDITS.txt")
 	for e: StringName in effects:
 		var path := "res://assets/art/icons/game_icons/%s.svg" % e

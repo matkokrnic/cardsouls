@@ -1372,7 +1372,51 @@ extends TestCase
 ##   `UnitKindProfile.has_between_attack_behaviour()`, false for the fixture's kind, so `rng_state` does
 ##   not move -- pinned from the other side by test_hellhound.gd, where a hound's draws DO move it).
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "3823edbd0db7ef4fe0d8096dd84fcef610e805179d2b86c8cf35d4a9ff638b6a"
+## STORY 7-5a (Deck 2 core, per-seat decks). TWO ORDERED PARTS, EACH MEASURED (`7-5a/R23`, AC 56).
+##
+## PART A (decks, per-seat selection, the temporary refusal, FORMAT_VERSION 23 -> 24): NO RE-BASELINE.
+## Predicted a non-mover on every cause and MEASURED one: with all of Part A in place this file's hash is
+## `3823edbd...` exactly, and both key-set pins are green unedited. The measured NON-causes: the per-seat
+## deck seam (the fixture injects ONE list through `inject_deck`, which is the same ids on both seats, so the
+## deal is bit-identical); the authored Deck 1 change and the new Deck 2 (the fixture injects its own deck);
+## the record format; the refusal gates (the fixture's effect ids are not in the unavailable table); and
+## nine new `CardEffect` fields (content, never hashed).
+##
+## PART B (the eight halves, markers, reversals): RE-BASELINED ONCE, `3823edbd...` -> `fbad85ce...`,
+## NINE CAUSES, ALL SHAPE -- exactly the prediction: the nine new hashed per-player facts.
+##   EIGHT are new per-player snapshot KEYS, each at its resting value on every hashed tick because the
+##   fixture casts none of the eight halves: `stagings` (0), `setup` ([0, 0.0]), `charge_setup` (0.0),
+##   `execute` ([0, 0.0]), `stoneskin` (0), `enrage` ([]), `lifechain` ([]), `hand_discount` (nine 0.0s --
+##   the fixture's hand width). The per-player key set goes 51 -> 59.
+##   THE NINTH is the per-cast reversal data: the `reversal` key's ARITY, 6 -> 7 (`amount_b`, Bloodmagic's
+##   second scalar). No key moves; the array is one element longer on both seats (P1's written Vanguard
+##   packet and P2's resting one), the `cast` key's 2 -> 6 precedent.
+##
+##   ISOLATED BOTH DIRECTIONS (measured 2026-10-12 on the fixture's own snapshot, by a script kept outside
+##   the repo: the hash-tick snapshot taken ONCE from this file's `_make_match` + `_play_sequence`, then
+##   hashed with causes erased / restored -- an erased key is byte-for-byte the snapshot a build without
+##   that key produces, because every one of the nine is a pure addition with no reader on the fixture's
+##   path). Recorded in full in `C:\dev\_75a-golden-partB.txt`:
+##   (a) REVERSE PROBE (`E6-R/R8`): all nine removed -> `3823edbd...` EXACTLY, the Part A hash.
+##   (b) each cause ALONE on the Part A shape moves the hash (nine distinct hashes), and each cause REMOVED
+##       from the Part B shape moves it (nine more) -- none is a non-mover, none is redundant.
+##   (c) the cumulative chain, in the order below, ends at `fbad85ce...`:
+##       + stagings       3558b5e0...      + stoneskin      d74df75b...
+##       + setup          fce7e3e7...      + enrage         656c740f...
+##       + charge_setup   8cba6a1f...      + lifechain      ffb8cd9f...
+##       + execute        3322260f...      + hand_discount  0194db96...
+##                                         + reversal arity fbad85ce...
+##   THE PROBE'S OWN SIDE-EFFECTS: none on the repo (no source file was edited to take it). While the keys
+##   are absent the two key-set pins and this file's `reversal` content pin would fail -- which is what
+##   they are for.
+##
+##   NOT CAUSES, MEASURED BY (a) RATHER THAN ASSUMED: every BEHAVIOUR this part adds. The fixture's one
+##   melee exchange runs through the new `_with_enrage` / `_with_execute` / `_deal_hero_damage` seats with
+##   no window, no charge and no cover, and comes back bit-identical; its cast is a summon; nothing stages,
+##   so the staging count and the discount never move; no unblockable is pressed. A Part B behaviour move
+##   would have shown as (a) failing to reproduce `3823edbd...`, and it reproduces it.
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "fbad85ce3f3ea1c02e1787e0288e8e039a0a4b375e972d20723dabe71c49e972"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1885,11 +1929,12 @@ func test_the_golden_fixture_carries_the_measured_content_of_this_storys_three_c
 	# CAUSE 2 (AC 2): the reversal packet. The t22 cast is a SUMMON, so P1 carries a real Vanguard-class
 	# record naming the board index it appended; P2 carries the masked resting packet.
 	assert_eq(p1["reversal"],
+		# Story 7-5a (AC 47): the packet is SEVEN elements -- `amount_b` joined it, resting 0.0 here.
 		[PlayerState.REVERSAL_VANGUARD, [0] as Array[int], [] as Array[int], [] as Array[int],
-			[] as Array[bool], 0.0],
+			[] as Array[bool], 0.0, 0.0],
 		"P1's reversal packet records the t22 SUMMON at board index 0 -- the fixture exercises a "
 		+ "WRITTEN packet, not only the resting one (AC 2/AC 17)")
-	assert_eq(p2["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0],
+	assert_eq(p2["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0],
 		"P2 resolved nothing, so its packet is the masked resting value -- the RESTING-EMPTY sub-case "
 		+ "of Golden Prediction cause 2, measured here rather than argued")
 	# CAUSE 3 (AC 23, `6-5f/R32`): one float per record, all resting, because nothing in this fixture

@@ -85,6 +85,14 @@ var _flags_captured := false
 ## The three content channels (AC 5 / AC 6; story 4-1 adds the third) plus the ORDER they were
 ## injected in.
 var _deck_contents: Array[StringName] = []
+## Story 7-5a (AC 8/AC 11): THE SECOND SEAT'S COMPOSITION and the DECK NAME each seat was assigned, both
+## riding the EXISTING deck channel (no seventh channel, `SOUND_CONTENT_ORDER` unmoved). `_deck_contents`
+## above is seat 1's since this story. The one-list capture writes the same ids to both, so a recording
+## made with one list is the recording it always was. The names are a LABEL (the F3 text reads them under
+## replay, AC 12) and decide nothing: a replay deals from the two id lists, never from a name -- which is
+## what makes it reproduce the deal with the setting file changed or absent.
+var _deck_contents_p2: Array[StringName] = []
+var _deck_names: Array[String] = ["", ""]
 var _cost_values: Dictionary = {}   # card id -> CardCastCondition property values
 ## Story 4-1 (`4-1/R1`): card id -> CardEffect property values. BY VALUE like its two siblings and
 ## for the identical reason (this file's header): a CardEffect is a Resource, so a retained handle
@@ -194,6 +202,21 @@ func capture_inject_deck(contents: Array[StringName]) -> void:
 	Invariant.check(not contents.is_empty(),
 		"a captured deck composition must be non-empty (the inject_deck precedent)")
 	_deck_contents = contents.duplicate()
+	_deck_contents_p2 = contents.duplicate()
+	_content_order.append(CHANNEL_DECK)
+
+
+## Story 7-5a (AC 8/AC 11): THE PER-SEAT FORM of the deck capture, `MatchState.inject_seat_decks`' twin --
+## ONE channel entry carrying both seats' compositions and the deck name each seat was assigned. Both
+## compositions must be non-empty, the one-list capture's own rule applied per seat.
+func capture_inject_seat_decks(p1_contents: Array[StringName], p2_contents: Array[StringName],
+		names: Array[String] = ["", ""]) -> void:
+	Invariant.check(not p1_contents.is_empty() and not p2_contents.is_empty(),
+		"a captured deck composition must be non-empty for both seats (the inject_deck precedent)")
+	Invariant.check(names.size() == 2, "the deck-name label carries exactly two seats")
+	_deck_contents = p1_contents.duplicate()
+	_deck_contents_p2 = p2_contents.duplicate()
+	_deck_names = names.duplicate()
 	_content_order.append(CHANNEL_DECK)
 
 
@@ -505,6 +528,17 @@ func replay_deck_contents() -> Array[StringName]:
 	return _deck_contents.duplicate()
 
 
+## Story 7-5a (AC 8/AC 11): one SEAT's recorded composition -- `replay_deck_contents()` is seat 0's.
+func replay_seat_deck_contents(slot: int) -> Array[StringName]:
+	return (_deck_contents if slot == 0 else _deck_contents_p2).duplicate()
+
+
+## Story 7-5a (AC 12): the deck NAME each seat was assigned when the record was made (`""` for a seat
+## whose composition came from a one-list capture or a test override). A label for the F3 text only.
+func replay_deck_names() -> Array[String]:
+	return _deck_names.duplicate()
+
+
 ## The recorded cast costs, each CardCastCondition rebuilt from values — so a card re-priced in
 ## data/cards/ after the recording cannot change what the replay pays (AC 6).
 func replay_card_costs() -> Dictionary[StringName, CardCastCondition]:
@@ -573,7 +607,9 @@ func replay_inject_content(ms: MatchState) -> bool:
 	for channel: StringName in _content_order:
 		match channel:
 			CHANNEL_DECK:
-				ms.inject_deck(replay_deck_contents())
+				# Story 7-5a (AC 11): each seat gets ITS OWN recorded composition. A record captured with
+				# one list holds the same ids twice, which is `inject_deck` exactly.
+				ms.inject_seat_decks(replay_seat_deck_contents(0), replay_seat_deck_contents(1))
 			CHANNEL_COSTS:
 				ms.inject_card_costs(replay_card_costs())
 			CHANNEL_EFFECTS:

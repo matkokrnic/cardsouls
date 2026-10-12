@@ -304,6 +304,47 @@ extends Resource
 ## two fields rather than one field with a fourth meaning.
 @export var counter_window_seconds: float = 0.0
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-5a: DECK 2's NUMBERS AND LIFECHAIN's -- the SEVENTH such family. NINE more FLAT exports, on the
+## header's own discipline: no subclass, no nested resource, so `RecordFile._card_effects` keeps
+## round-tripping every one of them generically and `_fresh_nested` needs no new row.
+## ------------------------------------------------------------------------------------------
+## EVERY ONE IS NEUTRAL BY DEFAULT (zero, or x1.0 for the one multiplier), so an effect that does not use
+## a field cannot change an outcome. Three existing fields are REUSED rather than re-spelled, on
+## `duration_seconds`' own third-reading precedent (`6-5b/R7`): EXECUTE's x3 is `damage_dealt_multiplier`
+## ("the multiplier on damage the buffed side DEALS"), and ENRAGE's and LIFECHAIN's base window is
+## `duration_seconds` ("the effect's ONE window").
+
+## BLOODMAGIC (AC 27/AC 28): the HP the caster PAYS. It is a price, not damage: it is taken off the hero
+## directly and never passes the damage funnel. The cast is refused while the caster's HP is at or below it.
+@export var hp_cost: float = 0.0
+
+## BLOODMAGIC (AC 27): the mana the caster GAINS, clamped by the pool's own maximum at the point of use.
+@export var mana_gain: float = 0.0
+
+## ENRAGE (AC 30): the FLAT damage each of the caster's weapon hits gains while this window runs, added
+## BEFORE every multiplier (block, Execute, Bloodlust -- `7-5a/R12`/`R20`).
+@export var bonus_damage: float = 0.0
+
+## ENRAGE (AC 31): seconds added to `duration_seconds` PER ORB the caster holds at activation, counted
+## before the activation orb is paid (`7-5a/R18`).
+@export var duration_per_orb_seconds: float = 0.0
+
+## SETUP (AC 18): the multiplier on the orbs a landed unblockable that carries Setup grants. Neutral 1.0;
+## authored 2.0 ("1 becomes 2").
+@export var orb_grant_multiplier: float = 1.0
+
+## MANABLOSSOM (AC 34): the mana each card in the caster's hand costs LESS, and the larger amount it costs
+## less when the caster holds at least `orb_threshold` orbs (all colours) as the effect resolves. A zero
+## threshold means the larger amount never applies.
+@export var mana_discount: float = 0.0
+@export var orb_threshold: int = 0
+@export var mana_discount_at_threshold: float = 0.0
+
+## MANAPULATION (AC 38): the mana granted PER SUCCESSFUL STAGING into the caster's own pitch zone this
+## round, clamped by the pool's own maximum at the point of use.
+@export var mana_per_staging: float = 0.0
+
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation
 ## interprets it"). Empty = no cue named.

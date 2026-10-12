@@ -46,11 +46,14 @@ const REASON_INSUFFICIENT_ORBS := &"insufficient_orbs"
 ## only ever hold ids that came from that composition — which is exactly why AC 4 chose a seam
 ## check over a crash guard here. It is kept as a total function's honest default, not as a
 ## live path, and it is declared NOT mutation-proven for that reason.
+## STORY 7-5a (AC 34): `mana_discount` -- the Manablossom discount on the card being evaluated, already
+## clamped at zero by its reader. Optional and zero by default, so every caller that has no discount to
+## offer evaluates exactly as before.
 static func refusal_reason(condition: CardCastCondition, mana_current: float,
-		orbs: OrbPool, flags: FeatureFlags) -> StringName:
+		orbs: OrbPool, flags: FeatureFlags, mana_discount: float = 0.0) -> StringName:
 	if condition == null:
 		return REASON_UNKNOWN_CARD
-	var reason := flag_and_mana_refusal_reason(condition, mana_current, flags)
+	var reason := flag_and_mana_refusal_reason(condition, mana_current, flags, mana_discount)
 	if reason != ALLOWED:
 		return reason
 	if not _orbs_affordable(condition, orbs, flags):
@@ -73,12 +76,27 @@ static func refusal_reason(condition: CardCastCondition, mana_current: float,
 ## the staging seat refuses a missing pitch entry with its OWN reason before calling in (AC 5), so
 ## `REASON_UNKNOWN_CARD`'s "unreachable by construction" contract above is not weakened by this path.
 static func flag_and_mana_refusal_reason(condition: CardCastCondition, mana_current: float,
-		flags: FeatureFlags) -> StringName:
+		flags: FeatureFlags, mana_discount: float = 0.0) -> StringName:
 	if not _flag_open(condition, flags):
 		return REASON_FLAG_CLOSED
-	if condition.mana_cost > mana_current:
+	if discounted_mana_cost(condition, mana_discount) > mana_current:
 		return REASON_INSUFFICIENT_MANA
 	return ALLOWED
+
+
+## Story 7-5a (AC 34, `7-5a/R14`): THE MANA A CONDITION COSTS UNDER A DISCOUNT -- its authored price less
+## the discount, FLOORED AT ZERO. Orb costs are untouched (a discount is mana only).
+##
+## ONE EXPRESSION, TWO KINDS OF READER: the affordability test directly above and the two spend seats in
+## `MatchState` (the Mode 1 press and the staging), so "may I pay it" and "what did I pay" cannot disagree
+## about a discounted price. COMPUTES, DOES NOT APPLY -- this file's standing contract.
+##
+## A ZERO (or negative) DISCOUNT RETURNS THE AUTHORED PRICE ITSELF, not `price - 0.0`, so an undiscounted
+## cast is the same float it has always been.
+static func discounted_mana_cost(condition: CardCastCondition, mana_discount: float) -> float:
+	if mana_discount <= 0.0:
+		return condition.mana_cost
+	return maxf(0.0, condition.mana_cost - mana_discount)
 
 
 ## AC 3's flag scope, evaluated as DATA — EconomyEvaluator._flag_open's twin, same reading in
