@@ -706,3 +706,8 @@ Drugi krug: torzo pod lockom uvijek gleda protivnika, u svim smjerovima i kroz p
 - Krug 3 (feel pass 2): sve je top, daleko najbolje ponašanje pasa do sad (ciljaju kamo idem, nizovi napada, lukovi oko mene, odlaze pa skaču natrag, zvukovi). Sitne dorade: skok rjeđi, da me ne preleti daleko kad stojim, rijetka duga orbita, hod unatrag bez okrenute glave.
 - Krug 4 (feel pass 3): izgleda i osjeća se super, ostaje ovako.
 - Ostaje za kasnije: cviljenje kad ga udariš nema zvuka; režanje se rijetko čuje (skok zauzme mjesto za glasove); veličina i brojke su privremene do 7-7.
+
+## 7-5a Deck 2 core: smoke 12.10.2026
+Solo [0,3]. Krug A: pad na Decku 2. Krug B: tipkovnica na Decku 2, pad na Decku 1. Svih 12 točaka prolazi:
+Setup/Execute/Stoneskin naboji s markerima, Bloodmagic, slaganje Enragea, Manablossom popust, Manapulation,
+odbijanje Healera/Furyja/Wratha, Counterspell na nove polovice, Vanguard/Lifechain, R-D6.
