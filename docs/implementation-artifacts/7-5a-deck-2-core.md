@@ -4,7 +4,7 @@ baseline_commit: 80b95406d3d875891b8e5c9e237acb496315e685
 
 # Story 7.5a: Deck 2 core, Deck 1's eighth card, per-seat decks
 
-Status: ready-for-dev
+Status: done
 
 Tier **A** (new hashed per-player facts, new damage-funnel steps, a changed injection seam, a record-format bump, new
 refusable outcomes). Authored 2026-10-11 against HEAD == origin/main == `80b9540`; readiness gate and operator rulings
@@ -253,19 +253,19 @@ The dev pass builds in two ORDERED parts (`7-5a/R23`); each ends with its own go
 starts. One review, after Part B.
 
 **Part A - decks and seats (AC 1-15, 52, 56)**
-- [ ] T1 Deck data: Deck 1 amendment, new Vanguard/Lifechain card, Deck 2 list, new card and effect `.tres`, icons (AC 1-6, 52).
-- [ ] T2 Per-seat selection: injection, per-seat deal, HUD reel, the setting and its precedence (AC 7-9, 12).
-- [ ] T3 Format bump: 24, v23 refusal, every pin of AC 10, replay of the deal (AC 10-11).
-- [ ] T4 Temporary refusal list for the three 7-5b halves (AC 13-15).
-- [ ] T5 Part A measurement: golden and key set, expected UNMOVED except named shape causes; record before/after.
+- [x] T1 Deck data: Deck 1 amendment, new Vanguard/Lifechain card, Deck 2 list, new card and effect `.tres`, icons (AC 1-6, 52).
+- [x] T2 Per-seat selection: injection, per-seat deal, HUD reel, the setting and its precedence (AC 7-9, 12).
+- [x] T3 Format bump: 24, v23 refusal, every pin of AC 10, replay of the deal (AC 10-11).
+- [x] T4 Temporary refusal list for the three 7-5b halves (AC 13-15).
+- [x] T5 Part A measurement: golden and key set, expected UNMOVED except named shape causes; record before/after.
 
 **Part B - the eight halves, markers, reversals (AC 16-58)**
-- [ ] T6 Setup, Execute, Stoneskin charges and the damage funnel (AC 16-26).
-- [ ] T7 Bloodmagic, Enrage store, Manablossom, Manapulation (AC 27-38).
-- [ ] T8 Lifechain split (AC 39-42).
-- [ ] T9 Counterspell reversals for every new half (AC 43-49).
-- [ ] T10 Markers, counts, discount channel (AC 50-51).
-- [ ] T11 Replay identity, hashed-fact clear tests, key set, Part B measurement, gate (AC 53-58).
+- [x] T6 Setup, Execute, Stoneskin charges and the damage funnel (AC 16-26).
+- [x] T7 Bloodmagic, Enrage store, Manablossom, Manapulation (AC 27-38).
+- [x] T8 Lifechain split (AC 39-42).
+- [x] T9 Counterspell reversals for every new half (AC 43-49).
+- [x] T10 Markers, counts, discount channel (AC 50-51).
+- [x] T11 Replay identity, hashed-fact clear tests, key set, Part B measurement, gate (AC 53-58).
 - [ ] T12 Live Smoke (three launches) and close-out docs, including the E7 docs debt (X1).
 
 ## Dev Notes
@@ -365,6 +365,40 @@ Do NOT move (they load the effect file by id and never read the pairing): `test_
 - Design decisions (what the game IS) are Matko's: a dev-pass choice that changes a player-facing rule or adds a public API
   or folder STOPS and asks.
 
+### Dev-pass implementation choices (2026-10-11/12 dev pass; each was left open by the story)
+
+1. **Card ids.** New card files: `vanguard` (Vanguard/Lifechain), `setup`, `healer`, `bloodmagic`, `manablossom`,
+   `manapulation`. Effect ids: `setup`, `execute`, `healer`, `stoneskin`, `bloodmagic`, `enrage`, `manablossom`,
+   `elemental_fury`, `manapulation`, `wrath_of_god`, `lifechain`. All new cards author `max_copies = 3`.
+2. **Temporary refusal (AC 14): one resolver table.** `CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS` (three rows, each
+   naming `7-5b-deck-2-bodies`) and `is_unavailable()`. Both refusal seats ask it; 7-5b empties the table in one edit.
+   The refusal sits ABOVE the price at both seats, so the player hears `not_available_yet` whatever their mana.
+3. **Per-seat seam.** `MatchState.inject_seat_decks(p1, p2)` beside `inject_deck` (now a wrapper); second composition
+   member `_deck_contents_p2`. Recorder: `capture_inject_seat_decks(p1, p2, names)` on the EXISTING deck channel.
+   Record: `deck` is `[seat 1 ids, seat 2 ids]`, plus a new `deck_names` key (a label for the F3 text only).
+4. **Setting.** `data/deck_select.tres` (`DeckSelect`, `src/main/deck_select.gd`): `seat_decks = [name, name]`, a name
+   being a file stem under `data/decks/`. An unknown (or empty) name refuses the match: `push_warning`, no `MatchState`,
+   tick loop off, reason readable through `start_refusal()`. `push_warning`, not `Invariant.check`, so a test can
+   exercise the refusal without tripping the suite's error grep. Test tier: `deck_list_override` (one list, both seats)
+   outranks the new additive `seat_deck_list_overrides`.
+5. **Numbers.** Nine new flat `CardEffect` fields (`hp_cost`, `mana_gain`, `bonus_damage`, `duration_per_orb_seconds`,
+   `orb_grant_multiplier`, `mana_discount`, `orb_threshold`, `mana_discount_at_threshold`, `mana_per_staging`). Execute's
+   x3 reuses `damage_dealt_multiplier`; Enrage's and Lifechain's base window reuses `duration_seconds`.
+6. **Charges carry their magnitude.** `setup` and `execute` snapshot as `[charges, multiplier]`; the per-attack Setup
+   carry (`charge_setup`) IS the orb multiplier (0.0 = not carrying), so the landing needs no effect lookup.
+7. **Window lists are append-only within a round.** An expired or countered Enrage/Lifechain entry stays in place at
+   zero, so an entry's INDEX is its identity and a Counterspell ends exactly its own cast's window (AC 45).
+8. **Discount lives on `Hand`** (`_discounts`, raw sum, cleared in `remove_at`); the HUD gets it through the runner's
+   existing `cards_changed` wrapper (read inline beside `pending_draw_owed`), so the SIGNAL's payload is unchanged
+   and no seam is added (AC 37, AC 51).
+9. **"Still in hand" for a Manablossom counter (AC 46).** The record's slot is DROPPED when its card leaves the hand
+   without a new resolution (staging, unblockable press, defence press). A Mode 1 play overwrites the record anyway.
+10. **Reversal packet gains a seventh element `amount_b`** for Bloodmagic's HP (its mana rides `amount`).
+11. **A Lifechain share is not a hit on the minion:** no hit reaction is queued, no reversal part is recorded for it,
+    and Bloodlust's taken-multiplier is not re-applied. Flagged for review as the one choice nearest to design.
+12. **`hit_landed` carries the HERO's dealt damage** (0 when Stoneskin absorbed, the hero's share under Lifechain).
+13. **Markers are one text line over the hero** (`BuffMarkers`, a `Label3D`): `SET n  EXE n  STN n  ENR n  LIFE`.
+
 ### References
 
 - `docs/planning-artifacts/deck-2-spec.md`; `docs/planning-artifacts/deck-1-spec.md` (2026-10-11 amendment, 7-3, 7-4, 6-5f)
@@ -405,8 +439,129 @@ known hand. Pitch-half reversals are machine-only (AC 49); the keyboard seat has
 
 ### Agent Model Used
 
+Opus 5.5 (`claude-opus-5-5`), one session, no subagents, 2026-10-11 22:57 to 2026-10-12 00:24 (suite-file clock).
+
 ### Debug Log References
+
+Full log: `C:\dev\_75a-dev.md` (outside the repo). Suite output: `C:\dev\_75a-suite-before.txt`,
+`C:\dev\_75a-suite-partA.txt`, `C:\dev\_75a-suite-after.txt`. Golden measurement: `C:\dev\_75a-golden-partB.txt`.
+Mutation runs: `C:\dev\_75a-m01.txt` .. `_75a-m20b.txt`. Pre-edit tree backup: `C:\dev\_bak-75a`.
 
 ### Completion Notes List
 
+**State of the pass:** Parts A and B built, T1-T11 done, nothing committed. T12 (Live Smoke, close-out docs) is the
+operator's and is NOT done; every `[S]` criterion (AC 12 smoke point, AC 50, AC 58 smoke) is unverified.
+
+**Suite (E5-R/R5: two default full runs plus ONE extra, reported):**
+- before (pre-edit): state 1388 tests / 0 failed / 24055 assertions; integration 93 files, 1 FAIL
+  (`test_unblockable_reach_live.gd`, the pre-existing intermittent in `deferred-work.md`; it passed re-run alone).
+- EXTRA, Part A boundary: state 1405 / 1 failed / 24994; integration 94 files all PASS. Reason: Deck 1's
+  composition changed, so the pinned-seed live tests and unlisted pins had to be re-checked before Part B. The one
+  failure (`test_deck_and_hand.gd::test_injection_seam_rejects_an_empty_injected_deck`, a source scan of
+  `inject_deck`'s own empty-deck guard) was fixed in Part A by keeping the guard on `inject_deck` too.
+- after (final tree): state 1519 / 0 failed / 25628; integration 95 files all PASS (corrected at review: the first draft said 96, counting the state-harness RESULT line).
+
+**Golden (AC 56), one measurement per part:**
+- Part A: NO re-baseline. `3823edbd...` before and after; key set unmoved. Per-seat seam, authored decks, format
+  bump, refusal gates and the new `CardEffect` fields are each a measured non-cause.
+- Part B: ONE re-baseline, `3823edbd...` -> `fbad85ce3f3ea1c02e1787e0288e8e039a0a4b375e972d20723dabe71c49e972`.
+  Nine causes, all SHAPE, as predicted: eight new per-player keys (`stagings`, `setup`, `charge_setup`, `execute`,
+  `stoneskin`, `enrage`, `lifechain`, `hand_discount`) and the `reversal` key's arity 6 -> 7. Each measured alone and
+  removed (both directions); all nine removed reproduces `3823edbd...` exactly, so no behaviour moved. The isolation
+  was done on the fixture's own hash-tick snapshot by a script outside the repo (no source edit); the chain is in
+  `test_determinism.gd`'s accounting block.
+- Per-player snapshot key set 51 -> 59 (both pins moved). `FORMAT_VERSION` 23 -> 24; `REQUIRED_KEYS` 16 -> 17.
+
+**New hashed per-player facts (AC 54), each cleared at `_end_round` AND `_reset_player`, one test per fact in both
+directions (`test_deck_2_teardown.gd`):** staging count; Setup charges (+ multiplier); the per-attack Setup carry;
+Execute charges (+ multiplier); Stoneskin charges; the Enrage window list; the Lifechain window list; the per-slot
+Manablossom discount (on `Hand`); the per-cast reversal data (eight new `REVERSAL_*` kinds and `reversal_amount_b`).
+
+**Mutations: 20 mutants, 20 killed.** 18 died on the first run; 2 SURVIVED and died after a test was strengthened:
+- M9 (Stoneskin spent by a zero-damage instance): survived; killed after adding
+  `test_a_zero_damage_hit_spends_neither_stoneskin_nor_execute`.
+- M20 (record file: the per-seat COUNT guard on `deck`): survived, because the flat-list case is also caught by the
+  per-seat type guard; killed after adding a one-composition / three-composition / one-name case.
+Each mutation was restored from `C:\dev\_75a-mut\` with a SHA-256 match. Table in `C:\dev\_75a-dev.md`.
+
+**Deviations from an AC, with reasons:**
+1. **AC 18, "blocked or deflected by the defender" as a non-landing case.** In this repo an unblockable is not
+   stopped by a block or a deflect (it never enters the block ladder, 5-2/5-6). The test pins what happens: the
+   attack LANDS on a blocking defender and the doubling is paid. No behaviour was changed to match the AC's wording.
+2. **AC 18, "defender knocked down during the chargeup".** Read as the Setup-carrying ATTACKER being knocked down
+   during its own chargeup (the attack is abandoned, AC 19 "interrupted"); that case is tested. The literal reading is
+   also pinned: a defender already knocked down IS still hit, so that attack lands and the doubling is paid.
+3. **AC 46, "cards already played keep what they saved".** A Mode 1 play writes a new last-resolved record, so after
+   it Manablossom is no longer the Counterspell target at all. The reachable case is a card that left by staging, an
+   unblockable or a defence; that is what is tested (the saved mana is not clawed back).
+4. **AC 48 already-used variants** exist for the charge, window and discount halves. Bloodmagic and Manapulation
+   resolve instantly and have no "already used" state; they are tested plain and clamped (AC 47) instead.
+5. **AC 9 refusal mechanism.** An unknown deck refuses the match with `push_warning` plus `start_refusal()`, not
+   `Invariant.check`, so the refusal is testable without tripping the suite's `^ERROR:` grep.
+6. **T12 not done** (operator smoke, close-out docs, X1 docs debt). Story is `review` with T12 unchecked.
+
+**Process notes:**
+- The first new data files (11 effects, 6 cards, `deck_2.tres`) were CREATED by one python script (new files, no
+  existing file touched). Three identical version pins in `test_replay_identity.gd` were moved by a python
+  byte-replace without a failed Edit first (Edit `replace_all` would have done it). Every other edit used Edit/Write.
+- One filtered run hung to the 600 s timeout: a parse error in a new test file left the state harness waiting
+  instead of quitting. The engine process was killed and the run repeated. No suite file was affected.
+- Four `godot --headless --editor --quit` passes were run (icon imports, class cache for `DeckSelect`,
+  `Deck2Fixture`, `BuffMarkers`, and `.uid` files). `project.godot` and `main.tscn` have no diff.
+- Icons were downloaded from game-icons.net (11 files, CC BY 3.0, credited in `assets/CREDITS.txt`).
+
 ### File List
+
+New (source and data):
+- `src/main/deck_select.gd` (+ `.uid`), `data/deck_select.tres`
+- `src/actors/hero/buff_markers.gd` (+ `.uid`)
+- `data/decks/deck_2.tres`
+- `data/cards/vanguard.tres`, `setup.tres`, `healer.tres`, `bloodmagic.tres`, `manablossom.tres`, `manapulation.tres`
+- `data/effects/setup.tres`, `execute.tres`, `healer.tres`, `stoneskin.tres`, `bloodmagic.tres`, `enrage.tres`,
+  `manablossom.tres`, `elemental_fury.tres`, `manapulation.tres`, `wrath_of_god.tres`, `lifechain.tres`
+- `assets/art/icons/game_icons/` eleven `.svg` (+ `.svg.import`): `setup`, `execute`, `healer`, `stoneskin`,
+  `bloodmagic`, `enrage`, `manablossom`, `elemental_fury`, `manapulation`, `wrath_of_god`, `lifechain`
+
+New (tests, each with its `.uid`):
+- `test/deck_2_fixture.gd`
+- `test/state/test_seat_decks.gd`, `test_deck_2_charges.gd`, `test_deck_2_damage.gd`, `test_deck_2_economy.gd`,
+  `test_deck_2_counterspell.gd`, `test_deck_2_teardown.gd`, `test_deck_2_replay.gd`
+- `test/integration/test_seat_decks_live.gd`, `test_buff_markers_live.gd`
+
+Modified (source and data):
+- `src/state/match_state.gd`, `src/state/player_state.gd`, `src/state/hand.gd`
+- `src/state/economy/card_effect_resolver.gd`, `src/state/economy/cast_evaluator.gd`
+- `src/state/resources/card_effect.gd`
+- `src/systems/intent_recorder.gd`, `src/systems/record_file.gd`
+- `src/main/match_runner.gd`, `src/actors/hero/hero.gd`
+- `src/ui/hud/hud_root.gd`, `src/ui/debug/debug_instrument_panel.gd`
+- `data/decks/deck_1.tres`, `data/presentation/effect_icons.tres`, `assets/CREDITS.txt`
+
+Modified (tests):
+- `test/state/test_card_authoring.gd`, `test_card_observation.gd`, `test_counterspell.gd`, `test_determinism.gd`,
+  `test_draw_delay_and_reshuffle.gd`, `test_intent_recorder.gd`, `test_live_reload.gd`, `test_record_file.gd`,
+  `test_replay_identity.gd`
+- `test/integration/test_card_database.gd`, `test_card_face.gd`, `test_deck_injection.gd`
+- `test/tools/replay_file.gd`
+
+Docs: this story file only (Status, task boxes, Dev Notes choices, Dev Agent Record). Board note updated by the
+skill's `on_complete`; the board key stays `ready-for-dev`.
+
+### Change Log
+
+- 2026-10-12: dev pass (Parts A and B). Per-seat decks and the deck setting, Deck 1's eighth card, Deck 2's list
+  and cards, the temporary refusal, `FORMAT_VERSION` 24, the eight halves with their reversals, placeholder markers
+  and the discounted-cost display. Golden re-baselined once (Part B, shape only). Status -> review. Not committed.
+- 2026-10-12: close-out. Review APPROVE WITH CHANGES, fixes applied (Manablossom drop tests, malformed-setting
+  refusal, on-screen start refusal, regen/cap test fixes), operator smoke passed all points, code committed as
+  `6f3afb3`. Status -> done. Decision-log session "7-5a close-out", `7-5a/R33..R43`.
+
+### Closing note (close-out, 2026-10-12)
+
+Review verdict: APPROVE WITH CHANGES (`C:\dev\_75a-review.md`; no blocker, no behavioural defect in the shipped
+code). Fix summary: F1 two tests for the Manablossom slot drop at the unblockable and defence presses; F2 a
+malformed existing deck setting refuses to start (a missing one means the default); F3 accepted by the operator
+(`7-5a/R39`); F4 test readings fixed (`7-5a/R41`); F5/F6 recorded (F6 owners in `deferred-work.md`). Golden
+`3823edbd` -> `fbad85ce` (shape only), `FORMAT_VERSION` 24. Evidence: `C:\dev\_75a-suite-fix2.txt` (state 1523 / 0
+failed; integration 94 of 95 PASS, the known intermittent `test_unblockable_reach_live.gd` passed alone twice).
+Live smoke: the operator's entry in `docs/playtest-log.md`, all points passed.

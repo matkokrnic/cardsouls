@@ -667,7 +667,7 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 
 - Authoring test: every card's summed orb price must be <= `HudRoot.MAX_PIPS` (review MINOR-5). Owner: 7-7 or the next card-authoring story.
 - Hourglass marker contrast on cards with large art is weak (operator smoke note). Owner: art phase.
-- `test_unblockable_reach_live`: PRE-EXISTING intermittent failure (GREEN `late_close`; 1/8 at 690d5f0, 2/5 at HEAD with seed pinned 12345), likely the frame-counted defender teleport against the state tick at the 12-13 edge. Harden the test (sidestep on a state-tick count) with 7-7, which re-measures this test per 7-9/R22; add it to `run_all.sh` VERBOSE_FILES at the E7 close-out.
+- `test_unblockable_reach_live`: PRE-EXISTING intermittent failure (GREEN `late_close`; 1/8 at 690d5f0, 2/5 at HEAD with seed pinned 12345), likely the frame-counted defender teleport against the state tick at the 12-13 edge. Harden the test (sidestep on a state-tick count) with 7-7, which re-measures this test per 7-9/R22; add it to `run_all.sh` VERBOSE_FILES at the E7 close-out. Occurrence 2026-10-12, 7-5a fix2 full run: fail in suite / pass alone x2.
 - `epics.md` 7-4 text still names "+1 mana for a defended unblockable" (delivered by 7-9/R6, not 7-4). Owner: E7 close-out.
 - Commit trailer drift: `CLAUDE.md:32` says Claude Sonnet 5, recent commits carry Claude Sonnet 5.5. Owner: E7 close-out decides.
 - The keyboard controller has no pitch path (pad only). Owner: E7 close-out decides whether parity is owed.
@@ -807,3 +807,8 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
   (`match_runner.gd`, near the projectile poll). A reset followed by as many new shots in the same `advance()` as there
   were actors would slip through. Not reachable today (the reset also empties the units that fire). No action; the
   comment's "an array longer than its board can only mean that reset" holds in one direction only.
+
+## From 7-5a close-out (2026-10-12)
+- **7-5a review F6: HUD discount marks stay stale between round end and the redeal.** Cosmetic (play is frozen). Owner: 7-7.
+- **7-5a review F6: the public runner accessors** (`connect_hit_landed`, `connect_deflect_landed`, `connect_pitch_changed`, the hands accessor) **dereference a null match after a start refusal.** Unreachable in-game (the refused runner builds no controllers, HUDs or signals); tests only. Owner: E7 close-out.
+- **`gdd.md:147` unblockable cost is stale** ("stamina only"; the config charges 1 mana, `balance_config.tres:230`, `7-5a/R21`). Owner: E7 close-out.

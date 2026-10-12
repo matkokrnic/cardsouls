@@ -1,5 +1,5 @@
 ﻿# generated: 2026-07-22
-# last_updated: 2026-10-11
+# last_updated: 2026-10-12
 # project: cardsouls
 # project_key: NOKEY
 # tracking_system: file-system
@@ -25,7 +25,7 @@
 # - Per-story holds/notes live in story_notes below, never as extra statuses.
 
 generated: 2026-07-22
-last_updated: 2026-10-11
+last_updated: 2026-10-12
 project: cardsouls
 project_key: NOKEY
 tracking_system: file-system
@@ -146,7 +146,7 @@ development_status:
   7-2-animation-polish: done  # Tier B (A if authored timing windows move)
   7-3-minion-rework: done  # Tier A
   7-4-pitch-speeds: done  # Tier A
-  7-5a-deck-2-core: ready-for-dev  # Tier A
+  7-5a-deck-2-core: done  # Tier A
   7-5b-deck-2-bodies: backlog  # Tier A
   7-6-hud-and-card-presentation: done  # Tier B
   7-7-tuning-pass: backlog  # Tier B (A if a seat is added or an action becomes refusable)
@@ -160,7 +160,7 @@ story_notes:
   7-2-animation-polish: "done 2026-10-09; close-out 7-2/R1-R11 (review APPROVE WITH FINDINGS, live smoke passed after torso-facing and Rocksling-swing fixes, golden 43449bd9 unmoved, FORMAT_VERSION 22)."
   7-3-minion-rework: "done 2026-10-11; close-out 7-3/R25-R46 (review CHANGES REQUIRED, F1 hero lifted onto a hound fixed, four smoke rounds PASS, golden 3823edbd, FORMAT_VERSION 23)."
   7-4-pitch-speeds: "done 2026-10-09; close-out 7-4/R21-R29 (review CHANGES REQUESTED 0/1/5 fixed, smoke 10/10 PASS after three socket rounds, golden 43449bd9, FORMAT_VERSION 22)."
-  7-5a-deck-2-core: "ready-for-dev 2026-10-11 -- readiness gate fixed and promoted (docs/implementation-artifacts/7-5a-deck-2-core.md; decision-log session '7-5 design, 7-5a gate and rulings', 7-5a/R1..R32); all open questions closed; one story built in two ordered parts (R23)."
+  7-5a-deck-2-core: "done 2026-10-12; close-out 7-5a/R33-R43 (review APPROVE WITH CHANGES, fixes applied, smoke passed all points, golden fbad85ce, FORMAT_VERSION 24)."
   7-5b-deck-2-bodies: "backlog -- Healer, Elemental Fury, Wrath of God; NOT authored, needs its own scope talk (operator split of 7-5-deck-2, 2026-10-11)."
   7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
   7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11); re-measure the AC 4b live steering test when GREEN numbers change (7-9/R22)."
