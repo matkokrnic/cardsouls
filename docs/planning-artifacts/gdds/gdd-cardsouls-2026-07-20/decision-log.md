@@ -12831,3 +12831,31 @@ Evidence and the two extra full runs (E5-R/R5, disclosed with their reasons): fi
 `7-5a/R43` Budget interval (E5-R/R3): the before-baseline start 2026-10-11 22:57:40 -> `_75a-suite-fix2.txt` end 2026-10-12 20:06:13, delta 1268 min 33 s (21 h 08 min 33 s); wall clock across an overnight idle gap and the operator's smoke, not working time.
 
 LAYER-COMPLETION: preconditions=DONE (deck_select.tres is new/untracked, noted); blind-hunter=DONE; edge-case-hunter=DONE; acceptance-auditor=DONE (58 ACs + R1..R32; [S] criteria not run by me); T1=DONE (reproduced both ways); T2=DONE; T3=DONE; T4=DONE; T5=DONE (F1); T6=DONE; T7=DONE (per-kind proof); T8=DONE (F2, F6); T9=DONE (F4); T10=DONE (invariants run green); T11=DONE (one dev-record miscount); T12=DONE (mutant SURVIVED, restored, SHA-verified); triage=DONE; report=WRITTEN; fixes=NOT STARTED (halted, waiting for operator go)
+
+## 2026-10-14 -- 7-5b gate rulings
+
+Session "7-5b gate rulings": the readiness gate of story `7-5b-deck-2-bodies` (`C:\dev\_7-5b-gate.md`, outside the repo: NOT READY, 4 blockers B1-B4, notes N1-N12) and the operator's rulings that close it. Labels `7-5b/R1..R23`, each seated in the story file in the same fix-and-promote pass. Docs-only; no suite run. HEAD == `a9b52cb`, origin/main == `fd07ecd` throughout.
+
+`7-5b/R1` The 2026-10-14 scope rulings are recorded here; the story cites them by label from now on.
+`7-5b/R2` Healer `max_hp` 18.0: exactly six basic hero hits at `hero_damage_to_unit = 3.0` (AC 4).
+`7-5b/R3` Out of range the heal clock keeps running and the tick is skipped (AC 6).
+`7-5b/R4` A Counterspell on the Healer card treats its shots as a stone's (in flight removed, landed damage refunded); a block does not reduce the shot.
+`7-5b/R5` The Elemental Fury condition is judged at activation; the staging mana stays spent; a refused card stays staged and is activatable later.
+`7-5b/R6` (REVISED, resolves B4) Elemental Fury projectiles ALWAYS target the opposing hero, like the Healer shot; no lock-target routing, no unit-target payloads.
+`7-5b/R7` Red 3.0 damage; blue and green deal no damage; volley interval 0.15 s; order red, blue, green.
+`7-5b/R8` Wrath: damage 6.0, base radius 4.0 m, +1.0 m per orb still held after the blue orb is paid, knockback 4.0 m; a hero in a knockdown takes the damage only.
+`7-5b/R9` Every walking unit slides; interruption follows the kind's `react_on_damage`; totems take damage only.
+`7-5b/R10` A deflect of the pulse costs the normal deflect cost and does nothing to the caster; a block must face the caster.
+`7-5b/R11` Stoneskin absorbs the Wrath damage; knockback and stun still apply.
+`7-5b/R12` The Wrath windup is a normal cast commitment (stun or death cancels it); Elemental Fury has no cast time.
+`7-5b/R13` Healer owner tint through the existing `owner_skins` / `skin_mesh_path` mechanism; one mesh is enough (gate N11).
+`7-5b/R14` Healer model "Knight D Pelegrini" and five clips (Standing Idle 03, Standing Walk Forward, Standing 2H Magic Area Attack 01, Standing 1H Magic Attack 03, Standing React Death Forward) from Mixamo (Adobe), mapped to idle / walk / cast / shoot / death.
+`7-5b/R15` The `4-3d` citation stands (`4-3c/R2`); `project-context.md:166` goes to Deferred as E7 close-out debt; the `deck-2-spec.md` amendments are made in the fix pass.
+`7-5b/R16` Every other default the story was written to stands.
+`7-5b/R17` (B1) The Healer-to-owner range is a NEW same-side intake on the `push_drain_target` precedent (`match_state.gd:1659`), not a same-slot exemption in `push_contact`.
+`7-5b/R18` (B2) The Wrath stun is the fifth direct `STUNNED` write (`test_action_state.gd` census x4 -> x5); it reuses only the CHARGING teardown of `_apply_bolt_landing`, arms no root and sets no bolt flag.
+`7-5b/R19` (B3) `test_card_authoring.gd:925-926`, `test_balance_authoring.gd:803-804` and `:832` move; the Healer kind has `is_minion = true` (corpse <=> minion, `7-3/D4`).
+`7-5b/R20` (N3) The dev pass leans to KEEP the effect id `healer` with a whole-id summon row; a rename is allowed only at the cost the gate lists.
+`7-5b/R21` (N6) Healer move speed 3.0 (data; hero walks 2.0, runs 6.0) so a running owner outruns it; follow-owner is a new runner branch.
+`7-5b/R22` `assets/CREDITS.txt` has no paladin or skeletonzombie model entry: the Healer gets a new entry in the file's existing shape with the clip-to-file mapping; the missing two entries go to Deferred as E7 close-out debt.
+`7-5b/R23` The block-exemption seat (`match_state.gd:3053-3057`, every hero-sourced shot) is the authority for R4; `6-5d/R4` is background only.
