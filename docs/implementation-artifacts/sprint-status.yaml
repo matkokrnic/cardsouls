@@ -147,7 +147,7 @@ development_status:
   7-3-minion-rework: done  # Tier A
   7-4-pitch-speeds: done  # Tier A
   7-5a-deck-2-core: done  # Tier A
-  7-5b-deck-2-bodies: backlog  # Tier A
+  7-5b-deck-2-bodies: ready-for-dev  # Tier A
   7-6-hud-and-card-presentation: done  # Tier B
   7-7-tuning-pass: backlog  # Tier B (A if a seat is added or an action becomes refusable)
 
@@ -161,7 +161,7 @@ story_notes:
   7-3-minion-rework: "done 2026-10-11; close-out 7-3/R25-R46 (review CHANGES REQUIRED, F1 hero lifted onto a hound fixed, four smoke rounds PASS, golden 3823edbd, FORMAT_VERSION 23)."
   7-4-pitch-speeds: "done 2026-10-09; close-out 7-4/R21-R29 (review CHANGES REQUESTED 0/1/5 fixed, smoke 10/10 PASS after three socket rounds, golden 43449bd9, FORMAT_VERSION 22)."
   7-5a-deck-2-core: "done 2026-10-12; close-out 7-5a/R33-R43 (review APPROVE WITH CHANGES, fixes applied, smoke passed all points, golden fbad85ce, FORMAT_VERSION 24)."
-  7-5b-deck-2-bodies: "backlog -- story file authored 2026-10-14 (Status authored, baseline fd07ecd); awaits operator review of its open questions and a readiness gate before promotion; NOT cleared for a dev pass."
+  7-5b-deck-2-bodies: "ready-for-dev 2026-10-14 -- gate fixed and promoted (rulings 7-5b/R1-R23, baseline fd07ecd); awaits dev pass part A."
   7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
   7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11); re-measure the AC 4b live steering test when GREEN numbers change (7-9/R22)."
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."

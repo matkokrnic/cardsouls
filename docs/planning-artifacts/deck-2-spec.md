@@ -38,7 +38,7 @@ until `7-5b-deck-2-bodies` ships.
      grants NO orbs. Several stack as charges: one x3 per hit, never multiplied together.
 
 2. **Healer / Stoneskin** -- green, x3, instant
-   - **Healer** (normal, 3 mana) [7-5b]: summons a unit that heals you. Whenever you launch an unblockable, each of your
+   - **Healer** (normal, 3 mana) [7-5b]: summons a unit that heals you. Whenever your unblockable chargeup begins, each of your
      Healers fires a projectile at the opposing hero. Body and numbers are decided in the 7-5b scope talk.
    - **Stoneskin** (pitch, 2 mana + 1 green orb): absorbs the next damage instance you take, from any source. No timer.
      An unblockable still knocks you down and still grants the attacker its orbs; only the damage is absorbed. Stackable
@@ -57,14 +57,14 @@ until `7-5b-deck-2-bodies` ships.
      unchanged. Several Manablossoms stack additively. Fireball's staging minimum drops by the discount (3 becomes 2) and
      its damage stays per mana actually spent. A card under a Boulder takes the discount and shows it when uncovered.
      Boulder clearing and the unblockable's mana are never discounted.
-   - **Elemental Fury** (pitch, 5 mana + 1 blue orb) [7-5b]: fires one projectile per orb you hold, each with its orb's
+   - **Elemental Fury** (pitch, 5 mana + 1 blue orb) [7-5b]: fires one projectile per orb still held after paying, each with its orb's
      colour effect: red = damage, blue = slow, green = heals you. The held orbs are not spent.
 
 5. **Manapulation / Wrath of God** -- blue, x2, sorcery
    - **Manapulation** (normal, 1 mana): gain X mana, where X = how many times you have pitched (successfully staged a card
      into your own pitch zone) this round. Refused stagings and Boulder clears do not count.
    - **Wrath of God** (pitch, 6 mana + 1 blue orb) [7-5b]: Dark Souls style wave around you. Damage and knockback to the
-     opposing hero and opposing units within a radius; the radius grows with orbs you hold. Your own units are
+     opposing hero and opposing units within a radius; the radius grows with orbs still held after paying. Your own units are
      unaffected.
 
 ## Deck list (TEMP copies)
