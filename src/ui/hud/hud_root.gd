@@ -145,10 +145,12 @@ var _reshuffle_token := 0
 ## `CARD_FRAME_PX` 6 -- about the visual weight the armed state had -- in the card's own colour; ARMING TURNS THAT
 ## SAME FRAME GOLD (plus a soft gold glow and the lift), never a second frame. Halves re-derived inside it.
 ##   frame bands    x[0,6] x[122,128] y[0,6] y[152,158]
-##   normal half    (6,6)   116x72 -- art backing (3,3) 64x64, art (5,5) 60x60, cost badge (70,20) 42x42
+## 7-7 pre-playtest pass: the halves SWAPPED to match the face buttons -- pitch (Y, the top button) on top,
+## normal (A, the bottom button) below. Half-local rects unchanged but the pitch badge and pips (see `PITCH_COST_RECT`).
+##   pitch half     (6,6)   116x72 -- art backing (3,3) 64x64, art (5,5) 60x60, cost badge (70,16) 42x40,
+##                                    pips (69,56) 46x14
 ##   divider        (6,78)  116x2
-##   pitch half     (6,80)  116x72 -- art backing (3,3) 64x64, art (5,5) 60x60, cost badge (70,3) 42x36,
-##                                    pips (69,45) 46x20
+##   normal half    (6,80)  116x72 -- art backing (3,3) 64x64, art (5,5) 60x60, cost badge (70,20) 42x42
 ##   keyword slot   (104,8) 14x14
 const CARD_SIZE := Vector2(128.0, 158.0)
 const CARD_GAP := 8.0
@@ -158,8 +160,11 @@ const HALF_SIZE := Vector2(116.0, 72.0)
 const ART_BACK_RECT := Rect2(3.0, 3.0, 64.0, 64.0)
 const ART_RECT := Rect2(5.0, 5.0, 60.0, 60.0)
 const NORMAL_COST_RECT := Rect2(70.0, 20.0, 42.0, 42.0)
-const PITCH_COST_RECT := Rect2(70.0, 3.0, 42.0, 36.0)
-const PIPS_RECT := Rect2(69.0, 45.0, 46.0, 20.0)
+## 7-7 pre-playtest pass: with the pitch half on top its badge would sit under the reserved keyword slot (card
+## y 8..22), so the badge starts below it and the pip row drops to the half's foot (was (70,3) 42x36 / (69,45)).
+## The badge is its measured minimum height (40: the font plus the badge margins), and the row is a pip's height.
+const PITCH_COST_RECT := Rect2(70.0, 16.0, 42.0, 40.0)
+const PIPS_RECT := Rect2(69.0, 56.0, 46.0, 14.0)
 const PIP_SIZE := 13.0
 const MAX_PIPS := 3
 const PIP_GAP := 3.0
@@ -181,6 +186,24 @@ const UNAFFORDABLE_MODULATE := Color(0.5, 0.5, 0.52, 1.0)
 const UNAFFORDABLE_SATURATION := 0.15
 const AFFORD_RIM_PX := 2
 const AFFORD_GLOW_PX := 4
+## 7-7 pre-playtest pass: the PITCH-READY cues -- the one place their colours and timing are tuned.
+## Hand (`PitchReady`, an INSTANT card only): a pulsing cyan outline round the pitch half while its pitch is fully
+## covered right now -- the half's mana payable (the rim rule above) AND every pip held (the count-fill rule) -- and
+## the own zone is empty (a stage into an occupied zone is refused, `REASON_PITCH_ZONE_OCCUPIED`). A sorcery never
+## shows it: banked orbs do not count toward a sorcery (`7-4/R12`).
+## Zone (`ReadyGlow`): a strong pulsing glow round a staged card while its payload says READY, until it fires or
+## fizzles (the payload clears).
+const PITCH_READY_COLOR := Color(0.35, 0.95, 1.0, 1.0)
+const PITCH_READY_RIM_PX := 3
+const PITCH_READY_GLOW_PX := 7
+const PITCH_READY_OUTSET_PX := 3.0
+const ZONE_READY_COLOR := Color(1.0, 0.86, 0.30, 1.0)
+const ZONE_READY_RIM_PX := 5
+const ZONE_READY_GLOW_PX := 14
+## One full pulse (dim -> bright -> dim) in seconds, and the alpha the pulse dips to.
+const PITCH_READY_PULSE_SEC := 0.7
+const ZONE_READY_PULSE_SEC := 0.45
+const READY_PULSE_MIN_ALPHA := 0.3
 ## 7-6 POLISH 2 (operator ruling P7): a pip is ALWAYS drawn in its full orb colour -- a HELD orb is a filled
 ## circle, a MISSING one a hollow ring `PIP_RING_PX` thick. Count-fill (F3) unchanged.
 const PIP_RING_PX := 3
@@ -324,6 +347,8 @@ var _own_card_pips: Array = []
 var _own_card_hourglasses: Array[Control] = []
 ## 7-6 POLISH (P2): each half's glowing affordability rim, [normal, pitch] per slot.
 var _own_card_rims: Array = []
+## 7-7 pre-playtest pass: each slot's pitch-ready outline (`PitchReady`), index-aligned with `_own_card_panels`.
+var _own_card_pitch_ready: Array[Control] = []
 var _own_card_flashes: Array[Panel] = []
 ## P13: each slot's reel overlay and its art, and whether it is spinning.
 var _own_card_reels: Array[Control] = []
@@ -826,12 +851,20 @@ func _apply_affordability() -> void:
 		# Story 7-4 (AC 14, `7-4/R12`): a SORCERY's pips are never lit from the bank -- banked orbs do not count
 		# toward it, so they stay hollow rings whatever the bank holds. An instant's fill by count is unchanged.
 		var sorcery := _is_sorcery(_slot_face_ids[i])
+		var all_held := true
 		for pip: Panel in _own_card_pips[i]:
 			var c := int(pip.get_meta(&"orb_color", -1))
 			var rank := int(pip.get_meta(&"orb_rank", 1))
 			var held := not sorcery and c >= 0 and c < _orbs.size() and _orbs[c] >= rank
 			# P7: full colour always; held = a filled circle, missing = a hollow ring.
 			(pip.get_theme_stylebox("panel") as StyleBoxFlat).draw_center = held
+			if pip.visible and not held:
+				all_held = false
+		# 7-7 pre-playtest pass: the hand's pitch-ready cue, composed from the two reads above (see
+		# `PITCH_READY_COLOR`). The pitch half's art hue is only set when the card has a pitch half.
+		_own_card_pitch_ready[i].visible = row != null and not sorcery and all_held \
+				and (_half_hues[i] as Array)[1] != null and is_half_affordable(i, 1) \
+				and _own_staged_card == PitchState.NO_CARD
 
 
 ## Story 7-6 (AC 14/AC 15) / P2: is half `half` (0 normal, 1 pitch) of slot `index` shown as PAYABLE -- full colour
@@ -964,6 +997,7 @@ func _render_pitch_zone(zone: Panel, card_id: StringName, ready: bool, remaining
 	bar.max_value = maxi(1, duration_ticks)
 	bar.value = remaining_ticks if staged else 0
 	ready_label.visible = staged and ready
+	(zone.get_node("ReadyGlow") as Control).visible = staged and ready
 	# Story 7-4 (AC 12/AC 13): a SORCERY carries the hourglass and one socket per required orb, sorted by colour
 	# ordinal; the n-th socket of a colour is filled iff at least n orbs of that colour were EARNED since staging
 	# (the payload's count -- never the bank, so a socket is empty at staging whatever the bank holds). Speed is
@@ -1006,6 +1040,32 @@ func _is_sorcery(id: StringName) -> bool:
 	if row == null or (row as Array).size() < 5:
 		return false
 	return int((row as Array)[4]) == Enums.PitchSpeed.SORCERY
+
+
+## 7-7 pre-playtest pass: one READY cue -- a hollow rim `outset` px outside a `size` rect, glowing outward, its
+## alpha pulsing forever on a looping tween (the HUD has no `_process`; a hidden cue's pulse simply is not drawn).
+## Built hidden under `parent` (already in the tree, which the tween needs); its owner toggles `visible`.
+func _make_ready_cue(parent: Control, node_name: String, size: Vector2, outset: float, color: Color, rim_px: int,
+		glow_px: int, period_sec: float) -> Panel:
+	var cue := Panel.new()
+	cue.name = node_name
+	cue.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cue.position = Vector2(-outset, -outset)
+	cue.size = size + Vector2(outset, outset) * 2.0
+	var style := StyleBoxFlat.new()
+	style.draw_center = false
+	style.set_border_width_all(rim_px)
+	style.set_corner_radius_all(4)
+	style.border_color = color
+	style.shadow_color = Color(color, 0.8)
+	style.shadow_size = glow_px
+	cue.add_theme_stylebox_override("panel", style)
+	cue.visible = false
+	parent.add_child(cue)
+	var pulse := cue.create_tween().set_loops()
+	pulse.tween_property(cue, "modulate:a", READY_PULSE_MIN_ALPHA, period_sec * 0.5)
+	pulse.tween_property(cue, "modulate:a", 1.0, period_sec * 0.5)
+	return cue
 
 
 ## Story 7-4 (AC 12): the PLACEHOLDER hourglass marker -- two amber triangles meeting at a waist, drawn with
@@ -1352,6 +1412,9 @@ func _build_pitch_zone(node_name: String, anchor_x: float, offsets: Array) -> Pa
 	ready_label.offset_bottom = 154.0
 	ready_label.visible = false
 	zone.add_child(ready_label)
+	# 7-7 pre-playtest pass: the zone's READY glow, round the whole zone, shown with the READY label.
+	_make_ready_cue(zone, "ReadyGlow", Vector2(offsets[2] - offsets[0], offsets[3] - offsets[1]), 0.0,
+			ZONE_READY_COLOR, ZONE_READY_RIM_PX, ZONE_READY_GLOW_PX, ZONE_READY_PULSE_SEC)
 	# Story 7-4 (AC 12/AC 13): the sorcery marker and the socket row, both hidden until a sorcery is staged.
 	zone.add_child(_make_hourglass("Hourglass", ZONE_HOURGLASS_POS))
 	var sockets := Control.new()
@@ -1427,7 +1490,9 @@ func _build_card(strip: Control, i: int) -> void:
 		var half := Control.new()
 		half.name = "NormalHalf" if h == 0 else "PitchHalf"
 		half.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		half.position = Vector2(CARD_FRAME_PX, CARD_FRAME_PX + h * (HALF_SIZE.y + DIVIDER_PX))
+		# 7-7 pre-playtest pass: the halves follow the face buttons -- Y (top, `cast_pitch_button`) plays the PITCH
+		# half, so it is drawn on top; A (bottom, `cast_basic_button`) plays the NORMAL half, drawn below.
+		half.position = Vector2(CARD_FRAME_PX, CARD_FRAME_PX + (1 - h) * (HALF_SIZE.y + DIVIDER_PX))
 		half.size = HALF_SIZE
 		card.add_child(half)
 		halves.append(half)
@@ -1489,6 +1554,9 @@ func _build_card(strip: Control, i: int) -> void:
 		half.add_child(rim)
 		rims.append(rim)
 		if h == 1:
+			# 7-7 pre-playtest pass: the pitch-ready outline, just outside the half, over its gold rim.
+			_own_card_pitch_ready.append(_make_ready_cue(half, "PitchReady", HALF_SIZE, PITCH_READY_OUTSET_PX,
+					PITCH_READY_COLOR, PITCH_READY_RIM_PX, PITCH_READY_GLOW_PX, PITCH_READY_PULSE_SEC))
 			# Story 7-4 (AC 12): the sorcery marker on the pitch half, over the art's top-left corner.
 			var glass := _make_hourglass("Hourglass", HAND_HOURGLASS_POS)
 			half.add_child(glass)

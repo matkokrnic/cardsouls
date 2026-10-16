@@ -191,6 +191,9 @@ func sample() -> InputIntent:
 	# resolve_cast_mode() (press edge flips it); under HOLD it is the level itself, as before. Either way
 	# `cast_held` below is what resolve_card_tick() has always taken, so that function is untouched.
 	var cast_held := Input.is_joy_button_pressed(_device, _profile.cast_button)
+	# 7-7 pre-playtest pass: D-pad Down (`card_mode_alt_button`) is the same raw level as L3, OR-ed in before the
+	# HOLD/TOGGLE step, so the 6-10 scheme applies to it unchanged.
+	cast_held = cast_held or Input.is_joy_button_pressed(_device, _profile.card_mode_alt_button)
 	cast_held = _advance_cast_mode(cast_held)
 	var attack_raw := Input.is_joy_button_pressed(_device, _profile.attack_button)
 	var block_raw := Input.is_joy_button_pressed(_device, _profile.block_button)

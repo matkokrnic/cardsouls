@@ -68,6 +68,11 @@ extends Resource
 ## same tick, same discipline as every other field on this resource.
 @export var cast_button: JoyButton = JOY_BUTTON_LEFT_STICK
 
+## 7-7 pre-playtest pass: a SECOND card-mode button, D-pad Down, ADDITIVE to `cast_button` -- the two raw levels
+## are OR-ed before the HOLD/TOGGLE step, so either one drives card mode with the same semantics and L3 is
+## unchanged. The shipped `.tres` carries no line for it (the `card_mode_toggle` precedent): it loads as this default.
+@export var card_mode_alt_button: JoyButton = JOY_BUTTON_DPAD_DOWN
+
 ## Story 6-10 (AC 1, R1): which card-mode SCHEME `cast_button` drives. false = HOLD, exactly the 5-0b
 ## behaviour above (held L3 is card mode, released exits the same tick). true = TOGGLE: an L3 press
 ## edge turns card mode on, the next press edge turns it off. NOT a joypad button index -- a plain

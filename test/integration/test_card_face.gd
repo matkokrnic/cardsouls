@@ -209,13 +209,14 @@ func _run() -> void:
 	_check_play_flash()
 
 
-## AC 5 / AC 7: two EQUAL halves split by a visible divider; art + cost on top, art + cost + one pip per
-## required orb (in that orb's colour) below; an EMPTY reserved keyword node top-right.
+## AC 5 / AC 7: two EQUAL halves split by a visible divider; art + cost + one pip per required orb (in that
+## orb's colour) on top, art + cost below; an EMPTY reserved keyword node top-right.
+## 7-7 pre-playtest pass: the PITCH half (Y, the top face button) is now the TOP half, the normal half (A) below.
 func _check_face_structure() -> void:
 	for i in 4:
 		var card := _card(i)
-		var top := _half(i, 0)
-		var bottom := _half(i, 1)
+		var top := _half(i, 1)
+		var bottom := _half(i, 0)
 		var divider := card.get_node_or_null("Divider") as Control
 		_check(top != null and bottom != null and divider != null, "slot %d: halves/divider missing" % i)
 		if top == null or bottom == null or divider == null:

@@ -166,6 +166,12 @@ var _huds: Array[HudRoot] = []
 var _debug_layer_visible := false
 var _inspectors: Array[StateInspector] = []
 
+## 7-7 pre-playtest pass: the locked-UNIT HP bars, one per LOCKING slot, created on first use (step 4d).
+const LOCK_HP_BAR_SCRIPT := preload("res://src/actors/props/lock_hp_bar.gd")
+## How far above the lock marker's body point the bar floats, in metres.
+const LOCK_HP_BAR_ABOVE_MARK := 0.9
+var _lock_hp_bars: Array[Node3D] = []
+
 ## Story 4-1 (AC 7): the grey-box unit scene and the actors spawned from it, per slot. The SCENE
 ## REFERENCE LIVES HERE AND ONLY HERE -- src/state/ never holds one (UnitBoard is a pure
 ## RefCounted count), which is the HeroActor precedent: state decides that a unit EXISTS, the
@@ -5526,6 +5532,38 @@ func _lock_mark_world_position(target_slot: int, target_index: int) -> Variant:
 	return (world as Vector3) + Vector3.UP * lift
 
 
+## 7-7 pre-playtest pass: each slot's locked-UNIT HP bar. Shown above the locked unit (the lock marker's body point
+## lifted `LOCK_HP_BAR_ABOVE_MARK`) while that slot is locked on a LIVING unit whose actor exists; hidden when
+## unlocked, locked on a hero (the HUD shows hero HP), on a dead or freed unit, and through the round-over freeze.
+## Plain reads of the lock address, the unit's hp and its kind's max_hp -- nothing is written to state.
+func _push_lock_hp_bars(round_over: bool) -> void:
+	if _lock_hp_bars.is_empty():
+		for slot: int in 2:
+			var bar: Node3D = LOCK_HP_BAR_SCRIPT.new()
+			bar.name = "LockHpBarP%d" % (slot + 1)
+			bar.set_locking_slot(slot)
+			add_child(bar)
+			_lock_hp_bars.append(bar)
+	for slot: int in 2:
+		var bar: Node3D = _lock_hp_bars[slot]
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		var target_slot := player.lock_target_slot
+		var index := player.lock_target_index
+		if round_over or not player.is_locked() or index == TargetingService.HERO_INDEX:
+			bar.hide_bar()
+			continue
+		var target_owner: PlayerState = _match_state.p1 if target_slot == 0 else _match_state.p2
+		var world: Variant = _lock_mark_world_position(target_slot, index)
+		if world == null or not target_owner.units.has_index(index) or not target_owner.units.is_alive_at(index):
+			bar.hide_bar()
+			continue
+		var kind: UnitKindProfile = null
+		if _match_state.balance != null:
+			kind = _match_state.balance.kind_at(target_owner.units.kind_index_at(index))
+		var max_hp := kind.max_hp if kind != null else 0.0
+		bar.show_at((world as Vector3) + Vector3.UP * LOCK_HP_BAR_ABOVE_MARK, target_owner.units.hp_at(index), max_hp)
+
+
 ## Story 4-6 (AC 10): unproject a world point into this slot's own viewport, or null when it is
 ## not visible there -- behind the camera, or outside the viewport rectangle. PRESENTATION ONLY;
 ## nothing it returns reaches `src/state/` except through the resolved ADDRESS the caller stamps
@@ -5927,6 +5965,8 @@ func _physics_process(delta: float) -> void:
 	var round_over: bool = bool(_match_state.to_snapshot().get("round_over", false))
 	_huds[0].set_lock_marker(null if round_over else _lock_target_screen_position(0, _p1_view_cam))
 	_huds[1].set_lock_marker(null if round_over else _lock_target_screen_position(1, _p2_view_cam))
+	# 7-7 pre-playtest pass: the locked-unit HP bars, off the same lock address and the same round-over hide.
+	_push_lock_hp_bars(round_over)
 	# Story 7-10 (AC 3): round end puts the unblockable eyes out, off the same `round_over` read -- a hero frozen
 	# mid-charge by the round-over freeze shows no lit eyes.
 	_p1_hero.eyes.set_suppressed(round_over)
