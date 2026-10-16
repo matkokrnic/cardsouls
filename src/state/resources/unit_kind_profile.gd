@@ -273,6 +273,31 @@ extends Resource
 ## interval above has passed. Presentation-only, like the interval.
 @export var bark_chance: float = 0.0
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-5b (AC 6/AC 7): THE HEALER's FACTS. All flat exports, every default neutral, so a kind that
+## authors none of them never heals and never fires on its owner's chargeup.
+## ------------------------------------------------------------------------------------------
+
+## AC 6 (`7-5b/R3`): each living unit of this kind heals its OWNER by `heal_amount` every
+## `heal_interval_seconds` (converted once, `UnitKindTicks.heal_interval_ticks`) if the runner reports it
+## within `heal_range` metres of the owner on that tick. Out of range the clock keeps running and the tick
+## heals nothing. `heal_range` is read by the RUNNER only (the range fact enters through
+## `MatchState.push_heal_range`); `advance()` never reads a distance.
+##
+## Smoke fix 1 (S1/S2): `heal_range` is ALSO the follow band's OUTER radius -- the runner keeps a follower still
+## while its owner is within it and walks it after the owner beyond it, to `stop_distance` (the INNER radius) --
+## so "in heal range" and "standing still" are one number, never two that could disagree.
+@export var heal_amount: float = 0.0
+@export var heal_interval_seconds: float = 0.0
+@export var heal_range: float = 0.0
+
+## AC 7: the EFFECT ID whose damage and flight a unit of this kind fires at the opposing hero when its
+## owner's unblockable chargeup begins, and the delay from that tick to the shot's spawn tick, in seconds
+## (converted once, `UnitKindTicks.shot_delay_ticks`; zero fires on the chargeup tick itself). Empty means
+## the kind never fires on a chargeup.
+@export var owner_chargeup_shot_effect: StringName = &""
+@export var shot_delay_seconds: float = 0.0
+
 ## AC 9 / `4-4/R7`: this kind's attack capability as a LIST of records, never a single flat attack.
 ##
 ## STORY 7-3 (`7-3/R5`/`R20`): UP TO TWO ENTRIES ARE SELECTED AMONG. Entry 0 is the CLOSE attack and

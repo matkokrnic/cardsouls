@@ -76,3 +76,14 @@ extends Resource
 ## AUDITED > 0: a zero budget expires the projectile on its launch tick, which ships the whole
 ## mechanism invisible in the build.
 @export var travel_budget: float = 0.0
+
+## Story 7-5b smoke fix 2 (S14): THE STARS-OF-RUIN SHAPE -- `CardEffect`'s four flat fields of the same names,
+## mirrored here so the runner reads one profile for every shot. ACTOR-SIDE ONLY: the runner places and steers the
+## shot's actor by them; no state code reads them, so speed, budget, homing and contacts are untouched. Neutral zero
+## is "no fan, level, from the feet, no bloom" -- every unit kind's shot and every other spell's. The bloom's LENGTH
+## is `acceleration_delay_seconds` above (the shot blooms while it still flies at `launch_speed`), so this schema
+## gains no duration and the per-kind seconds-to-ticks guard needs no new twin.
+@export var fan_arc_degrees: float = 0.0
+@export var launch_pitch_degrees: float = 0.0
+@export var launch_height: float = 0.0
+@export var bloom_turn_rate_degrees_per_second: float = 0.0

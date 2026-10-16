@@ -225,6 +225,16 @@ const FIREBALL_RELEASE_SECONDS := 0.8353
 const ROCKSLING_LIFT_PEAK_SECONDS := 1.4264
 const ROCKSLING_THROW_RELEASE_SECONDS := 1.3275
 
+## Story 7-5b smoke fix 2 (S12): WRATH OF GOD's clip `cast_wrath` (Mixamo "Standing 2H Magic Area Attack 02", 3.2667 s,
+## 98 frames at 30 fps) -- its SLAM, MEASURED (`tools/measure_spell_clip_frames.gd`): after the RAISE (the hands'
+## midpoint at its peak, frame 15, 0.5000 s) the body crouches (Hips 0.844 -> 0.637 model units) and the hands'
+## midpoint reaches its LOWEST MODEL-SPACE HEIGHT at FRAME 44 (1.4667 s), both hands at their lowest there (right
+## 0.988, left 1.013) -- the ruling's "both hands at their lowest point after the raise". The criterion first stated
+## measured height RELATIVE TO THE HIPS and picked frame 87 (2.90 s), the slow return to rest: a hips-relative height
+## cannot see the crouch that lowers the hands, so the absolute one is used (disclosed in the story's record). The
+## end of the fast drop, frame 21 (0.70 s), is recorded as the alternative for the operator's eye.
+const WRATH_SLAM_SECONDS := 44.0 / 30.0
+
 ## Story 7-1 (AC 24): how much of a Rocksling cast window the THROW takes, the rest being the LIFT. A feel knob
 ## (the `_CHARGE_HOLD_KNOBS` posture): 0.55 of the authored 0.8 s puts the throw's start at t=0.8875, on the
 ## backswing's deepest point, so the whole forward swing plays before the release.
@@ -1521,6 +1531,10 @@ func on_cast_progress(elapsed_seconds: float) -> void:
 ##   ROCKSLING (option A): the LIFT for the first `1 - ROCKSLING_THROW_SHARE` of the window, ending on the lift's
 ##     peak; then the THROW for the rest, ending on its release -- stone 1 leaves on it. Stones 2 and 3 fly with
 ##     no swing (story 7-2 tried one; the operator's live smoke removed it) while the throw follows through.
+##   WRATH OF GOD (story 7-5b smoke fix 2, S12): `cast_wrath` from frame 0, RATE-FITTED -- the playhead runs
+##     `elapsed x WRATH_SLAM_SECONDS / cast_seconds`, so the RAISE plays through the windup and the measured SLAM
+##     lands on its last tick, the pulse (`4-3d`'s single custom rate, the time read from the cast window). At the
+##     authored 0.8 s that is 1.83x. A windup cut by a stun or a death is cut like any cast (`on_cast_ended`).
 ## Any other outcome answers `[]`: not a spell clip.
 static func spell_cast_pose(outcome: StringName, elapsed: float, cast_seconds: float) -> Array:
 	var cast := maxf(cast_seconds, 0.0)
@@ -1535,6 +1549,8 @@ static func spell_cast_pose(outcome: StringName, elapsed: float, cast_seconds: f
 				return [&"cast_rocksling_lift", _lead_in_pose(t, lift_part, ROCKSLING_LIFT_PEAK_SECONDS)]
 			return [&"cast_rocksling_throw",
 					_lead_in_pose(t - lift_part, throw_part, ROCKSLING_THROW_RELEASE_SECONDS)]
+		CardEffectResolver.OUTCOME_WRATH_OF_GOD:
+			return [&"cast_wrath", t * WRATH_SLAM_SECONDS / cast if cast > 0.0 else WRATH_SLAM_SECONDS]
 	return []
 
 

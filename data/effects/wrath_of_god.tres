@@ -5,3 +5,11 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"wrath_of_god"
+cast_seconds = 0.8
+damage_amount = 6.0
+stun_seconds = 0.5
+pulse_radius = 4.0
+radius_per_orb = 1.0
+knockback_distance = 4.0
+knockback_seconds = 0.4
+blocked_damage_multiplier = 0.5

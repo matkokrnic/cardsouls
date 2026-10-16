@@ -158,6 +158,13 @@ var _lock_pushes: Dictionary[int, Array] = {}
 ## raise a different board.
 var _drain_pushes: Dictionary[int, Array] = {}
 
+## Story 7-5b (AC 6/AC 24, `7-5b/R17`): the per-tick HEAL-RANGE channel -- the EIGHTH capture channel, a
+## sibling of `_drain_pushes` above in every respect: same keying (the tick the pushed value is READ on),
+## same push-order entry shape [[slot, int], ...], same classification (a runner answer derived from actor
+## positions). Its own channel because `push_heal_range` is its own seam. It MUST be recorded: the answer
+## decides whether a heal tick heals, which reaches the hashed hero hp.
+var _heal_range_pushes: Dictionary[int, Array] = {}
+
 ## The contact-fact channel (AC 9), keyed by tick index exactly like the bases above, with the
 ## four-field fact stored in push order: [[attacker, target, attack_index, dir], ...].
 var _contacts: Dictionary[int, Array] = {}
@@ -356,6 +363,16 @@ func capture_push_drain_target(slot: int, index: int) -> void:
 	_drain_pushes[tick].append([slot, index])
 
 
+## The HEAL-RANGE channel (story 7-5b, AC 6) -- MatchState.push_heal_range(). Per tick, per in-range unit,
+## mirroring `capture_push_drain_target` directly above line for line. `RecordFile.FORMAT_VERSION` moves with
+## it (a v24 record has no such channel and would replay every heal tick as out of range).
+func capture_push_heal_range(slot: int, index: int) -> void:
+	var tick := _tick + 1
+	if not _heal_range_pushes.has(tick):
+		_heal_range_pushes[tick] = []
+	_heal_range_pushes[tick].append([slot, index])
+
+
 ## The CONTACT-FACT channel — MatchState.push_contact(). The seam's fact verbatim, mirroring its
 ## signature exactly so the tap can never record a differently-shaped fact from the one pushed.
 ##
@@ -498,6 +515,11 @@ func lock_pushes_at(tick: int) -> Array:
 ## Story 6-5b (AC 18): the replay-side read of the drain channel, `lock_pushes_at`'s twin.
 func drain_pushes_at(tick: int) -> Array:
 	return (_drain_pushes[tick] as Array).duplicate() if _drain_pushes.has(tick) else []
+
+
+## Story 7-5b (AC 6): the replay-side read of the heal-range channel, `drain_pushes_at`'s twin.
+func heal_range_pushes_at(tick: int) -> Array:
+	return (_heal_range_pushes[tick] as Array).duplicate() if _heal_range_pushes.has(tick) else []
 
 
 # ---------------------------------------------------------------- replay side
@@ -650,6 +672,13 @@ func replay_push_lock_directions(ms: MatchState, tick: int) -> void:
 func replay_push_drain_targets(ms: MatchState, tick: int) -> void:
 	for push: Array in drain_pushes_at(tick):
 		ms.push_drain_target(int(push[0]), int(push[1]))
+
+
+## Re-push the recorded HEAL-RANGE facts for `tick`, in recorded push order (story 7-5b, AC 6).
+## `replay_push_drain_targets` directly above, for the sibling channel.
+func replay_push_heal_ranges(ms: MatchState, tick: int) -> void:
+	for push: Array in heal_range_pushes_at(tick):
+		ms.push_heal_range(int(push[0]), int(push[1]))
 
 
 ## Drain the recorded contact facts for `tick` into push_contact, in recorded push order (AC 9).

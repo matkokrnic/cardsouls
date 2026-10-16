@@ -55,6 +55,10 @@ var orbit_max_ticks: int
 var circle_wobble_ticks: int
 ## `UnitKindProfile.bark_interval_seconds` in ticks. Presentation-only; no `advance()` seat reads it.
 var bark_interval_ticks: int
+## Story 7-5b (AC 6/AC 7): the heal interval and the owed-shot delay, in ticks. Zero for a kind that
+## authors neither.
+var heal_interval_ticks: int
+var shot_delay_ticks: int
 
 
 ## The derived tick record at `index`, or NULL when this kind has none — `UnitKindProfile.attack_at`

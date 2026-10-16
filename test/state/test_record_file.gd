@@ -69,6 +69,8 @@ const PRE_7_3_PATH := "user://test_7_3_pre_minion_fact.rec"
 ## Story 7-5a (`7-5a/R16`): the v23 refusal fixture and the per-seat deck round trip write their own file.
 ## No "23" or "24" in the path, so `error.contains("23")` can only be answered by the version in the message.
 const PRE_7_5A_PATH := "user://test_seat_decks_pre_per_seat.rec"
+## Story 7-5b (AC 26): the v24 refusal fixture and the heal-range round trip write their own file.
+const PRE_7_5B_PATH := "user://test_7_5b_pre_heal_range.rec"
 const KIND_ACTIVE_MULTIPLIER := 0.25
 ## Story 6-5g (AC 27, REVIEW FIX m5): the v18 refusal fixture's own path, on its siblings' naming -- this
 ## story's own dev pass had reused `PRE_6_5C_PATH` (harmless, since each test removes its file before the
@@ -245,8 +247,11 @@ func test_a_record_containing_a_bolt_replays_to_the_identical_hash() -> void:
 ## Each is paired against a row that must read the other value, for the reason the target half is:
 ## a blanket-written column passes a single-row assertion and fails a paired one.
 func test_the_format_version_and_the_widened_contact_row_move_together() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 24,
-		"FORMAT_VERSION is 24 as of story 7-5a (`7-5a/R16`) -- a SHAPE change: the `deck` channel carries "
+	assert_eq(RecordFile.FORMAT_VERSION, 25,
+		"FORMAT_VERSION is 25 as of story 7-5b -- a NEW REQUIRED KEY (`heal_range_pushes`, the heal-range "
+		+ "channel), wider effect and kind rows (six `CardEffect` and five `UnitKindProfile` fields), and a "
+		+ "BEHAVIOUR change (the three Deck 2 halves v24 refused now resolve). v24 is refused HARD, no shim. "
+		+ "It was 24 as of story 7-5a (`7-5a/R16`) -- a SHAPE change: the `deck` channel carries "
 		+ "one composition PER SEAT plus the two seats' deck names, where a v23 file carries one flat list "
 		+ "for both, and `CardEffect` gains nine flat fields. v23 is refused HARD, no shim. "
 		+ "It was 23 as of story 7-3 (`7-3/R23`) -- a BEHAVIOUR change through a default (minion "
@@ -1088,6 +1093,52 @@ func test_a_v23_record_is_refused_with_a_reason() -> void:
 	_remove(PRE_7_5A_PATH)
 
 
+## Story 7-5b (AC 26): A v24 RECORD IS REFUSED WITH A REASON, NO SHIM -- the per-bump fixture, on the
+## `test_a_v23_record_is_refused_with_a_reason` precedent directly above.
+##
+## WHAT A v24 FILE WOULD SILENTLY DO: it carries no `heal_range_pushes` channel, so every Healer heal tick
+## would replay as out of range; its effect and kind rows lack the eleven new fields; and a Healer, Elemental
+## Fury or Wrath press it recorded as REFUSED would now resolve.
+func test_a_v24_record_is_refused_with_a_reason() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	assert_eq(RecordFile.save_record(record, PRE_7_5B_PATH), "", "the record was written")
+	_rewrite_format_version(PRE_7_5B_PATH, 24)
+	var refused := RecordFile.load_record(PRE_7_5B_PATH)
+	assert_null(refused["record"],
+		"a v24 record is REFUSED -- it has no heal-range channel and refused three halves this build resolves")
+	assert_ne(refused["error"], "", "...with a REASON, never the empty-error refusal read as success")
+	assert_true(refused["error"].contains("24"), "...naming the version found: %s" % refused["error"])
+	assert_true(refused["error"].contains(str(RecordFile.FORMAT_VERSION)),
+		"...and the version this build speaks: %s" % refused["error"])
+	_rewrite_format_version(PRE_7_5B_PATH, RecordFile.FORMAT_VERSION)
+	assert_not_null(RecordFile.load_record(PRE_7_5B_PATH)["record"],
+		"restoring the version makes the SAME file load again -- the refusal was the version, not "
+		+ "damage done by rewriting it")
+	_remove(PRE_7_5B_PATH)
+
+
+## Story 7-5b (AC 6/AC 26): THE HEAL-RANGE CHANNEL ROUND-TRIPS through an actually-saved file, and a current-
+## version body WITHOUT the key is refused naming it -- `test_a_v13_record_without_drain_pushes_is_refused_with_a_reason`'s
+## shape for the new required key.
+func test_the_heal_range_channel_round_trips_and_its_absence_is_refused() -> void:
+	var record: IntentRecorder = _record_a_driven_run()["record"]
+	# Two pushes on tick 2 and one on tick 3 written into the saved body, read back in push order.
+	assert_eq(RecordFile.save_record(record, PRE_7_5B_PATH), "", "the base record was written")
+	_rewrite_values(PRE_7_5B_PATH, {"heal_range_pushes": {2: [[0, 1], [1, 0]], 3: [[0, 2]]}})
+	var loaded: IntentRecorder = RecordFile.load_record(PRE_7_5B_PATH)["record"]
+	assert_not_null(loaded, "a record carrying heal-range pushes loads")
+	if loaded != null:
+		assert_eq(loaded.heal_range_pushes_at(2), [[0, 1], [1, 0]], "tick 2's pushes come back in push order")
+		assert_eq(loaded.heal_range_pushes_at(3), [[0, 2]], "...and tick 3's")
+		assert_eq(loaded.heal_range_pushes_at(4), [], "...and a tick with none reads empty")
+	_rewrite_without(PRE_7_5B_PATH, ["heal_range_pushes"])
+	var truncated := RecordFile.load_record(PRE_7_5B_PATH)
+	assert_null(truncated["record"], "a current-version body without heal_range_pushes is refused")
+	assert_true(truncated["error"].contains("heal_range_pushes"),
+		"...naming the missing key: %s" % truncated["error"])
+	_remove(PRE_7_5B_PATH)
+
+
 ## Story 7-5a (AC 10/AC 11): THE PER-SEAT DECK CHANNEL ROUND-TRIPS, read out of an actually-saved file --
 ## two DIFFERENT compositions and the two deck names survive save + load, each on its own seat, and a v24
 ## file whose `deck` key holds the OLD flat shape is refused by name rather than dying in the rebuild.
@@ -1624,9 +1675,10 @@ func test_a_new_held_key_round_trips_without_any_serialization_edit() -> void:
 ## must not have arrived as a format bump or a widened top-level key set — a record well-formed
 ## under yesterday's rules still loads identically, which is the whole compatibility claim.
 func test_the_contents_validation_bumped_no_version_and_widened_no_required_key() -> void:
-	assert_eq(RecordFile.FORMAT_VERSION, 24,
+	assert_eq(RecordFile.FORMAT_VERSION, 25,
 		"`5-1a/R4`: the SHAPE was unchanged BY 5-1a — only its validation was made stricter. The "
-		+ "version has since moved to 24 (last: 7-5a, which made the deck channel per seat and added the "
+		+ "version has since moved to 25 (last: 7-5b, which added the heal-range channel and built the three "
+		+ "refused Deck 2 halves; before it 7-5a, which made the deck channel per seat and added the "
 		+ "`deck_names` key; before it 7-3, which made minion membership an authored kind fact and "
 		+ "widened the effect, kind and attack rows for the Hellhound; before it 7-4, which made four Deck 1 cards sorceries that count only "
 		+ "orbs earned after staging and widened the card and pitch cost rows by `pitch_speed`; before it 7-9, "
@@ -1654,8 +1706,9 @@ func test_the_contents_validation_bumped_no_version_and_widened_no_required_key(
 		assert_false(RecordFile.REQUIRED_KEYS.has(field),
 			("`5-1a/R12`: `%s` is a PER-INTENT field inside each `intents` element, never a "
 			+ "top-level key — REQUIRED_KEYS is not widened by this story") % field)
-	assert_eq(RecordFile.REQUIRED_KEYS.size(), 17,
-		"SEVENTEEN top-level required keys: story 7-5a added `deck_names`, the two seats' deck labels "
+	assert_eq(RecordFile.REQUIRED_KEYS.size(), 18,
+		"EIGHTEEN top-level required keys: story 7-5b added `heal_range_pushes`, the eighth capture channel "
+		+ "(the bump 24 -> 25 is what it is worth). It was SEVENTEEN as of 7-5a, which added `deck_names`, the two seats' deck labels "
 		+ "beside the now per-seat `deck` key (it was SIXTEEN before 7-5a, and that story's bump 23 -> 24 "
 		+ "is what the key is worth); story 6-5b added `drain_pushes`, the seventh capture channel "
 		+ "and the second per-tick pushed-fact channel after `lock_pushes` (it was FIFTEEN before "

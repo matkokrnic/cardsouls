@@ -149,7 +149,11 @@ const EXPECTED_INTAKE_SURFACE: Array[String] = [
 	# `"drain_signals"` by EXACT STRING against this same surface, so a sibling called `drain_target`
 	# would leave a reader unable to tell the exemption from the intake by name. `push_*` is also the
 	# truthful prefix -- this one genuinely carries data inward.
-	"push_contact", "push_drain_target", "set_camera_basis",
+	# Story 7-5b (AC 6, `7-5b/R17`): `push_heal_range` is MatchState's FIFTEENTH intake and the EIGHTH capture
+	# channel, shipping WITH `capture_push_heal_range` -- the `6-5b` drain-target precedent verbatim, this pin
+	# updated with intent while the channel check below is the falling guard. Sorted position: `push_d`
+	# precedes `push_h`.
+	"push_contact", "push_drain_target", "push_heal_range", "set_camera_basis",
 	# Story 4-6 (AC 2, `4-6/R6`): the SIXTH pushed-fact intake -- the per-tick lock direction, in
 	# sorted position beside the basis it is a sibling of. It arrives WITH its
 	# `capture_set_lock_direction` channel, which is exactly what this scan exists to force.

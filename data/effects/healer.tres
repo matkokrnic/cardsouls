@@ -5,3 +5,13 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"healer"
+summon_count = 1
+summon_kind = &"healer"
+damage_amount = 3.0
+launch_speed = 8.0
+homing_turn_rate_degrees_per_second = 120.0
+acceleration_delay_seconds = 0.4
+acceleration_per_second_squared = 12.0
+max_speed = 20.0
+travel_budget = 60.0
+blocked_damage_multiplier = 0.3333333333333333

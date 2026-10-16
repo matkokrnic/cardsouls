@@ -122,6 +122,35 @@ var _paused := false
 ## while still down (Open Question 3) without being forced off every frame.
 var _was_knocked_down: Array[bool] = [false, false]
 
+## Story 7-5b (AC 23): the DECK 2 BODIES' presentation memory, runner-local, per slot -- the Wrath ring's radius
+## drawn at the end of the previous tick (its falling edge is the pulse), the slot's summed Healer heal count
+## then (a rise is a heal tick), and whether the hero's current stun is the Wrath's (latched at the stun's
+## first tick, when the knockback starts with it). Presentation only: nothing here reaches `advance()`.
+var _pulse_ring_last: Array[float] = [0.0, 0.0]
+var _heal_count_last: Array[int] = [0, 0]
+var _wrath_stunned: Array[bool] = [false, false]
+
+## Story 7-5b smoke fix 1 (S1, S4, S5, S8): ONE FOLLOWER's runner-local motion memory -- whether it is walking
+## after its owner (the follow band's latch), the heal count and owed shot it last saw (their edges), how many
+## more ticks it stays ROOTED for a cast and FACES the opposing hero after a shot, and the heal count its heal
+## look last showed. Actor motion and presentation only: nothing here reaches `advance()`, and a replay drains
+## the recorded heal-range facts rather than gathering them, so the body's walk never decides a heal there.
+## Smoke fix 2 (S15): also whether it is TURNING (the dead zone's latch) and the yaw it stood at when the rig was
+## last pushed (the turn the body actually made, the `take_motion` posture).
+class _FollowerPose:
+	var walking := false
+	var heal_count := 0
+	var shot_owed: int = UnitBoard.NO_SHOT_OWED
+	var root_ticks := 0
+	var face_ticks := 0
+	var shown_heal_count := 0
+	var turning := false
+	var yaw := 0.0
+	var yaw_sampled := false
+
+## Each follower's `_FollowerPose`, keyed by its actor's instance id (`_follower_pose`). Erased with the actor.
+var _follower_poses: Dictionary = {}
+
 ## Story 3-0b (AC 2): the ONE debug instrument panel, kept so the runner can push the polled
 ## window-countdown payload into it after each advance(). A Control reference, never a seam.
 var _instrument_panel: DebugInstrumentPanel
@@ -153,6 +182,10 @@ const TOTEM_SCENE := preload("res://src/actors/minions/totem_actor.tscn")
 ## Hellhound model, its own collision sizes, the two owner skins and `HoundAnimationController`.
 const HOUND_SCENE := preload("res://src/actors/minions/hound_actor.tscn")
 
+## Story 7-5b (AC 11): the HEALER scene -- the same node set and script with the Healer model, its five-clip
+## library, the two owner skins and `HealerAnimationController`, and NO Hitbox (it never attacks).
+const HEALER_SCENE := preload("res://src/actors/minions/healer_actor.tscn")
+
 ## Story 7-3 (`7-3/D5`, AC 15): THE PER-KIND PRESENTATION TABLES, keyed by kind NAME on
 ## `_TOTEM_TINT_BY_KIND`'s precedent and held here, in presentation code. A kind in none of them falls
 ## back to the rule that stood before this story (scene by attack shape, lift by `Hitbox`, the Vanguard
@@ -166,14 +199,21 @@ const HOUND_SCENE := preload("res://src/actors/minions/hound_actor.tscn")
 ##   above a hound.
 ## `_UNIT_ROW_BY_KIND`: the `EffectPresentationSet` row that carries the kind's spawn look and its
 ##   voice. A kind with a row here shows that look ONCE PER CAST (see `_present_batch_spawn`).
+##
+## Story 7-5b (AC 11): the HEALER's rows. Its lift is MEASURED (`tools/measure_healer_rig.gd`, table 7): its
+## chest (`mixamorig_Spine2`) stands 1.09 m up in `idle` at the scene's 0.8 mount (smoke fix 1, S7; 1.37 m at
+## the native mount it replaced).
 const _UNIT_SCENE_BY_KIND := {
 	&"hellhound": HOUND_SCENE,
+	&"healer": HEALER_SCENE,
 }
 const _LOCK_MARK_LIFT_BY_KIND := {
 	&"hellhound": 0.6,
+	&"healer": 1.09,
 }
 const _UNIT_ROW_BY_KIND := {
 	&"hellhound": &"hellhound",
+	&"healer": &"healer",
 }
 
 ## Story 4-4 (AC 14): the PROJECTILE scene — a plain `Node3D` carrying one `Hitbox` on the existing
@@ -225,7 +265,9 @@ var _counter_daggers: Array = [null, null]
 ##   `_red_contact_tick` -- the window-elapsed tick of RED's head contact (`red_contact_elapsed_ticks`);
 ##   `_counter_impacted` -- this counter's impact has been shown;
 ##   `_victim_hold_ticks` -- indexed by the VICTIM's slot: ticks its pose has been held;
-##   `_shake_elapsed` / `_shake_total` -- indexed by the CAMERA's slot: the running shake, -1 when none.
+##   `_shake_elapsed` / `_shake_total` -- indexed by the CAMERA's slot: the running shake, -1 when none;
+##   `_shake_amplitude` -- (story 7-5b smoke fix 2, S13) that shake's amplitude: 7-10's own for a counter, the
+##       `wrath_of_god` row's `shake_amplitude` for a pulse.
 var _counter_landed: Array[bool] = [false, false]
 var _red_travel_scale: Array[float] = [1.0, 1.0]
 var _red_back_scale: Array[float] = [1.0, 1.0]
@@ -236,6 +278,7 @@ var _counter_impacted: Array[bool] = [false, false]
 var _victim_hold_ticks: Array[int] = [0, 0]
 var _shake_elapsed: Array[int] = [-1, -1]
 var _shake_total: Array[int] = [0, 0]
+var _shake_amplitude: Array[float] = [UnblockablePresentation.SHAKE_AMPLITUDE, UnblockablePresentation.SHAKE_AMPLITUDE]
 
 ## Story 6-6b (AC 11): how high off the hero root the thrown dagger flies, in metres -- roughly chest
 ## height on this rig, so it reads as thrown rather than slid along the floor. A presentation constant
@@ -1431,6 +1474,80 @@ func _push_charge_reach_facts() -> void:
 				player.hero.attack_index, fact_dir, kind)
 
 
+## Story 7-5b (AC 16/AC 17, Dev Notes "the reach-probe precedent"): THE WRATH RING GATHER. For each hero with
+## a pulse cast in its windup (`cast_radius > 0`, frozen by state at the activation), every OPPOSING body --
+## the opposing hero and each living opposing unit -- whose planar centre is within that radius of the
+## caster is pushed as a `CONTACT_PULSE` fact through the one contact intake, carrying the planar bearing
+## from the body to the caster. The runner measures, state decides: what crosses is the membership relation
+## and a direction, never a position. EVENT-SCOPED: nothing is gathered for a slot with no pulse pending, and
+## the round-over freeze cannot have one (round end clears the cast). The caster's own side is never asked.
+func _push_pulse_facts() -> void:
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		if not player.is_casting() or player.cast_radius <= 0.0:
+			continue
+		var caster: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		if not is_instance_valid(caster):
+			continue
+		var opposing_slot := 1 - slot
+		var attacker_address: Array[int] = [slot, TargetingService.HERO_INDEX]
+		var enemy: HeroActor = _p2_hero if slot == 0 else _p1_hero
+		if is_instance_valid(enemy):
+			_push_pulse_fact(attacker_address, [opposing_slot, TargetingService.HERO_INDEX],
+					caster.global_position - enemy.global_position, player)
+		var opponent: PlayerState = _match_state.p2 if slot == 0 else _match_state.p1
+		var actors: Array = _unit_actors[opposing_slot]
+		for index: int in actors.size():
+			if not opponent.units.is_alive_at(index) or not is_instance_valid(actors[index]):
+				continue
+			_push_pulse_fact(attacker_address, [opposing_slot, index],
+					caster.global_position - (actors[index] as Node3D).global_position, player)
+
+
+## Story 7-5b (AC 6, `7-5b/R17`): THE HEAL-RANGE GATHER for `slot`. Every LIVING unit of that slot whose kind
+## heals (`heal_amount` and `heal_range` both authored) and whose actor stands within the kind's `heal_range` of
+## its OWNER -- the planar distance between the two actors this runner owns -- is one fact, tapped then pushed
+## (`capture_push_heal_range`, `push_heal_range`), in board-index order. The runner measures, state decides:
+## what crosses is "this unit is in range", never a position or a distance. A unit out of range, dead, or with
+## no actor yet is simply not pushed, which is the honest "out of range" answer. Live branch only: a replay
+## drains the recorded facts instead (`replay_push_heal_ranges`).
+func _push_heal_ranges(slot: int, player: PlayerState) -> void:
+	var balance := _match_state.balance
+	var owner: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	if balance == null or not is_instance_valid(owner):
+		return
+	var actors: Array = _unit_actors[slot]
+	for index: int in actors.size():
+		if not player.units.has_index(index) or not player.units.is_alive_at(index):
+			continue
+		var unit: Node = actors[index]
+		if not is_instance_valid(unit):
+			continue
+		var kind := balance.kind_at(player.units.kind_index_at(index))
+		if kind == null or kind.heal_amount <= 0.0 or kind.heal_range <= 0.0:
+			continue
+		var apart := Vector2((unit as Node3D).global_position.x - owner.global_position.x,
+				(unit as Node3D).global_position.z - owner.global_position.z)
+		if apart.length() > kind.heal_range:
+			continue
+		_recorder.capture_push_heal_range(slot, index)
+		_match_state.push_heal_range(slot, index)
+
+
+## One ring fact, if the body is inside the frozen radius and not co-located with the caster (a zero
+## direction is no spatial fact -- `push_contact`'s own rule). Tapped and pushed in the standard order.
+func _push_pulse_fact(attacker_address: Array[int], target_address: Array[int], to_caster: Vector3,
+		player: PlayerState) -> void:
+	var planar := Vector2(to_caster.x, to_caster.z)
+	if planar.is_zero_approx() or planar.length() > player.cast_radius:
+		return
+	var fact_dir := planar.normalized()
+	_recorder.capture_push_contact(attacker_address, target_address, player.hero.attack_index, fact_dir,
+			MatchState.CONTACT_PULSE)
+	_match_state.push_contact(attacker_address, target_address, player.hero.attack_index, fact_dir,
+			MatchState.CONTACT_PULSE)
+
+
 ## Story 6-1d (AC 1): DOES THE TRACKED BLADE ACTUALLY TOUCH THAT HERO'S BODY?
 ##
 ## MELEE'S EXACT QUERY, SHARED RATHER THAN COPIED IN SPIRIT (`6-1d/R1`): the same `Area3D`
@@ -1560,7 +1677,7 @@ func _push_unblockable_markers() -> void:
 func _shake_world_offset(slot: int, camera: Camera3D) -> Vector3:
 	if _shake_elapsed[slot] < 0:
 		return Vector3.ZERO
-	var o := UnblockablePresentation.shake_offset(_shake_elapsed[slot], _shake_total[slot])
+	var o := UnblockablePresentation.shake_offset(_shake_elapsed[slot], _shake_total[slot], _shake_amplitude[slot])
 	return camera.global_transform.basis.x * o.x + camera.global_transform.basis.y * o.y
 
 
@@ -1865,9 +1982,12 @@ func _charge_color_of(color: int) -> Color:
 	return Color.WHITE
 
 
-## Story 7-10 (AC 10): start a camera shake on `slot`'s viewport camera.
-func _start_shake(slot: int) -> void:
-	_shake_total[slot] = UnblockablePresentation.ticks(UnblockablePresentation.SHAKE_SECONDS)
+## Story 7-10 (AC 10): start a camera shake on `slot`'s viewport camera. Story 7-5b smoke fix 2 (S13): of
+## `seconds` and `amplitude` -- 7-10's own by default, the `wrath_of_god` row's for a pulse.
+func _start_shake(slot: int, seconds: float = UnblockablePresentation.SHAKE_SECONDS,
+		amplitude: float = UnblockablePresentation.SHAKE_AMPLITUDE) -> void:
+	_shake_total[slot] = UnblockablePresentation.ticks(seconds)
+	_shake_amplitude[slot] = amplitude
 	_shake_elapsed[slot] = 0
 
 
@@ -2223,7 +2343,14 @@ func _resolve_ended_shots() -> void:
 				how = EffectPresenter.End.VANISH
 			elif bool(shot[5]):
 				how = EffectPresenter.End.FIZZLE
-			_effects.end_projectile(shot[2] as Vector3, StringName(shot[1]), how)
+			_effects.end_projectile(shot[2] as Vector3, StringName(shot[1]), how, int(shot[6]))
+			# Story 7-5b (AC 23): a GREEN Elemental Fury shot that LANDED on its hero target healed its caster --
+			# the caster's marker pops. Read by this same pairing (`7-1/R2`), so it is exactly as honest as the
+			# ending look it rides on.
+			if on_hero and how == EffectPresenter.End.IMPACT and int(shot[6]) == Enums.CardColor.GREEN:
+				var caster: HeroActor = _p1_hero if owner == 0 else _p2_hero
+				if is_instance_valid(caster):
+					caster.buff_markers.pop(BuffMarkers.TOKEN_GREEN)
 	_ended_shots.clear()
 	for slot: int in 2:
 		_shot_hits[slot] = 0
@@ -2267,6 +2394,90 @@ func _push_effect_presentation() -> void:
 			_effects.heal_droplets(hero)
 		_prev_hp[slot] = hp
 		_drained_this_tick[slot] = false
+
+
+## Story 7-5b (AC 23): THE DECK 2 BODIES' PLACEHOLDER LOOKS, from public reads after the drain, both viewports by
+## construction (every look is on an actor in the one shared world):
+##   * THE WRATH RING under a caster for its whole windup, at the radius state froze (`cast_radius`, read, never
+##     re-derived), and the PULSE FLASH on the windup's falling edge when the windup was not cut -- not by a stun
+##     or a death (`_push_cast_presentation`'s readable interrupt) and not by a Counterspell this tick
+##     (`_shot_vanish`, still set here: this runs before `_resolve_ended_shots` clears it);
+##   * a HEAL pop over the owner when the slot's summed Healer heal count rises (a heal tick that healed);
+##   * the SLOW and Wrath STUN conditions over each hero, level-triggered. The Wrath stun is told from every other
+##     stun by the knockback that starts with it on its first tick, and latched for the rest of the stun.
+## Off on a corpse and through the round-over freeze, like `_push_effect_presentation`'s looks.
+func _push_deck_2_presentation() -> void:
+	var freeze := _match_state.p1.hero.action_state == HeroState.ActionState.DEAD \
+			or _match_state.p2.hero.action_state == HeroState.ActionState.DEAD
+	for slot: int in 2:
+		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2
+		var hero: HeroActor = _p1_hero if slot == 0 else _p2_hero
+		var on := not freeze and is_instance_valid(hero)
+		var radius := player.cast_radius if on and player.is_casting() else 0.0
+		if _effects != null:
+			_effects.set_pulse_ring(slot, hero, radius, _windup_progress(slot))
+			if radius <= 0.0 and _pulse_ring_last[slot] > 0.0 and on and not _shot_vanish[slot] \
+					and player.hero.action_state != HeroState.ActionState.STUNNED and player.hero.is_alive():
+				_effects.show_pulse(hero.global_position, _pulse_ring_last[slot])
+				# Smoke fix 2 (S13): the IMPACT FLASHES on the bodies state reports hit, and the SHAKE on both
+				# viewports (the row's `shake_seconds`; 0 is off).
+				_show_wrath_hits(slot, player)
+				var wrath_row := _effects.row(&"wrath_of_god")
+				var shake := wrath_row.knob(&"shake_seconds", 0.0) if wrath_row != null else 0.0
+				if shake > 0.0:
+					for viewport: int in 2:
+						_start_shake(viewport, shake, wrath_row.knob(&"shake_amplitude", 0.0))
+		_pulse_ring_last[slot] = radius
+		var heals := 0
+		for index: int in player.units.size():
+			heals += player.units.heal_count_at(index)
+			_show_healer_heal(slot, player, index, hero, on)
+		if on and heals > _heal_count_last[slot]:
+			hero.buff_markers.pop(BuffMarkers.TOKEN_HEAL)
+		_heal_count_last[slot] = heals
+		var stunned := player.hero.action_state == HeroState.ActionState.STUNNED
+		if not stunned:
+			_wrath_stunned[slot] = false
+		elif player.knockback_window.is_running:
+			_wrath_stunned[slot] = true
+		if is_instance_valid(hero):
+			hero.buff_markers.show_conditions(on and player.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW),
+					on and _wrath_stunned[slot])
+
+
+## Story 7-5b smoke fix 2 (S13): how far through its cast window `slot`'s cast is, 0 at the press and 1 on its last
+## tick -- `_push_cast_presentation`'s own tick count, so the windup look gathers on the state's clock.
+func _windup_progress(slot: int) -> float:
+	if not _cast_armed[slot] or _cast_total_ticks[slot] <= 0:
+		return 0.0
+	return clampf(float(_cast_elapsed_ticks[slot]) / float(_cast_total_ticks[slot]), 0.0, 1.0)
+
+
+## Story 7-5b smoke fix 2 (S13): A GOLDEN IMPACT FLASH ON EVERY BODY THE PULSE HIT, AND ON NO OTHER -- read off the
+## state on the pulse tick, never off the ring or a distance:
+##   * every unit, and the hero, whose hp THIS pulse removed: the caster's Wrath record names each such body as a
+##     `PART_DAMAGE` part on the opposing slot (`MatchState._note_reversal_damage`);
+##   * the opposing hero also when its knockback is running on this tick, the pulse's own slide -- Stoneskin took
+##     the damage, but the pulse still landed (`7-5b/R11`).
+## A dodged or deflected pulse writes neither, so it flashes nothing.
+func _show_wrath_hits(slot: int, caster: PlayerState) -> void:
+	var victim_slot := 1 - slot
+	var victim: PlayerState = _match_state.p1 if victim_slot == 0 else _match_state.p2
+	var hero_hit := victim.knockback_window.is_running
+	if caster.reversal_kind == PlayerState.REVERSAL_WRATH_OF_GOD:
+		for i: int in caster.reversal_indices.size():
+			if caster.reversal_a[i] != PlayerState.PART_DAMAGE or caster.reversal_b[i] != victim_slot:
+				continue
+			var address := caster.reversal_indices[i]
+			if address == TargetingService.HERO_INDEX:
+				hero_hit = true
+			else:
+				var body := _actor_at(victim_slot, address)
+				if is_instance_valid(body):
+					_effects.show_wrath_hit(body as Node3D)
+	var victim_hero: HeroActor = _p1_hero if victim_slot == 0 else _p2_hero
+	if hero_hit and is_instance_valid(victim_hero):
+		_effects.show_wrath_hit(victim_hero)
 
 
 ## Story 7-1 (AC 19, `7-1/R3`): refresh the previous-tick copy of each reversal packet, at the END of the frame --
@@ -2655,6 +2866,11 @@ func _relay_round_started() -> void:
 	_ended_shots.clear()
 	_raised_spawns.clear()
 	_restored_sources.clear()
+	# Story 7-5b: the Deck 2 bodies' edge memory rests too, so the cleared match shows no pulse and no pop.
+	for deck_2_slot: int in 2:
+		_pulse_ring_last[deck_2_slot] = 0.0
+		_heal_count_last[deck_2_slot] = 0
+		_wrath_stunned[deck_2_slot] = false
 	# Story 7-10: the unblockable presentation goes back to rest -- eyes, shimmer, hitstop, lift, travel factor,
 	# victim hold and the shakes (the `_free_counter_dagger` discipline on every end path).
 	for slot: int in 2:
@@ -2839,6 +3055,161 @@ func _unit_kind_name(player: PlayerState, index: int) -> StringName:
 		return &""
 	var kind := balance.kind_at(player.units.kind_index_at(index))
 	return kind.kind_name if kind != null else &""
+
+
+## Story 7-5b (AC 3): the KIND of the record at `index`, or null on `_unit_kind_name`'s three misses.
+func _unit_kind(player: PlayerState, index: int) -> UnitKindProfile:
+	var balance := _match_state.balance
+	if balance == null or not player.units.has_index(index):
+		return null
+	return balance.kind_at(player.units.kind_index_at(index))
+
+
+## Story 7-5b (AC 3, `7-5b/R21`): does a unit of `kind` FOLLOW ITS OWNER? A kind that authors NO attack and
+## fires on its owner's chargeup (the Healer) -- read from authored data, never from a kind name. State never
+## gives such a unit a target, so following its owner is the whole of how it moves.
+static func _follows_owner(kind: UnitKindProfile) -> bool:
+	return kind != null and not kind.has_attack() and kind.owner_chargeup_shot_effect != &""
+
+
+## Story 7-5b smoke fix 1: the motion memory of the follower `unit` (record `index` of `player`), created on first
+## use FROM THE RECORD AS IT STANDS -- so a new actor for a record that has already healed or owes a shot (a
+## raised corpse) sees no edge on its first tick.
+func _follower_pose(unit: Node, player: PlayerState, index: int) -> _FollowerPose:
+	var id := unit.get_instance_id()
+	var pose: _FollowerPose = _follower_poses.get(id)
+	if pose == null:
+		pose = _FollowerPose.new()
+		pose.heal_count = player.units.heal_count_at(index)
+		pose.shown_heal_count = pose.heal_count
+		pose.shot_owed = player.units.shot_owed_at(index)
+		_follower_poses[id] = pose
+	return pose
+
+
+## Story 7-5b smoke fix 1 (S4, S8): ONE TICK of a follower's edges, counted once per tick by the aim seat. A
+## heal that healed ROOTS the body for the row's `cast_seconds` -- the time its controller fits `cast` into --
+## unless a shot is owed (its controller plays no `cast` then: the shot outranks the heal). A shot that LEFT
+## (owed -> none) keeps it facing the opposing hero for the row's `shoot_face_hold_seconds`. Both read off state's
+## own facts, never off the rig: an animation decides nothing, not even where a body stands.
+func _step_follower_pose(player: PlayerState, index: int, unit: Node) -> _FollowerPose:
+	var pose := _follower_pose(unit, player, index)
+	pose.root_ticks = maxi(0, pose.root_ticks - 1)
+	pose.face_ticks = maxi(0, pose.face_ticks - 1)
+	var heals := player.units.heal_count_at(index)
+	var owed := player.units.shot_owed_at(index)
+	if heals > pose.heal_count and owed == UnitBoard.NO_SHOT_OWED:
+		pose.root_ticks = _row_knob_ticks(player, index, &"cast_seconds")
+	if owed == UnitBoard.NO_SHOT_OWED and pose.shot_owed != UnitBoard.NO_SHOT_OWED:
+		pose.face_ticks = _row_knob_ticks(player, index, &"shoot_face_hold_seconds")
+	pose.heal_count = heals
+	pose.shot_owed = owed
+	return pose
+
+
+## A seconds knob of the record at `index`'s presentation row, in whole ticks (0 for a kind with no row).
+func _row_knob_ticks(player: PlayerState, index: int, knob: StringName) -> int:
+	return int(round(maxf(0.0, _unit_row_knob(player, index, knob, 0.0)) * TimingWindow.TICK_HZ))
+
+
+## Story 7-5b (AC 3, `7-5b/R21`), REPLACED BY SMOKE FIX 1 (S1, S4): THE FOLLOW BAND. A follower STANDS STILL while
+## its owner is within its kind's `heal_range` -- the OUTER radius, the same number the heal-range gather reads,
+## so "close enough to heal" and "close enough to stand" are one fact (S2). Once the owner is beyond it, the
+## follower WALKS after it at `move_speed` until it is at `stop_distance` -- the INNER radius -- and stops there.
+## The latch between the two is `_FollowerPose.walking`, so a body inside the band keeps doing what it was doing:
+## no stop-start at one radius, and it never flees an owner that comes closer (it only ever walks TOWARD it). A
+## heal that healed ROOTS it for its cast (`root_ticks`), so `cast` is played standing.
+##
+## SMOKE FIX 2 (S18, the operator's default): IT IS ROOTED WHILE SHOOTING too, as for its cast -- from the tick a
+## shot is OWED (state's countdown) through the row's `shoot_face_hold_seconds` after it leaves (`face_ticks`), so
+## `shoot` is played standing still. Both read off state's facts, never off the rig.
+func _follow_owner(slot: int, player: PlayerState, index: int, unit: UnitActor, kind: UnitKindProfile,
+		delta: float) -> void:
+	var pose := _follower_pose(unit, player, index)
+	var owner: HeroActor = _p1_hero if slot == 0 else _p2_hero
+	if pose.root_ticks > 0 or pose.shot_owed != UnitBoard.NO_SHOT_OWED or pose.face_ticks > 0 \
+			or not is_instance_valid(owner):
+		unit.velocity = Vector3.ZERO
+		return
+	var apart := Vector2(owner.global_position.x - unit.global_position.x,
+			owner.global_position.z - unit.global_position.z).length()
+	if not pose.walking and apart > maxf(kind.heal_range, kind.stop_distance):
+		pose.walking = true
+	elif pose.walking and apart <= kind.stop_distance:
+		pose.walking = false
+	if not pose.walking:
+		unit.velocity = Vector3.ZERO
+		return
+	unit.approach(owner.global_position, kind.move_speed, kind.stop_distance, delta)
+
+
+## Story 7-5b smoke fix 2 (S15a): a facing error at or below this (radians) is ALIGNED and ends a turn. Not tuning:
+## the line between "on it" and float noise once `turn_toward` has clamped onto the heading.
+const TURN_ALIGNED_EPS := 0.002
+
+
+## Story 7-5b smoke fix 2 (S15a): THE FOLLOWER'S DEAD ZONE. A follower that is not turning STARTS only when its facing
+## error to `look` exceeds `dead_zone` (radians, the row's `turn_dead_zone_degrees`); once started it turns at `step`
+## (radians per tick; `aim_at` snaps when it is zero) until it is ON `look`, then stops -- the latch is
+## `_FollowerPose.turning`, so a body inside the dead zone neither creeps nor jitters, and one that sets off finishes.
+## A zero dead zone turns on any error, the pre-S15 behaviour.
+func _turn_follower(unit: UnitActor, pose: _FollowerPose, look: Vector3, step: float, dead_zone: float) -> void:
+	if not pose.turning and absf(_yaw_error(unit, look)) > dead_zone:
+		pose.turning = true
+	if not pose.turning:
+		return
+	if step > 0.0:
+		unit.turn_toward(look, step)
+	else:
+		unit.aim_at(look)
+	if absf(_yaw_error(unit, look)) <= TURN_ALIGNED_EPS:
+		pose.turning = false
+
+
+## The signed yaw (radians) `unit` must still turn through to face `look`, planar -- `UnitActor.turn_toward`'s own
+## heading arithmetic. Zero for a coincident point (no direction to face).
+static func _yaw_error(unit: Node3D, look: Vector3) -> float:
+	var planar := Vector2(look.x - unit.global_position.x, look.z - unit.global_position.z)
+	if planar.is_zero_approx():
+		return 0.0
+	return angle_difference(unit.global_rotation.y, atan2(planar.x, planar.y) + PI)
+
+
+## Story 7-5b smoke fix 2 (S15a): a follower's RE-AIM step (radians per tick), from its row's
+## `reaim_turn_rate_degrees_per_second`; `fallback` (the kind's own step) for a row that authors none.
+func _reaim_step(player: PlayerState, index: int, fallback: float) -> float:
+	var rate := _unit_row_knob(player, index, &"reaim_turn_rate_degrees_per_second", 0.0)
+	return deg_to_rad(rate) / float(TimingWindow.TICK_HZ) if rate > 0.0 else fallback
+
+
+## Story 7-5b smoke fix 2 (S15b): THE YAW SPEED (degrees per second, positive = turning LEFT) the follower at `index`
+## actually turned through since the last push -- measured off its rotation, `UnitActor.take_motion`'s posture, so
+## a body is animated as what it did. Zero on its first push, and for every kind that does not follow its owner.
+func _take_follower_yaw_speed(unit: Node, player: PlayerState, index: int) -> float:
+	if not _follows_owner(_unit_kind(player, index)):
+		return 0.0
+	var pose := _follower_pose(unit, player, index)
+	var yaw := (unit as Node3D).global_rotation.y
+	var turned := 0.0 if not pose.yaw_sampled else angle_difference(pose.yaw, yaw)
+	pose.yaw = yaw
+	pose.yaw_sampled = true
+	return rad_to_deg(turned) * float(TimingWindow.TICK_HZ)
+
+
+## Story 7-5b smoke fix 1 (S5): EVERY HEAL IS SEEN. A living follower whose heal count rose since its look last
+## showed gets the heal look over its owner (`EffectPresenter.show_healer_heal`) when `on`; off (the round-over
+## freeze) the count is still taken, so a later tick shows no stale heal.
+func _show_healer_heal(slot: int, player: PlayerState, index: int, owner: HeroActor, on: bool) -> void:
+	var actors: Array = _unit_actors[slot]
+	if index >= actors.size() or not is_instance_valid(actors[index]) or not player.units.is_alive_at(index):
+		return
+	if not _follows_owner(_unit_kind(player, index)):
+		return
+	var pose := _follower_pose(actors[index], player, index)
+	var heals := player.units.heal_count_at(index)
+	if on and heals > pose.shown_heal_count and _effects != null:
+		_effects.show_healer_heal(actors[index] as Node3D, owner)
+	pose.shown_heal_count = heals
 
 
 ## Story 7-3, feel pass: one knob of the presentation row of the record at `index`'s kind, or
@@ -3167,6 +3538,7 @@ func _free_dead_unit_actors(slot: int, player: PlayerState) -> void:
 		if _effects != null:
 			_effects.set_grave_ward(corpse, player.units.is_corpse_extended_at(index))
 		if not player.units.has_corpse_at(index):
+			_follower_poses.erase(corpse.get_instance_id())
 			corpse.queue_free()
 			actors[index] = null
 
@@ -3241,7 +3613,16 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 			# ignores the call. Measured off the actor's position, so a body that is blocked or pushed
 			# is animated as what it is doing.
 			var motion := (unit as UnitActor).take_motion(1.0 / float(TimingWindow.TICK_HZ))
-			rig.on_unit_motion(motion.y, motion.x, _unit_row(player, index))
+			# Smoke fix 2 (S15): and the YAW the body actually turned through since the last push, for a follower
+			# (its turn-in-place clips); 0.0 for every other kind.
+			rig.on_unit_motion(motion.y, motion.x, _unit_row(player, index),
+					_take_follower_yaw_speed(unit, player, index))
+			# Story 7-5b (AC 10): THE HEAL COUNT AND THE OWED SHOT ride the same push, one call ahead of it --
+			# two plain ints off this record, polled like the phase (no observation seam) -- and since smoke fix
+			# 1 (S6) the record's HP, whose fall plays `hurt`. The Healer's controller selects `cast`, `shoot`
+			# and `hurt` by them; every other rig ignores the call.
+			rig.on_unit_support(player.units.heal_count_at(index), player.units.shot_owed_at(index),
+					player.units.hp_at(index))
 			rig.on_unit_tick(player.units.is_alive_at(index),
 					player.units.attack_phase_at(index), (unit as UnitActor).velocity.length())
 			# Story 7-3 (AC 18): a bark that came due on this push is played AT THE UNIT, from its kind's
@@ -3317,6 +3698,29 @@ func _aim_unit_actors(slot: int, player: PlayerState) -> void:
 		# it is going (`_travel_heading`: a dog running an arc, or away, does not run sideways or
 		# backwards), and looks at its target again once it has got where it was going.
 		if player.units.behavior_phase_at(index) == UnitBoard.BehaviorPhase.RUN_ON:
+			continue
+		# Story 7-5b (AC 3): A FOLLOWER FACES ITS OWNER, whom it walks after (`_approach_unit_actors`). It has no
+		# target to look at -- state never gives it one.
+		#
+		# SMOKE FIX 1 (S8): WHILE A SHOT IS OWED, and for the row's `shoot_face_hold_seconds` after it leaves, it
+		# faces the OPPOSING hero it shoots at instead, then turns back to its owner -- at its kind's turn rate.
+		# The edges this needs, and the cast root the drive phase reads (S4), are counted HERE, once per tick:
+		# this seat runs ahead of `_approach_unit_actors`.
+		#
+		# SMOKE FIX 2 (S15a): IT RE-AIMS ONLY PAST A DEAD ZONE -- see `_turn_follower`. Facing the target for a shot it
+		# turns at its kind's rate (S8, unchanged); every other re-aim, toward its owner, at the row's slower
+		# `reaim_turn_rate_degrees_per_second` (the operator's answer at smoke fix 2), so its turn-in-place clip plays
+		# at a pace that reads as feet.
+		if _follows_owner(_unit_kind(player, index)):
+			var pose := _step_follower_pose(player, index, unit)
+			var opposing: HeroActor = _p2_hero if slot == 0 else _p1_hero
+			var look := (_p1_hero if slot == 0 else _p2_hero).global_position
+			var step := _reaim_step(player, index, turn_step)
+			if (pose.shot_owed != UnitBoard.NO_SHOT_OWED or pose.face_ticks > 0) and is_instance_valid(opposing):
+				look = opposing.global_position
+				step = turn_step
+			_turn_follower(unit as UnitActor, pose, look, step,
+					deg_to_rad(maxf(0.0, _unit_row_knob(player, index, &"turn_dead_zone_degrees", 0.0))))
 			continue
 		var target_slot := player.units.target_slot_at(index)
 		if target_slot == TargetingService.NO_TARGET_SLOT:
@@ -3582,6 +3986,23 @@ func _approach_unit_actors(slot: int, player: PlayerState, delta: float) -> void
 			continue
 		var unit: Node = actors[index]
 		if not is_instance_valid(unit):
+			continue
+		# Story 7-5b (AC 19/AC 20): A WRATH KNOCKBACK SLIDE OUTRANKS EVERYTHING BELOW. State decided that the
+		# unit slides, which way and how fast (`UnitBoard.knockback_velocity_at`); this seat only moves the
+		# body by it, and `move_and_slide()` is what a wall stops. Nothing here ends the slide -- state's own
+		# countdown does.
+		var slide := player.units.knockback_velocity_at(index)
+		if not slide.is_zero_approx():
+			(unit as UnitActor).travel(slide, slide.length())
+			continue
+		# Story 7-5b (AC 3, `7-5b/R21`): THE FOLLOW-OWNER BRANCH. A unit that never attacks and fires on its
+		# owner's chargeup follows its OWNER -- since smoke fix 1 (S1), inside the band `_follow_owner` keeps:
+		# still within its outer radius, walking after the owner beyond it until the inner one, and rooted while
+		# it casts (S4). It never acquires an enemy target (state gives it none), never flees and draws nothing:
+		# the walk is presentation's, like every unit's. Read inline off the replay-aware config (CONSTRAINT C).
+		var follow_kind := balance.kind_at(player.units.kind_index_at(index))
+		if _follows_owner(follow_kind):
+			_follow_owner(slot, player, index, unit as UnitActor, follow_kind, delta)
 			continue
 		# Story 7-3, feel pass 2: A SWING THAT OVERSHOOTS PASSES OTHER BODIES WHILE IT TRAVELS (the leap
 		# goes over its target and lands beyond it), and only then. Decided here, ahead of every skip
@@ -3869,6 +4290,8 @@ func _free_unit_actors() -> void:
 			if is_instance_valid(shot):
 				shot.queue_free()
 		shots.clear()
+	# Story 7-5b smoke fix 1: the followers' motion memory goes with their actors.
+	_follower_poses.clear()
 
 
 ## Story 3-5b (AC 6): MatchState.reshuffle_vulnerable_window_opened ->
@@ -4263,17 +4686,68 @@ func _spawn_missing_projectile_actors(slot: int, player: PlayerState) -> void:
 			board.target_slot_at(index), board.target_index_at(index))
 		if target_position is Vector3:
 			shot.launch_toward((target_position as Vector3) - shot.global_position)
+		# Story 7-5b smoke fix 2 (S14): a shot whose profile authors the Stars-of-Ruin shape leaves in its fan.
+		_launch_in_fan(slot, player, index, shot)
 		# Story 7-1 (AC 12/AC 16/AC 21): the shot's LOOK by its effect id -- Fireball's core, a Rocksling stone, a
 		# Corpse Bomb skull (whose minion glows as it leaves). The scene and its `Hitbox` are unchanged (AC 35); a
 		# totem shot has no effect id and keeps `5-0c`'s look.
 		if _effects != null:
 			var effect_id := StringName(board.effect_id_at(index))
-			_effects.dress_projectile(shot, effect_id, board.damage_at(index))
+			# Story 7-5b (AC 23): plus the shot's COLOUR fact, which tints an Elemental Fury shot.
+			_effects.dress_projectile(shot, effect_id, board.damage_at(index), board.color_at(index))
 			# A spell shot that names a BOARD INDEX as its source left a minion (Corpse Bomb's skull); a hero's
 			# own shot carries `HERO_INDEX` there (`add_hero_shot`), and a totem shot has no effect id.
-			if effect_id != &"" and board.source_index_at(index) >= 0:
+			# Story 7-5b: a HEALER's shot also leaves a unit (`add_minion_shot`), and it is not a skull -- the
+			# glow is Corpse Bomb's row's alone.
+			var source_row := _effects.row_for_effect(effect_id)
+			if source_row != null and source_row.row_id == &"corpse_bomb" and board.source_index_at(index) >= 0:
 				_effects.skull_source_glow(_actor_at(slot, board.source_index_at(index)))
 		actors.append(shot)
+
+
+## Story 7-5b smoke fix 2 (S14, the Stars of Ruin shape): A HERO-SOURCED SHOT WHOSE PROFILE AUTHORS THE SHAPE LEAVES
+## IN ITS FAN -- from `launch_height` above the caster's feet, along the caster's FORWARD (state's `facing`) turned
+## to its own share of [-`fan_arc_degrees`, +`fan_arc_degrees`] (the i-th of the volley's N, `_fan_place`; a single
+## shot straight ahead), pitched up `launch_pitch_degrees` and steered back to the feet's height as it converges.
+## Actor placement only: where a shot STARTS and which way it first points are the actor's (`ProjectileActor`'s
+## header), so no state fact moves. A profile authoring none of the three is untouched -- every other shot.
+func _launch_in_fan(slot: int, player: PlayerState, index: int, shot: ProjectileActor) -> void:
+	var board := player.projectiles
+	if not board.is_hero_sourced_at(index):
+		return
+	var profile := _match_state.projectile_profile_at(board, index)
+	if profile == null or (profile.fan_arc_degrees <= 0.0 and is_zero_approx(profile.launch_pitch_degrees)
+			and profile.launch_height <= 0.0):
+		return
+	var cruise := shot.global_position.y
+	shot.global_position.y = cruise + profile.launch_height
+	var forward := player.hero.facing
+	if not forward.is_zero_approx():
+		var place := _fan_place(player, index)
+		var angle := 0.0
+		if place.y > 1:
+			angle = deg_to_rad(profile.fan_arc_degrees * (2.0 * float(place.x) / float(place.y - 1) - 1.0))
+		shot.launch_toward(Vector3(forward.x, 0.0, forward.y).rotated(Vector3.UP, angle))
+	shot.launch_pitched(deg_to_rad(profile.launch_pitch_degrees), cruise)
+
+
+## Story 7-5b smoke fix 2 (S14): (i, N) -- shot `index`'s place in its VOLLEY and the volley's size, read off state:
+## the shots its caster's resolution record lists as launched (`PART_PROJECTILE` parts, in launch order) plus the
+## ones its pending volley still owes. A shot the record does not list (a later resolution overwrote it) is (0, 1):
+## straight ahead.
+func _fan_place(player: PlayerState, index: int) -> Vector2i:
+	var place := -1
+	var launched := 0
+	for i: int in player.reversal_indices.size():
+		if player.reversal_a[i] != PlayerState.PART_PROJECTILE:
+			continue
+		if player.reversal_indices[i] == index:
+			place = launched
+		launched += 1
+	if place < 0:
+		return Vector2i(0, 1)
+	var owed := player.volley_colors.size() if player.has_pending_volley() else 0
+	return Vector2i(place, launched + owed)
 
 
 ## Story 7-3, feel pass 2 (defect E; the path predates the story): THE ACTOR ARRAY IS RECONCILED WITH
@@ -4388,9 +4862,29 @@ func _drive_projectiles(slot: int, player: PlayerState) -> void:
 				# `CardEffect`, not on a kind) would have steered at a null profile -- i.e. not at all.
 				var profile := _match_state.projectile_profile_at(board, index)
 				if profile != null:
-					shot.steer_toward(target_position as Vector3,
-							profile.homing_turn_rate_degrees_per_second)
+					shot.steer_toward(target_position as Vector3, _homing_rate(profile, board, index))
 		shot.advance_flight_by(_match_state.projectile_step_distance_at(board, index))
+
+
+## Story 7-5b smoke fix 2 (S14): a shot's speed at or below its launch speed plus this (m/s) is still at its launch
+## speed. Not tuning: the line between "not yet accelerating" and float noise in state's step.
+const BLOOM_SPEED_EPS := 0.0001
+
+
+## Story 7-5b smoke fix 2 (S14): THE HOMING RATE shot `index` steers at this tick -- the profile's WEAK
+## `bloom_turn_rate_degrees_per_second` while it BLOOMS, its own `homing_turn_rate_degrees_per_second` once it
+## converges. It blooms for as long as STATE still flies it at its `launch_speed` (`projectile_step_distance_at`, the
+## distance state charged this tick): the ruling's one delay, after which the strong homing and the existing
+## acceleration begin together -- so the bloom's length is state's own `acceleration_delay_seconds`, converted once at
+## its guarded seam, and nothing here converts a duration. A profile authoring no bloom rate, or no acceleration to
+## end a bloom, homes at its own rate from launch, as every shot did.
+func _homing_rate(profile: ProjectileProfile, board: ProjectileBoard, index: int) -> float:
+	if profile.bloom_turn_rate_degrees_per_second > 0.0 and profile.acceleration_per_second_squared > 0.0 \
+			and profile.max_speed > profile.launch_speed \
+			and _match_state.projectile_step_distance_at(board, index) * float(TimingWindow.TICK_HZ) \
+					<= profile.launch_speed + BLOOM_SPEED_EPS:
+		return profile.bloom_turn_rate_degrees_per_second
+	return profile.homing_turn_rate_degrees_per_second
 
 
 ## Story 4-4 (AC 14): the CONTACT GATHER for slot `slot`'s live projectiles — the
@@ -4469,7 +4963,7 @@ func _free_dead_projectile_actors(slot: int, player: PlayerState) -> void:
 			_ended_shots.append([slot, effect_id,
 					shape.global_position if shape != null else (node as Node3D).global_position,
 					player.projectiles.target_slot_at(index), player.projectiles.target_index_at(index),
-					_shot_expired(player.projectiles, index)])
+					_shot_expired(player.projectiles, index), player.projectiles.color_at(index)])
 		node.queue_free()
 		actors[index] = null
 
@@ -5144,6 +5638,10 @@ func _physics_process(delta: float) -> void:
 			# replay that re-derived it from the live scene would sacrifice a DIFFERENT minion than the
 			# recorded match did, and diverge the hashed board from that tick onward.
 			_replay_record.replay_push_drain_targets(_match_state, _replay_tick)
+			# Story 7-5b (AC 6/AC 24): the HEAL-RANGE channel drains here, beside the drain targets and for
+			# their reason -- it is derived from actor POSITIONS, which may drift between a recording and its
+			# replay, and it decides whether a heal tick heals (the hashed hero hp).
+			_replay_record.replay_push_heal_ranges(_match_state, _replay_tick)
 			_replay_record.replay_push_contacts(_match_state, _replay_tick)
 		else:
 			# 2. Gather spatial facts — each rig's basis, pushed PER SLOT (SEAM CHOICE 2: never one
@@ -5181,6 +5679,12 @@ func _physics_process(delta: float) -> void:
 						_match_state.p1 if drain_slot == 0 else _match_state.p2)
 				_recorder.capture_push_drain_target(drain_slot, drain_target)
 				_match_state.push_drain_target(drain_slot, drain_target)
+			# Story 7-5b (AC 6, `7-5b/R17`): the HEAL RANGE, gathered, tapped and pushed in this same step-2 seat
+			# and the same per-slot order as the drain target directly above, and for its reason EVERY ticking
+			# frame: the one consumer (`_advance_healers`) reads the facts only on a Healer's interval tick, and a
+			# seat that fired only then would be a seat the record could be missing a row for.
+			_push_heal_ranges(0, _match_state.p1)
+			_push_heal_ranges(1, _match_state.p2)
 			# Story 5-2 (AC 17, `5-2/R6`): the CHARGE-REACH fact, gathered and tapped in this
 			# same step-2 seat and BEFORE advance() -- which is the whole of AC 17's ordering
 			# requirement: state never pulls from the runner mid-advance(), so the fact the
@@ -5188,6 +5692,9 @@ func _physics_process(delta: float) -> void:
 			# existing contacts channel, so a replay restores it through
 			# `replay_push_contacts` above with no new channel and no row-shape change.
 			_push_charge_reach_facts()
+			# Story 7-5b (AC 16/AC 17): the WRATH RING facts, in this same step-2 seat and before advance(),
+			# so the strike that reads them at step 6c has this tick's membership.
+			_push_pulse_facts()
 			#    Story 1-7: contact facts — direct query on state-flagged-active hitboxes, pushed
 			#    through push_contact, the SOLE intake (1-5 obligation). See _gather_contact_facts.
 			# Story 4-3b (AC 5): THE CANONICAL CROSS-ATTACKER GATHER ORDER, and the unit pass's
@@ -5431,6 +5938,8 @@ func _physics_process(delta: float) -> void:
 	#    droplets, and the end-of-tick copy of the reversal packets (`7-1/R3`). Plain reads, no new seam.
 	#    Review fix F1: the raised-from spawns first, while this tick's Counterspell sources are still held.
 	_resolve_raised_spawns()
+	# Story 7-5b: the Deck 2 bodies' looks, BEFORE the shot endings clear this tick's Counterspell flags.
+	_push_deck_2_presentation()
 	_resolve_ended_shots()
 	_push_effect_presentation()
 	_copy_reversal_records()

@@ -45,6 +45,24 @@ extends Node3D
 ## there is no straight-line branch anywhere to fall out of step with the homing one.
 var heading := Vector3.FORWARD
 
+## Story 7-5b smoke fix 2 (S14, the Stars of Ruin shape): A CLIMB, for a shot launched pitched up -- its PITCH
+## (radians above level; the path is `heading` tilted up by it) and the CRUISE HEIGHT its pitch is steered back to,
+## the root height every shot flies at (the caster's feet). ONLY A SHOT GIVEN ONE BY `launch_pitched` CLIMBS: every
+## other shot keeps `_climbs` false and moves along `heading` exactly as before, so the planar contract above still
+## holds for all of them. The climb is the same steering, in the vertical: rate-limited by the same turn rate, and
+## never below the cruise height (a shot does not dig into the floor).
+var pitch := 0.0
+var cruise_y := 0.0
+var _climbs := false
+
+
+## Story 7-5b smoke fix 2 (S14): give this freshly launched shot a CLIMB of `pitch_radians` above level, steered back
+## toward `cruise_height` once it homes. Called once by the runner, after `launch_toward`.
+func launch_pitched(pitch_radians: float, cruise_height: float) -> void:
+	pitch = pitch_radians
+	cruise_y = cruise_height
+	_climbs = true
+
 
 ## Point this shot along `planar_dir` with no turn-rate limit — the LAUNCH orientation, called once
 ## by the runner on the tick the state layer created the record.
@@ -89,6 +107,11 @@ func steer_toward(target_position: Vector3, turn_rate_degrees: float) -> void:
 	# tick's authored allowance", which is what makes a zero authored turn rate degrade to flying
 	# dead straight rather than to a special case.
 	heading = heading.rotated(Vector3.UP, clampf(angle, -max_turn, max_turn)).normalized()
+	# Smoke fix 2 (S14): a CLIMBING shot steers its pitch the same way -- toward the slope that brings it down to its
+	# cruise height over the planar distance left, by at most the same allowance.
+	if _climbs:
+		var wanted := atan2(cruise_y - global_position.y, to_target.length())
+		pitch += clampf(wanted - pitch, -max_turn, max_turn)
 	_face_heading()
 
 
@@ -107,7 +130,15 @@ func steer_toward(target_position: Vector3, turn_rate_degrees: float) -> void:
 ## from the hitbox overlap this node reports, and by its travel budget. Sliding along a wall would be
 ## a physics behaviour nothing in this story asks for.
 func advance_flight_by(distance: float) -> void:
-	global_position += heading * distance
+	if not _climbs:
+		global_position += heading * distance
+		return
+	# Smoke fix 2 (S14): along the heading tilted up by the pitch, the SAME distance (the one the budget was charged),
+	# never below the cruise height.
+	global_position += heading * distance * cos(pitch) + Vector3.UP * distance * sin(pitch)
+	if global_position.y < cruise_y:
+		global_position.y = cruise_y
+		pitch = maxf(pitch, 0.0)
 
 
 ## Yaw the node to match its heading. PRESENTATIONAL ONLY — nothing reads this rotation, including

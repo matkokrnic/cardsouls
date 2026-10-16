@@ -24,11 +24,21 @@ extends SceneTree
 ## progress"): a moving hero now plays the gesture on the upper body with its legs walking, and movement no longer
 ## cuts it. The split itself is pinned in test_upper_lower_split.gd; here, only the gesture's own survival.
 ##
+## STORY 7-5b SMOKE FIX 2 (S12): WRATH OF GOD'S `cast_wrath`. Pinned: at every windup length the pose at the windup's
+## last tick -- the pulse -- sits ON the measured slam frame (`WRATH_SLAM_SECONDS`, restated below from
+## tools/measure_spell_clip_frames.gd: frame 44 at 30 fps), the windup starts at frame 0 and the playhead never runs
+## backwards (RATE-FITTED, so every windup length plays the whole raise); the slam is inside the clip; on the real rig
+## a Wrath windup plays `cast_wrath`, sits on the slam at its end, follows through at native rate when it pulsed and
+## stops when it was cut.
+##
 ## Run: godot --headless --path . --script res://test/integration/test_spell_cast_clips.gd
 
 const CASTS: Array[float] = [0.3, 0.8, 1.25, 2.0, 4.0]
 const FIREBALL := CardEffectResolver.OUTCOME_FIREBALL
 const ROCKSLING := CardEffectResolver.OUTCOME_ROCKSLING
+const WRATH := CardEffectResolver.OUTCOME_WRATH_OF_GOD
+## The measured slam (header), restated so this file fails if the constant moves without a re-measure.
+const WRATH_SLAM := 44.0 / 30.0
 
 var _failures: Array[String] = []
 var _frames := 0
@@ -53,6 +63,17 @@ func _initialize() -> void:
 		_check(start.size() == 2 and start[0] == &"cast_rocksling_lift", "rocksling starts on the LIFT (cast %.2f)" % cast)
 		_check_monotonic(FIREBALL, cast)
 		_check_monotonic(ROCKSLING, cast)
+		var wrath := AnimationController.spell_cast_pose(WRATH, cast, cast)
+		_check(wrath.size() == 2 and wrath[0] == &"cast_wrath", "wrath pose names cast_wrath (cast %.2f)" % cast)
+		if wrath.size() == 2:
+			_check(absf(float(wrath[1]) - WRATH_SLAM) < 0.0001,
+				"wrath at the end of a %.2f s windup -- the pulse -- sits on the slam (got %.4f)" % [cast, wrath[1]])
+		var wrath_start := AnimationController.spell_cast_pose(WRATH, 0.0, cast)
+		_check(wrath_start.size() == 2 and absf(float(wrath_start[1])) < 0.0001,
+			"wrath starts its windup on frame 0 -- the whole raise plays (cast %.2f)" % cast)
+		_check_monotonic(WRATH, cast)
+	_check(is_equal_approx(AnimationController.WRATH_SLAM_SECONDS, WRATH_SLAM),
+		"the controller's slam (%.4f) is the measured frame 44 at 30 fps" % AnimationController.WRATH_SLAM_SECONDS)
 	_check(AnimationController.spell_cast_pose(CardEffectResolver.OUTCOME_HONED_BOLT, 0.4, 0.8).is_empty(),
 		"Honed Bolt is not a spell pose -- it keeps `cast`")
 	_check(library != null, "the paladin library loads")
@@ -65,6 +86,9 @@ func _initialize() -> void:
 			"lift peak inside its clip")
 		_check(AnimationController.ROCKSLING_THROW_RELEASE_SECONDS
 				< library.get_animation(&"cast_rocksling_throw").length, "throw release inside its clip")
+		_check(library.has_animation(&"cast_wrath"), "library carries cast_wrath")
+		if library.has_animation(&"cast_wrath"):
+			_check(WRATH_SLAM < library.get_animation(&"cast_wrath").length, "wrath slam inside its clip")
 		_check_gesture_timing(library)
 	_check_gesture_selection()
 	var scene := load("res://src/actors/hero/hero.tscn") as PackedScene
@@ -97,6 +121,25 @@ func _physics_process(_delta: float) -> bool:
 	anim.on_cast_progress(0.8)
 	_check(player.current_animation == &"cast_rocksling_throw", "and ends on the throw")
 	anim.on_cast_ended(false)
+	# Smoke fix 2 (S12): Wrath -- the windup plays cast_wrath, the pulse tick sits on the slam, a pulse follows through.
+	anim.on_cast_started(0.8, WRATH)
+	_check(player.current_animation == &"cast_wrath", "a Wrath windup plays cast_wrath (got %s)" % player.current_animation)
+	anim.on_cast_progress(0.4)
+	_check(absf(player.current_animation_position - WRATH_SLAM * 0.5) < 0.001,
+		"halfway through the windup the clip is halfway to the slam (got %.4f)" % player.current_animation_position)
+	anim.on_cast_progress(0.8)
+	_check(absf(player.current_animation_position - WRATH_SLAM) < 0.001,
+		"the windup's last tick -- the pulse -- shows the slam (got %.4f)" % player.current_animation_position)
+	anim.on_cast_ended(true)
+	_check(player.current_animation == &"cast_wrath" and player.get_playing_speed() > 0.0,
+		"a pulsed Wrath follows through at native rate")
+	anim.on_cast_started(0.8, WRATH)
+	anim.on_cast_progress(0.3)
+	var cut_at := player.current_animation_position
+	anim.on_cast_ended(false)
+	anim.on_cast_progress(0.6)
+	_check(absf(player.current_animation_position - cut_at) < 0.001 or player.current_animation != &"cast_wrath",
+		"a windup cut by a stun or a death no longer drives the clip toward the slam")
 	_check_gestures_on_rig(anim, player)
 	_hero.queue_free()
 	for f in _failures:

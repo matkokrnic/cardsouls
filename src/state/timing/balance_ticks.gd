@@ -397,6 +397,9 @@ static func _kind_ticks(kind: UnitKindProfile) -> UnitKindTicks:
 			TimingWindow.seconds_to_ticks(kind.orbit_max_seconds))
 	out.circle_wobble_ticks = TimingWindow.seconds_to_ticks(kind.circle_wobble_seconds)
 	out.bark_interval_ticks = TimingWindow.seconds_to_ticks(kind.bark_interval_seconds)
+	# Story 7-5b (AC 6/AC 7): the Healer's two durations, on the same single boundary.
+	out.heal_interval_ticks = TimingWindow.seconds_to_ticks(kind.heal_interval_seconds)
+	out.shot_delay_ticks = TimingWindow.seconds_to_ticks(kind.shot_delay_seconds)
 	for attack in kind.attacks:
 		var a := UnitAttackTicks.new()
 		if attack != null:

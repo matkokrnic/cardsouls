@@ -88,6 +88,13 @@ const SUMMON_KINDS: Dictionary[StringName, StringName] = {
 	&"summon_stamina_accelerator": KIND_STAMINA_ACCELERATOR,
 }
 
+## Story 7-5b (AC 2, `7-5b/R20`): THE WHOLE-ID SUMMON ROW -- a summon whose effect id carries no `summon_`
+## prefix. `healer` keeps its id (the card, its icon and its CREDITS line all name it), so the prefix path
+## cannot reach it and this table does: a row here is a summon in every respect the prefix path is -- the
+## `OUTCOME_SUMMON` verdict, the minion layer's flag, and the kind named by the effect's own authored
+## `summon_kind`. Only ever asked `has()` of one known key, `SUMMON_KINDS`' posture.
+const WHOLE_ID_SUMMONS: Array[StringName] = [&"healer"]
+
 ## AC 1: the three ids above are TOTEMS and gate on `FeatureFlags.totems`; every other `summon_*` id
 ## is a minion and gates on `FeatureFlags.minions`. Derived from the table rather than listed a
 ## second time, so the two can never disagree — see `_is_totem()` below.
@@ -357,8 +364,28 @@ const ECONOMY_OUTCOMES: Dictionary[StringName, StringName] = {
 
 
 ## ------------------------------------------------------------------------------------------
+## STORY 7-5b (AC 12-15): THE VOLLEY FAMILY -- Elemental Fury fires its projectiles at the activation, with
+## no cast, one per orb still held after its own orb is paid. Its own table on this file's standing rule
+## ("one table per family"): it is not a cast (no commitment window) and not an own-side buff. Gates on
+## `FeatureFlags.spells` through `_spells_open`.
+## ------------------------------------------------------------------------------------------
+const OUTCOME_ELEMENTAL_FURY := &"elemental_fury"
+
+const VOLLEY_OUTCOMES: Dictionary[StringName, StringName] = {
+	&"elemental_fury": OUTCOME_ELEMENTAL_FURY,
+}
+
+
+## ------------------------------------------------------------------------------------------
 ## STORY 7-5a (AC 13-15, `7-5a/R29`): THE TEMPORARY REFUSAL TABLE -- the halves `7-5b` builds.
 ## ------------------------------------------------------------------------------------------
+## STORY 7-5b (AC 1): THE TABLE IS NOW EMPTY AND STAYS, `DEFERRED_EFFECT_OWNERS`' own resting state. All three
+## rows named `7-5b` and `7-5b` builds all three: `healer` is a whole-id summon (`WHOLE_ID_SUMMONS`),
+## `elemental_fury` the volley family and `wrath_of_god` a cast row. The mechanism below is untouched --
+## an empty table answers "nothing is waiting on a story" at both refusal seats.
+##
+## THE PARAGRAPHS BELOW DESCRIBE THE MECHANISM AS 7-5a SHIPPED IT and are kept for the next half that needs
+## it; the "IDS ARE NOT `summon_*`" clause is now true of an empty set.
 ## Each row is an effect id whose card half is REFUSED BEFORE ANY SPEND with `REASON_NOT_AVAILABLE_YET`:
 ## at the Mode 1 pre-spend gate for a normal half, at the staging ladder for a pitch half. THE VALUE is the
 ## board key of the story that builds it -- `DEFERRED_EFFECT_OWNERS`' shape, with the one difference that
@@ -373,11 +400,7 @@ const ECONOMY_OUTCOMES: Dictionary[StringName, StringName] = {
 ## THE IDS ARE DELIBERATELY NOT `summon_*` / `spell_*` AND HAVE NO OUTCOME ROW ANYWHERE ELSE (AC 14). If the
 ## refusal were ever skipped, `outcome()` answers `REASON_NOT_AVAILABLE_YET` for them -- a cast that applies
 ## nothing -- rather than, say, a `summon_healer` id summoning a zombie through the prefix path.
-const UNAVAILABLE_EFFECT_OWNERS: Dictionary[StringName, StringName] = {
-	&"healer": &"7-5b-deck-2-bodies",
-	&"elemental_fury": &"7-5b-deck-2-bodies",
-	&"wrath_of_god": &"7-5b-deck-2-bodies",
-}
+const UNAVAILABLE_EFFECT_OWNERS: Dictionary[StringName, StringName] = {}
 
 ## The outcome an unavailable id resolves to if it is ever reached -- and the refusal reason both seats
 ## queue, so "not available yet" is one token wherever it surfaces.
@@ -468,10 +491,17 @@ const OUTCOME_FIREBALL := &"fireball"
 ## `inject_pitch_effects`' flight-profile mirror had to be widened to cover the basic map too (AC 1a).
 const OUTCOME_ROCKSLING := &"rocksling"
 
+## STORY 7-5b (AC 16, `7-5b/R12`): THE FOURTH MEMBER OF THE CAST FAMILY. Wrath's windup IS a normal cast
+## commitment (a stun or death during it cancels it, card and mana stay spent), so it adopts the framework
+## by this row plus its own strike arm, `MatchState._apply_wrath_of_god` -- the window, the three commitment
+## locks and the interrupt are untouched. Its strike resolves ONE pulse, not a projectile.
+const OUTCOME_WRATH_OF_GOD := &"wrath_of_god"
+
 const CAST_OUTCOMES: Dictionary[StringName, StringName] = {
 	&"honed_bolt": OUTCOME_HONED_BOLT,
 	&"fireball": OUTCOME_FIREBALL,
 	&"rocksling": OUTCOME_ROCKSLING,
+	&"wrath_of_god": OUTCOME_WRATH_OF_GOD,
 }
 
 
@@ -606,6 +636,15 @@ const HP_COST_REQUIREMENTS: Dictionary[StringName, StringName] = {
 	&"bloodmagic": NEEDS_HP_ABOVE_COST,
 }
 
+## Story 7-5b (AC 12, `7-5b/R5`): ELEMENTAL FURY's precondition -- AFTER THE ACTIVATION'S OWN ORB PRICE IS
+## PAID, AT LEAST ONE ORB (any colour) MUST STILL BE HELD. A SEVENTH arm, judged at the activation's pre-spend
+## gate, so a refusal spends no orb and leaves the card staged with its countdown running.
+const NEEDS_ORB_AFTER_PRICE := &"orb_after_price"
+
+const ORB_REQUIREMENTS: Dictionary[StringName, StringName] = {
+	&"elemental_fury": NEEDS_ORB_AFTER_PRICE,
+}
+
 ## Story 6-5c (AC 4, Discrepancy 3): `honed_bolt`'s target -- A LIVING ENEMY HERO. The requirement is
 ## EVALUATED AT THE SAME PRE-SPEND SEAT as the four above (`MatchState._board_refusal_reason`), which
 ## is what AC 4 means by "the target requirement is evaluated at the same pre-spend seat".
@@ -670,6 +709,10 @@ static func board_requirement_for(effect: CardEffect) -> StringName:
 	var hp_cost: StringName = HP_COST_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 	if hp_cost != NEEDS_NOTHING:
 		return hp_cost
+	# Story 7-5b: SIX TABLES, STILL ONE ANSWER -- all six share no id.
+	var orb_after: StringName = ORB_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
+	if orb_after != NEEDS_NOTHING:
+		return orb_after
 	return COUNTERSPELL_REQUIREMENTS.get(effect.effect_id, NEEDS_NOTHING)
 
 
@@ -695,6 +738,10 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	if id.begins_with(PREFIX_SUMMON):
 		if _is_totem(effect.effect_id):
 			return OUTCOME_SUMMON if _totems_open(flags) else REASON_TOTEMS_FLAG_CLOSED
+		return OUTCOME_SUMMON if _minions_open(flags) else REASON_MINIONS_FLAG_CLOSED
+	# Story 7-5b (AC 2): a WHOLE-ID summon is the prefix path's minion arm verbatim -- a summon, gated on the
+	# minion layer, the flag read only after the id is recognised.
+	if WHOLE_ID_SUMMONS.has(effect.effect_id):
 		return OUTCOME_SUMMON if _minions_open(flags) else REASON_MINIONS_FLAG_CLOSED
 	# Story 6-5a (AC 4): the WHOLE-ID matches, AFTER the summon prefix (a summon id is never a table
 	# row) and BEFORE the `spell_*` prefix. The id is recognised first and the flag read only after, the
@@ -752,6 +799,10 @@ static func outcome(effect: CardEffect, flags: FeatureFlags) -> StringName:
 	var economy: StringName = ECONOMY_OUTCOMES.get(effect.effect_id, &"")
 	if economy != &"":
 		return economy if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
+	# Story 7-5b (AC 13): the volley family, in the same seat and order.
+	var volley: StringName = VOLLEY_OUTCOMES.get(effect.effect_id, &"")
+	if volley != &"":
+		return volley if _spells_open(flags) else REASON_SPELLS_FLAG_CLOSED
 	# Story 7-5a (AC 14): a half `7-5b` builds. Both refusal seats stop it before this is ever asked; if
 	# one were skipped, this answers a named nothing rather than falling through to another family.
 	if is_unavailable(effect):

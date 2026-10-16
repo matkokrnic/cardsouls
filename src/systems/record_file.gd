@@ -426,7 +426,19 @@ extends RefCounted
 ## seat got which deck, so it is REFUSED WITH A REASON by the version check -- no shim, the `4-1/R1` rule.
 ## A SHAPE CAUSE RIDES BESIDE IT: `CardEffect` gains nine flat fields (the `card_effects` and
 ## `pitch_effects` rows). No new channel (`SOUND_CONTENT_ORDER` is unmoved), no new nested class.
-const FORMAT_VERSION := 24
+##
+## STORY 7-5b (AC 26): 24 -> 25, WITH THE HARD REFUSAL OF A v24 FILE, NO SHIM. THREE MEASURED CAUSES, each
+## sufficient alone. (1) A NEW REQUIRED KEY, `heal_range_pushes` -- the eighth capture channel
+## (`push_heal_range`, `7-5b/R17`); a v24 file has none, so every Healer heal tick it recorded would replay as
+## out of range. (2) ROW SHAPES: `CardEffect` gains ten flat fields (six for the three bodies, four for the
+## smoke-fix-2 Stars-of-Ruin flight; the `effects` / `pitch_effects` rows), `ProjectileProfile` four (the mirrored
+## flight, same four) and `UnitKindProfile` five (the `balance` row). The S14 fields moved row shapes AFTER the
+## first bump and FORMAT_VERSION stays 25 for them: the version is unreleased, and no on-disk v25 record exists
+## (every record test writes its own under `user://`). (3) BEHAVIOUR: `healer`, `elemental_fury` and `wrath_of_god`
+## were REFUSED through v24 (`not_available_yet`) and now resolve, so a v24 stream that pressed one replays a
+## card the recorded match never cast. The new pulse contact kind is a new VALUE of the existing `kind`
+## element and moves no row shape.
+const FORMAT_VERSION := 25
 
 ## AC 7: the `user://` naming the SAVE control writes to. INDEXED rather than timestamped, and
 ## that is deliberate on both sides: the index makes the path a test can NAME in advance
@@ -483,6 +495,9 @@ const REQUIRED_KEYS: Dictionary[String, int] = {
 	# onward. Its arrival IS the version bump -- a v13 file lacks this key and is refused by the version
 	# check long before this map is consulted, exactly as `lock_pushes` was at v6.
 	"drain_pushes": TYPE_DICTIONARY,
+	# Story 7-5b (AC 6/AC 26): the per-tick HEAL-RANGE channel, required from FORMAT_VERSION 25 onward -- a v24
+	# file lacks it and is refused by the version check first, exactly as `drain_pushes` was at v14.
+	"heal_range_pushes": TYPE_DICTIONARY,
 	# Story 4-1 (`4-1/R1`): the third content channel, required from FORMAT_VERSION 2 onward. Its
 	# arrival IS the version bump -- a v1 file lacks this key, and is refused by the version check
 	# long before this map is consulted.
@@ -827,6 +842,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 	var contacts: Dictionary = {}
 	var lock_pushes: Dictionary = {}
 	var drain_pushes: Dictionary = {}
+	var heal_range_pushes: Dictionary = {}
 	for tick in range(1, record.tick_count() + 1):
 		var pair: Array = []
 		for intent: InputIntent in record.intents_at(tick):
@@ -848,6 +864,10 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		var drains := record.drain_pushes_at(tick)
 		if not drains.is_empty():
 			drain_pushes[tick] = drains
+		# Story 7-5b (AC 6): the heal-range channel, the drain channel's sparse rule and keying.
+		var heal_ranges := record.heal_range_pushes_at(tick)
+		if not heal_ranges.is_empty():
+			heal_range_pushes[tick] = heal_ranges
 	return {
 		"format_version": FORMAT_VERSION,
 		"seed": record.replay_seed(),
@@ -867,6 +887,7 @@ static func _to_dictionary(record: IntentRecorder) -> Dictionary:
 		"contacts": contacts,
 		"lock_pushes": lock_pushes,
 		"drain_pushes": drain_pushes,
+		"heal_range_pushes": heal_range_pushes,
 	}
 
 
@@ -1014,6 +1035,7 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 	var contacts: Dictionary = data["contacts"]
 	var lock_pushes: Dictionary = data["lock_pushes"]
 	var drain_pushes: Dictionary = data["drain_pushes"]
+	var heal_range_pushes: Dictionary = data["heal_range_pushes"]
 	for tick in range(1, int(data["tick_count"]) + 1):
 		for push: Array in camera_pushes.get(tick, []):
 			record.capture_set_camera_basis(int(push[0]), push[1] as Basis)
@@ -1026,6 +1048,9 @@ static func _from_dictionary(data: Dictionary) -> IntentRecorder:
 		# order relative to `capture_advance` as its two pushed-fact siblings above.
 		for push: Array in drain_pushes.get(tick, []):
 			record.capture_push_drain_target(int(push[0]), int(push[1]))
+		# Story 7-5b (AC 6): the heal-range channel, re-captured in the same seat as its sibling above.
+		for push: Array in heal_range_pushes.get(tick, []):
+			record.capture_push_heal_range(int(push[0]), int(push[1]))
 		for fact: Array in contacts.get(tick, []):
 			# Story 4-3a / 4-3b: the SEVEN-element row (attacker slot, attacker index, target slot,
 			# target index, attack index, dir, kind) rebuilt into the recorder's pair-shaped seam.

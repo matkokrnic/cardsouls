@@ -103,6 +103,13 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	"burst", "cast", "charge_contact", "charge_setup", "corpse_bomb",
 	"deck_size", "defense", "discard_size", "enrage", "execute", "hand_covered", "hand_discount",
 	"hand_size", "hero",
+	# Story 7-5b (AC 13/AC 18/AC 25): SEVEN new keys, FIFTY-NINE -> SIXTY-SIX, each in SORTED position --
+	# `knockback` (the hero's Wrath slide), `projectile_color` (the per-shot colour), `unit_heal_count`,
+	# `unit_heal_ticks`, `unit_knockback`, `unit_shot_owed` (the Healer's facts and every unit's slide) and
+	# `volley` (the owed Elemental Fury projectiles). The pulse radius and the per-part reversal amounts ride
+	# the existing `cast` and `reversal` keys as new elements and move no key. Same mechanism, THIRTEENTH
+	# time: this pin and test_card_observation.gd's were BOTH red before this edit.
+	"knockback",
 	# Story 6-1c (AC 2/AC 4): the THIRTY-FIRST key -- `landing`, the mode (2) landing window's
 	# remaining ticks, in SORTED position between `hero` and `lock_target`. Same mechanism, seventh
 	# time: this pin and test_card_observation.gd's were BOTH red before this edit, and the story
@@ -130,7 +137,8 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# THE `cast` KEY DID NOT MOVE THIS SET, deliberately: the four facts a cast now carries EXTEND that
 	# one key from two elements to six rather than adding four keys, so the story's cause 2 and this
 	# key-set move stay two separately measurable causes instead of one event with two symptoms.
-	"projectile_alive", "projectile_damage", "projectile_effect", "projectile_flight_ticks",
+	"projectile_alive", "projectile_color", "projectile_damage", "projectile_effect",
+	"projectile_flight_ticks",
 	"projectile_homing", "projectile_kind",
 	"projectile_source", "projectile_targets", "projectile_travelled",
 	# Story 6-5c (AC 17/AC 23): the THIRTY-EIGHTH key -- `root`, as
@@ -177,10 +185,12 @@ const EXPECTED_PLAYER_SNAPSHOT_KEYS: Array[String] = [
 	# -> one key, its three corpse siblings' rule. The full reasoning (why it cannot be derived -- the
 	# death seat overwrote the only other copy with zero) lives with the count assertion in
 	# test_card_observation.gd and at `UnitBoard._hp_at_death` -- cited, not duplicated.
-	"unit_count", "unit_hp", "unit_hp_at_death", "unit_in_reach", "unit_kind", "unit_raised_from",
+	"unit_count", "unit_heal_count", "unit_heal_ticks", "unit_hp", "unit_hp_at_death", "unit_in_reach",
+	"unit_kind", "unit_knockback", "unit_raised_from",
 	# Story 7-3: `unit_reach_second` (the second reach band's freshness, `unit_in_reach`'s twin).
-	"unit_reach_second",
+	"unit_reach_second", "unit_shot_owed",
 	"unit_swing_dedupe", "unit_targets",
+	"volley",   # Story 7-5b: see the block beside `knockback`.
 ]
 
 ## The all-zero TimingWindow snapshot — a window that was never started, and equally a window the

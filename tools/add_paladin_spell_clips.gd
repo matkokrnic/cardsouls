@@ -25,6 +25,11 @@ extends SceneTree
 ##
 ## IDEMPOTENT: a clip already present is replaced.
 ##
+## STORY 7-5b SMOKE FIX 2 (S12): THIRTY-FOUR -> THIRTY-FIVE. `NEW_CLIPS` now names `cast_wrath` (Mixamo "Standing 2H
+## Magic Area Attack 02", downloaded on the paladin), Wrath of God's windup and slam, and the two gesture clips join
+## `EXISTING_CLIPS`. MEASURED FIRST (`tools/measure_spell_clip_frames.gd`): take `mixamo_com`, 3.2667 s, Hips net
+## 0.0000 and peak 0.1269 planar -- in place and inside the ceiling, so it is added raw like the others.
+##
 ## 7-1 POLISH ROUND (operator smoke, 2026-10-04): THIRTY-TWO -> THIRTY-FOUR. `NEW_CLIPS` now names the two gesture
 ## clips -- `cast_buff` (Vampiric Aura / Frostbite, a buff gesture) and `cast_counterspell` (a sword strike into the
 ## air) -- and the three spell-cast clips this tool first added join `EXISTING_CLIPS`, asserted and left untouched.
@@ -40,11 +45,10 @@ const LIBRARY_PATH := SOURCE_DIR + "paladin_anims.res"
 ## The clip name -> loop flag matrix this run adds. test/integration/test_rig_clips.gd asserts the SAME matrix
 ## (for every clip) against the assembled scene, independently.
 const NEW_CLIPS := {
-	"cast_buff": false,
-	"cast_counterspell": false,
+	"cast_wrath": false,
 }
 
-## The thirty-two clips already assembled, asserted present and untouched by this run.
+## The thirty-four clips already assembled, asserted present and untouched by this run.
 const EXISTING_CLIPS: Array[StringName] = [
 	&"idle", &"run", &"attack", &"block", &"roll", &"death",
 	&"strafe_left", &"strafe_right", &"backpedal",
@@ -55,6 +59,7 @@ const EXISTING_CLIPS: Array[StringName] = [
 	&"counter_jump", &"counter_backflip", &"counter_slide", &"counter_throw",
 	&"cast", &"dizzy",
 	&"cast_fireball", &"cast_rocksling_lift", &"cast_rocksling_throw",
+	&"cast_buff", &"cast_counterspell",
 ]
 
 const SOURCE_TAKE := &"mixamo_com"

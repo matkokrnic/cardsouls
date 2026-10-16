@@ -30,6 +30,14 @@ const ROW_SOUND_SLOTS := {
 	&"frostbite": [&"frost_arm", &"frost_hit"],
 	&"corpse_bomb": [&"skull_launch", &"skull_hit"],
 	&"stun_root": [],
+	# Story 7-5b (AC 23): the three Deck 2 bodies' placeholder rows. The Healer's spawn sound is its own slot;
+	# its shot and the two spells reuse existing rows' sounds (the stone's, the Fireball's, the Boom's) and
+	# author none of their own.
+	&"healer": [&"summon"],
+	&"elemental_fury": [],
+	# Story 7-5b smoke fix 2 (S13): the pulse's deep boom (Boom's file) and its holy chime (the magic bells Frostbite
+	# arms with -- the one bell sound the project has).
+	&"wrath_of_god": [&"pulse_boom", &"pulse_chime"],
 }
 
 ## Story 7-3, feel pass 2: the VOICES of a row -- sounds a creature makes again and again, each played

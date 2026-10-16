@@ -7,10 +7,9 @@ extends TestCase
 ## test from two plain `Deck`s and one generator, so "two seats on one list deal exactly as before this
 ## story" is checked against the shuffle itself rather than against the code under test.
 ##
-## THE REFUSAL. Healer (normal), Elemental Fury and Wrath of God (pitch) are refused as "not available yet"
-## before anything is spent, at the Mode 1 ladder and at the staging ladder; the other half of each card,
-## and modes 2 and 3, still work (`7-5a/R29`). The fixture authors its own cards and effect ids in-test
-## (`BC/R3`): only the three effect IDS are the shipped vocabulary, because the refusal keys on them.
+## THE REFUSAL (7-5a) IS GONE (story 7-5b AC 1): Healer (normal), Elemental Fury and Wrath of God (pitch)
+## resolve and stage like any card, and the block below pins that inversion; the other half of each card,
+## and modes 2 and 3, still work. The fixture authors its own cards and effect ids in-test (`BC/R3`).
 
 const SEED := 4242
 const HAND_SIZE := 4
@@ -129,60 +128,53 @@ func test_the_per_seat_seam_rejects_an_empty_composition_for_either_seat() -> vo
 	assert_true(guarded, "inject_seat_decks must Invariant.check BOTH seats' compositions are non-empty")
 
 
-# ---------------------------------------------------------------- AC 13-15: the temporary refusal
+# ---------------------------------------------------------------- AC 13-15 (7-5a), INVERTED by 7-5b AC 1
 
-## AC 13: HEALER (normal) is refused before anything is spent -- named reason, card kept, mana kept,
-## nothing discarded, nothing resolved, no replacement owed.
-func test_healer_normal_is_refused_as_not_available_yet_with_nothing_spent() -> void:
+## STORY 7-5b (AC 1): THE TEMPORARY REFUSAL IS GONE, AND THIS BLOCK NOW PINS ITS ABSENCE rather than asserting
+## a dead rule. The three 7-5a refusal tests are inverted in place: the same fixture and the same presses,
+## and every one of them now RESOLVES (Healer) or STAGES (Elemental Fury, Wrath of God) with the ordinary
+## spend -- `not_available_yet` is heard by nobody.
+
+## AC 1: HEALER (normal) is no longer refused -- the press resolves, the mana is paid, the card is discarded
+## and its replacement is owed, exactly as any Mode 1 cast.
+func test_healer_normal_now_resolves_and_is_never_refused() -> void:
 	var ms := _refusal_match()
 	var slot := _slot_of(ms, &"t_healer")
 	var rejections := _rejections(ms.p1)
 	var resolved := _resolved(ms)
-	var before := ms.to_snapshot()
-	var hand_before := ms.p1.hand.to_array()
 	_advance(ms, _intent(slot, Enums.ModeKind.BASIC))
-	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOT_AVAILABLE_YET]],
-		"the press is refused with the named reason, once")
-	assert_eq(MatchState.REASON_NOT_AVAILABLE_YET, &"not_available_yet", "...and the token reads as it says")
-	assert_eq(ms.p1.hand.to_array(), hand_before, "the card stays in hand, in its slot")
-	assert_eq(ms.p1.mana.get_current(), START_MANA, "no mana is spent")
-	assert_eq(ms.p1.discard.size(), 0, "nothing is discarded")
-	assert_true(ms.p1.pending_draw_owed.is_empty(), "no replacement is owed")
-	assert_true(resolved.is_empty(), "no `card_cast_resolved` -- nothing resolved")
-	assert_eq(_without_tick(ms.to_snapshot()), _without_tick(before),
-		"the whole snapshot is unmoved but for the tick counter")
+	assert_true(rejections.is_empty(), "the press is not refused (no `not_available_yet`): %s" % [rejections])
+	assert_eq(resolved, [[0, &"t_healer", Enums.ModeKind.BASIC]], "the Healer press resolves")
+	assert_eq(ms.p1.mana.get_current(), START_MANA - BASIC_MANA, "its mana is paid")
+	assert_eq(ms.p1.discard.size(), 1, "the card is discarded")
+	assert_eq(ms.p1.pending_draw_owed, [slot] as Array[int], "its replacement is owed")
 
 
-## AC 13: ELEMENTAL FURY and WRATH OF GOD are refused AT STAGING -- the card stays in hand, no mana is
-## lost and nothing enters the pitch zone.
-func test_elemental_fury_and_wrath_of_god_are_refused_at_staging_with_nothing_spent() -> void:
+## AC 1: ELEMENTAL FURY and WRATH OF GOD are no longer refused AT STAGING -- the card enters the zone and
+## its staging mana is paid.
+func test_elemental_fury_and_wrath_of_god_now_stage_and_are_never_refused() -> void:
 	for card_id: StringName in [&"t_blossom", &"t_pulation"]:
 		var ms := _refusal_match()
 		var slot := _slot_of(ms, card_id)
 		var rejections := _rejections(ms.p1)
-		var before := ms.to_snapshot()
 		_advance(ms, _intent(slot, Enums.ModeKind.PITCH))
-		assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOT_AVAILABLE_YET]],
-			"%s: staging is refused with the named reason" % card_id)
-		assert_false(ms.pitch.is_staged(0), "%s: nothing enters the pitch zone" % card_id)
-		assert_eq(ms.p1.hand.to_array()[slot], card_id, "%s: the card stays in hand" % card_id)
-		assert_eq(ms.p1.mana.get_current(), START_MANA, "%s: no mana is lost" % card_id)
-		assert_eq(_without_tick(ms.to_snapshot()), _without_tick(before),
-			"%s: the whole snapshot is unmoved but for the tick counter" % card_id)
+		assert_true(rejections.is_empty(), "%s: staging is not refused: %s" % [card_id, rejections])
+		assert_eq(ms.pitch.staged_card_id(0), card_id, "%s: the card is in the pitch zone" % card_id)
+		assert_eq(ms.p1.mana.get_current(), START_MANA - PITCH_MANA, "%s: its staging mana is paid" % card_id)
 
 
-## AC 13: the refusal is heard WHATEVER the caster can afford -- a broke caster is told the half is not
-## available yet, not that it lacks mana (the gate sits above the price).
-func test_the_refusal_is_announced_ahead_of_the_price() -> void:
+## AC 1: with the gate gone, a BROKE caster hears the ordinary price refusal for the same two presses --
+## the refusal ladder is the one every other card meets.
+func test_a_broke_caster_now_hears_the_ordinary_price_refusal() -> void:
 	var ms := _refusal_match()
 	ms.p1.mana.add(-START_MANA)
 	ms.drain_signals()
 	var rejections := _rejections(ms.p1)
 	_advance(ms, _intent(_slot_of(ms, &"t_healer"), Enums.ModeKind.BASIC))
 	_advance(ms, _intent(_slot_of(ms, &"t_blossom"), Enums.ModeKind.PITCH))
-	assert_eq(rejections, [[&"card_cast", MatchState.REASON_NOT_AVAILABLE_YET],
-			[&"card_cast", MatchState.REASON_NOT_AVAILABLE_YET]],
-		"both seats answer `not_available_yet` to a caster with no mana at all")
+	assert_eq(rejections, [[&"card_cast", CastEvaluator.REASON_INSUFFICIENT_MANA],
+			[&"card_cast", CastEvaluator.REASON_INSUFFICIENT_MANA]],
+		"both presses answer `insufficient_mana` to a caster with no mana at all")
 
 
 ## AC 14: THE OTHER HALF OF EACH CARD WORKS. Healer's card still STAGES (Stoneskin), and Manablossom's and
@@ -221,37 +213,24 @@ func test_modes_two_and_three_of_a_refused_card_still_work() -> void:
 		assert_true(ms.p2.defense_window.is_running, "%s: the defence window opened" % card_id)
 
 
-## AC 15: A REFUSED CARD NEVER OVERWRITES THE LAST-RESOLVED RECORD and is never a Counterspell target --
-## the record and the reversal packet the previous card left are exactly what they were.
-func test_a_refused_card_leaves_the_last_resolved_record_and_its_packet_untouched() -> void:
+## AC 1 (inverting 7-5a AC 15): A HEALER PRESS NOW WRITES THE LAST-RESOLVED RECORD like any resolution --
+## it is the card a Counterspell would answer.
+func test_a_healer_press_now_becomes_the_last_resolved_card() -> void:
 	var ms := _refusal_match()
 	_advance(ms, _intent(_slot_of(ms, &"t_plain"), Enums.ModeKind.BASIC))
-	var record_before: Array = ms.p1.to_snapshot()["last_resolved_card"]
-	var packet_before: Array = ms.p1.to_snapshot()["reversal"]
-	assert_eq(String(record_before[0]), "t_plain", "sanity: the plain card resolved and is the record")
-	var rejections := _rejections(ms.p1)
+	assert_eq(String(ms.p1.to_snapshot()["last_resolved_card"][0]), "t_plain",
+		"sanity: the plain card resolved first and is the record")
 	_advance(ms, _intent(_slot_of(ms, &"t_healer"), Enums.ModeKind.BASIC))
-	_advance(ms, _intent(_slot_of(ms, &"t_blossom"), Enums.ModeKind.PITCH))
-	assert_eq(rejections.size(), 2, "both presses were refused")
-	assert_eq(ms.p1.to_snapshot()["last_resolved_card"], record_before,
-		"the last-resolved record still names the card resolved BEFORE the refusals")
-	assert_eq(ms.p1.to_snapshot()["reversal"], packet_before, "...and its reversal packet is unmoved")
+	assert_eq(String(ms.p1.to_snapshot()["last_resolved_card"][0]), "t_healer",
+		"the Healer press overwrites the record -- it resolved")
 
 
-## AC 14: the refusal is CONTENT-DRIVEN -- it follows the effect id through the injected maps, so the same
-## press on a card whose halves are ordinary ids is not refused. (This is also what makes it replay-stable
-## with no record channel: a replay re-injects the recorded effects and reaches the same answer.)
-func test_the_refusal_follows_the_injected_effect_id_not_the_card() -> void:
-	var ms := _refusal_match()
-	var rejections := _rejections(ms.p1)
-	_advance(ms, _intent(_slot_of(ms, &"t_plain"), Enums.ModeKind.BASIC))
-	assert_true(rejections.is_empty(), "an ordinary card's normal half is not refused")
-	var staging := _refusal_match()
-	var staging_rejections := _rejections(staging.p1)
-	_advance(staging, _intent(_slot_of(staging, &"t_plain"), Enums.ModeKind.PITCH))
-	assert_true(staging_rejections.is_empty(), "an ordinary card's pitch half stages")
-	assert_true(CardEffectResolver.is_unavailable(_effect(&"healer")), "the resolver answers for the id")
-	assert_false(CardEffectResolver.is_unavailable(_effect(&"stoneskin")), "...and not for its sibling half")
+## AC 1: THE REFUSAL TABLE IS EMPTY -- the mechanism stays (`is_unavailable` and both seats are untouched),
+## and no effect id answers it any more, the three 7-5b halves included.
+func test_the_refusal_table_is_empty_and_no_id_is_unavailable() -> void:
+	assert_eq(CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS.size(), 0, "the table is EMPTY (AC 1)")
+	for id: StringName in [&"healer", &"elemental_fury", &"wrath_of_god", &"stoneskin", &"spell_plain"]:
+		assert_false(CardEffectResolver.is_unavailable(_effect(id)), "'%s' is not a refused half" % id)
 	assert_false(CardEffectResolver.is_unavailable(null), "a missing effect entry is not a refused half")
 
 

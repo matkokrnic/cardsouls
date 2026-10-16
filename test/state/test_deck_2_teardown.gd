@@ -24,7 +24,7 @@ const RESTING := {
 	"enrage": [],
 	"lifechain": [],
 	"hand_discount": [0.0, 0.0, 0.0, 0.0],
-	"reversal": [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0],
+	"reversal": [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0, []],   # Story 7-5b: eighth element.
 }
 
 

@@ -60,6 +60,9 @@ const EXPECTED_LOOP := {
 	# two gesture clips (`cast_buff` for Vampiric Aura / Frostbite, `cast_counterspell`) are ONE-SHOTS: each plays
 	# once on an instant resolution (`AnimationController.play_gesture`) and yields to locomotion when it ends.
 	&"cast_buff": false, &"cast_counterspell": false,
+	# Story 7-5b smoke fix 2 (S12): THIRTY-FOUR -> THIRTY-FIVE. Wrath of God's `cast_wrath` is a ONE-SHOT: its playhead
+	# is seek-driven through the windup (`spell_cast_pose`, the slam on the pulse) and it follows through once.
+	&"cast_wrath": false,
 }
 
 var _failures: Array[String] = []

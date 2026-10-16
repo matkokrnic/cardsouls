@@ -267,6 +267,16 @@ const HASHED: Array[String] = [
 	# Story 7-5a (AC 47/AC 54): the packet's SEVENTH member, `amount_b` (Bloodmagic's second scalar), HASHED
 	# with its six siblings through the same ONE `reversal` key.
 	"player_state.reversal_amount_b",
+	# Story 7-5b (AC 22): the packet's EIGHTH member, the per-part amounts, HASHED through the same `reversal` key.
+	"player_state.reversal_part_amounts",
+	# Story 7-5b (AC 16): the frozen PULSE RADIUS, HASHED through the `cast` key (its seventh element) on the
+	# cast's own test -- it crosses ticks (activation to strike) and decides an outcome (who the ring takes).
+	"player_state.cast_radius",
+	# Story 7-5b (AC 13/AC 18): the PENDING VOLLEY's three members (`volley` key) and the hero KNOCKBACK
+	# SLIDE's three (`knockback` key), HASHED on the burst's test -- each crosses ticks and decides how many
+	# shots still exist and when, or the hero's velocity. UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"player_state.volley_effect_id", "player_state.volley_colors", "player_state.volley_window",
+	"player_state.knockback_window", "player_state.knockback_dir", "player_state.knockback_speed",
 	# Story 7-5a (AC 54): THE DUELIST'S STATE -- eleven members classify HASHED, on `charge_contact`'s test:
 	# each is produced by the tick, CROSSES TICKS and DECIDES AN OUTCOME (a staging count Manapulation pays
 	# on, a charge that waits for the hit or press that spends it, the per-attack Setup carry, a window
@@ -385,6 +395,14 @@ const HASHED: Array[String] = [
 	# `unit_circle_dir` keys. Plain ints, no position: where a circling unit stands is actor-owned.
 	"unit_board._attack_choice", "unit_board._reach_second_ticks", "unit_board._behavior_phase",
 	"unit_board._behavior_ticks", "unit_board._circle_dir",
+	# Story 7-5b (AC 6/AC 7/AC 20): the SIX new board members, ALL HASHED. `_heal_ticks` decides when the next
+	# heal tick closes; `_shot_owed` when an owed shot spawns; the three knockback members decide the unit's
+	# motion for the slide's length; `_heal_count` is read ACROSS the `advance()` boundary by presentation, so
+	# it takes `hero_state.stun_is_bolt`'s HASHED direction rather than `vulnerable_window`'s exclusion. They
+	# reach the hash through `unit_heal_ticks`, `unit_heal_count`, `unit_shot_owed` and the fused
+	# `unit_knockback`. UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"unit_board._heal_ticks", "unit_board._heal_count", "unit_board._shot_owed",
+	"unit_board._knockback_ticks", "unit_board._knockback_dir", "unit_board._knockback_speed",
 	# Story 4-4 (AC 14-19): the PROJECTILE BOARD and all eight of its members, ALL HASHED — so
 	# UNHASHED_CROSS_TICK_MEMBERS still stays at THREE and this story adds no fourth exclusion to
 	# argue about either. Each passes `4-3a/R17`'s test on its own: the target decides where homing
@@ -410,6 +428,9 @@ const HASHED: Array[String] = [
 	# THE ID IS A `String` VALUE, never a StringName and never a key -- `player_state.cast_card_id`'s own
 	# measured reason, carried to a second container.
 	"projectile_board._effect_ids", "projectile_board._damage",
+	# Story 7-5b (AC 13/AC 15): the per-shot COLOUR, HASHED with its siblings (`projectile_color`) -- it decides
+	# what a landing does. UNHASHED_CROSS_TICK_MEMBERS STAYS AT FOUR.
+	"projectile_board._colors",
 	"player_state.unit_dedupe", "unit_swing_dedupe._records",
 	"hero_state.action_state", "hero_state.chain_index", "hero_state.attack_index",
 	"hero_state.velocity", "hero_state.facing", "hero_state.roll_direction",
@@ -536,6 +557,11 @@ const PER_TICK: Array[String] = [
 	"match_state._counter_press_age_at_step3",
 	"match_state._defense_answerable_at_step6",
 	"match_state._charge_reach_pushed",
+	# Story 7-5b (AC 6/AC 17): the HEAL-RANGE and PULSE-RING buffers, `_contact_queue`'s shape -- filled by the
+	# pushes that precede an `advance()`, read inside it, emptied before it returns (and on a frozen tick), so
+	# no tick observes a previous tick's facts. Both are captured by their channels (`capture_push_heal_range`,
+	# `capture_push_contact`). Not cross-tick state: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
+	"match_state._heal_range_pushes", "match_state._pulse_facts",
 	# Story 6-6a review (D2): the "this `hit_landed` was blocked" fact, raised and lowered around ONE queued
 	# emission inside the drain -- false at every point a tick or a snapshot can observe. Not cross-tick
 	# state at all: UNHASHED_CROSS_TICK_MEMBERS stays at 4.
@@ -1363,8 +1389,8 @@ func test_a_saved_and_reloaded_boulder_run_replays_to_the_identical_hash() -> vo
 	assert_eq(record.tick_count(), BOULDER_TICKS, "the record carries every tick that ran")
 	# THE REAL RECORD PATH: `user://` file out, file in, replay from what came back.
 	assert_eq(RecordFile.save_record(record, BOULDER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 24,
-		"...at FORMAT_VERSION 24, read out of the FILE rather than off the constant (7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(BOULDER_RECORD_PATH), 25,
+		"...at FORMAT_VERSION 25, read out of the FILE rather than off the constant (7-5b; 24 as of 7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27; 18 as of 6-5f AC 29; 17 as of 6-5e AC 39)")
 	var result := RecordFile.load_record(BOULDER_RECORD_PATH)
 	assert_not_null(result["record"],
@@ -1786,6 +1812,9 @@ const RECORDER_METHOD_CHANNELS := {
 	"capture_set_camera_basis": "bases",
 	"capture_set_lock_direction": "lock",
 	"capture_push_drain_target": "drain_target",
+	# Story 7-5b (AC 6): the heal-range channel, both halves.
+	"capture_push_heal_range": "heal_range",
+	"replay_push_heal_ranges": "heal_range",
 	"capture_push_contact": "contacts",
 	"capture_advance": "intents",
 	"replay_seed": "seed",
@@ -1811,6 +1840,7 @@ const RECORDER_METHOD_CHANNELS := {
 ## `test_every_replay_channel_is_known_or_not_covered` below.
 const NOT_COVERED := {
 	"drain_target": "_replay never calls replay_push_drain_targets at all",
+	"heal_range": "_replay never calls replay_push_heal_ranges at all (its drop is proven in test_deck_2_bodies_replay.gd)",
 }
 
 ## The SECOND, independent MatchState — driven ONLY by the record. `drop` names one channel to
@@ -2169,8 +2199,8 @@ func test_a_saved_and_reloaded_counterspell_run_replays_to_the_identical_hash() 
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), COUNTER_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, COUNTER_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 24,
-		"...at FORMAT_VERSION 24, read out of the FILE rather than off the constant (7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(COUNTER_RECORD_PATH), 25,
+		"...at FORMAT_VERSION 25, read out of the FILE rather than off the constant (7-5b; 24 as of 7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(COUNTER_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))
@@ -2522,8 +2552,8 @@ func test_a_saved_and_reloaded_timed_and_in_flight_run_replays_to_the_identical_
 	var live_hash := CanonicalHash.of(live.to_snapshot())
 	assert_eq(record.tick_count(), TIMED_TICKS, "the record carries every tick that ran")
 	assert_eq(RecordFile.save_record(record, TIMED_RECORD_PATH), "", "the record was written to disk")
-	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 24,
-		"...at FORMAT_VERSION 24, read out of the FILE rather than off the constant (7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
+	assert_eq(_saved_format_version(TIMED_RECORD_PATH), 25,
+		"...at FORMAT_VERSION 25, read out of the FILE rather than off the constant (7-5b; 24 as of 7-5a/R16; 23 as of 7-3/R23; 22 as of 7-4/R19; 21 as of 7-9 AC 13; 20 as of 7-8/R12; 19 as of "
 		+ "6-5g AC 27)")
 	var result := RecordFile.load_record(TIMED_RECORD_PATH)
 	assert_not_null(result["record"], "...and it loads back: %s" % str(result["error"]))

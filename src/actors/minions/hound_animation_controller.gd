@@ -161,7 +161,9 @@ func on_unit_behavior(behavior_phase: int, behavior_ticks: int, circle_dir: int,
 
 ## `knobs` is the kind's PRESENTATION ROW (or null for a kind with none): authored presentation data,
 ## read here for the six knobs this rig plays by. Not a state handle -- no state object reaches a rig.
-func on_unit_motion(forward_speed: float, side_speed: float, knobs: EffectPresentationRow) -> void:
+## `_yaw_speed` (story 7-5b smoke fix 2) is the Healer's; a hound turns by its heading sectors and ignores it.
+func on_unit_motion(forward_speed: float, side_speed: float, knobs: EffectPresentationRow,
+		_yaw_speed: float = 0.0) -> void:
 	_forward_speed = forward_speed
 	_side_speed = side_speed
 	if knobs == null:

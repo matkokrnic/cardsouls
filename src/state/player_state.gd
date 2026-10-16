@@ -366,6 +366,13 @@ var cast_target_index: int = TargetingService.HERO_INDEX
 ## `root_blocks_run`/`root_blocks_roll` are stored rather than re-read from the effect one family up.
 var cast_damage: float = 0.0
 
+## Story 7-5b (AC 16, `7-5b/R8`): THE PULSE RADIUS the cast will strike with, FROZEN AT ACTIVATION -- the
+## effect's base radius plus its per-orb growth times the orbs still held after the activation orb was paid.
+## Zero for every cast that is not a pulse (their effects author no radius). It rides the `cast` key as a
+## SEVENTH element, `cast_damage`'s own reason one field over: the orbs it was measured against may have
+## moved by the strike, so it cannot be re-derived there.
+var cast_radius: float = 0.0
+
 ## ------------------------------------------------------------------------------------------
 ## STORY 6-5c: THE ROOT (AC 17, AC 18).
 ## ------------------------------------------------------------------------------------------
@@ -478,6 +485,76 @@ func clear_burst() -> void:
 
 
 ## ------------------------------------------------------------------------------------------
+## STORY 7-5b (AC 13, `7-5b/R7`): THE PENDING VOLLEY -- the burst's shape for Elemental Fury, whose shots are
+## not all alike: each carries the COLOUR of the orb it stands for, in the fixed order red, blue, green.
+## ------------------------------------------------------------------------------------------
+## The first projectile leaves at the activation; the rest are owed, `volley_interval_seconds` apart, and
+## what owes them is THIS record. Separate from the burst because a Rocksling burst and a volley can both be
+## pending at once (two different resolutions), and because the burst carries one damage for every stone
+## while a volley's shots differ by colour. Every shot aims at the OPPOSING HERO (`7-5b/R6`), so no target
+## address is stored.
+##
+## HASHED on the burst's own test: it crosses ticks and decides outcomes (how many shots still exist, when
+## each appears, what each does). One `volley` key: `[effect id, [colours still owed], remaining ticks]`.
+## `""` MEANS NO VOLLEY IS PENDING and is the single discriminator, `burst_effect_id`'s posture.
+var volley_effect_id: String = ""
+var volley_colors: Array[int] = []
+var volley_window: TimingWindow
+
+
+func has_pending_volley() -> bool:
+	return volley_effect_id != ""
+
+
+## ARM the volley with the colours still owed AFTER the activation's own first shot. An empty list clears the
+## record, `start_burst`'s non-positive rule.
+func start_volley(effect_id: StringName, colors: Array[int], interval_ticks: int) -> void:
+	if colors.is_empty():
+		clear_volley()
+		return
+	volley_effect_id = String(effect_id)
+	volley_colors = colors.duplicate()
+	volley_window.start(interval_ticks)
+
+
+## THE ONE STOP POINT for a volley -- the last shot leaving, the caster's death, a Counterspell, round end
+## and the debug reset all end it here.
+func clear_volley() -> void:
+	volley_effect_id = ""
+	volley_colors.clear()
+	volley_window.start(0)
+
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-5b (AC 18/AC 19, `7-5b/R8`): THE KNOCKBACK SLIDE -- a hero a Wrath pulse struck slides directly
+## away from the caster for the authored time at the authored distance's speed. STATE decides that it
+## happens, its direction and its speed; the actor's `move_and_slide()` is what a wall stops.
+## ------------------------------------------------------------------------------------------
+## HASHED (one `knockback` key, `[remaining ticks, direction, speed]`, gated on the window): it crosses ticks
+## and decides the hero's velocity on every one of them. The direction is a planar unit vector the runner's
+## pulse fact carried (the contact intake's `dir`, negated) -- a direction, never a position (`4-3/R2`).
+var knockback_window: TimingWindow
+var knockback_dir: Vector2 = Vector2.ZERO
+var knockback_speed: float = 0.0
+
+
+## START the slide. A non-positive duration clears it, `start_rule`'s N3 rule.
+func start_knockback(duration_ticks: int, dir: Vector2, speed: float) -> void:
+	if duration_ticks <= 0:
+		clear_knockback()
+		return
+	knockback_window.start(duration_ticks)
+	knockback_dir = dir
+	knockback_speed = speed
+
+
+func clear_knockback() -> void:
+	knockback_window.start(0)
+	knockback_dir = Vector2.ZERO
+	knockback_speed = 0.0
+
+
+## ------------------------------------------------------------------------------------------
 ## STORY 6-5e (ruling 14, AC 38/AC 40): CORPSE BOMB'S PER-ACTIVATION CONVERSION RECORD.
 ## ------------------------------------------------------------------------------------------
 ## `6-5f`'s Counterspell will need to know WHICH of this player's minions one Corpse Bomb activation turned
@@ -541,13 +618,14 @@ func is_casting() -> bool:
 ## staging locked. Widened rather than split into a second `start_pitch_cast`, so there stays exactly
 ## ONE place a cast begins and the four facts cannot be armed without it.
 func start_cast(card_id: StringName, duration_ticks: int, mode: int,
-		target_slot: int, target_index: int, damage: float) -> void:
+		target_slot: int, target_index: int, damage: float, radius: float = 0.0) -> void:
 	cast_card_id = String(card_id)
 	cast_window.start(duration_ticks)
 	cast_effect_mode = mode
 	cast_target_slot = target_slot
 	cast_target_index = target_index
 	cast_damage = damage
+	cast_radius = radius
 
 
 ## Story 6-5c (AC 5, AC 24): THE ONE STOP POINT for a cast -- the strike, every interrupt, the debug
@@ -565,6 +643,7 @@ func clear_cast() -> void:
 	cast_target_slot = TargetingService.NO_TARGET_SLOT
 	cast_target_index = TargetingService.HERO_INDEX
 	cast_damage = 0.0
+	cast_radius = 0.0
 
 
 ## Story 6-5c (AC 17, AC 19): ARM (or RESTART, choice A) the root. `duration_ticks` is the stun plus
@@ -715,6 +794,9 @@ func _init(queue: SignalQueue) -> void:
 	root_window = TimingWindow.new()
 	# Story 6-5e: the burst interval clock, built beside the cast window whose strike arms it.
 	burst_window = TimingWindow.new()
+	# Story 7-5b: the volley interval and the knockback slide.
+	volley_window = TimingWindow.new()
+	knockback_window = TimingWindow.new()
 	for _kind in RULE_COUNT:
 		rule_windows.append(TimingWindow.new())
 		rule_a.append(0.0)
@@ -1041,6 +1123,18 @@ const REVERSAL_LIFECHAIN := 18
 const REVERSAL_BLOODMAGIC := 19
 const REVERSAL_MANABLOSSOM := 20
 const REVERSAL_MANAPULATION := 21
+## STORY 7-5b (AC 5/AC 8/AC 14/AC 22, `7-5b/R4`): THREE MORE KINDS, the three halves this story builds, and
+## all three are PART-LIST kinds (the `6-5g` vocabulary below), never a new column shape:
+##   REVERSAL_HEALER          `PART_SUMMONED` per Healer the cast put on the board (removed, no corpse), then
+##                            each of THOSE Healers' shots as a stone's: `PART_PROJECTILE` (in flight:
+##                            removed) and `PART_DAMAGE` (landed: refunded).
+##   REVERSAL_ELEMENTAL_FURY  `PART_PROJECTILE` per projectile launched, `PART_VOLLEY` while projectiles are
+##                            still owed, `PART_DAMAGE` (red), `PART_SLOW` (blue) and `PART_HEAL` (green).
+##   REVERSAL_WRATH_OF_GOD    a CAST kind (opened at the press, interruptible in its windup), then one
+##                            `PART_DAMAGE` per body the pulse hurt -- hero and units alike.
+const REVERSAL_HEALER := 22
+const REVERSAL_ELEMENTAL_FURY := 23
+const REVERSAL_WRATH_OF_GOD := 24
 
 ## ------------------------------------------------------------------------------------------
 ## STORY 6-5g (AC 3/AC 10/AC 26, OPEN QUESTION 1 RESOLVED): THE SEVEN NEW KINDS' OWN READING OF THE FIVE
@@ -1090,6 +1184,13 @@ const PART_STUN := 5          ## this resolution stunned and rooted a hero; no a
 ## started the slow -- no address, `b` = the STRUCK slot. Lets the reversal arm cancel only the slow ITS OWN
 ## resolution placed, rather than whichever slow happens to be running on the other player's one rule slot.
 const PART_SLOW := 6
+## STORY 7-5b: three more tags. `PART_SUMMONED` -- a unit this resolution put on the board; address = its
+## board index, `b` = the owner's slot. `PART_VOLLEY` -- this resolution armed an Elemental Fury volley; no
+## address. `PART_HEAL` -- this resolution healed its own caster (a green landing); no address, `b` = the
+## caster's slot, the amount in that part's own `reversal_part_amounts` element.
+const PART_SUMMONED := 7
+const PART_VOLLEY := 8
+const PART_HEAL := 9
 
 ## The resting values of a part that addresses nothing / belongs to no slot. `-1`, `NO_RAISED_RECORD`'s own
 ## posture: not a valid index and not a valid slot, so neither collides with a real one.
@@ -1137,6 +1238,14 @@ var reversal_amount: float = 0.0
 ## Zero for every other kind, so it is inert wherever it is not written. It rides the `reversal` snapshot
 ## key as a SEVENTH element (the `cast` key's 2 -> 6 widening precedent: the key count does not move).
 var reversal_amount_b: float = 0.0
+## STORY 7-5b (AC 22): A FIFTH PER-ELEMENT COLUMN, a float per part -- the hp THAT part actually removed (or,
+## for `PART_HEAL`, actually healed). Wrath is the first resolution that damages MORE THAN ONE body, so the
+## one scalar `amount` (a sum) can no longer say what each body gets back. `_note_reversal_damage` now writes
+## both: the per-part figure here and the sum in `reversal_amount`, which every `6-5g` arm keeps reading
+## unchanged. Index-aligned with the four columns above when a part list is written, empty for every kind
+## that writes whole columns. It rides the `reversal` key as an EIGHTH element (the `cast` widening
+## precedent: the key count does not move).
+var reversal_part_amounts: Array[float] = []
 
 ## The resting value of `reversal_b` -- a consumed corpse that raised nothing (an unresolvable kind; see
 ## `MatchState._apply_raise_dead`). `-1`, `UnitBoard.NO_RAISE_SOURCE`'s own posture: not a valid board index,
@@ -1185,6 +1294,13 @@ func record_reversal(kind: int, indices: Array[int], a: Array[int], b: Array[int
 	reversal_flags = flags.duplicate()
 	reversal_amount = amount
 	reversal_amount_b = amount_b
+	# Story 7-5b: a record written with a TAG column (`a`) is a part list, so it gets one zero amount per part,
+	# aligned for the parts `reversal_note_part` appends later (Corpse Bomb writes its converted parts this
+	# way); a record without one carries no per-part amounts at all -- see `reversal_part_amounts`.
+	reversal_part_amounts.clear()
+	if not a.is_empty():
+		reversal_part_amounts.resize(indices.size())
+		reversal_part_amounts.fill(0.0)
 
 
 ## Story 7-5a (AC 46, `7-5a/R11`): THE CARD IN HAND SLOT `hand_slot` HAS LEFT THE HAND -- drop it from a
@@ -1231,6 +1347,8 @@ func reversal_note_part(kind: int, tag: int, address: int = NO_REVERSAL_ADDRESS,
 	reversal_a.append(tag)
 	reversal_b.append(slot)
 	reversal_flags.append(flag)
+	# Story 7-5b: the per-part amount starts at zero and is accumulated by `reversal_add_part_amount`.
+	reversal_part_amounts.append(0.0)
 
 
 ## The hp sum's own adder. Separate from `reversal_note_part` because the two are independent facts about one
@@ -1240,6 +1358,33 @@ func reversal_add_amount(kind: int, removed: float) -> void:
 	if kind == REVERSAL_NONE or reversal_kind != kind:
 		return
 	reversal_amount += removed
+
+
+## Story 7-5b (AC 22): add `amount` to the part tagged `tag` at `address` -- the per-part twin of the adder
+## above. A packet that is not `kind`, or holds no such part, records nothing.
+func reversal_add_part_amount(kind: int, tag: int, address: int, amount: float) -> void:
+	if kind == REVERSAL_NONE or reversal_kind != kind:
+		return
+	for i in reversal_indices.size():
+		if reversal_a[i] == tag and reversal_indices[i] == address and i < reversal_part_amounts.size():
+			reversal_part_amounts[i] += amount
+			return
+
+
+## Story 7-5b review fix (P1): the per-part twin that REPLACES rather than accumulates -- for a part whose amount
+## is a fact about the world and not a sum (a placed slow's expiry tick). Same guards as the adder.
+func reversal_set_part_amount(kind: int, tag: int, address: int, amount: float) -> void:
+	if kind == REVERSAL_NONE or reversal_kind != kind:
+		return
+	for i in reversal_indices.size():
+		if reversal_a[i] == tag and reversal_indices[i] == address and i < reversal_part_amounts.size():
+			reversal_part_amounts[i] = amount
+			return
+
+
+## Story 7-5b: the per-part amount of element `i`, or 0.0 for a packet written as whole columns.
+func reversal_part_amount_at(i: int) -> float:
+	return reversal_part_amounts[i] if i >= 0 and i < reversal_part_amounts.size() else 0.0
 
 
 ## Is there already a part with this tag at this address? The `PART_DAMAGE` element's own guard (append once,
@@ -1266,6 +1411,7 @@ func clear_reversal() -> void:
 	reversal_flags.clear()
 	reversal_amount = 0.0
 	reversal_amount_b = 0.0
+	reversal_part_amounts.clear()
 
 
 ## Story 6-5a (REVIEW B1, operator ruling): the last-resolved-card record is CLEARED by round end and by
@@ -1383,6 +1529,8 @@ const SNAPSHOT_ID_PATHS: Array[String] = [
 	#
 	# THE FIRST FAMILY MEMBER, and the reason the `[]` convention above exists at all.
 	"/projectile_effect[]",
+	# Story 7-5b (AC 13): the pending volley's EFFECT id -- `/burst[0]`'s twin.
+	"/volley[0]",
 ]
 
 
@@ -1684,6 +1832,13 @@ func to_snapshot() -> Dictionary:
 		"unit_behavior_phase": units.behavior_phase_snapshot(),
 		"unit_behavior_ticks": units.behavior_ticks_snapshot(),
 		"unit_circle_dir": units.circle_dir_snapshot(),
+		# STORY 7-5b (AC 6/AC 7/AC 20): FOUR board keys -- the Healer's heal clock, heal count and owed shot,
+		# and the knockback slide (fused). Each crosses ticks and decides an outcome (`4-3a/R17`); a kind that
+		# authors none of it holds the resting value (0, 0, -1, [0, (0, 0), 0.0]).
+		"unit_heal_ticks": units.heal_ticks_snapshot(),
+		"unit_heal_count": units.heal_count_snapshot(),
+		"unit_shot_owed": units.shot_owed_snapshot(),
+		"unit_knockback": units.knockback_snapshot(),
 		# Story 4-4 (AC 14-19): the PROJECTILE BOARD joins the hash — SEVEN keys, on the split
 		# `UnitBoard` already established (the target FUSES its two ints because a target is one fact
 		# in two halves; the rest are independent facts that fusing would hide).
@@ -1719,6 +1874,8 @@ func to_snapshot() -> Dictionary:
 		# 38 -> 40. The `cast` extension is a separate cause and moves no key (see that key).
 		"projectile_effect": projectiles.effect_id_snapshot(),
 		"projectile_damage": projectiles.damage_snapshot(),
+		# STORY 7-5b (AC 13): the per-shot COLOUR, `NO_COLOR` for every shot that is not Elemental Fury's.
+		"projectile_color": projectiles.color_snapshot(),
 		# Story 5-2 (AC 21/AC 22, `5-2/R9`): the ONE new key this story adds -- the ACTIVE
 		# TELEGRAPH, as `[colour, remaining_ticks]`. The `lock_target` FUSION verbatim and for the
 		# same reason: a telegraph is ONE fact in two halves (what colour, how much longer), and
@@ -1822,11 +1979,13 @@ func to_snapshot() -> Dictionary:
 		# the Fireball is aimed (AC 24), and the damage decides what it hits for (AC 7). None is
 		# recomputable inside the tick that reads it -- the staging that froze the damage and the lock
 		# reading that froze the target are both ticks in the past, and the lock itself may have moved.
+		# STORY 7-5b (AC 16): A SEVENTH ELEMENT, the frozen pulse radius (`cast_radius`). The key count does not
+		# move on this cause; the array's arity does. Resting `0.0`.
 		"cast": [cast_card_id, cast_window.remaining_ticks(), cast_effect_mode,
-					cast_target_slot, cast_target_index, cast_damage] \
+					cast_target_slot, cast_target_index, cast_damage, cast_radius] \
 				if is_casting() \
 				else ["", 0, NO_CAST_EFFECT_MODE, TargetingService.NO_TARGET_SLOT,
-					TargetingService.HERO_INDEX, 0.0],
+					TargetingService.HERO_INDEX, 0.0, 0.0],
 		# Story 6-5e (AC 11a/AC 38, `6-5e/R21`/G2, Golden Prediction cause 1a): THE PENDING BURST, as
 		# `[effect id, stones remaining, remaining ticks, target slot, target index, per-stone damage]`.
 		# The `cast` key's SIX-ELEMENT FUSION verbatim and for its reason: a burst is ONE fact in six
@@ -1932,11 +2091,13 @@ func to_snapshot() -> Dictionary:
 		# from `MatchState._boulder_card_id` instead of riding here.
 		# STORY 7-5a (AC 47): A SEVENTH ELEMENT, `amount_b` -- see `reversal_amount_b`. The key count does not
 		# move on this cause; the array's arity does. Resting `0.0`.
+		# STORY 7-5b (AC 22): AN EIGHTH ELEMENT, the per-part amounts (`reversal_part_amounts`). The key count
+		# does not move on this cause; the array's arity does. Resting `[]`.
 		"reversal": [reversal_kind, reversal_indices.duplicate(), reversal_a.duplicate(),
 					reversal_b.duplicate(), reversal_flags.duplicate(), reversal_amount,
-					reversal_amount_b] \
+					reversal_amount_b, reversal_part_amounts.duplicate()] \
 				if reversal_kind != REVERSAL_NONE \
-				else [REVERSAL_NONE, [], [], [], [], 0.0, 0.0],
+				else [REVERSAL_NONE, [], [], [], [], 0.0, 0.0, []],
 		# STORY 7-5a (AC 54, Golden Prediction Part B): EIGHT NEW KEYS, one per new hashed per-player fact.
 		# Each CROSSES TICKS AND DECIDES AN OUTCOME (`4-3a/R17`) and none is recomputable inside the tick
 		# that reads it -- the cast that added a charge or opened a window is ticks in the past:
@@ -1962,6 +2123,15 @@ func to_snapshot() -> Dictionary:
 		"enrage": _enrage_snapshot(),
 		"lifechain": lifechain_ticks.duplicate(),
 		"hand_discount": hand.discounts_snapshot(),
+		# STORY 7-5b (AC 13/AC 18/AC 25): TWO NEW KEYS. `volley` -- `[effect id, [colours still owed],
+		# remaining ticks]`, gated on `has_pending_volley()` (the `burst` gate's reason: the launch tick reads
+		# the stopped window and a shot is still owed). `knockback` -- `[remaining ticks, direction, speed]`,
+		# gated on the window. Each crosses ticks and decides an outcome (`4-3a/R17`). The volley's id is an
+		# EFFECT id held as a `String` VALUE, declared in `SNAPSHOT_ID_PATHS`.
+		"volley": [volley_effect_id, volley_colors.duplicate(), volley_window.remaining_ticks()] \
+				if has_pending_volley() else ["", [], 0],
+		"knockback": [knockback_window.remaining_ticks(), knockback_dir, knockback_speed] \
+				if knockback_window.is_running else [0, Vector2.ZERO, 0.0],
 	}
 
 

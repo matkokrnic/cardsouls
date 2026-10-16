@@ -361,8 +361,12 @@ func test_every_board_bound_guard_is_wired_to_that_predicate() -> void:
 		assert_true(line.contains("has_index("),
 			"every bound guard consults the public predicate rather than re-deriving the bound: %s"
 					% line.strip_edges())
-	assert_eq(checks, 27,
-		"TWENTY-SEVEN bound guards ship as of story 7-3, which adds NINE -- the behaviour accessors and "
+	assert_eq(checks, 36,
+		"THIRTY-SIX bound guards ship as of story 7-5b, which adds NINE -- the Healer and knockback "
+		+ "accessors and mutators (heal_ticks_at, heal_count_at, shot_owed_at, advance_heal_clock_at, "
+		+ "close_heal_tick_at, owe_shot_at, set_shot_owed_at, start_knockback_at, knockback_ticks_at), each "
+		+ "the STRICT kind; `knockback_velocity_at` is the lenient runner read and carries none. "
+		+ "TWENTY-SEVEN bound guards shipped as of story 7-3, which adds NINE -- the behaviour accessors and "
 		+ "mutators (attack_choice_at, is_in_second_reach_at, mark_second_reach_at, behavior_phase_at, "
 		+ "behavior_ticks_at, circle_dir_at, set_behavior_at, set_circle_dir_at, and the feel pass's "
 		+ "turn_circle_at), each the STRICT kind "

@@ -99,13 +99,14 @@ static func red_land_height(head_top_y: float, defender_root_y: float) -> float:
 
 ## The camera shake's offset in the camera's own (right, up) plane, `elapsed` ticks into a shake of `total`
 ## ticks. Deterministic (no RNG): two incommensurate sines, decaying linearly to zero at the end.
-static func shake_offset(elapsed: int, total: int) -> Vector2:
+## Story 7-5b smoke fix 2 (S13): of `amplitude` -- this file's own by default; the Wrath pulse passes its row's.
+static func shake_offset(elapsed: int, total: int, amplitude: float = SHAKE_AMPLITUDE) -> Vector2:
 	if total <= 0 or elapsed >= total or elapsed < 0:
 		return Vector2.ZERO
 	var t := float(elapsed) / TimingWindow.TICK_HZ
 	var decay := 1.0 - float(elapsed) / float(total)
 	var w := TAU * SHAKE_FREQUENCY_HZ
-	return Vector2(sin(w * t), cos(w * 1.37 * t)) * SHAKE_AMPLITUDE * decay
+	return Vector2(sin(w * t), cos(w * 1.37 * t)) * amplitude * decay
 
 
 ## Seconds to whole ticks, at least one for any positive duration (the presentation twin of

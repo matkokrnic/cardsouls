@@ -170,6 +170,14 @@ const CONTACT_CHARGE_REACH_OUTSIDE := 3
 ## moves, no capture channel is added, and it is tapped and replayed like every other fact.
 const CONTACT_REACH_PROBE_SECOND := 4
 
+## Story 7-5b (AC 16/AC 17, `7-5b` Dev Notes "the reach-probe precedent"): THE PULSE-RING FACT -- "this
+## opposing body is inside the caster's frozen Wrath radius, at this planar bearing". Gathered by the runner
+## for a hero with a pending pulse, pushed through the ONE contact intake (opposing-slot facts only; the
+## self-contact refusal is untouched), and LATCHED per tick into `_pulse_facts` rather than queued -- the
+## charge-reach split's reason: the pulse resolves at step 6c and the queue drains at step 4. A new VALUE of
+## the existing `kind` element, so the recorded contact row's shape does not change.
+const CONTACT_PULSE := 5
+
 ## Story 5-2 (AC 17): the resting value of the per-slot charge-reach latch -- NO FACT HAS BEEN
 ## PUSHED. Deliberately a THIRD value rather than a default of "outside": a headless MatchState with
 ## no runner, and the tick a chargeup BEGINS (the runner gathers before advance(), so the entry tick
@@ -303,6 +311,21 @@ var _drain_targets: Array[int] = [NO_DRAIN_TARGET, NO_DRAIN_TARGET]
 ## sentinel, because a board index is never negative (`UnitBoard.has_index`) -- so it collides with
 ## nothing and needs no separate "was anything pushed" flag.
 const NO_DRAIN_TARGET := -1
+
+## Story 7-5b (AC 6, `7-5b/R17`): THIS TICK'S HEAL-RANGE FACTS, per slot -- the board indices of that slot's
+## units the runner reports within their kind's authored `heal_range` of their OWNER this tick. The NEW
+## SAME-SIDE intake (`push_heal_range`), on the `push_drain_target` precedent: an answer the runner computes
+## from actor positions this layer may not read, captured by its own record channel. Never a same-slot
+## exemption in `push_contact` (`4-3a/R21b` stays strict).
+##
+## PER-TICK, `_contact_queue`'s classification: filled by the pushes that precede an `advance()`, read by the
+## heal seat inside it and emptied before it returns, so no tick observes a previous tick's facts -- a unit
+## that was in range last tick and is not reported this tick is out of range.
+var _heal_range_pushes: Array[Array] = [[], []]
+
+## Story 7-5b (AC 17): THIS TICK'S PULSE-RING FACTS, as the contact dictionaries `push_contact` builds, in push
+## order. PER-TICK on the same classification as `_heal_range_pushes`, emptied before `advance()` returns.
+var _pulse_facts: Array[Dictionary] = []
 
 ## Story 1-5 (B7): queued contact facts, drained deterministically in advance() step 4.
 ## Input-like PUSHED facts, same category as InputIntent and the camera basis: plain
@@ -698,6 +721,9 @@ func advance(intents: Array[InputIntent]) -> void:
 	if _round_over:
 		p1.hero.velocity = Vector3.ZERO
 		p2.hero.velocity = Vector3.ZERO
+		# Story 7-5b: the two per-tick fact buffers are emptied on a frozen tick too, so nothing pushed
+		# during the freeze is read by the next live tick.
+		_clear_per_tick_facts()
 		return
 	# 1c. Story 4-6 (AC 3/AC 9/AC 10): THE LOCK SEAT -- ingest each slot's retarget RESULT off its
 	#    intent, then re-validate the standing lock. Seated HERE, after the step-1b freeze and
@@ -780,6 +806,13 @@ func advance(intents: Array[InputIntent]) -> void:
 	# pre-injection MatchState can start no burst, because the only seat that starts one is a cast strike.
 	p1.burst_window.tick()
 	p2.burst_window.tick()
+	# Story 7-5b (AC 13/AC 18): the VOLLEY interval and the hero KNOCKBACK slide count down here, beside the
+	# burst window and on its idiom -- ticked in one place, read at the step-6d volley seat and at
+	# `_resolve_movement` respectively. Both are cleared outright at round end and at the reset.
+	p1.volley_window.tick()
+	p2.volley_window.tick()
+	p1.knockback_window.tick()
+	p2.knockback_window.tick()
 	# Story 6-5a (AC 8): the TIMED-RULE SEAT counts down HERE, beside every other D4 window, on the
 	# identical idiom -- ticked in one place, read at the seats that apply each rule. A round-over tick
 	# returns at step 1b and never reaches this line, so a running buff freezes with the round.
@@ -896,6 +929,10 @@ func advance(intents: Array[InputIntent]) -> void:
 		_regen_stamina(p1, p1_actually_running)
 		_regen_stamina(p2, p2_actually_running)
 		_generate_mana(confirmed_hits)
+		# Story 7-5b (AC 6): THE HEAL SEAT, beside the other resource faucets and after step 4, so a Healer
+		# killed by this tick's contacts heals nothing. Fixed P1 -> P2.
+		_advance_healers(p1, 0)
+		_advance_healers(p2, 1)
 	# 6. Card / economy        the DECK DEAL seat (story 3-3, AC 7/AC 9) — the ONE seat, serving
 	#    BOTH occasions: match start (armed by the injection seam) and the debug reset (armed at
 	#    step 1 THIS tick, so a reset's reshuffle lands on the reset tick, not one later). Seated
@@ -984,6 +1021,14 @@ func advance(intents: Array[InputIntent]) -> void:
 	#    FIXED P1 -> P2, like every other per-player loop in this function.
 	_advance_bursts(p1)
 	_advance_bursts(p2)
+	# 6e. Story 7-5b (AC 7/AC 13): THE VOLLEY AND HEALER-SHOT SEATS -- the burst seat's two siblings, seated
+	# directly after it for its reasons: after the step-6 presses (an Elemental Fury activated and a chargeup
+	# begun THIS tick are already scheduled, so a zero delay fires on that very tick) and after 6c (a Wrath
+	# pulse that killed a Healer this tick has already done so). Fixed P1 -> P2.
+	_advance_volleys(p1, 0)
+	_advance_volleys(p2, 1)
+	_advance_healer_shots(p1, 0)
+	_advance_healer_shots(p2, 1)
 	# 7. Board update          the SHARED THROTTLED TARGETING TICK (story 4-2, AC 7, `4-2/R15`).
 	#    This line replaces the literal `[E4 minion/totem throttled-tick seam]` comment that
 	#    reserved the seat from E4 planning onward — the seat is now filled by the thing it was
@@ -1011,6 +1056,15 @@ func advance(intents: Array[InputIntent]) -> void:
 	_update_unit_targets()
 	# 8. Resolution check
 	_check_resolution()
+	# Story 7-5b: this tick's pushed heal-range and pulse facts have been read; empty them.
+	_clear_per_tick_facts()
+
+
+## Story 7-5b: empty the two per-tick fact buffers (`_heal_range_pushes`, `_pulse_facts`).
+func _clear_per_tick_facts() -> void:
+	_heal_range_pushes[0].clear()
+	_heal_range_pushes[1].clear()
+	_pulse_facts.clear()
 
 
 ## X3 hot-reload seam (story 1-1): the runner passes the (re)loaded BalanceConfig here.
@@ -1443,6 +1497,10 @@ func _rebuild_projectile_mirror() -> void:
 ## is read off the cast's OWN mode-resolved effect at the strike (`_cast_effect_of`), never through an
 ## effect-id lookup, so two entries disagreeing on it cannot produce an ambiguous read. If a later story
 ## routes another field through an effect-id lookup, it belongs in this comparison in the same edit.
+## Story 7-5b smoke fix 1 (S9) is such a story: the block rung reads `blocked_damage_multiplier` through
+## `_shot_effect_of`, so it is compared HERE, in this body, where the AC 1a guard scans for it.
+## Story 7-5b smoke fix 2 (S14): the four Stars-of-Ruin fields are MIRRORED (`_mirror_one_effect`), so two entries
+## disagreeing on them would decide one id's flight silently -- compared here too.
 ## STATIC, so the AC 1a test can ask the shipped predicate directly rather than reimplementing it: an
 ## `Invariant.check` is `push_error` + `assert` and the assert is stripped in an exported build, so the
 ## honest thing to pin is the DISCRIMINATOR, not the crash.
@@ -1454,7 +1512,26 @@ static func _mirrored_values_agree(a: CardEffect, b: CardEffect) -> bool:
 			and is_equal_approx(a.acceleration_per_second_squared, b.acceleration_per_second_squared) \
 			and is_equal_approx(a.max_speed, b.max_speed) \
 			and is_equal_approx(a.travel_budget, b.travel_budget) \
-			and a.boulders_per_cast == b.boulders_per_cast
+			and a.boulders_per_cast == b.boulders_per_cast \
+			and is_equal_approx(a.blocked_damage_multiplier, b.blocked_damage_multiplier) \
+			and is_equal_approx(a.fan_arc_degrees, b.fan_arc_degrees) \
+			and is_equal_approx(a.launch_pitch_degrees, b.launch_pitch_degrees) \
+			and is_equal_approx(a.launch_height, b.launch_height) \
+			and is_equal_approx(a.bloom_turn_rate_degrees_per_second, b.bloom_turn_rate_degrees_per_second) \
+			and _effect_id_lookup_values_agree(a, b)
+
+
+## Story 7-5b: THE FIELDS 7-5b ROUTES THROUGH AN EFFECT-ID LOOKUP, added to the comparison as the paragraph
+## above instructs. The Healer's shot reads `damage_amount` off `_effects_by_effect_id` at its spawn, an
+## Elemental Fury volley reads `damage_amount` and `volley_interval_seconds` at each later launch, and a
+## landed colour reads `slow_*` and `heal_amount` -- so two entries disagreeing on any of them would be the
+## same silent ambiguity the flight fields are refused for.
+static func _effect_id_lookup_values_agree(a: CardEffect, b: CardEffect) -> bool:
+	return is_equal_approx(a.damage_amount, b.damage_amount) \
+			and is_equal_approx(a.heal_amount, b.heal_amount) \
+			and is_equal_approx(a.slow_speed_multiplier, b.slow_speed_multiplier) \
+			and is_equal_approx(a.slow_duration_seconds, b.slow_duration_seconds) \
+			and is_equal_approx(a.volley_interval_seconds, b.volley_interval_seconds)
 
 
 ## One effect's flat flight fields mirrored into a real `ProjectileProfile`. A null effect contributes
@@ -1469,6 +1546,11 @@ func _mirror_one_effect(effect: CardEffect) -> void:
 	profile.acceleration_per_second_squared = effect.acceleration_per_second_squared
 	profile.max_speed = effect.max_speed
 	profile.travel_budget = effect.travel_budget
+	# Story 7-5b smoke fix 2 (S14): the four actor-side flight fields, mirrored for the runner (no state reads them).
+	profile.fan_arc_degrees = effect.fan_arc_degrees
+	profile.launch_pitch_degrees = effect.launch_pitch_degrees
+	profile.launch_height = effect.launch_height
+	profile.bloom_turn_rate_degrees_per_second = effect.bloom_turn_rate_degrees_per_second
 	_effect_projectiles[effect.effect_id] = profile
 	_effect_projectile_delay_ticks[effect.effect_id] = \
 			TimingWindow.seconds_to_ticks(effect.acceleration_delay_seconds)
@@ -1553,8 +1635,9 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		("contact attacker index must be >= -1 (a unit or the hero) or <= %d (a projectile), got %d")
 				% [PROJECTILE_INDEX_BASE, attacker_index])
 	Invariant.check(kind == CONTACT_STRIKE or kind == CONTACT_REACH_PROBE
-			or kind == CONTACT_REACH_PROBE_SECOND or is_charge_reach_kind(kind),
-		"contact kind must be CONTACT_STRIKE, a REACH PROBE or a CHARGE-REACH kind, got %d"
+			or kind == CONTACT_REACH_PROBE_SECOND or is_charge_reach_kind(kind)
+			or kind == CONTACT_PULSE,
+		"contact kind must be CONTACT_STRIKE, a REACH PROBE, a CHARGE-REACH kind or CONTACT_PULSE, got %d"
 				% kind)
 	Invariant.check(target.size() == 2,
 		"contact target must be a [slot, index] pair, got %d element(s)" % target.size())
@@ -1595,6 +1678,16 @@ func push_contact(attacker: Array[int], target: Array[int], attack_index: int,
 		# direction -- re-reads the previous tick's fact (OQ5, accepted).
 		var charging: PlayerState = p1 if attacker_slot == 0 else p2
 		_charge_reach[attacker_slot] = kind if charging.is_contact_window_open() else REACH_UNKNOWN
+		return
+	# Story 7-5b (AC 17): a PULSE-RING fact latches for this tick's strike seat instead of queueing -- see
+	# `CONTACT_PULSE`. Validated above exactly as strictly as a strike.
+	if kind == CONTACT_PULSE:
+		_pulse_facts.append({
+			"attacker": attacker_slot,
+			"target": target_slot,
+			"target_index": target_index,
+			"dir": target_to_attacker,
+		})
 		return
 	_contact_queue.append({
 		"attacker": attacker_slot,
@@ -1658,6 +1751,16 @@ func set_lock_direction(slot: int, direction: Vector2) -> void:
 ## no living minion in front of it, which is the honest answer and the resting value.
 func push_drain_target(slot: int, index: int) -> void:
 	_drain_targets[slot] = index
+
+
+## Runner step-2 push (story 7-5b, AC 6, `7-5b/R17`): the unit at board `index` of `slot` is within its
+## kind's authored heal range of its OWNER this tick. One push per in-range unit per tick; a unit not pushed
+## is out of range. The `push_drain_target` seam family's fifth member and its shape verbatim -- a runner
+## answer computed from actor positions, captured by its own record channel (`capture_push_heal_range`),
+## consumed inside `advance()` by exactly one seat (`_advance_healers`). SAME-SIDE by construction: the slot
+## names the board the unit is on and its owner both, so nothing about the self-contact invariant moves.
+func push_heal_range(slot: int, index: int) -> void:
+	_heal_range_pushes[slot].append(index)
 
 
 ## Emit all queued signals. Called by the runner AFTER advance() returns (D5).
@@ -3050,11 +3153,24 @@ func _resolve_contacts() -> Array[int]:
 			# A TOTEM'S SHOT KEEPS THE MULTIPLIER (AC 36's list names it explicitly, and `6-5d/R17` is why
 			# it earned its own new test: no shipped test exercised a projectile under a buff or a block, so
 			# `existing tests pass unchanged` would have proved nothing here).
+			#
+			# STORY 7-5b SMOKE FIX 1 (S9, superseding `7-5b/R4`/`R23` for the Healer shot only): A HERO-SOURCED
+			# SHOT WHOSE EFFECT AUTHORS A `blocked_damage_multiplier` TAKES THAT SHARE through a held block -- the
+			# effect's own number, Wrath's field, never `BalanceConfig.block_damage_multiplier`. The Healer's shot
+			# authors 1/3 (3.0 -> 1.0); every other hero-sourced shot authors the neutral 0.0 and stays exempt, so
+			# Fireball, Elemental Fury and the skulls are untouched. The hit IS blocked then -- the block did
+			# something -- so `blocked` is set, as for any other blocked hit. Deflect and i-frames are the rungs
+			# above and are unchanged.
 			if not (is_projectile_index(attacker_index) \
 					and attacker.projectiles.is_hero_sourced_at(
 						projectile_index_of(attacker_index))):
 				damage *= balance.block_damage_multiplier
 				blocked = true
+			else:
+				var blocked_effect: CardEffect = _shot_effect_of(attacker, attacker_index)
+				if blocked_effect != null and blocked_effect.blocked_damage_multiplier > 0.0:
+					damage *= blocked_effect.blocked_damage_multiplier
+					blocked = true
 		# Story 6-5a (AC 9): THE DAMAGE FUNNEL, seated AFTER the block multiplier.
 		#
 		# 6-5a REVIEW N1: the dev pass said "and never reordered with it", which is a claim no test can
@@ -3097,6 +3213,9 @@ func _resolve_contacts() -> Array[int]:
 			_note_reversal_damage(attacker,
 					_reversal_kind_of_shot(attacker, projectile_index_of(attacker_index)),
 					int(fact["target"]), TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
+			# Story 7-5b (AC 15): an Elemental Fury projectile's COLOUR acts here, on the landing path only --
+			# the deflect and i-frame rungs `continue`d above, so a projectile that does not land does nothing.
+			_apply_fury_landing(attacker, projectile_index_of(attacker_index), target, int(fact["target"]))
 		# Story 6-5a (R5): FROSTBITE'S TRIGGER SEAT -- a CONFIRMED hero melee hit on the enemy hero,
 		# BLOCKED INCLUDED (blocked is confirmed, `1-8`). The deflect path `continue`d above and the
 		# i-frame drop earlier, so neither reaches this line; unit targets branched off before the
@@ -4611,8 +4730,11 @@ func _resolve_basic_cast(player: PlayerState, hand_slot: int, slot: int) -> void
 	var cast_effect: CardEffect = _card_effects.get(played)
 	if CardEffectResolver.starts_cast(cast_effect, flags):
 		var cast_address := _captured_target_address(player)
+		# Story 7-5b (AC 16): the radius is frozen at this press too (Mode 1 pays no orb, so "after paying" is
+		# the orbs held now); zero for every cast that authors no radius.
 		player.start_cast(played, TimingWindow.seconds_to_ticks(cast_effect.cast_seconds),
-				Enums.ModeKind.BASIC, cast_address[0], cast_address[1], 0.0)
+				Enums.ModeKind.BASIC, cast_address[0], cast_address[1], 0.0,
+				_cast_radius(cast_effect, orbs_held))
 		# STORY 6-5g (AC 9/AC 10): the Class 2 reversal record opens HERE, in the packet the
 		# `record_resolved_card` above just cleared. See `_record_cast_reversal`.
 		_record_cast_reversal(player, cast_effect)
@@ -4753,8 +4875,19 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 				# a cast that put nothing on the board has nothing to undo, so the packet stays at
 				# `REVERSAL_NONE` and the gate refuses a Counterspell against it (`6-5f/R11`'s fourth
 				# clause, reached by construction rather than by a check).
-				player.record_reversal(PlayerState.REVERSAL_VANGUARD, summoned,
-						[] as Array[int], [] as Array[int], [] as Array[bool], 0.0)
+				# STORY 7-5b (AC 5/AC 8, `7-5b/R4`): A KIND THAT FIRES ON ITS OWNER'S CHARGEUP (the Healer) records
+				# the PART-LIST kind instead, because its shots have to join the same packet later ("its shots as a
+				# stone's") and the whole-column Vanguard record has no part vocabulary. The summoned records are
+				# its `PART_SUMMONED` parts; a Counterspell removes them exactly as `_reverse_summon` does.
+				if kind.owner_chargeup_shot_effect != &"":
+					_record_buff_reversal(player, PlayerState.REVERSAL_HEALER)
+					var owner_slot := 0 if player == p1 else 1
+					for index: int in summoned:
+						player.reversal_note_part(PlayerState.REVERSAL_HEALER, PlayerState.PART_SUMMONED,
+								index, owner_slot)
+				else:
+					player.record_reversal(PlayerState.REVERSAL_VANGUARD, summoned,
+							[] as Array[int], [] as Array[int], [] as Array[bool], 0.0)
 		CardEffectResolver.OUTCOME_BLOODLUST:
 			player.start_rule(PlayerState.RULE_BLOODLUST,
 					TimingWindow.seconds_to_ticks(effect.duration_seconds),
@@ -4815,6 +4948,10 @@ func _apply_card_effect(player: PlayerState, effect: CardEffect, slot: int,
 		# here suppresses a cast, because none is ever started.
 		CardEffectResolver.OUTCOME_COUNTERSPELL:
 			_apply_counterspell(player, slot)
+		# Story 7-5b (AC 13): the VOLLEY arm. Resolves at the activation with no cast frame -- not a
+		# `CAST_OUTCOMES` row, so `starts_cast()` answered false and the pitch seat took this arm.
+		CardEffectResolver.OUTCOME_ELEMENTAL_FURY:
+			_apply_elemental_fury(player, effect, slot)
 
 
 ## Story 7-5a: every orb `player` holds, ALL COLOURS -- the count Enrage and Manablossom scale on (AC 31,
@@ -5267,6 +5404,9 @@ func _record_cast_reversal(player: PlayerState, effect: CardEffect) -> void:
 			_record_buff_reversal(player, PlayerState.REVERSAL_FIREBALL)
 		CardEffectResolver.OUTCOME_ROCKSLING:
 			_record_buff_reversal(player, PlayerState.REVERSAL_ROCKSLING)
+		# Story 7-5b (AC 22): Wrath's windup is counterable mid-cast exactly like the three above.
+		CardEffectResolver.OUTCOME_WRATH_OF_GOD:
+			_record_buff_reversal(player, PlayerState.REVERSAL_WRATH_OF_GOD)
 
 
 ## Story 6-5g (AC 10/AC 14-17/AC 19): THE LIVING RECORD'S DAMAGE SEAT -- `removed` hp landed on
@@ -5297,6 +5437,9 @@ func _note_reversal_damage(attacker: PlayerState, kind: int, target_slot: int, t
 		var killed_it := target_index != TargetingService.HERO_INDEX \
 				and not target_owner.units.is_alive_at(target_index)
 		attacker.reversal_note_part(kind, PlayerState.PART_DAMAGE, target_index, target_slot, killed_it)
+	# Story 7-5b (AC 22): the PART's own figure as well as the packet's sum -- Wrath damages several bodies and
+	# each gets back what IT lost. For every kind that damages one body the two figures are equal.
+	attacker.reversal_add_part_amount(kind, PlayerState.PART_DAMAGE, target_index, removed)
 	attacker.reversal_add_amount(kind, removed)
 
 
@@ -5308,8 +5451,10 @@ func _note_reversal_damage(attacker: PlayerState, kind: int, target_slot: int, t
 ## (`4-3a/R9`, both add seats append unconditionally), so a second copy's stones can never be mistaken for
 ## this packet's -- which is the discrimination `6-5g/R10` left to this pass.
 func _reversal_kind_of_shot(attacker: PlayerState, shot_index: int) -> int:
+	# Story 7-5b (AC 8/AC 14): the Healer's shots and Elemental Fury's projectiles join the same lookup.
 	for kind: int in [PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING,
-			PlayerState.REVERSAL_CORPSE_BOMB]:
+			PlayerState.REVERSAL_CORPSE_BOMB, PlayerState.REVERSAL_HEALER,
+			PlayerState.REVERSAL_ELEMENTAL_FURY]:
 		if attacker.reversal_has_part(kind, PlayerState.PART_PROJECTILE, shot_index):
 			return kind
 	return PlayerState.REVERSAL_NONE
@@ -5406,7 +5551,9 @@ func _apply_counterspell(player: PlayerState, slot: int) -> void:
 		# one of those reversals is a WALK OF THE PACKET'S PARTS -- they differ only in which parts they can
 		# ever hold, and a per-card arm would be four copies of one walk.
 		PlayerState.REVERSAL_HONED_BOLT, PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING, \
-		PlayerState.REVERSAL_CORPSE_BOMB:
+		PlayerState.REVERSAL_CORPSE_BOMB, PlayerState.REVERSAL_HEALER, \
+		PlayerState.REVERSAL_ELEMENTAL_FURY, PlayerState.REVERSAL_WRATH_OF_GOD:
+			# Story 7-5b (AC 5/AC 8/AC 14/AC 22): the three new kinds are part lists too -- the same walk.
 			_reverse_recorded_parts(victim)
 		PlayerState.REVERSAL_BOOM:
 			# THE REFUND AND THE BOULDERS BOTH GO TO `player`, not to `victim`, and that is Boom's own
@@ -5479,8 +5626,14 @@ func _apply_counterspell(player: PlayerState, slot: int) -> void:
 ## corpse, nothing to gather, nothing to target, no actor kept alive by a corpse countdown.
 func _reverse_summon(victim: PlayerState) -> void:
 	for index: int in victim.reversal_indices:
-		victim.units.kill_at(index, 0)
-		victim.units.consume_corpse_at(index)
+		_vanish_summoned(victim, index)
+
+
+## Story 7-5b (AC 5): ONE summoned record VANISHES -- the pair above, for one index, shared by the Vanguard
+## walk and the Healer's `PART_SUMMONED` part so the death seat keeps exactly its callers.
+func _vanish_summoned(owner: PlayerState, index: int) -> void:
+	owner.units.kill_at(index, 0)
+	owner.units.consume_corpse_at(index)
 
 
 ## Story 6-5f (AC 18/AC 21/AC 23, `6-5f/R17`/`R20`/`R29`): THE GENERAL RESTORATION RULE -- a minion killed by
@@ -5591,7 +5744,9 @@ func _get_up_ticks_for(kind_index: int) -> int:
 ## restore path goes through `hp_at_death_at` / `restore_corpse_at` / `consume_corpse_at` -- `kill_at` appears
 ## nowhere on it.
 func _reverse_recorded_parts(victim: PlayerState) -> void:
-	if victim.is_casting() and victim.reversal_kind != PlayerState.REVERSAL_CORPSE_BOMB:
+	# Story 7-5b: ONLY A CAST KIND interrupts a cast -- the packet of an instant resolution (Corpse Bomb, and
+	# now the Healer and Elemental Fury) cannot describe a cast in progress.
+	if victim.is_casting() and _is_cast_reversal_kind(victim.reversal_kind):
 		victim.clear_cast()
 	var uncovered_holder: PlayerState = null
 	for i in victim.reversal_indices.size():
@@ -5612,14 +5767,32 @@ func _reverse_recorded_parts(victim: PlayerState) -> void:
 				owner.hero.start_stun(0, false)
 				owner.clear_root()
 			PlayerState.PART_DAMAGE:
+				# Story 7-5b (AC 22): the PART's own amount -- equal to the sum for every kind that damages
+				# one body, and the only correct figure for a Wrath pulse that damaged several.
 				if address == TargetingService.HERO_INDEX:
-					owner.hero.heal(victim.reversal_amount)
+					owner.hero.heal(victim.reversal_part_amount_at(i))
 				elif owner.units.is_alive_at(address):
-					owner.units.restore_hp_at(address, victim.reversal_amount)
+					owner.units.restore_hp_at(address, victim.reversal_part_amount_at(i))
 				elif victim.reversal_flags[i] and owner.units.has_corpse_at(address):
 					_restore_killed_minion_at(owner, address)
 			PlayerState.PART_CONVERTED:
 				_restore_killed_minion_at(owner, address)
+			# Story 7-5b (AC 5): a Healer the countered card summoned VANISHES with no corpse either way --
+			# `_reverse_summon`'s exact pair, for one recorded index.
+			PlayerState.PART_SUMMONED:
+				_vanish_summoned(owner, address)
+			# Story 7-5b (AC 14): Elemental Fury's projectiles still owed are cancelled.
+			PlayerState.PART_VOLLEY:
+				victim.clear_volley()
+			# Story 7-5b (AC 15): a blue landing's slow ends on the hero it slowed.
+			PlayerState.PART_SLOW:
+				if _own_slow_still_running(owner, victim.reversal_part_amount_at(i)):
+					owner.cancel_rule(PlayerState.RULE_FROSTBITE_SLOW)
+			# Story 7-5b (AC 15): a green landing's heal is clawed back off the caster by the amount it
+			# actually healed -- floored at 1, `6-5f/R14`'s "a counter never kills".
+			PlayerState.PART_HEAL:
+				owner.hero.take_damage(minf(victim.reversal_part_amount_at(i),
+						maxf(0.0, owner.hero.get_hp() - 1.0)))
 	# The hand announcement fires ONCE, after the walk -- `_restore_boulders`' own shape, and for its reason:
 	# the cover layer rides `cards_changed`'s visible-array payload, so a lifted Boulder reaches the HUD
 	# through the existing channel with no new seam.
@@ -5627,6 +5800,13 @@ func _reverse_recorded_parts(victim: PlayerState) -> void:
 	# whole of it -- and `null` when nothing was lifted means no announcement at all.
 	if uncovered_holder != null:
 		uncovered_holder.notify_cards_changed()
+
+
+## Story 7-5b: IS `kind` ONE OF THE CAST KINDS -- the four reversal kinds whose packet is opened at a cast
+## PRESS and may therefore describe a cast still in its window (Honed Bolt, Fireball, Rocksling, Wrath).
+static func _is_cast_reversal_kind(kind: int) -> bool:
+	return kind == PlayerState.REVERSAL_HONED_BOLT or kind == PlayerState.REVERSAL_FIREBALL \
+			or kind == PlayerState.REVERSAL_ROCKSLING or kind == PlayerState.REVERSAL_WRATH_OF_GOD
 
 
 ## Story 6-5f (AC 19, `6-5f/R18`): GRAVE WARD's extension comes back OUT of every corpse it touched, and a
@@ -5949,6 +6129,11 @@ const REASON_NOT_AVAILABLE_YET := CardEffectResolver.REASON_NOT_AVAILABLE_YET
 ## the hero's HP, and a player whose card stayed in hand needs to hear which.
 const REASON_INSUFFICIENT_HP := &"insufficient_hp"
 
+## Story 7-5b (AC 12, `7-5b/R5`): ELEMENTAL FURY ACTIVATED WITH NO ORB LEFT TO FIRE once its own orb is paid.
+## A board-gate refusal fired before the orb spend, naming the missing fact: the card stays staged, its
+## countdown runs on, and the same press succeeds once another orb is earned.
+const REASON_NO_ORB_AFTER_PRICE := &"no_orb_after_price"
+
 
 ## Story 6-5e (AC 17a): REFUSE this press if the slot is covered, and say whether it did.
 ##
@@ -6073,6 +6258,19 @@ func _board_refusal_reason(player: PlayerState, effect: CardEffect) -> StringNam
 		# (after the counter window) whose answer depends on the effect's own authored number.
 		CardEffectResolver.NEEDS_HP_ABOVE_COST:
 			return &"" if player.hero.get_hp() > effect.hp_cost else REASON_INSUFFICIENT_HP
+		# Story 7-5b (AC 12, `7-5b/R5`): THE SEVENTH ARM -- after the staged card's own orb price is paid, at
+		# least one orb (any colour) must still be held. Read off the SAME staged price the activation is about
+		# to spend (`pitch.staged_orb_costs`), so the gate and the spend cannot disagree. Fired before the orb
+		# spend at the Mode 4 seat, so a refusal spends nothing and leaves the card staged and its countdown
+		# running. Off the pitch path (nothing staged) the price is zero.
+		CardEffectResolver.NEEDS_ORB_AFTER_PRICE:
+			var own_slot := 0 if player == p1 else 1
+			var priced := 0
+			if pitch.is_staged(own_slot):
+				var costs := pitch.staged_orb_costs(own_slot)
+				for color: Variant in costs:
+					priced += int(costs[color])
+			return &"" if _total_orbs(player) - priced >= 1 else REASON_NO_ORB_AFTER_PRICE
 	return &""
 
 
@@ -6144,7 +6342,10 @@ func _reversal_has_anything_left(victim: PlayerState) -> bool:
 	var is_part_list_kind := victim.reversal_kind == PlayerState.REVERSAL_HONED_BOLT \
 			or victim.reversal_kind == PlayerState.REVERSAL_FIREBALL \
 			or victim.reversal_kind == PlayerState.REVERSAL_ROCKSLING \
-			or victim.reversal_kind == PlayerState.REVERSAL_CORPSE_BOMB
+			or victim.reversal_kind == PlayerState.REVERSAL_CORPSE_BOMB \
+			or victim.reversal_kind == PlayerState.REVERSAL_HEALER \
+			or victim.reversal_kind == PlayerState.REVERSAL_ELEMENTAL_FURY \
+			or victim.reversal_kind == PlayerState.REVERSAL_WRATH_OF_GOD
 	# STORY 7-5a (AC 48): THE BLANKET `amount` ADMISSION IS NARROWED TO THE KINDS IT WAS WRITTEN FOR. It is
 	# right for a pool or a hero that is always there (Culling, Drain, Boom, and now Bloodmagic and
 	# Manapulation, which answer through their own arms below for the same reason). It is WRONG for
@@ -6244,10 +6445,11 @@ func _reversal_has_anything_left(victim: PlayerState) -> bool:
 		# is tested INSIDE the `PART_DAMAGE` case below now (`6-5g/R21`), not by the blanket clause at the top
 		# of this function -- these four kinds are deliberately excluded from it (see `is_part_list_kind`).
 		PlayerState.REVERSAL_HONED_BOLT, PlayerState.REVERSAL_FIREBALL, PlayerState.REVERSAL_ROCKSLING, \
-		PlayerState.REVERSAL_CORPSE_BOMB:
+		PlayerState.REVERSAL_CORPSE_BOMB, PlayerState.REVERSAL_HEALER, \
+		PlayerState.REVERSAL_ELEMENTAL_FURY, PlayerState.REVERSAL_WRATH_OF_GOD:
 			# A CAST STILL IN ITS WINDOW IS THE FIRST SURVIVING PART (AC 11): countering it interrupts it, which
-			# is the whole point of admitting a cast in progress at all.
-			if victim.is_casting() and victim.reversal_kind != PlayerState.REVERSAL_CORPSE_BOMB:
+			# is the whole point of admitting a cast in progress at all. (Story 7-5b: cast KINDS only.)
+			if victim.is_casting() and _is_cast_reversal_kind(victim.reversal_kind):
 				return true
 			for i in victim.reversal_indices.size():
 				var address: int = victim.reversal_indices[i]
@@ -6276,11 +6478,12 @@ func _reversal_has_anything_left(victim: PlayerState) -> bool:
 						# refund likewise; a DEAD unit is restorable only while its own corpse survives AND this
 						# resolution's own kill flag says the corpse is this resolution's to claim -- a unit that
 						# merely survived the hit and was killed by something else later is neither.
+						# Story 7-5b (AC 22): the part's OWN amount, the reversal's own reading.
 						if address == TargetingService.HERO_INDEX:
-							if victim.reversal_amount > 0.0:
+							if victim.reversal_part_amount_at(i) > 0.0:
 								return true
 						elif owner.units.is_alive_at(address):
-							if victim.reversal_amount > 0.0:
+							if victim.reversal_part_amount_at(i) > 0.0:
 								return true
 						elif victim.reversal_flags[i] and owner.units.has_corpse_at(address):
 							return true
@@ -6289,6 +6492,22 @@ func _reversal_has_anything_left(victim: PlayerState) -> bool:
 						# own kill, unconditionally -- no flag needed, unlike `PART_DAMAGE` above.
 						if not owner.units.is_alive_at(address) \
 								and owner.units.has_corpse_at(address):
+							return true
+					# Story 7-5b (AC 5): a summoned Healer still standing, or its corpse, can still be removed.
+					PlayerState.PART_SUMMONED:
+						if owner.units.is_alive_at(address) or owner.units.has_corpse_at(address):
+							return true
+					# Story 7-5b (AC 14): projectiles still owed can still be cancelled.
+					PlayerState.PART_VOLLEY:
+						if victim.has_pending_volley():
+							return true
+					# Story 7-5b (AC 15): a blue landing's slow still running can still be ended.
+					PlayerState.PART_SLOW:
+						if _own_slow_still_running(owner, victim.reversal_part_amount_at(i)):
+							return true
+					# Story 7-5b (AC 15): a green landing's heal can always be clawed back (the caster is there).
+					PlayerState.PART_HEAL:
+						if victim.reversal_part_amount_at(i) > 0.0:
 							return true
 	return false
 
@@ -6606,8 +6825,11 @@ func _resolve_pitch_activate(player: PlayerState, slot: int) -> void:
 	player.record_resolved_card(card_id, Enums.ModeKind.PITCH, _tick)
 	if CardEffectResolver.starts_cast(pitch_effect, flags):
 		var address := _captured_target_address(player)
+		# Story 7-5b (AC 16, `7-5b/R8`): the pulse radius FROZEN HERE, off the orbs still held now that the
+		# activation's own orb has been paid (the spend is above). Zero for a cast that authors no radius.
 		player.start_cast(card_id, TimingWindow.seconds_to_ticks(pitch_effect.cast_seconds),
-				Enums.ModeKind.PITCH, address[0], address[1], locked_damage)
+				Enums.ModeKind.PITCH, address[0], address[1], locked_damage,
+				_cast_radius(pitch_effect, _total_orbs(player)))
 		# STORY 6-5g (AC 9/AC 10): the Class 2 reversal record opens at the ACTIVATION press too -- the same
 		# helper at the same position relative to `start_cast`, so a Fireball pitched and a Honed Bolt cast
 		# become counterable by one mechanism. See `_record_cast_reversal`.
@@ -6845,6 +7067,9 @@ func _resolve_unblockable_cast(player: PlayerState, hand_slot: int, slot: int) -
 	_charge_reach[slot] = REACH_UNKNOWN
 	player.charge_contact = PlayerState.CHARGE_CONTACT_NONE
 	player.hero.set_action_state(HeroState.ActionState.CHARGING)
+	# Story 7-5b (AC 7): THE CHARGEUP HAS BEGUN, so every living Healer of this player owes ONE shot. Seated
+	# below every refusal above, so a press refused for mana, stamina or state owes nothing.
+	_owe_healer_shots(player)
 	player.pending_draw_owed.append(hand_slot)
 	player.pending_draw.start(balance_ticks.draw_replacement_delay_ticks)
 	player.notify_cards_changed()
@@ -7212,6 +7437,9 @@ func _resolve_cast_strikes() -> void:
 			# `damage_amount` read at this seat (see `_apply_rocksling`).
 			CardEffectResolver.OUTCOME_ROCKSLING:
 				_apply_rocksling(player, effect, target_slot, target_index)
+			# Story 7-5b (AC 16-21): the FOURTH arm -- one pulse, resolved on the windup's last tick.
+			CardEffectResolver.OUTCOME_WRATH_OF_GOD:
+				_apply_wrath_of_god(player, effect, slot)
 
 
 ## Story 6-5d (AC 12): THE EFFECT A CAST IN FLIGHT WILL STRIKE, looked up in the map its MODE names.
@@ -7546,6 +7774,338 @@ func _advance_bursts(player: PlayerState) -> void:
 	player.burst_window.start(player.burst_window.duration_ticks())
 
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-5b: THE THREE DECK 2 BODIES.
+## ------------------------------------------------------------------------------------------
+
+## Story 7-5b (AC 16, `7-5b/R8`): the radius a pulse cast freezes at its press -- the base plus the per-orb
+## growth times `orbs_after_price`. Zero for every effect that authors neither number, so every other cast
+## carries a resting `0.0` radius.
+static func _cast_radius(effect: CardEffect, orbs_after_price: int) -> float:
+	if effect == null:
+		return 0.0
+	return effect.pulse_radius + effect.radius_per_orb * float(orbs_after_price)
+
+
+## Story 7-5b (AC 6, `7-5b/R3`): THE HEAL SEAT for one player's board. Each LIVING unit whose kind heals
+## advances its own clock one tick; when the clock reaches the authored interval the tick closes -- it HEALS
+## the owner by the authored amount only if the runner reported that unit in range THIS tick and the owner
+## is alive, and the clock restarts either way (out of range the tick is skipped, never banked). Healing goes
+## through `HeroState.heal`, clamped at the maximum: it is not damage, so no funnel, no Stoneskin, no
+## Lifechain, no lifesteal and no signal of a hit -- true by absence. Two Healers have two clocks.
+##
+## A FROZEN ROUND NEVER REACHES THIS SEAT (step 1b returns first). Draws nothing from the RNG.
+func _advance_healers(player: PlayerState, slot: int) -> void:
+	if balance == null:
+		return
+	for index in player.units.size():
+		if not player.units.is_alive_at(index):
+			continue
+		var kind := _unit_kind_at(player, index)
+		if kind == null or kind.heal_amount <= 0.0:
+			continue
+		var kind_ticks := balance_ticks.kind_ticks_at(player.units.kind_index_at(index))
+		if kind_ticks == null or kind_ticks.heal_interval_ticks <= 0:
+			continue
+		player.units.advance_heal_clock_at(index)
+		if player.units.heal_ticks_at(index) < kind_ticks.heal_interval_ticks:
+			continue
+		var heals := player.hero.is_alive() and _heal_range_pushes[slot].has(index)
+		if heals:
+			player.hero.heal(kind.heal_amount)
+		player.units.close_heal_tick_at(index, heals)
+
+
+## Story 7-5b (AC 7): the owner's unblockable chargeup has BEGUN -- every LIVING unit of a kind that fires on
+## it owes ONE shot, spawning after its kind's authored delay. Called from the accepted press only.
+func _owe_healer_shots(player: PlayerState) -> void:
+	if balance == null or balance_ticks == null:
+		return
+	for index in player.units.size():
+		if not player.units.is_alive_at(index):
+			continue
+		var kind := _unit_kind_at(player, index)
+		if kind == null or kind.owner_chargeup_shot_effect == &"":
+			continue
+		var kind_ticks := balance_ticks.kind_ticks_at(player.units.kind_index_at(index))
+		player.units.owe_shot_at(index, kind_ticks.shot_delay_ticks if kind_ticks != null else 0)
+
+
+## Story 7-5b (AC 7/AC 8): THE HEALER-SHOT SEAT. An owed shot counts down; at zero it SPAWNS -- a hero-sourced
+## record at the OPPOSING HERO, launched from the Healer (`add_minion_shot`), with the authored damage and
+## flight of the kind's named effect -- so every defence meets it exactly as a stone (no new rung). A Healer
+## dead before its spawn tick fires nothing (its owed shot is dropped). One shot per owed record.
+##
+## A shot from a Healer the owner's CURRENT packet summoned joins that packet as a `PART_PROJECTILE`, so a
+## Counterspell on the Healer card removes it in flight and refunds it once landed (`7-5b/R4`).
+func _advance_healer_shots(player: PlayerState, slot: int) -> void:
+	for index in player.units.size():
+		var owed := player.units.shot_owed_at(index)
+		if owed == UnitBoard.NO_SHOT_OWED:
+			continue
+		if not player.units.is_alive_at(index):
+			player.units.set_shot_owed_at(index, UnitBoard.NO_SHOT_OWED)
+			continue
+		if owed > 0:
+			player.units.set_shot_owed_at(index, owed - 1)
+			continue
+		player.units.set_shot_owed_at(index, UnitBoard.NO_SHOT_OWED)
+		var kind := _unit_kind_at(player, index)
+		if kind == null:
+			continue
+		var effect: CardEffect = _effects_by_effect_id.get(kind.owner_chargeup_shot_effect)
+		if effect == null:
+			continue
+		player.projectiles.add_minion_shot(1 - slot, TargetingService.HERO_INDEX, effect.effect_id,
+				effect.damage_amount, index)
+		if player.reversal_has_part(PlayerState.REVERSAL_HEALER, PlayerState.PART_SUMMONED, index):
+			player.reversal_note_part(PlayerState.REVERSAL_HEALER, PlayerState.PART_PROJECTILE,
+					player.projectiles.size() - 1)
+
+
+## Story 7-5b (AC 13, `7-5b/R6`/`R7`): ELEMENTAL FURY RESOLVES -- one projectile per orb still held after the
+## activation orb was paid (the spend ran before this apply), in the fixed colour order red, blue, green. The
+## held orbs are NOT spent. The first projectile leaves now; the rest are owed `volley_interval_seconds`
+## apart (converted once, here). Every projectile targets the OPPOSING HERO -- no lock routing, no unit target.
+func _apply_elemental_fury(caster: PlayerState, effect: CardEffect, slot: int) -> void:
+	var colors: Array[int] = []
+	for color: int in [Enums.CardColor.RED, Enums.CardColor.BLUE, Enums.CardColor.GREEN]:
+		for _i in caster.orbs.get_count(color):
+			colors.append(color)
+	if colors.is_empty():
+		return
+	_record_buff_reversal(caster, PlayerState.REVERSAL_ELEMENTAL_FURY)
+	var first: int = colors.pop_front()
+	_launch_fury_projectile(caster, effect, slot, first)
+	caster.start_volley(effect.effect_id, colors,
+			TimingWindow.seconds_to_ticks(effect.volley_interval_seconds))
+	if caster.has_pending_volley():
+		caster.reversal_note_part(PlayerState.REVERSAL_ELEMENTAL_FURY, PlayerState.PART_VOLLEY)
+
+
+## ONE Elemental Fury projectile: a hero-sourced shot at the opposing hero carrying its colour. Only a RED one
+## carries damage; blue and green deal none and act at the landing (`_apply_fury_landing`).
+func _launch_fury_projectile(caster: PlayerState, effect: CardEffect, slot: int, color: int) -> void:
+	var damage := effect.damage_amount if color == Enums.CardColor.RED else 0.0
+	caster.projectiles.add_hero_shot(1 - slot, TargetingService.HERO_INDEX, effect.effect_id, damage, color)
+	caster.reversal_note_part(PlayerState.REVERSAL_ELEMENTAL_FURY, PlayerState.PART_PROJECTILE,
+			caster.projectiles.size() - 1)
+
+
+## Story 7-5b (AC 13): THE VOLLEY SEAT -- `_advance_bursts`' shape. A dead caster's volley is cancelled; a
+## running interval waits; otherwise the next colour leaves and the interval restarts, one shot per tick at
+## most, until nothing is owed.
+func _advance_volleys(player: PlayerState, slot: int) -> void:
+	if not player.has_pending_volley():
+		return
+	if not player.hero.is_alive():
+		player.clear_volley()
+		return
+	if player.volley_window.is_running:
+		return
+	var effect: CardEffect = _effects_by_effect_id.get(StringName(player.volley_effect_id))
+	if effect == null:
+		player.clear_volley()
+		return
+	var color: int = player.volley_colors.pop_front()
+	_launch_fury_projectile(player, effect, slot, color)
+	if player.volley_colors.is_empty():
+		player.clear_volley()
+		return
+	player.volley_window.start(player.volley_window.duration_ticks())
+
+
+## Story 7-5b review fix (P1): the tick the slow running on `hero_owner` ends at -- `_tick` plus its remaining
+## ticks, both read after this tick's rules have ticked, so the same slow reads the same number on every later tick.
+func _slow_expiry_tick(hero_owner: PlayerState) -> float:
+	return float(_tick + hero_owner.rule_windows[PlayerState.RULE_FROSTBITE_SLOW].remaining_ticks())
+
+
+## Story 7-5b review fix (P1): IS THE SLOW RUNNING ON `hero_owner` THE ONE A RECORDED PART PLACED? Running AND
+## still ending at the recorded expiry. A later refresh (a Frostbite trigger, another source) ends elsewhere, and a
+## Counterspell must neither end it nor count it as something left to undo.
+func _own_slow_still_running(hero_owner: PlayerState, expiry: float) -> bool:
+	return hero_owner.is_rule_active(PlayerState.RULE_FROSTBITE_SLOW) \
+			and is_equal_approx(_slow_expiry_tick(hero_owner), expiry)
+
+
+## Story 7-5b (AC 15, `7-5b/R7`): WHAT A LANDED ELEMENTAL FURY PROJECTILE DOES BEYOND ITS DAMAGE -- called from
+## the hero ladder's landing path only, so a deflected, i-frame-dropped, countered or expired projectile never
+## gets here (it has no effect). BLUE slows the struck hero through the existing slow rule (refresh, never
+## stack); GREEN heals the CASTER, clamped at its maximum. Each joins the shot's own packet, so a Counterspell
+## ends the slow and claws the heal back.
+func _apply_fury_landing(attacker: PlayerState, shot_index: int, target: PlayerState,
+		target_slot: int) -> void:
+	var color := attacker.projectiles.color_at(shot_index)
+	if color == ProjectileBoard.NO_COLOR:
+		return
+	var effect: CardEffect = _effects_by_effect_id.get(
+			StringName(attacker.projectiles.effect_id_at(shot_index)))
+	if effect == null:
+		return
+	var kind := _reversal_kind_of_shot(attacker, shot_index)
+	if color == Enums.CardColor.BLUE:
+		var slow_ticks := TimingWindow.seconds_to_ticks(effect.slow_duration_seconds)
+		if target.hero.is_alive() and slow_ticks > 0:
+			target.start_rule(PlayerState.RULE_FROSTBITE_SLOW, slow_ticks, effect.slow_speed_multiplier, 0.0)
+			if not attacker.reversal_has_part(kind, PlayerState.PART_SLOW):
+				attacker.reversal_note_part(kind, PlayerState.PART_SLOW, PlayerState.NO_REVERSAL_ADDRESS,
+						target_slot)
+			# Story 7-5b review fix (P1, the `6-5g/R22` shape): the part carries the EXPIRY TICK of the slow this
+			# landing placed (a refresh by a later blue shot moves it), so a Counterspell claims only a running
+			# slow that still ends there -- one rule slot per player means a later Frostbite refresh is the same slot.
+			attacker.reversal_set_part_amount(kind, PlayerState.PART_SLOW, PlayerState.NO_REVERSAL_ADDRESS,
+					_slow_expiry_tick(target))
+	elif color == Enums.CardColor.GREEN:
+		if not attacker.hero.is_alive():
+			return
+		var before := attacker.hero.get_hp()
+		attacker.hero.heal(effect.heal_amount)
+		var healed := attacker.hero.get_hp() - before
+		if healed > 0.0:
+			var caster_slot := 1 - target_slot
+			if not attacker.reversal_has_part(kind, PlayerState.PART_HEAL):
+				attacker.reversal_note_part(kind, PlayerState.PART_HEAL, PlayerState.NO_REVERSAL_ADDRESS,
+						caster_slot)
+			attacker.reversal_add_part_amount(kind, PlayerState.PART_HEAL, PlayerState.NO_REVERSAL_ADDRESS,
+					healed)
+
+
+## Story 7-5b (AC 16-21, `7-5b/R8`-`R11`): THE WRATH PULSE -- one pulse on the windup's last tick, against
+## every OPPOSING body the runner reported inside the frozen ring THIS tick (`_pulse_facts`, the recorded
+## contact intake). The caster's own side is unreachable (a pulse fact is opposing-slot by the intake's own
+## self-contact refusal), and a corpse is skipped by the liveness tests below. Not a lingering zone: only this
+## tick's facts are read.
+##
+## TARGETS ARE TAKEN IN ASCENDING ADDRESS ORDER (the hero, then units by board index), deduplicated, so the
+## push order of the facts decides nothing.
+func _apply_wrath_of_god(caster: PlayerState, effect: CardEffect, slot: int) -> void:
+	var victim_slot := 1 - slot
+	var victim := p1 if victim_slot == 0 else p2
+	var addresses: Array[int] = []
+	var dirs: Array[Vector2] = []
+	for fact: Dictionary in _pulse_facts:
+		if int(fact["attacker"]) != slot or int(fact["target"]) != victim_slot:
+			continue
+		var index := int(fact["target_index"])
+		if addresses.has(index):
+			continue
+		var at := 0
+		while at < addresses.size() and addresses[at] < index:
+			at += 1
+		addresses.insert(at, index)
+		dirs.insert(at, fact["dir"] as Vector2)
+	for i in addresses.size():
+		if addresses[i] == TargetingService.HERO_INDEX:
+			_pulse_hero(caster, effect, slot, victim, dirs[i])
+		else:
+			_pulse_unit(caster, effect, victim, victim_slot, addresses[i], dirs[i])
+
+
+## The pulse on the OPPOSING HERO. The ladder, in order:
+##   * a dead hero, or one whose i-frames were open at step 3 (roll or get-up), is untouched (AC 21);
+##   * a hero BLOCKING and FACING the caster either DEFLECTS (the timed window open and the normal deflect
+##     cost paid -- nothing to the caster, `7-5b/R10`) or takes the effect's own blocked share with NO
+##     knockback and NO stun;
+##   * otherwise the full damage, then -- unless the hero is already in a knockdown (`R-STUNSTACK`), which
+##     takes the damage only -- the stun and the knockback slide.
+## The damage goes through the funnel and `_deal_hero_damage`, so Stoneskin absorbs it (the slide and the stun
+## still apply, `7-5b/R11`) and Lifechain splits it. The stun write precedes `hit_landed`, the bolt's order.
+func _pulse_hero(caster: PlayerState, effect: CardEffect, slot: int, target: PlayerState,
+		dir: Vector2) -> void:
+	var target_slot := 1 - slot
+	if not target.hero.is_alive():
+		return
+	if _iframe_open_at_step3[target_slot]:
+		return
+	var damage := effect.damage_amount
+	var blocked := false
+	if target.hero.action_state == HeroState.ActionState.BLOCKING and _is_facing(target.hero, dir):
+		if target.hero.is_deflect_window_open() and target.stamina.spend(
+				balance.deflect_stamina_cost, balance_ticks.stamina_regen_delay_ticks):
+			_queue.push(deflect_landed.emit.bind(slot, target_slot, PlayerState.NO_TELEGRAPH_COLOR))
+			return
+		damage *= effect.blocked_damage_multiplier
+		blocked = true
+	damage = _funnel_damage(caster, TargetingService.HERO_INDEX, target, TargetingService.HERO_INDEX, damage)
+	var hp_before := target.hero.get_hp()
+	damage = _deal_hero_damage(target, damage)
+	_apply_lifesteal(caster, TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
+	_note_reversal_damage(caster, PlayerState.REVERSAL_WRATH_OF_GOD, target_slot,
+			TargetingService.HERO_INDEX, hp_before - target.hero.get_hp())
+	var already_down := target.hero.action_state == HeroState.ActionState.STUNNED \
+			and balance_ticks.is_knockdown_stun(target.hero.stun.duration_ticks())
+	if not blocked and target.hero.is_alive() and not already_down:
+		_apply_wrath_stun(target, effect)
+		var away := -dir.normalized()
+		var speed := _knockback_speed(effect)
+		target.start_knockback(TimingWindow.seconds_to_ticks(effect.knockback_seconds), away, speed)
+		# The slide starts THIS tick: the velocity step 3 wrote before the pulse is replaced now, so the
+		# hero moves for exactly the window's ticks.
+		if target.knockback_window.is_running:
+			target.hero.velocity = Vector3(away.x, 0.0, away.y) * speed
+	_queue.push(_emit_hit_landed.bind(slot, target_slot, damage, target.hero.get_hp(), blocked))
+
+
+## THE WRATH STUN -- the FIFTH authored direct `STUNNED` write (`7-5b/R18`), argued on the footing the other
+## four were: a DIFFERENT CAUSE (an area pulse, not a melee exchange, a landing or a single-target bolt), a
+## DIFFERENT SUBJECT-AND-SEAT pair (every hero inside the ring at step 6c's pulse strike) and DIFFERENT
+## COLLATERAL (a knockback slide, and NO root and NO bolt flag -- so it cannot reuse `_apply_bolt_landing`).
+## It reuses ONLY that function's CHARGING teardown. It is not a knockdown: its length stays below
+## `knockdown_stun_seconds` (the authoring audit). A swing ends because the state leaves ATTACKING, a block
+## because it leaves BLOCKING, a cast because `_cast_is_interrupted` reads STUNNED.
+##
+## STORY 7-5b REVIEW FIX (D1, operator ruling S19): A STUN ALREADY RUNNING IS NEVER SHORTENED. A hero in a
+## non-knockdown stun (the knockdown floor was judged by the caller) keeps the longer of its running remainder
+## and the pulse's own length, and keeps its `stun_is_bolt` flag -- the pulse neither cuts a bolt stun short nor
+## makes it read as a non-bolt one.
+func _apply_wrath_stun(target: PlayerState, effect: CardEffect) -> void:
+	var was_charging := target.hero.action_state == HeroState.ActionState.CHARGING
+	var stun_ticks := TimingWindow.seconds_to_ticks(effect.stun_seconds)
+	var is_bolt := target.hero.stun_is_bolt
+	if target.hero.stun.is_running:
+		stun_ticks = maxi(stun_ticks, target.hero.stun.remaining_ticks())
+	else:
+		is_bolt = false
+	target.hero.start_stun(stun_ticks, is_bolt)
+	target.hero.set_action_state(HeroState.ActionState.STUNNED)
+	if was_charging:
+		_abandon_chargeup(target)
+
+
+## The slide speed -- distance over time, the `1-9` roll's own expression. Zero for an unauthored time.
+static func _knockback_speed(effect: CardEffect) -> float:
+	if effect.knockback_seconds <= 0.0:
+		return 0.0
+	return effect.knockback_distance / effect.knockback_seconds
+
+
+## The pulse on an OPPOSING UNIT (AC 20, `7-5b/R9`): the damage through the funnel's unit seat (a kill leaves
+## a corpse through the one death seat). A WALKING unit (authored move speed above zero) that survives slides
+## away from the caster; a TOTEM never moves. A kind that reacts to damage has its attack interrupted.
+func _pulse_unit(caster: PlayerState, effect: CardEffect, owner: PlayerState, owner_slot: int,
+		index: int, dir: Vector2) -> void:
+	if not owner.units.is_alive_at(index):
+		return
+	var hp_before := owner.units.hp_at(index)
+	owner.units.apply_damage_at(index, _funnel_damage(caster, TargetingService.HERO_INDEX, owner, index,
+			effect.damage_amount), _corpse_ticks_for(owner, index))
+	var removed := hp_before - owner.units.hp_at(index)
+	_apply_lifesteal(caster, TargetingService.HERO_INDEX, removed)
+	_note_reversal_damage(caster, PlayerState.REVERSAL_WRATH_OF_GOD, owner_slot, index, removed)
+	if not owner.units.is_alive_at(index):
+		owner.unit_dedupe.discard(index)
+		return
+	var kind := _unit_kind_at(owner, index)
+	if kind == null:
+		return
+	if kind.move_speed > 0.0:
+		owner.units.start_knockback_at(index, TimingWindow.seconds_to_ticks(effect.knockback_seconds),
+				-dir.normalized(), _knockback_speed(effect))
+	if removed > 0.0 and kind.react_on_damage:
+		_begin_unit_reaction(owner, index)
+
+
 ## Story 6-5c (AC 14-16, AC 19): THE STUN AND THE ROOT a landed bolt writes onto a LIVING target.
 ##
 ## THE KNOCKDOWN FLOOR COMES FIRST AND BEATS EVERYTHING (AC 16a, `6-5c/R9`, `R-STUNSTACK`): a bolt
@@ -7593,16 +8153,25 @@ func _apply_bolt_landing(target: PlayerState, effect: CardEffect) -> void:
 	target.hero.start_stun(stun_ticks, true)
 	target.hero.set_action_state(HeroState.ActionState.STUNNED)
 	if was_charging:
-		target.charge_window.start(0)
-		target.landing_window.start(0)
-		target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
-		# Story 7-8 review fix: the abandoned attack's hit-once memory rests with it, the knockdown
-		# abandonment's rule (OQ1) -- the bolt is the fifth way a `CHARGING` attack ends.
-		target.charge_contact = PlayerState.CHARGE_CONTACT_NONE
-		# Story 7-5a (AC 19): ...and a Setup the abandoned attack carried rests with it (interrupted).
-		target.clear_charge_setup()
+		_abandon_chargeup(target)
 	target.arm_root(stun_ticks + TimingWindow.seconds_to_ticks(effect.root_seconds),
 			effect.root_blocks_run, effect.root_blocks_roll)
+
+
+## THE CHARGING TEARDOWN a stun writes onto a hero that was mid-chargeup -- extracted from
+## `_apply_bolt_landing` (story 7-5b, `7-5b/R18`) so the Wrath pulse's stun reuses exactly this and NOT the
+## bolt's whole landing (no root, no bolt flag). Every line is the bolt's, unchanged: the chargeup, the launch
+## and the colour end as ONE fact, and the attack's hit-once memory and Setup carry rest with it. The card and
+## the stamina stay spent.
+func _abandon_chargeup(target: PlayerState) -> void:
+	target.charge_window.start(0)
+	target.landing_window.start(0)
+	target.charge_color = PlayerState.NO_TELEGRAPH_COLOR
+	# Story 7-8 review fix: the abandoned attack's hit-once memory rests with it, the knockdown
+	# abandonment's rule (OQ1) -- the bolt is the fifth way a `CHARGING` attack ends.
+	target.charge_contact = PlayerState.CHARGE_CONTACT_NONE
+	# Story 7-5a (AC 19): ...and a Setup the abandoned attack carried rests with it (interrupted).
+	target.clear_charge_setup()
 
 
 ## Story 6-6b (AC 1/AC 3/AC 7/AC 8): CAN THIS HERO ANSWER AN UNBLOCKABLE RIGHT NOW, AND IN WHAT COLOUR?
@@ -8249,7 +8818,14 @@ func _resolve_movement(player: PlayerState, intent: InputIntent, slot: int) -> b
 	#
 	# `DEAD` STILL WINS, by the early return at the top of this function -- a corpse mid-cast is
 	# zeroed there and the cast is cleared at step 6c the same tick.
-	if player.is_casting():
+	# STORY 7-5b (AC 18/AC 19, `7-5b/R8`): THE WRATH KNOCKBACK SLIDE OUTRANKS EVERY BRANCH BELOW -- the struck
+	# hero is STUNNED for most of it (whose branch would root it) and the slide is what the stun "runs while".
+	# State writes the velocity; `move_and_slide()` stops it at a wall, and state never learns where. Facing
+	# falls through to the lock rung below, the STUNNED carve-out's own rule.
+	if player.knockback_window.is_running:
+		var slide := player.knockback_dir * player.knockback_speed
+		player.hero.velocity = Vector3(slide.x, 0.0, slide.y)
+	elif player.is_casting():
 		player.hero.velocity = Vector3.ZERO
 	elif player.hero.action_state == HeroState.ActionState.ROLLING:
 		# Story 6-5a (R2): a BLOODHOUND-boosted roll covers `roll_distance_multiplier` times the distance
@@ -8994,6 +9570,17 @@ func _end_round(loser: PlayerState, loser_index: int) -> void:
 		ended.clear_duelist_state()
 		ended.clear_charge_setup()
 		ended.hand.clear_discounts()
+		# Story 7-5b (AC 25): EVERY NEW HASHED FACT CLEARS AT ROUND END TOO, for 7-5a's B1 reason -- an owed
+		# volley, a hero's knockback slide, every Healer's owed shot, heal clock and heal count, every unit's
+		# slide, and every projectile's colour payload (a round that has ended holds no payload still to land;
+		# the frozen shot itself goes with the board at the reset). The pending pulse is the cast's, which
+		# `clear_cast` above already ended.
+		ended.clear_volley()
+		ended.clear_knockback()
+		ended.units.clear_owed_shots()
+		ended.units.clear_heal_clocks()
+		ended.units.clear_knockbacks()
+		ended.projectiles.clear_colors()
 	loser.hero.set_action_state(HeroState.ActionState.DEAD)
 	_queue.push(round_ended.emit.bind(loser_index))
 
@@ -9270,3 +9857,10 @@ func _reset_player(player: PlayerState) -> void:
 	player.clear_duelist_state()
 	player.clear_charge_setup()
 	player.hand.clear_discounts()
+	# Story 7-5b (AC 25): the SIXTEENTH named exception -- the owed volley and the hero's knockback slide,
+	# cleared for the burst's traced reason (step 1b freezes their windows while leaving them armed). The
+	# Healer's per-unit facts, every unit's slide and every projectile's colour go with `units.clear()` and
+	# `projectiles.clear()` above. This slot's pushed heal-range facts name records that clear just deleted.
+	player.clear_volley()
+	player.clear_knockback()
+	_heal_range_pushes[reset_slot].clear()

@@ -305,7 +305,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# so the observation channel still adds nothing, which is what this test actually asserts.
 		"burst", "cast", "charge_contact", "charge_setup", "corpse_bomb",
 		"deck_size", "defense", "discard_size", "enrage", "execute", "hand_covered", "hand_discount",
-		"hand_size", "hero", "landing",
+		# Story 7-5b (AC 25): SEVEN new keys in sorted position -- `knockback`, `projectile_color`,
+		# `unit_heal_count`, `unit_heal_ticks`, `unit_knockback`, `unit_shot_owed`, `volley`. See the twin pin
+		# in `test_draw_delay_and_reshuffle.gd`. Ints, floats, bools and `Vector2`s only; the one id (the
+		# volley's effect id) is a declared `SNAPSHOT_ID_PATHS` member.
+		"hand_size", "hero", "knockback", "landing",
 		"last_resolved_card", "lifechain", "lock_target",
 		"mana", "orbs",
 		"pending_draw", "pending_draw_owed",
@@ -316,7 +320,8 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# extension is a separate cause that moves no key. This copy moves for the SAME reason and is
 		# updated here deliberately: the observation channel still adds nothing, which is what this test
 		# actually asserts.
-		"projectile_alive", "projectile_damage", "projectile_effect", "projectile_flight_ticks",
+		"projectile_alive", "projectile_color", "projectile_damage", "projectile_effect",
+		"projectile_flight_ticks",
 		"projectile_homing", "projectile_kind",
 		"projectile_source", "projectile_targets", "projectile_travelled",
 		# Story 6-5c (AC 17/AC 23): `root` -- `[remaining_ticks, blocks_run, blocks_roll]` -- in
@@ -364,10 +369,12 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 		# THE CLAIM THIS PIN GUARDS IS STILL UNCHANGED, which is what makes this extension legitimate too:
 		# a per-record float is the `unit_hp` class exactly -- a value, not an identity, not a position and
 		# not a StringName. It is literally the same NUMBER `unit_hp` carried one tick before the death.
-		"unit_count", "unit_hp", "unit_hp_at_death", "unit_in_reach", "unit_kind", "unit_raised_from",
+		"unit_count", "unit_heal_count", "unit_heal_ticks", "unit_hp", "unit_hp_at_death",
+		"unit_in_reach", "unit_kind", "unit_knockback", "unit_raised_from",
 		# Story 7-3: `unit_reach_second` (the second reach band's freshness, `unit_in_reach`'s twin).
-		"unit_reach_second",
+		"unit_reach_second", "unit_shot_owed",
 		"unit_swing_dedupe", "unit_targets",
+		"volley",
 	]
 	assert_eq(keys, expected,
 		"the per-player snapshot key set is UNCHANGED by the observation channel — counts only, "
@@ -375,8 +382,11 @@ func test_the_observation_channel_adds_no_snapshot_key() -> void:
 	# Story 4-2: the COUNT, asserted separately from the SET, so the move from ten to eleven is a
 	# named quantity in its own right. A future story that swaps one key for another would keep this
 	# green and fail the set assertion above; one that adds a key silently fails BOTH.
-	assert_eq(keys.size(), 59,
-		"the per-player snapshot key set is FIFTY-NINE keys as of story 7-5a, which adds EIGHT, one per new "
+	assert_eq(keys.size(), 66,
+		"the per-player snapshot key set is SIXTY-SIX keys as of story 7-5b, which adds SEVEN: `knockback`, "
+		+ "`volley`, `projectile_color`, `unit_heal_ticks`, `unit_heal_count`, `unit_shot_owed` and "
+		+ "`unit_knockback` (the pulse radius and the per-part reversal amounts ride `cast` and `reversal`). "
+		+ "It was FIFTY-NINE keys as of story 7-5a, which adds EIGHT, one per new "
 		+ "hashed per-player fact: `stagings`, `setup`, `charge_setup`, `execute`, `stoneskin`, `enrage`, "
 		+ "`lifechain` and `hand_discount` (each crosses ticks and decides an outcome, `4-3a/R17`; the ninth "
 		+ "fact rides the existing `reversal` key as a seventh element). "

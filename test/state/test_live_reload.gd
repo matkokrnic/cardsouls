@@ -49,7 +49,9 @@ const DECK_IDS: Array[StringName] = [&"reload_card_a", &"reload_card_b", &"reloa
 ## Story 7-5a (AC 8/AC 10): FOURTEEN -> FIFTEEN capture METHODS, because `MatchState` gained the per-seat
 ## intake `inject_seat_decks` and this set is derived from the intake surface (`3-0c/R2`). It is the
 ## per-seat form of the deck channel, so the CHANNEL count stays fourteen.
-const SHIPPED_CAPTURE_CHANNELS := 15
+## Story 7-5b (AC 6, `7-5b/R17`): FIFTEEN -> SIXTEEN capture methods, the HEAL-RANGE channel, because
+## `MatchState` gained the intake `push_heal_range` and this set is derived from the intake surface.
+const SHIPPED_CAPTURE_CHANNELS := 16
 
 
 # ---------------------------------------------------------------- AC 2
@@ -130,7 +132,10 @@ func test_the_replay_side_consumes_the_live_event_with_no_new_code() -> void:
 ## per-seat form of the existing deck channel (`SOUND_CONTENT_ORDER` is unmoved), not a new channel. The
 ## old name was `test_the_recorder_still_ships_exactly_fourteen_capture_channels`, recorded verbatim so
 ## the pin stays greppable.
-func test_the_recorder_still_ships_exactly_fifteen_capture_methods() -> void:
+## RENAMED BY STORY 7-5b (AC 6) for the same count-in-the-name reason: `capture_push_heal_range` is the
+## SIXTEENTH capture method and a new channel. The old name was
+## `test_the_recorder_still_ships_exactly_fifteen_capture_methods`, recorded verbatim.
+func test_the_recorder_still_ships_exactly_sixteen_capture_methods() -> void:
 	var script: GDScript = load(RECORDER)
 	var channels: Array[String] = []
 	for method: Dictionary in script.get_script_method_list():
@@ -164,6 +169,9 @@ func test_the_recorder_still_ships_exactly_fifteen_capture_methods() -> void:
 		# what the move is worth. The pin moves because the STORY moved it -- this guard doing its job
 		# and naming the cause.
 		"capture_push_drain_target",
+		# Story 7-5b (AC 6): the per-tick HEAL-RANGE channel, the drain-target sibling. Sorted position; the
+		# FORMAT_VERSION bump 24 -> 25 carries it.
+		"capture_push_heal_range",
 		"capture_seed", "capture_set_camera_basis",
 		# Story 4-6 (AC 2, `4-6/R6`): the TENTH channel -- the per-tick lock direction, the
 		# `capture_set_camera_basis` sibling. The pin moves because the STORY moved it, which is
@@ -171,9 +179,10 @@ func test_the_recorder_still_ships_exactly_fifteen_capture_methods() -> void:
 		"capture_set_lock_direction",
 	], "the channel set is the EIGHT `3-0c` shipped, plus story 4-1's card-effect channel, story "
 		+ "4-6's lock-direction channel, story 5-2's card-colour channel, story 6-2's pitch-cost channel, "
-		+ "story 6-5a's pitch-effect channel and story 6-5b's drain-target channel")
+		+ "story 6-5a's pitch-effect channel, story 6-5b's drain-target channel and story 7-5b's "
+		+ "heal-range channel")
 	assert_eq(channels.size(), SHIPPED_CAPTURE_CHANNELS,
-		"a SIXTEENTH capture method is a scope violation, and this is where it fails")
+		"a SEVENTEENTH capture method is a scope violation, and this is where it fails")
 	assert_eq(IntentRecorder.SOUND_CONTENT_ORDER.size(), 6,
 		"...and the per-seat deck form added NO content channel (story 7-5a): still six")
 

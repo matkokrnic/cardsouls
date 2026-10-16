@@ -190,7 +190,20 @@ func on_unit_behavior(_behavior_phase: int, _behavior_ticks: int, _circle_dir: i
 ## the crossfade time, the bounds of the locomotion playback rate, the stalk's playback rate, the
 ## heading sectors. IGNORED HERE, like the push above: the zombie has one walk clip, no blend and no
 ## stalk, and no row.
-func on_unit_motion(_forward_speed: float, _side_speed: float, _knobs: EffectPresentationRow) -> void:
+## Story 7-5b smoke fix 2 (S15b): and the YAW the body actually turned through, in degrees per second (positive =
+## turning left), which the Healer's turn-in-place clips play by; the runner measures it for a follower only and
+## passes 0.0 for every other kind. Defaulted, so a caller with no turn to report says nothing.
+func on_unit_motion(_forward_speed: float, _side_speed: float, _knobs: EffectPresentationRow,
+		_yaw_speed: float = 0.0) -> void:
+	pass
+
+
+## Story 7-5b (AC 10): the FOURTH per-tick push from the same seat, also ahead of `on_unit_tick` -- the
+## unit's heal count and owed-shot countdown, two plain ints off its board record, and (smoke fix 1, S6) its
+## hp, whose fall plays the Healer's `hurt`. IGNORED HERE, like the two pushes above: only
+## `HealerAnimationController` selects by them. A polled argument list on the existing path, not an
+## observation seam.
+func on_unit_support(_heal_count: int, _shot_owed: int, _hp: float) -> void:
 	pass
 
 

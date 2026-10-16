@@ -131,6 +131,15 @@ func color_of(r: EffectPresentationRow, fallback: Color = Color(0.8, 0.75, 0.7))
 	return fallback
 
 
+## Story 7-5b (AC 23): the vocabulary colour of an `Enums.CardColor` ordinal -- an Elemental Fury shot's colour
+## fact (`ProjectileBoard.color_at`). Any other value answers `fallback`. The one colour table, `color_of`'s.
+func card_color(color: int, fallback: Color) -> Color:
+	var profile: Variant = _vocabulary.get(color)
+	if color >= 0 and profile is TelegraphProfile:
+		return (profile as TelegraphProfile).color
+	return fallback
+
+
 ## ---------------------------------------------------------------------------------------------- sound
 
 ## Play one row slot. Non-positional on the `CombatCues` bus, the standing cue shape (AC 30). `parent` binds the
@@ -394,24 +403,70 @@ func show_drain(source: Vector3, caster: Node3D) -> void:
 	if r == null or not is_instance_valid(caster):
 		return
 	var color := color_of(r)
-	var thread := MeshInstance3D.new()
-	add_child(thread)
-	var from := source + Vector3(0.0, 0.8, 0.0)
-	var to := caster.global_position
-	var mesh := ImmediateMesh.new()
-	thread.mesh = mesh
-	thread.material_override = EffectFx.material(null, color, true, BaseMaterial3D.BILLBOARD_DISABLED)
-	var verts := PackedVector3Array()
-	EffectFx._ribbon(verts, PackedVector3Array([from, from.lerp(to, 0.5) + Vector3(0, 0.4, 0), to]), r.size)
-	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for v: Vector3 in verts:
-		mesh.surface_add_vertex(v)
-	mesh.surface_end()
-	EffectFx.free_after(thread, r.duration)
+	_thread(source + Vector3(0.0, 0.8, 0.0), caster.global_position, color, r.size, r.duration)
 	EffectFx.burst(self, source + Vector3(0.0, 0.5, 0.0), EffectFx.TEX_DEBRIS, Color(0.45, 0.42, 0.35, 1.0),
 			r.count, 0.7, 0.35, 2.5, 70.0, 6.0, false)
 	_overlay_flash(_hero_skin(caster), color, r.knob(&"flash", 0.25))
 	play_sound(&"drain", &"drain")
+
+
+## Drain's THREAD (7-1): a ribbon `width` wide from `from` to `to`, arched up at its middle, drawn for `seconds`.
+## Shared by the Healer's heal look (story 7-5b smoke fix 1, S5). Returns the thread node.
+func _thread(from: Vector3, to: Vector3, color: Color, width: float, seconds: float) -> MeshInstance3D:
+	var thread := MeshInstance3D.new()
+	add_child(thread)
+	var mesh := ImmediateMesh.new()
+	thread.mesh = mesh
+	thread.material_override = EffectFx.material(null, color, true, BaseMaterial3D.BILLBOARD_DISABLED)
+	var verts := PackedVector3Array()
+	EffectFx._ribbon(verts, PackedVector3Array([from, from.lerp(to, 0.5) + Vector3(0, 0.4, 0), to]), width)
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for v: Vector3 in verts:
+		mesh.surface_add_vertex(v)
+	mesh.surface_end()
+	EffectFx.free_after(thread, seconds)
+	return thread
+
+
+## Story 7-5b smoke fix 1 (S5): ONE HEALER HEAL, EVERY ONE VISIBLE (placeholder quality; the `healer` row's
+## knobs, the row's green). On the HEALER a green-gold flash from both hands as its `cast` starts (a burst
+## `knob heal_hand_size` across and a flash light at each hand); a thin green THREAD from the Healer to its
+## OWNER for `knob heal_thread_seconds`, `knob heal_thread_width` wide (Drain's thread); on the OWNER rising
+## green sparkles (`knob heal_sparkle_count` over `knob heal_sparkle_seconds`) and a brief green rim flash for
+## `knob heal_flash_seconds` (Drain's caster flash). The `+HEAL` marker over the owner is the runner's, as before.
+func show_healer_heal(healer: Node3D, owner: Node3D) -> void:
+	var r := row(&"healer")
+	if r == null or not is_instance_valid(healer) or not is_instance_valid(owner):
+		return
+	var green := color_of(r)
+	var gold := green.lerp(Color(1.0, 0.85, 0.35), 0.5)
+	var hands := _hand_positions(healer)
+	var hand_size := r.knob(&"heal_hand_size", 0.35)
+	for hand: Vector3 in hands:
+		EffectFx.burst(self, hand, EffectFx.TEX_GLOW, gold, 10, 0.35, hand_size, 1.2)
+		_flash_light(hand, gold, r.intensity * 2.0, 2.5, 0.3)
+	var from: Vector3 = hands[0].lerp(hands[hands.size() - 1], 0.5)
+	_thread(from, owner.global_position + Vector3(0.0, 1.0, 0.0), green, r.knob(&"heal_thread_width", 0.05),
+			r.knob(&"heal_thread_seconds", 0.3))
+	EffectFx.burst(self, owner.global_position + Vector3(0.0, 0.3, 0.0), EffectFx.TEX_GLOW, green.lightened(0.2),
+			int(r.knob(&"heal_sparkle_count", 18.0)), r.knob(&"heal_sparkle_seconds", 0.9), 0.12, 1.6, 25.0, -1.5)
+	_overlay_flash(_hero_skin(owner), green, r.knob(&"heal_flash_seconds", 0.3))
+
+
+## The world positions of a rigged actor's two hands (its first `Skeleton3D`'s Mixamo hand bones), or one point
+## a metre above its root when it has no such skeleton.
+func _hand_positions(actor: Node3D) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var skeletons := actor.find_children("*", "Skeleton3D", true, false)
+	if not skeletons.is_empty():
+		var skeleton := skeletons[0] as Skeleton3D
+		for bone_name: String in ["mixamorig_LeftHand", "mixamorig_RightHand"]:
+			var bone := skeleton.find_bone(bone_name)
+			if bone >= 0:
+				out.append(skeleton.global_transform * skeleton.get_bone_global_pose(bone).origin)
+	if out.is_empty():
+		out.append(actor.global_position + Vector3(0.0, 1.0, 0.0))
+	return out
 
 
 ## VAMPIRIC AURA (AC 11): one lifesteal heal = droplets flowing into the hero; `heal` per heal.
@@ -639,7 +694,9 @@ func flash_returned(actor: Node3D) -> void:
 ## Dress a freshly spawned shot by its effect id: Fireball, Rocksling stone or Corpse Bomb skull. A shot with no
 ## row (the totem shot, `5-0c`) is left exactly as it spawned. THE HITBOX IS NEVER TOUCHED (AC 4/AC 35): the
 ## default `Mesh` is hidden and the look is parented beside it, concentric with `Hitbox/HitboxShape`.
-func dress_projectile(shot: Node3D, effect_id: StringName, damage: float) -> void:
+## Story 7-5b (AC 23): `color_fact` is the shot's colour fact (`ProjectileBoard.color_at`, -1 for none); only an
+## Elemental Fury shot reads it.
+func dress_projectile(shot: Node3D, effect_id: StringName, damage: float, color_fact: int = -1) -> void:
 	var r := row_for_effect(effect_id)
 	if r == null or not is_instance_valid(shot):
 		return
@@ -681,6 +738,53 @@ func dress_projectile(shot: Node3D, effect_id: StringName, damage: float) -> voi
 			dress.add_child(flame)
 			dress.add_child(_flare_trail(color, envelope, r))
 			play_sound(&"corpse_bomb", &"skull_launch")
+		&"healer":
+			# Story 7-5b (AC 23): the Healer's shot wears the ROCKSLING STONE -- the stone look and its throw
+			# sound reused, sized by the Healer row's own `knob shot_size`.
+			var stone := _rock_instance(r.knob(&"shot_size", 0.35))
+			dress.add_child(stone)
+			_spin(stone, r.knob(&"spin_seconds", 0.6))
+			play_sound(&"rocksling", &"rock_throw")
+		&"elemental_fury":
+			# Story 7-5b (AC 23): a glowing core in the shot's OWN colour (red, blue or green), with the
+			# Fireball's flame envelope and flare trail in that colour, and the Fireball's launch sound.
+			_dress_fury(dress, r, card_color(color_fact, color_of(r)))
+			play_sound(&"fireball", &"fire_launch")
+
+
+## Story 7-5b (AC 23): ELEMENTAL FURY -- a solid core of `size` radius in `color` (unshaded, so the colour reads as
+## itself), wrapped in the Fireball's flame envelope (`knob envelope_radius`) and flare trail.
+const FURY_CORE_NODE := &"FuryCore"
+## Story 7-5b smoke fix 2 (S14): the bright star on a Fury core. Tests find it by this name.
+const FURY_STAR_NODE := &"FuryStar"
+
+
+func _dress_fury(dress: Node3D, r: EffectPresentationRow, color: Color) -> void:
+	var core := MeshInstance3D.new()
+	core.name = FURY_CORE_NODE
+	var sphere := SphereMesh.new()
+	sphere.radius = r.size
+	sphere.height = r.size * 2.0
+	core.mesh = sphere
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = color
+	core.material_override = material
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	dress.add_child(core)
+	var envelope := r.knob(&"envelope_radius", r.size * 1.6)
+	_flame_envelope(dress, color, envelope, r.count)
+	dress.add_child(_flare_trail(color, envelope, r))
+	# Story 7-5b smoke fix 2 (S14, the Stars of Ruin look): a bright STAR on the core in its own colour (`knob
+	# star_size`, whitened by `knob star_whiten`), the flare trail above drawn longer (its `trail_seconds`), and a
+	# small SPARKLE BURST where it leaves (`knob launch_sparkle_count` / `_size` / `_speed` / `_seconds`).
+	var bright := color.lerp(Color.WHITE, r.knob(&"star_whiten", 0.4))
+	var star := EffectFx.quad(EffectFx.TEX_STAR, bright, r.knob(&"star_size", 0.8), true)
+	star.name = FURY_STAR_NODE
+	dress.add_child(star)
+	EffectFx.burst(self, dress.global_position, EffectFx.TEX_STAR, bright, int(r.knob(&"launch_sparkle_count", 12.0)),
+			r.knob(&"launch_sparkle_seconds", 0.4), r.knob(&"launch_sparkle_size", 0.12),
+			r.knob(&"launch_sparkle_speed", 3.0))
 
 
 ## FIREBALL (AC 16/AC 17): no model -- a glowing core with moving noise (`fireball_core.gdshader`), a particle
@@ -772,11 +876,12 @@ static func _hit_radius(shot: Node3D) -> float:
 
 
 ## A shot ended (AC 16, `7-1/R2`): the ending look at its last hit-centre position.
-func end_projectile(position: Vector3, effect_id: StringName, how: int) -> void:
+## Story 7-5b: `color_fact` is the shot's colour fact, as `dress_projectile` takes it.
+func end_projectile(position: Vector3, effect_id: StringName, how: int, color_fact: int = -1) -> void:
 	var r := row_for_effect(effect_id)
 	if r == null:
 		return
-	var color := color_of(r)
+	var color := card_color(color_fact, color_of(r))
 	if how == End.VANISH:
 		var vanish := row(&"counterspell")
 		EffectFx.burst(self, position, EffectFx.TEX_RUNE, color_of(vanish, color), 3, 0.4, 0.9, 0.5)
@@ -815,6 +920,342 @@ func end_projectile(position: Vector3, effect_id: StringName, how: int) -> void:
 					0.28, 5.0, 180.0, 8.0, false)
 			EffectFx.burst(self, position, EffectFx.TEX_FLAME, color, r.count / 2, 0.4, 0.6, 2.0)
 			play_sound(&"corpse_bomb", &"skull_hit")
+		&"healer":
+			# Story 7-5b: the stone's own ending, reused -- debris and chunks, the hit sound on a hit only.
+			var stone_spread := 180.0 if how == End.SCATTER else 70.0
+			EffectFx.burst(self, position, EffectFx.TEX_DEBRIS, Color(0.55, 0.5, 0.45, 1.0), r.count, r.duration,
+					0.3, 4.0, stone_spread, 9.0, false)
+			_spawn_rock_chunks(position, 4, r.knob(&"shot_size", 0.35) * 0.35)
+			if how != End.SCATTER:
+				play_sound(&"rocksling", &"rock_hit")
+		&"elemental_fury":
+			# Story 7-5b: a burst in the shot's own colour; the Fireball's hit sound on a hit only.
+			EffectFx.burst(self, position, EffectFx.TEX_FLAME, color, r.count, r.duration, r.size * 3.0, 4.0, 180.0, 2.0)
+			EffectFx.burst(self, position, EffectFx.TEX_STAR, color.lightened(0.3), 12, 0.4, 0.15, 6.0)
+			if how != End.SCATTER:
+				play_sound(&"fireball", &"fire_hit")
+
+
+## ---------------------------------------------------------------------------------------------- wrath of god
+
+## Story 7-5b (AC 23): the node name of the Wrath windup's ground ring on the caster. Tests find it by this name.
+const PULSE_RING_NODE := &"PulseRing"
+const _PULSE_RING_KEY := &"pulse_ring"
+## Story 7-5b smoke fix 2 (S13): the windup's golden column and the light gathering at the raised hands (children of
+## the caster), the pulse's expanding shockwave (a child of this presenter) and the impact flash on a body the pulse
+## hit (a child of that body). Tests find them by these names.
+const WRATH_COLUMN_NODE := &"WrathColumn"
+const WRATH_GLOW_NODE := &"WrathHandGlow"
+const WRATH_WAVE_NODE := &"WrathWave"
+const WRATH_HIT_NODE := &"WrathHit"
+const _WRATH_COLUMN_KEY := &"wrath_column"
+const _WRATH_GLOW_KEY := &"wrath_glow"
+## Not tuning: the flat disc's thickness (and the least a ring's inner radius may be), and the shortest time a fade
+## or a spread is given -- floors that keep a zero knob from dividing by zero or drawing a degenerate mesh.
+const _DISC_THICKNESS := 0.01
+const _MIN_SECONDS := 0.05
+
+
+## Story 7-5b (AC 23): THE WRATH RING, LEVEL-TRIGGERED from the runner's per-tick poll: a flat ring on the ground
+## under `hero` whose OUTER EDGE is `radius` -- the radius state froze at the activation (`PlayerState.cast_radius`)
+## -- for as long as the runner pushes a radius above zero, gone at zero. A child of the hero actor (whose root
+## never rotates, DECISION A), so it is centred on the caster in both viewports. `knob ring_width` is its width.
+##
+## SMOKE FIX 2 (S13, the Wrath of Gold look): `progress` is how far through its windup the cast is (0 at the press,
+## 1 on the pulse tick, the runner's read of the cast window), and the windup GATHERS with it, all gold/white and
+## every number a knob:
+##   * the ring BRIGHTENS -- alpha `ring_alpha_start` -> `ring_alpha_end`, whitening by `ring_whiten` -- and its
+##     radius never moves off the frozen one;
+##   * a faint golden COLUMN on the caster grows to `column_height` (`column_radius` wide, `column_alpha`);
+##   * golden light GATHERS AT THE RAISED HANDS -- a bright point growing `glow_size_min` -> `glow_size_max` with a
+##     light to `glow_light_energy` (`glow_light_range`), and rising golden motes (`glow_mote_count` over
+##     `glow_mote_seconds`, `glow_mote_size`, rising at `glow_mote_rise`) -- placed each tick at the hands' midpoint.
+func set_pulse_ring(slot: int, hero: Node3D, radius: float, progress: float = 0.0) -> void:
+	var existing: Variant = _hero_nodes[slot].get(_PULSE_RING_KEY)
+	if radius <= 0.0 or not is_instance_valid(hero):
+		_drop_ring(existing)
+		_hero_nodes[slot].erase(_PULSE_RING_KEY)
+		_drop_ring(_hero_nodes[slot].get(_WRATH_COLUMN_KEY))
+		_hero_nodes[slot].erase(_WRATH_COLUMN_KEY)
+		_drop_ring(_hero_nodes[slot].get(_WRATH_GLOW_KEY))
+		_hero_nodes[slot].erase(_WRATH_GLOW_KEY)
+		return
+	var r := row(&"wrath_of_god")
+	var t := clampf(progress, 0.0, 1.0)
+	var gold := wrath_gold(r)
+	var ring: MeshInstance3D
+	if is_instance_valid(existing) and (existing as Node).get_parent() == hero:
+		ring = existing as MeshInstance3D
+	else:
+		_drop_ring(existing)
+		ring = MeshInstance3D.new()
+		ring.name = PULSE_RING_NODE
+		ring.mesh = TorusMesh.new()
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		ring.material_override = material
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		hero.add_child(ring)
+		ring.position = Vector3(0.0, HERO_FEET_Y + 0.03, 0.0)
+		_hero_nodes[slot][_PULSE_RING_KEY] = ring
+	var torus := ring.mesh as TorusMesh
+	var width := r.knob(&"ring_width", 0.12) if r != null else 0.12
+	if not is_equal_approx(torus.outer_radius, radius):
+		torus.outer_radius = radius
+		torus.inner_radius = maxf(radius - width, 0.01)
+	var alpha := lerpf(_k(r, &"ring_alpha_start", 0.5), _k(r, &"ring_alpha_end", 1.0), t)
+	(ring.material_override as StandardMaterial3D).albedo_color = \
+			Color(gold.lerp(Color.WHITE, t * _k(r, &"ring_whiten", 0.5)), alpha)
+	_wrath_column(slot, hero, r, gold, t)
+	_wrath_glow(slot, hero, r, gold, t)
+
+
+## The row's knob `name`, or `fallback` with no row.
+static func _k(r: EffectPresentationRow, name: StringName, fallback: float) -> float:
+	return r.knob(name, fallback) if r != null else fallback
+
+
+## Story 7-5b smoke fix 2 (S13): THE WRATH GOLD, from the row's `gold_r` / `gold_g` / `gold_b` knobs (data, not a
+## literal): the one colour every part of the look is drawn in, whitened toward the pulse.
+static func wrath_gold(r: EffectPresentationRow) -> Color:
+	return Color(_k(r, &"gold_r", 1.0), _k(r, &"gold_g", 0.82), _k(r, &"gold_b", 0.35))
+
+
+## The windup's golden column on the caster, grown to `progress` of its authored height (feet up).
+func _wrath_column(slot: int, hero: Node3D, r: EffectPresentationRow, gold: Color, t: float) -> void:
+	var column := _hero_nodes[slot].get(_WRATH_COLUMN_KEY) as MeshInstance3D \
+			if is_instance_valid(_hero_nodes[slot].get(_WRATH_COLUMN_KEY)) else null
+	if column == null or column.get_parent() != hero:
+		column = MeshInstance3D.new()
+		column.name = WRATH_COLUMN_NODE
+		var cylinder := CylinderMesh.new()
+		cylinder.cap_top = false
+		cylinder.cap_bottom = false
+		column.mesh = cylinder
+		column.material_override = EffectFx.material(null, Color(gold, _k(r, &"column_alpha", 0.25)), true,
+				BaseMaterial3D.BILLBOARD_DISABLED)
+		column.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		hero.add_child(column)
+		_hero_nodes[slot][_WRATH_COLUMN_KEY] = column
+	var mesh := column.mesh as CylinderMesh
+	var height := maxf(_k(r, &"column_height", 6.0) * t, _DISC_THICKNESS)
+	mesh.height = height
+	mesh.top_radius = _k(r, &"column_radius", 0.6)
+	mesh.bottom_radius = mesh.top_radius
+	column.position = Vector3(0.0, HERO_FEET_Y + height * 0.5, 0.0)
+
+
+## The light gathering at the raised hands: a growing bright point, a light and rising motes at the hands' midpoint.
+func _wrath_glow(slot: int, hero: Node3D, r: EffectPresentationRow, gold: Color, t: float) -> void:
+	var glow := _hero_nodes[slot].get(_WRATH_GLOW_KEY) as Node3D \
+			if is_instance_valid(_hero_nodes[slot].get(_WRATH_GLOW_KEY)) else null
+	if glow == null or glow.get_parent() != hero:
+		glow = Node3D.new()
+		glow.name = WRATH_GLOW_NODE
+		hero.add_child(glow)
+		var point := EffectFx.quad(EffectFx.TEX_GLOW, gold.lerp(Color.WHITE, _k(r, &"glow_whiten", 0.5)),
+				_k(r, &"glow_size_max", 0.9), true)
+		point.name = &"Point"
+		glow.add_child(point)
+		var lamp := EffectFx.light(gold, 0.0, _k(r, &"glow_light_range", 4.0))
+		lamp.name = &"Light"
+		glow.add_child(lamp)
+		var motes := EffectFx.particles(EffectFx.TEX_STAR, gold, int(_k(r, &"glow_mote_count", 24.0)),
+				_k(r, &"glow_mote_seconds", 0.8), _k(r, &"glow_mote_size", 0.08), _k(r, &"glow_mote_speed", 0.4),
+				_k(r, &"glow_mote_spread", 60.0), -_k(r, &"glow_mote_rise", 2.0), false, false)
+		motes.name = &"Motes"
+		glow.add_child(EffectFx.emit_sphere(motes, _k(r, &"glow_mote_area", 0.3)))
+		_hero_nodes[slot][_WRATH_GLOW_KEY] = glow
+	var hands := _hand_positions(hero)
+	glow.global_position = hands[0].lerp(hands[hands.size() - 1], 0.5)
+	var size := lerpf(_k(r, &"glow_size_min", 0.1), _k(r, &"glow_size_max", 0.9), t)
+	((glow.get_node(^"Point") as MeshInstance3D).mesh as QuadMesh).size = Vector2(size, size)
+	(glow.get_node(^"Light") as OmniLight3D).light_energy = _k(r, &"glow_light_energy", 3.0) * t
+
+
+## The drawn size of `slot`'s gathering hand light (0.0 when none) -- what a test reads.
+func wrath_glow_size(slot: int) -> float:
+	var glow: Variant = _hero_nodes[slot].get(_WRATH_GLOW_KEY)
+	if not is_instance_valid(glow):
+		return 0.0
+	return (((glow as Node3D).get_node(^"Point") as MeshInstance3D).mesh as QuadMesh).size.x
+
+
+## A ring leaves its hero AT ONCE and is freed after: a new ring added in the same frame keeps the node name.
+func _drop_ring(ring: Variant) -> void:
+	if not is_instance_valid(ring):
+		return
+	var node := ring as Node
+	if node.get_parent() != null:
+		node.get_parent().remove_child(node)
+	node.queue_free()
+
+
+## The drawn ring's outer radius for `slot`, or 0.0 when none is drawn -- what a test reads.
+func pulse_ring_radius(slot: int) -> float:
+	var ring: Variant = _hero_nodes[slot].get(_PULSE_RING_KEY)
+	if not is_instance_valid(ring):
+		return 0.0
+	return ((ring as MeshInstance3D).mesh as TorusMesh).outer_radius
+
+
+## Story 7-5b (AC 23): THE PULSE, on the tick the windup ends with a pulse (the runner's read).
+##
+## SMOKE FIX 2 (S13, the Wrath of Gold look), every number a knob of the `wrath_of_god` row, all in its gold:
+##   * a WHITE-GOLD FLASH at the caster -- a light (`intensity`, `flash_seconds`) and a bright point
+##     (`flash_size`), whitened by `flash_whiten`;
+##   * a golden SHOCKWAVE that EXPANDS ON THE GROUND from the caster to the frozen `radius` in `wave_seconds` -- a
+##     translucent disc (`disc_alpha`), a bright rim (`rim_width`) and a vertical sheet of light at its edge
+##     (`wall_height`, `wall_alpha`) -- then fades over `afterglow_seconds`. GEOMETRY-HONEST: its drawn radius ends
+##     on `radius`, the state's (`pulse_wave_radius`). Driven on PHYSICS ticks, so the expansion is a function of
+##     ticks, not of frame rate;
+##   * DUST and DEBRIS thrown outward along the ground to the edge (`dust_count`, `dust_size`, `debris_count`,
+##     `debris_size`, both over `dust_seconds`), GOLDEN SPARKS rising across the ring (`spark_count`, `spark_size`,
+##     `spark_rise`, `spark_seconds`) and an AFTERGLOW on the ground (`afterglow_seconds`, `afterglow_alpha`);
+##   * the deep BOOM (Boom's file) and a holy CHIME (the magic bells Frostbite arms with) -- the row's
+##     `pulse_boom` and `pulse_chime` slots.
+## The camera shake is the runner's (both viewports, `shake_seconds` / `shake_amplitude`).
+func show_pulse(position: Vector3, radius: float) -> void:
+	var r := row(&"wrath_of_god")
+	if r == null:
+		return
+	var gold := wrath_gold(r)
+	var white_gold := gold.lerp(Color.WHITE, _k(r, &"flash_whiten", 0.6))
+	var flash_seconds := _k(r, &"flash_seconds", 0.25)
+	var ground := Vector3(position.x, position.y + HERO_FEET_Y + _k(r, &"ground_lift", 0.04), position.z)
+	_flash_light(position, white_gold, r.intensity, radius * 2.0, flash_seconds)
+	var point := EffectFx.quad(EffectFx.TEX_GLOW, white_gold, _k(r, &"flash_size", 3.0), true)
+	add_child(point)
+	point.global_position = position
+	_fade_out(point, flash_seconds)
+	_wrath_wave(ground, radius, r, gold)
+	var dust_seconds := maxf(_k(r, &"dust_seconds", 0.6), _MIN_SECONDS)
+	var earth := Color(_k(r, &"earth_r", 0.55), _k(r, &"earth_g", 0.5), _k(r, &"earth_b", 0.45))
+	_ground_burst(ground, EffectFx.TEX_SMOKE, gold.lerp(earth, _k(r, &"dust_tint", 0.6)),
+			int(_k(r, &"dust_count", 40.0)), dust_seconds, _k(r, &"dust_size", 0.9), radius / dust_seconds)
+	_ground_burst(ground, EffectFx.TEX_DEBRIS, earth, int(_k(r, &"debris_count", 24.0)), dust_seconds,
+			_k(r, &"debris_size", 0.25), radius / dust_seconds)
+	var sparks := EffectFx.burst(self, ground, EffectFx.TEX_STAR, white_gold, int(_k(r, &"spark_count", 48.0)),
+			_k(r, &"spark_seconds", 1.0), _k(r, &"spark_size", 0.12), _k(r, &"spark_rise", 3.0),
+			_k(r, &"spark_spread", 20.0), -_k(r, &"spark_rise", 3.0))
+	var spread := radius * _k(r, &"spark_area", 0.7)
+	EffectFx.emit_box(sparks, Vector3(spread, _DISC_THICKNESS, spread))
+	var afterglow := EffectFx.quad(EffectFx.TEX_GLOW, Color(gold, _k(r, &"afterglow_alpha", 0.6)), radius * 2.0, false)
+	add_child(afterglow)
+	afterglow.global_position = ground
+	_fade_out(afterglow, _k(r, &"wave_seconds", 0.25) + _k(r, &"afterglow_seconds", 0.5))
+	play_sound(&"wrath_of_god", &"pulse_boom")
+	play_sound(&"wrath_of_god", &"pulse_chime")
+
+
+## A one-shot burst thrown OUTWARD ALONG THE GROUND in every direction at `speed` (dust and debris), not up.
+func _ground_burst(at: Vector3, texture: Texture2D, color: Color, amount: int, seconds: float, size: float,
+		speed: float) -> void:
+	var p := EffectFx.burst(self, at, texture, color, amount, seconds, size, speed, 180.0, 0.0, false)
+	var pm := p.process_material as ParticleProcessMaterial
+	pm.direction = Vector3.RIGHT
+	pm.flatness = 1.0
+
+
+## The expanding golden shockwave: a disc, a rim and an edge sheet sized together by `_set_wave_radius`.
+func _wrath_wave(ground: Vector3, radius: float, r: EffectPresentationRow, gold: Color) -> void:
+	var previous := get_node_or_null(NodePath(WRATH_WAVE_NODE))
+	if previous != null:
+		remove_child(previous)
+		previous.queue_free()
+	var wave := Node3D.new()
+	wave.name = WRATH_WAVE_NODE
+	add_child(wave)
+	wave.global_position = ground
+	var disc := MeshInstance3D.new()
+	disc.name = &"Disc"
+	var disc_mesh := CylinderMesh.new()
+	disc_mesh.height = _DISC_THICKNESS
+	disc.mesh = disc_mesh
+	disc.material_override = EffectFx.material(null, Color(gold, _k(r, &"disc_alpha", 0.35)), true,
+			BaseMaterial3D.BILLBOARD_DISABLED)
+	wave.add_child(disc)
+	var rim := MeshInstance3D.new()
+	rim.name = &"Rim"
+	rim.mesh = TorusMesh.new()
+	rim.material_override = EffectFx.material(null, gold.lerp(Color.WHITE, _k(r, &"flash_whiten", 0.6)), true,
+			BaseMaterial3D.BILLBOARD_DISABLED)
+	wave.add_child(rim)
+	var wall := MeshInstance3D.new()
+	wall.name = &"Wall"
+	var wall_mesh := CylinderMesh.new()
+	wall_mesh.cap_top = false
+	wall_mesh.cap_bottom = false
+	wall_mesh.height = _k(r, &"wall_height", 1.0)
+	wall.mesh = wall_mesh
+	wall.position = Vector3(0.0, wall_mesh.height * 0.5, 0.0)
+	wall.material_override = EffectFx.material(null, Color(gold, _k(r, &"wall_alpha", 0.45)), true,
+			BaseMaterial3D.BILLBOARD_DISABLED)
+	wave.add_child(wall)
+	for part: MeshInstance3D in [disc, rim, wall]:
+		part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var start := minf(_k(r, &"rim_width", 0.15), radius)
+	_set_wave_radius(start, wave, _k(r, &"rim_width", 0.15))
+	var tween := wave.create_tween()
+	tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	tween.tween_method(_set_wave_radius.bind(wave, _k(r, &"rim_width", 0.15)), start, radius,
+			maxf(_k(r, &"wave_seconds", 0.25), _MIN_SECONDS))
+	# The AFTERGLOW: once expanded, all three parts fade together (the first after the expansion, the other two
+	# beside it), then the wave goes.
+	var fade := maxf(_k(r, &"afterglow_seconds", 0.5), _MIN_SECONDS)
+	tween.tween_property(disc.material_override, "albedo_color:a", 0.0, fade)
+	tween.parallel().tween_property(rim.material_override, "albedo_color:a", 0.0, fade)
+	tween.parallel().tween_property(wall.material_override, "albedo_color:a", 0.0, fade)
+	tween.tween_callback(wave.queue_free)
+
+
+## Size the shockwave's three parts to `radius`. Bound order: the tweened value first.
+func _set_wave_radius(radius: float, wave: Variant, rim_width: float) -> void:
+	if not is_instance_valid(wave):
+		return
+	var node := wave as Node3D
+	var disc := (node.get_node(^"Disc") as MeshInstance3D).mesh as CylinderMesh
+	disc.top_radius = radius
+	disc.bottom_radius = radius
+	var rim := (node.get_node(^"Rim") as MeshInstance3D).mesh as TorusMesh
+	rim.outer_radius = radius
+	rim.inner_radius = maxf(radius - rim_width, _DISC_THICKNESS)
+	var wall := (node.get_node(^"Wall") as MeshInstance3D).mesh as CylinderMesh
+	wall.top_radius = radius
+	wall.bottom_radius = radius
+	node.set_meta(&"radius", radius)
+
+
+## The drawn radius of the latest pulse's shockwave (0.0 when none is drawn) -- what a test reads.
+func pulse_wave_radius() -> float:
+	var wave := get_node_or_null(NodePath(WRATH_WAVE_NODE))
+	return float(wave.get_meta(&"radius", 0.0)) if wave != null else 0.0
+
+
+## Story 7-5b smoke fix 2 (S13): a golden IMPACT FLASH on `body`, which the pulse just hit -- the runner calls it
+## only for a body the state reports hit (the caster's Wrath record, `MatchRunner._show_wrath_hits`). A child of
+## the body, at `hit_height` above its feet: a white-gold star (`hit_size`), a light and a spark burst
+## (`hit_spark_count`), over `hit_seconds`.
+func show_wrath_hit(body: Node3D) -> void:
+	var r := row(&"wrath_of_god")
+	if r == null or not is_instance_valid(body):
+		return
+	var white_gold := wrath_gold(r).lerp(Color.WHITE, _k(r, &"flash_whiten", 0.6))
+	var seconds := _k(r, &"hit_seconds", 0.35)
+	var hit := Node3D.new()
+	hit.name = WRATH_HIT_NODE
+	body.add_child(hit)
+	var feet := body.global_position.y + (HERO_FEET_Y if body is HeroActor else 0.0)
+	hit.global_position = Vector3(body.global_position.x, feet + _k(r, &"hit_height", 1.1), body.global_position.z)
+	var star := EffectFx.quad(EffectFx.TEX_STAR, white_gold, _k(r, &"hit_size", 1.2), true)
+	hit.add_child(star)
+	_fade_out(star, seconds)
+	var lamp := EffectFx.light(white_gold, r.intensity, _k(r, &"hit_light_range", 3.0))
+	hit.add_child(lamp)
+	EffectFx.burst(hit, hit.global_position, EffectFx.TEX_SPARK, white_gold, int(_k(r, &"hit_spark_count", 16.0)),
+			seconds, _k(r, &"hit_spark_size", 0.12), _k(r, &"hit_spark_speed", 4.0))
+	EffectFx.free_after(hit, seconds)
 
 
 ## CORPSE BOMB (AC 21): each converted minion glows blue as its skull flies out of it.

@@ -1,0 +1,53 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/actors/minions/unit_actor.gd" id="1_unitactor"]
+[ext_resource type="PackedScene" path="res://assets/characters/healer/healer.fbx" id="2_hlmodel"]
+[ext_resource type="AnimationLibrary" path="res://assets/characters/healer/healer_anims.res" id="3_hlanims"]
+[ext_resource type="Script" path="res://src/actors/minions/healer_animation_controller.gd" id="4_hlanctl"]
+[ext_resource type="Material" path="res://assets/characters/healer/healer_p1.tres" id="5_skinp1"]
+[ext_resource type="Material" path="res://assets/characters/healer/healer_p2.tres" id="6_skinp2"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_healerbody"]
+height = 2.0
+radius = 0.3
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_healerhurt"]
+size = Vector3(0.56, 1.64, 0.48)
+
+[node name="HealerActor" type="CharacterBody3D"]
+script = ExtResource("1_unitactor")
+owner_skins = Array[Material]([ExtResource("5_skinp1"), ExtResource("6_skinp2")])
+skin_mesh_path = NodePath("Healer/Skeleton3D/Lower_Armor")
+editor_description = "Story 7-5b (ACs 9-11). The Healer's actor: hound_actor.tscn's node set on the SAME unit_actor.gd script, MINUS the Hitbox -- the Healer never attacks (its shot is a hero-sourced projectile record that carries its own hitbox). Chosen by MatchRunner._unit_scene_for from its per-kind table (7-3/D5). ROOT AT THE FEET, like unit_actor.tscn. owner_skins holds the purple (P1) and red (P2) materials, each the Healer's own albedo and normal textures with a tint (7-5b/R13); the runner calls apply_owner_skin(slot) at spawn. It carries NO `Mesh/Totem` child, which keeps the runner's totem test false for it."
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("CylinderShape3D_healerbody")
+editor_description = "The BODY shape, on default layer 1 like every unit. A CYLINDER (the hound's feel-pass reason: this root yaws to face its owner, and a cylinder is the same shape at every yaw). HEIGHT 2.0 m, THE HERO'S BODY BOX, standing on the ground (centre at half its height): 7-3/R38 -- a body shorter than the hero's is one a hero can be depenetrated UP onto. Radius 0.3 m, inside the drawn torso."
+
+[node name="Hurtbox" type="Area3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+monitoring = false
+editor_description = "Unit hurtbox, the unit_actor.tscn convention verbatim: layer 2, mask 0, monitoring off. It is DETECTED and detects nothing; the runner's gather pass is its only consumer."
+
+[node name="HurtboxShape" type="CollisionShape3D" parent="Hurtbox"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.82, 0)
+shape = SubResource("BoxShape3D_healerhurt")
+editor_description = "FITS THE DRAWN BODY (smoke fix 1, S7): 1.64 m tall from the ground, the drawn top at the 0.8 mount being 1.635 m (tools/measure_healer_rig.gd, table 7), 0.56 m across and 0.48 m deep (the native 0.7 x 0.6 at the mount scale) -- a hit that visibly lands on the Healer has to count, and one that passes over its helmet must not. The BODY cylinder above stays 2.0 m (7-3/R38)."
+
+[node name="Healer" parent="." instance=ExtResource("2_hlmodel")]
+transform = Transform3D(-0.8, 0, 0, 0, 0.8, 0, 0, 0, -0.8, 0, 0, 0)
+editor_description = "The skinned Mixamo Healer ('Knight D Pelegrini', story 7-5b AC 9), imported at root_scale 1.0 (2.07 m, origin at its feet) and MOUNTED AT SCALE 0.8 HERE, THE ONE PLACE ITS SIZE IS SET (story 7-5b smoke fix 1, S7; the hound's 0.33 mount is the precedent): drawn about 1.66 m, the paladin's height (tools/measure_healer_rig.gd, table 7). A HALF-TURN YAW, no translation: the model faces +Z and this scene's forward is -Z (the zombie's mount, 4-3c fix pass)."
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Healer"]
+root_node = NodePath("..")
+libraries = {
+&"": ExtResource("3_hlanims")
+}
+editor_description = "The Healer's SIX clips -- idle, walk, cast, shoot, death and (smoke fix 1, S6) hurt -- as one AnimationLibrary built headlessly by tools/build_healer_anims.gd. `root_node` is the model instance, so the library's `Skeleton3D:mixamorig_*` tracks resolve against its skeleton. The model's own Mixamo take never reaches the scene: assets/characters/healer/strip_model_anim.gd removes it at import. Pinned by test/integration/test_healer_rig_clips.gd."
+
+[node name="AnimationController" type="Node" parent="."]
+script = ExtResource("4_hlanctl")
+animation_player_path = NodePath("../Healer/AnimationPlayer")
+editor_description = "HealerAnimationController: the Healer's READ-ONLY clip selector, pushed by MatchRunner._aim_unit_actors like the zombie's and the hound's. No _physics_process (F1), no state handle."

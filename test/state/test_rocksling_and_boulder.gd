@@ -126,8 +126,17 @@ func test_every_field_read_through_the_effect_id_handle_is_in_the_mirrored_set()
 	assert_true(mirrored.has("boulders_per_cast") and mirrored.has("launch_speed"),
 		"sanity: the compared set really was scanned out of `_mirrored_values_agree` (found %s)"
 				% ", ".join(mirrored))
-	assert_eq(mirrored.size(), 7,
-		"sanity: the seven fields the two mirrors carry -- six flight, plus `boulders_per_cast`")
+	# Story 7-5b smoke fix 1 (S9): seven -> eight. The block rung reads `blocked_damage_multiplier` through
+	# `_shot_effect_of`, and this test's own rule put it in the comparison in the same edit.
+	# Story 7-5b smoke fix 2 (S14): eight -> twelve. The four Stars-of-Ruin flight fields are mirrored into the
+	# profile, so they join the comparison in the same edit.
+	# Story 7-5b review fix (P2): twelve -> seventeen. The scan follows `_effect_id_lookup_values_agree`, whose five
+	# fields (`damage_amount`, `heal_amount`, the two slow numbers, `volley_interval_seconds`) the comparison always
+	# carried but this test could not see.
+	assert_eq(mirrored.size(), 17,
+		"sanity: the seventeen fields the comparison carries -- six flight, `boulders_per_cast`, (smoke fix 1, S9) "
+				+ "`blocked_damage_multiplier`, (smoke fix 2, S14) the four Stars-of-Ruin flight fields, and (review "
+				+ "fix, P2) the five effect-id-lookup fields")
 	var handles := _handles_assigned_from(lines, "_shot_effect_of")
 	assert_true(handles.size() > 0,
 		"sanity: `_shot_effect_of`'s return is assigned somewhere -- a rename un-guards this test")
@@ -143,6 +152,18 @@ func test_every_field_read_through_the_effect_id_handle_is_in_the_mirrored_set()
 		("a field is read through the EFFECT-ID handle but is NOT in `_mirrored_values_agree`'s "
 			+ "comparison, so two entries under one id could disagree on it silently (AC 1a): %s")
 					% ", ".join(outside))
+	# Story 7-5b review fix (P2): and the second handle -- a field read off a variable assigned from
+	# `_effects_by_effect_id.get(` belongs in the same comparison, in the same edit.
+	var looked_up := _fields_read_through_effect_id_lookups(lines)
+	assert_true(looked_up.has("damage_amount") and looked_up.has("slow_duration_seconds"),
+		"sanity: the lookup scan found the Healer / Fury reads (found %s)" % ", ".join(looked_up))
+	var unmirrored: Array[String] = []
+	for field: String in looked_up:
+		if not mirrored.has(field):
+			unmirrored.append(field)
+	assert_eq(unmirrored.size(), 0,
+		("a field is read through `_effects_by_effect_id.get(` but is NOT in the mirror comparison, so two "
+			+ "entries under one id could disagree on it silently (AC 1a): %s") % ", ".join(unmirrored))
 
 
 # ------------------------------------------------------- AC 7-11a: the cast and the committed burst
@@ -1050,16 +1071,48 @@ func _fields_compared_by_the_mirror_predicate(lines: Array[String]) -> Array[Str
 	var inside := false
 	var reader := RegEx.create_from_string("\\ba\\.([A-Za-z_][A-Za-z0-9_]*)")
 	for line in lines:
-		if line.contains("func _mirrored_values_agree("):
-			inside = true
+		# Story 7-5b review fix (P2): the comparison is two functions now -- the mirrored fields inline and the
+		# effect-id-lookup fields in `_effect_id_lookup_values_agree`, which the first calls. Both bodies are the set.
+		if line.begins_with("func ") or line.begins_with("static func "):
+			inside = line.contains("func _mirrored_values_agree(") \
+					or line.contains("func _effect_id_lookup_values_agree(")
 			continue
-		if inside and line.begins_with("func ") or (inside and line.begins_with("static func ")):
-			break
 		if not inside:
 			continue
 		for m: RegExMatch in reader.search_all(line):
 			if not out.has(m.get_string(1)):
 				out.append(m.get_string(1))
+	return out
+
+
+## Story 7-5b review fix (P2): the fields read off a variable assigned from `_effects_by_effect_id.get(` -- the OTHER
+## way a field reaches the effect-id handle (the Healer's shot, the Fury volley and landing read through it, not
+## through `_shot_effect_of`). Scoped per function body, because `effect` is also an ordinary parameter name all
+## over the file. The effect's own identity (`effect_id`) is the lookup KEY, not a value two entries could disagree on.
+func _fields_read_through_effect_id_lookups(lines: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	var assign := RegEx.create_from_string("var\\s+([A-Za-z_][A-Za-z0-9_]*)[^=]*=\\s*_effects_by_effect_id\\.get\\(")
+	var body: Array[String] = []
+	var bodies: Array = []
+	for line in lines:
+		if line.begins_with("func ") or line.begins_with("static func "):
+			bodies.append(body)
+			body = []
+		body.append(line)
+	bodies.append(body)
+	for fn: Array in bodies:
+		var handles: Array[String] = []
+		for line: String in fn:
+			var m := assign.search(line)
+			if m != null and not handles.has(m.get_string(1)):
+				handles.append(m.get_string(1))
+		for handle: String in handles:
+			var reader := RegEx.create_from_string("\\b%s\\.([A-Za-z_][A-Za-z0-9_]*)" % handle)
+			for line: String in fn:
+				for r: RegExMatch in reader.search_all(line):
+					var field := r.get_string(1)
+					if field != "effect_id" and not out.has(field):
+						out.append(field)
 	return out
 
 

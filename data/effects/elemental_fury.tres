@@ -5,3 +5,18 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"elemental_fury"
+heal_amount = 5.0
+slow_speed_multiplier = 0.5
+slow_duration_seconds = 4.0
+damage_amount = 3.0
+launch_speed = 8.0
+homing_turn_rate_degrees_per_second = 360.0
+acceleration_delay_seconds = 0.35
+acceleration_per_second_squared = 12.0
+max_speed = 22.0
+travel_budget = 60.0
+fan_arc_degrees = 35.0
+launch_pitch_degrees = 15.0
+launch_height = 0.5
+bloom_turn_rate_degrees_per_second = 30.0
+volley_interval_seconds = 0.15

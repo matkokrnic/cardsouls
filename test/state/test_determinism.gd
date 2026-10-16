@@ -1416,7 +1416,32 @@ extends TestCase
 ##   so the staging count and the discount never move; no unblockable is pressed. A Part B behaviour move
 ##   would have shown as (a) failing to reproduce `3823edbd...`, and it reproduces it.
 ## ---------------------------------------------------------------------------------------------
-const GOLDEN := "fbad85ce3f3ea1c02e1787e0288e8e039a0a4b375e972d20723dabe71c49e972"
+## STORY 7-5b (Deck 2 bodies), PART A: RE-BASELINED ONCE, `fbad85ce...` -> `97c9a1de...`, NINE CAUSES,
+## ALL SHAPE, measured the 7-5a way (the fixture's own hash-tick snapshot, taken once by a script outside
+## the repo, `C:\dev\_7-5b-golden\measure.gd`, hashed with causes erased / restored; no source edit):
+##   SEVEN NEW per-player KEYS, each at rest on every hashed tick because the fixture casts none of the
+##   three bodies: `volley` (["", [], 0]), `knockback` ([0, (0, 0), 0.0]), `projectile_color` ([] -- no
+##   shot), and four board keys over the fixture's one minion -- `unit_heal_ticks` ([0]), `unit_heal_count`
+##   ([0]), `unit_shot_owed` ([-1]), `unit_knockback` ([[0, (0, 0), 0.0]]). The per-player key set goes
+##   59 -> 66.
+##   TWO ARITY MOVES, no key: `cast` 6 -> 7 (the frozen pulse radius, resting 0.0) and `reversal` 7 -> 8
+##   (the per-part amounts, `[]` for P1's written Vanguard packet and P2's resting one).
+##   (a) REVERSE PROBE (`E6-R/R8`): all nine erased -> `fbad85ce...` EXACTLY, the 7-5a hash. So no
+##       BEHAVIOUR moved: the fixture's summon, its melee exchange and its throttled targeting all run
+##       through the new seats (the heal seat, the volley and Healer-shot seats, the knockback branch) and
+##       come back bit-identical.
+##   (b) each cause ALONE on the old shape moves the hash (nine distinct hashes), and each REMOVED from the
+##       new shape moves it (nine more) -- none is a non-mover, none is redundant.
+##   (c) the cumulative chain, in the order below, ends at `97c9a1de...`:
+##       + volley           9dbcd7de...      + unit_shot_owed   2ef47881...
+##       + knockback        9ad978c4...      + unit_knockback   60993b94...
+##       + unit_heal_ticks  61cf1b40...      + projectile_color 994c441f...
+##       + unit_heal_count  14c5279c...      + cast arity       625ca646...
+##                                           + reversal arity   97c9a1de...
+##   PREDICTED NON-CAUSES, MEASURED: the new `CardEffect` and `UnitKindProfile` fields (content and balance,
+##   never hashed -- they move the RECORD format, `FORMAT_VERSION` 24 -> 25, not this hash).
+## ---------------------------------------------------------------------------------------------
+const GOLDEN := "97c9a1de7047d28ffa41e9b55dca905b6ccb542942677a096d2735c11b29da96"
 
 ## Story 4-4 (AC 6/AC 12): the golden fixture's authored MINION KIND values — coverage-not-feel like
 ## every number in `_golden_config`, and deliberately NOT the authored 9.0 / 3.0.
@@ -1930,11 +1955,12 @@ func test_the_golden_fixture_carries_the_measured_content_of_this_storys_three_c
 	# record naming the board index it appended; P2 carries the masked resting packet.
 	assert_eq(p1["reversal"],
 		# Story 7-5a (AC 47): the packet is SEVEN elements -- `amount_b` joined it, resting 0.0 here.
+		# Story 7-5b (AC 22): EIGHT -- the per-part amounts joined it, empty for a whole-column record.
 		[PlayerState.REVERSAL_VANGUARD, [0] as Array[int], [] as Array[int], [] as Array[int],
-			[] as Array[bool], 0.0, 0.0],
+			[] as Array[bool], 0.0, 0.0, [] as Array[float]],
 		"P1's reversal packet records the t22 SUMMON at board index 0 -- the fixture exercises a "
 		+ "WRITTEN packet, not only the resting one (AC 2/AC 17)")
-	assert_eq(p2["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0],
+	assert_eq(p2["reversal"], [PlayerState.REVERSAL_NONE, [], [], [], [], 0.0, 0.0, []],
 		"P2 resolved nothing, so its packet is the masked resting value -- the RESTING-EMPTY sub-case "
 		+ "of Golden Prediction cause 2, measured here rather than argued")
 	# CAUSE 3 (AC 23, `6-5f/R32`): one float per record, all resting, because nothing in this fixture
@@ -2349,6 +2375,35 @@ func test_the_summon_consumes_no_rng() -> void:
 		"...and the effects-less run really did not — so this comparison is not vacuous")
 	assert_eq(summoning.to_snapshot()["rng_state"], not_summoning.to_snapshot()["rng_state"],
 		"appending a unit record consumed NO rng — the predicted non-mover, confirmed")
+
+
+## Story 7-5b (AC 3): THE HEALER TWIN of the test above. That test summons the golden fixture's minion, which
+## is not the Healer, so the Healer's own claim -- it never flees, never attacks, never acquires a target and
+## draws NOTHING from the match RNG at any tick -- is pinned here on its own kind: a match that summons a
+## Healer and lets it live, heal and fire on a chargeup for two hundred ticks ends at the SAME `rng_state`
+## as the identical match whose Healer card resolved with the minion layer closed (nothing summoned). The
+## kind authors no between-attack behaviour and no attack, so no seeded draw can be reached.
+func test_the_healer_consumes_no_rng() -> void:
+	var with_healer := _healer_run(true)
+	var without := _healer_run(false)
+	assert_eq(with_healer.p1.units.size(), 1, "sanity: the Healer was summoned in the first match")
+	assert_true(with_healer.p1.units.heal_count_at(0) > 0, "...and actually healed")
+	assert_true(with_healer.p1.projectiles.size() > 0, "...and fired on the chargeup")
+	assert_eq(without.p1.units.size(), 0, "...and the closed-layer match summoned nothing")
+	assert_eq(with_healer.to_snapshot()["rng_state"], without.to_snapshot()["rng_state"],
+		"a living, healing, shooting Healer consumed NO rng")
+
+
+func _healer_run(minions: bool) -> MatchState:
+	const BodiesFx := preload("res://test/deck_2_bodies_fixture.gd")
+	var flags := BodiesFx.flags_with(minions, true)
+	var ms: MatchState = BodiesFx.make(flags)
+	BodiesFx.summon_healer(ms, 0)
+	BodiesFx.D.set_hp(ms, ms.p1, 50.0)
+	BodiesFx.D.press_unblockable(ms, 0)
+	for _t in 200:
+		BodiesFx.advance_with_ranges(ms, [[0, 0]] if ms.p1.units.size() > 0 else [])
+	return ms
 
 
 ## Story 4-2 (AC 7/AC 8/AC 11): the BEHAVIOURAL golden cause, pinned on the hashed record itself

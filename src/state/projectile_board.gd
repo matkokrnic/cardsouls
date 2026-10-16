@@ -135,6 +135,13 @@ var _effect_ids: Array[String] = []
 ## bit-identical damage is true by construction rather than by a value that happens to be zero.
 var _damage: Array[float] = []
 
+## Story 7-5b (AC 13/AC 15, `7-5b/R7`): THE COLOUR an Elemental Fury projectile stands for -- an
+## `Enums.CardColor` ordinal, fixed at launch, or `NO_COLOR` for every other shot. It decides what the
+## landing does (red damages, blue slows, green heals the caster), so it is HASHED (`projectile_color`).
+var _colors: Array[int] = []
+
+const NO_COLOR := -1
+
 
 ## The ONE way a projectile enters the board — the `UnitBoard.add()` discipline (one seat, inside
 ## the ordered dispatch). Called from `MatchState._advance_unit_attacks` at the windup-to-active
@@ -157,6 +164,7 @@ func add(target_slot: int, target_index: int, kind_index: int, source_index: int
 	# `is_hero_sourced_at` reads, so this seat needs no flag and the totem path is untouched.
 	_effect_ids.append("")
 	_damage.append(0.0)
+	_colors.append(NO_COLOR)
 
 
 ## Story 6-5d (AC 13): THE SECOND WAY A PROJECTILE ENTERS THE BOARD -- a HERO-SOURCED shot, placed by
@@ -171,8 +179,9 @@ func add(target_slot: int, target_index: int, kind_index: int, source_index: int
 ## `NO_KIND_INDEX` AND `HERO_INDEX` ARE WRITTEN HERE, not left to a caller: a hero-sourced record must
 ## never resolve a unit kind, and `_source_index` must land on the runner's existing owner-hero fallback
 ## in `_projectile_launch_position` so the shot leaves the caster (AC 13) with no runner edit.
+## Story 7-5b (AC 13): a defaulted COLOUR -- only Elemental Fury passes one.
 func add_hero_shot(target_slot: int, target_index: int, effect_id: StringName,
-		damage: float) -> void:
+		damage: float, color: int = NO_COLOR) -> void:
 	Invariant.check(effect_id != &"",
 		"a hero-sourced projectile needs an effect id -- the empty id means unit-fired")
 	_target_slots.append(target_slot)
@@ -185,11 +194,13 @@ func add_hero_shot(target_slot: int, target_index: int, effect_id: StringName,
 	_travelled.append(0.0)
 	_effect_ids.append(String(effect_id))
 	_damage.append(damage)
+	_colors.append(color)
 
 
 ## Story 6-5e (AC 3a, `6-5e/R23`/G4): THE THIRD WAY A PROJECTILE ENTERS THE BOARD -- a shot a HERO'S
-## SPELL fired FROM A MINION'S POSITION. Corpse Bomb's skulls, placed by `MatchState._apply_corpse_bomb`
-## and nowhere else.
+## SPELL fired FROM A MINION'S POSITION. Corpse Bomb's skulls, placed by `MatchState._apply_corpse_bomb`,
+## and -- STORY 7-5b (AC 8) -- the Healer's shots, placed by `MatchState._advance_healer_shots`: both are a
+## hero's card's projectile leaving one of its units, and these are the only two seats.
 ##
 ## IT EXISTS BECAUSE `add_hero_shot` WRITES `HERO_INDEX` INSIDE THE SEAT, BY DESIGN. That seat's own
 ## docstring says why -- "`_source_index` must land on the runner's existing owner-hero fallback in
@@ -230,6 +241,7 @@ func add_minion_shot(target_slot: int, target_index: int, effect_id: StringName,
 	_travelled.append(0.0)
 	_effect_ids.append(String(effect_id))
 	_damage.append(damage)
+	_colors.append(NO_COLOR)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end — `UnitBoard.clear()`'s contract (`4-1/R5`)
@@ -249,6 +261,7 @@ func clear() -> void:
 	_travelled.clear()
 	_effect_ids.clear()
 	_damage.clear()
+	_colors.clear()
 
 
 func size() -> int:
@@ -457,3 +470,19 @@ func effect_id_snapshot() -> Array:
 
 func damage_snapshot() -> Array:
 	return _damage.duplicate()
+
+
+## Story 7-5b (AC 13): the per-shot colour. Lenient on the index, `is_hero_sourced_at`'s reason: the contact
+## ladder asks it of untrusted fact data.
+func color_at(index: int) -> int:
+	return _colors[index] if has_index(index) else NO_COLOR
+
+
+func color_snapshot() -> Array:
+	return _colors.duplicate()
+
+
+## Story 7-5b (AC 25): round end -- every shot's colour payload rests (see `MatchState._end_round`).
+func clear_colors() -> void:
+	for i in _colors.size():
+		_colors[i] = NO_COLOR

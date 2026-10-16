@@ -170,8 +170,15 @@ func test_stunned_has_exactly_three_authored_non_table_entry_points() -> void:
 		if n > 0:
 			sites.append("%s x%d" % [path, n])
 	sites.sort()
-	assert_eq(sites, ["res://src/state/match_state.gd x4"],
-		"STORY 6-5c (`6-5c/R11`): THREE -> FOUR. The FOURTH is the HONED BOLT LANDING in "
+	assert_eq(sites, ["res://src/state/match_state.gd x5"],
+		"STORY 7-5b (`7-5b/R18`): FOUR -> FIVE. The FIFTH is the WRATH PULSE STUN in `_apply_wrath_stun`, "
+		+ "argued on the footing of the four: a DIFFERENT CAUSE (an area pulse, not a melee exchange, a "
+		+ "landing or a single-target bolt), a DIFFERENT SUBJECT-AND-SEAT (every hero inside the ring at "
+		+ "step 6c's pulse strike) and DIFFERENT COLLATERAL (a knockback slide; no root and no bolt flag, so "
+		+ "it cannot reuse `_apply_bolt_landing`, whose CHARGING teardown alone it shares through "
+		+ "`_abandon_chargeup`). No PRESS maps to it, so the TABLE-edge scan stays unedited. "
+		+ "MUTATION (7-5b dev pass): delete the pulse's write -> this pin reads `x4` and goes RED. "
+		+ "STORY 6-5c (`6-5c/R11`): THREE -> FOUR. The FOURTH is the HONED BOLT LANDING in "
 		+ "`_apply_bolt_landing`, and it is ARGUED rather than merely added, on the footing 6-6a and "
 		+ "6-6b each used for the third and the counter: a DIFFERENT SUBJECT (the bolt's target -- not "
 		+ "the deflected attacker, not the unanswered victim, not the countered attacker), a DIFFERENT "
@@ -184,7 +191,7 @@ func test_stunned_has_exactly_three_authored_non_table_entry_points() -> void:
 		+ "COLOUR COUNTER in `_resolve_color_counter` (6-6b AC 4, which MOVED here from the retired "
 		+ "landing rung in `_resolve_charge_landing`), the melee deflect in `_resolve_contacts` "
 		+ "(5-6 AC 9), and the knockdown in `_apply_landing_packages` (6-6a AC 3). "
-		+ "A fourth site anywhere under src/ fails here and must be argued, not merely added -- got %s"
+		+ "A sixth site anywhere under src/ fails here and must be argued, not merely added -- got %s"
 		% [sites])
 
 

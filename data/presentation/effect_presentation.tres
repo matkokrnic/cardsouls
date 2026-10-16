@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="EffectPresentationSet" load_steps=54 format=3]
+[gd_resource type="Resource" script_class="EffectPresentationSet" load_steps=57 format=3]
 
 [ext_resource type="Script" path="res://src/actors/effects/effect_presentation_set.gd" id="1_set"]
 [ext_resource type="Script" path="res://src/actors/effects/effect_presentation_row.gd" id="2_row"]
@@ -431,6 +431,143 @@ extra = {
 &"spark_count": 24.0
 }
 
+[sub_resource type="Resource" id="Row_healer"]
+script = ExtResource("2_row")
+row_id = &"healer"
+effect_ids = PackedStringArray("healer")
+card_color = 2
+size = 1.6
+duration = 1.2
+count = 24
+silences_generic_cue = true
+sounds = {
+&"summon": ExtResource("s_summon")
+}
+volume_db = {
+&"summon": 0.0
+}
+extra = {
+&"blend_seconds": 0.2,
+&"cast_seconds": 1.0,
+&"heal_flash_seconds": 0.3,
+&"heal_hand_size": 0.35,
+&"heal_sparkle_count": 18.0,
+&"heal_sparkle_seconds": 0.9,
+&"heal_thread_seconds": 0.3,
+&"heal_thread_width": 0.05,
+&"locomotion_rate_max": 2.2,
+&"locomotion_rate_min": 0.5,
+&"reaim_turn_rate_degrees_per_second": 90.0,
+&"shoot_face_hold_seconds": 0.6,
+&"shot_size": 0.35,
+&"spin_seconds": 0.6,
+&"turn_dead_zone_degrees": 25.0,
+&"walk_enter_speed": 0.6,
+&"walk_exit_speed": 0.25
+}
+
+[sub_resource type="Resource" id="Row_elemental_fury"]
+script = ExtResource("2_row")
+row_id = &"elemental_fury"
+effect_ids = PackedStringArray("elemental_fury")
+card_color = 1
+size = 0.2
+duration = 0.5
+count = 24
+intensity = 2.0
+extra = {
+&"envelope_radius": 0.35,
+&"launch_sparkle_count": 12.0,
+&"launch_sparkle_seconds": 0.4,
+&"launch_sparkle_size": 0.12,
+&"launch_sparkle_speed": 3.0,
+&"star_size": 0.8,
+&"star_whiten": 0.4,
+&"trail_seconds": 0.8,
+&"trail_amount": 64.0
+}
+
+[sub_resource type="Resource" id="Row_wrath_of_god"]
+script = ExtResource("2_row")
+row_id = &"wrath_of_god"
+effect_ids = PackedStringArray("wrath_of_god")
+card_color = 1
+size = 1.0
+duration = 0.5
+count = 32
+intensity = 6.0
+sounds = {
+&"pulse_boom": ExtResource("s_boom"),
+&"pulse_chime": ExtResource("s_frost_arm")
+}
+volume_db = {
+&"pulse_boom": 2.0,
+&"pulse_chime": -4.0
+}
+pitch = {
+&"pulse_boom": 0.8,
+&"pulse_chime": 0.85
+}
+extra = {
+&"afterglow_alpha": 0.6,
+&"afterglow_seconds": 0.5,
+&"column_alpha": 0.22,
+&"column_height": 6.0,
+&"column_radius": 0.6,
+&"debris_count": 24.0,
+&"debris_size": 0.25,
+&"disc_alpha": 0.35,
+&"dust_count": 40.0,
+&"dust_seconds": 0.6,
+&"dust_size": 0.9,
+&"dust_tint": 0.6,
+&"earth_b": 0.45,
+&"earth_g": 0.5,
+&"earth_r": 0.55,
+&"flash_seconds": 0.25,
+&"flash_size": 3.0,
+&"flash_whiten": 0.6,
+&"glow_light_energy": 3.0,
+&"glow_light_range": 4.0,
+&"glow_mote_area": 0.3,
+&"glow_mote_count": 24.0,
+&"glow_mote_rise": 2.0,
+&"glow_mote_seconds": 0.8,
+&"glow_mote_size": 0.08,
+&"glow_mote_speed": 0.4,
+&"glow_mote_spread": 60.0,
+&"glow_size_max": 0.9,
+&"glow_size_min": 0.1,
+&"glow_whiten": 0.5,
+&"gold_b": 0.35,
+&"gold_g": 0.82,
+&"gold_r": 1.0,
+&"ground_lift": 0.04,
+&"hit_height": 1.1,
+&"hit_light_range": 3.0,
+&"hit_seconds": 0.35,
+&"hit_size": 1.2,
+&"hit_spark_count": 16.0,
+&"hit_spark_size": 0.12,
+&"hit_spark_speed": 4.0,
+&"rim_width": 0.15,
+&"ring_alpha_end": 1.0,
+&"ring_alpha_start": 0.5,
+&"ring_whiten": 0.5,
+&"ring_width": 0.12,
+&"shake_amplitude": 0.12,
+&"shake_seconds": 0.3,
+&"spark_area": 0.7,
+&"spark_count": 48.0,
+&"spark_rise": 3.0,
+&"spark_seconds": 1.0,
+&"spark_size": 0.12,
+&"spark_spread": 20.0,
+&"wall_alpha": 0.45,
+&"wall_height": 1.0,
+&"wave_seconds": 0.25
+}
+
 [resource]
 script = ExtResource("1_set")
-rows = Array[ExtResource("2_row")]([SubResource("Row_vanguard"), SubResource("Row_hellhound"), SubResource("Row_culling"), SubResource("Row_grave_ward"), SubResource("Row_raise_dead"), SubResource("Row_drain"), SubResource("Row_vampiric_aura"), SubResource("Row_rocksling"), SubResource("Row_boulder_slow"), SubResource("Row_boom"), SubResource("Row_bloodhound_step"), SubResource("Row_fireball"), SubResource("Row_honed_bolt"), SubResource("Row_counterspell"), SubResource("Row_frostbite"), SubResource("Row_corpse_bomb"), SubResource("Row_stun_root")])
+rows = Array[ExtResource("2_row")]([SubResource("Row_vanguard"), SubResource("Row_hellhound"), SubResource("Row_culling"), SubResource("Row_grave_ward"), SubResource("Row_raise_dead"), SubResource("Row_drain"), SubResource("Row_vampiric_aura"), SubResource("Row_rocksling"), SubResource("Row_boulder_slow"), SubResource("Row_boom"), SubResource("Row_bloodhound_step"), SubResource("Row_fireball"), SubResource("Row_honed_bolt"), SubResource("Row_counterspell"), SubResource("Row_frostbite"), SubResource("Row_corpse_bomb"), SubResource("Row_stun_root"), SubResource("Row_healer"), SubResource("Row_elemental_fury"), SubResource("Row_wrath_of_god")])

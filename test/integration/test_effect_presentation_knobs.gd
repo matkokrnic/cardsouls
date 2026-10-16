@@ -55,7 +55,8 @@ func _initialize() -> void:
 			"the authored set has exactly one row per Scope row (%d vs %d)"
 					% [knob_set.rows.size(), EffectPresentationSet.ROW_SOUND_SLOTS.size()])
 	# Story 7-3 (AC 15): sixteen -> seventeen, the `hellhound` row (its spawn sound and its bark).
-	_check(rows_checked == 17, "the Scope table has seventeen rows, walked %d" % rows_checked)
+	# Story 7-5b (AC 23): seventeen -> twenty, the `healer`, `elemental_fury` and `wrath_of_god` rows.
+	_check(rows_checked == 20, "the Scope table has twenty rows, walked %d" % rows_checked)
 	# Story 7-3, feel pass: THE HELLHOUND ROW'S NEW KNOBS ARE AUTHORED AND BOUNDED (the presentation
 	# half of the authoring audit; the kind's own numbers are bounded in test_balance_authoring.gd).
 	# Each band is the condition under which the knob still does its job.
@@ -128,6 +129,51 @@ func _initialize() -> void:
 				"the voices the cap leaves alone are %s, want the bite's snap and the yelp" % [EffectPresentationSet.UNCAPPED_VOICES])
 		_check(not ResourceLoader.exists("res://assets/audio/effects/sfx_hound_bark.tres"),
 				"the synthesized placeholder bark is still in the tree")
+	# Story 7-5b smoke fix 1 (S3, S4, S5, S8): THE HEALER ROW'S KNOBS ARE AUTHORED AND BOUNDED, each band the
+	# condition under which the knob still does its job.
+	var healer := knob_set.row(&"healer") if knob_set != null else null
+	_check(healer != null, "the `healer` row is authored")
+	if healer != null:
+		for bound: Array in [[&"blend_seconds", 0.05, 0.3], [&"cast_seconds", 0.5, 2.0],
+				[&"shoot_face_hold_seconds", 0.2, 1.5], [&"heal_thread_seconds", 0.1, 1.0],
+				[&"heal_thread_width", 0.01, 0.2], [&"heal_flash_seconds", 0.1, 1.0], [&"heal_hand_size", 0.1, 1.0],
+				[&"heal_sparkle_count", 4.0, 64.0], [&"heal_sparkle_seconds", 0.2, 2.0],
+				# Smoke fix 2 (S15a): a dead zone that still lets the body face its owner (0) or ever turn (90), and a
+				# re-aim rate that still turns (0) without spinning its turn clip into a blur.
+				[&"turn_dead_zone_degrees", 5.0, 45.0], [&"reaim_turn_rate_degrees_per_second", 30.0, 360.0]]:
+			_check(healer.extra.has(bound[0]), "row 'healer': knob '%s' is not authored" % bound[0])
+			var value := healer.knob(bound[0], -1.0)
+			_check(value >= float(bound[1]) and value <= float(bound[2]),
+					"row 'healer': %s %.3f is outside [%.2f, %.2f]" % [bound[0], value, bound[1], bound[2]])
+		var rate_min := healer.knob(&"locomotion_rate_min", -1.0)
+		var rate_max := healer.knob(&"locomotion_rate_max", -1.0)
+		_check(rate_min > 0.0 and rate_min <= 1.0 and rate_max >= 1.0 and rate_max <= 4.0,
+				"row 'healer': the locomotion rate bounds %.2f..%.2f must bracket 1.0 inside (0, 4]" % [rate_min, rate_max])
+		# The walk/idle HYSTERESIS: two thresholds, the exit strictly below the enter, both well under a walk.
+		var enter := healer.knob(&"walk_enter_speed", -1.0)
+		var exit := healer.knob(&"walk_exit_speed", -1.0)
+		_check(exit > 0.0 and exit < enter and enter < 1.5,
+				"row 'healer': walk_exit_speed %.2f and walk_enter_speed %.2f must be a band 0 < exit < enter < 1.5 m/s"
+						% [exit, enter])
+	# Story 7-5b smoke fix 2 (S13): THE WRATH OF GOLD LOOK'S KNOBS ARE AUTHORED AND BOUNDED -- the wave expands in about
+	# a quarter second and fades in about half (the ruling's numbers), its edge sheet is about a metre, the shake may
+	# be OFF (0) but is short, and the gold is a colour.
+	var wrath := knob_set.row(&"wrath_of_god") if knob_set != null else null
+	_check(wrath != null, "the `wrath_of_god` row is authored")
+	if wrath != null:
+		for bound: Array in [[&"wave_seconds", 0.1, 0.5], [&"afterglow_seconds", 0.2, 1.0], [&"wall_height", 0.5, 2.0],
+				[&"shake_seconds", 0.0, 0.6], [&"shake_amplitude", 0.0, 0.3], [&"column_height", 1.0, 12.0],
+				[&"glow_size_min", 0.0, 1.0], [&"glow_size_max", 0.2, 2.0], [&"hit_seconds", 0.1, 1.0],
+				[&"gold_r", 0.0, 1.0], [&"gold_g", 0.0, 1.0], [&"gold_b", 0.0, 1.0],
+				[&"ring_alpha_start", 0.1, 1.0], [&"ring_alpha_end", 0.1, 1.0]]:
+			_check(wrath.extra.has(bound[0]), "row 'wrath_of_god': knob '%s' is not authored" % bound[0])
+			var value := wrath.knob(bound[0], -1.0)
+			_check(value >= float(bound[1]) and value <= float(bound[2]),
+					"row 'wrath_of_god': %s %.3f is outside [%.2f, %.2f]" % [bound[0], value, bound[1], bound[2]])
+		_check(wrath.knob(&"glow_size_max", 0.0) > wrath.knob(&"glow_size_min", 0.0),
+				"row 'wrath_of_god': the hand light must GROW over the windup (glow_size_max > glow_size_min)")
+		_check(wrath.knob(&"ring_alpha_end", 0.0) > wrath.knob(&"ring_alpha_start", 0.0),
+				"row 'wrath_of_god': the ring must BRIGHTEN toward the pulse (ring_alpha_end > ring_alpha_start)")
 	for path: String in _gd_files("res://src/state/"):
 		var text := FileAccess.get_file_as_string(path)
 		for token: String in ["EffectPresentation", "EffectPresenter", "data/presentation"]:

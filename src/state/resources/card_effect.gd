@@ -234,6 +234,26 @@ extends Resource
 @export var max_speed: float = 0.0
 @export var travel_budget: float = 0.0
 
+## STORY 7-5b SMOKE FIX 2 (S14, the Stars of Ruin shape): FOUR MORE FLIGHT FIELDS, mirrored into the same
+## `ProjectileProfile` with the same names. ALL FOUR ARE ACTOR-SIDE: the runner reads them to place and steer the
+## shot's actor, and NOTHING in `src/state/` decides with them -- a shot's speed, budget, homing flag and contacts
+## are exactly what they were (the flight is the actor's, `ProjectileActor`'s header), so no hashed fact moves.
+## Every default is neutral zero, which leaves every other shot flying as it always has.
+##   `fan_arc_degrees`         the HALF-ARC of a volley's launch FAN about the caster's forward: the i-th of N shots
+##                             leaves at its own even share of [-arc, +arc]; a single shot straight ahead.
+##   `launch_pitch_degrees`    how far ABOVE the level each shot leaves (it climbs, then is steered back down).
+##   `launch_height`           how far above the caster's feet the shot's root leaves (its hit sphere rides above
+##                             that, as on every shot) -- the chest, not the feet.
+##   `bloom_turn_rate_degrees_per_second`  the WEAK homing rate the shot steers at while it BLOOMS -- for as long as
+##                             state still flies it at its `launch_speed`, i.e. through `acceleration_delay_seconds`,
+##                             the ONE delay the ruling names ("after the delay, a strong homing rate AND the
+##                             existing acceleration"); after it, `homing_turn_rate_degrees_per_second`. No second
+##                             duration: the delay is state's own, converted once at its guarded seam (A1).
+@export var fan_arc_degrees: float = 0.0
+@export var launch_pitch_degrees: float = 0.0
+@export var launch_height: float = 0.0
+@export var bloom_turn_rate_degrees_per_second: float = 0.0
+
 ## ------------------------------------------------------------------------------------------
 ## STORY 6-5e: ROCKSLING'S BURST -- the FIFTH such family (6-5a's five buff/trigger fields, 6-5b's four
 ## corpse/own-minion fields, 6-5c's seven cast fields, 6-5d's eight variable-cost/flight fields). TWO
@@ -344,6 +364,35 @@ extends Resource
 ## MANAPULATION (AC 38): the mana granted PER SUCCESSFUL STAGING into the caster's own pitch zone this
 ## round, clamped by the pool's own maximum at the point of use.
 @export var mana_per_staging: float = 0.0
+
+## ------------------------------------------------------------------------------------------
+## STORY 7-5b: ELEMENTAL FURY's AND WRATH OF GOD's NUMBERS -- the EIGHTH such family. SIX more FLAT
+## exports, on the header's own discipline: no subclass, no nested resource.
+## ------------------------------------------------------------------------------------------
+## EVERY ONE IS NEUTRAL BY DEFAULT (zero), so an effect that does not use a field cannot change an outcome.
+## Existing fields are REUSED where they already say the thing (`6-5b/R7`'s third-reading precedent):
+## Elemental Fury's red damage is `damage_amount`, its blue slow is `slow_speed_multiplier` /
+## `slow_duration_seconds` (Frostbite's own pair, the existing slow rule), its green heal is `heal_amount`,
+## and its flight is the six flight fields; Wrath's damage is `damage_amount`, its stun `stun_seconds` and
+## its windup `cast_seconds`. The Healer's shot reads `damage_amount` and the flight six off `healer.tres`.
+
+## ELEMENTAL FURY (AC 13, `7-5b/R7`): the gap between two consecutive projectiles of one volley, in seconds.
+## Converted to ticks once, when the volley is scheduled (A1).
+@export var volley_interval_seconds: float = 0.0
+
+## WRATH OF GOD (AC 16, `7-5b/R8`): the pulse radius with no orb held, and the metres added per orb still
+## held after the activation orb is paid. The sum is FROZEN at activation (`PlayerState.cast_radius`).
+@export var pulse_radius: float = 0.0
+@export var radius_per_orb: float = 0.0
+
+## WRATH OF GOD (AC 18, `7-5b/R8`): how far the pulse pushes a struck body directly away from the caster,
+## and over how long, in seconds -- the slide's speed is the quotient, the `1-9` roll's own expression.
+@export var knockback_distance: float = 0.0
+@export var knockback_seconds: float = 0.0
+
+## WRATH OF GOD (AC 21, `7-5b/R10`): the multiplier on the pulse damage a hero BLOCKING and facing the
+## caster takes -- the EFFECT's own number, not `BalanceConfig.block_damage_multiplier`.
+@export var blocked_damage_multiplier: float = 0.0
 
 ## Story 6-5a (AC 3): a PRESENTATION handle -- which cue presentation may play for this effect. No
 ## file under `src/state/` ever reads it (the header's "state carries vocabulary, presentation

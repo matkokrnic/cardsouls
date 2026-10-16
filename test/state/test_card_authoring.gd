@@ -90,7 +90,9 @@ const SHARED_IDS: Array[StringName] = [&"honed_bolt", &"rocksling", &"bloodhound
 ## `deck-2-spec.md`. The three shared cards are pinned by `DECK_1_PRICES` and must agree with it (AC 3).
 const DECK_2_NEW_PRICES: Dictionary = {
 	&"setup": [Enums.CardColor.RED, 2.0, 4.0, {Enums.CardColor.RED: 1}],
-	&"healer": [Enums.CardColor.GREEN, 3.0, 2.0, {Enums.CardColor.GREEN: 1}],
+	# Story 7-5b smoke fix 1 (S10): the Healer's Mode 1 mana moves 3.0 -> 7.0 (superseding `deck-2-spec.md`); its
+	# colour, Stoneskin's Mode 4 mana and its orb price are unchanged.
+	&"healer": [Enums.CardColor.GREEN, 7.0, 2.0, {Enums.CardColor.GREEN: 1}],
 	&"bloodmagic": [Enums.CardColor.GREEN, 0.0, 2.0, {Enums.CardColor.GREEN: 1}],
 	&"manablossom": [Enums.CardColor.BLUE, 1.0, 5.0, {Enums.CardColor.BLUE: 1}],
 	&"manapulation": [Enums.CardColor.BLUE, 1.0, 6.0, {Enums.CardColor.BLUE: 1}],
@@ -862,51 +864,54 @@ func test_the_four_own_minion_effects_carry_their_spec_numbers() -> void:
 
 ## Story 7-5a (AC 2/AC 14): DECK 2's FIVE NEW CARDS' TEN EFFECTS, BY FAMILY, read off the resolver's own
 ## tables (the derived-not-transcribed discipline). Three are CHARGES, one is a STACKING WINDOW, three are
-## ECONOMY effects, and three are UNAVAILABLE until `7-5b` -- and those three carry NO other resolver row
-## and no summon/spell prefix (AC 14: nothing for a skipped refusal to fall through to).
+## ECONOMY effects. STORY 7-5b: the three 7-5a refused are BODIES now -- a whole-id summon, the volley family
+## and a cast row -- and the refusal table is empty.
 func test_deck_2_new_effects_fall_into_their_resolver_families() -> void:
 	var charge := 0
 	var stacking_window := 0
 	var economy := 0
-	var unavailable: Array[StringName] = []
+	# Story 7-5b (AC 1): the three halves 7-5a refused now resolve through a family each -- a whole-id
+	# SUMMON, the VOLLEY family and a CAST row -- and nothing is left in the refusal table.
+	var bodies: Array[StringName] = []
 	for id: StringName in DECK_2_NEW_EFFECTS:
 		var card := _card_for(id)
 		if card == null:
 			continue
 		for effect: CardEffect in [card.basic_effect, card.pitch_effect]:
 			var effect_id := effect.effect_id
+			assert_false(CardEffectResolver.is_unavailable(effect),
+				"Deck 2 effect '%s' is not refused any more (AC 1)" % effect_id)
 			if CardEffectResolver.CHARGE_OUTCOMES.has(effect_id):
 				charge += 1
 			elif CardEffectResolver.STACKING_WINDOW_OUTCOMES.has(effect_id):
 				stacking_window += 1
 			elif CardEffectResolver.ECONOMY_OUTCOMES.has(effect_id):
 				economy += 1
-			elif CardEffectResolver.is_unavailable(effect):
-				unavailable.append(effect_id)
+			elif CardEffectResolver.WHOLE_ID_SUMMONS.has(effect_id) \
+					or CardEffectResolver.VOLLEY_OUTCOMES.has(effect_id) \
+					or CardEffectResolver.CAST_OUTCOMES.has(effect_id):
+				bodies.append(effect_id)
 			else:
 				assert_true(false, "Deck 2 effect '%s' is in no resolver family" % effect_id)
 	assert_eq([charge, stacking_window, economy], [3, 1, 3],
 		"Setup / Execute / Stoneskin are charges, Enrage a stacking window, Bloodmagic / Manablossom / "
 		+ "Manapulation economy effects")
-	unavailable.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
-	assert_eq(unavailable, [&"elemental_fury", &"healer", &"wrath_of_god"] as Array[StringName],
-		"exactly the three `7-5b` halves are refused for now (AC 13)")
-	assert_eq(CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS.size(), 3, "...and the table holds nothing else")
+	bodies.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	assert_eq(bodies, [&"elemental_fury", &"healer", &"wrath_of_god"] as Array[StringName],
+		"the three `7-5b` halves resolve through the summon, volley and cast families (AC 1)")
+	assert_eq(CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS.size(), 0, "the refusal table is EMPTY (AC 1)")
 	var flags := FeatureFlags.new()
 	flags.spells = true
 	flags.minions = true
 	flags.totems = true
-	for effect_id: StringName in CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS:
-		assert_eq(CardEffectResolver.UNAVAILABLE_EFFECT_OWNERS[effect_id], &"7-5b-deck-2-bodies",
-			"'%s' names the story that builds it" % effect_id)
-		var text := String(effect_id)
-		assert_false(text.begins_with(CardEffectResolver.PREFIX_SUMMON)
-				or text.begins_with(CardEffectResolver.PREFIX_SPELL),
-			"'%s' takes no prefix path (a `summon_healer` would summon a zombie if the refusal were skipped)"
-					% effect_id)
-		assert_eq(CardEffectResolver.outcome(_effect(effect_id), flags),
-			CardEffectResolver.REASON_NOT_AVAILABLE_YET,
-			"'%s' resolves to the named nothing, never to another family's outcome (AC 14)" % effect_id)
+	assert_eq(CardEffectResolver.outcome(_effect(&"healer"), flags), CardEffectResolver.OUTCOME_SUMMON,
+		"`healer` resolves as a SUMMON through its whole-id row (`7-5b/R20`)")
+	assert_eq(CardEffectResolver.outcome(_effect(&"elemental_fury"), flags),
+		CardEffectResolver.OUTCOME_ELEMENTAL_FURY, "`elemental_fury` resolves through the volley family")
+	assert_eq(CardEffectResolver.outcome(_effect(&"wrath_of_god"), flags),
+		CardEffectResolver.OUTCOME_WRATH_OF_GOD, "`wrath_of_god` resolves through the cast family")
+	assert_eq(CardEffectResolver.kind_for(_effect(&"healer")), &"healer",
+		"the Healer summons the `healer` kind its effect authors")
 
 
 ## Story 7-5a (AC 4): THE NEW EFFECTS' NUMBERS, exactly as `deck-2-spec.md` and the 2026-10-11 amendment in
@@ -922,8 +927,24 @@ func test_the_deck_2_and_lifechain_effects_carry_their_spec_numbers() -> void:
 		&"manablossom": {"mana_discount": 1.0, "orb_threshold": 3, "mana_discount_at_threshold": 2.0},
 		&"manapulation": {"mana_per_staging": 1.0},
 		&"lifechain": {"duration_seconds": 10.0},
-		# The three `7-5b` halves author no number at all (their bodies and numbers are 7-5b's).
-		&"healer": {}, &"elemental_fury": {}, &"wrath_of_god": {},
+		# Story 7-5b (AC 2/AC 8/AC 13-18, `7-5b/R2`-`R12`): the three halves' numbers, all TEMP.
+		&"healer": {"summon_count": 1, "summon_kind": &"healer", "damage_amount": 3.0,
+			"launch_speed": 8.0, "homing_turn_rate_degrees_per_second": 120.0,
+			"acceleration_delay_seconds": 0.4, "acceleration_per_second_squared": 12.0, "max_speed": 20.0,
+			# Story 7-5b smoke fix 1 (S9): a held block takes a THIRD of the shot -- 1.0 of its 3.0.
+			"travel_budget": 60.0, "blocked_damage_multiplier": 1.0 / 3.0},
+		# Story 7-5b smoke fix 2 (S14, the Stars of Ruin shape): a +/-35 degree fan pitched up 15 degrees from 0.5 m
+		# above the feet, blooming at 30 deg/s through the 0.35 s delay (0.4 -> 0.35) at the launch speed, then
+		# converging at 360 deg/s while accelerating 8 -> 22 m/s.
+		&"elemental_fury": {"damage_amount": 3.0, "slow_speed_multiplier": 0.5, "slow_duration_seconds": 4.0,
+			"heal_amount": 5.0, "volley_interval_seconds": 0.15,
+			"launch_speed": 8.0, "homing_turn_rate_degrees_per_second": 360.0,
+			"acceleration_delay_seconds": 0.35, "acceleration_per_second_squared": 12.0, "max_speed": 22.0,
+			"travel_budget": 60.0, "fan_arc_degrees": 35.0, "launch_pitch_degrees": 15.0, "launch_height": 0.5,
+			"bloom_turn_rate_degrees_per_second": 30.0},
+		&"wrath_of_god": {"cast_seconds": 0.8, "damage_amount": 6.0, "stun_seconds": 0.5, "pulse_radius": 4.0,
+			"radius_per_orb": 1.0, "knockback_distance": 4.0, "knockback_seconds": 0.4,
+			"blocked_damage_multiplier": 0.5},
 	}
 	var neutral := CardEffect.new()
 	for id: StringName in authored:
@@ -940,6 +961,30 @@ func test_the_deck_2_and_lifechain_effects_carry_their_spec_numbers() -> void:
 			else:
 				assert_eq(effect.get(name), neutral.get(name),
 					"'%s' authors no %s -- an effect uses the numbers it needs and no others" % [id, name])
+
+
+## Story 7-5b smoke fix 2 (S14): THE STARS-OF-RUIN SHAPE IS COHERENT, whatever its tuning -- there IS a bloom (the
+## shot blooms while it flies at its launch speed, so an acceleration delay, an acceleration and a ceiling above the
+## launch speed must all be authored, or it never blooms or never stops), its homing is WEAKER than the converge rate
+## (the fan opens, then closes), the fan is a real arc short of sideways, and the pitch climbs without going vertical.
+func test_the_elemental_fury_flight_blooms_then_converges() -> void:
+	var fury := _effect(&"elemental_fury")
+	assert_not_null(fury, "data/effects/elemental_fury.tres loads")
+	if fury == null:
+		return
+	assert_true(fury.acceleration_delay_seconds > 0.0 and fury.acceleration_per_second_squared > 0.0
+			and fury.max_speed > fury.launch_speed,
+		"the bloom is the delay before the acceleration: a delay (%.2f s), an acceleration (%.1f) and a ceiling above "
+				% [fury.acceleration_delay_seconds, fury.acceleration_per_second_squared]
+				+ "the launch speed (%.1f > %.1f) must all be authored" % [fury.max_speed, fury.launch_speed])
+	assert_true(fury.bloom_turn_rate_degrees_per_second > 0.0
+			and fury.bloom_turn_rate_degrees_per_second < fury.homing_turn_rate_degrees_per_second,
+		"the bloom homes (%.0f deg/s) more weakly than the converge (%.0f deg/s)"
+				% [fury.bloom_turn_rate_degrees_per_second, fury.homing_turn_rate_degrees_per_second])
+	assert_true(fury.fan_arc_degrees > 0.0 and fury.fan_arc_degrees < 90.0,
+		"the fan's half-arc %.0f degrees is a fan, short of sideways" % fury.fan_arc_degrees)
+	assert_true(fury.launch_pitch_degrees >= 0.0 and fury.launch_pitch_degrees < 45.0,
+		"the launch pitch %.0f degrees climbs without going vertical" % fury.launch_pitch_degrees)
 
 
 ## Story 6-5a (AC 2): EVERY EFFECT NUMBER IS A FLAT EXPORT ON CardEffect ITSELF -- no field holds an

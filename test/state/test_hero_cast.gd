@@ -1021,8 +1021,10 @@ func test_the_authored_castable_pitch_effects_are_exactly_the_forked_set() -> vo
 			castable.append("%s/%s" % [card.id, card.pitch_effect.effect_id])
 	assert_true(checked > 0, "at least one authored pitch effect was checked")
 	castable.sort()
-	assert_eq(castable, ["bloodhound_step/fireball"],
-		"Story 6-5d (AC 1/AC 10): EXACTLY ONE authored pitch effect is a cast id -- Bloodhound Step's "
+	assert_eq(castable, ["bloodhound_step/fireball", "manapulation/wrath_of_god"],
+		"Story 7-5b (AC 16, `7-5b/R12`): TWO -- Wrath of God (Manapulation's pitch) joins, its windup a normal "
+		+ "cast commitment, added here deliberately as this pin asks. "
+		+ "Story 6-5d (AC 1/AC 10): EXACTLY ONE authored pitch effect is a cast id -- Bloodhound Step's "
 		+ "Fireball, the first PITCH effect in the project that starts a commitment window. A second "
 		+ "one is not forbidden, but it must be added here deliberately, because the pitch apply seat's "
 		+ "fork is what makes it resolve at all")

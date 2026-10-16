@@ -80,14 +80,15 @@ func test_the_captured_target_is_hashed_state() -> void:
 	ms.p1.lock_target_index = 0
 	_advance(ms, _cast_intent(CAST_SLOT), InputIntent.new())
 	var cast: Array = ms.to_snapshot()["p1"]["cast"]
-	assert_eq(cast.size(), 6,
-		"the `cast` key carries six elements: id, remaining, mode, target slot, target index, damage")
+	assert_eq(cast.size(), 7,
+		"the `cast` key carries seven elements: id, remaining, mode, target slot, target index, damage and "
+		+ "(story 7-5b, AC 16) the frozen pulse radius")
 	assert_eq(cast[2], int(Enums.ModeKind.BASIC), "...the MODE the strike resolves in (AC 12)")
 	assert_eq([cast[3], cast[4]], [1, 0], "...and the CAPTURED target address (AC 24/AC 30)")
 	# At rest the key is the neutral row, so a stale target is unrepresentable in the hash.
 	var resting: Array = ms.to_snapshot()["p2"]["cast"]
 	assert_eq(resting, ["", 0, PlayerState.NO_CAST_EFFECT_MODE,
-			TargetingService.NO_TARGET_SLOT, TargetingService.HERO_INDEX, 0.0],
+			TargetingService.NO_TARGET_SLOT, TargetingService.HERO_INDEX, 0.0, 0.0],
 		"a player with no cast in flight carries the resting row (AC 30)")
 
 

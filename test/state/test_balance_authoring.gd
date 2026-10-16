@@ -800,8 +800,9 @@ func test_authored_unit_kinds_cover_every_summon_kind_in_a_pinned_order() -> voi
 		assert_not_null(kind, "no authored kind slot may be null — indices must stay stable")
 		names.append(kind.kind_name)
 	# Story 7-3: `hellhound` is APPENDED (index 4). Appending renames no existing record's kind.
+	# Story 7-5b (`7-5b/R19`): `healer` is APPENDED (index 5), on the same rule.
 	assert_eq(names, [&"minion", &"combat_totem", &"mana_accelerator", &"stamina_accelerator",
-			&"hellhound"],
+			&"hellhound", &"healer"],
 		"the authored kind list and ITS ORDER are the contract a record's stored kind INDEX means; "
 		+ "reordering renames every existing record's kind")
 	# Every kind the resolver can name must exist, plus the unmapped default it falls back to.
@@ -829,9 +830,112 @@ func test_authored_minion_membership_is_the_zombie_and_the_hound_only() -> void:
 	for kind: UnitKindProfile in config.unit_kinds:
 		if kind.is_minion:
 			members.append(kind.kind_name)
-	assert_eq(members, [&"minion", &"hellhound"],
-		"exactly the zombie and the hound author `is_minion` (totems are excluded from the corpse "
+	# Story 7-5b (`7-5b/R19`, AC 5): the Healer is a minion too -- corpse <=> minion (`7-3/D4`).
+	assert_eq(members, [&"minion", &"hellhound", &"healer"],
+		"exactly the zombie, the hound and the Healer author `is_minion` (totems are excluded from the corpse "
 		+ "rule, Culling, Drain, Corpse Bomb, Raise Dead and Bloodlust)")
+
+
+## ---- The HEALER kind (story 7-5b, AC 3/AC 4/AC 6/AC 7, `7-5b/R2`/`R3`/`R21`) ------------------
+##
+## THE SIX-HITS CLAIM IS AUDITED AS A BAND, the `7-3` AC 6 shape: an unbuffed Healer dies to six basic hero
+## melee hits, so `ceil(max_hp / hero_damage_to_unit)` must be 6 or 7 -- with the authored 3.0 hero damage,
+## `max_hp` in (15.0, 21.0]. A retune of either number stays inside the band without a test edit.
+##
+## THE REST IS EACH NUMBER'S OWN FAILURE MODE: a heal or interval of zero ships a Healer that never heals, a
+## zero range one that is never in range, a missing shot effect one that never fires on a chargeup (and the
+## effect named must exist and author damage and a flight, or the shot is consumed on its first tick), a
+## negative delay is meaningless, and a move speed not below the hero's RUN speed would let the Healer keep
+## up with a running owner (`7-5b/R21`). It authors NO attack and NO targeting priority: it never acquires an
+## enemy and never swings (AC 3), and it draws nothing from the RNG (no between-attack behaviour).
+func test_the_authored_healer_kind_is_inside_its_ruled_bands() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	assert_not_null(config, "authored balance config loads as BalanceConfig")
+	if config == null:
+		return
+	var healer := _kind(config, &"healer")
+	assert_not_null(healer, "the authored config must carry a `healer` kind")
+	if healer == null:
+		return
+	var hits := ceili(healer.max_hp / config.hero_damage_to_unit)
+	assert_true(hits == 6 or hits == 7,
+		"an unbuffed Healer dies to six basic hero hits (`7-5b/R2`): ceil(%.1f / %.1f) = %d must be 6 or 7"
+				% [healer.max_hp, config.hero_damage_to_unit, hits])
+	assert_true(healer.is_minion, "the Healer is a minion: it leaves a corpse (`7-5b/R19`)")
+	assert_false(healer.react_on_damage, "the Healer has NO hit reaction (AC 5)")
+	assert_true(healer.move_speed > 0.0, "the Healer WALKS (AC 3): a speed above zero")
+	assert_true(healer.move_speed < config.move_speed,
+		"a running owner outruns its Healer (`7-5b/R21`): %.1f must be below the hero's run speed %.1f"
+				% [healer.move_speed, config.move_speed])
+	assert_true(healer.heal_amount > 0.0 and healer.heal_interval_seconds > 0.0 and healer.heal_range > 0.0,
+		"the Healer heals a positive amount, every positive interval, inside a positive range (AC 6)")
+	# Smoke fix 1 (S1/S2): THE FOLLOW BAND. The Healer stands still while its owner is within `heal_range` -- the
+	# OUTER radius, which the runner reads for the band AND the heal range, so the two are one number -- and once
+	# the owner is beyond it walks after it to `stop_distance`, the INNER radius. An inner radius that is not
+	# inside the outer one is no band: the Healer would set off and stop in the same tick.
+	assert_true(healer.stop_distance > 0.0 and healer.stop_distance < healer.heal_range,
+		"the follow band's inner radius (%.1f m, `stop_distance`) sits strictly inside its outer radius (%.1f m, "
+				% [healer.stop_distance, healer.heal_range] + "`heal_range`)")
+	assert_true(healer.shot_delay_seconds >= 0.0, "the owed shot's delay is non-negative (AC 7; 0 = the chargeup tick)")
+	assert_true(healer.attacks.is_empty(), "the Healer authors no attack -- it never swings (AC 3)")
+	assert_eq(healer.priority_name, &"", "...and no targeting priority -- it never acquires an enemy (AC 3)")
+	assert_false(healer.has_between_attack_behaviour(), "...and no between-attack behaviour: no RNG draw (AC 3)")
+	var shot := load("res://data/effects/%s.tres" % healer.owner_chargeup_shot_effect) as CardEffect
+	assert_not_null(shot, "the shot's effect `%s` is an authored effect file (AC 7)" % healer.owner_chargeup_shot_effect)
+	if shot != null:
+		assert_true(shot.damage_amount > 0.0, "the Healer's shot deals damage (AC 8)")
+		assert_true(shot.launch_speed > 0.0 and shot.travel_budget > 0.0,
+			"...and authors a flight, or it is consumed on its first tick")
+		# Smoke fix 1 (S9): a held block takes a real share of the shot, in (0, 1) -- the Wrath bound below.
+		assert_true(shot.blocked_damage_multiplier > 0.0 and shot.blocked_damage_multiplier < 1.0,
+			"a held block takes a real share of the Healer's shot, in (0, 1) (smoke fix 1, S9)")
+	var ticks := BalanceTicks.from_config(config).kind_ticks_at(config.kind_index_of(&"healer"))
+	assert_eq(ticks.heal_interval_ticks, TimingWindow.seconds_to_ticks(healer.heal_interval_seconds),
+		"the heal interval is converted once into ticks (A1)")
+
+
+## ---- The Wrath stun is not a knockdown (story 7-5b, AC 18, `7-5b/R18`) -------------------------
+##
+## `BalanceTicks.is_knockdown_stun` tells a knockdown from an ordinary stun BY DURATION, so the Wrath stun must
+## stay strictly below `knockdown_stun_seconds` -- the Honed Bolt audit's bound, applied to the second
+## authored non-knockdown stun. Also: the blocked share is a real reduction in (0, 1), and the slide authors a
+## positive distance and time.
+func test_the_authored_wrath_numbers_are_inside_their_bands() -> void:
+	var config := load(CONFIG_PATH) as BalanceConfig
+	var wrath := load("res://data/effects/wrath_of_god.tres") as CardEffect
+	assert_not_null(config, "authored balance config loads")
+	assert_not_null(wrath, "wrath_of_god.tres loads")
+	if config == null or wrath == null:
+		return
+	var ticks := BalanceTicks.from_config(config)
+	assert_true(wrath.stun_seconds > 0.0, "the Wrath stun is positive")
+	assert_false(ticks.is_knockdown_stun(TimingWindow.seconds_to_ticks(wrath.stun_seconds)),
+		"the Wrath stun (%.2f s) is NOT a knockdown: it stays below knockdown_stun_seconds (%.2f s)"
+				% [wrath.stun_seconds, config.knockdown_stun_seconds])
+	assert_true(wrath.blocked_damage_multiplier > 0.0 and wrath.blocked_damage_multiplier < 1.0,
+		"a held block facing the caster takes a real share in (0, 1) (`7-5b/R10`)")
+	assert_true(wrath.knockback_distance > 0.0 and wrath.knockback_seconds > 0.0,
+		"the knockback authors a positive distance and a positive time")
+	assert_true(wrath.pulse_radius > 0.0 and wrath.radius_per_orb >= 0.0, "the ring has a positive base radius")
+
+
+## ---- Elemental Fury's numbers (story 7-5b, AC 13-15, `7-5b/R7`) ------------------------------------
+##
+## Each colour's own failure mode: a zero red damage, a slow multiplier outside (0, 1) (1 is no slow, 0 a
+## standstill, above 1 a haste), a zero slow time or a zero green heal ship a colour that does nothing; a
+## negative interval is meaningless (zero is the legal "all on one tick"); and a projectile with no launch
+## speed or budget is consumed on its first tick.
+func test_the_authored_elemental_fury_numbers_are_inside_their_bands() -> void:
+	var fury := load("res://data/effects/elemental_fury.tres") as CardEffect
+	assert_not_null(fury, "elemental_fury.tres loads")
+	if fury == null:
+		return
+	assert_true(fury.damage_amount > 0.0, "red deals damage")
+	assert_true(fury.slow_speed_multiplier > 0.0 and fury.slow_speed_multiplier < 1.0, "blue slows, in (0, 1)")
+	assert_true(fury.slow_duration_seconds > 0.0, "...for a positive time")
+	assert_true(fury.heal_amount > 0.0, "green heals")
+	assert_true(fury.volley_interval_seconds >= 0.0, "the volley interval is non-negative")
+	assert_true(fury.launch_speed > 0.0 and fury.travel_budget > 0.0, "every projectile authors a flight")
 
 
 ## ---- The shelved ZOMBIE is unchanged (story 7-3, AC 1/AC 7/AC 8, `7-3/R1`/`R19`) -------------

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="BalanceConfig" load_steps=15 format=3]
+[gd_resource type="Resource" script_class="BalanceConfig" load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://src/state/resources/balance_config.gd" id="1_balcfg"]
 [ext_resource type="Script" path="res://src/state/resources/unit_kind_profile.gd" id="2_kind"]
@@ -177,6 +177,21 @@ bark_interval_seconds = 6.0
 bark_chance = 0.3
 attacks = Array[Resource]([SubResource("Resource_hellhound_bite"), SubResource("Resource_hellhound_leap")])
 
+[sub_resource type="Resource" id="Resource_kind_healer"]
+script = ExtResource("2_kind")
+kind_name = &"healer"
+move_speed = 2.4
+stop_distance = 7.0
+max_hp = 18.0
+is_minion = true
+turn_rate_degrees_per_second = 540.0
+heal_amount = 2.0
+heal_interval_seconds = 5.0
+heal_range = 10.0
+owner_chargeup_shot_effect = &"healer"
+shot_delay_seconds = 0.4
+attacks = Array[Resource]([])
+
 [resource]
 script = ExtResource("1_balcfg")
 max_hp = 100.0
@@ -208,7 +223,7 @@ hand_size = 4
 draw_replacement_delay_seconds = 1.0
 reshuffle_vulnerable_window_seconds = 1.5
 minion_retarget_interval_seconds = 0.2
-unit_kinds = Array[Resource]([SubResource("Resource_kind_minion"), SubResource("Resource_kind_combat_totem"), SubResource("Resource_kind_mana_accelerator"), SubResource("Resource_kind_stamina_accelerator"), SubResource("Resource_kind_hellhound")])
+unit_kinds = Array[Resource]([SubResource("Resource_kind_minion"), SubResource("Resource_kind_combat_totem"), SubResource("Resource_kind_mana_accelerator"), SubResource("Resource_kind_stamina_accelerator"), SubResource("Resource_kind_hellhound"), SubResource("Resource_kind_healer")])
 hero_damage_to_unit = 3.0
 corpse_lifetime_seconds = 20.0
 mana_accelerator_mana = 0.5

@@ -320,6 +320,9 @@ const UNIT_KIND_FIELDS: Array[String] = [
 	"retreat_move_speed_multiplier", "retreat_distance",
 	# Story 7-3, feel pass 3: the long orbit.
 	"orbit_weight", "orbit_min_seconds", "orbit_max_seconds", "orbit_approach_share",
+	# Story 7-5b (AC 6/AC 7): the Healer's four numbers (`owner_chargeup_shot_effect` is a StringName and is
+	# skipped by the float/int filter, like `kind_name`).
+	"heal_amount", "heal_interval_seconds", "heal_range", "shot_delay_seconds",
 ]
 
 const UNIT_ATTACK_FIELDS: Array[String] = [
@@ -337,6 +340,8 @@ const UNIT_ATTACK_FIELDS: Array[String] = [
 const PROJECTILE_FIELDS: Array[String] = [
 	"launch_speed", "homing_turn_rate_degrees_per_second", "acceleration_delay_seconds",
 	"acceleration_per_second_squared", "max_speed", "travel_budget",
+	# Story 7-5b smoke fix 2 (S14): the Stars-of-Ruin shape, actor-side (no duration: the bloom is the delay above).
+	"fan_arc_degrees", "launch_pitch_degrees", "launch_height", "bloom_turn_rate_degrees_per_second",
 ]
 
 ## Half (a) for the three per-kind schemas: reflection finds every declared tunable, and each must

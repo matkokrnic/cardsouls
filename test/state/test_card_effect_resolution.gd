@@ -323,6 +323,24 @@ func test_round_end_leaves_the_board_standing() -> void:
 ## `4-1/R5` as a source fact as well as a behavioural one: _end_round must not so much as name the
 ## board. The behavioural test above proves today's outcome; this refuses the edit that would make
 ## a future round-end path clear it while some other change happened to keep that test green.
+##
+## STORY 7-5b (AC 25) NAMES FOUR EXCEPTIONS, and they are exceptions to this scan's WORDING, not to
+## `4-1/R5`: AC 25 rules that an owed Healer shot, a heal clock, a knockback slide and a projectile's colour
+## payload never cross a round end, so `_end_round` resets those PER-RECORD facts -- every record stays on its
+## board at its index (the behavioural test above, unchanged, still proves the board survives). THREE are
+## unit-board calls and ONE is a projectile-board call (review fix P3: the scan used to look only at the unit
+## board, so the projectile write sat outside it). Each is named here by its exact text; any OTHER line naming
+## either board in `_end_round` still fails.
+const END_ROUND_UNIT_FACT_CLEARS: Array[String] = [
+	"ended.units.clear_owed_shots()",
+	"ended.units.clear_heal_clocks()",
+	"ended.units.clear_knockbacks()",
+]
+const END_ROUND_PROJECTILE_FACT_CLEARS: Array[String] = [
+	"ended.projectiles.clear_colors()",
+]
+
+
 func test_end_round_never_touches_the_board() -> void:
 	var in_seam := false
 	var seam_found := false
@@ -336,7 +354,10 @@ func test_end_round_never_touches_the_board() -> void:
 			break
 		if line.begins_with("#"):
 			continue          # a doc comment NAMING the rule is not a violation of it
-		if in_seam and (line.contains("units") or line.contains("UnitBoard")):
+		if in_seam and (line.contains("units") or line.contains("UnitBoard")
+				or line.contains("projectiles") or line.contains("ProjectileBoard")) \
+				and not END_ROUND_UNIT_FACT_CLEARS.has(line.strip_edges()) \
+				and not END_ROUND_PROJECTILE_FACT_CLEARS.has(line.strip_edges()):
 			offenders.append(line.strip_edges())
 	assert_true(seam_found, "match_state.gd must still declare _end_round (a rename un-guards this)")
 	assert_eq(offenders.size(), 0,

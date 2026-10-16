@@ -403,6 +403,36 @@ const CIRCLE_NONE := 0
 const CIRCLE_CLOCKWISE := 1
 const CIRCLE_COUNTER_CLOCKWISE := -1
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-5b (AC 6/AC 7/AC 20): SIX MORE PARALLEL ARRAYS -- the Healer's heal clock, its heal count and its
+## owed shot, and the Wrath knockback slide every walking unit can be given.
+## ------------------------------------------------------------------------------------------
+## STILL PLAIN SCALARS (and one `Vector2`, `_attack_dir`'s type), STILL INDEX-ALIGNED, so the header's "no
+## nested typed array, no Dictionary, no StringName" reasoning covers all six unchanged. ALL ARE HASHED
+## (`4-3a/R17`). A kind that authors none of this holds the resting value in every one for its whole life.
+
+## Ticks ELAPSED since this unit's last heal tick (counted UP by `MatchState`'s heal seat, reset to zero on
+## each heal tick whether it healed or not -- `7-5b/R3`: out of range the clock keeps running and the tick
+## heals nothing). Counted up rather than down so the record needs no authored number at `add()`.
+var _heal_ticks: Array[int] = []
+
+## How many heal ticks of this unit actually HEALED. Presentation polls it for the `cast` clip (an increase
+## is a heal); `advance()` never reads it.
+var _heal_count: Array[int] = []
+
+## Ticks until this unit's OWED shot spawns, or `NO_SHOT_OWED`. Written when its owner's unblockable
+## chargeup begins, counted down by the shot seat, which fires at zero.
+var _shot_owed: Array[int] = []
+
+const NO_SHOT_OWED := -1
+
+## The knockback slide: ticks left, the planar direction (away from the pulse's caster) and the speed. ONE
+## fact in three parts, fused into one snapshot key (`unit_targets`' reason). The runner moves the actor by
+## it while `_knockback_ticks > 0`; a wall stops the actor and state never learns where it stopped.
+var _knockback_ticks: Array[int] = []
+var _knockback_dir: Array[Vector2] = []
+var _knockback_speed: Array[float] = []
+
 
 ## The ONE way a unit enters the board. Called from MatchState's step-6 cast dispatch, once per
 ## resolved `summon_*` cast. It enters holding the honest NO-TARGET pair rather than a placeholder
@@ -481,6 +511,13 @@ func add(max_hp: float, kind_index: int, raised_from: int = NO_RAISE_SOURCE,
 	_behavior_phase.append(BehaviorPhase.GET_UP if get_up_ticks > 0 else BehaviorPhase.ENGAGE)
 	_behavior_ticks.append(maxi(0, get_up_ticks))
 	_circle_dir.append(CIRCLE_NONE)
+	# Story 7-5b: the six enter at rest -- no time on the heal clock, nothing healed, no shot owed, no slide.
+	_heal_ticks.append(0)
+	_heal_count.append(0)
+	_shot_owed.append(NO_SHOT_OWED)
+	_knockback_ticks.append(0)
+	_knockback_dir.append(Vector2.ZERO)
+	_knockback_speed.append(0.0)
 
 
 ## Emptied by the DEBUG RESET ONLY, never by round end (`4-1/R5`): the board persists through
@@ -532,6 +569,13 @@ func clear() -> void:
 	_behavior_phase.clear()
 	_behavior_ticks.clear()
 	_circle_dir.clear()
+	# Story 7-5b: cleared with their siblings, for the header's own reason.
+	_heal_ticks.clear()
+	_heal_count.clear()
+	_shot_owed.clear()
+	_knockback_ticks.clear()
+	_knockback_dir.clear()
+	_knockback_speed.clear()
 
 
 func size() -> int:
@@ -1111,6 +1155,102 @@ func turn_circle_at(index: int) -> void:
 	_circle_dir[index] = -_circle_dir[index]
 
 
+## ------------------------------------------------------------------------------------------
+## STORY 7-5b: the Healer and knockback accessors and mutators. Bound enforcement follows `hp_at`.
+## ------------------------------------------------------------------------------------------
+
+func heal_ticks_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _heal_ticks[index]
+
+
+func heal_count_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _heal_count[index]
+
+
+func shot_owed_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _shot_owed[index]
+
+
+## AC 6: one more tick on the heal clock.
+func advance_heal_clock_at(index: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_heal_ticks[index] += 1
+
+
+## AC 6 (`7-5b/R3`): a heal tick has come round -- the clock restarts whether or not the tick healed, and
+## `healed` counts it.
+func close_heal_tick_at(index: int, healed: bool) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_heal_ticks[index] = 0
+	if healed:
+		_heal_count[index] += 1
+
+
+## AC 7: owe one shot, spawning in `delay_ticks`. A second chargeup while one is owed re-owes it.
+func owe_shot_at(index: int, delay_ticks: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_shot_owed[index] = maxi(0, delay_ticks)
+
+
+func set_shot_owed_at(index: int, ticks: int) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_shot_owed[index] = ticks
+
+
+## AC 25: every owed shot on this board is cancelled -- round end and the debug reset.
+func clear_owed_shots() -> void:
+	for i in _shot_owed.size():
+		_shot_owed[i] = NO_SHOT_OWED
+
+
+## AC 25: every heal clock and heal count on this board rests -- round end.
+func clear_heal_clocks() -> void:
+	for i in _heal_ticks.size():
+		_heal_ticks[i] = 0
+		_heal_count[i] = 0
+
+
+func clear_knockbacks() -> void:
+	for i in _knockback_ticks.size():
+		_knockback_ticks[i] = 0
+		_knockback_dir[i] = Vector2.ZERO
+		_knockback_speed[i] = 0.0
+
+
+## AC 20: START a knockback slide on this unit.
+func start_knockback_at(index: int, ticks: int, dir: Vector2, speed: float) -> void:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	_knockback_ticks[index] = maxi(0, ticks)
+	_knockback_dir[index] = dir
+	_knockback_speed[index] = speed
+
+
+## The runner's read: the PLANAR slide velocity (x = world X, y = world Z), or zero once it has run out. A
+## planar `Vector2`, never a 3D vector -- this container names no world-space type (`6-5b/R1`). Lenient on
+## the index (`is_alive_at`'s posture): the runner asks it of every actor it drives.
+func knockback_velocity_at(index: int) -> Vector2:
+	if not has_index(index) or _knockback_ticks[index] <= 0:
+		return Vector2.ZERO
+	return _knockback_dir[index] * _knockback_speed[index]
+
+
+func knockback_ticks_at(index: int) -> int:
+	Invariant.check(has_index(index),
+		"unit board index %d is out of range (board holds %d units)" % [index, size()])
+	return _knockback_ticks[index]
+
+
 ## The LATEST KNOWN direction to the acquired target, refreshed while the unit is IDLE (AC 12). The
 ## IDLE test lives at the call site rather than in here, because this class is a container and the
 ## phase it would have to consult is policy: `MatchState` decides when a direction may still move,
@@ -1201,6 +1341,10 @@ func tick_attack_timers() -> void:
 	for i in _behavior_ticks.size():
 		if _behavior_ticks[i] > 0:
 			_behavior_ticks[i] -= 1
+	# Story 7-5b (AC 20): the knockback slide runs out here, on the same clock, clamped at zero.
+	for i in _knockback_ticks.size():
+		if _knockback_ticks[i] > 0:
+			_knockback_ticks[i] -= 1
 
 
 ## AC 16's snapshot payloads — FIVE separate keys, one per array, on the `unit_hp` precedent
@@ -1317,6 +1461,28 @@ func behavior_ticks_snapshot() -> Array:
 
 func circle_dir_snapshot() -> Array:
 	return _circle_dir.duplicate()
+
+
+## Story 7-5b: the Healer's three payloads, one array -> one key, and the knockback slide as ONE fused key of
+## `[ticks, direction, speed]` per record (one fact in three parts, `targets_snapshot`'s reason).
+func heal_ticks_snapshot() -> Array:
+	return _heal_ticks.duplicate()
+
+
+func heal_count_snapshot() -> Array:
+	return _heal_count.duplicate()
+
+
+func shot_owed_snapshot() -> Array:
+	return _shot_owed.duplicate()
+
+
+func knockback_snapshot() -> Array:
+	var out: Array = []
+	for i in _knockback_ticks.size():
+		out.append([_knockback_ticks[i], _knockback_dir[i], _knockback_speed[i]] \
+				if _knockback_ticks[i] > 0 else [0, Vector2.ZERO, 0.0])
+	return out
 
 
 ## AC 11's snapshot payload: one `[slot, index]` pair per record, in board-index order. The ORDER IS
