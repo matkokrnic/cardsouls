@@ -812,3 +812,9 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 - **7-5a review F6: HUD discount marks stay stale between round end and the redeal.** Cosmetic (play is frozen). Owner: 7-7.
 - **7-5a review F6: the public runner accessors** (`connect_hit_landed`, `connect_deflect_landed`, `connect_pitch_changed`, the hands accessor) **dereference a null match after a start refusal.** Unreachable in-game (the refused runner builds no controllers, HUDs or signals); tests only. Owner: E7 close-out.
 - **`gdd.md:147` unblockable cost is stale** ("stamina only"; the config charges 1 mana, `balance_config.tres:230`, `7-5a/R21`). Owner: E7 close-out.
+
+## Deferred from: code review of story-7-5b-deck-2-bodies (2026-10-16)
+- **7-5b review P5: the heal-range channel records every in-range tick** (`match_runner.gd` `_push_heal_ranges`; read only on a Healer's interval tick, `match_state.gd` `_advance_healers`). About 10 800 rows per 3-minute match against about 36 that decide anything. Gate the gather on the state-owned `heal_ticks_at(index) + 1 >= heal_interval_ticks`, or accept. Owner: 7-7.
+- **7-5b review W1: `push_heal_range` takes slot and index unvalidated** (`match_state.gd`), as `push_drain_target` does; a corrupt record raises an array error rather than a named refusal. Harden both together. Owner: E7 close-out.
+- **7-5b review W2: simultaneous mutual Wrath.** P1's pulse stuns P2 at step 6c before P2's strike, so P2 loses it (fixed P1 -> P2 order, as Honed Bolt). Worth a line in the balance inputs. Owner: E7 close-out.
+- **7-5b review W3: the live-test audio-stop block is copied into three tests** (`test_fury_flight_live.gd`, `test_deck_2_bodies_presentation_live.gd`, the pass-1 strike test). A shared helper would stop the next copy. Owner: E7 close-out.
