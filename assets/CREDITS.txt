@@ -48,6 +48,27 @@ HELLHOUND -- assets/characters/hellhound/ (story 7-3: SK_Hellhound.fbx, the purp
 
 CAST ANIMATIONS -- assets/characters/paladin/cast_fireball.fbx, cast_rocksling_lift.fbx, cast_rocksling_throw.fbx
   Mixamo (Adobe), on the existing paladin rig -- the same source as the rig's other clips.
+  cast_wrath.fbx -- "Standing 2H Magic Area Attack 02" (Wrath of God's windup and slam; story 7-5b smoke fix 2),
+  same source, same rig.
+
+HEALER -- assets/characters/healer/ (story 7-5b, 7-5b/R14, R22: healer.fbx and the three textures the importer
+  extracted from it, healer_0.png / healer_1.png / healer_2.png; the ten clip FBXs below; healer_anims.res is
+  built from the clips by tools/build_healer_anims.gd; healer_p1.tres / healer_p2.tres are in-repo owner tints of
+  the model's own textures)
+  Model "Knight D Pelegrini", Mixamo (Adobe) (https://www.mixamo.com), with its clips from the same source.
+  License: Mixamo / Adobe terms -- royalty-free for personal, commercial and non-profit projects, games
+  included; the files may not be redistributed as stand-alone assets.
+  One line per clip: <file> -- "<Mixamo clip>" (the clip it plays as)
+    idle.fbx -- "Standing Idle 03" (idle)
+    walk.fbx -- "Standing Walk Forward" (walk)
+    cast.fbx -- "Standing 2H Magic Area Attack 01" (cast)
+    shoot.fbx -- "Standing 1H Magic Attack 03" (shoot)
+    death.fbx -- "Standing React Death Forward" (death)
+    hurt.fbx -- "Standing React Small From Left" (hurt; downloaded on the Knight D Pelegrini character)
+    turn_left.fbx -- "Standing Turn Left 90" (turn_left; downloaded on the Knight D Pelegrini character)
+    turn_right.fbx -- "Standing Turn Right 90" (turn_right; downloaded on the Knight D Pelegrini character)
+    strafe_left.fbx -- "Standing Walk Left" (strafe_left; downloaded on the Knight D Pelegrini character)
+    strafe_right.fbx -- "Standing Walk Right" (strafe_right; downloaded on the Knight D Pelegrini character)
 
 EFFECT ICONS (story 7-6) -- assets/art/icons/game_icons/*.svg (placeholder hand/history art, one per effect)
   From the game-icons.net project (https://game-icons.net), downloaded as white-on-transparent SVG and renamed
