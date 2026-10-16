@@ -818,3 +818,9 @@ For `game-architecture.md`'s amendment ledger at the E7 close-out; the doc is NO
 - **7-5b review W1: `push_heal_range` takes slot and index unvalidated** (`match_state.gd`), as `push_drain_target` does; a corrupt record raises an array error rather than a named refusal. Harden both together. Owner: E7 close-out.
 - **7-5b review W2: simultaneous mutual Wrath.** P1's pulse stuns P2 at step 6c before P2's strike, so P2 loses it (fixed P1 -> P2 order, as Honed Bolt). Worth a line in the balance inputs. Owner: E7 close-out.
 - **7-5b review W3: the live-test audio-stop block is copied into three tests** (`test_fury_flight_live.gd`, `test_deck_2_bodies_presentation_live.gd`, the pass-1 strike test). A shared helper would stop the next copy. Owner: E7 close-out.
+
+## 7-7 pre-playtest pass (2026-10-16, Tier B, no story file, commit 4be1836)
+- **Done:** HUD pitch-ready cues (hand outline on an instant whose pitch is covered and the zone empty; zone READY glow), card halves swapped to the face buttons (pitch/Y top, normal/A bottom), locked-unit HP bar tinted by the locking player, arena floor/wall grid shaders, D-pad Down as a second card-mode button beside L3.
+- **Not done: Honed Bolt sphere.** A Honed Bolt is never a `ProjectileActor`; the visible ball is `BoltActor`'s 0.7 m glow mote (`bolt_actor.gd` `MOTE_SIZE`). Needs a look decision.
+- **Not done: roll facing (reverted).** Turning the model while the hit shapes stay in the state-yaw frame breaks 7-8's tracks-visible-trunk pin (`test_hero_hit_shape_live.gd`, 0.46-0.73 m mid-roll); letting them follow the model moves hit geometry. Needs a ruling.
+- The 7-7 story is authored after the playtest; board unchanged (7-7 stays backlog).
