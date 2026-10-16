@@ -5544,6 +5544,11 @@ func _push_lock_hp_bars(round_over: bool) -> void:
 			bar.set_locking_slot(slot)
 			add_child(bar)
 			_lock_hp_bars.append(bar)
+		# 7-7 smoke fix: each view camera stops rendering the OTHER slot's bar layer, so a lock's bar is seen only
+		# by the player who locked.
+		var layers: Array[int] = LOCK_HP_BAR_SCRIPT.VISUAL_LAYER_BY_SLOT
+		_p1_view_cam.cull_mask &= ~layers[1]
+		_p2_view_cam.cull_mask &= ~layers[0]
 	for slot: int in 2:
 		var bar: Node3D = _lock_hp_bars[slot]
 		var player: PlayerState = _match_state.p1 if slot == 0 else _match_state.p2

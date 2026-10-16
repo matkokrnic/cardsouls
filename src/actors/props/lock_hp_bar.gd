@@ -9,8 +9,13 @@ const SHADER := preload("res://src/actors/props/lock_hp_bar.gdshader")
 const BAR_SIZE := Vector2(0.9, 0.11)
 ## The locking player's tint, by slot -- the 7-3 owner-skin colours (P1 purple, P2 red).
 const SLOT_TINTS: Array[Color] = [Color(0.72, 0.38, 1.0), Color(1.0, 0.25, 0.2)]
+## 7-7 smoke fix: each slot's bar renders on its OWN visual layer (11 for P1, 12 for P2; nothing else in the project
+## sets a layer), and the runner drops the OTHER slot's layer from each view camera's cull mask -- so only the
+## locking player sees their bar.
+const VISUAL_LAYER_BY_SLOT: Array[int] = [1 << 10, 1 << 11]
 
 var _material: ShaderMaterial
+var _mesh: MeshInstance3D
 
 
 func _init() -> void:
@@ -19,18 +24,25 @@ func _init() -> void:
 	quad.size = BAR_SIZE
 	_material = ShaderMaterial.new()
 	_material.shader = SHADER
-	var mesh := MeshInstance3D.new()
-	mesh.name = "Bar"
-	mesh.mesh = quad
-	mesh.material_override = _material
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mesh)
+	_mesh = MeshInstance3D.new()
+	_mesh.name = "Bar"
+	_mesh.mesh = quad
+	_mesh.material_override = _material
+	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_mesh)
 	visible = false
 
 
-## Tint the bar for the slot that LOCKS with it (set once, at creation).
+## Tint the bar for the slot that LOCKS with it, and put it on that slot's own visual layer (set once, at creation).
 func set_locking_slot(slot: int) -> void:
-	_material.set_shader_parameter(&"fill_color", SLOT_TINTS[clampi(slot, 0, SLOT_TINTS.size() - 1)])
+	var s := clampi(slot, 0, SLOT_TINTS.size() - 1)
+	_material.set_shader_parameter(&"fill_color", SLOT_TINTS[s])
+	_mesh.layers = VISUAL_LAYER_BY_SLOT[s]
+
+
+## The test-facing read: the visual layer mask the bar renders on.
+func visual_layers() -> int:
+	return _mesh.layers
 
 
 ## Show the bar at `world` with `hp` of `max_hp` filled.
