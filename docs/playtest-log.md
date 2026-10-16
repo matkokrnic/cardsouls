@@ -711,3 +711,9 @@ Drugi krug: torzo pod lockom uvijek gleda protivnika, u svim smjerovima i kroz p
 Solo [0,3]. Krug A: pad na Decku 2. Krug B: tipkovnica na Decku 2, pad na Decku 1. Svih 12 točaka prolazi:
 Setup/Execute/Stoneskin naboji s markerima, Bloodmagic, slaganje Enragea, Manablossom popust, Manapulation,
 odbijanje Healera/Furyja/Wratha, Counterspell na nove polovice, Vanguard/Lifechain, R-D6.
+
+## 2026-10-16 — 7-5b Deck 2 bodies (Healer, Elemental Fury, Wrath of God)
+Tri smokea, solo [0,3], deck_select po sjedalu.
+Smoke 1: Healer pratio preblizu (2 m) i klizao nogama, idle/walk treperili, castao u hodu, heal nevidljiv, prevelik, nije se okretao prema meti; shot, heal cadence, Wrath, obrane, Counterspell, kraj runde i fps prošli. Presude: krug praćenja 10/7 m, root dok casta, heal VFX, hurt klip, 80 % visine, blokirani shot radi 1, cijena 7.
+Smoke 2: krug praćenja ok, hod bez treperenja ali prebrz (→ 2.4), idle awkward (ostaje), heal VFX služi, hurt vidljiv, Fury radi; Healer klizi pri okretu → turn/strafe klipovi + mrtva zona 25°. Naručeno: Wrath cast klip + Wrath of Gold VFX, Fury let kao Stars of Ruin.
+Smoke 3: sve štima — tresak na puls, zlatni val, lepeza i konvergencija, okreti i koraci Healera, root dok puca.
