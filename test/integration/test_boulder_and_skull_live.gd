@@ -14,7 +14,7 @@ extends SceneTree
 ## derived from the WHOLE LIBRARY and that is the only reason it is there. Part A proves the whole path on
 ## the real authored content: the real `CardDatabase`, the real `balance_config.tres`, the real deck list,
 ## the maps derived the way `MatchRunner` derives them -- a Rocksling cast fires the authored stones, a
-## landed stone plants a Boulder, and a Mode ① press clears it for the authored 2 mana with the covered card
+## landed stone plants a Boulder, and a Mode ① press clears it for the authored 1 mana with the covered card
 ## restored.
 ##
 ## PART B -- THE SKULL LEAVES THE MINION'S BODY, NOT THE CASTER'S FEET (AC 3a/AC 31). `add_minion_shot`
@@ -113,8 +113,8 @@ func _run_part_a(_database: Node) -> void:
 	if boulder.cast_condition == null:
 		_check(false, "PART A: Boulder authors no cast condition -- it could never be played")
 		return
-	_check(is_equal_approx(boulder.cast_condition.mana_cost, 2.0),
-		"PART A: Boulder is priced at the authored 2 mana (AC 20) -- got %f"
+	_check(is_equal_approx(boulder.cast_condition.mana_cost, 1.0),
+		"PART A: Boulder is priced at the authored 1 mana (AC 20; 2 -> 1 by 7-7 post-playtest tuning) -- got %f"
 				% boulder.cast_condition.mana_cost)
 	_check(boulder.basic_effect != null
 			and CardEffectResolver.clears_cover(boulder.basic_effect),
@@ -195,8 +195,8 @@ func _run_part_a(_database: Node) -> void:
 	ms.drain_signals()
 	_check(not ms.p2.hand.is_covered(slot),
 		"PART A: the Boulder was CLEARED by a real Mode 1 press on the shipped configuration (AC 21)")
-	_check(is_equal_approx(mana_before - ms.p2.mana.get_current(), 2.0),
-		"PART A: ...for exactly the authored 2 mana -- got %f"
+	_check(is_equal_approx(mana_before - ms.p2.mana.get_current(), 1.0),
+		"PART A: ...for exactly the authored 1 mana -- got %f"
 				% (mana_before - ms.p2.mana.get_current()))
 	_check(ms.p2.hand.to_array()[slot] == beneath,
 		"PART A: ...and the covered card is back in its own slot, unmoved (AC 21)")

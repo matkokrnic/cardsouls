@@ -5,4 +5,4 @@
 [resource]
 script = ExtResource("1_effect")
 effect_id = &"grave_ward"
-duration_seconds = 20.0
+duration_seconds = 30.0

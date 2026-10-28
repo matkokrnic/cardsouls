@@ -7,13 +7,13 @@
 
 [sub_resource type="Resource" id="Resource_cast"]
 script = ExtResource("2_cast")
-mana_cost = 2.0
+mana_cost = 1.0
 
 [sub_resource type="Resource" id="Resource_pitch"]
 script = ExtResource("2_cast")
 mana_cost = 6.0
 orb_costs = Dictionary[int, int]({
-0: 2
+0: 1
 })
 pitch_speed = 1
 

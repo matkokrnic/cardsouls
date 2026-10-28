@@ -925,7 +925,7 @@ func test_the_authored_honed_bolt_carries_its_spec_numbers() -> void:
 ## the numbers are asserted against the SPEC and the ruling, never against the code that reads them.
 func test_the_authored_fireball_carries_its_ruled_numbers() -> void:
 	var fb := _authored_effect(&"fireball")
-	assert_eq(fb.damage_per_mana, 1.5, "Fireball deals 1.5 damage per mana spent (`6-5d/R2`)")
+	assert_eq(fb.damage_per_mana, 2.0, "Fireball deals 2.0 damage per mana spent (`6-5d/R2`; 1.5 -> 2.0 by 7-7 post-playtest tuning)")
 	assert_eq(fb.mana_cap, 10.0, "...capped at 10 mana per staging (`6-5d/R1`)")
 	assert_true(fb.cast_seconds > 0.0, "...after a cast of strictly positive length (AC 11)")
 	# THE FLIGHT PROFILE STARTS FROM THE TOTEM SHOT'S (AC 3), which is what makes "the totem-shot feel"

@@ -7,11 +7,11 @@
 
 [sub_resource type="Resource" id="Resource_cast"]
 script = ExtResource("2_cast")
-mana_cost = 3.0
+mana_cost = 5.0
 
 [sub_resource type="Resource" id="Resource_pitch"]
 script = ExtResource("2_cast")
-mana_cost = 3.0
+mana_cost = 0.0
 orb_costs = Dictionary[int, int]({
 2: 1
 })

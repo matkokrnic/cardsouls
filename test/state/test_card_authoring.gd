@@ -94,8 +94,9 @@ const DECK_2_NEW_PRICES: Dictionary = {
 	# colour, Stoneskin's Mode 4 mana and its orb price are unchanged.
 	&"healer": [Enums.CardColor.GREEN, 7.0, 2.0, {Enums.CardColor.GREEN: 1}],
 	&"bloodmagic": [Enums.CardColor.GREEN, 0.0, 2.0, {Enums.CardColor.GREEN: 1}],
-	&"manablossom": [Enums.CardColor.BLUE, 1.0, 5.0, {Enums.CardColor.BLUE: 1}],
-	&"manapulation": [Enums.CardColor.BLUE, 1.0, 6.0, {Enums.CardColor.BLUE: 1}],
+	# 7-7 post-playtest tuning: manablossom Mode 4 5 -> 8, manapulation Mode 4 6 -> 7.
+	&"manablossom": [Enums.CardColor.BLUE, 1.0, 8.0, {Enums.CardColor.BLUE: 1}],
+	&"manapulation": [Enums.CardColor.BLUE, 1.0, 7.0, {Enums.CardColor.BLUE: 1}],
 }
 
 ## Story 7-5a (AC 2): Deck 2's five new cards' two effect ids, [normal, pitch].
@@ -121,8 +122,9 @@ const DECK_2_NEW_PITCH_SPEEDS := {
 ## `deck-1-spec.md` §1-7 and the operator's amendments. id -> [colour, basic mana, pitch mana, orb price].
 const DECK_1_PRICES: Dictionary = {
 	# Story 7-3 (AC 2, `7-3/R9`/`R14`): the green card's prices are Vanguard's, unchanged.
-	&"hellhound": [Enums.CardColor.GREEN, 3.0, 3.0, {Enums.CardColor.GREEN: 1}],
-	&"grave_ward": [Enums.CardColor.GREEN, 2.0, 6.0, {Enums.CardColor.RED: 2}],
+	# 7-7 post-playtest tuning: hellhound 3/3 -> 5/0, grave_ward 2/6 + 2 red -> 1/6 + 1 red.
+	&"hellhound": [Enums.CardColor.GREEN, 5.0, 0.0, {Enums.CardColor.GREEN: 1}],
+	&"grave_ward": [Enums.CardColor.GREEN, 1.0, 6.0, {Enums.CardColor.RED: 1}],
 	&"drain": [Enums.CardColor.GREEN, 2.0, 5.0, {Enums.CardColor.GREEN: 1, Enums.CardColor.RED: 1}],
 	&"rocksling": [Enums.CardColor.RED, 4.0, 3.0, {Enums.CardColor.RED: 1}],
 	# Story 6-5d (AC 3, `6-5d/R9`/`R19`): the Mode ④ mana moves 4.0 -> 3.0. The 4 was BLOODLUST's fixed
@@ -130,8 +132,9 @@ const DECK_1_PRICES: Dictionary = {
 	# staging is refused, not a price, since a Fireball spends `min(pool, mana_cap)`. The orb price,
 	# colour and Mode ① price are unchanged.
 	&"bloodhound_step": [Enums.CardColor.RED, 2.0, 3.0, {Enums.CardColor.RED: 1}],
-	&"honed_bolt": [Enums.CardColor.BLUE, 4.0, 4.0, {Enums.CardColor.BLUE: 1}],
-	&"frostbite": [Enums.CardColor.BLUE, 4.0, 5.0, {Enums.CardColor.BLUE: 1}],
+	# 7-7 post-playtest tuning: honed_bolt Mode 1 4 -> 3; frostbite Mode 1 4 -> 2, Mode 4 5 -> 4.
+	&"honed_bolt": [Enums.CardColor.BLUE, 3.0, 4.0, {Enums.CardColor.BLUE: 1}],
+	&"frostbite": [Enums.CardColor.BLUE, 2.0, 4.0, {Enums.CardColor.BLUE: 1}],
 	# Story 7-5a (AC 4/AC 5): Vanguard / Lifechain -- green, the Vanguard's own 3 mana, Lifechain 3 + 1 green.
 	&"vanguard": [Enums.CardColor.GREEN, 3.0, 3.0, {Enums.CardColor.GREEN: 1}],
 }
@@ -836,8 +839,8 @@ func test_the_four_own_minion_effects_carry_their_spec_numbers() -> void:
 	assert_eq(culling.kill_cap, 99,
 		"...up to a kill_cap of 99 (`6-5b/R15`, the spec's 'effectively no cap')")
 	var grave_ward := _effect(&"grave_ward")
-	assert_eq(grave_ward.duration_seconds, 20.0,
-		"Grave Ward adds 20 s to each of the caster's corpses (`6-5b/R7` -- an ADDITIVE per-corpse "
+	assert_eq(grave_ward.duration_seconds, 30.0,
+		"Grave Ward adds 30 s (7-7 post-playtest tuning; was 20) to each of the caster's corpses (`6-5b/R7` -- an ADDITIVE per-corpse "
 		+ "extension, not the per-player timed rule deck-1-spec.md originally worded)")
 	var raise_dead := _effect(&"raise_dead")
 	assert_eq(raise_dead.raise_hp_percent, 100.0, "Raise Dead raises at 100% of max HP")
