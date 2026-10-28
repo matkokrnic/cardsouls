@@ -12916,3 +12916,13 @@ LAYER-COMPLETION: verification-6-record-honesty -- timeline in the logs agrees w
 LAYER-COMPLETION: final-state -- Status `review` unchanged; board unchanged by this session; working tree byte-identical to the start apart from the review section appended to the story file (55 modified + 36 untracked, +4048/-242, project.godot clean); engine launches this session: 1 state, 102 integration (in 2 calls), 1 golden measure, 3 mutated single-file runs (each its own call). Out-of-repo outputs: C:\dev\_7-5b-review-state.txt, -integ-1.txt, -integ-2.txt, -golden.txt, C:\dev\_7-5b-review-mut\.
 
 Promotion: story `7-5b-deck-2-bodies` is named for promotion to `done` (C4 flips the story Status and the board after the E4-R/R7 grep finds this session).
+
+## 2026-10-17 -- 7-7 post-playtest tuning (board key 7-7-tuning-pass; no story file, operator decision)
+Numbers hand-tuned in C:\dev\_play for the 2026-10-17 playtest, played and kept; copied into the repo data files (commit ef8ed9b).
+Balance: mana_regen_per_second 0.25 -> 0.2; corpse_lifetime_seconds 20 -> 30; deflect_stun_seconds 0.4 -> 0.6. max_mana DELIBERATELY KEPT at 10.0 (_play had 20.0); melee_hit_mana stays 1.0 (hand-typed bare integer is not a change).
+Cards (cast/pitch mana): boulder cast 2 -> 1; frostbite 4/5 -> 2/4; grave_ward cast 2 -> 1, red orbs 2 -> 1; hellhound 3/3 -> 5/0; honed_bolt cast 4 -> 3; manablossom pitch 5 -> 8; manapulation pitch 6 -> 7.
+Effects: fireball damage_per_mana 1.5 -> 2.0; grave_ward duration_seconds 20 -> 30. projectile_actor.tscn and data/presentation: no difference.
+Golden UNMOVED: 97c9a1de, 66 keys (BC/R3: balance and card data are golden-neutral); test_state_matches_golden passes.
+Suite after: state 1597 tests / 0 failed / 26573 assertions; integration 102 files, 102 PASS (two calls of 51).
+Test edits (old pins -> new numbers only, no new tests): test/state/test_card_authoring.gd:98-99,126-127,136-137 (price tables), :842 (grave ward 30 s); test/state/test_hero_cast.gd:928 (fireball 2.0); test/integration/test_boulder_and_skull_live.gd:17,116-118,198-200 (boulder 1 mana).
+7-7 stays backlog.
