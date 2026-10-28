@@ -717,3 +717,13 @@ Tri smokea, solo [0,3], deck_select po sjedalu.
 Smoke 1: Healer pratio preblizu (2 m) i klizao nogama, idle/walk treperili, castao u hodu, heal nevidljiv, prevelik, nije se okretao prema meti; shot, heal cadence, Wrath, obrane, Counterspell, kraj runde i fps prošli. Presude: krug praćenja 10/7 m, root dok casta, heal VFX, hurt klip, 80 % visine, blokirani shot radi 1, cijena 7.
 Smoke 2: krug praćenja ok, hod bez treperenja ali prebrz (→ 2.4), idle awkward (ostaje), heal VFX služi, hurt vidljiv, Fury radi; Healer klizi pri okretu → turn/strafe klipovi + mrtva zona 25°. Naručeno: Wrath cast klip + Wrath of Gold VFX, Fury let kao Stars of Ruin.
 Smoke 3: sve štima — tresak na puls, zlatni val, lepeza i konvergencija, okreti i koraci Healera, root dok puca.
+
+
+## 2026-10-17 — prvi playtest s prijateljima (3 igrača + ja)
+
+Build: 78d6068 + ručno tunane brojke (regen 0.2, leševi 30 s, deflect stun 0.6, Boulder 1, Grave Ward 1 / Raise Dead 1 crveni, Hellhound 5 / Culling 0+Z, Fireball 2 dmg/mana, Grave Ward +30 s, max mana 20 — vraćeno na 10). Deck 1 vs Deck 1, dva pada, TV.
+Format: objašnjenje, ja sa svakim 2 runde, pa oni međusobno; snimano; anketa na kraju (1–10).
+Anketa: zabava 8/8/7, razumijevanje 8/6/6, svi bi igrali opet. Zbunjuje: control scheme, orbovi/pitch, karte bez oznaka (žele ikonu tipa). Neodigrano/neshvaćeno: Fireball, Culling, Grave Ward + Raise Dead. 2/3: karte odlučile meč; "kazniti spam miniona".
+Moja opažanja: L3 card mode nezgrapan (potvrđeno); 4 ljudi s 2 pada — čekači se zapričaju, igra padne u drugi plan; nitko nije kontrirao unblockable bojom; kamera bez locka treba biti slobodna (pitch); nema rematcha bez restarta Godota; HUD čitljivost; prigovori na lock cycling.
+Ključna rečenica igrača: "sve karte bi trebale biti zabavne samo s A" — setup karte bez vidljive posljedice se izbjegavaju.
+Dalje: control scheme v2 (D-pad naoružava kartu, X/Y/R2/L2 modovi), match menu + rematch, slobodna kamera, counter-ready cue, ikone tipa na kartama; playtest 2 s istom trojicom + 2 nova, po dvoje.
