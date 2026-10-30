@@ -12926,3 +12926,37 @@ Golden UNMOVED: 97c9a1de, 66 keys (BC/R3: balance and card data are golden-neutr
 Suite after: state 1597 tests / 0 failed / 26573 assertions; integration 102 files, 102 PASS (two calls of 51).
 Test edits (old pins -> new numbers only, no new tests): test/state/test_card_authoring.gd:98-99,126-127,136-137 (price tables), :842 (grave ward 30 s); test/state/test_hero_cast.gd:928 (fireball 2.0); test/integration/test_boulder_and_skull_live.gd:17,116-118,198-200 (boulder 1 mana).
 7-7 stays backlog.
+
+## 2026-10-30 -- 7-11 close-out session
+
+Session "7-11 close-out": story `7-11-control-scheme-v2` closed (Tier A per the story and board; `src/state/` is byte-identical and the golden is unmoved). HEAD == origin/main == `e13329b` at the start; the whole story cycle (dev PART A + B, smoke fixes S1-S3, code review, review fixes L1-L4) sat UNCOMMITTED and is committed by this chain: C1 code `7029e7f`, C2 this entry, C3 story and board. NOTE ON LABELS: the log holds no earlier 7-11 session -- the gate rulings R1-R10, G1-G6, Q1-Q2 and M1-M6 live in the story file (Resolved rulings, 2026-10-28) and are cited here by their story labels. The smoke and review rulings below keep the labels the story file gave them (`7-11/S1`..`S3`, `7-11/L1`..`L4`) and nothing is renumbered.
+
+Smoke rulings (operator, 2026-10-29; items 1-10 PASS, three presentation findings, all fixed and re-smoked):
+`7-11/S1` The D-pad badge sits OFF the card face, centred on the card's top frame band, its bottom edge on the face's top edge. Still a child of its card, so it follows the armed rise and keeps its direction on a Boulder-covered slot.
+`7-11/S2` DIAMOND is a whole alternate arrangement of the half, not only a card shape: the diamond sits bottom-left, the vitals tuck into its lower-right notch, and the two pitch zones stack bottom-right (own above opponent's). ROW and ROW+GLYPH are unchanged.
+`7-11/S3` In DIAMOND the armed card is pushed outward 12 px along its own direction with its gold frame, and the other three dim to 0.8; nothing armed leaves all four at rest and undimmed. Refines G4 (frame only in DIAMOND) -- the 24 px rise still applies to ROW and ROW+GLYPH.
+
+Supersession:
+`7-11/G3` OVERRIDES `6-3-split/R-REFUSE` (`decision-log.md:10233`, "no HUD consumer of the rejection seam is added") for the arm-hint blink ONLY. The guard `test_action_rejected_has_no_hud_consumer` now admits exactly one inline runner consumer, and that consumer may only call `blink_arm_hint()` (no `hud.on_*` callback); `hud_root.gd` never names `action_rejected`, so `2-4/R4` (the HUD never subscribes) holds. Every other consumer of the seam, and the reject cue, are unchanged.
+
+Review (verdict APPROVE; fixes L1-L4 applied):
+`7-11/L1` The override parser refuses an integer literal longer than 6 characters before `to_int()` (an overflowing literal printed an engine ERROR).
+`7-11/L2` `apply_override_text` applies onto an internal duplicate and copies to `self` only on success, so a refused text leaves the profile exactly as it was.
+`7-11/L3` New invariant: every test under `test/` that builds a GAMEPAD slot sets `controls_override_root`, so no test reads the developer's real `user://controls`.
+`7-11/L4` Debug Log nit and the superseded B2/B3 mutation rows marked; pins added for CRLF, empty, BOM, lone-CR and over-long override text.
+NOTE (not a finding, no change): `Controller.armed_after_hand_change` names the constant `Hand.EMPTY` -- the first state-layer symbol in controller code. D3 holds: it is a constant, not a state read.
+
+Operator smoke: 12/12 PASS.
+
+Measured at close-out: state 1590 tests / 0 failed / 26430 assertions (`C:\dev\_711d-chain-state.txt`, one foreground launch, equal to the review-fix AFTER); integration 104 files, 104 PASS (52 + 52, `C:\dev\_711c-suite-after-int1/2.txt`); golden `97c9a1de...29da96`, 66 keys, unmoved; `FORMAT_VERSION` 25; `git diff -- src/state/` and `src/main/main.tscn` empty; `project.godot` = exactly the two `pX_cast_mode` deletions.
+
+Deferred, with owners:
+- Badge look ("good enough for now", operator) -> the HUD-readability story.
+- DIAMOND through the runner stays smoke-only, by the story's rule (no headless live test builds it end to end).
+- The `6-5b/R24` "resources still in use" leak flake seen this cycle on `test_camera_freedom_live` and `test_unit_combat_live` -- owner unchanged (`deferred-work.md`); the isolated `--verbose` re-runs were clean.
+
+Budget interval (`E5-R/R3`): start 2026-10-28 22:28:34 (earliest `C:\dev\_711a-suite-before-*`, the -state file) / end 2026-10-30 17:56:36 (`C:\dev\_711c-suite-after-int2.txt`) / delta 43h28m02s.
+
+Promotion: story `7-11-control-scheme-v2` is named for promotion to `done` (C3 flips the story Status and the board after the E4-R/R7 grep finds this session).
+
+LAYER-COMPLETION: Blind Hunter complete; Edge Case Hunter complete; Acceptance Auditor complete
