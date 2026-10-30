@@ -182,8 +182,6 @@ func _physics_process(_delta: float) -> bool:
 			print("RESULT: FAIL")
 			quit(1)
 			return false
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(_armed_action)
 	if _frames == ARM_FRAME + 2:
@@ -192,8 +190,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == CONFIRM_RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 	if _frames == SPAWN_CHECK_FRAME:
 		var unit := _first_unit_actor()
 		_spawned = _state.p1.units.size() == 1 and unit != null

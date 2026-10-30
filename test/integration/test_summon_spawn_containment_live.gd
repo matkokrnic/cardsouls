@@ -69,8 +69,6 @@ func _physics_process(_delta: float) -> bool:
 		if not _slot_chosen:
 			return _fail("no summoning card in the dealt hand: %s" % str(_state.p1.hand.to_array()))
 
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(_armed_action)
 	if _frames == ARM_FRAME + 2:
@@ -79,8 +77,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 
 	# Sampled the frame the actor first exists, before it has walked anywhere -- same discipline as
 	# test_unit_spawn_placement_live.gd, so a later corrective walk cannot mask an out-of-ring spawn.

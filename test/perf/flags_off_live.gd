@@ -105,8 +105,6 @@ func _drive_casts() -> void:
 			Input.action_press(StringName("%s_cast_confirm" % p))
 		elif t == 8:
 			Input.action_release(StringName("%s_cast_confirm" % p))
-		elif t == 10:
-			Input.action_release(StringName("%s_cast_mode" % p))
 		elif t >= CAST_CYCLE_LENGTH:
 			_cast_t[slot] = -1
 
@@ -122,7 +120,6 @@ func _begin_cast(slot: int) -> void:
 	_cast_action[slot] = action
 	_cast_t[slot] = 0
 	_casts += 1
-	Input.action_press(StringName("%s_cast_mode" % p))
 
 
 func _first_summoning_slot(slot: int) -> int:

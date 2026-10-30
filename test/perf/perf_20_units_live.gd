@@ -104,7 +104,6 @@ const CAST_ARM_PRESS := 1
 const CAST_ARM_RELEASE := 3
 const CAST_CONFIRM_PRESS := 6
 const CAST_CONFIRM_RELEASE := 8
-const CAST_MODE_RELEASE := 10
 const CAST_CYCLE_LENGTH := 13
 
 var _frames := 0
@@ -438,8 +437,8 @@ func _combat_totems(slot: int) -> int:
 	return total
 
 
-## The real arm-then-confirm scheme, in the order the controller requires it: the cast-mode
-## modifier is HELD, the card key arms the slot while it is down, and cast_confirm commits.
+## The real arm-then-confirm scheme (7-11 v2, no modifier): the card key arms the slot (sticky) and
+## cast_confirm commits it.
 func _drive_casts() -> void:
 	for slot in 2:
 		if _cast_t[slot] < 0:
@@ -457,8 +456,6 @@ func _drive_casts() -> void:
 			Input.action_press(StringName("%s_cast_confirm" % p))
 		elif t == CAST_CONFIRM_RELEASE:
 			Input.action_release(StringName("%s_cast_confirm" % p))
-		elif t == CAST_MODE_RELEASE:
-			Input.action_release(StringName("%s_cast_mode" % p))
 		elif t >= CAST_CYCLE_LENGTH:
 			_cast_t[slot] = -1
 
@@ -474,9 +471,9 @@ func _close_the_heroes() -> void:
 		hero.global_position = p
 
 
-## Both heroes swing on a fixed cadence, but NEVER while that slot has a cast in flight: the cast
-## scheme holds `cast_mode` down for ten frames and an attack press underneath it is a different
-## gesture from the one the controller is being asked to read.
+## Both heroes swing on a fixed cadence, but NEVER while that slot has a cast in flight: an attack
+## press underneath the arm-then-confirm sequence is a different gesture from the one the controller
+## is being asked to read.
 func _drive_attacks() -> void:
 	for slot in 2:
 		var action := StringName("p%d_attack" % (slot + 1))
@@ -501,7 +498,6 @@ func _begin_cast(slot: int) -> void:
 	_cast_action[slot] = action
 	_cast_t[slot] = 0
 	_casts_attempted[slot] += 1
-	Input.action_press(StringName("%s_cast_mode" % p))
 
 
 ## Which hand slot to arm. A COMBAT-TOTEM card wins while this side is under its totem target (AC 2

@@ -19,7 +19,7 @@ extends Controller
 ## keyboard parity in a local match where one player may be on a keyboard.
 
 ## Same prefix-free intent keys as KeyboardController -- kept here as the documented shape of
-## `_prev_held`'s public keys (referenced by `_LOCK_KEY`/`_CAST_BASIC_KEY` below) even though
+## `_prev_held`'s public keys (referenced by `_LOCK_KEY`/`_PLAY_BASIC_KEY` below) even though
 ## `resolve_card_tick` (Story 5-0b) now takes attack/block/roll as named parameters rather than
 ## looping this array.
 const INTENT_ACTIONS: Array[StringName] = [&"attack", &"block", &"roll"]
@@ -39,32 +39,20 @@ const NO_DEVICE := -1
 ## the same question.
 const _LOCK_KEY := &"__lock"
 
-## Story 5-0b (AC 3): the `_prev_held` key the cast-commit face button's edge is remembered
-## under. Same reasoning as `_LOCK_KEY` directly above -- the commit press is resolved into
-## `InputIntent.card_commit` here, never carried as its own intent action, so it is deliberately
-## NOT a member of INTENT_ACTIONS.
-const _CAST_BASIC_KEY := &"__cast_basic"
-
-## Story 5-7 (AC 1/AC 7): the `_prev_held` keys the UNBLOCKABLE (B) and DEFENSE (X) commit edges are
-## remembered under -- `_CAST_BASIC_KEY`'s reasoning directly above, applied unchanged to the two
-## face buttons this story wires. Both are resolved into `InputIntent.card_mode`/`card_commit` here
-## and never carried as their own intent action, so neither is a member of INTENT_ACTIONS.
-##
-## B's key is DELIBERATELY SEPARATE from `&"roll"`, even though both read the same physical button
-## today: the two edges answer different questions (has the dodge been pressed vs has the
-## unblockable confirm been pressed) and a shared entry would make the answer to one depend on
-## whether the other had been consumed.
-const _CAST_UNBLOCKABLE_KEY := &"__cast_unblockable"
-const _CAST_DEFENSE_KEY := &"__cast_defense"
-## Story 6-3a (AC 2): the `_prev_held` key the PITCH (Y) confirm edge is remembered under -- the two
-## keys directly above, applied unchanged to the fourth face button. ONE key serves both of Y's
-## meanings (stage with L3 held, activate with L3 released): they are one physical press edge, and
-## which meaning it carries is decided by `cast_held` inside `resolve_card_tick`, not by a second memory.
+## Story 7-11 (AC 5): the `_prev_held` key X's BASIC play edge is remembered under. Same reasoning as
+## `_LOCK_KEY` directly above -- the press is resolved into `InputIntent.card_commit` here, never carried
+## as its own intent action, so it is deliberately NOT a member of INTENT_ACTIONS. (5-0b's A-button
+## `_CAST_BASIC_KEY`, 5-7's B/X keys and 6-10's L3 key are gone with the meanings they remembered.)
+const _PLAY_BASIC_KEY := &"__play_basic"
+## Story 6-3a (AC 2): the `_prev_held` key the PITCH (Y) edge is remembered under. ONE key serves both of
+## Y's meanings (stage, activate): they are one physical press edge, and which meaning it carries is
+## decided by the pushed READY bool inside `resolve_card_tick` (7-11 R3), not by a second memory.
 const _CAST_PITCH_KEY := &"__cast_pitch"
-## Story 6-10 (AC 5/AC 10): the `_prev_held` key L3's raw read is remembered under, so the TOGGLE scheme can
-## see a press EDGE. Tracked every tick under either switch value (HOLD ignores it), and primed HELD on the
-## neutral path like the confirm edges above, so a replug with L3 already held toggles nothing.
-const _CAST_TOGGLE_KEY := &"__cast_toggle"
+## Story 7-11 (AC 1): the `_prev_held` keys the four D-pad ARMING edges are remembered under, in the
+## profile's direction order (left, up, down, right). Private, never intent actions.
+const _DPAD_KEYS: Array[StringName] = [&"__dpad_left", &"__dpad_up", &"__dpad_down", &"__dpad_right"]
+## Story 7-11 (AC 2): how many hand slots the arming tie-break walks, in ascending index order.
+const HAND_SLOTS := 4
 
 var _device: int = NO_DEVICE
 var _profile: GamepadProfile
@@ -94,22 +82,26 @@ var _prev_flick_magnitude := 0.0
 ## above and read back through `camera_rotate()`. A level, not an edge.
 var _camera_rotate := 0.0
 
-## Story 5-0b (AC 2/AC 9): the hand slot currently ARMED by cast mode, or -1 for none -- the
+## Story 5-0b (AC 2/AC 9): the hand slot currently ARMED, or -1 for none -- the
 ## `KeyboardController._armed_slot` precedent exactly, exposed the same way through
-## `armed_slot()` below (base `Controller` returns -1). Cleared the SAME tick `cast_button` is
-## released (AC 1), never carried past the tick cast mode exits.
+## `armed_slot()` below (base `Controller` returns -1). Story 7-11 (R1, G1): STICKY -- set by a D-pad
+## tap, kept through every play press, and cleared only when the armed card LEAVES its slot
+## (`observe_hand_ids`), by `clear_armed_slot()` (round end, debug reset) and by the neutral path.
 var _armed_slot: int = -1
-## Story 5-0b (AC 2): previous-tick L2/R2 axis values. Read and updated EVERY tick regardless of
-## cast mode, the same reason `_prev_flick_magnitude` is unconditional -- a trigger already
-## pulled past the threshold before cast mode is entered must not fire a spurious arm the instant
-## cast mode begins; only a fresh CROSSING arms a slot.
+## Story 5-0b (AC 2): previous-tick L2/R2 axis values, read and updated EVERY tick -- only a fresh
+## CROSSING fires (7-11: a DEFENSE / UNBLOCKABLE play), never a trigger held past the threshold.
 var _prev_l2 := 0.0
 var _prev_r2 := 0.0
-## Story 6-10 (AC 5-9): whether card mode is on. Under TOGGLE it is the memory the L3 press edges flip; under
-## HOLD it just mirrors the raw L3 level each sample. Controller-local presentation memory, never state,
-## never on the intent -- the `_armed_slot` precedent. Cleared on the neutral path and by
-## `force_card_mode_off()`.
-var _card_mode_on := false
+## Story 7-11 (R3): the own Pitch Zone's READY, as last pushed by the runner (`observe_pitch_ready`).
+var _pitch_ready := false
+## Story 7-11 (G1): the previous `hand_ids` push, the "before" side of the arm-clear transition.
+var _hand_ids: Array = []
+## Story 7-11 (AC 1): the profile's arming buttons and direction -> slot map, read ONCE at construction
+## (the load-once profile), and the per-sample D-pad reads, written in place -- no per-tick allocation.
+var _dpad_buttons: Array[JoyButton] = []
+var _dpad_slots: Array[int] = []
+var _dpad_raw: Array[bool] = [false, false, false, false]
+var _dpad_prev: Array[bool] = [false, false, false, false]
 
 
 ## slot_gamepad_ordinal: WHICH gamepad this is among the configured GAMEPAD slots (the i-th
@@ -118,6 +110,8 @@ var _card_mode_on := false
 ## never from the player slot (AC3; the Flip-2 live proof that slot 1 still binds the one pad).
 func _init(slot_gamepad_ordinal: int, profile: GamepadProfile) -> void:
 	_profile = profile
+	_dpad_buttons = profile.dpad_buttons()
+	_dpad_slots = profile.dpad_slots()
 	var pads := Input.get_connected_joypads()
 	if slot_gamepad_ordinal >= 0 and slot_gamepad_ordinal < pads.size():
 		_device = pads[slot_gamepad_ordinal]
@@ -146,30 +140,19 @@ func sample() -> InputIntent:
 		_prev_flick_magnitude = 0.0
 		# Story 6-8: an unplugged pad must not keep turning the camera at its last deflection.
 		_camera_rotate = 0.0
-		# Story 5-0b: same neutral path, opposite reasoning -- these three prevs are primed HELD,
-		# not cleared, because clearing them would PRIME the trigger/Basic edges: a replug with
-		# L3+trigger+A already held would then read as a fresh crossing and arm-and-commit with no
-		# new press. Priming HELD forces every card input to be released and freshly pressed again
-		# after reconnect before it can arm or commit, matching the `_prev_held.clear()` an
-		# attack/block/roll RELEASE-before-press gets, just approached from the opposite prime.
-		#
-		# Story 5-7 (AC 7): the two NEW commit edges join that same priming set, for the identical
-		# reason and with no new rule -- a replug must not be able to spend a card via UNBLOCKABLE
-		# or DEFENSE any more than it can via BASIC.
-		#
-		# Story 6-3a (AC 2): Y joins the same set, for the same reason -- a replug with Y already held
-		# must fire neither a stage (L3 held) nor an activation (L3 released) with no new press.
+		# Story 5-0b / 7-11 (AC 4): same neutral path, opposite reasoning -- the card-input prevs are primed
+		# HELD, not cleared, because clearing them would PRIME the edges: a replug with a D-pad direction,
+		# X, Y or a trigger already down would read as a fresh press and arm or play with no new press.
+		# Priming HELD forces every card input to be released and freshly pressed again after reconnect,
+		# matching the `_prev_held.clear()` an attack/block/roll RELEASE-before-press gets, just approached
+		# from the opposite prime. A disconnect also drops the arm (7-11 AC 4).
 		_armed_slot = -1
-		# Story 6-10 (AC 9d/AC 10): card mode is off after every disconnect, and L3 joins the priming set
-		# HELD so a replug with L3 already held is not read as a fresh click.
-		_card_mode_on = false
-		_prev_held[_CAST_TOGGLE_KEY] = true
 		_prev_l2 = 1.0
 		_prev_r2 = 1.0
-		_prev_held[_CAST_BASIC_KEY] = true
-		_prev_held[_CAST_UNBLOCKABLE_KEY] = true
-		_prev_held[_CAST_DEFENSE_KEY] = true
+		_prev_held[_PLAY_BASIC_KEY] = true
 		_prev_held[_CAST_PITCH_KEY] = true
+		for key: StringName in _DPAD_KEYS:
+			_prev_held[key] = true
 		return intent
 	# Y SIGN (2-2 review D2), verified by content + test, NOT an accident: raw Y is read
 	# DIRECTLY, no inversion. JOY_AXIS_LEFT_Y is positive-DOWN, so a stick pushed UP reads a
@@ -183,42 +166,34 @@ func sample() -> InputIntent:
 		Input.get_joy_axis(_device, _profile.move_axis_y))
 	intent.move_dir = resolve_move_dir(raw, _profile.deadzone)
 
-	# Story 5-0b: sample() reads raw device state ONLY -- every decision (suppression, slot
-	# arming, commit) is made by the pure resolve_card_tick() below, on the resolve_move_dir /
-	# resolve_flick precedent directly below. Joypad reads are not headless-samplable (see file
-	# header), so keeping the DECISION pure is what makes AC 9's coverage list reachable at all.
-	# Story 6-10 (AC 5): under TOGGLE the raw L3 level is turned into the mode by the pure
-	# resolve_cast_mode() (press edge flips it); under HOLD it is the level itself, as before. Either way
-	# `cast_held` below is what resolve_card_tick() has always taken, so that function is untouched.
-	var cast_held := Input.is_joy_button_pressed(_device, _profile.cast_button)
-	# 7-7 pre-playtest pass: D-pad Down (`card_mode_alt_button`) is the same raw level as L3, OR-ed in before the
-	# HOLD/TOGGLE step, so the 6-10 scheme applies to it unchanged.
-	cast_held = cast_held or Input.is_joy_button_pressed(_device, _profile.card_mode_alt_button)
-	cast_held = _advance_cast_mode(cast_held)
+	# Story 5-0b / 7-11: sample() reads raw device state ONLY -- every card decision (arming, the four
+	# plays, the Y rule) is made by the pure resolve_card_tick() below, on the resolve_move_dir /
+	# resolve_flick precedent. Joypad reads are not headless-samplable, so keeping the DECISION pure is
+	# what makes the scheme's coverage reachable at all. No modifier is read (7-11 R2).
 	var attack_raw := Input.is_joy_button_pressed(_device, _profile.attack_button)
 	var block_raw := Input.is_joy_button_pressed(_device, _profile.block_button)
 	var roll_raw := Input.is_joy_button_pressed(_device, _profile.roll_button)
+	var run_raw := Input.is_joy_button_pressed(_device, _profile.run_button)
 	var l2_value := Input.get_joy_axis(_device, _profile.trigger_axis_left)
 	var r2_value := Input.get_joy_axis(_device, _profile.trigger_axis_right)
-	var basic_raw := Input.is_joy_button_pressed(_device, _profile.cast_basic_button)
-	# Story 5-7 (AC 1): B and X, read the SAME device-filtered way as every button above and through
-	# their own authored `GamepadProfile` fields -- no raw joypad index appears here.
-	var unblockable_raw := Input.is_joy_button_pressed(_device, _profile.cast_unblockable_button)
-	var defense_raw := Input.is_joy_button_pressed(_device, _profile.cast_defense_button)
-	# Story 6-3a (AC 2): Y, the fourth confirm, through its own authored field the same way.
+	var basic_raw := Input.is_joy_button_pressed(_device, _profile.play_basic_button)
+	# Story 6-3a (AC 2): Y, through its own authored field the same way.
 	var pitch_raw := Input.is_joy_button_pressed(_device, _profile.cast_pitch_button)
+	for i in _DPAD_KEYS.size():
+		_dpad_raw[i] = Input.is_joy_button_pressed(_device, _dpad_buttons[i])
+		_dpad_prev[i] = _prev_held.get(_DPAD_KEYS[i], false)
 
 	var result := resolve_card_tick(
-		cast_held,
 		attack_raw, _prev_held.get(&"attack", false),
 		block_raw, _prev_held.get(&"block", false),
 		roll_raw, _prev_held.get(&"roll", false),
+		run_raw,
+		_dpad_raw, _dpad_prev, _dpad_slots,
 		l2_value, _prev_l2,
 		r2_value, _prev_r2,
-		basic_raw, _prev_held.get(_CAST_BASIC_KEY, false),
-		unblockable_raw, _prev_held.get(_CAST_UNBLOCKABLE_KEY, false),
-		defense_raw, _prev_held.get(_CAST_DEFENSE_KEY, false),
+		basic_raw, _prev_held.get(_PLAY_BASIC_KEY, false),
 		pitch_raw, _prev_held.get(_CAST_PITCH_KEY, false),
+		_pitch_ready,
 		_profile.trigger_threshold,
 		_armed_slot)
 
@@ -231,29 +206,30 @@ func sample() -> InputIntent:
 	# Story 6-7 (AC 4): the impure write, mirroring attack/block/roll directly above -- the VALUE
 	# is computed in the pure resolve_card_tick() above; this write is the only impure step.
 	intent.held[&"run"] = result["run_held"]
+	# Story 7-11 (M6 dev call): the card fields are written on COMMIT samples only -- the armed slot
+	# stays controller-local (secret; forward-compatible with lockstep), and state reads `card_slot`
+	# only under the commit guard anyway.
 	if result["card_commit"]:
 		intent.card_slot = result["card_slot"]
-		# Story 5-7 (AC 15): the mode the fired confirm button actually selected, replacing the
-		# hardcoded BASIC `5-2/R15` named as this story's to fix. No new InputIntent field -- the
-		# three card fields already carry everything modes ①-③ need.
+		# Story 5-7 (AC 15): the mode the fired play button selected -- no new InputIntent field.
 		intent.card_mode = result["card_mode"]
 		intent.card_commit = true
 		# Story 6-3a (AC 2/AC 4): the tenth InputIntent field. Without this line the resolver computes
-		# an activation and it never reaches state -- every bare-Y press would stage instead.
+		# an activation and it never reaches state -- every READY-zone Y would stage instead.
 		intent.card_activate = result["card_activate"]
 
 	_prev_held[&"attack"] = attack_raw
 	_prev_held[&"block"] = block_raw
 	_prev_held[&"roll"] = roll_raw
-	_prev_held[_CAST_BASIC_KEY] = basic_raw
-	_prev_held[_CAST_UNBLOCKABLE_KEY] = unblockable_raw
-	_prev_held[_CAST_DEFENSE_KEY] = defense_raw
+	_prev_held[_PLAY_BASIC_KEY] = basic_raw
 	_prev_held[_CAST_PITCH_KEY] = pitch_raw
+	for i in _DPAD_KEYS.size():
+		_prev_held[_DPAD_KEYS[i]] = _dpad_raw[i]
 	_prev_l2 = l2_value
 	_prev_r2 = r2_value
-	# Story 6-10 (AC 11): under TOGGLE a commit press disarms and mode stays on; HOLD is untouched (AC 4).
-	_armed_slot = resolve_armed_after_commit(_profile.card_mode_toggle, result["card_commit"],
-			result["armed_slot"])
+	# Story 7-11 (G1): a play press never clears the arm -- only the armed card leaving its slot does
+	# (`observe_hand_ids`), so a REFUSED play keeps it armed.
+	_armed_slot = result["armed_slot"]
 
 	_sample_lock_controls()
 	return intent
@@ -334,140 +310,93 @@ static func resolve_trigger_edge(value: float, prev_value: float, threshold: flo
 	return value >= threshold and prev_value < threshold
 
 
-## Story 5-0b (AC 1-5): the ENTIRE cast/card-scheme decision for one tick, PURE and
-## headless-testable -- the `resolve_move_dir`/`resolve_flick` extraction precedent above, taken
-## the rest of the way. sample() is the only Input.* reader here (D3(a)); this function is the
-## DECISION, built from raw device reads it never reaches for itself, so every AC 9 case is
-## reachable from a test without a real pad.
+## Story 7-11 (R1, AC 1/AC 2): the ARMING decision, PURE. `dpad_raw` / `prev_dpad_raw` are this and the
+## last sample's reads of the four direction buttons and `dpad_slots` the profile's direction -> slot map,
+## all in direction order (left, up, down, right). A press EDGE arms the mapped slot; a held direction
+## arms once; re-tapping the armed direction leaves it armed; with no fresh press the previous arm is
+## returned unchanged (arming is STICKY, R1).
 ##
-## Args are this tick's raw reads paired with last tick's raw reads (the `_prev_held` values, not
-## the previously-emitted intent) -- exactly what sample() already tracked before this story, now
-## just handed in rather than consulted inline.
+## THE TIE-BREAK (AC 2, the 5-0b "last write wins" precedent): slots are evaluated in ascending index
+## order and the last write wins, so two directions pressed on one sample arm the HIGHER slot index --
+## whatever the direction map says.
+static func resolve_arm(dpad_raw: Array[bool], prev_dpad_raw: Array[bool], dpad_slots: Array[int],
+		prev_armed_slot: int) -> int:
+	var armed := prev_armed_slot
+	for slot in HAND_SLOTS:
+		for i in dpad_raw.size():
+			if dpad_slots[i] == slot and dpad_raw[i] and not prev_dpad_raw[i]:
+				armed = slot
+	return armed
+
+
+## Story 5-0b, RE-SIGNATURED by story 7-11 (R1-R4, G3, AC 1-8): the ENTIRE card-scheme decision for one
+## sample, PURE and headless-testable -- the `resolve_move_dir`/`resolve_flick` extraction precedent.
+## sample() is the only Input.* reader here (D3(a)); this function is the DECISION, built from raw device
+## reads it never reaches for itself. Args are this sample's raw reads paired with last sample's
+## (`_prev_held`), plus the pushed READY bool and the current arm.
 ##
-## AC 1: cast mode is `cast_held`, a raw READ, never an edge -- releasing it exits the SAME tick
-## (the caller passes this tick's read, so there is no released-edge delay to construct).
+## ARMING FIRST (`resolve_arm` above), so a direction and a play pressed on the same sample play the newly
+## armed slot.
 ##
-## AC 2: L2/L1/R1/R2 arm hand slot 0/1/2/3, the physical left-to-right order, checked in that
-## order so a same-tick chord (unreachable on real hardware, reachable in a test) resolves to the
-## RIGHTMOST button pressed -- the same "last write wins" resolution `KeyboardController`'s
-## per-index loop already gets. `l2_pressed`/`r2_pressed` are the trigger-crossing edge
-## (`resolve_trigger_edge` above); `attack`/`block` reuse the ordinary button-press edge.
+## THE FOUR PLAYS, NO MODIFIER (R2): X -> mode ① BASIC, Y -> mode ④ PITCH, L2 -> mode ③ DEFENSE, R2 -> mode
+## ② UNBLOCKABLE. X and Y are button press edges; L2/R2 are the trigger-crossing edge
+## (`resolve_trigger_edge`). Each commits `card_slot` = the armed slot.
 ##
-## AC 3: the Basic face button commits the ARMED slot in one press -- no separate confirm button.
-## A fresh Basic press ALWAYS raises the commit, with `card_slot = armed_slot` even when that is
-## -1 (nothing armed): the state-side `empty_slot` refusal AC 3 describes is reached, not
-## swallowed here -- the keyboard's parity precedent exactly (`Hand.is_slot_empty` treats a
-## negative index as empty, so slot -1 lands on the same refusal a real empty slot does).
+## THE Y RULE (R3): with the own Pitch Zone READY (`pitch_ready`, pushed by the runner) Y ACTIVATES it --
+## `card_activate` true and `card_slot` -1, whatever is armed. Otherwise Y STAGES the armed card.
 ##
-## AC 4/AC 5: attack/block/roll are SUPPRESSED on the returned `*_held`/`*_pressed` whenever
-## `cast_held` is true this tick -- L1/R1/B are reassigned to card-slot/mode-select buttons and
-## must not also throw an attack/block/roll. The `*_raw`/`prev_*_raw` pair is untouched by
-## suppression, so a button already held through `cast_button`'s release produces no press edge on
-## exit (the edge needs a genuine false->true transition in the RAW reads, which a still-held
-## button never gives), while a fresh press the tick after release registers normally.
+## NOTHING ARMED (G3, `5-0b/R1` kept): every play still commits, carrying `card_slot` -1 -- the controller
+## never swallows a commit; state's empty-slot refusal answers it, as it does an armed-but-EMPTY slot.
 ##
-## ---------------------------------------------------------------------------------------------
-## STORY 5-7 (AC 1, AC 2, AC 9, AC 15): the OTHER TWO CONFIRM BUTTONS, and the mode they carry.
+## THE CHORD (AC 5): play presses on one sample resolve to AT MOST ONE commit, in the fixed order X, Y,
+## L2, R2 with the last write winning -- so R2 (UNBLOCKABLE) wins any chord it is in, the answer B gave
+## every chord under 5-7. `card_commit` is one bool and `card_mode` one value: one commit by construction.
 ##
-## AC 1: B commits the armed slot as UNBLOCKABLE and X commits it as DEFENSE, both on the EXACT
-## `basic_pressed` shape above -- one PRESS-EDGE press that both selects and confirms, no separate
-## step, and a fresh press ALWAYS raises the commit even with `armed_slot == -1`, so the same
-## state-side `empty_slot` refusal is reached rather than swallowed here. That is Basic's own
-## review-fix precedent applied identically to both new buttons rather than re-decided.
-##
-## AC 2 (5-7's "Y is a no-op by omission") is SUPERSEDED by story 6-3a, directly below.
-##
-## AC 9: A/B/X pressed the SAME tick (unreachable on real hardware, reachable from a test) resolve
-## to AT MOST ONE commit, deterministically -- the golden/replay contract requires an answer
-## regardless of reachability. The three are checked in the face cluster's PHYSICAL LEFT-TO-RIGHT
-## order (X leftmost, A centre, B rightmost) and the last write wins, so a triple-press resolves to
-## B / UNBLOCKABLE. That is the SAME "last write wins -> rightmost" rule AC 2's four-slot arming
-## chord already resolves by, stated once and applied to both chords rather than a second,
-## differently-shaped tie-break. `card_commit` is one bool and `card_mode` one value, so at most
-## one commit can leave here by construction, not by the branch order being careful.
-##
-## AC 15: `card_mode` is RETURNED rather than hardcoded by the caller -- `sample()`'s
-## `Enums.ModeKind.BASIC` (the site `5-2/R15` named) now reads this key. BASIC remains the value
-## when nothing fired; it is only ever read under `card_commit`.
-##
-## ---------------------------------------------------------------------------------------------
-## STORY 6-3a (AC 2, `6-3-split/R-Y`): Y, THE FOURTH CONFIRM, READ ON BOTH SIDES OF `cast_held`.
-##
-## INSIDE cast mode Y is a fourth confirm on the exact `basic_pressed` shape: it commits the armed
-## slot as PITCH with `card_activate = false` (a STAGE), and a fresh press ALWAYS raises the commit
-## even with `armed_slot == -1`, so state's existing `empty_slot` refusal is reached, not swallowed.
-##
-## OUTSIDE cast mode Y -- and only Y -- still commits: PITCH with `card_activate = true` and
-## `card_slot = -1`. An activation addresses the player's OWN Pitch Zone, never a hand slot, so the
-## slot is irrelevant and stays at its resting value. `card_activate` is what tells state the two
-## "PITCH, slot -1" commits apart (Fact 4): one is an empty-slot stage refusal, the other an activation.
-##
-## THE FOUR-CONFIRM CHORD ORDER (the dev-pass choice AC 2 left open): X, Y, A, B -- last write wins.
-## The face cluster's left-to-right reading order, with the centre column read top (Y) before bottom
-## (A). Y's seat there changes NONE of `5-7`'s pinned pairs (A+X -> A, B+X -> B, A+B -> B, the triple
-## -> B), so B still wins any chord it is in; the only new answers are Y+X -> Y and Y+A -> A. The chord
-## is only ever reachable inside cast mode -- outside it Y is the only confirm that commits at all.
+## NO SUPPRESSION (AC 8): attack/block/roll/run are this sample's raw reads and press edges, always. And a
+## play never clears the arm (G1): the returned `armed_slot` is the arming result alone.
 static func resolve_card_tick(
-		cast_held: bool,
 		attack_raw: bool, prev_attack_raw: bool,
 		block_raw: bool, prev_block_raw: bool,
 		roll_raw: bool, prev_roll_raw: bool,
+		run_raw: bool,
+		dpad_raw: Array[bool], prev_dpad_raw: Array[bool], dpad_slots: Array[int],
 		l2_value: float, prev_l2_value: float,
 		r2_value: float, prev_r2_value: float,
 		basic_raw: bool, prev_basic_raw: bool,
-		unblockable_raw: bool, prev_unblockable_raw: bool,
-		defense_raw: bool, prev_defense_raw: bool,
 		pitch_raw: bool, prev_pitch_raw: bool,
+		pitch_ready: bool,
 		trigger_threshold: float,
 		prev_armed_slot: int) -> Dictionary:
-	var attack_pressed := attack_raw and not prev_attack_raw
-	var block_pressed := block_raw and not prev_block_raw
-	var roll_pressed := roll_raw and not prev_roll_raw
-	var l2_pressed := resolve_trigger_edge(l2_value, prev_l2_value, trigger_threshold)
-	var r2_pressed := resolve_trigger_edge(r2_value, prev_r2_value, trigger_threshold)
+	var armed_slot := resolve_arm(dpad_raw, prev_dpad_raw, dpad_slots, prev_armed_slot)
 	var basic_pressed := basic_raw and not prev_basic_raw
-	var unblockable_pressed := unblockable_raw and not prev_unblockable_raw
-	var defense_pressed := defense_raw and not prev_defense_raw
 	var pitch_pressed := pitch_raw and not prev_pitch_raw
+	var defense_pressed := resolve_trigger_edge(l2_value, prev_l2_value, trigger_threshold)
+	var unblockable_pressed := resolve_trigger_edge(r2_value, prev_r2_value, trigger_threshold)
 
-	var armed_slot := prev_armed_slot
 	var card_slot := -1
 	var card_commit := false
 	var card_mode := Enums.ModeKind.BASIC
 	var card_activate := false
-	if cast_held:
-		if l2_pressed:
-			armed_slot = 0
-		if block_pressed:
-			armed_slot = 1
-		if attack_pressed:
-			armed_slot = 2
-		if r2_pressed:
-			armed_slot = 3
-		# The four confirms, in reading order (5-7 AC 9, 6-3a AC 2): X, Y, A, B -- last write wins.
-		if defense_pressed:
-			card_slot = armed_slot
-			card_mode = Enums.ModeKind.DEFENSE
-			card_commit = true
-		if pitch_pressed:
-			card_slot = armed_slot
-			card_mode = Enums.ModeKind.PITCH
-			card_commit = true
-		if basic_pressed:
-			card_slot = armed_slot
-			card_mode = Enums.ModeKind.BASIC
-			card_commit = true
-		if unblockable_pressed:
-			card_slot = armed_slot
-			card_mode = Enums.ModeKind.UNBLOCKABLE
-			card_commit = true
-	else:
-		armed_slot = -1
-		# Story 6-3a (AC 2): the bare-Y ACTIVATION. No hand slot is addressed, so `card_slot` stays -1.
-		if pitch_pressed:
-			card_mode = Enums.ModeKind.PITCH
-			card_commit = true
-			card_activate = true
+	# The four plays, in the chord order X, Y, L2, R2 -- last write wins.
+	if basic_pressed:
+		card_slot = armed_slot
+		card_mode = Enums.ModeKind.BASIC
+		card_commit = true
+	if pitch_pressed:
+		card_mode = Enums.ModeKind.PITCH
+		card_commit = true
+		card_activate = pitch_ready
+		card_slot = -1 if pitch_ready else armed_slot
+	if defense_pressed:
+		card_slot = armed_slot
+		card_mode = Enums.ModeKind.DEFENSE
+		card_commit = true
+		card_activate = false
+	if unblockable_pressed:
+		card_slot = armed_slot
+		card_mode = Enums.ModeKind.UNBLOCKABLE
+		card_commit = true
+		card_activate = false
 
 	return {
 		"armed_slot": armed_slot,
@@ -475,24 +404,14 @@ static func resolve_card_tick(
 		"card_commit": card_commit,
 		"card_mode": card_mode,
 		"card_activate": card_activate,
-		"attack_held": attack_raw and not cast_held,
-		"attack_pressed": attack_pressed and not cast_held,
-		"block_held": block_raw and not cast_held,
-		"block_pressed": block_pressed and not cast_held,
-		"roll_held": roll_raw and not cast_held,
-		"roll_pressed": roll_pressed and not cast_held,
-		# Story 6-7 (AC 4): bare A drives RUN outside cast mode, on the attack_held/block_held/
-		# roll_held shape directly above -- deliberately NOT `basic_pressed` (an edge), since
-		# running is a HOLD fact like the other three, and deliberately suppressed by cast_held
-		# so the same A that arms/confirms a card inside cast mode never also drives running.
-		"run_held": basic_raw and not cast_held,
-		# STORY 6-9 (AC 7): the mode ② confirm's RAW HELD STATE IS NO LONGER RETURNED. Click-to-
-		# commit leaves the state layer nothing to read it with -- the press commits the attack and
-		# no release ends it -- so the returned held entry and the `intent.held` write for the
-		# `card_cast` key above it are both gone, and with them `6-1/R9`'s L3-chord fork (with no hold there
-		# is no chord to pick). `unblockable_raw` is still read, for the COMMIT PRESS EDGE alone
-		# (`unblockable_pressed`, above). Arming, the commit chord and "L3 release clears
-		# `armed_slot`" are untouched.
+		"attack_held": attack_raw,
+		"attack_pressed": attack_raw and not prev_attack_raw,
+		"block_held": block_raw,
+		"block_pressed": block_raw and not prev_block_raw,
+		"roll_held": roll_raw,
+		"roll_pressed": roll_raw and not prev_roll_raw,
+		# Story 6-7 (AC 4) / 7-11 (AC 8): A held is RUN, always -- a HOLD fact like the three above.
+		"run_held": run_raw,
 	}
 
 
@@ -502,52 +421,20 @@ func armed_slot() -> int:
 	return _armed_slot
 
 
-## Story 6-10 (AC 9/AC 20): card mode on, for the HUD lift. See Controller's base declaration.
-func card_mode_on() -> bool:
-	return _card_mode_on
-
-
-## Story 6-10 (AC 9): a knockdown, round end or debug reset ended card mode. Clears the mode and the armed
-## slot. The raw L3 memory is deliberately LEFT ALONE: an L3 still physically held through this has no new
-## press edge, so it cannot turn the mode back on -- only a fresh release-then-press does.
-func force_card_mode_off() -> void:
-	if not _profile.card_mode_toggle:
-		return  # R3 is TOGGLE-only: HOLD's mode is the live L3 level and stays byte-identical
-	_card_mode_on = false
+## Story 7-11 (AC 4): round end / debug reset. See Controller's base declaration.
+func clear_armed_slot() -> void:
 	_armed_slot = -1
 
 
-## Story 6-10 (AC 5): one sample's card-mode step -- resolve the mode from this tick's raw L3 read, then
-## remember both the raw read (the edge memory) and the mode. Split out of sample() so the memory wiring is
-## testable without a pad; the decision itself stays the pure function below.
-func _advance_cast_mode(l3_raw: bool) -> bool:
-	_card_mode_on = resolve_cast_mode(_profile.card_mode_toggle, l3_raw,
-			_prev_held.get(_CAST_TOGGLE_KEY, false), _card_mode_on)
-	_prev_held[_CAST_TOGGLE_KEY] = l3_raw
-	return _card_mode_on
+## Story 7-11 (G1, AC 3): the armed card leaving its slot clears the arm. See Controller's base declaration.
+func observe_hand_ids(ids: Array) -> void:
+	_armed_slot = armed_after_hand_change(_armed_slot, _hand_ids, ids)
+	_hand_ids = ids.duplicate()
 
 
-## Story 6-10 (AC 5/AC 6/AC 8): the pure card-mode decision, joypad reads passed in so it is testable
-## without a pad. HOLD (`toggle` false): the mode IS the raw L3 level. TOGGLE: a press edge (raw true this
-## sample, false the last) flips the current mode; nothing else changes it -- holding L3 and releasing L3
-## are both no-ops. The result feeds resolve_card_tick()'s `cast_held`, so entry and exit take effect the
-## same tick and exit clears the armed slot there.
-static func resolve_cast_mode(toggle: bool, l3_raw: bool, prev_l3_raw: bool, mode_on: bool) -> bool:
-	if not toggle:
-		return l3_raw
-	if l3_raw and not prev_l3_raw:
-		return not mode_on
-	return mode_on
-
-
-## Story 6-10 (AC 11, AC 4): the armed slot after this tick. TOGGLE and a commit was raised (any of the four
-## confirms, accepted by state or not): disarmed. Otherwise exactly what resolve_card_tick() returned, which
-## is HOLD's behaviour (a commit does not clear the armed slot). A bare-Y activation also raises
-## `card_commit`, but with mode off nothing is armed, so clearing changes nothing.
-static func resolve_armed_after_commit(toggle: bool, commit: bool, armed: int) -> int:
-	if toggle and commit:
-		return -1
-	return armed
+## Story 7-11 (R3): the own Pitch Zone's READY, for the Y rule. See Controller's base declaration.
+func observe_pitch_ready(is_ready: bool) -> void:
+	_pitch_ready = is_ready
 
 
 ## Story 4-6 (AC 9): the click edge sampled by `_sample_lock_controls`. See Controller's base

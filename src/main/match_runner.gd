@@ -117,10 +117,6 @@ var _replay_tick := 0
 ## out of this file while F1 keeps the tick gate in it.
 var _debug_input := DebugInputReader.new()
 var _paused := false
-## Story 6-10 (AC 9a): per-slot "was knocked down last frame", runner-local presentation memory for the
-## step 1b poll, so card mode is dropped on the knockdown's RISING edge only -- a player may click L3 again
-## while still down (Open Question 3) without being forced off every frame.
-var _was_knocked_down: Array[bool] = [false, false]
 
 ## Story 7-5b (AC 23): the DECK 2 BODIES' presentation memory, runner-local, per slot -- the Wrath ring's radius
 ## drawn at the end of the previous tick (its falling edge is the pulse), the slot's summed Healer heal count
@@ -698,6 +694,12 @@ func _ready() -> void:
 		# the window's tick count, which stays write-only unhashed state (3-5b/R20, 3-6/R3). Read
 		# inline off the already-loaded authored config (CONSTRAINT C).
 		hud.reshuffle_vulnerable_window_seconds = balance_config.reshuffle_vulnerable_window_seconds
+		# Story 7-11 (R6, AC 12): this slot's hand layout and direction -> slot map, read off its OWN profile and
+		# handed over as plain values before add_child; the HUD never sees the profile. A slot without one (keyboard,
+		# null, replay) keeps the HUD's ROW default (G4: keyboard layout data waits for 7-12).
+		var slot_profile := _slot_profiles[slot]
+		if slot_profile != null:
+			hud.set_hand_layout(slot_profile.hand_layout, slot_profile.dpad_slots())
 		hud_viewports[slot].add_child(hud)
 		huds.append(hud)
 		connect_hero_hp_changed(slot, hud.on_hp_changed)
@@ -742,12 +744,32 @@ func _ready() -> void:
 			var hand_colors: Array[int] = []
 			for id: StringName in hand_ids:
 				hand_colors.append(card_colors_by_id.get(id, -1))
-			(_p1_controller if slot_index == 0 else _p2_controller).observe_hand_colors(hand_colors))
+			var controller := _p1_controller if slot_index == 0 else _p2_controller
+			controller.observe_hand_colors(hand_colors)
+			# Story 7-11 (G1, M5): the arm-clear channel -- the emission's own BOUND `hand_ids` (the visible
+			# layer as it stood when this notify was queued), NEVER `player.hand.to_array()` read here at
+			# drain time, which would show a same-drain refill at both emissions and hide the EMPTY between.
+			controller.observe_hand_ids(hand_ids))
 		EventBus.round_ended.connect(hud.on_round_ended.bind(slot))
 		# Story 6-3b (AC 1/AC 3): the TENTH seam's HUD consumer. Match-level, so BOTH roots receive BOTH
 		# zones and each binds its OWN slot to tell them apart -- the on_round_ended bind directly above,
 		# second time. No priming: both zones are empty until the first staging.
 		connect_pitch_changed(hud.on_pitch_changed.bind(slot))
+		# Story 7-11 (R3, M5): the READY relay for the pad's Y rule -- this slot's OWN zone only (the seam is
+		# match-level, so the wrapper filters `zone_slot == slot`, the `hud_root.gd` filter), pushed to that
+		# slot's controller as a plain bool. Captures `self` and an int, no PlayerState (4-B1).
+		connect_pitch_changed(func(zone_slot: int, _card_id: StringName, _hand_slot: int, zone_ready: bool,
+				_remaining_ticks: int, _duration_ticks: int, _fresh_orbs: Dictionary) -> void:
+			if zone_slot == slot_index:
+				(_p1_controller if slot_index == 0 else _p2_controller).observe_pitch_ready(zone_ready))
+		# Story 7-11 (G3, Q2, AC 14): THE ARM-HINT BLINK. This slot's own `action_rejected`, wrapped here so the HUD never
+		# subscribes (`2-4/R4`): a refused card play (`&"card_cast"`, the one action every cast/pitch/defense refusal in
+		# state names) while this slot's controller has NOTHING armed pushes one blink to this slot's OWN root -- on any
+		# reason. A DEAD hero or a round-over match returns before any refusal is emitted, so those presses stay silent.
+		# Captures `self`, an int and this root (a Node), no PlayerState (4-B1).
+		connect_hero_action_rejected(slot, func(action: StringName, _reason: StringName) -> void:
+			if action == &"card_cast" and (_p1_controller if slot_index == 0 else _p2_controller).armed_slot() == -1:
+				hud.blink_arm_hint())
 		# Story 3-6 (AC 4): the reshuffle flag. BOTH viewports subscribe to the SAME ownerless bus
 		# event (E3-RG/R3 — "this player's deck ran out" is a match-wide public fact), each binding
 		# its OWN slot so it can render the event against itself: the round_ended wiring directly
@@ -1051,6 +1073,15 @@ func _show_start_refusal(reason: String) -> void:
 ## `_ready` (through `_resolve_seed`) and nowhere else. 0 = unset. Every live test that depends on the
 ## dealt hand sets it to 12345, the seed the runner shipped as a constant before this story.
 var seed_override: int = 0
+
+## Story 7-11 (R5, AC 11): THE OVERRIDE ROOT a headless test injects, on the `seed_override` precedent
+## directly above -- set BEFORE the runner enters the tree, read once per GAMEPAD slot in `_make_controller`.
+## The shipped value is the real `user://controls`; a test points it at a root outside `user://` and the repo.
+var controls_override_root: String = GamepadProfile.OVERRIDE_ROOT
+
+## Story 7-11 (R6, AC 12): each PLAYER slot's own gamepad profile, kept by `_make_controller` so the HUD wiring can push
+## that slot's hand layout and direction map as plain values. null for a keyboard / null / replay slot (renders ROW).
+var _slot_profiles: Array[GamepadProfile] = [null, null]
 
 ## Story 7-4 (AC 17): the load-once pin knob's path. See `SeedPin`.
 const SEED_PIN_PATH := "res://data/seed_pin.tres"
@@ -2691,9 +2722,12 @@ func _make_controller(kind: ControllerKind, slot: int) -> Controller:
 			# (2-2 review D3), NOT the player slot and NOT a mutable counter — so re-wiring the
 			# slots (2-3, DEBT B reload) can never bind the wrong device and there is no counter to
 			# reset. The profile is the load-once authored mapping (data/gamepad_profile.tres),
-			# the camera_config pattern.
-			return GamepadController.new(
-				_gamepad_ordinal_for_slot(slot), load("res://data/gamepad_profile.tres") as GamepadProfile)
+			# the camera_config pattern. Story 7-11 (R5, AC 10): PER SLOT -- each pad slot gets its own
+			# instance, overlaid with that PLAYER slot's override file under `controls_override_root`. Kept per slot
+			# for the HUD's hand-layout push (R6), so the file is read once and both readers see the same instance.
+			var profile := GamepadProfile.load_for_slot(slot + 1, controls_override_root)
+			_slot_profiles[slot] = profile
+			return GamepadController.new(_gamepad_ordinal_for_slot(slot), profile)
 	Invariant.check(false, "unknown controller kind: %d" % kind)
 	return NullController.new()
 
@@ -2833,12 +2867,13 @@ func connect_pitch_changed(callback: Callable) -> void:
 	_match_state.pitch_changed.connect(callback)
 
 
-## Story 6-10 (AC 9): push "card mode ended" to both controllers. Base no-op except the pad's TOGGLE scheme.
-func _force_card_mode_off_all() -> void:
+## Story 7-11 (AC 4): push "drop your armed slot" to both controllers (round end, debug reset) -- 6-10's
+## card-mode clears re-homed onto the arm. Knockdown no longer pushes it (6-10/R3 reversed).
+func _clear_armed_slots() -> void:
 	if _p1_controller != null:
-		_p1_controller.force_card_mode_off()
+		_p1_controller.clear_armed_slot()
 	if _p2_controller != null:
-		_p2_controller.force_card_mode_off()
+		_p2_controller.clear_armed_slot()
 
 
 ## Story 1-7 (AC 4.3): MatchState.round_ended -> EventBus.round_ended. Runner-owned
@@ -2848,8 +2883,8 @@ func _relay_round_ended(loser_index: int) -> void:
 	# Story 7-1 (AC 32): nothing transient lingers into the round-over freeze.
 	if _effects != null:
 		_effects.clear_transient()
-	# Story 6-10 (AC 9b): the round ending drops card mode on both pads, on this EXISTING relay.
-	_force_card_mode_off_all()
+	# Story 7-11 (AC 4): the round ending drops the arm on both seats, on this EXISTING relay.
+	_clear_armed_slots()
 
 
 ## Story 2-6 (AC 1, 2-6/R5): MatchState.round_started -> EventBus.round_started. Runner-owned
@@ -2857,8 +2892,8 @@ func _relay_round_ended(loser_index: int) -> void:
 ## — the reset is a whole-match event, not per-player.
 func _relay_round_started() -> void:
 	EventBus.round_started.emit()
-	# Story 6-10 (AC 9c): the debug reset (the only thing that fires round_started) drops card mode too.
-	_force_card_mode_off_all()
+	# Story 7-11 (AC 4): the debug reset (the only thing that fires round_started) drops the arm too.
+	_clear_armed_slots()
 	# Story 4-1 (AC 8): the DEBUG RESET clears each player's UnitBoard (MatchState._reset_player,
 	# the one named exception to that function's "NOTHING else" contract), and the grey-box actors
 	# go with it. Wired onto THIS EXISTING RELAY deliberately -- no new EventBus event and no new
@@ -5611,18 +5646,8 @@ func _physics_process(delta: float) -> void:
 	#     handle, plain ints only.
 	#     OUTSIDE the `ticking` gate deliberately — the selection must stay visible and
 	#     responsive while the debug pause is held, exactly as camera follow (4b) does.
-	# Story 6-10 (AC 9a): knockdown drops card mode on its rising edge. The same `_stun_flavor_for_slot`
-	# read the rig closure already uses (no new seam, no new connect), polled here rather than driven from
-	# the action-state signal because the ordinary-to-knockdown escalation is a same-state write that emits
-	# nothing. An ordinary stun never triggers it (AC 9a).
-	for knock_slot: int in 2:
-		var knocked := _stun_flavor_for_slot(knock_slot) == AnimationController.STUN_FLAVOR_KNOCKDOWN
-		if knocked and not _was_knocked_down[knock_slot]:
-			(_p1_controller if knock_slot == 0 else _p2_controller).force_card_mode_off()
-		_was_knocked_down[knock_slot] = knocked
-	# Story 6-10 (AC 16/AC 20): the card-mode lift rides the same poll-and-push, own HUD only.
-	_huds[0].set_card_mode(_p1_controller.card_mode_on())
-	_huds[1].set_card_mode(_p2_controller.card_mode_on())
+	# Story 7-11 (AC 4): 6-10's knockdown poll is GONE -- knockdown keeps the arm -- and so is the card-mode
+	# lift push (there is no card mode, R2). The armed slot alone is pushed, own HUD only (secret).
 	_huds[0].set_card_selection(_p1_controller.armed_slot(), Enums.ModeKind.BASIC)
 	_huds[1].set_card_selection(_p2_controller.armed_slot(), Enums.ModeKind.BASIC)
 	# Story 3-0b (AC 1): steps 2, 3 and 4 — gather, advance, drive — are THE freeze. While paused

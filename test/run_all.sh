@@ -26,7 +26,7 @@ echo "### integration tests ###"
 # in use at exit" (full-suite runs only, never in isolation) run with -v, so Godot's verbose leak detail
 # is in their output, and ANY file whose output carries that message has its FULL output printed. This
 # only adds output: the pass/fail test below is unchanged, and the message still fails the suite.
-VERBOSE_FILES="test/integration/test_unit_combat_live.gd test/integration/test_charge_telegraph_dispatch_live.gd test/integration/test_card_mode_lift.gd"
+VERBOSE_FILES="test/integration/test_unit_combat_live.gd test/integration/test_charge_telegraph_dispatch_live.gd"
 shopt -s nullglob
 found=0
 for t in test/integration/test_*.gd; do

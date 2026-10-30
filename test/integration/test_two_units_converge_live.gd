@@ -169,8 +169,6 @@ func _physics_process(_delta: float) -> bool:
 		if not _slot_chosen:
 			return _fail("no summoning card in the dealt hand: %s" % str(_state.p1.hand.to_array()))
 	# --- two casts, two units ---
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(_armed_action)
 	if _frames == ARM_FRAME + 2:
@@ -179,10 +177,7 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 	if _frames == ARM2_FRAME:
-		Input.action_press(&"p1_cast_mode")
 		_slot_chosen = _choose_a_summoning_slot()
 	if _frames == ARM2_FRAME + 1 and _slot_chosen:
 		Input.action_press(_armed_action)
@@ -192,8 +187,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM2_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == RELEASE2_FRAME:
-		Input.action_release(&"p1_cast_mode")
 
 	if _frames == SPAWN_CHECK_FRAME:
 		var actors := _both_unit_actors()

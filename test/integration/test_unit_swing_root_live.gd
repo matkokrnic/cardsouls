@@ -199,8 +199,6 @@ func _physics_process(_delta: float) -> bool:
 			_reshuffling = true
 			_reshuffle_tick = 0
 			return false
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(_armed_action)
 	if _frames == ARM_FRAME + 2:
@@ -209,8 +207,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == CONFIRM_RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 	if _frames == SPAWN_CHECK_FRAME:
 		# EXACTLY ONE unit, which is what makes "no neighbour in contact" a property of the scene
 		# rather than a hope about it.

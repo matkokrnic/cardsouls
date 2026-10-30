@@ -470,44 +470,40 @@ func _check_boulder() -> void:
 	_check(cover.modulate == Color.WHITE, "P2: a payable Boulder cover is dimmed")
 	_hud.on_mana_changed(0.0, 10.0)
 	# AC 21 / 7-6 POLISH 3 (operator ruling P17): a Boulder-covered slot ARMS EXACTLY LIKE ANY OTHER CARD -- its frame
-	# turns gold and, in card mode, it takes the row lift and rises to the armed lift.
+	# turns gold and (story 7-11, G4: no card mode, the default ROW layout) it rises the armed lift.
 	_hud.set_card_selection(0, Enums.ModeKind.BASIC)
-	_check(_hud.highlight_width(0) == HudRoot.ARMED_FRAME_PX, "P17: the armed covered slot shows no gold frame")
-	_hud.set_card_mode(true)
 	_check(_hud.highlight_width(0) == HudRoot.ARMED_FRAME_PX
 			and is_equal_approx(_hud.card_lift(0), HudRoot.CARD_MODE_ARMED_LIFT_PX),
 			"P17: the armed covered slot is not lifted and gold-framed (lift %s)" % _hud.card_lift(0))
-	_check(is_equal_approx(_hud.card_lift(1), HudRoot.CARD_MODE_ROW_LIFT_PX),
-			"AC 21 control: an uncovered slot did not take the row lift")
+	_check(is_equal_approx(_hud.card_lift(1), 0.0) and _hud.highlight_width(1) == 0,
+			"AC 21 control: an unarmed uncovered slot moved or framed (lift %s)" % _hud.card_lift(1))
 	_hud.set_card_selection(1, Enums.ModeKind.BASIC)
 	_check(_hud.highlight_width(1) == HudRoot.ARMED_FRAME_PX and is_equal_approx(_hud.card_lift(1),
 			HudRoot.CARD_MODE_ARMED_LIFT_PX), "AC 21 control: an uncovered armed slot has no frame or lift")
-	_hud.set_card_mode(false)
 	_hud.set_card_selection(-1, Enums.ModeKind.BASIC)
 	_hand([&"card_a", &"card_b", &"card_c", &"card_d"])
 	_check(not (_card(0).get_node("BoulderCover") as Control).visible, "R4: the cover outlived the uncover")
 
 
-## AC 17 / 7-6 POLISH (operator ruling P3): card mode lifts the whole row a little, the armed card clearly higher
-## with a strong frame drawn outside the card; lifts only while card mode is on (a card never lifts alone), the
-## frame whenever armed. All of it is independent of affordability (P2): the three states stay distinguishable.
+## AC 17 / 7-6 POLISH (operator ruling P3) as amended by story 7-11 (R2, G4, AC 13): there is no card mode, so no
+## row lift -- nothing moves while nothing is armed; the ARMED card rises `CARD_MODE_ARMED_LIFT_PX` (24 px) with its
+## strong gold frame (the default ROW layout; DIAMOND's push-and-dim rule is `test_hand_layouts.gd`). All of it is
+## independent of affordability (P2): the states stay distinguishable.
 func _check_highlights() -> void:
 	_hud.on_mana_changed(10.0, 10.0)
 	for i in 4:
 		_check(is_equal_approx(_hud.card_lift(i), 0.0) and _hud.highlight_width(i) == 0,
-				"P3: slot %d lifted or framed with mode off and nothing armed" % i)
-	_hud.set_card_mode(true)
-	for i in 4:
-		_check(is_equal_approx(_hud.card_lift(i), HudRoot.CARD_MODE_ROW_LIFT_PX) and _hud.highlight_width(i) == 0,
-				"P3: card mode did not lift slot %d by the row lift (%s)" % [i, _hud.card_lift(i)])
+				"P3: slot %d lifted or framed with nothing armed" % i)
+	_check(not _hud.has_method("set_card_mode") and _hud.has_method("set_card_selection")
+			and not (_hud.get_script() as GDScript).get_script_constant_map().has("CARD_MODE_ROW_LIFT_PX"),
+			"7-11 R2: the card-mode row lift (`set_card_mode`, `CARD_MODE_ROW_LIFT_PX`) still exists")
 	_hud.set_card_selection(2, Enums.ModeKind.BASIC)
 	_check(is_equal_approx(_hud.card_lift(2), HudRoot.CARD_MODE_ARMED_LIFT_PX)
-			and _hud.highlight_width(2) == HudRoot.ARMED_FRAME_PX, "P3: the armed card is not lifted high and framed")
-	_check(HudRoot.CARD_MODE_ARMED_LIFT_PX >= 3.0 * HudRoot.CARD_MODE_ROW_LIFT_PX,
-			"P3: the armed lift is not clearly higher than the row lift")
+			and is_equal_approx(HudRoot.CARD_MODE_ARMED_LIFT_PX, 24.0)
+			and _hud.highlight_width(2) == HudRoot.ARMED_FRAME_PX, "G4: the armed card does not rise 24 px framed")
 	for i in [0, 1, 3]:
-		_check(is_equal_approx(_hud.card_lift(i), HudRoot.CARD_MODE_ROW_LIFT_PX) and _hud.highlight_width(i) == 0,
-				"P3: unarmed slot %d is not at the row lift without a frame" % i)
+		_check(is_equal_approx(_hud.card_lift(i), 0.0) and _hud.highlight_width(i) == 0,
+				"G4: unarmed slot %d is not at rest without a frame (lift %s)" % [i, _hud.card_lift(i)])
 	# AC 17: payable (P2) and armed (P3) co-exist on one card without collapsing into one look.
 	_check(_hud.is_half_affordable(2, 0) and _hud.highlight_width(2) > 0, "AC 17: a payable card cannot also be armed")
 	# 7-6 POLISH 3 (operator ruling P14): ONE frame per card, CARD_FRAME_PX thick in the card's own colour; arming turns
@@ -521,10 +517,12 @@ func _check_highlights() -> void:
 			% HudRoot.CARD_FRAME_PX)
 	for i in 4:
 		_check(_card(i).get_node_or_null("Highlight") == null, "P14: slot %d still carries a second frame node" % i)
-	# The 6-10 hold shape: mode off with a slot still armed -- the frame alone, no lone lift.
-	_hud.set_card_mode(false)
-	_check(_hud.highlight_width(2) == HudRoot.ARMED_FRAME_PX and is_equal_approx(_hud.card_lift(2), 0.0),
-			"P3: mode off + armed must show the frame and no lone lift (lift %s)" % _hud.card_lift(2))
+	# Story 7-11 (G4) -- INVERTS 6-10's "mode off + armed: frame alone, no lone lift": the arm is sticky with no
+	# modifier, and the armed card RISES on its own (pushed again unchanged, as the runner does every frame).
+	_hud.set_card_selection(2, Enums.ModeKind.BASIC)
+	_check(_hud.highlight_width(2) == HudRoot.ARMED_FRAME_PX
+			and is_equal_approx(_hud.card_lift(2), HudRoot.CARD_MODE_ARMED_LIFT_PX),
+			"G4: an armed card with no modifier held does not rise (lift %s)" % _hud.card_lift(2))
 	_hud.set_card_selection(-1, Enums.ModeKind.BASIC)
 	for i in 4:
 		_check(is_equal_approx(_hud.card_lift(i), 0.0) and _hud.highlight_width(i) == 0, "P3: slot %d did not return to rest" % i)

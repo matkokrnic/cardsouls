@@ -136,8 +136,6 @@ func _physics_process(_delta: float) -> bool:
 		if not _slot_chosen:
 			return _fail("no summoning card in the dealt hand: %s" % str(_state.p1.hand.to_array()))
 
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(_armed_action)
 	if _frames == ARM_FRAME + 2:
@@ -146,8 +144,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 
 	# --- PHASE 1 SAMPLE: the frame the first actor exists, before it has walked anywhere. ---
 	if _spawn1 == Vector3.INF and _live_actors() >= 1:
@@ -167,8 +163,6 @@ func _physics_process(_delta: float) -> bool:
 	if _frames == PIN_FRAME + 1:
 		_state.p1.mana.add(_state.p1.mana.get_maximum())
 		_slot_chosen = _choose_a_summoning_slot()
-	if _frames == ARM2_FRAME and _slot_chosen:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM2_FRAME + 1 and _slot_chosen:
 		Input.action_press(_armed_action)
 	if _frames == ARM2_FRAME + 2:
@@ -177,8 +171,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM2_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == RELEASE2_FRAME:
-		Input.action_release(&"p1_cast_mode")
 
 	# --- PHASE 2 SAMPLE: same rule, the frame the second actor exists. ---
 	if _spawn1 != Vector3.INF and _spawn2 == Vector3.INF and _live_actors() >= 2:

@@ -82,8 +82,6 @@ func _physics_process(_delta: float) -> bool:
 	# modifier is HELD (keyboard_controller.gd:105 returns early without it — arming is impossible
 	# otherwise), the card key arms the slot while it is down, and cast_confirm commits. Copied
 	# beat for beat from test_card_selection_indicator.gd, the file that already drives this.
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(&"p1_card_2")     # arm hand slot index 1
 	if _frames == ARM_FRAME + 2:
@@ -92,8 +90,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == CONFIRM_RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 	if _frames == IN_FLIGHT_CHECK_FRAME:
 		# NON-VACUITY, state side: the cast really happened through advance(). Without this a
 		# refused cast would leave a blank slot and the final assertion would pass for the wrong

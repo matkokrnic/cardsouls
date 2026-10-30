@@ -138,6 +138,9 @@ var _reshuffle_token := 0
 ## to the OUTER column (operator answer in chat, 2026-10-05). In that band: 8 px bottom margin + 158 card +
 ## `CARD_MODE_ARMED_LIFT_PX` 24 + the armed frame's 4 px outset = 194 <= 196. Badges are solid, larger and
 ## high-contrast; pips are 13 px with 4 px gaps.
+## Story 7-11 (measured): that 196 px band belonged to the 648 px window; P9 re-laid the hand for the shipped
+## 960x1080 half and P12 let the hidden debug box overlay the HUD, so the fit check is now the live layout test
+## (`test_hud_viewports.gd`, every card at its armed reach) and, per hand layout, `test_hand_layouts.gd`.
 ## 7-6 POLISH 2 (operator ruling P8, 2026-10-06): the card-colour FRAME is permanent and as thick as the armed
 ## frame (`ARMED_FRAME_PX`), drawn by `ColorSwatch` OUTSIDE the halves, so dimming a half never dims the colour and
 ## the frame ties the two halves together. The halves are re-derived inside it.
@@ -237,13 +240,54 @@ const ZONE_SOCKET_BAND_BOTTOM := 158.0
 ## pre-7-6 knobs were 4 and 6) and carries a strong bright `ARMED_FRAME_PX` frame drawn OUTSIDE the card. As before
 ## 7-6, a card never lifts alone: the lifts apply only while card mode is on, the armed frame whenever a slot is
 ## armed. A Boulder-covered slot shows neither (AC 21).
-const CARD_MODE_ROW_LIFT_PX := 6.0
+## Story 7-11 (R2, G4, AC 13): there is no card mode, so the row lift and `CARD_MODE_ROW_LIFT_PX` are GONE (7-6/P3's
+## "never lifts alone" is superseded). The ARMED card rises `CARD_MODE_ARMED_LIFT_PX` with its gold frame in ROW and
+## ROW+GLYPH (the name is kept: it is the same 24 px rise); in DIAMOND the gold frame alone marks it (see
+## `DIAMOND_GAP`).
 const CARD_MODE_ARMED_LIFT_PX := 24.0
 ## P14: the armed card's frame IS its card frame turned gold -- so its width is `CARD_FRAME_PX` -- with a soft gold
 ## glow `ARMED_GLOW_PX` outside it.
 const ARMED_FRAME_PX := CARD_FRAME_PX
 const ARMED_FRAME_COLOR := Color(1.0, 0.84, 0.30)
 const ARMED_GLOW_PX := 4
+
+## Story 7-11 (R6, AC 12): THE HAND LAYOUT, one of `GamepadProfile.HandLayout`, pushed by the runner as a plain int
+## with the direction -> slot map (`set_hand_layout`); the HUD never loads a profile. A slot nothing is pushed to (a
+## keyboard, a replay) renders ROW with the default map.
+##   ROW        today's arc (P9), nothing added
+##   ROW_GLYPH  the arc plus one D-pad direction badge per card (`DPAD_BADGE_RECT`), following the map
+##   DIAMOND    a whole alternate arrangement of the half (smoke fix S2, 2026-10-29): the four cards at the D-pad
+##              positions in the half's bottom-LEFT corner (`DIAMOND_EDGE_PX` in from the left and bottom edges, off
+##              the hero) -- up over down in the centre column, left and right flanking it at mid-height; the vitals
+##              tucked into the diamond's lower-right notch (below the RIGHT card, right of the DOWN card); the two
+##              pitch zones stacked in the half's bottom-right corner, own above opponent's (`DIAMOND_ZONE_GAP`)
+## The DIAMOND gap between cards is `DIAMOND_GAP` (8 px, the row's gap): a 24 px rise of the DOWN card would run 16 px
+## into the UP card above it, so DIAMOND never rises (G4, measured). Smoke fix S3 (operator, G4 refined): the armed card
+## is PUSHED OUTWARD along its own direction by `DIAMOND_ARMED_PUSH_PX` (up up, down down, left left, right right) with
+## its gold frame, and the other three dim to `DIAMOND_UNARMED_DIM`; nothing armed = all at rest, undimmed. The edge
+## margin keeps a pushed card (plus its glow) inside the half.
+const DIAMOND_GAP := CARD_GAP
+const DIAMOND_EDGE_PX := HAND_BOTTOM_PX
+const DIAMOND_ZONE_GAP := 16.0
+const DIAMOND_ARMED_PUSH_PX := 12.0
+const DIAMOND_UNARMED_DIM := 0.8
+## The badge: a dark round plate with a dim D-pad cross whose one lit arm is the direction that arms this card. Smoke
+## fix S1 (2026-10-29): OFF THE CARD FACE -- centred on the card's TOP frame band, its bottom edge on the face's top
+## edge (`CARD_FRAME_PX`), so it covers only frame and hangs 16 px above the card. Below the card was measured and
+## does not fit: the vitals start 6 px under the arc's middle pair. Still a child of its card (it follows the armed
+## rise) and drawn above the Boulder cover, so a covered slot (which arms, P17) keeps its direction. It swells from its
+## bottom-centre (`pivot_offset`) so the blink never pushes it onto the face.
+const DPAD_BADGE_RECT := Rect2(53.0, -16.0, 22.0, 22.0)
+const DPAD_BADGE_ARM_PX := 6.0
+const DPAD_BADGE_PLATE := Color(0.05, 0.045, 0.04, 0.96)
+const DPAD_BADGE_CROSS := Color(0.42, 0.40, 0.36)
+const DPAD_BADGE_LIT := Color(1.0, 0.97, 0.88)
+## Story 7-11 (G3, Q2, AC 14): THE ARM-HINT BLINK -- a nothing-armed play that state refused pulses the own hand once:
+## every card's frame flashes `ARM_HINT_COLOR` and, in ROW+GLYPH, the badges swell `ARM_HINT_BADGE_SWELL`. One pulse
+## (up and back down) over `ARM_HINT_BLINK_SEC`; no sound (state's reject cue already plays).
+const ARM_HINT_BLINK_SEC := 0.4
+const ARM_HINT_COLOR := Color(1.0, 1.0, 1.0, 1.0)
+const ARM_HINT_BADGE_SWELL := 0.35
 
 ## Story 7-6 (R4, AC 20): the covered card's faintness under a Boulder.
 const UNDER_MODULATE := Color(1.0, 1.0, 1.0, 0.32)
@@ -319,8 +363,18 @@ var _own_card_panels: Array[Panel] = []
 ## Story 7-6: the own hand row's container -- a plain Control (not a box container) so a card's lift is a
 ## position write nothing re-sorts away.
 var _hand_strip: Control
-var _card_mode_on := false
+## Story 7-11 smoke fix S2: the vitals column, re-placed with the hand strip and both pitch zones by DIAMOND.
+var _vitals: Control
 var _armed_slot := -1
+## Story 7-11 (R6): the pushed hand layout and, per hand slot, the D-pad direction that arms it (0 left, 1 up, 2 down,
+## 3 right -- `GamepadProfile`'s direction order), the inverse of the pushed direction -> slot map.
+var _hand_layout: int = GamepadProfile.HandLayout.ROW
+var _slot_directions: Array[int] = [0, 1, 2, 3]
+## Each card's D-pad badge, its lit arm per direction, and its arm-hint frame (AC 14's blink).
+var _own_card_badges: Array[Control] = []
+var _own_card_badge_arms: Array = []
+var _own_card_hints: Array[Panel] = []
+var _hint_tween: Tween
 ## The card BODY style: the `_make_card_face_style(true)` face, shared across the four panels (2-5/R4's single
 ## seat). The colour lives on each slot's own frame, not here.
 var _card_base_style: StyleBoxFlat
@@ -452,8 +506,6 @@ var _tweens: Dictionary = {}
 ## P14: each slot's frame hue (null = no frame) and whether it is armed (the frame then shows gold).
 var _frame_hues: Array = [null, null, null, null]
 var _slot_armed: Array[bool] = [false, false, false, false]
-## 7-6 POLISH (P3): each slot's current lift, so the per-frame push writes a position only when it changes.
-var _slot_lifts: Array[float] = [0.0, 0.0, 0.0, 0.0]
 
 enum { LOOK_BLANK, LOOK_CARD, LOOK_COVERED, LOOK_IN_FLIGHT, LOOK_GHOST }
 
@@ -873,10 +925,21 @@ func is_half_affordable(index: int, half: int) -> bool:
 	return ((_own_card_rims[index] as Array)[half] as Control).visible 			and ((_own_card_halves[index] as Array)[half] as Control).modulate == (_half_tints[index] as Array)[half]
 
 
-## P3: how far slot `index` is lifted, in pixels (0 at rest) -- measured from its ARC rest height (P9). The
-## test-facing read, off the live node.
+## P3: how far slot `index` is lifted, in pixels (0 at rest) -- measured from its rest height in the current hand
+## layout (the ARC, P9, in ROW / ROW+GLYPH). The test-facing read, off the live node.
 func card_lift(index: int) -> float:
-	return -_own_card_panels[index].position.y - _arc_raise(index)
+	return _rest_position(index).y - _own_card_panels[index].position.y
+
+
+## Smoke fix S3: how far slot `index` sits from its rest in the current hand layout, in the strip's own space (zero
+## at rest; DIAMOND's armed push points along the card's direction). The test-facing read, off the live node.
+func card_offset(index: int) -> Vector2:
+	return _own_card_panels[index].position - _rest_position(index)
+
+
+## Smoke fix S3: slot `index`'s tone -- 1.0 undimmed, `DIAMOND_UNARMED_DIM` while another DIAMOND card is armed.
+func card_tone(index: int) -> float:
+	return _own_card_panels[index].modulate.r
 
 
 
@@ -1286,6 +1349,7 @@ func _build_vitals() -> void:
 	column.offset_bottom = VITALS_OFFSETS[3]
 	column.add_theme_constant_override("separation", 2)
 	add_child(column)
+	_vitals = column
 	var hp := _make_bar_row("HP", Color(0.85, 0.2, 0.2))
 	_hp_bar = hp[0]
 	_hp_value = hp[1]
@@ -1449,6 +1513,8 @@ func _build_pitch_zone(node_name: String, anchor_x: float, offsets: Array) -> Pa
 ## hand's alone. A card lifts only for card mode / arming (P3, `_apply_selection`): the armed card's top plus its
 ## frame stays at y >= 454. The strip is a plain Control -- built ONCE (2-5/R6). The rendered count stays the
 ## presentation-local constant 4 (2-5/R1).
+## Story 7-11 (R6): where each card RESTS is the hand layout's (`_rest_position`); the strip keeps exactly the four
+## card panels as children in every layout -- badges and hint frames are children of their card.
 func _build_hand_row() -> void:
 	var strip := Control.new()
 	strip.name = "HandStrip"
@@ -1467,6 +1533,7 @@ func _build_hand_row() -> void:
 	_card_base_style = _make_card_face_style(true)
 	for i in 4:
 		_build_card(strip, i)
+	_apply_hand_layout()
 
 
 ## One card panel and its fixed children (R1). Every rect is set here and nowhere else (AC 10).
@@ -1491,7 +1558,8 @@ func _build_card(strip: Control, i: int) -> void:
 		half.name = "NormalHalf" if h == 0 else "PitchHalf"
 		half.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# 7-7 pre-playtest pass: the halves follow the face buttons -- Y (top, `cast_pitch_button`) plays the PITCH
-		# half, so it is drawn on top; A (bottom, `cast_basic_button`) plays the NORMAL half, drawn below.
+		# half, so it is drawn on top; the NORMAL half is drawn below. Story 7-11 (R2): the normal half is played by
+		# X (`play_basic_button`) now, no longer A; the pitch-on-top order is unchanged.
 		half.position = Vector2(CARD_FRAME_PX, CARD_FRAME_PX + (1 - h) * (HALF_SIZE.y + DIVIDER_PX))
 		half.size = HALF_SIZE
 		card.add_child(half)
@@ -1721,6 +1789,64 @@ func _build_card(strip: Control, i: int) -> void:
 	_own_card_cover_arts.append(cover_art)
 	_own_card_cover_costs.append(cover_cost)
 	_own_card_cover_frames.append(cover_style)
+	# Story 7-11 (AC 14): the arm-hint frame -- the card's frame band in `ARM_HINT_COLOR`, hidden until a blink.
+	var hint := Panel.new()
+	hint.name = "ArmHint"
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint.position = Vector2.ZERO
+	hint.size = CARD_SIZE
+	var hint_style := StyleBoxFlat.new()
+	hint_style.draw_center = false
+	hint_style.set_corner_radius_all(4)
+	hint_style.set_border_width_all(CARD_FRAME_PX)
+	hint_style.border_color = ARM_HINT_COLOR
+	hint.add_theme_stylebox_override("panel", hint_style)
+	hint.visible = false
+	card.add_child(hint)
+	_own_card_hints.append(hint)
+	# Story 7-11 (R6, AC 12): the D-pad badge, last so it draws above everything on the card (see `DPAD_BADGE_RECT`).
+	_build_dpad_badge(card)
+
+
+## Story 7-11 (R6, AC 12): one card's D-pad badge -- procedural, no binary asset and no text: a round dark plate, the
+## dim cross, and the four arms, of which `_apply_hand_layout` lights exactly the one that arms this card.
+func _build_dpad_badge(card: Panel) -> void:
+	var badge := Panel.new()
+	badge.name = "DpadBadge"
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.position = DPAD_BADGE_RECT.position
+	badge.size = DPAD_BADGE_RECT.size
+	badge.pivot_offset = Vector2(DPAD_BADGE_RECT.size.x * 0.5, DPAD_BADGE_RECT.size.y)
+	var plate := StyleBoxFlat.new()
+	plate.bg_color = DPAD_BADGE_PLATE
+	plate.border_color = COST_BADGE_RIM
+	plate.set_border_width_all(1)
+	plate.set_corner_radius_all(int(DPAD_BADGE_RECT.size.x * 0.5))
+	badge.add_theme_stylebox_override("panel", plate)
+	badge.visible = false
+	card.add_child(badge)
+	var arm := DPAD_BADGE_ARM_PX
+	var mid := (DPAD_BADGE_RECT.size - Vector2(arm, arm)) * 0.5
+	var cross := ColorRect.new()
+	cross.name = "Cross"
+	cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cross.color = DPAD_BADGE_CROSS
+	cross.position = mid
+	cross.size = Vector2(arm, arm)
+	badge.add_child(cross)
+	# Direction order left, up, down, right (`GamepadProfile`): each arm is one `arm`-square beside the centre.
+	var arms: Array[ColorRect] = []
+	for offset: Vector2 in [Vector2(-arm, 0.0), Vector2(0.0, -arm), Vector2(0.0, arm), Vector2(arm, 0.0)]:
+		var a := ColorRect.new()
+		a.name = "Arm%d" % arms.size()
+		a.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		a.position = mid + offset
+		a.size = Vector2(arm, arm)
+		a.color = DPAD_BADGE_CROSS
+		badge.add_child(a)
+		arms.append(a)
+	_own_card_badges.append(badge)
+	_own_card_badge_arms.append(arms)
 
 
 ## P1: a cost badge's plate -- solid, dark, rimmed, so the number reads against any art or colour behind it.
@@ -1756,35 +1882,33 @@ func _make_card_face_style(is_own: bool) -> StyleBoxFlat:
 
 ## Story 3-5a (AC 10): THE selection indicator. `slot` is the armed hand slot, -1 for none; the mode rides
 ## along for the E5 modes and is currently always BASIC. PRESENTATION-LOCAL, and pushed rather than
-## subscribed: no signal, no state handle. 7-6 POLISH (P3): the armed card LIFTS (while card mode is on) and
-## carries the strong frame.
+## subscribed: no signal, no state handle. Story 7-11 (G4, AC 13): the armed card carries the gold frame and, in
+## ROW / ROW+GLYPH, rises `CARD_MODE_ARMED_LIFT_PX`. Own half only: the runner pushes each slot's arm to its OWN root.
 func set_card_selection(slot: int, mode: Enums.ModeKind) -> void:
 	var _armed_mode := mode
 	_armed_slot = slot
 	_apply_selection()
 
 
-## Story 6-10 (AC 16/AC 20): the mode-on flag, pushed by the runner each frame beside `set_card_selection`
-## (outside the ticking gate). Presentation-local like the armed slot. 7-6 POLISH (P3): mode on lifts the row.
-func set_card_mode(on: bool) -> void:
-	_card_mode_on = on
-	_apply_selection()
-
-
-## 7-6 POLISH (operator ruling P3, AC 17/AC 19/AC 21): every slot's lift and frame. Card mode on lifts every card
-## `CARD_MODE_ROW_LIFT_PX`; the armed card rises to `CARD_MODE_ARMED_LIFT_PX` -- lifts only while mode is on, so a
-## card never lifts alone (the 6-10 rule). The armed slot's ONE frame turns gold (P14) whenever a slot is armed.
-## 7-6 POLISH 3 (operator ruling P17): a Boulder-covered slot arms exactly like any other card. Writes a position or
-## a frame only when it changes (review fix N2): the runner pushes every frame.
+## 7-6 POLISH (operator ruling P3, AC 17/AC 19/AC 21) as amended by story 7-11 (G4, smoke fix S3): every slot's
+## placement, tone and frame. The armed card rises `CARD_MODE_ARMED_LIFT_PX` in ROW / ROW+GLYPH; in DIAMOND it is pushed
+## outward `DIAMOND_ARMED_PUSH_PX` along its own direction and the other three dim to `DIAMOND_UNARMED_DIM`. Every
+## other card rests. The armed slot's ONE frame turns gold (P14) in every layout. 7-6 POLISH 3 (operator ruling P17):
+## a Boulder-covered slot arms exactly like any other card. Writes a position, tone or frame only when it changes
+## (review fix N2): the runner pushes every frame.
 func _apply_selection() -> void:
+	var diamond := _hand_layout == GamepadProfile.HandLayout.DIAMOND
 	for i in _own_card_panels.size():
-		var lift := 0.0
-		if _card_mode_on:
-			lift = CARD_MODE_ARMED_LIFT_PX if i == _armed_slot else CARD_MODE_ROW_LIFT_PX
-		if lift != _slot_lifts[i] or _own_card_panels[i].position.y != -lift - _arc_raise(i):
-			_slot_lifts[i] = lift
-			_own_card_panels[i].position = Vector2(i * (CARD_SIZE.x + CARD_GAP), -lift - _arc_raise(i))
 		var armed := i == _armed_slot
+		var at := _rest_position(i)
+		if armed:
+			at += _diamond_push(i) if diamond else Vector2(0.0, -CARD_MODE_ARMED_LIFT_PX)
+		if _own_card_panels[i].position != at:
+			_own_card_panels[i].position = at
+		var dim := DIAMOND_UNARMED_DIM if diamond and _armed_slot >= 0 and not armed else 1.0
+		var tone := Color(dim, dim, dim, 1.0)
+		if _own_card_panels[i].modulate != tone:
+			_own_card_panels[i].modulate = tone
 		if armed != _slot_armed[i]:
 			_slot_armed[i] = armed
 			_paint_frame(i)
@@ -1793,6 +1917,162 @@ func _apply_selection() -> void:
 ## P9: the arc -- the two middle cards (slots 2 and 3, indices 1 and 2) sit `ARC_RAISE_PX` higher.
 func _arc_raise(index: int) -> float:
 	return ARC_RAISE_PX if index == 1 or index == 2 else 0.0
+
+
+## Story 7-11 (R6, AC 12): THE HAND LAYOUT PUSH -- this slot's `GamepadProfile.HandLayout` and its direction -> hand
+## slot map (left, up, down, right), as PLAIN values from the runner (the `set_card_selection` shape; the HUD never
+## loads a profile). Handed over before add_child on the `set_reel_cards` precedent, and safe to call again later.
+## A map that is not a permutation of the four slots is refused for the default one -- the profile's own loader
+## already refuses such a file, so this only guards the HUD against a malformed push.
+func set_hand_layout(layout: int, direction_slots: Array) -> void:
+	_hand_layout = layout
+	var directions: Array[int] = [0, 1, 2, 3]
+	var seen: Dictionary = {}
+	for d in mini(direction_slots.size(), 4):
+		var s := int(direction_slots[d])
+		if s >= 0 and s < 4 and not seen.has(s):
+			seen[s] = true
+			directions[s] = d
+	if seen.size() != 4 or direction_slots.size() != 4:
+		directions = [0, 1, 2, 3]
+	_slot_directions = directions
+	_apply_hand_layout()
+
+
+## Story 7-11 (R6): place the strip, the vitals and the pitch zones for the layout, every card at its rest (plus the
+## armed rise or push) and show or hide the badges, each lighting its own card's direction. A no-op before the hand
+## row is built.
+func _apply_hand_layout() -> void:
+	_apply_arrangement()
+	var glyphs := _hand_layout == GamepadProfile.HandLayout.ROW_GLYPH
+	for i in _own_card_badges.size():
+		_own_card_badges[i].visible = glyphs
+		var arms: Array = _own_card_badge_arms[i]
+		for d in arms.size():
+			(arms[d] as ColorRect).color = DPAD_BADGE_LIT if d == _slot_directions[i] else DPAD_BADGE_CROSS
+	_apply_selection()
+
+
+## Story 7-11 smoke fix S2: the half's arrangement. ROW / ROW+GLYPH: the P9 / P15 places, exactly as built. DIAMOND:
+## the strip flush in the bottom-left corner (`DIAMOND_EDGE_PX` in), the vitals in the diamond's lower-right notch
+## (left edge on the RIGHT card's, `DIAMOND_GAP` below it, the same size as in ROW), the zones stacked in the
+## bottom-right corner, own above opponent's. Everything stays bottom-anchored, so only the x anchor changes.
+func _apply_arrangement() -> void:
+	if _hand_strip == null or _vitals == null:
+		return
+	var row_width := 4.0 * CARD_SIZE.x + 3.0 * CARD_GAP
+	var strip_top := -HAND_BOTTOM_PX - CARD_SIZE.y
+	if _hand_layout != GamepadProfile.HandLayout.DIAMOND:
+		_place(_hand_strip, 0.5, [-row_width * 0.5, strip_top, row_width * 0.5, -HAND_BOTTOM_PX])
+		_place(_vitals, 0.5, VITALS_OFFSETS)
+		_place(_own_pitch, OWN_PITCH_ANCHOR, OWN_PITCH_OFFSETS)
+		_place(_opponent_pitch, OPPONENT_PITCH_ANCHOR, OPPONENT_PITCH_OFFSETS)
+		return
+	var diamond_width := 3.0 * CARD_SIZE.x + 2.0 * DIAMOND_GAP
+	_place(_hand_strip, 0.0, [DIAMOND_EDGE_PX, -DIAMOND_EDGE_PX - CARD_SIZE.y, DIAMOND_EDGE_PX + diamond_width,
+			-DIAMOND_EDGE_PX])
+	# The strip is one card tall, so a card's bottom (from the half's bottom) is the strip's bottom plus its y.
+	var right_card_bottom := -DIAMOND_EDGE_PX + _diamond_rest(3).y
+	var vitals_left := DIAMOND_EDGE_PX + _diamond_rest(3).x
+	var vitals_top := right_card_bottom + DIAMOND_GAP
+	_place(_vitals, 0.0, [vitals_left, vitals_top, vitals_left + VITALS_OFFSETS[2] - VITALS_OFFSETS[0],
+			vitals_top + VITALS_OFFSETS[3] - VITALS_OFFSETS[1]])
+	var zone_bottom := -DIAMOND_EDGE_PX
+	var zone_left := -DIAMOND_EDGE_PX - CARD_SIZE.x
+	_place(_opponent_pitch, 1.0, [zone_left, zone_bottom - CARD_SIZE.y, -DIAMOND_EDGE_PX, zone_bottom])
+	zone_bottom -= CARD_SIZE.y + DIAMOND_ZONE_GAP
+	_place(_own_pitch, 1.0, [zone_left, zone_bottom - CARD_SIZE.y, -DIAMOND_EDGE_PX, zone_bottom])
+
+
+## One bottom-anchored control at x anchor `anchor_x` and `offsets` ([left, top, right, bottom]). Anchors first, then
+## the offsets, so the offsets land as given.
+func _place(node: Control, anchor_x: float, offsets: Array) -> void:
+	node.anchor_left = anchor_x
+	node.anchor_right = anchor_x
+	node.offset_left = offsets[0]
+	node.offset_top = offsets[1]
+	node.offset_right = offsets[2]
+	node.offset_bottom = offsets[3]
+
+
+## Story 7-11 (R6): where slot `index` rests in the strip's own space. ROW / ROW+GLYPH: today's arc. DIAMOND: at its
+## direction's D-pad position (`_diamond_rest`).
+func _rest_position(index: int) -> Vector2:
+	if _hand_layout != GamepadProfile.HandLayout.DIAMOND:
+		return Vector2(index * (CARD_SIZE.x + CARD_GAP), -_arc_raise(index))
+	return _diamond_rest(_slot_directions[index])
+
+
+## Smoke fix S2: the DIAMOND rest of D-pad `direction` (0 left, 1 up, 2 down, 3 right) in the strip's own space -- the
+## strip's left edge is the diamond's and its bottom the DOWN card's. Up over down in the centre column, `DIAMOND_GAP`
+## apart; left and right beside the column, `DIAMOND_GAP` out, at its mid-height. The card's TOP-LEFT corner.
+func _diamond_rest(direction: int) -> Vector2:
+	var centre_x := CARD_SIZE.x + DIAMOND_GAP
+	var up_y := -CARD_SIZE.y - DIAMOND_GAP
+	var side_y := up_y * 0.5
+	match direction:
+		0:
+			return Vector2(0.0, side_y)
+		1:
+			return Vector2(centre_x, up_y)
+		2:
+			return Vector2(centre_x, 0.0)
+	return Vector2(centre_x + CARD_SIZE.x + DIAMOND_GAP, side_y)
+
+
+## Smoke fix S3: the armed DIAMOND card's outward push -- `DIAMOND_ARMED_PUSH_PX` along its own direction.
+func _diamond_push(index: int) -> Vector2:
+	match _slot_directions[index]:
+		0:
+			return Vector2(-DIAMOND_ARMED_PUSH_PX, 0.0)
+		1:
+			return Vector2(0.0, -DIAMOND_ARMED_PUSH_PX)
+		2:
+			return Vector2(0.0, DIAMOND_ARMED_PUSH_PX)
+	return Vector2(DIAMOND_ARMED_PUSH_PX, 0.0)
+
+
+## Story 7-11 (AC 12): the direction slot `index`'s badge lights (0 left .. 3 right), or -1 while no badge shows. The
+## test-facing read, off the live nodes.
+func badge_direction(index: int) -> int:
+	if not _own_card_badges[index].is_visible_in_tree():
+		return -1
+	var arms: Array = _own_card_badge_arms[index]
+	for d in arms.size():
+		if (arms[d] as ColorRect).color == DPAD_BADGE_LIT:
+			return d
+	return -1
+
+
+## Story 7-11 (G3, Q2, AC 14): THE ARM-HINT BLINK, pushed by the runner to this root alone when its own slot's
+## card play was refused while nothing was armed -- the HUD never subscribes to `action_rejected` (`2-4/R4`). One
+## pulse: up to full and back over `ARM_HINT_BLINK_SEC`; a blink arriving mid-pulse restarts it.
+func blink_arm_hint() -> void:
+	if _own_card_hints.is_empty():
+		return
+	if _hint_tween != null and _hint_tween.is_valid():
+		_hint_tween.kill()
+	_set_hint_pulse(0.0)
+	_hint_tween = create_tween()
+	_hint_tween.tween_method(_set_hint_pulse, 0.0, 1.0, ARM_HINT_BLINK_SEC * 0.5)
+	_hint_tween.tween_method(_set_hint_pulse, 1.0, 0.0, ARM_HINT_BLINK_SEC * 0.5)
+
+
+## AC 14: one pulse level, 0 (rest: hint frames hidden, badges at size) to 1 (full).
+func _set_hint_pulse(level: float) -> void:
+	for hint: Panel in _own_card_hints:
+		hint.visible = level > 0.0
+		hint.modulate.a = level
+	for badge: Control in _own_card_badges:
+		badge.scale = Vector2.ONE * (1.0 + ARM_HINT_BADGE_SWELL * level)
+
+
+## AC 14: is the arm-hint pulse showing right now? The test-facing read, off the live nodes.
+func arm_hint_blinking() -> bool:
+	for hint: Panel in _own_card_hints:
+		if hint.visible and hint.modulate.a > 0.0:
+			return true
+	return false
 
 
 ## Story 7-6 (AC 17/AC 21): the armed frame on one slot -- 0 when not armed, `ARMED_FRAME_PX` when its frame shows

@@ -453,8 +453,13 @@ func _raw_connect_entries(re: RegEx, text: String) -> Array[String]:
 ##
 ## STATED LIMITATION, the same class as the two guards above: a consumer bound through an alias of the
 ## seam (a stored Callable of `connect_hero_action_rejected`) evades the call pattern.
+##
+## Story 7-11 (G3, Q2, AC 14) ADDS EXACTLY ONE INLINE CONSUMER (`func`): the runner's per-slot wrap that pushes the
+## nothing-armed blink to that slot's OWN HudRoot -- the mechanism G3 names. The HUD still consumes nothing
+## (`2-4/R4`): the wrap is runner code, pinned below to push `blink_arm_hint()` and no `hud.on_*` callback, and
+## hud_root.gd's code never names `action_rejected`.
 const ACTION_REJECTED_CONSUMERS: Array[String] = [
-	"cues.on_action_rejected", "inspector.on_action_rejected",
+	"cues.on_action_rejected", "func", "inspector.on_action_rejected",
 ]
 
 
@@ -491,6 +496,28 @@ func test_action_rejected_has_no_hud_consumer() -> void:  # 6-3b AC 8, 6-3-split
 	assert_eq(raw_sites, ["res://src/main/match_runner.gd:callback"] as Array[String],
 		"the only raw `action_rejected.connect(` is the seam's wrapper body. Got: %s"
 				% ", ".join(raw_sites))
+	# Story 7-11 (AC 14): the one inline consumer is the runner's blink wrap -- its body (the lines indented deeper
+	# than the call) pushes the blink and reaches no HUD callback; and the HUD's own code never names the signal.
+	var runner_lines := _code_lines("res://src/main/match_runner.gd")
+	var body := ""
+	for i in runner_lines.size():
+		if not runner_lines[i].contains("connect_hero_action_rejected(slot, func("):
+			continue
+		var depth := runner_lines[i].length() - runner_lines[i].lstrip("\t").length()
+		body = runner_lines[i]
+		for j in range(i + 1, runner_lines.size()):
+			var line := runner_lines[j]
+			if line.strip_edges() != "" and line.length() - line.lstrip("\t").length() <= depth:
+				break
+			body += "\n" + line
+	assert_true(body != "", "the 7-11 blink wrap is an inline consumer in match_runner.gd")
+	assert_true(body.contains("blink_arm_hint()") and not body.contains(".on_"),
+		"the inline consumer pushes `blink_arm_hint()` and no `on_*` callback. Got: %s" % body)
+	var hud_hits := 0
+	for line in _code_lines("res://src/ui/hud/hud_root.gd"):
+		if line.contains("action_rejected"):
+			hud_hits += 1
+	assert_eq(hud_hits, 0, "hud_root.gd's code never names `action_rejected` (2-4/R4: the HUD never subscribes)")
 
 
 ## Story 4-3 (AC 5, `4-3/R13`): "NO STATE DECISION READS PHYSICS" IS MEASURED, NOT ASSERTED. AC 4
@@ -610,6 +637,42 @@ func test_slot_controller_kinds_default_is_p1_p2() -> void:  # Story 2-3 (2-3/R7
 	assert_eq(int(kinds[0]), 0, "slot 0 ships KEYBOARD_P1 (ordinal 0)")
 	assert_eq(int(kinds[1]), 1, "slot 1 ships KEYBOARD_P2 (ordinal 1) — the 2-3 flip from NULL")
 	inst.free()
+
+
+## Story 7-11 review fix L3: A TEST THAT BUILDS A GAMEPAD SLOT NEVER READS THE REAL `user://controls`. A runner whose
+## slot kind is GAMEPAD loads that player's `slot_N.cfg` in `_make_controller`; unless the test injects
+## `controls_override_root`, the developer's own override file decides whether the test passes (the 7-11 smoke-config
+## run failed three files that way). So every file under test/ that sets a slot kind to GAMEPAD (the `3` ordinal or the
+## `GAMEPAD` token in a `slot_controller_kinds` assignment) AND builds controllers (`_make_controller(` or a runner
+## added to the tree) must also set `controls_override_root`. A file that only derives the pad ORDINAL builds no
+## controller and is exempt. STATED LIMITATION: a kind set through a variable evades the assignment pattern.
+func test_gamepad_slot_tests_inject_the_controls_override_root() -> void:  # 7-11 review fix L3
+	var kinds_re := RegEx.create_from_string("slot_controller_kinds\\.assign\\(\\[[^\\]]*\\b(3|GAMEPAD)\\b")
+	var builds_re := RegEx.create_from_string("_make_controller\\(|add_child\\(\\s*runner")
+	# NON-VACUITY: the patterns see what they are for, and not the exempt shapes.
+	assert_true(kinds_re.search("\trunner.slot_controller_kinds.assign([KEYBOARD_P1, GAMEPAD])") != null, "sees a GAMEPAD token")
+	assert_true(kinds_re.search("\trunner.slot_controller_kinds.assign([3, 3])") != null, "sees the ordinal")
+	assert_null(kinds_re.search("\tmain.slot_controller_kinds.assign([0, 1])"), "keyboards are not GAMEPAD")
+	assert_null(kinds_re.search("\trunner.slot_controller_kinds.assign([13, 0])"), "13 is not 3")
+	assert_true(builds_re.search("\trunner._make_controller(3, 0)") != null, "sees a controller build")
+	assert_true(builds_re.search("\troot.add_child(runner)") != null, "sees a runner added to the tree")
+	var gamepad_builders: Array[String] = []
+	var missing: Array[String] = []
+	for path in _gd_files("res://test/"):
+		if path.ends_with("test_architecture_invariants.gd"):
+			continue
+		var text := "\n".join(_code_lines(path))
+		if kinds_re.search(text) == null or builds_re.search(text) == null:
+			continue
+		gamepad_builders.append(path)
+		if not text.contains("controls_override_root"):
+			missing.append(path)
+	assert_true(gamepad_builders.size() >= 2,
+		"the scan finds the two gamepad-kind tests that build controllers (else the guard is vacuous). Got: %s"
+				% ", ".join(gamepad_builders))
+	assert_eq(missing, [] as Array[String],
+		"a test that builds a GAMEPAD slot must set `controls_override_root` (it would read the real user://controls). "
+		+ "Missing in: %s" % ", ".join(missing))
 
 
 ## Story 1-10 (AC 6): the cues/ui layer is READ-ONLY (D5 — presentation subscribes,

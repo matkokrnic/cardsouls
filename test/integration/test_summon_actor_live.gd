@@ -91,10 +91,8 @@ func _physics_process(_delta: float) -> bool:
 			print("RESULT: FAIL")
 			quit(1)
 			return false
-	# The real arm-then-confirm scheme, in the order the controller requires it: the cast-mode
-	# modifier is HELD, the card key arms the slot while it is down, and cast_confirm commits.
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
+	# The real arm-then-confirm scheme (7-11 v2: no modifier): the card key arms the slot (sticky),
+	# and cast_confirm commits it.
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(_armed_action)
 	if _frames == ARM_FRAME + 2:
@@ -103,8 +101,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == CONFIRM_RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
 	if _frames == SPAWN_CHECK_FRAME:
 		# AC 7: the record reached the board AND an actor reached the tree. Both halves asserted,
 		# because either alone is the bug — a board with no actor is the invisible feature, an

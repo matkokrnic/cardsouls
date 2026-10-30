@@ -191,11 +191,9 @@ func _physics_process(_delta: float) -> bool:
 			_reshuffling = true
 			_reshuffle_tick = 0
 			return false
-	_cast(ARM_FRAME, CONFIRM_FRAME, RELEASE_FRAME, &"p1_cast_mode", &"p1_cast_confirm", _p1_action)
-	_cast(SECOND_ARM_FRAME, SECOND_CONFIRM_FRAME, SECOND_RELEASE_FRAME, &"p1_cast_mode",
-			&"p1_cast_confirm", _p1_action_2)
-	_cast(P2_ARM_FRAME, P2_CONFIRM_FRAME, P2_RELEASE_FRAME, &"p2_cast_mode", &"p2_cast_confirm",
-			_p2_action)
+	_cast(ARM_FRAME, CONFIRM_FRAME, &"p1_cast_confirm", _p1_action)
+	_cast(SECOND_ARM_FRAME, SECOND_CONFIRM_FRAME, &"p1_cast_confirm", _p1_action_2)
+	_cast(P2_ARM_FRAME, P2_CONFIRM_FRAME, &"p2_cast_confirm", _p2_action)
 
 	if _frames == SPAWN_CHECK_FRAME:
 		_spawned = _state.p1.units.size() == 2 and _state.p2.units.size() == 1 \
@@ -429,10 +427,9 @@ func _probe_tick_span() -> Dictionary:
 	return {"ticks": ticks, "span": maxi(0, total - first)}
 
 
-func _cast(arm: int, confirm: int, release: int, mode: StringName, confirm_action: StringName,
-		card: StringName) -> void:
-	if _frames == arm:
-		Input.action_press(mode)
+## Story 7-11 (v2, no modifier): the card key arms the slot (sticky) and the confirm commits it -- the held
+## `pX_cast_mode` press/release and the release frame it needed are gone with the action (G2).
+func _cast(arm: int, confirm: int, confirm_action: StringName, card: StringName) -> void:
 	if _frames == arm + 1:
 		Input.action_press(card)
 	if _frames == arm + 2:
@@ -441,8 +438,6 @@ func _cast(arm: int, confirm: int, release: int, mode: StringName, confirm_actio
 		Input.action_press(confirm_action)
 	if _frames == confirm + 2:
 		Input.action_release(confirm_action)
-	if _frames == release:
-		Input.action_release(mode)
 
 
 func _fail(message: String) -> bool:

@@ -17,9 +17,10 @@ extends SceneTree
 ## highlight-everything regression all FAIL here. Swapping the slot mapping fails (proven by
 ## SHA256-verified swap in the dev record).
 ##
-## Also pinned: RELEASING the modifier clears the selection the same tick (the "release exits
-## instantly" half of the scheme), and the OPPONENT viewport is never indicated by P1's press —
-## the 2-4/R7 no-opponent-read discipline extended to the indicator.
+## Also pinned: the arm is STICKY (story 7-11 R1/R7 -- there is no modifier to release; the 3-5a "releasing
+## the modifier disarms" half is inverted): several frames after the card key is released the same panel is
+## still armed. And the OPPONENT viewport is never indicated by P1's press — the 2-4/R7 no-opponent-read
+## discipline extended to the indicator.
 ##
 ## Styling is read STRUCTURALLY through `HudRoot.highlight_width` (7-6 P14: the card's own frame turned gold), never
 ## against hardcoded colours, so a later palette change does not break the guard.
@@ -41,7 +42,7 @@ var _huds_exist := false
 var _baseline_uniform := false
 var _armed_correct := false
 var _opponent_untouched := false
-var _cleared_on_release := false
+var _sticky_after_release := false
 var _detail := ""
 
 
@@ -69,8 +70,6 @@ func _physics_process(_delta: float) -> bool:
 		# the armed assertion below mean something — without it, a row that was always
 		# heterogeneous could satisfy "exactly one differs" by accident.
 		_baseline_uniform = _distinct_border_count(_p1_hud) == 1
-	if _frames == ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 1:
 		Input.action_press(PRESSED_CARD_ACTION)
 	if _frames == ARM_FRAME + 2:
@@ -84,17 +83,18 @@ func _physics_process(_delta: float) -> bool:
 			_detail += " armed_panel=%d expected=%d;" % [armed, EXPECTED_PANEL]
 		# The opponent's viewport must show nothing: P1's selection is P1's.
 		_opponent_untouched = _armed_panel_index(_p2_hud) == -1
-	if _frames == ARM_FRAME + 6:
-		Input.action_release(&"p1_cast_mode")
 	if _frames == ARM_FRAME + 8:
-		# Releasing the modifier exits instantly and disarms — nothing stays lit.
-		_cleared_on_release = _armed_panel_index(_p1_hud) == -1
+		# Story 7-11 (R1): STICKY -- six frames after the card key was released, still exactly that panel.
+		var still := _armed_panel_index(_p1_hud)
+		_sticky_after_release = still == EXPECTED_PANEL
+		if not _sticky_after_release:
+			_detail += " after_release=%d expected=%d;" % [still, EXPECTED_PANEL]
 	if _frames >= ARM_FRAME + 10:
 		var ok: bool = (_huds_exist and _baseline_uniform and _armed_correct
-			and _opponent_untouched and _cleared_on_release)
-		print("selection: huds=%s baseline_uniform=%s armed_correct=%s opponent_untouched=%s cleared_on_release=%s%s" % [
+			and _opponent_untouched and _sticky_after_release)
+		print("selection: huds=%s baseline_uniform=%s armed_correct=%s opponent_untouched=%s sticky_after_release=%s%s" % [
 			_huds_exist, _baseline_uniform, _armed_correct, _opponent_untouched,
-			_cleared_on_release, _detail])
+			_sticky_after_release, _detail])
 		print("RESULT: %s" % ("PASS" if ok else "FAIL"))
 		quit(0 if ok else 1)
 	return false

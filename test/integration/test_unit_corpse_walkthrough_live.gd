@@ -161,8 +161,6 @@ func _physics_process(_delta: float) -> bool:
 			_reshuffling = true
 			_reshuffle_tick = 0
 			return false
-	if _frames == P1_ARM_FRAME:
-		Input.action_press(&"p1_cast_mode")
 	if _frames == P1_ARM_FRAME + 1:
 		Input.action_press(_p1_action)
 	if _frames == P1_ARM_FRAME + 2:
@@ -171,10 +169,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p1_cast_confirm")
 	if _frames == P1_CONFIRM_FRAME + 2:
 		Input.action_release(&"p1_cast_confirm")
-	if _frames == P1_CONFIRM_RELEASE_FRAME:
-		Input.action_release(&"p1_cast_mode")
-	if _frames == P2_ARM_FRAME:
-		Input.action_press(&"p2_cast_mode")
 	if _frames == P2_ARM_FRAME + 1:
 		Input.action_press(_p2_action)
 	if _frames == P2_ARM_FRAME + 2:
@@ -183,8 +177,6 @@ func _physics_process(_delta: float) -> bool:
 		Input.action_press(&"p2_cast_confirm")
 	if _frames == P2_CONFIRM_FRAME + 2:
 		Input.action_release(&"p2_cast_confirm")
-	if _frames == P2_CONFIRM_RELEASE_FRAME:
-		Input.action_release(&"p2_cast_mode")
 	if _frames == SPAWN_CHECK_FRAME:
 		_spawned = _state.p1.units.size() == 1 and _state.p2.units.size() == 1 \
 				and _live() != null and _victim() != null

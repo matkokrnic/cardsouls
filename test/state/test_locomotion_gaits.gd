@@ -334,30 +334,31 @@ func test_regen_resumes_exactly_at_last_running_tick_plus_47_further_ticks() -> 
 		"AC 17: regen resumes exactly on the tick after last-running-tick + 47 further ticks")
 
 
-## ---- AC 4 (pad half): resolve_card_tick's run_held, bare A vs. under cast_held -----------
+## ---- AC 4 (pad half): resolve_card_tick's run_held -- bare A held runs, ALWAYS ---------------
+## Story 7-11 (M2): RETIRES `test_resolve_card_tick_run_held_true_on_bare_a_false_under_cast_held` -- its
+## "false under cast_held" half named a modifier v2 deletes (R2). A is now its own `run_button` read, so the
+## pin is that A held drives running whatever else is down (an armed slot, a play pressed this sample).
 
-func test_resolve_card_tick_run_held_true_on_bare_a_false_under_cast_held() -> void:
-	var bare := GamepadController.resolve_card_tick(false,
+func test_resolve_card_tick_run_held_true_on_bare_a_held_always() -> void:
+	var rest: Array[bool] = [false, false, false, false]
+	var slots: Array[int] = [0, 1, 2, 3]
+	for armed: int in [-1, 2]:
+		for play: bool in [false, true]:
+			var r := GamepadController.resolve_card_tick(
+				false, false, false, false, false, false,
+				true,  # run_raw: A held
+				rest, rest, slots,
+				0.0, 0.0, 0.0, 0.0,
+				play, false,  # X freshly pressed (a play) or not
+				false, false, false, 0.5, armed)
+			assert_true(r["run_held"], "AC 4: A held drives running (armed %d, X pressed %s)" % [armed, play])
+	var idle := GamepadController.resolve_card_tick(
 		false, false, false, false, false, false,
+		false,  # A not held
+		rest, rest, slots,
 		0.0, 0.0, 0.0, 0.0,
-		true, false,  # basic_raw pressed, cast NOT held
-		false, false, false, false, false, false, 0.5, -1)
-	assert_true(bare["run_held"], "AC 4: bare A (basic_raw) outside cast_held drives running")
-
-	var cast := GamepadController.resolve_card_tick(true,
-		false, false, false, false, false, false,
-		0.0, 0.0, 0.0, 0.0,
-		true, false,  # basic_raw pressed, but cast_held true this time
-		false, false, false, false, false, false, 0.5, -1)
-	assert_false(cast["run_held"],
-		"AC 4: the same bare A held while cast_held is true never drives running")
-
-	var idle := GamepadController.resolve_card_tick(false,
-		false, false, false, false, false, false,
-		0.0, 0.0, 0.0, 0.0,
-		false, false,  # basic_raw not held at all
-		false, false, false, false, false, false, 0.5, -1)
-	assert_false(idle["run_held"], "no A held, no running")
+		true, false, false, false, false, 0.5, 1)
+	assert_false(idle["run_held"], "no A held, no running -- not even with X pressed")
 
 
 ## ---- AC 2: run_stamina_drain_per_tick derivation, the stamina_regen_per_tick shape -------

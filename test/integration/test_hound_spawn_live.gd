@@ -71,8 +71,6 @@ func _physics_process(_delta: float) -> bool:
 
 ## One cast of hand slot 1 by `prefix`'s keyboard, the strike-alignment test's input sequence.
 func _cast(prefix: String, arm_frame: int) -> void:
-	if _frames == arm_frame:
-		Input.action_press(StringName(prefix + "_cast_mode"))
 	if _frames == arm_frame + 1:
 		Input.action_press(StringName(prefix + "_card_1"))
 	if _frames == arm_frame + 2:
@@ -81,8 +79,6 @@ func _cast(prefix: String, arm_frame: int) -> void:
 		Input.action_press(StringName(prefix + "_cast_confirm"))
 	if _frames == arm_frame + 8:
 		Input.action_release(StringName(prefix + "_cast_confirm"))
-	if _frames == arm_frame + 10:
-		Input.action_release(StringName(prefix + "_cast_mode"))
 
 
 func _check_cast(slot: int, player: PlayerState, skin_file: String, summon_sounds: int) -> void:
@@ -229,7 +225,7 @@ func _check(ok: bool, message: String) -> void:
 func _finish(error: String) -> bool:
 	if error != "":
 		_failures.append(error)
-	for action: String in ["cast_mode", "card_1", "cast_confirm"]:
+	for action: String in ["card_1", "cast_confirm"]:
 		Input.action_release(StringName("p1_" + action))
 		Input.action_release(StringName("p2_" + action))
 	if _effects != null:

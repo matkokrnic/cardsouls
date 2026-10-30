@@ -32,11 +32,10 @@ var _action_map: Dictionary[StringName, StringName] = {}  # intent key -> Input 
 ## which is the property test_architecture_invariants.gd::test_card_scheme_only_in_controllers
 ## exists to keep true.
 ##
-## THE SCHEME, keyboard only this story:
-##   HOLD  pX_cast_mode        enter cast mode
-##   PRESS pX_card_1 .. _4     arm that hand slot (the selection indicator lights)
-##   PRESS pX_cast_confirm     commit the armed slot, mode BASIC
-##   RELEASE pX_cast_mode      exit instantly and disarm
+## THE SCHEME (story 7-11 R7: the 3-5a scheme converted to the v2 ARM model, no modifier):
+##   PRESS pX_card_1 .. _4     arm that hand slot -- STICKY, the pad's D-pad rules (AC 1-4)
+##   PRESS pX_cast_confirm     commit the armed slot, mode BASIC (slot -1 with nothing armed)
+## The 3-5a HOLD modifier `pX_cast_mode` is gone, with its Input Map action (G2).
 ##
 ## Story 5-7 (AC 12): the two TEMPORARY confirm keys `5-3` and `5-5` added here (`pX_cast_unblockable`
 ## for UNBLOCKABLE, `pX_cast_defense` for DEFENSE) are GONE -- branch, field, action-string line and
@@ -63,10 +62,12 @@ var _action_map: Dictionary[StringName, StringName] = {}  # intent key -> Input 
 ## value-object contract above: sample() still returns a FRESH InputIntent every tick and never
 ## a reused mutable instance — what persists is this controller's private selection, not the
 ## intent.
-var _cast_mode: StringName
 var _cast_confirm: StringName
 var _card_actions: Array[StringName] = []
 var _armed_slot: int = -1
+## Story 7-11 (G1): the previous `hand_ids` push, and the per-sample card-key edges written in place.
+var _hand_ids: Array = []
+var _card_pressed: Array[bool] = [false, false, false, false]
 
 ## Story 6-8 (AC 23/AC 24): THE LOCK CONTROLS, keyboard parity with the pad (closes deferred-work M5).
 ## Five Input Map actions per prefix, bound to physically unique keys (the ratified table: P1 T / F G
@@ -109,7 +110,6 @@ func _init(prefix: StringName) -> void:
 	_debug_reset = _action(prefix, "debug_reset")
 	for key in INTENT_ACTIONS:
 		_action_map[key] = _action(prefix, key)
-	_cast_mode = _action(prefix, "cast_mode")
 	_cast_confirm = _action(prefix, "cast_confirm")
 	for i in CARD_SLOTS:
 		_card_actions.append(_action(prefix, "card_%d" % (i + 1)))
@@ -192,33 +192,54 @@ static func resolve_rotate_keys(left_held: bool, right_held: bool) -> float:
 
 
 ## The card half of sample(), kept in its own function so the scheme is one readable block and
-## swapping it is one edit. Writes only InputIntent's three card fields.
-##
-## RELEASING THE MODIFIER EXITS INSTANTLY — the selection is dropped the same tick, so the escape
-## out of a cast into a roll costs no extra press. That is the operator's stated intent for the
-## pad layout and it is honoured here on the keyboard.
+## swapping it is one edit. Writes only InputIntent's three card fields, and only on a COMMIT sample
+## (7-11 M6 dev call, the pad's rule: the armed slot stays controller-local).
 ##
 ## NO ACTION NAME CROSSES THE BOUNDARY: the Input Map action `pX_card_2` is resolved to the plain
 ## index 1 inside this loop, so the per-player prefix cannot leak into the intent (AC 11) — not
 ## by a strip step that could rot, but because no name is carried at all.
 func _sample_card_scheme(intent: InputIntent) -> void:
-	if not Input.is_action_pressed(_cast_mode):
-		_armed_slot = -1
-		return
 	for i in _card_actions.size():
-		if Input.is_action_just_pressed(_card_actions[i]):
-			_armed_slot = i
-	intent.card_slot = _armed_slot
-	# Story 5-7 (AC 12): the keyboard scheme is back to ONE confirm key and ONE mode. `5-3`'s
-	# `pX_cast_unblockable` and `5-5`'s `pX_cast_defense` branches are deleted -- both were declared
-	# TEMPORARY by their own stories, both existed only so a human could reach modes ② and ③ before
-	# a pad button could, and the pad's B and X now do that (`5-7` AC 1). BASIC is once again the
-	# only mode this controller produces.
-	intent.card_mode = Enums.ModeKind.BASIC
-	# A commit with nothing armed still reaches state and is REFUSED there (empty_slot),
-	# rather than being swallowed here: the refusal is player-facing feedback and belongs
-	# on the shipped action_rejected seam, not in the controller.
-	intent.card_commit = Input.is_action_just_pressed(_cast_confirm)
+		_card_pressed[i] = Input.is_action_just_pressed(_card_actions[i])
+	var result := resolve_card_keys(_card_pressed, Input.is_action_just_pressed(_cast_confirm), _armed_slot)
+	_armed_slot = result["armed_slot"]
+	if result["card_commit"]:
+		intent.card_slot = result["card_slot"]
+		# Story 5-7 (AC 12) / 7-11 (R7): BASIC is the only mode this controller produces -- no keyboard
+		# mode is added.
+		intent.card_mode = Enums.ModeKind.BASIC
+		intent.card_commit = true
+
+
+## Story 7-11 (R7, AC 15): the keyboard card decision, PURE so it is headless-testable (`is_action_just_pressed`
+## is frame-scoped and a headless harness never advances a frame). `card_pressed` is this sample's press edge
+## of `pX_card_1..4` in slot order. ARMING is STICKY and follows the pad's rules: a fresh key arms its slot,
+## re-pressing the armed key keeps it, keys pressed on one sample resolve in ascending slot order with the
+## last write winning -- the HIGHER slot (AC 2). The confirm commits the armed slot, after this sample's
+## arming. A confirm with nothing armed STILL commits slot -1 (G3): state refuses it (empty_slot) rather than
+## the controller swallowing it -- the refusal is player-facing feedback on the shipped action_rejected seam.
+## A commit never clears the arm (G1): only the armed card leaving its slot does (`observe_hand_ids`).
+static func resolve_card_keys(card_pressed: Array[bool], confirm_pressed: bool, prev_armed_slot: int) -> Dictionary:
+	var armed := prev_armed_slot
+	for i in card_pressed.size():
+		if card_pressed[i]:
+			armed = i
+	return {
+		"armed_slot": armed,
+		"card_commit": confirm_pressed,
+		"card_slot": armed if confirm_pressed else -1,
+	}
+
+
+## Story 7-11 (AC 4): round end / debug reset. See Controller's base declaration.
+func clear_armed_slot() -> void:
+	_armed_slot = -1
+
+
+## Story 7-11 (G1, AC 3): the armed card leaving its slot clears the arm. See Controller's base declaration.
+func observe_hand_ids(ids: Array) -> void:
+	_armed_slot = armed_after_hand_change(_armed_slot, _hand_ids, ids)
+	_hand_ids = ids.duplicate()
 
 
 ## Story 3-5a (AC 10): the armed slot, for the PRESENTATION-side selection indicator — read by

@@ -15,25 +15,47 @@ func sample() -> InputIntent:
 ## indicator shows what the PLAYER has selected, which is a controller fact, and routing it
 ## through state would mean a snapshot field (and a replay contract) for a highlight.
 ##
-## Base returns -1 so a controller with no card scheme — NullController, and GamepadController
-## until its own profile lands — renders no selection rather than needing a stub each.
+## Base returns -1 so a controller with no card scheme (NullController, ReplayController) renders no
+## selection rather than needing a stub each.
 func armed_slot() -> int:
 	return -1
 
 
-## Story 6-10 (AC 9/AC 20): whether this controller is in card mode right now. PRESENTATION-FACING and
-## controller-local, polled by the runner beside `armed_slot()` and pushed into the HUD's own hand-row
-## lift -- never on InputIntent, never read from state. Base returns false, so a controller with no
-## pad card scheme (Null, Replay, Keyboard) shows no lift and needs no stub.
-func card_mode_on() -> bool:
-	return false
-
-
-## Story 6-10 (AC 9): the runner PUSHES "something ended your card mode" (knockdown, round end, debug
-## reset). Only the pad's TOGGLE scheme has a memory to clear; base is a no-op on the
-## `observe_hand_colors` precedent so no other controller needs a stub.
-func force_card_mode_off() -> void:
+## Story 7-11 (AC 4): the runner PUSHES "the round ended / the debug reset ran" -- drop the armed slot.
+## Replaces 6-10's `force_card_mode_off` (there is no card mode; R2). Knockdown no longer pushes anything.
+## Base is a no-op on the `observe_hand_colors` precedent so no other controller needs a stub.
+func clear_armed_slot() -> void:
 	pass
+
+
+## Story 7-11 (G1, AC 3): this player's hand, as the BOUND `hand_ids` of each `cards_changed` emission
+## (the VISIBLE layer, `Hand.EMPTY` for a hole), PUSHED by the runner's existing wrapper -- never read
+## off state (D3). An armed card that LEAVES its slot (non-EMPTY -> EMPTY at the armed index) clears the
+## arm, which is what makes a played or staged card disarm while a refused one stays armed. Base no-op.
+func observe_hand_ids(_ids: Array) -> void:
+	pass
+
+
+## Story 7-11 (R3, AC 6): whether this player's OWN Pitch Zone is READY, PUSHED by the runner off the
+## tenth seam (`connect_pitch_changed`, filtered to the own slot) -- a plain bool, never a state read.
+## Only the pad's Y rule consumes it; base is a no-op.
+func observe_pitch_ready(_ready: bool) -> void:
+	pass
+
+
+## Story 7-11 (G1, AC 3): the arm after one `observe_hand_ids` push, PURE so the rule is headless-testable.
+## Clears ONLY on the armed slot's own non-EMPTY -> EMPTY transition between two consecutive emissions:
+## the emission's payload, never a sample of state, so a same-id refill delivered in the same drain still
+## shows the EMPTY in between and still clears. A cover (Boulder) or its removal changes the visible id
+## without ever passing through EMPTY, so it keeps the arm (Q1). An index past either array reads EMPTY.
+static func armed_after_hand_change(armed: int, prev_ids: Array, ids: Array) -> int:
+	if armed < 0:
+		return armed
+	var was: StringName = prev_ids[armed] if armed < prev_ids.size() else Hand.EMPTY
+	var now: StringName = ids[armed] if armed < ids.size() else Hand.EMPTY
+	if was != Hand.EMPTY and now == Hand.EMPTY:
+		return -1
+	return armed
 
 
 ## Story 6-D1: the hand's per-slot colours (`Enums.CardColor` as int, -1 for an empty slot), PUSHED by

@@ -514,15 +514,20 @@ func test_no_pitch_stage_or_other_reserved_card_action_ships() -> void:
 ## single-player confirm keys that used to make `SHIPPED_INPUT_ACTIONS` below asymmetric
 ## (`p1_cast_unblockable` from 5-3, `p2_cast_defense` from 5-5) -- the pad's B and X confirm those
 ## two modes now, so the keyboard scheme is symmetric again and this test is unchanged by that.
+##
+## Story 7-11 (G2): `pX_cast_mode` LEAVES the scheme -- v2 has no modifier (R2, R7) -- so the expected set is
+## the confirm plus the four card keys, and the retired modifier is pinned ABSENT for both players.
 func test_card_scheme_input_actions_ship_for_both_players() -> void:
 	var missing: Array[String] = []
 	for prefix in ["p1", "p2"]:
-		var expected: Array[String] = ["%s_cast_mode" % prefix, "%s_cast_confirm" % prefix]
+		var expected: Array[String] = ["%s_cast_confirm" % prefix]
 		for i in 4:
 			expected.append("%s_card_%d" % [prefix, i + 1])
 		for action in expected:
 			if not InputMap.has_action(action):
 				missing.append(action)
+		assert_false(InputMap.has_action("%s_cast_mode" % prefix),
+			"%s_cast_mode is removed with the held modifier (7-11 G2)" % prefix)
 	assert_eq(missing.size(), 0,
 		"card-scheme Input Map actions missing (AC 11): %s" % ", ".join(missing))
 
@@ -543,7 +548,9 @@ func test_card_scheme_input_actions_ship_for_both_players() -> void:
 const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	"debug_pause", "debug_step",
 	"p1_attack", "p1_block", "p1_card_1", "p1_card_2", "p1_card_3", "p1_card_4",
-	"p1_cast_confirm", "p1_cast_mode", "p1_debug_reset",
+	# Story 7-11 (G2): `p1_cast_mode` / `p2_cast_mode` LEAVE this list -- the story that retires the consumer
+	# (the held keyboard modifier) moves the pin. Q and O are freed, not reassigned; nothing is added.
+	"p1_cast_confirm", "p1_debug_reset",
 	# Story 6-D1 (DEBUG): the three P1 solo-smoke keys (X / V / B) JOIN the list, on the `3-0c/R11`
 	# discipline -- the story that ships the consumer moves the pin.
 	"p1_debug_unblockable_red", "p1_debug_unblockable_blue", "p1_debug_unblockable_green",
@@ -563,7 +570,7 @@ const SHIPPED_INPUT_ACTIONS: Array[String] = [
 	# working exactly as `3-0c/R11` built it, run in reverse: the story that ships the consumer is
 	# the story that moves the list, and so is the story that retires it. This story adds NO action,
 	# so the set only shrinks.
-	"p2_cast_confirm", "p2_cast_mode", "p2_debug_reset",
+	"p2_cast_confirm", "p2_debug_reset",
 	"p2_move_down", "p2_move_left", "p2_move_right", "p2_move_up", "p2_roll",
 	"p2_run",
 	# Story 6-8: P2 `Numpad 5` lock, `Numpad 4`/`Numpad 6` camera left/right, `Numpad 1`/`Numpad 3`

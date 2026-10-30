@@ -787,14 +787,24 @@ static func _refused(reason: String) -> Dictionary:
 ## string prefix and is a different directory. Comparing against the root plus its separator is
 ## what refuses it.
 static func _outside_user_directory(path: String) -> String:
+	if is_inside_root(path, REQUIRED_PATH_PREFIX):
+		return ""
 	var user_root := ProjectSettings.globalize_path(REQUIRED_PATH_PREFIX).simplify_path()
 	var resolved := ProjectSettings.globalize_path(path).simplify_path()
-	if resolved.begins_with(user_root + "/"):
-		return ""
 	return ("refusing to write %s — it resolves to %s, which is not inside the %s directory (%s). "
 			+ "Records go under %s, never into the project tree (`3-0d/R16`, normalised at "
 			+ "`3-0d/R22`); use RecordFile.path_for()") % [
 					path, resolved, REQUIRED_PATH_PREFIX, user_root, REQUIRED_PATH_PREFIX]
+
+
+## Story 7-11 (M4, AC 11): THE CONTAINMENT TEST ITSELF, lifted out of `_outside_user_directory` above with
+## the root as a parameter so a second caller (the per-slot gamepad override, `GamepadProfile.load_for_slot`)
+## can contain a path under an INJECTED root. Same mechanism, unchanged: both sides globalised and
+## `simplify_path()`d, then compared against the resolved root PLUS its separator (`3-0d/R22`).
+static func is_inside_root(path: String, root: String) -> bool:
+	var resolved_root := ProjectSettings.globalize_path(root).simplify_path()
+	var resolved := ProjectSettings.globalize_path(path).simplify_path()
+	return resolved.begins_with(resolved_root + "/")
 
 
 # ---------------------------------------------------------------- serialise
