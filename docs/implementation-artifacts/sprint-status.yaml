@@ -151,6 +151,7 @@ development_status:
   7-6-hud-and-card-presentation: done  # Tier B
   7-7-tuning-pass: backlog  # Tier B (A if a seat is added or an action becomes refusable)
   7-11-control-scheme-v2: done  # Tier A
+  7-12-match-menu: ready-for-dev  # Tier B
 
 story_notes:
   7-T1-tooling-debt: "closed out 2026-10-02 (decision-log session 7-T1 close-out, 7-T1/R1..R6); AC 5-7 close UNMET at the pre-named cut point, flake carried forward in deferred-work.md."
@@ -165,6 +166,7 @@ story_notes:
   7-5b-deck-2-bodies: "done 2026-10-16; close-out 7-5b/R24-R42 (review APPROVE WITH CHANGES, fixes applied, smoke passed, golden 97c9a1de, FORMAT_VERSION 25)."
   7-6-hud-and-card-presentation: "done 2026-10-06, Tier B close-out complete (HUD and card presentation redesign, golden and snapshot key set unmoved, suite 1248/0/11839 + 78 integration, five live smokes passed, decision-log session 7-6 close-out)."
   7-11-control-scheme-v2: "done 2026-10-30, Tier A close-out complete (C1 7029e7f, review APPROVE, smoke 12/12, golden 97c9a1de and 66 keys unmoved, suite 1590/0/26430 + 104 integration, decision-log session 7-11 close-out)."
+  7-12-match-menu: "promoted to ready-for-dev 2026-10-30; the four open questions are resolved in the story file (Resolved questions, operator rulings 2026-10-30)."
   7-7-tuning-pass: "backlog -- the retune block, carrying the 6-1d/R16 reach/homing, dodge-cost and GREEN travel-profile inputs; Tier A if a seat is added or an action becomes refusable (E6-C/R11); re-measure the AC 4b live steering test when GREEN numbers change (7-9/R22)."
   6-0-card-hand-tint: "done 2026-09-08, Tier B close-out complete (colour rides the existing cards_changed wrapper per 6-0/R1-R4, replay reads CardDatabase presentation-side only, golden and 30-key snapshot set unmoved, smoke PASS 4/4, decision-log session 6-0-card-hand-tint close-out)."
   6-1-hold-to-charge: "done 2026-09-09, Tier A close-out complete (hold-through-chargeup + paid feint per 6-1/R1-R15, golden and 30-key set unmoved, suite 735/0/5430 + 56 integration, smoke 6/7 PASS (item 5 machine-pinned, named finding for 6-1b), decision-log session 6-1 close-out)."
